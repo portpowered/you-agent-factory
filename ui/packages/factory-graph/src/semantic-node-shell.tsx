@@ -4,6 +4,29 @@ import {
 } from "@you-agent-factory/components/graphs";
 import type { ReactNode } from "react";
 
+import {
+  type FactoryGraphNodeFamily,
+  factoryGraphNodeFamilyForShellType,
+  factoryGraphNodeFamilyRole,
+} from "./node-family.js";
+import {
+  type FactoryGraphNodeInteractionOverlay,
+  FactoryGraphNodeInteractionOverlayView,
+} from "./node-interaction-overlay.js";
+import {
+  FactoryGraphNodeResizeControls,
+  type FactoryGraphNodeResizeControlsProps,
+} from "./node-resize-controls.js";
+import {
+  factoryGraphNodeVisualNestedAccentClassName,
+  factoryGraphNodeVisualStateClassName,
+} from "./semantic-node-style.js";
+import {
+  type FactoryGraphVisualStateInput,
+  factoryGraphVisualNestedAccentRole,
+  resolveFactoryGraphVisualState,
+} from "./visual-state.js";
+
 export type FactoryGraphPlaceNodeType =
   | "constraint"
   | "doc"
@@ -35,8 +58,29 @@ export interface FactoryGraphNodeShellProps {
   children: ReactNode;
   className?: string;
   handles: FactoryGraphNodeHandle[];
+  interactionOverlay?: FactoryGraphNodeInteractionOverlay;
   nodeType: "workstation" | FactoryGraphPlaceNodeType;
+  resizeControls?: FactoryGraphNodeResizeControlsProps;
+  visualState?: Omit<FactoryGraphVisualStateInput, "family">;
   zAxisIncompleteHints?: FactoryGraphZAxisIncompleteHints | null;
+}
+
+/** Shared secondary surface rendered when a semantic node has been resized. */
+export function FactoryGraphNodeExpandedContent({
+  children,
+  family,
+}: {
+  children: ReactNode;
+  family: FactoryGraphNodeFamily;
+}) {
+  return (
+    <div
+      className="grid min-w-0 gap-0.5 overflow-hidden border-t border-outline-variant pt-1 text-xs leading-tight text-on-surface-subtle"
+      data-factory-graph-expanded-content={family}
+    >
+      {children}
+    </div>
+  );
 }
 
 /** Original semantic Factory node frame, including its typed connection rails. */
@@ -44,7 +88,10 @@ export function FactoryGraphNodeShell({
   children,
   className = "",
   handles,
+  interactionOverlay,
   nodeType,
+  resizeControls,
+  visualState: visualStateInput,
   zAxisIncompleteHints = null,
 }: FactoryGraphNodeShellProps) {
   const packageHandles = handles.map((handle) => ({
@@ -52,18 +99,68 @@ export function FactoryGraphNodeShell({
     tone: handle.tone ?? factoryGraphHandleToneFromId(handle.id),
   }));
   const activeHints = nodeType === "workstation" ? zAxisIncompleteHints : null;
+  const familyRole = factoryGraphNodeFamilyRole(
+    factoryGraphNodeFamilyForShellType(nodeType),
+  );
+  const visualState = resolveFactoryGraphVisualState({
+    family: familyRole.family,
+    ...visualStateInput,
+  });
+  const nestedAccentRole = factoryGraphVisualNestedAccentRole(
+    visualState.surface,
+  );
+  const visibleResizeControls = resizeControls
+    ? { ...resizeControls, isVisible: visualState.selection }
+    : undefined;
 
   return (
-    <div className="relative h-full min-w-0 w-full">
+    // `group/factory-graph-node` is the hover/focus ancestor the resize grip
+    // reveals against; keep it on the wrapper that spans the whole card.
+    <div className="group/factory-graph-node relative h-full min-w-0 w-full">
       <GraphNodeShell
-        className={className}
+        aria-invalid={visualState.validation === "error" || undefined}
+        className={classNames(
+          "shadow-none",
+          nodeType === "workstation" &&
+            "[&>div:last-of-type]:gap-0.5 [&>div:last-of-type]:py-2",
+          className,
+          interactionOverlayClassName(interactionOverlay?.draftStatus),
+          factoryGraphNodeVisualStateClassName(visualState),
+          factoryGraphNodeVisualNestedAccentClassName(visualState),
+        )}
         data-current-activity-node-type={nodeType}
+        data-graph-node-family={familyRole.family}
+        data-graph-node-shape={familyRole.shape}
+        data-graph-visual-active-flow={visualState.activeFlow || undefined}
+        data-graph-visual-border={visualState.border}
+        data-graph-visual-emphasis={visualState.emphasis}
+        data-graph-visual-fill={visualState.fill}
+        data-graph-visual-focus={visualState.focus}
+        data-graph-visual-glow={visualState.glow}
+        data-graph-visual-icon={visualState.icon}
+        data-graph-visual-lifecycle={visualState.lifecycle}
+        data-graph-visual-muted={visualState.muted || undefined}
+        data-graph-visual-nested-accent={nestedAccentRole}
+        data-graph-visual-selection={visualState.selection || undefined}
+        data-graph-visual-status={visualState.status}
+        data-graph-visual-surface={visualState.surface}
+        data-graph-visual-treatment={visualState.statusTreatment}
+        data-graph-visual-validation={visualState.validation}
+        data-graph-draft-status={
+          interactionOverlay?.draftStatus === "none"
+            ? undefined
+            : interactionOverlay?.draftStatus
+        }
         handles={packageHandles}
         nodeKind={nodeType}
         showStateIndicator={false}
       >
         {children}
+        <FactoryGraphNodeInteractionOverlayView overlay={interactionOverlay} />
       </GraphNodeShell>
+      {visibleResizeControls ? (
+        <FactoryGraphNodeResizeControls {...visibleResizeControls} />
+      ) : null}
       {activeHints
         ? workstationZAxisIncompleteHintSlots().map((slot) => (
             <ZAxisIncompleteHintOrb
@@ -79,6 +176,25 @@ export function FactoryGraphNodeShell({
   );
 }
 
+function classNames(
+  ...values: Array<string | false | null | undefined>
+): string {
+  return values.filter(Boolean).join(" ");
+}
+
+function interactionOverlayClassName(
+  draftStatus: FactoryGraphNodeInteractionOverlay["draftStatus"],
+): string | undefined {
+  switch (draftStatus) {
+    case "addition":
+      return "ring-2 ring-af-warning-border";
+    case "removal":
+      return "ring-2 ring-af-danger-border";
+    default:
+      return undefined;
+  }
+}
+
 export function factoryGraphHandleToneFromId(
   handleId: string,
 ): NonNullable<GraphNodeHandle["tone"]> {
@@ -91,6 +207,7 @@ export function factoryGraphHandleToneFromId(
   if (handleId.includes("on-continue")) return "continue";
   if (handleId.includes("on-failure")) return "failure";
   if (handleId.includes("on-rejection")) return "rejection";
+  if (handleId.includes("approval")) return "output";
   if (handleId.includes("output")) return "output";
   if (handleId.includes("input")) return "input";
   if (handleId.includes("assignment")) return "assignment";

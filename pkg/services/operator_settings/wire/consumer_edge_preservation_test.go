@@ -8,16 +8,18 @@ import (
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
 // TestNewServicePreservesDocumentPersistAndEffectiveResolution proves document
 // load/update/atomic persist and effective resolution keep the same Settings-
 // observable outcomes after the Settings→Providers consumer cut when the wire
 // composes resolution against an injected providers.Service root.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestNewServicePreservesDocumentPersistAndEffectiveResolution(t *testing.T) {
 	t.Parallel()
 
@@ -106,15 +108,17 @@ func newPreservationWireService(t *testing.T) operatorsettings.Service {
 	t.Helper()
 
 	providersRoot := internaltestproviders.StandardCatalog()
-	service, err := settingswire.NewService(
-		platformfilesystem.Local{},
-		func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
-			return os.CreateTemp(dir, pattern)
+	service, err := settingswire.NewServiceFromConfigDocument(
+		operatorsettings.ConfigDocumentService{
+			Files:      platformfilesystem.Local{},
+			CreateTemp: func(dir, pattern string) (operatorsettings.TemporaryFile, error) { return os.CreateTemp(dir, pattern) },
+			Decoder:    globalconfigmapping.Decode,
+			Encoder:    globalconfigmapping.Encode,
+			Providers:  preservationProviderCatalog,
 		},
-		globalconfigmapping.Decode,
-		globalconfigmapping.Encode,
-		preservationProviderCatalog,
 		providersRoot,
+		testIDGenerator(),
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)

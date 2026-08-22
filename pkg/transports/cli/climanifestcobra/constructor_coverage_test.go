@@ -1,4 +1,4 @@
-package climanifestcobra_test
+package climanifestcobra
 
 import (
 	"bytes"
@@ -8,8 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
@@ -20,7 +19,7 @@ func TestNewCommandTreeProjectsSchemaHelpLifecycleAndCompletion(t *testing.T) {
 	manifest := syntheticPresentationManifest()
 	dynamicCalls := 0
 	bindings := genericBindingsForManifest(manifest)
-	bindings.Completions = climanifestcobra.CompletionRegistry{
+	bindings.Completions = CompletionRegistry{
 		"stable.alpha.flag.cluster": func(
 			*cobra.Command,
 			[]string,
@@ -38,7 +37,7 @@ func TestNewCommandTreeProjectsSchemaHelpLifecycleAndCompletion(t *testing.T) {
 			return []string{"worker-2", "worker-1"}, cobra.ShellCompDirectiveNoFileComp
 		},
 	}
-	root, err := climanifestcobra.NewCommandTree(manifest, bindings)
+	root, err := NewCommandTree(manifest, bindings)
 	if err != nil {
 		t.Fatalf("NewCommandTree() error = %v", err)
 	}
@@ -78,7 +77,7 @@ func TestNewCommandTreeProjectsRootNoArgumentHelpWithoutDispatch(t *testing.T) {
 			return nil
 		}
 	}
-	root, err := climanifestcobra.NewCommandTree(manifest, bindings)
+	root, err := NewCommandTree(manifest, bindings)
 	if err != nil {
 		t.Fatalf("NewCommandTree() error = %v", err)
 	}
@@ -147,7 +146,7 @@ func TestNewCommandTreeProjectsMatchingInheritedPresentation(t *testing.T) {
 				updatePresentationFlag(&manifest, "stable.root.flag.region", test.mutate)
 				updatePresentationFlag(&manifest, "stable.alpha.flag.region", test.mutate)
 			}
-			root, err := climanifestcobra.NewCommandTree(manifest, presentationBindings(manifest))
+			root, err := NewCommandTree(manifest, presentationBindings(manifest))
 			if err != nil {
 				t.Fatalf("NewCommandTree() error = %v", err)
 			}
@@ -187,7 +186,7 @@ func TestNewCommandTreeDispatchesByStableHandlerIDWithNormalizedInputs(t *testin
 		received = values
 		return nil
 	}
-	root, err := climanifestcobra.NewCommandTree(manifest, bindings)
+	root, err := NewCommandTree(manifest, bindings)
 	if err != nil {
 		t.Fatalf("NewCommandTree() error = %v", err)
 	}
@@ -199,7 +198,7 @@ func TestNewCommandTreeDispatchesByStableHandlerIDWithNormalizedInputs(t *testin
 		t.Fatalf("handler inputs = %#v, want normalized stable-ID value", received)
 	}
 
-	root, err = climanifestcobra.NewCommandTree(manifest, bindings)
+	root, err = NewCommandTree(manifest, bindings)
 	if err != nil {
 		t.Fatalf("NewCommandTree() after rename error = %v", err)
 	}
@@ -222,7 +221,7 @@ func TestNewCommandTreeKeepsNonRunnableCommandsOnCobraHelpPath(t *testing.T) {
 			return nil
 		}
 	}
-	root, err := climanifestcobra.NewCommandTree(manifest, bindings)
+	root, err := NewCommandTree(manifest, bindings)
 	if err != nil {
 		t.Fatalf("NewCommandTree() error = %v", err)
 	}
@@ -248,12 +247,12 @@ func TestNewCommandTreeKeepsNonRunnableCommandsOnCobraHelpPath(t *testing.T) {
 func TestNewCommandTreeRejectsInvalidHandlerBindingsBeforeExecution(t *testing.T) {
 	tests := []struct {
 		name    string
-		mutate  func(*climanifest.Manifest, *climanifestcobra.GenericBindings)
+		mutate  func(*climanifest.Manifest, *GenericBindings)
 		wantErr string
 	}{
 		{
 			name: "missing handler record",
-			mutate: func(manifest *climanifest.Manifest, _ *climanifestcobra.GenericBindings) {
+			mutate: func(manifest *climanifest.Manifest, _ *GenericBindings) {
 				command := manifest.Commands["stable.alpha"]
 				command.Handler = nil
 				manifest.Commands[command.ID] = command
@@ -262,7 +261,7 @@ func TestNewCommandTreeRejectsInvalidHandlerBindingsBeforeExecution(t *testing.T
 		},
 		{
 			name: "empty handler ID",
-			mutate: func(manifest *climanifest.Manifest, _ *climanifestcobra.GenericBindings) {
+			mutate: func(manifest *climanifest.Manifest, _ *GenericBindings) {
 				command := manifest.Commands["stable.alpha"]
 				command.Handler.ID = ""
 				manifest.Commands[command.ID] = command
@@ -271,14 +270,14 @@ func TestNewCommandTreeRejectsInvalidHandlerBindingsBeforeExecution(t *testing.T
 		},
 		{
 			name: "unknown handler ID",
-			mutate: func(manifest *climanifest.Manifest, bindings *climanifestcobra.GenericBindings) {
+			mutate: func(manifest *climanifest.Manifest, bindings *GenericBindings) {
 				delete(bindings.Handlers, manifest.Commands["stable.alpha"].Handler.ID)
 			},
 			wantErr: `command "stable.alpha" handler ID "stable.alpha.handler" has no registered executable binding`,
 		},
 		{
 			name: "duplicate handler ID",
-			mutate: func(manifest *climanifest.Manifest, _ *climanifestcobra.GenericBindings) {
+			mutate: func(manifest *climanifest.Manifest, _ *GenericBindings) {
 				command := manifest.Commands["stable.leaf"]
 				command.Handler.ID = "stable.alpha.handler"
 				manifest.Commands[command.ID] = command
@@ -298,7 +297,7 @@ func TestNewCommandTreeRejectsInvalidHandlerBindingsBeforeExecution(t *testing.T
 				}
 			}
 			test.mutate(&manifest, &bindings)
-			root, err := climanifestcobra.NewCommandTree(manifest, bindings)
+			root, err := NewCommandTree(manifest, bindings)
 			if root != nil || err == nil || !strings.Contains(err.Error(), test.wantErr) {
 				t.Fatalf("NewCommandTree() = (%v, %v), want nil and error containing %q", root, err, test.wantErr)
 			}
@@ -338,7 +337,7 @@ func TestNewCommandTreeRejectsRepeatedScalarArgumentValueTypes(t *testing.T) {
 				calls++
 				return nil
 			}
-			root, err := climanifestcobra.NewCommandTree(manifest, bindings)
+			root, err := NewCommandTree(manifest, bindings)
 			if root != nil || err == nil || !strings.Contains(err.Error(), "must use stringArray") {
 				t.Fatalf("NewCommandTree() = (%v, %v), want repeated scalar rejection", root, err)
 			}
@@ -378,7 +377,7 @@ func TestNewCommandTreeDispatchesScalarBooleanAndInt64Arguments(t *testing.T) {
 				received = values
 				return nil
 			}
-			root, err := climanifestcobra.NewCommandTree(manifest, bindings)
+			root, err := NewCommandTree(manifest, bindings)
 			if err != nil {
 				t.Fatalf("NewCommandTree() error = %v", err)
 			}
@@ -480,12 +479,12 @@ func assertProjectedArgumentCompletion(t *testing.T, alpha *cobra.Command, dynam
 func TestNewCommandTreeRejectsInvalidLifecycleAndCompletionBeforeProjection(t *testing.T) {
 	tests := []struct {
 		name    string
-		mutate  func(*climanifest.Manifest, *climanifestcobra.GenericBindings)
+		mutate  func(*climanifest.Manifest, *GenericBindings)
 		wantErr string
 	}{
 		{
 			name: "missing command lifecycle",
-			mutate: func(manifest *climanifest.Manifest, _ *climanifestcobra.GenericBindings) {
+			mutate: func(manifest *climanifest.Manifest, _ *GenericBindings) {
 				command := manifest.Commands["stable.alpha"]
 				command.Lifecycle = climanifest.Lifecycle{}
 				manifest.Commands[command.ID] = command
@@ -494,7 +493,7 @@ func TestNewCommandTreeRejectsInvalidLifecycleAndCompletionBeforeProjection(t *t
 		},
 		{
 			name: "unsupported removed command",
-			mutate: func(manifest *climanifest.Manifest, _ *climanifestcobra.GenericBindings) {
+			mutate: func(manifest *climanifest.Manifest, _ *GenericBindings) {
 				command := manifest.Commands["stable.alpha"]
 				command.Lifecycle.State = "removed"
 				manifest.Commands[command.ID] = command
@@ -503,7 +502,7 @@ func TestNewCommandTreeRejectsInvalidLifecycleAndCompletionBeforeProjection(t *t
 		},
 		{
 			name: "incomplete flag lifecycle",
-			mutate: func(manifest *climanifest.Manifest, _ *climanifestcobra.GenericBindings) {
+			mutate: func(manifest *climanifest.Manifest, _ *GenericBindings) {
 				updatePresentationFlag(manifest, "stable.alpha.flag.cluster", func(flag *climanifest.Flag) {
 					flag.Lifecycle = climanifest.Lifecycle{}
 				})
@@ -512,7 +511,7 @@ func TestNewCommandTreeRejectsInvalidLifecycleAndCompletionBeforeProjection(t *t
 		},
 		{
 			name: "static completion without choices",
-			mutate: func(manifest *climanifest.Manifest, _ *climanifestcobra.GenericBindings) {
+			mutate: func(manifest *climanifest.Manifest, _ *GenericBindings) {
 				updatePresentationFlag(manifest, "stable.root.flag.region", func(flag *climanifest.Flag) {
 					flag.Enum = nil
 				})
@@ -524,7 +523,7 @@ func TestNewCommandTreeRejectsInvalidLifecycleAndCompletionBeforeProjection(t *t
 		},
 		{
 			name: "inherited lifecycle differs from declaration",
-			mutate: func(manifest *climanifest.Manifest, _ *climanifestcobra.GenericBindings) {
+			mutate: func(manifest *climanifest.Manifest, _ *GenericBindings) {
 				updatePresentationFlag(manifest, "stable.alpha.flag.region", func(flag *climanifest.Flag) {
 					flag.Lifecycle = deprecatedLifecycle(flag.ID, "stable.alpha.flag.cluster", "use --cluster instead")
 				})
@@ -533,7 +532,7 @@ func TestNewCommandTreeRejectsInvalidLifecycleAndCompletionBeforeProjection(t *t
 		},
 		{
 			name: "inherited visibility differs from declaration",
-			mutate: func(manifest *climanifest.Manifest, _ *climanifestcobra.GenericBindings) {
+			mutate: func(manifest *climanifest.Manifest, _ *GenericBindings) {
 				updatePresentationFlag(manifest, "stable.alpha.flag.region", func(flag *climanifest.Flag) {
 					flag.Visibility = "hidden"
 				})
@@ -542,14 +541,14 @@ func TestNewCommandTreeRejectsInvalidLifecycleAndCompletionBeforeProjection(t *t
 		},
 		{
 			name: "missing dynamic binding",
-			mutate: func(_ *climanifest.Manifest, bindings *climanifestcobra.GenericBindings) {
+			mutate: func(_ *climanifest.Manifest, bindings *GenericBindings) {
 				delete(bindings.Completions, "stable.alpha.flag.cluster")
 			},
 			wantErr: `input "stable.alpha.flag.cluster": missing dynamic completion binding`,
 		},
 		{
 			name: "unsupported completion mode",
-			mutate: func(manifest *climanifest.Manifest, _ *climanifestcobra.GenericBindings) {
+			mutate: func(manifest *climanifest.Manifest, _ *GenericBindings) {
 				updatePresentationFlag(manifest, "stable.alpha.flag.cluster", func(flag *climanifest.Flag) {
 					flag.Completion = "filesystem"
 				})
@@ -562,7 +561,7 @@ func TestNewCommandTreeRejectsInvalidLifecycleAndCompletionBeforeProjection(t *t
 			manifest := syntheticPresentationManifest()
 			bindings := presentationBindings(manifest)
 			test.mutate(&manifest, &bindings)
-			root, err := climanifestcobra.NewCommandTree(manifest, bindings)
+			root, err := NewCommandTree(manifest, bindings)
 			if root != nil || err == nil || !strings.Contains(err.Error(), test.wantErr) {
 				t.Fatalf("NewCommandTree() = (%v, %v), want nil and error containing %q", root, err, test.wantErr)
 			}
@@ -649,26 +648,26 @@ func withArgumentCompletion(argument climanifest.Argument, completion string) cl
 	return argument
 }
 
-func presentationBindings(manifest climanifest.Manifest) climanifestcobra.GenericBindings {
+func presentationBindings(manifest climanifest.Manifest) GenericBindings {
 	callback := func(*cobra.Command, []string, string) ([]cobra.Completion, cobra.ShellCompDirective) {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	bindings := genericBindingsForManifest(manifest)
-	bindings.Completions = climanifestcobra.CompletionRegistry{
+	bindings.Completions = CompletionRegistry{
 		"stable.alpha.flag.cluster": callback,
 		"stable.alpha.arg.worker":   callback,
 	}
 	return bindings
 }
 
-func genericBindingsForManifest(manifest climanifest.Manifest) climanifestcobra.GenericBindings {
-	handlers := make(climanifestcobra.HandlerRegistry)
+func genericBindingsForManifest(manifest climanifest.Manifest) GenericBindings {
+	handlers := make(HandlerRegistry)
 	for _, command := range manifest.Commands {
 		if command.Handler != nil && command.Handler.ID != "" {
 			handlers[command.Handler.ID] = func(context.Context, map[string]any) error { return nil }
 		}
 	}
-	return climanifestcobra.GenericBindings{Handlers: handlers}
+	return GenericBindings{Handlers: handlers}
 }
 
 func TestInheritedFlagGroupsStayCommandLocalAcrossRootAndSiblings(t *testing.T) {
@@ -702,7 +701,7 @@ func assertUnrelatedRelationshipInvocation(t *testing.T, kind, command string, a
 			return nil
 		}
 	}
-	root, err := climanifestcobra.NewCommandTree(manifest, bindings)
+	root, err := NewCommandTree(manifest, bindings)
 	if err != nil {
 		t.Fatalf("NewCommandTree() error = %v", err)
 	}
@@ -732,7 +731,7 @@ func assertUnrelatedRelationshipCompletion(t *testing.T, kind, command string, a
 
 func commandCompletionOutput(t *testing.T, manifest climanifest.Manifest, command string, args []string) string {
 	t.Helper()
-	root, err := climanifestcobra.NewCommandTree(manifest, genericBindingsForManifest(manifest))
+	root, err := NewCommandTree(manifest, genericBindingsForManifest(manifest))
 	if err != nil {
 		t.Fatalf("NewCommandTree() error = %v", err)
 	}
@@ -843,12 +842,12 @@ func TestNewRunServerFamilyComponentsRegistersLocalFlags(t *testing.T) {
 	components := mustRunServerFamilyComponents(t)
 	for _, flagName := range []string{
 		"continuously", "work", "dir", "named", "factory", "record", "no-record",
-		"replay", "runtime-log-dir", "runtime-log-max-size-mb", "runtime-log-max-backups",
+		"replay", "resume", "runtime-log-dir", "runtime-log-max-size-mb", "runtime-log-max-backups",
 		"runtime-log-max-age-days", "runtime-log-compress", "runtime-metrics-dir",
 		"runtime-metrics-max-size-mb", "runtime-metrics-max-backups",
 		"runtime-metrics-max-age-days", "runtime-metrics-compress", "with-mock-workers",
-		"with-server", "with-site", "quiet", "output", "skip-permissions", "port",
-		"provider", "model", "worktree",
+		"with-server", "with-site", "quiet", "output", "skip-permissions", "port", "listen",
+		"provider", "model", "worktree", "to-file",
 	} {
 		if components.Run.Flags().Lookup(flagName) == nil {
 			t.Fatalf("generated run missing local flag %q", flagName)
@@ -861,12 +860,12 @@ func TestNewRunServerFamilyComponentsRegistersLocalFlags(t *testing.T) {
 
 func TestNewRunServerFamilyComponentsRejectsMissingAndOutOfFamilyBindings(t *testing.T) {
 	bindings := testRunServerBindings()
-	if _, err := climanifestcobra.NewRunServerFamilyComponents(nil, bindings); err == nil {
+	if _, err := NewRunServerFamilyComponents(nil, bindings); err == nil {
 		t.Fatal("nil registry = nil, want error")
 	}
 	registry := mustRunServerRegistry(t)
 	bindings.LocalTargets = nil
-	if _, err := climanifestcobra.NewRunServerFamilyComponents(registry, bindings); err == nil {
+	if _, err := NewRunServerFamilyComponents(registry, bindings); err == nil {
 		t.Fatal("missing run/server local targets = nil, want error")
 	}
 
@@ -878,7 +877,7 @@ func TestNewRunServerFamilyComponentsRejectsMissingAndOutOfFamilyBindings(t *tes
 	delete(manifest.Commands, "you.run")
 	delete(manifest.Commands, "you.submit")
 	delete(manifest.Commands, "you.submit.batch")
-	if _, err := climanifestcobra.NewRunServerFamilyComponentsFromManifest(
+	if _, err := NewRunServerFamilyComponentsFromManifest(
 		manifest,
 		registry,
 		testRunServerBindings(),
@@ -887,9 +886,9 @@ func TestNewRunServerFamilyComponentsRejectsMissingAndOutOfFamilyBindings(t *tes
 	}
 }
 
-func mustRunServerFamilyComponents(t *testing.T) climanifestcobra.RunServerFamilyComponents {
+func mustRunServerFamilyComponents(t *testing.T) RunServerFamilyComponents {
 	t.Helper()
-	components, err := climanifestcobra.NewRunServerFamilyComponents(
+	components, err := NewRunServerFamilyComponents(
 		mustRunServerRegistry(t),
 		testRunServerBindings(),
 	)
@@ -912,15 +911,17 @@ func mustRunServerRegistry(t *testing.T) *commandregistry.Registry {
 	return registry
 }
 
-func testRunServerBindings() climanifestcobra.RunServerFlagBindings {
+func testRunServerBindings() RunServerFlagBindings {
 	targets := map[string]any{}
 	for _, inputID := range []string{
 		"you.run.flag.work", "you.run.flag.dir", "you.run.flag.named",
-		"you.run.flag.factory", "you.run.flag.record", "you.run.flag.replay",
+		"you.run.flag.factory", "you.run.flag.record", "you.run.flag.replay", "you.run.flag.resume",
 		"you.run.flag.provider", "you.run.flag.model",
-		"you.run.flag.worktree",
+		"you.run.flag.worker-reasoning-effort",
+		"you.run.flag.worktree", "you.run.flag.to-file",
 		"you.run.flag.runtime-log-dir", "you.run.flag.runtime-metrics-dir",
 		"you.run.flag.with-mock-workers", "you.run.flag.output",
+		"you.run.flag.listen", "you.server.flag.listen",
 	} {
 		targets[inputID] = testScalarTarget("")
 	}
@@ -939,7 +940,7 @@ func testRunServerBindings() climanifestcobra.RunServerFlagBindings {
 	} {
 		targets[inputID] = testScalarTarget(0)
 	}
-	return climanifestcobra.RunServerFlagBindings{LocalTargets: targets}
+	return RunServerFlagBindings{LocalTargets: targets}
 }
 
 func replaceFlagSpelling(args []string, spelling string) []string {

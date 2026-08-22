@@ -5,7 +5,68 @@ const INLINE_ADD_WIDGET_INSTANCE_SLOT = "inline-add";
 export const WORK_OUTCOME_CHART_MIN_GRID_HEIGHT = 4;
 export const WORK_OUTCOME_CHART_MIN_GRID_WIDTH = 4;
 
+/** The pre-scope key is retained as a one-time migration source only. */
 export const DASHBOARD_LAYOUT_STORAGE_KEY = "agent-factory.dashboard.layout.v2";
+export const DASHBOARD_LAYOUT_STORAGE_VERSION = 3 as const;
+export const DASHBOARD_LAYOUT_STORAGE_KEY_PREFIX = `agent-factory.dashboard.layout.v${DASHBOARD_LAYOUT_STORAGE_VERSION}`;
+
+export interface DashboardLayoutScope {
+  factoryID: string;
+  sessionID: string;
+}
+
+export type DashboardLayoutInstanceHighWaterMarks = Readonly<
+  Record<string, number>
+>;
+
+export interface DashboardLayoutStorageEnvelope {
+  layout: AgentBentoLayoutItem[];
+  schemaVersion: typeof DASHBOARD_LAYOUT_STORAGE_VERSION;
+  scope: DashboardLayoutScope;
+  /** Optional so v3 envelopes written before monotonic allocation remain readable. */
+  instanceHighWaterMarks?: DashboardLayoutInstanceHighWaterMarks;
+}
+
+export type DashboardLayoutDiagnosticCode =
+  | "invalid-item"
+  | "invalid-id"
+  | "duplicate-id"
+  | "invalid-size"
+  | "out-of-bounds"
+  | "collision"
+  | "singleton-violation"
+  | "malformed-json"
+  | "unsupported-envelope"
+  | "storage-unavailable"
+  | "storage-read-failed"
+  | "storage-quota-exceeded"
+  | "storage-write-failed";
+
+export interface DashboardLayoutDiagnostic {
+  code: DashboardLayoutDiagnosticCode;
+  count: number;
+  severity: "error" | "repair";
+}
+
+export function createDashboardLayoutScope(
+  factoryID: string,
+  sessionID: string,
+): DashboardLayoutScope {
+  return {
+    factoryID: factoryID.trim(),
+    sessionID: sessionID.trim(),
+  };
+}
+
+export function getDashboardLayoutStorageKey(
+  scope: DashboardLayoutScope,
+): string {
+  return [
+    DASHBOARD_LAYOUT_STORAGE_KEY_PREFIX,
+    encodeURIComponent(scope.factoryID),
+    encodeURIComponent(scope.sessionID),
+  ].join(":");
+}
 
 export const DASHBOARD_WIDGET_IDS = {
   addWidget: "add-widget",
@@ -16,6 +77,7 @@ export const DASHBOARD_WIDGET_IDS = {
   submitWork: "submit-work",
   terminalWork: "terminal-work",
   trace: "trace",
+  workerSessionTimeline: "worker-session-timeline",
   workGraph: "work-graph",
   workOutcomeChart: "work-outcome-chart",
   workTotals: "work-totals",
@@ -59,6 +121,10 @@ export const DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS = {
   ),
   trace: createDashboardWidgetInstanceID(
     DASHBOARD_WIDGET_IDS.trace,
+    PRIMARY_WIDGET_INSTANCE_SLOT,
+  ),
+  workerSessionTimeline: createDashboardWidgetInstanceID(
+    DASHBOARD_WIDGET_IDS.workerSessionTimeline,
     PRIMARY_WIDGET_INSTANCE_SLOT,
   ),
   workGraph: createDashboardWidgetInstanceID(
@@ -173,6 +239,16 @@ const DEFAULT_DASHBOARD_LAYOUT_ITEMS = [
     y: 17,
   }),
   dashboardLayoutItem({
+    h: 9,
+    id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workerSessionTimeline,
+    minH: 5,
+    minW: 4,
+    w: 12,
+    widgetType: DASHBOARD_WIDGET_IDS.workerSessionTimeline,
+    x: 0,
+    y: 28,
+  }),
+  dashboardLayoutItem({
     h: 4,
     hidden: true,
     id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.factorySession,
@@ -181,7 +257,7 @@ const DEFAULT_DASHBOARD_LAYOUT_ITEMS = [
     w: 4,
     widgetType: DASHBOARD_WIDGET_IDS.factorySession,
     x: 8,
-    y: 27,
+    y: 37,
   }),
   dashboardLayoutItem({
     h: 4,
@@ -191,7 +267,7 @@ const DEFAULT_DASHBOARD_LAYOUT_ITEMS = [
     w: 4,
     widgetType: DASHBOARD_WIDGET_IDS.addWidget,
     x: 8,
-    y: 27,
+    y: 37,
   }),
 ] as const satisfies readonly AgentBentoLayoutItem[];
 
@@ -253,6 +329,8 @@ export function getPrimaryInstanceIDForWidgetType(widgetType: string): string {
       return DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.terminalWork;
     case DASHBOARD_WIDGET_IDS.trace:
       return DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.trace;
+    case DASHBOARD_WIDGET_IDS.workerSessionTimeline:
+      return DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workerSessionTimeline;
     case DASHBOARD_WIDGET_IDS.workGraph:
       return DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workGraph;
     case DASHBOARD_WIDGET_IDS.workOutcomeChart:

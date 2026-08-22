@@ -10,6 +10,10 @@ import {
   selectLabeledComboboxOption,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
+  waitForFactoryGraphSelectionDeleteButton,
+  waitForFactoryGraphSelectionReady,
+  waitForStableBoundingBox,
+  waitForStableFactoryGraphNodePlacement,
 } from "./browser-test-harness.mjs";
 import { isolatedMockBrowserTest as it } from "./mocked-browser-test-fixture.mjs";
 
@@ -171,6 +175,19 @@ function currentSelectionPanel(page) {
   return page.getByRole("article", { name: "Current selection" });
 }
 
+async function assertWorkerConfigurationEditable(panel, expectedModel) {
+  await panel
+    .getByRole("heading", { name: "Worker configuration" })
+    .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+  const modelField = panel.getByRole("textbox", { name: "Model" });
+  await modelField.waitFor({
+    state: "visible",
+    timeout: uiInteractionTimeoutMs,
+  });
+  expect(await modelField.isEditable()).toBe(true);
+  expect(await modelField.inputValue()).toBe(expectedModel);
+}
+
 async function assertNoPanelTopologyDeleteInCurrentSelection(page) {
   const panel = currentSelectionPanel(page);
   await panel.waitFor({
@@ -188,13 +205,15 @@ async function assertNoPanelTopologyDeleteInCurrentSelection(page) {
   }
 }
 
-async function marqueeSelectGraphNode(page, nodeLocator) {
-  const nodeBox = await nodeLocator.boundingBox();
+async function marqueeSelectGraphNode(page, nodeLocator, nodeTestId) {
+  await waitForStableFactoryGraphNodePlacement(page, nodeTestId);
+  const nodeBox = await waitForStableBoundingBox(nodeLocator);
   if (!nodeBox) {
     throw new Error(
       "Expected graph node to have a bounding box for marquee selection.",
     );
   }
+  await waitForFactoryGraphSelectionReady(page);
 
   const viewport = page.getByRole("region", { name: "Work graph viewport" });
   const viewportBox = await viewport.boundingBox();
@@ -218,6 +237,10 @@ async function marqueeSelectGraphNode(page, nodeLocator) {
   await page.mouse.move(startX, startY);
   await page.mouse.down();
   await page.mouse.move(endX, endY);
+  await page.locator(".react-flow__selection").waitFor({
+    state: "visible",
+    timeout: uiInteractionTimeoutMs,
+  });
   await page.mouse.up();
 }
 
@@ -330,15 +353,7 @@ describe.concurrent("factory graph editor selection panel delete browser integra
           .getByRole("button", { name: "Select writer worker" })
           .click();
         const panel = currentSelectionPanel(browserPage.page);
-        await panel
-          .getByRole("heading", { name: "Worker configuration" })
-          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-        const modelField = panel.getByRole("textbox", { name: "Model" });
-        await modelField.waitFor({
-          state: "visible",
-          timeout: uiInteractionTimeoutMs,
-        });
-        expect(await modelField.isEditable()).toBe(true);
+        await assertWorkerConfigurationEditable(panel, "gpt-5");
         await assertNoPanelTopologyDeleteInCurrentSelection(browserPage.page);
 
         await addWorker(browserPage.page, toolbar, { name: "spare" });
@@ -355,14 +370,22 @@ describe.concurrent("factory graph editor selection panel delete browser integra
         const spareGraphNode = browserPage.page.getByTestId(
           "rf__node-worker:spare",
         );
-        await marqueeSelectGraphNode(browserPage.page, spareGraphNode);
-
-        const batchDeleteButton = toolbar.getByRole("button", {
-          name: "Delete selected graph item",
-        });
+        await marqueeSelectGraphNode(
+          browserPage.page,
+          spareGraphNode,
+          "rf__node-worker:spare",
+        );
+        const batchDeleteButton =
+          await waitForFactoryGraphSelectionDeleteButton(toolbar);
         await batchDeleteButton.scrollIntoViewIfNeeded();
         expect(await batchDeleteButton.isDisabled()).toBe(false);
-        await batchDeleteButton.click();
+        await batchDeleteButton.focus();
+        expect(
+          await batchDeleteButton.evaluate(
+            (button) => button === document.activeElement,
+          ),
+        ).toBe(true);
+        await batchDeleteButton.press("Enter");
 
         await expect
           .poll(
@@ -375,6 +398,12 @@ describe.concurrent("factory graph editor selection panel delete browser integra
             },
           )
           .toBe(0);
+
+        await browserPage.page
+          .getByRole("button", { name: "Select writer worker" })
+          .click();
+        await assertWorkerConfigurationEditable(panel, "gpt-5");
+        await assertNoPanelTopologyDeleteInCurrentSelection(browserPage.page);
 
         expectNoBrowserErrors(
           browserPage.pageErrors,

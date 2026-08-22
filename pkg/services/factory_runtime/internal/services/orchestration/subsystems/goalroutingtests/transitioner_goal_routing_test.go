@@ -40,7 +40,7 @@ func TestTransitioner_BuiltInGoalRepeaterContinueAndRejectRepeat(t *testing.T) {
 		t.Run(string(outcome), func(t *testing.T) {
 			result := executeBuiltInGoalRepeaterResult(t, net, workstation, transition, now, "goal:init", outcome)
 			assertSingleGoalMutationAtPlace(t, result, "goal:init")
-			assertTransitionConsumesPlace(t, transition, result.Mutations[0].NewToken.PlaceID)
+			assertTransitionConsumesPlace(t, transition, result.Mutations[0].ToPlace)
 		})
 	}
 }
@@ -145,7 +145,7 @@ func builtInGoalRepeaterSnapshot(
 				TransitionID:    transitionID,
 				WorkstationName: "execute-goal",
 				StartTime:       now.Add(-time.Second),
-				ConsumedTokens: []factorytoken.Token{{
+				ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{{
 					ID:        "goal-token",
 					PlaceID:   inputPlace,
 					CreatedAt: now.Add(-time.Hour),
@@ -160,7 +160,7 @@ func builtInGoalRepeaterSnapshot(
 						ConsecutiveFailures: map[string]int{},
 						PlaceVisits:         map[string]int{},
 					},
-				}},
+				}}),
 			},
 		},
 		Results: []workerexecution.WorkResult{{
@@ -181,7 +181,7 @@ func assertSingleGoalMutationAtPlace(t *testing.T, result *interfaces.TickResult
 		t.Fatalf("mutations = %#v, want one mutation to %s", result, wantPlace)
 	}
 	mutation := result.Mutations[0]
-	if mutation.ToPlace != wantPlace || mutation.NewToken.PlaceID != wantPlace {
+	if mutation.ToPlace != wantPlace {
 		t.Fatalf("mutation = %#v, want destination %s", mutation, wantPlace)
 	}
 	if mutation.NewToken.Color.WorkID != "goal-work" {

@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 description: >-
   Canonical callable argument contract for invoking one factory. When present,
   CLI, API, dashboard, docs, and packaged-factory surfaces should discover and

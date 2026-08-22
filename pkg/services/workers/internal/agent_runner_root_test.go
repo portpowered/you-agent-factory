@@ -125,6 +125,7 @@ func TestAgentRunnerCancellationThroughServiceComposition(t *testing.T) {
 }
 
 type serviceAgentProvidersFake struct {
+	providers.Service
 	mu      sync.Mutex
 	request providers.ExecuteRequest
 	result  providers.ExecuteResult
@@ -159,7 +160,10 @@ func newServiceAgentProvidersFake() *serviceAgentProvidersFake {
 		},
 		Diagnostics: &providers.ExecuteDiagnostics{
 			DurationMillis: 42,
-			Metadata:       map[string]string{"fixture": "detached"},
+			Metadata: map[string]string{
+				"fixture": "detached",
+				workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
+			},
 		},
 	}}
 }
@@ -175,6 +179,24 @@ func (fake *serviceAgentProvidersFake) Execute(
 	return fake.result, nil
 }
 
+func (fake *serviceAgentProvidersFake) Continue(
+	_ context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	fake.calls.Add(1)
+	fake.mu.Lock()
+	fake.request = request.Attempt.Clone()
+	fake.mu.Unlock()
+	return providers.ContinueResult{
+		Reference: request.Reference,
+		Outcome:   providers.ContinuationOutcomeResumed,
+		Result:    fake.result,
+	}, nil
+}
+
 func (fake *failingServiceAgentProvidersFake) Execute(
 	ctx context.Context,
 	request providers.ExecuteRequest,
@@ -184,6 +206,20 @@ func (fake *failingServiceAgentProvidersFake) Execute(
 	fake.request = request.Clone()
 	fake.mu.Unlock()
 	return providers.ExecuteResult{}, fake.failure
+}
+
+func (fake *failingServiceAgentProvidersFake) Continue(
+	_ context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	fake.calls.Add(1)
+	fake.mu.Lock()
+	fake.request = request.Attempt.Clone()
+	fake.mu.Unlock()
+	return providers.ContinueResult{}, fake.failure
 }
 
 func (fake *interruptingServiceAgentProvidersFake) Execute(
@@ -201,6 +237,26 @@ func (fake *interruptingServiceAgentProvidersFake) Execute(
 		kind = providers.ExecuteFailureKindTimeout
 	}
 	return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: kind, Message: "interrupted"}
+}
+
+func (fake *interruptingServiceAgentProvidersFake) Continue(
+	ctx context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	fake.calls.Add(1)
+	fake.mu.Lock()
+	fake.request = request.Attempt.Clone()
+	fake.mu.Unlock()
+	fake.once.Do(func() { close(fake.entered) })
+	<-ctx.Done()
+	kind := providers.ExecuteFailureKindCanceled
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		kind = providers.ExecuteFailureKindTimeout
+	}
+	return providers.ContinueResult{}, providers.ExecuteFailure{Kind: kind, Message: "interrupted"}
 }
 
 func (*serviceAgentProvidersFake) ListProviders(
@@ -286,14 +342,15 @@ func assertServiceAgentFailureFacts(
 	published []workers.ProgressFragment,
 ) {
 	t.Helper()
-	wantSession := &workers.ProviderSessionMetadata{
+	wantSession := &providers.SessionMetadata{
 		Provider: string(providers.IDCodex),
 		Kind:     providers.SessionIDKind,
 		ID:       "resume-session-1",
 	}
-	if !reflect.DeepEqual(result.ProviderSession, wantSession) ||
-		!reflect.DeepEqual(providerErr.ProviderSession, wantSession) {
-		t.Fatalf("failure sessions = result:%#v error:%#v, want %#v", result.ProviderSession, providerErr.ProviderSession, wantSession)
+	wantContinuation := (wantSession).ContinuationRef()
+	if !reflect.DeepEqual(result.Continuation, wantContinuation) ||
+		!reflect.DeepEqual(providerErr.Continuation, wantContinuation) {
+		t.Fatalf("failure continuations = result:%#v error:%#v, want %#v", result.Continuation, providerErr.Continuation, wantContinuation)
 	}
 	if len(published) != 2 ||
 		published[0].DispatchID != "dispatch-agent-1" ||
@@ -305,9 +362,7 @@ func assertServiceAgentFailureFacts(
 }
 
 func cloneServiceProgressFragment(fragment workers.ProgressFragment) workers.ProgressFragment {
-	fragment.ProviderSessionRef = workers.CloneProviderSessionMetadata(
-		fragment.ProviderSessionRef,
-	)
+	fragment.Continuation = (fragment.Continuation).ClonePtr()
 	if fragment.Metadata == nil {
 		return fragment
 	}

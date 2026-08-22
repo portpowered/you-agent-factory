@@ -12,20 +12,20 @@ import (
 // Effect is the invocation-scoped native Codex boundary. Implementations emit
 // stdout chunks in arrival order and return only allowlisted execution facts.
 type Effect interface {
-	Execute(context.Context, providers.ExecuteRequest, func([]byte) error) (EffectResult, error)
+	Execute(context.Context, execution.ContinuationRequest, func([]byte) error) (EffectResult, error)
 }
 
 // EffectFunc adapts a function to Effect.
 type EffectFunc func(
 	context.Context,
-	providers.ExecuteRequest,
+	execution.ContinuationRequest,
 	func([]byte) error,
 ) (EffectResult, error)
 
 // Execute invokes the adapted function.
 func (effect EffectFunc) Execute(
 	ctx context.Context,
-	request providers.ExecuteRequest,
+	request execution.ContinuationRequest,
 	observe func([]byte) error,
 ) (EffectResult, error) {
 	return effect(ctx, request, observe)
@@ -43,6 +43,7 @@ func NewRegistration(effect Effect) execution.Registration {
 	return execution.Registration{
 		Provider: providers.IDCodex,
 		Attempt:  newAttempt(effect),
+		Continue: newContinuationAttempt(effect),
 	}
 }
 
@@ -54,29 +55,60 @@ func newAttempt(effect Effect) execution.Attempt {
 		ctx context.Context,
 		request providers.ExecuteRequest,
 	) (providers.ExecuteResult, error) {
-		decoder := newDecoder()
+		return newContinuationAttempt(effect)(ctx, execution.ContinuationRequest{ExecuteRequest: request})
+	}
+}
+
+func newContinuationAttempt(effect Effect) execution.ContinuationAttempt {
+	if effect == nil {
+		return unavailableContinuationAttempt
+	}
+	return func(
+		ctx context.Context,
+		request execution.ContinuationRequest,
+	) (providers.ExecuteResult, error) {
+		decoder := newDecoder(request.ExecuteRequest.ObserveSession)
 		effectResult, effectErr := effect.Execute(ctx, request, decoder.observe)
 		flushErr := decoder.flush()
 		if failure, failed := collectFailure(decoder, effectErr, flushErr); failed {
 			if failure.SessionRef == nil {
 				failure.SessionRef = decoder.sessionRef()
 			}
+			if failure.Diagnostics == nil {
+				failure.Diagnostics = decoder.diagnostics()
+			}
 			return providers.ExecuteResult{}, failure
 		}
 		content, session, finalErr := decoder.final()
 		if finalErr != nil {
-			return providers.ExecuteResult{}, execution.AttemptFailure{
+			failure := execution.AttemptFailure{
 				SessionRef:      decoder.sessionRef(),
 				FinalParseError: finalErr,
 			}
+			// A skipped oversized record only fails the execution when the
+			// stream ends without a recoverable final agent decision. Keep the
+			// pre-existing record-limit classification for that terminal case.
+			if skipped := decoder.skippedRecordFailure(); skipped != nil {
+				failure.Declared = skipped
+				failure.Diagnostics = decoder.diagnostics()
+			}
+			return providers.ExecuteResult{}, failure
 		}
+		metadata := cloneMetadata(effectResult.Metadata)
+		if metadata == nil {
+			metadata = make(map[string]string, 4)
+		}
+		for key, value := range decoder.diagnostics().Metadata {
+			metadata[key] = value
+		}
+		metadata["completion_evidence"] = "agent_message"
 		return providers.ExecuteResult{
 			Content:    content,
 			SessionRef: session,
 			Diagnostics: &providers.ExecuteDiagnostics{
 				DurationMillis: effectResult.DurationMillis,
 				Progress:       decoder.progressFacts(),
-				Metadata:       cloneMetadata(effectResult.Metadata),
+				Metadata:       metadata,
 			},
 		}, nil
 	}
@@ -97,6 +129,12 @@ func collectFailure(
 		}
 		failed = true
 	}
+	if resourceFailure := decoder.resourceFailure(); resourceFailure != nil {
+		if failure.Declared == nil || failure.Declared.Kind == providers.ExecuteFailureKindUnknown {
+			failure.Declared = resourceFailure
+		}
+		failed = true
+	}
 	if decoder.decodeErr != nil {
 		failure.DecodeError = decoder.decodeErr
 		failed = true
@@ -104,6 +142,10 @@ func collectFailure(
 	if flushErr != nil {
 		failure.FlushError = flushErr
 		failed = true
+	}
+	if decoder.limit != nil || decoder.recordSkips > 0 ||
+		decoder.transcriptFull || decoder.diagnosticsFull || decoder.retainedTextFull {
+		failure.Diagnostics = decoder.diagnostics()
 	}
 	return failure, failed
 }
@@ -136,6 +178,16 @@ func nativeFailure(err error) (execution.AttemptFailure, bool) {
 func unavailableAttempt(
 	context.Context,
 	providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, providers.ExecuteFailure{
+		Kind:    providers.ExecuteFailureKindDependency,
+		Message: "Codex native execution is unavailable",
+	}
+}
+
+func unavailableContinuationAttempt(
+	context.Context,
+	execution.ContinuationRequest,
 ) (providers.ExecuteResult, error) {
 	return providers.ExecuteResult{}, providers.ExecuteFailure{
 		Kind:    providers.ExecuteFailureKindDependency,

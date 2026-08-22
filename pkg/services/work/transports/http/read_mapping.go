@@ -1,27 +1,39 @@
 package http
 
 import (
+	"encoding/json"
+	"errors"
+
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/optional"
+	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 )
 
 // ListOptionsFromAPI maps one public list-work request into validated Work root
 // list options.
 func ListOptionsFromAPI(params factoryapi.ListWorkBySessionIdParams) (work.ListOptions, error) {
 	options := work.ListOptions{
-		StateName:    optional.StringValue(params.StateName),
-		StateType:    listParamString(params.StateType),
-		Name:         optional.StringValue(params.Name),
-		WorkTypeName: optional.StringValue(params.WorkTypeName),
-		TraceID:      optional.StringValue(params.TraceId),
-		SortBy:       listParamString(params.SortBy),
-		MaxResults:   optional.IntValue(params.MaxResults),
-		NextToken:    optional.StringValue(params.NextToken),
+		StateName:         optional.StringValue(params.StateName),
+		StateType:         listParamString(params.StateType),
+		Name:              optional.StringValue(params.Name),
+		WorkTypeName:      optional.StringValue(params.WorkTypeName),
+		TraceID:           optional.StringValue(params.TraceId),
+		Terminal:          listParamBool(params.Terminal),
+		NonTerminal:       listParamBool(params.NonTerminal),
+		IncludeSuperseded: listParamBool(params.IncludeSuperseded),
+		SortBy:            listParamString(params.SortBy),
+		MaxResults:        optional.IntValue(params.MaxResults),
+		NextToken:         optional.StringValue(params.NextToken),
+		Counts:            listParamBool(params.Counts),
 	}
 	query, err := work.NormalizeList(options)
 	if err != nil {
+		var validation *work.ValidationError
+		if errors.As(err, &validation) {
+			return work.ListOptions{}, &work.ValidationError{Field: validation.Field, Message: validation.Field + " is invalid"}
+		}
 		return work.ListOptions{}, err
 	}
 	return query.Options(), nil
@@ -32,6 +44,13 @@ func listParamString[T ~string](value *T) string {
 		return ""
 	}
 	return string(*value)
+}
+
+func listParamBool[T ~bool](value *T) bool {
+	if value == nil {
+		return false
+	}
+	return bool(*value)
 }
 
 // ListWorkResponseToAPI encodes detached Work list results into the public HTTP
@@ -50,6 +69,9 @@ func ListWorkResponseToAPI(result work.ListResult) factoryapi.ListWorkResponse {
 	if result.NextToken != "" {
 		response.PaginationContext.NextToken = &result.NextToken
 	}
+	if result.Counts != nil {
+		response.Counts = &factoryapi.ListWorkCountSummary{Total: result.Counts.Total}
+	}
 	return response
 }
 
@@ -59,20 +81,52 @@ func WorkReadModelToAPI(item work.ReadModel) factoryapi.Work {
 	result := factoryapi.Work{
 		Name:                     item.Name,
 		WorkId:                   optional.NonEmptyStringPtr(item.WorkID),
+		RequestId:                optional.NonEmptyStringPtr(item.RequestID),
 		WorkTypeName:             optional.NonEmptyStringPtr(item.WorkTypeName),
 		ChainingTraceDepth:       optional.PositiveIntPtr(item.ChainingTraceDepth),
 		CurrentChainingTraceId:   optional.NonEmptyStringPtr(item.CurrentChainingTraceID),
 		PreviousChainingTraceIds: optional.CopiedStringsPtr(item.PreviousChainingTraceIDs),
 		TraceId:                  optional.NonEmptyStringPtr(item.TraceID),
+		SupersededBy:             optional.NonEmptyStringPtr(item.SupersededBy),
 		Content:                  contentcontract.GeneratedPtrFromParts(item.Content),
 		Tags:                     optional.CopiedStringMapPtr(item.Tags),
+		FailureDetail:            workFailureDetailToAPI(item.FailureDetail),
 		StopSummary:              workStopSummaryToAPI(item.StopSummary),
+	}
+	if jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent) {
+		if item.StructuredResult == nil {
+			// A non-nil RawMessage keeps JSON null present through generated
+			// interface{} fields that use omitempty.
+			result.StructuredResult = json.RawMessage("null")
+		} else {
+			result.StructuredResult = jsonvalue.Clone(item.StructuredResult)
+		}
 	}
 	if item.State != nil {
 		result.State = &factoryapi.WorkState{
 			Name: item.State.Name,
 			Type: factoryapi.WorkStateType(item.State.Type),
 		}
+	}
+	if item.HumanApproval != nil {
+		approval := factoryapi.HumanApproval{
+			ApprovalId:      item.HumanApproval.ApprovalID,
+			SessionId:       item.HumanApproval.SessionID,
+			DispatchId:      item.HumanApproval.DispatchID,
+			WorkstationId:   item.HumanApproval.WorkstationID,
+			WorkstationName: item.HumanApproval.WorkstationName,
+			Status:          factoryapi.HumanApprovalStatus(item.HumanApproval.Status),
+			WorkIds:         []string{item.WorkID},
+			Decisions:       make([]factoryapi.HumanApprovalDecisions, 0, len(item.HumanApproval.Decisions)),
+		}
+		for _, decision := range item.HumanApproval.Decisions {
+			approval.Decisions = append(approval.Decisions, factoryapi.HumanApprovalDecisions(decision))
+		}
+		if item.HumanApproval.Description != "" {
+			description := item.HumanApproval.Description
+			approval.Description = &description
+		}
+		result.HumanApproval = &approval
 	}
 	if len(item.Relations) > 0 {
 		relations := make([]factoryapi.Relation, 0, len(item.Relations))
@@ -87,7 +141,38 @@ func WorkReadModelToAPI(item work.ReadModel) factoryapi.Work {
 		}
 		result.Relations = &relations
 	}
+	if len(item.ExpectedArtifacts) > 0 {
+		expectedArtifacts := make([]factoryapi.WorkExpectedArtifact, 0, len(item.ExpectedArtifacts))
+		for _, artifact := range item.ExpectedArtifacts {
+			mapped := factoryapi.WorkExpectedArtifact{
+				Name:         artifact.Name,
+				Pattern:      artifact.Pattern,
+				NonEmpty:     artifact.NonEmpty,
+				Verification: factoryapi.WorkExpectedArtifactVerification(artifact.Verification),
+			}
+			if artifact.Reason != nil {
+				reason := factoryapi.ExpectedArtifactVerificationReason(*artifact.Reason)
+				mapped.Reason = &reason
+			}
+			expectedArtifacts = append(expectedArtifacts, mapped)
+		}
+		result.ExpectedArtifacts = &expectedArtifacts
+	}
 	return result
+}
+
+func workFailureDetailToAPI(detail *work.FailureDetail) *factoryapi.FailureDetail {
+	if detail == nil {
+		return nil
+	}
+	return &factoryapi.FailureDetail{
+		Reason:  factoryapi.WorkFailureType(detail.Reason),
+		Message: detail.Message,
+	}
+}
+
+func WorkReadModelToGenerated(item work.ReadModel) factoryapi.Work {
+	return WorkReadModelToAPI(item)
 }
 
 func workStopSummaryToAPI(summary *work.StopSummary) *factoryapi.FactoryStopSummary {

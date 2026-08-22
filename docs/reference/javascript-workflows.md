@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-07-30
+last-modified: 2026-08-21
 doc-id: agent-factory/guides/javascript-workflows
 ---
 
@@ -118,7 +118,7 @@ to the facts that remain inspectable.
 | `phase` | `phase(name: string): void` | Appends an ordered phase observation for the `FactorySession` and its `FactoryEvent` stream. |
 | `log` | `log(message: string, fields?: object): void` | Appends a structured log observation. Fields must be JSON-compatible. |
 | `workflow.log` | `workflow.log(message: string, fields?: object): void` | Same observable log contract as `log`. |
-| `agent.run` | `await agent.run({prompt, label?, preset?, executorProvider?, modelProvider?, model?, reasoningEffort?, skipPermissions?})` | Requests one child execution and resolves to its structured result. Its resolved worker selection and lifecycle are inspectable as a `Dispatch` and related `FactoryEvent` records. For ACP, use `executorProvider: "ACP"` and select the integration with `modelProvider`, such as `cursor-acp`. Set `skipPermissions: true` only for intentionally autonomous child work. Explicit settings remain subject to policy. |
+| `agent.run` | `await agent.run({prompt, label?, preset?, executorProvider?, modelProvider?, model?, reasoningEffort?, resourceId?, skipPermissions?})` | Requests one child execution and resolves to its structured result. Its resolved worker selection, resource admission, and lifecycle are inspectable as a `Dispatch` and related `FactoryEvent` records. For ACP, use `executorProvider: "ACP"` and select the integration with `modelProvider`, such as `cursor-acp`. Set `resourceId` to a stable Factory Runtime resource ID when the child must consume shared live capacity. Set `skipPermissions: true` only for intentionally autonomous child work. Explicit settings remain subject to policy. |
 | `parallel` | `await parallel(items)` where each item is an `agent.run` request object or async function | Runs bounded child work and returns results in input order. Child work remains individually inspectable as `Dispatch` records. |
 | `pipeline` | `await pipeline(items, worker, next?)` | Runs `worker(item, index)` and optional `next(workerResult, item, index)` for each item. Returns ordered per-item status and stage results. |
 | `workflow.checkpoint` | `workflow.checkpoint({label: string, state?: object}): void` | Persists JSON-compatible application state as a checkpoint artifact/reference and appends a checkpoint observation. It does not snapshot the JavaScript VM. |
@@ -136,11 +136,21 @@ Workflow source is validated before execution and runs with only the globals
 listed above plus ordinary JavaScript language facilities. Direct filesystem,
 shell, process, module `import`/`require`, and network access is unavailable.
 Child requests may select a preset, executor provider, model provider, model,
-reasoning effort, and a boolean `skipPermissions` value;
+reasoning effort, stable `resourceId`, and a boolean `skipPermissions` value;
 the host permits them only when effective policy allows them. Command, sandbox,
 writable-root, network, concurrency, and output-schema fields are not otherwise supported
 `agent.run` arguments. Use `agent.run` for host-mediated child work and
 `workflow.artifact` for durable outputs.
+
+`skipPermissions: true` is a dangerous, child-scoped override for the selected
+provider's approval and sandbox restrictions. The selected provider route must
+advertise the permission-bypass capability; an incapable route fails closed
+before a provider attempt, prompt, subprocess, or other execution side effect
+with a safe capability diagnostic. It does not change `policy.mode`, session
+state, model or reasoning allowlists, route selection, fanout or concurrency,
+duration, token, output, or artifact budgets, network or connector access, or
+other workflow controls. Omitted and `false` values retain the provider's
+normal permission behavior.
 
 ## Runnable examples
 
@@ -203,7 +213,7 @@ result availability have the same meaning on every surface.
 | Start and wait | `you run --named FACTORY` for canonical named-Factory invocation | `POST /factory-sessions/sync` | `you.factory_session.start_sync` |
 | Start for polling | — | `POST /factory-sessions/async` | `you.factory_session.start_async` |
 | Read status or final/partial result | `you session show SESSION_ID` | `GET /factory-sessions/SESSION_ID`; `GET /factory-sessions/SESSION_ID/results` | `you.factory_session.get`; `you.factory_session.get_result` |
-| Inspect child work and durable facts | `you session dispatches SESSION_ID` | `GET /factory-sessions/SESSION_ID/dispatches`; `artifacts`; `events` | `you.factory_session.list_dispatches`; `list_artifacts`; `read_events` |
+| Inspect child work and durable facts | `you session show SESSION_ID` for status; use `you metrics --session SESSION_ID --group-by worker` for aggregates | `GET /factory-sessions/SESSION_ID/dispatches`; `artifacts`; `events` | `you.factory_session.list_dispatches`; `list_artifacts`; `read_events` |
 
 Start requests use the shared `FactorySessionExecutionRequest` shape: one source
 selector, JSON-compatible `args`, requested policy where applicable, and the
@@ -214,8 +224,8 @@ sync response or fetched later; running sessions can report a not-ready final
 result while their status, partial result, dispatches, artifacts, and events
 remain inspectable.
 
-`you mcp serve` is fixture-backed by default for deterministic offline contract
-scenarios. Use `you mcp serve --runtime` for live JavaScript execution. Both
+`you server mcp` is fixture-backed by default for deterministic offline contract
+scenarios. Use `you server mcp --runtime` for live JavaScript execution. Both
 modes expose the same `you.factory_session.*` tool envelopes, but fixture-backed
 calls return catalog scenarios while runtime-backed calls execute resolved
 source.
@@ -287,7 +297,7 @@ VM internals part of the inspection contract.
 | Non-JSON checkpoint, artifact, log fields, or final value | Execution fails with a bounded `must be JSON-compatible` diagnostic. | The session, earlier dispatches/artifacts/events, and any approved checkpoint references remain inspectable; the rejected value is not promised as an artifact. | Convert the value to JSON data without functions, cycles, or host objects. |
 | Result not ready | Result reads return `resultStatus: NOT_READY` with availability reason `RESULT_NOT_READY`; this is retryable while the session is running. | Status, partial result when present, dispatches, artifacts, and events remain inspectable. | Poll status/events and retry the result read after progress or a terminal transition. |
 | Factory Session not found | CLI reports `SESSION_NOT_FOUND`; REST uses `NOT_FOUND`; MCP returns its Factory Session not-found error envelope. | Nothing is inspectable for that identifier. | Reuse the exact `sessionId` returned by start and confirm the same runtime/storage scope. |
-| Recording flag conflict | `--record` with `--replay`, or `--no-record` with `--record`, is rejected before execution. | No new session or session-owned facts. | Choose one recording mode; see `you docs record-replay`. |
+| Recording flag conflict | `--record` with `--replay`, `--no-record` with `--record`, `--resume` with `--replay`, or `--resume` with `--no-record` is rejected before execution. | No new session or session-owned facts. | Choose one recording mode; see `you docs record-replay`. |
 | Missing, malformed, or incompatible replay | Replay load fails before reconstruction; unsupported artifacts report `unsupported replay artifact schemaVersion`. | No reconstructed session is created from the rejected file; the file itself remains unchanged. | Use an artifact with the supported schema, regenerate it with a compatible `you` version, or run live to create a new recording. |
 
 A successful final result has `resultStatus: FINAL`. A running session can be
@@ -302,4 +312,4 @@ Use the session lifecycle status together with result status and availability.
 - `you docs sessions` — session discovery and inspection
 - `you docs mcp` — fixture-backed and runtime-backed MCP host setup
 - `you docs config` — worker preset and operator-default configuration
-- `you docs record-replay` — recording and replay modes
+- `you docs record-replay` — recording, replay, and resume modes

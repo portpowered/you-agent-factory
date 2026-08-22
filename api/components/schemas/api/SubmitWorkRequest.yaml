@@ -22,7 +22,12 @@ properties:
     $ref: '../data-models/WorkContent.yaml'
     description: Optional canonical ordered work content parts for this submission.
   payload:
-    description: Opaque work payload forwarded as raw JSON.
+    description: >-
+      Opaque work payload forwarded as raw JSON. Each submitted Work payload is
+      limited to 65,536 bytes measured from its compact UTF-8 JSON value;
+      exactly 65,536 bytes is allowed. An oversized submission returns the
+      operation's 400 BAD_REQUEST ErrorResponse with payloadBytes and
+      payloadLimitBytes; those values count bytes, not characters.
   tags:
     $ref: '../shared/StringMap.yaml'
   relations:

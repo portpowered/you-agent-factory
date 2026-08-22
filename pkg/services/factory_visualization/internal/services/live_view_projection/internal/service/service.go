@@ -7,9 +7,9 @@ import (
 	"sync"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
 	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/recordingsqueries"
+	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 // Service owns retained event projection, reconnect cursor, and live

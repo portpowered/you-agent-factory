@@ -64,7 +64,7 @@ func TestScanTestBehaviorBoundariesRejectsFunctionalTransportConstruction(t *tes
 	writeGoSourceFile(t, repoRoot, "tests/functional/runtime_api/direct_submit_test.go", `package runtime_api
 import (
   clihttp "github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
-  submit "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
+  submit "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/submit"
 )
 func bypassRootProcess() { clihttp.NewProtocol(nil, nil); submit.NewSubmit(nil, nil) }
 `)
@@ -76,7 +76,7 @@ func bypassRootProcess() { clihttp.NewProtocol(nil, nil); submit.NewSubmit(nil, 
 	joined := testBehaviorFindingSummary(findings)
 	for _, want := range []string{
 		"tests/functional/runtime_api/direct_submit_test.go|alternate-customer-composition|pkg/transports/cli/clihttp|NewProtocol|1",
-		"tests/functional/runtime_api/direct_submit_test.go|alternate-customer-composition|pkg/transports/cli/submit|NewSubmit|1",
+		"tests/functional/runtime_api/direct_submit_test.go|alternate-customer-composition|pkg/services/work/transports/cli/submit|NewSubmit|1",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("findings = %q, want %q", joined, want)
@@ -129,10 +129,10 @@ func usePublicEdges() { generatedclient.NewClient(""); factoryapi.NewPublicValue
 func TestScanTestBehaviorBoundariesAllowsOwnerTransportConstruction(t *testing.T) {
 	t.Parallel()
 	repoRoot := t.TempDir()
-	writeGoSourceFile(t, repoRoot, "pkg/transports/cli/submit/protocol_test.go", `package submit
+	writeGoSourceFile(t, repoRoot, "pkg/services/work/transports/cli/submit/protocol_test.go", `package submit
 import (
   clihttp "github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
-  submit "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
+  submit "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/submit"
 )
 func protocolInvariant() { clihttp.NewProtocol(nil, nil); submit.NewSubmit(nil, nil) }
 `)
@@ -273,7 +273,7 @@ import (
   workers "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 type testProviderSessionService struct{}
-func newTestProviderSessionService() { sessions.CanonicalProvider("agent"); service.NewForRoots(); cursor.LoadDetails(); workers.CanonicalProviderSessionProvider("agent") }
+func newTestProviderSessionService() { sessions.CanonicalProvider("agent"); service.NewForRoots(); cursor.LoadDetails(); providers.ID("agent").CanonicalSessionProvider() }
 func scriptedProviderSessionDetail() {}
 `)
 

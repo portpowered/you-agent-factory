@@ -8,10 +8,10 @@ import (
 	"strings"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	workflowpreview "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/preview"
-	workflowruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/runtime"
-	workflowsource "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/source"
-	workflowvalidation "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/validation"
+	workflowpreview "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript/preview"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime"
+	workflowsource "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript/source"
+	workflowvalidation "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript/validation"
 )
 
 // Service implements the JavaScript orchestrator capabilities published by

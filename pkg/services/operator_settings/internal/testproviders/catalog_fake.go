@@ -13,6 +13,7 @@ import (
 // CatalogFake is a behavioral double for providers.Service used by Settings
 // wire and resolution tests.
 type CatalogFake struct {
+	providers.Service
 	providers map[providers.ID]providers.Descriptor
 }
 

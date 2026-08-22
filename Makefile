@@ -2,10 +2,11 @@ BINARY_NAME := you
 CMD_PATH    := ./cmd/factory/
 BIN_DIR     := bin
 GO          ?= go
-INSTALL_DIR := $(or $(GOBIN),$(shell $(GO) env GOPATH)/bin)
+INSTALL_DIR = $(or $(GOBIN),$(shell $(GO) env GOPATH)/bin)
 NPM         ?= npm
+NODE        ?= node
 ifeq ($(OS),Windows_NT)
-BUN_BIN     := $(shell where.exe bun >NUL 2>NUL && echo bun)
+BUN_BIN     := $(shell where.exe bun >/dev/null 2>&1 && echo bun)
 else
 BUN_BIN     := $(shell command -v bun 2>/dev/null)
 endif
@@ -15,14 +16,86 @@ UI_SCRIPT   := $(if $(BUN_BIN),$(BUN_BIN) run,$(NPM) run)
 UI_EXEC     := $(if $(BUN_BIN),$(BUN_BIN) x,$(NPM) exec)
 UI_INSTALL  := $(if $(BUN_BIN),$(BUN_BIN) install,$(NPM) install --no-package-lock)
 FUNCTIONAL_DEFAULT_PACKAGES := ./tests/functional/...
-FUNCTIONAL_DEFAULT_JOBS ?= 8
-UNIT_DEFAULT_JOBS ?= 32
+
+# Keep the default Go work claimed by each factory lane bounded when several
+# lanes share one host. GO_LANE_BUDGET is max(2, logical CPUs /
+# YOU_EXPECTED_CONCURRENT_LANES). Both inputs are overridable for controlled
+# probes and CI-specific capacity, while invalid detected values safely select
+# two jobs.
+YOU_EXPECTED_CONCURRENT_LANES ?= 4
+ifeq ($(OS),Windows_NT)
+YOU_LOGICAL_CPUS ?= $(strip $(NUMBER_OF_PROCESSORS))
+else
+YOU_LOGICAL_CPUS ?= $(strip $(shell getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || nproc 2>/dev/null))
+endif
+
+define decimal_remainder
+$(strip $(subst 0,,$(subst 1,,$(subst 2,,$(subst 3,,$(subst 4,,$(subst 5,,$(subst 6,,$(subst 7,,$(subst 8,,$(subst 9,,$(1))))))))))))
+endef
+
+define nonzero_decimal
+$(strip $(subst 0,,$(1)))
+endef
+
+define positive_decimal
+$(if $(strip $(1)),$(if $(call decimal_remainder,$(1)),,$(if $(call nonzero_decimal,$(1)),$(strip $(1)),)),)
+endef
+
+ifeq ($(OS),Windows_NT)
+ifneq (,$(or $(findstring /sh,$(SHELL)),$(findstring /bash,$(SHELL))))
+# GNU Make uses the effective SHELL for $(shell), so use POSIX arithmetic when
+# Windows Make is running through sh.exe or bash.exe. Calling cmd.exe here
+# makes MSYS shells return the cmd banner and prompt instead of the result.
+define compute_go_lane_budget
+$(strip $(shell budget=$$(expr $(1) / $(2) 2>/dev/null); if test "$$budget" -ge 2 2>/dev/null; then printf '%s' "$$budget"; elif test "$$budget" = 0 || test "$$budget" = 1; then printf '2'; fi))
+endef
+else
+# The native Windows Make shell is cmd.exe when no POSIX shell is selected.
+# Keep the command's raw stdout for the validation guard below.
+define compute_go_lane_budget
+$(strip $(shell cmd.exe /d /v:on /c "set /a result=$(1)/$(2) >nul & if !result! LSS 2 (echo 2) else (echo !result!)"))
+endef
+endif
+else
+define compute_go_lane_budget
+$(strip $(shell budget=$$(expr $(1) / $(2) 2>/dev/null); if test "$$budget" -ge 2 2>/dev/null; then printf '%s' "$$budget"; elif test "$$budget" = 0 || test "$$budget" = 1; then printf '2'; fi))
+endef
+endif
+
+ifndef GO_LANE_BUDGET
+ifneq ($(call positive_decimal,$(YOU_LOGICAL_CPUS)),)
+ifneq ($(call positive_decimal,$(YOU_EXPECTED_CONCURRENT_LANES)),)
+GO_LANE_BUDGET_COMPUTED ?= $(call compute_go_lane_budget,$(YOU_LOGICAL_CPUS),$(YOU_EXPECTED_CONCURRENT_LANES))
+ifneq ($(call positive_decimal,$(GO_LANE_BUDGET_COMPUTED)),)
+GO_LANE_BUDGET := $(call positive_decimal,$(GO_LANE_BUDGET_COMPUTED))
+else
+$(warning GO_LANE_BUDGET received invalid computed value '$(GO_LANE_BUDGET_COMPUTED)'; using 2)
+GO_LANE_BUDGET := 2
+endif
+else
+GO_LANE_BUDGET := 2
+endif
+else
+GO_LANE_BUDGET := 2
+endif
+endif
+
+ifdef GO_LANE_BUDGET
+GO_LANE_BUDGET_VALIDATED := $(call positive_decimal,$(GO_LANE_BUDGET))
+ifneq ($(GO_LANE_BUDGET_VALIDATED),)
+override GO_LANE_BUDGET := $(GO_LANE_BUDGET_VALIDATED)
+else
+$(warning GO_LANE_BUDGET received invalid override '$(GO_LANE_BUDGET)'; using 2)
+override GO_LANE_BUDGET := 2
+endif
+endif
+
+FUNCTIONAL_DEFAULT_JOBS ?= $(GO_LANE_BUDGET)
+UNIT_DEFAULT_JOBS ?= $(GO_LANE_BUDGET)
 FUNCTIONAL_LONG_TAGS ?= functionallong
 FUNCTIONAL_LONG_PACKAGES := ./tests/functional/...
 STRESS_DEFAULT_PACKAGES := ./tests/stress/...
 RELEASE_DEFAULT_PACKAGES := ./tests/release/...
-MODEL_LONG_TEST_TIMEOUT ?= 20m
-PR_INFERENCE_APPROVAL_REGRESSION ?= TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio
 SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST := TestProviderCancellationTerminatesCompanionProcesses
 SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT ?= 100
 SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT ?= 120s
@@ -32,8 +105,6 @@ CRON_TIME_WORK_SMOKE_TIMEOUT ?= 120s
 CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TEST := TestCurrentFactoryActivationSwitchesPersistedFactories
 CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_COUNT ?= 1
 CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TIMEOUT ?= 120s
-CROSS_PROVIDER_PARITY_SMOKE_TEST := TestCrossProviderParity
-CROSS_PROVIDER_PARITY_SMOKE_TIMEOUT ?= 120s
 JAVASCRIPT_CONTRACT_SMOKE_TIMEOUT ?= 120s
 CONFIG_CONTRACT_SMOKE_TIMEOUT ?= 120s
 JAVASCRIPT_RUNTIME_REGRESSION_TESTS ?= ^(TestCallBehavior_WorkflowFinalInventoryMatchesExecution|TestCallBehavior_AgentRunInventoryMatchesExecution|TestRun_ProgressPrimitives_EmitsOrderedRuntimeRecords|TestRun_PolicyDeniedChildOperations_ReturnStableDiagnostics|TestCallBehavior_WorkflowResumeStateInventoryMatchesExecution)$$
@@ -46,58 +117,89 @@ ifeq ($(OS),Windows_NT)
 	BINARY_NAME := you.exe
 endif
 
-# Detect git worktree environment
-# In a worktree, --git-common-dir points to the main repo's .git directory,
-# while --git-dir points to the worktree's .git file. When they differ, we're
-# in a worktree and must force a full rebuild to avoid stale build cache.
-_GIT_COMMON_DIR := $(shell git rev-parse --git-common-dir 2>/dev/null)
-_GIT_DIR := $(shell git rev-parse --git-dir 2>/dev/null)
-IS_WORKTREE :=
-ifneq ($(_GIT_COMMON_DIR),$(_GIT_DIR))
-	IS_WORKTREE := 1
-endif
-
-# When in a worktree, add -a flag to force rebuild all packages
-WORKTREE_FLAGS :=
-ifdef IS_WORKTREE
-	WORKTREE_FLAGS := -a
-endif
+# Go's build cache is content-addressed and already includes the inputs that
+# determine a package's compiled output. Local CLI builds do not consume Go's
+# repository VCS metadata, so skip that probe by default. Keep this option
+# separate from GO_BUILD_FLAGS so callers can restore stamping explicitly with
+# GO_LOCAL_BUILD_FLAGS=-buildvcs=true without changing other build flags.
+GO_BUILD_FLAGS ?=
+GO_LOCAL_BUILD_FLAGS ?= -buildvcs=false
 
 GO_TEST_TIMEOUT ?= 300s
 GO_COVERAGE_TIMEOUT ?= 10m
 GO_COVERAGE_MIN ?= 75.9
+GO_COVERAGE_FLOOR_POLICY ?= blocking
 GO_UNIT_COVERAGE_MIN ?= $(GO_COVERAGE_MIN)
 GO_FUNCTIONAL_COVERAGE_MIN ?= 33.1
 GO_UNIT_COVERAGE_MANIFEST ?= docs/internal/baselines/go-unit-coverage-package-minimums.json
 GO_FUNCTIONAL_COVERAGE_MANIFEST ?= docs/internal/baselines/go-functional-coverage-package-minimums.json
+FUNCTIONAL_QUARANTINE ?= tests/functional/functional-quarantine.json
+FUNCTIONAL_TEST_TIER ?= pr-short
+FUNCTIONAL_TEST_TRIGGER ?= local
+FUNCTIONAL_TEST_BUDGET ?= 35m
+FUNCTIONAL_SHORT ?= true
 GO_UNIT_COVERAGE_PROFILE ?=
+GO_UNIT_COVERAGE_JSON_OUTPUT ?=
+GO_UNIT_COVERAGE_TIMING_OUTPUT ?=
 GO_FUNCTIONAL_COVERAGE_PROFILE ?=
 GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT ?=
+GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT ?=
 FUNCTIONAL_TEST_VIZ_DIR ?= .artifacts/functional-test-viz
 FUNCTIONAL_TEST_VIZ_PROFILE ?= $(FUNCTIONAL_TEST_VIZ_DIR)/coverage.out
 FUNCTIONAL_TEST_VIZ_JSON ?= $(FUNCTIONAL_TEST_VIZ_DIR)/coverage-summary.json
+FUNCTIONAL_TEST_VIZ_TIMING ?= $(FUNCTIONAL_TEST_VIZ_DIR)/functional-timing-summary.json
 FUNCTIONAL_TEST_VIZ_MARKDOWN ?= $(FUNCTIONAL_TEST_VIZ_DIR)/functional-tests.md
+# The Linux CI wrapper sets this optional handoff so an ordinary
+# gocoveragecheck failure can be reported by its compact terminal verdict step.
+# An unset path preserves the historical fail-fast target behavior.
+FUNCTIONAL_GOCOVERAGE_EXIT_FILE ?=
 BACKEND_SIZE_ROOT ?= .
 PACKAGE_MAINT_ROOT ?= .
 PACKAGE_FILE_COUNT_ROOT ?= .
 PACKAGE_BOUNDARY_ROOT ?= .
+PACKAGE_BOUNDARY_ALL ?= 0
+PACKAGE_BOUNDARY_BASE_REF ?=
 PACKAGE_STRUCTURE_ROOT ?= .
 BACKEND_DEPENDENCY_GRAPH_DIR ?= .artifacts/backend-dependency-graph
 BACKEND_DEPENDENCY_GRAPH_DOT ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.dot
 BACKEND_DEPENDENCY_GRAPH_SVG ?= $(BACKEND_DEPENDENCY_GRAPH_DIR)/backend-dependency-graph.svg
 COMPATIBILITY_ALIAS_CHECK_ROOT ?= .
 RETIRED_SURFACE_CHECK_ROOT ?= .
-LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check ownership-inventory-check deadcode
+LINT_CHECKER_CACHE_DIR ?= .cache/lint-checkers
+# Set LINT_CHECKER_FALLBACK=1 to use the original go run path for one proof.
+LINT_CHECKER_FALLBACK ?= 0
+LINT_CHECKER_DRIVER_PACKAGE := ./cmd/lintcheck
+LINT_CHECKER_DRIVER ?=
+LINT_LANE_PACKAGE := ./cmd/lintlane
+LINT_JOBS ?= $(GO_LANE_BUDGET)
+# Keep the recursive command available to lintlane without spelling the
+# special $(MAKE) variable in this recipe; GNU Make executes such recipes
+# during -n so recursive builds can receive the dry-run flag.
+LINT_MAKE ?= $(MAKE)
+LINT_REPORT_FILE ?=
+LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure service-cycle-check package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check ownership-inventory-check deadcode fmt-check
+
+define run_lint_checker
+$(if $(LINT_CHECKER_DRIVER),"$(LINT_CHECKER_DRIVER)",$(GO) run $(LINT_CHECKER_DRIVER_PACKAGE)) -cache-dir "$(LINT_CHECKER_CACHE_DIR)" -go "$(GO)" $(if $(filter 1 true yes,$(LINT_CHECKER_FALLBACK)),-fallback,) -package "$(1)" -- $(2)
+endef
 
 define run_verification_step
 	@printf '%s\n' "==> $(2) [make $(1)]"
 	@$(MAKE) $(1) || { status=$$?; printf '%s\n' "FAIL: $(2) [make $(1)] failed. Rerun with: make $(1)"; exit $$status; }
 endef
 
+define ensure_directory
+	@mkdir -p $(1)
+endef
+
 ifeq ($(OS),Windows_NT)
 define run_verification_step
 	@echo Running $(2) [make $(1)]
 	@$(MAKE) $(1) || (echo FAIL: $(2) [make $(1)] failed. Rerun with: make $(1) & exit /b 1)
+endef
+
+define ensure_directory
+	@if not exist "$(subst /,\,$(1))" mkdir "$(subst /,\,$(1))"
 endef
 endif
 
@@ -115,16 +217,17 @@ define run_timed_step
 endef
 
 
-.PHONY: default build install bundle-api
-.PHONY: fmt vet deps deps-tidy clean init typecheck release lint
+.PHONY: default default-pipeline-banner build install bundle-api print-go-parallelism
+.PHONY: fmt fmt-check vet deps deps-tidy clean init typecheck release lint
 
-.PHONY: test test-full test-unit test-unit-fresh test-lane-audit test-maintenance test-integration test-contract test-stress test-release
-.PHONY: test-functional test-functional-long test-backend-functional functional-boundary-check functional-test-viz
+.PHONY: test test-full test-unit test-unit-fresh test-ci-workflows test-lane-audit test-maintenance test-integration test-contract test-stress test-release
+.PHONY: test-functional test-functional-fresh test-functional-long test-functional-long-compile test-backend-functional functional-boundary-check functional-test-viz
 .PHONY: test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
-.PHONY: test-unit-coverage test-functional-coverage test-backend-coverage test-coverage-go test-race
-.PHONY: test-backend-verification test-root-process-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval
+.PHONY: test-unit-coverage test-functional-coverage coverage-help test-backend-coverage test-coverage-go test-race
+.PHONY: test-backend-verification test-root-process-acceptance long-tests long-tests-managed-runtime
+.PHONY: frontend-verification backend-verification ui-backend-integration
 
-.PHONY: verify-fast verify-pr verify-pr-inference verify-extended verify-build verify-lint verify-api
+.PHONY: verify-fast verify-pr verify-extended verify-build verify-lint verify-api
 .PHONY: verify-build-contracts verify-tests run-concurrent-ui-verification-lanes verify test-ui-coverage
 
 .PHONY: backend-dependency-graph
@@ -143,8 +246,8 @@ endef
 
 .PHONY: docs-reference-check docs-reference-smoke
 
-.PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke provider-parity-smoke javascript-contract-smoke config-contract-smoke
-.PHONY: backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check durable-runtime-construction-check logging-boundary-check ownership-inventory-check
+.PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke javascript-contract-smoke config-contract-smoke
+.PHONY: backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure service-cycle-check package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check durable-runtime-construction-check logging-boundary-check ownership-inventory-check
 .PHONY: response-stream-stress-smoke release-surface-smoke artifact-contract-closeout
 .PHONY: compatibility-alias-check retired-surface-check readme-check deadcode dashboard-verify
 
@@ -157,22 +260,47 @@ endef
 .PHONY: ui-package-client-build ui-package-components-build ui-package-emulator-build ui-package-replay-build ui-package-visualizers-build ui-packages-build ui-dashboard-build ui-build-all build-all
 
 
-default:
-	$(MAKE) generate-api
-	$(MAKE) ui-deps
-	$(MAKE) ui-build
-	$(MAKE) build
-	$(MAKE) test
-	$(MAKE) lint
+# Keep the default pipeline as an ordinary ordered dependency graph. Recipe-
+# level $(MAKE) invocations are special to GNU Make and execute during -n so
+# that recursive builds can receive the dry-run flag; on the measured Windows
+# Make implementation that still launched real work. These aggregators remain
+# serialized to preserve the old stop-on-failure behavior even with -j.
+.NOTPARALLEL: default test
+# Bare `make` runs the complete generation, frontend, build, test, and lint
+# pipeline. Use `make build` when only the Go binary is needed.
+default: default-pipeline-banner generate-api ui-deps ui-build build test lint
+
+default-pipeline-banner:
+	@echo "Bare make runs: generate-api, ui-deps, ui-build, build, test, lint."
+	@echo "For only the Go binary, run: make build."
+
+# Print the derived values without starting a toolchain process. This is useful
+# for controlled host-capacity probes, for example:
+#   make -s print-go-parallelism YOU_LOGICAL_CPUS=24 YOU_EXPECTED_CONCURRENT_LANES=4
+print-go-parallelism:
+	@echo "YOU_LOGICAL_CPUS=$(YOU_LOGICAL_CPUS) YOU_EXPECTED_CONCURRENT_LANES=$(YOU_EXPECTED_CONCURRENT_LANES)"
+	@echo "GO_LANE_BUDGET=$(GO_LANE_BUDGET)"
+	@echo "UNIT_DEFAULT_JOBS=$(UNIT_DEFAULT_JOBS)"
+	@echo "FUNCTIONAL_DEFAULT_JOBS=$(FUNCTIONAL_DEFAULT_JOBS)"
+	@echo "LINT_JOBS=$(LINT_JOBS)"
+	@echo "UNITLANE_DEFAULT_JOBS=$(GO_LANE_BUDGET)"
+
+# Local pre-push guidance: run both independent Go coverage reports before
+# pushing. A build or typecheck does not substitute for either completed run.
+coverage-help:
+	$(info Local pre-push checks: run both independent Go coverage reports before pushing.)
+	$(info   make test-unit-coverage       backend unit/package coverage report)
+	$(info   make test-functional-coverage independent functional coverage report)
+	$(info A build or typecheck alone does not replace either completed coverage run.)
 
 build:
-	$(GO) build $(WORKTREE_FLAGS) -o $(BIN_DIR)/$(BINARY_NAME) $(CMD_PATH)
+	$(GO) build $(GO_BUILD_FLAGS) $(GO_LOCAL_BUILD_FLAGS) -o $(BIN_DIR)/$(BINARY_NAME) $(CMD_PATH)
 
 install:
-	$(GO) build $(WORKTREE_FLAGS) -o $(INSTALL_DIR)/$(BINARY_NAME) $(CMD_PATH)
+	$(GO) build $(GO_BUILD_FLAGS) $(GO_LOCAL_BUILD_FLAGS) -o $(INSTALL_DIR)/$(BINARY_NAME) $(CMD_PATH)
 
 bundle-api:
-	node scripts/run-quiet-api-command.js bundle:rest ./api/openapi-main.yaml ./api/openapi.yaml
+	$(NODE) scripts/run-quiet-api-command.js bundle:rest ./api/openapi-main.yaml ./api/openapi.yaml
 
 generate-api: bundle-api generate-go-api generate-ui-api
 
@@ -185,7 +313,7 @@ generate-go-client-api:
 	$(GO) generate -run=client -tags=interfaces ./pkg/transports/http
 
 generate-ui-api:
-	cd ui && node ./scripts/generate-openapi-types.mjs ../api/openapi.yaml src/api/generated/openapi.ts
+	cd ui && $(NODE) ./scripts/generate-openapi-types.mjs ../api/openapi.yaml src/api/generated/openapi.ts
 
 # Interface generation is split by consumer so callers can refresh only UI
 # artifacts or all generated interfaces without relying on prerequisite order.
@@ -231,7 +359,6 @@ api-smoke:
 	node scripts/check-api-generated-drift.js
 	$(GO) test ./pkg/transports/http/contracttests -run TestOpenAPIContract_BundledFactoryEventSchemasRemainComplete -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./tests/functional/transport/http/server -run TestGeneratedClientAndServerSchemaStayAligned -count=1 -timeout $(GO_TEST_TIMEOUT)
-	$(MAKE) provider-parity-smoke
 
 api-package-pack-smoke:
 	node --test scripts/package-export-validation.test.mjs scripts/api-package-contract.test.mjs scripts/api-package-pack.test.mjs scripts/api-package-candidate.test.mjs scripts/api-package-registry.test.mjs scripts/api-package-consumer.test.mjs scripts/api-package-pr-dry-run.test.mjs scripts/api-package-publish.test.mjs scripts/api-package-development-workflow.test.mjs
@@ -353,12 +480,15 @@ docs-reference-smoke:
 	$(GO) test ./pkg/transports/cli/docs/... -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/transports/cli -run TestDocsCommand_ -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./tests/functional/smoke -run TestDocsCommandSmoke_ -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./tests/functional/factory/definitions -run '^TestFactoryValidationDocsCommandDescribesStaticGate$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 readme-check:
 	$(GO) run ./cmd/readmecheck
 
-test:
-	$(MAKE) test-unit
+test: test-unit test-ci-workflows
+
+test-ci-workflows:
+	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/localai-backend-artifact-workflow.test.mjs
 
 test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)
@@ -380,23 +510,32 @@ test-integration:
 	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./pkg/services/factory_definitions/internal/services/compilation/runtimetests ./pkg/services/factory_definitions/internal/services/catalog/persistence/integrationtests ./pkg/services/factory_definitions/portableconfig/integrationtests ./pkg/services/factory_sessions/internal/execution/fixtures ./pkg/transports/http/servertests/... -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/services/automations/internal/services/filesystem_watchers/internal/service -run '^TestFileWatcher_' -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/platform/process -run '^TestExecCommandRunner_' -count=1 -timeout $(GO_TEST_TIMEOUT)
-	$(GO) test ./pkg/services/workers/worktree -run '^TestPrepareFactoryGitWorktree_(CreatesWorktreeWhenMissing|ReusesExistingValidWorktree|UsesExistingWorktreesParent|ReturnsFailureWhenWorktreeAddFails|ReturnsFailureWhenPathExistsButIsNotWorktree)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
-	$(GO) test ./pkg/services/providers/internal/services/execution/internal/provider -run '^TestScriptWrapProvider_CommandEnvironmentPreventsGitMergeEditorPrompt$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./pkg/services/workers/internal/worktree -run '^TestPrepareFactoryGitWorktree_(CreatesWorktreeWhenMissing|ReusesExistingValidWorktree|UsesExistingWorktreesParent|ReturnsFailureWhenWorktreeAddFails|ReturnsFailureWhenPathExistsButIsNotWorktree)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./pkg/services/providers/internal/services/execution/internal/adapters/claude -run '^TestClaudeCommandEnvironmentPreventsGitMergeEditorPrompt$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test-contract:
-	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./contracts ./pkg/services/factory_definitions/contracts/contracttests ./pkg/services/providers/internal/services/execution/internal/provider/functionaltests ./pkg/services/providers/internal/services/execution/internal/provider/paritytests ./pkg/transports/http/contracttests ./pkg/transports/cli/baseline ./pkg/transports/cli/clicontract ./pkg/transports/cli/cliinputs ./pkg/transports/cli/climanifestgen ./pkg/transports/cli/commandidentity -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./contracts ./pkg/services/factory_definitions/contracts/contracttests ./pkg/transports/http/contracttests ./pkg/transports/cli/baseline ./pkg/transports/cli/clicontract ./pkg/transports/cli/cliinputs ./pkg/transports/cli/climanifestgen ./pkg/transports/cli/commandidentity -count=1 -timeout $(GO_TEST_TIMEOUT)
 
+# Cache-aware developer feedback; use test-functional-fresh for an
+# unconditional rerun.
 test-functional:
+	$(MAKE) functional-boundary-check
+	$(GO) run ./cmd/functionallane -jobs $(FUNCTIONAL_DEFAULT_JOBS) -timeout $(GO_TEST_TIMEOUT)
+
+# CI-equivalent and flake-investigation path: force every package to execute.
+test-functional-fresh:
 	$(MAKE) functional-boundary-check
 	$(GO) run ./cmd/functionallane -jobs $(FUNCTIONAL_DEFAULT_JOBS) -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 functional-boundary-check:
 	$(GO) run ./cmd/functionalboundarycheck
 
-# functional-test-viz runs the boundary check, then the required short functional
-# coverage lane exactly once (profile + gocoveragecheck -json-output), then the
-# FND-004 Markdown catalog generator. Artifacts land under
-# .artifacts/functional-test-viz/.
+# functional-test-viz runs the boundary check, then the configured fresh
+# functional coverage tier exactly once (profile + gocoveragecheck
+# -json-output), then the FND-004 Markdown catalog generator. Artifacts land
+# under .artifacts/functional-test-viz/. The Linux CI wrapper enforces the
+# tier's FUNCTIONAL_TEST_BUDGET around this target and leaves the artifact root
+# intact when the budget or a later step fails.
 #
 # Fail-closed composition: each recipe line must succeed before the next runs.
 # Boundary, suite, coverage-floor, metadata/inventory, or Markdown rendering
@@ -404,15 +543,21 @@ functional-boundary-check:
 # so already-written diagnostics (for example coverage.out / coverage-summary.json
 # after a floor fail, or those files before a render fail) remain inspectable.
 # gocoveragecheck writes -json-output after a completed measurement even when a
-# floor fails; Make then stops before Markdown so the failure stays non-zero.
+# floor fails. Without FUNCTIONAL_GOCOVERAGE_EXIT_FILE, Make stops before
+# Markdown so the failure stays non-zero; the Linux CI wrapper sets that path
+# to hand an ordinary exit-1 outcome to its compact verdict step.
 functional-test-viz:
 	$(MAKE) functional-boundary-check
-	@mkdir -p $(FUNCTIONAL_TEST_VIZ_DIR)
-	GO_FUNCTIONAL_COVERAGE_PROFILE=$(FUNCTIONAL_TEST_VIZ_PROFILE) \
+	$(call ensure_directory,$(FUNCTIONAL_TEST_VIZ_DIR))
+	$(MAKE) test-functional-coverage \
+		GO_COVERAGE_FLOOR_POLICY=$(GO_COVERAGE_FLOOR_POLICY) \
+		GO_FUNCTIONAL_COVERAGE_PROFILE=$(FUNCTIONAL_TEST_VIZ_PROFILE) \
 		GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT=$(FUNCTIONAL_TEST_VIZ_JSON) \
-		$(MAKE) test-functional-coverage
+		GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT=$(FUNCTIONAL_TEST_VIZ_TIMING) \
+		FUNCTIONAL_GOCOVERAGE_EXIT_FILE=$(FUNCTIONAL_GOCOVERAGE_EXIT_FILE)
 	$(GO) run ./cmd/functionaltestviz \
 		-coverage-summary $(FUNCTIONAL_TEST_VIZ_JSON) \
+		-timing-summary $(FUNCTIONAL_TEST_VIZ_TIMING) \
 		-output $(FUNCTIONAL_TEST_VIZ_MARKDOWN)
 
 test-stress:
@@ -423,6 +568,11 @@ test-release:
 
 test-functional-long:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) $(FUNCTIONAL_LONG_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+# Compile every functionallong-tagged functional package without running tests
+# or starting any of the long-test runtime dependencies.
+test-functional-long-compile:
+	$(GO) vet -tags=$(FUNCTIONAL_LONG_TAGS) $(FUNCTIONAL_LONG_PACKAGES)
 
 test-root-process-acceptance:
 	$(GO) test $(ROOT_PROCESS_ACCEPTANCE_PACKAGES) -count=1 -timeout $(ROOT_PROCESS_ACCEPTANCE_TIMEOUT)
@@ -438,14 +588,6 @@ verify-pr:
 	$(info Running pull-request verification tier: build contracts + required CI-equivalent test lanes)
 	$(call run_verification_step,verify-build-contracts,build contracts and static verification)
 	$(call run_verification_step,verify-tests,required CI-equivalent test lanes)
-
-verify-pr-inference:
-	$(info Running PR-gated inference approval lane: $(PR_INFERENCE_APPROVAL_REGRESSION))
-	$(info Required: export INFINITE_YOU_RUN_OMNIVOICE_LONG_TESTS=1)
-	$(info Runtime: omnivoice-llamacpp on PATH, or set INFINITE_YOU_OMNIVOICE_COMMAND to the executable)
-	$(info Optional: INFINITE_YOU_OMNIVOICE_CACHE_DIR to reuse managed model cache (omit to use a temp cache))
-	$(info Broader specialty sweep remains on make long-tests; this lane is merge-blocking PR inference approval only)
-	$(call run_verification_step,pr-inference-approval,PR inference approval regression)
 
 verify-extended:
 	$(info Running extended verification tier: required PR verification + opt-in long and specialty suites)
@@ -478,35 +620,95 @@ test-backend-verification:
 test-backend-functional:
 	$(MAKE) test-functional-coverage
 
+# Focused classifier lanes. Each target owns only its product verification
+# scope and composes the existing checks so broader verification entry points
+# retain their current behavior.
+frontend-verification:
+	$(MAKE) typecheck
+	$(MAKE) ui-lint
+	$(MAKE) ui-component-test
+	$(MAKE) test-ui-coverage
+	$(MAKE) test-ui-browser-integration
+	$(MAKE) test-ui-storybook-integration
+	$(MAKE) ui-public-package-release
+
+backend-verification:
+	$(MAKE) build
+	$(MAKE) test-backend-verification
+
+# This lane is intentionally narrower than the general UI browser lane: it
+# runs the browser coverage that starts and calls the real backend, without
+# Storybook-only checks.
+ui-backend-integration:
+	$(MAKE) ui-durable-session-real-backend-integration-test
+
+ACP_BASELINE_DIR       ?= docs/internal/projects/acp-program/baselines
+ACP_BASELINE_ARTIFACTS ?= .artifacts/acp-baseline
+
+.PHONY: acp-baseline-self acp-baseline-capture acp-baseline-compare acp-baseline-check
+
+# Capture our own `you server acp` through the shared scenario scripts. Needs no
+# external agent and no provider credentials, so it is safe anywhere.
+acp-baseline-self:
+	$(GO) build -o $(ACP_BASELINE_ARTIFACTS)/you ./cmd/factory
+	$(GO) run ./cmd/acpbaseline capture -agent '$(ACP_BASELINE_ARTIFACTS)/you server acp' \
+		-name you -out $(ACP_BASELINE_ARTIFACTS) -publish $(ACP_BASELINE_DIR)/you/$(shell date -u +%Y-%m-%d)
+
+# Capture a third-party ACP agent. Requires that agent installed and
+# authenticated; exits 3 with instructions when it is not. Raw transcripts hold
+# full prompt and response content and stay under .artifacts (gitignored).
+#   make acp-baseline-capture ACP_AGENT='cursor-agent acp' ACP_BASELINE_NAME=cursor-agent
+acp-baseline-capture:
+	$(GO) run ./cmd/acpbaseline capture -agent '$(ACP_AGENT)' -name '$(ACP_BASELINE_NAME)' \
+		-out $(ACP_BASELINE_ARTIFACTS) -publish $(ACP_BASELINE_DIR)/$(ACP_BASELINE_NAME)/$(shell date -u +%Y-%m-%d)
+
+acp-baseline-compare:
+	$(GO) run ./cmd/acpbaseline compare \
+		$(foreach m,$(wildcard $(ACP_BASELINE_DIR)/*/*/capability-matrix.json),-matrix $(m)) \
+		-out $(ACP_BASELINE_DIR)/comparison-matrix.md
+
+# Commit guard: committed baselines are digested, secret-free, and in budget.
+acp-baseline-check:
+	$(GO) run ./cmd/acpbaseline verify -dir $(ACP_BASELINE_DIR)
+
 long-tests:
-	$(info Running opt-in long and specialty suites: UI performance + managed runtime coverage + real local inference coverage)
+	$(info Running opt-in long and specialty suites: UI performance + managed runtime coverage)
 	$(call run_verification_step,test-ui-performance,UI Performance specialty lane)
 	$(call run_verification_step,long-tests-managed-runtime,Managed Runtime specialty lane)
-	$(call run_verification_step,long-tests-functional-runtime,Real Local Inference specialty lane)
 
 long-tests-managed-runtime:
 	$(GO) test ./pkg/services/models/internal/local -run '^TestOmniVoiceLocalRuntime_' -count=1 -timeout $(GO_TEST_TIMEOUT)
-
-pr-inference-approval:
-	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/runtime_api -run '$(PR_INFERENCE_APPROVAL_REGRESSION)' -count=1 -timeout $(MODEL_LONG_TEST_TIMEOUT)
-
-long-tests-functional-runtime:
-	$(MAKE) pr-inference-approval
 
 test-coverage-go:
 	$(info make test-coverage-go is a compatibility alias for unit coverage; use make test-functional-coverage for the independent functional report.)
 	$(MAKE) test-unit-coverage
 
+# The three GO_UNIT_COVERAGE_* output paths are optional and independent. Each
+# is forwarded only when it is set, so an invocation with none of them set runs
+# exactly the command it ran before reporting existed. Setting the JSON or
+# timing path never changes the gate: gocoveragecheck's exit code stays the sole
+# pass/fail signal. Floor policy defaults to blocking for local callers; hosted
+# CI sets GO_COVERAGE_FLOOR_POLICY=advisory for both coverage lanes.
 test-unit-coverage:
-	$(GO) run ./cmd/gocoveragecheck -suite unit -min $(GO_UNIT_COVERAGE_MIN) -package-manifest $(GO_UNIT_COVERAGE_MANIFEST) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_UNIT_COVERAGE_PROFILE),-profile $(GO_UNIT_COVERAGE_PROFILE),)
+	$(GO) run ./cmd/gocoveragecheck -suite unit -min $(GO_UNIT_COVERAGE_MIN) -package-manifest $(GO_UNIT_COVERAGE_MANIFEST) -package-floor-policy $(GO_COVERAGE_FLOOR_POLICY) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_UNIT_COVERAGE_PROFILE),-profile $(GO_UNIT_COVERAGE_PROFILE),) $(if $(GO_UNIT_COVERAGE_JSON_OUTPUT),-json-output $(GO_UNIT_COVERAGE_JSON_OUTPUT),) $(if $(GO_UNIT_COVERAGE_TIMING_OUTPUT),-timing-output $(GO_UNIT_COVERAGE_TIMING_OUTPUT),)
 
 # test-functional-coverage always runs functional-boundary-check first so the
 # required CI Backend Functional Coverage lane (and any local/alias caller of
-# this target) cannot succeed without a successful boundary check. Boundary
-# failures exit non-zero before gocoveragecheck starts.
+# this target) cannot succeed without a successful boundary check. gocoveragecheck
+# forces -count=1 for its instrumented run, so this target remains fresh even
+# though the ordinary developer lane is cache-aware. Boundary failures exit
+# non-zero before gocoveragecheck starts.
 test-functional-coverage:
 	$(MAKE) functional-boundary-check
-	$(GO) run ./cmd/gocoveragecheck -suite functional -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-manifest $(GO_FUNCTIONAL_COVERAGE_MANIFEST) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),) $(if $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),-json-output $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),)
+	@echo "Functional tier: name=$(FUNCTIONAL_TEST_TIER) trigger=$(FUNCTIONAL_TEST_TRIGGER) short=$(FUNCTIONAL_SHORT) budget=$(FUNCTIONAL_TEST_BUDGET) selection=subtractive quarantine=$(FUNCTIONAL_QUARANTINE)"
+	@set +e; \
+	$(GO) run ./cmd/gocoveragecheck -suite functional -stream -jobs $(FUNCTIONAL_DEFAULT_JOBS) -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-manifest $(GO_FUNCTIONAL_COVERAGE_MANIFEST) -package-floor-policy $(GO_COVERAGE_FLOOR_POLICY) -functional-quarantine $(FUNCTIONAL_QUARANTINE) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(filter false 0 no,$(FUNCTIONAL_SHORT)),-short=false,) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),) $(if $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),-json-output $(GO_FUNCTIONAL_COVERAGE_JSON_OUTPUT),) $(if $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),-timing-output $(GO_FUNCTIONAL_COVERAGE_TIMING_OUTPUT),); \
+	status=$$?; \
+	if [ -n "$(FUNCTIONAL_GOCOVERAGE_EXIT_FILE)" ]; then \
+		printf '%s\n' "$$status" > "$(FUNCTIONAL_GOCOVERAGE_EXIT_FILE)"; \
+		if [ "$$status" -eq 1 ]; then exit 0; fi; \
+	fi; \
+	exit "$$status"
 
 script-timeout-companion-smoke-100:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/workers/inference -run $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST) -count=$(SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT) -timeout $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT)
@@ -517,15 +719,12 @@ cron-time-work-smoke:
 current-factory-watcher-switch-smoke:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/factory/current -run $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TEST) -count=$(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_COUNT) -timeout $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TIMEOUT)
 
-provider-parity-smoke:
-	$(GO) test ./pkg/services/providers/internal/services/execution/internal/provider/paritytests -run $(CROSS_PROVIDER_PARITY_SMOKE_TEST) -count=1 -timeout $(CROSS_PROVIDER_PARITY_SMOKE_TIMEOUT)
-
 javascript-contract-smoke:
 	$(GO) run ./cmd/javascriptcontractsmoke -root .
 	$(GO) run ./cmd/javascriptcontractsmoke -root .
 	$(GO) test ./internal/javascriptcontractsmoke ./cmd/javascriptcontractsmoke -count=1 -timeout $(JAVASCRIPT_CONTRACT_SMOKE_TIMEOUT)
 	$(GO) test ./contracts -run '^TestJavaScriptRuntimeBehaviorDoesNotLoadContractManifests$$' -count=1 -timeout $(JAVASCRIPT_CONTRACT_SMOKE_TIMEOUT)
-	$(GO) test ./pkg/orchestrators/javascript/runtime -run '$(JAVASCRIPT_RUNTIME_REGRESSION_TESTS)' -count=1 -timeout $(JAVASCRIPT_CONTRACT_SMOKE_TIMEOUT)
+	$(GO) test ./pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime -run '$(JAVASCRIPT_RUNTIME_REGRESSION_TESTS)' -count=1 -timeout $(JAVASCRIPT_CONTRACT_SMOKE_TIMEOUT)
 
 config-contract-smoke:
 	$(GO) run ./cmd/configcontractsmoke -root .
@@ -545,47 +744,50 @@ artifact-contract-closeout:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/workers/script -run "TestWorkerPublicContractSmoke_" -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 lint:
-	$(MAKE) $(LINT_TARGETS)
+	$(GO) run $(LINT_LANE_PACKAGE) -make "$(LINT_MAKE)" -jobs "$(LINT_JOBS)" -go "$(GO)" -cache-dir "$(LINT_CHECKER_CACHE_DIR)" $(if $(LINT_REPORT_FILE),-report-file "$(LINT_REPORT_FILE)",) $(if $(LINT_CHECKER_DRIVER),-checker-driver "$(LINT_CHECKER_DRIVER)",-checker-package "$(LINT_CHECKER_DRIVER_PACKAGE)") -- $(LINT_TARGETS)
 
 backend-size:
-	$(GO) run ./cmd/backendsizecheck -root $(BACKEND_SIZE_ROOT)
+	$(call run_lint_checker,./cmd/backendsizecheck,-root "$(BACKEND_SIZE_ROOT)")
 
 backend-dependency-graph:
 	$(GO) run ./cmd/backenddependencygraph -root . -go $(GO) -output $(BACKEND_DEPENDENCY_GRAPH_DOT) -svg-output $(BACKEND_DEPENDENCY_GRAPH_SVG)
 
 pkg-maint:
-	$(GO) run ./cmd/pkgmaintcheck -root $(PACKAGE_MAINT_ROOT)
+	$(call run_lint_checker,./cmd/pkgmaintcheck,-root "$(PACKAGE_MAINT_ROOT)")
 
 pkg-file-count:
-	$(GO) run ./cmd/pkgfilecountcheck -root $(PACKAGE_FILE_COUNT_ROOT)
+	$(call run_lint_checker,./cmd/pkgfilecountcheck,-root "$(PACKAGE_FILE_COUNT_ROOT)")
 
 pkg-boundary:
-	$(GO) run ./cmd/pkgboundarycheck -root $(PACKAGE_BOUNDARY_ROOT)
-	$(GO) run ./cmd/ownershipboundarycheck
+	$(call run_lint_checker,./cmd/pkgboundarycheck,-root "$(PACKAGE_BOUNDARY_ROOT)" $(if $(strip $(PACKAGE_BOUNDARY_BASE_REF)),-base-ref "$(PACKAGE_BOUNDARY_BASE_REF)",) $(if $(filter 1 true yes,$(PACKAGE_BOUNDARY_ALL)),--all,))
+	$(call run_lint_checker,./cmd/ownershipboundarycheck,)
 
 pkg-structure:
-	$(GO) run ./cmd/pkgstructurecheck -root $(PACKAGE_STRUCTURE_ROOT)
+	$(call run_lint_checker,./cmd/pkgstructurecheck,-root "$(PACKAGE_STRUCTURE_ROOT)")
+
+service-cycle-check:
+	$(call run_lint_checker,./cmd/servicecyclecheck,-root ".")
 
 package-target-manifest-check:
-	$(GO) run ./cmd/packagetargetmanifestcheck -root .
+	$(call run_lint_checker,./cmd/packagetargetmanifestcheck,-root ".")
 
 packaged-factory-source-check:
-	$(GO) run ./cmd/packagedfactorysourcecheck -root .
+	$(call run_lint_checker,./cmd/packagedfactorysourcecheck,-root ".")
 
 packaged-factory-consumption-check:
-	$(GO) run ./cmd/packagedfactoryconsumptioncheck -root .
+	$(call run_lint_checker,./cmd/packagedfactoryconsumptioncheck,-root ".")
 
 packaged-factory-catalog-generate:
 	$(GO) run ./cmd/packagedfactorycataloggenerate -root .
 
 packaged-factory-catalog-check:
-	$(GO) run ./cmd/packagedfactorycatalogcheck -root .
+	$(call run_lint_checker,./cmd/packagedfactorycatalogcheck,-root ".")
 
 provider-catalog-generate:
 	$(GO) run ./cmd/providercataloggenerate -root .
 
 provider-catalog-check:
-	$(GO) run ./cmd/providercatalogcheck -root .
+	$(call run_lint_checker,./cmd/providercatalogcheck,-root ".")
 
 model-provider-package-generate:
 	node scripts/model-provider-package.mjs generate
@@ -594,25 +796,25 @@ model-provider-package-check:
 	node scripts/model-provider-package.mjs check
 
 ownership-boundary-check:
-	$(GO) run ./cmd/ownershipboundarycheck
+	$(call run_lint_checker,./cmd/ownershipboundarycheck,)
 
 ownership-inventory-check:
-	$(GO) run ./cmd/ownershipinventorycheck
+	$(call run_lint_checker,./cmd/ownershipinventorycheck,)
 
 durable-runtime-construction-check:
-	$(GO) run ./cmd/durableruntimeconstructioncheck -root .
+	$(call run_lint_checker,./cmd/durableruntimeconstructioncheck,-root ".")
 
 logging-boundary-check:
-	$(GO) run ./cmd/loggingboundarycheck -root .
+	$(call run_lint_checker,./cmd/loggingboundarycheck,-root ".")
 
 compatibility-alias-check:
-	$(GO) run ./cmd/compatibilityaliascheck -root $(COMPATIBILITY_ALIAS_CHECK_ROOT)
+	$(call run_lint_checker,./cmd/compatibilityaliascheck,-root "$(COMPATIBILITY_ALIAS_CHECK_ROOT)")
 
 retired-surface-check:
-	$(GO) run ./cmd/retiredsurfacecheck -root $(RETIRED_SURFACE_CHECK_ROOT)
+	$(call run_lint_checker,./cmd/retiredsurfacecheck,-root "$(RETIRED_SURFACE_CHECK_ROOT)")
 
 deadcode:
-	$(GO) run ./cmd/deadcodecheck
+	$(call run_lint_checker,./cmd/deadcodecheck,)
 
 ui-deadcode:
 	cd ui && $(UI_SCRIPT) deadcode
@@ -636,6 +838,7 @@ verify-api:
 
 verify-build-contracts:
 	$(MAKE) typecheck
+	$(MAKE) test-functional-long-compile
 	$(MAKE) verify-build
 	$(MAKE) verify-lint
 	$(MAKE) verify-api
@@ -675,6 +878,7 @@ ci-typecheck:
 	$(MAKE) typecheck
 
 ci-verify-build-contracts: ci-typecheck
+	$(MAKE) test-functional-long-compile
 	$(MAKE) verify-build
 	$(MAKE) verify-lint
 	$(MAKE) verify-api
@@ -713,6 +917,17 @@ test-race:
 
 fmt:
 	$(GO) fmt ./...
+
+fmt-check:
+	@set -e; \
+	paths_file="$${TMPDIR:-.}/you-gofmt-check-$$.paths"; \
+	trap 'rm -f "$$paths_file"' 0 1 2 3 15; \
+	git ls-files -z --cached -- 'cmd/**/*.go' 'pkg/**/*.go' 'tests/**/*.go' > "$$paths_file"; \
+	violations="$$(xargs -0 $(GO)fmt -l < "$$paths_file")"; \
+	if test -n "$$violations"; then \
+		printf '%s\n' "$$violations"; \
+		exit 1; \
+	fi
 
 vet:
 	$(GO) vet ./...

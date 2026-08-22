@@ -12,6 +12,7 @@ import (
 
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
+	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -264,7 +265,7 @@ func (resumeSmokeRequestPreparationCallbacks) PrepareEventReconnect(
 const resumeRegressionSessionID = "dur-sess-js-run-n-001"
 
 type resumeRegressionExecutionScript struct {
-	fse.ExecutionService
+	factorysessionwire.DurableExecutionService
 	paused bool
 }
 

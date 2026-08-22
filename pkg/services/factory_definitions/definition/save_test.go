@@ -17,10 +17,10 @@ import (
 
 	factoryeditable "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/editable"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/validationentry"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIPrePersist(t *testing.T) {
@@ -87,7 +87,7 @@ func TestSaveReplaceCurrentForSession_RejectsStaleBaseVersion(t *testing.T) {
 		}},
 		Workstations: &[]factoryapi.Workstation{{
 			Name:   "plan-task",
-			Worker: "planner",
+			Worker: definitionStringPtr("planner"),
 			Type:   saveWorkstationTypeModel(),
 			Body:   saveStringPointer("Plan the story."),
 			Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}},
@@ -161,7 +161,7 @@ func TestSaveReplaceCurrentForSession_PersistsSplitLayout(t *testing.T) {
 		}},
 		Workstations: &[]factoryapi.Workstation{{
 			Name:   "plan-task",
-			Worker: "planner",
+			Worker: definitionStringPtr("planner"),
 			Type:   saveWorkstationTypeModel(),
 			Body:   saveStringPointer("Plan the story."),
 			Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}},
@@ -249,7 +249,7 @@ func TestSaveReplaceCurrentForSession_ReplacesNamedCurrentFactoryLayout(t *testi
 		}},
 		Workstations: &[]factoryapi.Workstation{{
 			Name:   "plan-task",
-			Worker: "planner",
+			Worker: definitionStringPtr("planner"),
 			Type:   saveWorkstationTypeModel(),
 			Body:   saveStringPointer("Plan the named story."),
 			Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}},
@@ -315,7 +315,7 @@ func TestSaveReplaceCurrentForSession_RestoresLayoutWhenActivationFails(t *testi
 		}},
 		Workstations: &[]factoryapi.Workstation{{
 			Name:   "plan-task",
-			Worker: "planner",
+			Worker: definitionStringPtr("planner"),
 			Type:   saveWorkstationTypeModel(),
 			Body:   saveStringPointer("Plan the story."),
 			Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}},

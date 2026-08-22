@@ -12,10 +12,10 @@ describe("getTerminalWorkMessages", () => {
   });
 
   it.each([
-    ["en", "Completed and failed work"],
-    ["zh-CN", "已完成和失败的工作"],
-    ["ko", "완료 및 실패한 작업"],
-    ["ja", "完了済みおよび失敗した作業"],
+    ["en", "Terminal work outcomes"],
+    ["zh-CN", "终端工作结果"],
+    ["ko", "터미널 작업 결과"],
+    ["ja", "ターミナル作業の結果"],
   ] as const)("resolves %s catalog copy", (locale, expectedTitle) => {
     expect(getTerminalWorkMessages(locale).cardTitle).toBe(expectedTitle);
   });
@@ -34,11 +34,14 @@ describe("getTerminalWorkMessages", () => {
   it("keeps status-aware labels and fallback copy available through the resolved locale catalog", () => {
     const messages = getTerminalWorkMessages("ja");
 
-    expect(messages.legendLabel).toBe("ターミナル作業の結果");
+    expect(messages.legendLabel).toBe("ターミナル作業のステータスグループ");
     expect(messages.rowTitle("completed")).toBe("完了");
     expect(messages.rowTitle("failed")).toBe("失敗");
     expect(messages.iconLabel("completed")).toBe("完了した作業");
     expect(messages.iconLabel("failed")).toBe("失敗した作業");
+    expect(messages.rowTitle("canceled")).toBe("キャンセル済み");
+    expect(messages.rowTitle("terminated")).toBe("終了");
+    expect(messages.rowTitle("unknown")).toBe("不明");
     expect(messages.disclosureLabel(true)).toBe("折りたたむ");
     expect(messages.disclosureLabel(false)).toBe("展開");
     expect(messages.emptyState("completed")).toBe(

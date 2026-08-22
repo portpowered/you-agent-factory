@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -15,37 +16,64 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // MockInferenceProvider returns a typed provider override for functional tests
 // without requiring destination packages to import service implementation paths.
-func MockInferenceProvider(contents ...string) workerprovider.Provider {
-	responses := make([]workerexecution.InferenceResponse, len(contents))
+func MockInferenceProvider(contents ...string) providers.Service {
+	responses := make([]providers.ExecuteResult, len(contents))
 	for index, content := range contents {
-		responses[index] = workerexecution.InferenceResponse{Content: content}
+		responses[index] = providers.ExecuteResult{Content: content}
 	}
-	return testutil.NewMockProvider(responses...)
+	return testutil.NewNativeMockProvider(responses...)
 }
 
-// BlockingInferenceProvider blocks the first inference call until release is
+type inferenceProvider interface {
+	Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error)
+}
+
+// ProviderServiceFromInference bridges an Infer-shaped test provider into the
+// Providers-root edge used by root.BuildProcess. The adapter keeps the
+// compatibility fake unchanged while exposing the same Execute-shaped
+// contract as native Providers test doubles.
+func ProviderServiceFromInference(provider inferenceProvider) providers.Service {
+	if provider == nil {
+		return nil
+	}
+	adapter := &testutil.ProviderServiceAdapter{}
+	adapter.InferFunc = provider.Infer
+	return adapter
+}
+
+// BlockingInferenceProvider blocks the first provider call until release is
 // closed or the context is canceled, then completes subsequent calls immediately.
-func BlockingInferenceProvider(release <-chan struct{}) workerprovider.Provider {
-	return &blockingInferenceProvider{release: release}
+func BlockingInferenceProvider(release <-chan struct{}) providers.Service {
+	provider := &blockingProvider{release: release}
+	provider.NativeProvider.ExecuteFunc = provider.Execute
+	return provider
 }
 
-type blockingInferenceProvider struct {
+type blockingProvider struct {
+	testutil.NativeProvider
 	release <-chan struct{}
 	mu      sync.Mutex
 	calls   int
 }
 
-func (p *blockingInferenceProvider) Infer(
+type terminalObservationMode int
+
+const (
+	terminalObservationCorrelated terminalObservationMode = iota
+	terminalObservationStableWindow
+)
+
+func (p *blockingProvider) Execute(
 	ctx context.Context,
-	_ workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
+	_ providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
 	p.mu.Lock()
 	p.calls++
 	call := p.calls
@@ -54,10 +82,10 @@ func (p *blockingInferenceProvider) Infer(
 		select {
 		case <-p.release:
 		case <-ctx.Done():
-			return workerexecution.InferenceResponse{}, ctx.Err()
+			return providers.ExecuteResult{}, ctx.Err()
 		}
 	}
-	return workerexecution.InferenceResponse{Content: "completed"}, nil
+	return providers.ExecuteResult{Content: "completed"}, nil
 }
 
 // RunFactoryToCompletion executes the customer daemon command through the
@@ -66,7 +94,7 @@ func (p *blockingInferenceProvider) Infer(
 func RunFactoryToCompletion(
 	t testing.TB,
 	dir string,
-	provider workerprovider.Provider,
+	provider providers.Service,
 	timeout time.Duration,
 ) factoryapi.FactorySession {
 	return RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
@@ -99,6 +127,27 @@ func RunFactoryToCompletionWithEdgesAndWork(
 	return session, work
 }
 
+// RunFactoryToCompletionWithEdgesAndWorkStable retains the quiet stability
+// window required by watcher discovery and repeater handoffs. Other functional
+// scenarios should use RunFactoryToCompletionWithEdgesAndWork so completion is
+// correlated to the exact live Factory Session without an unconditional delay.
+func RunFactoryToCompletionWithEdgesAndWorkStable(
+	t testing.TB,
+	dir string,
+	overrides serviceedges.Edges,
+	timeout time.Duration,
+) (factoryapi.FactorySession, factoryapi.ListWorkResponse) {
+	session, work, _, _ := runFactoryToCompletionWithMode(
+		t,
+		dir,
+		overrides,
+		timeout,
+		false,
+		terminalObservationStableWindow,
+	)
+	return session, work
+}
+
 // RunFactoryToCompletionWithEdgesAndObservations also returns the public Work
 // listing and retained Factory Event history captured before the daemon stops.
 func RunFactoryToCompletionWithEdgesAndObservations(
@@ -108,6 +157,52 @@ func RunFactoryToCompletionWithEdgesAndObservations(
 	timeout time.Duration,
 ) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
 	session, work, events, _ := runFactoryToCompletion(t, dir, overrides, timeout, false)
+	return session, work, events
+}
+
+// RunFactoryToCompletionWithEdgesAndObservationsStable is the retained
+// watcher/repeater fallback for scenarios whose Work set can grow after a
+// transient idle projection.
+func RunFactoryToCompletionWithEdgesAndObservationsStable(
+	t testing.TB,
+	dir string,
+	overrides serviceedges.Edges,
+	timeout time.Duration,
+) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
+	session, work, events, _ := runFactoryToCompletionWithMode(
+		t,
+		dir,
+		overrides,
+		timeout,
+		false,
+		terminalObservationStableWindow,
+	)
+	return session, work, events
+}
+
+// RunFactoryToCompletionWithEdgesAndObservationsStableBeforeClose observes
+// terminal Work and invokes beforeClose immediately before shutting down the
+// process. The hook is for process-boundary fixtures that must remain alive
+// until the public terminal observation has drained the provider response.
+func RunFactoryToCompletionWithEdgesAndObservationsStableBeforeClose(
+	t testing.TB,
+	dir string,
+	overrides serviceedges.Edges,
+	timeout time.Duration,
+	beforeClose func(),
+) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
+	t.Helper()
+	session, work, events, _ := runFactoryToCompletionWithHome(
+		t,
+		dir,
+		overrides,
+		timeout,
+		false,
+		nil,
+		terminalObservationStableWindow,
+		nil,
+		beforeClose,
+	)
 	return session, work, events
 }
 
@@ -121,7 +216,17 @@ func RunFactoryToCompletionWithConfiguredHome(
 	timeout time.Duration,
 	configure func(string),
 ) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
-	session, work, events, _ := runFactoryToCompletionWithHome(t, dir, overrides, timeout, false, configure)
+	session, work, events, _ := runFactoryToCompletionWithHome(
+		t,
+		dir,
+		overrides,
+		timeout,
+		false,
+		configure,
+		terminalObservationCorrelated,
+		nil,
+		nil,
+	)
 	return session, work, events
 }
 
@@ -141,6 +246,56 @@ func RunFactoryToCompletionWithEdgesAndResponseEvents(
 	return runFactoryToCompletion(t, dir, overrides, timeout, true)
 }
 
+// RunFactoryToCompletionWithEdgesAndResponseEventsAndWorkerSessionEvents also
+// drains every public Worker Session history correlated with the completed
+// Work before the root-built process stops. The callback stays at the public
+// HTTP boundary so provider-neutral sessions can be inspected by Worker ID.
+func RunFactoryToCompletionWithEdgesAndResponseEventsAndWorkerSessionEvents(
+	t testing.TB,
+	dir string,
+	overrides serviceedges.Edges,
+	timeout time.Duration,
+) (
+	factoryapi.FactorySession,
+	factoryapi.ListWorkResponse,
+	[]factoryapi.FactoryEvent,
+	[]factoryapi.FactoryResponseEvent,
+	[]factoryapi.WorkerSessionEvent,
+) {
+	var workerEvents []factoryapi.WorkerSessionEvent
+	session, work, events, responseEvents := runFactoryToCompletionWithHome(
+		t,
+		dir,
+		overrides,
+		timeout,
+		true,
+		nil,
+		terminalObservationCorrelated,
+		func(baseURL string, listed factoryapi.ListWorkResponse) {
+			seen := make(map[string]struct{})
+			for _, item := range listed.Results {
+				workID := StringPointerValue(item.WorkId)
+				if workID == "" {
+					continue
+				}
+				observations := ListDefaultSessionWorkerSessions(t, baseURL, workID)
+				for _, observation := range observations.Sessions {
+					if observation.WorkerSessionId == "" {
+						continue
+					}
+					if _, ok := seen[observation.WorkerSessionId]; ok {
+						continue
+					}
+					seen[observation.WorkerSessionId] = struct{}{}
+					workerEvents = append(workerEvents, GetWorkerSessionEventsByIDAt(t, baseURL, observation.WorkerSessionId)...)
+				}
+			}
+		},
+		nil,
+	)
+	return session, work, events, responseEvents, workerEvents
+}
+
 func runFactoryToCompletion(
 	t testing.TB,
 	dir string,
@@ -153,9 +308,43 @@ func runFactoryToCompletion(
 	[]factoryapi.FactoryEvent,
 	[]factoryapi.FactoryResponseEvent,
 ) {
-	return runFactoryToCompletionWithHome(t, dir, overrides, timeout, captureResponseEvents, nil)
+	return runFactoryToCompletionWithMode(
+		t,
+		dir,
+		overrides,
+		timeout,
+		captureResponseEvents,
+		terminalObservationCorrelated,
+	)
 }
 
+func runFactoryToCompletionWithMode(
+	t testing.TB,
+	dir string,
+	overrides serviceedges.Edges,
+	timeout time.Duration,
+	captureResponseEvents bool,
+	observationMode terminalObservationMode,
+) (
+	factoryapi.FactorySession,
+	factoryapi.ListWorkResponse,
+	[]factoryapi.FactoryEvent,
+	[]factoryapi.FactoryResponseEvent,
+) {
+	return runFactoryToCompletionWithHome(
+		t,
+		dir,
+		overrides,
+		timeout,
+		captureResponseEvents,
+		nil,
+		observationMode,
+		nil,
+		nil,
+	)
+}
+
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func runFactoryToCompletionWithHome(
 	t testing.TB,
 	dir string,
@@ -163,6 +352,9 @@ func runFactoryToCompletionWithHome(
 	timeout time.Duration,
 	captureResponseEvents bool,
 	configure func(string),
+	observationMode terminalObservationMode,
+	captureWorkerSessionEvents func(string, factoryapi.ListWorkResponse),
+	beforeClose func(),
 ) (
 	factoryapi.FactorySession,
 	factoryapi.ListWorkResponse,
@@ -202,6 +394,7 @@ func runFactoryToCompletionWithHome(
 	})
 	daemon := StartProcessCommand(t, process, inputs.Input)
 	baseURL := server.WaitForURL(t)
+	liveSession := GetDefaultSession(t, baseURL)
 	var (
 		responseCaptureCancel context.CancelFunc
 		responseCaptureDone   <-chan responseEventCaptureResult
@@ -212,7 +405,6 @@ func runFactoryToCompletionWithHome(
 		// terminal work is observed leaves the session itself active, so a fresh
 		// SSE request correctly remains open and the old retained-history helper
 		// could spend its entire timeout waiting for the HTTP response.
-		liveSession := GetDefaultSession(t, baseURL)
 		captureContext, cancelCapture := context.WithCancel(context.Background())
 		responseCaptureCancel = cancelCapture
 		captureDone := make(chan responseEventCaptureResult, 1)
@@ -233,25 +425,52 @@ func runFactoryToCompletionWithHome(
 			t.Fatalf("start factory response-event capture: %v", err)
 		}
 	}
-	WaitForTerminalStatus(t, baseURL, timeout)
+	if observationMode == terminalObservationStableWindow {
+		WaitForTerminalStatus(t, baseURL, timeout)
+	} else {
+		WaitForSessionTerminalStatus(t, baseURL, liveSession.Id, timeout)
+	}
 
 	session := GetDefaultSession(t, baseURL)
 	work := ListDefaultSessionWork(t, baseURL)
 	events := GetFactoryEventsAt(t, baseURL)
+	if captureWorkerSessionEvents != nil {
+		// Worker Session replay is the provider-owned lifecycle boundary. Its
+		// terminal replay summary is authoritative for source observations that
+		// can be published after the Work projection or response RUN event.
+		captureWorkerSessionEvents(baseURL, work)
+	}
 	var responseEvents []factoryapi.FactoryResponseEvent
+	var responseStreamComplete bool
 	if responseCaptureCancel != nil {
 		// Work completion and response-stream publication use separate observers.
 		// Wait for the stream's terminal event instead of relying on a scheduler
-		// sleep, with a short ceiling for providers that expose partial streams.
-		waitForTerminalResponseEvent(responseActivity, 500*time.Millisecond)
+		// sleep. The caller's deadline is a failure guard for a delayed response
+		// stream, not permission to return a partial event snapshot.
+		responseStreamComplete = waitForTerminalResponseEvent(responseActivity, timeout)
+	}
+	if beforeClose != nil {
+		beforeClose()
+	}
+	// Stop the root process before canceling the capture request. Process
+	// shutdown closes the session-owned response stream, which is the
+	// authoritative boundary after all response publishers have quiesced.
+	daemon.Stop(t)
+	if responseCaptureCancel != nil {
 		responseCaptureCancel()
 		capture := <-responseCaptureDone
 		if capture.err != nil {
 			t.Fatalf("capture factory response events: %v", capture.err)
 		}
 		responseEvents = capture.events
+		if !responseStreamComplete {
+			t.Fatalf(
+				"timed out waiting for terminal response event after %s; captured %d events",
+				timeout,
+				len(responseEvents),
+			)
+		}
 	}
-	daemon.Stop(t)
 	closeCtx, cancelClose := context.WithTimeout(context.Background(), processCommandStopTimeout)
 	defer cancelClose()
 	if closer, ok := process.(interface{ Close(context.Context) error }); ok {
@@ -309,7 +528,10 @@ func captureFactoryResponseEvents(
 		default:
 		}
 	}
-	if err := scanner.Err(); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(ctx.Err(), context.Canceled) {
+	if err := scanner.Err(); err != nil &&
+		!errors.Is(err, context.Canceled) &&
+		!errors.Is(ctx.Err(), context.Canceled) &&
+		!errors.Is(err, io.ErrUnexpectedEOF) {
 		return nil, fmt.Errorf("read response-event stream: %w", err)
 	}
 	return events, nil
@@ -318,17 +540,23 @@ func captureFactoryResponseEvents(
 func waitForTerminalResponseEvent(
 	activity <-chan factoryapi.FactoryResponseEvent,
 	ceiling time.Duration,
-) {
+) bool {
+	if ceiling <= 0 {
+		return false
+	}
 	timer := time.NewTimer(ceiling)
 	defer timer.Stop()
 	for {
 		select {
-		case event := <-activity:
+		case event, ok := <-activity:
+			if !ok {
+				return false
+			}
 			if isTerminalResponseEvent(event) {
-				return
+				return true
 			}
 		case <-timer.C:
-			return
+			return false
 		}
 	}
 }

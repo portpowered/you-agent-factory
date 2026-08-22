@@ -1,14 +1,14 @@
 package runtimeopening
 
 import (
-	"bytes"
-	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay"
 	operatordefaultsruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/operatordefaults"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -21,7 +21,14 @@ type RuntimeLoad struct {
 	LoadedFactoryCfg  factorydefinitions.MutableLoadedFactorySource
 	ReplayArtifact    *factorydefinitions.ReplayArtifact
 	PortableRecording *recording.PortableRecording
+	HistoricalReplay  *recordingreplay.RecordingReplayProjection
 	SessionLogger     *zap.Logger
+}
+
+type runtimeReplayLoad struct {
+	legacyArtifact    *factorydefinitions.ReplayArtifact
+	portableRecording *recording.PortableRecording
+	historicalReplay  *recordingreplay.RecordingReplayProjection
 }
 
 func LoadRuntime(
@@ -34,34 +41,76 @@ func LoadRuntime(
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
-	loadReplay recording.ReplayArtifactLoader,
+	replayInputs recording.ReplayInputLoader,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	newSessionLogger factoryruntime.SessionLoggerFactory,
-	replayFiles fileeffects.ReplayRecordingReader,
+) (RuntimeLoad, error) {
+	return loadRuntime(
+		dir,
+		executionBaseDir,
+		replayPath,
+		operatorDefaults,
+		workstationLoader,
+		root,
+		loadFactory,
+		newLoadedFactory,
+		decodeReplayConfig,
+		replayInputs,
+		captureLoadedFactorySnapshot,
+		newSessionLogger,
+		nil,
+		nil,
+		factorysessions.DefaultSessionID,
+	)
+}
+
+func loadRuntime(
+	dir string,
+	executionBaseDir string,
+	replayPath string,
+	operatorDefaults operatorconfig.ResolvedDefaults,
+	workstationLoader factorydefinitions.WorkstationLoader,
+	root RuntimeRoot,
+	loadFactory factorydefinitions.LoadedFactoryLoader,
+	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
+	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	replayInputs recording.ReplayInputLoader,
+	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	newSessionLogger factoryruntime.SessionLoggerFactory,
+	resolvedSnapshot *factorydefinitions.RuntimeSnapshot,
+	preloadedReplayInput *recording.LoadReplayInputResult,
+	sessionID string,
 ) (RuntimeLoad, error) {
 	if newSessionLogger == nil {
 		return RuntimeLoad{}, fmt.Errorf("Factory Runtime session logger factory is required")
 	}
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		sessionID = factorysessions.DefaultSessionID
+	}
 	logger := newSessionLogger(
 		root.BaseLogger,
-		factorysessions.DefaultSessionID,
+		sessionID,
 		root.FactoryRootDir,
 		dir,
 	)
 	if logger == nil {
 		return RuntimeLoad{}, fmt.Errorf("Factory Runtime session logger factory returned nil")
 	}
-	if replayPath != "" {
-		portableRecording, portable, err := loadPortableRecordingReplay(replayPath, replayFiles)
-		if err != nil {
-			return RuntimeLoad{}, fmt.Errorf("load portable replay: %w", err)
-		}
-		if portable {
-			return RuntimeLoad{
-				PortableRecording: portableRecording,
-				SessionLogger:     logger,
-			}, nil
-		}
+	replayLoad, err := loadRuntimeReplay(
+		replayPath,
+		replayInputs,
+		preloadedReplayInput,
+	)
+	if err != nil {
+		return RuntimeLoad{}, err
+	}
+	if replayLoad.portableRecording != nil {
+		return RuntimeLoad{
+			PortableRecording: replayLoad.portableRecording,
+			HistoricalReplay:  replayLoad.historicalReplay,
+			SessionLogger:     logger,
+		}, nil
 	}
 
 	logger.Info("loading factory config", zap.String("dir", dir))
@@ -74,7 +123,8 @@ func LoadRuntime(
 		loadFactory,
 		newLoadedFactory,
 		decodeReplayConfig,
-		loadReplay,
+		replayLoad.legacyArtifact,
+		resolvedSnapshot,
 	)
 	if err != nil {
 		logger.Error("failed to load factory config", zap.Error(err))
@@ -86,8 +136,17 @@ func LoadRuntime(
 			"runtime config load replaced portable bundled files",
 			loaded.PortableBundledFileReplacements(),
 		)
+		if config := loaded.FactoryConfig(); config != nil {
+			if paths := config.IgnoredJSONPaths(); len(paths) > 0 {
+				logger.Warn(
+					"ignored unknown Factory Definition fields",
+					zap.String("code", factorydefinitions.FactoryConfigIgnoredFieldWarningCode),
+					zap.Strings("ignored_json_paths", paths),
+				)
+			}
+		}
 	}
-	warnReplayMetadataMismatches(
+	reportRuntimeReplayMetadata(
 		dir,
 		replayPath,
 		workstationLoader,
@@ -103,29 +162,62 @@ func LoadRuntime(
 	}, nil
 }
 
-func loadPortableRecordingReplay(
-	path string,
-	files fileeffects.ReplayRecordingReader,
-) (*recording.PortableRecording, bool, error) {
-	if files == nil {
-		return nil, false, fmt.Errorf("Factory Session replay recording reader is required")
+func loadRuntimeReplay(
+	replayPath string,
+	replayInputs recording.ReplayInputLoader,
+	preloadedReplayInput *recording.LoadReplayInputResult,
+) (runtimeReplayLoad, error) {
+	if replayPath == "" {
+		return runtimeReplayLoad{}, nil
 	}
-	data, err := files.ReadFile(path)
+	if replayInputs == nil {
+		return runtimeReplayLoad{}, fmt.Errorf("Factory Session replay input capability is required")
+	}
+	var result recording.LoadReplayInputResult
+	var err error
+	if preloadedReplayInput != nil {
+		result = *preloadedReplayInput
+	} else {
+		result, err = replayInputs.LoadReplayInput(recording.LoadReplayInputRequest{Path: replayPath})
+	}
 	if err != nil {
-		return nil, false, fmt.Errorf("read replay recording: %w", err)
+		var inputErr *recording.ReplayInputError
+		if errors.As(err, &inputErr) && inputErr.Family == recording.ReplayInputFamilyLegacy {
+			return runtimeReplayLoad{}, fmt.Errorf("load factory config: %w", err)
+		}
+		return runtimeReplayLoad{}, fmt.Errorf("load portable replay: %w", err)
 	}
-	var header struct {
-		RecordingKind string `json:"recordingKind"`
+	if result.Portable == nil {
+		return runtimeReplayLoad{legacyArtifact: result.Legacy}, nil
 	}
-	if err := json.Unmarshal(data, &header); err != nil ||
-		header.RecordingKind != recording.KindJavaScriptFactorySession {
-		return nil, false, nil
-	}
-	value, err := recording.DecodePortableRecording(bytes.NewReader(data))
+	projection, err := recordingreplay.ReplayRecording(*result.Portable)
 	if err != nil {
-		return nil, true, err
+		return runtimeReplayLoad{}, fmt.Errorf("load portable replay: inspect historical recording: %w", err)
 	}
-	return &value, true, nil
+	return runtimeReplayLoad{
+		portableRecording: result.Portable,
+		historicalReplay:  &projection,
+	}, nil
+}
+
+func reportRuntimeReplayMetadata(
+	dir string,
+	replayPath string,
+	workstationLoader factorydefinitions.WorkstationLoader,
+	artifact *factorydefinitions.ReplayArtifact,
+	logger *zap.Logger,
+	loadFactory factorydefinitions.LoadedFactoryLoader,
+	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+) {
+	warnReplayMetadataMismatches(
+		dir,
+		replayPath,
+		workstationLoader,
+		artifact,
+		logger,
+		loadFactory,
+		captureLoadedFactorySnapshot,
+	)
 }
 
 func loadRuntimeConfig(
@@ -137,9 +229,19 @@ func loadRuntimeConfig(
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
-	loadReplay recording.ReplayArtifactLoader,
+	artifact *factorydefinitions.ReplayArtifact,
+	resolvedSnapshot *factorydefinitions.RuntimeSnapshot,
 ) (factorydefinitions.MutableLoadedFactorySource, *factorydefinitions.ReplayArtifact, error) {
 	if replayPath == "" {
+		if resolvedSnapshot != nil {
+			loaded, err := loadRuntimeSnapshot(
+				resolvedSnapshot,
+				executionBaseDir,
+				operatorDefaults,
+				newLoadedFactory,
+			)
+			return loaded, nil, err
+		}
 		if loadFactory == nil {
 			return nil, nil, fmt.Errorf("Factory Definitions loader is required")
 		}
@@ -155,18 +257,14 @@ func loadRuntimeConfig(
 		}
 		return loaded, nil, nil
 	}
-	if loadReplay == nil {
-		return nil, nil, fmt.Errorf("replay artifact loader is required")
+	if artifact == nil {
+		return nil, nil, fmt.Errorf("replay artifact is required")
 	}
 	if decodeReplayConfig == nil {
 		return nil, nil, fmt.Errorf("replay Factory Definition decoder is required")
 	}
 	if newLoadedFactory == nil {
 		return nil, nil, fmt.Errorf("Factory Definitions loaded-source factory is required")
-	}
-	artifact, err := loadReplay(replayPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("load replay artifact: %w", err)
 	}
 	runtimeConfig, err := decodeReplayConfig(artifact.Factory)
 	if err != nil {
@@ -183,6 +281,128 @@ func loadRuntimeConfig(
 	}
 	loaded.SetRuntimeBaseDir(executionBaseDir)
 	return loaded, artifact, nil
+}
+
+func loadRuntimeSnapshot(
+	resolved *factorydefinitions.RuntimeSnapshot,
+	executionBaseDir string,
+	operatorDefaults operatorconfig.ResolvedDefaults,
+	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
+) (factorydefinitions.MutableLoadedFactorySource, error) {
+	if resolved == nil {
+		return nil, fmt.Errorf("resolved Factory Definition snapshot is required")
+	}
+	if newLoadedFactory == nil {
+		return nil, fmt.Errorf("Factory Definitions loaded-source factory is required")
+	}
+	snapshot, err := resolved.Clone()
+	if err != nil {
+		return nil, fmt.Errorf("clone resolved Factory Definition snapshot: %w", err)
+	}
+	if strings.TrimSpace(snapshot.FactoryDir) == "" {
+		return nil, fmt.Errorf("resolved Factory Definition snapshot directory is required")
+	}
+	if strings.TrimSpace(snapshot.EffectiveFactory.Name) == "" {
+		return nil, fmt.Errorf("resolved Factory Definition snapshot Factory name is required")
+	}
+	lookup := newRuntimeSnapshotLookup(&snapshot)
+	config := snapshot.EffectiveFactory
+	attachRuntimeSnapshotPromptSources(&config, snapshot.PromptSources)
+	loaded, err := newLoadedFactory(
+		snapshot.FactoryDir,
+		&config,
+		lookup,
+		snapshot.BundledFiles,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("build loaded Factory from resolved snapshot: %w", err)
+	}
+	if loaded == nil {
+		return nil, fmt.Errorf("Factory Definitions loaded-source factory returned no source")
+	}
+	baseDir := strings.TrimSpace(executionBaseDir)
+	if baseDir == "" {
+		baseDir = snapshot.RuntimeBaseDir
+	}
+	loaded.SetRuntimeBaseDir(baseDir)
+	if err := applyOperatorDefaults(loaded, operatorDefaults); err != nil {
+		return nil, err
+	}
+	return loaded, nil
+}
+
+type runtimeSnapshotLookup struct {
+	workers      map[string]*factorydefinitions.FactoryWorkerConfig
+	workstations map[string]*factorydefinitions.FactoryWorkstationConfig
+}
+
+func newRuntimeSnapshotLookup(
+	snapshot *factorydefinitions.RuntimeSnapshot,
+) factorydefinitions.RuntimeDefinitionLookup {
+	lookup := &runtimeSnapshotLookup{
+		workers:      make(map[string]*factorydefinitions.FactoryWorkerConfig, len(snapshot.Workers)),
+		workstations: make(map[string]*factorydefinitions.FactoryWorkstationConfig, len(snapshot.Workstations)),
+	}
+	for _, worker := range snapshot.Workers {
+		cloned := factorydefinitions.CloneWorkerConfig(worker)
+		lookup.workers[cloned.Name] = &cloned
+	}
+	for _, workstation := range snapshot.Workstations {
+		cloned := factorydefinitions.CloneWorkstationConfig(workstation)
+		lookup.workstations[cloned.Name] = &cloned
+	}
+	return lookup
+}
+
+func (lookup *runtimeSnapshotLookup) Worker(
+	name string,
+) (*factorydefinitions.FactoryWorkerConfig, bool) {
+	if lookup == nil {
+		return nil, false
+	}
+	worker, ok := lookup.workers[name]
+	return worker, ok
+}
+
+func (lookup *runtimeSnapshotLookup) Workstation(
+	name string,
+) (*factorydefinitions.FactoryWorkstationConfig, bool) {
+	if lookup == nil {
+		return nil, false
+	}
+	workstation, ok := lookup.workstations[name]
+	return workstation, ok
+}
+
+func attachRuntimeSnapshotPromptSources(
+	config *factorydefinitions.FactoryConfig,
+	sources []factorydefinitions.RuntimePromptSource,
+) {
+	if config == nil {
+		return
+	}
+	for _, source := range sources {
+		if strings.TrimSpace(source.Name) == "" || strings.TrimSpace(source.Path) == "" {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(source.Role)) {
+		case "worker":
+			for index := range config.Workers {
+				if config.Workers[index].Name == source.Name {
+					config.Workers[index].PromptSourcePath = source.Path
+					break
+				}
+			}
+		case "workstation":
+			for index := range config.Workstations {
+				if config.Workstations[index].Name == source.Name {
+					config.Workstations[index].PromptSourcePath = source.Path
+					config.Workstations[index].PromptSourceIsTemplate = source.IsTemplate
+					break
+				}
+			}
+		}
+	}
 }
 
 func applyOperatorDefaults(

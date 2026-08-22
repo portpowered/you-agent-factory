@@ -3,7 +3,7 @@ package climanifestgen
 import (
 	"fmt"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 )
 
 // ExtractRepresentativeFamily returns manifest metadata for exactly the
@@ -29,6 +29,12 @@ func ExtractWorkersFamily(manifest climanifest.Manifest) (climanifest.Manifest, 
 	return extractFamily(manifest, "workers", WorkersFamilyCommandIDs)
 }
 
+// ExtractWorkerSessionsFamily returns customer-facing worker-session
+// observation commands.
+func ExtractWorkerSessionsFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
+	return extractFamily(manifest, "worker sessions", WorkerSessionsFamilyCommandIDs)
+}
+
 // ExtractRunSubmitFamily returns manifest metadata for exactly the run/submit
 // command IDs declared in commands.json.
 func ExtractRunSubmitFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
@@ -41,9 +47,16 @@ func ExtractFactoryConfigInitFamily(manifest climanifest.Manifest) (climanifest.
 	return extractFamily(manifest, "factory/config/init", FactoryConfigInitFamilyCommandIDs)
 }
 
-// ExtractMCPFamily returns canonical metadata for you mcp and you mcp serve.
+// ExtractMCPFamily returns canonical metadata for the shared server parent and
+// its MCP child.
 func ExtractMCPFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
-	return extractFamily(manifest, "canonical MCP", MCPFamilyCommandIDs)
+	return extractFamily(manifest, "canonical server MCP", MCPFamilyCommandIDs)
+}
+
+// ExtractServeFamily returns canonical metadata for the shared server parent
+// and its ACP child.
+func ExtractServeFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
+	return extractFamily(manifest, "canonical server ACP", ServeFamilyCommandIDs)
 }
 
 func extractFamily(
@@ -102,4 +115,16 @@ func ExtractModelsDocsFamily(manifest climanifest.Manifest) (climanifest.Manifes
 		RootPath:      manifest.RootPath,
 		Commands:      commands,
 	}, nil
+}
+
+// ExtractProvidersFamily returns manifest metadata for exactly the providers
+// capability-discovery command IDs declared in commands.json.
+func ExtractProvidersFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
+	return extractFamily(manifest, "providers", ProvidersFamilyCommandIDs)
+}
+
+// ExtractMetricsFamily returns manifest metadata for the local runtime-metrics
+// inspection command.
+func ExtractMetricsFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
+	return extractFamily(manifest, "metrics", MetricsFamilyCommandIDs)
 }

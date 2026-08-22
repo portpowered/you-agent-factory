@@ -150,51 +150,6 @@ func TestConstructedService_ResumeJSONMatchesPackageCommand(t *testing.T) {
 	)
 }
 
-func TestConstructedService_DispatchesHumanAndJSONMatchPackageCommands(t *testing.T) {
-	t.Parallel()
-
-	label := "step-one"
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(factoryapi.ListFactorySessionDispatchesResponse{
-			SessionId: "dur-sess-js-interrupted-001",
-			Dispatches: []factoryapi.FactorySessionDispatchSummary{{
-				Id:           "dispatch-1",
-				Status:       factoryapi.FactoryDispatchStatusCOMPLETED,
-				DispatchKind: factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
-				Label:        &label,
-			}},
-		})
-	}))
-	defer srv.Close()
-
-	service := constructedService(t)
-	protocol := testHTTPProtocol(t)
-	baseCfg := DispatchesConfig{
-		Context:   context.Background(),
-		Server:    srv.URL,
-		SessionID: "dur-sess-js-interrupted-001",
-	}
-	for name, jsonMode := range map[string]bool{"human": false, "json": true} {
-		name, jsonMode := name, jsonMode
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			cfg := baseCfg
-			cfg.JSON = jsonMode
-			assertConstructedServiceParity(t,
-				func(output io.Writer) error {
-					cfg.Output = output
-					return service.ListDispatches(cfg)
-				},
-				func(output io.Writer) error {
-					cfg.Output = output
-					return NewDispatches(protocol)(cfg)
-				},
-			)
-		})
-	}
-}
-
 func TestConstructedService_CreateHumanAndJSONMatchPackageCommands(t *testing.T) {
 	t.Parallel()
 

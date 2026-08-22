@@ -21,6 +21,7 @@ let reactFlowErrorToReport: { errorId: string; message: string } | null = null;
 
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual("@xyflow/react");
+  const { ReactFlowProvider } = actual;
 
   return {
     ...actual,
@@ -50,14 +51,16 @@ vi.mock("@xyflow/react", async () => {
       });
 
       return (
-        <div data-testid="mock-react-flow">
-          <ul aria-label="Rendered graph edges">
-            {(edges ?? []).map((edge) => (
-              <li key={edge.id}>{edge.id}</li>
-            ))}
-          </ul>
-          {children}
-        </div>
+        <ReactFlowProvider>
+          <div data-testid="mock-react-flow">
+            <ul aria-label="Rendered graph edges">
+              {(edges ?? []).map((edge) => (
+                <li key={edge.id}>{edge.id}</li>
+              ))}
+            </ul>
+            {children}
+          </div>
+        </ReactFlowProvider>
       );
     },
   };
@@ -119,55 +122,28 @@ const importController: CurrentActivityImportController = {
   onDrop: vi.fn(),
 };
 
-const DEFAULT_GRAPH_RECT = {
-  bottom: 720,
+const DEFAULT_VIEWPORT_MEASUREMENT = {
   height: 720,
-  left: 0,
-  right: 1280,
-  top: 0,
+  ready: true,
   width: 1280,
-  x: 0,
-  y: 0,
-  toJSON: () => ({}),
-} as DOMRect;
+} as const;
 
 afterEach(() => {
   cleanup();
   reactFlowErrorToReport = null;
 });
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: React Flow error coverage keeps the viewport bootstrap setup and endpoint assertions together.
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: endpoint coverage keeps the representative diagnostics together.
 describe("CurrentActivityGraphViewport React Flow errors", () => {
-  const originalBoundingClientRect =
-    HTMLElement.prototype.getBoundingClientRect;
-  const originalResizeObserver = globalThis.ResizeObserver;
+  it("keeps recoverable React Flow diagnostics inside the viewport", () => {
+    reactFlowErrorToReport = {
+      errorId: "004",
+      message:
+        "The React Flow parent container needs a width and a height to render the graph.",
+    };
 
-  beforeEach(() => {
-    HTMLElement.prototype.getBoundingClientRect = () => DEFAULT_GRAPH_RECT;
-    globalThis.ResizeObserver = class {
-      public constructor(private readonly callback: ResizeObserverCallback) {}
-
-      public disconnect(): void {}
-
-      public observe(target: Element): void {
-        this.callback(
-          [
-            {
-              contentRect: DEFAULT_GRAPH_RECT,
-              target,
-            } as ResizeObserverEntry,
-          ],
-          this as unknown as ResizeObserver,
-        );
-      }
-
-      public unobserve(): void {}
-    } as unknown as typeof ResizeObserver;
-  });
-
-  afterEach(() => {
-    HTMLElement.prototype.getBoundingClientRect = originalBoundingClientRect;
-    globalThis.ResizeObserver = originalResizeObserver;
+    expect(() => renderViewport()).not.toThrow();
+    expect(screen.getByTestId("mock-react-flow")).toBeTruthy();
   });
 
   it("throws when React Flow reports an edge endpoint handle mismatch", () => {
@@ -328,6 +304,7 @@ function renderViewport({
       }}
       edges={edges}
       flowContainerRef={flowContainerRef}
+      viewportMeasurement={DEFAULT_VIEWPORT_MEASUREMENT}
       handleNodesChange={vi.fn()}
       hasPendingChanges={false}
       layoutControls={{

@@ -14,7 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -22,11 +22,13 @@ import (
 func startRootRuntimeMCPServer(
 	t *testing.T,
 	projectRoot string,
-	provider workerprovider.Provider,
+	provider providers.Service,
 ) (*stdioMCPClient, func(), <-chan error) {
 	t.Helper()
 
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{ProviderOverride: provider})
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		ProviderOverride: provider,
+	})
 	if err != nil {
 		t.Fatalf("BuildProcess: %v", err)
 	}
@@ -56,7 +58,7 @@ func startRootRuntimeMCPServer(
 	var stderr bytes.Buffer
 	go func() {
 		serveErr <- process.Execute(root.Input{
-			Args:             []string{"you", "mcp", "serve", "--runtime", "--project-root", projectRoot},
+			Args:             []string{"you", "server", "mcp", "--runtime", "--project-root", projectRoot},
 			Env:              env,
 			Stdin:            stdinRead,
 			Stdout:           stdoutWrite,

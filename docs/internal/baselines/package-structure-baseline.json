@@ -3,6 +3,11 @@
   "stage": "packaged-structure",
   "entries": [
     {
+      "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/sessions/live_change_contract_test.go",
+      "target": "sessions"
+    },
+    {
       "rule": "deprecated-runtime-api-file",
       "filePath": "tests/functional/runtime_api/api_cleanup_smoke_test.go",
       "target": "tests/functional/runtime_api"
@@ -30,11 +35,6 @@
     {
       "rule": "deprecated-runtime-api-file",
       "filePath": "tests/functional/runtime_api/api_javascript_sync_structured_input_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_model_local_inference_long_test.go",
       "target": "tests/functional/runtime_api"
     },
     {
@@ -236,11 +236,6 @@
       "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_javascript_sync_structured_input_test.go",
       "target": "TestNamedJavaScriptFactoryRunResolvesInvocationInputThroughCLI"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_model_local_inference_long_test.go",
-      "target": "TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio"
     },
     {
       "rule": "deprecated-runtime-api-test",
@@ -689,22 +684,12 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/guards_batch/executor_review_state_lane_classification.go",
-      "target": "guards_batch"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/guards_batch/failed_immutability_long_test.go",
       "target": "guards_batch"
     },
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/guards_batch/helpers_long_test.go",
-      "target": "guards_batch"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/guards_batch/helpers_test.go",
       "target": "guards_batch"
     },
     {
@@ -1004,6 +989,46 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/chat_sessions/root_composition/acp_multi_turn_test.go",
+      "target": "chat_sessions"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/chat_sessions/root_composition/acp_packaged_factory_prompt_test.go",
+      "target": "chat_sessions"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/chat_sessions/root_composition/acp_prompt_delegation_test.go",
+      "target": "chat_sessions"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/chat_sessions/root_composition/acp_server_composition_test.go",
+      "target": "chat_sessions"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/chat_sessions/root_composition/acp_streaming_composition_test.go",
+      "target": "chat_sessions"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/chat_sessions/root_composition/acp_streaming_usage_composition_test.go",
+      "target": "chat_sessions"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/chat_sessions/root_composition/acp_worker_child_events_test.go",
+      "target": "chat_sessions"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/chat_sessions/root_composition/doc.go",
+      "target": "chat_sessions"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/cli/factory_run/output/failure_test.go",
       "target": "cli"
     },
@@ -1119,6 +1144,11 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/root_composition/dispatch_worker_sessions_concurrency_activation_test.go",
+      "target": "factory_runtime"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/factory_runtime/root_composition/doc.go",
       "target": "factory_runtime"
     },
@@ -1204,7 +1234,7 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/recordings/root_composition/packaged_root_shape_test.go",
+      "filePath": "tests/functional/recordings/root_composition/portable_replay_execution_test.go",
       "target": "recordings"
     },
     {
@@ -1281,6 +1311,26 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/automations/internal/services/script_pollers/service.go",
       "target": "ScriptPollerCommandRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/chat_sessions/sequencing.go",
+      "target": "EventsTopic"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/chat_sessions/transitions.go",
+      "target": "CloseTargetEpisode"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/chat_sessions/transitions.go",
+      "target": "OpenNextTargetEpisode"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/chat_sessions/transitions.go",
+      "target": "ResolveControlIntentOutcome"
     },
     {
       "rule": "service-root-exported-function",
@@ -1389,11 +1439,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_runtime/hosting.go",
-      "target": "RuntimeModeOrDefault"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_runtime/hosting_observation.go",
       "target": "ObservationHasActiveWork"
     },
@@ -1410,17 +1455,7 @@
     {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/capture.go",
-      "target": "EnvelopeFromRootCheckpoint"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/capture.go",
       "target": "RestoreRuntimeOpaquePayload"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/capture.go",
-      "target": "RootCheckpointFromEnvelope"
     },
     {
       "rule": "service-root-exported-function",
@@ -1519,6 +1554,11 @@
     },
     {
       "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/resource_capacity.go",
+      "target": "NewResourceCapacityLease"
+    },
+    {
+      "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_runtime/public_work_tokens.go",
       "target": "CollectPublicWorkTokens"
     },
@@ -1526,11 +1566,6 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_runtime/public_work_tokens.go",
       "target": "IsPublicWorkToken"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_runtime/recording_event_contracts.go",
-      "target": "RunFinishedFactoryEvent"
     },
     {
       "rule": "service-root-exported-function",
@@ -1589,6 +1624,11 @@
     },
     {
       "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/managed_runtime_contract.go",
+      "target": "IsManagedRuntimeBackend"
+    },
+    {
+      "rule": "service-root-exported-function",
       "filePath": "pkg/services/models/catalog_contract.go",
       "target": "ValidateGetModelRequest"
     },
@@ -1614,8 +1654,18 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/models/runtime_config_contract.go",
-      "target": "ValidateRuntimeBinding"
+      "filePath": "pkg/services/models/local_execution_contract.go",
+      "target": "PrepareGenericInvocation"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/managed_runtime_contract.go",
+      "target": "NormalizeGenericInvocationOutputs"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/operator_settings/acp_agent_profile.go",
+      "target": "DefaultACPAgentProfile"
     },
     {
       "rule": "service-root-exported-function",
@@ -1656,21 +1706,6 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/operator_settings/defaults_resolution.go",
       "target": "Resolve"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/providers/selection_contract.go",
-      "target": "ResolveIdentity"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/providers/selection_contract.go",
-      "target": "ResolveSelection"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/providers/selection_contract.go",
-      "target": "ValidatePrerequisites"
     },
     {
       "rule": "service-root-exported-function",
@@ -1994,8 +2029,18 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/execute_contracts.go",
-      "target": "CloneSafeDiagnostics"
+      "filePath": "pkg/services/worker_sessions/publish.go",
+      "target": "NewProviderSessionObservationPublisher"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/worker_sessions/terminal.go",
+      "target": "SanitizeProviderFailureClassification"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/worker_sessions/topic.go",
+      "target": "Topic"
     },
     {
       "rule": "service-root-exported-function",
@@ -2090,11 +2135,6 @@
     {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/workers/failure.go",
-      "target": "AsInferenceFailure"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/failure.go",
       "target": "ClassifyInferenceFailure"
     },
     {
@@ -2169,6 +2209,11 @@
     },
     {
       "rule": "service-root-exported-function",
+      "filePath": "pkg/services/workers/progress_observations.go",
+      "target": "CloneProviderSessionReference"
+    },
+    {
+      "rule": "service-root-exported-function",
       "filePath": "pkg/services/workers/proposal_mappers.go",
       "target": "ProposedOutputFromLegacyWorkResult"
     },
@@ -2181,16 +2226,6 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/workers/proposal_mappers.go",
       "target": "WorkProposedItemsFromProposedWork"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/provider_port.go",
-      "target": "RunnerIdentityForWorker"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/provider_port.go",
-      "target": "UsesNamedProvider"
     },
     {
       "rule": "service-root-exported-function",
@@ -2299,13 +2334,13 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/workstation_pool_boundary_contracts.go",
-      "target": "WorkstationExecutionServiceFromRoot"
+      "filePath": "pkg/services/factory_sessions/service_contracts.go",
+      "target": "NewLiveChangeError"
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/workstation_pool_boundary_impl.go",
-      "target": "NewWorkstationPoolBoundary"
+      "filePath": "pkg/services/factory_sessions/service_contracts.go",
+      "target": "NormalizeLiveChangeRequest"
     },
     {
       "rule": "service-root-interface-count",
@@ -2319,18 +2354,23 @@
     },
     {
       "rule": "service-root-interface-count",
+      "filePath": "pkg/services/chat_sessions",
+      "target": "pkg/services/chat_sessions/contracts.go:Service,pkg/services/chat_sessions/factory_target_catalog_contract.go:FactoryTargetCatalogService"
+    },
+    {
+      "rule": "service-root-interface-count",
       "filePath": "pkg/services/edges",
-      "target": "<none>"
+      "target": "\u003cnone\u003e"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_definitions",
-      "target": "pkg/services/factory_definitions/activation_contract.go:DefinitionActivationGateway,pkg/services/factory_definitions/authored_layout_filesystem.go:AuthoredLayoutReaderFileSystem,pkg/services/factory_definitions/authored_layout_filesystem.go:AuthoredLayoutWriterFileSystem,pkg/services/factory_definitions/authored_layout_filesystem.go:InputInboxSentinelEnsurer,pkg/services/factory_definitions/config_file_operations.go:FactoryConfigPathSource,pkg/services/factory_definitions/decision_envelope_contract.go:DecisionEnvelopeService,pkg/services/factory_definitions/invocation_interpolation_contract.go:InvocationInterpolationService,pkg/services/factory_definitions/invocation_output_contract.go:InvocationOutputShapingService,pkg/services/factory_definitions/invocation_work_type_contract.go:InvocationWorkTypeService,pkg/services/factory_definitions/loading_effects.go:Clock,pkg/services/factory_definitions/loading_effects.go:LoadingFileSystem,pkg/services/factory_definitions/loading_effects.go:VersionFileSystem,pkg/services/factory_definitions/named_catalog_ports.go:NamedFactoryCatalogFileSystem,pkg/services/factory_definitions/named_path_ports.go:NamedPathFileSystem,pkg/services/factory_definitions/named_path_ports.go:NamedPathResolver,pkg/services/factory_definitions/packaged_installation.go:PackagedFactoryInstaller,pkg/services/factory_definitions/packaged_installation_ports.go:PackagedInstallationFileSystem,pkg/services/factory_definitions/packages_contract.go:PackagedGoalPromptFileSystem,pkg/services/factory_definitions/persistence_ports.go:DirectoryReplacementStore,pkg/services/factory_definitions/persistence_ports.go:PersistenceFileSystem,pkg/services/factory_definitions/portable_bundled_validation.go:PortableBundledFileInspection,pkg/services/factory_definitions/quorum_policy_contract.go:QuorumPolicyService,pkg/services/factory_definitions/replay_runtime.go:ReplayRuntimeConfig,pkg/services/factory_definitions/scaffold_contract.go:ScaffoldFileSystem,pkg/services/factory_definitions/scaffold_contract.go:ScaffoldOutput,pkg/services/factory_definitions/service_contract.go:Service,pkg/services/factory_definitions/service_contract.go:SessionHost,pkg/services/factory_definitions/tts_observability_contract.go:TTSObservabilityService,pkg/services/factory_definitions/validation_contract.go:ValidationOperations,pkg/services/factory_definitions/work_propagation_contract.go:WorkPropagationPolicyService,pkg/services/factory_definitions/workstation_execution_contract.go:WorkstationExecutionPolicyService"
+      "target": "pkg/services/factory_definitions/activation_contract.go:DefinitionActivationGateway,pkg/services/factory_definitions/authored_layout_filesystem.go:AuthoredLayoutReaderFileSystem,pkg/services/factory_definitions/authored_layout_filesystem.go:AuthoredLayoutWriterFileSystem,pkg/services/factory_definitions/authored_layout_filesystem.go:InputInboxSentinelEnsurer,pkg/services/factory_definitions/config_file_operations.go:FactoryConfigPathSource,pkg/services/factory_definitions/current_factory_pointer.go:CatalogPathsService,pkg/services/factory_definitions/decision_envelope_contract.go:DecisionEnvelopeService,pkg/services/factory_definitions/invocation_interpolation_contract.go:InvocationInterpolationService,pkg/services/factory_definitions/invocation_output_contract.go:InvocationOutputShapingService,pkg/services/factory_definitions/invocation_work_type_contract.go:InvocationWorkTypeService,pkg/services/factory_definitions/loading_effects.go:Clock,pkg/services/factory_definitions/loading_effects.go:LoadingFileSystem,pkg/services/factory_definitions/loading_effects.go:VersionFileSystem,pkg/services/factory_definitions/named_catalog_ports.go:NamedFactoryCatalogFileSystem,pkg/services/factory_definitions/named_path_ports.go:NamedPathResolver,pkg/services/factory_definitions/packaged_installation.go:PackagedFactoryInstaller,pkg/services/factory_definitions/packaged_installation_ports.go:PackagedInstallationFileSystem,pkg/services/factory_definitions/packages_contract.go:PackagedGoalPromptFileSystem,pkg/services/factory_definitions/persistence_ports.go:DirectoryReplacementStore,pkg/services/factory_definitions/persistence_ports.go:PersistenceFileSystem,pkg/services/factory_definitions/portable_bundled_validation.go:PortableBundledFileInspection,pkg/services/factory_definitions/quorum_policy_contract.go:QuorumPolicyService,pkg/services/factory_definitions/replay_runtime.go:ReplayRuntimeConfig,pkg/services/factory_definitions/scaffold_contract.go:ScaffoldFileSystem,pkg/services/factory_definitions/scaffold_contract.go:ScaffoldOutput,pkg/services/factory_definitions/service_contract.go:Service,pkg/services/factory_definitions/service_contract.go:SessionHost,pkg/services/factory_definitions/tts_observability_contract.go:TTSObservabilityService,pkg/services/factory_definitions/validation_contract.go:ValidationOperations,pkg/services/factory_definitions/work_propagation_contract.go:WorkPropagationPolicyService,pkg/services/factory_definitions/workstation_execution_contract.go:WorkstationExecutionPolicyService"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_runtime",
-      "target": "pkg/services/factory_runtime/clock.go:Clock,pkg/services/factory_runtime/clock.go:LogicalClock,pkg/services/factory_runtime/execution_contracts.go:DispatchResultHook,pkg/services/factory_runtime/execution_contracts.go:DispatchResultHookWakeSignaler,pkg/services/factory_runtime/execution_contracts.go:SubmissionHook,pkg/services/factory_runtime/factory_status.go:FactoryStatusProjector,pkg/services/factory_runtime/filesystem.go:InputFileSystem,pkg/services/factory_runtime/filesystem.go:RuntimeDirectoryFileSystem,pkg/services/factory_runtime/filesystem.go:WorkflowSourceFileSystem,pkg/services/factory_runtime/hosting.go:HostedHandle,pkg/services/factory_runtime/hosting.go:HostedInstance,pkg/services/factory_runtime/hosting.go:HostedLedger,pkg/services/factory_runtime/hosting.go:Lifecycle,pkg/services/factory_runtime/hosting.go:ReplacementBuilder,pkg/services/factory_runtime/hosting.go:Sidecars,pkg/services/factory_runtime/interfaces.go:APIFactory,pkg/services/factory_runtime/interfaces.go:Factory,pkg/services/factory_runtime/interfaces.go:Service,pkg/services/factory_runtime/interfaces.go:WorkMover,pkg/services/factory_runtime/interfaces.go:WorkflowContextProvider,pkg/services/factory_runtime/javascript_checkpoint_contract.go:JavaScriptCheckpointStore,pkg/services/factory_runtime/javascript_checkpoint_contract.go:JavaScriptCheckpointSummaries,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptChildValues,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflowDefinitions,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflowRuntime,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflows,pkg/services/factory_runtime/logger.go:Logger,pkg/services/factory_runtime/metrics.go:MetricsEmitter,pkg/services/factory_runtime/orchestration_contract.go:OrchestrationCompilation,pkg/services/factory_runtime/orchestration_contract.go:OrchestrationJavaScriptExecution,pkg/services/factory_runtime/result_types.go:SessionResultProjectionOperation,pkg/services/factory_runtime/runtime_log_sink.go:RuntimeLogSink,pkg/services/factory_runtime/runtime_metrics_sink.go:RuntimeMetricRecordWriter,pkg/services/factory_runtime/runtime_metrics_sink.go:RuntimeMetricsSink,pkg/services/factory_runtime/session_build_spec.go:LoadedConfig,pkg/services/factory_runtime/workflow_preview_operation.go:WorkflowPreviewOperation"
+      "target": "pkg/services/factory_runtime/clock.go:Clock,pkg/services/factory_runtime/clock.go:LogicalClock,pkg/services/factory_runtime/execution_contracts.go:DispatchResultHook,pkg/services/factory_runtime/execution_contracts.go:DispatchResultHookWakeSignaler,pkg/services/factory_runtime/execution_contracts.go:SubmissionHook,pkg/services/factory_runtime/factory_status.go:FactoryStatusProjector,pkg/services/factory_runtime/filesystem.go:InputFileSystem,pkg/services/factory_runtime/filesystem.go:RuntimeDirectoryFileSystem,pkg/services/factory_runtime/filesystem.go:WorkflowSourceFileSystem,pkg/services/factory_runtime/interfaces.go:APIFactory,pkg/services/factory_runtime/interfaces.go:Service,pkg/services/factory_runtime/interfaces.go:WorkflowContextProvider,pkg/services/factory_runtime/javascript_checkpoint_contract.go:JavaScriptCheckpointStore,pkg/services/factory_runtime/javascript_checkpoint_contract.go:JavaScriptCheckpointSummaries,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptChildValues,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflowDefinitions,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflowRuntime,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflows,pkg/services/factory_runtime/logger.go:Logger,pkg/services/factory_runtime/metrics.go:MetricsEmitter,pkg/services/factory_runtime/orchestration_contract.go:OrchestrationCompilation,pkg/services/factory_runtime/orchestration_contract.go:OrchestrationJavaScriptExecution,pkg/services/factory_runtime/resource_capacity.go:AdmittedResourceCapacityService,pkg/services/factory_runtime/resource_capacity.go:ResourceCapacityAdmission,pkg/services/factory_runtime/resource_capacity.go:ResourceCapacityLeaseAdmission,pkg/services/factory_runtime/resource_capacity.go:ResourceCapacityRevisionService,pkg/services/factory_runtime/resource_capacity.go:ResourceCapacityService,pkg/services/factory_runtime/result_types.go:SessionResultProjectionOperation,pkg/services/factory_runtime/runtime_log_sink.go:RuntimeLogOwner,pkg/services/factory_runtime/runtime_log_sink.go:RuntimeLogSink,pkg/services/factory_runtime/runtime_metrics_sink.go:RuntimeMetricRecordWriter,pkg/services/factory_runtime/runtime_metrics_sink.go:RuntimeMetricsOwner,pkg/services/factory_runtime/runtime_metrics_sink.go:RuntimeMetricsSink,pkg/services/factory_runtime/runtime_session_contract.go:RuntimeLifecycle,pkg/services/factory_runtime/runtime_session_contract.go:RuntimeRecord,pkg/services/factory_runtime/runtime_session_contract.go:RuntimeReplacementBuilder,pkg/services/factory_runtime/runtime_session_contract.go:RuntimeRun,pkg/services/factory_runtime/runtime_session_contract.go:RuntimeSidecars,pkg/services/factory_runtime/session_build_spec.go:LoadedConfig,pkg/services/factory_runtime/workflow_preview_operation.go:WorkflowPreviewOperation"
     },
     {
       "rule": "service-root-interface-count",
@@ -2345,7 +2385,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_sessions",
-      "target": "pkg/services/factory_sessions/activation_contract.go:DefinitionActivationGatewayProvider,pkg/services/factory_sessions/execution_contract.go:ExecutionService,pkg/services/factory_sessions/models_cli_collaboration.go:ModelsCLIPresentationCollaborator,pkg/services/factory_sessions/service_contracts.go:Service"
+      "target": "pkg/services/factory_sessions/assembly_contract.go:InvocationService,pkg/services/factory_sessions/contracts.go:OpeningPresentationOwner,pkg/services/factory_sessions/execution_contract.go:DurableExecutionService,pkg/services/factory_sessions/execution_contract.go:SessionInventoryService,pkg/services/factory_sessions/service_contracts.go:LiveChangeAdmission,pkg/services/factory_sessions/service_contracts.go:LiveChangeApplication,pkg/services/factory_sessions/service_contracts.go:LiveChangeEventLog,pkg/services/factory_sessions/service_contracts.go:LiveChangePreflight,pkg/services/factory_sessions/service_contracts.go:LiveChangeService,pkg/services/factory_sessions/service_contracts.go:LiveControlService,pkg/services/factory_sessions/service_contracts.go:LiveResultService,pkg/services/factory_sessions/service_contracts.go:Service,pkg/services/factory_sessions/target_execution_contract.go:TargetExecutionService"
     },
     {
       "rule": "service-root-interface-count",
@@ -2364,8 +2404,18 @@
     },
     {
       "rule": "service-root-interface-count",
-      "filePath": "pkg/services/providers",
-      "target": "pkg/services/providers/acp_configuration_contract.go:ACPConfiguration,pkg/services/providers/lifecycle_contract.go:Lifecycle,pkg/services/providers/service_contract.go:Service"
+      "filePath": "pkg/services/providers/internal/services/acp",
+      "target": "pkg/services/providers/internal/services/acp/service.go:ContinuationService,pkg/services/providers/internal/services/acp/service.go:Service"
+    },
+    {
+      "rule": "service-root-interface-count",
+      "filePath": "pkg/services/providers/internal/services/execution",
+      "target": "pkg/services/providers/internal/services/execution/service.go:ContinuationService,pkg/services/providers/internal/services/execution/service.go:Service"
+    },
+    {
+      "rule": "service-root-interface-count",
+      "filePath": "pkg/services/recordings",
+      "target": "pkg/services/recordings/contracts.go:Service,pkg/services/recordings/lifecycle_capability.go:RecordingLifecycle,pkg/services/recordings/replay_artifact_capability.go:RecordingReplayArtifacts,pkg/services/recordings/replay_artifact_capability.go:ReplayInputLoader,pkg/services/recordings/runtime_recording_binder.go:RuntimeRecordingBinder"
     },
     {
       "rule": "service-root-interface-count",
@@ -2380,12 +2430,22 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/work/internal/services/state_access",
-      "target": "pkg/services/work/internal/services/state_access/service.go:RecordingsAdapter,pkg/services/work/internal/services/state_access/service.go:Service,pkg/services/work/internal/services/state_access/service.go:SessionAdapter,pkg/services/work/internal/services/state_access/service.go:SessionResolver"
+      "target": "pkg/services/work/internal/services/state_access/service.go:Service,pkg/services/work/internal/services/state_access/service.go:SessionAdapter,pkg/services/work/internal/services/state_access/service.go:SessionResolver,pkg/services/work/internal/services/state_access/service.go:SnapshotReader"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers",
-      "target": "pkg/services/workers/command.go:CommandRunner,pkg/services/workers/interfaces.go:AgentToolFileSystem,pkg/services/workers/interfaces.go:FactoryWorktreePreparer,pkg/services/workers/interfaces.go:InvocationExecutor,pkg/services/workers/interfaces.go:Runner,pkg/services/workers/interfaces.go:WorkerExecutor,pkg/services/workers/interfaces.go:WorkstationRequestExecutor,pkg/services/workers/interfaces.go:WorktreeFileSystem,pkg/services/workers/interfaces.go:WorktreeGitCommander,pkg/services/workers/mock_workers_contracts.go:MockWorkersConfigFileSystem,pkg/services/workers/prompt_template_contracts.go:PromptTemplates,pkg/services/workers/provider_port.go:Provider,pkg/services/workers/pty_contracts.go:PTYAllocator,pkg/services/workers/pty_contracts.go:PTYSession,pkg/services/workers/runner_process.go:Clock,pkg/services/workers/runtime_service.go:RuntimeService,pkg/services/workers/sessions_consumer_contracts.go:ProviderRegistry,pkg/services/workers/workstation_contracts.go:ModelInvoker,pkg/services/workers/workstation_contracts.go:Service,pkg/services/workers/workstation_pool_boundary_contracts.go:WorkstationExecutionService,pkg/services/workers/workstation_pool_boundary_contracts.go:WorkstationPoolBoundary"
+      "target": "pkg/services/workers/command.go:CommandRunner,pkg/services/workers/interfaces.go:AgentToolFileSystem,pkg/services/workers/interfaces.go:FactoryWorktreePreparer,pkg/services/workers/interfaces.go:InvocationExecutor,pkg/services/workers/interfaces.go:Runner,pkg/services/workers/interfaces.go:WorkerExecutor,pkg/services/workers/interfaces.go:WorkstationRequestExecutor,pkg/services/workers/interfaces.go:WorktreeFileSystem,pkg/services/workers/interfaces.go:WorktreeGitCommander,pkg/services/workers/mock_workers_contracts.go:MockWorkersConfigFileSystem,pkg/services/workers/prompt_template_contracts.go:PromptTemplates,pkg/services/workers/pty_contracts.go:PTYAllocator,pkg/services/workers/pty_contracts.go:PTYSession,pkg/services/workers/runner_process.go:Clock,pkg/services/workers/workstation_contracts.go:ModelInvoker,pkg/services/workers/workstation_contracts.go:Service"
+    },
+    {
+      "rule": "service-root-interface-count",
+      "filePath": "pkg/services/workers/internal/services/workstations",
+      "target": "\u003cnone\u003e"
+    },
+    {
+      "rule": "service-root-missing-internal",
+      "filePath": "pkg/services/workers/internal/services/workstations/internal",
+      "target": "pkg/services/workers/internal/services/workstations"
     },
     {
       "rule": "service-root-unexpected-directory",
@@ -2709,16 +2769,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/runners/agents",
-      "target": "pkg/services/workers/internal/services/runners"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/runners/inference",
-      "target": "pkg/services/workers/internal/services/runners"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/internal/services/runners/process",
       "target": "pkg/services/workers/internal/services/runners"
     },
@@ -2734,59 +2784,13 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/runtime_assembly/construction",
-      "target": "pkg/services/workers/internal/services/runtime_assembly"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/workstations/draftvalidation",
-      "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/workstations/envdiagnostics",
-      "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/workstations/execution",
-      "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/internal/services/workstations/executor",
-      "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/workstations/inferencefailure",
       "target": "pkg/services/workers/internal/services/workstations"
     },
     {
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/internal/services/workstations/invocation",
       "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/workstations/poolboundary",
-      "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/workstations/prompting",
-      "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/workstations/skippermissions",
-      "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/internal/services/workstations/worktree",
-      "target": "pkg/services/workers/internal/services/workstations"
     }
-  ],
-  "violations": []
+  ]
 }

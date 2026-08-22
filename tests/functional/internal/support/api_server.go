@@ -8,16 +8,22 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -26,6 +32,8 @@ import (
 // packages. A larger ceiling prevents scheduler and antivirus variance on
 // Windows from becoming a test failure without slowing the success path.
 const functionalServerReadyTimeout = 15 * time.Second
+
+const workerSessionReplayPollInterval = 10 * time.Millisecond
 
 // FunctionalAPIServerConfig describes customer process inputs and replaceable
 // external boundaries. Product/runtime configuration is supplied through Args
@@ -38,17 +46,28 @@ type FunctionalAPIServerConfig struct {
 	MockWorkersConfig            *workers.MockWorkersConfig
 	WaitForServiceModeRuntime    bool
 	ResponseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits
-	Args                         []string
-	Env                          []string
-	ProviderOverride             providercontract.Provider
-	Edges                        serviceedges.Edges
+	// ServerReadyTimeout overrides the bounded startup wait for scenarios whose
+	// process initialization includes a large first-time packaged catalog.
+	ServerReadyTimeout time.Duration
+	Args               []string
+	Env                []string
+	ProviderOverride   providers.Service
+	Edges              serviceedges.Edges
+	// BeforeStart prepares scenario-owned durable state through the same
+	// root-built process that will host the server. The callback runs after
+	// invocation-local environment setup and before the server command starts.
+	BeforeStart func(testing.TB, Process, root.Input)
 }
 
 // FunctionalAPIServer owns one daemon invocation on a reusable root Process.
 type FunctionalAPIServer struct {
-	process *ProcessCommand
-	api     *ProcessAPIServer
-	url     string
+	process         *ProcessCommand
+	api             *ProcessAPIServer
+	url             string
+	closeProcess    func(context.Context) error
+	closeOnce       sync.Once
+	closeErr        error
+	recordingReader recordings.WorkerRecordingReader
 }
 
 // ConfigureWorkerCommands installs typed functional command edges before the
@@ -76,7 +95,11 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 
 	api := NewProcessAPIServer()
 	edges.APIServerStarter = api.Start
-	process := BuildProcess(t, edges)
+	process, recordingReader := BuildProcessWithRecordingReader(t, edges)
+	var closeProcess func(context.Context) error
+	if closer, ok := process.(interface{ Close(context.Context) error }); ok {
+		closeProcess = closer.Close
+	}
 
 	args := append([]string{"you", "run"}, functionalRunArgs(t, cfg)...)
 	inputs := FakeInputs(context.Background(), args)
@@ -95,6 +118,17 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	} else {
 		inputs.Env = append([]string(nil), cfg.Env...)
 	}
+	server := &FunctionalAPIServer{
+		api:             api,
+		closeProcess:    closeProcess,
+		recordingReader: recordingReader,
+	}
+	if closeProcess != nil {
+		t.Cleanup(func() { server.Close(t) })
+	}
+	if cfg.BeforeStart != nil {
+		cfg.BeforeStart(t, process, inputs.Input)
+	}
 	t.Cleanup(func() {
 		if !t.Failed() {
 			return
@@ -107,14 +141,40 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 		}
 	})
 	command := StartProcessCommand(t, process, inputs.Input)
-	server := &FunctionalAPIServer{process: command, api: api}
-	server.url = api.WaitForURL(t)
+	server.process = command
+	readyTimeout := functionalServerReadyTimeout
+	if cfg.ServerReadyTimeout > 0 {
+		readyTimeout = cfg.ServerReadyTimeout
+	}
+	baseURL, err := api.WaitForBaseURL(readyTimeout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.url = baseURL
 	if cfg.WaitForServiceModeRuntime {
 		WaitForStatus(t, server.url, functionalServerReadyTimeout, func(status factoryapi.StatusResponse) bool {
 			return status.RuntimeStatus != ""
 		})
 	}
 	return server
+}
+
+// Close releases the root process resources after Stop has canceled its
+// customer invocation. Tests that need to reuse durable project state can
+// call it before opening another process against the same directory.
+func (fs *FunctionalAPIServer) Close(t testing.TB) {
+	t.Helper()
+	if fs == nil || fs.closeProcess == nil {
+		return
+	}
+	fs.closeOnce.Do(func() {
+		closeCtx, cancelClose := context.WithTimeout(context.Background(), processCommandStopTimeout)
+		defer cancelClose()
+		fs.closeErr = fs.closeProcess(closeCtx)
+	})
+	if fs.closeErr != nil {
+		t.Errorf("close application process: %v", fs.closeErr)
+	}
 }
 
 func withFunctionalEnvironment(environment []string, name, value string) []string {
@@ -189,6 +249,15 @@ func (fs *FunctionalAPIServer) URL() string {
 	return fs.url
 }
 
+// WorkerRecordingReader exposes the detached recording read capability of the
+// same root-built process that hosts this functional server.
+func (fs *FunctionalAPIServer) WorkerRecordingReader() recordings.WorkerRecordingReader {
+	if fs == nil {
+		return nil
+	}
+	return fs.recordingReader
+}
+
 func (fs *FunctionalAPIServer) Done() <-chan struct{} {
 	if fs == nil || fs.process == nil {
 		closed := make(chan struct{})
@@ -223,9 +292,8 @@ func (fs *FunctionalAPIServer) WaitForExitError(t testing.TB, timeout time.Durat
 	}
 }
 
-// GetFactoryEvents reads the canonical public session event stream. The
-// endpoint first replays retained history, so a short quiet period yields a
-// stable observation without reaching into the runtime service graph.
+// GetFactoryEvents reads the canonical public session event stream's committed
+// retained history through its public retained-count boundary.
 func (fs *FunctionalAPIServer) GetFactoryEvents(t *testing.T) []factoryapi.FactoryEvent {
 	t.Helper()
 	return GetFactoryEventsAt(t, fs.URL())
@@ -272,6 +340,17 @@ func GetFactoryEventsAfterAt(
 	return readFactoryEventsFromURL(t, factoryEventsURLWithCursor(baseURL, cursor))
 }
 
+// GetFactoryEventsAfterForSessionAt reads retained Factory Event history after
+// an acknowledged reconnect cursor for one explicitly selected Factory Session.
+func GetFactoryEventsAfterForSessionAt(
+	t testing.TB,
+	baseURL, sessionID string,
+	cursor FactoryEventReadCursor,
+) []factoryapi.FactoryEvent {
+	t.Helper()
+	return readFactoryEventsFromURL(t, SessionEventsURLWithCursor(baseURL, sessionID, cursor))
+}
+
 // FactoryEventsInvalidCursorError is the typed 400 payload for an invalid
 // Factory Event reconnect cursor together with the raw response body.
 type FactoryEventsInvalidCursorError struct {
@@ -306,7 +385,115 @@ func ProbeFactoryEventStreamRecoveryAt(
 // session endpoint without requiring the FunctionalAPIServer wrapper.
 func GetFactoryEventsAt(t testing.TB, baseURL string) []factoryapi.FactoryEvent {
 	t.Helper()
-	return readFactoryEventsFromURL(t, DefaultSessionEventsURL(baseURL))
+	return GetFactoryEventsForSessionAt(t, baseURL, factorysessions.DefaultSessionID)
+}
+
+// GetFactoryEventsForSessionAt reads the committed retained Factory Event
+// history for one explicitly selected session. The public stream's retained
+// count header makes this a bounded snapshot read; it never waits for stream
+// quietness.
+func GetFactoryEventsForSessionAt(t testing.TB, baseURL, sessionID string) []factoryapi.FactoryEvent {
+	t.Helper()
+	return readFactoryEventsFromURL(t, SessionEventsURL(baseURL, sessionID))
+}
+
+// GetWorkerSessionEventsByIDAt drains the public provider-neutral Worker
+// Session stream through its retained replay summary. The Worker Session ID
+// comes from the public list projection, so this path remains usable when no
+// Provider Session reference was emitted.
+func GetWorkerSessionEventsByIDAt(t testing.TB, baseURL, workerSessionID string) []factoryapi.WorkerSessionEvent {
+	t.Helper()
+	if strings.TrimSpace(workerSessionID) == "" {
+		t.Fatal("worker session id is empty")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), functionalServerReadyTimeout)
+	defer cancel()
+	endpoint := strings.TrimSuffix(baseURL, "/") +
+		"/factory-sessions/" + factorysessions.DefaultSessionID +
+		"/worker-sessions/" + url.PathEscape(workerSessionID) + "/events?replayOnly=true"
+	events, err := waitForCompleteWorkerSessionReplay(ctx, endpoint)
+	if err != nil {
+		t.Fatalf("GET Worker Session events: %v", err)
+	}
+	return events
+}
+
+func waitForCompleteWorkerSessionReplay(
+	ctx context.Context,
+	endpoint string,
+) ([]factoryapi.WorkerSessionEvent, error) {
+	ticker := time.NewTicker(workerSessionReplayPollInterval)
+	defer ticker.Stop()
+	var lastSummary *factoryapi.WorkerSessionReplaySummary
+	for {
+		events, summary, err := readWorkerSessionReplay(ctx, endpoint)
+		if err != nil {
+			return nil, err
+		}
+		lastSummary = summary
+		if summary != nil && summary.Complete {
+			return events, nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf(
+				"waiting for complete replay at %s; last summary=%#v: %w",
+				endpoint,
+				lastSummary,
+				ctx.Err(),
+			)
+		case <-ticker.C:
+		}
+	}
+}
+
+func readWorkerSessionReplay(
+	ctx context.Context,
+	endpoint string,
+) ([]factoryapi.WorkerSessionEvent, *factoryapi.WorkerSessionReplaySummary, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build Worker Session events request: %w", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return nil, nil, fmt.Errorf("GET Worker Session events: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		return nil, nil, fmt.Errorf(
+			"GET Worker Session events status = %d url = %s body = %s",
+			response.StatusCode,
+			endpoint,
+			strings.TrimSpace(string(body)),
+		)
+	}
+
+	var events []factoryapi.WorkerSessionEvent
+	scanner := bufio.NewScanner(response.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		var event factoryapi.WorkerSessionEvent
+		if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event); err != nil {
+			return nil, nil, fmt.Errorf("decode Worker Session event: %w", err)
+		}
+		events = append(events, event)
+		if string(event.Delivery) == "REPLAY_SUMMARY" || event.ReplaySummary != nil {
+			if event.ReplaySummary == nil {
+				return nil, nil, fmt.Errorf("Worker Session replay summary is empty: %s", endpoint)
+			}
+			return events, event.ReplaySummary, nil
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, nil, fmt.Errorf("read Worker Session events: %w", err)
+	}
+	return nil, nil, fmt.Errorf("Worker Session event stream ended without replay summary: %s", endpoint)
 }
 
 func readFactoryEventsInvalidCursorErrorFromURL(t testing.TB, endpoint string) FactoryEventsInvalidCursorError {
@@ -399,6 +586,16 @@ func readFactoryEventsFromURL(t testing.TB, endpoint string) []factoryapi.Factor
 		t.Fatalf("GET factory events status = %d url = %q body = %s", response.StatusCode, endpoint, strings.TrimSpace(string(body)))
 	}
 
+	retainedHeader := strings.TrimSpace(response.Header.Get(factorysessionshttp.SessionEventStreamRetainedCountHeader))
+	retainedCount, err := strconv.Atoi(retainedHeader)
+	if err != nil {
+		defer response.Body.Close()
+		t.Fatalf(
+			"GET factory events url = %q: missing or invalid %s header (%q): %v",
+			endpoint, factorysessionshttp.SessionEventStreamRetainedCountHeader, retainedHeader, err,
+		)
+	}
+
 	events := make(chan factoryapi.FactoryEvent, 256)
 	errs := make(chan error, 1)
 	go func() {
@@ -421,35 +618,23 @@ func readFactoryEventsFromURL(t testing.TB, endpoint string) []factoryapi.Factor
 		}
 	}()
 
-	var collected []factoryapi.FactoryEvent
+	collected := make([]factoryapi.FactoryEvent, 0, retainedCount)
 	deadline := time.NewTimer(functionalServerReadyTimeout)
 	defer deadline.Stop()
-	var quiet *time.Timer
-	var quietC <-chan time.Time
-	for {
+	for len(collected) < retainedCount {
 		select {
 		case event := <-events:
 			collected = append(collected, event)
-			if quiet == nil {
-				quiet = time.NewTimer(25 * time.Millisecond)
-			} else {
-				if !quiet.Stop() {
-					select {
-					case <-quiet.C:
-					default:
-					}
-				}
-				quiet.Reset(25 * time.Millisecond)
-			}
-			quietC = quiet.C
 		case err := <-errs:
 			t.Fatalf("read factory events: %v", err)
-		case <-quietC:
-			return collected
 		case <-deadline.C:
-			t.Fatalf("timed out reading factory event history")
+			t.Fatalf(
+				"timed out reading factory event history: got %d of %d retained events",
+				len(collected), retainedCount,
+			)
 		}
 	}
+	return collected
 }
 
 // GetFactoryResponseEventsAt reads retained public Factory response events

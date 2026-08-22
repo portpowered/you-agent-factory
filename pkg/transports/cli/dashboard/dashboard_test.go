@@ -7,6 +7,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -82,10 +83,10 @@ func activeRawEngineSnapshotForDashboardTest(now time.Time, topology *factoryrun
 				TransitionID:    "raw-transition",
 				WorkstationName: "raw-workstation",
 				StartTime:       now.Add(-5 * time.Second),
-				ConsumedTokens: []factoryruntime.RuntimeToken{{
-					ID:      "raw-token",
-					PlaceID: "task:processing",
-					Color:   factoryruntime.RuntimeTokenColor{Name: "raw-should-not-render", WorkID: "raw-work", WorkTypeID: "task"},
+				ConsumedTokens: []workerexecution.Token{{
+					ID:    "raw-token",
+					State: "processing",
+					Color: workerexecution.Color{Name: "raw-should-not-render", WorkID: "raw-work", WorkTypeID: "task"},
 				}},
 			},
 		},
@@ -189,7 +190,7 @@ func TestFormatSimpleDashboardWithRenderData_MapsSystemTimeCompatibilityAtCliBou
 					WorkstationName: interfaces.SystemTimeExpiryTransitionID,
 					Outcome:         string(workerexecution.OutcomeFailed),
 					FailureDetail:   &workerexecution.FailureDetail{Reason: "expired", Message: "expired"},
-					ProviderSession: workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-expire"},
+					ProviderSession: providers.SessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-expire"},
 				}},
 			},
 		},
@@ -350,7 +351,7 @@ func buildTerminalProviderRenderFixture(now time.Time) (
 					ConsumedInputs:  []interfaces.WorkstationInput{{WorkItem: &work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "story", DisplayName: "Blocked change"}}},
 					Outcome:         string(workerexecution.OutcomeFailed),
 					FailureDetail:   &workerexecution.FailureDetail{Reason: workerexecution.WorkFailureTypeThrottled, Message: "provider unavailable"},
-					ProviderSession: workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-failed"},
+					ProviderSession: providers.SessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-failed"},
 				}},
 			},
 		}
@@ -588,8 +589,8 @@ func TestFormatSimpleDashboard_SnapshotOnlyDoesNotRenderSessionRows(t *testing.T
 			TransitionID:    "raw-transition",
 			WorkstationName: "raw-workstation",
 			Outcome:         workerexecution.OutcomeAccepted,
-			ConsumedTokens: []factoryruntime.RuntimeToken{
-				{ID: "raw-token", PlaceID: "task:processing", Color: factoryruntime.RuntimeTokenColor{Name: "raw-input", WorkID: "raw-work", WorkTypeID: "task"}},
+			ConsumedTokens: []workerexecution.Token{
+				{ID: "raw-token", State: "processing", Color: workerexecution.Color{Name: "raw-input", WorkID: "raw-work", WorkTypeID: "task"}},
 			},
 		}},
 		FactoryState: "RUNNING",

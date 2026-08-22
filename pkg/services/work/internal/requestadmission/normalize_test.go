@@ -252,6 +252,137 @@ func TestNormalizeWorkRequest_DependsOnRelationTargetsRequiredState(t *testing.T
 	}
 }
 
+func TestNormalizeWorkRequest_DependsOnResolvesBoardTargetsByNameIDOrBoth(t *testing.T) {
+	tests := []struct {
+		name       string
+		targetID   string
+		targetName string
+	}{
+		{name: "name", targetName: "existing"},
+		{name: "id", targetID: "work-existing"},
+		{name: "both", targetID: "work-existing", targetName: "existing"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			normalized, err := NormalizeWorkRequest(Request{
+				RequestID: "request-cross-batch-" + tc.name,
+				Type:      RequestTypeFactoryRequestBatch,
+				Works: []Work{{
+					Name:       "new-work",
+					WorkTypeID: "task",
+				}},
+				Relations: []WorkRelation{{
+					Type:           WorkRelationDependsOn,
+					SourceWorkName: "new-work",
+					TargetWorkID:   tc.targetID,
+					TargetWorkName: tc.targetName,
+				}},
+			}, NormalizeOptions{
+				ValidWorkTypes: map[string]bool{"task": true},
+				ExistingWorks: []ExistingWork{{
+					WorkID:     "work-existing",
+					Name:       "existing",
+					WorkTypeID: "task",
+				}},
+			})
+			if err != nil {
+				t.Fatalf("NormalizeWorkRequest: %v", err)
+			}
+			if got := normalized[0].Relations[0].TargetWorkID; got != "work-existing" {
+				t.Fatalf("target Work ID = %q, want work-existing", got)
+			}
+			if got := normalized[0].Relations[0].RequiredState; got != "complete" {
+				t.Fatalf("required state = %q, want complete", got)
+			}
+		})
+	}
+}
+
+func TestNormalizeWorkRequest_RelationTargetDiagnosticsIdentifyReferenceField(t *testing.T) {
+	tests := []struct {
+		name     string
+		relation WorkRelation
+		opts     NormalizeOptions
+		want     string
+	}{
+		{
+			name: "unknown name",
+			relation: WorkRelation{
+				Type: WorkRelationDependsOn, SourceWorkName: "new-work", TargetWorkName: "missing",
+			},
+			want: `targetWorkName="missing" does not identify a Work`,
+		},
+		{
+			name: "unknown id",
+			relation: WorkRelation{
+				Type: WorkRelationDependsOn, SourceWorkName: "new-work", TargetWorkID: "missing-id",
+			},
+			want: `targetWorkId="missing-id" does not identify a Work`,
+		},
+		{
+			name: "ambiguous name",
+			relation: WorkRelation{
+				Type: WorkRelationDependsOn, SourceWorkName: "new-work", TargetWorkName: "duplicate",
+			},
+			opts: NormalizeOptions{
+				ExistingWorks: []ExistingWork{
+					{WorkID: "work-a", Name: "duplicate", WorkTypeID: "task"},
+					{WorkID: "work-b", Name: "duplicate", WorkTypeID: "task"},
+				},
+			},
+			want: `relations[0] targetWorkName="duplicate" is ambiguous`,
+		},
+		{
+			name: "conflicting references",
+			relation: WorkRelation{
+				Type: WorkRelationDependsOn, SourceWorkName: "new-work", TargetWorkName: "existing", TargetWorkID: "other-id",
+			},
+			opts: NormalizeOptions{
+				ExistingWorks: []ExistingWork{
+					{WorkID: "work-existing", Name: "existing", WorkTypeID: "task"},
+					{WorkID: "other-id", Name: "other", WorkTypeID: "task"},
+				},
+			},
+			want: `relations[0] targetWorkName="existing" and targetWorkId="other-id" identify different Work`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			request := Request{
+				RequestID: "request-relation-diagnostic-" + tc.name,
+				Type:      RequestTypeFactoryRequestBatch,
+				Works:     []Work{{Name: "new-work", WorkTypeID: "task"}},
+				Relations: []WorkRelation{tc.relation},
+			}
+			if tc.opts.ValidWorkTypes == nil {
+				tc.opts.ValidWorkTypes = map[string]bool{"task": true}
+			}
+			_, err := NormalizeWorkRequest(request, tc.opts)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want substring %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeWorkRequest_RejectsParentChildTargetOutsideSubmittedBatch(t *testing.T) {
+	_, err := NormalizeWorkRequest(Request{
+		RequestID: "request-parent-existing",
+		Type:      RequestTypeFactoryRequestBatch,
+		Works:     []Work{{Name: "child", WorkTypeID: "task"}},
+		Relations: []WorkRelation{{
+			Type: WorkRelationParentChild, SourceWorkName: "child", TargetWorkName: "existing",
+		}},
+	}, NormalizeOptions{
+		ValidWorkTypes: map[string]bool{"task": true},
+		ExistingWorks:  []ExistingWork{{WorkID: "parent-id", Name: "existing", WorkTypeID: "task"}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "PARENT_CHILD target") || !strings.Contains(err.Error(), "previously submitted Work") {
+		t.Fatalf("error = %v, want same-batch parent-child diagnostic", err)
+	}
+}
+
 func TestNormalizeWorkRequest_ParentChildRelationTargetsParentAndCoexistsWithDependsOn(t *testing.T) {
 	request := Request{
 		RequestID: "request-parent-child-1",
@@ -505,6 +636,61 @@ func TestNormalizeWorkRequest_RejectsDependencyCycle(t *testing.T) {
 	}
 }
 
+func TestNormalizeWorkRequest_DuplicateNameDiagnosticIsStableAcrossWorkTypes(t *testing.T) {
+	request := Request{
+		RequestID: "request-duplicate-diagnostic",
+		Type:      RequestTypeFactoryRequestBatch,
+		Works: []Work{
+			{Name: "first", WorkTypeID: "task"},
+			{Name: "second", WorkTypeID: "review"},
+			{Name: "first", WorkTypeID: "review"},
+			{Name: "second", WorkTypeID: "task"},
+		},
+	}
+	_, err := NormalizeWorkRequest(request, NormalizeOptions{
+		ValidWorkTypes: map[string]bool{"task": true, "review": true},
+	})
+	if err == nil {
+		t.Fatal("NormalizeWorkRequest succeeded for duplicate names")
+	}
+	want := "work_request: duplicate name \"first\": works[2].name conflicts with works[0].name; works[].name must be unique across the entire batch, including across different workTypeName values; rename or remove one entry"
+	if got := err.Error(); got != want {
+		t.Fatalf("duplicate-name diagnostic = %q, want %q", got, want)
+	}
+}
+
+func TestNormalizeWorkRequest_RelationEndpointDiagnosticIsDeterministicAndSourceFirst(t *testing.T) {
+	request := Request{
+		RequestID: "request-relation-endpoint-diagnostic",
+		Type:      RequestTypeFactoryRequestBatch,
+		Works: []Work{
+			{Name: "declared", WorkTypeID: "task"},
+		},
+		Relations: []WorkRelation{
+			{
+				Type:           WorkRelationDependsOn,
+				SourceWorkName: "missing-source",
+				TargetWorkName: "missing-target",
+			},
+			{
+				Type:           WorkRelationParentChild,
+				SourceWorkName: "declared",
+				TargetWorkName: "missing-later",
+			},
+		},
+	}
+	_, err := NormalizeWorkRequest(request, NormalizeOptions{
+		ValidWorkTypes: map[string]bool{"task": true},
+	})
+	if err == nil {
+		t.Fatal("NormalizeWorkRequest succeeded for missing relation endpoints")
+	}
+	want := `work_request: relations[0] relation type "DEPENDS_ON" has sourceWorkName "missing-source" and targetWorkName "missing-target"; endpoint sourceWorkName="missing-source" is missing from this batch; relation endpoints must name Work declared in this batch's works[] (not previously submitted Work); add the named Work to works[] or correct sourceWorkName`
+	if got := err.Error(); got != want {
+		t.Fatalf("relation endpoint diagnostic = %q, want %q", got, want)
+	}
+}
+
 func TestNormalizeWorkRequest_RejectsValidationFailures_WorkArrayAndEndpoints(t *testing.T) {
 	runNormalizeWorkRequestValidationTests(t, []normalizeValidationTestCase{
 		{
@@ -529,7 +715,7 @@ func TestNormalizeWorkRequest_RejectsValidationFailures_WorkArrayAndEndpoints(t 
 				Works:     []Work{{Name: "first", WorkTypeID: "task"}},
 				Relations: []WorkRelation{{Type: WorkRelationDependsOn, TargetWorkName: "first"}},
 			},
-			wantErr: "missing sourceWorkName",
+			wantErr: "endpoint sourceWorkName",
 		},
 		{
 			name: "blank source endpoint",
@@ -539,7 +725,7 @@ func TestNormalizeWorkRequest_RejectsValidationFailures_WorkArrayAndEndpoints(t 
 				Works:     []Work{{Name: "first", WorkTypeID: "task"}},
 				Relations: []WorkRelation{{Type: WorkRelationDependsOn, SourceWorkName: "   ", TargetWorkName: "first"}},
 			},
-			wantErr: "missing sourceWorkName",
+			wantErr: "endpoint sourceWorkName",
 		},
 		{
 			name: "missing target endpoint",
@@ -549,7 +735,7 @@ func TestNormalizeWorkRequest_RejectsValidationFailures_WorkArrayAndEndpoints(t 
 				Works:     []Work{{Name: "first", WorkTypeID: "task"}},
 				Relations: []WorkRelation{{Type: WorkRelationDependsOn, SourceWorkName: "first"}},
 			},
-			wantErr: "missing targetWorkName",
+			wantErr: "endpoint targetWorkName",
 		},
 		{
 			name: "unknown source endpoint",
@@ -559,7 +745,7 @@ func TestNormalizeWorkRequest_RejectsValidationFailures_WorkArrayAndEndpoints(t 
 				Works:     []Work{{Name: "first", WorkTypeID: "task"}},
 				Relations: []WorkRelation{{Type: WorkRelationDependsOn, SourceWorkName: "missing", TargetWorkName: "first"}},
 			},
-			wantErr: "unknown sourceWorkName",
+			wantErr: "endpoint sourceWorkName",
 		},
 		{
 			name: "unknown target endpoint",
@@ -569,7 +755,7 @@ func TestNormalizeWorkRequest_RejectsValidationFailures_WorkArrayAndEndpoints(t 
 				Works:     []Work{{Name: "first", WorkTypeID: "task"}},
 				Relations: []WorkRelation{{Type: WorkRelationDependsOn, SourceWorkName: "first", TargetWorkName: "missing"}},
 			},
-			wantErr: "unknown targetWorkName",
+			wantErr: "targetWorkName=\"missing\" does not identify a Work",
 		},
 	})
 }
@@ -951,8 +1137,8 @@ func TestFactoryRequestBatch_InvalidRelationsRejected(t *testing.T) {
 	for _, tc := range []struct {
 		name, payload, wantErr string
 	}{
-		{"unknown source in relation", `{"requestId":"invalid-6","type":"FACTORY_REQUEST_BATCH","works":[{"workTypeName":"task","name":"a"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"missing","targetWorkName":"a"}]}`, "unknown sourceWorkName"},
-		{"unknown target in relation", `{"requestId":"invalid-7","type":"FACTORY_REQUEST_BATCH","works":[{"workTypeName":"task","name":"a"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"a","targetWorkName":"missing"}]}`, "unknown targetWorkName"},
+		{"unknown source in relation", `{"requestId":"invalid-6","type":"FACTORY_REQUEST_BATCH","works":[{"workTypeName":"task","name":"a"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"missing","targetWorkName":"a"}]}`, "endpoint sourceWorkName"},
+		{"unknown target in relation", `{"requestId":"invalid-7","type":"FACTORY_REQUEST_BATCH","works":[{"workTypeName":"task","name":"a"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"a","targetWorkName":"missing"}]}`, "targetWorkName=\"missing\" does not identify a Work"},
 		{"self-referencing dependency", `{"requestId":"invalid-8","type":"FACTORY_REQUEST_BATCH","works":[{"workTypeName":"task","name":"a"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"a","targetWorkName":"a"}]}`, "self-dependency"},
 		{"self-parenting relation", `{"requestId":"invalid-9","type":"FACTORY_REQUEST_BATCH","works":[{"workTypeName":"task","name":"a"}],"relations":[{"type":"PARENT_CHILD","sourceWorkName":"a","targetWorkName":"a"}]}`, "self-parenting"},
 		{"duplicate parent-child relation", `{"requestId":"invalid-10","type":"FACTORY_REQUEST_BATCH","works":[{"workTypeName":"task","name":"parent"},{"workTypeName":"task","name":"child"}],"relations":[{"type":"PARENT_CHILD","sourceWorkName":"child","targetWorkName":"parent"},{"type":"PARENT_CHILD","sourceWorkName":"child","targetWorkName":"parent"}]}`, "duplicates relations[0]"},

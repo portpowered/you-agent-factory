@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildGridAutoLayoutPositionsByNodeId,
   buildLargeFactoryEditorFixture,
+  buildLargeFactoryEditorParityFixture,
   FACTORY_GRAPH_LARGE_EDITOR_FIXTURE_TARGETS,
   factoryGraphLargeEditorFixtures,
 } from "../fixtures/factory-graph-large-editor-fixtures";
@@ -60,5 +61,26 @@ describe("factory graph large editor fixtures", () => {
       expect(fixture.topology.nodes.length).toBe(fixture.graphNodeCount);
       expect(fixture.factoryDefinition.workstations?.length).toBeGreaterThan(0);
     }
+  });
+
+  it("builds the combined large visual-parity scenario", () => {
+    const parityFixture = buildLargeFactoryEditorParityFixture(
+      factoryGraphLargeEditorFixtures.fiveHundred,
+    );
+
+    expect(parityFixture.groups.map((group) => group.color)).toEqual([
+      "info",
+      "warning",
+      "success",
+    ]);
+    expect(parityFixture.authoredSizeByNodeId.size).toBeGreaterThanOrEqual(3);
+    expect(parityFixture.workStateNodeIds.length).toBeGreaterThanOrEqual(4);
+    expect(parityFixture.layout.groups).toEqual(parityFixture.groups);
+    expect(parityFixture.layout.nodes).not.toEqual(
+      parityFixture.fixture.layout.nodes,
+    );
+    expect(parityFixture.fixture.topology.nodes.length).toBeGreaterThanOrEqual(
+      FACTORY_GRAPH_LARGE_EDITOR_FIXTURE_TARGETS.fiveHundred,
+    );
   });
 });

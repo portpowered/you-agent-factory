@@ -72,13 +72,11 @@ workers:
     skipPermissions: true
     modelProvider: ${writerProvider}
     model: ${writerModel}
-    promptFile: prompts/executor.md
   - name: review-work-reviewer
     type: AGENT_WORKER
     skipPermissions: true
     modelProvider: ${reviewerProvider}
     model: ${reviewerModel}
-    promptFile: prompts/reviewer.md
 workstations:
   - name: execute-review-work
     type: AGENT_RUN

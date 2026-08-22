@@ -1,0 +1,9 @@
+type: string
+description: Provider-supported reasoning effort setting for one model.
+enum:
+  - minimal
+  - low
+  - medium
+  - high
+  - xhigh
+  - max

@@ -9,15 +9,28 @@ import {
 
 describe("factory graph work state phase styling", () => {
   it.each([
-    ["INITIAL", "queue", "text-info"],
-    ["PROCESSING", "processing", "text-warning"],
-    ["TERMINAL", "terminal", "text-success"],
-    ["FAILED", "failed", "text-error"],
+    ["INITIAL", "queue", "text-info", "border-info-border bg-info-container"],
+    [
+      "PROCESSING",
+      "processing",
+      "text-warning",
+      "border-af-warning-border bg-warning-container",
+    ],
+    [
+      "TERMINAL",
+      "terminal",
+      "text-success",
+      "border-af-success-border bg-success-container",
+    ],
+    [
+      "FAILED",
+      "failed",
+      "text-error",
+      "border-af-danger-border bg-error-container",
+    ],
   ] as const)(
     "maps %s to phase surface and icon styling",
-    (type, iconKind, iconClass) => {
-      const surfaceClass = "border-info-border bg-info-container";
-
+    (type, iconKind, iconClass, surfaceClass) => {
       expect(workStatePhaseSurfaceClassName(type)).toBe(surfaceClass);
       expect(workStatePhaseSwatchClassName(type)).toBe(surfaceClass);
       expect(workStatePhaseSemanticIconKind(type)).toBe(iconKind);
@@ -27,10 +40,20 @@ describe("factory graph work state phase styling", () => {
 
   it("falls back to neutral styling when workStateType is missing", () => {
     expect(workStatePhaseSurfaceClassName(undefined)).toBe(
-      "border-info-border bg-info-container",
+      "border-outline bg-surface",
     );
     expect(workStatePhaseSemanticIconKind(undefined)).toBe("queue");
     expect(workStatePhaseSemanticIconClassName(undefined)).toBe(
+      "text-on-surface-variant",
+    );
+  });
+
+  it("falls back to neutral styling for a future raw category", () => {
+    expect(workStatePhaseSurfaceClassName("PAUSED_BY_POLICY")).toBe(
+      "border-outline bg-surface",
+    );
+    expect(workStatePhaseSemanticIconKind("PAUSED_BY_POLICY")).toBe("queue");
+    expect(workStatePhaseSemanticIconClassName("PAUSED_BY_POLICY")).toBe(
       "text-on-surface-variant",
     );
   });

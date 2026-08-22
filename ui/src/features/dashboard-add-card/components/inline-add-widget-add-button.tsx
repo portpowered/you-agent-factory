@@ -1,7 +1,6 @@
+import { Button } from "@you-agent-factory/components/primitives";
 import { Plus } from "lucide-react";
 import type { ReactElement } from "react";
-
-import { Button } from "@you-agent-factory/components/primitives";
 
 export interface InlineAddWidgetAddButtonProps {
   disabled: boolean;
@@ -21,6 +20,7 @@ export function InlineAddWidgetAddButton({
       aria-label={
         selectedWidgetTitle ? `${title}: ${selectedWidgetTitle}` : title
       }
+      data-dashboard-add-widget-control="true"
       disabled={disabled}
       onClick={onClick}
       size="icon"

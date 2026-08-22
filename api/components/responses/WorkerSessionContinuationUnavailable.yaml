@@ -1,0 +1,5 @@
+description: The Worker Session continuation could not cross its event-readiness or Workers-admission barrier.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'

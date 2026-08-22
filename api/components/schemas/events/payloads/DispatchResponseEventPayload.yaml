@@ -30,18 +30,25 @@ properties:
     $ref: '../../../../openapi-main.yaml#/components/schemas/WorkOutcome'
   output:
     type: string
+  structuredResult:
+    description: Optional native JSON value produced when the workstation outputSchema validates the worker response. JSON null is distinct from an omitted value.
   error:
     type: string
   feedback:
     type: string
   selectedClassificationLabel:
     type: string
+  artifactVerification:
+    $ref: '../../data-models/ExpectedArtifactVerification.yaml'
   failureDetail:
     $ref: '../../data-models/FailureDetail.yaml'
   providerFailure:
     $ref: '../../../../openapi-main.yaml#/components/schemas/ProviderFailureMetadata'
   metrics:
     $ref: '../../../../openapi-main.yaml#/components/schemas/WorkMetrics'
+  usage:
+    $ref: '../../data-models/FactoryDispatchUsage.yaml'
+    description: Dispatch usage derived from the completed workstation result when available.
   durationMillis:
     type: integer
     format: int64

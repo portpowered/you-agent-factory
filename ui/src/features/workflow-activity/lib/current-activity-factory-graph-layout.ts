@@ -1,4 +1,9 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: this projection keeps canonical factory graph mapping rules together.
+import {
+  type FactoryGraphNodeFamily,
+  factoryGraphNodeFamilyRole,
+  resolveFactoryGraphNodeDimensions,
+} from "@you-agent-factory/factory-graph";
 import type {
   DashboardEdgeOutcomeKind,
   DashboardPlaceKind,
@@ -7,6 +12,7 @@ import type {
   StateCategory,
 } from "../../../api/dashboard/types";
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
+import { WorkstationKind } from "../../../api/generated/openapi";
 import type { FactoryGraphEditorVisibilityPreset } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-graph";
 import {
@@ -16,7 +22,11 @@ import {
   type FactoryGraphTopology,
   parseFactoryGraphWorkstationNodeId,
 } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
-import { FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND } from "../../factory-graph-editor/lib/editor/factory-graph-editor-layout";
+import {
+  type FactoryLayout,
+  factoryLayoutFromDefinition,
+  factoryLayoutNodeSize,
+} from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import { filterFactoryGraphTopologyForCustomerDisplay } from "../../factory-graph-editor/lib/operations/factory-graph-customer-display";
 import { projectFactoryGraphByVisibilityPreset } from "../../factory-graph-editor/lib/preferences/factory-graph-visibility-preset-projection";
 import { projectFactoryGraphByHiddenNodeClasses } from "../../factory-graph-editor/lib/work-state/factory-graph-node-class-visibility";
@@ -27,12 +37,13 @@ import {
   CRON_WORKSTATION_KIND,
   POLLER_WORKSTATION_KIND,
   REPEATER_WORKSTATION_KIND,
-  STANDARD_WORKSTATION_KIND,
 } from "../../flowchart/lib/workstation-icon-metadata";
 import { factoryBundledDocDisplayLabel } from "./factory-bundled-docs";
 
-export const CURRENT_ACTIVITY_DOC_NODE_WIDTH = 168;
-export const CURRENT_ACTIVITY_DOC_NODE_HEIGHT = 86;
+export const CURRENT_ACTIVITY_DOC_NODE_WIDTH =
+  factoryGraphNodeFamilyRole("doc").defaultDimensions.width;
+export const CURRENT_ACTIVITY_DOC_NODE_HEIGHT =
+  factoryGraphNodeFamilyRole("doc").defaultDimensions.height;
 
 interface FactoryGraphSeedNode {
   displayLabel?: string;
@@ -138,7 +149,7 @@ function workstationIOWorkType(io: LegacyFactoryWorkstationIO): string {
 
 function dashboardWorkstationKind(
   behavior: FactoryWorkstation["behavior"],
-): DashboardWorkstationKind {
+): DashboardWorkstationKind | undefined {
   switch (behavior) {
     case "CRON":
       return CRON_WORKSTATION_KIND;
@@ -147,8 +158,9 @@ function dashboardWorkstationKind(
     case "REPEATER":
       return REPEATER_WORKSTATION_KIND;
     case "STANDARD":
+      return WorkstationKind.STANDARD;
     case undefined:
-      return STANDARD_WORKSTATION_KIND;
+      return undefined;
   }
 }
 
@@ -266,23 +278,83 @@ function nodeKindForFactoryGraphNode(
 }
 
 function nodeDimensionsForFactoryGraphNode(node: FactoryGraphNode) {
-  switch (node.kind) {
-    case "doc":
+  const content =
+    node.kind === "doc" && node.key.kind === "doc"
+      ? [node.label, node.key.name]
+      : node.kind === "work-state" && node.key.kind === "work-state"
+        ? [node.label, node.key.workTypeName, node.key.stateName]
+        : [node.label];
+  return resolveFactoryGraphNodeDimensions(node.kind, { content })
+    .resolvedDimensions;
+}
+
+/**
+ * Applies authored Factory node sizes to a cached graph-layout projection.
+ * React Flow measurement state is intentionally not part of this operation.
+ */
+export function applyFactoryLayoutNodeSizesToGraphLayout(input: {
+  canonicalLayout: FactoryLayout;
+  factory: CanonicalFactoryDefinition;
+  graphLayout: GraphLayout;
+}): GraphLayout {
+  const normalizedFactory = normalizeFactoryDefinitionForGraph(input.factory);
+  const topologyNodesById = new Map(
+    buildFactoryGraphTopologyFromDefinition(normalizedFactory).nodes.map(
+      (node) => [node.id, node],
+    ),
+  );
+
+  return {
+    ...input.graphLayout,
+    nodes: input.graphLayout.nodes.map((positionedNode) => {
+      const factoryGraphNode = topologyNodesById.get(positionedNode.nodeId);
+      const family =
+        factoryGraphNode?.kind ?? familyForPositionedNode(positionedNode);
+      const content = factoryGraphNode
+        ? sizingContentForFactoryGraphNode(factoryGraphNode)
+        : [positionedNode.nodeId];
+      const dimensions = resolveFactoryGraphNodeDimensions(family, {
+        authoredDimensions: factoryLayoutNodeSize(
+          input.canonicalLayout,
+          positionedNode.nodeId,
+        ),
+        content,
+      }).resolvedDimensions;
+
       return {
-        height: CURRENT_ACTIVITY_DOC_NODE_HEIGHT,
-        width: CURRENT_ACTIVITY_DOC_NODE_WIDTH,
+        ...positionedNode,
+        height: dimensions.height,
+        width: dimensions.width,
       };
+    }),
+  };
+}
+
+function familyForPositionedNode(node: PositionedNode): FactoryGraphNodeFamily {
+  switch (node.nodeKind) {
+    case "doc":
+      return "doc";
     case "resource":
-      return FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND.resource;
-    case "work-state":
-      return FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND["work-state"];
-    case "worker":
-      return FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND.worker;
-    case "work-type":
-      return FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND["work-type"];
+      return "resource";
+    case "state_position":
+      return "work-state";
     case "workstation":
-      return FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND.workstation;
+      return "workstation";
+    case "constraint":
+      return "constraint";
   }
+}
+
+function sizingContentForFactoryGraphNode(
+  node: FactoryGraphNode,
+): readonly string[] {
+  if (node.key.kind === "doc") {
+    return [node.label, node.key.name];
+  }
+  if (node.key.kind === "work-state") {
+    return [node.label, node.key.workTypeName, node.key.stateName];
+  }
+  return [node.label];
 }
 
 function seedNodeFromFactoryGraphNode(
@@ -611,11 +683,19 @@ export function findFactoryWorkstationByNodeId(
   factory: CanonicalFactoryDefinition | undefined,
   nodeId: string,
 ): DashboardWorkstationNode | null {
-  const workstation = (factory?.workstations ?? []).find(
-    (candidate) => candidate.id === nodeId || candidate.name === nodeId,
+  const workstation = (factory?.workstations ?? []).find((candidate) =>
+    factoryWorkstationMatchesNodeId(candidate, nodeId),
   );
 
   return workstation ? dashboardWorkstationFromFactory(workstation) : null;
+}
+
+function factoryWorkstationMatchesNodeId(
+  workstation: FactoryWorkstation,
+  nodeId: string,
+): boolean {
+  const authoredId = workstation.id?.trim();
+  return authoredId ? authoredId === nodeId : workstation.name === nodeId;
 }
 
 export async function buildCurrentActivityGraphLayoutFromFactory(
@@ -661,7 +741,12 @@ export async function buildCurrentActivityGraphLayoutFromFactory(
     }
   }
 
-  return layoutFactoryGraphSeeds(nodes, edges);
+  const graphLayout = await layoutFactoryGraphSeeds(nodes, edges);
+  return applyFactoryLayoutNodeSizesToGraphLayout({
+    canonicalLayout: factoryLayoutFromDefinition(normalizedFactory),
+    factory: normalizedFactory,
+    graphLayout,
+  });
 }
 
 async function layoutFactoryGraphSeeds(

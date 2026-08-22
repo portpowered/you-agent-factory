@@ -16,21 +16,16 @@ import (
 
 const (
 	// providersLeafEffectContractPackage is the durable Providers Execution
-	// leaf that owns the provider inference/process effect contract. Later
-	// Providers migration packets move the live Workers path here; this packet
-	// only encodes ownership for the checker and fixtures.
+	// leaf that owns the provider inference/process effect contract.
 	providersLeafEffectContractPackage = "pkg/services/providers/execution/inferencecontract"
 	providersServiceRootPrefix         = "pkg/services/providers/"
 	providersLeafEffectContractImport  = repositoryImportPrefix + providersLeafEffectContractPackage
 
-	// workersProviderEffectMigrationDebtPackage remains the live declaration
-	// site until Providers packets land. It is not the durable normative owner.
-	workersProviderEffectMigrationDebtPackage = "pkg/services/providers/internal/services/execution/internal/provider/inferencecontract"
-
-	// workersProviderMigrationDebtPrefix hosts the absorbed Standardized
-	// Providers catalog/registry/execution surfaces until Providers packets
-	// land. Competing forks outside this prefix and Providers are rejected.
-	workersProviderMigrationDebtPrefix = "pkg/services/providers/internal/services/execution/internal/provider/"
+	// workersRequestScopedProviderPortPackage is the sole Workers-root bridge
+	// retained for request-scoped execution construction. It is an adapter over
+	// Providers, not a durable provider protocol or effect owner.
+	workersRequestScopedProviderPortPackage = "pkg/services/workers"
+	workersRequestScopedProviderPortType    = "Provider"
 
 	edgesPackagePath = "pkg/services/edges"
 
@@ -104,10 +99,10 @@ func scanProviderEffectOwnershipFile(
 	if walkErr != nil {
 		return nil, walkErr
 	}
+	if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+		return nil, filepath.SkipDir
+	}
 	if entry.IsDir() {
-		if entry.Name() == "testdata" || entry.Name() == "vendor" {
-			return nil, filepath.SkipDir
-		}
 		return nil, nil
 	}
 	if !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
@@ -171,8 +166,8 @@ func providerEffectOwnershipFindingForType(
 	if finding, hit := competingProviderCatalogOrExecutionAbstraction(packagePath, filePath, typed); hit {
 		return finding, true
 	}
-	if isDurableProvidersLeafOwner(packagePath) ||
-		packagePath == workersProviderEffectMigrationDebtPackage {
+	if isWorkersRequestScopedProviderPort(packagePath, typed, imports) ||
+		isDurableProvidersLeafOwner(packagePath) {
 		return providerEffectOwnershipFinding{}, false
 	}
 	if !isProviderEffectPortDeclaration(typed, imports) &&
@@ -185,6 +180,56 @@ func providerEffectOwnershipFindingForType(
 		filePath:    filePath,
 		typeName:    typed.Name.Name,
 	}, true
+}
+
+func isWorkersRequestScopedProviderPort(
+	packagePath string,
+	typed *ast.TypeSpec,
+	imports map[string]string,
+) bool {
+	return packagePath == workersRequestScopedProviderPortPackage &&
+		typed.Name != nil &&
+		typed.Name.Name == workersRequestScopedProviderPortType &&
+		declaresWorkersRequestScopedProviderContract(typed, imports)
+}
+
+func declaresWorkersRequestScopedProviderContract(
+	typed *ast.TypeSpec,
+	imports map[string]string,
+) bool {
+	interfaceType, ok := typed.Type.(*ast.InterfaceType)
+	if !ok || interfaceType.Methods == nil || len(interfaceType.Methods.List) != 1 {
+		return false
+	}
+	method := interfaceType.Methods.List[0]
+	if len(method.Names) != 1 || method.Names[0].Name != providerEffectMethodName {
+		return false
+	}
+	signature, ok := method.Type.(*ast.FuncType)
+	if !ok {
+		return false
+	}
+	parameters := fieldTypes(signature.Params)
+	results := fieldTypes(signature.Results)
+	if len(parameters) != 2 || len(results) != 2 {
+		return false
+	}
+	if !isStandardContextType(parameters[0], imports) ||
+		!isLocalNamedType(parameters[1], "ProviderInferenceRequest") {
+		return false
+	}
+	return isLocalNamedType(results[0], "InferenceResponse") &&
+		isErrorType(results[1])
+}
+
+func isLocalNamedType(expression ast.Expr, name string) bool {
+	identifier, ok := expression.(*ast.Ident)
+	return ok && identifier.Name == name
+}
+
+func isErrorType(expression ast.Expr) bool {
+	identifier, ok := expression.(*ast.Ident)
+	return ok && identifier.Name == "error"
 }
 
 func isDurableProvidersLeafOwner(packagePath string) bool {
@@ -298,13 +343,15 @@ func typeExpressionRedefinesProviderEffect(expression ast.Expr, imports map[stri
 }
 
 func isProviderEffectMethodSignature(signature *ast.FuncType, imports map[string]string) bool {
-	if fieldCount(signature.Params) != 2 || fieldCount(signature.Results) != 2 {
+	parameters := fieldTypes(signature.Params)
+	results := fieldTypes(signature.Results)
+	if len(parameters) != 2 || len(results) != 2 {
 		return false
 	}
-	if !isStandardContextType(signature.Params.List[0].Type, imports) {
+	if !isStandardContextType(parameters[0], imports) {
 		return false
 	}
-	errorResult, ok := signature.Results.List[len(signature.Results.List)-1].Type.(*ast.Ident)
+	errorResult, ok := results[len(results)-1].(*ast.Ident)
 	return ok && errorResult.Name == "error"
 }
 
@@ -325,19 +372,21 @@ func isStandardContextType(expression ast.Expr, imports map[string]string) bool 
 	}
 }
 
-func fieldCount(fields *ast.FieldList) int {
+func fieldTypes(fields *ast.FieldList) []ast.Expr {
 	if fields == nil {
-		return 0
+		return nil
 	}
-	count := 0
+	types := make([]ast.Expr, 0, len(fields.List))
 	for _, field := range fields.List {
-		if len(field.Names) == 0 {
-			count++
-			continue
+		fieldCount := len(field.Names)
+		if fieldCount == 0 {
+			fieldCount = 1
 		}
-		count += len(field.Names)
+		for range fieldCount {
+			types = append(types, field.Type)
+		}
 	}
-	return count
+	return types
 }
 
 func redefinesProvidersLeafEffectContract(typed *ast.TypeSpec, imports map[string]string) bool {
@@ -408,7 +457,7 @@ func competingProviderCatalogOrExecutionAbstraction(
 	if typed.Name == nil {
 		return providerEffectOwnershipFinding{}, false
 	}
-	if isProvidersServicePackage(packagePath) || isAbsorbedWorkersProviderSurface(packagePath) {
+	if isProvidersServicePackage(packagePath) {
 		return providerEffectOwnershipFinding{}, false
 	}
 	if !isCompetingProviderAbstractionPackage(packagePath) {
@@ -436,11 +485,6 @@ func competingProviderCatalogOrExecutionAbstraction(
 		}
 		return providerEffectOwnershipFinding{}, false
 	}
-}
-
-func isAbsorbedWorkersProviderSurface(packagePath string) bool {
-	return packagePath == strings.TrimSuffix(workersProviderMigrationDebtPrefix, "/") ||
-		strings.HasPrefix(packagePath, workersProviderMigrationDebtPrefix)
 }
 
 func isCompetingProviderAbstractionPackage(packagePath string) bool {
@@ -541,4 +585,3 @@ func writeProviderEffectOwnershipFindings(writer io.Writer, findings []providerE
 		}
 	}
 }
-

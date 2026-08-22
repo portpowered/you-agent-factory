@@ -7,18 +7,20 @@ import (
 	"io"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinitionentry"
 )
 
 // ValidateConfig holds parameters for factory validation output.
 type ValidateConfig struct {
-	Context context.Context
-	Path    string
-	JSON    bool
-	Output  io.Writer
+	Context     context.Context
+	Path        string
+	JSON        bool
+	Output      io.Writer
+	RunManifest climanifest.Manifest
 }
 
 // ValidateWithServices validates through injected Factory Definitions root
@@ -46,12 +48,12 @@ func ValidateWithServices(
 	if err != nil {
 		return err
 	}
-	factory, err := factoryconfig.DecodeAuthoredFactoryAPI(source.Data)
+	factory, decodeDiagnostics, err := factoryconfig.DecodeAuthoredFactoryAPIWithDiagnostics(source.Data)
 	if err != nil {
 		return authoredSourceError(source, err)
 	}
 
-	result, err := validationentry.ValidateFactoryAPI(
+	result, err := factorydefinitionentry.ValidateFactoryAPI(
 		cfg.Context,
 		factory,
 		validate,
@@ -62,6 +64,7 @@ func ValidateWithServices(
 			fmt.Errorf("validate factory config: %w", err),
 		)
 	}
+	result.Targets = append(result.Targets, runInvocationCompositionTargets(cfg.RunManifest, factory)...)
 
 	apiResult := apisurface.FactoryValidationResultToAPI(result)
 	if cfg.JSON {
@@ -69,10 +72,12 @@ func ValidateWithServices(
 			Valid    bool                                     `json:"valid"`
 			Targets  []factoryapi.FactoryValidationTarget     `json:"targets"`
 			Taxonomy []apisurface.FactoryRuntimeTaxonomyEntry `json:"taxonomy"`
+			Warnings []apisurface.FactoryConfigDecodeWarning  `json:"warnings,omitempty"`
 		}{
 			Valid:    len(apiResult.Targets) == 0,
 			Targets:  apiResult.Targets,
 			Taxonomy: apisurface.FactoryRuntimeTaxonomySummary(factory),
+			Warnings: apisurface.FactoryConfigDecodeWarnings(decodeDiagnostics.Paths()),
 		}
 		if err := json.NewEncoder(cfg.Output).Encode(payload); err != nil {
 			return err
@@ -86,10 +91,52 @@ func ValidateWithServices(
 		return nil
 	}
 
+	if err := apisurface.RenderFactoryConfigDecodeWarnings(
+		decodeDiagnostics.Paths(),
+		cfg.Output,
+	); err != nil {
+		return authoredSourceError(source, err)
+	}
 	if err := apisurface.RenderFactoryValidationHuman(factory, apiResult, cfg.Output); err != nil {
 		return authoredSourceError(source, err)
 	}
 	return nil
+}
+
+func runInvocationCompositionTargets(
+	manifest climanifest.Manifest,
+	factory factoryapi.Factory,
+) []factorydefinitions.ValidationTarget {
+	if factory.InvocationSignature == nil {
+		return nil
+	}
+	internalFactory, err := factoryconfig.FactoryConfigFromOpenAPI(factory)
+	if err != nil || internalFactory.InvocationSignature == nil {
+		return nil
+	}
+	_, diagnostics, err := climanifest.ComposeRunInputs(
+		manifest,
+		"you.run",
+		internalFactory.InvocationSignature,
+	)
+	if err != nil || len(diagnostics) == 0 {
+		return nil
+	}
+	targets := make([]factorydefinitions.ValidationTarget, 0, len(diagnostics))
+	for _, diagnostic := range diagnostics {
+		targets = append(targets, factorydefinitions.ValidationTarget{
+			Code:     diagnostic.Code,
+			Severity: factorydefinitions.ValidationSeverityError,
+			Message:  diagnostic.Message,
+			Subject: factorydefinitions.ValidationSubject{
+				Type:     factorydefinitions.ValidationSubjectTypeFactory,
+				ID:       diagnostic.FactoryOwner,
+				Location: factorydefinitions.ValidationSubjectLocationDefinition,
+			},
+			Path: diagnostic.Path,
+		})
+	}
+	return targets
 }
 
 func authoredSourceError(

@@ -88,6 +88,10 @@ func executableDependencies(
 	return agy.ExecutableDependencies{Locator: locator, Inspector: inspector}
 }
 
+func continuationRequest(request providers.ExecuteRequest) execution.ContinuationRequest {
+	return execution.ContinuationRequest{ExecuteRequest: request}
+}
+
 func TestPTYEffectRequiresAllocator(t *testing.T) {
 	t.Parallel()
 
@@ -111,12 +115,12 @@ func TestPTYEffectRejectsSeparateReasoningEffort(t *testing.T) {
 		Executable:             executable,
 		ExecutableDependencies: executableDependencies(nil, executable),
 	})
-	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+	_, err := effect.Execute(context.Background(), continuationRequest(providers.ExecuteRequest{
 		Provider:        providers.IDAntigravity,
 		AttemptID:       "dispatch-agy-effort",
 		ReasoningEffort: "xhigh",
 		UserMessage:     "review",
-	}, func([]byte) error { return nil })
+	}), func([]byte) error { return nil })
 	var failure execution.AttemptFailure
 	if !errors.As(err, &failure) ||
 		failure.NativeError == nil ||
@@ -150,20 +154,22 @@ func TestPTYEffectBuildsArgvWorkspaceAndEnvironment(t *testing.T) {
 	if effect == nil {
 		t.Fatal("NewPTYEffect() returned nil")
 	}
-	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:         providers.IDAntigravity,
-		AttemptID:        "dispatch-agy",
-		Model:            "gemini-pro",
-		UserMessage:      privatePrompt,
-		WorkingDirectory: filepath.Join("workspaces", "a"),
-		WorkerType:       "agent-worker",
-		WorkstationName:  "review-work",
+	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{
+		ExecuteRequest: providers.ExecuteRequest{
+			Provider:         providers.IDAntigravity,
+			AttemptID:        "dispatch-agy",
+			Model:            "gemini-pro",
+			UserMessage:      privatePrompt,
+			WorkingDirectory: filepath.Join("workspaces", "a"),
+			WorkerType:       "agent-worker",
+			WorkstationName:  "review-work",
+			EnvVars:          map[string]string{"AGY_TOKEN": "secret"},
+		},
 		ResumeSession: &providers.SessionRef{
 			Provider: providers.IDAntigravity,
 			Kind:     providers.SessionIDKind,
 			ID:       "session-1",
 		},
-		EnvVars: map[string]string{"AGY_TOKEN": "secret"},
 	}, func([]byte) error { return nil })
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
@@ -203,12 +209,14 @@ func TestPTYEffectExecutesThroughInjectedNativePTY(t *testing.T) {
 	})
 	const prompt = "summarize this; preserve argv boundaries"
 	var observed []byte
-	result, err := effect.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:         providers.IDAntigravity,
-		AttemptID:        "dispatch-agy-contract",
-		Model:            "gemini-pro",
-		UserMessage:      prompt,
-		WorkingDirectory: ".",
+	result, err := effect.Execute(context.Background(), execution.ContinuationRequest{
+		ExecuteRequest: providers.ExecuteRequest{
+			Provider:         providers.IDAntigravity,
+			AttemptID:        "dispatch-agy-contract",
+			Model:            "gemini-pro",
+			UserMessage:      prompt,
+			WorkingDirectory: ".",
+		},
 		ResumeSession: &providers.SessionRef{
 			Provider: providers.IDAntigravity,
 			Kind:     providers.SessionIDKind,
@@ -244,12 +252,12 @@ func TestPTYEffectPreservesPromptMetacharactersInArgv(t *testing.T) {
 		Executable:             "agy",
 		ExecutableDependencies: executableDependencies(nil),
 	})
-	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+	_, err := effect.Execute(context.Background(), continuationRequest(providers.ExecuteRequest{
 		Provider:         providers.IDAntigravity,
 		AttemptID:        "dispatch-agy-42",
 		WorkingDirectory: ".",
 		UserMessage:      privatePrompt,
-	}, func([]byte) error { return nil })
+	}), func([]byte) error { return nil })
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -274,11 +282,11 @@ func TestPTYEffectTimeoutCleansCaptureBeforeObserve(t *testing.T) {
 		Executable:             "agy",
 		ExecutableDependencies: executableDependencies(nil),
 	})
-	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+	_, err := effect.Execute(context.Background(), continuationRequest(providers.ExecuteRequest{
 		Provider:    providers.IDAntigravity,
 		AttemptID:   "dispatch-agy-timeout",
 		UserMessage: "hello",
-	}, func([]byte) error {
+	}), func([]byte) error {
 		t.Fatal("observe() called on timeout, want no public stream emit")
 		return nil
 	})
@@ -317,11 +325,11 @@ func TestPTYEffectFailsClosedWithoutExecutableEffects(t *testing.T) {
 		Allocator:   &stubAllocator{},
 		Executable:  "agy",
 	})
-	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+	_, err := effect.Execute(context.Background(), continuationRequest(providers.ExecuteRequest{
 		Provider:    providers.IDAntigravity,
 		AttemptID:   "dispatch-agy-missing-effects",
 		UserMessage: "hello",
-	}, func([]byte) error { return nil })
+	}), func([]byte) error { return nil })
 	var attemptFailure execution.AttemptFailure
 	if !errors.As(err, &attemptFailure) ||
 		attemptFailure.NativeError == nil ||
@@ -342,12 +350,12 @@ func TestPTYEffectResolvesBareExecutableThroughInjectedSearchPath(t *testing.T) 
 		Executable:             "agy",
 		ExecutableDependencies: executableDependencies(map[string]string{"agy": resolved}, resolved),
 	})
-	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+	_, err := effect.Execute(context.Background(), continuationRequest(providers.ExecuteRequest{
 		Provider:         providers.IDAntigravity,
 		AttemptID:        "dispatch-agy-path",
 		WorkingDirectory: ".",
 		UserMessage:      "hello",
-	}, func([]byte) error { return nil })
+	}), func([]byte) error { return nil })
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -376,13 +384,13 @@ func TestPTYEffectDispatchContextIsPreservedInLaunch(t *testing.T) {
 		Executable:             "agy",
 		ExecutableDependencies: executableDependencies(nil),
 	})
-	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+	_, err := effect.Execute(context.Background(), continuationRequest(providers.ExecuteRequest{
 		Provider:        providers.IDAntigravity,
 		AttemptID:       "dispatch-agy-context",
 		WorkerType:      "agent-worker",
 		WorkstationName: "review-work",
 		UserMessage:     "hello",
-	}, func([]byte) error { return nil })
+	}), func([]byte) error { return nil })
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}

@@ -1,0 +1,53 @@
+type: object
+additionalProperties: false
+description: A modality produced by a tool, explicitly separate from direct model output.
+required:
+  - modality
+  - support
+  - transport
+oneOf:
+  - type: object
+    required:
+      - condition
+    properties:
+      support:
+        type: string
+        enum:
+          - conditional
+      condition:
+        type: string
+        minLength: 1
+        maxLength: 512
+  - type: object
+    properties:
+      support:
+        type: string
+        enum:
+          - supported
+          - unsupported
+          - unknown
+properties:
+  modality:
+    $ref: './ProviderModalityKind.yaml'
+  support:
+    $ref: './ProviderCapabilitySupport.yaml'
+  transport:
+    $ref: './ProviderModalityTransport.yaml'
+  condition:
+    type: string
+    minLength: 1
+    maxLength: 512
+    description: Bounded operator-visible condition required when support is conditional.
+  mediaConstraints:
+    $ref: './ProviderMediaConstraints.yaml'
+  evidenceRefs:
+    type: array
+    minItems: 1
+    maxItems: 16
+    uniqueItems: true
+    description: Stable IDs of evidence records qualifying this tool output fact.
+    items:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[a-z][a-z0-9._-]*$'

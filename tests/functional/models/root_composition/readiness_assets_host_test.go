@@ -16,7 +16,6 @@ import (
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -305,13 +304,20 @@ type recordingModelHostLauncher struct {
 
 func (launcher *recordingModelHostLauncher) Start(
 	context.Context,
-	modelswire.HostProcessStartSpec,
-) (modelswire.HostManagedProcess, error) {
+	serviceedges.HostProcessStartSpec,
+) (interface {
+	HealthEndpoint() string
+	Wait() error
+	Stop(context.Context) error
+}, error) {
 	launcher.mu.Lock()
 	launcher.calls++
 	endpoint := launcher.endpoint
 	launcher.mu.Unlock()
-	return &functionalModelHostProcess{endpoint: endpoint, stopped: make(chan struct{})}, nil
+	return &functionalModelHostProcess{
+		endpoint: endpoint,
+		stopped:  make(chan struct{}),
+	}, nil
 }
 
 func (launcher *recordingModelHostLauncher) Calls() int {
@@ -328,7 +334,9 @@ type functionalModelHostProcess struct {
 
 func (process *functionalModelHostProcess) HealthEndpoint() string { return process.endpoint }
 func (process *functionalModelHostProcess) Stop(context.Context) error {
-	process.once.Do(func() { close(process.stopped) })
+	process.once.Do(func() {
+		close(process.stopped)
+	})
 	return nil
 }
 func (process *functionalModelHostProcess) Wait() error {

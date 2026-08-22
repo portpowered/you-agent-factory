@@ -17,6 +17,9 @@ properties:
   workTypeName:
     type: string
     description: Configured work type name from factory.json for this submitted work item.
+  supersededBy:
+    type: string
+    description: Optional successor Work ID when this terminal or failed same-name Work item has been superseded by a later admission.
   state:
     $ref: './WorkState.yaml'
     description: Current lifecycle state for this work item when returned by read APIs. Submit requests use the state's name when an explicit initial state is provided.
@@ -39,7 +42,14 @@ properties:
     $ref: './WorkContent.yaml'
     description: Optional canonical ordered work content parts for this work item.
   payload:
-    description: Opaque work payload forwarded as raw JSON, or a binary data, or whatever else. 
+    description: >-
+      Opaque work payload forwarded as raw JSON. Each submitted Work payload is
+      limited to 65,536 bytes measured from its compact UTF-8 JSON value;
+      exactly 65,536 bytes is allowed. A batch is rejected atomically with a
+      400 BAD_REQUEST ErrorResponse when any Work payload exceeds this limit.
+      The reported payloadBytes value is a byte count, not a character count.
+  structuredResult:
+    description: Optional JSON value produced by a workstation whose outputSchema validated the worker response. JSON null is distinct from an omitted value.
   tags:
     $ref: '../shared/StringMap.yaml'
     description: Key-value pairs for storing arbitrary metadata about the work. Both keys and values are strings.
@@ -48,6 +58,17 @@ properties:
     description: Current outbound relationships attached to this listed source work item when returned by read APIs.
     items:
       $ref: './Relation.yaml'
+  expectedArtifacts:
+    type: array
+    description: Effective expected artifact declarations and their latest recorded verification state.
+    items:
+      $ref: './WorkExpectedArtifact.yaml'
   stopSummary:
     $ref: '../api/FactoryStopSummary.yaml'
     description: Canonical stopped-state summary for existing work inspection reads when this work item explains paused, blocked, needs-human, or interrupted automation.
+  humanApproval:
+    $ref: '../api/HumanApproval.yaml'
+    description: Pending HUMAN_APPROVAL request currently owning this Work item, when present.
+  failureDetail:
+    $ref: './FailureDetail.yaml'
+    description: Most recent bounded failure detail when this Work item is currently in a failed state.

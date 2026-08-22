@@ -227,9 +227,9 @@ func TestCLIWorkShowMissingReturnsNotFound(t *testing.T) {
 	assertCLIWorkShowNotFoundFailure(t, showJSONOut, err, workWiringMissingWorkID)
 }
 
-// TestCLIWorkVisualizeProducesDeterministicGraph proves you work visualize emits
+// TestCLIWorkRenderProducesDeterministicGraph proves you work render emits
 // the same dependency graph for a fixed batch input across repeated CLI invocations.
-func TestCLIWorkVisualizeProducesDeterministicGraph(t *testing.T) {
+func TestCLIWorkRenderProducesDeterministicGraph(t *testing.T) {
 	workingDir := t.TempDir()
 	processHarness := newRootProcessHarness(t)
 	batchPath := writeWorkWiringVisualizeBatchFile(t, workingDir)
@@ -238,17 +238,17 @@ func TestCLIWorkVisualizeProducesDeterministicGraph(t *testing.T) {
 	defer cancel()
 
 	firstOut, err := runYouCLI(ctx, processHarness, workingDir, "",
-		"work", "visualize", batchPath,
+		"work", "render", batchPath,
 	)
 	if err != nil {
-		t.Fatalf("you work visualize (first): %v\noutput:\n%s", err, firstOut)
+		t.Fatalf("you work render (first): %v\noutput:\n%s", err, firstOut)
 	}
 
 	secondOut, err := runYouCLI(ctx, processHarness, workingDir, "",
-		"work", "visualize", batchPath,
+		"work", "render", batchPath,
 	)
 	if err != nil {
-		t.Fatalf("you work visualize (second): %v\noutput:\n%s", err, secondOut)
+		t.Fatalf("you work render (second): %v\noutput:\n%s", err, secondOut)
 	}
 
 	first := string(firstOut)
@@ -273,12 +273,9 @@ func assertCLIWorkShowNotFoundFailure(
 	}
 
 	text := string(output)
-	lower := strings.ToLower(text)
-	if !strings.Contains(lower, "not found") {
-		t.Fatalf("work show missing not-found diagnostic:\n%s", text)
-	}
-	if !strings.Contains(text, workID) {
-		t.Fatalf("work show missing work id %q in diagnostic:\n%s", workID, text)
+	support.RequireSafeCLIDiagnostic(t, text)
+	if strings.Contains(text, workID) {
+		t.Fatalf("work show leaked work id %q in safe diagnostic:\n%s", workID, text)
 	}
 
 	var shown factoryapi.Work

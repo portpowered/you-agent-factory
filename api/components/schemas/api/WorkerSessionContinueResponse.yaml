@@ -1,0 +1,53 @@
+type: object
+additionalProperties: false
+required:
+  - requestId
+  - sourceWorkerSessionId
+  - successorWorkerSessionId
+  - predecessorWorkerSessionId
+  - accepted
+  - state
+  - eventTopic
+description: >-
+  Admission acknowledgment for a Worker Session continuation. The response
+  exposes the source-to-successor lineage needed to inspect or stream the
+  successor without exposing provider selection inputs.
+properties:
+  requestId:
+    type: string
+    description: Caller idempotency key echoed for correlation.
+  sourceWorkerSessionId:
+    type: string
+    description: Stable terminal Worker Session identity used as the source.
+  successorWorkerSessionId:
+    type: string
+    description: Stable Worker Session identity reserved for the successor.
+  predecessorWorkerSessionId:
+    type: string
+    description: Stable predecessor identity recorded on the successor; equal to sourceWorkerSessionId.
+  accepted:
+    type: boolean
+    description: Always true for a 202 response.
+  state:
+    type: string
+    enum:
+      - RESERVED
+      - STARTING
+      - RUNNING
+      - PAUSED
+      - COMPLETED
+      - FAILED
+      - CANCELED
+      - TERMINATED
+    x-enum-varnames:
+      - WorkerSessionContinueResponseStateReserved
+      - WorkerSessionContinueResponseStateStarting
+      - WorkerSessionContinueResponseStateRunning
+      - WorkerSessionContinueResponseStatePaused
+      - WorkerSessionContinueResponseStateCompleted
+      - WorkerSessionContinueResponseStateFailed
+      - WorkerSessionContinueResponseStateCanceled
+      - WorkerSessionContinueResponseStateTerminated
+  eventTopic:
+    type: string
+    description: Deterministic Events topic whose retained opening record is ready to read and subscribe.

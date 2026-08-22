@@ -12,6 +12,7 @@ import (
 // TestWorkServiceApplicationSlicesExerciseFunctionalLane proves published Work
 // application-service methods used by Factory Sessions admission and invocation
 // edges execute in the functional coverage lane.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestWorkServiceApplicationSlicesExerciseFunctionalLane(t *testing.T) {
 	t.Parallel()
 
@@ -20,6 +21,7 @@ func TestWorkServiceApplicationSlicesExerciseFunctionalLane(t *testing.T) {
 	service := workwire.NewRuntimeService(
 		functionalLaneRuntimeResolver{runtime: runtime},
 		os.ReadFile,
+		nil,
 		&functionalLaneContentStaging{},
 		work.ContentMaterializeFunc(func(context.Context, string) (string, work.ContentCleanup, error) {
 			return "/tmp/functional-materialized", func() {}, nil

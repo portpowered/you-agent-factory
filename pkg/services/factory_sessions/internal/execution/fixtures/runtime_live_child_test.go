@@ -12,19 +12,16 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryruntimefixtures"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestJavaScriptRuntimeService_AgentRunLiveChild_ProjectsRealDispatchInspection(t *testing.T) {
 	provider := newFixtureMockProvider(workerexecution.InferenceResponse{
-		Content: `{"text":"live:agent-run-fake-child:summarize-findings:summarize workflows:workflows"}`,
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
-			Provider: "mock",
-			Kind:     "session_id",
-			ID:       "live-provider-session-1",
-		},
+		Content:      `{"text":"live:agent-run-fake-child:summarize-findings:summarize workflows:workflows"}`,
+		Continuation: (&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-1"}).ContinuationRef(),
 	})
 	projectRoot := setupRuntimeWorkflowFixture(t, "agent-run-preset-child.workflow.js", "agent-run-preset-child")
 	service := newConfiguredJavaScriptRuntimeService(runtimeServiceConfig{
@@ -212,6 +209,85 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_TimeoutInterruptsProviderInf
 	}
 	provider.waitForInferStart(t)
 	waitForInferContextHonored(t, provider, 2*time.Second)
+}
+
+func TestJavaScriptRuntimeService_AgentRunLiveChild_TimeoutSettlesSessionAndDispatch(t *testing.T) {
+	provider := newBlockingFixtureProvider()
+	projectRoot := setupRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
+	service := newConfiguredJavaScriptRuntimeService(runtimeServiceConfig{
+		ProjectRoot:       projectRoot,
+		ChildExecutorMode: fse.ChildExecutorModeLive,
+		ProviderExecutor:  provider,
+		Workflows: scriptedSingleChildWorkflows(factory.JavaScriptChildExecutionRequest{
+			Prompt:           "wait for Antigravity",
+			ExecutorProvider: "SCRIPT_WRAP",
+			ModelProvider:    "antigravity",
+			Model:            "gemini-3.6-flash-medium",
+			Label:            "non-responsive-antigravity",
+		}),
+	})
+
+	completed, err := service.StartSync(context.Background(), liveChildTimeoutStartRequest())
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+
+	provider.waitForInferStart(t)
+	waitForInferContextHonored(t, provider, 2*time.Second)
+	assertLiveChildTimeoutSession(t, service, completed.SessionID)
+	assertLiveChildTimeoutDispatch(t, service, completed.SessionID)
+}
+
+func liveChildTimeoutStartRequest() fse.StartRequest {
+	return fse.StartRequest{
+		RequestID: "req-runtime-agent-run-live-child-child-timeout",
+		Source: fse.Source{
+			Kind:         factory.WorkflowSourceKindWorkflowName,
+			WorkflowName: "agent-run-fake-child",
+		},
+		Args: map[string]any{
+			"subject": "workflows",
+		},
+		Runtime: &fse.RuntimeOptions{
+			ChildExecutorMode: fse.ChildExecutorModeLive,
+		},
+		RequestedPolicy: map[string]any{
+			"maxWorkerDurationMs": int64(25),
+		},
+	}
+}
+
+func assertLiveChildTimeoutSession(t *testing.T, service *fse.JavaScriptRuntimeService, sessionID string) {
+	t.Helper()
+	read, err := service.GetSession(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if read.Status != fse.LifecycleStatusFailed {
+		t.Fatalf("session status = %q, want FAILED", read.Status)
+	}
+	if read.Failure == nil || !strings.Contains(strings.ToLower(read.Failure.Message), "antigravity") ||
+		!strings.Contains(strings.ToLower(read.Failure.Message), "timed out") {
+		t.Fatalf("session failure = %#v, want Antigravity timeout", read.Failure)
+	}
+	if read.Progress == nil || read.Progress.TotalDispatches != 1 || read.Progress.FailedDispatches != 1 {
+		t.Fatalf("progress = %#v, want one failed dispatch", read.Progress)
+	}
+}
+
+func assertLiveChildTimeoutDispatch(t *testing.T, service *fse.JavaScriptRuntimeService, sessionID string) {
+	t.Helper()
+	dispatch, err := service.GetDispatch(context.Background(), sessionID, "dispatch-1")
+	if err != nil {
+		t.Fatalf("GetDispatch: %v", err)
+	}
+	if dispatch.Status != fse.DispatchStatusFailed || dispatch.FailureClassification != string(workerexecution.WorkFailureTypeTimeout) {
+		t.Fatalf("dispatch = %#v, want one typed timeout", dispatch)
+	}
+	if dispatch.FailureDetail == nil || dispatch.FailureDetail.Reason != string(workerexecution.WorkFailureTypeTimeout) ||
+		!strings.Contains(dispatch.FailureDetail.Message, "timed out") {
+		t.Fatalf("dispatch failure detail = %#v, want timeout reason", dispatch.FailureDetail)
+	}
 }
 
 func TestJavaScriptRuntimeService_AgentRunLiveChild_StartAsyncProjectsRunningDispatchForInterrupt(t *testing.T) {
@@ -488,12 +564,8 @@ func (m *parallelLiveChildMockProvider) Execute(
 		return fixtureInvocationFailure(input.Attempt, workerexecution.WorkFailureTypePermanentBadRequest)
 	}
 	response := workerexecution.InferenceResponse{
-		Content: `{"text":"live:` + req.Dispatch.DispatchID + `:` + req.UserMessage + `"}`,
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
-			Provider: "mock",
-			Kind:     "session_id",
-			ID:       "live-provider-" + req.Dispatch.DispatchID,
-		},
+		Content:      `{"text":"live:` + req.Dispatch.DispatchID + `:` + req.UserMessage + `"}`,
+		Continuation: (&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-" + req.Dispatch.DispatchID}).ContinuationRef(),
 	}
 	return fixtureInvocationSuccess(input.Attempt, response), nil
 }
@@ -503,9 +575,9 @@ func fixtureInvocationSuccess(
 	response workerexecution.InferenceResponse,
 ) workerexecution.InvocationResult {
 	return workerexecution.InvocationResult{
-		Response:        response,
-		Attempt:         attempt,
-		ProviderSession: workerexecution.CloneProviderSessionMetadata(response.ProviderSession),
+		Response:     response,
+		Attempt:      attempt,
+		Continuation: (response.Continuation).ClonePtr(),
 	}
 }
 
@@ -859,12 +931,8 @@ func assertDispatchStatusTransitions(t *testing.T, got []fse.DispatchStatus, wan
 func TestJavaScriptRuntimeService_ChildExecutorModes_CoexistOnSameWorkflowSource(t *testing.T) {
 	projectRoot := setupRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
 	provider := newFixtureMockProvider(workerexecution.InferenceResponse{
-		Content: `{"text":"live child output"}`,
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
-			Provider: "mock",
-			Kind:     "session_id",
-			ID:       "live-provider-session-1",
-		},
+		Content:      `{"text":"live child output"}`,
+		Continuation: (&providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-1"}).ContinuationRef(),
 	})
 
 	fakeService := newConfiguredJavaScriptRuntimeService(runtimeServiceConfig{

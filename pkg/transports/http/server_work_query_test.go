@@ -12,9 +12,9 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/http/workstationprojection"
 	"go.uber.org/zap"
 )
 
@@ -235,9 +235,61 @@ func TestListWork(t *testing.T) {
 	result := work.ListResult{Results: []work.ReadModel{{WorkID: "work-1", Name: "one"}, {WorkID: "work-2", Name: "two"}}, MaxResults: 2, NextToken: "next"}
 	rec := serveProgrammedList(t, "?maxResults=2", work.ListOptions{MaxResults: 2}, result, nil)
 	got := decodeJSONResponse[factoryapi.ListWorkResponse](t, rec)
-	if len(got.Results) != 2 || got.PaginationContext == nil || stringValue(got.PaginationContext.NextToken) != "next" {
+	if len(got.Results) != 2 || got.PaginationContext == nil || stringValue(got.PaginationContext.NextToken) != "next" || got.Counts != nil {
 		t.Fatalf("response = %#v", got)
 	}
+}
+
+func TestListWork_FiltersTerminalityAndMapsPrePaginationCounts(t *testing.T) {
+	terminal := true
+	counts := true
+	result := work.ListResult{
+		Results:    []work.ReadModel{{WorkID: "work-1", Name: "one"}},
+		MaxResults: 1,
+		NextToken:  "next",
+		Counts:     &work.ListCountSummary{Total: 3},
+	}
+	rec := serveProgrammedList(
+		t,
+		"?workTypeName=story&terminal=true&counts=true&maxResults=1",
+		work.ListOptions{WorkTypeName: "story", Terminal: terminal, Counts: counts, MaxResults: 1},
+		result,
+		nil,
+	)
+	got := decodeJSONResponse[factoryapi.ListWorkResponse](t, rec)
+	if len(got.Results) != 1 || got.PaginationContext == nil || stringValue(got.PaginationContext.NextToken) != "next" {
+		t.Fatalf("response page = %#v, want one result and next token", got)
+	}
+	if got.Counts == nil || got.Counts.Total != 3 {
+		t.Fatalf("response counts = %#v, want pre-pagination total 3", got.Counts)
+	}
+}
+
+func TestListWork_ZeroMatchCountsReturnEmptyPageAndZeroTotal(t *testing.T) {
+	nonTerminal := true
+	counts := true
+	rec := serveProgrammedList(
+		t,
+		"?workTypeName=missing&nonTerminal=true&counts=true",
+		work.ListOptions{WorkTypeName: "missing", NonTerminal: nonTerminal, Counts: counts},
+		work.ListResult{MaxResults: work.DefaultListMaxResults, Counts: &work.ListCountSummary{Total: 0}},
+		nil,
+	)
+	got := decodeJSONResponse[factoryapi.ListWorkResponse](t, rec)
+	if len(got.Results) != 0 || got.Counts == nil || got.Counts.Total != 0 {
+		t.Fatalf("response = %#v, want empty page with explicit zero count", got)
+	}
+}
+
+func TestListWork_RejectsContradictoryTerminalityBeforeWorkRoot(t *testing.T) {
+	srv := newWorkReadProtocolServer(strictWorkAPIFake{list: func(context.Context, string, work.ListOptions) (work.ListResult, error) {
+		t.Fatal("Work root must not be called for contradictory terminality filters")
+		return work.ListResult{}, nil
+	}})
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/work?terminal=true&nonTerminal=true", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "terminal is invalid")
 }
 
 func TestListWork_ReturnsRuntimeRelationsWithSourceToTargetDirection(t *testing.T) {
@@ -413,7 +465,7 @@ func TestListWork_PaginationCursorUsesDispatchTokenID(t *testing.T) {
 func TestBuildFactoryWorldWorkstationRequestProjectionSliceUsesServiceRootProjection(t *testing.T) {
 	state := interfaces.FactoryWorldState{ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{"service-owned": {DispatchID: "service-owned"}}}
 	projector := &workstationRequestProjectorFake{result: recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice{WorkstationRequestsByDispatchId: &map[string]recordings.WorkstationFactoryWorldWorkstationRequestView{"dispatch-1": {DispatchId: "dispatch-1", TransitionId: "review", Counts: recordings.WorkstationFactoryWorldWorkstationRequestCountView{DispatchedCount: 1}}}}}
-	got := workstationprojection.Generated(projector.ProjectWorkstationRequests(state))
+	got := recordingshttp.Generated(projector.ProjectWorkstationRequests(state))
 	if projector.got.ActiveDispatches["service-owned"].DispatchID != "service-owned" || got.WorkstationRequestsByDispatchId == nil {
 		t.Fatalf("projection = %#v input=%#v", got, projector.got)
 	}

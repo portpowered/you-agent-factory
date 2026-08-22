@@ -11,15 +11,84 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	modelhttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// TestHTTPGenericInvocationContractsPreserveOrderedInputsAndNamedOutputs proves
+// generic HTTP invocation contracts preserve ordered, repeated named inputs and
+// named outputs for a customer request.
+func TestHTTPGenericInvocationContractsPreserveOrderedInputsAndNamedOutputs(t *testing.T) {
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	help := support.FakeInputs(t.Context(), []string{"you", "session", "show", "--help"})
+	if err := process.Execute(help.Input); err != nil {
+		t.Fatalf("Process.Execute(session show help) error = %v", err)
+	}
+
+	outputMode := factoryapi.ModelInvocationOutputModeJSON
+	offline := true
+	inputs := []factoryapi.ModelInvocationInput{
+		{Name: "prompt", Modality: factoryapi.ModelInvocationContentTypeText, Content: stringPtr("compare")},
+		{Name: "image", Modality: factoryapi.ModelInvocationContentTypeImage, MediaType: stringPtr("image/png"), Content: stringPtr("first")},
+		{Name: "image", Modality: factoryapi.ModelInvocationContentTypeImage, MediaType: stringPtr("image/jpeg"), Content: stringPtr("second")},
+	}
+	parameters := []factoryapi.ModelInvocationParameter{{Name: "temperature", Value: map[string]any{"value": 0.2}}}
+	mapped, err := modelhttp.GenericInvocationRequestFromGenerated(factoryapi.GenericModelInvocationRequest{
+		Scope:      "scope-functional-http",
+		Holder:     "functional-http",
+		Model:      factoryapi.ModelReference{NameOrUri: "llm"},
+		Operation:  modelprovider.OperationOMNI,
+		Inputs:     &inputs,
+		Parameters: &parameters,
+		OutputMode: &outputMode,
+		Offline:    &offline,
+	})
+	if err != nil {
+		t.Fatalf("GenericInvocationRequestFromGenerated() error = %v", err)
+	}
+	if err := mapped.Validate(); err != nil {
+		t.Fatalf("mapped generic request validation error = %v", err)
+	}
+	if len(mapped.Inputs) != 3 || mapped.Inputs[1].Name != "image" || mapped.Inputs[2].Content != "second" ||
+		mapped.Parameters[0].Name != "temperature" || mapped.OutputMode != modelprovider.OutputModeJSON || !mapped.Offline {
+		t.Fatalf("mapped generic request = %#v", mapped)
+	}
+
+	artifact, err := (modelprovider.InferenceArtifactRef{}).Parse("artifact:functional-http-segments")
+	if err != nil {
+		t.Fatalf("parse output artifact: %v", err)
+	}
+	projected := modelhttp.GenericInvocationResponseToGenerated(modelprovider.GenericInvocationResult{
+		Outputs: []modelprovider.InferenceOutput{
+			{Name: "transcript", Modality: modelprovider.ModalityText, Content: "hello"},
+			{Name: "segments", Modality: modelprovider.ModalityJSON, Artifact: &modelprovider.InferenceArtifact{
+				Artifact: artifact, Name: "segments.json", MediaType: "application/json", SizeBytes: 12,
+			}},
+		},
+	})
+	if len(projected.Outputs) != 2 || projected.Outputs[0].Name != "transcript" || projected.Outputs[1].Name != "segments" ||
+		projected.Outputs[1].Artifact == nil || projected.Outputs[1].Artifact.ArtifactRef != "artifact:functional-http-segments" {
+		t.Fatalf("projected generic response = %#v", projected)
+	}
+	failure := modelhttp.GenericInvocationFailureToGenerated(&modelprovider.InvocationFailure{
+		Class:     modelprovider.InvocationFailureClassBackendProtocol,
+		Message:   "backend protocol is incompatible",
+		Model:     modelprovider.ModelReference{NameOrURI: "asr"},
+		Operation: modelprovider.OperationASR,
+		Slot:      "segments",
+	})
+	if failure == nil || failure.Class != factoryapi.ModelInvocationFailureClassBackendProtocol ||
+		failure.Model == nil || failure.Model.NameOrUri != "asr" || failure.Slot == nil || *failure.Slot != "segments" {
+		t.Fatalf("projected generic failure = %#v", failure)
+	}
+}
 
 // TestHTTPModelInvocationMapsAudioWorkContent proves model HTTP transport maps
 // audio work content through the shared workcontent mapper for functional coverage.
@@ -33,10 +102,16 @@ func TestHTTPModelInvocationMapsAudioWorkContent(t *testing.T) {
 	}
 
 	providerStub := &httpWorkContentProvider{
-		response: workerexecution.InferenceResponse{
+		response: providers.ExecuteResult{
 			Content: mustMarshalHTTPWorkContentAudioResponse(t, audioPath),
+			Diagnostics: &providers.ExecuteDiagnostics{
+				Metadata: map[string]string{
+					"completion_evidence": "provider_response",
+				},
+			},
 		},
 	}
+	providerStub.NativeProvider.ExecuteFunc = providerStub.Execute
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
@@ -209,17 +284,16 @@ func stringPointerValue[T ~string](value *T) string {
 }
 
 type httpWorkContentProvider struct {
+	testutil.NativeProvider
 	mu       sync.Mutex
-	response workerexecution.InferenceResponse
+	response providers.ExecuteResult
 }
 
-func (provider *httpWorkContentProvider) Infer(
+func (provider *httpWorkContentProvider) Execute(
 	_ context.Context,
-	_ workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
+	_ providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
 	provider.mu.Lock()
 	defer provider.mu.Unlock()
 	return provider.response, nil
 }
-
-var _ providercontract.Provider = (*httpWorkContentProvider)(nil)

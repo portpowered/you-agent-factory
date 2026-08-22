@@ -53,6 +53,13 @@ func (fakeDefinitionsPeer) CurrentFactoryDefinitionVersionAtRoot(
 	return factorydefinitions.FactoryVersion{}, factorydefinitions.ErrCurrentFactoryNotFound
 }
 
+func (fakeDefinitionsPeer) ResolveExecutionCatalog(
+	context.Context,
+	factorydefinitions.ResolveExecutionCatalogRequest,
+) (factorydefinitions.ResolveExecutionCatalogResult, error) {
+	return factorydefinitions.ResolveExecutionCatalogResult{}, nil
+}
+
 func (p fakeDefinitionsPeer) ListNamedFactories(
 	_ context.Context,
 	_ factorydefinitions.ListNamedFactoriesRequest,

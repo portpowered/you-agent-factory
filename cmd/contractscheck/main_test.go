@@ -2,10 +2,12 @@ package main
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -23,9 +25,7 @@ func TestRunPassesCleanStagingWithoutWriting(t *testing.T) {
 	if got := stdout.String(); got != successMessage+"\n" || stderr.Len() != 0 {
 		t.Fatalf("run() stdout = %q, stderr = %q", got, stderr.String())
 	}
-	if after := commandTree(t, root); !reflect.DeepEqual(after, before) {
-		t.Fatal("run() changed repository bytes on success")
-	}
+	assertCommandTreeUnchanged(t, "run() changed repository bytes on success", before, commandTree(t, root))
 }
 
 func TestRunReportsCombinedDriftDeterministicallyWithoutWriting(t *testing.T) {
@@ -71,9 +71,7 @@ func TestRunReportsCombinedDriftDeterministicallyWithoutWriting(t *testing.T) {
 			t.Fatalf("run %d stdout = %q, stderr = %q, want %q", runIndex, stdout, stderr, want)
 		}
 	}
-	if after := commandTree(t, root); !reflect.DeepEqual(after, before) {
-		t.Fatal("run() changed repository bytes on failure")
-	}
+	assertCommandTreeUnchanged(t, "run() changed repository bytes on failure", before, commandTree(t, root))
 }
 
 func TestRunReportsPackagedFactorySchemaDriftWithRegenerationRemedy(t *testing.T) {
@@ -115,9 +113,7 @@ func TestRunReportsPackagedFactorySchemaDriftWithRegenerationRemedy(t *testing.T
 					t.Fatalf("run() stderr = %q, want fragment %q", stderr, fragment)
 				}
 			}
-			if after := commandTree(t, root); !reflect.DeepEqual(after, before) {
-				t.Fatal("run() changed repository bytes on failure")
-			}
+			assertCommandTreeUnchanged(t, "run() changed repository bytes on failure", before, commandTree(t, root))
 		})
 	}
 }
@@ -160,27 +156,99 @@ func commandFixture(t *testing.T) string {
 	return root
 }
 
-func commandTree(t *testing.T, root string) map[string]string {
+func commandTree(t *testing.T, root string) commandTreeSnapshot {
 	t.Helper()
-	result := make(map[string]string)
-	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
-		if err != nil || entry.IsDir() {
+	return snapshotCommandTree(t, root, filepath.WalkDir, os.ReadFile)
+}
+
+func snapshotCommandTree(
+	t *testing.T,
+	root string,
+	walkDir func(string, fs.WalkDirFunc) error,
+	readFile func(string) ([]byte, error),
+) commandTreeSnapshot {
+	t.Helper()
+	result := make(commandTreeSnapshot)
+	if err := walkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
 			return err
+		}
+		if entry.IsDir() {
+			return nil
 		}
 		relative, err := filepath.Rel(root, path)
 		if err != nil {
 			return err
 		}
-		payload, err := os.ReadFile(path)
+		payload, err := readFile(path)
 		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
 			return err
 		}
-		result[filepath.ToSlash(relative)] = string(payload)
+		result[filepath.ToSlash(relative)] = payload
 		return nil
 	}); err != nil {
 		t.Fatalf("walk repository: %v", err)
 	}
 	return result
+}
+
+func TestSnapshotCommandTreeSkipsTransientMissingEntriesAndReportsRemovals(t *testing.T) {
+	root := t.TempDir()
+	for _, path := range []string{"kept.txt", "walk-missing.txt", "read-missing.txt"} {
+		writeCommandFixture(t, root, path, path)
+	}
+	before := commandTree(t, root)
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatalf("read fixture directory: %v", err)
+	}
+	entryByName := make(map[string]os.DirEntry, len(entries))
+	for _, entry := range entries {
+		entryByName[entry.Name()] = entry
+	}
+	wrappedNotExist := func(path string) error {
+		return fmt.Errorf("fixture entry disappeared at %s: %w", path, fs.ErrNotExist)
+	}
+
+	after := snapshotCommandTree(
+		t,
+		root,
+		func(_ string, walkFn fs.WalkDirFunc) error {
+			for _, path := range []string{"kept.txt", "walk-missing.txt", "read-missing.txt"} {
+				fullPath := filepath.Join(root, path)
+				var callbackErr error
+				if path == "walk-missing.txt" {
+					callbackErr = wrappedNotExist(path)
+				}
+				if err := walkFn(fullPath, entryByName[path], callbackErr); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		func(path string) ([]byte, error) {
+			if filepath.Base(path) == "read-missing.txt" {
+				return nil, wrappedNotExist(filepath.Base(path))
+			}
+			return os.ReadFile(path)
+		},
+	)
+
+	diff := formatCommandTreeDiff(before, after)
+	for _, fragment := range []string{
+		"  removed: read-missing.txt",
+		"  removed: walk-missing.txt",
+	} {
+		if !strings.Contains(diff, fragment) {
+			t.Fatalf("formatCommandTreeDiff() = %q, want fragment %q", diff, fragment)
+		}
+	}
 }
 
 func writeCommandFixture(t *testing.T, root, path, contents string) {

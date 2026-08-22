@@ -621,8 +621,8 @@ func contentURLForTestPath(url string, file string) string {
 
 func resourceReplayToken(id string) workers.Token {
 	return workers.Token{
-		ID:      id,
-		PlaceID: "executor-slot:available",
+		ID:    id,
+		State: "available",
 		Color: workers.Color{
 			DataType: workers.DataTypeResource,
 			Name:     "executor-slot",

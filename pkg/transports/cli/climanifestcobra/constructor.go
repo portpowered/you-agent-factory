@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -36,40 +36,62 @@ type flagTarget struct {
 }
 
 func registerFlag(flagSet *pflag.FlagSet, contract climanifest.Flag, target flagTarget, usage string) error {
+	if err := registerFlagValue(flagSet, contract, contract.Long, target, usage, true); err != nil {
+		return err
+	}
+	for _, alias := range contract.Aliases {
+		if err := registerFlagValue(flagSet, contract, alias, target, "", false); err != nil {
+			return err
+		}
+		aliasFlag := flagSet.Lookup(alias)
+		aliasFlag.Hidden = true
+		aliasFlag.NoOptDefVal = contract.NoOptionDefault
+	}
+	return nil
+}
+
+func registerFlagValue(
+	flagSet *pflag.FlagSet,
+	contract climanifest.Flag,
+	name string,
+	target flagTarget,
+	usage string,
+	primary bool,
+) error {
 	switch contract.ValueType {
 	case "bool":
 		if target.boolValue == nil {
-			return fmt.Errorf("missing bool binding for flag %q", contract.Long)
+			return fmt.Errorf("missing bool binding for flag %q", name)
 		}
 		defaultValue, err := strconv.ParseBool(contract.Default)
 		if err != nil {
-			return fmt.Errorf("parse default for flag %q: %w", contract.Long, err)
+			return fmt.Errorf("parse default for flag %q: %w", name, err)
 		}
-		if contract.Shorthand != "" {
-			flagSet.BoolVarP(target.boolValue, contract.Long, contract.Shorthand, defaultValue, usage)
+		if primary && contract.Shorthand != "" {
+			flagSet.BoolVarP(target.boolValue, name, contract.Shorthand, defaultValue, usage)
 		} else {
-			flagSet.BoolVar(target.boolValue, contract.Long, defaultValue, usage)
+			flagSet.BoolVar(target.boolValue, name, defaultValue, usage)
 		}
 	case "string":
 		if target.stringValue == nil {
-			return fmt.Errorf("missing string binding for flag %q", contract.Long)
+			return fmt.Errorf("missing string binding for flag %q", name)
 		}
-		if contract.Shorthand != "" {
-			flagSet.StringVarP(target.stringValue, contract.Long, contract.Shorthand, contract.Default, usage)
+		if primary && contract.Shorthand != "" {
+			flagSet.StringVarP(target.stringValue, name, contract.Shorthand, contract.Default, usage)
 		} else {
-			flagSet.StringVar(target.stringValue, contract.Long, contract.Default, usage)
+			flagSet.StringVar(target.stringValue, name, contract.Default, usage)
 		}
 	case "int":
 		if target.intValue == nil {
-			return fmt.Errorf("missing int binding for flag %q", contract.Long)
+			return fmt.Errorf("missing int binding for flag %q", name)
 		}
 		defaultValue, err := strconv.Atoi(contract.Default)
 		if err != nil {
-			return fmt.Errorf("parse default for flag %q: %w", contract.Long, err)
+			return fmt.Errorf("parse default for flag %q: %w", name, err)
 		}
-		flagSet.IntVar(target.intValue, contract.Long, defaultValue, usage)
+		flagSet.IntVar(target.intValue, name, defaultValue, usage)
 	default:
-		return fmt.Errorf("unsupported flag value type %q for %q", contract.ValueType, contract.Long)
+		return fmt.Errorf("unsupported flag value type %q for %q", contract.ValueType, name)
 	}
 	return nil
 }
@@ -230,7 +252,7 @@ func (GenericConstructor) Construct(manifest climanifest.Manifest, bindingSets .
 		if err := projectFlags(built[item.record.Path], item, targets, bindings); err != nil {
 			return nil, fmt.Errorf("build generic command tree: %w", err)
 		}
-		projectArgumentAndRelationshipRules(built[item.record.Path], item)
+		projectArgumentAndRelationshipRules(built[item.record.Path], item, bindings)
 		if err := projectGenericPresentation(built[item.record.Path], item, bindings); err != nil {
 			return nil, fmt.Errorf("build generic command tree: %w", err)
 		}
@@ -283,6 +305,9 @@ func rootCommandRecord(plan []plannedCommand) climanifest.Command {
 func planCommandTree(manifest climanifest.Manifest, bindings GenericBindings) ([]plannedCommand, error) {
 	if err := validateManifestHeader(manifest); err != nil {
 		return nil, err
+	}
+	if err := climanifest.ValidatePlacementContract(manifest); err != nil {
+		return nil, fmt.Errorf("validate placement contract: %w", err)
 	}
 	if err := climanifest.ValidateRootContract(manifest); err != nil {
 		return nil, err
@@ -558,6 +583,13 @@ func projectGenericHandler(cmd *cobra.Command, record climanifest.Command, bindi
 			if err != nil {
 				return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
 			}
+			if record.Placement != "" {
+				placement, err := ResolveCommandPlacement(record, persistentInputs)
+				if err != nil {
+					return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
+				}
+				attachResolvedPlacement(command, placement)
+			}
 			return cobraHandler(command, args, values, persistentInputs)
 		}
 		if resolvedCobraHandler != nil {
@@ -568,6 +600,13 @@ func projectGenericHandler(cmd *cobra.Command, record climanifest.Command, bindi
 			persistentInputs, err := ResolvedPersistentInputs(command)
 			if err != nil {
 				return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
+			}
+			if record.Placement != "" {
+				placement, err := ResolveCommandPlacement(record, persistentInputs)
+				if err != nil {
+					return fmt.Errorf("dispatch command %q handler %q: %w", record.ID, record.Handler.ID, err)
+				}
+				attachResolvedPlacement(command, placement)
 			}
 			return resolvedCobraHandler(command, inputs, persistentInputs)
 		}
@@ -869,11 +908,6 @@ func projectFlags(
 		if err := registerGenericFlag(flagSet, item.record, value); err != nil {
 			return genericFlagError(plan.record.ID, item.record.ID, "register flag: %v", err)
 		}
-		if item.record.Required && len(item.record.Aliases) == 0 {
-			if err := cmd.MarkFlagRequired(item.record.Long); err != nil {
-				return genericFlagError(plan.record.ID, item.record.ID, "mark required: %v", err)
-			}
-		}
 	}
 	return nil
 }
@@ -904,71 +938,4 @@ func registerGenericFlag(flagSet *pflag.FlagSet, record climanifest.Flag, value 
 		aliasFlag.NoOptDefVal = registered.NoOptDefVal
 	}
 	return nil
-}
-
-func validateRequiredGenericFlags(cmd *cobra.Command, plan plannedCommand) error {
-	for _, item := range plan.flags {
-		if !item.record.Required {
-			continue
-		}
-		names := append([]string{item.record.Long}, item.record.Aliases...)
-		for _, name := range names {
-			if flag := lookupCommandFlag(cmd, name); flag != nil && flag.Changed {
-				goto nextFlag
-			}
-		}
-		return fmt.Errorf("required flag(s) %q not set", "--"+item.record.Long)
-	nextFlag:
-	}
-	return nil
-}
-
-func projectCobraFlagGroupAnnotations(
-	cmd *cobra.Command,
-	commandID string,
-	relationships []plannedRelationship,
-) error {
-	for _, relationship := range relationships {
-		names := make([]string, 0, len(relationship.participants))
-		for _, participant := range relationship.participants {
-			if participant.kind != "flag" || !participant.cobraGroupAnnotationSafe {
-				names = nil
-				break
-			}
-			names = append(names, strings.TrimPrefix(participant.public, "--"))
-		}
-		if len(names) == 0 {
-			continue
-		}
-		for _, name := range names {
-			if lookupCommandFlag(cmd, name) == nil {
-				return fmt.Errorf(
-					"command %q relationship %q cannot project unavailable flag %q",
-					commandID, relationship.record.ID, "--"+name,
-				)
-			}
-		}
-		switch relationship.record.Kind {
-		case "mutually-exclusive", "conflict":
-			cmd.MarkFlagsMutuallyExclusive(names...)
-		case "required-together":
-			cmd.MarkFlagsRequiredTogether(names...)
-		case "at-least-one":
-			cmd.MarkFlagsOneRequired(names...)
-		}
-	}
-	return nil
-}
-
-func relationshipError(relationship plannedRelationship, message string) error {
-	names := make([]string, len(relationship.participants))
-	for index, participant := range relationship.participants {
-		names[index] = participant.public
-	}
-	return fmt.Errorf(
-		"input relationship %q: %s %s",
-		relationship.record.ID,
-		message,
-		strings.Join(names, ", "),
-	)
 }

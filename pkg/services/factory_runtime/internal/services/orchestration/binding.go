@@ -3,9 +3,9 @@ package orchestration
 import "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 
 type compiledBinding struct {
-	kind        Kind
-	petriNet    *state.Net
-	javascript  *javascriptCompiledSource
+	kind       Kind
+	petriNet   *state.Net
+	javascript *javascriptCompiledSource
 }
 
 type javascriptCompiledSource struct {

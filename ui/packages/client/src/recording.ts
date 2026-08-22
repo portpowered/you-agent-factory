@@ -8,6 +8,7 @@ import { orderFactoryEvents } from "./event-ordering.js";
 import {
   canonicalEventIssues,
   canonicalFactoryIssues,
+  isCanonicalSchemaCompatibilityIssueCode,
 } from "./schema-validation.js";
 
 export const FACTORY_RECORDING_SCHEMA_VERSION = "factory-recording/v1" as const;
@@ -26,6 +27,7 @@ export type RecordingValidationIssueCode =
   | "invalid_value"
   | "missing_required_field"
   | "unsupported_field"
+  | "unsupported_enum_value"
   | "unsupported_recording_schema_version"
   | "unsupported_event_type"
   | "unsupported_event_schema_version"
@@ -40,9 +42,28 @@ export interface RecordingValidationIssue {
   message: string;
 }
 
+export type RecordingValidationCompatibilityIssueCode =
+  | "unsupported_event_type"
+  | "unsupported_enum_value"
+  | "unsupported_field";
+
+export function isRecordingValidationCompatibilityIssueCode(
+  code: RecordingValidationIssueCode,
+): code is RecordingValidationCompatibilityIssueCode {
+  return isCanonicalSchemaCompatibilityIssueCode(code);
+}
+
 export type SafeParseFactoryRecordingResult =
-  | { success: true; data: FactoryRecording }
-  | { success: false; issues: readonly RecordingValidationIssue[] };
+  | {
+      success: true;
+      data: FactoryRecording;
+      diagnostics: readonly RecordingValidationIssue[];
+    }
+  | {
+      success: false;
+      issues: readonly RecordingValidationIssue[];
+      diagnostics: readonly RecordingValidationIssue[];
+    };
 
 export class FactoryRecordingValidationError extends Error {
   readonly issues: readonly RecordingValidationIssue[];
@@ -79,6 +100,24 @@ const recordingFields = new Set([
 
 function isRecord(value: unknown): value is InputRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function partitionValidationIssues(
+  issues: readonly RecordingValidationIssue[],
+): {
+  blockingIssues: RecordingValidationIssue[];
+  diagnostics: RecordingValidationIssue[];
+} {
+  const blockingIssues: RecordingValidationIssue[] = [];
+  const diagnostics: RecordingValidationIssue[] = [];
+  for (const issue of issues) {
+    if (isRecordingValidationCompatibilityIssueCode(issue.code)) {
+      diagnostics.push(issue);
+    } else {
+      blockingIssues.push(issue);
+    }
+  }
+  return { blockingIssues, diagnostics };
 }
 
 function addRequiredStringIssue(
@@ -271,6 +310,7 @@ export function safeParseFactoryRecording(
           message: "Expected Factory recording to be an object.",
         },
       ],
+      diagnostics: [],
     };
   }
 
@@ -334,20 +374,25 @@ export function safeParseFactoryRecording(
     }
   }
 
-  if (issues.length === 0 && Array.isArray(input.events)) {
+  if (
+    partitionValidationIssues(issues).blockingIssues.length === 0 &&
+    Array.isArray(input.events)
+  ) {
     issues.push(
       ...validateRecordingSemantics(input, input.events as InputRecord[]),
     );
   }
 
-  return issues.length > 0
-    ? { success: false, issues }
+  const { blockingIssues, diagnostics } = partitionValidationIssues(issues);
+  return blockingIssues.length > 0
+    ? { success: false, issues: blockingIssues, diagnostics }
     : {
         success: true,
         data: {
           ...(input as unknown as FactoryRecording),
           events: orderFactoryEvents(input.events as FactoryEvent[]),
         },
+        diagnostics,
       };
 }
 

@@ -1,9 +1,17 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: current activity graph projection helpers remain grouped around shared node and edge fixtures.
+import {
+  type FactoryGraphNodeDimensions,
+  type FactoryGraphNodeFamily,
+  type FactoryGraphNodeResizeControlsProps,
+  resolveFactoryGraphNodeDimensions,
+  resolveFactoryGraphWorkstationSemantics,
+} from "@you-agent-factory/factory-graph";
 import type {
   DashboardActiveExecution,
   DashboardSnapshot,
 } from "../../../api/dashboard/types";
 import type { FactoryValidationTarget } from "../../../api/factory-validation";
+import { resolveRunnerSelection } from "../../current-factory-definition/lib/runner-selection";
 import { workTypeHasDefaultHandling } from "../../current-factory-definition/lib/work-type-default-handling";
 import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import { workstationSupportsProgressOutcomeRoutes } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
@@ -13,6 +21,7 @@ import {
   projectFactoryValidationTargets,
   validationNodeErrorForNode,
 } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
+import type { CurrentActivityNode } from "../../flowchart/components/current-activity-nodes";
 import type {
   GraphLayout,
   PositionedDocNode,
@@ -21,7 +30,6 @@ import type {
   PositionedPlaceNode,
   PositionedWorkstationNode,
 } from "../../flowchart/lib/layout";
-import type { CurrentActivityNode } from "../../flowchart/components/current-activity-nodes";
 import { findFactoryWorkstationByNodeId } from "./current-activity-factory-graph-layout";
 import { resolveFactoryGraphPlaceNode } from "./current-activity-factory-graph-node-ids";
 import type { GraphNodePosition } from "./layout/graph-node-positions";
@@ -426,6 +434,7 @@ interface BuildCurrentActivityNodesInput {
   graphLayout: GraphLayout;
   locale?: string;
   now: number;
+  onGraphSelectNode?: (nodeId: string) => void;
   onSelectDoc: (targetPath: string) => void;
   onSelectResource: (resourceName: string) => void;
   onSelectStateNode: (placeId: string) => void;
@@ -440,6 +449,97 @@ interface BuildCurrentActivityNodesInput {
   selection: CurrentActivitySelection | null;
   snapshot: DashboardSnapshot;
   validationTargets?: readonly FactoryValidationTarget[];
+}
+
+function resizeControlsForNode(input: {
+  family: FactoryGraphNodeFamily;
+  nodeId: string;
+  position: GraphNodePosition;
+  resizeController?: CurrentActivityEditorState["nodeResizeControls"];
+}): FactoryGraphNodeResizeControlsProps | undefined {
+  const controller = input.resizeController;
+  if (!controller?.enabled) {
+    return undefined;
+  }
+
+  const resolution = resolveFactoryGraphNodeDimensions(input.family);
+  const target = {
+    family: input.family,
+    nodeId: input.nodeId,
+    position: { x: input.position.x, y: input.position.y },
+  };
+
+  return {
+    allowedAxes: resolution.allowedAxes,
+    bounds: resolution.bounds,
+    nodeId: input.nodeId,
+    onResize: (dimensions: FactoryGraphNodeDimensions) =>
+      controller.onResize?.(target, dimensions),
+    onResizeEnd: (dimensions: FactoryGraphNodeDimensions) =>
+      controller.onResizeEnd(target, dimensions),
+  };
+}
+
+function placeNodeFamily(
+  place: PositionedPlaceNode["place"],
+  factoryGraphNode: ReturnType<typeof resolveFactoryGraphPlaceNode>,
+): FactoryGraphNodeFamily {
+  if (place.kind === "work_state") return "work-state";
+  if (place.kind === "resource") return "resource";
+  if (factoryGraphNode?.kind === "worker") return "worker";
+  if (factoryGraphNode?.kind === "work-type") return "work-type";
+  return "constraint";
+}
+
+function workerPresentationMetadata(
+  factory: DashboardSnapshot["factory"],
+  workerName: string,
+): {
+  runnerId?: string;
+  workerType?: string;
+} {
+  if (!factory) {
+    return {};
+  }
+
+  const worker = factory.workers?.find(
+    (candidate) => candidate.name === workerName || candidate.id === workerName,
+  );
+  if (!worker) {
+    return {};
+  }
+
+  const workerWorkstations = (factory.workstations ?? []).filter(
+    (workstation) => workstation.worker === worker.name,
+  );
+  const runnerSelections =
+    workerWorkstations.length > 0
+      ? workerWorkstations.map((workstation) =>
+          resolveRunnerSelection(
+            workstation.runner,
+            factory.runner,
+            worker.modelProvider,
+          ),
+        )
+      : [
+          resolveRunnerSelection(
+            undefined,
+            factory.runner,
+            worker.modelProvider,
+          ),
+        ];
+  const runnerIds = new Set(
+    runnerSelections.map((runnerSelection) => runnerSelection.runnerId),
+  );
+  const runnerSelection =
+    runnerIds.size === 1 ? runnerSelections[0] : undefined;
+
+  return {
+    ...(worker.type ? { workerType: worker.type } : {}),
+    ...(runnerSelection && runnerSelection.source !== "default"
+      ? { runnerId: runnerSelection.runnerId }
+      : {}),
+  };
 }
 
 function buildPlaceNodeShell(positionedNode: PositionedPlaceNode) {
@@ -496,12 +596,110 @@ function buildPlaceNodeData(
           input.selection.placeId === place.place_id) ||
         (input.selection?.kind === "node" &&
           input.selection.nodeId === factoryGraphNodeId),
+      resizeControls: resizeControlsForNode({
+        family: placeNodeFamily(place, factoryGraphNode),
+        nodeId: positionedNode.nodeId,
+        position: { x: positionedNode.x, y: positionedNode.y },
+        resizeController: input.editor?.nodeResizeControls,
+      }),
       tokenCount:
         input.snapshot.runtime.place_token_counts?.[place.place_id] ?? 0,
       validationError: validationNodeError !== undefined,
       validationMessage: validationNodeError?.message,
     },
     place,
+  };
+}
+
+function withGraphSelectNode<Args extends unknown[]>(
+  onGraphSelectNode: ((nodeId: string) => void) | undefined,
+  factoryGraphNodeId: string,
+  onSelect: (...args: Args) => void,
+): (...args: Args) => void {
+  return (...args: Args) => {
+    onGraphSelectNode?.(factoryGraphNodeId);
+    onSelect(...args);
+  };
+}
+
+type PlaceNodeBuildContext = {
+  basePlaceNode: ReturnType<typeof buildPlaceNodeShell>;
+  placeData: ReturnType<typeof buildPlaceNodeData>;
+  input: BuildCurrentActivityNodesInput;
+  wireSelectionHandlers: boolean;
+};
+
+function buildWorkerPlaceNode(
+  context: PlaceNodeBuildContext,
+): CurrentActivityNode {
+  const { basePlaceNode, input, wireSelectionHandlers } = context;
+  const { basePlaceData, factoryGraphNodeId, place } = context.placeData;
+  const workerName =
+    place.state_value ?? factoryGraphNodeId.replace(/^worker:/, "");
+  const workerMetadata = workerPresentationMetadata(
+    input.factoryDefinition ?? input.snapshot.factory,
+    workerName,
+  );
+  return {
+    ...basePlaceNode,
+    data: {
+      ...basePlaceData,
+      kind: "worker" as const,
+      ...(wireSelectionHandlers
+        ? {
+            onSelectWorker: withGraphSelectNode(
+              input.onGraphSelectNode,
+              factoryGraphNodeId,
+              input.onSelectWorker,
+            ),
+          }
+        : {}),
+      place,
+      ...workerMetadata,
+      selectedWorker:
+        input.selection?.kind === "worker" &&
+        input.selection.workerName === workerName,
+    },
+    selectable: true,
+    type: "worker",
+  };
+}
+
+function buildWorkTypePlaceNode(
+  context: PlaceNodeBuildContext,
+): CurrentActivityNode {
+  const { basePlaceNode, input, wireSelectionHandlers } = context;
+  const { basePlaceData, factoryGraphNodeId, place } = context.placeData;
+  const workTypeName =
+    place.state_value ?? factoryGraphNodeId.replace(/^work-type:/, "");
+  const resolvedFactoryDefinition =
+    input.factoryDefinition ?? input.snapshot.factory;
+  const isDefaultWorkType = workTypeHasDefaultHandling(
+    resolvedFactoryDefinition,
+    workTypeName,
+  );
+  return {
+    ...basePlaceNode,
+    data: {
+      ...basePlaceData,
+      kind: "work-type" as const,
+      ...(wireSelectionHandlers
+        ? {
+            onSelectWorkType: withGraphSelectNode(
+              input.onGraphSelectNode,
+              factoryGraphNodeId,
+              input.onSelectWorkType,
+            ),
+          }
+        : {}),
+      isDefaultWorkType,
+      place,
+      selectedWorkType:
+        input.selection?.kind === "work-type" &&
+        input.selection.workTypeName === workTypeName,
+    },
+    selectable: false,
+    type: "workType",
   };
 }
 
@@ -512,12 +710,13 @@ function buildPlaceNode(
 ): CurrentActivityNode {
   const factoryGraphNode = resolveFactoryGraphPlaceNode(positionedNode.place);
   const basePlaceNode = buildPlaceNodeShell(positionedNode);
-  const { basePlaceData, factoryGraphNodeId, place } = buildPlaceNodeData(
+  const placeData = buildPlaceNodeData(
     positionedNode,
     input,
     factoryGraphNode,
     validationProjection,
   );
+  const { basePlaceData, factoryGraphNodeId, place } = placeData;
 
   const wireSelectionHandlers = shouldWireGraphNodeSelectionHandlers(
     input.editor,
@@ -530,7 +729,13 @@ function buildPlaceNode(
         ...basePlaceData,
         kind: "work-state" as const,
         ...(wireSelectionHandlers
-          ? { onSelectStateNode: input.onSelectStateNode }
+          ? {
+              onSelectStateNode: withGraphSelectNode(
+                input.onGraphSelectNode,
+                factoryGraphNodeId,
+                input.onSelectStateNode,
+              ),
+            }
           : {}),
         place,
       },
@@ -550,7 +755,13 @@ function buildPlaceNode(
         ...basePlaceData,
         kind: "resource" as const,
         ...(wireSelectionHandlers
-          ? { onSelectResource: input.onSelectResource }
+          ? {
+              onSelectResource: withGraphSelectNode(
+                input.onGraphSelectNode,
+                factoryGraphNodeId,
+                input.onSelectResource,
+              ),
+            }
           : {}),
         place,
         selectedResource:
@@ -563,52 +774,21 @@ function buildPlaceNode(
   }
 
   if (factoryGraphNode?.kind === "worker") {
-    const workerName =
-      place.state_value ?? factoryGraphNode.nodeId.replace(/^worker:/, "");
-    return {
-      ...basePlaceNode,
-      data: {
-        ...basePlaceData,
-        kind: "worker" as const,
-        ...(wireSelectionHandlers
-          ? { onSelectWorker: input.onSelectWorker }
-          : {}),
-        place,
-        selectedWorker:
-          input.selection?.kind === "worker" &&
-          input.selection.workerName === workerName,
-      },
-      selectable: true,
-      type: "worker",
-    };
+    return buildWorkerPlaceNode({
+      basePlaceNode,
+      input,
+      placeData,
+      wireSelectionHandlers,
+    });
   }
 
   if (factoryGraphNode?.kind === "work-type") {
-    const workTypeName =
-      place.state_value ?? factoryGraphNodeId.replace(/^work-type:/, "");
-    const resolvedFactoryDefinition =
-      input.factoryDefinition ?? input.snapshot.factory;
-    const isDefaultWorkType = workTypeHasDefaultHandling(
-      resolvedFactoryDefinition,
-      workTypeName,
-    );
-    return {
-      ...basePlaceNode,
-      data: {
-        ...basePlaceData,
-        kind: "work-type" as const,
-        ...(wireSelectionHandlers
-          ? { onSelectWorkType: input.onSelectWorkType }
-          : {}),
-        isDefaultWorkType,
-        place,
-        selectedWorkType:
-          input.selection?.kind === "work-type" &&
-          input.selection.workTypeName === workTypeName,
-      },
-      selectable: false,
-      type: "workType",
-    };
+    return buildWorkTypePlaceNode({
+      basePlaceNode,
+      input,
+      placeData,
+      wireSelectionHandlers,
+    });
   }
 
   return {
@@ -643,11 +823,23 @@ function buildDocNode(
       kind: "doc",
       locale: input.locale,
       ...(wireSelectionHandlers && selectableDoc
-        ? { onSelectDoc: input.onSelectDoc }
+        ? {
+            onSelectDoc: withGraphSelectNode(
+              input.onGraphSelectNode,
+              positionedNode.nodeId,
+              input.onSelectDoc,
+            ),
+          }
         : {}),
       selectedDoc:
         input.selection?.kind === "doc" &&
         input.selection.targetPath === positionedNode.targetPath,
+      resizeControls: resizeControlsForNode({
+        family: "doc",
+        nodeId: positionedNode.nodeId,
+        position: { x: positionedNode.x, y: positionedNode.y },
+        resizeController: input.editor?.nodeResizeControls,
+      }),
       targetPath: positionedNode.targetPath,
     },
     draggable: true,
@@ -666,6 +858,7 @@ function buildDocNode(
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: workstation node data keeps runtime, selection, connection, and resize presentation together.
 function buildWorkstationNode(
   positionedNode: PositionedWorkstationNode,
   input: BuildCurrentActivityNodesInput,
@@ -702,6 +895,14 @@ function buildWorkstationNode(
     node_id: runtimeWorkstationNodeId,
     transition_id: workstation.transition_id || runtimeWorkstationNodeId,
   };
+  const workstationSemantics = resolveFactoryGraphWorkstationSemantics(
+    factory?.workstations?.find((candidate) => {
+      const candidateID = candidate.id?.trim();
+      return candidateID
+        ? candidateID === runtimeWorkstationNodeId
+        : candidate.name === runtimeWorkstationNodeId;
+    }),
+  );
   const executions =
     input.activeExecutionsByWorkstationNodeID[runtimeWorkstationNodeId] ??
     input.activeExecutionsByWorkstationNodeID[workstation.node_id] ??
@@ -710,7 +911,6 @@ function buildWorkstationNode(
     x: positionedNode.x,
     y: positionedNode.y,
   };
-
   return {
     className: "border-0 bg-transparent p-0 text-on-surface",
     data: {
@@ -742,10 +942,20 @@ function buildWorkstationNode(
         input.activeGraphHighlights.hasActiveFlow &&
         !input.activeGraphHighlights.relatedNodeIds.has(positionedNode.nodeId),
       now: input.now,
+      resizeControls: resizeControlsForNode({
+        family: "workstation",
+        nodeId: positionedNode.nodeId,
+        position,
+        resizeController: input.editor?.nodeResizeControls,
+      }),
       ...(wireSelectionHandlers
         ? {
             onSelectWorkID: input.onSelectWorkID,
-            onSelectWorkstation: input.onSelectWorkstation,
+            onSelectWorkstation: withGraphSelectNode(
+              input.onGraphSelectNode,
+              positionedNode.nodeId,
+              input.onSelectWorkstation,
+            ),
           }
         : {}),
       selectedWorkID:
@@ -757,6 +967,7 @@ function buildWorkstationNode(
         input.selection?.kind === "node" &&
         input.selection.nodeId === runtimeWorkstationNodeId,
       workstation: normalizedWorkstation,
+      workstationSemantics,
     },
     draggable: true,
     height: positionedNode.height,
@@ -783,6 +994,7 @@ export function buildCurrentActivityNodes({
   graphLayout,
   locale,
   now,
+  onGraphSelectNode,
   onSelectDoc,
   onSelectResource,
   onSelectStateNode,
@@ -815,6 +1027,7 @@ export function buildCurrentActivityNodes({
     graphLayout,
     locale,
     now,
+    onGraphSelectNode,
     onSelectDoc,
     onSelectResource,
     onSelectStateNode,

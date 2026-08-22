@@ -26,7 +26,7 @@ type lifecycleRuntime struct {
 	failErr       error
 	completeErr   error
 	failedBecause error
-	hosted        factoryruntime.HostedInstance
+	hosted        factoryruntime.RuntimeRecord
 }
 
 func (*lifecycleRuntime) StartLifecycle(context.Context, context.Context) error {
@@ -57,7 +57,7 @@ func (runtime *lifecycleRuntime) FailStartup(err error) error {
 	return runtime.failErr
 }
 
-func (runtime *lifecycleRuntime) CurrentRuntimeBundle() factoryruntime.HostedInstance {
+func (runtime *lifecycleRuntime) CurrentRuntimeBundle() factoryruntime.RuntimeRecord {
 	return runtime.hosted
 }
 
@@ -201,6 +201,62 @@ func TestServiceRunReadinessFailureTransitionsRuntimeStartupFailure(t *testing.T
 	}
 }
 
+func TestServiceRunDoesNotDuplicateTerminalBindFailureInLogger(t *testing.T) {
+	t.Parallel()
+
+	core, observed := observer.New(zapcore.ErrorLevel)
+	logger := zap.New(core)
+	bindErr := &platformhttpserver.BindError{
+		Host: "127.0.0.1", PreferredPort: 8123,
+		Cause: errors.New("address already in use"),
+	}
+	runtime := &lifecycleRuntime{failErr: errors.New("startup failure recorded")}
+	err := New(func(context.Context, platformhttpserver.StartRequest) error {
+		return bindErr
+	}).Run(
+		context.Background(), http.NewServeMux(), runtime, logger,
+		factorysessions.RuntimeHostRequest{
+			RuntimeMode: interfaces.RuntimeModeService,
+			WorkFile:    "work.json",
+			Port:        8123,
+		},
+		nil,
+	)
+	if !errors.Is(err, runtime.failErr) {
+		t.Fatalf("Run() error = %v, want %v", err, runtime.failErr)
+	}
+	if entries := observed.All(); len(entries) != 0 {
+		t.Fatalf("bind failure log entries = %d, want no duplicate logger entry", len(entries))
+	}
+}
+
+func TestServiceRunLogsNonBindAPIStartupFailure(t *testing.T) {
+	t.Parallel()
+
+	core, observed := observer.New(zapcore.ErrorLevel)
+	logger := zap.New(core)
+	apiErr := errors.New("unexpected API starter failure")
+	runtime := &lifecycleRuntime{failErr: errors.New("startup failure recorded")}
+	err := New(func(context.Context, platformhttpserver.StartRequest) error {
+		return apiErr
+	}).Run(
+		context.Background(), http.NewServeMux(), runtime, logger,
+		factorysessions.RuntimeHostRequest{
+			RuntimeMode: interfaces.RuntimeModeService,
+			WorkFile:    "work.json",
+			Port:        8123,
+		},
+		nil,
+	)
+	if !errors.Is(err, runtime.failErr) {
+		t.Fatalf("Run() error = %v, want %v", err, runtime.failErr)
+	}
+	entries := observed.FilterMessage("API server error").All()
+	if len(entries) != 1 {
+		t.Fatalf("non-bind API failure log entries = %d, want 1", len(entries))
+	}
+}
+
 func TestServiceRunReportsNonCancellationRuntimeFailure(t *testing.T) {
 	t.Parallel()
 
@@ -312,3 +368,127 @@ func (runtime hostedRuntime) RuntimeDiagnostics() factoryruntime.RuntimeLogDiagn
 }
 func (hostedRuntime) RecordingLedger() recordings.Ledger { return nil }
 func (hostedRuntime) CloseArtifacts() error              { return nil }
+
+type cancellationLifecycleRuntime struct {
+	waiting     chan struct{}
+	stopStarted chan struct{}
+	releaseStop chan struct{}
+	stopErr     error
+}
+
+func (*cancellationLifecycleRuntime) StartLifecycle(context.Context, context.Context) error {
+	panic("unexpected StartLifecycle")
+}
+
+func (*cancellationLifecycleRuntime) StartWorkerLifecycle(context.Context) (factorysessions.RuntimeStop, error) {
+	panic("unexpected StartWorkerLifecycle")
+}
+
+func (*cancellationLifecycleRuntime) CompleteStartup(context.Context) error { return nil }
+
+func (runtime *cancellationLifecycleRuntime) WaitForRuntime(ctx context.Context) error {
+	close(runtime.waiting)
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (runtime *cancellationLifecycleRuntime) StopLifecycle(context.Context) error {
+	close(runtime.stopStarted)
+	<-runtime.releaseStop
+	return runtime.stopErr
+}
+
+func (*cancellationLifecycleRuntime) FailStartup(err error) error { return err }
+
+func (*cancellationLifecycleRuntime) CurrentRuntimeBundle() factoryruntime.RuntimeRecord { return nil }
+
+func TestServiceRunCancellationStopsRuntimeBeforeTransport(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	transportDone := make(chan struct{})
+	runtime := &cancellationLifecycleRuntime{
+		waiting:     make(chan struct{}),
+		stopStarted: make(chan struct{}),
+		releaseStop: make(chan struct{}),
+	}
+	host := New(func(ctx context.Context, request platformhttpserver.StartRequest) error {
+		close(started)
+		request.OnBound(platformhttpserver.Binding{Host: "127.0.0.1", Port: request.Port})
+		<-ctx.Done()
+		close(transportDone)
+		return ctx.Err()
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defer func() {
+		select {
+		case <-runtime.releaseStop:
+		default:
+			close(runtime.releaseStop)
+		}
+	}()
+	runDone := make(chan error, 1)
+	go func() {
+		runDone <- host.Run(
+			ctx,
+			http.NewServeMux(),
+			runtime,
+			zap.NewNop(),
+			factorysessions.RuntimeHostRequest{Host: "127.0.0.1", Port: 8123},
+			nil,
+		)
+	}()
+	<-started
+	<-runtime.waiting
+	cancel()
+
+	select {
+	case <-runtime.stopStarted:
+	case <-transportDone:
+		t.Fatal("transport closed before runtime stop began")
+	case <-time.After(time.Second):
+		t.Fatal("runtime stop did not begin after cancellation")
+	}
+	select {
+	case <-transportDone:
+		t.Fatal("transport closed before runtime stop completed")
+	default:
+	}
+	close(runtime.releaseStop)
+	if err := <-runDone; err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+}
+
+func TestServiceRunCancellationReportsRuntimeStopError(t *testing.T) {
+	t.Parallel()
+
+	stopErr := errors.New("runtime stop failed")
+	runtime := &cancellationLifecycleRuntime{
+		waiting:     make(chan struct{}),
+		stopStarted: make(chan struct{}),
+		releaseStop: make(chan struct{}),
+		stopErr:     stopErr,
+	}
+	host := New(func(ctx context.Context, request platformhttpserver.StartRequest) error {
+		request.OnBound(platformhttpserver.Binding{Host: "127.0.0.1", Port: request.Port})
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runDone := make(chan error, 1)
+	go func() {
+		runDone <- host.Run(ctx, http.NewServeMux(), runtime, zap.NewNop(), factorysessions.RuntimeHostRequest{
+			Host: "127.0.0.1", Port: 8123,
+		}, nil)
+	}()
+	<-runtime.waiting
+	cancel()
+	<-runtime.stopStarted
+	close(runtime.releaseStop)
+	if err := <-runDone; !errors.Is(err, stopErr) {
+		t.Fatalf("Run() error = %v, want %v", err, stopErr)
+	}
+}

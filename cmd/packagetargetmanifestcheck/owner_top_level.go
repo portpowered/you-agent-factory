@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 )
 
 const servicesRootRelative = "pkg/services"
@@ -24,12 +26,24 @@ type ownerTopLevelSpec struct {
 	unexpected     []string
 }
 
-// productOwnerTopLevelSpecs is the reviewer-verifiable inventory for every
-// committed product owner. Recordings delegates to the INV-REC top-level lists.
+// productOwnerTopLevelSpecs records the owners whose immediate children deviate
+// from canonicalOwnerTopLevelRetain. Recordings delegates to the INV-REC
+// top-level lists.
+//
+// This is not a service roster: an owner with no entry takes the canonical
+// default from ownerTopLevelSpecFor, so adding a service needs no entry here.
 var productOwnerTopLevelSpecs = map[string]ownerTopLevelSpec{
 	"automations": {
 		owner:          "automations",
 		expectedRetain: []string{"internal", "transports", "wire"},
+	},
+	"chat_sessions": {
+		owner:          "chat_sessions",
+		expectedRetain: []string{"internal", "transports", "wire"},
+	},
+	"events": {
+		owner:          "events",
+		expectedRetain: []string{"internal", "wire"},
 	},
 	"factory_definitions": {
 		owner:          "factory_definitions",
@@ -89,18 +103,66 @@ var productOwnerTopLevelSpecs = map[string]ownerTopLevelSpec{
 		owner:          "workers",
 		expectedRetain: []string{"internal", "wire"},
 	},
+	"worker_sessions": {
+		owner:          "worker_sessions",
+		expectedRetain: []string{"internal", "transports", "wire"},
+	},
+	"webhooks": {
+		owner:          "webhooks",
+		expectedRetain: []string{"internal", "wire"},
+	},
 }
 
-func productOwnerTopLevelSpecsList() []ownerTopLevelSpec {
-	specs := make([]ownerTopLevelSpec, 0, len(closedDestinationVocabulary().ProductOwners))
-	for _, owner := range closedDestinationVocabulary().ProductOwners {
-		spec, ok := productOwnerTopLevelSpecs[owner]
-		if !ok {
-			panic(fmt.Sprintf("missing top-level inventory for product owner %q", owner))
+// ownerTopLevelSpecFor returns the top-level inventory for one product owner,
+// defaulting to the canonical retain set when the owner declares no deviation.
+func ownerTopLevelSpecFor(owner string) ownerTopLevelSpec {
+	if spec, ok := productOwnerTopLevelSpecs[owner]; ok {
+		return spec
+	}
+	return ownerTopLevelSpec{
+		owner:          owner,
+		expectedRetain: slices.Clone(canonicalOwnerTopLevelRetain),
+	}
+}
+
+// productOwnerTopLevelSpecsList returns the top-level inventory for every owner
+// derived from repoRoot's pkg/services tree, ordered by owner name.
+func productOwnerTopLevelSpecsList(repoRoot string) ([]ownerTopLevelSpec, error) {
+	owners, err := ownershipinventory.DiscoverProductOwners(repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	specs := make([]ownerTopLevelSpec, 0, len(owners))
+	for _, owner := range owners {
+		if spec, declared := productOwnerTopLevelSpecs[owner]; declared {
+			specs = append(specs, spec)
+			continue
+		}
+		spec, err := derivedOwnerTopLevelSpec(repoRoot, owner)
+		if err != nil {
+			return nil, err
 		}
 		specs = append(specs, spec)
 	}
-	return specs
+	return specs, nil
+}
+
+// derivedOwnerTopLevelSpec builds the spec for an owner that declares no
+// deviation by intersecting its live children with the canonical retain set, so
+// the reconciliation assertion reduces to "every live top-level child is
+// canonical" instead of demanding children the owner never had.
+func derivedOwnerTopLevelSpec(repoRoot, owner string) (ownerTopLevelSpec, error) {
+	children, err := listOwnerTopLevelChildren(repoRoot, owner)
+	if err != nil {
+		return ownerTopLevelSpec{}, err
+	}
+	spec := ownerTopLevelSpec{owner: owner}
+	for _, child := range children {
+		if slices.Contains(canonicalOwnerTopLevelRetain, child) {
+			spec.expectedRetain = append(spec.expectedRetain, child)
+		}
+	}
+	return spec, nil
 }
 
 func listOwnerTopLevelChildren(root, owner string) ([]string, error) {
@@ -120,23 +182,18 @@ func listOwnerTopLevelChildren(root, owner string) ([]string, error) {
 	return children, nil
 }
 
-func ownerTopLevelInventory(owner string) ([]string, bool) {
-	spec, ok := productOwnerTopLevelSpecs[owner]
-	if !ok {
-		return nil, false
-	}
-	inventory := make([]string, 0, len(spec.expectedRetain)+len(spec.unexpected))
-	inventory = append(inventory, spec.expectedRetain...)
-	inventory = append(inventory, spec.unexpected...)
+// inventory returns the spec's accounted-for immediate children: approved retain
+// children plus declared unexpected siblings, stable-sorted.
+func (s ownerTopLevelSpec) inventory() []string {
+	inventory := make([]string, 0, len(s.expectedRetain)+len(s.unexpected))
+	inventory = append(inventory, s.expectedRetain...)
+	inventory = append(inventory, s.unexpected...)
 	slices.Sort(inventory)
-	return inventory, true
+	return inventory
 }
 
 func classifyOwnerTopLevelChild(owner, name string) (kind string, ok bool) {
-	spec, exists := productOwnerTopLevelSpecs[owner]
-	if !exists {
-		return "", false
-	}
+	spec := ownerTopLevelSpecFor(owner)
 	if slices.Contains(spec.expectedRetain, name) {
 		return "expected_retain", true
 	}
@@ -147,10 +204,7 @@ func classifyOwnerTopLevelChild(owner, name string) (kind string, ok bool) {
 }
 
 func ownerCanonicalRetainRest(owner, rest string) bool {
-	spec, ok := productOwnerTopLevelSpecs[owner]
-	if !ok {
-		return false
-	}
+	spec := ownerTopLevelSpecFor(owner)
 	top, _, _ := strings.Cut(rest, "/")
 	if top == "" {
 		return false
@@ -159,10 +213,7 @@ func ownerCanonicalRetainRest(owner, rest string) bool {
 }
 
 func ownerUnexpectedTopLevelRest(owner, rest string) bool {
-	spec, ok := productOwnerTopLevelSpecs[owner]
-	if !ok {
-		return false
-	}
+	spec := ownerTopLevelSpecFor(owner)
 	top, _, _ := strings.Cut(rest, "/")
 	return slices.Contains(spec.unexpected, top)
 }

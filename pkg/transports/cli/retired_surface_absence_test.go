@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/retiredsurfaceguard"
+	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
-	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 )
@@ -25,6 +25,11 @@ var settledRetiredCLIInvocations = []struct {
 	{name: "factory save bare", args: []string{"factory", "save"}},
 	{name: "factory save name only", args: []string{"factory", "save", "staging"}},
 	{name: "factory validate", args: []string{"factory", "validate", "./factory.json"}},
+	{name: "factory query", args: []string{"factory", "query"}},
+	{name: "work visualize", args: []string{"work", "visualize"}},
+	{name: "session dispatches", args: []string{"session", "dispatches", "session-customer"}},
+	{name: "serve acp", args: []string{"serve", "acp"}},
+	{name: "mcp serve", args: []string{"mcp", "serve"}},
 }
 
 var canonicalCLIReplacementPaths = [][]string{

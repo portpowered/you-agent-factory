@@ -1,14 +1,24 @@
 package factorydefinitions
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 	catalogresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 // Root-owned aliases expose the Factory Definition vocabulary without making
 // peer services import implementation subpackages.
 type FactoryConfig = contracts.FactoryConfig
+type FactoryWebhookConfig = contracts.FactoryWebhookConfig
+type FactoryWebhookFilterConfig = contracts.FactoryWebhookFilterConfig
+type FactoryWebhookDeliveryPolicyConfig = contracts.FactoryWebhookDeliveryPolicyConfig
+type FactoryWebhookEffectiveDeliveryPolicy = contracts.FactoryWebhookEffectiveDeliveryPolicy
 type NameValueConfig = contracts.NameValueConfig
 type NameValueValidationError = contracts.NameValueValidationError
 type SaveMode = contracts.SaveMode
@@ -50,10 +60,14 @@ type ModelProvider = contracts.ModelProvider
 type RuntimeConfigLookup = contracts.RuntimeConfigLookup
 type RuntimeDefinitionLookup = contracts.RuntimeDefinitionLookup
 type RuntimeFactoryConfigLookup = contracts.RuntimeFactoryConfigLookup
+type PromptSource = contracts.PromptSource
+type RuntimePromptSourceLookup = contracts.RuntimePromptSourceLookup
 type WorkstationKind = contracts.WorkstationKind
 type WorkstationLimits = contracts.WorkstationLimits
 type Workstation = contracts.Workstation
+type ExpectedArtifactConfig = contracts.ExpectedArtifactConfig
 type GuardMatchConfig = contracts.GuardMatchConfig
+type LogicalRoundTripConfig = contracts.LogicalRoundTripConfig
 type GuardType = contracts.GuardType
 type InputGuardConfig = contracts.InputGuardConfig
 type InputTypeConfig = contracts.InputTypeConfig
@@ -75,6 +89,18 @@ const (
 	ValidationProfileTopology          = contracts.ValidationProfileTopology
 	ValidationProfilePrePersist        = contracts.ValidationProfilePrePersist
 	DefaultTopologyValidationMessage   = contracts.DefaultTopologyValidationMessage
+
+	FactoryWebhookEventTypeWorkStateChange     = contracts.FactoryWebhookEventTypeWorkStateChange
+	FactoryWebhookEventTypeDispatchResponse    = contracts.FactoryWebhookEventTypeDispatchResponse
+	FactoryWebhookEventTypeDispatchReconciled  = contracts.FactoryWebhookEventTypeDispatchReconciled
+	FactoryWebhookEventTypeDispatchInterrupted = contracts.FactoryWebhookEventTypeDispatchInterrupted
+	FactoryWebhookDispatchStatusFailed         = contracts.FactoryWebhookDispatchStatusFailed
+	FactoryWebhookDispatchStatusInterrupted    = contracts.FactoryWebhookDispatchStatusInterrupted
+	DefaultFactoryWebhookRequestTimeout        = contracts.DefaultFactoryWebhookRequestTimeout
+	DefaultFactoryWebhookMaxAttempts           = contracts.DefaultFactoryWebhookMaxAttempts
+	DefaultFactoryWebhookInitialBackoff        = contracts.DefaultFactoryWebhookInitialBackoff
+	DefaultFactoryWebhookBackoffMultiplier     = contracts.DefaultFactoryWebhookBackoffMultiplier
+	DefaultFactoryWebhookMaxBackoff            = contracts.DefaultFactoryWebhookMaxBackoff
 
 	InvocationParameterTypeHintString        = contracts.InvocationParameterTypeHintString
 	InvocationParameterTypeHintPath          = contracts.InvocationParameterTypeHintPath
@@ -105,6 +131,7 @@ const (
 	InvocationReturnPolicyExplicit              = contracts.InvocationReturnPolicyExplicit
 
 	FactoryAgentsFileName                 = contracts.FactoryAgentsFileName
+	FactoryConfigIgnoredFieldWarningCode  = contracts.FactoryConfigIgnoredFieldWarningCode
 	WorkersDir                            = contracts.WorkersDir
 	WorkstationsDir                       = contracts.WorkstationsDir
 	BundledFileTypeRootHelper             = contracts.BundledFileTypeRootHelper
@@ -119,6 +146,7 @@ var (
 var (
 	ValidateNameValue                            = contracts.ValidateNameValue
 	ResolveNameValue                             = contracts.ResolveNameValue
+	ResolveFactoryWebhookDeliveryPolicy          = contracts.ResolveFactoryWebhookDeliveryPolicy
 	CanonicalFactoryGraphEntityID                = contracts.CanonicalFactoryGraphEntityID
 	CanonicalFactoryGraphWorkTypeID              = contracts.CanonicalFactoryGraphWorkTypeID
 	CanonicalFactoryGraphWorkStateID             = contracts.CanonicalFactoryGraphWorkStateID
@@ -204,6 +232,7 @@ var CanonicalizeOperatorWorkerModelProviderInput = contracts.CanonicalizeOperato
 var IsSymbolicWorkerModelProviderDefault = contracts.IsSymbolicWorkerModelProviderDefault
 var UsesModelhostLease = contracts.UsesModelhostLease
 var IsAgentRunWorkstationType = contracts.IsAgentRunWorkstationType
+var IsHumanApprovalWorkstationType = contracts.IsHumanApprovalWorkstationType
 var IsAgentWorkerType = contracts.IsAgentWorkerType
 var IsInferenceRunWorkstationType = contracts.IsInferenceRunWorkstationType
 var IsInferenceWorkerType = contracts.IsInferenceWorkerType
@@ -214,6 +243,7 @@ var WorkerBehaviorClass = contracts.WorkerBehaviorClass
 var ExpectedWorkerBehaviorClassForWorkstation = contracts.ExpectedWorkerBehaviorClassForWorkstation
 var WorkerMatchesWorkstationBehavior = contracts.WorkerMatchesWorkstationBehavior
 var PublicWorkerTypeForFactoryUsage = contracts.PublicWorkerTypeForFactoryUsage
+var IsScheduledLegacyModelPair = contracts.IsScheduledLegacyModelPair
 var EffectiveWorkstationBehaviorClass = contracts.EffectiveWorkstationBehaviorClass
 var IsLegacyGrandfatheredWorkerWorkstationPair = contracts.IsLegacyGrandfatheredWorkerWorkstationPair
 var RequiresWorkerWorkstationBehaviorCompatibility = contracts.RequiresWorkerWorkstationBehaviorCompatibility
@@ -225,6 +255,9 @@ var EffectiveAgentToolPolicy = workerconfig.EffectiveAgentToolPolicy
 var IsKnownAgentToolPolicy = workerconfig.IsKnownAgentToolPolicy
 var NormalizeAgentToolPolicy = workerconfig.NormalizeAgentToolPolicy
 var CloneWorkerConfig = workerconfig.Clone
+var EffectiveExpectedArtifacts = contracts.EffectiveExpectedArtifacts
+var NormalizeExpectedArtifactConfigs = contracts.NormalizeExpectedArtifactConfigs
+var ValidateExpectedArtifactConfig = contracts.ValidateExpectedArtifactConfig
 
 // Foreign-vocabulary deletion-only aliases below are retained until
 // CLN-DEF-CONTRACTS story 007 deletes the contracts mega-barrel. Event envelope
@@ -287,6 +320,8 @@ type (
 	RequiredToolConfig                               = contracts.RequiredToolConfig
 	RuntimeMode                                      = contracts.RuntimeMode
 	RuntimeStatus                                    = contracts.RuntimeStatus
+	TerminationClassification                        = contracts.TerminationClassification
+	TerminationResult                                = contracts.TerminationResult
 	RuntimeWorkstationLookup                         = contracts.RuntimeWorkstationLookup
 	SubmissionHookContext[TSnapshot any]             = contracts.SubmissionHookContext[TSnapshot]
 	SubmissionHookResult                             = contracts.SubmissionHookResult
@@ -358,6 +393,8 @@ const (
 	RuntimeStatusActive                           = contracts.RuntimeStatusActive
 	RuntimeStatusFinished                         = contracts.RuntimeStatusFinished
 	RuntimeStatusIdle                             = contracts.RuntimeStatusIdle
+	TerminationClassificationComplete             = contracts.TerminationClassificationComplete
+	TerminationClassificationIncomplete           = contracts.TerminationClassificationIncomplete
 	SystemTimeExpiryTransitionID                  = contracts.SystemTimeExpiryTransitionID
 	SystemTimePendingState                        = contracts.SystemTimePendingState
 	SystemTimeWorkTypeID                          = contracts.SystemTimeWorkTypeID
@@ -388,6 +425,7 @@ const (
 	WorkstationKindRepeater                       = contracts.WorkstationKindRepeater
 	WorkstationKindStandard                       = contracts.WorkstationKindStandard
 	WorkstationTypeClassify                       = contracts.WorkstationTypeClassify
+	WorkstationTypeHumanApproval                  = contracts.WorkstationTypeHumanApproval
 	WorkstationOutcomeFormatDecisionEnvelope      = contracts.WorkstationOutcomeFormatDecisionEnvelope
 	BundledFileEncodingUTF8                       = contracts.BundledFileEncodingUTF8
 	BundledFileTypeDoc                            = contracts.BundledFileTypeDoc
@@ -412,6 +450,7 @@ var (
 	ErrFactoryLayoutNotFound              = contracts.ErrFactoryLayoutNotFound
 	ErrNamedFactoryNotFound               = contracts.ErrNamedFactoryNotFound
 	ErrNamedFactoryIsCurrent              = contracts.ErrNamedFactoryIsCurrent
+	ErrFactoryInstallationContention      = contracts.ErrFactoryInstallationContention
 	NewBlockingFactoryLoadError           = contracts.NewBlockingFactoryLoadError
 	AsBlockingFactoryLoadError            = contracts.AsBlockingFactoryLoadError
 	NewValidationTopologyError            = contracts.NewValidationTopologyError
@@ -472,3 +511,229 @@ var (
 	StrictPublicWorkstationKind                            = contracts.StrictPublicWorkstationKind
 	StrictPublicWorkTypeHandlingBehavior                   = contracts.StrictPublicWorkTypeHandlingBehavior
 )
+
+// ResolveRuntimeSnapshotRequest selects exactly one authored Factory source.
+// FactoryDir and SourcePath are interchangeable path forms; Canonical is the
+// in-memory canonical form. Requests contain only identity, execution-base,
+// and invocation-context values, never runtime collaborators.
+type ResolveRuntimeSnapshotRequest struct {
+	FactoryDir       string
+	SourcePath       string
+	Canonical        []byte
+	ExecutionBaseDir string
+	Invocation       RuntimeSnapshotInvocationContext
+}
+
+// RuntimeSnapshotInvocationContext carries value-only context that belongs to
+// the invocation which requested resolution. Definitions does not retain a
+// session, runtime, provider, model, filesystem, or executor handle here.
+type RuntimeSnapshotInvocationContext struct {
+	FactorySessionID string
+	WorkflowID       string
+	Arguments        *work.InvocationArguments
+}
+
+// ResolveRuntimeSnapshotResult carries one detached Runtime input. Every
+// nested value is copied from the loaded source before it crosses the
+// Definitions boundary.
+type ResolveRuntimeSnapshotResult struct {
+	Snapshot RuntimeSnapshot
+}
+
+// RuntimeSnapshot is the immutable-by-convention value projection consumed by
+// Runtime activation. It deliberately contains authored/effective facts only:
+// no service interfaces, callbacks, providers, model handles, executors,
+// filesystems, or mutable loaded-source references are retained.
+type RuntimeSnapshot struct {
+	FactoryDir        string
+	RuntimeBaseDir    string
+	Invocation        RuntimeSnapshotInvocationContext
+	DefinitionVersion *FactoryVersion
+	EffectiveFactory  FactoryConfig
+	Workers           []FactoryWorkerConfig
+	Workstations      []FactoryWorkstationConfig
+	AutomationSources []RuntimeAutomationSource
+	PromptSources     []RuntimePromptSource
+	BundledFiles      []PortableBundledFileReplacement
+}
+
+// Clone returns a detached copy suitable for crossing another service
+// boundary. Runtime activation stores the copy it was given so a caller
+// cannot change an already accepted activation by retaining one of the nested
+// maps, slices, or pointers in its request.
+func (snapshot RuntimeSnapshot) Clone() (RuntimeSnapshot, error) {
+	config, err := CloneFactoryConfig(&snapshot.EffectiveFactory)
+	if err != nil {
+		return RuntimeSnapshot{}, fmt.Errorf("clone runtime snapshot Factory: %w", err)
+	}
+	if config == nil {
+		return RuntimeSnapshot{}, fmt.Errorf("clone runtime snapshot Factory: configuration is required")
+	}
+	for index := range config.Workers {
+		if index < len(snapshot.EffectiveFactory.Workers) {
+			config.Workers[index] = CloneWorkerConfig(snapshot.EffectiveFactory.Workers[index])
+		}
+	}
+	for index := range config.Workstations {
+		if index < len(snapshot.EffectiveFactory.Workstations) {
+			config.Workstations[index] = CloneWorkstationConfig(snapshot.EffectiveFactory.Workstations[index])
+		}
+	}
+
+	cloned := RuntimeSnapshot{
+		FactoryDir:     snapshot.FactoryDir,
+		RuntimeBaseDir: snapshot.RuntimeBaseDir,
+		Invocation: RuntimeSnapshotInvocationContext{
+			FactorySessionID: snapshot.Invocation.FactorySessionID,
+			WorkflowID:       snapshot.Invocation.WorkflowID,
+			Arguments:        work.CloneInvocationArguments(snapshot.Invocation.Arguments),
+		},
+		EffectiveFactory:  *config,
+		Workers:           make([]FactoryWorkerConfig, len(snapshot.Workers)),
+		Workstations:      make([]FactoryWorkstationConfig, len(snapshot.Workstations)),
+		AutomationSources: make([]RuntimeAutomationSource, len(snapshot.AutomationSources)),
+		PromptSources:     append([]RuntimePromptSource(nil), snapshot.PromptSources...),
+		BundledFiles:      append([]PortableBundledFileReplacement(nil), snapshot.BundledFiles...),
+	}
+	if snapshot.DefinitionVersion != nil {
+		version := *snapshot.DefinitionVersion
+		cloned.DefinitionVersion = &version
+	}
+	for index, worker := range snapshot.Workers {
+		cloned.Workers[index] = CloneWorkerConfig(worker)
+	}
+	for index, workstation := range snapshot.Workstations {
+		cloned.Workstations[index] = CloneWorkstationConfig(workstation)
+	}
+	for index, source := range snapshot.AutomationSources {
+		cloned.AutomationSources[index] = source
+		cloned.AutomationSources[index].Workstation = CloneWorkstationConfig(source.Workstation)
+		if source.Worker != nil {
+			worker := CloneWorkerConfig(*source.Worker)
+			cloned.AutomationSources[index].Worker = &worker
+		}
+	}
+	return cloned, nil
+}
+
+// RuntimeAutomationSource is the value-only automation definition associated
+// with one effective workstation. Runtime and Automations use the embedded
+// workstation/worker policy to create their own isolated live source state.
+type RuntimeAutomationSource struct {
+	ID              string
+	Kind            RuntimeAutomationSourceKind
+	WorkstationName string
+	WorkerName      string
+	Workstation     FactoryWorkstationConfig
+	Worker          *FactoryWorkerConfig
+	Schedule        string
+	Every           string
+	TriggerAtStart  bool
+}
+
+// RuntimeAutomationSourceKind classifies the authored trigger shape without
+// exposing Automations implementation types.
+type RuntimeAutomationSourceKind string
+
+const (
+	RuntimeAutomationSourceKindWorkstation RuntimeAutomationSourceKind = "WORKSTATION"
+	RuntimeAutomationSourceKindCron        RuntimeAutomationSourceKind = "CRON"
+	RuntimeAutomationSourceKindScript      RuntimeAutomationSourceKind = "SCRIPT"
+	RuntimeAutomationSourceKindPoller      RuntimeAutomationSourceKind = "POLLER"
+	RuntimeAutomationSourceKindHosted      RuntimeAutomationSourceKind = "HOSTED"
+)
+
+// RuntimePromptSource preserves fixed authored prompt identity separately from
+// the effective Factory configuration, which intentionally omits source paths.
+type RuntimePromptSource struct {
+	Role       string
+	Name       string
+	Path       string
+	IsTemplate bool
+}
+
+// RuntimeSnapshotDiagnosticCode classifies a typed resolution failure.
+type RuntimeSnapshotDiagnosticCode string
+
+const (
+	RuntimeSnapshotDiagnosticInvalidRequest    RuntimeSnapshotDiagnosticCode = "invalid-request"
+	RuntimeSnapshotDiagnosticInvalidDefinition RuntimeSnapshotDiagnosticCode = "invalid-definition"
+	RuntimeSnapshotDiagnosticUnavailable       RuntimeSnapshotDiagnosticCode = "resolver-unavailable"
+	RuntimeSnapshotDiagnosticCanceled          RuntimeSnapshotDiagnosticCode = "canceled"
+)
+
+// RuntimeSnapshotDiagnostic is a sensitive-safe failure fact that can be
+// surfaced by transports without exposing loader implementation details.
+type RuntimeSnapshotDiagnostic struct {
+	Code    RuntimeSnapshotDiagnosticCode
+	Field   string
+	Message string
+}
+
+var (
+	// ErrRuntimeSnapshotResolutionFailed is the stable umbrella for snapshot
+	// resolution failures.
+	ErrRuntimeSnapshotResolutionFailed = errors.New("runtime snapshot resolution failed")
+	// ErrInvalidRuntimeSnapshotRequest reports missing or conflicting source
+	// identity fields before any loader is invoked.
+	ErrInvalidRuntimeSnapshotRequest = errors.New("invalid runtime snapshot request")
+	// ErrInvalidRuntimeSnapshotDefinition reports a source that could not be
+	// loaded, validated, or detached into an effective Factory.
+	ErrInvalidRuntimeSnapshotDefinition = errors.New("invalid runtime snapshot definition")
+	// ErrRuntimeSnapshotResolverUnavailable reports missing construction ports.
+	ErrRuntimeSnapshotResolverUnavailable = errors.New("runtime snapshot resolver unavailable")
+)
+
+// RuntimeSnapshotResolutionError carries a stable diagnostic plus the typed
+// Definitions error returned by source validation/loading when one exists.
+type RuntimeSnapshotResolutionError struct {
+	Diagnostic RuntimeSnapshotDiagnostic
+	Cause      error
+}
+
+func (e *RuntimeSnapshotResolutionError) Error() string {
+	if e == nil {
+		return ErrRuntimeSnapshotResolutionFailed.Error()
+	}
+	message := strings.TrimSpace(e.Diagnostic.Message)
+	if message == "" {
+		message = string(e.Diagnostic.Code)
+	}
+	if e.Cause != nil {
+		return fmt.Sprintf("%v: %s: %v", ErrRuntimeSnapshotResolutionFailed, message, e.Cause)
+	}
+	return fmt.Sprintf("%v: %s", ErrRuntimeSnapshotResolutionFailed, message)
+}
+
+func (e *RuntimeSnapshotResolutionError) Unwrap() error {
+	if e == nil {
+		return ErrRuntimeSnapshotResolutionFailed
+	}
+	return e.Cause
+}
+
+func (e *RuntimeSnapshotResolutionError) Is(target error) bool {
+	if target == ErrRuntimeSnapshotResolutionFailed {
+		return true
+	}
+	if e == nil {
+		return false
+	}
+	switch e.Diagnostic.Code {
+	case RuntimeSnapshotDiagnosticInvalidRequest:
+		return target == ErrInvalidRuntimeSnapshotRequest
+	case RuntimeSnapshotDiagnosticInvalidDefinition:
+		return target == ErrInvalidRuntimeSnapshotDefinition
+	case RuntimeSnapshotDiagnosticUnavailable:
+		return target == ErrRuntimeSnapshotResolverUnavailable
+	default:
+		return false
+	}
+}
+
+// RuntimeSnapshotOperation is the owner-composed operation used to attach
+// snapshot resolution to the singular Definitions root.
+type RuntimeSnapshotOperation func(
+	context.Context,
+	ResolveRuntimeSnapshotRequest,
+) (ResolveRuntimeSnapshotResult, error)

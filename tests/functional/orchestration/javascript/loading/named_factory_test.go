@@ -122,6 +122,7 @@ func TestNamedJavaScriptFactoryRunsThroughAPIInvocation(t *testing.T) {
 // Factory Session lifecycle controls apply to a named JavaScript Factory session
 // started through the public HTTP customer boundary and remain observable on the
 // public session surface for that named Factory identity through HTTP and CLI.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestNamedJavaScriptFactoryUsesSameFactorySessionControls(t *testing.T) {
 	t.Parallel()
 
@@ -530,7 +531,7 @@ func runNamedJavaScriptSessionLifecycleCLIJSON(
 	t.Helper()
 
 	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "--server", serverURL,
+		"you", "--remote", "--json", "--server", serverURL,
 		"session", operation, sessionID,
 	})
 	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)

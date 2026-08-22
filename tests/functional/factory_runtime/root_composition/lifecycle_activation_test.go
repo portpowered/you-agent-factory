@@ -27,6 +27,7 @@ import (
 // proves Factory Runtime control, observation, and dispatch-plan activate through
 // published public HTTP surfaces after runtime lifecycle on a process constructed
 // only through root.BuildProcess with Factory Runtime effects replaced via edges.Edges.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestFactoryRuntimeControlObservationAndDispatchPlanActivateThroughRootBuildProcessAfterLifecycle(
 	t *testing.T,
 ) {

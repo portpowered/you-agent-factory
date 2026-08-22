@@ -126,3 +126,16 @@ func commandProcessLeaderExited(cmd *exec.Cmd) bool {
 	pid, err := syscall.Wait4(cmd.Process.Pid, &status, syscall.WNOHANG, nil)
 	return err == nil && pid > 0
 }
+
+func commandProcessLeaderRunning(cmd *exec.Cmd, stateReader ProcessStateReader) bool {
+	if cmd == nil || cmd.Process == nil {
+		return false
+	}
+	if stateReader != nil {
+		if state, ok := stateReader(cmd.Process.Pid); ok && state == 'Z' {
+			return false
+		}
+	}
+	err := syscall.Kill(cmd.Process.Pid, 0)
+	return err == nil || err == syscall.EPERM
+}

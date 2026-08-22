@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-05-23
+last-modified: 2026-08-21
 doc-id: agent-factory/authoring-factories
 ---
 
@@ -16,6 +16,12 @@ Use `you docs config` for the field-by-field
 `factory.json` reference, `you docs workstations` for workstation
 runtime fields, `you docs workers` for worker backend fields, and
 `you docs batch-inputs` for the watched-file and API request shape.
+Use `you docs factory-validation` for the required pre-run gate, its complete
+static checks, and the worked unsupported-join failure. This page keeps the
+end-to-end order without duplicating that validation reference.
+
+For keeping a real pipeline alive across idle periods or recovering after a
+process restart, use `you docs operations`.
 
 ## Recommended Layout
 
@@ -77,6 +83,88 @@ At runtime:
 
 Use `you docs config` for the
 canonical routing contract, including continue and rejection routes.
+
+## Declare Expected Artifacts
+
+Work Types and Workstations can declare files that a dispatch is expected to
+produce. The `pattern` is relative to the dispatch workspace and may be a
+literal path, a glob, or a Go template. The replayable template vocabulary is
+limited to `.Inputs` with the stable fields `Name`, `WorkID`, `WorkTypeID`,
+`DataType`, `TraceID`, `ParentID`, `Project`, `Tags`, and `Payload`, plus
+`.Context.Project` and `.Context.SessionID`. These fields are captured at
+dispatch creation, so completion verification and historical Work reads use
+the same values. Prompt-only fields such as `Relations`, `Content`,
+`PreviousOutput`, `RejectionFeedback`, and `History` are not part of the
+artifact contract. Host paths, environment variables, and Factory
+documentation are intentionally not available to expected-artifact templates.
+This complete JSON example can be saved as
+`factory.json` and checked
+with `you factory config validate ./factory.json`:
+
+```json
+{
+  "workTypes": [
+    {
+      "name": "task",
+      "handlingBehavior": ["DEFAULT"],
+      "states": [
+        { "name": "init", "type": "INITIAL" },
+        { "name": "complete", "type": "TERMINAL" },
+        { "name": "failed", "type": "FAILED" }
+      ],
+      "expectedArtifacts": [
+        {
+          "name": "task-report",
+          "pattern": "reports/{{ (index .Inputs 0).Name }}.json",
+          "nonEmpty": true
+        }
+      ]
+    }
+  ],
+  "workers": [{ "name": "processor" }],
+  "workstations": [
+    {
+      "name": "process-task",
+      "worker": "processor",
+      "inputs": [{ "workType": "task", "state": "init" }],
+      "outputs": [{ "workType": "task", "state": "complete" }],
+      "onFailure": { "workType": "task", "state": "failed" },
+      "expectedArtifacts": [
+        {
+          "name": "manifest",
+          "pattern": "reports/{{ (index .Inputs 0).Name }}.manifest.json"
+        }
+      ]
+    }
+  ]
+}
+```
+
+The same declarations are valid in `factory.yaml`:
+
+```yaml
+workTypes:
+  - name: task
+    expectedArtifacts:
+      - name: task-report
+        pattern: 'reports/{{ (index .Inputs 0).Name }}.json'
+        nonEmpty: true
+workstations:
+  - name: process-task
+    expectedArtifacts:
+      - name: manifest
+        pattern: 'reports/{{ (index .Inputs 0).Name }}.manifest.json'
+```
+
+Work Type declarations are inherited first, followed by Workstation
+declarations. Exact duplicates are removed while preserving the first authored
+position. `nonEmpty: true` requires every regular file matched by the pattern
+to contain data. Empty names or patterns, invalid templates or globs, absolute
+paths, paths containing `..`, or unsupported template fields such as
+`.Inputs[0].Relations`, `.Inputs[0].History`, `.Context.WorkDir`,
+`.Context.ArtifactDir`, `.Context.Env`, and `.Docs` are rejected with the
+owning Work Type or Workstation in the validation diagnostic.
+Omitting `expectedArtifacts` keeps the legacy behavior unchanged.
 
 ## Build Your First Workflow
 
@@ -219,10 +307,62 @@ Return ACCEPTED when the story is ready.
 Return REJECTED with concrete feedback when another pass is needed.
 ```
 
-### 3. Start the factory
+### 3. Validate before the first run
 
-For a portable JSON or YAML Factory and a single customer prompt, mark one work
-type with `handlingBehavior: ["DEFAULT"]` (see `you docs config`) and run:
+Run the validate-only gate against the same authored file or directory that
+the next run will use. Validation must pass after the Factory is authored and
+immediately before its first execution. It does not start a Factory Session,
+invoke a provider, or persist a named Factory.
+
+For a portable file and the split directory layout, use the corresponding
+source path:
+
+```bash
+# Portable JSON or YAML file.
+you factory config validate ./factory.json
+
+# Split Factory directory containing exactly one factory.json, factory.yaml,
+# or factory.yml root.
+you factory config validate ./factory
+```
+
+Against the current checked-in Factory, both forms print this current-binary
+result:
+
+```text
+Factory validation passed.
+Runtime taxonomy:
+  worker processor: AGENT_WORKER
+  worker workspace-setup: SCRIPT_WORKER
+  worker planner: AGENT_WORKER
+  worker ideafier: AGENT_WORKER
+  workstation ideafy: AGENT_RUN (worker=ideafier)
+  workstation plan: AGENT_RUN (worker=planner)
+  workstation consume: LOGICAL_MOVE (worker=)
+  workstation setup-workspace: SCRIPT_RUN (worker=workspace-setup)
+  workstation process: AGENT_RUN (worker=processor)
+  workstation review: AGENT_RUN (worker=planner)
+  workstation executor-loop-breaker: LOGICAL_MOVE (worker=)
+  workstation review-loop-breaker: LOGICAL_MOVE (worker=)
+  workstation though-retrigger: LOGICAL_MOVE (worker=)
+```
+
+If validation fails, do not run or persist the Factory. Correct every blocking
+finding and repeat the same command until it passes. For the field-level
+checks, supported join arity, split-layout requirements, classifier routes,
+and the real three-input failure, use `you docs factory-validation` rather
+than duplicating those rules here.
+
+Run the gate again after any topology, guard, route, schema, worker,
+workstation, or split-layout prompt/configuration change, and do so before the
+next run that relies on the change. A successful static check is not a promise
+that providers, external resources, runtime paths, or execution will succeed.
+
+### 4. Start the factory
+
+Only after validation passes, for a portable JSON or YAML Factory and a single
+customer prompt, mark one work type with `handlingBehavior: ["DEFAULT"]` (see
+`you docs config`) and run:
 
 ```bash
 you run --factory ./factory.json "Fix the lint issues"
@@ -252,10 +392,11 @@ The command loads the selected JSON or YAML definition, resolves the split
 listening server.
 
 Live runs record a replay-compatible artifact by default. Use `--no-record`,
-`--record <path>`, or `--replay <path>` when you need to override capture or
-playback. Run `you docs record-replay` for generated paths, incompatible flag
-combinations, sensitivity warnings, and copy-pasteable record and replay
-examples.
+`--record <path>`, `--replay <path>`, or `--resume <recording>` when you need to
+override capture, playback, or continuation. Resume writes a successor
+recording by default. Use `--record <path>` to select its path. Run `you docs
+record-replay` for generated paths, incompatible flag combinations, sensitivity
+warnings, and copy-pasteable record, replay, and resume examples.
 
 Run `you docs mock-workers` for the `--with-mock-workers` JSON contract,
 selection fields, and deterministic outcome examples beyond this quick start.
@@ -293,14 +434,17 @@ This precedence is selection-only: the CLI chooses exactly one matching named
 factory directory and never merges a project-local definition with a global
 definition of the same canonical name.
 
-The fourteen first-party packaged Factories also use the named-factory path.
+The seventeen first-party packaged Factories also use the named-factory path.
 `you factory list` is the discovery source for their descriptions and runnable
 examples.
 
 | Factory | Orchestrator | Use it for |
 | --- | --- | --- |
+| `@you/agy-clip-qa` | Graph | Gate a rendered clip against its shot specification with a structured pass-or-reroll result. |
+| `@you/agy-cold-watch` | Graph | Review a completed cut from first principles, including visual chronology and audio. |
 | `@you/classify` | Graph | Route a request to a small, medium, or large model lane by complexity. |
 | `@you/deep-research` | JavaScript | Run bounded specialist investigations in parallel and synthesize their findings. |
+| `@you/factory-builder` | Graph | Create and install one validated graph or JavaScript Factory from a request. |
 | `@you/full-flow` | Graph | Plan implementation waves, work in isolated worktrees, merge, and replan until complete. |
 | `@you/fusion` | Graph | Produce a draft with one worker and refine it with another. |
 | `@you/goal` | Graph | Repeat bounded work on a goal until the executor reports completion. |
@@ -319,6 +463,8 @@ Representative invocations:
 ```bash
 you run --named @you/plan-execute --to "Implement the requested feature"
 you run --named @you/plan-parallel --to "Implement the requested feature"
+you run --named @you/factory-builder --factory-name release-note-review --orchestrator graph --to "Review submitted release notes and return an approved summary."
+you run --named @you/factory-builder --factory-name release-synthesis --orchestrator javascript --to "Run two independent analyses and return one synthesized result."
 you run --named @you/loop --every 1h --to "Check dependency updates"
 you run --named @you/tournament --rounds 3 --to "Propose a launch strategy"
 you run --named @you/full-flow --to "Complete the requested project"
@@ -336,6 +482,56 @@ See `you run --named <factory> --help` for each Factory's arguments,
 `you docs run` for invocation inputs and stdout result modes, `you docs
 sessions` for stopped-run inspection and recovery, and `you docs models` for
 TTS readiness, direct invocation, and audio or JSON result choices.
+
+### Built-in `@you/factory-builder` validated creation
+
+`@you/factory-builder` creates exactly one new named Factory from a request.
+Set `--orchestrator graph` for a YAML graph Factory or `--orchestrator
+javascript` for a JavaScript orchestrator. `--factory-name` optionally supplies
+a new stable Factory name; when it is omitted, Builder derives one from the
+request and fails safely if that name already exists. Optional
+`--builder-provider` and `--builder-model` overrides follow the normal
+operator-default precedence when they are omitted.
+
+Before asking Builder to materialize a Factory, use the canonical public
+guides for the requested form:
+
+```bash
+you docs agents
+you docs authoring-factories
+you docs config
+you docs javascript-workflows
+```
+
+Builder stages its candidate beneath the current workspace, outside an
+installed Factory root. It must first use the public validate-only command:
+
+```bash
+you factory config validate <staged-candidate>
+```
+
+Validation is required before persistence; success does not itself install the
+candidate. Only after validation succeeds, Builder uses the ordinary named
+Factory create command with the global operator-owned Factory root explicitly
+selected. That prevents the command's project-local `./factory` default from
+shadowing the shared named Factory:
+
+```bash
+you factory create <factory-name> --from <staged-candidate> --dir ~/.you-agent-factory/factories
+```
+
+That command owns the named-Factory destination. Builder does not copy staged
+files into `./factory`, the operator-owned Factory root, a packaged Factory
+directory, or another installed Factory. It also does not use `you factory
+update`: a requested name that already exists remains unchanged. When
+validation fails, Builder reports the safe diagnostic and a concrete correction
+action, does not install the candidate, and does not start it.
+
+The Builder result reports the canonical Factory name, requested orchestrator,
+validation outcome, and installation outcome without exposing staging paths,
+credentials, raw provider commands, or other unsafe host details. Inspect a
+successful installation with `you factory list` or validate it again by name's
+installed path before running it.
 
 ### Built-in `@you/review` approval gate
 
@@ -380,7 +576,7 @@ command.
 ### Built-in `@you/goal` repeater
 
 The shipped goal factory is deliberately minimal. It defines `goal:init`,
-`goal:execute`, `goal:complete`, `goal:blocked`, and `goal:failed`, with one
+`goal:complete`, `goal:blocked`, and `goal:failed`, with one
 `goal-executor` worker and one `execute-goal` `AGENT_RUN` workstation using
 `REPEATER` behavior. The executor maintains an atomic JSON progress file under
 `.you-goals/<session-id>/<work-id>.json` in the working directory and returns a
@@ -436,7 +632,7 @@ On upgrade, normal initializer startup moves valid factories from the retired
 factory already exists in both locations, initialization preserves both copies
 and reports the conflict so you can compare them without losing customer edits.
 
-### 4. Submit work
+### 5. Submit work
 
 Create a startup or watched-file request:
 
@@ -665,10 +861,9 @@ under the current user's default model-cache directory.
 
 ### Maintainer Validation
 
-For real local OMNIVOICE coverage, run `make long-tests`. Set
-`INFINITE_YOU_RUN_OMNIVOICE_LONG_TESTS=1`, ensure `omnivoice-llamacpp` is
-installed, and optionally set `INFINITE_YOU_OMNIVOICE_COMMAND` or
-`INFINITE_YOU_OMNIVOICE_CACHE_DIR` to reuse a custom backend or managed cache.
+For managed local-model runtime coverage, run
+`make long-tests-managed-runtime`. This focused specialty lane exercises the
+managed runtime adapter with deterministic local test doubles.
 
 ## Related Contract Detail
 
@@ -853,6 +1048,13 @@ review-loop workflow.
 ## Authoring Checklist
 
 - Keep the public workflow contract in `factory.json`.
+- Run `you factory config validate` on the authored file or directory after
+  authoring and until it passes immediately before the first run.
+- Repeat validation after topology, guard, route, schema, worker, workstation,
+  or split-layout prompt/configuration changes and before the next dependent
+  run.
+- Use `you docs factory-validation` for the complete static-check list and
+  unsupported-join correction example.
 - Use camelCase factory-config fields such as `workTypes`, `resources`,
   `onFailure`, `onRejection`, and `maxVisits`.
 - Use `supportingFiles` only for portability-only concerns such as

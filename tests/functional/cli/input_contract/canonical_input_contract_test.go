@@ -6,7 +6,7 @@ import (
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
@@ -126,6 +126,72 @@ func TestGenericRepresentativeProjectionIsObservableThroughApplicationRoot(t *te
 	}
 }
 
+func TestGenericRequiredFlagValidationIsObservableThroughApplicationRoot(t *testing.T) {
+	t.Run("set required flag", func(t *testing.T) {
+		var observation cliobservation.Result
+		process := support.BuildProcess(t, serviceedges.Edges{
+			CLIObserver: cliobservation.Capture(&observation),
+		})
+		inputs := support.FakeInputs(t.Context(), []string{
+			"you", "session", "create", "--dir", t.TempDir(),
+		})
+
+		if err := process.Execute(inputs.Input); err != nil {
+			t.Fatalf("Process.Execute(session create with required flag) error = %v", err)
+		}
+		dir, found := cliobservation.Flag(observation.Parse, "dir")
+		if !found || !dir.Changed {
+			t.Fatalf("observed --dir parse = %#v found=%v, want changed required flag", dir, found)
+		}
+	})
+
+	t.Run("missing required flag", func(t *testing.T) {
+		var observation cliobservation.Result
+		process := support.BuildProcess(t, serviceedges.Edges{
+			CLIObserver: cliobservation.Capture(&observation),
+		})
+		inputs := support.FakeInputs(t.Context(), []string{"you", "session", "create"})
+
+		err := process.Execute(inputs.Input)
+		if err == nil || !strings.Contains(err.Error(), `required flag(s) "--dir" not set`) {
+			t.Fatalf("Process.Execute(session create without required flag) error = %v", err)
+		}
+	})
+}
+
+func TestWorkerSessionProjectionAcceptsDirectListAndOptionalWorkID(t *testing.T) {
+	var observation cliobservation.Result
+	process := support.BuildProcess(t, serviceedges.Edges{
+		CLIObserver: cliobservation.Capture(&observation),
+	})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "worker-sessions", "list",
+	})
+
+	err := process.Execute(inputs.Input)
+	if err != nil {
+		t.Fatalf("Process.Execute(worker-sessions list) error = %v, want direct-session list to succeed without --work-id", err)
+	}
+	if observation.Parse.CommandPath != "you worker-sessions list" {
+		t.Fatalf("observed command path = %q, want worker-sessions list", observation.Parse.CommandPath)
+	}
+
+	var suppliedObservation cliobservation.Result
+	suppliedProcess := support.BuildProcess(t, serviceedges.Edges{
+		CLIObserver: cliobservation.Capture(&suppliedObservation),
+	})
+	suppliedInputs := support.FakeInputs(t.Context(), []string{
+		"you", "worker-sessions", "list", "--work-id", "work-1",
+	})
+	if err := suppliedProcess.Execute(suppliedInputs.Input); err != nil {
+		t.Fatalf("Process.Execute(worker-sessions list with work ID) error = %v", err)
+	}
+	workID, found := cliobservation.Flag(suppliedObservation.Parse, "work-id")
+	if !found || !workID.Changed || workID.Value != "work-1" {
+		t.Fatalf("observed --work-id parse = %#v found=%v", workID, found)
+	}
+}
+
 func TestGenericSessionProjectionEnforcesProductionInputContracts(t *testing.T) {
 	tests := []struct {
 		name string
@@ -133,8 +199,8 @@ func TestGenericSessionProjectionEnforcesProductionInputContracts(t *testing.T) 
 		want string
 	}{
 		{
-			name: "required positional",
-			args: []string{"you", "session", "dispatches"},
+			name: "required positional on retained command",
+			args: []string{"you", "session", "delete"},
 			want: "requires at least 1 arg",
 		},
 		{
@@ -210,14 +276,6 @@ func TestGenericSessionProjectionCoversProductionCommandShapes(t *testing.T) {
 			name: "list default scope",
 			args: []string{"you", "session", "list"},
 			path: "you session list",
-		},
-		{
-			name: "dispatch filters",
-			args: []string{
-				"you", "session", "dispatches", "missing-session",
-				"--phase", "queued", "--status", "active",
-			},
-			path: "you session dispatches",
 		},
 		{
 			name: "delete required id",

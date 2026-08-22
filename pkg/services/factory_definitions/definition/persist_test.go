@@ -100,7 +100,7 @@ func TestService_PrepareEditableFactoryPersistView_UsesSameNormalizationAsPersis
 		}},
 		Workstations: &[]generatedapi.Workstation{{
 			Name:   "process",
-			Worker: "worker-a",
+			Worker: definitionStringPtr("worker-a"),
 			Type:   workstationTypeModel(),
 			Inputs: []generatedapi.WorkstationIO{{WorkType: "task", State: "init"}},
 			Outputs: &[]generatedapi.WorkstationIO{

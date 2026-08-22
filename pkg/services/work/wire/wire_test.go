@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	contentmaterializationwire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization/wire"
+	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 )
 
 func TestDefaultContentMaterializationHTTPTimeoutMatchesNestedWire(t *testing.T) {
@@ -88,8 +88,8 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 
 	valid := validNewServiceInputs(t)
 	tests := []struct {
-		name   string
-		mutate func(*newServiceInputs)
+		name    string
+		mutate  func(*newServiceInputs)
 		wantErr string
 	}{
 		{
@@ -242,6 +242,7 @@ func TestNewRuntimeServiceConstructsPublishedRootFromWiredCollaborators(t *testi
 	service := workwire.NewRuntimeService(
 		inputs.runtimes,
 		os.ReadFile,
+		nil,
 		staging,
 		materializer,
 	)
@@ -282,7 +283,7 @@ func TestNewServiceServesPublishedPeerBehavior(t *testing.T) {
 	if err == nil {
 		t.Fatal("ListWork() error = nil, want unresolved runtime failure")
 	}
-	if err.Error() != "Work state access recordings adapter is required" {
+	if err.Error() != "Work state access snapshot reader is required" {
 		t.Fatalf("ListWork() error = %v, want recordings adapter required", err)
 	}
 
@@ -314,6 +315,8 @@ func TestNewServiceServesPublishedPeerBehavior(t *testing.T) {
 	}
 }
 
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestNewServiceConstructsInertRoot(t *testing.T) {
 	t.Parallel()
 

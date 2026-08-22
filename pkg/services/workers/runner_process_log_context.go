@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -50,9 +51,19 @@ func commandCompletionLogFields(req CommandRequest, result CommandResult, durati
 	}
 	return fields
 }
+
+// commandRequestDetailsLogFields records the composed command-line size next to
+// the argument count. The count alone cannot distinguish a dispatch that fits
+// the command-line budget from one that will be rejected by the process loader,
+// so an operator had no way to see a prompt growing toward that bound. The
+// budget reported here is the one the prompt-shaping path applies on every
+// host, which is why it is the same constant everywhere rather than a reading
+// of the current operating system.
 func commandRequestDetailsLogFields(req CommandRequest) []any {
 	return workLogFields(req.Execution, "event_name", workLogEventCommandRunnerRequestDetails, "status", "verbose",
-		"command", req.Command, "args_count", len(req.Args), "working_dir", req.WorkDir, "stdin_bytes", len(req.Stdin))
+		"command", req.Command, "args_count", len(req.Args), "working_dir", req.WorkDir, "stdin_bytes", len(req.Stdin),
+		"command_line_chars", platformprocess.ComposedCommandLineLength(req.Command, req.Args),
+		"command_line_budget", platformprocess.WindowsCommandLineLimit)
 }
 func commandOutputDetailsLogFields(req CommandRequest, result CommandResult, duration time.Duration) []any {
 	return workLogFields(req.Execution, "event_name", workLogEventCommandRunnerOutputDetails, "status", "verbose",
@@ -75,6 +86,33 @@ func commandResultStatus(ctx context.Context, result CommandResult, err error) s
 type contextualLogger struct {
 	logger logging.Logger
 	fields []any
+}
+
+// commandExecutionLogger resolves the sink one command execution must write
+// to. The Runtime-selected sink travels with the request, so a process-scoped
+// runner constructed with a placeholder logger still reaches the opened
+// Runtime's log without consulting the execution context or retaining any
+// Factory Session state between requests.
+func commandExecutionLogger(req CommandRequest, logger logging.Logger) logging.Logger {
+	if req.ExecutionLogger != nil {
+		return logging.EnsureLogger(req.ExecutionLogger)
+	}
+	return logging.EnsureLogger(logger)
+}
+
+func commandResultForLogging(
+	runner CommandRunner,
+	ctx context.Context,
+	request CommandRequest,
+	result CommandResult,
+) CommandResult {
+	projector, ok := runner.(interface {
+		CommandResultForLogging(context.Context, CommandRequest, CommandResult) CommandResult
+	})
+	if !ok {
+		return result
+	}
+	return projector.CommandResultForLogging(ctx, request, result)
 }
 
 func commandContextLogger(logger logging.Logger, req CommandRequest) logging.Logger {

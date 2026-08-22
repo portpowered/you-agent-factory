@@ -5,33 +5,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	stateaccess "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access"
 	stateaccesswire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire"
 )
 
-// Service coordinates Work operations against the runtime registered for a
-// live Factory Session.
-type Service struct {
-	sessions    RuntimeResolver
-	stateAccess stateaccess.Service
-}
-
-type RuntimeResolver interface {
-	Resolve(string) *factorysessions.LiveRuntime
-}
-
 type applicationService struct {
-	runtimes            work.RuntimeResolver
-	readSubmittedFile   work.SubmittedFileReader
-	contentStaging      work.ContentStagingService
-	contentMaterializer work.ContentMaterializer
-	stateAccess         stateaccess.Service
+	runtimes             work.RuntimeResolver
+	readSubmittedFile    work.SubmittedFileReader
+	inspectSubmittedFile work.SubmittedFilePathInspector
+	contentStaging       work.ContentStagingService
+	contentMaterializer  work.ContentMaterializer
+	stateAccess          stateaccess.Service
 }
 
 // Compile-time proof that production applicationService seals the published Work
@@ -41,31 +27,22 @@ var (
 	_ work.FileSubmissionService = (*applicationService)(nil)
 )
 
-// New constructs the canonical Work application service.
-func New(sessions RuntimeResolver) *Service {
-	return &Service{
-		sessions: sessions,
-		stateAccess: stateaccesswire.NewService(
-			stateaccesswire.NewRuntimeSessionResolver(liveSessionRuntimeResolver{sessions: sessions}),
-			nil,
-		),
-	}
-}
-
 // NewService constructs the Work root contract for composition. Content staging
 // and materialization may be nil when a caller only needs admission/state-access
 // slices; content methods then return a deterministic configuration error.
 func NewService(
 	runtimes work.RuntimeResolver,
 	readSubmittedFile work.SubmittedFileReader,
+	inspectSubmittedFile work.SubmittedFilePathInspector,
 	contentStaging work.ContentStagingService,
 	contentMaterializer work.ContentMaterializer,
 ) work.FileSubmissionService {
 	return &applicationService{
-		runtimes:            runtimes,
-		readSubmittedFile:   readSubmittedFile,
-		contentStaging:      contentStaging,
-		contentMaterializer: contentMaterializer,
+		runtimes:             runtimes,
+		readSubmittedFile:    readSubmittedFile,
+		inspectSubmittedFile: inspectSubmittedFile,
+		contentStaging:       contentStaging,
+		contentMaterializer:  contentMaterializer,
 		stateAccess: stateaccesswire.NewService(
 			stateaccesswire.NewRuntimeSessionResolver(runtimes),
 			nil,
@@ -195,7 +172,10 @@ func (s *applicationService) PrepareInvocationInput(
 	ctx context.Context,
 	request work.InvocationInputPreparationRequest,
 ) (work.PreparedInvocationInput, error) {
-	prepared, err := work.NewInvocationInputPreparation().PrepareInvocationInput(ctx, request)
+	prepared, err := work.NewInvocationInputPreparation(
+		s.readSubmittedFile,
+		s.inspectSubmittedFile,
+	).PrepareInvocationInput(ctx, request)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return work.PreparedInvocationInput{}, err
@@ -247,52 +227,4 @@ func submitFile(ctx context.Context, path string, target SubmitTarget, readFile 
 		return work.WorkRequestSubmitResult{}, fmt.Errorf("submit initial work: %w", err)
 	}
 	return result, nil
-}
-
-func (s *Service) runtime(sessionID string) (*factorysessions.LiveRuntime, error) {
-	if s == nil || s.sessions == nil {
-		return nil, fmt.Errorf("Factory Session runtime service is required")
-	}
-	runtime := s.sessions.Resolve(sessionID)
-	if runtime == nil || runtime.Factory == nil {
-		return nil, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, strings.TrimSpace(sessionID))
-	}
-	return runtime, nil
-}
-
-// SubmitWorkRequestForSession admits a canonical Work Request to one live session.
-func (s *Service) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
-	if s == nil || s.stateAccess == nil {
-		return work.WorkRequestSubmitResult{}, fmt.Errorf("Work state access is required")
-	}
-	return s.stateAccess.SubmitWorkRequestForSession(ctx, sessionID, request)
-}
-
-// MoveWorkForSession applies an API-originated operator move to one live session.
-func (s *Service) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (work.OperatorMoveResult, error) {
-	if s == nil || s.stateAccess == nil {
-		return work.OperatorMoveResult{}, fmt.Errorf("Work state access is required")
-	}
-	return s.stateAccess.MoveWorkForSession(ctx, sessionID, workID, stateName, requestID)
-}
-
-// SubscribeFactoryEventsForSession returns replay followed by live events for
-// the selected Factory Session runtime.
-func (s *Service) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
-	runtime, err := s.runtime(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	legacyRuntime, ok := runtime.Factory.(factory.APIFactory)
-	if !ok {
-		return nil, fmt.Errorf("legacy Factory Runtime event subscription is required")
-	}
-	stream, err := legacyRuntime.SubscribeFactoryEvents(ctx, reconnect, interfaces.FactoryEventReconnectScope{SessionID: sessionID})
-	if err != nil {
-		return nil, fmt.Errorf("subscribe factory events: %w", err)
-	}
-	if stream != nil {
-		stream.BackendScopeID = strings.TrimSpace(runtime.BackendScopeID)
-	}
-	return stream, nil
 }

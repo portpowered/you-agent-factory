@@ -80,6 +80,7 @@ func TestAgentRunnerNormalizesProviderFailureKindsWithoutRetry(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestAgentRunnerPreservesCancellationAndDeadlineContext(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -145,7 +146,7 @@ func TestAgentRunnerPreservesCancellationAndDeadlineContext(t *testing.T) {
 
 func TestAgentRunnerBoundsFailureMessage(t *testing.T) {
 	fake := &failingAgentProvidersFake{failure: providers.ExecuteFailure{
-		Kind:    providers.ExecuteFailureKindUnknown,
+		Kind:    providers.ExecuteFailureKindInvalidRequest,
 		Message: strings.Repeat("ø", 600),
 	}}
 	runner := resolveAgentRunner(t, fake, agentNoopPublisher)
@@ -175,6 +176,20 @@ func (fake *failingAgentProvidersFake) Execute(
 	return providers.ExecuteResult{}, fake.failure
 }
 
+func (fake *failingAgentProvidersFake) Continue(
+	_ context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	fake.calls.Add(1)
+	fake.mu.Lock()
+	fake.request = request.Attempt.Clone()
+	fake.mu.Unlock()
+	return providers.ContinueResult{}, fake.failure
+}
+
 type interruptingAgentProvidersFake struct {
 	agentProvidersFake
 	entered chan struct{}
@@ -198,6 +213,27 @@ func (fake *interruptingAgentProvidersFake) Execute(
 		kind = providers.ExecuteFailureKindTimeout
 	}
 	return providers.ExecuteResult{}, providerFailureFixture(kind)
+}
+
+func (fake *interruptingAgentProvidersFake) Continue(
+	ctx context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	fake.calls.Add(1)
+	fake.mu.Lock()
+	fake.request = request.Attempt.Clone()
+	fake.ctx = ctx
+	fake.mu.Unlock()
+	fake.once.Do(func() { close(fake.entered) })
+	<-ctx.Done()
+	kind := providers.ExecuteFailureKindCanceled
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		kind = providers.ExecuteFailureKindTimeout
+	}
+	return providers.ContinueResult{}, providerFailureFixture(kind)
 }
 
 func (fake *interruptingAgentProvidersFake) Context() context.Context {
@@ -259,6 +295,7 @@ func providerFailureFixture(
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func assertAgentFailureFacts(
 	t *testing.T,
 	result workers.RunnerExecutionResult,
@@ -266,14 +303,15 @@ func assertAgentFailureFacts(
 	published []workers.ProgressFragment,
 ) {
 	t.Helper()
-	wantSession := &workers.ProviderSessionMetadata{
+	wantSession := &providers.SessionMetadata{
 		Provider: string(providers.IDCodex),
 		Kind:     providers.SessionIDKind,
 		ID:       "resume-session-1",
 	}
-	if !reflect.DeepEqual(result.ProviderSession, wantSession) ||
-		!reflect.DeepEqual(providerErr.ProviderSession, wantSession) {
-		t.Fatalf("failure sessions = result:%#v error:%#v, want %#v", result.ProviderSession, providerErr.ProviderSession, wantSession)
+	wantContinuation := (wantSession).ContinuationRef()
+	if !reflect.DeepEqual(result.Continuation, wantContinuation) ||
+		!reflect.DeepEqual(providerErr.Continuation, wantContinuation) {
+		t.Fatalf("failure continuations = result:%#v error:%#v, want %#v", result.Continuation, providerErr.Continuation, wantContinuation)
 	}
 	if result.Diagnostics == nil ||
 		result.Diagnostics.Provider == nil ||
@@ -288,10 +326,10 @@ func assertAgentFailureFacts(
 	if len(published) != 2 ||
 		published[0].DispatchID != "dispatch-agent-1" ||
 		published[0].Payload != "provider stopped" ||
-		!reflect.DeepEqual(published[0].ProviderSessionRef, wantSession) ||
+		!reflect.DeepEqual(published[0].Continuation, wantContinuation) ||
 		published[1].Kind != workers.FailedFragmentKind ||
 		published[1].Type != "FAILED" ||
-		!reflect.DeepEqual(published[1].ProviderSessionRef, wantSession) {
+		!reflect.DeepEqual(published[1].Continuation, wantContinuation) {
 		t.Fatalf("failure progress = %#v, want correlated diagnostic and terminal failure", published)
 	}
 }

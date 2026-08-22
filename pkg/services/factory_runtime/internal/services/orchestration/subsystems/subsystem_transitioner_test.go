@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token_transformer"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -486,7 +487,7 @@ func TestTransitioner_WorkerGeneratedBatchCreatesFanoutCountFromPublicWork(t *te
 		t.Fatal("expected transitioner result")
 	}
 
-	var countToken *factorytoken.Token
+	var countToken *workerexecution.Token
 	for i := range result.Mutations {
 		if result.Mutations[i].ToPlace == "t1:fanout-count" {
 			countToken = result.Mutations[i].NewToken
@@ -554,7 +555,7 @@ func TestTransitioner_CompletedDispatchPreservesProviderSession(t *testing.T) {
 				TransitionID:    "t1",
 				WorkstationName: "codex-worker",
 				StartTime:       now.Add(-2 * time.Second),
-				ConsumedTokens: []factorytoken.Token{{
+				ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{{
 					ID:      "tok-1",
 					PlaceID: "task:init",
 					Color: factorytoken.Color{
@@ -562,7 +563,7 @@ func TestTransitioner_CompletedDispatchPreservesProviderSession(t *testing.T) {
 						WorkTypeID: "task",
 						Tags:       map[string]string{"owner": "dispatcher"},
 					},
-				}},
+				}}),
 			},
 		},
 		Results: []workerexecution.WorkResult{{
@@ -570,11 +571,7 @@ func TestTransitioner_CompletedDispatchPreservesProviderSession(t *testing.T) {
 			TransitionID: "t1",
 			Outcome:      workerexecution.OutcomeAccepted,
 			Output:       "done",
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
-				Provider: "codex",
-				Kind:     "session_id",
-				ID:       "sess_codex_123",
-			},
+			Continuation: (&providers.SessionMetadata{Provider: "codex", Kind: providers.SessionIDKind, ID: "sess_codex_123"}).ContinuationRef(),
 		}},
 	}
 
@@ -596,7 +593,7 @@ func TestTransitioner_CompletedDispatchPreservesProviderSession(t *testing.T) {
 		t.Fatalf("completed output mutations = %#v, want one cloned output token", completed.OutputMutations)
 	}
 
-	snapshot.Results[0].ProviderSession.ID = "mutated-session"
+	snapshot.Results[0].Continuation.ProviderSessionID = "mutated-session"
 	snapshot.Dispatches["d-1"].ConsumedTokens[0].Color.Tags["owner"] = "mutated"
 	result.Mutations[0].NewToken.Color.Payload[0] = 'X'
 
@@ -657,7 +654,7 @@ func workerBatchSnapshot(output string) *interfaces.EngineStateSnapshot[petri.Ma
 			"dispatch-1": {
 				DispatchID:   "dispatch-1",
 				TransitionID: "t1",
-				ConsumedTokens: []factorytoken.Token{{
+				ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{{
 					ID:        "tok-source",
 					PlaceID:   "task:init",
 					CreatedAt: time.Date(2026, time.April, 16, 21, 0, 0, 0, time.UTC),
@@ -670,7 +667,7 @@ func workerBatchSnapshot(output string) *interfaces.EngineStateSnapshot[petri.Ma
 						TraceID:    "trace-source",
 						Tags:       map[string]string{"tenant": "port"},
 					},
-				}},
+				}}),
 			},
 		},
 		Results: []workerexecution.WorkResult{{
@@ -715,7 +712,7 @@ func TestHistoryTransitionerPipeline_ProcessAcceptPreservesSiblingLaneReviewInit
 			"d-process": {
 				DispatchID:     "d-process",
 				TransitionID:   "process",
-				ConsumedTokens: []factorytoken.Token{taskToken},
+				ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{taskToken}),
 			},
 		},
 		Results: []workerexecution.WorkResult{{
@@ -782,7 +779,7 @@ func TestHistoryTransitionerPipeline_ProcessAcceptReconcilesDuplicateReviewInit(
 			"d-process": {
 				DispatchID:     "d-process",
 				TransitionID:   "process",
-				ConsumedTokens: []factorytoken.Token{taskToken},
+				ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{taskToken}),
 			},
 		},
 		Results: []workerexecution.WorkResult{{
@@ -862,7 +859,7 @@ func TestHistoryTransitionerPipeline_ReviewAcceptReconcilesDuplicateReviewAndSta
 			"d-review": {
 				DispatchID:     "d-review",
 				TransitionID:   "review",
-				ConsumedTokens: []factorytoken.Token{taskToken, reviewToken},
+				ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{taskToken, reviewToken}),
 			},
 		},
 		Results: []workerexecution.WorkResult{{

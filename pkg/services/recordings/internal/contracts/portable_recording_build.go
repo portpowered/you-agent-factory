@@ -36,8 +36,8 @@ func BuildPortableRecording(facts PortableRecordingCanonicalFacts) (PortableReco
 		return PortableRecording{}, err
 	}
 	value := PortableRecording{
-		RecordingKind: KindJavaScriptFactorySession, SchemaVersion: portableRecordingSchemaV2,
-		ReplayCompatibilityVersion: portableRecordingReplayCompat,
+		RecordingKind: KindJavaScriptFactorySession, SchemaVersion: PortableRecordingCurrentSchemaVersion,
+		ReplayCompatibilityVersion: PortableRecordingReplayCompatibilityV1,
 		Session: PortableRecordingSessionSummary{
 			ID: facts.SessionID, Status: facts.Status, OrchestratorKind: facts.OrchestratorKind,
 		},
@@ -50,6 +50,7 @@ func BuildPortableRecording(facts PortableRecordingCanonicalFacts) (PortableReco
 			SecretsRedacted: secretsRedacted,
 		},
 	}
+	value.WorkerHistory = buildPortableRecordingWorkerHistory(facts.WorkerHistory)
 	if facts.Checkpoint != nil {
 		value.Checkpoint = &PortableRecordingCheckpointSummary{
 			ID: facts.Checkpoint.ID, Label: facts.Checkpoint.Label, Summary: facts.Checkpoint.Summary,
@@ -69,6 +70,19 @@ func BuildPortableRecording(facts PortableRecordingCanonicalFacts) (PortableReco
 		}
 	}
 	return value, ValidatePortableRecording(value)
+}
+
+func buildPortableRecordingWorkerHistory(
+	history *PortableRecordingWorkerHistory,
+) *PortableRecordingWorkerHistory {
+	if history == nil {
+		return &PortableRecordingWorkerHistory{
+			Availability: PortableRecordingWorkerHistoryUnavailable,
+			Reason:       PortableRecordingWorkerHistoryReasonNotCaptured,
+		}
+	}
+	clone := clonePortableRecordingWorkerHistory(*history)
+	return &clone
 }
 
 func saturatingPortableRecordingSecretsRedacted(total, count int64) int64 {

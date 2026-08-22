@@ -7,8 +7,10 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 )
@@ -19,6 +21,74 @@ type planRuntime struct {
 	workerErr      error
 	workerStop     factorysessions.RuntimeStop
 	runtimeStopErr error
+}
+
+type cancellationTransitionRuntime struct {
+	events []string
+
+	runtimeContext             context.Context
+	runtimeAliveAtStartReturn  bool
+	workerStopSawRuntimeCancel bool
+	workerStarts               int
+
+	startEntered  chan struct{}
+	releaseStart  chan struct{}
+	workerEntered chan struct{}
+	releaseWorker chan struct{}
+}
+
+func (runtime *cancellationTransitionRuntime) StartLifecycle(_, runCtx context.Context) error {
+	runtime.runtimeContext = runCtx
+	runtime.events = append(runtime.events, "runtime:start")
+	if runtime.startEntered != nil {
+		close(runtime.startEntered)
+		<-runtime.releaseStart
+	}
+	runtime.runtimeAliveAtStartReturn = runCtx.Err() == nil
+	return nil
+}
+
+func (runtime *cancellationTransitionRuntime) Start(ctx, runCtx context.Context) error {
+	return runtime.StartLifecycle(ctx, runCtx)
+}
+
+func (runtime *cancellationTransitionRuntime) StartWorkerLifecycle(ctx context.Context) (factorysessions.RuntimeStop, error) {
+	runtime.workerStarts++
+	runtime.events = append(runtime.events, "workers:start")
+	if runtime.workerEntered != nil {
+		close(runtime.workerEntered)
+		<-runtime.releaseWorker
+	}
+	return func(context.Context) error {
+		runtime.workerStopSawRuntimeCancel = runtime.runtimeContext.Err() != nil
+		runtime.events = append(runtime.events, "workers:stop")
+		return nil
+	}, nil
+}
+
+func (runtime *cancellationTransitionRuntime) StartWorkers(ctx context.Context) (factorysessions.RuntimeStop, error) {
+	return runtime.StartWorkerLifecycle(ctx)
+}
+
+func (*cancellationTransitionRuntime) CompleteStartup(context.Context) error { return nil }
+
+func (*cancellationTransitionRuntime) WaitForRuntime(context.Context) error { return nil }
+
+func (*cancellationTransitionRuntime) RunTransport(context.Context, http.Handler) error { return nil }
+
+func (runtime *cancellationTransitionRuntime) StopLifecycle(context.Context) error {
+	runtime.events = append(runtime.events, "runtime:stop")
+	return nil
+}
+
+func (runtime *cancellationTransitionRuntime) Stop(ctx context.Context) error {
+	return runtime.StopLifecycle(ctx)
+}
+
+func (*cancellationTransitionRuntime) FailStartup(err error) error { return err }
+
+func (*cancellationTransitionRuntime) CurrentRuntimeBundle() factoryruntime.RuntimeRecord {
+	return nil
 }
 
 func (runtime *planRuntime) Start(context.Context, context.Context) error {
@@ -128,79 +198,6 @@ func TestRuntimeLifecycleOwnsActivationAndReverseShutdown(t *testing.T) {
 	}
 }
 
-func TestRunCompletionStopsAndJoinsOwnedTransport(t *testing.T) {
-	runtime := &planRuntime{}
-	transport := &blockingPlanComponent{
-		started: make(chan struct{}),
-		stopped: make(chan struct{}),
-	}
-	completed := make(chan struct{})
-	plan, err := BuildLifecyclePlan(roles.LifecyclePlanRequest{
-		Runtime: runtime,
-		Components: factorysessions.BoundProcessComponents{
-			Transport: transport,
-		},
-		Completion: func(ctx context.Context) error {
-			select {
-			case <-transport.started:
-				close(completed)
-				return nil
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		},
-	})
-	if err != nil {
-		t.Fatalf("BuildLifecyclePlan: %v", err)
-	}
-	if err := lifecycle.NewManager().Run(t.Context(), plan); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	select {
-	case <-completed:
-	default:
-		t.Fatal("terminal completion did not run after transport activation")
-	}
-	select {
-	case <-transport.stopped:
-	default:
-		t.Fatal("terminal completion did not join the owned transport")
-	}
-}
-
-func TestRunTransportFailureCancelsWaitingCompletion(t *testing.T) {
-	transportErr := errors.New("listener startup failed")
-	runtime := &planRuntime{}
-	transport := &blockingPlanComponent{
-		started: make(chan struct{}),
-		stopped: make(chan struct{}),
-		waitErr: transportErr,
-	}
-	completionCanceled := make(chan struct{})
-	plan, err := BuildLifecyclePlan(roles.LifecyclePlanRequest{
-		Runtime: runtime,
-		Components: factorysessions.BoundProcessComponents{
-			Transport: transport,
-		},
-		Completion: func(ctx context.Context) error {
-			<-ctx.Done()
-			close(completionCanceled)
-			return ctx.Err()
-		},
-	})
-	if err != nil {
-		t.Fatalf("BuildLifecyclePlan: %v", err)
-	}
-	if err := lifecycle.NewManager().Run(t.Context(), plan); !errors.Is(err, transportErr) {
-		t.Fatalf("Run error = %v, want %v", err, transportErr)
-	}
-	select {
-	case <-completionCanceled:
-	default:
-		t.Fatal("listener failure did not cancel the waiting completion")
-	}
-}
-
 func TestRuntimeLifecycleLeavesRuntimeUnwindAvailableAfterWorkerStartFailure(t *testing.T) {
 	sentinel := errors.New("workers failed")
 	runtime := &planRuntime{workerErr: sentinel}
@@ -211,6 +208,78 @@ func TestRuntimeLifecycleLeavesRuntimeUnwindAvailableAfterWorkerStartFailure(t *
 	want := []string{"runtime:start", "workers:start", "runtime:stop"}
 	if !reflect.DeepEqual(runtime.events, want) {
 		t.Fatalf("events = %v, want %v", runtime.events, want)
+	}
+}
+
+func TestRuntimeLifecycleRejectsPreActivationCancellationBeforeRuntimeAcquisition(t *testing.T) {
+	runtime := &planRuntime{}
+	plan := requiredPlan(t, runtime)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if err := lifecycle.NewManager().Run(ctx, plan); err != nil {
+		t.Fatalf("Run error = %v, want canceled activation to unwind quietly", err)
+	}
+	if len(runtime.events) != 0 {
+		t.Fatalf("runtime events = %v, want no runtime acquisition after pre-activation cancellation", runtime.events)
+	}
+}
+
+func TestRuntimeLifecycleKeepsRuntimeAliveUntilCanceledStartupUnwinds(t *testing.T) {
+	runtime := &cancellationTransitionRuntime{
+		startEntered: make(chan struct{}),
+		releaseStart: make(chan struct{}),
+	}
+	plan := requiredPlanWithEvents(t, runtime, &runtime.events)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runDone := make(chan error, 1)
+	go func() { runDone <- lifecycle.NewManager().Run(ctx, plan) }()
+
+	awaitLifecycleSignal(t, runtime.startEntered)
+	cancel()
+	close(runtime.releaseStart)
+	if err := <-runDone; err != nil {
+		t.Fatalf("Run error = %v, want cancellation to unwind cleanly", err)
+	}
+	if !runtime.runtimeAliveAtStartReturn {
+		t.Fatal("runtime context was canceled before the startup transition returned")
+	}
+	if runtime.workerStarts != 0 {
+		t.Fatalf("worker starts = %d, want no worker acquisition after cancellation", runtime.workerStarts)
+	}
+}
+
+func TestRuntimeLifecycleDrainsWorkerAcquisitionBeforeRuntimeShutdown(t *testing.T) {
+	runtime := &cancellationTransitionRuntime{
+		workerEntered: make(chan struct{}),
+		releaseWorker: make(chan struct{}),
+	}
+	plan := requiredPlanWithEvents(t, runtime, &runtime.events)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runDone := make(chan error, 1)
+	go func() { runDone <- lifecycle.NewManager().Run(ctx, plan) }()
+
+	awaitLifecycleSignal(t, runtime.workerEntered)
+	cancel()
+	close(runtime.releaseWorker)
+	if err := <-runDone; err != nil {
+		t.Fatalf("Run error = %v, want cancellation to unwind cleanly", err)
+	}
+	if runtime.workerStopSawRuntimeCancel {
+		t.Fatal("worker acquisition was stopped after the runtime context was canceled")
+	}
+}
+
+func awaitLifecycleSignal(t *testing.T, signal <-chan struct{}) {
+	t.Helper()
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
+	select {
+	case <-signal:
+	case <-timer.C:
+		t.Fatal("timed out waiting for lifecycle transition")
 	}
 }
 
@@ -371,12 +440,78 @@ func TestDirectJavaScriptLifecycleRejectsMissingCompletion(t *testing.T) {
 	}
 }
 
+func TestLifecycleStateRejectsDuplicateStartsAndNoopStops(t *testing.T) {
+	runtime := &planRuntime{}
+	state := &applicationRuntimeLifecycle{runtime: runtime}
+	ctx := context.Background()
+
+	if err := state.startWorkers(ctx); err == nil || !strings.Contains(err.Error(), "runtime is not started") {
+		t.Fatalf("startWorkers before runtime = %v, want runtime-not-started", err)
+	}
+	if err := state.stopWorkers(ctx); err != nil {
+		t.Fatalf("stopWorkers without acquisition: %v", err)
+	}
+	if err := state.startRuntime(ctx); err != nil {
+		t.Fatalf("startRuntime: %v", err)
+	}
+	if err := state.startRuntime(ctx); err == nil || !strings.Contains(err.Error(), "already started") {
+		t.Fatalf("duplicate startRuntime = %v, want already-started", err)
+	}
+	if err := state.startWorkers(ctx); err != nil {
+		t.Fatalf("startWorkers: %v", err)
+	}
+	if err := state.startWorkers(ctx); err == nil || !strings.Contains(err.Error(), "already started") {
+		t.Fatalf("duplicate startWorkers = %v, want already-started", err)
+	}
+	if err := state.stopWorkers(ctx); err != nil {
+		t.Fatalf("stopWorkers: %v", err)
+	}
+	if err := state.stopWorkers(ctx); err != nil {
+		t.Fatalf("second stopWorkers: %v", err)
+	}
+	if err := state.stopRuntime(ctx); err != nil {
+		t.Fatalf("stopRuntime: %v", err)
+	}
+	if err := state.stopRuntime(ctx); err != nil {
+		t.Fatalf("second stopRuntime: %v", err)
+	}
+}
+
+func TestJoinCompletionTransportResultsPreservesOperationalErrors(t *testing.T) {
+	transportErr := errors.New("transport failed")
+	completionErr := errors.New("completion failed")
+	err := joinCompletionTransportResults(
+		completionTransportResult{name: "transport", err: transportErr},
+		completionTransportResult{name: "completion", err: context.Canceled},
+	)
+	if !errors.Is(err, transportErr) || strings.Contains(err.Error(), "completion failed") {
+		t.Fatalf("joined error = %v, want transport failure without cancellation", err)
+	}
+	err = joinCompletionTransportResults(
+		completionTransportResult{name: "transport", err: transportErr},
+		completionTransportResult{name: "completion", err: completionErr},
+	)
+	if !errors.Is(err, transportErr) || !errors.Is(err, completionErr) {
+		t.Fatalf("joined errors = %v, want both operational failures", err)
+	}
+}
+
+func TestIsNilHandlesNonNilValue(t *testing.T) {
+	if isNil(42) {
+		t.Fatal("isNil(42) = true, want false")
+	}
+}
+
 func requiredPlan(t *testing.T, runtime *planRuntime) lifecycle.Plan {
+	return requiredPlanWithEvents(t, runtime, &runtime.events)
+}
+
+func requiredPlanWithEvents(t *testing.T, runtime roles.ProcessRuntime, events *[]string) lifecycle.Plan {
 	t.Helper()
 	plan, err := BuildLifecyclePlan(roles.LifecyclePlanRequest{
 		Runtime: runtime,
 		Components: factorysessions.BoundProcessComponents{
-			Transport: &planComponent{name: "transport", events: &runtime.events},
+			Transport: &planComponent{name: "transport", events: events},
 		},
 	})
 	if err != nil {

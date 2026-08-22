@@ -12,14 +12,15 @@ const (
 	WorkerTypeModel     = "MODEL_WORKER"
 	WorkerTypeHosted    = "HOSTED_WORKER"
 
-	WorkstationTypeInference = "INFERENCE_RUN"
-	WorkstationTypeAgent     = "AGENT_RUN"
-	WorkstationTypeScript    = "SCRIPT_RUN"
-	WorkstationTypePoller    = "POLLER_RUN"
-	WorkstationTypeModel     = "MODEL_WORKSTATION"
-	WorkstationTypeInvoke    = "MODEL_INVOKE"
-	WorkstationTypeLogical   = "LOGICAL_MOVE"
-	WorkstationTypeClassify  = "CLASSIFIER_WORKSTATION"
+	WorkstationTypeInference     = "INFERENCE_RUN"
+	WorkstationTypeAgent         = "AGENT_RUN"
+	WorkstationTypeScript        = "SCRIPT_RUN"
+	WorkstationTypePoller        = "POLLER_RUN"
+	WorkstationTypeModel         = "MODEL_WORKSTATION"
+	WorkstationTypeInvoke        = "MODEL_INVOKE"
+	WorkstationTypeLogical       = "LOGICAL_MOVE"
+	WorkstationTypeClassify      = "CLASSIFIER_WORKSTATION"
+	WorkstationTypeHumanApproval = "HUMAN_APPROVAL"
 
 	HostedWorkerProviderLinear = "LINEAR"
 	ModelProviderDefault       = "DEFAULT"
@@ -45,6 +46,7 @@ var workstationAliases = map[string]string{
 	WorkstationTypeScript: WorkstationTypeScript, WorkstationTypePoller: WorkstationTypePoller,
 	WorkstationTypeInvoke: WorkstationTypeInference, WorkstationTypeModel: WorkstationTypeAgent,
 	WorkstationTypeClassify: WorkstationTypeClassify, WorkstationTypeLogical: WorkstationTypeLogical,
+	WorkstationTypeHumanApproval: WorkstationTypeHumanApproval,
 }
 
 func normalize(value string, aliases map[string]string, preserveUnknown bool) string {
@@ -87,11 +89,14 @@ func PublicWorkstationTypeFromInternalRuntime(workstationType, workerType string
 	case WorkstationTypeInvoke:
 		return WorkstationTypeInference
 	case WorkstationTypeModel:
+		if IsScheduledLegacyModelPair(workstationType, workerType, kind) {
+			return WorkstationTypeModel
+		}
 		if PermissiveWorkerType(workerType) == WorkerTypeScript {
 			return WorkstationTypeScript
 		}
 		return WorkstationTypeAgent
-	case WorkstationTypeLogical, WorkstationTypeClassify:
+	case WorkstationTypeLogical, WorkstationTypeClassify, WorkstationTypeHumanApproval:
 		return strings.TrimSpace(workstationType)
 	case "":
 		if kind == WorkstationKindPoller {
@@ -105,6 +110,23 @@ func PublicWorkstationTypeFromInternalRuntime(workstationType, workerType string
 	}
 }
 
+// IsScheduledLegacyModelPair identifies the legacy model worker/workstation
+// pair whose inference behavior is selected by its scheduling kind. Keep the
+// pair as MODEL_WORKSTATION for public projection so a legacy MODEL_WORKER can
+// continue to project to INFERENCE_WORKER without rewriting the authored alias.
+func IsScheduledLegacyModelPair(workstationType, workerType string, kind WorkstationKind) bool {
+	if strings.TrimSpace(workstationType) != WorkstationTypeModel ||
+		PermissiveWorkerType(workerType) != WorkerTypeInference {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(string(kind))) {
+	case WorkstationKindRepeater, WorkstationKindCron:
+		return true
+	default:
+		return false
+	}
+}
+
 func IsPollerRunPublicWorkstationType(value string, kind WorkstationKind) bool {
 	return PermissiveWorkstationType(value) == WorkstationTypePoller || (strings.TrimSpace(value) == "" && kind == WorkstationKindPoller)
 }
@@ -113,11 +135,8 @@ func IsInferenceWorkerType(value string) bool { return StrictWorkerType(value) =
 
 func ProjectWorkerBehaviorClass(value string) string { return StrictWorkerType(value) }
 
-func IsInferenceRunWorkstationType(value string) bool {
-	return StrictWorkstationType(value) == WorkstationTypeInference
-}
-func IsAgentRunWorkstationType(value string) bool {
-	return StrictWorkstationType(value) == WorkstationTypeAgent
+func IsHumanApprovalWorkstationType(value string) bool {
+	return StrictWorkstationType(value) == WorkstationTypeHumanApproval
 }
 func IsScriptRunWorkstationType(value string) bool {
 	return StrictWorkstationType(value) == WorkstationTypeScript

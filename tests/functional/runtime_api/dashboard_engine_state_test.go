@@ -2,7 +2,6 @@ package runtime_api
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,8 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -34,11 +32,11 @@ func TestDashboard_EngineStateSnapshot_EndToEnd(t *testing.T) {
 	if got := support.GetDefaultSession(t, server.URL()).Runtime.Progress.InFlightCount; got != 1 {
 		t.Fatalf("in-flight dispatch count = %d, want 1", got)
 	}
-	provider.respond(workerexecution.InferenceResponse{
+	provider.respond(providers.ExecuteResult{
 		Content: "COMPLETE",
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
+		SessionRef: &providers.SessionRef{
 			Provider: "codex",
-			Kind:     "session_id",
+			Kind:     providers.SessionIDKind,
 			ID:       "sess-world-view-success",
 		},
 	}, nil)
@@ -46,14 +44,12 @@ func TestDashboard_EngineStateSnapshot_EndToEnd(t *testing.T) {
 
 	submitDashboardWorldViewFunctionalWork(t, server.URL(), "world-view-failed", "trace-world-view-failed")
 	provider.nextDispatch(t)
-	provider.respond(workerexecution.InferenceResponse{}, &workerexecution.ProviderError{
-		Family:  workerexecution.WorkFailureFamilyTerminal,
-		Type:    workerexecution.WorkFailureTypePermanentBadRequest,
+	provider.respond(providers.ExecuteResult{}, providers.ExecuteFailure{
+		Kind:    providers.ExecuteFailureKindInvalidRequest,
 		Message: "provider rejected dashboard world-view work",
-		Cause:   errors.New("provider rejected"),
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
+		SessionRef: &providers.SessionRef{
 			Provider: "codex",
-			Kind:     "session_id",
+			Kind:     providers.SessionIDKind,
 			ID:       "sess-world-view-failed",
 		},
 	})
@@ -157,49 +153,55 @@ func waitForPublicWorkInPlace(t *testing.T, baseURL, placeID, workID string, tim
 }
 
 type functionalWorldViewProvider struct {
-	requests  chan workerexecution.ProviderInferenceRequest
+	testutil.NativeProvider
+	requests  chan providers.ExecuteRequest
 	responses chan functionalWorldViewProviderResponse
 }
 
 type functionalWorldViewProviderResponse struct {
-	response workerexecution.InferenceResponse
+	response providers.ExecuteResult
 	err      error
 }
 
 func newFunctionalWorldViewProvider() *functionalWorldViewProvider {
-	return &functionalWorldViewProvider{
-		requests:  make(chan workerexecution.ProviderInferenceRequest, 2),
+	provider := &functionalWorldViewProvider{
+		requests:  make(chan providers.ExecuteRequest, 2),
 		responses: make(chan functionalWorldViewProviderResponse, 2),
 	}
+	provider.NativeProvider.ExecuteFunc = provider.Execute
+	return provider
 }
 
-func (p *functionalWorldViewProvider) Infer(ctx context.Context, request workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
+func (p *functionalWorldViewProvider) Execute(ctx context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
 	select {
 	case p.requests <- request:
 	case <-ctx.Done():
-		return workerexecution.InferenceResponse{}, ctx.Err()
+		return providers.ExecuteResult{}, ctx.Err()
 	}
 	select {
 	case response := <-p.responses:
 		return response.response, response.err
 	case <-ctx.Done():
-		return workerexecution.InferenceResponse{}, ctx.Err()
+		return providers.ExecuteResult{}, ctx.Err()
 	}
 }
 
-func (p *functionalWorldViewProvider) nextDispatch(t *testing.T) workerexecution.ProviderInferenceRequest {
+func (p *functionalWorldViewProvider) nextDispatch(t *testing.T) providers.ExecuteRequest {
 	t.Helper()
 	select {
 	case request := <-p.requests:
 		return request
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for provider dispatch")
-		return workerexecution.ProviderInferenceRequest{}
+		return providers.ExecuteRequest{}
 	}
 }
 
-func (p *functionalWorldViewProvider) respond(response workerexecution.InferenceResponse, err error) {
+func (p *functionalWorldViewProvider) respond(response providers.ExecuteResult, err error) {
+	if response.Content != "" && response.Diagnostics == nil {
+		response.Diagnostics = &providers.ExecuteDiagnostics{Metadata: map[string]string{
+			"completion_evidence": "provider_response",
+		}}
+	}
 	p.responses <- functionalWorldViewProviderResponse{response: response, err: err}
 }
-
-var _ workerprovider.Provider = (*functionalWorldViewProvider)(nil)

@@ -208,8 +208,8 @@ describe("CurrentActivity node hover surfaces", () => {
       name: "Select Draft workstation",
     });
 
-    expect(workstationShell?.className).toContain("border-af-success-border");
-    expect(workstationShell?.className).toContain("ring-af-success-border");
+    expect(workstationShell?.className).toContain("border-af-warning-border");
+    expect(workstationShell?.className).toContain("ring-af-warning-border");
     expect(
       activeWorkstation.container.querySelector("[data-active='true']"),
     ).toBeTruthy();
@@ -218,7 +218,7 @@ describe("CurrentActivity node hover surfaces", () => {
     ).toBeNull();
     expect(
       headerButton.querySelector("[data-workstation-semantic-icon]"),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
       headerButton.querySelector("[data-workstation-title]")?.textContent,
     ).toBe("Draft");
@@ -226,7 +226,7 @@ describe("CurrentActivity node hover surfaces", () => {
 });
 
 describe("Active workstation work item rows", () => {
-  it("uses compact spacing on active workstation work item rows", () => {
+  it("uses compact spacing on up to two active workstation work item rows", () => {
     const activeWorkstation = renderWorkstationNode({
       active: true,
       executions: [
@@ -252,17 +252,6 @@ describe("Active workstation work item rows", () => {
             },
           ],
         },
-        {
-          dispatch_id: "dispatch-3",
-          started_at: "2026-06-09T00:00:00Z",
-          work_items: [
-            {
-              display_name: "Story Gamma",
-              work_id: "work-3",
-              work_type: "story",
-            },
-          ],
-        },
       ],
       onSelectWorkID: vi.fn(),
       selectedWorkID: "work-2",
@@ -271,7 +260,6 @@ describe("Active workstation work item rows", () => {
     const workItemButtons = [
       activeWorkstation.getByRole("button", { name: /Story Alpha/ }),
       activeWorkstation.getByRole("button", { name: /Story Beta/ }),
-      activeWorkstation.getByRole("button", { name: /Story Gamma/ }),
     ];
 
     workItemButtons.forEach((button) => {
@@ -283,7 +271,7 @@ describe("Active workstation work item rows", () => {
       expect(button.className).toContain("min-w-0");
       expect(
         button.querySelector("[data-active-work-label]")?.className,
-      ).toContain("truncate");
+      ).toContain("break-words");
       expect(
         button.querySelector("[data-active-work-duration]")?.className,
       ).toContain("shrink-0");
@@ -331,7 +319,7 @@ describe("Active workstation work item rows", () => {
   });
 });
 
-describe("Active workstation label truncation", () => {
+describe("Active workstation label wrapping", () => {
   it("keeps short workstation titles at the largest readable size", () => {
     const shortTitle = "Short Active Story";
     const activeWorkstation = renderWorkstationNode({
@@ -346,8 +334,8 @@ describe("Active workstation label truncation", () => {
       .closest("[data-workstation-title]");
 
     expect(titleLabel?.className).toContain("text-[1rem]");
-    expect(titleLabel?.className).toContain("truncate");
-    expect(titleLabel?.className).toContain("whitespace-nowrap");
+    expect(titleLabel?.className).toContain("whitespace-normal");
+    expect(titleLabel?.className).toContain("[overflow-wrap:anywhere]");
   });
 
   it("keeps medium workstation titles at the intermediate readable size", () => {
@@ -365,7 +353,7 @@ describe("Active workstation label truncation", () => {
 
     expect(titleLabel?.className).toContain("text-[0.88rem]");
     expect(titleLabel?.className).not.toContain("text-[0.78rem]");
-    expect(titleLabel?.className).toContain("truncate");
+    expect(titleLabel?.className).toContain("break-words");
   });
 
   it("keeps medium active work labels at the default row size", () => {
@@ -397,7 +385,7 @@ describe("Active workstation label truncation", () => {
 
     expect(workLabel?.className).toContain("text-[0.74rem]");
     expect(workLabel?.className).not.toContain("text-[0.68rem]");
-    expect(workLabel?.className).toContain("truncate");
+    expect(workLabel?.className).toContain("break-words");
     expect(workLabel?.className).toContain("basis-0");
     expect(durationLabel?.className).toContain("shrink-0");
     expect(workItemButton.className).toContain("overflow-hidden");
@@ -446,10 +434,10 @@ describe("Activity graph node surface tones", () => {
       "bg-surface-container-highest",
     );
     expect(activeWorkstationShell?.className).toContain(
-      "border-af-success-border",
+      "border-af-warning-border",
     );
     expect(activeWorkstationShell?.className).toContain(
-      "ring-af-success-border",
+      "ring-af-warning-border",
     );
     expect(selectedWorkstationShell?.className).toContain(
       "bg-surface-container-highest",

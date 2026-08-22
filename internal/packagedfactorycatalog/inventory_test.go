@@ -23,8 +23,8 @@ func TestDiscoverReturnsCompleteSortedAuthoredInventory(t *testing.T) {
 	}
 
 	want := []string{
-		"classify", "deep-research", "full-flow", "fusion", "goal", "loop",
-		"plan-execute", "plan-parallel", "quorum", "review", "spawn", "subagent",
+		"agy-clip-qa", "agy-cold-watch", "classify", "deep-research", "factory-builder", "fix", "full-flow", "fusion", "goal", "loop",
+		"plan-execute", "plan-parallel", "quorum", "ralph", "review", "spawn", "subagent",
 		"tournament", "tts",
 	}
 	if len(inventory.Entries) != len(want) {
@@ -221,6 +221,39 @@ func TestDiscoverRejectsInvalidDirectoryRoots(t *testing.T) {
 			assertErrorContains(t, err, test.fragments...)
 		})
 	}
+}
+
+func TestBuildCatalogRejectsDisconnectedFirstPartyWorkState(t *testing.T) {
+	t.Parallel()
+
+	source := fstest.MapFS{
+		"schemas/factory.schema.json": &fstest.MapFile{Data: []byte(`{"$id":"test-schema","type":"object"}`)},
+		"factories/synthetic/factory.json": &fstest.MapFile{Data: []byte(
+			`{"name":"@you/synthetic","id":"id-synthetic",` +
+				`"workTypes":[{"name":"task","handlingBehavior":["DEFAULT"],"states":[` +
+				`{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},` +
+				`{"name":"failed","type":"FAILED"},{"name":"orphan","type":"PROCESSING"}]}],` +
+				`"resources":[],"workers":[],"workstations":[{"name":"move","type":"LOGICAL_MOVE",` +
+				`"inputs":[{"workType":"task","state":"init"}],` +
+				`"outputs":[{"workType":"task","state":"complete"}],` +
+				`"onFailure":[{"workType":"task","state":"failed"}]}]}`,
+		)},
+	}
+
+	_, err := packagedfactorycatalog.BuildCatalog(
+		context.Background(),
+		source,
+		"factories",
+		"schemas/factory.schema.json",
+	)
+	assertErrorContains(
+		t,
+		err,
+		"factories/synthetic/factory.json",
+		"first-party Work state role validation failed",
+		`"synthetic"`,
+		"task:orphan",
+	)
 }
 
 func TestDiscoverRejectsMissingAndDuplicateIdentities(t *testing.T) {

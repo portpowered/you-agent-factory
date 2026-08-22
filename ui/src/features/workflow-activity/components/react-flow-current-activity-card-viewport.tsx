@@ -12,14 +12,18 @@ import {
   type OnSelectionChangeFunc,
   ReactFlow,
   type ReactFlowInstance,
+  useStore,
+  useUpdateNodeInternals,
   type XYPosition,
 } from "@xyflow/react";
+import { FactoryGraphGroupRegionLayer } from "@you-agent-factory/factory-graph/group-regions";
 import {
   type ComponentProps,
   type KeyboardEvent,
   type MutableRefObject,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
 } from "react";
 import {
@@ -39,6 +43,7 @@ import { FactoryGraphEdgeWaypointControls } from "../../factory-graph-editor/com
 import { FactoryGraphEdgeWaypointLayer } from "../../factory-graph-editor/components/flow/factory-graph-edge-waypoint-layer";
 import { FactoryGraphVisualGroupControls } from "../../factory-graph-editor/components/flow/visual-groups/factory-graph-visual-group-controls";
 import { FactoryGraphVisualGroupLayer } from "../../factory-graph-editor/components/flow/visual-groups/factory-graph-visual-group-layer";
+import { useFactoryGraphTouchPanePan } from "../../factory-graph-editor/hooks/selection/use-factory-graph-touch-pane-pan";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import { isValidFactoryGraphConnection } from "../../factory-graph-editor/lib/editor/factory-graph-editor-connections";
 import type {
@@ -54,12 +59,14 @@ import {
 import type { FactoryLayoutGroup } from "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
 import { FACTORY_GRAPH_EDITOR_REACT_FLOW_GESTURE_PROPS } from "../../factory-graph-editor/lib/selection/factory-graph-editor-react-flow-interaction";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import { useFactoryGraphTouchPanePan } from "../../factory-graph-editor/hooks/selection/use-factory-graph-touch-pane-pan";
 import { GraphViewportSurface } from "../../graphs/components/dashboard-graph-viewport-surface";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { useCanonicalLayoutViewportSync } from "../lib/layout/use-canonical-layout-viewport-sync";
 import { handleCurrentActivityReactFlowError } from "../lib/react-flow-current-activity-card-errors";
-import { useMeasuredCurrentActivityGraphViewport } from "../lib/use-measured-current-activity-graph-viewport";
+import {
+  type MeasuredCurrentActivityGraphViewport,
+  useMeasuredCurrentActivityGraphViewport,
+} from "../lib/use-measured-current-activity-graph-viewport";
 import {
   DashboardFlowAxisLegend,
   getDefaultDashboardFlowAxisLegendEdgeItems,
@@ -239,6 +246,71 @@ function factoryGraphEdgeIdForRenderedEdge(nodes: Node[], edge: Edge) {
   )}->${factoryGraphNodeIdForRenderedNode(nodes, edge.target)}`;
 }
 
+/**
+ * React Flow treats an unmeasured node as intersecting every marquee. Refresh
+ * the disposable projection's internals after controlled nodes mount, then
+ * expose the actual measurement state for browser interaction synchronization.
+ */
+function FactoryGraphInitializationState({ nodeIds }: { nodeIds: string[] }) {
+  const updateNodeInternals = useUpdateNodeInternals();
+  const nodeIdKey = nodeIds.join(",");
+  const stableNodeIds = useMemo(
+    () => (nodeIdKey === "" ? [] : nodeIdKey.split(",")),
+    [nodeIdKey],
+  );
+  const missingNodeIds = useStore((state) => {
+    if (state.nodeLookup.size === 0) {
+      return null;
+    }
+
+    const nextMissingNodeIds: string[] = [];
+    for (const node of state.nodeLookup.values()) {
+      if (node.hidden) {
+        continue;
+      }
+
+      // React Flow's drag position calculation requires measured dimensions.
+      // Configured or initial dimensions are enough to render a node but do
+      // not mean that its internals are ready for pointer interaction.
+      const width = node.measured?.width;
+      const height = node.measured?.height;
+      if (
+        node.internals.handleBounds === undefined ||
+        width === undefined ||
+        height === undefined ||
+        width <= 0 ||
+        height <= 0
+      ) {
+        nextMissingNodeIds.push(node.id);
+      }
+    }
+
+    return nextMissingNodeIds.join(",");
+  });
+  const shouldRefreshNodeInternalsRef = useRef(false);
+  shouldRefreshNodeInternalsRef.current =
+    missingNodeIds === null || missingNodeIds.length > 0;
+
+  useEffect(() => {
+    // Keep measurement state out of the dependencies: updateNodeInternals mutates it.
+    if (!shouldRefreshNodeInternalsRef.current) {
+      return;
+    }
+
+    updateNodeInternals(stableNodeIds);
+  }, [stableNodeIds, updateNodeInternals]);
+
+  return (
+    <div
+      aria-hidden="true"
+      data-factory-graph-selection-ready={String(
+        missingNodeIds !== null && missingNodeIds.length === 0,
+      )}
+      style={{ display: "none" }}
+    />
+  );
+}
+
 type CurrentActivityGraphViewportAddControls = {
   actions?: FactoryGraphEditorMenuAction[];
   isMenuOpen?: boolean;
@@ -332,6 +404,7 @@ export function CurrentActivityGraphViewport({
   selectedVisualGroupId = null,
   selectedWaypointEdgeId = null,
   visualGroupAriaLabel,
+  visualGroupOutlineAriaLabel,
   visualGroupCanEdit = false,
   visualGroupControls = null,
   visualGroupResizeHandleAriaLabel,
@@ -341,6 +414,7 @@ export function CurrentActivityGraphViewport({
   saveControls,
   saveDisabledReason,
   visibilityControls,
+  viewportMeasurement,
   flowContainerRef,
   flowInstanceRef,
 }: {
@@ -392,6 +466,10 @@ export function CurrentActivityGraphViewport({
   selectedVisualGroupId?: string | null;
   selectedWaypointEdgeId?: string | null;
   visualGroupAriaLabel?: (group: FactoryLayoutGroup) => string;
+  visualGroupOutlineAriaLabel?: (
+    group: FactoryLayoutGroup,
+    edge: "top" | "right" | "bottom" | "left",
+  ) => string;
   visualGroupCanEdit?: boolean;
   visualGroupResizeHandleAriaLabel?: (
     corner: "ne" | "nw" | "se" | "sw",
@@ -418,6 +496,7 @@ export function CurrentActivityGraphViewport({
   saveControls: CurrentActivityGraphViewportSaveControls;
   saveDisabledReason?: string;
   visibilityControls: CurrentActivityGraphViewportVisibilityControls;
+  viewportMeasurement?: MeasuredCurrentActivityGraphViewport;
   flowContainerRef?: MutableRefObject<HTMLElement | null>;
   flowInstanceRef?: MutableRefObject<ReactFlowInstance | null>;
 }) {
@@ -432,15 +511,17 @@ export function CurrentActivityGraphViewport({
   const touchPanePanProps = useFactoryGraphTouchPanePan(activeFlowInstanceRef);
   const isValidConnection = buildCurrentActivityIsValidConnection({
     activeTool: editorControls.activeTool,
-    editorMode: editorControls.isEditing,
+    editorMode: editorControls.isEditing && editorControls.canInteract,
     nodes,
   });
-  const graphViewport =
+  const measuredGraphViewport =
     useMeasuredCurrentActivityGraphViewport(flowContainerRef);
+  const graphViewport = viewportMeasurement ?? measuredGraphViewport;
   const canonicalLayoutViewport = layoutControls.canonicalViewport ?? null;
   const shouldFitView = canonicalLayoutViewport == null;
   const skipNextViewportMoveEndRef = useRef(false);
-  const canPersistLayoutChanges = layoutControls.canMoveLayout;
+  const canEditGraph = editorControls.isEditing && editorControls.canInteract;
+  const canPersistLayoutChanges = canEditGraph && layoutControls.canMoveLayout;
   const moveLayoutNode = canPersistLayoutChanges
     ? layoutControls.moveNode
     : undefined;
@@ -453,7 +534,7 @@ export function CurrentActivityGraphViewport({
   const updatePlacementViewport = addControls.updatePlacementViewport;
   const reportPlacementViewport = useCallback(
     (viewport: { x: number; y: number; zoom: number }) => {
-      if (!graphViewport.ready) {
+      if (!canEditGraph || !graphViewport.ready) {
         return;
       }
 
@@ -467,6 +548,7 @@ export function CurrentActivityGraphViewport({
       graphViewport.height,
       graphViewport.ready,
       graphViewport.width,
+      canEditGraph,
       updatePlacementViewport,
     ],
   );
@@ -490,6 +572,10 @@ export function CurrentActivityGraphViewport({
   }, [activeFlowInstanceRef, canonicalLayoutViewport, reportPlacementViewport]);
   const handleConnect = useCallback(
     (connection: Connection) => {
+      if (!canEditGraph) {
+        return;
+      }
+
       onConnect?.({
         ...connection,
         source: connection.source
@@ -500,7 +586,17 @@ export function CurrentActivityGraphViewport({
           : connection.target,
       });
     },
-    [nodes, onConnect],
+    [canEditGraph, nodes, onConnect],
+  );
+  const handleAuthorizedNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      if (!canEditGraph) {
+        return;
+      }
+
+      handleNodesChange(changes);
+    },
+    [canEditGraph, handleNodesChange],
   );
   const handleEditorCanvasKeyDown = useCallback(
     (event: KeyboardEvent<HTMLElement>) => {
@@ -510,7 +606,7 @@ export function CurrentActivityGraphViewport({
       }
 
       if (
-        !editorControls.isEditing ||
+        !canEditGraph ||
         !shouldHandleFactoryGraphEditorKeyboardShortcut(event.target)
       ) {
         return;
@@ -545,9 +641,9 @@ export function CurrentActivityGraphViewport({
     },
     [
       canDeleteGraphSelection,
+      canEditGraph,
       clearGraphSelection,
       deleteGraphSelection,
-      editorControls.isEditing,
       layoutControls,
     ],
   );
@@ -623,8 +719,7 @@ export function CurrentActivityGraphViewport({
               nodes={nodes}
               edgesFocusable={editorControls.isEditing}
               nodesConnectable={
-                editorControls.isEditing &&
-                editorControls.activeTool !== "delete"
+                canEditGraph && editorControls.activeTool !== "delete"
               }
               onConnect={handleConnect}
               onInit={(instance) => {
@@ -633,24 +728,21 @@ export function CurrentActivityGraphViewport({
               }}
               onError={handleCurrentActivityReactFlowError}
               onEdgeClick={(_event, edge) => {
-                if (
-                  editorControls.isEditing &&
-                  editorControls.activeTool === "delete"
-                ) {
+                if (canEditGraph && editorControls.activeTool === "delete") {
                   onEditorEdgeClick?.(
                     factoryGraphEdgeIdForRenderedEdge(nodes, edge),
                   );
                   return;
                 }
 
-                if (editorControls.isEditing) {
+                if (canEditGraph) {
                   onEditorEdgeClick?.(
                     factoryGraphEdgeIdForRenderedEdge(nodes, edge),
                   );
                 }
               }}
               onEdgeDoubleClick={(event, edge) => {
-                if (!editorControls.isEditing || !onEditorEdgeDoubleClick) {
+                if (!canEditGraph || !onEditorEdgeDoubleClick) {
                   return;
                 }
 
@@ -667,28 +759,31 @@ export function CurrentActivityGraphViewport({
                   }),
                 );
               }}
-              nodesDraggable={true}
+              nodesDraggable={canPersistLayoutChanges}
               onNodeClick={(_, node) => {
-                if (
-                  editorControls.isEditing &&
-                  editorControls.activeTool === "delete"
-                ) {
+                if (canEditGraph && editorControls.activeTool === "delete") {
                   onEditorNodeClick?.(
                     factoryGraphNodeIdForRenderedNode(nodes, node.id),
                   );
                 }
               }}
               onMoveEnd={(_, viewport) => {
-                reportPlacementViewport(viewport);
                 if (skipNextViewportMoveEndRef.current) {
                   skipNextViewportMoveEndRef.current = false;
                   return;
                 }
 
-                updateLayoutViewport?.(viewport);
+                if (!canEditGraph) {
+                  return;
+                }
+
+                reportPlacementViewport(viewport);
+                if (canPersistLayoutChanges) {
+                  updateLayoutViewport?.(viewport);
+                }
               }}
               onNodeDragStart={(_, node) => {
-                if (!editorControls.isEditing) {
+                if (!canPersistLayoutChanges) {
                   return;
                 }
 
@@ -717,6 +812,11 @@ export function CurrentActivityGraphViewport({
                 };
               }}
               onNodeDragStop={(_, node) => {
+                if (!canPersistLayoutChanges) {
+                  dragSessionRef.current = null;
+                  return;
+                }
+
                 const factoryGraphNodeId = (
                   node.data as { factoryGraphNodeId?: string } | undefined
                 )?.factoryGraphNodeId;
@@ -750,7 +850,7 @@ export function CurrentActivityGraphViewport({
                 }
               }}
               onEdgesChange={handleEdgesChange}
-              onNodesChange={handleNodesChange}
+              onNodesChange={handleAuthorizedNodesChange}
               onPaneClick={() => {
                 if (editorControls.activeTool !== "delete") {
                   clearGraphSelection?.();
@@ -764,7 +864,17 @@ export function CurrentActivityGraphViewport({
               }}
               proOptions={{ hideAttribution: true }}
             >
+              <FactoryGraphInitializationState
+                key="factory-graph-initialization"
+                nodeIds={nodes.map((node) => node.id)}
+              />
               <DashboardGraphBackground key="factory-graph-background" />
+              {!editorControls.isEditing && visualGroups.length > 0 ? (
+                <FactoryGraphGroupRegionLayer
+                  groups={visualGroups}
+                  key="factory-graph-group-regions"
+                />
+              ) : null}
               {editorControls.isEditing &&
               visualGroups.length > 0 &&
               onSelectVisualGroup &&
@@ -773,6 +883,7 @@ export function CurrentActivityGraphViewport({
                   key="factory-graph-visual-groups"
                   canEdit={visualGroupCanEdit}
                   groupAriaLabel={visualGroupAriaLabel}
+                  groupOutlineAriaLabel={visualGroupOutlineAriaLabel}
                   groups={visualGroups}
                   onMoveGroup={onMoveVisualGroup}
                   onResizeGroup={onResizeVisualGroup}

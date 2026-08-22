@@ -15,8 +15,8 @@ import (
 
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
+	workcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
-	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 )
 
 type rootTestHTTPClock struct{}
@@ -36,7 +36,6 @@ func TestSessionCommand_RegistersSubcommands(t *testing.T) {
 	for _, path := range [][]string{
 		{"session", "list"},
 		{"session", "show"},
-		{"session", "dispatches"},
 		{"session", "pause"},
 		{"session", "resume"},
 		{"session", "create"},
@@ -63,15 +62,18 @@ func TestSessionCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 	for _, want := range []string{
 		"list",
 		"show",
-		"dispatches",
 		"pause",
 		"resume",
+		"cancel",
+		"terminate",
 		"create",
 		"delete",
 		"you session list",
 		"you session show",
 		"you session pause",
 		"you session resume",
+		"you --remote --server http://factory.example:7437 session pause",
+		"you session resume session-beta --remote --server http://factory.example:7437",
 		"you session list --json",
 		"you session create --dir /workspace/fleet --port 9090",
 		"you session delete session-beta --port 9090 --json",
@@ -176,62 +178,15 @@ func TestSessionShowCommand_GlobalJSONMapsToConfig(t *testing.T) {
 	}
 }
 
-func TestSessionDispatchesCommand_GlobalJSONMapsToConfig(t *testing.T) {
-	originalListSessionDispatches := listSessionDispatches
-	defer func() {
-		listSessionDispatches = originalListSessionDispatches
-	}()
-
-	var got session.DispatchesConfig
-	listSessionDispatches = func(cfg session.DispatchesConfig) error {
-		got = cfg
-		return nil
-	}
-
+func TestSessionDispatchesCommand_IsUnknownAfterRemoval(t *testing.T) {
 	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"--json", "--server", "http://127.0.0.1:9090", "session", "dispatches", "dur-sess-js-run-n-001"})
+	root.SetArgs([]string{"session", "dispatches", "dur-sess-js-run-n-001"})
 
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute session dispatches with global --json: %v", err)
-	}
-	if !got.JSON {
-		t.Fatal("expected global --json to map to DispatchesConfig.JSON")
-	}
-	if got.Server != "http://127.0.0.1:9090" {
-		t.Fatalf("server = %q, want http://127.0.0.1:9090", got.Server)
-	}
-	if got.SessionID != "dur-sess-js-run-n-001" {
-		t.Fatalf("sessionId = %q, want dur-sess-js-run-n-001", got.SessionID)
-	}
-}
-
-func TestSessionDispatchesCommand_HelpDocumentsDurableInspection(t *testing.T) {
-	var out bytes.Buffer
-	root := newLegacyTestRootCommand()
-	root.SetOut(&out)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"session", "dispatches", "--help"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute session dispatches --help: %v", err)
-	}
-
-	help := out.String()
-	for _, want := range []string{
-		"dispatches <session-id>",
-		"dur-sess-",
-		"FactorySession",
-		"Dispatch",
-		"FactoryArtifact",
-		"ListFactorySessionDispatchesResponse",
-		"you session dispatches",
-		"--json",
-	} {
-		if !strings.Contains(help, want) {
-			t.Fatalf("session dispatches help missing %q:\n%s", want, help)
-		}
+	err := root.Execute()
+	if err == nil || !strings.Contains(err.Error(), `unknown command "dispatches"`) {
+		t.Fatalf("execute retired session dispatches = %v, want unknown command", err)
 	}
 }
 
@@ -396,20 +351,20 @@ func TestWorkMoveCommand_HelpDocumentsOperatorMove(t *testing.T) {
 	}
 }
 
-func TestWorkVisualizeCommand_HelpDocumentsReadOnlyFormatsAndRedirection(t *testing.T) {
+func TestWorkRenderCommand_HelpDocumentsReadOnlyFormatsAndRedirection(t *testing.T) {
 	var out bytes.Buffer
 	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"work", "visualize", "--help"})
+	root.SetArgs([]string{"work", "render", "--help"})
 
 	if err := root.Execute(); err != nil {
-		t.Fatalf("execute work visualize --help: %v", err)
+		t.Fatalf("execute work render --help: %v", err)
 	}
 
 	help := out.String()
 	for _, want := range []string{
-		"visualize <batch-file.json>",
+		"render <batch-file.json>",
 		"read-only",
 		"does not submit work",
 		"contact a running factory",
@@ -424,12 +379,24 @@ func TestWorkVisualizeCommand_HelpDocumentsReadOnlyFormatsAndRedirection(t *test
 		"mermaid or markdown-mermaid",
 	} {
 		if !strings.Contains(help, want) {
-			t.Fatalf("work visualize help missing %q:\n%s", want, help)
+			t.Fatalf("work render help missing %q:\n%s", want, help)
 		}
 	}
 }
 
-func TestWorkVisualizeCommand_DependentBatchWritesMermaidToStdout(t *testing.T) {
+func TestWorkVisualizeCommand_IsUnknownAfterRename(t *testing.T) {
+	root := newLegacyTestRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"work", "visualize"})
+
+	err := root.Execute()
+	if err == nil || !strings.Contains(err.Error(), `unknown command "visualize"`) {
+		t.Fatalf("execute retired work visualize = %v, want unknown command", err)
+	}
+}
+
+func TestWorkRenderCommand_DependentBatchWritesMermaidToStdout(t *testing.T) {
 	path := writeWorkVisualizeBatchFile(t, `{
   "requestId": "cli-dependent",
   "type": "FACTORY_REQUEST_BATCH",
@@ -444,9 +411,9 @@ func TestWorkVisualizeCommand_DependentBatchWritesMermaidToStdout(t *testing.T) 
   ]
 }`)
 
-	stdout, stderr, err := executeWorkVisualize(t, path)
+	stdout, stderr, err := executeWorkRender(t, path)
 	if err != nil {
-		t.Fatalf("execute work visualize: %v", err)
+		t.Fatalf("execute work render: %v", err)
 	}
 	if stderr != "" {
 		t.Fatalf("stderr = %q, want empty on success", stderr)
@@ -467,7 +434,7 @@ func TestWorkVisualizeCommand_DependentBatchWritesMermaidToStdout(t *testing.T) 
 	}
 }
 
-func TestWorkVisualizeCommand_IndependentWorkBatchHasStandaloneNodes(t *testing.T) {
+func TestWorkRenderCommand_IndependentWorkBatchHasStandaloneNodes(t *testing.T) {
 	path := writeWorkVisualizeBatchFile(t, `{
   "requestId": "cli-independent",
   "type": "FACTORY_REQUEST_BATCH",
@@ -477,9 +444,9 @@ func TestWorkVisualizeCommand_IndependentWorkBatchHasStandaloneNodes(t *testing.
   ]
 }`)
 
-	stdout, stderr, err := executeWorkVisualize(t, path)
+	stdout, stderr, err := executeWorkRender(t, path)
 	if err != nil {
-		t.Fatalf("execute work visualize: %v", err)
+		t.Fatalf("execute work render: %v", err)
 	}
 	if stderr != "" {
 		t.Fatalf("stderr = %q, want empty on success", stderr)
@@ -494,7 +461,7 @@ func TestWorkVisualizeCommand_IndependentWorkBatchHasStandaloneNodes(t *testing.
 	}
 }
 
-func TestWorkVisualizeCommand_InvalidDependencyReferenceFailsWithEmptyStdout(t *testing.T) {
+func TestWorkRenderCommand_InvalidDependencyReferenceFailsWithEmptyStdout(t *testing.T) {
 	path := writeWorkVisualizeBatchFile(t, `{
   "requestId": "cli-unknown-dep",
   "type": "FACTORY_REQUEST_BATCH",
@@ -506,7 +473,7 @@ func TestWorkVisualizeCommand_InvalidDependencyReferenceFailsWithEmptyStdout(t *
   ]
 }`)
 
-	stdout, stderr, err := executeWorkVisualize(t, path)
+	stdout, stderr, err := executeWorkRender(t, path)
 	if err == nil {
 		t.Fatal("expected non-zero exit for unknown dependency reference")
 	}
@@ -518,10 +485,10 @@ func TestWorkVisualizeCommand_InvalidDependencyReferenceFailsWithEmptyStdout(t *
 	}
 }
 
-func TestWorkVisualizeCommand_InvalidJSONFailsWithEmptyStdout(t *testing.T) {
+func TestWorkRenderCommand_InvalidJSONFailsWithEmptyStdout(t *testing.T) {
 	path := writeWorkVisualizeBatchFile(t, `{not-json`)
 
-	stdout, stderr, err := executeWorkVisualize(t, path)
+	stdout, stderr, err := executeWorkRender(t, path)
 	if err == nil {
 		t.Fatal("expected non-zero exit for invalid JSON")
 	}
@@ -533,8 +500,8 @@ func TestWorkVisualizeCommand_InvalidJSONFailsWithEmptyStdout(t *testing.T) {
 	}
 }
 
-func TestWorkVisualizeCommand_MissingFileFailsWithEmptyStdout(t *testing.T) {
-	stdout, stderr, err := executeWorkVisualize(t, filepath.Join(t.TempDir(), "missing.json"))
+func TestWorkRenderCommand_MissingFileFailsWithEmptyStdout(t *testing.T) {
+	stdout, stderr, err := executeWorkRender(t, filepath.Join(t.TempDir(), "missing.json"))
 	if err == nil {
 		t.Fatal("expected non-zero exit for missing batch file")
 	}
@@ -546,7 +513,7 @@ func TestWorkVisualizeCommand_MissingFileFailsWithEmptyStdout(t *testing.T) {
 	}
 }
 
-func TestWorkVisualizeCommand_MermaidAndMarkdownShareEquivalentEdges(t *testing.T) {
+func TestWorkRenderCommand_MermaidAndMarkdownShareEquivalentEdges(t *testing.T) {
 	path := writeWorkVisualizeBatchFile(t, `{
   "requestId": "cli-format-parity",
   "type": "FACTORY_REQUEST_BATCH",
@@ -561,17 +528,17 @@ func TestWorkVisualizeCommand_MermaidAndMarkdownShareEquivalentEdges(t *testing.
   ]
 }`)
 
-	mermaidStdout, mermaidStderr, err := executeWorkVisualize(t, path)
+	mermaidStdout, mermaidStderr, err := executeWorkRender(t, path)
 	if err != nil {
-		t.Fatalf("execute work visualize mermaid: %v", err)
+		t.Fatalf("execute work render mermaid: %v", err)
 	}
 	if mermaidStderr != "" {
 		t.Fatalf("mermaid stderr = %q, want empty on success", mermaidStderr)
 	}
 
-	markdownStdout, markdownStderr, err := executeWorkVisualize(t, "--format", "markdown-mermaid", path)
+	markdownStdout, markdownStderr, err := executeWorkRender(t, "--format", "markdown-mermaid", path)
 	if err != nil {
-		t.Fatalf("execute work visualize markdown-mermaid: %v", err)
+		t.Fatalf("execute work render markdown-mermaid: %v", err)
 	}
 	if markdownStderr != "" {
 		t.Fatalf("markdown stderr = %q, want empty on success", markdownStderr)
@@ -588,7 +555,7 @@ func TestWorkVisualizeCommand_MermaidAndMarkdownShareEquivalentEdges(t *testing.
 	}
 }
 
-func executeWorkVisualize(t *testing.T, args ...string) (stdout, stderr string, err error) {
+func executeWorkRender(t *testing.T, args ...string) (stdout, stderr string, err error) {
 	t.Helper()
 	originalVisualize := visualizeWork
 	visualizeWork = func(cfg workcli.VisualizeConfig) error {
@@ -621,7 +588,7 @@ func executeWorkVisualize(t *testing.T, args ...string) (stdout, stderr string, 
 	var out, errOut bytes.Buffer
 	root.SetOut(&out)
 	root.SetErr(&errOut)
-	cmdArgs := append([]string{"work", "visualize"}, args...)
+	cmdArgs := append([]string{"work", "render"}, args...)
 	root.SetArgs(cmdArgs)
 	err = root.Execute()
 	return out.String(), errOut.String(), err
@@ -687,15 +654,15 @@ func TestWorkShowCommand_HelpDocumentsVerifyFlow(t *testing.T) {
 	}
 }
 
-func TestFactoryQueryCommand_HelpDocumentsSessionListDiscoverability(t *testing.T) {
+func TestFactoryShowCommand_HelpDocumentsSessionListDiscoverability(t *testing.T) {
 	var out bytes.Buffer
 	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"factory", "query", "--help"})
+	root.SetArgs([]string{"factory", "show", "--help"})
 
 	if err := root.Execute(); err != nil {
-		t.Fatalf("execute factory query --help: %v", err)
+		t.Fatalf("execute factory show --help: %v", err)
 	}
 
 	help := out.String()
@@ -704,7 +671,7 @@ func TestFactoryQueryCommand_HelpDocumentsSessionListDiscoverability(t *testing.
 		"discover live session ids",
 	} {
 		if !strings.Contains(help, want) {
-			t.Fatalf("factory query help missing %q:\n%s", want, help)
+			t.Fatalf("factory show help missing %q:\n%s", want, help)
 		}
 	}
 }
@@ -859,17 +826,12 @@ func TestProductionRootUsesGeneratedSessionFamilyCutover(t *testing.T) {
 	if session.RunE != nil {
 		t.Fatal("session parent must remain non-runnable through generated cutover")
 	}
-	if len(session.Commands()) != 7 {
-		t.Fatalf("session child count = %d, want exactly 7 generated leaves", len(session.Commands()))
+	resourceSet, _, findErr := root.Find([]string{"session", "resource", "set"})
+	if findErr != nil {
+		t.Fatalf("Find(session resource set) error = %v", findErr)
 	}
-	for _, name := range []string{"create", "list", "show", "delete", "pause", "resume", "dispatches"} {
-		command, _, findErr := root.Find([]string{"session", name})
-		if findErr != nil {
-			t.Fatalf("Find(session %s) error = %v", name, findErr)
-		}
-		if command.RunE == nil {
-			t.Fatalf("session %s must attach resolved RunE through generated cutover", name)
-		}
+	if resourceSet.RunE == nil {
+		t.Fatal("session resource set must attach resolved RunE through generated cutover")
 	}
 	for _, name := range []string{"run", "submit", "factory", "models", "work"} {
 		if _, _, err := root.Find([]string{name}); err != nil {
@@ -888,6 +850,12 @@ func TestShowSessionUsesInjectedService(t *testing.T) {
 				return nil
 			},
 		}),
+		LocalSessionsCLI: session.Bind(session.Operations{
+			Show: func(cfg session.ShowConfig) error {
+				called = true
+				return nil
+			},
+		}),
 	}).NewCommand(nil, nil, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
@@ -897,5 +865,79 @@ func TestShowSessionUsesInjectedService(t *testing.T) {
 	}
 	if !called {
 		t.Fatal("injected session show service was not invoked")
+	}
+}
+
+func TestSessionLifecycleLeavesExecuteInjectedPlacementAdapter(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		args      []string
+		placement string
+		operation string
+		sessionID string
+		server    string
+	}{
+		{
+			name:      "local cancel",
+			args:      []string{"session", "cancel", "session-alpha"},
+			placement: "local",
+			operation: "cancel",
+			sessionID: "session-alpha",
+			server:    "http://localhost:7437",
+		},
+		{
+			name:      "remote terminate",
+			args:      []string{"--remote", "--server", "http://factory.example:7437", "session", "terminate", "session-beta"},
+			placement: "remote",
+			operation: "terminate",
+			sessionID: "session-beta",
+			server:    "http://factory.example:7437",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			runSessionLifecycleAdapterCase(t, test.args, test.placement, test.operation, test.sessionID, test.server)
+		})
+	}
+}
+
+func runSessionLifecycleAdapterCase(
+	t *testing.T,
+	args []string,
+	wantPlacement, wantOperation, wantSessionID, wantServer string,
+) {
+	t.Helper()
+	type lifecycleCall struct {
+		placement string
+		operation string
+		sessionID string
+		server    string
+	}
+	var calls []lifecycleCall
+	control := func(placement, operation string) func(session.LifecycleControlConfig) error {
+		return func(cfg session.LifecycleControlConfig) error {
+			calls = append(calls, lifecycleCall{placement, operation, cfg.SessionID, cfg.Server})
+			_, err := fmt.Fprintf(cfg.Output, "%s %s accepted\n", operation, cfg.SessionID)
+			return err
+		}
+	}
+	local := session.Bind(session.Operations{Cancel: control("local", "cancel"), Terminate: control("local", "terminate")})
+	remote := session.Bind(session.Operations{Cancel: control("remote", "cancel"), Terminate: control("remote", "terminate")})
+	root := (CommandFactory{ModelsCLI: rootModelsCLI, SessionsCLI: remote, LocalSessionsCLI: local}).NewCommand(nil, nil, nil)
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetErr(io.Discard)
+	root.SetArgs(args)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute %v: %v", args, err)
+	}
+	if len(calls) != 1 {
+		t.Fatalf("lifecycle adapter calls = %#v, want one call", calls)
+	}
+	call := calls[0]
+	if call.placement != wantPlacement || call.operation != wantOperation || call.sessionID != wantSessionID || call.server != wantServer {
+		t.Fatalf("lifecycle adapter call = %#v, want placement=%q operation=%q session=%q server=%q", call, wantPlacement, wantOperation, wantSessionID, wantServer)
+	}
+	if got := output.String(); got != wantOperation+" "+wantSessionID+" accepted\n" {
+		t.Fatalf("stdout = %q, want accepted outcome", got)
 	}
 }

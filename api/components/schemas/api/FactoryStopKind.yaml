@@ -5,3 +5,8 @@ enum:
   - BLOCKED
   - NEEDS_HUMAN
   - INTERRUPTED
+x-enum-varnames:
+  - PAUSED
+  - BLOCKED
+  - NEEDSHUMAN
+  - INTERRUPTED

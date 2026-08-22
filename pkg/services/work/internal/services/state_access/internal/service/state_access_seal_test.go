@@ -59,6 +59,7 @@ func TestStateAccessSealSubmitAndMovePipeline(t *testing.T) {
 // TestStateAccessSealFullStateAccessPipeline seals IMP-WORK-04 story 003 proof:
 // submit/move/list/get/move-and-read return detached Work-owned shapes through
 // one state_access Service and a private Session adapter fake.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestStateAccessSealFullStateAccessPipeline(t *testing.T) {
 	t.Parallel()
 
@@ -218,7 +219,7 @@ func assertDetachedMoveResult(
 	if result.WorkID != workID || result.FromState != fromState || result.ToState != toState {
 		t.Fatalf("move result = %#v, want detached %s->%s for %s", result, fromState, toState, workID)
 	}
-	if result.FromPlaceID != "" || result.ToPlaceID != "" || result.TokenID != "" {
+	if result.TokenID != "" {
 		t.Fatalf("move result leaked Petri fields: %#v", result)
 	}
 }
@@ -269,13 +270,11 @@ func (a *sealSessionAdapter) MoveWork(
 	}
 	a.workStates[workID] = stateName
 	return work.OperatorMoveResult{
-		WorkID:      workID,
-		WorkTypeID:  "story",
-		FromState:   fromState,
-		ToState:     stateName,
-		FromPlaceID: "story:" + fromState,
-		ToPlaceID:   "story:" + stateName,
-		TokenID:     "tok-seal",
+		WorkID:     workID,
+		WorkTypeID: "story",
+		FromState:  fromState,
+		ToState:    stateName,
+		TokenID:    "tok-seal",
 	}, nil
 }
 

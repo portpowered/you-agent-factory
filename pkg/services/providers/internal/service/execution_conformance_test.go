@@ -5,6 +5,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
@@ -45,7 +46,7 @@ func newConformanceRoot(
 	if err != nil {
 		return nil, err
 	}
-	return providerservice.New(catalogService, executionService)
+	return providerservice.New(catalogService, executionService, logging.NoopLogger{})
 }
 
 type streamingAdapter struct {
@@ -75,7 +76,7 @@ func (adapter *streamingAdapter) attempt(
 	adapter.recordStart(request)
 	defer adapter.recordCleanup()
 	if adapter.plan.MutateRequest {
-		request.ResumeSession.ID = "streaming-adapter-mutated"
+		request.UserMessage = "streaming-adapter-mutated"
 	}
 	if adapter.plan.WaitForContext {
 		<-ctx.Done()
@@ -138,7 +139,7 @@ func newFinalOnlyAdapter(plan executiontest.Plan) executiontest.Adapter {
 			state.mu.Unlock()
 		}()
 		if plan.MutateRequest {
-			request.ResumeSession.ID = "final-adapter-mutated"
+			request.UserMessage = "final-adapter-mutated"
 		}
 		if plan.WaitForContext {
 			<-ctx.Done()

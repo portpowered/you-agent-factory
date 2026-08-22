@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
@@ -123,7 +124,7 @@ func scanPeerServiceImports(
 			}
 			return nil
 		}
-		if !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+		if !strings.HasSuffix(entry.Name(), ".go") {
 			return nil
 		}
 		relative, err := filepath.Rel(repoRoot, path)
@@ -135,11 +136,19 @@ func scanPeerServiceImports(
 		if owner == "" || !inventory.hasOwner(owner) {
 			return nil
 		}
-		fileSet := token.NewFileSet()
-		file, err := parser.ParseFile(fileSet, path, nil, parser.ImportsOnly)
+		content, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
+		fileSet := token.NewFileSet()
+		file, err := parser.ParseFile(fileSet, path, content, parser.ImportsOnly|parser.ParseComments)
+		if err != nil {
+			return err
+		}
+		if ast.IsGenerated(file) {
+			return nil
+		}
+		class := classifyBoundarySource(relative)
 		packagePath := filepath.ToSlash(filepath.Dir(relative))
 		for _, spec := range file.Imports {
 			importPath, err := strconv.Unquote(spec.Path.Value)
@@ -156,6 +165,7 @@ func scanPeerServiceImports(
 				Rule:     rulePeerServiceImplementation,
 				FilePath: relative,
 				Target:   importPath,
+				Class:    class,
 				Line:     fileSet.Position(spec.Pos()).Line,
 			})
 		}

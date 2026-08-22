@@ -10,6 +10,7 @@ import (
 	"time"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	codex "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
 )
 
@@ -65,7 +66,7 @@ func TestCodexRootNormalizesFailureStagesAndSuppressesResults(t *testing.T) {
 			var cleanups atomic.Int32
 			effect := codex.EffectFunc(func(
 				_ context.Context,
-				_ providers.ExecuteRequest,
+				_ execution.ContinuationRequest,
 				observe func([]byte) error,
 			) (codex.EffectResult, error) {
 				defer cleanups.Add(1)
@@ -96,7 +97,7 @@ func TestCodexRootPreservesStartedSessionOnFailure(t *testing.T) {
 
 	effect := codex.EffectFunc(func(
 		_ context.Context,
-		_ providers.ExecuteRequest,
+		_ execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (codex.EffectResult, error) {
 		if err := observe([]byte(
@@ -117,6 +118,37 @@ func TestCodexRootPreservesStartedSessionOnFailure(t *testing.T) {
 		failure.SessionRef.Kind != providers.SessionIDKind ||
 		failure.SessionRef.ID != "thread-failed-42" {
 		t.Fatalf("Execute() error = %#v, want failed Codex session reference", err)
+	}
+}
+
+func TestCodexRootMarksUnknownTurnFailedAsUnrecognizedProviderRefusal(t *testing.T) {
+	t.Parallel()
+
+	const providerDetail = "future turn failure credential=secret"
+	effect := codex.EffectFunc(func(
+		_ context.Context,
+		_ execution.ContinuationRequest,
+		observe func([]byte) error,
+	) (codex.EffectResult, error) {
+		return codex.EffectResult{}, observe([]byte(
+			`{"type":"turn.failed","error":{"message":"` + providerDetail + `"}}` + "\n",
+		))
+	})
+
+	_, err := newCodexRoot(t, effect).Execute(t.Context(), codexFailureRequest())
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("Execute() error = %v, want providers.ExecuteFailure", err)
+	}
+	if failure.Kind != providers.ExecuteFailureKindUnknown {
+		t.Fatalf("failure kind = %q, want unknown", failure.Kind)
+	}
+	if failure.Diagnostics == nil ||
+		failure.Diagnostics.Metadata[providers.ExecuteDiagnosticMetadataUnrecognizedProviderRefusal] != "true" {
+		t.Fatalf("failure diagnostics = %#v, want unrecognized-refusal marker", failure.Diagnostics)
+	}
+	if strings.Contains(err.Error(), providerDetail) {
+		t.Fatalf("failure error leaked provider detail: %v", err)
 	}
 }
 
@@ -155,7 +187,7 @@ func TestCodexRootCancellationAndDeadlineReachEffectAndCleanUpOnce(t *testing.T)
 			var cleanups atomic.Int32
 			effect := codex.EffectFunc(func(
 				ctx context.Context,
-				_ providers.ExecuteRequest,
+				_ execution.ContinuationRequest,
 				_ func([]byte) error,
 			) (codex.EffectResult, error) {
 				close(started)
@@ -203,7 +235,7 @@ func TestCodexRootFailureSuppressesPreviouslyObservedSuccess(t *testing.T) {
 
 	effect := codex.EffectFunc(func(
 		_ context.Context,
-		_ providers.ExecuteRequest,
+		_ execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (codex.EffectResult, error) {
 		if err := observe(codexSuccessStream()); err != nil {
@@ -229,7 +261,7 @@ func TestCodexRootCarriesObservedSessionOnParseFailure(t *testing.T) {
 
 	effect := codex.EffectFunc(func(
 		_ context.Context,
-		_ providers.ExecuteRequest,
+		_ execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (codex.EffectResult, error) {
 		return codex.EffectResult{}, observe([]byte(
@@ -242,6 +274,48 @@ func TestCodexRootCarriesObservedSessionOnParseFailure(t *testing.T) {
 		failure.SessionRef == nil ||
 		failure.SessionRef.ID != "codex-session-partial" {
 		t.Fatalf("Execute() error = %#v, want observed session on parse failure", err)
+	}
+}
+
+func TestCodexRootCarriesBoundedRecordLimitThroughFailureDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	stream := `{"type":"thread.started","thread_id":"thread-record-limit"}` + "\n" +
+		`{"type":"item.updated","item":{"id":"oversized-record","type":"agent_message","text":"` +
+		strings.Repeat("x", (1<<20)+1) + `"}}` + "\n"
+	effect := codex.EffectFunc(func(
+		_ context.Context,
+		_ execution.ContinuationRequest,
+		observe func([]byte) error,
+	) (codex.EffectResult, error) {
+		return codex.EffectResult{}, observe([]byte(stream))
+	})
+
+	result, err := newCodexRoot(t, effect).Execute(t.Context(), codexFailureRequest())
+	if !reflect.DeepEqual(result, providers.ExecuteResult{}) {
+		t.Fatalf("Execute() result = %#v, want zero result", result)
+	}
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) || failure.Kind != providers.ExecuteFailureKindDependency {
+		t.Fatalf("Execute() error = %#v, want dependency failure", err)
+	}
+	if !strings.Contains(failure.Message, "record limit") ||
+		!strings.Contains(failure.Message, "configured 1048576") ||
+		!strings.Contains(failure.Message, "thread-record-limit") {
+		t.Fatalf("failure message = %q, want safe record-limit context", failure.Message)
+	}
+	if failure.Diagnostics == nil {
+		t.Fatal("failure diagnostics = nil, want bounded limit context")
+	}
+	metadata := failure.Diagnostics.Metadata
+	if metadata["inspection_limit_category"] != "record" ||
+		metadata["inspection_limit_configured"] != "1048576" ||
+		metadata["inspection_limit_observed"] == "" ||
+		metadata["inspection_limit_line"] != "2" {
+		t.Fatalf("failure limit metadata = %#v, want bounded record facts", metadata)
+	}
+	if strings.Contains(err.Error(), strings.Repeat("x", 128)) {
+		t.Fatalf("failure error leaked oversized rollout content: %v", err)
 	}
 }
 

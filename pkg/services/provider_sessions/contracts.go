@@ -139,9 +139,14 @@ type ParseSummary struct {
 	ParseErrors        []LineError
 	Reasoning          []ReasoningSummary
 	TokenUsage         *TokenUsage
-	Turns              []TurnSummary
-	UnknownEventCount  int
-	UnknownEvents      []UnknownEvent
+	// CumulativeInputTokens contains the supported cumulative input counters
+	// observed in provider usage events, in transcript order. Worker Sessions
+	// uses these already-parsed counters to derive per-turn context values;
+	// providers that do not expose this evidence leave the slice empty.
+	CumulativeInputTokens []int
+	Turns                 []TurnSummary
+	UnknownEventCount     int
+	UnknownEvents         []UnknownEvent
 }
 
 type FunctionCallSummary struct {
@@ -236,13 +241,15 @@ var (
 	ErrUnsupportedProvider         = errors.New("unsupported provider session provider")
 )
 
-// LookupError retains normalized provider context. Root is optional legacy
-// diagnostic context; Codex lookups omit it so configured host paths do not
-// cross the Provider Sessions boundary.
+// LookupError retains normalized provider and session context. SessionID is
+// the validated opaque session identity that failed inspection. Root is
+// optional legacy diagnostic context; Codex lookups omit it so configured host
+// paths do not cross the Provider Sessions boundary.
 type LookupError struct {
-	Provider Provider
-	Root     string
-	Err      error
+	Provider  Provider
+	SessionID string
+	Root      string
+	Err       error
 }
 
 func (e *LookupError) Error() string {

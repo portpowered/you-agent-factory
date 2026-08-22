@@ -13,9 +13,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -51,6 +54,31 @@ func TestWriteInvocationError_WritesOneStandardErrorResponseForTerminalFailure(t
 	}
 	if response.Message != "goal execution failed [session=session-failed workId=work-failed]" {
 		t.Fatalf("message = %q", response.Message)
+	}
+}
+
+func TestWriteIncompleteDrainError_WritesExactHumanDiagnostic(t *testing.T) {
+	t.Parallel()
+
+	var stderr strings.Builder
+	err := fmt.Errorf("runtime stopped: %w", &factoryruntime.IncompleteDrainError{NonTerminalWorkCount: 3})
+	if !WriteIncompleteDrainError(&stderr, err) {
+		t.Fatal("incomplete drain error was not handled")
+	}
+	if got, want := stderr.String(), "Error: factory session drained with 3 non-terminal work items; run is incomplete\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
+func TestWriteIncompleteDrainError_IgnoresOtherFailures(t *testing.T) {
+	t.Parallel()
+
+	var stderr strings.Builder
+	if WriteIncompleteDrainError(&stderr, errors.New("ordinary failure")) {
+		t.Fatal("ordinary failure was incorrectly classified as incomplete drain")
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
 	}
 }
 
@@ -114,6 +142,42 @@ func TestMapServerFailureWritesDeclaredStandardError(t *testing.T) {
 	if response.Code != factoryapi.ErrorResponseCode(ServerBindFailedCode) ||
 		response.Family != factoryapi.ErrorFamilyInternalServerError {
 		t.Fatalf("ErrorResponse = %#v", response)
+	}
+}
+
+func TestMapServerFailureDiagnosesPreReadinessFailureWithoutRawCause(t *testing.T) {
+	t.Parallel()
+
+	secretCause := errors.New("provider-token=SECRET")
+	mapped := MapServerFailure(&initializer.RuntimeHostStartupError{Cause: secretCause})
+	var invocationErr *InvocationError
+	if !errors.As(mapped, &invocationErr) {
+		t.Fatalf("mapped error = %T, want InvocationError", mapped)
+	}
+	if invocationErr.Code != ServerStartFailedCode {
+		t.Fatalf("mapped code = %q, want %q", invocationErr.Code, ServerStartFailedCode)
+	}
+	if !strings.Contains(invocationErr.Message, "requested server did not start") ||
+		!strings.Contains(invocationErr.Message, "failure_class=runtime_startup_failed") {
+		t.Fatalf("mapped message = %q, want safe startup classification", invocationErr.Message)
+	}
+	if strings.Contains(invocationErr.Message, "SECRET") {
+		t.Fatalf("mapped message = %q, must not expose raw startup cause", invocationErr.Message)
+	}
+}
+
+func TestMapServerFailurePreservesSafePreReadinessCause(t *testing.T) {
+	t.Parallel()
+
+	cause := &InvocationError{Code: InvocationErrorCodeFailed, Message: "required input is missing"}
+	mapped := MapServerFailure(&initializer.RuntimeHostStartupError{Cause: cause})
+	var invocationErr *InvocationError
+	if !errors.As(mapped, &invocationErr) {
+		t.Fatalf("mapped error = %T, want InvocationError", mapped)
+	}
+	if invocationErr.Code != cause.Code ||
+		invocationErr.Message != "requested server did not start: RUN_INVOCATION_FAILED: required input is missing" {
+		t.Fatalf("mapped error = %#v, want preserved safe cause", invocationErr)
 	}
 }
 
@@ -198,16 +262,23 @@ func TestHumanFactoryEventRenderer_CustomerLifecycleGolden(t *testing.T) {
 	}
 }
 
-func TestJSONFactoryEventRenderer_EmitsDiscriminatedSafeNDJSON(t *testing.T) {
+func TestJSONFactoryEventRenderer_EmitsCanonicalFactoryEventAndInvocationResponseNDJSON(t *testing.T) {
 	const providerCanary = "PRIVATE_PROVIDER_CHUNK_71f2"
 	providerResponse := providerCanary
+	wantPrimaryResult := []work.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "first terminal part"},
+		{Type: work.WorkContentPartTypeText, Text: "second terminal part"},
+	}
 	events := append(canonicalJavaScriptFactoryEvents(), canonicalFactoryEventWithPayload(
 		4,
 		factorydefinitions.FactoryEventTypeInferenceResponse,
 		workerexecution.InferenceResponseEventPayload{
-			Diagnostics:     json.RawMessage(`{"schemaVersion":"agent-factory.response-event.v1","textDelta":"PRIVATE_PROVIDER_CHUNK_71f2"}`),
-			ProviderSession: &workerexecution.ProviderSessionMetadata{Provider: "codex", ID: providerCanary},
-			Response:        &providerResponse,
+			Diagnostics: json.RawMessage(`{"schemaVersion":"agent-factory.response-event.v1","textDelta":"PRIVATE_PROVIDER_CHUNK_71f2"}`),
+			Continuation: func() *providers.ContinuationRef {
+				ref := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: providerCanary}.ContinuationRef()
+				return &ref
+			}(),
+			Response: &providerResponse,
 		},
 	))
 
@@ -216,7 +287,7 @@ func TestJSONFactoryEventRenderer_EmitsDiscriminatedSafeNDJSON(t *testing.T) {
 	renderer.PresentFactoryEvents(events)
 	if err := renderer.WriteFinalInvocationResult(apisurface.FactoryInvocationResult{
 		RequestID: "request-ndjson", Status: factorydefinitions.InvocationTerminalStatusCompleted,
-		PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "complete"}},
+		PrimaryResult: wantPrimaryResult,
 	}); err != nil {
 		t.Fatalf("writeFinalInvocationResult: %v", err)
 	}
@@ -228,8 +299,15 @@ func TestJSONFactoryEventRenderer_EmitsDiscriminatedSafeNDJSON(t *testing.T) {
 	for index, line := range lines[:len(events)] {
 		assertFactoryEventNDJSONRecord(t, line, events[index], index)
 	}
-	assertInvocationResultNDJSONRecord(t, lines[len(lines)-1])
-	for _, forbidden := range []string{providerCanary, "textDelta", "providerSession", "FactoryResponseEvent"} {
+	assertInvocationResultNDJSONRecord(t, lines[len(lines)-1], wantPrimaryResult)
+	for _, forbidden := range []string{
+		providerCanary,
+		"textDelta",
+		"providerSession",
+		"FactoryResponseEvent",
+		`"recordType":"response_event"`,
+		`"invocation":`,
+	} {
 		if strings.Contains(output.String(), forbidden) {
 			t.Fatalf("NDJSON exposed provider-only value %q:\n%s", forbidden, output.String())
 		}
@@ -254,13 +332,16 @@ func assertFactoryEventNDJSONRecord(
 	if err := json.Unmarshal(record["event"], &event); err != nil {
 		t.Fatalf("decode event %d: %v", index, err)
 	}
+	if event.Id != want.Id || event.SchemaVersion != want.SchemaVersion || event.Type != want.Type {
+		t.Fatalf("event %d canonical identity changed: %#v, want id=%q schema=%q type=%q", index, event, want.Id, want.SchemaVersion, want.Type)
+	}
 	if event.Context.Sequence != want.Context.Sequence || event.Context.SessionSequence == nil ||
 		*event.Context.SessionSequence != *want.Context.SessionSequence {
 		t.Fatalf("event %d sequence context changed: %#v", index, event.Context)
 	}
 }
 
-func assertInvocationResultNDJSONRecord(t *testing.T, line string) {
+func assertInvocationResultNDJSONRecord(t *testing.T, line string, wantPrimaryResult []work.WorkContentPart) {
 	t.Helper()
 	var record map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(line), &record); err != nil {
@@ -269,6 +350,14 @@ func assertInvocationResultNDJSONRecord(t *testing.T, line string) {
 	if len(record) != 2 || string(record["recordType"]) != `"invocation_result"` || len(record["response"]) == 0 {
 		t.Fatalf("terminal record has invalid discriminator shape: %s", line)
 	}
+	var terminal remoteInvocationNDJSONRecord
+	if err := json.Unmarshal([]byte(line), &terminal); err != nil {
+		t.Fatalf("decode terminal response: %v", err)
+	}
+	if terminal.Response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("terminal status = %q, want completed", terminal.Response.Status)
+	}
+	assertGeneratedWorkContentPartsFromResponse(t, terminal.Response.PrimaryResult, wantPrimaryResult)
 }
 
 func TestJSONFactoryEventRenderer_WithoutTerminalWritesOnlyFactoryEvents(t *testing.T) {

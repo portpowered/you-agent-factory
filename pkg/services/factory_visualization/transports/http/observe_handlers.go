@@ -12,7 +12,7 @@ func (a *Adapter) ObserveHTTP(
 	ctx context.Context,
 	body io.Reader,
 ) (ObserveHTTPResponse, error) {
-	req, err := decodeObserveHTTPRequest(body)
+	req, diagnostics, err := decodeObserveHTTPRequest(body)
 	if err != nil {
 		return ObserveHTTPResponse{}, err
 	}
@@ -23,7 +23,9 @@ func (a *Adapter) ObserveHTTP(
 	if err != nil {
 		return ObserveHTTPResponse{}, err
 	}
-	return observeHTTPResponseFromResult(result), nil
+	response := observeHTTPResponseFromResult(result)
+	response.ignoredJSONPaths = diagnostics.Paths()
+	return response, nil
 }
 
 // HandleObserve serves POST /factory-visualization/observe.
@@ -33,6 +35,7 @@ func (a *Adapter) HandleObserve(w http.ResponseWriter, r *http.Request) {
 		a.writeObserveRequestError(w, err)
 		return
 	}
+	a.writeCompatibilityWarning(w, "observe", response.ignoredJSONPaths)
 	a.writeJSON(w, http.StatusOK, response)
 }
 

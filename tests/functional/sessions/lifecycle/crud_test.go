@@ -28,6 +28,7 @@ const sessionLifecycleCRUDMissingSessionID = "dur-sess-missing-999"
 // and session show with matching folder identity and live runtime status markers,
 // and session delete removes it so subsequent list/show no longer treat it as
 // an open session participating in the owned runtime lifecycle.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestFactorySessionCreateListShowDelete(t *testing.T) {
 	primaryFactoryDir := support.ScaffoldFactory(t, sessionLifecycleCRUDFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -143,9 +144,7 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 		t.Fatalf("you session show after delete unexpectedly succeeded:\n%s", showAfterDeleteOut)
 	}
 	showAfterDelete := string(showAfterDeleteOut)
-	if !strings.Contains(showAfterDelete, "not found") {
-		t.Fatalf("session show after delete missing not-found diagnostic:\n%s", showAfterDelete)
-	}
+	support.RequireSafeCLIDiagnostic(t, showAfterDelete)
 	if strings.Contains(showAfterDelete, sessionID) && strings.Contains(showAfterDelete, `"id"`) {
 		t.Fatalf("session show after delete must not emit a success session payload:\n%s", showAfterDelete)
 	}
@@ -826,11 +825,9 @@ func assertCLISessionNotFoundFailure(
 	}
 
 	text := string(output)
-	if !strings.Contains(strings.ToLower(text), "not found") {
-		t.Fatalf("session %s missing not-found diagnostic:\n%s", operation, text)
-	}
-	if !strings.Contains(text, sessionID) {
-		t.Fatalf("session %s missing session id %q in diagnostic:\n%s", operation, sessionID, text)
+	support.RequireSafeCLIDiagnostic(t, text)
+	if strings.Contains(text, sessionID) {
+		t.Fatalf("session %s leaked session id %q in safe diagnostic:\n%s", operation, sessionID, text)
 	}
 
 	if expectDeleteConfirmation {

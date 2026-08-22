@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "suite": "functional",
+  "entries": [
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/factory_runtime",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "Linux build constraints leave this functional package without runnable Go test files"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/operator_settings",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "tests/functional/operator_settings: Linux CI run 32447648976 on head 9ed4acf7200683e4e8324588286468d107e6867f reported terminal skip with zero top-level tests under both the default and functionallong tag sets; https://github.com/portpowered/you-agent-factory/actions/runs/32447648976"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/providers/agy",
+      "test": "TestAgyLiveSmoke",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "requires YOU_AGY_LIVE_SMOKE=1 and live AGY credentials"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/providers/contract",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "tests/functional/providers/contract: Linux CI run 32447648976 on head 9ed4acf7200683e4e8324588286468d107e6867f reported terminal skip with zero top-level tests under both the default and functionallong tag sets; https://github.com/portpowered/you-agent-factory/actions/runs/32447648976"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/providers/mock_workers",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "tests/functional/providers/mock_workers: Linux CI run 32447648976 on head 9ed4acf7200683e4e8324588286468d107e6867f reported terminal skip with zero top-level tests under both the default and functionallong tag sets; https://github.com/portpowered/you-agent-factory/actions/runs/32447648976"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/providers/observability",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "tests/functional/providers/observability: Linux CI run 32447648976 on head 9ed4acf7200683e4e8324588286468d107e6867f reported terminal skip with zero top-level tests under both the default and functionallong tag sets; https://github.com/portpowered/you-agent-factory/actions/runs/32447648976"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/providers/script",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "tests/functional/providers/script: Linux CI run 32447648976 on head 9ed4acf7200683e4e8324588286468d107e6867f reported terminal skip with zero top-level tests under both the default and functionallong tag sets; https://github.com/portpowered/you-agent-factory/actions/runs/32447648976"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/recordings",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "Linux build constraints leave this functional package without runnable Go test files"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/transport/terminalportlock",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "tests/functional/transport/terminalportlock: Linux CI run 32447648976 on head 9ed4acf7200683e4e8324588286468d107e6867f reported terminal skip with zero top-level tests under both the default and functionallong tag sets; https://github.com/portpowered/you-agent-factory/actions/runs/32447648976"
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/tests/functional/work",
+      "bucket": "ENVIRONMENT-DEPENDENT",
+      "reason": "Linux build constraints leave this functional package without runnable Go test files"
+    }
+  ]
+}

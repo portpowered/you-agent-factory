@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/wire"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -27,6 +27,8 @@ import (
 // generated Session and Work leaves reach their typed transport handlers through
 // the public process root with the canonical argument and flag shapes.
 func TestManifestProjectedRepresentativeHandlersAcceptCanonicalInputs(t *testing.T) {
+	t.Parallel()
+
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
@@ -37,12 +39,12 @@ func TestManifestProjectedRepresentativeHandlersAcceptCanonicalInputs(t *testing
 		{"you", "--server", unavailableServer, "session", "list", "--json"},
 		{"you", "--server", unavailableServer, "session", "show", "session-1", "--json"},
 		{"you", "--server", unavailableServer, "session", "delete", "session-1", "--json"},
-		{"you", "--server", unavailableServer, "session", "pause", "session-1", "--json"},
-		{"you", "--server", unavailableServer, "session", "resume", "session-1", "--json"},
-		{"you", "--server", unavailableServer, "session", "dispatches", "session-1", "--json"},
+		{"you", "--remote", "--server", unavailableServer, "session", "pause", "session-1", "--json"},
+		{"you", "--remote", "--server", unavailableServer, "session", "resume", "session-1", "--json"},
 		{"you", "--server", unavailableServer, "work", "list", "--json"},
 		{"you", "--server", unavailableServer, "work", "show", "work-1", "--json"},
 		{"you", "--server", unavailableServer, "work", "move", "work-1", "complete", "--json"},
+		{"you", "--server", unavailableServer, "worker-sessions", "list", "--json"},
 	}
 	for _, args := range cases {
 		_, _, executeErr := executeFactoryArgs(
@@ -66,6 +68,8 @@ func TestManifestProjectedRepresentativeHandlersAcceptCanonicalInputs(t *testing
 
 // TestCurrentFactoryFailsBeforeProductActivation proves invalid Current Factory selection is side-effect free.
 func TestCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		prepare  func(*testing.T, string)
@@ -101,6 +105,8 @@ func TestCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
 			runCurrentFactoryFailureCase(t, test.prepare, test.wantCode)
 		})
 	}
@@ -108,6 +114,8 @@ func TestCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
 
 // TestServerCurrentFactoryFailsBeforeProductActivation proves server validation precedes product activation.
 func TestServerCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		prepare  func(*testing.T, string)
@@ -132,6 +140,8 @@ func TestServerCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
 			runCurrentFactoryFailureCaseForCommand(t, "server", test.prepare, test.wantCode)
 		})
 	}
@@ -139,6 +149,8 @@ func TestServerCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
 
 // TestRunScopedSiteMissingCurrentFactoryFailsBeforeProductActivation proves site selection does not bypass validation.
 func TestRunScopedSiteMissingCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
+	t.Parallel()
+
 	workingDirectory := t.TempDir()
 	var effects atomic.Int32
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
@@ -213,7 +225,7 @@ func runCurrentFactoryFailureCaseForCommand(
 			effects.Add(1)
 			return "unexpected-session"
 		},
-		ProviderOverride: countingProvider{calls: &effects},
+		ProviderOverride: newCountingProvider(&effects),
 	})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
@@ -241,8 +253,12 @@ func runCurrentFactoryFailureCaseForCommand(
 // TestServerNonTTYReadinessGatesBrowserAndCancellationJoinsOwnedServer proves
 // that server-owned browser startup is independent of stdout TTY state.
 func TestServerNonTTYReadinessGatesBrowserAndCancellationJoinsOwnedServer(t *testing.T) {
+	t.Parallel()
+
 	for iteration := 0; iteration < 3; iteration++ {
 		t.Run(fmt.Sprintf("iteration-%d", iteration), func(t *testing.T) {
+			t.Parallel()
+
 			runServerLifecycleCase(t)
 		})
 	}
@@ -285,7 +301,7 @@ func runServerLifecycleCase(t *testing.T) {
 			cancel()
 			return nil
 		},
-		ProviderOverride: countingProvider{calls: &providerCalls},
+		ProviderOverride: newCountingProvider(&providerCalls),
 	})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
@@ -320,6 +336,8 @@ func runServerLifecycleCase(t *testing.T) {
 
 // TestServerBindExhaustionWritesDeclaredErrorWithoutResidualEffects proves terminal bind failures leave no lifecycle effects.
 func TestServerBindExhaustionWritesDeclaredErrorWithoutResidualEffects(t *testing.T) {
+	t.Parallel()
+
 	workingDirectory := t.TempDir()
 	factoryDir := filepath.Join(workingDirectory, "factory")
 	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
@@ -372,9 +390,13 @@ func TestServerBindExhaustionWritesDeclaredErrorWithoutResidualEffects(t *testin
 			t.Fatalf("server stdout exposed readiness %q before bind failure:\n%s", forbidden, stdout)
 		}
 	}
+	stderrLines := strings.Split(strings.TrimSpace(stderr), "\n")
+	if len(stderrLines) != 2 || !strings.Contains(stderrLines[0], "--server is deprecated") || !strings.Contains(stderrLines[0], "--listen") {
+		t.Fatalf("server stderr = %q, want one migration warning followed by one ErrorResponse", stderr)
+	}
 	var response factoryapi.ErrorResponse
-	if err := json.Unmarshal([]byte(stderr), &response); err != nil {
-		t.Fatalf("server stderr is not exactly one ErrorResponse: %v\n%s", err, stderr)
+	if err := json.Unmarshal([]byte(stderrLines[1]), &response); err != nil {
+		t.Fatalf("server stderr ErrorResponse is invalid: %v\n%s", err, stderr)
 	}
 	if response.Code != factoryapi.ErrorResponseCode("SERVER_BIND_FAILED") {
 		t.Fatalf("ErrorResponse = %#v, want SERVER_BIND_FAILED", response)
@@ -393,6 +415,8 @@ func TestServerBindExhaustionWritesDeclaredErrorWithoutResidualEffects(t *testin
 
 // TestCurrentFactoryRunsToIdleWithoutStartingServer proves ordinary Current Factory runs remain serverless.
 func TestCurrentFactoryRunsToIdleWithoutStartingServer(t *testing.T) {
+	t.Parallel()
+
 	workingDirectory := t.TempDir()
 	factoryDir := filepath.Join(workingDirectory, "factory")
 	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
@@ -422,7 +446,7 @@ func TestCurrentFactoryRunsToIdleWithoutStartingServer(t *testing.T) {
 		RuntimeHostObserver: func(factorysessions.RuntimeHostBinding) {
 			effects.Add(1)
 		},
-		ProviderOverride: countingProvider{calls: &effects},
+		ProviderOverride: newCountingProvider(&effects),
 	})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
@@ -450,6 +474,8 @@ func TestCurrentFactoryRunsToIdleWithoutStartingServer(t *testing.T) {
 
 // TestCurrentFactoryRunScopedServerStopsAtIdleAndSiteOpensAfterReadiness proves one-shot hosting and site readiness.
 func TestCurrentFactoryRunScopedServerStopsAtIdleAndSiteOpensAfterReadiness(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		flag        string
@@ -461,6 +487,8 @@ func TestCurrentFactoryRunScopedServerStopsAtIdleAndSiteOpensAfterReadiness(t *t
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
 			workingDirectory := t.TempDir()
 			factoryDir := filepath.Join(workingDirectory, "factory")
 			if err := os.MkdirAll(factoryDir, 0o755); err != nil {
@@ -524,6 +552,8 @@ func TestCurrentFactoryRunScopedServerStopsAtIdleAndSiteOpensAfterReadiness(t *t
 
 // TestContinuousRunScopedServerKeepsListenerUntilCancellation proves continuous hosting follows invocation cancellation.
 func TestContinuousRunScopedServerKeepsListenerUntilCancellation(t *testing.T) {
+	t.Parallel()
+
 	workingDirectory := t.TempDir()
 	factoryDir := filepath.Join(workingDirectory, "factory")
 	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
@@ -661,12 +691,17 @@ const idleCurrentFactoryJSON = `{
 }`
 
 type countingProvider struct {
+	testutil.NativeProvider
 	calls *atomic.Int32
 }
 
-var _ providercontract.Provider = countingProvider{}
+func newCountingProvider(calls *atomic.Int32) countingProvider {
+	provider := countingProvider{calls: calls}
+	provider.NativeProvider.ExecuteFunc = provider.Execute
+	return provider
+}
 
-func (provider countingProvider) Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
+func (provider countingProvider) Execute(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
 	provider.calls.Add(1)
-	return workers.InferenceResponse{}, nil
+	return providers.ExecuteResult{}, nil
 }

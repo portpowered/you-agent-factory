@@ -7,9 +7,13 @@ x-enum-varnames:
   - FactoryEventTypeRunRequest
   - FactoryEventTypeInitialStructureRequest
   - FactoryEventTypeFactoryChange
+  - FactoryEventTypeFactoryChangeRequest
+  - FactoryEventTypeFactoryChangeFailed
   - FactoryEventTypeWorkRequest
   - FactoryEventTypeRelationshipChangeRequest
   - FactoryEventTypeDispatchRequest
+  - FactoryEventTypeHumanApprovalRequested
+  - FactoryEventTypeDispatchWorkerSessionAssociation
   - FactoryEventTypeModelRequest
   - FactoryEventTypeModelResponse
   - FactoryEventTypeInferenceRequest
@@ -39,9 +43,13 @@ enum:
   - RUN_REQUEST
   - INITIAL_STRUCTURE_REQUEST
   - FACTORY_CHANGE
+  - FACTORY_CHANGE_REQUEST
+  - FACTORY_CHANGE_FAILED
   - WORK_REQUEST
   - RELATIONSHIP_CHANGE_REQUEST
   - DISPATCH_REQUEST
+  - HUMAN_APPROVAL_REQUESTED
+  - DISPATCH_WORKER_SESSION_ASSOCIATION
   - MODEL_REQUEST
   - MODEL_RESPONSE
   - INFERENCE_REQUEST
@@ -71,9 +79,13 @@ x-enum-descriptions:
   - A factory run request was recorded and its effective runtime configuration is known.
   - The static factory topology and configured resources are available before work moves.
   - The running factory definition changed and a canonical replacement topology is now active.
+  - A normalized live Factory Session change request was admitted before application.
+  - An admitted live Factory Session change could not become effective and was closed with a safe failure.
   - Work entered the factory as a normalized request.
   - A relationship-change request between work items was recorded.
   - A workstation request began processing a set of input work.
+  - A HUMAN_APPROVAL workstation reserved its input Work and is waiting for operator input.
+  - A dispatch was associated with the Worker Session allocated to execute it.
   - A model-backed worker invocation request is about to enter resource, load, and execution boundaries.
   - A model-backed worker invocation returned with resource, load, output, and failure evidence.
   - A model-worker provider attempt is about to send a prompt to the provider.

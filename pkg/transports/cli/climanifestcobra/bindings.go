@@ -4,11 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
+
+const genericRequiredAnnotation = "infinite-you/required"
+
+type encodedArgumentValue struct {
+	ValueType string          `json:"valueType"`
+	Present   bool            `json:"present"`
+	Value     json.RawMessage `json:"value"`
+}
 
 // CompletionRegistry maps stable manifest input IDs to transport-edge dynamic
 // completion callbacks.
@@ -61,6 +71,48 @@ type SourceCandidateProvider func(
 // complete persistent snapshot to handlers that still own typed option structs.
 type ResolvedInputsBinding func(resolvedinput.Inputs) error
 
+type resolvedPlacementContextKey struct{}
+
+// ResolveCommandPlacement resolves the root --remote input against one
+// command's authored capability. A missing root input is treated as the
+// explicit false/default value so detached family constructors remain useful
+// in focused tests and compatibility adapters.
+func ResolveCommandPlacement(
+	command climanifest.Command,
+	inputs resolvedinput.Inputs,
+) (climanifest.ExecutionPlacement, error) {
+	remote := false
+	if _, present := inputs.Lookup("you.flag.remote"); present {
+		value, err := inputs.Bool("you.flag.remote")
+		if err != nil {
+			return "", fmt.Errorf("resolve command %q placement: %w", command.ID, err)
+		}
+		remote = value
+	}
+	placement, err := command.ResolvePlacement(remote)
+	if err != nil {
+		return "", err
+	}
+	return placement, nil
+}
+
+func attachResolvedPlacement(cmd *cobra.Command, placement climanifest.ExecutionPlacement) {
+	cmd.SetContext(context.WithValue(cmd.Context(), resolvedPlacementContextKey{}, placement))
+}
+
+// ResolvedPlacementFromContext returns the placement resolved for the current
+// command invocation by the generic CLI constructor.
+func ResolvedPlacementFromContext(ctx context.Context) (climanifest.ExecutionPlacement, error) {
+	if ctx == nil {
+		return "", fmt.Errorf("read resolved placement: context is required")
+	}
+	placement, ok := ctx.Value(resolvedPlacementContextKey{}).(climanifest.ExecutionPlacement)
+	if !ok {
+		return "", fmt.Errorf("read resolved placement: invocation has not resolved command placement")
+	}
+	return placement, nil
+}
+
 // GenericBindings supplies executable transport bindings used while projecting
 // a generic manifest. Additional stable-ID registries can be added here without
 // coupling manifest records to public command or input spellings.
@@ -69,12 +121,68 @@ type GenericBindings struct {
 	Handlers                HandlerRegistry
 	CobraHandlers           CobraHandlerRegistry
 	ResolvedCobraHandlers   ResolvedCobraHandlerRegistry
+	DeferRequiredValidation map[string]bool
 	Inputs                  InputBindingRegistry
 	SourceValues            SourceCandidateProvider
 	RootInputs              ResolvedInputsBinding
 	GuardUnknownSubcommands bool
 }
 
+// ValidateRequiredFlags preserves Cobra's required-flag checks for handwritten
+// commands and applies manifest-required checks to generic commands. Generic
+// required flags are validated here for observation and in the command handler
+// path so machine-readable handlers can own their JSON error documents.
+func ValidateRequiredFlags(cmd *cobra.Command) error {
+	if cmd == nil {
+		return fmt.Errorf("validate required flags: command is required")
+	}
+	if err := cmd.ValidateRequiredFlags(); err != nil {
+		return err
+	}
+	return validateRequiredFlagAnnotations(cmd)
+}
+
+func validateRequiredFlagAnnotations(cmd *cobra.Command) error {
+	var missing []string
+	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+		if values := flag.Annotations[genericRequiredAnnotation]; len(values) == 0 || values[0] != "true" {
+			return
+		}
+		if flag.Changed {
+			return
+		}
+		if aliases := flag.Annotations["cobra_annotation_flag_aliases"]; len(aliases) > 0 {
+			for _, alias := range aliases {
+				if aliasFlag := cmd.Flags().Lookup(alias); aliasFlag != nil && aliasFlag.Changed {
+					return
+				}
+			}
+		}
+		missing = append(missing, flag.Name)
+	})
+	if len(missing) == 0 {
+		return nil
+	}
+	sort.Strings(missing)
+	return fmt.Errorf("required flag(s) %q not set", "--"+missing[0])
+}
+
+func validateRequiredGenericFlags(cmd *cobra.Command, record climanifest.Command) error {
+	for _, flag := range sortedFlags(record.Flags) {
+		if !flag.Required {
+			continue
+		}
+		names := append([]string{flag.Long}, flag.Aliases...)
+		for _, name := range names {
+			if parsed := lookupCommandFlag(cmd, name); parsed != nil && parsed.Changed {
+				goto nextFlag
+			}
+		}
+		return fmt.Errorf("required flag(s) %q not set", "--"+flag.Long)
+	nextFlag:
+	}
+	return nil
+}
 
 // InputChanged reports whether the CLI explicitly supplied a manifest input.
 // Callers identify the input only by stable ID; public flag spellings remain

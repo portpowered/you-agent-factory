@@ -23,7 +23,6 @@ func TestRootErrorResponse_MapsSharedRuntimeSentinels(t *testing.T) {
 		runtimeHTTPOperationControl,
 		runtimeHTTPOperationMoveWork,
 		runtimeHTTPOperationDispatchPlan,
-		runtimeHTTPOperationCheckpoint,
 	}
 	cases := []struct {
 		name       string
@@ -45,13 +44,6 @@ func TestRootErrorResponse_MapsSharedRuntimeSentinels(t *testing.T) {
 			wantStatus: http.StatusNotFound,
 			wantCode:   factoryapi.ErrorResponseCodeNOTFOUND,
 			wantMsg:    "factory runtime target not found",
-		},
-		{
-			name:       "capability unavailable",
-			err:        factoryruntime.ErrCapabilityUnavailable,
-			wantStatus: http.StatusServiceUnavailable,
-			wantCode:   factoryapi.ErrorResponseCode("SERVICE_UNAVAILABLE"),
-			wantMsg:    "factory runtime capability is unavailable",
 		},
 	}
 
@@ -84,13 +76,6 @@ func TestRootErrorResponse_MapsObservationFailures(t *testing.T) {
 		wantCode   factoryapi.ErrorResponseCode
 		wantMsg    string
 	}{
-		{
-			name:       "session observer required",
-			err:        errSessionObserverRequired,
-			wantStatus: http.StatusServiceUnavailable,
-			wantCode:   factoryapi.ErrorResponseCode("SERVICE_UNAVAILABLE"),
-			wantMsg:    "factory status is unavailable",
-		},
 		{
 			name:       "session not found",
 			err:        factorysessions.ErrSessionNotFound,
@@ -270,53 +255,6 @@ func TestRootErrorResponse_MapsDispatchPlanFailures(t *testing.T) {
 	}
 }
 
-func TestRootErrorResponse_MapsCheckpointFailures(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name       string
-		err        error
-		wantStatus int
-		wantCode   factoryapi.ErrorResponseCode
-		wantMsg    string
-	}{
-		{
-			name:       "checkpoint not found",
-			err:        factoryruntime.ErrCheckpointNotFound,
-			wantStatus: http.StatusNotFound,
-			wantCode:   factoryapi.ErrorResponseCodeNOTFOUND,
-			wantMsg:    "factory runtime checkpoint not found",
-		},
-		{
-			name:       "corrupt checkpoint",
-			err:        factoryruntime.ErrCorruptCheckpoint,
-			wantStatus: http.StatusBadRequest,
-			wantCode:   factoryapi.ErrorResponseCodeBADREQUEST,
-			wantMsg:    "factory runtime checkpoint is corrupt",
-		},
-		{
-			name:       "incompatible checkpoint",
-			err:        factoryruntime.ErrIncompatibleCheckpoint,
-			wantStatus: http.StatusConflict,
-			wantCode:   factoryapi.ErrorResponseCode("CONFLICT"),
-			wantMsg:    "factory runtime checkpoint is incompatible",
-		},
-	}
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			status, response, ok := RootErrorResponse(tc.err, runtimeHTTPOperationCheckpoint)
-			if !ok {
-				t.Fatalf("RootErrorResponse(%v) = not handled", tc.err)
-			}
-			if status != tc.wantStatus || response.Code != tc.wantCode || response.Message != tc.wantMsg {
-				t.Fatalf("RootErrorResponse(%v) = %d %#v", tc.err, status, response)
-			}
-		})
-	}
-}
-
 func TestRootErrorResponse_IgnoresCrossOperationTypedFailures(t *testing.T) {
 	t.Parallel()
 
@@ -326,8 +264,8 @@ func TestRootErrorResponse_IgnoresCrossOperationTypedFailures(t *testing.T) {
 	if _, _, ok := RootErrorResponse(factoryruntime.ErrAlreadyStopped, runtimeHTTPOperationMoveWork); ok {
 		t.Fatal("already stopped must not map through move-work operation")
 	}
-	if _, _, ok := RootErrorResponse(factoryruntime.ErrDuplicateDispatchIntent, runtimeHTTPOperationCheckpoint); ok {
-		t.Fatal("duplicate dispatch intent must not map through checkpoint operation")
+	if _, _, ok := RootErrorResponse(factoryruntime.ErrDuplicateDispatchIntent, runtimeHTTPOperationControl); ok {
+		t.Fatal("duplicate dispatch intent must not map through control operation")
 	}
 	if _, _, ok := RootErrorResponse(apisurface.ErrFactorySessionNotFound, runtimeHTTPOperationControl); ok {
 		t.Fatal("session not found must not map through control operation")
@@ -343,7 +281,6 @@ func TestRootErrorResponse_ReturnsFalseForUnmappedFailures(t *testing.T) {
 		runtimeHTTPOperationControl,
 		runtimeHTTPOperationMoveWork,
 		runtimeHTTPOperationDispatchPlan,
-		runtimeHTTPOperationCheckpoint,
 	}
 	for _, operation := range operations {
 		if _, _, ok := RootErrorResponse(err, operation); ok {
@@ -371,6 +308,21 @@ func TestWriteRootOrInternalError_SanitizesUnmappedFailures(t *testing.T) {
 	}
 }
 
+func TestWriteRootOrInternalError_HandlesContextOutcomeCarriedByErr(t *testing.T) {
+	t.Parallel()
+
+	adapter := NewAdapter(&runtimeRootFake{})
+	recorder := httptest.NewRecorder()
+
+	adapter.writeRootOrInternalError(recorder, context.Background(), runtimeHTTPOperationObserve, "failed to observe factory runtime status", context.DeadlineExceeded)
+
+	body := recorder.Body.String()
+	if recorder.Code != http.StatusGatewayTimeout ||
+		!strings.Contains(body, `"message":"factory runtime request timed out"`) {
+		t.Fatalf("response = %d %s, want gateway-timeout outcome for a context deadline carried by err", recorder.Code, body)
+	}
+}
+
 func operationName(operation runtimeHTTPOperation) string {
 	switch operation {
 	case runtimeHTTPOperationObserve:
@@ -381,8 +333,6 @@ func operationName(operation runtimeHTTPOperation) string {
 		return "move-work"
 	case runtimeHTTPOperationDispatchPlan:
 		return "dispatch-plan"
-	case runtimeHTTPOperationCheckpoint:
-		return "checkpoint"
 	default:
 		return fmt.Sprintf("operation(%d)", operation)
 	}

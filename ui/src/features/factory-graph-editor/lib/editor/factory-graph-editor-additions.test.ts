@@ -411,4 +411,33 @@ describe("factory graph editor additions", () => {
       },
     ]);
   });
+
+  it("adds a workerless human approval workstation with stable authored metadata", () => {
+    const nextDraft = applyFactoryGraphAddEntityDraft(
+      createEmptyFactoryGraphDraft(),
+      {
+        behavior: "STANDARD",
+        body: "ignored prompt",
+        cron: null,
+        kind: "workstation",
+        name: "release-approval",
+        workerName: "",
+        workstationType: "HUMAN_APPROVAL",
+      },
+    );
+
+    expect(nextDraft.additions.workstations).toEqual([
+      {
+        description: {
+          type: "LOCALIZABLE_ASSET",
+          value: "release-approval",
+        },
+        id: "release-approval",
+        inputs: [],
+        name: "release-approval",
+        outputs: [],
+        type: "HUMAN_APPROVAL",
+      },
+    ]);
+  });
 });

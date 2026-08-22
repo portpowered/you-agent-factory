@@ -63,6 +63,275 @@ func TestExecuteReportsPassingCoverage(t *testing.T) {
 	}
 }
 
+func TestExecuteReportsPackageSummariesWhenManifestValidationFails(t *testing.T) {
+	originalCommandRunner := commandRunner
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	defer func() {
+		commandRunner = originalCommandRunner
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	}()
+
+	workRootPackage := modulePath + "/pkg/services/work"
+	workInternalPackage := modulePath + "/pkg/services/work/internal"
+	manifestPath := writePackageMinimumManifest(t, "unit", workInternalPackage, "100.00")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	commandRunner = fakeGoCoverageCommandPassing
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	err := execute(config{
+		min:             0,
+		suite:           "unit",
+		coverpkg:        strings.Join([]string{workRootPackage, workInternalPackage}, ","),
+		packages:        "./pkg/services/work/internal",
+		packageManifest: manifestPath,
+	})
+	if err == nil || !strings.Contains(err.Error(), "measured unit service \""+workRootPackage+"\" has no root manifest entry") {
+		t.Fatalf("execute() error = %v, want missing-service-root validation failure", err)
+	}
+
+	wantSummaries := workRootPackage + "\tcoverage: 0.0% of statements\n" + workInternalPackage + "\tcoverage: 0.0% of statements\n"
+	if got := stdout.String(); !strings.Contains(got, "total: (statements) 0.0%") || !strings.Contains(got, wantSummaries) {
+		t.Fatalf("execute() stdout = %q, want total and exact package summaries", got)
+	}
+	if strings.Contains(stdout.String(), "meets minimum") {
+		t.Fatalf("execute() stdout = %q, did not expect success message", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+	}
+}
+
+func TestExecuteReportsPackageSummariesForCompleteManifest(t *testing.T) {
+	originalCommandRunner := commandRunner
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	defer func() {
+		commandRunner = originalCommandRunner
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	}()
+
+	configPackage := modulePath + "/pkg/config"
+	manifestPath := writePackageMinimumManifest(t, "unit", configPackage, "100.00")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	commandRunner = fakeGoCoverageCommandPassing
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	err := execute(config{
+		min:             0,
+		suite:           "unit",
+		coverpkg:        configPackage,
+		packages:        "./pkg/config",
+		packageManifest: manifestPath,
+	})
+	if err != nil {
+		t.Fatalf("execute() error = %v", err)
+	}
+
+	got := stdout.String()
+	wantSummary := configPackage + "\tcoverage: 100.0% of statements\n"
+	if strings.Count(got, wantSummary) != 1 {
+		t.Fatalf("execute() stdout = %q, want one package summary %q", got, wantSummary)
+	}
+	if !strings.Contains(got, "Go coverage 100.0% meets minimum 0.0%.") {
+		t.Fatalf("execute() stdout = %q, want success message", got)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+	}
+}
+
+func TestExecuteReportsManifestPackagesWithoutProfileMeasurement(t *testing.T) {
+	originalCommandRunner := commandRunner
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	defer func() {
+		commandRunner = originalCommandRunner
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	}()
+
+	configPackage := modulePath + "/pkg/config"
+	initializerPackage := modulePath + "/pkg/initializer"
+	servicePackage := modulePath + "/pkg/service"
+	manifestPath := writePackageMinimumManifestWithEntries(t, "unit", []manifestPackageSpec{
+		{importPath: configPackage, minimum: "0.00"},
+		{importPath: initializerPackage, exception: unitUnmeasurableMeasurementException()},
+		{importPath: servicePackage, exception: unitUnmeasurableMeasurementException()},
+	})
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	commandRunner = fakeGoCoverageCommandWithMeasuredZeroConfig
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	err := execute(config{
+		min:             0,
+		suite:           "unit",
+		coverpkg:        strings.Join([]string{configPackage, initializerPackage, servicePackage}, ","),
+		packages:        "./pkg/config",
+		packageManifest: manifestPath,
+	})
+	if err != nil {
+		t.Fatalf("execute() error = %v", err)
+	}
+
+	wantStderr := strings.Join([]string{
+		"coverage not evaluated: package=" + initializerPackage + " lane=unit (no measurement in profile)",
+		"coverage not evaluated: package=" + servicePackage + " lane=unit (no measurement in profile)",
+		"",
+	}, "\n")
+	if got := stderr.String(); got != wantStderr {
+		t.Fatalf("execute() stderr = %q, want deterministic unmeasured diagnostics %q", got, wantStderr)
+	}
+	if strings.Contains(stderr.String(), "package="+configPackage) {
+		t.Fatalf("execute() stderr = %q, did not report measured package as unmeasured", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Go coverage 0.0% meets minimum 0.0%.") {
+		t.Fatalf("execute() stdout = %q, want unchanged successful gate result", stdout.String())
+	}
+}
+
+func TestExecuteReportsUncoveredBlocksForManifestRegression(t *testing.T) {
+	originalCommandRunner := commandRunner
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	defer func() {
+		commandRunner = originalCommandRunner
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	}()
+
+	configPackage := modulePath + "/pkg/config"
+	manifestPath := writePackageMinimumManifest(t, "unit", configPackage, "100.00")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	commandRunner = fakeGoCoverageCommandWithMeasuredZeroConfig
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	err := execute(config{
+		min:             0,
+		suite:           "unit",
+		coverpkg:        configPackage,
+		packages:        "./pkg/config",
+		packageManifest: manifestPath,
+	})
+	if err == nil {
+		t.Fatal("execute() unexpectedly succeeded")
+	}
+	for _, want := range []string{
+		"package coverage regression: package=" + configPackage,
+		"lane=unit expected-minimum=100.00%",
+		"uncovered blocks: pkg/config/config.go:1 (3 statements)",
+		"restore coverage before running `go run ./cmd/gocoveragecheck",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("execute() error = %q, want diagnostic containing %q", err, want)
+		}
+	}
+	if strings.Contains(err.Error(), "pkg/service") {
+		t.Fatalf("execute() error = %q, did not expect another package's uncovered blocks", err)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+	}
+}
+
+func TestExecuteReportsRootObservationCoverageRegressionWithExactCountsAndBlocks(t *testing.T) {
+	originalCommandRunner := commandRunner
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	defer func() {
+		commandRunner = originalCommandRunner
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	}()
+
+	rootObservationPackage := modulePath + "/pkg/services/factory_runtime/internal/rootobservation"
+	manifestPath := writePackageMinimumManifestWithEntries(t, "unit", []manifestPackageSpec{
+		{importPath: modulePath + "/pkg/services/factory_runtime", minimum: "0.00"},
+		{importPath: rootObservationPackage, minimum: "100.00"},
+	})
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	commandRunner = fakeGoCoverageCommandWithRootObservationRegression
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	err := execute(config{
+		min:             0,
+		suite:           "unit",
+		coverpkg:        strings.Join([]string{modulePath + "/pkg/services/factory_runtime", rootObservationPackage}, ","),
+		packages:        "./pkg/services/factory_runtime/internal/rootobservation",
+		packageManifest: manifestPath,
+	})
+	if err == nil {
+		t.Fatal("execute() unexpectedly succeeded")
+	}
+
+	wantFailure := "package coverage regression: package=" + rootObservationPackage +
+		" lane=unit expected-minimum=100.00% actual=95.5556% delta=-4.4444 percentage-points covered=43/45 statements; " +
+		"uncovered blocks: pkg/services/factory_runtime/internal/rootobservation/project.go:21 (1 statement), " +
+		"pkg/services/factory_runtime/internal/rootobservation/project.go:41 (1 statement); " +
+		"restore coverage before running `go run ./cmd/gocoveragecheck -suite unit -profile <coverage-profile> -update-manifest " + manifestPath + "`"
+	if err.Error() != wantFailure {
+		t.Fatalf("execute() error = %q, want exact regression diagnostic %q", err, wantFailure)
+	}
+	if strings.Count(err.Error(), "uncovered blocks:") != 1 || strings.Count(err.Error(), "(1 statement)") != 2 {
+		t.Fatalf("execute() error = %q, want exactly two uncovered blocks", err)
+	}
+	if !strings.Contains(stdout.String(), rootObservationPackage+"\tcoverage: 95.6% of statements") {
+		t.Fatalf("execute() stdout = %q, want rootobservation package summary", stdout.String())
+	}
+	wantDiagnostic := "coverage not evaluated: package=" + modulePath + "/pkg/services/factory_runtime lane=unit (no measurement in profile)\n"
+	if got := stderr.String(); got != wantDiagnostic {
+		t.Fatalf("execute() stderr = %q, want the service-root unmeasured diagnostic %q", got, wantDiagnostic)
+	}
+}
+
+func TestExecuteDoesNotReportPackageSummariesWhenMeasurementFails(t *testing.T) {
+	originalCommandRunner := commandRunner
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	defer func() {
+		commandRunner = originalCommandRunner
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	}()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	commandRunner = fakeGoCoverageCommandTestFailsWithoutDetail
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	err := execute(config{
+		min:      0,
+		coverpkg: modulePath + "/pkg/config",
+		packages: "./pkg/config",
+	})
+	if err == nil {
+		t.Fatal("execute() unexpectedly succeeded")
+	}
+	if strings.Contains(stdout.String(), "\tcoverage:") || strings.Contains(stdout.String(), "total: (statements)") {
+		t.Fatalf("execute() stdout = %q, want no package summaries without a valid measurement", stdout.String())
+	}
+	if got := stderr.String(); !strings.Contains(got, "coverage not evaluated") || !strings.Contains(got, "package floors were NOT checked") {
+		t.Fatalf("execute() stderr = %q, want skipped-floor diagnostic", got)
+	}
+	if strings.Contains(stderr.String(), "failed tests observed") {
+		t.Fatalf("execute() stderr = %q, did not expect an invented failure count", stderr.String())
+	}
+}
+
 func TestExecuteTotalOnlyReportsIndependentSuiteCoverageWithPackageSummaries(t *testing.T) {
 	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
@@ -204,13 +473,14 @@ func TestExecuteEnforcesAggregateAndManifestMinimumsIndependently(t *testing.T) 
 		command      commandRunnerFunc
 		wantFailure  string
 		rejectText   string
+		wantStderr   string
 	}{
 		{
 			name:         "aggregate pass cannot mask package regression",
 			minimum:      "1.00",
 			aggregateMin: 0,
-			command:      fakeGoCoverageCommand,
-			wantFailure:  "package coverage regression: package=" + modulePath + "/pkg/config lane=unit expected-minimum=1.00%",
+			command:      fakeGoCoverageCommandWithMeasuredZeroConfig,
+			wantFailure:  "package coverage regression: package=" + modulePath + "/pkg/config lane=unit expected-minimum=1.00% actual=0.0000%",
 		},
 		{
 			name:         "package pass cannot mask aggregate regression",
@@ -244,8 +514,8 @@ func TestExecuteEnforcesAggregateAndManifestMinimumsIndependently(t *testing.T) 
 			if tc.rejectText != "" && strings.Contains(err.Error(), tc.rejectText) {
 				t.Fatalf("execute() error = %q, did not expect %q", err.Error(), tc.rejectText)
 			}
-			if stderr.Len() != 0 {
-				t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+			if got := stderr.String(); got != tc.wantStderr {
+				t.Fatalf("execute() stderr = %q, want %q", got, tc.wantStderr)
 			}
 		})
 	}
@@ -423,78 +693,6 @@ func TestRunCreatesAndRemovesTempCoverageProfile(t *testing.T) {
 	}
 }
 
-func TestRunWrapsCoverSummaryFailureUsingStderrDetail(t *testing.T) {
-	originalCommandRunner := commandRunner
-	originalStdout := stdoutWriter
-	originalStderr := stderrWriter
-	defer func() {
-		commandRunner = originalCommandRunner
-		stdoutWriter = originalStdout
-		stderrWriter = originalStderr
-	}()
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	commandRunner = fakeGoCoverageCommandCoverFailsWithStderr
-	stdoutWriter = &stdout
-	stderrWriter = &stderr
-
-	_, err := run(config{
-		coverpkg: modulePath + "/pkg/config",
-		packages: "./pkg/config",
-		profile:  filepath.Join(t.TempDir(), "coverage.out"),
-	})
-	if err == nil {
-		t.Fatal("run() unexpectedly succeeded")
-	}
-
-	if !strings.Contains(err.Error(), "summarize go coverage: exit status 3") {
-		t.Fatalf("run() error = %q, want summarize wrapper", err.Error())
-	}
-	if !strings.Contains(err.Error(), "stderr detail from cover tool") {
-		t.Fatalf("run() error = %q, want stderr detail", err.Error())
-	}
-	if strings.Contains(err.Error(), "stdout detail from cover tool") {
-		t.Fatalf("run() error = %q, did not expect stdout fallback detail", err.Error())
-	}
-}
-
-func TestRunWrapsCoverSummaryFailureUsingStdoutFallback(t *testing.T) {
-	originalCommandRunner := commandRunner
-	originalStdout := stdoutWriter
-	originalStderr := stderrWriter
-	defer func() {
-		commandRunner = originalCommandRunner
-		stdoutWriter = originalStdout
-		stderrWriter = originalStderr
-	}()
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	commandRunner = fakeGoCoverageCommandCoverFailsWithStdout
-	stdoutWriter = &stdout
-	stderrWriter = &stderr
-
-	_, err := run(config{
-		coverpkg: modulePath + "/pkg/config",
-		packages: "./pkg/config",
-		profile:  filepath.Join(t.TempDir(), "coverage.out"),
-	})
-	if err == nil {
-		t.Fatal("run() unexpectedly succeeded")
-	}
-
-	if !strings.Contains(err.Error(), "summarize go coverage: exit status 4") {
-		t.Fatalf("run() error = %q, want summarize wrapper", err.Error())
-	}
-	if !strings.Contains(err.Error(), "stdout detail from cover tool") {
-		t.Fatalf("run() error = %q, want stdout fallback detail", err.Error())
-	}
-	if strings.Contains(err.Error(), "stderr detail from cover tool") {
-		t.Fatalf("run() error = %q, did not expect stderr detail", err.Error())
-	}
-}
-
 func TestRunWrapsCoverageLaneFailure(t *testing.T) {
 	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
@@ -520,43 +718,12 @@ func TestRunWrapsCoverageLaneFailure(t *testing.T) {
 		t.Fatal("run() unexpectedly succeeded")
 	}
 
-	want := "run go test coverage shard 1/1: exit status 7"
+	want := "run go test coverage lane: exit status 7"
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("run() error = %q, want prefix %q", err.Error(), want)
 	}
 	if !strings.Contains(err.Error(), "raw failure output from go test") {
 		t.Fatalf("run() error = %q, want raw go test output detail", err.Error())
-	}
-}
-
-func TestRunWrapsCoverSummaryFailureWithoutDetail(t *testing.T) {
-	originalCommandRunner := commandRunner
-	originalStdout := stdoutWriter
-	originalStderr := stderrWriter
-	defer func() {
-		commandRunner = originalCommandRunner
-		stdoutWriter = originalStdout
-		stderrWriter = originalStderr
-	}()
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	commandRunner = fakeGoCoverageCommandCoverFailsWithoutDetail
-	stdoutWriter = &stdout
-	stderrWriter = &stderr
-
-	_, err := run(config{
-		coverpkg: modulePath + "/pkg/config",
-		packages: "./pkg/config",
-		profile:  filepath.Join(t.TempDir(), "coverage.out"),
-	})
-	if err == nil {
-		t.Fatal("run() unexpectedly succeeded")
-	}
-
-	want := "summarize go coverage: exit status 8"
-	if err.Error() != want {
-		t.Fatalf("run() error = %q, want %q", err.Error(), want)
 	}
 }
 

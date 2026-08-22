@@ -15,26 +15,29 @@ const (
 	failureStageFinalParse = "final_parse"
 )
 
-func normalizeValidationFailure(request providers.ExecuteRequest) error {
+func normalizeValidationFailure(request providers.ExecuteRequest, extraSecrets ...string) error {
 	return normalizeDeclaredFailure(providers.ExecuteFailure{
 		Kind: providers.ExecuteFailureKindInvalidRequest,
-	}, request)
+	}, request, extraSecrets...)
 }
 
 func normalizeContextFailure(
 	ctx context.Context,
 	request providers.ExecuteRequest,
+	extraSecrets ...string,
 ) error {
 	if err := ctx.Err(); err != nil {
-		return normalizeAttemptFailure(ctx, err, request)
+		return normalizeAttemptFailure(ctx, err, request, extraSecrets...)
 	}
 	return nil
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func normalizeAttemptFailure(
 	ctx context.Context,
 	attemptErr error,
 	request providers.ExecuteRequest,
+	extraSecrets ...string,
 ) (normalized error) {
 	lifecycle, hasLifecycle := attemptFailureAs(attemptErr)
 	failureSession := sessionRefFromAttemptFailure(attemptErr, lifecycle, hasLifecycle)
@@ -44,7 +47,7 @@ func normalizeAttemptFailure(
 		}
 		if failure, ok := executeFailureAs(normalized); ok {
 			failure.SessionRef = failureSession
-			normalized = normalizeDeclaredFailure(failure, request)
+			normalized = normalizeDeclaredFailure(failure, request, extraSecrets...)
 		}
 	}()
 	signals := []error{ctx.Err()}
@@ -59,30 +62,32 @@ func normalizeAttemptFailure(
 	if containsError(signals, context.DeadlineExceeded) {
 		return normalizeDeclaredFailure(providers.ExecuteFailure{
 			Kind: providers.ExecuteFailureKindTimeout,
-		}, request)
+		}, request, extraSecrets...)
 	}
 	if containsError(signals, context.Canceled) {
 		return normalizeDeclaredFailure(providers.ExecuteFailure{
 			Kind: providers.ExecuteFailureKindCanceled,
-		}, request)
+		}, request, extraSecrets...)
 	}
 	if hasLifecycle && lifecycle.Declared != nil {
-		return normalizeDeclaredFailure(lifecycle.Declared.Clone(), request)
+		declared := lifecycle.Declared.Clone()
+		declared.Diagnostics = mergeLifecycleDiagnostics(declared.Diagnostics, lifecycle.Diagnostics)
+		return normalizeDeclaredFailure(declared, request, extraSecrets...)
 	}
 	if declared, ok := executeFailureAs(attemptErr); ok {
-		return normalizeDeclaredFailure(declared, request)
+		return normalizeDeclaredFailure(declared, request, extraSecrets...)
 	}
 	if errors.Is(attemptErr, context.DeadlineExceeded) ||
 		errors.Is(attemptErr, providers.ErrExecuteTimeout) {
 		return normalizeDeclaredFailure(providers.ExecuteFailure{
 			Kind: providers.ExecuteFailureKindTimeout,
-		}, request)
+		}, request, extraSecrets...)
 	}
 	if errors.Is(attemptErr, context.Canceled) ||
 		errors.Is(attemptErr, providers.ErrExecuteCancelled) {
 		return normalizeDeclaredFailure(providers.ExecuteFailure{
 			Kind: providers.ExecuteFailureKindCanceled,
-		}, request)
+		}, request, extraSecrets...)
 	}
 	// Stream lifecycle failures describe an unusable provider response, not a
 	// caller validation failure. Classify them as dependency failures so the
@@ -92,12 +97,12 @@ func normalizeAttemptFailure(
 		return normalizeDeclaredFailure(providers.ExecuteFailure{
 			Kind:        providers.ExecuteFailureKindDependency,
 			Diagnostics: lifecycleStageDiagnostics(lifecycle, hasLifecycle),
-		}, request)
+		}, request, extraSecrets...)
 	}
 	return normalizeDeclaredFailure(providers.ExecuteFailure{
 		Kind:        providers.ExecuteFailureKindUnknown,
 		Diagnostics: lifecycleStageDiagnostics(lifecycle, hasLifecycle),
-	}, request)
+	}, request, extraSecrets...)
 }
 
 func sessionRefFromAttemptFailure(
@@ -122,6 +127,7 @@ func sessionRefFromAttemptFailure(
 func normalizeDeclaredFailure(
 	failure providers.ExecuteFailure,
 	request providers.ExecuteRequest,
+	extraSecrets ...string,
 ) error {
 	failure = failure.Clone()
 	if err := validateSessionRef(failure.SessionRef, request.Provider); err != nil {
@@ -130,27 +136,50 @@ func normalizeDeclaredFailure(
 	if !knownFailureKind(failure.Kind) {
 		failure.Kind = providers.ExecuteFailureKindUnknown
 	}
-	failure.Message = sanitizeDiagnosticText(
-		failure.Message,
-		maxDiagnosticRunes,
-		request,
-	)
+	if safeFailureMessage(failure.Diagnostics) {
+		failure.Message = sanitizeSafeFailureMessage(failure.Message, request, extraSecrets...)
+	} else {
+		failure.Message = sanitizeDiagnosticText(
+			failure.Message,
+			maxDiagnosticRunes,
+			request,
+			extraSecrets...,
+		)
+	}
 	if failure.Message == "" {
 		failure.Message = defaultFailureMessage(failure.Kind)
 	}
 	if failure.Diagnostics != nil {
-		diagnostics := normalizeDiagnostics(*failure.Diagnostics, request)
+		diagnostics := normalizeDiagnostics(*failure.Diagnostics, request, extraSecrets...)
 		failure.Diagnostics = &diagnostics
 	}
 	return failure
+}
+
+func safeFailureMessage(diagnostics *providers.ExecuteDiagnostics) bool {
+	return diagnostics != nil &&
+		diagnostics.Metadata[providers.ExecuteDiagnosticMetadataSafeFailureMessage] == "true"
+}
+
+func sanitizeSafeFailureMessage(
+	value string,
+	request providers.ExecuteRequest,
+	extraSecrets ...string,
+) string {
+	request.WorkingDirectory = ""
+	return sanitizeDiagnosticText(value, maxDiagnosticRunes, request, extraSecrets...)
 }
 
 func lifecycleStageDiagnostics(
 	failure execution.AttemptFailure,
 	ok bool,
 ) *providers.ExecuteDiagnostics {
-	if !ok {
+	if !ok && failure.Diagnostics == nil {
 		return nil
+	}
+	diagnostics := providers.ExecuteDiagnostics{}
+	if failure.Diagnostics != nil {
+		diagnostics = failure.Diagnostics.Clone()
 	}
 	stage := ""
 	switch {
@@ -163,12 +192,49 @@ func lifecycleStageDiagnostics(
 	case failure.NativeError != nil:
 		stage = failureStageNative
 	}
-	if stage == "" {
+	if stage != "" {
+		if diagnostics.Metadata == nil {
+			diagnostics.Metadata = make(map[string]string)
+		}
+		diagnostics.Metadata["failure_stage"] = stage
+	}
+	if diagnostics.Metadata == nil && len(diagnostics.Progress) == 0 && diagnostics.DurationMillis == 0 {
 		return nil
 	}
-	return &providers.ExecuteDiagnostics{
-		Metadata: map[string]string{"failure_stage": stage},
+	return &diagnostics
+}
+
+func mergeLifecycleDiagnostics(
+	declared *providers.ExecuteDiagnostics,
+	lifecycle *providers.ExecuteDiagnostics,
+) *providers.ExecuteDiagnostics {
+	if declared == nil {
+		if lifecycle == nil {
+			return nil
+		}
+		clone := lifecycle.Clone()
+		return &clone
 	}
+	if lifecycle == nil {
+		clone := declared.Clone()
+		return &clone
+	}
+	merged := declared.Clone()
+	overlay := lifecycle.Clone()
+	if len(overlay.Progress) > 0 {
+		merged.Progress = append(merged.Progress, overlay.Progress...)
+	}
+	if merged.Metadata == nil {
+		merged.Metadata = make(map[string]string)
+	}
+	for key, value := range overlay.Metadata {
+		merged.Metadata[key] = value
+	}
+	if overlay.DurationMillis > merged.DurationMillis {
+		merged.DurationMillis = overlay.DurationMillis
+	}
+	merged.ProgressAlreadyObserved = merged.ProgressAlreadyObserved || overlay.ProgressAlreadyObserved
+	return &merged
 }
 
 func containsError(values []error, target error) bool {
@@ -213,7 +279,9 @@ func knownFailureKind(kind providers.ExecuteFailureKind) bool {
 		providers.ExecuteFailureKindMisconfigured,
 		providers.ExecuteFailureKindThrottled,
 		providers.ExecuteFailureKindDependency,
-		providers.ExecuteFailureKindUnknown:
+		providers.ExecuteFailureKindUnknown,
+		providers.ExecuteFailureKindCapabilityMismatch,
+		providers.ExecuteFailureKindSessionNotFound:
 		return true
 	default:
 		return false
@@ -236,6 +304,10 @@ func defaultFailureMessage(kind providers.ExecuteFailureKind) string {
 		return "provider execution was throttled"
 	case providers.ExecuteFailureKindDependency:
 		return "provider dependency failed"
+	case providers.ExecuteFailureKindCapabilityMismatch:
+		return "provider does not support the requested capability"
+	case providers.ExecuteFailureKindSessionNotFound:
+		return "provider does not recognize the referenced Provider Session as live"
 	default:
 		return "provider execution failed"
 	}

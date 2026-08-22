@@ -3,7 +3,7 @@ package workers
 import (
 	"strings"
 
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 // CanonicalDraftFragment carries one provider-native canonical response draft
@@ -17,16 +17,36 @@ const (
 	ResponseFragmentKind  = "RESPONSE_FRAGMENT"
 	CompletedFragmentKind = "STREAM_COMPLETED"
 	FailedFragmentKind    = "STREAM_FAILED"
+	// ProviderSessionObservedFragmentKind is an internal hand-off of a
+	// provider-authored exact session identity. The Worker Sessions bridge
+	// commits it before any dependent response output and does not expose this
+	// bookkeeping fragment on the response stream itself.
+	ProviderSessionObservedFragmentKind = "PROVIDER_SESSION_OBSERVED"
 )
 
 // ProgressFragment is the provider-neutral transient observation emitted by
 // Workers and accepted by a Factory Session response stream.
 type ProgressFragment struct {
-	DispatchID                     string
-	Kind                           string
-	Type                           string
-	Payload                        string
-	ProviderSessionRef             *providersessions.Metadata
+	// Correlation is the detached identity of the attempt that emitted this
+	// progress fact. DispatchID remains populated for compatibility with
+	// existing stream consumers.
+	Correlation ExecutionCorrelation
+	DispatchID  string
+	Kind        string
+	Type        string
+	Payload     string
+	// Provider is the provider identity selected for this attempt. It is
+	// intentionally independent from ProviderSessionReference: a provider may
+	// author progress without exposing a resumable native session identity.
+	Provider string
+	// Continuation is the opaque provider-owned identity used to associate a
+	// resumable execution before forwarding output.
+	// ProviderSessionReference and ProviderSessionRef retain the old detached
+	// projections for the compatibility subtree until its successor deletion
+	// lane removes them. New code uses Continuation.
+	ProviderSessionReference       *providers.SessionRef
+	ProviderSessionRef             *providers.SessionMetadata
+	Continuation                   *providers.ContinuationRef
 	ExternalEventType              string
 	Metadata                       map[string]string
 	CanonicalDraft                 any
@@ -35,3 +55,13 @@ type ProgressFragment struct {
 
 // ProgressPublisher receives transient Worker observations.
 type ProgressPublisher func(ProgressFragment)
+
+// CloneProviderSessionReference returns a detached compatibility copy of the
+// exact provider-session reference carried by a legacy progress fragment.
+func CloneProviderSessionReference(reference *providers.SessionRef) *providers.SessionRef {
+	if reference == nil {
+		return nil
+	}
+	cloned := reference.Clone()
+	return &cloned
+}

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/internal/contractopenapiconverter"
+	"github.com/portpowered/infinite-you/internal/providerpackages"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
 )
@@ -22,6 +23,7 @@ const (
 	ManifestSchemaPath   = "packages/model-providers/generated/provider-manifest.schema.json"
 	CatalogSchemaPath    = "packages/model-providers/generated/provider-catalog.schema.json"
 	CatalogPath          = "packages/model-providers/generated/catalog.json"
+	RuntimeCatalogPath   = "packages/model-providers/generated/runtime-acp.json"
 	openAPIPath          = "api/openapi.yaml"
 	authoredProvidersDir = "packages/model-providers/providers"
 )
@@ -49,6 +51,14 @@ func Build(source fs.FS) (Catalog, error) {
 	if err != nil {
 		return Catalog{}, err
 	}
+	packages, err := providerpackages.Validate(source, providerpackages.DefaultRuntimeProfiles())
+	if err != nil {
+		return Catalog{}, fmt.Errorf("validate provider packages: %w", err)
+	}
+	runtimeCatalog, err := marshalJSON(providerpackages.RuntimeProjection(packages))
+	if err != nil {
+		return Catalog{}, fmt.Errorf("serialize provider runtime catalog: %w", err)
+	}
 	if err := validateCatalogSemantics(providers); err != nil {
 		return Catalog{}, err
 	}
@@ -67,6 +77,7 @@ func Build(source fs.FS) (Catalog, error) {
 		ManifestSchemaPath: manifestSchema,
 		CatalogSchemaPath:  catalogSchema,
 		CatalogPath:        catalog,
+		RuntimeCatalogPath: runtimeCatalog,
 	}}, nil
 }
 
@@ -148,11 +159,30 @@ func loadProvider(source fs.FS, schema *jsonschema.Schema, manifestPath string) 
 	if err := validateValue(schema, provider, manifestPath); err != nil {
 		return nil, err
 	}
+	if err := validateAuthoredManifestCompleteness(provider, manifestPath); err != nil {
+		return nil, err
+	}
 	id, _ := provider["id"].(string)
 	if id != path.Base(path.Dir(manifestPath)) {
 		return nil, fmt.Errorf("%s: provider id %q must match its directory name", manifestPath, id)
 	}
 	return provider, nil
+}
+
+func validateAuthoredManifestCompleteness(provider map[string]any, manifestPath string) error {
+	for _, field := range []string{"models", "tools", "knownLimits"} {
+		if _, exists := provider[field]; !exists {
+			return fmt.Errorf("%s: authored provider is missing capability facts %q", manifestPath, field)
+		}
+	}
+	discovery, ok := provider["discovery"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("%s: authored provider discovery facts are missing", manifestPath)
+	}
+	if _, exists := discovery["prerequisites"]; !exists {
+		return fmt.Errorf("%s: authored provider is missing discovery prerequisites", manifestPath)
+	}
+	return nil
 }
 
 func compileSchema(payload []byte) (*jsonschema.Schema, error) {

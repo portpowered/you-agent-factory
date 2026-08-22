@@ -5,14 +5,16 @@ import "context"
 // Fields carries optional correlation metadata for a runtime metrics record.
 // Concrete emitters should treat new fields as additive schema growth.
 type Fields struct {
-	DispatchID  string
-	WorkID      string
-	TraceID     string
-	Workstation string
-	WorkerType  string
-	Provider    string
-	Outcome     string
-	Reason      string
+	DispatchID      string
+	WorkID          string
+	TraceID         string
+	Workstation     string
+	WorkerType      string
+	WorkerSessionID string
+	Provider        string
+	Model           string
+	Outcome         string
+	Reason          string
 }
 
 // MetricsEmitter records logical factory runtime measurements without exposing

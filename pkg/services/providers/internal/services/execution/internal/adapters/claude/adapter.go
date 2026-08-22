@@ -12,20 +12,20 @@ import (
 // Effect is the invocation-scoped native Claude boundary. Implementations emit
 // stdout chunks in arrival order and return only allowlisted execution facts.
 type Effect interface {
-	Execute(context.Context, providers.ExecuteRequest, func([]byte) error) (EffectResult, error)
+	Execute(context.Context, execution.ContinuationRequest, func([]byte) error) (EffectResult, error)
 }
 
 // EffectFunc adapts a function to Effect.
 type EffectFunc func(
 	context.Context,
-	providers.ExecuteRequest,
+	execution.ContinuationRequest,
 	func([]byte) error,
 ) (EffectResult, error)
 
 // Execute invokes the adapted function.
 func (effect EffectFunc) Execute(
 	ctx context.Context,
-	request providers.ExecuteRequest,
+	request execution.ContinuationRequest,
 	observe func([]byte) error,
 ) (EffectResult, error) {
 	return effect(ctx, request, observe)
@@ -43,6 +43,7 @@ func NewRegistration(effect Effect) execution.Registration {
 	return execution.Registration{
 		Provider: providers.IDClaude,
 		Attempt:  newAttempt(effect),
+		Continue: newContinuationAttempt(effect),
 	}
 }
 
@@ -54,7 +55,19 @@ func newAttempt(effect Effect) execution.Attempt {
 		ctx context.Context,
 		request providers.ExecuteRequest,
 	) (providers.ExecuteResult, error) {
-		decoder := newDecoder(request.AttemptID)
+		return newContinuationAttempt(effect)(ctx, execution.ContinuationRequest{ExecuteRequest: request})
+	}
+}
+
+func newContinuationAttempt(effect Effect) execution.ContinuationAttempt {
+	if effect == nil {
+		return unavailableContinuationAttempt
+	}
+	return func(
+		ctx context.Context,
+		request execution.ContinuationRequest,
+	) (providers.ExecuteResult, error) {
+		decoder := newDecoder(request.AttemptID, request.ExecuteRequest.ObserveSession)
 		effectResult, effectErr := effect.Execute(ctx, request, decoder.observe)
 		flushErr := decoder.flush()
 		if failure, failed := collectFailure(decoder, effectErr, flushErr); failed {
@@ -70,13 +83,21 @@ func newAttempt(effect Effect) execution.Attempt {
 				FinalParseError: finalErr,
 			}
 		}
+		metadata := cloneMetadata(effectResult.Metadata)
+		if metadata == nil {
+			metadata = make(map[string]string, 3)
+		}
+		for key, value := range decoder.reportedUsage {
+			metadata[key] = value
+		}
+		metadata["completion_evidence"] = "agent_message"
 		return providers.ExecuteResult{
 			Content:    content,
 			SessionRef: session,
 			Diagnostics: &providers.ExecuteDiagnostics{
 				DurationMillis: effectResult.DurationMillis,
 				Progress:       decoder.progressFacts(),
-				Metadata:       cloneMetadata(effectResult.Metadata),
+				Metadata:       metadata,
 			},
 		}, nil
 	}
@@ -136,6 +157,16 @@ func nativeFailure(err error) (execution.AttemptFailure, bool) {
 func unavailableAttempt(
 	context.Context,
 	providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, providers.ExecuteFailure{
+		Kind:    providers.ExecuteFailureKindDependency,
+		Message: "Claude native execution is unavailable",
+	}
+}
+
+func unavailableContinuationAttempt(
+	context.Context,
+	execution.ContinuationRequest,
 ) (providers.ExecuteResult, error) {
 	return providers.ExecuteResult{}, providers.ExecuteFailure{
 		Kind:    providers.ExecuteFailureKindDependency,

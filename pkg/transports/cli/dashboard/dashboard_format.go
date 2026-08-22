@@ -7,6 +7,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/timedisplay"
@@ -295,7 +296,7 @@ func dashboardFailureReason(reason, message string) string {
 	}
 }
 
-func formatProviderSession(session *workerexecution.ProviderSessionMetadata) string {
+func formatProviderSession(session *providers.SessionMetadata) string {
 	if session == nil || session.ID == "" {
 		return "n/a"
 	}

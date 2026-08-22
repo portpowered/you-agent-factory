@@ -57,6 +57,81 @@ func TestBind_FakeRootInvokedThroughCanonicalQueryStatusTool(t *testing.T) {
 	}
 }
 
+func TestBind_FakeRootInvokedThroughHistoricalQueryTool(t *testing.T) {
+	t.Parallel()
+
+	var invoked bool
+	fake := fakeRecordingsRoot{
+		invoked: &invoked,
+		queryHistory: func(request recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error) {
+			if request.Recording.RecordingID != "recording-history-001" {
+				t.Fatalf("recordingId = %q, want recording-history-001", request.Recording.RecordingID)
+			}
+			if request.Recording.Artifact != "artifact-history-001" {
+				t.Fatalf("artifact = %q, want artifact-history-001", request.Recording.Artifact)
+			}
+			if request.Recording.Scope.FactorySessionID != "dur-sess-history-001" {
+				t.Fatalf("factorySessionId = %q, want dur-sess-history-001", request.Recording.Scope.FactorySessionID)
+			}
+			return recordings.HistoricalRecordingQueryResult{
+				Recording: request.Recording,
+				Status: recordings.RecordingStatusFacts{
+					RecordingID: request.Recording.RecordingID,
+					State:       recordings.RecordingFinalized,
+				},
+			}, nil
+		},
+	}
+	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	raw, err := operation(
+		context.Background(),
+		mcprecording.ToolQueryHistory,
+		json.RawMessage(`{"recordingId":"recording-history-001","artifact":"artifact-history-001","factorySessionId":"dur-sess-history-001"}`),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(query_history) error = %v", err)
+	}
+	if !invoked {
+		t.Fatal("fake recordings root was not invoked")
+	}
+	var response mcprecording.ToolResponse[recordings.HistoricalRecordingQueryResult]
+	if err := json.Unmarshal(raw, &response); err != nil {
+		t.Fatalf("decode tool response: %v", err)
+	}
+	if response.Error != nil || response.Result == nil {
+		t.Fatalf("CallTool(query_history) = %s, want success", raw)
+	}
+	if response.Result.Recording.Scope.FactorySessionID != "dur-sess-history-001" {
+		t.Fatalf("result scope = %q, want dur-sess-history-001", response.Result.Recording.Scope.FactorySessionID)
+	}
+}
+
+func TestBind_HistoricalQueryTypedFailureReturnsStableErrorEnvelope(t *testing.T) {
+	t.Parallel()
+
+	fake := fakeRecordingsRoot{
+		queryHistory: func(_ recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error) {
+			return recordings.HistoricalRecordingQueryResult{}, &recordings.HistoricalRecordingQueryError{
+				Kind:        recordings.HistoricalRecordingQueryErrorMissingHistory,
+				RecordingID: "recording-history-missing",
+			}
+		},
+	}
+	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	raw, err := operation(
+		context.Background(),
+		mcprecording.ToolQueryHistory,
+		json.RawMessage(`{"recordingId":"recording-history-missing","artifact":"artifact-history-missing","factorySessionId":"dur-sess-history-missing"}`),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(query_history) error = %v", err)
+	}
+	envelope := assertTypedToolErrorEnvelope(t, raw, "recording.history.not_found", false, "recording-history-missing")
+	if envelope.Message != "historical recording history not found" {
+		t.Fatalf("error.message = %q, want historical recording history not found", envelope.Message)
+	}
+}
+
 func TestCallTool_UnknownToolReturnsStableError(t *testing.T) {
 	t.Parallel()
 
@@ -91,6 +166,7 @@ type fakeRecordingsRoot struct {
 	appendEvent          func(recordings.AppendRecordedEventRequest) (recordings.AppendRecordedEventResult, error)
 	loadReplay           func(recordings.LoadReplayRecordingRequest) (recordings.LoadReplayRecordingResult, error)
 	readPortableArtifact func(context.Context, recordings.ReadPortableArtifactRequest) (recordings.ReadPortableArtifactResult, error)
+	queryHistory         func(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error)
 }
 
 func (fake fakeRecordingsRoot) markInvoked() {
@@ -138,4 +214,14 @@ func (fake fakeRecordingsRoot) ReadPortableArtifact(
 		panic("unexpected ReadPortableArtifact on fake recordings root")
 	}
 	return fake.readPortableArtifact(ctx, request)
+}
+
+func (fake fakeRecordingsRoot) QueryHistoricalRecording(
+	request recordings.HistoricalRecordingQueryRequest,
+) (recordings.HistoricalRecordingQueryResult, error) {
+	fake.markInvoked()
+	if fake.queryHistory == nil {
+		panic("unexpected QueryHistoricalRecording on fake recordings root")
+	}
+	return fake.queryHistory(request)
 }

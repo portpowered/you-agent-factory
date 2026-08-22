@@ -1,0 +1,54 @@
+type: object
+additionalProperties: false
+required:
+  - sessionId
+  - resourceId
+  - previousCapacity
+  - requestedCapacity
+  - effectiveCapacity
+  - inUseCount
+  - availableCount
+  - minimumCapacity
+  - outcome
+  - revision
+  - requestId
+  - changeId
+properties:
+  sessionId:
+    type: string
+  resourceId:
+    type: string
+    description: Stable authored Resource.id. This is the only resource identity used by the operation.
+  resourceName:
+    type: string
+    description: Current display label, provided for presentation only.
+  previousCapacity:
+    type: integer
+    minimum: 0
+  requestedCapacity:
+    type: integer
+    minimum: 0
+  effectiveCapacity:
+    type: integer
+    minimum: 0
+  inUseCount:
+    type: integer
+    minimum: 0
+  availableCount:
+    type: integer
+    minimum: 0
+  minimumCapacity:
+    type: integer
+    minimum: 0
+    description: Lowest capacity currently safe to admit without interrupting in-use work.
+  outcome:
+    $ref: './FactorySessionResourceCapacityOutcome.yaml'
+  revision:
+    type: integer
+    minimum: 0
+  requestId:
+    type: string
+  changeId:
+    type: string
+  links:
+    $ref: './FactorySessionResourceCapacityLinks.yaml'

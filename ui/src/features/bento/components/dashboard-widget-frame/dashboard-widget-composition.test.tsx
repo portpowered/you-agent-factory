@@ -77,12 +77,12 @@ describe("dashboard widget composition ownership", () => {
     expect(
       availability.some(
         (entry) =>
-          entry.widgetType === "work-graph" && entry.duplicateCapable === true,
+          entry.widgetType === "work-graph" && entry.duplicateCapable === false,
       ),
     ).toBe(true);
     expect(
       canAddDashboardWidgetType(DEFAULT_DASHBOARD_LAYOUT, "work-graph"),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       canAddDashboardWidgetType(DEFAULT_DASHBOARD_LAYOUT, "provider-session"),
     ).toBe(false);

@@ -29,9 +29,9 @@ func TestProjectFactorySessionStopSummaryProjectsPetriDispatchStatuses(t *testin
 		t.Run(tc.name, func(t *testing.T) {
 			snapshot, token := stoppedWorkSnapshot(now, "blocked")
 			if tc.active {
-				snapshot.Dispatches = map[string]*interfaces.DispatchEntry{"dispatch-1": {DispatchID: "dispatch-1", WorkstationName: "review", ConsumedTokens: []workerexecution.Token{*token}}}
+				snapshot.Dispatches = map[string]*interfaces.DispatchEntry{"dispatch-1": {DispatchID: "dispatch-1", WorkstationName: "review", ConsumedTokens: []workerexecution.Token{{ID: token.ID, State: "blocked", Color: token.Color}}}}
 			} else {
-				snapshot.DispatchHistory = []interfaces.CompletedDispatch{{DispatchID: "dispatch-1", WorkstationName: "review", Outcome: tc.outcome, EndTime: now, ConsumedTokens: []workerexecution.Token{*token}}}
+				snapshot.DispatchHistory = []interfaces.CompletedDispatch{{DispatchID: "dispatch-1", WorkstationName: "review", Outcome: tc.outcome, EndTime: now, ConsumedTokens: []workerexecution.Token{{ID: token.ID, State: "blocked", Color: token.Color}}}}
 			}
 			summary := sessionprojection.ProjectFactorySessionStopSummary("session-1", snapshot, nil)
 			if summary == nil || summary.LatestDispatch == nil || summary.LatestDispatch.Status != tc.want {
@@ -58,11 +58,36 @@ func TestProjectFactorySessionStopSummaryAppliesCanonicalPrecedence(t *testing.T
 	}
 }
 
-func stoppedWorkSnapshot(now time.Time, stateName string) (*legacysnapshot.Snapshot, *factoryruntime.RuntimeToken) {
+func TestProjectFactorySessionStopSummaryPreservesStructuredSchemaViolationReason(t *testing.T) {
+	now := time.Date(2026, 7, 20, 12, 30, 0, 0, time.UTC)
+	snapshot, token := stoppedWorkSnapshot(now, "blocked")
+	snapshot.DispatchHistory = []interfaces.CompletedDispatch{{
+		DispatchID: "dispatch-schema-violation",
+		Outcome:    workerexecution.OutcomeFailed,
+		Reason:     "structured output schema violation: missing property summary",
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyTerminal,
+			Type:   workerexecution.WorkFailureTypeStructuredOutputSchemaViolation,
+		},
+		EndTime:        now,
+		ConsumedTokens: []workerexecution.Token{{ID: token.ID, State: "blocked", Color: token.Color}},
+	}}
+
+	summary := sessionprojection.ProjectFactorySessionStopSummary("session-1", snapshot, nil)
+	if summary == nil || summary.LatestDispatch == nil || summary.LatestDispatch.FailureDetail == nil {
+		t.Fatalf("stop summary = %#v, want dispatch failure detail", summary)
+	}
+	if summary.LatestDispatch.FailureDetail.Reason != StopFailureType("structured_output_schema_violation") {
+		t.Fatalf("failure reason = %q, want structured_output_schema_violation", summary.LatestDispatch.FailureDetail.Reason)
+	}
+}
+
+func stoppedWorkSnapshot(now time.Time, stateName string) (*legacysnapshot.Snapshot, *workerexecution.Token) {
 	placeID := "goal:" + stateName
-	token := &factoryruntime.RuntimeToken{ID: "token-1", PlaceID: placeID, EnteredAt: now, Color: factoryruntime.RuntimeTokenColor{WorkID: "work-1", WorkTypeID: "goal", Name: "Goal"}}
+	runtimeToken := &factoryruntime.RuntimeToken{ID: "token-1", PlaceID: placeID, EnteredAt: now, Color: factoryruntime.RuntimeTokenColor{WorkID: "work-1", WorkTypeID: "goal", Name: "Goal"}}
+	token := &workerexecution.Token{ID: runtimeToken.ID, State: stateName, EnteredAt: now, Color: runtimeToken.Color}
 	return &legacysnapshot.Snapshot{
-		Marking:  factoryruntime.PetriMarkingSnapshot{Tokens: map[string]*factoryruntime.RuntimeToken{token.ID: token}},
+		Marking:  factoryruntime.PetriMarkingSnapshot{Tokens: map[string]*factoryruntime.RuntimeToken{runtimeToken.ID: runtimeToken}},
 		Topology: &factoryruntime.Net{Places: map[string]*factoryruntime.PetriPlace{placeID: {ID: placeID, TypeID: "goal", State: stateName}}},
 	}, token
 }

@@ -14,45 +14,169 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 )
 
-// TestVerifyFastCommandSmoke_UsesOnlyShortOwnedSuites prove verify-fast invokes only short owned suites in order.
+// TestFunctionalLongCompileGate_UsesRealTaggedFixtureOutcome proves the
+// compile-only gate observes real tagged source without executing the test.
+func TestFunctionalLongCompileGate_UsesRealTaggedFixtureOutcome(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, nil)
+
+	validPackage := writeFunctionallongFixture(t, repoRoot, false)
+	output, err := runMakefileTargetWithArgs(
+		repoRoot,
+		makefilePath,
+		"FUNCTIONAL_LONG_PACKAGES="+validPackage,
+		"test-functional-long-compile",
+	)
+	if err != nil {
+		t.Fatalf("valid tagged fixture failed compile-only gate: %v\n%s", err, output)
+	}
+
+	invalidPackage := writeFunctionallongFixture(t, repoRoot, true)
+	output, err = runMakefileTargetWithArgs(
+		repoRoot,
+		makefilePath,
+		"FUNCTIONAL_LONG_PACKAGES="+invalidPackage,
+		"test-functional-long-compile",
+	)
+	if err == nil {
+		t.Fatalf("invalid tagged fixture unexpectedly passed compile-only gate:\n%s", output)
+	}
+	if !strings.Contains(output, "functionallongCompileGateIntentionalError") {
+		t.Fatalf("compile-only gate failed without reporting the invalid tagged fixture:\n%s", output)
+	}
+}
+
+// TestFunctionalLaneTargetsSeparateCachedAndFreshModes proves the two public
+// Make targets keep the same boundary and runner settings while selecting
+// Go's cache mode versus explicit execution.
+func TestFunctionalLaneTargetsSeparateCachedAndFreshModes(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	fakeGo := writeExecutableScript(t, "fake-go-functional-lane", `#!/bin/sh
+if [ "$1" = "run" ]; then
+  printf '%s\n' "$*" >> "$FUNCTIONAL_LANE_ARGS"
+fi
+if [ "$1" = "run" ] && [ "${FUNCTIONAL_LANE_FAIL:-0}" = "1" ]; then
+  printf '%s\n' '--- FAIL: TestRepresentativeFunctionalFailure'
+  exit 23
+fi
+`)
+
+	for _, tc := range []struct {
+		target   string
+		wantMode string
+	}{
+		{target: "test-functional", wantMode: "cached"},
+		{target: "test-functional-fresh", wantMode: "fresh"},
+	} {
+		t.Run(tc.wantMode+" success", func(t *testing.T) {
+			argsPath := filepath.Join(t.TempDir(), "go-args.txt")
+			t.Setenv("FUNCTIONAL_LANE_ARGS", argsPath)
+			makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
+				"functional-boundary-check": "@printf '%s\\n' 'stub:functional-boundary'\n",
+			})
+
+			output, err := runMakefileTargetWithArgs(
+				repoRoot,
+				makefilePath,
+				fmt.Sprintf("GO=%s", fakeGo),
+				"FUNCTIONAL_DEFAULT_JOBS=3",
+				"GO_TEST_TIMEOUT=17s",
+				tc.target,
+			)
+			if err != nil {
+				t.Fatalf("run %s: %v\\n%s", tc.target, err, output)
+			}
+			if count := strings.Count(output, "stub:functional-boundary"); count != 1 {
+				t.Fatalf("%s ran boundary check %d times, want once:\\n%s", tc.target, count, output)
+			}
+
+			args, err := os.ReadFile(argsPath)
+			if err != nil {
+				t.Fatalf("read fake go args: %v", err)
+			}
+			got := strings.TrimSpace(string(args))
+			wantBase := "run ./cmd/functionallane -jobs 3 -timeout 17s"
+			if tc.wantMode == "cached" && got != wantBase {
+				t.Fatalf("cached target args = %q, want %q", got, wantBase)
+			}
+			if tc.wantMode == "fresh" && got != "run ./cmd/functionallane -jobs 3 -count=1 -timeout 17s" {
+				t.Fatalf("fresh target args = %q, want explicit count", got)
+			}
+		})
+
+		t.Run(tc.wantMode+" failure", func(t *testing.T) {
+			argsPath := filepath.Join(t.TempDir(), "go-args.txt")
+			t.Setenv("FUNCTIONAL_LANE_ARGS", argsPath)
+			t.Setenv("FUNCTIONAL_LANE_FAIL", "1")
+			makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
+				"functional-boundary-check": "@printf '%s\\n' 'stub:functional-boundary'\n",
+			})
+
+			output, err := runMakefileTargetWithArgs(
+				repoRoot,
+				makefilePath,
+				fmt.Sprintf("GO=%s", fakeGo),
+				"FUNCTIONAL_DEFAULT_JOBS=3",
+				"GO_TEST_TIMEOUT=17s",
+				tc.target,
+			)
+			if err == nil {
+				t.Fatalf("%s unexpectedly succeeded:\\n%s", tc.target, output)
+			}
+			if !strings.Contains(output, "functional-lane") {
+				t.Fatalf("%s failure did not include the runner command:\\n%s", tc.target, output)
+			}
+			if !strings.Contains(output, "TestRepresentativeFunctionalFailure") {
+				t.Fatalf("%s failure did not preserve the failing functional test output:\\n%s", tc.target, output)
+			}
+		})
+	}
+}
+
+// TestVerifyFastCommandSmoke_UsesOnlyShortOwnedSuites prove verify-fast selects only short owned suites in order.
 func TestVerifyFastCommandSmoke_UsesOnlyShortOwnedSuites(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
+	executionSentinel := filepath.Join(t.TempDir(), "verify-fast-suite-executed")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
 		"typecheck":             "@printf '%s\\n' 'stub:typecheck'\n",
 		"mcp-contract-check":    "@printf '%s\\n' 'stub:mcp-contract-check'\n",
 		"ui-test":               "@printf '%s\\n' 'stub:ui-test'\n",
-		"test":                  "@printf '%s\\n' 'stub:test'\n",
+		"test":                  fmt.Sprintf("@printf '%%s\\n' 'stub:test'\n@printf '%%s\\n' 'selected-suite-executed' > %q\n", executionSentinel),
+		"test-unit":             fmt.Sprintf("@printf '%%s\\n' 'simulated-unit-failure'\n@printf '%%s\\n' 'unit-suite-executed' > %q\n@exit 73\n", executionSentinel),
 		"ui-install-playwright": "@printf '%s\\n' 'unexpected:ui-install-playwright'\n\t@exit 99\n",
 		"ui-integration-test":   "@printf '%s\\n' 'unexpected:ui-integration-test'\n\t@exit 99\n",
 		"test-functional-long":  "@printf '%s\\n' 'unexpected:test-functional-long'\n\t@exit 99\n",
 		"long-tests":            "@printf '%s\\n' 'unexpected:long-tests'\n\t@exit 99\n",
 	})
 
-	output, err := runMakefileTarget(repoRoot, makefilePath, "verify-fast")
+	output, err := runMakefileTargetDryRun(repoRoot, makefilePath, "verify-fast")
 	if err != nil {
-		t.Fatalf("run verify-fast wrapper: %v\n%s", err, output)
+		t.Fatalf("dry-run verify-fast wrapper: %v\n%s", err, output)
+	}
+	if _, err := os.Stat(executionSentinel); !os.IsNotExist(err) {
+		t.Fatalf("dry-run verify-fast executed a suite recipe; sentinel error = %v\n%s", err, output)
 	}
 
 	assertOutputOrder(t, output,
 		"Running fast verification tier: typecheck + MCP contract boundary + short UI/unit suite + short Go suite",
 		"==> dashboard typecheck [make typecheck]",
-		"stub:typecheck",
+		"typecheck ||",
 		"==> MCP contract boundary [make mcp-contract-check]",
-		"stub:mcp-contract-check",
+		"mcp-contract-check ||",
 		"==> short UI/unit suite [make ui-test]",
-		"stub:ui-test",
+		"ui-test ||",
 		"==> short Go suite [make test]",
-		"stub:test",
+		"test ||",
 	)
 
 	for _, unwanted := range []string{
-		"unexpected:ui-install-playwright",
-		"unexpected:ui-integration-test",
-		"unexpected:test-functional-long",
-		"unexpected:long-tests",
+		"[make ui-install-playwright]",
+		"[make ui-integration-test]",
+		"[make test-functional-long]",
+		"[make long-tests]",
 	} {
 		if strings.Contains(output, unwanted) {
-			t.Fatalf("verify-fast unexpectedly ran %q:\n%s", unwanted, output)
+			t.Fatalf("verify-fast unexpectedly selected %q:\n%s", unwanted, output)
 		}
 	}
 }
@@ -67,7 +191,13 @@ func TestVerifyFastCommandSmoke_FailureReportsOwnedSuiteAndRerunCommand(t *testi
 		"test":               "@printf '%s\\n' 'stub:test'\n",
 	})
 
-	output, err := runMakefileTarget(repoRoot, makefilePath, "verify-fast")
+	output, err := runMakefileTargetWithPrerequisitesMarkedOld(
+		repoRoot,
+		makefilePath,
+		"verify-fast",
+		"test-unit",
+		"test-ci-workflows",
+	)
 	if err == nil {
 		t.Fatalf("verify-fast unexpectedly succeeded:\n%s", output)
 	}
@@ -89,7 +219,13 @@ func TestVerifyFastCommandSmoke_ContractFailureStopsLaterSuites(t *testing.T) {
 		"test":               "@printf '%s\\n' 'stub:test'\n",
 	})
 
-	output, err := runMakefileTarget(repoRoot, makefilePath, "verify-fast")
+	output, err := runMakefileTargetWithPrerequisitesMarkedOld(
+		repoRoot,
+		makefilePath,
+		"verify-fast",
+		"test-unit",
+		"test-ci-workflows",
+	)
 	if err == nil {
 		t.Fatalf("verify-fast unexpectedly succeeded:\n%s", output)
 	}
@@ -526,17 +662,174 @@ func TestBackendVerificationLaneScriptSmoke_PreservesFailureExitAndLog(t *testin
 	}
 }
 
+// TestFunctionalTestVizLaneScriptSmoke_UsesCanonicalOwnedCommandAndCapturesLog prove run-functional-test-viz.sh invokes the canonical make target with the shared artifact directory and captures command.log.
+func TestFunctionalTestVizLaneScriptSmoke_UsesCanonicalOwnedCommandAndCapturesLog(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makePath := writeExecutableScript(t, "fake-make-functional-viz", `#!/bin/sh
+for argument in "$@"; do
+  case "$argument" in
+    FUNCTIONAL_GOCOVERAGE_EXIT_FILE=*)
+      printf '%s\n' '0' > "${argument#*=}"
+      ;;
+  esac
+done
+printf '%s\n' 'Functional suite inventory: discovered-packages=1 observed-packages=1 (pass=1 fail=0 skip=0) top-level-tests=1 (pass=1 fail=0 skip=0) deferred-short-tests=0 wall=0.001s complete=true'
+printf '%s\n' 'total: (statements) 80.0%'
+printf '%s\n' 'Functional package coverage verdict:'
+printf '%s\n' '  floor violations: none'
+printf '%s\n' '  package=github.com/portpowered/infinite-you/pkg/alpha coverage=80.0% floor=75.0% delta=+5.0pp gate=pass lane=functional'
+printf '%s\n' '  tally: measured-packages=1 gated-packages=1 below-floor=0 near-floor=0 gate-failures=0'
+printf '%s\n' 'Go coverage 80.0% meets minimum 33.1%.'
+printf '%s\n' "fake-make:$*"
+`)
+	artifactRoot := filepath.Join(t.TempDir(), "functional-test-viz-artifacts")
+
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "run-functional-test-viz.sh"),
+		fmt.Sprintf("FUNCTIONAL_TEST_VIZ_DIR=%s", artifactRoot),
+		fmt.Sprintf("MAKE_BIN=%s", makePath),
+	)
+	if err != nil {
+		t.Fatalf("run functional test viz script: %v\n%s", err, output)
+	}
+	if !strings.Contains(output, "fake-make:functional-test-viz FUNCTIONAL_TEST_VIZ_DIR="+artifactRoot) {
+		t.Fatalf("functional test viz script did not invoke the canonical make target with the shared artifact directory:\n%s", output)
+	}
+
+	logBody, err := os.ReadFile(filepath.Join(artifactRoot, "command.log"))
+	if err != nil {
+		t.Fatalf("read functional test viz command log: %v", err)
+	}
+	if !strings.Contains(string(logBody), "fake-make:functional-test-viz") {
+		t.Fatalf("functional test viz command log missing canonical command output:\n%s", string(logBody))
+	}
+}
+
+// TestFunctionalTestVizLaneScriptSmoke_PreservesFailureExitAndLog prove run-functional-test-viz.sh preserves failure exit codes and command.log output so a failed lane cannot be papered over by publication steps.
+func TestFunctionalTestVizLaneScriptSmoke_PreservesFailureExitAndLog(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makePath := writeExecutableScript(t, "fake-make-functional-viz-fail", "#!/bin/sh\nprintf '%s\\n' \"fake-make:$*\"\nexit 42\n")
+	artifactRoot := filepath.Join(t.TempDir(), "functional-test-viz-artifacts")
+
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "run-functional-test-viz.sh"),
+		fmt.Sprintf("FUNCTIONAL_TEST_VIZ_DIR=%s", artifactRoot),
+		fmt.Sprintf("MAKE_BIN=%s", makePath),
+	)
+	if err == nil {
+		t.Fatalf("functional test viz script unexpectedly succeeded:\n%s", output)
+	}
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok || exitErr.ExitCode() != 42 {
+		t.Fatalf("functional test viz script exit = %v, want exit code 42\n%s", err, output)
+	}
+
+	logBody, readErr := os.ReadFile(filepath.Join(artifactRoot, "command.log"))
+	if readErr != nil {
+		t.Fatalf("read functional test viz command log: %v", readErr)
+	}
+	if !strings.Contains(string(logBody), "fake-make:functional-test-viz") {
+		t.Fatalf("functional test viz command log missing failure output:\n%s", string(logBody))
+	}
+}
+
+// TestFunctionalTestSummaryPublishScriptSmoke_AppendsMarkdownWhenPresent prove publish-functional-test-summary.sh appends the functional test markdown to the job summary when the report exists.
+func TestFunctionalTestSummaryPublishScriptSmoke_AppendsMarkdownWhenPresent(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	tempDir := t.TempDir()
+	markdownPath := filepath.Join(tempDir, "functional-tests.md")
+	if err := os.WriteFile(markdownPath, []byte("## Functional test timings\n\nTotal wall-clock: 12.5s\n"), 0o644); err != nil {
+		t.Fatalf("write fake functional test markdown: %v", err)
+	}
+	summaryPath := filepath.Join(tempDir, "step-summary.md")
+
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "publish-functional-test-summary.sh"),
+		fmt.Sprintf("FUNCTIONAL_TEST_VIZ_MARKDOWN=%s", markdownPath),
+		fmt.Sprintf("FUNCTIONAL_TEST_VIZ_DIR=%s", tempDir),
+		fmt.Sprintf("GITHUB_STEP_SUMMARY=%s", summaryPath),
+	)
+	if err != nil {
+		t.Fatalf("publish functional test summary script: %v\n%s", err, output)
+	}
+
+	summaryBody, readErr := os.ReadFile(summaryPath)
+	if readErr != nil {
+		t.Fatalf("read published job summary: %v", readErr)
+	}
+	if !strings.Contains(string(summaryBody), "## Functional test timings") {
+		t.Fatalf("job summary missing functional test timing section:\n%s", string(summaryBody))
+	}
+}
+
+// TestFunctionalTestSummaryPublishScriptSmoke_SkipsWhenMarkdownMissing prove publish-functional-test-summary.sh succeeds and leaves the job summary untouched when the markdown report is absent, so missing optional diagnostics never obscure an earlier failure.
+func TestFunctionalTestSummaryPublishScriptSmoke_SkipsWhenMarkdownMissing(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	tempDir := t.TempDir()
+	missingMarkdownPath := filepath.Join(tempDir, "does-not-exist.md")
+	summaryPath := filepath.Join(tempDir, "step-summary.md")
+
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "publish-functional-test-summary.sh"),
+		fmt.Sprintf("FUNCTIONAL_TEST_VIZ_MARKDOWN=%s", missingMarkdownPath),
+		fmt.Sprintf("FUNCTIONAL_TEST_VIZ_DIR=%s", tempDir),
+		fmt.Sprintf("GITHUB_STEP_SUMMARY=%s", summaryPath),
+	)
+	if err != nil {
+		t.Fatalf("publish functional test summary script unexpectedly failed when markdown was absent: %v\n%s", err, output)
+	}
+	if !strings.Contains(output, "skipping job summary") {
+		t.Fatalf("publish functional test summary script did not report skipping the job summary:\n%s", output)
+	}
+	if _, statErr := os.Stat(summaryPath); statErr == nil {
+		summaryBody, readErr := os.ReadFile(summaryPath)
+		if readErr != nil {
+			t.Fatalf("read job summary: %v", readErr)
+		}
+		if len(summaryBody) != 0 {
+			t.Fatalf("job summary should remain untouched when markdown is absent, got:\n%s", string(summaryBody))
+		}
+	}
+}
+
+// TestFunctionalTestSummaryPublishScriptSmoke_NoopWhenGithubStepSummaryUnset prove publish-functional-test-summary.sh succeeds without a GitHub Actions job summary target.
+func TestFunctionalTestSummaryPublishScriptSmoke_NoopWhenGithubStepSummaryUnset(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	tempDir := t.TempDir()
+	markdownPath := filepath.Join(tempDir, "functional-tests.md")
+	if err := os.WriteFile(markdownPath, []byte("## Functional test timings\n"), 0o644); err != nil {
+		t.Fatalf("write fake functional test markdown: %v", err)
+	}
+
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "publish-functional-test-summary.sh"),
+		fmt.Sprintf("FUNCTIONAL_TEST_VIZ_MARKDOWN=%s", markdownPath),
+		fmt.Sprintf("FUNCTIONAL_TEST_VIZ_DIR=%s", tempDir),
+		"GITHUB_STEP_SUMMARY=",
+	)
+	if err != nil {
+		t.Fatalf("publish functional test summary script unexpectedly failed without GITHUB_STEP_SUMMARY: %v\n%s", err, output)
+	}
+	if !strings.Contains(output, "GITHUB_STEP_SUMMARY not set") {
+		t.Fatalf("publish functional test summary script did not report the missing GITHUB_STEP_SUMMARY target:\n%s", output)
+	}
+}
+
 // TestVerifyExtendedCommandSmoke_UsesOnlyExplicitLongSuitesAfterPRTier prove verify-extended runs PR verification then only explicit long and specialty suites.
 func TestVerifyExtendedCommandSmoke_UsesOnlyExplicitLongSuitesAfterPRTier(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-		"verify-pr":                     "@printf '%s\\n' 'stub:verify-pr'\n",
-		"test-ui-performance":           "@printf '%s\\n' 'stub:test-ui-performance'\n",
-		"long-tests-managed-runtime":    "@printf '%s\\n' 'stub:long-tests-managed-runtime'\n",
-		"long-tests-functional-runtime": "@printf '%s\\n' 'stub:long-tests-functional-runtime'\n",
-		"test-functional-long":          "@printf '%s\\n' 'unexpected:test-functional-long'\n\t@exit 99\n",
-		"test-backend-functional":       "@printf '%s\\n' 'unexpected:test-backend-functional'\n\t@exit 99\n",
-		"ui-integration-test":           "@printf '%s\\n' 'unexpected:ui-integration-test'\n\t@exit 99\n",
+		"verify-pr":                  "@printf '%s\\n' 'stub:verify-pr'\n",
+		"test-ui-performance":        "@printf '%s\\n' 'stub:test-ui-performance'\n",
+		"long-tests-managed-runtime": "@printf '%s\\n' 'stub:long-tests-managed-runtime'\n",
+		"test-functional-long":       "@printf '%s\\n' 'unexpected:test-functional-long'\n\t@exit 99\n",
+		"test-backend-functional":    "@printf '%s\\n' 'unexpected:test-backend-functional'\n\t@exit 99\n",
+		"ui-integration-test":        "@printf '%s\\n' 'unexpected:ui-integration-test'\n\t@exit 99\n",
 	})
 
 	output, err := runMakefileTarget(repoRoot, makefilePath, "verify-extended")
@@ -549,13 +842,11 @@ func TestVerifyExtendedCommandSmoke_UsesOnlyExplicitLongSuitesAfterPRTier(t *tes
 		"==> pull-request verification tier [make verify-pr]",
 		"stub:verify-pr",
 		"==> opt-in long and specialty suites [make long-tests]",
-		"Running opt-in long and specialty suites: UI performance + managed runtime coverage + real local inference coverage",
+		"Running opt-in long and specialty suites: UI performance + managed runtime coverage",
 		"==> UI Performance specialty lane [make test-ui-performance]",
 		"stub:test-ui-performance",
 		"==> Managed Runtime specialty lane [make long-tests-managed-runtime]",
 		"stub:long-tests-managed-runtime",
-		"==> Real Local Inference specialty lane [make long-tests-functional-runtime]",
-		"stub:long-tests-functional-runtime",
 	)
 
 	for _, unwanted := range []string{
@@ -573,95 +864,15 @@ func TestVerifyExtendedCommandSmoke_UsesOnlyExplicitLongSuitesAfterPRTier(t *tes
 func TestLongTestsCommandSmoke_FailureReportsExactSpecialtyLaneRerun(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-		"test-ui-performance":           "@printf '%s\\n' 'stub:test-ui-performance'\n",
-		"long-tests-managed-runtime":    "@printf '%s\\n' 'stub:long-tests-managed-runtime'\n",
-		"long-tests-functional-runtime": "@printf '%s\\n' 'stub:long-tests-functional-runtime'\n\t@exit 29\n",
+		"test-ui-performance":        "@printf '%s\\n' 'stub:test-ui-performance'\n",
+		"long-tests-managed-runtime": "@printf '%s\\n' 'stub:long-tests-managed-runtime'\n\t@exit 29\n",
 	})
 
 	output, err := runMakefileTarget(repoRoot, makefilePath, "long-tests")
 	if err == nil {
 		t.Fatalf("long-tests unexpectedly succeeded:\n%s", output)
 	}
-	if !strings.Contains(output, "FAIL: Real Local Inference specialty lane [make long-tests-functional-runtime] failed. Rerun with: make long-tests-functional-runtime") {
+	if !strings.Contains(output, "FAIL: Managed Runtime specialty lane [make long-tests-managed-runtime] failed. Rerun with: make long-tests-managed-runtime") {
 		t.Fatalf("long-tests failure output missing exact specialty rerun hint:\n%s", output)
-	}
-}
-
-// TestVerifyPRInferenceCommandSmoke_RunsSingleNamedRegressionOnly prove verify-pr-inference runs only the named PR inference approval regression.
-func TestVerifyPRInferenceCommandSmoke_RunsSingleNamedRegressionOnly(t *testing.T) {
-	repoRoot := testutil.MustRepoPath(t, ".")
-	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-		"pr-inference-approval":         "@printf '%s\\n' 'stub:pr-inference-approval'\n",
-		"long-tests":                    "@printf '%s\\n' 'unexpected:long-tests'\n\t@exit 99\n",
-		"long-tests-managed-runtime":    "@printf '%s\\n' 'unexpected:long-tests-managed-runtime'\n\t@exit 99\n",
-		"long-tests-functional-runtime": "@printf '%s\\n' 'unexpected:long-tests-functional-runtime'\n\t@exit 99\n",
-	})
-
-	output, err := runMakefileTarget(repoRoot, makefilePath, "verify-pr-inference")
-	if err != nil {
-		t.Fatalf("run verify-pr-inference wrapper: %v\n%s", err, output)
-	}
-
-	assertOutputOrder(t, output,
-		"Running PR-gated inference approval lane: TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio",
-		"Required: export INFINITE_YOU_RUN_OMNIVOICE_LONG_TESTS=1",
-		"Runtime: omnivoice-llamacpp on PATH, or set INFINITE_YOU_OMNIVOICE_COMMAND to the executable",
-		"Optional: INFINITE_YOU_OMNIVOICE_CACHE_DIR to reuse managed model cache (omit to use a temp cache)",
-		"Broader specialty sweep remains on make long-tests; this lane is merge-blocking PR inference approval only",
-		"==> PR inference approval regression [make pr-inference-approval]",
-		"stub:pr-inference-approval",
-	)
-
-	for _, unwanted := range []string{
-		"unexpected:long-tests",
-		"unexpected:long-tests-managed-runtime",
-		"unexpected:long-tests-functional-runtime",
-	} {
-		if strings.Contains(output, unwanted) {
-			t.Fatalf("verify-pr-inference unexpectedly ran %q:\n%s", unwanted, output)
-		}
-	}
-}
-
-// TestVerifyPRInferenceCommandSmoke_FailureReportsOwnedRerunCommand prove verify-pr-inference failure output reports the owned rerun command.
-func TestVerifyPRInferenceCommandSmoke_FailureReportsOwnedRerunCommand(t *testing.T) {
-	repoRoot := testutil.MustRepoPath(t, ".")
-	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-		"pr-inference-approval": "@printf '%s\\n' 'stub:pr-inference-approval'\n\t@exit 31\n",
-	})
-
-	output, err := runMakefileTarget(repoRoot, makefilePath, "verify-pr-inference")
-	if err == nil {
-		t.Fatalf("verify-pr-inference unexpectedly succeeded:\n%s", output)
-	}
-	if !strings.Contains(output, "FAIL: PR inference approval regression [make pr-inference-approval] failed. Rerun with: make pr-inference-approval") {
-		t.Fatalf("verify-pr-inference failure output missing exact rerun hint:\n%s", output)
-	}
-}
-
-// TestVerifyPRInferenceCommandSmoke_StaysOutsideRequiredPRAndExtendedTiers prove verify-pr, verify-extended, and long-tests do not invoke verify-pr-inference.
-func TestVerifyPRInferenceCommandSmoke_StaysOutsideRequiredPRAndExtendedTiers(t *testing.T) {
-	repoRoot := testutil.MustRepoPath(t, ".")
-	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-		"verify-build-contracts":        "@printf '%s\\n' 'stub:verify-build-contracts'\n",
-		"release-surface-smoke":         "@printf '%s\\n' 'stub:release-surface-smoke'\n",
-		"test-ui-coverage":              "@printf '%s\\n' 'stub:test-ui-coverage'\n",
-		"test-ui-performance":           "@printf '%s\\n' 'stub:test-ui-performance'\n",
-		"ui-integration-test":           "@printf '%s\\n' 'stub:ui-integration-test'\n",
-		"test-backend-verification":     "@printf '%s\\n' 'stub:test-backend-verification'\n",
-		"verify-pr":                     "@printf '%s\\n' 'stub:verify-pr'\n",
-		"long-tests-managed-runtime":    "@printf '%s\\n' 'stub:long-tests-managed-runtime'\n",
-		"long-tests-functional-runtime": "@printf '%s\\n' 'stub:long-tests-functional-runtime'\n",
-		"pr-inference-approval":         "@printf '%s\\n' 'unexpected:pr-inference-approval'\n\t@exit 99\n",
-	})
-
-	for _, target := range []string{"verify-pr", "verify-extended", "long-tests"} {
-		output, err := runMakefileTarget(repoRoot, makefilePath, target)
-		if err != nil {
-			t.Fatalf("run %s wrapper: %v\n%s", target, err, output)
-		}
-		if strings.Contains(output, "unexpected:pr-inference-approval") {
-			t.Fatalf("%s unexpectedly ran verify-pr-inference lane:\n%s", target, output)
-		}
 	}
 }

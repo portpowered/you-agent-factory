@@ -1,3 +1,4 @@
+// backendsizecheck:ignore-file pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 package dispatch
 
 import (
@@ -458,6 +459,7 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 		support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 		for i := 0; i < 3; i++ {
 			testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+				Name:       fmt.Sprintf("batch-item-%d", i),
 				WorkTypeID: "task",
 				TraceID:    fmt.Sprintf("trace-e2e-batch-%d", i),
 				Payload:    []byte(`{"title":"batch item"}`),

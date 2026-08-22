@@ -69,6 +69,11 @@ const inlineWidgetPickerMessagesByLocale = {
           "Inspect trace details and related state transitions inline.",
         title: "Trace drilldown",
       },
+      "worker-session-timeline": {
+        description:
+          "Inspect canonical Worker Session events for the selected Work without leaving the dashboard.",
+        title: "Worker Session timeline",
+      },
       "work-graph": {
         description:
           "Watch workflow activity and navigate the graph from the main dashboard board.",
@@ -119,6 +124,10 @@ const inlineWidgetPickerMessagesByLocale = {
       trace: {
         description: "内联检查追踪详情及其相关状态变化。",
         title: "追踪钻取",
+      },
+      "worker-session-timeline": {
+        description: "无需离开仪表板即可查看所选工作项的规范 Worker 会话事件。",
+        title: "Worker 会话时间线",
       },
       "work-graph": {
         description: "从主仪表板面板观察工作流活动并导航流程图。",

@@ -32,7 +32,7 @@
         "description": "Exact number of independently executed tasks, from 1 through 14.",
         "externalName": "count",
         "typeHint": "NUMBER_STRING",
-        "required": true,
+        "defaultValue": "3",
         "bindings": [
           {
             "kind": "NAMED"
@@ -87,8 +87,7 @@
   "argsSchema": {
     "type": "object",
     "required": [
-      "request",
-      "count"
+      "request"
     ],
     "properties": {
       "request": {
@@ -97,6 +96,7 @@
       },
       "count": {
         "type": "integer",
+        "default": 3,
         "minimum": 1,
         "maximum": 14
       },

@@ -281,7 +281,7 @@ export async function expectOrderedLeftEdges(locators, label) {
 export async function verifyDashboardHeader(page, _dialog, viewport) {
   const heading = page.getByRole("heading", {
     level: 1,
-    name: "U",
+    name: "You Agent Factory",
     exact: true,
   });
   const sessionTabs = page.getByRole("navigation", {

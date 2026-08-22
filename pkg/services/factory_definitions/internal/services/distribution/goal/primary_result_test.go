@@ -31,7 +31,6 @@ func TestPackagedGoalInvocationPrimaryResult_ReturnsSummaryNotSubmittedInput(t *
 		WorkTypeID: PackagedInvocationReturnWorkTypeName,
 		State:      PackagedInvocationReturnTerminalState,
 		TraceID:    requestID,
-		PlaceID:    PackagedInvocationReturnWorkTypeName + ":" + PackagedInvocationReturnTerminalState,
 		Content:    summaryContent,
 	}
 
@@ -91,7 +90,6 @@ func TestPackagedGoalInvocationPrimaryResult_UnresolvedWhenConfiguredTerminalMis
 		WorkTypeID: PackagedInvocationReturnWorkTypeName,
 		State:      "failed",
 		TraceID:    requestID,
-		PlaceID:    PackagedInvocationReturnWorkTypeName + ":failed",
 		Content:    submitted.Content,
 	}
 

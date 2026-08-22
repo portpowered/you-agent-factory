@@ -13,6 +13,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 )
 
 const resumeOwnerSessionID = "dur-sess-resume-owner-aaaaaaaaaaaaaaaaaaaaaaaa"
@@ -200,7 +201,7 @@ func seedInterruptedSessionInStore(
 func newResumeBackedExecution(
 	t *testing.T,
 	store *restartMemoryStore,
-) factorysessions.ExecutionService {
+) durableexecution.Service {
 	t.Helper()
 
 	clock := restartClock{now: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)}

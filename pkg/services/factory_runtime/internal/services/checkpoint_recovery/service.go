@@ -1,25 +1,25 @@
 // Package checkpoint_recovery defines the parent-private Factory Runtime
-// checkpoint recovery capability. Peers interact through Runtime root contracts;
-// CheckpointStore types remain inside this package.
+// checkpoint recovery capability. It is not exposed through the Runtime root,
+// a transport, or any peer dependency; CheckpointStore types remain inside
+// this package.
 package checkpoint_recovery
 
 import (
+	"errors"
 	"strings"
-
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 )
 
 // ErrCheckpointNotFound indicates a checkpoint identity is not present in the
 // Runtime-owned checkpoint store.
-var ErrCheckpointNotFound = factoryruntime.ErrCheckpointNotFound
+var ErrCheckpointNotFound = errors.New("factory runtime checkpoint not found")
 
 // ErrCorruptCheckpoint indicates the checkpoint envelope failed integrity or
 // shape checks without exposing strategy codec internals.
-var ErrCorruptCheckpoint = factoryruntime.ErrCorruptCheckpoint
+var ErrCorruptCheckpoint = errors.New("factory runtime checkpoint is corrupt")
 
 // ErrIncompatibleCheckpoint indicates the checkpoint schema or opaque payload
 // is incompatible with the Runtime restore surface.
-var ErrIncompatibleCheckpoint = factoryruntime.ErrIncompatibleCheckpoint
+var ErrIncompatibleCheckpoint = errors.New("factory runtime checkpoint is incompatible")
 
 // Envelope is a versioned opaque checkpoint envelope persisted by checkpoint
 // identity inside checkpoint_recovery. Payload bytes are opaque strategy data.

@@ -20,6 +20,10 @@ func (packagedInstallationFileSystemStub) Stat(string) (fs.FileInfo, error) {
 	return nil, fs.ErrNotExist
 }
 
+func (packagedInstallationFileSystemStub) ReadDir(string) ([]fs.DirEntry, error) {
+	return nil, fs.ErrNotExist
+}
+
 func TestProvideNamedFactoryCandidatePathsResolverForwardsOwnerOperation(t *testing.T) {
 	paths, err := factorydefinitionswire.NewPathResolver(platformfilesystem.Local{})
 	if err != nil {
@@ -41,6 +45,16 @@ func TestProvideNamedFactoryCandidatePathsResolverForwardsOwnerOperation(t *test
 func (packagedInstallationFileSystemStub) ReadFile(string) ([]byte, error) {
 	return nil, fs.ErrNotExist
 }
+
+func (packagedInstallationFileSystemStub) Mkdir(string, fs.FileMode) error { return nil }
+
+func (packagedInstallationFileSystemStub) MkdirAll(string, fs.FileMode) error { return nil }
+
+func (packagedInstallationFileSystemStub) RemoveAll(string) error { return nil }
+
+func (packagedInstallationFileSystemStub) WriteFile(string, []byte, fs.FileMode) error { return nil }
+
+func (packagedInstallationFileSystemStub) Rename(string, string) error { return nil }
 
 type factoryDefinitionClockStub struct{}
 
@@ -101,8 +115,12 @@ func TestProvidePackagedFactoryDefinitions_LoadsDetachedGeneratedCatalog(t *test
 	}
 
 	wantNames := []string{
+		"@you/agy-clip-qa",
+		"@you/agy-cold-watch",
 		"@you/classify",
 		"@you/deep-research",
+		"@you/factory-builder",
+		"@you/fix",
 		"@you/full-flow",
 		"@you/fusion",
 		"@you/goal",
@@ -110,6 +128,7 @@ func TestProvidePackagedFactoryDefinitions_LoadsDetachedGeneratedCatalog(t *test
 		"@you/plan-execute",
 		"@you/plan-parallel",
 		"@you/quorum",
+		"@you/ralph",
 		"@you/review",
 		"@you/spawn",
 		"@you/subagent",

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -20,9 +21,19 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	inference "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+)
+
+var (
+	_ recordings.RecordingMakeDirectories     = Edges{}.RecordingMakeDirectories
+	_ recordings.RecordingCreateTemporaryFile = Edges{}.RecordingCreateTempFile
+	_ recordings.RecordingRemovePath          = Edges{}.RecordingRemovePath
+	_ recordings.RecordingRenamePath          = Edges{}.RecordingRenamePath
+	_ recordings.RecordingReadFile            = Edges{}.RecordingReadFile
 )
 
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
@@ -57,6 +68,7 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 	directoryReplacementStore := &edgeDirectoryReplacementStore{}
 	workRequestIDGenerated := false
 	workSubmittedFileRead := false
+	workSubmittedFilePathInspected := false
 	responseEventIDGenerated := false
 	sessionIDGenerated := false
 	homeDirectoryResolved := false
@@ -75,6 +87,11 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 			return nil, providerTemporaryFileError
 		},
 	}
+	directoryCreationRequested := false
+	directoryCreator := factorydefinitions.PackagedInstallationDirectoryCreator(func(string, fs.FileMode) error {
+		directoryCreationRequested = true
+		return nil
+	})
 
 	merged := Merge(Edges{
 		APIServerStarter:     defaultStarter,
@@ -168,13 +185,14 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 			requiredToolVersionProbed = true
 			return []byte("version"), nil
 		},
-		FactoryDefinitionNamedPathFileSystem:            platformfilesystem.Local{},
-		FactoryDefinitionNamedFactoryCatalogFileSystem:  platformfilesystem.Local{},
-		FactoryDefinitionPackagedInstallationFileSystem: platformfilesystem.Local{},
-		FactoryDefinitionPersistenceFileSystem:          platformfilesystem.Local{},
-		FactoryDefinitionDirectoryReplacementStore:      directoryReplacementStore,
-		FactoryDefinitionScaffoldFileSystem:             platformfilesystem.Local{},
-		FactoryDefinitionScaffoldOutput:                 scaffoldOutput,
+		FactoryDefinitionNamedPathFileSystem:                  platformfilesystem.Local{},
+		FactoryDefinitionNamedFactoryCatalogFileSystem:        platformfilesystem.Local{},
+		FactoryDefinitionPackagedInstallationFileSystem:       platformfilesystem.Local{},
+		FactoryDefinitionPackagedInstallationDirectoryCreator: directoryCreator,
+		FactoryDefinitionPersistenceFileSystem:                platformfilesystem.Local{},
+		FactoryDefinitionDirectoryReplacementStore:            directoryReplacementStore,
+		FactoryDefinitionScaffoldFileSystem:                   platformfilesystem.Local{},
+		FactoryDefinitionScaffoldOutput:                       scaffoldOutput,
 		WorkRequestIDGenerator: func() string {
 			workRequestIDGenerated = true
 			return "work-id"
@@ -182,6 +200,10 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 		WorkSubmittedFileReader: func(string) ([]byte, error) {
 			workSubmittedFileRead = true
 			return []byte("work"), nil
+		},
+		WorkSubmittedFilePathInspector: func(string) (fs.FileInfo, error) {
+			workSubmittedFilePathInspected = true
+			return nil, nil
 		},
 		FactorySessionResponseEventIDGenerator: func() string {
 			responseEventIDGenerated = true
@@ -306,6 +328,9 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 	if output, err := merged.WorkSubmittedFileReader("work.json"); err != nil || string(output) != "work" || !workSubmittedFileRead {
 		t.Fatalf("WorkSubmittedFileReader replacement = (%q, %v, %v)", output, err, workSubmittedFileRead)
 	}
+	if _, err := merged.WorkSubmittedFilePathInspector("prompt.txt"); err != nil || !workSubmittedFilePathInspected {
+		t.Fatalf("WorkSubmittedFilePathInspector replacement = (%v, %v)", err, workSubmittedFilePathInspected)
+	}
 	if got := merged.FactorySessionResponseEventIDGenerator(); got != "response-event-id" || !responseEventIDGenerated {
 		t.Fatalf("FactorySessionResponseEventIDGenerator replacement = (%q, %v)", got, responseEventIDGenerated)
 	}
@@ -320,6 +345,7 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 	}
 	var _ work.RequestIDGenerator = merged.WorkRequestIDGenerator
 	var _ work.SubmittedFileReader = merged.WorkSubmittedFileReader
+	var _ work.SubmittedFilePathInspector = merged.WorkSubmittedFilePathInspector
 	var _ factorydefinitions.LoadingFileSystem = merged.FactoryDefinitionLoadingFileSystem
 	if _, ok := merged.FactoryDefinitionNamedPathFileSystem.(platformfilesystem.Local); !ok {
 		t.Fatalf("FactoryDefinitionNamedPathFileSystem = %T, want explicit replacement", merged.FactoryDefinitionNamedPathFileSystem)
@@ -329,6 +355,12 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 	}
 	if _, ok := merged.FactoryDefinitionPackagedInstallationFileSystem.(platformfilesystem.Local); !ok {
 		t.Fatalf("FactoryDefinitionPackagedInstallationFileSystem = %T, want explicit replacement", merged.FactoryDefinitionPackagedInstallationFileSystem)
+	}
+	if merged.FactoryDefinitionPackagedInstallationDirectoryCreator == nil {
+		t.Fatal("FactoryDefinitionPackagedInstallationDirectoryCreator = nil, want explicit replacement")
+	}
+	if err := merged.FactoryDefinitionPackagedInstallationDirectoryCreator("ignored", 0o755); err != nil || !directoryCreationRequested {
+		t.Fatalf("FactoryDefinitionPackagedInstallationDirectoryCreator replacement = (%v, %v), want injected call", err, directoryCreationRequested)
 	}
 	if _, ok := merged.FactoryDefinitionPersistenceFileSystem.(platformfilesystem.Local); !ok {
 		t.Fatalf("FactoryDefinitionPersistenceFileSystem = %T, want explicit replacement", merged.FactoryDefinitionPersistenceFileSystem)
@@ -378,6 +410,42 @@ func TestMergeAppendsAndDetachesProviderRegistrations(t *testing.T) {
 	}
 }
 
+func TestMergeAppendsAndDetachesCatalogCapabilityOverrides(t *testing.T) {
+	t.Parallel()
+
+	defaultOverride := inference.CatalogCapabilityOverride{
+		Provider:     providers.IDCodex,
+		Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},
+	}
+	addedOverride := inference.CatalogCapabilityOverride{
+		Provider:     providers.IDClaude,
+		Capabilities: []providers.Capability{providers.CapabilitySessionResume},
+	}
+	defaults := []inference.CatalogCapabilityOverride{defaultOverride}
+	additions := []inference.CatalogCapabilityOverride{addedOverride}
+
+	merged := Merge(
+		Edges{ProviderCatalogCapabilityOverrides: defaults},
+		Edges{ProviderCatalogCapabilityOverrides: additions},
+	)
+	defaults[0].Capabilities[0] = providers.CapabilityUsage
+	additions[0].Capabilities[0] = providers.CapabilityUsage
+
+	want := []inference.CatalogCapabilityOverride{
+		{
+			Provider:     providers.IDCodex,
+			Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},
+		},
+		{
+			Provider:     providers.IDClaude,
+			Capabilities: []providers.Capability{providers.CapabilitySessionResume},
+		},
+	}
+	if !reflect.DeepEqual(merged.ProviderCatalogCapabilityOverrides, want) {
+		t.Fatalf("ProviderCatalogCapabilityOverrides = %#v, want detached append %#v", merged.ProviderCatalogCapabilityOverrides, want)
+	}
+}
+
 type edgeAgyPTYHost struct{}
 
 func (*edgeAgyPTYHost) Allocate(context.Context) (platformpty.Allocation, error) { return nil, nil }
@@ -420,11 +488,139 @@ func TestMergeWithEmptyReplacementsPreservesProductionDefaults(t *testing.T) {
 	}
 }
 
-type stubProvider struct{ id string }
+func TestMergeAppliesAssetAndHostedEndpointReplacements(t *testing.T) {
+	t.Parallel()
+
+	merged := Merge(
+		Edges{HostedLinearEndpoint: "https://default.example"},
+		Edges{
+			HostedLinearEndpoint: "https://replacement.example",
+			ModelAssetEndpoints: models.RuntimeAssetEndpoints{
+				BaseURL:    "https://assets.example",
+				APIBaseURL: "https://api-assets.example",
+			},
+			ModelAssetHostPlatform: models.AssetHostPlatform{
+				OperatingSystem: "replacement-os",
+			},
+		},
+	)
+	if merged.HostedLinearEndpoint != "https://replacement.example" {
+		t.Fatalf("HostedLinearEndpoint = %q, want replacement", merged.HostedLinearEndpoint)
+	}
+	if merged.ModelAssetEndpoints.BaseURL != "https://assets.example" {
+		t.Fatalf("ModelAssetEndpoints.BaseURL = %q, want replacement", merged.ModelAssetEndpoints.BaseURL)
+	}
+	if merged.ModelAssetEndpoints.APIBaseURL != "https://api-assets.example" {
+		t.Fatalf("ModelAssetEndpoints.APIBaseURL = %q, want replacement", merged.ModelAssetEndpoints.APIBaseURL)
+	}
+	if merged.ModelAssetHostPlatform.OperatingSystem != "replacement-os" {
+		t.Fatalf("ModelAssetHostPlatform.OperatingSystem = %q, want replacement", merged.ModelAssetHostPlatform.OperatingSystem)
+	}
+}
+
+func TestMergeAppliesModelAssetAndHostEffectReplacements(t *testing.T) {
+	t.Parallel()
+
+	environment := func(name string) string { return "value:" + name }
+	protocol := &edgeModelHostProtocol{}
+	dialer := &edgeModelHostGRPCDialer{}
+	compatibility := &edgeModelHostCompatibilityChecker{}
+	merged := Merge(Edges{}, Edges{
+		ModelAssetResolveEnvironment:  environment,
+		ModelHostProtocolNegotiator:   protocol,
+		ModelHostGRPCDialer:           dialer,
+		ModelHostCompatibilityChecker: compatibility,
+	})
+	if merged.ModelAssetResolveEnvironment("CACHE") != "value:CACHE" {
+		t.Fatalf("asset environment edge was not replaced")
+	}
+	if merged.ModelHostProtocolNegotiator != protocol {
+		t.Fatal("protocol negotiator edge was not replaced")
+	}
+	if merged.ModelHostGRPCDialer != dialer {
+		t.Fatal("gRPC dialer edge was not replaced")
+	}
+	if merged.ModelHostCompatibilityChecker != compatibility {
+		t.Fatal("compatibility checker edge was not replaced")
+	}
+}
+
+func TestMergeAppliesCLIOutputInspectionReplacement(t *testing.T) {
+	t.Parallel()
+
+	defaultErr := errors.New("default inspect")
+	replacementErr := errors.New("replacement inspect")
+	defaultInspect := func(string) (fs.FileInfo, error) { return nil, defaultErr }
+	replacementInspect := func(string) (fs.FileInfo, error) { return nil, replacementErr }
+	merged := Merge(
+		Edges{ModelCLIOutputInspectPath: defaultInspect},
+		Edges{ModelCLIOutputInspectPath: replacementInspect},
+	)
+	if _, err := merged.ModelCLIOutputInspectPath("mapped.out"); !errors.Is(err, replacementErr) {
+		t.Fatalf("merged ModelCLIOutputInspectPath error = %v, want replacement error", err)
+	}
+}
+
+func TestMergeReplacesAndPreservesRecordingArtifactReadEffect(t *testing.T) {
+	t.Parallel()
+
+	defaultRead := recordings.RecordingReadFile(func(string) ([]byte, error) {
+		return []byte("default"), nil
+	})
+	replacementRead := recordings.RecordingReadFile(func(string) ([]byte, error) {
+		return []byte("replacement"), nil
+	})
+
+	merged := Merge(
+		Edges{RecordingReadFile: defaultRead},
+		Edges{RecordingReadFile: replacementRead},
+	)
+	if got, err := merged.RecordingReadFile("artifact"); err != nil || string(got) != "replacement" {
+		t.Fatalf("merged RecordingReadFile = (%q, %v), want replacement", got, err)
+	}
+
+	preserved := Merge(Edges{RecordingReadFile: defaultRead}, Edges{})
+	if got, err := preserved.RecordingReadFile("artifact"); err != nil || string(got) != "default" {
+		t.Fatalf("preserved RecordingReadFile = (%q, %v), want default", got, err)
+	}
+}
+
+type stubProvider struct {
+	id string
+	testutil.ProviderServiceAdapter
+}
 
 type edgeDirectoryReplacementStore struct{}
 
 type edgeWorktreeGit struct{}
+
+type edgeModelHostProtocol struct{}
+
+func (edgeModelHostProtocol) Negotiate(
+	context.Context,
+	string,
+	ModelHostProtocolNegotiationRequest,
+) (ModelHostProtocolNegotiationResult, error) {
+	return ModelHostProtocolNegotiationResult{}, nil
+}
+
+type edgeModelHostGRPCDialer struct{}
+
+func (edgeModelHostGRPCDialer) Dial(context.Context, string) (interface {
+	Negotiate(
+		context.Context,
+		ModelHostProtocolNegotiationRequest,
+	) (ModelHostProtocolNegotiationResult, error)
+	Close() error
+}, error) {
+	return nil, nil
+}
+
+type edgeModelHostCompatibilityChecker struct{}
+
+func (edgeModelHostCompatibilityChecker) Check(context.Context, ModelHostCompatibilityRequest) error {
+	return nil
+}
 
 func (*edgeWorktreeGit) Run(context.Context, string, ...string) (string, string, int, error) {
 	return "", "", 0, nil

@@ -27,6 +27,16 @@ func TestCurrentChainingTraceIDPrefersCustomerWork(t *testing.T) {
 	}
 }
 
+func TestCurrentChainingTraceIDFromColorsUsesSameCustomerSelection(t *testing.T) {
+	colors := []Color{
+		{DataType: DataTypeWork, WorkTypeID: "system", TraceID: "trace-system"},
+		{DataType: DataTypeWork, WorkTypeID: "task", CurrentChainingTraceID: "trace-customer"},
+	}
+	if got := CurrentChainingTraceIDFromColors(colors, "system"); got != "trace-customer" {
+		t.Fatalf("CurrentChainingTraceIDFromColors() = %q, want trace-customer", got)
+	}
+}
+
 func TestChainingTraceDepthFromColorsUsesDeepestWorkInput(t *testing.T) {
 	colors := []Color{
 		{DataType: DataTypeResource, ChainingTraceDepth: 99},

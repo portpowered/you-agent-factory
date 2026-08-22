@@ -8,7 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	pathpkg "path"
+	"sort"
 	"strings"
+	"text/template"
 	"time"
 
 	catalogresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
@@ -154,10 +157,11 @@ const (
 	WorkstationTypeScript    = "SCRIPT_RUN"
 	WorkstationTypePoller    = "POLLER_RUN"
 	// Legacy runtime identifiers retained during the migration window.
-	WorkstationTypeModel    = "MODEL_WORKSTATION"
-	WorkstationTypeInvoke   = "MODEL_INVOKE"
-	WorkstationTypeLogical  = "LOGICAL_MOVE"
-	WorkstationTypeClassify = "CLASSIFIER_WORKSTATION"
+	WorkstationTypeModel         = "MODEL_WORKSTATION"
+	WorkstationTypeInvoke        = "MODEL_INVOKE"
+	WorkstationTypeLogical       = "LOGICAL_MOVE"
+	WorkstationTypeClassify      = "CLASSIFIER_WORKSTATION"
+	WorkstationTypeHumanApproval = "HUMAN_APPROVAL"
 )
 
 // FactoryConfig is the specification of a factory as a JSON file.
@@ -172,6 +176,7 @@ type FactoryConfig struct {
 	InvocationReturn    *InvocationReturnConfig         `json:"invocation_return,omitempty"`
 	InvocationSignature *InvocationSignatureConfig      `json:"invocationSignature,omitempty"`
 	Examples            []InvocationExampleConfig       `json:"examples,omitempty" yaml:"examples,omitempty"`
+	Webhooks            []FactoryWebhookConfig          `json:"webhooks,omitempty" yaml:"webhooks,omitempty"`
 	Orchestrator        *FactoryOrchestratorConfig      `json:"orchestrator,omitempty"`
 	WorkTypes           []WorkTypeConfig                `json:"work_types"`
 	Resources           []catalogresource.Config        `json:"resources"`
@@ -179,6 +184,47 @@ type FactoryConfig struct {
 	Layout              *FactoryLayoutConfig            `json:"layout,omitempty"`
 	Workers             []workerconfig.Config           `json:"workers"`
 	Workstations        []FactoryWorkstationConfig      `json:"workstations"`
+	ignoredJSONPaths    []string                        `json:"-"`
+}
+
+// FactoryConfigIgnoredFieldWarningCode identifies a forward-compatible field
+// that was ignored while decoding a customer-authored Factory Definition.
+const FactoryConfigIgnoredFieldWarningCode = "FACTORY_CONFIG_UNKNOWN_FIELDS_IGNORED"
+
+// SetIgnoredJSONPaths retains the deterministic paths of customer-authored
+// fields that were ignored while decoding this Factory Definition. The paths
+// are operational diagnostics and are deliberately excluded from persisted
+// Factory configuration.
+func (cfg *FactoryConfig) SetIgnoredJSONPaths(paths []string) {
+	if cfg == nil {
+		return
+	}
+	unique := make(map[string]struct{}, len(paths))
+	for _, path := range paths {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		unique[path] = struct{}{}
+	}
+	if len(unique) == 0 {
+		cfg.ignoredJSONPaths = nil
+		return
+	}
+	cfg.ignoredJSONPaths = make([]string, 0, len(unique))
+	for path := range unique {
+		cfg.ignoredJSONPaths = append(cfg.ignoredJSONPaths, path)
+	}
+	sort.Strings(cfg.ignoredJSONPaths)
+}
+
+// IgnoredJSONPaths returns a detached, sorted copy of compatibility paths
+// collected while decoding this Factory Definition.
+func (cfg *FactoryConfig) IgnoredJSONPaths() []string {
+	if cfg == nil || len(cfg.ignoredJSONPaths) == 0 {
+		return nil
+	}
+	return append([]string(nil), cfg.ignoredJSONPaths...)
 }
 
 // FactoryVersion is the durable optimistic-concurrency metadata stored with a
@@ -424,11 +470,134 @@ func (a *InvocationExampleArguments) UnmarshalYAML(node *yaml.Node) error {
 }
 
 type WorkTypeConfig struct {
-	ID               string           `json:"id,omitempty" yaml:"id,omitempty"`
-	Name             string           `json:"name"`
-	Description      *NameValueConfig `json:"description,omitempty" yaml:"description,omitempty"`
-	States           []StateConfig    `json:"states"`
-	HandlingBehavior []string         `json:"handlingBehavior,omitempty"`
+	ID                string                   `json:"id,omitempty" yaml:"id,omitempty"`
+	Name              string                   `json:"name"`
+	Description       *NameValueConfig         `json:"description,omitempty" yaml:"description,omitempty"`
+	States            []StateConfig            `json:"states"`
+	HandlingBehavior  []string                 `json:"handlingBehavior,omitempty"`
+	ExpectedArtifacts []ExpectedArtifactConfig `json:"expectedArtifacts,omitempty" yaml:"expectedArtifacts,omitempty"`
+}
+
+// ExpectedArtifactConfig declares one output contract relative to the
+// dispatch workspace. Pattern is a workspace-relative literal path or glob
+// written with the same Go-template input vocabulary as workstation prompts.
+type ExpectedArtifactConfig struct {
+	Name     string `json:"name" yaml:"name"`
+	Pattern  string `json:"pattern" yaml:"pattern"`
+	NonEmpty bool   `json:"nonEmpty,omitempty" yaml:"nonEmpty,omitempty"`
+}
+
+// EffectiveExpectedArtifacts combines the applicable Work Type contract with
+// the producing Workstation contract. Work Type declarations are inherited
+// first, followed by Workstation declarations, and exact duplicate values are
+// retained only once in authored order.
+func EffectiveExpectedArtifacts(
+	workType WorkTypeConfig,
+	workstation FactoryWorkstationConfig,
+) []ExpectedArtifactConfig {
+	combined := make([]ExpectedArtifactConfig, 0, len(workType.ExpectedArtifacts)+len(workstation.ExpectedArtifacts))
+	combined = append(combined, workType.ExpectedArtifacts...)
+	combined = append(combined, workstation.ExpectedArtifacts...)
+	return NormalizeExpectedArtifactConfigs(combined)
+}
+
+// NormalizeExpectedArtifactConfigs removes exact duplicate declarations while
+// preserving the first declaration's authored position and value.
+func NormalizeExpectedArtifactConfigs(
+	declarations []ExpectedArtifactConfig,
+) []ExpectedArtifactConfig {
+	if len(declarations) == 0 {
+		return nil
+	}
+	normalized := make([]ExpectedArtifactConfig, 0, len(declarations))
+	seen := make(map[ExpectedArtifactConfig]struct{}, len(declarations))
+	for _, declaration := range declarations {
+		if _, exists := seen[declaration]; exists {
+			continue
+		}
+		seen[declaration] = struct{}{}
+		normalized = append(normalized, declaration)
+	}
+	return normalized
+}
+
+// ValidateExpectedArtifactConfig validates the definition-time portion of an
+// expected artifact contract. Runtime verification must repeat the workspace
+// containment check after rendering because input values are not known here.
+func ValidateExpectedArtifactConfig(
+	declaration ExpectedArtifactConfig,
+	inputCount int,
+) error {
+	if strings.TrimSpace(declaration.Name) == "" {
+		return fmt.Errorf("expected artifact name is required")
+	}
+	if strings.TrimSpace(declaration.Pattern) == "" {
+		return fmt.Errorf("expected artifact %q pattern is required", declaration.Name)
+	}
+	if err := validateExpectedArtifactPattern(declaration.Pattern, inputCount); err != nil {
+		return fmt.Errorf("expected artifact %q pattern: %w", declaration.Name, err)
+	}
+	return nil
+}
+
+func validateExpectedArtifactPattern(pattern string, inputCount int) error {
+	if inputCount < 0 {
+		return fmt.Errorf("input count cannot be negative")
+	}
+	if err := validateExpectedArtifactPathSafety(pattern); err != nil {
+		return err
+	}
+	if _, err := template.New("expected_artifact").Option("missingkey=error").Parse(pattern); err != nil {
+		return fmt.Errorf("invalid template: %w", err)
+	}
+	inputs := make([]work.ExpectedArtifactInput, inputCount)
+	for index := range inputs {
+		inputs[index] = work.ExpectedArtifactInput{
+			Name:       fmt.Sprintf("work-%d", index),
+			WorkID:     fmt.Sprintf("work-id-%d", index),
+			WorkTypeID: "work-type",
+			DataType:   "work",
+			TraceID:    fmt.Sprintf("trace-%d", index),
+			ParentID:   "parent",
+			Project:    "project",
+			Tags:       map[string]string{"branch": "main"},
+			Payload:    "payload",
+		}
+	}
+	rendered, err := (work.ExpectedArtifactTemplateContext{
+		Project: "project", SessionID: "session",
+	}).Render(pattern, inputs)
+	if err != nil {
+		return fmt.Errorf("template cannot be rendered for the dispatch inputs: %w", err)
+	}
+	return validateExpectedArtifactPathSafety(rendered)
+}
+
+func validateExpectedArtifactPathSafety(value string) error {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return fmt.Errorf("rendered pattern is empty")
+	}
+	portable := strings.ReplaceAll(trimmed, `\`, "/")
+	if pathpkg.IsAbs(portable) || strings.HasPrefix(portable, "/") {
+		return fmt.Errorf("path must be relative to the dispatch workspace")
+	}
+	if len(portable) >= 2 && portable[1] == ':' && isASCIIAlpha(portable[0]) {
+		return fmt.Errorf("path must not contain a host volume")
+	}
+	for _, segment := range strings.Split(portable, "/") {
+		if segment == ".." {
+			return fmt.Errorf("path cannot escape the dispatch workspace")
+		}
+	}
+	if _, err := pathpkg.Match(portable, ""); err != nil {
+		return fmt.Errorf("invalid glob pattern: %w", err)
+	}
+	return nil
+}
+
+func isASCIIAlpha(value byte) bool {
+	return (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z')
 }
 
 // StateConfig declares a state within a work type.
@@ -540,6 +709,7 @@ type FactoryWorkstationConfig struct {
 	Runner                string                      `json:"runner,omitempty" yaml:"runner,omitempty"`
 	PromptFile            string                      `json:"prompt_file,omitempty" yaml:"promptFile,omitempty"`
 	OutputSchema          string                      `json:"output_schema,omitempty" yaml:"outputSchema,omitempty"`
+	OutputContract        string                      `json:"output_contract,omitempty" yaml:"outputContract,omitempty"`
 	Timeout               string                      `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 	Limits                WorkstationLimits           `json:"limits,omitempty" yaml:"limits,omitempty"`
 	WorkPropagation       *WorkPropagationConfig      `json:"workPropagation,omitempty" yaml:"workPropagation,omitempty"`
@@ -550,6 +720,7 @@ type FactoryWorkstationConfig struct {
 	OnContinue            []IOConfig                  `json:"on_continue,omitempty" yaml:"onContinue,omitempty"`
 	OnRejection           []IOConfig                  `json:"on_rejection,omitempty" yaml:"onRejection,omitempty"`
 	OnFailure             []IOConfig                  `json:"on_failure,omitempty" yaml:"onFailure,omitempty"`
+	ExpectedArtifacts     []ExpectedArtifactConfig    `json:"expectedArtifacts,omitempty" yaml:"expectedArtifacts,omitempty"`
 	Resources             []catalogresource.Config    `json:"resources,omitempty" yaml:"resources,omitempty"`
 	CopyReferencedScripts bool                        `json:"copy_referenced_scripts,omitempty" yaml:"-"`
 	Guards                []GuardConfig               `json:"guards,omitempty" yaml:"guards,omitempty"`
@@ -561,6 +732,12 @@ type FactoryWorkstationConfig struct {
 	WorkingDirectory      string                      `json:"working_directory,omitempty" yaml:"workingDirectory,omitempty"`
 	Worktree              string                      `json:"worktree,omitempty" yaml:"worktree,omitempty"`
 	Env                   map[string]string           `json:"env,omitempty" yaml:"env,omitempty"`
+	// PromptSourcePath is runtime-only identity for a file-backed authored
+	// workstation prompt. PromptSourceIsTemplate distinguishes a referenced
+	// prompt file from the workstation AGENTS.md body. Both values are fixed
+	// when the authored layout is loaded and are never persisted.
+	PromptSourcePath       string `json:"-" yaml:"-"`
+	PromptSourceIsTemplate bool   `json:"-" yaml:"-"`
 }
 
 // ClassificationRouteConfig declares one authored classifier label and the
@@ -658,13 +835,23 @@ type GuardMatchConfig struct {
 	InputKey string `json:"input_key,omitempty" yaml:"inputKey,omitempty"`
 }
 
+// LogicalRoundTripConfig enables paired workstation visit counting for a
+// VISIT_COUNT guard. MaxVisits on the containing guard is the logical cycle
+// budget; MaxRawVisits is the independent absolute ceiling over both paired
+// workstation visit counts.
+type LogicalRoundTripConfig struct {
+	Workstations []string `json:"workstations" yaml:"workstations"`
+	MaxRawVisits int      `json:"max_raw_visits" yaml:"maxRawVisits"`
+}
+
 // GuardConfig declares a guard on a workstation using customer-facing names.
 type GuardConfig struct {
-	Type              GuardType         `json:"type" yaml:"type"`
-	Workstation       string            `json:"workstation,omitempty" yaml:"workstation,omitempty"`
-	MaxVisits         int               `json:"max_visits,omitempty" yaml:"maxVisits,omitempty"`
-	MaxVisitsArgument string            `json:"max_visits_argument,omitempty" yaml:"maxVisitsArgument,omitempty"`
-	MatchConfig       *GuardMatchConfig `json:"match_config,omitempty" yaml:"matchConfig,omitempty"`
+	Type              GuardType               `json:"type" yaml:"type"`
+	Workstation       string                  `json:"workstation,omitempty" yaml:"workstation,omitempty"`
+	MaxVisits         int                     `json:"max_visits,omitempty" yaml:"maxVisits,omitempty"`
+	MaxVisitsArgument string                  `json:"max_visits_argument,omitempty" yaml:"maxVisitsArgument,omitempty"`
+	LogicalRoundTrip  *LogicalRoundTripConfig `json:"logical_round_trip,omitempty" yaml:"logicalRoundTrip,omitempty"`
+	MatchConfig       *GuardMatchConfig       `json:"match_config,omitempty" yaml:"matchConfig,omitempty"`
 }
 
 type IOConfig struct {

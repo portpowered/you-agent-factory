@@ -5,8 +5,12 @@ import type {
   NodeChange,
   OnSelectionChangeFunc,
 } from "@xyflow/react";
-import { useCallback, useMemo, useState } from "react";
-
+import type { GraphEdgeInteraction } from "@you-agent-factory/components/graphs";
+import {
+  type FactoryGraphNodeDimensions,
+  resolveFactoryGraphNodeResizeDimensions,
+} from "@you-agent-factory/factory-graph";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   DashboardActiveExecution,
   DashboardSnapshot,
@@ -17,13 +21,17 @@ import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/
 import type { FactoryLayout } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import { decorateProjectedEdgesWithWaypoints } from "../../factory-graph-editor/lib/projection/factory-graph-react-flow-edge-waypoint-projection";
 import type { FactoryGraphReactFlowEdge } from "../../factory-graph-editor/lib/projection/factory-graph-react-flow-projection";
-import type { GraphLayout } from "../../flowchart/lib/layout";
 import type { CurrentActivityNode } from "../../flowchart/components/current-activity-nodes";
+import type { GraphLayout } from "../../flowchart/lib/layout";
 import {
   buildGraphEdges,
   initialFocusNodes,
 } from "../lib/react-flow-current-activity-card-edges";
-import type { CurrentActivityEditorState } from "../lib/react-flow-current-activity-card-editor-handles";
+import type {
+  CurrentActivityEditorState,
+  CurrentActivityNodeResizeController,
+  CurrentActivityNodeResizeTarget,
+} from "../lib/react-flow-current-activity-card-editor-handles";
 import {
   buildActiveGraphHighlights,
   buildActiveItemLabelsByPlaceId,
@@ -46,6 +54,8 @@ const EMPTY_TRANSIENT_NODE_POSITIONS = new Map<
   string,
   { x: number; y: number }
 >();
+const EMPTY_RESIZE_DIMENSIONS = new Map<string, FactoryGraphNodeDimensions>();
+const EMPTY_EXPANDED_NODE_IDS = new Set<string>();
 
 export type CurrentActivityGraphRenderProjection = {
   canonicalLayoutViewport: { x: number; y: number; zoom: number } | null;
@@ -61,7 +71,13 @@ export type CurrentActivityGraphViewModelEditorInput = Omit<
   CurrentActivityEditorState,
   "onConnectionAnchorClick" | "validationTargets"
 > & {
+  edgePointerInteraction?: (edgeId: string) => GraphEdgeInteraction | undefined;
+  edgeWaypointPreviews?: ReadonlyMap<
+    string,
+    readonly { x: number; y: number }[]
+  >;
   graphProjection: CurrentActivityGraphRenderProjection;
+  expandedNodeIds?: ReadonlySet<string>;
   handleConnectionAnchorClick: CurrentActivityEditorState["onConnectionAnchorClick"];
   selectedWaypointEdgeId?: string | null;
   validationTargets?: CurrentActivityEditorState["validationTargets"];
@@ -94,6 +110,7 @@ function useCurrentActivityBaseNodes({
   graphLayout,
   locale,
   now,
+  onGraphSelectNode,
   onSelectDoc,
   onSelectResource,
   onSelectStateNode,
@@ -126,6 +143,7 @@ function useCurrentActivityBaseNodes({
   editor: CurrentActivityGraphViewModelEditorInput;
   factoryDefinition?: DashboardSnapshot["factory"];
   graphLayout: GraphLayout;
+  onGraphSelectNode: (nodeId: string) => void;
 }) {
   return useMemo<CurrentActivityNode[]>(
     () =>
@@ -137,6 +155,7 @@ function useCurrentActivityBaseNodes({
           activeTool: editor.activeTool,
           canInteractWithEditor: editor.canInteractWithEditor,
           editorMode: editor.editorMode,
+          nodeResizeControls: editor.nodeResizeControls,
           onConnectionAnchorClick: editor.handleConnectionAnchorClick,
           pendingConnectionSource: editor.pendingConnectionSource,
           validationTargets: editor.validationTargets,
@@ -145,6 +164,7 @@ function useCurrentActivityBaseNodes({
         graphLayout,
         locale,
         now,
+        onGraphSelectNode,
         onSelectDoc,
         onSelectResource,
         onSelectStateNode,
@@ -159,11 +179,18 @@ function useCurrentActivityBaseNodes({
       activeExecutionsByWorkstationNodeID,
       activeGraphHighlights,
       activeItemLabelsByPlaceId,
-      editor,
+      editor.activeTool,
+      editor.canInteractWithEditor,
+      editor.editorMode,
+      editor.handleConnectionAnchorClick,
+      editor.nodeResizeControls,
+      editor.pendingConnectionSource,
+      editor.validationTargets,
       factoryDefinition,
       graphLayout,
       locale,
       now,
+      onGraphSelectNode,
       onSelectDoc,
       onSelectResource,
       onSelectStateNode,
@@ -175,6 +202,148 @@ function useCurrentActivityBaseNodes({
       snapshot,
     ],
   );
+}
+
+function useCurrentActivityNodeResizeState(input: {
+  committedDimensionsByNodeId: ReadonlyMap<string, FactoryGraphNodeDimensions>;
+  editor: CurrentActivityGraphViewModelEditorInput;
+  graphKey: string;
+  locale?: string;
+}) {
+  const [dimensionsByNodeId, setDimensionsByNodeId] = useState<
+    ReadonlyMap<string, FactoryGraphNodeDimensions>
+  >(new Map());
+  const [liveResize, setLiveResize] = useState<{
+    dimensions: FactoryGraphNodeDimensions;
+    nodeId: string;
+  } | null>(null);
+  const previousCommittedDimensionsRef = useRef(
+    input.committedDimensionsByNodeId,
+  );
+
+  const previewDimensions = useCallback(
+    (
+      target: CurrentActivityNodeResizeTarget,
+      dimensions: FactoryGraphNodeDimensions,
+    ) => {
+      setLiveResize({
+        dimensions: resolveFactoryGraphNodeResizeDimensions(
+          target.family,
+          dimensions,
+        ),
+        nodeId: target.nodeId,
+      });
+    },
+    [],
+  );
+  const updateDimensions = useCallback(
+    (
+      target: CurrentActivityNodeResizeTarget,
+      dimensions: FactoryGraphNodeDimensions,
+    ) => {
+      const resolvedDimensions = resolveFactoryGraphNodeResizeDimensions(
+        target.family,
+        dimensions,
+      );
+      setDimensionsByNodeId((currentDimensions) => {
+        const nextDimensions = new Map(currentDimensions);
+        nextDimensions.set(target.nodeId, resolvedDimensions);
+        return nextDimensions;
+      });
+    },
+    [],
+  );
+  const hostController = input.editor.nodeResizeControls;
+  const localController = useMemo<CurrentActivityNodeResizeController>(
+    () => ({
+      enabled:
+        input.editor.editorMode &&
+        input.editor.canInteractWithEditor &&
+        input.editor.activeTool !== "delete",
+      onResizeEnd: updateDimensions,
+    }),
+    [
+      input.editor.activeTool,
+      input.editor.canInteractWithEditor,
+      input.editor.editorMode,
+      updateDimensions,
+    ],
+  );
+  const controller = useMemo<CurrentActivityNodeResizeController>(
+    () => ({
+      enabled: hostController?.enabled ?? localController.enabled,
+      onResize: previewDimensions,
+      onResizeEnd: (target, dimensions) => {
+        // Dropping the preview and committing in the same handler keeps both
+        // updates in one render, so the node never flashes its old size.
+        setLiveResize(null);
+        // Keep the committed presentation projection even when a host also
+        // persists the authored layout. The host callback owns canonical
+        // state; this local map owns the expanded rendering contract.
+        updateDimensions(target, dimensions);
+        hostController?.onResizeEnd(target, dimensions);
+      },
+    }),
+    [
+      hostController,
+      localController.enabled,
+      previewDimensions,
+      updateDimensions,
+    ],
+  );
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: graph identity and edit availability intentionally reset presentation-only resize state.
+  useEffect(() => {
+    setDimensionsByNodeId(new Map());
+    setLiveResize(null);
+  }, [input.graphKey, controller.enabled]);
+
+  useEffect(() => {
+    const previousDimensions = previousCommittedDimensionsRef.current;
+    const committedDimensions = input.committedDimensionsByNodeId;
+    previousCommittedDimensionsRef.current = committedDimensions;
+
+    if (hostController === undefined) {
+      return;
+    }
+
+    setDimensionsByNodeId((currentDimensions) => {
+      let nextDimensions: Map<string, FactoryGraphNodeDimensions> | null = null;
+
+      for (const [nodeId] of currentDimensions) {
+        const previous = previousDimensions.get(nodeId);
+        const committed = committedDimensions.get(nodeId);
+        if (
+          previous?.height === committed?.height &&
+          previous?.width === committed?.width
+        ) {
+          continue;
+        }
+
+        nextDimensions ??= new Map(currentDimensions);
+        nextDimensions.delete(nodeId);
+      }
+
+      return nextDimensions ?? currentDimensions;
+    });
+  }, [hostController, input.committedDimensionsByNodeId]);
+
+  // The live map stays separate from the committed one so an in-progress drag
+  // paints the new geometry without also flipping the node into its expanded
+  // content variant and back when the drag settles.
+  const liveDimensionsByNodeId = useMemo(
+    () =>
+      liveResize
+        ? new Map([[liveResize.nodeId, liveResize.dimensions]])
+        : EMPTY_RESIZE_DIMENSIONS,
+    [liveResize],
+  );
+
+  return {
+    controller,
+    dimensionsByNodeId,
+    liveDimensionsByNodeId,
+  };
 }
 
 function useActiveGraphHighlights({
@@ -200,6 +369,10 @@ function useActiveGraphHighlights({
 function useCurrentActivityGraphNodePresentation(
   baseNodes: CurrentActivityNode[],
   graphSelection: FactoryGraphEditorSelectionController,
+  dimensionsByNodeId: ReadonlyMap<string, FactoryGraphNodeDimensions>,
+  liveDimensionsByNodeId: ReadonlyMap<string, FactoryGraphNodeDimensions>,
+  expandedNodeIds: ReadonlySet<string>,
+  positionChangesEnabled: boolean,
 ) {
   const basePositionKey = useMemo(
     () =>
@@ -218,6 +391,10 @@ function useCurrentActivityGraphNodePresentation(
 
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
+      if (!positionChangesEnabled) {
+        return;
+      }
+
       const positionChanges: NodeChange[] = [];
 
       for (const change of changes) {
@@ -263,24 +440,86 @@ function useCurrentActivityGraphNodePresentation(
           : currentPositionState;
       });
     },
-    [basePositionKey],
+    [basePositionKey, positionChangesEnabled],
   );
+  useEffect(() => {
+    if (positionChangesEnabled) {
+      return;
+    }
+
+    setTransientPositionState({
+      basePositionKey,
+      positionsByNodeId: EMPTY_TRANSIENT_NODE_POSITIONS,
+    });
+  }, [basePositionKey, positionChangesEnabled]);
   const transientPositionsByNodeId =
+    positionChangesEnabled &&
     transientPositionState.basePositionKey === basePositionKey
       ? transientPositionState.positionsByNodeId
       : EMPTY_TRANSIENT_NODE_POSITIONS;
 
   const displayNodes = useMemo(
     () =>
-      baseNodes.map((node) => ({
-        ...node,
-        position: transientPositionsByNodeId.get(node.id) ?? node.position,
-        selected: graphSelection.isNodeSelected(node.id),
-      })),
-    [baseNodes, graphSelection, transientPositionsByNodeId],
+      baseNodes.map((node) => {
+        const resizedDimensions = dimensionsByNodeId.get(node.id);
+        const renderedDimensions =
+          liveDimensionsByNodeId.get(node.id) ?? resizedDimensions;
+        const presentation = {
+          ...(renderedDimensions
+            ? {
+                height: renderedDimensions.height,
+                measured: renderedDimensions,
+                width: renderedDimensions.width,
+              }
+            : {}),
+          position: transientPositionsByNodeId.get(node.id) ?? node.position,
+          selected: graphSelection.isNodeSelected(node.id),
+        };
+        return projectCurrentActivityNodePresentation(
+          node,
+          presentation,
+          resizedDimensions !== undefined || expandedNodeIds.has(node.id),
+        );
+      }),
+    [
+      baseNodes,
+      dimensionsByNodeId,
+      graphSelection,
+      expandedNodeIds,
+      liveDimensionsByNodeId,
+      transientPositionsByNodeId,
+    ],
   );
 
   return { displayNodes, handleNodesChange };
+}
+
+type CurrentActivityNodePresentation = {
+  height?: number;
+  measured?: FactoryGraphNodeDimensions;
+  position: { x: number; y: number };
+  selected: boolean;
+  width?: number;
+};
+
+/**
+ * Preserve the React Flow node/data discriminant while adding presentation
+ * state shared by every semantic node family. Each factory-graph data
+ * contract declares `expanded`, but TypeScript cannot retain that invariant
+ * through a spread over the discriminated union without this narrow helper.
+ */
+function projectCurrentActivityNodePresentation<
+  Node extends CurrentActivityNode,
+>(
+  node: Node,
+  presentation: CurrentActivityNodePresentation,
+  expanded: boolean,
+): Node {
+  return {
+    ...node,
+    ...presentation,
+    data: { ...node.data, expanded },
+  } as Node;
 }
 
 function useCurrentActivityGraphEdges({
@@ -289,6 +528,8 @@ function useCurrentActivityGraphEdges({
   graphSelection,
   handleAssignments,
   layout,
+  edgePointerInteraction,
+  edgeWaypointPreviews,
   pendingAdditionEdgeIds,
   selectedWaypointEdgeId,
   visibleGraphEdges,
@@ -298,6 +539,11 @@ function useCurrentActivityGraphEdges({
   graphSelection: FactoryGraphEditorSelectionController;
   handleAssignments: ReturnType<typeof buildHandleAssignments>;
   layout: FactoryLayout;
+  edgePointerInteraction?: (edgeId: string) => GraphEdgeInteraction | undefined;
+  edgeWaypointPreviews?: ReadonlyMap<
+    string,
+    readonly { x: number; y: number }[]
+  >;
   pendingAdditionEdgeIds: ReadonlySet<string>;
   selectedWaypointEdgeId?: string | null;
   visibleGraphEdges: GraphLayout["edges"];
@@ -314,6 +560,7 @@ function useCurrentActivityGraphEdges({
     return decorateProjectedEdgesWithWaypoints({
       edges: edges as FactoryGraphReactFlowEdge[],
       layout,
+      waypointPreviews: edgeWaypointPreviews,
       selectedWaypointEdgeId: selectedWaypointEdgeId ?? null,
     }).map((edge) => {
       const layoutEdgeId =
@@ -324,19 +571,23 @@ function useCurrentActivityGraphEdges({
         graphSelection.isEdgeSelected(edge.id) ||
         graphSelection.isEdgeSelected(layoutEdgeId);
 
-      if (!selected) {
+      const interaction = edgePointerInteraction?.(layoutEdgeId);
+      if (!selected && !interaction) {
         return edge;
       }
 
       return {
         ...edge,
-        selected: true,
-        type: edge.type ?? "factoryEditorEdge",
+        data: interaction ? { ...edge.data, interaction } : edge.data,
+        selected: selected || edge.selected,
+        type: "factoryEditorEdge",
       };
     });
   }, [
     activeGraphHighlights,
     displayNodes,
+    edgePointerInteraction,
+    edgeWaypointPreviews,
     graphSelection,
     handleAssignments,
     layout,
@@ -402,6 +653,19 @@ export function useCurrentActivityGraphViewModel({
     renderedLayout,
     visibleGraphEdges,
   } = editor.graphProjection;
+  const committedDimensionsByNodeId = useMemo(() => {
+    const dimensionsByNodeId = new Map<string, FactoryGraphNodeDimensions>();
+    for (const node of renderedLayout.nodes ?? []) {
+      if (node.size === undefined) {
+        continue;
+      }
+      dimensionsByNodeId.set(node.id, {
+        height: node.size.height,
+        width: node.size.width,
+      });
+    }
+    return dimensionsByNodeId;
+  }, [renderedLayout]);
   const graphKey = useMemo(
     () => currentActivityGraphKey(graphLayout),
     [graphLayout],
@@ -442,17 +706,38 @@ export function useCurrentActivityGraphViewModel({
   const graphSelection = useFactoryGraphEditorSelection({
     onStateChange: publishGraphSelectionBridgeState,
   });
+  const { replaceSelection: replaceGraphSelection } = graphSelection;
+  const handleGraphSelectNode = useCallback(
+    (nodeId: string) => {
+      replaceGraphSelection({
+        nodeIds: [nodeId],
+        primaryTarget: { id: nodeId, kind: "node" },
+      });
+    },
+    [replaceGraphSelection],
+  );
   const graphSelectionEnabled =
     !editor.editorMode || editor.activeTool !== "delete";
+  const nodeResizeState = useCurrentActivityNodeResizeState({
+    committedDimensionsByNodeId,
+    editor,
+    graphKey,
+    locale,
+  });
+  const graphEditor = useMemo(
+    () => ({ ...editor, nodeResizeControls: nodeResizeState.controller }),
+    [editor, nodeResizeState.controller],
+  );
   const baseNodes = useCurrentActivityBaseNodes({
     activeExecutionsByWorkstationNodeID,
     activeGraphHighlights,
     activeItemLabelsByPlaceId,
-    editor,
+    editor: graphEditor,
     factoryDefinition: displayFactoryDefinition ?? undefined,
     graphLayout: positionedGraphLayout,
     locale,
     now,
+    onGraphSelectNode: handleGraphSelectNode,
     onSelectDoc,
     onSelectResource,
     onSelectStateNode,
@@ -464,7 +749,14 @@ export function useCurrentActivityGraphViewModel({
     snapshot,
   });
   const { displayNodes, handleNodesChange } =
-    useCurrentActivityGraphNodePresentation(baseNodes, graphSelection);
+    useCurrentActivityGraphNodePresentation(
+      baseNodes,
+      graphSelection,
+      nodeResizeState.dimensionsByNodeId,
+      nodeResizeState.liveDimensionsByNodeId,
+      editor.expandedNodeIds ?? EMPTY_EXPANDED_NODE_IDS,
+      editor.editorMode && editor.canInteractWithEditor,
+    );
   const { handleEdgesChange } = useCurrentActivityGraphEdgePresentation(
     graphSelection,
     graphSelectionEnabled,
@@ -476,6 +768,8 @@ export function useCurrentActivityGraphViewModel({
   const edges = useCurrentActivityGraphEdges({
     activeGraphHighlights,
     displayNodes,
+    edgePointerInteraction: editor.edgePointerInteraction,
+    edgeWaypointPreviews: editor.edgeWaypointPreviews,
     graphSelection,
     handleAssignments,
     layout: renderedLayout,

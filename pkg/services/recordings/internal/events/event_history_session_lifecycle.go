@@ -66,6 +66,50 @@ type SessionLifecycleCompleteInput struct {
 // SessionLifecycleControlInput remains an alias for source compatibility.
 type SessionLifecycleControlInput = recordings.SessionLifecycleControlInput
 
+// SeedCanonicalEvents restores an already-recorded event prefix before the
+// runtime emits successor lifecycle events. The restored identities and
+// ordering metadata remain untouched so public reconnect cursors continue
+// across a process replacement.
+func (h *FactoryEventHistory) SeedCanonicalEvents(events []interfaces.FactoryEvent) error {
+	if h == nil {
+		return fmt.Errorf("factory event history is unavailable")
+	}
+	if len(events) == 0 {
+		return nil
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.events) > 0 {
+		return fmt.Errorf("factory event history already contains events")
+	}
+	h.events = cloneFactoryEvents(events)
+	for _, event := range h.events {
+		switch event.Type {
+		case interfaces.FactoryEventTypeInitialStructureRequest:
+			h.hasInitialStructure = true
+		case interfaces.FactoryEventTypeRunRequest:
+			h.hasRunRequest = true
+			h.runRecordedAt = interfaces.CanonicalEventTime(event.Context.EventTime)
+		case interfaces.FactoryEventTypeRunResponse:
+			h.hasRunResponse = true
+		case interfaces.FactoryEventTypeSessionStarted:
+			h.hasSessionStarted = true
+			h.sessionStartedAt = interfaces.CanonicalEventTime(event.Context.EventTime)
+		case interfaces.FactoryEventTypeSessionCompleted:
+			h.hasSessionCompleted = true
+		}
+		if event.Context.SessionID != nil {
+			if sessionID := strings.TrimSpace(*event.Context.SessionID); sessionID != "" {
+				h.sessionID = sessionID
+			}
+		}
+		if event.Context.SessionSequence != nil && *event.Context.SessionSequence >= h.nextSessionSequence {
+			h.nextSessionSequence = *event.Context.SessionSequence + 1
+		}
+	}
+	return nil
+}
+
 // RecordSessionPaused records a successful Factory Session pause lifecycle transition.
 func (h *FactoryEventHistory) RecordSessionPaused(input SessionLifecycleControlInput, eventTime time.Time) {
 	if h == nil || strings.TrimSpace(input.SessionID) == "" {
@@ -114,6 +158,7 @@ func (h *FactoryEventHistory) RecordSessionStarted(input SessionLifecycleStartIn
 	}
 	h.hasSessionStarted = true
 	h.sessionStartedAt = interfaces.CanonicalEventTime(eventTime)
+	h.sessionID = strings.TrimSpace(input.SessionID)
 	h.mu.Unlock()
 
 	eventTime = interfaces.CanonicalEventTime(eventTime)
@@ -379,10 +424,163 @@ func (h *FactoryEventHistory) allocateSessionLifecycleSequence() int {
 	return current
 }
 
+// sessionScopedContext attaches the active Factory Session identity and its
+// delivery sequence to runtime events emitted after SESSION_STARTED. The
+// Recordings subscription uses both fields to retain a session-scoped stream
+// and to detect gaps without confusing the process-global event sequence with
+// the session-local sequence.
+func (h *FactoryEventHistory) sessionScopedContext(context interfaces.FactoryEventContext) interfaces.FactoryEventContext {
+	if h == nil {
+		return context
+	}
+	h.mu.RLock()
+	sessionID := h.sessionID
+	h.mu.RUnlock()
+	if sessionID == "" {
+		return context
+	}
+	context.SessionID = stringPtr(sessionID)
+	sequence := h.allocateSessionLifecycleSequence()
+	context.SessionSequence = &sequence
+	return context
+}
+
 func sessionLifecycleDigestJSON(raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return ""
 	}
 	sum := sha256.Sum256(raw)
 	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// RecordWorkStateChange records a canonical marking relocation for operator or
+// cascade recovery paths.
+func (h *FactoryEventHistory) RecordWorkStateChange(tick int, record work.WorkStateChangeRecord, eventTime time.Time) {
+	if h == nil || record.WorkID == "" || record.Source == "" {
+		return
+	}
+	eventTime = interfaces.CanonicalEventTime(eventTime)
+	workTypeName := strings.TrimSpace(record.WorkTypeName)
+	if workTypeName == "" {
+		workTypeName = record.WorkTypeID
+	}
+	context := interfaces.FactoryEventContext{
+		Tick:      tick,
+		EventTime: eventTime,
+		SessionID: stringPtrIfNotEmpty(record.SessionID),
+		RequestID: stringPtrIfNotEmpty(record.RequestID),
+		WorkIDs:   stringSlicePtr([]string{record.WorkID}),
+	}
+	if context.SessionID != nil {
+		sessionSequence := h.allocateSessionLifecycleSequence()
+		context.SessionSequence = &sessionSequence
+	}
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeWorkStateChange,
+		fmt.Sprintf("%s/%s/%d", eventIDWorkStateChangePrefix, record.WorkID, tick),
+		context,
+		interfaces.WorkStateChangeEventPayload{
+			WorkID:        record.WorkID,
+			WorkTypeName:  workTypeName,
+			FromState:     record.FromState,
+			ToState:       record.ToState,
+			FromPlaceID:   workStatePlaceID(record.WorkTypeID, record.FromState),
+			ToPlaceID:     workStatePlaceID(record.WorkTypeID, record.ToState),
+			Source:        record.Source,
+			TriggerWorkID: stringPtrIfNotEmpty(record.TriggerWorkID),
+			Reason:        stringPtrIfNotEmpty(record.Reason),
+		},
+	))
+}
+
+func workStatePlaceID(workTypeID, state string) string {
+	workTypeID = strings.TrimSpace(workTypeID)
+	state = strings.TrimSpace(state)
+	if workTypeID == "" {
+		return state
+	}
+	if state == "" {
+		return workTypeID
+	}
+	return workTypeID + ":" + state
+}
+
+// RecordFactoryStateChange records a runtime lifecycle transition.
+func (h *FactoryEventHistory) RecordFactoryStateChange(tick int, previous interfaces.FactoryState, next interfaces.FactoryState, reason string, eventTime time.Time) {
+	if h == nil || previous == next {
+		return
+	}
+	eventTime = interfaces.CanonicalEventTime(eventTime)
+	nextState := next
+	eventID := fmt.Sprintf("%s/%d/%s", eventIDStateChangePrefix, tick, next)
+	h.mu.RLock()
+	for _, existing := range h.events {
+		if existing.Id == eventID {
+			h.mu.RUnlock()
+			return
+		}
+	}
+	h.mu.RUnlock()
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeFactoryStateResponse,
+		eventID,
+		interfaces.FactoryEventContext{Tick: tick, EventTime: eventTime},
+		interfaces.FactoryStateResponseEventPayload{
+			PreviousState: &previous,
+			State:         nextState,
+			Reason:        stringPtrIfNotEmpty(reason),
+		},
+	))
+}
+
+func (h *FactoryEventHistory) appendEvent(event interfaces.FactoryEvent) interfaces.FactoryEvent {
+	appended, _ := h.appendEventWithValidation(event, nil)
+	return appended
+}
+
+func (h *FactoryEventHistory) appendEventWithValidation(
+	event interfaces.FactoryEvent,
+	validate func(interfaces.FactoryEvent) error,
+) (interfaces.FactoryEvent, error) {
+	if h == nil {
+		return interfaces.FactoryEvent{}, fmt.Errorf("factory event history is unavailable")
+	}
+	h.mu.Lock()
+	event.SchemaVersion = interfaces.FactoryEventSchemaVersionV1
+	event.Context.Sequence = len(h.events)
+	h.assignLiveChangeSessionSequenceLocked(&event)
+	event = enrichFactoryChangeSequence(event)
+	if validate != nil {
+		if err := validate(event.Clone()); err != nil {
+			h.mu.Unlock()
+			return interfaces.FactoryEvent{}, err
+		}
+	}
+	h.events = append(h.events, event)
+	streams := make([]*eventHistorySubscription, 0, len(h.streams))
+	for _, stream := range h.streams {
+		streams = append(streams, stream)
+	}
+	recorders := append([]func(interfaces.FactoryEvent){}, h.recorders...)
+	eventTypeRecorders := append([]func(interfaces.FactoryEventType){}, h.eventTypeRecorders...)
+	for _, stream := range streams {
+		if stream.dispatchID != "" && !factoryEventBelongsToDispatch(event, stream.dispatchID) {
+			continue
+		}
+		if !stream.offer(event.Clone()) {
+			stream.signalOverflow()
+		}
+	}
+	// Recorder callbacks must share the append critical section. They feed
+	// durable recording state, and invoking them after unlock lets concurrent
+	// appenders acquire the recorder in a different order than the canonical
+	// event sequence.
+	for _, recorder := range recorders {
+		recorder(event.Clone())
+	}
+	for _, recorder := range eventTypeRecorders {
+		recorder(event.Type)
+	}
+	h.mu.Unlock()
+	return event.Clone(), nil
 }

@@ -50,10 +50,7 @@ var forbiddenCompositionImports = []string{
 }
 
 var forbiddenProviderImplementationImports = []string{
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/agy",
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/claude",
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/codex",
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/cursor",
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat/cursor",
 }
 
 // Provider scenarios may import service-root contracts and these exact public
@@ -62,8 +59,8 @@ var forbiddenProviderImplementationImports = []string{
 // root-built process harness. Keep this set aligned with the package-boundary
 // policy's publicExternalEffectContractImports.
 //
-// Providers Execution leaf is the durable provider-effect owner; Workers
-// inferencecontract remains migration debt until later Providers packets land.
+// Providers Execution is the durable provider-effect owner; Workers retains
+// only a request-scoped compatibility adapter over the Providers contract.
 var providerPublicEffectContractImports = map[string]struct{}{
 	"github.com/portpowered/infinite-you/pkg/services/providers/execution/inferencecontract":                              {},
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty": {},

@@ -1,0 +1,16 @@
+type: object
+additionalProperties: false
+description: >-
+  Canonical association between one Factory dispatch and the Worker Session
+  allocated to execute it. Dispatch identity remains authoritative in
+  FactoryEvent.context.dispatchId and is not repeated in this payload. This
+  public projection intentionally remains closed: canonical recording data
+  may retain execution-only model and reasoningEffort facts, but this event
+  serves only the Worker Session identity.
+required:
+  - workerSessionId
+properties:
+  workerSessionId:
+    type: string
+    minLength: 1
+    description: Non-empty Worker Session identity allocated for the dispatch.

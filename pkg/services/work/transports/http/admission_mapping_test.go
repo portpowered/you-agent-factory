@@ -60,6 +60,38 @@ func TestWorkRequestFromUpsertAPI_MapsBatchRequest(t *testing.T) {
 	}
 }
 
+func TestWorkRequestFromUpsertAPI_MapsNameOrIDRelationReferences(t *testing.T) {
+	t.Parallel()
+
+	targetName := "existing"
+	targetID := "work-existing"
+	workTypeName := "task"
+	request, err := WorkRequestFromUpsertAPI(factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody{
+		RequestId: "request-relations",
+		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
+		Works: &[]factoryapi.Work{{
+			Name:         "new-work",
+			WorkTypeName: &workTypeName,
+		}},
+		Relations: &[]factoryapi.WorkRequestRelation{{
+			Type:           factoryapi.RelationTypeDependsOn,
+			SourceWorkName: "new-work",
+			TargetWorkName: &targetName,
+			TargetWorkId:   &targetID,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("WorkRequestFromUpsertAPI: %v", err)
+	}
+	if len(request.Relations) != 1 {
+		t.Fatalf("relations = %#v, want one relation", request.Relations)
+	}
+	got := request.Relations[0]
+	if got.TargetWorkName != targetName || got.TargetWorkID != targetID {
+		t.Fatalf("relation = %#v, want both target references", got)
+	}
+}
+
 func TestSubmitWorkResponseToAPI_EncodesDetachedResult(t *testing.T) {
 	t.Parallel()
 

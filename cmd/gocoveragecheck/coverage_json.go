@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"os"
 	"strings"
 )
 
@@ -12,6 +11,11 @@ import (
 // gocoveragecheck. Downstream visualizers consume this artifact instead of
 // re-parsing coverage profiles.
 type coverageSummaryJSON struct {
+	Complete             bool                  `json:"complete"`
+	MeasurementReason    string                `json:"measurementReason,omitempty"`
+	PackageFloorPolicy   string                `json:"packageFloorPolicy"`
+	PackageFloorFindings []string              `json:"packageFloorFindings,omitempty"`
+	ManifestDiagnostics  []string              `json:"manifestDiagnostics,omitempty"`
 	CoveredStatements    int                   `json:"coveredStatements"`
 	MeasurableStatements int                   `json:"measurableStatements"`
 	CoveragePercent      float64               `json:"coveragePercent"`
@@ -39,12 +43,36 @@ type packageCoverageGate struct {
 
 func buildCoverageSummaryJSON(result coverageResult) coverageSummaryJSON {
 	covered, measurable := overallStatementTotals(result)
+	policy := strings.TrimSpace(result.packageFloorPolicy)
+	if policy == "" {
+		policy = coverageFloorPolicyBlocking
+	}
 	return coverageSummaryJSON{
+		Complete:             true,
 		CoveredStatements:    covered,
 		MeasurableStatements: measurable,
 		CoveragePercent:      roundCoveragePercent(result.actual),
+		PackageFloorPolicy:   policy,
+		PackageFloorFindings: appendCoverageDiagnostics(result.packageMinimumWarnings, result.packageMinimumFailures),
+		ManifestDiagnostics:  appendCoverageDiagnostics(result.manifestCompletenessWarnings, result.unmeasuredPackageDiagnostics),
 		Packages:             buildPackageCoverageJSON(result),
 	}
+}
+
+func appendCoverageDiagnostics(groups ...[]string) []string {
+	count := 0
+	for _, group := range groups {
+		count += len(group)
+	}
+	if count == 0 {
+		return nil
+	}
+
+	diagnostics := make([]string, 0, count)
+	for _, group := range groups {
+		diagnostics = append(diagnostics, group...)
+	}
+	return diagnostics
 }
 
 func buildPackageCoverageJSON(result coverageResult) []packageCoverageJSON {
@@ -128,15 +156,22 @@ func renderCoverageSummaryJSON(summary coverageSummaryJSON) ([]byte, error) {
 }
 
 func writeCoverageSummaryJSON(path string, result coverageResult) error {
+	return writeCoverageSummaryJSONWithStatus(path, result, true, "")
+}
+
+func writeCoverageSummaryJSONWithStatus(path string, result coverageResult, complete bool, reason string) error {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return nil
 	}
-	data, err := renderCoverageSummaryJSON(buildCoverageSummaryJSON(result))
+	summary := buildCoverageSummaryJSON(result)
+	summary.Complete = complete
+	summary.MeasurementReason = strings.TrimSpace(reason)
+	data, err := renderCoverageSummaryJSON(summary)
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := writeAtomicDiagnosticFile(path, data); err != nil {
 		return fmt.Errorf("write go coverage summary json: %w", err)
 	}
 	return nil

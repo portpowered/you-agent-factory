@@ -2,16 +2,19 @@ import { Dialog } from "@you-agent-factory/components/overlays";
 import { Button, Text } from "@you-agent-factory/components/primitives";
 import {
   type DragEvent as ReactDragEvent,
-  useEffect,
+  useCallback,
   useId,
   useRef,
   useState,
 } from "react";
 import type { DashboardStreamState } from "../../../api/dashboard/types";
 import type { FactorySessionSummary } from "../../../api/factory-sessions";
-import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { AlertPanel } from "../../../components/ui/alert-panel";
-import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
+import {
+  getDashboardStreamStateForSession,
+  useDashboardStreamStore,
+} from "../../dashboard/state/dashboardStreamStore";
+import { useDashboardSessionTabFocus } from "../hooks/use-dashboard-session-tab-focus";
 import {
   type DashboardSessionTabsState,
   useDashboardSessionTabsState,
@@ -38,6 +41,26 @@ export function DashboardSessionTabs({
   return <DashboardSessionTabsView locale={locale} state={sessionTabsState} />;
 }
 
+function useDashboardStreamStateForSession(locale: string) {
+  const sessionStreamStates = useDashboardStreamStore(
+    (storeState) => storeState.sessionStreamStates,
+  );
+  const sessionStreamStateKeysBySessionID = useDashboardStreamStore(
+    (storeState) => storeState.sessionStreamStateKeysBySessionID,
+  );
+
+  return useCallback(
+    (sessionID: string) =>
+      getDashboardStreamStateForSession(
+        sessionID,
+        sessionStreamStates,
+        sessionStreamStateKeysBySessionID,
+        locale,
+      ),
+    [locale, sessionStreamStateKeysBySessionID, sessionStreamStates],
+  );
+}
+
 function DashboardSessionTabsView({
   locale,
   state,
@@ -46,14 +69,13 @@ function DashboardSessionTabsView({
   state: DashboardSessionTabsState;
 }) {
   const messages = getHeaderControlsMessages(locale);
-  const streamStatus = useDashboardStreamStore(
-    (storeState) => storeState.streamState.status,
-  );
+  const dialogTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const streamStateForSession = useDashboardStreamStateForSession(locale);
   const {
     activeSession,
-    activeSessionID,
     closeError,
     closeSessionMutation,
+    completedCreatesNewFactory,
     dialogError,
     dialogOpen,
     discoveredTargets,
@@ -65,28 +87,19 @@ function DashboardSessionTabsView({
     handleCreateNewFactory,
     handleInspectFolder,
     handleOpenTarget,
+    isRefreshingSessions,
     moveSessionTab,
     openSessionMutation,
+    openFactoryDialog,
     resetDialogState,
     selectedTargetValue,
     sessions,
     sessionsQuery,
     setActiveSessionID,
     setDialogOpen,
+    setSelectedTargetValue,
     validateFolderMutation,
   } = state;
-
-  useEffect(() => {
-    if (sessions.length === 0) {
-      return;
-    }
-    if (
-      activeSessionID === "" ||
-      !sessions.some((session) => session.id === activeSessionID)
-    ) {
-      setActiveSessionID(sessions[0]?.id ?? DEFAULT_FACTORY_SESSION_ID);
-    }
-  }, [activeSessionID, sessions, setActiveSessionID]);
 
   return (
     <>
@@ -100,21 +113,30 @@ function DashboardSessionTabsView({
                 : null
             }
             error={sessionsQuery.isError ? sessionsQuery.error : null}
+            isRefreshing={isRefreshingSessions}
             isPending={sessionsQuery.isPending}
             messages={messages}
             onCloseSession={handleCloseSession}
+            onOpenFactory={(trigger) => {
+              dialogTriggerRef.current = trigger;
+              openFactoryDialog();
+            }}
             onRetry={() => {
               void sessionsQuery.refetch();
-            }}
-            onOpenSession={() => {
-              setDialogOpen(true);
             }}
             onReorderSession={moveSessionTab}
             onSelectSession={setActiveSessionID}
             sessions={sessions}
-            streamStatus={streamStatus}
+            streamStateForSession={streamStateForSession}
           />
         </div>
+        {completedCreatesNewFactory !== null ? (
+          <AlertPanel aria-live="polite" role="status" tone="success">
+            {completedCreatesNewFactory
+              ? messages.newFactorySuccessLabel
+              : messages.openFactorySuccessLabel}
+          </AlertPanel>
+        ) : null}
         {closeError ? (
           <AlertPanel role="alert" tone="danger">
             {closeError.message}
@@ -143,8 +165,14 @@ function DashboardSessionTabsView({
           onCreateNewFactory={() => {
             void handleCreateNewFactory();
           }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            dialogTriggerRef.current?.focus();
+            dialogTriggerRef.current = null;
+          }}
           onInspectFolder={handleInspectFolder}
           onOpenTarget={handleOpenTarget}
+          onSelectTarget={setSelectedTargetValue}
           selectedTargetValue={selectedTargetValue}
         />
       </Dialog>
@@ -158,32 +186,39 @@ function SessionTabsContent({
   closingSessionID,
   error,
   isPending,
+  isRefreshing,
   messages,
+  onOpenFactory,
   onCloseSession,
-  onOpenSession,
   onReorderSession,
   onRetry,
   onSelectSession,
   sessions,
-  streamStatus,
+  streamStateForSession,
 }: {
   activeSession: FactorySessionSummary | null;
   closingSessionID: string | null;
   error: unknown;
   isPending: boolean;
+  isRefreshing: boolean;
   messages: ReturnType<typeof getHeaderControlsMessages>;
   onCloseSession: (sessionID: string) => void;
-  onOpenSession: () => void;
+  onOpenFactory: (trigger: HTMLButtonElement) => void;
   onReorderSession: (sessionID: string, targetIndex: number) => void;
   onRetry: () => void;
   onSelectSession: (sessionID: string) => void;
   sessions: FactorySessionSummary[];
-  streamStatus: DashboardStreamState["status"];
+  streamStateForSession: (sessionID: string) => DashboardStreamState;
 }) {
-  const sessionButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const sessionTabsID = useId();
   const [draggedSessionID, setDraggedSessionID] = useState<string | null>(null);
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
+  const { getSessionButtonRef, moveSessionFocus, selectAndFocusSession } =
+    useDashboardSessionTabFocus({
+      activeSession,
+      onSelectSession,
+      sessions,
+    });
 
   if (isPending) {
     return (
@@ -194,17 +229,19 @@ function SessionTabsContent({
   }
   if (error) {
     const sessionError = normalizeFactorySessionsError(error);
-    return (
-      <SessionErrorState
-        label={
-          sessionError.code === "NETWORK_ERROR"
-            ? messages.sessionsOfflineTitle
-            : messages.sessionsErrorTitle
-        }
-        messages={messages}
-        onRetry={onRetry}
-      />
-    );
+    if (sessions.length === 0) {
+      return (
+        <SessionErrorState
+          label={
+            sessionError.code === "NETWORK_ERROR"
+              ? messages.sessionsOfflineTitle
+              : messages.sessionsErrorTitle
+          }
+          messages={messages}
+          onRetry={onRetry}
+        />
+      );
+    }
   }
   if (sessions.length === 0) {
     return (
@@ -214,25 +251,12 @@ function SessionTabsContent({
         </Text>
         <OpenSessionButton
           label={messages.openSessionButtonLabel}
-          onClick={onOpenSession}
+          onClick={(event) => {
+            onOpenFactory(event.currentTarget);
+          }}
         />
       </>
     );
-  }
-
-  function focusSessionButton(index: number) {
-    sessionButtonRefs.current[index]?.focus();
-  }
-
-  function moveSessionFocus(currentIndex: number, offset: number) {
-    const nextIndex =
-      (currentIndex + offset + sessions.length) % sessions.length;
-    const nextSession = sessions[nextIndex];
-    if (!nextSession) {
-      return;
-    }
-    onSelectSession(nextSession.id);
-    focusSessionButton(nextIndex);
   }
 
   function dropInsertionIndex(
@@ -245,8 +269,29 @@ function SessionTabsContent({
 
   return (
     <>
+      {isRefreshing ? (
+        <Text
+          aria-live="polite"
+          className="text-sm text-on-surface-variant"
+          role="status"
+        >
+          {messages.refreshingSessionsLabel}
+        </Text>
+      ) : null}
+      {error ? (
+        <SessionErrorState
+          label={
+            normalizeFactorySessionsError(error).code === "NETWORK_ERROR"
+              ? messages.sessionsOfflineTitle
+              : messages.sessionsErrorTitle
+          }
+          messages={messages}
+          onRetry={onRetry}
+        />
+      ) : null}
       <nav
         aria-label={messages.sessionTabsLabel}
+        aria-busy={isRefreshing}
         className="min-w-0 overflow-x-auto overscroll-x-contain"
       >
         <div
@@ -257,9 +302,7 @@ function SessionTabsContent({
           {sessions.map((session, index) => (
             <SessionTabButton
               active={session.id === activeSession?.id}
-              buttonRef={(element) => {
-                sessionButtonRefs.current[index] = element;
-              }}
+              buttonRef={getSessionButtonRef(session.id)}
               controlsID={sessionPanelID(sessionTabsID, session.id)}
               dragPreview={draggedSessionID === session.id}
               draggable={sessions.length > 1}
@@ -304,22 +347,27 @@ function SessionTabsContent({
                   case "ArrowLeft":
                   case "ArrowUp":
                     event.preventDefault();
-                    moveSessionFocus(index, -1);
+                    moveSessionFocus(session.id, -1);
                     return;
                   case "ArrowRight":
                   case "ArrowDown":
                     event.preventDefault();
-                    moveSessionFocus(index, 1);
+                    moveSessionFocus(session.id, 1);
                     return;
                   case "Home":
                     event.preventDefault();
-                    onSelectSession(sessions[0]?.id ?? session.id);
-                    focusSessionButton(0);
+                    if (sessions[0]) {
+                      selectAndFocusSession(sessions[0].id);
+                    }
                     return;
                   case "End":
                     event.preventDefault();
-                    onSelectSession(sessions.at(-1)?.id ?? session.id);
-                    focusSessionButton(sessions.length - 1);
+                    {
+                      const lastSession = sessions.at(-1);
+                      if (lastSession) {
+                        selectAndFocusSession(lastSession.id);
+                      }
+                    }
                     return;
                   case "Delete":
                   case "Backspace":
@@ -331,7 +379,7 @@ function SessionTabsContent({
                 }
               }}
               onClick={() => {
-                onSelectSession(session.id);
+                selectAndFocusSession(session.id);
               }}
               closeDisabled={closingSessionID === session.id}
               messages={messages}
@@ -339,16 +387,22 @@ function SessionTabsContent({
                 onCloseSession(session.id);
               }}
               session={session}
-              streamStatus={streamStatus}
+              streamState={streamStateForSession(session.id)}
               tabID={sessionTabID(sessionTabsID, session.id)}
             />
           ))}
         </div>
       </nav>
-      <OpenSessionButton
-        label={messages.openSessionButtonLabel}
-        onClick={onOpenSession}
-      />
+      {/* flex-none keeps the fixed-size open button on screen; the tab strip
+          beside it owns the shrink and scrolls instead. */}
+      <div className="flex flex-none items-center gap-1">
+        <OpenSessionButton
+          label={messages.openSessionButtonLabel}
+          onClick={(event) => {
+            onOpenFactory(event.currentTarget);
+          }}
+        />
+      </div>
       {activeSession ? (
         <div
           aria-labelledby={sessionTabID(sessionTabsID, activeSession.id)}

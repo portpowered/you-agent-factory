@@ -66,69 +66,44 @@ func listProductionPkgPackages(repoRoot string) ([]string, error) {
 	return packages, nil
 }
 
-func validateInventory(repoRoot string, inventory []string) error {
-	live, err := listProductionPkgPackages(repoRoot)
-	if err != nil {
-		return err
-	}
-	if len(inventory) == 0 {
-		return fmt.Errorf("inventory must list every production pkg package; found 0 rows, live tree has %d", len(live))
-	}
-	if !slices.IsSorted(inventory) {
-		return fmt.Errorf("inventory must be stable-sorted in byte-order path sort")
-	}
-	seen := make(map[string]struct{}, len(inventory))
-	for i, packagePath := range inventory {
-		if strings.TrimSpace(packagePath) == "" {
-			return fmt.Errorf("inventory[%d] is empty", i)
-		}
+// validateRowsNamePackagesThatExist proves every committed migration row still
+// names a package present in the live tree, so a row cannot silently outlive the
+// package it describes.
+//
+// Completeness is deliberately asserted in one direction only. A live package
+// with no row is valid, expected state: its destination is derivable from its
+// own path, so adding or deleting a package inside a service needs no registry
+// edit.
+func validateRowsNamePackagesThatExist(repoRoot string, packages []PackageMapping) error {
+	var stale []string
+	for i, row := range packages {
+		packagePath := row.PackagePath
 		if strings.Contains(packagePath, "\\") {
-			return fmt.Errorf("inventory[%d] %q must use slash separators", i, packagePath)
+			return fmt.Errorf("moves[%d] %q must use slash separators", i, packagePath)
 		}
 		if !strings.HasPrefix(packagePath, "pkg/") {
-			return fmt.Errorf("inventory[%d] %q must be repository-relative under pkg/", i, packagePath)
+			return fmt.Errorf("moves[%d] %q must be repository-relative under pkg/", i, packagePath)
 		}
-		if _, dup := seen[packagePath]; dup {
-			return fmt.Errorf("inventory contains duplicate package path %q", packagePath)
+		// Discover the source class before deciding whether the row is live. A
+		// test-only package remains visible to the package-target report instead
+		// of disappearing behind a production-only filter; both source classes
+		// still establish that the named directory exists.
+		classes, err := packageTargetSourceClasses(repoRoot, packagePath)
+		if err != nil {
+			return err
 		}
-		seen[packagePath] = struct{}{}
+		if len(classes) == 0 {
+			stale = append(stale, packagePath)
+		}
 	}
-	if !slices.Equal(inventory, live) {
-		missing, extra := diffStringSets(live, inventory)
-		switch {
-		case len(missing) > 0 && len(extra) > 0:
-			return fmt.Errorf("inventory does not match live production packages; missing example %q; extra example %q", missing[0], extra[0])
-		case len(missing) > 0:
-			return fmt.Errorf("inventory is missing production package %q", missing[0])
-		case len(extra) > 0:
-			return fmt.Errorf("inventory contains unknown package %q", extra[0])
-		default:
-			return fmt.Errorf("inventory order does not match stable-sorted live production packages")
-		}
+	if len(stale) > 0 {
+		slices.Sort(stale)
+		return fmt.Errorf(
+			"moves name %d package(s) that no longer exist in the live tree: %s\nLINT_VIOLATION_COUNT: %d",
+			len(stale),
+			strings.Join(stale, ", "),
+			len(stale),
+		)
 	}
 	return nil
-}
-
-func diffStringSets(want, got []string) (missing, extra []string) {
-	wantSet := make(map[string]struct{}, len(want))
-	gotSet := make(map[string]struct{}, len(got))
-	for _, value := range want {
-		wantSet[value] = struct{}{}
-	}
-	for _, value := range got {
-		gotSet[value] = struct{}{}
-	}
-	for _, value := range want {
-		if _, ok := gotSet[value]; !ok {
-			missing = append(missing, value)
-		}
-	}
-	for _, value := range got {
-		if _, ok := wantSet[value]; !ok {
-			extra = append(extra, value)
-		}
-	}
-	slices.Sort(missing)
-	slices.Sort(extra)
-	return missing, extra
 }

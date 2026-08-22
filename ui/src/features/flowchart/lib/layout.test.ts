@@ -66,12 +66,12 @@ describe("buildGraphLayout", () => {
     expect(
       layout.nodes.find((node) => node.nodeId === "workstation:intake"),
     ).toMatchObject({
-      height: 196,
+      height: 156,
     });
-    expect(layout.height).toBeGreaterThan(190);
+    expect(layout.height).toBeGreaterThan(150);
   });
 
-  it("uses compact dimensions for exhaustion-rule transitions", async () => {
+  it("keeps missing workstation semantics at the standard graph dimensions", async () => {
     const topology = {
       workstation_node_ids: ["process", "executor-loop-breaker"],
       workstation_nodes_by_id: {
@@ -136,7 +136,7 @@ describe("buildGraphLayout", () => {
     expect(
       layout.nodes.find((node) => node.nodeId === "workstation:process"),
     ).toMatchObject({
-      height: 196,
+      height: 156,
       width: 156,
     });
     expect(
@@ -144,8 +144,8 @@ describe("buildGraphLayout", () => {
         (node) => node.nodeId === "workstation:executor-loop-breaker",
       ),
     ).toMatchObject({
-      height: 58,
-      width: 132,
+      height: 156,
+      width: 156,
     });
   });
 

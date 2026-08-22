@@ -9,18 +9,20 @@ import (
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	edges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
+	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
+	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessionsrootcli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
-	httpapplication "github.com/portpowered/infinite-you/pkg/transports/http/application"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
-	factorydefinitionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinition"
-	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 )
 
@@ -30,48 +32,59 @@ var platformSet = wire.NewSet(
 )
 
 var apiSet = wire.NewSet(
-	composition.NewWorkAPI,
-	composition.NewHTTPBinder,
-	apisurface.NewRuntimeAPI,
-	composition.NewLiveSessionAPI,
-	factorydefinitionmapping.NewAPI,
-	factorysessionmapping.NewDurableAPI,
-	factorysessionmapping.NewLiveAPI,
-	factorysessionmapping.NewInvocationAPI,
+	providersessionshttp.NewAdapter,
+	providersessionshttp.NewHandler,
 	mcpstdio.NewOpener,
-	httpapplication.NewHandler,
+	provideHTTPRuntimeBindingWithMetrics,
 )
 
 var servicesSet = wire.NewSet(
 	provideProvidersService,
+	provideEventsService,
+	provideWorkerRecordingWriter,
+	provideWorkerSessionRecorder,
+	provideWorkerRecordingReader,
+	provideWorkerSessionsFactoryWithRecorder,
 	provideApplicationProcessLifecycle,
 	provideProviderRegistry,
-	provideProviderRegistryRebinder,
-	wire.Bind(new(initializerapplication.ProviderRegistry), new(workers.ProviderRegistry)),
 	provideFactorySessionProviderIdentityResolver,
 	factorysessionwire.NewRequestPreparation,
+	factorysessionwire.NewLiveChangeCoordinator,
 	provideFactorySessionHTTPRequestPreparation,
 	factoryruntime.NewFactoryStatusProjector,
 	factoryruntime.NewSessionResultProjectionOperation,
 	provideOperatorSettingsFileSystem,
 	provideOperatorSettingsCreateTemporaryFile,
 	provideOperatorSettingsProviderCatalog,
+	provideOperatorSettingsLogger,
+	provideChatSessionsService,
 	provideOperatorSettingsService,
 	provideOperatorSettingsIDGenerator,
+	provideChatSessionsFactoryTargetCatalogService,
+	provideACPServerFactoryTargetRuntimeResolver,
+	provideACPServerFactoryTarget,
+	provideACPServerFactoryTargetService,
+	provideACPServerResolveHomeDir,
+	provideChatSessionsResponseBridge,
+	provideACPServerResponseBridge,
+	provideACPServer,
+	provideACPWireRecorder,
 	provideOperatorConfigDecoder,
+	provideOperatorConfigDiagnosticsDecoder,
 	provideOperatorConfigEncoder,
 	provideSystemInitializationInspectPath,
 	provideSystemInitializationLegacyFactoryMigrationFileSystem,
 	provideOperatorConfigLoader,
 	provideOperatorBackendScopeEnsurer,
 	provideDurableExecutionFactory,
-	provideWorkerExecutionFactory,
 	provideAPIServerStarter,
 	provideRuntimeHostOperation,
 	provideProcessRuntimeFactory,
 	factorysessionwire.NewLifecyclePlanOperation,
 	provideFactoryVisualizationFactory,
 	provideResponsePresentation,
+	factoryvisualizationwire.NewRuntimeSinkOwner,
+	factorysessionwire.NewOpeningPresentationOwner,
 	provideWorkContentStagingService,
 	work.NewContentPreparation,
 	work.NewRequestPreparationService,
@@ -80,14 +93,14 @@ var servicesSet = wire.NewSet(
 	work.NewFactoryRequestBatchPreparation,
 	work.NewInvocationInputPreparation,
 	provideWorkersMockWorkersConfigFileSystem,
-	workers.NewMockWorkersConfigLoader,
+	provideWorkersMockWorkersConfigDiagnosticsLoader,
 	provideRuntimeArtifactClock,
 	provideRuntimeArtifactIDGenerator,
 	provideRuntimeArtifactPathReserver,
 	provideRuntimeArtifactRootResolver,
 	provideRuntimeLoggerFactory,
-	provideRuntimeLogSinkFactory,
-	provideRuntimeMetricsSinkFactory,
+	provideRuntimeLogOwner,
+	provideRuntimeMetricsOwner,
 	provideManagedRunnerFactory,
 	provideModelsService,
 	provideFactorySessionsWorkingDirectory,
@@ -112,12 +125,14 @@ var servicesSet = wire.NewSet(
 	provideModelInvocationArtifactExporter,
 	provideModelInvocationTimeout,
 	provideModelInvocationOperation,
-	provideWorkFactory,
+	provideModelsCLIComposition,
+	provideModelsCLIOutputFileSystem,
+	provideWorkService,
 	provideWorkRequestIDGenerator,
 	provideWorkSubmittedFileReader,
+	provideWorkSubmittedFilePathInspector,
 	provideWorkContentHostPlatform,
 	provideContentMaterializer,
-	provideWorkMaterializationService,
 	provideFactoryInvocationPolicyPorts,
 	provideDecisionEnvelopeService,
 	provideInvocationInterpolationService,
@@ -127,19 +142,28 @@ var servicesSet = wire.NewSet(
 	provideWorkPropagationPolicyService,
 	provideWorkstationExecutionPolicyService,
 	provideTTSObservabilityService,
-	provideAutomationFactory,
+	provideAutomationHostedSourceInputs,
+	provideAutomationsRoot,
+	wire.Bind(new(automations.Service), new(automations.Root)),
 	provideFactorySessionsService,
+	provideFactorySessionDetachedOperations,
+	provideFactoryVisualizationMetricsQuery,
+	provideRuntimeMetricsQueryCapability,
+	provideFactorySessionExecutionRuntimeOpening,
+	provideProviderPriceTableReader,
+	provideCostsQuery,
+	provideCostsQueryCapability,
+	provideFactorySessionsRuntimeAssembly,
+	provideFactoryWebhooksService,
 	providePortableRecordingWriter,
 	provideOrchestrationJavaScriptExecution,
 	provideOrchestrationCompilation,
 	provideFactorySessionExecutionFactory,
 	provideConductorInvocationWithProgressFactory,
-	provideRecordingsProjectionFactory,
-	provideRecordingsFactory,
-	provideRuntimeLedgerFactory,
+	provideFactorySessionReplayInputs,
+	provideRecordingsRoot,
+	provideRecordingsRuntimeOpening,
 	provideReplayArtifactStorage,
-	provideRuntimeRecorderFactory,
-	provideReplayClockFactory,
 	provideFactoryRuntimeIDGenerator,
 	provideFactoryRuntimeDirectories,
 	provideFactoryRuntimeInputs,
@@ -162,6 +186,7 @@ var servicesSet = wire.NewSet(
 	provideFactoryDefinitionNamedPathResolver,
 	provideFactoryDefinitionNamedFactoryCatalogFileSystem,
 	provideFactoryDefinitionPackagedInstallationFileSystem,
+	provideFactoryDefinitionPackagedInstallationDirectoryCreator,
 	providePackagedFactoryInstallation,
 	provideFactoryDefinitionAuthoredReaderFileSystem,
 	provideFactoryDefinitionAuthoredWriterFileSystem,
@@ -177,31 +202,45 @@ var servicesSet = wire.NewSet(
 	providePortableBundledDocsPruner,
 	provideFactoryDefinitionLoader,
 	provideFactoryRuntimeClockResolver,
+	provideFactoryRuntimeClock,
+	provideFactoryRuntimeProviderOverride,
+	provideFactoryRuntimeSubmissionRecorder,
+	provideFactoryRuntimeDispatchRecorder,
+	provideFactorySessionInvocationMetricsRecorder,
+	provideFactoryRuntimeProviderCommandRunner,
+	provideFactoryRuntimeScriptCommandRunner,
 	provideFactoryRuntimeSessionLoggerFactory,
-	provideReplayExecutionFactory,
 	provideWorkersRetryRandomSource,
 	provideWorkersWorkstationFileSystem,
 	provideWorkersProviderTemporaryFileSystem,
 	provideAgyPTYAllocator,
-	provideWorkersRuntimeFactory,
-	provideWorkersRuntimeExecutorsFactory,
 	provideWorkersMockCommandRunnerFactory,
-	provideAutomationHostedSourcesFactory,
-	provideWorkersLocalRuntimeHooksFactory,
 	provideWorkerCommandRunnerAdapter,
-	provideFactoryDefinitionsFactory,
+	provideFactoryDefinitionsRuntimeRouter,
+	provideFactoryDefinitionsRoot,
 	provideFactoryScaffoldInitializer,
 	provideEditableFactoryValidator,
 	provideInitialFactorySnapshotFactory,
 	factoryruntimewire.NewRuntimeFactory,
 	factoryruntimewire.NewAssembly,
+	provideFactoryRuntimeRootFactory,
 	wire.Bind(new(factorysessionwire.FactoryRuntimeAssembler), new(*factoryruntimewire.Assembly)),
-	wire.Struct(new(factorysessionwire.RuntimeOpeningDependencies), "*"),
+	wire.Struct(new(factorysessionwire.ProviderSessionsRuntimeOpeningPorts), "*"),
+	wire.Struct(new(factorysessionwire.FactoryRuntimeOpeningPorts), "*"),
+	wire.Struct(new(factorysessionwire.FactoryDefinitionsRuntimeOpeningPorts), "*"),
+	wire.Struct(new(factorysessionwire.FactorySessionsRuntimeOpeningPorts), "*"),
+	wire.Struct(new(factorysessionwire.WorkRuntimeOpeningPorts), "*"),
+	wire.Struct(new(factorysessionwire.AutomationsRuntimeOpeningPorts), "*"),
+	wire.Struct(new(factorysessionwire.ModelsRuntimeOpeningPorts), "*"),
+	wire.Struct(new(factorysessionwire.RecordingsRuntimeOpeningPorts), "*"),
+	wire.Struct(new(factorysessionwire.WebhooksRuntimeOpeningPorts), "*"),
+	wire.Struct(new(factorysessionwire.WorkersRuntimeOpeningPorts), "*"),
+	wire.Struct(new(factorysessionwire.OperatorSettingsRuntimeOpeningPorts), "*"),
 	provideLoadedFactorySourceFactory,
 	provideLoadedFactoryLoader,
 	provideReplayArtifactLoader,
 	provideReplayRuntimeConfigDecoder,
-	factorysessionwire.NewRuntimeOpeningFactory,
+	factorysessionwire.NewRuntimeOpening,
 )
 
 var providerSessionServiceSet = wire.NewSet(
@@ -231,14 +270,52 @@ var factoryDefinitionsServicesSet = wire.NewSet(
 	provideEffectiveFactoryDefinitionNormalizer,
 	provideEffectiveFactoryCatalogOperation,
 	provideEffectiveFactoryDefinitionsService,
+	factorydefinitionswire.NewCatalogPathsService,
 )
 
 var workerServiceSet = wire.NewSet(
-	provideWorkerInvocationFactory,
+	provideStatelessWorkersService,
+	provideWorkersAgentToolFileSystem,
+	provideWorkersWorktree,
+	provideWorkersWorktreeRelease,
+	provideWorkersFactoryDocsFileSystem,
 	provideProviderFromCommandRunnerFactory,
-	provideWorkerInvocationWithProgressFactory,
 	provideWorkerProcessEnvironment,
 	provideWorkerCurrentWorkingDirectory,
+)
+
+var statelessWorkersSet = wire.NewSet(
+	platformSet,
+	provideProvidersService,
+	provideModelsService,
+	provideFactoryRuntimeScriptCommandRunner,
+	provideWorkersFactoryDocsFileSystem,
+	provideFactoryRuntimeClock,
+	provideWorkersProviderTemporaryFileSystem,
+	provideWorkersWorktree,
+	provideWorkersWorktreeRelease,
+	provideFactoryRuntimeProviderOverride,
+	provideWorkersAgentToolFileSystem,
+	provideFactoryInvocationPolicyPorts,
+	provideDecisionEnvelopeService,
+	provideStatelessWorkersService,
+)
+
+var mockStatelessWorkersSet = wire.NewSet(
+	platformSet,
+	provideProvidersService,
+	provideModelsService,
+	provideFactoryRuntimeScriptCommandRunner,
+	provideWorkersFactoryDocsFileSystem,
+	provideFactoryRuntimeClock,
+	provideWorkersProviderTemporaryFileSystem,
+	provideWorkersWorktree,
+	provideWorkersWorktreeRelease,
+	provideFactoryRuntimeProviderOverride,
+	provideWorkersAgentToolFileSystem,
+	provideFactoryInvocationPolicyPorts,
+	provideDecisionEnvelopeService,
+	provideMockStatelessWorkersService,
 )
 
 var cliCommandOperationsSet = wire.NewSet(
@@ -259,11 +336,34 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideSubmitPayloadReader,
 	provideOperatorDefaultsResolver,
 	provideStandardCLIHTTPProtocol,
+	provideMetricsCLI,
+	provideCostsCLI,
+	provideRemoteInvocationOperation,
 	provideExtendedCLIHTTPProtocol,
+	provideWatchCLIHTTPProtocol,
+	provideStreamingCLIHTTPProtocol,
 	provideSubmitWorkOperation,
 	provideSubmitBatchOperation,
+	provideListWorkerSessionsOperation,
+	provideShowWorkerSessionOperation,
+	provideReadWorkerSessionOperation,
+	provideStreamWorkerSessionOperation,
+	provideWorkerSessionsCLIIdentityGenerator,
+	provideWorkerSessionsCLIExecutionFileReader,
+	provideContinueWorkerSessionOperation,
+	provideInterruptWorkerSessionOperation,
+	providePauseWorkerSessionOperation,
+	provideResumeWorkerSessionOperation,
+	provideCancelWorkerSessionOperation,
+	provideTerminateWorkerSessionOperation,
+	provideLocalWorkerSessionsBoundary,
+	wire.Bind(new(workersessionsrootcli.LocalInvokeBoundary), new(*localWorkerSessionsBoundary)),
+	wire.Bind(new(workersessionsrootcli.LocalControlBoundary), new(*localWorkerSessionsBoundary)),
+	provideInvokeWorkerSessionOperation,
 	provideSessionsCLIService,
+	provideLocalSessionsCLIService,
 	provideModelsCLIService,
+	provideProvidersCLIService,
 	provideFlattenFactoryConfigOperation,
 	provideExpandFactoryConfigOperation,
 	provideConfigureInitOperation,
@@ -282,6 +382,9 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideUpdateFactoryFromFileOperation,
 	provideDeleteFactoryOperation,
 	provideListWorkOperation,
+	provideListHumanApprovalsOperation,
+	provideShowHumanApprovalOperation,
+	provideWatchWorkOperation,
 	provideShowWorkOperation,
 	provideMoveWorkOperation,
 	provideWorkVisualizationOperation,
@@ -304,7 +407,12 @@ var BundleSet = wire.NewSet(
 	providePackagedFactoryCatalog,
 	provideSystemInitializationService,
 	provideSystemInitializationOperation,
-	provideRuntimeOpener,
+	wire.Bind(new(factorydefinitions.Persistence), new(factorydefinitions.PackagedFactoryPersistence)),
+	wire.Bind(new(processcontract.ACPServer), new(acp.Server)),
+	wire.Bind(new(factorysessionwire.ApplicationRuntimeOpening), new(*factorysessionwire.RuntimeOpening)),
+	wire.Bind(new(factorysessionwire.InvocationRuntimeOpening), new(*factorysessionwire.RuntimeOpening)),
+	wire.Bind(new(factorysessionwire.ExecutionRuntimeOpening), new(*factorysessionwire.RuntimeOpening)),
+	wire.Bind(new(factorysessionwire.WorkerExecution), new(workers.Service)),
 	provideApplicationRuntimeAdapter,
 	provideLifecycleRunnerFactory,
 	provideWorkStopSummaryProjector,
@@ -320,6 +428,7 @@ var BundleSet = wire.NewSet(
 	initializerapplication.NewOpenedStdioRunnerBuilder,
 	provideFixtureStdioApplicationBuilder,
 	provideRuntimeStdioApplicationBuilder,
+	provideMCPServerBuilder,
 	provideSessionExecutionOpeningFactory,
 	wire.Bind(new(factorysessionwire.StdioExecutionOpening), new(*factorysessionwire.ExecutionOpeningFactory)),
 	factorysessionwire.NewStdioOpeningService,
@@ -334,7 +443,7 @@ var BundleSet = wire.NewSet(
 	provideRunInvocationOperation,
 	provideModelsCLIInvocationOperation,
 	provideCLICommandFactory,
-	initializerapplication.NewProcess,
+	initializerapplication.NewProcessWithRuntimeCostsAndExecution,
 	wire.Bind(new(processcontract.Initializer), new(*initializerapplication.Initializer)),
 	wire.Bind(new(processcontract.CommandFactory), new(cli.CommandFactory)),
 )
@@ -347,6 +456,34 @@ func InjectBundle(
 ) (*initializerapplication.Process, error) {
 	wire.Build(
 		BundleSet,
+	)
+	return nil, nil
+}
+
+// BuildStatelessWorkers composes the standalone Workers Execute root without
+// opening the application command graph, Factory Runtime, or Factory Session.
+// It is a narrow service-root construction boundary used by direct callers
+// that need one detached attempt.
+func BuildStatelessWorkers(
+	ctx context.Context,
+	edges edges.Edges,
+) (workers.Service, error) {
+	wire.Build(
+		statelessWorkersSet,
+	)
+	return nil, nil
+}
+
+// BuildMockStatelessWorkers composes the explicit mock-feature Workers root.
+// It shares the detached production construction ports while opting into the
+// mock registration only when the caller supplies mock configuration.
+func BuildMockStatelessWorkers(
+	ctx context.Context,
+	edges edges.Edges,
+	mockWorkers *workers.MockWorkersConfig,
+) (workers.Service, error) {
+	wire.Build(
+		mockStatelessWorkersSet,
 	)
 	return nil, nil
 }

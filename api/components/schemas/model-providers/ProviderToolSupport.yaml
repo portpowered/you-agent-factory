@@ -1,0 +1,7 @@
+type: string
+description: Evidence state for a named provider tool fact.
+enum:
+  - supported
+  - unsupported
+  - conditional
+  - unknown

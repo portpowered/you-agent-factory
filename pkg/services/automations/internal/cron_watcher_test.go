@@ -225,7 +225,7 @@ func TestStartCronWatchersForRuntime_DisablesMissingScheduleWithoutAffectingVali
 			Workstations: []interfaces.FactoryWorkstationConfig{validCron, missingScheduleCron},
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
-			validCron.Name:            &validCron,
+			validCron.Name:           &validCron,
 			missingScheduleCron.Name: &missingScheduleCron,
 		},
 	)

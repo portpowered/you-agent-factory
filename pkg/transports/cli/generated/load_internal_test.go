@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 )
 
 func TestGeneratedFamilyAccessorsReturnFreshValues(t *testing.T) {
@@ -19,6 +19,8 @@ func TestGeneratedFamilyAccessorsReturnFreshValues(t *testing.T) {
 		{name: "work", load: WorkFamilyManifest},
 		{name: "factory config init", load: FactoryConfigInitFamilyManifest},
 		{name: "models docs", load: ModelsDocsFamilyManifest},
+		{name: "providers", load: ProvidersFamilyManifest},
+		{name: "metrics", load: MetricsFamilyManifest},
 		{name: "run submit", load: RunSubmitFamilyManifest},
 		{name: "mcp", load: MCPFamilyManifest},
 	}
@@ -42,6 +44,25 @@ func TestGeneratedFamilyAccessorsReturnFreshValues(t *testing.T) {
 				break
 			}
 		})
+	}
+}
+
+func TestMetricsFamilyManifestMatchesContractedIDs(t *testing.T) {
+	manifest, err := MetricsFamilyManifest()
+	if err != nil {
+		t.Fatalf("MetricsFamilyManifest() error = %v", err)
+	}
+	if len(manifest.Commands) != len(MetricsFamilyCommandIDs) {
+		t.Fatalf("command count = %d, want %d", len(manifest.Commands), len(MetricsFamilyCommandIDs))
+	}
+	for _, id := range MetricsFamilyCommandIDs {
+		command, err := manifest.CommandByID(id)
+		if err != nil {
+			t.Fatalf("CommandByID(%q) error = %v", id, err)
+		}
+		if command.ID != id {
+			t.Fatalf("command %q record id = %q", id, command.ID)
+		}
 	}
 }
 

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -75,13 +75,15 @@ func namedFactorySmokeEnvironment(homeDir string) []string {
 func runFactoryThroughCustomerProcess(
 	t *testing.T,
 	dir string,
-	provider providercontract.Provider,
+	provider interface {
+		Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error)
+	},
 ) factoryapi.StatusResponse {
 	t.Helper()
 	server := support.NewProcessAPIServer()
 	process := support.BuildProcess(t, serviceedges.Edges{
 		APIServerStarter: server.Start,
-		ProviderOverride: provider,
+		ProviderOverride: support.ProviderServiceFromInference(provider),
 	})
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run",

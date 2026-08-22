@@ -1,0 +1,41 @@
+type: object
+additionalProperties: false
+required:
+  - position
+  - cursor
+  - sourceType
+  - sourceId
+  - sourceSequence
+  - sourceEventId
+  - schemaId
+  - payload
+properties:
+  cursor:
+    $ref: './WorkerSessionEventCursor.yaml'
+    description: Typed reconnect cursor for this canonical event record.
+  position:
+    type: integer
+    format: int64
+    minimum: 1
+    description: Aggregate position assigned by the canonical Events ledger.
+  sourceType:
+    type: string
+    description: Source-native event family.
+  sourceId:
+    type: string
+    description: Source-native event identity.
+  sourceSequence:
+    type: integer
+    format: int64
+    minimum: 1
+    description: Source-native monotonic sequence.
+  sourceEventId:
+    type: string
+    description: Source-native idempotency event identity.
+  schemaId:
+    type: string
+    description: Source-native payload schema identity.
+  payload:
+    type: object
+    additionalProperties: true
+    description: Source-native canonical event payload.

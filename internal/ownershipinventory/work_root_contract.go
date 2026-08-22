@@ -33,7 +33,6 @@ var WorkThinRootContractFiles = []string{
 	"proposal_materialization_contract.go",
 	"proposal_materialization_contract_test.go",
 	"read_contract.go",
-	"recordings_request_boundary_test.go",
 	"service_contract.go",
 	"service_peer_bindings.go",
 	"service_peer_bindings_test.go",

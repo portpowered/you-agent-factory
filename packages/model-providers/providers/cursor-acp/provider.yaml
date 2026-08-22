@@ -1,0 +1,105 @@
+id: cursor-acp
+aliases: []
+displayName:
+  type: LOCALIZABLE_ASSET
+  value: Cursor ACP
+description:
+  type: LOCALIZABLE_ASSET
+  value: Cursor ACP is a package-owned ACP stdio integration.
+documentation:
+  - kind: reference
+    url: https://github.com/agentclientprotocol/registry
+technicalSupportLevel: experimental
+implementationAvailability: externally-supplied
+maximumExecutionCapabilities:
+  promptSubmission: true
+  imageInput: true
+  sessionResume: false
+  structuredOutput: false
+  permissionBypass: true
+  toolExecution: false
+  workingDirectory: false
+  worktree: false
+maximumResponseFidelityCapabilities:
+  nativeStreaming: false
+  messageDeltas: false
+  messageSnapshots: false
+  reasoningSummaries: false
+  toolLifecycle: false
+  toolOutputDeltas: false
+  fileChanges: false
+  plans: false
+  usage: false
+  stableItemIds: false
+  providerReconnect: false
+discovery:
+  executableNames: [cursor-agent]
+  endpointKinds: [stdio]
+  configurationKeys: []
+  prerequisites:
+    - kind: executable
+      name: cursor-agent
+      description: Install the Cursor ACP launch executable before execution.
+    - kind: authentication
+      name: account-authentication
+      description: Authenticate the Cursor ACP account before execution.
+    - kind: workspace
+      name: writable-workspace
+      description: Select a writable workspace before execution.
+harness:
+  kind: acp
+  acpSupport:
+    support: supported
+    protocolVersion: "1"
+    resourceDelivery: implemented
+    evidenceRefs: [cursor-acp-protocol]
+modelCatalogPosture: unknown
+harnessRoutes:
+  - direction: input
+    modality: audio
+    support: unknown
+    transport: none
+  - direction: input
+    modality: image
+    support: supported
+    transport: acp_resource
+    evidenceRefs: [cursor-acp-protocol]
+  - direction: input
+    modality: text
+    support: supported
+    transport: inline
+    evidenceRefs: [cursor-acp-protocol]
+  - direction: input
+    modality: video
+    support: unknown
+    transport: none
+  - direction: output
+    modality: audio
+    support: unknown
+    transport: none
+  - direction: output
+    modality: image
+    support: unknown
+    transport: none
+  - direction: output
+    modality: text
+    support: supported
+    transport: inline
+    evidenceRefs: [cursor-acp-protocol]
+  - direction: output
+    modality: video
+    support: unknown
+    transport: none
+evidence:
+  - id: cursor-acp-protocol
+    kind: conformance_fixture
+    verifiedOn: "2026-08-11"
+    factRefs:
+      - model_catalog
+      - harness/acp
+      - harness/input/image
+      - harness/input/text
+      - harness/output/text
+models: []
+tools: []
+knownLimits: []

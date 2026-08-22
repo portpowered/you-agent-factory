@@ -2,14 +2,24 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"runtime/debug"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
+	workerrecording "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution/recording"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
+)
+
+const (
+	detachedProviderMaxRetries     = 2
+	detachedProviderInitialBackoff = 100 * time.Millisecond
 )
 
 // Execute validates and clones the request, runs one private runner attempt,
@@ -18,46 +28,120 @@ import (
 func (s *Service) Execute(
 	ctx context.Context,
 	request workers.ExecuteRequest,
-) (result workers.ExecuteResult, err error) {
+) (workers.ExecuteResult, error) {
 	if s == nil || s.runners == nil {
 		return workers.ExecuteResult{}, workers.ErrExecuteUnavailable
+	}
+	if ctx == nil {
+		return workers.ExecuteResult{}, fmt.Errorf(
+			"%w: context is required",
+			workers.ErrInvalidExecuteRequest,
+		)
 	}
 	if err := ctx.Err(); err != nil {
 		return workers.ExecuteResult{}, err
 	}
+	// Detach all caller-owned mutable data before validation or any downstream
+	// selection. The request snapshot is the only input the attempt may use.
+	request = request.Clone()
 	if err := request.Validate(); err != nil {
 		return workers.ExecuteResult{}, err
 	}
-	request = request.Clone()
+	if !request.Target.Environment.SkipProcessInheritance &&
+		len(request.Target.Environment.ProcessEnvironment) == 0 {
+		request.Target.Environment.ProcessEnvironment = os.Environ()
+	}
 	correlation := request.Correlation
+	if request.Target.Noop {
+		return workers.ExecuteResult{
+			Correlation: correlation,
+			Outcome:     workers.ExecutionOutcomeAccepted,
+		}, nil
+	}
 
 	cleanup := newCleanupRegistry()
-	defer cleanup.run(s.logger)
+	temporaryFiles := newTrackedTemporaryFiles(s.temporaryFiles)
+	if temporaryFiles != nil {
+		cleanup.add(temporaryFiles.Cleanup)
+	}
 
-	if err := s.prepareWorkspace(ctx, &request, cleanup); err != nil {
-		return workers.ExecuteResult{}, err
+	identity, err := s.prepareAttempt(ctx, &request, cleanup)
+	if err != nil {
+		return workers.ExecuteResult{}, s.preStartError(ctx, cleanup, err)
+	}
+	if request.Input.PreparedRequestObserver != nil {
+		request.Input.PreparedRequestObserver(request)
+	}
+	return s.executeStarted(ctx, request, identity, correlation, cleanup, temporaryFiles)
+}
+
+func (s *Service) prepareAttempt(
+	ctx context.Context,
+	request *workers.ExecuteRequest,
+	cleanup *cleanupRegistry,
+) (string, error) {
+	if err := s.prepareWorkspace(ctx, request, cleanup); err != nil {
+		return "", err
+	}
+	if contextErr := ctx.Err(); contextErr != nil {
+		return "", contextErr
 	}
 	identity := resolveRunnerIdentity(request.Target)
-	if err := s.authorizeProviderTarget(ctx, &request, identity); err != nil {
-		return workers.ExecuteResult{}, err
+	request.Target.Tools.RequiredOptionalCapabilities = requiredOptionalCapabilities(*request, identity)
+	if err := s.authorizeProviderTarget(ctx, request, identity); err != nil {
+		return "", err
+	}
+	if contextErr := ctx.Err(); contextErr != nil {
+		return "", contextErr
 	}
 	// Selection is validated before the attempt starts so missing/unknown
 	// identities remain pre-start errors. Resolve performs no execution effect.
 	if _, err := s.runners.Resolve(runners.ResolutionRequest{
-		Identity:             identity,
-		RequiredCapabilities: request.Target.Tools.RequiredOptionalCapabilities,
+		Identity: identity,
+		RequiredCapabilities: runnerResolutionCapabilities(
+			request.Target.Tools.RequiredOptionalCapabilities,
+			identity,
+		),
 	}); err != nil {
-		return workers.ExecuteResult{}, fmt.Errorf(
+		return "", fmt.Errorf(
 			"%w: resolve runner %q: %v",
 			workers.ErrInvalidExecuteRequest,
 			identity,
 			err,
 		)
 	}
+	if contextErr := ctx.Err(); contextErr != nil {
+		return "", contextErr
+	}
+	return identity, nil
+}
+
+func (s *Service) preStartError(
+	ctx context.Context,
+	cleanup *cleanupRegistry,
+	executeErr error,
+) error {
+	cleanupErr := cleanup.run(s.logger)
+	if contextErr := ctx.Err(); contextErr != nil {
+		return contextErr
+	}
+	return errors.Join(executeErr, cleanupErr)
+}
+
+func (s *Service) executeStarted(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+	identity string,
+	correlation workers.ExecutionCorrelation,
+	cleanup *cleanupRegistry,
+	temporaryFiles workers.TemporaryFileSystem,
+) (workers.ExecuteResult, error) {
+	defer cleanup.run(s.logger)
 
 	startedAt := s.clock()
 	sequence := atomic.Int64{}
-	s.emit(ctx, &sequence, workers.ExecutionObservation{
+	observationContext := context.WithoutCancel(ctx)
+	s.emit(observationContext, &sequence, workers.ExecutionObservation{
 		Correlation: correlation,
 		Kind:        workers.ExecutionObservationKindStarted,
 		Timestamp:   startedAt,
@@ -67,6 +151,7 @@ func (s *Service) Execute(
 		"workers execute started",
 		"factory_session_id", correlation.FactorySessionID,
 		"runtime_id", correlation.RuntimeID,
+		"generation_id", correlation.GenerationID,
 		"dispatch_id", correlation.DispatchID,
 		"attempt_id", correlation.AttemptID,
 		"runner_id", request.Target.RunnerID,
@@ -75,35 +160,187 @@ func (s *Service) Execute(
 	execCtx, cancel := s.withTimeout(ctx, request.Target.Timeout)
 	defer cancel()
 
-	var runnerResult workers.RunnerExecutionResult
-	var runErr error
-	func() {
-		defer func() {
-			if recovered := recover(); recovered != nil {
-				runErr = panicFailure(recovered, debug.Stack())
-			}
-		}()
-		adapted := adaptRunnerRequest(request, identity)
-		runnerResult, runErr = s.runners.Execute(execCtx, runners.ExecuteRequest{
-			Identity:             identity,
-			RequiredCapabilities: request.Target.Tools.RequiredOptionalCapabilities,
-			Attempt:              adapted,
-		})
-	}()
+	runnerResult, runErr := s.runRunner(execCtx, request, identity, temporaryFiles)
 
+	if contextErr := execCtx.Err(); contextErr != nil {
+		var providerErr *workers.ProviderError
+		// Runner-owned cancellation errors carry the canonical provider
+		// message and should survive the context deadline/cancellation check.
+		// A raw runner error is still normalized to the authoritative context
+		// error so cancellation cannot be reported as an arbitrary process
+		// failure.
+		if !errors.As(runErr, &providerErr) || providerErr == nil {
+			runErr = contextErr
+		}
+	}
+	cleanupErr := cleanup.run(s.logger)
+	if cleanupErr != nil {
+		runErr = errors.Join(runErr, cleanupFailure(cleanupErr))
+	}
 	finishedAt := s.clock()
-	result = s.normalizeResult(correlation, request, runnerResult, runErr, finishedAt.Sub(startedAt))
-	s.emitTerminal(ctx, &sequence, result, finishedAt)
+	result := s.normalizeResult(correlation, request, runnerResult, runErr, finishedAt.Sub(startedAt))
+	s.emitTerminal(observationContext, &sequence, result, finishedAt)
 	s.logger.Info(
 		"workers execute finished",
 		"factory_session_id", correlation.FactorySessionID,
 		"runtime_id", correlation.RuntimeID,
+		"generation_id", correlation.GenerationID,
 		"dispatch_id", correlation.DispatchID,
 		"attempt_id", correlation.AttemptID,
 		"outcome", string(result.Outcome),
 		"duration_ms", finishedAt.Sub(startedAt).Milliseconds(),
 	)
 	return result.Clone(), nil
+}
+
+func (s *Service) runRunner(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+	identity string,
+	temporaryFiles workers.TemporaryFileSystem,
+) (runnerResult workers.RunnerExecutionResult, runErr error) {
+	providerOverride := request.Input.ProviderOverride
+	if providerOverride == nil {
+		providerOverride = s.providerOverride
+	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			runErr = panicFailure(
+				recovered,
+				debug.Stack(),
+				providerOverrideApplies(&request, providerOverride) && identity == runners.AgentIdentity,
+			)
+		}
+	}()
+	if request.Input.MockWorkers != nil {
+		ctx = workerexecution.WithMockWorkersConfig(ctx, request.Input.MockWorkers)
+		ctx = workerexecution.WithMockWorkerOutputPolicy(ctx, request.Target.Output)
+	}
+	if request.Input.ProgressPublisher != nil {
+		ctx = workerexecution.WithProgressPublisher(ctx, request.Input.ProgressPublisher)
+	}
+	if request.Input.ScriptEventRecorder != nil {
+		ctx = workerexecution.WithScriptEventRecorder(ctx, request.Input.ScriptEventRecorder)
+	}
+	if request.Input.CommandRunnerOverride != nil {
+		ctx = workerexecution.WithCommandRunnerOverride(ctx, request.Input.CommandRunnerOverride)
+	}
+	runnerRequest := adaptRunnerRequest(request, identity, temporaryFiles)
+	if request.Target.Tools.AgentLoop {
+		return s.runAgentLoop(ctx, request, identity, runnerRequest, providerOverride)
+	}
+	if providerOverrideApplies(&request, providerOverride) && identity == runners.AgentIdentity &&
+		!usesACPProvider(runnerRequest.ExecutorProvider) {
+		providerRunner := workerrecording.NewProviderRunner(
+			workerexecutor.RunnerFromProvider(providerOverride),
+			request.Input.InferenceEventRecorder,
+			s.clock,
+		)
+		return s.executeProviderWithRetry(ctx, runnerRequest, func(
+			attempt workers.RunnerExecutionRequest,
+		) (workers.RunnerExecutionResult, error) {
+			result, err := providerRunner.Execute(ctx, attempt)
+			return normalizeProviderOverrideResult(result, attempt), err
+		})
+	}
+	if identity != runners.AgentIdentity {
+		return s.runners.Execute(ctx, runners.ExecuteRequest{
+			Identity:             identity,
+			RequiredCapabilities: request.Target.Tools.RequiredOptionalCapabilities,
+			Attempt:              runnerRequest,
+		})
+	}
+	return s.executeProviderWithRetry(ctx, runnerRequest, func(
+		attempt workers.RunnerExecutionRequest,
+	) (workers.RunnerExecutionResult, error) {
+		return s.runners.Execute(ctx, runners.ExecuteRequest{
+			Identity: identity,
+			RequiredCapabilities: runnerResolutionCapabilities(
+				attempt.RequiredOptionalCapabilities,
+				identity,
+			),
+			Attempt: attempt,
+		})
+	})
+}
+
+// executeProviderWithRetry preserves the provider-attempt policy at the
+// stateless Workers boundary. Runtime still owns Work-level attempts; this
+// loop only retries provider failures that the shared failure classifier
+// declares retryable, and carries the exact opaque Provider Session into the
+// next provider call.
+//
+// The classifier is the single authority for retryability. A provider process
+// that failed or exited non-zero without a retryable classification is a
+// terminal external effect: retrying it burns the Work's attempt budget and
+// re-runs a real provider command that already reported a definitive failure.
+func (s *Service) executeProviderWithRetry(
+	ctx context.Context,
+	request workers.RunnerExecutionRequest,
+	execute func(workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error),
+) (workers.RunnerExecutionResult, error) {
+	for retryCount := 0; ; retryCount++ {
+		result, err := execute(request)
+		if err == nil {
+			return result, nil
+		}
+
+		providerErr := workers.NormalizeProviderExecutionError(err)
+		if providerErr == nil || !retryableProviderFailure(providerErr) || retryCount >= detachedProviderMaxRetries {
+			return result, err
+		}
+
+		if continuation := providerContinuationForRetry(providerErr, result); continuation != nil {
+			if request.Continuation != nil {
+				request.Continuation = (continuation).ClonePtr()
+				request.SessionID = ""
+			} else {
+				normalized := continuation.Normalize()
+				request.SessionID = strings.TrimSpace(normalized.ProviderSessionID)
+				if request.SessionID == "" {
+					request.SessionID = strings.TrimSpace(normalized.ExternalRef)
+				}
+			}
+			request.RequiredOptionalCapabilities = appendRunnerCapabilityIfMissing(
+				request.RequiredOptionalCapabilities,
+				workers.RunnerOptionalCapabilitySessionResume,
+			)
+		}
+		if err := sleepForDetachedProviderRetry(ctx, detachedProviderInitialBackoff<<retryCount); err != nil {
+			return result, err
+		}
+	}
+}
+
+func retryableProviderFailure(providerErr *workers.ProviderError) bool {
+	if providerErr == nil {
+		return false
+	}
+	return workers.WorkFailureDecisionFromProviderError(providerErr).Retryable
+}
+
+func providerContinuationForRetry(
+	providerErr *workers.ProviderError,
+	result workers.RunnerExecutionResult,
+) *workers.ProviderContinuationRef {
+	if providerErr != nil && providerErr.Continuation != nil {
+		return (providerErr.Continuation).ClonePtr()
+	}
+	if result.Continuation != nil {
+		return (result.Continuation).ClonePtr()
+	}
+	return nil
+}
+
+func sleepForDetachedProviderRetry(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (s *Service) withTimeout(
@@ -122,8 +359,14 @@ func (s *Service) prepareWorkspace(
 	cleanup *cleanupRegistry,
 ) error {
 	workspace := request.Target.Workspace
-	if !workspace.PrepareWorktree || s.worktree == nil {
+	if !workspace.PrepareWorktree {
 		return nil
+	}
+	if s.worktree == nil || s.worktreeRelease == nil {
+		return fmt.Errorf(
+			"%w: worktree preparer and releaser are required when worktree preparation is enabled",
+			workers.ErrInvalidExecuteRequest,
+		)
 	}
 	factoryDirectory := strings.TrimSpace(workspace.FactoryDirectory)
 	checkout := strings.TrimSpace(workspace.CheckoutIdentifier)
@@ -138,7 +381,6 @@ func (s *Service) prepareWorkspace(
 		return fmt.Errorf("%w: prepare worktree: %v", workers.ErrInvalidExecuteRequest, err)
 	}
 	if path := strings.TrimSpace(preparation.CheckoutPath); path != "" {
-		request.Target.Workspace.Worktree = path
 		if strings.TrimSpace(request.Target.Workspace.WorkingDirectory) == "" {
 			request.Target.Workspace.WorkingDirectory = path
 		}
@@ -146,12 +388,12 @@ func (s *Service) prepareWorkspace(
 			request.Target.Environment.WorkingDirectory = path
 			request.Target.Environment.WorkingDirectorySet = true
 		}
-		cleanup.add(func() error {
-			// Worktree leases are released by dropping request-scoped ownership.
-			// Concrete checkout deletion remains owned by the Worktree preparer
-			// implementation; Execute only guarantees request-end cleanup hooks run.
-			return nil
-		})
+		if !preparation.Reused && !workspace.RetainWorktree {
+			preparation := preparation
+			cleanup.add(func() error {
+				return s.worktreeRelease(context.WithoutCancel(ctx), preparation)
+			})
+		}
 	}
 	return nil
 }
@@ -195,7 +437,7 @@ func (s *Service) emit(
 	}
 	observation.Sequence = sequence.Add(1)
 	observation = observation.Clone()
-	if err := s.observe(ctx, observation); err != nil {
+	if err := deliverObservation(s.observe, context.WithoutCancel(ctx), observation); err != nil {
 		s.logger.Warn(
 			"workers observation delivery failed",
 			"dispatch_id", observation.Correlation.DispatchID,
@@ -206,20 +448,56 @@ func (s *Service) emit(
 	}
 }
 
-func panicFailure(recovered any, stack []byte) error {
-	message := fmt.Sprintf("workers execute panic: %v", recovered)
+func deliverObservation(
+	sink workers.ObservationSink,
+	ctx context.Context,
+	observation workers.ExecutionObservation,
+) (err error) {
+	if sink == nil {
+		return nil
+	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = errors.New("Workers observation sink panicked")
+		}
+	}()
+	return sink(ctx, observation)
+}
+
+func panicFailure(recovered any, stack []byte, preserveCompatibilityCause bool) error {
+	message := "worker runner panicked"
+	var cause error
+	if preserveCompatibilityCause {
+		cause = &workers.WorkerExecutorPanicError{Cause: recovered}
+	}
 	failure := workers.NewProviderError(
 		workers.WorkFailureTypeUnknown,
 		message,
-		nil,
+		cause,
 	)
 	failure.Diagnostics = &workers.WorkDiagnostics{
 		Panic: &workers.PanicDiagnostic{
 			Message: message,
-			Stack:   string(stack),
+			Stack:   boundedPanicStack(stack),
 		},
 	}
 	return failure
+}
+
+func boundedPanicStack(stack []byte) string {
+	const maxPanicStackBytes = 4096
+	if len(stack) > maxPanicStackBytes {
+		stack = stack[:maxPanicStackBytes]
+	}
+	return string(stack)
+}
+
+func cleanupFailure(err error) error {
+	return workers.NewProviderError(
+		workers.WorkFailureTypeInternalServerError,
+		"execution cleanup failed",
+		errors.Join(workers.ErrExecuteCleanupFailed, err),
+	)
 }
 
 func errMisconfigured(message string) error {

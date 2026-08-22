@@ -1,5 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import react from "@vitejs/plugin-react-swc";
 import { defineConfig } from "vite";
 
 const packageRoot = path.dirname(fileURLToPath(import.meta.url));
@@ -9,6 +10,7 @@ function isExternalPackage(moduleId: string): boolean {
 }
 
 export default defineConfig({
+  plugins: [react()],
   build: {
     copyPublicDir: false,
     emptyOutDir: false,

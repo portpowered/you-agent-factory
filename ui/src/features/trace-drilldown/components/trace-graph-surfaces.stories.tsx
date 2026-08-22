@@ -1,5 +1,6 @@
 import "../../../styles.css";
 
+import { expect, userEvent, within } from "storybook/test";
 import type {
   DashboardTraceDispatch,
   DashboardWorkItemRef,
@@ -80,6 +81,11 @@ const TRACE_RELATIONS: DashboardWorkRelation[] = [
   },
 ];
 
+const UNRESOLVED_TRACE_DISPATCHES: DashboardTraceDispatch[] = [
+  buildDispatch("dispatch-parallel-a", { workstation_name: "Parallel A" }),
+  buildDispatch("dispatch-parallel-b", { workstation_name: "Parallel B" }),
+];
+
 export default {
   title: "Agent Factory/Dashboard/Trace Graph Surfaces",
 };
@@ -100,4 +106,77 @@ export const LocalizedZhCN = {
       <TraceRelationFlow locale="zh-CN" relations={TRACE_RELATIONS} />
     </div>
   ),
+};
+
+export const UnresolvedLineage = {
+  tags: ["test"],
+  render: () => (
+    <TraceWorkstationPath dispatches={UNRESOLVED_TRACE_DISPATCHES} />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    const unresolvedStatus = canvas.getByText(
+      "Lineage is unresolved: no recorded relationship connects one or more dispatches, so no predecessor was inferred.",
+    );
+    await expect(unresolvedStatus).toBeVisible();
+    await expect(unresolvedStatus).toHaveAttribute("role", "status");
+    await expect(
+      canvas.getByRole("region", { name: "Dispatch relationship graph" }),
+    ).toBeVisible();
+  },
+};
+
+export const TextualRelationFallback = {
+  tags: ["test"],
+  render: () => (
+    <div className="grid gap-4">
+      <TraceWorkstationPath
+        dispatches={TRACE_DISPATCHES}
+        onSelectTraceSelection={() => {}}
+        renderGraph={false}
+      />
+      <TraceRelationFlow
+        onSelectWorkID={() => {}}
+        relations={TRACE_RELATIONS}
+        renderGraph={false}
+      />
+    </div>
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const relationPaths = canvas.getAllByRole("region", {
+      name: "Textual relation path",
+    });
+
+    await expect(relationPaths).toHaveLength(2);
+    await expect(
+      canvas.queryByRole("region", { name: "Dispatch relationship graph" }),
+    ).toBeNull();
+    await expect(
+      canvas.queryByRole("region", { name: "Batch relation graph" }),
+    ).toBeNull();
+
+    const dispatchRelationButton = within(relationPaths[0]).getAllByRole(
+      "button",
+    )[0];
+    if (!dispatchRelationButton) {
+      throw new Error("Expected a keyboard-operable dispatch relation.");
+    }
+    dispatchRelationButton.focus();
+    await expect(dispatchRelationButton).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+
+    const firstBatchRelation = within(relationPaths[1]).getAllByRole(
+      "listitem",
+    )[0];
+    if (!firstBatchRelation) {
+      throw new Error("Expected a textual batch relation.");
+    }
+    const batchRelationButton = within(firstBatchRelation).getByRole("button", {
+      name: "Select work work-implement.",
+    });
+    await userEvent.click(batchRelationButton);
+    await expect(batchRelationButton).toHaveFocus();
+  },
 };

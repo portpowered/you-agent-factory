@@ -4,12 +4,35 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 )
 
 // ErrMoveWorkRequestAlreadyApplied is the typed state-access failure returned
 // when an operator move requestId was already applied. Peers branch with
 // errors.Is on MoveWorkForSession / MoveWorkAndRead.
 var ErrMoveWorkRequestAlreadyApplied = errors.New("operator move request was already applied")
+
+// The remaining typed operator-move failures Work publishes. The runtime that
+// applies the move raises its own engine-owned failures; the adapter that
+// already detaches successful move results also translates those failures into
+// these Work-owned sentinels, so Work's own surfaces never have to match a
+// foreign service's error identity. Messages are the operator-facing wording
+// Work's transports already emitted for each failure.
+var (
+	// ErrMoveWorkNotFound reports that the moved Work is not present in the
+	// session's runtime state.
+	ErrMoveWorkNotFound = errors.New("work not found")
+	// ErrMoveWorkInvalidState reports that the requested target state is not
+	// authored for the Work's work type.
+	ErrMoveWorkInvalidState = errors.New("invalid target state for work type")
+	// ErrMoveWorkInFlightDispatch reports that the Work is currently held by an
+	// active dispatch and cannot be relocated.
+	ErrMoveWorkInFlightDispatch = errors.New("work is in an active dispatch")
+	// ErrMoveWorkEngineTerminated reports that the session's runtime has stopped
+	// accepting state changes.
+	ErrMoveWorkEngineTerminated = errors.New("engine has terminated")
+)
 
 // InvocationReturnConfig selects the Work result returned by one Factory
 // invocation.
@@ -100,9 +123,24 @@ type InvocationWorldState struct {
 	FailedWorkItemsByID      map[string]FactoryWorkItem
 	TerminalWorkByID         map[string]InvocationTerminalWork
 	WorkStateChangesByWorkID map[string][]InvocationWorkStateChange
+	PendingHumanApprovals    []InvocationHumanApproval
 	FactoryState             string
 	JavaScriptRuntime        *InvocationJavaScriptRuntime
 	SessionBracket           *InvocationSessionBracket
+}
+
+// InvocationHumanApproval identifies the pending operator input that prevents
+// an invocation from producing a primary result. It is intentionally detached
+// from Factory Definition and recording implementation types.
+type InvocationHumanApproval struct {
+	ApprovalID      string
+	SessionID       string
+	DispatchID      string
+	WorkstationID   string
+	WorkstationName string
+	Decisions       []string
+	Status          string
+	WorkItemIDs     []string
 }
 
 func (s InvocationWorldState) InvocationWorldState() InvocationWorldState { return s }
@@ -121,7 +159,6 @@ type InvocationWorkStateChange struct {
 	WorkID       string
 	WorkTypeName string
 	ToState      string
-	ToPlaceID    string
 	RequestID    string
 }
 
@@ -202,7 +239,37 @@ type WorkRequestEventWork struct {
 	TraceID                  string            `json:"traceId,omitempty"`
 	Content                  []WorkContentPart `json:"content,omitempty"`
 	Payload                  json.RawMessage   `json:"payload,omitempty"`
+	StructuredResult         any               `json:"structuredResult,omitempty"`
 	Tags                     map[string]string `json:"tags,omitempty"`
+	// StructuredResultPresent preserves the distinction between an absent
+	// result and a schema-valid JSON null. It is an in-process ownership fact,
+	// not a second public field.
+	StructuredResultPresent bool `json:"-"`
+}
+
+// MarshalJSON preserves an explicitly present structuredResult when its JSON
+// value is null while keeping the field omitted for older/unstructured events.
+func (value WorkRequestEventWork) MarshalJSON() ([]byte, error) {
+	type alias WorkRequestEventWork
+	return jsonvalue.MarshalOptionalField(alias(value), value.StructuredResult, value.StructuredResultPresent, "structuredResult")
+}
+
+// UnmarshalJSON restores structured-result presence for replay, including a
+// present JSON null.
+func (value *WorkRequestEventWork) UnmarshalJSON(data []byte) error {
+	type alias WorkRequestEventWork
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	structured, present, err := jsonvalue.UnmarshalOptionalField(data, "structuredResult")
+	if err != nil {
+		return err
+	}
+	*value = WorkRequestEventWork(decoded)
+	value.StructuredResult = structured
+	value.StructuredResultPresent = present
+	return nil
 }
 
 // WorkEventState is the state reference embedded in the public Work event
@@ -335,8 +402,18 @@ const (
 type WorkRelation struct {
 	Type           WorkRelationType `json:"type"`
 	SourceWorkName string           `json:"sourceWorkName"`
-	TargetWorkName string           `json:"targetWorkName"`
+	TargetWorkID   string           `json:"targetWorkId,omitempty"`
+	TargetWorkName string           `json:"targetWorkName,omitempty"`
 	RequiredState  string           `json:"requiredState,omitempty"`
+}
+
+// ExistingWork is the stable board identity used to resolve a relation target
+// during live admission. It is intentionally smaller than Work so admission
+// cannot depend on a read-model projection or transport representation.
+type ExistingWork struct {
+	WorkID     string
+	Name       string
+	WorkTypeID string
 }
 
 type WorkRequestNormalizeOptions struct {
@@ -344,6 +421,7 @@ type WorkRequestNormalizeOptions struct {
 	ValidWorkTypes    map[string]bool
 	ValidStatesByType map[string]map[string]bool
 	IDGenerator       RequestIDGenerator
+	ExistingWorks     []ExistingWork
 }
 
 // Relation defines a typed relationship between runtime work items.
@@ -373,8 +451,36 @@ type FactoryWorkItem struct {
 	TraceID                  string            `json:"traceId,omitempty"`
 	Content                  []WorkContentPart `json:"content,omitempty"`
 	ParentID                 string            `json:"parentId,omitempty"`
-	PlaceID                  string            `json:"placeId,omitempty"`
+	StructuredResult         any               `json:"structuredResult,omitempty"`
 	Tags                     map[string]string `json:"tags,omitempty"`
+	// StructuredResultPresent preserves an explicitly stored JSON null without
+	// making absent results appear on older snapshots or API projections.
+	StructuredResultPresent bool `json:"-"`
+}
+
+// MarshalJSON preserves an explicitly present structuredResult when its JSON
+// value is null while keeping the field omitted for older/unstructured items.
+func (value FactoryWorkItem) MarshalJSON() ([]byte, error) {
+	type alias FactoryWorkItem
+	return jsonvalue.MarshalOptionalField(alias(value), value.StructuredResult, value.StructuredResultPresent, "structuredResult")
+}
+
+// UnmarshalJSON restores structured-result presence for persisted snapshots
+// and recordings, including a present JSON null.
+func (value *FactoryWorkItem) UnmarshalJSON(data []byte) error {
+	type alias FactoryWorkItem
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	structured, present, err := jsonvalue.UnmarshalOptionalField(data, "structuredResult")
+	if err != nil {
+		return err
+	}
+	*value = FactoryWorkItem(decoded)
+	value.StructuredResult = structured
+	value.StructuredResultPresent = present
+	return nil
 }
 
 type FactoryRelation struct {
@@ -432,19 +538,18 @@ const (
 type WorkStateChangeRecord struct {
 	WorkID, WorkTypeID, WorkTypeName string
 	FromState, ToState               string
-	FromPlaceID, ToPlaceID           string
 	Source                           WorkStateChangeSource
 	RequestID, TriggerWorkID, Reason string
+	SessionID                        string
 }
 
 // OperatorMoveResult is the existing detached move success shape returned by
 // the root Service state-access slice (MoveWorkForSession). Peers consume Work
 // identity and from/to state facts without importing Factory Runtime types.
 type OperatorMoveResult struct {
-	WorkID, WorkTypeID     string
-	FromState, ToState     string
-	FromPlaceID, ToPlaceID string
-	TokenID                string
+	WorkID, WorkTypeID string
+	FromState, ToState string
+	TokenID            string
 }
 
 // CloneTags returns a detached copy of Work tag metadata while preserving nil.
@@ -524,16 +629,17 @@ func SupportedContentParts(parts []WorkContentPart) []WorkContentPart {
 
 // WorkDispatch is the canonical dispatch-owned runtime payload.
 type WorkDispatch struct {
-	DispatchID               string              `json:"dispatch_id"`
-	TransitionID             string              `json:"transition_id"`
-	WorkerType               string              `json:"worker_type,omitempty"`
-	WorkstationName          string              `json:"workstation_name,omitempty"`
-	ProjectID                string              `json:"project_id,omitempty"`
-	CurrentChainingTraceID   string              `json:"current_chaining_trace_id,omitempty"`
-	PreviousChainingTraceIDs []string            `json:"previous_chaining_trace_ids,omitempty"`
-	Execution                ExecutionMetadata   `json:"execution,omitempty"`
-	InputTokens              []any               `json:"input_tokens"`
-	InputBindings            map[string][]string `json:"input_bindings,omitempty"`
+	DispatchID               string                           `json:"dispatch_id"`
+	TransitionID             string                           `json:"transition_id"`
+	WorkerType               string                           `json:"worker_type,omitempty"`
+	WorkstationName          string                           `json:"workstation_name,omitempty"`
+	ProjectID                string                           `json:"project_id,omitempty"`
+	ExpectedArtifactContext  *ExpectedArtifactTemplateContext `json:"expected_artifact_context,omitempty"`
+	CurrentChainingTraceID   string                           `json:"current_chaining_trace_id,omitempty"`
+	PreviousChainingTraceIDs []string                         `json:"previous_chaining_trace_ids,omitempty"`
+	Execution                ExecutionMetadata                `json:"execution,omitempty"`
+	InputTokens              []any                            `json:"input_tokens"`
+	InputBindings            map[string][]string              `json:"input_bindings,omitempty"`
 }
 
 type ExecutionMetadata struct {
@@ -553,6 +659,7 @@ func CloneExecutionMetadata(metadata ExecutionMetadata) ExecutionMetadata {
 
 func CloneWorkDispatch(dispatch WorkDispatch) WorkDispatch {
 	clone := dispatch
+	clone.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext)
 	clone.PreviousChainingTraceIDs = cloneStringSlice(dispatch.PreviousChainingTraceIDs)
 	clone.Execution = CloneExecutionMetadata(dispatch.Execution)
 	clone.InputTokens = cloneAnySlice(dispatch.InputTokens)
@@ -598,7 +705,7 @@ func CloneWorkContentParts(parts []WorkContentPart) []WorkContentPart {
 // CloneInvocationArguments returns a detached copy of runtime-only invocation
 // argument metadata.
 func CloneInvocationArguments(args *InvocationArguments) *InvocationArguments {
-	if args == nil || len(args.Arguments) == 0 {
+	if args == nil {
 		return nil
 	}
 	clone := &InvocationArguments{Arguments: make(map[string]InvocationArgument, len(args.Arguments))}

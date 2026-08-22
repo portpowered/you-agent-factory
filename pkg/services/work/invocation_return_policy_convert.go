@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	"github.com/portpowered/infinite-you/pkg/services/work/internal/invocationreturnpolicy"
 )
 
@@ -155,6 +157,7 @@ func normalizeArgumentsInputToInternal(input NormalizeArgumentsInput) invocation
 		NamedArgs:            namedArgumentInputsToInternal(input.NamedArgs),
 		DirectArgs:           namedArgumentInputsToInternal(input.DirectArgs),
 		StdinText:            input.StdinText,
+		FileText:             input.FileText,
 		CompatibilityText:    input.CompatibilityText,
 		CompatibilityContent: contentPartsToInternal(input.CompatibilityContent),
 	}
@@ -279,6 +282,15 @@ func invocationWorldStateToInternal(state InvocationWorldState) invocationreturn
 		FailedWorkItemsByID:      make(map[string]invocationreturnpolicy.WorkItem, len(state.FailedWorkItemsByID)),
 		TerminalWorkByID:         make(map[string]invocationreturnpolicy.InvocationTerminalWork, len(state.TerminalWorkByID)),
 		WorkStateChangesByWorkID: make(map[string][]invocationreturnpolicy.InvocationWorkStateChange, len(state.WorkStateChangesByWorkID)),
+		PendingHumanApprovals:    make([]invocationreturnpolicy.InvocationHumanApproval, 0, len(state.PendingHumanApprovals)),
+	}
+	for _, approval := range state.PendingHumanApprovals {
+		inner.PendingHumanApprovals = append(inner.PendingHumanApprovals, invocationreturnpolicy.InvocationHumanApproval{
+			ApprovalID: approval.ApprovalID, SessionID: approval.SessionID, DispatchID: approval.DispatchID,
+			WorkstationID: approval.WorkstationID, WorkstationName: approval.WorkstationName,
+			Decisions: append([]string(nil), approval.Decisions...), Status: approval.Status,
+			WorkItemIDs: append([]string(nil), approval.WorkItemIDs...),
+		})
 	}
 	for id, request := range state.WorkRequestsByID {
 		inner.WorkRequestsByID[id] = invocationreturnpolicy.InvocationWorkRequest{
@@ -305,7 +317,6 @@ func invocationWorldStateToInternal(state InvocationWorldState) invocationreturn
 				WorkID:       change.WorkID,
 				WorkTypeName: change.WorkTypeName,
 				ToState:      change.ToState,
-				ToPlaceID:    change.ToPlaceID,
 				RequestID:    change.RequestID,
 			}
 		}
@@ -365,9 +376,23 @@ func workItemToInternal(item FactoryWorkItem) invocationreturnpolicy.WorkItem {
 		TraceID:                  item.TraceID,
 		Content:                  contentPartsToInternal(item.Content),
 		ParentID:                 item.ParentID,
-		PlaceID:                  item.PlaceID,
+		PlaceID:                  workItemPlaceID(item),
+		StructuredResult:         jsonvalue.Clone(item.StructuredResult),
+		StructuredResultPresent:  jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent),
 		Tags:                     cloneStringMap(item.Tags),
 	}
+}
+
+func workItemPlaceID(item FactoryWorkItem) string {
+	state := strings.TrimSpace(item.State)
+	if state == "" {
+		return ""
+	}
+	workTypeID := strings.TrimSpace(item.WorkTypeID)
+	if workTypeID == "" {
+		return state
+	}
+	return workTypeID + ":" + state
 }
 
 func primaryResultSelectionInputToInternal(input PrimaryResultSelectionInput) invocationreturnpolicy.PrimaryResultSelectionInput {
@@ -400,10 +425,15 @@ func primaryResultErrorFromInternal(err *invocationreturnpolicy.PrimaryResultErr
 		RequestID: err.RequestID,
 		Policy:    err.Policy,
 		Context: InvocationFailureContext{
-			SessionID: err.Context.SessionID,
-			WorkID:    err.Context.WorkID,
-			WorkName:  err.Context.WorkName,
-			WorkState: err.Context.WorkState,
+			SessionID:       err.Context.SessionID,
+			WorkID:          err.Context.WorkID,
+			WorkName:        err.Context.WorkName,
+			WorkState:       err.Context.WorkState,
+			ApprovalID:      err.Context.ApprovalID,
+			DispatchID:      err.Context.DispatchID,
+			WorkstationID:   err.Context.WorkstationID,
+			WorkstationName: err.Context.WorkstationName,
+			Decisions:       append([]string(nil), err.Context.Decisions...),
 		},
 	}
 }
@@ -413,6 +443,7 @@ func invocationInputPreparationRequestToInternal(request InvocationInputPreparat
 		Arguments:            cloneStringSlice(request.Arguments),
 		Signature:            invocationSignatureToInternal(request.Signature),
 		StdinText:            request.StdinText,
+		FilePath:             request.FilePath,
 		DirectArgs:           namedArgumentInputsToInternal(request.DirectArgs),
 		CompatibilityContent: contentPartsToInternal(request.CompatibilityContent),
 	}

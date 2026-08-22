@@ -24,37 +24,83 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
+type inferenceProvider interface {
+	Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error)
+}
+
 type stressProcessHarness struct {
-	t       *testing.T
-	baseURL string
-	cancel  context.CancelFunc
-	done    chan error
-	workers workerMuxExecutor
+	t             *testing.T
+	baseURL       string
+	cancel        context.CancelFunc
+	done          chan error
+	workers       workerMuxExecutor
+	serverTimings *stressServerQueryTimings
+}
+
+type stressServerQueryTimings struct {
+	mu             sync.Mutex
+	work           []time.Duration
+	workerSessions []time.Duration
+}
+
+func (s *stressServerQueryTimings) record(path string, duration time.Duration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	switch path {
+	case "/factory-sessions/~default/work":
+		s.work = append(s.work, duration)
+	case "/worker-sessions":
+		s.workerSessions = append(s.workerSessions, duration)
+	}
+}
+
+func (s *stressServerQueryTimings) take() (work, workerSessions []time.Duration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	work = append([]time.Duration(nil), s.work...)
+	workerSessions = append([]time.Duration(nil), s.workerSessions...)
+	s.work = nil
+	s.workerSessions = nil
+	return work, workerSessions
 }
 
 func startStressProcess(
 	t *testing.T,
 	dir string,
-	provider workerprovider.Provider,
+	provider any,
 ) *stressProcessHarness {
 	t.Helper()
 	ensureStressProviderDefinitions(t, dir)
+	var providerService providers.Service
+	switch provider := provider.(type) {
+	case providers.Service:
+		providerService = provider
+	case inferenceProvider:
+		providerService = testutil.ProviderServiceAdapter{InferFunc: provider.Infer}
+	default:
+		panic("startStressProcess requires a Providers service or legacy test provider")
+	}
 
 	var (
-		serverMu sync.Mutex
-		server   *httptest.Server
+		serverMu      sync.Mutex
+		server        *httptest.Server
+		serverTimings = &stressServerQueryTimings{}
 	)
 	ready := make(chan struct{})
 	edges := serviceedges.Edges{
-		ProviderOverride: provider,
+		ProviderOverride: providerService,
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
-			started := httptest.NewServer(request.Handler)
+			started := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				startedAt := time.Now()
+				request.Handler.ServeHTTP(w, r)
+				serverTimings.record(r.URL.Path, time.Since(startedAt))
+			}))
 			serverMu.Lock()
 			server = started
 			serverMu.Unlock()
@@ -80,6 +126,7 @@ func startStressProcess(
 				"you", "run",
 				"--dir", dir,
 				"--continuously",
+				"--with-server",
 				"--quiet",
 				"--no-record",
 			},
@@ -103,7 +150,7 @@ func startStressProcess(
 	baseURL := server.URL
 	serverMu.Unlock()
 	harness := &stressProcessHarness{
-		t: t, baseURL: baseURL, cancel: cancel, done: done,
+		t: t, baseURL: baseURL, cancel: cancel, done: done, serverTimings: serverTimings,
 	}
 	harness.waitForSession(5 * time.Second)
 	t.Cleanup(harness.Stop)

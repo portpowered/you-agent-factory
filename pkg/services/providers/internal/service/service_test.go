@@ -3,9 +3,15 @@ package service_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
+	acpsdk "github.com/coder/acp-go-sdk"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
@@ -14,12 +20,13 @@ import (
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestNew_RejectsNilCatalog(t *testing.T) {
 	t.Parallel()
 
-	service, err := providerservice.New(nil, &stubExecution{})
+	service, err := providerservice.New(nil, &stubExecution{}, logging.NoopLogger{})
 	if err == nil || service != nil {
 		t.Fatalf("New(nil) = (%v, %v), want error", service, err)
 	}
@@ -33,7 +40,7 @@ func TestNewRejectsInvalidExecutionComposition(t *testing.T) {
 		t.Fatalf("catalogwire.NewService() = %v", err)
 	}
 	var nilExecution execution.Service
-	service, constructionErr := providerservice.New(catalogService, nilExecution)
+	service, constructionErr := providerservice.New(catalogService, nilExecution, logging.NoopLogger{})
 	if constructionErr == nil || service != nil {
 		t.Fatalf(
 			"New() = (%v, %v), want invalid execution composition error",
@@ -54,7 +61,7 @@ func TestRootDelegatesListAndGetToCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService)
+	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -63,8 +70,8 @@ func TestRootDelegatesListAndGetToCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProviders() = %v", err)
 	}
-	if len(list.Providers) != 3 {
-		t.Fatalf("len(Providers) = %d, want 3", len(list.Providers))
+	if len(list.Providers) != 23 {
+		t.Fatalf("len(Providers) = %d, want 23", len(list.Providers))
 	}
 
 	got, err := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.IDCodex})
@@ -104,6 +111,9 @@ func TestRootDelegatesExecuteToOnePrivateExecutionAttempt(t *testing.T) {
 				if request.ReasoningEffort != "xhigh" {
 					t.Fatalf("adapter reasoning effort = %q, want canonical xhigh", request.ReasoningEffort)
 				}
+				if !request.SkipPermissions {
+					t.Fatal("adapter skip permissions = false, want true")
+				}
 				return providers.ExecuteResult{Content: "root result"}, nil
 			},
 		},
@@ -111,7 +121,7 @@ func TestRootDelegatesExecuteToOnePrivateExecutionAttempt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService)
+	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -120,12 +130,78 @@ func TestRootDelegatesExecuteToOnePrivateExecutionAttempt(t *testing.T) {
 		Provider:        providers.IDCodex,
 		AttemptID:       "attempt-1",
 		ReasoningEffort: " XHIGH ",
+		SkipPermissions: true,
 	})
 	if err != nil {
 		t.Fatalf("Execute() = %v", err)
 	}
 	if result.Content != "root result" || calls != 1 {
 		t.Fatalf("Execute() = (%#v, %d calls), want root result and 1 call", result, calls)
+	}
+}
+
+func TestRootFailsClosedForUnsupportedPermissionBypassBeforeAttempt(t *testing.T) {
+	t.Parallel()
+
+	catalogService, err := catalogwire.NewService(catalogwire.WithDescriptors(providers.Descriptor{
+		ID:           providers.IDCodex,
+		DisplayName:  "Codex",
+		Availability: providers.AvailabilitySelectable,
+		Readiness:    providers.ReadinessReady,
+	}))
+	if err != nil {
+		t.Fatalf("catalogwire.NewService() = %v", err)
+	}
+	adapterCalls := 0
+	executionService, err := executionwire.NewService(
+		catalogService,
+		execution.Registration{
+			Provider: providers.IDCodex,
+			Attempt: func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+				adapterCalls++
+				return providers.ExecuteResult{Content: "unexpected"}, nil
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("executionwire.NewService() = %v", err)
+	}
+	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("New() = %v", err)
+	}
+
+	_, executeErr := root.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:        providers.IDCodex,
+		AttemptID:       "unsupported-bypass",
+		SkipPermissions: true,
+	})
+	var failure providers.ExecuteFailure
+	if !errors.Is(executeErr, providers.ErrCapabilityMismatch) ||
+		!errors.As(executeErr, &failure) ||
+		failure.Kind != providers.ExecuteFailureKindCapabilityMismatch ||
+		!strings.Contains(failure.Message, "codex") ||
+		!strings.Contains(failure.Message, "permission_bypass") ||
+		strings.Contains(failure.Message, "command") ||
+		adapterCalls != 0 {
+		t.Fatalf(
+			"Execute(unsupported bypass) = (%#v, %d calls), want bounded capability failure before attempt",
+			executeErr,
+			adapterCalls,
+		)
+	}
+
+	for _, request := range []providers.ExecuteRequest{
+		{Provider: providers.IDCodex, AttemptID: "omitted-bypass"},
+		{Provider: providers.IDCodex, AttemptID: "false-bypass", SkipPermissions: false},
+	} {
+		result, executeErr := root.Execute(context.Background(), request)
+		if executeErr != nil || result.Content != "unexpected" {
+			t.Fatalf("Execute(%q) = (%#v, %v), want default route execution", request.AttemptID, result, executeErr)
+		}
+	}
+	if adapterCalls != 2 {
+		t.Fatalf("adapter calls after default bypass requests = %d, want 2", adapterCalls)
 	}
 }
 
@@ -141,7 +217,7 @@ func TestRootACPRejectsSeparateReasoningEffortAndAcceptsExactModelID(t *testing.
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
 	acpService := &stubACPService{provider: "cursor-acp"}
-	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil)
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewWithACP() = %v", err)
 	}
@@ -187,6 +263,59 @@ func TestRootRejectsSeparateReasoningEffortForAgy(t *testing.T) {
 	}
 }
 
+func TestCatalogAdvertisedAgyEffortsAreNotRejectedByExecutionPolicy(t *testing.T) {
+	t.Parallel()
+
+	catalogService, err := catalogwire.NewService()
+	if err != nil {
+		t.Fatalf("catalogwire.NewService() = %v", err)
+	}
+	executionService, err := executionwire.NewService(
+		catalogService,
+		execution.Registration{
+			Provider: providers.IDAntigravity,
+			Attempt: func(
+				context.Context,
+				providers.ExecuteRequest,
+			) (providers.ExecuteResult, error) {
+				return providers.ExecuteResult{Content: "accepted"}, nil
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("executionwire.NewService() = %v", err)
+	}
+	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("New() = %v", err)
+	}
+
+	list, err := root.ListProviders(context.Background(), providers.ListProvidersRequest{})
+	if err != nil {
+		t.Fatalf("ListProviders() = %v", err)
+	}
+	agy := indexProviders(list.Providers)[providers.IDAntigravity]
+	for _, model := range agy.Models {
+		for _, effort := range model.Efforts {
+			_, executeErr := root.Execute(context.Background(), providers.ExecuteRequest{
+				Provider:        providers.IDAntigravity,
+				AttemptID:       "catalog-policy-" + model.ID,
+				Model:           model.ID,
+				ReasoningEffort: string(effort),
+			})
+			var failure providers.ExecuteFailure
+			if errors.As(executeErr, &failure) &&
+				failure.Kind == providers.ExecuteFailureKindInvalidRequest &&
+				strings.Contains(failure.Message, "does not support a separate reasoning effort") {
+				t.Fatalf("catalog advertises AGY model %q effort %q rejected by canonical execution policy", model.ID, effort)
+			}
+			if executeErr != nil {
+				t.Fatalf("Execute(%s, %s) = %v, want accepted advertised combination", model.ID, effort, executeErr)
+			}
+		}
+	}
+}
+
 func TestRootRejectsMinimalReasoningEffortForClaude(t *testing.T) {
 	t.Parallel()
 
@@ -208,8 +337,9 @@ func TestRootRejectsMinimalReasoningEffortForClaude(t *testing.T) {
 var _ acp.Service = (*stubACPService)(nil)
 
 type stubACPService struct {
-	provider     providers.ID
-	executeCalls int
+	provider        providers.ID
+	executeCalls    int
+	skipPermissions bool
 }
 
 func (service *stubACPService) Close(context.Context) error { return nil }
@@ -218,19 +348,75 @@ func (service *stubACPService) Configure(context.Context, []providers.ACPIntegra
 	return nil
 }
 
-func (service *stubACPService) Integrations() []providers.ACPIntegration { return nil }
+func (service *stubACPService) Integrations() []providers.ACPIntegration {
+	return []providers.ACPIntegration{{Name: service.provider}}
+}
 
 func (service *stubACPService) Resolve(id providers.ID) (providers.ID, bool) {
 	return service.provider, id == service.provider
 }
 
+func (service *stubACPService) NegotiatedCapabilities(providers.ID) (acpsdk.AgentCapabilities, bool) {
+	return acpsdk.AgentCapabilities{}, false
+}
+
 func (service *stubACPService) Execute(
 	_ context.Context,
 	_ providers.ID,
-	_ providers.ExecuteRequest,
+	request providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
 	service.executeCalls++
+	service.skipPermissions = request.SkipPermissions
 	return providers.ExecuteResult{Content: "acp result"}, nil
+}
+
+func (service *stubACPService) Claim(providers.ID, string) (acp.Generation, bool) { return nil, false }
+
+func (service *stubACPService) TryCancel(context.Context, acp.Generation) (bool, error) {
+	return false, nil
+}
+
+func TestRootACPUsesAdvertisedPermissionBypass(t *testing.T) {
+	t.Parallel()
+
+	catalogService, err := catalogwire.NewService(catalogwire.WithDescriptors(providers.Descriptor{
+		ID:           "cursor-acp",
+		DisplayName:  "Cursor ACP",
+		Availability: providers.AvailabilitySelectable,
+		Readiness:    providers.ReadinessUnverified,
+		Capabilities: []providers.Capability{
+			providers.CapabilityPromptSubmission,
+			providers.CapabilityPermissionBypass,
+		},
+	}))
+	if err != nil {
+		t.Fatalf("catalogwire.NewService() = %v", err)
+	}
+	executionService, err := executionwire.NewService(catalogService)
+	if err != nil {
+		t.Fatalf("executionwire.NewService() = %v", err)
+	}
+	acpService := &stubACPService{provider: "cursor-acp"}
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("NewWithACP() = %v", err)
+	}
+
+	result, executeErr := root.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:        acpService.provider,
+		AttemptID:       "acp-bypass",
+		Model:           "cursor-grok-4.5-medium-fast",
+		SkipPermissions: true,
+	})
+	if executeErr != nil || result.Content != "acp result" || !acpService.skipPermissions || acpService.executeCalls != 1 {
+		t.Fatalf(
+			"Execute(ACP bypass) = (%#v, %v, skip=%v, calls=%d), want delegated bypass request",
+			result,
+			executeErr,
+			acpService.skipPermissions,
+			acpService.executeCalls,
+		)
+	}
 }
 
 func TestRootDelegatesTypedExecutionFailure(t *testing.T) {
@@ -257,7 +443,7 @@ func TestRootDelegatesTypedExecutionFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService)
+	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -408,7 +594,7 @@ func TestRegisteredCompositionIsInert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executionwire.NewService() = %v", err)
 	}
-	root, err := providerservice.New(catalogService, executionService)
+	root, err := providerservice.New(catalogService, executionService, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -422,14 +608,163 @@ func TestRegisteredCompositionIsInert(t *testing.T) {
 	}
 }
 
-func mustRootService(t *testing.T) providers.Service {
+func TestRootSelectsAntigravityThroughAuthoritativeCatalogIdentity(t *testing.T) {
+	t.Parallel()
+
+	service := newAgyProvidersServiceWithPTY(t, &workers.MockPTYAllocator{})
+	resolved, err := service.ResolveIdentity(
+		context.Background(),
+		providers.ResolveIdentityRequest{Identity: " ANTIGRAVITY "},
+	)
+	if err != nil {
+		t.Fatalf("ResolveIdentity(antigravity) error = %v", err)
+	}
+	if resolved.ID != providers.IDAntigravity {
+		t.Fatalf("ResolveIdentity identity = %q, want antigravity", resolved.ID)
+	}
+	descriptor, err := service.GetProvider(
+		context.Background(),
+		providers.GetProviderRequest{ID: resolved.ID},
+	)
+	if err != nil {
+		t.Fatalf("GetProvider(antigravity) error = %v", err)
+	}
+	if descriptor.Provider.ID != providers.IDAntigravity ||
+		descriptor.Provider.Availability != providers.AvailabilitySelectable {
+		t.Fatalf("GetProvider(antigravity) = %#v, want selectable canonical descriptor", descriptor.Provider)
+	}
+	if !slices.Contains(descriptor.Provider.Capabilities, providers.CapabilityPromptSubmission) ||
+		!slices.Contains(descriptor.Provider.Capabilities, providers.CapabilityMessageSnapshots) {
+		t.Fatalf("GetProvider(antigravity) capabilities = %v, want prompt_submission and message_snapshots", descriptor.Provider.Capabilities)
+	}
+	if slices.Contains(descriptor.Provider.Capabilities, providers.CapabilityNativeStreaming) {
+		t.Fatal("GetProvider(antigravity) overclaims native streaming")
+	}
+}
+
+func TestRootExecutesAntigravityThroughCanonicalProvider(t *testing.T) {
+	t.Parallel()
+
+	mock := &workers.MockPTYAllocator{
+		Result: workers.PTYSessionResult{ExitCode: 0, CleanedText: "agy provider answer"},
+	}
+	service := newAgyProvidersServiceWithPTY(t, mock)
+	result, err := service.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:         providers.IDAntigravity,
+		AttemptID:        "attempt-agy-root",
+		Model:            "agy-default",
+		UserMessage:      "say hello",
+		WorkingDirectory: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("Execute(antigravity) error = %v", err)
+	}
+	if result.Content != "agy provider answer" {
+		t.Fatalf("Execute(antigravity) content = %q, want agy provider answer", result.Content)
+	}
+	if result.Diagnostics == nil {
+		t.Fatal("Execute(antigravity) diagnostics = nil, want canonical execution facts")
+	}
+	if len(mock.Sessions) != 1 {
+		t.Fatalf("pty sessions = %d, want 1", len(mock.Sessions))
+	}
+}
+
+func TestRootContinuesAntigravityThroughCanonicalProvider(t *testing.T) {
+	t.Parallel()
+
+	mock := &workers.MockPTYAllocator{
+		Result: workers.PTYSessionResult{ExitCode: 0, CleanedText: "continued Agy response"},
+	}
+	service := newAgyProvidersServiceWithPTY(t, mock)
+	continued, err := service.Continue(context.Background(), providers.ContinueRequest{
+		Reference: providers.SessionRef{
+			Provider: providers.IDAntigravity,
+			Kind:     providers.SessionIDKind,
+			ID:       "prior-session",
+		},
+		Attempt: providers.ExecuteRequest{
+			Provider:         providers.IDAntigravity,
+			AttemptID:        "attempt-agy-continue",
+			UserMessage:      "continue the prior turn",
+			WorkingDirectory: t.TempDir(),
+		},
+	})
+	if err != nil {
+		t.Fatalf("Continue(antigravity) error = %v", err)
+	}
+	if continued.Outcome != providers.ContinuationOutcomeResumed {
+		t.Fatalf("Continue(antigravity) outcome = %q, want resumed", continued.Outcome)
+	}
+	if continued.Result.Content != "continued Agy response" {
+		t.Fatalf("Continue(antigravity) content = %q, want continued Agy response", continued.Result.Content)
+	}
+	if continued.Result.SessionRef == nil || continued.Result.SessionRef.ID != "prior-session" {
+		t.Fatalf("Continue(antigravity) session = %#v, want prior-session", continued.Result.SessionRef)
+	}
+	if len(mock.Sessions) != 1 {
+		t.Fatalf("pty sessions = %d, want 1", len(mock.Sessions))
+	}
+}
+
+func TestRootSanitizesAntigravityFailureDetails(t *testing.T) {
+	t.Parallel()
+
+	mock := &workers.MockPTYAllocator{
+		Result: workers.PTYSessionResult{
+			ExitCode: 1,
+			RawBytes: []byte("failed reading /tmp/secret-key and private prompt"),
+		},
+	}
+	service := newAgyProvidersServiceWithPTY(t, mock)
+	_, err := service.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:         providers.IDAntigravity,
+		AttemptID:        "attempt-agy-failure",
+		UserMessage:      "private prompt",
+		WorkingDirectory: t.TempDir(),
+	})
+	if err == nil {
+		t.Fatal("Execute(antigravity failure) error = nil, want normalized failure")
+	}
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("Execute(antigravity failure) error = %v, want ExecuteFailure", err)
+	}
+	if strings.Contains(failure.Message, "/tmp/") ||
+		strings.Contains(failure.Message, "secret-key") ||
+		strings.Contains(failure.Message, "private prompt") {
+		t.Fatalf("failure message leaked unsafe detail: %q", failure.Message)
+	}
+}
+
+func newAgyProvidersServiceWithPTY(t *testing.T, allocator *workers.MockPTYAllocator) providers.Service {
+	t.Helper()
+	service, err := providerswire.NewService(
+		providerswire.WithCommandRunner(testutil.NewProviderCommandRunner()),
+		providerswire.WithAgyPTY(providerswire.AgyPTYPlatformDependencies{
+			Allocator: allocator,
+			Locator:   platformprocess.HostExecutableLocator{},
+			Inspector: platformfilesystem.Local{},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("providerswire.NewService() error = %v", err)
+	}
+	return service
+}
+
+func mustRootService(t *testing.T) *providerservice.Service {
 	t.Helper()
 
 	root, err := providerswire.NewService()
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
-	return root
+	service, ok := root.(*providerservice.Service)
+	if !ok {
+		t.Fatalf("NewService() returned %T, want Providers root implementation", root)
+	}
+	return service
 }
 
 func assertGetErrorIs(

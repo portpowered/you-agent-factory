@@ -14,10 +14,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 func TestListFactorySessions_RuntimeBackedIncludesLiveAndPersistedScopes(t *testing.T) {
 	const sessionID = "dur-sess-api-list-001"
+	const canonicalDefaultSessionID = "019e0000-0000-7000-8000-000000000042"
 	service := apiExecutionScript{
 		startAsync: func(context.Context, factorysessionexecution.StartRequest) (factorysessionexecution.AsyncStartResult, error) {
 			return factorysessionexecution.AsyncStartResult{
@@ -32,7 +34,7 @@ func TestListFactorySessions_RuntimeBackedIncludesLiveAndPersistedScopes(t *test
 			return factorysessionexecution.ListSessionsResult{
 				Scope: factorysessionexecution.SessionListScopeAll,
 				LiveSessions: []factorysessionexecution.LiveSessionSummary{{
-					ID: "~default", FactoryDir: "/workspace/root", FolderPath: "/workspace/root",
+					ID: canonicalDefaultSessionID, FactoryDir: "/workspace/root", FolderPath: "/workspace/root",
 					Project: "root", IsDefault: true,
 				}},
 				DurableSessions: []factorysessionexecution.DurableSessionListSummary{{
@@ -47,7 +49,7 @@ func TestListFactorySessions_RuntimeBackedIncludesLiveAndPersistedScopes(t *test
 			return factoryapi.ListFactorySessionsResponse{
 				Sessions: []factoryapi.FactorySessionSummary{
 					{
-						Id:         "~default",
+						Id:         canonicalDefaultSessionID,
 						FactoryDir: "/workspace/root",
 						FolderPath: "/workspace/root",
 						Project:    "root",
@@ -63,8 +65,8 @@ func TestListFactorySessions_RuntimeBackedIncludesLiveAndPersistedScopes(t *test
 	started := postDurableAsyncStart(t, server.URL, runtimeBackedAsyncStartRequest("req-api-runtime-list-live-001"))
 
 	liveList := getFactorySessionList(t, server.URL, "live")
-	if !containsLiveSessionID(liveList.Sessions, "~default") {
-		t.Fatalf("live list sessions = %#v, want workspace row ~default", liveList.Sessions)
+	if !containsLiveSessionID(liveList.Sessions, canonicalDefaultSessionID) {
+		t.Fatalf("live list sessions = %#v, want canonical workspace row", liveList.Sessions)
 	}
 	if containsLiveSessionID(liveList.Sessions, started.SessionId) {
 		t.Fatalf("live list sessions = %#v, should not include terminal durable row %q", liveList.Sessions, started.SessionId)
@@ -315,7 +317,7 @@ func readBody(t *testing.T, resp *http.Response) string {
 	return string(body)
 }
 
-func serverURLForLifecycle(t *testing.T, service factorysessionexecution.ExecutionService) string {
+func serverURLForLifecycle(t *testing.T, service factorysessionmapping.DurableExecution) string {
 	t.Helper()
 	srv := newDurableAPITestServer(service)
 	server := httptest.NewServer(srv.Handler())

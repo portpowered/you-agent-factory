@@ -16,9 +16,9 @@ and historical world state from that event stream.
   as events.
 - Product behavior is split across Factory Definitions, Factory Runtime,
   Factory Sessions, Recordings, Work, Workers, Providers, Models, Automations,
-  Provider Sessions, Operator Settings, Factory Visualization, and System
-  Initialization services. `pkg/wire` composes these services and
-  `pkg/initializer` owns application lifecycle.
+  Chat Sessions, Events, Worker Sessions, Provider Sessions, Operator Settings,
+  Factory Visualization, and System Initialization services. `pkg/wire`
+  composes these services and `pkg/initializer` owns application lifecycle.
 - Public terminology is defined in
   `docs/architecture/data-model.md`: `Factory`, `Factory Session`, `Current
   Factory`, `Work`, `Work Request`, and `Provider Session`.
@@ -44,6 +44,9 @@ Read these architecture notes when the work touches their area:
   customer/internal data-model split.
 - `docs/architecture/packaged-structure.md` for the current Go package families,
   service package convention, dependency direction, and composition boundaries.
+- `docs/architecture/service-ownership-rationale.md` for why each committed
+  service owns what it owns, the destination vocabulary, responsibility
+  clusters, public-surface ownership, and owned roles.
 
 ## Standards
 
@@ -85,12 +88,19 @@ the standards.
 - `pkg/root/` exposes the caller-facing `BuildProcess` construction boundary.
   `pkg/wire/` owns the canonical application dependency graph, and
   `pkg/initializer/` activates and unwinds already-constructed lifecycle roles.
-- `pkg/transports/` owns protocol composition for CLI, HTTP, MCP, generated
+- `pkg/transports/` owns protocol composition for CLI, HTTP, MCP, ACP, generated
   transport contracts and clients, and representation mapping. Service-specific
   adapters may live under the owning service's `transports/` directory.
-- `pkg/platform/` contains policy-free cross-cutting implementations such as
-  filesystem, process, logging, metrics, replay storage, clocks, PTY, and
-  runtime-artifact support.
+- `pkg/transports/acp/` owns ACP protocol negotiation, envelopes, session
+  transport, response bridging, and transport mapping. It consumes service
+  contracts and does not own Factory state.
+- `pkg/transports/mapping/` owns representation conversion at public boundaries;
+  it translates protocol payloads into service contracts and does not own
+  canonical policy or state.
+- `pkg/platform/` owns policy-free cross-cutting implementations such as
+  filesystem/replay storage, process and PTY execution, logging, metrics,
+  clocks, and runtime-artifact support. Platform implementations do not choose
+  Factory, Factory Session, Work, worker, provider, model, or scheduling policy.
 - `pkg/services/` contains the product-domain service families. Service roots
   expose public contracts and operations; private implementation belongs under
   the owning service's `internal/` tree, focused construction providers under
@@ -98,9 +108,10 @@ the standards.
 - `pkg/services/factory_definitions/` owns Factory definition loading,
   persistence, validation, compilation, authored layout, packaged distribution,
   catalog behavior, and invocation policy.
-- `pkg/services/factory_runtime/` owns event-first orchestration, scheduling,
-  dispatch, runtime projections, Petri execution, JavaScript workflows, and
-  checkpoint recovery.
+- `pkg/services/factory_runtime/` owns event-first Factory orchestration,
+  scheduling, dispatch, runtime projections, JavaScript workflows, and
+  checkpoint recovery. Implementation-specific runtime primitives remain
+  behind this customer-facing Factory boundary.
 - `pkg/services/factory_sessions/` owns live and durable Factory Session state,
   runtime opening, lifecycle gateways, response streams, invocation, controls,
   and persisted execution behavior.
@@ -109,19 +120,36 @@ the standards.
 - `pkg/services/work/` owns Work and Work Request contracts, admission, content,
   materialization, staging, lineage, read behavior, and pure invocation return
   policy.
-- `pkg/services/workers/` owns worker and workstation execution, runners,
-  prompt/output shaping, worktrees, mock-worker behavior, and worker capability
-  policy.
-- `pkg/services/providers/` owns provider identity, catalog, lifecycle, ACP
-  integration, and provider execution. Workers consume Providers through its
-  public contracts; provider implementations do not belong to Workers.
+- `pkg/services/workers/` owns request-scoped worker and workstation execution,
+  runner selection, prompt/output shaping, worktrees, mock-worker behavior, and
+  worker capability policy. It consumes Providers and Models through their
+  public contracts; provider inference/execution and hosted polling do not
+  belong to Workers.
+- `pkg/services/providers/` owns provider identity, catalog, configuration,
+  lifecycle, provider protocol and selection, session identity, adapter choice,
+  provider inference, provider execution policy, and one normalized execution
+  attempt. Workers consumes Providers through its public contracts and retains
+  only request-scoped scheduling and retry policy.
 - `pkg/services/models/` owns the managed local-model catalog, assets, runtime
   readiness and lifecycle, host supervision, source resolution, cache, pull,
   and local inference support.
 - `pkg/services/automations/` owns cron, filesystem watcher, script poller,
-  hosted-source, reconciliation, and invocation-schedule behavior.
+  hosted-source observation and polling, reconciliation, and invocation-schedule
+  behavior. Hosted polling does not belong to Workers.
 - `pkg/services/provider_sessions/` owns provider-session discovery and
   transcript/session inspection.
+- `pkg/services/chat_sessions/` owns the customer conversation and control
+  context used by ACP: selected targets, ordered turns, target episodes,
+  attachments, and control intents. It sequences source-native observations
+  onto the Chat Session's Events topic without owning Factory replay history.
+- `pkg/services/events/` owns the process-local, in-memory session-scoped
+  source-native stream: append/attachment, retained reads, cursors,
+  subscriptions, retention gaps, and backpressure. It is not the canonical
+  Factory Event ledger.
+- `pkg/services/worker_sessions/` owns Worker Session identity, attempt
+  supervision, lifecycle classification, dispatch association, and publication
+  of source-native Worker observations to Events. It does not own Worker
+  execution policy or Factory replay history.
 - `pkg/services/operator_settings/`, `pkg/services/factory_visualization/`, and
   `pkg/services/system_initialization/` own settings resolution, runtime
   presentation/projection, and system bootstrap/rollback respectively.
@@ -130,7 +158,7 @@ the standards.
 - `pkg/services/factory_runtime/internal/orchestrators/petri/` contains internal
   Petri-net primitives. External packages consume Factory Runtime root
   contracts instead.
-- `pkg/services/factory_runtime/internal/orchestrators/javascript/` contains
+- `pkg/services/factory_runtime/internal/services/orchestration/javascript/` contains
   JavaScript workflow runtime, preview, source lookup, storage, and validation
   implementations. Public orchestration contracts are exposed at
   `pkg/services/factory_runtime`.

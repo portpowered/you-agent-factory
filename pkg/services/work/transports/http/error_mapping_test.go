@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -23,7 +22,7 @@ func TestRootErrorResponse_MapsNotFoundFailures(t *testing.T) {
 	}{
 		{name: "factory session", err: apisurface.ErrFactorySessionNotFound},
 		{name: "work", err: work.ErrWorkNotFound},
-		{name: "runtime move work", err: state.ErrMoveWorkNotFound},
+		{name: "moved work", err: work.ErrMoveWorkNotFound},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -63,9 +62,9 @@ func TestRootErrorResponse_MapsMoveValidationFailures(t *testing.T) {
 		err     error
 		message string
 	}{
-		{err: state.ErrMoveWorkInvalidState, message: "invalid target state for work type"},
-		{err: state.ErrMoveWorkInFlightDispatch, message: "work is in an active dispatch"},
-		{err: state.ErrMoveWorkEngineTerminated, message: "engine has terminated"},
+		{err: work.ErrMoveWorkInvalidState, message: "invalid target state for work type"},
+		{err: work.ErrMoveWorkInFlightDispatch, message: "work is in an active dispatch"},
+		{err: work.ErrMoveWorkEngineTerminated, message: "engine has terminated"},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.err.Error(), func(t *testing.T) {
@@ -142,6 +141,39 @@ func TestRootErrorResponse_MapsWorkRequestValidationFailures(t *testing.T) {
 	}
 }
 
+func TestRootErrorResponse_MapsPayloadSizeFailureWithoutPayloadContent(t *testing.T) {
+	t.Parallel()
+
+	payloadSize := &work.PayloadSizeError{
+		WorkName:          "oversized-work",
+		PayloadBytes:      work.MaxWorkPayloadBytes + 1,
+		PayloadLimitBytes: work.MaxWorkPayloadBytes,
+	}
+	err := &work.RequestPreparationError{Message: payloadSize.Error(), Cause: payloadSize}
+
+	status, response, ok := RootErrorResponse(err)
+	if !ok || status != http.StatusBadRequest {
+		t.Fatalf("RootErrorResponse(%v) = %d %#v %v, want bad request", err, status, response, ok)
+	}
+	if response.Family != factoryapi.ErrorFamilyBadRequest ||
+		response.Code != factoryapi.ErrorResponseCodeBADREQUEST {
+		t.Fatalf("response = %#v, want BAD_REQUEST family and code", response)
+	}
+	for _, marker := range []string{
+		"work_request:",
+		`Work "oversized-work"`,
+		"payloadBytes=65537",
+		"payloadLimitBytes=65536",
+	} {
+		if !strings.Contains(response.Message, marker) {
+			t.Fatalf("response message = %q, want marker %q", response.Message, marker)
+		}
+	}
+	if strings.Contains(response.Message, "payload content") {
+		t.Fatalf("response message = %q, must not expose payload content", response.Message)
+	}
+}
+
 func TestRootErrorResponse_ReturnsFalseForNilAndUnmappedFailures(t *testing.T) {
 	t.Parallel()
 
@@ -184,7 +216,7 @@ func TestTypedRootFailuresDoNotCollapseToInternalError(t *testing.T) {
 		work.ErrInvalidWorkRequest,
 		work.ErrWorkRequestConflict,
 		work.ErrWorkRequestRejected,
-		state.ErrMoveWorkInvalidState,
+		work.ErrMoveWorkInvalidState,
 		&work.ValidationError{Message: "invalid query"},
 		&work.ContentStagingError{Message: "staging failed"},
 	}

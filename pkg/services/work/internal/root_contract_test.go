@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/work/internal"
 )
@@ -38,7 +37,7 @@ func TestNewServiceSatisfiesPublishedWorkRoot(t *testing.T) {
 	t.Parallel()
 
 	runtime := &internalAdmissionRuntime{}
-	service := internalservice.NewService(&internalRuntimeResolver{runtime: runtime}, nil, nil, nil)
+	service := internalservice.NewService(&internalRuntimeResolver{runtime: runtime}, nil, nil, nil, nil)
 	var root work.Service = service
 
 	request := work.WorkRequest{RequestID: "internal-root-admission"}
@@ -48,13 +47,4 @@ func TestNewServiceSatisfiesPublishedWorkRoot(t *testing.T) {
 	if runtime.submitted.RequestID != request.RequestID {
 		t.Fatalf("submitted request = %q, want %q", runtime.submitted.RequestID, request.RequestID)
 	}
-}
-
-type internalRootOnlyRuntime struct{ factoryruntime.Service }
-
-func TestNewReturnsSessionScopedService(t *testing.T) {
-	t.Parallel()
-
-	_ = internalRootOnlyRuntime{}
-	_ = internalservice.New
 }

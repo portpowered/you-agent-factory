@@ -2,6 +2,7 @@ package replay
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -49,6 +50,49 @@ func TestArtifactFromEventStream_ParsesCanonicalEventStreamAndSkipsTruncatedTail
 	}
 }
 
+func TestArtifactFromEventStreamRejectsNonTailCorruption(t *testing.T) {
+	artifact := testReplayArtifact(t,
+		replayWorkRequestEvent(t, "request-1", 1, "api", []factoryapi.Work{{
+			Name:         "task-1",
+			TraceId:      stringPtrIfNotEmpty("trace-1"),
+			WorkId:       stringPtrIfNotEmpty("work-1"),
+			WorkTypeName: stringPtrIfNotEmpty("task"),
+		}}, nil),
+	)
+	event, err := json.Marshal(artifact.Events[0])
+	if err != nil {
+		t.Fatalf("Marshal event: %v", err)
+	}
+	completeBlock := "data: " + string(event) + "\n\n"
+
+	tests := map[string]string{
+		"malformed complete block":      completeBlock + "data: {\"id\":\"broken\"\n\n",
+		"malformed mid-stream block":    completeBlock + "data: {\"id\":\"broken\"\n\n" + completeBlock,
+		"no complete recoverable event": "data: {\"id\":\"broken\"\n",
+	}
+	for name, stream := range tests {
+		t.Run(name, func(t *testing.T) {
+			result, err := ArtifactFromEventStream(strings.NewReader(stream), testFactorySnapshotDecoder)
+			if result != nil || err == nil {
+				t.Fatalf("ArtifactFromEventStream = (%#v, %v), want error", result, err)
+			}
+		})
+	}
+}
+
+func TestArtifactFromEventStreamReturnsScannerFailure(t *testing.T) {
+	result, err := ArtifactFromEventStream(failingEventStreamReader{}, testFactorySnapshotDecoder)
+	if result != nil || err == nil || !strings.Contains(err.Error(), "scan event stream") {
+		t.Fatalf("ArtifactFromEventStream = (%#v, %v), want scanner error", result, err)
+	}
+}
+
+type failingEventStreamReader struct{}
+
+func (failingEventStreamReader) Read([]byte) (int, error) {
+	return 0, errors.New("event stream read failed")
+}
+
 func TestArtifactFromEventStreamFileRejectsMissingFileOperations(t *testing.T) {
 	t.Parallel()
 	result, err := ArtifactFromEventStreamFile("events.jsonl", testFactorySnapshotDecoder, nil, nil, nil)
@@ -74,7 +118,7 @@ func TestArtifactFromEventStream_NormalizesLegacyCronPayloads(t *testing.T) {
 		Workstations: &[]factoryapi.Workstation{{
 			Name:     "daily-refresh",
 			Behavior: stringPtrIfNotEmpty(factoryapi.WorkstationKindCron),
-			Worker:   "executor",
+			Worker:   generatedStringPtr("executor"),
 			Outputs: &[]factoryapi.WorkstationIO{{
 				WorkType: "task",
 				State:    "complete",
@@ -158,6 +202,100 @@ func TestSaveArtifactFromEventStreamFile_HydratesAdjacentFactoryAndRewritesEmbed
 		t.Fatalf("AsInitialStructureRequestEventPayload: %v", err)
 	}
 	assertReplayHydratedFactoryRuntime(t, initialPayload.Factory)
+}
+
+func TestReplayArtifactRoundTrip_PreservesLiveChangeRevisionAndCorrelation(t *testing.T) {
+	artifact := testReplayArtifact(t)
+	request, success := liveChangeReplayEvents(t)
+	artifact.Events = append(artifact.Events, request, success)
+	assignEventSequences(artifact.Events)
+
+	path := filepath.Join(t.TempDir(), "live-change.replay.json")
+	if err := Save(testReplayStorage(), path, artifact); err != nil {
+		t.Fatalf("Save live-change artifact: %v", err)
+	}
+	loaded, err := Load(testReplayStorage(), path, testFactorySnapshotDecoder)
+	if err != nil {
+		t.Fatalf("Load live-change artifact: %v", err)
+	}
+	assertLiveChangeReplayEvents(t, loaded.Events)
+}
+
+func liveChangeReplayEvents(t *testing.T) (interfaces.FactoryEvent, interfaces.FactoryEvent) {
+	t.Helper()
+	sessionID, requestID, changeID := "session-live-change", "request-live-change", "live-change/request-live-change"
+	requestPayload, err := json.Marshal(interfaces.FactoryChangeRequestEventPayload{
+		ChangeID: changeID, ExpectedRevision: 0, Operation: "resource.capacity.set", TargetID: "reviewers",
+		RequestedValue: json.RawMessage("8"), Source: "test",
+	})
+	if err != nil {
+		t.Fatalf("marshal live-change request: %v", err)
+	}
+	snapshot := mustFactorySnapshot(t, testGeneratedFactory())
+	previous, next, effective := 0, 1, 2
+	eventTime := time.Date(2026, time.April, 10, 12, 0, 1, 0, time.UTC)
+	successPayload, err := json.Marshal(interfaces.FactoryChangeEventPayload{
+		Factory: snapshot, ChangeID: changeID, Operation: "resource.capacity.set", TargetID: "reviewers",
+		PreviousRevision: &previous, NewRevision: &next, EffectiveSequence: &effective,
+	})
+	if err != nil {
+		t.Fatalf("marshal live-change success: %v", err)
+	}
+	requestSequence, successSequence := 7, 8
+	requestEvent := interfaces.FactoryEvent{
+		Id: "factory-event/factory-change-request/" + changeID, Type: interfaces.FactoryEventTypeFactoryChangeRequest,
+		Context: interfaces.FactoryEventContext{
+			EventTime: eventTime, RequestID: stringPtrIfNotEmpty(requestID), SessionID: stringPtrIfNotEmpty(sessionID), SessionSequence: &requestSequence,
+		},
+		Payload: requestPayload,
+	}
+	successEvent := interfaces.FactoryEvent{
+		Id: "factory-event/factory-change/" + changeID, Type: interfaces.FactoryEventTypeFactoryChange,
+		Context: interfaces.FactoryEventContext{
+			EventTime: eventTime.Add(time.Second), RequestID: stringPtrIfNotEmpty(requestID), SessionID: stringPtrIfNotEmpty(sessionID), SessionSequence: &successSequence,
+		},
+		Payload: successPayload,
+	}
+	return requestEvent, successEvent
+}
+
+func assertLiveChangeReplayEvents(t *testing.T, events []interfaces.FactoryEvent) {
+	t.Helper()
+	if len(events) != 3 {
+		t.Fatalf("replayed event count = %d, want run request plus two live-change events", len(events))
+	}
+	var request interfaces.FactoryChangeRequestEventPayload
+	if err := events[1].DecodePayload(&request); err != nil {
+		t.Fatalf("decode replayed live-change request: %v", err)
+	}
+	var success interfaces.FactoryChangeEventPayload
+	if err := events[2].DecodePayload(&success); err != nil {
+		t.Fatalf("decode replayed live-change success: %v", err)
+	}
+	assertLiveChangeReplayCorrelation(t, events)
+	assertLiveChangeReplayRevision(t, request, success)
+}
+
+func assertLiveChangeReplayCorrelation(t *testing.T, events []interfaces.FactoryEvent) {
+	t.Helper()
+	if events[1].Context.RequestID == nil || *events[1].Context.RequestID != "request-live-change" ||
+		events[2].Context.RequestID == nil || *events[2].Context.RequestID != "request-live-change" ||
+		events[1].Context.SessionSequence == nil || *events[1].Context.SessionSequence != 7 ||
+		events[2].Context.SessionSequence == nil || *events[2].Context.SessionSequence != 8 {
+		t.Fatalf("replayed correlation = request %#v success %#v", events[1].Context, events[2].Context)
+	}
+}
+
+func assertLiveChangeReplayRevision(
+	t *testing.T,
+	request interfaces.FactoryChangeRequestEventPayload,
+	success interfaces.FactoryChangeEventPayload,
+) {
+	t.Helper()
+	if request.ChangeID != "live-change/request-live-change" || success.NewRevision == nil || *success.NewRevision != 1 ||
+		success.EffectiveSequence == nil || *success.EffectiveSequence != 2 || success.Factory == nil {
+		t.Fatalf("replayed revision payload = request %#v success %#v", request, success)
+	}
 }
 
 func scriptedHydratedFactorySnapshotDirectoryLoader(
@@ -354,7 +492,7 @@ func replayRecordedFactoryFixture() factoryapi.Factory {
 		}},
 		Workers: &[]factoryapi.Worker{{Name: "executor"}},
 		Workstations: &[]factoryapi.Workstation{{
-			Name: "execute-story", Worker: "executor", Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}}, Outputs: &[]factoryapi.WorkstationIO{{WorkType: "story", State: "complete"}},
+			Name: "execute-story", Worker: generatedStringPtr("executor"), Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}}, Outputs: &[]factoryapi.WorkstationIO{{WorkType: "story", State: "complete"}},
 		}},
 	}
 }

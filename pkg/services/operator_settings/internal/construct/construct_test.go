@@ -13,8 +13,8 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	settingsconstruct "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/construct"
 	resolution "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
 func TestNewServiceFromConfigDocumentRequiresDocumentPorts(t *testing.T) {
@@ -278,7 +278,9 @@ func testProviderCatalog(value string) (string, bool) {
 	}
 }
 
-type stubProvidersRoot struct{}
+type stubProvidersRoot struct {
+	providers.Service
+}
 
 func (stubProvidersRoot) ListProviders(context.Context, providers.ListProvidersRequest) (providers.ListProvidersResult, error) {
 	return providers.ListProvidersResult{}, nil

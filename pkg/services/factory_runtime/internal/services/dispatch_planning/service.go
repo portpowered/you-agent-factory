@@ -7,6 +7,7 @@ package dispatch_planning
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -42,6 +43,8 @@ type ExecutionFacts struct {
 	RunnerSelectionSource    workers.RunnerSelectionSource
 	ProjectID                string
 	FactorySessionID         string
+	RecordingID              string
+	Capabilities             *workers.Capabilities
 	InputPayload             []any
 	ModelOperation           string
 	ModelBindings            []workers.ResolvedModelOperationBinding
@@ -50,6 +53,7 @@ type ExecutionFacts struct {
 	SystemPrompt             string
 	UserMessage              string
 	OutputSchema             string
+	Timeout                  time.Duration
 	EnvVars                  map[string]string
 	ProcessEnvironment       []string
 	Worktree                 string

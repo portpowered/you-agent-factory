@@ -67,6 +67,42 @@ func TestConfigMapping_SimplePath(t *testing.T) {
 	assertEquality(t, expectedNet, outputNet)
 }
 
+func TestConfigMapping_PreservesExpectedArtifactDeclarationsOnWorkTypesAndWorkstations(t *testing.T) {
+	input := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			},
+			ExpectedArtifacts: []interfaces.ExpectedArtifactConfig{{
+				Name: "report", Pattern: "reports/report.json", NonEmpty: true,
+			}},
+		}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:    "transformer",
+			Inputs:  []interfaces.IOConfig{{StateName: "init", WorkTypeName: "task"}},
+			Outputs: []interfaces.IOConfig{{StateName: "complete", WorkTypeName: "task"}},
+			ExpectedArtifacts: []interfaces.ExpectedArtifactConfig{{
+				Name: "manifest", Pattern: "reports/manifest.json",
+			}},
+		}},
+	}
+
+	output, err := (testConfigMapper{}).Map(context.Background(), input)
+	if err != nil {
+		t.Fatalf("Map() error = %v", err)
+	}
+	workType := output.WorkTypes["task"]
+	if workType == nil || len(workType.ExpectedArtifacts) != 1 || workType.ExpectedArtifacts[0].Name != "report" || !workType.ExpectedArtifacts[0].NonEmpty {
+		t.Fatalf("mapped work-type artifacts = %#v", workType)
+	}
+	transition := output.Transitions["transformer"]
+	if transition == nil || len(transition.ExpectedArtifacts) != 1 || transition.ExpectedArtifacts[0].Pattern != "reports/manifest.json" {
+		t.Fatalf("mapped workstation artifacts = %#v", transition)
+	}
+}
+
 func TestConfigMapping_RejectionAndFailure(t *testing.T) {
 	input := &interfaces.FactoryConfig{
 		WorkTypes: []interfaces.WorkTypeConfig{
@@ -142,6 +178,121 @@ func TestConfigMapping_RejectionLoopWithGuardedLoopBreaker(t *testing.T) {
 	})
 	assertReviewerRejectionTransition(t, outputNet.Transitions["reviewer"])
 	testutil.AssertGuardedLoopBreakerTransition(t, outputNet.Transitions["reviewer-loop-breaker"], "task:init", "task:failed", "reviewer", 3)
+}
+
+func TestConfigMapping_ReviewRepeaterContinuePreservesRejectionFailureAndVisitBound(t *testing.T) {
+	mapper := testConfigMapper{}
+	outputNet, err := mapper.Map(context.Background(), reviewHoldFactoryConfig())
+	if err != nil {
+		t.Fatalf("failed to map review hold config: %v", err)
+	}
+
+	review := outputNet.Transitions["review"]
+	if review == nil {
+		t.Fatal("expected review transition")
+	}
+	assertTransitionArcPlaces(t, review.OutputArcs, "task:to-complete", "review:complete")
+	assertTransitionArcPlaces(t, review.ContinueArcs, "task:in-review", "review:init")
+	assertTransitionArcPlaces(t, review.RejectionArcs, "task:init")
+	assertTransitionArcPlaces(t, review.FailureArcs, "task:failed", "review:fin")
+
+	breaker := outputNet.Transitions["review-loop-breaker"]
+	if breaker == nil {
+		t.Fatal("expected review-loop-breaker transition")
+	}
+	if len(breaker.InputArcs) != 1 {
+		t.Fatalf("review-loop-breaker input arcs = %d, want 1", len(breaker.InputArcs))
+	}
+	guard, ok := breaker.InputArcs[0].Guard.(*factoryruntime.PetriVisitCountGuard)
+	if !ok {
+		t.Fatalf("review-loop-breaker input guard = %T, want VisitCountGuard", breaker.InputArcs[0].Guard)
+	}
+	if guard.TransitionID != "review" || guard.MaxVisits != 10 {
+		t.Fatalf("review loop guard = (%q, %d), want (review, 10)", guard.TransitionID, guard.MaxVisits)
+	}
+}
+
+func TestConfigMapping_VisitCountGuardMapsLogicalRoundTripPolicy(t *testing.T) {
+	cfg := reviewHoldFactoryConfig()
+	cfg.Workstations[1].Guards[0].MaxVisits = 12
+	cfg.Workstations[1].Guards[0].LogicalRoundTrip = &interfaces.LogicalRoundTripConfig{
+		Workstations: []string{"process", "review"},
+		MaxRawVisits: 24,
+	}
+
+	outputNet, err := (testConfigMapper{}).Map(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("failed to map logical round-trip config: %v", err)
+	}
+	guard, ok := outputNet.Transitions["review-loop-breaker"].InputArcs[0].Guard.(*factoryruntime.PetriVisitCountGuard)
+	if !ok {
+		t.Fatalf("loop-breaker input guard = %T, want VisitCountGuard", outputNet.Transitions["review-loop-breaker"].InputArcs[0].Guard)
+	}
+	if guard.LogicalRoundTrip == nil {
+		t.Fatal("logical round-trip policy = nil, want compiled policy")
+	}
+	if guard.LogicalRoundTrip.Transitions != [2]string{"process", "review"} || guard.LogicalRoundTrip.MaxRawVisits != 24 {
+		t.Fatalf("compiled logical round-trip policy = %#v, want process/review and raw ceiling 24", guard.LogicalRoundTrip)
+	}
+}
+
+func reviewHoldFactoryConfig() *interfaces.FactoryConfig {
+	return &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{
+			{
+				Name: "task",
+				States: []interfaces.StateConfig{
+					{Name: "init", Type: interfaces.StateTypeInitial},
+					{Name: "in-review", Type: interfaces.StateTypeProcessing},
+					{Name: "to-complete", Type: interfaces.StateTypeProcessing},
+					{Name: "complete", Type: interfaces.StateTypeTerminal},
+					{Name: "failed", Type: interfaces.StateTypeFailed},
+				},
+			},
+			{
+				Name: "review",
+				States: []interfaces.StateConfig{
+					{Name: "init", Type: interfaces.StateTypeInitial},
+					{Name: "complete", Type: interfaces.StateTypeTerminal},
+					{Name: "fin", Type: interfaces.StateTypeFailed},
+				},
+			},
+		},
+		Workstations: []interfaces.FactoryWorkstationConfig{
+			{
+				Name: "review",
+				Kind: interfaces.WorkstationKindRepeater,
+				Inputs: []interfaces.IOConfig{
+					{WorkTypeName: "task", StateName: "in-review"},
+					{WorkTypeName: "review", StateName: "init"},
+				},
+				Outputs: []interfaces.IOConfig{
+					{WorkTypeName: "task", StateName: "to-complete"},
+					{WorkTypeName: "review", StateName: "complete"},
+				},
+				OnContinue: []interfaces.IOConfig{
+					{WorkTypeName: "task", StateName: "in-review"},
+					{WorkTypeName: "review", StateName: "init"},
+				},
+				OnRejection: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+				OnFailure: []interfaces.IOConfig{
+					{WorkTypeName: "task", StateName: "failed"},
+					{WorkTypeName: "review", StateName: "fin"},
+				},
+			},
+			{
+				Name:    "review-loop-breaker",
+				Type:    interfaces.WorkstationTypeLogical,
+				Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "in-review"}},
+				Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
+				Guards: []interfaces.GuardConfig{{
+					Type:        interfaces.GuardTypeVisitCount,
+					Workstation: "review",
+					MaxVisits:   10,
+				}},
+			},
+		},
+	}
 }
 
 func rejectionLoopWithGuardedLoopBreakerFactoryConfig() *interfaces.FactoryConfig {

@@ -60,11 +60,10 @@ var deletionGates = map[string]string{
 // performs the effect. Platform may implement those ports but may not depend on
 // a composed service, service root, or implementation package.
 //
-// Providers Execution leaf ownership is durable; Workers inferencecontract
-// remains migration debt until later Providers packets land.
+// Providers Execution owns the durable provider effect contract. Keep this
+// allowlist limited to the canonical Providers-owned leaf.
 var approvedPlatformLeafPorts = map[string]struct{}{
 	modulePath + "/pkg/services/providers/execution/inferencecontract": {},
-	modulePath + "/pkg/services/providers/internal/services/execution/internal/provider/inferencecontract":    {},
 }
 
 // approvedPlatformAdapterPorts records narrow source-to-owner exceptions for a
@@ -96,10 +95,11 @@ type config struct {
 }
 
 type finding struct {
-	Rule     string `json:"rule"`
-	FilePath string `json:"filePath"`
-	Target   string `json:"target"`
-	Line     int    `json:"-"`
+	Rule     string              `json:"rule"`
+	FilePath string              `json:"filePath"`
+	Target   string              `json:"target"`
+	Class    boundarySourceClass `json:"class"`
+	Line     int                 `json:"-"`
 }
 
 type baseline struct {
@@ -111,6 +111,7 @@ type baselineEntry struct {
 	Rule         string `json:"rule"`
 	FilePath     string `json:"filePath"`
 	Target       string `json:"target"`
+	Class        string `json:"class,omitempty"`
 	Stage        string `json:"stage"`
 	DeletionGate string `json:"deletionGate"`
 }
@@ -157,14 +158,17 @@ func run(cfg config, stdout, stderr io.Writer) error {
 	for _, item := range stale {
 		fmt.Fprintf(
 			stderr,
-			"[agent-factory:ownership-boundary] stale baseline: %s %s -> %s; remove this entry from %s\n",
+			"[agent-factory:ownership-boundary] stale baseline: %s %s -> %s [class=%s]; remove this entry from %s\n",
 			item.Rule,
 			item.FilePath,
 			item.Target,
+			item.Class,
 			baselineFile,
 		)
 	}
+	counts := countClassifiedViolations(unrecorded, stale)
 	if len(unrecorded) > 0 || len(stale) > 0 {
+		writeClassifiedViolationCounts(stderr, counts)
 		return fmt.Errorf(
 			"[agent-factory:ownership-boundary] found %d new violation(s) and %d stale baseline entries",
 			len(unrecorded),
@@ -176,6 +180,7 @@ func run(cfg config, stdout, stderr io.Writer) error {
 		"[agent-factory:ownership-boundary] ownership boundaries hold (%d deletion-only baseline entries remain)\n",
 		len(active),
 	)
+	writeClassifiedViolationCounts(stdout, counts)
 	return nil
 }
 
@@ -207,7 +212,7 @@ func scan(repoRoot string) ([]finding, error) {
 				}
 				return nil
 			}
-			if !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			if !strings.HasSuffix(entry.Name(), ".go") {
 				return nil
 			}
 			relative, err := filepath.Rel(repoRoot, path)
@@ -245,16 +250,17 @@ func scanFile(path, relative string, inventory ownerInventory) ([]finding, error
 	if ast.IsGenerated(file) {
 		return nil, nil
 	}
+	class := classifyBoundarySource(relative)
 	aliases, imports := importInventory(file)
 	var findings []finding
 	switch {
 	case within(relative, initializerRoot):
-		findings = append(findings, scanInitializerImports(fileSet, imports, relative, inventory)...)
-		findings = append(findings, scanInitializerCalls(fileSet, file, aliases, relative)...)
+		findings = append(findings, scanInitializerImports(fileSet, imports, relative, inventory, class)...)
+		findings = append(findings, scanInitializerCalls(fileSet, file, aliases, relative, class)...)
 	case within(relative, platformRoot):
-		findings = append(findings, scanPlatformImports(fileSet, imports, relative)...)
+		findings = append(findings, scanPlatformImports(fileSet, imports, relative, class)...)
 	case within(relative, mappingRoot):
-		findings = append(findings, scanMappingBehavior(fileSet, file, aliases, imports, relative)...)
+		findings = append(findings, scanMappingBehavior(fileSet, file, aliases, imports, relative, class)...)
 	}
 	return findings, nil
 }
@@ -290,6 +296,7 @@ func scanInitializerImports(
 	imports []importedPackage,
 	relative string,
 	inventory ownerInventory,
+	class boundarySourceClass,
 ) []finding {
 	var findings []finding
 	for _, imported := range imports {
@@ -302,7 +309,7 @@ func scanInitializerImports(
 		}
 		if rule != "" {
 			findings = append(findings, finding{
-				Rule: rule, FilePath: relative, Target: imported.Path,
+				Rule: rule, FilePath: relative, Target: imported.Path, Class: class,
 				Line: fileSet.Position(imported.Pos).Line,
 			})
 		}
@@ -311,8 +318,8 @@ func scanInitializerImports(
 				strings.HasPrefix(imported.Path, transportsImport)) {
 			findings = append(findings, finding{
 				Rule: ruleInitializerConstruction, FilePath: relative,
-				Target: imported.Path + ".*",
-				Line:   fileSet.Position(imported.Pos).Line,
+				Target: imported.Path + ".*", Class: class,
+				Line: fileSet.Position(imported.Pos).Line,
 			})
 		}
 	}
@@ -343,6 +350,7 @@ func scanInitializerCalls(
 	file *ast.File,
 	aliases map[string]string,
 	relative string,
+	class boundarySourceClass,
 ) []finding {
 	var findings []finding
 	ast.Inspect(file, func(node ast.Node) bool {
@@ -368,8 +376,8 @@ func scanInitializerCalls(
 		}
 		findings = append(findings, finding{
 			Rule: ruleInitializerConstruction, FilePath: relative,
-			Target: importPath + "." + selector.Sel.Name,
-			Line:   fileSet.Position(call.Pos()).Line,
+			Target: importPath + "." + selector.Sel.Name, Class: class,
+			Line: fileSet.Position(call.Pos()).Line,
 		})
 		return true
 	})
@@ -385,7 +393,7 @@ func constructionName(name string) bool {
 	return false
 }
 
-func scanPlatformImports(fileSet *token.FileSet, imports []importedPackage, relative string) []finding {
+func scanPlatformImports(fileSet *token.FileSet, imports []importedPackage, relative string, class boundarySourceClass) []finding {
 	var findings []finding
 	for _, imported := range imports {
 		if !strings.HasPrefix(imported.Path, servicesImport) {
@@ -401,7 +409,7 @@ func scanPlatformImports(fileSet *token.FileSet, imports []importedPackage, rela
 			}
 		}
 		findings = append(findings, finding{
-			Rule: rulePlatformDomainImport, FilePath: relative, Target: imported.Path,
+			Rule: rulePlatformDomainImport, FilePath: relative, Target: imported.Path, Class: class,
 			Line: fileSet.Position(imported.Pos).Line,
 		})
 	}
@@ -414,12 +422,13 @@ func scanMappingBehavior(
 	aliases map[string]string,
 	imports []importedPackage,
 	relative string,
+	class boundarySourceClass,
 ) []finding {
 	var findings []finding
 	for _, imported := range imports {
 		if imported.Path == "os/exec" {
 			findings = append(findings, finding{
-				Rule: ruleMappingProcess, FilePath: relative, Target: "os/exec",
+				Rule: ruleMappingProcess, FilePath: relative, Target: "os/exec", Class: class,
 				Line: fileSet.Position(imported.Pos).Line,
 			})
 		}
@@ -435,7 +444,7 @@ func scanMappingBehavior(
 		}
 		if rule != "" {
 			findings = append(findings, finding{
-				Rule: rule, FilePath: relative, Target: imported.Path + ".*",
+				Rule: rule, FilePath: relative, Target: imported.Path + ".*", Class: class,
 				Line: fileSet.Position(imported.Pos).Line,
 			})
 		}
@@ -443,7 +452,7 @@ func scanMappingBehavior(
 	ast.Inspect(file, func(node ast.Node) bool {
 		if statement, ok := node.(*ast.GoStmt); ok {
 			findings = append(findings, finding{
-				Rule: ruleMappingGoroutine, FilePath: relative, Target: "go statement",
+				Rule: ruleMappingGoroutine, FilePath: relative, Target: "go statement", Class: class,
 				Line: fileSet.Position(statement.Pos()).Line,
 			})
 			return true
@@ -480,8 +489,8 @@ func scanMappingBehavior(
 		if rule != "" {
 			findings = append(findings, finding{
 				Rule: rule, FilePath: relative,
-				Target: importPath + "." + selector.Sel.Name,
-				Line:   fileSet.Position(call.Pos()).Line,
+				Target: importPath + "." + selector.Sel.Name, Class: class,
+				Line: fileSet.Position(call.Pos()).Line,
 			})
 		}
 		return true
@@ -510,11 +519,15 @@ func uniqueFindings(items []finding) []finding {
 }
 
 func findingKey(item finding) string {
-	return item.Rule + "\x00" + item.FilePath + "\x00" + item.Target
+	return item.Rule + "\x00" + item.FilePath + "\x00" + string(item.Class) + "\x00" + item.Target
 }
 
 func entryKey(item baselineEntry) string {
-	return item.Rule + "\x00" + item.FilePath + "\x00" + item.Target
+	class := item.Class
+	if strings.TrimSpace(class) == "" {
+		class = string(classifyBoundarySource(item.FilePath))
+	}
+	return item.Rule + "\x00" + item.FilePath + "\x00" + class + "\x00" + item.Target
 }
 
 func createBaseline(repoRoot string, findings []finding, stdout io.Writer) error {
@@ -533,6 +546,7 @@ func createBaseline(repoRoot string, findings []finding, stdout io.Writer) error
 	for _, item := range findings {
 		entries = append(entries, baselineEntry{
 			Rule: item.Rule, FilePath: item.FilePath, Target: item.Target,
+			Class: string(item.Class),
 			Stage: baselineStage, DeletionGate: deletionGates[item.Rule],
 		})
 	}
@@ -581,6 +595,11 @@ func partition(
 		if err := validateEntry(item); err != nil {
 			return nil, nil, nil, err
 		}
+		class, err := baselineSourceClass(item)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		item.Class = string(class)
 		key := entryKey(item)
 		if _, duplicate := entries[key]; duplicate {
 			return nil, nil, nil, fmt.Errorf("%s contains duplicate entry for %s", baselineFile, item.Target)
@@ -620,6 +639,19 @@ func validateEntry(item baselineEntry) error {
 	if item.DeletionGate != gate {
 		return fmt.Errorf("%s entry %s has an invalid deletion gate", baselineFile, item.Target)
 	}
+	class, err := baselineSourceClass(item)
+	if err != nil {
+		return err
+	}
+	if class == testOnlySourceClass {
+		for field, value := range map[string]string{
+			"rule": item.Rule, "filePath": item.FilePath, "target": item.Target,
+		} {
+			if strings.ContainsAny(value, "*?[]") {
+				return fmt.Errorf("%s entry %s %s must be exact and cannot contain wildcards", baselineFile, item.Target, field)
+			}
+		}
+	}
 	return nil
 }
 
@@ -630,13 +662,13 @@ func writeFinding(writer io.Writer, label string, item finding) {
 	}
 	fmt.Fprintf(
 		writer,
-		"[agent-factory:ownership-boundary] %s: %s:%d %s -> %s; %s\n",
+		"[agent-factory:ownership-boundary] %s: %s:%d %s -> %s [class=%s]; %s\n",
 		label,
 		item.FilePath,
 		item.Line,
 		item.Rule,
 		item.Target,
+		item.Class,
 		remediation,
 	)
 }
-

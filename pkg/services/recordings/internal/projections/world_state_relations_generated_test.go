@@ -2,10 +2,14 @@ package projections
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -68,8 +72,8 @@ func TestFactoryRelationsFromRequest_PreservesNilInput(t *testing.T) {
 
 func TestFactoryWorldReducer_RemoveTokenCleansWorkIndexes(t *testing.T) {
 	reducer := newFactoryWorldReducer(0)
-	firstItem := work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"}
-	secondItem := work.FactoryWorkItem{ID: "work-2", WorkTypeID: "task", TraceID: "trace-2", PlaceID: "task:init"}
+	firstItem := work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", State: "init"}
+	secondItem := work.FactoryWorkItem{ID: "work-2", WorkTypeID: "task", TraceID: "trace-2", State: "init"}
 
 	reducer.addWorkToken("tok-work-1", "task:init", firstItem)
 	reducer.addWorkToken("tok-work-2", "task:init", secondItem)
@@ -126,7 +130,8 @@ func TestFactoryWorldReducer_AppliesCanonicalWorkerExecutionEvents(t *testing.T)
 	response := "finished"
 	exitCode := 0
 	failureType := workerexecution.ScriptFailureTypeTimeout
-	providerSession := &workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "session-1"}
+	providerSession := &providers.SessionMetadata{Provider: "codex", Kind: "session_id", ID: "session-1"}
+	continuation := (providerSession).ContinuationRef()
 	diagnostics := json.RawMessage(`{"provider":{"provider":"codex","model":"gpt-5"}}`)
 	events := []interfaces.FactoryEvent{
 		canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeInferenceRequest, context, workerexecution.InferenceRequestEventPayload{
@@ -134,7 +139,7 @@ func TestFactoryWorldReducer_AppliesCanonicalWorkerExecutionEvents(t *testing.T)
 		}),
 		canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeInferenceResponse, context, workerexecution.InferenceResponseEventPayload{
 			Attempt: 2, InferenceRequestID: "inference-1", Outcome: workerexecution.InferenceOutcomeSucceeded,
-			Response: &response, DurationMillis: 1250, ExitCode: &exitCode, ProviderSession: providerSession, Diagnostics: diagnostics,
+			Response: &response, DurationMillis: 1250, ExitCode: &exitCode, Continuation: continuation, Diagnostics: diagnostics,
 		}),
 		canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeScriptRequest, context, workerexecution.ScriptRequestEventPayload{
 			Attempt: 1, DispatchID: dispatchID, TransitionID: "review", ScriptRequestID: "script-1", Command: "go", Args: []string{"test", "./..."},
@@ -158,6 +163,84 @@ func TestFactoryWorldReducer_AppliesCanonicalWorkerExecutionEvents(t *testing.T)
 	assertCanonicalInferenceProjection(t, reducer, dispatchID, response)
 	assertCanonicalScriptProjection(t, reducer, dispatchID)
 	assertCanonicalAgentRunProjection(t, reducer, dispatchID)
+}
+
+func TestFactoryWorldReducer_PreservesDetachedStructuredResultsAcrossOutputWork(t *testing.T) {
+	t0 := time.Date(2026, 7, 16, 2, 30, 0, 0, time.UTC)
+	input := work.FactoryWorkItem{ID: "work-input", WorkTypeID: "task", TraceID: "trace-input", State: "init"}
+	structured := map[string]any{
+		"nested": map[string]any{"label": "ready"},
+		"items":  []any{json.Number("1"), json.Number("2")},
+	}
+	outputWork := []work.FactoryWorkItem{
+		{ID: "work-output-a", WorkTypeID: "task", TraceID: "trace-a", StructuredResult: structured, StructuredResultPresent: true},
+		{ID: "work-output-b", WorkTypeID: "task", TraceID: "trace-b", StructuredResult: structured, StructuredResultPresent: true},
+	}
+	request := projectionReducerWorkstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
+		DispatchID:   "dispatch-structured",
+		TransitionID: "t-review",
+		Workstation:  interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
+		Inputs: []interfaces.WorkstationInput{{
+			TokenID:  "tok-input",
+			PlaceID:  "task:init",
+			WorkItem: &input,
+		}},
+	})
+	response := projectionReducerWorkstationResponseEvent(3, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
+		DispatchID:   "dispatch-structured",
+		TransitionID: "t-review",
+		Workstation:  interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
+		Result: interfaces.WorkstationResult{
+			Outcome:                 string(workerexecution.OutcomeAccepted),
+			StructuredResult:        structured,
+			StructuredResultPresent: true,
+		},
+		OutputWork: outputWork,
+	})
+	encoded, err := json.Marshal(response)
+	if err != nil {
+		t.Fatalf("marshal response event: %v", err)
+	}
+	var persisted factoryapi.FactoryEvent
+	if err := json.Unmarshal(encoded, &persisted); err != nil {
+		t.Fatalf("unmarshal persisted response event: %v", err)
+	}
+
+	reducer := newFactoryWorldReducer(3)
+	for _, event := range []factoryapi.FactoryEvent{
+		projectionReducerInitialStructureEvent(t0),
+		projectionReducerWorkInputEvent(1, t0.Add(time.Second), "tok-input", input),
+		request,
+		persisted,
+	} {
+		if err := reducer.apply(mustCanonicalProjectionEvent(t, event)); err != nil {
+			t.Fatalf("apply event %q: %v", event.Type, err)
+		}
+	}
+
+	state := reducer.state()
+	if len(state.CompletedDispatches) != 1 {
+		t.Fatalf("completed dispatches = %#v, want one completion", state.CompletedDispatches)
+	}
+	completion := state.CompletedDispatches[0]
+	if !completion.Result.StructuredResultPresent || !reflect.DeepEqual(completion.Result.StructuredResult, structured) {
+		t.Fatalf("completion structured result = %#v (present=%t), want %#v", completion.Result.StructuredResult, completion.Result.StructuredResultPresent, structured)
+	}
+	if len(completion.OutputWorkItems) != 2 {
+		t.Fatalf("output work items = %#v, want two items", completion.OutputWorkItems)
+	}
+	for _, item := range completion.OutputWorkItems {
+		if !item.StructuredResultPresent || !reflect.DeepEqual(item.StructuredResult, structured) {
+			t.Fatalf("output work item %q structured result = %#v (present=%t), want %#v", item.ID, item.StructuredResult, item.StructuredResultPresent, structured)
+		}
+	}
+
+	first := completion.OutputWorkItems[0].StructuredResult.(map[string]any)
+	first["nested"].(map[string]any)["label"] = "mutated"
+	second := completion.OutputWorkItems[1].StructuredResult.(map[string]any)
+	if second["nested"].(map[string]any)["label"] != "ready" {
+		t.Fatalf("output structured result ownership was shared: %#v", completion.OutputWorkItems)
+	}
 }
 
 func assertCanonicalInferenceProjection(t *testing.T, reducer *factoryWorldReducer, dispatchID string, response string) {
@@ -216,7 +299,7 @@ func TestFactoryWorldReducer_DetachesCompletedConsumedInputsFromDispatchSource(t
 		WorkTypeID:               "task",
 		DisplayName:              "Draft",
 		TraceID:                  "trace-1",
-		PlaceID:                  "task:init",
+		State:                    "init",
 		PreviousChainingTraceIDs: []string{"chain-a", "chain-b"},
 		Tags:                     map[string]string{"priority": "high"},
 	}
@@ -237,7 +320,7 @@ func TestFactoryWorldReducer_DetachesCompletedConsumedInputsFromDispatchSource(t
 		Result:          interfaces.WorkstationResult{Outcome: "ACCEPTED"},
 		DurationMillis:  800,
 		TraceData:       &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
-		ProviderSession: &workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-1"},
+		ProviderSession: &providers.SessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-1"},
 	})
 	inference := projectionReducerGeneratedEvent(
 		factoryapi.FactoryEventTypeInferenceResponse,
@@ -250,7 +333,7 @@ func TestFactoryWorldReducer_DetachesCompletedConsumedInputsFromDispatchSource(t
 			Attempt:            1,
 			Outcome:            factoryapi.InferenceOutcomeSucceeded,
 			DurationMillis:     700,
-			ProviderSession:    projectionReducerProviderSession(&workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-1"}),
+			ProviderSession:    projectionReducerProviderSession(&providers.SessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-1"}),
 		},
 	)
 
@@ -307,7 +390,7 @@ func TestFactoryWorldReducer_DetachesCompletedConsumedInputsFromDispatchSource(t
 
 func mustCanonicalProjectionEvent(t *testing.T, event factoryapi.FactoryEvent) interfaces.FactoryEvent {
 	t.Helper()
-	canonicalEvent, err := interfaces.NewFactoryEvent(event)
+	canonicalEvent, err := recordingshttp.CanonicalFactoryEvent(event)
 	if err != nil {
 		t.Fatalf("convert projection event %q: %v", event.Type, err)
 	}
@@ -328,7 +411,7 @@ func projectionReducerInitialStructureEvent(eventTime time.Time) factoryapi.Fact
 			Workstations: &[]factoryapi.Workstation{{
 				Id:        stringPtrForProjectionTest("t-review"),
 				Name:      "Review",
-				Worker:    "reviewer",
+				Worker:    stringPtrForProjectionTest("reviewer"),
 				Inputs:    []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
 				Outputs:   &[]factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
 				OnFailure: &[]factoryapi.WorkstationIO{{WorkType: "task", State: "failed"}},
@@ -397,6 +480,13 @@ func projectionReducerWorkstationResponseEvent(tick int, eventTime time.Time, pa
 		DurationMillis: int64PtrForProjectionTest(payload.DurationMillis),
 		OutputWork:     &outputWork,
 	}
+	if jsonvalue.Present(payload.Result.StructuredResult, payload.Result.StructuredResultPresent) {
+		if payload.Result.StructuredResult == nil {
+			generatedPayload.StructuredResult = json.RawMessage("null")
+		} else {
+			generatedPayload.StructuredResult = jsonvalue.Clone(payload.Result.StructuredResult)
+		}
+	}
 	return projectionReducerGeneratedEvent(factoryapi.FactoryEventTypeDispatchResponse, "response/"+payload.DispatchID, tick, eventTime, context, generatedPayload)
 }
 
@@ -437,7 +527,7 @@ func projectionReducerGeneratedEvent(eventType factoryapi.FactoryEventType, id s
 }
 
 func projectionReducerGeneratedWork(item work.FactoryWorkItem, requestID string) factoryapi.Work {
-	return factoryapi.Work{
+	generated := factoryapi.Work{
 		Name:                     item.DisplayName,
 		RequestId:                stringPtrForProjectionTest(requestID),
 		Tags:                     projectionReducerStringMap(item.Tags),
@@ -447,6 +537,14 @@ func projectionReducerGeneratedWork(item work.FactoryWorkItem, requestID string)
 		WorkId:                   stringPtrForProjectionTest(item.ID),
 		WorkTypeName:             stringPtrForProjectionTest(item.WorkTypeID),
 	}
+	if jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent) {
+		if item.StructuredResult == nil {
+			generated.StructuredResult = json.RawMessage("null")
+		} else {
+			generated.StructuredResult = jsonvalue.Clone(item.StructuredResult)
+		}
+	}
+	return generated
 }
 
 func projectionReducerGeneratedOutputWork(payload interfaces.WorkstationResponsePayload) []factoryapi.Work {
@@ -465,7 +563,7 @@ func projectionReducerGeneratedOutputWork(payload interfaces.WorkstationResponse
 	return works
 }
 
-func projectionReducerProviderSession(session *workerexecution.ProviderSessionMetadata) *factoryapi.ProviderSessionMetadata {
+func projectionReducerProviderSession(session *providers.SessionMetadata) *factoryapi.ProviderSessionMetadata {
 	if session == nil {
 		return nil
 	}

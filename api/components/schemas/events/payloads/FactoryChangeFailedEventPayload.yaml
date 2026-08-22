@@ -1,0 +1,37 @@
+type: object
+additionalProperties: false
+description: >-
+  Safe terminal failure for an admitted live Factory Session change. Raw
+  provider payloads, commands, stack traces, and requested values are excluded.
+required:
+  - changeId
+  - operation
+  - targetId
+  - expectedRevision
+  - previousRevision
+  - failureCode
+  - failureMessage
+properties:
+  changeId:
+    type: string
+    minLength: 1
+  operation:
+    type: string
+    minLength: 1
+  targetId:
+    type: string
+    minLength: 1
+  expectedRevision:
+    type: integer
+    minimum: 0
+  previousRevision:
+    type: integer
+    minimum: 0
+  failureCode:
+    type: string
+    minLength: 1
+    description: Stable safe failure category.
+  failureMessage:
+    type: string
+    minLength: 1
+    description: Bounded safe failure explanation.

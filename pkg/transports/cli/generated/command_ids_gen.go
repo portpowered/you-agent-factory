@@ -14,8 +14,12 @@ var RepresentativeFamilyCommandIDs = []string{
 // contracts/cli/commands.json for the work inspection/control family.
 var WorkFamilyCommandIDs = []string{
 	"you.work",
+	"you.work.approval",
+	"you.work.approval.list",
+	"you.work.approval.show",
 	"you.work.list",
+	"you.work.watch",
 	"you.work.show",
 	"you.work.move",
-	"you.work.visualize",
+	"you.work.render",
 }

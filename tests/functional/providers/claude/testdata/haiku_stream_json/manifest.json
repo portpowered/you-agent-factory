@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "command": "claude -p --verbose --model <selector> --setting-sources '' --tools '' --disable-slash-commands --output-format stream-json --include-partial-messages <prompt>",
+    "providerVersion": "2.1.220",
+    "capturedAt": "2026-08-02",
+    "prompt": "Reply with exactly: HAIKU GOLDEN COMPLETE",
+    "sanitization": "Removed host paths, credentials, thinking text/signatures, usage/cost, timestamps, durations, and random identifiers; retained native record shapes and reported model identities."
+  },
+  "cases": [
+    {
+      "name": "alias",
+      "selector": "haiku",
+      "reportedModel": "claude-haiku-4-5-20251001",
+      "sessionId": "claude-haiku-alias-session",
+      "stdoutFile": "haiku.jsonl",
+      "sha256": "1740003b0bb4fe298091f6c7d91b0cd152ce123deaec44bef263646e6c7e9686"
+    },
+    {
+      "name": "family",
+      "selector": "claude-haiku-4-5",
+      "reportedModel": "claude-haiku-4-5-20251001",
+      "sessionId": "claude-haiku-family-session",
+      "stdoutFile": "claude-haiku-4-5.jsonl",
+      "sha256": "9f5456715706c1c7461a190110cde9cc4fab6fda90c06b1c4a1eb4e3ae6faea2"
+    },
+    {
+      "name": "pinned",
+      "selector": "claude-haiku-4-5-20251001",
+      "reportedModel": "claude-haiku-4-5-20251001",
+      "sessionId": "claude-haiku-pinned-session",
+      "stdoutFile": "claude-haiku-4-5-20251001.jsonl",
+      "sha256": "54e5c03c8dcac5352857ad83dee0d9c4a3ecf2de33a4bb96363a8c3ef791e5fa"
+    }
+  ]
+}

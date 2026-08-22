@@ -6,6 +6,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -29,7 +30,7 @@ func TestFactoryWorldReducerAppliesCanonicalStructureAndStateEvents(t *testing.T
 	if err := reducer.applyStructureEvent(structure); err != nil {
 		t.Fatalf("applyStructureEvent: %v", err)
 	}
-	reducer.stateValue.WorkItemsByID["work-1"] = work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", State: "ready", PlaceID: "task:ready"}
+	reducer.stateValue.WorkItemsByID["work-1"] = work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", State: "ready"}
 	reducer.addWorkToken("work-1", "task:ready", reducer.stateValue.WorkItemsByID["work-1"])
 	workState := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeWorkStateChange, interfaces.FactoryEventContext{EventTime: eventTime.Add(time.Second), Sequence: 2, Tick: 2}, interfaces.WorkStateChangeEventPayload{FromPlaceID: "task:ready", FromState: "ready", Source: work.WorkStateChangeSourceAPI, ToPlaceID: "task:done", ToState: "done", WorkID: "work-1", WorkTypeName: "task"})
 	if err := reducer.applyWorkStateChangeEvent(workState); err != nil {
@@ -60,6 +61,97 @@ func TestReconstructCanonicalFactoryWorldStateOrdersOwnerEvents(t *testing.T) {
 	}
 	if state.FactoryState != string(interfaces.FactoryStateCompleted) || state.EventTime != eventTime.Add(time.Second) {
 		t.Fatalf("canonical ordered state = %#v, want completed at final event time", state)
+	}
+}
+
+func TestReconstructCanonicalFactoryWorldStateProjectsPendingHumanApprovalFromReplay(t *testing.T) {
+	t.Parallel()
+	eventTime := time.Date(2026, time.July, 16, 8, 0, 0, 0, time.UTC)
+	snapshot, err := interfaces.NewFactorySnapshot(map[string]any{
+		"name": "approval-factory",
+		"workstations": []any{map[string]any{
+			"id":   "approval-workstation",
+			"name": "Release Approval",
+			"description": map[string]any{
+				"type":    interfaces.NameValueTypeLocalizableAsset,
+				"value":   "release-approval-description",
+				"locales": []any{"en-US", "fr-FR"},
+				"values":  map[string]any{"en-US": "Approve the release", "fr-FR": "Approuver la version"},
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	structure := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeInitialStructureRequest,
+		interfaces.FactoryEventContext{Sequence: 0, Tick: 0, EventTime: eventTime},
+		interfaces.InitialStructureRequestEventPayload{Factory: snapshot})
+	dispatchID, sessionID, requestID := "dispatch-approval-1", "session-approval-1", "request-approval-1"
+	workIDs := []string{"work-2", "work-1"}
+	traceIDs := []string{"trace-1"}
+	dispatch := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeDispatchRequest,
+		interfaces.FactoryEventContext{
+			Sequence: 1, Tick: 1, EventTime: eventTime.Add(time.Second), SessionID: &sessionID,
+			RequestID: &requestID, DispatchID: &dispatchID, WorkIDs: &workIDs, TraceIDs: &traceIDs,
+		}, interfaces.DispatchRequestEventPayload{
+			TransitionID: "approval-workstation",
+			Inputs: []interfaces.DispatchConsumedWorkRef{
+				{WorkID: "work-2"},
+				{WorkID: "work-1"},
+			},
+		})
+	approval := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeHumanApprovalRequested,
+		interfaces.FactoryEventContext{
+			Sequence: 2, Tick: 1, EventTime: eventTime.Add(2 * time.Second), SessionID: &sessionID,
+			RequestID: &requestID, DispatchID: &dispatchID, WorkIDs: &workIDs, TraceIDs: &traceIDs,
+		}, interfaces.HumanApprovalRequestedEventPayload{
+			ApprovalID:    "approval-dispatch-approval-1",
+			WorkstationID: "approval-workstation",
+			Decisions: []interfaces.HumanApprovalDecision{
+				interfaces.HumanApprovalDecisionApprove,
+				interfaces.HumanApprovalDecisionReject,
+			},
+			Status: interfaces.HumanApprovalStatusPending,
+		})
+
+	state, err := ReconstructCanonicalFactoryWorldState([]interfaces.FactoryEvent{approval, dispatch, structure}, 1)
+	if err != nil {
+		t.Fatalf("ReconstructCanonicalFactoryWorldState: %v", err)
+	}
+	assertPendingHumanApprovalProjection(t, state, sessionID, requestID, dispatchID, workIDs, traceIDs)
+
+	replayed, err := ReconstructCanonicalFactoryWorldState([]interfaces.FactoryEvent{structure, dispatch, approval}, 1)
+	if err != nil {
+		t.Fatalf("replay after reconnect: %v", err)
+	}
+	if !reflect.DeepEqual(state.PendingHumanApprovalsByID, replayed.PendingHumanApprovalsByID) {
+		t.Fatalf("replayed pending approvals = %#v, want stable projection %#v", replayed.PendingHumanApprovalsByID, state.PendingHumanApprovalsByID)
+	}
+}
+
+func assertPendingHumanApprovalProjection(t *testing.T, state interfaces.FactoryWorldState, sessionID, requestID, dispatchID string, workIDs, traceIDs []string) {
+	t.Helper()
+	if len(state.PendingHumanApprovalsByID) != 1 {
+		t.Fatalf("pending approvals = %#v, want one replayed approval", state.PendingHumanApprovalsByID)
+	}
+	pending := state.PendingHumanApprovalsByID["approval-dispatch-approval-1"]
+	if pending.SessionID != sessionID || pending.RequestID != requestID || pending.DispatchID != dispatchID ||
+		pending.WorkstationID != "approval-workstation" || pending.WorkstationName != "Release Approval" ||
+		pending.Status != interfaces.HumanApprovalStatusPending || !reflect.DeepEqual(pending.WorkItemIDs, workIDs) ||
+		!reflect.DeepEqual(pending.TraceIDs, traceIDs) {
+		t.Fatalf("pending approval = %#v, want canonical correlation and topology identity", pending)
+	}
+	if pending.WorkstationDescription == nil || interfaces.ResolveNameValue(*pending.WorkstationDescription, "fr-FR") != "Approuver la version" {
+		t.Fatalf("pending workstation description = %#v, want localized effective-factory description", pending.WorkstationDescription)
+	}
+	if !reflect.DeepEqual(pending.Decisions, []interfaces.HumanApprovalDecision{
+		interfaces.HumanApprovalDecisionApprove,
+		interfaces.HumanApprovalDecisionReject,
+	}) {
+		t.Fatalf("pending decisions = %#v, want APPROVE and REJECT only", pending.Decisions)
+	}
+	if _, ok := state.ActiveDispatches[dispatchID]; !ok {
+		t.Fatalf("active dispatches = %#v, want claimed dispatch retained while approval is pending", state.ActiveDispatches)
 	}
 }
 
@@ -163,7 +255,7 @@ func TestCanonicalDispatchResponseReconstructsCompletionAndReleasesResources(t *
 	if completion.DispatchID != dispatchID || completion.Result.FailureMetadata == nil || completion.Result.FailureMetadata.Type != workerexecution.WorkFailureTypeTimeout {
 		t.Fatalf("completion = %#v", completion)
 	}
-	if len(completion.OutputWorkItems) != 1 || completion.OutputWorkItems[0].PlaceID != "task:failed" || completion.OutputWorkItems[0].Content[0].Type != work.WorkContentPartTypeText {
+	if len(completion.OutputWorkItems) != 1 || completion.OutputWorkItems[0].State != "failed" || completion.OutputWorkItems[0].Content[0].Type != work.WorkContentPartTypeText {
 		t.Fatalf("output work = %#v", completion.OutputWorkItems)
 	}
 	if got := reducer.tokenPlaces[resourceToken]; got != "gpu:available" {
@@ -171,6 +263,82 @@ func TestCanonicalDispatchResponseReconstructsCompletionAndReleasesResources(t *
 	}
 	if _, active := reducer.stateValue.ActiveDispatches[dispatchID]; active {
 		t.Fatal("completed dispatch remains active")
+	}
+}
+
+func TestDispatchInterruptedRearmsNonTerminalInputsAndResources(t *testing.T) {
+	t.Parallel()
+
+	reducer := newFactoryWorldReducer(3)
+	dispatchID := "dispatch-interrupted"
+	live := work.FactoryWorkItem{ID: "work-live", WorkTypeID: "task", State: "processing", TraceID: "trace-live"}
+	fallback := work.FactoryWorkItem{ID: "work-fallback", WorkTypeID: "task", TraceID: "trace-fallback"}
+	terminal := work.FactoryWorkItem{ID: "work-terminal", WorkTypeID: "task", State: "done"}
+	failed := work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", State: "failed"}
+	noPlace := work.FactoryWorkItem{ID: "work-no-place", WorkTypeID: "task"}
+	reducer.stateValue.WorkItemsByID[live.ID] = live
+	reducer.stateValue.WorkItemsByID[fallback.ID] = fallback
+	reducer.stateValue.WorkItemsByID[terminal.ID] = terminal
+	reducer.stateValue.WorkItemsByID[failed.ID] = failed
+	reducer.stateValue.TerminalWorkByID[terminal.ID] = interfaces.FactoryTerminalWork{WorkItem: terminal, Status: "TERMINAL"}
+	reducer.stateValue.FailedWorkItemsByID[failed.ID] = failed
+	reducer.workPlaces[fallback.ID] = "task:ready"
+	reducer.stateValue.ActiveDispatches[dispatchID] = interfaces.FactoryWorldDispatch{
+		DispatchID: dispatchID,
+		Inputs: []interfaces.WorkstationInput{
+			{TokenID: live.ID, PlaceID: "task:processing", WorkItem: &live},
+			{TokenID: fallback.ID, WorkItem: nil},
+			{TokenID: terminal.ID, PlaceID: "task:done", WorkItem: &terminal},
+			{TokenID: failed.ID, PlaceID: "task:failed", WorkItem: &failed},
+			{TokenID: noPlace.ID, WorkItem: &noPlace},
+			{TokenID: "", PlaceID: "task:processing"},
+		},
+		Resources: []interfaces.FactoryResourceUnit{
+			{ResourceID: "gpu", TokenID: "gpu-token", PlaceID: "gpu:held"},
+			{ResourceID: "cpu", TokenID: "cpu-token"},
+			{ResourceID: "ignored", TokenID: ""},
+		},
+	}
+	reason := "daemon restart interrupted process-bound attempt"
+	event := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeDispatchInterrupted, interfaces.FactoryEventContext{
+		DispatchID: &dispatchID,
+		EventTime:  time.Date(2026, time.July, 16, 6, 0, 0, 0, time.UTC),
+		Tick:       3,
+	}, interfaces.DispatchInterruptedEventPayload{Reason: reason})
+
+	if err := reducer.applyDispatchInterruptedEvent(event); err != nil {
+		t.Fatalf("applyDispatchInterruptedEvent: %v", err)
+	}
+	if _, active := reducer.stateValue.ActiveDispatches[dispatchID]; active {
+		t.Fatal("interrupted dispatch remains active")
+	}
+	if got := reducer.tokenPlaces[live.ID]; got != "task:processing" {
+		t.Fatalf("re-armed live Work place = %q, want task:processing", got)
+	}
+	if got := reducer.tokenPlaces[fallback.ID]; got != "task:ready" {
+		t.Fatalf("fallback Work place = %q, want task:ready", got)
+	}
+	if got := reducer.tokenPlaces["gpu-token"]; got != "gpu:held" {
+		t.Fatalf("explicit resource place = %q, want gpu:held", got)
+	}
+	if got := reducer.tokenPlaces["cpu-token"]; got != "cpu:available" {
+		t.Fatalf("fallback resource place = %q, want cpu:available", got)
+	}
+	if _, present := reducer.tokenPlaces[terminal.ID]; present {
+		t.Fatalf("terminal Work was re-armed: %#v", reducer.tokenPlaces)
+	}
+	if _, present := reducer.tokenPlaces[failed.ID]; present {
+		t.Fatalf("failed Work was re-armed: %#v", reducer.tokenPlaces)
+	}
+	if _, present := reducer.tokenPlaces[noPlace.ID]; present {
+		t.Fatalf("Work without a logical place was re-armed: %#v", reducer.tokenPlaces)
+	}
+	if reducer.stateValue.ActiveWorkItemsByID[live.ID].ID != live.ID ||
+		reducer.stateValue.ActiveWorkItemsByID[fallback.ID].ID != fallback.ID {
+		t.Fatalf("active Work after interruption = %#v", reducer.stateValue.ActiveWorkItemsByID)
+	}
+	if got := reducer.stateValue.JavaScriptRuntime.Dispatches[0].Status; got != string(interfaces.FactoryDispatchStatusInterrupted) {
+		t.Fatalf("interrupted dispatch projection status = %q, want %q", got, interfaces.FactoryDispatchStatusInterrupted)
 	}
 }
 
@@ -313,13 +481,13 @@ func buildWorldViewProviderSessions() []interfaces.FactoryWorldProviderSessionRe
 			TransitionID:    "t-review",
 			WorkItemIDs:     []string{"work-active"},
 			ConsumedInputs:  []interfaces.WorkstationInput{{WorkItem: &work.FactoryWorkItem{ID: "work-active", WorkTypeID: "task"}}},
-			ProviderSession: workerexecution.ProviderSessionMetadata{ID: "provider-session"},
+			ProviderSession: providers.SessionMetadata{ID: "provider-session"},
 		},
 		{
 			DispatchID:      "dispatch-provider-system",
 			TransitionID:    interfaces.SystemTimeExpiryTransitionID,
 			WorkItemIDs:     []string{"time-work"},
-			ProviderSession: workerexecution.ProviderSessionMetadata{ID: "provider-system"},
+			ProviderSession: providers.SessionMetadata{ID: "provider-system"},
 		},
 	}
 }

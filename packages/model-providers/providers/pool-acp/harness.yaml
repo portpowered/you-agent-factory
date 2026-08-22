@@ -1,0 +1,9 @@
+implementation:
+  kind: acp_agent
+  profile: pool-acp
+launch:
+  posture: installed_executable
+  transport: stdio
+  command: pool
+  arguments:
+    - acp

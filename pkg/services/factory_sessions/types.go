@@ -37,9 +37,25 @@ type ResponseEventIDGenerator func() string
 // Factory Session. Process hosts retain their private lifecycle handles, while
 // application services operate through this bounded domain view.
 type LiveRuntime struct {
-	Factory        factory.Service
-	BackendScopeID string
-	RuntimeConfig  interfaces.LoadedFactorySource
+	Factory factory.Service
+	// Binding is the opaque activation capability published by Factory
+	// Runtime. Factory remains populated as a compatibility fallback while
+	// callers migrate off hosted runtime products.
+	Binding factory.RuntimeBinding
+	// WorkAndEventIngress is the migration-only Work-submission and event-
+	// subscription boundary published alongside the opaque runtime capability.
+	// Factory Sessions resolves it once when it binds Factory so peers read a
+	// declared capability instead of recovering one from the runtime value.
+	// It retires together with factory.APIFactory once Work admission owns
+	// submission and Recordings owns canonical event reads.
+	WorkAndEventIngress   factory.APIFactory
+	Clock                 factory.Clock
+	BackendScopeID        string
+	RuntimeConfig         interfaces.LoadedFactorySource
+	LiveChangeEvents      LiveChangeEventLog
+	LiveChangeApplication LiveChangeApplication
+	LiveChangeAdmission   LiveChangeAdmission
+	LiveChangeLogger      *zap.Logger
 }
 
 type compatibilityError string
@@ -125,6 +141,7 @@ type RuntimeProjection struct {
 	Lifecycle              RuntimeLifecycle
 	LifecycleControlStatus *string
 	OrchestratorKind       string
+	PendingHumanApprovals  []interfaces.FactoryWorldHumanApproval
 	Petri                  *PetriRuntimeProjection
 	PolicyHash             *string
 	Progress               RuntimeProgress
@@ -323,8 +340,8 @@ type SyncPreflightResult struct {
 // --- merged from execution_owned_helpers.go ---
 
 // Root-owned lifecycle helpers are published as function values so the Sessions
-// service root keeps exactly the Service/ExecutionService InterfaceType surface
-// required by pkg-structure (no package-level FuncDecl exports).
+// service root keeps exactly the Service InterfaceType surface required by
+// pkg-structure (no package-level FuncDecl exports).
 var (
 	IsTerminalLifecycleStatus              = isTerminalLifecycleStatus
 	AllowsRetryDispatchOnTerminal          = allowsRetryDispatchOnTerminal
@@ -340,7 +357,6 @@ var (
 	MaterializeEventReadStream             = materializeEventReadStream
 	NewValidationError                     = newValidationError
 )
-
 
 // IsTerminalLifecycleStatus reports whether status is terminal and therefore
 // immutable except for explicitly allowed inspection or retry behaviors.
@@ -592,4 +608,70 @@ func newValidationError(field, message string) *ValidationError {
 		Field:   field,
 		Message: message,
 	}
+}
+
+func cloneDetachedStartRequest(request SessionStartRequest) SessionStartRequest {
+	request.Definition = cloneDefinitionSelection(request.Definition)
+	request.Source = cloneSource(request.Source)
+	request.Input = clonePreparedInput(request.Input)
+	request.Args = cloneAnyMap(request.Args)
+	request.Policy = cloneAnyMap(request.Policy)
+	request.Orchestrator = cloneOrchestratorOverride(request.Orchestrator)
+	request.RuntimeOptions = cloneRuntimeOptions(request.RuntimeOptions)
+	request.Target = cloneTargetRef(request.Target)
+	return request
+}
+
+func cloneDefinitionSelection(selection SessionDefinitionSelection) SessionDefinitionSelection {
+	selection.SourceRef = strings.TrimSpace(selection.SourceRef)
+	selection.SourceHash = strings.TrimSpace(selection.SourceHash)
+	if selection.DefinitionVersion != nil {
+		version := *selection.DefinitionVersion
+		selection.DefinitionVersion = &version
+	}
+	return selection
+}
+
+func cloneSource(source Source) Source {
+	cloned := source
+	cloned.FactoryInline = append([]byte(nil), source.FactoryInline...)
+	if source.InlineWorkflow != nil {
+		inline := *source.InlineWorkflow
+		inline.ArgsSchema = append([]byte(nil), source.InlineWorkflow.ArgsSchema...)
+		inline.DefaultPolicy = append([]byte(nil), source.InlineWorkflow.DefaultPolicy...)
+		inline.Metadata = cloneStringMap(source.InlineWorkflow.Metadata)
+		if len(source.InlineWorkflow.Agents) > 0 {
+			inline.Agents = make(map[string]interfaces.FactoryOrchestratorJavaScriptAgent, len(source.InlineWorkflow.Agents))
+			for name, agent := range source.InlineWorkflow.Agents {
+				inline.Agents[name] = agent
+			}
+		}
+		cloned.InlineWorkflow = &inline
+	}
+	return cloned
+}
+
+func cloneTargetRef(target *TargetRef) *TargetRef {
+	if target == nil {
+		return nil
+	}
+	cloned := *target
+	return &cloned
+}
+
+func cloneOrchestratorOverride(override *OrchestratorOverride) *OrchestratorOverride {
+	if override == nil {
+		return nil
+	}
+	cloned := *override
+	cloned.Raw = append([]byte(nil), override.Raw...)
+	return &cloned
+}
+
+func cloneRuntimeOptions(options *RuntimeOptions) *RuntimeOptions {
+	if options == nil {
+		return nil
+	}
+	cloned := *options
+	return &cloned
 }

@@ -1,4 +1,9 @@
 import {
+  type FactoryGraphNodeDimensions,
+  factoryGraphNodeFamilyRole,
+  resolveFactoryGraphNodeDimensions,
+} from "@you-agent-factory/factory-graph";
+import {
   buildLayeredGraphLayout,
   type LayeredGraphLayoutNode,
 } from "../../../flowchart/lib/layered-layout";
@@ -10,16 +15,14 @@ import type {
 /** Node bounds used by the factory graph editor layout and viewport placement resolver. */
 export const FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND: Record<
   FactoryGraphNodeKind,
-  { height: number; width: number }
+  FactoryGraphNodeDimensions
 > = {
-  doc: { height: 86, width: 168 },
-  resource: { height: 86, width: 168 },
-  // Keep shared factory/trace/editor layout geometry aligned with the
-  // current-activity graph's compact worker modeling.
-  worker: { height: 58, width: 156 },
-  "work-state": { height: 86, width: 164 },
-  "work-type": { height: 58, width: 156 },
-  workstation: { height: 196, width: 156 },
+  doc: factoryGraphNodeFamilyRole("doc").defaultDimensions,
+  resource: factoryGraphNodeFamilyRole("resource").defaultDimensions,
+  worker: factoryGraphNodeFamilyRole("worker").defaultDimensions,
+  "work-state": factoryGraphNodeFamilyRole("work-state").defaultDimensions,
+  "work-type": factoryGraphNodeFamilyRole("work-type").defaultDimensions,
+  workstation: factoryGraphNodeFamilyRole("workstation").defaultDimensions,
 };
 
 export interface FactoryGraphEditorLayoutNode
@@ -45,7 +48,9 @@ export async function buildFactoryGraphEditorLayout(
       toNodeId: edge.targetId,
     })),
     nodes: topology.nodes.map((node) => ({
-      ...FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND[node.kind],
+      ...resolveFactoryGraphNodeDimensions(node.kind, {
+        content: [node.label],
+      }).resolvedDimensions,
       id: node.id,
       nodeId: node.id,
       nodeKind: node.kind,

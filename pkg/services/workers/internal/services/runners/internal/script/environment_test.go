@@ -34,6 +34,21 @@ func TestMergedEnvironmentDropsUndeclaredHostValuesWhenFactoryDeclaresBoundedEnv
 	}
 }
 
+func TestMergedEnvironmentHandlesEmptyAndMalformedInheritedEntries(t *testing.T) {
+	if got := filterInheritedExecutionEnvironment(nil); got != nil {
+		t.Fatalf("filterInheritedExecutionEnvironment(nil) = %#v, want nil", got)
+	}
+
+	got := filterInheritedExecutionEnvironment([]string{
+		"MALFORMED",
+		"=missing-name",
+		"PATH=/bin",
+	})
+	if len(got) != 1 || got[0] != "PATH=/bin" {
+		t.Fatalf("filtered environment = %#v, want only inherited PATH", got)
+	}
+}
+
 func containsEnvironment(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {

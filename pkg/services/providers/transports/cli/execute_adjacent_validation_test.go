@@ -10,7 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerscli "github.com/portpowered/infinite-you/pkg/services/providers/transports/cli"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 )
 
 type manifestSourceStore func(string) ([]byte, error)
@@ -142,7 +142,7 @@ func TestProvidersCLIAdapter_ListAndShowDoNotInvokeExecute(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Show() = %v", err)
 	}
-	if root.executeCalls != 0 {
-		t.Fatalf("Execute calls = %d, want 0 for catalog-only adapter paths", root.executeCalls)
+	if _, _, executeCalls := root.callCounts(); executeCalls != 0 {
+		t.Fatalf("Execute calls = %d, want 0 for catalog-only adapter paths", executeCalls)
 	}
 }

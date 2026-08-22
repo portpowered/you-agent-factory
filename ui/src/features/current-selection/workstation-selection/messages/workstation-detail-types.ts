@@ -144,6 +144,11 @@ export interface WorkstationDetailMessages {
   elapsedLabel: string;
   totalRuntimeLabel: string;
   expandAction: string;
+  historyProgressLabel: (
+    shownCount: number,
+    totalCount: number,
+    remainingCount: number,
+  ) => string;
   historyRequestCountLabel: (count: number) => string;
   historyRunCountLabel: (count: number) => string;
   historicalRequestsLabel: string;
@@ -162,6 +167,7 @@ export interface WorkstationDetailMessages {
   providerSummary: (provider: string, model?: string | null) => string;
   requestDetailsUnavailable: (dispatchId: string) => string;
   requestHistoryHeading: string;
+  showMoreHistoryAction: (remainingCount: number) => string;
   requestSelectedAction: string;
   requestStatusStartedAgo: (elapsed: string) => string;
   runnerFieldHelp: (runnerName: string, sourceLabel: string) => string;

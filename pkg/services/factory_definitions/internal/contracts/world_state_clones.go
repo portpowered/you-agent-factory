@@ -1,6 +1,7 @@
 package factorycontracts
 
 import (
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -10,24 +11,31 @@ import (
 // selected-tick dispatch completion record.
 func CloneFactoryWorldDispatchCompletion(completion FactoryWorldDispatchCompletion) FactoryWorldDispatchCompletion {
 	clone := completion
-	clone.Result.FailureMetadata = workerexecution.CloneWorkFailureMetadata(completion.Result.FailureMetadata)
+	clone.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(completion.ExpectedArtifactContext)
+	clone.Result = workerexecution.CloneWorkstationResult(completion.Result)
 	clone.WorkItemIDs = cloneStringSlice(completion.WorkItemIDs)
 	clone.ConsumedInputs = cloneWorkstationInputs(completion.ConsumedInputs)
 	clone.InputWorkItems = cloneFactoryWorkItems(completion.InputWorkItems)
 	clone.OutputWorkItems = cloneFactoryWorkItems(completion.OutputWorkItems)
 	clone.PreviousChainingTraceIDs = cloneStringSlice(completion.PreviousChainingTraceIDs)
 	clone.TraceIDs = cloneStringSlice(completion.TraceIDs)
-	clone.ProviderSession = workerexecution.CloneProviderSessionMetadata(completion.ProviderSession)
+	clone.ProviderSession = (completion.ProviderSession).Clone()
 	clone.Diagnostics = workerdiagnostics.CloneSafeWorkDiagnostics(completion.Diagnostics)
 	clone.TerminalWork = cloneFactoryTerminalWork(completion.TerminalWork)
 	return clone
+}
+
+func cloneExpectedArtifactTemplateContext(
+	context *work.ExpectedArtifactTemplateContext,
+) *work.ExpectedArtifactTemplateContext {
+	return context.Clone()
 }
 
 // CloneFactoryWorldProviderSessionRecord returns a detached copy of one
 // canonical selected-tick provider-session record.
 func CloneFactoryWorldProviderSessionRecord(record FactoryWorldProviderSessionRecord) FactoryWorldProviderSessionRecord {
 	clone := record
-	clone.ProviderSession = *workerexecution.CloneProviderSessionMetadata(&record.ProviderSession)
+	clone.ProviderSession = *(&record.ProviderSession).Clone()
 	clone.Diagnostics = workerdiagnostics.CloneSafeWorkDiagnostics(record.Diagnostics)
 	clone.WorkItemIDs = cloneStringSlice(record.WorkItemIDs)
 	clone.WorkItems = cloneFactoryWorldWorkItemRefs(record.WorkItems)
@@ -70,7 +78,7 @@ func CloneWorkstationInputs(inputs []WorkstationInput) []WorkstationInput {
 func cloneFactoryWorldInferenceAttempt(attempt FactoryWorldInferenceAttempt) FactoryWorldInferenceAttempt {
 	clone := attempt
 	clone.ExitCode = cloneIntPtr(attempt.ExitCode)
-	clone.ProviderSession = workerexecution.CloneProviderSessionMetadata(attempt.ProviderSession)
+	clone.ProviderSession = (attempt.ProviderSession).Clone()
 	clone.Diagnostics = workerdiagnostics.CloneSafeWorkDiagnostics(attempt.Diagnostics)
 	return clone
 }
@@ -81,6 +89,8 @@ func cloneFactoryTerminalWork(terminalWork *FactoryTerminalWork) *FactoryTermina
 	}
 	clone := *terminalWork
 	clone.WorkItem.PreviousChainingTraceIDs = cloneStringSlice(terminalWork.WorkItem.PreviousChainingTraceIDs)
+	clone.WorkItem.StructuredResult = jsonvalue.Clone(terminalWork.WorkItem.StructuredResult)
+	clone.WorkItem.StructuredResultPresent = jsonvalue.Present(terminalWork.WorkItem.StructuredResult, terminalWork.WorkItem.StructuredResultPresent)
 	clone.WorkItem.Tags = cloneStringMap(terminalWork.WorkItem.Tags)
 	return &clone
 }
@@ -93,6 +103,8 @@ func cloneFactoryWorkItems(items []work.FactoryWorkItem) []work.FactoryWorkItem 
 	for i, item := range items {
 		clone[i] = item
 		clone[i].PreviousChainingTraceIDs = cloneStringSlice(item.PreviousChainingTraceIDs)
+		clone[i].StructuredResult = jsonvalue.Clone(item.StructuredResult)
+		clone[i].StructuredResultPresent = jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent)
 		clone[i].Tags = cloneStringMap(item.Tags)
 	}
 	return clone
@@ -108,6 +120,8 @@ func cloneWorkstationInputs(inputs []WorkstationInput) []WorkstationInput {
 		if input.WorkItem != nil {
 			item := *input.WorkItem
 			item.PreviousChainingTraceIDs = cloneStringSlice(item.PreviousChainingTraceIDs)
+			item.StructuredResult = jsonvalue.Clone(item.StructuredResult)
+			item.StructuredResultPresent = jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent)
 			item.Tags = cloneStringMap(item.Tags)
 			clone[i].WorkItem = &item
 		}

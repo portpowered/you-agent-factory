@@ -2,10 +2,10 @@ package workers
 
 import (
 	"encoding/json"
-	"strings"
 	"time"
 
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -21,10 +21,26 @@ type WorkerState struct {
 
 // InferenceResponse is returned by a provider after model inference.
 type InferenceResponse struct {
-	Content         string                   `json:"content"`
+	Content        string      `json:"content"`
+	Outcome        WorkOutcome `json:"outcome,omitempty"`
+	Feedback       string      `json:"feedback,omitempty"`
+	Classification string      `json:"classification,omitempty"`
+	// RecordedOutputWork carries work a decision-envelope reviewer recorded on
+	// its envelope. Runtime validates and materializes these items, so a runner
+	// that parses an envelope must surface them instead of dropping them.
+	RecordedOutputWork []work.FactoryWorkItem `json:"recorded_output_work,omitempty"`
+	// ProviderSession is a retained compatibility projection for legacy
+	// Infer-shaped fakes. Live execution translates it to Continuation at the
+	// Providers boundary; Workers does not inspect or retain session state.
 	ProviderSession *ProviderSessionMetadata `json:"provider_session,omitempty"`
+	Continuation    *ProviderContinuationRef `json:"continuation,omitempty"`
 	Diagnostics     *WorkDiagnostics         `json:"diagnostics,omitempty"`
 }
+
+// ProviderSessionMetadata is the retained Workers compatibility name for the
+// Providers-owned detached session identity. It contains identity only; the
+// Provider Sessions service owns transcript and storage state.
+type ProviderSessionMetadata = providers.SessionMetadata
 
 // InferenceEventKind identifies which provider-boundary fact was observed.
 // Factory owns the corresponding canonical event vocabulary and envelope.
@@ -79,6 +95,7 @@ type InferenceResponseEventPayload struct {
 	InferenceRequestID string                          `json:"inferenceRequestId"`
 	Outcome            InferenceOutcome                `json:"outcome"`
 	ProviderSession    *ProviderSessionMetadata        `json:"providerSession,omitempty"`
+	Continuation       *ProviderContinuationRef        `json:"continuation,omitempty"`
 	Response           *string                         `json:"response,omitempty"`
 }
 
@@ -157,6 +174,7 @@ type ModelResponseEventPayload struct {
 	OutputContent      *[]work.WorkContentPart          `json:"outputContent,omitempty"`
 	OutputPreview      *string                          `json:"outputPreview,omitempty"`
 	ProviderSession    *ProviderSessionMetadata         `json:"providerSession,omitempty"`
+	Continuation       *ProviderContinuationRef         `json:"continuation,omitempty"`
 	ProviderLocality   string                           `json:"providerLocality"`
 	ResourceAcquired   *bool                            `json:"resourceAcquired,omitempty"`
 	ResourceWaitMillis *int64                           `json:"resourceWaitMillis,omitempty"`
@@ -171,6 +189,7 @@ type AgentRunResponseEvent struct {
 	ID         string
 	DispatchID string
 	EventTime  time.Time
+	Tick       int
 	Payload    AgentRunResponseEventPayload
 }
 
@@ -257,22 +276,52 @@ type ScriptResponseEventPayload struct {
 // contract consumed by Factory event reducers. FactoryEvent context remains
 // authoritative for dispatch identity and ordering.
 type DispatchResponseEventPayload struct {
-	CompletionID                *string                      `json:"completionId,omitempty"`
-	CurrentChainingTraceID      *string                      `json:"currentChainingTraceId,omitempty"`
-	DurationMillis              *int64                       `json:"durationMillis,omitempty"`
-	Error                       *string                      `json:"error,omitempty"`
-	FailureDetail               *FailureDetail               `json:"failureDetail,omitempty"`
-	Feedback                    *string                      `json:"feedback,omitempty"`
-	Metadata                    map[string]string            `json:"metadata,omitempty"`
-	Metrics                     *WorkMetricsEventPayload     `json:"metrics,omitempty"`
-	Outcome                     WorkOutcome                  `json:"outcome"`
-	Output                      *string                      `json:"output,omitempty"`
-	OutputResources             *[]DispatchResourceEventRef  `json:"outputResources,omitempty"`
-	OutputWork                  *[]work.WorkRequestEventWork `json:"outputWork,omitempty"`
-	PreviousChainingTraceIDs    *[]string                    `json:"previousChainingTraceIds,omitempty"`
-	ProviderFailure             *WorkFailureMetadata         `json:"providerFailure,omitempty"`
-	SelectedClassificationLabel *string                      `json:"selectedClassificationLabel,omitempty"`
-	TransitionID                string                       `json:"transitionId"`
+	CompletionID                *string                       `json:"completionId,omitempty"`
+	CurrentChainingTraceID      *string                       `json:"currentChainingTraceId,omitempty"`
+	DurationMillis              *int64                        `json:"durationMillis,omitempty"`
+	Error                       *string                       `json:"error,omitempty"`
+	ArtifactVerification        *ExpectedArtifactVerification `json:"artifactVerification,omitempty"`
+	FailureDetail               *FailureDetail                `json:"failureDetail,omitempty"`
+	Feedback                    *string                       `json:"feedback,omitempty"`
+	Metadata                    map[string]string             `json:"metadata,omitempty"`
+	Metrics                     *WorkMetricsEventPayload      `json:"metrics,omitempty"`
+	Outcome                     WorkOutcome                   `json:"outcome"`
+	Output                      *string                       `json:"output,omitempty"`
+	OutputResources             *[]DispatchResourceEventRef   `json:"outputResources,omitempty"`
+	OutputWork                  *[]work.WorkRequestEventWork  `json:"outputWork,omitempty"`
+	StructuredResult            any                           `json:"structuredResult,omitempty"`
+	PreviousChainingTraceIDs    *[]string                     `json:"previousChainingTraceIds,omitempty"`
+	ProviderFailure             *WorkFailureMetadata          `json:"providerFailure,omitempty"`
+	SelectedClassificationLabel *string                       `json:"selectedClassificationLabel,omitempty"`
+	TransitionID                string                        `json:"transitionId"`
+	Usage                       *DispatchUsageEventPayload    `json:"usage,omitempty"`
+	// StructuredResultPresent distinguishes a present JSON null from an absent
+	// result without changing the public event shape.
+	StructuredResultPresent bool `json:"-"`
+}
+
+// MarshalJSON preserves an explicitly present structuredResult when its JSON
+// value is null while keeping the field omitted for unstructured dispatches.
+func (value DispatchResponseEventPayload) MarshalJSON() ([]byte, error) {
+	type alias DispatchResponseEventPayload
+	return jsonvalue.MarshalOptionalField(alias(value), value.StructuredResult, value.StructuredResultPresent, "structuredResult")
+}
+
+// UnmarshalJSON restores structured-result presence for event replay.
+func (value *DispatchResponseEventPayload) UnmarshalJSON(data []byte) error {
+	type alias DispatchResponseEventPayload
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	structured, present, err := jsonvalue.UnmarshalOptionalField(data, "structuredResult")
+	if err != nil {
+		return err
+	}
+	*value = DispatchResponseEventPayload(decoded)
+	value.StructuredResult = structured
+	value.StructuredResultPresent = present
+	return nil
 }
 
 // DispatchResourceEventRef preserves the public resource facts emitted with a
@@ -280,6 +329,18 @@ type DispatchResponseEventPayload struct {
 type DispatchResourceEventRef struct {
 	Capacity int    `json:"capacity"`
 	Name     string `json:"name"`
+}
+
+// DispatchUsageEventPayload carries optional, replay-safe usage facts on a
+// completed Petri dispatch. Pointer fields preserve the distinction between a
+// missing provider fact and a provider-reported zero.
+type DispatchUsageEventPayload struct {
+	CostUSD        *float64 `json:"costUsd,omitempty"`
+	DurationMillis *int64   `json:"durationMillis,omitempty"`
+	InputTokens    *int64   `json:"inputTokens,omitempty"`
+	OutputTokens   *int64   `json:"outputTokens,omitempty"`
+	RetryCount     *int32   `json:"retryCount,omitempty"`
+	TotalTokens    *int64   `json:"totalTokens,omitempty"`
 }
 
 // WorkMetricsEventPayload preserves the millisecond-based public event shape
@@ -293,56 +354,120 @@ type WorkMetricsEventPayload struct {
 // WorkstationResult describes the business result of one workstation execution
 // carried by Factory event payloads and world-state projections.
 type WorkstationResult struct {
-	Outcome                     string               `json:"outcome"`
-	Output                      string               `json:"output,omitempty"`
-	Error                       string               `json:"error,omitempty"`
-	Feedback                    string               `json:"feedback,omitempty"`
-	SelectedClassificationLabel string               `json:"selected_classification_label,omitempty"`
-	FailureDetail               *FailureDetail       `json:"failureDetail,omitempty"`
-	FailureMetadata             *WorkFailureMetadata `json:"failure_metadata,omitempty"`
+	Outcome                     string                        `json:"outcome"`
+	Output                      string                        `json:"output,omitempty"`
+	Error                       string                        `json:"error,omitempty"`
+	Feedback                    string                        `json:"feedback,omitempty"`
+	SelectedClassificationLabel string                        `json:"selected_classification_label,omitempty"`
+	ArtifactVerification        *ExpectedArtifactVerification `json:"artifact_verification,omitempty"`
+	FailureDetail               *FailureDetail                `json:"failureDetail,omitempty"`
+	FailureMetadata             *WorkFailureMetadata          `json:"failure_metadata,omitempty"`
+	StructuredResult            any                           `json:"structuredResult,omitempty"`
+	// StructuredResultPresent distinguishes a present JSON null from an absent
+	// result in durable dispatch completion projections.
+	StructuredResultPresent bool `json:"-"`
+}
+
+// MarshalJSON preserves an explicitly present structuredResult when its JSON
+// value is null while keeping the field omitted for unstructured results.
+func (value WorkstationResult) MarshalJSON() ([]byte, error) {
+	type alias WorkstationResult
+	return jsonvalue.MarshalOptionalField(alias(value), value.StructuredResult, value.StructuredResultPresent, "structuredResult")
+}
+
+// UnmarshalJSON restores structured-result presence from durable projections.
+func (value *WorkstationResult) UnmarshalJSON(data []byte) error {
+	type alias WorkstationResult
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	structured, present, err := jsonvalue.UnmarshalOptionalField(data, "structuredResult")
+	if err != nil {
+		return err
+	}
+	*value = WorkstationResult(decoded)
+	value.StructuredResult = structured
+	value.StructuredResultPresent = present
+	return nil
 }
 
 func CloneWorkstationResult(result WorkstationResult) WorkstationResult {
 	clone := result
+	clone.ArtifactVerification = result.ArtifactVerification.Clone()
 	clone.FailureDetail = CloneFailureDetail(result.FailureDetail)
 	clone.FailureMetadata = CloneWorkFailureMetadata(result.FailureMetadata)
+	clone.StructuredResult = jsonvalue.Clone(result.StructuredResult)
+	clone.StructuredResultPresent = jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent)
 	return clone
+}
+
+// CanonicalProviderSessionProvider preserves the legacy Workers helper while
+// the compatibility surface is retired by the successor deletion lane.
+func CanonicalProviderSessionProvider(provider string) string {
+	return providers.ID(provider).CanonicalSessionProvider()
+}
+
+// CloneProviderSessionMetadata returns a detached compatibility projection.
+func CloneProviderSessionMetadata(session *ProviderSessionMetadata) *ProviderSessionMetadata {
+	return (session).Clone()
 }
 
 // WorkResult is returned by a worker after processing.
 // The Outcome determines which arc set is used to route the resulting tokens.
 type WorkResult struct {
-	DispatchID                  string                   `json:"dispatch_id"`
-	TransitionID                string                   `json:"transition_id"`
-	Outcome                     WorkOutcome              `json:"outcome"`
-	Output                      string                   `json:"output,omitempty"`
-	RecordedOutputWork          []work.FactoryWorkItem   `json:"recorded_output_work,omitempty"`
-	Error                       string                   `json:"error,omitempty"`
-	Feedback                    string                   `json:"feedback,omitempty"`
-	SelectedClassificationLabel string                   `json:"selected_classification_label,omitempty"`
-	FailureMetadata             *WorkFailureMetadata     `json:"failure_metadata,omitempty"`
-	ProviderSession             *ProviderSessionMetadata `json:"provider_session,omitempty"`
-	Diagnostics                 *WorkDiagnostics         `json:"diagnostics,omitempty"`
-	Metrics                     WorkMetrics              `json:"metrics"`
+	DispatchID                  string                        `json:"dispatch_id"`
+	TransitionID                string                        `json:"transition_id"`
+	Outcome                     WorkOutcome                   `json:"outcome"`
+	Output                      string                        `json:"output,omitempty"`
+	StructuredResult            any                           `json:"structuredResult,omitempty"`
+	RecordedOutputWork          []work.FactoryWorkItem        `json:"recorded_output_work,omitempty"`
+	Error                       string                        `json:"error,omitempty"`
+	FailureDetail               *FailureDetail                `json:"failureDetail,omitempty"`
+	Feedback                    string                        `json:"feedback,omitempty"`
+	SelectedClassificationLabel string                        `json:"selected_classification_label,omitempty"`
+	ArtifactVerification        *ExpectedArtifactVerification `json:"artifact_verification,omitempty"`
+	FailureMetadata             *WorkFailureMetadata          `json:"failure_metadata,omitempty"`
+	ProviderSession             *ProviderSessionMetadata      `json:"provider_session,omitempty"`
+	Continuation                *ProviderContinuationRef      `json:"continuation,omitempty"`
+	// ProviderFailureKind and ProviderContinuation* retain Providers-owned
+	// classifications across the in-process Workers result boundary. They are
+	// deliberately excluded from event serialization: Factory Event contracts
+	// keep their existing normalized Worker failure vocabulary, while a Worker
+	// Session can safely expose the classification for its exact resume result.
+	ProviderFailureKind             providers.ExecuteFailureKind      `json:"-"`
+	ProviderContinuationFailureKind providers.ContinuationFailureKind `json:"-"`
+	ProviderContinuationOutcome     providers.ContinuationOutcome     `json:"-"`
+	Diagnostics                     *WorkDiagnostics                  `json:"diagnostics,omitempty"`
+	Metrics                         WorkMetrics                       `json:"metrics"`
+	// StructuredResultPresent distinguishes a present JSON null from an absent
+	// result at transient and checkpoint boundaries.
+	StructuredResultPresent bool `json:"-"`
 }
 
-// ProviderSessionMetadata carries a stable provider rollout/session identity.
-type ProviderSessionMetadata = providersessions.Metadata
+// MarshalJSON preserves an explicitly present structuredResult when its JSON
+// value is null while keeping the field omitted for unstructured results.
+func (value WorkResult) MarshalJSON() ([]byte, error) {
+	type alias WorkResult
+	return jsonvalue.MarshalOptionalField(alias(value), value.StructuredResult, value.StructuredResultPresent, "structuredResult")
+}
 
-// CanonicalProviderSessionProvider maps provider-session identities onto the
-// stable backend-facing names used for loading, events, and persisted
-// diagnostics. Cursor keeps the CLI command name `agent` but stores `cursor`
-// as the provider-session contract.
-func CanonicalProviderSessionProvider(provider string) string {
-	trimmed := strings.TrimSpace(provider)
-	switch trimmed {
-	case "", "cursor":
-		return trimmed
-	case "agent", "cursor-agent", "cursor-cli":
-		return "cursor"
-	default:
-		return trimmed
+// UnmarshalJSON restores structured-result presence from checkpoints or other
+// persisted execution snapshots.
+func (value *WorkResult) UnmarshalJSON(data []byte) error {
+	type alias WorkResult
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
 	}
+	structured, present, err := jsonvalue.UnmarshalOptionalField(data, "structuredResult")
+	if err != nil {
+		return err
+	}
+	*value = WorkResult(decoded)
+	value.StructuredResult = structured
+	value.StructuredResultPresent = present
+	return nil
 }
 
 // WorkOutcome distinguishes the result routing behavior for worker output.
@@ -394,10 +519,32 @@ type ProviderDiagnostic struct {
 // Provider response metadata keys are shared across provider normalization and
 // runtime metrics so core factory packages do not depend on provider adapters.
 const (
-	ProviderResponseMetadataDurationMS    = "duration_ms"
-	ProviderResponseMetadataDurationAPIMS = "duration_api_ms"
-	ProviderResponseMetadataInputTokens   = "input_tokens"
-	ProviderResponseMetadataOutputTokens  = "output_tokens"
+	ProviderResponseMetadataDurationMS            = "duration_ms"
+	ProviderResponseMetadataDurationAPIMS         = "duration_api_ms"
+	ProviderResponseMetadataInputTokens           = "input_tokens"
+	ProviderResponseMetadataOutputTokens          = "output_tokens"
+	ProviderResponseMetadataCachedInputTokens     = "cached_input_tokens"
+	ProviderResponseMetadataReasoningOutputTokens = "reasoning_output_tokens"
+	// ProviderResponseMetadataFailure* are bounded, closed-vocabulary failure
+	// facts. They are safe to carry across the worker and terminal-event
+	// boundaries; raw provider errors and rollout payloads are not.
+	ProviderResponseMetadataFailureClassification           = "failure_classification"
+	ProviderResponseMetadataFailureFamily                   = "failure_family"
+	ProviderResponseMetadataFailureOperation                = "failure_operation"
+	ProviderResponseMetadataFailureStage                    = "failure_stage"
+	ProviderResponseMetadataFailureType                     = "failure_type"
+	ProviderResponseMetadataCompletionEvidence              = "completion_evidence"
+	ProviderResponseMetadataInspectionLimitCategory         = "inspection_limit_category"
+	ProviderResponseMetadataInspectionLimitConfigured       = "inspection_limit_configured"
+	ProviderResponseMetadataInspectionLimitObserved         = "inspection_limit_observed"
+	ProviderResponseMetadataInspectionLimitLine             = "inspection_limit_line"
+	ProviderResponseMetadataInspectionSourceBytes           = "inspection_source_bytes"
+	ProviderResponseMetadataInspectionLineCount             = "inspection_line_count"
+	ProviderResponseMetadataInspectionRecordCount           = "inspection_record_count"
+	ProviderResponseMetadataInspectionRecordsSkipped        = "inspection_records_skipped"
+	ProviderResponseMetadataInspectionTranscriptTruncated   = "inspection_transcript_truncated"
+	ProviderResponseMetadataInspectionDiagnosticsTruncated  = "inspection_diagnostics_truncated"
+	ProviderResponseMetadataInspectionRetainedTextTruncated = "inspection_retained_text_truncated"
 )
 
 // InvocationDiagnostic records replay-safe invocation metadata derived from
@@ -451,16 +598,58 @@ const (
 type WorkFailureType string
 
 const (
-	WorkFailureTypeAuthFailure         WorkFailureType = "auth_failure"
-	WorkFailureTypePermanentBadRequest WorkFailureType = "permanent_bad_request"
-	WorkFailureTypeThrottled           WorkFailureType = "throttled"
-	WorkFailureTypeInternalServerError WorkFailureType = "internal_server_error"
-	WorkFailureTypeTimeout             WorkFailureType = "timeout"
-	WorkFailureTypeUnknown             WorkFailureType = "unknown"
-	WorkFailureTypeMisconfigured       WorkFailureType = "misconfigured"
-	WorkFailureTypeCommandLineTooLong  WorkFailureType = "command_line_too_long"
-	WorkFailureTypeMissingExecutable   WorkFailureType = "missing_executable"
+	WorkFailureTypeAuthFailure                     WorkFailureType = "auth_failure"
+	WorkFailureTypePermanentBadRequest             WorkFailureType = "permanent_bad_request"
+	WorkFailureTypeThrottled                       WorkFailureType = "throttled"
+	WorkFailureTypeInternalServerError             WorkFailureType = "internal_server_error"
+	WorkFailureTypeTimeout                         WorkFailureType = "timeout"
+	WorkFailureTypeUnknown                         WorkFailureType = "unknown"
+	WorkFailureTypeMisconfigured                   WorkFailureType = "misconfigured"
+	WorkFailureTypeCommandLineTooLong              WorkFailureType = "command_line_too_long"
+	WorkFailureTypeMissingExecutable               WorkFailureType = "missing_executable"
+	WorkFailureTypeStructuredOutputSchemaViolation WorkFailureType = "structured_output_schema_violation"
+	// WorkFailureTypeExpectedArtifactsUnsatisfied is a terminal, deterministic
+	// failure emitted when a successful worker did not produce its declared
+	// workspace files.
+	WorkFailureTypeExpectedArtifactsUnsatisfied WorkFailureType = "EXPECTED_ARTIFACTS_UNSATISFIED"
 )
+
+// ExpectedArtifactVerificationReason identifies why one expected artifact
+// declaration was not satisfied. The values are deliberately small and stable
+// because they cross the canonical Factory event boundary.
+type ExpectedArtifactVerificationReason string
+
+const (
+	ExpectedArtifactVerificationReasonMissing ExpectedArtifactVerificationReason = "MISSING"
+	ExpectedArtifactVerificationReasonEmpty   ExpectedArtifactVerificationReason = "EMPTY"
+)
+
+// ExpectedArtifactVerificationEntry is a safe, workspace-relative diagnostic
+// for one unmet expected artifact declaration. Pattern never contains the
+// absolute dispatch workspace.
+type ExpectedArtifactVerificationEntry struct {
+	DeclarationIndex int                                `json:"declarationIndex,omitempty"`
+	Name             string                             `json:"name"`
+	Pattern          string                             `json:"pattern"`
+	Reason           ExpectedArtifactVerificationReason `json:"reason"`
+}
+
+// ExpectedArtifactVerification is the durable terminal failure summary for
+// expected artifact enforcement.
+type ExpectedArtifactVerification struct {
+	Code    WorkFailureType                     `json:"code"`
+	Entries []ExpectedArtifactVerificationEntry `json:"entries"`
+}
+
+// Clone returns a detached verification summary.
+func (verification *ExpectedArtifactVerification) Clone() *ExpectedArtifactVerification {
+	if verification == nil {
+		return nil
+	}
+	clone := *verification
+	clone.Entries = append([]ExpectedArtifactVerificationEntry(nil), verification.Entries...)
+	return &clone
+}
 
 // FailureDetail is the canonical customer-safe explanation of a failed
 // operation. Runtime projections copy this value without reclassifying or
@@ -501,7 +690,9 @@ func FailureDecisionFromMetadata(metadata *WorkFailureMetadata) WorkFailureDecis
 		WorkFailureTypeUnknown,
 		WorkFailureTypeMisconfigured,
 		WorkFailureTypeMissingExecutable,
-		WorkFailureTypeCommandLineTooLong:
+		WorkFailureTypeCommandLineTooLong,
+		WorkFailureTypeStructuredOutputSchemaViolation,
+		WorkFailureTypeExpectedArtifactsUnsatisfied:
 		return WorkFailureDecision{Terminal: true}
 	}
 	switch metadata.Family {
@@ -512,16 +703,6 @@ func FailureDecisionFromMetadata(metadata *WorkFailureMetadata) WorkFailureDecis
 	default:
 		return WorkFailureDecision{Terminal: true}
 	}
-}
-
-// CloneProviderSessionMetadata returns a detached provider-session metadata
-// value for Worker-owned execution and stream contracts.
-func CloneProviderSessionMetadata(session *ProviderSessionMetadata) *ProviderSessionMetadata {
-	if session == nil {
-		return nil
-	}
-	clone := *session
-	return &clone
 }
 
 func CloneWorkFailureMetadata(failure *WorkFailureMetadata) *WorkFailureMetadata {

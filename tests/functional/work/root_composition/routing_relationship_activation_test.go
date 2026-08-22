@@ -107,6 +107,7 @@ func TestWorkRoutingActivatesThroughRootBuildProcessAfterLifecycle(t *testing.T)
 // and edges.Edges. Detailed relationship coverage remains under
 // tests/functional/work/relationships; this test closes the explicit public-process
 // activation gap.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestWorkRelationshipsActivateThroughRootBuildProcessAfterLifecycle(t *testing.T) {
 	t.Parallel()
 

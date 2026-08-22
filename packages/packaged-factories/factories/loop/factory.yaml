@@ -3,6 +3,15 @@ id: builtin-loop
 description:
   type: LOCALIZABLE_ASSET
   value: Runs the requested task at a duration interval such as 1h for the lifetime of the Factory Session.
+# Return the first scheduled execution's result rather than waiting for the
+# Factory to fall quiescent. The controller Work stays active for the life of
+# the Factory Session by design, so a quiescence-based return never completes
+# and a caller that supplies no timeout -- which is every ACP prompt -- would
+# wait forever.
+invocationReturn:
+  policy: EXPLICIT
+  workTypeName: scheduled-execution
+  terminalState: complete
 invocationSignature:
   parameters:
     - name: request
@@ -17,13 +26,18 @@ invocationSignature:
     - name: every
       description: Positive duration interval from 1s through 168h, such as 30s, 5m, 1h, or 1h30m.
       externalName: every
-      required: true
+      defaultValue: "1h"
       bindings:
         - kind: NAMED
     - name: triggerAtStart
       description: Run once immediately after the controller Work is admitted.
       externalName: trigger-at-start
-      defaultValue: "false"
+      # Defaults are materialized into the controller's invocation arguments,
+      # and the scheduler prefers that argument over the workstation's cron
+      # literal. A "false" default therefore silently suppressed the immediate
+      # run, leaving an invocation with nothing terminal to return until a
+      # whole interval elapsed.
+      defaultValue: "true"
       bindings:
         - kind: NAMED
     - name: maxConsecutiveFailures
@@ -65,8 +79,6 @@ workTypes:
     states:
       - name: active
         type: INITIAL
-      - name: stopped
-        type: TERMINAL
       - name: failed
         type: FAILED
   - name: scheduled-execution
@@ -96,7 +108,9 @@ workstations:
     worker: loop-trigger
     cron:
       every: ${every}
-      triggerAtStart: false
+      # Fire once immediately so an invocation returns its first scheduled
+      # execution instead of waiting a whole interval for one to exist.
+      triggerAtStart: true
     workPropagation:
       mode: PRESERVE_INPUT
     inputs:

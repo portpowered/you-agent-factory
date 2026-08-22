@@ -4,6 +4,7 @@ import {
   type FactorySessionsAPIErrorTarget,
   type FactorySessionTarget,
 } from "../../../api/factory-sessions";
+import type { getDashboardSessionControlsMessages } from "../messages/dashboard-session-controls";
 import type { getHeaderControlsMessages } from "../messages/header-controls";
 
 export const SESSION_TAB_PATH_MAX_LENGTH = 48;
@@ -95,12 +96,12 @@ export function sessionCloseLabel(
 export function sessionStreamToggleLabel(
   session: FactorySessionSummary,
   paused: boolean,
-  messages: ReturnType<typeof getHeaderControlsMessages>,
+  messages: ReturnType<typeof getDashboardSessionControlsMessages>,
 ): string {
   return replaceSessionLabelToken(
     paused
-      ? messages.resumeSessionStreamLabelTemplate
-      : messages.pauseSessionStreamLabelTemplate,
+      ? messages.resumeLiveUpdatesLabelTemplate
+      : messages.pauseLiveUpdatesLabelTemplate,
     session,
   );
 }

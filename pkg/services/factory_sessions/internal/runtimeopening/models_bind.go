@@ -17,17 +17,26 @@ type modelsRuntimeBind struct {
 }
 
 // runtimeOpeningCleanup owns resources in acquisition order and releases them
-// exactly once in reverse order on either opening failure or runtime shutdown.
+// exactly once in reverse order on either opening failure or runtime
+// shutdown. Add is safe to call concurrently with Close: a later Factory
+// Session build (for example a named-factory activation racing session
+// shutdown) can register a cleanup action after opening has already
+// returned, so both the action slice and the once-guarded release read it
+// under the same mutex.
 type runtimeOpeningCleanup struct {
+	mu      sync.Mutex
 	actions []func() error
 	once    sync.Once
 	err     error
 }
 
 func (cleanup *runtimeOpeningCleanup) Add(action func() error) {
-	if action != nil {
-		cleanup.actions = append(cleanup.actions, action)
+	if action == nil {
+		return
 	}
+	cleanup.mu.Lock()
+	cleanup.actions = append(cleanup.actions, action)
+	cleanup.mu.Unlock()
 }
 
 func (cleanup *runtimeOpeningCleanup) OwnModelsScope(
@@ -50,8 +59,12 @@ func (cleanup *runtimeOpeningCleanup) OwnModelsScope(
 
 func (cleanup *runtimeOpeningCleanup) Close() error {
 	cleanup.once.Do(func() {
-		for index := len(cleanup.actions) - 1; index >= 0; index-- {
-			cleanup.err = errors.Join(cleanup.err, cleanup.actions[index]())
+		cleanup.mu.Lock()
+		actions := append([]func() error(nil), cleanup.actions...)
+		cleanup.actions = nil
+		cleanup.mu.Unlock()
+		for index := len(actions) - 1; index >= 0; index-- {
+			cleanup.err = errors.Join(cleanup.err, actions[index]())
 		}
 	})
 	return cleanup.err

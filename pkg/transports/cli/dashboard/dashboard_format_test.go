@@ -21,11 +21,11 @@ func TestDisplayCompletedDispatchStatus(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]string{
-		string(workerexecution.OutcomeAccepted):  "Success",
-		string(workerexecution.OutcomeContinue):  "Continue",
-		string(workerexecution.OutcomeRejected):  "Rejected",
-		string(workerexecution.OutcomeFailed):    "Failed",
-		"mystery":                                "Unknown",
+		string(workerexecution.OutcomeAccepted): "Success",
+		string(workerexecution.OutcomeContinue): "Continue",
+		string(workerexecution.OutcomeRejected): "Rejected",
+		string(workerexecution.OutcomeFailed):   "Failed",
+		"mystery":                               "Unknown",
 	}
 	for outcome, want := range cases {
 		if got := displayCompletedDispatchStatus(outcome); got != want {

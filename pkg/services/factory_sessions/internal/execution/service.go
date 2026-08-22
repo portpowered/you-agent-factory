@@ -4,16 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
+	"time"
+
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	internalcontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"sort"
-	"strings"
-	"time"
 )
 
 func reconcileAppendOnlyCanonicalEvents(previous, projected []json.RawMessage) []json.RawMessage {
@@ -99,8 +102,9 @@ func (s *JavaScriptRuntimeService) recordCanonicalTerminalState(target *runtimeS
 		events,
 		extractDispatchInterruptedEvents(candidate.events),
 	)
+	preserveAppendOnly := target.eventConsumer != nil || hasDurableLiveChangeEvents(target.events)
 	candidate.events = projected
-	if target.eventConsumer != nil {
+	if preserveAppendOnly {
 		candidate.events = reconcileAppendOnlyCanonicalEvents(target.events, projected)
 	}
 	if err := s.persistTerminalSessionState(candidate); err != nil {
@@ -264,10 +268,9 @@ const (
 
 // PersistenceChoiceForPolicy resolves application policy into the closed
 // persistence choice consumed by durable execution composition.
-// Ordinary runtime opening uses the zero value / disabled policy so live
-// you run and packaged-factory invocations do not create project-local
-// .you-agent-factory/durable-sessions. Explicit enabled policy preserves
-// restart/resume snapshot persistence for callers and tests that opt in.
+// Public runtime opening selects PersistencePolicyEnabled explicitly before it
+// reaches this selector. The zero value and explicit disabled policy remain
+// memory-only choices for callers and tests that need deterministic isolation.
 func PersistenceChoiceForPolicy(
 	policy PersistencePolicy,
 	projectRoot string,
@@ -333,7 +336,7 @@ func (choice PersistenceChoice) resolve() (runtimepersist.Store, error) {
 func NewJavaScriptExecutionService(
 	projectRoot string,
 	childExecutorMode string,
-	executor workers.InvocationExecutor,
+	directChildInvocation workers.InvocationExecutor,
 	persistenceChoice PersistenceChoice,
 	clock factory.Clock,
 	syncWaits SyncWaitScheduler,
@@ -345,9 +348,9 @@ func NewJavaScriptExecutionService(
 	workerSettings factory.JavaScriptWorkerSettings,
 	recordingWriter recording.PortableRecordingWriter,
 	generateSessionID internalcontracts.SessionIDGenerator,
-	liveChildInvocation LiveChildInvocationFactory,
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseStreams responsestreamservice.Service,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (Service, error) {
 	projectRoot = strings.TrimSpace(projectRoot)
 	if projectRoot == "" {
@@ -372,8 +375,8 @@ func NewJavaScriptExecutionService(
 		return nil, NewValidationError("childValues", "Factory Runtime JavaScript child values are required")
 	}
 	childExecutorMode = normalizeChildExecutorMode(childExecutorMode)
-	if childExecutorMode == ChildExecutorModeLive && executor == nil && liveChildInvocation == nil {
-		return nil, NewValidationError("runtime.childExecutorMode", "worker invocation executor is required for live child execution")
+	if err := validateChildExecutorMode(childExecutorMode); err != nil {
+		return nil, err
 	}
 	if recordingWriter == nil {
 		return nil, NewValidationError("recordingWriter", "portable recording writer is required")
@@ -386,23 +389,23 @@ func NewJavaScriptExecutionService(
 		return nil, err
 	}
 	return NewJavaScriptRuntimeService(
-		projectRoot, childExecutorMode, executor, persistence, clock, syncWaits,
+		projectRoot, childExecutorMode, directChildInvocation, persistence, clock, syncWaits,
 		checkpointSummaries,
 		workflowDefinitions, orchestration, childValues,
 		workerPresetIDs, workerSettings, recordingWriter,
 		generateSessionID,
-		liveChildInvocation,
 		generateResponseEventID,
 		responseStreams,
+		liveChangeCoordinator,
 	), nil
 }
 
-// SmokeLiveChildProvider returns a deterministic mock provider for CLI and
-// fixture-backed live-provider child smoke without MCP host startup. Scope for
-// this provider is the completed CLI live-dispatch smoke lane; MCP live serve and
-// website inspection remain deferred follow-up cells.
-func SmokeLiveChildProvider() workers.Provider {
-	return smokeLiveChildProvider{}
+// SmokeLiveChildProvider returns the Workers-facing fixture provider used by
+// the execution package's live-child contract tests. It is intentionally a
+// Workers compatibility fixture; production Providers behavior is owned by
+// the Providers service root.
+func SmokeLiveChildProvider() *smokeLiveChildProvider {
+	return &smokeLiveChildProvider{}
 }
 
 type smokeLiveChildProvider struct{}
@@ -410,11 +413,13 @@ type smokeLiveChildProvider struct{}
 func (smokeLiveChildProvider) Infer(_ context.Context, _ workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
 	return workers.InferenceResponse{
 		Content: `{"text":"live:agent-run-fake-child:summarize-findings:summarize workflows:workflows"}`,
-		ProviderSession: &workers.ProviderSessionMetadata{
-			Provider: "mock",
-			Kind:     "session_id",
-			ID:       "live-provider-session-1",
-		},
+		Continuation: func() *providers.ContinuationRef {
+			ref := providers.SessionRef{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-1"}.ContinuationRef()
+			return &ref
+		}(),
+		Diagnostics: &workers.WorkDiagnostics{Metadata: map[string]string{
+			workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
+		}},
 	}, nil
 }
 
@@ -602,14 +607,15 @@ func dispatchSummaryFromChildRecord(currentPhase string, child factory.JavaScrip
 		Model:                 strings.TrimSpace(child.Model),
 		ReasoningEffort:       strings.TrimSpace(child.ReasoningEffort),
 	}
+	summary.Provider = strings.TrimSpace(child.Provider)
+	if summary.Provider == "" && strings.TrimSpace(child.ExecutionMode) == factory.JavaScriptChildExecutionModeFake {
+		summary.Provider = "fake"
+	}
 	if javascript := dispatchJavaScriptFromChildRecord(child); strings.TrimSpace(javascript.TaskKind) != "" {
 		summary.JavaScript = &javascript
 	}
 	if ref := strings.TrimSpace(child.ProviderSessionRef); ref != "" {
-		provider := strings.TrimSpace(child.Provider)
-		if provider == "" && strings.TrimSpace(child.ExecutionMode) == factory.JavaScriptChildExecutionModeFake {
-			provider = "fake"
-		}
+		provider := summary.Provider
 		summary.Provider = provider
 		summary.ProviderSessionRefs = []ProviderSessionRef{{
 			Provider: provider,
@@ -656,9 +662,10 @@ func dispatchFailureDetailFromChildRecord(child factory.JavaScriptChildDispatchR
 
 func dispatchJavaScriptFromChildRecord(child factory.JavaScriptChildDispatchRecord) DispatchJavaScriptProjection {
 	return DispatchJavaScriptProjection{
-		TaskKind:      "AGENT",
-		TaskLabel:     child.Label,
-		ExecutionMode: strings.TrimSpace(child.ExecutionMode),
+		TaskKind:        "AGENT",
+		TaskLabel:       child.Label,
+		ExecutionMode:   strings.TrimSpace(child.ExecutionMode),
+		SkipPermissions: child.SkipPermissions,
 	}
 }
 

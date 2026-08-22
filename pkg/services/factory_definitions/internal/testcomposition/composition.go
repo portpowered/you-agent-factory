@@ -7,6 +7,7 @@ package testcomposition
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 
 	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
@@ -46,6 +47,17 @@ type Composition struct {
 	requiredTools  factorydefinitions.RequiredToolChecker
 }
 
+// NamedPathFileSystem is the exact filesystem effect used to resolve and
+// persist Current Factory pointers and canonical named Factory paths for
+// this owner-local test composition. It mirrors the construction-time port
+// factorydefinitionswire.NamedPathFileSystem publishes for production Wire.
+type NamedPathFileSystem interface {
+	ReadFile(string) ([]byte, error)
+	Stat(string) (fs.FileInfo, error)
+	MkdirAll(string, fs.FileMode) error
+	WriteFile(string, []byte, fs.FileMode) error
+}
+
 // Effects is the exact set of Factory Definitions-owned filesystem roles
 // required by the owner-local test composition. Outer _test.go edges select
 // their policy-free Platform implementations explicitly.
@@ -54,7 +66,7 @@ type Effects struct {
 	AuthoredReader      factorydefinitions.AuthoredLayoutReaderFileSystem
 	AuthoredWriter      factorydefinitions.AuthoredLayoutWriterFileSystem
 	Persistence         factorydefinitions.PersistenceFileSystem
-	NamedPaths          factorydefinitions.NamedPathFileSystem
+	NamedPaths          NamedPathFileSystem
 	NamedFactoryCatalog factorydefinitions.NamedFactoryCatalogFileSystem
 	InboxSentinels      factorydefinitions.InputInboxSentinelEnsurer
 }
@@ -198,7 +210,7 @@ func (c Composition) LoadedFactoryFromCanonicalJSON(payload []byte, loader facto
 func (c Composition) Persistence(
 	validator factorydefinitions.Validator,
 	mapInput factorydefinitions.FactoryLayoutPayloadMapper,
-) factorydefinitions.Persistence {
+) factorydefinitions.PackagedFactoryPersistence {
 	loader := c.Loader()
 	_, _, pruneRemovedDocs := PortableOperations(c.fileSystem)
 	representation := c.representation
@@ -263,7 +275,7 @@ func (c Composition) Persistence(
 	return persistence
 }
 
-func mustNamedPaths(fileSystem factorydefinitions.NamedPathFileSystem) *catalognamedpaths.Resolver {
+func mustNamedPaths(fileSystem NamedPathFileSystem) *catalognamedpaths.Resolver {
 	resolver, err := catalognamedpaths.New(fileSystem)
 	if err != nil {
 		panic(err)
@@ -377,7 +389,7 @@ func (c Composition) MapFactoryJSONForPersistence(payload []byte) (factorydefini
 	return c.representation.MapPersistence(payload)
 }
 
-func (c Composition) FactoryDefinitionPersistenceWithValidator(validator factorydefinitions.Validator) factorydefinitions.Persistence {
+func (c Composition) FactoryDefinitionPersistenceWithValidator(validator factorydefinitions.Validator) factorydefinitions.PackagedFactoryPersistence {
 	return c.Persistence(validator, c.MapFactoryJSONForPersistence)
 }
 

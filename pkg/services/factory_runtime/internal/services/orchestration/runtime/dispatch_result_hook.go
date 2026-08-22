@@ -3,15 +3,22 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
+	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -32,6 +39,7 @@ type dispatchPlanningResultHook struct {
 	scheduled         []scheduledDispatchResult
 	asyncErr          error
 	onResult          func()
+	acceptanceStates  sync.Map
 	mu                sync.Mutex
 }
 
@@ -44,6 +52,80 @@ func (h *dispatchPlanningResultHook) SetOnBufferedResult(fn func()) {
 type scheduledDispatchResult struct {
 	deliveryTick int
 	result       workerexecution.WorkResult
+}
+
+// dispatchAcceptanceState coordinates the one potentially blocking Work
+// materialization per dispatch without holding a lock across planner or Work
+// calls. The planner remains the durable terminal authority; this state only
+// shares the detached canonical result that concurrent contenders submit.
+type dispatchAcceptanceState struct {
+	mu            sync.Mutex
+	ready         chan struct{}
+	initialized   bool
+	materializing bool
+	result        workerexecution.WorkResult
+	outcome       dispatchplanning.TerminalResultOutcome
+}
+
+func newDispatchAcceptanceState() *dispatchAcceptanceState {
+	return &dispatchAcceptanceState{ready: make(chan struct{})}
+}
+
+func (s *dispatchAcceptanceState) claimRoot(
+	result workerexecution.WorkResult,
+	outcome dispatchplanning.TerminalResultOutcome,
+) (workerexecution.WorkResult, dispatchplanning.TerminalResultOutcome, <-chan struct{}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.initialized {
+		s.initialized = true
+		s.result = result
+		s.outcome = outcome
+		close(s.ready)
+		return result, outcome, nil
+	}
+	if s.materializing {
+		return workerexecution.WorkResult{}, "", s.ready
+	}
+	return s.result, s.outcome, nil
+}
+
+func (s *dispatchAcceptanceState) claimWorker() (
+	workerexecution.WorkResult,
+	dispatchplanning.TerminalResultOutcome,
+	<-chan struct{},
+	bool,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.initialized {
+		s.initialized = true
+		s.materializing = true
+		return workerexecution.WorkResult{}, "", nil, true
+	}
+	if s.materializing {
+		return workerexecution.WorkResult{}, "", s.ready, false
+	}
+	return s.result, s.outcome, nil, false
+}
+
+func (s *dispatchAcceptanceState) finishWorker(
+	result workerexecution.WorkResult,
+	outcome dispatchplanning.TerminalResultOutcome,
+) {
+	s.mu.Lock()
+	s.result = result
+	s.outcome = outcome
+	s.materializing = false
+	close(s.ready)
+	s.mu.Unlock()
+}
+
+func (s *dispatchAcceptanceState) wait() (workerexecution.WorkResult, dispatchplanning.TerminalResultOutcome) {
+	<-s.ready
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.result, s.outcome
 }
 
 type dispatchHookSnapshot = interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
@@ -66,6 +148,14 @@ func newCanonicalDispatchPlanningResultHook(
 		factorySessionID: factorySessionID,
 		waitCh:           make(chan struct{}, 1),
 	}
+}
+
+func (h *dispatchPlanningResultHook) acceptanceState(dispatchID string) *dispatchAcceptanceState {
+	value, _ := h.acceptanceStates.LoadOrStore(
+		strings.TrimSpace(dispatchID),
+		newDispatchAcceptanceState(),
+	)
+	return value.(*dispatchAcceptanceState)
 }
 
 func (h *dispatchPlanningResultHook) SubmitDispatch(
@@ -152,37 +242,104 @@ func (h *dispatchPlanningResultHook) acceptWorkersResult(
 	result workers.WorkstationDispatchResult,
 	dispatchErr error,
 ) {
+	dispatchID := firstRuntimeValue(
+		request.Execution.Dispatch.DispatchID, result.DispatchID,
+	)
 	workResult := canonicalWorkResult(request, result, dispatchErr)
-	usedPlanned := false
-	if provider, ok := h.completionPlanner.(plannedCompletionResultProvider); ok {
-		planned, hasPlanned, err := provider.PlannedResultForDispatch(request.Execution.Dispatch)
-		if err != nil {
-			h.recordCanonicalError(err)
-			return
-		}
-		if hasPlanned && (workResult.Outcome != workerexecution.OutcomeFailed ||
-			planned.Outcome == workerexecution.OutcomeFailed) {
-			planned.DispatchID = request.Execution.Dispatch.DispatchID
-			planned.TransitionID = request.Execution.Dispatch.TransitionID
-			workResult = planned
-			usedPlanned = true
-		}
+	planned, usedPlanned, err := h.plannedWorkersResult(request, workResult)
+	if err != nil {
+		h.recordCanonicalError(err)
+		return
 	}
-	// Replay/planned completions already carry Work-owned OutputWork identity
-	// from the event ledger. Live Worker proposals are materialized here so
-	// invalid proposals cannot enter Runtime state.
-	if !usedPlanned {
-		workResult = materializeWorkerOutputForDispatch(
-			ctx,
-			h.workService,
-			h.net,
-			h.workRequestIDs,
-			request,
-			workResult,
-		)
+	if usedPlanned {
+		h.acceptPlannedWorkersResult(ctx, request, dispatchID, result, planned)
+		return
 	}
+	h.acceptLiveWorkersResult(ctx, request, dispatchID, result, workResult)
+}
+
+func (h *dispatchPlanningResultHook) plannedWorkersResult(
+	request workers.WorkstationDispatchRequest,
+	workResult workerexecution.WorkResult,
+) (workerexecution.WorkResult, bool, error) {
+	provider, ok := h.completionPlanner.(plannedCompletionResultProvider)
+	if !ok {
+		return workResult, false, nil
+	}
+	planned, hasPlanned, err := provider.PlannedResultForDispatch(request.Execution.Dispatch)
+	if err != nil || !hasPlanned ||
+		(workResult.Outcome == workerexecution.OutcomeFailed &&
+			planned.Outcome != workerexecution.OutcomeFailed) {
+		return workResult, false, err
+	}
+	planned.DispatchID = request.Execution.Dispatch.DispatchID
+	planned.TransitionID = request.Execution.Dispatch.TransitionID
+	return planned, true, nil
+}
+
+func (h *dispatchPlanningResultHook) acceptPlannedWorkersResult(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+	dispatchID string,
+	result workers.WorkstationDispatchResult,
+	workResult workerexecution.WorkResult,
+) {
 	outcome := workstationTerminalResultOutcome(result.TerminalOutcome, workResult.Outcome)
-	if _, err := h.acceptCanonicalResult(ctx, request, workResult, "", outcome); err != nil {
+	state := h.acceptanceState(dispatchID)
+	workResult, outcome, wait := state.claimRoot(workResult, outcome)
+	if wait != nil {
+		workResult, outcome = state.wait()
+	}
+	h.recordAcceptedResult(ctx, request, workResult, outcome)
+}
+
+func (h *dispatchPlanningResultHook) acceptLiveWorkersResult(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+	dispatchID string,
+	result workers.WorkstationDispatchResult,
+	workResult workerexecution.WorkResult,
+) {
+	intent, ok := h.planner.Intent(workResult.DispatchID)
+	if !ok || intent.Result != nil {
+		outcome := workstationTerminalResultOutcome(result.TerminalOutcome, workResult.Outcome)
+		h.recordAcceptedResult(ctx, request, workResult, outcome)
+		return
+	}
+	state := h.acceptanceState(dispatchID)
+	sharedResult, sharedOutcome, wait, materializer := state.claimWorker()
+	if wait != nil {
+		workResult, outcome := state.wait()
+		h.recordAcceptedResult(ctx, request, workResult, outcome)
+		return
+	}
+	if materializer {
+		workResult = materializeWorkerOutputForDispatchWithProposal(
+			ctx, h.workService, h.net, h.workRequestIDs, request,
+			workResult, result.ProposedOutput,
+		)
+		state.finishWorker(
+			workResult,
+			workstationTerminalResultOutcome(result.TerminalOutcome, workResult.Outcome),
+		)
+	} else {
+		workResult = sharedResult
+		h.recordAcceptedResult(ctx, request, workResult, sharedOutcome)
+		return
+	}
+	h.recordAcceptedResult(
+		ctx, request, workResult,
+		workstationTerminalResultOutcome(result.TerminalOutcome, workResult.Outcome),
+	)
+}
+
+func (h *dispatchPlanningResultHook) recordAcceptedResult(
+	ctx context.Context,
+	request workers.WorkstationDispatchRequest,
+	result workerexecution.WorkResult,
+	outcome dispatchplanning.TerminalResultOutcome,
+) {
+	if _, err := h.acceptCanonicalResult(ctx, request, result, "", outcome); err != nil {
 		h.recordCanonicalError(err)
 	}
 }
@@ -258,6 +415,11 @@ func (h *dispatchPlanningResultHook) acceptRootResult(
 		workResult.Outcome = workerexecution.OutcomeFailed
 		workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
 	}
+	state := h.acceptanceState(req.DispatchID)
+	workResult, outcome, wait := state.claimRoot(workResult, outcome)
+	if wait != nil {
+		workResult, outcome = state.wait()
+	}
 	return h.acceptCanonicalResult(ctx, intent.Action.Request, workResult, req.WorkID, outcome)
 }
 
@@ -325,7 +487,8 @@ func (h *dispatchPlanningResultHook) acceptCanonicalResult(
 		h.mu.Unlock()
 		return retired, nil
 	}
-	if !h.resultBuffer.Write(ctx, result) {
+	wrote := h.resultBuffer.Write(ctx, result)
+	if !wrote {
 		h.mu.Lock()
 		h.scheduled = append(h.scheduled, scheduledDispatchResult{result: result})
 		h.notifyCanonicalResultLocked()
@@ -409,4 +572,401 @@ func terminalResultOutcome(outcome workerexecution.WorkOutcome) (dispatchplannin
 
 type plannedCompletionResultProvider interface {
 	PlannedResultForDispatch(dispatch work.WorkDispatch) (workerexecution.WorkResult, bool, error)
+}
+
+func recordedWorkExists(world interfaces.FactoryWorldState, events []interfaces.FactoryEvent, workID string) bool {
+	if _, ok := world.WorkItemsByID[workID]; ok {
+		return true
+	}
+	if _, ok := world.ActiveWorkItemsByID[workID]; ok {
+		return true
+	}
+	if _, ok := world.TerminalWorkByID[workID]; ok {
+		return true
+	}
+	if _, ok := world.FailedWorkItemsByID[workID]; ok {
+		return true
+	}
+	for _, event := range events {
+		if containsRecordedWorkID(pointerStringSlice(event.Context.WorkIDs), workID) {
+			return true
+		}
+	}
+	return false
+}
+
+func recordedObservationState(outcome string) workersessions.State {
+	switch workers.WorkOutcome(outcome) {
+	case workers.OutcomeAccepted, workers.OutcomeContinue:
+		return workersessions.StateCompleted
+	case workers.OutcomeFailed, workers.OutcomeRejected:
+		return workersessions.StateFailed
+	default:
+		return workersessions.StateFailed
+	}
+}
+
+func recordedFailure(outcome workers.WorkOutcome, detail *workers.FailureDetail, metadata *workers.WorkFailureMetadata, state workersessions.State) *workersessions.FailureCause {
+	return recordedFailureWithDiagnostics(outcome, detail, metadata, state, nil)
+}
+
+func recordedFailureWithDiagnostics(
+	outcome workers.WorkOutcome,
+	detail *workers.FailureDetail,
+	metadata *workers.WorkFailureMetadata,
+	state workersessions.State,
+	diagnostics *workers.SafeWorkDiagnostics,
+) *workersessions.FailureCause {
+	if !state.Terminal() || state == workersessions.StateCompleted {
+		return nil
+	}
+	kind := workersessions.FailureCauseWorkersExecutionFailure
+	if outcome == workers.OutcomeRejected {
+		kind = workersessions.FailureCauseRejected
+	} else if recordedIncompleteOutput(diagnostics) {
+		kind = workersessions.FailureCauseIncompleteOutput
+	}
+	return &workersessions.FailureCause{Kind: kind, Detail: recordedFailureDetail(kind, detail, metadata), ProviderFailureKind: recordedProviderFailureKind(detail)}
+}
+
+func recordedIncompleteOutput(diagnostics *workers.SafeWorkDiagnostics) bool {
+	if diagnostics == nil || diagnostics.Provider == nil {
+		return false
+	}
+	metadata := diagnostics.Provider.ResponseMetadata
+	if strings.ToLower(strings.TrimSpace(metadata[workerexecution.ProviderResponseMetadataFailureOperation])) != "completion_validation" {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(metadata[workerexecution.ProviderResponseMetadataFailureClassification])) {
+	case "contradictory_completion", "missing_completion_evidence", "missing_required_output":
+		return true
+	default:
+		return false
+	}
+}
+
+func recordedFailureDetail(kind workersessions.FailureCauseKind, detail *workers.FailureDetail, metadata *workers.WorkFailureMetadata) string {
+	if kind == workersessions.FailureCauseRejected {
+		return "the Workers result was rejected by the business review"
+	}
+	if kind == workersessions.FailureCauseIncompleteOutput {
+		return "the Workers result did not include the required final output"
+	}
+	if metadata != nil {
+		family, familyKnown := recordedFailureFamily(metadata.Family)
+		typ, typeKnown := recordedFailureType(metadata.Type)
+		if familyKnown && typeKnown && (family != "" || typ != "") {
+			if family == "" {
+				family = "unknown"
+			}
+			if typ == "" {
+				typ = "unknown"
+			}
+			return "family=" + family + " type=" + typ
+		}
+	}
+	if typ, ok := recordedFailureType(detailType(detail)); ok && typ != "" {
+		return "type=" + typ
+	}
+	return "the Workers execution result was not successful"
+}
+
+func detailType(detail *workers.FailureDetail) workers.WorkFailureType {
+	if detail == nil {
+		return ""
+	}
+	return detail.Reason
+}
+
+func recordedFailureFamily(family workers.WorkFailureFamily) (string, bool) {
+	switch family {
+	case "":
+		return "", true
+	case workers.WorkFailureFamilyTerminal, workers.WorkFailureFamilyRetryable, workers.WorkFailureFamilyThrottle:
+		return string(family), true
+	default:
+		return "", false
+	}
+}
+
+func recordedFailureType(typ workers.WorkFailureType) (string, bool) {
+	switch typ {
+	case "":
+		return "", true
+	case workers.WorkFailureTypeAuthFailure, workers.WorkFailureTypePermanentBadRequest, workers.WorkFailureTypeThrottled,
+		workers.WorkFailureTypeInternalServerError, workers.WorkFailureTypeTimeout, workers.WorkFailureTypeUnknown,
+		workers.WorkFailureTypeMisconfigured, workers.WorkFailureTypeCommandLineTooLong, workers.WorkFailureTypeMissingExecutable,
+		workers.WorkFailureTypeStructuredOutputSchemaViolation, workers.WorkFailureTypeExpectedArtifactsUnsatisfied:
+		return string(typ), true
+	default:
+		return "", false
+	}
+}
+
+func recordedProviderFailureKind(detail *workers.FailureDetail) providers.ExecuteFailureKind {
+	if detail == nil {
+		return ""
+	}
+	switch detail.Reason {
+	case workers.WorkFailureTypeAuthFailure:
+		return providers.ExecuteFailureKindAuthentication
+	case workers.WorkFailureTypeTimeout:
+		return providers.ExecuteFailureKindTimeout
+	case workers.WorkFailureTypeThrottled:
+		return providers.ExecuteFailureKindThrottled
+	case workers.WorkFailureTypeMisconfigured:
+		return providers.ExecuteFailureKindMisconfigured
+	default:
+		return ""
+	}
+}
+
+func mergeRecordedObservations(recorded, live []workersessions.Observation) []workersessions.Observation {
+	if len(recorded) == 0 && len(live) == 0 {
+		return nil
+	}
+
+	// Recorded facts remain authoritative for an overlapping Worker Session,
+	// while the live registry can contain a session whose association has not
+	// reached the durable projection yet. Clone both sources so the read
+	// decorator never mutates a service-owned observation while reconciling the
+	// two views.
+	merged := make([]workersessions.Observation, 0, len(recorded)+len(live))
+	seen := make(map[string]struct{}, len(recorded)+len(live))
+	liveBySession := make(map[string]workersessions.Observation, len(live))
+	for _, observation := range live {
+		liveBySession[observation.WorkerSessionID] = observation.Clone()
+	}
+
+	for _, recordedObservation := range recorded {
+		if _, alreadyAdded := seen[recordedObservation.WorkerSessionID]; alreadyAdded {
+			continue
+		}
+		seen[recordedObservation.WorkerSessionID] = struct{}{}
+		mergedObservation := recordedObservation.Clone()
+		if liveObservation, ok := liveBySession[recordedObservation.WorkerSessionID]; ok {
+			mergeLiveObservation(&mergedObservation, liveObservation)
+		}
+		merged = append(merged, mergedObservation)
+	}
+
+	for _, liveObservation := range live {
+		if _, alreadyAdded := seen[liveObservation.WorkerSessionID]; alreadyAdded {
+			continue
+		}
+		seen[liveObservation.WorkerSessionID] = struct{}{}
+		merged = append(merged, liveObservation.Clone())
+	}
+	sortObservationAttempts(merged)
+	return merged
+}
+
+func mergeLiveObservation(recorded *workersessions.Observation, live workersessions.Observation) {
+	if recorded == nil {
+		return
+	}
+	if live.StartedAt != nil {
+		started := *live.StartedAt
+		recorded.StartedAt = &started
+	}
+	if live.Model != nil && strings.TrimSpace(*live.Model) != "" {
+		recorded.Model = cloneRecordedString(live.Model)
+	}
+	if live.ReasoningEffort != nil && strings.TrimSpace(*live.ReasoningEffort) != "" {
+		recorded.ReasoningEffort = cloneRecordedString(live.ReasoningEffort)
+	}
+	if live.ProviderSessionAvailable {
+		recorded.ProviderSession = live.ProviderSession.Clone()
+		recorded.ProviderSessionAvailable = true
+	}
+	if live.TokenUsage != nil {
+		clone := live.TokenUsage.Clone()
+		recorded.TokenUsage = &clone
+	}
+	if live.Transcript != workersessions.TranscriptAvailabilityUnavailable {
+		recorded.Transcript = live.Transcript
+		recorded.Parse = live.Parse.Clone()
+	}
+	if recorded.Failure == nil && live.Failure != nil {
+		failure := *live.Failure
+		recorded.Failure = &failure
+	}
+}
+
+func sortObservationAttempts(observations []workersessions.Observation) {
+	sort.SliceStable(observations, func(i, j int) bool {
+		left, right := observations[i], observations[j]
+		switch {
+		case left.StartedAt != nil && right.StartedAt != nil && !left.StartedAt.Equal(*right.StartedAt):
+			return left.StartedAt.Before(*right.StartedAt)
+		case left.StartedAt != nil && right.StartedAt == nil:
+			return true
+		case left.StartedAt == nil && right.StartedAt != nil:
+			return false
+		case left.AttemptID != right.AttemptID:
+			return left.AttemptID < right.AttemptID
+		default:
+			return left.WorkerSessionID < right.WorkerSessionID
+		}
+	})
+}
+
+func cloneAndSortFactoryEvents(events []interfaces.FactoryEvent) []interfaces.FactoryEvent {
+	ordered := make([]interfaces.FactoryEvent, len(events))
+	for index, event := range events {
+		ordered[index] = event.Clone()
+	}
+	sort.SliceStable(ordered, func(i, j int) bool {
+		left, right := ordered[i], ordered[j]
+		if left.Context.Tick != right.Context.Tick {
+			return left.Context.Tick < right.Context.Tick
+		}
+		if left.Context.Sequence != right.Context.Sequence {
+			return left.Context.Sequence < right.Context.Sequence
+		}
+		if !left.Context.EventTime.Equal(right.Context.EventTime) {
+			return left.Context.EventTime.Before(right.Context.EventTime)
+		}
+		return left.Id < right.Id
+	})
+	return ordered
+}
+
+func closeRuntimeEventSubscriptions(ledger recordings.RuntimeLedger) {
+	if ledger == nil {
+		return
+	}
+	closer, ok := ledger.(interface{ CloseLiveSubscriptions() })
+	if !ok {
+		return
+	}
+	closer.CloseLiveSubscriptions()
+}
+
+func eventTimeForDispatch(events []interfaces.FactoryEvent, dispatchID string) time.Time {
+	for index := len(events) - 1; index >= 0; index-- {
+		if stringPointerValue(events[index].Context.DispatchID) == dispatchID && events[index].Type == interfaces.FactoryEventTypeDispatchResponse {
+			return events[index].Context.EventTime.UTC()
+		}
+	}
+	return time.Time{}
+}
+
+func firstRecordedTime(primary, fallback time.Time) time.Time {
+	if !primary.IsZero() {
+		return primary.UTC()
+	}
+	return fallback.UTC()
+}
+
+func firstRecordedWorkIDs(primary, fallback []string) []string {
+	if len(primary) > 0 {
+		return append([]string(nil), primary...)
+	}
+	return append([]string(nil), fallback...)
+}
+
+func firstRecordedFailure(primary, fallback *workersessions.FailureCause) *workersessions.FailureCause {
+	if primary != nil {
+		return primary
+	}
+	return fallback
+}
+
+func containsRecordedWorkID(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func appendUniqueRecordedString(values []string, value string) []string {
+	if value == "" || containsRecordedWorkID(values, value) {
+		return values
+	}
+	return append(values, value)
+}
+
+func stringPointerValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func pointerStringSlice(value *[]string) []string {
+	if value == nil {
+		return nil
+	}
+	return append([]string(nil), (*value)...)
+}
+
+func providerSessionRef(metadata providers.SessionMetadata) providers.SessionRef {
+	return providers.SessionRef{Provider: providers.ID(metadata.Provider), Kind: metadata.Kind, ID: metadata.ID}
+}
+
+func cloneProviderMetadata(metadata *providers.SessionMetadata) *providers.SessionMetadata {
+	if metadata == nil {
+		return nil
+	}
+	clone := *metadata
+	return &clone
+}
+
+func isObservationNotFound(err error) bool {
+	return err == workersessions.ErrObservationWorkNotFound
+}
+
+func isObservationProjectionUnavailable(err error) bool {
+	return err == workersessions.ErrObservationProjectionUnavailable
+}
+
+func observationContextError(ctx context.Context) error {
+	if ctx == nil {
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return workersessions.ErrObservationCanceled
+	}
+	return nil
+}
+
+func (f *factoryImpl) currentWorldState(tick int) *interfaces.FactoryWorldState {
+	if f.eventHistory == nil || f.cfg == nil || f.cfg.worldStateProjector == nil {
+		return nil
+	}
+	state, err := f.cfg.worldStateProjector(f.eventHistory.CanonicalEvents(), tick)
+	if err != nil {
+		f.logger.Warn("factory world-state reconstruction failed; falling back to runtime snapshot", "error", err)
+		return nil
+	}
+	return &state
+}
+
+func (f *factoryImpl) deriveRuntimeStatus(currentState interfaces.FactoryState, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], worldState *interfaces.FactoryWorldState) interfaces.RuntimeStatus {
+	if currentState == interfaces.FactoryStateCompleted || currentState == interfaces.FactoryStateFailed {
+		return interfaces.RuntimeStatusFinished
+	}
+	if snapshot.InFlightCount > 0 || len(snapshot.Dispatches) > 0 || hasNonTerminalWork(snapshot.Marking, f.topology) {
+		return interfaces.RuntimeStatusActive
+	}
+	return interfaces.RuntimeStatusIdle
+}
+
+func hasNonTerminalWork(marking petri.MarkingSnapshot, topology *state.Net) bool {
+	if topology == nil {
+		return false
+	}
+	for _, token := range marking.Tokens {
+		if token == nil || token.Color.DataType == factorytoken.DataTypeResource || token.Color.WorkTypeID == "" {
+			continue
+		}
+		category := topology.StateCategoryForPlace(token.PlaceID)
+		if category != state.StateCategoryTerminal && category != state.StateCategoryFailed {
+			return true
+		}
+	}
+	return false
 }

@@ -27,7 +27,9 @@ import (
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 	inferencewire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/wire"
+	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	runtimehostwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/wire"
+	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	"go.uber.org/zap"
 )
@@ -72,6 +74,104 @@ func NewService(
 	hostLogger HostDiagnosticLogger,
 	hostMetrics HostMetricsRecorder,
 	localHooks LocalRuntimeHooks,
+	resolveEnvironment AssetResolveEnvironment,
+	protocolNegotiator HostProtocolNegotiator,
+	compatibilityChecker HostCompatibilityChecker,
+	revisionResolvers ...func(context.Context, string) (string, error),
+) (models.Service, error) {
+	return newService(
+		assetPlatform, assetHTTP, assetEndpoints, assetMkdirAll, assetStat, assetHome,
+		assetWriteFile, assetRename, assetRemove, assetReadFile, assetReadDir,
+		assetCreate, assetOpen, processLauncher, hostHTTP, hostClock, runtimeRunner,
+		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
+		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
+		resolveEnvironment, protocolNegotiator, compatibilityChecker, nil,
+		revisionResolvers...,
+	)
+}
+
+// NewServiceWithBackendArtifactResolver constructs the Models root with the
+// exact pinned backend selector used by the joined invocation path.
+func NewServiceWithBackendArtifactResolver(
+	assetPlatform models.AssetHostPlatform,
+	assetHTTP AssetHTTPDoer,
+	assetEndpoints models.RuntimeAssetEndpoints,
+	assetMkdirAll AssetMakeDirectories,
+	assetStat AssetInspectPath,
+	assetHome AssetResolveHomeDirectory,
+	assetWriteFile AssetWriteFile,
+	assetRename AssetRenamePath,
+	assetRemove AssetRemovePath,
+	assetReadFile AssetReadFile,
+	assetReadDir AssetReadDirectory,
+	assetCreate AssetCreateFile,
+	assetOpen AssetOpenFile,
+	processLauncher HostProcessLauncher,
+	hostHTTP HostHTTPDoer,
+	hostClock HostClock,
+	runtimeRunner platformprocess.CommandRunner,
+	runtimeHTTP RuntimeHTTPDoer,
+	runtimeInspect RuntimeInspectFile,
+	runtimeTempDir RuntimeTempDirectory,
+	runtimeTempFile RuntimeCreateTempFile,
+	logger *zap.Logger,
+	now func() time.Time,
+	issuerEntropy platformrandom.Source,
+	pullMetrics PullMetricsRecorder,
+	hostLogger HostDiagnosticLogger,
+	hostMetrics HostMetricsRecorder,
+	localHooks LocalRuntimeHooks,
+	resolveEnvironment AssetResolveEnvironment,
+	protocolNegotiator HostProtocolNegotiator,
+	compatibilityChecker HostCompatibilityChecker,
+	backendResolver BackendArtifactResolver,
+	revisionResolvers ...func(context.Context, string) (string, error),
+) (models.Service, error) {
+	return newService(
+		assetPlatform, assetHTTP, assetEndpoints, assetMkdirAll, assetStat, assetHome,
+		assetWriteFile, assetRename, assetRemove, assetReadFile, assetReadDir,
+		assetCreate, assetOpen, processLauncher, hostHTTP, hostClock, runtimeRunner,
+		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
+		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
+		resolveEnvironment, protocolNegotiator, compatibilityChecker, backendResolver,
+		revisionResolvers...,
+	)
+}
+
+func newService(
+	assetPlatform models.AssetHostPlatform,
+	assetHTTP AssetHTTPDoer,
+	assetEndpoints models.RuntimeAssetEndpoints,
+	assetMkdirAll AssetMakeDirectories,
+	assetStat AssetInspectPath,
+	assetHome AssetResolveHomeDirectory,
+	assetWriteFile AssetWriteFile,
+	assetRename AssetRenamePath,
+	assetRemove AssetRemovePath,
+	assetReadFile AssetReadFile,
+	assetReadDir AssetReadDirectory,
+	assetCreate AssetCreateFile,
+	assetOpen AssetOpenFile,
+	processLauncher HostProcessLauncher,
+	hostHTTP HostHTTPDoer,
+	hostClock HostClock,
+	runtimeRunner platformprocess.CommandRunner,
+	runtimeHTTP RuntimeHTTPDoer,
+	runtimeInspect RuntimeInspectFile,
+	runtimeTempDir RuntimeTempDirectory,
+	runtimeTempFile RuntimeCreateTempFile,
+	logger *zap.Logger,
+	now func() time.Time,
+	issuerEntropy platformrandom.Source,
+	pullMetrics PullMetricsRecorder,
+	hostLogger HostDiagnosticLogger,
+	hostMetrics HostMetricsRecorder,
+	localHooks LocalRuntimeHooks,
+	resolveEnvironment AssetResolveEnvironment,
+	protocolNegotiator HostProtocolNegotiator,
+	compatibilityChecker HostCompatibilityChecker,
+	backendResolver BackendArtifactResolver,
+	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
 	if err := validateConstructionInputs(
 		assetPlatform,
@@ -99,15 +199,212 @@ func NewService(
 	); err != nil {
 		return nil, err
 	}
-	defaultEndpoints := models.RuntimeAssetEndpoints{
+	return composeModelsService(
+		assetPlatform,
+		assetHTTP,
+		assetEndpoints,
+		assetMkdirAll,
+		assetStat,
+		assetHome,
+		assetWriteFile,
+		assetRename,
+		assetRemove,
+		assetReadFile,
+		assetReadDir,
+		assetCreate,
+		assetOpen,
+		processLauncher,
+		hostHTTP,
+		hostClock,
+		runtimeRunner,
+		runtimeHTTP,
+		runtimeInspect,
+		runtimeTempDir,
+		runtimeTempFile,
+		logger,
+		now,
+		issuerEntropy,
+		pullMetrics,
+		hostLogger,
+		hostMetrics,
+		localHooks,
+		resolveEnvironment,
+		protocolNegotiator,
+		compatibilityChecker,
+		backendResolver,
+		revisionResolvers...,
+	)
+}
+
+func composeModelsService(
+	assetPlatform models.AssetHostPlatform,
+	assetHTTP AssetHTTPDoer,
+	assetEndpoints models.RuntimeAssetEndpoints,
+	assetMkdirAll AssetMakeDirectories,
+	assetStat AssetInspectPath,
+	assetHome AssetResolveHomeDirectory,
+	assetWriteFile AssetWriteFile,
+	assetRename AssetRenamePath,
+	assetRemove AssetRemovePath,
+	assetReadFile AssetReadFile,
+	assetReadDir AssetReadDirectory,
+	assetCreate AssetCreateFile,
+	assetOpen AssetOpenFile,
+	processLauncher HostProcessLauncher,
+	hostHTTP HostHTTPDoer,
+	hostClock HostClock,
+	runtimeRunner platformprocess.CommandRunner,
+	runtimeHTTP RuntimeHTTPDoer,
+	runtimeInspect RuntimeInspectFile,
+	runtimeTempDir RuntimeTempDirectory,
+	runtimeTempFile RuntimeCreateTempFile,
+	logger *zap.Logger,
+	now func() time.Time,
+	issuerEntropy platformrandom.Source,
+	pullMetrics PullMetricsRecorder,
+	hostLogger HostDiagnosticLogger,
+	hostMetrics HostMetricsRecorder,
+	localHooks LocalRuntimeHooks,
+	resolveEnvironment AssetResolveEnvironment,
+	protocolNegotiator HostProtocolNegotiator,
+	compatibilityChecker HostCompatibilityChecker,
+	backendResolver BackendArtifactResolver,
+	revisionResolvers ...func(context.Context, string) (string, error),
+) (models.Service, error) {
+	resolvedEndpoints := resolveAssetEndpoints(assetEndpoints)
+	launcher, clock, createTempFile := adaptConstructionPorts(
+		processLauncher, hostClock, runtimeTempFile,
+	)
+	components, err := buildModelsServiceComponents(
+		assetPlatform, assetHTTP, resolvedEndpoints, assetMkdirAll, assetStat,
+		assetHome, assetWriteFile, assetRename, assetRemove, assetReadFile,
+		assetReadDir, assetCreate, assetOpen, processLauncher, hostHTTP, hostClock,
+		hostLogger, hostMetrics, resolveEnvironment, protocolNegotiator,
+		compatibilityChecker, now, issuerEntropy, firstRevisionResolver(revisionResolvers),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return modelsservice.NewRoot(
+		launcher, hostHTTP, clock,
+		runtimeRunner, runtimeHTTP, localmodels.InspectFile(runtimeInspect),
+		localmodels.TempDirectory(runtimeTempDir), createTempFile,
+		components.runtimeScopes, components.catalog, components.assets, components.runtimeHost, components.inference,
+		modelseffects.ProcessDependencies{
+			Logger: logger, Clock: now, PullMetrics: pullMetrics,
+			HostLogger: hostLogger, HostMetrics: hostMetrics, LocalHooks: localHooks,
+			ResolveHuggingFaceRevision: firstRevisionResolver(revisionResolvers),
+			ResolveBackendArtifact:     backendResolver,
+			BackendArtifactPlatform:    assetPlatform,
+		},
+	)
+}
+
+type modelsServiceComponents struct {
+	runtimeScopes runtimescopes.Service
+	assets        scopedassets.Service
+	catalog       catalog.Service
+	runtimeHost   runtimehost.Service
+	inference     inference.Service
+}
+
+func buildModelsServiceComponents(
+	assetPlatform models.AssetHostPlatform,
+	assetHTTP AssetHTTPDoer,
+	assetEndpoints models.RuntimeAssetEndpoints,
+	assetMkdirAll AssetMakeDirectories,
+	assetStat AssetInspectPath,
+	assetHome AssetResolveHomeDirectory,
+	assetWriteFile AssetWriteFile,
+	assetRename AssetRenamePath,
+	assetRemove AssetRemovePath,
+	assetReadFile AssetReadFile,
+	assetReadDir AssetReadDirectory,
+	assetCreate AssetCreateFile,
+	assetOpen AssetOpenFile,
+	processLauncher HostProcessLauncher,
+	hostHTTP HostHTTPDoer,
+	hostClock HostClock,
+	hostLogger HostDiagnosticLogger,
+	hostMetrics HostMetricsRecorder,
+	resolveEnvironment AssetResolveEnvironment,
+	protocolNegotiator HostProtocolNegotiator,
+	compatibilityChecker HostCompatibilityChecker,
+	now func() time.Time,
+	issuerEntropy platformrandom.Source,
+	revisionResolver func(context.Context, string) (string, error),
+) (modelsServiceComponents, error) {
+	issuerID, err := runtimeScopeIssuerID(issuerEntropy)
+	if err != nil {
+		return modelsServiceComponents{}, fmt.Errorf("construct Models Runtime Scopes issuer identity: %w", err)
+	}
+	runtimeScopes, err := runtimescopeswire.NewService(func() string { return issuerID })
+	if err != nil {
+		return modelsServiceComponents{}, err
+	}
+	assetService, err := assetswire.NewService(
+		runtimeScopes, assetPlatform, assetHTTP, assetEndpoints,
+		assetMkdirAll, assetStat, assetHome, assetWriteFile, assetRename,
+		assetRemove, assetReadFile, assetReadDir, assetCreate, assetOpen,
+		scopedassets.ConstructionOptions{ResolveEnvironment: resolveEnvironment, ResolveRevision: revisionResolver},
+	)
+	if err != nil {
+		return modelsServiceComponents{}, err
+	}
+	catalogService, err := catalogwire.NewService(runtimeScopes, newCatalogReadinessQuery(assetService))
+	if err != nil {
+		return modelsServiceComponents{}, err
+	}
+	runtimeHost, err := runtimehostwire.NewService(
+		runtimeScopes, assetService, processLauncher, hostHTTP, hostClock, hostLogger, hostMetrics,
+		runtimehost.Options{
+			Platform: assetPlatform, ProtocolNegotiator: protocolNegotiator,
+			CompatibilityChecker: compatibilityChecker,
+		},
+	)
+	if err != nil {
+		return modelsServiceComponents{}, err
+	}
+	inferenceService, err := inferencewire.NewService(
+		runtimeScopes, assetService, catalogService, runtimeHost,
+		inference.InputEchoInvocationRuntime{}, inference.InertArtifactFileSystem{}, now,
+	)
+	if err != nil {
+		return modelsServiceComponents{}, err
+	}
+	return modelsServiceComponents{
+		runtimeScopes: runtimeScopes, assets: assetService, catalog: catalogService,
+		runtimeHost: runtimeHost, inference: inferenceService,
+	}, nil
+}
+
+func firstRevisionResolver(
+	resolvers []func(context.Context, string) (string, error),
+) func(context.Context, string) (string, error) {
+	if len(resolvers) == 0 {
+		return nil
+	}
+	return resolvers[0]
+}
+
+func resolveAssetEndpoints(overrides models.RuntimeAssetEndpoints) models.RuntimeAssetEndpoints {
+	resolved := models.RuntimeAssetEndpoints{
 		BaseURL: defaultAssetBaseURL, APIBaseURL: defaultAssetAPIBaseURL,
 	}
-	if assetEndpoints.BaseURL != "" {
-		defaultEndpoints.BaseURL = assetEndpoints.BaseURL
+	if overrides.BaseURL != "" {
+		resolved.BaseURL = overrides.BaseURL
 	}
-	if assetEndpoints.APIBaseURL != "" {
-		defaultEndpoints.APIBaseURL = assetEndpoints.APIBaseURL
+	if overrides.APIBaseURL != "" {
+		resolved.APIBaseURL = overrides.APIBaseURL
 	}
+	return resolved
+}
+
+func adaptConstructionPorts(
+	processLauncher HostProcessLauncher,
+	hostClock HostClock,
+	runtimeTempFile RuntimeCreateTempFile,
+) (modelhost.ProcessLauncher, modelhost.Clock, localmodels.CreateTempFile) {
 	var launcher modelhost.ProcessLauncher
 	if processLauncher != nil {
 		launcher = hostProcessLauncher{next: processLauncher}
@@ -120,70 +417,7 @@ func NewService(
 	if runtimeTempFile != nil {
 		createTempFile = runtimeTempFileAdapter{next: runtimeTempFile}.create
 	}
-	issuerID, err := runtimeScopeIssuerID(issuerEntropy)
-	if err != nil {
-		return nil, fmt.Errorf("construct Models Runtime Scopes issuer identity: %w", err)
-	}
-	runtimeScopes, err := runtimescopeswire.NewService(func() string { return issuerID })
-	if err != nil {
-		return nil, err
-	}
-	assetService, err := assetswire.NewService(
-		runtimeScopes, assetPlatform, assetHTTP,
-		models.RuntimeAssetEndpoints{
-			BaseURL: defaultEndpoints.BaseURL, APIBaseURL: defaultEndpoints.APIBaseURL,
-		},
-		assetMkdirAll, assetStat, assetHome, assetWriteFile, assetRename,
-		assetRemove, assetReadFile, assetReadDir, assetCreate, assetOpen,
-	)
-	if err != nil {
-		return nil, err
-	}
-	catalogService, err := catalogwire.NewService(
-		runtimeScopes,
-		newCatalogReadinessQuery(assetService),
-	)
-	if err != nil {
-		return nil, err
-	}
-	runtimeHost, err := runtimehostwire.NewService(
-		runtimeScopes,
-		assetService,
-		processLauncher,
-		hostHTTP,
-		hostClock,
-		hostLogger,
-		hostMetrics,
-	)
-	if err != nil {
-		return nil, err
-	}
-	inferenceService, err := inferencewire.NewService(
-		runtimeScopes,
-		assetService,
-		catalogService,
-		runtimeHost,
-		inference.InputEchoInvocationRuntime{},
-		inference.InertArtifactFileSystem{},
-		now,
-	)
-	if err != nil {
-		return nil, err
-	}
-	service, err := modelsservice.NewRoot(
-		launcher, hostHTTP, clock,
-		runtimeRunner, runtimeHTTP, localmodels.InspectFile(runtimeInspect),
-		localmodels.TempDirectory(runtimeTempDir), createTempFile,
-		runtimeScopes, catalogService, assetService, runtimeHost, inferenceService,
-		modelseffects.ProcessDependencies{
-			Logger: logger, Clock: now, PullMetrics: pullMetrics,
-			HostLogger: hostLogger, HostMetrics: hostMetrics, LocalHooks: localHooks,
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-	return service, nil
+	return launcher, clock, createTempFile
 }
 
 func newCatalogReadinessQuery(assetService scopedassets.Service) catalog.ReadinessQuery {
@@ -207,6 +441,7 @@ func newCatalogReadinessQuery(assetService scopedassets.Service) catalog.Readine
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func validateConstructionInputs(
 	assetPlatform models.AssetHostPlatform,
 	assetHTTP modelseffects.AssetHTTPDoer,

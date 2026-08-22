@@ -4,8 +4,14 @@ export const FACTORY_EVENTS_ENDPOINT = "/events";
 
 export const FACTORY_EVENT_TYPES = {
   factoryChange: "FACTORY_CHANGE",
+  factoryChangeRequest: "FACTORY_CHANGE_REQUEST",
+  factoryChangeFailed: "FACTORY_CHANGE_FAILED",
   dispatchResponse: "DISPATCH_RESPONSE",
   dispatchRequest: "DISPATCH_REQUEST",
+  humanApprovalRequested: "HUMAN_APPROVAL_REQUESTED",
+  dispatchWorkerSessionAssociation: "DISPATCH_WORKER_SESSION_ASSOCIATION",
+  modelRequest: "MODEL_REQUEST",
+  modelResponse: "MODEL_RESPONSE",
   factoryStateResponse: "FACTORY_STATE_RESPONSE",
   inferenceRequest: "INFERENCE_REQUEST",
   inferenceResponse: "INFERENCE_RESPONSE",
@@ -15,6 +21,7 @@ export const FACTORY_EVENT_TYPES = {
   runRequest: "RUN_REQUEST",
   scriptRequest: "SCRIPT_REQUEST",
   scriptResponse: "SCRIPT_RESPONSE",
+  agentRunResponse: "AGENT_RUN_RESPONSE",
   workRequest: "WORK_REQUEST",
   workStateChange: "WORK_STATE_CHANGE",
   sessionStarted: "SESSION_STARTED",
@@ -28,13 +35,18 @@ export const FACTORY_EVENT_TYPES = {
   dispatchQueued: "DISPATCH_QUEUED",
   dispatchInterrupted: "DISPATCH_INTERRUPTED",
   dispatchReconciled: "DISPATCH_RECONCILED",
+  javascriptCheckpointRef: "JAVASCRIPT_CHECKPOINT_REF",
+  javascriptPhaseChange: "JAVASCRIPT_PHASE_CHANGE",
   artifactCreated: "ARTIFACT_CREATED",
 } as const satisfies Record<string, FactoryEventType>;
 
 type FactorySchemas = components["schemas"];
 type GeneratedFactoryEvent = FactorySchemas["FactoryEvent"];
 
-export type FactoryEventType = FactorySchemas["FactoryEventType"];
+/** Event types are open so an older dashboard can retain newer events. */
+export type FactoryEventType =
+  | FactorySchemas["FactoryEventType"]
+  | (string & {});
 
 export type FactoryEventContext = FactorySchemas["FactoryEventContext"];
 
@@ -51,6 +63,8 @@ export type FactoryEventPayload =
   | RunResponsePayload
   | InitialStructureRequestPayload
   | FactoryChangePayload
+  | FactoryChangeRequestPayload
+  | FactoryChangeFailedPayload
   | WorkRequestPayload
   | RelationshipChangeRequestPayload
   | DispatchRequestPayload
@@ -76,6 +90,12 @@ export type InitialStructureRequestPayload =
   FactorySchemas["InitialStructureRequestEventPayload"];
 
 export type FactoryChangePayload = FactorySchemas["FactoryChangeEventPayload"];
+
+export type FactoryChangeRequestPayload =
+  FactorySchemas["FactoryChangeRequestEventPayload"];
+
+export type FactoryChangeFailedPayload =
+  FactorySchemas["FactoryChangeFailedEventPayload"];
 
 export type FactoryDefinition = FactorySchemas["Factory"];
 

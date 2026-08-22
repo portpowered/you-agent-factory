@@ -1,13 +1,17 @@
 // Package contracts contains the Recordings-owned transport-neutral contract
 // vocabulary and private contract-support helpers.
+// backendsizecheck:ignore-file pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-file-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 package contracts
 
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	recordingworkstation "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections/workstation"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -86,6 +90,33 @@ var ErrRecordingSnapshotWrite = errors.New("recording snapshot write failed")
 // recording finished.
 var ErrRecordingWriteRejected = errors.New("recording write rejected after finish")
 
+// ErrRecordingScopeInvalid reports an empty or malformed opaque recording
+// scope reference.
+var ErrRecordingScopeInvalid = errors.New("recording scope is invalid")
+
+// ErrInvalidRecordingScopeRef is the descriptive alias used by callers that
+// validate a reference at a transport boundary.
+var ErrInvalidRecordingScopeRef = ErrRecordingScopeInvalid
+
+// ErrRecordingScopeStale reports a well-formed reference that no longer
+// identifies a live scope issued by this Recordings root.
+var ErrRecordingScopeStale = errors.New("recording scope is stale")
+
+// ErrRecordingScopeUnknown is the operation-oriented alias for stale scope
+// references.
+var ErrRecordingScopeUnknown = ErrRecordingScopeStale
+
+// ErrRecordingScopeClosed reports a reference that was explicitly closed.
+var ErrRecordingScopeClosed = errors.New("recording scope is closed")
+
+// ErrRecordingScopeForeign reports a reference issued by another Recordings
+// root.
+var ErrRecordingScopeForeign = errors.New("recording scope is foreign")
+
+// ErrRecordingScopeFinalized reports an append or mutable operation attempted
+// after the selected scope reached its terminal lifecycle state.
+var ErrRecordingScopeFinalized = errors.New("recording scope is finalized")
+
 // DefaultRecordingFlushInterval is the cadence used when an enabled recording
 // does not request a positive active-flush interval.
 const DefaultRecordingFlushInterval = 250 * time.Millisecond
@@ -108,8 +139,107 @@ var ErrUnsupportedReplayBinding = errors.New("unsupported replay binding input")
 type RuntimeOpeningRequest struct {
 	RecordPath    string
 	ReplayPath    string
+	ResumePath    string
+	ResumeInput   LoadResumeInputResult
 	WorkflowID    string
 	FlushInterval time.Duration
+}
+
+// RuntimeScopeRequest contains the runtime-owned values Recordings needs to
+// open one private event stream. The process graph supplies the Recordings
+// root once; callers provide only the topology, identity, clock, and loaded
+// definition values for this runtime.
+type RuntimeScopeRequest struct {
+	Topology      InitialStructureSource
+	Definitions   interfaces.RuntimeDefinitionLookup
+	LoadedFactory interfaces.LoadedFactorySource
+	// ReplayEvents is an optional canonical prefix restored before the live
+	// runtime emits successor lifecycle events. It preserves public event
+	// identities and ordering across a process replacement.
+	ReplayEvents     []interfaces.FactoryEvent
+	Now              func() time.Time
+	RecordingID      string
+	RecordPath       string
+	FlushInterval    time.Duration
+	FactorySessionID string
+}
+
+// RuntimeScopeResult returns the runtime event ledger and optional recorder
+// owned by the shared Recordings root. The ledger and recorder are runtime
+// capabilities, not construction collaborators; they are acquired and
+// finalized by the root's scope owner.
+type RuntimeScopeResult struct {
+	Ledger   RuntimeEventLedger
+	Recorder RuntimeRecorder
+	Scope    RecordingScopeRef
+}
+
+// LoadReplayInputRequest selects one historical replay input by filesystem
+// path before a runtime recording scope exists.
+type LoadReplayInputRequest struct {
+	Path string
+}
+
+// LoadReplayInputResult contains exactly one of Portable or Legacy, depending
+// on which replay input family the selected path contained.
+type LoadReplayInputResult struct {
+	Portable    *PortableRecording
+	Legacy      *ReplayArtifact
+	Diagnostics *ReplayInputDecodeDiagnostics
+}
+
+// ReplayInputDecodeDiagnostics contains safe metadata produced while loading
+// one replay input. The pointer on LoadReplayInputResult keeps the established
+// result value comparable for runtime-opening request assertions while still
+// carrying path-only compatibility diagnostics.
+type ReplayInputDecodeDiagnostics struct {
+	IgnoredJSONPaths []string
+}
+
+// LoadResumeInputRequest selects one explicit resume source by filesystem
+// path before a runtime recording scope exists. It is intentionally distinct
+// from LoadReplayInputRequest so a live continuation cannot be routed through
+// the read-only replay intent by accident.
+type LoadResumeInputRequest struct {
+	Path string
+}
+
+// LoadResumeInputResult contains the detached input facts selected for a live
+// continuation. Factory Runtime consumes the legacy Factory-event family to
+// seed the live successor's initial world state; portable inspection inputs
+// remain a separate, read-only product.
+type LoadResumeInputResult struct {
+	Input LoadReplayInputResult
+}
+
+// RuntimeOpening is the Recordings-owned capability used by Factory Runtime
+// and Factory Sessions while opening a runtime. It keeps replay construction,
+// projection selection, and live scope acquisition on the one process root.
+type RuntimeOpening interface {
+	OpenRuntime(context.Context, RuntimeScopeRequest) (RuntimeScopeResult, error)
+	LoadReplayInput(LoadReplayInputRequest) (LoadReplayInputResult, error)
+	// ReconstructCanonicalFactoryWorldState reduces detached canonical Factory
+	// Events into the typed world state consumed by runtime construction. The
+	// reduction remains Recordings-owned; callers receive only the public value
+	// contract and never the reducer or projection implementation.
+	ReconstructCanonicalFactoryWorldState([]FactoryEvent, int) (FactoryWorldState, error)
+	LoadResumeInput(LoadResumeInputRequest) (LoadResumeInputResult, error)
+	Projection() ProjectionService
+	ReplayClock(*ReplayArtifact) Clock
+	ReplayExecution(*ReplayArtifact) (
+		providers.Service,
+		workerexecution.CommandRunner,
+		[]ReplayHook,
+		CompletionDeliveryPlanner,
+		error,
+	)
+}
+
+// Root is the complete process-scoped Recordings authority. Runtime opening
+// is an owner capability of this same value, never a second service graph.
+type Root interface {
+	Service
+	RuntimeOpening
 }
 
 // CanonicalEventID is the Recordings-owned identity of one accepted Factory
@@ -219,7 +349,12 @@ type (
 	DispatchQueuedEventPayload                 = interfaces.DispatchQueuedEventPayload
 	DispatchReconciledEventPayload             = interfaces.DispatchReconciledEventPayload
 	DispatchRequestEventPayload                = interfaces.DispatchRequestEventPayload
+	HumanApprovalDecision                      = interfaces.HumanApprovalDecision
+	HumanApprovalRequestedEventPayload         = interfaces.HumanApprovalRequestedEventPayload
+	HumanApprovalStatus                        = interfaces.HumanApprovalStatus
 	FactoryChangeEventPayload                  = interfaces.FactoryChangeEventPayload
+	FactoryChangeRequestEventPayload           = interfaces.FactoryChangeRequestEventPayload
+	FactoryChangeFailedEventPayload            = interfaces.FactoryChangeFailedEventPayload
 	FactoryEvent                               = interfaces.FactoryEvent
 	FactoryEventContext                        = interfaces.FactoryEventContext
 	FactoryEventReconnectCursor                = interfaces.FactoryEventReconnectCursor
@@ -256,7 +391,14 @@ const (
 	FactoryEventTypeDispatchReconciled            = interfaces.FactoryEventTypeDispatchReconciled
 	FactoryEventTypeDispatchRequest               = interfaces.FactoryEventTypeDispatchRequest
 	FactoryEventTypeDispatchResponse              = interfaces.FactoryEventTypeDispatchResponse
+	FactoryEventTypeDispatchWorkerSessionAssoc    = interfaces.FactoryEventTypeDispatchWorkerSessionAssoc
+	FactoryEventTypeHumanApprovalRequested        = interfaces.FactoryEventTypeHumanApprovalRequested
+	HumanApprovalDecisionApprove                  = interfaces.HumanApprovalDecisionApprove
+	HumanApprovalDecisionReject                   = interfaces.HumanApprovalDecisionReject
+	HumanApprovalStatusPending                    = interfaces.HumanApprovalStatusPending
 	FactoryEventTypeFactoryChange                 = interfaces.FactoryEventTypeFactoryChange
+	FactoryEventTypeFactoryChangeRequest          = interfaces.FactoryEventTypeFactoryChangeRequest
+	FactoryEventTypeFactoryChangeFailed           = interfaces.FactoryEventTypeFactoryChangeFailed
 	FactoryEventTypeFactoryStateResponse          = interfaces.FactoryEventTypeFactoryStateResponse
 	FactoryEventTypeInferenceRequest              = interfaces.FactoryEventTypeInferenceRequest
 	FactoryEventTypeInferenceResponse             = interfaces.FactoryEventTypeInferenceResponse
@@ -302,6 +444,7 @@ type (
 	FactoryWorldAgentRunResponse              = interfaces.FactoryWorldAgentRunResponse
 	FactoryWorldDispatch                      = interfaces.FactoryWorldDispatch
 	FactoryWorldDispatchCompletion            = interfaces.FactoryWorldDispatchCompletion
+	FactoryWorldHumanApproval                 = interfaces.FactoryWorldHumanApproval
 	FactoryWorldFailureDetail                 = interfaces.FactoryWorldFailureDetail
 	FactoryWorldInferenceAttempt              = interfaces.FactoryWorldInferenceAttempt
 	FactoryWorldJavaScriptChildDispatchCounts = interfaces.FactoryWorldJavaScriptChildDispatchCounts
@@ -469,6 +612,22 @@ type LoadReplayRecordingResult struct {
 	Recording ReplayRecordingFacts
 }
 
+// LoadReplayRecordingForResumeRequest selects one recording for explicit
+// resume-intent loading. Unlike neutral replay, resume loading may inspect an
+// active, unfinalized recording.
+type LoadReplayRecordingForResumeRequest struct {
+	RecordingID RecordingID
+}
+
+// LoadReplayRecordingForResumeResult returns detached canonical facts and the
+// recovery facts reported by the selected resume source.
+type LoadReplayRecordingForResumeResult struct {
+	Recording             ReplayRecordingFacts
+	RecoveredEventCount   int
+	Truncated             bool
+	SkippedTrailingBlocks int
+}
+
 // ReplayPlanHandle is an opaque Recordings-owned replay identity.
 type ReplayPlanHandle string
 
@@ -578,7 +737,8 @@ type SubscribeRequest struct {
 
 // SubscribeResult is the plain reconnect-aware subscribe success outcome.
 type SubscribeResult struct {
-	Subscription EventSubscription
+	Subscription       EventSubscription
+	RetainedEventCount int
 }
 
 // WorldStateViewSchemaVersion identifies the detached world-state payload
@@ -649,6 +809,35 @@ type ValidateReconnectReplayRequest struct {
 
 // RecordingID is the Recordings-owned identity of one bound recording.
 type RecordingID string
+
+// RecordingScopeRef is an opaque Recordings-owned reference to one live
+// recording scope. Callers may carry and compare it, but they cannot inspect
+// or construct the lifecycle, ledger, projection, recorder, or storage state
+// behind the reference.
+type RecordingScopeRef struct {
+	value string
+}
+
+// Parse restores a scope reference received from a trusted boundary. The
+// issuing Recordings root classifies stale, closed, and foreign ownership when
+// the reference is used.
+func (RecordingScopeRef) Parse(value string) (RecordingScopeRef, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return RecordingScopeRef{}, ErrRecordingScopeInvalid
+	}
+	return RecordingScopeRef{value: value}, nil
+}
+
+// String returns the opaque serialized reference.
+func (ref RecordingScopeRef) String() string {
+	return ref.value
+}
+
+// IsZero reports whether no recording scope reference was supplied.
+func (ref RecordingScopeRef) IsZero() bool {
+	return strings.TrimSpace(ref.value) == ""
+}
 
 // RecordingArtifactReference is an opaque portable artifact reference. It does
 // not grant filesystem authority or expose a writer, transaction, or temporary
@@ -847,6 +1036,263 @@ type RecordingStatusResult struct {
 	Status RecordingStatusFacts
 }
 
+// RecordingScopeStatus is a detached lifecycle snapshot addressed by an
+// opaque scope reference. It intentionally omits the private RecordingID used
+// by the compatibility lifecycle implementation.
+type RecordingScopeStatus struct {
+	Scope          RecordingScopeRef
+	EventScope     CanonicalEventScope
+	Artifact       RecordingArtifactReference
+	State          RecordingLifecycleState
+	AcceptedEvents int
+	LastEvent      *CanonicalEventCursor
+	FlushedThrough *CanonicalEventCursor
+	Failures       []RecordingFailure
+	FinalizedAt    *time.Time
+}
+
+// BeginRecordingScopeRequest selects one value-only recording scope. Artifact
+// takes precedence over generated HomeDir/ReportedSessionID target selection.
+// RecordingID is an optional caller identity used only to correlate the
+// private lifecycle binding; it is never returned as the scope reference.
+type BeginRecordingScopeRequest struct {
+	Enabled       bool
+	RecordingID   RecordingID
+	Scope         CanonicalEventScope
+	Target        RecordingTargetRequest
+	FlushInterval time.Duration
+}
+
+// BeginRecordingScopeResult returns the opaque scope and detached active
+// status. Disabled requests return a zero scope and zero status.
+type BeginRecordingScopeResult struct {
+	Scope  RecordingScopeRef
+	Status RecordingScopeStatus
+}
+
+// AppendRecordingScopeEventRequest appends one canonical event to the
+// selected scope and its canonical event ledger.
+type AppendRecordingScopeEventRequest struct {
+	Scope RecordingScopeRef
+	Event CanonicalEvent
+}
+
+// AppendRecordingScopeEventResult returns the accepted canonical event and
+// detached scope status.
+type AppendRecordingScopeEventResult struct {
+	Event  CanonicalEvent
+	Status RecordingScopeStatus
+}
+
+// FlushRecordingScopeRequest asks the selected scope to persist its accepted
+// prefix through Recordings-owned lifecycle effects.
+type FlushRecordingScopeRequest struct {
+	Scope RecordingScopeRef
+}
+
+// FlushRecordingScopeResult returns the detached status after flushing.
+type FlushRecordingScopeResult struct {
+	Status RecordingScopeStatus
+}
+
+// FinalizeRecordingScopeRequest applies terminal metadata and performs the
+// final owned flush for the selected scope.
+type FinalizeRecordingScopeRequest struct {
+	Scope      RecordingScopeRef
+	FinishedAt time.Time
+}
+
+// FinalizeRecordingScopeResult returns the first terminal outcome. Repeated
+// finalization is idempotent.
+type FinalizeRecordingScopeResult struct {
+	Status RecordingScopeStatus
+}
+
+// CloseRecordingScopeRequest releases an acquired scope. An active scope is
+// finalized before release; a FinishedAt value is required for that implicit
+// finalization.
+type CloseRecordingScopeRequest struct {
+	Scope      RecordingScopeRef
+	FinishedAt time.Time
+}
+
+// CloseRecordingScopeResult confirms that owned lifecycle resources have been
+// released. Repeated close calls return the same detached terminal status.
+type CloseRecordingScopeResult struct {
+	Scope  RecordingScopeRef
+	Closed bool
+	Status RecordingScopeStatus
+}
+
+// QueryRecordingScopeRequest selects one opaque scope for inspection.
+type QueryRecordingScopeRequest struct {
+	Scope RecordingScopeRef
+}
+
+// QueryRecordingScopeResult returns a detached status for one scope.
+type QueryRecordingScopeResult struct {
+	Status RecordingScopeStatus
+}
+
+// OpenRecordingScopeRequest opens an already-finalized recording for
+// historical inspection. Live scopes are acquired with
+// BeginRecordingScope; opening an existing active recording would create two
+// mutable owners for the same history and is therefore rejected.
+type OpenRecordingScopeRequest struct {
+	RecordingID RecordingID
+	Scope       CanonicalEventScope
+}
+
+// OpenRecordingScopeResult returns the opaque historical scope and its
+// detached terminal status.
+type OpenRecordingScopeResult = BeginRecordingScopeResult
+
+// SubscribeRecordingScopeRequest selects the canonical event stream owned by
+// one recording scope. Cursor validation is performed against that scope's
+// retained event prefix rather than a caller-provided session or ledger.
+type SubscribeRecordingScopeRequest struct {
+	Scope  RecordingScopeRef
+	Cursor *CanonicalEventCursor
+}
+
+// SubscribeRecordingScopeResult contains a scope-filtered event subscription.
+type SubscribeRecordingScopeResult struct {
+	Subscription EventSubscription
+}
+
+// LoadReplayRecordingScopeRequest selects finalized replay facts by opaque
+// recording scope reference.
+type LoadReplayRecordingScopeRequest struct {
+	Scope RecordingScopeRef
+}
+
+// LoadReplayRecordingScopeResult returns detached replay facts and lifecycle
+// status for the selected scope.
+type LoadReplayRecordingScopeResult struct {
+	Recording ReplayRecordingFacts
+	Status    RecordingScopeStatus
+}
+
+// CreateReplayPlanScopeRequest asks Recordings to build a neutral replay plan
+// from the finalized prefix owned by Scope.
+type CreateReplayPlanScopeRequest struct {
+	Scope           RecordingScopeRef
+	SchemaVersion   ReplayPlanSchemaVersion
+	Timing          ReplayTimingMode
+	ExpectedThrough *CanonicalEventCursor
+	SelectedTick    int
+}
+
+// CreateReplayPlanScopeResult returns the detached opaque replay-plan facts.
+type CreateReplayPlanScopeResult struct {
+	Plan   ReplayPlanFacts
+	Status RecordingScopeStatus
+}
+
+// ObserveReplayScopeRequest advances a replay plan that was created through
+// the selected scope. Plan ownership is checked before the neutral replay
+// service is called.
+type ObserveReplayScopeRequest struct {
+	Scope RecordingScopeRef
+	Plan  ReplayPlanHandle
+}
+
+// ObserveReplayScopeResult returns detached replay progress and current scope
+// status.
+type ObserveReplayScopeResult struct {
+	Observation ReplayObservation
+	Status      RecordingScopeStatus
+}
+
+// ReconstructRecordingScopeRequest asks Recordings to project a coherent
+// prefix of one scope's retained canonical facts. Through, when present,
+// selects the last cursor included in that prefix.
+type ReconstructRecordingScopeRequest struct {
+	Scope        RecordingScopeRef
+	Through      *CanonicalEventCursor
+	SelectedTick int
+}
+
+// ReconstructRecordingScopeResult returns detached world-state and lifecycle
+// facts from one coherent scope prefix.
+type ReconstructRecordingScopeResult struct {
+	WorldState WorldStateView
+	Status     RecordingScopeStatus
+}
+
+// QuerySimpleDashboardScopeRequest asks Recordings to derive dashboard data
+// from a coherent scope projection prefix.
+type QuerySimpleDashboardScopeRequest struct {
+	Scope        RecordingScopeRef
+	Through      *CanonicalEventCursor
+	SelectedTick int
+}
+
+// QuerySimpleDashboardScopeResult returns the world-state and detached
+// dashboard projection used to derive it.
+type QuerySimpleDashboardScopeResult struct {
+	Data       SimpleDashboardRenderData
+	WorldState WorldStateView
+	Status     RecordingScopeStatus
+}
+
+// QueryWorkstationRequestsScopeRequest asks Recordings to derive workstation
+// requests from a coherent scope projection prefix.
+type QueryWorkstationRequestsScopeRequest struct {
+	Scope        RecordingScopeRef
+	Through      *CanonicalEventCursor
+	SelectedTick int
+}
+
+// QueryWorkstationRequestsScopeResult returns the world-state and detached
+// workstation-request projection used to derive it.
+type QueryWorkstationRequestsScopeResult struct {
+	Projection WorkstationFactoryWorldWorkstationRequestProjectionSlice
+	WorldState WorldStateView
+	Status     RecordingScopeStatus
+}
+
+// BuildPortableArtifactScopeRequest selects one finalized scope for artifact
+// construction without exposing its private RecordingID.
+type BuildPortableArtifactScopeRequest struct {
+	Scope RecordingScopeRef
+}
+
+// BuildPortableArtifactScopeResult returns the detached artifact and scope
+// status.
+type BuildPortableArtifactScopeResult struct {
+	Artifact PortableArtifact
+	Status   RecordingScopeStatus
+}
+
+// ExportPortableArtifactScopeRequest selects one finalized scope for atomic
+// artifact publication.
+type ExportPortableArtifactScopeRequest struct {
+	Scope RecordingScopeRef
+}
+
+// ExportPortableArtifactScopeResult returns the public reference, artifact,
+// and detached scope status.
+type ExportPortableArtifactScopeResult struct {
+	Reference RecordingArtifactReference
+	Artifact  PortableArtifact
+	Status    RecordingScopeStatus
+}
+
+// ReadPortableArtifactScopeRequest selects one published artifact through its
+// owning scope. Reference remains an opaque public artifact handle.
+type ReadPortableArtifactScopeRequest struct {
+	Scope     RecordingScopeRef
+	Reference RecordingArtifactReference
+}
+
+// ReadPortableArtifactScopeResult returns a validated detached artifact and
+// scope status.
+type ReadPortableArtifactScopeResult struct {
+	Artifact PortableArtifact
+	Status   RecordingScopeStatus
+}
+
 // RecordingSnapshot is the detached value passed to the exact persistence
 // effect selected by Wire. Target selection remains private to Recordings.
 type RecordingSnapshot struct {
@@ -895,7 +1341,7 @@ type BindReplayExecutionRequest struct {
 // Deprecated: provider and runner bindings are intentionally excluded from the
 // peer-facing Service replay slice.
 type BindReplayExecutionResult struct {
-	Provider           workerexecution.Provider
+	Provider           providers.Service
 	CommandRunner      workerexecution.CommandRunner
 	Hooks              []ReplayHook
 	CompletionDelivery CompletionDeliveryPlanner
@@ -1017,7 +1463,8 @@ type DecodePortableArtifactRequest struct {
 
 // DecodePortableArtifactResult contains the validated detached artifact.
 type DecodePortableArtifactResult struct {
-	Artifact PortableArtifact
+	Artifact         PortableArtifact
+	IgnoredJSONPaths []string
 }
 
 // SummarizePortableArtifactRequest inspects one detached artifact.
@@ -1053,7 +1500,8 @@ type ReadPortableArtifactRequest struct {
 // ReadPortableArtifactResult contains the validated detached artifact read from
 // the public destination.
 type ReadPortableArtifactResult struct {
-	Artifact PortableArtifact
+	Artifact         PortableArtifact
+	IgnoredJSONPaths []string
 }
 
 // Ledger is the legacy runtime append/subscribe composition capability.
@@ -1079,6 +1527,8 @@ type Ledger interface {
 // deliberately excluded so a peer can implement this authority without
 // importing Factory Definitions or Recordings implementation packages.
 type Service interface {
+	RecordingScopeService
+
 	// Append publishes one ordered Factory Event through the plain
 	// append/subscribe root-contract slice.
 	Append(AppendRecordedEventRequest) (AppendRecordedEventResult, error)
@@ -1124,6 +1574,9 @@ type Service interface {
 	// LoadReplayRecording selects finalized canonical facts through the neutral
 	// replay root-contract slice.
 	LoadReplayRecording(LoadReplayRecordingRequest) (LoadReplayRecordingResult, error)
+	// LoadReplayRecordingForResume selects canonical facts for explicit resume
+	// intent. It may load an unfinalized recording and reports recovery facts.
+	LoadReplayRecordingForResume(LoadReplayRecordingForResumeRequest) (LoadReplayRecordingForResumeResult, error)
 	// CreateReplayPlan validates canonical facts and creates an opaque neutral
 	// replay plan without exposing execution or storage machinery.
 	CreateReplayPlan(CreateReplayPlanRequest) (CreateReplayPlanResult, error)
@@ -1151,6 +1604,29 @@ type Service interface {
 	// ReadPortableArtifact reads and validates one published portable artifact
 	// from its public reference.
 	ReadPortableArtifact(context.Context, ReadPortableArtifactRequest) (ReadPortableArtifactResult, error)
+}
+
+// RecordingScopeService is the scope-bearing lifecycle slice of the
+// Recordings root. Its operations accept only detached values and opaque
+// references; owner collaborators remain private to Recordings.
+type RecordingScopeService interface {
+	BeginRecordingScope(context.Context, BeginRecordingScopeRequest) (BeginRecordingScopeResult, error)
+	OpenRecordingScope(context.Context, OpenRecordingScopeRequest) (OpenRecordingScopeResult, error)
+	AppendRecordingScopeEvent(context.Context, AppendRecordingScopeEventRequest) (AppendRecordingScopeEventResult, error)
+	SubscribeRecordingScope(context.Context, SubscribeRecordingScopeRequest) (SubscribeRecordingScopeResult, error)
+	FlushRecordingScope(context.Context, FlushRecordingScopeRequest) (FlushRecordingScopeResult, error)
+	FinalizeRecordingScope(context.Context, FinalizeRecordingScopeRequest) (FinalizeRecordingScopeResult, error)
+	CloseRecordingScope(context.Context, CloseRecordingScopeRequest) (CloseRecordingScopeResult, error)
+	QueryRecordingScope(context.Context, QueryRecordingScopeRequest) (QueryRecordingScopeResult, error)
+	LoadReplayRecordingScope(context.Context, LoadReplayRecordingScopeRequest) (LoadReplayRecordingScopeResult, error)
+	CreateReplayPlanScope(context.Context, CreateReplayPlanScopeRequest) (CreateReplayPlanScopeResult, error)
+	ObserveReplayScope(context.Context, ObserveReplayScopeRequest) (ObserveReplayScopeResult, error)
+	ReconstructRecordingScope(context.Context, ReconstructRecordingScopeRequest) (ReconstructRecordingScopeResult, error)
+	QuerySimpleDashboardScope(context.Context, QuerySimpleDashboardScopeRequest) (QuerySimpleDashboardScopeResult, error)
+	QueryWorkstationRequestsScope(context.Context, QueryWorkstationRequestsScopeRequest) (QueryWorkstationRequestsScopeResult, error)
+	BuildPortableArtifactScope(context.Context, BuildPortableArtifactScopeRequest) (BuildPortableArtifactScopeResult, error)
+	ExportPortableArtifactScope(context.Context, ExportPortableArtifactScopeRequest) (ExportPortableArtifactScopeResult, error)
+	ReadPortableArtifactScope(context.Context, ReadPortableArtifactScopeRequest) (ReadPortableArtifactScopeResult, error)
 }
 
 // ProjectionService is the legacy runtime projection composition capability.
@@ -1251,6 +1727,19 @@ type CompletionDeliveryPlanner interface {
 	DeliveryTickForDispatch(work.WorkDispatch) (int, bool, error)
 }
 
+// ReplayWorkerSessionIDResolver preserves the canonical Worker Session
+// identity recorded for a dispatch when legacy replay re-executes that
+// dispatch through the live Factory Runtime.
+type ReplayWorkerSessionIDResolver interface {
+	WorkerSessionIDForDispatch(work.WorkDispatch) (string, bool)
+}
+
+// ReplayDispatchIDResolver preserves the canonical dispatch identity recorded
+// for a dispatch when replay reconstructs it through the live Factory Runtime.
+type ReplayDispatchIDResolver interface {
+	DispatchIDForDispatch(work.WorkDispatch) (string, bool)
+}
+
 // WorkerEventRecorder is the provider-neutral recording capability exposed to
 // the Workers service during runtime construction.
 type WorkerEventRecorder interface {
@@ -1275,12 +1764,13 @@ type RuntimeRecorder interface {
 	Finalize(time.Time) error
 }
 
-// RuntimeRecorderFactory constructs one session-scoped replay recorder from
-// root Factory Definition contracts.
+// RuntimeRecorderFactory is retained for the compatibility opening seam until
+// Factory Sessions consumes RuntimeOpening directly.
 type RuntimeRecorderFactory func(
 	time.Duration,
 	interfaces.LoadedFactorySource,
 	func() time.Time,
+	string,
 	string,
 ) (RuntimeRecorder, error)
 
@@ -1291,7 +1781,7 @@ type RuntimeRecorderFactory func(
 type ReplayExecutionFactory func(
 	*ReplayArtifact,
 ) (
-	workerexecution.Provider,
+	providers.Service,
 	workerexecution.CommandRunner,
 	[]ReplayHook,
 	CompletionDeliveryPlanner,
@@ -1322,6 +1812,7 @@ type RuntimeLedger interface {
 	RecordWorkInput(int, work.SubmitRequest, workerexecution.Token, time.Time)
 	RecordWorkstationRequest(int, FactoryDispatchRecord, time.Time)
 	RecordWorkstationResponse(int, workerexecution.WorkResult, CompletedDispatch)
+	RecordDispatchWorkerSessionAssociation(tick int, dispatchID string, workerSessionID string, requestID string, eventTime time.Time)
 	RecordRunResponse(int, FactoryState, string, time.Time)
 	RecordWorkStateChange(int, work.WorkStateChangeRecord, time.Time)
 	RecordFactoryStateChange(int, FactoryState, FactoryState, string, time.Time)
@@ -1333,6 +1824,37 @@ type RuntimeLedger interface {
 	RecordSessionLifecycleControl(SessionLifecycleControlInput, time.Time)
 	SetFactoryRunnerOverride(string)
 	SetInitialStructureFactory(*interfaces.FactorySnapshot)
+}
+
+// DispatchWorkerSessionExecutionFacts carries the resolved execution facts
+// needed by the Factory Runtime Worker Session read projection. These facts
+// are retained in the internal association payload without widening the
+// public Factory Event contract.
+type DispatchWorkerSessionExecutionFacts struct {
+	Model           string
+	ReasoningEffort string
+}
+
+// DispatchWorkerSessionAssociationRecorder is an optional RuntimeLedger
+// capability. Older ledgers keep using RecordDispatchWorkerSessionAssociation;
+// ledgers that retain resolved execution facts implement this extension so
+// replay and closed-session reads can project them without a live registry.
+type DispatchWorkerSessionAssociationRecorder interface {
+	RecordDispatchWorkerSessionAssociationWithExecution(
+		tick int,
+		dispatchID string,
+		workerSessionID string,
+		requestID string,
+		facts DispatchWorkerSessionExecutionFacts,
+		eventTime time.Time,
+	)
+}
+
+// HumanApprovalRequestRecorder is the optional Recordings capability used by
+// Factory Runtime to publish a pending HUMAN_APPROVAL_REQUESTED fact without
+// widening every legacy RuntimeLedger test double.
+type HumanApprovalRequestRecorder interface {
+	RecordHumanApprovalRequested(int, FactoryDispatchRecord, time.Time)
 }
 
 // RuntimeEventLedger combines runtime-domain and Worker event publication for

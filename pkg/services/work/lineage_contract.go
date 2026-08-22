@@ -3,6 +3,7 @@ package work
 import (
 	"encoding/json"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	"github.com/portpowered/infinite-you/pkg/services/work/internal/lineagegraph"
 )
 
@@ -346,7 +347,9 @@ func toLineageWorkItem(item FactoryWorkItem) lineagegraph.WorkItem {
 		TraceID:                  item.TraceID,
 		Content:                  toLineageContentParts(item.Content),
 		ParentID:                 item.ParentID,
-		PlaceID:                  item.PlaceID,
+		PlaceID:                  workItemPlaceID(item),
+		StructuredResult:         jsonvalue.Clone(item.StructuredResult),
+		StructuredResultPresent:  jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent),
 		Tags:                     cloneStringMap(item.Tags),
 	}
 }
@@ -363,7 +366,8 @@ func fromLineageWorkItem(item lineagegraph.WorkItem) FactoryWorkItem {
 		TraceID:                  item.TraceID,
 		Content:                  fromLineageContentParts(item.Content),
 		ParentID:                 item.ParentID,
-		PlaceID:                  item.PlaceID,
+		StructuredResult:         jsonvalue.Clone(item.StructuredResult),
+		StructuredResultPresent:  jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent),
 		Tags:                     cloneStringMap(item.Tags),
 	}
 }

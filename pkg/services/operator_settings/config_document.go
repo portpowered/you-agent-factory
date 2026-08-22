@@ -27,13 +27,15 @@ type ProviderModelUpdate struct {
 // injected ports and a private DocumentOwner; it is not the peer-facing
 // Operator Settings authority. New code should depend on Service.
 type ConfigDocumentService struct {
-	Files           FileSystem
-	CreateTemp      CreateTemporaryFile
-	Providers       ProviderCatalog
-	Decoder         ConfigDecoder
-	Encoder         ConfigEncoder
-	DocumentOwner   DocumentOwner
-	PersistenceLock sync.Locker
+	Files                 FileSystem
+	CreateTemp            CreateTemporaryFile
+	Providers             ProviderCatalog
+	Decoder               ConfigDecoder
+	DiagnosticDecoder     ConfigDiagnosticsDecoder
+	Encoder               ConfigEncoder
+	PreserveUnknownFields ConfigDocumentPreserver
+	DocumentOwner         DocumentOwner
+	PersistenceLock       sync.Locker
 }
 
 // ErrProviderModelInputCanceled is returned by a prompt when the operator
@@ -46,14 +48,30 @@ func (service ConfigDocumentService) owner() (DocumentOwner, error) {
 		return nil, fmt.Errorf("operator settings document owner is required")
 	}
 	if rebindable, ok := service.DocumentOwner.(interface {
-		RebindDocumentOwner(FileSystem, CreateTemporaryFile, ConfigDecoder, ConfigEncoder, ProviderCatalog) DocumentOwner
+		RebindDocumentOwner(FileSystem, CreateTemporaryFile, ConfigDecoder, ConfigEncoder, ProviderCatalog, ...ConfigDiagnosticsDecoder) DocumentOwner
 	}); ok {
+		if service.PreserveUnknownFields != nil {
+			if rebindableWithPreserver, ok := service.DocumentOwner.(interface {
+				RebindDocumentOwnerWithPreserver(FileSystem, CreateTemporaryFile, ConfigDecoder, ConfigEncoder, ProviderCatalog, ConfigDocumentPreserver, ...ConfigDiagnosticsDecoder) DocumentOwner
+			}); ok {
+				return rebindableWithPreserver.RebindDocumentOwnerWithPreserver(
+					service.Files,
+					service.CreateTemp,
+					service.Decoder,
+					service.Encoder,
+					service.Providers,
+					service.PreserveUnknownFields,
+					service.DiagnosticDecoder,
+				), nil
+			}
+		}
 		return rebindable.RebindDocumentOwner(
 			service.Files,
 			service.CreateTemp,
 			service.Decoder,
 			service.Encoder,
 			service.Providers,
+			service.DiagnosticDecoder,
 		), nil
 	}
 	return service.DocumentOwner, nil
@@ -94,14 +112,17 @@ func (service ConfigDocumentService) Parse(data []byte) (ConfigDocument, error) 
 
 // FileConfig returns the validated semantic view of the document.
 func (document ConfigDocument) FileConfig() Config {
-	config := document.config
-	if document.config.WorkerPresets != nil {
-		config.WorkerPresets = append([]WorkerPreset{}, document.config.WorkerPresets...)
+	return document.config.Clone()
+}
+
+// cloneACPAgentProfilePointer returns a detached copy of an optional ACP
+// Agent profile pointer, preserving nil for an absent profile.
+func cloneACPAgentProfilePointer(profile *ACPAgentProfile) *ACPAgentProfile {
+	if profile == nil {
+		return nil
 	}
-	if document.config.Workers.ACP.Integrations != nil {
-		config.Workers.ACP.Integrations = append([]ACPIntegration{}, document.config.Workers.ACP.Integrations...)
-	}
-	return config
+	cloned := profile.Clone()
+	return &cloned
 }
 
 // BackendScopeID returns the operator identity stored beside the defaults.
@@ -165,6 +186,39 @@ func (service ConfigDocumentService) ConfigureProviderModel(
 		return ConfigDocument{}, err
 	}
 	return ConfigDocument{config: configFromDocument(result.Document)}, nil
+}
+
+// ReplacePriceTable returns a new validated document with the complete
+// operator-owned price table replaced while preserving every unrelated setting.
+func (service ConfigDocumentService) ReplacePriceTable(document ConfigDocument, table PriceTable) (ConfigDocument, error) {
+	normalized, err := table.Normalize()
+	if err != nil {
+		return ConfigDocument{}, err
+	}
+	config := document.FileConfig()
+	config.PriceTable = normalized
+	return ConfigDocument{config: config}, nil
+}
+
+// ConfigurePriceTable loads, replaces, and atomically persists one complete
+// price table through the same document owner used by the other settings
+// updates.
+func (service ConfigDocumentService) ConfigurePriceTable(ctx context.Context, path string, table PriceTable) (ConfigDocument, error) {
+	if err := operationContextError(ctx); err != nil {
+		return ConfigDocument{}, err
+	}
+	document, err := service.Load(path)
+	if err != nil {
+		return ConfigDocument{}, err
+	}
+	updated, err := service.ReplacePriceTable(document, table)
+	if err != nil {
+		return ConfigDocument{}, err
+	}
+	if err := service.Persist(ctx, path, updated); err != nil {
+		return ConfigDocument{}, err
+	}
+	return updated, nil
 }
 
 // ConfigureProviderModelPrompted acquires values through a write-free prompt,
@@ -269,13 +323,16 @@ func configFromDocument(document Document) Config {
 			WorkerModelProvider: document.Defaults.WorkerModelProvider,
 			WorkerModel:         document.Defaults.WorkerModel,
 		},
+		PriceTable: document.PriceTable.Clone(),
 		Runtime: RuntimeSettings{
 			Logging: RuntimeArtifactSettings(document.Runtime.Logging),
 			Metrics: RuntimeArtifactSettings(document.Runtime.Metrics),
 		},
 		Workers: WorkerSettings{ACP: ACPSettings{
 			Integrations: append([]ACPIntegration(nil), document.Workers.ACP.Integrations...),
+			AgentProfile: cloneACPAgentProfilePointer(document.Workers.ACP.AgentProfile),
 		}},
+		Models: cloneModelConfigs(document.Models),
 	}
 	if document.WorkerPresets != nil {
 		config.WorkerPresets = make([]WorkerPreset, len(document.WorkerPresets))
@@ -296,12 +353,15 @@ func documentFromConfig(config Config) Document {
 			WorkerModelProvider: config.Defaults.WorkerModelProvider,
 			WorkerModel:         config.Defaults.WorkerModel,
 		},
+		PriceTable: config.PriceTable.Clone(),
 		Runtime: DocumentRuntimeSettings{
 			Logging: DocumentRuntimeArtifactSettings(config.Runtime.Logging),
 			Metrics: DocumentRuntimeArtifactSettings(config.Runtime.Metrics),
 		},
+		Models: cloneModelConfigs(config.Models),
 		Workers: DocumentWorkerSettings{ACP: DocumentACPSettings{
 			Integrations: append([]ACPIntegration(nil), config.Workers.ACP.Integrations...),
+			AgentProfile: cloneACPAgentProfilePointer(config.Workers.ACP.AgentProfile),
 		}},
 	}
 	if config.WorkerPresets != nil {
@@ -317,5 +377,5 @@ func documentFromConfig(config Config) Document {
 }
 
 func emptyConfigDocument() ConfigDocument {
-	return ConfigDocument{config: Config{Runtime: defaultRuntimeSettings()}}
+	return ConfigDocument{config: Config{PriceTable: defaultPriceTable(), Runtime: defaultRuntimeSettings()}}
 }

@@ -1,6 +1,7 @@
 package events
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +12,13 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+func stateFromPlaceIDForTest(placeID string) string {
+	if index := strings.LastIndexByte(placeID, ':'); index >= 0 {
+		return placeID[index+1:]
+	}
+	return placeID
+}
 
 func TestFactoryEventHistory_RecordWorkRequest_PreservesGeneratedWorkChainingTraceLineage(t *testing.T) {
 	eventTime := time.Date(2026, 4, 22, 18, 0, 0, 0, time.UTC)
@@ -235,8 +243,8 @@ func fanInLineageConsumedTokens() []workerexecution.Token {
 	return []workerexecution.Token{
 		newFanInWorkToken("tok-z", "work-z", "source-z", "request-z", "trace-z", []string{"trace-root-z"}),
 		{
-			ID:      "tok-resource",
-			PlaceID: "resource:available",
+			ID:    "tok-resource",
+			State: "available",
 			Color: workerexecution.Color{
 				DataType:                 workerexecution.DataTypeResource,
 				WorkTypeID:               "gpu",
@@ -253,8 +261,8 @@ func fanInLineageConsumedTokens() []workerexecution.Token {
 
 func newFanInWorkToken(id, workID, name, requestID, traceID string, previous []string) workerexecution.Token {
 	return workerexecution.Token{
-		ID:      id,
-		PlaceID: "task:init",
+		ID:    id,
+		State: "init",
 		Color: workerexecution.Color{
 			DataType:                 workerexecution.DataTypeWork,
 			WorkID:                   workID,
@@ -283,8 +291,8 @@ func fanInLineageCompletion(eventTime time.Time, consumed []workerexecution.Toke
 			{
 				Type: interfaces.MutationCreate,
 				Token: &workerexecution.Token{
-					ID:      "tok-resource-out",
-					PlaceID: "gpu:available",
+					ID:    "tok-resource-out",
+					State: "available",
 					Color: workerexecution.Color{
 						DataType:   workerexecution.DataTypeResource,
 						WorkTypeID: "gpu",
@@ -300,8 +308,8 @@ func newFanOutWorkMutation(id, placeID, workID, name, traceID string, previous [
 	return interfaces.TokenMutationRecord{
 		Type: interfaces.MutationCreate,
 		Token: &workerexecution.Token{
-			ID:      id,
-			PlaceID: placeID,
+			ID:    id,
+			State: stateFromPlaceIDForTest(placeID),
 			Color: workerexecution.Color{
 				DataType:                 workerexecution.DataTypeWork,
 				WorkID:                   workID,
@@ -363,8 +371,8 @@ func chainingTraceLineageCompletion(eventTime time.Time, consumed []workerexecut
 		OutputMutations: []interfaces.TokenMutationRecord{{
 			Type: interfaces.MutationCreate,
 			Token: &workerexecution.Token{
-				ID:      "tok-output",
-				PlaceID: "task:done",
+				ID:    "tok-output",
+				State: "done",
 				Color: workerexecution.Color{
 					DataType:   workerexecution.DataTypeWork,
 					WorkID:     "work-output",
@@ -484,8 +492,8 @@ func TestFactoryEventHistory_RecordWorkstationResponse_PreserveInputExposesConsu
 	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 
 	consumed := []workerexecution.Token{{
-		ID:      "tok-input",
-		PlaceID: "task:init",
+		ID:    "tok-input",
+		State: "init",
 		Color: workerexecution.Color{
 			DataType:   workerexecution.DataTypeWork,
 			WorkID:     "work-input",
@@ -500,8 +508,8 @@ func TestFactoryEventHistory_RecordWorkstationResponse_PreserveInputExposesConsu
 		},
 	}}
 	outputToken := workerexecution.Token{
-		ID:      "work-input",
-		PlaceID: "task:done",
+		ID:    "work-input",
+		State: "done",
 		Color: workerexecution.Color{
 			DataType:   workerexecution.DataTypeWork,
 			WorkID:     "work-input",
@@ -578,8 +586,8 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesRes
 	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 
 	consumed := []workerexecution.Token{{
-		ID:      "tok-input",
-		PlaceID: "task:init",
+		ID:    "tok-input",
+		State: "init",
 		Color: workerexecution.Color{
 			DataType:   workerexecution.DataTypeWork,
 			WorkID:     "work-input",
@@ -594,8 +602,8 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesRes
 		},
 	}}
 	outputToken := workerexecution.Token{
-		ID:      "work-input",
-		PlaceID: "task:done",
+		ID:    "work-input",
+		State: "done",
 		Color: workerexecution.Color{
 			DataType:   workerexecution.DataTypeWork,
 			WorkID:     "work-input",
@@ -672,8 +680,8 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesNex
 	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 
 	consumed := []workerexecution.Token{{
-		ID:      "tok-input",
-		PlaceID: "task:init",
+		ID:    "tok-input",
+		State: "init",
 		Color: workerexecution.Color{
 			DataType:   workerexecution.DataTypeWork,
 			WorkID:     "work-input",
@@ -688,8 +696,8 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesNex
 		},
 	}}
 	outputToken := workerexecution.Token{
-		ID:      "work-input",
-		PlaceID: "task:init",
+		ID:    "work-input",
+		State: "init",
 		Color: workerexecution.Color{
 			DataType:   workerexecution.DataTypeWork,
 			WorkID:     "work-input",
@@ -765,8 +773,8 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesNex
 
 func failedPreservesRequestContentFixture(eventTime time.Time) (consumed []workerexecution.Token, outputToken workerexecution.Token) {
 	consumed = []workerexecution.Token{{
-		ID:      "tok-input",
-		PlaceID: "task:init",
+		ID:    "tok-input",
+		State: "init",
 		Color: workerexecution.Color{
 			DataType:   workerexecution.DataTypeWork,
 			WorkID:     "work-input",
@@ -781,8 +789,8 @@ func failedPreservesRequestContentFixture(eventTime time.Time) (consumed []worke
 		},
 	}}
 	outputToken = workerexecution.Token{
-		ID:      "work-input",
-		PlaceID: "task:failed",
+		ID:    "work-input",
+		State: "failed",
 		Color: workerexecution.Color{
 			DataType:   workerexecution.DataTypeWork,
 			WorkID:     "work-input",

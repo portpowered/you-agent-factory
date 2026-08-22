@@ -8,6 +8,8 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -16,6 +18,7 @@ import (
 // TestAdaptPreservesRecordingsReplayContracts exercises the runtime-owned
 // adapter at its internal boundary, where the engine snapshot representation
 // is intentionally allowed to remain private.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestAdaptPreservesRecordingsReplayContracts(t *testing.T) {
 	t.Parallel()
 
@@ -26,7 +29,7 @@ func TestAdaptPreservesRecordingsReplayContracts(t *testing.T) {
 	replayFactory := factoryruntime.ReplayExecutionFactory(func(
 		artifact *recordings.ReplayArtifact,
 	) (
-		workers.Provider,
+		providers.Service,
 		workers.CommandRunner,
 		[]recordings.ReplayHook,
 		recordings.CompletionDeliveryPlanner,
@@ -66,7 +69,7 @@ func TestAdaptPreservesRecordingsReplayContracts(t *testing.T) {
 			Snapshot: interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 				TickCount: 4,
 				Marking: petri.MarkingSnapshot{
-					Tokens: map[string]*workers.Token{
+					Tokens: map[string]*factorytoken.Token{
 						"token-1": {
 							PlaceID: "place-review",
 							Color: workers.Color{

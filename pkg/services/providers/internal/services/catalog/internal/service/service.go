@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -9,11 +10,12 @@ import (
 )
 
 type service struct {
-	providers        []providers.Descriptor
-	byID             map[providers.ID]providers.Descriptor
-	aliases          map[string]providers.ID
-	probe            catalog.ProbeQuery
-	extraDescriptors []providers.Descriptor
+	providers           []providers.Descriptor
+	byID                map[providers.ID]providers.Descriptor
+	aliases             map[string]providers.ID
+	probe               catalog.ProbeQuery
+	extraDescriptors    []providers.Descriptor
+	capabilityOverrides []catalog.CapabilityOverride
 }
 
 var _ catalog.Service = (*service)(nil)
@@ -44,8 +46,42 @@ func New(options ...Option) (catalog.Service, error) {
 			s.providers = append(s.providers, descriptor.Clone())
 		}
 	}
+	if err := applyCapabilityOverrides(s.providers, s.capabilityOverrides); err != nil {
+		return nil, err
+	}
 	s.byID, s.aliases = indexDescriptors(s.providers)
 	return s, nil
+}
+
+func applyCapabilityOverrides(
+	descriptors []providers.Descriptor,
+	overrides []catalog.CapabilityOverride,
+) error {
+	seen := make(map[providers.ID]struct{}, len(overrides))
+	for _, override := range overrides {
+		if err := override.Provider.Validate(); err != nil {
+			return fmt.Errorf("provider capability override: %w", err)
+		}
+		canonical := providers.ID(strings.ToLower(strings.TrimSpace(override.Provider.String())))
+		if _, duplicate := seen[canonical]; duplicate {
+			return fmt.Errorf("provider capability override for %q is duplicated", canonical)
+		}
+		seen[canonical] = struct{}{}
+
+		found := false
+		for index := range descriptors {
+			if strings.ToLower(descriptors[index].ID.String()) != canonical.String() {
+				continue
+			}
+			descriptors[index].Capabilities = append([]providers.Capability(nil), override.Capabilities...)
+			found = true
+			break
+		}
+		if !found {
+			return fmt.Errorf("provider capability override targets unknown provider %q", canonical)
+		}
+	}
+	return nil
 }
 
 func indexDescriptors(descriptors []providers.Descriptor) (
@@ -194,11 +230,11 @@ func clonePrerequisites(prerequisites []providers.Prerequisite) []providers.Prer
 
 func isProviderSelectable(descriptor providers.Descriptor) bool {
 	if descriptor.Availability != providers.AvailabilitySelectable ||
-		descriptor.Readiness != providers.ReadinessReady ||
 		hasMissingPrerequisite(descriptor.Prerequisites) {
 		return false
 	}
-	return true
+	return descriptor.Readiness == providers.ReadinessReady ||
+		descriptor.Readiness == providers.ReadinessUnverified
 }
 
 func hasMissingPrerequisite(prerequisites []providers.Prerequisite) bool {

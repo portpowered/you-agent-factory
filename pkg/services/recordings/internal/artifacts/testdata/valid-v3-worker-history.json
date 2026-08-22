@@ -1,0 +1,33 @@
+{
+  "recordingKind": "you.factory-session.javascript.recording",
+  "schemaVersion": "3",
+  "replayCompatibilityVersion": "1",
+  "session": {"id": "session-current-worker-001", "status": "COMPLETED", "orchestratorKind": "JAVASCRIPT"},
+  "source": {"ref": "workflow/current-worker.js", "hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111"},
+  "argumentsDigest": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "policyHash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "artifacts": [],
+  "events": [
+    {"id": "event-started", "type": "SESSION_STARTED", "sequence": 0, "timestamp": "2026-08-12T13:00:00Z"},
+    {"id": "event-completed", "type": "SESSION_COMPLETED", "sequence": 1, "timestamp": "2026-08-12T13:00:01Z"}
+  ],
+  "result": {"status": "FINAL", "mode": "final"},
+  "workerHistory": {
+    "availability": "AVAILABLE",
+    "reason": "",
+    "recordingKind": "you.worker-session.recording",
+    "schemaVersion": "1",
+    "replayCompatibilityVersion": "1",
+    "identity": {"recordingId": "worker-recording-current-001", "workerSessionId": "worker-session-current-001", "topic": "worker-session/worker-session-current-001/events"},
+    "lifecycle": {"status": "COMPLETED", "openingTimestamp": "2026-08-12T13:00:00Z", "terminal": {"position": 3, "phase": "COMPLETED", "status": "COMPLETED"}},
+    "correlation": {"factorySessionId": "session-current-worker-001", "recordingId": "worker-recording-current-001", "dispatchId": "dispatch-current-001", "turnId": "turn-current-001", "traceId": "trace-current-001", "workIds": ["work-current-001"], "attemptId": "attempt-current-001", "attempt": 1, "attemptReason": "INITIAL", "providerSelection": {"runnerId": "codex"}},
+    "provider": {"provider": "codex"},
+    "records": [
+      {"position": 1, "sourceType": "worker_session_lifecycle", "sourceId": "worker-session-current-001", "sourceSequence": 1, "sourceEventId": "started", "schemaId": "workers.draft.v1", "kind": "SESSION", "phase": "STARTED", "provenance": {"delivery": "SYNTHESIZED", "fidelity": "LIFECYCLE_ONLY", "nativeEventType": "worker_session_lifecycle", "provider": "codex", "representation": "NOTIFICATION"}, "dispatchId": "dispatch-current-001", "turnId": "turn-current-001", "payload": {"kind": "SESSION", "phase": "STARTED", "provenance": {"delivery": "SYNTHESIZED", "fidelity": "LIFECYCLE_ONLY", "nativeEventType": "worker_session_lifecycle", "provider": "codex", "representation": "NOTIFICATION"}, "payload": {"status": "STARTING", "startedAt": "2026-08-12T13:00:00Z", "workerSessionId": "worker-session-current-001", "factorySessionId": "session-current-worker-001", "recordingId": "worker-recording-current-001", "dispatchId": "dispatch-current-001", "turnId": "turn-current-001", "traceId": "trace-current-001", "workIds": ["work-current-001"], "attemptId": "attempt-current-001", "attempt": 1, "attemptReason": "INITIAL", "providerSelection": {"runnerId": "codex"}}, "dispatchId": "dispatch-current-001", "turnId": "turn-current-001"}},
+      {"position": 2, "sourceType": "worker_observation", "sourceId": "worker-session-current-001", "sourceSequence": 1, "sourceEventId": "worker/1", "schemaId": "workers.draft.v1", "kind": "MESSAGE", "phase": "COMPLETED", "provenance": {"delivery": "NATIVE_STREAM", "fidelity": "NORMALIZED", "nativeEventType": "message.completed", "provider": "codex", "representation": "SNAPSHOT"}, "dispatchId": "dispatch-current-001", "turnId": "turn-current-001", "itemId": "message-current-001", "payload": {"kind": "MESSAGE", "phase": "COMPLETED", "provenance": {"delivery": "NATIVE_STREAM", "fidelity": "NORMALIZED", "nativeEventType": "message.completed", "provider": "codex", "representation": "SNAPSHOT"}, "payload": {"role": "assistant", "contentBlocks": [{"kind": "TEXT", "text": "done"}]}, "dispatchId": "dispatch-current-001", "turnId": "turn-current-001", "itemId": "message-current-001"}},
+      {"position": 3, "sourceType": "worker_session_lifecycle", "sourceId": "worker-session-current-001", "sourceSequence": 2, "sourceEventId": "terminal", "schemaId": "workers.draft.v1", "kind": "SESSION", "phase": "COMPLETED", "provenance": {"delivery": "SYNTHESIZED", "fidelity": "LIFECYCLE_ONLY", "nativeEventType": "worker_session_lifecycle", "provider": "codex", "representation": "NOTIFICATION"}, "dispatchId": "dispatch-current-001", "payload": {"kind": "SESSION", "phase": "COMPLETED", "provenance": {"delivery": "SYNTHESIZED", "fidelity": "LIFECYCLE_ONLY", "nativeEventType": "worker_session_lifecycle", "provider": "codex", "representation": "NOTIFICATION"}, "payload": {"status": "COMPLETED"}, "dispatchId": "dispatch-current-001"}}
+    ],
+    "integrity": {"algorithm": "sha256", "digest": "sha256:92dc2304831962e4b85d573e00db160c0c3e6e19a0ae99c34515993d8bac0976"}
+  },
+  "redaction": {"runtimeStateOmitted": true, "checkpointBodiesOmitted": true, "providerTranscriptsOmitted": true, "childDispatchesOmitted": true, "secretsRedacted": 0}
+}

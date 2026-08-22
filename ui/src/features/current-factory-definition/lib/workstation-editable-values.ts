@@ -1,8 +1,8 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
 import type { components } from "../../../api/generated/openapi";
-import type { ApiRunnerID } from "../../current-selection/workstation-selection/messages/runner-openapi-enums";
 import { BUILT_IN_RUNNER_IDS } from "../../current-selection/workstation-selection/editing/runner-metadata";
+import type { ApiRunnerID } from "../../current-selection/workstation-selection/messages/runner-openapi-enums";
 import {
   type ResolvedRunnerSelection,
   type RunnerSelectionSource,
@@ -144,7 +144,7 @@ export function resolveEditableWorkstationValues(
   const behavior = resolveEditableWorkstationBehavior(workstation);
   const workerModelProvider = resolveWorkerModelProvider(
     factory,
-    workstation.worker,
+    workstation.worker ?? "",
   );
   const resolvedRunnerSelection = resolveRunnerSelection(
     workstation.runner,
@@ -167,7 +167,7 @@ export function resolveEditableWorkstationValues(
     operationBindings: isModelInvokeWorkstationType(workstationType)
       ? syncEditableModelInvokeBindingsForOperation(
           resolveModelOperationByName(
-            resolveModelWorkerOperations(factory, workstation.worker),
+            resolveModelWorkerOperations(factory, workstation.worker ?? ""),
             workstation.operation ?? "",
           ),
           resolveEditableModelInvokeBindings(workstation.operationBindings),
@@ -187,7 +187,7 @@ export function resolveEditableWorkstationValues(
     ),
     workerTypeByName: resolveWorkerTypeByName(factory),
     workerModelProvider,
-    workerName: workstation.worker,
+    workerName: workstation.worker ?? "",
     workerOptions: resolveWorkerOptions(factory),
     guards: resolveEditableWorkstationGuards(workstation),
     inputs: resolveEditableWorkstationInputs(workstation),

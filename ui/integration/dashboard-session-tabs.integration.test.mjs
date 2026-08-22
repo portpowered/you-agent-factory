@@ -5,6 +5,8 @@ import { describe, expect } from "vitest";
 import {
   browserScenarioTimeoutMs,
   expectNoBrowserErrors,
+  loadReplayLines,
+  resolvedDefaultFactorySessionID,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
 } from "./browser-test-harness.mjs";
@@ -100,6 +102,11 @@ const openedFactoryDefinition = {
       worker: "review-writer",
     },
   ],
+};
+
+const betaFactoryDefinition = {
+  ...defaultFactoryDefinition,
+  name: "Beta Browser Session Harness Factory",
 };
 
 const betaSessionID = "session-beta";
@@ -243,17 +250,21 @@ describe.concurrent("dashboard session tabs browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .getByRole("heading", {
+            level: 1,
+            name: "You Agent Factory",
+            exact: true,
+          })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         await browserPage.page
-          .getByRole("button", { name: "Open another session" })
+          .getByRole("button", { name: "Open Factory" })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         await browserPage.page
-          .getByRole("button", { name: "Open another session" })
+          .getByRole("button", { name: "Open Factory" })
           .click();
 
         const dialog = browserPage.page.getByRole("dialog", {
-          name: "Factory Session",
+          name: "Open Factory",
         });
         await dialog.waitFor({
           state: "visible",
@@ -266,6 +277,9 @@ describe.concurrent("dashboard session tabs browser integration", () => {
           .getByRole("button", { name: "Review factory" })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         await dialog.getByRole("button", { name: "Review factory" }).click();
+        await dialog
+          .getByRole("button", { name: "Open selected target" })
+          .click();
 
         await dialog.waitFor({
           state: "hidden",
@@ -340,7 +354,11 @@ describe.concurrent("dashboard session tabs browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .getByRole("heading", {
+            level: 1,
+            name: "You Agent Factory",
+            exact: true,
+          })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 
         const rootTab = browserPage.page.getByRole("tab", { name: "root" });
@@ -358,6 +376,123 @@ describe.concurrent("dashboard session tabs browser integration", () => {
             timeout: uiInteractionTimeoutMs,
           })
           .toBe("true");
+        await expect
+          .poll(() => readSessionTabStatusLabel(rootTab), {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBe("Factory event stream connected.");
+        await expect
+          .poll(() => readSessionTabStatusLabel(betaTab), {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBe("Loading factory events...");
+
+        const sessionControls = browserPage.page.getByRole("article", {
+          name: "Session controls",
+        });
+        await sessionControls.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+
+        // The timeline-mode status pill and the per-card state banners were
+        // removed from the dashboard chrome; the timeline slider position is
+        // now the observable live/historical signal.
+        const timelineSlider = sessionControls.getByRole("slider", {
+          name: "Timeline tick",
+        });
+        const readTimelineTickPosition = async () => ({
+          max: Number(await timelineSlider.getAttribute("max")),
+          value: Number(await timelineSlider.inputValue()),
+        });
+        await expect
+          .poll(
+            async () => {
+              const { max, value } = await readTimelineTickPosition();
+              return Number.isFinite(max) && value === max;
+            },
+            { timeout: uiInteractionTimeoutMs },
+          )
+          .toBe(true);
+
+        const workTotalsCard = browserPage.page.locator(
+          '[data-bento-card-id="work-totals"]',
+        );
+        const workTotalsRegion = workTotalsCard.getByRole("region", {
+          name: "work totals",
+        });
+        await workTotalsRegion.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+
+        const pauseButton = sessionControls.getByRole("button", {
+          name: "Pause live dashboard updates for root",
+        });
+        await pauseButton.focus();
+        await pauseButton.press("Enter");
+        await sessionControls
+          .getByRole("status", { name: "Live dashboard updates paused" })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+        await sessionControls
+          .getByRole("button", {
+            name: "Resume live dashboard updates for root",
+          })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+
+        await timelineSlider.focus();
+        await timelineSlider.press("ArrowLeft");
+        await expect
+          .poll(
+            async () => {
+              const { max, value } = await readTimelineTickPosition();
+              return Number.isFinite(max) && value < max;
+            },
+            { timeout: uiInteractionTimeoutMs },
+          )
+          .toBe(true);
+        expect(
+          await sessionControls
+            .getByText("Factory Session paused", { exact: true })
+            .count(),
+        ).toBe(0);
+
+        await browserPage.page.setViewportSize({ width: 360, height: 800 });
+        await expect
+          .poll(
+            async () => {
+              const { max, value } = await readTimelineTickPosition();
+              return Number.isFinite(max) && value < max;
+            },
+            { timeout: uiInteractionTimeoutMs },
+          )
+          .toBe(true);
+        await workTotalsRegion.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+        await browserPage.page.setViewportSize({ width: 1280, height: 900 });
+
+        const resumeButton = sessionControls.getByRole("button", {
+          name: "Resume live dashboard updates for root",
+        });
+        await resumeButton.focus();
+        await resumeButton.press("Enter");
+        await sessionControls
+          .getByRole("button", {
+            name: "Pause live dashboard updates for root",
+          })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+        await timelineSlider.press("ArrowRight");
+        await expect
+          .poll(
+            async () => {
+              const { max, value } = await readTimelineTickPosition();
+              return Number.isFinite(max) && value === max;
+            },
+            { timeout: uiInteractionTimeoutMs },
+          )
+          .toBe(true);
 
         expectSubtleActiveSessionTabShell(
           await readSessionTabShellClassName(rootTab),
@@ -377,6 +512,31 @@ describe.concurrent("dashboard session tabs browser integration", () => {
             timeout: uiInteractionTimeoutMs,
           })
           .toBe("false");
+        await expect
+          .poll(() => readSessionTabStatusLabel(betaTab), {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toMatch(/\S+/);
+        await expect
+          .poll(() => readSessionTabStatusLabel(rootTab), {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toMatch(/\S+/);
+
+        await browserPage.page.setViewportSize({ width: 360, height: 800 });
+        await expect
+          .poll(
+            () =>
+              browserPage.page
+                .getByRole("navigation", { name: "factory sessions" })
+                .getAttribute("class"),
+            { timeout: uiInteractionTimeoutMs },
+          )
+          .toMatch(/overflow-x-auto/);
+        await betaTab.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
 
         expectSubtleActiveSessionTabShell(
           await readSessionTabShellClassName(betaTab),
@@ -384,6 +544,309 @@ describe.concurrent("dashboard session tabs browser integration", () => {
         expectMutedInactiveSessionTabShell(
           await readSessionTabShellClassName(rootTab),
         );
+
+        expectNoBrowserErrors(
+          browserPage.pageErrors,
+          browserPage.consoleErrors,
+          expect,
+        );
+      } finally {
+        await server.stop();
+        await browserPage.close();
+      }
+    },
+    browserScenarioTimeoutMs,
+  );
+
+  it(
+    "keeps retained card data visible as its live stream goes stale at desktop and narrow widths",
+    async ({ expect, openBrowserPage, preview }) => {
+      const replayLines = await loadReplayLines("event-stream-replay.jsonl");
+      const server = await startFactoryApiServer({
+        apiPort: preview.apiPort,
+        currentFactory: defaultFactoryDefinition,
+        eventLines: [],
+      });
+      const browserPage = await openBrowserPage({
+        artifactLabel: "dashboard-card-reconnecting",
+      });
+      let eventStreamAttempts = 0;
+
+      try {
+        await browserPage.page.route("**/events**", async (route) => {
+          const acceptHeader = route.request().headers().accept ?? "";
+          if (!acceptHeader.includes("text/event-stream")) {
+            await route.continue();
+            return;
+          }
+
+          eventStreamAttempts += 1;
+          if (eventStreamAttempts === 1) {
+            const body = replayLines
+              .map((line) => `data: ${line}\n\n`)
+              .join("");
+            await route.fulfill({
+              body,
+              contentType: "text/event-stream",
+              status: 200,
+            });
+            return;
+          }
+
+          await route.abort("failed");
+        });
+
+        await browserPage.page.goto(preview.previewURL, {
+          waitUntil: "domcontentloaded",
+        });
+        await browserPage.page
+          .getByRole("heading", {
+            level: 1,
+            name: "You Agent Factory",
+            exact: true,
+          })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+
+        // The per-card freshness banner was removed from the dashboard
+        // cards, so the retained-data contract is now that the work totals
+        // stat region keeps rendering its replay-derived values after the
+        // live stream dies and across viewport changes.
+        const workTotalsRegion = browserPage.page
+          .locator('[data-bento-card-id="work-totals"]')
+          .getByRole("region", { name: "work totals" });
+        await workTotalsRegion.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+        await expect
+          .poll(() => eventStreamAttempts, {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBeGreaterThanOrEqual(1);
+        let previousTotalsText = "";
+        await expect
+          .poll(
+            async () => {
+              const currentTotalsText =
+                (await workTotalsRegion.textContent()) ?? "";
+              const stable =
+                currentTotalsText !== "" &&
+                currentTotalsText === previousTotalsText;
+              previousTotalsText = currentTotalsText;
+              return stable;
+            },
+            { timeout: uiInteractionTimeoutMs },
+          )
+          .toBe(true);
+        const retainedTotalsText = previousTotalsText;
+
+        await browserPage.page.setViewportSize({ width: 360, height: 800 });
+        await workTotalsRegion.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+        expect(await workTotalsRegion.textContent()).toBe(retainedTotalsText);
+
+        await browserPage.page.setViewportSize({ width: 1280, height: 900 });
+        await workTotalsRegion.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+        expect(await workTotalsRegion.textContent()).toBe(retainedTotalsText);
+        expectNoBrowserErrors(
+          browserPage.pageErrors,
+          browserPage.consoleErrors,
+          expect,
+        );
+      } finally {
+        await server.stop();
+        await browserPage.close();
+      }
+    },
+    browserScenarioTimeoutMs,
+  );
+
+  it(
+    "keeps the selected beta session stable when alpha stream data arrives late",
+    async ({ expect, openBrowserPage, preview }) => {
+      const alphaLines = buildReplayLines(defaultFactoryDefinition);
+      const betaLines = buildReplayLines(betaFactoryDefinition);
+      const server = await startFactoryApiServer({
+        apiPort: preview.apiPort,
+        currentFactory: defaultFactoryDefinition,
+        eventLines: alphaLines,
+        eventLinesBySessionID: {
+          [betaSessionID]: betaLines,
+        },
+        currentFactoryBySessionID: {
+          [betaSessionID]: betaFactoryDefinition,
+        },
+        sessions: [defaultSession, betaSession],
+      });
+      const browserPage = await openBrowserPage({
+        artifactLabel: "dashboard-late-session-result",
+      });
+      const delayedAlphaRoutes = [];
+      let alphaStreamAttempts = 0;
+
+      try {
+        await browserPage.page.route("**/events**", async (route) => {
+          const acceptHeader = route.request().headers().accept ?? "";
+          if (!acceptHeader.includes("text/event-stream")) {
+            await route.continue();
+            return;
+          }
+
+          const pathname = new URL(route.request().url()).pathname;
+          const alphaEventsPath = `/factory-sessions/${resolvedDefaultFactorySessionID}/events`;
+          if (pathname !== alphaEventsPath) {
+            await route.continue();
+            return;
+          }
+
+          alphaStreamAttempts += 1;
+          if (alphaStreamAttempts === 1) {
+            await route.fulfill({
+              body: alphaLines
+                .slice(0, 2)
+                .map((line) => `data: ${line}\n\n`)
+                .join(""),
+              contentType: "text/event-stream",
+              status: 200,
+            });
+            return;
+          }
+
+          delayedAlphaRoutes.push(route);
+        });
+
+        await browserPage.page.goto(preview.previewURL, {
+          waitUntil: "domcontentloaded",
+        });
+        await browserPage.page
+          .getByRole("heading", {
+            level: 1,
+            name: "You Agent Factory",
+            exact: true,
+          })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+
+        const rootTab = browserPage.page.getByRole("tab", { name: "root" });
+        const betaTab = browserPage.page.getByRole("tab", { name: "beta" });
+        await rootTab.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+        await betaTab.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+        await expect
+          .poll(() => delayedAlphaRoutes.length, {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBeGreaterThan(0);
+
+        await betaTab.click();
+        await expect
+          .poll(() => betaTab.getAttribute("aria-selected"), {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBe("true");
+        await expect
+          .poll(() => readSessionTabStatusLabel(betaTab), {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBe("Factory event stream connected.");
+
+        // The timeline-mode status pill and the per-card state banners were
+        // removed from the dashboard chrome; the timeline slider position is
+        // the live/historical signal, and the beta card contract is that its
+        // work totals stay unchanged while alpha data arrives late.
+        const sessionControls = browserPage.page.getByRole("article", {
+          name: "Session controls",
+        });
+        const timelineSlider = sessionControls.getByRole("slider", {
+          name: "Timeline tick",
+        });
+        const readTimelineTickPosition = async () => ({
+          max: Number(await timelineSlider.getAttribute("max")),
+          value: Number(await timelineSlider.inputValue()),
+        });
+        await expect
+          .poll(
+            async () => {
+              const { max, value } = await readTimelineTickPosition();
+              return Number.isFinite(max) && value === max;
+            },
+            { timeout: uiInteractionTimeoutMs },
+          )
+          .toBe(true);
+
+        const workTotalsRegion = browserPage.page
+          .locator('[data-bento-card-id="work-totals"]')
+          .getByRole("region", { name: "work totals" });
+        await workTotalsRegion.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+        const betaCardText = await workTotalsRegion.textContent();
+
+        await timelineSlider.focus();
+        await timelineSlider.press("ArrowLeft");
+        await expect
+          .poll(
+            async () => {
+              const { max, value } = await readTimelineTickPosition();
+              return Number.isFinite(max) && value < max;
+            },
+            { timeout: uiInteractionTimeoutMs },
+          )
+          .toBe(true);
+        await timelineSlider.press("ArrowRight");
+        await expect
+          .poll(
+            async () => {
+              const { max, value } = await readTimelineTickPosition();
+              return Number.isFinite(max) && value === max;
+            },
+            { timeout: uiInteractionTimeoutMs },
+          )
+          .toBe(true);
+
+        const delayedAlphaRoute = delayedAlphaRoutes.at(-1);
+        if (!delayedAlphaRoute) {
+          throw new Error("Expected a delayed alpha event-stream request.");
+        }
+        await delayedAlphaRoute.fulfill({
+          body: alphaLines
+            .slice(2)
+            .map((line) => `data: ${line}\n\n`)
+            .join(""),
+          contentType: "text/event-stream",
+          status: 200,
+        });
+
+        await expect
+          .poll(() => betaTab.getAttribute("aria-selected"), {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBe("true");
+        await expect
+          .poll(() => readSessionTabStatusLabel(betaTab), {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBe("Factory event stream connected.");
+        expect(await workTotalsRegion.textContent()).toBe(betaCardText);
+        await expect
+          .poll(
+            async () => {
+              const { max, value } = await readTimelineTickPosition();
+              return Number.isFinite(max) && value === max;
+            },
+            { timeout: uiInteractionTimeoutMs },
+          )
+          .toBe(true);
 
         expectNoBrowserErrors(
           browserPage.pageErrors,
@@ -407,6 +870,10 @@ async function readSessionTabShellClassName(tabLocator) {
     }
     return shell.className;
   });
+}
+
+async function readSessionTabStatusLabel(tabLocator) {
+  return tabLocator.getByRole("img").getAttribute("aria-label");
 }
 
 function expectSubtleActiveSessionTabShell(className) {

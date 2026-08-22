@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliinputs"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
 )
 
@@ -214,8 +214,8 @@ func TestValidateRejectsMigratedInputSetAndMetadataDriftIndependently(t *testing
 				input.ProductionInputs.Relationships = nil
 			},
 			kind:     KindMissingInput,
-			stableID: "you.mcp.serve.relationship.runtime-source",
-			path:     "you mcp serve",
+			stableID: "you.server.mcp.relationship.runtime-source",
+			path:     "you server mcp",
 			field:    "relationship",
 		},
 	}

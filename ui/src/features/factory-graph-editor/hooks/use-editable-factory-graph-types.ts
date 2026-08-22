@@ -1,3 +1,7 @@
+import type {
+  FactoryGraphNodeDimensions,
+  FactoryGraphNodeFamily,
+} from "@you-agent-factory/factory-graph";
 import type { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import type { FactoryDocumentSaveState } from "../../current-selection/base/hooks/factory-document-save-types";
 
@@ -20,6 +24,7 @@ import type {
 } from "../lib/draft/factory-graph-draft-types";
 import type { FactoryGraphAddEntityDraft } from "../lib/editor/factory-graph-editor-additions";
 import type { FactoryGraphNodeFieldUpdate } from "../lib/editor-runtime/factory-graph-field-operations";
+import type { FactoryLayoutGroupNodeGeometry } from "../lib/layout/visual-groups/factory-graph-layout-groups";
 import type {
   FactoryGraphOperationResult,
   FactoryGraphReactFlowProjection,
@@ -33,6 +38,8 @@ export interface UseEditableFactoryGraphOptions {
   currentFactoryDocument?: CurrentFactoryDocument;
   /** Normalized dashboard session id; graph draft resets when this changes. */
   factoryDocumentScopeKey?: string | null;
+  initialDraft?: FactoryGraphDraft;
+  initialLayout?: import("../lib/layout/factory-graph-layout-operations").FactoryLayout;
   locale?: string | null;
 }
 
@@ -78,6 +85,19 @@ export interface EditableFactoryGraphViewModel {
       delta: { x: number; y: number },
       resolvedPositionsByNodeId: ReadonlyMap<string, { x: number; y: number }>,
     ) => void;
+    resizeLayoutNode: (
+      nodeId: string,
+      family: FactoryGraphNodeFamily,
+      dimensions: FactoryGraphNodeDimensions,
+      position: { x: number; y: number },
+    ) => void;
+    fitLayoutNode: (
+      nodeId: string,
+      family: FactoryGraphNodeFamily,
+      dimensions: FactoryGraphNodeDimensions,
+      position: { x: number; y: number },
+    ) => void;
+    resetLayoutNodeSize: (nodeId: string) => void;
     resetLayout: (options?: { recordHistory?: boolean }) => void;
     redoLayout: () => void;
     save: () => Promise<boolean>;
@@ -87,15 +107,19 @@ export interface EditableFactoryGraphViewModel {
       y: number;
       zoom: number;
     }) => void;
-    createVisualGroup: (center: {
-      x: number;
-      y: number;
-    }) => { id: string } | null;
-    renameVisualGroup: (groupId: string, label: string) => void;
-    setVisualGroupColor: (
+    createVisualGroup: (
+      center: { x: number; y: number },
+      options?: {
+        nodeGeometryById?: ReadonlyMap<string, FactoryLayoutGroupNodeGeometry>;
+        nodeIds?: readonly string[];
+      },
+    ) => { id: string } | null;
+    fitVisualGroup: (
       groupId: string,
-      color: "primary" | "info" | "success" | "warning" | "outline",
+      nodeGeometryById: ReadonlyMap<string, FactoryLayoutGroupNodeGeometry>,
     ) => void;
+    renameVisualGroup: (groupId: string, label: string) => void;
+    setVisualGroupColor: (groupId: string, color: string) => void;
     addNodeToVisualGroup: (groupId: string, nodeId: string) => void;
     removeNodeFromVisualGroup: (groupId: string, nodeId: string) => void;
     moveVisualGroupByDelta: (

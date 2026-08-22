@@ -1,0 +1,107 @@
+description:
+    type: LOCALIZABLE_ASSET
+    value: Reviews a completed cut from first principles with ANTIGRAVITY, covering chronology, temporal defects, audio, observed speech, and a pass-or-reroll recommendation.
+examples:
+    - args:
+        cutPath: .\completed-cut.mp4
+      description:
+        type: LOCALIZABLE_ASSET
+        value: Cold-watch a completed cut and report what the artifact actually communicates.
+      name: review-completed-cut
+id: builtin-agy-cold-watch
+invocationReturn:
+    policy: EXPLICIT
+    terminalState: complete
+    workTypeName: cold-watch-review
+invocationSignature:
+    outputContract:
+        contentType: text/markdown
+        description: A context-free Markdown observation report for the completed cut.
+        mode: INLINE
+    parameters:
+        - bindings:
+            - kind: NAMED
+            - kind: POSITIONAL
+              position: 1
+          description: Path to the completed cut, relative to the AGY workspace or an absolute path within it.
+          externalName: cut-path
+          name: cutPath
+          required: true
+          typeHint: FILE_PATH
+    unknownNamedArgumentPolicy: REJECT
+name: agy-cold-watch
+workTypes:
+    - handlingBehavior:
+        - DEFAULT
+      name: cold-watch-review
+      states:
+        - name: init
+          type: INITIAL
+        - name: complete
+          type: TERMINAL
+        - name: failed
+          type: FAILED
+workers:
+    - body: |-
+        You are the context-free cold-watch reviewer for @you/agy-cold-watch. The
+        completed-cut path in the user task is your only creative context. Watch the
+        entire media file, including its audio track, using the existing workspace
+        file access. Do not inspect nearby briefs, manifests, shot specifications,
+        filenames as evidence of intent, or upstream status. Do not infer whether
+        the artifact is correct from anything other than what you observe in the
+        file. If the file cannot be opened or read, say so plainly and do not invent
+        a review report.
+
+        Return only a concise Markdown report using these exact H2 headings:
+        ## Inspection status
+        Inspected: yes
+        ## Chronological events
+        Include timestamped events for the whole file.
+        ## Temporal or transient defects
+        Include timestamps, or write "None observed".
+        ## Audio content and defects
+        Start with exactly one of "Audio content: speech", "Audio content: music",
+        "Audio content: noise", "Audio content: silence", or "Audio content: mixed".
+        Include timestamped audio defects, or write "None observed".
+        ## Observed speech
+        Include timestamped speech/transcription, or write "None observed".
+        ## Overall recommendation
+        End with exactly one line: "Recommendation: pass" or "Recommendation: reroll".
+        A file-access refusal is an execution failure, not a recommendation: do not
+        claim Inspected: yes and do not emit a recommendation when the file cannot
+        be opened or read.
+      model: gemini-3.6-flash-high
+      modelProvider: ANTIGRAVITY
+      name: agy-cold-watch-reviewer
+      skipPermissions: true
+      timeout: 8m
+      type: AGENT_WORKER
+workstations:
+    - body: |-
+        Review only this completed-cut path. Preserve the path text exactly as
+        written when you use it; it is the only creative input and must be passed
+        directly to the AGY file-reading workflow:
+
+        ${cutPath}
+
+          Do not add a creative brief, shot specification, expected beat, prior
+          verdict, or any other context. Watch the whole file and return the complete
+          cold-watch observation report described by your reviewer instructions.
+          The report must use these exact H2 headings: ## Inspection status,
+          ## Chronological events, ## Temporal or transient defects, ## Audio content and defects, ## Observed speech, and ## Overall recommendation. Include
+          "Inspected: yes", name the audio content, and end with exactly one
+          "Recommendation: pass" or "Recommendation: reroll" line. If the file
+          cannot be read, return an execution failure without a recommendation.
+      inputs:
+        - state: init
+          workType: cold-watch-review
+      name: watch-completed-cut
+      onFailure:
+        - state: failed
+          workType: cold-watch-review
+      outputContract: markdown-observation-report/v1
+      outputs:
+        - state: complete
+          workType: cold-watch-review
+      type: AGENT_RUN
+      worker: agy-cold-watch-reviewer

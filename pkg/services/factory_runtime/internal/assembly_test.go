@@ -1,17 +1,148 @@
 package internal
 
 import (
+	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jonboulle/clockwork"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 	instancehostwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/wire"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func stubWorkerSessionsFactory(workers.Service, platformclock.Source) (workersessions.Service, error) {
+	return nil, nil
+}
+
+type stubWorkersService struct{ workers.Service }
+
+type assemblyWorldStateOpening struct {
+	recordings.RuntimeOpening
+	state   interfaces.FactoryWorldState
+	tick    int
+	events  []interfaces.FactoryEvent
+	request recordings.RuntimeScopeRequest
+}
+
+func (opening *assemblyWorldStateOpening) OpenRuntime(
+	_ context.Context,
+	request recordings.RuntimeScopeRequest,
+) (recordings.RuntimeScopeResult, error) {
+	opening.request = request
+	return recordings.RuntimeScopeResult{}, nil
+}
+
+func (opening *assemblyWorldStateOpening) ReconstructCanonicalFactoryWorldState(
+	events []interfaces.FactoryEvent,
+	selectedTick int,
+) (interfaces.FactoryWorldState, error) {
+	opening.events = events
+	opening.tick = selectedTick
+	return opening.state, nil
+}
+
+func TestRuntimeOpeningWithFlushOnlySeedsResumeCanonicalEvents(t *testing.T) {
+	resumeEvents := []interfaces.FactoryEvent{{Id: "resume-event"}}
+	for name, events := range map[string][]interfaces.FactoryEvent{
+		"ordinary replay": nil,
+		"process resume":  resumeEvents,
+	} {
+		t.Run(name, func(t *testing.T) {
+			opening := &assemblyWorldStateOpening{}
+			wrapped := runtimeOpeningWithFlush{
+				RuntimeOpening:        opening,
+				flushInterval:         time.Second,
+				resumeCanonicalEvents: events,
+			}
+			if _, err := wrapped.OpenRuntime(context.Background(), recordings.RuntimeScopeRequest{}); err != nil {
+				t.Fatalf("OpenRuntime: %v", err)
+			}
+			if opening.request.FlushInterval != time.Second {
+				t.Fatalf("flush interval = %v, want 1s", opening.request.FlushInterval)
+			}
+			if len(opening.request.ReplayEvents) != len(events) {
+				t.Fatalf("seeded replay events = %d, want %d", len(opening.request.ReplayEvents), len(events))
+			}
+			if len(events) > 0 && opening.request.ReplayEvents[0].Id != events[0].Id {
+				t.Fatalf("seeded event ID = %q, want %q", opening.request.ReplayEvents[0].Id, events[0].Id)
+			}
+		})
+	}
+}
+
+func TestReconstructRestoredWorldStateUsesLatestReplayTick(t *testing.T) {
+	events := []interfaces.FactoryEvent{
+		{Context: interfaces.FactoryEventContext{Tick: 2}},
+		{Context: interfaces.FactoryEventContext{Tick: 7}},
+		{Context: interfaces.FactoryEventContext{Tick: 4}},
+	}
+	opening := &assemblyWorldStateOpening{state: interfaces.FactoryWorldState{Tick: 7}}
+
+	state, err := reconstructRestoredWorldState(opening, events)
+	if err != nil {
+		t.Fatalf("reconstructRestoredWorldState: %v", err)
+	}
+	if state == nil || state.Tick != 7 {
+		t.Fatalf("restored state = %#v, want tick 7", state)
+	}
+	if opening.tick != 7 {
+		t.Fatalf("selected reconstruction tick = %d, want latest replay tick 7", opening.tick)
+	}
+	if len(opening.events) != len(events) {
+		t.Fatalf("reconstruction events = %d, want %d", len(opening.events), len(events))
+	}
+}
+
+func TestResumeInputSelectsRecordedEventsForRestoredWorldState(t *testing.T) {
+	resumeEvents := []interfaces.FactoryEvent{
+		{Id: "resume-event", Context: interfaces.FactoryEventContext{Tick: 9}},
+	}
+	resumeInput := &recordings.LoadResumeInputResult{
+		Input: recordings.LoadReplayInputResult{
+			Legacy: &recordings.ReplayArtifact{Events: resumeEvents},
+		},
+	}
+
+	selected, err := restoredEventsForOpening(nil, resumeInput)
+	if err != nil {
+		t.Fatalf("restoredEventsForOpening(resume) error = %v", err)
+	}
+	opening := &assemblyWorldStateOpening{state: interfaces.FactoryWorldState{Tick: 9}}
+	state, err := reconstructRestoredWorldState(opening, selected)
+	if err != nil {
+		t.Fatalf("reconstructRestoredWorldState(resume) error = %v", err)
+	}
+	if state == nil || state.Tick != 9 {
+		t.Fatalf("resumed state = %#v, want selected tick 9", state)
+	}
+	if len(opening.events) != 1 || opening.events[0].Id != "resume-event" {
+		t.Fatalf("reconstructed resume events = %#v, want selected recording event", opening.events)
+	}
+}
+
+func TestResumeInputRejectsPortableOrEmptyHistory(t *testing.T) {
+	for name, input := range map[string]*recordings.LoadResumeInputResult{
+		"portable":     {Input: recordings.LoadReplayInputResult{Portable: &recordings.PortableRecording{}}},
+		"empty legacy": {Input: recordings.LoadReplayInputResult{Legacy: &recordings.ReplayArtifact{}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := restoredEventsForOpening(nil, input); err == nil {
+				t.Fatal("restoredEventsForOpening() error = nil, want invalid resume history")
+			}
+		})
+	}
+}
+
 func TestNewAssemblyRequiresWireConstructedRuntimeFactory(t *testing.T) {
-	assembly, err := NewAssembly(nil)
+	assembly, err := NewAssembly(nil, stubWorkerSessionsFactory, nil)
 	if err == nil || !strings.Contains(err.Error(), "Factory Runtime factory is required") {
 		t.Fatalf("NewAssembly(nil) error = %v, want required dependency", err)
 	}
@@ -20,14 +151,40 @@ func TestNewAssemblyRequiresWireConstructedRuntimeFactory(t *testing.T) {
 	}
 }
 
+func TestNewAssemblyRequiresWorkerSessionsFactory(t *testing.T) {
+	runtimeFactory := &RuntimeFactory{}
+	assembly, err := NewAssembly(runtimeFactory, nil, stubWorkersService{})
+	if err == nil || !strings.Contains(err.Error(), "Worker Sessions factory is required") {
+		t.Fatalf("NewAssembly(nil factory) error = %v, want required dependency", err)
+	}
+	if assembly != nil {
+		t.Fatalf("NewAssembly(nil factory) = %#v, want nil assembly", assembly)
+	}
+}
+
+func TestNewAssemblyRequiresWorkersService(t *testing.T) {
+	runtimeFactory := &RuntimeFactory{}
+	assembly, err := NewAssembly(runtimeFactory, stubWorkerSessionsFactory, nil)
+	if err == nil || !strings.Contains(err.Error(), "Workers service is required") {
+		t.Fatalf("NewAssembly(nil Workers service) error = %v, want required dependency", err)
+	}
+	if assembly != nil {
+		t.Fatalf("NewAssembly(nil Workers service) = %#v, want nil assembly", assembly)
+	}
+}
+
 func TestNewAssemblyBindsRuntimeFactory(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
-	assembly, err := NewAssembly(runtimeFactory)
+	workerService := stubWorkersService{}
+	assembly, err := NewAssembly(runtimeFactory, stubWorkerSessionsFactory, workerService)
 	if err != nil {
 		t.Fatalf("NewAssembly() error = %v", err)
 	}
 	if assembly == nil || assembly.runtimeFactory != runtimeFactory {
 		t.Fatalf("NewAssembly() = %#v, want supplied Runtime Factory", assembly)
+	}
+	if assembly.workerService != workerService {
+		t.Fatalf("NewAssembly() worker service = %#v, want supplied service", assembly.workerService)
 	}
 }
 
@@ -39,8 +196,132 @@ func TestRuntimeCompositionComposesInertInstanceHost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("instancehostwire.New() error = %v", err)
 	}
-	var _ factoryruntime.Lifecycle = lifecycle
+	var _ factoryruntime.RuntimeLifecycle = lifecycle
 	if _, ok := lifecycle.(instancehost.Service); !ok {
 		t.Fatalf("composed lifecycle type = %T, want instance_host.Service", lifecycle)
 	}
+}
+
+func TestBoundRuntimeServiceUsesConcreteDelegateForWideOperations(t *testing.T) {
+	t.Parallel()
+
+	root, err := NewRoot(
+		func() string { return "runtime-test-id" },
+		nil,
+		nil,
+		clockwork.NewFakeClock(),
+		func(context.Context, workers.WorkstationDispatchRequest) error { return nil },
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewRoot() error = %v", err)
+	}
+	engine := &wideOperationRuntimeFake{}
+	wrapper := &runtimeDelegateWrapper{Service: engine, delegate: engine}
+	root.active["runtime-1"] = &runtimeActivationState{service: wrapper, ingress: engine}
+
+	binding := &boundRuntimeService{root: root, runtimeID: "runtime-1"}
+	if _, err := binding.SubmitWorkRequest(context.Background(), work.WorkRequest{}); err != nil {
+		t.Fatalf("SubmitWorkRequest() error = %v", err)
+	}
+	if _, err := binding.SubscribeFactoryEvents(context.Background(), nil, interfaces.FactoryEventReconnectScope{}); err != nil {
+		t.Fatalf("SubscribeFactoryEvents() error = %v", err)
+	}
+	if engine.submitCalls != 1 || engine.eventCalls != 1 {
+		t.Fatalf("engine wide-operation calls = (%d, %d), want (1, 1)", engine.submitCalls, engine.eventCalls)
+	}
+	if wrapper.submitCalls != 0 || wrapper.eventCalls != 0 {
+		t.Fatalf("compatibility wrapper wide-operation calls = (%d, %d), want (0, 0)", wrapper.submitCalls, wrapper.eventCalls)
+	}
+}
+
+func TestBoundRuntimeServiceUsesConcreteDelegateForLegacyWorkSnapshot(t *testing.T) {
+	t.Parallel()
+
+	root, err := NewRoot(
+		func() string { return "runtime-test-id" },
+		nil,
+		nil,
+		clockwork.NewFakeClock(),
+		func(context.Context, workers.WorkstationDispatchRequest) error { return nil },
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewRoot() error = %v", err)
+	}
+	snapshot := &interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.RuntimeNet]{}
+	engine := &legacySnapshotRuntimeFake{snapshot: snapshot}
+	root.active["runtime-1"] = &runtimeActivationState{
+		service: &runtimeDelegateWrapper{Service: engine, delegate: engine},
+		ingress: engine,
+	}
+
+	binding := &boundRuntimeService{root: root, runtimeID: "runtime-1"}
+	legacyObservation, ok := factoryruntime.Service(binding).(interface {
+		GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.RuntimeNet], error)
+	})
+	if !ok {
+		t.Fatal("bound Runtime service does not expose the legacy Work snapshot capability")
+	}
+	got, err := legacyObservation.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot() error = %v", err)
+	}
+	if got != snapshot {
+		t.Fatalf("GetEngineStateSnapshot() = %p, want concrete delegate snapshot %p", got, snapshot)
+	}
+}
+
+type runtimeDelegateWrapper struct {
+	factoryruntime.Service
+	delegate    factoryruntime.Service
+	submitCalls int
+	eventCalls  int
+}
+
+func (wrapper *runtimeDelegateWrapper) RuntimeDelegate() factoryruntime.Service {
+	return wrapper.delegate
+}
+
+func (wrapper *runtimeDelegateWrapper) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	wrapper.submitCalls++
+	return work.WorkRequestSubmitResult{}, nil
+}
+
+func (wrapper *runtimeDelegateWrapper) SubscribeFactoryEvents(
+	context.Context,
+	*interfaces.FactoryEventReconnectCursor,
+	interfaces.FactoryEventReconnectScope,
+) (*interfaces.FactoryEventStream, error) {
+	wrapper.eventCalls++
+	return nil, nil
+}
+
+type wideOperationRuntimeFake struct {
+	factoryruntime.Service
+	submitCalls int
+	eventCalls  int
+}
+
+type legacySnapshotRuntimeFake struct {
+	wideOperationRuntimeFake
+	snapshot *interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.RuntimeNet]
+}
+
+func (service *legacySnapshotRuntimeFake) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.RuntimeNet], error) {
+	return service.snapshot, nil
+}
+
+func (service *wideOperationRuntimeFake) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	service.submitCalls++
+	return work.WorkRequestSubmitResult{}, nil
+}
+
+func (service *wideOperationRuntimeFake) SubscribeFactoryEvents(
+	context.Context,
+	*interfaces.FactoryEventReconnectCursor,
+	interfaces.FactoryEventReconnectScope,
+) (*interfaces.FactoryEventStream, error) {
+	service.eventCalls++
+	return nil, nil
 }

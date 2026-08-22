@@ -74,14 +74,54 @@ thoughts:init -> ideafy -> thoughts:complete
 
 idea:init -> plan -> idea:to-complete + plan:init
 plan:init -> setup-workspace -> plan:complete + task:init
-task:init -> process -> task:in-review
-task:in-review -> review -> task:to-complete
+task:init -> process -> task:awaiting-ci
+task:awaiting-ci -> ci-wait -> task:in-review
+task:in-review + review:init with the same name -> review -> task:to-complete
 idea:to-complete + task:to-complete with the same name -> consume
 ```
+
+The **ci-wait** workstation is an agentless CI gate: a script
+(`factory/scripts/ci-wait.py`) waits until every required PR check on the
+lane's head is terminal (pass or fail — terminal-ness, not verdict), so
+reviewer agent sessions never spend time or review visits watching CI. A
+reviewer `<CONTINUE>` hold routes the task back to `awaiting-ci`, re-entering
+the same gate instead of burning a review visit.
+
+### Process and review visit budget
+
+The process and review loop uses one logical cycle for each paired traversal.
+Its two loop-breaker guards set `maxVisits` to `12` and `maxRawVisits` to
+`24`. Seven review rejections therefore use fourteen raw visits without
+reaching the logical limit.
+
+The raw backstop still stops an imbalanced or unchanged route. It sums visits
+from `process` and `review`, then fails the Work when it reaches `24`. A
+`VISIT_COUNT` guard without `logicalRoundTrip` keeps the legacy raw behavior.
 
 Executor and review workstations run in worktrees under
 `.claude/worktrees/<work-item-name>/`, created by
 `factory/scripts/setup-workspace.py`.
+
+The **review** workstation runs the dedicated `reviewer` worker
+(codex `gpt-5.6-luna`, reasoning effort `max`). Planning (`plan`) stays on the
+`planner` worker (codex `gpt-5.6-sol`).
+
+### Review quality probes
+
+Reviews run on luna at max reasoning effort for cost reasons: sol review
+sessions were the factory's largest spend bucket, and luna runs at roughly
+1/25th of sol's token rates. Because review-evaluation quality on luna is a
+known risk, the operator dispatches an independent "review quality probe"
+subagent on luna-reviewed PRs. The probe re-reviews the same PR head at high
+capability and grades the factory review as one of:
+
+* `CONCUR` — the probe agrees with the factory review's verdict
+* `MISSED_BLOCKER` — the factory review approved despite a real blocker
+  (false approve)
+* `FALSE_REJECTION` — the factory review rejected without a real blocker
+
+A `MISSED_BLOCKER` on a merged PR, or a low concur rate over the first ~10
+luna reviews, reverts the review worker to sol.
 
 ## Batch Submission
 
@@ -189,5 +229,5 @@ run the narrow verification recipe documented in `factory/docs/batch-inputs.md`:
 
 ```sh
 go test ./pkg/services/workers/prompting -run TestPromptRenderer_ResolvesCheckedInPlannerFactoryDocs -count=1
-go test ./pkg/transports/cli/submit -run TestSubmitBatch_DryRunFactoryDocsBatchInputExample -count=1
+go test ./pkg/services/work/transports/cli/submit -run TestSubmitBatch_DryRunFactoryDocsBatchInputExample -count=1
 ```

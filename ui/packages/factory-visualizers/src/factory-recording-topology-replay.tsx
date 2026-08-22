@@ -42,6 +42,11 @@ export interface FactoryRecordingValidationDiagnosticIssue {
   path: readonly (number | string)[];
 }
 
+export interface FactoryRecordingCompatibilityDiagnosticIssue
+  extends FactoryRecordingValidationDiagnosticIssue {
+  message: string;
+}
+
 export interface FactoryRecordingValidationDiagnostic {
   issues: readonly FactoryRecordingValidationDiagnosticIssue[];
   kind: "recording-validation";
@@ -49,8 +54,16 @@ export interface FactoryRecordingValidationDiagnostic {
   recoverable: false;
 }
 
+export interface FactoryRecordingCompatibilityDiagnostic {
+  issues: readonly FactoryRecordingCompatibilityDiagnosticIssue[];
+  kind: "recording-compatibility";
+  message: string;
+  recoverable: true;
+}
+
 export type FactoryRecordingTopologyReplayError =
   | FactoryRecordingValidationDiagnostic
+  | FactoryRecordingCompatibilityDiagnostic
   | FactoryVisualizerError;
 
 export interface FactoryRecordingTopologyReplayMessages {
@@ -59,6 +72,7 @@ export interface FactoryRecordingTopologyReplayMessages {
   selectedTick: (formattedTick: string) => string;
   timeline: FactoryTimelineScrubberMessages;
   topology: FactoryTopologyReplayMessages;
+  compatibilityDetected?: string;
   validationFailed: string;
 }
 
@@ -127,7 +141,18 @@ export function FactoryRecordingTopologyReplay({
           ),
     [messages.validationFailed, parsed],
   );
+  const compatibilityDiagnostic = useMemo(
+    () =>
+      parsed?.diagnostics.length
+        ? toRecordingCompatibilityDiagnostic(
+            parsed.diagnostics,
+            messages.compatibilityDetected,
+          )
+        : undefined,
+    [messages.compatibilityDetected, parsed],
+  );
   useDistinctRecordingErrorReport(validationError, onError);
+  useDistinctRecordingCompatibilityReport(compatibilityDiagnostic, onError);
   useDistinctVisualizerErrorReport(
     state?.status === "failed" ? state.error : undefined,
     onError,
@@ -331,6 +356,24 @@ function toRecordingValidationDiagnostic(
   };
 }
 
+function toRecordingCompatibilityDiagnostic(
+  issues: readonly RecordingValidationIssue[],
+  message: string | undefined,
+): FactoryRecordingCompatibilityDiagnostic {
+  return {
+    // hardcoded-ui-copy-exception: non-product-diagnostic
+    message: message ?? "Factory recording contains compatibility diagnostics.",
+    issues: issues.map(({ category, code, path, message: issueMessage }) => ({
+      category,
+      code,
+      message: issueMessage,
+      path,
+    })),
+    kind: "recording-compatibility",
+    recoverable: true,
+  };
+}
+
 function useDistinctRecordingErrorReport(
   error: FactoryRecordingValidationDiagnostic | undefined,
   onError: FactoryRecordingTopologyReplayProps["onError"],
@@ -345,6 +388,25 @@ function useDistinctRecordingErrorReport(
     reported.current.add(key);
     onError?.(error);
   }, [error, onError]);
+}
+
+function useDistinctRecordingCompatibilityReport(
+  diagnostic: FactoryRecordingCompatibilityDiagnostic | undefined,
+  onError: FactoryRecordingTopologyReplayProps["onError"],
+) {
+  const reported = useRef(new Set<string>());
+  useEffect(() => {
+    if (!diagnostic) return;
+    const key = diagnostic.issues
+      .map(
+        (issue) =>
+          `${issue.category}:${issue.code}:${issue.path.join(".")}:${issue.message}`,
+      )
+      .join("|");
+    if (reported.current.has(key)) return;
+    reported.current.add(key);
+    onError?.(diagnostic);
+  }, [diagnostic, onError]);
 }
 
 function useDistinctVisualizerErrorReport(

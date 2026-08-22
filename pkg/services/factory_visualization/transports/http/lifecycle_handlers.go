@@ -12,7 +12,7 @@ func (a *Adapter) ActivateLifecycleHTTP(
 	ctx context.Context,
 	body io.Reader,
 ) (LifecycleHTTPResponse, error) {
-	req, err := decodeActivateHTTPRequest(body)
+	req, diagnostics, err := decodeActivateHTTPRequest(body)
 	if err != nil {
 		return LifecycleHTTPResponse{}, err
 	}
@@ -23,7 +23,9 @@ func (a *Adapter) ActivateLifecycleHTTP(
 	if err != nil {
 		return LifecycleHTTPResponse{}, err
 	}
-	return lifecycleHTTPResponseFromActivateResult(result), nil
+	response := lifecycleHTTPResponseFromActivateResult(result)
+	response.ignoredJSONPaths = diagnostics.Paths()
+	return response, nil
 }
 
 // JoinLifecycleHTTP decodes an owned Join HTTP request, invokes the
@@ -32,7 +34,7 @@ func (a *Adapter) JoinLifecycleHTTP(
 	ctx context.Context,
 	body io.Reader,
 ) (LifecycleHTTPResponse, error) {
-	req, err := decodeJoinHTTPRequest(body)
+	req, diagnostics, err := decodeJoinHTTPRequest(body)
 	if err != nil {
 		return LifecycleHTTPResponse{}, err
 	}
@@ -43,7 +45,9 @@ func (a *Adapter) JoinLifecycleHTTP(
 	if err != nil {
 		return LifecycleHTTPResponse{}, err
 	}
-	return lifecycleHTTPResponseFromJoinResult(result), nil
+	response := lifecycleHTTPResponseFromJoinResult(result)
+	response.ignoredJSONPaths = diagnostics.Paths()
+	return response, nil
 }
 
 // StopDrainLifecycleHTTP decodes an owned StopDrain HTTP request, invokes the
@@ -52,7 +56,7 @@ func (a *Adapter) StopDrainLifecycleHTTP(
 	ctx context.Context,
 	body io.Reader,
 ) (LifecycleHTTPResponse, error) {
-	req, err := decodeStopDrainHTTPRequest(body)
+	req, diagnostics, err := decodeStopDrainHTTPRequest(body)
 	if err != nil {
 		return LifecycleHTTPResponse{}, err
 	}
@@ -63,7 +67,9 @@ func (a *Adapter) StopDrainLifecycleHTTP(
 	if err != nil {
 		return LifecycleHTTPResponse{}, err
 	}
-	return lifecycleHTTPResponseFromStopDrainResult(result), nil
+	response := lifecycleHTTPResponseFromStopDrainResult(result)
+	response.ignoredJSONPaths = diagnostics.Paths()
+	return response, nil
 }
 
 // HandleActivateLifecycle serves POST /factory-visualization/lifecycle/activate.
@@ -73,6 +79,7 @@ func (a *Adapter) HandleActivateLifecycle(w http.ResponseWriter, r *http.Request
 		a.writeLifecycleRequestError(w, err)
 		return
 	}
+	a.writeCompatibilityWarning(w, "activate_lifecycle", response.ignoredJSONPaths)
 	a.writeJSON(w, http.StatusOK, response)
 }
 
@@ -83,6 +90,7 @@ func (a *Adapter) HandleJoinLifecycle(w http.ResponseWriter, r *http.Request) {
 		a.writeLifecycleRequestError(w, err)
 		return
 	}
+	a.writeCompatibilityWarning(w, "join_lifecycle", response.ignoredJSONPaths)
 	a.writeJSON(w, http.StatusOK, response)
 }
 
@@ -93,6 +101,7 @@ func (a *Adapter) HandleStopDrainLifecycle(w http.ResponseWriter, r *http.Reques
 		a.writeLifecycleRequestError(w, err)
 		return
 	}
+	a.writeCompatibilityWarning(w, "stop_drain_lifecycle", response.ignoredJSONPaths)
 	a.writeJSON(w, http.StatusOK, response)
 }
 

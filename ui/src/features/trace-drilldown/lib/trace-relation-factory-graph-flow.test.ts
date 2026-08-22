@@ -76,6 +76,9 @@ describe("buildTraceRelationFactoryGraphFlow", () => {
         "trace-relation-source",
       ]),
     );
+    expect(flow.relations.map((relation) => relation.id)).toEqual(
+      flow.edges.map((edge) => edge.id),
+    );
   });
 
   it("registers only shared work graph React Flow node types", () => {

@@ -1,0 +1,18 @@
+type: string
+description: >-
+  Delivery outcome for one Worker Session stream frame. RECORD is a retained
+  or live canonical event, TERMINAL marks the live terminal event, and
+  TERMINAL_REPLAY marks the terminal event in an already-terminal replay.
+  SOURCE_FAILURE is an explicit non-event outcome after the stream has opened.
+enum:
+  - RECORD
+  - TERMINAL
+  - TERMINAL_REPLAY
+  - REPLAY_SUMMARY
+  - SOURCE_FAILURE
+x-enum-varnames:
+  - WorkerSessionEventDeliveryRecord
+  - WorkerSessionEventDeliveryTerminal
+  - WorkerSessionEventDeliveryTerminalReplay
+  - WorkerSessionEventDeliveryReplaySummary
+  - WorkerSessionEventDeliverySourceFailure

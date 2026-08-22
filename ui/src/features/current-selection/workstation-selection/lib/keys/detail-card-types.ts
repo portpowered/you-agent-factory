@@ -189,6 +189,7 @@ export interface WorkstationActiveWorkListProps {
 }
 
 export interface WorkstationRequestHistorySectionProps {
+  locale?: string;
   messages: WorkstationDetailMessages;
   now: number;
   onSelectWorkID?: (workID: string) => void;
@@ -202,6 +203,7 @@ export interface WorkstationRequestHistorySectionProps {
 export interface WorkstationHistorySectionProps {
   collapseActionLabel: string;
   expandActionLabel: string;
+  locale?: string;
   messages: WorkstationDetailMessages;
   now: number;
   onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;

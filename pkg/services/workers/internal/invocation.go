@@ -13,29 +13,13 @@ import (
 	workerinvocation "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation"
 )
 
-// NewInvocation constructs the narrow direct-invocation role used by
-// standalone Factory Session execution.
-func NewInvocation(
-	providersService providers.Service,
-	commandRunner workers.CommandRunner,
-	commandClock workers.Clock,
-	allocator workers.PTYAllocator,
-	resolveSymlinks workers.ResolveExecutableSymlinks,
-	executableLocator platformprocess.ExecutableLocator,
-	executableInspector platformfilesystem.PathInspector,
-	executableFiles platformfilesystem.ReadOpener,
-	operatingSystem workers.OperatingSystem,
-	temporaryFileSystems ...platformfilesystem.TemporaryFileSystem,
-) (workers.InvocationExecutor, error) {
-	return newInvocation(
-		providersService, commandRunner, commandClock, allocator, resolveSymlinks,
-		executableLocator, executableInspector, executableFiles, operatingSystem,
-		nil, temporaryFileSystems...,
-	)
-}
-
 // NewInvocationWithProgress constructs one direct-invocation role that publishes
-// provider progress fragments through the supplied publisher.
+// provider progress fragments through the supplied publisher. It is reached
+// only through NewConductorInvocationWithProgress, whose remaining production
+// caller is named in workers/wire/runtime_bridge.go.
+//
+// TODO(P6-C): retire this bridge after that caller passes detached values to
+// Service.Execute.
 func NewInvocationWithProgress(
 	providersService providers.Service,
 	commandRunner workers.CommandRunner,
@@ -91,21 +75,21 @@ func newInvocation(
 	if err != nil {
 		return nil, fmt.Errorf("construct Worker invocation: %w", err)
 	}
-	return workerinvocation.NewExecutor(registryExecuteProvider{registry: registry}), nil
+	return workerinvocation.NewRunnerExecutor(registryRunner{registry: registry}), nil
 }
 
-// registryExecuteProvider routes transitional InvocationExecutor traffic through
-// the private runners.Service.Execute boundary rather than holding a Strategy.
-type registryExecuteProvider struct{ registry runners.Service }
+// registryRunner routes the direct-invocation boundary through the private
+// runner service without projecting a provider client into Workers.
+type registryRunner struct{ registry runners.Service }
 
-func (provider registryExecuteProvider) Infer(
+func (runner registryRunner) Execute(
 	ctx context.Context,
-	request workers.ProviderInferenceRequest,
-) (workers.InferenceResponse, error) {
-	if provider.registry == nil {
-		return workers.InferenceResponse{}, fmt.Errorf("construct Worker invocation: agent runner registry is required")
+	request workers.RunnerExecutionRequest,
+) (workers.RunnerExecutionResult, error) {
+	if runner.registry == nil {
+		return workers.RunnerExecutionResult{}, fmt.Errorf("construct Worker invocation: agent runner registry is required")
 	}
-	return provider.registry.Execute(ctx, runners.ExecuteRequest{
+	return runner.registry.Execute(ctx, runners.ExecuteRequest{
 		Identity: runners.AgentIdentity,
 		Attempt:  request,
 	})

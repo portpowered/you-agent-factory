@@ -2,11 +2,14 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -38,12 +41,48 @@ func TestMainRoutesCommandFailureThroughFailf(t *testing.T) {
 
 func TestParseConfigHonorsOverridesAndNormalizesJobs(t *testing.T) {
 	restoreArgsAndFlags(t)
-	os.Args = []string{"functionallane", "-count=3", "-jobs=0", "-root=./tests/functional/runtime_api/...", "-short=false", "-timeout=2m30s"}
+	os.Args = []string{"functionallane", "-count=3", "-jobs=0", "-root=./tests/functional/runtime_api/...", "-short=false", "-timeout=2m30s", "-timing-output=.artifacts/timings.json"}
 	flag.CommandLine = flag.NewFlagSet("functionallane", flag.ContinueOnError)
 	got := parseConfig()
-	want := config{count: 3, jobs: 1, root: "./tests/functional/runtime_api/...", short: false, timeout: 150 * time.Second}
+	want := config{count: 3, jobs: 1, root: "./tests/functional/runtime_api/...", short: false, timeout: 150 * time.Second, timingOutput: ".artifacts/timings.json"}
 	if got != want {
 		t.Fatalf("parseConfig() = %+v, want %+v", got, want)
+	}
+}
+
+func TestRunFunctionalTestsWritesRankedTimingReport(t *testing.T) {
+	restoreExecCommand(t)
+	originalStdout := stdoutWriter
+	t.Cleanup(func() { stdoutWriter = originalStdout })
+	var output bytes.Buffer
+	stdoutWriter = &output
+	execCommand = fakeFunctionalLaneCommand
+	t.Setenv("GO_WANT_FUNCTIONALLANE_HELPER", "1")
+	t.Setenv("FUNCTIONALLANE_HELPER_TIMING_JSON", "1")
+	outputPath := filepath.Join(t.TempDir(), "timings.json")
+	cfg := config{count: 1, jobs: 4, root: "./tests/functional/example", short: true, timeout: time.Minute, timingOutput: outputPath}
+	if err := runFunctionalTests(cfg); err != nil {
+		t.Fatalf("runFunctionalTests() error = %v", err)
+	}
+	payload, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read timing report: %v", err)
+	}
+	var report functionalTimingReport
+	if err := json.Unmarshal(payload, &report); err != nil {
+		t.Fatalf("decode timing report: %v", err)
+	}
+	if report.Version != functionalTimingReportVersion || len(report.Packages) != 2 || len(report.Tests) != 2 {
+		t.Fatalf("timing report = %#v", report)
+	}
+	if report.Packages[0].Name != "example.com/slow" || report.Tests[0].Name != "TestSlow" {
+		t.Fatalf("timing ranking = %#v", report)
+	}
+	if !strings.Contains(output.String(), "ok  \texample.com/slow") {
+		t.Fatalf("rendered output = %q", output.String())
+	}
+	if strings.Contains(output.String(), "=== RUN") {
+		t.Fatalf("timing output included verbose go test events: %q", output.String())
 	}
 }
 
@@ -52,8 +91,44 @@ func TestParseConfigDefaults(t *testing.T) {
 	os.Args = []string{"functionallane"}
 	flag.CommandLine = flag.NewFlagSet("functionallane", flag.ContinueOnError)
 	got := parseConfig()
-	if got.count != 1 || got.jobs != 8 || got.root != "./tests/functional/..." || !got.short || got.timeout != 5*time.Minute {
+	if got.count != 0 || got.jobs != 8 || got.root != "./tests/functional/..." || !got.short || got.timeout != 5*time.Minute {
 		t.Fatalf("parseConfig() defaults = %+v", got)
+	}
+}
+
+func TestRunFunctionalTestsOmitsCountForDefaultCacheMode(t *testing.T) {
+	restoreExecCommand(t)
+	var gotArgs []string
+	execCommand = func(name string, args ...string) *exec.Cmd {
+		gotArgs = append([]string{name}, args...)
+		return fakeFunctionalLaneCommand(name, args...)
+	}
+	t.Setenv("GO_WANT_FUNCTIONALLANE_HELPER", "1")
+
+	cfg := config{jobs: 8, root: "./tests/functional/...", short: true, timeout: 2 * time.Minute}
+	if err := runFunctionalTests(cfg); err != nil {
+		t.Fatalf("runFunctionalTests() error = %v", err)
+	}
+	want := []string{"go", "test", "-p=8", "-short", "./tests/functional/...", "-timeout=2m0s"}
+	if !slices.Equal(gotArgs, want) {
+		t.Fatalf("command = %v, want %v", gotArgs, want)
+	}
+}
+
+func TestRunFunctionalTestsRejectsNegativeCount(t *testing.T) {
+	restoreExecCommand(t)
+	executed := false
+	execCommand = func(name string, args ...string) *exec.Cmd {
+		executed = true
+		return fakeFunctionalLaneCommand(name, args...)
+	}
+
+	err := runFunctionalTests(config{count: -1, jobs: 1, root: "./tests/functional/...", short: true, timeout: time.Minute})
+	if err == nil || err.Error() != "invalid -count=-1: value must be zero or greater" {
+		t.Fatalf("runFunctionalTests() error = %v, want invalid-count diagnostic", err)
+	}
+	if executed {
+		t.Fatal("runFunctionalTests() invoked go test after rejecting count")
 	}
 }
 
@@ -101,6 +176,14 @@ func TestFunctionallaneFakeGoProcess(t *testing.T) {
 	}
 	if os.Getenv("FUNCTIONALLANE_HELPER_TEST_FAIL") == "1" {
 		os.Exit(2)
+	}
+	if os.Getenv("FUNCTIONALLANE_HELPER_TIMING_JSON") == "1" {
+		fmt.Fprintln(os.Stdout, `{"Action":"output","Package":"example.com/slow","Test":"TestSlow","Output":"=== RUN   TestSlow\n"}`)
+		fmt.Fprintln(os.Stdout, `{"Action":"pass","Package":"example.com/fast","Test":"TestFast","Elapsed":0.25}`)
+		fmt.Fprintln(os.Stdout, `{"Action":"pass","Package":"example.com/slow","Test":"TestSlow","Elapsed":1.5}`)
+		fmt.Fprintln(os.Stdout, `{"Action":"pass","Package":"example.com/fast","Elapsed":0.5,"Output":"ok  \texample.com/fast\n"}`)
+		fmt.Fprintln(os.Stdout, `{"Action":"pass","Package":"example.com/slow","Elapsed":2,"Output":"ok  \texample.com/slow\n"}`)
+		os.Exit(0)
 	}
 }
 

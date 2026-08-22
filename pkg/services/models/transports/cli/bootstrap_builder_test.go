@@ -32,6 +32,24 @@ type InvocationRunner interface {
 }
 
 type testModelRunner = InvocationRunner
+
+func TestPresentationScopeRequestFromInvokePreservesModelDefaults(t *testing.T) {
+	t.Parallel()
+
+	request := presentationScopeRequestFromInvoke(InvokeConfig{
+		OperatorDefaults: operatorconfig.ResolvedDefaults{
+			WorkerModelProvider: "codex",
+			WorkerModel:         "gpt-5.6",
+		},
+	})
+	if request.OperatorDefaults.WorkerModelProvider != "codex" {
+		t.Fatalf("provider = %q, want codex", request.OperatorDefaults.WorkerModelProvider)
+	}
+	if request.OperatorDefaults.WorkerModel != "gpt-5.6" {
+		t.Fatalf("model = %q, want gpt-5.6", request.OperatorDefaults.WorkerModel)
+	}
+}
+
 type testModelRuntimeSelections struct {
 	Dir                  string
 	SystemConfigHomeDir  string
@@ -91,28 +109,24 @@ func (testModelInvocationOperation) InvokeFactory(
 	context.Context,
 	factorysessions.InvocationTarget,
 	factorysessions.InvocationRequest,
-	factorysessions.FactoryEventConsumer,
 ) (factorysessions.FactoryInvocationOutcome, error) {
 	return factorysessions.FactoryInvocationOutcome{}, errors.New("Factory invocation is not supported by the model test operation")
 }
 
 func (testModelInvocationOperation) InvokeModel(
 	ctx context.Context,
-	target factorysessions.InvocationTarget,
+	target InvocationTarget,
 	modelName string,
 	request modelinference.Request,
 ) (modelinference.Result, error) {
-	executionBaseDir := target.ExecutionBaseDir
-	if executionBaseDir == "" {
-		executionBaseDir, _ = os.Getwd()
-	}
+	executionBaseDir, _ := os.Getwd()
 	cfg := &testModelRuntimeSelections{
 		Dir:                  target.FactoryDir,
 		SystemConfigHomeDir:  target.HomeDir,
 		OperatorDefaults:     target.OperatorDefaults,
 		ExecutionBaseDir:     executionBaseDir,
 		RuntimeMode:          interfaces.RuntimeModeService,
-		Logger:               target.Logger,
+		Logger:               zap.NewNop(),
 		Verbose:              target.Verbose,
 		RuntimeLogConfig:     logging.DefaultRuntimeLogConfig(),
 		RuntimeMetricsConfig: platformmetrics.DefaultRuntimeMetricsConfig(),

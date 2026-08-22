@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -83,6 +84,7 @@ func newFactoryWorldReducer(selectedTick int) *factoryWorldReducer {
 			AgentRunResponsesByDispatchID: make(map[string]map[string]interfaces.FactoryWorldAgentRunResponse),
 			PlaceOccupancyByID:            make(map[string]interfaces.FactoryPlaceOccupancy),
 			ActiveDispatches:              make(map[string]interfaces.FactoryWorldDispatch),
+			PendingHumanApprovalsByID:     make(map[string]interfaces.FactoryWorldHumanApproval),
 			TracesByID:                    make(map[string]interfaces.FactoryWorldTrace),
 			WorkStateChangesByWorkID:      make(map[string][]interfaces.FactoryWorldWorkStateChangeRecord),
 		},
@@ -110,6 +112,8 @@ func (r *factoryWorldReducer) apply(event interfaces.FactoryEvent) error {
 		return r.applyRelationshipChangeEvent(event)
 	case interfaces.FactoryEventTypeDispatchRequest:
 		return r.applyDispatchRequestEvent(event)
+	case interfaces.FactoryEventTypeHumanApprovalRequested:
+		return r.applyHumanApprovalRequestedEvent(event)
 	case interfaces.FactoryEventTypeDispatchResponse:
 		return r.applyDispatchResponseEvent(event)
 	case interfaces.FactoryEventTypeFactoryStateResponse:
@@ -120,6 +124,7 @@ func (r *factoryWorldReducer) apply(event interfaces.FactoryEvent) error {
 		return nil
 	case interfaces.FactoryEventTypeInferenceRequest,
 		interfaces.FactoryEventTypeInferenceResponse,
+		interfaces.FactoryEventTypeModelResponse,
 		interfaces.FactoryEventTypeScriptRequest,
 		interfaces.FactoryEventTypeScriptResponse,
 		interfaces.FactoryEventTypeAgentRunResponse:
@@ -284,8 +289,8 @@ func (r *factoryWorldReducer) applyWorkRequest(context interfaces.FactoryEventCo
 		if workItems[i].TraceID == "" {
 			workItems[i].TraceID = traceID
 		}
-		if workItems[i].PlaceID == "" {
-			workItems[i].PlaceID = r.initialPlaceForWorkType(workItems[i].WorkTypeID)
+		if workItems[i].State == "" {
+			workItems[i].State = stateFromPlaceID(r.initialPlaceForWorkType(workItems[i].WorkTypeID))
 		}
 	}
 	r.stateValue.WorkRequestsByID[requestID] = interfaces.WorkRequestPayload{
@@ -300,7 +305,7 @@ func (r *factoryWorldReducer) applyWorkRequest(context interfaces.FactoryEventCo
 		r.stateValue.PayloadLineage.RecordWorkRequestSnapshot(context.Tick, requestID, item)
 		r.stateValue.WorkItemsByID[item.ID] = item
 		r.stateValue.ActiveWorkItemsByID[item.ID] = item
-		r.addWorkToken(item.ID, item.PlaceID, item)
+		r.addWorkToken(item.ID, r.placeForWorkTypeState(item.WorkTypeID, item.State), item)
 		r.addTraceWork(item.TraceID, item.ID)
 	}
 	for _, relation := range r.factoryRelationsFromRequest(payload.Relations, context) {
@@ -643,13 +648,22 @@ func placeIDMatchesWorkType(placeID string, workTypeID string) bool {
 	return prefix == workTypeID
 }
 
+func stateFromPlaceID(placeID string) string {
+	trimmed := strings.TrimSpace(placeID)
+	if index := strings.LastIndexByte(trimmed, ':'); index >= 0 {
+		return trimmed[index+1:]
+	}
+	return trimmed
+}
+
 func (r *factoryWorldReducer) terminalWorkForCompletion(outcome workerexecution.WorkOutcome, workIDs []string) *interfaces.FactoryTerminalWork {
 	for _, workID := range sortedStrings(workIDs) {
 		item, ok := r.stateValue.WorkItemsByID[workID]
-		if !ok || item.PlaceID == "" {
+		placeID := r.workPlaces[workID]
+		if !ok || placeID == "" {
 			continue
 		}
-		category := r.placeCats[item.PlaceID]
+		category := r.placeCats[placeID]
 		if category == "TERMINAL" || category == "FAILED" ||
 			(outcome == workerexecution.OutcomeFailed && strings.TrimSpace(item.State) == "") {
 			return &interfaces.FactoryTerminalWork{WorkItem: item, Status: category}
@@ -807,7 +821,9 @@ func cloneWorkItems(input []work.FactoryWorkItem) []work.FactoryWorkItem {
 	for i, item := range input {
 		out[i] = item
 		out[i].Tags = cloneStringMap(item.Tags)
-		out[i].Content = append([]work.WorkContentPart(nil), item.Content...)
+		out[i].Content = work.CloneWorkContentParts(item.Content)
+		out[i].StructuredResult = jsonvalue.Clone(item.StructuredResult)
+		out[i].StructuredResultPresent = jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent)
 	}
 	return out
 }
@@ -897,11 +913,15 @@ func mergeFactoryWorkItem(existing work.FactoryWorkItem, incoming work.FactoryWo
 	if incoming.ParentID == "" {
 		incoming.ParentID = existing.ParentID
 	}
-	if incoming.PlaceID == "" {
-		incoming.PlaceID = existing.PlaceID
-	}
 	if incoming.Tags == nil {
 		incoming.Tags = cloneStringMap(existing.Tags)
+	}
+	if !jsonvalue.Present(incoming.StructuredResult, incoming.StructuredResultPresent) {
+		incoming.StructuredResult = jsonvalue.Clone(existing.StructuredResult)
+		incoming.StructuredResultPresent = existing.StructuredResultPresent
+	} else {
+		incoming.StructuredResult = jsonvalue.Clone(incoming.StructuredResult)
+		incoming.StructuredResultPresent = true
 	}
 	return incoming
 }
@@ -965,6 +985,21 @@ func (r *factoryWorldReducer) topologyWorkstation(transitionID string) (interfac
 		}
 	}
 	return interfaces.FactoryWorkstation{}, false
+}
+
+func cloneNameValue(value *interfaces.NameValueConfig) *interfaces.NameValueConfig {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	clone.Locales = append([]string(nil), value.Locales...)
+	if value.Values != nil {
+		clone.Values = make(map[string]string, len(value.Values))
+		for locale, text := range value.Values {
+			clone.Values[locale] = text
+		}
+	}
+	return &clone
 }
 
 func (r *factoryWorldReducer) topologyPlace(placeID string) (interfaces.FactoryPlace, bool) {

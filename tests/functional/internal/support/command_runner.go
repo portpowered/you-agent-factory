@@ -15,6 +15,7 @@ type RecordingCommandRunner struct {
 	mu       sync.Mutex
 	stdout   []byte
 	requests []platformprocess.CommandRequest
+	calls    chan struct{}
 }
 
 type staticSuccessCommandRunner struct {
@@ -23,6 +24,29 @@ type staticSuccessCommandRunner struct {
 
 func NewStaticSuccessCommandRunner(stdout string) platformprocess.CommandRunner {
 	return &staticSuccessCommandRunner{stdout: []byte(stdout)}
+}
+
+type gatedSuccessCommandRunner struct {
+	stdout []byte
+	gate   <-chan struct{}
+}
+
+// NewGatedSuccessCommandRunner returns a CommandRunner whose successful result
+// is withheld until gate closes (or the invocation context ends first). It
+// lets a test deterministically hold a worker dispatch open for an explicit,
+// signal-based window instead of racing a fast/mocked worker's completion
+// against an out-of-process observer that has to make a real HTTP round trip.
+func NewGatedSuccessCommandRunner(stdout string, gate <-chan struct{}) platformprocess.CommandRunner {
+	return &gatedSuccessCommandRunner{stdout: []byte(stdout), gate: gate}
+}
+
+func (r *gatedSuccessCommandRunner) Run(ctx context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	select {
+	case <-r.gate:
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+	return platformprocess.CommandResult{Stdout: shapedProviderCommandStdout(req.Command, r.stdout)}, nil
 }
 
 // NewShapedProviderCommandRunner wraps the shared test runner so Codex and Claude
@@ -47,7 +71,10 @@ func (r *ShapedProviderCommandRunner) Run(ctx context.Context, req platformproce
 }
 
 func NewRecordingCommandRunner(stdout string) *RecordingCommandRunner {
-	return &RecordingCommandRunner{stdout: []byte(stdout)}
+	return &RecordingCommandRunner{
+		stdout: []byte(stdout),
+		calls:  make(chan struct{}, 64),
+	}
 }
 
 func (r *staticSuccessCommandRunner) Run(_ context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
@@ -56,9 +83,12 @@ func (r *staticSuccessCommandRunner) Run(_ context.Context, req platformprocess.
 
 func (r *RecordingCommandRunner) Run(_ context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	r.requests = append(r.requests, cloneProcessCommandRequest(req))
+	r.mu.Unlock()
+	select {
+	case r.calls <- struct{}{}:
+	default:
+	}
 	return platformprocess.CommandResult{Stdout: shapedProviderCommandStdout(req.Command, r.stdout)}, nil
 }
 
@@ -66,6 +96,22 @@ func (r *RecordingCommandRunner) CallCount() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.requests)
+}
+
+// WaitForCall waits for the command-runner edge to observe the requested
+// number of dispatches. The edge signal avoids polling an asynchronously
+// scheduled provider invocation from a functional test.
+func (r *RecordingCommandRunner) WaitForCall(ctx context.Context, want int) error {
+	for {
+		if r.CallCount() >= want {
+			return nil
+		}
+		select {
+		case <-r.calls:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
 
 func (r *RecordingCommandRunner) LastRequest() platformprocess.CommandRequest {
@@ -119,4 +165,5 @@ func shapedProviderCommandStdout(command string, stdout []byte) []byte {
 
 var _ platformprocess.CommandRunner = (*RecordingCommandRunner)(nil)
 var _ platformprocess.CommandRunner = (*staticSuccessCommandRunner)(nil)
+var _ platformprocess.CommandRunner = (*gatedSuccessCommandRunner)(nil)
 var _ platformprocess.CommandRunner = (*ShapedProviderCommandRunner)(nil)

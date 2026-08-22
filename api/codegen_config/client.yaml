@@ -4,14 +4,23 @@ generate:
   models: true
   client: true
 output-options:
+  # FactoryEvent is an SSE frame schema referenced through x-event-schema.
+  # Retaining unreferenced component schemas publishes that typed contract to
+  # the generated Go client as well as the server and TypeScript consumers.
+  skip-prune: true
   overlay:
     path: ../../../api/codegen_config/factory-codegen-overlay.yaml
     strict: false
   include-operation-ids:
     - getStatus
+    - getMetrics
+    - getMetricsCosts
     - getEventsBySessionId
     - getEditableCurrentFactoryDefinition
     - getCurrentFactory
     - saveEditableCurrentFactoryDefinition
     - getFactoryResponseEventsBySessionId
+    - getWorkerSessionObservationByWorkerSessionId
+    - readWorkerSessionTranscriptByWorkerSessionId
+    - streamWorkerSessionEventsByWorkerSessionId
   response-type-suffix: ClientResponse

@@ -3,6 +3,7 @@ package providers_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"sort"
 	"testing"
 
@@ -16,6 +17,27 @@ type catalogPeerFake struct {
 }
 
 var _ providers.Service = (*catalogPeerFake)(nil)
+
+func (*catalogPeerFake) ResolveIdentity(
+	context.Context,
+	providers.ResolveIdentityRequest,
+) (providers.ResolveIdentityResult, error) {
+	return providers.ResolveIdentityResult{}, errors.New("selection is not part of this catalog fake")
+}
+
+func (*catalogPeerFake) ResolveSelection(
+	context.Context,
+	providers.ResolveSelectionRequest,
+) (providers.ResolveSelectionResult, error) {
+	return providers.ResolveSelectionResult{}, errors.New("selection is not part of this catalog fake")
+}
+
+func (*catalogPeerFake) ValidatePrerequisites(
+	context.Context,
+	providers.ValidatePrerequisitesRequest,
+) error {
+	return errors.New("selection is not part of this catalog fake")
+}
 
 func newCatalogPeerFake(entries ...providers.Descriptor) *catalogPeerFake {
 	catalog := make(map[providers.ID]providers.Descriptor, len(entries))
@@ -61,6 +83,61 @@ func (fake *catalogPeerFake) GetProvider(
 		return providers.GetProviderResult{}, providers.ErrProviderUnavailable
 	}
 	return providers.GetProviderResult{Provider: descriptor.Clone()}, nil
+}
+
+// Continue implements the published Providers Service continuation slice for
+// catalogPeerFake using only Providers root contracts: a known provider that
+// advertises CapabilitySessionResume echoes the closed unsupported outcome
+// only when the fake descriptor omits that capability, and otherwise reports
+// a generic failure - executePeerFake overrides this with a fuller resumed
+// path.
+func (fake *catalogPeerFake) Continue(
+	_ context.Context,
+	request providers.ContinueRequest,
+) (providers.ContinueResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ContinueResult{}, err
+	}
+	descriptor, ok := fake.providers[request.Reference.Provider]
+	if !ok {
+		return providers.ContinueResult{}, providers.ErrUnknownProvider
+	}
+	if !hasCapability(descriptor, providers.CapabilitySessionResume) {
+		return providers.ContinueResult{
+			Reference: request.Reference,
+			Outcome:   providers.ContinuationOutcomeUnsupported,
+		}, nil
+	}
+	return providers.ContinueResult{}, providers.ErrExecuteFailed
+}
+
+func (fake *catalogPeerFake) ContinueReference(
+	ctx context.Context,
+	request providers.ContinueReferenceRequest,
+) (providers.ContinueReferenceResult, error) {
+	reference, err := request.Reference.ToSessionRef()
+	if err != nil {
+		return providers.ContinueReferenceResult{}, err
+	}
+	continued, err := fake.Continue(ctx, providers.ContinueRequest{Reference: reference, Attempt: request.Attempt})
+	if err != nil {
+		return providers.ContinueReferenceResult{}, err
+	}
+	continuedReference := continued.Reference
+	if continuedReference.Provider == "" {
+		continuedReference = reference
+	}
+	resultReference := continuedReference.ContinuationRef()
+	resultReference.ExternalRef = request.Reference.Normalize().ExternalRef
+	return providers.ContinueReferenceResult{
+		Reference: resultReference,
+		Outcome:   continued.Outcome,
+		Result:    continued.Result,
+	}, nil
+}
+
+func hasCapability(descriptor providers.Descriptor, capability providers.Capability) bool {
+	return slices.Contains(descriptor.Capabilities, capability)
 }
 
 func hasMissingPrerequisite(prerequisites []providers.Prerequisite) bool {

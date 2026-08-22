@@ -3,7 +3,9 @@ additionalProperties: false
 description: >-
   Durable Factory Session lifecycle control recorded on the canonical factory
   event stream. Session identity lives in FactoryEvent.context; this payload
-  carries replay-safe control facts only.
+  carries replay-safe control facts only. Its operation and outcome shape is
+  intentionally closed because it is a fixed control contract, not an
+  extensible event metadata bag.
 required:
   - operation
   - outcome

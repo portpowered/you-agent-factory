@@ -1,0 +1,20 @@
+{
+  "formatVersion": "pss-path-lease-packet-manifest/v1",
+  "packets": [
+    {
+      "packetId": "PSS-I05",
+      "leaseClass": "event-boundary-metadata",
+      "exclusivePaths": [
+        "docs/internal/projects/packaged-service-structure/event-boundary-d2-rescope.md"
+      ],
+      "state": "active"
+    },
+    {
+      "packetId": "PKT-BOUNDARY-CONFLICT",
+      "exclusivePaths": [
+        "docs/internal/projects/packaged-service-structure/event-boundary-d2-rescope.md"
+      ],
+      "state": "blocked"
+    }
+  ]
+}

@@ -6,6 +6,7 @@ import { factoryLayoutEdgeWaypoints } from "../../lib/layout/factory-graph-layou
 import {
   createDefaultFactoryLayout,
   factoryLayoutNodePosition,
+  factoryLayoutNodeSize,
   moveFactoryLayoutNode,
 } from "../../lib/layout/factory-graph-layout-operations";
 import {
@@ -86,6 +87,105 @@ describe("useFactoryGraphLayoutDraftState movement history", () => {
 
     expect(result.current.canUndoLayout).toBe(false);
     expect(result.current.canRedoLayout).toBe(false);
+  });
+});
+
+describe("useFactoryGraphLayoutDraftState node-size history", () => {
+  it("records resize, fit, and reset as atomic commands with exact undo and redo", () => {
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: baseFactoryDefinition,
+        factoryDocumentScopeKey: "session-node-size-history",
+      }),
+    );
+
+    act(() => {
+      result.current.resizeNode(
+        "workstation:draft",
+        "workstation",
+        { height: 400, width: 9999 },
+        { x: 40, y: 80 },
+      );
+    });
+
+    expect(
+      factoryLayoutNodeSize(result.current.layout, "workstation:draft"),
+    ).toEqual({ height: 400, width: 520 });
+    expect(
+      factoryLayoutNodePosition(result.current.layout, "workstation:draft"),
+    ).toEqual({ x: 40, y: 80 });
+    expect(result.current.canUndoLayout).toBe(true);
+
+    act(() => {
+      result.current.undoLayout();
+    });
+    expect(
+      factoryLayoutNodeSize(result.current.layout, "workstation:draft"),
+    ).toBeUndefined();
+    expect(result.current.canRedoLayout).toBe(true);
+
+    act(() => {
+      result.current.redoLayout();
+    });
+    expect(
+      factoryLayoutNodeSize(result.current.layout, "workstation:draft"),
+    ).toEqual({ height: 400, width: 520 });
+
+    act(() => {
+      result.current.fitNode(
+        "workstation:draft",
+        "workstation",
+        { height: 260, width: 300 },
+        { x: 40, y: 80 },
+      );
+    });
+    expect(
+      factoryLayoutNodeSize(result.current.layout, "workstation:draft"),
+    ).toEqual({ height: 260, width: 300 });
+
+    act(() => {
+      result.current.undoLayout();
+    });
+    expect(
+      factoryLayoutNodeSize(result.current.layout, "workstation:draft"),
+    ).toEqual({ height: 400, width: 520 });
+
+    act(() => {
+      result.current.redoLayout();
+      result.current.resetNodeSize("workstation:draft");
+    });
+    expect(
+      factoryLayoutNodeSize(result.current.layout, "workstation:draft"),
+    ).toBeUndefined();
+
+    act(() => {
+      result.current.undoLayout();
+    });
+    expect(
+      factoryLayoutNodeSize(result.current.layout, "workstation:draft"),
+    ).toEqual({ height: 260, width: 300 });
+  });
+
+  it("normalizes invalid resize dimensions before entering pending layout", () => {
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: baseFactoryDefinition,
+        factoryDocumentScopeKey: "session-node-size-invalid",
+      }),
+    );
+
+    act(() => {
+      result.current.resizeNode(
+        "worker:writer",
+        "worker",
+        { height: Number.NaN, width: Number.POSITIVE_INFINITY },
+        { x: 10, y: 20 },
+      );
+    });
+
+    expect(
+      factoryLayoutNodeSize(result.current.layout, "worker:writer"),
+    ).toEqual({ height: 58, width: 156 });
   });
 });
 
@@ -526,6 +626,42 @@ describe("useFactoryGraphLayoutDraftState visual group create rename style", () 
 });
 
 describe("useFactoryGraphLayoutDraftState visual group save reload", () => {
+  it("normalizes a custom color through the layout operation and restores it after reload", () => {
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: baseFactoryDefinition,
+        factoryDocumentScopeKey: "session-group-custom-color",
+      }),
+    );
+
+    act(() => {
+      result.current.createVisualGroup({ x: 0, y: 0 });
+      result.current.setVisualGroupColor("group-1", "#ABC123");
+    });
+
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1")?.color,
+    ).toBe("#abc123");
+
+    const savedLayout = structuredClone(result.current.layout);
+    act(() => {
+      result.current.setVisualGroupColor("group-1", "rgb(1, 2, 3)");
+    });
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1")?.color,
+    ).toBe("#abc123");
+
+    act(() => {
+      result.current.adoptSavedLayout(savedLayout);
+    });
+
+    expect(result.current.layoutDirty).toBe(false);
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1")?.color,
+    ).toBe("#abc123");
+    expect(result.current.canUndoLayout).toBe(false);
+  });
+
   it("adopts saved visual group layout after reload without topology dirty state", () => {
     const savedLayoutDocument = {
       ...baseFactoryDefinition,
@@ -571,6 +707,103 @@ describe("useFactoryGraphLayoutDraftState visual group save reload", () => {
       parentGroupId: null,
     });
     expect(result.current.canUndoLayout).toBe(false);
+  });
+});
+
+describe("useFactoryGraphLayoutDraftState visual group fitting", () => {
+  it("creates a fitted group from the selected node geometry in one history step", () => {
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: baseFactoryDefinition,
+        factoryDocumentScopeKey: "session-group-fit-create",
+      }),
+    );
+    const nodeGeometryById = new Map([
+      [
+        "workstation:draft",
+        { height: 40, position: { x: 100, y: 120 }, width: 80 },
+      ],
+      [
+        "worker:writer",
+        { height: 60, position: { x: 280, y: 200 }, width: 120 },
+      ],
+    ]);
+
+    act(() => {
+      result.current.createVisualGroup(
+        { x: 0, y: 0 },
+        {
+          nodeGeometryById,
+          nodeIds: ["workstation:draft", "worker:writer"],
+        },
+      );
+    });
+
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1"),
+    ).toMatchObject({
+      bounds: { height: 204, width: 364, x: 68, y: 88 },
+      nodeIds: ["workstation:draft", "worker:writer"],
+    });
+
+    act(() => {
+      result.current.undoLayout();
+    });
+    expect(factoryLayoutGroupById(result.current.layout, "group-1")).toBe(
+      undefined,
+    );
+
+    act(() => {
+      result.current.redoLayout();
+    });
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1")?.bounds,
+    ).toEqual({ height: 204, width: 364, x: 68, y: 88 });
+  });
+
+  it("fits an existing group, ignores stale members, and supports undo and redo", () => {
+    const layoutDocument = {
+      ...baseFactoryDefinition,
+      layout: addFactoryLayoutGroup(createDefaultFactoryLayout(), {
+        bounds: { height: 200, width: 300, x: 10, y: 20 },
+        id: "group-1",
+        label: "Review",
+        nodeIds: ["workstation:draft", "legacy-node"],
+      }),
+    };
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: layoutDocument,
+        factoryDocumentScopeKey: "session-group-fit-existing",
+      }),
+    );
+    const nodeGeometryById = new Map([
+      [
+        "workstation:draft",
+        { height: 40, position: { x: 100, y: 120 }, width: 80 },
+      ],
+    ]);
+
+    act(() => {
+      result.current.fitVisualGroup("group-1", nodeGeometryById);
+    });
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1")?.bounds,
+    ).toEqual({ height: 104, width: 144, x: 68, y: 88 });
+
+    act(() => {
+      result.current.undoLayout();
+    });
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1")?.bounds,
+    ).toEqual({ height: 200, width: 300, x: 10, y: 20 });
+
+    act(() => {
+      result.current.redoLayout();
+    });
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1")?.bounds,
+    ).toEqual({ height: 104, width: 144, x: 68, y: 88 });
   });
 });
 
@@ -629,6 +862,11 @@ describe("useFactoryGraphLayoutDraftState visual group membership", () => {
 });
 
 describe("useFactoryGraphLayoutDraftState visual group geometry", () => {
+  it(
+    "moves all group members, leaves unrelated nodes stable, and restores the full move",
+    moveAllGroupMembersThroughHistory,
+  );
+
   it("records group move, resize, and delete with undo and redo", () => {
     const layoutDocument = {
       ...baseFactoryDefinition,
@@ -727,4 +965,101 @@ describe("useFactoryGraphLayoutDraftState visual group geometry", () => {
     );
   });
 });
+
+function moveAllGroupMembersThroughHistory() {
+  const originalBounds = { height: 240, width: 360, x: 40, y: 60 };
+  let layout = addFactoryLayoutGroup(createDefaultFactoryLayout(), {
+    bounds: originalBounds,
+    id: "group-1",
+    label: "Review",
+    nodeIds: ["workstation:draft", "worker:writer"],
+  });
+  layout = moveFactoryLayoutNode(layout, "workstation:draft", {
+    x: 80,
+    y: 100,
+  });
+  layout = moveFactoryLayoutNode(layout, "worker:writer", {
+    x: 180,
+    y: 140,
+  });
+  layout = moveFactoryLayoutNode(layout, "workstation:unrelated", {
+    x: 500,
+    y: 520,
+  });
+  const layoutDocument = {
+    ...baseFactoryDefinition,
+    layout,
+  };
+
+  const { result } = renderHook(() =>
+    useFactoryGraphLayoutDraftState({
+      currentFactoryDocument: layoutDocument,
+      factoryDocumentScopeKey: "session-group-move-members",
+    }),
+  );
+
+  const delta = { x: 32, y: -18 };
+  act(() => {
+    result.current.moveVisualGroupByDelta(
+      "group-1",
+      delta,
+      new Map([
+        ["workstation:draft", { x: 80, y: 100 }],
+        ["worker:writer", { x: 180, y: 140 }],
+      ]),
+    );
+  });
+
+  expect(
+    factoryLayoutGroupById(result.current.layout, "group-1")?.bounds,
+  ).toEqual({
+    height: 240,
+    width: 360,
+    x: 72,
+    y: 42,
+  });
+  expect(
+    factoryLayoutNodePosition(result.current.layout, "workstation:draft"),
+  ).toEqual({ x: 112, y: 82 });
+  expect(
+    factoryLayoutNodePosition(result.current.layout, "worker:writer"),
+  ).toEqual({ x: 212, y: 122 });
+  expect(
+    factoryLayoutNodePosition(result.current.layout, "workstation:unrelated"),
+  ).toEqual({ x: 500, y: 520 });
+
+  act(() => {
+    result.current.undoLayout();
+  });
+  expect(
+    factoryLayoutGroupById(result.current.layout, "group-1")?.bounds,
+  ).toEqual(originalBounds);
+  expect(
+    factoryLayoutNodePosition(result.current.layout, "workstation:draft"),
+  ).toEqual({ x: 80, y: 100 });
+  expect(
+    factoryLayoutNodePosition(result.current.layout, "worker:writer"),
+  ).toEqual({ x: 180, y: 140 });
+  expect(
+    factoryLayoutNodePosition(result.current.layout, "workstation:unrelated"),
+  ).toEqual({ x: 500, y: 520 });
+
+  act(() => {
+    result.current.redoLayout();
+  });
+  expect(
+    factoryLayoutGroupById(result.current.layout, "group-1")?.bounds,
+  ).toEqual({
+    height: 240,
+    width: 360,
+    x: 72,
+    y: 42,
+  });
+  expect(
+    factoryLayoutNodePosition(result.current.layout, "workstation:draft"),
+  ).toEqual({ x: 112, y: 82 });
+  expect(
+    factoryLayoutNodePosition(result.current.layout, "worker:writer"),
+  ).toEqual({ x: 212, y: 122 });
+}
 // Component lane: requires DOM APIs.

@@ -56,65 +56,92 @@ func NormalizeWorkRequest(req Request, opts NormalizeOptions) ([]SubmitRequest, 
 	if err != nil {
 		return nil, err
 	}
-	if err := rejectDependencyCycles(req.Relations); err != nil {
-		return nil, err
-	}
 
 	traceID := batchTraceID(req)
+	return normalizeBatchWorks(req, opts, workIndex, relIndex, traceID)
+}
+
+func normalizeBatchWorks(
+	req Request,
+	opts NormalizeOptions,
+	workIndex map[string]normalizedBatchWork,
+	relIndex map[string][]Relation,
+	traceID string,
+) ([]SubmitRequest, error) {
 	normalized := make([]SubmitRequest, 0, len(req.Works))
 	for i, work := range req.Works {
-		workTypeID := work.WorkTypeID
-		if workTypeID == "" {
-			workTypeID = opts.DefaultWorkTypeID
-		}
-		content, payload, err := normalizeWorkContent(work.Content, work.Payload)
+		normalizedWork, err := normalizeBatchWork(req, opts, workIndex, relIndex, traceID, i, work)
 		if err != nil {
-			return nil, fmt.Errorf("work_request: works[%d] (%q) has invalid content/payload: %w", i, work.Name, err)
+			return nil, err
 		}
+		normalized = append(normalized, normalizedWork)
 
-		itemCurrentChainingTraceID := ResolveWorkRequestCurrentChainingTraceID(work.CurrentChainingTraceID, work.TraceID)
-		if itemCurrentChainingTraceID == "" {
-			itemCurrentChainingTraceID = ResolveWorkRequestCurrentChainingTraceID(req.CurrentChainingTraceID, traceID)
-		}
-		itemTraceID := work.TraceID
-		if itemTraceID == "" {
-			itemTraceID = itemCurrentChainingTraceID
-		}
-		itemRequestID := work.RequestID
-		if itemRequestID == "" {
-			itemRequestID = req.RequestID
-		}
-
-		tags := make(map[string]string, len(work.Tags)+3)
-		maps.Copy(tags, work.Tags)
-		tags["_work_name"] = work.Name
-		tags["_work_type"] = workTypeID
-		if work.ExecutionID != "" {
-			tags["_execution_id"] = work.ExecutionID
-		}
-
-		normalized = append(normalized, SubmitRequest{
-			RequestID:                itemRequestID,
-			WorkID:                   workIndex[work.Name].id,
-			Name:                     work.Name,
-			WorkTypeID:               workTypeID,
-			ChainingTraceDepth:       normalizeSubmitChainingTraceDepth(work.ChainingTraceDepth, itemCurrentChainingTraceID, itemTraceID),
-			CurrentChainingTraceID:   itemCurrentChainingTraceID,
-			PreviousChainingTraceIDs: lineagegraph.CanonicalChainingTraceIDs(work.PreviousChainingTraceIDs),
-			TraceID:                  itemTraceID,
-			Content:                  content,
-			Payload:                  payload,
-			Tags:                     tags,
-			TargetState:              work.State,
-			ExecutionID:              work.ExecutionID,
-			Relations: appendUniquePetriRelations(
-				cloneRelations(relIndex[work.Name]),
-				work.RuntimeRelations,
-			),
-			InvocationArguments: cloneInvocationArguments(work.InvocationArguments),
-		})
 	}
 	return normalized, nil
+}
+
+func normalizeBatchWork(
+	req Request,
+	opts NormalizeOptions,
+	workIndex map[string]normalizedBatchWork,
+	relIndex map[string][]Relation,
+	traceID string,
+	index int,
+	work Work,
+) (SubmitRequest, error) {
+	workTypeID := work.WorkTypeID
+	if workTypeID == "" {
+		workTypeID = opts.DefaultWorkTypeID
+	}
+	content, payload, err := normalizeWorkContent(work.Content, work.Payload)
+	if err != nil {
+		return SubmitRequest{}, fmt.Errorf("work_request: works[%d] (%q) has invalid content/payload: %w", index, work.Name, err)
+	}
+	if err := validateWorkPayloadSize(work.Name, workIndex[work.Name].id, payload); err != nil {
+		return SubmitRequest{}, err
+	}
+
+	itemCurrentChainingTraceID := ResolveWorkRequestCurrentChainingTraceID(work.CurrentChainingTraceID, work.TraceID)
+	if itemCurrentChainingTraceID == "" {
+		itemCurrentChainingTraceID = ResolveWorkRequestCurrentChainingTraceID(req.CurrentChainingTraceID, traceID)
+	}
+	itemTraceID := work.TraceID
+	if itemTraceID == "" {
+		itemTraceID = itemCurrentChainingTraceID
+	}
+	itemRequestID := work.RequestID
+	if itemRequestID == "" {
+		itemRequestID = req.RequestID
+	}
+
+	tags := make(map[string]string, len(work.Tags)+3)
+	maps.Copy(tags, work.Tags)
+	tags["_work_name"] = work.Name
+	tags["_work_type"] = workTypeID
+	if work.ExecutionID != "" {
+		tags["_execution_id"] = work.ExecutionID
+	}
+
+	return SubmitRequest{
+		RequestID:                itemRequestID,
+		WorkID:                   workIndex[work.Name].id,
+		Name:                     work.Name,
+		WorkTypeID:               workTypeID,
+		ChainingTraceDepth:       normalizeSubmitChainingTraceDepth(work.ChainingTraceDepth, itemCurrentChainingTraceID, itemTraceID),
+		CurrentChainingTraceID:   itemCurrentChainingTraceID,
+		PreviousChainingTraceIDs: lineagegraph.CanonicalChainingTraceIDs(work.PreviousChainingTraceIDs),
+		TraceID:                  itemTraceID,
+		Content:                  content,
+		Payload:                  payload,
+		Tags:                     tags,
+		TargetState:              work.State,
+		ExecutionID:              work.ExecutionID,
+		Relations: appendUniquePetriRelations(
+			cloneRelations(relIndex[work.Name]),
+			work.RuntimeRelations,
+		),
+		InvocationArguments: cloneInvocationArguments(work.InvocationArguments),
+	}, nil
 }
 
 func SubmitResultFromNormalized(requestID string, normalized []SubmitRequest) SubmitResult {
@@ -207,8 +234,10 @@ func SubmitWorkName(req SubmitRequest) string {
 }
 
 type normalizedBatchWork struct {
+	name       string
 	id         string
 	workTypeID string
+	batch      bool
 }
 
 func normalizedSubmissionMatch(
@@ -275,16 +304,12 @@ func applyGeneratedSubmissionOverrides(next SubmitRequest, submitted SubmitReque
 }
 
 func validateBatchWork(req Request, opts NormalizeOptions) (map[string]normalizedBatchWork, error) {
-	workNames := make(map[string]bool, len(req.Works))
+	workNames := make(map[string]int, len(req.Works))
 	workIndex := make(map[string]normalizedBatchWork, len(req.Works))
 	for i, work := range req.Works {
-		if strings.TrimSpace(work.Name) == "" {
-			return nil, fmt.Errorf("work_request: works[%d] is missing required name", i)
+		if err := validateBatchWorkName(workNames, i, work); err != nil {
+			return nil, err
 		}
-		if workNames[work.Name] {
-			return nil, fmt.Errorf("work_request: works[%d] has duplicate name %q", i, work.Name)
-		}
-		workNames[work.Name] = true
 
 		workTypeID := work.WorkTypeID
 		if workTypeID == "" {
@@ -308,37 +333,68 @@ func validateBatchWork(req Request, opts NormalizeOptions) (map[string]normalize
 			workID = fmt.Sprintf("batch-%s-%s", req.RequestID, work.Name)
 		}
 		workIndex[work.Name] = normalizedBatchWork{
+			name:       work.Name,
 			id:         workID,
 			workTypeID: workTypeID,
+			batch:      true,
 		}
 	}
 	return workIndex, nil
 }
 
+func validateBatchWorkName(workNames map[string]int, index int, work Work) error {
+	if strings.TrimSpace(work.Name) == "" {
+		return fmt.Errorf("work_request: works[%d] is missing required name", index)
+	}
+	if original, exists := workNames[work.Name]; exists {
+		return fmt.Errorf(
+			"work_request: duplicate name %q: works[%d].name conflicts with works[%d].name; works[].name must be unique across the entire batch, including across different workTypeName values; rename or remove one entry",
+			work.Name,
+			index,
+			original,
+		)
+	}
+	workNames[work.Name] = index
+	return nil
+}
+
 func validateAndIndexBatchRelations(req Request, workIndex map[string]normalizedBatchWork, opts NormalizeOptions) (map[string][]Relation, error) {
 	relIndex := make(map[string][]Relation)
 	seen := map[string]int{}
-	parentTargets := make(map[string]string)
+	parentTargets := make(map[string]normalizedBatchWork)
+	dependencyGraph := make(map[string][]string)
 	for i, rel := range req.Relations {
-		targetWork, err := validateBatchRelationEndpoints(i, rel, workIndex)
+		sourceWork, err := validateBatchRelationSource(i, rel, workIndex)
 		if err != nil {
 			return nil, err
 		}
-		normalized, key, err := normalizeBatchRelation(i, rel, targetWork, opts)
+		targetWork, err := resolveBatchRelationTarget(i, rel, workIndex, opts.ExistingWorks)
+		if err != nil {
+			return nil, err
+		}
+		if rel.Type == WorkRelationParentChild && !targetWork.batch {
+			return nil, fmt.Errorf(
+				"work_request: relations[%d] PARENT_CHILD target %s=%q must be declared in this batch's works[]; PARENT_CHILD endpoints cannot reference previously submitted Work",
+				i,
+				relationTargetField(rel),
+				relationTargetValue(rel),
+			)
+		}
+		normalized, key, err := normalizeBatchRelation(i, rel, sourceWork, targetWork, opts)
 		if err != nil {
 			return nil, err
 		}
 		if rel.Type == WorkRelationParentChild {
-			if existingTarget, ok := parentTargets[rel.SourceWorkName]; ok && existingTarget != rel.TargetWorkName {
+			if existingTarget, ok := parentTargets[sourceWork.id]; ok && existingTarget.id != targetWork.id {
 				return nil, fmt.Errorf(
 					"work_request: relations[%d] assigns multiple PARENT_CHILD parents to %q (%q and %q)",
 					i,
 					rel.SourceWorkName,
-					existingTarget,
-					rel.TargetWorkName,
+					existingTarget.name,
+					targetWork.name,
 				)
 			}
-			parentTargets[rel.SourceWorkName] = rel.TargetWorkName
+			parentTargets[sourceWork.id] = targetWork
 		}
 		if original, duplicate := seen[key]; duplicate {
 			if rel.Type == WorkRelationDependsOn {
@@ -363,40 +419,238 @@ func validateAndIndexBatchRelations(req Request, workIndex map[string]normalized
 		}
 		seen[key] = i
 		relIndex[rel.SourceWorkName] = append(relIndex[rel.SourceWorkName], normalized)
+		if rel.Type == WorkRelationDependsOn {
+			dependencyGraph[sourceWork.id] = append(dependencyGraph[sourceWork.id], targetWork.id)
+		}
+	}
+	if err := rejectDependencyCycles(dependencyGraph); err != nil {
+		return nil, err
 	}
 	return relIndex, nil
 }
 
-func validateBatchRelationEndpoints(i int, rel WorkRelation, workIndex map[string]normalizedBatchWork) (normalizedBatchWork, error) {
+func validateBatchRelationSource(i int, rel WorkRelation, workIndex map[string]normalizedBatchWork) (normalizedBatchWork, error) {
 	if strings.TrimSpace(rel.SourceWorkName) == "" {
-		return normalizedBatchWork{}, fmt.Errorf("work_request: relations[%d] is missing sourceWorkName", i)
+		return normalizedBatchWork{}, missingBatchRelationEndpointError(i, rel, "sourceWorkName")
 	}
-	if strings.TrimSpace(rel.TargetWorkName) == "" {
-		return normalizedBatchWork{}, fmt.Errorf("work_request: relations[%d] is missing targetWorkName", i)
-	}
-	if _, ok := workIndex[rel.SourceWorkName]; !ok {
-		return normalizedBatchWork{}, fmt.Errorf("work_request: relations[%d] references unknown sourceWorkName %q", i, rel.SourceWorkName)
-	}
-	targetWork, ok := workIndex[rel.TargetWorkName]
+	sourceWork, ok := workIndex[rel.SourceWorkName]
 	if !ok {
-		return normalizedBatchWork{}, fmt.Errorf("work_request: relations[%d] references unknown targetWorkName %q", i, rel.TargetWorkName)
+		return normalizedBatchWork{}, missingBatchRelationEndpointError(i, rel, "sourceWorkName")
 	}
-	return targetWork, nil
+	return sourceWork, nil
 }
 
-func normalizeBatchRelation(i int, rel WorkRelation, targetWork normalizedBatchWork, opts NormalizeOptions) (Relation, string, error) {
+// validateBatchRelationShape checks the parts that can be known without a
+// Factory Session. DEPENDS_ON target existence is deliberately deferred to
+// live admission because its target may already be on the selected board.
+func validateBatchRelationShape(i int, rel WorkRelation, workIndex map[string]normalizedBatchWork) error {
+	if _, err := validateBatchRelationSource(i, rel, workIndex); err != nil {
+		return err
+	}
+	if strings.TrimSpace(rel.TargetWorkName) == "" && strings.TrimSpace(rel.TargetWorkID) == "" {
+		return missingBatchRelationEndpointError(i, rel, "targetWorkName")
+	}
+	if rel.Type == WorkRelationParentChild {
+		if targetName := strings.TrimSpace(rel.TargetWorkName); targetName != "" {
+			if _, ok := workIndex[rel.TargetWorkName]; !ok {
+				return missingBatchRelationEndpointError(i, rel, "targetWorkName")
+			}
+		} else {
+			found := false
+			for _, work := range workIndex {
+				if work.id == strings.TrimSpace(rel.TargetWorkID) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return missingBatchRelationEndpointError(i, rel, "targetWorkId")
+			}
+		}
+	}
+	return nil
+}
+
+func resolveBatchRelationTarget(
+	i int,
+	rel WorkRelation,
+	workIndex map[string]normalizedBatchWork,
+	existing []ExistingWork,
+) (normalizedBatchWork, error) {
+	targetName := strings.TrimSpace(rel.TargetWorkName)
+	targetID := strings.TrimSpace(rel.TargetWorkID)
+	if targetName == "" && targetID == "" {
+		return normalizedBatchWork{}, missingBatchRelationEndpointError(i, rel, "targetWorkName")
+	}
+
+	byName := relationTargetCandidates(workIndex, existing, targetName, "name")
+	byID := relationTargetCandidates(workIndex, existing, targetID, "id")
+	if err := validateRelationTargetCandidates(i, rel, targetName, targetID, byName, byID); err != nil {
+		return normalizedBatchWork{}, err
+	}
+
+	if targetName != "" && targetID != "" {
+		return resolveRelationTargetByBoth(i, rel, byName, byID[0])
+	}
+	if targetName != "" {
+		return byName[0], nil
+	}
+	return byID[0], nil
+}
+
+func validateRelationTargetCandidates(
+	i int,
+	rel WorkRelation,
+	targetName string,
+	targetID string,
+	byName []normalizedBatchWork,
+	byID []normalizedBatchWork,
+) error {
+	if targetName != "" && len(byName) == 0 && targetID == "" {
+		return unknownRelationTargetError(i, rel, "targetWorkName", rel.TargetWorkName)
+	}
+	if targetName != "" && targetID == "" && len(byName) > 1 {
+		return ambiguousRelationTargetNameError(i, rel)
+	}
+	if targetID != "" && len(byID) == 0 {
+		return unknownRelationTargetError(i, rel, "targetWorkId", rel.TargetWorkID)
+	}
+	if targetID != "" && len(byID) > 1 {
+		return fmt.Errorf(
+			"work_request: relations[%d] targetWorkId=%q identifies multiple Work items on this Factory Session board",
+			i,
+			rel.TargetWorkID,
+		)
+	}
+	return nil
+}
+
+func resolveRelationTargetByBoth(
+	i int,
+	rel WorkRelation,
+	byName []normalizedBatchWork,
+	byID normalizedBatchWork,
+) (normalizedBatchWork, error) {
+	for _, candidate := range byName {
+		if candidate.id == byID.id {
+			return byID, nil
+		}
+	}
+	return normalizedBatchWork{}, fmt.Errorf(
+		"work_request: relations[%d] targetWorkName=%q and targetWorkId=%q identify different Work items; provide matching references",
+		i,
+		rel.TargetWorkName,
+		rel.TargetWorkID,
+	)
+}
+
+func relationTargetCandidates(
+	workIndex map[string]normalizedBatchWork,
+	existing []ExistingWork,
+	value string,
+	field string,
+) []normalizedBatchWork {
+	if value == "" {
+		return nil
+	}
+	var candidates []normalizedBatchWork
+	for _, target := range workIndex {
+		if (field == "name" && target.name == value) || (field == "id" && target.id == value) {
+			candidates = appendUniqueRelationTarget(candidates, target)
+		}
+	}
+	for _, target := range existing {
+		candidate := normalizedBatchWork{
+			name:       strings.TrimSpace(target.Name),
+			id:         strings.TrimSpace(target.WorkID),
+			workTypeID: target.WorkTypeID,
+		}
+		if candidate.id == "" || (field == "name" && candidate.name != value) || (field == "id" && candidate.id != value) {
+			continue
+		}
+		candidates = appendUniqueRelationTarget(candidates, candidate)
+	}
+	return candidates
+}
+
+func appendUniqueRelationTarget(candidates []normalizedBatchWork, candidate normalizedBatchWork) []normalizedBatchWork {
+	for _, existing := range candidates {
+		if existing.id == candidate.id {
+			return candidates
+		}
+	}
+	return append(candidates, candidate)
+}
+
+func relationTargetField(rel WorkRelation) string {
+	if strings.TrimSpace(rel.TargetWorkID) != "" {
+		return "targetWorkId"
+	}
+	return "targetWorkName"
+}
+
+func relationTargetValue(rel WorkRelation) string {
+	if strings.TrimSpace(rel.TargetWorkID) != "" {
+		return rel.TargetWorkID
+	}
+	return rel.TargetWorkName
+}
+
+func unknownRelationTargetError(i int, rel WorkRelation, field, value string) error {
+	return fmt.Errorf(
+		"work_request: relations[%d] relation type %q has sourceWorkName %q; unknown %s=%q does not identify a Work on this Factory Session board; correct %s or provide targetWorkId",
+		i,
+		rel.Type,
+		rel.SourceWorkName,
+		field,
+		value,
+		field,
+	)
+}
+
+func ambiguousRelationTargetNameError(i int, rel WorkRelation) error {
+	return fmt.Errorf(
+		"work_request: relations[%d] targetWorkName=%q is ambiguous on this Factory Session board; use targetWorkId to select one Work",
+		i,
+		rel.TargetWorkName,
+	)
+}
+
+func missingBatchRelationEndpointError(i int, rel WorkRelation, endpointField string) error {
+	endpointValue := rel.SourceWorkName
+	targetDescription := fmt.Sprintf("targetWorkName %q", rel.TargetWorkName)
+	if endpointField == "targetWorkName" {
+		endpointValue = rel.TargetWorkName
+	}
+	if endpointField == "targetWorkId" {
+		endpointValue = rel.TargetWorkID
+		targetDescription = fmt.Sprintf("targetWorkId %q", rel.TargetWorkID)
+	}
+	return fmt.Errorf(
+		"work_request: relations[%d] relation type %q has sourceWorkName %q and %s; endpoint %s=%q is missing from this batch; relation endpoints must name Work declared in this batch's works[] (not previously submitted Work); add the named Work to works[] or correct %s",
+		i,
+		rel.Type,
+		rel.SourceWorkName,
+		targetDescription,
+		endpointField,
+		endpointValue,
+		endpointField,
+	)
+}
+
+func normalizeBatchRelation(i int, rel WorkRelation, sourceWork, targetWork normalizedBatchWork, opts NormalizeOptions) (Relation, string, error) {
 	switch rel.Type {
 	case WorkRelationDependsOn:
-		return normalizeDependsOnRelation(i, rel, targetWork, opts)
+		return normalizeDependsOnRelation(i, rel, sourceWork, targetWork, opts)
 	case WorkRelationParentChild:
-		return normalizeParentChildRelation(i, rel, targetWork)
+		return normalizeParentChildRelation(i, rel, sourceWork, targetWork)
 	default:
 		return Relation{}, "", fmt.Errorf("work_request: relations[%d] has unsupported type %q", i, rel.Type)
 	}
 }
 
-func normalizeDependsOnRelation(i int, rel WorkRelation, targetWork normalizedBatchWork, opts NormalizeOptions) (Relation, string, error) {
-	if rel.SourceWorkName == rel.TargetWorkName {
+func normalizeDependsOnRelation(i int, rel WorkRelation, sourceWork, targetWork normalizedBatchWork, opts NormalizeOptions) (Relation, string, error) {
+	if sourceWork.id == targetWork.id {
 		return Relation{}, "", fmt.Errorf("work_request: relations[%d] has self-dependency on %q", i, rel.SourceWorkName)
 	}
 	requiredState := rel.RequiredState
@@ -415,11 +669,11 @@ func normalizeDependsOnRelation(i int, rel WorkRelation, targetWork normalizedBa
 		Type:          RelationDependsOn,
 		TargetWorkID:  targetWork.id,
 		RequiredState: requiredState,
-	}, relationValidationKey(rel.Type, rel.SourceWorkName, rel.TargetWorkName, requiredState), nil
+	}, relationValidationKey(rel.Type, sourceWork.id, targetWork.id, requiredState), nil
 }
 
-func normalizeParentChildRelation(i int, rel WorkRelation, targetWork normalizedBatchWork) (Relation, string, error) {
-	if rel.SourceWorkName == rel.TargetWorkName {
+func normalizeParentChildRelation(i int, rel WorkRelation, sourceWork, targetWork normalizedBatchWork) (Relation, string, error) {
+	if sourceWork.id == targetWork.id {
 		return Relation{}, "", fmt.Errorf("work_request: relations[%d] has self-parenting on %q", i, rel.SourceWorkName)
 	}
 	if rel.RequiredState != "" {
@@ -428,20 +682,14 @@ func normalizeParentChildRelation(i int, rel WorkRelation, targetWork normalized
 	return Relation{
 		Type:         RelationParentChild,
 		TargetWorkID: targetWork.id,
-	}, relationValidationKey(rel.Type, rel.SourceWorkName, rel.TargetWorkName, ""), nil
+	}, relationValidationKey(rel.Type, sourceWork.id, targetWork.id, ""), nil
 }
 
 func relationValidationKey(relType WorkRelationType, sourceWorkName string, targetWorkName string, requiredState string) string {
 	return fmt.Sprintf("%s|%s|%s|%s", relType, sourceWorkName, targetWorkName, requiredState)
 }
 
-func rejectDependencyCycles(relations []WorkRelation) error {
-	graph := make(map[string][]string)
-	for _, rel := range relations {
-		if rel.Type == WorkRelationDependsOn {
-			graph[rel.SourceWorkName] = append(graph[rel.SourceWorkName], rel.TargetWorkName)
-		}
-	}
+func rejectDependencyCycles(graph map[string][]string) error {
 	for name := range graph {
 		sort.Strings(graph[name])
 	}

@@ -7,6 +7,7 @@ import (
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/fixtures"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 )
 
 func TestDurableInspectReturnsPublishedSuccessShape(t *testing.T) {
@@ -98,7 +99,7 @@ func TestDurableInspectFailuresStayDistinctFromOtherDurableErrors(t *testing.T) 
 }
 
 type inspectFailureStub struct {
-	factorysessions.ExecutionService
+	durableexecution.Service
 }
 
 func (s *inspectFailureStub) GetSession(_ context.Context, sessionID string) (factorysessions.SessionReadResult, error) {

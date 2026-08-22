@@ -6,6 +6,7 @@ import { WorkstationRequestHistorySection } from "./workstation-request-history-
 export function WorkstationHistorySection({
   collapseActionLabel,
   expandActionLabel,
+  locale,
   messages,
   now,
   onSelectProviderSession,
@@ -24,6 +25,7 @@ export function WorkstationHistorySection({
     return (
       <WorkstationRequestHistorySection
         key={`workstation-request-history:${selectedNodeID}`}
+        locale={locale}
         messages={messages}
         now={now}
         onSelectWorkID={onSelectWorkID}

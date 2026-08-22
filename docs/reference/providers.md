@@ -1,10 +1,179 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-07-29
+last-modified: 2026-08-10
 doc-id: agent-factory/guides/providers
 ---
 
-# Providers and ACP Agents
+# Providers, worker models, and ACP agents
+
+Choose the worker's provider and model from the input the worker must perceive
+and the kind of work it must do. The `modelProvider` selects the adapter and
+`model` selects the model passed to that adapter. The tier descriptions below
+are operator guidance for the configured models, not guarantees about latency,
+quality, pricing, or availability in every provider account.
+
+## Choose by input first
+
+| Need | Prefer | Decision consequence |
+|------|--------|----------------------|
+| Text, code, repository changes, or image-aware review | A configured Codex GPT-5.6 tier | The bundled Codex route accepts prompt and image input, but GPT-5.6 does not provide video or audio understanding. Do not assign audiovisual judging to it. |
+| Text and code through the bundled Claude CLI | `CLAUDE` with `claude-sonnet-5` when that model is available to the installed CLI/account | The bundled Claude provider does not declare image input. Treat it as a text/code route unless your separately configured ACP integration documents different capabilities. |
+| A video or audio file that the worker must inspect | `ANTIGRAVITY` with an AGY model | Recorded AGY CLI runs inspected referenced media through the workspace file-parsing path, including both visual content and an audio track. This is version-sensitive evidence, not a universal guarantee for every AGY release. |
+| More than five reference images for one ImageGen call | Split the work or redesign the prompt | `referenced_image_paths` accepts zero through five paths per call. Retrying the same call with six or more paths does not make it valid. |
+
+GPT-5.6's lack of video/audio understanding is a hard selection constraint for
+the configured Codex tiers. AGY's audiovisual behavior is a recorded CLI
+capability: the adapter's formal `imageInput` capability is still false, while
+the AGY agent can inspect files made available in its workspace. Those are
+different input paths; do not treat AGY as accepting provider-native image
+tokens.
+
+## Current configured model guidance
+
+Use these as a practical starting point when the models are available. The
+intended roles are routing guidance observed in this repository's Factory
+configuration and validation runs; they are not a claim that one tier always
+outperforms another.
+
+| Provider and model | Good starting point | Effort guidance |
+|--------------------|---------------------|-----------------|
+| `CODEX` / `gpt-5.6-luna` | Difficult implementation, deep review, or work where correctness is more important than throughput. This is operator selection guidance; the checked-in Factory does not currently assign this tier to a named worker. | Codex accepts the provider-neutral effort vocabulary and forwards it as its native reasoning setting. Use the value your selected model/account supports. |
+| `CODEX` / `gpt-5.6-sol` | Planning, ideation, and ordinary analysis. The checked-in Factory uses this tier for planner and ideafier workers at `medium`. | `medium` is the observed Factory choice; it is not a hard requirement for the model. |
+| `CODEX` / `gpt-5.6-terra` | Balanced implementation and verification when a general GPT-5.6 tier is preferable. | Choose an effort supported by the selected model/account; do not infer a media capability from the tier name. |
+| `CLAUDE` / `claude-sonnet-5` | General text/code work when the Claude CLI exposes this model. | The current Claude adapter rejects `minimal`; its other canonical effort values are forwarded to Claude's `--effort` option, subject to the installed CLI/model. |
+
+The provider-neutral worker contract recognizes `minimal`, `low`, `medium`,
+`high`, `xhigh`, and `max`. That vocabulary is not portable across providers:
+Claude rejects `minimal`, and ANTIGRAVITY does not accept a separate effort
+through the public Factory or `you run` contract. Keep the effort choice with
+the provider/model decision rather than assuming that a value accepted by
+Codex is accepted everywhere.
+
+## ANTIGRAVITY / AGY model selection
+
+The following AGY model IDs are the current adapter allowlist and were also
+observed in recorded AGY CLI 1.1.11 runs on 2026-08-08. This is intentionally
+versioned guidance: check the installed AGY release after an upgrade.
+
+Supported model IDs:
+
+- `gemini-3.6-flash-high`
+- `gemini-3.6-flash-medium`
+- `gemini-3.6-flash-low`
+- `gemini-3.5-flash-high`
+- `gemini-3.5-flash-medium`
+- `gemini-3.5-flash-low`
+- `gemini-3.1-pro-high`
+- `gemini-3.1-pro-low`
+- `claude-sonnet-4-6`
+- `claude-opus-4-6-thinking`
+- `gpt-oss-120b-medium`
+
+AGY effort selection is encoded by the model ID where the ID carries a
+`-low`, `-medium`, or `-high` suffix; that suffix is part of the model ID, not
+a separate worker field. The public Factory and `you run` contract rejects any
+non-empty AGY `reasoningEffort`, so omit `reasoningEffort` from AGY worker
+frontmatter and omit `--worker-reasoning-effort` when selecting AGY. Do not
+invent a suffix or an effort value for an ID that is not listed. Select AGY
+with the public worker value `modelProvider: ANTIGRAVITY` and choose one of the
+model IDs above. Factory dispatch supplies the AGY workspace and native
+process settings; do not copy provider-native flags onto a Factory or `you run`
+surface unless that surface explicitly documents them.
+
+## Configure a Factory worker or one ad-hoc run
+
+Put durable worker identity and policy in the worker frontmatter. Use a
+one-shot `you run` override only when the same Factory should run once with a
+different provider, model, effort, permission request, or prompt source. The
+generic run flags are the public boundary; provider-native options such as
+AGY's `--add-dir`, `--effort`, and `--print-timeout` belong to Factory dispatch
+and are not generic `you run` flags.
+
+| Durable Factory setting | One-shot `you run` counterpart | Boundary |
+|-------------------------|--------------------------------|----------|
+| `modelProvider` | `--provider` | Selects the provider adapter for this invocation. |
+| `model` | `--model` | Overrides the selected provider's model for this invocation. |
+| `reasoningEffort` | `--worker-reasoning-effort` | Uses the canonical `minimal`, `low`, `medium`, `high`, `xhigh`, or `max` vocabulary where the selected provider supports it. Omit both for ANTIGRAVITY because its public contract rejects a separate effort. |
+| `skipPermissions` | `--skip-permissions` | Requests an invocation-only permission shortcut; the selected provider must support it. |
+| worker `timeout` and workstation `limits.maxExecutionTime` | No generic `--timeout` override | These remain Factory execution limits. For AGY print-mode dispatch, the applicable worker timeout becomes the adapter's print timeout; the adapter uses a five-minute default when no positive request is supplied. |
+| workstation `promptFile` or prompt body | `--to-file` | Supplies one exact, multiline primary prompt for a one-shot invocation; it is not a worker/provider setting. |
+
+For example, this is a durable `AGENT_WORKER` definition. The worker owns the
+provider, model, effort, permission policy, and per-attempt timeout; the
+workstation owns the prompt and step behavior.
+
+```yaml
+---
+type: AGENT_WORKER
+modelProvider: CODEX
+model: gpt-5.6-luna
+executorProvider: SCRIPT_WRAP
+reasoningEffort: high
+skipPermissions: true
+timeout: 45m
+---
+
+You are the implementation worker. Make the requested change and report the
+verification you ran.
+```
+
+For one run, keep the prompt in a UTF-8 file and pass only its path. This
+PowerShell shape is safe for multiline text and paths containing spaces:
+
+```powershell
+$promptDirectory = Join-Path (Get-Location) "prompt files"
+New-Item -ItemType Directory -Path $promptDirectory -Force | Out-Null
+$promptPath = Join-Path $promptDirectory "release brief.txt"
+$promptText = @"
+Review the release notes and identify the highest-risk rollback step.
+Keep the answer concise, but preserve the exact wording of the risk.
+"@
+[IO.File]::WriteAllText($promptPath, $promptText, [Text.UTF8Encoding]::new($false))
+
+you run --provider codex --model gpt-5.6-luna --worker-reasoning-effort high --to-file $promptPath
+```
+
+`--to-file` is mutually exclusive with positional prompt text, non-empty
+stdin, and a signature-defined `--to`; it preserves the file's line endings,
+blank lines, Unicode, and trailing newline. See `you docs run` for the complete
+input-source contract. `--worker-reasoning-effort` is an invocation override,
+not a provider-native `--effort` spelling.
+
+### ANTIGRAVITY dispatch details
+
+Factory dispatch, rather than the operator's `you run` command, owns AGY's
+native process arguments. In the current print-mode command adapter, every
+dispatch receives `--add-dir <working-directory>` so AGY can read files from
+the Factory workspace. The adapter also derives the effective `--print-timeout`
+from the execution request and passes it to AGY; when no positive request is
+available, the adapter's default is `5m`. Set the durable Factory timeout for a
+long media review instead of inventing `--print-timeout` on `you run`.
+
+AGY's completion is stream-based. The adapter parses the final `result` event
+and its response; it does not treat a zero process exit as task acceptance. A
+recorded missing-file run exited zero and reported `status: SUCCESS` while the
+response declined the task, so use a response contract or structured verdict
+when the workflow must distinguish task success from process completion.
+
+AGY effort selection is model-based at the public boundary. The Providers
+service rejects any non-empty AGY `ReasoningEffort` before adapter dispatch, so
+omit `reasoningEffort` in Factory frontmatter and omit
+`--worker-reasoning-effort` from an AGY `you run` invocation. Choose a listed
+model ID whose suffix expresses the desired tier when such a suffix is
+available. Do not pass AGY's native `--effort` or `--add-dir` directly to a
+generic `you run` invocation. If a task requires video or audio inspection,
+route it to AGY; if one ImageGen call needs more than five references, split or
+redesign it instead.
+
+## ImageGen reference limit
+
+ImageGen's `referenced_image_paths` parameter accepts **0–5 paths per call**.
+The limit applies to one ImageGen request, not to the number of images in an
+entire Factory Session. If a task needs six or more references, split it into
+multiple calls with an intermediate synthesis step, or reduce the reference
+set before calling ImageGen. Do not keep retrying an over-limit request.
+
+## ACP agents use a separate execution layer
 
 The `executorProvider` on an agent worker selects the execution mechanism;
 `ACP` selects Agent Client Protocol execution. The separate `modelProvider`
@@ -43,9 +212,62 @@ List the built-in presets and any operator-added ACP integrations:
 you workers list
 ```
 
-`selectable` means the identity is present in the Providers catalog. The
-definitive readiness check is a small `you run`, because the agent executable,
-authentication, and negotiated ACP session are checked when execution starts.
+`selectable` means the identity is present in the Providers catalog. In the
+side-effect-free catalog output, `readiness: unverified` means no request-time
+probe checked the current executable, account, or session. A prerequisite with
+`status: required` is static setup guidance, not a claim that the requirement
+is installed or authenticated. A readiness probe, or a small `you run`, can
+report `ready`, `unavailable`, or `degraded` after checking the current machine.
+
+## Discover provider capabilities before execution
+
+Use the side-effect-free provider inventory before choosing a provider or
+model:
+
+```bash
+you providers list
+you providers list --json
+```
+
+The command reports the same catalog facts in both formats. Each provider entry
+has:
+
+| Field | Meaning |
+| --- | --- |
+| `id`, display name, and aliases | The canonical identity accepted by worker and run configuration. |
+| `availability`, `readiness`, and `prerequisites` | `availability` is publication/selectability metadata. `readiness: unverified` and prerequisite `status: required` mean the side-effect-free catalog has not checked the current machine; a request-time probe can report `ready`, `unavailable`, or `degraded` with `satisfied`/`missing` facts. |
+| `models` and `efforts` | Exact supported model IDs and the effort values accepted independently for each model. The model list is an exact per-ID inventory, not a family alias; do not synthesize IDs from a family name. An empty effort list is explicit: the model has no separate public effort setting, such as AGY's model-encoded selection. |
+| `modalities` | Directional input/output support, including the transport such as `inline`, `file_path`, or `none`. Unsupported values are explicit. |
+| `tools` | Named tools and whether the provider advertises them as supported. |
+| `knownLimits` | Named behavior, default, or maximum constraints with typed values such as seconds, paths, and flags. |
+
+The current first-party entries make several preflight constraints explicit:
+
+- Codex publishes the exact IDs `gpt-5.6`, `gpt-5.6-luna`, `gpt-5.6-sol`, and
+  `gpt-5.6-terra`. Each supports text and image input but marks audio and
+  video understanding as unsupported. Image generation accepts at most five
+  `referenced_image_paths`.
+- `antigravity` is the AGY provider. Its catalog includes
+  `claude-opus-4-6-thinking`, `claude-sonnet-4-6`, the Gemini 3.1/3.5/3.6
+  variants, and `gpt-oss-120b-medium`. Its models publish an explicit empty
+  `efforts` list because AGY selects effort through exact model IDs where the
+  ID carries a `-low`, `-medium`, or `-high` suffix; the public Providers
+  execution path rejects a separate reasoning effort. Audio and video inputs
+  use `file_path` transport. Its named limits expose that model-ID selection,
+  workspace extension through `--add-dir`, and a five-minute default
+  `print_timeout` (300 seconds).
+- Claude publishes the exact text-only IDs `claude-opus-4-6-thinking`,
+  `claude-sonnet-4-20250514`, and `claude-sonnet-5`, each with the same
+  low-through-max effort list. Its static authentication, executable, and
+  workspace requirements remain `required` until a readiness probe runs.
+- Claude and any configured ACP identity use the same field shape. Empty model,
+  tool, or limit arrays are reported explicitly, so missing metadata is not
+  mistaken for support.
+
+`you providers list` reads the authored catalog and does not launch a provider,
+open a network session, or negotiate ACP. Treat the command output as the
+preflight authority, then use `you run` to verify an installed executable,
+authentication, and provider-specific session behavior.
 
 ## Add a custom ACP integration
 
@@ -185,10 +407,14 @@ Run it from the project directory whose files the agent should inspect:
 you run --factory ./test.workflow.js --skip-permissions
 ```
 
-JavaScript receives the structured child result. Use `you session show`,
-`you session dispatches`, and the printed Factory Session links when deeper
-inspection is needed. See `you docs javascript-workflows` for the complete host
-API and lifecycle contract.
+JavaScript receives the structured child result. Use `you session show` for
+Factory Session status and summary. Use `you metrics --session SESSION_ID --group-by provider`
+for provider aggregates. Use the REST
+`GET /factory-sessions/SESSION_ID/dispatches` or MCP
+`you.factory_session.list_dispatches` read for exact dispatch records. Use
+`you worker-sessions list --work-id WORK_ID` only for Work-specific drill-down.
+See `you docs javascript-workflows` for the complete host API and lifecycle
+contract.
 
 ## Remove a custom integration
 

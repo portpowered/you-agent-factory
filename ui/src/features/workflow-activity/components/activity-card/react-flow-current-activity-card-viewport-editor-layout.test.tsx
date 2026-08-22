@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { Node } from "@xyflow/react";
+import type { Node, NodeChange } from "@xyflow/react";
 import { type ReactNode, useEffect } from "react";
 
 import type { CurrentActivityImportController } from "../../hooks/current-activity-import-controller";
@@ -7,6 +7,7 @@ import { CurrentActivityGraphViewport } from "../react-flow-current-activity-car
 
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual("@xyflow/react");
+  const { ReactFlowProvider } = actual;
 
   return {
     ...actual,
@@ -18,16 +19,19 @@ vi.mock("@xyflow/react", async () => {
       defaultViewport,
       fitView,
       nodes,
+      nodesDraggable,
       onInit,
       onMoveEnd,
       onNodeDragStart,
       onNodeDragStop,
+      onNodesChange,
     }: {
       className?: string;
       children: ReactNode;
       defaultViewport?: { x: number; y: number; zoom: number };
       fitView?: boolean;
       nodes?: Node[];
+      nodesDraggable?: boolean;
       onInit?: (instance: {
         fitView: () => Promise<boolean>;
         getViewport: () => { x: number; y: number; zoom: number };
@@ -42,6 +46,7 @@ vi.mock("@xyflow/react", async () => {
       ) => void;
       onNodeDragStart?: (_event: unknown, node: Node, nodes: Node[]) => void;
       onNodeDragStop?: (_event: unknown, node: Node, nodes: Node[]) => void;
+      onNodesChange?: (changes: NodeChange[]) => void;
     }) => {
       useEffect(() => {
         onInit?.({
@@ -58,47 +63,73 @@ vi.mock("@xyflow/react", async () => {
       }, [onInit, onMoveEnd]);
 
       return (
-        <div
-          className={className}
-          data-default-viewport={JSON.stringify(defaultViewport ?? null)}
-          data-fit-view={String(fitView ?? false)}
-          data-testid="mock-react-flow"
-        >
-          <button
-            onClick={() => onMoveEnd?.(null, { x: 12, y: 34, zoom: 1.25 })}
-            type="button"
+        <ReactFlowProvider>
+          <div
+            className={className}
+            data-default-viewport={JSON.stringify(defaultViewport ?? null)}
+            data-fit-view={String(fitView ?? false)}
+            data-nodes-draggable={String(nodesDraggable ?? false)}
+            data-node-position={JSON.stringify(nodes?.[0]?.position ?? null)}
+            data-testid="mock-react-flow"
           >
-            pan-viewport
-          </button>
-          <button
-            onClick={() => {
-              const draggedNodes = (nodes ?? []).filter(
-                (node) => node.selected,
-              );
-              const primaryNode = draggedNodes[0] ?? nodes?.[0];
-              if (!primaryNode) {
-                return;
-              }
+            <button
+              onClick={() => onMoveEnd?.(null, { x: 12, y: 34, zoom: 1.25 })}
+              type="button"
+            >
+              pan-viewport
+            </button>
+            <button
+              onClick={() => {
+                const draggedNodes = (nodes ?? []).filter(
+                  (node) => node.selected,
+                );
+                const primaryNode = draggedNodes[0] ?? nodes?.[0];
+                if (!primaryNode) {
+                  return;
+                }
 
-              onNodeDragStart?.(null, primaryNode, nodes ?? []);
-              onNodeDragStop?.(
-                null,
-                {
-                  ...primaryNode,
-                  position: {
-                    x: primaryNode.position.x + 16,
-                    y: primaryNode.position.y + 8,
+                onNodeDragStart?.(null, primaryNode, nodes ?? []);
+                onNodeDragStop?.(
+                  null,
+                  {
+                    ...primaryNode,
+                    position: {
+                      x: primaryNode.position.x + 16,
+                      y: primaryNode.position.y + 8,
+                    },
                   },
-                },
-                nodes ?? [],
-              );
-            }}
-            type="button"
-          >
-            drag-selected-nodes
-          </button>
-          {children}
-        </div>
+                  nodes ?? [],
+                );
+              }}
+              type="button"
+            >
+              drag-selected-nodes
+            </button>
+            <button
+              onClick={() => {
+                const primaryNode = nodes?.[0];
+                if (!primaryNode) {
+                  return;
+                }
+
+                onNodesChange?.([
+                  {
+                    id: primaryNode.id,
+                    position: {
+                      x: primaryNode.position.x + 24,
+                      y: primaryNode.position.y + 12,
+                    },
+                    type: "position",
+                  },
+                ]);
+              }}
+              type="button"
+            >
+              position-node
+            </button>
+            {children}
+          </div>
+        </ReactFlowProvider>
       );
     },
   };
@@ -118,61 +149,13 @@ const importController: CurrentActivityImportController = {
   onDrop: vi.fn(),
 };
 
-const DEFAULT_GRAPH_RECT = {
-  bottom: 720,
+const DEFAULT_VIEWPORT_MEASUREMENT = {
   height: 720,
-  left: 0,
-  right: 1280,
-  top: 0,
+  ready: true,
   width: 1280,
-  x: 0,
-  y: 0,
-  toJSON: () => ({}),
-} as DOMRect;
-
-function installViewportMeasurementMocks() {
-  const originalBoundingClientRect =
-    HTMLElement.prototype.getBoundingClientRect;
-  const originalResizeObserver = globalThis.ResizeObserver;
-
-  HTMLElement.prototype.getBoundingClientRect = () => DEFAULT_GRAPH_RECT;
-  globalThis.ResizeObserver = class {
-    public constructor(private readonly callback: ResizeObserverCallback) {}
-
-    public disconnect(): void {}
-
-    public observe(target: Element): void {
-      this.callback(
-        [
-          {
-            contentRect: DEFAULT_GRAPH_RECT,
-            target,
-          } as ResizeObserverEntry,
-        ],
-        this as unknown as ResizeObserver,
-      );
-    }
-
-    public unobserve(): void {}
-  } as unknown as typeof ResizeObserver;
-
-  return () => {
-    HTMLElement.prototype.getBoundingClientRect = originalBoundingClientRect;
-    globalThis.ResizeObserver = originalResizeObserver;
-  };
-}
+} as const;
 
 describe("CurrentActivityGraphViewport canonical viewport sync", () => {
-  let restoreViewportMeasurementMocks = () => {};
-
-  beforeEach(() => {
-    restoreViewportMeasurementMocks = installViewportMeasurementMocks();
-  });
-
-  afterEach(() => {
-    restoreViewportMeasurementMocks();
-  });
-
   it("projects saved canonical viewport into React Flow and skips fitView", () => {
     renderViewport({
       canonicalLayoutViewport: { x: 80, y: 120, zoom: 1.4 },
@@ -206,6 +189,8 @@ describe("CurrentActivityGraphViewport canonical viewport sync", () => {
     const updatePlacementViewport = vi.fn();
 
     renderViewport({
+      editorMode: true,
+      includeMoveLayoutNode: false,
       updatePlacementViewport,
     });
 
@@ -218,21 +203,46 @@ describe("CurrentActivityGraphViewport canonical viewport sync", () => {
     });
   });
 
-  it("persists viewport panning into canonical layout in observe mode", () => {
+  it("keeps observe mode immutable across drag, position, and viewport callbacks", () => {
     const updateLayoutViewport = vi.fn();
+    const updatePlacementViewport = vi.fn();
+    const handleNodesChange = vi.fn();
+    const moveLayoutNode = vi.fn();
 
     renderViewport({
       editorMode: false,
+      handleNodesChange,
+      moveLayoutNode,
+      nodes: [
+        {
+          data: { factoryGraphNodeId: "workstation:draft" },
+          id: "workstation:draft",
+          position: { x: 10, y: 20 },
+        },
+      ],
       updateLayoutViewport,
+      updatePlacementViewport,
     });
 
+    const reactFlow = screen.getByTestId("mock-react-flow");
+    expect(reactFlow.getAttribute("data-nodes-draggable")).toBe("false");
+    expect(reactFlow.getAttribute("data-node-position")).toBe(
+      JSON.stringify({ x: 10, y: 20 }),
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "drag-selected-nodes" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "position-node" }));
     fireEvent.click(screen.getByRole("button", { name: "pan-viewport" }));
 
-    expect(updateLayoutViewport).toHaveBeenCalledWith({
-      x: 12,
-      y: 34,
-      zoom: 1.25,
-    });
+    expect(reactFlow.getAttribute("data-node-position")).toBe(
+      JSON.stringify({ x: 10, y: 20 }),
+    );
+    expect(handleNodesChange).not.toHaveBeenCalled();
+    expect(moveLayoutNode).not.toHaveBeenCalled();
+    expect(updateLayoutViewport).not.toHaveBeenCalled();
+    expect(updatePlacementViewport).not.toHaveBeenCalled();
   });
 
   it("skips persisting viewport changes triggered by canonical fitView sync", () => {
@@ -260,16 +270,6 @@ describe("CurrentActivityGraphViewport canonical viewport sync", () => {
 });
 
 describe("CurrentActivityGraphViewport editor layout interactions", () => {
-  let restoreViewportMeasurementMocks = () => {};
-
-  beforeEach(() => {
-    restoreViewportMeasurementMocks = installViewportMeasurementMocks();
-  });
-
-  afterEach(() => {
-    restoreViewportMeasurementMocks();
-  });
-
   it("routes undo and redo keyboard shortcuts through layout history handlers", () => {
     const onUndoLayout = vi.fn();
     const onRedoLayout = vi.fn();
@@ -364,6 +364,7 @@ function renderViewport({
   moveLayoutNode = vi.fn(),
   moveLayoutNodesByDelta = vi.fn(),
   nodes = [],
+  handleNodesChange = vi.fn(),
   onRedoLayout = vi.fn(),
   onUndoLayout = vi.fn(),
   updateLayoutViewport = vi.fn(),
@@ -381,6 +382,7 @@ function renderViewport({
     resolvedPositionsByNodeId: ReadonlyMap<string, { x: number; y: number }>,
   ) => void;
   nodes?: Node[];
+  handleNodesChange?: (changes: NodeChange[]) => void;
   onRedoLayout?: () => void;
   onUndoLayout?: () => void;
   updateLayoutViewport?: (viewport: {
@@ -421,7 +423,8 @@ function renderViewport({
       edges={[]}
       flowContainerRef={flowContainerRef}
       flowInstanceRef={flowInstanceRef}
-      handleNodesChange={vi.fn()}
+      viewportMeasurement={DEFAULT_VIEWPORT_MEASUREMENT}
+      handleNodesChange={handleNodesChange}
       hasPendingChanges={false}
       headingID="test-heading"
       imports={importController}

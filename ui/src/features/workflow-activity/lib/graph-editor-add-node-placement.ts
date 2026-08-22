@@ -1,4 +1,8 @@
-import type { Node, ReactFlowInstance } from "@xyflow/react";
+import type { Node } from "@xyflow/react";
+import {
+  type FactoryGraphNodeDimensions,
+  resolveFactoryGraphNodeDimensions,
+} from "@you-agent-factory/factory-graph";
 import { buildDocTargetPathFromFileName } from "../../current-factory-definition/lib/doc-editable-values";
 import {
   type FactoryGraphNodeKind,
@@ -7,13 +11,9 @@ import {
 import type { FactoryGraphAddEntityDraft } from "../../factory-graph-editor/lib/editor/factory-graph-editor-additions";
 import { factoryGraphDocNodeIdForTargetPath } from "../../factory-graph-editor/lib/factory-graph-doc-editor";
 import {
-  CURRENT_ACTIVITY_DOC_NODE_HEIGHT,
-  CURRENT_ACTIVITY_DOC_NODE_WIDTH,
-} from "./current-activity-factory-graph-layout";
-import {
+  type AxisAlignedRect,
   axisAlignedRectFromTopLeft,
   type FlowPoint,
-  graphEditorNodeDimensionsForKind,
   resolveViewportCenterNodePlacement,
   topLeftFromAxisAlignedRectCenter,
 } from "./graph-editor-node-placement";
@@ -63,11 +63,6 @@ export function factoryGraphNodeKindForAddEntityDraft(
   return draft.kind;
 }
 
-function nodeKindFromRenderedNode(node: Node): FactoryGraphNodeKind | null {
-  const kind = (node.data as { kind?: FactoryGraphNodeKind } | undefined)?.kind;
-  return kind ?? null;
-}
-
 function renderedNodeSize(
   node: Node,
 ): { height: number; width: number } | null {
@@ -101,31 +96,33 @@ export function occupiedRectsFromRenderedNodes(
       continue;
     }
 
-    const kind = nodeKindFromRenderedNode(node);
-    const dimensions = kind
-      ? graphEditorNodeDimensionsForKind(kind)
-      : { height: size.height, width: size.width };
-
-    occupiedRects.push(
-      axisAlignedRectFromTopLeft(node.position, {
-        height: dimensions.height,
-        width: dimensions.width,
-      }),
-    );
+    occupiedRects.push(axisAlignedRectFromTopLeft(node.position, size));
   }
 
   return occupiedRects;
 }
 
-function _viewportCenterInFlowCoordinates(
-  instance: ReactFlowInstance,
-  container: HTMLElement,
-): FlowPoint {
-  const bounds = container.getBoundingClientRect();
-  return instance.screenToFlowPosition({
-    x: bounds.left + bounds.width / 2,
-    y: bounds.top + bounds.height / 2,
-  });
+function placementContentForDraft(
+  draft: FactoryGraphAddEntityDraft,
+): readonly string[] {
+  if (draft.kind === "doc") {
+    return [buildDocTargetPathFromFileName(draft.fileName.trim())];
+  }
+
+  if (draft.kind === "work-state") {
+    return [`${draft.workTypeName.trim()}:${draft.name.trim()}`];
+  }
+
+  return [draft.name.trim()];
+}
+
+function placementSizeForDraft(
+  draft: FactoryGraphAddEntityDraft,
+): FactoryGraphNodeDimensions {
+  return resolveFactoryGraphNodeDimensions(
+    factoryGraphNodeKindForAddEntityDraft(draft),
+    { content: placementContentForDraft(draft) },
+  ).resolvedDimensions;
 }
 
 export function viewportCenterFromPlacementViewport(
@@ -146,20 +143,15 @@ export function viewportCenterFromPlacementViewport(
 export function resolveInitialPlacementTopLeft(input: {
   draft: FactoryGraphAddEntityDraft;
   nodes: readonly Node[];
+  viewportBounds?: AxisAlignedRect;
   viewportCenter: FlowPoint;
 }): GraphNodePosition | null {
   const nodeId = factoryGraphNodeIdForAddEntityDraft(input.draft);
-  const kind = factoryGraphNodeKindForAddEntityDraft(input.draft);
-  const candidateSize =
-    kind === "doc"
-      ? {
-          height: CURRENT_ACTIVITY_DOC_NODE_HEIGHT,
-          width: CURRENT_ACTIVITY_DOC_NODE_WIDTH,
-        }
-      : graphEditorNodeDimensionsForKind(kind);
+  const candidateSize = placementSizeForDraft(input.draft);
   const placement = resolveViewportCenterNodePlacement({
     candidateSize,
     occupiedRects: occupiedRectsFromRenderedNodes(input.nodes, nodeId),
+    viewportBounds: input.viewportBounds,
     viewportCenter: input.viewportCenter,
   });
 
@@ -171,9 +163,21 @@ export function resolveInitialPlacementTopLeftForViewport(input: {
   nodes: readonly Node[];
   placementViewport: GraphEditorAddNodePlacementViewport;
 }): GraphNodePosition | null {
+  const zoom =
+    Number.isFinite(input.placementViewport.viewport.zoom) &&
+    input.placementViewport.viewport.zoom > 0
+      ? input.placementViewport.viewport.zoom
+      : 1;
+
   return resolveInitialPlacementTopLeft({
     draft: input.draft,
     nodes: input.nodes,
+    viewportBounds: {
+      height: input.placementViewport.height / zoom,
+      width: input.placementViewport.width / zoom,
+      x: -input.placementViewport.viewport.x / zoom,
+      y: -input.placementViewport.viewport.y / zoom,
+    },
     viewportCenter: viewportCenterFromPlacementViewport(
       input.placementViewport,
     ),

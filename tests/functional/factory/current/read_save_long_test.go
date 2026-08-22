@@ -24,15 +24,18 @@ func TestCurrentFactoryActivationSwitchesPersistedFactories(t *testing.T) {
 	support.SkipLongFunctional(t, "slow current-factory activation persistence smoke")
 
 	rootDir := t.TempDir()
-	alphaDir := seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
-	betaDir := createNamedFactoryFixture(
-		t,
-		rootDir,
-		"beta",
-		functionalNamedFactoryPayloadWithWorkType(t, "beta", "beta-task"),
-	)
-
-	server := startCurrentFactoryServer(t, rootDir)
+	var alphaDir, betaDir string
+	server := startCurrentFactoryServerWithSetup(t, rootDir, currentFactorySetup(t, func(process support.Process, env []string) {
+		alphaDir = seedNamedFactoryRootWithProcess(t, process, env, rootDir, "alpha", "alpha-task")
+		betaDir = createNamedFactoryFixtureWithProcess(
+			t,
+			process,
+			env,
+			rootDir,
+			"beta",
+			functionalNamedFactoryPayloadWithWorkType(t, "beta", "beta-task"),
+		)
+	}))
 	defer server.Stop(t)
 	support.WaitForRuntimeIdle(t, server.URL(), 5*time.Second)
 
@@ -55,20 +58,23 @@ func TestCurrentFactoryLiveAPIReadsFollowActivatedFactory(t *testing.T) {
 	support.SkipLongFunctional(t, "slow current-factory live API activation smoke")
 
 	rootDir := t.TempDir()
-	seedNamedFactoryRootWithTerminalState(t, rootDir, "alpha", "alpha-complete")
-	betaDir := createNamedFactoryFixture(
-		t,
-		rootDir,
-		"beta",
-		functionalNamedFactoryPayloadWithTerminalState(t, "beta", "beta-complete"),
-	)
-
 	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
 		Stdout: support.ClaudeSuccessStdout("Done. COMPLETE"),
 	}, platformprocess.CommandResult{
 		Stdout: support.ClaudeSuccessStdout("Done. COMPLETE"),
 	})
-	server := startCurrentFactoryServerWithProviderRunner(t, rootDir, runner)
+	var betaDir string
+	server := startCurrentFactoryServerWithProviderRunnerAndSetup(t, rootDir, runner, currentFactorySetup(t, func(process support.Process, env []string) {
+		seedNamedFactoryRootWithTerminalStateAndProcess(t, process, env, rootDir, "alpha", "alpha-complete")
+		betaDir = createNamedFactoryFixtureWithProcess(
+			t,
+			process,
+			env,
+			rootDir,
+			"beta",
+			functionalNamedFactoryPayloadWithTerminalState(t, "beta", "beta-complete"),
+		)
+	}))
 	defer server.Stop(t)
 
 	support.WaitForRuntimeIdle(t, server.URL(), 5*time.Second)
@@ -137,18 +143,21 @@ func TestCurrentFactoryWatchedFileExecutionFollowsActivatedFactory(t *testing.T)
 	support.SkipLongFunctional(t, "slow current-factory watcher activation smoke")
 
 	rootDir := t.TempDir()
-	_ = seedFilewatcherNamedFactoryRoot(t, rootDir, "alpha", true)
-	betaDir := seedFilewatcherNamedFactoryRoot(t, rootDir, "beta", false)
-
 	runner := support.NewShapedProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")},
 		platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")},
 	)
-	server := startCurrentFactoryServerWithProviderRunner(t, rootDir, runner)
+	var betaDir string
+	var betaPayload []byte
+	server := startCurrentFactoryServerWithProviderRunnerAndSetup(t, rootDir, runner, currentFactorySetup(t, func(process support.Process, env []string) {
+		_ = seedFilewatcherNamedFactoryRootWithProcess(t, process, env, rootDir, "alpha", true)
+		betaDir = seedFilewatcherNamedFactoryRootWithProcess(t, process, env, rootDir, "beta", false)
+		betaPayload = namedFilewatcherFactoryPayloadWithProcess(t, process, env, "beta")
+	}))
 	defer server.Stop(t)
 
 	support.WaitForRuntimeIdle(t, server.URL(), 5*time.Second)
-	activateNamedPersistedFactoryOverHTTP(t, server.URL(), namedFilewatcherFactoryPayload(t, "beta"))
+	activateNamedPersistedFactoryOverHTTP(t, server.URL(), betaPayload)
 	assertCurrentFactoryNameAndDirectory(t, server.URL(), "beta", betaDir)
 
 	testutil.WriteSeedFile(t, betaDir, "task", []byte(`{"title":"beta watched work"}`))

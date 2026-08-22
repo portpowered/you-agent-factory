@@ -3,18 +3,13 @@
 package composition_test
 
 import (
-	"bufio"
 	"bytes"
-	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -114,7 +109,7 @@ func TestJavaScriptNamedStagesExposeOrderedProgress(t *testing.T) {
 		stageReviewDispatch.Id,
 	)
 
-	events := listNamedStagesFactoryEvents(t, server.URL(), started.SessionId)
+	events := support.GetFactoryEventsForSessionAt(t, server.URL(), started.SessionId)
 	assertNamedStagesOrderedPhaseProgress(t, events)
 }
 
@@ -272,81 +267,6 @@ func listEmptyStagesDispatches(
 		t,
 		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+sessionID+"/dispatches",
 	)
-}
-
-func listNamedStagesFactoryEvents(
-	t *testing.T,
-	serverURL, sessionID string,
-) []factoryapi.FactoryEvent {
-	t.Helper()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/" + sessionID + "/events"
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		t.Fatalf("build named stages factory events request: %v", err)
-	}
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatalf("GET named stages factory events: %v", err)
-	}
-	if response.StatusCode != http.StatusOK {
-		defer response.Body.Close()
-		t.Fatalf("GET named stages factory events status = %d", response.StatusCode)
-	}
-
-	events := make(chan factoryapi.FactoryEvent, 256)
-	errs := make(chan error, 1)
-	go func() {
-		defer response.Body.Close()
-		scanner := bufio.NewScanner(response.Body)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if !strings.HasPrefix(line, "data:") {
-				continue
-			}
-			var event factoryapi.FactoryEvent
-			if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event); err != nil {
-				errs <- fmt.Errorf("decode factory event: %w", err)
-				return
-			}
-			events <- event
-		}
-		if err := scanner.Err(); err != nil && !errors.Is(err, context.Canceled) {
-			errs <- err
-		}
-	}()
-
-	var collected []factoryapi.FactoryEvent
-	deadline := time.NewTimer(2 * time.Second)
-	defer deadline.Stop()
-	var quiet *time.Timer
-	var quietC <-chan time.Time
-	for {
-		select {
-		case event := <-events:
-			collected = append(collected, event)
-			if quiet == nil {
-				quiet = time.NewTimer(25 * time.Millisecond)
-			} else {
-				if !quiet.Stop() {
-					select {
-					case <-quiet.C:
-					default:
-					}
-				}
-				quiet.Reset(25 * time.Millisecond)
-			}
-			quietC = quiet.C
-		case err := <-errs:
-			t.Fatalf("read named stages factory events: %v", err)
-		case <-quietC:
-			return collected
-		case <-deadline.C:
-			return collected
-		}
-	}
 }
 
 func assertTwoCompletedNamedStageDispatches(

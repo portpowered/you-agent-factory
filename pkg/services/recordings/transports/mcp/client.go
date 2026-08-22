@@ -61,9 +61,20 @@ type canonicalToolHandler func(
 
 var canonicalToolHandlers = map[string]canonicalToolHandler{
 	ToolQueryStatus:          handleQueryStatus,
+	ToolQueryHistory:         handleQueryHistory,
 	ToolAppendEvent:          handleAppendEvent,
 	ToolLoadReplay:           handleLoadReplay,
 	ToolReadPortableArtifact: handleReadPortableArtifact,
+}
+
+func handleQueryHistory(
+	ctx context.Context,
+	service recordings.Service,
+	input json.RawMessage,
+) (json.RawMessage, error) {
+	return callToolJSON(input, "decode query history input", func(request QueryHistoryInput) ToolResponse[recordings.HistoricalRecordingQueryResult] {
+		return QueryHistory(ctx, service, request)
+	})
 }
 
 func handleQueryStatus(

@@ -45,6 +45,30 @@ func (factoryRequestBatchPreparation) PrepareFactoryRequestBatch(
 	if len(request.Works) == 0 {
 		return PreparedFactoryRequestBatch{}, errors.New("batch works must contain at least one item")
 	}
+	workNames := make(map[string]int, len(request.Works))
+	workIndex := make(map[string]normalizedBatchWork, len(request.Works))
+	for index, work := range request.Works {
+		if err := validateBatchWorkName(workNames, index, work); err != nil {
+			return PreparedFactoryRequestBatch{}, err
+		}
+		payload, err := workPayloadForAdmissionSize(work.Content, work.Payload)
+		if err != nil {
+			return PreparedFactoryRequestBatch{}, fmt.Errorf("work_request: works[%d] (%q) payload: %w", index, work.Name, err)
+		}
+		if err := validateWorkPayloadSize(work.Name, work.WorkID, payload); err != nil {
+			return PreparedFactoryRequestBatch{}, err
+		}
+		workID := work.WorkID
+		if workID == "" {
+			workID = fmt.Sprintf("batch-%s-%s", request.RequestID, work.Name)
+		}
+		workIndex[work.Name] = normalizedBatchWork{name: work.Name, id: workID, batch: true}
+	}
+	for index, relation := range request.Relations {
+		if err := validateBatchRelationShape(index, relation, workIndex); err != nil {
+			return PreparedFactoryRequestBatch{}, err
+		}
+	}
 	return PreparedFactoryRequestBatch{
 		Request:       request,
 		CanonicalJSON: append([]byte(nil), data...),

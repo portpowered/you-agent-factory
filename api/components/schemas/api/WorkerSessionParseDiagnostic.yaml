@@ -1,0 +1,14 @@
+type: object
+additionalProperties: false
+required:
+  - code
+  - lineNumber
+  - message
+properties:
+  code:
+    type: string
+  lineNumber:
+    type: integer
+    minimum: 0
+  message:
+    type: string

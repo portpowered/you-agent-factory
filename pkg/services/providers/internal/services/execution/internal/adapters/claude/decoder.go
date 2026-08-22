@@ -36,11 +36,13 @@ type decoder struct {
 	finalContent   string
 	finalSessionID string
 	hasResult      bool
+	reportedUsage  map[string]string
 
 	progress        []providers.ExecuteProgress
 	declaredFailure *providers.ExecuteFailure
 	declaredKnown   bool
 	decodeErr       error
+	observeSession  providers.SessionObserver
 }
 
 type messageCompletion struct {
@@ -66,6 +68,7 @@ type nativeEnvelope struct {
 	SessionID       string          `json:"session_id"`
 	IsError         bool            `json:"is_error"`
 	Result          string          `json:"result"`
+	Usage           json.RawMessage `json:"usage"`
 	ParentToolUseID json.RawMessage `json:"parent_tool_use_id"`
 	Event           json.RawMessage `json:"event"`
 	Message         *nativeMessage  `json:"message"`
@@ -99,9 +102,10 @@ type nativeDelta struct {
 	PartialJSON string `json:"partial_json"`
 }
 
-func newDecoder(attemptID string) *decoder {
+func newDecoder(attemptID string, observeSession providers.SessionObserver) *decoder {
 	return &decoder{
 		attemptID:         strings.TrimSpace(attemptID),
+		observeSession:    observeSession,
 		blocks:            make(map[int]*contentBlock),
 		completedMessages: make(map[string]string),
 		completedTools:    make(map[string]string),
@@ -196,6 +200,13 @@ func (decoder *decoder) decodeRecord(raw []byte) {
 	if session := strings.TrimSpace(envelope.SessionID); session != "" {
 		if decoder.sessionID == "" {
 			decoder.sessionID = session
+			if decoder.observeSession != nil {
+				decoder.observeSession(providers.SessionRef{
+					Provider: providers.IDClaude,
+					Kind:     providers.SessionIDKind,
+					ID:       session,
+				})
+			}
 			decoder.addProgress("session.started", "started", nil)
 		}
 	}
@@ -245,7 +256,39 @@ func (decoder *decoder) decodeResultRecord(envelope nativeEnvelope) {
 	}
 	decoder.finalContent = strings.TrimSpace(envelope.Result)
 	decoder.finalSessionID = strings.TrimSpace(envelope.SessionID)
+	decoder.reportedUsage = decodeUsageMetadata(envelope.Usage)
 	decoder.hasResult = true
+}
+
+type nativeUsage struct {
+	InputTokens  json.RawMessage `json:"input_tokens"`
+	OutputTokens json.RawMessage `json:"output_tokens"`
+}
+
+func decodeUsageMetadata(raw json.RawMessage) map[string]string {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return nil
+	}
+	var usage nativeUsage
+	if json.Unmarshal(raw, &usage) != nil {
+		return nil
+	}
+	metadata := make(map[string]string, 2)
+	addUsageMetadata(metadata, "input_tokens", usage.InputTokens)
+	addUsageMetadata(metadata, "output_tokens", usage.OutputTokens)
+	if len(metadata) == 0 {
+		return nil
+	}
+	return metadata
+}
+
+func addUsageMetadata(metadata map[string]string, key string, raw json.RawMessage) {
+	value, err := strconv.ParseInt(string(bytes.TrimSpace(raw)), 10, 64)
+	if err != nil || value < 0 {
+		return
+	}
+	metadata[key] = strconv.FormatInt(value, 10)
 }
 
 func (decoder *decoder) decodeStreamEvent(raw json.RawMessage, parentItemID string) {
@@ -595,6 +638,8 @@ func claudeDeclaredFailureMessage(kind providers.ExecuteFailureKind) string {
 		return "Claude encountered a temporary server error"
 	case providers.ExecuteFailureKindCanceled:
 		return "Claude execution was canceled"
+	case providers.ExecuteFailureKindSessionNotFound:
+		return "Claude does not recognize the referenced Provider Session as live"
 	default:
 		return "Claude returned a terminal failure"
 	}

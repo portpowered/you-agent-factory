@@ -3,6 +3,7 @@ package application
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -224,7 +225,7 @@ func newProcessForTest(
 	initializer startupcli.Initializer,
 ) *Process {
 	t.Helper()
-	process, err := NewProcess(factory, initializer, processTestProviderRegistry{}, processTestLifecycle{})
+	process, err := NewProcess(factory, initializer, processTestProviderRegistry{}, processTestLifecycle{}, processTestACPServer{}, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)
 	}
@@ -234,7 +235,7 @@ func newProcessForTest(
 func TestProcessRequiresAndExposesProviderRegistry(t *testing.T) {
 	t.Parallel()
 
-	if process, err := NewProcess(nil, nil, nil, nil); err == nil || process != nil {
+	if process, err := NewProcess(nil, nil, nil, nil, nil, nil, nil, nil, nil); err == nil || process != nil {
 		t.Fatalf("NewProcess(nil registry) = (%#v, %v), want construction failure", process, err)
 	}
 	if registry := (*Process)(nil).ProviderRegistry(); registry != nil {
@@ -242,7 +243,7 @@ func TestProcessRequiresAndExposesProviderRegistry(t *testing.T) {
 	}
 
 	want := processTestProviderRegistry{}
-	process, err := NewProcess(nil, nil, want, processTestLifecycle{})
+	process, err := NewProcess(nil, nil, want, processTestLifecycle{}, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)
 	}
@@ -251,11 +252,112 @@ func TestProcessRequiresAndExposesProviderRegistry(t *testing.T) {
 	}
 }
 
+func TestProcessExposesACPServer(t *testing.T) {
+	t.Parallel()
+
+	if server := (*Process)(nil).ACPServer(); server != nil {
+		t.Fatalf("nil Process.ACPServer() = %#v, want nil", server)
+	}
+
+	want := processTestACPServer{}
+	process, err := NewProcess(nil, nil, processTestProviderRegistry{}, processTestLifecycle{}, want, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewProcess() error = %v", err)
+	}
+	if got := process.ACPServer(); got != want {
+		t.Fatalf("ACPServer() = %#v, want %#v", got, want)
+	}
+}
+
+func TestProcessExposesWorkerRecordingReader(t *testing.T) {
+	t.Parallel()
+
+	if capability := (*Process)(nil).WorkerRecordingReader(); capability != nil {
+		t.Fatalf("nil Process.WorkerRecordingReader() = %#v, want nil", capability)
+	}
+
+	want := processTestWorkerRecordingReader{}
+	process, err := NewProcess(nil, nil, processTestProviderRegistry{}, processTestLifecycle{}, nil, want, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewProcess() error = %v", err)
+	}
+	if got := process.WorkerRecordingReader(); got != want {
+		t.Fatalf("WorkerRecordingReader() = %#v, want %#v", got, want)
+	}
+}
+
+func TestProcessExposesRuntimeMetricsQuery(t *testing.T) {
+	t.Parallel()
+
+	if capability := (*Process)(nil).RuntimeMetricsQuery(); capability != nil {
+		t.Fatalf("nil Process.RuntimeMetricsQuery() = %#v, want nil", capability)
+	}
+
+	want := processTestRuntimeMetricsQueryCapability{}
+	process, err := NewProcess(nil, nil, processTestProviderRegistry{}, processTestLifecycle{}, nil, nil, nil, want, nil)
+	if err != nil {
+		t.Fatalf("NewProcess() error = %v", err)
+	}
+	if got := process.RuntimeMetricsQuery(); got != want {
+		t.Fatalf("RuntimeMetricsQuery() = %#v, want %#v", got, want)
+	}
+}
+
+func TestProcessExposesDetachedOperations(t *testing.T) {
+	t.Parallel()
+
+	if capability := (*Process)(nil).DetachedOperations(); capability != nil {
+		t.Fatalf("nil Process.DetachedOperations() = %#v, want nil", capability)
+	}
+
+	want := processTestDetachedOperationsCapability{}
+	process, err := NewProcess(nil, nil, processTestProviderRegistry{}, processTestLifecycle{}, nil, nil, want, nil, nil)
+	if err != nil {
+		t.Fatalf("NewProcess() error = %v", err)
+	}
+	if got := process.DetachedOperations(); got != want {
+		t.Fatalf("DetachedOperations() = %#v, want %#v", got, want)
+	}
+}
+
+func TestProcessCloseUsesInjectedLifecycle(t *testing.T) {
+	t.Parallel()
+
+	if err := (*Process)(nil).Close(context.Background()); err != nil {
+		t.Fatalf("nil Process.Close() error = %v, want nil", err)
+	}
+	process, err := NewProcess(nil, nil, processTestProviderRegistry{}, processTestLifecycle{}, nil, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewProcess() error = %v", err)
+	}
+	if err := process.Close(context.Background()); err != nil {
+		t.Fatalf("Process.Close() error = %v, want nil", err)
+	}
+}
+
 type processTestProviderRegistry struct{}
 
 type processTestLifecycle struct{}
 
 func (processTestLifecycle) Close(context.Context) error { return nil }
+
+type processTestACPServer struct{}
+
+type processTestWorkerRecordingReader struct{}
+
+type processTestRuntimeMetricsQueryCapability struct{}
+
+func (processTestRuntimeMetricsQueryCapability) RuntimeMetricsQuery() any { return "query" }
+
+type processTestDetachedOperationsCapability struct{}
+
+func (processTestDetachedOperationsCapability) DetachedOperations() any { return "operations" }
+
+func (processTestWorkerRecordingReader) LoadWorkerRecording(context.Context, string) (json.RawMessage, error) {
+	return json.RawMessage(`{"sessions":[]}`), nil
+}
+
+func (processTestACPServer) Serve(context.Context, io.Reader, io.Writer) error { return nil }
 
 func (processTestProviderRegistry) CanonicalIdentity(identity string) (string, error) {
 	return identity, nil

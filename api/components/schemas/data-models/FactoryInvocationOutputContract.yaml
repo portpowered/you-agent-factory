@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 description: Customer-facing output hint for a factory invocation signature.
 properties:
   mode:

@@ -26,10 +26,11 @@ type SessionAdapter interface {
 	ReadWorkSnapshot(context.Context) (work.ReadSnapshot, error)
 }
 
-// RecordingsAdapter is the private query-only Recordings port used when state
-// access reads from Recordings-backed projections. It never writes Recordings
-// stores and exposes only detached Work read snapshots.
-type RecordingsAdapter interface {
+// SnapshotReader is the private query-only port used when state access serves
+// reads from an already-projected session snapshot instead of a live Factory
+// Session. It never writes and exposes only detached Work read snapshots, so
+// state access never names whichever owner produced the projection.
+type SnapshotReader interface {
 	ReadWorkSnapshot(context.Context, string) (work.ReadSnapshot, error)
 }
 

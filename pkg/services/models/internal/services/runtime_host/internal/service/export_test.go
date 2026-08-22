@@ -15,9 +15,11 @@ import (
 
 // SupervisorTestConfig overrides supervisor timing and health probing for tests.
 type SupervisorTestConfig struct {
-	ReadinessTimeout    time.Duration
-	HealthCheckInterval time.Duration
-	HealthChecker       healthChecker
+	ReadinessTimeout          time.Duration
+	HealthCheckInterval       time.Duration
+	HealthChecker             healthChecker
+	AfterLoadStateObservation func()
+	OnProcessFailure          func()
 }
 
 // HostPolicyTestConfig overrides idle unload and loaded-runtime pressure policy for tests.
@@ -61,6 +63,7 @@ func NewWithHostTestConfig(
 	hostMetrics modelseffects.HostMetricsRecorder,
 	supervisorCfg SupervisorTestConfig,
 	policyCfg HostPolicyTestConfig,
+	options ...runtimehost.Options,
 ) runtimehost.Service {
 	s := New(
 		scopes,
@@ -71,6 +74,7 @@ func NewWithHostTestConfig(
 		hostClock,
 		hostLogger,
 		hostMetrics,
+		options...,
 	).(*service)
 	if supervisorCfg.ReadinessTimeout > 0 {
 		s.supervisor.ReadinessTimeout = supervisorCfg.ReadinessTimeout
@@ -81,6 +85,8 @@ func NewWithHostTestConfig(
 	if supervisorCfg.HealthChecker != nil {
 		s.supervisor.HealthChecker = supervisorCfg.HealthChecker
 	}
+	s.supervisor.afterLoadStateObservation = supervisorCfg.AfterLoadStateObservation
+	s.supervisor.onProcessFailure = supervisorCfg.OnProcessFailure
 	s.idleUnloadAfter, s.maxLoadedRuntimes = normalizeHostPolicy(
 		policyCfg.IdleUnloadAfter,
 		policyCfg.MaxLoadedRuntimes,
@@ -125,6 +131,101 @@ func NewWithLeasesFacts(
 		policyCfg.MaxLoadedRuntimes,
 	)
 	return s
+}
+
+// NewWithLeasesFactsAndSupervisorConfig constructs the wired host used by
+// focused supervision tests when lease revocation and injected backend
+// effects must be observed together.
+func NewWithLeasesFactsAndSupervisorConfig(
+	scopes runtimescopes.Service,
+	assets scopedassets.Service,
+	processLauncher modelseffects.HostProcessLauncher,
+	hostHTTP modelseffects.HostHTTPDoer,
+	hostClock modelseffects.HostClock,
+	hostLogger modelseffects.HostDiagnosticLogger,
+	hostMetrics modelseffects.HostMetricsRecorder,
+	slotFacts modelseffects.SlotFactsProvider,
+	supervisorCfg SupervisorTestConfig,
+	policyCfg HostPolicyTestConfig,
+	options ...runtimehost.Options,
+) runtimehost.Service {
+	leases, err := leaseswire.NewService(hostClock, slotFacts)
+	if err != nil {
+		panic(err)
+	}
+	s := New(
+		scopes,
+		assets,
+		leases,
+		processLauncher,
+		hostHTTP,
+		hostClock,
+		hostLogger,
+		hostMetrics,
+		options...,
+	).(*service)
+	if supervisorCfg.ReadinessTimeout > 0 {
+		s.supervisor.ReadinessTimeout = supervisorCfg.ReadinessTimeout
+	}
+	if supervisorCfg.HealthCheckInterval > 0 {
+		s.supervisor.HealthCheckInterval = supervisorCfg.HealthCheckInterval
+	}
+	if supervisorCfg.HealthChecker != nil {
+		s.supervisor.HealthChecker = supervisorCfg.HealthChecker
+	}
+	s.supervisor.afterLoadStateObservation = supervisorCfg.AfterLoadStateObservation
+	s.supervisor.onProcessFailure = supervisorCfg.OnProcessFailure
+	s.idleUnloadAfter, s.maxLoadedRuntimes = normalizeHostPolicy(
+		policyCfg.IdleUnloadAfter,
+		policyCfg.MaxLoadedRuntimes,
+	)
+	return s
+}
+
+// NewWiredWithSupervisorConfig constructs the host-backed lease adapter with
+// deterministic supervisor overrides for focused integration tests.
+func NewWiredWithSupervisorConfig(
+	scopes runtimescopes.Service,
+	assets scopedassets.Service,
+	processLauncher modelseffects.HostProcessLauncher,
+	hostHTTP modelseffects.HostHTTPDoer,
+	hostClock modelseffects.HostClock,
+	hostLogger modelseffects.HostDiagnosticLogger,
+	hostMetrics modelseffects.HostMetricsRecorder,
+	supervisorCfg SupervisorTestConfig,
+	policyCfg HostPolicyTestConfig,
+	options ...runtimehost.Options,
+) (runtimehost.Service, error) {
+	host, err := NewWired(
+		scopes,
+		assets,
+		processLauncher,
+		hostHTTP,
+		hostClock,
+		hostLogger,
+		hostMetrics,
+		options...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	s := host.(*service)
+	if supervisorCfg.ReadinessTimeout > 0 {
+		s.supervisor.ReadinessTimeout = supervisorCfg.ReadinessTimeout
+	}
+	if supervisorCfg.HealthCheckInterval > 0 {
+		s.supervisor.HealthCheckInterval = supervisorCfg.HealthCheckInterval
+	}
+	if supervisorCfg.HealthChecker != nil {
+		s.supervisor.HealthChecker = supervisorCfg.HealthChecker
+	}
+	s.supervisor.afterLoadStateObservation = supervisorCfg.AfterLoadStateObservation
+	s.supervisor.onProcessFailure = supervisorCfg.OnProcessFailure
+	s.idleUnloadAfter, s.maxLoadedRuntimes = normalizeHostPolicy(
+		policyCfg.IdleUnloadAfter,
+		policyCfg.MaxLoadedRuntimes,
+	)
+	return host, nil
 }
 
 // AcquireSlotCapacity simulates one active capacity holder for idle-unload tests.

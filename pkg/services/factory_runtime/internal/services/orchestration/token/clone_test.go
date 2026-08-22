@@ -190,6 +190,19 @@ func TestCloneToken_PreserveNilAndEmptyValues(t *testing.T) {
 	}
 }
 
+func TestCloneSlicePreservesNilAndDetachesRuntimeTokens(t *testing.T) {
+	if got := CloneSlice(nil); got != nil {
+		t.Fatalf("CloneSlice(nil) = %#v, want nil", got)
+	}
+
+	original := []Token{{Color: Color{Tags: map[string]string{"lane": "fast"}}}}
+	cloned := CloneSlice(original)
+	cloned[0].Color.Tags["lane"] = "slow"
+	if original[0].Color.Tags["lane"] != "fast" {
+		t.Fatalf("CloneSlice mutated original token: %#v", original)
+	}
+}
+
 func assertNilMatches(t *testing.T, wantNil bool, gotNil bool, field string) {
 	t.Helper()
 	if wantNil != gotNil {

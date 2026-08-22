@@ -28,6 +28,19 @@ func TestEnginePipelineThinRootProofGate_EndToEndCompletionInvariants(t *testing
 	root := testutil.MustRepoRoot(t)
 	serviceRoot := filepath.Join(root, "pkg", "services", "factory_runtime")
 
+	runCanonicalRootDirectoriesProof(t, serviceRoot)
+	runUnexpectedRootChildrenProof(t, root)
+	runDeletedPublicPipelineDirectoriesProof(t, serviceRoot)
+	runServiceDirectoryProof(t, serviceRoot)
+	runCheckpointRecoveryProof(t, serviceRoot)
+	runPublishedServiceBoundaryProof(t)
+	runOwnershipInventoryProof(t, root)
+	runPackageStructureBaselineProof(t, root)
+	runPackageTargetManifestProof(t, root)
+	runInternalServicesLayoutProof(t, serviceRoot)
+}
+
+func runCanonicalRootDirectoriesProof(t *testing.T, serviceRoot string) {
 	t.Run("canonical_root_directories", func(t *testing.T) {
 		t.Parallel()
 
@@ -66,7 +79,9 @@ func TestEnginePipelineThinRootProofGate_EndToEndCompletionInvariants(t *testing
 			}
 		}
 	})
+}
 
+func runUnexpectedRootChildrenProof(t *testing.T, root string) {
 	t.Run("unexpected_root_children_recorded_as_move_debt_only", func(t *testing.T) {
 		t.Parallel()
 
@@ -92,7 +107,9 @@ func TestEnginePipelineThinRootProofGate_EndToEndCompletionInvariants(t *testing
 			}
 		}
 	})
+}
 
+func runDeletedPublicPipelineDirectoriesProof(t *testing.T, serviceRoot string) {
 	t.Run("deleted_public_pipeline_directories_absent", func(t *testing.T) {
 		t.Parallel()
 
@@ -105,7 +122,9 @@ func TestEnginePipelineThinRootProofGate_EndToEndCompletionInvariants(t *testing
 			}
 		}
 	})
+}
 
+func runServiceDirectoryProof(t *testing.T, serviceRoot string) {
 	t.Run("service_directory_absent", func(t *testing.T) {
 		t.Parallel()
 
@@ -118,7 +137,9 @@ func TestEnginePipelineThinRootProofGate_EndToEndCompletionInvariants(t *testing
 			}
 		}
 	})
+}
 
+func runCheckpointRecoveryProof(t *testing.T, serviceRoot string) {
 	t.Run("checkpoint_recovery_undisturbed", func(t *testing.T) {
 		t.Parallel()
 
@@ -131,7 +152,9 @@ func TestEnginePipelineThinRootProofGate_EndToEndCompletionInvariants(t *testing
 			t.Fatal("checkpoint_recovery nested service is not a directory")
 		}
 	})
+}
 
+func runPublishedServiceBoundaryProof(t *testing.T) {
 	t.Run("wire_constructs_published_control_observation_dispatch", func(t *testing.T) {
 		t.Parallel()
 
@@ -176,7 +199,9 @@ func TestEnginePipelineThinRootProofGate_EndToEndCompletionInvariants(t *testing
 			t.Fatalf("ControlPause() error = %v, want ErrNotRunning", err)
 		}
 	})
+}
 
+func runOwnershipInventoryProof(t *testing.T, root string) {
 	t.Run("ownership_inventory_omits_deleted_public_pipeline_packages", func(t *testing.T) {
 		t.Parallel()
 
@@ -193,7 +218,9 @@ func TestEnginePipelineThinRootProofGate_EndToEndCompletionInvariants(t *testing
 			}
 		}
 	})
+}
 
+func runPackageStructureBaselineProof(t *testing.T, root string) {
 	t.Run("package_structure_baseline_omits_deleted_public_pipeline_directories", func(t *testing.T) {
 		t.Parallel()
 
@@ -210,29 +237,28 @@ func TestEnginePipelineThinRootProofGate_EndToEndCompletionInvariants(t *testing
 			}
 		}
 	})
+}
 
-	t.Run("package_target_manifest_omits_deleted_public_pipeline_packages", func(t *testing.T) {
+func runPackageTargetManifestProof(t *testing.T, root string) {
+	t.Run("unfinished_package_moves_omit_deleted_public_pipeline_packages", func(t *testing.T) {
 		t.Parallel()
 
-		manifest := loadPackageTargetManifestBaseline(t, root)
-		for _, packagePath := range manifest.Inventory {
-			for _, deleted := range foldedEnginePipelineTopLevelChildren() {
-				deletedPath := "pkg/services/factory_runtime/" + deleted
-				if packagePath == deletedPath || strings.HasPrefix(packagePath, deletedPath+"/") {
-					t.Fatalf("package-target manifest inventory still lists deleted pipeline package %q", packagePath)
-				}
-			}
+		moves := loadUnfinishedPackageMoves(t, root)
+		if len(moves.Moves) == 0 {
+			t.Fatal("unfinished package move ledger is empty; this proof needs live rows to scan")
 		}
-		for _, row := range manifest.Packages {
+		for _, row := range moves.Moves {
 			for _, deleted := range foldedEnginePipelineTopLevelChildren() {
 				deletedPath := "pkg/services/factory_runtime/" + deleted
 				if row.PackagePath == deletedPath || strings.HasPrefix(row.PackagePath, deletedPath+"/") {
-					t.Fatalf("package-target manifest packages still list deleted pipeline package %q", row.PackagePath)
+					t.Fatalf("unfinished package move ledger still lists deleted pipeline package %q", row.PackagePath)
 				}
 			}
 		}
 	})
+}
 
+func runInternalServicesLayoutProof(t *testing.T, serviceRoot string) {
 	t.Run("internal_services_layout", func(t *testing.T) {
 		t.Parallel()
 
@@ -261,11 +287,13 @@ func TestEnginePipelineThinRootProofGate_EndToEndCompletionInvariants(t *testing
 	})
 }
 
-type packageTargetManifestBaseline struct {
-	Inventory []string `json:"inventory"`
-	Packages  []struct {
+// unfinishedPackageMoves is the consolidated ledger of packages that still have
+// an open Packaged Service Structure move. It is the single place a package path
+// can be named after the per-package destination enumerations were retired.
+type unfinishedPackageMoves struct {
+	Moves []struct {
 		PackagePath string `json:"packagePath"`
-	} `json:"packages"`
+	} `json:"moves"`
 }
 
 type packageStructureBaselineEntry struct {
@@ -273,19 +301,19 @@ type packageStructureBaselineEntry struct {
 	FilePath string `json:"filePath"`
 }
 
-func loadPackageTargetManifestBaseline(t *testing.T, root string) packageTargetManifestBaseline {
+func loadUnfinishedPackageMoves(t *testing.T, root string) unfinishedPackageMoves {
 	t.Helper()
 
-	path := filepath.Join(root, "docs", "internal", "packaged-service-structure", "package-target-manifest.json")
+	path := filepath.Join(root, "docs", "internal", "baselines", "unfinished-package-moves.json")
 	payload, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("ReadFile(%q) error = %v", path, err)
 	}
-	var manifest packageTargetManifestBaseline
-	if err := json.Unmarshal(payload, &manifest); err != nil {
+	var moves unfinishedPackageMoves
+	if err := json.Unmarshal(payload, &moves); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
-	return manifest
+	return moves
 }
 
 func loadPackageStructureBaselineEntries(t *testing.T, root string) []packageStructureBaselineEntry {

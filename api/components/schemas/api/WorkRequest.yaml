@@ -14,11 +14,14 @@ properties:
     $ref: './WorkRequestType.yaml'
   works:
     type: array
-    description: A batch of work items to be submitted together.
+    description: >-
+      A batch of work items to be submitted together. Each Work payload uses
+      the compact UTF-8 JSON byte limit documented by the Work schema; a batch
+      is rejected atomically when any Work exceeds 65,536 bytes.
     items:
       $ref: '../data-models/Work.yaml'
   relations:
     type: array
-    description: Relationships between various work items.
+    description: Relationships between submitted or already-boarded work items.
     items:
-      $ref: '../data-models/Relation.yaml'
+      $ref: './WorkRequestRelation.yaml'

@@ -1,6 +1,9 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useCurrentSelection } from "../../current-selection/hooks/core/useCurrentSelection";
+import type { DashboardCardStateSnapshot } from "../../dashboard/lib/dashboard-card-state";
 import {
   factoryTimelineEntryKey,
   useFactoryTimelineStore,
@@ -10,6 +13,43 @@ import type { StreamDerivedCacheIdentity } from "../../timeline/public/stream-id
 export interface DashboardWorkOutcomeStream {
   identity: StreamDerivedCacheIdentity | null;
   status: "loading" | "ready";
+}
+
+export interface DashboardBentoCardStateContext {
+  dirtyCardInstanceIDs: ReadonlySet<string>;
+  workOutcomeHydrationStatus: DashboardWorkOutcomeStream["status"];
+}
+
+export type DashboardBentoDirtyStateReporter = (
+  widgetInstanceID: string,
+  isDirty: boolean,
+) => void;
+
+export type DashboardBentoCardStateReporter = (
+  widgetInstanceID: string,
+  state: DashboardCardStateSnapshot,
+) => void;
+
+export interface DashboardBentoSnapshot {
+  currentSelection: ReturnType<typeof useCurrentSelection>;
+  dashboardCardStateContext: DashboardBentoCardStateContext;
+  getDashboardCardState: (
+    widgetInstanceID: string,
+  ) => DashboardCardStateSnapshot | undefined;
+  materializedWorkOutcomeState: unknown;
+  reportDashboardCardState: DashboardBentoCardStateReporter;
+  reportDashboardCardDirtyState: DashboardBentoDirtyStateReporter;
+  restoreDashboardCardState: (
+    widgetInstanceID: string,
+    state: DashboardCardStateSnapshot,
+  ) => void;
+  restoredDashboardCardStates: Readonly<
+    Record<string, DashboardCardStateSnapshot>
+  >;
+  selectedSnapshot: DashboardSnapshot | undefined;
+  selectedTimelineTick: number;
+  snapshot: DashboardSnapshot;
+  workOutcomeHydrationStatus: DashboardWorkOutcomeStream["status"];
 }
 
 interface WorkOutcomeTimelineSelectionState {
@@ -73,10 +113,111 @@ const EMPTY_DASHBOARD_SNAPSHOT: DashboardSnapshot = {
   uptime_seconds: 0,
 };
 
+interface DashboardBentoCardStateRegistry {
+  dirtyCardInstanceIDs: ReadonlySet<string>;
+  getDashboardCardState: (
+    widgetInstanceID: string,
+  ) => DashboardCardStateSnapshot | undefined;
+  reportDashboardCardState: DashboardBentoCardStateReporter;
+  reportDashboardCardDirtyState: DashboardBentoDirtyStateReporter;
+  restoreDashboardCardState: (
+    widgetInstanceID: string,
+    state: DashboardCardStateSnapshot,
+  ) => void;
+  restoredDashboardCardStates: Readonly<
+    Record<string, DashboardCardStateSnapshot>
+  >;
+}
+
+function useDashboardBentoCardStateRegistry(
+  sessionID: string | null | undefined,
+): DashboardBentoCardStateRegistry {
+  const [dirtyCardInstanceIDs, setDirtyCardInstanceIDs] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
+  const previousSessionIDRef = useRef(sessionID);
+  const reportDashboardCardDirtyState = useCallback(
+    (widgetInstanceID: string, isDirty: boolean) => {
+      setDirtyCardInstanceIDs((currentIDs) => {
+        const nextIDs = new Set(currentIDs);
+        if (isDirty) {
+          nextIDs.add(widgetInstanceID);
+        } else {
+          nextIDs.delete(widgetInstanceID);
+        }
+
+        if (nextIDs.size === currentIDs.size) {
+          const hasSameIDs = [...nextIDs].every((id) => currentIDs.has(id));
+          if (hasSameIDs) {
+            return currentIDs;
+          }
+        }
+
+        return nextIDs;
+      });
+    },
+    [],
+  );
+  const dashboardCardStateByInstanceIDRef = useRef<
+    Map<string, DashboardCardStateSnapshot>
+  >(new Map());
+  const [restoredDashboardCardStates, setRestoredDashboardCardStates] =
+    useState<Record<string, DashboardCardStateSnapshot>>({});
+  const reportDashboardCardState = useCallback<DashboardBentoCardStateReporter>(
+    (widgetInstanceID, state) => {
+      dashboardCardStateByInstanceIDRef.current.set(widgetInstanceID, state);
+    },
+    [],
+  );
+  const getDashboardCardState = useCallback(
+    (widgetInstanceID: string) =>
+      dashboardCardStateByInstanceIDRef.current.get(widgetInstanceID),
+    [],
+  );
+  const restoreDashboardCardState = useCallback(
+    (widgetInstanceID: string, state: DashboardCardStateSnapshot) => {
+      setRestoredDashboardCardStates((currentStates) => ({
+        ...currentStates,
+        [widgetInstanceID]: state,
+      }));
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (previousSessionIDRef.current === sessionID) {
+      return;
+    }
+
+    previousSessionIDRef.current = sessionID;
+    setDirtyCardInstanceIDs(new Set());
+    dashboardCardStateByInstanceIDRef.current.clear();
+    setRestoredDashboardCardStates({});
+  }, [sessionID]);
+
+  return {
+    dirtyCardInstanceIDs,
+    getDashboardCardState,
+    reportDashboardCardState,
+    reportDashboardCardDirtyState,
+    restoreDashboardCardState,
+    restoredDashboardCardStates,
+  };
+}
+
 export function useDashboardBentoSnapshot(
   sessionID: string | null | undefined,
   workOutcomeStream?: DashboardWorkOutcomeStream,
-) {
+): DashboardBentoSnapshot {
+  const {
+    dirtyCardInstanceIDs,
+    getDashboardCardState,
+    reportDashboardCardState,
+    reportDashboardCardDirtyState,
+    restoreDashboardCardState,
+    restoredDashboardCardStates,
+  } = useDashboardBentoCardStateRegistry(sessionID);
+
   const materializedWorkOutcomeState = useFactoryTimelineStore(
     (state) =>
       selectDashboardWorkOutcomeInput(state, workOutcomeStream)
@@ -107,9 +248,18 @@ export function useDashboardBentoSnapshot(
   return {
     currentSelection,
     materializedWorkOutcomeState,
+    getDashboardCardState,
+    reportDashboardCardState,
     selectedSnapshot,
     selectedTimelineTick,
     snapshot,
+    dashboardCardStateContext: {
+      dirtyCardInstanceIDs,
+      workOutcomeHydrationStatus,
+    } satisfies DashboardBentoCardStateContext,
     workOutcomeHydrationStatus,
+    reportDashboardCardDirtyState,
+    restoreDashboardCardState,
+    restoredDashboardCardStates,
   };
 }

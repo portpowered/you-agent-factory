@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	checkpointrecovery "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery"
 	checkpointrecoveryservice "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/service"
 	checkpointrecoverywire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/wire"
@@ -29,14 +28,6 @@ func TestRecoveryCaptureStoresOpaqueEnvelope(t *testing.T) {
 		string(captured.Envelope.Payload) != string(payload) {
 		t.Fatalf("Capture() envelope = %#v, want stored opaque envelope", captured.Envelope)
 	}
-
-	root := checkpointrecovery.RootCheckpointFromEnvelope(captured.Envelope)
-	if root.CheckpointID != "checkpoint-1" ||
-		root.SchemaVersion != checkpointrecovery.RuntimeOpaqueCheckpointSchemaVersion ||
-		root.StrategyKind != checkpointrecovery.RuntimeOpaqueCheckpointStrategyKind ||
-		string(root.Payload) != string(payload) {
-		t.Fatalf("RootCheckpointFromEnvelope() = %#v, want root checkpoint mapping", root)
-	}
 }
 
 func TestRecoveryCaptureRejectsMissingCheckpointIdentity(t *testing.T) {
@@ -46,7 +37,7 @@ func TestRecoveryCaptureRejectsMissingCheckpointIdentity(t *testing.T) {
 	_, err := recovery.Capture(checkpointrecovery.CaptureRequest{
 		Payload: []byte(`{"factoryState":"RUNNING"}`),
 	})
-	if !errors.Is(err, factoryruntime.ErrCheckpointNotFound) {
+	if !errors.Is(err, checkpointrecovery.ErrCheckpointNotFound) {
 		t.Fatalf("Capture() error = %v, want ErrCheckpointNotFound", err)
 	}
 }
@@ -58,7 +49,38 @@ func TestRecoveryCaptureRejectsCorruptPayload(t *testing.T) {
 	_, err := recovery.Capture(checkpointrecovery.CaptureRequest{
 		CheckpointID: "checkpoint-1",
 	})
-	if !errors.Is(err, factoryruntime.ErrCorruptCheckpoint) {
+	if !errors.Is(err, checkpointrecovery.ErrCorruptCheckpoint) {
 		t.Fatalf("Capture() error = %v, want ErrCorruptCheckpoint", err)
+	}
+}
+
+func TestRecoveryCaptureFailureDoesNotMutatePreviouslyValidStoredEnvelope(t *testing.T) {
+	t.Parallel()
+
+	recovery := checkpointrecoverywire.New()
+	validPayload := []byte(`{"factoryState":"PAUSED"}`)
+	captured, err := recovery.Capture(checkpointrecovery.CaptureRequest{
+		CheckpointID: "checkpoint-1",
+		Payload:      validPayload,
+	})
+	if err != nil {
+		t.Fatalf("Capture() error = %v", err)
+	}
+
+	_, err = recovery.Capture(checkpointrecovery.CaptureRequest{
+		CheckpointID: "checkpoint-1",
+	})
+	if !errors.Is(err, checkpointrecovery.ErrCorruptCheckpoint) {
+		t.Fatalf("Capture(corrupt) error = %v, want ErrCorruptCheckpoint", err)
+	}
+
+	loaded, err := recovery.Load(checkpointrecovery.LoadRequest{CheckpointID: "checkpoint-1"})
+	if err != nil {
+		t.Fatalf("Load() after failed Capture error = %v", err)
+	}
+	if loaded.Envelope.SchemaVersion != captured.Envelope.SchemaVersion ||
+		loaded.Envelope.StrategyKind != captured.Envelope.StrategyKind ||
+		string(loaded.Envelope.Payload) != string(captured.Envelope.Payload) {
+		t.Fatalf("Load() after failed Capture = %#v, want previously valid envelope %#v unmutated", loaded.Envelope, captured.Envelope)
 	}
 }

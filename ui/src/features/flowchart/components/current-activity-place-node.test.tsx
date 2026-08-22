@@ -56,13 +56,13 @@ describe("CurrentActivity place node work-state phase styling", () => {
   });
 
   it.each([
-    ["INITIAL", "INITIAL"],
-    ["PROCESSING", "PROCESSING"],
-    ["TERMINAL", "TERMINAL"],
-    ["FAILED", "FAILED"],
+    ["INITIAL", "waiting", "border-info-border bg-info-container"],
+    ["PROCESSING", "active", "border-af-warning-border bg-warning-container"],
+    ["TERMINAL", "success", "border-af-success-border bg-success-container"],
+    ["FAILED", "danger", "border-af-danger-border bg-error-container"],
   ] as const)(
     "applies lifecycle surface classes for work_state with state_category %s",
-    (stateCategory) => {
+    (stateCategory, status, surfaceClass) => {
       const place: DashboardPlaceRef = {
         kind: "work_state",
         place_id: `story:${stateCategory.toLowerCase()}`,
@@ -78,6 +78,11 @@ describe("CurrentActivity place node work-state phase styling", () => {
       expect(shell?.className).toContain(
         workStatePhaseSurfaceClassName(stateCategory),
       );
+      expect(shell?.getAttribute("data-graph-visual-status")).toBe(status);
+      expect(shell?.getAttribute("data-graph-visual-surface")).toBe(status);
+      for (const className of surfaceClass.split(" ")) {
+        expect(shell?.className).toContain(className);
+      }
     },
   );
 
@@ -96,6 +101,28 @@ describe("CurrentActivity place node work-state phase styling", () => {
     expect(shell?.className).toContain(
       workStatePhaseSurfaceClassName(undefined),
     );
+    expect(shell?.className).toContain("border-outline bg-surface");
+  });
+
+  it("keeps a future work-state category as an accessible raw neutral label", () => {
+    const place: DashboardPlaceRef = {
+      kind: "work_state",
+      place_id: "story:paused",
+      state_category: "PAUSED_BY_POLICY",
+      state_value: "paused",
+      type_id: "story",
+    };
+    const { container, getByText } = render(
+      <StatePositionNodeView {...statePositionNodeProps(place)} />,
+    );
+    const shell = nodeShell(container);
+    const category = getByText("PAUSED_BY_POLICY");
+
+    expect(category.getAttribute("data-state-category-label")).toBe("true");
+    expect(category.getAttribute("title")).toBe("PAUSED_BY_POLICY");
+    expect(category.className).toContain("text-on-surface-variant");
+    expect(shell?.className).toContain("border-outline bg-surface");
+    expect(shell?.getAttribute("data-graph-visual-status")).toBe("quiet");
   });
 
   it("keeps resource node styling unchanged", () => {
@@ -160,6 +187,8 @@ describe("CurrentActivity place node work-state phase precedence", () => {
     const shell = nodeShell(container);
 
     expect(shell?.className).toContain("border-primary");
+    expect(shell?.getAttribute("data-graph-visual-border")).toBe("selection");
+    expect(shell?.getAttribute("data-graph-visual-selection")).toBe("true");
     expect(shell?.className).toContain(
       workStatePhaseSurfaceClassName("INITIAL"),
     );
@@ -183,7 +212,10 @@ describe("CurrentActivity place node work-state phase precedence", () => {
     );
     const shell = nodeShell(container);
 
-    expect(shell?.className).toContain("ring-af-danger-border");
+    expect(shell?.className).toContain("shadow-af-graph-validation-danger");
+    expect(shell?.className).toContain("!border-error");
+    expect(shell?.getAttribute("data-graph-visual-border")).toBe("validation");
+    expect(shell?.getAttribute("data-graph-visual-validation")).toBe("error");
     expect(shell?.className).toContain(
       workStatePhaseSurfaceClassName("FAILED"),
     );
@@ -204,8 +236,12 @@ describe("CurrentActivity place node work-state phase precedence", () => {
     );
     const shell = nodeShell(container);
 
-    expect(shell?.className).toContain("border-af-success-border");
-    expect(shell?.className).toContain("shadow-af-success-chip");
+    expect(shell?.className).toContain("border-af-warning-border");
+    expect(shell?.className).toContain("shadow-af-graph-warning");
+    expect(shell?.getAttribute("data-graph-visual-emphasis")).toBe("strong");
+    expect(shell?.getAttribute("data-graph-visual-treatment")).toBe(
+      "processing",
+    );
     expect(shell?.className).toContain(
       workStatePhaseSurfaceClassName("PROCESSING"),
     );
@@ -229,6 +265,194 @@ describe("CurrentActivity place node work-state phase precedence", () => {
     expect(shell?.className).toContain(
       workStatePhaseSurfaceClassName("TERMINAL"),
     );
-    expect(shell?.className).toContain("opacity-[0.45]");
+    expect(shell?.className).toContain("agent-flow-node--muted");
+    expect(shell?.className).not.toContain("opacity-[0.45]");
+  });
+});
+
+/** `!bg-warning` is a substring of `!bg-warning-container`; compare tokens. */
+function shellClassTokens(shell: HTMLElement | null): string[] {
+  return (shell?.className ?? "").split(" ").filter(Boolean);
+}
+
+function workStatePlace(stateCategory: "PROCESSING" | "TERMINAL") {
+  return {
+    kind: "work_state",
+    place_id: `story:${stateCategory.toLowerCase()}`,
+    state_category: stateCategory,
+    state_value: stateCategory.toLowerCase(),
+    type_id: "story",
+  } satisfies DashboardPlaceRef;
+}
+
+describe("CurrentActivity work-state node fill by held work", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("keeps an empty processing work state translucent", () => {
+    const { container } = render(
+      <StatePositionNodeView
+        {...statePositionNodeProps(workStatePlace("PROCESSING"), {
+          tokenCount: 0,
+        })}
+      />,
+    );
+    const shell = nodeShell(container);
+
+    expect(shell?.getAttribute("data-graph-visual-fill")).toBe("soft");
+    expect(shellClassTokens(shell)).toContain("!bg-warning-container");
+    expect(shellClassTokens(shell)).not.toContain("!bg-warning");
+  });
+
+  it("keeps an empty processing work state on default label ink", () => {
+    const { container } = render(
+      <StatePositionNodeView
+        {...statePositionNodeProps(workStatePlace("PROCESSING"), {
+          tokenCount: 0,
+        })}
+      />,
+    );
+    const shell = nodeShell(container);
+
+    expect(shell?.className).not.toContain(
+      "[&_[data-state-value]]:!text-on-warning",
+    );
+    expect(
+      container.querySelector("[data-state-value]")?.getAttribute("class"),
+    ).toContain("text-on-surface");
+  });
+
+  it("fills a processing work state solidly once work is in it", () => {
+    const { container } = render(
+      <StatePositionNodeView
+        {...statePositionNodeProps(workStatePlace("PROCESSING"), {
+          tokenCount: 2,
+        })}
+      />,
+    );
+    const shell = nodeShell(container);
+
+    expect(shell?.getAttribute("data-graph-visual-fill")).toBe("solid");
+    expect(shellClassTokens(shell)).toContain("!bg-warning");
+    expect(shellClassTokens(shell)).not.toContain("!bg-warning-container");
+  });
+
+  it("inverts work-state label ink on a solid fill", () => {
+    const { container } = render(
+      <StatePositionNodeView
+        {...statePositionNodeProps(workStatePlace("PROCESSING"), {
+          tokenCount: 2,
+        })}
+      />,
+    );
+    const shell = nodeShell(container);
+
+    expect(shell?.className).toContain(
+      "[&_[data-state-value]]:!text-on-warning",
+    );
+    expect(shell?.className).toContain(
+      "[&_[data-state-work-type]]:!text-on-warning",
+    );
+  });
+
+  it("inverts the work-state icon on a solid fill so it stays visible", () => {
+    const { container } = render(
+      <StatePositionNodeView
+        {...statePositionNodeProps(workStatePlace("PROCESSING"), {
+          tokenCount: 2,
+        })}
+      />,
+    );
+    const shell = nodeShell(container);
+
+    expect(container.querySelector("[data-graph-semantic-icon]")).toBeTruthy();
+    expect(shell?.className).toContain(
+      "[&_[data-graph-semantic-icon]]:!text-on-warning",
+    );
+  });
+
+  it("fills a held terminal work state solidly in its own tone", () => {
+    const { container } = render(
+      <StatePositionNodeView
+        {...statePositionNodeProps(workStatePlace("TERMINAL"), {
+          tokenCount: 1,
+        })}
+      />,
+    );
+    const shell = nodeShell(container);
+
+    expect(shell?.getAttribute("data-graph-visual-fill")).toBe("solid");
+    expect(shellClassTokens(shell)).toContain("!bg-success");
+    expect(shell?.className).toContain(
+      "[&_[data-state-value]]:!text-on-success",
+    );
+  });
+});
+
+describe("CurrentActivity work-state progress markers", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("renders the larger numeric marker as unboxed surface text", () => {
+    const { container } = render(
+      <StatePositionNodeView
+        {...statePositionNodeProps(workStatePlace("PROCESSING"), {
+          tokenCount: 4,
+        })}
+      />,
+    );
+    const marker = container.querySelector<HTMLElement>(
+      '[data-state-work-progress="numeric"]',
+    );
+
+    expect(marker?.className).toContain("min-h-6");
+    expect(marker?.className).toContain("text-base");
+    expect(marker?.className).toContain("text-on-surface");
+    expect(marker?.className).not.toContain("bg-success-container");
+    expect(marker?.className).not.toContain("border-af-success-border");
+  });
+
+  it("renders active dots from an active resolved work-state surface", () => {
+    const { container } = render(
+      <StatePositionNodeView
+        {...statePositionNodeProps(workStatePlace("PROCESSING"), {
+          tokenCount: 2,
+        })}
+      />,
+    );
+    const marker = container.querySelector<HTMLElement>(
+      '[data-state-work-progress="dots"]',
+    );
+    const dots = container.querySelectorAll("[data-state-work-progress-dot]");
+
+    expect(marker?.getAttribute("data-work-progress-state")).toBe("active");
+    for (const dot of dots) {
+      expect(dot.className).toContain("bg-on-surface");
+      expect(dot.getAttribute("data-work-progress-dot-state")).toBe("active");
+    }
+  });
+
+  it("renders idle dots from a terminal resolved work-state surface", () => {
+    const { container } = render(
+      <StatePositionNodeView
+        {...statePositionNodeProps(workStatePlace("TERMINAL"), {
+          tokenCount: 2,
+        })}
+      />,
+    );
+    const marker = container.querySelector<HTMLElement>(
+      '[data-state-work-progress="dots"]',
+    );
+    const dots = container.querySelectorAll("[data-state-work-progress-dot]");
+
+    expect(marker?.getAttribute("data-work-progress-state")).toBe("idle");
+    for (const dot of dots) {
+      expect(dot.className).toContain("bg-surface");
+      expect(dot.className).toContain("border-outline-variant");
+      expect(dot.className).not.toContain("bg-on-surface");
+      expect(dot.getAttribute("data-work-progress-dot-state")).toBe("idle");
+    }
   });
 });

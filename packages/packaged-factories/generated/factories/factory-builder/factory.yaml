@@ -1,0 +1,311 @@
+description:
+    type: LOCALIZABLE_ASSET
+    value: Creates and installs one validated graph or JavaScript Factory from a customer request.
+examples:
+    - args:
+        factoryName: release-note-review
+        orchestrator: graph
+        request: Review submitted release notes and return an approved summary.
+      description:
+        type: LOCALIZABLE_ASSET
+        value: Create a reusable graph Factory for a bounded review workflow.
+      name: graph-factory
+    - args:
+        factoryName: release-synthesis
+        orchestrator: javascript
+        request: Run two independent analyses and return one synthesized result.
+      description:
+        type: LOCALIZABLE_ASSET
+        value: Create a reusable JavaScript Factory for a bounded synthesis workflow.
+      name: javascript-factory
+id: builtin-factory-builder
+invocationReturn:
+    policy: EXPLICIT
+    terminalState: complete
+    workTypeName: factory-build
+invocationSignature:
+    parameters:
+        - bindings:
+            - kind: POSITIONAL
+              position: 1
+            - kind: STDIN
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Requested behavior for the reusable Factory to create. Omit it to receive usage guidance instead of building anything.
+          externalName: to
+          name: request
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Optional stable name for the Factory that will be created through the named-Factory CLI. When omitted, Builder derives one from the request.
+          externalName: factory-name
+          name: factoryName
+        - bindings:
+            - kind: NAMED
+          choices:
+            - graph
+            - javascript
+          defaultValue: graph
+          description: 'Factory form to author: graph for YAML topology or javascript for a JavaScript orchestrator.'
+          externalName: orchestrator
+          name: orchestrator
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Optional model provider override for the Factory Builder; omitted values use operator defaults.
+          externalName: builder-provider
+          name: builderProvider
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Optional model override for the Factory Builder; omitted values use operator defaults.
+          externalName: builder-model
+          name: builderModel
+name: factory-builder
+resources:
+    - capacity: 1
+      name: factory-builder-slot
+workTypes:
+    - handlingBehavior:
+        - DEFAULT
+      name: factory-build
+      states:
+        - name: init
+          type: INITIAL
+        - name: build
+          type: PROCESSING
+        - name: help
+          type: PROCESSING
+        - name: complete
+          type: TERMINAL
+        - name: failed
+          type: FAILED
+workers:
+    - body: 'Decide whether a message is an actual request to create a reusable Factory or a question about what this Factory does. Return exactly one lowercase label: build or help.'
+      model: ${builderModel}
+      modelProvider: ${builderProvider}
+      name: builder-router
+      skipPermissions: true
+      type: AGENT_WORKER
+    - body: Answer with the authored Factory Builder usage guidance exactly as supplied, without inventing flags, commands, or capabilities.
+      model: ${builderModel}
+      modelProvider: ${builderProvider}
+      name: builder-helper
+      skipPermissions: true
+      type: AGENT_WORKER
+    - agentTools:
+        policy: ENABLED
+      model: ${builderModel}
+      modelProvider: ${builderProvider}
+      name: factory-builder
+      skipPermissions: true
+      type: AGENT_WORKER
+workstations:
+    - body: |
+        You have no prior context. Decide what the message below is asking for, then
+        return exactly one lowercase label: `build` or `help`.
+
+        Return `help` when the message is any of:
+
+        - empty, blank, or only whitespace
+        - a greeting, such as "hi", "hello", or "hey"
+        - a question about what this Factory is, what it can do, or how to use it
+        - a request for documentation, examples, options, or flags
+        - so vague that you could not name the Factory's purpose, inputs, and outputs
+          from it
+
+        Return `build` only when the message is an actual request to create a reusable
+        Factory — that is, when it describes the behavior the new Factory should
+        perform. A request may be brief and still be a build request, as long as it
+        states what the Factory should do.
+
+        When you are genuinely unsure, return `help`. Answering a question costs the
+        customer one short reply; building the wrong Factory costs them a wrong Factory
+        installed under a name they did not choose.
+
+        Return only the single label. Do not explain, quote the message, or add
+        punctuation.
+
+        Message:
+        ${request}
+      classificationRoutes:
+        - label: build
+          outputs:
+            - state: build
+              workType: factory-build
+        - label: help
+          outputs:
+            - state: help
+              workType: factory-build
+      inputs:
+        - state: init
+          workType: factory-build
+      name: route-request
+      onFailure:
+        - state: help
+          workType: factory-build
+      promptFile: prompts/route-request.md
+      type: CLASSIFIER_WORKSTATION
+      workPropagation:
+        mode: PRESERVE_INPUT
+      worker: builder-router
+    - body: |
+        The customer has not asked you to build anything yet. Do not create, install,
+        validate, or modify any Factory. Do not read the workspace or run any command.
+
+        Reply with the guidance block below reproduced verbatim. You may add at most
+        one short sentence before it acknowledging what the customer said. Add nothing
+        after it, and never invent flags, commands, capabilities, or documentation
+        topics that do not appear in it.
+
+        ---
+
+        **Factory Builder** creates one reusable Factory from a description of what you
+        want it to do, then installs it so you can run it by name.
+
+        Tell me what the Factory should do, and I will build it. For example:
+
+        - "Create a Factory that reviews release notes and returns an approved summary."
+        - "Build a Factory that runs two independent analyses and merges them into one answer."
+
+        **Two forms are available**
+
+        - `graph` — a YAML topology of workstations and work states. This is the default.
+        - `javascript` — a JavaScript orchestrator, for logic that is awkward as a graph.
+
+        **From the command line**
+
+        ```
+        you run --named @you/factory-builder --to "<what the Factory should do>"
+        ```
+
+        Optional flags:
+
+        - `--factory-name <name>` — a stable name to install under. Derived from your request when omitted.
+        - `--orchestrator graph|javascript` — which form to author. Defaults to `graph`.
+
+        **From an editor over ACP**
+
+        Just describe the Factory you want in a message. No flags are needed.
+
+        **Documentation**
+
+        - `you docs authoring-factories` — work types, states, workstations, and guards
+        - `you docs javascript-workflows` — the JavaScript orchestrator form
+        - `you docs packaged-factories` — the Factories that ship with `you`
+        - `you docs run` — invoking a Factory and passing inputs
+
+        ---
+
+        Customer message:
+        ${request}
+      inputs:
+        - state: help
+          workType: factory-build
+      name: answer-help
+      onFailure:
+        - state: failed
+          workType: factory-build
+      outputs:
+        - state: complete
+          workType: factory-build
+      promptFile: prompts/help.md
+      type: AGENT_RUN
+      worker: builder-helper
+    - body: |
+        You are Factory Builder. Create exactly one new reusable Factory requested below.
+        You have no prior context and must not infer an existing Factory name or change
+        an existing Factory.
+
+        Before materializing any candidate, read these canonical public topics in full:
+
+        - `you docs agents`
+        - `you docs authoring-factories`
+        - `you docs config`
+        - `you docs javascript-workflows`
+
+        Treat those public contracts as authoritative. Use `graph` to author a YAML
+        graph Factory and `javascript` to author a JavaScript orchestrator Factory.
+        Do not guess fields, workflow primitives, validation behavior, or persistence
+        semantics from the workspace.
+
+        Inputs:
+
+        - Request: `${request}`
+        - New Factory name: `${factoryName}` (optional)
+        - Requested orchestrator: `${orchestrator}`
+
+        If the requested name is blank, derive one concise, stable, lowercase
+        hyphenated name from the request before staging. Use that same derived name for
+        the staging directory, validation context, named-Factory create command, and
+        result. Never overwrite an existing named Factory; if the derived name already
+        exists, stop and report the safe collision diagnostic rather than selecting a
+        replacement name.
+
+        Stage candidate files only beneath a new, Factory-name-scoped directory inside
+        the current workspace. The staging directory is not an installed Factory. Do
+        not write directly into `./factory`, an operator-owned Factory root, a packaged
+        Factory directory, or an existing named Factory. Do not create, update, or
+        start a Factory Session while authoring.
+
+        Build one complete candidate using the applicable public authoring contract.
+        For graph candidates, include every required topology and invocation field. For
+        JavaScript candidates, use only supported JavaScript workflow primitives and
+        metadata. Keep provider and model choices optional so ordinary operator defaults
+        remain effective unless the caller supplied the Builder override. Do not place
+        credentials, tokens, raw provider commands, or host-specific absolute paths in
+        the candidate or response.
+
+        Validate the staged candidate with the public validate-only command:
+
+        ```bash
+        you factory config validate <staged-candidate>
+        ```
+
+        Correct every validation failure before attempting persistence. A successful
+        validation is a prerequisite, not installation. After validation succeeds,
+        install only through the existing named-Factory command. Pass the global
+        operator-owned Factory root explicitly so persistence does not fall back to the
+        project-local `./factory` default:
+
+        When the request supplied a name, use this command form:
+
+        ```bash
+        you factory create ${factoryName} --from <staged-candidate> --dir ~/.you-agent-factory/factories
+        ```
+
+        When the request did not supply a name, substitute the derived name in that
+        same command form.
+
+        Never copy staged files into an operator-owned Factory root or use another
+        installation path. Do not call `you factory update`; a requested name that
+        already exists must remain unchanged. If validation or create fails, stop and
+        report the safe diagnostic, validation code, field, or source location when
+        available, and a concrete correction action; leave no alternate installed
+        Factory behind.
+
+        Return a concise, self-contained result that states the chosen canonical
+        Factory name, orchestrator kind, validation outcome, and whether the named
+        Factory was installed. Refer to the named-Factory destination rather than
+        printing a staging path. Redact credentials, secrets, raw provider commands,
+        and unsafe filesystem details.
+      inputs:
+        - state: build
+          workType: factory-build
+      name: build-factory
+      onFailure:
+        - state: failed
+          workType: factory-build
+      outputs:
+        - state: complete
+          workType: factory-build
+      promptFile: prompts/build-factory.md
+      resources:
+        - capacity: 1
+          name: factory-builder-slot
+      type: AGENT_RUN
+      worker: factory-builder

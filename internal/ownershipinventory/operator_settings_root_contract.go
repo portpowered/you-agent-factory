@@ -11,6 +11,8 @@ import (
 // Confirmed against docs/internal/projects/packaged-service-structure/operator-settings-root-go-inventory.json
 // (INV-SET-TOPLEVEL).
 var OperatorSettingsThinRootContractFiles = []string{
+	"acp_agent_profile.go",
+	"acp_agent_profile_test.go",
 	"acp_integrations.go",
 	"acp_integrations_test.go",
 	"backend_scope.go",
@@ -123,8 +125,12 @@ func VerifyOperatorSettingsCommittedRootContractInventoryAlignment(root string) 
 }
 
 // VerifyOperatorSettingsRootReconciliation locks CLN-SET-CONTRACT-ROOTS story-001
-// reconciliation: live root .go files, INV JSON inventory, Go mirror, top-level
-// directories, and ownership/package-target ledgers agree before fold stories run.
+// reconciliation: live root .go files, INV JSON inventory, Go mirror, and
+// top-level directories agree before fold stories run.
+//
+// There is no longer a second ledger to reconcile against: open moves live in
+// one consolidated ledger, so a manifest row and an inventory row cannot drift
+// apart.
 func VerifyOperatorSettingsRootReconciliation(root string) error {
 	if err := VerifyOperatorSettingsRootGoInventory(root); err != nil {
 		return err
@@ -132,7 +138,7 @@ func VerifyOperatorSettingsRootReconciliation(root string) error {
 	if err := VerifyOperatorSettingsCommittedRootContractInventoryAlignment(root); err != nil {
 		return err
 	}
-	if err := VerifyOperatorSettingsDualLedgerAlignment(root); err != nil {
+	if err := VerifyOperatorSettingsUnexpectedPublicSiblingRemaps(root); err != nil {
 		return err
 	}
 	return nil

@@ -1,56 +1,116 @@
-import { factoryGraphNodeTitleClassName } from "./semantic-node-style.js";
-export function factoryGraphWorkstationPresentation(workstation, locale) {
-    const exhaustion = workstation.workstation_kind === "exhaustion" ||
-        (!workstation.workstation_kind && !workstation.worker_type);
-    const normalized = workstation.workstation_kind?.trim().toUpperCase();
-    const semanticKind = exhaustion
-        ? "exhaustion"
-        : normalized === "CRON"
-            ? "CRON"
-            : normalized === "POLLER"
-                ? "POLLER"
-                : normalized === "REPEATER"
-                    ? "REPEATER"
-                    : "STANDARD";
+import { WorkstationKind } from "@you-agent-factory/client";
+import { factoryGraphNodeTitleClassName, factoryGraphNodeWrappedTextClassName, } from "./semantic-node-style.js";
+import { factoryGraphWorkstationRuntimeRole, UNKNOWN_FACTORY_GRAPH_WORKSTATION_SEMANTICS, } from "./workstation-semantics.js";
+/** Render-independent workstation presentation metadata for a graph node. */
+export function factoryGraphWorkstationPresentation(semantics = UNKNOWN_FACTORY_GRAPH_WORKSTATION_SEMANTICS, locale) {
+    const runtime = runtimePresentation(semantics.runtimeType, locale);
+    return {
+        ...semantics,
+        ...schedulingPresentation(semantics.schedulingBehavior, locale),
+        className: runtime.className,
+        iconKind: runtime.iconKind,
+        label: runtime.label,
+    };
+}
+function runtimePresentation(runtimeType, locale) {
     const chinese = locale === "zh-CN";
-    const values = {
-        CRON: {
-            borderClassName: "border-dashed",
-            className: "text-success",
-            iconKind: "cron",
-            semanticKind: "CRON",
-        },
-        POLLER: {
-            borderClassName: "border-dotted",
-            className: "text-primary",
-            iconKind: "poller",
-            semanticKind: "POLLER",
-        },
-        REPEATER: {
-            borderClassName: "border-double",
-            className: "text-info",
-            iconKind: "repeater",
-            semanticKind: "REPEATER",
-        },
-        STANDARD: {
-            className: "text-on-surface-subtle",
-            iconKind: "workstation",
-            semanticKind: "STANDARD",
-        },
-        exhaustion: {
-            className: "text-error",
-            iconKind: "exhaustion",
-            semanticKind: "exhaustion",
-        },
-    };
+    const runtimeRole = factoryGraphWorkstationRuntimeRole(runtimeType);
     const labels = {
-        CRON: chinese ? "Cron 工作站" : "Cron workstation",
-        POLLER: chinese ? "轮询器工作站" : "Poller workstation",
-        REPEATER: chinese ? "重复器工作站" : "Repeater workstation",
-        STANDARD: chinese ? "标准工作站" : "Standard workstation",
-        exhaustion: chinese ? "耗尽规则" : "Exhaustion rule",
+        AGENT: chinese ? "代理" : "Agent",
+        CLASSIFIER: chinese ? "分类器" : "Classifier",
+        HUMAN_APPROVAL: chinese ? "人工审批" : "Human approval",
+        INFERENCE: chinese ? "推理" : "Inference",
+        LOGICAL_MOVE: chinese ? "逻辑移动" : "Logical move",
+        POLLER: chinese ? "轮询" : "Poller",
+        SCRIPT: chinese ? "脚本" : "Script",
+        UNKNOWN: chinese ? "未知" : "Unknown",
     };
-    return { ...values[semanticKind], label: labels[semanticKind] };
+    const iconKinds = {
+        AGENT: "workstation",
+        CLASSIFIER: "queue",
+        HUMAN_APPROVAL: "constraint",
+        INFERENCE: "processing",
+        LOGICAL_MOVE: "workstation",
+        POLLER: "poller",
+        SCRIPT: "workstation",
+        UNKNOWN: "workstation",
+    };
+    return {
+        className: "text-on-surface-subtle",
+        iconKind: iconKinds[runtimeRole],
+        label: labels[runtimeRole],
+    };
+}
+function schedulingPresentation(behavior, locale) {
+    const chinese = locale === "zh-CN";
+    switch (behavior) {
+        case WorkstationKind.CRON:
+            return {
+                borderClassName: "border-dashed",
+                schedulingLabel: "Cron",
+            };
+        case WorkstationKind.POLLER:
+            return {
+                borderClassName: "border-dotted",
+                schedulingLabel: chinese ? "轮询" : "Poller",
+            };
+        case WorkstationKind.REPEATER:
+            return {
+                borderClassName: "border-double",
+                schedulingLabel: chinese ? "重复器" : "Repeater",
+            };
+        case WorkstationKind.STANDARD:
+            return { schedulingLabel: undefined };
+        case "UNKNOWN":
+            return {
+                schedulingLabel: chinese ? "默认调度器" : "Default scheduler",
+            };
+    }
+}
+export function factoryGraphWorkstationControlRoleLabel(controlRole, locale) {
+    if (locale === "zh-CN") {
+        switch (controlRole) {
+            case "CLASSIFIER":
+                return "分类器路由";
+            case "HUMAN_APPROVAL":
+                return "人工审批";
+            case "LOGICAL_ROUTER":
+                return "逻辑路由";
+            case "LOOP_BREAKER":
+                return "循环断路器";
+            case "NONE":
+                return "无控制角色";
+            case "UNKNOWN":
+                return "控制角色未知";
+        }
+    }
+    switch (controlRole) {
+        case "CLASSIFIER":
+            return "Classifier route";
+        case "HUMAN_APPROVAL":
+            return "Human approval";
+        case "LOGICAL_ROUTER":
+            return "Logical router";
+        case "LOOP_BREAKER":
+            return "Loop breaker";
+        case "NONE":
+            return "No control role";
+        case "UNKNOWN":
+            return "Unknown control role";
+    }
+}
+export function factoryGraphWorkstationGuardLimitValue(control) {
+    const fixed = control.limit.fixed === undefined ? undefined : String(control.limit.fixed);
+    const argument = control.limit.argument;
+    if (fixed && argument)
+        return `${fixed} (${argument})`;
+    return fixed ?? argument ?? "Unknown";
+}
+export function factoryGraphWorkstationGuardTargetLabel(locale) {
+    return locale === "zh-CN" ? "目标工作站" : "Target workstation";
+}
+export function factoryGraphWorkstationGuardLimitLabel(locale) {
+    return locale === "zh-CN" ? "访问上限" : "Visit limit";
 }
 export function factoryGraphWorkItemLabel(item) {
     return item.display_name?.trim() || item.work_id?.trim() || "Unknown work";
@@ -86,11 +146,6 @@ export function factoryGraphSelectWorkstationLabel(title, locale) {
         ? `选择 ${title} 工作站`
         : `Select ${title} workstation`;
 }
-export function factoryGraphSelectExhaustionLabel(title, locale) {
-    return locale === "zh-CN"
-        ? `选择 ${title} 枯竭规则`
-        : `Select ${title} exhaustion rule`;
-}
 export function factoryGraphWorkstationTitleClassName(label) {
     return factoryGraphNodeTitleClassName(factoryGraphClassNames("basis-0 flex-1", label.length > 34
         ? "text-[0.78rem]"
@@ -99,7 +154,7 @@ export function factoryGraphWorkstationTitleClassName(label) {
             : "text-[1rem]"));
 }
 export function factoryGraphWorkItemLabelClassName(label) {
-    return factoryGraphClassNames("block min-w-0 basis-0 flex-1 truncate whitespace-nowrap leading-tight", label.length > 58
+    return factoryGraphClassNames(factoryGraphNodeWrappedTextClassName("block basis-0 flex-1 leading-tight"), label.length > 58
         ? "text-[0.64rem]"
         : label.length > 38
             ? "text-[0.68rem]"

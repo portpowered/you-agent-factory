@@ -104,14 +104,14 @@ func TestJavaScriptRuntimeService_StartSyncStreamsCanonicalPhaseBeforeCompletion
 	service := newJavaScriptRuntimeService(t, workflows)
 	request := simpleFinalSyncStartRequest()
 	request.RequestID = "req-runtime-sync-live-events-001"
-	eventBatches := make(chan []interfaces.FactoryEvent, 8)
-	request.EventConsumer = func(events []interfaces.FactoryEvent) {
-		eventBatches <- events
+	type syncResult struct {
+		started fse.SyncStartResult
+		err     error
 	}
-	done := make(chan error, 1)
+	done := make(chan syncResult, 1)
 	go func() {
-		_, err := service.StartSync(context.Background(), request)
-		done <- err
+		started, err := service.StartSync(context.Background(), request)
+		done <- syncResult{started: started, err: err}
 	}()
 
 	select {
@@ -119,55 +119,34 @@ func TestJavaScriptRuntimeService_StartSyncStreamsCanonicalPhaseBeforeCompletion
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for live JavaScript phase")
 	}
-	observed := collectFactoryEventTypes(eventBatches)
-	if !containsFactoryEventType(observed, interfaces.FactoryEventTypeOrchestratorPhaseChanged) {
-		t.Fatalf("events before completion = %v, want ORCHESTRATOR_PHASE_CHANGED", observed)
-	}
 	select {
-	case err := <-done:
-		t.Fatalf("StartSync completed before workflow release: %v", err)
+	case result := <-done:
+		t.Fatalf("StartSync completed before workflow release: %v", result.err)
 	default:
 	}
 
 	close(release)
-	if err := <-done; err != nil {
-		t.Fatalf("StartSync: %v", err)
+	result := <-done
+	if result.err != nil {
+		t.Fatalf("StartSync: %v", result.err)
 	}
-	observed = append(observed, collectFactoryEventTypes(eventBatches)...)
-	phaseIndex := indexFactoryEventType(observed, interfaces.FactoryEventTypeOrchestratorPhaseChanged)
-	checkpointIndex := indexFactoryEventType(observed, interfaces.FactoryEventTypeOrchestratorCheckpointWritten)
-	if phaseIndex < 0 || checkpointIndex <= phaseIndex {
-		t.Fatalf("canonical JavaScript event order = %v", observed)
+	replayed, err := service.ReadEvents(context.Background(), result.started.SessionID, fse.EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents: %v", err)
 	}
-}
-
-func collectFactoryEventTypes(batches <-chan []interfaces.FactoryEvent) []interfaces.FactoryEventType {
-	var eventTypes []interfaces.FactoryEventType
-	for {
-		select {
-		case events := <-batches:
-			for _, event := range events {
-				eventTypes = append(eventTypes, event.Type)
-			}
-		default:
-			return eventTypes
-		}
+	observed := decodeCanonicalFactoryEvents(t, replayed.Events)
+	if indexFactoryEventType(observed, interfaces.FactoryEventTypeOrchestratorPhaseChanged) < 0 ||
+		indexFactoryEventType(observed, interfaces.FactoryEventTypeOrchestratorCheckpointWritten) < 0 {
+		t.Fatalf("canonical JavaScript events = %v", observed)
 	}
-}
-
-func containsFactoryEventType(
-	eventTypes []interfaces.FactoryEventType,
-	want interfaces.FactoryEventType,
-) bool {
-	return indexFactoryEventType(eventTypes, want) >= 0
 }
 
 func indexFactoryEventType(
-	eventTypes []interfaces.FactoryEventType,
+	events []interfaces.FactoryEvent,
 	want interfaces.FactoryEventType,
 ) int {
-	for index, eventType := range eventTypes {
-		if eventType == want {
+	for index, event := range events {
+		if event.Type == want {
 			return index
 		}
 	}

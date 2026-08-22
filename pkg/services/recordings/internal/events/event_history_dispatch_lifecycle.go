@@ -6,6 +6,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -17,6 +18,138 @@ const (
 	eventIDDispatchReconciledPrefix  = "factory-event/dispatch-reconciled"
 	eventIDArtifactCreatedPrefix     = "factory-event/artifact-created"
 )
+
+func (subscription *eventHistorySubscription) offer(event interfaces.FactoryEvent) bool {
+	subscription.pendingMu.Lock()
+	select {
+	case <-subscription.done:
+		subscription.pendingMu.Unlock()
+		return true
+	case <-subscription.overflow:
+		subscription.pendingMu.Unlock()
+		return true
+	case <-subscription.terminal:
+		subscription.pendingMu.Unlock()
+		return true
+	default:
+	}
+	if subscription.terminalClosed {
+		subscription.pendingMu.Unlock()
+		return true
+	}
+	if subscription.pending >= subscription.limit {
+		subscription.pendingMu.Unlock()
+		return false
+	}
+	subscription.pending++
+	subscription.pendingMu.Unlock()
+
+	select {
+	case <-subscription.done:
+		subscription.releasePending()
+	case <-subscription.overflow:
+		subscription.releasePending()
+	case <-subscription.terminal:
+		subscription.releasePending()
+	case subscription.inbox <- event:
+	default:
+		subscription.releasePending()
+		return false
+	}
+	return true
+}
+
+func (subscription *eventHistorySubscription) releasePending() {
+	subscription.pendingMu.Lock()
+	if subscription.pending > 0 {
+		subscription.pending--
+	}
+	subscription.pendingMu.Unlock()
+}
+
+func (subscription *eventHistorySubscription) drainTerminalEvents() bool {
+	for {
+		select {
+		case <-subscription.done:
+			return false
+		case event := <-subscription.inbox:
+			select {
+			case <-subscription.done:
+				subscription.releasePending()
+				return false
+			case <-subscription.overflow:
+				subscription.releasePending()
+				return false
+			case subscription.events <- event.Clone():
+				subscription.releasePending()
+			}
+		default:
+			return true
+		}
+	}
+}
+
+func (h *FactoryEventHistory) relayLiveSubscription(id int, subscription *eventHistorySubscription) {
+	defer close(subscription.drained)
+	defer func() {
+		h.mu.Lock()
+		delete(h.streams, id)
+		h.mu.Unlock()
+	}()
+	defer close(subscription.events)
+	for {
+		select {
+		case <-subscription.done:
+			return
+		case <-subscription.overflow:
+			return
+		case <-subscription.terminal:
+			if !subscription.drainTerminalEvents() {
+				return
+			}
+			return
+		case event := <-subscription.inbox:
+			select {
+			case <-subscription.done:
+				subscription.releasePending()
+				return
+			case <-subscription.overflow:
+				subscription.releasePending()
+				return
+			case subscription.events <- event.Clone():
+				subscription.releasePending()
+			}
+		}
+	}
+}
+
+func cloneFactoryEventsForStream(
+	events []interfaces.FactoryEvent,
+	scope interfaces.FactoryEventReconnectScope,
+) []interfaces.FactoryEvent {
+	dispatchID := strings.TrimSpace(scope.DispatchID)
+	filtered := make([]interfaces.FactoryEvent, 0, len(events))
+	for _, event := range events {
+		if dispatchID != "" && !factoryEventBelongsToDispatch(event, dispatchID) {
+			continue
+		}
+		filtered = append(filtered, event.Clone())
+	}
+	if scope.HistoryLimit <= 0 {
+		return filtered
+	}
+	if len(filtered) <= scope.HistoryLimit {
+		return filtered
+	}
+	return filtered[len(filtered)-scope.HistoryLimit:]
+}
+
+func factoryEventBelongsToDispatch(event interfaces.FactoryEvent, dispatchID string) bool {
+	if event.Context.DispatchID == nil {
+		return false
+	}
+	return strings.TrimSpace(*event.Context.DispatchID) == dispatchID
+}
 
 // DispatchQueuedInput carries replay-safe facts for DISPATCH_QUEUED.
 type DispatchQueuedInput struct {
@@ -41,6 +174,21 @@ type DispatchQueuedInput struct {
 	SchemaDigest        string
 	InputArtifactIDs    []string
 	InputWorkIDs        []string
+	SkipPermissions     bool
+}
+
+func isJavaScriptDispatch(kind interfaces.FactoryDispatchKind) bool {
+	switch kind {
+	case interfaces.FactoryDispatchKindJavaScriptAgent,
+		interfaces.FactoryDispatchKindJavaScriptScript,
+		interfaces.FactoryDispatchKindJavaScriptSynthesize,
+		interfaces.FactoryDispatchKindJavaScriptSystem,
+		interfaces.FactoryDispatchKindJavaScriptTool,
+		interfaces.FactoryDispatchKindJavaScriptVerify:
+		return true
+	default:
+		return false
+	}
 }
 
 // DispatchInterruptedInput carries replay-safe facts for DISPATCH_INTERRUPTED.
@@ -56,7 +204,7 @@ type DispatchInterruptedInput struct {
 	Reason              string
 	ObservedStatus      interfaces.FactoryDispatchStatus
 	RetryPlanned        bool
-	ProviderSessionRef  *workerexecution.ProviderSessionMetadata
+	ProviderSessionRef  *providers.SessionMetadata
 	CheckpointRef       *interfaces.FactorySessionJavaScriptCheckpointEventRef
 }
 
@@ -145,6 +293,10 @@ func (h *FactoryEventHistory) RecordDispatchQueued(input DispatchQueuedInput, ev
 	}
 	if schemaDigest := strings.TrimSpace(input.SchemaDigest); schemaDigest != "" {
 		payload.SchemaDigest = &schemaDigest
+	}
+	if isJavaScriptDispatch(input.DispatchKind) {
+		skipPermissions := input.SkipPermissions
+		payload.SkipPermissions = &skipPermissions
 	}
 	if len(input.InputArtifactIDs) > 0 {
 		artifactIDs := append([]string(nil), input.InputArtifactIDs...)
@@ -437,7 +589,10 @@ func synthesizeDispatchReconciliationEvents(
 		return nil, nil
 	}
 
-	ackDispatches := dispatchStatesByID(ackState.JavaScriptRuntime.Dispatches)
+	ackDispatches := make(map[string]interfaces.FactorySessionDispatchState)
+	if ackState.JavaScriptRuntime != nil {
+		ackDispatches = dispatchStatesByID(ackState.JavaScriptRuntime.Dispatches)
+	}
 	missedDispatchCoverage := dispatchLifecycleCoverage(missed)
 	now := latestCanonicalEventTime(events)
 	synthetic := make([]interfaces.FactoryEvent, 0)
@@ -631,4 +786,100 @@ func maxEventTick(events []interfaces.FactoryEvent) int {
 		}
 	}
 	return tick
+}
+
+// RecordModelEvent appends worker-owned model execution facts to canonical
+// history while Factory owns the envelope, vocabulary, and ordering.
+func (h *FactoryEventHistory) RecordModelEvent(event workerexecution.ModelEvent) {
+	if h == nil || strings.TrimSpace(event.ID) == "" || strings.TrimSpace(event.DispatchID) == "" {
+		return
+	}
+	eventType, payload := modelFactoryEventPayload(event)
+	if eventType == "" || payload == nil {
+		return
+	}
+	h.appendEvent(domainFactoryEvent(
+		eventType,
+		event.ID,
+		h.sessionScopedContext(interfaces.FactoryEventContext{
+			Tick:       event.Tick,
+			EventTime:  interfaces.CanonicalEventTime(event.EventTime),
+			DispatchID: stringPtrIfNotEmpty(event.DispatchID),
+			RequestID:  stringPtrIfNotEmpty(event.RequestID),
+			TraceIDs:   stringSlicePtr(event.TraceIDs),
+			WorkIDs:    stringSlicePtr(event.WorkIDs),
+		}),
+		payload,
+	))
+}
+
+func modelFactoryEventPayload(event workerexecution.ModelEvent) (interfaces.FactoryEventType, any) {
+	switch event.Kind {
+	case workerexecution.ModelEventKindRequest:
+		if event.Request != nil && event.Response == nil {
+			return interfaces.FactoryEventTypeModelRequest, *event.Request
+		}
+	case workerexecution.ModelEventKindResponse:
+		if event.Response != nil && event.Request == nil {
+			return interfaces.FactoryEventTypeModelResponse, *event.Response
+		}
+	}
+	return "", nil
+}
+
+// RecordScriptEvent appends worker-owned script facts to the canonical history
+// while Factory owns the envelope, vocabulary, and ordering.
+func (h *FactoryEventHistory) RecordScriptEvent(event workerexecution.ScriptEvent) {
+	if h == nil || strings.TrimSpace(event.ID) == "" || strings.TrimSpace(event.DispatchID) == "" {
+		return
+	}
+	eventType, payload := scriptFactoryEventPayload(event)
+	if eventType == "" || payload == nil {
+		return
+	}
+	h.appendEvent(domainFactoryEvent(
+		eventType,
+		event.ID,
+		h.sessionScopedContext(interfaces.FactoryEventContext{
+			Tick:       event.Tick,
+			EventTime:  interfaces.CanonicalEventTime(event.EventTime),
+			DispatchID: stringPtrIfNotEmpty(event.DispatchID),
+			RequestID:  stringPtrIfNotEmpty(event.RequestID),
+			TraceIDs:   stringSlicePtr(event.TraceIDs),
+			WorkIDs:    stringSlicePtr(event.WorkIDs),
+		}),
+		payload,
+	))
+}
+
+func scriptFactoryEventPayload(event workerexecution.ScriptEvent) (interfaces.FactoryEventType, any) {
+	switch event.Kind {
+	case workerexecution.ScriptEventKindRequest:
+		if event.Request != nil && event.Response == nil {
+			return interfaces.FactoryEventTypeScriptRequest, *event.Request
+		}
+	case workerexecution.ScriptEventKindResponse:
+		if event.Response != nil && event.Request == nil {
+			return interfaces.FactoryEventTypeScriptResponse, *event.Response
+		}
+	}
+	return "", nil
+}
+
+// RecordAgentRunEvent appends an agent-run boundary event to the same
+// canonical history used for dispatch and replay events.
+func (h *FactoryEventHistory) RecordAgentRunEvent(event workerexecution.AgentRunResponseEvent) {
+	if h == nil || strings.TrimSpace(event.ID) == "" || strings.TrimSpace(event.DispatchID) == "" {
+		return
+	}
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeAgentRunResponse,
+		event.ID,
+		h.sessionScopedContext(interfaces.FactoryEventContext{
+			Tick:       event.Tick,
+			EventTime:  interfaces.CanonicalEventTime(event.EventTime),
+			DispatchID: stringPtr(event.DispatchID),
+		}),
+		event.Payload,
+	))
 }

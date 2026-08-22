@@ -12,9 +12,15 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	costshttp "github.com/portpowered/infinite-you/pkg/services/costs/transports/http"
+	factorydefinitionshttp "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
+	factoryvisualizationhttp "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
+	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
+	workersessionshttp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	dashboardui "github.com/portpowered/infinite-you/ui"
 	"go.uber.org/zap"
@@ -26,31 +32,378 @@ var _ factoryapi.ServerInterface = (*Server)(nil)
 
 // Server is the REST API server for the agent-factory.
 type Server struct {
-	*factorysessionshttp.Adapter
-	modelsHTTP       *modelshttp.Handler
-	providerSessions providersessions.Service
-	logger           *zap.Logger
-	router           *mux.Router
+	*factorySessionsAdapter
+	*workAdapter
+	recordingsHTTP         *recordingshttp.Adapter
+	factoryDefinitionsHTTP *factorydefinitionshttp.Handler
+	modelsHTTP             *modelshttp.Handler
+	providerSessionsHTTP   *providersessionshttp.Handler
+	workerSessionsHTTP     *workersessionshttp.Handler
+	metricsHTTP            *factoryvisualizationhttp.MetricsHandler
+	costsHTTP              *costshttp.Handler
+	logger                 *zap.Logger
+	router                 *mux.Router
 }
+
+type factorySessionsAdapter struct{ *factorysessionshttp.Adapter }
+type workAdapter struct{ *workhttp.Adapter }
 
 // NewServer composes an immutable generated HTTP server from dependencies
 // selected by Wire and the opened Factory Session. It performs no dependency
 // construction or service lookup.
 func NewServer(
 	factorySessionsHTTP *factorysessionshttp.Handler,
+	workHTTP *workhttp.Adapter,
 	modelsHTTP *modelshttp.Handler,
-	providerSessions providersessions.Service,
+	providerSessionsHTTP *providersessionshttp.Handler,
+	factoryDefinitionsHTTP *factorydefinitionshttp.Handler,
 	logger *zap.Logger,
+	workerSessions ...*workersessionshttp.Handler,
+) *Server {
+	return newServer(nil, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, nil, nil, workerSessions...)
+}
+
+// NewServerWithRecordings composes the generated route shell with the
+// Recordings-owned history and artifact adapter. Standalone durable-execution
+// compatibility is contained inside that owner adapter until its callers move.
+func NewServerWithRecordings(
+	recordingsHTTP *recordingshttp.Adapter,
+	factorySessionsHTTP *factorysessionshttp.Handler,
+	workHTTP *workhttp.Adapter,
+	modelsHTTP *modelshttp.Handler,
+	providerSessionsHTTP *providersessionshttp.Handler,
+	factoryDefinitionsHTTP *factorydefinitionshttp.Handler,
+	logger *zap.Logger,
+	workerSessions ...*workersessionshttp.Handler,
+) *Server {
+	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, nil, nil, workerSessions...)
+}
+
+// NewServerWithRecordingsAndCosts composes the generated route shell with the
+// Recordings and Costs owner adapters for a live runtime. The older
+// constructors remain available for focused transport fixtures that do not
+// need the cost-report route.
+func NewServerWithRecordingsAndCosts(
+	recordingsHTTP *recordingshttp.Adapter,
+	factorySessionsHTTP *factorysessionshttp.Handler,
+	workHTTP *workhttp.Adapter,
+	modelsHTTP *modelshttp.Handler,
+	providerSessionsHTTP *providersessionshttp.Handler,
+	factoryDefinitionsHTTP *factorydefinitionshttp.Handler,
+	logger *zap.Logger,
+	costsHTTP *costshttp.Handler,
+	workerSessions ...*workersessionshttp.Handler,
+) *Server {
+	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, nil, costsHTTP, workerSessions...)
+}
+
+// NewServerWithRecordingsAndMetricsAndCosts composes the generated route shell
+// with the canonical Visualization metrics and Costs owner adapters for a
+// live runtime. The older constructors remain available for focused
+// transport fixtures that do not need these routes.
+func NewServerWithRecordingsAndMetricsAndCosts(
+	recordingsHTTP *recordingshttp.Adapter,
+	factorySessionsHTTP *factorysessionshttp.Handler,
+	workHTTP *workhttp.Adapter,
+	modelsHTTP *modelshttp.Handler,
+	providerSessionsHTTP *providersessionshttp.Handler,
+	factoryDefinitionsHTTP *factorydefinitionshttp.Handler,
+	logger *zap.Logger,
+	metricsHTTP *factoryvisualizationhttp.MetricsHandler,
+	costsHTTP *costshttp.Handler,
+	workerSessions ...*workersessionshttp.Handler,
+) *Server {
+	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, metricsHTTP, costsHTTP, workerSessions...)
+}
+
+func newServer(
+	recordingsHTTP *recordingshttp.Adapter,
+	factorySessionsHTTP *factorysessionshttp.Handler,
+	workHTTP *workhttp.Adapter,
+	modelsHTTP *modelshttp.Handler,
+	providerSessionsHTTP *providersessionshttp.Handler,
+	factoryDefinitionsHTTP *factorydefinitionshttp.Handler,
+	logger *zap.Logger,
+	metricsHTTP *factoryvisualizationhttp.MetricsHandler,
+	costsHTTP *costshttp.Handler,
+	workerSessions ...*workersessionshttp.Handler,
 ) *Server {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
+	if workHTTP != nil {
+		workHTTP = workHTTP.WithLogger(logger)
+	}
 	srv := &Server{
-		Adapter:    factorySessionsHTTP,
-		modelsHTTP: modelsHTTP, providerSessions: providerSessions, logger: logger,
+		factorySessionsAdapter: &factorySessionsAdapter{Adapter: factorySessionsHTTP},
+		workAdapter:            &workAdapter{Adapter: workHTTP},
+		recordingsHTTP:         recordingsHTTP,
+		factoryDefinitionsHTTP: factoryDefinitionsHTTP,
+		modelsHTTP:             modelsHTTP, providerSessionsHTTP: providerSessionsHTTP, logger: logger,
+		metricsHTTP: metricsHTTP,
+		costsHTTP:   costsHTTP,
+	}
+	if len(workerSessions) > 0 {
+		srv.workerSessionsHTTP = workerSessions[0]
 	}
 	srv.router = srv.buildRouter()
 	return srv
+}
+
+// StartWorkerSession forwards the global asynchronous start operation to the
+// Worker Sessions owner handler.
+func (s *Server) StartWorkerSession(w http.ResponseWriter, r *http.Request) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.StartWorkerSession(w, r)
+}
+
+// ContinueWorkerSession forwards the source-addressed continuation operation
+// to the Worker Sessions owner handler.
+func (s *Server) ContinueWorkerSession(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.ContinueWorkerSession(w, r, workerSessionID)
+}
+
+// InterruptWorkerSession forwards the source-addressed interrupt-and-replace
+// operation to the Worker Sessions owner handler.
+func (s *Server) InterruptWorkerSession(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.InterruptWorkerSession(w, r, workerSessionID)
+}
+
+// PauseWorkerSession forwards the source-addressed pause control to the
+// Worker Sessions owner handler.
+func (s *Server) PauseWorkerSession(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.PauseWorkerSession(w, r, workerSessionID)
+}
+
+// ResumeWorkerSession forwards the source-addressed resume control to the
+// Worker Sessions owner handler.
+func (s *Server) ResumeWorkerSession(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.ResumeWorkerSession(w, r, workerSessionID)
+}
+
+// CancelWorkerSession forwards the source-addressed cancel control to the
+// Worker Sessions owner handler.
+func (s *Server) CancelWorkerSession(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.CancelWorkerSession(w, r, workerSessionID)
+}
+
+// TerminateWorkerSession forwards the source-addressed terminate control to
+// the Worker Sessions owner handler.
+func (s *Server) TerminateWorkerSession(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.TerminateWorkerSession(w, r, workerSessionID)
+}
+
+// ListWorkerSessions forwards the top-level Worker Session observation list.
+func (s *Server) ListWorkerSessions(
+	w http.ResponseWriter,
+	r *http.Request,
+	params factoryapi.ListWorkerSessionsParams,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.ListWorkerSessions(w, r, params)
+}
+
+// GetWorkerSessionObservationByWorkerSessionId forwards the top-level
+// identity detail operation.
+func (s *Server) GetWorkerSessionObservationByWorkerSessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.GetWorkerSessionObservationByWorkerSessionId(w, r, workerSessionID)
+}
+
+// ReadWorkerSessionTranscriptByWorkerSessionId forwards top-level transcript
+// projection by stable Worker Session identity.
+func (s *Server) ReadWorkerSessionTranscriptByWorkerSessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.ReadWorkerSessionTranscriptByWorkerSessionId(w, r, workerSessionID)
+}
+
+// StreamWorkerSessionEventsByTopLevelWorkerSessionId forwards the top-level
+// identity event stream.
+func (s *Server) StreamWorkerSessionEventsByTopLevelWorkerSessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	workerSessionID factoryapi.WorkerSessionID,
+	params factoryapi.StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.StreamWorkerSessionEventsByTopLevelWorkerSessionId(w, r, workerSessionID, params)
+}
+
+// ListWorkerSessionsBySessionId forwards the generated operation to the
+// Worker Sessions owner handler.
+func (s *Server) ListWorkerSessionsBySessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	params factoryapi.ListWorkerSessionsBySessionIdParams,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.ListWorkerSessionsBySessionId(w, r, sessionID, params)
+}
+
+// GetWorkerSessionObservationBySessionId forwards the generated operation to
+// the Worker Sessions owner handler.
+func (s *Server) GetWorkerSessionObservationBySessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	params factoryapi.GetWorkerSessionObservationBySessionIdParams,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.GetWorkerSessionObservationBySessionId(w, r, sessionID, params)
+}
+
+// GetWorkerSessionObservationByFactorySessionAndWorkerSessionId forwards the canonical
+// Worker-ID observation operation to the Worker Sessions owner handler.
+func (s *Server) GetWorkerSessionObservationByFactorySessionAndWorkerSessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.GetWorkerSessionObservationByFactorySessionAndWorkerSessionId(w, r, sessionID, workerSessionID)
+}
+
+// ReadWorkerSessionTranscriptBySessionId forwards the generated operation to
+// the Worker Sessions owner handler.
+func (s *Server) ReadWorkerSessionTranscriptBySessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	params factoryapi.ReadWorkerSessionTranscriptBySessionIdParams,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.ReadWorkerSessionTranscriptBySessionId(w, r, sessionID, params)
+}
+
+// ReadWorkerSessionTranscriptByFactorySessionAndWorkerSessionId forwards the canonical
+// Worker-ID transcript operation to the Worker Sessions owner handler.
+func (s *Server) ReadWorkerSessionTranscriptByFactorySessionAndWorkerSessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	workerSessionID factoryapi.WorkerSessionID,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.ReadWorkerSessionTranscriptByFactorySessionAndWorkerSessionId(w, r, sessionID, workerSessionID)
+}
+
+// StreamWorkerSessionEventsBySessionId forwards the generated operation to
+// the Worker Sessions owner handler.
+func (s *Server) StreamWorkerSessionEventsBySessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	params factoryapi.StreamWorkerSessionEventsBySessionIdParams,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.StreamWorkerSessionEventsBySessionId(w, r, sessionID, params)
+}
+
+// StreamWorkerSessionEventsByWorkerSessionId forwards the provider-neutral
+// Worker Session identity stream to the Worker Sessions owner handler.
+func (s *Server) StreamWorkerSessionEventsByWorkerSessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	workerSessionID factoryapi.WorkerSessionID,
+	params factoryapi.StreamWorkerSessionEventsByWorkerSessionIdParams,
+) {
+	if s.workerSessionsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Worker Sessions handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.workerSessionsHTTP.StreamWorkerSessionEventsByWorkerSessionId(w, r, sessionID, workerSessionID, params)
 }
 
 var noModTime = time.Time{}
@@ -58,6 +411,44 @@ var noModTime = time.Time{}
 // Handler returns the http.Handler for testing and composition.
 func (s *Server) Handler() http.Handler {
 	return s.router
+}
+
+// GetProviderSessionDetails forwards the generated operation to the Provider
+// Sessions owner handler without changing its request or response values.
+func (s *Server) GetProviderSessionDetails(
+	w http.ResponseWriter,
+	r *http.Request,
+	params factoryapi.GetProviderSessionDetailsParams,
+) {
+	s.providerSessionsHTTP.GetProviderSessionDetails(w, r, params)
+}
+
+// GetMetrics forwards the generated operation to the Factory Visualization
+// metrics owner handler. The top-level transport owns only route composition.
+func (s *Server) GetMetrics(
+	w http.ResponseWriter,
+	r *http.Request,
+	params factoryapi.GetMetricsParams,
+) {
+	if s == nil || s.metricsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Visualization metrics handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.metricsHTTP.GetMetrics(w, r, params)
+}
+
+// GetMetricsCosts forwards the generated operation to the Costs owner
+// handler. The top-level transport owns only route composition.
+func (s *Server) GetMetricsCosts(
+	w http.ResponseWriter,
+	r *http.Request,
+	params factoryapi.GetMetricsCostsParams,
+) {
+	if s == nil || s.costsHTTP == nil {
+		s.writeError(w, http.StatusInternalServerError, "Costs handler is unavailable", "INTERNAL_ERROR")
+		return
+	}
+	s.costsHTTP.GetMetricsCosts(w, r, params)
 }
 
 func (s *Server) buildRouter() *mux.Router {
@@ -133,4 +524,90 @@ func (s *Server) serveDashboardIndex(w http.ResponseWriter, r *http.Request, dis
 	}
 
 	http.ServeContent(w, r, dashboardUIIndexFile, noModTime, readSeeker)
+}
+
+// GetEventsBySessionId routes canonical Factory Event history to Recordings.
+func (s *Server) GetEventsBySessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	params factoryapi.GetEventsBySessionIdParams,
+) {
+	if s != nil && s.recordingsHTTP != nil {
+		s.recordingsHTTP.GetEventsBySessionId(w, r, sessionID, params)
+		return
+	}
+	s.writeError(w, http.StatusInternalServerError, "Recordings handler is unavailable", "INTERNAL_ERROR")
+}
+
+// GetFactorySessionResults routes durable historical result projection to
+// Recordings.
+func (s *Server) GetFactorySessionResults(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	params factoryapi.GetFactorySessionResultsParams,
+) {
+	if s != nil && s.recordingsHTTP != nil {
+		s.recordingsHTTP.GetFactorySessionResults(w, r, sessionID, params)
+		return
+	}
+	s.writeError(w, http.StatusInternalServerError, "Recordings handler is unavailable", "INTERNAL_ERROR")
+}
+
+// ListFactorySessionDispatches routes durable dispatch history to Recordings.
+func (s *Server) ListFactorySessionDispatches(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	params factoryapi.ListFactorySessionDispatchesParams,
+) {
+	if s != nil && s.recordingsHTTP != nil {
+		s.recordingsHTTP.ListFactorySessionDispatches(w, r, sessionID, params)
+		return
+	}
+	s.writeError(w, http.StatusInternalServerError, "Recordings handler is unavailable", "INTERNAL_ERROR")
+}
+
+// GetFactorySessionDispatch routes one durable dispatch projection to
+// Recordings.
+func (s *Server) GetFactorySessionDispatch(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	dispatchID factoryapi.DispatchID,
+) {
+	if s != nil && s.recordingsHTTP != nil {
+		s.recordingsHTTP.GetFactorySessionDispatch(w, r, sessionID, dispatchID)
+		return
+	}
+	s.writeError(w, http.StatusInternalServerError, "Recordings handler is unavailable", "INTERNAL_ERROR")
+}
+
+// ListFactorySessionArtifacts routes durable artifact history to Recordings.
+func (s *Server) ListFactorySessionArtifacts(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+) {
+	if s != nil && s.recordingsHTTP != nil {
+		s.recordingsHTTP.ListFactorySessionArtifacts(w, r, sessionID)
+		return
+	}
+	s.writeError(w, http.StatusInternalServerError, "Recordings handler is unavailable", "INTERNAL_ERROR")
+}
+
+// GetFactorySessionArtifact routes one durable artifact projection to
+// Recordings.
+func (s *Server) GetFactorySessionArtifact(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	artifactID factoryapi.ArtifactID,
+) {
+	if s != nil && s.recordingsHTTP != nil {
+		s.recordingsHTTP.GetFactorySessionArtifact(w, r, sessionID, artifactID)
+		return
+	}
+	s.writeError(w, http.StatusInternalServerError, "Recordings handler is unavailable", "INTERNAL_ERROR")
 }

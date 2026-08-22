@@ -22,6 +22,7 @@ func NewServiceFromConfigDocument(
 			service.Decoder,
 			service.Encoder,
 			service.Providers,
+			service.DiagnosticDecoder,
 		)
 	}
 	resolutionService, err := constructResolutionService()
@@ -36,5 +37,6 @@ func NewServiceFromConfigDocument(
 		service.Decoder,
 		service.Encoder,
 		nil,
+		service.DiagnosticDecoder,
 	)
 }

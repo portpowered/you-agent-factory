@@ -9,6 +9,9 @@ workstation-scoped execution settings here. Keep worker backend fields in
 `you docs workers` and top-level `factory.json` work type and routing
 context in `you docs config`.
 
+For dispatch-time prompt reload and live Work or Worker Session inspection, use
+`you docs operations`.
+
 ## Split Layout And Ownership
 
 Keep workflow topology in `factory.json`, worker system instructions in
@@ -614,6 +617,37 @@ These fields can live inline on `workstations[]` or in the workstation
 | `env` | Environment variables passed to script or provider execution. Values are templates. |
 | `copyReferencedScripts` | `config expand` portability flag. When `true`, expand copies supported relative script references from the bound `SCRIPT_WORKER` into the expanded layout. Omitted means `false`. |
 | `body` | Inline markdown body used as prompt template when no prompt file or explicit prompt template is supplied. |
+
+## Structured JSON result channel
+
+Set `outputSchema` on a worker-backed workstation when downstream Work should
+consume validated JSON rather than parse prose or exchange an artifact file.
+The schema is evaluated against the worker response before the dispatch is
+accepted. A valid object, array, scalar, boolean, or explicit JSON `null` is
+stored as native `structuredResult` data on the resulting Work and is available
+to downstream templates as `.Inputs[n].StructuredResult`:
+
+```yaml
+workstations:
+  - name: classify
+    type: AGENT_RUN
+    outputSchema: '{"type":"object","properties":{"decision":{"type":"string"}},"required":["decision"],"additionalProperties":false}'
+    body: |
+      Return only JSON with a decision of "accept" or "reject".
+
+  - name: route
+    type: AGENT_RUN
+    body: |
+      Decision: {{ (index .Inputs 0).StructuredResult.decision }}
+```
+
+`you --json work list` exposes the same native value as `structuredResult`,
+while human list output renders deterministic compact JSON. `you work watch`
+includes it on the first transition line after the canonical Work receives the
+value and keeps each line as one complete JSON object. An invalid worker
+response fails with the typed `structured_output_schema_violation` dispatch
+failure and does not publish a structured result; older recordings and
+unstructured Work omit the field.
 
 Do not author new configs with `runtime_type`; use `type`. Do not rely on
 `worktree_cleanup`; that stale field is not part of the current public

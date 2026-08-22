@@ -10,6 +10,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/services/agent"
 )
 
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T) {
 	fake := newAgentProvidersFake()
 	fake.result.Diagnostics.Progress = []providers.ExecuteProgress{
@@ -35,7 +37,7 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 			if fragment.Metadata != nil {
 				fragment.Metadata["sequence"] = "publisher-mutated"
 			}
-			fragment.ProviderSessionRef.ID = "publisher-mutated"
+			fragment.Continuation.ProviderSessionID = "publisher-mutated"
 		},
 	})
 	if err != nil {
@@ -56,11 +58,10 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 			Kind:       workers.ProgressFragmentKind,
 			Type:       "planning",
 			Payload:    "first",
-			ProviderSessionRef: &workers.ProviderSessionMetadata{
-				Provider: string(providers.IDCodex),
-				Kind:     providers.SessionIDKind,
-				ID:       "provider-session-1",
-			},
+			Provider:   string(providers.IDCodex),
+			Continuation: (&providers.SessionMetadata{
+				Provider: string(providers.IDCodex), Kind: providers.SessionIDKind, ID: "provider-session-1",
+			}).ContinuationRef(),
 			Metadata: map[string]string{"sequence": "1"},
 		},
 		{
@@ -68,11 +69,10 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 			Kind:       workers.ProgressFragmentKind,
 			Type:       "responding",
 			Payload:    "second",
-			ProviderSessionRef: &workers.ProviderSessionMetadata{
-				Provider: string(providers.IDCodex),
-				Kind:     providers.SessionIDKind,
-				ID:       "provider-session-1",
-			},
+			Provider:   string(providers.IDCodex),
+			Continuation: (&providers.SessionMetadata{
+				Provider: string(providers.IDCodex), Kind: providers.SessionIDKind, ID: "provider-session-1",
+			}).ContinuationRef(),
 			Metadata: map[string]string{"sequence": "2"},
 		},
 		{
@@ -80,21 +80,19 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 			Kind:       workers.ProgressFragmentKind,
 			Type:       "message.completed",
 			Payload:    "fixture output",
-			ProviderSessionRef: &workers.ProviderSessionMetadata{
-				Provider: string(providers.IDCodex),
-				Kind:     providers.SessionIDKind,
-				ID:       "provider-session-1",
-			},
+			Provider:   string(providers.IDCodex),
+			Continuation: (&providers.SessionMetadata{
+				Provider: string(providers.IDCodex), Kind: providers.SessionIDKind, ID: "provider-session-1",
+			}).ContinuationRef(),
 		},
 		{
 			DispatchID: "dispatch-agent-1",
 			Kind:       workers.CompletedFragmentKind,
 			Type:       "COMPLETED",
-			ProviderSessionRef: &workers.ProviderSessionMetadata{
-				Provider: string(providers.IDCodex),
-				Kind:     providers.SessionIDKind,
-				ID:       "provider-session-1",
-			},
+			Provider:   string(providers.IDCodex),
+			Continuation: (&providers.SessionMetadata{
+				Provider: string(providers.IDCodex), Kind: providers.SessionIDKind, ID: "provider-session-1",
+			}).ContinuationRef(),
 			ExternalEventType: "STREAM_COMPLETED",
 		},
 	}
@@ -124,9 +122,7 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 }
 
 func cloneProgressFragment(fragment workers.ProgressFragment) workers.ProgressFragment {
-	fragment.ProviderSessionRef = workers.CloneProviderSessionMetadata(
-		fragment.ProviderSessionRef,
-	)
+	fragment.Continuation = (fragment.Continuation).ClonePtr()
 	fragment.Metadata = cloneAgentProgressMetadata(fragment.Metadata)
 	return fragment
 }

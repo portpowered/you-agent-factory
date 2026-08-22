@@ -44,6 +44,26 @@ def init_local_repo(repo_path):
 
 
 def write_prd(repo_path, prd_name, include_md=False):
+    exclude_path = repo_path / ".git" / "info" / "exclude"
+    existing_excludes = (
+        exclude_path.read_text(encoding="utf-8")
+        if exclude_path.exists()
+        else ""
+    )
+    missing_excludes = [
+        entry
+        for entry in ("tasks/todo/", ".claude/")
+        if entry not in existing_excludes.splitlines()
+    ]
+    if missing_excludes:
+        exclude_path.write_text(
+            existing_excludes.rstrip("\n")
+            + "\n"
+            + "\n".join(missing_excludes)
+            + "\n",
+            encoding="utf-8",
+        )
+
     tasks_dir = repo_path / "tasks" / "todo"
     tasks_dir.mkdir(parents=True)
     prd_json = tasks_dir / f"{prd_name}.json"
@@ -98,7 +118,7 @@ class SetupWorkspaceFailureTest(unittest.TestCase):
         original_prune = self.module.prune_worktrees
 
         def failing_prune(_repo_root):
-            raise RuntimeError(
+            raise ValueError(
                 "git worktree prune failed (exit 128): simulated prune failure"
             )
 
@@ -113,6 +133,171 @@ class SetupWorkspaceFailureTest(unittest.TestCase):
         self.assertIn("simulated prune failure", stderr)
         self.assertNotIn("Worktree preparation failed", stderr)
         self.assertNotIn("PRD copy failed", stderr)
+
+    def test_reports_prd_read_failure_with_bounded_unexpected_detail(self):
+        init_local_repo(self.repo_path)
+        prd_name = "prd-read-fail-prd"
+        write_prd(self.repo_path, prd_name)
+
+        def failing_read(_prd_path):
+            raise ValueError("malformed PRD detail\n" + ("x" * 5000))
+
+        original_read = self.module.read_prd
+        self.module.read_prd = failing_read
+        try:
+            exit_code, stderr = self.run_main_in_repo(prd_name)
+        finally:
+            self.module.read_prd = original_read
+
+        self.assertEqual(exit_code, 1)
+        self.assertLess(len(stderr), 1300)
+        self.assertLess(stderr.count("x"), 1100)
+        self.assertIn("Failed to read PRD: malformed PRD detail", stderr)
+        self.assertIn("more characters", stderr)
+        self.assertNotIn("Traceback", stderr)
+        self.assertNotIn("Root sync failed", stderr)
+
+    def test_reports_missing_prd_as_a_prd_read_failure(self):
+        init_local_repo(self.repo_path)
+        prd_name = "missing-prd"
+
+        result = run_setup_workspace(self.repo_path, prd_name)
+
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("Failed to read PRD:", result.stderr)
+        self.assertIn("PRD not found", result.stderr)
+        self.assertNotIn("Root sync failed", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_reports_unexpected_worktree_failure_with_stage_and_detail(self):
+        init_local_repo(self.repo_path)
+        prd_name = "worktree-unexpected-fail-prd"
+        write_prd(self.repo_path, prd_name)
+
+        def failing_worktree(*_args):
+            raise ValueError("simulated worktree preparation failure")
+
+        original_create = self.module.create_or_reuse_worktree
+        self.module.create_or_reuse_worktree = failing_worktree
+        try:
+            exit_code, stderr = self.run_main_in_repo(prd_name)
+        finally:
+            self.module.create_or_reuse_worktree = original_create
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn(
+            "Worktree preparation failed: simulated worktree preparation failure",
+            stderr,
+        )
+        self.assertNotIn("Traceback", stderr)
+        self.assertNotIn("Root sync failed", stderr)
+        self.assertNotIn("PRD copy failed", stderr)
+
+    def test_classifies_windows_reserved_path_with_manual_recovery(self):
+        init_local_repo(self.repo_path)
+        prd_name = "windows-reserved-path-prd"
+        write_prd(self.repo_path, prd_name)
+
+        def failing_worktree(*_args):
+            raise RuntimeError(
+                "git worktree add failed (exit 128): error: invalid path 'NUL'"
+            )
+
+        original_create = self.module.create_or_reuse_worktree
+        self.module.create_or_reuse_worktree = failing_worktree
+        try:
+            exit_code, stderr = self.run_main_in_repo(prd_name)
+        finally:
+            self.module.create_or_reuse_worktree = original_create
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("Worktree preparation failed:", stderr)
+        self.assertIn("Windows-reserved", stderr)
+        self.assertIn("literal NUL device name", stderr)
+        self.assertIn("manually back up", stderr)
+        self.assertIn("remove or rename", stderr)
+        self.assertIn("invalid path 'NUL'", stderr)
+        self.assertNotIn("Traceback", stderr)
+
+    @unittest.skipUnless(os.name == "nt", "Git path restriction is Windows-specific")
+    def test_classifies_reproducible_windows_reserved_nul_worktree_failure(self):
+        init_local_repo(self.repo_path)
+        prd_name = "windows-nul-fixture-prd"
+        write_prd(self.repo_path, prd_name)
+
+        blob = subprocess.run(
+            ["git", "hash-object", "-w", "--stdin"],
+            cwd=self.repo_path,
+            input=b"reserved path\n",
+            capture_output=True,
+            check=True,
+        ).stdout.decode().strip()
+        tree = subprocess.run(
+            ["git", "mktree"],
+            cwd=self.repo_path,
+            input=(
+                "100644 blob "
+                + blob
+                + chr(9)
+                + "NUL"
+                + chr(10)
+            ).encode(),
+            capture_output=True,
+            check=True,
+        ).stdout.decode().strip()
+        commit = subprocess.run(
+            ["git", "commit-tree", tree, "-m", "reserved path fixture"],
+            cwd=self.repo_path,
+            capture_output=True,
+            check=True,
+        ).stdout.decode().strip()
+        subprocess.run(
+            ["git", "update-ref", f"refs/heads/{prd_name}", commit],
+            cwd=self.repo_path,
+            check=True,
+        )
+
+        result = run_setup_workspace(self.repo_path, prd_name)
+
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("Worktree preparation failed:", result.stderr)
+        self.assertIn("Windows-reserved", result.stderr)
+        self.assertIn("literal NUL device name", result.stderr)
+        self.assertIn("manually back up", result.stderr)
+        self.assertIn("remove or rename", result.stderr)
+        self.assertIn("invalid path 'NUL'", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_reports_unexpected_prd_copy_failure_with_stage_and_detail(self):
+        init_local_repo(self.repo_path)
+        prd_name = "prd-copy-unexpected-fail-prd"
+        write_prd(self.repo_path, prd_name)
+
+        with mock.patch.object(
+            self.module,
+            "sync_main",
+            return_value="already up to date",
+        ), mock.patch.object(
+            self.module,
+            "prune_worktrees",
+        ), mock.patch.object(
+            self.module,
+            "create_or_reuse_worktree",
+            return_value=False,
+        ), mock.patch.object(
+            self.module,
+            "copy_prd_files",
+            side_effect=ValueError("simulated PRD copy failure"),
+        ):
+            exit_code, stderr = self.run_main_in_repo(prd_name)
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("PRD copy failed: simulated PRD copy failure", stderr)
+        self.assertNotIn("Traceback", stderr)
+        self.assertNotIn("Root sync failed", stderr)
+        self.assertNotIn("Worktree preparation failed", stderr)
 
     def test_reports_root_sync_failure_when_no_origin_and_local_main_missing(self):
         init_local_repo(self.repo_path)
@@ -192,7 +377,7 @@ class SetupWorkspaceFailureTest(unittest.TestCase):
         self.assertNotIn("Worktree preparation failed", result.stderr)
         self.assertNotIn("PRD copy failed", result.stderr)
 
-    def test_reports_worktree_preparation_failure_without_root_sync_label(self):
+    def test_diverged_branch_reuse_reports_no_failure_labels(self):
         bare_remote = self.repo_path / "remote.git"
         bare_remote.mkdir()
         subprocess.run(
@@ -260,9 +445,11 @@ class SetupWorkspaceFailureTest(unittest.TestCase):
         subprocess.run(["git", "fetch", "origin"], cwd=local_repo, check=True)
 
         second = run_setup_workspace(local_repo, prd_name)
-        self.assertEqual(second.returncode, 1, second.stdout)
-        self.assertIn("Worktree preparation failed:", second.stderr)
-        self.assertIn("worktree branch update failed", second.stderr.lower())
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertIn(
+            "skipped (local branch diverged from upstream", second.stderr,
+        )
+        self.assertNotIn("Worktree preparation failed", second.stderr)
         self.assertNotIn("Root sync failed", second.stderr)
         self.assertNotIn("PRD copy failed", second.stderr)
 

@@ -3,18 +3,24 @@ package factorysessionexecution
 import (
 	"encoding/json"
 	"fmt"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"strings"
 	"time"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 )
 
-func validateLiveChildProviderExecutor(mode string, executor workers.InvocationExecutor, liveChildInvocation LiveChildInvocationFactory) error {
-	if mode == ChildExecutorModeLive && executor == nil && liveChildInvocation == nil {
-		return NewValidationError("runtime.childExecutorMode", "worker invocation executor is required for live child execution")
+// validateChildExecutorMode rejects a child-executor mode this runtime cannot
+// serve. Live children are invoked through the session's Factory Runtime, which
+// is bound after construction, so there is nothing to check at construction
+// time and the check that remains is the mode vocabulary itself.
+func validateChildExecutorMode(mode string) error {
+	switch mode {
+	case ChildExecutorModeLive, ChildExecutorModeFake:
+		return nil
+	default:
+		return NewValidationError("runtime.childExecutorMode", "unsupported child executor mode")
 	}
-	return nil
 }
 
 // StartPrepareContext supplies filesystem and deployment inputs for durable start
@@ -515,7 +521,7 @@ func rebuildRuntimeSessionCanonicalEvents(state *runtimeSessionState) []json.Raw
 		runtimeDispatchEventInputFromState(state),
 	)
 	projected = mergePreservedDispatchInterruptedEvents(projected, preserved)
-	if state.eventConsumer == nil {
+	if state.eventConsumer == nil && !hasDurableLiveChangeEvents(state.events) {
 		return projected
 	}
 	return reconcileAppendOnlyCanonicalEvents(state.events, projected)
@@ -530,6 +536,7 @@ type dispatchQueuedEventPayload struct {
 	Model           string `json:"model,omitempty"`
 	ReasoningEffort string `json:"reasoningEffort,omitempty"`
 	Provider        string `json:"provider,omitempty"`
+	SkipPermissions *bool  `json:"skipPermissions,omitempty"`
 	QueuePosition   *int   `json:"queuePosition,omitempty"`
 }
 
@@ -563,6 +570,9 @@ func appendCanonicalRuntimeDispatchLifecycleEvents(
 		}
 		if dispatch.Status == DispatchStatusInterrupted {
 			continue
+		}
+		if javascript, ok := input.DispatchJavaScript[dispatch.ID]; ok && dispatch.JavaScript == nil {
+			dispatch.JavaScript = &javascript
 		}
 		dispatchEvents = buildDispatchQueuedEvent(events, dispatchEvents, session, dispatch, source, index)
 		if isReconciledDispatchStatus(dispatch.Status) {
@@ -608,6 +618,10 @@ func buildDispatchQueuedEvent(
 	}
 	if provider := strings.TrimSpace(dispatch.Provider); provider != "" {
 		payload.Provider = provider
+	}
+	if javascript := dispatch.JavaScript; javascript != nil {
+		skipPermissions := javascript.SkipPermissions
+		payload.SkipPermissions = &skipPermissions
 	}
 	position := queueIndex
 	payload.QueuePosition = &position

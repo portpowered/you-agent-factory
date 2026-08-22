@@ -2,11 +2,44 @@
   "formatVersion": 1,
   "declarations": [
     {
+      "test": "tests/functional/factory/visualization/runtime_metrics/costs_cli_test.go::TestMetricsCostsCLITraversesProductionHTTPRoute",
+      "stableIds": [
+        "cli/you.metrics.costs"
+      ]
+    },
+    {
+      "test": "tests/functional/factory/visualization/runtime_metrics/documented_workflow_test.go::TestMetricsDocumentedWorkflowThroughRootProcess",
+      "stableIds": [
+        "rest/getMetrics"
+      ]
+    },
+    {
+      "test": "tests/functional/models/root_composition/inference_invoke_test.go::TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess",
+      "stableIds": [
+        "rest/invokeGenericModel"
+      ]
+    },
+    {
+      "test": "tests/functional/provider_sessions/cli/worker_sessions_cli_test.go::TestWorkerSessionsCLI",
+      "stableIds": [
+        "cli/you.worker-sessions.list",
+        "cli/you.worker-sessions.read",
+        "cli/you.worker-sessions.show",
+        "cli/you.worker-sessions.stream"
+      ]
+    },
+    {
       "test": "tests/functional/providers/acp/catalog_cli_test.go::TestRootBuiltACPCommandsAddDeleteAndUnifiedListOneSettingsBackedCatalogEntry",
       "stableIds": [
         "cli/you.workers.acp.add",
         "cli/you.workers.acp.delete",
         "cli/you.workers.list"
+      ]
+    },
+    {
+      "test": "tests/functional/providers/discovery/discovery_test.go::TestProvidersListThroughRootBuildProcess",
+      "stableIds": [
+        "cli/you.providers.list"
       ]
     },
     {
@@ -24,6 +57,19 @@
       ]
     },
     {
+      "test": "tests/functional/transport/acp/stdio/cli_serve_acp_prompt_test.go::TestServeACP_RootBuildProcessCompletesOneFactoryPrompt",
+      "stableIds": [
+        "cli/you.server.acp"
+      ]
+    },
+    {
+	  "test": "tests/functional/transport/cli/commands/human_approval_wiring_test.go::TestCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors",
+	  "stableIds": [
+	    "cli/you.work.approval.list",
+	    "cli/you.work.approval.show"
+	  ]
+	},
+	{
       "test": "tests/functional/transport/cli/commands/run_wiring_test.go::TestCLIRunFactoryByPath",
       "stableIds": [
         "cli/you.run"
@@ -66,6 +112,96 @@
       "test": "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go::TestCLISubmitBatchSuccessHumanAndJSONShapes",
       "stableIds": [
         "cli/you.submit.batch"
+      ]
+    },
+    {
+      "test": "tests/functional/work/watch/watch_test.go::TestWorkWatchFollowsStateTransitionsUntilTerminal",
+      "stableIds": [
+        "cli/you.work.watch"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/inference/opening_record_test.go::TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession",
+      "stableIds": [
+        "rest/streamWorkerSessionEventsByWorkerSessionId",
+        "sse/streamWorkerSessionEventsByWorkerSessionId"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT011WorkerSessionCursorResumeAcrossRestart",
+      "stableIds": [
+        "rest/streamWorkerSessionEventsByWorkerSessionId",
+        "sse/streamWorkerSessionEventsByWorkerSessionId"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT012WorkerSessionFollowAndProviderReferenceParity",
+      "stableIds": [
+        "rest/getWorkerSessionObservationBySessionId",
+        "rest/readWorkerSessionTranscriptBySessionId",
+        "rest/streamWorkerSessionEventsBySessionId",
+        "sse/streamWorkerSessionEventsBySessionId"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/inference/worker_session_id_history_test.go::TestWSRFT010WorkerSessionIDHTTPHistory",
+      "stableIds": [
+        "rest/getWorkerSessionObservationByFactorySessionAndWorkerSessionId",
+        "rest/getWorkerSessionObservationByWorkerSessionId",
+        "rest/readWorkerSessionTranscriptByFactorySessionAndWorkerSessionId",
+        "rest/readWorkerSessionTranscriptByWorkerSessionId"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage",
+      "stableIds": [
+        "cli/you.worker-sessions.continue",
+        "cli/you.worker-sessions.invoke"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionRemoteControlsUseExactRoutesWithoutFallback",
+      "stableIds": [
+        "cli/you.worker-sessions.cancel",
+        "cli/you.worker-sessions.pause",
+        "cli/you.worker-sessions.resume",
+        "cli/you.worker-sessions.terminate"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionRemoteInterruptUsesExactRouteAndAdmissionSnapshots",
+      "stableIds": [
+        "cli/you.worker-sessions.interrupt"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/mock/live_capacity_test.go::TestLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch",
+      "stableIds": [
+        "cli/you.session.resource.set"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/transports/http/worker_sessions_invoke_continue_test.go::TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect",
+      "stableIds": [
+        "sse/streamWorkerSessionEventsByTopLevelWorkerSessionId"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPControlCancelConvergesTerminalSnapshot",
+      "stableIds": [
+        "rest/cancelWorkerSession"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive",
+      "stableIds": [
+        "rest/startWorkerSession"
+      ]
+    },
+    {
+      "test": "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPInterruptRejectsUnassociatedActiveSource",
+      "stableIds": [
+        "rest/interruptWorkerSession"
       ]
     },
     {

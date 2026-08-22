@@ -148,33 +148,12 @@ func isNilDependency(value any) bool {
 	}
 }
 
-func (h *CatalogHost) ResolveIdentity(
-	_ context.Context,
-	runtimeCfg *models.RuntimeConfig,
-	modelName string,
-) (Identity, error) {
-	entry, err := h.catalogEntry(runtimeCfg, modelName)
-	if err != nil {
-		return Identity{}, err
-	}
-	return h.identityFromCatalog(runtimeCfg, entry), nil
-}
-
 func (h *CatalogHost) InspectReadiness(
 	ctx context.Context,
 	runtimeCfg *models.RuntimeConfig,
 	modelName string,
 ) (ReadinessSnapshot, error) {
 	return h.inspectReadiness(ctx, runtimeCfg, modelName, true)
-}
-
-// InspectAssetReadiness classifies readiness from installed assets without supervised-runtime overlay.
-func (h *CatalogHost) InspectAssetReadiness(
-	ctx context.Context,
-	runtimeCfg *models.RuntimeConfig,
-	modelName string,
-) (ReadinessSnapshot, error) {
-	return h.inspectReadiness(ctx, runtimeCfg, modelName, false)
 }
 
 func (h *CatalogHost) inspectReadiness(

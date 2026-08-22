@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"strings"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -101,6 +102,15 @@ type FactoryWorktreePreparer interface {
 	Prepare(context.Context, string, string) (FactoryWorktreePreparation, error)
 }
 
+// TemporaryFile is the exact writable handle returned by a Worker temporary
+// file system.
+type TemporaryFile = platformfilesystem.TemporaryFile
+
+// TemporaryFileSystem is the exact request-scoped temporary-file effect used
+// by a Worker runner. Execute wraps it per call so only paths created by that
+// attempt are released during cleanup.
+type TemporaryFileSystem = platformfilesystem.TemporaryFileSystem
+
 // InvocationInput is one canonical, single-attempt Worker invocation.
 // Retry policy belongs to the calling service.
 type InvocationInput struct {
@@ -112,7 +122,7 @@ type InvocationInput struct {
 type InvocationResult struct {
 	Response        InferenceResponse
 	Attempt         int
-	ProviderSession *ProviderSessionMetadata
+	Continuation    *ProviderContinuationRef
 	FailureMetadata *WorkFailureMetadata
 	FailureDecision *WorkFailureDecision
 	FailureDetail   *FailureDetail

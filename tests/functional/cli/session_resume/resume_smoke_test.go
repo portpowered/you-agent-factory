@@ -16,17 +16,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestCLIResumeSmoke_InterruptedJavaScriptFactorySessionResumesThroughSharedSessionCommands(t *testing.T) {
+	t.Parallel()
+
 	harness := newCLIResumeSmokeHarness(t)
 	sessionID := harness.startInterruptedSession(t)
 
@@ -69,18 +71,20 @@ func TestCLIResumeSmoke_InterruptedJavaScriptFactorySessionResumesThroughSharedS
 		t.Fatalf("post-resume resultSummary = %#v, want FINAL", after.ResultSummary)
 	}
 	if harness.provider.callCount() < 3 {
-		t.Fatalf("provider infer calls = %d, want at least 3 after resume completion", harness.provider.callCount())
+		t.Fatalf("provider execute calls = %d, want at least 3 after resume completion", harness.provider.callCount())
 	}
 }
 
 func TestCLIResumeSmoke_DurableResumeContinuityPreservesCompletedChildDispatchesWithoutReplay(t *testing.T) {
+	t.Parallel()
+
 	harness := newCLIResumeSmokeHarness(t)
 	sessionID := harness.startInterruptedSession(t)
 
 	beforeShow := readDurableSessionViaCLI(t, harness, sessionID)
 	assertDurableProgressCounts(t, beforeShow.Progress, 1, 2, 0)
 
-	beforeDispatches := readDispatchesViaCLI(t, harness, sessionID)
+	beforeDispatches := readDispatchesViaHTTP(t, harness, sessionID)
 	dispatchOneBefore := requireDispatchSummary(t, beforeDispatches, "dispatch-1", factoryapi.FactoryDispatchStatusCOMPLETED)
 	dispatchTwoBefore := requireDispatchSummary(t, beforeDispatches, "dispatch-2", factoryapi.FactoryDispatchStatusINTERRUPTED, factoryapi.FactoryDispatchStatusRUNNING)
 	if len(beforeDispatches.Dispatches) != 2 {
@@ -114,7 +118,7 @@ func TestCLIResumeSmoke_DurableResumeContinuityPreservesCompletedChildDispatches
 		)
 	}
 
-	afterDispatches := readDispatchesViaCLI(t, harness, sessionID)
+	afterDispatches := readDispatchesViaHTTP(t, harness, sessionID)
 	if len(afterDispatches.Dispatches) != 2 {
 		t.Fatalf("post-resume dispatch count = %d, want 2 (no replayed child dispatches)", len(afterDispatches.Dispatches))
 	}
@@ -130,11 +134,13 @@ func TestCLIResumeSmoke_DurableResumeContinuityPreservesCompletedChildDispatches
 	}
 
 	if harness.provider.callCount() != 3 {
-		t.Fatalf("provider infer calls = %d, want exactly 3 (step-one once, blocked step-two once, resumed step-two once)", harness.provider.callCount())
+		t.Fatalf("provider execute calls = %d, want exactly 3 (step-one once, blocked step-two once, resumed step-two once)", harness.provider.callCount())
 	}
 }
 
 func TestCLIResumeSmoke_TerminalSessionResumeReturnsTypedRejectionAndPreservesSessionRead(t *testing.T) {
+	t.Parallel()
+
 	harness := newCLIResumeSmokeSucceededHarness(t)
 	sessionID := harness.startSucceededSession(t)
 
@@ -184,6 +190,8 @@ func TestCLIResumeSmoke_TerminalSessionResumeReturnsTypedRejectionAndPreservesSe
 }
 
 func TestCLIResumeSmoke_RunningSessionResumeReturnsTypedNoOpAndPreservesSessionRead(t *testing.T) {
+	t.Parallel()
+
 	harness := newCLIResumeSmokeRunningHarness(t)
 	sessionID := harness.startRunningSession(t)
 
@@ -242,21 +250,17 @@ func intValueOrZero(value *int) int {
 	return *value
 }
 
-func readDispatchesViaCLI(
+func readDispatchesViaHTTP(
 	t *testing.T,
 	harness *cliResumeSmokeHarness,
 	sessionID string,
 ) factoryapi.ListFactorySessionDispatchesResponse {
 	t.Helper()
 
-	out, err := harness.executeCLI(t, "session", "dispatches", sessionID)
-	if err != nil {
-		t.Fatalf("session dispatches: %v", err)
-	}
-
+	body := getCLIResumeJSON(t, harness.serverURL+"/factory-sessions/"+sessionID+"/dispatches")
 	var listed factoryapi.ListFactorySessionDispatchesResponse
-	if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &listed); err != nil {
-		t.Fatalf("decode session dispatches JSON: %v\n%s", err, out.String())
+	if err := json.Unmarshal(bytes.TrimSpace(body), &listed); err != nil {
+		t.Fatalf("decode REST dispatches JSON: %v\n%s", err, body)
 	}
 	if listed.SessionId != sessionID {
 		t.Fatalf("dispatch sessionId = %q, want %q", listed.SessionId, sessionID)
@@ -370,7 +374,7 @@ func newCLIResumeSmokeRunningHarness(t *testing.T) *cliResumeSmokeHarness {
 func startRootCLIResumeAPIServer(
 	t *testing.T,
 	projectRoot string,
-	provider workerprovider.Provider,
+	provider providers.Service,
 ) (string, cliResumeProcess) {
 	t.Helper()
 
@@ -436,7 +440,14 @@ func startRootCLIResumeAPIServer(
 func (h *cliResumeSmokeHarness) executeCLI(t *testing.T, args ...string) (bytes.Buffer, error) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	inputArgs := []string{"you", "--json", "--server", h.serverURL}
+	inputArgs := []string{"you", "--json"}
+	if len(args) >= 2 && args[0] == "session" {
+		switch args[1] {
+		case "pause", "resume", "cancel", "terminate":
+			inputArgs = append(inputArgs, "--remote")
+		}
+	}
+	inputArgs = append(inputArgs, "--server", h.serverURL)
 	inputArgs = append(inputArgs, args...)
 	err := h.process.Execute(root.Input{
 		Args:             inputArgs,
@@ -483,6 +494,23 @@ func postCLIResumeJSON(t *testing.T, endpoint string, request any) []byte {
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		t.Fatalf("POST %s status = %d\n%s", endpoint, response.StatusCode, body)
+	}
+	return body
+}
+
+func getCLIResumeJSON(t *testing.T, endpoint string) []byte {
+	t.Helper()
+	response, err := http.Get(endpoint)
+	if err != nil {
+		t.Fatalf("GET %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read GET %s response: %v", endpoint, err)
+	}
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		t.Fatalf("GET %s status = %d\n%s", endpoint, response.StatusCode, body)
 	}
 	return body
 }
@@ -577,13 +605,14 @@ func (h *cliResumeSmokeHarness) startInterruptedSession(t *testing.T) string {
 	)
 
 	reason := "cli resume smoke interrupt"
+	h.provider.waitForExecuteBlocked(t, 5*time.Second)
 	postCLIResumeJSON(t, h.serverURL+"/factory-sessions/"+sessionID+"/interrupt-dispatch",
 		factoryapi.FactorySessionInterruptDispatchRequest{
 			DispatchId: "dispatch-2",
 			Reason:     &reason,
 		},
 	)
-	h.provider.waitForCanceledInfer(t, 5*time.Second)
+	h.provider.waitForCanceledExecute(t, 5*time.Second)
 	waitForDurableSessionStatusViaCLI(
 		t, h, sessionID,
 		factoryapi.FactorySessionDurableLifecycleStatusInterrupted, 5*time.Second,
@@ -698,7 +727,7 @@ func waitForCLIResumeSmokeDispatchStatus(
 	deadline := time.Now().Add(timeout)
 	var last factoryapi.ListFactorySessionDispatchesResponse
 	for time.Now().Before(deadline) {
-		listed := readDispatchesViaCLI(t, harness, sessionID)
+		listed := readDispatchesViaHTTP(t, harness, sessionID)
 		last = listed
 		for _, dispatch := range listed.Dispatches {
 			if dispatch.Id != dispatchID {
@@ -715,15 +744,34 @@ func waitForCLIResumeSmokeDispatchStatus(
 }
 
 type cliResumeSmokeBlockingProvider struct {
+	testutil.NativeProvider
 	mu              sync.Mutex
 	calls           int
 	blockedOnce     bool
 	contextCanceled int
+	executeBlocked  chan struct{}
 	workflowName    string
 }
 
 func newCLIResumeSmokeBlockingProvider(workflowName string) *cliResumeSmokeBlockingProvider {
-	return &cliResumeSmokeBlockingProvider{workflowName: workflowName}
+	provider := &cliResumeSmokeBlockingProvider{
+		executeBlocked: make(chan struct{}),
+		workflowName:   workflowName,
+	}
+	provider.NativeProvider.ExecuteFunc = provider.Execute
+	return provider
+}
+
+func (p *cliResumeSmokeBlockingProvider) waitForExecuteBlocked(t *testing.T, timeout time.Duration) {
+	t.Helper()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-p.executeBlocked:
+	case <-timer.C:
+		t.Fatal("provider Execute did not enter its cancellable wait")
+	}
 }
 
 func (p *cliResumeSmokeBlockingProvider) callCount() int {
@@ -732,7 +780,7 @@ func (p *cliResumeSmokeBlockingProvider) callCount() int {
 	return p.calls
 }
 
-func (p *cliResumeSmokeBlockingProvider) Infer(ctx context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
+func (p *cliResumeSmokeBlockingProvider) Execute(ctx context.Context, _ providers.ExecuteRequest) (providers.ExecuteResult, error) {
 	p.mu.Lock()
 	p.calls++
 	call := p.calls
@@ -740,11 +788,11 @@ func (p *cliResumeSmokeBlockingProvider) Infer(ctx context.Context, _ workerexec
 	p.mu.Unlock()
 
 	if call == 1 {
-		return workerexecution.InferenceResponse{
+		return providers.ExecuteResult{
 			Content: fmt.Sprintf(`{"text":"live:%s:step-one:step-one:workflows","label":"step-one"}`, p.workflowName),
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
+			SessionRef: &providers.SessionRef{
 				Provider: "mock",
-				Kind:     "session_id",
+				Kind:     providers.SessionIDKind,
 				ID:       "live-provider-session-1",
 			},
 		}, nil
@@ -753,26 +801,27 @@ func (p *cliResumeSmokeBlockingProvider) Infer(ctx context.Context, _ workerexec
 	if !alreadyBlocked {
 		p.mu.Lock()
 		p.blockedOnce = true
+		close(p.executeBlocked)
 		p.mu.Unlock()
 
 		<-ctx.Done()
 		p.mu.Lock()
 		p.contextCanceled++
 		p.mu.Unlock()
-		return workerexecution.InferenceResponse{}, ctx.Err()
+		return providers.ExecuteResult{}, ctx.Err()
 	}
 
-	return workerexecution.InferenceResponse{
+	return providers.ExecuteResult{
 		Content: fmt.Sprintf(`{"text":"live:%s:step-two:step-two:workflows","label":"step-two"}`, p.workflowName),
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
+		SessionRef: &providers.SessionRef{
 			Provider: "mock",
-			Kind:     "session_id",
+			Kind:     providers.SessionIDKind,
 			ID:       "live-provider-session-2",
 		},
 	}, nil
 }
 
-func (p *cliResumeSmokeBlockingProvider) waitForCanceledInfer(t *testing.T, timeout time.Duration) {
+func (p *cliResumeSmokeBlockingProvider) waitForCanceledExecute(t *testing.T, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -784,5 +833,5 @@ func (p *cliResumeSmokeBlockingProvider) waitForCanceledInfer(t *testing.T, time
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	t.Fatal("provider Infer did not observe canceled workflow context")
+	t.Fatal("provider Execute did not observe canceled workflow context")
 }

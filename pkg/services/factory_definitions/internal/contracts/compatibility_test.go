@@ -143,3 +143,49 @@ func TestPublicWorkerTypeForFactoryUsagePreservesMixedLegacyAlias(t *testing.T) 
 		t.Fatalf("mixed usage = %q", got)
 	}
 }
+
+func TestPublicWorkerTypeForFactoryUsageProjectsScheduledLegacyModelWorkerAsInference(t *testing.T) {
+	t.Parallel()
+
+	for _, kind := range []workertaxonomy.WorkstationKind{
+		workertaxonomy.WorkstationKindRepeater,
+		workertaxonomy.WorkstationKindCron,
+	} {
+		worker := workerconfig.Config{Name: "worker", Type: workertaxonomy.WorkerTypeModel}
+		workstations := []Workstation{{
+			Type:           workertaxonomy.WorkstationTypeModel,
+			Kind:           WorkstationKind(kind),
+			WorkerTypeName: worker.Name,
+		}}
+		if got := PublicWorkerTypeForFactoryUsage(worker, workstations); got != workertaxonomy.WorkerTypeInference {
+			t.Fatalf("scheduled %s legacy model worker = %q, want %q", kind, got, workertaxonomy.WorkerTypeInference)
+		}
+	}
+}
+
+func TestScheduledLegacyModelPairPreservesExplicitNonInferenceWorkerProjection(t *testing.T) {
+	t.Parallel()
+
+	workstation := Workstation{
+		Type: WorkstationTypeModel,
+		Kind: WorkstationKindCron,
+	}
+	if got := PublicWorkerTypeForFactoryUsage(
+		workerconfig.Config{Name: "worker", Type: workertaxonomy.WorkerTypeAgent},
+		[]Workstation{{
+			Name:           workstation.Name,
+			Type:           workstation.Type,
+			Kind:           workstation.Kind,
+			WorkerTypeName: "worker",
+		}},
+	); got != workertaxonomy.WorkerTypeAgent {
+		t.Fatalf("explicit agent worker = %q, want %q", got, workertaxonomy.WorkerTypeAgent)
+	}
+	if got := workertaxonomy.PublicWorkstationTypeFromInternalRuntime(
+		workstation.Type,
+		workertaxonomy.WorkerTypeAgent,
+		workertaxonomy.WorkstationKind(workstation.Kind),
+	); got != workertaxonomy.WorkstationTypeAgent {
+		t.Fatalf("explicit agent workstation = %q, want %q", got, workertaxonomy.WorkstationTypeAgent)
+	}
+}

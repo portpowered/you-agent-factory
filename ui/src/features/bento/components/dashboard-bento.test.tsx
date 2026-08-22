@@ -1,3 +1,4 @@
+// biome-ignore lint/style/noExcessiveLinesPerFile: dashboard widget integration cases share one mock harness.
 import { fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
@@ -10,6 +11,7 @@ import { DashboardBento } from "./dashboard-bento";
 const addDashboardWidget = vi.fn();
 const removeDashboardWidget = vi.fn();
 let mockDashboardLayout = DEFAULT_DASHBOARD_LAYOUT;
+let mockGraphDirty = false;
 
 const currentSelectionState = {
   canRedoSelection: false,
@@ -214,6 +216,7 @@ vi.mock("../../trace-drilldown/components/trace-drilldown-widget", () => ({
 vi.mock("../../work-outcome/hooks/useWorkOutcomeChart", () => ({
   useWorkOutcomeChart: () => ({
     chartState: { status: "ready" },
+    samples: [],
     status: "empty",
   }),
 }));
@@ -230,20 +233,81 @@ vi.mock("../../work-totals/components/work-totals-widget", () => ({
   ),
 }));
 
+vi.mock(
+  "../../worker-session-timeline/components/worker-session-timeline-widget",
+  () => ({
+    WorkerSessionTimelineWidget: ({
+      headerAction,
+      workID,
+    }: {
+      headerAction?: React.ReactNode;
+      workID?: string | null;
+    }) => (
+      <section>
+        {headerAction}
+        Worker Session timeline card
+        {workID ? `:${workID}` : ""}
+      </section>
+    ),
+  }),
+);
+
 vi.mock("../../workflow-activity/components/workflow-activity-widget", () => ({
   WorkflowActivityWidget: ({
     headerAction,
+    onCardStateChange,
+    onDirtyStateChange,
+    restoredCardState,
     widgetInstanceID,
   }: {
     headerAction?: React.ReactNode;
+    onCardStateChange?: (state: unknown) => void;
+    onDirtyStateChange?: (isDirty: boolean) => void;
+    restoredCardState?: unknown;
     widgetInstanceID?: string;
-  }) => (
-    <section>
-      {headerAction}
-      Workflow activity card
-      {widgetInstanceID ? `:${widgetInstanceID}` : ""}
-    </section>
-  ),
+  }) => {
+    const [graphCardState, setGraphCardState] = React.useState(
+      restoredCardState ?? { draft: "saved-topology" },
+    );
+    const dirtyStateChangeRef = React.useRef(onDirtyStateChange);
+    const cardStateChangeRef = React.useRef(onCardStateChange);
+
+    React.useEffect(() => {
+      dirtyStateChangeRef.current = onDirtyStateChange;
+      cardStateChangeRef.current = onCardStateChange;
+    }, [onCardStateChange, onDirtyStateChange]);
+
+    React.useEffect(() => {
+      dirtyStateChangeRef.current?.(
+        mockGraphDirty || graphCardState.draft === "unsaved-topology-node",
+      );
+      cardStateChangeRef.current?.(graphCardState);
+    }, [graphCardState]);
+
+    return (
+      <section>
+        {headerAction}
+        Workflow activity card
+        {widgetInstanceID ? `:${widgetInstanceID}` : ""}
+        <div data-testid="graph-card-state">
+          {JSON.stringify(graphCardState)}
+        </div>
+        <button
+          onClick={() => {
+            const nextState = { draft: "unsaved-topology-node" };
+            setGraphCardState(nextState);
+            cardStateChangeRef.current?.(nextState);
+            dirtyStateChangeRef.current?.(true);
+          }}
+          type="button"
+        >
+          Edit graph draft
+        </button>
+        <button type="button">Save draft</button>
+        <button type="button">Discard changes</button>
+      </section>
+    );
+  },
 }));
 
 vi.mock("./session-controls-widget", () => ({
@@ -296,10 +360,15 @@ vi.mock("../hooks/useDashboardLayout", () => ({
     submitWork: "submit-work",
     terminalWork: "terminal-work",
     trace: "trace",
+    workerSessionTimeline: "worker-session-timeline",
     workGraph: "work-graph",
     workOutcomeChart: "work-outcome-chart",
     workTotals: "work-totals",
   },
+  createDashboardLayoutScope: (factoryID: string, sessionID: string) => ({
+    factoryID,
+    sessionID,
+  }),
   getRenderableDashboardLayout: (layout: unknown) => layout,
   useDashboardLayout: () => {
     const [dashboardLayout, setDashboardLayout] =
@@ -310,7 +379,14 @@ vi.mock("../hooks/useDashboardLayout", () => ({
         addDashboardWidget(widgetType);
       },
       dashboardLayout,
-      persistDashboardLayout: vi.fn(),
+      persistDashboardLayout: (nextLayout) => {
+        setDashboardLayout(nextLayout);
+        return {
+          diagnostics: [],
+          instanceHighWaterMarks: {},
+          persisted: true,
+        };
+      },
       removeDashboardWidget: (widgetInstanceID: string) => {
         removeDashboardWidget(widgetInstanceID);
         setDashboardLayout((currentLayout) =>
@@ -353,8 +429,11 @@ vi.mock("../../dashboard-add-card/components/inline-add-widget-card", () => ({
   }) => (
     <section>
       Add widget card
-      <button onClick={() => onSelectWidget?.("work-graph")} type="button">
-        Add workflow activity widget
+      <button
+        onClick={() => onSelectWidget?.("work-outcome-chart")}
+        type="button"
+      >
+        Add work outcome chart widget
       </button>
     </section>
   ),
@@ -367,6 +446,7 @@ describe("DashboardBento", () => {
     removeDashboardWidget.mockReset();
     mockUseCurrentActivityImportController.mockClear();
     mockDashboardLayout = DEFAULT_DASHBOARD_LAYOUT;
+    mockGraphDirty = false;
     timelineStoreState = defaultTimelineStoreState;
   });
 
@@ -406,6 +486,9 @@ describe("DashboardBento", () => {
     expect(screen.getByTestId("session-controls").textContent).toContain(
       "Session controls card",
     );
+    expect(screen.getByTestId("worker-session-timeline").textContent).toContain(
+      "Worker Session timeline card",
+    );
   });
 
   it("keeps provider-session selection centralized between the current selection and provider-session cards", () => {
@@ -424,36 +507,27 @@ describe("DashboardBento", () => {
     );
   });
 
-  it("adds a widget instance through the inline picker selection seam", () => {
+  it("adds a duplicate-capable widget through the inline picker selection seam", () => {
     render(<DashboardBento />);
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Add workflow activity widget" }),
+      screen.getByRole("button", {
+        name: "Add work outcome chart widget",
+      }),
     );
 
-    expect(addDashboardWidget).toHaveBeenCalledWith("work-graph");
+    expect(addDashboardWidget).toHaveBeenCalledWith("work-outcome-chart");
   });
 
-  it("passes stable workflow activity instance ids into duplicate-capable dashboard cards", () => {
-    mockDashboardLayout = [
-      ...DEFAULT_DASHBOARD_LAYOUT,
-      {
-        h: 8,
-        id: "work-graph::instance-1",
-        minH: 6,
-        minW: 5,
-        w: 8,
-        widgetType: "work-graph",
-        x: 0,
-        y: 12,
-      },
-    ];
+  it("passes the persisted workflow activity instance id into its card", () => {
+    mockDashboardLayout = DEFAULT_DASHBOARD_LAYOUT.map((item) =>
+      item.widgetType === "work-graph"
+        ? { ...item, id: "work-graph::instance-1" }
+        : item,
+    );
 
     render(<DashboardBento />);
 
-    expect(
-      screen.getByText("Workflow activity card:work-graph::primary"),
-    ).toBeTruthy();
     expect(
       screen.getByText("Workflow activity card:work-graph::instance-1"),
     ).toBeTruthy();
@@ -466,8 +540,8 @@ describe("DashboardBento", () => {
       name: "Remove Work totals widget from dashboard",
     });
 
-    expect(workTotalsRemoveButton.className).toContain("h-10");
-    expect(workTotalsRemoveButton.className).toContain("w-10");
+    expect(workTotalsRemoveButton.className).toContain("h-11");
+    expect(workTotalsRemoveButton.className).toContain("w-11");
     expect(workTotalsRemoveButton.className).toContain("focus-visible:ring-2");
     expect(
       screen.queryByRole("button", {
@@ -516,6 +590,67 @@ describe("DashboardBento", () => {
       "Add widget card",
     );
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(screen.queryByText(/undo/i)).toBeNull();
+    expect(
+      screen.getByTestId("dashboard-widget-removal-status").textContent,
+    ).toContain("Work outcome chart was removed.");
+    expect(
+      screen.getByRole("button", {
+        name: "Undo removing Work outcome chart",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("confirms dirty graph removal and leaves the layout unchanged when canceled", () => {
+    mockGraphDirty = true;
+    render(<DashboardBento />);
+
+    const graphRemoveButton = screen.getByRole("button", {
+      name: "Remove Factory graph widget from dashboard",
+    });
+    fireEvent.click(graphRemoveButton);
+
+    expect(screen.getByRole("dialog").textContent).toContain(
+      "Factory graph has unsaved changes",
+    );
+    expect(removeDashboardWidget).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep widget" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(removeDashboardWidget).not.toHaveBeenCalled();
+
+    fireEvent.click(graphRemoveButton);
+    fireEvent.click(screen.getByRole("button", { name: "Remove widget" }));
+    expect(removeDashboardWidget).toHaveBeenCalledWith("work-graph::primary");
+  });
+
+  it("restores an unsaved graph draft and editor actions through removal undo", () => {
+    render(<DashboardBento />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit graph draft" }));
+    expect(screen.getByTestId("graph-card-state").textContent).toContain(
+      "unsaved-topology-node",
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Remove Factory graph widget from dashboard",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Remove widget" }));
+    expect(screen.queryByTestId("graph-card-state")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Undo removing Factory graph",
+      }),
+    );
+
+    expect(screen.getByTestId("graph-card-state").textContent).toContain(
+      "unsaved-topology-node",
+    );
+    expect(screen.getByRole("button", { name: "Save draft" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Discard changes" }),
+    ).toBeTruthy();
   });
 });

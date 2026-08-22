@@ -409,7 +409,6 @@ func TestClassifyFailedInvocation_MatchesFailedWorkByRequestStateChange(t *testi
 		WorkID:       failedChild.ID,
 		WorkTypeName: failedChild.WorkTypeID,
 		ToState:      "failed",
-		ToPlaceID:    failedChild.PlaceID,
 		RequestID:    "request-1",
 	}}
 	state.FailedWorkItemsByID[failedChild.ID] = failedChild
@@ -565,7 +564,6 @@ func invocationWorkItem(workID, workTypeName, stateName, name, placeID string) w
 		State:       stateName,
 		DisplayName: name,
 		TraceID:     workID + "-trace",
-		PlaceID:     placeID,
 		Content: []work.WorkContentPart{{
 			Type: work.WorkContentPartTypeText,
 			Text: workID + "-content",
@@ -657,4 +655,95 @@ func assertPrimaryResultSelection(
 	if got.PrimaryResult[0].Text != want.Content[0].Text {
 		t.Fatalf("primary result text = %q, want %q", got.PrimaryResult[0].Text, want.Content[0].Text)
 	}
+}
+
+// TestResolvePrimaryResult_ExplicitPolicyDoesNotReturnAnEarlierInvocationsTerminalWork
+// pins the invariant a multi-turn session depends on: an invocation whose own
+// work has not reached its configured terminal state yet is unresolved, even
+// when an earlier invocation on the same session already left matching
+// terminal work behind.
+//
+// The explicit policy's last-resort match is deliberately unscoped so that
+// terminal work the runtime created without a direct submission link -- the
+// case the scope and trace tiers cannot see -- still resolves. That
+// last resort must still never reach across into another invocation's work:
+// on the second and every later turn of one Chat Session, the previous turn's
+// answer is exactly what sits in TerminalWorkByID while this turn is still
+// running, so an unscoped match returns the previous turn's answer and ends
+// the wait early.
+func TestResolvePrimaryResult_ExplicitPolicyDoesNotReturnAnEarlierInvocationsTerminalWork(t *testing.T) {
+	explicit := &interfaces.InvocationReturnConfig{
+		Policy:        work.ReturnPolicyExplicit,
+		WorkTypeName:  "goal",
+		TerminalState: "complete",
+	}
+
+	state := invocationWorldStateFixture()
+	// Turn one: submitted and already complete.
+	turnOneRoot := invocationWorkItem("work-turn-1", "goal", "init", "turn-1", "goal:init")
+	turnOneTerminal := invocationWorkItem("work-turn-1", "goal", "complete", "turn-1", "goal:complete")
+	turnOneTerminal.Content = []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText, Text: "first turn answer",
+	}}
+	recordInvocationSubmittedWork(&state, 1, "request-turn-1", turnOneRoot)
+	recordInvocationDispatchOutput(
+		&state, 2, "dispatch-turn-1", []work.FactoryWorkItem{turnOneRoot}, turnOneTerminal)
+	state.TerminalWorkByID[turnOneTerminal.ID] = interfaces.FactoryTerminalWork{
+		WorkItem: turnOneTerminal, Status: "TERMINAL",
+	}
+
+	// Turn two: submitted on the same session, still running -- no terminal
+	// work of its own yet. This is the exact state the invocation wait loop
+	// observes on every poll before its own Worker finishes.
+	turnTwoRoot := invocationWorkItem("work-turn-2", "goal", "init", "turn-2", "goal:init")
+	recordInvocationSubmittedWork(&state, 3, "request-turn-2", turnTwoRoot)
+
+	_, err := work.ResolvePrimaryResult(work.PrimaryResultSelectionInput{
+		RequestID:        "request-turn-2",
+		InvocationReturn: explicit,
+		WorldState:       state,
+	})
+
+	var selectionErr *work.PrimaryResultError
+	if !errors.As(err, &selectionErr) {
+		t.Fatalf("error = %v, want the running invocation to stay unresolved rather than "+
+			"resolve to the previous turn's terminal work", err)
+	}
+	if selectionErr.Code != work.PrimaryResultErrorCodeUnresolved {
+		t.Fatalf("code = %q, want %q", selectionErr.Code, work.PrimaryResultErrorCodeUnresolved)
+	}
+}
+
+// TestResolvePrimaryResult_ExplicitPolicyStillResolvesUnlinkedRuntimeTerminalWork
+// keeps the last-resort match reachable for the case it exists to serve:
+// terminal work this invocation's Factory produced without a submission or
+// trace link back to the submitted item. Scoping the last resort must not
+// turn this into an unresolved invocation.
+func TestResolvePrimaryResult_ExplicitPolicyStillResolvesUnlinkedRuntimeTerminalWork(t *testing.T) {
+	state := invocationWorldStateFixture()
+	root := invocationWorkItem("work-root", "goal", "init", "root", "goal:init")
+	// Terminal work under a different work ID, with no dispatch output or
+	// trace linking it back to the submitted item.
+	unlinked := invocationWorkItem("work-unlinked", "goal", "complete", "unlinked", "goal:complete")
+	unlinked.Content = []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText, Text: "runtime-produced answer",
+	}}
+	recordInvocationSubmittedWork(&state, 1, "request-1", root)
+	state.TerminalWorkByID[unlinked.ID] = interfaces.FactoryTerminalWork{
+		WorkItem: unlinked, Status: "TERMINAL",
+	}
+
+	got, err := work.ResolvePrimaryResult(work.PrimaryResultSelectionInput{
+		RequestID: "request-1",
+		InvocationReturn: &interfaces.InvocationReturnConfig{
+			Policy:        work.ReturnPolicyExplicit,
+			WorkTypeName:  "goal",
+			TerminalState: "complete",
+		},
+		WorldState: state,
+	})
+	if err != nil {
+		t.Fatalf("work.ResolvePrimaryResult: %v", err)
+	}
+	assertPrimaryResultSelection(t, got, work.ReturnPolicyExplicit, unlinked)
 }

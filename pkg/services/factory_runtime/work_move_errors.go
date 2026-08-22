@@ -25,32 +25,64 @@ const (
 )
 
 // PauseRequest is the plain pause control input published at the Runtime root.
-type PauseRequest struct{}
+// TurnID is the immutable Factory invocation correlation captured by the
+// upstream control owner. A blank TurnID preserves the historical
+// factory-wide pause behavior and selects no Worker Sessions.
+type PauseRequest struct {
+	TurnID string
+	// ControlID is the upstream committed-control identity. Reusing it returns
+	// the original captured child evidence instead of selecting a later ledger
+	// snapshot. It is optional for compatibility with existing factory-wide
+	// controls that do not address a turn.
+	ControlID string
+}
 
 // PauseResult is the plain pause control success shape published at the Runtime root.
 type PauseResult struct {
-	Outcome ControlOutcome
+	Outcome              ControlOutcome
+	WorkerSessionControl WorkerSessionControlResult
 }
 
 // ResumeRequest is the plain resume control input published at the Runtime root.
-type ResumeRequest struct{}
+// TurnID has the same immutable captured-turn meaning as PauseRequest.TurnID.
+type ResumeRequest struct {
+	TurnID string
+	// ControlID has the same committed-control identity meaning as
+	// PauseRequest.ControlID.
+	ControlID string
+}
 
 // ResumeResult is the plain resume control success shape published at the Runtime root.
 type ResumeResult struct {
-	Outcome ControlOutcome
+	Outcome              ControlOutcome
+	WorkerSessionControl WorkerSessionControlResult
 }
 
-// TerminateRequest is the plain terminate/stop control input published at the
-// Runtime root. Nested IMP-RUN packets own durable stop wiring; this type is
-// the peer-facing request vocabulary.
+// TerminateRequest is the plain stop control input published at the Runtime
+// root. Nested IMP-RUN packets own durable stop wiring; this type is the
+// peer-facing request vocabulary. WorkerSessionAction defaults to TERMINATE;
+// a captured upstream CANCEL intent sets it to CANCEL so descendants retain
+// their distinct Worker Sessions lifecycle outcome.
 type TerminateRequest struct {
 	Reason string
+	// TurnID is the immutable Factory invocation correlation captured by the
+	// upstream control owner. A blank TurnID preserves historical factory-wide
+	// termination behavior and selects no Worker Sessions.
+	TurnID string
+	// ControlID is the upstream committed-control identity. Reusing it returns
+	// the original captured child evidence instead of selecting a later ledger
+	// snapshot or a replacement turn.
+	ControlID string
+	// WorkerSessionAction is CANCEL or TERMINATE for a turn-scoped stop. The
+	// zero value is TERMINATE for compatibility with existing stop callers.
+	WorkerSessionAction WorkerSessionControlAction
 }
 
 // TerminateResult is the plain terminate/stop control success shape published
 // at the Runtime root.
 type TerminateResult struct {
-	Outcome ControlOutcome
+	Outcome              ControlOutcome
+	WorkerSessionControl WorkerSessionControlResult
 }
 
 // WaitToCompleteRequest is the plain wait-to-complete control input published

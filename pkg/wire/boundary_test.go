@@ -15,6 +15,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -88,6 +89,10 @@ func TestFactorySessionsServiceRequiresRuntimeClockBinding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("construct named-path resolver: %v", err)
 	}
+	eventsService, err := eventswire.NewService()
+	if err != nil {
+		t.Fatalf("construct events service: %v", err)
+	}
 
 	service, err := provideFactorySessionsService(
 		factoryruntime.NewSessionResultProjectionOperation(),
@@ -103,15 +108,15 @@ func TestFactorySessionsServiceRequiresRuntimeClockBinding(t *testing.T) {
 		factorysessionwire.InvocationInputReader(func(string) ([]byte, error) { return nil, nil }),
 		factorysessionwire.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
 		func(path string) (string, error) { return path, nil },
+		eventsService,
+		&wireTestClock{},
+		factorysessionwire.NewLiveChangeCoordinator(),
 	)
 	if err != nil {
 		t.Fatalf("provide Factory Sessions service: %v", err)
 	}
-	if assembly, err := service.ForRuntime(factorysessions.RuntimeBinding{}); assembly != nil || err == nil {
-		t.Fatalf("Factory Sessions assembly without clock = %#v, want nil", assembly)
-	}
-	if assembly, err := service.ForRuntime(factorysessions.RuntimeBinding{Clock: &wireTestClock{}}); assembly == nil || err != nil {
-		t.Fatalf("Factory Sessions assembly with explicit Wire clock = %#v, error = %v", assembly, err)
+	if service == nil {
+		t.Fatal("Factory Sessions service is nil")
 	}
 }
 
@@ -174,7 +179,7 @@ func TestLegacyRuntimeBuilderAndRuntimeBundleCannotReturn(t *testing.T) {
 			return walkErr
 		}
 		if entry.IsDir() {
-			if entry.Name() == ".git" || entry.Name() == "vendor" || entry.Name() == "node_modules" {
+			if entry.Name() == ".git" || entry.Name() == ".claude" || entry.Name() == "vendor" || entry.Name() == "node_modules" {
 				return filepath.SkipDir
 			}
 			return nil
@@ -213,7 +218,7 @@ func TestFactoryRuntimeAssemblyCallbackCannotReturn(t *testing.T) {
 		}
 		if entry.IsDir() {
 			switch entry.Name() {
-			case ".git", "node_modules", "vendor":
+			case ".git", ".claude", "node_modules", "vendor":
 				return filepath.SkipDir
 			default:
 				return nil

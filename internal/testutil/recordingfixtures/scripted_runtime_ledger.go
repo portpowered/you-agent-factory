@@ -17,18 +17,27 @@ import (
 type ScriptedRuntimeLedger struct {
 	mu sync.Mutex
 
-	Events             []factorydefinitions.FactoryEvent
-	Calls              []string
-	WorkRequests       []work.WorkRequestRecord
-	WorkStateChanges   []work.WorkStateChangeRecord
-	WorkstationResults []workers.WorkResult
-	InferenceEvents    []workers.InferenceEvent
-	LifecycleControls  []recordings.SessionLifecycleControlInput
-	GenerationID       string
-	SubscribeResult    factorydefinitions.FactoryEventStream
-	SubscribeError     error
-	eventRecorders     []func(factorydefinitions.FactoryEvent)
-	eventTypeRecorders []func(factorydefinitions.FactoryEventType)
+	Events                            []factorydefinitions.FactoryEvent
+	Calls                             []string
+	WorkRequests                      []work.WorkRequestRecord
+	WorkStateChanges                  []work.WorkStateChangeRecord
+	WorkstationResults                []workers.WorkResult
+	DispatchWorkerSessionAssociations []ScriptedDispatchWorkerSessionAssociation
+	InferenceEvents                   []workers.InferenceEvent
+	LifecycleControls                 []recordings.SessionLifecycleControlInput
+	GenerationID                      string
+	SubscribeResult                   factorydefinitions.FactoryEventStream
+	SubscribeError                    error
+	eventRecorders                    []func(factorydefinitions.FactoryEvent)
+	eventTypeRecorders                []func(factorydefinitions.FactoryEventType)
+}
+
+// ScriptedDispatchWorkerSessionAssociation records one observed
+// RecordDispatchWorkerSessionAssociation call.
+type ScriptedDispatchWorkerSessionAssociation struct {
+	DispatchID      string
+	WorkerSessionID string
+	RequestID       string
 }
 
 var _ recordings.RuntimeEventLedger = (*ScriptedRuntimeLedger)(nil)
@@ -55,6 +64,14 @@ func (l *ScriptedRuntimeLedger) CallsSnapshot() []string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return append([]string(nil), l.Calls...)
+}
+
+// DispatchWorkerSessionAssociationsSnapshot returns a detached copy of every
+// observed RecordDispatchWorkerSessionAssociation call.
+func (l *ScriptedRuntimeLedger) DispatchWorkerSessionAssociationsSnapshot() []ScriptedDispatchWorkerSessionAssociation {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]ScriptedDispatchWorkerSessionAssociation(nil), l.DispatchWorkerSessionAssociations...)
 }
 
 func (l *ScriptedRuntimeLedger) Subscribe(
@@ -166,6 +183,23 @@ func (l *ScriptedRuntimeLedger) RecordWorkstationResponse(
 	l.WorkstationResults = append(l.WorkstationResults, result)
 	l.mu.Unlock()
 	l.recordCall("RecordWorkstationResponse")
+}
+
+func (l *ScriptedRuntimeLedger) RecordDispatchWorkerSessionAssociation(
+	_ int,
+	dispatchID string,
+	workerSessionID string,
+	requestID string,
+	_ time.Time,
+) {
+	l.mu.Lock()
+	l.DispatchWorkerSessionAssociations = append(l.DispatchWorkerSessionAssociations, ScriptedDispatchWorkerSessionAssociation{
+		DispatchID:      dispatchID,
+		WorkerSessionID: workerSessionID,
+		RequestID:       requestID,
+	})
+	l.mu.Unlock()
+	l.recordCall("RecordDispatchWorkerSessionAssociation")
 }
 
 func (l *ScriptedRuntimeLedger) RecordRunResponse(

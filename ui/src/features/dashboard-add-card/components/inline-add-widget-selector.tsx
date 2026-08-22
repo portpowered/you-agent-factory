@@ -19,6 +19,7 @@ export interface InlineAddWidgetSelectorProps {
   disabled: boolean;
   onValueChange: (value: string) => void;
   options: InlineAddWidgetSelectorOption[];
+  unavailableOptionLabel: string;
   unavailableLabel: string;
   value: string;
 }
@@ -31,6 +32,7 @@ export function InlineAddWidgetSelector({
   disabled,
   onValueChange,
   options,
+  unavailableOptionLabel,
   unavailableLabel,
   value,
 }: InlineAddWidgetSelectorProps): ReactElement {
@@ -42,11 +44,16 @@ export function InlineAddWidgetSelector({
           value: unavailableLabel,
         },
       ]
-    : options.map((option) => ({
-        disabled: !availabilityByType.get(option.widgetType)?.enabled,
-        label: option.title,
-        value: option.widgetType,
-      }));
+    : options.map((option) => {
+        const enabled = availabilityByType.get(option.widgetType)?.enabled;
+        return {
+          disabled: !enabled,
+          label: enabled
+            ? option.title
+            : `${option.title} — ${unavailableOptionLabel}`,
+          value: option.widgetType,
+        };
+      });
 
   return (
     <EnumSelect

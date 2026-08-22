@@ -1,0 +1,298 @@
+{
+  "acp": [
+    {
+      "name": "copilot-acp",
+      "transport": "stdio",
+      "executable": "copilot",
+      "command": "copilot --acp --stdio",
+      "arguments": [
+        "--acp",
+        "--stdio"
+      ],
+      "posture": "installed_executable",
+      "implementation": {
+        "kind": "acp_agent",
+        "profile": "copilot-acp"
+      }
+    },
+    {
+      "name": "cursor-acp",
+      "transport": "stdio",
+      "executable": "cursor-agent",
+      "command": "cursor-agent acp",
+      "arguments": [
+        "acp"
+      ],
+      "posture": "installed_executable",
+      "implementation": {
+        "kind": "acp_agent",
+        "profile": "cursor-acp"
+      }
+    },
+    {
+      "name": "droid-acp",
+      "aliases": [
+        "factory-droid",
+        "factorydroid"
+      ],
+      "transport": "stdio",
+      "executable": "droid",
+      "command": "droid exec --output-format acp",
+      "arguments": [
+        "exec",
+        "--output-format",
+        "acp"
+      ],
+      "posture": "installed_executable",
+      "implementation": {
+        "kind": "acp_agent",
+        "profile": "droid-acp"
+      }
+    },
+    {
+      "name": "fast-agent-acp",
+      "transport": "stdio",
+      "executable": "uvx",
+      "command": "uvx fast-agent-mcp acp",
+      "arguments": [
+        "fast-agent-mcp",
+        "acp"
+      ],
+      "posture": "package_runner",
+      "implementation": {
+        "kind": "acp_agent",
+        "profile": "fast-agent-acp"
+      }
+    },
+    {
+      "name": "gemini-acp",
+      "transport": "stdio",
+      "executable": "gemini",
+      "command": "gemini --acp",
+      "arguments": [
+        "--acp"
+      ],
+      "posture": "installed_executable",
+      "implementation": {
+        "kind": "acp_agent",
+        "profile": "gemini-acp"
+      }
+    },
+    {
+      "name": "grok-build-acp",
+      "transport": "stdio",
+      "executable": "grok",
+      "command": "grok agent stdio",
+      "arguments": [
+        "agent",
+        "stdio"
+      ],
+      "posture": "installed_executable",
+      "implementation": {
+        "kind": "acp_agent",
+        "profile": "grok-build-acp"
+      }
+    },
+    {
+      "name": "iflow-acp",
+      "transport": "stdio",
+      "executable": "iflow",
+      "command": "iflow --experimental-acp",
+      "arguments": [
+        "--experimental-acp"
+      ],
+      "posture": "installed_executable",
+      "implementation": {
+        "kind": "acp_agent",
+        "profile": "iflow-acp"
+      }
+    },
+    {
+      "name": "kilocode-acp",
+      "transport": "stdio",
+      "executable": "npx",
+      "command": "npx -y @kilocode/cli acp",
+      "arguments": [
+        "-y",
+        "@kilocode/cli",
+        "acp"
+      ],
+      "posture": "package_runner",
+      "implementation": {
+        "kind": "acp_agent",
+        "profile": "kilocode-acp"
+      }
+    },
+    {
+      "name": "kimi-acp",
+      "transport": "stdio",
+      "executable": "kimi",
+      "command": "kimi acp",
+      "arguments": [
+        "acp"
+      ],
+      "posture": "installed_executable",
+      "implementation": {
+        "kind": "acp_agent",
+        "profile": "kimi-acp"
+      }
+    },
+    {
+      "name": "kiro-acp",
+      "transport": "stdio",
+      "executable": "kiro-cli-chat",
+      "command": "kiro-cli-chat acp",
+      "arguments": [
+        "acp"
+      ],
+      "posture": "installed_executable",
+      "implementation": {
+        "kind": "acp_agent",
+        "profile": "kiro-acp"
+      }
+    },
+    {
+      "name": "mux-acp",
+      "transport": "stdio",
+      "executable": "mux",
+      "command": "mux acp",
+      "arguments": [
+        "acp"
+      ],
+      "posture": "installed_executable",
+      "implementation": {
+        "kind": "acp_agent",
+        "profile": "mux-acp"
+      }
+    },
+    {
+      "name": "openclaw-acp",
+      "transport": "stdio",
+      "executable": "openclaw",
+      "command": "openclaw acp",
+      "arguments": [
+        "acp"
+      ],
+      "posture": "installed_executable",
+      "implementation": {
+        "kind": "acp_agent",
+        "profile": "openclaw-acp"
+      }
+    },
+    {
+      "name": "opencode-acp",
+      "transport": "stdio",
+      "executable": "npx",
+      "command": "npx -y opencode-ai acp",
+      "arguments": [
+        "-y",
+        "opencode-ai",
+        "acp"
+      ],
+      "posture": "package_runner",
+      "implementation": {
+        "kind": "acp_agent",
+        "profile": "opencode-acp"
+      }
+    },
+    {
+      "name": "pi-acp",
+      "transport": "stdio",
+      "executable": "npx",
+      "command": "npx pi-acp",
+      "arguments": [
+        "pi-acp"
+      ],
+      "posture": "package_runner",
+      "implementation": {
+        "kind": "acp_agent",
+        "profile": "pi-acp"
+      }
+    },
+    {
+      "name": "pool-acp",
+      "transport": "stdio",
+      "executable": "pool",
+      "command": "pool acp",
+      "arguments": [
+        "acp"
+      ],
+      "posture": "installed_executable",
+      "implementation": {
+        "kind": "acp_agent",
+        "profile": "pool-acp"
+      }
+    },
+    {
+      "name": "qoder-acp",
+      "transport": "stdio",
+      "executable": "qodercli",
+      "command": "qodercli --acp",
+      "arguments": [
+        "--acp"
+      ],
+      "posture": "installed_executable",
+      "implementation": {
+        "kind": "acp_agent",
+        "profile": "qoder-acp"
+      }
+    },
+    {
+      "name": "qwen-acp",
+      "transport": "stdio",
+      "executable": "qwen",
+      "command": "qwen --acp",
+      "arguments": [
+        "--acp"
+      ],
+      "posture": "installed_executable",
+      "implementation": {
+        "kind": "acp_agent",
+        "profile": "qwen-acp"
+      }
+    },
+    {
+      "name": "reasonix-acp",
+      "transport": "stdio",
+      "executable": "reasonix",
+      "command": "reasonix acp",
+      "arguments": [
+        "acp"
+      ],
+      "posture": "installed_executable",
+      "implementation": {
+        "kind": "acp_agent",
+        "profile": "reasonix-acp"
+      }
+    },
+    {
+      "name": "trae-acp",
+      "transport": "stdio",
+      "executable": "traecli",
+      "command": "traecli acp serve",
+      "arguments": [
+        "acp",
+        "serve"
+      ],
+      "posture": "installed_executable",
+      "implementation": {
+        "kind": "acp_agent",
+        "profile": "trae-acp"
+      }
+    },
+    {
+      "name": "zeroclaw-acp",
+      "transport": "stdio",
+      "executable": "zeroclaw",
+      "command": "zeroclaw acp",
+      "arguments": [
+        "acp"
+      ],
+      "posture": "installed_executable",
+      "implementation": {
+        "kind": "acp_agent",
+        "profile": "zeroclaw-acp"
+      }
+    }
+  ]
+}

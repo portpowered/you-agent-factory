@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/root"
 	"github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 )
 
@@ -59,51 +60,163 @@ func processExitCode(err, contextErr error, args []string) int {
 }
 
 func declaredCancellationExitCode(args []string) int {
-	commandName := selectedCommandName(args)
-	if commandName == "" {
+	commandPath := selectedCommandPath(args)
+	if commandPath == "" {
 		return exitFailure
 	}
-	manifest, err := generated.RunSubmitFamilyManifest()
-	if err != nil {
-		return exitFailure
+	manifests := []func() (climanifest.Manifest, error){
+		generated.RunSubmitFamilyManifest,
+		generated.WorkerSessionsFamilyManifest,
 	}
-	for _, command := range manifest.Commands {
-		if command.Name != commandName || command.Path != manifest.RootPath+" "+commandName {
+	for _, loadManifest := range manifests {
+		manifest, err := loadManifest()
+		if err != nil {
 			continue
 		}
-		for _, exit := range command.Exits {
-			if exit.Kind == "cancel" {
-				return exit.Code
+		for _, command := range manifest.Commands {
+			if command.Path != commandPath {
+				continue
+			}
+			for _, exit := range command.Exits {
+				if exit.Kind == "cancel" {
+					return exit.Code
+				}
 			}
 		}
 	}
 	return exitFailure
 }
 
-func selectedCommandName(args []string) string {
+func selectedCommandPath(args []string) string {
+	commandPaths, flagByName, rootPaths := cancellationCommandMetadata()
+	if len(commandPaths) == 0 || len(rootPaths) == 0 {
+		return ""
+	}
+
+	parts := make([]string, 0, 2)
+	var lastExact string
 	for index := 1; index < len(args); index++ {
 		arg := args[index]
-		if strings.HasPrefix(arg, "--") {
-			if !strings.Contains(arg, "=") && globalFlagConsumesValue(arg) {
-				index++
+		if arg == "--" {
+			return ""
+		}
+		if strings.HasPrefix(arg, "-") {
+			if !strings.Contains(arg, "=") {
+				flag, knownFlag := flagByName[arg]
+				if knownFlag && manifestFlagConsumesValue(flag) {
+					if index+1 >= len(args) {
+						return ""
+					}
+					index++
+				}
 			}
 			continue
 		}
-		if strings.HasPrefix(arg, "-") {
-			continue
+
+		parts = append(parts, arg)
+		matchedPrefix := false
+		for rootPath := range rootPaths {
+			candidate := strings.TrimSpace(rootPath + " " + strings.Join(parts, " "))
+			if canonicalPath, exact := commandPaths[candidate]; exact {
+				lastExact = canonicalPath
+				// A runnable command can own runnable protocol children (for
+				// example, `you server` owns `you server mcp`). Keep walking
+				// while the exact path is also a prefix so the child lifecycle
+				// contract wins over the parent's cancellation code.
+				if !cancellationPathHasPrefix(commandPaths, candidate) {
+					return canonicalPath
+				}
+				matchedPrefix = true
+				break
+			}
+			if cancellationPathHasPrefix(commandPaths, candidate) {
+				matchedPrefix = true
+				break
+			}
 		}
-		return arg
+		if !matchedPrefix {
+			return lastExact
+		}
 	}
-	return ""
+	return lastExact
 }
 
-func globalFlagConsumesValue(arg string) bool {
-	switch arg {
-	case "--server":
-		return true
-	default:
-		return false
+func cancellationCommandMetadata() (map[string]string, map[string]climanifest.Flag, map[string]struct{}) {
+	commandPaths := make(map[string]string)
+	flagByName := make(map[string]climanifest.Flag)
+	rootPaths := make(map[string]struct{})
+	manifests := []func() (climanifest.Manifest, error){
+		generated.RunSubmitFamilyManifest,
+		generated.WorkerSessionsFamilyManifest,
+		generated.MCPFamilyManifest,
+		generated.ServeFamilyManifest,
 	}
+	for _, loadManifest := range manifests {
+		manifest, err := loadManifest()
+		if err != nil {
+			continue
+		}
+		if manifest.RootPath != "" {
+			rootPaths[manifest.RootPath] = struct{}{}
+		}
+		for _, command := range manifest.Commands {
+			for _, flag := range command.Flags {
+				registerManifestFlag(flagByName, flag)
+			}
+			if !commandDeclaresCancellation(command) {
+				continue
+			}
+			commandPaths[command.Path] = command.Path
+			for _, alias := range command.Aliases {
+				parentPath := strings.TrimSuffix(command.Path, " "+command.Name)
+				aliasPath := strings.TrimSpace(parentPath + " " + alias)
+				if aliasPath != "" {
+					commandPaths[aliasPath] = command.Path
+				}
+			}
+		}
+	}
+	return commandPaths, flagByName, rootPaths
+}
+
+func commandDeclaresCancellation(command climanifest.Command) bool {
+	for _, exit := range command.Exits {
+		if exit.Kind == "cancel" {
+			return true
+		}
+	}
+	return false
+}
+
+func registerManifestFlag(flags map[string]climanifest.Flag, flag climanifest.Flag) {
+	if flag.Long == "" {
+		return
+	}
+	register := func(name string) {
+		if current, exists := flags[name]; !exists || (current.ValueType == "bool" && flag.ValueType != "bool") {
+			flags[name] = flag
+		}
+	}
+	register("--" + flag.Long)
+	if flag.Shorthand != "" {
+		register("-" + flag.Shorthand)
+	}
+	for _, alias := range flag.Aliases {
+		register("--" + alias)
+	}
+}
+
+func manifestFlagConsumesValue(flag climanifest.Flag) bool {
+	return flag.ValueType != "bool" && flag.NoOptionDefault == ""
+}
+
+func cancellationPathHasPrefix(commandPaths map[string]string, candidate string) bool {
+	for commandPath := range commandPaths {
+		if strings.HasPrefix(commandPath, candidate+" ") {
+			return true
+		}
+	}
+	return false
 }
 
 func streamIsTerminal(file *os.File) bool {

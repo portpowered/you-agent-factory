@@ -32,12 +32,16 @@ func (s *currentRuntimeSource) SubscribeFactoryEvents(
 		if runtime == nil || runtime.Factory == nil {
 			return factorysessions.ErrRuntimeNotAvailable
 		}
-		legacyRuntime, ok := runtime.Factory.(factoryruntime.APIFactory)
-		if !ok {
-			return fmt.Errorf("legacy Factory Runtime event subscription is required")
+		// TODO(P5B): subscribe from Recordings so Visualization no longer needs
+		// this source-native compatibility capability. Until then Visualization
+		// reads the event boundary Factory Sessions declares on the live
+		// runtime instead of recovering one from the runtime value.
+		events := runtime.WorkAndEventIngress
+		if events == nil {
+			return fmt.Errorf("Factory Runtime event subscription is required until Recordings migration")
 		}
 		var subscribeErr error
-		stream, subscribeErr = legacyRuntime.SubscribeFactoryEvents(ctx, reconnect, scope)
+		stream, subscribeErr = events.SubscribeFactoryEvents(ctx, reconnect, scope)
 		return subscribeErr
 	})
 	return stream, err

@@ -14,10 +14,12 @@ const (
 	DiagnosticExecutionBehavior = "execution_behavior"
 	ExecutionBehaviorAgentRun   = "agent_run"
 
-	DiagnosticFailureClass   = "failure_class"
-	DiagnosticRecoveryAction = "recovery_action"
+	DiagnosticFailureClass        = "failure_class"
+	DiagnosticProviderFailureType = "provider_failure_type"
+	DiagnosticRecoveryAction      = "recovery_action"
 
-	FailureClassHarnessRuntime = "agent_run_harness_failure"
+	FailureClassProvider       = workerexecution.AgentRunFailureClassProvider
+	FailureClassHarnessRuntime = workerexecution.AgentRunFailureClassHarness
 	FailureClassCanceled       = "agent_run_canceled"
 	FailureClassTimeout        = "agent_run_timeout"
 	FailureClassLeaseDenied    = "agent_run_lease_denied"
@@ -26,7 +28,10 @@ const (
 	FailureClassToolDenied     = "agent_run_tool_denied"
 	FailureClassToolPolicy     = "agent_run_tool_policy_violation"
 	FailureClassToolRuntime    = "agent_run_tool_failure"
+	FailureClassToolCapability = "agent_run_tool_capability_unsupported"
 )
+
+const maxAgentRunProviderFailureTypeLength = 64
 
 func agentRunDiagnostics(extra map[string]string) *workerexecution.WorkDiagnostics {
 	metadata := map[string]string{
@@ -41,6 +46,44 @@ func agentRunDiagnostics(extra map[string]string) *workerexecution.WorkDiagnosti
 	return &workerexecution.WorkDiagnostics{Metadata: metadata}
 }
 
+// mergeAgentRunDiagnostics keeps the agent-run execution facts while
+// preserving structured result diagnostics emitted by an output validator.
+// In particular, decision-envelope validation facts must survive the
+// agent-run projection so Worker Sessions can classify a clean incomplete
+// response without inspecting the transcript.
+func mergeAgentRunDiagnostics(base, overlay *workerexecution.WorkDiagnostics) *workerexecution.WorkDiagnostics {
+	if base == nil {
+		return workerexecution.CloneWorkDiagnostics(overlay)
+	}
+	merged := workerexecution.CloneWorkDiagnostics(base)
+	if overlay == nil {
+		return merged
+	}
+	overlay = workerexecution.CloneWorkDiagnostics(overlay)
+	if overlay.RenderedPrompt != nil {
+		merged.RenderedPrompt = overlay.RenderedPrompt
+	}
+	if overlay.Provider != nil {
+		merged.Provider = overlay.Provider
+	}
+	if overlay.Invocation != nil {
+		merged.Invocation = overlay.Invocation
+	}
+	if overlay.Command != nil {
+		merged.Command = overlay.Command
+	}
+	if overlay.Panic != nil {
+		merged.Panic = overlay.Panic
+	}
+	for key, value := range overlay.Metadata {
+		if merged.Metadata == nil {
+			merged.Metadata = make(map[string]string)
+		}
+		merged.Metadata[key] = value
+	}
+	return merged
+}
+
 func failureClassForError(err error) string {
 	if err == nil {
 		return ""
@@ -50,6 +93,9 @@ func failureClassForError(err error) string {
 	}
 	if class, ok := modelhostFailureClass(err); ok {
 		return class
+	}
+	if normalizedProviderErrorForAgentRun(err) != nil {
+		return FailureClassProvider
 	}
 	if errors.Is(err, context.Canceled) {
 		return FailureClassCanceled
@@ -102,16 +148,26 @@ func formatAgentRunError(err error) string {
 		return "agent run model runtime failure: " + err.Error()
 	case FailureClassToolDenied, FailureClassToolPolicy:
 		return "agent run tool policy violation: " + safeToolPolicyFailureSummary(err)
+	case FailureClassToolCapability:
+		return "agent run tools unsupported: " + safeToolPolicyFailureSummary(err)
 	case FailureClassToolRuntime:
 		return "agent run tool failure: " + safeToolRuntimeFailureSummary(err)
+	case FailureClassProvider:
+		return "agent run provider failure: " + safeProviderFailureSummary(normalizedProviderErrorForAgentRun(err))
 	default:
 		return "agent run harness failure: " + err.Error()
 	}
 }
 
 func agentRunFailureDiagnostics(err error) map[string]string {
+	class := failureClassForError(err)
 	diagnostics := map[string]string{
-		DiagnosticFailureClass: failureClassForError(err),
+		DiagnosticFailureClass: class,
+	}
+	if class == FailureClassProvider {
+		if providerErr := normalizedProviderErrorForAgentRun(err); providerErr != nil {
+			diagnostics[DiagnosticProviderFailureType] = string(safeProviderFailureType(providerErr))
+		}
 	}
 	if action := recoveryActionForError(err); action != "" {
 		diagnostics[DiagnosticRecoveryAction] = action
@@ -119,7 +175,56 @@ func agentRunFailureDiagnostics(err error) map[string]string {
 	return diagnostics
 }
 
+func normalizedProviderErrorForAgentRun(err error) *workerexecution.ProviderError {
+	if err == nil {
+		return nil
+	}
+	var providerErr *workerexecution.ProviderError
+	if errors.As(err, &providerErr) && providerErr != nil {
+		return providerErr
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return nil
+	}
+	return workerexecution.NormalizeProviderExecutionError(err)
+}
+
+func safeProviderFailureType(providerErr *workerexecution.ProviderError) workerexecution.WorkFailureType {
+	if providerErr == nil {
+		return workerexecution.WorkFailureTypeUnknown
+	}
+	typ := providerErr.Type
+	if len([]rune(string(typ))) > maxAgentRunProviderFailureTypeLength {
+		return workerexecution.WorkFailureTypeUnknown
+	}
+	switch typ {
+	case workerexecution.WorkFailureTypeAuthFailure,
+		workerexecution.WorkFailureTypePermanentBadRequest,
+		workerexecution.WorkFailureTypeThrottled,
+		workerexecution.WorkFailureTypeInternalServerError,
+		workerexecution.WorkFailureTypeTimeout,
+		workerexecution.WorkFailureTypeUnknown,
+		workerexecution.WorkFailureTypeMisconfigured,
+		workerexecution.WorkFailureTypeCommandLineTooLong,
+		workerexecution.WorkFailureTypeMissingExecutable,
+		workerexecution.WorkFailureTypeStructuredOutputSchemaViolation:
+		return typ
+	default:
+		return workerexecution.WorkFailureTypeUnknown
+	}
+}
+
+func safeProviderFailureSummary(providerErr *workerexecution.ProviderError) string {
+	return "provider error: " + string(safeProviderFailureType(providerErr))
+}
+
 func recoveryActionForError(err error) string {
+	if errors.Is(err, ErrAgentRunToolsUnsupported) {
+		return agentRunToolsUnsupportedRecoveryAction
+	}
+	if providerErr := normalizedProviderErrorForAgentRun(err); providerErr != nil {
+		return recoveryActionForProviderFailure(providerErr)
+	}
 	if errors.Is(err, models.ErrHostCapacityExhausted) {
 		return "retry later or increase managed runtime resource capacity"
 	}
@@ -134,6 +239,21 @@ func recoveryActionForError(err error) string {
 		return "resolve the managed runtime failure before retrying the agent run"
 	}
 	return ""
+}
+
+func recoveryActionForProviderFailure(providerErr *workerexecution.ProviderError) string {
+	metadata := workerexecution.WorkFailureMetadataFromProviderError(providerErr)
+	if metadata == nil {
+		return ""
+	}
+	switch metadata.Family {
+	case workerexecution.WorkFailureFamilyRetryable:
+		return "retry the agent run after the provider recovers"
+	case workerexecution.WorkFailureFamilyThrottle:
+		return "retry after provider capacity or rate limiting recovers"
+	default:
+		return ""
+	}
 }
 
 func recoveryActionForReadiness(readiness models.ReadinessState) string {
@@ -253,6 +373,9 @@ func safeToolRuntimeFailureSummary(err error) string {
 }
 
 func toolFailureClass(err error) (string, bool) {
+	if errors.Is(err, ErrAgentRunToolsUnsupported) {
+		return FailureClassToolCapability, true
+	}
 	if errors.Is(err, ErrToolPolicyDenied) {
 		return FailureClassToolPolicy, true
 	}

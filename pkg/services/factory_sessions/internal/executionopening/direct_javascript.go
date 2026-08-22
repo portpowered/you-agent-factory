@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 	"sync"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle"
@@ -20,6 +20,7 @@ type directJavaScriptRunOperation struct {
 	runSync           roles.DirectJavaScriptSyncRunner
 	generateSessionID factorysessions.SessionIDGenerator
 	host              roles.DirectJavaScriptHostAdapter
+	presentations     factorysessions.OpeningPresentationOwner
 }
 
 type directJavaScriptTransport interface {
@@ -41,6 +42,7 @@ func NewDirectJavaScriptRunOperation(
 	runSync roles.DirectJavaScriptSyncRunner,
 	generateSessionID factorysessions.SessionIDGenerator,
 	host roles.DirectJavaScriptHostAdapter,
+	presentations ...factorysessions.OpeningPresentationOwner,
 ) (roles.DirectJavaScriptRunOperation, error) {
 	if build == nil {
 		return nil, errors.New("session execution builder is required")
@@ -54,8 +56,13 @@ func NewDirectJavaScriptRunOperation(
 	if host == nil {
 		return nil, errors.New("direct JavaScript host adapter is required")
 	}
+	var presentationOwner factorysessions.OpeningPresentationOwner
+	if len(presentations) > 0 {
+		presentationOwner = presentations[0]
+	}
 	return &directJavaScriptRunOperation{
 		build: build, runSync: runSync, generateSessionID: generateSessionID, host: host,
+		presentations: presentationOwner,
 	}, nil
 }
 
@@ -75,12 +82,16 @@ func (o *directJavaScriptRunOperation) Open(
 	if o == nil || o.build == nil || o.runSync == nil {
 		return factorysessions.DirectJavaScriptApplication{}, errors.New("direct JavaScript run operation is unavailable")
 	}
+	presentation, err := o.presentationScope(request.ScopeID)
+	if err != nil {
+		return factorysessions.DirectJavaScriptApplication{}, err
+	}
 	prepared, err := o.prepareExecution(ctx, request)
 	if err != nil {
 		return factorysessions.DirectJavaScriptApplication{}, err
 	}
-	completion := o.completion(prepared, request)
-	transport, completion, err := o.prepareHosting(request, prepared.execution, completion)
+	completion := o.completion(prepared, request, presentation.Output)
+	transport, completion, err := o.prepareHosting(request.Host, presentation.RuntimeHostObserver, prepared.execution, completion)
 	if err != nil {
 		return factorysessions.DirectJavaScriptApplication{}, errors.Join(err, prepared.execution.Close())
 	}
@@ -136,6 +147,7 @@ func (o *directJavaScriptRunOperation) prepareExecution(
 func (o *directJavaScriptRunOperation) completion(
 	prepared preparedDirectJavaScriptExecution,
 	request factorysessions.DirectJavaScriptRunRequest,
+	output io.Writer,
 ) func(context.Context) error {
 	return func(runCtx context.Context) error {
 		return o.runSync(runCtx, prepared.execution, factorysessions.StartRequest{
@@ -145,22 +157,22 @@ func (o *directJavaScriptRunOperation) completion(
 				WorkflowFile: prepared.sourcePath,
 			},
 			Runtime: &factorysessions.RuntimeOptions{ChildExecutorMode: prepared.childMode},
-		}, request.JSONOutput, request.Output)
+		}, request.JSONOutput, output)
 	}
 }
 
 func (o *directJavaScriptRunOperation) prepareHosting(
-	request factorysessions.DirectJavaScriptRunRequest,
+	host *factorysessions.RuntimeHostRequest,
+	observer factorysessions.RuntimeHostObserver,
 	execution roles.OwnedExecutionService,
 	completion func(context.Context) error,
 ) (directJavaScriptTransport, func(context.Context) error, error) {
-	if request.Host == nil {
+	if host == nil {
 		return nil, completion, nil
 	}
 	ready := make(chan struct{})
-	observer := request.RuntimeHostObserver
 	var publish sync.Once
-	request.RuntimeHostObserver = func(binding factorysessions.RuntimeHostBinding) {
+	readyObserver := func(binding factorysessions.RuntimeHostBinding) {
 		publish.Do(func() {
 			if observer != nil {
 				observer(binding)
@@ -177,84 +189,22 @@ func (o *directJavaScriptRunOperation) prepareHosting(
 			return runCtx.Err()
 		}
 	}
-	transport, err := o.host(execution, directJavaScriptLifecycle{execution}, request)
+	transport, err := o.host(execution, *host, readyObserver)
 	return transport, completion, err
 }
 
-type directJavaScriptLifecycle struct {
-	execution factorysessions.ExecutionService
-}
-
-func (adapter directJavaScriptLifecycle) PauseDurableFactorySession(
-	ctx context.Context, sessionID string, request factorysessions.ControlRequest,
-) (factorysessions.LifecycleControlResult, error) {
-	return adapter.execution.Pause(ctx, sessionID, request)
-}
-
-func (adapter directJavaScriptLifecycle) ResumeDurableFactorySession(
-	ctx context.Context, sessionID string, request factorysessions.ControlRequest,
-) (factorysessions.LifecycleControlResult, error) {
-	return adapter.execution.Resume(ctx, sessionID, request)
-}
-
-func (adapter directJavaScriptLifecycle) CancelDurableFactorySession(
-	ctx context.Context, sessionID string, request factorysessions.ControlRequest,
-) (factorysessions.LifecycleControlResult, error) {
-	return adapter.execution.Cancel(ctx, sessionID, request)
-}
-
-func (adapter directJavaScriptLifecycle) TerminateDurableFactorySession(
-	ctx context.Context, sessionID string, request factorysessions.ControlRequest,
-) (factorysessions.LifecycleControlResult, error) {
-	return adapter.execution.Terminate(ctx, sessionID, request)
-}
-
-func (adapter directJavaScriptLifecycle) ApproveDurableFactorySession(
-	ctx context.Context, sessionID string, request factorysessions.ApproveRequest,
-) (factorysessions.LifecycleControlResult, error) {
-	return adapter.execution.Approve(ctx, sessionID, request)
-}
-
-func (adapter directJavaScriptLifecycle) RetryDurableFactorySessionDispatch(
-	ctx context.Context, sessionID string, request factorysessions.RetryDispatchRequest,
-) (factorysessions.LifecycleControlResult, error) {
-	return adapter.execution.RetryDispatch(ctx, sessionID, request)
-}
-
-func (adapter directJavaScriptLifecycle) InterruptDurableFactorySessionDispatch(
-	ctx context.Context, sessionID string, request factorysessions.InterruptDispatchRequest,
-) (factorysessions.LifecycleControlResult, error) {
-	return adapter.execution.InterruptDispatch(ctx, sessionID, request)
-}
-
-func (adapter directJavaScriptLifecycle) ReadDurableFactorySessionEventStream(
-	ctx context.Context, sessionID string, request factorysessions.EventReconnectRequest,
-) (*factorydefinitions.FactoryEventStream, error) {
-	result, err := adapter.execution.ReadEvents(ctx, sessionID, request)
-	if err != nil {
-		return nil, err
+func (o *directJavaScriptRunOperation) presentationScope(id factorysessions.OpeningScopeID) (factorysessions.DirectJavaScriptRunScope, error) {
+	if id == "" {
+		return factorysessions.DirectJavaScriptRunScope{}, nil
 	}
-	return factorysessions.MaterializeEventReadStream(result), nil
-}
-
-func (adapter directJavaScriptLifecycle) ProbeDurableFactorySessionEvents(
-	ctx context.Context, sessionID string, request factorysessions.EventReconnectRequest,
-) error {
-	_, err := adapter.execution.ReadEvents(ctx, sessionID, request)
-	return err
-}
-
-func (adapter directJavaScriptLifecycle) SubscribeDurableFactoryResponseEvents(
-	ctx context.Context,
-	request factorysessions.ResponseEventSubscriptionRequest,
-) (*factorysessions.ResponseEventCursor, error) {
-	subscriber, ok := adapter.execution.(interface {
-		SubscribeResponseEvents(context.Context, string, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error)
-	})
+	if o.presentations == nil {
+		return factorysessions.DirectJavaScriptRunScope{}, fmt.Errorf("direct JavaScript opening presentation scope %q is unavailable", id)
+	}
+	scope, ok := o.presentations.DirectJavaScript(id)
 	if !ok {
-		return nil, factorysessions.ErrRuntimeNotAvailable
+		return factorysessions.DirectJavaScriptRunScope{}, fmt.Errorf("direct JavaScript opening presentation scope %q is unavailable", id)
 	}
-	return subscriber.SubscribeResponseEvents(ctx, request.SessionID, request)
+	return scope, nil
 }
 
 var _ roles.DirectJavaScriptRunOperation = (*directJavaScriptRunOperation)(nil)

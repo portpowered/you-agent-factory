@@ -4,24 +4,13 @@ import (
 	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
-	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
 )
 
-// NewProviderFromService adapts the Providers root to the retained Workers
-// Provider port used by durable Factory Session construction. Execution enters
-// through the private runners.Service.Execute boundary.
-func NewProviderFromService(service providers.Service) (workers.Provider, error) {
+// NewProviderFromService returns the Providers root selected by composition.
+// Provider execution is no longer adapted into a Workers-owned client port.
+func NewProviderFromService(service providers.Service) (providers.Service, error) {
 	if service == nil {
-		return nil, fmt.Errorf("construct Worker provider: Providers service is required")
+		return nil, fmt.Errorf("construct Providers service: service is required")
 	}
-	registry, err := runnerswire.NewAgentRegistry(runners.AgentDependencies{
-		Providers: service,
-		Publish:   func(workers.ProgressFragment) {},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("construct Worker provider: %w", err)
-	}
-	return registryExecuteProvider{registry: registry}, nil
+	return service, nil
 }

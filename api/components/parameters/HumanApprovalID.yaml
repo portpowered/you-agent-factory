@@ -1,0 +1,7 @@
+name: approval_id
+in: path
+required: true
+description: Stable pending human-approval identifier.
+schema:
+  type: string
+  minLength: 1

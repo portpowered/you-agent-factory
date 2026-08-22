@@ -6,13 +6,15 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestInvocationScheduleFactoryRecoversDurableControllerWithoutInitialRetrigger(t *testing.T) {
 	underlying := &invocationScheduleRecoveryFactory{snapshot: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
@@ -42,7 +44,7 @@ func TestInvocationScheduleFactoryRecoversDurableControllerWithoutInitialRetrigg
 	}}
 	schedules := &recordingInvocationSchedules{}
 	wrapped := &invocationScheduleFactory{
-		Factory: underlying, schedules: schedules, factoryDir: "factory-loop",
+		Engine: underlying, schedules: schedules, factoryDir: "factory-loop",
 		factoryConfig: invocationScheduleRecoveryConfig(), ctx: context.Background(),
 	}
 
@@ -82,13 +84,39 @@ func TestInvocationScheduleFactoryRecoversDurableControllerWithoutInitialRetrigg
 	}
 }
 
+func TestInvocationScheduleFactoryForwardsModelsRuntimeScope(t *testing.T) {
+	t.Parallel()
+
+	scope, err := (modelprovider.RuntimeScopeRef{}).Parse("factory-session:models")
+	if err != nil {
+		t.Fatalf("parse Models scope: %v", err)
+	}
+	underlying := &invocationScheduleRecoveryFactory{}
+	wrapped := &invocationScheduleFactory{Engine: underlying}
+
+	if err := wrapped.BindModelsRuntimeScope(scope); err != nil {
+		t.Fatalf("BindModelsRuntimeScope: %v", err)
+	}
+	if underlying.scope != scope || underlying.scopeCalls != 1 {
+		t.Fatalf("forwarded scope = %#v, calls = %d; want %#v and one call", underlying.scope, underlying.scopeCalls, scope)
+	}
+}
+
 type invocationScheduleRecoveryFactory struct {
-	factory.Factory
-	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
+	factoryhost.Engine
+	snapshot   *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
+	scope      modelprovider.RuntimeScopeRef
+	scopeCalls int
 }
 
 func (f *invocationScheduleRecoveryFactory) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
 	return f.snapshot, nil
+}
+
+func (f *invocationScheduleRecoveryFactory) BindModelsRuntimeScope(scope modelprovider.RuntimeScopeRef) error {
+	f.scope = scope
+	f.scopeCalls++
+	return nil
 }
 
 type recordingInvocationSchedules struct {
@@ -120,5 +148,5 @@ func invocationScheduleRecoveryConfig() *interfaces.FactoryConfig {
 	}}
 }
 
-var _ factory.Factory = (*invocationScheduleRecoveryFactory)(nil)
+var _ factoryhost.Engine = (*invocationScheduleRecoveryFactory)(nil)
 var _ invocationScheduleService = (*recordingInvocationSchedules)(nil)

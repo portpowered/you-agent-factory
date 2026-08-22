@@ -17,8 +17,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -109,6 +110,7 @@ func TestFactorySessionRestartRemapsLiveIDToLogicalIdentity(t *testing.T) {
 // the public resume boundary without replaying those completed children:
 // completed Dispatch identities stay COMPLETED, only remaining work continues,
 // and progress on public session surfaces reflects durable continuity.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestFactorySessionResumeDoesNotRepeatCompletedDispatch(t *testing.T) {
 	const workflowName = "resumable-two-step-fake-children"
 	factoryDir := setupResumableTwoStepWorkflowFixture(t, workflowName)
@@ -211,10 +213,10 @@ func TestFactorySessionResumeDoesNotRepeatCompletedDispatch(t *testing.T) {
 	}
 }
 
-// TestFactorySessionHistoryIsNotPersistedByDefault proves an interrupted
-// Factory Session remains inspectable for its process lifetime but is absent
-// after restart while durable snapshot recording is disabled by default.
-func TestFactorySessionHistoryIsNotPersistedByDefault(t *testing.T) {
+// TestFactorySessionHistoryIsPersistedAcrossRestart proves an interrupted
+// Factory Session remains inspectable after the public process is restarted
+// with the same project-local durable session store.
+func TestFactorySessionHistoryIsPersistedAcrossRestart(t *testing.T) {
 	const workflowName = "resumable-two-step-fake-children"
 	factoryDir := setupResumableTwoStepWorkflowFixture(t, workflowName)
 	home := t.TempDir()
@@ -240,13 +242,13 @@ func TestFactorySessionHistoryIsNotPersistedByDefault(t *testing.T) {
 	}
 
 	beforeDispatches := listFactorySessionDispatches(t, beforeURL, sessionID)
-	requireDispatchSummary(
+	dispatchOneBefore := requireDispatchSummary(
 		t,
 		beforeDispatches,
 		"dispatch-1",
 		factoryapi.FactoryDispatchStatusCOMPLETED,
 	)
-	requireDispatchSummary(
+	dispatchTwoBefore := requireDispatchSummary(
 		t,
 		beforeDispatches,
 		"dispatch-2",
@@ -282,21 +284,77 @@ func TestFactorySessionHistoryIsNotPersistedByDefault(t *testing.T) {
 		t.Fatalf("sync-preflight reasonCode = %q, want %q", preflight.ReasonCode, factoryapi.LogicalSessionRemap)
 	}
 
-	endpoint := afterURL + "/factory-sessions/" + url.PathEscape(sessionID)
-	response, err := http.Get(endpoint)
-	if err != nil {
-		t.Fatalf("GET %s: %v", endpoint, err)
+	assertRestartedFactorySession(
+		t,
+		afterURL,
+		sessionID,
+		beforeShow,
+		dispatchOneBefore,
+		dispatchTwoBefore,
+		beforeEvents,
+	)
+}
+
+func assertRestartedFactorySession(
+	t *testing.T,
+	baseURL string,
+	sessionID string,
+	beforeShow factoryapi.FactorySessionDurableReadModel,
+	beforeDispatchOne factoryapi.FactorySessionDispatchSummary,
+	beforeDispatchTwo factoryapi.FactorySessionDispatchSummary,
+	beforeEvents []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+
+	afterShow := readDurableFactorySession(t, baseURL, sessionID)
+	if afterShow.SessionId != sessionID {
+		t.Fatalf("post-restart sessionId = %q, want %q", afterShow.SessionId, sessionID)
 	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusNotFound {
-		body, _ := io.ReadAll(response.Body)
+	assertDurableProgressCounts(t, afterShow.Progress, 1, 2, 0)
+	if afterShow.Status != factoryapi.FactorySessionDurableLifecycleStatusInterrupted {
+		t.Fatalf("post-restart status = %q, want INTERRUPTED", afterShow.Status)
+	}
+	if afterShow.Lifecycle == nil || afterShow.Lifecycle.InterruptedAt == nil {
+		t.Fatalf("post-restart lifecycle = %#v, want interruptedAt", afterShow.Lifecycle)
+	}
+	if beforeShow.Lifecycle == nil || beforeShow.Lifecycle.InterruptedAt == nil {
+		t.Fatal("pre-restart lifecycle missing interruptedAt")
+	}
+	if !afterShow.Lifecycle.InterruptedAt.Equal(*beforeShow.Lifecycle.InterruptedAt) {
 		t.Fatalf(
-			"GET %s status = %d body = %s, want 404 while persistence is disabled",
-			endpoint,
-			response.StatusCode,
-			body,
+			"interruptedAt changed across restart: before=%s after=%s",
+			beforeShow.Lifecycle.InterruptedAt,
+			afterShow.Lifecycle.InterruptedAt,
 		)
 	}
+
+	afterDispatches := listFactorySessionDispatches(t, baseURL, sessionID)
+	afterDispatchOne := requireDispatchSummary(t, afterDispatches, "dispatch-1", factoryapi.FactoryDispatchStatusCOMPLETED)
+	afterDispatchTwo := requireDispatchSummary(
+		t,
+		afterDispatches,
+		"dispatch-2",
+		factoryapi.FactoryDispatchStatusINTERRUPTED,
+		factoryapi.FactoryDispatchStatusRUNNING,
+	)
+	if len(afterDispatches.Dispatches) != 2 {
+		t.Fatalf("post-restart dispatch count = %d, want 2", len(afterDispatches.Dispatches))
+	}
+	assertDispatchSummaryParity(t, beforeDispatchOne, afterDispatchOne)
+	assertDispatchSummaryParity(t, beforeDispatchTwo, afterDispatchTwo)
+	if beforeDispatchTwo.Status != afterDispatchTwo.Status {
+		t.Fatalf(
+			"dispatch-2 status changed across restart: before=%q after=%q",
+			beforeDispatchTwo.Status,
+			afterDispatchTwo.Status,
+		)
+	}
+
+	afterEvents := listFactorySessionEvents(t, baseURL, sessionID)
+	if len(afterEvents) == 0 {
+		t.Fatal("post-restart factory events unexpectedly empty")
+	}
+	assertFactoryEventHistoryContinuity(t, beforeEvents, afterEvents)
 }
 
 func startLogicalIdentityRestartServer(
@@ -432,6 +490,7 @@ func startInterruptedResumableSession(
 	)
 
 	reason := "logical identity resume interrupt"
+	provider.waitForExecuteBlocked(t, 5*time.Second)
 	postLogicalIdentityJSON[factoryapi.FactorySessionLifecycleControlResponse](
 		t,
 		baseURL+"/factory-sessions/"+sessionID+"/interrupt-dispatch",
@@ -440,7 +499,7 @@ func startInterruptedResumableSession(
 			Reason:     &reason,
 		},
 	)
-	provider.waitForCanceledInfer(t, 5*time.Second)
+	provider.waitForCanceledExecute(t, 5*time.Second)
 	waitForDurableFactorySessionStatus(
 		t,
 		baseURL,
@@ -510,6 +569,7 @@ func listFactorySessionEvents(
 
 	var collected []factoryapi.FactoryEvent
 	scanner := bufio.NewScanner(response.Body)
+	scanner.Buffer(make([]byte, 64*1024), boardPersistenceMaxEventLineBytes)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "data:") {
@@ -723,15 +783,34 @@ func strPtr(value string) *string {
 }
 
 type logicalIdentityResumeBlockingProvider struct {
+	testutil.NativeProvider
 	mu              sync.Mutex
 	calls           int
 	blockedOnce     bool
 	contextCanceled int
+	executeBlocked  chan struct{}
 	workflowName    string
 }
 
 func newLogicalIdentityResumeBlockingProvider(workflowName string) *logicalIdentityResumeBlockingProvider {
-	return &logicalIdentityResumeBlockingProvider{workflowName: workflowName}
+	provider := &logicalIdentityResumeBlockingProvider{
+		executeBlocked: make(chan struct{}),
+		workflowName:   workflowName,
+	}
+	provider.NativeProvider.ExecuteFunc = provider.Execute
+	return provider
+}
+
+func (p *logicalIdentityResumeBlockingProvider) waitForExecuteBlocked(t *testing.T, timeout time.Duration) {
+	t.Helper()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-p.executeBlocked:
+	case <-timer.C:
+		t.Fatal("provider Execute did not enter its cancellable wait")
+	}
 }
 
 func (p *logicalIdentityResumeBlockingProvider) callCount() int {
@@ -740,10 +819,10 @@ func (p *logicalIdentityResumeBlockingProvider) callCount() int {
 	return p.calls
 }
 
-func (p *logicalIdentityResumeBlockingProvider) Infer(
+func (p *logicalIdentityResumeBlockingProvider) Execute(
 	ctx context.Context,
-	_ workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
+	_ providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
 	p.mu.Lock()
 	p.calls++
 	call := p.calls
@@ -751,11 +830,11 @@ func (p *logicalIdentityResumeBlockingProvider) Infer(
 	p.mu.Unlock()
 
 	if call == 1 {
-		return workerexecution.InferenceResponse{
+		return providers.ExecuteResult{
 			Content: fmt.Sprintf(`{"text":"live:%s:step-one:step-one:workflows","label":"step-one"}`, p.workflowName),
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
+			SessionRef: &providers.SessionRef{
 				Provider: "mock",
-				Kind:     "session_id",
+				Kind:     providers.SessionIDKind,
 				ID:       "live-provider-session-1",
 			},
 		}, nil
@@ -764,26 +843,27 @@ func (p *logicalIdentityResumeBlockingProvider) Infer(
 	if !alreadyBlocked {
 		p.mu.Lock()
 		p.blockedOnce = true
+		close(p.executeBlocked)
 		p.mu.Unlock()
 
 		<-ctx.Done()
 		p.mu.Lock()
 		p.contextCanceled++
 		p.mu.Unlock()
-		return workerexecution.InferenceResponse{}, ctx.Err()
+		return providers.ExecuteResult{}, ctx.Err()
 	}
 
-	return workerexecution.InferenceResponse{
+	return providers.ExecuteResult{
 		Content: fmt.Sprintf(`{"text":"live:%s:step-two:step-two:workflows","label":"step-two"}`, p.workflowName),
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
+		SessionRef: &providers.SessionRef{
 			Provider: "mock",
-			Kind:     "session_id",
+			Kind:     providers.SessionIDKind,
 			ID:       "live-provider-session-2",
 		},
 	}, nil
 }
 
-func (p *logicalIdentityResumeBlockingProvider) waitForCanceledInfer(t *testing.T, timeout time.Duration) {
+func (p *logicalIdentityResumeBlockingProvider) waitForCanceledExecute(t *testing.T, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -795,5 +875,5 @@ func (p *logicalIdentityResumeBlockingProvider) waitForCanceledInfer(t *testing.
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	t.Fatal("provider Infer did not observe canceled workflow context")
+	t.Fatal("provider Execute did not observe canceled workflow context")
 }

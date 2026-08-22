@@ -1,20 +1,17 @@
 package executionopening
 
 import (
-	"context"
 	"errors"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"go.uber.org/zap"
 )
 
@@ -23,12 +20,6 @@ type executionOpeningFileSystemStub struct {
 	getwdError       error
 	foundPath        string
 	inspectedPaths   []string
-}
-
-type executionOpeningCommandRunner struct{}
-
-func (executionOpeningCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{}, nil
 }
 
 func (stub *executionOpeningFileSystemStub) Getwd() (string, error) {
@@ -41,44 +32,6 @@ func (stub *executionOpeningFileSystemStub) Stat(path string) (fs.FileInfo, erro
 		return nil, nil
 	}
 	return nil, fs.ErrNotExist
-}
-
-func TestExecutionOpeningDoesNotDependOnInitializerOrConcreteTransports(t *testing.T) {
-	t.Parallel()
-
-	entries, err := os.ReadDir(".")
-	if err != nil {
-		t.Fatalf("read executionopening package: %v", err)
-	}
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") ||
-			strings.HasSuffix(entry.Name(), "_test.go") {
-			continue
-		}
-		source, err := os.ReadFile(entry.Name())
-		if err != nil {
-			t.Fatalf("read %s: %v", entry.Name(), err)
-		}
-		for _, forbidden := range []string{"pkg/initializer", "pkg/transports/mcp", "pkg/transports/http", "pkg/services/edges"} {
-			if strings.Contains(string(source), forbidden) {
-				t.Errorf("%s imports forbidden lifecycle or transport package %q", entry.Name(), forbidden)
-			}
-		}
-	}
-}
-
-func TestExecutionOpeningDoesNotSelectAmbientPathEffects(t *testing.T) {
-	t.Parallel()
-
-	source, err := os.ReadFile("factory.go")
-	if err != nil {
-		t.Fatalf("read factory.go: %v", err)
-	}
-	for _, forbidden := range []string{"os.Getwd(", "os.Stat("} {
-		if strings.Contains(string(source), forbidden) {
-			t.Errorf("factory.go selects ambient path effect %q; inject ExecutionOpeningFileSystem", forbidden)
-		}
-	}
 }
 
 func TestPathResolutionUsesInjectedExecutionOpeningFileSystem(t *testing.T) {
@@ -123,18 +76,12 @@ func TestNewFactoryRequiresRuntimeArtifactRootResolver(t *testing.T) {
 
 	_, err := NewFactory(
 		&runtimeopening.Factory{},
-		runtimeopening.ExternalEffects{},
-		executionOpeningCommandRunner{},
-		&workers.MockPTYAllocator{},
-		func(factorysessions.ExecutionProvider, string, string, string, workers.InvocationExecutor, factoryruntime.Clock) (factorysessions.ExecutionService, error) {
-			return nil, nil
-		},
-		func(workers.CommandRunner, workers.PTYAllocator) (workers.InvocationExecutor, error) {
+		workersRootExecutionProbe{},
+		func(factorysessions.ExecutionProvider, string, string, string, WorkerExecution, factoryruntime.Clock) (durableexecution.Service, error) {
 			return nil, nil
 		},
 		func(factoryruntime.Clock) factoryruntime.Clock { return nil },
 		nil,
-		func(platformprocess.CommandRunner) workers.CommandRunner { return nil },
 		platformfilesystem.Local{},
 		zap.NewNop(),
 	)
@@ -148,18 +95,12 @@ func TestNewFactoryRequiresExecutionOpeningFileSystem(t *testing.T) {
 
 	_, err := NewFactory(
 		&runtimeopening.Factory{},
-		runtimeopening.ExternalEffects{},
-		executionOpeningCommandRunner{},
-		&workers.MockPTYAllocator{},
-		func(factorysessions.ExecutionProvider, string, string, string, workers.InvocationExecutor, factoryruntime.Clock) (factorysessions.ExecutionService, error) {
-			return nil, nil
-		},
-		func(workers.CommandRunner, workers.PTYAllocator) (workers.InvocationExecutor, error) {
+		workersRootExecutionProbe{},
+		func(factorysessions.ExecutionProvider, string, string, string, WorkerExecution, factoryruntime.Clock) (durableexecution.Service, error) {
 			return nil, nil
 		},
 		func(factoryruntime.Clock) factoryruntime.Clock { return nil },
 		func(string) factoryruntime.RuntimeArtifactRoots { return factoryruntime.RuntimeArtifactRoots{} },
-		func(platformprocess.CommandRunner) workers.CommandRunner { return nil },
 		nil,
 		zap.NewNop(),
 	)

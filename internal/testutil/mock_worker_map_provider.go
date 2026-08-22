@@ -5,18 +5,22 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// MockProvider implements provider.Provider for testing. It returns
+// MockWorkerMapProvider implements the Providers root contract for testing.
+// It returns
 // predetermined InferenceResponses in sequence. When the sequence is
 // exhausted, it returns a default response.
 type MockWorkerMapProvider struct {
-	workerCalls     map[string][]workerexecution.ProviderInferenceRequest
-	mu              sync.Mutex
-	workerIndex     map[string]int            // tracks call count per worker type for response sequencing
-	workerResponses map[string][]WorkResponse // optional: different response sequences per worker type
-	defaultR        workerexecution.InferenceResponse
+	NativeProvider
+	workerCalls       map[string][]providers.ExecuteRequest
+	legacyWorkerCalls map[string][]workerexecution.ProviderInferenceRequest
+	mu                sync.Mutex
+	workerIndex       map[string]int            // tracks call count per worker type for response sequencing
+	workerResponses   map[string][]WorkResponse // optional: different response sequences per worker type
+	defaultResult     providers.ExecuteResult
 }
 
 // response from a provider can either be content or an error.
@@ -48,44 +52,52 @@ func mapResponses(input map[string][]workerexecution.InferenceResponse) map[stri
 }
 
 func NewMockWorkerMapProviderWithDefault(responses map[string][]WorkResponse) *MockWorkerMapProvider {
-	return &MockWorkerMapProvider{
-		workerResponses: responses,
-		defaultR: workerexecution.InferenceResponse{
-			Content: "default mock response",
-		},
-		workerIndex: make(map[string]int),
-		workerCalls: make(map[string][]workerexecution.ProviderInferenceRequest),
+	provider := &MockWorkerMapProvider{
+		workerResponses:   responses,
+		defaultResult:     nativeExecuteResult(workerexecution.InferenceResponse{Content: "default mock response"}),
+		workerIndex:       make(map[string]int),
+		workerCalls:       make(map[string][]providers.ExecuteRequest),
+		legacyWorkerCalls: make(map[string][]workerexecution.ProviderInferenceRequest),
 	}
+	return provider
 }
 
-// Infer records the request and returns the next predetermined response.
-func (m *MockWorkerMapProvider) Infer(_ context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
+// Execute records the native request and returns the next predetermined response.
+func (m *MockWorkerMapProvider) Execute(_ context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	workerType := req.WorkerType
-	if workerType == "" {
-		workerType = req.Dispatch.WorkerType
-	}
+	workerType := request.WorkerType
 	if m.workerResponses[workerType] != nil {
-		m.workerCalls[workerType] = append(m.workerCalls[workerType], req)
+		m.workerCalls[workerType] = append(m.workerCalls[workerType], request.Clone())
+		dispatchID := request.Correlation.DispatchID
+		if dispatchID == "" {
+			dispatchID = request.AttemptID
+		}
+		m.legacyWorkerCalls[workerType] = append(
+			m.legacyWorkerCalls[workerType],
+			providerInferenceRequest(request, nil, dispatchID),
+		)
 
 		index := m.workerIndex[workerType]
 		if index < len(m.workerResponses[workerType]) {
 			resp := m.workerResponses[workerType][index]
 			m.workerIndex[workerType]++
 			if resp.Error != nil {
-				return workerexecution.InferenceResponse{}, resp.Error
+				return providers.ExecuteResult{}, resp.Error
 			} else {
-				return workerexecution.InferenceResponse{
+				return providers.ExecuteResult{
 					Content: resp.Content,
+					Diagnostics: &providers.ExecuteDiagnostics{Metadata: map[string]string{
+						"completion_evidence": "provider_response",
+					}},
 				}, nil
 			}
 		}
 	} else {
-		return workerexecution.InferenceResponse{}, errors.New("failed")
+		return providers.ExecuteResult{}, errors.New("failed")
 	}
-	return m.defaultR, nil
+	return authoritativeNativeResult(m.defaultResult.Clone()), nil
 }
 
 // Calls returns all InferenceRequests received by this provider, in order.
@@ -93,8 +105,8 @@ func (m *MockWorkerMapProvider) Calls(workerType string) []workerexecution.Provi
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	out := make([]workerexecution.ProviderInferenceRequest, len(m.workerCalls[workerType]))
-	copy(out, m.workerCalls[workerType])
+	out := make([]workerexecution.ProviderInferenceRequest, len(m.legacyWorkerCalls[workerType]))
+	copy(out, m.legacyWorkerCalls[workerType])
 	return out
 }
 
@@ -103,7 +115,7 @@ func (m *MockWorkerMapProvider) CallCount(workerType string) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	return len(m.workerCalls[workerType])
+	return len(m.legacyWorkerCalls[workerType])
 }
 
 // LastCall returns the most recent InferenceRequest, or panics if none.
@@ -111,7 +123,7 @@ func (m *MockWorkerMapProvider) LastCall(workerType string) workerexecution.Prov
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	calls := m.workerCalls[workerType]
+	calls := m.legacyWorkerCalls[workerType]
 	if len(calls) == 0 {
 		panic("MockWorkerMapProvider: LastCall() called with no inferences")
 	}
@@ -119,4 +131,4 @@ func (m *MockWorkerMapProvider) LastCall(workerType string) workerexecution.Prov
 }
 
 // Compile-time check.
-var _ workerexecution.Provider = (*MockWorkerMapProvider)(nil)
+var _ providers.Service = (*MockWorkerMapProvider)(nil)

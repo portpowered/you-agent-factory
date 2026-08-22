@@ -1,5 +1,7 @@
-// Package acp adapts customer ACP catalog commands to Operator Settings and
-// the Providers root without introducing a CLI-owned registry.
+// Package acp contains protocol-facing ACP CLI value types and validation.
+// Cross-service configuration and catalog composition are injected by Wire as
+// owner operations; this package does not join Operator Settings and
+// Providers roots.
 package acp
 
 import (
@@ -11,115 +13,64 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
-type Service struct {
-	Settings   operatorsettings.Service
-	Providers  providers.Service
-	GenerateID operatorsettings.IDGenerator
-}
-
 type WorkerCatalog struct {
 	Providers []providers.Descriptor
 	ACP       map[providers.ID]bool
 	Custom    map[providers.ID]bool
 }
 
-func (service Service) ListWorkers(ctx context.Context, home string) (WorkerCatalog, error) {
-	if service.Providers == nil {
+type ListWorkersOperation func(context.Context, string) (WorkerCatalog, error)
+type ConfigureOperation func(context.Context, []operatorsettings.ACPIntegration) error
+type AddOperation func(context.Context, string, string, string, string) error
+type DeleteOperation func(context.Context, string, string) error
+
+// Operations is the CLI's injected ACP operation surface. Wire composes these
+// operations from the owner roots; command handlers only parse flags and
+// invoke one operation.
+type Operations struct {
+	ListWorkersOperation ListWorkersOperation
+	ConfigureOperation   ConfigureOperation
+	AddOperation         AddOperation
+	DeleteOperation      DeleteOperation
+}
+
+func (operations Operations) ListWorkers(ctx context.Context, home string) (WorkerCatalog, error) {
+	if operations.ListWorkersOperation == nil {
 		return WorkerCatalog{}, fmt.Errorf("Providers service is required")
 	}
-	if service.Settings == nil {
-		return WorkerCatalog{}, fmt.Errorf("Operator Settings service is required")
-	}
-	document, err := service.Settings.LoadDocument(operatorsettings.LoadDocumentRequest{
-		Path: service.Settings.DefaultConfigPath(home),
-	})
-	if err != nil {
-		return WorkerCatalog{}, err
-	}
-	if err := service.configure(ctx, document.Document); err != nil {
-		return WorkerCatalog{}, err
-	}
-	listed, err := service.Providers.ListProviders(ctx, providers.ListProvidersRequest{})
-	if err != nil {
-		return WorkerCatalog{}, err
-	}
-	acpProviders := make(map[providers.ID]bool)
-	customProviders := make(map[providers.ID]bool)
-	for _, integration := range document.Document.Workers.ACP.Integrations {
-		customProviders[providers.ID(integration.Name)] = true
-	}
-	for _, descriptor := range filterACPProviders(listed, document.Document.Workers.ACP.Integrations).Providers {
-		acpProviders[descriptor.ID] = true
-	}
-	return WorkerCatalog{Providers: listed.Providers, ACP: acpProviders, Custom: customProviders}, nil
+	return operations.ListWorkersOperation(ctx, home)
 }
 
-// Configure applies an already-loaded operator ACP configuration to the live
-// Providers root. It is used by run before any worker selection occurs.
-func (service Service) Configure(ctx context.Context, configured []operatorsettings.ACPIntegration) error {
-	if len(configured) == 0 && service.Providers == nil {
-		return nil
+func (operations Operations) Configure(ctx context.Context, configured []operatorsettings.ACPIntegration) error {
+	if operations.ConfigureOperation == nil {
+		return fmt.Errorf("ACP configuration operation is required")
 	}
-	return service.configureIntegrations(ctx, configured)
+	return operations.ConfigureOperation(ctx, configured)
 }
 
-func (service Service) Add(ctx context.Context, home, name, transport, command string) error {
-	if service.GenerateID == nil {
+func (operations Operations) Add(ctx context.Context, home, name, transport, command string) error {
+	if operations.AddOperation == nil {
 		return fmt.Errorf("ACP integration ID generator is required")
 	}
-	if err := canceledContextError(ctx); err != nil {
-		return err
+	return operations.AddOperation(ctx, home, name, transport, command)
+}
+
+func (operations Operations) Delete(ctx context.Context, home, name string) error {
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 	}
-	if service.Settings == nil {
+	if operations.DeleteOperation == nil {
 		return fmt.Errorf("Operator Settings service is required")
 	}
-	document, err := service.Settings.ConfigureACPIntegrationAdd(ctx, service.Settings.DefaultConfigPath(home), operatorsettings.ACPIntegration{
-		ID: service.GenerateID(), Name: name, Transport: transport, Command: command,
-	})
-	if err != nil {
-		return err
-	}
-	return service.configure(ctx, document)
+	return operations.DeleteOperation(ctx, home, name)
 }
 
-func (service Service) Delete(ctx context.Context, home, name string) error {
-	if err := canceledContextError(ctx); err != nil {
-		return err
-	}
-	if service.Settings == nil {
-		return fmt.Errorf("Operator Settings service is required")
-	}
-	document, err := service.Settings.ConfigureACPIntegrationDelete(ctx, service.Settings.DefaultConfigPath(home), name)
-	if err != nil {
-		return err
-	}
-	return service.configure(ctx, document)
-}
-
-func canceledContextError(ctx context.Context) error {
-	if ctx == nil {
-		return nil
-	}
-	return ctx.Err()
-}
-
-func (service Service) configure(ctx context.Context, document operatorsettings.Document) error {
-	return service.configureIntegrations(ctx, document.Workers.ACP.Integrations)
-}
-
-func (service Service) configureIntegrations(ctx context.Context, configured []operatorsettings.ACPIntegration) error {
-	configurator, ok := service.Providers.(providers.ACPConfiguration)
-	if !ok {
-		return fmt.Errorf("Providers ACP configuration role is required")
-	}
-	integrations := make([]providers.ACPIntegration, len(configured))
-	for index, value := range configured {
-		integrations[index] = providers.ACPIntegration{ID: value.ID, Name: providers.ID(value.Name), Transport: value.Transport, Command: value.Command}
-	}
-	return configurator.ConfigureACPIntegrations(ctx, integrations)
-}
-
-func filterACPProviders(
+// FilterACPProviders retains descriptors selected by the effective ACP
+// configuration. Providers owns the effective application; this function only
+// projects its detached catalog for the existing CLI table shape.
+func FilterACPProviders(
 	result providers.ListProvidersResult,
 	configured []operatorsettings.ACPIntegration,
 ) providers.ListProvidersResult {
@@ -135,6 +86,14 @@ func filterACPProviders(
 		}
 	}
 	return providers.ListProvidersResult{Providers: filtered}
+}
+
+// Kept private for the package's focused projection characterization.
+func filterACPProviders(
+	result providers.ListProvidersResult,
+	configured []operatorsettings.ACPIntegration,
+) providers.ListProvidersResult {
+	return FilterACPProviders(result, configured)
 }
 
 func ValidateAdd(name, transport, command string) error {

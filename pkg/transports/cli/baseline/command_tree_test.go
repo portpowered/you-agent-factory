@@ -1,6 +1,7 @@
 package baseline_test
 
 import (
+	"os"
 	"sort"
 	"strings"
 	"testing"
@@ -23,6 +24,12 @@ func TestCommandTreeBaseline_MatchesFixture(t *testing.T) {
 	}
 
 	if got == want {
+		return
+	}
+	if os.Getenv("UPDATE_CLI_BASELINES") == "1" {
+		if err := os.WriteFile(commandTreeFixture, []byte(got), 0o600); err != nil {
+			t.Fatalf("update command tree baseline fixture: %v", err)
+		}
 		return
 	}
 

@@ -69,7 +69,6 @@ workers:
     reasoningEffort: ${workerReasoningEffort}
     agentTools:
       policy: READ_ONLY
-    promptFile: prompts/worker.md
 workstations:
   - name: run-subagent
     type: AGENT_RUN

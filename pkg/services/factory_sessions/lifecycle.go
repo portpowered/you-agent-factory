@@ -3,6 +3,7 @@ package factorysessions
 import (
 	"context"
 
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
@@ -38,10 +39,7 @@ type RuntimeHostRequest struct {
 }
 
 // RuntimeHostBinding is the endpoint selected by the external HTTP host.
-type RuntimeHostBinding struct {
-	Host string
-	Port int
-}
+type RuntimeHostBinding = initializer.RuntimeHostBinding
 
 // RuntimeHostObserver receives the selected endpoint for presentation at the
 // process boundary. It does not own listener or server lifecycle.

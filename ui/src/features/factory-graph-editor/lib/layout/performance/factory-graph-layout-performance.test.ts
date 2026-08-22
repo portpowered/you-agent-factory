@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
-
+import { buildFactoryGraphEditorFlowModel } from "../../../components/flow/factory-graph-editor-flow";
 import { createEmptyFactoryGraphDraft } from "../../draft/factory-graph-draft-types";
 import {
+  buildGridAutoLayoutPositionsByNodeId,
+  buildLargeFactoryEditorParityFixture,
   type FactoryGraphLargeEditorFixture,
   factoryGraphLargeEditorFixtures,
 } from "../../fixtures/factory-graph-large-editor-fixtures";
@@ -16,6 +18,7 @@ import {
   hasFactoryLayoutChanges,
   moveFactoryLayoutNode,
   moveFactoryLayoutNodesByDelta,
+  resolveProjectedLayoutPositions,
 } from "../factory-graph-layout-operations";
 import { projectFactoryGraphWithCanonicalLayout } from "../factory-graph-layout-projection";
 import {
@@ -205,4 +208,58 @@ describe("factory graph layout performance budgets", () => {
       },
     );
   }, 180_000);
+
+  it("keeps the combined live overlay parity fixture within the 500-node projection budget", async () => {
+    const parityFixture = buildLargeFactoryEditorParityFixture(
+      factoryGraphLargeEditorFixtures.fiveHundred,
+    );
+    const nodeIds = parityFixture.fixture.topology.nodes.map((node) => node.id);
+    const positions = resolveProjectedLayoutPositions({
+      autoLayoutPositionsByNodeId:
+        buildGridAutoLayoutPositionsByNodeId(nodeIds),
+      canonicalLayout: parityFixture.layout,
+      nodeIds,
+    });
+    const placeTokenCountsByNodeId = new Map(
+      parityFixture.workStateNodeIds
+        .slice(0, 4)
+        .map((nodeId, index) => [nodeId, [1, 3, 4, 25][index] ?? 0]),
+    );
+    let projection: ReturnType<typeof buildFactoryGraphEditorFlowModel> | null =
+      null;
+    const projectionMedianMs = await measureMedianOperationMs(
+      () => {
+        projection = buildFactoryGraphEditorFlowModel({
+          activeNodeIds: new Set(parityFixture.workStateNodeIds.slice(0, 2)),
+          canEditConnections: false,
+          factoryDefinition: parityFixture.fixture.factoryDefinition,
+          focusedNodeIds: new Set(parityFixture.workStateNodeIds.slice(0, 2)),
+          layout: parityFixture.layout,
+          layoutPositionsByNodeId: positions,
+          mutedNodeIds: new Set<string>(),
+          pendingAdditionEdgeIds: new Set<string>(),
+          pendingConnectionSource: null,
+          pendingAdditionNodeIds: new Set<string>(),
+          pendingRemovalEdgeIds: new Set<string>(),
+          pendingRemovalNodeIds: new Set<string>(),
+          placeTokenCountsByNodeId,
+          topology: parityFixture.fixture.topology,
+        });
+      },
+      { iterations: 1, warmup: 0 },
+    );
+
+    expect(projectionMedianMs).toBeLessThanOrEqual(
+      FACTORY_GRAPH_LAYOUT_PERFORMANCE_BUDGETS.fiveHundred.initialProjectionMs,
+    );
+    expect(projection?.nodes).toHaveLength(
+      parityFixture.fixture.graphNodeCount,
+    );
+    expect(
+      projection?.nodes.filter((node) => node.data.tokenCount > 3),
+    ).toHaveLength(2);
+    expect(projection?.nodes.filter((node) => node.data.active)).toHaveLength(
+      2,
+    );
+  }, 60_000);
 });

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 )
 
@@ -297,19 +296,19 @@ func (s *stubDurableExecution) ListSessions(context.Context, factorysessionexecu
 	return factorysessionexecution.ListSessionsResult{}, errors.New("not implemented")
 }
 
-func TestService_PauseDurableFactorySession_DelegatesToControlPlane(t *testing.T) {
+func TestService_Pause_DelegatesToDurableOwner(t *testing.T) {
 	t.Parallel()
 
 	execution := &stubDurableExecution{}
 	gateway := newServiceTestGateway(&durableLifecycleGatewayHost{execution: execution})
 
-	response, err := gateway.PauseDurableFactorySession(
+	response, err := gateway.Pause(
 		context.Background(),
 		"dur-sess-js-run-n-001",
 		factorysessionexecution.ControlRequest{},
 	)
 	if err != nil {
-		t.Fatalf("PauseDurableFactorySession: %v", err)
+		t.Fatalf("Pause: %v", err)
 	}
 	if response.Outcome != factorysessionexecution.LifecycleControlOutcomeAccepted {
 		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
@@ -319,34 +318,19 @@ func TestService_PauseDurableFactorySession_DelegatesToControlPlane(t *testing.T
 	}
 }
 
-func TestService_PauseDurableFactorySession_RejectsLiveSessionID(t *testing.T) {
-	t.Parallel()
-
-	gateway := newServiceTestGateway(&durableLifecycleGatewayHost{execution: &stubDurableExecution{}})
-
-	_, err := gateway.PauseDurableFactorySession(
-		context.Background(),
-		"live-session-001",
-		factorysessionexecution.ControlRequest{},
-	)
-	if err == nil || !errors.Is(err, controlplane.ErrDurableSessionLifecycleRouting) {
-		t.Fatalf("PauseDurableFactorySession error = %v, want durable routing error", err)
-	}
-}
-
-func TestService_CancelDurableFactorySession_DelegatesToControlPlane(t *testing.T) {
+func TestService_Cancel_DelegatesToDurableOwner(t *testing.T) {
 	t.Parallel()
 
 	execution := &stubDurableExecution{}
 	gateway := newServiceTestGateway(&durableLifecycleGatewayHost{execution: execution})
 
-	response, err := gateway.CancelDurableFactorySession(
+	response, err := gateway.Cancel(
 		context.Background(),
 		"dur-sess-js-run-n-001",
 		factorysessionexecution.ControlRequest{},
 	)
 	if err != nil {
-		t.Fatalf("CancelDurableFactorySession: %v", err)
+		t.Fatalf("Cancel: %v", err)
 	}
 	if execution.cancelCalls != 1 {
 		t.Fatalf("cancel calls = %d, want 1", execution.cancelCalls)
@@ -356,7 +340,7 @@ func TestService_CancelDurableFactorySession_DelegatesToControlPlane(t *testing.
 	}
 }
 
-func TestService_ResumeDurableFactorySession_DelegatesToControlPlane(t *testing.T) {
+func TestService_Resume_DelegatesToDurableOwner(t *testing.T) {
 	t.Parallel()
 
 	execution := &stubDurableExecution{}
@@ -367,89 +351,89 @@ func TestService_ResumeDurableFactorySession_DelegatesToControlPlane(t *testing.
 	}
 	gateway := newServiceTestGateway(&durableLifecycleGatewayHost{execution: execution})
 
-	response, err := gateway.ResumeDurableFactorySession(
+	response, err := gateway.Resume(
 		context.Background(),
 		"dur-sess-js-run-n-001",
 		factorysessionexecution.ControlRequest{},
 	)
 	if err != nil {
-		t.Fatalf("ResumeDurableFactorySession: %v", err)
+		t.Fatalf("Resume: %v", err)
 	}
 	if response.Status != factorysessionexecution.LifecycleStatusRunning {
 		t.Fatalf("status = %q, want RUNNING", response.Status)
 	}
 }
 
-func TestService_TerminateDurableFactorySession_DelegatesToControlPlane(t *testing.T) {
+func TestService_Terminate_DelegatesToDurableOwner(t *testing.T) {
 	t.Parallel()
 
 	execution := &stubDurableExecution{}
 	gateway := newServiceTestGateway(&durableLifecycleGatewayHost{execution: execution})
 
-	response, err := gateway.TerminateDurableFactorySession(
+	response, err := gateway.Terminate(
 		context.Background(),
 		"dur-sess-js-run-n-001",
 		factorysessionexecution.ControlRequest{},
 	)
 	if err != nil {
-		t.Fatalf("TerminateDurableFactorySession: %v", err)
+		t.Fatalf("Terminate: %v", err)
 	}
 	if response.Outcome != factorysessionexecution.LifecycleControlOutcomeAccepted {
 		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
 	}
 }
 
-func TestService_ApproveDurableFactorySession_DelegatesToControlPlane(t *testing.T) {
+func TestService_Approve_DelegatesToDurableOwner(t *testing.T) {
 	t.Parallel()
 
 	execution := &stubDurableExecution{}
 	gateway := newServiceTestGateway(&durableLifecycleGatewayHost{execution: execution})
 
-	response, err := gateway.ApproveDurableFactorySession(
+	response, err := gateway.Approve(
 		context.Background(),
 		"dur-sess-js-run-n-001",
 		factorysessionexecution.ApproveRequest{},
 	)
 	if err != nil {
-		t.Fatalf("ApproveDurableFactorySession: %v", err)
+		t.Fatalf("Approve: %v", err)
 	}
 	if response.Outcome != factorysessionexecution.LifecycleControlOutcomeAccepted {
 		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
 	}
 }
 
-func TestService_RetryDurableFactorySessionDispatch_DelegatesToControlPlane(t *testing.T) {
+func TestService_RetryDispatch_DelegatesToDurableOwner(t *testing.T) {
 	t.Parallel()
 
 	execution := &stubDurableExecution{}
 	gateway := newServiceTestGateway(&durableLifecycleGatewayHost{execution: execution})
 
-	response, err := gateway.RetryDurableFactorySessionDispatch(
+	response, err := gateway.RetryDispatch(
 		context.Background(),
 		"dur-sess-js-run-n-001",
 		factorysessionexecution.RetryDispatchRequest{DispatchID: "dispatch-1"},
 	)
 	if err != nil {
-		t.Fatalf("RetryDurableFactorySessionDispatch: %v", err)
+		t.Fatalf("RetryDispatch: %v", err)
 	}
 	if response.Outcome != factorysessionexecution.LifecycleControlOutcomeAccepted {
 		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
 	}
 }
 
-func TestService_InterruptDurableFactorySessionDispatch_DelegatesToControlPlane(t *testing.T) {
+func TestService_InterruptDispatch_DelegatesToDurableOwner(t *testing.T) {
 	t.Parallel()
 
 	execution := &stubDurableExecution{}
 	gateway := newServiceTestGateway(&durableLifecycleGatewayHost{execution: execution})
 
-	response, err := gateway.InterruptDurableFactorySessionDispatch(
+	response, err := gateway.InterruptDispatch(
 		context.Background(),
 		"dur-sess-js-run-n-001",
 		factorysessionexecution.InterruptDispatchRequest{DispatchID: "dispatch-1"},
 	)
 	if err != nil {
-		t.Fatalf("InterruptDurableFactorySessionDispatch: %v", err)
+		t.Fatalf("InterruptDispatch: %v", err)
 	}
 	if response.Outcome != factorysessionexecution.LifecycleControlOutcomeAccepted {
 		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)

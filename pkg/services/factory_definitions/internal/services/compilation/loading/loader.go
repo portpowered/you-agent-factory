@@ -43,6 +43,17 @@ type Loader struct {
 	splitRuntimeEntityExists func(string) bool
 }
 
+// ReadFile exposes the loader's already-selected filesystem read effect to
+// other Factory Definitions-owned operations. Keeping this projection here
+// makes invocation interpolation use the same filesystem boundary as source
+// loading without allowing runtime consumers to acquire a filesystem.
+func (l *Loader) ReadFile(path string) ([]byte, error) {
+	if l == nil || l.fileSystem == nil {
+		return nil, fmt.Errorf("Factory Definitions loading filesystem is required")
+	}
+	return l.fileSystem.ReadFile(path)
+}
+
 // New constructs the Factory Definitions loader from flat representation and
 // filesystem capabilities.
 func New(
@@ -348,7 +359,11 @@ func (l *Loader) LoadSourceFromCanonicalJSON(
 	runtimeDefinitions, err := l.discoverRuntimeDefinitions(
 		"",
 		factoryConfig,
-		hasInlineRuntimeDefinitions(factoryConfig),
+		// Canonical JSON is already a self-contained source. Runtime fields
+		// may be present because the source was captured from an effective
+		// loaded Factory, but that must not turn replay/import resolution into
+		// a split-layout requirement for sibling AGENTS.md files.
+		false,
 		workstationLoader,
 	)
 	if err != nil {
@@ -611,6 +626,10 @@ func (l *Loader) runtimeWorkerDefinition(
 		}
 		if found {
 			inlineWorker.Body = body
+			inlineWorker.PromptSourcePath = filepath.Join(
+				workerDir,
+				factorydefinitions.FactoryAgentsFileName,
+			)
 		} else if requireSplitDefinition &&
 			strings.TrimSpace(inlineWorker.Body) == "" &&
 			l.splitRuntimeEntityExists(workerDir) {
@@ -756,8 +775,14 @@ func (l *Loader) inlineBodyOnlyWorkstationRuntimeDefinition(
 			return nil, false, err
 		}
 		definition.PromptTemplate = prompt
+		definition.PromptSourcePath = filepath.Join(workstationDir, definition.PromptFile)
+		definition.PromptSourceIsTemplate = true
 	} else {
 		definition.PromptTemplate = body
+		definition.PromptSourcePath = filepath.Join(
+			workstationDir,
+			factorydefinitions.FactoryAgentsFileName,
+		)
 	}
 	return definition, true, nil
 }
@@ -842,6 +867,7 @@ func hasInlineRuntimeDefinitions(factoryConfig *factorydefinitions.FactoryConfig
 	return false
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func workstationHasInlineRuntimeDefinitionFields(
 	workstation factorydefinitions.FactoryWorkstationConfig,
 ) bool {
@@ -852,6 +878,7 @@ func workstationHasInlineRuntimeDefinitionFields(
 		workstation.Runner == "" &&
 		workstation.PromptFile == "" &&
 		workstation.OutputSchema == "" &&
+		workstation.OutputContract == "" &&
 		workstation.Timeout == "" &&
 		workstation.Limits.MaxRetries == 0 &&
 		workstation.Limits.MaxExecutionTime == "" &&
@@ -868,6 +895,7 @@ func workstationHasInlineRuntimeDefinitionFields(
 	return workstationHasRuntimeFields(workstation)
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func workstationHasRuntimeFields(
 	workstation factorydefinitions.FactoryWorkstationConfig,
 ) bool {
@@ -876,6 +904,7 @@ func workstationHasRuntimeFields(
 		workstation.Runner != "" ||
 		workstation.PromptFile != "" ||
 		workstation.OutputSchema != "" ||
+		workstation.OutputContract != "" ||
 		workstation.Timeout != "" ||
 		workstation.Limits.MaxRetries != 0 ||
 		workstation.Limits.MaxExecutionTime != "" ||

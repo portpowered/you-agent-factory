@@ -41,6 +41,9 @@ const (
 // InvocationScheduleRequest carries the authored CRON graph, the pending
 // invocation Work, and runtime-owned effects needed by scheduled executions.
 type InvocationScheduleRequest struct {
+	// RuntimeID routes schedule preparation to the isolated Automations owner
+	// for this Factory Runtime. Empty keeps direct owner-local callers working.
+	RuntimeID     string
 	FactoryDir    string
 	FactoryConfig *factorydefinitions.FactoryConfig
 	RuntimeConfig factorydefinitions.RuntimeConfigLookup
@@ -108,9 +111,34 @@ func (prepared PreparedInvocationSchedules) Abort() {
 // composing a peer and invoke explicit methods on Root.
 type Root struct {
 	Operations Service
+	Lifecycle  interface {
+		ActivateRuntime(context.Context, RuntimeActivationRequest) (RuntimeActivationResult, error)
+		DeactivateRuntime(context.Context, RuntimeDeactivationRequest) (RuntimeDeactivationResult, error)
+	}
+	Runtime any
 }
 
-func rootOperationsAvailable(operations Service) bool {
+var _ Service = Root{}
+
+func (r Root) runtimeOperations() (interface {
+	ActivateRuntime(context.Context, RuntimeActivationRequest) (RuntimeActivationResult, error)
+	DeactivateRuntime(context.Context, RuntimeDeactivationRequest) (RuntimeDeactivationResult, error)
+	StartRuntime(context.Context, string) error
+	PrepareInvocationSchedules(context.Context, InvocationScheduleRequest) (PreparedInvocationSchedules, error)
+}, bool) {
+	if !rootOperationsAvailable(r.Runtime) {
+		return nil, false
+	}
+	capability, ok := r.Runtime.(interface {
+		ActivateRuntime(context.Context, RuntimeActivationRequest) (RuntimeActivationResult, error)
+		DeactivateRuntime(context.Context, RuntimeDeactivationRequest) (RuntimeDeactivationResult, error)
+		StartRuntime(context.Context, string) error
+		PrepareInvocationSchedules(context.Context, InvocationScheduleRequest) (PreparedInvocationSchedules, error)
+	})
+	return capability, ok && rootOperationsAvailable(capability)
+}
+
+func rootOperationsAvailable(operations any) bool {
 	if operations == nil {
 		return false
 	}
@@ -192,6 +220,64 @@ func (r Root) GetCursor(
 		return GetCursorResult{}, unavailableRootError("GetCursor")
 	}
 	return r.Operations.GetCursor(ctx, request)
+}
+
+// ActivateRuntime allocates one detached runtime-scoped Automations owner.
+func (r Root) ActivateRuntime(
+	ctx context.Context,
+	request RuntimeActivationRequest,
+) (RuntimeActivationResult, error) {
+	lifecycle := r.Lifecycle
+	if !rootOperationsAvailable(lifecycle) {
+		if capability, ok := r.runtimeOperations(); ok {
+			lifecycle = capability
+		}
+	}
+	if !rootOperationsAvailable(lifecycle) {
+		return RuntimeActivationResult{}, unavailableRootError("ActivateRuntime")
+	}
+	return lifecycle.ActivateRuntime(ctx, request)
+}
+
+// DeactivateRuntime releases one runtime-scoped Automations owner.
+func (r Root) DeactivateRuntime(
+	ctx context.Context,
+	request RuntimeDeactivationRequest,
+) (RuntimeDeactivationResult, error) {
+	lifecycle := r.Lifecycle
+	if !rootOperationsAvailable(lifecycle) {
+		if capability, ok := r.runtimeOperations(); ok {
+			lifecycle = capability
+		}
+	}
+	if !rootOperationsAvailable(lifecycle) {
+		return RuntimeDeactivationResult{}, unavailableRootError("DeactivateRuntime")
+	}
+	return lifecycle.DeactivateRuntime(ctx, request)
+}
+
+// StartRuntime starts the source activity owned by one activated runtime.
+// Activation remains separate so input preseed can complete before source
+// goroutines are published to the runtime host.
+func (r Root) StartRuntime(ctx context.Context, runtimeID string) error {
+	capability, ok := r.runtimeOperations()
+	if !ok {
+		return unavailableRootError("StartRuntime")
+	}
+	return capability.StartRuntime(ctx, runtimeID)
+}
+
+// PrepareInvocationSchedules prepares runtime-owned schedules without
+// exposing the Automations implementation or its scheduler state.
+func (r Root) PrepareInvocationSchedules(
+	ctx context.Context,
+	request InvocationScheduleRequest,
+) (PreparedInvocationSchedules, error) {
+	capability, ok := r.runtimeOperations()
+	if !ok {
+		return PreparedInvocationSchedules{}, unavailableRootError("PrepareInvocationSchedules")
+	}
+	return capability.PrepareInvocationSchedules(ctx, request)
 }
 
 // ReconcileRequest carries desired automation specs and observed instance facts

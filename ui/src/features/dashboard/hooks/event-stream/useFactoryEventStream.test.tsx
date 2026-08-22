@@ -6,7 +6,10 @@ import {
   CURRENT_FACTORY_DEFINITION_QUERY_KEY,
   CURRENT_FACTORY_DOCUMENT_QUERY_KEY,
 } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import { useDashboardStreamStore } from "../../state/dashboardStreamStore";
+import {
+  getDashboardStreamStateForSession,
+  useDashboardStreamStore,
+} from "../../state/dashboardStreamStore";
 import { useFactoryEventStream } from "./useFactoryEventStream";
 import {
   CANONICAL_SELECTED_TICK_EVENTS,
@@ -245,6 +248,79 @@ describe("useFactoryEventStream transport", () => {
 
     await waitFor(() => {
       expect(replayHarness.getStreams()).toHaveLength(2);
+    });
+  });
+
+  it("rejects late events and status callbacks from a previous session target", async () => {
+    const receivedEvents: string[] = [];
+    const { rerender } = renderHook(
+      ({ sessionID }: { sessionID: string }) =>
+        useFactoryEventStream({
+          enabled: true,
+          onEvents: (events) => {
+            receivedEvents.push(...events.map((event) => event.id));
+          },
+          onEvent: () => {},
+          sessionID,
+        }),
+      {
+        initialProps: { sessionID: "session-a" },
+        wrapper: createFactoryEventStreamTestWrapper(queryClient),
+      },
+    );
+
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
+    const sessionAStream = replayHarness.getStreams()[0];
+    if (!sessionAStream) {
+      throw new Error("expected session A stream to be opened");
+    }
+
+    act(() => {
+      sessionAStream.emit("message", {
+        ...CANONICAL_SELECTED_TICK_EVENTS[0],
+        id: "session-a-queued-before-switch",
+      });
+      rerender({ sessionID: "session-b" });
+    });
+
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(2);
+    });
+    const sessionBStream = replayHarness.getStreams()[1];
+    if (!sessionBStream) {
+      throw new Error("expected session B stream to be opened");
+    }
+
+    act(() => {
+      sessionAStream.emit("message", {
+        ...CANONICAL_SELECTED_TICK_EVENTS[0],
+        id: "session-a-late",
+      });
+      sessionAStream.onerror?.(new Event("late-session-a-error"));
+      sessionBStream.emitOpen();
+    });
+
+    const stateBeforeSessionBEvent = useDashboardStreamStore.getState();
+    expect(
+      getDashboardStreamStateForSession(
+        "session-b",
+        stateBeforeSessionBEvent.sessionStreamStates,
+        stateBeforeSessionBEvent.sessionStreamStateKeysBySessionID,
+      ),
+    ).toMatchObject({ status: "live" });
+    expect(receivedEvents).toEqual([]);
+
+    act(() => {
+      sessionBStream.emit("message", {
+        ...CANONICAL_SELECTED_TICK_EVENTS[0],
+        id: "session-b-current",
+      });
+    });
+
+    await waitFor(() => {
+      expect(receivedEvents).toEqual(["session-b-current"]);
     });
   });
 

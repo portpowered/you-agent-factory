@@ -3,38 +3,43 @@ package commandregistry
 import (
 	"fmt"
 	"io"
-	"sort"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	workcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
-	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
 )
 
 const (
-	workListStateNameInputID    = "you.work.list.flag.state-name"
-	workListStateTypeInputID    = "you.work.list.flag.state-type"
-	workListNameInputID         = "you.work.list.flag.name"
-	workListWorkTypeNameInputID = "you.work.list.flag.work-type-name"
-	workListTraceIDInputID      = "you.work.list.flag.trace-id"
-	workListSortByInputID       = "you.work.list.flag.sort-by"
-	workListMaxResultsInputID   = "you.work.list.flag.max-results"
-	workListNextTokenInputID    = "you.work.list.flag.next-token"
-	workListSessionInputID      = "you.work.list.flag.session"
-	workShowWorkIDInputID       = "you.work.show.arg.0"
-	workShowSessionInputID      = "you.work.show.flag.session"
-	workMoveWorkIDInputID       = "you.work.move.arg.0"
-	workMoveStateNameInputID    = "you.work.move.arg.1"
-	workMoveSessionInputID      = "you.work.move.flag.session"
-	workMoveRequestIDInputID    = "you.work.move.flag.request-id"
-	workVisualizeBatchInputID   = "you.work.visualize.arg.0"
-	workVisualizeFormatInputID  = "you.work.visualize.flag.format"
-	workServerInputID           = "you.flag.server"
-	workJSONInputID             = "you.flag.json"
-	workVerboseInputID          = "you.flag.verbose"
-	workDebugInputID            = "you.flag.debug"
+	workListStateNameInputID          = "you.work.list.flag.state-name"
+	workListStateTypeInputID          = "you.work.list.flag.state-type"
+	workListNameInputID               = "you.work.list.flag.name"
+	workListWorkTypeNameInputID       = "you.work.list.flag.work-type-name"
+	workListTraceIDInputID            = "you.work.list.flag.trace-id"
+	workListTerminalInputID           = "you.work.list.flag.terminal"
+	workListNonTerminalInputID        = "you.work.list.flag.non-terminal"
+	workListIncludeSupersededInputID  = "you.work.list.flag.all"
+	workListSortByInputID             = "you.work.list.flag.sort-by"
+	workListMaxResultsInputID         = "you.work.list.flag.max-results"
+	workListNextTokenInputID          = "you.work.list.flag.next-token"
+	workListCountsInputID             = "you.work.list.flag.counts"
+	workListSessionInputID            = "you.work.list.flag.session"
+	workWatchSessionInputID           = "you.work.watch.flag.session"
+	workWatchFollowInputID            = "you.work.watch.flag.follow"
+	workShowWorkIDInputID             = "you.work.show.arg.0"
+	workShowSessionInputID            = "you.work.show.flag.session"
+	workMoveWorkIDInputID             = "you.work.move.arg.0"
+	workMoveStateNameInputID          = "you.work.move.arg.1"
+	workMoveSessionInputID            = "you.work.move.flag.session"
+	workMoveRequestIDInputID          = "you.work.move.flag.request-id"
+	workRenderBatchInputID            = "you.work.render.arg.0"
+	workRenderFormatInputID           = "you.work.render.flag.format"
+	workApprovalListSessionInputID    = "you.work.approval.list.flag.session"
+	workApprovalShowApprovalIDInputID = "you.work.approval.show.arg.0"
+	workApprovalShowSessionInputID    = "you.work.approval.show.flag.session"
+	workServerInputID                 = "you.flag.server"
+	workJSONInputID                   = "you.flag.json"
+	workVerboseInputID                = "you.flag.verbose"
+	workDebugInputID                  = "you.flag.debug"
 )
 
 // ResolvedWorkRunE executes one Work command from invocation-local resolved
@@ -48,16 +53,40 @@ type ResolvedWorkRunE func(
 // ResolvedWorkHandlers supplies typed handlers for the runnable Work commands.
 // Construction maps these handlers through the stable IDs in the manifest.
 type ResolvedWorkHandlers struct {
-	List      ResolvedWorkRunE
-	Show      ResolvedWorkRunE
-	Move      ResolvedWorkRunE
-	Visualize ResolvedWorkRunE
+	ApprovalList ResolvedWorkRunE
+	ApprovalShow ResolvedWorkRunE
+	List         ResolvedWorkRunE
+	Watch        ResolvedWorkRunE
+	Show         ResolvedWorkRunE
+	Move         ResolvedWorkRunE
+	Visualize    ResolvedWorkRunE
+}
+
+// ResolvedApprovalListBinding supplies the effects used by the pending
+// approval list stable-input adapter.
+type ResolvedApprovalListBinding struct {
+	ListHumanApprovals func(workcli.ListHumanApprovalsConfig) error
+	DiagnosticsWriter  func(*cobra.Command) io.Writer
+}
+
+// ResolvedApprovalShowBinding supplies the effects used by the pending
+// approval show stable-input adapter.
+type ResolvedApprovalShowBinding struct {
+	ShowHumanApproval func(workcli.ShowHumanApprovalConfig) error
+	DiagnosticsWriter func(*cobra.Command) io.Writer
 }
 
 // ResolvedListBinding supplies the effects used by the Work list stable-input
 // adapter. Each invocation maps resolved values into a fresh ListConfig.
 type ResolvedListBinding struct {
 	ListWork          func(workcli.ListConfig) error
+	DiagnosticsWriter func(*cobra.Command) io.Writer
+}
+
+// ResolvedWatchBinding supplies the effects used by the Work watch stable-input
+// adapter. Each invocation maps resolved values into a fresh WatchConfig.
+type ResolvedWatchBinding struct {
+	WatchWork         func(workcli.WatchConfig) error
 	DiagnosticsWriter func(*cobra.Command) io.Writer
 }
 
@@ -76,7 +105,7 @@ type ResolvedMoveBinding struct {
 }
 
 // ResolvedVisualizeBinding supplies the local operation used by the Work
-// visualize stable-input adapter.
+// render stable-input adapter.
 type ResolvedVisualizeBinding struct {
 	VisualizeWork func(workcli.VisualizeConfig) error
 }
@@ -103,44 +132,100 @@ func ResolvedListRunE(binding ResolvedListBinding) ResolvedWorkRunE {
 	}
 }
 
+// ResolvedApprovalListRunE maps canonical approval-list input IDs into one
+// transport request without retaining Cobra-backed pointers between calls.
+func ResolvedApprovalListRunE(binding ResolvedApprovalListBinding) ResolvedWorkRunE {
+	return func(cmd *cobra.Command, inputs resolvedinput.Inputs, inherited resolvedinput.Inputs) error {
+		if binding.ListHumanApprovals == nil {
+			return fmt.Errorf("human approval list service is required")
+		}
+		sessionID, err := inputs.String(workApprovalListSessionInputID)
+		if err != nil {
+			return fmt.Errorf("resolve human approval list inputs: %w", err)
+		}
+		globals, err := resolvedWorkGlobals(inherited)
+		if err != nil {
+			return fmt.Errorf("resolve human approval list inputs: %w", err)
+		}
+		cfg := workcli.ListHumanApprovalsConfig{
+			Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
+			JSON: globals.json, Verbose: globals.verbose || globals.debug,
+			Debug: globals.debug, Output: cmd.OutOrStdout(),
+		}
+		if binding.DiagnosticsWriter != nil {
+			cfg.Diagnostics = binding.DiagnosticsWriter(cmd)
+		}
+		return binding.ListHumanApprovals(cfg)
+	}
+}
+
+// ResolvedApprovalShowRunE maps canonical approval-show input IDs into one
+// transport request without retaining Cobra-backed pointers between calls.
+func ResolvedApprovalShowRunE(binding ResolvedApprovalShowBinding) ResolvedWorkRunE {
+	return func(cmd *cobra.Command, inputs resolvedinput.Inputs, inherited resolvedinput.Inputs) error {
+		if binding.ShowHumanApproval == nil {
+			return fmt.Errorf("human approval show service is required")
+		}
+		approvalID, err := inputs.String(workApprovalShowApprovalIDInputID)
+		if err != nil {
+			return fmt.Errorf("resolve human approval show inputs: %w", err)
+		}
+		sessionID, err := inputs.String(workApprovalShowSessionInputID)
+		if err != nil {
+			return fmt.Errorf("resolve human approval show inputs: %w", err)
+		}
+		globals, err := resolvedWorkGlobals(inherited)
+		if err != nil {
+			return fmt.Errorf("resolve human approval show inputs: %w", err)
+		}
+		cfg := workcli.ShowHumanApprovalConfig{
+			Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
+			ApprovalID: approvalID, JSON: globals.json,
+			Verbose: globals.verbose || globals.debug, Debug: globals.debug,
+			Output: cmd.OutOrStdout(),
+		}
+		if binding.DiagnosticsWriter != nil {
+			cfg.Diagnostics = binding.DiagnosticsWriter(cmd)
+		}
+		return binding.ShowHumanApproval(cfg)
+	}
+}
+
+// ResolvedWatchRunE maps canonical Work watch input IDs into one typed watch
+// request without retaining Cobra-backed pointers between invocations.
+func ResolvedWatchRunE(binding ResolvedWatchBinding) ResolvedWorkRunE {
+	return func(
+		cmd *cobra.Command,
+		inputs resolvedinput.Inputs,
+		inherited resolvedinput.Inputs,
+	) error {
+		if binding.WatchWork == nil {
+			return fmt.Errorf("work watch service is required")
+		}
+		cfg, err := resolvedWatchConfig(cmd, inputs, inherited)
+		if err != nil {
+			return fmt.Errorf("resolve work watch inputs: %w", err)
+		}
+		if binding.DiagnosticsWriter != nil {
+			cfg.Diagnostics = binding.DiagnosticsWriter(cmd)
+		}
+		if err := workcli.ValidateWatchConfig(cfg); err != nil {
+			return err
+		}
+		return binding.WatchWork(cfg)
+	}
+}
+
 func resolvedListConfig(
 	cmd *cobra.Command,
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) (workcli.ListConfig, error) {
-	stateName, err := inputs.String(workListStateNameInputID)
+	filters, err := readResolvedWorkListFilterInputs(inputs)
 	if err != nil {
 		return workcli.ListConfig{}, err
 	}
-	stateType, err := inputs.String(workListStateTypeInputID)
-	if err != nil {
-		return workcli.ListConfig{}, err
-	}
-	name, err := inputs.String(workListNameInputID)
-	if err != nil {
-		return workcli.ListConfig{}, err
-	}
-	workTypeName, err := inputs.String(workListWorkTypeNameInputID)
-	if err != nil {
-		return workcli.ListConfig{}, err
-	}
-	traceID, err := inputs.String(workListTraceIDInputID)
-	if err != nil {
-		return workcli.ListConfig{}, err
-	}
-	sortBy, err := inputs.String(workListSortByInputID)
-	if err != nil {
-		return workcli.ListConfig{}, err
-	}
-	maxResults, err := inputs.Int(workListMaxResultsInputID)
-	if err != nil {
-		return workcli.ListConfig{}, err
-	}
-	nextToken, err := inputs.String(workListNextTokenInputID)
-	if err != nil {
-		return workcli.ListConfig{}, err
-	}
-	sessionID, err := inputs.String(workListSessionInputID)
+	paging, err := readResolvedWorkListPagingInputs(inputs)
 	if err != nil {
 		return workcli.ListConfig{}, err
 	}
@@ -149,13 +234,138 @@ func resolvedListConfig(
 		return workcli.ListConfig{}, err
 	}
 	return workcli.ListConfig{
-		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
-		StateName: stateName, StateType: stateType, Name: name,
-		WorkTypeName: workTypeName, TraceID: traceID, SortBy: sortBy,
-		MaxResults: maxResults, NextToken: nextToken, JSON: globals.json,
+		Context: cmd.Context(), Server: globals.server, SessionID: paging.sessionID,
+		StateName: filters.stateName, StateType: filters.stateType, Name: filters.name,
+		WorkTypeName: filters.workTypeName, TraceID: filters.traceID, Terminal: paging.terminal,
+		NonTerminal: paging.nonTerminal, IncludeSuperseded: paging.includeSuperseded,
+		SortBy: filters.sortBy, MaxResults: paging.maxResults,
+		NextToken: paging.nextToken, Counts: paging.counts, JSON: globals.json,
 		Verbose: globals.verbose || globals.debug, Debug: globals.debug,
 		Output: cmd.OutOrStdout(),
 	}, nil
+}
+
+type resolvedWorkListFilterInputs struct {
+	stateName    string
+	stateType    string
+	name         string
+	workTypeName string
+	traceID      string
+	sortBy       string
+}
+
+func readResolvedWorkListFilterInputs(inputs resolvedinput.Inputs) (resolvedWorkListFilterInputs, error) {
+	stateName, err := inputs.String(workListStateNameInputID)
+	if err != nil {
+		return resolvedWorkListFilterInputs{}, err
+	}
+	stateType, err := inputs.String(workListStateTypeInputID)
+	if err != nil {
+		return resolvedWorkListFilterInputs{}, err
+	}
+	name, err := inputs.String(workListNameInputID)
+	if err != nil {
+		return resolvedWorkListFilterInputs{}, err
+	}
+	workTypeName, err := inputs.String(workListWorkTypeNameInputID)
+	if err != nil {
+		return resolvedWorkListFilterInputs{}, err
+	}
+	traceID, err := inputs.String(workListTraceIDInputID)
+	if err != nil {
+		return resolvedWorkListFilterInputs{}, err
+	}
+	sortBy, err := inputs.String(workListSortByInputID)
+	if err != nil {
+		return resolvedWorkListFilterInputs{}, err
+	}
+	return resolvedWorkListFilterInputs{
+		stateName: stateName, stateType: stateType, name: name,
+		workTypeName: workTypeName, traceID: traceID, sortBy: sortBy,
+	}, nil
+}
+
+type resolvedWorkListPagingInputs struct {
+	terminal          bool
+	nonTerminal       bool
+	includeSuperseded bool
+	maxResults        int
+	nextToken         string
+	counts            bool
+	sessionID         string
+}
+
+func readResolvedWorkListPagingInputs(inputs resolvedinput.Inputs) (resolvedWorkListPagingInputs, error) {
+	terminal, err := inputs.Bool(workListTerminalInputID)
+	if err != nil {
+		return resolvedWorkListPagingInputs{}, err
+	}
+	nonTerminal, err := inputs.Bool(workListNonTerminalInputID)
+	if err != nil {
+		return resolvedWorkListPagingInputs{}, err
+	}
+	includeSuperseded, err := inputs.Bool(workListIncludeSupersededInputID)
+	if err != nil {
+		return resolvedWorkListPagingInputs{}, err
+	}
+	maxResults, err := inputs.Int(workListMaxResultsInputID)
+	if err != nil {
+		return resolvedWorkListPagingInputs{}, err
+	}
+	nextToken, err := inputs.String(workListNextTokenInputID)
+	if err != nil {
+		return resolvedWorkListPagingInputs{}, err
+	}
+	counts, err := inputs.Bool(workListCountsInputID)
+	if err != nil {
+		return resolvedWorkListPagingInputs{}, err
+	}
+	sessionID, err := inputs.String(workListSessionInputID)
+	if err != nil {
+		return resolvedWorkListPagingInputs{}, err
+	}
+	return resolvedWorkListPagingInputs{
+		terminal: terminal, nonTerminal: nonTerminal,
+		includeSuperseded: includeSuperseded, maxResults: maxResults,
+		nextToken: nextToken, counts: counts, sessionID: sessionID,
+	}, nil
+}
+
+func resolvedWatchConfig(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) (workcli.WatchConfig, error) {
+	sessionID, err := inputs.String(workWatchSessionInputID)
+	if err != nil {
+		return workcli.WatchConfig{}, err
+	}
+	follow, err := inputs.Bool(workWatchFollowInputID)
+	if err != nil {
+		return workcli.WatchConfig{}, err
+	}
+	globals, err := resolvedWorkGlobals(inherited)
+	if err != nil {
+		return workcli.WatchConfig{}, err
+	}
+	return workcli.WatchConfig{
+		Context:           cmd.Context(),
+		Server:            globals.server,
+		SessionID:         sessionID,
+		SessionIDExplicit: workWatchSessionFlagChanged(cmd),
+		Follow:            follow,
+		Verbose:           globals.verbose || globals.debug,
+		Debug:             globals.debug,
+		Output:            cmd.OutOrStdout(),
+	}, nil
+}
+
+func workWatchSessionFlagChanged(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	flag := cmd.Flag("session")
+	return flag != nil && flag.Changed
 }
 
 // ResolvedShowRunE maps canonical Work show input IDs into one transport
@@ -260,7 +470,7 @@ func resolvedMoveConfig(
 	}, nil
 }
 
-// ResolvedVisualizeRunE maps canonical Work visualize input IDs into one local
+// ResolvedVisualizeRunE maps canonical Work render input IDs into one local
 // request without retaining Cobra-backed pointers between invocations.
 func ResolvedVisualizeRunE(binding ResolvedVisualizeBinding) ResolvedWorkRunE {
 	return func(
@@ -269,15 +479,15 @@ func ResolvedVisualizeRunE(binding ResolvedVisualizeBinding) ResolvedWorkRunE {
 		_ resolvedinput.Inputs,
 	) error {
 		if binding.VisualizeWork == nil {
-			return fmt.Errorf("work visualize service is required")
+			return fmt.Errorf("work render service is required")
 		}
-		batchFile, err := inputs.String(workVisualizeBatchInputID)
+		batchFile, err := inputs.String(workRenderBatchInputID)
 		if err != nil {
-			return fmt.Errorf("resolve work visualize inputs: %w", err)
+			return fmt.Errorf("resolve work render inputs: %w", err)
 		}
-		format, err := inputs.String(workVisualizeFormatInputID)
+		format, err := inputs.String(workRenderFormatInputID)
 		if err != nil {
-			return fmt.Errorf("resolve work visualize inputs: %w", err)
+			return fmt.Errorf("resolve work render inputs: %w", err)
 		}
 		return binding.VisualizeWork(workcli.VisualizeConfig{
 			Context: cmd.Context(), BatchFile: batchFile,
@@ -313,253 +523,4 @@ func resolvedWorkGlobals(inputs resolvedinput.Inputs) (resolvedWorkGlobalValues,
 	return resolvedWorkGlobalValues{
 		server: server, json: jsonOutput, verbose: verbose, debug: debug,
 	}, nil
-}
-
-// RunnableWorkCommandIDs returns contracted runnable command IDs for the work
-// family in stable sorted order.
-func RunnableWorkCommandIDs(manifest climanifest.Manifest) ([]string, error) {
-	ids := make([]string, 0, len(climanifestgen.WorkFamilyCommandIDs))
-	for _, commandID := range climanifestgen.WorkFamilyCommandIDs {
-		if err := climanifestgen.AssertWorkFamilyCommandID(commandID); err != nil {
-			return nil, err
-		}
-		record, err := manifest.CommandByID(commandID)
-		if err != nil {
-			return nil, err
-		}
-		if record.Runnable {
-			ids = append(ids, commandID)
-		}
-	}
-	sort.Strings(ids)
-	return ids, nil
-}
-
-// VerifyWorkRunnableCoverage fails when any contracted runnable work-family
-// command ID lacks a registered handwritten handler.
-func (r *Registry) VerifyWorkRunnableCoverage(manifest climanifest.Manifest) error {
-	runnableIDs, err := RunnableWorkCommandIDs(manifest)
-	if err != nil {
-		return err
-	}
-	var missing []string
-	for _, commandID := range runnableIDs {
-		if _, lookupErr := r.Lookup(commandID); lookupErr != nil {
-			missing = append(missing, commandID)
-		}
-	}
-	if len(missing) > 0 {
-		return fmt.Errorf(
-			"work runnable command handlers missing for: %v",
-			missing,
-		)
-	}
-	return nil
-}
-
-// WorkHandlers carries handlers for the leased live-binding Work constructor.
-//
-// Deprecated: use ResolvedWorkHandlers. This compatibility shape remains only
-// until production root composition adopts NewResolvedWorkCommand.
-type WorkHandlers struct {
-	ListRunE      RunE
-	ShowRunE      RunE
-	MoveRunE      RunE
-	VisualizeRunE RunE
-}
-
-// NewWorkRegistry registers handlers for the leased live-binding Work
-// constructor and verifies contracted runnable command coverage.
-//
-// Deprecated: construct ResolvedWorkHandlers from ResolvedListRunE,
-// ResolvedShowRunE, ResolvedMoveRunE, and ResolvedVisualizeRunE.
-func NewWorkRegistry(handlers WorkHandlers) (*Registry, error) {
-	if handlers.ListRunE == nil {
-		return nil, fmt.Errorf("build work handler registry: list handler is required")
-	}
-	if handlers.ShowRunE == nil {
-		return nil, fmt.Errorf("build work handler registry: show handler is required")
-	}
-	if handlers.MoveRunE == nil {
-		return nil, fmt.Errorf("build work handler registry: move handler is required")
-	}
-	if handlers.VisualizeRunE == nil {
-		return nil, fmt.Errorf("build work handler registry: visualize handler is required")
-	}
-
-	registry := NewRegistry()
-	registrations := []struct {
-		commandID string
-		handler   RunE
-	}{
-		{commandID: "you.work.list", handler: handlers.ListRunE},
-		{commandID: "you.work.show", handler: handlers.ShowRunE},
-		{commandID: "you.work.move", handler: handlers.MoveRunE},
-		{commandID: "you.work.visualize", handler: handlers.VisualizeRunE},
-	}
-	for _, registration := range registrations {
-		if err := registry.Register(registration.commandID, registration.handler); err != nil {
-			return nil, fmt.Errorf("build work handler registry: %w", err)
-		}
-	}
-
-	manifest, err := generated.WorkFamilyManifest()
-	if err != nil {
-		return nil, fmt.Errorf("build work handler registry: %w", err)
-	}
-	if err := registry.VerifyWorkRunnableCoverage(manifest); err != nil {
-		return nil, fmt.Errorf("build work handler registry: %w", err)
-	}
-	return registry, nil
-}
-
-// ListBinding supplies handwritten work list execution dependencies.
-type ListBinding struct {
-	Config            *workcli.ListConfig
-	Server            *string
-	JSON              *bool
-	Verbose           func() bool
-	Debug             *bool
-	DiagnosticsWriter func(cmd *cobra.Command) io.Writer
-	ListWork          func(workcli.ListConfig) error
-}
-
-// ListRunE returns the handwritten work list RunE used by production wiring.
-func ListRunE(binding ListBinding) RunE {
-	return func(cmd *cobra.Command, args []string) error {
-		if binding.ListWork == nil {
-			return fmt.Errorf("work list service is required")
-		}
-		cfg := *binding.Config
-		cfg.Context = cmd.Context()
-		if binding.Server != nil {
-			cfg.Server = *binding.Server
-		}
-		if binding.JSON != nil {
-			cfg.JSON = *binding.JSON
-		}
-		cfg.Output = cmd.OutOrStdout()
-		if binding.DiagnosticsWriter != nil {
-			cfg.Diagnostics = binding.DiagnosticsWriter(cmd)
-		}
-		if binding.Verbose != nil {
-			cfg.Verbose = binding.Verbose()
-		}
-		if binding.Debug != nil {
-			cfg.Debug = *binding.Debug
-		}
-		return binding.ListWork(cfg)
-	}
-}
-
-// ShowBinding supplies handwritten work show execution dependencies.
-type ShowBinding struct {
-	Config            *workcli.ShowConfig
-	Server            *string
-	JSON              *bool
-	Verbose           func() bool
-	Debug             *bool
-	DiagnosticsWriter func(cmd *cobra.Command) io.Writer
-	ShowWork          func(workcli.ShowConfig) error
-}
-
-// ShowRunE returns the handwritten work show RunE used by production wiring.
-func ShowRunE(binding ShowBinding) RunE {
-	return func(cmd *cobra.Command, args []string) error {
-		if binding.ShowWork == nil {
-			return fmt.Errorf("work show service is required")
-		}
-		cfg := *binding.Config
-		cfg.Context = cmd.Context()
-		if binding.Server != nil {
-			cfg.Server = *binding.Server
-		}
-		if len(args) == 1 {
-			cfg.WorkID = args[0]
-		}
-		if binding.JSON != nil {
-			cfg.JSON = *binding.JSON
-		}
-		cfg.Output = cmd.OutOrStdout()
-		if binding.DiagnosticsWriter != nil {
-			cfg.Diagnostics = binding.DiagnosticsWriter(cmd)
-		}
-		if binding.Verbose != nil {
-			cfg.Verbose = binding.Verbose()
-		}
-		if binding.Debug != nil {
-			cfg.Debug = *binding.Debug
-		}
-		return binding.ShowWork(cfg)
-	}
-}
-
-// MoveBinding supplies handwritten work move execution dependencies.
-type MoveBinding struct {
-	Config            *workcli.MoveConfig
-	Server            *string
-	JSON              *bool
-	Verbose           func() bool
-	Debug             *bool
-	DiagnosticsWriter func(cmd *cobra.Command) io.Writer
-	MoveWork          func(workcli.MoveConfig) error
-}
-
-// MoveRunE returns the handwritten work move RunE used by production wiring.
-func MoveRunE(binding MoveBinding) RunE {
-	return func(cmd *cobra.Command, args []string) error {
-		if binding.MoveWork == nil {
-			return fmt.Errorf("work move service is required")
-		}
-		cfg := *binding.Config
-		cfg.Context = cmd.Context()
-		if binding.Server != nil {
-			cfg.Server = *binding.Server
-		}
-		if len(args) >= 1 {
-			cfg.WorkID = args[0]
-		}
-		if len(args) >= 2 {
-			cfg.StateName = args[1]
-		}
-		if binding.JSON != nil {
-			cfg.JSON = *binding.JSON
-		}
-		cfg.Output = cmd.OutOrStdout()
-		if binding.DiagnosticsWriter != nil {
-			cfg.Diagnostics = binding.DiagnosticsWriter(cmd)
-		}
-		if binding.Verbose != nil {
-			cfg.Verbose = binding.Verbose()
-		}
-		if binding.Debug != nil {
-			cfg.Debug = *binding.Debug
-		}
-		return binding.MoveWork(cfg)
-	}
-}
-
-// VisualizeBinding supplies handwritten work visualize execution dependencies.
-type VisualizeBinding struct {
-	Format    *string
-	Visualize func(workcli.VisualizeConfig) error
-}
-
-// VisualizeRunE returns the handwritten work visualize RunE used by production wiring.
-func VisualizeRunE(binding VisualizeBinding) RunE {
-	return func(cmd *cobra.Command, args []string) error {
-		if binding.Visualize == nil {
-			return fmt.Errorf("work visualize service is required")
-		}
-		format := ""
-		if binding.Format != nil {
-			format = *binding.Format
-		}
-		return binding.Visualize(workcli.VisualizeConfig{
-			Context:   cmd.Context(),
-			BatchFile: args[0],
-			Format:    format,
-			Output:    cmd.OutOrStdout(),
-		})
-	}
 }

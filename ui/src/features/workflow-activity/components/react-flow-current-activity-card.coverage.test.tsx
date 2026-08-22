@@ -34,6 +34,7 @@ const {
   actualBuildGraphLayoutRef,
   mockBuildGraphLayout,
   mockImportController,
+  mockUpdateNodeInternals,
 } = vi.hoisted(() => ({
   actualBuildGraphLayoutRef: { current: null as BuildGraphLayout | null },
   mockBuildGraphLayout: vi.fn(),
@@ -50,10 +51,12 @@ const {
     onDragOver: vi.fn(),
     onDrop: vi.fn(),
   },
+  mockUpdateNodeInternals: vi.fn(),
 }));
 
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual("@xyflow/react");
+  const { ReactFlowProvider } = actual;
 
   return {
     ...actual,
@@ -79,6 +82,7 @@ vi.mock("@xyflow/react", async () => {
         data-testid="graph-controls"
       />
     ),
+    useUpdateNodeInternals: () => mockUpdateNodeInternals,
     ReactFlow: ({
       children,
       connectionLineStyle,
@@ -128,71 +132,73 @@ vi.mock("@xyflow/react", async () => {
       };
 
       return (
-        <div data-testid="mock-react-flow">
-          <output data-testid="edges-focusable">
-            {String(edgesFocusable ?? false)}
-          </output>
-          <output data-testid="connection-line-style">
-            {JSON.stringify(connectionLineStyle ?? null)}
-          </output>
-          <output data-testid="valid-workstation-output">
-            {String(
-              isValidConnection?.({
-                source: "workstation:review",
-                sourceHandle: "workstation-output-source",
-                target: "work-state:story:done",
-                targetHandle: "work-state-input-target",
-              }) ?? false,
-            )}
-          </output>
-          <output data-testid="invalid-workstation-output">
-            {String(
-              isValidConnection?.({
-                source: "workstation:review",
-                sourceHandle: "workstation-output-source",
-                target: "work-state:story:done",
-                targetHandle: "workstation-input-source",
-              }) ?? false,
-            )}
-          </output>
-          <button
-            onClick={() =>
-              onConnect?.({
-                source: "workstation:review",
-                sourceHandle: "workstation-output-source",
-                target: "work-state:story:done",
-                targetHandle: "work-state-input-target",
-              })
-            }
-            type="button"
-          >
-            Trigger connect
-          </button>
-          <button
-            onClick={() => onEdgeClick?.(null, { id: "edge-review-done" })}
-            type="button"
-          >
-            Trigger edge click
-          </button>
-          <button
-            onClick={() => onNodeClick?.(null, { id: "workstation:review" })}
-            type="button"
-          >
-            Trigger node click
-          </button>
-          <button
-            onClick={() =>
-              onNodeDragStop?.(null, {
-                ...draggedNode,
-                position: { x: 320, y: 180 },
-              })
-            }
-            type="button"
-          >
-            Trigger drag stop
-          </button>
-          {children}
-        </div>
+        <ReactFlowProvider>
+          <div data-testid="mock-react-flow">
+            <output data-testid="edges-focusable">
+              {String(edgesFocusable ?? false)}
+            </output>
+            <output data-testid="connection-line-style">
+              {JSON.stringify(connectionLineStyle ?? null)}
+            </output>
+            <output data-testid="valid-workstation-output">
+              {String(
+                isValidConnection?.({
+                  source: "workstation:review",
+                  sourceHandle: "workstation-output-source",
+                  target: "work-state:story:done",
+                  targetHandle: "work-state-input-target",
+                }) ?? false,
+              )}
+            </output>
+            <output data-testid="invalid-workstation-output">
+              {String(
+                isValidConnection?.({
+                  source: "workstation:review",
+                  sourceHandle: "workstation-output-source",
+                  target: "work-state:story:done",
+                  targetHandle: "workstation-input-source",
+                }) ?? false,
+              )}
+            </output>
+            <button
+              onClick={() =>
+                onConnect?.({
+                  source: "workstation:review",
+                  sourceHandle: "workstation-output-source",
+                  target: "work-state:story:done",
+                  targetHandle: "work-state-input-target",
+                })
+              }
+              type="button"
+            >
+              Trigger connect
+            </button>
+            <button
+              onClick={() => onEdgeClick?.(null, { id: "edge-review-done" })}
+              type="button"
+            >
+              Trigger edge click
+            </button>
+            <button
+              onClick={() => onNodeClick?.(null, { id: "workstation:review" })}
+              type="button"
+            >
+              Trigger node click
+            </button>
+            <button
+              onClick={() =>
+                onNodeDragStop?.(null, {
+                  ...draggedNode,
+                  position: { x: 320, y: 180 },
+                })
+              }
+              type="button"
+            >
+              Trigger drag stop
+            </button>
+            {children}
+          </div>
+        </ReactFlowProvider>
       );
     },
   };
@@ -361,6 +367,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
 
   beforeEach(() => {
     mockBuildGraphLayout.mockReset();
+    mockUpdateNodeInternals.mockReset();
     HTMLElement.prototype.getBoundingClientRect = () =>
       ({
         bottom: 720,
@@ -452,6 +459,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
         graphLayout: { edges: [], height: 0, nodes: [], width: 0 },
         pendingAdditionEdgeIds: new Set<string>(),
         positionedGraphLayout: { edges: [], height: 0, nodes: [], width: 0 },
+        renderedLayout: { schemaVersion: 1 },
         visibleGraphEdges: [],
       },
       handleConnectionAnchorClick: vi.fn(),
@@ -541,6 +549,46 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     expect(screen.getByTestId("connection-line-style").textContent).toContain(
       '"stroke":"var(--color-primary)"',
     );
+  });
+
+  it("refreshes graph internals only when the rendered node IDs change", async () => {
+    const nodes: Parameters<typeof CurrentActivityGraphViewport>[0]["nodes"] = [
+      {
+        data: { kind: "workstation" },
+        id: "workstation:review",
+        position: { x: 0, y: 0 },
+        type: "workstation",
+      },
+    ];
+
+    const rendered = renderViewport({ nodes });
+
+    await waitFor(() => {
+      expect(mockUpdateNodeInternals).toHaveBeenCalledTimes(1);
+    });
+    expect(mockUpdateNodeInternals).toHaveBeenLastCalledWith([
+      "workstation:review",
+    ]);
+
+    rendered.rerenderWithNodes(nodes.map((node) => ({ ...node })));
+    expect(mockUpdateNodeInternals).toHaveBeenCalledTimes(1);
+
+    rendered.rerenderWithNodes([
+      ...nodes,
+      {
+        data: { kind: "work-state" },
+        id: "work-state:story:done",
+        position: { x: 240, y: 0 },
+        type: "workState",
+      },
+    ]);
+    await waitFor(() => {
+      expect(mockUpdateNodeInternals).toHaveBeenCalledTimes(2);
+    });
+    expect(mockUpdateNodeInternals).toHaveBeenLastCalledWith([
+      "workstation:review",
+      "work-state:story:done",
+    ]);
   });
 
   it("renders the compact editor toolbar inside the graph card without duplicate add controls", () => {
@@ -881,60 +929,73 @@ function renderViewport({
   >[0]["onEditorNodeClick"];
 }) {
   const flowContainerRef = { current: null as HTMLElement | null };
+  type ViewportNodes = Parameters<
+    typeof CurrentActivityGraphViewport
+  >[0]["nodes"];
 
-  return render(
-    <CurrentActivityGraphViewport
-      addControls={{
-        actions: addMenuActions,
-        isMenuOpen: false,
-        setMenuOpen: vi.fn(),
-        startAction: onAddAction,
-      }}
-      editorControls={{
-        activeTool,
-        canInteract: editorMode,
-        discardPendingChanges: vi.fn(),
-        isEditing: editorMode,
-        selectTool: vi.fn(),
-        toggleMode: vi.fn(),
-      }}
-      edges={[]}
-      flowContainerRef={flowContainerRef}
-      handleNodesChange={vi.fn()}
-      hasPendingChanges={false}
-      headingID="test-heading"
-      layoutControls={{
-        canMoveLayout: includeMoveLayoutNode,
-        canRedo: false,
-        canUndo: false,
-        initialFitViewKey: "full-graph",
-        initialFitViewOptions: { padding: 0.18 },
-        moveNode: moveLayoutNode,
-        moveNodesByDelta: vi.fn(),
-        redo: vi.fn(),
-        reset: vi.fn(),
-        undo: vi.fn(),
-        updateViewport: vi.fn(),
-      }}
-      imports={mockImportController}
-      nodeTypes={{}}
-      nodes={nodes}
-      onConnect={onConnect}
-      onEditorEdgeClick={onEditorEdgeClick}
-      onEditorNodeClick={onEditorNodeClick}
-      saveControls={{ canSave: false, requestConfirmation: vi.fn() }}
-      visibilityControls={{
-        hiddenNodeClasses: new Set(),
-        isDirty: false,
-        isMenuOpen: false,
-        preset: "all",
-        resetPreferences: vi.fn(),
-        setMenuOpen: vi.fn(),
-        setPreset: vi.fn(),
-        toggleHiddenNodeClass: vi.fn(),
-      }}
-    />,
-  );
+  function TestViewport({ nodes: nextNodes }: { nodes: ViewportNodes }) {
+    return (
+      <CurrentActivityGraphViewport
+        addControls={{
+          actions: addMenuActions,
+          isMenuOpen: false,
+          setMenuOpen: vi.fn(),
+          startAction: onAddAction,
+        }}
+        editorControls={{
+          activeTool,
+          canInteract: editorMode,
+          discardPendingChanges: vi.fn(),
+          isEditing: editorMode,
+          selectTool: vi.fn(),
+          toggleMode: vi.fn(),
+        }}
+        edges={[]}
+        flowContainerRef={flowContainerRef}
+        handleNodesChange={vi.fn()}
+        hasPendingChanges={false}
+        headingID="test-heading"
+        layoutControls={{
+          canMoveLayout: includeMoveLayoutNode,
+          canRedo: false,
+          canUndo: false,
+          initialFitViewKey: "full-graph",
+          initialFitViewOptions: { padding: 0.18 },
+          moveNode: moveLayoutNode,
+          moveNodesByDelta: vi.fn(),
+          redo: vi.fn(),
+          reset: vi.fn(),
+          undo: vi.fn(),
+          updateViewport: vi.fn(),
+        }}
+        imports={mockImportController}
+        nodeTypes={{}}
+        nodes={nextNodes}
+        onConnect={onConnect}
+        onEditorEdgeClick={onEditorEdgeClick}
+        onEditorNodeClick={onEditorNodeClick}
+        saveControls={{ canSave: false, requestConfirmation: vi.fn() }}
+        visibilityControls={{
+          hiddenNodeClasses: new Set(),
+          isDirty: false,
+          isMenuOpen: false,
+          preset: "all",
+          resetPreferences: vi.fn(),
+          setMenuOpen: vi.fn(),
+          setPreset: vi.fn(),
+          toggleHiddenNodeClass: vi.fn(),
+        }}
+      />
+    );
+  }
+
+  const rendered = render(<TestViewport nodes={nodes} />);
+  return {
+    ...rendered,
+    rerenderWithNodes: (nextNodes: ViewportNodes) => {
+      rendered.rerender(<TestViewport nodes={nextNodes} />);
+    },
+  };
 }
 
 function createConnectionDraftState() {

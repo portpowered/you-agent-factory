@@ -20,7 +20,7 @@ func TestPlanDispatch_ForwardsDecodedFieldsToRoot(t *testing.T) {
 			got = req
 			return factoryruntime.PlanDispatchResult{
 				Outcome:       factoryruntime.DispatchPlanOutcomeAccepted,
-				DispatchID:      req.DispatchID,
+				DispatchID:    req.DispatchID,
 				CorrelationID: req.CorrelationID,
 			}, nil
 		},
@@ -173,13 +173,6 @@ func TestPlanDispatch_MapsTypedDispatchFailures(t *testing.T) {
 			wantStatus: http.StatusServiceUnavailable,
 			wantCode:   "SERVICE_UNAVAILABLE",
 			wantMsg:    "factory runtime is not running",
-		},
-		{
-			name:       "capability unavailable",
-			programmed: factoryruntime.ErrCapabilityUnavailable,
-			wantStatus: http.StatusServiceUnavailable,
-			wantCode:   "SERVICE_UNAVAILABLE",
-			wantMsg:    "factory runtime capability is unavailable",
 		},
 	}
 

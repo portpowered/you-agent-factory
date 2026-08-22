@@ -5,13 +5,16 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionshttp "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http"
+	httpcompat "github.com/portpowered/infinite-you/pkg/transports/http/compat"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 type validationDecodeCase struct {
@@ -26,13 +29,6 @@ func TestValidateFactory_RejectsInvalidPayloadBeforeValidationInvoked(t *testing
 	t.Parallel()
 
 	cases := []validationDecodeCase{
-		{
-			name:        "unknown_field",
-			body:        `{"name":"alpha","unknownExtra":1}`,
-			wantStatus:  http.StatusBadRequest,
-			wantCode:    "BAD_REQUEST",
-			wantMessage: "invalid request payload",
-		},
 		{
 			name:        "malformed",
 			body:        `{"name":"alpha"`,
@@ -87,6 +83,56 @@ func TestValidateFactory_RejectsInvalidPayloadBeforeValidationInvoked(t *testing
 				tc.wantMessage,
 			)
 		})
+	}
+}
+
+func TestValidateFactory_AcceptsUnknownFieldsWithWarning(t *testing.T) {
+	t.Parallel()
+
+	core, logs := observer.New(zap.WarnLevel)
+	validation := &capturingValidationFake{}
+	handler := factorydefinitionshttp.NewHandlerFromRoot(
+		factorydefinitionshttp.RootBinding{Validation: validation},
+		zap.New(core),
+	)
+	body := strings.Replace(
+		strings.Replace(minimalValidationFactoryBody, `"name": "alpha",`, `"name": "alpha", "futureRoot": "secret-root",`, 1),
+		`"name": "task",`, `"name": "task", "futureNested": {"value":"secret-nested"},`, 1,
+	)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/factory-validations", strings.NewReader(body))
+
+	handler.ValidateFactory(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", recorder.Code, recorder.Body.String())
+	}
+	warning := recorder.Header().Get("Warning")
+	if !strings.Contains(warning, "299") ||
+		!strings.Contains(warning, "$.futureRoot") ||
+		!strings.Contains(warning, "$.workTypes[0].futureNested") {
+		t.Fatalf("Warning = %q, want code 299 and both ignored paths", warning)
+	}
+	if validation.request.Config == nil || validation.request.Config.Name != "alpha" {
+		t.Fatalf("decoded config = %#v, want known factory name alpha", validation.request.Config)
+	}
+	entries := logs.All()
+	if len(entries) != 1 {
+		t.Fatalf("warning log count = %d, want one", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if fields["warning_code"] != int64(httpcompat.WarningCode) ||
+		fields["boundary"] != "factory_definitions.http" ||
+		fields["operation"] != "validate_factory" {
+		t.Fatalf("warning fields = %#v, want HTTP compatibility metadata", fields)
+	}
+	if got, ok := fields["json_paths"].([]interface{}); !ok || !reflect.DeepEqual(got, []interface{}{
+		"$.futureRoot", "$.workTypes[0].futureNested",
+	}) {
+		t.Fatalf("json_paths = %#v, want sorted ignored paths", fields["json_paths"])
+	}
+	if strings.Contains(entries[0].Message, "secret") || strings.Contains(recorder.Body.String(), "secret") {
+		t.Fatal("compatibility diagnostics exposed an ignored field value")
 	}
 }
 

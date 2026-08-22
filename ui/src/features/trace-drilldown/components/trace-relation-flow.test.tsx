@@ -1,3 +1,4 @@
+// biome-ignore lint/style/noExcessiveLinesPerFile: relation graph coverage keeps one mocked React Flow harness alongside the textual fallback and responsive surface assertions.
 import {
   cleanup,
   fireEvent,
@@ -299,8 +300,11 @@ describe("TraceRelationFlow", () => {
     expect(implementNode.className).toContain("border-info-border");
     expect(implementNode.className).toContain("bg-info-container");
     expect(within(implementButton).getByText("Implement story")).toBeTruthy();
-    expect(screen.queryByText("Parent-child")).toBeNull();
-    expect(screen.queryByText("Done")).toBeNull();
+    const textualPath = screen.getByRole("region", {
+      name: "Textual relation path",
+    });
+    expect(within(textualPath).getByText("Parent-child")).toBeTruthy();
+    expect(within(textualPath).getByText(/Required state:.*Done/)).toBeTruthy();
     expect(screen.queryByText("Work state")).toBeNull();
     expect(screen.queryByText("Failed")).toBeNull();
 
@@ -355,7 +359,11 @@ describe("TraceRelationFlow selected work", () => {
 
     expect(screen.queryByRole("button", { name: "Plan story" })).toBeNull();
 
-    const selectedShell = screen.getByText("Plan story").closest("article");
+    const selectedShell = within(
+      screen.getByTestId("trace-relation-react-flow"),
+    )
+      .getByText("Plan story")
+      .closest("article");
     if (!(selectedShell instanceof HTMLElement)) {
       throw new Error("Expected selected relation node shell to render.");
     }
@@ -367,6 +375,65 @@ describe("TraceRelationFlow selected work", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Implement story" }));
     expect(onSelectWorkID).toHaveBeenCalledWith("work-implement");
+  });
+});
+
+describe("TraceRelationFlow textual fallback", () => {
+  let restoreBrowserShims: (() => void) | undefined;
+
+  beforeEach(() => {
+    restoreBrowserShims = installDashboardBrowserTestShims();
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreBrowserShims?.();
+    restoreBrowserShims = undefined;
+  });
+
+  it("keeps the semantic relation path usable when graph rendering is disabled", () => {
+    const onSelectWorkID = vi.fn();
+
+    render(
+      <TraceRelationFlow
+        onSelectWorkID={onSelectWorkID}
+        relations={RELATIONS}
+        renderGraph={false}
+      />,
+    );
+
+    const textualPath = screen.getByRole("region", {
+      name: "Textual relation path",
+    });
+    expect(within(textualPath).getAllByRole("listitem")).toHaveLength(2);
+    expect(
+      screen.queryByRole("region", { name: "Batch relation graph" }),
+    ).toBeNull();
+
+    const firstRelation = within(textualPath).getAllByRole("listitem")[0];
+    if (!firstRelation) {
+      throw new Error("Expected the first textual relation to render.");
+    }
+    const target = within(firstRelation).getByRole("button", {
+      name: "Select work work-implement.",
+    });
+    target.focus();
+    fireEvent.keyDown(target, { key: "Enter" });
+    fireEvent.click(target);
+    expect(onSelectWorkID).toHaveBeenCalledWith("work-implement");
+    expect(target.className).toContain("focus-visible:ring-af-focus-ring");
+  });
+
+  it("keeps the zero-relation state named and accessible", () => {
+    render(<TraceRelationFlow relations={[]} renderGraph={false} />);
+
+    const textualPath = screen.getByRole("region", {
+      name: "Textual relation path",
+    });
+    expect(within(textualPath).getByRole("status").textContent).toBe(
+      "No recorded relations.",
+    );
+    expect(screen.getByText("None")).toBeTruthy();
   });
 });
 
@@ -448,10 +515,15 @@ describe("TraceRelationFlow localization", () => {
       expect(screen.getByRole("region", { name: "批次关系图" })).toBeTruthy();
     });
 
-    expect(screen.getByText("Review story")).toBeTruthy();
-    expect(screen.getByText("Fix story")).toBeTruthy();
-    expect(screen.queryByText("派生自")).toBeNull();
-    expect(screen.queryByText("未知状态：escalated_review")).toBeNull();
+    const textualPath = screen.getByRole("region", {
+      name: "文本关系路径",
+    });
+    expect(within(textualPath).getByText("Review story")).toBeTruthy();
+    expect(within(textualPath).getByText("Fix story")).toBeTruthy();
+    expect(within(textualPath).getByText("派生自")).toBeTruthy();
+    expect(
+      within(textualPath).getByText(/未知状态：escalated_review/),
+    ).toBeTruthy();
     expect(renderedEdges()[0]?.ariaLabel).toBe(
       "派生自关系：从 Review story 到 Fix story，要求 未知状态：escalated_review",
     );
@@ -482,7 +554,10 @@ describe("TraceRelationFlow localization", () => {
       expect(screen.getByRole("region", { name: "批次关系图" })).toBeTruthy();
     });
 
-    expect(screen.getByText("未知来源")).toBeTruthy();
-    expect(screen.getByText("work-target")).toBeTruthy();
+    const textualPath = screen.getByRole("region", {
+      name: "文本关系路径",
+    });
+    expect(within(textualPath).getByText("未知来源")).toBeTruthy();
+    expect(within(textualPath).getAllByText("work-target")).toHaveLength(2);
   });
 });

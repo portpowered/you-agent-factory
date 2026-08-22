@@ -1,0 +1,5 @@
+description: The Worker Session interrupt could not cross its cancellation or successor admission barrier.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/WorkerSessionInterruptError.yaml'

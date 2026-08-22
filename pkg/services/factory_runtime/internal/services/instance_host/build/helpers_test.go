@@ -4,9 +4,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -141,19 +142,23 @@ func TestCommandRunnerOverrideForMode_ReplayReplacesOnlyProductionEdge(t *testin
 	}
 }
 
-type stubProvider struct{}
-
-func (stubProvider) Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
-	return workerexecution.InferenceResponse{}, nil
+type stubProvider struct {
+	*testutil.NativeProvider
 }
 
-type scriptedReplaySideEffects struct{}
+func (stubProvider) Execute(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, nil
+}
 
-func (*scriptedReplaySideEffects) Infer(
+type scriptedReplaySideEffects struct {
+	*testutil.NativeProvider
+}
+
+func (*scriptedReplaySideEffects) Execute(
 	context.Context,
-	workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
-	return workerexecution.InferenceResponse{}, nil
+	providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, nil
 }
 
 func (*scriptedReplaySideEffects) Run(
@@ -216,8 +221,8 @@ func TestWarnPortableBundledReplacementReport_LogsTargets(t *testing.T) {
 func TestProviderOverrideForMode_PrefersConfiguredProviderAndFallsBackToReplay(t *testing.T) {
 	t.Parallel()
 
-	configured := stubProvider{}
-	sideEffects := &scriptedReplaySideEffects{}
+	configured := stubProvider{NativeProvider: &testutil.NativeProvider{}}
+	sideEffects := &scriptedReplaySideEffects{NativeProvider: &testutil.NativeProvider{}}
 
 	if got := providerOverrideForMode(configured, sideEffects); got != configured {
 		t.Fatalf("configured provider = %#v, want %#v", got, configured)

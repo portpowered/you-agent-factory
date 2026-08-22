@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -36,7 +38,7 @@ func TestListProductionPkgPackagesIsStableSortedAndIdempotent(t *testing.T) {
 		t.Fatalf("second listProductionPkgPackages() error = %v", err)
 	}
 	if !slices.Equal(first, second) {
-		t.Fatalf("re-running inventory generation changed the ordered package list")
+		t.Fatalf("re-running package discovery changed the ordered package list")
 	}
 }
 
@@ -59,79 +61,229 @@ func TestListProductionPkgPackagesIncludesProductionAndOmitsTestOnly(t *testing.
 	}
 }
 
-func TestValidateManifestRequiresCompleteStableInventory(t *testing.T) {
+// TestCheckPassesWhenPackageIsAddedInsideExistingServiceWithNoRegistryEdit is the
+// core of the registration-tax retirement: package churn inside a service must
+// not require a registry edit. The check runs before and after a new package
+// appears, against byte-identical registry files.
+func TestCheckPassesWhenPackageIsAddedInsideExistingServiceWithNoRegistryEdit(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	writeGoPackage(t, repoRoot, "pkg/alpha", "package alpha\n")
-	writeGoPackage(t, repoRoot, "pkg/beta", "package beta\n")
+	writeGoPackage(t, repoRoot, "pkg/services/work", "package work\n")
+	writeGoPackage(t, repoRoot, "pkg/services/work/internal/lineagegraph", "package lineagegraph\n")
+	movesPath := writeFixtureMoveLedger(t, repoRoot, []PackageMapping{{
+		PackagePath: "pkg/services/work/internal/lineagegraph",
+		Destination: "work/internal",
+		Successor:   "pkg/services/work/internal",
+	}})
+	movesBefore := readFileBytes(t, movesPath)
 
-	base := Manifest{
-		Version:               1,
-		Stage:                 manifestStage,
-		DestinationVocabulary: closedDestinationVocabulary(),
-		ArchitectureExceptionNotes: map[string]string{
-			"edges": edgesArchitectureExceptionNote,
-		},
-		FutureDebt: []FutureDebt{edgesFutureDebtEntry()},
+	if err := runCheck(t, repoRoot); err != nil {
+		t.Fatalf("check on the starting tree error = %v", err)
 	}
 
-	missing := base
-	missing.Inventory = []string{"pkg/alpha"}
-	missing.Packages = mustResidualPackages(t, missing.Inventory)
-	if err := validateManifestAt(repoRoot, missing); err == nil || !strings.Contains(err.Error(), "inventory") {
-		t.Fatalf("incomplete inventory error = %v", err)
+	// A brand-new package inside an existing service, with no registry edit.
+	writeGoPackage(t, repoRoot, "pkg/services/work/internal/newsubsystem", "package newsubsystem\n")
+	if err := runCheck(t, repoRoot); err != nil {
+		t.Fatalf("check after adding a package with no registry edit error = %v", err)
 	}
 
-	unsorted := base
-	unsorted.Inventory = []string{"pkg/beta", "pkg/alpha"}
-	unsorted.Packages = mustResidualPackages(t, unsorted.Inventory)
-	if err := validateManifestAt(repoRoot, unsorted); err == nil || !strings.Contains(err.Error(), "stable-sorted") {
-		t.Fatalf("unsorted inventory error = %v", err)
+	// Deleting a package that never had a row is likewise a no-edit change.
+	if err := os.RemoveAll(filepath.Join(repoRoot, filepath.FromSlash("pkg/services/work/internal/newsubsystem"))); err != nil {
+		t.Fatalf("remove added package: %v", err)
+	}
+	if err := runCheck(t, repoRoot); err != nil {
+		t.Fatalf("check after deleting a package with no registry edit error = %v", err)
 	}
 
-	complete := base
-	complete.Inventory = []string{"pkg/alpha", "pkg/beta"}
-	complete.Packages = mustResidualPackages(t, complete.Inventory)
-	if err := validateManifestAt(repoRoot, complete); err != nil {
-		t.Fatalf("complete inventory error = %v", err)
+	if after := readFileBytes(t, movesPath); !bytes.Equal(movesBefore, after) {
+		t.Fatal("the check rewrote the move ledger; it must be read-only")
 	}
 }
 
-func mustResidualPackages(t *testing.T, inventory []string) []PackageMapping {
-	t.Helper()
-	rows := make([]PackageMapping, 0, len(inventory))
-	for _, packagePath := range inventory {
-		mapping, ok := mapResidualPackage(packagePath)
-		if !ok {
-			t.Fatalf("mapResidualPackage(%q) ok = false for inventory fixture", packagePath)
+// TestCheckFailsWhenMoveRowNamesAbsentPackage proves the surviving rows cannot
+// rot: completeness is retired in one direction only.
+func TestCheckFailsWhenMoveRowNamesAbsentPackage(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoPackage(t, repoRoot, "pkg/services/work", "package work\n")
+	writeFixtureMoveLedger(t, repoRoot, []PackageMapping{{
+		PackagePath: "pkg/services/work/internal/alreadymoved",
+		Destination: "work/internal",
+		Successor:   "pkg/services/work/internal",
+	}})
+
+	err := runCheck(t, repoRoot)
+	if err == nil {
+		t.Fatal("check error = nil, want failure for a row naming an absent package")
+	}
+	if !strings.Contains(err.Error(), "pkg/services/work/internal/alreadymoved") {
+		t.Fatalf("check error = %v, want the stale package path named", err)
+	}
+	if !strings.Contains(err.Error(), "LINT_VIOLATION_COUNT: 1") {
+		t.Fatalf("check error = %v, want a machine-readable violation count", err)
+	}
+}
+
+// TestCheckRejectsResurrectedRetainRow locks the retirement in place. An
+// old-style row that only restates where a package already lives carries no
+// successor, so pasting the retired enumeration back in fails the check rather
+// than passing as a no-op.
+func TestCheckRejectsResurrectedRetainRow(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoPackage(t, repoRoot, "pkg/services/work", "package work\n")
+	writeFixtureMoveLedger(t, repoRoot, nil)
+	writeRawMoveLedger(t, repoRoot, `{
+  "version": 1,
+  "stage": "`+unfinishedMovesStage+`",
+  "moves": [
+    {
+      "packagePath": "pkg/services/work",
+      "disposition": "retain",
+      "destination": "work"
+    }
+  ]
+}`)
+
+	err := runCheck(t, repoRoot)
+	if err == nil {
+		t.Fatal("check error = nil, want rejection of a rowless retain restatement")
+	}
+	if !strings.Contains(err.Error(), "successor is required") {
+		t.Fatalf("check error = %v, want a missing-successor message", err)
+	}
+}
+
+// TestCheckDerivesServiceVocabularyFromServicesDirectory proves the service-name
+// vocabulary comes from the pkg/services directory at check time rather than from
+// a closed Go list inside this tool.
+//
+// The fixture root contains one service name that appears nowhere in this
+// repository's Go source. A move row targeting it is accepted purely because the
+// directory exists, with no edit to the checker; the same row is rejected once the
+// destination names a service with no directory.
+func TestCheckDerivesServiceVocabularyFromServicesDirectory(t *testing.T) {
+	t.Parallel()
+
+	const throwaway = "throwaway_probe_service"
+
+	t.Run("accepts a destination naming a service that only exists as a directory", func(t *testing.T) {
+		t.Parallel()
+
+		repoRoot := t.TempDir()
+		writeGoPackage(t, repoRoot, "pkg/services/"+throwaway, "package "+throwaway+"\n")
+		writeGoPackage(t, repoRoot, "pkg/services/"+throwaway+"/legacyfacade", "package legacyfacade\n")
+		writeFixtureMoveLedger(t, repoRoot, []PackageMapping{{
+			PackagePath: "pkg/services/" + throwaway + "/legacyfacade",
+			Destination: throwaway + "/internal",
+			Successor:   "pkg/services/" + throwaway + "/internal",
+		}})
+
+		if err := runCheck(t, repoRoot); err != nil {
+			t.Fatalf("check error = %v; a service directory alone must make its name a valid destination", err)
 		}
-		rows = append(rows, mapping)
-	}
-	return rows
+
+		vocab, err := derivedDestinationVocabulary(repoRoot)
+		if err != nil {
+			t.Fatalf("derivedDestinationVocabulary() error = %v", err)
+		}
+		if !slices.Contains(vocab.ProductOwners, throwaway) {
+			t.Fatalf("derived productOwners = %v, want it to include %q", vocab.ProductOwners, throwaway)
+		}
+	})
+
+	t.Run("rejects a destination naming a service with no directory", func(t *testing.T) {
+		t.Parallel()
+
+		repoRoot := t.TempDir()
+		writeGoPackage(t, repoRoot, "pkg/services/"+throwaway, "package "+throwaway+"\n")
+		writeGoPackage(t, repoRoot, "pkg/services/"+throwaway+"/legacyfacade", "package legacyfacade\n")
+		writeFixtureMoveLedger(t, repoRoot, []PackageMapping{{
+			PackagePath: "pkg/services/" + throwaway + "/legacyfacade",
+			Destination: "ghost_service/internal",
+			Successor:   "pkg/services/ghost_service",
+		}})
+
+		err := runCheck(t, repoRoot)
+		if err == nil {
+			t.Fatal("check error = nil, want rejection of a destination naming no live service")
+		}
+		if !strings.Contains(err.Error(), "ghost_service") {
+			t.Fatalf("check error = %v, want the unknown service named", err)
+		}
+	})
 }
 
-func TestCommittedManifestInventoryMatchesLiveProductionPackages(t *testing.T) {
+// TestCommittedManifestPassesTheCheck runs the real committed registries against
+// the real tree, which is what the packaged-service-structure lint target does.
+func TestCommittedManifestPassesTheCheck(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := findRepoRoot(t)
-	manifest, err := loadManifest(filepath.Join(repoRoot, manifestRelativePath))
+	if err := runCheck(t, repoRoot); err != nil {
+		t.Fatalf("committed manifest check error = %v", err)
+	}
+}
+
+func runCheck(t *testing.T, repoRoot string) error {
+	t.Helper()
+	return run(config{
+		root:      repoRoot,
+		movesPath: unfinishedMovesRelativePath,
+	}, &bytes.Buffer{}, &bytes.Buffer{})
+}
+
+// writeFixtureMoveLedger writes a schema-valid open-move ledger carrying only
+// the given rows and returns its path.
+func writeFixtureMoveLedger(t *testing.T, repoRoot string, rows []PackageMapping) string {
+	t.Helper()
+	moves := UnfinishedMoves{
+		Version: 1,
+		Stage:   unfinishedMovesStage,
+		Moves:   rows,
+	}
+	return writeFixtureJSON(t, repoRoot, unfinishedMovesRelativePath, moves)
+}
+
+func writeFixtureJSON(t *testing.T, repoRoot, relativePath string, value any) string {
+	t.Helper()
+	data, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
-		t.Fatalf("loadManifest() error = %v", err)
+		t.Fatalf("encode fixture %s: %v", relativePath, err)
 	}
-	if err := validateManifestAt(repoRoot, manifest); err != nil {
-		t.Fatalf("committed manifest inventory validation error = %v", err)
+	path := filepath.Join(repoRoot, filepath.FromSlash(relativePath))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir fixture dir for %s: %v", relativePath, err)
 	}
-	live, err := listProductionPkgPackages(repoRoot)
+	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+		t.Fatalf("write fixture %s: %v", relativePath, err)
+	}
+	return path
+}
+
+// writeRawMoveLedger writes ledger JSON verbatim so a test can express a shape
+// the Go structs no longer model, such as a resurrected retain row.
+func writeRawMoveLedger(t *testing.T, repoRoot, payload string) {
+	t.Helper()
+	path := filepath.Join(repoRoot, filepath.FromSlash(unfinishedMovesRelativePath))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir move ledger dir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(payload+"\n"), 0o644); err != nil {
+		t.Fatalf("write raw move ledger: %v", err)
+	}
+}
+
+func readFileBytes(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("listProductionPkgPackages() error = %v", err)
+		t.Fatalf("read %s: %v", path, err)
 	}
-	if !slices.Equal(manifest.Inventory, live) {
-		t.Fatalf("committed inventory diverges from live production packages (manifest=%d live=%d)", len(manifest.Inventory), len(live))
-	}
-	if len(manifest.Inventory) == 0 {
-		t.Fatal("committed inventory is empty")
-	}
+	return data
 }
 
 func writeGoPackage(t *testing.T, repoRoot, packagePath, source string, fileName ...string) {

@@ -10,6 +10,37 @@ export function isDefaultFactorySessionID(
   );
 }
 
+/** True when the default selector is replaced by its resolved runtime session identity. */
+export function isDefaultToRuntimeSessionAliasRemap(
+  previousSessionID: string | null,
+  sessionID: string | null,
+): boolean {
+  if (previousSessionID == null || sessionID == null) {
+    return false;
+  }
+  if (previousSessionID === sessionID) {
+    return false;
+  }
+  return (
+    isDefaultFactorySessionID(previousSessionID) &&
+    !isDefaultFactorySessionID(sessionID)
+  );
+}
+
+/** True when two session keys identify the same logical document scope. */
+export function areFactorySessionIDsEquivalent(
+  previousSessionID: string | null | undefined,
+  sessionID: string | null | undefined,
+): boolean {
+  return (
+    previousSessionID === sessionID ||
+    isDefaultToRuntimeSessionAliasRemap(
+      previousSessionID ?? null,
+      sessionID ?? null,
+    )
+  );
+}
+
 export function currentFactorySessionPath(
   sessionID: string | null | undefined,
 ): string {

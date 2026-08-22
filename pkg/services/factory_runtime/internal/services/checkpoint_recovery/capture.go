@@ -3,8 +3,6 @@ package checkpoint_recovery
 import (
 	"encoding/json"
 	"strings"
-
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 )
 
 const (
@@ -18,8 +16,8 @@ const (
 )
 
 // ExecutionCaptureFacts are the minimal execution facts encoded into opaque
-// checkpoint payload bytes during capture. Nested codecs own meaning; peers only
-// observe the resulting opaque Payload on the Runtime root.
+// checkpoint payload bytes during capture. Nested codecs own meaning; this
+// remains private recovery vocabulary with no public Runtime root exposure.
 type ExecutionCaptureFacts struct {
 	FactoryState string
 }
@@ -45,7 +43,7 @@ type Service interface {
 }
 
 // EncodeRuntimeOpaquePayload serializes minimal execution facts into opaque
-// strategy bytes suitable for Runtime root checkpoint capture.
+// strategy bytes suitable for private Runtime checkpoint capture.
 func EncodeRuntimeOpaquePayload(facts ExecutionCaptureFacts) ([]byte, error) {
 	state := strings.TrimSpace(facts.FactoryState)
 	if state == "" {
@@ -54,28 +52,6 @@ func EncodeRuntimeOpaquePayload(facts ExecutionCaptureFacts) ([]byte, error) {
 	return json.Marshal(struct {
 		FactoryState string `json:"factoryState"`
 	}{FactoryState: state})
-}
-
-// RootCheckpointFromEnvelope maps a private envelope to the published Runtime
-// root checkpoint vocabulary.
-func RootCheckpointFromEnvelope(envelope Envelope) factoryruntime.Checkpoint {
-	return factoryruntime.Checkpoint{
-		CheckpointID:  envelope.CheckpointID,
-		SchemaVersion: envelope.SchemaVersion,
-		StrategyKind:  envelope.StrategyKind,
-		Payload:       append([]byte(nil), envelope.Payload...),
-	}
-}
-
-// EnvelopeFromRootCheckpoint maps a published Runtime root checkpoint to the
-// private envelope vocabulary used inside checkpoint_recovery.
-func EnvelopeFromRootCheckpoint(checkpoint factoryruntime.Checkpoint) Envelope {
-	return Envelope{
-		CheckpointID:  strings.TrimSpace(checkpoint.CheckpointID),
-		SchemaVersion: checkpoint.SchemaVersion,
-		StrategyKind:  strings.TrimSpace(checkpoint.StrategyKind),
-		Payload:       append([]byte(nil), checkpoint.Payload...),
-	}
 }
 
 // RestoreRuntimeOpaquePayload decodes opaque strategy bytes into execution facts

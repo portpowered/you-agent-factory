@@ -8,10 +8,11 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
 const identityInventoryFixturesRelativeDir = "pkg/services/operator_settings/internal/services/document/identityinventory/testdata/fixtures"
@@ -29,6 +30,8 @@ func TestWireLegacyPackagesFoldPreservesExistingBackendScopeIdentity(t *testing.
 	root, err := settingswire.NewServiceFromConfigDocument(
 		testConfigDocumentService(),
 		internaltestproviders.StandardCatalog(),
+		testIDGenerator(),
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
@@ -95,15 +98,17 @@ func TestWireLegacyPackagesFoldPreservesRootBehaviorWithRelocatedTestHelpers(t *
 	}
 
 	providersRoot := internaltestproviders.StandardCatalog()
-	service, err := settingswire.NewService(
-		platformfilesystem.Local{},
-		func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
-			return os.CreateTemp(dir, pattern)
+	service, err := settingswire.NewServiceFromConfigDocument(
+		operatorsettings.ConfigDocumentService{
+			Files:      platformfilesystem.Local{},
+			CreateTemp: func(dir, pattern string) (operatorsettings.TemporaryFile, error) { return os.CreateTemp(dir, pattern) },
+			Decoder:    globalconfigmapping.Decode,
+			Encoder:    globalconfigmapping.Encode,
+			Providers:  preservationProviderCatalog,
 		},
-		globalconfigmapping.Decode,
-		globalconfigmapping.Encode,
-		preservationProviderCatalog,
 		providersRoot,
+		testIDGenerator(),
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)

@@ -134,3 +134,27 @@ func TestArtifactDetailResponseToAPI_EncodesDetachedArtifactDetail(t *testing.T)
 		t.Fatalf("response = %#v, want encoded artifact detail", response)
 	}
 }
+
+func TestArtifactDetailResponseToAPI_MapsOptionalKindsVisibilityRedactionsAndCapture(t *testing.T) {
+	t.Parallel()
+
+	createdAt := time.Date(2026, time.August, 16, 2, 3, 4, 0, time.UTC)
+	kinds := []string{"FINAL_RESULT", "CHILD_RESULT", "FINDING", "PATCH", "LOG", "DATASET", "CHECKPOINT", "WORKTREE_SUMMARY", "unknown"}
+	for _, kind := range kinds {
+		kind := kind
+		t.Run(kind, func(t *testing.T) {
+			response := ArtifactDetailResponseToAPI("session-optional", interfaces.FactorySessionArtifactState{
+				ID: kind + "-artifact", Kind: kind, Visibility: "INTERNAL_CHECKPOINT", Label: " label ",
+				ContentHash: "hash", SizeBytes: 4, CapturedAt: createdAt,
+				RedactionCounts: map[string]int{"secrets": 1, "paths": 2, "tokens": 3},
+				CaptureMetadata: map[string]string{"sourceDispatchId": "dispatch-optional", "mimeType": " text/plain "},
+			})
+			if response.Visibility != factoryapi.FactoryArtifactVisibilityINTERNALCHECKPOINT ||
+				response.RedactionCounts == nil || response.RedactionCounts.Secrets == nil ||
+				response.CaptureMetadata == nil || response.CaptureMetadata.SourceDispatchId == nil ||
+				response.ContentRef == nil || response.ContentRef.Href == "" {
+				t.Fatalf("artifact response = %#v, want optional projections", response)
+			}
+		})
+	}
+}

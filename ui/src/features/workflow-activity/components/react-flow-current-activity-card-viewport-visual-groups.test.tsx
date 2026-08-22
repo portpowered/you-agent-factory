@@ -27,6 +27,32 @@ vi.mock(
 );
 
 vi.mock(
+  "@you-agent-factory/factory-graph/group-regions",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("@you-agent-factory/factory-graph/group-regions")
+      >();
+
+    return {
+      ...actual,
+      FactoryGraphGroupRegionLayer: ({
+        groups,
+      }: {
+        groups: readonly { id: string }[];
+      }) => (
+        <div
+          data-read-only="true"
+          data-testid="factory-graph-group-region-layer"
+        >
+          {groups.map((group) => group.id).join(",")}
+        </div>
+      ),
+    };
+  },
+);
+
+vi.mock(
   "../../factory-graph-editor/components/flow/visual-groups/factory-graph-visual-group-controls",
   () => ({
     FactoryGraphVisualGroupControls: () => (
@@ -37,6 +63,7 @@ vi.mock(
 
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual("@xyflow/react");
+  const { ReactFlowProvider } = actual;
 
   return {
     ...actual,
@@ -59,7 +86,11 @@ vi.mock("@xyflow/react", async () => {
         });
       }, [onInit]);
 
-      return <div data-testid="mock-react-flow">{children}</div>;
+      return (
+        <ReactFlowProvider>
+          <div data-testid="mock-react-flow">{children}</div>
+        </ReactFlowProvider>
+      );
     },
   };
 });
@@ -106,56 +137,18 @@ const visualGroupControls = {
   onRenameGroup: vi.fn(),
   onSetGroupColor: vi.fn(),
   onToggleNodeMembership: vi.fn(),
-  selectedGroupLabel: "Selected visual group",
+  groupAriaLabel: "Visual group Review",
   staleMemberNodeIds: [],
 };
 
-const DEFAULT_GRAPH_RECT = {
-  bottom: 720,
+const DEFAULT_VIEWPORT_MEASUREMENT = {
   height: 720,
-  left: 0,
-  right: 1280,
-  top: 0,
+  ready: true,
   width: 1280,
-  x: 0,
-  y: 0,
-  toJSON: () => ({}),
-} as DOMRect;
+} as const;
 
 describe("CurrentActivityGraphViewport visual groups", () => {
-  const originalBoundingClientRect =
-    HTMLElement.prototype.getBoundingClientRect;
-  const originalResizeObserver = globalThis.ResizeObserver;
-
-  beforeEach(() => {
-    HTMLElement.prototype.getBoundingClientRect = () => DEFAULT_GRAPH_RECT;
-    globalThis.ResizeObserver = class {
-      public constructor(private readonly callback: ResizeObserverCallback) {}
-
-      public disconnect(): void {}
-
-      public observe(target: Element): void {
-        this.callback(
-          [
-            {
-              contentRect: DEFAULT_GRAPH_RECT,
-              target,
-            } as ResizeObserverEntry,
-          ],
-          this as unknown as ResizeObserver,
-        );
-      }
-
-      public unobserve(): void {}
-    } as unknown as typeof ResizeObserver;
-  });
-
-  afterEach(() => {
-    HTMLElement.prototype.getBoundingClientRect = originalBoundingClientRect;
-    globalThis.ResizeObserver = originalResizeObserver;
-  });
-
-  it("renders visual group overlays while editing and hides them in observer mode", async () => {
+  it("uses the shared read-only region in observer mode and edit composition while editing", async () => {
     const { rerender } = renderVisualGroupViewport({
       editorMode: true,
       onCreateVisualGroup: vi.fn(),
@@ -172,6 +165,9 @@ describe("CurrentActivityGraphViewport visual groups", () => {
       screen.getByTestId("factory-visual-group-controls"),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create group" })).toBeEnabled();
+    expect(
+      screen.queryByTestId("factory-graph-group-region-layer"),
+    ).not.toBeInTheDocument();
 
     rerender(
       <CurrentActivityGraphViewport
@@ -192,6 +188,12 @@ describe("CurrentActivityGraphViewport visual groups", () => {
     expect(
       screen.queryByTestId("factory-visual-group-controls"),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("factory-graph-group-region-layer"),
+    ).toHaveAttribute("data-read-only", "true");
+    expect(
+      screen.getByTestId("factory-graph-group-region-layer"),
+    ).toHaveTextContent("group-1");
   });
 
   it("invokes create visual group from the editor toolbar", async () => {
@@ -242,6 +244,7 @@ function buildVisualGroupViewportProps({
     },
     edges: [] as Edge[],
     flowContainerRef,
+    viewportMeasurement: DEFAULT_VIEWPORT_MEASUREMENT,
     handleNodesChange: vi.fn(),
     hasPendingChanges: false,
     layoutControls: {

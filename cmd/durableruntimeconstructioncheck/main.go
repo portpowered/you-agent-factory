@@ -19,7 +19,7 @@ const (
 	storeDirectoryName     = "DirForProjectRoot"
 	persistenceBooleanName = "PersistSessions"
 	providerInferenceName  = "Infer"
-	providerPackagePath    = "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider"
+	providerPackagePath    = "github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat"
 )
 
 var canonicalEventOwnerCalls = map[string]struct{}{
@@ -44,7 +44,7 @@ var approvedApplicationCompositionFiles = map[string]struct{}{
 
 var javascriptLiveChildRoots = []string{
 	"pkg/services/factory_sessions/internal/execution/livechild/",
-	"pkg/orchestrators/javascript/",
+	"pkg/services/factory_runtime/internal/services/orchestration/javascript/",
 }
 
 var approvedRuntimeConstructorFiles = map[string]struct{}{
@@ -188,10 +188,6 @@ func isJavaScriptLiveChildFile(relative string) bool {
 	return false
 }
 
-func isJavaScriptOrchestratorFile(relative string) bool {
-	return strings.HasPrefix(relative, "pkg/orchestrators/javascript/")
-}
-
 func approved(relative string, files map[string]struct{}) bool {
 	_, ok := files[relative]
 	return ok
@@ -244,4 +240,3 @@ func ignoredDirectory(name string) bool {
 		return false
 	}
 }
-

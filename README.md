@@ -54,7 +54,7 @@ Packaged Factories resolve by name and materialize lazily under
 `~/.you-agent-factory/factories` when first used:
 
 1. Run `you init --provider codex` to configure the default model provider.
-2. Run `you factory list` to inspect the fourteen available packaged Factories.
+2. Run `you factory list` to inspect the seventeen available packaged Factories.
 3. From the project you want the agent to work in, run:
 
 ```sh
@@ -70,7 +70,7 @@ topics, see [`you docs`](./docs/reference/README.md).
 
 ### Pre-packaged factories
 
-YOU comes with [fourteen pre-packaged factories](./docs/reference/packaged-factories.md).
+YOU comes with [seventeen pre-packaged factories](./docs/reference/packaged-factories.md).
 
 #### Save money flow (plan-execute)
 
@@ -130,13 +130,13 @@ Run YOU as a backend that you can submit work against.
 Start a continuous named Factory with an API listener:
 
 ```bash
-you run --named @you/goal --continuously --with-server --to "finish up some random-job"
+you run --named @you/goal --continuously --with-server --listen 127.0.0.1:7437 --to "finish up some random-job"
 ```
 
 Or serve the project-local Current Factory (`./factory/factory.json`) with the dashboard:
 
 ```bash
-you server
+you server --listen 127.0.0.1:7437
 ```
 
 Submit one work item to a running session (payload is a file path):
@@ -148,10 +148,24 @@ you submit --name "task-1" --work-type-name "goal" --payload goal.md
 
 Then watch the session run with `you session list` / `you work list`.
 
+Run a supported operation through an already-running server:
+
+```bash
+you --remote --server <uri> run "Review the release notes"
+```
+
+`--remote` selects the running server at `--server`; it never starts local
+hosting. Use `--listen <host:port>` with `--with-server`, `--with-site`, or
+`you server` when the command itself owns a local listener. `--remote` cannot
+be combined with `--with-server` or `--with-site`.
+
 ### Website mode
 
 Open the dashboard at [http://localhost:7437/dashboard/ui](http://localhost:7437/dashboard/ui)
 (or the bound URL printed when you start with `--with-site` / `you server`).
+Use `--listen <host:port>` on listener-owning commands when the local bind must
+be exact; an explicit local `--server` remains a warned legacy compatibility
+path.
 
 The live graph shows workstations, routing, and Factory Session status as work
 moves through the factory. The submit card posts one work item into the running

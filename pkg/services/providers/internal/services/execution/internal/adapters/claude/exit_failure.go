@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 )
 
 type apiErrorEnvelope struct {
@@ -19,12 +19,14 @@ type apiErrorRecord struct {
 	Message string `json:"message"`
 }
 
-func exitFailureFromCommandResult(result workers.CommandResult) error {
+func exitFailureFromCommandResult(result providerservice.CommandResult) error {
 	if failure, ok := declaredFailureFromCommandOutput(result.Stdout, result.Stderr); ok {
 		return failure
 	}
 	normalized := strings.ToLower(formatCombinedCommandOutput(result))
 	switch {
+	case containsAny(normalized, "no conversation found", "no session found"):
+		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindSessionNotFound, Message: claudeDeclaredFailureMessage(providers.ExecuteFailureKindSessionNotFound)}
 	case containsAny(normalized, "api key", "authentication", "unauthorized", "forbidden", "login required", "not authenticated"):
 		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindAuthentication, Message: claudeDeclaredFailureMessage(providers.ExecuteFailureKindAuthentication)}
 	case containsAny(normalized, "invalid argument", "bad request", "invalid request"):
@@ -40,7 +42,7 @@ func exitFailureFromCommandResult(result workers.CommandResult) error {
 }
 
 func declaredFailureFromCommandOutput(stdout, stderr []byte) (providers.ExecuteFailure, bool) {
-	combined := formatCombinedCommandOutput(workers.CommandResult{Stdout: stdout, Stderr: stderr})
+	combined := formatCombinedCommandOutput(providerservice.CommandResult{Stdout: stdout, Stderr: stderr})
 	for _, line := range strings.Split(combined, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -52,16 +54,14 @@ func declaredFailureFromCommandOutput(stdout, stderr []byte) (providers.ExecuteF
 		var envelope apiErrorEnvelope
 		if json.Unmarshal([]byte(line), &envelope) == nil && envelope.Error != nil {
 			failure := classifyAPIErrorRecord(*envelope.Error)
-			if failure.Kind != providers.ExecuteFailureKindUnknown {
-				return failure, true
-			}
+			markUnrecognizedProviderRefusal(&failure)
+			return failure, true
 		}
 		var direct apiErrorRecord
 		if json.Unmarshal([]byte(line), &direct) == nil && strings.TrimSpace(direct.Message) != "" {
 			failure := classifyAPIErrorRecord(direct)
-			if failure.Kind != providers.ExecuteFailureKindUnknown {
-				return failure, true
-			}
+			markUnrecognizedProviderRefusal(&failure)
+			return failure, true
 		}
 	}
 	return providers.ExecuteFailure{}, false
@@ -82,7 +82,7 @@ func classifyAPIErrorRecord(record apiErrorRecord) providers.ExecuteFailure {
 		kind = providers.ExecuteFailureKindDependency
 	}
 	if kind == providers.ExecuteFailureKindUnknown {
-		return providers.ExecuteFailure{Kind: kind}
+		return providers.ExecuteFailure{Kind: kind, Message: message}
 	}
 	if message == "" {
 		message = claudeDeclaredFailureMessage(kind)
@@ -90,7 +90,16 @@ func classifyAPIErrorRecord(record apiErrorRecord) providers.ExecuteFailure {
 	return providers.ExecuteFailure{Kind: kind, Message: message}
 }
 
-func formatCombinedCommandOutput(result workers.CommandResult) string {
+func markUnrecognizedProviderRefusal(failure *providers.ExecuteFailure) {
+	if failure == nil || failure.Kind != providers.ExecuteFailureKindUnknown {
+		return
+	}
+	failure.Diagnostics = &providers.ExecuteDiagnostics{Metadata: map[string]string{
+		providers.ExecuteDiagnosticMetadataUnrecognizedProviderRefusal: "true",
+	}}
+}
+
+func formatCombinedCommandOutput(result providerservice.CommandResult) string {
 	stdout := strings.TrimSpace(string(result.Stdout))
 	stderr := strings.TrimSpace(string(result.Stderr))
 	switch {

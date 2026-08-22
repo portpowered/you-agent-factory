@@ -8,7 +8,7 @@ import (
 // Effect-port contracts are owned here so the Sessions service root can publish
 // them as type aliases without adding extra root InterfaceType declarations
 // (pkg-structure requires exactly one named service interface aside from
-// recorded deletion-only debt for Service + ExecutionService).
+// recorded deletion-only debt for the Sessions service root).
 
 type ExecutionOpeningFileSystem interface {
 	Getwd() (string, error)

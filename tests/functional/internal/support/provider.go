@@ -119,6 +119,41 @@ func CodexSuccessStdout(result string) []byte {
 	)
 }
 
+// CodexSuccessStdoutWithUsage emits the same sanitized Codex JSONL fixture as
+// CodexSuccessStdout while allowing a functional test to prove provider usage
+// metadata at the command-runner edge.
+func CodexSuccessStdoutWithUsage(result string, inputTokens, outputTokens int64) []byte {
+	if result == "" {
+		result = "Done. COMPLETE"
+	}
+	item, err := json.Marshal(map[string]any{
+		"type": "item.completed",
+		"item": map[string]any{
+			"id":   "codex-functional-message",
+			"type": "agent_message",
+			"text": result,
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+	turnCompleted, err := json.Marshal(map[string]any{
+		"type": "turn.completed",
+		"usage": map[string]any{
+			"input_tokens":  inputTokens,
+			"output_tokens": outputTokens,
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+	return []byte(
+		`{"type":"turn.started"}` + "\n" +
+			string(item) + "\n" +
+			string(turnCompleted) + "\n",
+	)
+}
+
 func ClaudeSuccessStdout(result string) []byte {
 	if result == "" {
 		result = "Done. COMPLETE"

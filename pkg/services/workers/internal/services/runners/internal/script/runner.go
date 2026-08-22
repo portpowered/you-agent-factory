@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/template"
 	"time"
@@ -16,7 +17,8 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/prompting"
 )
 
 const Identity = "script"
@@ -32,6 +34,7 @@ type Config struct {
 	Command          string
 	Args             []string
 	FactoryDirectory string
+	RequestSelected  bool
 }
 
 // Dependencies are the exact effects used by one Script Runner.
@@ -66,7 +69,7 @@ var _ workers.Runner = (*runner)(nil)
 
 // New validates and snapshots a Script Runner and its exact execution edges.
 func New(config Config, dependencies Dependencies) (workers.Runner, error) {
-	if strings.TrimSpace(config.Command) == "" {
+	if strings.TrimSpace(config.Command) == "" && !config.RequestSelected {
 		return nil, misconfigured("script command is required", nil)
 	}
 	if dependencies.CommandRunner == nil {
@@ -104,6 +107,48 @@ func (r *runner) Execute(
 	ctx context.Context,
 	request workers.RunnerExecutionRequest,
 ) (workers.RunnerExecutionResult, error) {
+	effective := *r
+	if override := workerexecution.CommandRunnerOverrideFromContext(ctx, nil); override != nil {
+		if streaming, ok := override.(streamingCommandRunner); ok {
+			effective.commandRunner = streaming
+		} else {
+			effective.commandRunner = commandRunnerWithStreamingFallback{runner: override}
+		}
+	}
+	effective.publish = workerexecution.ProgressPublisherFromContext(ctx, r.publish)
+	effective.record = workerexecution.ScriptEventRecorderFromContext(ctx, r.record)
+	return effective.execute(ctx, request)
+}
+
+// commandRunnerWithStreamingFallback adapts a replay or test command effect
+// that only exposes the root CommandRunner contract to the Script Runner's
+// streaming boundary. One complete chunk preserves the same observable
+// output and lets the effect remain policy-free.
+type commandRunnerWithStreamingFallback struct {
+	runner workers.CommandRunner
+}
+
+func (runner commandRunnerWithStreamingFallback) RunStreaming(
+	ctx context.Context,
+	request workers.CommandRequest,
+	observer platformprocess.OutputChunkObserver,
+) (workers.CommandResult, error) {
+	result, err := runner.runner.Run(ctx, request)
+	if observer != nil {
+		if len(result.Stdout) > 0 {
+			observer(platformprocess.OutputStreamStdout, append([]byte(nil), result.Stdout...))
+		}
+		if len(result.Stderr) > 0 {
+			observer(platformprocess.OutputStreamStderr, append([]byte(nil), result.Stderr...))
+		}
+	}
+	return result, err
+}
+
+func (r *runner) execute(
+	ctx context.Context,
+	request workers.RunnerExecutionRequest,
+) (workers.RunnerExecutionResult, error) {
 	if err := ctx.Err(); err != nil {
 		return workers.RunnerExecutionResult{}, err
 	}
@@ -121,8 +166,9 @@ func (r *runner) Execute(
 	}
 	started := r.now()
 	requestID := scriptRequestID(commandRequest.DispatchID)
-	r.record(scriptRequestEvent(commandRequest, requestID, started))
-	observer := r.outputObserver(commandRequest.DispatchID)
+	transitionID := request.Dispatch.TransitionID
+	r.record(scriptRequestEvent(commandRequest, requestID, started, transitionID))
+	observer := r.outputObserver(commandRequest.DispatchID, request.Correlation)
 	result, err := r.commandRunner.RunStreaming(
 		ctx,
 		workers.CloneSubprocessExecutionRequest(commandRequest),
@@ -137,6 +183,7 @@ func (r *runner) Execute(
 		finished,
 		result,
 		err,
+		transitionID,
 	)
 }
 
@@ -148,9 +195,10 @@ func (r *runner) completeExecution(
 	finished time.Time,
 	result workers.CommandResult,
 	runErr error,
+	transitionID string,
 ) (workers.RunnerExecutionResult, error) {
 	duration := finished.Sub(started)
-	diagnostics := commandDiagnostics(commandRequest, result, duration)
+	diagnostics := commandDiagnostics(commandRequest, result, duration, transitionID)
 	if runErr != nil {
 		if interruption := classifyInterruption(ctx, runErr); interruption != nil {
 			diagnostics.Command.TimedOut = interruption.timedOut
@@ -162,6 +210,7 @@ func (r *runner) completeExecution(
 				interruption.outcome,
 				interruption.failureType,
 				finished,
+				transitionID,
 			))
 			partial := failureResult(result, diagnostics)
 			if interruption.timedOut {
@@ -177,6 +226,7 @@ func (r *runner) completeExecution(
 			workers.ScriptExecutionOutcomeProcessError,
 			workers.ScriptFailureTypeProcessError,
 			finished,
+			transitionID,
 		))
 		return failureResult(result, diagnostics), commandStartFailure(runErr, diagnostics)
 	}
@@ -189,6 +239,7 @@ func (r *runner) completeExecution(
 			workers.ScriptExecutionOutcomeFailedExitCode,
 			"",
 			finished,
+			transitionID,
 		))
 		return failureResult(result, diagnostics), executionFailure(
 			workers.WorkFailureTypeInternalServerError,
@@ -197,7 +248,7 @@ func (r *runner) completeExecution(
 			diagnostics,
 		)
 	}
-	r.record(scriptSuccessEvent(commandRequest, requestID, result, duration, finished))
+	r.record(scriptSuccessEvent(commandRequest, requestID, result, duration, finished, transitionID))
 	return workers.RunnerExecutionResult{
 		Content:     strings.TrimSpace(string(result.Stdout)),
 		Diagnostics: workers.CloneWorkDiagnostics(diagnostics),
@@ -291,12 +342,42 @@ func (r *runner) resolveCommandRequest(
 	tokens []workers.Token,
 ) (workers.CommandRequest, error) {
 	workDir := effectiveWorkDir(request)
+	command := r.command
+	argsTemplate := r.args
+	workflowContext := request.WorkflowContext.Clone()
+	if workflowContext == nil {
+		workflowContext = &workers.Context{}
+	}
+	factoryDirectory := firstNonEmpty(workflowContext.FactoryDirectory, r.factoryDirectory)
+	if strings.TrimSpace(request.Command) != "" {
+		command = request.Command
+		argsTemplate = request.Args
+	}
+	if strings.TrimSpace(request.FactoryDirectory) != "" {
+		factoryDirectory = request.FactoryDirectory
+	}
+	workDir = firstNonEmpty(workDir, workflowContext.WorkDirectory)
+	projectID := firstNonEmpty(request.ProjectID, workflowContext.ProjectID)
+	envVars := mergeStringMaps(workflowContext.EnvVars, request.EnvVars)
+	workflowContext.FactoryDirectory = factoryDirectory
+	workflowContext.WorkDirectory = workDir
+	workflowContext.ProjectID = projectID
+	workflowContext.EnvVars = cloneStringMap(envVars)
+	workflowContext.SessionID = firstNonEmpty(
+		workflowContext.SessionID,
+		request.Correlation.FactorySessionID,
+		request.SessionID,
+	)
+	if strings.TrimSpace(command) == "" {
+		return workers.CommandRequest{}, fmt.Errorf("script command is required")
+	}
 	templateContext := &workers.Context{
-		FactoryDirectory: r.factoryDirectory,
-		WorkDirectory:    workDir,
-		EnvVars:          cloneStringMap(request.EnvVars),
-		ProjectID:        request.ProjectID,
-		SessionID:        request.SessionID,
+		FactoryDirectory: workflowContext.FactoryDirectory,
+		WorkDirectory:    workflowContext.WorkDirectory,
+		EnvVars:          cloneStringMap(workflowContext.EnvVars),
+		ArtifactDir:      workflowContext.ArtifactDir,
+		ProjectID:        workflowContext.ProjectID,
+		SessionID:        workflowContext.SessionID,
 	}
 	data, err := prompting.BuildPromptDataWithFactoryDocs(
 		tokens,
@@ -306,28 +387,71 @@ func (r *runner) resolveCommandRequest(
 	if err != nil {
 		return workers.CommandRequest{}, err
 	}
-	args, err := resolveArgs(r.args, data)
+	args, err := resolveArgs(argsTemplate, data)
 	if err != nil {
 		return workers.CommandRequest{}, err
 	}
 
 	dispatch := request.Dispatch
 	return workers.CommandRequest{
-		Command:                  resolveFactoryScript(r.factoryDirectory, r.command),
-		Args:                     resolveFactoryScripts(r.factoryDirectory, args),
-		Env:                      mergedEnvironment(request.ProcessEnvironment, request.EnvVars),
+		Command:                  resolveFactoryScript(factoryDirectory, command),
+		Args:                     resolveFactoryScripts(factoryDirectory, args),
+		Env:                      mergedEnvironment(request.ProcessEnvironment, envVars),
 		WorkDir:                  workDir,
 		DispatchID:               dispatch.DispatchID,
-		TransitionID:             dispatch.TransitionID,
 		WorkerType:               firstNonEmpty(request.WorkerType, dispatch.WorkerType),
 		WorkstationName:          firstNonEmpty(request.WorkstationType, dispatch.WorkstationName),
-		ProjectID:                firstNonEmpty(request.ProjectID, dispatch.ProjectID),
+		ProjectID:                firstNonEmpty(projectID, dispatch.ProjectID),
 		CurrentChainingTraceID:   dispatch.CurrentChainingTraceID,
 		PreviousChainingTraceIDs: append([]string(nil), dispatch.PreviousChainingTraceIDs...),
 		Execution:                dispatch.Execution,
-		InputTokens:              workers.InputTokens(tokens...),
-		InputBindings:            cloneStringSliceMap(dispatch.InputBindings),
+		Inputs:                   commandInputs(tokens, dispatch.InputBindings),
+		ProcessLifecycleObserver: request.ProcessLifecycleObserver,
 	}, nil
+}
+
+func commandInputs(tokens []workers.Token, bindings map[string][]string) []workers.WorkInput {
+	if len(tokens) == 0 {
+		return nil
+	}
+	namesByTokenID := make(map[string][]string)
+	for name, tokenIDs := range bindings {
+		for _, tokenID := range tokenIDs {
+			namesByTokenID[tokenID] = append(namesByTokenID[tokenID], name)
+		}
+	}
+	for tokenID := range namesByTokenID {
+		sort.Strings(namesByTokenID[tokenID])
+	}
+
+	inputs := make([]workers.WorkInput, 0, len(tokens))
+	for _, token := range tokens {
+		content := work.CloneWorkContentParts(token.Color.Content)
+		if len(content) == 0 && len(token.Color.Payload) > 0 {
+			content = []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
+				Text: string(token.Color.Payload),
+			}}
+		}
+		inputs = append(inputs, workers.WorkInput{
+			Kind:       string(token.Color.DataType),
+			State:      token.State,
+			InputNames: append([]string(nil), namesByTokenID[token.ID]...),
+			WorkID:     token.Color.WorkID,
+			Name:       token.Color.Name,
+			WorkTypeID: token.Color.WorkTypeID,
+			RequestID:  token.Color.RequestID,
+			Content:    content,
+			Tags:       cloneStringMap(token.Color.Tags),
+			Relations:  append([]work.Relation(nil), token.Color.Relations...),
+			Lineage: workers.WorkLineage{
+				ParentWorkID: token.Color.ParentID,
+				TraceID:      token.Color.TraceID,
+				OriginRef:    token.Color.Name,
+			},
+		})
+	}
+	return inputs
 }
 
 func snapshotRequest(
@@ -452,11 +576,13 @@ func resolveFactoryScript(factoryDirectory, value string) string {
 	return filepath.Join(factoryDirectory, "scripts", filepath.FromSlash(relative))
 }
 
-func firstNonEmpty(primary, fallback string) string {
-	if primary != "" {
-		return primary
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
 	}
-	return fallback
+	return ""
 }
 
 func cloneStringMap(values map[string]string) map[string]string {
@@ -470,15 +596,18 @@ func cloneStringMap(values map[string]string) map[string]string {
 	return cloned
 }
 
-func cloneStringSliceMap(values map[string][]string) map[string][]string {
-	if len(values) == 0 {
+func mergeStringMaps(base, override map[string]string) map[string]string {
+	if len(base) == 0 && len(override) == 0 {
 		return nil
 	}
-	cloned := make(map[string][]string, len(values))
-	for key, value := range values {
-		cloned[key] = append([]string(nil), value...)
+	merged := cloneStringMap(base)
+	if merged == nil {
+		merged = make(map[string]string, len(override))
 	}
-	return cloned
+	for key, value := range override {
+		merged[key] = value
+	}
+	return merged
 }
 
 func cloneAnyValues(values []any) ([]any, error) {

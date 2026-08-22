@@ -3,14 +3,18 @@ package batch_contract_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -64,14 +68,23 @@ func executeSubmitBatchCLI(t *testing.T, process support.Process, args []string)
 }
 
 func executeSubmitBatchCLIExpectError(t *testing.T, process support.Process, args []string) (stdout, stderr string, err error) {
+	return executeSubmitBatchCLIExpectErrorWithInput(t, process, args, "", true)
+}
+
+func executeSubmitBatchCLIExpectErrorWithInput(
+	t *testing.T,
+	process support.Process,
+	args []string,
+	stdin string,
+	stdinIsTTY bool,
+) (stdout, stderr string, err error) {
 	t.Helper()
 	home := t.TempDir()
 	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.Env = batchContractHomeEnvironment(home)
 	inputs.Input.WorkingDirectory = home
-	stdinIsTTY := true
 	inputs.Input.StdinIsTTY = &stdinIsTTY
-	inputs.Input.Stdin = strings.NewReader("")
+	inputs.Input.Stdin = strings.NewReader(stdin)
 	err = process.Execute(inputs.Input)
 	return inputs.Stdout(), inputs.Stderr(), err
 }
@@ -132,6 +145,36 @@ func successSubmitBatchFactoryConfig() map[string]any {
 			},
 		},
 	}
+}
+
+func batchAdmissionFactoryConfig() map[string]any {
+	config := successSubmitBatchFactoryConfig()
+	delete(config, "workers")
+	delete(config, "workstations")
+	return config
+}
+
+func providerSubmitBatchFactoryConfig() map[string]any {
+	config := successSubmitBatchFactoryConfig()
+	config["name"] = "work-cli-submit-batch-contract-provider"
+	config["workers"] = []map[string]string{{"name": "provider-worker"}}
+	workstations := config["workstations"].([]map[string]any)
+	workstations[0]["worker"] = "provider-worker"
+	config["workstations"] = workstations
+	return config
+}
+
+func duplicateSubmitBatchFactoryConfig() map[string]any {
+	config := batchAdmissionFactoryConfig()
+	config["workTypes"] = append(config["workTypes"].([]map[string]any), map[string]any{
+		"name": "story",
+		"states": []map[string]any{
+			{"name": "init", "type": "INITIAL"},
+			{"name": "complete", "type": "TERMINAL"},
+			{"name": "failed", "type": "FAILED"},
+		},
+	})
+	return config
 }
 
 func decodeSubmitBatchJSONResult(t *testing.T, output string) batchContractSubmitJSON {
@@ -196,6 +239,21 @@ func assertSubmitBatchJSONSuccess(t *testing.T, submitted batchContractSubmitJSO
 	}
 }
 
+func assertRelationEndpointDiagnostic(t *testing.T, diagnostic, value, source string) {
+	t.Helper()
+	for _, marker := range []string{
+		"relations[0]",
+		`relation type "DEPENDS_ON"`,
+		`sourceWorkName "` + source + `"`,
+		"targetWorkName",
+		value,
+	} {
+		if !strings.Contains(diagnostic, marker) {
+			t.Fatalf("diagnostic missing %q:\n%s", marker, diagnostic)
+		}
+	}
+}
+
 func inlineBatchJSON(requestID, workName, workType, title string) string {
 	return `{
 		"requestId": "` + requestID + `",
@@ -204,6 +262,77 @@ func inlineBatchJSON(requestID, workName, workType, title string) string {
 			{"name": "` + workName + `", "workTypeName": "` + workType + `", "payload": {"title": "` + title + `"}}
 		]
 	}`
+}
+
+func oversizedBatchJSON(requestID, workName string) string {
+	return batchJSONWithPayloadSize(requestID, workName, work.MaxWorkPayloadBytes+1, "")
+}
+
+func boundaryBatchJSON(requestID, workName string, payloadBytes int, marker string) string {
+	return batchJSONWithPayloadSize(requestID, workName, payloadBytes, marker)
+}
+
+func batchJSONWithPayloadSize(requestID, workName string, payloadBytes int, textPrefix string) string {
+	const emptyPayload = `{"text":""}`
+	textBytes := payloadBytes - len(emptyPayload)
+	if textBytes < len(textPrefix) {
+		panic(fmt.Sprintf("payload size %d cannot fit prefix %q", payloadBytes, textPrefix))
+	}
+	payload := `{"text":"` + textPrefix + strings.Repeat("x", textBytes-len(textPrefix)) + `"}`
+	if len(payload) != payloadBytes {
+		panic(fmt.Sprintf("test payload length = %d, want %d", len(payload), payloadBytes))
+	}
+	return fmt.Sprintf(
+		`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"workTypeName":"task","payload":%s}]}`,
+		requestID,
+		workName,
+		payload,
+	)
+}
+
+func duplicateBatchJSON(requestID string) string {
+	return `{
+		"requestId": "` + requestID + `",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [
+			{"name": "release", "workTypeName": "task", "payload": {"title": "Task release"}},
+			{"name": "release", "workTypeName": "story", "payload": {"title": "Story release"}}
+		]
+	}`
+}
+
+func validRelationsBatchJSON() string {
+	return `{
+		"requestId": "batch-valid-relations",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [
+			{"name": "parent", "workTypeName": "task"},
+			{"name": "prerequisite", "workTypeName": "task"},
+			{"name": "child", "workTypeName": "task"}
+		],
+		"relations": [
+			{"type": "PARENT_CHILD", "sourceWorkName": "child", "targetWorkName": "parent"},
+			{"type": "DEPENDS_ON", "sourceWorkName": "child", "targetWorkName": "prerequisite"}
+		]
+	}`
+}
+
+func relationEndpointBatchJSON(requestID, workName, sourceWorkName, targetWorkName string) string {
+	return `{
+		"requestId": "` + requestID + `",
+		"type": "FACTORY_REQUEST_BATCH",
+		"works": [{"name": "` + workName + `", "workTypeName": "task"}],
+		"relations": [{"type": "DEPENDS_ON", "sourceWorkName": "` + sourceWorkName + `", "targetWorkName": "` + targetWorkName + `"}]
+	}`
+}
+
+func writeBatchContractInputFile(t *testing.T, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "batch.json")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write batch input file: %v", err)
+	}
+	return path
 }
 
 func newInstrumentedSubmitBatchServer(t *testing.T) (serverURL string, requests *atomic.Int32) {

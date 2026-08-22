@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
@@ -16,8 +17,10 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
@@ -35,8 +38,16 @@ const (
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
+	processClock := edges.Clock
+	if processClock == nil {
+		processClock = platformclock.Real{}
+	}
 	assetPlatform := provideModelAssetHostPlatform(edges)
 	assetEndpoints := edges.ModelAssetEndpoints
+	assetEnvironment := edges.ModelAssetResolveEnvironment
+	if assetEnvironment == nil {
+		assetEnvironment = os.Getenv
+	}
 
 	assetHTTP := edges.ModelAssetHTTPClient
 	if assetHTTP == nil {
@@ -93,7 +104,22 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 	}
 	hostClock := edges.ModelHostClock
 	if hostClock == nil {
-		hostClock = modelsClock{}
+		hostClock = modelsClock{source: processClock}
+	}
+	protocolNegotiator := adaptModelHostProtocolNegotiator(edges.ModelHostProtocolNegotiator)
+	if protocolNegotiator == nil && !isNilModelEdgeDependency(edges.ModelHostGRPCDialer) {
+		protocolNegotiator = modelswire.PinnedGRPCNegotiator{
+			Dialer: modelHostGRPCDialerAdapter{next: edges.ModelHostGRPCDialer},
+		}
+	}
+	compatibilityChecker := adaptModelHostCompatibilityChecker(edges.ModelHostCompatibilityChecker)
+	backendArtifactResolver := adaptModelBackendArtifactResolver(edges.ModelResolveBackendArtifact)
+	if backendArtifactResolver == nil {
+		var resolverErr error
+		backendArtifactResolver, resolverErr = modelswire.NewDefaultBackendArtifactResolver()
+		if resolverErr != nil {
+			return nil, fmt.Errorf("construct Models backend artifact selector: %w", resolverErr)
+		}
 	}
 	runtimeRunner := edges.ModelRuntimeCommandRunner
 	if runtimeRunner == nil {
@@ -117,14 +143,17 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 	}
 	runtimeTempFile := edges.ModelRuntimeCreateTempFile
 	if runtimeTempFile == nil {
-		runtimeTempFile = func(dir, pattern string) (modelswire.RuntimeTempFile, error) {
+		runtimeTempFile = func(dir, pattern string) (interface {
+			Close() error
+			Name() string
+		}, error) {
 			return os.CreateTemp(dir, pattern)
 		}
 	}
 
-	return modelswire.NewService(
+	return modelswire.NewServiceWithBackendArtifactResolver(
 		assetPlatform,
-		modelswire.AssetHTTPDoer(assetHTTP),
+		assetHTTP,
 		assetEndpoints,
 		modelswire.AssetMakeDirectories(assetMkdirAll),
 		modelswire.AssetInspectPath(assetStat),
@@ -136,22 +165,179 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		modelswire.AssetReadDirectory(assetReadDir),
 		modelswire.AssetCreateFile(assetCreate),
 		modelswire.AssetOpenFile(assetOpen),
-		launcher,
+		adaptModelHostProcessLauncher(launcher),
 		hostHTTP,
-		hostClock,
+		adaptModelHostClock(hostClock),
 		runtimeRunner,
-		modelswire.RuntimeHTTPDoer(runtimeHTTP),
+		runtimeHTTP,
 		modelswire.RuntimeInspectFile(runtimeInspect),
 		modelswire.RuntimeTempDirectory(runtimeTempDir),
-		runtimeTempFile,
+		adaptModelRuntimeTempFile(runtimeTempFile),
 		zap.NewNop(),
-		time.Now,
+		processClock.Now,
 		platformrandom.CryptoSource{},
-		edges.ModelPullMetricsRecorder,
+		adaptModelsPullMetricsRecorder(edges.ModelPullMetricsRecorder),
 		modelswire.HostDiagnosticLogger(factorysessionwire.ModelHostDiagnosticLogger(zap.NewNop())),
 		modelswire.HostMetricsRecorder(factorysessionwire.ModelHostDiagnosticMetrics(edges.InvocationMetricsRecorder)),
 		modelLocalRuntimeHooks(workerswire.LocalRuntimeHooks()),
+		assetEnvironment,
+		protocolNegotiator,
+		compatibilityChecker,
+		backendArtifactResolver,
+		edges.ModelResolveHuggingFaceRevision,
 	)
+}
+
+func adaptModelBackendArtifactResolver(
+	next serviceedges.ModelResolveBackendArtifact,
+) modelswire.BackendArtifactResolver {
+	if next == nil {
+		return nil
+	}
+	return func(
+		ctx context.Context,
+		request modelswire.BackendArtifactSelectionRequest,
+	) (modelswire.BackendArtifactSelection, error) {
+		selection, err := next(ctx, serviceedges.ModelBackendArtifactSelectionRequest{
+			Backend:         request.Backend,
+			Platform:        request.Platform,
+			ProtocolVersion: request.ProtocolVersion,
+		})
+		return modelswire.BackendArtifactSelection{
+			Name:     selection.Name,
+			Location: selection.Location,
+			Bytes:    selection.Bytes,
+			SHA256:   selection.SHA256,
+		}, err
+	}
+}
+
+type modelHostProtocolNegotiatorAdapter struct {
+	next modelHostProtocolEdge
+}
+
+func (adapter modelHostProtocolNegotiatorAdapter) Negotiate(
+	ctx context.Context,
+	endpoint string,
+	request modelswire.HostProtocolNegotiationRequest,
+) (modelswire.HostProtocolNegotiationResult, error) {
+	result, err := adapter.next.Negotiate(ctx, endpoint, serviceedges.ModelHostProtocolNegotiationRequest{
+		ProtocolVersion: request.ProtocolVersion,
+		Backend:         request.Backend,
+		ModelName:       request.ModelName,
+		Revision:        request.Revision,
+		Platform:        request.Platform,
+	})
+	return modelswire.HostProtocolNegotiationResult{
+		ProtocolVersion: result.ProtocolVersion,
+		Backend:         result.Backend,
+		Ready:           result.Ready,
+	}, err
+}
+
+type modelHostGRPCDialerAdapter struct {
+	next modelHostGRPCDialerEdge
+}
+
+func (adapter modelHostGRPCDialerAdapter) Dial(
+	ctx context.Context,
+	endpoint string,
+) (modelswire.HostGRPCConnection, error) {
+	connection, err := adapter.next.Dial(ctx, endpoint)
+	if err != nil || connection == nil {
+		return nil, err
+	}
+	return modelHostGRPCConnectionAdapter{next: connection}, nil
+}
+
+type modelHostGRPCConnectionAdapter struct {
+	next modelHostGRPCConnectionEdge
+}
+
+func (adapter modelHostGRPCConnectionAdapter) Negotiate(
+	ctx context.Context,
+	request modelswire.HostProtocolNegotiationRequest,
+) (modelswire.HostProtocolNegotiationResult, error) {
+	result, err := adapter.next.Negotiate(ctx, serviceedges.ModelHostProtocolNegotiationRequest{
+		ProtocolVersion: request.ProtocolVersion,
+		Backend:         request.Backend,
+		ModelName:       request.ModelName,
+		Revision:        request.Revision,
+		Platform:        request.Platform,
+	})
+	return modelswire.HostProtocolNegotiationResult{
+		ProtocolVersion: result.ProtocolVersion,
+		Backend:         result.Backend,
+		Ready:           result.Ready,
+	}, err
+}
+
+func (adapter modelHostGRPCConnectionAdapter) Close() error {
+	return adapter.next.Close()
+}
+
+type modelHostCompatibilityCheckerAdapter struct {
+	next modelHostCompatibilityEdge
+}
+
+func (adapter modelHostCompatibilityCheckerAdapter) Check(
+	ctx context.Context,
+	request modelswire.HostCompatibilityRequest,
+) error {
+	return adapter.next.Check(ctx, serviceedges.ModelHostCompatibilityRequest{
+		Backend:   request.Backend,
+		ModelName: request.ModelName,
+		Revision:  request.Revision,
+		Platform:  request.Platform,
+	})
+}
+
+func adaptModelHostProtocolNegotiator(
+	negotiator modelHostProtocolEdge,
+) modelswire.HostProtocolNegotiator {
+	if isNilModelEdgeDependency(negotiator) {
+		return nil
+	}
+	return modelHostProtocolNegotiatorAdapter{next: negotiator}
+}
+
+func adaptModelHostCompatibilityChecker(
+	checker modelHostCompatibilityEdge,
+) modelswire.HostCompatibilityChecker {
+	if isNilModelEdgeDependency(checker) {
+		return nil
+	}
+	return modelHostCompatibilityCheckerAdapter{next: checker}
+}
+
+type modelHostProtocolEdge interface {
+	Negotiate(
+		context.Context,
+		string,
+		serviceedges.ModelHostProtocolNegotiationRequest,
+	) (serviceedges.ModelHostProtocolNegotiationResult, error)
+}
+
+type modelHostGRPCDialerEdge interface {
+	Dial(context.Context, string) (interface {
+		Negotiate(
+			context.Context,
+			serviceedges.ModelHostProtocolNegotiationRequest,
+		) (serviceedges.ModelHostProtocolNegotiationResult, error)
+		Close() error
+	}, error)
+}
+
+type modelHostGRPCConnectionEdge interface {
+	Negotiate(
+		context.Context,
+		serviceedges.ModelHostProtocolNegotiationRequest,
+	) (serviceedges.ModelHostProtocolNegotiationResult, error)
+	Close() error
+}
+
+type modelHostCompatibilityEdge interface {
+	Check(context.Context, serviceedges.ModelHostCompatibilityRequest) error
 }
 
 func providePlatformProcessCommandRunner(edges serviceedges.Edges) (platformprocess.CommandRunner, error) {
@@ -163,11 +349,27 @@ func providePlatformProcessCommandRunner(edges serviceedges.Edges) (platformproc
 	if newCommand == nil {
 		newCommand = exec.Command
 	}
-	runner, err := platformprocess.NewExecCommandRunner(newCommand, clock, nil)
+	processStateReader := platformprocess.NewProcfsProcessStateReader(os.ReadFile)
+	runner, err := platformprocess.NewExecCommandRunner(newCommand, clock, nil, processStateReader)
 	if err != nil {
 		return nil, err
 	}
+	runner.CommandLineLimit = hostCommandLineLimit()
 	return runner, nil
+}
+
+// hostCommandLineLimit selects the composed command-line bound the running
+// host's process loader enforces for one spawn. The operating system is read
+// here, at the canonical injection boundary, so pkg/platform/process can name
+// an oversized-command-line spawn failure without selecting a host policy of
+// its own. Hosts other than Windows report 0 because they bound the total
+// argument block and each individual argument rather than the composed line,
+// so their spawn failures are named from the operating system error alone.
+func hostCommandLineLimit() int {
+	if runtime.GOOS == "windows" {
+		return platformprocess.WindowsCommandLineLimit
+	}
+	return 0
 }
 
 func provideModelAssetHostPlatform(edges serviceedges.Edges) models.AssetHostPlatform {
@@ -181,11 +383,19 @@ func provideModelAssetHostPlatform(edges serviceedges.Edges) models.AssetHostPla
 	return platform
 }
 
-type modelsClock struct{}
+type modelsClock struct{ source platformclock.Source }
 
-func (modelsClock) Now() time.Time { return time.Now() }
+func (clock modelsClock) Now() time.Time {
+	if clock.source != nil {
+		return clock.source.Now()
+	}
+	return time.Time{}
+}
 
-func (modelsClock) NewTimer(duration time.Duration) modelswire.HostTimer {
+func (modelsClock) NewTimer(duration time.Duration) interface {
+	C() <-chan time.Time
+	Stop() bool
+} {
 	return modelsTimer{Timer: time.NewTimer(duration)}
 }
 
@@ -195,7 +405,11 @@ func (timer modelsTimer) C() <-chan time.Time { return timer.Timer.C }
 
 type modelsProcessLauncher struct{}
 
-func (modelsProcessLauncher) Start(ctx context.Context, spec modelswire.HostProcessStartSpec) (modelswire.HostManagedProcess, error) {
+func (modelsProcessLauncher) Start(ctx context.Context, spec serviceedges.HostProcessStartSpec) (interface {
+	HealthEndpoint() string
+	Wait() error
+	Stop(context.Context) error
+}, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -220,6 +434,128 @@ func (modelsProcessLauncher) Start(ctx context.Context, spec modelswire.HostProc
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
 	return &modelsManagedProcess{cmd: cmd, healthEndpoint: endpoint, done: done}, nil
+}
+
+type modelHostProcessLauncherAdapter struct {
+	next interface {
+		Start(context.Context, serviceedges.HostProcessStartSpec) (interface {
+			HealthEndpoint() string
+			Wait() error
+			Stop(context.Context) error
+		}, error)
+	}
+}
+
+func adaptModelHostProcessLauncher(next interface {
+	Start(context.Context, serviceedges.HostProcessStartSpec) (interface {
+		HealthEndpoint() string
+		Wait() error
+		Stop(context.Context) error
+	}, error)
+}) modelswire.HostProcessLauncher {
+	if isNilModelEdgeDependency(next) {
+		return nil
+	}
+	return modelHostProcessLauncherAdapter{next: next}
+}
+
+func (adapter modelHostProcessLauncherAdapter) Start(
+	ctx context.Context,
+	spec modelswire.HostProcessStartSpec,
+) (modelswire.HostManagedProcess, error) {
+	process, err := adapter.next.Start(ctx, serviceedges.HostProcessStartSpec{
+		Command:        spec.Command,
+		Args:           spec.Args,
+		Env:            spec.Env,
+		WorkDir:        spec.WorkDir,
+		HealthEndpoint: spec.HealthEndpoint,
+	})
+	if err != nil || process == nil {
+		return modelswire.HostManagedProcess(process), err
+	}
+	return modelswire.HostManagedProcess(process), nil
+}
+
+type modelHostClockAdapter struct {
+	next interface {
+		Now() time.Time
+		NewTimer(time.Duration) interface {
+			C() <-chan time.Time
+			Stop() bool
+		}
+	}
+}
+
+func adaptModelHostClock(next interface {
+	Now() time.Time
+	NewTimer(time.Duration) interface {
+		C() <-chan time.Time
+		Stop() bool
+	}
+}) modelswire.HostClock {
+	if isNilModelEdgeDependency(next) {
+		return nil
+	}
+	return modelHostClockAdapter{next: next}
+}
+
+func (adapter modelHostClockAdapter) Now() time.Time { return adapter.next.Now() }
+
+func (adapter modelHostClockAdapter) NewTimer(duration time.Duration) modelswire.HostTimer {
+	return modelswire.HostTimer(adapter.next.NewTimer(duration))
+}
+
+func adaptModelRuntimeTempFile(next serviceedges.RuntimeCreateTempFile) modelswire.RuntimeCreateTempFile {
+	if next == nil {
+		return nil
+	}
+	return func(dir, pattern string) (modelswire.RuntimeTempFile, error) {
+		file, err := next(dir, pattern)
+		return modelswire.RuntimeTempFile(file), err
+	}
+}
+
+type modelsPullMetricsAdapter struct {
+	next interface {
+		RecordModelPullMetric(serviceedges.PullMetric)
+	}
+}
+
+func adaptModelsPullMetricsRecorder(next interface {
+	RecordModelPullMetric(serviceedges.PullMetric)
+}) modelswire.PullMetricsRecorder {
+	if next == nil {
+		return nil
+	}
+	return modelsPullMetricsAdapter{next: next}
+}
+
+// isNilModelEdgeDependency preserves Models Wire's typed-nil validation when
+// an edge-owned interface is wrapped by a canonical adapter. Without this
+// check, a nil pointer would become a non-nil adapter value and fail later at
+// invocation rather than during inert construction.
+func isNilModelEdgeDependency(value any) bool {
+	if value == nil {
+		return true
+	}
+	reflected := reflect.ValueOf(value)
+	switch reflected.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return reflected.IsNil()
+	default:
+		return false
+	}
+}
+
+func (adapter modelsPullMetricsAdapter) RecordModelPullMetric(metric modelswire.PullMetric) {
+	labels := make(map[string]string, len(metric.Labels))
+	for key, value := range metric.Labels {
+		labels[key] = value
+	}
+	adapter.next.RecordModelPullMetric(serviceedges.PullMetric{
+		Name:   metric.Name,
+		Labels: labels,
+	})
 }
 
 func modelLocalRuntimeHooks(hooks workers.LocalRuntimeHooks) modelswire.LocalRuntimeHooks {
@@ -268,4 +604,48 @@ func (p *modelsManagedProcess) Stop(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+func provideModelsCLIInvocationOperation(
+	invocation factorysessionwire.InvocationOperation,
+) modelscli.InvocationOperation {
+	if invocation == nil {
+		return nil
+	}
+	return modelsCLIInvocationOperation{invocation: invocation}
+}
+
+// modelsCLIInvocationOperation maps the four invocation inputs the Models CLI
+// resolves onto the fuller Factory Sessions invocation target. Owning the
+// mapping here keeps the Models CLI transport free of a Factory Sessions
+// import while preserving the exact values the command sent before.
+type modelsCLIInvocationOperation struct {
+	invocation factorysessionwire.InvocationOperation
+}
+
+func (o modelsCLIInvocationOperation) InvokeModel(
+	ctx context.Context,
+	target modelscli.InvocationTarget,
+	modelName string,
+	request models.Request,
+) (models.Result, error) {
+	return o.invocation.InvokeModel(ctx, factorysessions.InvocationTarget{
+		FactoryDir:       target.FactoryDir,
+		HomeDir:          target.HomeDir,
+		OperatorDefaults: target.OperatorDefaults,
+		Verbose:          target.Verbose,
+	}, modelName, request)
+}
+
+func (o modelsCLIInvocationOperation) ResolveModelInvocationFactoryDir(
+	factoryDir string,
+) (string, error) {
+	return o.invocation.ResolveModelInvocationFactoryDir(factoryDir)
+}
+
+func (o modelsCLIInvocationOperation) ExportModelInvocationArtifact(
+	source string,
+	destination string,
+) error {
+	return o.invocation.ExportModelInvocationArtifact(source, destination)
 }

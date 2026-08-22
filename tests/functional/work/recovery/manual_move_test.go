@@ -29,6 +29,12 @@ func TestFailedCascadeCanBeRecoveredByPublicWorkMove(t *testing.T) {
 	)
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "cascading_failure"))
+	// In-scope construction exception: this cascade needs independent response
+	// sequences for starter and finisher. ProviderCommandRunner receives only the
+	// policy-free command, args, and identical fixture prompt, so it cannot target
+	// those per-worker attempts; a queued edge run leaves the recovered child
+	// failed. The provider service below is the narrowest way to preserve this
+	// public cascade/recovery behavior without changing the production path.
 	provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
 		"starter": {
 			{Content: "COMPLETE"},
@@ -45,6 +51,7 @@ func TestFailedCascadeCanBeRecoveredByPublicWorkMove(t *testing.T) {
 
 	requiredState := "complete"
 	workTypeName := "task"
+	targetWorkName := "parent"
 	support.UpsertDefaultSessionWorkRequest(t, server.URL(), factoryapi.WorkRequest{
 		RequestId: requestID,
 		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
@@ -64,29 +71,35 @@ func TestFailedCascadeCanBeRecoveredByPublicWorkMove(t *testing.T) {
 				Payload:      map[string]string{"role": "child"},
 			},
 		},
-		Relations: &[]factoryapi.Relation{{
+		Relations: &[]factoryapi.WorkRequestRelation{{
 			Type:           factoryapi.RelationTypeDependsOn,
 			SourceWorkName: "child",
-			TargetWorkName: "parent",
+			TargetWorkName: &targetWorkName,
 			RequiredState:  &requiredState,
 		}},
 	})
 
 	waitForWorkIDsAtState(t, server.URL(), []string{parentWorkID, childWorkID}, "failed", 15*time.Second)
+	support.WaitForTerminalStatus(t, server.URL(), 15*time.Second)
 
-	parentMoved := postMoveWork(t, server.URL(), parentWorkID, "processing")
-	if workStateName(parentMoved.State) != "processing" {
-		t.Fatalf("parent move response = %#v, want processing", parentMoved)
+	parentMoveStatus, parentMoveBody := postMoveWorkStatus(t, server.URL(), parentWorkID, "processing")
+	if parentMoveStatus != http.StatusOK {
+		t.Fatalf("parent move status = %d, want 200: %s", parentMoveStatus, parentMoveBody)
 	}
 
-	childMoved := postMoveWork(t, server.URL(), childWorkID, "init")
-	if workStateName(childMoved.State) != "init" {
-		t.Fatalf("child move response = %#v, want init", childMoved)
+	childMoveStatus, childMoveBody := postMoveWorkStatus(t, server.URL(), childWorkID, "init")
+	if childMoveStatus != http.StatusOK {
+		t.Fatalf("child move status = %d, want 200: %s", childMoveStatus, childMoveBody)
 	}
 
-	completed := waitForWorkIDsComplete(t, server.URL(), []string{childWorkID}, 15*time.Second)
-	if len(completed) != 1 || workStateName(completed[0].State) != "complete" {
-		t.Fatalf("child completion = %#v, want complete", completed)
+	completed := waitForWorkIDsComplete(t, server.URL(), []string{parentWorkID, childWorkID}, 15*time.Second)
+	if len(completed) != 2 {
+		t.Fatalf("completed Works = %#v, want parent and child", completed)
+	}
+	for _, item := range completed {
+		if workStateName(item.State) != "complete" {
+			t.Fatalf("completed Work = %#v, want complete", item)
+		}
 	}
 
 	listed := support.ListDefaultSessionWork(t, server.URL())

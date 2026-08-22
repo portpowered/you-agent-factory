@@ -1,0 +1,316 @@
+{
+  "schemaVersion": 1,
+  "kind": "localai-backend-artifacts",
+  "publication": {
+    "id": "localai-backends-v1-374fb240161479665f1e4d2c422dbe152f7eb585fc4ee82dabd182517feae2f1",
+    "releaseTag": "localai-backends-v1-374fb240161479665f1e4d2c422dbe152f7eb585fc4ee82dabd182517feae2f1",
+    "repository": "portpowered/infinite-you",
+    "pinFingerprint": "374fb240161479665f1e4d2c422dbe152f7eb585fc4ee82dabd182517feae2f1",
+    "source": {
+      "repository": "https://github.com/mudler/LocalAI.git",
+      "commit": "b224c96db6f4b87306a33a808650bfce63b12588"
+    },
+    "protocol": {
+      "path": "backend/backend.proto",
+      "revision": "ad62c6df07ae1169eb14411a565a689cd996b19c"
+    },
+    "toolchain": {
+      "goVersion": "1.25.4",
+      "cmakeVersion": "3.31.10",
+      "protobufVersion": "24.4",
+      "grpcVersion": "1.59.0",
+      "grpcCommit": "08cc1787de022069135004adfdd17938b5062319",
+      "vcpkgCommit": "7f3781e19cc7d4e4882a4caec01668c6f7b5c163"
+    }
+  },
+  "artifacts": [
+    {
+      "id": "localai-llamacpp/darwin-arm64",
+      "backend": {
+        "id": "localai-llamacpp",
+        "source": {
+          "repository": "https://github.com/ggerganov/llama.cpp",
+          "commit": "6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef",
+          "pinVariable": "LLAMA_VERSION"
+        }
+      },
+      "source": {
+        "repository": "https://github.com/mudler/LocalAI.git",
+        "commit": "b224c96db6f4b87306a33a808650bfce63b12588",
+        "path": "backend/cpp/llama-cpp"
+      },
+      "protocol": {
+        "path": "backend/backend.proto",
+        "revision": "ad62c6df07ae1169eb14411a565a689cd996b19c"
+      },
+      "target": {
+        "id": "darwin-arm64",
+        "operatingSystem": "darwin",
+        "architecture": "arm64",
+        "accelerators": ["metal"]
+      },
+      "artifact": {
+        "name": "localai-backend-localai-llamacpp-darwin-arm64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
+        "location": "https://github.com/portpowered/infinite-you/releases/download/localai-backends-v1-374fb240161479665f1e4d2c422dbe152f7eb585fc4ee82dabd182517feae2f1/localai-backend-localai-llamacpp-darwin-arm64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
+        "sizeBytes": 29,
+        "sha256": "bbcb95127c31ce89e12edb632f84742c93cefc60581b1badb12c36886aea78d0"
+      }
+    },
+    {
+      "id": "localai-llamacpp/linux-amd64",
+      "backend": {
+        "id": "localai-llamacpp",
+        "source": {
+          "repository": "https://github.com/ggerganov/llama.cpp",
+          "commit": "6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef",
+          "pinVariable": "LLAMA_VERSION"
+        }
+      },
+      "source": {
+        "repository": "https://github.com/mudler/LocalAI.git",
+        "commit": "b224c96db6f4b87306a33a808650bfce63b12588",
+        "path": "backend/cpp/llama-cpp"
+      },
+      "protocol": {
+        "path": "backend/backend.proto",
+        "revision": "ad62c6df07ae1169eb14411a565a689cd996b19c"
+      },
+      "target": {
+        "id": "linux-amd64",
+        "operatingSystem": "linux",
+        "architecture": "amd64",
+        "accelerators": ["cpu"]
+      },
+      "artifact": {
+        "name": "localai-backend-localai-llamacpp-linux-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
+        "location": "https://github.com/portpowered/infinite-you/releases/download/localai-backends-v1-374fb240161479665f1e4d2c422dbe152f7eb585fc4ee82dabd182517feae2f1/localai-backend-localai-llamacpp-linux-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
+        "sizeBytes": 28,
+        "sha256": "9285e7ffc76aaadf4dfcc6b2de5e23c6b01d4e7068e8f2dd65673626cc5de4ed"
+      }
+    },
+    {
+      "id": "localai-llamacpp/windows-amd64",
+      "backend": {
+        "id": "localai-llamacpp",
+        "source": {
+          "repository": "https://github.com/ggerganov/llama.cpp",
+          "commit": "6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef",
+          "pinVariable": "LLAMA_VERSION"
+        }
+      },
+      "source": {
+        "repository": "https://github.com/mudler/LocalAI.git",
+        "commit": "b224c96db6f4b87306a33a808650bfce63b12588",
+        "path": "backend/cpp/llama-cpp"
+      },
+      "protocol": {
+        "path": "backend/backend.proto",
+        "revision": "ad62c6df07ae1169eb14411a565a689cd996b19c"
+      },
+      "target": {
+        "id": "windows-amd64",
+        "operatingSystem": "windows",
+        "architecture": "amd64",
+        "accelerators": ["cpu"]
+      },
+      "artifact": {
+        "name": "localai-backend-localai-llamacpp-windows-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.zip",
+        "location": "https://github.com/portpowered/infinite-you/releases/download/localai-backends-v1-374fb240161479665f1e4d2c422dbe152f7eb585fc4ee82dabd182517feae2f1/localai-backend-localai-llamacpp-windows-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.zip",
+        "sizeBytes": 30,
+        "sha256": "ef283f2c056018bb3872afb1cd577bed4ceac1731d74665a630c4f2f7978b574"
+      }
+    },
+    {
+      "id": "localai-whisper/darwin-arm64",
+      "backend": {
+        "id": "localai-whisper",
+        "source": {
+          "repository": "https://github.com/ggml-org/whisper.cpp",
+          "commit": "080bbbe85230f624f0b52127f1ae1218247989f9",
+          "pinVariable": "WHISPER_CPP_VERSION"
+        }
+      },
+      "source": {
+        "repository": "https://github.com/mudler/LocalAI.git",
+        "commit": "b224c96db6f4b87306a33a808650bfce63b12588",
+        "path": "backend/go/whisper"
+      },
+      "protocol": {
+        "path": "backend/backend.proto",
+        "revision": "ad62c6df07ae1169eb14411a565a689cd996b19c"
+      },
+      "target": {
+        "id": "darwin-arm64",
+        "operatingSystem": "darwin",
+        "architecture": "arm64",
+        "accelerators": ["metal"]
+      },
+      "artifact": {
+        "name": "localai-backend-localai-whisper-darwin-arm64-080bbbe85230f624f0b52127f1ae1218247989f9.tar.gz",
+        "location": "https://github.com/portpowered/infinite-you/releases/download/localai-backends-v1-374fb240161479665f1e4d2c422dbe152f7eb585fc4ee82dabd182517feae2f1/localai-backend-localai-whisper-darwin-arm64-080bbbe85230f624f0b52127f1ae1218247989f9.tar.gz",
+        "sizeBytes": 28,
+        "sha256": "bfbc18debd02d4640d0c5c98ae157c3b007709e1f3e65927ecdf11f6abcf995c"
+      }
+    },
+    {
+      "id": "localai-whisper/linux-amd64",
+      "backend": {
+        "id": "localai-whisper",
+        "source": {
+          "repository": "https://github.com/ggml-org/whisper.cpp",
+          "commit": "080bbbe85230f624f0b52127f1ae1218247989f9",
+          "pinVariable": "WHISPER_CPP_VERSION"
+        }
+      },
+      "source": {
+        "repository": "https://github.com/mudler/LocalAI.git",
+        "commit": "b224c96db6f4b87306a33a808650bfce63b12588",
+        "path": "backend/go/whisper"
+      },
+      "protocol": {
+        "path": "backend/backend.proto",
+        "revision": "ad62c6df07ae1169eb14411a565a689cd996b19c"
+      },
+      "target": {
+        "id": "linux-amd64",
+        "operatingSystem": "linux",
+        "architecture": "amd64",
+        "accelerators": ["cpu"]
+      },
+      "artifact": {
+        "name": "localai-backend-localai-whisper-linux-amd64-080bbbe85230f624f0b52127f1ae1218247989f9.tar.gz",
+        "location": "https://github.com/portpowered/infinite-you/releases/download/localai-backends-v1-374fb240161479665f1e4d2c422dbe152f7eb585fc4ee82dabd182517feae2f1/localai-backend-localai-whisper-linux-amd64-080bbbe85230f624f0b52127f1ae1218247989f9.tar.gz",
+        "sizeBytes": 27,
+        "sha256": "cc3ce183f6a947432db99642940962d23877cfefaf2a3f3b35f96feda99e3219"
+      }
+    },
+    {
+      "id": "localai-whisper/windows-amd64",
+      "backend": {
+        "id": "localai-whisper",
+        "source": {
+          "repository": "https://github.com/ggml-org/whisper.cpp",
+          "commit": "080bbbe85230f624f0b52127f1ae1218247989f9",
+          "pinVariable": "WHISPER_CPP_VERSION"
+        }
+      },
+      "source": {
+        "repository": "https://github.com/mudler/LocalAI.git",
+        "commit": "b224c96db6f4b87306a33a808650bfce63b12588",
+        "path": "backend/go/whisper"
+      },
+      "protocol": {
+        "path": "backend/backend.proto",
+        "revision": "ad62c6df07ae1169eb14411a565a689cd996b19c"
+      },
+      "target": {
+        "id": "windows-amd64",
+        "operatingSystem": "windows",
+        "architecture": "amd64",
+        "accelerators": ["cpu"]
+      },
+      "artifact": {
+        "name": "localai-backend-localai-whisper-windows-amd64-080bbbe85230f624f0b52127f1ae1218247989f9.zip",
+        "location": "https://github.com/portpowered/infinite-you/releases/download/localai-backends-v1-374fb240161479665f1e4d2c422dbe152f7eb585fc4ee82dabd182517feae2f1/localai-backend-localai-whisper-windows-amd64-080bbbe85230f624f0b52127f1ae1218247989f9.zip",
+        "sizeBytes": 29,
+        "sha256": "5688474c6b2d7c7fa77063d497d43b5d5ea5ecfd7b40449fe98b06767bd8eaaa"
+      }
+    },
+    {
+      "id": "localai-vibevoice/darwin-arm64",
+      "backend": {
+        "id": "localai-vibevoice",
+        "source": {
+          "repository": "https://github.com/mudler/vibevoice.cpp",
+          "commit": "000e37282bc5bb09edc20f7047a47924122ba3a0",
+          "pinVariable": "VIBEVOICE_CPP_VERSION"
+        }
+      },
+      "source": {
+        "repository": "https://github.com/mudler/LocalAI.git",
+        "commit": "b224c96db6f4b87306a33a808650bfce63b12588",
+        "path": "backend/go/vibevoice-cpp"
+      },
+      "protocol": {
+        "path": "backend/backend.proto",
+        "revision": "ad62c6df07ae1169eb14411a565a689cd996b19c"
+      },
+      "target": {
+        "id": "darwin-arm64",
+        "operatingSystem": "darwin",
+        "architecture": "arm64",
+        "accelerators": ["metal"]
+      },
+      "artifact": {
+        "name": "localai-backend-localai-vibevoice-darwin-arm64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
+        "location": "https://github.com/portpowered/infinite-you/releases/download/localai-backends-v1-374fb240161479665f1e4d2c422dbe152f7eb585fc4ee82dabd182517feae2f1/localai-backend-localai-vibevoice-darwin-arm64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
+        "sizeBytes": 30,
+        "sha256": "dd8dbe5ea9e42d8f4123f121908ccdf2273a3548ffc667377590e5cbb19b3522"
+      }
+    },
+    {
+      "id": "localai-vibevoice/linux-amd64",
+      "backend": {
+        "id": "localai-vibevoice",
+        "source": {
+          "repository": "https://github.com/mudler/vibevoice.cpp",
+          "commit": "000e37282bc5bb09edc20f7047a47924122ba3a0",
+          "pinVariable": "VIBEVOICE_CPP_VERSION"
+        }
+      },
+      "source": {
+        "repository": "https://github.com/mudler/LocalAI.git",
+        "commit": "b224c96db6f4b87306a33a808650bfce63b12588",
+        "path": "backend/go/vibevoice-cpp"
+      },
+      "protocol": {
+        "path": "backend/backend.proto",
+        "revision": "ad62c6df07ae1169eb14411a565a689cd996b19c"
+      },
+      "target": {
+        "id": "linux-amd64",
+        "operatingSystem": "linux",
+        "architecture": "amd64",
+        "accelerators": ["cpu"]
+      },
+      "artifact": {
+        "name": "localai-backend-localai-vibevoice-linux-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
+        "location": "https://github.com/portpowered/infinite-you/releases/download/localai-backends-v1-374fb240161479665f1e4d2c422dbe152f7eb585fc4ee82dabd182517feae2f1/localai-backend-localai-vibevoice-linux-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
+        "sizeBytes": 22,
+        "sha256": "10a84e67d02d078f711608accf13cb80b6724a4c03dc4acae5ba936831801172"
+      }
+    },
+    {
+      "id": "localai-vibevoice/windows-amd64",
+      "backend": {
+        "id": "localai-vibevoice",
+        "source": {
+          "repository": "https://github.com/mudler/vibevoice.cpp",
+          "commit": "000e37282bc5bb09edc20f7047a47924122ba3a0",
+          "pinVariable": "VIBEVOICE_CPP_VERSION"
+        }
+      },
+      "source": {
+        "repository": "https://github.com/mudler/LocalAI.git",
+        "commit": "b224c96db6f4b87306a33a808650bfce63b12588",
+        "path": "backend/go/vibevoice-cpp"
+      },
+      "protocol": {
+        "path": "backend/backend.proto",
+        "revision": "ad62c6df07ae1169eb14411a565a689cd996b19c"
+      },
+      "target": {
+        "id": "windows-amd64",
+        "operatingSystem": "windows",
+        "architecture": "amd64",
+        "accelerators": ["cpu"]
+      },
+      "artifact": {
+        "name": "localai-backend-localai-vibevoice-windows-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.zip",
+        "location": "https://github.com/portpowered/infinite-you/releases/download/localai-backends-v1-374fb240161479665f1e4d2c422dbe152f7eb585fc4ee82dabd182517feae2f1/localai-backend-localai-vibevoice-windows-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.zip",
+        "sizeBytes": 31,
+        "sha256": "229ae731d05569dbb675bee8fe13750eaf1adda74128b1eff76c5db0a3f9bc68"
+      }
+    }
+  ]
+}

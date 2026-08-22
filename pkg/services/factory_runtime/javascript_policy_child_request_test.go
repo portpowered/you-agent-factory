@@ -122,3 +122,96 @@ func TestValidateChildRequest_AllowsPermittedRequest(t *testing.T) {
 		t.Fatalf("ValidateChildRequest() error = %v, want nil", err)
 	}
 }
+
+func TestValidateChildRequest_SkipPermissionsOnlyOverridesSandboxRestrictions(t *testing.T) {
+	t.Parallel()
+	policy := factory.DefaultJavaScriptPolicy()
+	policy.AllowedModels = []string{"gpt-allowed"}
+	policy.AllowedReasoningEfforts = []string{"low"}
+	policy.AllowedCommands = []string{"review"}
+	policy.Concurrency = 2
+
+	tests := []struct {
+		name    string
+		request factory.JavaScriptPolicyChildRequest
+		wantErr string
+	}{
+		{
+			name: "workspace write sandbox",
+			request: factory.JavaScriptPolicyChildRequest{
+				Label:           "autonomous-child",
+				SkipPermissions: true,
+				Sandbox:         "workspace-write",
+			},
+		},
+		{
+			name: "writable roots",
+			request: factory.JavaScriptPolicyChildRequest{
+				Label:           "autonomous-child",
+				SkipPermissions: true,
+				WritableRoots:   []string{"/tmp/output"},
+			},
+		},
+		{
+			name: "model allowlist remains enforced",
+			request: factory.JavaScriptPolicyChildRequest{
+				Label:           "autonomous-child",
+				Model:           "gpt-denied",
+				SkipPermissions: true,
+			},
+			wantErr: `policy denied: model "gpt-denied" is not listed in allowedModels`,
+		},
+		{
+			name: "reasoning allowlist remains enforced",
+			request: factory.JavaScriptPolicyChildRequest{
+				Label:           "autonomous-child",
+				ReasoningEffort: "high",
+				SkipPermissions: true,
+			},
+			wantErr: `policy denied: reasoningEffort "high" is not listed in allowedReasoningEfforts`,
+		},
+		{
+			name: "command allowlist remains enforced",
+			request: factory.JavaScriptPolicyChildRequest{
+				Label:           "autonomous-child",
+				Command:         "deploy",
+				SkipPermissions: true,
+			},
+			wantErr: `policy denied: command "deploy" is not listed in allowedCommands`,
+		},
+		{
+			name: "network capability remains enforced",
+			request: factory.JavaScriptPolicyChildRequest{
+				Label:           "autonomous-child",
+				AllowNetwork:    true,
+				SkipPermissions: true,
+			},
+			wantErr: "policy denied: network access is not allowed by effective policy",
+		},
+		{
+			name: "concurrency budget remains enforced",
+			request: factory.JavaScriptPolicyChildRequest{
+				Label:           "autonomous-child",
+				Concurrency:     3,
+				SkipPermissions: true,
+			},
+			wantErr: "policy denied: requested concurrency 3 exceeds policy concurrency 2",
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			err := factory.ValidateJavaScriptPolicyChildRequest(policy, test.request)
+			if test.wantErr == "" {
+				if err != nil {
+					t.Fatalf("ValidateChildRequest() error = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("ValidateChildRequest() error = %v, want substring %q", err, test.wantErr)
+			}
+		})
+	}
+}

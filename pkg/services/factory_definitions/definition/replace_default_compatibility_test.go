@@ -68,7 +68,7 @@ func TestSaveDefaultCurrentFactoryForSession_PersistsSplitLayout(t *testing.T) {
 		}},
 		Workstations: &[]factoryapi.Workstation{{
 			Name:   "plan-task",
-			Worker: "planner",
+			Worker: definitionStringPtr("planner"),
 			Type:   workstationTypeModel(),
 			Body:   stringPointer("Plan the story."),
 			Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}},
@@ -170,7 +170,7 @@ func TestSaveDefaultCurrentFactoryForSession_RestoresTreeOnActivationFailure(t *
 		}},
 		Workstations: &[]factoryapi.Workstation{{
 			Name:   "process",
-			Worker: "worker-a",
+			Worker: definitionStringPtr("worker-a"),
 			Type:   workstationTypeModel(),
 			Body:   stringPointer("replacement workstation"),
 			Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}},

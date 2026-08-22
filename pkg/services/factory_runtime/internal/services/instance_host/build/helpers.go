@@ -3,6 +3,7 @@ package runtimebuild
 import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -29,7 +30,7 @@ func WarnPortableBundledReplacementReport(
 	factory.WarnPortableBundledReplacementReport(logger, message, replacements)
 }
 
-func providerOverrideForMode(provider workers.Provider, replayProvider workers.Provider) workers.Provider {
+func providerOverrideForMode(provider providers.Service, replayProvider providers.Service) providers.Service {
 	if provider != nil || replayProvider == nil {
 		return provider
 	}

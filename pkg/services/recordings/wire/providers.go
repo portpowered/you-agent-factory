@@ -1,15 +1,20 @@
 package wire
 
 import (
+	"context"
 	"fmt"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
 	artifactsimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/artifacts"
 	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
+	historicalquery "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query"
+	historicalquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -36,6 +41,78 @@ func NewReplayArtifactLoader(
 	}
 }
 
+// NewReplayInputLoader constructs the path-based, pre-ledger
+// recordings.ReplayInputLoader implementation selected by
+// process-graph composition, composing the existing portable-recording
+// decoder/validator with the existing legacy replay artifact loader behind
+// the one Recordings-owned replay-input capability so callers no longer
+// combine a raw file reader, the aliased portable-recording decoder/
+// validator, and the legacy loader themselves.
+//
+// This capability contains only LoadReplayInput because it is constructed and
+// injected before a Factory Session ledger exists. Ledger-scoped artifact
+// behavior remains on RecordingReplayArtifacts, whose implementation has the
+// required ledger and publication dependencies.
+func NewReplayInputLoader(
+	readFile recordings.RecordingReadFile,
+	loadLegacy recordings.ReplayArtifactLoader,
+	logger logging.Logger,
+) recordings.ReplayInputLoader {
+	return recordingsinternal.NewReplayInputLoader(readFile, loadLegacy, logger)
+}
+
+// NewRuntimeRoot constructs the singular process-scoped Recordings authority.
+// Runtime ledgers, projection use, replay collaborators, and recording
+// lifecycle state are acquired through the returned root's RuntimeOpening
+// capability rather than through opening-local constructors.
+func NewRuntimeRoot(
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	makeDirectories recordings.RecordingMakeDirectories,
+	createTemporaryFile recordings.RecordingCreateTemporaryFile,
+	removePath recordings.RecordingRemovePath,
+	renamePath recordings.RecordingRenamePath,
+	readFile recordings.RecordingReadFile,
+	captureSnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
+	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	replayInputs recordings.ReplayInputLoader,
+	logger logging.Logger,
+	clocks ...recordings.RecordingClock,
+) (recordings.Service, error) {
+	publication, err := recordingsinternal.NewPortableArtifactPublication(
+		makeDirectories,
+		createTemporaryFile,
+		removePath,
+		renamePath,
+		readFile,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("construct Recordings publication: %w", err)
+	}
+	historicalQuery := historicalquerywire.NewService(
+		readFile,
+		recordingsinternal.NewProjectionService(),
+	)
+	root := recordingsinternal.NewRuntimeRootWithHistoricalQuery(
+		targets,
+		writeFile,
+		readFile,
+		publication,
+		captureSnapshot,
+		decodeSnapshot,
+		decodeRuntimeConfig,
+		replayInputs,
+		logger,
+		historicalQuery,
+		clocks...,
+	)
+	if root == nil {
+		return nil, fmt.Errorf("construct Recordings: runtime root rejected its dependencies")
+	}
+	return root, nil
+}
+
 // NewProjectionService constructs the Recordings projection capability for
 // process-graph composition.
 func NewProjectionService() recordings.ProjectionService {
@@ -59,6 +136,7 @@ func NewLifecycleRuntimeRecorder(
 	flushInterval time.Duration,
 	loaded factorydefinitions.LoadedFactorySource,
 	now func() time.Time,
+	recordingID string,
 	recordPath string,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 ) (recordings.RuntimeRecorder, error) {
@@ -66,6 +144,7 @@ func NewLifecycleRuntimeRecorder(
 		flushInterval,
 		loaded,
 		now,
+		recordingID,
 		recordPath,
 		captureLoadedFactorySnapshot,
 	)
@@ -83,7 +162,7 @@ func NewReplayExecution(
 	decodeFactorySnapshot factorydefinitions.FactorySnapshotJSONDecoder,
 	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 ) (
-	workers.Provider,
+	providers.Service,
 	workers.CommandRunner,
 	[]recordings.ReplayHook,
 	recordings.CompletionDeliveryPlanner,
@@ -104,6 +183,11 @@ func NewServiceWithProjection(
 	projection recordings.ProjectionService,
 	targets recordings.LiveRecordingTargetPlanner,
 	writeFile func(string, []byte) error,
+	makeDirectories recordings.RecordingMakeDirectories,
+	createTemporaryFile recordings.RecordingCreateTemporaryFile,
+	removePath recordings.RecordingRemovePath,
+	renamePath recordings.RecordingRenamePath,
+	readFile recordings.RecordingReadFile,
 	clocks ...recordings.RecordingClock,
 ) (recordings.Service, error) {
 	if ledger == nil {
@@ -115,19 +199,103 @@ func NewServiceWithProjection(
 	if writeFile == nil {
 		return nil, fmt.Errorf("construct Recordings: snapshot write function is required")
 	}
-	writer := recordingsinternal.NewReplayRecordingSnapshotWriter(writeFile)
-	tickers := recordingsinternal.NewRecordingFlushTickerFactory()
-	publication, err := recordingsinternal.NewPortableArtifactPublication()
-	if err != nil {
-		return nil, err
+	return NewServiceWithProjectionAndEffects(
+		ledger,
+		projection,
+		targets,
+		writeFile,
+		makeDirectories,
+		createTemporaryFile,
+		removePath,
+		renamePath,
+		readFile,
+		clocks...,
+	)
+}
+
+// NewServiceWithProjectionAndEffects constructs the Recordings root with the
+// exact portable-artifact filesystem effects selected by the application
+// graph. This owner wire adapts those effects into the private artifact
+// publication capability and selects no host defaults.
+func NewServiceWithProjectionAndEffects(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	makeDirectories recordings.RecordingMakeDirectories,
+	createTemporaryFile recordings.RecordingCreateTemporaryFile,
+	removePath recordings.RecordingRemovePath,
+	renamePath recordings.RecordingRenamePath,
+	readFile recordings.RecordingReadFile,
+	clocks ...recordings.RecordingClock,
+) (recordings.Service, error) {
+	if ledger == nil {
+		return nil, fmt.Errorf("construct Recordings: ledger is required")
 	}
-	service := recordingsinternal.NewServiceWithLifecycleEffects(
+	if projection == nil {
+		return nil, fmt.Errorf("construct Recordings: projection is required")
+	}
+	publication, err := recordingsinternal.NewPortableArtifactPublication(
+		makeDirectories,
+		createTemporaryFile,
+		removePath,
+		renamePath,
+		readFile,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("construct Recordings publication: %w", err)
+	}
+	historicalQuery := historicalquerywire.NewService(readFile, projection)
+	return newServiceWithProjection(
+		ledger,
+		projection,
+		targets,
+		writeFile,
+		publication,
+		historicalQuery,
+		false,
+		clocks...,
+	)
+}
+
+type portableArtifactPublication interface {
+	Publish(context.Context, string, []byte) error
+	Read(context.Context, string) ([]byte, error)
+}
+
+func newServiceWithProjection(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	publication portableArtifactPublication,
+	historicalQuery historicalquery.Service,
+	requireWriter bool,
+	clocks ...recordings.RecordingClock,
+) (recordings.Service, error) {
+	if ledger == nil {
+		return nil, fmt.Errorf("construct Recordings: ledger is required")
+	}
+	if projection == nil {
+		return nil, fmt.Errorf("construct Recordings: projection is required")
+	}
+	if requireWriter && writeFile == nil {
+		return nil, fmt.Errorf("construct Recordings: snapshot write function is required")
+	}
+	var writer recordings.RecordingSnapshotWriter
+	var tickers recordings.RecordingFlushTickerFactory
+	if writeFile != nil {
+		writer = recordingsinternal.NewReplayRecordingSnapshotWriter(writeFile)
+		tickers = recordingsinternal.NewRecordingFlushTickerFactory()
+	}
+	service := recordingsinternal.NewServiceWithLifecycleEffectsAndHistoricalQuery(
 		ledger,
 		projection,
 		targets,
 		writer,
 		tickers,
 		publication,
+		historicalQuery,
 		clocks...,
 	)
 	if service == nil {

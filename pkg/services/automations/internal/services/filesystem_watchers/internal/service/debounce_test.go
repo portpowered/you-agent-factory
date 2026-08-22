@@ -249,7 +249,14 @@ func writeLocalFile(path string, content []byte) error {
 func waitForSubmitCount(t *testing.T, submitter *recordingSubmitter, want int) {
 	t.Helper()
 	deadline := time.After(time.Second)
-	for submitter.submitCallCount() < want {
+	for {
+		if submitter.submitCallCount() >= want {
+			// The count is authoritative. Clear notifications for submissions
+			// already included in the count so callers cannot mistake an old
+			// edge-triggered signal for new work.
+			submitter.drainSubmitted()
+			return
+		}
 		select {
 		case <-submitter.submitted:
 		case <-time.After(10 * time.Millisecond):

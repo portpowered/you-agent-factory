@@ -95,6 +95,7 @@ func TestShow_HumanOutputRendersPetriFactorySession(t *testing.T) {
 	output := out.String()
 	for _, want := range []string{
 		"Orchestrator kind:\tPETRI",
+		"Work tokens (marking):\t1",
 		"Petri marking tokens:\t1",
 		"Enabled transition:\ttr-process (worker-a)",
 	} {
@@ -104,6 +105,12 @@ func TestShow_HumanOutputRendersPetriFactorySession(t *testing.T) {
 	}
 	if strings.Contains(output, "Dynamic workflow:") {
 		t.Fatalf("Petri output should not include dynamic workflow shorthand: %s", output)
+	}
+	if strings.Contains(output, "Total tokens:") {
+		t.Fatalf("Petri output retained ambiguous total-token label: %s", output)
+	}
+	if strings.Contains(strings.ToLower(output), "cost") {
+		t.Fatalf("human output unexpectedly contains cost text: %s", output)
 	}
 }
 
@@ -128,6 +135,32 @@ func TestShow_JSONModeEmitsFactorySession(t *testing.T) {
 	}
 	if got.Id != "session-beta" || got.Runtime.OrchestratorKind != factoryapi.JAVASCRIPT {
 		t.Fatalf("session = %#v, want JavaScript session-beta", got)
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatalf("decode raw JSON: %v\n%s", err, out.String())
+	}
+	var runtime map[string]json.RawMessage
+	if err := json.Unmarshal(payload["runtime"], &runtime); err != nil {
+		t.Fatalf("decode runtime JSON: %v\n%s", err, out.String())
+	}
+	var progress map[string]json.RawMessage
+	if err := json.Unmarshal(runtime["progress"], &progress); err != nil {
+		t.Fatalf("decode progress JSON: %v\n%s", err, out.String())
+	}
+	totalTokens, ok := progress["totalTokens"]
+	if !ok {
+		t.Fatalf("JSON missing runtime.progress.totalTokens: %s", out.String())
+	}
+	var gotTotalTokens int
+	if err := json.Unmarshal(totalTokens, &gotTotalTokens); err != nil {
+		t.Fatalf("decode totalTokens: %v", err)
+	}
+	if gotTotalTokens != 0 {
+		t.Fatalf("totalTokens = %d, want 0", gotTotalTokens)
+	}
+	if strings.Contains(strings.ToLower(out.String()), "cost") {
+		t.Fatalf("JSON output unexpectedly contains cost text: %s", out.String())
 	}
 }
 
@@ -395,144 +428,6 @@ func TestShow_DurableSessionHumanOutputRendersLifecycleContinuity(t *testing.T) 
 		}
 	}
 }
-
-func TestDispatches_DurableSessionJSONUsesListFactorySessionDispatchesResponse(t *testing.T) {
-	label := "step-one"
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got, want := r.URL.Path, "/factory-sessions/dur-sess-js-interrupted-001/dispatches"; got != want {
-			t.Fatalf("path = %q, want %q", got, want)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(factoryapi.ListFactorySessionDispatchesResponse{
-			SessionId: "dur-sess-js-interrupted-001",
-			Dispatches: []factoryapi.FactorySessionDispatchSummary{
-				{
-					Id:           "dispatch-1",
-					Status:       factoryapi.FactoryDispatchStatusCOMPLETED,
-					DispatchKind: factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
-					Label:        &label,
-				},
-			},
-		}); err != nil {
-			t.Fatalf("encode response: %v", err)
-		}
-	}))
-	defer srv.Close()
-
-	var out bytes.Buffer
-	if err := NewDispatches(testHTTPProtocol(t))(DispatchesConfig{Context: context.Background(),
-		Server:    srv.URL,
-		SessionID: "dur-sess-js-interrupted-001",
-		JSON:      true,
-		Output:    &out,
-	}); err != nil {
-		t.Fatalf("Dispatches durable JSON: %v", err)
-	}
-
-	var listed factoryapi.ListFactorySessionDispatchesResponse
-	if err := json.Unmarshal(out.Bytes(), &listed); err != nil {
-		t.Fatalf("decode dispatches JSON: %v", err)
-	}
-	if listed.SessionId != "dur-sess-js-interrupted-001" {
-		t.Fatalf("sessionId = %q", listed.SessionId)
-	}
-	if len(listed.Dispatches) != 1 {
-		t.Fatalf("dispatches = %#v, want one dispatch", listed.Dispatches)
-	}
-}
-
-func TestDispatches_DurableSessionHumanOutputRendersDispatchSummaries(t *testing.T) {
-	phase, label, runner, model := "review", "Review child", "runner-1", "model-1"
-	attempt := int32(2)
-	duration := int64(1250)
-	artifacts := []string{"artifact-1"}
-	providerRefs := []factoryapi.LoadableProviderSessionRef{{Id: "provider-session-1", Kind: factoryapi.LoadableProviderSessionKind("SESSION_ID"), Provider: factoryapi.LoadableProviderSessionProvider("CLAUDE")}}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(factoryapi.ListFactorySessionDispatchesResponse{
-			SessionId: "dur-sess-js-interrupted-001",
-			Dispatches: []factoryapi.FactorySessionDispatchSummary{
-				{
-					Id:           "dispatch-1",
-					Status:       factoryapi.FactoryDispatchStatusCOMPLETED,
-					DispatchKind: factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
-				},
-				{
-					Id:           "dispatch-2",
-					Status:       factoryapi.FactoryDispatchStatusINTERRUPTED,
-					DispatchKind: factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
-					Phase:        &phase, Label: &label, RunnerId: &runner, Model: &model,
-					ProviderSessionRefs: &providerRefs, Attempt: &attempt,
-					Usage: &factoryapi.FactoryDispatchUsage{DurationMillis: &duration}, OutputArtifactIds: &artifacts,
-					FailureDetail: &factoryapi.FailureDetail{Reason: factoryapi.WorkFailureType("PROVIDER_ERROR"), Message: "provider unavailable"},
-				},
-			},
-		}); err != nil {
-			t.Fatalf("encode response: %v", err)
-		}
-	}))
-	defer srv.Close()
-
-	var out bytes.Buffer
-	if err := NewDispatches(testHTTPProtocol(t))(DispatchesConfig{Context: context.Background(),
-		Server:    srv.URL,
-		SessionID: "dur-sess-js-interrupted-001",
-		Output:    &out,
-	}); err != nil {
-		t.Fatalf("Dispatches durable human: %v", err)
-	}
-
-	output := out.String()
-	for _, want := range []string{
-		"Factory session dur-sess-js-interrupted-001 dispatches (2):",
-		"- dispatch-1 COMPLETED JAVASCRIPT_AGENT",
-		"- dispatch-2 INTERRUPTED JAVASCRIPT_AGENT",
-		"  Phase:\treview",
-		"  Label:\tReview child",
-		"  Runner:\trunner-1",
-		"  Model:\tmodel-1",
-		"  Provider sessions:\tprovider-session-1",
-		"  Attempt:\t2",
-		"  Duration:\t1250ms",
-		"  Artifacts:\tartifact-1",
-		"  Failure:\tprovider unavailable",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("output missing %q:\n%s", want, output)
-		}
-	}
-}
-
-func TestDispatches_RejectsNonDurableSessionID(t *testing.T) {
-	err := NewDispatches(testHTTPProtocol(t))(DispatchesConfig{Context: context.Background(),
-		Server:    "http://127.0.0.1:1",
-		SessionID: "session-beta",
-		Output:    ioDiscard{},
-	})
-	if err == nil {
-		t.Fatal("expected error for non-durable session id")
-	}
-	if !strings.Contains(err.Error(), "dur-sess-*") {
-		t.Fatalf("error = %q, want durable session requirement", err.Error())
-	}
-}
-
-func TestDispatchesEndpoint_ForwardsCanonicalFilters(t *testing.T) {
-	endpoint, err := dispatchesEndpoint(DispatchesConfig{Context: context.Background(),
-		Server: "http://127.0.0.1:3456", SessionID: "dur-sess-filter-001",
-		Phase: "build", Status: "FAILED",
-	})
-	if err != nil {
-		t.Fatalf("dispatchesEndpoint: %v", err)
-	}
-	if endpoint.Query().Get("phase") != "build" || endpoint.Query().Get("status") != "FAILED" {
-		t.Fatalf("query = %q, want phase=build and status=FAILED", endpoint.RawQuery)
-	}
-}
-
-type ioDiscard struct{}
-
-func (ioDiscard) Write(p []byte) (int, error) { return len(p), nil }
 
 func samplePetriFactorySession() factoryapi.FactorySession {
 	return factoryapi.FactorySession{

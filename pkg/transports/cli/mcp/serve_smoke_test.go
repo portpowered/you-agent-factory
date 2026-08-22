@@ -23,6 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 )
 
@@ -48,7 +49,7 @@ func TestRunServe_InstallSmoke_DiscoveryValidateAsyncPoll(t *testing.T) {
 
 func startRunServeSmokeServer(
 	t *testing.T,
-	service factorysessions.ExecutionService,
+	service mcpfactorysession.DurableExecution,
 ) (*stdioMCPClient, *os.File, <-chan error) {
 	t.Helper()
 	stdinRead, stdinWrite, err := os.Pipe()
@@ -78,7 +79,7 @@ func startRunServeSmokeServer(
 
 func executeGeneratedMCPServe(
 	ctx context.Context,
-	service factorysessions.ExecutionService,
+	service mcpfactorysession.DurableExecution,
 	stdin io.Reader,
 	stdout io.Writer,
 	wantRuntime bool,
@@ -93,13 +94,15 @@ func executeGeneratedMCPServe(
 				wantProjectRoot,
 			)
 		}
-		session, err := mcpstdio.Open(
-			service,
-			installSmokeRequestPreparation(),
-			installSmokeWorkflowDefinitions(),
-			intent.Stdin,
-			intent.Stdout,
-		)
+		server, err := mcpserver.New(mcpserver.Options{
+			ToolOperation: mcpserver.ToolOperation(mcpfactorysession.BindToolOperation(
+				service, nil, installSmokeRequestPreparation(), installSmokeWorkflowDefinitions(),
+			)),
+		})
+		if err != nil {
+			return err
+		}
+		session, err := mcpstdio.Open(server, intent.Stdin, intent.Stdout)
 		if err != nil {
 			return err
 		}
@@ -118,7 +121,14 @@ func executeGeneratedMCPServe(
 		return err
 	}
 	manifest.Commands[rootRecord.ID] = rootRecord
-	serveRecord, err := manifest.CommandByID("you.mcp.serve")
+	serverRecord, err := manifest.CommandByID("you.server")
+	if err != nil {
+		return err
+	}
+	serverRecord.Runnable = false
+	serverRecord.Handler = nil
+	manifest.Commands[serverRecord.ID] = serverRecord
+	serveRecord, err := manifest.CommandByID("you.server.mcp")
 	if err != nil {
 		return err
 	}
@@ -138,7 +148,7 @@ func executeGeneratedMCPServe(
 	root.SetIn(stdin)
 	root.SetOut(stdout)
 	root.SetErr(io.Discard)
-	args := []string{"mcp", "serve"}
+	args := []string{"server", "mcp"}
 	if wantRuntime {
 		args = append(args, "--runtime")
 		if wantProjectRoot != "" {
@@ -445,7 +455,7 @@ func decodeToolResponse[T any](t *testing.T, response mcpJSONRPCResponse) mcpfac
 }
 
 type installSmokeExecutionScript struct {
-	factorysessions.ExecutionService
+	mcpfactorysession.DurableExecution
 }
 
 func (installSmokeExecutionScript) StartAsync(

@@ -3,10 +3,15 @@ description: >-
   work states, run a worker or logical move, and emit the next work
   states.
 type: object
-additionalProperties: false
+additionalProperties: true
+# `join` was retired when fan-in moved to explicit Work inputs and guards. Keep
+# the workstation object open for additive fields without reviving that
+# removed execution semantic.
+not:
+  required:
+    - join
 required:
   - name
-  - worker
   - inputs
 properties:
   id:
@@ -38,7 +43,7 @@ properties:
       $ref: './WorkstationOperationBinding.yaml'
   worker:
     type: string
-    description: Name of a worker declared in the workers list.
+    description: Name of a worker declared in the workers list. Omit this field for HUMAN_APPROVAL workstations.
   runner:
     allOf:
       - $ref: './RunnerID.yaml'
@@ -49,6 +54,9 @@ properties:
   outputSchema:
     type: string
     description: JSON schema string used to validate or parse structured model output when configured.
+  outputContract:
+    type: string
+    description: Provider-neutral semantic contract applied to a successful workstation response after provider execution.
   outcomeFormat:
     allOf:
       - $ref: './WorkstationOutcomeFormat.yaml'
@@ -104,6 +112,11 @@ properties:
     description: Optional destination emitted when the workstation fails permanently.
     items:
       $ref: './WorkstationIO.yaml'
+  expectedArtifacts:
+    type: array
+    description: Expected output declarations added by this workstation to its applicable work type contract.
+    items:
+      $ref: './ExpectedArtifact.yaml'
   resources:
     type: array
     description: Resource capacity this workstation consumes while one dispatch is in flight.

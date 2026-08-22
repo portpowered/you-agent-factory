@@ -11,6 +11,7 @@ import {
   type FactoryGraphAddEntityKind,
   validateFactoryGraphAddEntityDraft,
 } from "../../factory-graph-editor/lib/editor/factory-graph-editor-additions";
+import type { WorkflowActivityBentoCardState } from "./workflow-activity-card-state";
 
 export interface FactoryGraphAddNodeLayoutPlacement {
   nodeId: string;
@@ -21,18 +22,29 @@ export function useFactoryGraphAddEntityController({
   currentFactoryDefinition,
   editableGraph,
   onDocAdded,
+  restoredCardState,
   setActiveTool,
 }: {
   currentFactoryDefinition: CanonicalFactoryDefinition | null;
   editableGraph: EditableFactoryGraphViewModel;
   onDocAdded?: (targetPath: string) => void;
+  restoredCardState?: Pick<
+    WorkflowActivityBentoCardState,
+    "addEntityDraft" | "addEntityErrors" | "addMenuOpen"
+  >;
   setActiveTool: (tool: FactoryGraphEditorTool) => void;
 }) {
-  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [addMenuOpen, setAddMenuOpen] = useState(
+    () => restoredCardState?.addMenuOpen ?? false,
+  );
   const [addEntityDraft, setAddEntityDraft] =
-    useState<FactoryGraphAddEntityDraft | null>(null);
+    useState<FactoryGraphAddEntityDraft | null>(
+      () => restoredCardState?.addEntityDraft ?? null,
+    );
   const [addEntityErrors, setAddEntityErrors] =
-    useState<FactoryGraphAddEntityFieldErrors>({});
+    useState<FactoryGraphAddEntityFieldErrors>(
+      () => restoredCardState?.addEntityErrors ?? {},
+    );
 
   const handleAddEntityAction = useCallback(
     (actionID: string) => {

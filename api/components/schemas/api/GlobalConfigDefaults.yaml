@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 description: Operator defaults that participate independently in file, environment, and flag precedence.
 properties:
   workerModelProvider:

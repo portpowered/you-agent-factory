@@ -17,8 +17,8 @@ import (
 	"github.com/jonboulle/clockwork"
 	factorydefinitioncomposition "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	hostedlinear "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/linear"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -31,6 +31,7 @@ type Config struct {
 	SecretResolver hostedlinear.SecretResolver
 	Checkpoints    hostedlinear.CheckpointStore
 	LinearEndpoint string
+	Jitter         retryJitter
 }
 
 func startLinearPollerWithConfig(
@@ -61,10 +62,13 @@ func startLinearPollerWithConfig(
 			return err
 		}
 	}
+	if cfg.Jitter == nil {
+		cfg.Jitter = func(base time.Duration) time.Duration { return base }
+	}
 	return StartLinearPoller(
 		ctx, sidecars, cfg.Logger, cfg.Clock, cfg.HTTPClient,
 		cfg.SecretResolver, cfg.Checkpoints, cfg.LinearEndpoint,
-		runtimeConfig, workstation, worker, submitter,
+		runtimeConfig, workstation, worker, cfg.Jitter, submitter,
 	)
 }
 
@@ -317,7 +321,7 @@ func TestNewLinearPoller_RequiresExternalEffects(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := NewLinearPoller(
 				zap.NewNop(), tc.clock, tc.client, tc.resolver, tc.checkpoints, "", runtimeCfg,
-				interfaces.FactoryWorkstationConfig{}, worker,
+				interfaces.FactoryWorkstationConfig{}, worker, nil,
 				func(context.Context, work.WorkRequest) error { return nil },
 			)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -492,9 +496,12 @@ func TestRestartBackoff_ProgressesWithinBounds(t *testing.T) {
 		{attempt: 2, want: 2 * restartBackoffMin},
 		{attempt: 3, want: 4 * restartBackoffMin},
 		{attempt: 4, want: 8 * restartBackoffMin},
-		{attempt: 5, want: restartBackoffMax},
-		{attempt: 6, want: restartBackoffMax},
-		{attempt: 10, want: restartBackoffMax},
+		{attempt: 5, want: 16 * restartBackoffMin},
+		{attempt: 6, want: 32 * restartBackoffMin},
+		{attempt: 10, want: 512 * restartBackoffMin},
+		{attempt: 12, want: 2048 * restartBackoffMin},
+		{attempt: 13, want: restartBackoffMax},
+		{attempt: 14, want: restartBackoffMax},
 	}
 	for _, tc := range cases {
 		tc := tc
@@ -594,7 +601,8 @@ func TestStartLinearPoller_BackoffProgressesAfterRepeatedFailures(t *testing.T) 
 		2 * restartBackoffMin,
 		4 * restartBackoffMin,
 		8 * restartBackoffMin,
-		restartBackoffMax,
+		16 * restartBackoffMin,
+		32 * restartBackoffMin,
 	}
 	for attempt, wantBackoff := range wantBackoffs {
 		waitForObservedLogCount(t, observedLogs, "hosted linear poller restarting", attempt+1, time.Second)
@@ -665,6 +673,116 @@ func TestStartLinearPoller_RestartsOnProviderHTTPFailure(t *testing.T) {
 	waitForFakeClockWaiters(t, fakeClock, 1)
 	fakeClock.Advance(restartBackoffMin)
 	waitForSubmitCalls(t, &submitCalls, 1, time.Second)
+
+	cancel()
+	sidecars.Wait()
+}
+
+func TestStartLinearPoller_UsesProviderRetryAfter(t *testing.T) {
+	fakeClock := clockwork.NewFakeClock()
+	var requestCount atomic.Int32
+	logCore, observedLogs := observer.New(zap.InfoLevel)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		call := requestCount.Add(1)
+		if call == 1 {
+			w.Header().Set("Retry-After", "10")
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(`{"errors":[{"message":"private provider response"}]}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(mockLinearIssuesGraphQLResponse()))
+	}))
+	defer server.Close()
+
+	factoryDir := t.TempDir()
+	writeHostedLinearSecretForTest(t, factoryDir)
+	pollerCfg, runtimeCfg, poller, worker := hostedLinearPollerFixtureForTest(t, factoryDir, server, nil)
+	pollerCfg.Logger = zap.New(logCore)
+	pollerCfg.Clock = fakeClock
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var sidecars sync.WaitGroup
+	if err := startLinearPollerWithConfig(ctx, &sidecars, pollerCfg, runtimeCfg, poller, worker, func(context.Context, work.WorkRequest) error {
+		return nil
+	}); err != nil {
+		t.Fatalf("StartLinearPoller() error = %v", err)
+	}
+
+	waitForObservedLogMessage(t, observedLogs, "hosted linear poller restarting", time.Second)
+	restartEntry := observedLogs.FilterMessage("hosted linear poller restarting").All()[0]
+	if got := durationField(restartEntry.ContextMap()["selected_delay"]); got != 10*time.Second {
+		t.Fatalf("selected retry delay = %s, want 10s", got)
+	}
+	if got := fieldString(restartEntry.ContextMap()["delay_source"]); got != "provider" {
+		t.Fatalf("retry delay source = %q, want provider", got)
+	}
+	if got := fieldString(restartEntry.ContextMap()["error"]); strings.Contains(got, "private provider response") {
+		t.Fatalf("restart error = %q, want sanitized provider failure", got)
+	}
+
+	waitForFakeClockWaiters(t, fakeClock, 1)
+	fakeClock.Advance(9 * time.Second)
+	if got := requestCount.Load(); got != 1 {
+		t.Fatalf("provider requests before provider delay elapsed = %d, want 1", got)
+	}
+	fakeClock.Advance(time.Second)
+	waitForFakeClockWaiters(t, fakeClock, 1)
+	if got := requestCount.Load(); got != 2 {
+		t.Fatalf("provider requests after provider delay elapsed = %d, want 2", got)
+	}
+
+	cancel()
+	sidecars.Wait()
+}
+
+func TestStartLinearPoller_InvalidRetryAfterFallsBackToComputedDelay(t *testing.T) {
+	fakeClock := clockwork.NewFakeClock()
+	var requestCount atomic.Int32
+	logCore, observedLogs := observer.New(zap.InfoLevel)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		call := requestCount.Add(1)
+		if call == 1 {
+			w.Header().Set("Retry-After", "not-a-delay")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(mockLinearIssuesGraphQLResponse()))
+	}))
+	defer server.Close()
+
+	factoryDir := t.TempDir()
+	writeHostedLinearSecretForTest(t, factoryDir)
+	pollerCfg, runtimeCfg, poller, worker := hostedLinearPollerFixtureForTest(t, factoryDir, server, nil)
+	pollerCfg.Logger = zap.New(logCore)
+	pollerCfg.Clock = fakeClock
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var sidecars sync.WaitGroup
+	if err := startLinearPollerWithConfig(ctx, &sidecars, pollerCfg, runtimeCfg, poller, worker, func(context.Context, work.WorkRequest) error {
+		return nil
+	}); err != nil {
+		t.Fatalf("StartLinearPoller() error = %v", err)
+	}
+
+	waitForObservedLogMessage(t, observedLogs, "hosted linear poller restarting", time.Second)
+	restartEntry := observedLogs.FilterMessage("hosted linear poller restarting").All()[0]
+	if got := durationField(restartEntry.ContextMap()["selected_delay"]); got != restartBackoffMin {
+		t.Fatalf("selected retry delay = %s, want %s", got, restartBackoffMin)
+	}
+	if got := fieldString(restartEntry.ContextMap()["delay_source"]); got != "computed" {
+		t.Fatalf("retry delay source = %q, want computed", got)
+	}
+
+	waitForFakeClockWaiters(t, fakeClock, 1)
+	fakeClock.Advance(restartBackoffMin)
+	waitForFakeClockWaiters(t, fakeClock, 1)
+	if got := requestCount.Load(); got != 2 {
+		t.Fatalf("provider requests after computed delay elapsed = %d, want 2", got)
+	}
 
 	cancel()
 	sidecars.Wait()

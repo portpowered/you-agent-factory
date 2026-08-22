@@ -46,10 +46,9 @@
     {
       "id": "provider-conductor",
       "paths": [
-        "pkg/services/providers/internal/services/execution/internal/provider/",
         "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty/"
       ],
-      "note": "Standardized Providers neutral-conductor lane owns provider composition; do not claim those holds in this freeze."
+      "note": "Standardized Providers neutral-conductor lane owns canonical Agy PTY composition; do not claim those holds in this freeze."
     }
   ]
 }

@@ -107,10 +107,89 @@ function buildStreamIdentityForSession(session, streamGenerationID) {
   };
 }
 
+function formatDurableCheckpointThrownOutcome(error) {
+  if (error instanceof Error) {
+    return `${error.name}: ${error.message}`;
+  }
+
+  return String(error);
+}
+
+function normalizeDurableCheckpointConditions(conditionFn) {
+  if (typeof conditionFn === "function") {
+    return null;
+  }
+
+  if (
+    conditionFn === null ||
+    typeof conditionFn !== "object" ||
+    Array.isArray(conditionFn)
+  ) {
+    throw new TypeError(
+      "Durable checkpoint conditions must be a function or a named condition object",
+    );
+  }
+
+  const namedConditions = Object.entries(conditionFn);
+  if (namedConditions.length === 0) {
+    throw new TypeError("Durable checkpoint named conditions cannot be empty");
+  }
+
+  for (const [name, condition] of namedConditions) {
+    if (typeof condition !== "function") {
+      throw new TypeError(
+        `Durable checkpoint condition must be a function: ${name}`,
+      );
+    }
+  }
+
+  return namedConditions;
+}
+
+async function evaluateNamedDurableCheckpointConditions(namedConditions) {
+  return Promise.all(
+    namedConditions.map(async ([name, condition]) => {
+      try {
+        return {
+          name,
+          ready: Boolean(await condition()),
+          outcome: "returned false",
+        };
+      } catch (error) {
+        return {
+          error: formatDurableCheckpointThrownOutcome(error),
+          name,
+          outcome: "threw",
+          ready: false,
+        };
+      }
+    }),
+  );
+}
+
+function formatNamedDurableCheckpointTimeout(label, outcomes) {
+  const unsatisfiedConditions = outcomes
+    .filter(({ ready }) => !ready)
+    .map(({ error, name, outcome }) => {
+      if (outcome === "threw") {
+        return `${name} (threw: ${error})`;
+      }
+
+      return `${name} (returned false)`;
+    });
+
+  return `Timed out waiting for durable checkpoint: ${label}; unsatisfied conditions: ${unsatisfiedConditions.join(", ")}`;
+}
+
 /**
  * Poll until a durable checkpoint becomes true (API request captured, download
  * hook populated, dialog closed). Prefer this over asserting transient status
  * copy, animation frames, or heading visibility during teardown.
+ *
+ * Existing callers can pass one synchronous or asynchronous boolean function.
+ * Named checkpoints can pass an object whose keys describe synchronous or
+ * asynchronous sub-conditions. Named sub-condition failures are retained for
+ * the next poll and included in the timeout diagnostic.
  */
 export async function waitForDurableCheckpoint(
   label,
@@ -118,13 +197,29 @@ export async function waitForDurableCheckpoint(
   timeoutMs = uiInteractionTimeoutMs,
   intervalMs = 100,
 ) {
+  const namedConditions = normalizeDurableCheckpointConditions(conditionFn);
+  let lastNamedOutcomes = null;
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
-    if (await conditionFn()) {
-      return;
+    if (namedConditions === null) {
+      if (await conditionFn()) {
+        return;
+      }
+    } else {
+      lastNamedOutcomes =
+        await evaluateNamedDurableCheckpointConditions(namedConditions);
+      if (lastNamedOutcomes.every(({ ready }) => ready)) {
+        return;
+      }
     }
     await delay(intervalMs);
+  }
+
+  if (namedConditions !== null) {
+    throw new Error(
+      formatNamedDurableCheckpointTimeout(label, lastNamedOutcomes ?? []),
+    );
   }
 
   throw new Error(`Timed out waiting for durable checkpoint: ${label}`);
@@ -143,6 +238,587 @@ export async function waitForDurableControlEnabled(
     async () => await locator.isEnabled(),
     timeoutMs,
   );
+}
+
+function boundingBoxesEqual(left, right) {
+  return (
+    left !== null &&
+    right !== null &&
+    left.x === right.x &&
+    left.y === right.y &&
+    left.width === right.width &&
+    left.height === right.height
+  );
+}
+
+/** Wait until a browser element reports the same geometry on two observations. */
+export async function waitForStableBoundingBox(
+  locator,
+  timeoutMs = uiInteractionTimeoutMs,
+  intervalMs = 100,
+) {
+  let previousBox = null;
+  let stableBox = null;
+
+  await waitForDurableCheckpoint(
+    "stable bounding box",
+    async () => {
+      const nextBox = await locator.boundingBox().catch(() => null);
+      const stable = boundingBoxesEqual(previousBox, nextBox);
+      previousBox = nextBox;
+
+      if (!stable) {
+        return false;
+      }
+
+      stableBox = nextBox;
+      return true;
+    },
+    timeoutMs,
+    intervalMs,
+  );
+
+  return stableBox;
+}
+
+/** Wait until React Flow has committed the same viewport transform twice. */
+export async function waitForStableFactoryGraphViewport(
+  page,
+  timeoutMs = uiInteractionTimeoutMs,
+  intervalMs = 100,
+) {
+  const flowViewport = page.locator(
+    "[data-current-activity-flow] .react-flow__viewport",
+  );
+  let previousTransform = null;
+  let stableTransform = null;
+
+  await waitForDurableCheckpoint(
+    "factory graph viewport settlement",
+    async () => {
+      const nextTransform = await flowViewport
+        .evaluate((element) => window.getComputedStyle(element).transform)
+        .catch(() => null);
+      const stable =
+        nextTransform !== null && nextTransform === previousTransform;
+      previousTransform = nextTransform;
+
+      if (!stable) {
+        return false;
+      }
+
+      stableTransform = nextTransform;
+      return true;
+    },
+    timeoutMs,
+    intervalMs,
+  );
+
+  return stableTransform;
+}
+
+/** Read the React Flow position encoded by a graph node's DOM transform. */
+export async function readFactoryGraphNodeFlowPosition(nodeLocator) {
+  return nodeLocator
+    .evaluate((element) => {
+      const flowNode =
+        element.classList.contains("react-flow__node") === true
+          ? element
+          : element.closest(".react-flow__node");
+      if (!flowNode) {
+        return null;
+      }
+
+      const transform =
+        flowNode.style.transform || window.getComputedStyle(flowNode).transform;
+      if (!transform || transform === "none") {
+        return null;
+      }
+
+      const translateMatch =
+        /translate(?:3d)?\(([-\d.]+)px,\s*([-\d.]+)px/.exec(transform);
+      if (translateMatch) {
+        return {
+          x: Number(translateMatch[1]),
+          y: Number(translateMatch[2]),
+        };
+      }
+
+      const matrixMatch = /matrix\(([^)]+)\)/.exec(transform);
+      if (matrixMatch) {
+        const values = matrixMatch[1]
+          .split(",")
+          .map((value) => Number.parseFloat(value.trim()));
+        if (values.length >= 6) {
+          return { x: values[4], y: values[5] };
+        }
+      }
+
+      return null;
+    })
+    .catch(() => null);
+}
+
+export function flowPositionDistance(left, right) {
+  if (!left || !right) {
+    return null;
+  }
+
+  return Math.max(Math.abs(left.x - right.x), Math.abs(left.y - right.y));
+}
+
+async function draggableFactoryGraphNodeStartPoint(nodeLocator, nodeLabel) {
+  const point = await nodeLocator.evaluate((element) => {
+    const flowNode =
+      element.classList.contains("react-flow__node") === true
+        ? element
+        : element.closest(".react-flow__node");
+    if (!flowNode) {
+      return null;
+    }
+
+    const flowNodeBox = flowNode.getBoundingClientRect();
+    const elementBox = element.getBoundingClientRect();
+    const candidates = [
+      { x: flowNodeBox.right - 4, y: flowNodeBox.top + flowNodeBox.height / 2 },
+      { x: flowNodeBox.left + 4, y: flowNodeBox.top + flowNodeBox.height / 2 },
+      {
+        x: flowNodeBox.left + flowNodeBox.width / 2,
+        y: flowNodeBox.top + 4,
+      },
+      {
+        x: flowNodeBox.left + flowNodeBox.width / 2,
+        y: flowNodeBox.bottom - 4,
+      },
+      { x: elementBox.right - 4, y: elementBox.top + elementBox.height / 2 },
+    ];
+
+    for (const candidate of candidates) {
+      const hit = document.elementFromPoint(candidate.x, candidate.y);
+      if (hit && flowNode.contains(hit) && !hit.closest(".nodrag")) {
+        return candidate;
+      }
+    }
+
+    return null;
+  });
+
+  if (!point) {
+    throw new Error(
+      `Expected a draggable surface inside ${nodeLabel}; all candidate points were nodrag controls.`,
+    );
+  }
+
+  return point;
+}
+
+const defaultDragAttemptCount = 2;
+const defaultDragSettleDelayMs = 50;
+
+async function dragFactoryGraphNodeAttempt(
+  page,
+  nodeLocator,
+  deltaX,
+  deltaY,
+  nodeLabel,
+  steps,
+  settleDelayMs,
+) {
+  const startPoint = await draggableFactoryGraphNodeStartPoint(
+    nodeLocator,
+    nodeLabel,
+  );
+  let pointerGestureStarted = false;
+  let midDragFlowPosition = null;
+
+  try {
+    await page.waitForTimeout(settleDelayMs);
+    await page.mouse.move(startPoint.x, startPoint.y);
+    pointerGestureStarted = true;
+    await page.mouse.down();
+    await page.waitForTimeout(settleDelayMs);
+    await page.mouse.move(startPoint.x + deltaX, startPoint.y + deltaY, {
+      steps,
+    });
+    await page.waitForTimeout(settleDelayMs);
+    midDragFlowPosition = await readFactoryGraphNodeFlowPosition(nodeLocator);
+  } finally {
+    if (pointerGestureStarted) {
+      await page.mouse.up().catch(() => {});
+    }
+  }
+
+  await page.waitForTimeout(settleDelayMs);
+  const postMouseUpFlowPosition =
+    await readFactoryGraphNodeFlowPosition(nodeLocator);
+
+  return { midDragFlowPosition, postMouseUpFlowPosition };
+}
+
+/**
+ * Drag a graph node and verify that React Flow moved it during and after the
+ * pointer gesture. The tolerance is caller-provided because browser checks
+ * intentionally use different movement contracts. A failed displacement gets
+ * one bounded settle/retry before the measured failure is reported.
+ */
+export async function dragNodeByOffset(
+  page,
+  nodeLocator,
+  deltaX,
+  deltaY,
+  {
+    displacementTolerancePx,
+    maxAttempts = defaultDragAttemptCount,
+    nodeLabel = "graph node",
+    settleDelayMs = defaultDragSettleDelayMs,
+    steps = 16,
+  } = {},
+) {
+  if (!Number.isFinite(displacementTolerancePx)) {
+    throw new TypeError(
+      `A finite displacement tolerance is required to drag ${nodeLabel}.`,
+    );
+  }
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
+    throw new TypeError(
+      `A positive integer attempt count is required to drag ${nodeLabel}.`,
+    );
+  }
+  if (!Number.isFinite(settleDelayMs) || settleDelayMs < 0) {
+    throw new TypeError(
+      `A non-negative settle delay is required to drag ${nodeLabel}.`,
+    );
+  }
+
+  await nodeLocator.waitFor({
+    state: "visible",
+    timeout: uiInteractionTimeoutMs,
+  });
+  await page.waitForTimeout(settleDelayMs);
+  const initialFlowPosition =
+    await readFactoryGraphNodeFlowPosition(nodeLocator);
+
+  let latestObservation = {
+    midDragDistancePx: null,
+    midDragFlowPosition: null,
+    postMouseUpDistancePx: null,
+    postMouseUpFlowPosition: null,
+  };
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    await nodeLocator.waitFor({
+      state: "visible",
+      timeout: uiInteractionTimeoutMs,
+    });
+    const { midDragFlowPosition, postMouseUpFlowPosition } =
+      await dragFactoryGraphNodeAttempt(
+        page,
+        nodeLocator,
+        deltaX,
+        deltaY,
+        nodeLabel,
+        steps,
+        settleDelayMs,
+      );
+    const midDragDistancePx = flowPositionDistance(
+      initialFlowPosition,
+      midDragFlowPosition,
+    );
+    const postMouseUpDistancePx = flowPositionDistance(
+      initialFlowPosition,
+      postMouseUpFlowPosition,
+    );
+    latestObservation = {
+      midDragDistancePx,
+      midDragFlowPosition,
+      postMouseUpDistancePx,
+      postMouseUpFlowPosition,
+    };
+
+    if (
+      midDragDistancePx !== null &&
+      midDragDistancePx > displacementTolerancePx &&
+      postMouseUpDistancePx !== null &&
+      postMouseUpDistancePx > displacementTolerancePx
+    ) {
+      return {
+        initialFlowPosition,
+        ...latestObservation,
+      };
+    }
+  }
+
+  throw new Error(
+    `Mouse drag did not produce the required flow displacement: ${JSON.stringify(
+      {
+        attempts: maxAttempts,
+        initialFlowPosition,
+        ...latestObservation,
+      },
+    )}`,
+  );
+}
+
+function graphNodePlacementSamplesEqual(left, right) {
+  if (!left || !right) {
+    return false;
+  }
+
+  return (
+    left.nodeTransform === right.nodeTransform &&
+    left.viewportTransform === right.viewportTransform &&
+    left.node.x === right.node.x &&
+    left.node.y === right.node.y &&
+    left.node.width === right.node.width &&
+    left.node.height === right.node.height &&
+    left.viewport.x === right.viewport.x &&
+    left.viewport.y === right.viewport.y &&
+    left.viewport.width === right.viewport.width &&
+    left.viewport.height === right.viewport.height
+  );
+}
+
+const settledGraphNodePlacementSampleCount = 3;
+
+function formatGraphNodePlacementNumber(value) {
+  return Number.isFinite(value) ? value.toFixed(2) : String(value);
+}
+
+function graphNodePlacementViewportViolation(sample) {
+  if (!sample) {
+    return null;
+  }
+
+  const nodeCenter = {
+    x: sample.node.x + sample.node.width / 2,
+    y: sample.node.y + sample.node.height / 2,
+  };
+  const viewport = {
+    bottom: sample.viewport.y + sample.viewport.height,
+    left: sample.viewport.x,
+    right: sample.viewport.x + sample.viewport.width,
+    top: sample.viewport.y,
+  };
+  const violations = [];
+
+  if (nodeCenter.x < viewport.left) {
+    violations.push({
+      axis: "x",
+      boundary: "left edge",
+      direction: "left of",
+      overshootPx: viewport.left - nodeCenter.x,
+    });
+  }
+  if (nodeCenter.x > viewport.right) {
+    violations.push({
+      axis: "x",
+      boundary: "right edge",
+      direction: "right of",
+      overshootPx: nodeCenter.x - viewport.right,
+    });
+  }
+  if (nodeCenter.y < viewport.top) {
+    violations.push({
+      axis: "y",
+      boundary: "top edge",
+      direction: "above",
+      overshootPx: viewport.top - nodeCenter.y,
+    });
+  }
+  if (nodeCenter.y > viewport.bottom) {
+    violations.push({
+      axis: "y",
+      boundary: "bottom edge",
+      direction: "below",
+      overshootPx: nodeCenter.y - viewport.bottom,
+    });
+  }
+
+  if (violations.length === 0) {
+    return null;
+  }
+
+  return {
+    nodeCenter,
+    viewport,
+    violations,
+  };
+}
+
+function graphNodePlacementIsWithinViewport(sample) {
+  return graphNodePlacementViewportViolation(sample) === null;
+}
+
+function formatGraphNodePlacementViewportViolation(
+  nodeTestId,
+  pollCount,
+  stableSampleCount,
+  violation,
+) {
+  const outOfRangeAxes = violation.violations
+    .map(
+      ({ axis, boundary, direction, overshootPx }) =>
+        `${axis} ${direction} ${boundary} by ${formatGraphNodePlacementNumber(overshootPx)}px`,
+    )
+    .join("; ");
+
+  return [
+    `Settled graph node placement cannot satisfy viewport visibility for ${nodeTestId}`,
+    `after ${stableSampleCount} consecutive byte-identical samples at poll ${pollCount}`,
+    `node center=(${formatGraphNodePlacementNumber(violation.nodeCenter.x)}, ${formatGraphNodePlacementNumber(violation.nodeCenter.y)})`,
+    `viewport edges={left=${formatGraphNodePlacementNumber(violation.viewport.left)}, right=${formatGraphNodePlacementNumber(violation.viewport.right)}, top=${formatGraphNodePlacementNumber(violation.viewport.top)}, bottom=${formatGraphNodePlacementNumber(violation.viewport.bottom)}}`,
+    `out-of-range axes: ${outOfRangeAxes}`,
+  ].join("; ");
+}
+
+/**
+ * Wait until a graph node's DOM geometry and both React Flow transforms settle.
+ * Viewport visibility is required by default, but callers that are proving a
+ * saved flow position can opt into geometry-only settlement when camera
+ * framing is an independent shared-layout concern.
+ */
+export async function waitForStableFactoryGraphNodePlacement(
+  page,
+  nodeTestId,
+  timeoutMs = uiInteractionTimeoutMs,
+  intervalMs = 100,
+  onObservation,
+  { requireViewportVisibility = true } = {},
+) {
+  let previousSample = null;
+  let stableSample = null;
+  let pollCount = 0;
+  let stableSampleCount = 0;
+
+  await waitForDurableCheckpoint(
+    `factory graph node placement: ${nodeTestId}`,
+    async () => {
+      pollCount += 1;
+      const nextSample = await page
+        .evaluate((testId) => {
+          const target = [...document.querySelectorAll("[data-testid]")].find(
+            (element) => element.getAttribute("data-testid") === testId,
+          );
+          const flowNode = target?.closest(".react-flow__node");
+          const graphSurface = target?.closest("[data-current-activity-flow]");
+          const flowViewport = flowNode
+            ?.closest(".react-flow")
+            ?.querySelector(".react-flow__viewport");
+
+          if (!target || !flowNode || !graphSurface || !flowViewport) {
+            return null;
+          }
+
+          const nodeBox = target.getBoundingClientRect();
+          const viewportBox = graphSurface.getBoundingClientRect();
+          return {
+            node: {
+              height: nodeBox.height,
+              width: nodeBox.width,
+              x: nodeBox.x,
+              y: nodeBox.y,
+            },
+            nodeTransform: window.getComputedStyle(flowNode).transform,
+            viewport: {
+              height: viewportBox.height,
+              width: viewportBox.width,
+              x: viewportBox.x,
+              y: viewportBox.y,
+            },
+            viewportTransform: window.getComputedStyle(flowViewport).transform,
+          };
+        }, nodeTestId)
+        .catch(() => null);
+      const stable = graphNodePlacementSamplesEqual(previousSample, nextSample);
+      stableSampleCount = stable ? stableSampleCount + 1 : nextSample ? 1 : 0;
+      const viewportViolation = graphNodePlacementViewportViolation(nextSample);
+      const withinViewport = Boolean(
+        nextSample && graphNodePlacementIsWithinViewport(nextSample),
+      );
+      const terminalDiagnostic =
+        requireViewportVisibility &&
+        stableSampleCount >= settledGraphNodePlacementSampleCount &&
+        viewportViolation
+          ? formatGraphNodePlacementViewportViolation(
+              nodeTestId,
+              pollCount,
+              stableSampleCount,
+              viewportViolation,
+            )
+          : null;
+      onObservation?.({
+        nextSample,
+        pollCount,
+        stable,
+        stableSampleCount,
+        terminalDiagnostic,
+        viewportViolation,
+        withinViewport,
+      });
+      previousSample = nextSample;
+
+      if (terminalDiagnostic) {
+        throw new Error(terminalDiagnostic);
+      }
+
+      if (
+        !stable ||
+        !nextSample ||
+        (requireViewportVisibility && !withinViewport)
+      ) {
+        return false;
+      }
+
+      stableSample = nextSample;
+      return true;
+    },
+    timeoutMs,
+    intervalMs,
+  );
+
+  return stableSample;
+}
+
+/** Wait until React Flow has measured every graph node for selection gestures. */
+export async function waitForFactoryGraphSelectionReady(
+  page,
+  timeoutMs = uiInteractionTimeoutMs,
+) {
+  const readinessMarker = page.locator(
+    '[data-factory-graph-selection-ready="true"]',
+  );
+
+  await waitForDurableCheckpoint(
+    "factory graph selection readiness",
+    async () => (await readinessMarker.count()) > 0,
+    timeoutMs,
+  );
+}
+
+/** Wait for the graph selection projection and its enabled batch-delete action. */
+export async function waitForFactoryGraphSelectionDeleteButton(
+  toolbar,
+  timeoutMs = uiInteractionTimeoutMs,
+) {
+  const selectedGraphSelection = toolbar.locator(
+    '[data-toolbar-graph-selection="single"], [data-toolbar-graph-selection="multi"]',
+  );
+  const batchDeleteButton = toolbar.getByRole("button", {
+    name: /^Delete (?:\d+ )?selected graph items?$/,
+  });
+
+  await waitForDurableCheckpoint(
+    "factory graph selection delete control",
+    {
+      "selection projection": async () =>
+        await selectedGraphSelection.isVisible(),
+      "delete control visibility": async () =>
+        await batchDeleteButton.isVisible(),
+      "delete control enabled": async () => await batchDeleteButton.isEnabled(),
+    },
+    timeoutMs,
+  );
+
+  return batchDeleteButton;
 }
 
 /**

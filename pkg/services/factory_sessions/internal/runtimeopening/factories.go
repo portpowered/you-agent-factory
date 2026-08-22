@@ -1,46 +1,17 @@
 package runtimeopening
 
 import (
-	"time"
+	"context"
 
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
-	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
-	"github.com/portpowered/infinite-you/pkg/services/models"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"go.uber.org/zap"
 )
-
-// ExternalEffects is the exact invocation-local effect set consumed while
-// opening Factory Session runtime state. Wire projects the process edge
-// aggregate into this owner-defined contract before it reaches a runtime
-// opening consumer.
-type ExternalEffects struct {
-	Clock                            factoryruntime.Clock
-	ProviderOverride                 workers.Provider
-	ModelPullMetricsRecorder         factorysessioncontracts.ModelPullMetricsRecorder
-	InvocationMetricsRecorder        roles.InvocationMetricsRecorder
-	ProviderCommandRunner            platformprocess.CommandRunner
-	ScriptCommandRunner              platformprocess.CommandRunner
-	SubmissionRecorder               recordings.SubmissionRecorder
-	DispatchRecorder                 recordings.DispatchRecorder
-	RuntimeHostObserver              factorysessions.RuntimeHostObserver
-	FactoryVisualizationSink         factoryvisualization.Sink
-	FactoryVisualizationRootObserver factoryvisualization.RootObserver
-	HostedClock                      automations.HostedLinearClock
-	HostedHTTPClient                 automations.HostedLinearHTTPDoer
-	HostedSecretResolver             automations.HostedLinearSecretResolver
-	HostedLinearEndpoint             string
-}
 
 // The factory roles below are consumed only while opening a Factory Session
 // runtime. Keeping them here makes the dependency direction explicit: Wire
@@ -49,25 +20,16 @@ type ExternalEffects struct {
 // providers can be cut over without an intermediate adapter graph.
 type WorkFactory = func(work.RuntimeResolver) work.Service
 
-type AutomationFactory = func(
-	*zap.Logger,
-	factoryruntime.Clock,
-	workers.CommandRunner,
-	string,
-	string,
-	automations.HostedPollers,
-) automations.Service
-
 type FactorySessionExecutionFactory = func(
 	string,
 	factorysessions.PersistencePolicy,
-	workers.Provider,
+	providers.Service,
 	factoryruntime.Clock,
 	map[string]struct{},
 	factoryruntime.JavaScriptWorkerSettings,
 	*workers.MockWorkersConfig,
 	[]operatorsettings.ACPIntegration,
-) (factorysessions.ExecutionService, error)
+) (durableexecution.Service, error)
 
 type ConductorInvocationWithProgressFactory = func(
 	providers.Service,
@@ -76,44 +38,21 @@ type ConductorInvocationWithProgressFactory = func(
 	workers.ProgressPublisher,
 ) (workers.InvocationExecutor, error)
 
-type RecordingsProjectionFactory = func() recordings.ProjectionService
+// RuntimeRootFactory constructs the inert process-scoped Factory Runtime root
+// with the opening operation supplied by this owner. The root constructor is
+// selected by the canonical process composition package, while the activation
+// callback remains owned by Factory Sessions because it assembles the session
+// product handoff.
+type FactoryRuntimeRoot interface {
+	factoryruntime.Service
+	Activate(context.Context, factoryruntime.RuntimeActivationRequest) (factoryruntime.RuntimeActivationResult, error)
+	Deactivate(context.Context, factoryruntime.RuntimeDeactivationRequest) (factoryruntime.RuntimeDeactivationResult, error)
+}
 
-type RecordingsFactory = func(recordings.Ledger, recordings.ProjectionService) recordings.Service
-
-type RuntimeLedgerFactory = func() factoryruntime.RuntimeLedgerFactory
-
-type ReplayClockFactory = func(*factorydefinitions.ReplayArtifact) recordings.Clock
-
-type WorkersRuntimeFactory = func(
-	roles.CurrentRuntimeResolver,
-	models.Service,
-	models.RuntimeScopeRef,
-	workers.CommandRunner,
-	workers.CommandRunner,
-	workers.PTYAllocator,
-	*zap.Logger,
-	bool,
-	string,
-	string,
-	*bool,
-	workers.Provider,
-	func() time.Time,
-	work.ContentMaterializer,
-	[]operatorsettings.ACPIntegration,
-) (workers.RuntimeService, error)
-
-type AutomationHostedSourcesFactory = automations.HostedSourcesFactory
-
-type WorkersLocalRuntimeHooksFactory = func() workers.LocalRuntimeHooks
-
-type FactoryDefinitionsFactory = func(
-	factorysessions.DefinitionHost,
-	factorydefinitions.DefinitionActivationGateway,
-	factorydefinitions.Validator,
-) factorydefinitions.Service
+type RuntimeRootFactory func(factoryruntime.RuntimeActivationOperation) (FactoryRuntimeRoot, error)
 
 type DurableExecution struct {
-	Service         factorysessions.ExecutionService
+	Service         durableexecution.Service
 	ACPIntegrations []operatorsettings.ACPIntegration
 }
 
@@ -123,25 +62,8 @@ type DurableExecutionFactory func(
 	operatorsettings.ResolvedDefaults,
 	RuntimeRoot,
 	factoryruntime.Clock,
-	workers.Provider,
+	providers.Service,
 	*workers.MockWorkersConfig,
 	FactorySessionExecutionFactory,
 	factorysessions.ProviderIdentityResolver,
 ) (DurableExecution, error)
-
-type WorkerExecutionFactory func(
-	factoryruntime.RuntimeOpeningRequest,
-	workers.RuntimeOpeningRequest,
-	factoryruntime.Clock,
-	*zap.Logger,
-	workers.CommandRunner,
-	workers.CommandRunner,
-	workers.PTYAllocator,
-	workers.Provider,
-	roles.CurrentRuntimeResolver,
-	models.Service,
-	models.RuntimeScopeRef,
-	work.Service,
-	WorkersRuntimeFactory,
-	[]operatorsettings.ACPIntegration,
-) (workers.RuntimeService, error)

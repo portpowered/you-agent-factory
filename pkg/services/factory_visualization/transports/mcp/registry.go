@@ -66,9 +66,9 @@ func ToolByName(name string) (ToolDefinition, bool) {
 
 func activateTool() ToolDefinition {
 	return ToolDefinition{
-		Name:        ToolActivate,
-		Description: "Activate Factory Visualization through retained-then-live projection and leave the inert constructed state.",
-		InputSchema: activateInputSchema(),
+		Name:         ToolActivate,
+		Description:  "Activate Factory Visualization through retained-then-live projection and leave the inert constructed state.",
+		InputSchema:  activateInputSchema(),
 		OutputSchema: toolResponseSchema(activateResultSchema()),
 		SuccessStableFields: []string{
 			"result.State",
@@ -79,9 +79,9 @@ func activateTool() ToolDefinition {
 
 func joinTool() ToolDefinition {
 	return ToolDefinition{
-		Name:        ToolJoin,
-		Description: "Join the Visualization live subscription and wait for it to exit after Activate.",
-		InputSchema: joinInputSchema(),
+		Name:         ToolJoin,
+		Description:  "Join the Visualization live subscription and wait for it to exit after Activate.",
+		InputSchema:  joinInputSchema(),
 		OutputSchema: toolResponseSchema(joinResultSchema()),
 		SuccessStableFields: []string{
 			"result.State",
@@ -92,9 +92,9 @@ func joinTool() ToolDefinition {
 
 func stopDrainTool() ToolDefinition {
 	return ToolDefinition{
-		Name:        ToolStopDrain,
-		Description: "Stop the Visualization live subscription and drain one final projected view through the Visualization-owned drain path.",
-		InputSchema: stopDrainInputSchema(),
+		Name:         ToolStopDrain,
+		Description:  "Stop the Visualization live subscription and drain one final projected view through the Visualization-owned drain path.",
+		InputSchema:  stopDrainInputSchema(),
 		OutputSchema: toolResponseSchema(stopDrainResultSchema()),
 		SuccessStableFields: []string{
 			"result.State",
@@ -105,9 +105,9 @@ func stopDrainTool() ToolDefinition {
 
 func observeTool() ToolDefinition {
 	return ToolDefinition{
-		Name:        ToolObserve,
-		Description: "Observe one detached retained-then-live Factory view projection through Visualization-owned plain contracts.",
-		InputSchema: observeInputSchema(),
+		Name:         ToolObserve,
+		Description:  "Observe one detached retained-then-live Factory view projection through Visualization-owned plain contracts.",
+		InputSchema:  observeInputSchema(),
 		OutputSchema: toolResponseSchema(observeResultSchema()),
 		SuccessStableFields: []string{
 			"result.View.TickCount",
@@ -120,9 +120,9 @@ func observeTool() ToolDefinition {
 
 func openPresentationTool() ToolDefinition {
 	return ToolDefinition{
-		Name:        ToolOpenPresentation,
-		Description: "Open one Visualization-owned presentation session using best-effort or lossless drain policy.",
-		InputSchema: openPresentationInputSchema(),
+		Name:         ToolOpenPresentation,
+		Description:  "Open one Visualization-owned presentation session using best-effort or lossless drain policy.",
+		InputSchema:  openPresentationInputSchema(),
 		OutputSchema: toolResponseSchema(openPresentationResultSchema()),
 		SuccessStableFields: []string{
 			"result.SessionID",
@@ -134,9 +134,9 @@ func openPresentationTool() ToolDefinition {
 
 func presentProgressTool() ToolDefinition {
 	return ToolDefinition{
-		Name:        ToolPresentProgress,
-		Description: "Enqueue ordered progress records onto an opened Visualization presentation session.",
-		InputSchema: presentProgressInputSchema(),
+		Name:         ToolPresentProgress,
+		Description:  "Enqueue ordered progress records onto an opened Visualization presentation session.",
+		InputSchema:  presentProgressInputSchema(),
 		OutputSchema: toolResponseSchema(presentProgressResultSchema()),
 		SuccessStableFields: []string{
 			"result.AcceptedCount",
@@ -147,9 +147,9 @@ func presentProgressTool() ToolDefinition {
 
 func finalizePresentationTool() ToolDefinition {
 	return ToolDefinition{
-		Name:        ToolFinalizePresentation,
-		Description: "Finalize one Visualization presentation session after draining accepted progress and committing a terminal write.",
-		InputSchema: finalizePresentationInputSchema(),
+		Name:         ToolFinalizePresentation,
+		Description:  "Finalize one Visualization presentation session after draining accepted progress and committing a terminal write.",
+		InputSchema:  finalizePresentationInputSchema(),
 		OutputSchema: toolResponseSchema(finalizePresentationResultSchema()),
 		SuccessStableFields: []string{
 			"result.Finalized",
@@ -161,9 +161,9 @@ func finalizePresentationTool() ToolDefinition {
 
 func closePresentationTool() ToolDefinition {
 	return ToolDefinition{
-		Name:        ToolClosePresentation,
-		Description: "Close and drain one Visualization presentation session without committing a terminal write.",
-		InputSchema: closePresentationInputSchema(),
+		Name:         ToolClosePresentation,
+		Description:  "Close and drain one Visualization presentation session without committing a terminal write.",
+		InputSchema:  closePresentationInputSchema(),
 		OutputSchema: toolResponseSchema(closePresentationResultSchema()),
 		SuccessStableFields: []string{
 			"result.DroppedCount",

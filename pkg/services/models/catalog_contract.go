@@ -138,6 +138,101 @@ type Detail struct {
 	Diagnostics  map[string]string
 }
 
+// LoadPolicy describes when a managed model backend may be loaded.
+type LoadPolicy string
+
+const (
+	// LoadPolicyOnDemand keeps the model unloaded until an invocation needs it.
+	LoadPolicyOnDemand LoadPolicy = "ON_DEMAND"
+	// LoadPolicyKeepWarm retains a ready backend after its last lease until
+	// explicit stop or resource pressure requires eviction.
+	LoadPolicyKeepWarm LoadPolicy = "KEEP_WARM"
+)
+
+const (
+	BuiltInModelNameLLM   = "llm"
+	BuiltInModelNameASR   = "asr"
+	BuiltInModelNameTTS   = "tts"
+	BuiltInModelNameEmbed = "embed"
+)
+
+const (
+	builtInLLMSource   = "hf://unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf@bfc15c382204943c3a8fff0c750b94ae2364d7a3"
+	builtInASRSource   = "hf://ggerganov/whisper.cpp/ggml-base.en.bin@5359861c739e955e79d9a303bcbc70fb988958b1"
+	builtInTTSSource   = "hf://vibevoice/VibeVoice-7B@505114ae6ad17be74df98e6939707434ec49c187"
+	builtInEmbedSource = "hf://Qwen/Qwen3-Embedding-0.6B@97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+)
+
+// ModelDefinition describes one configured model name without resolving its
+// source, inspecting a cache, or starting a backend. Operations are the
+// canonical provider-neutral contracts exposed by the Models root.
+type ModelDefinition struct {
+	Name       string
+	Source     string
+	Backend    string
+	LoadPolicy LoadPolicy
+	Operations []Operation
+}
+
+// BuiltInModelDefinition is the descriptive alias used by catalog consumers.
+type BuiltInModelDefinition = ModelDefinition
+
+// Clone returns a detached model definition.
+func (definition ModelDefinition) Clone() ModelDefinition {
+	definition.Operations = cloneOperations(definition.Operations)
+	return definition
+}
+
+// BuiltInCatalog is the stateless Models-root value that publishes the
+// canonical built-in model definitions.
+type BuiltInCatalog struct{}
+
+// ModelDefinitions returns the canonical built-in model definitions in stable
+// order. Every call returns detached values so callers cannot mutate shared
+// catalog state.
+func (BuiltInCatalog) ModelDefinitions() []ModelDefinition {
+	return []ModelDefinition{
+		builtInModelDefinition(BuiltInModelNameLLM, builtInLLMSource, "localai-llamacpp", OperationOMNI),
+		builtInModelDefinition(BuiltInModelNameASR, builtInASRSource, "localai-whisper", OperationASR),
+		builtInModelDefinition(BuiltInModelNameTTS, builtInTTSSource, "localai-vibevoice", OperationTTS),
+		builtInModelDefinition(BuiltInModelNameEmbed, builtInEmbedSource, "localai-llamacpp", OperationEMBED),
+	}
+}
+
+// ModelCatalog returns the built-in definitions keyed by their public model
+// names. The returned map and every nested definition are detached.
+func (catalog BuiltInCatalog) ModelCatalog() map[string]ModelDefinition {
+	definitions := catalog.ModelDefinitions()
+	models := make(map[string]ModelDefinition, len(definitions))
+	for _, definition := range definitions {
+		models[definition.Name] = definition.Clone()
+	}
+	return models
+}
+
+// ModelDefinitionFor returns one detached built-in definition by name. Names
+// are case-insensitive at this value-only lookup boundary.
+func (catalog BuiltInCatalog) ModelDefinitionFor(name string) (ModelDefinition, bool) {
+	canonicalName := strings.ToLower(strings.TrimSpace(name))
+	for _, definition := range catalog.ModelDefinitions() {
+		if definition.Name == canonicalName {
+			return definition.Clone(), true
+		}
+	}
+	return ModelDefinition{}, false
+}
+
+func builtInModelDefinition(name, source, backend, operationName string) ModelDefinition {
+	operation, _ := (GenericOperationCatalog{}).GenericOperationContract(operationName)
+	return ModelDefinition{
+		Name:       name,
+		Source:     source,
+		Backend:    backend,
+		LoadPolicy: LoadPolicyOnDemand,
+		Operations: []Operation{operation},
+	}
+}
+
 // Clone returns a detached catalog detail.
 func (detail Detail) Clone() Detail {
 	detail.Summary = detail.Summary.Clone()

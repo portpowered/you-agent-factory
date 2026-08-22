@@ -11,6 +11,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/replayhooks"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -18,8 +19,8 @@ import (
 )
 
 var (
-	_ factoryruntime.HostedInstance = (*factoryhost.Bundle)(nil)
-	_ factoryruntime.HostedLedger     = (*recordingfixtures.ScriptedRuntimeLedger)(nil)
+	_ factoryruntime.RuntimeRecord = (*factoryhost.Bundle)(nil)
+	_ recordings.RuntimeLedger     = (*recordingfixtures.ScriptedRuntimeLedger)(nil)
 )
 
 // TestRuntimeRecordingsConsumerBehaviorPreserved proves CUT-RUN-REC story 004:
@@ -56,7 +57,7 @@ func testHostedRuntimeExposesRecordingsRootCapabilities(t *testing.T) {
 		nil,
 	)
 
-	var hosted factoryruntime.HostedInstance = bundle
+	var hosted factoryruntime.RuntimeRecord = bundle
 	if hosted.RecordingLedger() != ledger {
 		t.Fatalf("RecordingLedger = %T, want root ledger fake", hosted.RecordingLedger())
 	}
@@ -104,7 +105,7 @@ func testReplayExecutionHandoffConsumesRecordingsRootVocabulary(t *testing.T) {
 	var replayFactory recordings.ReplayExecutionFactory = func(
 		artifact *recordings.ReplayArtifact,
 	) (
-		workers.Provider,
+		providers.Service,
 		workers.CommandRunner,
 		[]recordings.ReplayHook,
 		recordings.CompletionDeliveryPlanner,
@@ -165,8 +166,8 @@ type preservedTerminalRecording struct {
 	finishedAt    time.Time
 }
 
-func (*preservedTerminalRecording) BindRecordingService(
-	recordings.Service,
+func (*preservedTerminalRecording) BindRecordingLifecycle(
+	recordings.RecordingLifecycle,
 	recordings.CanonicalEventScope,
 ) error {
 	return nil

@@ -1,3 +1,7 @@
+import type {
+  FactoryGraphNodeDimensions,
+  FactoryGraphNodeFamily,
+} from "@you-agent-factory/factory-graph";
 import type { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import type { FactoryDocumentSaveState } from "../../current-selection/base/hooks/factory-document-save-types";
 import type {
@@ -15,13 +19,17 @@ import type {
 import type { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/editor/factory-graph-editor-additions";
 import type { FactoryGraphEditorDirtyState } from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-dirty-state";
 import type { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-save-summary";
-import { factoryLayoutGroupCanvasNodeOptions } from "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
+import {
+  type FactoryLayoutGroupNodeGeometry,
+  factoryLayoutGroupCanvasNodeOptions,
+} from "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import type { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import type { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
 import type { useFactoryGraphAddEntityController } from "./use-current-activity-graph-add-controller";
 import type { CurrentActivityGraphFlowProjection } from "./use-current-activity-graph-flow-projection";
 import type { CurrentActivityGraphLayoutState } from "./use-current-activity-graph-render-state";
+import type { WorkflowActivityBentoCardState } from "./workflow-activity-card-state";
 
 export type CurrentActivityGraphStatusState = {
   dirtyStateSummary: FactoryGraphEditorDirtyState;
@@ -49,6 +57,7 @@ type BuildCurrentActivityGraphStateValueArgs = {
   addEntityController: ReturnType<typeof useFactoryGraphAddEntityController>;
   addMenuActions: ReturnType<typeof buildFactoryGraphAddEntityMenuActions>;
   blockedRemovalReason: string | null;
+  cardStateSnapshot: WorkflowActivityBentoCardState;
   canDeleteSelection: ReturnType<
     typeof useFactoryGraphRemovalController
   >["canDeleteSelection"];
@@ -79,6 +88,19 @@ type BuildCurrentActivityGraphStateValueArgs = {
     delta: { x: number; y: number },
     resolvedPositionsByNodeId: ReadonlyMap<string, { x: number; y: number }>,
   ) => void;
+  resizeLayoutNode: (
+    nodeId: string,
+    family: FactoryGraphNodeFamily,
+    dimensions: FactoryGraphNodeDimensions,
+    position: { x: number; y: number },
+  ) => void;
+  fitLayoutNode: (
+    nodeId: string,
+    family: FactoryGraphNodeFamily,
+    dimensions: FactoryGraphNodeDimensions,
+    position: { x: number; y: number },
+  ) => void;
+  resetLayoutNodeSize: (nodeId: string) => void;
   redoLayout: () => void;
   resetLayout: () => void;
   resetPreferences: () => void;
@@ -88,15 +110,22 @@ type BuildCurrentActivityGraphStateValueArgs = {
     y: number;
     zoom: number;
   }) => void;
-  createVisualGroup: (center: {
-    x: number;
-    y: number;
-  }) => { id: string } | null;
-  renameVisualGroup: (groupId: string, label: string) => void;
-  setVisualGroupColor: (
+  createVisualGroup: (
+    center: {
+      x: number;
+      y: number;
+    },
+    options?: {
+      nodeGeometryById?: ReadonlyMap<string, FactoryLayoutGroupNodeGeometry>;
+      nodeIds?: readonly string[];
+    },
+  ) => { id: string } | null;
+  fitVisualGroup: (
     groupId: string,
-    color: "primary" | "info" | "success" | "warning" | "outline",
+    nodeGeometryById: ReadonlyMap<string, FactoryLayoutGroupNodeGeometry>,
   ) => void;
+  renameVisualGroup: (groupId: string, label: string) => void;
+  setVisualGroupColor: (groupId: string, color: string) => void;
   addNodeToVisualGroup: (groupId: string, nodeId: string) => void;
   removeNodeFromVisualGroup: (groupId: string, nodeId: string) => void;
   moveVisualGroupByDelta: (
@@ -203,12 +232,16 @@ function buildCurrentActivityGraphLayoutControls(
     moveEdgeWaypoint: args.moveEdgeWaypoint,
     moveNode: args.moveLayoutNode,
     moveNodesByDelta: args.moveLayoutNodesByDelta,
+    resizeNode: args.resizeLayoutNode,
+    fitNode: args.fitLayoutNode,
+    resetNodeSize: args.resetLayoutNodeSize,
     redo: args.redoLayout,
     removeEdgeWaypoint: args.removeEdgeWaypoint,
     reset: args.resetLayout,
     undo: args.undoLayout,
     updateViewport: args.updateLayoutViewport,
     createVisualGroup: args.createVisualGroup,
+    fitVisualGroup: args.fitVisualGroup,
     renameVisualGroup: args.renameVisualGroup,
     setVisualGroupColor: args.setVisualGroupColor,
     addNodeToVisualGroup: args.addNodeToVisualGroup,
@@ -358,6 +391,7 @@ export function buildCurrentActivityGraphStateValue(
 
   return {
     addControls,
+    cardStateSnapshot: args.cardStateSnapshot,
     connectionControls,
     editorControls,
     edgeWaypointControls: args.edgeWaypointControls,
@@ -405,6 +439,7 @@ export type CurrentActivityGraphEditorControls = ReturnType<
 
 export interface CurrentActivityGraphStateValue {
   addControls: CurrentActivityGraphAddControls;
+  cardStateSnapshot: WorkflowActivityBentoCardState;
   connectionControls: CurrentActivityGraphConnectionControls;
   editorControls: CurrentActivityGraphEditorControls;
   edgeWaypointControls: ReturnType<typeof useFactoryGraphEdgeWaypointEditor>;
@@ -417,3 +452,18 @@ export interface CurrentActivityGraphStateValue {
   validationControls: CurrentActivityGraphValidationControls;
   visibilityControls: CurrentActivityGraphVisibilityControls;
 }
+
+/**
+ * The editor-facing controller contract consumed by focused graph surfaces.
+ * Canonical draft mutations remain owned by the underlying graph state; this
+ * type only exposes the controls and outcomes an editor surface needs.
+ */
+export type CurrentActivityGraphEditorController = Pick<
+  CurrentActivityGraphStateValue,
+  | "addControls"
+  | "editorControls"
+  | "leaveControls"
+  | "removalControls"
+  | "saveControls"
+  | "status"
+>;

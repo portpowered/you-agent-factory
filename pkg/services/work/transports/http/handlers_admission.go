@@ -18,10 +18,16 @@ func (a *Adapter) StageSubmitWorkFileBySessionId(
 		a.writeError(w, http.StatusBadRequest, "session id is required", "BAD_REQUEST")
 		return
 	}
+	if a.sessionScope != nil {
+		if err := a.sessionScope(r.Context(), string(sessionID)); err != nil {
+			a.writeRootOrInternalError(w, err, "failed to validate factory session")
+			return
+		}
+	}
 
 	decoded, err := StageSubmitWorkFileRequestFromBody(r.Body)
 	if err != nil {
-		a.writeAdmissionDecodeError(w, err)
+		a.writeAdmissionOrRootError(w, err, "failed to prepare submit-work content")
 		return
 	}
 
@@ -71,7 +77,15 @@ func (a *Adapter) SubmitWorkBySessionId(
 		return
 	}
 	if err != nil {
-		a.writeAdmissionDecodeError(w, err)
+		a.writeAdmissionOrRootError(w, err, "failed to prepare submit-work content")
+		return
+	}
+	workRequest, err = a.invokePrepareWorkRequest(r.Context(), string(sessionID), workRequest, decoded.CanonicalJSON)
+	if shouldEndOnRequestContext(r.Context(), err) {
+		return
+	}
+	if err != nil {
+		a.writeRootOrInternalError(w, err, "failed to prepare work")
 		return
 	}
 
@@ -125,6 +139,14 @@ func (a *Adapter) UpsertWorkRequestBySessionId(
 	if requestContextEnded(r.Context()) {
 		return
 	}
+	workRequest, err = a.invokePrepareWorkRequest(r.Context(), string(sessionID), workRequest, decoded.CanonicalJSON)
+	if shouldEndOnRequestContext(r.Context(), err) {
+		return
+	}
+	if err != nil {
+		a.writeRootOrInternalError(w, err, "failed to prepare work request")
+		return
+	}
 
 	result, err := a.invokeSubmitWorkRequestForSession(r.Context(), string(sessionID), workRequest)
 	if shouldEndOnRequestContext(r.Context(), err) {
@@ -145,3 +167,10 @@ func (a *Adapter) writeAdmissionDecodeError(w http.ResponseWriter, err error) {
 	a.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 }
 
+func (a *Adapter) writeAdmissionOrRootError(w http.ResponseWriter, err error, fallback string) {
+	if message, ok := requestFieldValidationMessage(err); ok {
+		a.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+		return
+	}
+	a.writeRootOrInternalError(w, err, fallback)
+}

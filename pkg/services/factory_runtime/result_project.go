@@ -1,13 +1,24 @@
 package factory
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 )
+
+func hashLabel(path, text string) string {
+	digest := sha256.Sum256([]byte(path + "\n" + text))
+	return fmt.Sprintf("artifact-%s", hex.EncodeToString(digest[:8]))
+}
 
 // ProjectPrimaryResult maps one validated workflow result to WorkContent parts.
 func ProjectPrimaryResult(sessionID string, value TypedValue, artifacts []interfaces.FactorySessionArtifactState) ([]work.WorkContentPart, Result) {
@@ -378,4 +389,242 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// WorkArtifactProjectionInput contains the runtime-owned facts needed to
+// project expected artifacts for a Work read. The topology stays behind the
+// Factory Runtime root so Factory Sessions does not grow another Petri-shaped
+// dependency while adapting the result to its Work read contract.
+type WorkArtifactProjectionInput struct {
+	Token           *workers.Token
+	Topology        *RuntimeNet
+	Dispatches      map[string]*DispatchEntry
+	DispatchHistory []CompletedDispatch
+	Results         []workers.WorkResult
+}
+
+// WorkArtifactProjection derives the customer-facing expected-artifact read
+// model from runtime-owned topology and dispatch facts.
+type WorkArtifactProjection struct{}
+
+// Project derives the customer-facing expected-artifact read model from live
+// topology, active/completed dispatch facts, and worker results. It is
+// deterministic for a given runtime snapshot.
+func (WorkArtifactProjection) Project(input WorkArtifactProjectionInput) []work.ExpectedArtifactReadModel {
+	if input.Token == nil {
+		return nil
+	}
+	runtimeToken := factorytoken.FromWorker(*input.Token)
+	workTypeDeclarations := workTypeArtifactDeclarations(input.Topology, input.Token.Color.WorkTypeID)
+	if dispatch, ok := activeArtifactDispatch(input.Token, input.Dispatches); ok {
+		return projectWorkExpectedArtifacts(
+			workTypeDeclarations,
+			workstationArtifactDeclarations(input.Topology, dispatch.transitionID, dispatch.workstationName),
+			expectedArtifactInputs(dispatch.inputs, input.Token),
+			work.ExpectedArtifactObservation{},
+			dispatch.templateContext,
+		)
+	}
+	if dispatch, ok := completedArtifactDispatch(input.Token, input.DispatchHistory, input.Results); ok {
+		return projectWorkExpectedArtifacts(
+			workTypeDeclarations,
+			workstationArtifactDeclarations(input.Topology, dispatch.transitionID, dispatch.workstationName),
+			expectedArtifactInputs(dispatch.inputs, input.Token),
+			dispatch.observation,
+			dispatch.templateContext,
+		)
+	}
+	return work.ExpectedArtifactReadModelProjector{}.Project(
+		workTypeDeclarations,
+		workstationArtifactDeclarationsForPlace(input.Topology, runtimeToken.PlaceID),
+		[]work.ExpectedArtifactInput{expectedArtifactInput(*input.Token)},
+		work.ExpectedArtifactObservation{},
+	)
+}
+
+func projectWorkExpectedArtifacts(
+	workTypeDeclarations, workstationDeclarations []work.ExpectedArtifactDeclaration,
+	inputs []work.ExpectedArtifactInput,
+	observation work.ExpectedArtifactObservation,
+	templateContext *work.ExpectedArtifactTemplateContext,
+) []work.ExpectedArtifactReadModel {
+	if templateContext == nil {
+		return work.ExpectedArtifactReadModelProjector{}.Project(workTypeDeclarations, workstationDeclarations, inputs, observation)
+	}
+	return work.ExpectedArtifactReadModelProjector{}.Project(
+		workTypeDeclarations, workstationDeclarations, inputs, observation, *templateContext,
+	)
+}
+
+type artifactDispatchFacts struct {
+	transitionID    string
+	workstationName string
+	inputs          []workers.Token
+	observation     work.ExpectedArtifactObservation
+	templateContext *work.ExpectedArtifactTemplateContext
+}
+
+func activeArtifactDispatch(token *workers.Token, dispatches map[string]*DispatchEntry) (artifactDispatchFacts, bool) {
+	ids := make([]string, 0, len(dispatches))
+	for id := range dispatches {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		dispatch := dispatches[id]
+		if dispatch == nil || !dispatchContainsWork(dispatch.ConsumedTokens, token.Color.WorkID) {
+			continue
+		}
+		return artifactDispatchFacts{
+			transitionID:    dispatch.TransitionID,
+			workstationName: dispatch.WorkstationName,
+			inputs:          append([]workers.Token(nil), dispatch.ConsumedTokens...),
+			templateContext: cloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext),
+		}, true
+	}
+	return artifactDispatchFacts{}, false
+}
+
+func completedArtifactDispatch(token *workers.Token, dispatches []CompletedDispatch, results []workers.WorkResult) (artifactDispatchFacts, bool) {
+	for index := len(dispatches) - 1; index >= 0; index-- {
+		dispatch := dispatches[index]
+		if !dispatchContainsWork(dispatch.ConsumedTokens, token.Color.WorkID) {
+			continue
+		}
+		return artifactDispatchFacts{
+			transitionID:    dispatch.TransitionID,
+			workstationName: dispatch.WorkstationName,
+			inputs:          append([]workers.Token(nil), dispatch.ConsumedTokens...),
+			observation:     artifactObservation(dispatch, results),
+			templateContext: cloneExpectedArtifactTemplateContext(dispatch.ExpectedArtifactContext),
+		}, true
+	}
+	return artifactDispatchFacts{}, false
+}
+
+func dispatchContainsWork(tokens []workers.Token, workID string) bool {
+	for _, token := range tokens {
+		if token.Color.WorkID == workID {
+			return true
+		}
+	}
+	return false
+}
+
+func artifactObservation(dispatch CompletedDispatch, results []workers.WorkResult) work.ExpectedArtifactObservation {
+	if dispatch.ArtifactVerification != nil {
+		return expectedArtifactObservation(dispatch.ArtifactVerification)
+	}
+	for _, result := range results {
+		if result.DispatchID != dispatch.DispatchID {
+			continue
+		}
+		if result.ArtifactVerification == nil {
+			if result.Outcome == workers.OutcomeAccepted {
+				return work.ExpectedArtifactObservation{Verified: true}
+			}
+			return work.ExpectedArtifactObservation{}
+		}
+		return expectedArtifactObservation(result.ArtifactVerification)
+	}
+	if dispatch.Outcome == workers.OutcomeAccepted {
+		return work.ExpectedArtifactObservation{Verified: true}
+	}
+	return work.ExpectedArtifactObservation{}
+}
+
+func expectedArtifactObservation(verification *workers.ExpectedArtifactVerification) work.ExpectedArtifactObservation {
+	if verification == nil {
+		return work.ExpectedArtifactObservation{}
+	}
+	observation := work.ExpectedArtifactObservation{Verified: true}
+	for _, entry := range verification.Entries {
+		observation.Entries = append(observation.Entries, work.ExpectedArtifactVerificationEntry{
+			DeclarationIndex: entry.DeclarationIndex,
+			Name:             entry.Name,
+			Pattern:          entry.Pattern,
+			Reason:           work.ExpectedArtifactVerificationReason(entry.Reason),
+		})
+	}
+	return observation
+}
+
+func workTypeArtifactDeclarations(topology *RuntimeNet, workTypeID string) []work.ExpectedArtifactDeclaration {
+	if topology == nil || topology.WorkTypes[workTypeID] == nil {
+		return nil
+	}
+	return append([]work.ExpectedArtifactDeclaration(nil), topology.WorkTypes[workTypeID].ExpectedArtifacts...)
+}
+
+func workstationArtifactDeclarations(topology *RuntimeNet, transitionID, workstationName string) []work.ExpectedArtifactDeclaration {
+	if topology == nil {
+		return nil
+	}
+	for _, transition := range topology.Transitions {
+		if transition == nil {
+			continue
+		}
+		if transition.ID == transitionID || transition.Name == transitionID || transition.Name == workstationName {
+			return append([]work.ExpectedArtifactDeclaration(nil), transition.ExpectedArtifacts...)
+		}
+	}
+	return nil
+}
+
+func workstationArtifactDeclarationsForPlace(topology *RuntimeNet, placeID string) []work.ExpectedArtifactDeclaration {
+	if topology == nil {
+		return nil
+	}
+	transitionIDs := make([]string, 0, len(topology.Transitions))
+	for transitionID := range topology.Transitions {
+		transitionIDs = append(transitionIDs, transitionID)
+	}
+	sort.Strings(transitionIDs)
+	var declarations []work.ExpectedArtifactDeclaration
+	for _, transitionID := range transitionIDs {
+		transition := topology.Transitions[transitionID]
+		if transition == nil || !transitionConsumesPlace(transition.InputArcs, placeID) {
+			continue
+		}
+		declarations = append(declarations, transition.ExpectedArtifacts...)
+	}
+	return declarations
+}
+
+func transitionConsumesPlace(arcs []PetriArc, placeID string) bool {
+	for _, arc := range arcs {
+		if arc.PlaceID == placeID {
+			return true
+		}
+	}
+	return false
+}
+
+func expectedArtifactInputs(tokens []workers.Token, fallback *workers.Token) []work.ExpectedArtifactInput {
+	if len(tokens) == 0 && fallback != nil {
+		tokens = []workers.Token{*fallback}
+	}
+	inputs := make([]work.ExpectedArtifactInput, 0, len(tokens))
+	for _, token := range tokens {
+		inputs = append(inputs, expectedArtifactInput(token))
+	}
+	return inputs
+}
+
+func expectedArtifactInput(token workers.Token) work.ExpectedArtifactInput {
+	return work.ExpectedArtifactInput{
+		Name:       firstNonEmpty(token.Color.Name, token.Color.WorkID, token.ID),
+		WorkID:     token.Color.WorkID,
+		WorkTypeID: token.Color.WorkTypeID,
+		DataType:   string(token.Color.DataType),
+		TraceID:    token.Color.TraceID,
+		ParentID:   token.Color.ParentID,
+		Project:    token.Color.Tags[workers.ProjectTagKey],
+		Tags:       work.CloneTags(token.Color.Tags),
+		Payload:    string(token.Color.Payload),
+	}
+}
+
+func cloneExpectedArtifactTemplateContext(context *work.ExpectedArtifactTemplateContext) *work.ExpectedArtifactTemplateContext {
+	return context.Clone()
 }

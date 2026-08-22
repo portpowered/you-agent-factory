@@ -3,23 +3,27 @@ package root_composition_test
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
-// TestWireCompositionServesDocumentAndResolutionOperations exercises published
-// Settings wire surfaces through the functional lane so transitional composition
-// hooks (construct/testlink/testproviders) retain coverage after servicewire/
-// retargeting.
-func TestWireCompositionServesDocumentAndResolutionOperations(t *testing.T) {
-	t.Parallel()
+// newWireCompositionRoot constructs an Operator Settings root through the
+// same settingswire composition retargeting this whole test cell exists to
+// protect, seeded with a config file authored on disk. See the package-level
+// exception note above TestWireCompositionServesDocumentAndResolutionOperations
+// for why these tests construct through settingswire directly instead of
+// root.BuildProcess + Process.Execute.
+func newWireCompositionRoot(t *testing.T) (operatorsettings.Service, string) {
+	t.Helper()
 
 	homeDir := t.TempDir()
 	configPath := operatorsettings.DefaultConfigPath(homeDir)
@@ -51,10 +55,37 @@ func TestWireCompositionServesDocumentAndResolutionOperations(t *testing.T) {
 			&sync.Mutex{},
 		),
 		providersRoot,
+		func() string { return "00000000-0000-4000-8000-000000000001" },
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
 	}
+	return root, configPath
+}
+
+// TestWireCompositionServesDocumentAndResolutionOperations exercises published
+// Settings wire surfaces through the functional lane so transitional composition
+// hooks (construct/testlink/testproviders) retain coverage after servicewire/
+// retargeting.
+//
+// backend-review construction-path exception: general-backend-standards.md §7
+// prefers root.BuildProcess + Process.Execute for functional application
+// tests. This cell (and its ACP Agent profile siblings below) construct
+// through settingswire directly instead, for two independent, in-scope
+// reasons: (1) this file's whole purpose, predating the ACP Agent profile
+// work, is proving the Settings wire composition/retargeting seam itself
+// (see the sibling TestWireCompositionFromHomePorts*/TestResolveFromHome*
+// tests in this same file, none of which use root.BuildProcess either); and
+// (2) ACP Agent Profile V0 deliberately adds no CLI/HTTP/MCP transport surface
+// (docs/internal/projects/acp-client/final-proposal.md V0 scope), so no
+// root.BuildProcess-observable command exists that could exercise
+// ResolveACPAgentProfile/UpdateACPAgentProfile at all. This is the only
+// functional-lane coverage available for those two operations pre-transport.
+func TestWireCompositionServesDocumentAndResolutionOperations(t *testing.T) {
+	t.Parallel()
+
+	root, configPath := newWireCompositionRoot(t)
 
 	loaded, err := root.LoadDocument(operatorsettings.LoadDocumentRequest{Path: configPath})
 	if err != nil {
@@ -96,6 +127,89 @@ func TestWireCompositionServesDocumentAndResolutionOperations(t *testing.T) {
 	}
 }
 
+// TestWireCompositionResolvesDefaultACPAgentProfileWhenAbsent covers
+// ResolveACPAgentProfile through the wire-composed root; see the construction-
+// path exception documented on TestWireCompositionServesDocumentAndResolutionOperations.
+func TestWireCompositionResolvesDefaultACPAgentProfileWhenAbsent(t *testing.T) {
+	t.Parallel()
+
+	root, configPath := newWireCompositionRoot(t)
+
+	defaultProfile, err := root.ResolveACPAgentProfile(configPath)
+	if err != nil {
+		t.Fatalf("ResolveACPAgentProfile() error = %v", err)
+	}
+	wantDefaultProfile := operatorsettings.DefaultACPAgentProfile()
+	if defaultProfile.DefaultTarget != wantDefaultProfile.DefaultTarget ||
+		!reflect.DeepEqual(defaultProfile.AllowedTargets, wantDefaultProfile.AllowedTargets) {
+		t.Fatalf("ResolveACPAgentProfile() = %#v, want safe Factory Builder default %#v", defaultProfile, wantDefaultProfile)
+	}
+}
+
+// TestWireCompositionUpdatesACPAgentProfileAndPreservesSiblingSettings covers
+// UpdateACPAgentProfile through the wire-composed root, including the
+// bidirectional preservation guarantee against an unrelated ApplyDocumentUpdate;
+// see the construction-path exception documented on
+// TestWireCompositionServesDocumentAndResolutionOperations.
+func TestWireCompositionUpdatesACPAgentProfileAndPreservesSiblingSettings(t *testing.T) {
+	t.Parallel()
+
+	root, configPath := newWireCompositionRoot(t)
+
+	authoredProfile := operatorsettings.ACPAgentProfile{
+		DefaultTarget:  "factory:@you/research",
+		AllowedTargets: []string{"factory:@you/research", "factory:@you/factory-builder"},
+	}
+	updatedProfile, err := root.UpdateACPAgentProfile(t.Context(), configPath, authoredProfile)
+	if err != nil {
+		t.Fatalf("UpdateACPAgentProfile() error = %v", err)
+	}
+	if updatedProfile.DefaultTarget != authoredProfile.DefaultTarget {
+		t.Fatalf("UpdateACPAgentProfile() default = %q, want %q", updatedProfile.DefaultTarget, authoredProfile.DefaultTarget)
+	}
+
+	resolvedProfile, err := root.ResolveACPAgentProfile(configPath)
+	if err != nil {
+		t.Fatalf("ResolveACPAgentProfile() after update error = %v", err)
+	}
+	if resolvedProfile.DefaultTarget != authoredProfile.DefaultTarget ||
+		len(resolvedProfile.AllowedTargets) != len(authoredProfile.AllowedTargets) {
+		t.Fatalf("ResolveACPAgentProfile() after update = %#v, want %#v", resolvedProfile, authoredProfile)
+	}
+
+	provider := "gemini"
+	model := "gemini-pro"
+	if updatedAgain, err := root.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
+		Path: configPath,
+		ProviderModel: operatorsettings.DocumentProviderModelUpdate{
+			Provider: &provider,
+			Model:    &model,
+		},
+	}); err != nil {
+		t.Fatalf("ApplyDocumentUpdate() after profile update error = %v", err)
+	} else if updatedAgain.Document.Workers.ACP.AgentProfile == nil ||
+		updatedAgain.Document.Workers.ACP.AgentProfile.DefaultTarget != authoredProfile.DefaultTarget {
+		t.Fatalf(
+			"ApplyDocumentUpdate() after profile update = %#v, want authored profile preserved",
+			updatedAgain.Document.Workers.ACP.AgentProfile,
+		)
+	}
+}
+
+// TestWireCompositionUpdateACPAgentProfileRejectsBlankCandidate covers
+// UpdateACPAgentProfile's validation-before-persistence guarantee through the
+// wire-composed root; see the construction-path exception documented on
+// TestWireCompositionServesDocumentAndResolutionOperations.
+func TestWireCompositionUpdateACPAgentProfileRejectsBlankCandidate(t *testing.T) {
+	t.Parallel()
+
+	root, configPath := newWireCompositionRoot(t)
+
+	if _, err := root.UpdateACPAgentProfile(t.Context(), configPath, operatorsettings.ACPAgentProfile{}); err == nil {
+		t.Fatal("UpdateACPAgentProfile() with blank candidate error = nil, want validation failure")
+	}
+}
+
 func TestWireCompositionFromHomePortsConstructsSettingsRoot(t *testing.T) {
 	t.Parallel()
 
@@ -107,6 +221,8 @@ func TestWireCompositionFromHomePortsConstructsSettingsRoot(t *testing.T) {
 		platformfilesystem.Local{},
 		globalconfigmapping.Decode,
 		providersRoot,
+		func() string { return "00000000-0000-4000-8000-000000000001" },
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
@@ -123,12 +239,12 @@ func TestWireCompositionFromHomePortsRejectsMissingPorts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}
-	_, err = settingswire.NewServiceFromHomePorts(nil, globalconfigmapping.Decode, providersRoot)
+	_, err = settingswire.NewServiceFromHomePorts(nil, globalconfigmapping.Decode, providersRoot, func() string { return "00000000-0000-4000-8000-000000000001" }, logging.NoopLogger{})
 	if err == nil || !strings.Contains(err.Error(), "filesystem is required") {
 		t.Fatalf("NewServiceFromHomePorts(nil, decode) error = %v, want filesystem required", err)
 	}
 
-	_, err = settingswire.NewServiceFromHomePorts(platformfilesystem.Local{}, nil, providersRoot)
+	_, err = settingswire.NewServiceFromHomePorts(platformfilesystem.Local{}, nil, providersRoot, func() string { return "00000000-0000-4000-8000-000000000001" }, logging.NoopLogger{})
 	if err == nil || !strings.Contains(err.Error(), "decoder is required") {
 		t.Fatalf("NewServiceFromHomePorts(files, nil) error = %v, want decoder required", err)
 	}
@@ -151,6 +267,8 @@ func TestResolveFromHomeRejectsMissingFilesystemPorts(t *testing.T) {
 		nil,
 		globalconfigmapping.Decode,
 		providersRoot,
+		func() string { return "00000000-0000-4000-8000-000000000001" },
+		logging.NoopLogger{},
 	)
 	if err == nil || !strings.Contains(err.Error(), "operator settings filesystem is required") {
 		t.Fatalf("NewServiceFromHomePorts() error = %v, want home-port construction failure", err)
@@ -182,6 +300,8 @@ func TestResolveFromHomeUsesSettingsAdapterOwnershipPath(t *testing.T) {
 		platformfilesystem.Local{},
 		globalconfigmapping.Decode,
 		providersRoot,
+		func() string { return "00000000-0000-4000-8000-000000000001" },
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
@@ -214,7 +334,7 @@ func TestWireCompositionFromConfigDocumentConstructsFromDocumentPorts(t *testing
 		CreateTemp: func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
 			return os.CreateTemp(dir, pattern)
 		},
-	}, providersRoot)
+	}, providersRoot, func() string { return "00000000-0000-4000-8000-000000000001" }, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
 	}
@@ -230,7 +350,7 @@ func TestWireCompositionFromConfigDocumentRejectsMissingDocumentPorts(t *testing
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}
-	_, err = settingswire.NewServiceFromConfigDocument(operatorsettings.ConfigDocumentService{}, providersRoot)
+	_, err = settingswire.NewServiceFromConfigDocument(operatorsettings.ConfigDocumentService{}, providersRoot, func() string { return "00000000-0000-4000-8000-000000000001" }, logging.NoopLogger{})
 	if err == nil || !strings.Contains(err.Error(), "operator settings document ports are required") {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v, want document ports required", err)
 	}

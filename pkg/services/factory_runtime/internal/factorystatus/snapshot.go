@@ -7,6 +7,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/legacysnapshot"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 )
 
 // ProjectFromSnapshot maps a migration-only engine snapshot into the detached
@@ -38,7 +39,7 @@ func projectFactoryStatusTokens(marking *factory.PetriMarkingSnapshot, net *fact
 	}
 
 	for _, token := range marking.Tokens {
-		if token == nil || interfaces.IsSystemTimeToken(token) {
+		if token == nil || isSystemTimeToken(*token) {
 			continue
 		}
 		if token.Color.DataType == factory.RuntimeTokenDataTypeResource {
@@ -77,11 +78,16 @@ func countFactoryStatusTokens(marking *factory.PetriMarkingSnapshot) int {
 	}
 	count := 0
 	for _, token := range marking.Tokens {
-		if token != nil && !interfaces.IsSystemTimeToken(token) {
+		if token != nil && !isSystemTimeToken(*token) {
 			count++
 		}
 	}
 	return count
+}
+
+func isSystemTimeToken(token factorytoken.Token) bool {
+	projected := factorytoken.ToWorker(token)
+	return interfaces.IsSystemTimeToken(&projected)
 }
 
 func factoryStatusResourceTotals(net *factory.Net) map[string]int {

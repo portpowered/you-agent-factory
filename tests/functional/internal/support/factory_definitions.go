@@ -14,10 +14,34 @@ import (
 // command used by customers.
 func FlattenFactoryConfig(t testing.TB, path string) ([]byte, error) {
 	t.Helper()
+	return FlattenFactoryConfigWithProcess(t, BuildProcess(t, serviceedges.Edges{}), path)
+}
+
+// FlattenFactoryConfigWithProcess observes Factory Definitions through the
+// public command on a caller-owned reusable process. Only the process wiring
+// is reused; the command input and captured streams are invocation-local.
+func FlattenFactoryConfigWithProcess(t testing.TB, process Process, path string) ([]byte, error) {
+	t.Helper()
+	return FlattenFactoryConfigWithProcessAndEnv(t, process, os.Environ(), path)
+}
+
+// FlattenFactoryConfigWithProcessAndEnv observes Factory Definitions through
+// the public command on a caller-owned process and invocation-local
+// environment. The process wiring may be reused only for sequential calls.
+func FlattenFactoryConfigWithProcessAndEnv(
+	t testing.TB,
+	process Process,
+	env []string,
+	path string,
+) ([]byte, error) {
+	t.Helper()
+	if process == nil {
+		t.Fatal("FlattenFactoryConfigWithProcess requires a process")
+	}
 	inputs := FakeInputs(t.Context(), []string{"you", "factory", "config", "flatten", path})
-	inputs.Input.Env = os.Environ()
+	inputs.Input.Env = append([]string(nil), env...)
 	inputs.Input.WorkingDirectory = filepath.Dir(path)
-	if err := BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+	if err := process.Execute(inputs.Input); err != nil {
 		return nil, err
 	}
 	return []byte(inputs.Stdout()), nil
@@ -29,6 +53,29 @@ func FlattenFactoryConfig(t testing.TB, path string) ([]byte, error) {
 func LoadedFactory(t testing.TB, path string) (factoryapi.Factory, error) {
 	t.Helper()
 	payload, err := FlattenFactoryConfig(t, path)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	return DecodeFactoryDefinition(payload)
+}
+
+// LoadedFactoryWithProcess observes and decodes a Factory through the public
+// flatten command on a caller-owned reusable process.
+func LoadedFactoryWithProcess(t testing.TB, process Process, path string) (factoryapi.Factory, error) {
+	t.Helper()
+	return LoadedFactoryWithProcessAndEnv(t, process, os.Environ(), path)
+}
+
+// LoadedFactoryWithProcessAndEnv observes and decodes a Factory through the
+// public flatten command with invocation-local environment values.
+func LoadedFactoryWithProcessAndEnv(
+	t testing.TB,
+	process Process,
+	env []string,
+	path string,
+) (factoryapi.Factory, error) {
+	t.Helper()
+	payload, err := FlattenFactoryConfigWithProcessAndEnv(t, process, env, path)
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}

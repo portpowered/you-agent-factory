@@ -21,7 +21,7 @@ func TestStopSummaryToAPIOnlyConvertsDetachedOwnerResult(t *testing.T) {
 	}
 
 	mapped := factorysessionmapping.StopSummaryToAPI(summary)
-	if mapped == nil || mapped.StopKind != factoryapi.PAUSED || mapped.WorkId == nil || *mapped.WorkId != workID {
+	if mapped == nil || mapped.StopKind != factoryapi.FactoryStopKindPAUSED || mapped.WorkId == nil || *mapped.WorkId != workID {
 		t.Fatalf("mapped summary = %#v", mapped)
 	}
 	if mapped.LatestDispatch == nil || mapped.LatestDispatch.Status != factoryapi.FactoryDispatchStatusINTERRUPTED || mapped.LatestDispatch.FailureDetail == nil || mapped.LatestDispatch.FailureDetail.Reason != factoryapi.WorkFailureTypeTimeout {
@@ -31,5 +31,28 @@ func TestStopSummaryToAPIOnlyConvertsDetachedOwnerResult(t *testing.T) {
 	detached := factorysessionmapping.StopSummaryFromAPI(mapped)
 	if detached == nil || detached.StopKind != factorysessions.StopKindPaused || detached.LatestDispatch == nil || detached.LatestDispatch.Status != factorysessions.StopDispatchStatusInterrupted {
 		t.Fatalf("detached summary = %#v", detached)
+	}
+}
+
+func TestStopSummaryToAPIPreservesStructuredSchemaViolationReason(t *testing.T) {
+	message := "structured output schema violation: missing property summary"
+	summary := &factorysessions.StopSummary{
+		StopKind: factorysessions.StopKindBlocked,
+		LatestDispatch: &factorysessions.StopDispatchSummary{
+			DispatchID: "dispatch-schema-violation",
+			Status:     factorysessions.StopDispatchStatusFailed,
+			FailureDetail: &factorysessions.StopFailureDetail{
+				Reason:  "structured_output_schema_violation",
+				Message: message,
+			},
+		},
+	}
+
+	mapped := factorysessionmapping.StopSummaryToAPI(summary)
+	if mapped == nil || mapped.LatestDispatch == nil || mapped.LatestDispatch.FailureDetail == nil {
+		t.Fatalf("mapped summary = %#v, want dispatch failure detail", mapped)
+	}
+	if mapped.LatestDispatch.FailureDetail.Reason != factoryapi.WorkFailureTypeStructuredOutputSchemaViolation {
+		t.Fatalf("mapped failure reason = %q, want structured_output_schema_violation", mapped.LatestDispatch.FailureDetail.Reason)
 	}
 }

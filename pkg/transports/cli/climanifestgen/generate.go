@@ -12,7 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/contractjoiner"
 	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 )
 
 const (
@@ -35,6 +35,10 @@ const (
 	// WorkersFamilyJSONPath is generated worker-integration command metadata.
 	WorkersFamilyJSONPath = "pkg/transports/cli/generated/workers_family.json"
 
+	// WorkerSessionsFamilyJSONPath is generated worker-session observation
+	// command metadata.
+	WorkerSessionsFamilyJSONPath = "pkg/transports/cli/generated/worker_sessions_family.json"
+
 	// RunSubmitFamilyJSONPath is the generated run/submit-family metadata artifact.
 	RunSubmitFamilyJSONPath = "pkg/transports/cli/generated/run_submit_family.json"
 
@@ -56,9 +60,27 @@ const (
 	// ModelsDocsFamilyCommandIDsPath is the generated models/docs stable command ID list.
 	ModelsDocsFamilyCommandIDsPath = "pkg/transports/cli/generated/models_docs_command_ids_gen.go"
 
+	// ProvidersFamilyJSONPath is the generated providers-family metadata artifact.
+	ProvidersFamilyJSONPath = "pkg/transports/cli/generated/providers_family.json"
+
+	// ProvidersFamilyCommandIDsPath is the generated providers stable command ID list.
+	ProvidersFamilyCommandIDsPath = "pkg/transports/cli/generated/providers_command_ids_gen.go"
+
+	// MetricsFamilyJSONPath is the generated metrics-family metadata artifact.
+	MetricsFamilyJSONPath = "pkg/transports/cli/generated/metrics_family.json"
+
+	// MetricsFamilyCommandIDsPath is the generated metrics stable command ID list.
+	MetricsFamilyCommandIDsPath = "pkg/transports/cli/generated/metrics_command_ids_gen.go"
+
 	MCPFamilyJSONPath          = "pkg/transports/cli/generated/mcp_family.json"
 	MCPFamilyCommandIDsPath    = "pkg/transports/cli/generated/mcp_command_ids_gen.go"
 	RuntimeFamilyManifestsPath = "pkg/transports/cli/generated/family_manifests_gen.go"
+
+	// ServeFamilyJSONPath is the generated serve-family metadata artifact.
+	ServeFamilyJSONPath = "pkg/transports/cli/generated/serve_family.json"
+
+	// ServeFamilyCommandIDsPath is the generated stable serve command ID list.
+	ServeFamilyCommandIDsPath = "pkg/transports/cli/generated/serve_command_ids_gen.go"
 )
 
 // RepresentativeFamilyArtifact returns deterministic generated representative-family metadata bytes.
@@ -117,6 +139,21 @@ func WorkersArtifact(store generatedartifacts.SourceStore, repositoryRoot string
 	return contractjoiner.MarshalCanonicalJSON(family)
 }
 
+// WorkerSessionsArtifact returns deterministic worker-session observation
+// family metadata.
+func WorkerSessionsArtifact(store generatedartifacts.SourceStore, repositoryRoot string) ([]byte, error) {
+	manifestPath := filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath))
+	manifest, err := climanifest.LoadProduction(store, manifestPath)
+	if err != nil {
+		return nil, err
+	}
+	family, err := ExtractWorkerSessionsFamily(manifest)
+	if err != nil {
+		return nil, err
+	}
+	return contractjoiner.MarshalCanonicalJSON(family)
+}
+
 // RunSubmitArtifact returns deterministic generated run/submit-family metadata bytes.
 func RunSubmitArtifact(store generatedartifacts.SourceStore, repositoryRoot string) ([]byte, error) {
 	manifestPath := filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath))
@@ -159,6 +196,34 @@ func ModelsDocsArtifact(store generatedartifacts.SourceStore, repositoryRoot str
 	return contractjoiner.MarshalCanonicalJSON(family)
 }
 
+// ProvidersArtifact returns deterministic generated providers-family metadata.
+func ProvidersArtifact(store generatedartifacts.SourceStore, repositoryRoot string) ([]byte, error) {
+	manifestPath := filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath))
+	manifest, err := climanifest.LoadProduction(store, manifestPath)
+	if err != nil {
+		return nil, err
+	}
+	family, err := ExtractProvidersFamily(manifest)
+	if err != nil {
+		return nil, err
+	}
+	return contractjoiner.MarshalCanonicalJSON(family)
+}
+
+// MetricsArtifact returns deterministic generated metrics-family metadata.
+func MetricsArtifact(store generatedartifacts.SourceStore, repositoryRoot string) ([]byte, error) {
+	manifestPath := filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath))
+	manifest, err := climanifest.LoadProduction(store, manifestPath)
+	if err != nil {
+		return nil, err
+	}
+	family, err := ExtractMetricsFamily(manifest)
+	if err != nil {
+		return nil, err
+	}
+	return contractjoiner.MarshalCanonicalJSON(family)
+}
+
 // MCPArtifact returns canonical MCP family metadata and enforces source classification.
 func MCPArtifact(store generatedartifacts.SourceStore, repositoryRoot string) ([]byte, error) {
 	production, err := climanifest.LoadProduction(store, filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath)))
@@ -166,6 +231,20 @@ func MCPArtifact(store generatedartifacts.SourceStore, repositoryRoot string) ([
 		return nil, err
 	}
 	family, err := ExtractMCPFamily(production)
+	if err != nil {
+		return nil, err
+	}
+	return contractjoiner.MarshalCanonicalJSON(family)
+}
+
+// ServeArtifact returns canonical server-family metadata for you server and
+// its ACP child.
+func ServeArtifact(store generatedartifacts.SourceStore, repositoryRoot string) ([]byte, error) {
+	production, err := climanifest.LoadProduction(store, filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath)))
+	if err != nil {
+		return nil, err
+	}
+	family, err := ExtractServeFamily(production)
 	if err != nil {
 		return nil, err
 	}
@@ -183,11 +262,15 @@ func Artifacts(store generatedartifacts.SourceStore, repositoryRoot string) ([]g
 		{RepresentativeFamilyJSONPath, RepresentativeFamilyArtifact},
 		{WorkFamilyJSONPath, WorkArtifact},
 		{WorkersFamilyJSONPath, WorkersArtifact},
+		{WorkerSessionsFamilyJSONPath, WorkerSessionsArtifact},
 		{SessionFamilyJSONPath, SessionFamilyArtifact},
 		{RunSubmitFamilyJSONPath, RunSubmitArtifact},
 		{FactoryConfigInitFamilyJSONPath, FactoryConfigInitFamilyArtifact},
 		{ModelsDocsFamilyJSONPath, ModelsDocsArtifact},
+		{ProvidersFamilyJSONPath, ProvidersArtifact},
+		{MetricsFamilyJSONPath, MetricsArtifact},
 		{MCPFamilyJSONPath, MCPArtifact},
+		{ServeFamilyJSONPath, ServeArtifact},
 	}
 	payloads := make(map[string][]byte, len(producers))
 	for _, item := range producers {
@@ -207,6 +290,7 @@ func Artifacts(store generatedartifacts.SourceStore, repositoryRoot string) ([]g
 		{Path: RepresentativeFamilyJSONPath, Absent: true},
 		{Path: WorkFamilyJSONPath, Absent: true},
 		{Path: WorkersFamilyJSONPath, Absent: true},
+		{Path: WorkerSessionsFamilyJSONPath, Absent: true},
 		{Path: SessionFamilyJSONPath, Absent: true},
 		{Path: SessionFamilyCommandIDsPath, Payload: sessionCommandIDsSource()},
 		{Path: RepresentativeFamilyCommandIDsPath, Payload: representativeAndWorkCommandIDsSource()},
@@ -216,8 +300,14 @@ func Artifacts(store generatedartifacts.SourceStore, repositoryRoot string) ([]g
 		{Path: FactoryConfigInitFamilyCommandIDsPath, Payload: factoryConfigInitCommandIDsSource()},
 		{Path: ModelsDocsFamilyJSONPath, Absent: true},
 		{Path: ModelsDocsFamilyCommandIDsPath, Payload: modelsDocsCommandIDsSource()},
+		{Path: ProvidersFamilyJSONPath, Absent: true},
+		{Path: ProvidersFamilyCommandIDsPath, Payload: providersCommandIDsSource()},
+		{Path: MetricsFamilyJSONPath, Absent: true},
+		{Path: MetricsFamilyCommandIDsPath, Payload: metricsCommandIDsSource()},
 		{Path: MCPFamilyJSONPath, Absent: true},
 		{Path: MCPFamilyCommandIDsPath, Payload: mcpCommandIDsSource()},
+		{Path: ServeFamilyJSONPath, Absent: true},
+		{Path: ServeFamilyCommandIDsPath, Payload: serveCommandIDsSource()},
 		{Path: RuntimeFamilyManifestsPath, Payload: runtimeSource},
 	}, nil
 }
@@ -231,16 +321,20 @@ func runtimeFamilyManifestsSource(payloads map[string][]byte) ([]byte, error) {
 		{functionName: "sessionFamilyManifestValue", path: SessionFamilyJSONPath},
 		{functionName: "workFamilyManifestValue", path: WorkFamilyJSONPath},
 		{functionName: "workersFamilyManifestValue", path: WorkersFamilyJSONPath},
+		{functionName: "workerSessionsFamilyManifestValue", path: WorkerSessionsFamilyJSONPath},
 		{functionName: "factoryConfigInitFamilyManifestValue", path: FactoryConfigInitFamilyJSONPath},
 		{functionName: "modelsDocsFamilyManifestValue", path: ModelsDocsFamilyJSONPath},
+		{functionName: "providersFamilyManifestValue", path: ProvidersFamilyJSONPath},
+		{functionName: "metricsFamilyManifestValue", path: MetricsFamilyJSONPath},
 		{functionName: "runSubmitFamilyManifestValue", path: RunSubmitFamilyJSONPath},
 		{functionName: "mcpFamilyManifestValue", path: MCPFamilyJSONPath},
+		{functionName: "serveFamilyManifestValue", path: ServeFamilyJSONPath},
 	}
 
 	var builder strings.Builder
 	builder.WriteString("// Code generated by climanifestgen. DO NOT EDIT.\n\n")
 	builder.WriteString("package generated\n\n")
-	builder.WriteString("import \"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest\"\n\n")
+	builder.WriteString("import \"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest\"\n\n")
 	for _, family := range families {
 		var manifest climanifest.Manifest
 		if err := json.Unmarshal(payloads[family.path], &manifest); err != nil {
@@ -327,7 +421,7 @@ func renderManifestGoValue(value reflect.Value) string {
 
 func renderManifestGoType(valueType reflect.Type) string {
 	if valueType.Name() != "" {
-		if valueType.PkgPath() == "github.com/portpowered/infinite-you/pkg/transports/cli/climanifest" {
+		if valueType.PkgPath() == "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest" {
 			return "climanifest." + valueType.Name()
 		}
 		return valueType.Name()
@@ -373,6 +467,22 @@ func modelsDocsCommandIDsSource() []byte {
 	)
 }
 
+func providersCommandIDsSource() []byte {
+	return renderCommandIDsSource(
+		"ProvidersFamilyCommandIDs lists the stable command IDs emitted from\n// contracts/cli/commands.json for the providers CLI family.",
+		"ProvidersFamilyCommandIDs",
+		ProvidersFamilyCommandIDs,
+	)
+}
+
+func metricsCommandIDsSource() []byte {
+	return renderCommandIDsSource(
+		"MetricsFamilyCommandIDs lists the stable command IDs emitted from\n// contracts/cli/commands.json for the runtime-metrics CLI family.",
+		"MetricsFamilyCommandIDs",
+		MetricsFamilyCommandIDs,
+	)
+}
+
 func runSubmitCommandIDsSource() []byte {
 	return renderCommandIDsSource(
 		"RunSubmitFamilyCommandIDs lists the stable command IDs emitted from\n// contracts/cli/commands.json for the run/submit CLI family.",
@@ -385,6 +495,13 @@ func mcpCommandIDsSource() []byte {
 	var builder strings.Builder
 	builder.WriteString("// Code generated by climanifestgen. DO NOT EDIT.\n\npackage generated\n\n")
 	writeCommandIDVar(&builder, "MCPFamilyCommandIDs", ProductionManifestPath, "canonical MCP family", MCPFamilyCommandIDs)
+	return []byte(builder.String())
+}
+
+func serveCommandIDsSource() []byte {
+	var builder strings.Builder
+	builder.WriteString("// Code generated by climanifestgen. DO NOT EDIT.\n\npackage generated\n\n")
+	writeCommandIDVar(&builder, "ServeFamilyCommandIDs", ProductionManifestPath, "canonical serve family", ServeFamilyCommandIDs)
 	return []byte(builder.String())
 }
 

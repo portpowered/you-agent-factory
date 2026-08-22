@@ -43,6 +43,8 @@ func TestBuildProcessRemainsScriptPollerInertBeforeRuntimeLifecycle(t *testing.T
 // TestAutomationsScriptPollerAdmitsWorkThroughRuntimeLifecycle proves script poller
 // workstations admit Work through the runtime lifecycle after BuildProcess composition.
 func TestAutomationsScriptPollerAdmitsWorkThroughRuntimeLifecycle(t *testing.T) {
+	t.Parallel()
+
 	dir := support.ScaffoldFactory(t, scriptPollerFactoryConfig())
 	support.ClearSeedInputs(t, dir)
 

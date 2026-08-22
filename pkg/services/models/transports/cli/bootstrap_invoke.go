@@ -9,13 +9,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinitionentry"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
-	workerinferencemapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workerinference"
 	"go.uber.org/zap"
 )
 
@@ -29,10 +27,22 @@ type InvocationRequest struct {
 	Verbose          bool
 }
 
+// InvocationTarget carries the resolved invocation inputs this transport
+// populates on its way to the composition-root operation. It names only the
+// four values the Models CLI actually resolves; the composition root maps it
+// onto whatever fuller target the invoking service requires, so this transport
+// does not depend on that service's contract.
+type InvocationTarget struct {
+	FactoryDir       string
+	HomeDir          string
+	OperatorDefaults operatorconfig.ResolvedDefaults
+	Verbose          bool
+}
+
 // InvocationOperation is the already-constructed service operation consumed by
 // the CLI transport.
 type InvocationOperation interface {
-	InvokeModel(context.Context, factorysessions.InvocationTarget, string, modelinference.Request) (modelinference.Result, error)
+	InvokeModel(context.Context, InvocationTarget, string, modelinference.Request) (modelinference.Result, error)
 	ResolveModelInvocationFactoryDir(string) (string, error)
 	ExportModelInvocationArtifact(string, string) error
 }
@@ -105,11 +115,10 @@ func runBootstrapModelInvocation(
 	}
 	result, err := invoke.InvokeModel(
 		ctx,
-		factorysessions.InvocationTarget{
+		InvocationTarget{
 			FactoryDir:       cfg.FactoryDir,
 			HomeDir:          cfg.HomeDir,
 			OperatorDefaults: cfg.OperatorDefaults,
-			Logger:           cfg.Logger,
 			Verbose:          cfg.Verbose,
 		},
 		modelName,
@@ -159,7 +168,8 @@ func mapBootstrapModelInvokeError(err error) error {
 	if err == nil {
 		return nil
 	}
-	if failure, ok := workers.AsInferenceFailure(err); ok {
+	var failure *modelinference.InferenceFailure
+	if errors.As(err, &failure) && failure != nil {
 		return failure
 	}
 	switch {
@@ -195,7 +205,7 @@ func invocationRequestFromGenerated(request factoryapi.ModelInvocationRequest) m
 }
 
 func modelBindingsFromGenerated(bindings *[]factoryapi.WorkstationOperationBinding) []modelinference.ModelOperationBinding {
-	authored := workerinferencemapping.OperationBindingsFromGenerated(bindings)
+	authored := factorydefinitionentry.OperationBindingsFromGenerated(bindings)
 	result := make([]modelinference.ModelOperationBinding, len(authored))
 	for i := range authored {
 		result[i] = modelinference.ModelOperationBinding{

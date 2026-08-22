@@ -41,7 +41,7 @@ func (runtime *lifecycleRuntime) StopLifecycle(context.Context) error {
 
 func (*lifecycleRuntime) FailStartup(err error) error { return err }
 
-func (*lifecycleRuntime) CurrentRuntimeBundle() factoryruntime.HostedInstance { return nil }
+func (*lifecycleRuntime) CurrentRuntimeBundle() factoryruntime.RuntimeRecord { return nil }
 
 type hostOperation struct {
 	events  *[]string
@@ -58,6 +58,24 @@ func (host *hostOperation) Run(
 ) error {
 	*host.events = append(*host.events, "transport:run")
 	host.request = request
+	return runtime.CompleteStartup(ctx)
+}
+
+type bindingHostOperation struct {
+	binding factorysessions.RuntimeHostBinding
+}
+
+func (host *bindingHostOperation) Run(
+	ctx context.Context,
+	_ http.Handler,
+	runtime roles.LifecycleRuntime,
+	_ *zap.Logger,
+	_ factorysessions.RuntimeHostRequest,
+	observer factorysessions.RuntimeHostObserver,
+) error {
+	if observer != nil {
+		observer(host.binding)
+	}
 	return runtime.CompleteStartup(ctx)
 }
 
@@ -113,5 +131,52 @@ func TestFactoryRejectsMissingRuntimeAndHost(t *testing.T) {
 	}
 	if _, err := factory.Bind(nil, factorysessions.RuntimeHostRequest{}, nil, zap.NewNop()); err == nil {
 		t.Fatal("Bind error = nil, want missing runtime")
+	}
+}
+
+func TestFactoryPublishesRuntimeHostBindingAndObserverNotification(t *testing.T) {
+	runtime := &lifecycleRuntime{}
+	host := &bindingHostOperation{binding: factorysessions.RuntimeHostBinding{
+		Host: "127.0.0.1", Port: 8123,
+	}}
+	factory, err := NewFactory(host)
+	if err != nil {
+		t.Fatalf("NewFactory: %v", err)
+	}
+	observerCalls := 0
+	process, err := factory.Bind(runtime, factorysessions.RuntimeHostRequest{}, func(binding factorysessions.RuntimeHostBinding) {
+		observerCalls++
+		if binding.Port != 8123 {
+			t.Fatalf("observed binding = %#v, want port 8123", binding)
+		}
+	}, zap.NewNop())
+	if err != nil {
+		t.Fatalf("Bind: %v", err)
+	}
+	if err := process.RunTransport(context.Background(), http.NewServeMux()); err != nil {
+		t.Fatalf("RunTransport: %v", err)
+	}
+	ready, ok := process.(interface {
+		RuntimeHostReady() <-chan factorysessions.RuntimeHostBinding
+	})
+	if !ok {
+		t.Fatal("process does not expose initializer readiness")
+	}
+	binding, open := <-ready.RuntimeHostReady()
+	if !open || binding.Port != 8123 || binding.Host != "127.0.0.1" {
+		t.Fatalf("readiness = (%#v, open=%t), want published binding", binding, open)
+	}
+	if _, open := <-ready.RuntimeHostReady(); open {
+		t.Fatal("readiness channel remained open after first publication")
+	}
+	if observerCalls != 1 {
+		t.Fatalf("observer calls = %d, want 1", observerCalls)
+	}
+}
+
+func TestNilProcessRuntimeHasNoHostReadiness(t *testing.T) {
+	var runtime *processRuntime
+	if runtime.RuntimeHostReady() != nil {
+		t.Fatal("nil process runtime returned a readiness channel")
 	}
 }

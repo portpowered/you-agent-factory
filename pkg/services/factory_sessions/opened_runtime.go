@@ -3,15 +3,28 @@ package factorysessions
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+const (
+	ProgressFragmentKind  = workers.ProgressFragmentKind
+	ResponseFragmentKind  = workers.ResponseFragmentKind
+	CompletedFragmentKind = workers.CompletedFragmentKind
+	FailedFragmentKind    = workers.FailedFragmentKind
+)
+
+type ProgressFragment = workers.ProgressFragment
+
+type ProgressPublisher = workers.ProgressPublisher
+
 // SessionRuntimeOpeningRequest contains Factory Session identity,
 // persistence, startup, and hosting values for one runtime.
 type SessionRuntimeOpeningRequest struct {
+	// FactorySessionID correlates the opened runtime with its owning Factory
+	// Session. Empty values use the process's primary session alias.
+	FactorySessionID  string
 	PersistencePolicy PersistencePolicy
 	BackendScopeID    string
 	SystemConfigHome  string
@@ -24,11 +37,11 @@ type SessionRuntimeOpeningRequest struct {
 // bounded owner requests. The complete service graph remains injected; this
 // value carries only per-runtime customer and process selections.
 type RuntimeOpeningRequest struct {
-	FactoryDefinition factorydefinitions.RuntimeOpeningRequest
-	FactoryRuntime    factoryruntime.RuntimeOpeningRequest
-	FactorySession    SessionRuntimeOpeningRequest
-	Workers           workers.RuntimeOpeningRequest
-	Recordings        recordings.RuntimeOpeningRequest
-	Models            models.RuntimeOpeningRequest
-	OperatorDefaults  operatorsettings.ResolvedDefaults
+	FactoryDefinition   factorydefinitions.RuntimeOpeningRequest
+	FactoryRuntime      factoryruntime.RuntimeOpeningRequest
+	FactorySession      SessionRuntimeOpeningRequest
+	Workers             workers.RuntimeOpeningRequest
+	Recordings          recordings.RuntimeOpeningRequest
+	ModelCacheDirectory string
+	OperatorDefaults    operatorsettings.ResolvedDefaults
 }

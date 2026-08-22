@@ -18,10 +18,7 @@ import {
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useFactoryGraphDraftState } from "../../../factory-graph-editor/hooks/factory-graph-draft-hook";
 import { maintainerRuntimeShapedFactory } from "../../../factory-graph-editor/lib/fixtures/maintainer-runtime-shaped-factory.fixture";
-import {
-  EXHAUSTION_WORKSTATION_ICON_METADATA,
-  SUPPORTED_WORKSTATION_ICON_METADATA,
-} from "../../../flowchart/lib/workstation-icon-metadata";
+import { SUPPORTED_WORKSTATION_ICON_METADATA } from "../../../flowchart/lib/workstation-icon-metadata";
 import { buildCurrentActivityGraphLayoutFromFactory } from "../../lib/current-activity-factory-graph-layout";
 import { buildGraphEdges } from "../../lib/react-flow-current-activity-card-edges";
 import {
@@ -57,10 +54,6 @@ const LEGEND_ICON_EXPECTATIONS = [
     metadata.iconKind,
   ]),
   ["Active work", "active-work"],
-  [
-    EXHAUSTION_WORKSTATION_ICON_METADATA.label,
-    EXHAUSTION_WORKSTATION_ICON_METADATA.iconKind,
-  ],
 ] as const;
 function canonicalObserverSnapshot(): DashboardSnapshot {
   const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
@@ -372,14 +365,22 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       name: "Select Review workstation",
     });
     expect(
-      within(reviewWorkstationButton)
-        .getByRole("img", { name: "Repeater workstation" })
-        .getAttribute("data-graph-semantic-icon"),
-    ).toBe("repeater");
+      reviewWorkstationButton
+        .closest("[data-workstation-runtime-type]")
+        ?.getAttribute("data-workstation-runtime-type"),
+    ).toBe("MODEL_WORKSTATION");
+    expect(
+      reviewWorkstationButton
+        .closest("[data-workstation-scheduling-behavior]")
+        ?.getAttribute("data-workstation-scheduling-behavior"),
+    ).toBe("REPEATER");
+    expect(
+      reviewWorkstationButton.querySelector("[data-workstation-semantic-icon]"),
+    ).toBeNull();
     expect(
       reviewWorkstationButton
         .closest("[data-current-activity-node-type='workstation']")
-        ?.className.includes("border-af-success-border"),
+        ?.className.includes("border-af-warning-border"),
     ).toBe(true);
     expect(
       within(reviewWorkstationButton).queryByRole("img", { name: "Active" }),
@@ -388,7 +389,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     expect(
       (await getStateNodeArticle("story:documented"))
         .querySelector("article")
-        ?.className.includes("opacity-[0.45]"),
+        ?.className.includes("agent-flow-node--muted"),
     ).toBe(true);
   });
 
@@ -582,14 +583,22 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     });
     expect(reviewButton).toBeTruthy();
     expect(
-      within(reviewButton)
-        .getByRole("img", { name: "Repeater workstation" })
-        .getAttribute("data-graph-semantic-icon"),
-    ).toBe("repeater");
+      reviewButton
+        .closest("[data-workstation-runtime-type]")
+        ?.getAttribute("data-workstation-runtime-type"),
+    ).toBe("INFERENCE_RUN");
+    expect(
+      reviewButton
+        .closest("[data-workstation-scheduling-behavior]")
+        ?.getAttribute("data-workstation-scheduling-behavior"),
+    ).toBe("REPEATER");
+    expect(
+      reviewButton.querySelector("[data-workstation-semantic-icon]"),
+    ).toBeNull();
     expect(
       reviewButton
         .closest("[data-current-activity-node-type='workstation']")
-        ?.className.includes("border-af-success-border"),
+        ?.className.includes("border-af-warning-border"),
     ).toBe(true);
     expect(
       within(reviewButton).queryByRole("img", { name: "Active" }),
@@ -886,7 +895,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       .getByLabelText("agent-slot")
       .closest("article");
     expect(idleStateArticle.querySelector("article")?.className).toContain(
-      "opacity-[0.45]",
+      "agent-flow-node--muted",
     );
     expect(idleResourceArticle?.className).toContain("border-outline");
     expect(idleResourceArticle?.className).not.toContain("opacity-[0.45]");
@@ -988,11 +997,6 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     expect(
       legend.querySelector("[data-legend-icon='workstation'] span.border-2"),
     ).toBeNull();
-    expect(
-      legend.querySelector(
-        "[data-legend-icon='exhaustion'] span.border-dashed",
-      ),
-    ).toBeNull();
 
     fireEvent.click(collapseButton);
 
@@ -1004,7 +1008,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     ).toBeTruthy();
   });
 
-  it("does not render runtime-only exhaustion-rule topology nodes", async () => {
+  it("does not render workstation nodes absent from the authored definition", async () => {
     renderCurrentActivity({
       snapshot: dashboardSnapshotWithExhaustionRuleNode(),
     });
@@ -1014,13 +1018,11 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
         name: "Select Review workstation",
       }),
     ).toBeTruthy();
+    expect(screen.queryByText("executor-loop-breaker")).toBeNull();
     expect(
       screen.queryByRole("button", {
-        name: "Select executor-loop-breaker exhaustion rule",
+        name: /Select executor-loop-breaker workstation/,
       }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: /Should Not Render/ }),
     ).toBeNull();
     expect(screen.queryByText("Should Not Render")).toBeNull();
   });

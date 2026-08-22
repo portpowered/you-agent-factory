@@ -83,6 +83,38 @@ func TestRunnerInferencer_InferStreamEmitsDeltas(t *testing.T) {
 	}
 }
 
+// TestRunnerInferencer_InferStreamCarriesTypedError pins the harness-seam
+// contract: a failed inference must stream an ErrorValue that carries the
+// error OBJECT, not just its text, so consumers that honor ErrorValue.Err can
+// recover the typed provider classification.
+func TestRunnerInferencer_InferStreamCarriesTypedError(t *testing.T) {
+	t.Parallel()
+
+	failure := workerexecution.NewProviderError(
+		workerexecution.WorkFailureTypePermanentBadRequest,
+		"invalid request",
+		nil,
+	)
+	inferencer := newRunnerInferencer(&sequenceRunner{errors: []error{failure}}, workerexecution.ProviderInferenceRequest{})
+	ch, err := inferencer.InferStream(context.Background(), messages.InferenceRequest{})
+	if err != nil {
+		t.Fatalf("InferStream: %v", err)
+	}
+	var streamed *messages.ErrorValue
+	for msg := range ch {
+		if msg.Type == messages.StreamTypeError {
+			streamed, _ = msg.Value.(*messages.ErrorValue)
+		}
+	}
+	if streamed == nil || streamed.Err == nil {
+		t.Fatalf("stream error value = %#v, want the error object preserved", streamed)
+	}
+	var providerErr *workerexecution.ProviderError
+	if !errors.As(streamed.Err, &providerErr) || providerErr.Type != workerexecution.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("stream error = %v, want the typed provider error", streamed.Err)
+	}
+}
+
 func TestRunnerInferencer_RetriesTransientProviderFailure(t *testing.T) {
 	t.Parallel()
 
@@ -143,5 +175,43 @@ func TestRunnerInferencer_DoesNotRetryTerminalProviderFailure(t *testing.T) {
 	}
 	if runner.calls != 1 {
 		t.Fatalf("runner calls = %d, want no retry", runner.calls)
+	}
+}
+
+func TestSleepForProviderRetryHonorsTimerAndCancellation(t *testing.T) {
+	if err := sleepForProviderRetry(context.Background(), 0); err != nil {
+		t.Fatalf("sleepForProviderRetry(ready) = %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := sleepForProviderRetry(ctx, time.Hour); !errors.Is(err, context.Canceled) {
+		t.Fatalf("sleepForProviderRetry(canceled) = %v, want context.Canceled", err)
+	}
+}
+
+func TestConversationPromptPreservesRolesAndFallbacks(t *testing.T) {
+	system, conversation := conversationPrompt("base", []messages.Message{
+		messages.NewTextMessage(messages.RoleSystem, "ignored system"),
+		messages.NewTextMessage(messages.RoleUser, "question"),
+		messages.NewTextMessage(messages.RoleAssistant, "answer"),
+		messages.NewTextMessage(messages.RoleTool, "tool result"),
+	})
+	if system != "base" || conversation != "User: question\n\nAssistant: answer\n\nTool: tool result" {
+		t.Fatalf("conversationPrompt() = (%q, %q), want all non-system roles", system, conversation)
+	}
+
+	system, conversation = conversationPrompt("", []messages.Message{
+		messages.NewTextMessage(messages.RoleSystem, "runtime system"),
+		messages.NewTextMessage(messages.RoleUser, "fallback question"),
+	})
+	if system != "runtime system" || conversation != "User: fallback question" {
+		t.Fatalf("conversationPrompt(system/user) = (%q, %q)", system, conversation)
+	}
+
+	system, conversation = conversationPrompt("base", []messages.Message{
+		messages.NewTextMessage(messages.RoleSystem, "ignored"),
+	})
+	if system != "base" || conversation != "" {
+		t.Fatalf("conversationPrompt(empty history) = (%q, %q), want base and empty", system, conversation)
 	}
 }

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	checkpointrecovery "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery"
 )
 
@@ -19,17 +18,17 @@ func TestValidateEnvelopeRejectsStructurallyCorruptValues(t *testing.T) {
 		{
 			name:      "empty checkpoint id",
 			envelope:  checkpointrecovery.Envelope{SchemaVersion: 1, Payload: []byte("payload")},
-			wantError: factoryruntime.ErrCorruptCheckpoint,
+			wantError: checkpointrecovery.ErrCorruptCheckpoint,
 		},
 		{
 			name:      "non-positive schema version",
 			envelope:  checkpointrecovery.Envelope{CheckpointID: "checkpoint-1", Payload: []byte("payload")},
-			wantError: factoryruntime.ErrCorruptCheckpoint,
+			wantError: checkpointrecovery.ErrCorruptCheckpoint,
 		},
 		{
 			name:      "empty payload",
 			envelope:  checkpointrecovery.Envelope{CheckpointID: "checkpoint-1", SchemaVersion: 1},
-			wantError: factoryruntime.ErrCorruptCheckpoint,
+			wantError: checkpointrecovery.ErrCorruptCheckpoint,
 		},
 	}
 
@@ -42,5 +41,18 @@ func TestValidateEnvelopeRejectsStructurallyCorruptValues(t *testing.T) {
 				t.Fatalf("ValidateEnvelope() error = %v, want %v", err, tc.wantError)
 			}
 		})
+	}
+}
+
+func TestValidateEnvelopeAcceptsValidValue(t *testing.T) {
+	t.Parallel()
+
+	err := checkpointrecovery.ValidateEnvelope(checkpointrecovery.Envelope{
+		CheckpointID:  "checkpoint-1",
+		SchemaVersion: 1,
+		Payload:       []byte("payload"),
+	})
+	if err != nil {
+		t.Fatalf("ValidateEnvelope() error = %v, want nil", err)
 	}
 }

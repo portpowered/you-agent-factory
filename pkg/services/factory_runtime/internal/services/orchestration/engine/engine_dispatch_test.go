@@ -81,6 +81,97 @@ func TestDispatchRecordsTrackedInRunningDispatches(t *testing.T) {
 	}
 }
 
+func TestHumanApprovalDispatchIsReservedWithoutWorkerForwarding(t *testing.T) {
+	n := buildTestNet()
+	n.Transitions["approval"] = &petri.Transition{
+		ID:   "approval",
+		Name: "Approval",
+		Type: petri.TransitionHumanApproval,
+	}
+	marking := petri.NewMarking("test-wf")
+
+	alreadyDispatched := false
+	dispatchSub := &mockSubsystem{
+		group: subsystems.Dispatcher,
+		execFn: func(_ context.Context, _ *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+			if alreadyDispatched {
+				return nil, nil
+			}
+			alreadyDispatched = true
+			return &interfaces.TickResult{
+				Dispatches: []interfaces.DispatchRecord{{
+					Dispatch: work.WorkDispatch{
+						DispatchID:      "approval-dispatch",
+						TransitionID:    "approval",
+						WorkerType:      "",
+						WorkstationName: "Approval",
+						Execution: work.ExecutionMetadata{
+							WorkIDs: []string{"work-1"},
+						},
+					},
+					Mutations: []interfaces.MarkingMutation{{
+						Type:      interfaces.MutationConsume,
+						TokenID:   "tok-1",
+						FromPlace: "task:init",
+						Reason:    "consumed by human approval",
+					}},
+				}},
+			}, nil
+		},
+	}
+
+	hook := newTestDispatchResultHook()
+	var handlerCalls int
+	var records []interfaces.FactoryDispatchRecord
+	engine := newTestFactoryEngine(n, marking, []subsystems.Subsystem{dispatchSub},
+		WithDispatchResultHook(hook),
+		WithDispatchHandler(func(work.WorkDispatch) { handlerCalls++ }),
+		WithDispatchRecorder(func(record interfaces.FactoryDispatchRecord) {
+			records = append(records, record)
+		}),
+	)
+
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick() error: %v", err)
+	}
+	if handlerCalls != 0 {
+		t.Fatalf("human approval dispatch reached worker handler %d times", handlerCalls)
+	}
+	if len(hook.submits) != 0 {
+		t.Fatalf("human approval dispatch reached result hook: %#v", hook.submits)
+	}
+	if len(records) != 1 || !records[0].HumanApproval {
+		t.Fatalf("dispatch records = %#v, want one human-approval record", records)
+	}
+	if len(engine.RunningDispatches()) != 1 {
+		t.Fatalf("running dispatches = %d, want reserved approval dispatch", len(engine.RunningDispatches()))
+	}
+
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatalf("second Tick() error: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("human approval dispatch was retried or duplicated: %#v", records)
+	}
+}
+
+func TestWorkResultForCompletedDispatchPreservesResolvedClassificationLabel(t *testing.T) {
+	result := workerexecution.WorkResult{
+		Outcome: workerexecution.OutcomeAccepted,
+		Output:  "needs_review",
+	}
+	completed := interfaces.CompletedDispatch{
+		Outcome:                     workerexecution.OutcomeAccepted,
+		SelectedClassificationLabel: "needs_review",
+	}
+
+	got := workResultForCompletedDispatch(result, completed)
+
+	if got.SelectedClassificationLabel != completed.SelectedClassificationLabel {
+		t.Fatalf("selected classification label = %q, want %q", got.SelectedClassificationLabel, completed.SelectedClassificationLabel)
+	}
+}
+
 func TestDispatchResultHook_RecordsDispatchBeforeSubmittingToHook(t *testing.T) {
 	n := buildTestNet()
 	marking := petri.NewMarking("test-wf")
@@ -98,10 +189,10 @@ func TestDispatchResultHook_RecordsDispatchBeforeSubmittingToHook(t *testing.T) 
 							WorkIDs:   []string{"work-1"},
 							ReplayKey: "transition-1/trace-1/work-1",
 						},
-						InputTokens: workers.InputTokens(factorytoken.Token{
+						InputTokens: workers.InputTokens(factorytoken.ToWorker(factorytoken.Token{
 							ID:      "token-1",
 							PlaceID: "task:init",
-						}),
+						})),
 					},
 					Mutations: []interfaces.MarkingMutation{{
 						Type:      interfaces.MutationConsume,
@@ -168,7 +259,7 @@ func TestDispatchEntry_SubmitsRawInterfacesWorkDispatch(t *testing.T) {
 						TransitionID:    "transition-raw",
 						WorkerType:      "worker-raw",
 						WorkstationName: "station-raw",
-						InputTokens:     workers.InputTokens(inputToken),
+						InputTokens:     workers.InputTokens(factorytoken.ToWorker(inputToken)),
 						InputBindings:   map[string][]string{"work": {"token-raw"}},
 					},
 					Mutations: []interfaces.MarkingMutation{{
@@ -279,7 +370,7 @@ func TestTokenNamePopulatedOnDispatchAndCompletion(t *testing.T) {
 						DispatchID:   "d1",
 						TransitionID: "t1",
 						WorkerType:   "test-worker",
-						InputTokens: workers.InputTokens(factorytoken.Token{
+						InputTokens: workers.InputTokens(factorytoken.ToWorker(factorytoken.Token{
 							ID:      "tok-1",
 							PlaceID: "task:init",
 							Color: factorytoken.Color{
@@ -287,7 +378,7 @@ func TestTokenNamePopulatedOnDispatchAndCompletion(t *testing.T) {
 								WorkID:     "work-1",
 								WorkTypeID: "task",
 							},
-						}),
+						})),
 					},
 					Mutations: []interfaces.MarkingMutation{{
 						Type:      interfaces.MutationConsume,
@@ -393,7 +484,7 @@ func assertSingleDispatchRecord(t *testing.T, records []interfaces.FactoryDispat
 	}
 }
 
-func assertConsumedTokenName(t *testing.T, tokens []factorytoken.Token, wantName, label string) {
+func assertConsumedTokenName(t *testing.T, tokens []workerexecution.Token, wantName, label string) {
 	t.Helper()
 	if len(tokens) != 1 {
 		t.Fatalf("expected 1 consumed token on %s, got %d", label, len(tokens))

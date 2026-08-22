@@ -39,13 +39,20 @@ const BUN_INCOMPATIBLE_WORKSPACE_GRAPH_FILES = new Set([
   "src/features/factory-graph-editor/components/controls/factory-graph-editor-toolbar-sizing.test.tsx",
   "src/features/factory-graph-editor/components/factory-graph-editor-toolbar-icons.test.tsx",
   "src/features/factory-graph-editor/components/flow/factory-graph-editor-flow.progress-outcome-routes.test.tsx",
+  "src/features/factory-graph-editor/hooks/layout/factory-graph-edge-waypoint-editor-hook.component.test.ts",
+  "src/features/factory-graph-editor/hooks/layout/factory-graph-layout-draft-hook.component.test.ts",
+  "src/features/factory-graph-editor/hooks/layout/factory-graph-visual-group-editor-hook.component.test.ts",
+  "src/features/factory-graph-editor/components/flow/visual-groups/factory-graph-visual-group-layer.component.test.tsx",
+  "src/features/factory-graph-editor/components/flow/visual-groups/factory-graph-visual-group-controls.test.tsx",
   "src/features/factory-graph-editor/hooks/use-editable-factory-graph.document-plane.test.tsx",
   "src/features/factory-graph-editor/hooks/use-editable-factory-graph.snapshot-overlay.test.tsx",
   "src/features/factory-graph-editor/hooks/use-editable-factory-graph.worker-assignment.test.tsx",
   "src/features/factory-graph-editor/hooks/validation/use-factory-validation.bun.component.test.tsx",
   "src/features/flowchart/components/current-activity-doc-node.test.tsx",
   "src/features/flowchart/components/current-activity-node-chrome.test.tsx",
+  "src/features/flowchart/components/current-activity-place-node-expanded.test.tsx",
   "src/features/flowchart/components/current-activity-work-type-node.test.tsx",
+  "src/features/flowchart/components/current-activity-work-progress-marker.test.tsx",
   "src/features/flowchart/components/graph-semantic-icon.test.tsx",
   "src/features/graphs/components/work-relation-node.test.tsx",
   "src/features/submit-work/components/submit-work-widget.isolated.bun.component.test.tsx",
@@ -63,6 +70,7 @@ const BUN_INCOMPATIBLE_WORKSPACE_GRAPH_FILES = new Set([
   "src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-graph-semantics.test.tsx",
   "src/features/workflow-activity/components/dashboard-flow-axis-legend.test.tsx",
   "src/features/workflow-activity/hooks/react-flow-current-activity-card-graph-view-model.component.test.ts",
+  "src/features/workflow-activity/hooks/current-activity-graph-state-restoration.component.test.tsx",
 ]);
 
 const VITEST_COMPATIBILITY_PATTERNS: Array<{

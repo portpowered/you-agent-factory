@@ -1,0 +1,789 @@
+package workersessions
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+)
+
+// RuntimeAttemptRequest asks Worker Sessions to open the durable observation
+// window for an attempt whose admission and execution remain owned by
+// Factory Runtime. ID is the Worker Session identity; AttemptID is the
+// physical attempt identity written into lifecycle records. An empty
+// AttemptID uses the request dispatch ID.
+type RuntimeAttemptRequest struct {
+	ID        string
+	AttemptID string
+	Execution workers.WorkstationDispatchRequest
+}
+
+// RuntimeAttempt is the durable lifecycle handle returned after the opening
+// Worker Session record has committed. The function-valued handle keeps the
+// optional Runtime capability structural, so narrow Worker Sessions test
+// doubles do not need to implement it. Complete is idempotent and records the
+// terminal observation; Runtime remains authoritative for admission,
+// cancellation, and the detached execution itself.
+type RuntimeAttempt func(context.Context, workers.WorkstationDispatchResult, error) error
+
+// Complete commits the terminal observation through the RuntimeAttempt handle.
+func (a RuntimeAttempt) Complete(
+	ctx context.Context,
+	result workers.WorkstationDispatchResult,
+	dispatchErr error,
+) error {
+	if a == nil {
+		return errors.New("worker sessions: runtime attempt is unavailable")
+	}
+	return a(ctx, result, dispatchErr)
+}
+
+// Service is the W1+W2+W3 Worker Session identity, registry, supervision,
+// and Events publication foundation: stable identity reservation, immutable
+// deterministic inspection, supervised Start with exactly-once terminal
+// classification, a before-handoff opening record, and an after-output
+// terminal SESSION record, plus PublishRecord for committing source-native
+// Worker observations onto that same topic. StartTurn, Runtime persistence,
+// and transport behavior are later ACP Worker Events slices. Provider Session
+// association and controls are exposed here because this service owns
+// one session's supervision state and is the only route to an admitted
+// Workers dispatch's explicit cancellation boundary.
+type Service interface {
+	// Reserve validates req and, when req.ID is not already registered,
+	// stores a new session in StateReserved and returns its snapshot.
+	// Reserving an identity that already exists returns
+	// ErrSessionAlreadyExists and leaves the existing session unchanged; this
+	// is the one deterministic outcome for duplicate reservation.
+	Reserve(ctx context.Context, req ReserveRequest) (Session, error)
+
+	// Get returns the current immutable snapshot for req.ID. An invalid
+	// req.ID returns ErrInvalidSessionID; a valid but unregistered req.ID
+	// returns the distinguishable ErrSessionNotFound.
+	Get(ctx context.Context, req GetRequest) (Session, error)
+
+	// List returns immutable snapshots matching req.Filter in the documented
+	// deterministic order (ascending by ID), independent of insertion order
+	// or concurrent access. An empty registry or filter match returns a
+	// successful empty ListResult, not a not-found failure. An invalid
+	// filter value returns a typed validation error and no partial result.
+	List(ctx context.Context, req ListRequest) (ListResult, error)
+
+	// ListObservations returns detached, provider-neutral observations
+	// correlated with one Work identity. It is backed by Worker Sessions'
+	// lifecycle state, the exact Providers-owned association, and normalized
+	// Provider Sessions projection facts; it does not expose recording stores,
+	// provider readers, or filesystem paths.
+	ListObservations(ctx context.Context, req ListObservationsRequest) (ListObservationsResult, error)
+
+	// GetObservation returns one detached observation identified by its exact
+	// Providers-owned provider/kind/id reference.
+	GetObservation(ctx context.Context, req GetObservationRequest) (Observation, error)
+
+	// GetObservationByWorkerSessionID returns one detached observation by the
+	// canonical Worker Session identity. This identity-only path keeps
+	// provider-neutral histories inspectable when no Provider Session exists.
+	GetObservationByWorkerSessionID(ctx context.Context, req GetObservationByWorkerSessionIDRequest) (Observation, error)
+
+	// ListWorkerSessionObservations returns detached observations through the
+	// top-level Worker Session identity surface. The zero Scope selects direct
+	// sessions; callers must explicitly select All to include Factory-originated
+	// sessions. Results are sorted by Worker Session ID and use a bounded opaque
+	// cursor.
+	ListWorkerSessionObservations(ctx context.Context, req ListWorkerSessionObservationsRequest) (ListWorkerSessionObservationsResult, error)
+
+	// ReadTranscript returns the normalized Provider Sessions transcript for one
+	// terminal Worker Session identified by its exact Provider Session reference.
+	ReadTranscript(ctx context.Context, req ReadTranscriptRequest) (ReadTranscriptResult, error)
+
+	// ReadTranscriptByWorkerSessionID resolves the exact Provider Session
+	// association recorded by Worker Sessions before projecting the normalized
+	// transcript. Callers never supply a provider/kind/id tuple.
+	ReadTranscriptByWorkerSessionID(ctx context.Context, req ReadTranscriptByWorkerSessionIDRequest) (ReadTranscriptResult, error)
+
+	// StreamObservations returns a cancellable retained-then-live stream over
+	// the canonical Worker Session Events topic for the exact Provider Session
+	// reference.
+	StreamObservations(ctx context.Context, req StreamObservationsRequest) (ObservationSubscription, error)
+
+	// StreamObservationsByWorkerSessionID returns a cancellable retained-then-live
+	// stream over the canonical Worker Session Events topic by stable Worker
+	// Session identity, including sessions without a Provider Session reference.
+	StreamObservationsByWorkerSessionID(ctx context.Context, req StreamObservationsByWorkerSessionIDRequest) (ObservationSubscription, error)
+
+	// InvokeSession validates req, then establishes or reuses one stable Worker
+	// Session identity in StateReserved, transitions StateStarting, and hands
+	// a detached clone of req.Execution to the one directly injected
+	// Workers execution service. InvokeSession is synchronous: it
+	// returns only after the attempt commits its exactly-once absorbing
+	// terminal outcome, classified from the Workers WorkResult first and the
+	// adapter error second. A cancel or terminate that wins after Reserve but
+	// before Workers admission returns the established canceled terminal result
+	// without starting Workers. Invalid requests and conflicting invocations
+	// return a typed error before any registry mutation or Workers call. Once
+	// the terminal outcome commits, InvokeSession also appends one terminal
+	// KindSession record (PhaseCompleted or PhaseFailed) to Topic(req.ID); a
+	// failure publishing that record is logged and never changes the
+	// returned, already-committed Session. Its reservation, opening
+	// publication, admission callback, retry, control-race, terminal
+	// classification, and terminal publication use the same supervision
+	// implementation as Start; only the caller-facing wait point differs.
+	//
+	// InvokeSession is the one operation every orchestrator uses to run a
+	// Worker. It carries no executor: req.Execution.WorkstationName selects an
+	// already-assembled Workers runtime binding by route, so a Petri Worker
+	// names its authored workstation and a JavaScript workflow child names the
+	// reserved provider-invocation route. Neither supplies, constructs, or
+	// injects an executor of its own.
+	//
+	// When req.Retry allows more than one attempt, a retryable failure is
+	// retried under this same session identity and the same open publication
+	// window, so one Worker remains one Worker on the wire across its attempts.
+	InvokeSession(ctx context.Context, req InvokeSessionRequest) (InvokeSessionResult, error)
+
+	// Start validates req, reserves the Worker Session identity, commits and
+	// verifies its opening Events record, and starts the already-resolved
+	// Workers execution under server-owned supervision. It returns only after
+	// the session has reached the Workers admission callback, so a nil error is
+	// an honest acceptance barrier rather than a promise that execution has
+	// completed. The caller context can end the admission wait without ending
+	// the reserved operation: the request ID replay remains pending until the
+	// server-owned attempt records its authoritative accepted or failed result.
+	// Once admitted, the attempt continues after the caller's context is
+	// canceled; Cancel and Terminate are the explicit control paths for an
+	// admitted execution.
+	Start(ctx context.Context, req StartRequest) (StartResult, error)
+
+	// Continue validates req, atomically reserves one distinct successor Worker
+	// Session from the terminal source snapshot, and starts that successor
+	// under server-owned supervision. Worker Sessions owns source validation,
+	// lineage, idempotency, and admission; the resolved Workers execution is
+	// cloned from the source supervision and carries the source's exact
+	// Providers-owned SessionRef as ResumeSession. Providers.Continue remains
+	// the only provider execution path after Workers accepts the dispatch.
+	Continue(ctx context.Context, req ContinueRequest) (ContinueResult, error)
+
+	// Interrupt claims one active source dispatch at its exact admitted
+	// boundary, waits for the authoritative canceled source outcome, and then
+	// admits one distinct replacement successor through Continue. The source's
+	// exact recorded Provider Session reference is captured before cancellation
+	// and is the only reference accepted by the successor.
+	Interrupt(ctx context.Context, req InterruptRequest) (InterruptResult, error)
+
+	// AssociateProviderSession records the exact Providers-owned SessionRef
+	// observed by one currently supervised Worker Session attempt. The caller
+	// must name the session's exact dispatch identity; Worker Sessions derives
+	// the stable Worker Session, turn, and attempt correlation from that
+	// supervised attempt rather than accepting caller-supplied substitutes.
+	// Repeating the same reference is an idempotent duplicate. A different
+	// reference for that attempt is rejected and never replaces the first
+	// accepted association.
+	AssociateProviderSession(context.Context, ProviderSessionAssociationRequest) (ProviderSessionAssociationResult, error)
+
+	// ObserveProviderSession records a trusted live provider observation by its
+	// current Workers dispatch identity. Worker Sessions resolves the owning
+	// Worker Session and its immutable turn/attempt correlation itself, so a
+	// progress publisher cannot attach a reference to a sibling session.
+	// Callers must invoke this before forwarding output that names the observed
+	// Provider Session reference.
+	ObserveProviderSession(context.Context, ProviderSessionObservationRequest) (ProviderSessionAssociationResult, error)
+
+	// EnsureProviderBinding records the first provider identity learned from a
+	// supervised dispatch before its provider-native output is published. A
+	// later, different provider identity is rejected and never replaces the
+	// opening or existing binding.
+	EnsureProviderBinding(context.Context, ProviderBindingRequest) (ProviderBindingResult, error)
+
+	// WorkerSessionIDForDispatch resolves a supervised dispatch attempt to its
+	// stable Worker Session identity for source-native publication.
+	WorkerSessionIDForDispatch(context.Context, string) (string, error)
+
+	// PublishRecord validates req, then appends req.Draft, detached, as a
+	// source-native Worker record onto Topic(req.SessionID) using req's
+	// complete Events idempotency identity. PublishRecord only accepts a
+	// record while req.SessionID's publication window is open -- after its
+	// opening record has committed and before its terminal record has
+	// started committing -- and only when req.SourceSequence does not
+	// regress behind one already accepted for the same (SourceType,
+	// SourceID), unless req's full four-part identity was itself already
+	// accepted: an exact retry of a previously accepted identity always
+	// reaches Events and resolves to the original record as a duplicate,
+	// regardless of any later SourceSequence accepted since. Every accepted
+	// call for one session is itself serialized, so its own opening,
+	// publication, and terminal records can never interleave. Beyond that
+	// window and ordering enforcement, PublishRecord
+	// relies on Events for aggregate order, duplicate resolution, cursors,
+	// reads, and subscriptions. An invalid Draft, an unopened or closed
+	// publication window (ErrPublicationNotOpen), an out-of-order
+	// SourceSequence (ErrOutOfOrderPublication), a malformed Events
+	// identity, or an Events append failure is returned unchanged and
+	// commits no record.
+	PublishRecord(ctx context.Context, req PublishRecordRequest) (PublishRecordResult, error)
+
+	// Pause returns an explicit unsupported result unless the supervised
+	// execution capability can truthfully pause. It never fabricates PAUSED.
+	Pause(ctx context.Context, req ControlRequest) (ControlResult, error)
+
+	// Resume returns an explicit unsupported result until a matching paused
+	// execution capability is available. It never fabricates RUNNING.
+	Resume(ctx context.Context, req ControlRequest) (ControlResult, error)
+
+	// Cancel explicitly stops an admitted dispatch through the injected
+	// Workers execution service. It never uses caller-context cancellation as a
+	// substitute for that boundary effect.
+	Cancel(ctx context.Context, req ControlRequest) (ControlResult, error)
+
+	// Terminate is Cancel with join semantics: a successful result is returned
+	// only after the associated dispatch callback has completed.
+	Terminate(ctx context.Context, req ControlRequest) (ControlResult, error)
+}
+
+// ReserveRequest asks Service to reserve one new Worker Session identity.
+type ReserveRequest struct {
+	ID string
+}
+
+// Validate reports whether req carries a non-empty stable identity. Validate
+// is pure and does not mutate req.
+func (req ReserveRequest) Validate() error {
+	if !validSessionID(req.ID) {
+		return ErrInvalidSessionID
+	}
+	return nil
+}
+
+// GetRequest asks Service to inspect one Worker Session identity.
+type GetRequest struct {
+	ID string
+}
+
+// Validate reports whether req carries a non-empty stable identity. Validate
+// is pure and does not mutate req.
+func (req GetRequest) Validate() error {
+	if !validSessionID(req.ID) {
+		return ErrInvalidSessionID
+	}
+	return nil
+}
+
+// Filter narrows List results. The zero-value Filter matches every session.
+type Filter struct {
+	// States restricts results to sessions whose State is in States. An
+	// empty States matches every state.
+	States []State
+}
+
+// Validate reports whether every state named in f.States is one of the eight
+// accepted lifecycle states. Validate is pure and does not mutate f.
+func (f Filter) Validate() error {
+	for _, state := range f.States {
+		if !state.Valid() {
+			return ErrInvalidState
+		}
+	}
+	return nil
+}
+
+// ListRequest asks Service for the deterministic filtered set of current
+// Worker Session snapshots.
+type ListRequest struct {
+	Filter Filter
+}
+
+// Validate reports whether req.Filter is valid. Validate is pure and does not
+// mutate req.
+func (req ListRequest) Validate() error {
+	return req.Filter.Validate()
+}
+
+// ListResult is the deterministic immutable snapshot collection returned by
+// List. Mutating Sessions, or any element of it, after List returns never
+// affects registry-owned state or a later List/Get result.
+type ListResult struct {
+	Sessions []Session
+}
+
+// InvokeSessionRequest asks Service to supervise one already-resolved Workers
+// execution under a stable Worker Session identity.
+type InvokeSessionRequest struct {
+	// ID is the stable Worker Session identity. If ID is not yet registered,
+	// InvokeSession reserves it. If ID is already registered in StateReserved,
+	// InvokeSession reuses that exact session and never creates a replacement.
+	// Any other existing state is a conflicting invocation.
+	ID string
+	// Execution is the already-resolved Workers execution request.
+	// InvokeSession hands a detached clone of Execution to the injected
+	// workers.Service, so the caller retains exclusive
+	// ownership of Execution's reference-backed fields after InvokeSession is
+	// called. Worker Sessions performs no runner selection, prompt
+	// rendering, worktree preparation, provider invocation, or output
+	// shaping on this value.
+	//
+	// Execution.WorkstationName is a route into the immutable runtime-binding
+	// snapshot Workers assembled for this session. It is an authored
+	// workstation name for a Petri Worker and workers.ProviderInvocationRoute
+	// for a JavaScript workflow child; both resolve through the same
+	// route lookup, and neither carries an executor.
+	Execution workers.WorkstationDispatchRequest
+	// Retry bounds how many provider attempts this invocation may make. The
+	// zero value is exactly one attempt, so a caller that says nothing about
+	// retry gets the single-attempt behavior Petri dispatch has always had.
+	Retry RetryPolicy
+}
+
+// StartRequest is the asynchronous form of InvokeSessionRequest. The
+// execution must already be resolved by Workers; Worker Sessions only owns
+// identity, lifecycle, Events visibility, supervision, and the caller's
+// idempotency key. RequestID is required for Start and is intentionally not a
+// field on InvokeSessionRequest: synchronous callers retain their existing
+// session-ID conflict behavior without constructing an asynchronous transport
+// value.
+type StartRequest struct {
+	RequestID string
+	ID        string
+	Execution workers.WorkstationDispatchRequest
+	Retry     RetryPolicy
+}
+
+// Validate reports whether req carries the required caller request identity
+// and a minimally well-formed resolved Workers execution. It is pure and does
+// not reserve the request ID or mutate any caller-owned value.
+func (req StartRequest) Validate() error {
+	if strings.TrimSpace(req.RequestID) == "" {
+		return ErrInvalidStartRequestID
+	}
+	return (InvokeSessionRequest{
+		ID:        req.ID,
+		Execution: req.Execution,
+		Retry:     req.Retry,
+	}).Validate()
+}
+
+// StartResult is the detached Worker Session snapshot returned after Workers
+// admission. The snapshot may already be terminal when a Workers boundary
+// admits and completes an execution in one callback turn; completion itself
+// is never made synchronous by Start.
+type StartResult struct {
+	Session Session
+}
+
+// ContinueRequest asks Worker Sessions to create one successor from a
+// terminal source Worker Session. The source's exact provider association is
+// read from registry-owned state; callers cannot supply or replace it.
+// SuccessorWorkerSessionID is caller-selected so the newly reserved identity
+// is visible before provider execution begins and can never be confused with
+// the source identity.
+type ContinueRequest struct {
+	RequestID                string
+	SourceWorkerSessionID    string
+	SuccessorWorkerSessionID string
+	FollowUpInput            string
+}
+
+// Normalize returns the immutable request tuple used for validation and
+// idempotent replay. User input is preserved byte-for-byte after the required
+// non-empty check; only identity fields discard surrounding whitespace.
+func (req ContinueRequest) Normalize() ContinueRequest {
+	req.RequestID = strings.TrimSpace(req.RequestID)
+	req.SourceWorkerSessionID = strings.TrimSpace(req.SourceWorkerSessionID)
+	req.SuccessorWorkerSessionID = strings.TrimSpace(req.SuccessorWorkerSessionID)
+	return req
+}
+
+// Validate reports whether req carries all continuation identities and a
+// non-empty follow-up message. Validation is pure and does not inspect or
+// mutate Worker Sessions state.
+func (req ContinueRequest) Validate() error {
+	normalized := req.Normalize()
+	if normalized.RequestID == "" {
+		return ErrInvalidContinuationRequestID
+	}
+	if !validSessionID(normalized.SourceWorkerSessionID) || !validSessionID(normalized.SuccessorWorkerSessionID) ||
+		normalized.SourceWorkerSessionID == normalized.SuccessorWorkerSessionID {
+		return ErrInvalidContinuationLineage
+	}
+	if strings.TrimSpace(normalized.FollowUpInput) == "" {
+		return ErrInvalidContinuationInput
+	}
+	return nil
+}
+
+// ContinueResult is the detached successor snapshot returned once the
+// continuation reaches Workers admission. A pre-admission failure returns a
+// terminal successor snapshot together with ErrContinuationNotAccepted.
+type ContinueResult struct {
+	RequestID                string
+	SourceWorkerSessionID    string
+	SuccessorWorkerSessionID string
+	Session                  Session
+}
+
+// Clone returns a detached continuation result.
+func (result ContinueResult) Clone() ContinueResult {
+	result.Session = result.Session.Clone()
+	return result
+}
+
+// RetryPolicy bounds the attempts one InvokeSession call may make.
+//
+// Only the bound is caller-owned. The backoff schedule and the decision that a
+// particular failure is worth retrying both belong to Worker Sessions: a
+// caller-supplied schedule would be re-derived by every caller, and a
+// caller-supplied predicate would let two orchestrators disagree about what
+// "retryable" means when Workers already classifies it exactly once.
+type RetryPolicy struct {
+	// MaxAttempts is the total number of provider attempts, not the number of
+	// retries after the first. Zero and one are both exactly one attempt;
+	// negative values are rejected as invalid rather than silently clamped,
+	// because a negative bound is a caller bug rather than a preference.
+	MaxAttempts int
+}
+
+// Attempts returns the effective attempt budget for p, collapsing the zero
+// value and an explicit single attempt onto the same answer so callers never
+// have to distinguish "unset" from "no retries".
+func (p RetryPolicy) Attempts() int {
+	if p.MaxAttempts < 1 {
+		return 1
+	}
+	return p.MaxAttempts
+}
+
+// Validate reports whether p names a representable attempt budget. Validate is
+// pure and does not mutate p.
+func (p RetryPolicy) Validate() error {
+	if p.MaxAttempts < 0 {
+		return fmt.Errorf("%w: retry MaxAttempts must not be negative", ErrInvalidExecutionRequest)
+	}
+	return nil
+}
+
+// Validate reports whether req carries a non-empty stable identity and a
+// minimally well-formed resolved execution request: a named workstation
+// route, a non-empty attempt (dispatch) identity, and a nested dispatch
+// workstation name that is non-empty and matches the top-level route. The
+// nested-name checks mirror the same dispatch identity invariant the Workers
+// boundary itself enforces (see validDispatch in
+// pkg/services/workers/internal/services/workstations/internal/service/service.go),
+// so Worker Sessions rejects a malformed resolved request before any
+// registry mutation or Workers call instead of allowing Workers to reject it
+// after effects have already happened. Validate is pure and does not mutate
+// req, the registry, or call Workers.
+func (req InvokeSessionRequest) Validate() error {
+	if !validSessionID(req.ID) {
+		return ErrInvalidSessionID
+	}
+	if err := req.Retry.Validate(); err != nil {
+		return err
+	}
+	workstationName := strings.TrimSpace(req.Execution.WorkstationName)
+	if workstationName == "" {
+		return fmt.Errorf("%w: workstation name is required", ErrInvalidExecutionRequest)
+	}
+	if strings.TrimSpace(req.Execution.Execution.Dispatch.DispatchID) == "" {
+		return fmt.Errorf("%w: attempt (dispatch) id is required", ErrInvalidExecutionRequest)
+	}
+	// The nested comparison intentionally compares the RAW (untrimmed)
+	// nested dispatch workstation name against the already-trimmed
+	// top-level workstationName, mirroring validDispatch in
+	// pkg/services/workers/internal/services/workstations/internal/service/service.go
+	// exactly: that function trims only the top-level name and requires
+	// dispatch.WorkstationName == name with no trimming applied to the
+	// nested value. Trimming both sides here would incorrectly accept a
+	// whitespace-padded nested name that the real Workers boundary rejects.
+	rawNestedWorkstationName := req.Execution.Execution.Dispatch.WorkstationName
+	if strings.TrimSpace(rawNestedWorkstationName) == "" {
+		return fmt.Errorf("%w: nested dispatch workstation name is required", ErrInvalidExecutionRequest)
+	}
+	if rawNestedWorkstationName != workstationName {
+		return fmt.Errorf("%w: nested dispatch workstation name must match the top-level workstation name", ErrInvalidExecutionRequest)
+	}
+	return nil
+}
+
+// InvokeSessionResult is the detached snapshot InvokeSession returns once the
+// session's exactly-once terminal outcome has been committed.
+type InvokeSessionResult struct {
+	Session Session
+	// Dispatch is the raw, detached workers.WorkstationDispatchResult
+	// returned by the underlying workers.Service.
+	// DispatchWorkstation call. It is populated whenever the attempt was
+	// actually handed off to Workers, and is the zero value when InvokeSession
+	// terminalized before handoff (for example
+	// FailureCauseEventPublicationFailure). Session.Result carries only the
+	// bounded, safe COMPLETED/FAILED classification; Dispatch carries the
+	// full Workers-owned payload a trusted caller needs to preserve existing
+	// Work materialization and output lineage behavior unchanged.
+	//
+	// When more than one attempt ran, Dispatch is the last attempt's result:
+	// it is the outcome the session terminalized on, and the earlier attempts
+	// are visible as their own records on the session's topic.
+	Dispatch workers.WorkstationDispatchResult
+	// DispatchErr is the raw adapter error returned alongside Dispatch, if
+	// any, detached from registry-owned state.
+	DispatchErr error
+	// Attempts is the number of provider attempts actually made, always at
+	// least one for an invocation that reached Workers and zero for one that
+	// terminalized before handoff.
+	Attempts int
+}
+
+// ProviderSessionAssociation is the detached Worker Sessions-owned binding
+// from one Worker Session attempt to the exact Providers-owned Provider
+// Session reference it observed. DispatchID and AttemptID intentionally both
+// retain the existing Workers attempt identity: Workers currently uses the
+// dispatch ID as the Providers attempt ID, and keeping both fields makes that
+// correlation explicit without reconstructing it later. TurnID is empty only
+// for direct Worker Sessions that were not admitted from a Factory turn.
+type ProviderSessionAssociation struct {
+	WorkerSessionID string
+	TurnID          string
+	DispatchID      string
+	AttemptID       string
+	Reference       providers.SessionRef
+}
+
+// Validate checks the association's stable identity and exact Provider
+// Session reference. It is pure and never canonicalizes, resolves, or
+// reconstructs any part of Reference.
+func (association ProviderSessionAssociation) Validate() error {
+	if !validSessionID(association.WorkerSessionID) {
+		return ErrInvalidSessionID
+	}
+	if strings.TrimSpace(association.DispatchID) == "" || strings.TrimSpace(association.AttemptID) == "" ||
+		association.DispatchID != association.AttemptID {
+		return ErrInvalidProviderSessionAssociation
+	}
+	return association.Reference.Validate()
+}
+
+// Clone returns a detached association snapshot.
+func (association ProviderSessionAssociation) Clone() ProviderSessionAssociation {
+	association.Reference = association.Reference.Clone()
+	return association
+}
+
+// ProviderSessionAssociationRequest reports one exact Provider Session
+// reference observed by a Worker attempt. Worker Sessions verifies the
+// session and dispatch against its own supervision state before it records
+// the association.
+type ProviderSessionAssociationRequest struct {
+	WorkerSessionID string
+	DispatchID      string
+	Reference       providers.SessionRef
+}
+
+// Validate checks only caller-owned request fields. Registry-owned attempt,
+// turn, and Worker Session correlation is checked by AssociateProviderSession.
+func (request ProviderSessionAssociationRequest) Validate() error {
+	if !validSessionID(request.WorkerSessionID) {
+		return ErrInvalidSessionID
+	}
+	if strings.TrimSpace(request.DispatchID) == "" {
+		return ErrInvalidProviderSessionAssociation
+	}
+	return request.Reference.Validate()
+}
+
+// ProviderSessionObservationRequest carries the exact typed reference from a
+// Workers-owned live progress observation. Unlike
+// ProviderSessionAssociationRequest, it intentionally does not accept a
+// Worker Session ID: Worker Sessions derives the owner from DispatchID.
+type ProviderSessionObservationRequest struct {
+	DispatchID string
+	Reference  providers.SessionRef
+}
+
+// Validate checks the source-owned dispatch identity and exact typed
+// reference before Worker Sessions resolves its registry-owned owner and
+// correlation.
+func (request ProviderSessionObservationRequest) Validate() error {
+	if strings.TrimSpace(request.DispatchID) == "" {
+		return ErrInvalidProviderSessionAssociation
+	}
+	return request.Reference.Validate()
+}
+
+// ProviderSessionAssociationOutcome distinguishes a new exact association
+// from a retry of the already accepted association for the same attempt.
+type ProviderSessionAssociationOutcome string
+
+const (
+	ProviderSessionAssociationOutcomeAccepted  ProviderSessionAssociationOutcome = "ACCEPTED"
+	ProviderSessionAssociationOutcomeDuplicate ProviderSessionAssociationOutcome = "DUPLICATE"
+)
+
+// ProviderSessionAssociationResult is detached evidence for one association
+// observation. Association is always the registry-owned accepted snapshot on
+// success, including a duplicate observation.
+type ProviderSessionAssociationResult struct {
+	Association ProviderSessionAssociation
+	Outcome     ProviderSessionAssociationOutcome
+}
+
+var (
+	// ErrInvalidSessionID reports a request or session with an empty or
+	// whitespace-only identity.
+	ErrInvalidSessionID = errors.New("worker session: invalid session id")
+	// ErrInvalidState reports a request, filter, or session naming a value
+	// outside the eight accepted lifecycle states.
+	ErrInvalidState = errors.New("worker session: invalid state")
+	// ErrInvalidControlRecord reports a malformed durable control request or
+	// outcome payload.
+	ErrInvalidControlRecord = errors.New("worker session: invalid control record")
+	// ErrSessionAlreadyExists reports Reserve called with an identity that is
+	// already registered.
+	ErrSessionAlreadyExists = errors.New("worker session: already exists")
+	// ErrSessionNotFound reports Get called with a valid but unregistered
+	// identity.
+	ErrSessionNotFound = errors.New("worker session: not found")
+	// ErrInvalidExecutionRequest reports a Start request whose resolved
+	// Workers execution request is missing required identity fields.
+	ErrInvalidExecutionRequest = errors.New("worker session: invalid execution request")
+	// ErrInvalidStartRequestID reports an asynchronous Start request without a
+	// non-empty caller-owned idempotency key. InvokeSession does not require
+	// this value.
+	ErrInvalidStartRequestID = errors.New("worker session: start request id is required")
+	// ErrStartRequestIDConflict reports reuse of an asynchronous Start request
+	// ID with a different normalized immutable start tuple.
+	ErrStartRequestIDConflict = errors.New("worker session: start request id conflict")
+	// ErrSessionNotStartable reports Start called for an identity that is
+	// already registered outside StateReserved (already starting, running,
+	// paused, or terminal). No Workers call is made and the existing session
+	// is left unchanged.
+	ErrSessionNotStartable = errors.New("worker session: not startable")
+	// ErrStartNotAccepted reports that Start established the identity and
+	// lifecycle facts but did not reach the Workers admission callback.
+	ErrStartNotAccepted = errors.New("worker session: start not accepted")
+	// ErrStartOpeningPublication reports that Start could not commit or verify
+	// the opening Worker Session Events record before handing off to Workers.
+	ErrStartOpeningPublication = errors.New("worker session: opening publication failed")
+	// ErrEventTopicUnavailable reports that the opening record was not
+	// readable and subscribable through the Events contract required by Start's
+	// readiness barrier.
+	ErrEventTopicUnavailable = errors.New("worker session: event topic unavailable")
+	// ErrStartAdmissionFailed reports a Workers boundary failure before the
+	// admission callback became observable.
+	ErrStartAdmissionFailed = errors.New("worker session: admission failed")
+	// ErrStartServerStopping reports an asynchronous start rejected because
+	// the owning server/process lifecycle is stopping or has stopped.
+	ErrStartServerStopping = errors.New("worker session: server is stopping")
+	// ErrInvalidContinuationRequestID reports a continuation without a stable
+	// caller-owned idempotency key.
+	ErrInvalidContinuationRequestID = errors.New("worker session: continuation request id is required")
+	// ErrInvalidContinuationLineage reports missing, equal, or malformed source
+	// and successor identities.
+	ErrInvalidContinuationLineage = errors.New("worker session: invalid continuation lineage")
+	// ErrInvalidContinuationInput reports a continuation without follow-up
+	// input.
+	ErrInvalidContinuationInput = errors.New("worker session: continuation input is required")
+	// ErrContinuationSourceNotFound reports a valid continuation whose source
+	// Worker Session is not registered.
+	ErrContinuationSourceNotFound = errors.New("worker session: continuation source not found")
+	// ErrContinuationSourceActive reports a source that has not reached an
+	// absorbing terminal state.
+	ErrContinuationSourceActive = errors.New("worker session: continuation source is active")
+	// ErrContinuationProviderSessionMissing reports a terminal source without
+	// the exact Provider Session association required for continuation.
+	ErrContinuationProviderSessionMissing = errors.New("worker session: continuation provider session is missing")
+	// ErrContinuationProviderSessionInvalid reports a stored association that
+	// cannot be trusted as an exact typed Providers reference.
+	ErrContinuationProviderSessionInvalid = errors.New("worker session: continuation provider session is invalid")
+	// ErrContinuationSourceConflict reports that the source already has a
+	// reserved successor, preventing lineage branching.
+	ErrContinuationSourceConflict = errors.New("worker session: continuation source conflict")
+	// ErrContinuationRequestIDConflict reports reuse of an idempotency key with
+	// a different immutable continuation tuple.
+	ErrContinuationRequestIDConflict = errors.New("worker session: continuation request id conflict")
+	// ErrContinuationSuccessorConflict reports a successor identity already
+	// reserved by another operation.
+	ErrContinuationSuccessorConflict = errors.New("worker session: continuation successor conflict")
+	// ErrContinuationExecutionUnavailable reports that the source no longer has
+	// the immutable resolved execution context needed to derive a successor.
+	ErrContinuationExecutionUnavailable = errors.New("worker session: continuation execution unavailable")
+	// ErrContinuationNotAccepted reports a successor that was reserved but did
+	// not reach the Workers admission callback.
+	ErrContinuationNotAccepted = errors.New("worker session: continuation not accepted")
+	// ErrContinuationServerStopping reports rejection while the owning process
+	// lifecycle is stopping.
+	ErrContinuationServerStopping = errors.New("worker session: continuation server is stopping")
+	// ErrInvalidInterruptRequestID reports an interrupt without a stable
+	// caller-owned idempotency key.
+	ErrInvalidInterruptRequestID = errors.New("worker session: interrupt request id is required")
+	// ErrInvalidInterruptLineage reports missing or equal source and successor
+	// identities.
+	ErrInvalidInterruptLineage = errors.New("worker session: invalid interrupt lineage")
+	// ErrInvalidInterruptMessage reports an interrupt without replacement
+	// content.
+	ErrInvalidInterruptMessage = errors.New("worker session: interrupt replacement message is required")
+	// ErrInterruptSourceNotFound reports an interrupt whose source is absent.
+	ErrInterruptSourceNotFound = errors.New("worker session: interrupt source not found")
+	// ErrInterruptSourceNotActive reports a source that is not currently
+	// running an active dispatch.
+	ErrInterruptSourceNotActive = errors.New("worker session: interrupt source is not active")
+	// ErrInterruptSourceConflict reports a source already claimed by another
+	// terminal control or successor operation.
+	ErrInterruptSourceConflict = errors.New("worker session: interrupt source conflict")
+	// ErrInterruptProviderSessionMissing reports an active source without the
+	// exact Provider Session association required for replacement execution.
+	ErrInterruptProviderSessionMissing = errors.New("worker session: interrupt provider session is missing")
+	// ErrInterruptProviderSessionInvalid reports an association that does not
+	// match the source's exact admitted dispatch identity.
+	ErrInterruptProviderSessionInvalid = errors.New("worker session: interrupt provider session is invalid")
+	// ErrInterruptExecutionUnavailable reports a source without its immutable
+	// resolved Workers execution.
+	ErrInterruptExecutionUnavailable = errors.New("worker session: interrupt execution unavailable")
+	// ErrInterruptRequestIDConflict reports reuse of an interrupt idempotency
+	// key with a different immutable request tuple.
+	ErrInterruptRequestIDConflict = errors.New("worker session: interrupt request id conflict")
+	// ErrInterruptSourceCancellationFailed reports failure at the exact Workers
+	// cancellation boundary or an authoritative source outcome other than
+	// CANCELED.
+	ErrInterruptSourceCancellationFailed = errors.New("worker session: interrupt source cancellation failed")
+	// ErrInterruptSuccessorAdmissionFailed reports a successor reservation or
+	// Workers admission failure after source cancellation committed.
+	ErrInterruptSuccessorAdmissionFailed = errors.New("worker session: interrupt successor admission failed")
+	// ErrInterruptServerStopping reports rejection while the owning process
+	// lifecycle is stopping.
+	ErrInterruptServerStopping = errors.New("worker session: interrupt server is stopping")
+	// ErrPublicationNotOpen reports PublishRecord called for a session whose
+	// publication window is not open: the session was only ever reserved,
+	// its opening record has not yet committed, or its terminal record has
+	// already started committing. No record is committed.
+	ErrPublicationNotOpen = errors.New("worker session: publication is not open")
+	// ErrOutOfOrderPublication reports PublishRecord called with a
+	// SourceSequence that regresses behind one already accepted for the same
+	// (SourceType, SourceID). No record is committed.
+	ErrOutOfOrderPublication = errors.New("worker session: source sequence is out of order")
+	// ErrInvalidProviderBinding reports a missing dispatch or provider identity
+	// at the provider-output publication boundary.
+	ErrInvalidProviderBinding = errors.New("worker session: invalid provider binding")
+	// ErrProviderBindingAttemptMismatch reports a provider identity observed
+	// for a dispatch Worker Sessions does not currently supervise.
+	ErrProviderBindingAttemptMismatch = errors.New("worker session: provider binding attempt mismatch")
+	// ErrProviderBindingConflict reports a provider identity that contradicts
+	// the provider already established by the opening or an earlier binding.
+	ErrProviderBindingConflict = errors.New("worker session: provider binding conflict")
+	// ErrInvalidProviderSessionAssociation reports a malformed Worker Sessions
+	// association correlation. Invalid provider, kind, or opaque Provider
+	// Session identity retains the more specific Providers-owned typed error.
+	ErrInvalidProviderSessionAssociation = errors.New("worker session: invalid provider session association")
+	// ErrProviderSessionAssociationAttemptMismatch reports an observation
+	// whose dispatch does not match the Worker Session's supervised attempt.
+	ErrProviderSessionAssociationAttemptMismatch = errors.New("worker session: provider session association attempt mismatch")
+	// ErrProviderSessionAssociationNotAvailable reports an observation for a
+	// session that has not reached a live supervised attempt, or for a
+	// terminal attempt that never committed an association.
+	ErrProviderSessionAssociationNotAvailable = errors.New("worker session: provider session association is not available")
+	// ErrProviderSessionAssociationMissing reports a resume requested for a
+	// PAUSED Worker Session that has no exact Provider Session association.
+	// Worker Sessions never falls back to current provider/model selection or
+	// synthesizes a reference from a bare session ID in this case.
+	ErrProviderSessionAssociationMissing = errors.New("worker session: provider session association is missing")
+	// ErrProviderSessionAssociationConflict reports a different exact Provider
+	// Session reference observed after one reference was already committed for
+	// the same Worker Session attempt.
+	ErrProviderSessionAssociationConflict = errors.New("worker session: provider session association conflict")
+)

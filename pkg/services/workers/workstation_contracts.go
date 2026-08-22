@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 )
@@ -14,57 +15,50 @@ type ModelInvoker interface {
 	InvokeModel(context.Context, string, modelinference.Request) (modelinference.Result, error)
 }
 
-// WorkstationPoolLifecycleOutcome describes an idempotent workstation-pool
-// lifecycle transition.
-type WorkstationPoolLifecycleOutcome string
-
 // WorkstationDispatchTerminalOutcome classifies the one terminal result
 // committed for an accepted workstation dispatch.
 type WorkstationDispatchTerminalOutcome string
+
+// WorkstationDispatchReconciliationReason identifies a policy-free execution
+// observation that caused Workers to synthesize a terminal dispatch result.
+// Worker Sessions owns the session-level classification of this fact.
+type WorkstationDispatchReconciliationReason string
+
+// WorkstationDispatchCancelReason distinguishes an operator cancellation
+// from an internal reconciliation request. The latter is allowed to commit a
+// terminal result immediately because the executor may never return.
+type WorkstationDispatchCancelReason string
 
 // WorkstationDispatchCancelOutcome describes an idempotent explicit
 // cancellation request.
 type WorkstationDispatchCancelOutcome string
 
 const (
-	WorkstationPoolLifecycleOutcomeStarted        WorkstationPoolLifecycleOutcome = "STARTED"
-	WorkstationPoolLifecycleOutcomeAlreadyRunning WorkstationPoolLifecycleOutcome = "ALREADY_RUNNING"
-	WorkstationPoolLifecycleOutcomeStopped        WorkstationPoolLifecycleOutcome = "STOPPED"
-	WorkstationPoolLifecycleOutcomeAlreadyStopped WorkstationPoolLifecycleOutcome = "ALREADY_STOPPED"
-
 	WorkstationDispatchTerminalOutcomeCompleted WorkstationDispatchTerminalOutcome = "COMPLETED"
 	WorkstationDispatchTerminalOutcomeFailed    WorkstationDispatchTerminalOutcome = "FAILED"
 	WorkstationDispatchTerminalOutcomeCanceled  WorkstationDispatchTerminalOutcome = "CANCELED"
 
-	WorkstationDispatchCancelOutcomeCanceled        WorkstationDispatchCancelOutcome = "CANCELED"
-	WorkstationDispatchCancelOutcomeAlreadyCanceled WorkstationDispatchCancelOutcome = "ALREADY_CANCELED"
-	WorkstationDispatchCancelOutcomeAlreadyTerminal WorkstationDispatchCancelOutcome = "ALREADY_TERMINAL"
+	WorkstationDispatchReconciliationReasonProcessGone WorkstationDispatchReconciliationReason = "PROCESS_GONE"
+	WorkstationDispatchReconciliationReasonTimeout     WorkstationDispatchReconciliationReason = "EXECUTION_TIMEOUT"
 
-	// DefaultWorkstationCapacity preserves bounded behavior for bindings that
-	// predate explicit workstation admission limits.
-	DefaultWorkstationCapacity = 1
-	// DefaultWorkstationQueueCapacity bounds waiting work for legacy bindings.
-	DefaultWorkstationQueueCapacity = 1
+	WorkstationDispatchCancelReasonTimeout WorkstationDispatchCancelReason = "EXECUTION_TIMEOUT"
+
+	WorkstationDispatchCancelOutcomeCanceled          WorkstationDispatchCancelOutcome = "CANCELED"
+	WorkstationDispatchCancelOutcomeAlreadyCanceled   WorkstationDispatchCancelOutcome = "ALREADY_CANCELED"
+	WorkstationDispatchCancelOutcomeReconciled        WorkstationDispatchCancelOutcome = "RECONCILED"
+	WorkstationDispatchCancelOutcomeAlreadyReconciled WorkstationDispatchCancelOutcome = "ALREADY_RECONCILED"
+	WorkstationDispatchCancelOutcomeAlreadyTerminal   WorkstationDispatchCancelOutcome = "ALREADY_TERMINAL"
+
+	// DefaultWorkstationExecutionTimeout is the hard execution limit used when
+	// an authored worker does not provide an explicit positive timeout.
+	// Supervision and the workstation executor both consume this value so the
+	// deadline is not silently changed at either boundary.
+	DefaultWorkstationExecutionTimeout = 2 * time.Hour
 )
 
 var (
-	// ErrInvalidWorkstationPoolStart reports malformed workstation bindings.
-	ErrInvalidWorkstationPoolStart = errors.New("invalid Workers workstation-pool start request")
 	// ErrInvalidWorkstationDispatch reports a malformed workstation dispatch.
 	ErrInvalidWorkstationDispatch = errors.New("invalid Workers workstation dispatch request")
-	// ErrWorkstationPoolUnavailable reports a pool that has not been started.
-	ErrWorkstationPoolUnavailable = errors.New("Workers workstation pool is unavailable")
-	// ErrWorkstationPoolStopped reports a terminal pool that cannot be restarted.
-	ErrWorkstationPoolStopped = errors.New("Workers workstation pool is stopped")
-	// ErrUnknownWorkstationRoute reports a route outside the started snapshot.
-	ErrUnknownWorkstationRoute = errors.New("Workers workstation route is unknown")
-	// ErrMissingWorkstationBinding reports a configured route without an executor.
-	ErrMissingWorkstationBinding = errors.New("Workers workstation executor binding is missing")
-	// ErrWorkstationSaturated reports a route whose running and waiting capacity
-	// are both occupied.
-	ErrWorkstationSaturated = errors.New("Workers workstation route is saturated")
-	// ErrInvalidWorkstationCancellation reports a cancellation without an ID.
-	ErrInvalidWorkstationCancellation = errors.New("invalid Workers workstation cancellation request")
 	// ErrUnknownWorkstationDispatch reports cancellation for an unaccepted ID.
 	ErrUnknownWorkstationDispatch = errors.New("Workers workstation dispatch is unknown")
 	// ErrWorkstationDispatchCanceled classifies the canonical cancelled terminal
@@ -73,36 +67,13 @@ var (
 	// ErrWorkstationDispatchAlreadyTerminal reports late cancellation after a
 	// non-cancelled terminal result was committed.
 	ErrWorkstationDispatchAlreadyTerminal = errors.New("Workers workstation dispatch is already terminal")
+	// ErrWorkstationDispatchProcessGone reports that the executor's parent
+	// process exited before the dispatch produced a terminal result.
+	ErrWorkstationDispatchProcessGone = errors.New("Workers workstation process exited before dispatch completion")
+	// ErrWorkstationDispatchTimeout reports that a detached execution exceeded
+	// its resolved hard deadline before producing a terminal result.
+	ErrWorkstationDispatchTimeout = errors.New("Workers workstation dispatch execution deadline exceeded")
 )
-
-// WorkstationPoolStartRequest supplies the detached runtime bindings that are
-// available to the workstation pool. Only workstation bindings are accepted.
-type WorkstationPoolStartRequest struct {
-	Bindings []AssembledRuntimeBinding
-}
-
-// WorkstationPoolStartResult reports whether start activated the pool or
-// observed an already-running pool.
-type WorkstationPoolStartResult struct {
-	Outcome WorkstationPoolLifecycleOutcome
-}
-
-// WorkstationPoolStopResult reports whether stop performed the terminal
-// transition or observed an already-stopped pool.
-type WorkstationPoolStopResult struct {
-	Outcome WorkstationPoolLifecycleOutcome
-}
-
-// WorkstationRouteRequest names a configured workstation route.
-type WorkstationRouteRequest struct {
-	WorkstationName string
-}
-
-// WorkstationRouteResult reports availability in the active route snapshot.
-type WorkstationRouteResult struct {
-	WorkstationName string
-	Available       bool
-}
 
 // WorkstationDispatchRequest carries one detached execution request to the
 // executor binding assembled for the named workstation.
@@ -117,12 +88,22 @@ type WorkstationDispatchResult struct {
 	DispatchID      string
 	WorkstationName string
 	TerminalOutcome WorkstationDispatchTerminalOutcome
-	Result          WorkResult
+	// ReconciliationReason is set only when Workers owns a terminal result
+	// synthesized from an execution-lifecycle observation.
+	ReconciliationReason WorkstationDispatchReconciliationReason
+	Result               WorkResult
+	// ProposedOutput is a transient detached Worker proposal. Runtime passes it
+	// to Work for validation and canonical identity assignment before applying
+	// the result; it must never cross a durable WorkResult boundary directly.
+	ProposedOutput *ProposedOutput `json:"-"`
 }
 
 // WorkstationDispatchCancelRequest identifies one accepted dispatch.
 type WorkstationDispatchCancelRequest struct {
 	DispatchID string
+	// Reason is empty for an explicit operator cancellation. Workers-owned
+	// timeout reconciliation supplies WorkstationDispatchCancelReasonTimeout.
+	Reason WorkstationDispatchCancelReason
 }
 
 // WorkstationDispatchCancelResult reports whether cancellation was newly
@@ -132,74 +113,34 @@ type WorkstationDispatchCancelResult struct {
 	Outcome    WorkstationDispatchCancelOutcome
 }
 
-// RuntimeBuildRoleKind identifies the kind of role peers ask Workers to
-// assemble during a runtime build.
-type RuntimeBuildRoleKind string
+// ProviderInvocationRoute is the reserved route name for Workers that have no
+// authored workstation behind them. A JavaScript workflow child names it
+// instead of a workstation, so it reaches the same Workers execution route,
+// admission and cancellation, and the same Worker Session supervision as a
+// Petri Worker while skipping workstation prompt rendering it has no
+// definition for.
+//
+// It is deliberately one route rather than one per child. Workstation routes
+// come from the Factory definition and are snapshotted immutably when a session
+// opens, but agent.run children are discovered while the workflow runs; giving
+// each its own route would mean mutating a snapshot that is immutable by
+// contract. Everything that varies per child already travels on the execution
+// request, so one route serves all of them.
+//
+// The double-underscore fencing marks it as reserved rather than authored. It
+// deliberately carries no leading or trailing whitespace: Worker Sessions'
+// request validation compares the raw nested dispatch name against the trimmed
+// route name, so a padded value would be rejected before it ever reached the
+// pool.
+const ProviderInvocationRoute = "__provider_invocation__"
 
-const (
-	// RuntimeBuildRoleKindWorker assembles one worker-role binding.
-	RuntimeBuildRoleKindWorker RuntimeBuildRoleKind = "worker"
-	// RuntimeBuildRoleKindWorkstation assembles one workstation-role binding.
-	RuntimeBuildRoleKindWorkstation RuntimeBuildRoleKind = "workstation"
-)
+// ErrMissingRunnerSelection reports that an execution request omitted the
+// runner selection needed by Workers.
+var ErrMissingRunnerSelection = errors.New("Workers execution missing runner selection")
 
-// RuntimeBuildOpeningOptions carries Workers-owned opening selection facts
-// peers may supply when assembling immutable execution bindings.
-type RuntimeBuildOpeningOptions struct {
-	MockWorkers                       *MockWorkersConfig
-	InvocationSkipPermissionsOverride *bool
-	SkipBuiltInPrerequisiteValidation bool
-}
-
-// RuntimeBuildRoleRequest names one role peers want assembled into a detached
-// runtime binding.
-type RuntimeBuildRoleRequest struct {
-	Name string
-	Kind RuntimeBuildRoleKind
-}
-
-// RuntimeBuildRequest is the plain Workers-owned runtime-build input covering
-// execution selection and role-assembly facts peers need.
-type RuntimeBuildRequest struct {
-	RunnerID                   string
-	RequiredRunnerCapabilities []RunnerOptionalCapability
-	Opening                    RuntimeBuildOpeningOptions
-	Roles                      []RuntimeBuildRoleRequest
-}
-
-// AssembledRuntimeBinding is one detached immutable role/binding fact peers
-// can consume without importing Workers construction or executor packages.
-type AssembledRuntimeBinding struct {
-	RoleName        string
-	RoleKind        RuntimeBuildRoleKind
-	RunnerSelection ResolvedRunnerSelection
-	Executor        WorkstationRequestExecutor
-	// Capacity is the maximum concurrent executor calls for this workstation.
-	// Zero selects DefaultWorkstationCapacity for compatibility.
-	Capacity int
-	// QueueCapacity is the maximum accepted dispatches waiting for a slot.
-	// Zero selects DefaultWorkstationQueueCapacity for compatibility.
-	QueueCapacity int
-}
-
-// RuntimeBuildResult carries detached assembled-binding success facts for one
-// runtime-build operation.
-type RuntimeBuildResult struct {
-	RunnerSelection ResolvedRunnerSelection
-	Bindings        []AssembledRuntimeBinding
-}
-
-// ErrInvalidRuntimeBuildRequest reports a malformed or empty runtime-build
-// request peers can distinguish without parsing free-form construction details.
-var ErrInvalidRuntimeBuildRequest = errors.New("invalid Workers runtime-build request")
-
-// ErrMissingRunnerSelection reports that a runtime-build request omitted the
-// runner selection peers must supply.
-var ErrMissingRunnerSelection = errors.New("Workers runtime-build missing runner selection")
-
-// ErrUnknownRunnerSelection reports that a runtime-build request named a runner
+// ErrUnknownRunnerSelection reports that an execution request named a runner
 // identity Workers does not recognize.
-var ErrUnknownRunnerSelection = errors.New("Workers runtime-build unknown runner selection")
+var ErrUnknownRunnerSelection = errors.New("Workers execution unknown runner selection")
 
 // ErrUnsupportedRunnerCapability reports that a selected runner cannot satisfy
 // one explicitly required optional capability.
@@ -243,39 +184,14 @@ var ErrConflictingRunnerRegistration = errors.New("conflicting Workers runner re
 // more than one registration for the same canonical runner identity.
 var ErrDuplicateRunnerRegistration = errors.New("duplicate Workers runner registration")
 
-// ErrRuntimeAssemblyRejected reports that Workers rejected the supplied
-// assembly-shaped input.
-var ErrRuntimeAssemblyRejected = errors.New("Workers runtime assembly rejected")
-
-// ErrIncompleteRuntimeAssembly reports that Workers could not complete assembly
-// from the supplied runtime-build request.
-var ErrIncompleteRuntimeAssembly = errors.New("Workers runtime assembly incomplete")
-
-// Service is the aggregate customer-facing Worker execution boundary.
+// Service is the customer-facing request-scoped Worker execution boundary.
 // Provider factories, command runners, and workstation builders remain
 // implementation details or explicit Worker subservices.
-//
-// Execute is the canonical request-scoped operation. BuildRuntime, workstation
-// pool lifecycle, and related methods remain only as temporary compatibility
-// surfaces for later cutover.
 type Service interface {
-	ModelInvoker
-
-	// Execute runs one isolated logical Worker attempt from a complete detached
-	// request without opening a Factory Runtime or Factory Session.
+	// Execute runs one complete, detached Worker attempt. The operation is
+	// request-scoped; callers retain dispatch lifecycle, scheduling, and retry
+	// state outside Workers.
 	Execute(context.Context, ExecuteRequest) (ExecuteResult, error)
 
-	// BuildRuntime assembles detached execution bindings from explicit
-	// Workers-owned inputs.
-	BuildRuntime(context.Context, RuntimeBuildRequest) (RuntimeBuildResult, error)
-	// StartWorkstationPool activates one immutable workstation-route snapshot.
-	StartWorkstationPool(context.Context, WorkstationPoolStartRequest) (WorkstationPoolStartResult, error)
-	// StopWorkstationPool permanently stops workstation admission and activity.
-	StopWorkstationPool(context.Context) (WorkstationPoolStopResult, error)
-	// WorkstationRoute reports whether a route belongs to the active snapshot.
-	WorkstationRoute(context.Context, WorkstationRouteRequest) (WorkstationRouteResult, error)
-	// DispatchWorkstation executes through the binding for the requested route.
-	DispatchWorkstation(context.Context, WorkstationDispatchRequest) (WorkstationDispatchResult, error)
-	// CancelWorkstationDispatch cancels queued or running workstation work.
-	CancelWorkstationDispatch(context.Context, WorkstationDispatchCancelRequest) (WorkstationDispatchCancelResult, error)
+	ModelInvoker
 }

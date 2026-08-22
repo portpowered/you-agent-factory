@@ -1,0 +1,7 @@
+type: string
+description: Evidence state for a directional harness or model modality fact.
+enum:
+  - supported
+  - unsupported
+  - conditional
+  - unknown

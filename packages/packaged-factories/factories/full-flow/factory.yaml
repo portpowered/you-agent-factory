@@ -144,7 +144,6 @@ workers:
     modelProvider: ${plannerProvider}
     model: ${plannerModel}
     skipPermissions: true
-    promptFile: prompts/planner.md
   - name: task-worktree-setup
     type: SCRIPT_WORKER
     command: python3
@@ -158,25 +157,21 @@ workers:
     model: ${executorModel}
     skipPermissions: true
     stopToken: <COMPLETE>
-    promptFile: prompts/executor.md
   - name: full-flow-reviewer
     type: AGENT_WORKER
     modelProvider: ${reviewerProvider}
     model: ${reviewerModel}
     skipPermissions: true
-    promptFile: prompts/reviewer.md
   - name: full-flow-ci
     type: AGENT_WORKER
     modelProvider: ${executorProvider}
     model: ${executorModel}
     skipPermissions: true
-    promptFile: prompts/ci.md
   - name: full-flow-merger
     type: AGENT_WORKER
     modelProvider: ${executorProvider}
     model: ${executorModel}
     skipPermissions: true
-    promptFile: prompts/merger.md
   - name: cycle-decider
     type: SCRIPT_WORKER
     command: python3

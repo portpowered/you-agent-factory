@@ -2,6 +2,10 @@
 // aliases the transport-neutral value vocabulary owned by its internals.
 package recordings
 
+import (
+	"errors"
+)
+
 import recordingcontracts "github.com/portpowered/infinite-you/pkg/services/recordings/internal/contracts"
 
 type (
@@ -25,6 +29,8 @@ type (
 	Clock                                                      = recordingcontracts.Clock
 	CompletedDispatch                                          = recordingcontracts.CompletedDispatch
 	CompletionDeliveryPlanner                                  = recordingcontracts.CompletionDeliveryPlanner
+	ReplayWorkerSessionIDResolver                              = recordingcontracts.ReplayWorkerSessionIDResolver
+	ReplayDispatchIDResolver                                   = recordingcontracts.ReplayDispatchIDResolver
 	CreateReplayPlanRequest                                    = recordingcontracts.CreateReplayPlanRequest
 	CreateReplayPlanResult                                     = recordingcontracts.CreateReplayPlanResult
 	DecodePortableArtifactRequest                              = recordingcontracts.DecodePortableArtifactRequest
@@ -48,6 +54,8 @@ type (
 	ExportPortableArtifactRequest                              = recordingcontracts.ExportPortableArtifactRequest
 	ExportPortableArtifactResult                               = recordingcontracts.ExportPortableArtifactResult
 	FactoryChangeEventPayload                                  = recordingcontracts.FactoryChangeEventPayload
+	FactoryChangeRequestEventPayload                           = recordingcontracts.FactoryChangeRequestEventPayload
+	FactoryChangeFailedEventPayload                            = recordingcontracts.FactoryChangeFailedEventPayload
 	FactoryDispatchKind                                        = recordingcontracts.FactoryDispatchKind
 	FactoryDispatchRecord                                      = recordingcontracts.FactoryDispatchRecord
 	FactoryDispatchStatus                                      = recordingcontracts.FactoryDispatchStatus
@@ -59,6 +67,9 @@ type (
 	FactoryEventReconnectScope                                 = recordingcontracts.FactoryEventReconnectScope
 	FactoryEventStream                                         = recordingcontracts.FactoryEventStream
 	FactoryEventType                                           = recordingcontracts.FactoryEventType
+	HumanApprovalDecision                                      = recordingcontracts.HumanApprovalDecision
+	HumanApprovalRequestedEventPayload                         = recordingcontracts.HumanApprovalRequestedEventPayload
+	HumanApprovalStatus                                        = recordingcontracts.HumanApprovalStatus
 	FactoryPlace                                               = recordingcontracts.FactoryPlace
 	FactoryPlaceOccupancy                                      = recordingcontracts.FactoryPlaceOccupancy
 	FactorySessionChildDispatchCounts                          = recordingcontracts.FactorySessionChildDispatchCounts
@@ -89,6 +100,7 @@ type (
 	FactoryWorldAgentRunResponse                               = recordingcontracts.FactoryWorldAgentRunResponse
 	FactoryWorldDispatch                                       = recordingcontracts.FactoryWorldDispatch
 	FactoryWorldDispatchCompletion                             = recordingcontracts.FactoryWorldDispatchCompletion
+	FactoryWorldHumanApproval                                  = recordingcontracts.FactoryWorldHumanApproval
 	FactoryWorldFailureDetail                                  = recordingcontracts.FactoryWorldFailureDetail
 	FactoryWorldInferenceAttempt                               = recordingcontracts.FactoryWorldInferenceAttempt
 	FactoryWorldJavaScriptChildDispatchCounts                  = recordingcontracts.FactoryWorldJavaScriptChildDispatchCounts
@@ -127,8 +139,14 @@ type (
 	LiveRecordingTargetRequest                                 = recordingcontracts.LiveRecordingTargetRequest
 	LoadReplayArtifactRequest                                  = recordingcontracts.LoadReplayArtifactRequest
 	LoadReplayArtifactResult                                   = recordingcontracts.LoadReplayArtifactResult
+	LoadReplayInputRequest                                     = recordingcontracts.LoadReplayInputRequest
+	LoadReplayInputResult                                      = recordingcontracts.LoadReplayInputResult
+	LoadResumeInputRequest                                     = recordingcontracts.LoadResumeInputRequest
+	LoadResumeInputResult                                      = recordingcontracts.LoadResumeInputResult
 	LoadReplayRecordingRequest                                 = recordingcontracts.LoadReplayRecordingRequest
 	LoadReplayRecordingResult                                  = recordingcontracts.LoadReplayRecordingResult
+	LoadReplayRecordingForResumeRequest                        = recordingcontracts.LoadReplayRecordingForResumeRequest
+	LoadReplayRecordingForResumeResult                         = recordingcontracts.LoadReplayRecordingForResumeResult
 	MetadataMismatchWarning                                    = recordingcontracts.MetadataMismatchWarning
 	ObserveReplayRequest                                       = recordingcontracts.ObserveReplayRequest
 	ObserveReplayResult                                        = recordingcontracts.ObserveReplayResult
@@ -146,14 +164,20 @@ type (
 	PortableRecordingCanonicalFacts                            = recordingcontracts.PortableRecordingCanonicalFacts
 	PortableRecordingCanonicalResult                           = recordingcontracts.PortableRecordingCanonicalResult
 	PortableRecordingCheckpointSummary                         = recordingcontracts.PortableRecordingCheckpointSummary
+	PortableRecordingCodec                                     = recordingcontracts.PortableRecordingCodec
+	PortableRecordingCompatibilityPolicy                       = recordingcontracts.PortableRecordingCompatibilityPolicy
+	PortableRecordingDecodeDiagnostics                         = recordingcontracts.PortableRecordingDecodeDiagnostics
 	PortableRecordingDiagnostic                                = recordingcontracts.PortableRecordingDiagnostic
 	PortableRecordingDiagnosticCode                            = recordingcontracts.PortableRecordingDiagnosticCode
 	PortableRecordingEventSummary                              = recordingcontracts.PortableRecordingEventSummary
 	PortableRecordingFailureSummary                            = recordingcontracts.PortableRecordingFailureSummary
 	PortableRecordingRedactionMetadata                         = recordingcontracts.PortableRecordingRedactionMetadata
 	PortableRecordingResult                                    = recordingcontracts.PortableRecordingResult
+	ReplayInputDecodeDiagnostics                               = recordingcontracts.ReplayInputDecodeDiagnostics
 	PortableRecordingSessionSummary                            = recordingcontracts.PortableRecordingSessionSummary
 	PortableRecordingSourceSummary                             = recordingcontracts.PortableRecordingSourceSummary
+	PortableRecordingWorkerHistory                             = recordingcontracts.PortableRecordingWorkerHistory
+	PortableRecordingWorkerHistoryAvailability                 = recordingcontracts.PortableRecordingWorkerHistoryAvailability
 	PortableRecordingWriter                                    = recordingcontracts.PortableRecordingWriter
 	ProjectionService                                          = recordingcontracts.ProjectionService
 	ReadPortableArtifactRequest                                = recordingcontracts.ReadPortableArtifactRequest
@@ -171,8 +195,34 @@ type (
 	RecordingLifecycleState                                    = recordingcontracts.RecordingLifecycleState
 	RecordingMakeDirectories                                   = recordingcontracts.RecordingMakeDirectories
 	RecordingPathJoiner                                        = recordingcontracts.RecordingPathJoiner
+	RecordingReadFile                                          = recordingcontracts.RecordingReadFile
 	RecordingRemovePath                                        = recordingcontracts.RecordingRemovePath
 	RecordingRenamePath                                        = recordingcontracts.RecordingRenamePath
+	RecordingScopeRef                                          = recordingcontracts.RecordingScopeRef
+	RecordingScopeService                                      = recordingcontracts.RecordingScopeService
+	RecordingScopeStatus                                       = recordingcontracts.RecordingScopeStatus
+	OpenRecordingScopeRequest                                  = recordingcontracts.OpenRecordingScopeRequest
+	OpenRecordingScopeResult                                   = recordingcontracts.OpenRecordingScopeResult
+	SubscribeRecordingScopeRequest                             = recordingcontracts.SubscribeRecordingScopeRequest
+	SubscribeRecordingScopeResult                              = recordingcontracts.SubscribeRecordingScopeResult
+	LoadReplayRecordingScopeRequest                            = recordingcontracts.LoadReplayRecordingScopeRequest
+	LoadReplayRecordingScopeResult                             = recordingcontracts.LoadReplayRecordingScopeResult
+	CreateReplayPlanScopeRequest                               = recordingcontracts.CreateReplayPlanScopeRequest
+	CreateReplayPlanScopeResult                                = recordingcontracts.CreateReplayPlanScopeResult
+	ObserveReplayScopeRequest                                  = recordingcontracts.ObserveReplayScopeRequest
+	ObserveReplayScopeResult                                   = recordingcontracts.ObserveReplayScopeResult
+	ReconstructRecordingScopeRequest                           = recordingcontracts.ReconstructRecordingScopeRequest
+	ReconstructRecordingScopeResult                            = recordingcontracts.ReconstructRecordingScopeResult
+	QuerySimpleDashboardScopeRequest                           = recordingcontracts.QuerySimpleDashboardScopeRequest
+	QuerySimpleDashboardScopeResult                            = recordingcontracts.QuerySimpleDashboardScopeResult
+	QueryWorkstationRequestsScopeRequest                       = recordingcontracts.QueryWorkstationRequestsScopeRequest
+	QueryWorkstationRequestsScopeResult                        = recordingcontracts.QueryWorkstationRequestsScopeResult
+	BuildPortableArtifactScopeRequest                          = recordingcontracts.BuildPortableArtifactScopeRequest
+	BuildPortableArtifactScopeResult                           = recordingcontracts.BuildPortableArtifactScopeResult
+	ExportPortableArtifactScopeRequest                         = recordingcontracts.ExportPortableArtifactScopeRequest
+	ExportPortableArtifactScopeResult                          = recordingcontracts.ExportPortableArtifactScopeResult
+	ReadPortableArtifactScopeRequest                           = recordingcontracts.ReadPortableArtifactScopeRequest
+	ReadPortableArtifactScopeResult                            = recordingcontracts.ReadPortableArtifactScopeResult
 	RecordingSnapshot                                          = recordingcontracts.RecordingSnapshot
 	RecordingSnapshotWriter                                    = recordingcontracts.RecordingSnapshotWriter
 	RecordingStatusFacts                                       = recordingcontracts.RecordingStatusFacts
@@ -180,6 +230,18 @@ type (
 	RecordingStatusResult                                      = recordingcontracts.RecordingStatusResult
 	RecordingTargetRequest                                     = recordingcontracts.RecordingTargetRequest
 	RecordingTemporaryFile                                     = recordingcontracts.RecordingTemporaryFile
+	AppendRecordingScopeEventRequest                           = recordingcontracts.AppendRecordingScopeEventRequest
+	AppendRecordingScopeEventResult                            = recordingcontracts.AppendRecordingScopeEventResult
+	BeginRecordingScopeRequest                                 = recordingcontracts.BeginRecordingScopeRequest
+	BeginRecordingScopeResult                                  = recordingcontracts.BeginRecordingScopeResult
+	CloseRecordingScopeRequest                                 = recordingcontracts.CloseRecordingScopeRequest
+	CloseRecordingScopeResult                                  = recordingcontracts.CloseRecordingScopeResult
+	FinalizeRecordingScopeRequest                              = recordingcontracts.FinalizeRecordingScopeRequest
+	FinalizeRecordingScopeResult                               = recordingcontracts.FinalizeRecordingScopeResult
+	FlushRecordingScopeRequest                                 = recordingcontracts.FlushRecordingScopeRequest
+	FlushRecordingScopeResult                                  = recordingcontracts.FlushRecordingScopeResult
+	QueryRecordingScopeRequest                                 = recordingcontracts.QueryRecordingScopeRequest
+	QueryRecordingScopeResult                                  = recordingcontracts.QueryRecordingScopeResult
 	RecordRecordingErrorRequest                                = recordingcontracts.RecordRecordingErrorRequest
 	RecordRecordingErrorResult                                 = recordingcontracts.RecordRecordingErrorResult
 	RecordRecordingEventRequest                                = recordingcontracts.RecordRecordingEventRequest
@@ -206,7 +268,12 @@ type (
 	RunResponseEventPayload                                    = recordingcontracts.RunResponseEventPayload
 	RuntimeEventLedger                                         = recordingcontracts.RuntimeEventLedger
 	RuntimeLedger                                              = recordingcontracts.RuntimeLedger
+	DispatchWorkerSessionExecutionFacts                        = recordingcontracts.DispatchWorkerSessionExecutionFacts
+	DispatchWorkerSessionAssociationRecorder                   = recordingcontracts.DispatchWorkerSessionAssociationRecorder
+	HumanApprovalRequestRecorder                               = recordingcontracts.HumanApprovalRequestRecorder
 	RuntimeOpeningRequest                                      = recordingcontracts.RuntimeOpeningRequest
+	RuntimeScopeRequest                                        = recordingcontracts.RuntimeScopeRequest
+	RuntimeScopeResult                                         = recordingcontracts.RuntimeScopeResult
 	RuntimeRecorder                                            = recordingcontracts.RuntimeRecorder
 	RuntimeRecorderFactory                                     = recordingcontracts.RuntimeRecorderFactory
 	SessionLifecycleControlInput                               = recordingcontracts.SessionLifecycleControlInput
@@ -264,6 +331,18 @@ type (
 	WorldStateViewSchemaVersion                                = recordingcontracts.WorldStateViewSchemaVersion
 )
 
+// ErrServiceUnavailable identifies a transport request that reached a
+// Recordings-owned adapter before the process-scoped Recordings root was
+// bound. The sentinel lives at the owner root so peer transports do not need
+// to import another service's transport package to classify the failure.
+var ErrServiceUnavailable = errors.New("recordings service is required")
+
+// RuntimeOpening is the Recordings-owned capability used while Factory
+// Runtime opens a private runtime scope. Replay input loading remains on the
+// same process root so Factory Sessions cannot construct a second Recordings
+// graph for historical replay.
+type RuntimeOpening = recordingcontracts.RuntimeOpening
+
 const (
 	CheckpointResumabilityStatusResumable         = recordingcontracts.CheckpointResumabilityStatusResumable
 	DefaultRecordingFlushInterval                 = recordingcontracts.DefaultRecordingFlushInterval
@@ -290,7 +369,14 @@ const (
 	FactoryEventTypeDispatchReconciled            = recordingcontracts.FactoryEventTypeDispatchReconciled
 	FactoryEventTypeDispatchRequest               = recordingcontracts.FactoryEventTypeDispatchRequest
 	FactoryEventTypeDispatchResponse              = recordingcontracts.FactoryEventTypeDispatchResponse
+	FactoryEventTypeDispatchWorkerSessionAssoc    = recordingcontracts.FactoryEventTypeDispatchWorkerSessionAssoc
+	FactoryEventTypeHumanApprovalRequested        = recordingcontracts.FactoryEventTypeHumanApprovalRequested
+	HumanApprovalDecisionApprove                  = recordingcontracts.HumanApprovalDecisionApprove
+	HumanApprovalDecisionReject                   = recordingcontracts.HumanApprovalDecisionReject
+	HumanApprovalStatusPending                    = recordingcontracts.HumanApprovalStatusPending
 	FactoryEventTypeFactoryChange                 = recordingcontracts.FactoryEventTypeFactoryChange
+	FactoryEventTypeFactoryChangeRequest          = recordingcontracts.FactoryEventTypeFactoryChangeRequest
+	FactoryEventTypeFactoryChangeFailed           = recordingcontracts.FactoryEventTypeFactoryChangeFailed
 	FactoryEventTypeFactoryStateResponse          = recordingcontracts.FactoryEventTypeFactoryStateResponse
 	FactoryEventTypeInferenceRequest              = recordingcontracts.FactoryEventTypeInferenceRequest
 	FactoryEventTypeInferenceResponse             = recordingcontracts.FactoryEventTypeInferenceResponse
@@ -322,11 +408,16 @@ const (
 	KindJavaScriptFactorySession                  = recordingcontracts.KindJavaScriptFactorySession
 	PortableArtifactIntegritySHA256               = recordingcontracts.PortableArtifactIntegritySHA256
 	PortableArtifactSchemaV1                      = recordingcontracts.PortableArtifactSchemaV1
+	PortableRecordingCurrentSchemaVersion         = recordingcontracts.PortableRecordingCurrentSchemaVersion
 	PortableRecordingCodeInvalidDigest            = recordingcontracts.PortableRecordingCodeInvalidDigest
 	PortableRecordingCodeInvalidIdentity          = recordingcontracts.PortableRecordingCodeInvalidIdentity
 	PortableRecordingCodeInvalidSummary           = recordingcontracts.PortableRecordingCodeInvalidSummary
+	PortableRecordingCodeInvalidOrder             = recordingcontracts.PortableRecordingCodeInvalidOrder
 	PortableRecordingCodeMalformedContract        = recordingcontracts.PortableRecordingCodeMalformedContract
 	PortableRecordingCodeUnsupportedVersion       = recordingcontracts.PortableRecordingCodeUnsupportedVersion
+	PortableRecordingReplayCompatibilityV1        = recordingcontracts.PortableRecordingReplayCompatibilityV1
+	PortableRecordingSchemaV1                     = recordingcontracts.PortableRecordingSchemaV1
+	PortableRecordingSchemaV2                     = recordingcontracts.PortableRecordingSchemaV2
 	RecordingActive                               = recordingcontracts.RecordingActive
 	RecordingFailed                               = recordingcontracts.RecordingFailed
 	RecordingFinalized                            = recordingcontracts.RecordingFinalized
@@ -345,6 +436,20 @@ const (
 	SubscriptionGap                               = recordingcontracts.SubscriptionGap
 	SubscriptionSequenceDiscontinuity             = recordingcontracts.SubscriptionSequenceDiscontinuity
 	WorldStateViewSchemaV1                        = recordingcontracts.WorldStateViewSchemaV1
+)
+
+const (
+	PortableRecordingCodeUnsupportedSchema          = recordingcontracts.PortableRecordingCodeUnsupportedSchema
+	PortableRecordingCompatibilityAction            = recordingcontracts.PortableRecordingCompatibilityAction
+	PortableRecordingSchemaV3                       = recordingcontracts.PortableRecordingSchemaV3
+	PortableRecordingWorkerHistoryReasonNotCaptured = recordingcontracts.PortableRecordingWorkerHistoryReasonNotCaptured
+)
+
+const (
+	PortableRecordingWorkerHistoryAvailable          = recordingcontracts.PortableRecordingWorkerHistoryAvailable
+	PortableRecordingWorkerHistoryUnavailable        = recordingcontracts.PortableRecordingWorkerHistoryUnavailable
+	PortableRecordingWorkerHistoryReasonLegacySchema = recordingcontracts.PortableRecordingWorkerHistoryReasonLegacySchema
+	PortableRecordingWorkerHistoryUnavailableReason  = recordingcontracts.PortableRecordingWorkerHistoryUnavailableReason
 )
 
 var (
@@ -378,7 +483,14 @@ var (
 	ErrRecordingBindingConflict                        = recordingcontracts.ErrRecordingBindingConflict
 	ErrRecordingSnapshotEncoding                       = recordingcontracts.ErrRecordingSnapshotEncoding
 	ErrRecordingSnapshotWrite                          = recordingcontracts.ErrRecordingSnapshotWrite
+	ErrRecordingScopeClosed                            = recordingcontracts.ErrRecordingScopeClosed
+	ErrRecordingScopeFinalized                         = recordingcontracts.ErrRecordingScopeFinalized
+	ErrRecordingScopeForeign                           = recordingcontracts.ErrRecordingScopeForeign
+	ErrRecordingScopeInvalid                           = recordingcontracts.ErrRecordingScopeInvalid
+	ErrRecordingScopeStale                             = recordingcontracts.ErrRecordingScopeStale
+	ErrRecordingScopeUnknown                           = recordingcontracts.ErrRecordingScopeUnknown
 	ErrRecordingWriteRejected                          = recordingcontracts.ErrRecordingWriteRejected
+	ErrInvalidRecordingScopeRef                        = recordingcontracts.ErrInvalidRecordingScopeRef
 	ErrReplayPlanNotFound                              = recordingcontracts.ErrReplayPlanNotFound
 	ErrReplayRecordingNotFinalized                     = recordingcontracts.ErrReplayRecordingNotFinalized
 	ErrReplayRecordingNotFound                         = recordingcontracts.ErrReplayRecordingNotFound
@@ -391,12 +503,119 @@ var (
 	NewFactoryEvent                                    = recordingcontracts.NewFactoryEvent
 	BuildFactoryWorldWorkstationRequestProjectionSlice = recordingcontracts.BuildFactoryWorldWorkstationRequestProjectionSlice
 	BuildPortableRecording                             = recordingcontracts.BuildPortableRecording
+	CurrentPortableRecordingCodec                      = recordingcontracts.CurrentPortableRecordingCodec
 	DecodePortableRecording                            = recordingcontracts.DecodePortableRecording
+	DecodePortableRecordingWithDiagnostics             = recordingcontracts.DecodePortableRecordingWithDiagnostics
+	DecodePortableRecordingWithVersions                = recordingcontracts.DecodePortableRecordingWithVersions
 	FactoryMetadataWarnings                            = recordingcontracts.FactoryMetadataWarnings
+	NormalizePortableRecordingWorkerHistory            = recordingcontracts.NormalizePortableRecordingWorkerHistory
+	NewPortableRecordingCodec                          = recordingcontracts.NewPortableRecordingCodec
 	ValidatePortableRecording                          = recordingcontracts.ValidatePortableRecording
+	ValidatePortableRecordingWithVersions              = recordingcontracts.ValidatePortableRecordingWithVersions
 )
 
-// Service is the singular cross-service Recordings authority.
+// Service is the singular cross-service Recordings authority. Historical
+// queries are part of this same owner contract; runtime opening remains a
+// separate capability so peers do not need to advertise process lifecycle
+// operations just to read canonical history.
 type Service interface {
 	recordingcontracts.Service
+
+	// QueryHistoricalRecording reconstructs one finalized recording from its
+	// published artifact and returns the detached canonical history and
+	// projections selected by that artifact.
+	QueryHistoricalRecording(HistoricalRecordingQueryRequest) (HistoricalRecordingQueryResult, error)
+}
+
+// HistoricalRecordingIdentity identifies one durable recording and its
+// requested Factory Session scope.
+type HistoricalRecordingIdentity struct {
+	RecordingID RecordingID
+	Artifact    RecordingArtifactReference
+	Scope       CanonicalEventScope
+}
+
+// HistoricalRecordingQueryRequest selects one immutable recording artifact.
+type HistoricalRecordingQueryRequest struct {
+	Recording HistoricalRecordingIdentity
+}
+
+// HistoricalDispatchWorkerSessionAssociation records the canonical event
+// that associated a dispatch with a Worker Session.
+type HistoricalDispatchWorkerSessionAssociation struct {
+	ID              CanonicalEventID
+	WorkerSessionID string
+	RequestID       string
+	Cursor          CanonicalEventCursor
+}
+
+// HistoricalDispatch is the detached latest lifecycle projection for one
+// dispatch. The result preserves first-seen dispatch order.
+type HistoricalDispatch struct {
+	ID           string
+	Status       FactoryDispatchStatus
+	DispatchKind FactoryDispatchKind
+	TransitionID string
+	// Usage is retained only for Petri DISPATCH_RESPONSE facts. JavaScript
+	// dispatch usage continues to follow its existing reconciliation path.
+	Usage       *FactoryDispatchUsage
+	FirstCursor CanonicalEventCursor
+	LastCursor  CanonicalEventCursor
+	Association *HistoricalDispatchWorkerSessionAssociation
+}
+
+// HistoricalRecordingQueryResult contains detached canonical history,
+// selected-tick state, recording status, and dispatch facts.
+type HistoricalRecordingQueryResult struct {
+	Recording        HistoricalRecordingIdentity
+	Status           RecordingStatusFacts
+	Events           []CanonicalEvent
+	IgnoredJSONPaths []string
+	WorldState       WorldStateView
+	// WorkstationRequests is the selected-tick workstation read model derived
+	// from the same historical world state, keeping HTTP and MCP on one owner
+	// projection result.
+	WorkstationRequests WorkstationFactoryWorldWorkstationRequestProjectionSlice
+	Dispatches          []HistoricalDispatch
+}
+
+// HistoricalRecordingQueryErrorKind classifies durable-history outcomes
+// without requiring callers to parse diagnostic strings.
+type HistoricalRecordingQueryErrorKind string
+
+const (
+	HistoricalRecordingQueryErrorInvalidRequest HistoricalRecordingQueryErrorKind = "INVALID_REQUEST"
+	HistoricalRecordingQueryErrorMissingHistory HistoricalRecordingQueryErrorKind = "MISSING_HISTORY"
+	HistoricalRecordingQueryErrorCorruptHistory HistoricalRecordingQueryErrorKind = "CORRUPT_HISTORY"
+	HistoricalRecordingQueryErrorUnavailable    HistoricalRecordingQueryErrorKind = "UNAVAILABLE"
+)
+
+// HistoricalRecordingQueryError retains only safe recording and event identity
+// in its public presentation. Cause remains available for errors.Is/errors.As.
+type HistoricalRecordingQueryError struct {
+	Kind        HistoricalRecordingQueryErrorKind
+	RecordingID RecordingID
+	EventID     CanonicalEventID
+	Cause       error
+}
+
+func (e *HistoricalRecordingQueryError) Error() string {
+	if e == nil {
+		return ""
+	}
+	message := "historical recording query " + string(e.Kind)
+	if e.RecordingID != "" {
+		message += " recording=" + string(e.RecordingID)
+	}
+	if e.EventID != "" {
+		message += " event=" + string(e.EventID)
+	}
+	return message
+}
+
+func (e *HistoricalRecordingQueryError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
 }

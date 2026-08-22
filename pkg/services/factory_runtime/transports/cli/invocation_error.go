@@ -17,14 +17,18 @@ import (
 )
 
 const (
-	InvocationErrorCodeFailed       = "RUN_INVOCATION_FAILED"
-	InvocationErrorCodeCancelled    = "RUN_INVOCATION_CANCELLED"
-	InvocationErrorCodeTimeout      = "RUN_INVOCATION_TIMEOUT"
-	CurrentFactoryNotFoundCode      = "CURRENT_FACTORY_NOT_FOUND"
-	CurrentFactoryInvalidCode       = "CURRENT_FACTORY_INVALID"
-	InvocationOutputConflictCode    = "INVOCATION_OUTPUT_CONFLICT"
-	InvocationOutputUnsupportedCode = "INVOCATION_OUTPUT_UNSUPPORTED"
-	ServerBindFailedCode            = "SERVER_BIND_FAILED"
+	InvocationErrorCodeFailed          = "RUN_INVOCATION_FAILED"
+	InvocationErrorCodeCancelled       = "RUN_INVOCATION_CANCELLED"
+	InvocationErrorCodeTimeout         = "RUN_INVOCATION_TIMEOUT"
+	InvocationArgumentMissingValueCode = "INVOCATION_ARGUMENT_MISSING_VALUE"
+	InvocationArgumentInvalidValueCode = "INVOCATION_ARGUMENT_INVALID_VALUE"
+	CurrentFactoryNotFoundCode         = "CURRENT_FACTORY_NOT_FOUND"
+	CurrentFactoryInvalidCode          = "CURRENT_FACTORY_INVALID"
+	InvocationOutputConflictCode       = "INVOCATION_OUTPUT_CONFLICT"
+	InvocationOutputUnsupportedCode    = "INVOCATION_OUTPUT_UNSUPPORTED"
+	RemoteLocalHostingConflictCode     = "REMOTE_LOCAL_HOSTING_CONFLICT"
+	ServerBindFailedCode               = "SERVER_BIND_FAILED"
+	ServerStartFailedCode              = "SERVER_START_FAILED"
 )
 
 const (
@@ -61,6 +65,23 @@ func (e *InvocationError) Unwrap() error {
 		return nil
 	}
 	return e.Cause
+}
+
+// CLIErrorCode and CLIErrorMessage expose the already-sanitized diagnostic
+// fields to the shared process CLI boundary without exposing the concrete
+// runtime transport type there.
+func (e *InvocationError) CLIErrorCode() string {
+	if e == nil {
+		return ""
+	}
+	return e.Code
+}
+
+func (e *InvocationError) CLIErrorMessage() string {
+	if e == nil {
+		return ""
+	}
+	return e.Message
 }
 
 // ValidateInvocationOutputModeRequest carries invocation output validation inputs.
@@ -121,7 +142,8 @@ func newInvocationErrorResponse(code, message string) factoryapi.ErrorResponse {
 		family = factoryapi.ErrorFamilyNotFound
 	case code == CurrentFactoryInvalidCode ||
 		code == InvocationOutputConflictCode ||
-		code == InvocationOutputUnsupportedCode:
+		code == InvocationOutputUnsupportedCode ||
+		code == RemoteLocalHostingConflictCode:
 		family = factoryapi.ErrorFamilyBadRequest
 	}
 	return factoryapi.ErrorResponse{

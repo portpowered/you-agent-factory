@@ -266,7 +266,7 @@ describe("CurrentActivityGraphEditorDialogs", () => {
       <CurrentActivityGraphEditorDialogs
         currentSessionFactoryName="alpha"
         discardEditorChanges={discardEditorChanges}
-        viewModel={viewModel as never}
+        editorController={viewModel as never}
         imports={imports as never}
         readyImportPreviewState={imports.importPreviewState}
         shouldRenderImportPreviewDialog
@@ -351,7 +351,7 @@ describe("CurrentActivityGraphEditorDialogs", () => {
     render(
       <CurrentActivityGraphEditorDialogs
         currentSessionFactoryName="alpha"
-        viewModel={viewModel as never}
+        editorController={viewModel as never}
         imports={createImportsStub() as never}
         readyImportPreviewState={null}
         shouldRenderImportPreviewDialog={false}
@@ -387,7 +387,7 @@ describe("CurrentActivityGraphEditorDialogs", () => {
     render(
       <CurrentActivityGraphEditorDialogs
         currentSessionFactoryName="alpha"
-        viewModel={viewModel as never}
+        editorController={viewModel as never}
         imports={imports as never}
         readyImportPreviewState={imports.importPreviewState}
         shouldRenderImportPreviewDialog={false}

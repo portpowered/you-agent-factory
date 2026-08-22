@@ -215,10 +215,10 @@ func TestRegistry_FindByLogicalSessionKeyID_ReturnsMatchingSession(t *testing.T)
 
 // --- merged from durable_execution_contract_characterization_test.go ---
 
-// peerDurableExecutionFake exercises the published durable-execution root slice
-// through the singular Service. It compiles against only the Sessions root
-// package and never imports factory_sessions/internal or nested execution
-// implementation packages.
+// peerDurableExecutionFake exercises the published durable-execution capability
+// through the singular Service implementation. It compiles against only the
+// Sessions root package and never imports factory_sessions/internal or nested
+// execution implementation packages.
 type peerDurableExecutionFake struct {
 	*peerRootServiceFake
 	starts    map[string]DurableAsyncStartResult
@@ -240,6 +240,7 @@ func newPeerDurableExecutionFake() *peerDurableExecutionFake {
 }
 
 var _ Service = (*peerDurableExecutionFake)(nil)
+var _ DurableExecutionService = (*peerDurableExecutionFake)(nil)
 
 func (fake *peerDurableExecutionFake) StartAsync(
 	_ context.Context,
@@ -352,7 +353,7 @@ func TestDurableExecutionRootContract_StartAndInspectSuccess(t *testing.T) {
 	}
 	fake.lifecycle[sessionID] = LifecycleStatusRunning
 
-	var service Service = fake
+	var service DurableExecutionService = fake
 	ctx := context.Background()
 
 	started, err := service.StartAsync(ctx, DurableStartRequest{
@@ -412,7 +413,7 @@ func TestDurableExecutionRootContract_TypedFailures(t *testing.T) {
 		SessionID: checkpointID,
 	}
 
-	var service Service = fake
+	var service DurableExecutionService = fake
 	ctx := context.Background()
 
 	_, err := service.StartAsync(ctx, DurableStartRequest{RequestID: "req-invalid-source"})
@@ -462,8 +463,7 @@ func TestDurableExecutionRootContract_TypedFailures(t *testing.T) {
 // peerInvocationSurfaceFake exercises the published invocation root slice while
 // remaining a singular Service implementer. It compiles against only the
 // Sessions root package (plus approved Work content types already present in
-// root signatures) and never imports factory_sessions/internal or a separately
-// published peer-facing invoker interface.
+// root signatures) and never imports factory_sessions/internal.
 type peerInvocationSurfaceFake struct {
 	*peerRootServiceFake
 	outcomes map[string]InvocationResult
@@ -479,6 +479,7 @@ func newPeerInvocationSurfaceFake() *peerInvocationSurfaceFake {
 }
 
 var _ Service = (*peerInvocationSurfaceFake)(nil)
+var _ InvocationService = (*peerInvocationSurfaceFake)(nil)
 
 func invocationRequestKey(sessionID string, request InvocationRequest) string {
 	requestID := ""
@@ -497,8 +498,7 @@ func invocationRequestKey(sessionID string, request InvocationRequest) string {
 }
 
 // InvokeFactorySession is a peer-local callable using the published root
-// vocabulary. It is intentionally not a separately published root Invoker
-// interface; invocation stays under the singular Service aggregate.
+// vocabulary and the owner-published InvocationService capability.
 func (fake *peerInvocationSurfaceFake) InvokeFactorySession(
 	_ context.Context,
 	sessionID string,
@@ -543,10 +543,7 @@ func TestInvocationRootContract_ValidRequestMapsToSessionScopedOutcome(t *testin
 		},
 	}
 
-	var service Service = fake
-	if _, err := service.GetFactorySession(context.Background(), "missing"); !errors.Is(err, ErrSessionNotFound) {
-		t.Fatalf("singular Service read path = %v, want ErrSessionNotFound", err)
-	}
+	var service InvocationService = fake
 
 	resolved := ResolvedInvocationInput{
 		Source:  work.InputSourcePositionalText,
@@ -561,7 +558,7 @@ func TestInvocationRootContract_ValidRequestMapsToSessionScopedOutcome(t *testin
 		t.Fatalf("InvocationTimeout = %v, want positive published timeout budget", timeout)
 	}
 
-	result, err := fake.InvokeFactorySession(context.Background(), sessionID, request)
+	result, err := service.InvokeFactorySession(context.Background(), sessionID, request)
 	if err != nil {
 		t.Fatalf("InvokeFactorySession: %v", err)
 	}
@@ -617,13 +614,15 @@ func TestInvocationRootContract_TypedFailuresAreDistinct(t *testing.T) {
 		Message:   "invocation canceled by caller",
 	}
 
-	_, err := fake.InvokeFactorySession(context.Background(), sessionID, invalid)
+	var service InvocationService = fake
+
+	_, err := service.InvokeFactorySession(context.Background(), sessionID, invalid)
 	var invalidInput *InvocationValidationError
 	if !errors.As(err, &invalidInput) || invalidInput.Field != "content" {
 		t.Fatalf("invalid input = %v, want *InvocationValidationError field=content", err)
 	}
 
-	timeoutResult, err := fake.InvokeFactorySession(context.Background(), sessionID, timedOut)
+	timeoutResult, err := service.InvokeFactorySession(context.Background(), sessionID, timedOut)
 	if err != nil {
 		t.Fatalf("timeout InvokeFactorySession: %v", err)
 	}
@@ -632,7 +631,7 @@ func TestInvocationRootContract_TypedFailuresAreDistinct(t *testing.T) {
 		t.Fatalf("timeout result = %#v, want TIMED_OUT typed outcome", timeoutResult)
 	}
 
-	cancelResult, err := fake.InvokeFactorySession(context.Background(), sessionID, canceled)
+	cancelResult, err := service.InvokeFactorySession(context.Background(), sessionID, canceled)
 	if err != nil {
 		t.Fatalf("cancel InvokeFactorySession: %v", err)
 	}
@@ -673,10 +672,6 @@ func newPeerRootServiceFake() *peerRootServiceFake {
 
 var _ Service = (*peerRootServiceFake)(nil)
 
-func (fake *peerRootServiceFake) ForRuntime(OpeningBindingRequest) (Service, error) {
-	return fake, nil
-}
-
 func (fake *peerRootServiceFake) OpenFactorySession(context.Context, OpenRequest) (*OpenResult, error) {
 	return &OpenResult{SessionID: DefaultSessionID}, nil
 }
@@ -694,6 +689,14 @@ func (fake *peerRootServiceFake) GetFactorySession(_ context.Context, sessionID 
 		return projection, nil
 	}
 	return SessionProjection{}, ErrSessionNotFound
+}
+
+func (fake *peerRootServiceFake) ApplyLiveChange(context.Context, string, LiveChangeRequest) (LiveChangeResult, error) {
+	return LiveChangeResult{}, ErrLiveChangeApplicationUnavailable
+}
+
+func (fake *peerRootServiceFake) RecoverLiveChange(context.Context, string, string) (LiveChangeResult, error) {
+	return LiveChangeResult{}, ErrLiveChangeApplicationUnavailable
 }
 
 func (fake *peerRootServiceFake) GetFactorySessionSyncPreflight(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor, *factorydefinitions.FactorySessionLogicalResolveHint) (SyncPreflightResult, error) {
@@ -726,10 +729,6 @@ func (fake *peerRootServiceFake) ReadDurableFactorySessionEventStream(context.Co
 
 func (fake *peerRootServiceFake) ProbeDurableFactorySessionEvents(context.Context, string, EventReconnectRequest) error {
 	return ErrDurableSessionNotFound
-}
-
-func (fake *peerRootServiceFake) ObserveForSession(context.Context, string, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
-	return factoryruntime.ObserveResult{}, ErrSessionNotFound
 }
 
 func (fake *peerRootServiceFake) PauseLiveFactorySession(context.Context, string, ControlRequest) (LifecycleControlResult, error) {
@@ -772,7 +771,7 @@ func (fake *peerRootServiceFake) InterruptDurableFactorySessionDispatch(context.
 	return LifecycleControlResult{}, ErrDurableSessionNotFound
 }
 
-// peerExecutionStub satisfies the durable ExecutionService methods embedded in
+// peerExecutionStub satisfies the durable execution methods exposed by
 // the singular root Service so a peer can compile against one aggregate authority.
 type peerExecutionStub struct {
 	Service

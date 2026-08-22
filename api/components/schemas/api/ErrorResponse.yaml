@@ -23,11 +23,50 @@ properties:
       - MOVE_WORK_REQUEST_ALREADY_APPLIED
       - METHOD_NOT_ALLOWED
       - EXECUTION_REQUEST_ID_CONFLICT
+      - REQUEST_CONFLICT
+      - WORKER_SESSION_START_REQUEST_ID_CONFLICT
+      - WORKER_SESSION_NOT_STARTABLE
+      - WORKER_SESSION_START_OPENING_FAILED
+      - WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE
+      - WORKER_SESSION_EVENT_CURSOR_INVALID
+      - WORKER_SESSION_EVENT_CURSOR_FOREIGN
+      - WORKER_SESSION_EVENT_CURSOR_FUTURE
+      - WORKER_SESSION_EVENT_CURSOR_STALE
+      - WORKER_SESSION_EVENT_CURSOR_UNAVAILABLE
+      - WORKER_SESSION_ADMISSION_FAILED
+      - WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT
+      - WORKER_SESSION_CONTINUATION_CONFLICT
+      - WORKER_SESSION_PROVIDER_CONTINUATION_INVALID
+      - WORKER_SESSION_CONTINUATION_ADMISSION_FAILED
+      - WORKER_SESSION_INTERRUPT_REQUEST_ID_CONFLICT
+      - WORKER_SESSION_INTERRUPT_CONFLICT
+      - WORKER_SESSION_INTERRUPT_SOURCE_CANCELLATION_FAILED
+      - WORKER_SESSION_INTERRUPT_SUCCESSOR_ADMISSION_FAILED
+      - WORKER_SESSION_INTERRUPT_ADMISSION_FAILED
+      - WORKER_SESSION_CONTROL_INVALID
+      - WORKER_SESSION_CONTROL_CONFLICT
+      - WORKER_SESSION_CONTROL_FAILED
       - FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED
+      - RESOURCE_CAPACITY_IN_USE
+      - REVISION_CONFLICT
+      - LIFECYCLE_CONFLICT
+      - ADMITTED_APPLICATION_FAILURE
       - INVALID_RESPONSE_EVENT_CURSOR
       - INVALID_RESPONSE_EVENT_FILTER
       - RESPONSE_EVENT_SESSION_NOT_FOUND
       - RESPONSE_EVENT_STREAM_EXPIRED
+      - PROVIDER_UNSUPPORTED
+      - SESSION_KIND_UNSUPPORTED
+      - PROJECTION_UNAVAILABLE
+      - WORKER_SESSION_RECORDING_CORRUPT
+      - WORKER_SESSION_RECORDING_UNAVAILABLE
+      - WORKER_SESSION_STREAM_UNAVAILABLE
+      - WORKER_SESSION_TRANSCRIPT_ACTIVE
+      - WORKER_SESSION_TRANSCRIPT_UNAVAILABLE
+      - WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE
+      - METRICS_INVALID_REQUEST
+      - METRICS_SESSION_NOT_FOUND
+      - METRICS_SESSION_SCOPE_UNAVAILABLE
       - NOT_FOUND
       - INTERNAL_ERROR
     x-enum-descriptions:
@@ -41,11 +80,47 @@ properties:
       - Operator move requestId was already applied for this session.
       - The HTTP method is not allowed for the requested route.
       - Durable execution requestId was reused with materially different inputs.
+      - A live-change requestId was reused with a different normalized request body.
+      - Worker Session start requestId was reused with different normalized inputs.
+      - The requested Worker Session identity is already reserved or terminal.
+      - The Worker Session opening record could not be published.
+      - The Worker Session event topic did not reach the required readiness barrier.
+      - The Worker Session event cursor is malformed.
+      - The Worker Session event cursor belongs to another Worker Session.
+      - The Worker Session event cursor is ahead of the available history.
+      - The Worker Session event cursor no longer names retained history.
+      - The Worker Session event cursor's durable stream generation is unavailable.
+      - Workers could not admit the Worker Session execution.
+      - Worker Session continuation requestId was reused with different inputs.
+      - The Worker Session continuation conflicts with source lifecycle or successor lineage.
+      - The recorded Provider Session cannot be resumed for this Worker Session continuation.
+      - Workers could not admit the Worker Session continuation.
+      - Worker Session interrupt requestId was reused with different inputs.
+      - Worker Session interrupt conflicts with source lifecycle, lineage, or Provider Session state.
+      - Worker Sessions could not cancel the exact source dispatch for an interrupt.
+      - Worker Sessions canceled the source but could not admit the replacement successor.
+      - Workers could not admit the Worker Session interrupt replacement.
       - Lifecycle control requestId was already applied with different control inputs.
+      - Requested resource capacity is below the number of units currently in use.
+      - The caller's expected Factory revision is no longer current.
+      - The Factory Session lifecycle does not admit the requested change.
+      - A live change was admitted but its runtime application failed.
       - The Factory Response Event reconnect cursor is invalid.
       - A Factory Response Event filter is invalid.
       - The explicitly selected Factory Session for response events does not exist.
       - The retained Factory Response Event stream is no longer available.
+      - The requested Provider Session provider is not loadable by this API.
+      - The requested Provider Session identifier kind is not loadable by this API.
+      - The correlated Worker Session projection is temporarily unavailable.
+      - The durable Worker Session recording contains corrupt history.
+      - The durable Worker Session recording could not be read.
+      - The canonical Worker Session event stream is temporarily unavailable.
+      - The requested Worker Session has not reached a terminal state.
+      - The finished Worker Session has no normalized transcript available.
+      - Provider Sessions could not project the normalized Worker Session transcript.
+      - The metrics request could not be interpreted by the canonical metrics route.
+      - The requested live Factory Session identity was not discoverable.
+      - The live Factory Session was discoverable, but no retained metrics scope was available.
       - The requested resource does not exist.
       - The server failed while handling an otherwise valid request.
   targets:
@@ -53,3 +128,6 @@ properties:
     description: Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields.
     items:
       $ref: './FactoryValidationTarget.yaml'
+  resourceCapacity:
+    $ref: './FactorySessionResourceCapacityErrorDetails.yaml'
+    description: Resource accounting for a rejected capacity reduction.

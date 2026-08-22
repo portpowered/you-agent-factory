@@ -1,3 +1,4 @@
+// Invocation-example and compatibility mapping helpers.
 package factoryconfig
 
 import (

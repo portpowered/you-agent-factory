@@ -1,16 +1,17 @@
 package wire
 
 import (
-	"errors"
 	"io/fs"
 	"runtime"
 	"testing"
 	"time"
 
+	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/testing/eventsstub"
 )
 
 func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
@@ -30,6 +31,9 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 		{name: "invocation input reader", mutate: func(in *newServiceInputs) { in.invocationInputFiles = nil }},
 		{name: "initial Work reader", mutate: func(in *newServiceInputs) { in.initialWorkFiles = nil }},
 		{name: "symlink resolver", mutate: func(in *newServiceInputs) { in.resolveSymlinks = nil }},
+		{name: "events root", mutate: func(in *newServiceInputs) { in.eventsService = nil }},
+		{name: "clock", mutate: func(in *newServiceInputs) { in.clock = nil }},
+		{name: "live-change coordinator", mutate: func(in *newServiceInputs) { in.liveChangeCoordinator = nil }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -59,6 +63,56 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	var root factorysessions.Service = service
 	if root == nil {
 		t.Fatal("constructed root is nil")
+	}
+	liveControl, ok := service.(factorysessions.LiveControlService)
+	if !ok {
+		t.Fatal("constructed root does not publish the live-control capability")
+	}
+	if liveControl == nil {
+		t.Fatal("constructed live-control capability is nil")
+	}
+	if any(liveControl) != any(root) {
+		t.Fatalf("LiveControlService = %T, want the same authoritative Service instance %T", liveControl, root)
+	}
+}
+
+func TestNewServiceRetainsOneRuntimeAssemblyOnThePublishedRoot(t *testing.T) {
+	t.Parallel()
+
+	service, err := validNewServiceInputs().callNewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	assembly, err := RuntimeAssemblyFromService(service)
+	if err != nil {
+		t.Fatalf("RuntimeAssemblyFromService() error = %v", err)
+	}
+	if any(assembly) != any(service) {
+		t.Fatalf("runtime assembly = %T(%[1]v), want the same process root %T(%[2]v)", assembly, service)
+	}
+}
+
+func TestNewRuntimeOpeningRejectsIncompleteGroupsAtCompositionBoundary(t *testing.T) {
+	t.Parallel()
+
+	factory, err := NewRuntimeOpening(
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	if factory != nil {
+		t.Fatalf("NewRuntimeOpening() = %#v, want nil factory", factory)
+	}
+	if got, want := err.Error(), "Factory Sessions runtime-opening Provider Sessions owner ports are required"; got != want {
+		t.Fatalf("NewRuntimeOpening() error = %q, want %q", got, want)
 	}
 }
 
@@ -137,64 +191,6 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	}
 }
 
-func TestNewServiceServesPublishedForRuntimePeerBehavior(t *testing.T) {
-	t.Parallel()
-
-	clock := &recordingClock{}
-	directories := &recordingDirectoryInspection{}
-	symlinkCalls := 0
-	inputs := validNewServiceInputs()
-	inputs.directoryInspection = directories
-	inputs.resolveSymlinks = func(path string) (string, error) { symlinkCalls++; return path, nil }
-	service, err := inputs.callNewService()
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
-	if service == nil {
-		t.Fatal("NewService() returned nil service")
-	}
-
-	bound, bindErr := service.ForRuntime(factorysessions.RuntimeBinding{})
-	if bound != nil {
-		t.Fatalf("ForRuntime() without clock = %#v, want nil Service on missing binding input", bound)
-	}
-	var openingErr *factorysessions.OpeningBindingError
-	if !errors.As(bindErr, &openingErr) {
-		t.Fatalf("ForRuntime() error = %v, want *OpeningBindingError", bindErr)
-	}
-	if openingErr.Field != "clock" {
-		t.Fatalf("OpeningBindingError.Field = %q, want clock", openingErr.Field)
-	}
-	if !errors.Is(bindErr, factorysessions.ErrOpeningBindingInvalid) {
-		t.Fatalf("ForRuntime() error = %v, want errors.Is ErrOpeningBindingInvalid", bindErr)
-	}
-
-	bound, err = service.ForRuntime(factorysessions.RuntimeBinding{Clock: clock})
-	if err != nil {
-		t.Fatalf("ForRuntime() error = %v, want nil", err)
-	}
-	if bound == nil {
-		t.Fatal("ForRuntime() returned nil Service view")
-	}
-	var runtimeView factorysessions.Service = bound
-	if runtimeView == nil {
-		t.Fatal("bound runtime view is nil")
-	}
-	result := factorysessions.OpeningBindingResult{Service: bound}
-	if result.Service == nil {
-		t.Fatal("OpeningBindingResult must carry the usable root Service view")
-	}
-	if clock.calls != 0 {
-		t.Fatalf("runtime binding read clock %d times, want no runtime activity", clock.calls)
-	}
-	if directories.calls != 0 {
-		t.Fatalf("runtime binding inspected filesystem %d times, want no runtime activity", directories.calls)
-	}
-	if symlinkCalls != 0 {
-		t.Fatalf("runtime binding resolved symlinks %d times, want no filesystem activity", symlinkCalls)
-	}
-}
-
 type resultProjector struct{}
 
 func (resultProjector) ProjectSessionResults(factoryruntime.SessionResultInput) factoryruntime.SessionResultProjection {
@@ -216,9 +212,13 @@ type newServiceInputs struct {
 	invocationInputFiles         fileeffects.InvocationInputReader
 	initialWorkFiles             fileeffects.InitialWorkReader
 	resolveSymlinks              factorysessions.LogicalTargetResolveSymlinks
+	eventsService                events.Service
+	clock                        factoryruntime.Clock
+	liveChangeCoordinator        LiveChangeCoordinator
 }
 
 func validNewServiceInputs() newServiceInputs {
+	eventsService := eventsstub.New()
 	return newServiceInputs{
 		sessionResultProjection: resultProjector{},
 		eventIDs:                func() string { return "response-event-id" },
@@ -229,6 +229,9 @@ func validNewServiceInputs() newServiceInputs {
 		invocationInputFiles:    fileeffects.InvocationInputReader(func(string) ([]byte, error) { return nil, nil }),
 		initialWorkFiles:        fileeffects.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
 		resolveSymlinks:         func(path string) (string, error) { return path, nil },
+		eventsService:           eventsService,
+		clock:                   &recordingClock{},
+		liveChangeCoordinator:   NewLiveChangeCoordinator(),
 	}
 }
 
@@ -248,6 +251,9 @@ func (in newServiceInputs) callNewService() (factorysessions.Service, error) {
 		in.invocationInputFiles,
 		in.initialWorkFiles,
 		in.resolveSymlinks,
+		in.eventsService,
+		in.clock,
+		in.liveChangeCoordinator,
 	)
 }
 

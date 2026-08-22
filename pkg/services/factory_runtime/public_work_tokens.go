@@ -1,13 +1,21 @@
 package factory
 
 import (
+	"sort"
+
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // PublicWorkTokens is the deduplicated public work token set from marking and
 // active dispatch consumed inputs.
 type PublicWorkTokens struct {
-	Tokens           []*RuntimeToken
+	Tokens []*workers.Token
+	// MarkingTokens retains detached facts for resources and system tokens too;
+	// peer projections filter those product-specific categories after crossing
+	// the Runtime boundary.
+	MarkingTokens    []workers.Token
 	InFlightOnlyByID map[string]struct{}
 }
 
@@ -20,17 +28,29 @@ func CollectPublicWorkTokens(
 	dispatches map[string]*interfaces.DispatchEntry,
 ) PublicWorkTokens {
 	result := PublicWorkTokens{
-		Tokens:           make([]*RuntimeToken, 0),
+		Tokens:           make([]*workers.Token, 0),
+		MarkingTokens:    make([]workers.Token, 0, len(markingTokens)),
 		InFlightOnlyByID: make(map[string]struct{}),
 	}
 
 	seenWorkIDs := make(map[string]struct{})
 
-	for _, token := range markingTokens {
-		if !IsPublicWorkToken(token) {
+	markingIDs := make([]string, 0, len(markingTokens))
+	for id := range markingTokens {
+		markingIDs = append(markingIDs, id)
+	}
+	sort.Strings(markingIDs)
+	for _, id := range markingIDs {
+		runtimeToken := markingTokens[id]
+		if runtimeToken == nil {
 			continue
 		}
-		result.Tokens = append(result.Tokens, token)
+		token := factorytoken.ToWorker(*runtimeToken)
+		result.MarkingTokens = append(result.MarkingTokens, token)
+		if !IsPublicWorkToken(runtimeToken) {
+			continue
+		}
+		result.Tokens = append(result.Tokens, &token)
 		if workID := token.Color.WorkID; workID != "" {
 			seenWorkIDs[workID] = struct{}{}
 		}
@@ -42,10 +62,11 @@ func CollectPublicWorkTokens(
 			continue
 		}
 		for i := range entry.ConsumedTokens {
-			token := entry.ConsumedTokens[i]
-			if !IsPublicWorkToken(&token) {
+			runtimeToken := factorytoken.FromWorker(entry.ConsumedTokens[i])
+			if !IsPublicWorkToken(&runtimeToken) {
 				continue
 			}
+			token := factorytoken.ToWorker(runtimeToken)
 			if token.ID != "" {
 				if _, seen := seenDispatchTokenIDs[token.ID]; seen {
 					continue
@@ -74,5 +95,5 @@ func CollectPublicWorkTokens(
 func IsPublicWorkToken(token *RuntimeToken) bool {
 	return token != nil &&
 		token.Color.DataType != RuntimeTokenDataTypeResource &&
-		!interfaces.IsSystemTimeToken(token)
+		token.Color.WorkTypeID != interfaces.SystemTimeWorkTypeID
 }

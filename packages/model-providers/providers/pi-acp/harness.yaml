@@ -1,0 +1,9 @@
+implementation:
+  kind: acp_agent
+  profile: pi-acp
+launch:
+  posture: package_runner
+  transport: stdio
+  command: npx
+  arguments:
+    - pi-acp

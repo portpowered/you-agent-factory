@@ -14,11 +14,10 @@ import (
 // peers must compile against the root vocabulary rather than nested packages.
 //
 // Published naming notes:
-//   - ExecutionService is the durable execution facet embedded by Service
+//   - durable execution methods are exposed directly by Service
 //   - ExecutionValidationError names ValidationError for peer-facing clarity
 //   - ErrDurableSessionNotFound is the durable missing-session sentinel
 //   - ErrExecutionServiceNotConfigured names the durable service configuration failure
-//   - ExecutionFactoryEventConsumer names FactoryEventConsumer for durable sync observation
 //
 // Helper functions ApplySessionListScope, EvaluateLifecycleControl,
 // MaterializeEventReadStream, and related lifecycle/listing helpers are also
@@ -118,9 +117,13 @@ type ControlError struct {
 }
 
 // ControlRequest is optional metadata shared by pause, resume, cancel, and terminate.
+// TurnID binds a control that originated from a captured Chat turn to that
+// immutable Factory Runtime turn. RequestID remains the committed control
+// identity used to retain the original result on a retry.
 type ControlRequest struct {
 	RequestID string
 	Reason    string
+	TurnID    string
 }
 
 // DispatchDetail is the shared durable dispatch read projection.
@@ -148,9 +151,10 @@ type DispatchFilters struct {
 
 // DispatchJavaScriptProjection carries JavaScript-specific dispatch metadata.
 type DispatchJavaScriptProjection struct {
-	TaskKind      string
-	TaskLabel     string
-	ExecutionMode string
+	TaskKind        string
+	TaskLabel       string
+	ExecutionMode   string
+	SkipPermissions bool
 }
 
 // DispatchPetriProjection carries Petri-specific dispatch metadata.
@@ -520,32 +524,6 @@ type RuntimeOptions struct {
 	ChildExecutorMode string
 }
 
-// ExecutionService is the shared durable factory-session execution contract consumed by
-// API, CLI, MCP, and UI transports. Live-session open and invocation remain on
-// the separate factorysessions compatibility surface. All methods are
-// cancellation-aware; transports must not mutate runtime state directly.
-type ExecutionService interface {
-	StartAsync(ctx context.Context, req StartRequest) (AsyncStartResult, error)
-	StartSync(ctx context.Context, req StartRequest) (SyncStartResult, error)
-	ResumeInterruptedSession(ctx context.Context, sessionID string, req ResumeSessionRequest) (AsyncStartResult, error)
-	GetSession(ctx context.Context, sessionID string) (SessionReadResult, error)
-	Pause(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error)
-	Resume(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error)
-	Cancel(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error)
-	Terminate(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error)
-	Approve(ctx context.Context, sessionID string, req ApproveRequest) (LifecycleControlResult, error)
-	RetryDispatch(ctx context.Context, sessionID string, req RetryDispatchRequest) (LifecycleControlResult, error)
-	InterruptDispatch(ctx context.Context, sessionID string, req InterruptDispatchRequest) (LifecycleControlResult, error)
-	GetResult(ctx context.Context, sessionID string, req ResultRequest) (ResultReadResult, error)
-	ListDispatches(ctx context.Context, sessionID string) (ListDispatchesResult, error)
-	QueryDispatches(ctx context.Context, request DispatchQueryRequest) (ListDispatchesResult, error)
-	GetDispatch(ctx context.Context, sessionID, dispatchID string) (DispatchDetail, error)
-	ListArtifacts(ctx context.Context, sessionID string) (ListArtifactsResult, error)
-	GetArtifact(ctx context.Context, sessionID, artifactID string) (ArtifactDetail, error)
-	ReadEvents(ctx context.Context, sessionID string, req EventReconnectRequest) (EventReadResult, error)
-	ListSessions(ctx context.Context, req ListSessionsRequest) (ListSessionsResult, error)
-}
-
 // SessionActionAvailability exposes which lifecycle controls are currently valid
 // for one listed durable session.
 type SessionActionAvailability struct {
@@ -801,7 +779,7 @@ func (e *ResumeError) Error() string {
 // --- merged from durable_execution_contract.go ---
 
 // Durable-execution root slice freezes start, resume, control, and inspect
-// vocabulary on the singular Service (via embedded ExecutionService). Peers
+// vocabulary on the singular Service. Peers
 // consume these plain root contracts without importing nested durable-execution
 // or internal/execution implementation packages:
 //
@@ -816,8 +794,54 @@ func (e *ResumeError) Error() string {
 //   - *DurableResumeError for missing checkpoint / invalid resume state
 //   - *DurableControlError for rejected lifecycle transitions
 //
-// Durable operations remain methods on the singular root Service aggregate; this
-// file does not publish a separate peer-facing durable-execution interface.
+// DurableExecutionService is the narrow, owner-published Factory Sessions
+// capability for durable start, restart-resume, lifecycle control, and
+// inspection. It uses only the root request, result, and typed-error
+// vocabulary documented below. The singular Service satisfies this interface
+// structurally, so publishing the capability neither constructs nor locates a
+// second session authority.
+//
+// The interface deliberately excludes live-session open, list, get, pause,
+// resume, and close operations. Durable callers use the unprefixed lifecycle
+// methods because those methods route solely to the durable execution owner;
+// the separately named *LiveFactorySession methods remain outside this
+// capability.
+type DurableExecutionService interface {
+	StartAsync(context.Context, DurableStartRequest) (DurableAsyncStartResult, error)
+	StartSync(context.Context, DurableStartRequest) (DurableSyncStartResult, error)
+	ResumeInterruptedSession(context.Context, string, DurableResumeRequest) (DurableAsyncStartResult, error)
+	GetSession(context.Context, string) (DurableInspectResult, error)
+	Pause(context.Context, string, DurableControlRequest) (DurableControlResult, error)
+	Resume(context.Context, string, DurableControlRequest) (DurableControlResult, error)
+	Cancel(context.Context, string, DurableControlRequest) (DurableControlResult, error)
+	Terminate(context.Context, string, DurableControlRequest) (DurableControlResult, error)
+	Approve(context.Context, string, ApproveRequest) (DurableControlResult, error)
+	RetryDispatch(context.Context, string, RetryDispatchRequest) (DurableControlResult, error)
+	InterruptDispatch(context.Context, string, InterruptDispatchRequest) (DurableControlResult, error)
+	GetResult(context.Context, string, ResultRequest) (ResultReadResult, error)
+	ListDispatches(context.Context, string) (ListDispatchesResult, error)
+	QueryDispatches(context.Context, DispatchQueryRequest) (ListDispatchesResult, error)
+	GetDispatch(context.Context, string, string) (DispatchDetail, error)
+	ListArtifacts(context.Context, string) (ListArtifactsResult, error)
+	GetArtifact(context.Context, string, string) (ArtifactDetail, error)
+	ReadEvents(context.Context, string, EventReconnectRequest) (EventReadResult, error)
+}
+
+// SessionInventoryService is the owner-published capability for scoped
+// Factory Session inventory reads. Its request can intentionally select live,
+// durable, or combined inventory, so it remains separate from
+// DurableExecutionService and does not widen durable callers into live control.
+type SessionInventoryService interface {
+	ListSessions(context.Context, ListSessionsRequest) (ListSessionsResult, error)
+}
+
+// Service satisfies DurableExecutionService structurally. Keep this assertion
+// at the owner root so signature drift fails during the focused package build.
+var _ DurableExecutionService = (Service)(nil)
+
+// Service also satisfies the independent scoped inventory capability.
+var _ SessionInventoryService = (Service)(nil)
+
 // Slice-named aliases are the peer-facing durable vocabulary; nested
 // internal/execution types are not the peer-facing source of truth.
 

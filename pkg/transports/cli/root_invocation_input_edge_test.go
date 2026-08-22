@@ -11,7 +11,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/spf13/cobra"
 )
@@ -77,6 +77,60 @@ func TestResolveFactoryInvocationInput_RequiresProcessStdinForExplicitDash(t *te
 	_, err := collectRunInvocationStdin([]string{"-"}, nil, func() bool { return true })
 	if err == nil || !strings.Contains(err.Error(), "process stdin is required") {
 		t.Fatalf("error = %v, want missing stdin", err)
+	}
+}
+
+func TestResolveRunFactoryPromptToFileRejectsNonPromptRunShapes(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name    string
+		prepare func(*testing.T, *cobra.Command, *runcli.RunConfig)
+		want    string
+	}{
+		{
+			name: "work",
+			prepare: func(t *testing.T, cmd *cobra.Command, cfg *runcli.RunConfig) {
+				cmd.Flags().String("work", "", "")
+				if err := cmd.Flags().Set("work", "work.json"); err != nil {
+					t.Fatal(err)
+				}
+				cfg.WorkFile = "work.json"
+			},
+			want: "--to-file cannot be used with --work",
+		},
+		{
+			name: "continuous",
+			prepare: func(_ *testing.T, _ *cobra.Command, cfg *runcli.RunConfig) {
+				cfg.Continuously = true
+			},
+			want: "--to-file cannot be used with --continuously",
+		},
+		{
+			name: "replay",
+			prepare: func(_ *testing.T, _ *cobra.Command, cfg *runcli.RunConfig) {
+				cfg.ReplayPath = "replay.json"
+			},
+			want: "--to-file cannot be used with --replay",
+		},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "run"}
+			cmd.SetContext(context.Background())
+			cfg := runcli.RunConfig{InvocationFileExplicit: true, InvocationFilePath: "prompt.txt"}
+			test.prepare(t, cmd, &cfg)
+			preparation := rootInvocationInputScript{prepare: func(
+				context.Context,
+				work.InvocationInputPreparationRequest,
+			) (work.PreparedInvocationInput, error) {
+				t.Fatal("non-prompt run shape attempted invocation preparation")
+				return work.PreparedInvocationInput{}, nil
+			}}
+			if err := resolveRunFactoryPrompt(cmd, &cfg, nil, preparation); err == nil || err.Error() != test.want {
+				t.Fatalf("resolveRunFactoryPrompt error = %v, want %q", err, test.want)
+			}
+		})
 	}
 }
 
@@ -278,6 +332,78 @@ func TestResolveRunFactoryPromptEmptySignatureInputStillUsesEffectiveSchema(t *t
 		cfg.PreparedInvocationInput.NormalizedArguments.Arguments["mode"].Values[0] != "safe" {
 		t.Fatalf("prepared default-only input = %#v", cfg.PreparedInvocationInput)
 	}
+}
+
+func TestResolveRunFactoryPromptContinuousEmptySignatureInputRemainsIdle(t *testing.T) {
+	t.Parallel()
+
+	factoryDir, factoryPath := writeEffectiveSignatureFactory(t, completeInvocationSignaturePayload())
+	cmd := newEffectiveSignatureCommand(t, factoryPath, "")
+	cfg := effectiveSignatureRunConfig(factoryDir, factoryPath)
+	cfg.Continuously = true
+	preparation := rootInvocationInputScript{prepare: func(
+		context.Context,
+		work.InvocationInputPreparationRequest,
+	) (work.PreparedInvocationInput, error) {
+		t.Fatal("empty continuous service input must not prepare a synthetic invocation")
+		return work.PreparedInvocationInput{}, nil
+	}}
+
+	if err := resolveRunFactoryPrompt(cmd, &cfg, nil, preparation); err != nil {
+		t.Fatalf("resolve empty continuous signature input: %v", err)
+	}
+	if cfg.PreparedInvocationInput != nil || cfg.InvocationNormalizedArguments != nil || cfg.InvocationArguments != nil {
+		t.Fatalf("continuous empty signature input = %#v, want no invocation input", cfg)
+	}
+}
+
+func TestResolveRunFactoryPromptContinuousDefaultSignatureInputRemainsIdle(t *testing.T) {
+	t.Parallel()
+
+	factoryDir, factoryPath := writeEffectiveSignatureFactory(t, defaultOnlyInvocationSignaturePayload())
+	cmd := newEffectiveSignatureCommand(t, factoryPath, "")
+	cfg := effectiveSignatureRunConfig(factoryDir, factoryPath)
+	cfg.Continuously = true
+	preparation := rootInvocationInputScript{prepare: func(
+		context.Context,
+		work.InvocationInputPreparationRequest,
+	) (work.PreparedInvocationInput, error) {
+		t.Fatal("empty continuous service input must not apply a default as a synthetic invocation")
+		return work.PreparedInvocationInput{}, nil
+	}}
+
+	if err := resolveRunFactoryPrompt(cmd, &cfg, nil, preparation); err != nil {
+		t.Fatalf("resolve default-only continuous signature input: %v", err)
+	}
+	if cfg.PreparedInvocationInput != nil || cfg.InvocationNormalizedArguments != nil || cfg.InvocationArguments != nil {
+		t.Fatalf("continuous default-only signature input = %#v, want no invocation input", cfg)
+	}
+}
+
+func TestResolveRunFactoryPromptContinuousExplicitSignatureInputStillPrepares(t *testing.T) {
+	t.Parallel()
+
+	factoryDir, factoryPath := writeEffectiveSignatureFactory(t, completeInvocationSignaturePayload())
+	cmd := newEffectiveSignatureCommand(t, factoryPath, "")
+	cfg := effectiveSignatureRunConfig(factoryDir, factoryPath)
+	cfg.Continuously = true
+	prepared := completePreparedInvocation()
+	calls := 0
+	preparation := rootInvocationInputScript{prepare: func(
+		context.Context,
+		work.InvocationInputPreparationRequest,
+	) (work.PreparedInvocationInput, error) {
+		calls++
+		return prepared, nil
+	}}
+
+	if err := resolveRunFactoryPrompt(cmd, &cfg, completeInvocationArguments(), preparation); err != nil {
+		t.Fatalf("resolve explicit continuous signature input: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("preparation calls = %d, want exactly one", calls)
+	}
+	assertCompletePreparedInvocation(t, cfg.PreparedInvocationInput)
 }
 
 func TestResolveRunFactoryPromptEmptyInputStillRejectsSchemaCollision(t *testing.T) {

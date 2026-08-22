@@ -12,7 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 )
 
@@ -85,8 +85,8 @@ func TestAssertFactoryConfigInitFamilyCommandIDRejectsOutOfFamily(t *testing.T) 
 	if err := climanifestgen.AssertFactoryConfigInitFamilyCommandID("you.session.show"); err == nil {
 		t.Fatal("expected out-of-family command id rejection")
 	}
-	if err := climanifestgen.AssertFactoryConfigInitFamilyCommandID("you.factory.query"); err != nil {
-		t.Fatalf("AssertFactoryConfigInitFamilyCommandID(you.factory.query) error = %v", err)
+	if err := climanifestgen.AssertFactoryConfigInitFamilyCommandID("you.factory.show"); err != nil {
+		t.Fatalf("AssertFactoryConfigInitFamilyCommandID(you.factory.show) error = %v", err)
 	}
 }
 
@@ -685,8 +685,8 @@ func TestCheckRejectsRetiredModelsDocsFamilyJSONArtifact(t *testing.T) {
 }
 
 func TestIsFactoryConfigInitFamilyCommandID(t *testing.T) {
-	if !climanifestgen.IsFactoryConfigInitFamilyCommandID("you.factory.query") {
-		t.Fatal("expected you.factory.query in factory/config/init family")
+	if !climanifestgen.IsFactoryConfigInitFamilyCommandID("you.factory.show") {
+		t.Fatal("expected you.factory.show in factory/config/init family")
 	}
 	if climanifestgen.IsFactoryConfigInitFamilyCommandID("you.docs") {
 		t.Fatal("expected you.docs outside factory/config/init family")

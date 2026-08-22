@@ -11,8 +11,8 @@ import (
 
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	submitcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/submit"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
-	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/spf13/cobra"
 )
 
@@ -414,6 +414,168 @@ func TestRunCommand_ExplicitServerDerivesLoopbackBindAndEnablesFallback(t *testi
 	}
 	if !got.AutoPort {
 		t.Fatal("expected explicit --server to enable ascending port fallback")
+	}
+}
+
+func TestRunCommand_ListenSelectsExactLoopbackBind(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() { runCLI = originalRunCLI }()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+	root := newLegacyTestRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--with-server", "--listen", "127.0.0.1:9091"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --with-server --listen: %v", err)
+	}
+	if got.ListenAddress != "127.0.0.1:9091" || !got.ListenExplicit {
+		t.Fatalf("listen config = (%q, explicit=%t), want exact explicit address", got.ListenAddress, got.ListenExplicit)
+	}
+	if got.BindHost != "127.0.0.1" || got.Port != 9091 {
+		t.Fatalf("bind = %s:%d, want 127.0.0.1:9091", got.BindHost, got.Port)
+	}
+	if got.AutoPort {
+		t.Fatal("--listen must disable legacy automatic port fallback")
+	}
+}
+
+func TestRunCommand_ListenRequiresListenerMode(t *testing.T) {
+	runCalled := false
+	originalRunCLI := runCLI
+	defer func() { runCLI = originalRunCLI }()
+	runCLI = func(_ context.Context, _ runcli.RunConfig) error {
+		runCalled = true
+		return nil
+	}
+
+	root := newLegacyTestRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--listen", "127.0.0.1:9091"})
+
+	err := root.Execute()
+	if err == nil || !strings.Contains(err.Error(), "--with-server") || !strings.Contains(err.Error(), "--with-site") {
+		t.Fatalf("error = %v, want --listen listener-mode guidance", err)
+	}
+	if runCalled {
+		t.Fatal("run handler must not execute for an invalid --listen placement")
+	}
+}
+
+func TestRunCommand_LegacyServerBindingWarnsOnce(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() { runCLI = originalRunCLI }()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+	var stderr bytes.Buffer
+	root := newLegacyTestRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"run", "--with-server", "--server", "http://127.0.0.1:9092"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute legacy local server binding: %v", err)
+	}
+	if got.BindHost != "127.0.0.1" || got.Port != 9092 || !got.AutoPort {
+		t.Fatalf("legacy bind = %#v, want 127.0.0.1:9092 with fallback", got)
+	}
+	if count := strings.Count(stderr.String(), "warning:"); count != 1 {
+		t.Fatalf("stderr = %q, want exactly one warning", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "--server is deprecated") || !strings.Contains(stderr.String(), "--listen") {
+		t.Fatalf("stderr = %q, want actionable --listen migration warning", stderr.String())
+	}
+}
+
+func TestRunCommand_ListenPrecedesExplicitServerURI(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() { runCLI = originalRunCLI }()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+	var stderr bytes.Buffer
+	root := newLegacyTestRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{
+		"--server", "https://remote.example:9443",
+		"run", "--with-server", "--listen", "localhost:9093",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute --listen with explicit remote --server: %v", err)
+	}
+	if got.BindHost != "localhost" || got.Port != 9093 || got.AutoPort {
+		t.Fatalf("bind = %s:%d auto=%t, want localhost:9093 exact bind", got.BindHost, got.Port, got.AutoPort)
+	}
+	if !strings.Contains(stderr.String(), "--listen takes precedence") || strings.Count(stderr.String(), "warning:") != 1 {
+		t.Fatalf("stderr = %q, want one precedence warning", stderr.String())
+	}
+}
+
+func TestServerCommand_ListenSelectsExactLoopbackBind(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() { runCLI = originalRunCLI }()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+	root := newLegacyTestRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"server", "--listen", "[::1]:9094"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute server --listen: %v", err)
+	}
+	if got.ListenAddress != "[::1]:9094" || !got.ListenExplicit {
+		t.Fatalf("listen config = (%q, explicit=%t), want exact explicit address", got.ListenAddress, got.ListenExplicit)
+	}
+	if got.BindHost != "::1" || got.Port != 9094 || got.AutoPort {
+		t.Fatalf("bind = %s:%d auto=%t, want ::1:9094 exact bind", got.BindHost, got.Port, got.AutoPort)
+	}
+}
+
+func TestServerCommand_LegacyServerBindingWarnsOnce(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() { runCLI = originalRunCLI }()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+	var stderr bytes.Buffer
+	root := newLegacyTestRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"--server", "http://127.0.0.1:9095", "server"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute legacy server binding: %v", err)
+	}
+	if got.BindHost != "127.0.0.1" || got.Port != 9095 || !got.AutoPort {
+		t.Fatalf("legacy bind = %#v, want 127.0.0.1:9095 with fallback", got)
+	}
+	if strings.Count(stderr.String(), "warning:") != 1 ||
+		!strings.Contains(stderr.String(), "--server is deprecated") ||
+		!strings.Contains(stderr.String(), "--listen") {
+		t.Fatalf("stderr = %q, want one actionable migration warning", stderr.String())
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func generatedHistoryEvents(t testing.TB, history *FactoryEventHistory) []factoryapi.FactoryEvent {
@@ -19,11 +20,60 @@ func generatedHistoryEvents(t testing.TB, history *FactoryEventHistory) []factor
 	canonical := history.CanonicalEvents()
 	generated := make([]factoryapi.FactoryEvent, len(canonical))
 	for index, event := range canonical {
-		if err := event.Decode(&generated[index]); err != nil {
-			t.Fatalf("decode canonical Factory event %q for compatibility assertion: %v", event.Id, err)
+		mapped, err := apisurface.FactoryEventToAPI(event)
+		if err != nil {
+			t.Fatalf("map canonical Factory event %q for compatibility assertion: %v", event.Id, err)
 		}
+		generated[index] = mapped
 	}
 	return generated
+}
+
+func TestFactoryEventHistory_SeedCanonicalEventsPreservesPrefixAndCursorState(t *testing.T) {
+	t0 := time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
+	predecessor := newTestFactoryEventHistory(nil, func() time.Time { return t0 })
+	predecessor.RecordInitialStructure()
+	predecessor.RecordRunRequest()
+	predecessor.RecordSessionLifecycleFromFactoryConfig(
+		"session-alpha", &interfaces.FactoryConfig{Name: "factory-alpha"}, 0, t0,
+	)
+	predecessor.RecordFactoryStateChange(
+		0, interfaces.FactoryStateIdle, interfaces.FactoryStateRunning, "start", t0,
+	)
+	prefix := predecessor.CanonicalEvents()
+
+	successor := newTestFactoryEventHistory(nil, func() time.Time { return t0.Add(time.Second) })
+	if err := successor.SeedCanonicalEvents(prefix); err != nil {
+		t.Fatalf("SeedCanonicalEvents: %v", err)
+	}
+	successor.RecordInitialStructure()
+	successor.RecordRunRequest()
+	successor.RecordSessionLifecycleFromFactoryConfig(
+		"session-alpha", &interfaces.FactoryConfig{Name: "factory-alpha"}, 0, t0.Add(time.Second),
+	)
+	successor.RecordFactoryStateChange(
+		0, interfaces.FactoryStateIdle, interfaces.FactoryStateRunning, "start", t0.Add(time.Second),
+	)
+	successor.RecordSessionResumed(
+		SessionLifecycleControlInput{SessionID: "session-alpha"}, t0.Add(2*time.Second),
+	)
+
+	events := successor.CanonicalEvents()
+	if len(events) != len(prefix)+1 {
+		t.Fatalf("seeded event count = %d, want %d", len(events), len(prefix)+1)
+	}
+	for index, expected := range prefix {
+		actual := events[index]
+		if actual.Id != expected.Id || actual.Context.Sequence != expected.Context.Sequence {
+			t.Fatalf("seeded prefix[%d] = %#v, want %#v", index, actual, expected)
+		}
+	}
+	if got := events[len(prefix)].Context.Sequence; got != len(prefix) {
+		t.Fatalf("successor sequence = %d, want %d", got, len(prefix))
+	}
+	if events[len(prefix)].Context.SessionSequence == nil || *events[len(prefix)].Context.SessionSequence != 1 {
+		t.Fatalf("successor session sequence = %#v, want 1", events[len(prefix)].Context.SessionSequence)
+	}
 }
 
 func TestFactoryEventHistory_EventRecorderCannotMutateCanonicalHistory(t *testing.T) {
@@ -167,6 +217,96 @@ func assertPublicFactoryChangeEvent(t *testing.T, publicEvents []factoryapi.Fact
 	}
 	if publicPayload.Factory.Name != "replacement-factory" || publicPayload.Metadata == nil || (*publicPayload.Metadata)["source"] != "activation" {
 		t.Fatalf("public Factory change payload = %#v, want compatible generated shape", publicPayload)
+	}
+}
+
+func TestFactoryEventHistory_RevisionedLiveChangeAppendPreservesCorrelationAndReconnect(t *testing.T) {
+	history, requestEvent, successEvent := appendRevisionedLiveChangeHistory(t)
+	assertRevisionedLiveChangeOrdering(t, requestEvent, successEvent)
+	assertRevisionedLiveChangePayload(t, successEvent)
+
+	sequence := 0
+	replay, err := BuildCanonicalReconnectReplay(history.CanonicalEvents(), interfaces.FactoryEventReconnectCursor{AfterSequence: &sequence}, interfaces.FactoryEventReconnectScope{SessionID: "session-live-change"})
+	if err != nil || len(replay) != 1 || replay[0].Type != interfaces.FactoryEventTypeFactoryChange {
+		t.Fatalf("reconnect replay = %#v error=%v, want only terminal live-change event", replay, err)
+	}
+	generated := generatedHistoryEvents(t, history)
+	if _, err := generated[0].Payload.AsFactoryChangeRequestEventPayload(); err != nil {
+		t.Fatalf("generated request payload: %v", err)
+	}
+	if _, err := generated[1].Payload.AsFactoryChangeEventPayload(); err != nil {
+		t.Fatalf("generated success payload: %v", err)
+	}
+}
+
+func appendRevisionedLiveChangeHistory(t *testing.T) (*FactoryEventHistory, interfaces.FactoryEvent, interfaces.FactoryEvent) {
+	recordedAt := time.Date(2026, 8, 10, 20, 0, 0, 0, time.UTC)
+	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return recordedAt })
+	sessionID := "session-live-change"
+	requestID := "request-live-change"
+	changeID := "live-change/request-live-change"
+	requestPayload, err := json.Marshal(interfaces.FactoryChangeRequestEventPayload{
+		ChangeID: changeID, ExpectedRevision: 0, Operation: "resource.capacity.set", TargetID: "reviewers",
+		RequestedValue: json.RawMessage("8"), Source: "test",
+	})
+	if err != nil {
+		t.Fatalf("marshal request payload: %v", err)
+	}
+	requestEvent, err := history.AppendRecordedEventWithResult(interfaces.FactoryEvent{
+		Id:   "factory-event/factory-change-request/" + changeID,
+		Type: interfaces.FactoryEventTypeFactoryChangeRequest,
+		Context: interfaces.FactoryEventContext{
+			EventTime: recordedAt, SessionID: stringPtr(sessionID), RequestID: stringPtr(requestID), Source: stringPtr("test"),
+		},
+		Payload: requestPayload,
+	})
+	if err != nil {
+		t.Fatalf("append live-change request: %v", err)
+	}
+
+	snapshot, err := interfaces.NewFactorySnapshot(map[string]any{"name": "updated", "capacity": 8})
+	if err != nil {
+		t.Fatalf("create updated snapshot: %v", err)
+	}
+	previous, next := 0, 1
+	successPayload, err := json.Marshal(interfaces.FactoryChangeEventPayload{
+		Factory: snapshot, ChangeID: changeID, Operation: "resource.capacity.set", TargetID: "reviewers",
+		PreviousRevision: &previous, NewRevision: &next,
+	})
+	if err != nil {
+		t.Fatalf("marshal success payload: %v", err)
+	}
+	successEvent, err := history.AppendRecordedEventWithResult(interfaces.FactoryEvent{
+		Id:   "factory-event/factory-change/" + changeID,
+		Type: interfaces.FactoryEventTypeFactoryChange,
+		Context: interfaces.FactoryEventContext{
+			EventTime: recordedAt.Add(time.Second), SessionID: stringPtr(sessionID), RequestID: stringPtr(requestID), Source: stringPtr("test"),
+		},
+		Payload: successPayload,
+	})
+	if err != nil {
+		t.Fatalf("append live-change success: %v", err)
+	}
+	return history, requestEvent, successEvent
+}
+
+func assertRevisionedLiveChangeOrdering(t *testing.T, requestEvent, successEvent interfaces.FactoryEvent) {
+	t.Helper()
+	if requestEvent.Context.Sequence != 0 || successEvent.Context.Sequence != 1 ||
+		requestEvent.Context.SessionSequence == nil || *requestEvent.Context.SessionSequence != 0 ||
+		successEvent.Context.SessionSequence == nil || *successEvent.Context.SessionSequence != 1 {
+		t.Fatalf("event ordering = request %#v success %#v, want global 0/1 and session 0/1", requestEvent.Context, successEvent.Context)
+	}
+}
+
+func assertRevisionedLiveChangePayload(t *testing.T, successEvent interfaces.FactoryEvent) {
+	t.Helper()
+	var effective interfaces.FactoryChangeEventPayload
+	if err := successEvent.DecodePayload(&effective); err != nil {
+		t.Fatalf("decode effective live-change payload: %v", err)
+	}
+	if effective.EffectiveSequence == nil || *effective.EffectiveSequence != successEvent.Context.Sequence || effective.Factory == nil {
+		t.Fatalf("effective payload = %#v, want assigned sequence and complete snapshot", effective)
 	}
 }
 
@@ -362,6 +502,61 @@ func TestFactoryEventHistory_CloseLiveSubscriptionsEndsActiveStreams(t *testing.
 			}
 		case <-deadline:
 			t.Fatal("timed out waiting for stream closure after CloseLiveSubscriptions")
+		}
+	}
+}
+
+func TestFactoryEventHistory_ScopedSubscriptionBoundsHistoryAndLiveBuffer(t *testing.T) {
+	history := newTestFactoryEventHistory(nil, func() time.Time { return time.Unix(0, 0).UTC() })
+	event := func(id, dispatchID string) interfaces.FactoryEvent {
+		return interfaces.FactoryEvent{
+			Context: interfaces.FactoryEventContext{DispatchID: &dispatchID},
+			Id:      id,
+			Type:    interfaces.FactoryEventTypeDispatchRequest,
+		}
+	}
+	history.AppendRecordedEvent(event("target-1", "dispatch-target"))
+	history.AppendRecordedEvent(event("other-1", "dispatch-other"))
+	history.AppendRecordedEvent(event("target-2", "dispatch-target"))
+	history.AppendRecordedEvent(event("target-3", "dispatch-target"))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stream, err := history.Subscribe(ctx, nil, interfaces.FactoryEventReconnectScope{DispatchID: "dispatch-target", Limit: 2, HistoryLimit: 2})
+	if err != nil {
+		t.Fatalf("Subscribe() error = %v", err)
+	}
+	if got := len(stream.History); got != 2 {
+		t.Fatalf("scoped retained history length = %d, want 2", got)
+	}
+	if stream.History[0].Id != "target-2" || stream.History[1].Id != "target-3" {
+		t.Fatalf("scoped retained history = %#v, want latest target events", stream.History)
+	}
+
+	history.AppendRecordedEvent(event("other-live", "dispatch-other"))
+	history.AppendRecordedEvent(event("target-live-1", "dispatch-target"))
+	history.AppendRecordedEvent(event("target-live-2", "dispatch-target"))
+	history.AppendRecordedEvent(event("target-live-3", "dispatch-target"))
+
+	var liveIDs []string
+	deadline := time.After(time.Second)
+	for {
+		select {
+		case received, ok := <-stream.Events:
+			if !ok {
+				if len(liveIDs) > 2 {
+					t.Fatalf("scoped live buffer delivered %d records, want at most 2", len(liveIDs))
+				}
+				for _, id := range liveIDs {
+					if id == "other-live" {
+						t.Fatalf("unrelated event entered scoped stream: %q", id)
+					}
+				}
+				return
+			}
+			liveIDs = append(liveIDs, received.Id)
+		case <-deadline:
+			t.Fatalf("scoped live stream did not close after bounded-buffer overflow; received=%v", liveIDs)
 		}
 	}
 }
@@ -568,6 +763,49 @@ func TestFactoryEventHistory_RecordDispatchCompletion_PreservesSelectedClassific
 	}
 }
 
+func TestFactoryEventHistory_RecordDispatchCompletion_PreservesStructuredSchemaViolationClassification(t *testing.T) {
+	history := newTestFactoryEventHistory(
+		eventHistoryProjectionNet(),
+		func() time.Time { return time.Unix(0, 0).UTC() })
+
+	result := workerexecution.WorkResult{
+		DispatchID:   "dispatch-schema-violation",
+		TransitionID: "t-review",
+		Outcome:      workerexecution.OutcomeFailed,
+		Output:       `{"wrong":"do-not-leak-this-rejected-value"}`,
+		Error:        "structured output schema violation: required property verdict is missing",
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyTerminal,
+			Type:   workerexecution.WorkFailureTypeStructuredOutputSchemaViolation,
+		},
+	}
+	history.RecordWorkstationResponse(3, result, interfaces.CompletedDispatch{
+		DispatchID:   result.DispatchID,
+		TransitionID: result.TransitionID,
+		Outcome:      result.Outcome,
+		ConsumedTokens: []workerexecution.Token{{
+			ID:    "token-1",
+			Color: workerexecution.Color{WorkID: "work-1", WorkTypeID: "task", TraceID: "trace-1"},
+		}},
+	})
+
+	events := generatedHistoryEvents(t, history)
+	if len(events) != 1 {
+		t.Fatalf("event count = %d, want 1", len(events))
+	}
+	payload, err := events[0].Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("dispatch response payload: %v", err)
+	}
+	if payload.FailureDetail == nil || payload.FailureDetail.Reason != factoryapi.WorkFailureTypeStructuredOutputSchemaViolation {
+		t.Fatalf("failure detail = %#v, want structured schema violation", payload.FailureDetail)
+	}
+	if payload.ProviderFailure == nil || payload.ProviderFailure.Type == nil ||
+		*payload.ProviderFailure.Type != factoryapi.WorkFailureTypeStructuredOutputSchemaViolation {
+		t.Fatalf("provider failure = %#v, want structured schema violation", payload.ProviderFailure)
+	}
+}
+
 func TestFactoryEventHistory_RecordDispatchCompletion_PreservesOutputWorkStateFromTokenPlace(t *testing.T) {
 	history := newTestFactoryEventHistory(
 		eventHistoryProjectionNet(),
@@ -589,8 +827,8 @@ func TestFactoryEventHistory_RecordDispatchCompletion_PreservesOutputWorkStateFr
 		OutputMutations: []interfaces.TokenMutationRecord{{
 			Type: interfaces.MutationMove,
 			Token: &workerexecution.Token{
-				ID:      "token-terminal",
-				PlaceID: "task:complete",
+				ID:    "token-terminal",
+				State: "complete",
 				Color: workerexecution.Color{
 					WorkID:     "work-1",
 					WorkTypeID: "task",

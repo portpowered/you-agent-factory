@@ -10,10 +10,10 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestProcessModelsList_RoutesThroughPresentationCollaboratorWithoutServer proves
-// local models list reaches the owned adapter through Factory Sessions
-// ModelsCLIPresentationCollaborator rather than the remote HTTP bootstrap path.
-func TestProcessModelsList_RoutesThroughPresentationCollaboratorWithoutServer(t *testing.T) {
+// TestProcessModelsList_RoutesThroughCompositionProviderWithoutServer proves
+// local models list reaches the owned adapter through the explicit process
+// composition port rather than the remote HTTP bootstrap path.
+func TestProcessModelsList_RoutesThroughCompositionProviderWithoutServer(t *testing.T) {
 	t.Parallel()
 
 	process := support.BuildProcess(t, serviceedges.Edges{})
@@ -33,7 +33,7 @@ func TestProcessModelsList_RoutesThroughPresentationCollaboratorWithoutServer(t 
 
 // TestProcessModelsList_ReusesCatalogScopeAcrossCommands proves repeated local
 // models list/inspect/pull commands reuse the process-scoped catalog scope
-// opened by the presentation collaborator.
+// opened by the process composition port.
 func TestProcessModelsList_ReusesCatalogScopeAcrossCommands(t *testing.T) {
 	t.Parallel()
 
@@ -64,19 +64,17 @@ func TestProcessModelsList_ReusesCatalogScopeAcrossCommands(t *testing.T) {
 				t.Fatalf("Process.Execute(local models %s #%d) error = nil, want failure without catalog fixture", args[3], i+1)
 			}
 			stderr := inputs.Stderr()
-			if !strings.Contains(stderr, "not found") && !strings.Contains(stderr, "NotFound") {
-				t.Fatalf("stderr #%d = %q, want not-found diagnostics from owned Models root path", i+1, stderr)
-			}
+			support.RequireSafeCLIDiagnostic(t, stderr)
 		default:
 			t.Fatalf("unexpected command args: %v", args)
 		}
 	}
 }
 
-// TestProcessModelsPull_RoutesThroughPresentationCollaboratorWithoutServer proves
-// local models pull reaches the owned adapter through Factory Sessions
-// ModelsCLIPresentationCollaborator rather than the remote HTTP bootstrap path.
-func TestProcessModelsPull_RoutesThroughPresentationCollaboratorWithoutServer(t *testing.T) {
+// TestProcessModelsPull_RoutesThroughCompositionProviderWithoutServer proves
+// local models pull reaches the owned adapter through the explicit process
+// composition port rather than the remote HTTP bootstrap path.
+func TestProcessModelsPull_RoutesThroughCompositionProviderWithoutServer(t *testing.T) {
 	t.Parallel()
 
 	process := support.BuildProcess(t, serviceedges.Edges{})
@@ -86,15 +84,13 @@ func TestProcessModelsPull_RoutesThroughPresentationCollaboratorWithoutServer(t 
 	if err := process.Execute(inputs.Input); err == nil {
 		t.Fatalf("Process.Execute(local models pull) error = nil, want failure without catalog fixture")
 	}
-	if !strings.Contains(inputs.Stderr(), "not found") && !strings.Contains(inputs.Stderr(), "NotFound") {
-		t.Fatalf("stderr = %q, want not-found diagnostics from owned Models root path", inputs.Stderr())
-	}
+	support.RequireSafeCLIDiagnostic(t, inputs.Stderr())
 }
 
-// TestProcessModelsInvokeJSON_RoutesThroughPresentationCollaboratorWithoutServer proves
-// local models invoke --json reaches the owned adapter through Factory Sessions
-// ModelsCLIPresentationCollaborator rather than the remote HTTP bootstrap path.
-func TestProcessModelsInvokeJSON_RoutesThroughPresentationCollaboratorWithoutServer(t *testing.T) {
+// TestProcessModelsInvokeJSON_RoutesThroughCompositionProviderWithoutServer proves
+// local models invoke --json reaches the owned adapter through the explicit
+// process composition port rather than the remote HTTP bootstrap path.
+func TestProcessModelsInvokeJSON_RoutesThroughCompositionProviderWithoutServer(t *testing.T) {
 	t.Parallel()
 
 	process := support.BuildProcess(t, serviceedges.Edges{})
@@ -112,8 +108,8 @@ func TestProcessModelsInvokeJSON_RoutesThroughPresentationCollaboratorWithoutSer
 	}
 }
 
-// local models inspect uses the presentation collaborator-owned adapter path.
-func TestProcessModelsInspect_RoutesThroughPresentationCollaboratorWithoutServer(t *testing.T) {
+// local models inspect uses the process-composed owned adapter path.
+func TestProcessModelsInspect_RoutesThroughCompositionProviderWithoutServer(t *testing.T) {
 	t.Parallel()
 
 	process := support.BuildProcess(t, serviceedges.Edges{})
@@ -123,7 +119,5 @@ func TestProcessModelsInspect_RoutesThroughPresentationCollaboratorWithoutServer
 	if err := process.Execute(inputs.Input); err == nil {
 		t.Fatalf("Process.Execute(local models inspect) error = nil, want not-found failure without catalog fixture")
 	}
-	if !strings.Contains(inputs.Stderr(), "not found") && !strings.Contains(inputs.Stderr(), "NotFound") {
-		t.Fatalf("stderr = %q, want not-found diagnostics from owned Models root path", inputs.Stderr())
-	}
+	support.RequireSafeCLIDiagnostic(t, inputs.Stderr())
 }

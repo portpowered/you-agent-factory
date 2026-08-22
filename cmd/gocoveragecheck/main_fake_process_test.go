@@ -14,6 +14,14 @@ func fakeGoCoverageCommand(invocation commandInvocation) (string, string, error)
 	return fakeGoCommandByScenario("coverage-default", invocation.name, invocation.args...)
 }
 
+func fakeGoCoverageCommandWithMeasuredZeroConfig(invocation commandInvocation) (string, string, error) {
+	return fakeGoCommandByScenario("coverage-measured-zero-config", invocation.name, invocation.args...)
+}
+
+func fakeGoCoverageCommandWithRootObservationRegression(invocation commandInvocation) (string, string, error) {
+	return fakeGoCommandByScenario("coverage-rootobservation-regression", invocation.name, invocation.args...)
+}
+
 func fakeGoCoverageCommandPassing(invocation commandInvocation) (string, string, error) {
 	return fakeGoCommandByScenario("coverage-passing", invocation.name, invocation.args...)
 }
@@ -30,20 +38,12 @@ func fakeGoCoverageCommandWithTempProfileReport(invocation commandInvocation) (s
 	return fakeGoCommandByScenario("coverage-temp-profile", invocation.name, invocation.args...)
 }
 
-func fakeGoCoverageCommandCoverFailsWithStderr(invocation commandInvocation) (string, string, error) {
-	return fakeGoCommandByScenario("coverage-cover-fails-with-stderr", invocation.name, invocation.args...)
-}
-
-func fakeGoCoverageCommandCoverFailsWithStdout(invocation commandInvocation) (string, string, error) {
-	return fakeGoCommandByScenario("coverage-cover-fails-with-stdout", invocation.name, invocation.args...)
-}
-
 func fakeGoCoverageCommandTestFailsWithoutDetail(invocation commandInvocation) (string, string, error) {
 	return fakeGoCommandByScenario("coverage-test-fails-without-detail", invocation.name, invocation.args...)
 }
 
-func fakeGoCoverageCommandCoverFailsWithoutDetail(invocation commandInvocation) (string, string, error) {
-	return fakeGoCommandByScenario("coverage-cover-fails-without-detail", invocation.name, invocation.args...)
+func fakeGoCoverageCommandTestFailsWithObservedFailures(invocation commandInvocation) (string, string, error) {
+	return fakeGoCommandByScenario("coverage-test-fails-with-observed-failures", invocation.name, invocation.args...)
 }
 
 func fakeGoListCommandFailsWithStderr(invocation commandInvocation) (string, string, error) {
@@ -105,13 +105,26 @@ func fakeGoTestScenario(scenario string, args []string) (string, string, error) 
 			return "", "", fmt.Errorf("missing -coverprofile")
 		}
 		switch scenario {
-		case "coverage-passing", "coverage-cover-fails-with-stderr", "coverage-cover-fails-with-stdout", "coverage-cover-fails-without-detail", "coverage-temp-profile", "coverage-test-fails-without-detail":
+		case "coverage-passing", "coverage-cover-fails-with-stderr", "coverage-cover-fails-with-stdout", "coverage-cover-fails-without-detail", "coverage-measured-zero-config", "coverage-temp-profile", "coverage-test-fails-without-detail", "coverage-test-fails-with-observed-failures":
 			if err := writeFakeCoverageProfile(profilePath, strings.Join([]string{
 				"mode: count",
 				modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
 				modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
 				"",
 			}, "\n")); err != nil {
+				return "", "", err
+			}
+			if scenario == "coverage-measured-zero-config" {
+				if err := writeFakeCoverageProfile(profilePath, strings.Join([]string{
+					"mode: count",
+					modulePath + "/pkg/config/config.go:1.1,2.1 3 0",
+					"",
+				}, "\n")); err != nil {
+					return "", "", err
+				}
+			}
+		case "coverage-rootobservation-regression":
+			if err := writeRootObservationRegressionProfile(profilePath); err != nil {
 				return "", "", err
 			}
 		case "coverage-with-coverpkg-ok-summary", "coverage-with-ok-summary", "coverage-default":
@@ -128,8 +141,10 @@ func fakeGoTestScenario(scenario string, args []string) (string, string, error) 
 		}
 
 		switch scenario {
-		case "coverage-passing":
+		case "coverage-passing", "coverage-measured-zero-config":
 			return modulePath + "/pkg/config\t\tcoverage: 75.0% of statements\n", "", nil
+		case "coverage-rootobservation-regression":
+			return modulePath + "/pkg/services/factory_runtime/internal/rootobservation\t\tcoverage: 95.6% of statements\n", "", nil
 		case "coverage-temp-profile":
 			if err := writeTempProfileMarkerOrErr(profilePath); err != nil {
 				return "", "", err
@@ -146,6 +161,8 @@ func fakeGoTestScenario(scenario string, args []string) (string, string, error) 
 				modulePath + "/pkg/transports/http/client\t\tcoverage: 0.0% of statements\n", "", nil
 		case "coverage-test-fails-without-detail":
 			return "", "raw failure output from go test", fmt.Errorf("exit status 7")
+		case "coverage-test-fails-with-observed-failures":
+			return "--- FAIL: TestObservedFirstFailure (0.01s)\n--- FAIL: TestObservedSecondFailure (0.01s)\nFAIL\n", "raw failure output from go test", fmt.Errorf("exit status 7")
 		default:
 			return "", "", fmt.Errorf("unexpected cover scenario: %s", scenario)
 		}
@@ -160,10 +177,12 @@ func fakeGoTestScenario(scenario string, args []string) (string, string, error) 
 			modulePath + "/pkg/service\t\tcoverage: 100.0% of statements\n", "", nil
 	case "coverage-test-fails-without-detail":
 		return "", "raw failure output from go test", fmt.Errorf("exit status 7")
+	case "coverage-test-fails-with-observed-failures":
+		return "--- FAIL: TestObservedFirstFailure (0.01s)\n--- FAIL: TestObservedSecondFailure (0.01s)\nFAIL\n", "raw failure output from go test", fmt.Errorf("exit status 7")
 	}
 
 	switch scenario {
-	case "coverage-passing", "coverage-cover-fails-with-stderr", "coverage-cover-fails-with-stdout", "coverage-cover-fails-without-detail", "coverage-temp-profile":
+	case "coverage-passing", "coverage-cover-fails-with-stderr", "coverage-cover-fails-with-stdout", "coverage-cover-fails-without-detail", "coverage-measured-zero-config", "coverage-temp-profile":
 		return modulePath + "/pkg/config\t\tcoverage: 100.0% of statements\n" +
 			modulePath + "/pkg/service\t\tcoverage: 100.0% of statements\n", "", nil
 	case "coverage-test-fails-without-detail":
@@ -171,6 +190,20 @@ func fakeGoTestScenario(scenario string, args []string) (string, string, error) 
 	default:
 		return "", "", fmt.Errorf("unexpected go test scenario: %s", scenario)
 	}
+}
+
+func writeRootObservationRegressionProfile(profilePath string) error {
+	return writeFakeCoverageProfile(profilePath, strings.Join([]string{
+		"mode: count",
+		modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:51.1,52.1 8 1",
+		modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:41.1,42.1 1 0",
+		modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:1.1,2.1 10 1",
+		modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:21.1,22.1 1 0",
+		modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:61.1,62.1 6 1",
+		modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:31.3,32.1 7 1",
+		modulePath + "/pkg/services/factory_runtime/internal/rootobservation/project.go:11.1,12.1 12 1",
+		"",
+	}, "\n"))
 }
 
 func fakeGoToolScenario(scenario string, args []string) (string, string, error) {

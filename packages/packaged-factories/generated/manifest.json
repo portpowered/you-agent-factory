@@ -3,6 +3,65 @@
   "factorySchema": "https://schemas.portpowered.com/you/config/factory.schema.json",
   "factories": [
     {
+      "name": "@you/agy-clip-qa",
+      "project": "builtin-agy-clip-qa",
+      "slug": "agy-clip-qa",
+      "json": {
+        "locator": "generated/factories/agy-clip-qa/factory.json",
+        "sha256": "0363c83a8124e5001c6e518c0aca2bc14febf382f8634206e1ad6378a1f0cc14"
+      },
+      "yaml": {
+        "locator": "generated/factories/agy-clip-qa/factory.yaml",
+        "sha256": "34fe5583263f84ad1a1e59693b83db788895938cb17573986a33787554eeeace"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Deterministically gates a rendered clip against its shot specification with ANTIGRAVITY and returns a schema-validated pass-or-reroll verdict."
+      },
+      "examples": [
+        {
+          "name": "gate-rendered-clip",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Check a rendered clip against its shot specification and return a deterministic verdict."
+          },
+          "args": {
+            "clipPath": ".\\clip.mp4",
+            "shotSpecification": "A silver-haired woman points at a bright star; no speech is audible."
+          }
+        }
+      ]
+    },
+    {
+      "name": "@you/agy-cold-watch",
+      "project": "builtin-agy-cold-watch",
+      "slug": "agy-cold-watch",
+      "json": {
+        "locator": "generated/factories/agy-cold-watch/factory.json",
+        "sha256": "70b6fd94488c6214f052783d3845850479666d4884181b009e03a2c920f6edad"
+      },
+      "yaml": {
+        "locator": "generated/factories/agy-cold-watch/factory.yaml",
+        "sha256": "4c99a01a5e744942c57bef7a74c805c7ef239ed524036c7884a6eb247bf721f8"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Reviews a completed cut from first principles with ANTIGRAVITY, covering chronology, temporal defects, audio, observed speech, and a pass-or-reroll recommendation."
+      },
+      "examples": [
+        {
+          "name": "review-completed-cut",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Cold-watch a completed cut and report what the artifact actually communicates."
+          },
+          "args": {
+            "cutPath": ".\\completed-cut.mp4"
+          }
+        }
+      ]
+    },
+    {
       "name": "@you/classify",
       "project": "builtin-classify",
       "slug": "classify",
@@ -71,16 +130,89 @@
       ]
     },
     {
+      "name": "@you/factory-builder",
+      "project": "builtin-factory-builder",
+      "slug": "factory-builder",
+      "json": {
+        "locator": "generated/factories/factory-builder/factory.json",
+        "sha256": "beac46555e0fdc31fa0c9970bac481c82fba923822793104abe5631a3a2cd7ec"
+      },
+      "yaml": {
+        "locator": "generated/factories/factory-builder/factory.yaml",
+        "sha256": "ec58844286e535fd05218edd87e8a78e59ab679f2f7e2fda6c9458d0c5abf939"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Creates and installs one validated graph or JavaScript Factory from a customer request."
+      },
+      "examples": [
+        {
+          "name": "graph-factory",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Create a reusable graph Factory for a bounded review workflow."
+          },
+          "args": {
+            "factoryName": "release-note-review",
+            "orchestrator": "graph",
+            "request": "Review submitted release notes and return an approved summary."
+          }
+        },
+        {
+          "name": "javascript-factory",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Create a reusable JavaScript Factory for a bounded synthesis workflow."
+          },
+          "args": {
+            "factoryName": "release-synthesis",
+            "orchestrator": "javascript",
+            "request": "Run two independent analyses and return one synthesized result."
+          }
+        }
+      ]
+    },
+    {
+      "name": "@you/fix",
+      "project": "builtin-fix",
+      "slug": "fix",
+      "json": {
+        "locator": "generated/factories/fix/factory.json",
+        "sha256": "e9ec7c3b169dab0dd3dac7dd68850b4c2238a0c60457996bd63ac5023bf782e8"
+      },
+      "yaml": {
+        "locator": "generated/factories/fix/factory.yaml",
+        "sha256": "d9af38c13a043493745df2a365307fcae783b35224d7ebcca4458c6afa42154e"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Plans and iterates a requested fix in an isolated named worktree, then repeats independent review until approval or bounded failure."
+      },
+      "examples": [
+        {
+          "name": "plan-fix-review",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Plan, implement, and independently review a fix in a named worktree."
+          },
+          "args": {
+            "request": "Fix and verify the requested change",
+            "worktreeName": "fix-request"
+          }
+        }
+      ]
+    },
+    {
       "name": "@you/full-flow",
       "project": "builtin-full-flow",
       "slug": "full-flow",
       "json": {
         "locator": "generated/factories/full-flow/factory.json",
-        "sha256": "4586c33c6bab2efcda5d5a4320b71a57d52353d34081ea86d01abfd0b70e30cb"
+        "sha256": "68852c25b9ce2c25c1b08d50f522423237701f8c6d8e8e77c502c7cb988ac488"
       },
       "yaml": {
         "locator": "generated/factories/full-flow/factory.yaml",
-        "sha256": "bc81c0003094b08fd71a378dac5ae2aaf73b063ffb270ee74ab6ae59fea5258a"
+        "sha256": "bd9794e662bac01c4690abaf85b5c4f6c559bb417e3dafd4056884ca43c7507f"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -151,11 +283,11 @@
       "slug": "goal",
       "json": {
         "locator": "generated/factories/goal/factory.json",
-        "sha256": "a735c950e9e1297dda1615e123e099a25623e856b5cb2e61beeb6bee858600e4"
+        "sha256": "25f0f625f3dcaf10a48d326601006fca17c3403ef61b22cd77096378b2a23b57"
       },
       "yaml": {
         "locator": "generated/factories/goal/factory.yaml",
-        "sha256": "181521be4a213433d2fd67a54824fe2884a29dffbd91fe68b9069f4c1a7b029a"
+        "sha256": "0586aea72e0115210cd42db3ec37d8a83a4a872509ca19be19f47d1e3677fb47"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -180,11 +312,11 @@
       "slug": "loop",
       "json": {
         "locator": "generated/factories/loop/factory.json",
-        "sha256": "e50e0050d24c7386b8ae5479162ca8d36dbfca6ec41122013d3f27edb589d396"
+        "sha256": "2132bc1af67e1155850bf2f34cd0f2eca09b365c9a9a2fe1d767be4f4349ff49"
       },
       "yaml": {
         "locator": "generated/factories/loop/factory.yaml",
-        "sha256": "2286ec1ea401baa37c4a6458e06390a75b2eebe2cf3577acaf7ea2c6215d104f"
+        "sha256": "9f18cde8c71a7bfc43755b97fcf9e66e68022c5012721911e497439addcd783b"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -210,11 +342,11 @@
       "slug": "plan-execute",
       "json": {
         "locator": "generated/factories/plan-execute/factory.json",
-        "sha256": "cfe85cc2ed2bc37c79b3a87827ba3f8359649558d3715f65cde5068d6b7db0ca"
+        "sha256": "91a7fa8dbbab1ba8db1281a3f384c45f6fccbe94e10ac909120c366968ca288a"
       },
       "yaml": {
         "locator": "generated/factories/plan-execute/factory.yaml",
-        "sha256": "f3d8fceff6ebeca84952472df18dbc8379985b73261dd99ce262fd6a227394a5"
+        "sha256": "b65eeb73249d56cd928acae225785d5c06decfecaa032985c70fdf0ac966c8f5"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -239,11 +371,11 @@
       "slug": "plan-parallel",
       "json": {
         "locator": "generated/factories/plan-parallel/factory.json",
-        "sha256": "1a989e0f4ab76278e1f6404c27aa1a21eb89334e2b0dbab3cea729662c4b7430"
+        "sha256": "69502304c5ac4294271889e472286d221f7299a4ebfe212eaf2e5011134c9a9e"
       },
       "yaml": {
         "locator": "generated/factories/plan-parallel/factory.yaml",
-        "sha256": "68e814871d8b9af290f7972eca620efa603c3ef359d813828e669e3c700f44f5"
+        "sha256": "a4ac537ca05fb8ab280f4b2362235a0bdc9a834b8cd914bf83aa0b7346c08947"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -268,11 +400,11 @@
       "slug": "quorum",
       "json": {
         "locator": "generated/factories/quorum/factory.json",
-        "sha256": "f4b9c59d4481955b051a2d36768ba664878879bacd7ffcb9891a02fcb3c83281"
+        "sha256": "e6dbfe68daa0997d8fc0d306525de01683b398861b8e1d95e6953585a5c828f3"
       },
       "yaml": {
         "locator": "generated/factories/quorum/factory.yaml",
-        "sha256": "2c177c48674769503f3c051774904d44610f5c08c356e4945f5eeb370dbebb67"
+        "sha256": "898a670334ee5dd0ba03d8e1b7193e6b8462234518dc4a9c375dbfc81be6c096"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -306,16 +438,45 @@
       ]
     },
     {
+      "name": "@you/ralph",
+      "project": "builtin-ralph",
+      "slug": "ralph",
+      "json": {
+        "locator": "generated/factories/ralph/factory.json",
+        "sha256": "e9a252c2b28061d85fc7aceb423ae5c176cf5f890ccf8265858b343fda2bccbe"
+      },
+      "yaml": {
+        "locator": "generated/factories/ralph/factory.yaml",
+        "sha256": "c1d93de876b34e84acda86fae5f2c59654748935db99887f3238555bc238605c"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Plans a request, iterates through every incomplete plan story, and returns only after the durable plan is complete."
+      },
+      "examples": [
+        {
+          "name": "plan-and-iterate",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Plan and complete a multi-step request."
+          },
+          "args": {
+            "request": "Implement and verify the requested change"
+          }
+        }
+      ]
+    },
+    {
       "name": "@you/review",
       "project": "builtin-review",
       "slug": "review",
       "json": {
         "locator": "generated/factories/review/factory.json",
-        "sha256": "4c9d5f019cc9f39791cb7ca521a9b089ec313d0540d6456c77fc1ac6e06a4c4c"
+        "sha256": "66e4c52fec88cc0833f607e7cf308eb5900c8c3cc2e43430f3e4d80816f218d8"
       },
       "yaml": {
         "locator": "generated/factories/review/factory.yaml",
-        "sha256": "3cac4ae0c076ea6b978fce3ffa7f3fed7815a63bf2b4c901ff78ccb692ff36c8"
+        "sha256": "00d82c579941ea9faef46ecd216971673d9fb29034ab85fa23c66fdc0a5a6409"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -340,11 +501,11 @@
       "slug": "spawn",
       "json": {
         "locator": "generated/factories/spawn/factory.json",
-        "sha256": "dcfc4db717abb64f042faa659dc3bee141491aaae8332e9e725e286e264fcd80"
+        "sha256": "23825eb44eebe7b0d07f7357874907d235a88b7bfe398b8a8fbc344f9872a681"
       },
       "yaml": {
         "locator": "generated/factories/spawn/factory.yaml",
-        "sha256": "a48fec0f5c8a5ffcd2996665649a8b65cabb0eafe385441c84d5f8cbf5780dad"
+        "sha256": "a755018ed500dd7bb32663f2a4313c54c74695ea3f9a58b24fc205be7a332bdd"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -370,11 +531,11 @@
       "slug": "subagent",
       "json": {
         "locator": "generated/factories/subagent/factory.json",
-        "sha256": "7914a52bf786008c0cfb6628f804e004878f843cf5912c1913cd491563ac2cb2"
+        "sha256": "95c9d41e00d096d2dd133f1d7887e608cf75b2010c2ff5f084fa45c19412f8e6"
       },
       "yaml": {
         "locator": "generated/factories/subagent/factory.yaml",
-        "sha256": "41ca13b7b138b76ac6cbbc0220d34a92386aa1e7ec6b652408025d6a6a21ac44"
+        "sha256": "5d996868b3ed6a6b685e46b2fa51b62c7b2d9745cf456bc6b7c65dae362b7a38"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -409,11 +570,11 @@
       "slug": "tournament",
       "json": {
         "locator": "generated/factories/tournament/factory.json",
-        "sha256": "0e5535924b73ffbe6b2229ec051ed97517292077983a9c4f174c0b8b154e7081"
+        "sha256": "ff589e1b7e218cad928dc877519c8c17c633abf0cecf999ae4cd16384475085b"
       },
       "yaml": {
         "locator": "generated/factories/tournament/factory.yaml",
-        "sha256": "452c02e0556bec9176431b2804e1f9d254ba6ff70bae0758993921037b05bdc4"
+        "sha256": "c434ea91a7a4026575bfae9b4e9be20778cf4b79bbc2834eb7bfc3442d0da8a8"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -439,11 +600,11 @@
       "slug": "tts",
       "json": {
         "locator": "generated/factories/tts/factory.json",
-        "sha256": "074de7745359dee76441a8a579d367103f5e858be1b59a0308599376b1ca97c7"
+        "sha256": "b231213bdf49685062391f71ad60cb5a77f4556d399ef88347b7a381f311debd"
       },
       "yaml": {
         "locator": "generated/factories/tts/factory.yaml",
-        "sha256": "32c6baaf349be27e18d03a17d5ab67a433fcbbc83de705672f6aa01eb96272f7"
+        "sha256": "a51c69d2d6e4b705228782e65a4fc6e4e6329e945ec450d0c8982c8f2ee3c498"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",

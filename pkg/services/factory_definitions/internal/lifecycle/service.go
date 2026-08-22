@@ -15,6 +15,7 @@ import (
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	distributionservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution"
 	distributionwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/wire"
+	workstationexecution "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 )
 
@@ -50,6 +51,7 @@ type nonCatalogDefaults interface {
 	CreateNamedFactory(context.Context, factoryroot.CreateNamedFactoryRequest) (factoryroot.CreateNamedFactoryResult, error)
 	ReplaceNamedFactory(context.Context, factoryroot.ReplaceNamedFactoryRequest) (factoryroot.ReplaceNamedFactoryResult, error)
 	CompileEffectiveFactorySource(context.Context, factoryroot.CompileEffectiveFactorySourceRequest) (factoryroot.CompileEffectiveFactorySourceResult, error)
+	ResolveRuntimeSnapshot(context.Context, factoryroot.ResolveRuntimeSnapshotRequest) (factoryroot.ResolveRuntimeSnapshotResult, error)
 	ValidateStructuralFactoryDefinition(context.Context, factoryroot.ValidateStructuralFactoryDefinitionRequest) (factoryroot.ValidateStructuralFactoryDefinitionResult, error)
 	ValidateEffectiveFactoryDefinition(context.Context, factoryroot.ValidateEffectiveFactoryDefinitionRequest) (factoryroot.ValidateEffectiveFactoryDefinitionResult, error)
 	CaptureFactorySnapshot(context.Context, factoryroot.CaptureFactorySnapshotRequest) (factoryroot.CaptureFactorySnapshotResult, error)
@@ -78,6 +80,16 @@ func New(
 		activationGateway:  activationGateway,
 		versionFileSystem:  versionFileSystem,
 	}
+}
+
+// ResolveExecutionCatalog keeps execution-policy resolution at the
+// Definitions boundary. The operation is pure and does not construct or query
+// Workers, Providers, Models, or process effects.
+func (s *Service) ResolveExecutionCatalog(
+	ctx context.Context,
+	request factoryroot.ResolveExecutionCatalogRequest,
+) (factoryroot.ResolveExecutionCatalogResult, error) {
+	return workstationexecution.ResolveExecutionCatalog(ctx, request)
 }
 
 // NewWithCatalog constructs the Definitions root collaborator with private

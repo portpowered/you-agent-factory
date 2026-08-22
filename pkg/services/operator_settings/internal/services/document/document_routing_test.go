@@ -13,7 +13,7 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	settingsconstruct "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/construct"
 	settingsdocument "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 )
 
 func TestConfigDocumentServiceRoutesLoadUpdatePersistThroughNestedDocumentOwner(t *testing.T) {

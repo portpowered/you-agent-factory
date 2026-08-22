@@ -31,6 +31,27 @@ blocking PR conversation feedback is explicitly addressed, merge conflicts are
 resolved, and the PR is merged. A PR that is merely opened, green, approved, or
 ready to merge is not complete.
 
+That contract belongs to the lane as a whole, and the project-level delivery
+criterion must be written from the perspective of the stage that evaluates it.
+Every emitted delivery criterion must lead with this implementation-stage
+finish line and preserve this order:
+
+> Implementation-stage delivery criterion: The implementation stage marks this criterion satisfied and stops after its final head is pushed, the PR is open, CI has started, and all blocking review feedback is addressed. It does not poll or re-check CI after this finish line. The review stage owns driving CI to terminal-and-passing, resolving merge conflicts, and merging the PR; merge remains the lane-wide delivery boundary. CI-run evidence goes in a PR comment and never in a commit.
+
+The implementation stage owns only the finish line at the start of that
+criterion. The review stage owns driving CI to terminal-and-passing, resolving
+merge conflicts, and merging the PR afterward; merge remains the lane-wide
+delivery boundary.
+
+Never phrase a delivery criterion so that implementation owns "CI is green"
+or "the PR is merged", and never open it with "delivery continues until ...
+merged" or equivalent merge-first wording. The evaluating implementation stage
+cannot merge, so a merge-first criterion makes it wait on a review-owned
+outcome and can trigger repeated redispatch until the executor-loop breaker
+ends the lane. Implementation must stop at its finish line and must not poll
+or re-check CI afterward. Every plan must state that evidence about a CI run
+goes in a PR comment and never in a commit.
+
 When the ask touches backend, plan for clear package ownership, explicit state,
 isolated side effects, aligned contracts, and direct verification at the right
 test layer.
@@ -73,9 +94,28 @@ The JSON file must be implementation-ready and contain:
 - `context.customerAsk`
 - `context.problem`
 - `context.solution`
-- `acceptanceCriteria` with 3-7 project-level criteria plus a final quality-gate
-  criterion for typecheck, lint, and tests and a delivery criterion requiring
-  the implementation/review loop to continue until the PR is actually merged
+- `acceptanceCriteria` with 3-7 project-level criteria, a final quality-gate
+  criterion for typecheck, lint, and tests, and a delivery criterion that keeps
+  the lane's implementation/review loop going until the PR is actually merged.
+  The delivery criterion must begin with the exact implementation-stage finish
+  line in the canonical example above: implementation marks it satisfied and
+  stops after its final head is pushed, the PR is open, CI has started, and all
+  blocking review feedback is addressed. It must then assign terminal-and-
+  passing CI, merge-conflict resolution, and merging to the review stage while
+  retaining merge as the lane-wide completion boundary. Do not open it with
+  "delivery continues until ... merged" or equivalent merge-first wording: the
+  implementation stage evaluates the criterion but cannot merge, and waiting
+  on that review-owned outcome can trigger repeated redispatch until the
+  executor-loop breaker ends the lane. After the implementation finish line,
+  implementation must not poll or re-check CI because every redispatch consumes
+  one of the 12 process visits. Put CI-run evidence in a PR comment and never in
+  a commit. Phrase the lint criterion as "no NEW lint
+  violations relative to current main, and the gates green on main
+  (backend-size, pkg-maint, pkg-file-count, pkg-structure, vet) stay green" —
+  NOT as a blanket "make lint passes": `make lint` cannot pass end-to-end on
+  main while the pkg-boundary target carries pre-existing
+  packaged-service-structure migration debt (recorded 2026-08-08), and an
+  unsatisfiable criterion stalls the review loop.
 - `userStories` with sequential  ids, title, description,
   acceptanceCriteria, priority, `passes: false`, and empty `notes`
 - Ids for storeis should be shaped like {{ (index .Inputs 0).Name }}-001, 002, etc. 

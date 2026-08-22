@@ -1,4 +1,9 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: layout command inverses stay colocated for undo/redo coverage.
+import type {
+  FactoryGraphNodeDimensions,
+  FactoryGraphNodeFamily,
+  FactoryGraphNodeSizingContent,
+} from "@you-agent-factory/factory-graph";
 import {
   factoryLayoutEdgeWaypoints,
   factoryLayoutWaypointArraysEqual,
@@ -6,10 +11,16 @@ import {
 } from "../factory-graph-layout-edge-waypoints";
 import {
   type FactoryLayout,
+  type FactoryLayoutNode,
+  type FactoryLayoutNodeSize,
   type FactoryLayoutPoint,
   type FactoryLayoutViewport,
   factoryLayoutNodePosition,
+  fitFactoryLayoutNode,
   moveFactoryLayoutNode,
+  resetFactoryLayoutNodeSize,
+  resizeFactoryLayoutNode,
+  setFactoryLayoutNodeSize,
 } from "../factory-graph-layout-operations";
 import {
   addFactoryLayoutGroup,
@@ -29,6 +40,10 @@ export type FactoryLayoutNodePositionSnapshot =
   | { kind: "absent" }
   | { kind: "present"; position: FactoryLayoutPoint };
 
+export type FactoryLayoutNodeSnapshot =
+  | { kind: "absent" }
+  | { kind: "present"; node: FactoryLayoutNode };
+
 export type FactoryLayoutCommand =
   | {
       type: "move-node";
@@ -43,6 +58,12 @@ export type FactoryLayoutCommand =
         from: FactoryLayoutNodePositionSnapshot;
         to: FactoryLayoutNodePositionSnapshot;
       }>;
+    }
+  | {
+      type: "update-node-size";
+      nodeId: string;
+      from: FactoryLayoutNodeSnapshot;
+      to: FactoryLayoutNodeSnapshot;
     }
   | {
       type: "update-viewport";
@@ -130,6 +151,109 @@ export function factoryLayoutNodePositionSnapshotsEqual(
     right.kind === "present" &&
     factoryLayoutPointsEqual(left.position, right.position)
   );
+}
+
+export function snapshotFactoryLayoutNode(
+  layout: FactoryLayout,
+  nodeId: string,
+): FactoryLayoutNodeSnapshot {
+  const node = layout.nodes?.find((entry) => entry.id === nodeId);
+  return node
+    ? { kind: "present", node: structuredClone(node) }
+    : { kind: "absent" };
+}
+
+export function factoryLayoutNodeSnapshotsEqual(
+  left: FactoryLayoutNodeSnapshot,
+  right: FactoryLayoutNodeSnapshot,
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+export function createUpdateFactoryLayoutNodeSizeCommand(input: {
+  layout: FactoryLayout;
+  nodeId: string;
+  position?: FactoryLayoutPoint;
+  to: FactoryLayoutNodeSize | null;
+}): FactoryLayoutCommand | null {
+  const from = snapshotFactoryLayoutNode(input.layout, input.nodeId);
+  const nextLayout =
+    input.to === null
+      ? resetFactoryLayoutNodeSize(input.layout, input.nodeId)
+      : setFactoryLayoutNodeSize(
+          input.layout,
+          input.nodeId,
+          input.to,
+          input.position,
+        );
+  const to = snapshotFactoryLayoutNode(nextLayout, input.nodeId);
+  if (factoryLayoutNodeSnapshotsEqual(from, to)) {
+    return null;
+  }
+
+  return {
+    type: "update-node-size",
+    nodeId: input.nodeId,
+    from,
+    to,
+  };
+}
+
+export function createResizeFactoryLayoutNodeCommand(input: {
+  family: FactoryGraphNodeFamily;
+  layout: FactoryLayout;
+  nodeId: string;
+  position?: FactoryLayoutPoint;
+  requestedDimensions: FactoryGraphNodeDimensions;
+}): FactoryLayoutCommand | null {
+  const nextLayout = resizeFactoryLayoutNode(
+    input.layout,
+    input.nodeId,
+    input.family,
+    input.requestedDimensions,
+    input.position,
+  );
+  return createUpdateFactoryLayoutNodeSizeCommand({
+    layout: input.layout,
+    nodeId: input.nodeId,
+    position: input.position,
+    to:
+      nextLayout.nodes?.find((node) => node.id === input.nodeId)?.size ?? null,
+  });
+}
+
+export function createFitFactoryLayoutNodeCommand(input: {
+  content: FactoryGraphNodeSizingContent;
+  family: FactoryGraphNodeFamily;
+  layout: FactoryLayout;
+  nodeId: string;
+  position?: FactoryLayoutPoint;
+}): FactoryLayoutCommand | null {
+  const nextLayout = fitFactoryLayoutNode(
+    input.layout,
+    input.nodeId,
+    input.family,
+    input.content,
+    input.position,
+  );
+  return createUpdateFactoryLayoutNodeSizeCommand({
+    layout: input.layout,
+    nodeId: input.nodeId,
+    position: input.position,
+    to:
+      nextLayout.nodes?.find((node) => node.id === input.nodeId)?.size ?? null,
+  });
+}
+
+export function createResetFactoryLayoutNodeSizeCommand(input: {
+  layout: FactoryLayout;
+  nodeId: string;
+}): FactoryLayoutCommand | null {
+  return createUpdateFactoryLayoutNodeSizeCommand({
+    layout: input.layout,
+    nodeId: input.nodeId,
+    to: null,
+  });
 }
 
 export function createMoveFactoryLayoutNodeCommand(input: {
@@ -398,6 +522,13 @@ export function invertFactoryLayoutCommand(
         from: command.to,
         to: command.from,
       };
+    case "update-node-size":
+      return {
+        type: "update-node-size",
+        nodeId: command.nodeId,
+        from: command.to,
+        to: command.from,
+      };
     case "move-nodes":
       return {
         type: "move-nodes",
@@ -461,6 +592,8 @@ export function factoryLayoutCommandAffectedNodeIds(
   switch (command.type) {
     case "move-node":
       return [command.nodeId];
+    case "update-node-size":
+      return [command.nodeId];
     case "move-nodes":
       return command.moves.map((move) => move.nodeId);
     case "update-viewport":
@@ -518,6 +651,39 @@ export function applyFactoryLayoutNodePositionSnapshot(
   return moveFactoryLayoutNode(layout, nodeId, snapshot.position);
 }
 
+function applyFactoryLayoutNodeSnapshot(
+  layout: FactoryLayout,
+  nodeId: string,
+  snapshot: FactoryLayoutNodeSnapshot,
+): FactoryLayout {
+  const nodes = [...(layout.nodes ?? [])];
+  const existingIndex = nodes.findIndex((entry) => entry.id === nodeId);
+
+  if (snapshot.kind === "absent") {
+    if (existingIndex < 0) {
+      return layout;
+    }
+
+    nodes.splice(existingIndex, 1);
+    return {
+      ...layout,
+      nodes: nodes.length > 0 ? nodes : undefined,
+    };
+  }
+
+  const nextNode = structuredClone(snapshot.node);
+  if (existingIndex >= 0) {
+    nodes[existingIndex] = nextNode;
+  } else {
+    nodes.push(nextNode);
+  }
+
+  return {
+    ...layout,
+    nodes,
+  };
+}
+
 export function applyFactoryLayoutCommand(
   layout: FactoryLayout,
   command: FactoryLayoutCommand,
@@ -529,6 +695,8 @@ export function applyFactoryLayoutCommand(
         command.nodeId,
         command.to,
       );
+    case "update-node-size":
+      return applyFactoryLayoutNodeSnapshot(layout, command.nodeId, command.to);
     case "move-nodes": {
       let nextLayout = layout;
       for (const move of command.moves) {

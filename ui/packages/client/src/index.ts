@@ -7,6 +7,9 @@ export {
   type FactoryEventType,
   type operations,
   type paths,
+  WorkstationGuardType,
+  WorkstationKind,
+  WorkstationType,
 } from "./contracts.js";
 export {
   compareFactoryEvents,
@@ -19,7 +22,9 @@ export {
   FACTORY_RECORDING_SCHEMA_VERSION,
   type FactoryRecording,
   FactoryRecordingValidationError,
+  isRecordingValidationCompatibilityIssueCode,
   parseFactoryRecording,
+  type RecordingValidationCompatibilityIssueCode,
   type RecordingValidationIssue,
   type RecordingValidationIssueCode,
   type SafeParseFactoryRecordingResult,
@@ -34,17 +39,25 @@ export {
   safeParseFactoryEventReplayText,
 } from "./replay.js";
 export {
+  type CanonicalSchemaCompatibilityIssueCode,
+  type CanonicalSchemaIssue,
+  type CanonicalSchemaIssueCode,
+  isCanonicalSchemaCompatibilityIssueCode,
+} from "./schema-validation.js";
+export {
   type FactoryVisualizationLayoutCanonicalNodeContext,
   parseFactoryVisualizationLayout,
   safeParseFactoryVisualizationLayout,
 } from "./visualization-layout.js";
 export {
   FACTORY_VISUALIZATION_LAYOUT_SCHEMA_VERSION,
+  isFactoryVisualizationLayoutCompatibilityIssueCode,
   type FactoryVisualizationAnnotation,
   type FactoryVisualizationEmbeddedImageSource,
   type FactoryVisualizationImageAnnotation,
   type FactoryVisualizationImageContent,
   type FactoryVisualizationLayoutIssue,
+  type FactoryVisualizationLayoutCompatibilityIssueCode,
   type FactoryVisualizationLayoutIssueCode,
   type FactoryVisualizationLayoutV1,
   type FactoryVisualizationNodeEmptyState,

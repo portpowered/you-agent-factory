@@ -13,11 +13,74 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+type orderedWorkerSessionsLifecycle struct {
+	workersessions.Service
+	order *[]string
+}
+
+func (s *orderedWorkerSessionsLifecycle) Stop(context.Context) error {
+	*s.order = append(*s.order, "worker-sessions")
+	return nil
+}
+
+type orderedRuntimeBoundary struct {
+	order *[]string
+}
+
+func (b *orderedRuntimeBoundary) Start(context.Context) error { return nil }
+
+func (b *orderedRuntimeBoundary) Publish(
+	context.Context,
+	workerexecution.WorkstationDispatchRequest,
+	workerexecution.WorkstationDispatchAcceptFunc,
+) error {
+	return nil
+}
+
+func (b *orderedRuntimeBoundary) PublishWithAdmission(
+	context.Context,
+	workerexecution.WorkstationDispatchRequest,
+	workerexecution.WorkstationDispatchAdmissionFunc,
+	workerexecution.WorkstationDispatchAcceptFunc,
+) error {
+	return nil
+}
+
+func (*orderedRuntimeBoundary) Cancel(context.Context, workerexecution.WorkstationDispatchCancelRequest) (workerexecution.WorkstationDispatchCancelResult, error) {
+	return workerexecution.WorkstationDispatchCancelResult{}, nil
+}
+
+func (b *orderedRuntimeBoundary) Stop(context.Context) error {
+	*b.order = append(*b.order, "workers")
+	return nil
+}
+
+func TestFactoryRuntimeShutdownStopsWorkerSessionsBeforeWorkers(t *testing.T) {
+	order := make([]string, 0, 2)
+	f := &factoryImpl{
+		cfg: &runtimeConfig{
+			workerSessions: &orderedWorkerSessionsLifecycle{
+				Service: &fakeWorkerSessionsService{},
+				order:   &order,
+			},
+		},
+	}
+
+	if err := f.stopDispatchRuntimeLocked(context.Background(), dispatchplanning.RuntimeStopReasonCancelled); err != nil {
+		t.Fatalf("stopDispatchRuntimeLocked() error = %v, want nil", err)
+	}
+	if got, want := strings.Join(order, ","), "worker-sessions"; got != want {
+		t.Fatalf("shutdown order = %q, want %q", got, want)
+	}
+}
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this subscription contract test keeps replay ordering and live-stream assertions together at the runtime seam.
 func TestFactoryEventHistory_SubscribeReplaysHistoryThenStreamsLiveEvents(t *testing.T) {
@@ -274,8 +337,19 @@ func TestNew_WorkerPoolDispatchResultHookRecordsCompletionAtObservedTick(t *test
 	if completions[0].DispatchID != dispatch.DispatchID {
 		t.Fatalf("completion dispatch ID = %q, want %q", completions[0].DispatchID, dispatch.DispatchID)
 	}
-	if completions[0].ObservedTick <= dispatch.Execution.DispatchCreatedTick {
-		t.Fatalf("completion observed tick = %d, want after dispatch tick %d", completions[0].ObservedTick, dispatch.Execution.DispatchCreatedTick)
+	// On the async worker-pool path the engine deliberately drains the result
+	// buffer mid-tick (see FactoryEngine.drainPendingResults and
+	// forwardDispatches) so async results stay visible to TerminationCheck and
+	// do not trip false deadlock detection. A worker that finishes before the
+	// dispatching tick ends is therefore legitimately observed on that same
+	// tick, so requiring a strictly later tick here is a race, not a contract.
+	// The strictly-after ordering that IS a contract is covered deterministically
+	// by TestNew_ReplayDelayedWorkerPoolCompletionWakesAtPlannedTick, which pins
+	// delivery to a planned tick. What this test owns is that the async hook
+	// records exactly one completion, correlated to its dispatch, stamped with a
+	// tick that is never earlier than the dispatch tick.
+	if completions[0].ObservedTick < dispatch.Execution.DispatchCreatedTick {
+		t.Fatalf("completion observed tick = %d, want at or after dispatch tick %d", completions[0].ObservedTick, dispatch.Execution.DispatchCreatedTick)
 	}
 }
 
@@ -578,7 +652,7 @@ func TestRuntimeVisitCountReplayPreservesSharedTraceSiblingRouting(t *testing.T)
 func runVisitCountSiblingIsolationScenario(
 	t *testing.T,
 	maxReviews int,
-) (factory.Factory, *recordingfixtures.ScriptedRuntimeLedger) {
+) (factoryhost.Engine, *recordingfixtures.ScriptedRuntimeLedger) {
 	t.Helper()
 	f, history, err := newTestFactoryWithScriptedLedger(
 		withNet(buildVisitCountSiblingIsolationNet(maxReviews)),
@@ -674,7 +748,7 @@ func sharedTraceSiblingSubmissions(sharedTrace string) []work.SubmitRequest {
 	}
 }
 
-func runtimeSnapshot(t *testing.T, f factory.Factory) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+func runtimeSnapshot(t *testing.T, f factoryhost.Engine) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
 	t.Helper()
 	snapshot, err := f.GetEngineStateSnapshot(context.Background())
 	if err != nil {
@@ -715,4 +789,144 @@ func assertReviewDispatch(t *testing.T, snapshot *interfaces.EngineStateSnapshot
 		}
 	}
 	t.Fatalf("dispatch[%d] did not consume work %s", index, workID)
+}
+
+func TestRestoredDispatchRequestEventPreservesRestartMetadataAndResources(t *testing.T) {
+	now := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
+	cfg := &runtimeConfig{
+		clock:              platformclock.NewDeterministic(now, time.Second),
+		restoredWorldState: &interfaces.FactoryWorldState{Tick: 9},
+	}
+	dispatch := interfaces.FactoryWorldDispatch{
+		DispatchID:               "dispatch-restart",
+		TransitionID:             "t-process",
+		StartedTick:              11,
+		StartedAt:                now.Add(-time.Minute),
+		RunnerID:                 "runner-restart",
+		RunnerSelectionSource:    workerexecution.RunnerSelectionSourceFactory,
+		WorkItemIDs:              []string{"work-restart", "work-restart"},
+		CurrentChainingTraceID:   "trace-current",
+		PreviousChainingTraceIDs: []string{"trace-previous", "trace-previous", ""},
+		TraceIDs:                 []string{"trace-restart", "trace-restart", ""},
+		Inputs: []interfaces.WorkstationInput{
+			{TokenID: "work-restart", PlaceID: "task:init", WorkItem: &work.FactoryWorkItem{ID: "work-restart"}},
+			{TokenID: "resource-token", PlaceID: "gpu:available", Resource: &interfaces.FactoryResourceUnit{ResourceID: "gpu", TokenID: "resource-token"}},
+		},
+		Resources: []interfaces.FactoryResourceUnit{
+			{ResourceID: "gpu", TokenID: "resource-token"},
+			{ResourceID: " ", TokenID: "ignored"},
+		},
+	}
+
+	event, err := restoredDispatchRequestEvent(cfg, dispatch)
+	if err != nil {
+		t.Fatalf("restoredDispatchRequestEvent: %v", err)
+	}
+	var payload interfaces.DispatchRequestEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
+		t.Fatalf("decode restored dispatch request: %v", err)
+	}
+	assertRestoredDispatchRequestEnvelope(t, event, dispatch)
+	assertRestoredDispatchRequestMetadata(t, payload, dispatch)
+	assertRestoredDispatchRequestResources(t, payload)
+	assertRestoredDispatchRequestInputs(t, payload)
+	assertEmptyRestoredDispatchResourceRefs(t)
+}
+
+func assertRestoredDispatchRequestEnvelope(t *testing.T, event interfaces.FactoryEvent, dispatch interfaces.FactoryWorldDispatch) {
+	t.Helper()
+	if event.Type != interfaces.FactoryEventTypeDispatchRequest {
+		t.Fatalf("restored dispatch request type = %q, want %q", event.Type, interfaces.FactoryEventTypeDispatchRequest)
+	}
+	if stringPointerValue(event.Context.DispatchID) != dispatch.DispatchID {
+		t.Fatalf("restored dispatch request dispatch ID = %q, want %q", stringPointerValue(event.Context.DispatchID), dispatch.DispatchID)
+	}
+}
+
+func assertRestoredDispatchRequestMetadata(t *testing.T, payload interfaces.DispatchRequestEventPayload, dispatch interfaces.FactoryWorldDispatch) {
+	t.Helper()
+	if payload.TransitionID != dispatch.TransitionID {
+		t.Fatalf("restored dispatch transition = %q, want %q", payload.TransitionID, dispatch.TransitionID)
+	}
+	if payload.Metadata == nil {
+		t.Fatal("restored dispatch metadata = nil, want runner facts")
+	}
+	if stringPointerValue(payload.Metadata.RunnerID) != dispatch.RunnerID {
+		t.Fatalf("restored dispatch runner ID = %q, want %q", stringPointerValue(payload.Metadata.RunnerID), dispatch.RunnerID)
+	}
+	if payload.Metadata.RunnerSelectionSource == nil {
+		t.Fatal("restored dispatch runner selection source = nil")
+	}
+	if *payload.Metadata.RunnerSelectionSource != dispatch.RunnerSelectionSource {
+		t.Fatalf("restored dispatch runner selection source = %q, want %q", *payload.Metadata.RunnerSelectionSource, dispatch.RunnerSelectionSource)
+	}
+}
+
+func assertRestoredDispatchRequestResources(t *testing.T, payload interfaces.DispatchRequestEventPayload) {
+	t.Helper()
+	if payload.Resources == nil {
+		t.Fatal("restored dispatch resources = nil, want one gpu resource")
+	}
+	if len(*payload.Resources) != 1 {
+		t.Fatalf("restored dispatch resource count = %d, want one", len(*payload.Resources))
+	}
+	if (*payload.Resources)[0].Name != "gpu" {
+		t.Fatalf("restored dispatch resource name = %q, want gpu", (*payload.Resources)[0].Name)
+	}
+}
+
+func assertRestoredDispatchRequestInputs(t *testing.T, payload interfaces.DispatchRequestEventPayload) {
+	t.Helper()
+	if len(payload.Inputs) != 1 {
+		t.Fatalf("restored dispatch input count = %d, want one deduplicated Work input", len(payload.Inputs))
+	}
+	if payload.Inputs[0].WorkID != "work-restart" {
+		t.Fatalf("restored dispatch Work input = %q, want work-restart", payload.Inputs[0].WorkID)
+	}
+}
+
+func assertEmptyRestoredDispatchResourceRefs(t *testing.T) {
+	t.Helper()
+	if got := restoredDispatchResourceRefs(nil); got != nil {
+		t.Fatalf("empty restored resource refs = %#v, want nil", got)
+	}
+	if got := restoredDispatchResourceRefs([]interfaces.FactoryResourceUnit{{ResourceID: " "}}); got != nil {
+		t.Fatalf("blank restored resource refs = %#v, want nil", got)
+	}
+}
+
+func TestRestoredWorkPlacementHandlesApprovalAndTokenIdentityCollisions(t *testing.T) {
+	net := buildSimpleNet()
+	net.Transitions["t-approval"] = &petri.Transition{ID: "t-approval", Type: petri.TransitionHumanApproval}
+	item := work.FactoryWorkItem{ID: "work-restored", WorkTypeID: "task", State: "init"}
+	pendingApproval := interfaces.FactoryWorldDispatch{DispatchID: "dispatch-approval", TransitionID: "t-process"}
+	approvalWorld := &interfaces.FactoryWorldState{
+		PendingHumanApprovalsByID: map[string]interfaces.FactoryWorldHumanApproval{
+			"approval": {ApprovalID: "approval", DispatchID: pendingApproval.DispatchID},
+		},
+	}
+	if !restoredDispatchIsHumanApproval(approvalWorld, net, pendingApproval) {
+		t.Fatal("pending approval dispatch was not recognized as human approval")
+	}
+	if !restoredDispatchIsHumanApproval(nil, net, interfaces.FactoryWorldDispatch{TransitionID: "t-approval"}) {
+		t.Fatal("human-approval transition was not recognized")
+	}
+	if restoredDispatchIsHumanApproval(nil, nil, interfaces.FactoryWorldDispatch{DispatchID: "dispatch-normal"}) {
+		t.Fatal("ordinary dispatch was recognized as human approval")
+	}
+
+	marking := petri.NewMarking("restart-test")
+	existing := restoredWorkToken(item, "task:init", "", nil, time.Unix(0, 0).UTC())
+	existing.ID = "restored-work:" + item.ID
+	marking.AddToken(existing)
+	first := uniqueRestoredWorkTokenID(marking, item.ID)
+	if first != "restored-work:work-restored:2" {
+		t.Fatalf("first collision-safe token ID = %q, want restored-work:work-restored:2", first)
+	}
+	second := restoredWorkToken(item, "task:init", "", nil, time.Unix(0, 0).UTC())
+	second.ID = first
+	marking.AddToken(second)
+	if got := uniqueRestoredWorkTokenID(marking, item.ID); got != "restored-work:work-restored:3" {
+		t.Fatalf("repeated collision-safe token ID = %q, want restored-work:work-restored:3", got)
+	}
 }

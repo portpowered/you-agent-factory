@@ -2,8 +2,12 @@ import type { FactoryVisualizationLayoutIssue } from "./visualization-layout-con
 
 export class FactoryVisualizationLayoutValidationError extends Error {
   readonly issues: readonly FactoryVisualizationLayoutIssue[];
+  readonly diagnostics: readonly FactoryVisualizationLayoutIssue[];
 
-  constructor(issues: readonly FactoryVisualizationLayoutIssue[]) {
+  constructor(
+    issues: readonly FactoryVisualizationLayoutIssue[],
+    diagnostics: readonly FactoryVisualizationLayoutIssue[] = [],
+  ) {
     super(
       issues.length === 1
         ? `Factory visualization layout validation failed: ${issues[0]?.message}`
@@ -11,5 +15,6 @@ export class FactoryVisualizationLayoutValidationError extends Error {
     );
     this.name = "FactoryVisualizationLayoutValidationError";
     this.issues = issues;
+    this.diagnostics = diagnostics;
   }
 }

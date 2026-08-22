@@ -18,6 +18,10 @@ properties:
   maxVisitsArgument:
     type: string
     description: Optional invocation argument whose positive integer value tightens the fixed visit ceiling.
+  logicalRoundTrip:
+    allOf:
+      - $ref: './LogicalRoundTrip.yaml'
+    description: Optional paired process/review policy. When present, the containing maxVisits is the logical cycle budget and maxRawVisits is the absolute raw-visit backstop.
   matchConfig:
     allOf:
       - $ref: './GuardMatchConfig.yaml'

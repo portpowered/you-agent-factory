@@ -5,10 +5,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/work/internal"
@@ -25,23 +26,13 @@ type workRuntimeResolver struct {
 	err     error
 }
 
-type rootOnlyRuntime struct{ factoryruntime.Service }
-
-type rootRuntimeResolver struct {
-	runtime *factorysessions.LiveRuntime
-}
-
-func (r rootRuntimeResolver) Resolve(string) *factorysessions.LiveRuntime {
-	return r.runtime
-}
-
 func (r workRuntimeResolver) ResolveWorkRuntime(string) (work.Runtime, error) {
 	return r.runtime, r.err
 }
 
 func TestNewServiceRoutesThroughWorkRootRuntimeContract(t *testing.T) {
 	runtime := &recordingFactory{}
-	service := internalservice.NewService(workRuntimeResolver{runtime: runtime}, os.ReadFile, nil, nil)
+	service := internalservice.NewService(workRuntimeResolver{runtime: runtime}, os.ReadFile, nil, nil, nil)
 
 	request := work.WorkRequest{RequestID: "request-root-contract"}
 	if _, err := service.SubmitWorkRequestForSession(
@@ -87,31 +78,163 @@ func (f *recordingFactory) ReadWorkSnapshot(context.Context) (work.ReadSnapshot,
 }
 
 func TestNewServicePropagatesRuntimeResolverError(t *testing.T) {
-	service := internalservice.NewService(workRuntimeResolver{err: factorysessions.ErrSessionNotFound}, os.ReadFile, nil, nil)
+	service := internalservice.NewService(workRuntimeResolver{err: factorysessions.ErrSessionNotFound}, os.ReadFile, nil, nil, nil)
 	_, err := service.SubmitWorkRequestForSession(context.Background(), "missing", work.WorkRequest{})
 	if !errors.Is(err, factorysessions.ErrSessionNotFound) {
 		t.Fatalf("error = %v, want ErrSessionNotFound", err)
 	}
 }
 
-func TestLegacySessionOperationsFailClosedForRootOnlyRuntime(t *testing.T) {
-	service := internalservice.New(rootRuntimeResolver{runtime: &factorysessions.LiveRuntime{
-		Factory: rootOnlyRuntime{},
-	}})
-	ctx := context.Background()
+func TestNewServiceConcurrentSessionOperationsRemainIsolated(t *testing.T) {
+	t.Parallel()
 
-	if _, err := service.SubmitWorkRequestForSession(ctx, "session-1", work.WorkRequest{}); err == nil ||
-		!strings.Contains(err.Error(), "legacy Factory Runtime submission is required") {
-		t.Fatalf("SubmitWorkRequestForSession error = %v, want missing legacy submission capability", err)
+	first := &isolatedWorkRuntime{sessionID: "session-first"}
+	second := &isolatedWorkRuntime{sessionID: "session-second"}
+	service := internalservice.NewService(isolatedWorkRuntimeResolver{
+		runtimes: map[string]work.Runtime{
+			first.sessionID:  first,
+			second.sessionID: second,
+		},
+	}, nil, nil, nil, nil)
+
+	const operationsPerSession = 16
+	var wait sync.WaitGroup
+	errorsCh := make(chan error, operationsPerSession*2)
+	for _, sessionID := range []string{first.sessionID, second.sessionID} {
+		sessionID := sessionID
+		for index := 0; index < operationsPerSession; index++ {
+			index := index
+			wait.Add(1)
+			go runIsolatedSessionOperations(service, sessionID, index, &wait, errorsCh)
+		}
 	}
-	if _, err := service.MoveWorkForSession(ctx, "session-1", "work-1", "done", "move-1"); err == nil ||
-		!strings.Contains(err.Error(), "legacy Factory Runtime work move is required") {
-		t.Fatalf("MoveWorkForSession error = %v, want missing legacy move capability", err)
+	wait.Wait()
+	close(errorsCh)
+	for err := range errorsCh {
+		t.Fatalf("concurrent Work operation: %v", err)
 	}
-	if _, err := service.SubscribeFactoryEventsForSession(ctx, "session-1", nil); err == nil ||
-		!strings.Contains(err.Error(), "legacy Factory Runtime event subscription is required") {
-		t.Fatalf("SubscribeFactoryEventsForSession error = %v, want missing legacy event capability", err)
+
+	for _, runtime := range []*isolatedWorkRuntime{first, second} {
+		assertIsolatedRuntime(t, runtime, operationsPerSession)
 	}
+}
+
+func runIsolatedSessionOperations(
+	service work.Service,
+	sessionID string,
+	index int,
+	wait *sync.WaitGroup,
+	errorsCh chan<- error,
+) {
+	defer wait.Done()
+	requestID := sessionID + "-request-" + strconv.Itoa(index)
+	if _, err := service.SubmitWorkRequestForSession(context.Background(), sessionID, work.WorkRequest{
+		RequestID: requestID,
+	}); err != nil {
+		errorsCh <- err
+		return
+	}
+	listed, err := service.ListWork(context.Background(), sessionID, work.ListOptions{})
+	if err != nil {
+		errorsCh <- err
+		return
+	}
+	if len(listed.Results) != 1 || listed.Results[0].WorkID != sessionID+"-work" {
+		errorsCh <- errors.New("list crossed session boundary")
+		return
+	}
+	got, err := service.GetWork(context.Background(), sessionID, sessionID+"-work")
+	if err != nil {
+		errorsCh <- err
+		return
+	}
+	if got.WorkID != sessionID+"-work" {
+		errorsCh <- errors.New("get crossed session boundary")
+		return
+	}
+	moved, err := service.MoveWorkForSession(
+		context.Background(), sessionID, sessionID+"-work", "done", requestID+"-move",
+	)
+	if err != nil {
+		errorsCh <- err
+		return
+	}
+	if moved.WorkID != sessionID+"-work" {
+		errorsCh <- errors.New("move crossed session boundary")
+	}
+}
+
+func assertIsolatedRuntime(t *testing.T, runtime *isolatedWorkRuntime, wantOperations int) {
+	t.Helper()
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	if len(runtime.requestIDs) != wantOperations {
+		t.Fatalf("%s request count = %d, want %d", runtime.sessionID, len(runtime.requestIDs), wantOperations)
+	}
+	for _, requestID := range runtime.requestIDs {
+		if !strings.HasPrefix(requestID, runtime.sessionID+"-") {
+			t.Fatalf("%s received request %q from another session", runtime.sessionID, requestID)
+		}
+	}
+	if len(runtime.moveIDs) != wantOperations {
+		t.Fatalf("%s move count = %d, want %d", runtime.sessionID, len(runtime.moveIDs), wantOperations)
+	}
+}
+
+type isolatedWorkRuntimeResolver struct {
+	runtimes map[string]work.Runtime
+}
+
+func (r isolatedWorkRuntimeResolver) ResolveWorkRuntime(sessionID string) (work.Runtime, error) {
+	runtime := r.runtimes[sessionID]
+	if runtime == nil {
+		return nil, factorysessions.ErrSessionNotFound
+	}
+	return runtime, nil
+}
+
+type isolatedWorkRuntime struct {
+	sessionID  string
+	mu         sync.Mutex
+	requestIDs []string
+	moveIDs    []string
+}
+
+func (r *isolatedWorkRuntime) SubmitWorkRequest(
+	_ context.Context,
+	request work.WorkRequest,
+) (work.WorkRequestSubmitResult, error) {
+	r.mu.Lock()
+	r.requestIDs = append(r.requestIDs, request.RequestID)
+	r.mu.Unlock()
+	return work.WorkRequestSubmitResult{
+		RequestID: request.RequestID,
+		Accepted:  true,
+		Works: []work.WorkRequestSubmittedWork{{
+			Name: "work", WorkTypeName: "task", WorkID: r.sessionID + "-work",
+		}},
+	}, nil
+}
+
+func (r *isolatedWorkRuntime) ReadWorkSnapshot(context.Context) (work.ReadSnapshot, error) {
+	return work.ReadSnapshot{Items: []work.ReadModel{{
+		WorkID: r.sessionID + "-work",
+		Name:   "work",
+		State:  &work.State{Name: "draft", Type: work.StateTypeInitial},
+	}}}, nil
+}
+
+func (r *isolatedWorkRuntime) MoveWork(
+	_ context.Context,
+	workID string,
+	stateName string,
+	_ work.WorkStateChangeSource,
+	requestID string,
+) (work.OperatorMoveResult, error) {
+	r.mu.Lock()
+	r.moveIDs = append(r.moveIDs, requestID)
+	r.mu.Unlock()
+	return work.OperatorMoveResult{WorkID: workID, ToState: stateName}, nil
 }
 
 func TestSubmitFileParsesAndSubmitsCanonicalWorkRequest(t *testing.T) {
@@ -139,7 +262,7 @@ func TestSubmitFileForSessionUsesInjectedReaderAndRuntime(t *testing.T) {
 	service := internalservice.NewService(workRuntimeResolver{runtime: runtime}, func(path string) ([]byte, error) {
 		readPath = path
 		return []byte(`{"requestId":"request-edge","type":"FACTORY_REQUEST_BATCH","works":[]}`), nil
-	}, nil, nil)
+	}, nil, nil, nil)
 
 	result, err := service.SubmitFileForSession(context.Background(), "session-1", "edge.json")
 	if err != nil {
@@ -187,7 +310,7 @@ func TestSubmitFileReportsReadParseAndRuntimeFailures(t *testing.T) {
 }
 
 func TestNewServiceExposesInvocationAndReturnPolicySlice(t *testing.T) {
-	service := internalservice.NewService(workRuntimeResolver{runtime: &recordingFactory{}}, os.ReadFile, nil, nil)
+	service := internalservice.NewService(workRuntimeResolver{runtime: &recordingFactory{}}, os.ReadFile, nil, nil, nil)
 	ctx := context.Background()
 
 	stdin := "from service root"
@@ -273,6 +396,7 @@ func TestNewServiceDelegatesContentStagingSlice(t *testing.T) {
 	service := internalservice.NewService(
 		workRuntimeResolver{runtime: &recordingFactory{}},
 		os.ReadFile,
+		nil,
 		staging,
 		nil,
 	)
@@ -315,6 +439,7 @@ func TestNewServiceDelegatesContentMaterializationSlice(t *testing.T) {
 		workRuntimeResolver{runtime: &recordingFactory{}},
 		os.ReadFile,
 		nil,
+		nil,
 		materializer,
 	)
 	ctx := context.Background()
@@ -327,7 +452,7 @@ func TestNewServiceDelegatesContentMaterializationSlice(t *testing.T) {
 }
 
 func TestNewServiceContentSliceRequiresInjectedDependencies(t *testing.T) {
-	service := internalservice.NewService(workRuntimeResolver{runtime: &recordingFactory{}}, os.ReadFile, nil, nil)
+	service := internalservice.NewService(workRuntimeResolver{runtime: &recordingFactory{}}, os.ReadFile, nil, nil, nil)
 	ctx := context.Background()
 
 	if _, err := service.StageContent(ctx, work.StageContentRequest{}); err == nil || !strings.Contains(err.Error(), "content staging is required") {
@@ -348,7 +473,7 @@ func TestNewServiceContentSliceRequiresInjectedDependencies(t *testing.T) {
 }
 
 func TestNewServiceDelegatesPrepareWorkRequest(t *testing.T) {
-	service := internalservice.NewService(workRuntimeResolver{runtime: &recordingFactory{}}, os.ReadFile, nil, nil)
+	service := internalservice.NewService(workRuntimeResolver{runtime: &recordingFactory{}}, os.ReadFile, nil, nil, nil)
 	ctx := context.Background()
 
 	prepared, err := service.PrepareWorkRequest(ctx, work.WorkRequestPreparation{

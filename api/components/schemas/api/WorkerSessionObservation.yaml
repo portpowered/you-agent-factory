@@ -1,0 +1,131 @@
+type: object
+additionalProperties: false
+required:
+  - workerSessionId
+  - direct
+  - providerSessionAvailable
+  - workIds
+  - turnId
+  - attemptId
+  - state
+  - startedAt
+  - endedAt
+  - durationMillis
+  - durationBasis
+  - transcript
+  - parse
+properties:
+  workerSessionId:
+    type: string
+    description: Stable Worker Session identity.
+  direct:
+    type: boolean
+    description: Whether this observation was admitted through the direct top-level Worker Session surface.
+  factorySessionId:
+    type: string
+    description: Explicit Factory Session scope used for this observation.
+  workId:
+    type: string
+    nullable: true
+    description: >-
+      Stable primary Work identity associated with this Worker Session. The
+      complete correlation set remains available in workIds.
+  workName:
+    type: string
+    nullable: true
+    description: Display name of the primary associated Work when Work can be resolved.
+  providerSession:
+    $ref: './WorkerSessionProviderSessionRef.yaml'
+    nullable: true
+  model:
+    type: string
+    description: Model identifier resolved for the provider invocation, when recorded.
+  reasoningEffort:
+    type: string
+    description: Reasoning effort resolved for the provider invocation, when recorded.
+  providerSessionAvailable:
+    type: boolean
+    description: Whether a provider-session identity is available for this attempt.
+  workIds:
+    type: array
+    items:
+      type: string
+    description: Work identities correlated with this Worker Session attempt.
+  turnId:
+    type: string
+    nullable: true
+    description: Optional turn correlation identifier.
+  attemptId:
+    type: string
+    description: Stable attempt or dispatch identity.
+  state:
+    type: string
+    enum:
+      - RESERVED
+      - STARTING
+      - RUNNING
+      - PAUSED
+      - COMPLETED
+      - FAILED
+      - CANCELED
+      - TERMINATED
+    x-enum-varnames:
+      - WorkerSessionObservationStateReserved
+      - WorkerSessionObservationStateStarting
+      - WorkerSessionObservationStateRunning
+      - WorkerSessionObservationStatePaused
+      - WorkerSessionObservationStateCompleted
+      - WorkerSessionObservationStateFailed
+      - WorkerSessionObservationStateCanceled
+      - WorkerSessionObservationStateTerminated
+  startedAt:
+    type: string
+    format: date-time
+    nullable: true
+  endedAt:
+    type: string
+    format: date-time
+    nullable: true
+  durationMillis:
+    type: integer
+    format: int64
+    minimum: 0
+    nullable: true
+    description: Projected duration in milliseconds when authoritative timing exists.
+  durationBasis:
+    type: string
+    enum:
+      - UNAVAILABLE
+      - ACTIVE_CLOCK
+      - RECORDED_TIMESTAMPS
+  tokenUsage:
+    $ref: './ProviderSessionTokenUsage.yaml'
+    nullable: true
+  turnUsage:
+    $ref: './WorkerSessionTurnUsage.yaml'
+    nullable: true
+    description: Optional provider-neutral per-turn context projection. Omitted when supported cumulative input evidence is unavailable.
+  transcript:
+    type: string
+    enum:
+      - UNAVAILABLE
+      - AVAILABLE
+  failure:
+    $ref: './WorkerSessionFailure.yaml'
+    nullable: true
+  recordingHealth:
+    type: string
+    enum:
+      - COMPLETE
+      - DEGRADED
+      - INCOMPLETE
+    x-enum-varnames:
+      - WorkerSessionObservationRecordingHealthComplete
+      - WorkerSessionObservationRecordingHealthDegraded
+      - WorkerSessionObservationRecordingHealthIncomplete
+    description: Recordings-owned capture health, independent of Worker execution outcome.
+  recordingHealthReason:
+    type: string
+    description: Stable safe reason when recording health is DEGRADED or INCOMPLETE.
+  parse:
+    $ref: './WorkerSessionParseDiagnostics.yaml'

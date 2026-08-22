@@ -68,7 +68,6 @@ describe("DashboardFlowAxisLegend", () => {
       [messages.iconLabels.cron, "cron"],
       [messages.iconLabels.poller, "poller"],
       [messages.iconLabels["active-work"], "active-work"],
-      [messages.iconLabels.exhaustion, "exhaustion"],
     ]) {
       const iconEntry = legend.querySelector(`[data-legend-icon='${kind}']`);
       const icon = legendScope.getByRole("img", {
@@ -227,9 +226,14 @@ describe("DashboardFlowAxisLegend", () => {
 
     const swatches = phaseLegend.querySelectorAll("[aria-hidden='true']");
     expect(swatches.length).toBe(4);
-    for (const swatch of swatches) {
-      expect(swatch.getAttribute("class")).toContain("border-info-border");
-      expect(swatch.getAttribute("class")).toContain("bg-info-container");
+    const expectedSwatches = [
+      "border-info-border bg-info-container",
+      "border-af-warning-border bg-warning-container",
+      "border-af-success-border bg-success-container",
+      "border-af-danger-border bg-error-container",
+    ];
+    for (const [index, expectedClass] of expectedSwatches.entries()) {
+      expect(swatchClass(swatches[index])).toContain(expectedClass);
     }
 
     for (const phase of ["INITIAL", "PROCESSING", "TERMINAL", "FAILED"]) {
@@ -239,3 +243,7 @@ describe("DashboardFlowAxisLegend", () => {
     }
   });
 });
+
+function swatchClass(swatch: Element | undefined): string {
+  return swatch?.getAttribute("class") ?? "";
+}

@@ -116,6 +116,51 @@ func TestBind_GetSuccessReturnsDetachedReadModelFromInjectedRoot(t *testing.T) {
 	}
 }
 
+func TestBind_GetSuccessPreservesOrderedMixedContentParts(t *testing.T) {
+	t.Parallel()
+
+	fake := fakeWorkRoot{
+		getWork: func(context.Context, string, string) (work.ReadModel, error) {
+			return work.ReadModel{
+				WorkID: testWorkID,
+				Content: []work.WorkContentPart{
+					{Type: work.WorkContentPartTypeText, Text: "first", Slot: "prompt"},
+					{Type: work.WorkContentPartTypeJSON, JSON: json.RawMessage(`{"answer":42}`)},
+					{Type: work.WorkContentPartTypeImage, URL: "you-artifact://session-1/image-1"},
+				},
+			}, nil
+		},
+	}
+
+	raw, err := workmcp.Bind(workmcp.RootDependencies{Work: fake})(
+		context.Background(),
+		workmcp.ToolGet,
+		testGetInputJSON(),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(get) transport error = %v, want typed tool response", err)
+	}
+	var response workmcp.ToolResponse[work.ReadModel]
+	if err := json.Unmarshal(raw, &response); err != nil {
+		t.Fatalf("decode tool response: %v", err)
+	}
+	if response.Error != nil || response.Result == nil {
+		t.Fatalf("tool response = %s, want success envelope", raw)
+	}
+	if len(response.Result.Content) != 3 {
+		t.Fatalf("content = %#v, want three ordered parts", response.Result.Content)
+	}
+	if response.Result.Content[0].Type != work.WorkContentPartTypeText || response.Result.Content[0].Text != "first" {
+		t.Fatalf("content[0] = %#v, want first text part", response.Result.Content[0])
+	}
+	if response.Result.Content[1].Type != work.WorkContentPartTypeJSON || string(response.Result.Content[1].JSON) != `{"answer":42}` {
+		t.Fatalf("content[1] = %#v, want JSON part", response.Result.Content[1])
+	}
+	if response.Result.Content[2].Type != work.WorkContentPartTypeImage || response.Result.Content[2].URL != "you-artifact://session-1/image-1" {
+		t.Fatalf("content[2] = %#v, want image artifact reference", response.Result.Content[2])
+	}
+}
+
 func TestBind_StateAccessFailuresReturnTypedErrorEnvelopes(t *testing.T) {
 	t.Parallel()
 

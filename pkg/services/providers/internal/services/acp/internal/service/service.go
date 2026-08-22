@@ -1,4 +1,6 @@
 // Package service implements the parent-private Agent Client Protocol service.
+// backendsizecheck:ignore-file pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-file-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 package service
 
 import (
@@ -22,6 +24,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/internal/service/cancelwindow"
 )
 
 // Command is one configured stdio ACP launch command.
@@ -40,9 +43,9 @@ type Service struct {
 	locator      platformprocess.ExecutableLocator
 }
 
-var _ acp.Service = (*Service)(nil)
+var _ acp.ContinuationService = (*Service)(nil)
 
-func New(integrations []providers.ACPIntegration, newCommand platformprocess.CommandFactory, locator platformprocess.ExecutableLocator) (acp.Service, error) {
+func New(integrations []providers.ACPIntegration, newCommand platformprocess.CommandFactory, locator platformprocess.ExecutableLocator) (acp.ContinuationService, error) {
 	service := &Service{newCommand: newCommand, locator: locator}
 	if err := service.Configure(context.Background(), integrations); err != nil {
 		return nil, err
@@ -50,15 +53,75 @@ func New(integrations []providers.ACPIntegration, newCommand platformprocess.Com
 	return service, nil
 }
 
-func (service *Service) Execute(ctx context.Context, id providers.ID, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+// resolveDaemon resolves id (including an accepted alias) to its canonical
+// identity and owning daemon under a single read lock. ok mirrors
+// resolveLocked's own result; it does not additionally guarantee daemon is
+// non-nil, matching Execute's pre-existing behavior. Claim additionally
+// checks for a nil daemon itself.
+func (service *Service) resolveDaemon(id providers.ID) (target *daemon, canonical providers.ID, ok bool) {
 	service.mu.RLock()
-	canonical, ok := service.resolveLocked(id)
-	daemon := service.daemons[canonical]
+	canonical, ok = service.resolveLocked(id)
+	target = service.daemons[canonical]
 	service.mu.RUnlock()
+	return target, canonical, ok
+}
+
+func (service *Service) Execute(ctx context.Context, id providers.ID, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+	daemon, canonical, ok := service.resolveDaemon(id)
 	if !ok {
 		return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: fmt.Sprintf("ACP provider %q is unavailable", id)}
 	}
-	return daemon.execute(ctx, canonical, request)
+	return daemon.execute(ctx, canonical, request, nil)
+}
+
+// Continue resumes the exact private Providers session reference without
+// permitting an ordinary Execute caller to select a prior session.
+func (service *Service) Continue(
+	ctx context.Context,
+	id providers.ID,
+	request providers.ExecuteRequest,
+	reference providers.SessionRef,
+) (providers.ExecuteResult, error) {
+	daemon, canonical, ok := service.resolveDaemon(id)
+	if !ok {
+		return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: fmt.Sprintf("ACP provider %q is unavailable", id)}
+	}
+	return daemon.execute(ctx, canonical, request, &reference)
+}
+
+// NegotiatedCapabilities returns id's daemon's last successfully negotiated
+// AgentCapabilities without starting a connection or touching the daemon's
+// execute gate.
+func (service *Service) NegotiatedCapabilities(id providers.ID) (acpsdk.AgentCapabilities, bool) {
+	target, _, ok := service.resolveDaemon(id)
+	if !ok || target == nil {
+		return acpsdk.AgentCapabilities{}, false
+	}
+	return target.negotiatedCapabilities()
+}
+
+// Claim atomically captures the exact live cancel-window generation named by
+// id/attemptID, if id's daemon currently has an established session/prompt
+// turn in flight for it.
+func (service *Service) Claim(id providers.ID, attemptID string) (acp.Generation, bool) {
+	target, _, ok := service.resolveDaemon(id)
+	if !ok || target == nil {
+		return nil, false
+	}
+	return target.window.Claim(attemptID)
+}
+
+// TryCancel delivers a session/cancel notification to the exact generation
+// captured by a prior Claim call and blocks (bounded by ctx) until it
+// observes that generation's real recorded terminal outcome. It never
+// re-resolves generation by identity strings, so it cannot be redirected to
+// a different generation that later reuses the same provider/attemptID.
+func (service *Service) TryCancel(ctx context.Context, generation acp.Generation) (bool, error) {
+	session, ok := generation.(*cancelwindow.Session)
+	if !ok || session == nil {
+		return false, nil
+	}
+	return session.TryCancel(ctx)
 }
 
 func (service *Service) Close(ctx context.Context) error {
@@ -77,6 +140,7 @@ func (service *Service) Close(ctx context.Context) error {
 	return first
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (service *Service) Configure(ctx context.Context, integrations []providers.ACPIntegration) error {
 	commands := make(map[providers.ID]Command, len(integrations))
 	values := make(map[providers.ID]providers.ACPIntegration, len(integrations))
@@ -93,10 +157,20 @@ func (service *Service) Configure(ctx context.Context, integrations []providers.
 		if err != nil || len(parts) == 0 {
 			return fmt.Errorf("configure ACP provider %q: invalid command", integration.Name)
 		}
+		commandArgs := parts[1:]
+		if integration.Arguments != nil {
+			if !slices.Equal(commandArgs, integration.Arguments) {
+				return fmt.Errorf("configure ACP provider %q: command arguments drift from its runtime projection", integration.Name)
+			}
+			commandArgs = append([]string(nil), integration.Arguments...)
+		}
+		if integration.RuntimePosture == "catalog_only" {
+			return fmt.Errorf("configure ACP provider %q: catalog-only integrations are not selectable", integration.Name)
+		}
 		if _, exists := values[integration.Name]; exists {
 			return fmt.Errorf("configure ACP provider %q: duplicate identity", integration.Name)
 		}
-		commands[integration.Name] = Command{Name: parts[0], Args: append([]string(nil), parts[1:]...)}
+		commands[integration.Name] = Command{Name: parts[0], Args: commandArgs}
 		values[integration.Name] = integration
 		aliases[strings.ToLower(integration.Name.String())] = integration.Name
 		for _, alias := range integration.Aliases {
@@ -189,10 +263,40 @@ type daemon struct {
 	initialized acpsdk.InitializeResponse
 	finished    chan error
 	tree        platformprocess.SubprocessTree
-	stderr      bytes.Buffer
+	stderr      syncBuffer
+
+	window cancelwindow.Window
+
+	// negotiatedMu guards negotiated/negotiatedKnown separately from gate so
+	// a capability read never blocks on (or is blocked by) an in-flight
+	// execute call holding the gate for the duration of a live attempt.
+	negotiatedMu    sync.RWMutex
+	negotiated      acpsdk.AgentCapabilities
+	negotiatedKnown bool
 }
 
-func (daemon *daemon) execute(ctx context.Context, id providers.ID, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+// negotiatedCapabilities returns the AgentCapabilities from the daemon's
+// last successful initialize handshake, without touching gate or causing any
+// connection side effect. ok is false until the first successful handshake.
+func (daemon *daemon) negotiatedCapabilities() (acpsdk.AgentCapabilities, bool) {
+	daemon.negotiatedMu.RLock()
+	defer daemon.negotiatedMu.RUnlock()
+	return daemon.negotiated, daemon.negotiatedKnown
+}
+
+func (daemon *daemon) recordNegotiated(capabilities acpsdk.AgentCapabilities) {
+	daemon.negotiatedMu.Lock()
+	daemon.negotiated = capabilities
+	daemon.negotiatedKnown = true
+	daemon.negotiatedMu.Unlock()
+}
+
+func (daemon *daemon) execute(
+	ctx context.Context,
+	id providers.ID,
+	request providers.ExecuteRequest,
+	resume *providers.SessionRef,
+) (providers.ExecuteResult, error) {
 	executionCtx, cancelExecution := context.WithCancel(ctx)
 	stopLifecycleWatch := context.AfterFunc(daemon.lifecycle, cancelExecution)
 	defer func() {
@@ -214,38 +318,26 @@ func (daemon *daemon) execute(ctx context.Context, id providers.ID, request prov
 	if err != nil {
 		return providers.ExecuteResult{}, invalidFailure(err)
 	}
-	prompt := []acpsdk.ContentBlock{}
-	if text := strings.TrimSpace(request.SystemPrompt); text != "" {
-		prompt = append(prompt, acpsdk.TextBlock("System instructions:\n"+text))
-	}
-	prompt = append(prompt, acpsdk.TextBlock(request.UserMessage))
-	prompt = append(prompt, inputWorkBlocks(request.InputTokens, request.UserMessage)...)
-	prompt = append(prompt, resourceLinks(request.InputTokens, request.UserMessage)...)
+	prompt := promptBlocks(request)
 
 	if err := daemon.ensureStarted(ctx, id, cwd, requestEnvironment(request), request); err != nil {
 		return providers.ExecuteResult{}, err
 	}
-	daemon.client.reset(request.SkipPermissions)
+	daemon.client.reset(request.SkipPermissions, request.ProgressObserver)
 	client := daemon.client
 	connection := daemon.connection
 	initialized := daemon.initialized
 
-	session, err := connection.NewSession(ctx, acpsdk.NewSessionRequest{Cwd: cwd, McpServers: []acpsdk.McpServer{}})
+	session, err := daemon.openSession(ctx, id, cwd, initialized, request, resume)
 	if err != nil {
-		var requestErr *acpsdk.RequestError
-		if errors.As(err, &requestErr) && requestErr.Code == -32000 {
-			// The current connection cannot serve work until the operator
-			// authenticates. No login operation is exposed through this service,
-			// so retaining the process only leaves an unusable daemon (and its
-			// working directory) alive. Close it now and let a later execution
-			// establish a fresh authenticated connection.
-			_ = daemon.stopLocked(context.Background())
-			return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindAuthentication, Message: "ACP authentication required" + authenticationMethodHint(initialized.AuthMethods)}
-		}
-		daemon.invalidateDisconnected(ctx)
-		return providers.ExecuteResult{}, rpcFailure(ctx, "session/new", id, err, daemon.stderr.String(), request)
+		return providers.ExecuteResult{}, err
 	}
 	daemon.client.setSessionID(string(session.SessionId))
+	request.ObserveSession(providers.SessionRef{
+		Provider: id,
+		Kind:     providers.SessionIDKind,
+		ID:       string(session.SessionId),
+	})
 	modelConfig, err := applyAdvertisedModel(ctx, connection, session, request.Model)
 	if err != nil {
 		daemon.invalidateDisconnected(ctx)
@@ -255,69 +347,147 @@ func (daemon *daemon) execute(ctx context.Context, id providers.ID, request prov
 			string(session.SessionId),
 		)
 	}
-	if _, err := connection.Prompt(ctx, acpsdk.PromptRequest{SessionId: session.SessionId, Prompt: prompt}); err != nil {
+	response, err := daemon.promptWithWindow(request.AttemptID, session.SessionId, connection, func() (acpsdk.PromptResponse, error) {
+		return connection.Prompt(ctx, acpsdk.PromptRequest{SessionId: session.SessionId, Prompt: prompt})
+	})
+	if err != nil {
 		if ctx.Err() != nil {
 			cancelCtx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 			_ = connection.Cancel(cancelCtx, acpsdk.CancelNotification{SessionId: session.SessionId})
 			cancel()
 		}
-		daemon.invalidateDisconnected(context.Background())
+		// A failed prompt leaves the ACP turn's connection state
+		// authoritative only after the process has been retired. Waiting for
+		// stopLocked here prevents a retry from racing cmd.Wait or reusing a
+		// connection whose peer is already exiting.
+		_ = daemon.stopLocked(context.Background())
 		return providers.ExecuteResult{}, withPartial(rpcFailure(ctx, "session/prompt", id, err, daemon.stderr.String(), request), client, id)
 	}
-	return providers.ExecuteResult{Content: client.content(), SessionRef: &providers.SessionRef{Provider: id, Kind: providers.SessionIDKind, ID: string(session.SessionId)}, Diagnostics: &providers.ExecuteDiagnostics{Progress: completedPromptProgress(client.progressFacts()), Metadata: map[string]string{"execution_kind": "acp", "protocol_version": fmt.Sprint(initialized.ProtocolVersion), "model_config": modelConfig}}}, nil
+	if response.StopReason == acpsdk.StopReasonCancelled {
+		return providers.ExecuteResult{}, withPartial(acpControlCanceledFailure(id), client, id)
+	}
+	return providers.ExecuteResult{Content: client.content(), SessionRef: &providers.SessionRef{Provider: id, Kind: providers.SessionIDKind, ID: string(session.SessionId)}, Diagnostics: &providers.ExecuteDiagnostics{Progress: client.completeProgress(), ProgressAlreadyObserved: request.ProgressObserver != nil, Metadata: map[string]string{"execution_kind": "acp", "protocol_version": fmt.Sprint(initialized.ProtocolVersion), "model_config": modelConfig, "completion_evidence": "provider_response"}}}, nil
 }
 
-func completedPromptProgress(updates []providers.ExecuteProgress) []providers.ExecuteProgress {
-	result := []providers.ExecuteProgress{{Phase: "started", Metadata: map[string]string{"kind": "run", "native_type": "session/prompt"}}}
-	started := map[string]bool{}
-	items := map[string]map[string]bool{}
-	content := map[string]map[string]string{}
-	for _, update := range updates {
-		kind, itemID := update.Metadata["kind"], update.Metadata["item_id"]
-		if (kind == "message" || kind == "reasoning") && !started[kind] {
-			result = append(result, providers.ExecuteProgress{Phase: "started", Metadata: map[string]string{
-				"kind": kind, "item_id": itemID, "native_type": "acp/synthetic_start",
-			}})
-			started[kind] = true
-		}
-		if kind != "" && itemID != "" {
-			if items[kind] == nil {
-				items[kind] = map[string]bool{}
+// openSession resumes the exact private Provider Session reference through the native ACP
+// session/load method with its exact opaque id forwarded unchanged, and its
+// absence starts an ordinary fresh session/new. openSession never falls back
+// from a requested resume to a fresh session - a session/load failure is
+// returned as-is so a continuation can never silently adopt a different
+// Provider Session.
+func (daemon *daemon) openSession(
+	ctx context.Context,
+	id providers.ID,
+	cwd string,
+	initialized acpsdk.InitializeResponse,
+	request providers.ExecuteRequest,
+	resume *providers.SessionRef,
+) (acpsdk.NewSessionResponse, error) {
+	connection := daemon.connection
+	if resume != nil {
+		if resumeID := strings.TrimSpace(resume.ID); resumeID != "" {
+			loaded, err := connection.LoadSession(ctx, acpsdk.LoadSessionRequest{SessionId: acpsdk.SessionId(resumeID), Cwd: cwd, McpServers: []acpsdk.McpServer{}})
+			if err != nil {
+				return acpsdk.NewSessionResponse{}, daemon.sessionOpenFailure(ctx, id, "session/load", err, initialized, request)
 			}
-			if content[kind] == nil {
-				content[kind] = map[string]string{}
-			}
-			items[kind][itemID] = update.Phase == "completed"
-			content[kind][itemID] += update.Detail
-		}
-		result = append(result, update)
-	}
-	for _, kind := range []string{"reasoning", "tool", "session", "message"} {
-		ids := make([]string, 0, len(items[kind]))
-		for itemID := range items[kind] {
-			ids = append(ids, itemID)
-		}
-		sort.Strings(ids)
-		for _, itemID := range ids {
-			completed := items[kind][itemID]
-			if completed {
-				continue
-			}
-			result = append(result, providers.ExecuteProgress{Phase: "completed", Detail: content[kind][itemID], Metadata: map[string]string{
-				"kind": kind, "item_id": itemID, "native_type": "session/prompt",
-			}})
+			return acpsdk.NewSessionResponse{Meta: loaded.Meta, ConfigOptions: loaded.ConfigOptions, Modes: loaded.Modes, SessionId: acpsdk.SessionId(resumeID)}, nil
 		}
 	}
-	return append(result, providers.ExecuteProgress{Phase: "completed", Metadata: map[string]string{"kind": "run", "native_type": "session/prompt"}})
+	session, err := connection.NewSession(ctx, acpsdk.NewSessionRequest{Cwd: cwd, McpServers: []acpsdk.McpServer{}})
+	if err != nil {
+		return acpsdk.NewSessionResponse{}, daemon.sessionOpenFailure(ctx, id, "session/new", err, initialized, request)
+	}
+	return session, nil
+}
+
+const (
+	// acpErrorCodeResourceNotFound is the ACP-reserved JSON-RPC error code
+	// (schema ErrorCodeResourceNotFound) an agent returns when a referenced
+	// resource, including a session/load id, is not recognized.
+	acpErrorCodeResourceNotFound = -32002
+
+	// JSON-RPC reserves this inclusive range for server errors. ACP agents use
+	// it for provider-side failures that are distinct from the standard JSON-RPC
+	// protocol errors such as -32603.
+	acpServerErrorMinimum = -32099
+	acpServerErrorMaximum = -32000
+)
+
+// sessionOpenFailure normalizes a session/new or session/load failure. An
+// authentication-required failure closes the unusable daemon so a later
+// execution establishes a fresh authenticated connection. A session/load
+// failure reporting ResourceNotFound means the daemon itself is healthy but
+// does not recognize the exact requested Provider Session id, so it is
+// reported as ExecuteFailureKindSessionNotFound instead of the generic RPC
+// failure Continue would otherwise be unable to distinguish from any other
+// dependency failure. Every other failure is reported through the same
+// rpcFailure normalization every other ACP RPC failure in this service uses.
+func (daemon *daemon) sessionOpenFailure(
+	ctx context.Context,
+	id providers.ID,
+	method string,
+	err error,
+	initialized acpsdk.InitializeResponse,
+	request providers.ExecuteRequest,
+) error {
+	var requestErr *acpsdk.RequestError
+	if errors.As(err, &requestErr) && requestErr.Code == -32000 {
+		// The current connection cannot serve work until the operator
+		// authenticates. No login operation is exposed through this service,
+		// so retaining the process only leaves an unusable daemon (and its
+		// working directory) alive. Close it now and let a later execution
+		// establish a fresh authenticated connection.
+		_ = daemon.stopLocked(context.Background())
+		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindAuthentication, Message: "ACP authentication required" + authenticationMethodHint(initialized.AuthMethods)}
+	}
+	if method == "session/load" && requestErr != nil && requestErr.Code == acpErrorCodeResourceNotFound {
+		daemon.invalidateDisconnected(ctx)
+		return providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindSessionNotFound,
+			Message: fmt.Sprintf("ACP provider %q does not recognize the referenced Provider Session as live", id),
+		}
+	}
+	daemon.invalidateDisconnected(ctx)
+	return rpcFailure(ctx, method, id, err, daemon.stderr.String(), request)
+}
+
+// promptWithWindow opens the cancelable window for attemptID, runs prompt,
+// and closes the window with the real recorded outcome - via defer, so an
+// unexpected prompt unwind (including a panic) still closes the window
+// instead of leaving it stale. A stale window would let a later execution
+// that reuses this same attempt ID bind at the root and have a racing
+// control claim, or hang indefinitely on, this dead session (see
+// cancelwindow's package doc). response/err are read by the deferred closure
+// only after the assignment below completes, so a normal return still
+// records the actual outcome.
+func (daemon *daemon) promptWithWindow(
+	attemptID string,
+	sessionID acpsdk.SessionId,
+	connection *acpsdk.ClientSideConnection,
+	prompt func() (acpsdk.PromptResponse, error),
+) (response acpsdk.PromptResponse, err error) {
+	cancelable := daemon.window.Begin(attemptID, sessionID, connection)
+	defer func() {
+		daemon.window.End(cancelable, err == nil && response.StopReason == acpsdk.StopReasonCancelled)
+	}()
+	response, err = prompt()
+	return response, err
 }
 
 func (daemon *daemon) ensureStarted(ctx context.Context, id providers.ID, cwd string, environment []string, request providers.ExecuteRequest) error {
 	if daemon.connection != nil {
-		select {
-		case <-daemon.finished:
-			daemon.clearProcess()
-		default:
-			return nil
+		// A peer disconnect is authoritative even when cmd.Wait has not yet
+		// published the process result. Retrying through a connection whose
+		// reader has already terminated sends the continuation to a dead ACP
+		// process and loses the original attempt outcome.
+		daemon.invalidateDisconnected(ctx)
+		if daemon.connection != nil {
+			select {
+			case <-daemon.finished:
+				daemon.clearProcess()
+			default:
+				return nil
+			}
 		}
 	}
 	if daemon.newCommand == nil {
@@ -376,6 +546,7 @@ func (daemon *daemon) ensureStarted(ctx context.Context, id providers.ID, cwd st
 	daemon.initialized = initialized
 	daemon.finished = finished
 	daemon.tree = tree
+	daemon.recordNegotiated(initialized.AgentCapabilities)
 	return nil
 }
 
@@ -527,6 +698,13 @@ func rpcFailure(ctx context.Context, method string, id providers.ID, err error, 
 		message += " (stderr: " + detail + ")"
 	}
 	kind := providers.ExecuteFailureKindUnknown
+	var requestErr *acpsdk.RequestError
+	if errors.As(err, &requestErr) && isACPServerFailure(requestErr.Code) {
+		// A server-side ACP failure is a provider dependency outcome. Workers
+		// classifies that outcome as retryable and, when a session was opened,
+		// retains the exact Provider Session for the retry continuation.
+		kind = providers.ExecuteFailureKindDependency
+	}
 	if method == "initialize" {
 		native := strings.ToLower(err.Error())
 		if strings.Contains(native, "protocol version") || strings.Contains(native, "protocolversion") {
@@ -540,6 +718,12 @@ func rpcFailure(ctx context.Context, method string, id providers.ID, err error, 
 		},
 	}}}}
 }
+
+func isACPServerFailure(code int) bool {
+	return code >= acpServerErrorMinimum && code <= acpServerErrorMaximum &&
+		code != -32000 && code != acpErrorCodeResourceNotFound
+}
+
 func safeRPCMessage(err error) string {
 	var requestErr *acpsdk.RequestError
 	if errors.As(err, &requestErr) && strings.TrimSpace(requestErr.Message) != "" {
@@ -553,6 +737,20 @@ func safeRPCMessage(err error) string {
 }
 
 var renderedURL = regexp.MustCompile(`https?://[^\s\]\)]+`)
+
+// promptBlocks assembles one session/prompt turn's content blocks: an
+// optional system-instructions block, the user message, then any input Work
+// content and resource links derived from it.
+func promptBlocks(request providers.ExecuteRequest) []acpsdk.ContentBlock {
+	prompt := []acpsdk.ContentBlock{}
+	if text := strings.TrimSpace(request.SystemPrompt); text != "" {
+		prompt = append(prompt, acpsdk.TextBlock("System instructions:\n"+text))
+	}
+	prompt = append(prompt, acpsdk.TextBlock(request.UserMessage))
+	prompt = append(prompt, inputWorkBlocks(request.InputTokens, request.UserMessage)...)
+	prompt = append(prompt, resourceLinks(request.InputTokens, request.UserMessage)...)
+	return prompt
+}
 
 func inputWorkBlocks(values []any, renderedPrompt string) []acpsdk.ContentBlock {
 	blocks := make([]acpsdk.ContentBlock, 0)
@@ -723,9 +921,12 @@ func withPartial(err error, c *client, provider providers.ID) error {
 				failureProgress = append(failureProgress, progress.Clone())
 			}
 		}
-		progress := failedPromptProgress(c.progressFacts())
-		progress = append(progress, failureProgress...)
-		f.Diagnostics = &providers.ExecuteDiagnostics{Progress: progress, Metadata: map[string]string{"partial_content": c.content()}}
+		progress := c.failProgress(failureProgress...)
+		f.Diagnostics = &providers.ExecuteDiagnostics{
+			Progress:                progress,
+			ProgressAlreadyObserved: c.streamedProgress(),
+			Metadata:                map[string]string{"partial_content": c.content()},
+		}
 		if f.SessionRef == nil {
 			f.SessionRef = c.sessionRef(provider)
 		}
@@ -734,19 +935,6 @@ func withPartial(err error, c *client, provider providers.ID) error {
 	return err
 }
 
-func failedPromptProgress(updates []providers.ExecuteProgress) []providers.ExecuteProgress {
-	progress := completedPromptProgress(updates)
-	if len(progress) > 0 {
-		progress = progress[:len(progress)-1]
-	}
-	for index := range progress {
-		if progress[index].Phase != "completed" || progress[index].Metadata["kind"] != "message" {
-			continue
-		}
-		progress[index].Metadata["partial"] = "true"
-	}
-	return progress
-}
 func safeACPStderr(value string, env map[string]string) string {
 	for name, secret := range env {
 		if sensitiveEnvironmentName(name) && len(secret) >= 4 {
@@ -774,26 +962,41 @@ type client struct {
 	skipPermissions bool
 	text            strings.Builder
 	sessionID       string
-	progress        []providers.ExecuteProgress
+	stream          *promptProgressStream
 }
 
-func (c *client) reset(skipPermissions bool) {
+// reset begins one turn's progress stream. observe may be nil, in which case
+// the turn still normalizes its facts but delivers them only in the returned
+// diagnostics.
+func (c *client) reset(skipPermissions bool, observe providers.ProgressObserver) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.skipPermissions = skipPermissions
 	c.text.Reset()
 	c.sessionID = ""
-	c.progress = nil
+	c.stream = newPromptProgressStream(observe)
 }
 
 func (c *client) SessionUpdate(_ context.Context, n acpsdk.SessionNotification) error {
 	p, text := mapSessionUpdate(n.Update)
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if text != "" {
 		c.text.WriteString(text)
 	}
-	c.progress = append(c.progress, p...)
+	stream := c.stream
+	var pending []providers.ExecuteProgress
+	if stream != nil {
+		stream.Observe(p)
+		pending = stream.takePending()
+	}
+	c.mu.Unlock()
+	// Handed off after the lock is released. This callback runs on the ACP
+	// connection's notification path, and the SDK holds a turn's
+	// session/prompt response until every pre-response notification handler
+	// returns, so downstream publishing must not happen inline here.
+	if stream != nil {
+		stream.Deliver(pending)
+	}
 	return nil
 }
 func (c *client) setSessionID(v string) { c.mu.Lock(); c.sessionID = v; c.mu.Unlock() }
@@ -806,16 +1009,55 @@ func (c *client) sessionRef(provider providers.ID) *providers.SessionRef {
 	}
 	return &providers.SessionRef{Provider: provider, Kind: providers.SessionIDKind, ID: c.sessionID}
 }
-func (c *client) progressFacts() []providers.ExecuteProgress {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	out := make([]providers.ExecuteProgress, len(c.progress))
-	for i := range c.progress {
-		out[i] = c.progress[i].Clone()
-	}
-	return out
+
+// completeProgress closes the turn normally and returns its full ordered fact
+// list, which is exactly the sequence already streamed to the observer.
+func (c *client) completeProgress() []providers.ExecuteProgress {
+	return c.closeProgress(func(stream *promptProgressStream) []providers.ExecuteProgress {
+		return stream.Complete()
+	})
 }
 
+// failProgress closes a turn that never reached its own completed marker,
+// folding the transport's own failure diagnostics into the same stream so the
+// returned slice still matches what was observed.
+func (c *client) failProgress(extra ...providers.ExecuteProgress) []providers.ExecuteProgress {
+	return c.closeProgress(func(stream *promptProgressStream) []providers.ExecuteProgress {
+		return stream.Fail(extra...)
+	})
+}
+
+// closeProgress runs one turn-closing step under the client lock, then hands
+// off and joins delivery outside it, so every fact this turn reports has
+// reached the observer by the time the caller inspects the returned slice.
+func (c *client) closeProgress(
+	finish func(*promptProgressStream) []providers.ExecuteProgress,
+) []providers.ExecuteProgress {
+	c.mu.Lock()
+	stream := c.stream
+	var facts, pending []providers.ExecuteProgress
+	if stream != nil {
+		facts = finish(stream)
+		pending = stream.takePending()
+	}
+	c.mu.Unlock()
+	if stream == nil {
+		return nil
+	}
+	stream.Deliver(pending)
+	stream.close()
+	return facts
+}
+
+// streamedProgress reports whether this turn delivered its facts live, so a
+// caller knows not to publish the returned slice a second time.
+func (c *client) streamedProgress() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.stream != nil && c.stream.observe != nil
+}
+
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func mapSessionUpdate(update acpsdk.SessionUpdate) ([]providers.ExecuteProgress, string) {
 	phase, detail, kind, itemID := "update", "", "unknown", ""
 	metadata := map[string]string{}
@@ -874,6 +1116,11 @@ func mapSessionUpdate(update acpsdk.SessionUpdate) ([]providers.ExecuteProgress,
 					"provider_session_id": "",
 					"path":                content.Diff.Path,
 					"operation":           operation,
+					// ACP models a diff as content inside the tool call that
+					// produced it. Carrying the owning call's id keeps that
+					// ownership, so a consumer can attach the change to its
+					// tool call instead of presenting an orphaned edit.
+					"tool_call_id": string(update.ToolCallUpdate.ToolCallId),
 				},
 			})
 		}
@@ -894,10 +1141,11 @@ func mapSessionUpdate(update acpsdk.SessionUpdate) ([]providers.ExecuteProgress,
 	case update.SessionInfoUpdate != nil:
 		kind = "session"
 		metadata["native_type"] = "session_info_update"
-		phase = "started"
+		phase = "updated"
 		itemID = "session"
 		if update.SessionInfoUpdate.Title != nil {
 			detail = *update.SessionInfoUpdate.Title
+			metadata["title_present"] = "true"
 		}
 	default:
 		return nil, ""
@@ -929,7 +1177,13 @@ func (c *client) RequestPermission(ctx context.Context, request acpsdk.RequestPe
 	if ctx.Err() != nil {
 		return acpsdk.RequestPermissionResponse{Outcome: acpsdk.NewRequestPermissionOutcomeCancelled()}, nil
 	}
+	// The SDK invokes this callback from its connection reader while the
+	// per-turn policy is reset by the execution goroutine. Snapshot the policy
+	// under the same lock as reset so a permission request cannot observe an
+	// unsynchronized or stale turn value.
+	c.mu.Lock()
 	want := c.skipPermissions
+	c.mu.Unlock()
 	for _, option := range request.Options {
 		allow := option.Kind == acpsdk.PermissionOptionKindAllowOnce || option.Kind == acpsdk.PermissionOptionKindAllowAlways
 		if allow == want {
@@ -961,3 +1215,33 @@ func (*client) WaitForTerminalExit(context.Context, acpsdk.WaitForTerminalExitRe
 }
 
 var _ acpsdk.Client = (*client)(nil)
+
+// syncBuffer is a bytes.Buffer guarded for concurrent use.
+//
+// The daemon hands its stderr buffer to os/exec, which copies the child's
+// stderr on its own goroutine for the process' whole lifetime, while the
+// executing goroutine reads the accumulated text whenever it builds a failure
+// diagnostic. Those are genuinely concurrent, so the buffer cannot be a bare
+// bytes.Buffer.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func (b *syncBuffer) Reset() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.buf.Reset()
+}

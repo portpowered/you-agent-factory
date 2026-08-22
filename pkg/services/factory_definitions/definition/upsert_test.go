@@ -14,8 +14,8 @@ import (
 	factorysnapshotcapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture"
 	snapshotsportabilityprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/prepare"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorysnapshot"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 )
 
 func TestSaveUpsertNamedAndActivateForSession_PersistsChosenTargetName(t *testing.T) {
@@ -53,7 +53,7 @@ func TestSaveUpsertNamedAndActivateForSession_PersistsChosenTargetName(t *testin
 		}},
 		Workstations: &[]factoryapi.Workstation{{
 			Name:   "plan-task",
-			Worker: "planner",
+			Worker: definitionStringPtr("planner"),
 			Type:   upsertWorkstationTypeModel(),
 			Body:   upsertStringPointer("Plan the story."),
 			Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}},
@@ -138,7 +138,7 @@ func TestSaveUpsertNamedAndActivateForSession_ReplacesExistingNamedFactory(t *te
 		}},
 		Workstations: &[]factoryapi.Workstation{{
 			Name:   "plan-task",
-			Worker: "planner",
+			Worker: definitionStringPtr("planner"),
 			Type:   upsertWorkstationTypeModel(),
 			Body:   upsertStringPointer("replacement workstation"),
 			Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}},

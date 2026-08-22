@@ -1,0 +1,518 @@
+package workersessions_test
+
+import (
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+)
+
+func TestSession_Validate_AcceptsNonEmptyIDAndAcceptedState(t *testing.T) {
+	session := workersessions.Session{ID: "worker-1", State: workersessions.StateRunning}
+	if err := session.Validate(); err != nil {
+		t.Fatalf("Validate() = %v, want nil", err)
+	}
+}
+
+func TestSession_Validate_RejectsEmptyAndWhitespaceIdentity(t *testing.T) {
+	for _, id := range []string{"", "   ", "\t"} {
+		session := workersessions.Session{ID: id, State: workersessions.StateRunning}
+		if err := session.Validate(); !errors.Is(err, workersessions.ErrInvalidSessionID) {
+			t.Errorf("Validate() with ID %q = %v, want ErrInvalidSessionID", id, err)
+		}
+	}
+}
+
+func TestSession_Validate_RejectsUnknownAndInterruptedState(t *testing.T) {
+	for _, state := range []workersessions.State{"", "INTERRUPTED", "unknown"} {
+		session := workersessions.Session{ID: "worker-1", State: state}
+		if err := session.Validate(); !errors.Is(err, workersessions.ErrInvalidState) {
+			t.Errorf("Validate() with state %q = %v, want ErrInvalidState", state, err)
+		}
+	}
+}
+
+func TestSession_Validate_IsDeterministicAndDoesNotMutate(t *testing.T) {
+	session := workersessions.Session{ID: "worker-1", State: workersessions.StateRunning}
+	original := session
+
+	firstErr := session.Validate()
+	secondErr := session.Validate()
+
+	if firstErr != nil || secondErr != nil {
+		t.Fatalf("Validate() = (%v, %v), want (nil, nil)", firstErr, secondErr)
+	}
+	if session != original {
+		t.Fatalf("Validate() mutated the session: got %+v, want %+v", session, original)
+	}
+}
+
+func TestSession_Validate_CompletedRequiresMatchingCompletedResult(t *testing.T) {
+	session := workersessions.Session{
+		ID:     "worker-1",
+		State:  workersessions.StateCompleted,
+		Result: &workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted},
+	}
+	if err := session.Validate(); err != nil {
+		t.Fatalf("Validate() = %v, want nil", err)
+	}
+
+	missing := workersessions.Session{ID: "worker-1", State: workersessions.StateCompleted}
+	if err := missing.Validate(); !errors.Is(err, workersessions.ErrInvalidTerminalResult) {
+		t.Errorf("Validate() with missing Result = %v, want ErrInvalidTerminalResult", err)
+	}
+
+	mismatched := workersessions.Session{
+		ID:    "worker-1",
+		State: workersessions.StateCompleted,
+		Result: &workersessions.TerminalResult{
+			Outcome: workersessions.TerminalOutcomeFailed,
+			Cause:   &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure, Detail: "execution failed"},
+		},
+	}
+	if err := mismatched.Validate(); !errors.Is(err, workersessions.ErrInvalidTerminalResult) {
+		t.Errorf("Validate() with mismatched Result = %v, want ErrInvalidTerminalResult", err)
+	}
+}
+
+func TestSession_Validate_FailedRequiresMatchingFailedResultWithCause(t *testing.T) {
+	session := workersessions.Session{
+		ID:    "worker-1",
+		State: workersessions.StateFailed,
+		Result: &workersessions.TerminalResult{
+			Outcome: workersessions.TerminalOutcomeFailed,
+			Cause:   &workersessions.FailureCause{Kind: workersessions.FailureCauseExecutorPanic, Detail: "executor failed"},
+		},
+	}
+	if err := session.Validate(); err != nil {
+		t.Fatalf("Validate() = %v, want nil", err)
+	}
+
+	noCause := workersessions.Session{
+		ID:     "worker-1",
+		State:  workersessions.StateFailed,
+		Result: &workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeFailed},
+	}
+	if err := noCause.Validate(); !errors.Is(err, workersessions.ErrInvalidTerminalResult) {
+		t.Errorf("Validate() with FAILED and nil Cause = %v, want ErrInvalidTerminalResult", err)
+	}
+}
+
+func TestSession_Validate_NonTerminalStateRejectsTerminalResult(t *testing.T) {
+	for _, state := range []workersessions.State{
+		workersessions.StateReserved, workersessions.StateStarting, workersessions.StateRunning, workersessions.StatePaused,
+	} {
+		session := workersessions.Session{
+			ID:     "worker-1",
+			State:  state,
+			Result: &workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted},
+		}
+		if err := session.Validate(); !errors.Is(err, workersessions.ErrInvalidTerminalResult) {
+			t.Errorf("Validate() with state %q and a Result = %v, want ErrInvalidTerminalResult", state, err)
+		}
+	}
+}
+
+func TestSession_Terminal_MatchesStateTerminal(t *testing.T) {
+	for _, state := range []workersessions.State{
+		workersessions.StateReserved, workersessions.StateStarting, workersessions.StateRunning, workersessions.StatePaused,
+		workersessions.StateCompleted, workersessions.StateFailed, workersessions.StateCanceled, workersessions.StateTerminated,
+	} {
+		session := workersessions.Session{ID: "worker-1", State: state}
+		if got, want := session.Terminal(), state.Terminal(); got != want {
+			t.Errorf("Session.Terminal() with state %q = %v, want %v", state, got, want)
+		}
+	}
+}
+
+func TestReserveRequest_Validate_RejectsEmptyIdentity(t *testing.T) {
+	if err := (workersessions.ReserveRequest{ID: ""}).Validate(); !errors.Is(err, workersessions.ErrInvalidSessionID) {
+		t.Errorf("Validate() = %v, want ErrInvalidSessionID", err)
+	}
+	if err := (workersessions.ReserveRequest{ID: "worker-1"}).Validate(); err != nil {
+		t.Errorf("Validate() = %v, want nil", err)
+	}
+}
+
+func TestGetRequest_Validate_RejectsEmptyIdentity(t *testing.T) {
+	if err := (workersessions.GetRequest{ID: ""}).Validate(); !errors.Is(err, workersessions.ErrInvalidSessionID) {
+		t.Errorf("Validate() = %v, want ErrInvalidSessionID", err)
+	}
+	if err := (workersessions.GetRequest{ID: "worker-1"}).Validate(); err != nil {
+		t.Errorf("Validate() = %v, want nil", err)
+	}
+}
+
+func TestFilter_Validate_RejectsUnknownState(t *testing.T) {
+	filter := workersessions.Filter{States: []workersessions.State{workersessions.StateRunning, "INTERRUPTED"}}
+	if err := filter.Validate(); !errors.Is(err, workersessions.ErrInvalidState) {
+		t.Errorf("Validate() = %v, want ErrInvalidState", err)
+	}
+}
+
+func TestFilter_Validate_AcceptsEmptyAndAllValidStates(t *testing.T) {
+	if err := (workersessions.Filter{}).Validate(); err != nil {
+		t.Errorf("Validate() on empty filter = %v, want nil", err)
+	}
+	filter := workersessions.Filter{States: []workersessions.State{workersessions.StateRunning, workersessions.StateCompleted}}
+	if err := filter.Validate(); err != nil {
+		t.Errorf("Validate() = %v, want nil", err)
+	}
+}
+
+// TestListRequest_Validate_DelegatesToFilter proves ListRequest.Validate is
+// exactly req.Filter.Validate(): it accepts a well-formed Filter and rejects
+// the same malformed Filter Filter.Validate itself rejects.
+func TestListRequest_Validate_DelegatesToFilter(t *testing.T) {
+	if err := (workersessions.ListRequest{Filter: workersessions.Filter{States: []workersessions.State{workersessions.StateRunning}}}).Validate(); err != nil {
+		t.Errorf("Validate() = %v, want nil", err)
+	}
+	req := workersessions.ListRequest{Filter: workersessions.Filter{States: []workersessions.State{"INTERRUPTED"}}}
+	if err := req.Validate(); !errors.Is(err, workersessions.ErrInvalidState) {
+		t.Errorf("Validate() = %v, want ErrInvalidState", err)
+	}
+}
+
+func TestProviderSessionAssociation_ValidateAndClone(t *testing.T) {
+	valid := workersessions.ProviderSessionAssociation{
+		WorkerSessionID: "worker-1",
+		TurnID:          "turn-1",
+		DispatchID:      "dispatch-1",
+		AttemptID:       "dispatch-1",
+		Reference: providers.SessionRef{
+			Provider: providers.IDCodex,
+			Kind:     providers.SessionIDKind,
+			ID:       "provider-session-1",
+		},
+	}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid association Validate() = %v, want nil", err)
+	}
+	if got := valid.Clone(); got != valid {
+		t.Fatalf("Clone() = %#v, want equal detached value %#v", got, valid)
+	}
+
+	for _, test := range []struct {
+		name        string
+		association workersessions.ProviderSessionAssociation
+		wantErr     error
+	}{
+		{name: "missing worker session", association: workersessions.ProviderSessionAssociation{DispatchID: "dispatch-1", AttemptID: "dispatch-1", Reference: valid.Reference}, wantErr: workersessions.ErrInvalidSessionID},
+		{name: "missing dispatch", association: workersessions.ProviderSessionAssociation{WorkerSessionID: "worker-1", AttemptID: "dispatch-1", Reference: valid.Reference}, wantErr: workersessions.ErrInvalidProviderSessionAssociation},
+		{name: "mismatched attempt", association: workersessions.ProviderSessionAssociation{WorkerSessionID: "worker-1", DispatchID: "dispatch-1", AttemptID: "dispatch-2", Reference: valid.Reference}, wantErr: workersessions.ErrInvalidProviderSessionAssociation},
+		{name: "invalid provider reference", association: workersessions.ProviderSessionAssociation{WorkerSessionID: "worker-1", DispatchID: "dispatch-1", AttemptID: "dispatch-1", Reference: providers.SessionRef{Kind: providers.SessionIDKind, ID: "provider-session-1"}}, wantErr: providers.ErrInvalidID},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if err := test.association.Validate(); !errors.Is(err, test.wantErr) {
+				t.Fatalf("Validate() = %v, want %v", err, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestProviderSessionAssociationRequest_Validate(t *testing.T) {
+	valid := workersessions.ProviderSessionAssociationRequest{
+		WorkerSessionID: "worker-1",
+		DispatchID:      "dispatch-1",
+		Reference: providers.SessionRef{
+			Provider: providers.IDCodex,
+			Kind:     providers.SessionIDKind,
+			ID:       "provider-session-1",
+		},
+	}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid association request Validate() = %v, want nil", err)
+	}
+	for _, test := range []struct {
+		name    string
+		req     workersessions.ProviderSessionAssociationRequest
+		wantErr error
+	}{
+		{name: "missing worker session", req: workersessions.ProviderSessionAssociationRequest{DispatchID: valid.DispatchID, Reference: valid.Reference}, wantErr: workersessions.ErrInvalidSessionID},
+		{name: "blank dispatch", req: workersessions.ProviderSessionAssociationRequest{WorkerSessionID: valid.WorkerSessionID, DispatchID: " ", Reference: valid.Reference}, wantErr: workersessions.ErrInvalidProviderSessionAssociation},
+		{name: "invalid provider reference", req: workersessions.ProviderSessionAssociationRequest{WorkerSessionID: valid.WorkerSessionID, DispatchID: valid.DispatchID, Reference: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind}}, wantErr: providers.ErrInvalidSessionRef},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if err := test.req.Validate(); !errors.Is(err, test.wantErr) {
+				t.Fatalf("Validate() = %v, want %v", err, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestControlRequest_Validate(t *testing.T) {
+	if err := (workersessions.ControlRequest{ID: "worker-1"}).Validate(); err != nil {
+		t.Fatalf("valid control request Validate() = %v, want nil", err)
+	}
+	if err := (workersessions.ControlRequest{ID: " \t"}).Validate(); !errors.Is(err, workersessions.ErrInvalidSessionID) {
+		t.Fatalf("blank control request Validate() = %v, want ErrInvalidSessionID", err)
+	}
+}
+
+func TestControlRecordPayload_ValidateCoversRequestAndOutcomeContract(t *testing.T) {
+	validRequest := workersessions.ControlRecordPayload{
+		RecordType:      workersessions.ControlRecordTypeRequest,
+		Action:          workersessions.ControlActionResume,
+		RequestID:       "request-1",
+		CorrelationID:   "worker-1/request-1",
+		WorkerSessionID: "worker-1",
+	}
+	validOutcome := validRequest
+	validOutcome.RecordType = workersessions.ControlRecordTypeOutcome
+	validOutcome.Outcome = workersessions.ControlOutcomeApplied
+
+	for name, payload := range map[string]workersessions.ControlRecordPayload{
+		"valid request": validRequest,
+		"valid outcome": validOutcome,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := payload.Validate(); err != nil {
+				t.Fatalf("Validate() = %v, want nil", err)
+			}
+		})
+	}
+
+	for name, payload := range map[string]workersessions.ControlRecordPayload{
+		"invalid record type": {
+			RecordType: workersessions.ControlRecordType("other"), Action: workersessions.ControlActionPause,
+			RequestID: "request-1", CorrelationID: "correlation-1", WorkerSessionID: "worker-1",
+		},
+		"invalid action": {
+			RecordType: workersessions.ControlRecordTypeRequest, Action: workersessions.ControlAction("other"),
+			RequestID: "request-1", CorrelationID: "correlation-1", WorkerSessionID: "worker-1",
+		},
+		"missing identity": {
+			RecordType: workersessions.ControlRecordTypeRequest, Action: workersessions.ControlActionPause,
+		},
+		"request with outcome": {
+			RecordType: workersessions.ControlRecordTypeRequest, Action: workersessions.ControlActionPause,
+			Outcome: workersessions.ControlOutcomeApplied, RequestID: "request-1", CorrelationID: "correlation-1", WorkerSessionID: "worker-1",
+		},
+		"outcome without stable outcome": {
+			RecordType: workersessions.ControlRecordTypeOutcome, Action: workersessions.ControlActionPause,
+			RequestID: "request-1", CorrelationID: "correlation-1", WorkerSessionID: "worker-1",
+		},
+		"outcome with unknown outcome": {
+			RecordType: workersessions.ControlRecordTypeOutcome, Action: workersessions.ControlActionPause,
+			Outcome: workersessions.ControlOutcome("other"), RequestID: "request-1", CorrelationID: "correlation-1", WorkerSessionID: "worker-1",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := payload.Validate(); err == nil {
+				t.Fatal("Validate() = nil, want validation error")
+			}
+		})
+	}
+}
+
+func TestContinueRequest_ValidateAndNormalize(t *testing.T) {
+	valid := workersessions.ContinueRequest{
+		RequestID:                " request-1 ",
+		SourceWorkerSessionID:    " source-1 ",
+		SuccessorWorkerSessionID: " successor-1 ",
+		FollowUpInput:            "  follow-up  ",
+	}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid ContinueRequest.Validate() = %v, want nil", err)
+	}
+	normalized := valid.Normalize()
+	if normalized.RequestID != "request-1" || normalized.SourceWorkerSessionID != "source-1" || normalized.SuccessorWorkerSessionID != "successor-1" {
+		t.Fatalf("Normalize() identities = %#v, want trimmed identities", normalized)
+	}
+	if normalized.FollowUpInput != valid.FollowUpInput {
+		t.Fatalf("Normalize() changed follow-up input from %q to %q", valid.FollowUpInput, normalized.FollowUpInput)
+	}
+
+	for _, test := range []struct {
+		name string
+		req  workersessions.ContinueRequest
+		want error
+	}{
+		{name: "missing request ID", req: workersessions.ContinueRequest{SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor", FollowUpInput: "input"}, want: workersessions.ErrInvalidContinuationRequestID},
+		{name: "same lineage identity", req: workersessions.ContinueRequest{RequestID: "request", SourceWorkerSessionID: "same", SuccessorWorkerSessionID: "same", FollowUpInput: "input"}, want: workersessions.ErrInvalidContinuationLineage},
+		{name: "missing input", req: workersessions.ContinueRequest{RequestID: "request", SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor"}, want: workersessions.ErrInvalidContinuationInput},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if err := test.req.Validate(); !errors.Is(err, test.want) {
+				t.Fatalf("Validate() = %v, want %v", err, test.want)
+			}
+		})
+	}
+}
+
+func TestSession_Validate_RequiresAssociationToBelongToSession(t *testing.T) {
+	association := &workersessions.ProviderSessionAssociation{
+		WorkerSessionID: "worker-1",
+		DispatchID:      "dispatch-1",
+		AttemptID:       "dispatch-1",
+		Reference: providers.SessionRef{
+			Provider: providers.IDCodex,
+			Kind:     providers.SessionIDKind,
+			ID:       "provider-session-1",
+		},
+	}
+	valid := workersessions.Session{ID: "worker-1", State: workersessions.StateRunning, ProviderSessionAssociation: association}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("associated session Validate() = %v, want nil", err)
+	}
+
+	mismatched := valid
+	associationCopy := association.Clone()
+	mismatched.ProviderSessionAssociation = &associationCopy
+	mismatched.ProviderSessionAssociation.WorkerSessionID = "worker-2"
+	if err := mismatched.Validate(); !errors.Is(err, workersessions.ErrInvalidProviderSessionAssociation) {
+		t.Fatalf("mismatched association Validate() = %v, want ErrInvalidProviderSessionAssociation", err)
+	}
+
+	malformed := valid
+	malformedAssociation := association.Clone()
+	malformedAssociation.Reference.ID = ""
+	malformed.ProviderSessionAssociation = &malformedAssociation
+	if err := malformed.Validate(); !errors.Is(err, providers.ErrInvalidSessionRef) {
+		t.Fatalf("malformed association Validate() = %v, want Providers ErrInvalidSessionRef", err)
+	}
+}
+
+func TestSession_CloneAndContinueResultCloneDetachNestedState(t *testing.T) {
+	association := &workersessions.ProviderSessionAssociation{
+		WorkerSessionID: "worker-1",
+		DispatchID:      "dispatch-1",
+		AttemptID:       "dispatch-1",
+		Reference: providers.SessionRef{
+			Provider: providers.IDCodex,
+			Kind:     providers.SessionIDKind,
+			ID:       "provider-session-1",
+		},
+	}
+	model, reasoningEffort := "gpt-5.6-luna", "high"
+	original := workersessions.Session{
+		ID:                         "worker-1",
+		State:                      workersessions.StateFailed,
+		Model:                      &model,
+		ReasoningEffort:            &reasoningEffort,
+		Result:                     &workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeFailed, Cause: &workersessions.FailureCause{Kind: workersessions.FailureCauseExecutorPanic, Detail: "failed"}},
+		ProviderSessionAssociation: association,
+		PredecessorWorkerSessionID: "previous-worker",
+	}
+	clone := original.Clone()
+	result := workersessions.ContinueResult{
+		RequestID:                "request-1",
+		SourceWorkerSessionID:    "worker-1",
+		SuccessorWorkerSessionID: "worker-2",
+		Session:                  original,
+	}.Clone()
+
+	clone.Result.Cause.Detail = "mutated clone"
+	clone.ProviderSessionAssociation.Reference.ID = "mutated-provider"
+	*clone.Model = "mutated-model"
+	*clone.ReasoningEffort = "mutated-effort"
+	if original.Result.Cause.Detail != "failed" || original.ProviderSessionAssociation.Reference.ID != "provider-session-1" ||
+		*original.Model != "gpt-5.6-luna" || *original.ReasoningEffort != "high" {
+		t.Fatalf("Session.Clone() shared nested state: original = %#v", original)
+	}
+	result.Session.Result.Cause.Detail = "mutated result clone"
+	result.Session.ProviderSessionAssociation.Reference.ID = "mutated-result-provider"
+	*result.Session.Model = "mutated-result-model"
+	*result.Session.ReasoningEffort = "mutated-result-effort"
+	if original.Result.Cause.Detail != "failed" || original.ProviderSessionAssociation.Reference.ID != "provider-session-1" ||
+		*original.Model != "gpt-5.6-luna" || *original.ReasoningEffort != "high" {
+		t.Fatalf("ContinueResult.Clone() shared nested state: original = %#v", original)
+	}
+}
+
+func TestSession_Validate_RejectsMalformedLineage(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		predecessor string
+		successor   string
+	}{
+		{name: "blank predecessor", predecessor: "   "},
+		{name: "self predecessor", predecessor: "worker-1"},
+		{name: "blank successor", successor: "\t"},
+		{name: "self successor", successor: "worker-1"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			session := workersessions.Session{
+				ID:                         "worker-1",
+				State:                      workersessions.StateRunning,
+				PredecessorWorkerSessionID: test.predecessor,
+				SuccessorWorkerSessionID:   test.successor,
+			}
+			if err := session.Validate(); !errors.Is(err, workersessions.ErrInvalidContinuationLineage) {
+				t.Fatalf("Validate() = %v, want ErrInvalidContinuationLineage", err)
+			}
+		})
+	}
+}
+
+func TestInterruptRequestNormalizeValidateAndClonePreserveObservableContract(t *testing.T) {
+	request := workersessions.InterruptRequest{
+		RequestID:                " request-1 ",
+		SourceWorkerSessionID:    " source-1 ",
+		SuccessorWorkerSessionID: " successor-1 ",
+		ReplacementMessage:       "  preserve surrounding whitespace  ",
+	}
+	normalized := request.Normalize()
+	if normalized.RequestID != "request-1" || normalized.SourceWorkerSessionID != "source-1" || normalized.SuccessorWorkerSessionID != "successor-1" {
+		t.Fatalf("Normalize() = %#v, want trimmed identities", normalized)
+	}
+	if normalized.ReplacementMessage != request.ReplacementMessage {
+		t.Fatalf("Normalize() replacement message = %q, want byte-preserved %q", normalized.ReplacementMessage, request.ReplacementMessage)
+	}
+	if err := normalized.Validate(); err != nil {
+		t.Fatalf("valid InterruptRequest.Validate() = %v", err)
+	}
+
+	for name, invalid := range map[string]workersessions.InterruptRequest{
+		"missing request ID":        {SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor", ReplacementMessage: "message"},
+		"invalid lineage":           {RequestID: "request", SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "source", ReplacementMessage: "message"},
+		"blank replacement message": {RequestID: "request", SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor", ReplacementMessage: " \t"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := invalid.Validate(); err == nil {
+				t.Fatal("Validate() = nil, want validation error")
+			}
+		})
+	}
+
+	result := workersessions.InterruptResult{
+		RequestID: request.RequestID,
+		Source:    workersessions.Session{ID: "source-1", State: workersessions.StateCanceled},
+		Successor: workersessions.Session{ID: "successor-1", State: workersessions.StateRunning},
+	}
+	clone := result.Clone()
+	if clone.Source.ID != result.Source.ID || clone.Successor.ID != result.Successor.ID || clone.Source.State != workersessions.StateCanceled || clone.Successor.State != workersessions.StateRunning {
+		t.Fatalf("InterruptResult.Clone() = %#v, want detached lifecycle snapshots", clone)
+	}
+}
+
+func TestInterruptErrorPreservesPhaseCauseAndErrorsIsContract(t *testing.T) {
+	cause := errors.New("boundary unavailable")
+	interruptErr := &workersessions.InterruptError{Phase: workersessions.InterruptPhaseSourceCancellation, Cause: cause}
+	if !strings.Contains(interruptErr.Error(), string(workersessions.InterruptPhaseSourceCancellation)) || !strings.Contains(interruptErr.Error(), cause.Error()) {
+		t.Fatalf("InterruptError.Error() = %q, want phase and cause", interruptErr.Error())
+	}
+	if !errors.Is(interruptErr, cause) || !errors.Is(interruptErr, workersessions.ErrInterruptSourceCancellation) || errors.Is(interruptErr, workersessions.ErrInterruptSuccessorAdmission) {
+		t.Fatalf("errors.Is() phase/cause matching is incorrect")
+	}
+	if workersessions.ErrInterruptValidation.Error() != string(workersessions.InterruptPhaseValidation) {
+		t.Fatalf("interrupt validation sentinel = %q, want phase name", workersessions.ErrInterruptValidation.Error())
+	}
+	if !errors.Is(interruptErr, interruptErr) {
+		t.Fatal("errors.Is() should match the same InterruptError through Cause traversal")
+	}
+	if interruptErr.Unwrap() != cause {
+		t.Fatalf("InterruptError.Unwrap() = %v, want cause", interruptErr.Unwrap())
+	}
+
+	withoutCause := (&workersessions.InterruptError{Phase: workersessions.InterruptPhaseValidation}).Error()
+	if !strings.Contains(withoutCause, string(workersessions.InterruptPhaseValidation)) {
+		t.Fatalf("InterruptError without cause = %q, want validation phase", withoutCause)
+	}
+	var nilError *workersessions.InterruptError
+	if nilError.Error() != "worker session: interrupt failed" || nilError.Unwrap() != nil || nilError.Is(workersessions.ErrInterruptValidation) {
+		t.Fatal("nil InterruptError methods did not preserve safe zero behavior")
+	}
+}

@@ -14,8 +14,8 @@ import (
 	"github.com/jonboulle/clockwork"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"go.uber.org/zap"
@@ -44,8 +44,8 @@ type terminalRecording struct {
 	finishedAt    time.Time
 }
 
-func (*terminalRecording) BindRecordingService(
-	recordings.Service,
+func (*terminalRecording) BindRecordingLifecycle(
+	recordings.RecordingLifecycle,
 	recordings.CanonicalEventScope,
 ) error {
 	return nil
@@ -64,6 +64,76 @@ func (r *terminalRecording) Finalize(finishedAt time.Time) error {
 }
 
 var _ recordings.RuntimeRecorder = (*terminalRecording)(nil)
+
+// flushFailingRecording is a controllable recordings.RuntimeRecorder fake
+// used to prove that a startup Flush failure joins any preserved cleanup
+// (Stop) cause into the returned Start() result rather than discarding it.
+type flushFailingRecording struct {
+	flushErr   error
+	cleanupErr error
+	stopCalls  int
+}
+
+func (*flushFailingRecording) BindRecordingLifecycle(
+	recordings.RecordingLifecycle,
+	recordings.CanonicalEventScope,
+) error {
+	return nil
+}
+func (*flushFailingRecording) Start(context.Context)               {}
+func (r *flushFailingRecording) Stop()                             { r.stopCalls++ }
+func (*flushFailingRecording) RecordEvent(interfaces.FactoryEvent) {}
+func (*flushFailingRecording) RecordError(error)                   {}
+func (*flushFailingRecording) Finish(time.Time)                    {}
+func (r *flushFailingRecording) Flush() error                      { return r.flushErr }
+func (r *flushFailingRecording) Err() error                        { return r.cleanupErr }
+func (*flushFailingRecording) Finalize(time.Time) error            { return nil }
+
+var _ recordings.RuntimeRecorder = (*flushFailingRecording)(nil)
+
+// runTrackingFactory records whether Run was ever invoked, to prove runtime
+// execution never starts after a startup recording failure.
+type runTrackingFactory struct {
+	lifecycleObserverFactory
+	ran bool
+}
+
+func (f *runTrackingFactory) Run(context.Context) error {
+	f.ran = true
+	return nil
+}
+
+func TestStart_JoinsCleanupCauseWhenStartupFlushFailsAndNeverRunsFactory(t *testing.T) {
+	t.Parallel()
+
+	flushErr := errors.New("startup flush failed")
+	cleanupErr := errors.New("stop cleanup failed")
+	recording := &flushFailingRecording{flushErr: flushErr, cleanupErr: cleanupErr}
+	factoryStub := &runTrackingFactory{}
+
+	handle := factoryhost.Start(context.Background(), &factoryhost.Bundle{
+		Factory:   factoryStub,
+		Logger:    zap.NewNop(),
+		Recording: recording,
+	})
+
+	if !handle.Completed() {
+		t.Fatal("Start() should complete the handle synchronously when the startup flush fails")
+	}
+	err := handle.Result()
+	if !errors.Is(err, flushErr) {
+		t.Fatalf("Start() result error = %v, want it to preserve the initiating flush cause", err)
+	}
+	if !errors.Is(err, cleanupErr) {
+		t.Fatalf("Start() result error = %v, want it to preserve the cleanup (Stop) cause", err)
+	}
+	if recording.stopCalls != 1 {
+		t.Fatalf("recording Stop calls = %d, want exactly 1", recording.stopCalls)
+	}
+	if factoryStub.ran {
+		t.Fatal("runtime execution must not start after a startup recording flush failure")
+	}
+}
 
 func TestStopDelegatesEveryRuntimeOutcomeToRecordingFinalization(t *testing.T) {
 	t.Parallel()
@@ -191,33 +261,6 @@ func (f *lifecycleObserverFactory) AcceptDispatchResult(_ context.Context, req f
 		Outcome:       factory.DispatchPlanOutcomeRetired,
 		DispatchID:    req.DispatchID,
 		CorrelationID: req.CorrelationID,
-	}, nil
-}
-func (f *lifecycleObserverFactory) CaptureCheckpoint(_ context.Context, req factory.CaptureCheckpointRequest) (factory.CaptureCheckpointResult, error) {
-	id := req.CheckpointID
-	if id == "" {
-		id = "checkpoint-stub"
-	}
-	return factory.CaptureCheckpointResult{
-		Outcome: factory.CheckpointOutcomeCaptured,
-		Checkpoint: factory.Checkpoint{
-			CheckpointID:  id,
-			SchemaVersion: 1,
-			StrategyKind:  "runtime",
-			Payload:       []byte(`{}`),
-		},
-	}, nil
-}
-func (f *lifecycleObserverFactory) LoadCheckpoint(_ context.Context, req factory.LoadCheckpointRequest) (factory.LoadCheckpointResult, error) {
-	if req.CheckpointID == "" {
-		return factory.LoadCheckpointResult{}, factory.ErrCheckpointNotFound
-	}
-	return factory.LoadCheckpointResult{}, factory.ErrCheckpointNotFound
-}
-func (f *lifecycleObserverFactory) RestoreCheckpoint(_ context.Context, req factory.RestoreCheckpointRequest) (factory.RestoreCheckpointResult, error) {
-	return factory.RestoreCheckpointResult{
-		Outcome:      factory.CheckpointOutcomeRestored,
-		CheckpointID: req.Checkpoint.CheckpointID,
 	}, nil
 }
 func (f *lifecycleObserverFactory) MoveWork(context.Context, string, string, work.WorkStateChangeSource, string) (work.OperatorMoveResult, error) {
@@ -403,5 +446,17 @@ func TestWaitForStart_ReportsRunningReadinessWithoutRootService(t *testing.T) {
 	handle.CancelRun()
 	if err := factoryhost.Stop(handle, clockwork.NewFakeClock()); err != nil && !errors.Is(err, context.Canceled) {
 		t.Fatalf("Stop: %v", err)
+	}
+}
+
+func TestWaitForStart_AllowsIncompleteDrainToReachHostedTransport(t *testing.T) {
+	handle := &factoryhost.Handle{
+		Bundle:  &factoryhost.Bundle{Factory: &lifecycleObserverFactory{}},
+		RunDone: make(chan struct{}),
+	}
+	handle.SetRunResult(&factory.IncompleteDrainError{NonTerminalWorkCount: 2})
+
+	if err := factoryhost.WaitForStart(context.Background(), handle); err != nil {
+		t.Fatalf("WaitForStart: %v, want transport-visible startup", err)
 	}
 }

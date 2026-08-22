@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliinputs"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 )
@@ -230,8 +230,11 @@ func loadGeneratedManifests() ([]climanifest.Manifest, []climanifest.Manifest, e
 		generated.RepresentativeFamilyManifest, generated.SessionFamilyManifest,
 		generated.WorkFamilyManifest, generated.FactoryConfigInitFamilyManifest,
 		generated.WorkersFamilyManifest,
-		generated.ModelsDocsFamilyManifest, generated.RunSubmitFamilyManifest,
-		generated.MCPFamilyManifest,
+		generated.WorkerSessionsFamilyManifest,
+		generated.ModelsDocsFamilyManifest, generated.ProvidersFamilyManifest,
+		generated.MetricsFamilyManifest,
+		generated.RunSubmitFamilyManifest,
+		generated.MCPFamilyManifest, generated.ServeFamilyManifest,
 	}
 	canonical := make([]climanifest.Manifest, 0, len(loaders))
 	for _, load := range loaders {

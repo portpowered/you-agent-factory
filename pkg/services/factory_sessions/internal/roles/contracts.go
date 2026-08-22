@@ -8,34 +8,50 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
 type InvocationMetricsRecorder = factorysessions.InvocationMetricsRecorder
 
-type ApplicationOpeningPorts = factorysessions.ApplicationOpeningPorts
+// FactoryEventReader is the private presentation-bridge reader capability.
+// It is an alias to an unnamed interface so the Factory Sessions root does not
+// publish another named service interface.
+type FactoryEventReader = interface {
+	SubscribeFactoryEventsForSession(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) (*factorydefinitions.FactoryEventStream, error)
+	ReadDurableFactorySessionEventStream(context.Context, string, factorysessions.EventReconnectRequest) (*factorydefinitions.FactoryEventStream, error)
+}
 
-type ApplicationOpeningRequest = factorysessions.ApplicationOpeningRequest
+// HostedInvocationOperation is the operation-valued result retained by the
+// hosted CLI path after opening. It is intentionally private to implementation
+// roles rather than part of the Factory Sessions root interface inventory.
+type HostedInvocationOperation interface {
+	factorysessions.InvocationService
+	FactoryEventReader
+}
 
 type RuntimeResources struct {
 	Directory         string
 	RuntimeInstanceID string
 	BackendScopeID    string
+	Clock             factoryruntime.Clock
 	Diagnostics       factoryruntime.RuntimeLogDiagnostics
 	Logger            *zap.Logger
 	Close             func() error
 }
-
-type RuntimeHTTPServices = factorysessions.RuntimeHTTPServices
 
 type RuntimeVisualizationServices struct {
 	Reader      RuntimeReader
@@ -43,30 +59,60 @@ type RuntimeVisualizationServices struct {
 }
 
 type OpenedApplicationRuntime struct {
-	Process       ProcessRuntime
-	HTTP          RuntimeHTTPServices
-	Visualization RuntimeVisualizationServices
-	Resources     RuntimeResources
+	Process            ProcessRuntime
+	FactoryRuntime     factoryruntime.Service
+	FactoryDefinitions factorydefinitions.Service
+	WorkflowPreview    factoryruntime.WorkflowPreviewOperation
+	FactorySessions    factorysessions.Service
+	Recordings         recordings.Service
+	LiveControl        factorysessions.LiveControlService
+	Work               work.Service
+	Models             models.Service
+	ModelsScope        models.RuntimeScopeRef
+	ModelInvoker       workers.ModelInvoker
+	Workers            workers.Service
+	ProviderSessions   providersessions.Service
+	WorkerSessions     workersessions.ObservationService
+	WorkerPrompts      workers.PromptTemplates
+	// OperatorSettingsPath is the resolved document used by the opened
+	// runtime. Transport adapters receive it as data and never resolve or read
+	// configuration themselves.
+	OperatorSettingsPath string
+	Logger               *zap.Logger
+	Visualization        RuntimeVisualizationServices
+	Resources            RuntimeResources
+	HistoricalReplay     *factorysessions.HistoricalReplayInspection
 }
 
 type OpenedProcessApplication struct {
-	Plan        lifecycle.Plan
-	Diagnostics factoryruntime.RuntimeLogDiagnostics
+	Plan            lifecycle.Plan
+	Diagnostics     factoryruntime.RuntimeLogDiagnostics
+	Ready           <-chan initializer.RuntimeHostBinding
+	CleanInvocation factoryruntime.Service
+	// HostedInvocation is a narrow operation result for the hosted CLI path;
+	// it is not the opened runtime's HTTP service table.
+	HostedInvocation HostedInvocationOperation
+	HistoricalReplay *factorysessions.HistoricalReplayInspection
 }
 
 type OpenedInvocationRuntime struct {
 	Workers        workers.Service
+	ModelInvoker   workers.ModelInvoker
 	Sessions       factorysessions.Service
+	LiveControl    factorysessions.LiveControlService
 	Invoker        SessionInvoker
 	InputResolver  InvocationInputResolver
-	Execution      factorysessions.ExecutionService
+	Execution      durableexecution.Service
 	Lifecycle      LifecycleRuntime
 	ModelsScope    models.RuntimeScopeRef
+	RuntimeID      string
+	GenerationID   string
 	CloseArtifacts func() error
 }
 
 type OpenedExecutionRuntime struct {
-	Execution       factorysessions.ExecutionService
+	Execution       durableexecution.Service
+	Recordings      recordings.Service
 	WorkflowPreview factoryruntime.WorkflowPreviewOperation
 	Resources       RuntimeResources
 }
@@ -96,7 +142,7 @@ type CursorStoreFactory func(string) (factorysessions.CursorStore, error)
 type ExecutionOpeningFileSystem = factorysessions.ExecutionOpeningFileSystem
 
 type OwnedExecutionService interface {
-	factorysessions.ExecutionService
+	durableexecution.Service
 	Close() error
 }
 
@@ -114,7 +160,7 @@ type StdioApplication interface {
 
 type FixtureStdioApplicationBuilder func(
 	context.Context,
-	factorysessions.ExecutionService,
+	durableexecution.Service,
 	io.Reader,
 	io.Writer,
 ) (StdioApplication, error)
@@ -133,35 +179,29 @@ type StdioExecutionOpening interface {
 }
 
 type StdioOpeningOperation interface {
-	OpenStdio(context.Context, factorysessions.StdioOpeningRequest) (StdioApplication, error)
+	OpenStdio(
+		context.Context,
+		factorysessions.StdioOpeningRequest,
+	) (StdioApplication, error)
 }
 
 type DirectJavaScriptRunOperation interface {
 	Supports(string) bool
-	Open(context.Context, factorysessions.DirectJavaScriptRunRequest) (factorysessions.DirectJavaScriptApplication, error)
+	Open(
+		context.Context,
+		factorysessions.DirectJavaScriptRunRequest,
+	) (factorysessions.DirectJavaScriptApplication, error)
 }
 
 type DirectJavaScriptHostAdapter func(
 	OwnedExecutionService,
-	DirectJavaScriptLifecycle,
-	factorysessions.DirectJavaScriptRunRequest,
+	factorysessions.RuntimeHostRequest,
+	factorysessions.RuntimeHostObserver,
 ) (lifecycle.Component, error)
-
-type DirectJavaScriptLifecycle interface {
-	PauseDurableFactorySession(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
-	ResumeDurableFactorySession(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
-	CancelDurableFactorySession(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
-	TerminateDurableFactorySession(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
-	ApproveDurableFactorySession(context.Context, string, factorysessions.ApproveRequest) (factorysessions.LifecycleControlResult, error)
-	RetryDurableFactorySessionDispatch(context.Context, string, factorysessions.RetryDispatchRequest) (factorysessions.LifecycleControlResult, error)
-	InterruptDurableFactorySessionDispatch(context.Context, string, factorysessions.InterruptDispatchRequest) (factorysessions.LifecycleControlResult, error)
-	ReadDurableFactorySessionEventStream(context.Context, string, factorysessions.EventReconnectRequest) (*factorydefinitions.FactoryEventStream, error)
-	ProbeDurableFactorySessionEvents(context.Context, string, factorysessions.EventReconnectRequest) error
-}
 
 type DirectJavaScriptSyncRunner func(
 	context.Context,
-	factorysessions.ExecutionService,
+	durableexecution.Service,
 	factorysessions.StartRequest,
 	bool,
 	io.Writer,
@@ -206,7 +246,7 @@ type LifecycleRuntime interface {
 	WaitForRuntime(context.Context) error
 	StopLifecycle(context.Context) error
 	FailStartup(error) error
-	CurrentRuntimeBundle() factoryruntime.HostedInstance
+	CurrentRuntimeBundle() runtimeports.RuntimeInstance
 }
 
 type ProcessRuntime interface {
@@ -228,7 +268,6 @@ type LifecyclePlanRequest struct {
 	Runtime    ProcessRuntime
 	Components factorysessions.BoundProcessComponents
 	Close      func() error
-	Completion func(context.Context) error
 }
 
 type LifecyclePlanOperation func(LifecyclePlanRequest) (lifecycle.Plan, error)
@@ -249,7 +288,7 @@ type ModelInvocationOperation interface {
 
 type InvocationOperation interface {
 	ModelInvocationOperation
-	InvokeFactory(context.Context, InvocationTarget, factorysessions.InvocationRequest, factorysessions.FactoryEventConsumer) (FactoryInvocationOutcome, error)
+	InvokeFactory(context.Context, InvocationTarget, factorysessions.InvocationRequest) (FactoryInvocationOutcome, error)
 }
 
 type InvocationTarget = factorysessions.InvocationTarget
@@ -258,7 +297,6 @@ type FactoryInvocationOutcome = factorysessions.FactoryInvocationOutcome
 
 type ApplicationRuntime interface {
 	LifecycleRuntime
-	factoryruntime.APIFactory
 }
 
 type RuntimeAssembly interface {
@@ -273,12 +311,15 @@ type RuntimeAssembly interface {
 		clock factoryruntime.Clock,
 		baseLogger *zap.Logger,
 		logger *zap.Logger,
-		runtimeBuild factoryruntime.ReplacementBuilder,
-		startupRuntime factoryruntime.HostedInstance,
+		runtimeBuild runtimeports.RuntimeReplacementBuilder,
+		startupRuntime runtimeports.RuntimeInstance,
+		modelsScope models.RuntimeScopeRef,
 		startupSpec factoryruntime.SessionBuildSpec,
-		runtimeLifecycle factoryruntime.Lifecycle,
+		runtimeLifecycle runtimeports.RuntimeLifecycle,
 		runtimeSidecars factorysessions.RuntimeSidecars,
-		durableExecution factorysessions.ExecutionService,
+		durableExecution durableexecution.Service,
+		factoryDefinitions factorydefinitions.Service,
+		factorySessionID string,
 		dir string,
 		executionBaseDir string,
 		runtimeMode factorydefinitions.RuntimeMode,
@@ -292,5 +333,5 @@ type RuntimeAssembly interface {
 		reconnectCursorValidator factorysessions.ReconnectCursorValidator,
 		worldStateProjector factoryruntime.WorldStateProjector,
 		invocationMetricsRecorder InvocationMetricsRecorder,
-	) (ApplicationRuntime, factorysessions.Service, SessionInvoker, factorydefinitions.SessionHost, error)
+	) (ApplicationRuntime, factorysessions.Service, SessionInvoker, factorydefinitions.SessionHost, factorydefinitions.DefinitionActivationGateway, error)
 }

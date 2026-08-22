@@ -5,16 +5,115 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+// scopeLifecycleModelsRoot is a Models-root fixture that tracks real
+// OpenRuntimeScope/CloseRuntimeScope lifecycle state, so a scope closed
+// through this fixture is classified as closed by the same public boundary
+// operations Pull/Invoke call (PullModelForScope, GetCatalogModel), not by an
+// opener stub returning the sentinel directly.
+type scopeLifecycleModelsRoot struct {
+	stubModelsRoot
+
+	mu           sync.Mutex
+	nextScope    int
+	closedScopes map[string]bool
+
+	pullCalls            int
+	getCatalogModelCalls int
+	acquireLeaseCalls    int
+	invokeCalls          int
+}
+
+func (root *scopeLifecycleModelsRoot) OpenRuntimeScope(
+	context.Context, modelinference.OpenRuntimeScopeRequest,
+) (modelinference.OpenRuntimeScopeResult, error) {
+	root.mu.Lock()
+	defer root.mu.Unlock()
+	root.nextScope++
+	scope, err := (modelinference.RuntimeScopeRef{}).Parse(fmt.Sprintf("scope-lifecycle:%d", root.nextScope))
+	if err != nil {
+		return modelinference.OpenRuntimeScopeResult{}, err
+	}
+	return modelinference.OpenRuntimeScopeResult{Scope: scope}, nil
+}
+
+func (root *scopeLifecycleModelsRoot) CloseRuntimeScope(
+	_ context.Context, request modelinference.CloseRuntimeScopeRequest,
+) (modelinference.CloseRuntimeScopeResult, error) {
+	root.mu.Lock()
+	defer root.mu.Unlock()
+	if root.closedScopes == nil {
+		root.closedScopes = map[string]bool{}
+	}
+	root.closedScopes[request.Scope.String()] = true
+	return modelinference.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
+}
+
+func (root *scopeLifecycleModelsRoot) isClosed(scope modelinference.RuntimeScopeRef) bool {
+	root.mu.Lock()
+	defer root.mu.Unlock()
+	return root.closedScopes[scope.String()]
+}
+
+func (root *scopeLifecycleModelsRoot) PullModelForScope(
+	_ context.Context, request modelinference.PullModelRequest,
+) (modelinference.PullResult, error) {
+	root.mu.Lock()
+	root.pullCalls++
+	root.mu.Unlock()
+	if root.isClosed(request.Scope) {
+		return modelinference.PullResult{}, modelinference.ErrRuntimeScopeClosed
+	}
+	return modelinference.PullResult{ModelName: request.Name, Outcome: "PULLED"}, nil
+}
+
+func (root *scopeLifecycleModelsRoot) GetCatalogModel(
+	_ context.Context, request modelinference.GetModelRequest,
+) (modelinference.GetModelResult, error) {
+	root.mu.Lock()
+	root.getCatalogModelCalls++
+	root.mu.Unlock()
+	if root.isClosed(request.Scope) {
+		return modelinference.GetModelResult{}, modelinference.ErrRuntimeScopeClosed
+	}
+	return modelinference.GetModelResult{}, nil
+}
+
+func (root *scopeLifecycleModelsRoot) AcquireModelLease(
+	context.Context, modelinference.AcquireModelLeaseRequest,
+) (modelinference.AcquireModelLeaseResult, error) {
+	root.mu.Lock()
+	root.acquireLeaseCalls++
+	root.mu.Unlock()
+	return modelinference.AcquireModelLeaseResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (root *scopeLifecycleModelsRoot) InvokeModelWithLease(
+	context.Context, modelinference.InvokeModelRequest,
+) (modelinference.InvokeModelResult, error) {
+	root.mu.Lock()
+	root.invokeCalls++
+	root.mu.Unlock()
+	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (root *scopeLifecycleModelsRoot) InvokeModel(
+	context.Context, modelinference.InvokeModelRequest,
+) (modelinference.InvokeModelResult, error) {
+	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
+}
 
 func testRuntimeScope(t *testing.T) modelinference.RuntimeScopeRef {
 	t.Helper()
@@ -192,6 +291,195 @@ func TestRootAdapter_PullSuccessPreservesHumanAndJSONOutput(t *testing.T) {
 	}
 }
 
+func TestRootAdapter_PullClosesCatalogScopeAfterSuccess(t *testing.T) {
+	t.Parallel()
+
+	type ctxKey struct{}
+	ctx := context.WithValue(context.Background(), ctxKey{}, "pull-close-scope-test")
+
+	var closed bool
+	var closedCtx context.Context
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			pullModel: func(_ context.Context, name string) (modelinference.PullResult, error) {
+				if closed {
+					t.Fatal("PullModelForScope() called after presentation scope was already closed")
+				}
+				return modelinference.PullResult{ModelName: name, Outcome: "PULLED"}, nil
+			},
+		},
+		OpenCatalogScope: func(context.Context) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{
+				Scope: testRuntimeScope(t),
+				Close: func(closeCtx context.Context) error {
+					closed = true
+					closedCtx = closeCtx
+					return nil
+				},
+			}, nil
+		},
+	})
+
+	var out bytes.Buffer
+	if err := service.Pull(modelscli.PullConfig{
+		Context: ctx, ModelName: "OMNIVOICE_Q4_K_M", Output: &out,
+	}); err != nil {
+		t.Fatalf("Pull() error = %v", err)
+	}
+	if !closed {
+		t.Fatal("Pull() did not close the opened catalog presentation scope")
+	}
+	if closedCtx != ctx {
+		t.Fatalf("Pull() closed scope with a different context than the invocation context")
+	}
+}
+
+func TestRootAdapter_InvokeClosesRuntimeScopeAfterSuccess(t *testing.T) {
+	t.Parallel()
+
+	type ctxKey struct{}
+	ctx := context.WithValue(context.Background(), ctxKey{}, "invoke-close-scope-test")
+	scope := testRuntimeScope(t)
+
+	var closed bool
+	var closedCtx context.Context
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(_ context.Context, request modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return modelinference.GetModelResult{
+					Model: modelinference.Detail{
+						Summary: modelinference.Summary{
+							Name:             "OMNIVOICE_Q4_K_M",
+							ProviderLocality: modelinference.LocalityLocal,
+							Operations:       []modelinference.Operation{{Name: "TTS"}},
+						},
+					},
+				}, nil
+			},
+			acquireModelLease: func(context.Context, modelinference.AcquireModelLeaseRequest) (modelinference.AcquireModelLeaseResult, error) {
+				return modelinference.AcquireModelLeaseResult{
+					Lease: modelinference.ModelLease{Lease: testModelLease(t)},
+				}, nil
+			},
+			invokeModelWithLease: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				if closed {
+					t.Fatal("InvokeModelWithLease() called after presentation scope was already closed")
+				}
+				return modelinference.InvokeModelResult{
+					ModelName: "OMNIVOICE_Q4_K_M",
+					Operation: "TTS",
+					Content:   []modelinference.InferenceContent{{ContentType: "text/plain", Content: "synthesized"}},
+				}, nil
+			},
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{
+				Scope: scope,
+				Close: func(closeCtx context.Context) error {
+					closed = true
+					closedCtx = closeCtx
+					return nil
+				},
+			}, nil
+		},
+	})
+
+	var out bytes.Buffer
+	if err := service.Invoke(modelscli.InvokeConfig{
+		Context:   ctx,
+		ModelName: "OMNIVOICE_Q4_K_M",
+		Operation: "TTS",
+		Text:      "hello world",
+		JSON:      true,
+		Output:    &out,
+	}); err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	if !closed {
+		t.Fatal("Invoke() did not close the opened runtime presentation scope")
+	}
+	if closedCtx != ctx {
+		t.Fatalf("Invoke() closed scope with a different context than the invocation context")
+	}
+}
+
+func TestRootAdapter_PullThroughRealClosedModelsScopeReturnsPublicClosedScopeError(t *testing.T) {
+	t.Parallel()
+
+	root := &scopeLifecycleModelsRoot{}
+	opened, err := root.OpenRuntimeScope(context.Background(), modelinference.OpenRuntimeScopeRequest{})
+	if err != nil {
+		t.Fatalf("OpenRuntimeScope: %v", err)
+	}
+	if _, err := root.CloseRuntimeScope(context.Background(), modelinference.CloseRuntimeScopeRequest{
+		Scope: opened.Scope,
+	}); err != nil {
+		t.Fatalf("CloseRuntimeScope: %v", err)
+	}
+
+	service := modelscli.NewService(modelscli.Config{
+		Models: root,
+		OpenCatalogScope: func(context.Context) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: opened.Scope}, nil
+		},
+	})
+
+	var out bytes.Buffer
+	err = service.Pull(modelscli.PullConfig{
+		Context: context.Background(), ModelName: "OMNIVOICE_Q4_K_M", Output: &out,
+	})
+	if !errors.Is(err, modelinference.ErrRuntimeScopeClosed) {
+		t.Fatalf("Pull() through a closed Models scope error = %v, want errors.Is match for ErrRuntimeScopeClosed", err)
+	}
+	if root.pullCalls != 1 {
+		t.Fatalf("PullModelForScope() calls = %d, want exactly 1 (Pull must reach the Models public boundary)", root.pullCalls)
+	}
+}
+
+func TestRootAdapter_InvokeThroughRealClosedModelsScopeReturnsPublicClosedScopeError(t *testing.T) {
+	t.Parallel()
+
+	root := &scopeLifecycleModelsRoot{}
+	opened, err := root.OpenRuntimeScope(context.Background(), modelinference.OpenRuntimeScopeRequest{})
+	if err != nil {
+		t.Fatalf("OpenRuntimeScope: %v", err)
+	}
+	if _, err := root.CloseRuntimeScope(context.Background(), modelinference.CloseRuntimeScopeRequest{
+		Scope: opened.Scope,
+	}); err != nil {
+		t.Fatalf("CloseRuntimeScope: %v", err)
+	}
+
+	service := modelscli.NewService(modelscli.Config{
+		Models: root,
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: opened.Scope}, nil
+		},
+	})
+
+	err = service.Invoke(modelscli.InvokeConfig{
+		Context:   context.Background(),
+		ModelName: "OMNIVOICE_Q4_K_M",
+		Operation: "TTS",
+		Text:      "hello world",
+		JSON:      true,
+		Output:    io.Discard,
+	})
+	if !errors.Is(err, modelinference.ErrRuntimeScopeClosed) {
+		t.Fatalf("Invoke() through a closed Models scope error = %v, want errors.Is match for ErrRuntimeScopeClosed", err)
+	}
+	if root.getCatalogModelCalls != 1 {
+		t.Fatalf("GetCatalogModel() calls = %d, want exactly 1 (Invoke must reach the Models public boundary)", root.getCatalogModelCalls)
+	}
+	if root.acquireLeaseCalls != 0 {
+		t.Fatalf("AcquireModelLease() calls = %d, want 0 (must not continue past the closed-scope boundary)", root.acquireLeaseCalls)
+	}
+	if root.invokeCalls != 0 {
+		t.Fatalf("InvokeModelWithLease() calls = %d, want 0 (must not continue past the closed-scope boundary)", root.invokeCalls)
+	}
+}
+
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestRootAdapter_InvokeJSONResolvesThroughModelsRootCatalogAndInference(t *testing.T) {
 	t.Parallel()
 

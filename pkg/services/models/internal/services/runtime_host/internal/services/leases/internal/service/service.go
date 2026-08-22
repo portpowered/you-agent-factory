@@ -212,6 +212,33 @@ func (s *service) ReleaseModelLease(
 	}, nil
 }
 
+// RevokeModelLeases invalidates all active leases for a crashed host and
+// returns their capacity through the same coordinator path as explicit
+// release. It is idempotent and never exposes lease storage to Runtime Host.
+func (s *service) RevokeModelLeases(scope models.RuntimeScopeRef, modelName string) {
+	if s == nil || scope.IsZero() || strings.TrimSpace(modelName) == "" {
+		return
+	}
+	wantedSlot := leaseSlotKey(scope, modelName)
+	var releases []capacityRelease
+	s.mu.Lock()
+	for leaseKey, record := range s.leases {
+		if record.lease.Status != models.ModelLeaseStatusActive ||
+			leaseSlotKey(record.lease.Scope, record.lease.ModelName) != wantedSlot {
+			continue
+		}
+		record.lease.Status = models.ModelLeaseStatusExpired
+		s.leases[leaseKey] = record
+		s.releaseCapacityCountLocked(wantedSlot)
+		releases = append(releases, capacityRelease{
+			scope:     record.lease.Scope,
+			modelName: record.lease.ModelName,
+		})
+	}
+	s.mu.Unlock()
+	s.notifyCapacityReleased(releases)
+}
+
 func (s *service) releaseCapacityCountLocked(slotKey string) {
 	count := s.capacityHolders[slotKey]
 	if count <= 1 {

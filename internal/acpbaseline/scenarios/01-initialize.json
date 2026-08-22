@@ -1,0 +1,17 @@
+{
+  "name": "01-initialize",
+  "description": "Session initialization, advertised agent capabilities, and the session/new response shape, with an empty client capability set.",
+  "clientCapabilities": {},
+  "steps": [
+    {"kind": "request", "method": "initialize",
+     "params": {"protocolVersion": 1, "clientCapabilities": "${clientCapabilities}"},
+     "note": "Empty clientCapabilities mirrors what our own production ACP client sends, so the advertised capabilities are directly comparable."},
+    {"kind": "request", "method": "session/new",
+     "params": {"cwd": "${cwd}", "mcpServers": []}},
+    {"kind": "snapshot", "name": "capabilities"},
+    {"kind": "request", "method": "session/prompt",
+     "params": {"sessionId": "${sessionId}", "prompt": [{"type": "text", "text": "Reply with exactly the word: ack"}]},
+     "note": "Proves the session is live, so an empty capability advertisement is not mistaken for a dead session."},
+    {"kind": "await", "awaitMillis": 500}
+  ]
+}

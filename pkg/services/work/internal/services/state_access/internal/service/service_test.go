@@ -52,13 +52,11 @@ func (a *recordingSessionAdapter) MoveWork(
 		return work.OperatorMoveResult{}, a.moveErr
 	}
 	return work.OperatorMoveResult{
-		WorkID:      workID,
-		WorkTypeID:  "story",
-		FromState:   "draft",
-		ToState:     "review",
-		FromPlaceID: "story:draft",
-		ToPlaceID:   "story:review",
-		TokenID:     "tok-1",
+		WorkID:     workID,
+		WorkTypeID: "story",
+		FromState:  "draft",
+		ToState:    "review",
+		TokenID:    "tok-1",
 	}, nil
 }
 
@@ -115,7 +113,7 @@ func TestMoveWorkForSessionReturnsDetachedResult(t *testing.T) {
 	if result.WorkID != "work-1" || result.FromState != "draft" || result.ToState != "review" {
 		t.Fatalf("result = %#v, want detached draft->review move facts", result)
 	}
-	if result.FromPlaceID != "" || result.ToPlaceID != "" || result.TokenID != "" {
+	if result.TokenID != "" {
 		t.Fatalf("result leaked Petri fields: %#v", result)
 	}
 	if adapter.movedID != "work-1" || adapter.source != work.WorkStateChangeSourceAPI || adapter.requestID != "move-1" {

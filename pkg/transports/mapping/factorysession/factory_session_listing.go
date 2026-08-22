@@ -2,6 +2,7 @@ package factorysession
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -110,7 +111,9 @@ func ReadProjectionsToAPI(reads []factorysessions.ReadProjection) factoryapi.Lis
 		}
 		summaries = append(summaries, SessionSummaryToAPI(read.Context.Session, read.Context.FactorySessionID))
 	}
-	return factoryapi.ListFactorySessionsResponse{Sessions: summaries}
+	return factoryapi.ListFactorySessionsResponse{
+		Sessions: canonicalAPILiveSessionSummaries(summaries),
+	}
 }
 
 // RuntimeProjectionToAPI maps the Factory Session-owned runtime projection to
@@ -135,7 +138,62 @@ func RuntimeProjectionToAPI(
 		runtime.LifecycleControlStatus = &status
 	}
 	runtime.StopSummary = StopSummaryToAPI(projection.StopSummary)
+	if approvals := HumanApprovalsToAPI(projection.PendingHumanApprovals); len(approvals) > 0 {
+		runtime.PendingHumanApprovals = &approvals
+	}
 	return runtime
+}
+
+// HumanApprovalToAPI maps the replay-owned pending approval projection into the
+// safe public inspection shape. The topology description is resolved here so
+// the canonical event remains identity-only.
+func HumanApprovalToAPI(approval interfaces.FactoryWorldHumanApproval) factoryapi.HumanApproval {
+	decisions := make([]factoryapi.HumanApprovalDecisions, 0, len(approval.Decisions))
+	for _, decision := range approval.Decisions {
+		decisions = append(decisions, factoryapi.HumanApprovalDecisions(decision))
+	}
+	result := factoryapi.HumanApproval{
+		ApprovalId:      approval.ApprovalID,
+		SessionId:       approval.SessionID,
+		DispatchId:      approval.DispatchID,
+		WorkstationId:   approval.WorkstationID,
+		WorkstationName: approval.WorkstationName,
+		Decisions:       decisions,
+		Status:          factoryapi.HumanApprovalStatus(approval.Status),
+		WorkIds:         append([]string(nil), approval.WorkItemIDs...),
+	}
+	if approval.WorkstationDescription != nil {
+		description := interfaces.ResolveNameValue(*approval.WorkstationDescription, "")
+		if strings.TrimSpace(description) != "" {
+			result.Description = &description
+		}
+	}
+	if strings.TrimSpace(approval.EventID) != "" {
+		eventID := approval.EventID
+		result.EventId = &eventID
+	}
+	if !approval.EventTime.IsZero() {
+		requestedAt := approval.EventTime.UTC()
+		result.RequestedAt = &requestedAt
+	}
+	return result
+}
+
+// HumanApprovalsToAPI produces deterministic approval output for list and
+// embedded Factory Session reads.
+func HumanApprovalsToAPI(approvals []interfaces.FactoryWorldHumanApproval) []factoryapi.HumanApproval {
+	if len(approvals) == 0 {
+		return []factoryapi.HumanApproval{}
+	}
+	sorted := append([]interfaces.FactoryWorldHumanApproval(nil), approvals...)
+	sort.SliceStable(sorted, func(left, right int) bool {
+		return strings.Compare(sorted[left].ApprovalID, sorted[right].ApprovalID) < 0
+	})
+	result := make([]factoryapi.HumanApproval, 0, len(sorted))
+	for _, approval := range sorted {
+		result = append(result, HumanApprovalToAPI(approval))
+	}
+	return result
 }
 
 // StopSummaryToAPI converts the detached owner result to the generated public
@@ -426,6 +484,7 @@ func ListSessionsResponseToAPI(result factorysessionexecution.ListSessionsResult
 		}
 		response.DurableSessions = &durable
 	}
+	response.Sessions = canonicalAPILiveSessionSummaries(response.Sessions)
 	return response
 }
 
@@ -434,9 +493,10 @@ func ListSessionsResponseToAPI(result factorysessionexecution.ListSessionsResult
 func ScopedSessionListResponseToAPI(result factorysessions.ScopedSessionListResult) factoryapi.ListFactorySessionsResponse {
 	scope := factoryapi.FactorySessionListScope(result.Scope)
 	response := factoryapi.ListFactorySessionsResponse{
-		Scope: &scope, Sessions: make([]factoryapi.FactorySessionSummary, 0, len(result.LiveSessions)),
+		Scope:    &scope,
+		Sessions: make([]factoryapi.FactorySessionSummary, 0, len(result.LiveSessions)),
 	}
-	for _, session := range result.LiveSessions {
+	for _, session := range canonicalScopedLiveSessionSummaries(result.LiveSessions) {
 		summary := ScopedLiveSessionSummaryToAPI(session)
 		if session.Runtime != nil {
 			runtime := RuntimeProjectionToAPI(*session.Runtime, session.NormalizedTarget)
@@ -465,6 +525,49 @@ func ScopedLiveSessionSummaryToAPI(session factorysessions.ScopedLiveSessionSumm
 			Name: optionalTrimmedString(session.Target.Name),
 		},
 	}
+}
+
+// canonicalAPILiveSessionSummaries keeps the selector alias out of the public
+// listing while retaining the server-resolved UUID row. IDs are the only
+// identity key; labels, ordering, and paths are presentation data.
+func canonicalAPILiveSessionSummaries(
+	sessions []factoryapi.FactorySessionSummary,
+) []factoryapi.FactorySessionSummary {
+	canonical := make([]factoryapi.FactorySessionSummary, 0, len(sessions))
+	seen := make(map[string]struct{}, len(sessions))
+	for _, session := range sessions {
+		id := strings.TrimSpace(session.Id)
+		if id == "" || id == factorysessions.DefaultSessionID {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		session.Id = id
+		canonical = append(canonical, session)
+	}
+	return canonical
+}
+
+func canonicalScopedLiveSessionSummaries(
+	sessions []factorysessions.ScopedLiveSessionSummary,
+) []factorysessions.ScopedLiveSessionSummary {
+	canonical := make([]factorysessions.ScopedLiveSessionSummary, 0, len(sessions))
+	seen := make(map[string]struct{}, len(sessions))
+	for _, session := range sessions {
+		id := strings.TrimSpace(session.ID)
+		if id == "" || id == factorysessions.DefaultSessionID {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		session.ID = id
+		canonical = append(canonical, session)
+	}
+	return canonical
 }
 
 // LiveSessionSummaryToAPI maps one live workspace session row to the public summary shape.

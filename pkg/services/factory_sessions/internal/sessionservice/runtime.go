@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -15,24 +16,34 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 
 	"go.uber.org/zap"
 )
 
-// factoryRuntimeBundle is the public capability view owned by Factory Runtime.
-type factoryRuntimeBundle = factory.HostedInstance
+// factoryRuntimeBundle is the compatibility record retained by the binding
+// edge while Runtime exposes the private instance-host operations.
+type factoryRuntimeBundle = runtimeports.RuntimeInstance
 
-// liveRuntimeHandle is the public lifecycle handle owned by Factory Runtime.
-type liveRuntimeHandle = factory.HostedHandle
+type liveRuntimeHandle = runtimeports.RuntimeHandle
 
 type RuntimeSidecars interface {
-	Preseed(context.Context, factory.HostedInstance) error
-	Start(context.Context, factory.HostedHandle) error
-	Stop(factory.HostedHandle)
+	Preseed(context.Context, runtimeports.RuntimeInstance) error
+	Start(context.Context, runtimeports.RuntimeHandle) error
+	Stop(runtimeports.RuntimeHandle)
 }
 
-func (fs *SessionRuntime) PreseedRuntimeInputs(ctx context.Context, instance factory.HostedInstance) error {
+func runtimeModeOrDefault(mode interfaces.RuntimeMode) interfaces.RuntimeMode {
+	if mode == "" {
+		return interfaces.RuntimeModeBatch
+	}
+	return mode
+}
+
+func (fs *SessionRuntime) PreseedRuntimeInputs(ctx context.Context, instance runtimeports.RuntimeInstance) error {
 	if fs == nil || fs.runtimeSidecars == nil {
 		return fmt.Errorf("runtime sidecar service is required")
 	}
@@ -50,8 +61,9 @@ type SessionRuntime struct {
 	runtimeState     runtimebinding.State
 	sessionState     *sessionruntime.Service
 	sessionGateway   sessionGateway
-	runtimeBuild     factory.ReplacementBuilder
-	runtimeLifecycle factory.Lifecycle
+	runtimeBuild     runtimeports.RuntimeReplacementBuilder
+	modelsScope      models.RuntimeScopeRef
+	runtimeLifecycle runtimeports.RuntimeLifecycle
 	runtimeSidecars  RuntimeSidecars
 	factoryRootDir   string
 	// startupBundle holds the built default runtime before Run registers ~default.
@@ -73,7 +85,7 @@ type SessionRuntime struct {
 	startTime                    time.Time
 	clock                        factory.Clock
 	definitions                  interfaces.Service
-	durableExecution             factorysessions.ExecutionService
+	durableExecution             durableexecution.Service
 	newJavaScriptCheckpointStore factory.JavaScriptCheckpointStoreFactory
 	sessionResultProjection      factory.SessionResultProjectionOperation
 	directoryInspection          roles.DirectoryInspection
@@ -118,7 +130,29 @@ func (fs *SessionRuntime) buildReplacementFactoryRuntime(
 	if err != nil {
 		return nil, err
 	}
+	if err := fs.bindModelsRuntimeScope(bundle); err != nil {
+		return nil, errors.Join(err, bundle.CloseArtifacts())
+	}
 	return bundle, nil
+}
+
+func (fs *SessionRuntime) bindModelsRuntimeScope(bundle runtimeports.RuntimeInstance) error {
+	if fs == nil || fs.modelsScope.IsZero() {
+		return nil
+	}
+	if bundle == nil {
+		return fmt.Errorf("replacement Factory Runtime is unavailable")
+	}
+	binder, ok := bundle.(interface {
+		BindModelsRuntimeScope(models.RuntimeScopeRef) error
+	})
+	if !ok {
+		return fmt.Errorf("replacement Factory Runtime does not support Models runtime scope binding")
+	}
+	if err := binder.BindModelsRuntimeScope(fs.modelsScope); err != nil {
+		return fmt.Errorf("bind Models runtime scope to replacement Factory Runtime: %w", err)
+	}
+	return nil
 }
 
 func (fs *SessionRuntime) StartDefaultRuntime(
@@ -174,7 +208,7 @@ func (fs *SessionRuntime) currentRuntimeBundle() factoryRuntimeBundle {
 
 // CurrentRuntimeBundle returns the active Factory Runtime bundle for
 // initializer-owned startup diagnostics.
-func (fs *SessionRuntime) CurrentRuntimeBundle() factory.HostedInstance {
+func (fs *SessionRuntime) CurrentRuntimeBundle() runtimeports.RuntimeInstance {
 	return fs.currentRuntimeBundle()
 }
 
@@ -235,7 +269,7 @@ func (fs *SessionRuntime) waitForActiveRuntime(ctx context.Context) error {
 		if fs.runtimeState.ActiveHandle() != handle {
 			continue
 		}
-		if factory.RuntimeModeOrDefault(fs.runtimeMode) == interfaces.RuntimeModeService &&
+		if runtimeModeOrDefault(fs.runtimeMode) == interfaces.RuntimeModeService &&
 			fs.sessionState.Registry() != nil && fs.sessionState.Registry().Count() == 0 {
 			continue
 		}

@@ -1,19 +1,18 @@
 package service
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/jsoncompat"
 	artifactsexport "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export"
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 )
@@ -105,21 +104,17 @@ func (service *Service) EncodePortableArtifact(
 func (service *Service) DecodePortableArtifact(
 	request recordings.DecodePortableArtifactRequest,
 ) (recordings.DecodePortableArtifactResult, error) {
-	decoder := json.NewDecoder(bytes.NewReader(request.Payload))
-	decoder.DisallowUnknownFields()
 	var artifact recordings.PortableArtifact
-	if len(request.Payload) == 0 || decoder.Decode(&artifact) != nil {
-		return recordings.DecodePortableArtifactResult{}, recordings.ErrInvalidPortableArtifact
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); err != io.EOF {
+	diagnostics, err := jsoncompat.Decode(request.Payload, &artifact)
+	if len(request.Payload) == 0 || err != nil {
 		return recordings.DecodePortableArtifactResult{}, recordings.ErrInvalidPortableArtifact
 	}
 	if err := validatePortableArtifact(artifact); err != nil {
 		return recordings.DecodePortableArtifactResult{}, err
 	}
 	return recordings.DecodePortableArtifactResult{
-		Artifact: clonePortableArtifact(artifact),
+		Artifact:         clonePortableArtifact(artifact),
+		IgnoredJSONPaths: diagnostics.Paths(),
 	}, nil
 }
 
@@ -233,7 +228,10 @@ func (service *Service) ReadPortableArtifact(
 	if decoded.Artifact.Summary.RecordingID != request.RecordingID {
 		return recordings.ReadPortableArtifactResult{}, recordings.ErrForeignPortableArtifact
 	}
-	return recordings.ReadPortableArtifactResult{Artifact: decoded.Artifact}, nil
+	return recordings.ReadPortableArtifactResult{
+		Artifact:         decoded.Artifact,
+		IgnoredJSONPaths: append([]string(nil), decoded.IgnoredJSONPaths...),
+	}, nil
 }
 
 func portableArtifactContextError(ctx context.Context) error {

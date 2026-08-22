@@ -131,6 +131,30 @@ func (UnimplementedService) CompileEffectiveFactorySource(
 	return CompileEffectiveFactorySourceResult{}, ErrInvalidAuthoredFactorySource
 }
 
+// ResolveExecutionCatalog returns a collaborator-required failure until a
+// concrete Definitions owner is connected to the pure resolver.
+func (UnimplementedService) ResolveExecutionCatalog(
+	context.Context,
+	ResolveExecutionCatalogRequest,
+) (ResolveExecutionCatalogResult, error) {
+	return ResolveExecutionCatalogResult{}, fmt.Errorf("execution catalog resolver is required")
+}
+
+// ResolveRuntimeSnapshot returns a typed collaborator-required failure until
+// the owner-composed snapshot resolver is attached.
+func (UnimplementedService) ResolveRuntimeSnapshot(
+	context.Context,
+	ResolveRuntimeSnapshotRequest,
+) (ResolveRuntimeSnapshotResult, error) {
+	return ResolveRuntimeSnapshotResult{}, &RuntimeSnapshotResolutionError{
+		Diagnostic: RuntimeSnapshotDiagnostic{
+			Code:    RuntimeSnapshotDiagnosticUnavailable,
+			Message: "runtime snapshot resolver is not attached",
+		},
+		Cause: ErrRuntimeSnapshotResolverUnavailable,
+	}
+}
+
 // ValidateStructuralFactoryDefinition returns ErrInvalidFactoryDefinitionPayload
 // until nested validator wiring lands.
 func (UnimplementedService) ValidateStructuralFactoryDefinition(

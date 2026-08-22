@@ -127,3 +127,31 @@ func (fake *blockingDefinitionsValidationFake) ValidateSubmittedDefinition(
 }
 
 var _ factorydefinitions.SubmittedDefinitionValidationOperation = (*blockingDefinitionsValidationFake)(nil)
+
+func unavailableRuntimeSnapshot(
+	ctx context.Context,
+	request factorydefinitions.ResolveRuntimeSnapshotRequest,
+) (factorydefinitions.ResolveRuntimeSnapshotResult, error) {
+	return factorydefinitions.UnimplementedService{}.ResolveRuntimeSnapshot(ctx, request)
+}
+
+func (*mcpDefinitionsRootFake) ResolveRuntimeSnapshot(
+	ctx context.Context,
+	request factorydefinitions.ResolveRuntimeSnapshotRequest,
+) (factorydefinitions.ResolveRuntimeSnapshotResult, error) {
+	return unavailableRuntimeSnapshot(ctx, request)
+}
+
+func (*mcpCapturingCurrentFactoryRootFake) ResolveRuntimeSnapshot(
+	ctx context.Context,
+	request factorydefinitions.ResolveRuntimeSnapshotRequest,
+) (factorydefinitions.ResolveRuntimeSnapshotResult, error) {
+	return unavailableRuntimeSnapshot(ctx, request)
+}
+
+func (*mcpCapturingInstallRootFake) ResolveRuntimeSnapshot(
+	ctx context.Context,
+	request factorydefinitions.ResolveRuntimeSnapshotRequest,
+) (factorydefinitions.ResolveRuntimeSnapshotResult, error) {
+	return unavailableRuntimeSnapshot(ctx, request)
+}

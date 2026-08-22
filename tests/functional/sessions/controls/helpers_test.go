@@ -3,6 +3,7 @@ package sessioncontrols_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -27,6 +28,48 @@ const (
 	interruptedInspectWorkTypeName      = "goal"
 	interruptedInspectReviewWorkstation = "review-goal"
 )
+
+func openPauseResumeLifecycleEventStream(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+) *support.FactoryEventStream {
+	t.Helper()
+
+	retained := server.GetFactoryEvents(t)
+	if len(retained) == 0 {
+		t.Fatal("canonical Factory Event history is empty before pause/resume controls")
+	}
+
+	// Open without a cursor so the retained prefix flushes the SSE handshake.
+	// Then consume through the last event in the committed snapshot. Events
+	// published between that snapshot and the subscription remain queued after
+	// this point, so the lifecycle assertion has a stable observation boundary.
+	lastRetainedEventID := retained[len(retained)-1].Id
+	stream := support.OpenFactoryEventStreamAt(
+		t,
+		support.DefaultSessionEventsURL(server.URL()),
+	)
+	deadline := time.Now().Add(pauseResumeDurableStatusTimeout)
+	for {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			t.Fatalf(
+				"timed out establishing Factory Event observation point after retained event %q",
+				lastRetainedEventID,
+			)
+		}
+		event, ok := stream.TryNextEvent(remaining)
+		if !ok {
+			t.Fatalf(
+				"Factory Event stream closed before observation point at retained event %q",
+				lastRetainedEventID,
+			)
+		}
+		if event.Id == lastRetainedEventID {
+			return stream
+		}
+	}
+}
 
 func pauseResumeControlsFactoryDirWithBusyLoop(t *testing.T) string {
 	t.Helper()
@@ -520,6 +563,99 @@ func dispatchObservationIndexForWorkAtWorkstation(
 		}
 	}
 	return -1, false
+}
+
+func waitForPauseResumeLifecycleControlEvents(
+	t *testing.T,
+	stream *support.FactoryEventStream,
+	timeout time.Duration,
+) {
+	t.Helper()
+
+	wantOperations := []factoryapi.FactorySessionLifecycleControlKind{
+		factoryapi.FactorySessionLifecycleControlKindPause,
+		factoryapi.FactorySessionLifecycleControlKindResume,
+	}
+	var observed []factoryapi.FactoryEvent
+	deadline := time.Now().Add(timeout)
+	for len(observed) < len(wantOperations) {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			failPauseResumeLifecycleControlWait(t, "deadline expired", observed)
+		}
+
+		// The stream is the synchronization primitive. The deadline bounds only
+		// missing durable evidence; it does not poll Work projection state or add
+		// a sleep-based success path.
+		event, ok := stream.TryNextEvent(remaining)
+		if !ok {
+			failPauseResumeLifecycleControlWait(t, "event stream closed or deadline expired", observed)
+		}
+		if event.Type != factoryapi.FactoryEventTypeSessionLifecycleControl {
+			continue
+		}
+
+		observed = append(observed, event)
+		payload, err := event.Payload.AsSessionLifecycleControlEventPayload()
+		if err != nil {
+			failPauseResumeLifecycleControlWait(
+				t,
+				fmt.Sprintf("malformed SESSION_LIFECYCLE_CONTROL payload: %v", err),
+				observed,
+			)
+		}
+		wantOperation := wantOperations[len(observed)-1]
+		if payload.Operation != wantOperation ||
+			payload.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+			failPauseResumeLifecycleControlWait(
+				t,
+				fmt.Sprintf(
+					"observed operation=%q outcome=%q; want accepted %q",
+					payload.Operation,
+					payload.Outcome,
+					wantOperation,
+				),
+				observed,
+			)
+		}
+	}
+
+	assertPauseResumeLifecycleControlEvents(t, observed)
+}
+
+func failPauseResumeLifecycleControlWait(
+	t *testing.T,
+	reason string,
+	observed []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+
+	history := make([]string, 0, len(observed))
+	for _, event := range observed {
+		payload, err := event.Payload.AsSessionLifecycleControlEventPayload()
+		if err != nil {
+			history = append(history, fmt.Sprintf(
+				"id=%q sequence=%d malformed_payload=%v",
+				event.Id,
+				event.Context.Sequence,
+				err,
+			))
+			continue
+		}
+		history = append(history, fmt.Sprintf(
+			"id=%q sequence=%d operation=%q outcome=%q occurredAt=%s",
+			event.Id,
+			event.Context.Sequence,
+			payload.Operation,
+			payload.Outcome,
+			payload.OccurredAt.UTC().Format(time.RFC3339Nano),
+		))
+	}
+	t.Fatalf(
+		"pause/resume durable lifecycle event wait failed: %s; expected accepted operations in order [PAUSE, RESUME]; observed lifecycle-event history: %v",
+		reason,
+		history,
+	)
 }
 
 func filterSessionLifecycleControlEvents(events []factoryapi.FactoryEvent) []factoryapi.FactoryEvent {

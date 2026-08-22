@@ -11,6 +11,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
 	invocationruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation/runtimeadapter"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
@@ -57,8 +58,12 @@ type legacyInvocationRuntime struct {
 	peerShapedInvocationRuntime
 }
 
-func (runtime legacyInvocationRuntime) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.Net], error) {
-	return &interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.Net]{
+type legacySnapshotProvider interface {
+	GetEngineStateSnapshot(context.Context) (*legacysnapshot.Snapshot, error)
+}
+
+func (runtime legacyInvocationRuntime) GetEngineStateSnapshot(context.Context) (*legacysnapshot.Snapshot, error) {
+	return &legacysnapshot.Snapshot{
 		FactoryState: string(interfaces.FactoryStateIdle),
 	}, nil
 }
@@ -91,14 +96,14 @@ func (invocationHostedInstance) RuntimeDiagnostics() factory.RuntimeLogDiagnosti
 func (invocationHostedInstance) RecordingLedger() recordings.Ledger { return nil }
 func (invocationHostedInstance) CloseArtifacts() error              { return nil }
 
-var _ factory.HostedInstance = invocationHostedInstance{}
+var _ factory.RuntimeRecord = invocationHostedInstance{}
 
 type invocationHostedHandle struct {
-	instance factory.HostedInstance
+	instance factory.RuntimeRecord
 	done     chan struct{}
 }
 
-func (handle invocationHostedHandle) RuntimeInstance() factory.HostedInstance {
+func (handle invocationHostedHandle) RuntimeInstance() factory.RuntimeRecord {
 	return handle.instance
 }
 func (invocationHostedHandle) Completed() bool                   { return false }
@@ -107,7 +112,7 @@ func (invocationHostedHandle) Wait() error                       { return nil }
 func (invocationHostedHandle) CancelRun()                        {}
 func (handle invocationHostedHandle) RunDoneCh() <-chan struct{} { return handle.done }
 
-var _ factory.HostedHandle = invocationHostedHandle{}
+var _ factory.RuntimeRun = invocationHostedHandle{}
 
 func TestObserveRuntimeUsesServiceObservationWithoutLegacySnapshot(t *testing.T) {
 	t.Parallel()
@@ -121,8 +126,8 @@ func TestObserveRuntimeUsesServiceObservationWithoutLegacySnapshot(t *testing.T)
 			},
 		},
 	}
-	if _, ok := any(activeFactory).(factory.LegacySnapshotProvider); ok {
-		t.Fatal("peer-shaped invocation runtime must not implement LegacySnapshotProvider")
+	if _, ok := any(activeFactory).(legacySnapshotProvider); ok {
+		t.Fatal("peer-shaped invocation runtime must not implement the Petri snapshot capability")
 	}
 	instance := invocationHostedInstance{service: activeFactory}
 	sessions.Register(sessionruntime.Registration{

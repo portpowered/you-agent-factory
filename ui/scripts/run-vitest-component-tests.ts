@@ -1,4 +1,5 @@
 import { listComponentTestFiles } from "./component-test-files";
+import { buildVitestComponentArgs } from "./component-test-workers";
 
 const componentTests = listComponentTestFiles()
   .filter((file) => file.runner === "vitest")
@@ -16,14 +17,10 @@ const result = Bun.spawnSync({
   cmd: [
     "bunx",
     "vitest",
-    "run",
-    "--config",
-    "vitest.lanes.config.ts",
-    "--project=dashboard-component",
-    "--maxWorkers=2",
-    "--retry=0",
-    ...process.argv.slice(2),
-    ...componentTests,
+    ...buildVitestComponentArgs({
+      componentTests,
+      forwardedArgs: process.argv.slice(2),
+    }),
   ],
   cwd: process.cwd(),
   stderr: "inherit",

@@ -1,0 +1,56 @@
+type: object
+additionalProperties: false
+description: One explicit directional modality fact for a harness route or model.
+required:
+  - direction
+  - modality
+  - support
+  - transport
+oneOf:
+  - type: object
+    required:
+      - condition
+    properties:
+      support:
+        type: string
+        enum:
+          - conditional
+      condition:
+        type: string
+        minLength: 1
+        maxLength: 512
+  - type: object
+    properties:
+      support:
+        type: string
+        enum:
+          - supported
+          - unsupported
+          - unknown
+properties:
+  direction:
+    $ref: './ProviderModalityDirection.yaml'
+  modality:
+    $ref: './ProviderModalityKind.yaml'
+  support:
+    $ref: './ProviderModalitySupport.yaml'
+  transport:
+    $ref: './ProviderModalityTransport.yaml'
+  condition:
+    type: string
+    minLength: 1
+    maxLength: 512
+    description: Bounded operator-visible condition required when support is conditional.
+  mediaConstraints:
+    $ref: './ProviderMediaConstraints.yaml'
+  evidenceRefs:
+    type: array
+    minItems: 1
+    maxItems: 16
+    uniqueItems: true
+    description: Stable IDs of evidence records qualifying this fact.
+    items:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[a-z][a-z0-9._-]*$'

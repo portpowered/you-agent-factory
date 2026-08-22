@@ -45,6 +45,7 @@ make verify-extended
 make test
 make test-unit
 make test-functional
+make test-functional-fresh
 make test-stress
 make test-release
 make test-full
@@ -80,6 +81,24 @@ make ui-storybook
 make ui-test-storybook
 ```
 
+### Local build provenance
+
+`make build` and `make install` use `GO_LOCAL_BUILD_FLAGS`, which defaults to
+`-buildvcs=false`. This avoids Go's repository metadata probe on repeated local
+CLI builds because the maintained `cmd/` and `pkg/` code does not consume
+`vcs.revision`, `vcs.time`, or `vcs.modified`; the CLI's development version
+fallback only reads the main module version. The option is independent of
+`GO_BUILD_FLAGS`, and `GO_LOCAL_BUILD_FLAGS=-buildvcs=true` restores local VCS
+stamping when it is needed for a comparison.
+
+The local verification aggregators that call `make build`—including
+`make build-all`, `make backend-verification`, `make verify-build`, and
+`make release-surface-smoke`—inherit the unstamped local default. Shipped
+provenance remains unchanged: GoReleaser runs `.goreleaser.yml` directly,
+`make acp-baseline-self` performs its own direct `go build`, and the published
+`go install` smoke paths invoke `go install` directly. Those paths do not use
+`GO_LOCAL_BUILD_FLAGS` and remain stamped by their existing Go tooling.
+
 `make backend-dependency-graph` writes the direct production-import graph for
 repository packages under `cmd/` and `pkg/` to
 `.artifacts/backend-dependency-graph/backend-dependency-graph.dot`. When
@@ -93,31 +112,34 @@ Run dashboard package commands from `ui/` with Bun 1.3.12+ on PATH. Root `make` 
 
 | Goal | Canonical command | Runner |
 | --- | --- | --- |
-| Unit tests (Node) | `cd ui && bun run test:unit` or `make ui-test` | Named Vitest `dashboard-unit` project; no DOM setup |
+| Bun-native unit tests (Node) | `cd ui && bun run test:unit:bun` | Discovers `.bun.unit.test.ts` files and runs them with Bun's native test API; DOM-free and browser-free, disjoint from component, browser, performance, and Storybook conventions |
+| Aggregate unit tests (Bun + Vitest) | `cd ui && bun run test:unit` or `make ui-test` | Runs the Bun-native suffix lane first, then the optimized Vitest `dashboard-unit` project for ordinary `.test.ts` and supported `.unit.test.mts` files; stops on either failure |
 | Component tests (jsdom) | `cd ui && bun run test:component` | Named Vitest `dashboard-component` project |
-| Coverage thresholds and replay fixture guard | `make test-ui-coverage` | Node unit coverage via `test:coverage`, then replay check |
+| Coverage thresholds and replay fixture guard | `make test-ui-coverage` | Vitest Node coverage plus the Bun-owned unit LCOV merged once into the coverage report, then replay check |
 | Playwright integration | `cd ui && bun run test:integration` or `make ui-integration-test` | Vitest + Playwright |
-| Unit, component, then integration | `cd ui && bun run test` | Named Vitest lanes in increasing cost order |
+| Unit, component, then integration | `cd ui && bun run test` | Fail-fast orchestration of aggregate units, component tests, and browser integration |
 | Fresh npm install proof for scoped local components | `make ui-verify-fresh-npm-install` or `cd ui && npm run verify:fresh-npm-install` | Node script runs an isolated dashboard `npm install` and asserts `@you-agent-factory/components` resolves from `packages/components` |
 | Storybook browser integration | `make ui-storybook-integration-test` | Storybook static build plus focused responsive browser checks |
 
-Prefer `bun run test:unit` (or `make ui-test`) for dashboard unit work so the
-Node-only project, exclusions, and worker policy stay aligned with CI. Use
-`bun run test:component` when the contract renders React or needs DOM APIs.
-Targeted proof may pass paths to Vitest with the matching lane config.
+Prefer `bun run test:unit` (or `make ui-test`) for dashboard unit work so both
+unit owners, the Node-only exclusions, and the measured Vitest worker policy
+stay aligned with CI. Use `bun run test:unit:bun` when proving one migrated
+`.bun.unit.test.ts` file, and `bun run test:component` when the contract renders
+React or needs DOM APIs. Targeted proof may pass paths to Vitest with the
+matching lane config.
 
 ## GitHub Actions CI Baseline
 
 The repository CI workflow lives at `.github/workflows/ci.yml`. It runs automatically on pull requests and branch pushes and is intentionally limited to validation only. This first-pass workflow does not package or deploy releases.
 
-`.github/workflows/long-local-inference.yml` owns the Linux managed-runtime and real-inference regression. CI invokes it only when the classifier selects the Local Inference lane; it remains independently runnable after merge, on its daily `06:00 UTC` schedule, and through `workflow_dispatch`. Use it when a change affects managed local inference runtime setup, model download/cache behavior, or real local inference behavior.
+Managed local-model runtime coverage remains an opt-in specialty check through `make long-tests-managed-runtime`. The former end-to-end long-inference workflow and classifier lane have been retired; short and package-level model coverage remain part of their owning verification surfaces.
 
 The maintainer-owned CLI release policy lives in [CLI release policy](cli-release-policy.md). Keep future release automation aligned with that guide: release publication should come from manual semver tags on `main`, not from developer-machine publishing or manually created GitHub Release events.
 
 The workflow schedules only the ownership-selected lanes. Frontend coverage,
 mocked browser integration, and Storybook integration are separate jobs, as are backend verification, focused
 real-backend browser verification, API package verification, the two other
-package-family checks, documentation checks, and local inference. `make
+package-family checks, and documentation checks. `make
 verify-pr` remains the intentionally broad local aggregate, while a CI lane
 uses the direct command shown in the ownership table below.
 
@@ -139,19 +161,35 @@ The older aggregate names remain available as compatibility aliases while docs, 
 Treat the matrix below as the canonical suite-ownership and rerun guide for the tiered test surface:
 
 The focused Go suite commands are `make test-unit`, `make test-maintenance`,
-`make test-integration`, `make test-contract`, `make test-functional`, `make
-test-stress`, and `make test-release`. The unit command enumerates only
+`make test-integration`, `make test-contract`, `make test-functional`,
+`make test-functional-fresh`, `make test-stress`, and `make test-release`. The
+default functional command is cache-aware for fast unchanged feedback;
+`make test-functional-fresh` explicitly executes every maintained short
+functional package and is the CI-equivalent and flake-investigation path. The
+unit command enumerates only
 `./pkg/...`, then uses the shared `internal/testlanes` policy to exclude
 specialized packages. Code under `cmd/`, `internal/`, `tests/`, root
 `contracts/`, and the Go UI embed package is intentionally outside unit
 discovery. `make test-lane-audit` verifies that every required Go test package
-has one primary owner. Unit package concurrency defaults to 32 and remains
-overridable with `UNIT_DEFAULT_JOBS`. The fast unit lane schedules only packages
+has one primary owner. Unit, functional, and lint package concurrency defaults
+to the bounded `GO_LANE_BUDGET`: `max(2, logical CPUs /
+YOU_EXPECTED_CONCURRENT_LANES)`, with the divisor defaulting to 4. The
+`UNIT_DEFAULT_JOBS`, `FUNCTIONAL_DEFAULT_JOBS`, and `LINT_JOBS` variables remain
+independently overridable. Direct `cmd/unitlane` execution applies the same
+host/divisor policy (with `YOU_LOGICAL_CPUS` available for controlled probes),
+while an explicit `-jobs` value remains authoritative and still clamps to one
+when below one. The fast unit lane schedules only packages
 that contain Go tests and disables `go test`'s duplicate implicit vet pass;
 `make lint` and the required PR verification tier continue to run `go vet ./...`.
 The normal `make test` loop retains Go's content-addressed test cache, so
 unchanged packages do not relink and rerun on every local invocation. Use
 `make test-unit-fresh` when uncached `-count=1` evidence is explicitly needed.
+
+On Windows, the Makefile selects arithmetic compatible with GNU Make's
+effective shell: POSIX arithmetic for `sh.exe`/`bash.exe` and native `cmd.exe`
+arithmetic otherwise. The raw result is validated as a positive decimal before
+it becomes `GO_LANE_BUDGET`; malformed output produces a visible warning and
+falls back to 2 so the default test and lint flags remain numeric.
 `make test` is the compatibility entrypoint for `make test-unit`; `make
 test-full` remains the broad unshortened aggregate across every Go package.
 
@@ -161,7 +199,7 @@ test-full` remains the broad unshortened aggregate across every Go package.
 | `make verify-pr` | `make verify-build-contracts` once, then `make verify-tests` once | `make long-tests`, `make test-functional-long`, managed-runtime specialty coverage | rerun `make verify-pr` for the full required envelope, or rerun the failing owned lane called out in output |
 | `make verify-extended` | `make verify-pr`, then `make long-tests` | no extra hidden suites beyond the named long and specialty lanes | rerun `make verify-extended` for the whole opt-in pass, or rerun the failing owned long lane called out in output |
 | `make verify-tests` | `make test-maintenance`, `make test-integration`, `make test-contract`, `make release-surface-smoke`, `make test-root-process-acceptance`, concurrent UI coverage/browser integration, then independent backend unit and functional coverage | compatibility aliases that would repeat the same confidence outcome | rerun the exact failing required lane printed in output |
-| `make long-tests` | `make test-ui-performance`, `make long-tests-managed-runtime`, `make long-tests-functional-runtime` | short-path fast and PR-tier suites, unless you intentionally rerun them through `make verify-pr` first | rerun the exact failing specialty lane printed in output |
+| `make long-tests` | `make test-ui-performance`, `make long-tests-managed-runtime` | short-path fast and PR-tier suites, unless you intentionally rerun them through `make verify-pr` first | rerun the exact failing specialty lane printed in output |
 
 Compatibility aliases that still remain on the root command surface:
 
@@ -196,22 +234,31 @@ Treat the `ui/` Biome excessive-lines rules as a maintainability boundary for ha
 
 `make test-root-process-acceptance` is the focused rerun command for the hermetic root-process S24 acceptance package under `tests/functional/acceptance`. Each command invocation constructs an independent `root.BuildProcess`; the lane does not build a CLI executable. It runs the full behavioral acceptance corpus (including named-goal, stream, subagent, and local-model scenarios that skip under `-short`) and fails with scenario subtest names such as `s24-subagent` when the scenario matrix drifts from its documented customer-outcome mapping in `internal/builtcliacceptance/scenarios.go`.
 
-Every pull request begins with `Classify Verification`. The classifier is an additive ownership table: a mixed change runs the union of selected lanes rather than one exclusive bucket. `factory/**` is neutral, so factory-only changes select no product verification. `.github/workflows/**`, `scripts/ci/**`, `Makefile`, `go.mod`, `go.sum`, empty diffs, and unknown paths select every lane conservatively.
+Every pull request begins with `Classify Verification` and ends with `Verification Policy`. The classifier is an additive ownership table: a mixed change runs the union of selected lanes rather than one exclusive bucket. Job-level conditions skip unselected product work before a hosted runner is allocated.
 
 | Changed surface | Selected CI lanes | Direct local rerun |
 | --- | --- | --- |
 | `docs/reference/**`, `docs/README.md` | Docs Reference | `make docs-reference-smoke` |
 | `README.md` | README | `make readme-check` |
-| `factory/**` only or other internal docs | None | None |
-| `ui/**` | Frontend and Frontend Browser | `make typecheck ui-lint test-ui-coverage`; `make test-ui-browser-integration` |
-| `cmd/**`, `pkg/**`, `internal/**`, `tests/**` | Backend and UI Backend Integration | `make build test-backend-verification`; `make ui-durable-session-real-backend-integration-test` |
-| API contracts, HTTP transport/mapping, generated API output | Frontend, Frontend Browser, Backend, UI Backend Integration, API Package | the corresponding commands above plus `make api-package-verify` |
-| `packages/api/**` or API package scripts | API Package, Frontend, Frontend Browser, Backend, UI Backend Integration | `make api-package-verify` and the corresponding commands above |
-| Packaged Factories package | Packaged Factories Package and Backend | `make packaged-factory-package-verify`; `make build test-backend-verification` |
-| Model Providers package | Model Providers Package and Backend | `make model-provider-package-verify`; `make build test-backend-verification` |
-| Local inference ownership | Backend and Local Inference | `make build test-backend-verification`; `make verify-pr-inference` |
+| `factory/**` only or other `docs/**` paths | None | No product lane; use `make verify-pr` when a broad local pass is useful. |
+| `ui/**` | Frontend, Frontend Component, Frontend Coverage, Frontend Browser, Frontend Storybook | `make frontend-verification` |
+| `cmd/**`, `pkg/**`, `internal/**`, `tests/**`, or release scripts | Backend and UI Backend Integration | `make backend-verification`; `make ui-backend-integration` |
+| API contracts, HTTP transport or mapping, generated API output | Frontend, Backend, UI Backend Integration, API Package | `make frontend-verification`; `make backend-verification`; `make ui-backend-integration`; `make api-package-verify` |
+| `packages/api/**` or API package scripts | API Package plus the API consumer lanes | `make api-package-verify`; rerun the consumer commands above when needed. |
+| `packages/packaged-factories/**` or its package scripts | Packaged Factories Package and Backend | `make packaged-factory-package-verify`; `make backend-verification` |
+| `packages/model-providers/**` or provider package scripts | Model Providers Package and Backend | `make model-provider-package-verify`; `make backend-verification` |
 
-`Verification Policy` is the stable required check. It validates selected results and publishes touched areas, selected and skipped lanes, reasons, and local rerun commands. Lane conditions are applied to jobs, so unselected work does not allocate a hosted runner. Development Package applies the same package ownership to validation and pull-request candidate artifacts; protected `main` still prepares every artifact needed by publication.
+The classifier also emits a reason for every lane. `factory/**` is neutral, so a factory-only change selects no product lane; a factory change mixed with an owned path contributes no extra lane. `.github/workflows/**`, `scripts/ci/**`, `Makefile`, `go.mod`, `go.sum`, an empty change set, and unknown paths select every lane through the conservative `make verify-pr` policy. Only the exact classifier value `false` disables a lane. Missing or malformed lane outputs therefore select work, while a failed or incomplete classifier also fails `Verification Policy`.
+
+### Package and policy behavior
+
+`Development Package` is a reusable workflow called by pull-request and protected-main CI. A selected API or Packaged Factories package runs its self-verification and pull-request candidate dry run. A selected Model Providers package runs self-verification; it has no candidate job because that package has no candidate publication path. Mixed package changes run the union. Unselected package jobs and candidates are skipped before runner allocation.
+
+The protected-main CI call verifies every package and does not build pull-request candidates. The separate protected-main publication path still prepares, publishes, and verifies every required development artifact. This keeps publication prerequisites intact without making unrelated pull requests build candidates.
+
+`Classify Verification` and `Verification Policy` are always-present control-plane jobs. `Verification Policy` waits for all possible product results, accepts an expected skip for an unselected lane, and fails for classifier failure, selected failure, cancellation, missing results, or unexpected execution of an unselected lane. Its summary lists the touched areas, each run or skip decision, the classifier reason, and the terminal result.
+
+The protected-branch ruleset requires the stable `Verification Policy` check. It does not require conditional product job names, because those names are absent by design for unselected lanes. A policy success means classification completed safely and every selected lane, package verification, and required pull-request candidate succeeded.
 
 The next table describes focused local verification targets. CI execution is the
 ownership table above; coverage runs as one job rather than a shard matrix.
@@ -225,8 +272,6 @@ ownership table above; coverage runs as one job rather than a shard matrix.
 | `Backend Verification` | `make test-unit-coverage` and `make functional-test-viz` run sequentially in the Backend job. | `make test-backend-verification` | Keeps the direct local aggregate aligned with the selected Backend lane. |
 | `Backend Unit Coverage` | `cmd/gocoveragecheck` executes tests from `./cmd/factory` and maintained backend `./pkg/...` packages while measuring backend-owned code. | `make test-unit-coverage` | Keeps package-level coverage and per-package gates independent from system-level functional coverage. |
 | `Backend Functional Coverage` | `make functional-test-viz`: `functional-boundary-check`, then one `cmd/gocoveragecheck` functional coverage run (profile + JSON), then the Markdown catalog generator. | `make functional-test-viz` | Shows the internal-system coverage contributed by functional flows without unit, stress, or release tests affecting the profile, and uploads the inventory-plus-coverage artifact set. Boundary regressions cannot pass this lane on coverage alone. Coverage-only local reruns remain `make test-functional-coverage`. |
-| `Local Inference` | one Linux managed-runtime and real-inference regression through `make verify-pr-inference` after OMNIVOICE runtime and managed-model cache provisioning | `make verify-pr-inference` | Runs only when the Local Inference ownership lane is selected; narrow regression rerun: `make pr-inference-approval`. |
-
 UI Coverage orchestration is owned by `ui/scripts/ui-coverage-runner.mjs` behind
 `ui/package.json`'s `test:coverage` script. Its covered phase explicitly selects
 `vitest.lanes.config.ts` and `dashboard-unit`, so no jsdom, component, browser,
@@ -242,7 +287,7 @@ The UI Coverage contract also includes the replay coverage check. Keep browser-b
 
 Covered UI and browser integration lanes emit stable slow-file summaries through `ui/scripts/ui-test-cost-report.mjs`. The monolithic unit-coverage pass prints `[ui-coverage] Main covered pass slowest test files` after enforcing aggregate thresholds. Browser integration uses `ui/scripts/ui-integration-runner.mjs` behind `test:integration` and prints `[ui-browser-integration] Browser integration slowest test files` with per-file cost categories (`app-shell-integration`, `react-flow-graph`, `replay-timeline`, `import-export`, `script-style`, `uncategorized`). Copy those lines into closeout notes to compare runs without scraping source topology.
 
-Backend coverage is intentionally split. `make test-unit-coverage` discovers only `./cmd/factory` and maintained backend `./pkg/...` test packages and enforces both the aggregate unit floor and `go-unit-coverage-package-minimums.json`. `make test-functional-coverage` runs `functional-boundary-check` first, then discovers only maintained short packages under `tests/functional/...`, excludes `tests/functional/internal/...`, and enforces both the aggregate functional floor and `go-functional-coverage-package-minimums.json` over the same backend-owned code. Packages not exercised by a functional test are reported at `0.0%`; their unit-test coverage is never substituted. Ordinary low coverage is represented by the lane manifest's numeric current floor, so the required lanes no longer depend on newline-delimited package exception lists or a shared 80% package target. `make test-backend-coverage` and `make test-backend-functional` remain focused aliases for the unit and functional lanes respectively; `make test-backend-verification` is an aggregate compatibility target that runs both blocking reports in sequence. Stress, root-process release acceptance, release-surface smoke, and tagged long tests remain outside both coverage profiles.
+Backend coverage is intentionally split. `make test-unit-coverage` discovers only `./cmd/factory` and maintained backend `./pkg/...` test packages and enforces both the aggregate unit floor and `go-unit-coverage-package-minimums.json`. `make test-functional-coverage` runs `functional-boundary-check` first, then discovers only maintained short packages under `tests/functional/...`, excludes `tests/functional/internal/...`, and performs an explicit `-count=1` instrumented run before enforcing both the aggregate functional floor and `go-functional-coverage-package-minimums.json` over the same backend-owned code. Packages not exercised by a functional test are reported at `0.0%`; their unit-test coverage is never substituted. Ordinary low coverage is represented by the lane manifest's numeric current floor, so the required lanes no longer depend on newline-delimited package exception lists or a shared 80% package target. `make test-backend-coverage` and `make test-backend-functional` remain focused aliases for the unit and functional lanes respectively; `make test-backend-verification` is an aggregate compatibility target that runs both blocking reports in sequence. Stress, root-process release acceptance, release-surface smoke, and tagged long tests remain outside both coverage profiles.
 
 The deterministic current package floors are recorded in
 `go-unit-coverage-package-minimums.json` and
@@ -268,13 +313,26 @@ reviewed manifest after coverage is restored. Aggregate `-min` enforcement
 remains independent and blocking.
 The renderer sorts entries and truncates each exact ratio downward to two
 decimal percentage points, so identical profiles produce identical bytes and a
-generated floor never exceeds its measurement. Ratchet an existing reviewed
-manifest explicitly with
-`go run ./cmd/gocoveragecheck -suite <unit|functional> -min 0 -update-manifest <manifest-file>`.
-The command reports every package as `added`, `raised`, `unchanged`, or
-`rejected` in import-path order. Any rejected decrease prevents the entire
-write; repeating the command without an added package or qualifying increase
-leaves the manifest byte-for-byte unchanged.
+generated floor never exceeds its measurement. Update an existing reviewed
+manifest from a complete sample set explicitly with
+`go run ./cmd/gocoveragecheck -suite <unit|functional> -min 0 -update-manifest <manifest-file> -update-profiles <profile-1>,<profile-2>,<profile-3>,<profile-4>,<profile-5>`.
+The command requires at least five readable, count-mode profiles with the same
+package universe and statement totals. It reports every package as `added`,
+`lowered`, `raised`, or `unchanged` in import-path order and derives numeric
+floors from the exact minimum covered/total ratio across the sample set. A
+single profile, duplicate, incompatible, or unreadable profile is rejected
+before the manifest is written. Existing complete exceptions are retained
+unchanged, and repeating the command with the same samples leaves the manifest
+byte-for-byte unchanged.
+
+Aggregate an unchanged-commit variance report with
+`go run ./cmd/gocoveragecheck -suite functional -variance-profiles <profile-1>,<profile-2>,<profile-3>,<profile-4>,<profile-5> -variance-output <report> -variance-commit <full SHA> -variance-jobs <jobs>`.
+The generic report contains only facts derived from the compatible profiles and
+manifest. An audit may append package-specific remedy classifications and
+supplied context with `-variance-annotations <validated-json>`; every annotated
+package must be present in the measured sample universe, and annotations are
+sorted before rendering so replay remains byte-stable. Omitting that option
+keeps unrelated sample sets free of audit-specific claims.
 
 The browser-backed lane remains self-building for the same reason: `make ui-integration-test` delegates into the shared browser harness that runs `bun run build` with a test-owned API origin and serves that exact build with `vite preview`. Treat that build plus preview startup as part of the lane's owned runtime contract instead of uploading `ui/dist` from another job.
 
@@ -285,76 +343,14 @@ When a required lane fails, GitHub Actions keeps the lane-owned failure evidence
 | `UI Browser Integration` | `ui-browser-integration-failure-artifacts` | lane `command.log` plus the shared harness browser evidence: Playwright trace, final screenshot, page HTML snapshot, and diagnostics JSON |
 | `Backend Unit Coverage` | `backend-unit-coverage-report` | independent `coverage.out`, function-level `coverage.txt`, and unit lane `command.log` |
 | `Backend Functional Coverage` | `backend-functional-coverage-report` | `functional-tests.md`, `coverage-summary.json`, `coverage.out`, function-level `coverage.txt` when the profile exists, and functional lane `command.log` (uploaded on success and failure when present) |
-| `PR Inference Approval` | `pr-inference-approval-failure-artifacts` | lane `command.log` under `.artifacts/pr-inference-approval/` plus `runtime-setup.log` with platform, backend path, and cache path |
 
 Backend verification failure summaries are rendered by `go run ./cmd/backendverificationsummary -log .artifacts/backend-verification/command.log`. Keep that helper covered with `go test ./cmd/backendverificationsummary`, and keep the summary output focused on the first actionable failure block before falling back to a bounded command-log excerpt.
 
-### Local Inference
+### Managed Runtime Specialty Coverage
 
-The `Local Inference` lane is selected only for local-inference ownership or conservative full verification. It is not folded into Backend Verification. The reusable workflow runs Linux managed-runtime and real-inference coverage once.
-
-**Local rerun commands**
-
-- `make verify-pr-inference` — canonical PR-gated inference approval lane. Prints prerequisite guidance, then runs the single merge-blocking regression.
-- `make pr-inference-approval` — narrow rerun for only the named regression without the wrapper messaging.
-
-**Named regression and observable contract**
-
-The PR lane runs `TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio` in `tests/functional/runtime_api` (built with the `functionallong` tag). On a healthy branch it proves end-to-end OMNIVOICE local inference:
-
-- `POST /models/OMNIVOICE_Q4_K_M/pull` succeeds with model identity, cache path, revision, and downloaded files.
-- Direct `POST /models/OMNIVOICE_Q4_K_M/invocations` returns local TTS metadata and a valid `audio/wav` file output.
-- Streamed invocation returns `audio/wav` bytes.
-- Factory `MODEL_INVOKE` through submitted work reaches `speech:complete` and emits recorded audio in factory events.
-
-The `functionallong` compile surface for `tests/functional/runtime_api` is still exercised when `pr-inference-approval` compiles the package with `-tags=functionallong` before running the OMNIVOICE regression.
-
-**Environment and runtime prerequisites**
-
-| Input | Required | Purpose |
-| --- | --- | --- |
-| `INFINITE_YOU_RUN_OMNIVOICE_LONG_TESTS=1` | yes | Opt-in gate for real OMNIVOICE long inference tests |
-| `omnivoice-llamacpp` on `PATH` or `INFINITE_YOU_OMNIVOICE_COMMAND` | yes | Local OMNIVOICE runtime executable |
-| `INFINITE_YOU_OMNIVOICE_CACHE_DIR` | optional | Reuse managed model cache; omit to use a temp cache locally |
-
-CI provisions Linux `omnivoice-llamacpp` through `scripts/ci/install-omnivoice-command.sh`, sets `INFINITE_YOU_OMNIVOICE_COMMAND` to the installed binary, and caches `.cache/managed-models` plus `.cache/omnivoice-command` under a PR-lane-specific cache key.
-
-**Why this lane is selected**
-
-Inference-specific code can regress in ways the short Backend Verification corpus does not exercise: compile failures in `functionallong` tests, broken model pull or invocation routes, or factory-level `MODEL_INVOKE` wiring. The PR lane catches that class with one stable long regression before merge. It intentionally runs only the single sentinel test rather than the full specialty sweep so required PR feedback stays bounded.
-
-**How this differs from Long Local Inference**
-
-| Surface | PR Inference Approval | Long Local Inference |
-| --- | --- | --- |
-| Workflow | required job in `.github/workflows/ci.yml` | separate `.github/workflows/long-local-inference.yml` |
-| Trigger | every pull request and main push | post-merge push to `main`, daily schedule, manual dispatch |
-| Platforms | Linux only | Linux, macOS, and Windows matrix |
-| Command | `make verify-pr-inference` | `make long-tests` (managed runtime + functional runtime aggregate) |
-| Scope | one named OMNIVOICE regression | broader opt-in specialty sweep |
-
-Treat `Long Local Inference` as the maintainer-owned follow-up lane for deeper multi-platform coverage rather than as a substitute for merge-blocking PR inference approval. In GitHub Actions, its run names distinguish `post-merge verification`, `scheduled verification`, and `manual verification` so maintainers can tell why it ran from the workflow list. Reach for it after merging runtime-sensitive local-model changes, before a risky runtime release, or when you need cross-platform OMNIVOICE confirmation outside the narrower PR lane.
-
-**Failure surfaces and diagnostics**
-
-Distinguish setup failures from inference behavior failures when triaging a red `PR Inference Approval` job:
-
-| Failure class | Typical symptoms | Where to look |
-| --- | --- | --- |
-| Runtime setup | `platform or backend failure`, install script errors, missing `INFINITE_YOU_OMNIVOICE_COMMAND` | job step `Install OMNIVOICE runtime`, `.artifacts/pr-inference-approval/runtime-setup.log`, failure-step cache listing |
-| Compile or test wiring | `go test` compile errors before OMNIVOICE runs, duplicate helper symbols in `runtime_api` | `command.log` head; locally run `go test -tags=functionallong ./tests/functional/runtime_api -run '^$' -count=0` |
-| Inference behavior | `asset pull failure`, `invocation failure`, `output validation failure`, factory wait timeouts | `command.log` test output; rerun `make pr-inference-approval` with the same env |
-
-Lane summaries name `PR Inference Approval` explicitly and point to `make verify-pr-inference` and `make pr-inference-approval` on failure. Download `pr-inference-approval-failure-artifacts` for the retained `command.log` and `runtime-setup.log`.
-
-Use the lane-specific targets below when you need to rerun one required CI lane locally without replaying the full suite:
-
-- `make test-ui-coverage` for the jsdom-oriented dashboard coverage lane.
-- `make ui-integration-test` for the browser-backed dashboard integration lane.
-- `make test-unit-coverage` for backend package-test coverage.
-- `make test-functional-coverage` for independent maintained short functional-test coverage.
-- `make functional-test-viz` for the inventory-plus-coverage catalog: runs `functional-boundary-check`, executes the short functional coverage lane once with profile and `gocoveragecheck -json-output` under `.artifacts/functional-test-viz/` by default, then renders `functional-tests.md` via `cmd/functionaltestviz`. Required CI Backend Functional Coverage runs this target with `FUNCTIONAL_TEST_VIZ_DIR=.artifacts/backend-functional-coverage` and uploads `functional-tests.md`, `coverage-summary.json`, `coverage.out`, and `command.log` on success and failure when present. Boundary, suite, coverage-floor, metadata, or rendering failures exit non-zero; already-written diagnostics under the artifact root are left in place for inspection.
-- `make verify-pr-inference` for the required PR inference approval lane (requires OMNIVOICE runtime prerequisites above).
+`make long-tests-managed-runtime` is the focused specialty rerun for the managed
+local-model runtime adapter. It remains opt-in and is separate from the
+short functional suite and the required pull-request verification tier.
 
 `make verify-pr` is the canonical full review-ready local pass once dependencies and browser prerequisites are already installed. It does not install packages or browsers itself, so routine verification stays network-free after setup.
 
@@ -384,13 +380,9 @@ Reviewers should block new product copy that bypasses message catalogs, concaten
 
 Treat the opt-in long and specialty commands as a separate maintainer tier rather than hidden follow-on work inside `make verify-fast` or `make verify-pr`:
 
-- `make verify-pr-inference` is the required merge-blocking PR inference approval lane. It runs only the named OMNIVOICE regression and is separate from `make verify-pr`.
 - `make verify-extended` is the canonical "everything above plus the deeper safety nets" pass. Use it after `make verify-pr` when a change may have touched managed-local runtime behavior or the real local inference path and you want one aggregate command that still preserves exact rerun hints.
-- `make long-tests-managed-runtime` is the narrow specialty rerun for the managed-runtime lane in `pkg/models/local`. It protects the subprocess adapter and managed local model behavior without requiring the full end-to-end API flow.
-- `make long-tests-functional-runtime` is the narrow specialty rerun for the real OMNIVOICE functional lane in `tests/functional/runtime_api`. It delegates to `make pr-inference-approval` so the PR regression and specialty functional lane share one test invocation without changing the broader `make long-tests` meaning.
-- `make long-tests` is the explicit aggregate over those two opt-in specialty lanes. It prints the owned specialty lane before each nested step and reports the direct `make long-tests-...` rerun command on failure.
-
-`make verify-pr-inference` is required in CI but intentionally excluded from `make verify-fast` and `make verify-pr` because it needs the OMNIVOICE runtime. The broader `make long-tests` aggregate remains opt-in for deeper specialty coverage beyond the single PR sentinel. Keep both distinctions explicit so contributors do not confuse merge-blocking PR inference approval with the broader Long Local Inference workflow.
+- `make long-tests-managed-runtime` is the narrow specialty rerun for the managed-runtime lane in `pkg/services/models/internal/local`. It protects the subprocess adapter and managed local model behavior without requiring the full end-to-end API flow.
+- `make long-tests` is the explicit aggregate over UI performance and managed-runtime specialty coverage. It prints the owned specialty lane before each nested step and reports the direct rerun command on failure.
 
 When extending the workflow, change the repository-owned command surface before editing GitHub Actions orchestration. Add or adjust the relevant `make test-*` target first, keep the lane name aligned with the owned command, and document any cache, artifact, or deduplication decision here in the same change. Contributors should be able to answer "which lane owns this check?" and "what do I rerun locally?" from this section alone without reverse-engineering `.github/workflows/ci.yml`.
 

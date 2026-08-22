@@ -3,10 +3,14 @@ package server_binding_test
 import (
 	"bufio"
 	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -15,6 +19,8 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/transport/terminalportlock"
 )
 
 // TestBuiltExecutableFallsBackFromOccupiedLoopbackPortAndReportsActualURL proves the shipped socket fallback contract.
@@ -163,6 +169,92 @@ func TestBuiltExecutableServerInterruptExits130AndReleasesListener(t *testing.T)
 		t.Fatalf("parse reported dashboard URL %q: %v", actualURL, err)
 	}
 	waitForListenerRelease(t, parsed.Host)
+}
+
+// TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput proves
+// the OS process observes a deterministic listener-startup failure instead of
+// treating the command as a successful server launch. Port 65535 is used so
+// the normal auto-port scan has no higher candidate to select.
+func TestBuiltExecutableServerBindFailureExitsNonZeroWithoutReadinessOutput(t *testing.T) {
+	binaryPath := buildServerBindingBinary(t, t.Context(), testutil.MustRepoRoot(t))
+
+	// The run_scoped_server package asserts the same terminal-port exhaustion
+	// contract in a separate test process; this OS lock makes endpoint ownership
+	// explicit across both package processes before either listener is opened.
+	releasePortLock, err := terminalportlock.Acquire()
+	if err != nil {
+		t.Fatalf("acquire terminal loopback test lock: %v", err)
+	}
+	defer func() {
+		if err := releasePortLock(); err != nil {
+			t.Errorf("release terminal loopback test lock: %v", err)
+		}
+	}()
+
+	busyListener, err := net.Listen("tcp4", "127.0.0.1:65535")
+	if err != nil {
+		t.Fatalf("reserve terminal loopback port while owning test lock: %v", err)
+	}
+	defer func() {
+		if err := busyListener.Close(); err != nil {
+			t.Errorf("close blocking listener: %v", err)
+		}
+	}()
+
+	workingDirectory := t.TempDir()
+	writeCurrentFactory(t, workingDirectory)
+	homeDirectory := t.TempDir()
+	ctx, cancel := context.WithTimeout(t.Context(), serverBindFailureProcessTimeout)
+	defer cancel()
+	command := exec.CommandContext(
+		ctx,
+		binaryPath,
+		"--server", "http://127.0.0.1:65535", "server",
+	)
+	command.Dir = workingDirectory
+	command.Env = builtcliacceptance.ProcessEnvForIsolatedHome(homeDirectory)
+	var stdout, stderr bytes.Buffer
+	command.Stdout = &stdout
+	command.Stderr = &stderr
+
+	err = command.Run()
+	if ctx.Err() != nil {
+		processState := "unavailable"
+		if command.ProcessState != nil {
+			processState = command.ProcessState.String()
+		}
+		t.Fatalf(
+			"server bind-failure process timed out: %v; listener=%s listener_owned=%t process_state=%s stdout=%q stderr=%q",
+			ctx.Err(), busyListener.Addr().String(), true, processState, stdout.String(), stderr.String(),
+		)
+	}
+	var exitErr *exec.ExitError
+	if err == nil || !errors.As(err, &exitErr) {
+		t.Fatalf("server bind-failure process error = %v; stdout=%q stderr=%q, want non-zero process exit", err, stdout.String(), stderr.String())
+	}
+	if exitErr.ExitCode() == 0 {
+		t.Fatalf("server bind-failure process exit code = 0; stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+
+	if strings.TrimSpace(stdout.String()) != "" {
+		t.Fatalf("server bind-failure stdout = %q, want no readiness or success output", stdout.String())
+	}
+	const legacyBindWarning = "warning: --server is deprecated for local listener binding; use --listen <host:port> instead"
+	stderrLines := strings.Split(strings.TrimSpace(stderr.String()), "\n")
+	if len(stderrLines) != 2 || strings.TrimSpace(stderrLines[0]) != legacyBindWarning {
+		t.Fatalf("server bind-failure stderr = %q, want the legacy migration warning followed by one diagnostic line", stderr.String())
+	}
+	diagnostic := strings.TrimSpace(stderrLines[1])
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(diagnostic), &response); err != nil {
+		t.Fatalf("server bind-failure stderr is not one ErrorResponse: %v\n%s", err, stderr.String())
+	}
+	if response.Code != factoryapi.ErrorResponseCode("SERVER_BIND_FAILED") {
+		t.Fatalf("server bind-failure response = %#v, want SERVER_BIND_FAILED", response)
+	}
+	if !strings.Contains(response.Message, "requested server did not start") {
+		t.Fatalf("server bind-failure response message = %q, want requested-server diagnostic", response.Message)
+	}
 }
 
 func waitForListenerRelease(t *testing.T, address string) {

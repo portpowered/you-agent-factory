@@ -3,9 +3,8 @@ package diagnostics
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
-
-	workerenvdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/envdiagnostics"
 )
 
 func TestSafeWorkDiagnosticsRedactsHostSpecificWorkingDirectory(t *testing.T) {
@@ -18,7 +17,7 @@ func TestSafeWorkDiagnosticsRedactsHostSpecificWorkingDirectory(t *testing.T) {
 			},
 		},
 	})
-	if got := safe.Provider.RequestMetadata["working_directory"]; got != workerenvdiagnostics.MetadataOnlyCommandEnvValue {
+	if got := safe.Provider.RequestMetadata["working_directory"]; got != MetadataOnlyCommandEnvValue {
 		t.Fatalf("working_directory = %q, want metadata-only marker", got)
 	}
 	if got := safe.Provider.RequestMetadata["worktree"]; got != "feature-runtime" {
@@ -65,10 +64,10 @@ func TestSafeWorkDiagnosticsAllowlistAndCloneIsolation(t *testing.T) {
 	if _, ok := safe.Provider.RequestMetadata["authorization"]; ok {
 		t.Fatal("secret provider metadata leaked")
 	}
-	if got := safe.Provider.RequestMetadata["working_directory"]; got != workerenvdiagnostics.MetadataOnlyCommandEnvValue {
+	if got := safe.Provider.RequestMetadata["working_directory"]; got != MetadataOnlyCommandEnvValue {
 		t.Fatalf("host working directory = %q, want metadata-only marker", got)
 	}
-	if got := safe.Provider.RequestMetadata["worktree"]; got != workerenvdiagnostics.MetadataOnlyCommandEnvValue {
+	if got := safe.Provider.RequestMetadata["worktree"]; got != MetadataOnlyCommandEnvValue {
 		t.Fatalf("host worktree = %q, want metadata-only marker", got)
 	}
 	if _, ok := safe.RenderedPrompt.Variables["api_key"]; ok {
@@ -78,6 +77,110 @@ func TestSafeWorkDiagnosticsAllowlistAndCloneIsolation(t *testing.T) {
 	clone.Provider.RequestMetadata["request_id"] = "changed"
 	if safe.Provider.RequestMetadata["request_id"] != "req-1" {
 		t.Fatal("safe diagnostics clone was not detached")
+	}
+}
+
+func TestSafeWorkDiagnosticsPreservesProviderUsageCounters(t *testing.T) {
+	t.Parallel()
+
+	safe := SafeWorkDiagnosticsFromWorkDiagnostics(&WorkDiagnostics{
+		Provider: &ProviderDiagnostic{ResponseMetadata: map[string]string{
+			"input_tokens":            "89393",
+			"output_tokens":           "4622",
+			"thinking_tokens":         "2312",
+			"cache_read_tokens":       "252517",
+			"cache_write_tokens":      "0",
+			"total_tokens":            "94015",
+			"reasoning_tokens":        "0",
+			"reasoning_output_tokens": "0",
+		}},
+	})
+
+	if safe == nil || safe.Provider == nil {
+		t.Fatalf("safe diagnostics = %#v, want provider usage diagnostics", safe)
+	}
+	for key, want := range map[string]string{
+		"input_tokens":            "89393",
+		"output_tokens":           "4622",
+		"thinking_tokens":         "2312",
+		"cache_read_tokens":       "252517",
+		"cache_write_tokens":      "0",
+		"total_tokens":            "94015",
+		"reasoning_tokens":        "0",
+		"reasoning_output_tokens": "0",
+	} {
+		if got := safe.Provider.ResponseMetadata[key]; got != want {
+			t.Fatalf("safe response metadata[%q] = %q, want %q; metadata=%#v", key, got, want, safe.Provider.ResponseMetadata)
+		}
+	}
+}
+
+func TestSafeWorkDiagnosticsBoundsFailureMetadataAndKeepsCorrelation(t *testing.T) {
+	t.Parallel()
+	longValue := strings.Repeat("x", maxSafeMetadataValueRunes+100)
+	safe := SafeWorkDiagnosticsFromWorkDiagnostics(&WorkDiagnostics{
+		Provider: &ProviderDiagnostic{
+			RequestMetadata: map[string]string{"dispatch_id": longValue},
+			ResponseMetadata: map[string]string{
+				"failure_operation":           "provider_session_ingestion",
+				"failure_classification":      "resource_limit",
+				"failure_stage":               longValue,
+				"inspection_limit_category":   "record",
+				"inspection_limit_configured": "1048576",
+				"inspection_limit_observed":   "1048577",
+				"inspection_limit_line":       "2",
+				"raw_rollout":                 longValue,
+			},
+		},
+	})
+	if safe == nil || safe.Provider == nil {
+		t.Fatalf("safe diagnostics = %#v, want provider diagnostics", safe)
+	}
+	if got := safe.Provider.RequestMetadata["dispatch_id"]; len([]rune(got)) != maxSafeMetadataValueRunes {
+		t.Fatalf("bounded dispatch id length = %d, want %d", len([]rune(got)), maxSafeMetadataValueRunes)
+	}
+	if safe.Provider.ResponseMetadata["failure_operation"] != "provider_session_ingestion" ||
+		safe.Provider.ResponseMetadata["failure_classification"] != "resource_limit" {
+		t.Fatalf("response metadata = %#v, want stable failure classification", safe.Provider.ResponseMetadata)
+	}
+	if safe.Provider.ResponseMetadata["inspection_limit_category"] != "record" ||
+		safe.Provider.ResponseMetadata["inspection_limit_configured"] != "1048576" ||
+		safe.Provider.ResponseMetadata["inspection_limit_observed"] != "1048577" ||
+		safe.Provider.ResponseMetadata["inspection_limit_line"] != "2" {
+		t.Fatalf("response metadata = %#v, want bounded inspection limit facts", safe.Provider.ResponseMetadata)
+	}
+	if _, ok := safe.Provider.ResponseMetadata["failure_stage"]; ok {
+		t.Fatal("unrecognized failure stage value was retained")
+	}
+	if _, ok := safe.Provider.ResponseMetadata["raw_rollout"]; ok {
+		t.Fatal("raw rollout metadata leaked through the safe diagnostics allowlist")
+	}
+}
+
+func TestSafeWorkDiagnosticsPreservesIncompleteOutputClassification(t *testing.T) {
+	t.Parallel()
+
+	diagnostics := &WorkDiagnostics{Provider: &ProviderDiagnostic{ResponseMetadata: map[string]string{
+		"failure_operation":      "completion_validation",
+		"failure_classification": "missing_required_output",
+	}}}
+	safe := SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics)
+	if safe == nil || safe.Provider == nil {
+		t.Fatalf("safe diagnostics = %#v, want provider diagnostics", safe)
+	}
+	if got := safe.Provider.ResponseMetadata["failure_classification"]; got != "missing_required_output" {
+		t.Fatalf("safe failure classification = %q, want missing_required_output", got)
+	}
+	payload, err := SafeWorkDiagnosticsEventPayload(safe)
+	if err != nil {
+		t.Fatalf("SafeWorkDiagnosticsEventPayload() error = %v", err)
+	}
+	replayed, err := WorkDiagnosticsFromSafeEventPayload(payload)
+	if err != nil {
+		t.Fatalf("WorkDiagnosticsFromSafeEventPayload() error = %v", err)
+	}
+	if replayed == nil || replayed.Provider == nil || replayed.Provider.ResponseMetadata["failure_classification"] != "missing_required_output" {
+		t.Fatalf("replayed diagnostics = %#v, want incomplete-output classification", replayed)
 	}
 }
 

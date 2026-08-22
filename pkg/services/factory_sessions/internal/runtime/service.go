@@ -14,6 +14,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
@@ -22,18 +23,19 @@ import (
 // Registration contains the host-independent state needed to register one
 // live Factory Session runtime.
 type Registration struct {
-	SessionID            string
-	FactoryDir           string
-	FolderPath           string
-	ExecutionBaseDir     string
-	Target               factorysessions.TargetRef
-	Handle               any
-	Runtime              *factorysessions.LiveRuntime
-	Default              bool
-	Project              string
-	Select               bool
-	AllocateDefaultID    bool
-	AddEventTypeRecorder func(func(interfaces.FactoryEventType))
+	SessionID               string
+	RuntimeFactorySessionID string
+	FactoryDir              string
+	FolderPath              string
+	ExecutionBaseDir        string
+	Target                  factorysessions.TargetRef
+	Handle                  any
+	Runtime                 *factorysessions.LiveRuntime
+	Default                 bool
+	Project                 string
+	Select                  bool
+	AllocateDefaultID       bool
+	AddEventTypeRecorder    func(func(interfaces.FactoryEventType))
 }
 
 // RegistrationInput contains raw runtime and target paths used to normalize a
@@ -149,6 +151,22 @@ func (s *Service) WithRuntimeRead(fn func(*factorysessions.LiveRuntime) error) e
 	return fn(runtime)
 }
 
+// UpdateRuntime mutates one session's runtime view while activation and
+// replacement are excluded. It is used by the opening boundary to publish the
+// opaque Runtime binding after the process root has atomically activated it.
+func (s *Service) UpdateRuntime(sessionID string, update func(*factorysessions.LiveRuntime) error) error {
+	if s == nil || update == nil {
+		return factorysessions.ErrRuntimeNotAvailable
+	}
+	s.activation.Lock()
+	defer s.activation.Unlock()
+	session := s.Resolve(sessionID)
+	if session == nil || session.Runtime == nil {
+		return factorysessions.ErrRuntimeNotAvailable
+	}
+	return update(session.Runtime)
+}
+
 // WithActivationLock serializes definition activation against runtime operations.
 func (s *Service) WithActivationLock(fn func() error) error {
 	if s == nil {
@@ -220,6 +238,14 @@ func (s *Service) ResponseEventService() responsestreamservice.Service {
 	return s.responseEvents
 }
 
+// Clock returns the runtime-selected clock for session-owned effects.
+func (s *Service) Clock() factoryruntime.Clock {
+	if s == nil {
+		return nil
+	}
+	return s.clock
+}
+
 // ResponseStreamsForSession returns the canonical registry-owned stream set
 // for one live session.
 func (s *Service) ResponseStreamsForSession(session *livesession.LiveSession) *responsestream.StreamSet {
@@ -241,6 +267,23 @@ func (s *Service) CloseResponseStreams(session *livesession.LiveSession) {
 		session.CloseResponseEvents()
 	}
 	s.responses.Close(livesession.CanonicalID(session))
+}
+
+// RotateResponseStreams retires one runtime's response streams while allowing
+// its replacement to allocate fresh dispatch streams under the same stable
+// Factory Session identity. The response-event store itself remains closed;
+// the replacement registers a new store whose publications continue at the
+// shared Events authority's sequence.
+func (s *Service) RotateResponseStreams(session *livesession.LiveSession) {
+	if s == nil || s.responses == nil || session == nil {
+		return
+	}
+	if s.responseEvents != nil {
+		s.responseEvents.Close(session.ResponseEvents)
+	} else {
+		session.CloseResponseEvents()
+	}
+	s.responses.Rotate(livesession.CanonicalID(session))
 }
 
 // Registry exposes the canonical registry to bounded compatibility adapters.
@@ -297,6 +340,12 @@ func (s *Service) newLiveSession(registration Registration, sessionID string, is
 	)
 	if session == nil {
 		return nil
+	}
+	if runtimeSessionID := strings.TrimSpace(registration.RuntimeFactorySessionID); runtimeSessionID != "" {
+		session.RuntimeFactorySessionID = runtimeSessionID
+		if s.responseEvents == nil {
+			session.ResponseEvents = responseeventstore.NewSessionResponseEventStore(runtimeSessionID, s.clock, s.eventIDs)
+		}
 	}
 	if s.responseEvents != nil {
 		responseEvents, err := s.responseEvents.NewEventStore(livesession.CanonicalID(session), s.clock)

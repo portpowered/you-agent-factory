@@ -1,3 +1,4 @@
+import { FactoryEventType } from "../generated/openapi";
 import type {
   FactoryEvent,
   InferenceRequestPayload,
@@ -11,6 +12,12 @@ import { FACTORY_EVENT_TYPES } from "./types";
 const eventTime = "2026-04-18T12:30:00Z";
 
 describe("factory event types", () => {
+  it("keeps the shared runtime vocabulary aligned with the generated contract", () => {
+    expect(new Set(Object.values(FACTORY_EVENT_TYPES))).toEqual(
+      new Set(Object.values(FactoryEventType)),
+    );
+  });
+
   it("exposes typed inference request and response payloads", () => {
     const request = inferenceEvent(
       "event-inference-request",

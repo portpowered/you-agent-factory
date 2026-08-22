@@ -1,6 +1,8 @@
 package wire
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -10,11 +12,37 @@ import (
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
 
-type neutralReplayCompositionLedger struct {
-	recordings.Ledger
+func TestProvideWorkerRecordingReaderPreservesReader(t *testing.T) {
+	t.Parallel()
+
+	reader := workerRecordingReaderCompositionProbe{}
+	got, err := provideWorkerRecordingReader(reader)
+	if err != nil {
+		t.Fatalf("provideWorkerRecordingReader() error = %v", err)
+	}
+	payload, err := got.LoadWorkerRecording(t.Context(), "wire-reader")
+	if err != nil {
+		t.Fatalf("LoadWorkerRecording() error = %v", err)
+	}
+	var snapshot recordings.WorkerRecordingSnapshot
+	if err := json.Unmarshal(payload, &snapshot); err != nil {
+		t.Fatalf("decode Worker recording snapshot: %v", err)
+	}
+	if snapshot.RecordingID != "" || len(snapshot.Sessions) != 0 {
+		t.Fatalf("snapshot = %#v, want empty snapshot", snapshot)
+	}
+}
+
+type workerRecordingReaderCompositionProbe struct{}
+
+func (workerRecordingReaderCompositionProbe) PersistWorkerRecord(context.Context, recordings.WorkerRecordingRecord) error {
+	return nil
+}
+
+func (workerRecordingReaderCompositionProbe) LoadWorkerRecording(context.Context, string) (recordings.WorkerRecordingSnapshot, error) {
+	return recordings.WorkerRecordingSnapshot{}, nil
 }
 
 // TestInjectBundleComposesRecordingsNeutralReplayThroughWireFactory proves the
@@ -27,17 +55,21 @@ func TestInjectBundleComposesRecordingsNeutralReplayThroughWireFactory(t *testin
 		t.Fatalf("InjectBundle() error = %v", err)
 	}
 
-	factory := provideRecordingsFactory(
+	root, err := provideRecordingsRoot(
+		serviceedges.Edges{},
 		provideLiveRecordingTargetPlanner(),
 		platformreplay.Local{},
+		nil,
+		nil,
+		nil,
 	)
-	service := factory(
-		&neutralReplayCompositionLedger{},
-		recordingswire.NewProjectionService(),
-	)
-	if service == nil {
-		t.Fatal("provideRecordingsFactory() returned nil service")
+	if err != nil {
+		t.Fatalf("provideRecordingsRoot() error = %v", err)
 	}
+	if root == nil {
+		t.Fatal("provideRecordingsRoot() returned nil root")
+	}
+	var service recordings.Service = root
 	recording := finalizedNeutralReplayRecording(t, service)
 	assertNeutralReplayTypedFailures(t, service, recording)
 }

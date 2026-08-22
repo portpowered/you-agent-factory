@@ -49,6 +49,7 @@ func NewConfigValidator(requiredToolChecker RequiredToolChecker) *ConfigValidato
 		ruleGuards,
 		ruleInvocationBoundLimits,
 		ruleWorkstationKind,
+		ruleHumanApprovalWorkstations,
 		ruleClassifierWorkstations,
 		ruleCronWorkstations,
 		rulePollerWorkstations,
@@ -57,6 +58,7 @@ func NewConfigValidator(requiredToolChecker RequiredToolChecker) *ConfigValidato
 		ruleAgentWorkerTools,
 		ruleModelInvokeWorkstations,
 		rulePerInputGuards,
+		ruleUnsupportedSameNameAllChildrenCompleteJoinArity,
 		ruleResourceDefinitions,
 		ruleResourceUsage,
 		ruleRequiredTools(cv.requiredToolChecker),
@@ -123,14 +125,6 @@ func validatePortableBundledFilesForExpandOnPath(
 	return fmt.Errorf("%s", result.Error())
 }
 
-func ValidatePortableResourceManifestOnPath(
-	factoryDir string,
-	cfg *factorydefinitions.FactoryConfig,
-	requiredToolChecker RequiredToolChecker,
-) error {
-	return validatePortableResourceManifestOnPath(factoryDir, cfg, nil, nil, requiredToolChecker)
-}
-
 func ValidatePortableResourceManifestOnPathWithSourceResolver(
 	factoryDir string,
 	cfg *factorydefinitions.FactoryConfig,
@@ -147,13 +141,6 @@ func ValidatePortableResourceManifestOnPathWithSourceResolver(
 	)
 }
 
-func ValidatePortableBundledFilesForExpandOnPath(
-	factoryDir string,
-	cfg *factorydefinitions.FactoryConfig,
-) error {
-	return validatePortableBundledFilesForExpandOnPath(factoryDir, cfg, nil, nil)
-}
-
 func ValidatePortableBundledFilesForExpandOnPathWithSourceResolver(
 	factoryDir string,
 	cfg *factorydefinitions.FactoryConfig,
@@ -166,10 +153,6 @@ func ValidatePortableBundledFilesForExpandOnPathWithSourceResolver(
 		resolveSource,
 		inspectSource,
 	)
-}
-
-func BundledFileFindings(cfg *factorydefinitions.FactoryConfig) []Finding {
-	return ruleBundledFiles(cfg)
 }
 
 // --- Rule: input type validation ---

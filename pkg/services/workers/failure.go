@@ -7,44 +7,10 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	workerinferencefailure "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/inferencefailure"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	workerinferencefailure "github.com/portpowered/infinite-you/pkg/services/workers/internal/inferencefailure"
 )
-
-// InferenceFailureClass is the stable customer-facing inference failure category.
-type InferenceFailureClass string
-
-const (
-	InferenceFailureClassMissingModel         InferenceFailureClass = "missing_model"
-	InferenceFailureClassLoadingModel         InferenceFailureClass = "loading_model"
-	InferenceFailureClassUnsupportedOperation InferenceFailureClass = "unsupported_operation"
-	InferenceFailureClassTimeout              InferenceFailureClass = "timeout"
-	InferenceFailureClassRuntimeFailure       InferenceFailureClass = "runtime_failure"
-)
-
-// InferenceFailure is the detached, customer-safe outcome of Worker-owned
-// inference failure classification.
-type InferenceFailure struct {
-	Class      InferenceFailureClass
-	Message    string
-	ModelName  string
-	WorkerName string
-	Operation  string
-	Cause      error
-}
-
-func (e *InferenceFailure) Error() string {
-	if e == nil {
-		return ""
-	}
-	return e.Message
-}
-
-func (e *InferenceFailure) Unwrap() error {
-	if e == nil {
-		return nil
-	}
-	return e.Cause
-}
 
 // InferenceFailureContext identifies the inference target for failure messages.
 type InferenceFailureContext struct {
@@ -53,20 +19,15 @@ type InferenceFailureContext struct {
 	Operation  string
 }
 
-// AsInferenceFailure reports whether err contains a classified inference failure.
-func AsInferenceFailure(err error) (*InferenceFailure, bool) {
-	var failure *InferenceFailure
-	if errors.As(err, &failure) && failure != nil {
-		return failure, true
-	}
-	return nil, false
-}
-
 // ClassifyInferenceFailure owns the conversion of model-readiness and Worker
-// execution failures into one detached customer-safe result.
-func ClassifyInferenceFailure(err error, ctx InferenceFailureContext) (*InferenceFailure, bool) {
-	if failure, ok := AsInferenceFailure(err); ok {
-		return failure, true
+// execution failures into one detached customer-safe result. Workers performs
+// the classification; the classified value is Models-owned vocabulary
+// (models.InferenceFailure) so outward adapters can consume it without
+// depending on Workers.
+func ClassifyInferenceFailure(err error, ctx InferenceFailureContext) (*models.InferenceFailure, bool) {
+	var classified *models.InferenceFailure
+	if errors.As(err, &classified) && classified != nil {
+		return classified, true
 	}
 	failure, ok := workerinferencefailure.ClassifyInferenceFailure(
 		adaptClassificationError(err),
@@ -82,7 +43,7 @@ func ClassifyInferenceFailure(err error, ctx InferenceFailureContext) (*Inferenc
 	return convertInferenceFailure(failure), true
 }
 
-func ClassifyInferenceWorkResultFailure(result WorkResult, ctx InferenceFailureContext) (*InferenceFailure, bool) {
+func ClassifyInferenceWorkResultFailure(result WorkResult, ctx InferenceFailureContext) (*models.InferenceFailure, bool) {
 	failure, ok := workerinferencefailure.ClassifyInferenceWorkResultFailure(
 		workerinferencefailure.WorkResult{
 			Outcome:         workerinferencefailure.WorkResultOutcome(result.Outcome),
@@ -110,12 +71,12 @@ func convertInferenceFailureMetadata(metadata *WorkFailureMetadata) *workerinfer
 	}
 }
 
-func convertInferenceFailure(failure *workerinferencefailure.InferenceFailure) *InferenceFailure {
+func convertInferenceFailure(failure *workerinferencefailure.InferenceFailure) *models.InferenceFailure {
 	if failure == nil {
 		return nil
 	}
-	return &InferenceFailure{
-		Class:      InferenceFailureClass(failure.Class),
+	return &models.InferenceFailure{
+		Class:      models.InferenceFailureClass(failure.Class),
 		Message:    failure.Message,
 		ModelName:  failure.ModelName,
 		WorkerName: failure.WorkerName,
@@ -145,12 +106,18 @@ func adaptClassificationError(err error) error {
 
 // ProviderError is the public normalized Worker provider failure.
 type ProviderError struct {
-	Family          WorkFailureFamily
-	Type            WorkFailureType
-	Message         string
-	ProviderSession *ProviderSessionMetadata
-	Diagnostics     *WorkDiagnostics
-	Cause           error
+	Family  WorkFailureFamily
+	Type    WorkFailureType
+	Message string
+	// ProviderSession is retained for legacy Infer-shaped callers. Providers
+	// owns the detached identity; new code uses Continuation at this boundary.
+	ProviderSession                 *ProviderSessionMetadata
+	Continuation                    *ProviderContinuationRef
+	Diagnostics                     *WorkDiagnostics
+	Cause                           error
+	ProviderFailureKind             providers.ExecuteFailureKind
+	ProviderContinuationFailureKind providers.ContinuationFailureKind
+	ProviderContinuationOutcome     providers.ContinuationOutcome
 }
 
 func (e *ProviderError) Error() string {
@@ -186,6 +153,12 @@ func NormalizeProviderExecutionError(err error) *ProviderError {
 	}
 	var providerErr *ProviderError
 	if errors.As(err, &providerErr) {
+		if providerErr != nil && providerErr.Continuation == nil {
+			providerErr.Continuation = (providerErr.ProviderSession).ContinuationRef()
+		}
+		return providerErr
+	}
+	if providerErr := normalizeProviderSessionError(err); providerErr != nil {
 		return providerErr
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
@@ -194,14 +167,103 @@ func NormalizeProviderExecutionError(err error) *ProviderError {
 	return nil
 }
 
+func normalizeProviderSessionError(err error) *ProviderError {
+	var lookupErr *providersessions.LookupError
+	if !errors.As(err, &lookupErr) && !isProviderSessionFailure(err) {
+		return nil
+	}
+	failureType := WorkFailureTypeUnknown
+	classification := "storage"
+	message := "provider session ingestion failed"
+	switch {
+	case errors.Is(err, providersessions.ErrResourceLimitExceeded):
+		classification = "resource_limit"
+		message = "provider session inspection reached its configured limit"
+	case errors.Is(err, providersessions.ErrSessionStorageUnavailable):
+		failureType = WorkFailureTypeInternalServerError
+		message = "provider session storage was unavailable"
+	case errors.Is(err, providersessions.ErrSessionNotFound):
+		failureType = WorkFailureTypePermanentBadRequest
+		message = "provider session could not be found"
+	case errors.Is(err, providersessions.ErrOperationCanceled),
+		errors.Is(err, context.Canceled):
+		classification = "canceled"
+		message = "provider session inspection was canceled"
+	case errors.Is(err, providersessions.ErrInvalidIdentifier),
+		errors.Is(err, providersessions.ErrUnsupportedKind),
+		errors.Is(err, providersessions.ErrUnsupportedProvider):
+		failureType = WorkFailureTypePermanentBadRequest
+		message = "provider session request was invalid"
+	}
+	provider := ""
+	sessionID := ""
+	if lookupErr != nil {
+		provider = strings.TrimSpace(string(lookupErr.Provider))
+		sessionID = strings.TrimSpace(lookupErr.SessionID)
+	}
+	var continuation *ProviderContinuationRef
+	if sessionID != "" {
+		continuation = &ProviderContinuationRef{
+			Provider:          provider,
+			Kind:              providersessions.SessionIDKind,
+			ProviderSessionID: sessionID,
+			ExternalRef:       sessionID,
+		}
+	}
+	diagnostics := &WorkDiagnostics{
+		Provider: &ProviderDiagnostic{
+			Provider: provider,
+			ResponseMetadata: map[string]string{
+				ProviderResponseMetadataFailureOperation:      "provider_session_ingestion",
+				ProviderResponseMetadataFailureClassification: classification,
+			},
+		},
+	}
+	if continuation != nil {
+		diagnostics.Provider.ResponseMetadata["provider_session_provider"] = continuation.Provider
+		diagnostics.Provider.ResponseMetadata["provider_session_kind"] = continuation.Kind
+		diagnostics.Provider.ResponseMetadata["provider_session_id"] = continuation.ProviderSessionID
+	}
+	return &ProviderError{
+		Family:          providerFailureFamily(failureType),
+		Type:            failureType,
+		Message:         message,
+		ProviderSession: (continuation).SessionMetadata(),
+		Continuation:    continuation,
+		Diagnostics:     diagnostics,
+		Cause:           err,
+	}
+}
+
+func isProviderSessionFailure(err error) bool {
+	for _, candidate := range []error{
+		providersessions.ErrAmbiguousSessionFile,
+		providersessions.ErrInvalidIdentifier,
+		providersessions.ErrOperationCanceled,
+		providersessions.ErrResourceLimitExceeded,
+		providersessions.ErrSessionNotFound,
+		providersessions.ErrSessionOutsideRoot,
+		providersessions.ErrSessionSourceNotRegularFile,
+		providersessions.ErrSessionStorageUnavailable,
+		providersessions.ErrUnsupportedKind,
+		providersessions.ErrUnsupportedProvider,
+	} {
+		if errors.Is(err, candidate) {
+			return true
+		}
+	}
+	return false
+}
+
 func NewProviderErrorWithSession(
 	failureType WorkFailureType,
 	message string,
 	cause error,
-	session *ProviderSessionMetadata,
+	continuation *ProviderContinuationRef,
 ) *ProviderError {
 	err := NewProviderError(failureType, message, cause)
-	err.ProviderSession = CloneProviderSessionMetadata(session)
+	err.Continuation = cloneContinuation(continuation)
+	err.ProviderSession = (err.Continuation).SessionMetadata()
 	return err
 }
 

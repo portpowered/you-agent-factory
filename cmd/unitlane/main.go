@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -17,17 +18,19 @@ import (
 const modulePath = testlanes.ModulePath
 
 type config struct {
-	count   int
-	jobs    int
-	root    string
-	short   bool
-	timeout time.Duration
-	vet     bool
+	count        int
+	jobs         int
+	root         string
+	short        bool
+	timeout      time.Duration
+	vet          bool
+	timingOutput string
 }
 
 var executeUnitLane = run
 var execCommand = exec.Command
 var discoverUnitPackages = discoverPackages
+var stdoutWriter io.Writer = os.Stdout
 var stderrWriter io.Writer = os.Stderr
 var exitFunc = os.Exit
 
@@ -61,11 +64,12 @@ func run() error {
 func parseConfig() config {
 	var cfg config
 	flag.IntVar(&cfg.count, "count", 0, "go test -count value; zero preserves Go's content-addressed test cache")
-	flag.IntVar(&cfg.jobs, "jobs", 32, "go test -p value")
+	flag.IntVar(&cfg.jobs, "jobs", defaultUnitLaneJobs(), "go test -p value")
 	flag.StringVar(&cfg.root, "root", "./pkg/...", "go list package pattern for unit test discovery")
 	flag.BoolVar(&cfg.short, "short", true, "run with go test -short")
 	flag.DurationVar(&cfg.timeout, "timeout", 5*time.Minute, "go test timeout")
 	flag.BoolVar(&cfg.vet, "vet", false, "run go test's implicit vet pass")
+	flag.StringVar(&cfg.timingOutput, "timing-output", "", "optional path for a deterministic versioned unit package timing summary JSON document")
 	flag.Parse()
 	if cfg.jobs < 1 {
 		cfg.jobs = 1
@@ -123,9 +127,12 @@ func discoverPackagesUnder(rootDir, importPrefix string) ([]string, error) {
 }
 
 func runUnitTests(cfg config, packages []string) error {
-	packages = localPackageArguments(packages)
+	started := time.Now()
+	expectedPackages := append([]string(nil), packages...)
+	accumulator := newUnitTimingAccumulator(expectedPackages)
 	baseArgs := baseGoTestArgs(cfg)
 	baseLen := commandArgLen(baseArgs)
+	var laneErr error
 	for len(packages) > 0 {
 		batch := make([]string, 0, len(packages))
 		currentLen := baseLen
@@ -145,11 +152,23 @@ func runUnitTests(cfg config, packages []string) error {
 			currentLen += nextLen
 			packages = packages[1:]
 		}
-		if err := runGoTest(cfg, batch); err != nil {
-			return err
+		capture, err := runGoTest(cfg, localPackageArguments(batch), batch)
+		accumulator.add(capture)
+		if err != nil {
+			laneErr = err
+			break
 		}
 	}
-	return nil
+
+	summary := accumulator.summary(time.Since(started).Seconds())
+	var outputErrs []error
+	if err := writeUnitTimingSummary(stdoutWriter, summary); err != nil {
+		outputErrs = append(outputErrs, err)
+	}
+	if err := writeUnitTimingSummaryJSON(cfg.timingOutput, summary); err != nil {
+		outputErrs = append(outputErrs, err)
+	}
+	return errors.Join(laneErr, errors.Join(outputErrs...))
 }
 
 func localPackageArguments(packages []string) []string {
@@ -176,7 +195,7 @@ func commandArgLen(args []string) int {
 }
 
 func baseGoTestArgs(cfg config) []string {
-	args := []string{"test", fmt.Sprintf("-p=%d", cfg.jobs)}
+	args := []string{"test", fmt.Sprintf("-p=%d", cfg.jobs), "-json"}
 	if !cfg.vet {
 		args = append(args, "-vet=off")
 	}
@@ -186,7 +205,7 @@ func baseGoTestArgs(cfg config) []string {
 	return args
 }
 
-func runGoTest(cfg config, packages []string) error {
+func runGoTest(cfg config, packages, expectedPackages []string) (unitTimingCapture, error) {
 	args := baseGoTestArgs(cfg)
 	args = append(args, packages...)
 	if cfg.count > 0 {
@@ -196,9 +215,17 @@ func runGoTest(cfg config, packages []string) error {
 
 	cmd := execCommand("go", args...)
 	cmd.Env = os.Environ()
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	cmd.Stderr = stderrWriter
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return unitTimingCapture{}, fmt.Errorf("capture go test JSON output: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		return unitTimingCapture{}, err
+	}
+	capture, captureErr := collectUnitTimingCapture(stdout, expectedPackages, stdoutWriter)
+	runErr := cmd.Wait()
+	return capture, errors.Join(captureErr, runErr)
 }
 
 func commandError(err error, stderr string) error {

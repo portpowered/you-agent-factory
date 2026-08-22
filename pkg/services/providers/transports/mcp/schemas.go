@@ -50,7 +50,7 @@ func prerequisiteSchema() map[string]any {
 	return objectSchema(map[string]any{
 		"Kind":        stringProperty("Prerequisite kind such as configuration, credential, or dependency."),
 		"Name":        stringProperty("Prerequisite name."),
-		"Status":      stringProperty("Whether the prerequisite is satisfied or missing."),
+		"Status":      stringProperty("Whether the prerequisite is required but unverified, satisfied, or missing."),
 		"Description": stringProperty("Bounded setup guidance for the prerequisite."),
 	})
 }
@@ -61,7 +61,7 @@ func providerDescriptorSchema() map[string]any {
 		"Aliases":       map[string]any{"type": "array", "items": stringProperty("Alternate provider identity string.")},
 		"DisplayName":   stringProperty("Human-readable provider display name."),
 		"Availability":  stringProperty("Catalog availability posture for the provider."),
-		"Readiness":     stringProperty("Current provider readiness outcome."),
+		"Readiness":     stringProperty("Current readiness outcome, or unverified when no readiness probe ran."),
 		"Prerequisites": map[string]any{"type": "array", "items": prerequisiteSchema()},
 		"Capabilities":  map[string]any{"type": "array", "items": stringProperty("Provider-neutral capability identifier.")},
 	})
@@ -140,7 +140,6 @@ func executeInputSchema() map[string]any {
 			"items":       map[string]any{},
 		},
 		"outputSchema":     stringProperty("Optional structured output schema for the attempt."),
-		"resumeSession":    sessionRefInputSchema(),
 		"workingDirectory": stringProperty("Optional working directory for the attempt."),
 		"worktree":         stringProperty("Optional worktree path for the attempt."),
 		"envVars": map[string]any{

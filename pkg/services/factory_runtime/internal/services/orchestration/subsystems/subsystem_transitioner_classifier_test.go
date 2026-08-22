@@ -91,6 +91,35 @@ func TestTransitioner_ClassifierUnknownLabelUsesImplicitNormalizedFailureArc(t *
 	}
 }
 
+func TestResolveWorkResult_DecisionEnvelopePreservesExplicitRejectionOverStopWords(t *testing.T) {
+	transition := &petri.Transition{
+		ID:   "transition-id",
+		Name: "review-station",
+	}
+	result := &workerexecution.WorkResult{
+		DispatchID:   "dispatch-1",
+		TransitionID: "transition-id",
+		Outcome:      workerexecution.OutcomeRejected,
+		Feedback:     "add the missing release date",
+	}
+
+	resolved := resolveWorkResult(transition, result, runtimefixtures.RuntimeWorkstationLookupFixture{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"review-station": {
+				OutcomeFormat: interfaces.WorkstationOutcomeFormatDecisionEnvelope,
+				StopWords:     []string{"DONE"},
+			},
+		},
+	})
+
+	if resolved.outcome != workerexecution.OutcomeRejected {
+		t.Fatalf("resolved outcome = %s, want REJECTED", resolved.outcome)
+	}
+	if resolved.feedback != result.Feedback {
+		t.Fatalf("resolved feedback = %q, want %q", resolved.feedback, result.Feedback)
+	}
+}
+
 func newClassifierTransitionerFixture(now time.Time) *TransitionerSubsystem {
 	net := &state.Net{
 		Places: map[string]*petri.Place{
@@ -192,7 +221,7 @@ func newClassifierSnapshot(now time.Time, output string) *interfaces.EngineState
 				TransitionID:    "t1",
 				WorkstationName: "classifier",
 				StartTime:       now.Add(-time.Second),
-				ConsumedTokens: []factorytoken.Token{{
+				ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{{
 					ID:        "tok-1",
 					PlaceID:   "task:init",
 					CreatedAt: now.Add(-time.Hour),
@@ -206,7 +235,7 @@ func newClassifierSnapshot(now time.Time, output string) *interfaces.EngineState
 						ConsecutiveFailures: map[string]int{},
 						PlaceVisits:         map[string]int{},
 					},
-				}},
+				}}),
 			},
 		},
 		Results: []workerexecution.WorkResult{{

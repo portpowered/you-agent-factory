@@ -55,18 +55,20 @@ func (a *LibraryHarnessAdapter) Execute(ctx context.Context, input HarnessInput)
 	opts := []agentloop.Option{
 		agentloop.WithInferencer(input.Inferencer),
 	}
+	var recorder *ToolDiagnosticRecorder
 	if workerconfig.AgentToolsAllowExecution(policy) {
-		recorder := input.ToolRecorder
+		recorder = input.ToolRecorder
 		if recorder == nil {
 			recorder = NewToolDiagnosticRecorder()
 		}
 		opts = append(opts,
-			agentloop.WithToolExecutor(NewPolicyToolExecutor(a.toolFileSystem, policy, input.WorkingDir, recorder)),
+			agentloop.WithToolExecutor(newUnsupportedToolExecutor(policy, recorder)),
 			agentloop.WithTools(toolDefinitionsForPolicy(policy)),
 		)
 	} else {
 		opts = append(opts, agentloop.WithToolExecutionDisabled())
 	}
+	toolEventStart := len(recorder.Events())
 	if systemPrompt := strings.TrimSpace(input.SystemPrompt); systemPrompt != "" {
 		opts = append(opts, agentloop.WithSystemPrompt(systemPrompt))
 	}
@@ -82,6 +84,10 @@ func (a *LibraryHarnessAdapter) Execute(ctx context.Context, input HarnessInput)
 		FinalText: final.Text,
 		Messages:  result.Messages,
 		Err:       firstNonNilError(final.Err, err),
+	}
+	if recorder.hasPhaseSince("unsupported", toolEventStart) {
+		harnessResult.Err = agentRunToolsUnsupportedError(policy)
+		return harnessResult, harnessResult.Err
 	}
 	if harnessResult.Err != nil {
 		return harnessResult, harnessResult.Err

@@ -6,7 +6,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -19,14 +18,14 @@ var (
 type Adapter struct {
 	models  models.Service
 	scope   models.RuntimeScopeRef
-	invoker workers.ModelInvoker
+	invoker ModelInvoker
 	content work.ContentPreparation
 }
 
 // NewAdapter constructs the Models HTTP representation adapter.
 func NewAdapter(
 	service models.Service,
-	invoker workers.ModelInvoker,
+	invoker ModelInvoker,
 	content work.ContentPreparation,
 	scopes ...models.RuntimeScopeRef,
 ) *Adapter {
@@ -63,4 +62,31 @@ func (a *Adapter) InvokeModel(
 	}
 	mapped.Content = prepared
 	return a.invoker.InvokeModel(ctx, modelName, mapped)
+}
+
+// InvokeGenericModel maps and validates the provider-neutral request before it
+// crosses the Models root boundary. The root owns resolution, preparation,
+// host readiness, capacity, execution, and compensating release.
+func (a *Adapter) InvokeGenericModel(
+	ctx context.Context,
+	request factoryapi.GenericModelInvocationRequest,
+) (models.GenericInvocationResult, error) {
+	if a == nil || a.models == nil {
+		return models.GenericInvocationResult{}, errModelsServiceRequired
+	}
+	if a.scope.IsZero() {
+		return models.GenericInvocationResult{}, models.ErrRuntimeScopeInvalid
+	}
+	mapped, err := GenericInvocationRequestFromGenerated(request)
+	if err != nil {
+		return models.GenericInvocationResult{}, err
+	}
+	// The HTTP handler is already bound to the live Models runtime scope. Keep
+	// that process-owned scope authoritative instead of trusting a caller to
+	// select a different runtime through the generic request body.
+	mapped.Scope = a.scope
+	if err := mapped.ValidateGeneric(); err != nil {
+		return models.GenericInvocationResult{}, err
+	}
+	return a.models.InvokeModel(ctx, mapped)
 }

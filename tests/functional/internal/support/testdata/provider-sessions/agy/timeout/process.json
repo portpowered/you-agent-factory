@@ -1,11 +1,11 @@
 {
-  "argv": ["agy", "chat", "--headless", "--model", "gemini-pro"],
+  "argv": ["agy", "-p", "Process the golden timeout task.", "--output-format", "stream-json", "--add-dir", ".", "--disable-slash-commands", "--model", "gemini-3.6-flash-high"],
   "provider": "agy",
-  "model": "gemini-pro",
-  "exitCode": 124,
+  "model": "gemini-3.6-flash-high",
+  "exitCode": -1,
   "stdoutStream": false,
   "stderrStream": false,
   "workingDirectoryRole": "factory-root",
-  "timeoutCancelClass": "none",
+  "timeoutCancelClass": "context-deadline-exceeded",
   "terminalErrorClass": "structured-timeout"
 }

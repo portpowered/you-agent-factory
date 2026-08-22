@@ -13,10 +13,10 @@ import (
 
 	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
 	workcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
+	transportworkcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
-	transportworkcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/spf13/cobra"
 )
@@ -249,7 +249,7 @@ func TestBindShowRoutesThroughResolvedCompositionPath(t *testing.T) {
 	}
 }
 
-func TestBindVisualizeRoutesThroughResolvedCompositionPath(t *testing.T) {
+func TestBindRenderRoutesThroughResolvedCompositionPath(t *testing.T) {
 	t.Parallel()
 
 	visualize := workcli.BindVisualize(func(request workdomain.VisualizationRequest) (string, error) {
@@ -275,7 +275,7 @@ func TestBindVisualizeRoutesThroughResolvedCompositionPath(t *testing.T) {
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetContext(context.Background())
-	root.SetArgs([]string{"work", "visualize", "batch.json"})
+	root.SetArgs([]string{"work", "render", "batch.json"})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}

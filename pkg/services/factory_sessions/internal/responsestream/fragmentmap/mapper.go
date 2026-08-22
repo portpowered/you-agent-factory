@@ -8,10 +8,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -477,16 +479,26 @@ func mapProgressFragment(ctx Context, fragment responsestream.Event) (responseev
 	}, nil
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func semanticProgress(fragment responsestream.Event) (responseevents.Kind, responseevents.Phase, any) {
 	metadata := fragment.Metadata
 	kind := strings.ToLower(strings.TrimSpace(metadata["kind"]))
 	phase := semanticPhase(fragment.Type)
 	switch kind {
 	case "run":
+		if phase == responseevents.PhaseUpdated {
+			return responseevents.KindProgress, phase, progressPayloadFromFragment(fragment)
+		}
 		return responseevents.KindRun, phase, responseevents.RunPayload{Status: strings.ToLower(string(phase))}
 	case "session":
-		return responseevents.KindSession, phase, responseevents.SessionPayload{Status: strings.ToLower(string(phase))}
+		payload := responseevents.SessionPayload{Status: strings.ToLower(string(phase))}
+		if phase == responseevents.PhaseUpdated && strings.EqualFold(metadata["title_present"], "true") {
+			title := fragment.Payload
+			payload.Title = &title
+		}
+		return responseevents.KindSession, phase, payload
 	case "message":
+		phase = contentProgressPhase(phase)
 		if phase == responseevents.PhaseDelta {
 			return responseevents.KindMessage, phase, responseevents.MessageDeltaPayload{ContentBlockIndex: 0, ContentBlockKind: responseevents.ContentBlockText, TextDelta: fragment.Payload}
 		}
@@ -496,16 +508,24 @@ func semanticProgress(fragment responsestream.Event) (responseevents.Kind, respo
 			Partial:       strings.EqualFold(strings.TrimSpace(metadata["partial"]), "true"),
 		}
 	case "reasoning":
+		phase = contentProgressPhase(phase)
 		payload := responseevents.ReasoningPayload{Summary: fragment.Payload}
 		if phase == responseevents.PhaseDelta {
 			payload, payload.SummaryDelta = responseevents.ReasoningPayload{}, fragment.Payload
 		}
 		return responseevents.KindReasoning, phase, payload
 	case "tool":
+		phase = contentProgressPhase(phase)
 		toolID := strings.TrimSpace(metadata["item_id"])
 		name := strings.TrimSpace(fragment.Payload)
 		if name == "" {
 			name = "ACP tool"
+		}
+		if phase == responseevents.PhaseDelta {
+			return responseevents.KindTool, phase, responseevents.ToolDeltaPayload{
+				ToolCallID:  toolID,
+				OutputDelta: fragment.Payload,
+			}
 		}
 		payload := responseevents.ToolPayload{ToolCallID: toolID, ToolName: name, Status: metadata["status"]}
 		if raw := json.RawMessage(metadata["raw_input"]); json.Valid(raw) {
@@ -518,7 +538,7 @@ func semanticProgress(fragment responsestream.Event) (responseevents.Kind, respo
 	case "file_change":
 		return responseevents.KindFileChange, responseevents.PhaseUpdated, responseevents.FileChangePayload{Path: metadata["path"], Operation: metadata["operation"], Summary: fragment.Payload}
 	case "plan":
-		return responseevents.KindPlan, responseevents.PhaseUpdated, responseevents.PlanPayload{Summary: firstNonEmptyProgress(fragment.Payload, "ACP plan updated")}
+		return responseevents.KindPlan, responseevents.PhaseUpdated, planPayloadFromFragment(fragment, metadata)
 	case "usage":
 		return responseevents.KindUsage, responseevents.PhaseUpdated, responseevents.UsagePayload{TotalTokens: parseProgressInt64(metadata["used_tokens"])}
 	case "error":
@@ -526,6 +546,13 @@ func semanticProgress(fragment responsestream.Event) (responseevents.Kind, respo
 	default:
 		return responseevents.KindProgress, responseevents.PhaseUpdated, progressPayloadFromFragment(fragment)
 	}
+}
+
+func contentProgressPhase(phase responseevents.Phase) responseevents.Phase {
+	if phase == responseevents.PhaseUpdated {
+		return responseevents.PhaseDelta
+	}
+	return phase
 }
 
 func semanticProgressRepresentation(kind responseevents.Kind, phase responseevents.Phase) responseevents.Representation {
@@ -536,17 +563,20 @@ func semanticProgressRepresentation(kind responseevents.Kind, phase responseeven
 }
 
 func semanticPhase(value responsestream.EventType) responseevents.Phase {
-	switch strings.ToLower(strings.TrimSpace(string(value))) {
-	case "started", "start":
+	normalized := responsestream.EventType(strings.ToUpper(strings.TrimSpace(string(value))))
+	switch normalized {
+	case responsestream.EventTypeStarted, "START":
 		return responseevents.PhaseStarted
-	case "delta":
+	case responsestream.EventTypeTextDelta, "DELTA":
 		return responseevents.PhaseDelta
-	case "completed", "complete":
+	case responsestream.EventTypeFinalText, "COMPLETED", "COMPLETE":
 		return responseevents.PhaseCompleted
-	case "failed":
+	case responsestream.EventTypeFailed:
 		return responseevents.PhaseFailed
-	case "canceled", "cancelled":
+	case responsestream.EventTypeCanceled, "CANCELLED":
 		return responseevents.PhaseCanceled
+	case responsestream.EventTypeProgress, responsestream.EventTypeUnknown, "UPDATED":
+		return responseevents.PhaseUpdated
 	default:
 		return responseevents.PhaseUpdated
 	}
@@ -602,8 +632,11 @@ func fragmentPayloadTruncated(metadata map[string]string) bool {
 }
 
 func fragmentProvider(fragment responsestream.Event) string {
+	if provider := strings.TrimSpace(fragment.Provider); provider != "" {
+		return provider
+	}
 	if fragment.ProviderSessionRef != nil {
-		if provider := workerexecution.CanonicalProviderSessionProvider(fragment.ProviderSessionRef.Provider); provider != "" {
+		if provider := providers.ID(fragment.ProviderSessionRef.Provider).CanonicalSessionProvider(); provider != "" {
 			return provider
 		}
 	}
@@ -628,7 +661,7 @@ func fragmentNativeEventType(fragment responsestream.Event) string {
 	return string(fragment.Kind)
 }
 
-func providerSessionRefString(session *workerexecution.ProviderSessionMetadata) string {
+func providerSessionRefString(session *providers.SessionMetadata) string {
 	if session == nil {
 		return ""
 	}
@@ -646,4 +679,47 @@ func synthesizedEventID(ctx Context, fragment responsestream.Event) string {
 	)
 	sum := sha256.Sum256([]byte(material))
 	return "evt-legacy-" + hex.EncodeToString(sum[:8])
+}
+
+// planPayloadFromFragment recovers a plan's individual steps from the
+// provider's own reported entries.
+//
+// The ACP client already captures the entry list; keeping only a summary
+// string discarded it, so nothing downstream could render an actual plan no
+// matter what the provider reported. A provider that reports no usable entries
+// still yields the summary, which is the prior behavior.
+func planPayloadFromFragment(
+	fragment responsestream.Event,
+	metadata map[string]string,
+) responseevents.PlanPayload {
+	payload := responseevents.PlanPayload{
+		Summary: firstNonEmptyProgress(fragment.Payload, "ACP plan updated"),
+	}
+	raw := strings.TrimSpace(metadata["entries"])
+	if raw == "" {
+		return payload
+	}
+	var entries []struct {
+		Content string `json:"content"`
+		Title   string `json:"title"`
+		Status  string `json:"status"`
+	}
+	if err := json.Unmarshal([]byte(raw), &entries); err != nil {
+		return payload
+	}
+	for index, entry := range entries {
+		description := strings.TrimSpace(entry.Content)
+		if description == "" {
+			description = strings.TrimSpace(entry.Title)
+		}
+		if description == "" {
+			continue
+		}
+		payload.Steps = append(payload.Steps, responseevents.PlanStep{
+			ID:          strconv.Itoa(index + 1),
+			Description: description,
+			Status:      entry.Status,
+		})
+	}
+	return payload
 }

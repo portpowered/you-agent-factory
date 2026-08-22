@@ -2,6 +2,10 @@ package factorysessions
 
 import "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 
+// HomeDirectoryResolver resolves the process user's home directory at the
+// external filesystem edge selected by Wire.
+type HomeDirectoryResolver func() (string, error)
+
 // These aliases publish the Factory Sessions-owned external read effects at
 // the service root. Implementations depend on the leaf package to avoid a
 // root/import cycle; external consumers and the process edge aggregator use

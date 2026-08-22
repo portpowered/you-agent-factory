@@ -119,9 +119,11 @@ Before `you submit` or `you submit batch`, confirm a factory service is listenin
 
 1. **`you session list`** (primary) — calls `GET /factory-sessions` on the running host
    (default `http://localhost:7437`). Empty table means no open sessions; connection refused
-   means start a listening service with `you server` or a server-enabled run such as
-   `you run --continuously --with-server`.
-2. **`you factory query`** — active factory definition for the selected session when you need
+   means start a listening service with `you server --listen <host:port>` or a
+   server-enabled run such as `you run --continuously --with-server`. Omit
+   `--listen` for the default local bind; an explicit local `--server` is only
+   a warned compatibility path.
+2. **`you factory show`** — active factory definition for the selected session when you need
    the loaded factory name before `--session` on submit or work commands.
 3. **Deeper checks** — status API fields, dashboard URL, and continuous run modes: `you docs sessions`.
 
@@ -194,7 +196,7 @@ changing repository files. Prompt composition rules live in `docs/reference/auth
 | Guards and loop breakers | `you docs guards` |
 | Batch relations (`DEPENDS_ON`, `PARENT_CHILD`, `SPAWNED_BY`) | `you docs relationships` |
 | Submitted work (`POST /factory-sessions/{session_id}/work`, tags, tokens) | `you docs work` |
-| Sessions, factory query, status API, dashboard | `you docs sessions` |
+| Sessions, factory show, status API, dashboard | `you docs sessions` |
 | Dynamic workflow authoring and execution | `you docs javascript-workflows` |
 | Factory Session MCP host setup | `you docs mcp` |
 | Workstation routing and runtime fields | `you docs workstations` |

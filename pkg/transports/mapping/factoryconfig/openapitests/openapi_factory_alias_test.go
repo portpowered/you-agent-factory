@@ -441,7 +441,7 @@ func TestFactoryConfigFromOpenAPI_ReportsNestedGeneratedFieldPathOnMappingError(
 	}
 	workstations := []factoryapi.Workstation{{
 		Name:   "finish-story",
-		Worker: "executor",
+		Worker: openAPIStringPtr("executor"),
 		Inputs: []factoryapi.WorkstationIO{{
 			WorkType: "story",
 			State:    "init",

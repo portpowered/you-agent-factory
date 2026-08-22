@@ -10,6 +10,29 @@ import { useFactoryGraphEdgeWaypointEditor } from "./factory-graph-edge-waypoint
 
 const EDGE_ID = "workstation-output:workstation:draft->work-state:story:done";
 
+function createPointerEventTarget() {
+  const target = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "path",
+  ) as SVGPathElement;
+  target.setPointerCapture = vi.fn();
+  target.releasePointerCapture = vi.fn();
+  target.hasPointerCapture = vi.fn(() => true);
+  return target;
+}
+
+function createPointerEvent(
+  target: SVGPathElement,
+  input: { clientX: number; clientY: number; pointerId: number },
+) {
+  return {
+    ...input,
+    currentTarget: target,
+    preventDefault: vi.fn(),
+    stopPropagation: vi.fn(),
+  } as unknown as React.PointerEvent<SVGPathElement>;
+}
+
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: waypoint editor hook scenarios stay grouped around one hook contract.
 describe("useFactoryGraphEdgeWaypointEditor", () => {
   it("selects edges for waypoint editing and adds waypoints through layout actions", () => {
@@ -33,13 +56,13 @@ describe("useFactoryGraphEdgeWaypointEditor", () => {
             id: "workstation:draft",
             data: {},
             position: { x: 0, y: 0 },
-            type: "factoryEntity",
+            type: "workstation",
           },
           {
             id: "work-state:story:done",
             data: {},
             position: { x: 200, y: 100 },
-            type: "factoryEntity",
+            type: "statePosition",
           },
         ],
       }),
@@ -125,13 +148,13 @@ describe("useFactoryGraphEdgeWaypointEditor", () => {
             id: "workstation:draft",
             data: {},
             position: { x: 0, y: 0 },
-            type: "factoryEntity",
+            type: "workstation",
           },
           {
             id: "work-state:story:done",
             data: {},
             position: { x: 200, y: 100 },
-            type: "factoryEntity",
+            type: "statePosition",
           },
         ],
       }),
@@ -186,6 +209,79 @@ describe("useFactoryGraphEdgeWaypointEditor", () => {
 
     expect(handleEditorEdgeDelete).toHaveBeenCalledWith(EDGE_ID);
     expect(result.current.selectedWaypointEdgeId).toBeNull();
+  });
+
+  it("commits a directly dragged edge as one inserted waypoint", () => {
+    const addEdgeWaypoint = vi.fn();
+    const { result } = renderHook(() =>
+      useFactoryGraphEdgeWaypointEditor({
+        activeTool: null,
+        addEdgeWaypoint,
+        canInteractWithEditor: true,
+        editorMode: true,
+        handleEditorEdgeDelete: vi.fn(),
+        layout: createDefaultFactoryLayout(),
+        locale: "en",
+        moveEdgeWaypoint: vi.fn(),
+        removeEdgeWaypoint: vi.fn(),
+        nodes: [
+          {
+            id: "workstation:draft",
+            position: { x: 0, y: 0 },
+          },
+          {
+            id: "work-state:story:done",
+            position: { x: 200, y: 100 },
+          },
+        ],
+      }),
+    );
+    const target = createPointerEventTarget();
+    const interaction = result.current.edgePointerInteraction(EDGE_ID);
+
+    act(() => {
+      interaction?.onPointerDown?.(
+        createPointerEvent(target, {
+          clientX: 100,
+          clientY: 50,
+          pointerId: 7,
+        }),
+        { x: 100, y: 50 },
+      );
+      interaction?.onPointerMove?.(
+        createPointerEvent(target, {
+          clientX: 140,
+          clientY: 90,
+          pointerId: 7,
+        }),
+        { x: 140, y: 90 },
+      );
+    });
+
+    expect(result.current.selectedWaypointEdgeId).toBe(EDGE_ID);
+    expect(result.current.selectedEdgeWaypoints).toEqual([{ x: 140, y: 90 }]);
+
+    act(() => {
+      interaction?.onPointerUp?.(
+        createPointerEvent(target, {
+          clientX: 160,
+          clientY: 110,
+          pointerId: 7,
+        }),
+        { x: 160, y: 110 },
+      );
+    });
+
+    expect(addEdgeWaypoint).toHaveBeenCalledTimes(1);
+    expect(addEdgeWaypoint).toHaveBeenCalledWith(
+      EDGE_ID,
+      {
+        x: 160,
+        y: 110,
+      },
+      0,
+    );
+    expect(target.releasePointerCapture).toHaveBeenCalledWith(7);
   });
 });
 // Component lane: requires DOM APIs.

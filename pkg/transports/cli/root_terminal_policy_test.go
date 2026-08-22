@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,8 +13,11 @@ import (
 	"strings"
 	"testing"
 
+	submitcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/submit"
+	workcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
-	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 )
 
@@ -95,6 +99,9 @@ func TestRootCommand_ResolvesQuietRunPolicyForDiagnosticsAndLogger(t *testing.T)
 	}
 	if got.Diagnostics != nil {
 		t.Fatal("expected quiet run policy to suppress diagnostics writer")
+	}
+	if got.ProgressOutput != nil || got.ProgressIsTTY {
+		t.Fatalf("quiet progress channel = (%T, %t), want (nil, false)", got.ProgressOutput, got.ProgressIsTTY)
 	}
 	if got.Verbose {
 		t.Fatal("expected quiet run policy to disable verbose runtime logging")
@@ -268,6 +275,9 @@ func TestRootCommand_NormalModeRunWiresTerminalMutedLogger(t *testing.T) {
 	if got.Diagnostics != nil {
 		t.Fatal("expected normal run policy to suppress diagnostics writer")
 	}
+	if got.ProgressOutput == nil {
+		t.Fatal("expected normal run policy to wire the stderr progress channel")
+	}
 }
 
 func TestRootCommand_TerminalPolicyNeverLeaksPromptOrSecretsAcrossModes(t *testing.T) {
@@ -409,7 +419,14 @@ func TestProductionWorkCommandUsesGeneratedFamily(t *testing.T) {
 	if work.RunE != nil {
 		t.Fatal("generated work parent must remain non-runnable")
 	}
-	for _, path := range []string{"list", "show", "move", "visualize"} {
+	approval, _, err := work.Find([]string{"approval"})
+	if err != nil {
+		t.Fatalf("Find(approval) error = %v", err)
+	}
+	if approval.RunE != nil {
+		t.Fatal("generated work approval parent must remain non-runnable")
+	}
+	for _, path := range []string{"list", "watch", "show", "move", "render"} {
 		if _, _, err := work.Find([]string{path}); err != nil {
 			t.Fatalf("generated work tree missing %q: %v", path, err)
 		}
@@ -425,6 +442,13 @@ func TestProductionWorkCommandAttachesHandwrittenRunE(t *testing.T) {
 	if list.RunE == nil {
 		t.Fatal("generated work list must attach handwritten RunE")
 	}
+	watch, _, err := work.Find([]string{"watch"})
+	if err != nil {
+		t.Fatalf("Find(watch) error = %v", err)
+	}
+	if watch.RunE == nil {
+		t.Fatal("generated work watch must attach handwritten RunE")
+	}
 	show, _, err := work.Find([]string{"show"})
 	if err != nil {
 		t.Fatalf("Find(show) error = %v", err)
@@ -439,12 +463,12 @@ func TestProductionWorkCommandAttachesHandwrittenRunE(t *testing.T) {
 	if move.RunE == nil {
 		t.Fatal("generated work move must attach handwritten RunE")
 	}
-	visualize, _, err := work.Find([]string{"visualize"})
+	visualize, _, err := work.Find([]string{"render"})
 	if err != nil {
-		t.Fatalf("Find(visualize) error = %v", err)
+		t.Fatalf("Find(render) error = %v", err)
 	}
 	if visualize.RunE == nil {
-		t.Fatal("generated work visualize must attach handwritten RunE")
+		t.Fatal("generated work render must attach handwritten RunE")
 	}
 }
 
@@ -457,7 +481,14 @@ func TestProductionRootUsesGeneratedWorkFamilyCutover(t *testing.T) {
 	if work.RunE != nil {
 		t.Fatal("you work must remain non-runnable through generated cutover")
 	}
-	for _, path := range []string{"list", "show", "move", "visualize"} {
+	approval, _, err := work.Find([]string{"approval"})
+	if err != nil {
+		t.Fatalf("Find(work approval) error = %v", err)
+	}
+	if approval.RunE != nil {
+		t.Fatal("you work approval must remain non-runnable through generated cutover")
+	}
+	for _, path := range []string{"list", "watch", "show", "move", "render"} {
 		leaf, _, err := root.Find([]string{"work", path})
 		if err != nil {
 			t.Fatalf("Find(work %s) error = %v", path, err)
@@ -465,5 +496,417 @@ func TestProductionRootUsesGeneratedWorkFamilyCutover(t *testing.T) {
 		if leaf.RunE == nil {
 			t.Fatalf("you work %s must attach handwritten RunE through generated cutover", path)
 		}
+	}
+}
+func TestProductionWorkResolvedHandlerExecutesWatch(t *testing.T) {
+	var got workcli.WatchConfig
+	root := withTestInjectedPlatformRoles(CommandFactory{
+		WatchWork: func(cfg workcli.WatchConfig) error {
+			got = cfg
+			_, err := io.WriteString(cfg.Output, "watched\n")
+			return err
+		},
+	}).NewCommand(nil, nil, nil)
+
+	var stdout, stderr bytes.Buffer
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"--server", "https://factory.example", "--verbose", "--debug", "work", "watch", "--session", "session-alpha", "--follow"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("work watch Execute() error = %v", err)
+	}
+
+	if got.Context == nil || got.Server != "https://factory.example" || got.SessionID != "session-alpha" ||
+		!got.SessionIDExplicit || !got.Follow || !got.Verbose || !got.Debug || got.Output != &stdout || got.Diagnostics != &stderr {
+		t.Fatalf("watch config = %#v, want production stable-input mapping", got)
+	}
+	if stdout.String() != "watched\n" || stderr.Len() != 0 {
+		t.Fatalf("watch output = %q, diagnostics = %q", stdout.String(), stderr.String())
+	}
+}
+
+func TestWorkerSessionsListCommandMapsManifestInputsToOperation(t *testing.T) {
+	var got workersessionscli.ListConfig
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		ListWorkerSessions: func(config workersessionscli.ListConfig) error {
+			got = config
+			return nil
+		},
+	})
+	root := factory.NewCommand(nil, nil, nil)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"--json", "--server", "http://factory.test:7437",
+		"worker-sessions", "list", "--work-id", "work-1",
+		"--session", "session-1", "--output", "json",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute worker-sessions list: %v", err)
+	}
+	if got.WorkID == "" {
+		t.Fatal("worker sessions list operation was not invoked")
+	}
+	if got.WorkID != "work-1" || got.SessionID != "session-1" || got.Server != "http://factory.test:7437" {
+		t.Fatalf("operation config = %#v, want manifest values", got)
+	}
+	if got.OutputFormat != "json" || !got.JSON {
+		t.Fatalf("output config = %#v, want json output", got)
+	}
+}
+
+func TestWorkerSessionsInvokeCommandMapsManifestInputsToOperation(t *testing.T) {
+	var got workersessionscli.InvokeConfig
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		InvokeWorkerSession: func(config workersessionscli.InvokeConfig) error {
+			got = config
+			return nil
+		},
+	})
+	root := factory.NewCommand(nil, nil, nil)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"--json", "--server", "http://factory.test:7437",
+		"worker-sessions", "invoke", "--request-id", "request-1", "--worker-session-id", "session-1",
+		"--dispatch-id", "dispatch-1", "--workstation", "coding", "--provider", "codex",
+		"--model", "model-1", "--user-message", "hello", "--async", "--output", "json", "follow-up", "now",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute worker-sessions invoke: %v", err)
+	}
+	assertWorkerSessionsInvokeConfig(t, got)
+}
+
+func TestWorkerSessionsContinueCommandMapsManifestInputsToOperation(t *testing.T) {
+	var got workersessionscli.ContinueConfig
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		ContinueWorkerSession: func(config workersessionscli.ContinueConfig) error {
+			got = config
+			return nil
+		},
+	})
+	root := factory.NewCommand(nil, nil, nil)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"--json", "--server", "http://factory.test:7437",
+		"worker-sessions", "continue", "source-1", "--request-id", "request-1",
+		"--successor-worker-session-id", "successor-1", "--user-message", "hello",
+		"--async", "--output", "json", "follow", "up",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute worker-sessions continue: %v", err)
+	}
+	if got.SourceWorkerSessionID != "source-1" || got.RequestID != "request-1" ||
+		got.SuccessorWorkerSessionID != "successor-1" || got.FollowUpInput != "hello" ||
+		got.Server != "http://factory.test:7437" || got.Remote || !got.Async || got.OutputFormat != "json" || !got.JSON {
+		t.Fatalf("continue config = %#v, want manifest values", got)
+	}
+	if len(got.Prompt) != 2 || got.Prompt[0] != "follow" || got.Prompt[1] != "up" {
+		t.Fatalf("continue prompt = %#v, want positional follow-up input", got.Prompt)
+	}
+}
+
+func TestWorkerSessionsInterruptCommandMapsManifestInputs(t *testing.T) {
+	var interrupt workersessionscli.InterruptConfig
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		InterruptWorkerSession: func(config workersessionscli.InterruptConfig) error {
+			interrupt = config
+			return nil
+		},
+	})
+	root := factory.NewCommand(nil, nil, nil)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"--json", "--server", "http://factory.test:7437",
+		"worker-sessions", "interrupt", "source-1", "--request-id", "request-1",
+		"--successor-worker-session-id", "successor-1", "--replacement-message", "hello",
+		"--async", "--output", "json", "replace", "input",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute worker-sessions interrupt: %v", err)
+	}
+	if interrupt.SourceWorkerSessionID != "source-1" || interrupt.RequestID != "request-1" ||
+		interrupt.SuccessorWorkerSessionID != "successor-1" || interrupt.ReplacementMessage != "hello" ||
+		interrupt.Server != "http://factory.test:7437" || interrupt.Remote || !interrupt.Async ||
+		interrupt.OutputFormat != "json" || !interrupt.JSON || len(interrupt.Prompt) != 2 {
+		t.Fatalf("interrupt config = %#v, want manifest values", interrupt)
+	}
+}
+
+func TestWorkerSessionsControlCommandsMapManifestInputs(t *testing.T) {
+	for _, action := range []workersessions.ControlAction{
+		workersessions.ControlActionPause, workersessions.ControlActionResume,
+		workersessions.ControlActionCancel, workersessions.ControlActionTerminate,
+	} {
+		t.Run(strings.ToLower(string(action)), func(t *testing.T) {
+			var control workersessionscli.ControlConfig
+			operations := CommandFactory{}
+			operation := func(config workersessionscli.ControlConfig) error {
+				control = config
+				return nil
+			}
+			switch action {
+			case workersessions.ControlActionPause:
+				operations.PauseWorkerSession = operation
+			case workersessions.ControlActionResume:
+				operations.ResumeWorkerSession = operation
+			case workersessions.ControlActionCancel:
+				operations.CancelWorkerSession = operation
+			case workersessions.ControlActionTerminate:
+				operations.TerminateWorkerSession = operation
+			}
+			root := withTestInjectedPlatformRoles(operations).NewCommand(nil, nil, nil)
+			root.SetOut(io.Discard)
+			root.SetErr(io.Discard)
+			root.SetArgs([]string{
+				"--json", "--server", "http://factory.test:7437", "worker-sessions",
+				strings.ToLower(string(action)), "session-1", "--output", "json",
+			})
+			if err := root.Execute(); err != nil {
+				t.Fatalf("execute worker-sessions %s: %v", action, err)
+			}
+			if control.WorkerSessionID != "session-1" || control.Action != action ||
+				control.Server != "http://factory.test:7437" || control.Remote ||
+				control.OutputFormat != "json" || !control.JSON {
+				t.Fatalf("%s config = %#v, want manifest values", action, control)
+			}
+		})
+	}
+}
+
+func TestWorkerSessionsInterruptAndControlCommandsRequireOperations(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "interrupt",
+			args: []string{"worker-sessions", "interrupt", "source-1", "--request-id", "request-1", "--successor-worker-session-id", "successor-1", "--replacement-message", "replacement"},
+			want: "worker sessions interrupt service is required",
+		},
+		{
+			name: "pause",
+			args: []string{"worker-sessions", "pause", "session-1"},
+			want: "worker sessions pause service is required",
+		},
+		{
+			name: "resume",
+			args: []string{"worker-sessions", "resume", "session-1"},
+			want: "worker sessions resume service is required",
+		},
+		{
+			name: "cancel",
+			args: []string{"worker-sessions", "cancel", "session-1"},
+			want: "worker sessions cancel service is required",
+		},
+		{
+			name: "terminate",
+			args: []string{"worker-sessions", "terminate", "session-1"},
+			want: "worker sessions terminate service is required",
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			root := withTestInjectedPlatformRoles(CommandFactory{}).NewCommand(nil, nil, nil)
+			root.SetOut(io.Discard)
+			root.SetErr(io.Discard)
+			root.SetArgs(test.args)
+			err := root.Execute()
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("execute %s error = %v, want %q", test.name, err, test.want)
+			}
+		})
+	}
+}
+
+func TestWorkerSessionsInterruptInputReaderReportsTypedInputErrors(t *testing.T) {
+	values := map[string]any{
+		"you.worker-sessions.interrupt.arg.0":                            "source-1",
+		"you.worker-sessions.interrupt.flag.request-id":                  "request-1",
+		"you.worker-sessions.interrupt.flag.successor-worker-session-id": "successor-1",
+		"you.worker-sessions.interrupt.flag.replacement-message":         "replacement",
+		"you.worker-sessions.interrupt.flag.output":                      "json",
+		"you.worker-sessions.interrupt.arg.1":                            []string{"follow-up"},
+		"you.worker-sessions.interrupt.flag.async":                       true,
+	}
+	for _, key := range []string{
+		"you.worker-sessions.interrupt.arg.0",
+		"you.worker-sessions.interrupt.flag.request-id",
+		"you.worker-sessions.interrupt.flag.successor-worker-session-id",
+		"you.worker-sessions.interrupt.flag.replacement-message",
+		"you.worker-sessions.interrupt.flag.output",
+		"you.worker-sessions.interrupt.flag.async",
+	} {
+		candidate := make(map[string]any, len(values))
+		for id, value := range values {
+			candidate[id] = value
+		}
+		delete(candidate, key)
+		if _, err := readGeneratedWorkerSessionsInterruptInputs(candidate); err == nil {
+			t.Errorf("readGeneratedWorkerSessionsInterruptInputs(missing %s) = nil error, want typed input error", key)
+		}
+	}
+	delete(values, "you.worker-sessions.interrupt.arg.1")
+	if got, err := readGeneratedWorkerSessionsInterruptInputs(values); err != nil {
+		t.Fatalf("readGeneratedWorkerSessionsInterruptInputs(missing optional prompt) error = %v", err)
+	} else if len(got.replacementInput) != 0 {
+		t.Fatalf("optional interrupt prompt = %#v, want empty", got.replacementInput)
+	}
+}
+
+func assertWorkerSessionsInvokeConfig(t *testing.T, got workersessionscli.InvokeConfig) {
+	t.Helper()
+	checks := map[string]bool{
+		"local placement":   !got.Remote,
+		"server":            got.Server == "http://factory.test:7437",
+		"request ID":        got.RequestID == "request-1",
+		"Worker Session ID": got.WorkerSessionID == "session-1",
+		"dispatch ID":       got.DispatchID == "dispatch-1",
+		"workstation":       got.WorkstationName == "coding",
+		"provider":          got.Provider == "codex",
+		"model":             got.Model == "model-1",
+		"user message":      got.UserMessage == "hello",
+		"async":             got.Async,
+		"output format":     got.OutputFormat == "json",
+		"JSON output":       got.JSON,
+	}
+	for name, ok := range checks {
+		if !ok {
+			t.Errorf("invoke config %s is incorrect: %#v", name, got)
+		}
+	}
+	wantPrompt := []string{"follow-up", "now"}
+	if len(got.Prompt) != len(wantPrompt) {
+		t.Fatalf("invoke prompt = %#v, want positional prompt %#v", got.Prompt, wantPrompt)
+	}
+	for index, want := range wantPrompt {
+		if got.Prompt[index] != want {
+			t.Errorf("invoke prompt[%d] = %q, want %q", index, got.Prompt[index], want)
+		}
+	}
+}
+
+func TestWorkerSessionsShowCommandMapsManifestInputsToOperation(t *testing.T) {
+	var got workersessionscli.ShowConfig
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		ShowWorkerSession: func(config workersessionscli.ShowConfig) error {
+			got = config
+			return nil
+		},
+	})
+	root := factory.NewCommand(nil, nil, nil)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"--json", "--server", "http://factory.test:7437",
+		"worker-sessions", "show", "--provider", "codex", "--kind", "session_id", "--id", "provider-session-1",
+		"--session", "session-1", "--output", "json",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute worker-sessions show: %v", err)
+	}
+	if got.Provider != "codex" || got.Kind != "session_id" || got.ID != "provider-session-1" || got.SessionID != "session-1" {
+		t.Fatalf("operation config = %#v, want manifest identity values", got)
+	}
+	if got.Server != "http://factory.test:7437" || got.OutputFormat != "json" || !got.JSON {
+		t.Fatalf("output/config = %#v, want server and json values", got)
+	}
+}
+
+func TestWorkerSessionsStreamCommandMapsManifestInputsToOperation(t *testing.T) {
+	var got workersessionscli.StreamConfig
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		StreamWorkerSession: func(config workersessionscli.StreamConfig) error {
+			got = config
+			return nil
+		},
+	})
+	root := factory.NewCommand(nil, nil, nil)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"--json", "--server", "http://factory.test:7437",
+		"worker-sessions", "stream", "--provider", "codex", "--kind", "session_id", "--id", "provider-session-1",
+		"--session", "session-1", "--output", "json", "--follow",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute worker-sessions stream: %v", err)
+	}
+	if got.Provider != "codex" || got.Kind != "session_id" || got.ID != "provider-session-1" || got.SessionID != "session-1" {
+		t.Fatalf("operation config = %#v, want manifest identity values", got)
+	}
+	if got.Server != "http://factory.test:7437" || got.OutputFormat != "json" || !got.JSON {
+		t.Fatalf("output/config = %#v, want server and json values", got)
+	}
+	if !got.Follow || got.ReplayOnly {
+		t.Fatalf("stream mode config = %#v, want explicit live follow only", got)
+	}
+}
+
+func TestWorkerSessionsStreamRejectsReplayOnlyFollowBeforeOperation(t *testing.T) {
+	operationCalls := 0
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		StreamWorkerSession: func(workersessionscli.StreamConfig) error {
+			operationCalls++
+			return nil
+		},
+	})
+	root := factory.NewCommand(nil, nil, nil)
+	var stdout, stderr bytes.Buffer
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{
+		"--json", "--server", "http://factory.test:7437",
+		"worker-sessions", "stream", "--provider", "codex", "--kind", "session_id", "--id", "provider-session-1",
+		"--replay-only", "--follow", "--output", "json",
+	})
+
+	err := root.Execute()
+	var typed *workersessionscli.CLIError
+	if !errors.As(err, &typed) || typed.Code != workersessionscli.StreamModeConflictCode {
+		t.Fatalf("error = %v, want %s", err, workersessionscli.StreamModeConflictCode)
+	}
+	if operationCalls != 0 {
+		t.Fatalf("conflicting stream invoked operation %d times, want 0", operationCalls)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("conflicting stream wrote stdout %q, want empty", stdout.String())
+	}
+}
+
+func TestWorkerSessionsReadCommandMapsManifestInputsToOperation(t *testing.T) {
+	var got workersessionscli.ReadConfig
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		ReadWorkerSession: func(config workersessionscli.ReadConfig) error {
+			got = config
+			return nil
+		},
+	})
+	root := factory.NewCommand(nil, nil, nil)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"--json", "--server", "http://factory.test:7437",
+		"worker-sessions", "read", "--provider", "codex", "--kind", "session_id", "--id", "provider-session-1",
+		"--session", "session-1", "--output", "json",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute worker-sessions read: %v", err)
+	}
+	if got.Provider != "codex" || got.Kind != "session_id" || got.ID != "provider-session-1" || got.SessionID != "session-1" {
+		t.Fatalf("operation config = %#v, want manifest identity values", got)
+	}
+	if got.Server != "http://factory.test:7437" || got.OutputFormat != "json" || !got.JSON {
+		t.Fatalf("output/config = %#v, want server and json values", got)
 	}
 }

@@ -3,12 +3,15 @@ package codex_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
+	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	codex "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 )
@@ -16,25 +19,27 @@ import (
 func TestCodexRootPreservesRequestOrderedStreamFinalAndSession(t *testing.T) {
 	t.Parallel()
 
-	request := providers.ExecuteRequest{
-		Provider:         providers.IDCodex,
-		AttemptID:        "attempt-codex-success",
-		SystemPrompt:     "system contract",
-		UserMessage:      "perform the accepted work",
-		OutputSchema:     `{"type":"object"}`,
-		WorkingDirectory: "C:/factory",
-		Worktree:         "C:/factory/tree",
+	request := execution.ContinuationRequest{
+		ExecuteRequest: providers.ExecuteRequest{
+			Provider:         providers.IDCodex,
+			AttemptID:        "attempt-codex-success",
+			SystemPrompt:     "system contract",
+			UserMessage:      "perform the accepted work",
+			OutputSchema:     `{"type":"object"}`,
+			WorkingDirectory: "C:/factory",
+			Worktree:         "C:/factory/tree",
+		},
 		ResumeSession: &providers.SessionRef{
 			Provider: providers.IDCodex,
 			Kind:     providers.SessionIDKind,
 			ID:       "session-previous",
 		},
 	}
-	var received providers.ExecuteRequest
+	var received execution.ContinuationRequest
 	stream := codexSuccessStream()
 	effect := codex.EffectFunc(func(
 		_ context.Context,
-		got providers.ExecuteRequest,
+		got execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (codex.EffectResult, error) {
 		received = got.Clone()
@@ -45,31 +50,87 @@ func TestCodexRootPreservesRequestOrderedStreamFinalAndSession(t *testing.T) {
 		}
 		return codex.EffectResult{
 			DurationMillis: 23,
-			Metadata:       map[string]string{"transport": "jsonl"},
+			Metadata: map[string]string{
+				"transport": "jsonl",
+				"api_token": "provider-secret",
+			},
 		}, nil
 	})
 	root := newCodexRoot(t, effect)
 
-	result, err := root.Execute(t.Context(), request)
+	attempt := request.ExecuteRequest.Clone()
+	continued, err := root.Continue(t.Context(), providers.ContinueRequest{
+		Reference: *request.ResumeSession,
+		Attempt:   attempt,
+	})
 	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
+		t.Fatalf("Continue() error = %v", err)
 	}
+	if continued.Outcome != providers.ContinuationOutcomeResumed {
+		t.Fatalf("Continue().Outcome = %q, want resumed", continued.Outcome)
+	}
+	result := continued.Result
 	assertCodexSuccessResult(t, result, received, request)
 
 	result.SessionRef.ID = "caller-mutated"
 	result.Diagnostics.Progress[2].Metadata["caller"] = "mutated"
-	second, err := root.Execute(t.Context(), request)
+	secondContinued, err := root.Continue(t.Context(), providers.ContinueRequest{
+		Reference: *request.ResumeSession,
+		Attempt:   attempt,
+	})
 	if err != nil {
-		t.Fatalf("second Execute() error = %v", err)
+		t.Fatalf("second Continue() error = %v", err)
 	}
-	assertRepeatedCodexResultDetached(t, second)
+	assertRepeatedCodexResultDetached(t, secondContinued.Result)
+}
+
+func TestCodexRootObservesProviderSessionWhileNativeAttemptIsLive(t *testing.T) {
+	t.Parallel()
+
+	observed := make(chan providers.SessionRef, 1)
+	effect := codex.EffectFunc(func(
+		_ context.Context,
+		_ execution.ContinuationRequest,
+		observe func([]byte) error,
+	) (codex.EffectResult, error) {
+		if err := observe([]byte(`{"type":"thread.started","thread_id":"thread-live-observation"}` + "\n")); err != nil {
+			return codex.EffectResult{}, err
+		}
+		select {
+		case reference := <-observed:
+			want := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "thread-live-observation"}
+			if reference != want {
+				t.Fatalf("live SessionObserver reference = %#v, want %#v", reference, want)
+			}
+		default:
+			t.Fatal("SessionObserver was not called before native effect returned")
+		}
+		if err := observe([]byte(`{"type":"item.completed","item":{"id":"message-live-observation","type":"agent_message","text":"observed live"}}` + "\n")); err != nil {
+			return codex.EffectResult{}, err
+		}
+		return codex.EffectResult{}, nil
+	})
+	root := newCodexRoot(t, effect)
+
+	result, err := root.Execute(t.Context(), providers.ExecuteRequest{
+		Provider: providers.IDCodex, AttemptID: "attempt-live-observation", UserMessage: "observe the provider session",
+		SessionObserver: func(reference providers.SessionRef) {
+			observed <- reference
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.SessionRef == nil || result.SessionRef.ID != "thread-live-observation" {
+		t.Fatalf("Execute().SessionRef = %#v, want live thread reference", result.SessionRef)
+	}
 }
 
 func assertCodexSuccessResult(
 	t *testing.T,
 	result providers.ExecuteResult,
-	received providers.ExecuteRequest,
-	request providers.ExecuteRequest,
+	received execution.ContinuationRequest,
+	request execution.ContinuationRequest,
 ) {
 	t.Helper()
 	if !reflect.DeepEqual(received, request) {
@@ -92,7 +153,25 @@ func assertCodexSuccessResult(
 		result.Diagnostics.Metadata["transport"] != "jsonl" {
 		t.Fatalf("Diagnostics = %#v", result.Diagnostics)
 	}
+	if result.Diagnostics.Metadata["input_tokens"] != "10" ||
+		result.Diagnostics.Metadata["output_tokens"] != "5" {
+		t.Fatalf("usage metadata = %#v, want decimal input/output counters", result.Diagnostics.Metadata)
+	}
+	assertCodexUsageSubclassMetadata(t, result.Diagnostics.Metadata)
+	if result.Diagnostics.Metadata["api_token"] != "<redacted>" {
+		t.Fatalf("api_token = %q, want redacted", result.Diagnostics.Metadata["api_token"])
+	}
 	assertProgress(t, result.Diagnostics.Progress)
+}
+
+func assertCodexUsageSubclassMetadata(t *testing.T, metadata map[string]string) {
+	t.Helper()
+	if metadata["cached_input_tokens"] != "2" {
+		t.Fatalf("cached input metadata = %q, want 2", metadata["cached_input_tokens"])
+	}
+	if metadata["reasoning_output_tokens"] != "1" {
+		t.Fatalf("reasoning output metadata = %q, want 1", metadata["reasoning_output_tokens"])
+	}
 }
 
 func assertRepeatedCodexResultDetached(
@@ -118,7 +197,7 @@ func TestCodexDecoderFinalizesUnterminatedRecordOnce(t *testing.T) {
 	)
 	effect := codex.EffectFunc(func(
 		_ context.Context,
-		_ providers.ExecuteRequest,
+		_ execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (codex.EffectResult, error) {
 		for _, chunk := range splitEvery(stream, 3) {
@@ -137,6 +216,72 @@ func TestCodexDecoderFinalizesUnterminatedRecordOnce(t *testing.T) {
 	}
 	if got := countPhase(result.Diagnostics.Progress, "message.completed"); got != 1 {
 		t.Fatalf("completed message facts = %d, want 1", got)
+	}
+}
+
+func TestCodexDecoderBoundsTranscriptAndKeepsLaterCompletionEvidence(t *testing.T) {
+	t.Parallel()
+
+	var stream []byte
+	appendRecord := func(record any) {
+		encoded, err := json.Marshal(record)
+		if err != nil {
+			t.Fatalf("marshal stream record: %v", err)
+		}
+		stream = append(stream, encoded...)
+		stream = append(stream, '\n')
+	}
+	appendRecord(map[string]any{
+		"type":      "thread.started",
+		"thread_id": "thread-bounded-progress",
+	})
+	for index := 0; index < 5000; index++ {
+		appendRecord(itemRecord(
+			"item.updated",
+			fmt.Sprintf("progress-%d", index),
+			"agent_message",
+			map[string]any{"text": "bounded progress"},
+		))
+	}
+	appendRecord(itemRecord(
+		"item.completed",
+		"final-bounded-progress",
+		"agent_message",
+		map[string]any{"text": "authoritative completion after bounded progress"},
+	))
+
+	effect := codex.EffectFunc(func(
+		_ context.Context,
+		_ execution.ContinuationRequest,
+		observe func([]byte) error,
+	) (codex.EffectResult, error) {
+		for _, chunk := range splitEvery(stream, 4093) {
+			if err := observe(chunk); err != nil {
+				return codex.EffectResult{}, err
+			}
+		}
+		return codex.EffectResult{}, nil
+	})
+
+	result, err := newCodexRoot(t, effect).Execute(t.Context(), providers.ExecuteRequest{
+		Provider:  providers.IDCodex,
+		AttemptID: "attempt-bounded-progress",
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Content != "authoritative completion after bounded progress" {
+		t.Fatalf("Execute() content = %q, want later completion evidence", result.Content)
+	}
+	if result.Diagnostics == nil {
+		t.Fatal("Execute() diagnostics = nil, want bounded inspection metadata")
+	}
+	if result.Diagnostics.Metadata["inspection_transcript_truncated"] != "true" {
+		t.Fatalf("inspection metadata = %#v, want transcript truncation", result.Diagnostics.Metadata)
+	}
+	if result.Diagnostics.Metadata["inspection_record_count"] == "" ||
+		result.Diagnostics.Metadata["inspection_source_bytes"] == "" {
+		t.Fatalf("inspection metadata = %#v, want source and record progress", result.Diagnostics.Metadata)
 	}
 }
 
@@ -165,6 +310,9 @@ func assertProgress(t *testing.T, progress []providers.ExecuteProgress) {
 	}
 	if !reflect.DeepEqual(gotPhases, wantPhases) {
 		t.Fatalf("progress phases = %#v, want %#v", gotPhases, wantPhases)
+	}
+	if got := progress[12].Detail; got != `{"input_tokens":10,"cached_input_tokens":2,"output_tokens":5,"reasoning_output_tokens":1}` {
+		t.Fatalf("usage detail = %q, want existing serialized usage record", got)
 	}
 	for _, index := range []int{2, 3, 4} {
 		if progress[index].Metadata["item_id"] != "message-1" {
@@ -254,7 +402,7 @@ func newCodexRoot(t *testing.T, effect codex.Effect) providers.Service {
 	if err != nil {
 		t.Fatal(err)
 	}
-	root, err := providerservice.New(catalog, executionService)
+	root, err := providerservice.New(catalog, executionService, logging.NoopLogger{})
 	if err != nil {
 		t.Fatal(err)
 	}

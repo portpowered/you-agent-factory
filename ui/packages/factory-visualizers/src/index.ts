@@ -12,6 +12,8 @@ export {
 } from "./factory-emulator-view.js";
 
 export {
+  type FactoryRecordingCompatibilityDiagnostic,
+  type FactoryRecordingCompatibilityDiagnosticIssue,
   FactoryRecordingTopologyReplay,
   type FactoryRecordingTopologyReplayError,
   type FactoryRecordingTopologyReplayMessages,

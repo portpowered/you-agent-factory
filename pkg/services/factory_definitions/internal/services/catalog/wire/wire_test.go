@@ -340,7 +340,13 @@ func TestNewService_ListGetResolveDeleteNamedFactory(t *testing.T) {
 
 	fx := newNamedFactoryCatalogFixture(t)
 	ctx := context.Background()
+	assertNamedFactoryListAndGet(t, ctx, fx)
+	assertNamedFactoryResolvesProjectLocal(t, ctx, fx)
+	assertNamedFactoryPointerAndDelete(t, ctx, fx)
+}
 
+func assertNamedFactoryListAndGet(t *testing.T, ctx context.Context, fx namedFactoryCatalogFixture) {
+	t.Helper()
 	listed, err := fx.svc.ListNamedFactories(ctx, factorydefinitions.ListNamedFactoriesRequest{RootDir: fx.projectRoot})
 	if err != nil {
 		t.Fatalf("ListNamedFactories: %v", err)
@@ -359,7 +365,10 @@ func TestNewService_ListGetResolveDeleteNamedFactory(t *testing.T) {
 	if got.Entry.FactoryDir != fx.alphaDir {
 		t.Fatalf("factoryDir = %q, want %q", got.Entry.FactoryDir, fx.alphaDir)
 	}
+}
 
+func assertNamedFactoryResolvesProjectLocal(t *testing.T, ctx context.Context, fx namedFactoryCatalogFixture) {
+	t.Helper()
 	resolved, err := fx.svc.ResolveNamedFactory(ctx, factorydefinitions.ResolveNamedFactoryRequest{
 		ProjectRoot: fx.projectRoot,
 		GlobalRoot:  fx.globalRoot,
@@ -372,7 +381,10 @@ func TestNewService_ListGetResolveDeleteNamedFactory(t *testing.T) {
 		resolved.Resolution.Source != factorydefinitions.NamedFactoryResolutionSourceProjectLocal {
 		t.Fatalf("resolution = %#v, want project-local alpha at %q", resolved.Resolution, fx.alphaDir)
 	}
+}
 
+func assertNamedFactoryPointerAndDelete(t *testing.T, ctx context.Context, fx namedFactoryCatalogFixture) {
+	t.Helper()
 	if _, err := fx.svc.SetCurrentFactoryPointer(ctx, factorydefinitions.SetCurrentFactoryPointerRequest{
 		RootDir: fx.projectRoot,
 		Name:    "beta",
@@ -390,7 +402,7 @@ func TestNewService_ListGetResolveDeleteNamedFactory(t *testing.T) {
 		t.Fatalf("deleted.FactoryDir = %q, want %q", deleted.FactoryDir, fx.alphaDir)
 	}
 
-	listed, err = fx.svc.ListNamedFactories(ctx, factorydefinitions.ListNamedFactoriesRequest{RootDir: fx.projectRoot})
+	listed, err := fx.svc.ListNamedFactories(ctx, factorydefinitions.ListNamedFactoriesRequest{RootDir: fx.projectRoot})
 	if err != nil {
 		t.Fatalf("ListNamedFactories after delete: %v", err)
 	}

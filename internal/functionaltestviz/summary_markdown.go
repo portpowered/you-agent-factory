@@ -13,6 +13,13 @@ func RenderCatalogMarkdown(inputs CatalogInputs) (string, error) {
 	if err := RequireGoldenProvenance(inputs.Records); err != nil {
 		return "", err
 	}
+	timing := inputs.Timing
+	if timing.TestCount > 0 {
+		// The source inventory is the authoritative count for declarations in
+		// the tree; the timing artifact separately records what the run
+		// observed. Keeping both prevents a partial run from looking complete.
+		timing.InventoryTestCount = len(inputs.Records)
+	}
 	var b strings.Builder
 	b.WriteString("# Functional tests\n\n")
 	b.WriteString(RenderDomainSummariesMarkdown(BuildDomainSummaries(inputs.Records)))
@@ -22,6 +29,8 @@ func RenderCatalogMarkdown(inputs CatalogInputs) (string, error) {
 	b.WriteString(RenderDebtMarkdown(BuildDebtReport(inputs.Records)))
 	b.WriteString("\n")
 	b.WriteString(RenderPackageCoverageMarkdown(inputs.Coverage))
+	b.WriteString("\n")
+	b.WriteString(RenderFunctionalTimingMarkdown(timing))
 	return b.String(), nil
 }
 

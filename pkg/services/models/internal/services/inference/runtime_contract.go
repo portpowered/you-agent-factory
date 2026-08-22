@@ -26,8 +26,9 @@ type InvocationArtifactSource struct {
 // InvocationRuntimeRequest is the parent-private invoke input for one accepted
 // lease-backed operation.
 type InvocationRuntimeRequest struct {
-	Request  models.InvokeModelRequest
-	HostSlot HostHandleSlot
+	Request   models.InvokeModelRequest
+	Operation models.Operation
+	HostSlot  HostHandleSlot
 }
 
 // InvocationRuntimeResult contains detached runtime output facts without

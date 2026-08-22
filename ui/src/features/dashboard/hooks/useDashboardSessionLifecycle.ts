@@ -24,8 +24,8 @@ export function useDashboardSessionLifecycle({
 }: UseDashboardSessionLifecycleOptions) {
   const queryClient = useQueryClient();
   const resetTimeline = useFactoryTimelineStore((state) => state.reset);
-  const resetStreamState = useDashboardStreamStore(
-    (state) => state.resetStreamState,
+  const resetSessionStreamState = useDashboardStreamStore(
+    (state) => state.resetSessionStreamState,
   );
   const backendRuntimeCacheScope = useDashboardStreamStore(
     (state) => state.backendRuntimeCacheScope,
@@ -42,13 +42,15 @@ export function useDashboardSessionLifecycle({
     (factoryDefinitionQueryResetMode: FactoryDefinitionQueryResetMode) => {
       resetDashboardSessionScopedState(
         queryClient,
-        resetStreamState,
+        (nextLocale) => {
+          resetSessionStreamState(sessionID, nextLocale);
+        },
         resetTimeline,
         locale,
         factoryDefinitionQueryResetMode,
       );
     },
-    [locale, queryClient, resetStreamState, resetTimeline],
+    [locale, queryClient, resetSessionStreamState, resetTimeline, sessionID],
   );
 
   useEffect(() => {

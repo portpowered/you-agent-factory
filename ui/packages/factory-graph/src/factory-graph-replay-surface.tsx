@@ -1,18 +1,22 @@
-import {
-  Background,
-  Controls,
-  ReactFlow,
-  type Edge,
-} from "@xyflow/react";
+import { Background, Controls, type Edge, ReactFlow } from "@xyflow/react";
 import { GraphViewportSurface } from "@you-agent-factory/components/graphs";
 import type { FactoryTopologyNode } from "@you-agent-factory/factory-replay";
-
-import type { FactoryGraphSource } from "./source.js";
+import { FactoryGraphGroupRegionLayer } from "./group-region-presentation.js";
+import {
+  type FactoryGraphNodeDimensions,
+  resolveFactoryGraphNodeDimensions,
+} from "./node-family.js";
+import type { FactoryGraphNodeHandle } from "./semantic-node-shell.js";
 import {
   FACTORY_GRAPH_NODE_TYPES,
   type FactoryGraphNode,
 } from "./semantic-nodes.js";
-import type { FactoryGraphNodeHandle } from "./semantic-node-shell.js";
+import type { FactoryGraphWorkstationNodeData } from "./semantic-workstation-node.js";
+import type { FactoryGraphSource } from "./source.js";
+import {
+  type FactoryGraphWorkstationSemanticProjection,
+  projectFactoryGraphWorkstationSemantics,
+} from "./workstation-semantics.js";
 
 export interface FactoryGraphReplaySurfaceProps {
   className?: string;
@@ -41,6 +45,7 @@ export function FactoryGraphReplaySurface({
         edgesFocusable={false}
         fitView
         fitViewOptions={{ padding: 0.12 }}
+        minZoom={0.25}
         nodes={flow.nodes}
         nodesConnectable={false}
         nodesDraggable={false}
@@ -48,6 +53,7 @@ export function FactoryGraphReplaySurface({
         onNodeClick={(_event, node) => onSelectNode?.(node.id)}
         proOptions={{ hideAttribution: true }}
       >
+        <FactoryGraphGroupRegionLayer groups={source.factory.layout?.groups} />
         <Background />
         <Controls showInteractive={false} />
       </ReactFlow>
@@ -71,14 +77,30 @@ export function projectFactoryGraphReplayFlow(
       node.position,
     ]),
   );
+  const authoredSizes = new Map(
+    (source.factory.layout?.nodes ?? [])
+      .filter((node) => node.size !== undefined)
+      .map((node) => [node.id, node.size]),
+  );
   const activeIds = replayActiveNodeIds(source);
-  const topologyNodes = source.runtime.topology.nodes.map((topologyNode, index) =>
-    semanticNode(topologyNode, {
-      active: activeIds.has(topologyNode.id),
-      position: positions.get(topologyNode.id) ?? fallbackPosition(index),
-      selected: topologyNode.id === selectedNodeId,
-      source,
-    }),
+  const workstationSemanticsByNodeId = new Map(
+    projectFactoryGraphWorkstationSemantics(source).map((projection) => [
+      projection.nodeId,
+      projection,
+    ]),
+  );
+  const topologyNodes = source.runtime.topology.nodes.map(
+    (topologyNode, index) =>
+      semanticNode(topologyNode, {
+        active: activeIds.has(topologyNode.id),
+        position: positions.get(topologyNode.id) ?? fallbackPosition(index),
+        selected: topologyNode.id === selectedNodeId,
+        source,
+        authoredDimensions: authoredSizes.get(topologyNode.id),
+        workstationProjection: workstationSemanticsByNodeId.get(
+          topologyNode.id,
+        ),
+      }),
   );
   const docs = (source.factory.supportingFiles?.bundledFiles ?? []).flatMap(
     (file, index) => {
@@ -96,6 +118,14 @@ export function projectFactoryGraphReplayFlow(
             targetPath: file.targetPath,
           },
           id,
+          ...replayNodeDimensions(
+            "doc",
+            [
+              file.targetPath,
+              file.targetPath.split("/").at(-1) ?? file.targetPath,
+            ],
+            authoredSizes.get(id),
+          ),
           position:
             positions.get(id) ?? fallbackPosition(topologyNodes.length + index),
           type: "doc" as const,
@@ -125,12 +155,20 @@ function semanticNode(
     position: { x: number; y: number };
     selected: boolean;
     source: FactoryGraphSource;
+    authoredDimensions?: FactoryGraphNodeDimensions;
+    workstationProjection?: FactoryGraphWorkstationSemanticProjection;
   },
 ): FactoryGraphNode {
   const handles = node.handles.map(toSemanticHandle);
-  const base = { position: input.position };
+  const base = {
+    ...replayNodeDimensions(node.kind, [node.label], input.authoredDimensions),
+    position: input.position,
+  };
   switch (node.kind) {
-    case "worker":
+    case "worker": {
+      const workerType = input.source.factory.workers?.find(
+        (worker) => worker.name === node.label || worker.id === node.entityId,
+      )?.type;
       return {
         ...base,
         data: {
@@ -141,10 +179,12 @@ function semanticNode(
           muted: false,
           place: { place_id: node.id, state_value: node.label },
           selectedWorker: input.selected,
+          ...(workerType ? { workerType } : {}),
         },
         id: node.id,
         type: "worker",
       };
+    }
     case "work-type":
       return {
         ...base,
@@ -197,20 +237,24 @@ function semanticNode(
         id: node.id,
         type: "statePosition",
       };
-    case "workstation":
+    case "workstation": {
+      const active =
+        input.active || Boolean(input.workstationProjection?.activity.active);
+      const executions = replayExecutions(node.id, node.entityId, input.source);
       return {
         ...base,
         data: {
-          active: input.active,
-          activeFlow: input.active,
-          executions: [],
+          active,
+          activeFlow: active,
+          executions,
           factoryGraphNodeId: node.id,
           handles,
           muted: false,
-          now: 0,
+          now: input.source.selectedTick * 1000,
           selectedWorkID: null,
           selectedWorkstation: input.selected,
-          summaryOnly: true,
+          summaryOnly: executions.length === 0,
+          workstationSemantics: input.workstationProjection,
           workstation: {
             node_id: node.id,
             transition_id: node.label,
@@ -220,7 +264,26 @@ function semanticNode(
         id: node.id,
         type: "workstation",
       };
+    }
   }
+}
+
+function replayNodeDimensions(
+  family: Parameters<typeof resolveFactoryGraphNodeDimensions>[0],
+  content: string[],
+  authoredDimensions?: FactoryGraphNodeDimensions,
+) {
+  const dimensions = resolveFactoryGraphNodeDimensions(family, {
+    authoredDimensions,
+    content,
+  }).resolvedDimensions;
+  return {
+    height: dimensions.height,
+    initialHeight: dimensions.height,
+    initialWidth: dimensions.width,
+    measured: { height: dimensions.height, width: dimensions.width },
+    width: dimensions.width,
+  };
 }
 
 function toSemanticHandle(
@@ -243,6 +306,27 @@ function replayActiveNodeIds(source: FactoryGraphSource): ReadonlySet<string> {
     for (const id of overlay.resourceNodeIds ?? []) ids.add(id);
   }
   return ids;
+}
+
+function replayExecutions(
+  nodeId: string,
+  entityId: string,
+  source: FactoryGraphSource,
+): FactoryGraphWorkstationNodeData["executions"] {
+  return source.runtime.activity.activeDispatchOverlays
+    .filter(
+      (overlay) =>
+        overlay.workstationNodeId === nodeId ||
+        overlay.workstationId === entityId,
+    )
+    .map((overlay) => ({
+      dispatch_id: overlay.dispatchId,
+      started_at: new Date(overlay.startedTick * 1000).toISOString(),
+      work_items: (overlay.workIds ?? []).map((workId) => ({
+        display_name: workId,
+        work_id: workId,
+      })),
+    }));
 }
 
 function resourceCount(nodeId: string, source: FactoryGraphSource): number {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -41,7 +42,18 @@ type openTestHost struct {
 	sessionIDs      []string
 	sessions        map[string]*livesession.LiveSession
 	projectionErr   error
-	selectCalls     int
+
+	// selectCallsMu guards selectCalls: this host is shared by the concurrent
+	// open tests, which drive SelectTarget from several goroutines at once.
+	selectCallsMu sync.Mutex
+	selectCalls   int
+}
+
+// selectCallCount returns a consistent snapshot of the recorded selections.
+func (h *openTestHost) selectCallCount() int {
+	h.selectCallsMu.Lock()
+	defer h.selectCallsMu.Unlock()
+	return h.selectCalls
 }
 
 func (h *openTestHost) DiscoverTargets(_ string) ([]factorysessions.Target, error) {
@@ -52,7 +64,9 @@ func (h *openTestHost) DiscoverTargets(_ string) ([]factorysessions.Target, erro
 }
 
 func (h *openTestHost) SelectTarget(targets []factorysessions.Target, ref *factorysessions.TargetRef) (*factorysessions.Target, error) {
+	h.selectCallsMu.Lock()
 	h.selectCalls++
+	h.selectCallsMu.Unlock()
 	return logicaltarget.Select(targets, ref)
 }
 
@@ -215,8 +229,8 @@ func TestService_OpenFactorySessionFromFolder_AutoOpensSingleTarget(t *testing.T
 	if result.SessionID != "sess-1" {
 		t.Fatalf("session id = %q, want sess-1", result.SessionID)
 	}
-	if host.selectCalls != 1 {
-		t.Fatalf("identity target selections = %d, want 1", host.selectCalls)
+	if got := host.selectCallCount(); got != 1 {
+		t.Fatalf("identity target selections = %d, want 1", got)
 	}
 }
 

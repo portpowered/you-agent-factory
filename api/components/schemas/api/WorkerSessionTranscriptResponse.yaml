@@ -1,0 +1,38 @@
+type: object
+additionalProperties: false
+required:
+  - workerSessionId
+  - providerSession
+  - workIds
+  - attemptId
+  - state
+  - entries
+properties:
+  workerSessionId:
+    type: string
+    description: Stable Worker Session identity.
+  factorySessionId:
+    type: string
+    description: Explicit Factory Session scope used for this transcript read.
+  providerSession:
+    $ref: './WorkerSessionProviderSessionRef.yaml'
+  workIds:
+    type: array
+    items:
+      type: string
+    description: Work identities correlated with this Worker Session attempt.
+  turnId:
+    type: string
+    nullable: true
+    description: Optional turn correlation identifier.
+  attemptId:
+    type: string
+    description: Stable attempt or dispatch identity.
+  state:
+    type: string
+    description: Terminal Worker Session lifecycle state at transcript read time.
+  entries:
+    type: array
+    description: Ordered normalized transcript entries projected by Provider Sessions.
+    items:
+      $ref: './ProviderSessionTranscriptEntry.yaml'

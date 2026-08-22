@@ -9,33 +9,42 @@ import type {
 import { CompletedFailedWorkstationCard } from "./terminal-work-card";
 
 export interface TerminalWorkWidgetProps {
+  canceledItems?: TerminalWorkItem[];
   completedItems: TerminalWorkItem[];
   failedItems: TerminalWorkItem[];
   headerAction?: ReactNode;
   locale?: string;
   onSelectItem: (status: TerminalWorkStatus, item: TerminalWorkItem) => void;
   selectedItem: TerminalWorkDetail | null;
+  terminatedItems?: TerminalWorkItem[];
+  unknownItems?: TerminalWorkItem[];
   widgetId?: string;
 }
 
 export function TerminalWorkWidget({
+  canceledItems = [],
   completedItems,
   failedItems,
   headerAction,
   locale,
   onSelectItem,
   selectedItem,
+  terminatedItems = [],
+  unknownItems = [],
   widgetId = "terminal-work",
 }: TerminalWorkWidgetProps) {
   const resolvedLocale = resolveTerminalWorkLocale(locale);
 
   return (
     <CompletedFailedWorkstationCard
+      canceledItems={canceledItems}
       completedItems={completedItems}
       failedItems={failedItems}
       headerAction={headerAction}
       locale={resolvedLocale}
       selectedItem={selectedItem}
+      terminatedItems={terminatedItems}
+      unknownItems={unknownItems}
       widgetId={widgetId}
       onSelectItem={onSelectItem}
     />

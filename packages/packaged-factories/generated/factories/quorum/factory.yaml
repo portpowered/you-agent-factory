@@ -80,8 +80,6 @@ workTypes:
           type: INITIAL
         - name: quorum-context
           type: PROCESSING
-        - name: complete
-          type: TERMINAL
         - name: failed
           type: FAILED
     - name: quorum-branch-a
@@ -146,7 +144,6 @@ workstations:
       type: LOGICAL_MOVE
       workPropagation:
         mode: PRESERVE_INPUT
-      worker: ""
     - body: |-
         You have no shared conversation with any other branch. Read the original request in full and inspect relevant workspace instructions, source, tests, or other evidence when available. Produce branch A's independent solution, covering all requirements, bounded assumptions, edge cases, and verification. Make the result self-contained for a merger that cannot infer your reasoning.
 

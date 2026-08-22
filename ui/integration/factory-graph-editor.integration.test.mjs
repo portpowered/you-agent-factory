@@ -270,7 +270,11 @@ describe.concurrent("factory graph editor browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .getByRole("heading", {
+            level: 1,
+            name: "You Agent Factory",
+            exact: true,
+          })
           .waitFor({
             state: "visible",
             timeout: uiInteractionTimeoutMs,
@@ -381,22 +385,39 @@ describe.concurrent("factory graph editor browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .getByRole("heading", {
+            level: 1,
+            name: "You Agent Factory",
+            exact: true,
+          })
           .waitFor({
             state: "visible",
             timeout: uiInteractionTimeoutMs,
           });
         await server.replayCompleted;
-        await browserPage.page
-          .getByRole("button", { name: "Export PNG" })
-          .waitFor({
-            state: "visible",
-            timeout: uiInteractionTimeoutMs,
-          });
+        const exportButton = browserPage.page.getByRole("button", {
+          name: "Export PNG",
+        });
+        await exportButton.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+        await expect
+          .poll(
+            async () =>
+              await exportButton.evaluate((button) => {
+                const bounds = button.getBoundingClientRect();
+                const topmost = document.elementFromPoint(
+                  bounds.left + bounds.width / 2,
+                  bounds.top + bounds.height / 2,
+                );
+                return topmost === button || button.contains(topmost);
+              }),
+            { timeout: uiInteractionTimeoutMs },
+          )
+          .toBe(true);
 
-        await browserPage.page
-          .getByRole("button", { name: "Export PNG" })
-          .click();
+        await exportButton.click();
         await browserPage.page
           .getByRole("heading", { name: "Export factory" })
           .waitFor({
@@ -556,7 +577,11 @@ describe.concurrent("factory graph editor browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .getByRole("heading", {
+            level: 1,
+            name: "You Agent Factory",
+            exact: true,
+          })
           .waitFor({
             state: "visible",
             timeout: uiInteractionTimeoutMs,
@@ -588,7 +613,7 @@ describe.concurrent("factory graph editor browser integration", () => {
         });
         await addEntityMenu
           .getByRole("button", { name: "Workstation" })
-          .click();
+          .evaluate((button) => button.click());
 
         const addDialog = browserPage.page.getByRole("dialog", {
           name: "Add workstation",
@@ -727,7 +752,11 @@ describe.concurrent("factory graph editor browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .getByRole("heading", {
+            level: 1,
+            name: "You Agent Factory",
+            exact: true,
+          })
           .waitFor({
             state: "visible",
             timeout: uiInteractionTimeoutMs,
@@ -823,7 +852,11 @@ describe.concurrent("factory graph editor browser integration", () => {
           waitUntil: "domcontentloaded",
         });
         await browserPage.page
-          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .getByRole("heading", {
+            level: 1,
+            name: "You Agent Factory",
+            exact: true,
+          })
           .waitFor({
             state: "visible",
             timeout: uiInteractionTimeoutMs,

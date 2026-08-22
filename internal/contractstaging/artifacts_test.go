@@ -40,7 +40,7 @@ func TestGeneratedManifestAndConfigurationSchemasEnforceTheirPromisedContracts(t
 		{
 			path:    "packages/api/generated/schemas/you-config.schema.json",
 			valid:   `{"backendScopeID":"local-example","defaults":{},"workerPresets":[]}`,
-			invalid: `{"unexpected":true}`,
+			invalid: `{"defaults":{"workerModelProvider":true}}`,
 		},
 		{
 			path:    "packages/api/generated/schemas/factory.schema.json",

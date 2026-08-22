@@ -7,6 +7,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -183,17 +184,17 @@ func canonicalCompletedDispatchProjectionEvents(t0 time.Time) []factoryapi.Facto
 					WorkTypeID:  "task",
 					DisplayName: "Write docs",
 					TraceID:     "trace-1",
-					PlaceID:     "task:complete",
+					State:       "complete",
 				},
 			}},
 			TraceData:       &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
-			ProviderSession: &workerexecution.ProviderSessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"},
+			ProviderSession: &providers.SessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"},
 			TerminalWork: &interfaces.FactoryTerminalWork{
-				WorkItem: work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:complete"},
+				WorkItem: work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", State: "complete"},
 				Status:   "TERMINAL",
 			},
 		}),
-		workInputEvent(1, t0.Add(time.Second), work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:init"}),
+		workInputEvent(1, t0.Add(time.Second), work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", State: "init"}),
 		initialStructureEvent(t0),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-1",
@@ -202,7 +203,7 @@ func canonicalCompletedDispatchProjectionEvents(t0 time.Time) []factoryapi.Facto
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "work-1",
 				PlaceID:  "task:init",
-				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", State: "init"},
 			}},
 		}),
 		inferenceResponseEvent(3, t0.Add(2500*time.Millisecond), factoryapi.InferenceResponseEventPayload{
@@ -210,7 +211,7 @@ func canonicalCompletedDispatchProjectionEvents(t0 time.Time) []factoryapi.Facto
 			Attempt:            1,
 			Outcome:            factoryapi.InferenceOutcomeSucceeded,
 			DurationMillis:     2500,
-			ProviderSession:    generatedProviderSessionForProjectionTest(&workerexecution.ProviderSessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"}),
+			ProviderSession:    generatedProviderSessionForProjectionTest(&providers.SessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"}),
 		}),
 	}
 }
@@ -263,7 +264,7 @@ func safeResponseDiagnosticsProjectionEvents(t0 time.Time) []factoryapi.FactoryE
 	diagnostics := projectionSafeResponseDiagnostics()
 	return []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
-		workInputEventWithToken(1, t0.Add(time.Second), "tok-task-1", work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"}),
+		workInputEventWithToken(1, t0.Add(time.Second), "tok-task-1", work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", State: "init"}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-1",
 			TransitionID: "t-review",
@@ -271,7 +272,7 @@ func safeResponseDiagnosticsProjectionEvents(t0 time.Time) []factoryapi.FactoryE
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "tok-task-1",
 				PlaceID:  "task:init",
-				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", State: "init"},
 			}},
 		}),
 		inferenceResponseEvent(3, t0.Add(2500*time.Millisecond), factoryapi.InferenceResponseEventPayload{
@@ -279,7 +280,7 @@ func safeResponseDiagnosticsProjectionEvents(t0 time.Time) []factoryapi.FactoryE
 			Attempt:            1,
 			Outcome:            factoryapi.InferenceOutcomeSucceeded,
 			DurationMillis:     1500,
-			ProviderSession:    generatedProviderSessionForProjectionTest(&workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-1"}),
+			ProviderSession:    generatedProviderSessionForProjectionTest(&providers.SessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-1"}),
 			Diagnostics:        generatedWorkDiagnosticsForProjectionTest(diagnostics),
 		}),
 		workstationResponseEvent(3, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
@@ -289,7 +290,7 @@ func safeResponseDiagnosticsProjectionEvents(t0 time.Time) []factoryapi.FactoryE
 			Result:          interfaces.WorkstationResult{Outcome: "ACCEPTED"},
 			DurationMillis:  1500,
 			TraceData:       &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
-			ProviderSession: &workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-1"},
+			ProviderSession: &providers.SessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-1"},
 			Diagnostics:     diagnostics,
 		}),
 	}
@@ -358,7 +359,7 @@ func initialStructureEvent(eventTime time.Time) factoryapi.FactoryEvent {
 			Workstations: &[]factoryapi.Workstation{{
 				Id:        stringPtrForProjectionTest("t-review"),
 				Name:      "Review",
-				Worker:    "reviewer",
+				Worker:    stringPtrForProjectionTest("reviewer"),
 				Inputs:    []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
 				Outputs:   &[]factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
 				OnFailure: &[]factoryapi.WorkstationIO{{WorkType: "task", State: "failed"}},
@@ -385,7 +386,7 @@ func initialStructureEventWithNonSuccessRouteArrays(eventTime time.Time) factory
 			Workstations: &[]factoryapi.Workstation{{
 				Id:          stringPtrForProjectionTest("t-review"),
 				Name:        "Review",
-				Worker:      "reviewer",
+				Worker:      stringPtrForProjectionTest("reviewer"),
 				Inputs:      []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
 				Outputs:     &[]factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
 				OnContinue:  &[]factoryapi.WorkstationIO{{WorkType: "task", State: "retry"}, {WorkType: "task", State: "init"}},
@@ -410,7 +411,7 @@ func factoryChangeEvent(eventTime time.Time) factoryapi.FactoryEvent {
 			Workstations: &[]factoryapi.Workstation{{
 				Id:      stringPtrForProjectionTest("t-plan"),
 				Name:    "Plan",
-				Worker:  "planner",
+				Worker:  stringPtrForProjectionTest("planner"),
 				Inputs:  []factoryapi.WorkstationIO{{WorkType: "story", State: "new"}},
 				Outputs: &[]factoryapi.WorkstationIO{{WorkType: "story", State: "done"}},
 			}},
@@ -439,7 +440,7 @@ func runRequestEvent(eventTime time.Time) factoryapi.FactoryEvent {
 			Workstations: &[]factoryapi.Workstation{{
 				Id:        stringPtrForProjectionTest("t-review"),
 				Name:      "Review",
-				Worker:    "reviewer",
+				Worker:    stringPtrForProjectionTest("reviewer"),
 				Inputs:    []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
 				Outputs:   &[]factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
 				OnFailure: &[]factoryapi.WorkstationIO{{WorkType: "task", State: "failed"}},
@@ -609,82 +610,6 @@ func generatedProjectionEvent(eventType factoryapi.FactoryEventType, id string, 
 	return event
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity this event fixture builder keeps the supported replay payload variants on one canonical helper.
-func assignGeneratedProjectionPayload(event *factoryapi.FactoryEvent, payload any) {
-	switch typed := payload.(type) {
-	case factoryapi.RunRequestEventPayload:
-		if err := event.Payload.FromRunRequestEventPayload(typed); err != nil {
-			panic(err)
-		}
-	case factoryapi.InitialStructureRequestEventPayload:
-		if err := event.Payload.FromInitialStructureRequestEventPayload(typed); err != nil {
-			panic(err)
-		}
-	case factoryapi.FactoryChangeEventPayload:
-		if err := event.Payload.FromFactoryChangeEventPayload(typed); err != nil {
-			panic(err)
-		}
-	case factoryapi.WorkRequestEventPayload:
-		if err := event.Payload.FromWorkRequestEventPayload(typed); err != nil {
-			panic(err)
-		}
-	case factoryapi.DispatchRequestEventPayload:
-		if err := event.Payload.FromDispatchRequestEventPayload(typed); err != nil {
-			panic(err)
-		}
-	case factoryapi.InferenceRequestEventPayload:
-		if err := event.Payload.FromInferenceRequestEventPayload(typed); err != nil {
-			panic(err)
-		}
-	case factoryapi.InferenceResponseEventPayload:
-		if err := event.Payload.FromInferenceResponseEventPayload(typed); err != nil {
-			panic(err)
-		}
-	case factoryapi.ScriptRequestEventPayload:
-		if err := event.Payload.FromScriptRequestEventPayload(typed); err != nil {
-			panic(err)
-		}
-	case factoryapi.ScriptResponseEventPayload:
-		if err := event.Payload.FromScriptResponseEventPayload(typed); err != nil {
-			panic(err)
-		}
-	case factoryapi.AgentRunResponseEventPayload:
-		if err := event.Payload.FromAgentRunResponseEventPayload(typed); err != nil {
-			panic(err)
-		}
-	case factoryapi.DispatchResponseEventPayload:
-		if err := event.Payload.FromDispatchResponseEventPayload(typed); err != nil {
-			panic(err)
-		}
-	case factoryapi.RelationshipChangeRequestEventPayload:
-		if err := event.Payload.FromRelationshipChangeRequestEventPayload(typed); err != nil {
-			panic(err)
-		}
-	case factoryapi.FactoryStateResponseEventPayload:
-		if err := event.Payload.FromFactoryStateResponseEventPayload(typed); err != nil {
-			panic(err)
-		}
-	case factoryapi.WorkStateChangeEventPayload:
-		if err := event.Payload.FromWorkStateChangeEventPayload(typed); err != nil {
-			panic(err)
-		}
-	case factoryapi.RunResponseEventPayload:
-		if err := event.Payload.FromRunResponseEventPayload(typed); err != nil {
-			panic(err)
-		}
-	case factoryapi.JavaScriptCheckpointRefEventPayload:
-		if err := event.Payload.FromJavaScriptCheckpointRefEventPayload(typed); err != nil {
-			panic(err)
-		}
-	case factoryapi.JavaScriptPhaseChangeEventPayload:
-		if err := event.Payload.FromJavaScriptPhaseChangeEventPayload(typed); err != nil {
-			panic(err)
-		}
-	default:
-		assignGeneratedProjectionSessionLifecyclePayload(event, payload)
-	}
-}
-
 // pkgmaintcheck:ignore-cyclomatic-complexity session lifecycle fixture payloads stay on one generated-type switch for replay tests.
 func assignGeneratedProjectionSessionLifecyclePayload(event *factoryapi.FactoryEvent, payload any) {
 	switch typed := payload.(type) {
@@ -751,9 +676,23 @@ func inferenceResponseEvent(tick int, eventTime time.Time, payload factoryapi.In
 	return generatedProjectionEvent(factoryapi.FactoryEventTypeInferenceResponse, "inference-response/"+payload.InferenceRequestId, tick, eventTime, context, payload)
 }
 
+func modelResponseEvent(tick int, eventTime time.Time, payload factoryapi.ModelResponseEventPayload) factoryapi.FactoryEvent {
+	context := factoryapi.FactoryEventContext{
+		DispatchId: stringPtrForProjectionTest(dispatchIDForModelRequest(payload.ModelRequestId)),
+	}
+	return generatedProjectionEvent(factoryapi.FactoryEventTypeModelResponse, "model-response/"+payload.ModelRequestId, tick, eventTime, context, payload)
+}
+
 func dispatchIDForInferenceRequest(inferenceRequestID string) string {
 	if idx := strings.Index(inferenceRequestID, "/inference-request/"); idx > 0 {
 		return inferenceRequestID[:idx]
+	}
+	return ""
+}
+
+func dispatchIDForModelRequest(modelRequestID string) string {
+	if idx := strings.Index(modelRequestID, "/model-request/"); idx > 0 {
+		return modelRequestID[:idx]
 	}
 	return ""
 }
@@ -823,7 +762,7 @@ func generatedResourcesForProjectionTest(resources []interfaces.FactoryResourceU
 	return &out
 }
 
-func generatedProviderSessionForProjectionTest(session *workerexecution.ProviderSessionMetadata) *factoryapi.ProviderSessionMetadata {
+func generatedProviderSessionForProjectionTest(session *providers.SessionMetadata) *factoryapi.ProviderSessionMetadata {
 	if session == nil {
 		return nil
 	}
@@ -901,8 +840,6 @@ func assertWorkStateChangeRecord(
 		got.WorkTypeName != want.WorkTypeName ||
 		got.FromState != want.FromState ||
 		got.ToState != want.ToState ||
-		got.FromPlaceID != want.FromPlaceID ||
-		got.ToPlaceID != want.ToPlaceID ||
 		got.Source != want.Source ||
 		got.Tick != want.Tick {
 		t.Fatalf("work state change record = %#v, want %#v", got, want)
@@ -933,7 +870,7 @@ func TestReconstructFactoryWorldState_PreservesAgentRunInspectionDiagnostics(t *
 			ID:         "work-1",
 			WorkTypeID: "story",
 			TraceID:    "trace-1",
-			PlaceID:    "story:init",
+			State:      "init",
 		}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-agent-1",
@@ -942,7 +879,7 @@ func TestReconstructFactoryWorldState_PreservesAgentRunInspectionDiagnostics(t *
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "tok-story-1",
 				PlaceID:  "story:init",
-				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "story", TraceID: "trace-1", PlaceID: "story:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "story", TraceID: "trace-1", State: "init"},
 			}},
 		}),
 		agentRunResponseEvent(3, t0.Add(3*time.Second), factoryapi.AgentRunResponseEventPayload{

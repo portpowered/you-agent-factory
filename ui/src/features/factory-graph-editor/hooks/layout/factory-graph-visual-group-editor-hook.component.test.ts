@@ -33,6 +33,13 @@ describe("useFactoryGraphVisualGroupEditor", () => {
     const moveVisualGroupByDelta = vi.fn();
     const resizeVisualGroup = vi.fn();
     const deleteVisualGroup = vi.fn();
+    const fitVisualGroup = vi.fn();
+    const nodeGeometryById = new Map([
+      [
+        "workstation:draft",
+        { height: 40, position: { x: 100, y: 120 }, width: 80 },
+      ],
+    ]);
 
     const { result, rerender } = renderHook(
       ({ layout }) =>
@@ -41,12 +48,13 @@ describe("useFactoryGraphVisualGroupEditor", () => {
           addNodeToVisualGroup,
           canInteractWithEditor: true,
           canvasNodeOptions: [
-            { id: "workstation:draft", label: "Draft" },
-            { id: "worker:writer", label: "Writer" },
+            { id: "workstation:draft", kind: "workstation", label: "Draft" },
+            { id: "worker:writer", kind: "worker", label: "Writer" },
           ],
           createVisualGroup,
           deleteVisualGroup,
           editorMode: true,
+          fitVisualGroup,
           layout,
           locale: "en",
           moveVisualGroupByDelta,
@@ -55,6 +63,8 @@ describe("useFactoryGraphVisualGroupEditor", () => {
           resizeVisualGroup,
           resolveViewportCenter: () => ({ x: 120, y: 80 }),
           setVisualGroupColor,
+          nodeGeometryById,
+          selectedNodeIds: ["workstation:draft"],
         }),
       { initialProps: { layout: layoutWithGroup() } },
     );
@@ -62,7 +72,10 @@ describe("useFactoryGraphVisualGroupEditor", () => {
     act(() => {
       result.current.handleCreateVisualGroup();
     });
-    expect(createVisualGroup).toHaveBeenCalledWith({ x: 120, y: 80 });
+    expect(createVisualGroup).toHaveBeenCalledWith(
+      { x: 120, y: 80 },
+      { nodeGeometryById, nodeIds: ["workstation:draft"] },
+    );
     expect(result.current.selectedGroupId).toBe("group-new");
 
     rerender({ layout: layoutWithGroup() });
@@ -81,6 +94,11 @@ describe("useFactoryGraphVisualGroupEditor", () => {
       result.current.handleSetSelectedGroupColor("success");
     });
     expect(setVisualGroupColor).toHaveBeenCalledWith("group-1", "success");
+
+    act(() => {
+      result.current.visualGroupControls?.onFitGroup?.();
+    });
+    expect(fitVisualGroup).toHaveBeenCalledWith("group-1", nodeGeometryById);
 
     act(() => {
       result.current.visualGroupControls?.onToggleNodeMembership(

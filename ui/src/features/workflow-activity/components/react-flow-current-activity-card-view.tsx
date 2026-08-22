@@ -1,14 +1,15 @@
 import "@xyflow/react/dist/style.css";
 
+import { Heading } from "@you-agent-factory/components/primitives";
 import { useId } from "react";
-
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { ImportFactoryValue } from "../../../api/session-factory";
-import { Heading } from "@you-agent-factory/components/primitives";
 import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
+import { cn } from "../../../lib/cn";
 import type { ReadFactoryImportFile } from "../../import/hooks/use-factory-png-drop";
 import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-save-choice";
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
+import type { CurrentActivityGraphEditorController } from "../hooks/current-activity-graph-state-value";
 import {
   type CurrentActivityImportController,
   useCurrentActivityImportController,
@@ -17,7 +18,10 @@ import type { CurrentActivityGraphCardViewModel } from "../hooks/use-current-act
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import { CurrentActivityGraphEditorDialogs } from "./react-flow-current-activity-card-editor-dialogs";
-import { CurrentActivityGraphSaveNotifications } from "./react-flow-current-activity-card-save-notifications";
+import {
+  type CurrentActivityGraphSaveNotificationEffects,
+  CurrentActivityGraphSaveNotifications,
+} from "./react-flow-current-activity-card-save-notifications";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 
 function CurrentActivityCardHeading({
@@ -60,6 +64,7 @@ export interface ReactFlowCurrentActivityCardProps {
   activateFactory?: (
     input: FactoryImportConfirmInput,
   ) => Promise<ImportFactoryValue>;
+  editorController?: CurrentActivityGraphEditorController;
   importController?: CurrentActivityImportController;
   locale?: string;
   now: number;
@@ -76,6 +81,7 @@ export interface ReactFlowCurrentActivityCardProps {
   onSelectWorkType: (workTypeName: string) => void;
   onSelectWorkstation: (nodeId: string) => void;
   readFactoryImportFile?: ReadFactoryImportFile;
+  saveNotificationEffects?: CurrentActivityGraphSaveNotificationEffects;
   selection: CurrentActivitySelection | null;
   sessionID?: string | null;
   snapshot: DashboardSnapshot;
@@ -85,10 +91,12 @@ export interface ReactFlowCurrentActivityCardProps {
 export function ReactFlowCurrentActivityCardView(
   props: ReactFlowCurrentActivityCardProps & {
     viewModel: CurrentActivityGraphCardViewModel;
+    chromeless?: boolean;
     showHeaderActions?: boolean;
   },
 ) {
-  const { viewModel, showHeaderActions = false } = props;
+  const { viewModel, chromeless = false, showHeaderActions = false } = props;
+  const editorController = props.editorController ?? viewModel;
   const { headingID } = useCurrentActivityAccessibilityIDs(
     props.widgetInstanceID,
   );
@@ -108,13 +116,16 @@ export function ReactFlowCurrentActivityCardView(
       ? imports.importPreviewState
       : null;
   const handleDiscardEditorChanges = () => {
-    viewModel.leaveControls.discardChanges();
+    editorController.leaveControls.discardChanges();
   };
 
   return (
     <DashboardPanelShell
       aria-labelledby={headingID}
-      className="relative flex h-full max-h-full min-h-0 min-w-0 flex-col overflow-hidden"
+      className={cn(
+        "relative flex h-full max-h-full min-h-0 min-w-0 flex-col overflow-hidden",
+        chromeless && "rounded-none border-0 bg-transparent shadow-none",
+      )}
       style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
     >
       {showHeaderActions ? (
@@ -131,6 +142,7 @@ export function ReactFlowCurrentActivityCardView(
       )}
       <CurrentActivityGraphSurface
         viewModel={viewModel}
+        editorController={editorController}
         headingID={headingID}
         imports={imports}
         locale={props.locale}
@@ -138,13 +150,14 @@ export function ReactFlowCurrentActivityCardView(
         snapshot={props.snapshot}
       />
       <CurrentActivityGraphSaveNotifications
-        viewModel={viewModel}
+        editorController={editorController}
         locale={props.locale}
+        notificationEffects={props.saveNotificationEffects}
       />
       <CurrentActivityGraphEditorDialogs
         currentSessionFactoryName={props.snapshot.factory?.name ?? "factory"}
         discardEditorChanges={handleDiscardEditorChanges}
-        viewModel={viewModel}
+        editorController={editorController}
         imports={imports}
         locale={props.locale}
         readyImportPreviewState={readyImportPreviewState}

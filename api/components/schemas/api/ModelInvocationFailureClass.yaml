@@ -1,0 +1,17 @@
+type: string
+description: Stable provider-neutral failure identity for generic model invocation.
+enum:
+  - INVALID_MODEL_REFERENCE
+  - INVALID_OPERATION
+  - INVALID_SLOT
+  - SLOT_ARITY
+  - INVALID_PARAMETER
+  - MEDIA_CAPABILITY
+  - CONFIGURATION
+  - OFFLINE_CACHE
+  - ARTIFACT
+  - BACKEND_READINESS
+  - BACKEND_PROTOCOL
+  - CANCELLATION
+  - TIMEOUT
+  - MALFORMED_RESPONSE

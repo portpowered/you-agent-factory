@@ -1,6 +1,6 @@
 package factory
 
-import workflowruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/runtime"
+import workflowruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime"
 
 type (
 	JavaScriptRuntimeRequest             = workflowruntime.Request

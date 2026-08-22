@@ -1,0 +1,13 @@
+type: object
+additionalProperties: false
+required:
+  - name
+  - value
+description: One ordered named JSON parameter supplied to a model operation.
+properties:
+  name:
+    type: string
+    minLength: 1
+    description: Operation parameter name.
+  value:
+    description: JSON-compatible parameter value preserved without backend-specific typing.

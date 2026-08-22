@@ -1,8 +1,16 @@
 import { Background, Controls, ReactFlow } from "@xyflow/react";
+import {
+  FactoryGraphNodeShell,
+  type FactoryGraphNodeShellProps,
+  type FactoryGraphVisualStateInput,
+  GraphSemanticIcon,
+} from "@you-agent-factory/factory-graph";
 import { useState } from "react";
 import { expect, userEvent, within } from "storybook/test";
 
 import "../../../../styles.css";
+import { applyDocumentColorPalette } from "../../../../theme/app-color-palette";
+import { COLOR_PALETTE_IDS } from "../../../../theme/color-palette";
 import { baseFactoryDefinition } from "../../lib/draft/factory-graph-draft.test-helpers";
 import { buildFactoryGraphTopologyFromDefinition } from "../../lib/draft/factory-graph-draft-graph";
 import type {
@@ -19,6 +27,54 @@ import {
   FACTORY_GRAPH_EDITOR_EDGE_TYPES,
   FACTORY_GRAPH_EDITOR_NODE_TYPES,
 } from "../flow/factory-graph-editor-flow";
+
+type RgbColor = readonly [red: number, green: number, blue: number];
+
+function parseCssColor(value: string): RgbColor {
+  const trimmed = value.trim();
+  if (trimmed.startsWith("#")) {
+    const hex = trimmed.slice(1);
+    if (hex.length !== 6) throw new Error(`Expected a 6-digit color: ${value}`);
+    const number = Number.parseInt(hex, 16);
+    return [(number >> 16) & 0xff, (number >> 8) & 0xff, number & 0xff];
+  }
+
+  const match = trimmed.match(
+    /rgba?\(\s*(\d+(?:\.\d+)?)\s*[, ]\s*(\d+(?:\.\d+)?)\s*[, ]\s*(\d+(?:\.\d+)?)/,
+  );
+  if (!match) throw new Error(`Expected an RGB color: ${value}`);
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function relativeLuminance([red, green, blue]: RgbColor): number {
+  const channels = [red, green, blue].map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.03928
+      ? normalized / 12.92
+      : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+}
+
+function contrastRatio(foreground: RgbColor, background: RgbColor): number {
+  const foregroundLuminance = relativeLuminance(foreground);
+  const backgroundLuminance = relativeLuminance(background);
+  const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+  const darker = Math.min(foregroundLuminance, backgroundLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function shadowContainsColor(shadow: string, color: RgbColor): boolean {
+  const colors = shadow.matchAll(
+    /rgba?\(\s*(\d+(?:\.\d+)?)\s*[, ]\s*(\d+(?:\.\d+)?)\s*[, ]\s*(\d+(?:\.\d+)?)/g,
+  );
+  return Array.from(colors).some(
+    (match) =>
+      Number(match[1]) === color[0] &&
+      Number(match[2]) === color[1] &&
+      Number(match[3]) === color[2],
+  );
+}
 
 const PENDING_REMOVAL_TOPOLOGY: FactoryGraphTopology = {
   edges: [
@@ -562,6 +618,73 @@ const logicalMoveComparisonTopology: FactoryGraphTopology = {
   ],
 };
 
+const loopBreakerGeometryWorkstation: FactoryWorkstation = {
+  ...logicalMoveWorkstation,
+  guards: [
+    {
+      maxVisits: 3,
+      type: "VISIT_COUNT",
+      workstation: "execute-goal",
+    },
+  ],
+  name: "goal-loop-breaker",
+};
+
+const LOOP_BREAKER_GEOMETRY_TOPOLOGY: FactoryGraphTopology = {
+  edges: [],
+  nodes: [
+    {
+      id: "workstation:goal-loop-breaker",
+      key: { kind: "workstation", name: "goal-loop-breaker" },
+      kind: "workstation",
+      label: "goal-loop-breaker",
+    },
+  ],
+};
+
+const LOOP_BREAKER_GEOMETRY_LAYOUT = {
+  nodes: [
+    {
+      id: "workstation:goal-loop-breaker",
+      position: { x: 0, y: 0 },
+      size: { height: 280, width: 240 },
+    },
+  ],
+  schemaVersion: 1,
+};
+
+function LoopBreakerGeometryStory() {
+  const flow = buildFactoryGraphEditorFlowModel({
+    canEditConnections: true,
+    onConnectionAnchorClick: () => undefined,
+    pendingAdditionEdgeIds: new Set<string>(),
+    pendingConnectionSource: null,
+    pendingAdditionNodeIds: new Set<string>(),
+    pendingRemovalEdgeIds: new Set<string>(),
+    pendingRemovalNodeIds: new Set<string>(),
+    topology: LOOP_BREAKER_GEOMETRY_TOPOLOGY,
+    layout: LOOP_BREAKER_GEOMETRY_LAYOUT,
+    workstations: [loopBreakerGeometryWorkstation],
+  });
+
+  return (
+    <div className="h-[520px] w-full rounded-[1.5rem] border border-outline bg-surface-container-high p-4">
+      <ReactFlow
+        defaultEdgeOptions={{ selectable: false }}
+        edgeTypes={FACTORY_GRAPH_EDITOR_EDGE_TYPES}
+        edges={flow.edges}
+        fitView={true}
+        nodeTypes={FACTORY_GRAPH_EDITOR_NODE_TYPES}
+        nodes={flow.nodes}
+        nodesDraggable={false}
+      >
+        <Background />
+        <Controls showInteractive={false} />
+      </ReactFlow>
+    </div>
+  );
+}
+
 function ProgressOutcomeRoutesStory(input: {
   factoryDefinition?: CanonicalFactoryDefinition;
   topology?: FactoryGraphTopology;
@@ -699,6 +822,23 @@ const LIFECYCLE_PHASE_TOPOLOGY = buildFactoryGraphTopologyFromDefinition(
   lifecycleFactoryDefinition,
 );
 
+const futureCanonicalFactoryDefinition = {
+  ...baseFactoryDefinition,
+  workers: baseFactoryDefinition.workers?.map((worker) => ({
+    ...worker,
+    type: "FUTURE_WORKER_KIND" as never,
+  })),
+  workTypes: baseFactoryDefinition.workTypes?.map((workType) => ({
+    ...workType,
+    states: workType.states.map((state, index) =>
+      index === 0 ? { ...state, type: "FUTURE_WORK_STATE" as never } : state,
+    ),
+  })),
+} satisfies CanonicalFactoryDefinition;
+
+const FUTURE_CANONICAL_VALUES_TOPOLOGY =
+  buildFactoryGraphTopologyFromDefinition(futureCanonicalFactoryDefinition);
+
 function WorkStateLifecyclePhasesStory() {
   const flow = buildFactoryGraphEditorFlowModel({
     canEditConnections: false,
@@ -730,6 +870,137 @@ function WorkStateLifecyclePhasesStory() {
   );
 }
 
+function FutureCanonicalValuesStory() {
+  const flow = buildFactoryGraphEditorFlowModel({
+    canEditConnections: false,
+    factoryDefinition: futureCanonicalFactoryDefinition,
+    pendingAdditionEdgeIds: new Set<string>(),
+    pendingConnectionSource: null,
+    pendingAdditionNodeIds: new Set<string>(),
+    pendingRemovalEdgeIds: new Set<string>(),
+    pendingRemovalNodeIds: new Set<string>(),
+    topology: FUTURE_CANONICAL_VALUES_TOPOLOGY,
+  });
+
+  return (
+    <div className="relative h-[520px] w-full rounded-[1.5rem] border border-outline bg-surface-container-high p-4">
+      <ReactFlow
+        defaultEdgeOptions={{ selectable: false }}
+        edgeTypes={FACTORY_GRAPH_EDITOR_EDGE_TYPES}
+        edges={flow.edges}
+        fitView={true}
+        nodeTypes={FACTORY_GRAPH_EDITOR_NODE_TYPES}
+        nodes={flow.nodes}
+        nodesDraggable={false}
+      >
+        <Background />
+        <Controls showInteractive={false} />
+      </ReactFlow>
+    </div>
+  );
+}
+
+function ReducedMotionPreviewStory() {
+  return (
+    <div
+      className="grid max-w-xl gap-4 rounded-[1.5rem] border border-outline bg-surface-container-high p-6 text-on-surface"
+      data-graph-reduced-motion="true"
+    >
+      <div className="grid gap-1">
+        <h2 className="m-0 text-lg font-bold">Reduced motion preview</h2>
+        <p className="m-0 text-sm text-on-surface-variant">
+          Active-flow emphasis keeps its semantic border and surface while
+          motion is disabled.
+        </p>
+      </div>
+      <div
+        className="grid min-h-24 place-items-center rounded-lg border border-outline bg-background p-4"
+        data-current-activity-flow
+      >
+        <article
+          className="agent-flow-node--active rounded-lg border-2 border-af-success-border bg-warning-container px-4 py-3 shadow-af-success-chip"
+          data-testid="reduced-motion-active-node"
+        >
+          Active flow
+        </article>
+      </div>
+    </div>
+  );
+}
+
+function RuntimeEmphasisStatesStory() {
+  return (
+    <div className="grid max-w-4xl gap-4 rounded-[1.5rem] border border-outline bg-surface-container-high p-6 text-on-surface">
+      <div className="grid gap-1">
+        <h2 className="m-0 text-lg font-bold">Runtime emphasis states</h2>
+        <p className="m-0 text-sm text-on-surface-variant">
+          Selection, keyboard focus, muted context, and validation remain
+          visible on top of lifecycle meaning.
+        </p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <RuntimeEmphasisExample
+          data-testid="idle-muted-node"
+          iconKind="doc"
+          label="Idle context"
+          nodeType="doc"
+          visualState={{ muted: true }}
+        />
+        <RuntimeEmphasisExample
+          data-testid="active-selected-node"
+          iconKind="processing"
+          label="Active selected"
+          nodeType="workType"
+          visualState={{
+            activeFlow: true,
+            focused: true,
+            lifecycle: "PROCESSING",
+            muted: true,
+            selected: true,
+          }}
+        />
+        <RuntimeEmphasisExample
+          data-testid="failed-validation-node"
+          iconKind="failed"
+          label="Failed validation"
+          nodeType="statePosition"
+          visualState={{ focused: true, lifecycle: "FAILED", validation: true }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function RuntimeEmphasisExample({
+  "data-testid": testId,
+  iconKind,
+  label,
+  nodeType,
+  visualState,
+}: {
+  "data-testid": string;
+  iconKind: "doc" | "failed" | "processing";
+  label: string;
+  nodeType: FactoryGraphNodeShellProps["nodeType"];
+  visualState?: Omit<FactoryGraphVisualStateInput, "family">;
+}) {
+  return (
+    <div data-testid={testId}>
+      <FactoryGraphNodeShell
+        className="min-h-20 justify-center px-3 py-2"
+        handles={[]}
+        nodeType={nodeType}
+        visualState={visualState}
+      >
+        <div className="flex items-center gap-2">
+          <GraphSemanticIcon kind={iconKind} label={label} />
+          <span className="font-semibold">{label}</span>
+        </div>
+      </FactoryGraphNodeShell>
+    </div>
+  );
+}
+
 export default {
   title: "Agent Factory/Dashboard/Factory Graph Editor Flow",
   tags: ["test"],
@@ -740,19 +1011,62 @@ export const WorkStateLifecyclePhases = {
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
 
-    const expectPhaseSurface = async (label: string) => {
+    const expectPhaseSurface = async (
+      label: string,
+      surfaceClass: string,
+      status: string,
+    ) => {
       const node = (await canvas.findByText(label)).closest("article");
       if (!node) {
         throw new Error(`Expected work-state node for ${label}`);
       }
-      await expect(node.className).toContain("border-info-border");
-      await expect(node.className).toContain("bg-info-container");
+      for (const className of surfaceClass.split(" ")) {
+        await expect(node.className).toContain(className);
+      }
+      await expect(node).toHaveAttribute("data-graph-visual-status", status);
+      await expect(node).toHaveAttribute("data-graph-visual-surface", status);
     };
 
-    await expectPhaseSurface("story:queued");
-    await expectPhaseSurface("story:review");
-    await expectPhaseSurface("story:done");
-    await expectPhaseSurface("story:failed");
+    await expectPhaseSurface(
+      "story:queued",
+      "border-info-border bg-info-container",
+      "waiting",
+    );
+    await expectPhaseSurface(
+      "story:review",
+      "border-af-success-border bg-warning-container",
+      "active",
+    );
+    await expectPhaseSurface(
+      "story:done",
+      "border-af-success-border bg-success-container",
+      "success",
+    );
+    await expectPhaseSurface(
+      "story:failed",
+      "border-af-danger-border bg-error-container",
+      "danger",
+    );
+
+    for (const paletteId of COLOR_PALETTE_IDS) {
+      applyDocumentColorPalette(paletteId);
+      await expect(document.documentElement.dataset.colorPalette).toBe(
+        paletteId,
+      );
+      const processingNode = (await canvas.findByText("story:review")).closest(
+        "article",
+      );
+      // Authored PROCESSING phase holding no Work: tone without solid fill.
+      await expect(processingNode).toHaveAttribute(
+        "data-graph-visual-emphasis",
+        "standard",
+      );
+      await expect(processingNode).toHaveAttribute(
+        "data-graph-visual-fill",
+        "soft",
+      );
+    }
+    applyDocumentColorPalette("factory-dark");
 
     const legend = canvasElement.querySelector(
       "[data-factory-graph-work-state-phase-legend]",
@@ -766,6 +1080,139 @@ export const WorkStateLifecyclePhases = {
     await expect(
       within(legend as HTMLElement).getByText("Completed"),
     ).toBeVisible();
+  },
+};
+
+export const FutureCanonicalValues = {
+  render: () => <FutureCanonicalValuesStory />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText("FUTURE_WORKER_KIND")).toBeVisible();
+    await expect(await canvas.findByText("FUTURE_WORK_STATE")).toBeVisible();
+    await expect(
+      canvas
+        .getByText("FUTURE_WORKER_KIND")
+        .closest("article")
+        ?.className.includes("border-outline bg-surface"),
+    ).toBe(true);
+    await expect(
+      canvas
+        .getByText("FUTURE_WORK_STATE")
+        .closest("article")
+        ?.className.includes("border-outline bg-surface"),
+    ).toBe(true);
+  },
+};
+
+export const ReducedMotion = {
+  render: () => <ReducedMotionPreviewStory />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const activeNode = canvas.getByTestId("reduced-motion-active-node");
+
+    await expect(activeNode).toBeVisible();
+    await expect(window.getComputedStyle(activeNode).animationName).toBe(
+      "none",
+    );
+  },
+};
+
+export const RuntimeEmphasisStates = {
+  render: () => <RuntimeEmphasisStatesStory />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const idleNode = canvas
+      .getByTestId("idle-muted-node")
+      .querySelector("article");
+    const activeNode = canvas
+      .getByTestId("active-selected-node")
+      .querySelector("article");
+    const failedNode = canvas
+      .getByTestId("failed-validation-node")
+      .querySelector("article");
+
+    await expect(idleNode).toHaveAttribute("data-graph-visual-status", "quiet");
+    await expect(idleNode).toHaveAttribute("data-graph-visual-muted", "true");
+    await expect(activeNode).toHaveAttribute(
+      "data-graph-visual-status",
+      "active",
+    );
+    await expect(activeNode).toHaveAttribute(
+      "data-graph-visual-border",
+      "selection",
+    );
+    await expect(activeNode).toHaveAttribute("data-graph-visual-muted", "true");
+    await expect(activeNode).toHaveAttribute(
+      "data-graph-visual-focus",
+      "selection-and-keyboard",
+    );
+    await expect(activeNode).toHaveClass("ring-af-graph-focus-indicator");
+    await expect(failedNode).toHaveAttribute(
+      "data-graph-visual-status",
+      "danger",
+    );
+    await expect(failedNode).toHaveAttribute(
+      "data-graph-visual-validation",
+      "error",
+    );
+    await expect(failedNode).toHaveAttribute(
+      "data-graph-visual-border",
+      "validation",
+    );
+    await expect(failedNode).toHaveAttribute(
+      "data-graph-visual-focus",
+      "keyboard",
+    );
+    await expect(failedNode).toHaveAttribute("aria-invalid", "true");
+
+    if (
+      !(idleNode instanceof HTMLElement) ||
+      !(activeNode instanceof HTMLElement) ||
+      !(failedNode instanceof HTMLElement)
+    ) {
+      throw new Error("Expected runtime emphasis nodes to render as articles.");
+    }
+
+    for (const paletteId of COLOR_PALETTE_IDS) {
+      applyDocumentColorPalette(paletteId);
+      const rootStyles = window.getComputedStyle(document.documentElement);
+      const focusIndicator = parseCssColor(
+        rootStyles.getPropertyValue("--color-af-foundation-ink"),
+      );
+      const surface = parseCssColor(
+        rootStyles.getPropertyValue("--color-af-foundation-surface"),
+      );
+      const textColor = parseCssColor(window.getComputedStyle(idleNode).color);
+      const primary = parseCssColor(
+        rootStyles.getPropertyValue("--color-primary"),
+      );
+      const error = parseCssColor(rootStyles.getPropertyValue("--color-error"));
+      const activeStyles = window.getComputedStyle(activeNode);
+      const failedStyles = window.getComputedStyle(failedNode);
+
+      await expect(activeStyles.opacity).toBe("1");
+      await expect(failedStyles.opacity).toBe("1");
+      await expect(window.getComputedStyle(idleNode).opacity).toBe("1");
+      await expect(parseCssColor(activeStyles.borderTopColor)).toEqual(primary);
+      await expect(parseCssColor(failedStyles.borderTopColor)).toEqual(error);
+      await expect(
+        shadowContainsColor(activeStyles.boxShadow, focusIndicator),
+      ).toBe(true);
+      await expect(
+        shadowContainsColor(failedStyles.boxShadow, focusIndicator),
+      ).toBe(true);
+      await expect(shadowContainsColor(failedStyles.boxShadow, error)).toBe(
+        true,
+      );
+      await expect(
+        contrastRatio(focusIndicator, surface),
+      ).toBeGreaterThanOrEqual(3);
+      await expect(contrastRatio(textColor, surface)).toBeGreaterThanOrEqual(
+        4.5,
+      );
+    }
+
+    applyDocumentColorPalette("factory-dark");
   },
 };
 
@@ -813,6 +1260,58 @@ export const ConnectionAnchors = {
 
     await userEvent.click(failureSource);
     await expect(failureSource).toHaveAttribute("aria-pressed", "true");
+  },
+};
+
+export const LoopBreakerDensityWithInteractionOverlay = {
+  render: () => <LoopBreakerGeometryStory />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const loopTitle = await canvas.findByText("goal-loop-breaker", {
+      exact: true,
+    });
+    const loopNode = loopTitle.closest(".react-flow__node");
+
+    if (!(loopNode instanceof HTMLElement)) {
+      throw new Error("Expected the loop-breaker workstation React Flow node.");
+    }
+
+    await expect(within(loopNode).getByText("Breaker")).toBeVisible();
+    const guardLabel = loopNode.querySelector("[data-workstation-guard-card]");
+    expect(guardLabel).toBeTruthy();
+    expect(guardLabel?.getAttribute("data-workstation-guard-type")).toBe(
+      "VISIT_COUNT",
+    );
+    expect(guardLabel?.className).toContain("text-on-surface");
+    for (const boxedClass of [
+      "rounded-sm",
+      "border",
+      "bg-warning-container",
+      "px-1.5",
+      "py-0.5",
+    ]) {
+      expect(guardLabel?.className).not.toContain(boxedClass);
+    }
+    await expect(
+      loopNode.querySelector("[data-graph-interaction-overlay]"),
+    ).toBeVisible();
+    expect(
+      loopNode.querySelectorAll("[data-node-handle-badge]").length,
+    ).toBeGreaterThan(0);
+    expect(
+      loopNode.querySelectorAll("[data-workstation-guard-row]"),
+    ).toHaveLength(0);
+
+    const nodeBounds = loopNode.getBoundingClientRect();
+    for (const descendant of loopNode.querySelectorAll("*")) {
+      const bounds = descendant.getBoundingClientRect();
+      if (bounds.width <= 0 || bounds.height <= 0) continue;
+
+      expect(bounds.left).toBeGreaterThanOrEqual(nodeBounds.left);
+      expect(bounds.right).toBeLessThanOrEqual(nodeBounds.right);
+      expect(bounds.top).toBeGreaterThanOrEqual(nodeBounds.top);
+      expect(bounds.bottom).toBeLessThanOrEqual(nodeBounds.bottom);
+    }
   },
 };
 

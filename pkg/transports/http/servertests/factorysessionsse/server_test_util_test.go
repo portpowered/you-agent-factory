@@ -11,6 +11,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -109,9 +110,12 @@ func (*programmedFactorySessionEvents) MoveWorkForSession(context.Context, strin
 func newAPITestServer(workAPI apisurface.WorkAPI) *api.Server {
 	logger, _ := zap.NewDevelopment()
 	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
-		Work: workAPI, SessionRequests: sseRequestPreparation{},
+		SessionRequests: sseRequestPreparation{},
 	}, logger)
-	return api.NewServer(handler, nil, nil, logger)
+	return api.NewServerWithRecordings(
+		recordingshttp.NewLegacyAdapterWithLive(nil, nil, workAPI),
+		handler, nil, nil, nil, nil, logger,
+	)
 }
 
 func readBody(t *testing.T, resp *http.Response) string {

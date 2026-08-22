@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 )
 
@@ -29,7 +30,9 @@ type RuntimeMetricRecord struct {
 	TraceID           string  `json:"trace_id,omitempty"`
 	Workstation       string  `json:"workstation,omitempty"`
 	WorkerType        string  `json:"worker_type,omitempty"`
+	WorkerSessionID   string  `json:"worker_session_id,omitempty"`
 	Provider          string  `json:"provider,omitempty"`
+	Model             string  `json:"model,omitempty"`
 	Outcome           string  `json:"outcome,omitempty"`
 	Reason            string  `json:"reason,omitempty"`
 }
@@ -72,13 +75,22 @@ type RuntimeMetricsStorageConfig struct {
 	Compress   bool
 }
 
-// RuntimeMetricsSinkFactory opens one runtime-scoped sink. Wire selects the
-// policy-free writer implementation.
-type RuntimeMetricsSinkFactory func(
-	RuntimeMetricsScope,
-	string,
-	RuntimeMetricsStorageConfig,
-) (RuntimeMetricsSink, error)
+// RuntimeMetricsScopeRequest contains the value selections for one private
+// metrics scope. The owner retains the clock, ID, path, and filesystem
+// effects; callers provide only correlation values and destination policy.
+type RuntimeMetricsScopeRequest struct {
+	Scope         RuntimeMetricsScope
+	RootDirectory string
+	Policy        RuntimeMetricsPolicy
+	Config        RuntimeMetricsStorageConfig
+}
+
+// RuntimeMetricsOwner is the process-scoped observability root for runtime
+// metrics. Open returns one operation-private sink; the owner itself is not
+// closed when a session finishes.
+type RuntimeMetricsOwner interface {
+	Open(RuntimeMetricsScopeRequest) (RuntimeMetricsSink, error)
+}
 
 type projectedRuntimeMetricsSink struct {
 	writer   RuntimeMetricRecordWriter
@@ -147,10 +159,20 @@ func (s *projectedRuntimeMetricsSink) emit(
 		TraceID:           fields.TraceID,
 		Workstation:       fields.Workstation,
 		WorkerType:        fields.WorkerType,
-		Provider:          fields.Provider,
+		WorkerSessionID:   fields.WorkerSessionID,
+		Provider:          normalizedRuntimeMetricProvider(fields.Provider),
+		Model:             fields.Model,
 		Outcome:           fields.Outcome,
 		Reason:            fields.Reason,
 	})
+}
+
+func normalizedRuntimeMetricProvider(provider string) string {
+	provider = strings.TrimSpace(provider)
+	if provider == "" || strings.Contains(provider, "${") {
+		return ""
+	}
+	return provider
 }
 
 func (s *projectedRuntimeMetricsSink) Path() string                     { return s.artifact.Path }

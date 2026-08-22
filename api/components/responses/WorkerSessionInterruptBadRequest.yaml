@@ -1,0 +1,5 @@
+description: The Worker Session interrupt request failed validation.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/WorkerSessionInterruptError.yaml'

@@ -9,13 +9,13 @@ import (
 )
 
 const (
-	automationsInvalidRequestMessage      = "invalid automations request"
-	automationsNotFoundMessage            = "automations resource not found"
-	automationsConflictMessage            = "automations operation conflicted with observed state"
-	automationsNotReadyMessage            = "automations service is not ready"
-	automationsSupervisionFailedMessage   = "automation source supervision failed"
-	automationsInternalFailureMessage     = "automations request failed"
-	automationsErrorCodeConflict          = "CONFLICT"
+	automationsInvalidRequestMessage       = "invalid automations request"
+	automationsNotFoundMessage             = "automations resource not found"
+	automationsConflictMessage             = "automations operation conflicted with observed state"
+	automationsNotReadyMessage             = "automations service is not ready"
+	automationsSupervisionFailedMessage    = "automation source supervision failed"
+	automationsInternalFailureMessage      = "automations request failed"
+	automationsErrorCodeConflict           = "CONFLICT"
 	automationsErrorCodeServiceUnavailable = "SERVICE_UNAVAILABLE"
 )
 

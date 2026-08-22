@@ -1,0 +1,52 @@
+{
+  "cases": [
+    {
+      "name": "stop_reason completed maps to end_turn",
+      "role": "stop_reason",
+      "direction": "outbound",
+      "classification": "accepted",
+      "input": {"outcome": "completed"},
+      "expected": {"stopReason": "end_turn"}
+    },
+    {
+      "name": "stop_reason cancelled maps to cancelled",
+      "role": "stop_reason",
+      "direction": "outbound",
+      "classification": "accepted",
+      "input": {"outcome": "cancelled"},
+      "expected": {"stopReason": "cancelled"}
+    },
+    {
+      "name": "stop_reason tokens_exhausted maps to max_tokens",
+      "role": "stop_reason",
+      "direction": "outbound",
+      "classification": "accepted",
+      "input": {"outcome": "tokens_exhausted"},
+      "expected": {"stopReason": "max_tokens"}
+    },
+    {
+      "name": "stop_reason refused maps to refusal",
+      "role": "stop_reason",
+      "direction": "outbound",
+      "classification": "accepted",
+      "input": {"outcome": "refused"},
+      "expected": {"stopReason": "refusal"}
+    },
+    {
+      "name": "stop_reason failed falls back to end_turn without exposing a cause",
+      "role": "stop_reason",
+      "direction": "outbound",
+      "classification": "accepted",
+      "input": {"outcome": "failed"},
+      "expected": {"stopReason": "end_turn"}
+    },
+    {
+      "name": "stop_reason unknown outcome falls back to end_turn",
+      "role": "stop_reason",
+      "direction": "outbound",
+      "classification": "accepted",
+      "input": {"outcome": "a_future_outcome_this_transport_does_not_recognize"},
+      "expected": {"stopReason": "end_turn"}
+    }
+  ]
+}

@@ -12,6 +12,7 @@ import (
 const (
 	factoryEventSchemaPath     = "packages/api/generated/schemas/factory-event.schema.json"
 	factoryRecordingSchemaPath = "packages/api/generated/schemas/factory-recording.schema.json"
+	factoryEventVariantCount   = 35
 )
 
 func TestStandaloneFactorySchemasValidateCanonicalEventAndRecordingShapes(t *testing.T) {
@@ -45,6 +46,26 @@ func TestStandaloneFactorySchemasValidateCanonicalEventAndRecordingShapes(t *tes
 	recordingSchema := compileArtifactSchema(t, artifacts[factoryRecordingSchemaPath])
 	assertSchemaValueValid(t, eventSchema, validEvent, true)
 	assertSchemaValueValid(t, recordingSchema, validRecording, true)
+	validAssociation := cloneJSONValue(t, validEvent).(map[string]any)
+	validAssociation["id"] = "event-dispatch-worker-session-association"
+	validAssociation["type"] = "DISPATCH_WORKER_SESSION_ASSOCIATION"
+	validAssociation["context"].(map[string]any)["dispatchId"] = "dispatch-actual-7"
+	validAssociation["payload"] = map[string]any{"workerSessionId": "worker-session-actual-11"}
+	assertSchemaValueValid(t, eventSchema, validAssociation, true)
+	assertSchemaValueValid(t, recordingSchema, map[string]any{
+		"schemaVersion": validRecording["schemaVersion"],
+		"sessionId":     validRecording["sessionId"],
+		"events":        []any{validAssociation},
+	}, true)
+	missingWorkerSessionID := cloneJSONValue(t, validAssociation).(map[string]any)
+	delete(missingWorkerSessionID["payload"].(map[string]any), "workerSessionId")
+	assertSchemaValueValid(t, eventSchema, missingWorkerSessionID, false)
+	missingDispatchID := cloneJSONValue(t, validAssociation).(map[string]any)
+	delete(missingDispatchID["context"].(map[string]any), "dispatchId")
+	assertSchemaValueValid(t, eventSchema, missingDispatchID, false)
+	emptyDispatchID := cloneJSONValue(t, validAssociation).(map[string]any)
+	emptyDispatchID["context"].(map[string]any)["dispatchId"] = ""
+	assertSchemaValueValid(t, eventSchema, emptyDispatchID, false)
 
 	missingEventID := cloneJSONValue(t, validEvent).(map[string]any)
 	delete(missingEventID, "id")
@@ -88,11 +109,14 @@ func TestStandaloneFactorySchemasAreCompleteAndByteStable(t *testing.T) {
 	event := decodeSchemaObject(t, first[factoryEventSchemaPath])
 	discriminator := event["discriminator"].(map[string]any)
 	mapping := discriminator["mapping"].(map[string]any)
-	if discriminator["propertyName"] != "type" || len(mapping) != 31 {
-		t.Fatalf("FactoryEvent discriminator = %#v, want type with 31 mappings", discriminator)
+	if discriminator["propertyName"] != "type" || len(mapping) != factoryEventVariantCount {
+		t.Fatalf("FactoryEvent discriminator = %#v, want type with %d mappings", discriminator, factoryEventVariantCount)
 	}
-	if variants := event["oneOf"].([]any); len(variants) != 31 {
-		t.Fatalf("FactoryEvent variants = %d, want 31", len(variants))
+	if mapping["DISPATCH_WORKER_SESSION_ASSOCIATION"] != "#/$defs/DispatchWorkerSessionAssociationEventPayload" {
+		t.Fatalf("FactoryEvent association mapping = %#v, want dispatch-to-Worker-Session payload", mapping["DISPATCH_WORKER_SESSION_ASSOCIATION"])
+	}
+	if variants := event["oneOf"].([]any); len(variants) != factoryEventVariantCount {
+		t.Fatalf("FactoryEvent variants = %d, want %d", len(variants), factoryEventVariantCount)
 	}
 
 	recording := decodeSchemaObject(t, first[factoryRecordingSchemaPath])

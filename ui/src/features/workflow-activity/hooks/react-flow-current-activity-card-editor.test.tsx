@@ -556,6 +556,44 @@ describe("useCurrentActivityGraphState", () => {
     expect(readGraphDraftHasPendingChanges()).toBe(false);
   });
 
+  it("keeps editor chrome and confirmation during default-session identity resolution", () => {
+    const { result, rerender } = renderHook(
+      ({ factoryDocumentScopeKey }: { factoryDocumentScopeKey: string }) =>
+        useCurrentActivityGraphState(
+          semanticWorkflowDashboardSnapshot,
+          "en",
+          factoryDocumentScopeKey,
+        ),
+      {
+        initialProps: { factoryDocumentScopeKey: "~default" },
+      },
+    );
+
+    act(() => {
+      result.current.editorControls.toggleMode();
+      result.current.editorControls.selectTool("connect");
+      result.current.saveControls.requestConfirmation();
+    });
+    useFactoryGraphTopologyEditorBridge.setState({
+      handlers: {
+        blockedRemovalReason: null,
+        canInteractWithEditor: true,
+        editorMode: true,
+        requestNodeRemoval: vi.fn(),
+      },
+    });
+    rerender({ factoryDocumentScopeKey: "runtime-default-session" });
+
+    expect(result.current.editorControls.isEditing).toBe(true);
+    expect(result.current.editorControls.activeTool).toBe("connect");
+    expect(result.current.saveControls.isConfirming).toBe(true);
+    expect(hookState.addEntityController.reset).not.toHaveBeenCalled();
+    expect(hookState.saveEditableDefinition.reset).not.toHaveBeenCalled();
+    expect(useFactoryGraphTopologyEditorBridge.getState().handlers).not.toBe(
+      null,
+    );
+  });
+
   it("publishes graph draft pending state when draft dirtiness changes", () => {
     const { rerender } = renderHook(() =>
       useCurrentActivityGraphState(semanticWorkflowDashboardSnapshot),

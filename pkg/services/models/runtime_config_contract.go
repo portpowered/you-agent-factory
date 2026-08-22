@@ -2,7 +2,6 @@ package models
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 )
 
@@ -57,6 +56,9 @@ func (ref RuntimeScopeRef) IsZero() bool {
 type RuntimeScopeConfig struct {
 	CacheDirectory string
 	Runtime        RuntimeConfig
+	// OperatorModels is a detached, scope-local snapshot of optional model
+	// overlays. Models applies it over built-ins during reference resolution.
+	OperatorModels map[string]ModelOverlay
 }
 
 // Clone returns a detached copy safe for a Models implementation to retain.
@@ -67,6 +69,12 @@ func (config RuntimeScopeConfig) Clone() RuntimeScopeConfig {
 		cloned.Runtime.Workers[i] = config.Runtime.Workers[i].Clone()
 	}
 	cloned.Runtime.Resources = append([]RuntimeResource(nil), config.Runtime.Resources...)
+	if config.OperatorModels != nil {
+		cloned.OperatorModels = make(map[string]ModelOverlay, len(config.OperatorModels))
+		for name, overlay := range config.OperatorModels {
+			cloned.OperatorModels[name] = overlay.Clone()
+		}
+	}
 	return cloned
 }
 
@@ -91,13 +99,6 @@ type CloseRuntimeScopeRequest struct {
 type CloseRuntimeScopeResult struct {
 	Scope  RuntimeScopeRef
 	Closed bool
-}
-
-// RuntimeOpeningRequest is retained as the legacy ForRuntime input projection.
-//
-// Deprecated: use OpenRuntimeScopeRequest with detached RuntimeScopeConfig.
-type RuntimeOpeningRequest struct {
-	CacheDirectory string
 }
 
 const (
@@ -224,21 +225,4 @@ func (worker RuntimeWorker) IsInference() bool {
 // IsAgent recognizes the agent Worker taxonomy value.
 func (worker RuntimeWorker) IsAgent() bool {
 	return strings.TrimSpace(worker.Type) == RuntimeWorkerTypeAgent
-}
-
-// ErrInvalidRuntimeBinding classifies missing or invalid runtime-scope inputs
-// supplied to ForRuntime. Peers fail closed on this typed outcome without
-// importing local-runtime construction or process-launcher types.
-var ErrInvalidRuntimeBinding = errors.New("models runtime binding is invalid")
-
-// ValidateRuntimeBinding checks the plain runtime-scope inputs required to bind
-// a constructed Models service to one Factory Session. CacheDirectory may be
-// empty; the asset puller resolves a default managed-model cache root at use
-// time. RuntimeConfig lookup is required. Validation does not start host
-// processes or touch local-runtime implementation packages.
-func ValidateRuntimeBinding(binding RuntimeBinding) error {
-	if binding.RuntimeConfig == nil {
-		return fmt.Errorf("%w: runtime configuration lookup is required", ErrInvalidRuntimeBinding)
-	}
-	return nil
 }

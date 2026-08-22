@@ -7,14 +7,13 @@ import (
 	"testing"
 	"time"
 
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -22,10 +21,9 @@ import (
 )
 
 type recordingModelsService struct {
-	openRequests    []models.OpenRuntimeScopeRequest
-	closeRequests   []models.CloseRuntimeScopeRequest
-	forRuntimeCalls int
-	events          *[]string
+	openRequests  []models.OpenRuntimeScopeRequest
+	closeRequests []models.CloseRuntimeScopeRequest
+	events        *[]string
 }
 
 func (fake *recordingModelsService) OpenRuntimeScope(
@@ -54,11 +52,6 @@ func (fake *recordingModelsService) CloseRuntimeScope(
 	return models.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
 }
 
-func (fake *recordingModelsService) ForRuntime(models.RuntimeBinding) (models.Service, error) {
-	fake.forRuntimeCalls++
-	return fake, nil
-}
-
 func (fake *recordingModelsService) ListCatalog(
 	context.Context,
 	models.ListModelsRequest,
@@ -78,6 +71,13 @@ func (fake *recordingModelsService) GetModelReadiness(
 	models.GetModelReadinessRequest,
 ) (models.GetModelReadinessResult, error) {
 	return models.GetModelReadinessResult{}, models.ErrUnsupportedOperation
+}
+
+func (fake *recordingModelsService) ResolveModelReference(
+	context.Context,
+	models.ResolveModelReferenceRequest,
+) (models.ResolveModelReferenceResult, error) {
+	return models.ResolveModelReferenceResult{}, models.ErrUnsupportedOperation
 }
 
 func (fake *recordingModelsService) PrepareModelAssets(
@@ -150,6 +150,13 @@ func (fake *recordingModelsService) InvokeModelWithLease(
 	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
 }
 
+func (fake *recordingModelsService) InvokeModel(
+	context.Context,
+	models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
+	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
+}
+
 func (fake *recordingModelsService) CancelInvocation(
 	context.Context,
 	models.CancelInvocationRequest,
@@ -201,7 +208,7 @@ func (fake *recordingModelsService) InvokeLocal(
 	return models.LocalInvocationResult{}, models.ErrUnsupportedOperation
 }
 
-func TestBindModelsRuntimeScopeOpensDetachedScopeWithoutForRuntime(t *testing.T) {
+func TestBindModelsRuntimeScopeOpensDetachedScope(t *testing.T) {
 	t.Parallel()
 
 	fake := &recordingModelsService{}
@@ -223,9 +230,6 @@ func TestBindModelsRuntimeScopeOpensDetachedScopeWithoutForRuntime(t *testing.T)
 	}
 	if bind.Scope.IsZero() {
 		t.Fatal("bindModelsRuntimeScope() returned zero runtime scope")
-	}
-	if fake.forRuntimeCalls != 0 {
-		t.Fatalf("ForRuntime calls = %d, want 0", fake.forRuntimeCalls)
 	}
 	if len(fake.openRequests) != 1 {
 		t.Fatalf("OpenRuntimeScope requests = %d, want 1", len(fake.openRequests))
@@ -249,6 +253,7 @@ func TestAssembleRuntimeProductsCarriesModelsRootAndScopeIntoOpenedRuntime(t *te
 	}
 
 	opened := assembleRuntimeProducts(
+		context.Background(),
 		nil,
 		nil,
 		nil,
@@ -270,14 +275,108 @@ func TestAssembleRuntimeProductsCarriesModelsRootAndScopeIntoOpenedRuntime(t *te
 		func() error { return nil },
 	)
 
-	if opened.application.HTTP.Models != root {
+	if opened.application.Models != root {
 		t.Fatal("opened application runtime did not retain the process-scoped Models root")
 	}
-	if opened.application.HTTP.ModelsScope != scope {
-		t.Fatalf("opened HTTP Models scope = %q, want %q", opened.application.HTTP.ModelsScope, scope)
+	if opened.application.ModelsScope != scope {
+		t.Fatalf("opened Models scope = %q, want %q", opened.application.ModelsScope, scope)
 	}
-	if root.forRuntimeCalls != 0 {
-		t.Fatalf("ForRuntime calls = %d, want 0", root.forRuntimeCalls)
+}
+
+func TestAssembleRuntimeProductsBindsHostBoundFactorySessionsGatewayForApplicationRoles(t *testing.T) {
+	t.Parallel()
+
+	gateway := &runtimeProductsSessionsRole{readSession: func(string) factorysessions.SessionReadResult {
+		return factorysessions.SessionReadResult{SessionID: "host-bound-gateway"}
+	}, readLiveSession: func(string) factorysessions.LiveControlSnapshot {
+		return factorysessions.LiveControlSnapshot{Context: factorysessions.ProjectionContext{FactorySessionID: "host-bound-gateway"}}
+	}}
+	opened := assembleRuntimeProducts(
+		context.Background(),
+		nil,
+		gateway,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		modelsRuntimeBind{},
+		nil,
+		inertHostedInstance{},
+		nil,
+		nil,
+		nil,
+		nil,
+		"/factory",
+		"runtime-1",
+		"backend-1",
+		func() error { return nil },
+	)
+
+	got, err := opened.application.FactorySessions.GetSession(context.Background(), "session-1")
+	if err != nil {
+		t.Fatalf("FactorySessions.GetSession() error = %v, want host-bound gateway read", err)
+	}
+	if got.SessionID != "host-bound-gateway" {
+		t.Fatalf("FactorySessions.GetSession() = %q, want host-bound gateway result", got.SessionID)
+	}
+	liveRead, err := opened.application.LiveControl.GetFactorySession(context.Background(), "session-1")
+	if err != nil {
+		t.Fatalf("LiveControl.GetSession() error = %v, want host-bound gateway read", err)
+	}
+	if liveRead.Context.FactorySessionID != "host-bound-gateway" {
+		t.Fatalf("LiveControl.GetFactorySession() = %q, want host-bound gateway result", liveRead.Context.FactorySessionID)
+	}
+}
+
+func TestAssembledRuntimeResourcesCloseAcquiredResourcesInReverseOrder(t *testing.T) {
+	t.Parallel()
+
+	var events []string
+	cleanup := &runtimeOpeningCleanup{}
+	cleanup.Add(func() error {
+		events = append(events, "models-close")
+		return nil
+	})
+	cleanup.Add(func() error {
+		events = append(events, "workers-close")
+		return nil
+	})
+
+	opened := assembleRuntimeProducts(
+		context.Background(),
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		modelsRuntimeBind{},
+		nil,
+		inertHostedInstance{},
+		nil,
+		nil,
+		nil,
+		nil,
+		"/factory",
+		"runtime-1",
+		"backend-1",
+		cleanup.Close,
+	)
+	if err := opened.application.Resources.Close(); err != nil {
+		t.Fatalf("opened runtime resource Close() error = %v, want nil", err)
+	}
+	if !slices.Equal(events, []string{"workers-close", "models-close"}) {
+		t.Fatalf("runtime close events = %v, want reverse acquisition order", events)
+	}
+	if err := opened.application.Resources.Close(); err != nil {
+		t.Fatalf("second opened runtime resource Close() error = %v, want nil", err)
+	}
+	if !slices.Equal(events, []string{"workers-close", "models-close"}) {
+		t.Fatalf("runtime close events after second close = %v, want each resource closed once", events)
 	}
 }
 
@@ -321,22 +420,54 @@ func TestRuntimeOpeningCleanupClosesModelsScopeAfterLaterResourceOnFailure(t *te
 	}
 }
 
-func TestOpenRuntimeClosesModelsScopeExactlyOnceAfterLaterStepFails(t *testing.T) {
+func TestRuntimeOpeningCleanupPreservesPrimaryErrorAndAggregatesCleanupFailures(t *testing.T) {
 	t.Parallel()
 
 	var events []string
-	modelRoot := &recordingModelsService{events: &events}
-	laterErr := errors.New("worker runtime opening failed")
-	failure := &openingCoordinatorFailure{events: &events, err: laterErr}
-	factory := &Factory{
+	firstCleanupErr := errors.New("first cleanup failed")
+	secondCleanupErr := errors.New("second cleanup failed")
+	openingErr := errors.New("runtime assembly failed")
+	cleanup := &runtimeOpeningCleanup{}
+	cleanup.Add(func() error {
+		events = append(events, "first-close")
+		return firstCleanupErr
+	})
+	cleanup.Add(func() error {
+		events = append(events, "second-close")
+		return secondCleanupErr
+	})
+
+	err := cleanup.Unwind(openingErr)
+	for _, expected := range []error{openingErr, firstCleanupErr, secondCleanupErr} {
+		if !errors.Is(err, expected) {
+			t.Fatalf("Unwind() error = %v, want to retain %v", err, expected)
+		}
+	}
+	if !slices.Equal(events, []string{"second-close", "first-close"}) {
+		t.Fatalf("cleanup events = %v, want reverse acquisition order", events)
+	}
+
+	if err := cleanup.Close(); !errors.Is(err, firstCleanupErr) || !errors.Is(err, secondCleanupErr) {
+		t.Fatalf("second Close() error = %v, want previously aggregated cleanup errors", err)
+	}
+	if !slices.Equal(events, []string{"second-close", "first-close"}) {
+		t.Fatalf("cleanup events after second Close() = %v, want each resource closed once", events)
+	}
+}
+
+func newOpeningCoordinatorFactory(t *testing.T, modelService models.Service) *Factory {
+	t.Helper()
+	sessionsRoot := openingCoordinatorSessionsRoot{
+		RuntimeAssembly: openingCoordinatorBoundSessions{},
+	}
+	return &Factory{
 		durableExecutionFactory:        openingCoordinatorDurableExecution,
-		workerExecutionFactory:         failure.openWorkerExecution,
-		modelService:                   modelRoot,
-		factorySessionsService:         openingCoordinatorSessionsRoot{},
-		recordingsProjectionFactory:    openingCoordinatorProjections,
-		runtimeLedgerFactory:           openingCoordinatorLedgerFactory,
-		runtimeRecorderFactory:         openingCoordinatorRecorder,
-		automationHostedSourcesFactory: openingCoordinatorHostedPollers,
+		workerService:                  openingCoordinatorWorkersService{},
+		modelService:                   modelService,
+		factorySessionsService:         sessionsRoot,
+		factorySessionsRuntimeAssembly: sessionsRoot,
+		recordingsService:              &recordingsRootConstructionStub{},
+		recordingsRuntime:              &recordingsRootConstructionStub{},
 		factoryScaffoldInitializer:     openingCoordinatorInitializeScaffold,
 		editableFactoryValidator:       openingCoordinatorValidateEditable,
 		workService:                    work.MaterializationService(openingCoordinatorContentMaterializer{}),
@@ -345,54 +476,10 @@ func TestOpenRuntimeClosesModelsScopeExactlyOnceAfterLaterStepFails(t *testing.T
 		loadFactory:                    openingCoordinatorLoadFactory,
 		resolveClock:                   openingCoordinatorResolveClock,
 		newSessionLogger:               openingCoordinatorSessionLogger,
-		adaptWorkerCommandRunner:       openingCoordinatorAdaptCommandRunner,
 		generateRuntimeInstanceID:      func() string { return "runtime-opening-cleanup-test" },
 		resolveHome:                    func() (string, error) { return t.TempDir(), nil },
 		providerIdentities:             func(identity string) (string, error) { return identity, nil },
 	}
-	_, err := factory.openRuntime(
-		context.Background(),
-		&factorysessions.RuntimeOpeningRequest{
-			FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: t.TempDir()},
-			FactorySession:    factorysessions.SessionRuntimeOpeningRequest{BackendScopeID: "test-scope"},
-		},
-		ExternalEffects{},
-		zap.NewNop(),
-	)
-	if !errors.Is(err, laterErr) {
-		t.Fatalf("openRuntime() error = %v, want later-step failure", err)
-	}
-	if !slices.Equal(events, []string{"models-open", "later-step-failed", "models-close"}) {
-		t.Fatalf("opening events = %v, want scope cleanup after later-step failure", events)
-	}
-	if len(modelRoot.closeRequests) != 1 {
-		t.Fatalf("CloseRuntimeScope requests = %d, want exactly 1", len(modelRoot.closeRequests))
-	}
-}
-
-type openingCoordinatorFailure struct {
-	events *[]string
-	err    error
-}
-
-func (failure *openingCoordinatorFailure) openWorkerExecution(
-	factoryruntime.RuntimeOpeningRequest,
-	workers.RuntimeOpeningRequest,
-	factoryruntime.Clock,
-	*zap.Logger,
-	workers.CommandRunner,
-	workers.CommandRunner,
-	workers.PTYAllocator,
-	workers.Provider,
-	roles.CurrentRuntimeResolver,
-	models.Service,
-	models.RuntimeScopeRef,
-	work.Service,
-	WorkersRuntimeFactory,
-	[]operatorconfig.ACPIntegration,
-) (workers.RuntimeService, error) {
-	*failure.events = append(*failure.events, "later-step-failed")
-	return nil, failure.err
 }
 
 func openingCoordinatorDurableExecution(
@@ -401,45 +488,12 @@ func openingCoordinatorDurableExecution(
 	_ operatorconfig.ResolvedDefaults,
 	_ RuntimeRoot,
 	_ factoryruntime.Clock,
-	_ workers.Provider,
+	_ providers.Service,
 	_ *workers.MockWorkersConfig,
 	_ FactorySessionExecutionFactory,
 	_ factorysessions.ProviderIdentityResolver,
 ) (DurableExecution, error) {
 	return DurableExecution{}, nil
-}
-
-func openingCoordinatorProjections() recordings.ProjectionService {
-	return openingCoordinatorProjection{}
-}
-
-func openingCoordinatorLedgerFactory() factoryruntime.RuntimeLedgerFactory {
-	return func(
-		recordings.InitialStructureSource,
-		func() time.Time,
-		factorydefinitions.RuntimeDefinitionLookup,
-	) recordings.RuntimeEventLedger {
-		return nil
-	}
-}
-
-func openingCoordinatorRecorder(
-	time.Duration,
-	factorydefinitions.LoadedFactorySource,
-	func() time.Time,
-	string,
-) (recordings.RuntimeRecorder, error) {
-	return nil, nil
-}
-
-func openingCoordinatorHostedPollers(
-	*zap.Logger,
-	automations.HostedLinearClock,
-	automations.HostedLinearHTTPDoer,
-	automations.HostedLinearSecretResolver,
-	string,
-) automations.HostedPollers {
-	return nil
 }
 
 func openingCoordinatorInitializeScaffold(string) error {
@@ -472,18 +526,45 @@ func openingCoordinatorSessionLogger(*zap.Logger, string, string, string) *zap.L
 	return zap.NewNop()
 }
 
-func openingCoordinatorAdaptCommandRunner(platformprocess.CommandRunner) workers.CommandRunner {
-	return nil
-}
+type openingCoordinatorWorkersService struct{ workers.Service }
 
 type openingCoordinatorSessionsRoot struct {
 	factorysessions.Service
+	roles.RuntimeAssembly
 }
 
-func (openingCoordinatorSessionsRoot) ForRuntime(
-	factorysessions.OpeningBindingRequest,
-) (factorysessions.Service, error) {
-	return openingCoordinatorBoundSessions{}, nil
+type runtimeProductsSessionsRole struct {
+	factorysessions.Service
+	readSession     func(string) factorysessions.SessionReadResult
+	readLiveSession func(string) factorysessions.LiveControlSnapshot
+}
+
+func (role *runtimeProductsSessionsRole) GetSession(_ context.Context, sessionID string) (factorysessions.SessionReadResult, error) {
+	return role.readSession(sessionID), nil
+}
+
+func (role *runtimeProductsSessionsRole) GetFactorySession(_ context.Context, sessionID string) (factorysessions.LiveControlSnapshot, error) {
+	return role.readLiveSession(sessionID), nil
+}
+
+func (role *runtimeProductsSessionsRole) OpenFactorySession(context.Context, factorysessions.LiveControlOpenRequest) (*factorysessions.LiveControlOpenResult, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (role *runtimeProductsSessionsRole) ListFactorySessions(context.Context) ([]factorysessions.LiveControlListItem, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (role *runtimeProductsSessionsRole) PauseLiveFactorySession(context.Context, string, factorysessions.LiveControlRequest) (factorysessions.LiveControlResult, error) {
+	return factorysessions.LiveControlResult{}, errors.New("not implemented")
+}
+
+func (role *runtimeProductsSessionsRole) ResumeLiveFactorySession(context.Context, string, factorysessions.LiveControlRequest) (factorysessions.LiveControlResult, error) {
+	return factorysessions.LiveControlResult{}, errors.New("not implemented")
+}
+
+func (role *runtimeProductsSessionsRole) CloseFactorySession(context.Context, string) error {
+	return errors.New("not implemented")
 }
 
 type openingCoordinatorBoundSessions struct {
@@ -492,6 +573,10 @@ type openingCoordinatorBoundSessions struct {
 }
 
 func (openingCoordinatorBoundSessions) CurrentRuntime() *factorysessions.LiveRuntime {
+	return nil
+}
+
+func (openingCoordinatorBoundSessions) InferenceProgressPublisherFactory(*zap.Logger) func(string) factorysessions.ProgressPublisher {
 	return nil
 }
 

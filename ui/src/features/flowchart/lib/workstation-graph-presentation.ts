@@ -1,3 +1,4 @@
+import type { FactoryGraphVisualStatusRole } from "@you-agent-factory/factory-graph";
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
 import type { EditableWorkstationBehavior } from "../../current-factory-definition/lib/workstation-behavior";
 import {
@@ -5,6 +6,7 @@ import {
   POLLER_WORKSTATION_KIND,
   REPEATER_WORKSTATION_KIND,
   STANDARD_WORKSTATION_KIND,
+  UNKNOWN_WORKSTATION_KIND,
   type WorkstationIconMetadata,
   type WorkstationSemanticKind,
   workstationIconMetadata,
@@ -25,8 +27,9 @@ export function workstationBehaviorSemanticKind(
     case "REPEATER":
       return REPEATER_WORKSTATION_KIND;
     case "STANDARD":
-    case undefined:
       return STANDARD_WORKSTATION_KIND;
+    case undefined:
+      return UNKNOWN_WORKSTATION_KIND;
   }
 }
 
@@ -48,8 +51,9 @@ export function workstationGraphBorderClassName(
 export function workstationGraphPresentation(
   workstation: DashboardWorkstationNode,
   locale?: string | null,
+  parentStatus?: FactoryGraphVisualStatusRole,
 ): WorkstationGraphPresentation {
-  const metadata = workstationIconMetadata(workstation, locale);
+  const metadata = workstationIconMetadata(workstation, locale, parentStatus);
 
   return {
     ...metadata,
@@ -60,6 +64,7 @@ export function workstationGraphPresentation(
 export function workstationGraphPresentationFromBehavior(
   behavior: EditableWorkstationBehavior | undefined,
   locale?: string | null,
+  parentStatus?: FactoryGraphVisualStatusRole,
 ): WorkstationGraphPresentation {
   return workstationGraphPresentation(
     {
@@ -70,5 +75,6 @@ export function workstationGraphPresentationFromBehavior(
       worker_type: "",
     },
     locale,
+    parentStatus,
   );
 }

@@ -141,9 +141,48 @@ func TestReplaySubmissionsFromEventDecodesWorkOwnedPayload(t *testing.T) {
 	if !reflect.DeepEqual(got.request.Works[0].Content, []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello"}}) {
 		t.Fatalf("content = %#v", got.request.Works[0].Content)
 	}
-	wantRelations := []work.WorkRelation{{Type: work.WorkRelationDependsOn, SourceWorkName: "source", TargetWorkName: "target", RequiredState: "done"}}
+	wantRelations := []work.WorkRelation{{Type: work.WorkRelationDependsOn, SourceWorkName: "source", TargetWorkID: "work-2", TargetWorkName: "target", RequiredState: "done"}}
 	if !reflect.DeepEqual(got.request.Relations, wantRelations) {
 		t.Fatalf("relations = %#v, want %#v", got.request.Relations, wantRelations)
+	}
+}
+
+func TestReplaySubmissionsFromEventPreservesIDOnlyCrossBatchDependency(t *testing.T) {
+	payload, err := json.Marshal(work.WorkRequestEventPayload{
+		Source: "api",
+		Type:   work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.WorkRequestEventWork{{
+			Name:       "dependent",
+			WorkID:     "work-dependent",
+			WorkTypeID: "task",
+			State:      &work.WorkEventState{Name: "queued"},
+		}},
+		Relations: []work.WorkRequestEventRelation{{
+			Type:           work.WorkRelationDependsOn,
+			SourceWorkName: "dependent",
+			TargetWorkID:   "work-prior",
+			TargetWorkName: "work-prior",
+			RequiredState:  "complete",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal cross-batch ID-only payload: %v", err)
+	}
+	event := interfaces.FactoryEvent{
+		Id:      "event-cross-batch-id-only",
+		Payload: payload,
+	}
+
+	submissions, err := replaySubmissionsFromEvent(event)
+	if err != nil {
+		t.Fatalf("replaySubmissionsFromEvent: %v", err)
+	}
+	if len(submissions) != 1 || len(submissions[0].request.Relations) != 1 {
+		t.Fatalf("replayed submissions = %#v, want one request with one relation", submissions)
+	}
+	relation := submissions[0].request.Relations[0]
+	if relation.TargetWorkID != "work-prior" || relation.TargetWorkName != "" {
+		t.Fatalf("replayed ID-only relation = %#v, want target ID with no authored target name", relation)
 	}
 }
 
@@ -163,8 +202,6 @@ func TestReplayWorkStateChangeFromEvent_DecodesDomainPayloadAndContextFallbacks(
 		WorkTypeName:  "task",
 		FromState:     "failed",
 		ToState:       "init",
-		FromPlaceID:   "task:failed",
-		ToPlaceID:     "task:init",
 		Source:        work.WorkStateChangeSourceCLI,
 		TriggerWorkID: &triggerWorkID,
 		Reason:        &reason,
@@ -194,8 +231,6 @@ func TestReplayWorkStateChangeFromEvent_DecodesDomainPayloadAndContextFallbacks(
 		WorkTypeName:  "task",
 		FromState:     "failed",
 		ToState:       "init",
-		FromPlaceID:   "task:failed",
-		ToPlaceID:     "task:init",
 		Source:        work.WorkStateChangeSourceCLI,
 		RequestID:     requestID,
 		TriggerWorkID: triggerWorkID,
@@ -267,6 +302,55 @@ func TestReplayDispatchFromEvent_PreservesConsumedInputChainingLineage(t *testin
 	}
 	if got := replayed.dispatch.PreviousChainingTraceIDs; len(got) != 1 || got[0] != "trace-generated" {
 		t.Fatalf("replayed dispatch previous chaining trace IDs = %#v, want [trace-generated]", got)
+	}
+}
+
+func TestReplayDispatchFromEvent_PreservesExpectedArtifactTemplateContext(t *testing.T) {
+	payload := factoryapi.DispatchRequestEventPayload{
+		TransitionId: "publish",
+		Inputs:       []factoryapi.DispatchConsumedWorkRef{{WorkId: "work-generated"}},
+		ExpectedArtifactContext: &factoryapi.ExpectedArtifactTemplateContext{
+			Inputs: &[]factoryapi.ExpectedArtifactTemplateInput{{
+				Name:    stringPtrIfNotEmpty("input-7"),
+				Project: stringPtrIfNotEmpty("input-project-7"),
+				Payload: stringPtrIfNotEmpty("payload-7"),
+			}},
+			Project:   stringPtrIfNotEmpty("project-7"),
+			SessionId: stringPtrIfNotEmpty("session-9"),
+		},
+	}
+	var union factoryapi.FactoryEvent_Payload
+	if err := union.FromDispatchRequestEventPayload(payload); err != nil {
+		t.Fatalf("encode dispatch payload: %v", err)
+	}
+	replayed, err := replayDispatchFromGeneratedEvent(t, factoryapi.Factory{}, factoryapi.FactoryEvent{
+		Id:            "factory-event/dispatch-created/dispatch-context",
+		SchemaVersion: factoryapi.AgentFactoryEventV1,
+		Type:          factoryapi.FactoryEventTypeDispatchRequest,
+		Context: factoryapi.FactoryEventContext{
+			EventTime:  time.Date(2026, 4, 22, 19, 9, 0, 0, time.UTC),
+			Tick:       8,
+			DispatchId: stringPtrIfNotEmpty("dispatch-context"),
+			WorkIds:    slicePtr([]string{"work-generated"}),
+		},
+		Payload: union,
+	}, map[string]work.Work{
+		"work-generated": {WorkID: "work-generated", Name: "generated", WorkTypeID: "task"},
+	})
+	if err != nil {
+		t.Fatalf("replayDispatchFromEvent: %v", err)
+	}
+	if replayed.dispatch.ExpectedArtifactContext == nil ||
+		replayed.dispatch.ExpectedArtifactContext.Project != "project-7" ||
+		replayed.dispatch.ExpectedArtifactContext.SessionID != "session-9" {
+		t.Fatalf("replayed expected artifact context = %#v", replayed.dispatch.ExpectedArtifactContext)
+	}
+	if replayed.dispatch.ExpectedArtifactContext == nil ||
+		len(replayed.dispatch.ExpectedArtifactContext.Inputs) != 1 ||
+		replayed.dispatch.ExpectedArtifactContext.Inputs[0].Name != "input-7" ||
+		replayed.dispatch.ExpectedArtifactContext.Inputs[0].Project != "input-project-7" ||
+		replayed.dispatch.ExpectedArtifactContext.Inputs[0].Payload != "payload-7" {
+		t.Fatalf("replayed expected artifact inputs = %#v", replayed.dispatch.ExpectedArtifactContext)
 	}
 }
 

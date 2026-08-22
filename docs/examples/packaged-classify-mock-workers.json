@@ -1,0 +1,17 @@
+{
+  "mockWorkers": [
+    {
+      "id": "packaged-classifier-small",
+      "workerName": "complexity-classifier",
+      "workstationName": "classify-request",
+      "runType": "script",
+      "scriptConfig": {
+        "command": "node",
+        "args": [
+          "-e",
+          "process.stdout.write(JSON.stringify({type:'item.completed',item:{id:'message-final',type:'agent_message',text:'small'}})+'\\n')"
+        ]
+      }
+    }
+  ]
+}

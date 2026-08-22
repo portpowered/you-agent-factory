@@ -1,23 +1,33 @@
 // biome-ignore-all lint/style/noExcessiveLinesPerFile: existing dashboard-session-tabs coverage stayed intact during feature-root migration.
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: existing dashboard-session-tabs coverage stayed intact during feature-root migration.
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+
 import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 
 import { FactorySessionsAPIError } from "../../../api/factory-sessions";
-import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import { bunVi as vi } from "../../../testing/bun/vi-compat";
 import {
   factorySessionFieldTarget,
   factorySessionTargetTarget,
 } from "../../../testing/factory-validation-target-fixtures";
-import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
+import {
+  resetDashboardSessionStore,
+  useDashboardSessionStore,
+} from "../../dashboard/state/dashboardSessionStore";
+import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
 import {
   SESSION_TAB_PATH_MAX_LENGTH,
   sessionCloseLabel,
   sessionTabSecondaryPath,
 } from "../lib/dashboard-session-tabs-utils";
 import { getHeaderControlsMessages } from "../messages/header-controls";
-import { bunVi as vi } from "../../../testing/bun/vi-compat";
 import { DashboardSessionTabs } from "./dashboard-session-tabs";
 
 const listFactorySessions = vi.fn();
@@ -62,10 +72,8 @@ describe("DashboardSessionTabs", () => {
     openFactorySession.mockReset();
     closeFactorySession.mockReset();
     vi.unstubAllGlobals();
-    useDashboardSessionStore.setState({
-      pausedSessionIDs: [],
-      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
-    });
+    useDashboardStreamStore.getState().resetStreamState("en");
+    resetDashboardSessionStore();
   });
 
   it("renders loading and then the active session tabs", async () => {
@@ -165,6 +173,76 @@ describe("DashboardSessionTabs", () => {
 
     expectSubtleActiveSessionTabShell(sessionTabShell(betaTab));
     expectMutedInactiveSessionTabShell(sessionTabShell(rootTab));
+  });
+
+  it("renders each session tab's own connection projection", async () => {
+    listFactorySessions.mockResolvedValue([
+      {
+        factoryDir: "/workspace/root",
+        folderPath: "/workspace/root",
+        id: "session-root",
+        isDefault: true,
+        project: "root",
+        target: {
+          kind: "default",
+        },
+      },
+      {
+        factoryDir: "/workspace/root/beta",
+        folderPath: "/workspace/root",
+        id: "session-beta",
+        isDefault: false,
+        project: "beta",
+        target: {
+          kind: "named",
+          name: "beta",
+        },
+      },
+    ]);
+    useDashboardStreamStore
+      .getState()
+      .setSessionStreamState("session-root", null, {
+        message: "Root event stream is live",
+        status: "live",
+      });
+    useDashboardStreamStore
+      .getState()
+      .setSessionStreamState("session-beta", null, {
+        message: "Beta event stream is offline",
+        status: "offline",
+      });
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "root" })).toBeTruthy();
+      expect(screen.getByRole("tab", { name: "beta" })).toBeTruthy();
+    });
+
+    expect(
+      screen.getByRole("img", { name: "Root event stream is live" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("img", { name: "Beta event stream is offline" }),
+    ).toBeTruthy();
+
+    act(() => {
+      useDashboardStreamStore
+        .getState()
+        .setSessionStreamState("session-beta", null, {
+          message: "Beta event stream is reconnecting",
+          status: "reconnecting",
+        });
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("img", { name: "Beta event stream is reconnecting" }),
+      ).toBeTruthy();
+    });
+    expect(
+      screen.getByRole("img", { name: "Root event stream is live" }),
+    ).toBeTruthy();
   });
 
   it("supports keyboard navigation across session tabs with roving tab focus", async () => {
@@ -540,6 +618,9 @@ describe("DashboardSessionTabs", () => {
       screen.queryByRole("button", { name: messages.openSessionSubmitLabel }),
     ).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /default/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.openSessionTargetLabel }),
+    );
     await waitFor(() => {
       expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
         folderPath: "/workspace/other",
@@ -654,6 +735,9 @@ describe("DashboardSessionTabs", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: /alpha/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.openSessionTargetLabel }),
+    );
 
     await waitFor(() => {
       expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
@@ -755,6 +839,9 @@ describe("DashboardSessionTabs", () => {
     ).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /beta/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.openSessionTargetLabel }),
+    );
 
     await waitFor(() => {
       expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
@@ -897,7 +984,7 @@ describe("DashboardSessionTabs", () => {
     ).toBeNull();
   });
 
-  it("confirms init-new-factory after validateOnly returns initsNewFactory", async () => {
+  it("previews and explicitly confirms New Factory after validateOnly", async () => {
     const selectedFolderPath = "/workspace/new-factory-root";
     const nestedFactoryPath = `${selectedFolderPath}/factory`;
     listFactorySessions
@@ -988,13 +1075,13 @@ describe("DashboardSessionTabs", () => {
     await waitFor(() => {
       expect(
         screen.getByRole("button", {
-          name: messages.openSessionCreateFactoryLabel,
+          name: messages.newFactoryConfirmLabel,
         }),
       ).toBeTruthy();
     });
     expect(
       screen.getByText(
-        messages.openSessionInitNewFactoryDescriptionTemplate.replaceAll(
+        messages.newFactoryPreviewDescriptionTemplate.replaceAll(
           "{{folderPath}}",
           selectedFolderPath,
         ),
@@ -1007,7 +1094,7 @@ describe("DashboardSessionTabs", () => {
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: messages.openSessionCreateFactoryLabel,
+        name: messages.newFactoryConfirmLabel,
       }),
     );
 
@@ -1030,6 +1117,9 @@ describe("DashboardSessionTabs", () => {
       "session-new-factory",
     );
     expect(openFactorySession).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("status").textContent).toBe(
+      messages.newFactorySuccessLabel,
+    );
   });
 
   it("reopens a nested init-new-factory session through the selected folder path", async () => {
@@ -1158,14 +1248,14 @@ describe("DashboardSessionTabs", () => {
     await waitFor(() => {
       expect(
         screen.getByRole("button", {
-          name: messages.openSessionCreateFactoryLabel,
+          name: messages.newFactoryConfirmLabel,
         }),
       ).toBeTruthy();
     });
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: messages.openSessionCancelCreateFactoryLabel,
+        name: messages.newFactoryCancelLabel,
       }),
     );
 
@@ -1176,7 +1266,7 @@ describe("DashboardSessionTabs", () => {
     });
     expect(
       screen.queryByRole("button", {
-        name: messages.openSessionCreateFactoryLabel,
+        name: messages.newFactoryConfirmLabel,
       }),
     ).toBeNull();
     expect(openFactorySession).toHaveBeenCalledTimes(1);
@@ -1346,6 +1436,9 @@ describe("DashboardSessionTabs", () => {
       screen.getByRole("button", {
         name: /review.*\/workspace\/broken-project\/review/i,
       }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.openSessionTargetLabel }),
     );
 
     await waitFor(() => {

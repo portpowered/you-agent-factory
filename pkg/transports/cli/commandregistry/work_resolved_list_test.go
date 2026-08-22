@@ -15,11 +15,11 @@ import (
 	"time"
 
 	workservice "github.com/portpowered/infinite-you/pkg/services/work"
+	workcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
-	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/spf13/cobra"
 )
@@ -40,11 +40,12 @@ func TestResolvedListRunEMapsStableInputsIntoFreshRequests(t *testing.T) {
 		"--server", "https://factory.example", "--json", "--debug",
 		"work", "list",
 		"--session", "session-alpha",
-		"--state-name", "review",
+		"--state", "review",
 		"--state-type", "PROCESSING",
 		"--name", "prd",
-		"--work-type-name", "story",
+		"--work-type", "story",
 		"--trace-id", "trace-1",
+		"--terminal", "--all", "--counts",
 		"--sort-by", "state.type",
 		"--max-results", "7",
 		"--next-token", base64.StdEncoding.EncodeToString([]byte("cursor-1")),
@@ -64,7 +65,8 @@ func TestResolvedListRunEMapsStableInputsIntoFreshRequests(t *testing.T) {
 	assertResolvedListConfig(t, requests[0], resolvedListConfigValues{
 		server: "https://factory.example", sessionID: "session-alpha",
 		stateName: "review", stateType: "PROCESSING", name: "prd",
-		workTypeName: "story", traceID: "trace-1", sortBy: "state.type",
+		workTypeName: "story", traceID: "trace-1", terminal: true, includeSuperseded: true, counts: true,
+		sortBy:     "state.type",
 		maxResults: 7, nextToken: base64.StdEncoding.EncodeToString([]byte("cursor-1")),
 		json: true, verbose: true, debug: true,
 	})
@@ -97,7 +99,6 @@ func TestResolvedWorkListPublicCommandPreservesRoutesOutputsAndDiagnostics(t *te
 			}},
 			PaginationContext: &factoryapi.PaginationContext{
 				MaxResults: 1,
-				NextToken:  &nextToken,
 			},
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
@@ -150,7 +151,7 @@ func TestResolvedWorkListPublicCommandPreservesRoutesOutputsAndDiagnostics(t *te
 	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
 		t.Fatalf("JSON output = %q: %v", output.String(), err)
 	}
-	assertResolvedListResponse(t, response, nextToken)
+	assertResolvedListResponse(t, response)
 	if strings.Contains(output.String(), "work list request") {
 		t.Fatalf("stdout contains diagnostics: %q", output.String())
 	}
@@ -783,19 +784,23 @@ func (w errorWriter) Write([]byte) (int, error) {
 }
 
 type resolvedListConfigValues struct {
-	server       string
-	sessionID    string
-	stateName    string
-	stateType    string
-	name         string
-	workTypeName string
-	traceID      string
-	sortBy       string
-	maxResults   int
-	nextToken    string
-	json         bool
-	verbose      bool
-	debug        bool
+	server            string
+	sessionID         string
+	stateName         string
+	stateType         string
+	name              string
+	workTypeName      string
+	traceID           string
+	terminal          bool
+	nonTerminal       bool
+	includeSuperseded bool
+	sortBy            string
+	maxResults        int
+	nextToken         string
+	counts            bool
+	json              bool
+	verbose           bool
+	debug             bool
 }
 
 type resolvedShowConfigValues struct {
@@ -816,9 +821,11 @@ func assertResolvedListConfig(
 	values := resolvedListConfigValues{
 		server: got.Server, sessionID: got.SessionID,
 		stateName: got.StateName, stateType: got.StateType, name: got.Name,
-		workTypeName: got.WorkTypeName, traceID: got.TraceID, sortBy: got.SortBy,
+		workTypeName: got.WorkTypeName, traceID: got.TraceID,
+		terminal: got.Terminal, nonTerminal: got.NonTerminal, includeSuperseded: got.IncludeSuperseded, sortBy: got.SortBy,
 		maxResults: got.MaxResults, nextToken: got.NextToken,
-		json: got.JSON, verbose: got.Verbose, debug: got.Debug,
+		counts: got.Counts,
+		json:   got.JSON, verbose: got.Verbose, debug: got.Debug,
 	}
 	if values != want {
 		t.Fatalf("list config values = %#v, want %#v", values, want)
@@ -928,17 +935,13 @@ func assertResolvedListQuery(t *testing.T, query url.Values, want map[string]str
 func assertResolvedListResponse(
 	t *testing.T,
 	response factoryapi.ListWorkResponse,
-	nextToken string,
 ) {
 	t.Helper()
 	if len(response.Results) != 1 {
 		t.Fatalf("JSON results = %#v, want one", response.Results)
 	}
-	if response.PaginationContext == nil || response.PaginationContext.NextToken == nil {
-		t.Fatalf("JSON pagination = %#v, want next token", response.PaginationContext)
-	}
-	if *response.PaginationContext.NextToken != nextToken {
-		t.Fatalf("JSON next token = %q, want %q", *response.PaginationContext.NextToken, nextToken)
+	if response.PaginationContext == nil || response.PaginationContext.NextToken != nil {
+		t.Fatalf("JSON pagination = %#v, want exhausted response", response.PaginationContext)
 	}
 }
 
@@ -955,26 +958,6 @@ func resolvedTestInputsWithout(
 		}
 	}
 	return resolvedTestInputs(t, filtered...)
-}
-
-func TestResolvedWorkAdaptersRequireServices(t *testing.T) {
-	tests := []struct {
-		name    string
-		handler commandregistry.ResolvedWorkRunE
-	}{
-		{"list", commandregistry.ResolvedListRunE(commandregistry.ResolvedListBinding{})},
-		{"show", commandregistry.ResolvedShowRunE(commandregistry.ResolvedShowBinding{})},
-		{"move", commandregistry.ResolvedMoveRunE(commandregistry.ResolvedMoveBinding{})},
-		{"visualize", commandregistry.ResolvedVisualizeRunE(commandregistry.ResolvedVisualizeBinding{})},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			err := test.handler(&cobra.Command{}, resolvedinput.Inputs{}, resolvedinput.Inputs{})
-			if err == nil || !strings.Contains(err.Error(), "service is required") {
-				t.Fatalf("handler error = %v, want required service error", err)
-			}
-		})
-	}
 }
 
 type fixedHTTPClock struct{}

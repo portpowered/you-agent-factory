@@ -2,11 +2,20 @@ import { readdirSync, readFileSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  BUN_UNIT_TEST_MARKER_PATTERN,
+  BUN_UNIT_TEST_PATH_PATTERN,
+} from "./ui-test-lane-contract.mjs";
+
 const testFilePattern = /\.(?:test|spec)\.(?:[cm]?[jt]sx?)$/;
 const rootAppTestPattern = /^App(?:\.[^.]+)*\.test\.tsx$/;
 const appImportPattern = /from\s+["'][^"']*(?:^|\/)App["']/m;
 const unitDomImportPattern =
   /from\s+["'](?:@testing-library\/react|react-dom(?:\/[^"']*)?|jsdom|playwright|@playwright\/test)["']/m;
+const bunUnitDomImportPattern =
+  /from\s+["'](?:@testing-library\/react|react-dom(?:\/[^"']*)?|jsdom)["']/m;
+const bunUnitBrowserImportPattern =
+  /from\s+["'](?:playwright|@playwright\/test|@vitest\/browser|[^"']*browser-test-harness[^"']*)["']/m;
 const domEnvironmentDirectivePattern =
   /@vitest-environment\s+(?:jsdom|happy-dom)/m;
 const componentBrowserImportPattern =
@@ -14,17 +23,21 @@ const componentBrowserImportPattern =
 const optionalDomCapabilityImportPattern = /vitest-dom-capabilities\.setup/m;
 const aggregateFeaturePublicImportPattern =
   /(?:from\s+|import\s*\(|(?:vi|mock)\.mock\()\s*["'][^"']*(?:\/public|\.\.?\/public)["']/m;
-const generalUiBarrelImportPattern =
-  /from\s+["'][^"']*components\/ui["']/m;
+const generalUiBarrelImportPattern = /from\s+["'][^"']*components\/ui["']/m;
 const rootComponentsPackageImportPattern =
   /from\s+["']@you-agent-factory\/components["']/m;
 const optionalGlobalSetupPattern =
   /(?:ResizeObserver|HTMLAnchorElement|queryCommandSupported|monaco|test-browser-shims|vitest-dom-capabilities)/i;
 const dashboardCompositionImportPattern =
   /from\s+["'][^"']*features\/dashboard\/(?:components\/dashboard-screen|public(?:\/screen)?)["']/m;
+const bunTestImportPattern = /^\s*import\b[^\n;]*\bfrom\s+["']bun:test["']/m;
+const vitestImportPattern = /^\s*import\b[^\n;]*\bfrom\s+["']vitest["']/m;
 
 export function classifiedUiTestLane(relativePath) {
   const normalized = relativePath.split(sep).join("/");
+  if (BUN_UNIT_TEST_MARKER_PATTERN.test(normalized)) {
+    return BUN_UNIT_TEST_PATH_PATTERN.test(normalized) ? "bun-unit" : null;
+  }
   if (
     /(?:^|\/)performance\//.test(normalized) ||
     /\.performance\.test\.(?:[cm]?[jt]sx?)$/.test(normalized)
@@ -66,6 +79,34 @@ export function auditUiTestFile({ relativePath, source }) {
   }
 
   const lane = classifiedUiTestLane(normalized);
+  if (
+    BUN_UNIT_TEST_MARKER_PATTERN.test(normalized) &&
+    !BUN_UNIT_TEST_PATH_PATTERN.test(normalized)
+  ) {
+    errors.push(
+      `${normalized}: Bun-native unit tests must use the exact .bun.unit.test.ts suffix; this path is ambiguous or unowned`,
+    );
+  }
+  if (lane === "bun-unit" && bunUnitDomImportPattern.test(source)) {
+    errors.push(
+      `${normalized}: Bun unit tests cannot import DOM dependencies; move rendered behavior to a component test`,
+    );
+  }
+  if (lane === "bun-unit" && bunUnitBrowserImportPattern.test(source)) {
+    errors.push(
+      `${normalized}: Bun unit tests cannot import browser runners or integration harnesses; move browser behavior to an integration test`,
+    );
+  }
+  if (lane === "bun-unit" && vitestImportPattern.test(source)) {
+    errors.push(
+      `${normalized}: Bun unit tests must use Bun's native test API; importing Vitest leaves the file on an ambiguous runner boundary`,
+    );
+  }
+  if (lane === "unit" && bunTestImportPattern.test(source)) {
+    errors.push(
+      `${normalized}: files importing bun:test must use the exact .bun.unit.test.ts suffix so the Bun unit lane owns them`,
+    );
+  }
   if (lane === "unit" && unitDomImportPattern.test(source)) {
     errors.push(
       `${normalized}: unit tests cannot import DOM or browser runners`,
@@ -79,6 +120,16 @@ export function auditUiTestFile({ relativePath, source }) {
   if (lane === "unit" && optionalDomCapabilityImportPattern.test(source)) {
     errors.push(
       `${normalized}: unit tests cannot install optional DOM capabilities`,
+    );
+  }
+  if (lane === "bun-unit" && domEnvironmentDirectivePattern.test(source)) {
+    errors.push(
+      `${normalized}: Bun unit tests cannot request a DOM environment; move the file to a component test`,
+    );
+  }
+  if (lane === "bun-unit" && optionalDomCapabilityImportPattern.test(source)) {
+    errors.push(
+      `${normalized}: Bun unit tests cannot install optional DOM capabilities; move the file to a component test`,
     );
   }
   if (lane === "component" && componentBrowserImportPattern.test(source)) {

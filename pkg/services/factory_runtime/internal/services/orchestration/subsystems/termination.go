@@ -7,32 +7,52 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // TerminationCheckSubsystem detects when the runtime snapshot has no active
-// work left: no dispatches are in flight, all resource tokens have been
-// returned, and every visible token is already terminal or failed. It is
-// intentionally snapshot-driven: it does not query transition enablement and
-// it does not retain its own lifecycle state.
+// work left. A finite runtime completes when all customer Work is terminal;
+// when non-terminal Work is drained but no transition is immediately runnable,
+// it returns an explicit incomplete classification. It is intentionally
+// snapshot-driven and does not retain lifecycle state.
 type TerminationCheckSubsystem struct {
 	state       *state.Net
 	logger      logging.Logger
 	runtimeMode interfaces.RuntimeMode
+	evaluator   *scheduler.EnablementEvaluator
 }
 
 // NewTerminationCheck creates a new TerminationCheckSubsystem.
 func NewTerminationCheck(n *state.Net, logger logging.Logger, mode interfaces.RuntimeMode) *TerminationCheckSubsystem {
+	return NewTerminationCheckWithRuntime(n, logger, mode, nil, time.Now)
+}
+
+// NewTerminationCheckWithRuntime creates a termination checker using the same
+// runtime definition lookup and clock as the Dispatcher enablement boundary.
+func NewTerminationCheckWithRuntime(
+	n *state.Net,
+	logger logging.Logger,
+	mode interfaces.RuntimeMode,
+	runtimeConfig interfaces.RuntimeDefinitionLookup,
+	now func() time.Time,
+) *TerminationCheckSubsystem {
 	if mode == "" {
 		mode = interfaces.RuntimeModeBatch
 	}
+	if now == nil {
+		now = time.Now
+	}
+	l := logging.EnsureLogger(logger)
 	return &TerminationCheckSubsystem{
 		state:       n,
-		logger:      logging.EnsureLogger(logger),
+		logger:      l,
 		runtimeMode: mode,
+		evaluator:   scheduler.NewEnablementEvaluator(l, now, runtimeConfig),
 	}
 }
 
@@ -43,49 +63,102 @@ func (tc *TerminationCheckSubsystem) TickGroup() TickGroup {
 	return TerminationCheck
 }
 
-// Execute checks if the snapshot shows a fully terminated workflow.
-func (tc *TerminationCheckSubsystem) Execute(_ context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+// Execute classifies a finite runtime only after dispatches and resources have
+// quiesced. Service mode deliberately never emits a finite termination result.
+func (tc *TerminationCheckSubsystem) Execute(ctx context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
 	if tc.runtimeMode != interfaces.RuntimeModeBatch {
 		return nil, nil
 	}
-	if !tc.shouldTerminate(snapshot) {
+	termination := tc.classify(ctx, snapshot)
+	if termination == nil {
 		return nil, nil
 	}
 
-	tc.logger.Info("termination-check: no active work remains in the snapshot",
+	tc.logger.Info("termination-check: finite runtime classified",
+		"classification", termination.Classification,
+		"non_terminal_work_items", termination.NonTerminalWorkCount,
 		"tokens", len(snapshot.Marking.Tokens),
 		"in_flight", snapshot.InFlightCount)
 
-	return &interfaces.TickResult{ShouldTerminate: true}, nil
+	return &interfaces.TickResult{
+		ShouldTerminate: true,
+		Termination:     termination,
+	}, nil
 }
 
-func (tc *TerminationCheckSubsystem) shouldTerminate(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
+func (tc *TerminationCheckSubsystem) classify(ctx context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) *interfaces.TerminationResult {
 	if snapshot == nil {
-		return false
+		return nil
 	}
-	if snapshot.InFlightCount > 0 {
-		return false
+	if snapshot.InFlightCount > 0 || len(snapshot.Dispatches) > 0 {
+		return nil
 	}
 	if !tc.allResourcesReturned(&snapshot.Marking) {
-		return false
+		return nil
 	}
 
-	for _, token := range snapshot.Marking.Tokens {
-		if token == nil {
+	nonTerminalWork := tc.nonTerminalWorkIDs(snapshot.Marking.Tokens)
+	if len(nonTerminalWork) == 0 {
+		return &interfaces.TerminationResult{
+			Classification: interfaces.TerminationClassificationComplete,
+		}
+	}
+
+	if tc.hasImmediatelyRunnableActivity(ctx, snapshot) {
+		return nil
+	}
+
+	return &interfaces.TerminationResult{
+		Classification:       interfaces.TerminationClassificationIncomplete,
+		NonTerminalWorkCount: len(nonTerminalWork),
+	}
+}
+
+func (tc *TerminationCheckSubsystem) nonTerminalWorkIDs(tokens map[string]*factorytoken.Token) map[string]struct{} {
+	ids := make(map[string]struct{})
+	for _, token := range tokens {
+		if !tc.isCustomerWorkToken(token) || tc.isTerminalOrFailed(token) {
 			continue
 		}
-		if !tc.isTerminalOrFailed(token) {
-			return false
+		if token.Color.WorkID != "" {
+			ids[token.Color.WorkID] = struct{}{}
 		}
 	}
+	return ids
+}
 
-	return true
+func (tc *TerminationCheckSubsystem) isCustomerWorkToken(token *factorytoken.Token) bool {
+	if tc.state == nil || token == nil || token.Color.WorkID == "" {
+		return false
+	}
+	if !factoryruntime.IsPublicWorkToken(token) {
+		return false
+	}
+	place, ok := tc.state.Places[token.PlaceID]
+	if !ok || place == nil {
+		return false
+	}
+	if _, isResource := tc.state.Resources[place.TypeID]; isResource {
+		return false
+	}
+	_, isWorkType := tc.state.WorkTypes[place.TypeID]
+	return isWorkType
+}
+
+func (tc *TerminationCheckSubsystem) hasImmediatelyRunnableActivity(ctx context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
+	if tc.state == nil || tc.evaluator == nil || len(tc.state.Transitions) == 0 {
+		return false
+	}
+	return len(tc.evaluator.FindEnabledTransitionsWithSnapshot(ctx, tc.state, snapshot)) > 0
 }
 
 // isTerminalOrFailed returns true if the token is in a TERMINAL or FAILED place.
 func (tc *TerminationCheckSubsystem) isTerminalOrFailed(token *factorytoken.Token) bool {
+	if tc.state == nil || token == nil {
+		return false
+	}
 	place, ok := tc.state.Places[token.PlaceID]
-	if !ok {
+	if !ok || place == nil {
 		return false
 	}
 	wt, ok := tc.state.WorkTypes[place.TypeID]
@@ -104,6 +177,9 @@ func (tc *TerminationCheckSubsystem) isTerminalOrFailed(token *factorytoken.Toke
 // allResourcesReturned checks that each resource place has at least its initial
 // capacity of tokens (i.e., consumed resources have been returned).
 func (tc *TerminationCheckSubsystem) allResourcesReturned(snapshot *petri.MarkingSnapshot) bool {
+	if tc.state == nil || snapshot == nil {
+		return false
+	}
 	for _, res := range tc.state.Resources {
 		placeID := state.PlaceID(res.ID, interfaces.ResourceStateAvailable)
 		tokensInPlace := snapshot.TokensInPlace(placeID)

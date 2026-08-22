@@ -2,10 +2,10 @@ package run
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
-	"testing"
+	"os"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/platform/metrics"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
+	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -27,7 +28,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	contentmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
-	"go.uber.org/zap"
 )
 
 type testRuntimeRunnerOpener func(
@@ -48,7 +48,6 @@ type testRuntimeSelections struct {
 	Port                                    int
 	AutoPort                                bool
 	RuntimeHostObserver                     factorysessions.RuntimeHostObserver
-	Logger                                  *zap.Logger
 	Verbose                                 bool
 	RuntimeInstanceID                       string
 	BackendScopeID                          string
@@ -63,6 +62,7 @@ type testRuntimeSelections struct {
 	WorkFile                                string
 	RecordPath                              string
 	ReplayPath                              string
+	ResumePath                              string
 	WorkflowID                              string
 	MockWorkersConfig                       *workers.MockWorkersConfig
 	InvocationSkipPermissionsOverride       *bool
@@ -74,8 +74,7 @@ type testRuntimeSelections struct {
 func testRuntimeOpeningRequestFactory(
 	cfg RunConfig,
 	mockWorkers *workers.MockWorkersConfig,
-	observer factorysessions.RuntimeHostObserver,
-) factorysessions.ApplicationOpeningRequest {
+) *factorysessions.RuntimeOpeningRequest {
 	mode := interfaces.RuntimeModeBatch
 	if cfg.Continuously {
 		mode = interfaces.RuntimeModeService
@@ -90,7 +89,7 @@ func testRuntimeOpeningRequestFactory(
 			metricsDirectory = metrics.RuntimeMetricsRoot(cfg.HomeDir)
 		}
 	}
-	return factorysessions.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{
+	return &factorysessions.RuntimeOpeningRequest{
 		FactoryDefinition: interfaces.RuntimeOpeningRequest{
 			Directory: cfg.Dir, ExecutionBaseDir: cfg.ExecutionBaseDir,
 		},
@@ -113,18 +112,15 @@ func testRuntimeOpeningRequestFactory(
 			},
 		},
 		Workers: workers.RuntimeOpeningRequest{
-			RunnerID: cfg.RunnerID, MockWorkers: mockWorkers,
+			RunnerID: cfg.RunnerID, WorkerReasoningEffort: cfg.WorkerReasoningEffort, MockWorkers: mockWorkers,
 			InvocationSkipPermissionsOverride: cfg.InvocationSkipPermissionsOverride,
 		},
 		Recordings: recordings.RuntimeOpeningRequest{
-			RecordPath: cfg.RecordPath, ReplayPath: cfg.ReplayPath, WorkflowID: cfg.Workflow,
+			RecordPath: cfg.RecordPath, ReplayPath: cfg.ReplayPath, ResumePath: cfg.ResumePath, WorkflowID: cfg.Workflow,
 		},
-		Models:           models.RuntimeOpeningRequest{CacheDirectory: cfg.ModelCacheDir},
-		OperatorDefaults: cfg.OperatorDefaults,
-	}, Ports: factorysessions.ApplicationOpeningPorts{
-		InvocationMetricsRecorder: cfg.InvocationMetricsRecorder,
-		RuntimeHostObserver:       observer,
-	}}
+		ModelCacheDirectory: cfg.ModelCacheDir,
+		OperatorDefaults:    cfg.OperatorDefaults,
+	}
 }
 
 func flattenTestRuntimeRequest(request *factorysessions.RuntimeOpeningRequest) *testRuntimeSelections {
@@ -150,12 +146,12 @@ func flattenTestRuntimeRequest(request *factorysessions.RuntimeOpeningRequest) *
 			MaxAge: request.FactoryRuntime.MetricsConfig.MaxAge, Compress: request.FactoryRuntime.MetricsConfig.Compress,
 		},
 		WorkFile: request.FactorySession.WorkFile, RecordPath: request.Recordings.RecordPath,
-		ReplayPath: request.Recordings.ReplayPath, WorkflowID: request.Recordings.WorkflowID,
+		ReplayPath: request.Recordings.ReplayPath, ResumePath: request.Recordings.ResumePath, WorkflowID: request.Recordings.WorkflowID,
 		MockWorkersConfig:                       request.Workers.MockWorkers,
 		InvocationSkipPermissionsOverride:       request.Workers.InvocationSkipPermissionsOverride,
 		RecordFlushInterval:                     request.Recordings.FlushInterval,
 		SkipBuiltInRunnerPrerequisiteValidation: request.Workers.SkipBuiltInPrerequisiteValidation,
-		ModelCacheDir:                           request.Models.CacheDirectory,
+		ModelCacheDir:                           request.ModelCacheDirectory,
 	}
 }
 
@@ -188,51 +184,79 @@ var openTestRuntimeRunner testRuntimeRunnerOpener = missingTestRuntimeRunner
 var openTestInvocationRunner testInvocationRunnerOpener
 
 type testRunnerOpeners struct {
-	runtime    testRuntimeRunnerOpener
-	invocation testInvocationRunnerOpener
+	runtime           testRuntimeRunnerOpener
+	invocation        testInvocationRunnerOpener
+	presentations     factorysessions.OpeningPresentationOwner
+	visualizationSink factoryvisualization.Sink
 }
 
 func (f testRunnerOpeners) BuildRunner(
 	ctx context.Context,
-	request factorysessions.ApplicationOpeningRequest,
-	_ *zap.Logger,
-	visualizationSink factoryvisualization.Sink,
+	request *factorysessions.RuntimeOpeningRequest,
+	_ factorysessions.VisualizationSinkID,
 ) (initializer.LocalRuntimeRunner, error) {
 	if f.runtime == nil {
 		return nil, errors.New("construct local runtime: dependency-injected builder is required")
 	}
-	selections := flattenTestRuntimeRequest(request.Runtime)
-	edges := serviceedges.Edges{
-		InvocationMetricsRecorder: request.Ports.InvocationMetricsRecorder,
-		RuntimeHostObserver:       request.Ports.RuntimeHostObserver,
-	}
-	if selections != nil {
-		selections.RuntimeHostObserver = edges.RuntimeHostObserver
+	selections := flattenTestRuntimeRequest(request)
+	edges := serviceedges.Edges{}
+	var ready chan initializer.RuntimeHostBinding
+	if selections != nil && selections.Port > 0 {
+		ready = make(chan initializer.RuntimeHostBinding, 1)
+		selections.RuntimeHostObserver = func(binding factorysessions.RuntimeHostBinding) {
+			ready <- initializer.RuntimeHostBinding{Host: binding.Host, Port: binding.Port}
+		}
 	}
 	runner, err := f.runtime(ctx, selections, edges)
-	if err != nil || visualizationSink == nil {
+	if err != nil || runner == nil {
 		return runner, err
 	}
-	snapshots, ok := runner.(factoryruntime.LegacySnapshotProvider)
-	if !ok {
+	if f.visualizationSink != nil {
+		snapshots, ok := runner.(interface {
+			RuntimeObservation(context.Context) (factoryvisualization.RuntimeObservation, error)
+		})
+		if ok {
+			snapshot, snapshotErr := snapshots.RuntimeObservation(ctx)
+			if snapshotErr == nil {
+				runner = testDashboardRenderingRunner{
+					LocalRuntimeRunner: runner,
+					sink:               f.visualizationSink,
+					input:              factoryvisualization.View{Runtime: snapshot},
+				}
+			}
+		}
+	}
+	if ready == nil {
 		return runner, nil
 	}
-	snapshot, err := snapshots.GetEngineStateSnapshot(ctx)
-	if err != nil {
-		return runner, nil
+	return testRuntimeHostRunner{LocalRuntimeRunner: runner, ready: ready}, nil
+}
+
+type testRuntimeHostRunner struct {
+	initializer.LocalRuntimeRunner
+	ready <-chan initializer.RuntimeHostBinding
+}
+
+func (runner testRuntimeHostRunner) RuntimeHostBinding(ctx context.Context) (initializer.RuntimeHostBinding, error) {
+	select {
+	case binding := <-runner.ready:
+		return binding, nil
+	default:
 	}
-	return testDashboardRenderingRunner{
-		LocalRuntimeRunner: runner,
-		sink:               visualizationSink,
-		input: factoryvisualization.View{
-			Runtime: factoryvisualization.RuntimeObservation{
-				TickCount:     snapshot.TickCount,
-				FactoryState:  snapshot.FactoryState,
-				RuntimeStatus: snapshot.RuntimeStatus,
-				Uptime:        snapshot.Uptime,
-			},
-		},
-	}, nil
+	select {
+	case binding := <-runner.ready:
+		return binding, nil
+	case <-ctx.Done():
+		return initializer.RuntimeHostBinding{}, ctx.Err()
+	}
+}
+
+func (runner testRuntimeHostRunner) RuntimeHostReadinessConfigured() bool {
+	return runner.ready != nil
+}
+
+func (runner testRuntimeHostRunner) RuntimeLogDiagnostics() runtimeartifact.Diagnostics {
+	return runtimeLogDiagnosticsForRunner(runner.LocalRuntimeRunner)
 }
 
 type testDashboardRenderingRunner struct {
@@ -245,85 +269,6 @@ type runFuncRunner func(context.Context) error
 
 func (run runFuncRunner) Run(ctx context.Context) error { return run(ctx) }
 
-func TestOpenRunScopedServerAttachesInvocationCompletionAndKeepsOneShotResult(t *testing.T) {
-	prompt := "ship it"
-	var output strings.Builder
-	var opening factorysessions.ApplicationOpeningRequest
-	runnerCalls := 0
-	invocationCalls := 0
-	operation, err := Open(
-		t.Context(),
-		ensureTestRecordingsCLI(RunConfig{
-			Dir:                      "factory",
-			FactoryConfigPath:        "factory/factory.json",
-			InvocationPositionalText: &prompt,
-			WithServer:               true,
-			Port:                     7437,
-			DisableDefaultRecording:  true,
-			Output:                   &output,
-		}),
-		func(
-			_ context.Context,
-			request factorysessions.ApplicationOpeningRequest,
-			_ *zap.Logger,
-			_ factoryvisualization.Sink,
-		) (initializer.LocalRuntimeRunner, error) {
-			opening = request
-			return runFuncRunner(func(context.Context) error {
-				runnerCalls++
-				return nil
-			}), nil
-		},
-		testInvocationOperation{invokeFactory: func(
-			context.Context,
-			factorysessions.InvocationTarget,
-			factorysessions.InvocationRequest,
-			factorysessions.FactoryEventConsumer,
-		) (factorysessions.FactoryInvocationOutcome, error) {
-			invocationCalls++
-			return factorysessions.FactoryInvocationOutcome{
-				Result: interfaces.FactoryInvocationResult{
-					Status: interfaces.InvocationTerminalStatusCompleted,
-					PrimaryResult: []work.WorkContentPart{{
-						Type: work.WorkContentPartTypeText,
-						Text: "done",
-					}},
-				},
-			}, nil
-		}},
-		nil,
-		prepareSingleWorkTargetForTest,
-		testMockWorkersConfigLoader,
-		testRuntimeOpeningRequestFactory,
-	)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	if opening.Runtime.FactoryRuntime.Mode != interfaces.RuntimeModeService {
-		t.Fatalf("hosted runtime mode = %q, want service until terminal completion", opening.Runtime.FactoryRuntime.Mode)
-	}
-	if opening.Completion == nil || opening.Ports.RuntimeHostObserver == nil {
-		t.Fatal("run-scoped server omitted readiness-gated terminal completion")
-	}
-
-	if invocationCalls != 0 {
-		t.Fatal("invocation started while opening the hosted lifecycle")
-	}
-	opening.Ports.RuntimeHostObserver(factorysessions.RuntimeHostBinding{Port: 7437})
-	if err := opening.Completion(t.Context()); err != nil {
-		t.Fatalf("completion: %v", err)
-	}
-	if invocationCalls != 1 || output.String() != "done" {
-		t.Fatalf("invocation calls = %d, output = %q", invocationCalls, output.String())
-	}
-	if err := operation.Run(t.Context()); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if runnerCalls != 1 {
-		t.Fatalf("owned lifecycle runner calls = %d, want 1", runnerCalls)
-	}
-}
-
 func (r testDashboardRenderingRunner) Run(ctx context.Context) error {
 	if err := r.LocalRuntimeRunner.Run(ctx); err != nil {
 		return err
@@ -334,12 +279,13 @@ func (r testDashboardRenderingRunner) Run(ctx context.Context) error {
 }
 
 func (f testRunnerOpeners) Invocation() InvocationOperation {
-	return testInvocationOperation{open: f.invocation}
+	return testInvocationOperation{open: f.invocation, presentations: f.presentations}
 }
 
 type testInvocationOperation struct {
 	open          testInvocationRunnerOpener
-	invokeFactory func(context.Context, factorysessions.InvocationTarget, factorysessions.InvocationRequest, factorysessions.FactoryEventConsumer) (factorysessions.FactoryInvocationOutcome, error)
+	presentations factorysessions.OpeningPresentationOwner
+	invokeFactory func(context.Context, factorysessions.InvocationTarget, factorysessions.InvocationRequest, func([]interfaces.FactoryEvent)) (factorysessions.FactoryInvocationOutcome, error)
 }
 
 func (testInvocationOperation) ResolveModelInvocationFactoryDir(dir string) (string, error) {
@@ -363,8 +309,13 @@ func (o testInvocationOperation) InvokeFactory(
 	ctx context.Context,
 	target factorysessions.InvocationTarget,
 	request factorysessions.InvocationRequest,
-	consume factorysessions.FactoryEventConsumer,
 ) (factorysessions.FactoryInvocationOutcome, error) {
+	consume := func([]interfaces.FactoryEvent) {}
+	if o.presentations != nil && target.EventScopeID != "" {
+		if registered, ok := o.presentations.InvocationEvents(target.EventScopeID); ok {
+			consume = registered
+		}
+	}
 	if o.invokeFactory != nil {
 		return o.invokeFactory(ctx, target, request, consume)
 	}
@@ -372,7 +323,7 @@ func (o testInvocationOperation) InvokeFactory(
 		return factorysessions.FactoryInvocationOutcome{}, errors.New("construct factory invocation: test operation is required")
 	}
 	cfg := testInvocationRuntimeConfig(target)
-	runner, err := o.open(ctx, cfg, serviceedges.Edges{InvocationMetricsRecorder: target.MetricsRecorder})
+	runner, err := o.open(ctx, cfg, serviceedges.Edges{})
 	if err != nil {
 		return factorysessions.FactoryInvocationOutcome{}, err
 	}
@@ -406,7 +357,7 @@ func testInvocationRuntimeConfig(target factorysessions.InvocationTarget) *testR
 	return &testRuntimeSelections{
 		Dir: target.FactoryDir, RunnerID: target.RunnerID,
 		OperatorDefaults: target.OperatorDefaults, ExecutionBaseDir: target.ExecutionBaseDir,
-		SystemConfigHomeDir: target.HomeDir, Logger: target.Logger, Verbose: target.Verbose,
+		SystemConfigHomeDir: target.HomeDir, Verbose: target.Verbose,
 		RecordPath: target.RecordPath, ReplayPath: target.ReplayPath,
 		RuntimeLogDir: target.RuntimeLogDir, RuntimeLogConfig: logging.RuntimeLogConfig{
 			MaxSize: target.RuntimeLogConfig.MaxSize, MaxBackups: target.RuntimeLogConfig.MaxBackups,
@@ -484,7 +435,22 @@ func runWithTestRuntimeRunnerAndMockWorkersLoader(
 	builder testRuntimeRunnerOpener,
 	loadMockWorkers workers.MockWorkersConfigLoader,
 ) error {
+	return runWithTestRuntimeRunnerAndMockWorkersDiagnosticsLoader(
+		ctx, cfg, builder, loadMockWorkers, nil,
+	)
+}
+
+func runWithTestRuntimeRunnerAndMockWorkersDiagnosticsLoader(
+	ctx context.Context,
+	cfg RunConfig,
+	builder testRuntimeRunnerOpener,
+	loadMockWorkers workers.MockWorkersConfigLoader,
+	loadMockWorkersWithDiagnostics workers.MockWorkersConfigDiagnosticsLoader,
+) error {
 	cfg = ensureTestRecordingsCLI(cfg)
+	if cfg.WorkRequestFileLoader == nil && cfg.WorkFile != "" {
+		cfg.WorkRequestFileLoader = loadRunTestWorkRequestFile
+	}
 	if cfg.Clock == nil {
 		cfg.Clock = platformclock.Real{}
 	}
@@ -494,15 +460,21 @@ func runWithTestRuntimeRunnerAndMockWorkersLoader(
 	factory := testRunnerOpeners{
 		runtime: builder, invocation: openTestInvocationRunner,
 	}
-	operation, err := Open(
+	factory.presentations = newTestOpeningPresentationOwner()
+	presentation := testResponsePresentation()
+	factory.visualizationSink = runVisualizationSink(normalizeRunInvocationMode(cfg), presentation)
+	operation, err := OpenWithVisualizationOwnerAndDiagnostics(
 		ctx,
 		cfg,
 		factory.BuildRunner,
 		factory.Invocation(),
-		testResponsePresentation(),
+		presentation,
 		prepareSingleWorkTargetForTest,
 		loadMockWorkers,
+		loadMockWorkersWithDiagnostics,
 		testRuntimeOpeningRequestFactory,
+		factory.presentations,
+		nil,
 	)
 	if err != nil {
 		return err
@@ -519,6 +491,18 @@ func ensureTestRecordingsCLI(cfg RunConfig) RunConfig {
 		cfg.RecordingsCLI = recordingscli.New()
 	}
 	return cfg
+}
+
+func loadRunTestWorkRequestFile(path string) (work.WorkRequest, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return work.WorkRequest{}, err
+	}
+	var request work.WorkRequest
+	if err := json.Unmarshal(data, &request); err != nil {
+		return work.WorkRequest{}, err
+	}
+	return request, nil
 }
 
 func prepareSingleWorkTargetForTest(request work.WorkRequest) (work.SingleWorkTarget, error) {

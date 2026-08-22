@@ -3,16 +3,21 @@ package cli_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 type compositionHTTPClock struct{}
@@ -68,6 +73,10 @@ func (stub compositionModelsRoot) GetModelReadiness(context.Context, modelinfere
 	return modelinference.GetModelReadinessResult{}, modelinference.ErrUnsupportedOperation
 }
 
+func (stub compositionModelsRoot) ResolveModelReference(context.Context, modelinference.ResolveModelReferenceRequest) (modelinference.ResolveModelReferenceResult, error) {
+	return modelinference.ResolveModelReferenceResult{}, modelinference.ErrUnsupportedOperation
+}
+
 func (stub compositionModelsRoot) PullModelForScope(ctx context.Context, request modelinference.PullModelRequest) (modelinference.PullResult, error) {
 	if stub.pullModel != nil {
 		return stub.pullModel(ctx, request.Name)
@@ -115,12 +124,12 @@ func (stub compositionModelsRoot) InvokeModelWithLease(context.Context, modelinf
 	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
 }
 
-func (stub compositionModelsRoot) CancelInvocation(context.Context, modelinference.CancelInvocationRequest) (modelinference.CancelInvocationResult, error) {
-	return modelinference.CancelInvocationResult{}, modelinference.ErrUnsupportedOperation
+func (stub compositionModelsRoot) InvokeModel(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
 }
 
-func (stub compositionModelsRoot) ForRuntime(modelinference.RuntimeBinding) (modelinference.Service, error) {
-	return nil, modelinference.ErrUnsupportedOperation
+func (stub compositionModelsRoot) CancelInvocation(context.Context, modelinference.CancelInvocationRequest) (modelinference.CancelInvocationResult, error) {
+	return modelinference.CancelInvocationResult{}, modelinference.ErrUnsupportedOperation
 }
 
 func (stub compositionModelsRoot) ListModels(ctx context.Context) (modelinference.List, error) {
@@ -167,7 +176,7 @@ type compositionInvocation struct {
 
 func (inv compositionInvocation) InvokeModel(
 	context.Context,
-	factorysessions.InvocationTarget,
+	modelscli.InvocationTarget,
 	string,
 	modelinference.Request,
 ) (modelinference.Result, error) {
@@ -341,12 +350,12 @@ func TestConfigFromCompositionMapsRepresentativeCommandInputs(t *testing.T) {
 
 type factorySessionPresentationInvocation struct {
 	root      modelinference.Service
-	openScope func(context.Context, factorysessions.ModelsPresentationScopeRequest) (factorysessions.ModelsPresentationScope, error)
+	openScope func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error)
 }
 
 func (inv factorySessionPresentationInvocation) InvokeModel(
 	context.Context,
-	factorysessions.InvocationTarget,
+	modelscli.InvocationTarget,
 	string,
 	modelinference.Request,
 ) (modelinference.Result, error) {
@@ -361,31 +370,31 @@ func (inv factorySessionPresentationInvocation) ExportModelInvocationArtifact(st
 	return nil
 }
 
-func (inv factorySessionPresentationInvocation) ModelsPresentationRoot() modelinference.Service {
+func (inv factorySessionPresentationInvocation) CompositionModelsRoot() modelinference.Service {
 	return inv.root
 }
 
-func (inv factorySessionPresentationInvocation) OpenModelsCatalogScope(
+func (inv factorySessionPresentationInvocation) CompositionOpenCatalogScope(
 	ctx context.Context,
-) (factorysessions.ModelsPresentationScope, error) {
+) (modelscli.InvokeRuntimeScope, error) {
 	scope, err := (modelinference.RuntimeScopeRef{}).Parse("composition-test:catalog-scope")
 	if err != nil {
-		return factorysessions.ModelsPresentationScope{}, err
+		return modelscli.InvokeRuntimeScope{}, err
 	}
-	return factorysessions.ModelsPresentationScope{Scope: scope}, nil
+	return modelscli.InvokeRuntimeScope{Scope: scope}, nil
 }
 
-func (inv factorySessionPresentationInvocation) OpenModelsPresentationScope(
+func (inv factorySessionPresentationInvocation) CompositionOpenInvokeScope(
 	ctx context.Context,
-	request factorysessions.ModelsPresentationScopeRequest,
-) (factorysessions.ModelsPresentationScope, error) {
+	cfg modelscli.InvokeConfig,
+) (modelscli.InvokeRuntimeScope, error) {
 	if inv.openScope != nil {
-		return inv.openScope(ctx, request)
+		return inv.openScope(ctx, cfg)
 	}
-	return factorysessions.ModelsPresentationScope{}, nil
+	return modelscli.InvokeRuntimeScope{}, nil
 }
 
-func TestNewActivatesOwnedPathThroughPresentationCollaborator(t *testing.T) {
+func TestNewActivatesOwnedPathThroughCompositionProvider(t *testing.T) {
 	t.Parallel()
 
 	var listed bool
@@ -398,9 +407,6 @@ func TestNewActivatesOwnedPathThroughPresentationCollaborator(t *testing.T) {
 		},
 	}
 	invocation := factorySessionPresentationInvocation{root: root}
-	if _, ok := modelscli.AdaptCompositionInvocationForTest(invocation).(modelscli.CompositionModelsRoot); !ok {
-		t.Fatal("adapted presentation collaborator must expose CompositionModelsRoot")
-	}
 	service := modelscli.New(compositionHTTPProtocol(t), invocation)
 	if service == nil {
 		t.Fatal("New() = nil, want composition facade")
@@ -420,7 +426,7 @@ func TestNewActivatesOwnedPathThroughPresentationCollaborator(t *testing.T) {
 	}
 }
 
-func TestAdaptCompositionInvocationBuildsOwnedServiceFromPresentationCollaborator(t *testing.T) {
+func TestConfigFromCompositionBuildsOwnedServiceFromExplicitProvider(t *testing.T) {
 	t.Parallel()
 
 	invocation := factorySessionPresentationInvocation{
@@ -432,7 +438,8 @@ func TestAdaptCompositionInvocationBuildsOwnedServiceFromPresentationCollaborato
 	}
 	service := modelscli.NewService(modelscli.ConfigFromComposition(
 		compositionHTTPProtocol(t),
-		modelscli.AdaptCompositionInvocationForTest(invocation),
+		invocation,
+		invocation,
 	))
 	if service == nil {
 		t.Fatal("NewService(ConfigFromComposition()) = nil, want owned service")
@@ -448,7 +455,7 @@ func TestAdaptCompositionInvocationBuildsOwnedServiceFromPresentationCollaborato
 	}
 }
 
-func TestConfigFromCompositionWiresInvokeScopeFromPresentationCollaborator(t *testing.T) {
+func TestConfigFromCompositionWiresInvokeScopeFromExplicitProvider(t *testing.T) {
 	t.Parallel()
 
 	scope, err := (modelinference.RuntimeScopeRef{}).Parse("composition:test:scope")
@@ -458,14 +465,14 @@ func TestConfigFromCompositionWiresInvokeScopeFromPresentationCollaborator(t *te
 	var opened bool
 	invocation := factorySessionPresentationInvocation{
 		root: compositionModelsRoot{},
-		openScope: func(context.Context, factorysessions.ModelsPresentationScopeRequest) (factorysessions.ModelsPresentationScope, error) {
+		openScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
 			opened = true
-			return factorysessions.ModelsPresentationScope{Scope: scope}, nil
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
 		},
 	}
 	cfg := modelscli.ConfigFromComposition(
 		compositionHTTPProtocol(t),
-		modelscli.AdaptCompositionInvocationForTest(invocation),
+		invocation,
 	)
 	if cfg.Models == nil {
 		t.Fatal("ConfigFromComposition() Models = nil, want presentation root")
@@ -480,14 +487,14 @@ func TestConfigFromCompositionWiresInvokeScopeFromPresentationCollaborator(t *te
 		t.Fatalf("OpenInvokeScope() error = %v", err)
 	}
 	if !opened {
-		t.Fatal("OpenInvokeScope() did not delegate through presentation collaborator")
+		t.Fatal("OpenInvokeScope() did not delegate through the composition provider")
 	}
 	if openedScope.Scope != scope {
 		t.Fatalf("opened scope = %q, want %q", openedScope.Scope, scope)
 	}
 }
 
-func TestNewInvokesThroughPresentationCollaboratorOwnedPath(t *testing.T) {
+func TestNewInvokesThroughCompositionProviderOwnedPath(t *testing.T) {
 	t.Parallel()
 
 	scope := testRuntimeScope(t)
@@ -524,9 +531,9 @@ func TestNewInvokesThroughPresentationCollaboratorOwnedPath(t *testing.T) {
 				}, nil
 			},
 		},
-		openScope: func(context.Context, factorysessions.ModelsPresentationScopeRequest) (factorysessions.ModelsPresentationScope, error) {
+		openScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
 			openedScope = true
-			return factorysessions.ModelsPresentationScope{Scope: scope}, nil
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
 		},
 	}
 	service := modelscli.New(compositionHTTPProtocol(t), invocation)
@@ -547,4 +554,207 @@ func TestNewInvokesThroughPresentationCollaboratorOwnedPath(t *testing.T) {
 	if !strings.Contains(out.String(), "owned") {
 		t.Fatalf("Invoke() output = %q, want owned inference content", out.String())
 	}
+}
+
+func TestRootAdapter_InvokeGenericSingleOutputWritesOnlyPayload(t *testing.T) {
+	t.Parallel()
+
+	scope := testRuntimeScope(t)
+	var out bytes.Buffer
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(_ context.Context, request modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return genericCLIModel(request.Name, "EMBED", modelinference.OperationSlot{
+					Name: "embedding", Modality: modelinference.ModalityText,
+				}), nil
+			},
+			invokeModel: func(_ context.Context, request modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				if request.Operation != "EMBED" || len(request.Inputs) != 1 {
+					return modelinference.InvokeModelResult{}, fmt.Errorf("unexpected generic request: %#v", request)
+				}
+				return modelinference.InvokeModelResult{Outputs: []modelinference.InferenceOutput{{
+					Name: "embedding", Modality: modelinference.ModalityText, Content: "[1,2]",
+				}}}, nil
+			},
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
+	})
+
+	if err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: "embed", Operation: "EMBED", Text: "hello", Output: &out,
+	}); err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	if out.String() != "[1,2]" {
+		t.Fatalf("generic stdout = %q, want canonical payload only", out.String())
+	}
+}
+
+func TestRootAdapter_InvokeGenericMultipleOutputsRejectsBeforeRoot(t *testing.T) {
+	t.Parallel()
+
+	scope := testRuntimeScope(t)
+	called := false
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return genericCLIModel("omni", modelinference.OperationOMNI,
+					modelinference.OperationSlot{Name: "text", Modality: modelinference.ModalityText},
+					modelinference.OperationSlot{Name: "usage", Modality: modelinference.ModalityJSON}), nil
+			},
+			invokeModel: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				called = true
+				return modelinference.InvokeModelResult{}, nil
+			},
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
+	})
+
+	err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: "omni", Operation: modelinference.OperationOMNI,
+		Text: "hello", Output: io.Discard,
+	})
+	if err == nil || !strings.Contains(err.Error(), "text, usage") {
+		t.Fatalf("Invoke() error = %v, want named multi-output preflight failure", err)
+	}
+	if called {
+		t.Fatal("generic root was called after multi-output preflight rejection")
+	}
+}
+
+func TestRootAdapter_InvokeGenericJSONPreservesAllNamedOutputs(t *testing.T) {
+	t.Parallel()
+
+	scope := testRuntimeScope(t)
+	artifact := testArtifactRef(t, "artifact:usage")
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return genericCLIModel("omni", modelinference.OperationOMNI,
+					modelinference.OperationSlot{Name: "text", Modality: modelinference.ModalityText},
+					modelinference.OperationSlot{Name: "usage", Modality: modelinference.ModalityJSON}), nil
+			},
+			invokeModel: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				return modelinference.InvokeModelResult{Outputs: []modelinference.InferenceOutput{
+					{Name: "text", Modality: modelinference.ModalityText, Content: "answer"},
+					{Name: "usage", Modality: modelinference.ModalityJSON, Artifact: &modelinference.InferenceArtifact{
+						Artifact: artifact, MediaType: "application/json", SizeBytes: 7,
+					}},
+				}}, nil
+			},
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
+	})
+
+	var out bytes.Buffer
+	if err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: "omni", Operation: modelinference.OperationOMNI,
+		Text: "hello", JSON: true, Output: &out,
+	}); err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	var response factoryapi.GenericModelInvocationResponse
+	if err := json.Unmarshal(out.Bytes(), &response); err != nil {
+		t.Fatalf("decode generic JSON: %v\n%s", err, out.String())
+	}
+	if len(response.Outputs) != 2 || response.Outputs[0].Name != "text" || response.Outputs[1].Name != "usage" {
+		t.Fatalf("generic outputs = %#v, want all named outputs", response.Outputs)
+	}
+	if response.Outputs[1].Artifact == nil || response.Outputs[1].Artifact.ArtifactRef != "artifact:usage" || response.Outputs[1].Artifact.SizeBytes == nil || *response.Outputs[1].Artifact.SizeBytes != 7 {
+		t.Fatalf("generic artifact = %#v, want preserved metadata", response.Outputs[1].Artifact)
+	}
+}
+
+func TestRootAdapter_InvokeGenericExplicitMappingsPublishBytesAndMetadata(t *testing.T) {
+	t.Parallel()
+
+	scope := testRuntimeScope(t)
+	textPath := filepath.Join(t.TempDir(), "text.out")
+	usagePath := filepath.Join(t.TempDir(), "usage.out")
+	artifact := testArtifactRef(t, "artifact:usage")
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return genericCLIModel("omni", modelinference.OperationOMNI,
+					modelinference.OperationSlot{Name: "text", Modality: modelinference.ModalityText},
+					modelinference.OperationSlot{Name: "usage", Modality: modelinference.ModalityJSON}), nil
+			},
+			invokeModel: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				return modelinference.InvokeModelResult{Outputs: []modelinference.InferenceOutput{
+					{Name: "text", Modality: modelinference.ModalityText, ContentType: "text/plain", MediaType: "text/plain", Content: "answer"},
+					{Name: "usage", Modality: modelinference.ModalityJSON, ContentType: "application/json", MediaType: "application/json", Content: "{\"tokens\":2}", Artifact: &modelinference.InferenceArtifact{
+						Artifact: artifact, MediaType: "application/json", SizeBytes: 14,
+						Properties: map[string]string{"digest": "sha256:usage"},
+					}},
+				}}, nil
+			},
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
+		OutputFileSystem: localOutputFileSystem{},
+	})
+
+	var out bytes.Buffer
+	if err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: "omni", Operation: modelinference.OperationOMNI,
+		Text: "hello", OutputMappings: []string{"text=" + textPath, "usage=" + usagePath}, Output: &out,
+	}); err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	assertMappedCLIFile(t, textPath, "answer")
+	assertMappedCLIFile(t, usagePath, "{\"tokens\":2}")
+	assertMappedCLIResponse(t, out.Bytes())
+}
+
+type localOutputFileSystem struct{}
+
+func (localOutputFileSystem) CreateTemp(dir, pattern string) (modelscli.OutputTemporaryFile, error) {
+	return os.CreateTemp(dir, pattern)
+}
+
+func (localOutputFileSystem) Inspect(path string) (os.FileInfo, error) {
+	return os.Stat(path)
+}
+
+func (localOutputFileSystem) Remove(path string) error {
+	return os.Remove(path)
+}
+
+func (localOutputFileSystem) Rename(oldPath, newPath string) error {
+	return os.Rename(oldPath, newPath)
+}
+
+func assertMappedCLIFile(t *testing.T, path, want string) {
+	t.Helper()
+	got, err := os.ReadFile(path)
+	if err != nil || string(got) != want {
+		t.Fatalf("mapped output %s = %q, %v; want %q", path, got, err, want)
+	}
+}
+
+func assertMappedCLIResponse(t *testing.T, data []byte) {
+	t.Helper()
+	var response factoryapi.GenericModelInvocationResponse
+	if err := json.Unmarshal(data, &response); err != nil {
+		t.Fatalf("decode mapped response: %v", err)
+	}
+	if len(response.Outputs) != 2 || response.Outputs[1].Name != "usage" || response.Outputs[1].MediaType == nil || *response.Outputs[1].MediaType != "application/json" {
+		t.Fatalf("mapped response outputs = %#v, want named media metadata", response.Outputs)
+	}
+	if response.Outputs[1].Artifact == nil || response.Outputs[1].Artifact.SizeBytes == nil || *response.Outputs[1].Artifact.SizeBytes != 14 || response.Outputs[1].Artifact.Properties == nil || (*response.Outputs[1].Artifact.Properties)["digest"] != "sha256:usage" {
+		t.Fatalf("mapped response artifact = %#v, want digest and bytes metadata", response.Outputs[1].Artifact)
+	}
+}
+
+func genericCLIModel(name, operation string, outputs ...modelinference.OperationSlot) modelinference.GetModelResult {
+	return modelinference.GetModelResult{Model: modelinference.Detail{
+		Summary: modelinference.Summary{Name: name, Operations: []modelinference.Operation{{Name: operation, Outputs: outputs}}},
+	}}
 }

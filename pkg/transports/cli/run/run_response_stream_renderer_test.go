@@ -1,19 +1,26 @@
 package run
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
@@ -28,11 +35,12 @@ func TestRunFactoryInvocation_LiveAndReplayPreserveCanonicalJavaScriptOrder(t *t
 	}{{name: "live"}, {name: "replay", replayPath: "recording.json"}} {
 		t.Run(source.name, func(t *testing.T) {
 			var output bytes.Buffer
-			operation := testInvocationOperation{invokeFactory: func(
+			owner := newTestOpeningPresentationOwner()
+			operation := testInvocationOperation{presentations: owner, invokeFactory: func(
 				_ context.Context,
 				target factorysessions.InvocationTarget,
 				_ factorysessions.InvocationRequest,
-				consume factorysessions.FactoryEventConsumer,
+				consume func([]interfaces.FactoryEvent),
 			) (factorysessions.FactoryInvocationOutcome, error) {
 				if target.ReplayPath != source.replayPath {
 					t.Fatalf("ReplayPath = %q, want %q", target.ReplayPath, source.replayPath)
@@ -46,7 +54,10 @@ func TestRunFactoryInvocation_LiveAndReplayPreserveCanonicalJavaScriptOrder(t *t
 				}
 				return factorysessions.FactoryInvocationOutcome{Result: interfaces.FactoryInvocationResult{
 					RequestID: "request-js", Status: interfaces.InvocationTerminalStatusCompleted,
-					PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "complete"}},
+					PrimaryResult: []work.WorkContentPart{
+						{Type: work.WorkContentPartTypeText, Text: "first streamed part"},
+						{Type: work.WorkContentPartTypeText, Text: "second streamed part"},
+					},
 				}}, nil
 			}}
 			cfg := RunConfig{
@@ -54,8 +65,8 @@ func TestRunFactoryInvocation_LiveAndReplayPreserveCanonicalJavaScriptOrder(t *t
 				JSONOutput:           true, Output: &output, ReplayPath: source.replayPath,
 			}
 			if err := runFactoryInvocation(
-				context.Background(), cfg, invocationTarget(cfg, nil, nil),
-				factoryapi.InvocationRequest{}, operation, testResponsePresentation(),
+				context.Background(), cfg, invocationTarget(cfg, nil),
+				factoryapi.InvocationRequest{}, operation, testResponsePresentation(), owner,
 			); err != nil {
 				t.Fatalf("run Factory invocation: %v", err)
 			}
@@ -66,6 +77,345 @@ func TestRunFactoryInvocation_LiveAndReplayPreserveCanonicalJavaScriptOrder(t *t
 	if outputs[0] != outputs[1] {
 		t.Fatalf("live and replay presentation differ:\nlive=%s\nreplay=%s", outputs[0], outputs[1])
 	}
+}
+func TestRunRemoteInvocationResponseStreamReconnectsFromCanonicalCursor(t *testing.T) {
+	apiEvents := apiEventsFromDomain(t, canonicalJavaScriptFactoryEvents())
+	operation := &scriptedRemoteResponseOperation{
+		streams: []scriptedRemoteEventStream{
+			{events: apiEvents[:1], terminalErr: errors.New("connection reset")},
+			{events: apiEvents[1:]},
+		},
+		result: finalRemoteInvocationResult(t, "remote approved"),
+	}
+	var output bytes.Buffer
+	err := RunRemoteInvocation(context.Background(), RunConfig{
+		Dir:                     "factory",
+		NamedFactoryName:        "@you/research",
+		PreparedInvocationInput: preparedRemoteArguments("remote input"),
+		InvocationOutputMode:    InvocationOutputResponseStream,
+		Output:                  &output,
+	}, "http://selected.test", operation, testResponsePresentation())
+	if err != nil {
+		t.Fatalf("RunRemoteInvocation: %v\noutput:\n%s", err, output.String())
+	}
+	if len(operation.eventRequests) != 2 {
+		t.Fatalf("event stream opens = %d, want reconnect after first stream failure", len(operation.eventRequests))
+	}
+	first, second := operation.eventRequests[0], operation.eventRequests[1]
+	if first.AfterEventID != "" || first.AfterSequence != nil {
+		t.Fatalf("initial event cursor = %#v, want empty cursor", first)
+	}
+	if second.AfterEventID != apiEvents[0].Id || second.AfterSequence == nil || *second.AfterSequence != 1 {
+		t.Fatalf("reconnect event cursor = %#v, want event=%q sequence=1", second, apiEvents[0].Id)
+	}
+	if eventIndex, resultIndex := strings.Index(output.String(), "factory started"), strings.Index(output.String(), "remote approved"); eventIndex < 0 || resultIndex < 0 || eventIndex >= resultIndex {
+		t.Fatalf("human output ordering = %q, want canonical event before terminal result", output.String())
+	}
+}
+
+func TestRunRemoteInvocationResponseStreamJSONEmitsEventsBeforeTerminalFailure(t *testing.T) {
+	operation := &scriptedRemoteResponseOperation{
+		openErr: errors.New("remote event stream unavailable"),
+	}
+	var output bytes.Buffer
+	err := RunRemoteInvocation(context.Background(), RunConfig{
+		Dir:                     "factory",
+		NamedFactoryName:        "@you/research",
+		PreparedInvocationInput: preparedRemoteArguments("remote input"),
+		InvocationOutputMode:    InvocationOutputResponseStream,
+		JSONOutput:              true,
+		Output:                  &output,
+	}, "http://selected.test", operation, testResponsePresentation())
+	if err == nil || !strings.Contains(err.Error(), "remote event stream unavailable") {
+		t.Fatalf("RunRemoteInvocation error = %v, want exhausted event-stream failure", err)
+	}
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != 1 || !strings.Contains(lines[0], `"recordType":"invocation_result"`) {
+		t.Fatalf("JSON failure output = %q, want one terminal invocation record", output.String())
+	}
+	var record remoteInvocationNDJSONRecord
+	if err := json.Unmarshal([]byte(lines[0]), &record); err != nil {
+		t.Fatalf("decode terminal JSON record: %v", err)
+	}
+	if record.Response.Status != factoryapi.InvocationTerminalStatusFailed || record.Response.ErrorCode == nil || *record.Response.ErrorCode != RemoteDurableResultCode {
+		t.Fatalf("terminal response = %#v, want remote durable failure", record.Response)
+	}
+}
+
+func TestRemoteInvocationClientFactoryEventsUsesCanonicalCursor(t *testing.T) {
+	event := apiEventsFromDomain(t, canonicalJavaScriptFactoryEvents()[:1])[0]
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/factory-sessions/durable-remote/events" {
+			t.Fatalf("event path = %q, want canonical session events path", r.URL.Path)
+		}
+		if r.URL.Query().Get("after_event_id") != "event-previous" || r.URL.Query().Get("after_sequence") != "7" {
+			t.Fatalf("event cursor query = %s, want event-previous/7", r.URL.RawQuery)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", mustJSON(event))
+	}))
+	defer server.Close()
+	transport, err := clihttp.NewProtocol(server.Client(), platformclock.Real{})
+	if err != nil {
+		t.Fatalf("NewProtocol: %v", err)
+	}
+	operation := NewRemoteInvocation(transport)
+	eventOperation, ok := operation.(RemoteInvocationEventOperation)
+	if !ok {
+		t.Fatal("NewRemoteInvocation does not expose canonical event operation")
+	}
+	sequence := 7
+	stream, err := eventOperation.OpenFactorySessionEvents(context.Background(), RemoteInvocationEventRequest{
+		Server:        server.URL,
+		SessionID:     "durable-remote",
+		AfterEventID:  "event-previous",
+		AfterSequence: &sequence,
+	})
+	if err != nil {
+		t.Fatalf("OpenFactorySessionEvents: %v", err)
+	}
+	defer stream.Close()
+	got, err := stream.Next(context.Background())
+	if err != nil {
+		t.Fatalf("event stream Next: %v", err)
+	}
+	if got.Id != event.Id || got.Type != event.Type {
+		t.Fatalf("event = %#v, want %#v", got, event)
+	}
+	if _, err := stream.Next(context.Background()); !errors.Is(err, io.EOF) {
+		t.Fatalf("event stream terminal read error = %v, want EOF", err)
+	}
+}
+
+func TestRemoteInvocationClientFactoryEventsRejectsInvalidResponses(t *testing.T) {
+	request := RemoteInvocationEventRequest{Server: "https://selected.test", SessionID: "durable-remote"}
+	client := remoteInvocationClient{}
+	if _, err := client.OpenFactorySessionEvents(nil, request); err == nil || !strings.Contains(err.Error(), "context is required") {
+		t.Fatalf("nil context error = %v, want required-context error", err)
+	}
+	if _, err := client.OpenFactorySessionEvents(context.Background(), request); err == nil || !strings.Contains(err.Error(), "CLI HTTP protocol is required") {
+		t.Fatalf("nil protocol error = %v, want required-protocol error", err)
+	}
+	if _, err := (remoteInvocationClient{transport: &remoteProtocolStub{}}).OpenFactorySessionEvents(
+		context.Background(), RemoteInvocationEventRequest{Server: "http://[::1", SessionID: "durable-remote"},
+	); err == nil || !strings.Contains(err.Error(), RemoteDurableResultCode) {
+		t.Fatalf("invalid endpoint error = %v, want durable-result classification", err)
+	}
+
+	for _, test := range []struct {
+		name     string
+		response clihttp.Response
+		want     string
+	}{
+		{name: "missing HTTP response", response: clihttp.Response{}, want: "HTTP response is unavailable"},
+		{
+			name: "server API error",
+			response: clihttp.Response{HTTP: &http.Response{
+				StatusCode: http.StatusServiceUnavailable,
+				Body:       io.NopCloser(strings.NewReader(`{"message":"server unavailable"}`)),
+			}},
+			want: "server unavailable",
+		},
+		{
+			name: "server status without API error",
+			response: clihttp.Response{HTTP: &http.Response{
+				StatusCode: http.StatusBadGateway,
+				Body:       io.NopCloser(strings.NewReader("not JSON")),
+			}},
+			want: "(502)",
+		},
+		{
+			name:     "missing event body",
+			response: clihttp.Response{HTTP: &http.Response{StatusCode: http.StatusOK}},
+			want:     "HTTP response has no body",
+		},
+		{
+			name: "wrong content type",
+			response: clihttp.Response{HTTP: &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader("{}")),
+			}},
+			want: "content type",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := (remoteInvocationClient{transport: &remoteProtocolStub{response: test.response}}).OpenFactorySessionEvents(
+				context.Background(), request,
+			)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestRemoteFactoryEventStreamParsesFramesAndGuardsReads(t *testing.T) {
+	var nilStream *remoteFactoryEventStream
+	if _, err := nilStream.Next(context.Background()); err == nil || !strings.Contains(err.Error(), "unavailable") {
+		t.Fatalf("nil stream Next error = %v, want unavailable error", err)
+	}
+	if err := nilStream.Close(); err != nil {
+		t.Fatalf("nil stream Close error = %v, want nil", err)
+	}
+
+	stream := &remoteFactoryEventStream{reader: bufio.NewReader(strings.NewReader("data: not used\n\n"))}
+	if _, err := stream.Next(nil); !errors.Is(err, context.Canceled) {
+		t.Fatalf("nil context error = %v, want context.Canceled", err)
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := stream.Next(canceled); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled context error = %v, want context.Canceled", err)
+	}
+
+	event := apiEventsFromDomain(t, canonicalJavaScriptFactoryEvents()[:1])[0]
+	payload := mustJSON(event)
+	split := bytes.IndexByte(payload, ',') + 1
+	if split <= 0 {
+		t.Fatal("canonical event JSON has no safe multiline split")
+	}
+	framed := ": heartbeat\n\n" + "data: " + string(payload[:split]) + "\n" + "data: " + string(payload[split:]) + "\n\n"
+	stream = &remoteFactoryEventStream{reader: bufio.NewReader(strings.NewReader(framed))}
+	got, err := stream.Next(context.Background())
+	if err != nil || got.Id != event.Id || got.Type != event.Type {
+		t.Fatalf("framed event = %#v/%v, want event %q", got, err, event.Id)
+	}
+	if _, err := stream.Next(context.Background()); !errors.Is(err, io.EOF) {
+		t.Fatalf("after-frame error = %v, want EOF", err)
+	}
+
+	for _, malformed := range []string{"data: {\"id\":\"event-only\"}\n\n", "data: {not-json}\n\n"} {
+		_, err := readRemoteFactoryEventSSE(bufio.NewReader(strings.NewReader(malformed)))
+		var malformedErr *remoteMalformedFactoryEventError
+		if !errors.As(err, &malformedErr) {
+			t.Fatalf("malformed SSE error = %v, want remote malformed event error", err)
+		}
+	}
+}
+
+func TestRemoteFactoryEventRetryClassificationAndReconnectCancellation(t *testing.T) {
+	transportError := func(status int) error {
+		return &remoteInvocationEventTransportError{status: status, message: "transport"}
+	}
+	for _, test := range []struct {
+		name      string
+		err       error
+		wantRetry bool
+	}{
+		{name: "nil", wantRetry: false},
+		{name: "EOF", err: io.EOF, wantRetry: false},
+		{name: "canceled", err: context.Canceled, wantRetry: false},
+		{name: "malformed", err: &remoteMalformedFactoryEventError{cause: errors.New("bad event")}, wantRetry: false},
+		{name: "gateway", err: transportError(http.StatusBadGateway), wantRetry: true},
+		{name: "client failure", err: transportError(http.StatusBadRequest), wantRetry: false},
+		{name: "unknown", err: errors.New("unknown stream failure"), wantRetry: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := remoteFactoryEventRetryable(test.err); got != test.wantRetry {
+				t.Fatalf("retryable(%v) = %t, want %t", test.err, got, test.wantRetry)
+			}
+		})
+	}
+
+	attempts := 0
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := retryRemoteFactoryEventStream(ctx, "https://selected.test", "durable-remote", &attempts, transportError(http.StatusInternalServerError))
+	var invocationErr *InvocationError
+	if !errors.As(err, &invocationErr) || !errors.Is(err, context.Canceled) || attempts != 1 {
+		t.Fatalf("canceled reconnect = %v/attempts=%d, want typed canceled error after one attempt", err, attempts)
+	}
+}
+
+type scriptedRemoteResponseOperation struct {
+	streams       []scriptedRemoteEventStream
+	openErr       error
+	result        factoryapi.FactorySessionResult
+	eventRequests []RemoteInvocationEventRequest
+}
+
+func (operation *scriptedRemoteResponseOperation) StartFactorySession(context.Context, RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error) {
+	return factoryapi.FactorySessionExecutionResponse{
+		SessionId: "dur-sess-remote-stream",
+		Status:    factoryapi.FactorySessionDurableLifecycleStatusQueued,
+	}, nil
+}
+
+func (operation *scriptedRemoteResponseOperation) GetFactorySessionResult(context.Context, RemoteInvocationResultRequest) (factoryapi.FactorySessionResult, error) {
+	return operation.result, nil
+}
+
+func (operation *scriptedRemoteResponseOperation) OpenFactorySessionEvents(_ context.Context, request RemoteInvocationEventRequest) (RemoteInvocationEventStream, error) {
+	operation.eventRequests = append(operation.eventRequests, request)
+	if operation.openErr != nil {
+		return nil, operation.openErr
+	}
+	if len(operation.streams) == 0 {
+		return nil, errors.New("no scripted remote event stream remains")
+	}
+	stream := operation.streams[0]
+	operation.streams = operation.streams[1:]
+	return &stream, nil
+}
+
+type scriptedRemoteEventStream struct {
+	events      []factoryapi.FactoryEvent
+	index       int
+	terminalErr error
+	errReturned bool
+}
+
+func (stream *scriptedRemoteEventStream) Next(context.Context) (factoryapi.FactoryEvent, error) {
+	if stream.index < len(stream.events) {
+		event := stream.events[stream.index]
+		stream.index++
+		return event, nil
+	}
+	if stream.terminalErr != nil && !stream.errReturned {
+		stream.errReturned = true
+		return factoryapi.FactoryEvent{}, stream.terminalErr
+	}
+	return factoryapi.FactoryEvent{}, io.EOF
+}
+
+func (stream *scriptedRemoteEventStream) Close() error { return nil }
+
+func apiEventsFromDomain(t *testing.T, events []interfaces.FactoryEvent) []factoryapi.FactoryEvent {
+	t.Helper()
+	converted := make([]factoryapi.FactoryEvent, 0, len(events))
+	for _, event := range events {
+		var apiEvent factoryapi.FactoryEvent
+		if err := event.Decode(&apiEvent); err != nil {
+			t.Fatalf("decode domain Factory Event: %v", err)
+		}
+		converted = append(converted, apiEvent)
+	}
+	return converted
+}
+
+func finalRemoteInvocationResult(t *testing.T, text string) factoryapi.FactorySessionResult {
+	if t != nil {
+		t.Helper()
+	}
+	status := factoryapi.FactorySessionDurableLifecycleStatusSucceeded
+	result := factoryapi.FactorySessionResult{
+		SessionId:     "dur-sess-remote-stream",
+		ResultStatus:  factoryapi.FactorySessionResultStatusFinal,
+		SessionStatus: &status,
+	}
+	if t != nil {
+		result.PrimaryResult = remoteTextContent(t, text)
+	}
+	return result
+}
+
+func mustJSON(value any) []byte {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		panic(err)
+	}
+	return encoded
 }
 
 func assertPhaseCheckpointPhasePresentation(t *testing.T, output string) {
@@ -113,6 +463,14 @@ func assertPhaseCheckpointPhasePresentation(t *testing.T, output string) {
 	if !strings.Contains(lines[6], `"recordType":"invocation_result"`) {
 		t.Fatalf("terminal invocation record = %q", lines[6])
 	}
+	var terminal remoteInvocationNDJSONRecord
+	if err := json.Unmarshal([]byte(lines[6]), &terminal); err != nil {
+		t.Fatalf("decode terminal invocation record: %v", err)
+	}
+	assertGeneratedWorkContentPartsFromResponse(t, terminal.Response.PrimaryResult, []work.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "first streamed part"},
+		{Type: work.WorkContentPartTypeText, Text: "second streamed part"},
+	})
 }
 
 func TestRunFactoryInvocation_LiveEventIsWrittenBeforeOperationCompletes(t *testing.T) {
@@ -120,11 +478,12 @@ func TestRunFactoryInvocation_LiveEventIsWrittenBeforeOperationCompletes(t *test
 	published := make(chan struct{})
 	release := make(chan struct{})
 	events := canonicalJavaScriptFactoryEvents()
-	operation := testInvocationOperation{invokeFactory: func(
+	owner := newTestOpeningPresentationOwner()
+	operation := testInvocationOperation{presentations: owner, invokeFactory: func(
 		_ context.Context,
 		_ factorysessions.InvocationTarget,
 		_ factorysessions.InvocationRequest,
-		consume factorysessions.FactoryEventConsumer,
+		consume func([]interfaces.FactoryEvent),
 	) (factorysessions.FactoryInvocationOutcome, error) {
 		consume(events[:1])
 		close(published)
@@ -142,8 +501,8 @@ func TestRunFactoryInvocation_LiveEventIsWrittenBeforeOperationCompletes(t *test
 	done := make(chan error, 1)
 	go func() {
 		done <- runFactoryInvocation(
-			context.Background(), cfg, invocationTarget(cfg, nil, nil),
-			factoryapi.InvocationRequest{}, operation, testResponsePresentation(),
+			context.Background(), cfg, invocationTarget(cfg, nil),
+			factoryapi.InvocationRequest{}, operation, testResponsePresentation(), owner,
 		)
 	}()
 
@@ -438,4 +797,80 @@ func TestInvocationFactoryEventRenderer_ColorsOnlyTTYHumanOutput(t *testing.T) {
 	if plainTTY != outputs[1] {
 		t.Fatalf("TTY colors changed human content:\ntty=%q\nredirected=%q", outputs[0], outputs[1])
 	}
+}
+
+// These fixtures are shared by the remote invocation input and response-stream
+// tests so the protocol seam has one observable test double.
+type remoteProtocolStub struct {
+	response clihttp.Response
+	err      error
+	called   bool
+	url      string
+}
+
+func (stub *remoteProtocolStub) Execute(request *http.Request) (clihttp.Response, error) {
+	stub.called = true
+	if request != nil && request.URL != nil {
+		stub.url = request.URL.String()
+	}
+	return stub.response, stub.err
+}
+
+func (stub *remoteProtocolStub) GetJSON(context.Context, string, any) (clihttp.Response, error) {
+	return stub.response, stub.err
+}
+
+func (stub *remoteProtocolStub) PostJSON(_ context.Context, url string, _ io.Reader, _ any) (clihttp.Response, error) {
+	stub.called = true
+	stub.url = url
+	return stub.response, stub.err
+}
+
+func (stub *remoteProtocolStub) PostJSONCreated(context.Context, string, io.Reader, any) (clihttp.Response, error) {
+	return stub.response, stub.err
+}
+
+func (stub *remoteProtocolStub) PutJSON(context.Context, string, io.Reader, any) (clihttp.Response, error) {
+	return stub.response, stub.err
+}
+
+func (stub *remoteProtocolStub) PutJSONCreated(context.Context, string, io.Reader, any) (clihttp.Response, error) {
+	return stub.response, stub.err
+}
+
+func preparedRemoteArguments(prompt string) *work.PreparedInvocationInput {
+	return &work.PreparedInvocationInput{
+		NormalizedArguments: &work.NormalizedArguments{
+			Arguments: map[string]work.NormalizedArgument{
+				"prompt": {Values: []string{prompt}},
+			},
+		},
+	}
+}
+
+func remoteTextContent(t *testing.T, text string) *factoryapi.WorkContent {
+	t.Helper()
+	var part factoryapi.WorkContentPart
+	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+		Type: factoryapi.WorkContentPartTypeText,
+		Text: text,
+	}); err != nil {
+		t.Fatalf("build remote text content: %v", err)
+	}
+	content := factoryapi.WorkContent{part}
+	return &content
+}
+
+func boolPtr(value bool) *bool {
+	return &value
+}
+
+func durableLifecycleStatusPtr(value factoryapi.FactorySessionDurableLifecycleStatus) *factoryapi.FactorySessionDurableLifecycleStatus {
+	return &value
+}
+
+type remoteInvocationOperationFunc func(context.Context, RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error)
+
+func (fn remoteInvocationOperationFunc) StartFactorySession(ctx context.Context, request RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error) {
+	return fn(ctx, request)
 }

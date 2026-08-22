@@ -34,6 +34,9 @@ vi.mock("@xyflow/react", () => ({
       {children}
     </div>
   ),
+  useStore: (
+    selector: (state: { transform: [number, number, number] }) => unknown,
+  ) => selector({ transform: [0, 0, 1] }),
 }));
 
 const messages: FactoryRecordingTopologyReplayMessages = {
@@ -172,6 +175,81 @@ describe("FactoryRecordingTopologyReplay explicit states", () => {
     expect(screen.getByText("Sibling content survives")).toBeVisible();
     await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
     expect(onError).toHaveBeenCalledWith(projectionError);
+  });
+});
+
+describe("FactoryRecordingTopologyReplay compatibility states", () => {
+  it("renders future-bearing recordings and forwards compatibility diagnostics", async () => {
+    const onError = vi.fn();
+    const futureRecording = recording(true) as Record<string, unknown>;
+    const factory = futureRecording.factory as Record<string, unknown>;
+    factory.futureFactoryMetadata = "factory-secret";
+    factory.workers = [{ name: "future-worker", type: "FUTURE_WORKER_KIND" }];
+    factory.workTypes = [
+      {
+        name: "story",
+        states: [{ name: "paused", type: "FUTURE_WORK_STATE" }],
+      },
+    ];
+    const topologyEvent = (
+      futureRecording.events as Record<string, unknown>[]
+    )[0];
+    const futureEvent = structuredClone(topologyEvent);
+    futureEvent.id = "states-future-event";
+    futureEvent.type = "FUTURE_EVENT_TYPE";
+    futureEvent.payload = { futurePayload: "payload-secret" };
+    futureEvent.futureEventMetadata = "event-secret";
+    (futureEvent.context as Record<string, unknown>).sequence = 2;
+    (futureEvent.context as Record<string, unknown>).tick = 1;
+    futureRecording.events = [topologyEvent, futureEvent];
+
+    render(
+      <FactoryRecordingTopologyReplay
+        formatNumber={String}
+        messages={messages}
+        onError={onError}
+        recording={futureRecording}
+      />,
+    );
+
+    expect(screen.getByTestId("controlled-topology-renderer")).toBeVisible();
+    expect(screen.getByText("FUTURE_WORKER_KIND")).toBeVisible();
+    expect(screen.getByText("FUTURE_WORK_STATE")).toBeVisible();
+    expect(
+      screen.getByText("FUTURE_WORKER_KIND").closest("article")?.className,
+    ).toContain("border-outline bg-surface");
+    expect(
+      screen.getByText("FUTURE_WORK_STATE").closest("article")?.className,
+    ).toContain("border-outline bg-surface");
+    expect(topologyRegion()).not.toHaveTextContent(messages.topology.failed);
+    await waitFor(() =>
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "recording-compatibility",
+          recoverable: true,
+        }),
+      ),
+    );
+    const compatibilityDiagnostic = onError.mock.calls.find(
+      ([error]) => error.kind === "recording-compatibility",
+    )?.[0];
+    expect(compatibilityDiagnostic?.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "unsupported_event_type",
+          path: ["events", 1, "type"],
+        }),
+        expect.objectContaining({
+          code: "unsupported_field",
+          path: ["factory", "futureFactoryMetadata"],
+        }),
+        expect.objectContaining({
+          code: "unsupported_field",
+          path: ["events", 1, "futureEventMetadata"],
+        }),
+      ]),
+    );
+    expect(JSON.stringify(compatibilityDiagnostic)).not.toContain("secret");
   });
 });
 

@@ -144,9 +144,9 @@
       "packetId": "PSS-I01",
       "leaseClass": "root-wire-process",
       "exclusivePaths": [
-        "pkg/wire/",
-        "pkg/root/",
-        "pkg/initializer/"
+        "pkg/root/process.go",
+        "pkg/wire/profiles.go",
+        "pkg/wire/wire.go"
       ],
       "state": "blocked",
       "prerequisites": []
@@ -183,10 +183,9 @@
     },
     {
       "packetId": "PSS-I05",
-      "leaseClass": "event-backbone",
+      "leaseClass": "event-boundary-metadata",
       "exclusivePaths": [
-        "pkg/factory/contracts/",
-        "docs/internal/projects/packaged-service-structure/event-backbone-convergence.md"
+        "docs/internal/projects/packaged-service-structure/event-boundary-d2-rescope.md"
       ],
       "state": "blocked",
       "prerequisites": [

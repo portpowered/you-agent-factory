@@ -3,6 +3,7 @@ package http_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -70,13 +71,6 @@ func TestSaveCurrentFactoryBySessionId_RejectsInvalidPayloadBeforeRootInvoked(t 
 	t.Parallel()
 
 	cases := []validationDecodeCase{
-		{
-			name:        "unknown_field",
-			body:        `{"factory":{"name":"beta"},"unknownExtra":1}`,
-			wantStatus:  http.StatusBadRequest,
-			wantCode:    "BAD_REQUEST",
-			wantMessage: "invalid request payload",
-		},
 		{
 			name:        "malformed",
 			body:        `{"factory":{"name":"beta"`,
@@ -173,6 +167,316 @@ func TestSaveCurrentFactoryBySessionId_DecodesFactoryAndInvokesFakeRoot(t *testi
 	}
 	if response.Name != "beta" {
 		t.Fatalf("saved factory name = %q, want beta", response.Name)
+	}
+}
+
+func TestListPackagedFactories_MapsStableCatalogAndArtifacts(t *testing.T) {
+	t.Parallel()
+
+	root := &packagedFactoryCatalogRootFake{
+		listResult: factorydefinitions.ListBuiltInPackagedFactoriesResult{
+			Entries: []factorydefinitions.BuiltInPackagedFactoryEntry{
+				{Name: "@you/zeta", Project: "builtin-zeta"},
+				{Name: "@you/alpha", Project: "builtin-alpha"},
+			},
+		},
+		definitions: map[string]factorydefinitions.PackagedDefinition{
+			"@you/zeta":  packagedFactoryDefinition("@you/zeta", "builtin-zeta", "name: zeta\n"),
+			"@you/alpha": packagedFactoryDefinition("@you/alpha", "builtin-alpha", "name: alpha\n"),
+		},
+	}
+	handler := factorydefinitionshttp.NewHandlerFromRoot(
+		factorydefinitionshttp.RootBinding{Definitions: root},
+		zap.NewNop(),
+	)
+	recorder := httptest.NewRecorder()
+	handler.ListPackagedFactories(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/packaged-factories", nil),
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("response = %d %s, want 200", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.PackagedFactoryCatalogResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(response.Factories) != 2 {
+		t.Fatalf("factories = %d, want 2", len(response.Factories))
+	}
+	if response.Factories[0].Name != "@you/alpha" || response.Factories[1].Name != "@you/zeta" {
+		t.Fatalf("factory order = [%q, %q], want sorted public names", response.Factories[0].Name, response.Factories[1].Name)
+	}
+	entry := response.Factories[0]
+	if entry.Project != "builtin-alpha" || entry.Slug != "alpha" {
+		t.Fatalf("identity = %#v, want alpha/builtin-alpha/alpha", entry)
+	}
+	if entry.Description.Value != "Description for @you/alpha" {
+		t.Fatalf("description = %#v, want stable customer-facing metadata", entry.Description)
+	}
+	if len(entry.Examples) != 1 || entry.Examples[0].Name != "run-alpha" {
+		t.Fatalf("examples = %#v, want one stable invocation example", entry.Examples)
+	}
+	if entry.Json["name"] != "@you/alpha" {
+		t.Fatalf("JSON artifact name = %#v, want @you/alpha", entry.Json["name"])
+	}
+	if entry.Yaml != "name: alpha\n" {
+		t.Fatalf("YAML artifact = %q, want source artifact", entry.Yaml)
+	}
+}
+
+func TestListPackagedFactories_EmitsEmptyCollection(t *testing.T) {
+	t.Parallel()
+
+	root := &packagedFactoryCatalogRootFake{
+		listResult: factorydefinitions.ListBuiltInPackagedFactoriesResult{
+			Entries: []factorydefinitions.BuiltInPackagedFactoryEntry{},
+		},
+	}
+	handler := factorydefinitionshttp.NewHandlerFromRoot(
+		factorydefinitionshttp.RootBinding{Definitions: root},
+		zap.NewNop(),
+	)
+	recorder := httptest.NewRecorder()
+	handler.ListPackagedFactories(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/packaged-factories", nil),
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("response = %d %s, want 200", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.PackagedFactoryCatalogResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Factories == nil || len(response.Factories) != 0 {
+		t.Fatalf("factories = %#v, want a valid empty collection", response.Factories)
+	}
+}
+
+func TestListPackagedFactories_HidesCatalogLoadAndDecodeFailures(t *testing.T) {
+	t.Parallel()
+
+	t.Run("list failure", func(t *testing.T) {
+		root := &packagedFactoryCatalogRootFake{
+			listErr: errors.New("secret factory payload: do not expose"),
+		}
+		recorder := httptest.NewRecorder()
+		factorydefinitionshttp.NewHandlerFromRoot(
+			factorydefinitionshttp.RootBinding{Definitions: root},
+			zap.NewNop(),
+		).ListPackagedFactories(
+			recorder,
+			httptest.NewRequest(http.MethodGet, "/packaged-factories", nil),
+		)
+		assertPackagedFactoryCatalogInternalError(t, recorder, "secret factory payload: do not expose")
+	})
+
+	t.Run("artifact decode failure", func(t *testing.T) {
+		root := &packagedFactoryCatalogRootFake{
+			listResult: factorydefinitions.ListBuiltInPackagedFactoriesResult{
+				Entries: []factorydefinitions.BuiltInPackagedFactoryEntry{{
+					Name: "@you/broken", Project: "builtin-broken",
+				}},
+			},
+			definitions: map[string]factorydefinitions.PackagedDefinition{
+				"@you/broken": {
+					Name: "@you/broken", Project: "builtin-broken",
+					JSON: []byte(`{"name":`), YAML: []byte("name: broken\n"),
+				},
+			},
+		}
+		recorder := httptest.NewRecorder()
+		factorydefinitionshttp.NewHandlerFromRoot(
+			factorydefinitionshttp.RootBinding{Definitions: root},
+			zap.NewNop(),
+		).ListPackagedFactories(
+			recorder,
+			httptest.NewRequest(http.MethodGet, "/packaged-factories", nil),
+		)
+		assertPackagedFactoryCatalogInternalError(t, recorder, "packaged Factory")
+	})
+}
+
+func TestListPackagedFactories_RejectsMissingDefinitionsRoot(t *testing.T) {
+	t.Parallel()
+
+	recorder := listPackagedFactoriesResponse(t, factorydefinitionshttp.RootBinding{})
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", recorder.Code)
+	}
+}
+
+func TestListPackagedFactories_RejectsResolveFailure(t *testing.T) {
+	t.Parallel()
+
+	root := &packagedFactoryCatalogRootFake{
+		listResult: factorydefinitions.ListBuiltInPackagedFactoriesResult{
+			Entries: []factorydefinitions.BuiltInPackagedFactoryEntry{{
+				Name: "@you/missing", Project: "builtin-missing",
+			}},
+		},
+	}
+	recorder := listPackagedFactoriesResponse(t, factorydefinitionshttp.RootBinding{Definitions: root})
+	assertPackagedFactoryCatalogInternalError(t, recorder, "missing")
+}
+
+func TestListPackagedFactories_RejectsIdentityMismatch(t *testing.T) {
+	t.Parallel()
+
+	root := &packagedFactoryCatalogRootFake{
+		listResult: factorydefinitions.ListBuiltInPackagedFactoriesResult{
+			Entries: []factorydefinitions.BuiltInPackagedFactoryEntry{{
+				Name: "@you/mismatch", Project: "listed-project",
+			}},
+		},
+		definitions: map[string]factorydefinitions.PackagedDefinition{
+			"@you/mismatch": packagedFactoryDefinition("@you/mismatch", "resolved-project", "name: mismatch\n"),
+		},
+	}
+	recorder := listPackagedFactoriesResponse(t, factorydefinitionshttp.RootBinding{Definitions: root})
+	assertPackagedFactoryCatalogInternalError(t, recorder, "identity mismatch")
+}
+
+func TestListPackagedFactories_RejectsIncompleteDefinitions(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name       string
+		definition factorydefinitions.PackagedDefinition
+	}{
+		{
+			name: "incomplete identity",
+			definition: factorydefinitions.PackagedDefinition{
+				Name: "", Project: "builtin-incomplete-identity",
+			},
+		},
+		{
+			name: "incomplete artifacts",
+			definition: factorydefinitions.PackagedDefinition{
+				Name: "@you/incomplete-artifacts", Project: "builtin-incomplete-artifacts",
+			},
+		},
+		{
+			name: "incomplete discovery metadata",
+			definition: factorydefinitions.PackagedDefinition{
+				Name: "@you/incomplete-metadata", Project: "builtin-incomplete-metadata",
+				JSON: []byte(`{"name":"@you/incomplete-metadata"}`), YAML: []byte("name: incomplete-metadata\n"),
+			},
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			root := &packagedFactoryCatalogRootFake{
+				listResult: factorydefinitions.ListBuiltInPackagedFactoriesResult{
+					Entries: []factorydefinitions.BuiltInPackagedFactoryEntry{{
+						Name: testCase.definition.Name, Project: testCase.definition.Project,
+					}},
+				},
+				definitions: map[string]factorydefinitions.PackagedDefinition{
+					testCase.definition.Name: testCase.definition,
+				},
+			}
+			recorder := listPackagedFactoriesResponse(t, factorydefinitionshttp.RootBinding{Definitions: root})
+			assertPackagedFactoryCatalogInternalError(t, recorder, testCase.name)
+		})
+	}
+}
+
+func TestListPackagedFactories_MapsTypedRootFailure(t *testing.T) {
+	t.Parallel()
+
+	root := &packagedFactoryCatalogRootFake{
+		listErr: factorydefinitions.ErrInvalidFactoryDefinitionPayload,
+	}
+	recorder := listPackagedFactoriesResponse(t, factorydefinitionshttp.RootBinding{Definitions: root})
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func listPackagedFactoriesResponse(
+	t *testing.T,
+	binding factorydefinitionshttp.RootBinding,
+) *httptest.ResponseRecorder {
+	t.Helper()
+	recorder := httptest.NewRecorder()
+	factorydefinitionshttp.NewHandlerFromRoot(binding, zap.NewNop()).ListPackagedFactories(
+		recorder,
+		httpTestRequest("/packaged-factories"),
+	)
+	return recorder
+}
+
+func httpTestRequest(path string) *http.Request {
+	return httptest.NewRequest(http.MethodGet, path, nil)
+}
+
+func assertPackagedFactoryCatalogInternalError(
+	t *testing.T,
+	recorder *httptest.ResponseRecorder,
+	forbidden string,
+) {
+	t.Helper()
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500: %s", recorder.Code, recorder.Body.String())
+	}
+	if strings.Contains(recorder.Body.String(), forbidden) {
+		t.Fatalf("response exposed sensitive catalog detail %q: %s", forbidden, recorder.Body.String())
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if response.Code != factoryapi.ErrorResponseCodeINTERNALERROR {
+		t.Fatalf("code = %q, want INTERNAL_ERROR", response.Code)
+	}
+	if response.Message != "failed to load packaged factory catalog" {
+		t.Fatalf("message = %q, want actionable catalog failure", response.Message)
+	}
+}
+
+type packagedFactoryCatalogRootFake struct {
+	httpDefinitionsRootFake
+	listResult  factorydefinitions.ListBuiltInPackagedFactoriesResult
+	listErr     error
+	definitions map[string]factorydefinitions.PackagedDefinition
+}
+
+func (fake *packagedFactoryCatalogRootFake) ListBuiltInPackagedFactories(
+	context.Context,
+	factorydefinitions.ListBuiltInPackagedFactoriesRequest,
+) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
+	return fake.listResult, fake.listErr
+}
+
+func (fake *packagedFactoryCatalogRootFake) ResolveBuiltInPackagedFactory(
+	_ context.Context,
+	request factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
+) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
+	definition, ok := fake.definitions[request.Name]
+	if !ok {
+		return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, factorydefinitions.ErrUnknownPackagedFactoryIdentity
+	}
+	return factorydefinitions.ResolveBuiltInPackagedFactoryResult{
+		Definition: definition,
+		Formats:    definition.Formats,
+	}, nil
+}
+
+func packagedFactoryDefinition(
+	name string,
+	project string,
+	yaml string,
+) factorydefinitions.PackagedDefinition {
+	return factorydefinitions.PackagedDefinition{
+		Name:    name,
+		Project: project,
+		JSON:    []byte(`{"name":"` + name + `","description":{"type":"LOCALIZABLE_ASSET","value":"Description for ` + name + `"},"examples":[{"name":"run-` + strings.TrimPrefix(name, "@you/") + `","description":{"type":"LOCALIZABLE_ASSET","value":"Run ` + name + `"},"args":{"input":"sample"}}]}`),
+		YAML:    []byte(yaml),
+		Formats: []factorydefinitions.PackagedFactoryFormat{factorydefinitions.PackagedFactoryFormatJSON, factorydefinitions.PackagedFactoryFormatYAML},
 	}
 }
 

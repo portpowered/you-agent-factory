@@ -3,6 +3,8 @@ package factory_visualization
 import (
 	"context"
 	"time"
+
+	internalcontracts "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/contracts"
 )
 
 // Service is the singular peer-facing Factory Visualization contract.
@@ -202,6 +204,17 @@ const (
 
 // PresentationSessionID identifies one opened presentation/drain session.
 type PresentationSessionID string
+
+// RuntimeSinkID identifies one transport-selected visualization sink. The
+// sink itself remains private to Factory Visualization; Factory Sessions and
+// opening requests carry only this opaque selection.
+type RuntimeSinkID = internalcontracts.RuntimeSinkID
+
+// RuntimeSinkOwner retains operation-scoped visualization sinks behind the
+// Factory Visualization ownership boundary. The implementation-facing
+// contract is aliased here for composition callers without adding another
+// named interface to the customer-facing root.
+type RuntimeSinkOwner = internalcontracts.RuntimeSinkOwner
 
 // PresentationErrorKind distinguishes typed Visualization presentation/drain outcomes.
 type PresentationErrorKind string

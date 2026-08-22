@@ -1,0 +1,4 @@
+type: string
+description: Operator model load policy. Runtime activation is owned by Models.
+enum:
+  - ON_DEMAND

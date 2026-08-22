@@ -1,35 +1,39 @@
 // Command packagetargetmanifestcheck validates the Packaged Service Structure
-// package-to-target and deletion manifest schema, closed destination vocabulary,
-// stable-sorted production pkg inventory ledger seed, and exact one-destination
-// package coverage.
+// migration contract: the consolidated open-move ledger's schema, its closed
+// destination vocabulary, and the requirement that every remaining move row
+// still names a package that exists.
+//
+// The ledger records only unfinished migration intent. A package that stays
+// where it already lives derives its destination from its own path and carries
+// no row, so package churn inside a service requires no registry edit. The
+// package-target manifest document this command was named for held no
+// ratcheting content once its package rows moved into that ledger; the
+// destination vocabulary and architecture-exception rationale it also carried
+// are published at docs/architecture/service-ownership-rationale.md.
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type config struct {
-	root                  string
-	manifestPath          string
-	writeInventory        bool
-	writeOwnerPackages    bool
-	writeEdgesPackages    bool
-	writeResidualPackages bool
+	root                   string
+	movesPath              string
+	testOnlyBaselinePath   string
+	createTestOnlyBaseline bool
 }
 
 func main() {
 	cfg := config{}
-	flag.StringVar(&cfg.root, "root", ".", "repository root containing the package-target manifest")
-	flag.StringVar(&cfg.manifestPath, "manifest", manifestRelativePath, "repository-relative path to the package-target manifest")
-	flag.BoolVar(&cfg.writeInventory, "write-inventory", false, "rewrite the committed inventory from the live production pkg tree")
-	flag.BoolVar(&cfg.writeOwnerPackages, "write-owner-packages", false, "rewrite committed product-owner package destination rows from the inventory")
-	flag.BoolVar(&cfg.writeEdgesPackages, "write-edges-packages", false, "rewrite Process Edges architecture-exception package rows and FND-06 future debt")
-	flag.BoolVar(&cfg.writeResidualPackages, "write-residual-packages", false, "rewrite approved non-service family and residual/deletion-queue package rows from the inventory")
+	flag.StringVar(&cfg.root, "root", ".", "repository root containing the open-move ledger")
+	flag.StringVar(&cfg.movesPath, "moves", unfinishedMovesRelativePath, "repository-relative path to the consolidated unfinished-package-move ledger")
+	flag.StringVar(&cfg.testOnlyBaselinePath, "test-only-baseline", packageTargetTestOnlyBaselineRelativePath, "repository-relative path to the exact test-only package-target baseline")
+	flag.BoolVar(&cfg.createTestOnlyBaseline, "create-test-only-baseline", false, "create the deletion-only test-only package-target baseline; fails if the file already exists")
 	flag.Parse()
 	if err := run(cfg, os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -37,84 +41,78 @@ func main() {
 	}
 }
 
-func run(cfg config, stdout, _ io.Writer) error {
+func run(cfg config, stdout, stderr io.Writer) error {
 	repoRoot, err := filepath.Abs(cfg.root)
 	if err != nil {
 		return fmt.Errorf("resolve repository root: %w", err)
 	}
-	manifestFile := resolveManifestPath(repoRoot, cfg.manifestPath)
-	manifest, err := loadManifest(manifestFile)
+	movesPath := cfg.movesPath
+	if movesPath == "" {
+		movesPath = unfinishedMovesRelativePath
+	}
+	movesFile := resolveRepoPath(repoRoot, movesPath)
+	moves, err := loadUnfinishedMoves(movesFile)
 	if err != nil {
 		return err
 	}
-	if cfg.writeInventory {
-		inventory, listErr := listProductionPkgPackages(repoRoot)
-		if listErr != nil {
-			return listErr
-		}
-		manifest.Inventory = inventory
-		if writeErr := writeManifest(manifestFile, manifest); writeErr != nil {
-			return writeErr
-		}
-		fmt.Fprintf(stdout, "[agent-factory:package-target-manifest] wrote %d inventory rows to %s\n", len(inventory), filepath.ToSlash(manifestFile))
-	}
-	if cfg.writeOwnerPackages {
-		ownerRows, buildErr := buildCommittedOwnerPackages(manifest.Inventory)
-		if buildErr != nil {
-			return buildErr
-		}
-		manifest.Packages = mergeOwnerPackageRows(manifest.Packages, ownerRows)
-		if writeErr := writeManifest(manifestFile, manifest); writeErr != nil {
-			return writeErr
-		}
-		fmt.Fprintf(stdout, "[agent-factory:package-target-manifest] wrote %d committed-owner package rows to %s\n", len(ownerRows), filepath.ToSlash(manifestFile))
-	}
-	if cfg.writeEdgesPackages {
-		edgesRows, buildErr := buildEdgesExceptionPackages(manifest.Inventory)
-		if buildErr != nil {
-			return buildErr
-		}
-		manifest.Packages = mergeEdgesPackageRows(manifest.Packages, edgesRows)
-		manifest.ArchitectureExceptionNotes = map[string]string{
-			"edges": edgesArchitectureExceptionNote,
-		}
-		manifest.FutureDebt = ensureEdgesFutureDebt(manifest.FutureDebt)
-		if writeErr := writeManifest(manifestFile, manifest); writeErr != nil {
-			return writeErr
-		}
-		fmt.Fprintf(stdout, "[agent-factory:package-target-manifest] wrote %d edges exception package rows to %s\n", len(edgesRows), filepath.ToSlash(manifestFile))
-	}
-	if cfg.writeResidualPackages {
-		residualRows, buildErr := buildResidualPackages(manifest.Inventory)
-		if buildErr != nil {
-			return buildErr
-		}
-		manifest.Packages = mergeResidualPackageRows(manifest.Packages, residualRows)
-		if writeErr := writeManifest(manifestFile, manifest); writeErr != nil {
-			return writeErr
-		}
-		fmt.Fprintf(stdout, "[agent-factory:package-target-manifest] wrote %d residual package rows to %s\n", len(residualRows), filepath.ToSlash(manifestFile))
-	}
-	if err := validateManifestAt(repoRoot, manifest); err != nil {
+	if err := validateOpenMoveLedgerSchema(repoRoot, moves); err != nil {
 		return fmt.Errorf("[agent-factory:package-target-manifest] %w", err)
 	}
+	testOnlyBaselinePath := cfg.testOnlyBaselinePath
+	if testOnlyBaselinePath == "" {
+		testOnlyBaselinePath = packageTargetTestOnlyBaselineRelativePath
+	}
+
+	findings, err := scanPackageTargetFindings(repoRoot, moves.Moves)
+	if err != nil {
+		return err
+	}
+	if cfg.createTestOnlyBaseline {
+		return createPackageTargetTestOnlyBaseline(
+			resolveRepoPath(repoRoot, testOnlyBaselinePath),
+			findings,
+			stdout,
+		)
+	}
+	baselinePath := resolveRepoPath(repoRoot, testOnlyBaselinePath)
+	baseline, err := loadPackageTargetTestOnlyBaseline(baselinePath)
+	if err != nil {
+		return err
+	}
+	productionStale, testOnlyUnrecorded, testOnlyStale, err := partitionPackageTargetFindings(findings, moves.Moves, baseline)
+	if err != nil {
+		return err
+	}
+	if len(productionStale) > 0 || len(testOnlyUnrecorded) > 0 || len(testOnlyStale) > 0 {
+		writePackageTargetObservationCounts(stderr, findings)
+		writePackageTargetViolationCounts(stderr, productionStale, testOnlyUnrecorded, testOnlyStale)
+		for _, row := range productionStale {
+			writeStaleProductionPackageTargetRow(stderr, row)
+		}
+		for _, finding := range testOnlyUnrecorded {
+			writePackageTargetFinding(stderr, "new test-only package-target observation", finding)
+		}
+		for _, entry := range testOnlyStale {
+			writeStalePackageTargetTestOnlyBaselineEntry(stderr, entry, filepath.ToSlash(testOnlyBaselinePath))
+		}
+		return fmt.Errorf(
+			"[agent-factory:package-target-manifest] found %d stale production row(s) [%s], %d new test-only observation(s), and %d stale test-only baseline entry/entries\nLINT_VIOLATION_COUNT: %d",
+			len(productionStale),
+			strings.Join(packageTargetStaleRowPaths(productionStale), ", "),
+			len(testOnlyUnrecorded),
+			len(testOnlyStale),
+			len(productionStale)+len(testOnlyUnrecorded)+len(testOnlyStale),
+		)
+	}
+	writePackageTargetObservationCounts(stdout, findings)
+	writePackageTargetViolationCounts(stdout, productionStale, testOnlyUnrecorded, testOnlyStale)
 	fmt.Fprintf(
 		stdout,
-		"[agent-factory:package-target-manifest] inventory, destination vocabulary, and one-destination coverage hold (%d inventory rows, %d package rows)\n",
-		len(manifest.Inventory),
-		len(manifest.Packages),
+		"[agent-factory:package-target-manifest] all %d open migration row(s) hold the closed destination vocabulary and name live packages (%s); test-only baseline=%d exact deletion-only edge(s) (%s)\n",
+		len(moves.Moves),
+		filepath.ToSlash(movesFile),
+		len(baseline.Entries),
+		filepath.ToSlash(baselinePath),
 	)
-	return nil
-}
-
-func writeManifest(path string, manifest Manifest) error {
-	data, err := json.MarshalIndent(manifest, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode manifest %s: %w", path, err)
-	}
-	data = append(data, '\n')
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return fmt.Errorf("write manifest %s: %w", path, err)
-	}
 	return nil
 }

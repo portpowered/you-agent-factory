@@ -4,6 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
+
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 // ErrExecuteCancelled reports that one provider execution attempt was cancelled
@@ -18,20 +23,38 @@ var ErrExecuteTimeout = errors.New("provider execution timed out")
 // one of the more specific cancellation or timeout outcomes.
 var ErrExecuteFailed = errors.New("provider execution failed")
 
+// ErrCapabilityMismatch reports that a request asks a selected provider route
+// for a capability it does not truthfully advertise.
+var ErrCapabilityMismatch = errors.New("provider capability mismatch")
+
+// DefaultAntigravityPrintTimeout is the native AGY print-mode deadline used
+// when a caller does not provide a narrower worker timeout. It is published at
+// the Providers boundary so child orchestration can apply the same bound
+// without importing the Antigravity adapter or duplicating its policy.
+const DefaultAntigravityPrintTimeout = 5 * time.Minute
+
 // ExecuteFailureKind is a provider-neutral one-attempt failure category.
 // Providers owns the normalized attempt outcome; Workers and other callers own
 // retry, throttle, and scheduling policy.
 type ExecuteFailureKind string
 
 const (
-	ExecuteFailureKindCanceled       ExecuteFailureKind = "canceled"
-	ExecuteFailureKindTimeout        ExecuteFailureKind = "timeout"
-	ExecuteFailureKindAuthentication ExecuteFailureKind = "authentication"
-	ExecuteFailureKindInvalidRequest ExecuteFailureKind = "invalid_request"
-	ExecuteFailureKindMisconfigured  ExecuteFailureKind = "misconfigured"
-	ExecuteFailureKindThrottled      ExecuteFailureKind = "throttled"
-	ExecuteFailureKindDependency     ExecuteFailureKind = "dependency"
-	ExecuteFailureKindUnknown        ExecuteFailureKind = "unknown"
+	ExecuteFailureKindCanceled           ExecuteFailureKind = "canceled"
+	ExecuteFailureKindTimeout            ExecuteFailureKind = "timeout"
+	ExecuteFailureKindAuthentication     ExecuteFailureKind = "authentication"
+	ExecuteFailureKindInvalidRequest     ExecuteFailureKind = "invalid_request"
+	ExecuteFailureKindMisconfigured      ExecuteFailureKind = "misconfigured"
+	ExecuteFailureKindThrottled          ExecuteFailureKind = "throttled"
+	ExecuteFailureKindDependency         ExecuteFailureKind = "dependency"
+	ExecuteFailureKindUnknown            ExecuteFailureKind = "unknown"
+	ExecuteFailureKindCapabilityMismatch ExecuteFailureKind = "capability_mismatch"
+	// ExecuteFailureKindSessionNotFound reports that a resolved provider did
+	// not recognize the exact requested Provider Session id as live. Ordinary
+	// Execute never produces this kind: only a private Continue-triggered
+	// attempt can observe a prior session. Continue translates this
+	// kind into the typed stale continuation failure before returning to its
+	// caller, so this kind never reaches a Continue caller directly either.
+	ExecuteFailureKindSessionNotFound ExecuteFailureKind = "session_not_found"
 )
 
 // ExecuteFailure retains normalized one-attempt failure facts peers can branch
@@ -76,32 +99,128 @@ func sentinelForExecuteFailureKind(kind ExecuteFailureKind) error {
 		return ErrExecuteCancelled
 	case ExecuteFailureKindTimeout:
 		return ErrExecuteTimeout
+	case ExecuteFailureKindCapabilityMismatch:
+		return ErrCapabilityMismatch
 	default:
 		return ErrExecuteFailed
 	}
 }
 
+// ResolvedModelOperationBinding carries one detached model-operation input
+// through the Providers execution boundary without importing Workers request
+// types. Content remains the shared Work content vocabulary so structured
+// text, JSON, and audio parts retain their shape.
+type ResolvedModelOperationBinding struct {
+	Slot    string
+	Source  string
+	Content []work.WorkContentPart
+}
+
+// ExecuteOutcome carries an already-classified terminal work outcome across
+// the compatibility boundary. Providers does not derive this value; native
+// adapters leave it empty, while transitional inference-shaped callers may
+// provide it so the Workers output policy is not silently changed by the
+// boundary translation.
+type ExecuteOutcome string
+
+const (
+	ExecuteOutcomeAccepted ExecuteOutcome = "ACCEPTED"
+	ExecuteOutcomeContinue ExecuteOutcome = "CONTINUE"
+	ExecuteOutcomeRejected ExecuteOutcome = "REJECTED"
+	ExecuteOutcomeFailed   ExecuteOutcome = "FAILED"
+)
+
 // ExecuteRequest is the plain one-attempt execute vocabulary. Providers owns
 // exactly one normalized native attempt per call; callers own selection,
 // retry, throttle, and scheduling policy.
 type ExecuteRequest struct {
-	Provider           ID
-	AttemptID          string
-	WorkerType         string
-	WorkstationName    string
-	Model              string
-	ReasoningEffort    string
-	SkipPermissions    bool
-	SystemPrompt       string
-	UserMessage        string
-	InputTokens        []any
-	OutputSchema       string
-	ResumeSession      *SessionRef
-	WorkingDirectory   string
-	Worktree           string
-	EnvVars            map[string]string
-	ProcessEnvironment []string
+	Provider  ID
+	AttemptID string
+	// Correlation carries detached replay/lineage keys used by effect
+	// implementations that must claim the exact recorded attempt. It is not
+	// provider session state and does not influence provider selection.
+	Correlation     ExecuteCorrelation
+	WorkerType      string
+	WorkstationName string
+	RunnerID        string
+	ProjectID       string
+	TransitionID    string
+	InputBindings   map[string][]string
+	SessionID       string
+	Model           string
+	ModelOperation  string
+	ModelBindings   []ResolvedModelOperationBinding
+	ReasoningEffort string
+	ModelLocality   string
+	SkipPermissions bool
+	// PrintTimeout carries an invocation's requested native print limit. It is
+	// kept as provider-neutral execution metadata so a native adapter can
+	// forward it without importing worker-definition types.
+	PrintTimeout                time.Duration
+	SystemPrompt                string
+	UserMessage                 string
+	InputTokens                 []any
+	OutputSchema                string
+	ToolExecutionMode           string
+	RequiredCapabilities        []string
+	Command                     string
+	Args                        []string
+	FactoryDirectory            string
+	OutputContract              string
+	OutputFormat                string
+	StopToken                   string
+	DecisionEnvelope            bool
+	GoalRoutingDecisionEnvelope bool
+	WorkingDirectory            string
+	Worktree                    string
+	EnvVars                     map[string]string
+	ProcessEnvironment          []string
+	ProcessLifecycleObserver    platformprocess.ProcessLifecycleObserver
+	// SessionObserver receives a detached exact Provider Session reference as
+	// soon as the native provider reports it, while the attempt is still live.
+	// It is an invocation-scoped observation hook rather than a selection or
+	// resume input: Execute never accepts a pre-existing SessionRef. Callers
+	// must not assume that every provider can report a session before it
+	// completes.
+	SessionObserver SessionObserver
+	// ProgressObserver receives each bounded progress fact as soon as the
+	// provider reports it, while the attempt is still live. Like
+	// SessionObserver it is an invocation-scoped observation hook, never a
+	// selection or resume input. An adapter that cannot report progress before
+	// it completes simply leaves the observer uncalled and returns its facts
+	// in ExecuteDiagnostics.Progress as before.
+	ProgressObserver ProgressObserver
+	// ExecutionLogger is the caller-owned command log sink for this one
+	// attempt. Like the observers above it is an invocation-scoped effect and
+	// never a selection input: a native adapter forwards it with the
+	// subprocess request so a process-scoped command runner writes this
+	// attempt's diagnostics to the caller's log without retaining any
+	// caller state between attempts. A nil sink leaves the runner's
+	// construction-time logger in force.
+	ExecutionLogger logging.Logger
 }
+
+// ExecuteCorrelation identifies caller-owned execution lineage relevant to
+// deterministic effect boundaries such as Recordings replay.
+type ExecuteCorrelation struct {
+	FactorySessionID string
+	RuntimeID        string
+	GenerationID     string
+	DispatchID       string
+	AttemptID        string
+	RequestID        string
+	TraceID          string
+	ReplayKey        string
+	WorkIDs          []string
+}
+
+// SessionObserver receives one detached Provider-owned session identity
+// observed during a live execution attempt.
+type SessionObserver func(SessionRef)
+
+// ProgressObserver receives one bounded progress fact observed during a live
+// execution attempt.
+type ProgressObserver func(ExecuteProgress)
 
 // Validate checks request fields whose validity does not depend on catalog
 // state.
@@ -114,11 +233,6 @@ func (request ExecuteRequest) Validate() error {
 	}
 	if _, ok := ReasoningEffort(request.ReasoningEffort).Canonical(); !ok {
 		return fmt.Errorf("%w: unsupported reasoning effort %q", ErrExecuteFailed, request.ReasoningEffort)
-	}
-	if request.ResumeSession != nil {
-		if err := request.ResumeSession.Validate(); err != nil {
-			return fmt.Errorf("%w", err)
-		}
 	}
 	return nil
 }
@@ -140,6 +254,10 @@ func (value ReasoningEffort) Canonical() (string, bool) {
 // Clone returns a detached execute-request copy.
 func (request ExecuteRequest) Clone() ExecuteRequest {
 	cloned := request
+	cloned.Correlation.WorkIDs = append([]string(nil), request.Correlation.WorkIDs...)
+	cloned.InputBindings = cloneStringSliceMap(request.InputBindings)
+	cloned.Args = append([]string(nil), request.Args...)
+	cloned.RequiredCapabilities = append([]string(nil), request.RequiredCapabilities...)
 	cloned.EnvVars = cloneStringMap(request.EnvVars)
 	if request.ProcessEnvironment != nil {
 		cloned.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
@@ -147,11 +265,47 @@ func (request ExecuteRequest) Clone() ExecuteRequest {
 	if request.InputTokens != nil {
 		cloned.InputTokens = append([]any(nil), request.InputTokens...)
 	}
-	if request.ResumeSession != nil {
-		resume := request.ResumeSession.Clone()
-		cloned.ResumeSession = &resume
+	if request.ModelBindings != nil {
+		cloned.ModelBindings = cloneModelOperationBindings(request.ModelBindings)
 	}
 	return cloned
+}
+
+func cloneModelOperationBindings(values []ResolvedModelOperationBinding) []ResolvedModelOperationBinding {
+	if values == nil {
+		return nil
+	}
+	cloned := make([]ResolvedModelOperationBinding, len(values))
+	for index, value := range values {
+		cloned[index] = ResolvedModelOperationBinding{
+			Slot:    value.Slot,
+			Source:  value.Source,
+			Content: work.CloneWorkContentParts(value.Content),
+		}
+	}
+	return cloned
+}
+
+// ObserveSession forwards one complete detached Provider Session reference to
+// the request's invocation-scoped observer. Native adapters call this only
+// after they have received a provider-authored reference, never from model or
+// runner configuration. Invalid observations are ignored rather than exposed
+// as a plausible resumable identity.
+func (request ExecuteRequest) ObserveSession(reference SessionRef) {
+	if request.SessionObserver == nil || reference.Validate() != nil {
+		return
+	}
+	request.SessionObserver(reference.Clone())
+}
+
+// ObserveProgress forwards one detached progress fact to the request's
+// invocation-scoped observer. It is nil-safe so an adapter can report progress
+// unconditionally without first checking whether a caller is listening.
+func (request ExecuteRequest) ObserveProgress(progress ExecuteProgress) {
+	if request.ProgressObserver == nil {
+		return
+	}
+	request.ProgressObserver(progress.Clone())
 }
 
 // ExecuteProgress carries bounded in-flight progress facts for one attempt.
@@ -169,12 +323,52 @@ func (progress ExecuteProgress) Clone() ExecuteProgress {
 	return progress
 }
 
+// ExecuteDiagnosticMetadataSafeFailureMessage marks an adapter-authored
+// failure message as safe to preserve through the Workers boundary.
+const ExecuteDiagnosticMetadataSafeFailureMessage = "safe_failure_message"
+
+// ExecuteDiagnosticMetadataUnrecognizedProviderRefusal marks a structured
+// provider-declared refusal whose specific failure kind is not recognized.
+// Generic unknown failures do not carry this policy marker.
+const ExecuteDiagnosticMetadataUnrecognizedProviderRefusal = "unrecognized_provider_refusal"
+
 // ExecuteDiagnostics carries sanitized one-attempt diagnostic facts on success
 // or failure without raw provider command output.
 type ExecuteDiagnostics struct {
 	DurationMillis int64
 	Progress       []ExecuteProgress
 	Metadata       map[string]string
+	Command        *ExecuteCommandDiagnostics
+	Panic          *ExecutePanicDiagnostics
+	// ProgressAlreadyObserved reports that every fact in Progress was already
+	// delivered through ExecuteRequest.ProgressObserver, in this exact order,
+	// while the attempt was still live. A caller that published those live
+	// observations MUST NOT republish Progress, or every fact appears twice.
+	// Adapters that do not stream leave this false and Progress remains the
+	// only delivery.
+	ProgressAlreadyObserved bool
+}
+
+// ExecuteCommandDiagnostics carries detached, already-sanitized process facts
+// reported by a provider adapter. It deliberately contains no live process or
+// command-runner object.
+type ExecuteCommandDiagnostics struct {
+	Command    string
+	Args       []string
+	Env        map[string]string
+	Stdin      string
+	Stdout     string
+	Stderr     string
+	ExitCode   int
+	TimedOut   bool
+	DurationMS int64
+	WorkingDir string
+}
+
+// ExecutePanicDiagnostics carries bounded panic facts from an adapter.
+type ExecutePanicDiagnostics struct {
+	Message string
+	Stack   string
 }
 
 // Clone returns a detached diagnostics copy.
@@ -185,12 +379,23 @@ func (diagnostics ExecuteDiagnostics) Clone() ExecuteDiagnostics {
 		diagnostics.Progress[i] = progress[i].Clone()
 	}
 	diagnostics.Metadata = cloneStringMap(diagnostics.Metadata)
+	if diagnostics.Command != nil {
+		command := *diagnostics.Command
+		command.Args = append([]string(nil), diagnostics.Command.Args...)
+		command.Env = cloneStringMap(diagnostics.Command.Env)
+		diagnostics.Command = &command
+	}
+	if diagnostics.Panic != nil {
+		panicDiagnostics := *diagnostics.Panic
+		diagnostics.Panic = &panicDiagnostics
+	}
 	return diagnostics
 }
 
 // ExecuteResult is the detached result of one normalized provider attempt.
 type ExecuteResult struct {
 	Content     string
+	Outcome     ExecuteOutcome
 	SessionRef  *SessionRef
 	Diagnostics *ExecuteDiagnostics
 }
@@ -217,5 +422,237 @@ func cloneStringMap(values map[string]string) map[string]string {
 	for key, value := range values {
 		cloned[key] = value
 	}
+	return cloned
+}
+
+func cloneStringSliceMap(values map[string][]string) map[string][]string {
+	if values == nil {
+		return nil
+	}
+	cloned := make(map[string][]string, len(values))
+	for key, items := range values {
+		cloned[key] = append([]string(nil), items...)
+	}
+	return cloned
+}
+
+// ErrInvalidControlRequest reports that a control-attempt request has an
+// empty attempt id or an unrecognized control action. Empty provider identity
+// fails with ErrInvalidID for consistency with the rest of the root contract.
+var ErrInvalidControlRequest = errors.New("provider control request is invalid")
+
+// ErrControlSignalFailed reports that a claimed, truthfully-supported control
+// signal was not accepted by its owning live attempt for a genuine operation
+// reason (for example a broken ACP connection or a timed-out notification
+// send). It is returned as an error, distinct from the successful
+// ControlOutcomeUnsupported result: the capability was truthfully live, the
+// live registration was already removed, and the signal attempt itself
+// failed.
+var ErrControlSignalFailed = errors.New("provider control signal was not accepted")
+
+// ControlAction is the closed Providers-owned attempt-control action
+// vocabulary. Peers branch on these typed values instead of provider-specific
+// control strings.
+type ControlAction string
+
+const (
+	ControlActionPause     ControlAction = "pause"
+	ControlActionCancel    ControlAction = "cancel"
+	ControlActionTerminate ControlAction = "terminate"
+)
+
+// Validate checks that action is one of the closed, non-zero control-action
+// values.
+func (action ControlAction) Validate() error {
+	switch action {
+	case ControlActionPause, ControlActionCancel, ControlActionTerminate:
+		return nil
+	default:
+		return fmt.Errorf("%w: unsupported control action %q", ErrInvalidControlRequest, string(action))
+	}
+}
+
+// ControlOutcome is the closed Providers-owned attempt-control outcome
+// vocabulary. Unsupported is a successful capability result distinct from a
+// request-validation error or a genuine operation failure.
+type ControlOutcome string
+
+const (
+	ControlOutcomeCompleted   ControlOutcome = "completed"
+	ControlOutcomeUnsupported ControlOutcome = "unsupported"
+)
+
+// ControlAttemptRequest identifies one Providers-owned provider attempt and
+// the requested pause, cancel, or terminate action.
+type ControlAttemptRequest struct {
+	Provider  ID
+	AttemptID string
+	Action    ControlAction
+}
+
+// Validate checks that Provider is non-empty, AttemptID is non-empty after
+// trimming, and Action is one of the closed control-action values.
+func (request ControlAttemptRequest) Validate() error {
+	if err := request.Provider.Validate(); err != nil {
+		return fmt.Errorf("%w", err)
+	}
+	if strings.TrimSpace(request.AttemptID) == "" {
+		return fmt.Errorf("%w: empty attempt id", ErrInvalidControlRequest)
+	}
+	return request.Action.Validate()
+}
+
+// ControlAttemptResult echoes the requested provider, attempt, and action
+// alongside the closed completed/unsupported outcome. Every field is a plain
+// value, so a result is always detached and safe to hold or compare directly.
+type ControlAttemptResult struct {
+	Provider  ID
+	AttemptID string
+	Action    ControlAction
+	Outcome   ControlOutcome
+}
+
+// ErrInvalidContinuationRequest reports that a continuation request is
+// malformed: a blank provider, session kind, or session identity in Reference,
+// or an otherwise invalid Attempt. It is returned before any provider adapter
+// is invoked.
+var ErrInvalidContinuationRequest = errors.New("provider continuation request is invalid")
+
+// ErrContinuationForeign reports that a continuation request names an Attempt
+// provider that does not match the Reference provider it continues. Providers
+// never substitutes the resolved canonical provider for the one a foreign
+// reference actually names.
+var ErrContinuationForeign = errors.New("provider continuation reference is foreign")
+
+// ErrContinuationStale reports that a continuation reference names a Provider
+// Session identity its resolved provider no longer recognizes as live.
+var ErrContinuationStale = errors.New("provider continuation reference is stale")
+
+// ContinuationOutcome is the closed Providers-owned continuation success
+// vocabulary. Unsupported is a successful capability result distinct from any
+// ContinuationFailure: the resolved provider or session kind truthfully
+// cannot continue, so no provider adapter is invoked.
+type ContinuationOutcome string
+
+const (
+	ContinuationOutcomeResumed     ContinuationOutcome = "resumed"
+	ContinuationOutcomeUnsupported ContinuationOutcome = "unsupported"
+)
+
+// ContinuationFailureKind is a provider-neutral continuation failure
+// category. Unsupported is not a member of this vocabulary - see
+// ContinuationOutcomeUnsupported.
+type ContinuationFailureKind string
+
+const (
+	ContinuationFailureKindInvalid ContinuationFailureKind = "invalid"
+	ContinuationFailureKindForeign ContinuationFailureKind = "foreign"
+	ContinuationFailureKindStale   ContinuationFailureKind = "stale"
+)
+
+// ContinuationFailure retains the normalized continuation failure fact and the
+// rejected detached reference, so peers can review exactly which Provider
+// Session reference was rejected without importing Providers internals or
+// re-deriving the reference from the original request.
+type ContinuationFailure struct {
+	Kind      ContinuationFailureKind
+	Message   string
+	Reference SessionRef
+}
+
+func (failure ContinuationFailure) Error() string {
+	message := strings.TrimSpace(failure.Message)
+	if message == "" {
+		return sentinelForContinuationFailureKind(failure.Kind).Error()
+	}
+	return fmt.Sprintf("%s: %s", sentinelForContinuationFailureKind(failure.Kind).Error(), message)
+}
+
+func (failure ContinuationFailure) Unwrap() error {
+	return sentinelForContinuationFailureKind(failure.Kind)
+}
+
+// Clone returns a detached continuation-failure copy.
+func (failure ContinuationFailure) Clone() ContinuationFailure {
+	failure.Reference = failure.Reference.Clone()
+	return failure
+}
+
+func sentinelForContinuationFailureKind(kind ContinuationFailureKind) error {
+	switch kind {
+	case ContinuationFailureKindForeign:
+		return ErrContinuationForeign
+	case ContinuationFailureKindStale:
+		return ErrContinuationStale
+	default:
+		return ErrInvalidContinuationRequest
+	}
+}
+
+// ContinueRequest identifies the exact prior Provider Session to resume -
+// provider identity, provider-specific session kind, and exact opaque session
+// identity, carried by Reference - and the next attempt input to run against
+// that continued session. Attempt.Provider must equal Reference.Provider;
+// continuation is requested exclusively through this contract, never through
+// the ordinary Execute vocabulary.
+type ContinueRequest struct {
+	Reference SessionRef
+	Attempt   ExecuteRequest
+}
+
+// Validate checks that Reference is a complete session identity, that Attempt
+// is itself valid, and that Attempt names the same provider as Reference - all
+// before any provider adapter is invoked.
+func (request ContinueRequest) Validate() error {
+	if err := request.Reference.Validate(); err != nil {
+		return ContinuationFailure{
+			Kind:      ContinuationFailureKindInvalid,
+			Message:   err.Error(),
+			Reference: request.Reference,
+		}
+	}
+	if err := request.Attempt.Validate(); err != nil {
+		return ContinuationFailure{
+			Kind:      ContinuationFailureKindInvalid,
+			Message:   err.Error(),
+			Reference: request.Reference,
+		}
+	}
+	if request.Attempt.Provider != request.Reference.Provider {
+		return ContinuationFailure{
+			Kind: ContinuationFailureKindForeign,
+			Message: fmt.Sprintf(
+				"attempt provider %q does not match reference provider %q",
+				request.Attempt.Provider, request.Reference.Provider,
+			),
+			Reference: request.Reference,
+		}
+	}
+	return nil
+}
+
+// Clone returns a detached continuation-request copy.
+func (request ContinueRequest) Clone() ContinueRequest {
+	cloned := request
+	cloned.Reference = request.Reference.Clone()
+	cloned.Attempt = request.Attempt.Clone()
+	return cloned
+}
+
+// ContinueResult is the detached result of one continuation intent: either
+// the closed unsupported outcome (no provider adapter was invoked) or the
+// resumed outcome carrying the continued attempt's ExecuteResult. Reference
+// echoes the exact continued Provider Session identity unchanged.
+type ContinueResult struct {
+	Reference SessionRef
+	Outcome   ContinuationOutcome
+	Result    ExecuteResult
+}
+
+// Clone returns a detached continuation-result copy.
+func (result ContinueResult) Clone() ContinueResult {
+	cloned := result
+	cloned.Reference = result.Reference.Clone()
+	cloned.Result = result.Result.Clone()
 	return cloned
 }

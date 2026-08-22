@@ -9,11 +9,14 @@ import (
 )
 
 const (
-	FilterStateName    = "state.name"
-	FilterStateType    = "state.type"
-	FilterName         = "name"
-	FilterWorkTypeName = "workTypeName"
-	FilterTraceID      = "traceId"
+	FilterStateName         = "state.name"
+	FilterStateType         = "state.type"
+	FilterName              = "name"
+	FilterWorkTypeName      = "workTypeName"
+	FilterTraceID           = "traceId"
+	FilterTerminal          = "terminal"
+	FilterNonTerminal       = "nonTerminal"
+	FilterIncludeSuperseded = "includeSuperseded"
 
 	SortByStateType = "state.type"
 
@@ -26,14 +29,18 @@ const (
 // ListOptions is the validated list-request shape used by state-access query
 // preparation and selection.
 type ListOptions struct {
-	StateName    string
-	StateType    string
-	Name         string
-	WorkTypeName string
-	TraceID      string
-	SortBy       string
-	MaxResults   int
-	NextToken    string
+	StateName         string
+	StateType         string
+	Name              string
+	WorkTypeName      string
+	TraceID           string
+	Terminal          bool
+	NonTerminal       bool
+	IncludeSuperseded bool
+	SortBy            string
+	MaxResults        int
+	NextToken         string
+	Counts            bool
 }
 
 // PreparedListRequest is the detached, validated value returned to transport
@@ -103,6 +110,12 @@ func NormalizeList(options ListOptions) (ListQuery, error) {
 			fmt.Sprintf("%s must be one of INITIAL, PROCESSING, TERMINAL, or FAILED", FilterStateType),
 		)
 	}
+	if options.Terminal && options.NonTerminal {
+		return ListQuery{}, validationError(
+			FilterTerminal,
+			"terminal and nonTerminal cannot both be selected",
+		)
+	}
 	if options.SortBy != "" && options.SortBy != SortByStateType {
 		return ListQuery{}, validationError("sortBy", fmt.Sprintf("sortBy must be %s", SortByStateType))
 	}
@@ -113,7 +126,12 @@ func NormalizeList(options ListOptions) (ListQuery, error) {
 		return ListQuery{}, err
 	}
 
-	active := make([]string, 0, 6)
+	summary := listFilterSummary(options)
+	return ListQuery{options: options, filterSummary: summary}, nil
+}
+
+func listFilterSummary(options ListOptions) string {
+	active := make([]string, 0, 8)
 	for _, entry := range []struct {
 		key   string
 		value string
@@ -123,18 +141,27 @@ func NormalizeList(options ListOptions) (ListQuery, error) {
 		{FilterName, options.Name},
 		{FilterWorkTypeName, options.WorkTypeName},
 		{FilterTraceID, options.TraceID},
-		{"sortBy", options.SortBy},
 	} {
 		if entry.value != "" {
 			active = append(active, entry.key)
 		}
 	}
-
-	summary := "none"
-	if len(active) > 0 {
-		summary = strings.Join(active, ",")
+	if options.Terminal {
+		active = append(active, FilterTerminal)
 	}
-	return ListQuery{options: options, filterSummary: summary}, nil
+	if options.NonTerminal {
+		active = append(active, FilterNonTerminal)
+	}
+	if options.IncludeSuperseded {
+		active = append(active, FilterIncludeSuperseded)
+	}
+	if options.SortBy != "" {
+		active = append(active, "sortBy")
+	}
+	if len(active) == 0 {
+		return "none"
+	}
+	return strings.Join(active, ",")
 }
 
 // Options returns the normalized query values.

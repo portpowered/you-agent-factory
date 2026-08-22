@@ -14,7 +14,7 @@ import (
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/batchload"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/batchload"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
@@ -26,11 +26,36 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/metrics"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 )
 
+func TestEmitHistoricalReplayInspectionIncludesLegacyWorkerHistoryOutcome(t *testing.T) {
+	t.Parallel()
+	var output bytes.Buffer
+	err := emitHistoricalReplayInspection(&output, factorysessions.HistoricalReplayInspection{
+		Session: factorysessions.SessionReadResult{
+			SessionID: "legacy-session", Status: factorysessions.LifecycleStatusFailed,
+			ResolvedSource: factorysessions.ResolvedSource{SourceRef: "workflow/legacy.js"},
+		},
+		WorkerHistory: recordings.PortableRecordingWorkerHistory{
+			Availability: recordings.PortableRecordingWorkerHistoryUnavailable,
+			Reason:       recordings.PortableRecordingWorkerHistoryReasonLegacySchema,
+		},
+	})
+	if err != nil {
+		t.Fatalf("emitHistoricalReplayInspection() error = %v", err)
+	}
+	want := "Worker history: UNAVAILABLE (reason=SCHEMA_DID_NOT_RECORD_CANONICAL_WORKER_HISTORY)"
+	if !strings.Contains(output.String(), want) {
+		t.Fatalf("historical replay output = %q, want %q", output.String(), want)
+	}
+}
+
 type stubFactoryService struct {
+	runtimehost.Service
 	run                   func(context.Context) error
 	snapshot              func(context.Context) (*interfaces.EngineStateSnapshot[runtimehost.PetriMarkingSnapshot, *runtimehost.Net], error)
 	runtimeLogDiagnostics runtimehost.RuntimeLogDiagnostics
@@ -49,6 +74,22 @@ func (s stubFactoryService) GetEngineStateSnapshot(ctx context.Context) (*interf
 		return nil, errors.New("snapshot unavailable")
 	}
 	return s.snapshot(ctx)
+}
+
+func (s stubFactoryService) RuntimeObservation(ctx context.Context) (factoryvisualization.RuntimeObservation, error) {
+	snapshot, err := s.GetEngineStateSnapshot(ctx)
+	if err != nil {
+		return factoryvisualization.RuntimeObservation{}, err
+	}
+	if snapshot == nil {
+		return factoryvisualization.RuntimeObservation{}, nil
+	}
+	return factoryvisualization.RuntimeObservation{
+		TickCount:     snapshot.TickCount,
+		FactoryState:  snapshot.FactoryState,
+		RuntimeStatus: snapshot.RuntimeStatus,
+		Uptime:        snapshot.Uptime,
+	}, nil
 }
 
 func buildTransportTestRuntime(
@@ -323,14 +364,25 @@ func TestRun_DefaultModeUsesBatchRuntimeAndExitsWhenRunReturns(t *testing.T) {
 	}
 }
 
+type recordOrReplayPathCase struct {
+	name              string
+	cfg               RunConfig
+	wantDefaultRecord bool
+	wantRecordPath    string
+	wantReplayPath    string
+	wantResumePath    string
+}
+
 func TestRun_RecordOrReplayPathPassedToServiceConfig(t *testing.T) {
-	tests := []struct {
-		name              string
-		cfg               RunConfig
-		wantDefaultRecord bool
-		wantRecordPath    string
-		wantReplayPath    string
-	}{
+	for _, tt := range recordOrReplayPathCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			runRecordOrReplayPathCase(t, tt)
+		})
+	}
+}
+
+func recordOrReplayPathCases() []recordOrReplayPathCase {
+	return []recordOrReplayPathCase{
 		{
 			name:              "default live mode",
 			cfg:               RunConfig{},
@@ -354,61 +406,76 @@ func TestRun_RecordOrReplayPathPassedToServiceConfig(t *testing.T) {
 			wantReplayPath: "existing.replay.json",
 		},
 		{
+			name:              "resume mode",
+			cfg:               RunConfig{ResumePath: "existing.recording.json"},
+			wantDefaultRecord: true,
+			wantResumePath:    "existing.recording.json",
+		},
+		{
+			name:           "resume mode with explicit successor",
+			cfg:            RunConfig{ResumePath: "existing.recording.json", RecordPath: "successor.recording.json"},
+			wantRecordPath: "successor.recording.json",
+			wantResumePath: "existing.recording.json",
+		},
+		{
 			name: "default recording disabled for one run",
 			cfg: RunConfig{
 				DisableDefaultRecording: true,
 			},
 		},
 	}
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			originalBuilder := openTestRuntimeRunner
-			defer func() {
-				openTestRuntimeRunner = originalBuilder
-			}()
+func runRecordOrReplayPathCase(t *testing.T, tt recordOrReplayPathCase) {
+	originalBuilder := openTestRuntimeRunner
+	defer func() {
+		openTestRuntimeRunner = originalBuilder
+	}()
 
-			tt.cfg.HomeDir = t.TempDir()
-			plannedPath := filepath.Join(tt.cfg.HomeDir, "planned-recording.json")
-			tt.cfg.RecordingTargetPlanner = recordings.LiveRecordingTargetPlannerFunc(func(request recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
-				if request.HomeDir != tt.cfg.HomeDir || request.ReportedSessionID != defaultFactorySessionID {
-					t.Fatalf("recording request = %#v", request)
-				}
-				return recordings.LiveRecordingTarget{ServicePath: plannedPath, ReportedPath: plannedPath}, nil
-			})
+	tt.cfg.HomeDir = t.TempDir()
+	plannedPath := filepath.Join(tt.cfg.HomeDir, "planned-recording.json")
+	tt.cfg.RecordingTargetPlanner = recordings.LiveRecordingTargetPlannerFunc(func(request recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+		if request.HomeDir != tt.cfg.HomeDir || request.ReportedSessionID != defaultFactorySessionID {
+			t.Fatalf("recording request = %#v", request)
+		}
+		return recordings.LiveRecordingTarget{ServicePath: plannedPath, ReportedPath: plannedPath}, nil
+	})
 
-			var capturedRecordPath string
-			var capturedReplayPath string
-			openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
-				capturedRecordPath = cfg.RecordPath
-				capturedReplayPath = cfg.ReplayPath
-				return stubFactoryService{run: func(context.Context) error { return nil }}, nil
-			}
+	var capturedRecordPath string
+	var capturedReplayPath string
+	var capturedResumePath string
+	openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
+		capturedRecordPath = cfg.RecordPath
+		capturedReplayPath = cfg.ReplayPath
+		capturedResumePath = cfg.ResumePath
+		return stubFactoryService{run: func(context.Context) error { return nil }}, nil
+	}
 
-			err := Run(context.Background(), tt.cfg)
-			if tt.cfg.DisableDefaultRecording && tt.cfg.RecordPath != "" {
-				if err == nil {
-					t.Fatal("expected conflicting --record and --no-record settings to fail")
-				}
-				if !strings.Contains(err.Error(), "--no-record cannot be used with --record") {
-					t.Fatalf("unexpected error: %v", err)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("Run: %v", err)
-			}
-			if tt.wantDefaultRecord {
-				if capturedRecordPath != plannedPath {
-					t.Fatalf("record path = %q, want injected planned path %q", capturedRecordPath, plannedPath)
-				}
-			} else if capturedRecordPath != tt.wantRecordPath {
-				t.Fatalf("record path = %q, want %q", capturedRecordPath, tt.wantRecordPath)
-			}
-			if capturedReplayPath != tt.wantReplayPath {
-				t.Fatalf("replay path = %q, want %q", capturedReplayPath, tt.wantReplayPath)
-			}
-		})
+	err := Run(context.Background(), tt.cfg)
+	if tt.cfg.DisableDefaultRecording && tt.cfg.RecordPath != "" {
+		if err == nil {
+			t.Fatal("expected conflicting --record and --no-record settings to fail")
+		}
+		if !strings.Contains(err.Error(), "--no-record cannot be used with --record") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if tt.wantDefaultRecord {
+		if capturedRecordPath != plannedPath {
+			t.Fatalf("record path = %q, want injected planned path %q", capturedRecordPath, plannedPath)
+		}
+	} else if capturedRecordPath != tt.wantRecordPath {
+		t.Fatalf("record path = %q, want %q", capturedRecordPath, tt.wantRecordPath)
+	}
+	if capturedReplayPath != tt.wantReplayPath {
+		t.Fatalf("replay path = %q, want %q", capturedReplayPath, tt.wantReplayPath)
+	}
+	if capturedResumePath != tt.wantResumePath {
+		t.Fatalf("resume path = %q, want %q", capturedResumePath, tt.wantResumePath)
 	}
 }
 

@@ -7,10 +7,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
+	submitcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
-	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/spf13/cobra"
 )
 
@@ -90,19 +90,6 @@ func (r *Registry) LookupHandlers(commandID string) (CommandHandlers, error) {
 		return CommandHandlers{}, fmt.Errorf("lookup %q: handler not registered", commandID)
 	}
 	return handlers, nil
-}
-
-// AttachRunE sets cmd.RunE from the registry entry for commandID.
-func (r *Registry) AttachRunE(cmd *cobra.Command, commandID string) error {
-	if cmd == nil {
-		return fmt.Errorf("attach %q: command is nil", commandID)
-	}
-	handler, err := r.Lookup(commandID)
-	if err != nil {
-		return err
-	}
-	cmd.RunE = handler
-	return nil
 }
 
 // AttachHandlers sets cmd.PreRunE and cmd.RunE from the registry entry.

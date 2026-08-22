@@ -7,6 +7,12 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"go.uber.org/zap"
+)
+
+const (
+	workListReadOperation = "list_work"
+	workShowReadOperation = "show_work"
 )
 
 // ListWorkBySessionId decodes one session-scoped list-work request, invokes the
@@ -37,7 +43,13 @@ func (a *Adapter) ListWorkBySessionId(
 		return
 	}
 	if err != nil {
-		a.writeRootOrInternalError(w, err, "failed to list Work")
+		a.writeReadOrInternalError(
+			w,
+			err,
+			"failed to list Work",
+			workListReadOperation,
+			zap.String("session_id", string(sessionID)),
+		)
 		return
 	}
 	a.writeJSON(w, http.StatusOK, ListWorkResponseToAPI(result))
@@ -70,7 +82,14 @@ func (a *Adapter) GetWorkBySessionId(
 		return
 	}
 	if err != nil {
-		a.writeRootOrInternalError(w, err, "failed to get Work")
+		a.writeReadOrInternalError(
+			w,
+			err,
+			"failed to get Work",
+			workShowReadOperation,
+			zap.String("session_id", string(sessionID)),
+			zap.String("work_id", workID),
+		)
 		return
 	}
 	a.writeJSON(w, http.StatusOK, WorkReadModelToAPI(result))
@@ -84,4 +103,3 @@ func (a *Adapter) writeListDecodeError(w http.ResponseWriter, err error) {
 	}
 	a.writeError(w, http.StatusBadRequest, "invalid list-work request", "BAD_REQUEST")
 }
-

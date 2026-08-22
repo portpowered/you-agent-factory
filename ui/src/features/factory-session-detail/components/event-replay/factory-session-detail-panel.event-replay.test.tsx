@@ -102,6 +102,67 @@ describe("FactorySessionDetailPanel event replay disclosure", () => {
     ).toBeTruthy();
   });
 
+  it("keeps unfamiliar replay events in the neutral raw timeline", async () => {
+    const futureEvent = {
+      context: {
+        eventTime: "2026-06-25T10:00:06Z",
+        sequence: 6,
+        sessionId: successfulReplaySessionID,
+        sessionSequence: 6,
+        tick: 6,
+      },
+      id: "evt-future-timeline",
+      payload: { futurePayload: "payload-secret" },
+      schemaVersion: "agent-factory.event.v1",
+      type: "FUTURE_EVENT_TYPE",
+    };
+    const replayStream = `${buildSuccessfulReplayEventStream()}\ndata: ${JSON.stringify(
+      futureEvent,
+    )}\n\n`;
+
+    vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith(`/factory-sessions/${successfulReplaySessionID}`)) {
+        return jsonResponse(buildSuccessfulDurableSession());
+      }
+      if (
+        url.endsWith(`/factory-sessions/${successfulReplaySessionID}/events`)
+      ) {
+        return new Response(replayStream, {
+          headers: {
+            "Content-Type": "text/event-stream",
+          },
+          status: 200,
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID={successfulReplaySessionID} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("JavaScript workflow")).toBeTruthy();
+    });
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole("button", { name: "Expand Factory Event replay" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Showing 6 Factory Events.")).toBeTruthy();
+    });
+
+    expect(screen.getByText("Session completed")).toBeTruthy();
+    const futureLabels = screen.getAllByText("FUTURE_EVENT_TYPE");
+    expect(
+      futureLabels.some((label) =>
+        label.className.includes("bg-surface-container-low"),
+      ),
+    ).toBe(true);
+  });
+
   it("surfaces failed and warning replay cues inside the bounded timeline", async () => {
     vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
       const url = String(input);
@@ -144,7 +205,9 @@ describe("FactorySessionDetailPanel event replay disclosure", () => {
     expect(screen.getByText("Session completed")).toBeTruthy();
     expect(screen.getByText("Release verification failed.")).toBeTruthy();
     expect(
-      screen.getByText("Phase verify · Checkpoint checkpoint-9"),
+      screen.getByText(
+        "Phase verify · Checkpoint checkpoint-9 · Factory Artifact checkpoint-artifact-9",
+      ),
     ).toBeTruthy();
   });
 

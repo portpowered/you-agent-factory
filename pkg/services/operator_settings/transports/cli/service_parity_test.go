@@ -12,11 +12,12 @@ import (
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
 	operatorsettingscli "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
 func constructedSettingsCLIService(
@@ -400,6 +401,8 @@ func paritySettingsRoot(t *testing.T) operatorsettings.Service {
 	root, err := settingswire.NewServiceFromConfigDocument(
 		parityTestConfigService(),
 		internaltestproviders.StandardCatalog(),
+		func() string { return "00000000-0000-4000-8000-000000000001" },
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)

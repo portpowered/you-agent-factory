@@ -80,8 +80,10 @@ func sentinelForDocumentFailureKind(kind DocumentFailureKind) error {
 type Document struct {
 	BackendScopeID string
 	Defaults       DocumentDefaults
+	PriceTable     PriceTable
 	Runtime        DocumentRuntimeSettings
 	WorkerPresets  []DocumentWorkerPreset
+	Models         map[string]ModelConfig
 	Workers        DocumentWorkerSettings
 }
 
@@ -89,10 +91,12 @@ type Document struct {
 func (document Document) Clone() Document {
 	cloned := document
 	cloned.Defaults = document.Defaults.Clone()
+	cloned.PriceTable = document.PriceTable.Clone()
 	cloned.Runtime = document.Runtime.Clone()
 	if document.WorkerPresets != nil {
 		cloned.WorkerPresets = cloneDocumentWorkerPresets(document.WorkerPresets)
 	}
+	cloned.Models = cloneModelConfigs(document.Models)
 	cloned.Workers = document.Workers.Clone()
 	return cloned
 }
@@ -107,10 +111,16 @@ func (settings DocumentWorkerSettings) Clone() DocumentWorkerSettings {
 
 type DocumentACPSettings struct {
 	Integrations []ACPIntegration
+	AgentProfile *ACPAgentProfile
 }
 
 func (settings DocumentACPSettings) Clone() DocumentACPSettings {
-	return DocumentACPSettings{Integrations: append([]ACPIntegration(nil), settings.Integrations...)}
+	cloned := DocumentACPSettings{Integrations: append([]ACPIntegration(nil), settings.Integrations...)}
+	if settings.AgentProfile != nil {
+		profile := settings.AgentProfile.Clone()
+		cloned.AgentProfile = &profile
+	}
+	return cloned
 }
 
 // DocumentDefaults holds operator default values as a detached peer value.
@@ -170,7 +180,10 @@ func (settings DocumentRuntimeArtifactSettings) Clone() DocumentRuntimeArtifactS
 
 // EmptyDocument is a valid empty operator document with production-default
 // runtime artifact settings. It is a detached value, not a construction hook.
-var EmptyDocument = Document{Runtime: defaultDocumentRuntimeSettings()}
+var EmptyDocument = Document{
+	PriceTable: defaultPriceTable(),
+	Runtime:    defaultDocumentRuntimeSettings(),
+}
 
 func defaultDocumentRuntimeSettings() DocumentRuntimeSettings {
 	defaults := defaultRuntimeArtifactSettings()
@@ -207,9 +220,10 @@ func (request LoadDocumentRequest) Validate() error {
 
 // LoadDocumentResult is the detached outcome of one document load.
 type LoadDocumentResult struct {
-	Document Document
-	Path     string
-	Found    bool
+	Document         Document
+	Path             string
+	Found            bool
+	IgnoredJSONPaths []string
 }
 
 // DocumentProviderModelUpdate distinguishes omitted defaults from explicitly

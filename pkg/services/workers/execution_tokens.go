@@ -1,8 +1,11 @@
 package workers
 
 import (
+	"encoding/json"
+	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -30,17 +33,76 @@ type Color struct {
 	Relations                []work.Relation           `json:"relations"`
 	Content                  []work.WorkContentPart    `json:"content,omitempty"`
 	Payload                  []byte                    `json:"payload"`
+	StructuredResult         any                       `json:"structured_result,omitempty"`
 	InvocationArguments      *work.InvocationArguments `json:"-"`
+	// StructuredResultPresent distinguishes a present JSON null from an absent
+	// result in token/checkpoint serialization.
+	StructuredResultPresent bool `json:"-"`
 }
 
-// Token is the Worker-facing view of one runtime dispatch input.
+// MarshalJSON preserves an explicitly present structured result, including
+// JSON null, without making unstructured tokens emit the optional field.
+func (value Color) MarshalJSON() ([]byte, error) {
+	type alias Color
+	return jsonvalue.MarshalOptionalField(alias(value), value.StructuredResult, value.StructuredResultPresent, "structured_result")
+}
+
+// UnmarshalJSON restores structured-result presence from token snapshots.
+func (value *Color) UnmarshalJSON(data []byte) error {
+	type alias Color
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	structured, present, err := jsonvalue.UnmarshalOptionalField(data, "structured_result")
+	if err != nil {
+		return err
+	}
+	*value = Color(decoded)
+	value.StructuredResult = structured
+	value.StructuredResultPresent = present
+	return nil
+}
+
+// Token is the Worker-facing view of one Work dispatch input. Runtime place
+// identifiers are translated into State before this value reaches Workers.
 type Token struct {
 	ID        string    `json:"id"`
-	PlaceID   string    `json:"place_id"`
+	State     string    `json:"state,omitempty"`
 	Color     Color     `json:"color"`
 	CreatedAt time.Time `json:"created_at"`
 	EnteredAt time.Time `json:"entered_at"`
 	History   History   `json:"history"`
+}
+
+// UnmarshalJSON keeps persisted dispatch inputs readable after State replaced
+// the public place identifier. Historical snapshots used place_id for the
+// same authored state, so decode that value only at this compatibility seam.
+func (value *Token) UnmarshalJSON(data []byte) error {
+	type tokenAlias Token
+	var decoded tokenAlias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	var legacy struct {
+		PlaceID string `json:"place_id"`
+	}
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		return err
+	}
+	*value = Token(decoded)
+	if strings.TrimSpace(value.State) == "" {
+		value.State = stateFromLegacyPlaceID(legacy.PlaceID)
+	}
+	return nil
+}
+
+func stateFromLegacyPlaceID(placeID string) string {
+	trimmed := strings.TrimSpace(placeID)
+	if index := strings.LastIndexByte(trimmed, ':'); index >= 0 {
+		return trimmed[index+1:]
+	}
+	return trimmed
 }
 
 // History contains the execution history needed for Worker prompt policy.

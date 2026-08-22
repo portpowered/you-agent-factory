@@ -53,6 +53,7 @@ describe("getInlineWidgetPickerOptions", () => {
       "work-outcome-chart",
       "submit-work",
       "trace",
+      "worker-session-timeline",
     ]);
   });
 });

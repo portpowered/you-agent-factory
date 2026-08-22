@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorydefinition/retiredboundary"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
@@ -37,18 +38,12 @@ func ParseWorkerConfig(data []byte, sourcePath string) (*factorydefinitions.Fact
 		return nil, err
 	}
 
-	rawFrontmatter, err := parseAgentsFrontmatterMap(frontmatter)
-	if err != nil {
-		return nil, fmt.Errorf("parse worker frontmatter in %s: %w", sourcePath, err)
-	}
-	normalizeAgentsRuntimeResources(rawFrontmatter)
-	frontmatter, err = yaml.Marshal(rawFrontmatter)
-	if err != nil {
-		return nil, fmt.Errorf("normalize worker frontmatter in %s: %w", sourcePath, err)
-	}
-
 	var parsed workerFrontmatterInput
-	if err := yaml.Unmarshal(frontmatter, &parsed); err != nil {
+	if err := decodeAgentsFrontmatter(
+		frontmatter,
+		&parsed,
+		retiredboundary.RetiredWorkerFieldAliases(),
+	); err != nil {
 		return nil, fmt.Errorf("parse worker frontmatter in %s: %w", sourcePath, err)
 	}
 
@@ -131,18 +126,12 @@ func ParseWorkstationConfig(data []byte, sourcePath string) (*factorydefinitions
 		return nil, err
 	}
 
-	rawFrontmatter, err := parseAgentsFrontmatterMap(frontmatter)
-	if err != nil {
-		return nil, fmt.Errorf("parse workstation frontmatter in %s: %w", sourcePath, err)
-	}
-	normalizeAgentsRuntimeResources(rawFrontmatter)
-	frontmatter, err = yaml.Marshal(rawFrontmatter)
-	if err != nil {
-		return nil, fmt.Errorf("normalize workstation frontmatter in %s: %w", sourcePath, err)
-	}
-
 	var cfg factorydefinitions.FactoryWorkstationConfig
-	if err := yaml.Unmarshal(frontmatter, &cfg); err != nil {
+	if err := decodeAgentsFrontmatter(
+		frontmatter,
+		&cfg,
+		retiredboundary.RetiredWorkstationFieldAliases(),
+	); err != nil {
 		return nil, fmt.Errorf("parse workstation frontmatter in %s: %w", sourcePath, err)
 	}
 	normalizeWorkstationPublicEnums(&cfg)
@@ -232,11 +221,6 @@ func parseAgentsFrontmatterMap(frontmatter []byte) (map[string]any, error) {
 	return raw, nil
 }
 
-func frontmatterMap(raw any) map[string]any {
-	typed, _ := raw.(map[string]any)
-	return typed
-}
-
 func normalizeAgentsRuntimeResources(container map[string]any) {
 	resources, ok := container["resources"]
 	if !ok {
@@ -291,27 +275,29 @@ type workerFrontmatter struct {
 }
 
 type workstationFrontmatter struct {
-	ID               string                              `yaml:"id,omitempty"`
-	Name             string                              `yaml:"name,omitempty"`
-	Kind             factorydefinitions.WorkstationKind  `yaml:"behavior,omitempty"`
-	Type             string                              `yaml:"type,omitempty"`
-	Worker           string                              `yaml:"worker,omitempty"`
-	Runner           string                              `yaml:"runner,omitempty"`
-	PromptFile       string                              `yaml:"promptFile,omitempty"`
-	OutputSchema     string                              `yaml:"outputSchema,omitempty"`
-	Limits           workstationLimitsFrontmatter        `yaml:"limits,omitempty"`
-	Cron             *cronFrontmatter                    `yaml:"cron,omitempty"`
-	Inputs           []ioFrontmatter                     `yaml:"inputs,omitempty"`
-	Outputs          []ioFrontmatter                     `yaml:"outputs,omitempty"`
-	OnContinue       []ioFrontmatter                     `yaml:"onContinue,omitempty"`
-	OnRejection      []ioFrontmatter                     `yaml:"onRejection,omitempty"`
-	OnFailure        []ioFrontmatter                     `yaml:"onFailure,omitempty"`
-	Resources        []factorydefinitions.ResourceConfig `yaml:"resources,omitempty"`
-	Guards           []guardFrontmatter                  `yaml:"guards,omitempty"`
-	StopWords        []string                            `yaml:"stopWords,omitempty"`
-	WorkingDirectory string                              `yaml:"workingDirectory,omitempty"`
-	Worktree         string                              `yaml:"worktree,omitempty"`
-	Env              map[string]string                   `yaml:"env,omitempty"`
+	ID                string                                      `yaml:"id,omitempty"`
+	Name              string                                      `yaml:"name,omitempty"`
+	Kind              factorydefinitions.WorkstationKind          `yaml:"behavior,omitempty"`
+	Type              string                                      `yaml:"type,omitempty"`
+	Worker            string                                      `yaml:"worker,omitempty"`
+	Runner            string                                      `yaml:"runner,omitempty"`
+	PromptFile        string                                      `yaml:"promptFile,omitempty"`
+	OutputSchema      string                                      `yaml:"outputSchema,omitempty"`
+	OutputContract    string                                      `yaml:"outputContract,omitempty"`
+	Limits            workstationLimitsFrontmatter                `yaml:"limits,omitempty"`
+	Cron              *cronFrontmatter                            `yaml:"cron,omitempty"`
+	Inputs            []ioFrontmatter                             `yaml:"inputs,omitempty"`
+	Outputs           []ioFrontmatter                             `yaml:"outputs,omitempty"`
+	OnContinue        []ioFrontmatter                             `yaml:"onContinue,omitempty"`
+	OnRejection       []ioFrontmatter                             `yaml:"onRejection,omitempty"`
+	OnFailure         []ioFrontmatter                             `yaml:"onFailure,omitempty"`
+	ExpectedArtifacts []factorydefinitions.ExpectedArtifactConfig `yaml:"expectedArtifacts,omitempty"`
+	Resources         []factorydefinitions.ResourceConfig         `yaml:"resources,omitempty"`
+	Guards            []guardFrontmatter                          `yaml:"guards,omitempty"`
+	StopWords         []string                                    `yaml:"stopWords,omitempty"`
+	WorkingDirectory  string                                      `yaml:"workingDirectory,omitempty"`
+	Worktree          string                                      `yaml:"worktree,omitempty"`
+	Env               map[string]string                           `yaml:"env,omitempty"`
 }
 
 type workstationLimitsFrontmatter struct {
@@ -344,11 +330,12 @@ type inputGuardFrontmatter struct {
 }
 
 type guardFrontmatter struct {
-	Type              factorydefinitions.GuardType         `yaml:"type"`
-	Workstation       string                               `yaml:"workstation,omitempty"`
-	MaxVisits         int                                  `yaml:"maxVisits,omitempty"`
-	MaxVisitsArgument string                               `yaml:"maxVisitsArgument,omitempty"`
-	MatchConfig       *factorydefinitions.GuardMatchConfig `yaml:"matchConfig,omitempty"`
+	Type              factorydefinitions.GuardType               `yaml:"type"`
+	Workstation       string                                     `yaml:"workstation,omitempty"`
+	MaxVisits         int                                        `yaml:"maxVisits,omitempty"`
+	MaxVisitsArgument string                                     `yaml:"maxVisitsArgument,omitempty"`
+	LogicalRoundTrip  *factorydefinitions.LogicalRoundTripConfig `yaml:"logicalRoundTrip,omitempty"`
+	MatchConfig       *factorydefinitions.GuardMatchConfig       `yaml:"matchConfig,omitempty"`
 }
 
 func workstationFrontmatterForExpansion(def factorydefinitions.FactoryWorkstationConfig) workstationFrontmatter {
@@ -357,31 +344,33 @@ func workstationFrontmatterForExpansion(def factorydefinitions.FactoryWorkstatio
 		behavior = factorydefinitions.WorkstationKind(publicFactoryWorkstationKindFromInternal(def.Kind))
 	}
 	rendered := workstationFrontmatter{
-		ID:           def.ID,
-		Name:         def.Name,
-		Kind:         behavior,
-		Type:         def.Type,
-		Worker:       def.WorkerTypeName,
-		Runner:       def.Runner,
-		PromptFile:   def.PromptFile,
-		OutputSchema: def.OutputSchema,
+		ID:             def.ID,
+		Name:           def.Name,
+		Kind:           behavior,
+		Type:           def.Type,
+		Worker:         def.WorkerTypeName,
+		Runner:         def.Runner,
+		PromptFile:     def.PromptFile,
+		OutputSchema:   def.OutputSchema,
+		OutputContract: def.OutputContract,
 		Limits: workstationLimitsFrontmatter{
 			MaxRetries: def.Limits.MaxRetries, MaxExecutionTime: def.Limits.MaxExecutionTime,
 			MaxGeneratedWorkItems:               def.Limits.MaxGeneratedWorkItems,
 			MaxGeneratedWorkItemsArgument:       def.Limits.MaxGeneratedWorkItemsArgument,
 			MaxGeneratedWorkItemsArgumentOffset: def.Limits.MaxGeneratedWorkItemsArgumentOffset,
 		},
-		Inputs:           ioFrontmatterSlice(def.Inputs),
-		Outputs:          ioFrontmatterSlice(def.Outputs),
-		OnContinue:       ioFrontmatterSlice(def.OnContinue),
-		OnRejection:      ioFrontmatterSlice(def.OnRejection),
-		OnFailure:        ioFrontmatterSlice(def.OnFailure),
-		Resources:        append([]factorydefinitions.ResourceConfig(nil), def.Resources...),
-		Guards:           guardFrontmatterSlice(def.Guards),
-		StopWords:        append([]string(nil), def.StopWords...),
-		WorkingDirectory: def.WorkingDirectory,
-		Worktree:         def.Worktree,
-		Env:              cloneStringMap(def.Env),
+		Inputs:            ioFrontmatterSlice(def.Inputs),
+		Outputs:           ioFrontmatterSlice(def.Outputs),
+		OnContinue:        ioFrontmatterSlice(def.OnContinue),
+		OnRejection:       ioFrontmatterSlice(def.OnRejection),
+		OnFailure:         ioFrontmatterSlice(def.OnFailure),
+		ExpectedArtifacts: append([]factorydefinitions.ExpectedArtifactConfig(nil), def.ExpectedArtifacts...),
+		Resources:         append([]factorydefinitions.ResourceConfig(nil), def.Resources...),
+		Guards:            guardFrontmatterSlice(def.Guards),
+		StopWords:         append([]string(nil), def.StopWords...),
+		WorkingDirectory:  def.WorkingDirectory,
+		Worktree:          def.Worktree,
+		Env:               cloneStringMap(def.Env),
 	}
 	if def.Cron != nil {
 		rendered.Cron = &cronFrontmatter{
@@ -460,10 +449,21 @@ func guardFrontmatterSlice(configs []factorydefinitions.GuardConfig) []guardFron
 			Workstation:       configs[i].Workstation,
 			MaxVisits:         configs[i].MaxVisits,
 			MaxVisitsArgument: configs[i].MaxVisitsArgument,
+			LogicalRoundTrip:  cloneLogicalRoundTripConfig(configs[i].LogicalRoundTrip),
 			MatchConfig:       factorydefinitions.CloneGuardMatchConfig(configs[i].MatchConfig),
 		}
 	}
 	return out
+}
+
+func cloneLogicalRoundTripConfig(config *factorydefinitions.LogicalRoundTripConfig) *factorydefinitions.LogicalRoundTripConfig {
+	if config == nil {
+		return nil
+	}
+	return &factorydefinitions.LogicalRoundTripConfig{
+		Workstations: append([]string(nil), config.Workstations...),
+		MaxRawVisits: config.MaxRawVisits,
+	}
 }
 
 func authoredFactoryConfigForExpandedLayout(cfg *factorydefinitions.FactoryConfig) (*factorydefinitions.FactoryConfig, error) {
@@ -515,18 +515,6 @@ func AuthoredFactoryConfigForExpandedLayout(
 	cfg *factorydefinitions.FactoryConfig,
 ) (*factorydefinitions.FactoryConfig, error) {
 	return authoredFactoryConfigForExpandedLayout(cfg)
-}
-
-func CloneHostedWorkerAuthConfig(
-	cfg *factorydefinitions.HostedWorkerAuthConfig,
-) *factorydefinitions.HostedWorkerAuthConfig {
-	return cloneHostedWorkerAuthConfig(cfg)
-}
-
-func CloneHostedLinearWorkerConfig(
-	cfg *factorydefinitions.HostedLinearWorkerConfig,
-) *factorydefinitions.HostedLinearWorkerConfig {
-	return cloneHostedLinearWorkerConfig(cfg)
 }
 
 func SafeFactoryLayoutSegment(kind, name string) (string, error) {

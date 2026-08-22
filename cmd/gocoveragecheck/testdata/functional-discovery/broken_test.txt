@@ -1,0 +1,3 @@
+package discoveryfixture
+
+func TestBroken(

@@ -2,6 +2,7 @@ package script_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,8 +12,10 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -46,6 +49,14 @@ func TestScriptWorkerCompletesWithPublicPrimaryResult(t *testing.T) {
 	if runner.CallCount() != 1 {
 		t.Fatalf("script command calls = %d, want exactly one external command effect", runner.CallCount())
 	}
+	request := runner.LastRequest()
+	if request.Command != "echo" {
+		t.Fatalf("script command = %q, want authored command %q", request.Command, "echo")
+	}
+	assertCommandArgs(t, request, []string{"default-output"})
+	if request.WorkDir == "" {
+		t.Fatal("script command work directory is empty, want the runtime workspace")
+	}
 
 	assertDispatchOutput(t, events, scriptPrimaryResultOutput)
 }
@@ -78,6 +89,96 @@ func TestScriptWorkerNonZeroExitMapsToFailedOutcome(t *testing.T) {
 	}
 
 	assertScriptNonZeroExitDispatchFailure(t, events, scriptNonZeroExitMessage)
+}
+
+// TestScriptWorkerFailureReachesWorkShowThroughRootProcess proves the complete
+// customer path for an actionable setup-workspace failure: the script result
+// is recorded on the dispatch, projected onto failed Work, returned by the
+// session-scoped HTTP read, and rendered by both root-built CLI output modes.
+func TestScriptWorkerFailureReachesWorkShowThroughRootProcess(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	testutil.WriteSeedFile(t, dir, "task", []byte("setup-workspace failure payload"))
+	const diagnostic = "repository root is dirty: 2 tracked changes, 1 untracked file; inspect and commit or back up changes"
+
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Edges: serviceedges.Edges{
+			ScriptCommandRunner: nonZeroExitCommandRunner{stderr: diagnostic, exitCode: 1},
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	failedWorkID := failedScriptWorkID(t, listed)
+	listItem := workByID(t, listed, failedWorkID)
+	assertWorkFailureDetail(t, listItem.FailureDetail, diagnostic)
+
+	got := support.GetDefaultSessionWorkByID(t, server.URL(), failedWorkID)
+	assertWorkFailureDetail(t, got.FailureDetail, diagnostic)
+
+	dispatches := support.ObserveDispatchEvents(t, support.GetFactoryEventsAt(t, server.URL()))
+	if len(dispatches) != 1 || dispatches[0].Response == nil {
+		t.Fatalf("dispatch observations = %#v, want one failed response", dispatches)
+	}
+	assertWorkFailureDetail(t, dispatches[0].Response.FailureDetail, diagnostic)
+
+	cliProcess := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, cliProcess)
+
+	humanInputs := support.FakeInputs(t.Context(), []string{
+		"you", "--server", server.URL(), "work", "show", failedWorkID,
+	})
+	if err := cliProcess.Execute(humanInputs.Input); err != nil {
+		t.Fatalf("root work show human error = %v\nstdout=%s\nstderr=%s", err, humanInputs.Stdout(), humanInputs.Stderr())
+	}
+	if !strings.Contains(humanInputs.Stdout(), "Failure reason:\tinternal_server_error") ||
+		!strings.Contains(humanInputs.Stdout(), "Failure message:\t"+diagnostic) {
+		t.Fatalf("root work show human output = %q, want typed actionable failure", humanInputs.Stdout())
+	}
+
+	jsonInputs := support.FakeInputs(t.Context(), []string{
+		"you", "--server", server.URL(), "--json", "work", "show", failedWorkID,
+	})
+	if err := cliProcess.Execute(jsonInputs.Input); err != nil {
+		t.Fatalf("root work show JSON error = %v\nstdout=%s\nstderr=%s", err, jsonInputs.Stdout(), jsonInputs.Stderr())
+	}
+	var jsonWork factoryapi.Work
+	if err := json.Unmarshal([]byte(jsonInputs.Stdout()), &jsonWork); err != nil {
+		t.Fatalf("decode root work show JSON: %v\nstdout=%s", err, jsonInputs.Stdout())
+	}
+	assertWorkFailureDetail(t, jsonWork.FailureDetail, diagnostic)
+}
+
+func failedScriptWorkID(t *testing.T, listed factoryapi.ListWorkResponse) string {
+	t.Helper()
+	for _, item := range listed.Results {
+		if item.State == nil || item.State.Name != "failed" {
+			continue
+		}
+		if id := support.StringPointerValue(item.WorkId); id != "" {
+			return id
+		}
+	}
+	t.Fatalf("failed script Work missing from listing: %#v", listed.Results)
+	return ""
+}
+
+func workByID(t *testing.T, listed factoryapi.ListWorkResponse, workID string) factoryapi.Work {
+	t.Helper()
+	for _, item := range listed.Results {
+		if support.StringPointerValue(item.WorkId) == workID {
+			return item
+		}
+	}
+	t.Fatalf("Work %q missing from listing: %#v", workID, listed.Results)
+	return factoryapi.Work{}
+}
+
+func assertWorkFailureDetail(t *testing.T, detail *factoryapi.FailureDetail, diagnostic string) {
+	t.Helper()
+	if detail == nil || detail.Reason != factoryapi.WorkFailureTypeInternalServerError || detail.Message != diagnostic {
+		t.Fatalf("Work failure detail = %#v, want internal_server_error/%q", detail, diagnostic)
+	}
 }
 
 // TestScriptWorkerCancellationTerminatesChildProcess proves cancelling a
@@ -193,6 +294,143 @@ func TestServiceConfigOverrideAlignment_FunctionalHTTPServerScriptCommandRunner(
 	if got := runner.CallCount(); got != 1 {
 		t.Fatalf("script command runner calls = %d, want 1", got)
 	}
+}
+
+// TestStatelessWorkersRootExecutesDetachedScriptAttempt proves a detached
+// script attempt submitted to the public Workers root contract runs through
+// the injected command edge and returns one correlated accepted result.
+func TestStatelessWorkersRootExecutesDetachedScriptAttempt(t *testing.T) {
+	runner := support.NewRecordingCommandRunner("detached-script-output")
+	service, err := root.BuildStatelessWorkers(t.Context(), serviceedges.Edges{
+		ScriptCommandRunner: runner,
+	})
+	if err != nil {
+		t.Fatalf("BuildStatelessWorkers() error = %v", err)
+	}
+
+	result, err := service.Execute(t.Context(), detachedScriptExecuteRequest())
+	if err != nil {
+		t.Fatalf("Workers Execute() error = %v", err)
+	}
+	if result.Outcome != workerexecution.ExecutionOutcomeAccepted {
+		t.Fatalf("detached outcome = %q, failure = %#v, want ACCEPTED", result.Outcome, result.Failure)
+	}
+	if got := executeOutputText(result.Output); got != "detached-script-output" {
+		t.Fatalf("detached primary output = %q, want the script stdout", got)
+	}
+	if result.Correlation.DispatchID != "detached-dispatch" ||
+		result.Correlation.AttemptID != "detached-attempt" ||
+		result.Correlation.TraceID != "detached-trace" {
+		t.Fatalf("result correlation = %#v, want the submitted detached correlation", result.Correlation)
+	}
+	if runner.CallCount() != 1 {
+		t.Fatalf("script command calls = %d, want one canonical Workers attempt", runner.CallCount())
+	}
+	request := runner.LastRequest()
+	if request.Command != "echo" || len(request.Args) != 1 || request.Args[0] != "detached-output" {
+		t.Fatalf("script command request = %#v, want the submitted command and args", request)
+	}
+}
+
+// TestStatelessWorkersRootPreservesDetachedFailureAndPreStartErrors proves the
+// public Workers root reports a typed terminal failure for a non-zero script
+// exit and a pre-start error for an unknown runner, without sharing attempt
+// state between the two calls.
+func TestStatelessWorkersRootPreservesDetachedFailureAndPreStartErrors(t *testing.T) {
+	t.Run("non-zero exit is a typed terminal failure", func(t *testing.T) {
+		service, err := root.BuildStatelessWorkers(t.Context(), serviceedges.Edges{
+			ScriptCommandRunner: nonZeroExitCommandRunner{stderr: "detached failure", exitCode: 17},
+		})
+		if err != nil {
+			t.Fatalf("BuildStatelessWorkers() error = %v", err)
+		}
+
+		result, err := service.Execute(t.Context(), detachedScriptExecuteRequest())
+		if err != nil {
+			t.Fatalf("Workers Execute() error = %v", err)
+		}
+		if result.Outcome != workerexecution.ExecutionOutcomeFailed || result.Failure == nil {
+			t.Fatalf("failed result = %#v, want a typed terminal failure", result)
+		}
+		if result.Failure.Type == "" || result.Failure.Family == "" {
+			t.Fatalf("failure classification = %#v, want type and family", result.Failure)
+		}
+		if result.Correlation.DispatchID != "detached-dispatch" {
+			t.Fatalf("failed correlation = %#v, want the submitted detached correlation", result.Correlation)
+		}
+	})
+
+	t.Run("unknown runner fails before the command edge starts", func(t *testing.T) {
+		runner := support.NewRecordingCommandRunner("never-executed")
+		service, err := root.BuildStatelessWorkers(t.Context(), serviceedges.Edges{
+			ScriptCommandRunner: runner,
+		})
+		if err != nil {
+			t.Fatalf("BuildStatelessWorkers() error = %v", err)
+		}
+
+		request := detachedScriptExecuteRequest()
+		request.Target.RunnerID = "unknown-functional-runner"
+		result, err := service.Execute(t.Context(), request)
+		if err == nil {
+			t.Fatalf("pre-start result = %#v, want an unknown-runner request error", result)
+		}
+		if !strings.Contains(err.Error(), "unknown-functional-runner") {
+			t.Fatalf("pre-start error = %v, want it to name the rejected runner", err)
+		}
+		if result.Outcome != "" {
+			t.Fatalf("pre-start outcome = %q, want no terminal outcome before start", result.Outcome)
+		}
+		if runner.CallCount() != 0 {
+			t.Fatalf("script command calls = %d, want no external effect before start", runner.CallCount())
+		}
+	})
+}
+
+func detachedScriptExecuteRequest() workerexecution.ExecuteRequest {
+	return workerexecution.ExecuteRequest{
+		Correlation: workerexecution.ExecutionCorrelation{
+			FactorySessionID: "detached-session",
+			RuntimeID:        "detached-runtime",
+			GenerationID:     "detached-generation",
+			DispatchID:       "detached-dispatch",
+			AttemptID:        "detached-attempt",
+			RequestID:        "detached-request",
+			TraceID:          "detached-trace",
+		},
+		Target: workerexecution.ExecutionTarget{
+			WorkerName:      "detached-script-worker",
+			WorkerType:      "SCRIPT_WORKER",
+			WorkstationName: "detached-workstation",
+			RunnerID:        "script",
+			Command:         "echo",
+			Args:            []string{"detached-output"},
+			Environment: workerexecution.EnvironmentPolicy{
+				Vars: map[string]string{"DETACHED_MODE": "functional"},
+			},
+		},
+		Input: workerexecution.ExecutionInput{
+			Dispatch: work.WorkDispatch{
+				DispatchID:  "detached-dispatch",
+				WorkerType:  "SCRIPT_WORKER",
+				ProjectID:   "detached-project",
+				InputTokens: []any{"detached-token"},
+				Execution: work.ExecutionMetadata{
+					RequestID: "detached-request",
+					TraceID:   "detached-trace",
+				},
+			},
+		},
+		Attempt: workerexecution.AttemptContext{Number: 1},
+	}
+}
+
+func executeOutputText(output workerexecution.ProposedOutput) string {
+	var builder strings.Builder
+	for _, part := range output.Primary {
+		builder.WriteString(part.Text)
+	}
+	return builder.String()
 }
 
 type blockingCancellationCommandRunner struct {

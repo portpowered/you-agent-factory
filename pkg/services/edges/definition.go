@@ -10,9 +10,12 @@
 package edges
 
 import (
+	"context"
 	"database/sql"
 	"io"
 	"io/fs"
+	"net/http"
+	"time"
 
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -22,16 +25,18 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
+	"github.com/portpowered/infinite-you/pkg/platform/wiretranscript"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/webhooks"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -41,81 +46,142 @@ import (
 // pkg/root, pkg/wire, and BuildProcess override tests) consumes this bag;
 // constructed services take exact ports instead. It is not a service locator.
 type Edges struct {
-	CLIObserver                                     platformprocess.CLIObserver
-	PlatformProcessClock                            platformprocess.Clock
-	PlatformProcessCommandFactory                   platformprocess.CommandFactory
-	ProvidersExecutableLocator                      platformprocess.ExecutableLocator
-	ProviderCommandRunner                           platformprocess.CommandRunner
-	AgyPTYHost                                      platformpty.Host
-	AgyPTYClock                                     platformclock.Source
-	HostedHTTPClient                                automations.HostedLinearHTTPDoer
-	HostedLinearEndpoint                            string
-	HostedSecretResolver                            automations.HostedLinearSecretResolver
-	HostedLinearCheckpointStore                     automations.HostedLinearCheckpointStore
-	HostedClock                                     automations.HostedLinearClock
-	ModelAssetHTTPClient                            modelswire.AssetHTTPDoer
-	ModelAssetEndpoints                             models.RuntimeAssetEndpoints
-	ModelAssetHostPlatform                          models.AssetHostPlatform
-	ModelAssetMakeDirectories                       modelswire.AssetMakeDirectories
-	ModelAssetInspectPath                           modelswire.AssetInspectPath
-	ModelAssetResolveHomeDirectory                  modelswire.AssetResolveHomeDirectory
-	ModelAssetWriteFile                             modelswire.AssetWriteFile
-	ModelAssetRenamePath                            modelswire.AssetRenamePath
-	ModelAssetRemovePath                            modelswire.AssetRemovePath
-	ModelAssetReadFile                              modelswire.AssetReadFile
-	ModelAssetReadDirectory                         modelswire.AssetReadDirectory
-	ModelAssetCreateFile                            modelswire.AssetCreateFile
-	ModelAssetOpenFile                              modelswire.AssetOpenFile
-	ModelHostProcessLauncher                        modelswire.HostProcessLauncher
-	ModelHostHTTPClient                             modelswire.HostHTTPDoer
-	ModelHostClock                                  modelswire.HostClock
-	ModelRuntimeCommandRunner                       platformprocess.CommandRunner
-	ModelRuntimeHTTPClient                          modelswire.RuntimeHTTPDoer
-	ModelRuntimeInspectFile                         modelswire.RuntimeInspectFile
-	ModelRuntimeTempDirectory                       modelswire.RuntimeTempDirectory
-	ModelRuntimeCreateTempFile                      modelswire.RuntimeCreateTempFile
-	ModelInvocationArtifactFileSystem               modelswire.InvocationArtifactFileSystem
-	FactorySessionsWorkingDirectory                 platformfilesystem.WorkingDirectory
-	FactorySessionExecutionOpeningFileSystem        factorysessions.ExecutionOpeningFileSystem
-	FactorySessionDirectoryInspection               factorysessions.DirectoryInspection
-	FactorySessionResolveHomeDirectory              factorysessions.HomeDirectoryResolver
-	FactorySessionResolveLogicalTargetSymlinks      factorysessions.LogicalTargetResolveSymlinks
-	FactorySessionIDGenerator                       factorysessions.SessionIDGenerator
-	FactorySessionRuntimeInstanceIDGenerator        factorysessions.RuntimeInstanceIDGenerator
-	FactorySessionResponseEventIDGenerator          factorysessions.ResponseEventIDGenerator
-	FactorySessionResponseEventRetentionLimits      *factorysessions.ResponseEventRetentionLimits
-	FactorySessionCursorPersistenceFileSystem       factorysessions.CursorPersistenceFileSystem
-	FactorySessionCursorCreateTemporaryFile         factorysessions.CursorPersistenceCreateTemporaryFile
-	FactorySessionRuntimePersistenceFileSystem      factorysessions.RuntimePersistenceFileSystem
-	FactorySessionContractFixtureReader             factorysessions.ContractFixtureReader
-	FactorySessionInvocationInputReader             factorysessions.InvocationInputReader
-	FactorySessionReplayRecordingReader             factorysessions.ReplayRecordingReader
-	FactorySessionInitialWorkReader                 factorysessions.InitialWorkReader
-	FactoryRuntimeIDGenerator                       factoryruntime.IDGenerator
-	FactoryRuntimeDirectories                       factoryruntime.RuntimeDirectoryFileSystem
-	FactoryRuntimeInputs                            factoryruntime.InputFileSystem
-	FactoryRuntimeInputDirectoryWalker              factoryruntime.InputDirectoryWalker
-	FactoryRuntimeWorkflowSources                   factoryruntime.WorkflowSourceFileSystem
-	FactoryRuntimeWorkflowSourceResolveSymlinks     factoryruntime.WorkflowSourceResolveSymlinks
-	FactoryRuntimeWorkflowHome                      factoryruntime.WorkflowHomeResolver
-	FactoryDefinitionPortableFileSystem             portablefiles.FileSystem
-	FactoryDefinitionLoadingFileSystem              factorydefinitions.LoadingFileSystem
-	FactoryDefinitionClock                          factorydefinitions.Clock
-	FactoryDefinitionVersionFileSystem              factorydefinitions.VersionFileSystem
-	FactoryDefinitionPackagedGoalPromptFileSystem   factorydefinitions.PackagedGoalPromptFileSystem
-	FactoryDefinitionPortableBundledFileInspection  factorydefinitions.PortableBundledFileInspection
-	FactoryDefinitionRequiredToolPathLookup         factorydefinitions.RequiredToolPathLookup
-	FactoryDefinitionRequiredToolVersionProbe       factorydefinitions.RequiredToolVersionProbe
-	FactoryDefinitionPersistenceFileSystem          factorydefinitions.PersistenceFileSystem
-	FactoryDefinitionDirectoryReplacementStore      factorydefinitions.DirectoryReplacementStore
-	FactoryDefinitionNamedPathFileSystem            factorydefinitions.NamedPathFileSystem
-	FactoryDefinitionNamedFactoryCatalogFileSystem  factorydefinitions.NamedFactoryCatalogFileSystem
-	FactoryDefinitionPackagedInstallationFileSystem factorydefinitions.PackagedInstallationFileSystem
-	FactoryDefinitionAuthoredReaderFileSystem       factorydefinitions.AuthoredLayoutReaderFileSystem
-	FactoryDefinitionAuthoredWriterFileSystem       factorydefinitions.AuthoredLayoutWriterFileSystem
-	FactoryDefinitionScaffoldFileSystem             factorydefinitions.ScaffoldFileSystem
-	FactoryDefinitionScaffoldOutput                 factorydefinitions.ScaffoldOutput
-	ProviderSessionFileSystem                       interface {
+	CLIObserver                   platformprocess.CLIObserver
+	PlatformProcessClock          platformprocess.Clock
+	PlatformProcessCommandFactory platformprocess.CommandFactory
+	ProvidersExecutableLocator    platformprocess.ExecutableLocator
+	ProviderCommandRunner         platformprocess.CommandRunner
+	AgyPTYHost                    platformpty.Host
+	AgyPTYClock                   platformclock.Source
+	HostedHTTPClient              automations.HostedLinearHTTPDoer
+	HostedLinearEndpoint          string
+	HostedSecretResolver          automations.HostedLinearSecretResolver
+	HostedLinearCheckpointStore   automations.HostedLinearCheckpointStore
+	HostedClock                   automations.HostedLinearClock
+	AutomationsCursorFileSystem   interface {
+		ReadFile(string) ([]byte, error)
+		MkdirAll(string, fs.FileMode) error
+		WriteFile(string, []byte, fs.FileMode) error
+		Rename(string, string) error
+	}
+	FactoryWebhookHTTPClient interface {
+		Do(*http.Request) (*http.Response, error)
+	}
+	FactoryWebhookClock interface {
+		Now() time.Time
+		After(time.Duration) <-chan time.Time
+	}
+	FactoryWebhookSecretResolver     webhooks.SecretResolver
+	FactoryWebhookDeadLetterAppender webhooks.DeadLetterAppender
+	ModelAssetHTTPClient             interface {
+		Do(*http.Request) (*http.Response, error)
+	}
+	ModelAssetEndpoints             models.RuntimeAssetEndpoints
+	ModelAssetHostPlatform          models.AssetHostPlatform
+	ModelResolveHuggingFaceRevision func(context.Context, string) (string, error)
+	ModelAssetResolveEnvironment    func(string) string
+	ModelAssetMakeDirectories       AssetMakeDirectories
+	ModelAssetInspectPath           AssetInspectPath
+	ModelAssetResolveHomeDirectory  AssetResolveHomeDirectory
+	ModelAssetWriteFile             AssetWriteFile
+	ModelAssetRenamePath            AssetRenamePath
+	ModelAssetRemovePath            AssetRemovePath
+	ModelAssetReadFile              AssetReadFile
+	ModelAssetReadDirectory         AssetReadDirectory
+	ModelAssetCreateFile            AssetCreateFile
+	ModelAssetOpenFile              AssetOpenFile
+	ModelCLIOutputCreateTempFile    ModelCLIOutputCreateTempFile
+	ModelCLIOutputInspectPath       AssetInspectPath
+	ModelCLIOutputRemovePath        AssetRemovePath
+	ModelCLIOutputRenamePath        AssetRenamePath
+	ModelHostProcessLauncher        interface {
+		Start(context.Context, HostProcessStartSpec) (interface {
+			HealthEndpoint() string
+			Wait() error
+			Stop(context.Context) error
+		}, error)
+	}
+	ModelHostHTTPClient interface {
+		Do(*http.Request) (*http.Response, error)
+	}
+	ModelHostClock interface {
+		Now() time.Time
+		NewTimer(time.Duration) interface {
+			C() <-chan time.Time
+			Stop() bool
+		}
+	}
+	ModelHostProtocolNegotiator interface {
+		Negotiate(context.Context, string, ModelHostProtocolNegotiationRequest) (ModelHostProtocolNegotiationResult, error)
+	}
+	ModelHostGRPCDialer interface {
+		Dial(context.Context, string) (interface {
+			Negotiate(context.Context, ModelHostProtocolNegotiationRequest) (ModelHostProtocolNegotiationResult, error)
+			Close() error
+		}, error)
+	}
+	ModelHostCompatibilityChecker interface {
+		Check(context.Context, ModelHostCompatibilityRequest) error
+	}
+	ModelResolveBackendArtifact ModelResolveBackendArtifact
+	ModelRuntimeCommandRunner   platformprocess.CommandRunner
+	ModelRuntimeHTTPClient      interface {
+		Do(*http.Request) (*http.Response, error)
+	}
+	ModelRuntimeInspectFile           RuntimeInspectFile
+	ModelRuntimeTempDirectory         RuntimeTempDirectory
+	ModelRuntimeCreateTempFile        RuntimeCreateTempFile
+	ModelInvocationArtifactFileSystem interface {
+		Open(string) (io.ReadCloser, error)
+		Create(string) (io.WriteCloser, error)
+	}
+	FactorySessionsWorkingDirectory                platformfilesystem.WorkingDirectory
+	FactorySessionExecutionOpeningFileSystem       factorysessions.ExecutionOpeningFileSystem
+	FactorySessionDirectoryInspection              factorysessions.DirectoryInspection
+	FactorySessionResolveHomeDirectory             factorysessions.HomeDirectoryResolver
+	FactorySessionResolveLogicalTargetSymlinks     factorysessions.LogicalTargetResolveSymlinks
+	FactorySessionIDGenerator                      factorysessions.SessionIDGenerator
+	FactorySessionRuntimeInstanceIDGenerator       factorysessions.RuntimeInstanceIDGenerator
+	FactorySessionResponseEventIDGenerator         factorysessions.ResponseEventIDGenerator
+	FactorySessionResponseEventRetentionLimits     *factorysessions.ResponseEventRetentionLimits
+	FactorySessionCursorPersistenceFileSystem      factorysessions.CursorPersistenceFileSystem
+	FactorySessionCursorCreateTemporaryFile        factorysessions.CursorPersistenceCreateTemporaryFile
+	FactorySessionRuntimePersistenceFileSystem     factorysessions.RuntimePersistenceFileSystem
+	FactorySessionContractFixtureReader            factorysessions.ContractFixtureReader
+	FactorySessionInvocationInputReader            factorysessions.InvocationInputReader
+	FactorySessionReplayRecordingReader            factorysessions.ReplayRecordingReader
+	FactorySessionInitialWorkReader                factorysessions.InitialWorkReader
+	FactoryRuntimeIDGenerator                      factoryruntime.IDGenerator
+	FactoryRuntimeDirectories                      factoryruntime.RuntimeDirectoryFileSystem
+	FactoryRuntimeInputs                           factoryruntime.InputFileSystem
+	FactoryRuntimeInputDirectoryWalker             factoryruntime.InputDirectoryWalker
+	FactoryRuntimeWorkflowSources                  factoryruntime.WorkflowSourceFileSystem
+	FactoryRuntimeWorkflowSourceResolveSymlinks    factoryruntime.WorkflowSourceResolveSymlinks
+	FactoryRuntimeWorkflowHome                     factoryruntime.WorkflowHomeResolver
+	FactoryDefinitionPortableFileSystem            portablefiles.FileSystem
+	FactoryDefinitionLoadingFileSystem             factorydefinitions.LoadingFileSystem
+	FactoryDefinitionClock                         factorydefinitions.Clock
+	FactoryDefinitionVersionFileSystem             factorydefinitions.VersionFileSystem
+	FactoryDefinitionPackagedGoalPromptFileSystem  factorydefinitions.PackagedGoalPromptFileSystem
+	FactoryDefinitionPortableBundledFileInspection factorydefinitions.PortableBundledFileInspection
+	FactoryDefinitionRequiredToolPathLookup        factorydefinitions.RequiredToolPathLookup
+	FactoryDefinitionRequiredToolVersionProbe      factorydefinitions.RequiredToolVersionProbe
+	FactoryDefinitionPersistenceFileSystem         factorydefinitions.PersistenceFileSystem
+	FactoryDefinitionDirectoryReplacementStore     factorydefinitions.DirectoryReplacementStore
+	FactoryDefinitionNamedPathFileSystem           interface {
+		ReadFile(string) ([]byte, error)
+		Stat(string) (fs.FileInfo, error)
+		MkdirAll(string, fs.FileMode) error
+		WriteFile(string, []byte, fs.FileMode) error
+	}
+	FactoryDefinitionNamedFactoryCatalogFileSystem        factorydefinitions.NamedFactoryCatalogFileSystem
+	FactoryDefinitionPackagedInstallationFileSystem       factorydefinitions.PackagedInstallationFileSystem
+	FactoryDefinitionPackagedInstallationDirectoryCreator factorydefinitions.PackagedInstallationDirectoryCreator
+	FactoryDefinitionAuthoredReaderFileSystem             factorydefinitions.AuthoredLayoutReaderFileSystem
+	FactoryDefinitionAuthoredWriterFileSystem             factorydefinitions.AuthoredLayoutWriterFileSystem
+	FactoryDefinitionScaffoldFileSystem                   factorydefinitions.ScaffoldFileSystem
+	FactoryDefinitionScaffoldOutput                       factorydefinitions.ScaffoldOutput
+	ProviderSessionFileSystem                             interface {
 		Open(string) (io.ReadCloser, error)
 		Stat(string) (fs.FileInfo, error)
 	}
@@ -139,21 +205,26 @@ type Edges struct {
 	}
 
 	Clock                            platformclock.Source
+	ACPWireRecorder                  wiretranscript.WireRecorder
 	SubmissionRecorder               recordings.SubmissionRecorder
 	DispatchRecorder                 recordings.DispatchRecorder
+	WorkerRecordingWriter            recordings.WorkerRecordingWriter
+	RecordingWriteFile               func(string, []byte) error
 	RecordingMakeDirectories         recordings.RecordingMakeDirectories
 	RecordingCreateTempFile          recordings.RecordingCreateTemporaryFile
 	RecordingRemovePath              recordings.RecordingRemovePath
 	RecordingRenamePath              recordings.RecordingRenamePath
+	RecordingReadFile                recordings.RecordingReadFile
 	APIServerStarter                 platformhttpserver.Starter
 	BrowserOpener                    platformbrowser.Opener
 	InvocationMetricsRecorder        factorysessions.InvocationMetricsRecorder
 	RuntimeHostObserver              factorysessions.RuntimeHostObserver
 	FactoryVisualizationSink         factoryvisualization.Sink
 	FactoryVisualizationRootObserver factoryvisualization.RootObserver
-	ModelPullMetricsRecorder         modelswire.PullMetricsRecorder
-	ProviderOverride                 providercontract.Provider
+	ModelPullMetricsRecorder         interface{ RecordModelPullMetric(PullMetric) }
+	ProviderOverride                 providers.Service
 	providercontract.ProviderRegistrations
+	ProviderCatalogCapabilityOverrides []providercontract.CatalogCapabilityOverride
 	WorkersFactoryDocsFileSystem       platformfilesystem.ReadFileTree
 	WorkersResolveSymlinks             workers.ResolveExecutableSymlinks
 	WorkersExecutableLocator           platformprocess.ExecutableLocator
@@ -170,18 +241,19 @@ type Edges struct {
 
 	ScriptCommandRunner platformprocess.CommandRunner
 
-	WorkContentStagingFileSystem work.ContentStagingFileSystem
-	WorkContentStagingRandom     work.ContentStagingRandom
-	WorkContentStagingClock      work.ContentStagingClock
-	WorkContentHostPlatform      work.ContentHostPlatform
-	WorkContentInspectPath       work.ContentInspectPath
-	WorkContentCreateTempFile    work.ContentCreateTemporaryFile
-	WorkContentRemovePath        work.ContentRemovePath
-	WorkContentWriteFile         work.ContentWriteFile
-	WorkContentOpenFile          work.ContentOpenFile
-	WorkContentHTTPDoer          work.ContentHTTPDoer
-	WorkRequestIDGenerator       work.RequestIDGenerator
-	WorkSubmittedFileReader      work.SubmittedFileReader
+	WorkContentStagingFileSystem   work.ContentStagingFileSystem
+	WorkContentStagingRandom       work.ContentStagingRandom
+	WorkContentStagingClock        work.ContentStagingClock
+	WorkContentHostPlatform        work.ContentHostPlatform
+	WorkContentInspectPath         work.ContentInspectPath
+	WorkContentCreateTempFile      work.ContentCreateTemporaryFile
+	WorkContentRemovePath          work.ContentRemovePath
+	WorkContentWriteFile           work.ContentWriteFile
+	WorkContentOpenFile            work.ContentOpenFile
+	WorkContentHTTPDoer            work.ContentHTTPDoer
+	WorkRequestIDGenerator         work.RequestIDGenerator
+	WorkSubmittedFileReader        work.SubmittedFileReader
+	WorkSubmittedFilePathInspector work.SubmittedFilePathInspector
 }
 
 // Merge overlays non-zero replacements onto defaults.
@@ -192,6 +264,10 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	defaults.ProviderRegistrations = append(
 		append(providercontract.ProviderRegistrations(nil), defaults.ProviderRegistrations...),
 		replacements.ProviderRegistrations...,
+	)
+	defaults.ProviderCatalogCapabilityOverrides = append(
+		cloneCatalogCapabilityOverrides(defaults.ProviderCatalogCapabilityOverrides),
+		cloneCatalogCapabilityOverrides(replacements.ProviderCatalogCapabilityOverrides)...,
 	)
 	if replacements.CLIObserver != nil {
 		defaults.CLIObserver = replacements.CLIObserver
@@ -229,6 +305,21 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	if replacements.HostedClock != nil {
 		defaults.HostedClock = replacements.HostedClock
 	}
+	if replacements.AutomationsCursorFileSystem != nil {
+		defaults.AutomationsCursorFileSystem = replacements.AutomationsCursorFileSystem
+	}
+	if replacements.FactoryWebhookHTTPClient != nil {
+		defaults.FactoryWebhookHTTPClient = replacements.FactoryWebhookHTTPClient
+	}
+	if replacements.FactoryWebhookClock != nil {
+		defaults.FactoryWebhookClock = replacements.FactoryWebhookClock
+	}
+	if replacements.FactoryWebhookSecretResolver != nil {
+		defaults.FactoryWebhookSecretResolver = replacements.FactoryWebhookSecretResolver
+	}
+	if replacements.FactoryWebhookDeadLetterAppender != nil {
+		defaults.FactoryWebhookDeadLetterAppender = replacements.FactoryWebhookDeadLetterAppender
+	}
 	if replacements.ModelAssetHTTPClient != nil {
 		defaults.ModelAssetHTTPClient = replacements.ModelAssetHTTPClient
 	}
@@ -243,6 +334,12 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.ModelAssetHostPlatform.Architecture != "" {
 		defaults.ModelAssetHostPlatform.Architecture = replacements.ModelAssetHostPlatform.Architecture
+	}
+	if replacements.ModelResolveHuggingFaceRevision != nil {
+		defaults.ModelResolveHuggingFaceRevision = replacements.ModelResolveHuggingFaceRevision
+	}
+	if replacements.ModelAssetResolveEnvironment != nil {
+		defaults.ModelAssetResolveEnvironment = replacements.ModelAssetResolveEnvironment
 	}
 	if replacements.ModelAssetMakeDirectories != nil {
 		defaults.ModelAssetMakeDirectories = replacements.ModelAssetMakeDirectories
@@ -274,6 +371,18 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	if replacements.ModelAssetOpenFile != nil {
 		defaults.ModelAssetOpenFile = replacements.ModelAssetOpenFile
 	}
+	if replacements.ModelCLIOutputCreateTempFile != nil {
+		defaults.ModelCLIOutputCreateTempFile = replacements.ModelCLIOutputCreateTempFile
+	}
+	if replacements.ModelCLIOutputInspectPath != nil {
+		defaults.ModelCLIOutputInspectPath = replacements.ModelCLIOutputInspectPath
+	}
+	if replacements.ModelCLIOutputRemovePath != nil {
+		defaults.ModelCLIOutputRemovePath = replacements.ModelCLIOutputRemovePath
+	}
+	if replacements.ModelCLIOutputRenamePath != nil {
+		defaults.ModelCLIOutputRenamePath = replacements.ModelCLIOutputRenamePath
+	}
 	if replacements.ModelHostProcessLauncher != nil {
 		defaults.ModelHostProcessLauncher = replacements.ModelHostProcessLauncher
 	}
@@ -282,6 +391,18 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.ModelHostClock != nil {
 		defaults.ModelHostClock = replacements.ModelHostClock
+	}
+	if replacements.ModelHostProtocolNegotiator != nil {
+		defaults.ModelHostProtocolNegotiator = replacements.ModelHostProtocolNegotiator
+	}
+	if replacements.ModelHostGRPCDialer != nil {
+		defaults.ModelHostGRPCDialer = replacements.ModelHostGRPCDialer
+	}
+	if replacements.ModelHostCompatibilityChecker != nil {
+		defaults.ModelHostCompatibilityChecker = replacements.ModelHostCompatibilityChecker
+	}
+	if replacements.ModelResolveBackendArtifact != nil {
+		defaults.ModelResolveBackendArtifact = replacements.ModelResolveBackendArtifact
 	}
 	if replacements.ModelRuntimeCommandRunner != nil {
 		defaults.ModelRuntimeCommandRunner = replacements.ModelRuntimeCommandRunner
@@ -409,6 +530,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	if replacements.FactoryDefinitionPackagedInstallationFileSystem != nil {
 		defaults.FactoryDefinitionPackagedInstallationFileSystem = replacements.FactoryDefinitionPackagedInstallationFileSystem
 	}
+	if replacements.FactoryDefinitionPackagedInstallationDirectoryCreator != nil {
+		defaults.FactoryDefinitionPackagedInstallationDirectoryCreator = replacements.FactoryDefinitionPackagedInstallationDirectoryCreator
+	}
 	if replacements.FactoryDefinitionAuthoredReaderFileSystem != nil {
 		defaults.FactoryDefinitionAuthoredReaderFileSystem = replacements.FactoryDefinitionAuthoredReaderFileSystem
 	}
@@ -463,11 +587,20 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	if replacements.Clock != nil {
 		defaults.Clock = replacements.Clock
 	}
+	if replacements.ACPWireRecorder != nil {
+		defaults.ACPWireRecorder = replacements.ACPWireRecorder
+	}
 	if replacements.SubmissionRecorder != nil {
 		defaults.SubmissionRecorder = replacements.SubmissionRecorder
 	}
 	if replacements.DispatchRecorder != nil {
 		defaults.DispatchRecorder = replacements.DispatchRecorder
+	}
+	if replacements.WorkerRecordingWriter != nil {
+		defaults.WorkerRecordingWriter = replacements.WorkerRecordingWriter
+	}
+	if replacements.RecordingWriteFile != nil {
+		defaults.RecordingWriteFile = replacements.RecordingWriteFile
 	}
 	if replacements.RecordingMakeDirectories != nil {
 		defaults.RecordingMakeDirectories = replacements.RecordingMakeDirectories
@@ -480,6 +613,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.RecordingRenamePath != nil {
 		defaults.RecordingRenamePath = replacements.RecordingRenamePath
+	}
+	if replacements.RecordingReadFile != nil {
+		defaults.RecordingReadFile = replacements.RecordingReadFile
 	}
 	if replacements.APIServerStarter != nil {
 		defaults.APIServerStarter = replacements.APIServerStarter
@@ -583,5 +719,18 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	if replacements.WorkSubmittedFileReader != nil {
 		defaults.WorkSubmittedFileReader = replacements.WorkSubmittedFileReader
 	}
+	if replacements.WorkSubmittedFilePathInspector != nil {
+		defaults.WorkSubmittedFilePathInspector = replacements.WorkSubmittedFilePathInspector
+	}
 	return defaults
+}
+
+func cloneCatalogCapabilityOverrides(
+	overrides []providercontract.CatalogCapabilityOverride,
+) []providercontract.CatalogCapabilityOverride {
+	cloned := make([]providercontract.CatalogCapabilityOverride, len(overrides))
+	for index, override := range overrides {
+		cloned[index] = override.Clone()
+	}
+	return cloned
 }

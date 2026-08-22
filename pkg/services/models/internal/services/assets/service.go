@@ -5,7 +5,16 @@ import (
 	"context"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 )
+
+// ConstructionOptions supplies the exact process effects needed by the
+// parent-private asset implementation. It is not part of the Models peer
+// contract and never appears in an asset result.
+type ConstructionOptions struct {
+	ResolveEnvironment modelseffects.AssetResolveEnvironment
+	ResolveRevision    func(context.Context, string) (string, error)
+}
 
 // Service resolves scoped asset sources, prepares verified revisions, and
 // reports detached cache facts. Pulling, verification, and publication remain
@@ -37,20 +46,27 @@ type Service interface {
 // RuntimeCacheLayout is the Models-private bridge from verified scoped assets
 // to the existing local runtime process boundary.
 type RuntimeCacheLayout struct {
-	ModelName string
-	CachePath string
-	Revision  string
-	Files     []string
+	ModelName        string
+	CachePath        string
+	Revision         string
+	Files            []string
+	BackendCachePath string
+	BackendRevision  string
+	BackendFiles     []string
 }
 
 // RuntimeCacheInspection is the Models-private cache projection used by
 // catalog and host compatibility behavior during their separate migrations.
 type RuntimeCacheInspection struct {
-	Supported          bool
-	Installed          bool
-	Revision           string
-	CachePath          string
-	InstalledFileCount int
-	MissingAssets      []string
-	PartialArtifacts   bool
+	Supported             bool
+	Installed             bool
+	Revision              string
+	CachePath             string
+	InstalledFileCount    int
+	MissingAssets         []string
+	PartialArtifacts      bool
+	BackendRequired       bool
+	BackendCachePath      string
+	BackendRevision       string
+	BackendInstalledFiles int
 }

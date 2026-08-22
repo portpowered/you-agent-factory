@@ -1,3 +1,7 @@
+import type {
+  FactoryGraphNodeDimensions,
+  FactoryGraphNodeFamily,
+} from "@you-agent-factory/factory-graph";
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import type { FactoryValidationTarget } from "../../../api/factory-validation";
 import {
@@ -39,9 +43,33 @@ export interface CurrentActivityEditorState {
   activeTool: "add" | "connect" | "delete" | null;
   canInteractWithEditor: boolean;
   editorMode: boolean;
+  nodeResizeControls?: CurrentActivityNodeResizeController;
   onConnectionAnchorClick: (endpoint: FactoryGraphConnectionEndpoint) => void;
   pendingConnectionSource: FactoryGraphConnectionEndpoint | null;
   validationTargets?: readonly FactoryValidationTarget[];
+}
+
+export interface CurrentActivityNodeResizeTarget {
+  family: FactoryGraphNodeFamily;
+  nodeId: string;
+  position: { x: number; y: number };
+}
+
+export interface CurrentActivityNodeResizeController {
+  enabled: boolean;
+  /**
+   * Presentation-only preview for each intermediate size while the pointer is
+   * still down. The graph view model owns it; a canonical layout host only
+   * needs `onResizeEnd`, so committing history per pointer move never happens.
+   */
+  onResize?: (
+    target: CurrentActivityNodeResizeTarget,
+    dimensions: FactoryGraphNodeDimensions,
+  ) => void;
+  onResizeEnd: (
+    target: CurrentActivityNodeResizeTarget,
+    dimensions: FactoryGraphNodeDimensions,
+  ) => void;
 }
 
 /** Graph node header selection competes with delete-tool onNodeClick when wired. */

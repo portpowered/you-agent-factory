@@ -1,6 +1,6 @@
 {
   "formatVersion": "mock-workers-input/v1",
-  "unknownFieldPolicy": "ParseMockWorkersConfig uses json.Decoder.DisallowUnknownFields and rejects unknown top-level keys, unknown nested keys, and trailing JSON values",
+  "unknownFieldPolicy": "ParseMockWorkersConfig ignores unknown object fields and reports sorted unique JSON paths; known-field validation and exactly one JSON document remain strict",
   "loaderEntrypoints": [
     "ParseMockWorkersConfig",
     "LoadMockWorkersConfig"
@@ -81,6 +81,38 @@
       }
     },
     {
+      "id": "valid-unknown-top-level",
+      "category": "parse-unknown-field",
+      "entrypoint": "ParseMockWorkersConfig",
+      "outcome": "accept",
+      "fixture": "pkg/services/workers/internal/interface/testdata/fixtures/invalid/unknown-top-level.json",
+      "description": "unknown top-level keys are ignored and reported by JSON path",
+      "ignoredJSONPaths": [
+        "$.unexpectedTopLevel"
+      ],
+      "expectedConfig": {}
+    },
+    {
+      "id": "valid-unknown-nested-mock-worker",
+      "category": "parse-unknown-field",
+      "entrypoint": "ParseMockWorkersConfig",
+      "outcome": "accept",
+      "fixture": "pkg/services/workers/internal/interface/testdata/fixtures/invalid/unknown-nested-mock-worker.json",
+      "description": "unknown nested mockWorkers[] keys are ignored and reported by JSON path",
+      "ignoredJSONPaths": [
+        "$.mockWorkers[0].unexpectedNested"
+      ],
+      "expectedConfig": {
+        "mockWorkerCount": 1,
+        "mockWorkers": [
+          {
+            "id": "bad",
+            "runType": "accept"
+          }
+        ]
+      }
+    },
+    {
       "id": "docs-example-mock-workers",
       "category": "parse-docs-example",
       "entrypoint": "ParseMockWorkersConfig",
@@ -140,30 +172,6 @@
           }
         ]
       }
-    },
-    {
-      "id": "invalid-unknown-top-level",
-      "category": "parse-unknown-field",
-      "entrypoint": "ParseMockWorkersConfig",
-      "outcome": "reject",
-      "fixture": "pkg/services/workers/internal/interface/testdata/fixtures/invalid/unknown-top-level.json",
-      "description": "unknown top-level keys are rejected under strict decode",
-      "errorFragments": [
-        "decode mock workers JSON",
-        "unknown field"
-      ]
-    },
-    {
-      "id": "invalid-unknown-nested-mock-worker",
-      "category": "parse-unknown-field",
-      "entrypoint": "ParseMockWorkersConfig",
-      "outcome": "reject",
-      "fixture": "pkg/services/workers/internal/interface/testdata/fixtures/invalid/unknown-nested-mock-worker.json",
-      "description": "unknown nested mockWorkers[] keys are rejected under strict decode",
-      "errorFragments": [
-        "decode mock workers JSON",
-        "unknown field"
-      ]
     },
     {
       "id": "invalid-trailing-json",
@@ -284,6 +292,38 @@
       "expectedConfig": {
         "unmatchedDispatchPolicy": "passthrough",
         "mockWorkerCount": 1
+      }
+    },
+    {
+      "id": "load-unknown-top-level",
+      "category": "parse-unknown-field",
+      "entrypoint": "LoadMockWorkersConfig",
+      "outcome": "accept",
+      "fixture": "pkg/services/workers/internal/interface/testdata/fixtures/invalid/unknown-top-level.json",
+      "description": "LoadMockWorkersConfig preserves known fields and reports ignored top-level paths",
+      "ignoredJSONPaths": [
+        "$.unexpectedTopLevel"
+      ],
+      "expectedConfig": {}
+    },
+    {
+      "id": "load-unknown-nested-mock-worker",
+      "category": "parse-unknown-field",
+      "entrypoint": "LoadMockWorkersConfig",
+      "outcome": "accept",
+      "fixture": "pkg/services/workers/internal/interface/testdata/fixtures/invalid/unknown-nested-mock-worker.json",
+      "description": "LoadMockWorkersConfig preserves known nested fields and reports ignored paths",
+      "ignoredJSONPaths": [
+        "$.mockWorkers[0].unexpectedNested"
+      ],
+      "expectedConfig": {
+        "mockWorkerCount": 1,
+        "mockWorkers": [
+          {
+            "id": "bad",
+            "runType": "accept"
+          }
+        ]
       }
     }
   ]

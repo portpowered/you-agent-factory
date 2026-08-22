@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -26,7 +27,14 @@ func TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifac
 	})
 
 	provider := testutil.NewMockProvider(
-		workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
+		workerexecution.InferenceResponse{
+			Content: "Step one done. COMPLETE",
+			ProviderSession: &providers.SessionMetadata{
+				Provider: "codex",
+				Kind:     "session_id",
+				ID:       "session-inference-events",
+			},
+		},
 		workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
 	)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -97,6 +105,9 @@ func assertFirstInferenceAttemptOrder(t *testing.T, events []factoryapi.FactoryE
 	}
 	if response.Outcome != factoryapi.InferenceOutcomeSucceeded || stringValueFromFunctionalPtr(response.Response) != "Step one done. COMPLETE" {
 		t.Fatalf("inference response = %#v, want succeeded first provider response", response)
+	}
+	if response.ProviderSession == nil || stringValueFromFunctionalPtr(response.ProviderSession.Id) != "session-inference-events" {
+		t.Fatalf("inference provider session = %#v, want recorded provider session identity", response.ProviderSession)
 	}
 	if response.DurationMillis < 0 {
 		t.Fatalf("durationMillis = %d, want non-negative", response.DurationMillis)

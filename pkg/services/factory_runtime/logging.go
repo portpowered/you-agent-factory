@@ -1,9 +1,13 @@
 package factory
 
 import (
+	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"go.uber.org/zap"
 )
+
+// RuntimeLogDiagnostics describes immutable runtime log and metrics metadata.
+type RuntimeLogDiagnostics = runtimeartifact.Diagnostics
 
 // SessionLoggerFactory annotates a base logger with Factory Session identity.
 // Wire selects the implementation; session-opening code supplies only values.

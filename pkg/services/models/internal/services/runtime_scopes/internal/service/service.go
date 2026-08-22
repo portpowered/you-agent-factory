@@ -34,8 +34,8 @@ func (s *service) Open(binding models.RuntimeBinding) (runtimescopes.Reference, 
 	if s == nil {
 		return "", fmt.Errorf("%w: service is required", runtimescopes.ErrScopeUnknown)
 	}
-	if err := models.ValidateRuntimeBinding(binding); err != nil {
-		return "", err
+	if binding.RuntimeConfig == nil {
+		return "", fmt.Errorf("%w: runtime configuration lookup is required", runtimescopes.ErrInvalidBinding)
 	}
 
 	snapshot := cloneRuntimeConfig(binding.RuntimeConfig())
@@ -45,7 +45,7 @@ func (s *service) Open(binding models.RuntimeBinding) (runtimescopes.Reference, 
 	s.nextScopeID++
 	scopeIdentity := fmt.Sprintf("%s:%d", s.issuerToken, s.nextScopeID)
 	ref := runtimescopes.Reference(s.issuerToken + "." + opaqueToken("scope", scopeIdentity))
-	s.liveBindings[ref] = detachedBinding(binding.CacheDirectory, snapshot)
+	s.liveBindings[ref] = detachedBinding(binding.CacheDirectory, snapshot, binding.OperatorModels)
 	return ref, nil
 }
 
@@ -67,7 +67,7 @@ func (s *service) Resolve(ref runtimescopes.Reference) (models.RuntimeBinding, e
 	if !ok {
 		return models.RuntimeBinding{}, fmt.Errorf("%w: reference does not identify a live scope", runtimescopes.ErrScopeUnknown)
 	}
-	return detachedBinding(binding.CacheDirectory, binding.RuntimeConfig()), nil
+	return detachedBinding(binding.CacheDirectory, binding.RuntimeConfig(), binding.OperatorModels), nil
 }
 
 func (s *service) Close(ref runtimescopes.Reference) error {
@@ -99,14 +99,30 @@ func (s *service) isForeign(ref runtimescopes.Reference) bool {
 	return issuerToken != s.issuerToken
 }
 
-func detachedBinding(cacheDirectory string, config *models.RuntimeConfig) models.RuntimeBinding {
+func detachedBinding(
+	cacheDirectory string,
+	config *models.RuntimeConfig,
+	overlays map[string]models.ModelOverlay,
+) models.RuntimeBinding {
 	snapshot := cloneRuntimeConfig(config)
 	return models.RuntimeBinding{
 		CacheDirectory: cacheDirectory,
+		OperatorModels: cloneModelOverlays(overlays),
 		RuntimeConfig: func() *models.RuntimeConfig {
 			return cloneRuntimeConfig(snapshot)
 		},
 	}
+}
+
+func cloneModelOverlays(overlays map[string]models.ModelOverlay) map[string]models.ModelOverlay {
+	if overlays == nil {
+		return nil
+	}
+	cloned := make(map[string]models.ModelOverlay, len(overlays))
+	for name, overlay := range overlays {
+		cloned[name] = overlay.Clone()
+	}
+	return cloned
 }
 
 func cloneRuntimeConfig(config *models.RuntimeConfig) *models.RuntimeConfig {

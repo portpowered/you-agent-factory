@@ -1,11 +1,26 @@
+import { WorkstationKind } from "@you-agent-factory/client";
 import type { GraphSemanticIconKind } from "./semantic-icon.js";
-import { factoryGraphNodeTitleClassName } from "./semantic-node-style.js";
+import {
+  factoryGraphNodeTitleClassName,
+  factoryGraphNodeWrappedTextClassName,
+} from "./semantic-node-style.js";
+import {
+  type FactoryGraphWorkstationGuardedControl,
+  type FactoryGraphWorkstationRuntimeRole,
+  type FactoryGraphWorkstationRuntimeType,
+  type FactoryGraphWorkstationSchedulingBehavior,
+  type FactoryGraphWorkstationSemantics,
+  factoryGraphWorkstationRuntimeRole,
+  UNKNOWN_FACTORY_GRAPH_WORKSTATION_SEMANTICS,
+} from "./workstation-semantics.js";
 
 export interface FactoryGraphWorkstationRef {
   node_id: string;
   transition_id: string;
   workstation_name: string;
+  /** @deprecated Runtime topology metadata is not semantic authority. */
   worker_type?: string;
+  /** @deprecated Runtime topology metadata is not semantic authority. */
   workstation_kind?: string;
 }
 
@@ -15,80 +30,153 @@ export interface FactoryGraphWorkItemRef {
   work_type_id?: string;
 }
 
-export type FactoryGraphWorkstationSemanticKind =
-  | "CRON"
-  | "POLLER"
-  | "REPEATER"
-  | "STANDARD"
-  | "exhaustion";
-
-export interface FactoryGraphWorkstationPresentation {
+export interface FactoryGraphWorkstationPresentation
+  extends FactoryGraphWorkstationSemantics {
   borderClassName?: string;
   className: string;
   iconKind: GraphSemanticIconKind;
   label: string;
-  semanticKind: FactoryGraphWorkstationSemanticKind;
+  schedulingLabel: string | undefined;
 }
 
+/** Render-independent workstation presentation metadata for a graph node. */
 export function factoryGraphWorkstationPresentation(
-  workstation: FactoryGraphWorkstationRef,
+  semantics: FactoryGraphWorkstationSemantics = UNKNOWN_FACTORY_GRAPH_WORKSTATION_SEMANTICS,
   locale?: string,
 ): FactoryGraphWorkstationPresentation {
-  const exhaustion =
-    workstation.workstation_kind === "exhaustion" ||
-    (!workstation.workstation_kind && !workstation.worker_type);
-  const normalized = workstation.workstation_kind?.trim().toUpperCase();
-  const semanticKind: FactoryGraphWorkstationSemanticKind = exhaustion
-    ? "exhaustion"
-    : normalized === "CRON"
-      ? "CRON"
-      : normalized === "POLLER"
-        ? "POLLER"
-        : normalized === "REPEATER"
-          ? "REPEATER"
-          : "STANDARD";
+  const runtime = runtimePresentation(semantics.runtimeType, locale);
+  return {
+    ...semantics,
+    ...schedulingPresentation(semantics.schedulingBehavior, locale),
+    className: runtime.className,
+    iconKind: runtime.iconKind,
+    label: runtime.label,
+  };
+}
+
+function runtimePresentation(
+  runtimeType: FactoryGraphWorkstationRuntimeType,
+  locale?: string,
+): { className: string; iconKind: GraphSemanticIconKind; label: string } {
   const chinese = locale === "zh-CN";
-  const values: Record<
-    FactoryGraphWorkstationSemanticKind,
-    Omit<FactoryGraphWorkstationPresentation, "label">
+  const runtimeRole = factoryGraphWorkstationRuntimeRole(runtimeType);
+  const labels: Record<FactoryGraphWorkstationRuntimeRole, string> = {
+    AGENT: chinese ? "代理" : "Agent",
+    CLASSIFIER: chinese ? "分类器" : "Classifier",
+    HUMAN_APPROVAL: chinese ? "人工审批" : "Human approval",
+    INFERENCE: chinese ? "推理" : "Inference",
+    LOGICAL_MOVE: chinese ? "逻辑移动" : "Logical move",
+    POLLER: chinese ? "轮询" : "Poller",
+    SCRIPT: chinese ? "脚本" : "Script",
+    UNKNOWN: chinese ? "未知" : "Unknown",
+  };
+  const iconKinds: Record<
+    FactoryGraphWorkstationRuntimeRole,
+    GraphSemanticIconKind
   > = {
-    CRON: {
-      borderClassName: "border-dashed",
-      className: "text-success",
-      iconKind: "cron",
-      semanticKind: "CRON",
-    },
-    POLLER: {
-      borderClassName: "border-dotted",
-      className: "text-primary",
-      iconKind: "poller",
-      semanticKind: "POLLER",
-    },
-    REPEATER: {
-      borderClassName: "border-double",
-      className: "text-info",
-      iconKind: "repeater",
-      semanticKind: "REPEATER",
-    },
-    STANDARD: {
-      className: "text-on-surface-subtle",
-      iconKind: "workstation",
-      semanticKind: "STANDARD",
-    },
-    exhaustion: {
-      className: "text-error",
-      iconKind: "exhaustion",
-      semanticKind: "exhaustion",
-    },
+    AGENT: "workstation",
+    CLASSIFIER: "queue",
+    HUMAN_APPROVAL: "constraint",
+    INFERENCE: "processing",
+    LOGICAL_MOVE: "workstation",
+    POLLER: "poller",
+    SCRIPT: "workstation",
+    UNKNOWN: "workstation",
   };
-  const labels: Record<FactoryGraphWorkstationSemanticKind, string> = {
-    CRON: chinese ? "Cron 工作站" : "Cron workstation",
-    POLLER: chinese ? "轮询器工作站" : "Poller workstation",
-    REPEATER: chinese ? "重复器工作站" : "Repeater workstation",
-    STANDARD: chinese ? "标准工作站" : "Standard workstation",
-    exhaustion: chinese ? "耗尽规则" : "Exhaustion rule",
+  return {
+    className: "text-on-surface-subtle",
+    iconKind: iconKinds[runtimeRole],
+    label: labels[runtimeRole],
   };
-  return { ...values[semanticKind], label: labels[semanticKind] };
+}
+
+function schedulingPresentation(
+  behavior: FactoryGraphWorkstationSchedulingBehavior,
+  locale?: string,
+): { borderClassName?: string; schedulingLabel: string | undefined } {
+  const chinese = locale === "zh-CN";
+  switch (behavior) {
+    case WorkstationKind.CRON:
+      return {
+        borderClassName: "border-dashed",
+        schedulingLabel: "Cron",
+      };
+    case WorkstationKind.POLLER:
+      return {
+        borderClassName: "border-dotted",
+        schedulingLabel: chinese ? "轮询" : "Poller",
+      };
+    case WorkstationKind.REPEATER:
+      return {
+        borderClassName: "border-double",
+        schedulingLabel: chinese ? "重复器" : "Repeater",
+      };
+    case WorkstationKind.STANDARD:
+      return { schedulingLabel: undefined };
+    case "UNKNOWN":
+      return {
+        schedulingLabel: chinese ? "默认调度器" : "Default scheduler",
+      };
+  }
+}
+
+export function factoryGraphWorkstationControlRoleLabel(
+  controlRole: FactoryGraphWorkstationSemantics["controlRole"],
+  locale?: string,
+): string {
+  if (locale === "zh-CN") {
+    switch (controlRole) {
+      case "CLASSIFIER":
+        return "分类器路由";
+      case "HUMAN_APPROVAL":
+        return "人工审批";
+      case "LOGICAL_ROUTER":
+        return "逻辑路由";
+      case "LOOP_BREAKER":
+        return "循环断路器";
+      case "NONE":
+        return "无控制角色";
+      case "UNKNOWN":
+        return "控制角色未知";
+    }
+  }
+
+  switch (controlRole) {
+    case "CLASSIFIER":
+      return "Classifier route";
+    case "HUMAN_APPROVAL":
+      return "Human approval";
+    case "LOGICAL_ROUTER":
+      return "Logical router";
+    case "LOOP_BREAKER":
+      return "Loop breaker";
+    case "NONE":
+      return "No control role";
+    case "UNKNOWN":
+      return "Unknown control role";
+  }
+}
+
+export function factoryGraphWorkstationGuardLimitValue(
+  control: FactoryGraphWorkstationGuardedControl,
+): string {
+  const fixed =
+    control.limit.fixed === undefined ? undefined : String(control.limit.fixed);
+  const argument = control.limit.argument;
+  if (fixed && argument) return `${fixed} (${argument})`;
+  return fixed ?? argument ?? "Unknown";
+}
+
+export function factoryGraphWorkstationGuardTargetLabel(
+  locale?: string,
+): string {
+  return locale === "zh-CN" ? "目标工作站" : "Target workstation";
+}
+
+export function factoryGraphWorkstationGuardLimitLabel(
+  locale?: string,
+): string {
+  return locale === "zh-CN" ? "访问上限" : "Visit limit";
 }
 
 export function factoryGraphWorkItemLabel(
@@ -143,15 +231,6 @@ export function factoryGraphSelectWorkstationLabel(
     : `Select ${title} workstation`;
 }
 
-export function factoryGraphSelectExhaustionLabel(
-  title: string,
-  locale?: string,
-): string {
-  return locale === "zh-CN"
-    ? `选择 ${title} 枯竭规则`
-    : `Select ${title} exhaustion rule`;
-}
-
 export function factoryGraphWorkstationTitleClassName(label: string): string {
   return factoryGraphNodeTitleClassName(
     factoryGraphClassNames(
@@ -167,7 +246,7 @@ export function factoryGraphWorkstationTitleClassName(label: string): string {
 
 export function factoryGraphWorkItemLabelClassName(label: string): string {
   return factoryGraphClassNames(
-    "block min-w-0 basis-0 flex-1 truncate whitespace-nowrap leading-tight",
+    factoryGraphNodeWrappedTextClassName("block basis-0 flex-1 leading-tight"),
     label.length > 58
       ? "text-[0.64rem]"
       : label.length > 38

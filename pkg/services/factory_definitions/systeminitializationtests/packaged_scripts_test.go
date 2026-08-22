@@ -23,9 +23,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedinstallation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/validationentry"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 type directoryEntrySnapshot struct {
@@ -34,7 +34,7 @@ type directoryEntrySnapshot struct {
 	IsDir    bool
 }
 
-func packagedScriptsTestPersistence() factorydefinitions.Persistence {
+func packagedScriptsTestPersistence() factorydefinitions.PackagedFactoryPersistence {
 	validator := factoryvalidation.New(nil)
 	mapper := factorymapping.NewFactoryConfigMapper()
 	fileSystem := platformfilesystem.Local{}
@@ -157,10 +157,11 @@ func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndPreser
 
 	definition := assembledScriptPackageDefinition(t)
 	homeDir := t.TempDir()
-	created, err := packagedinstallation.New(packagedScriptsTestPersistence(), platformfilesystem.Local{}).
+	created, err := packagedinstallation.New(packagedScriptsTestPersistence(), platformfilesystem.Local{}, os.Mkdir).
 		EnsurePackagedFactories(
 			t.Context(),
 			factorydefinitions.NamedFactoriesRoot(homeDir),
+			"",
 			[]factorydefinitions.PackagedDefinition{definition},
 		)
 	if err != nil {
@@ -185,10 +186,11 @@ func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndPreser
 	}
 	beforeRerun := snapshotDirectoryContents(t, factoryDir)
 
-	skipped, err := packagedinstallation.New(packagedScriptsTestPersistence(), platformfilesystem.Local{}).
+	skipped, err := packagedinstallation.New(packagedScriptsTestPersistence(), platformfilesystem.Local{}, os.Mkdir).
 		EnsurePackagedFactories(
 			t.Context(),
 			factorydefinitions.NamedFactoriesRoot(homeDir),
+			"",
 			[]factorydefinitions.PackagedDefinition{definition},
 		)
 	if err != nil {

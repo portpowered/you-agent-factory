@@ -1,0 +1,24 @@
+{
+  "name": "03-config-and-models",
+  "description": "How the agent advertises workers, configuration, and models, and which method it accepts for changing them.",
+  "clientCapabilities": {},
+  "steps": [
+    {"kind": "request", "method": "initialize",
+     "params": {"protocolVersion": 1, "clientCapabilities": "${clientCapabilities}"}},
+    {"kind": "request", "method": "session/new",
+     "params": {"cwd": "${cwd}", "mcpServers": []}},
+    {"kind": "snapshot", "name": "advertisement"},
+    {"kind": "await", "awaitMillis": 1500,
+     "note": "Collects any available_commands_update or current_mode_update the agent pushes unprompted."},
+    {"kind": "expect_error", "method": "session/set_model",
+     "params": {"sessionId": "${sessionId}", "modelId": "${configValue1}"},
+     "note": "Method naming for model switching is unstable across agents. A -32601 here is baseline data, not a failure."},
+    {"kind": "expect_error", "method": "session/select_model",
+     "params": {"sessionId": "${sessionId}", "modelId": "${configValue1}"}},
+    {"kind": "expect_error", "method": "session/set_mode",
+     "params": {"sessionId": "${sessionId}", "modeId": "${configValue1}"}},
+    {"kind": "expect_error", "method": "session/set_config_option",
+     "params": {"sessionId": "${sessionId}", "configId": "${configId}", "value": "${configValue1}"}},
+    {"kind": "snapshot", "name": "post-set"}
+  ]
+}

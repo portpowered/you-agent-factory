@@ -1,21 +1,111 @@
 package run
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+// testOpeningPresentationOwner is a local owner double for CLI behavior tests.
+// Production tests use the concrete owner in its service Wire package; CLI
+// tests only need to observe value-only scope registration without importing
+// that construction package across a transport boundary.
+type testOpeningPresentationOwner struct {
+	mu     sync.Mutex
+	nextID uint64
+	scopes map[factorysessions.OpeningScopeID]testOpeningPresentationScope
+}
+
+type testOpeningPresentationScope struct {
+	directJavaScript *factorysessions.DirectJavaScriptRunScope
+	stdio            *factorysessions.StdioOpeningScope
+	invocationEvents *factorysessions.InvocationEventScope
+}
+
+func newTestOpeningPresentationOwner() *testOpeningPresentationOwner {
+	return &testOpeningPresentationOwner{scopes: make(map[factorysessions.OpeningScopeID]testOpeningPresentationScope)}
+}
+
+func (o *testOpeningPresentationOwner) register(scope testOpeningPresentationScope) (factorysessions.OpeningScopeID, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.nextID++
+	id := factorysessions.OpeningScopeID(fmt.Sprintf("test-opening-%d", o.nextID))
+	o.scopes[id] = scope
+	return id, nil
+}
+
+func (o *testOpeningPresentationOwner) RegisterDirectJavaScript(scope factorysessions.DirectJavaScriptRunScope) (factorysessions.OpeningScopeID, error) {
+	return o.register(testOpeningPresentationScope{directJavaScript: &scope})
+}
+
+func (o *testOpeningPresentationOwner) DirectJavaScript(id factorysessions.OpeningScopeID) (factorysessions.DirectJavaScriptRunScope, bool) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	scope, ok := o.scopes[id]
+	if !ok || scope.directJavaScript == nil {
+		return factorysessions.DirectJavaScriptRunScope{}, false
+	}
+	return *scope.directJavaScript, true
+}
+
+func (o *testOpeningPresentationOwner) RegisterStdio(scope factorysessions.StdioOpeningScope) (factorysessions.OpeningScopeID, error) {
+	return o.register(testOpeningPresentationScope{stdio: &scope})
+}
+
+func (o *testOpeningPresentationOwner) Stdio(id factorysessions.OpeningScopeID) (factorysessions.StdioOpeningScope, bool) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	scope, ok := o.scopes[id]
+	if !ok || scope.stdio == nil {
+		return factorysessions.StdioOpeningScope{}, false
+	}
+	return *scope.stdio, true
+}
+
+func (o *testOpeningPresentationOwner) RegisterInvocationEvents(scope factorysessions.InvocationEventScope) (factorysessions.OpeningScopeID, error) {
+	return o.register(testOpeningPresentationScope{invocationEvents: &scope})
+}
+
+func (o *testOpeningPresentationOwner) InvocationEvents(id factorysessions.OpeningScopeID) (factorysessions.FactoryEventConsumer, bool) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	scope, ok := o.scopes[id]
+	if !ok || scope.invocationEvents == nil {
+		return nil, false
+	}
+	return scope.invocationEvents.Consume, scope.invocationEvents.Consume != nil
+}
+
+func (o *testOpeningPresentationOwner) StartFactoryEventBridge(context.Context, factoryEventReader, factorysessions.OpeningScopeID) (interface {
+	Finish(context.Context, factoryEventReader, factorysessions.FactoryInvocationOutcome) error
+}, error) {
+	return nil, nil
+}
+
+func (o *testOpeningPresentationOwner) Close(id factorysessions.OpeningScopeID) {
+	o.mu.Lock()
+	delete(o.scopes, id)
+	o.mu.Unlock()
+}
 
 func TestResolveFactoryInvocationInputSchemaNamedAndFileSelectionsAreEquivalent(t *testing.T) {
 	t.Parallel()
@@ -210,6 +300,100 @@ func runSchemaFixtureManifest() climanifest.Manifest {
 	}}
 }
 
+func TestWriteFactoryInvocationHelpWithManifestRejectsCollisionsBeforeRendering(t *testing.T) {
+	t.Parallel()
+
+	manifest := runSchemaFixtureManifest()
+	manifest.Commands["you.run"].Flags["model"] = climanifest.Flag{
+		ID: "you.run.flag.model", Long: "model",
+	}
+	for _, test := range []struct {
+		name       string
+		config     RunConfig
+		external   string
+		wantError  bool
+		wantOutput string
+	}{
+		{
+			name:      "explicit colliding factory",
+			config:    RunConfig{FactoryConfigPath: "factory.json"},
+			external:  "model",
+			wantError: true,
+		},
+		{
+			name:      "named colliding factory",
+			config:    RunConfig{NamedFactoryName: "alpha", Dir: "factories/alpha"},
+			external:  "model",
+			wantError: true,
+		},
+		{
+			name:       "explicit prefixed factory",
+			config:     RunConfig{FactoryConfigPath: "factory.json"},
+			external:   "child-model",
+			wantOutput: "--child-model",
+		},
+		{
+			name:       "named prefixed factory",
+			config:     RunConfig{NamedFactoryName: "alpha", Dir: "factories/alpha"},
+			external:   "child-model",
+			wantOutput: "--child-model",
+		},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			signature := &interfaces.InvocationSignatureConfig{Parameters: []interfaces.InvocationParameterConfig{{
+				Name:         "model",
+				ExternalName: test.external,
+				Bindings:     []interfaces.InvocationParameterBindingConfig{{Kind: "NAMED"}},
+			}}}
+			var output bytes.Buffer
+			written, err := WriteFactoryInvocationHelpWithManifest(
+				&output,
+				"you",
+				runConfigWithFactoryLoader(test.config, signature),
+				manifest,
+			)
+			if test.wantError {
+				if err == nil || written {
+					t.Fatalf("help result = (%v, %v), want a blocking collision", written, err)
+				}
+				for _, want := range []string{
+					"cli.composition.long-name-collision",
+					"model",
+					"you.run.flag.model",
+					"child-model",
+					"worker-provider",
+					"research-model",
+				} {
+					if !strings.Contains(err.Error(), want) {
+						t.Fatalf("collision error missing %q: %v", want, err)
+					}
+				}
+				if output.Len() != 0 {
+					t.Fatalf("collision help output = %q, want empty output", output.String())
+				}
+				return
+			}
+			if err != nil || !written {
+				t.Fatalf("prefixed help result = (%v, %v), want rendered help", written, err)
+			}
+			if !strings.Contains(output.String(), test.wantOutput) {
+				t.Fatalf("prefixed help output missing %q:\n%s", test.wantOutput, output.String())
+			}
+		})
+	}
+}
+
+func runConfigWithFactoryLoader(
+	config RunConfig,
+	signature *interfaces.InvocationSignatureConfig,
+) RunConfig {
+	config.LoadFactoryConfigFile = func(string) (*interfaces.FactoryConfig, error) {
+		return &interfaces.FactoryConfig{InvocationSignature: signature}, nil
+	}
+	return config
+}
+
 func TestJavaScriptWorkflowPathRecognizesSupportedExtensions(t *testing.T) {
 	t.Parallel()
 	for _, path := range []string{"workflow.js", "WORKFLOW.MJS", " workflow.cjs "} {
@@ -347,6 +531,96 @@ func TestResponseStreamOutputCancelOnWriteErrorCancelsInvocationContext(t *testi
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for invocation cancellation after stdout write failure")
 	}
+	wrapped, ok := writer.(*responseStreamCancelOnWriteError)
+	if !ok {
+		t.Fatalf("writer type = %T, want responseStreamCancelOnWriteError", writer)
+	}
+	if !errors.Is(wrapped.Err(), writeErr) {
+		t.Fatalf("recorded writer error = %v, want %v", wrapped.Err(), writeErr)
+	}
+}
+
+func TestRunFactoryInvocationPreservesWriterFailureBeforeTerminalResult(t *testing.T) {
+	t.Parallel()
+
+	writeErr := errors.New("broken stdout pipe")
+	presentation := &captureResponsePresentation{}
+	invocation := undeterminedWriterFailureInvocation{
+		output: func() io.Writer { return presentation.output },
+	}
+	err := runFactoryInvocation(
+		context.Background(),
+		RunConfig{
+			InvocationOutputMode: InvocationOutputResponseStream,
+			JSONOutput:           true,
+			Output:               errorWriter{err: writeErr},
+		},
+		factorysessions.InvocationTarget{},
+		factoryapi.InvocationRequest{},
+		invocation,
+		presentation,
+		nil,
+	)
+	if err == nil || !errors.Is(err, writeErr) {
+		t.Fatalf("runFactoryInvocation() error = %v, want writer failure %v", err, writeErr)
+	}
+	var invocationErr *InvocationError
+	if !errors.As(err, &invocationErr) || invocationErr.Code != InvocationErrorCodeFailed {
+		t.Fatalf("runFactoryInvocation() error = %v, want failed InvocationError", err)
+	}
+}
+
+type undeterminedWriterFailureInvocation struct {
+	output func() io.Writer
+}
+
+func (undeterminedWriterFailureInvocation) InvokeModel(
+	context.Context,
+	factorysessions.InvocationTarget,
+	string,
+	models.Request,
+) (models.Result, error) {
+	return models.Result{}, errors.New("model invocation is not part of this test")
+}
+
+func (undeterminedWriterFailureInvocation) ResolveModelInvocationFactoryDir(string) (string, error) {
+	return "", errors.New("model invocation is not part of this test")
+}
+
+func (undeterminedWriterFailureInvocation) ExportModelInvocationArtifact(string, string) error {
+	return errors.New("model invocation is not part of this test")
+}
+
+func (invocation undeterminedWriterFailureInvocation) InvokeFactory(
+	ctx context.Context,
+	_ factorysessions.InvocationTarget,
+	_ factorysessions.InvocationRequest,
+) (factorysessions.FactoryInvocationOutcome, error) {
+	if invocation.output == nil || invocation.output() == nil {
+		return factorysessions.FactoryInvocationOutcome{}, errors.New("test response output is unavailable")
+	}
+	_, err := invocation.output().Write([]byte("event"))
+	if err == nil {
+		return factorysessions.FactoryInvocationOutcome{}, errors.New("test writer unexpectedly succeeded")
+	}
+	return factorysessions.FactoryInvocationOutcome{}, ctx.Err()
+}
+
+type captureResponsePresentation struct {
+	fakeResponsePresentation
+	output io.Writer
+}
+
+func (presentation *captureResponsePresentation) OpenLosslessFactoryEventStream(
+	writer io.Writer,
+	encode factoryvisualization.FactoryEventEncoder,
+) interface {
+	PresentFactoryEvents([]interfaces.FactoryEvent)
+	Finalize(factoryvisualization.FinalResponseWriter) (bool, error)
+	CloseAndDrain() error
+} {
+	presentation.output = writer
+	return presentation.fakeResponsePresentation.OpenLosslessFactoryEventStream(writer, encode)
 }
 
 type errorWriter struct {

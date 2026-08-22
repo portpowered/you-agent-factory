@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -28,7 +29,11 @@ const (
 	FactoryEventTypeDispatchReconciled            FactoryEventType = "DISPATCH_RECONCILED"
 	FactoryEventTypeDispatchRequest               FactoryEventType = "DISPATCH_REQUEST"
 	FactoryEventTypeDispatchResponse              FactoryEventType = "DISPATCH_RESPONSE"
+	FactoryEventTypeDispatchWorkerSessionAssoc    FactoryEventType = "DISPATCH_WORKER_SESSION_ASSOCIATION"
+	FactoryEventTypeHumanApprovalRequested        FactoryEventType = "HUMAN_APPROVAL_REQUESTED"
 	FactoryEventTypeFactoryChange                 FactoryEventType = "FACTORY_CHANGE"
+	FactoryEventTypeFactoryChangeRequest          FactoryEventType = "FACTORY_CHANGE_REQUEST"
+	FactoryEventTypeFactoryChangeFailed           FactoryEventType = "FACTORY_CHANGE_FAILED"
 	FactoryEventTypeFactoryStateResponse          FactoryEventType = "FACTORY_STATE_RESPONSE"
 	FactoryEventTypeInferenceRequest              FactoryEventType = "INFERENCE_REQUEST"
 	FactoryEventTypeInferenceResponse             FactoryEventType = "INFERENCE_RESPONSE"
@@ -77,11 +82,21 @@ type FactorySessionSyncPreflightOptions struct {
 	LogicalSessionKeyID *string
 }
 
-// FactoryEventReconnectScope configures how reconnect cursors are interpreted.
+// FactoryEventReconnectScope configures how reconnect cursors are interpreted
+// and how a domain stream is scoped at the canonical ledger boundary.
 type FactoryEventReconnectScope struct {
 	// SessionID enables sessionSequence-based after_sequence matching for
 	// session-scoped event streams.
 	SessionID string
+	// DispatchID limits a Worker Session stream to events for one dispatch.
+	DispatchID string
+	// Limit bounds the live subscription buffer. Zero uses the ledger default
+	// buffer size.
+	Limit int
+	// HistoryLimit caps the retained history returned before live delivery.
+	// Zero drains all retained history. Durable consumers that need a bounded
+	// replay must opt into that bound without changing live backpressure.
+	HistoryLimit int
 }
 
 // FactoryEventStream carries replayed history and then live canonical events.
@@ -267,6 +282,7 @@ type DispatchQueuedEventPayload struct {
 	RetryOfDispatchID *string             `json:"retryOfDispatchId,omitempty"`
 	RunnerID          *string             `json:"runnerId,omitempty"`
 	SchemaDigest      *string             `json:"schemaDigest,omitempty"`
+	SkipPermissions   *bool               `json:"skipPermissions,omitempty"`
 }
 
 // DispatchInterruptedEventPayload records an observed interruption.
@@ -274,7 +290,7 @@ type DispatchInterruptedEventPayload struct {
 	CheckpointRef      *FactorySessionJavaScriptCheckpointEventRef `json:"checkpointRef,omitempty"`
 	InterruptedAt      time.Time                                   `json:"interruptedAt"`
 	ObservedStatus     FactoryDispatchStatus                       `json:"observedStatus"`
-	ProviderSessionRef *workerexecution.ProviderSessionMetadata    `json:"providerSessionRef,omitempty"`
+	ProviderSessionRef *providers.SessionMetadata                  `json:"providerSessionRef,omitempty"`
 	Reason             string                                      `json:"reason"`
 	RetryPlanned       bool                                        `json:"retryPlanned"`
 }
@@ -558,9 +574,57 @@ type InitialStructureRequestEventPayload struct {
 // FactoryChangeEventPayload carries the replacement Factory snapshot after a
 // live definition change becomes active.
 type FactoryChangeEventPayload struct {
-	Factory         *FactorySnapshot   `json:"factory"`
-	Metadata        *map[string]string `json:"metadata,omitempty"`
-	SourceDirectory *string            `json:"sourceDirectory,omitempty"`
+	Factory           *FactorySnapshot               `json:"factory"`
+	ChangeID          string                         `json:"changeId,omitempty"`
+	Operation         string                         `json:"operation,omitempty"`
+	TargetID          string                         `json:"targetId,omitempty"`
+	PreviousRevision  *int                           `json:"previousRevision,omitempty"`
+	NewRevision       *int                           `json:"newRevision,omitempty"`
+	EffectiveSequence *int                           `json:"effectiveSequence,omitempty"`
+	ResourceCapacity  *FactoryResourceCapacityChange `json:"resourceCapacity,omitempty"`
+	Metadata          *map[string]string             `json:"metadata,omitempty"`
+	SourceDirectory   *string                        `json:"sourceDirectory,omitempty"`
+}
+
+// FactoryResourceCapacityChange retains the detached accounting needed to
+// replay a resource-capacity change without inspecting mutable runtime state.
+type FactoryResourceCapacityChange struct {
+	ResourceID        string `json:"resourceId"`
+	ResourceName      string `json:"resourceName,omitempty"`
+	PreviousCapacity  int    `json:"previousCapacity"`
+	RequestedCapacity int    `json:"requestedCapacity"`
+	EffectiveCapacity int    `json:"effectiveCapacity"`
+	InUseCount        int    `json:"inUseCount"`
+	AvailableCount    int    `json:"availableCount"`
+	MinimumCapacity   int    `json:"minimumCapacity"`
+	Outcome           string `json:"outcome"`
+}
+
+// FactoryChangeRequestEventPayload carries the normalized operator intent
+// before a live Factory Session change is applied. Request identity and
+// session scope remain authoritative on FactoryEventContext.
+type FactoryChangeRequestEventPayload struct {
+	ChangeID         string          `json:"changeId"`
+	ExpectedRevision int             `json:"expectedRevision"`
+	Operation        string          `json:"operation"`
+	TargetID         string          `json:"targetId"`
+	RequestedValue   json.RawMessage `json:"requestedValue"`
+	Actor            string          `json:"actor,omitempty"`
+	Source           string          `json:"source,omitempty"`
+	Reason           string          `json:"reason,omitempty"`
+}
+
+// FactoryChangeFailedEventPayload closes an admitted live change when its
+// application cannot commit. Failure fields are deliberately safe and never
+// carry provider payloads, commands, stack traces, or raw requested values.
+type FactoryChangeFailedEventPayload struct {
+	ChangeID         string `json:"changeId"`
+	Operation        string `json:"operation"`
+	TargetID         string `json:"targetId"`
+	ExpectedRevision int    `json:"expectedRevision"`
+	PreviousRevision int    `json:"previousRevision"`
+	FailureCode      string `json:"failureCode"`
+	FailureMessage   string `json:"failureMessage"`
 }
 
 // WorkInputPayload describes a work item submitted to the factory.
@@ -600,18 +664,18 @@ type WorkstationRequestPayload struct {
 
 // WorkstationResponsePayload describes the result and outputs of a dispatch.
 type WorkstationResponsePayload struct {
-	DispatchID      string                                   `json:"dispatch_id"`
-	TransitionID    string                                   `json:"transition_id"`
-	Workstation     FactoryWorkstationRef                    `json:"workstation"`
-	Result          WorkstationResult                        `json:"result"`
-	DurationMillis  int64                                    `json:"duration_millis"`
-	Outputs         []WorkstationOutput                      `json:"outputs,omitempty"`
-	OutputWork      []work.FactoryWorkItem                   `json:"output_work,omitempty"`
-	OutputResources []FactoryResourceUnit                    `json:"output_resources,omitempty"`
-	TraceData       *FactoryTraceData                        `json:"trace_data,omitempty"`
-	ProviderSession *workerexecution.ProviderSessionMetadata `json:"provider_session,omitempty"`
-	Diagnostics     *workerdiagnostics.SafeWorkDiagnostics   `json:"diagnostics,omitempty"`
-	TerminalWork    *FactoryTerminalWork                     `json:"terminal_work,omitempty"`
+	DispatchID      string                                 `json:"dispatch_id"`
+	TransitionID    string                                 `json:"transition_id"`
+	Workstation     FactoryWorkstationRef                  `json:"workstation"`
+	Result          WorkstationResult                      `json:"result"`
+	DurationMillis  int64                                  `json:"duration_millis"`
+	Outputs         []WorkstationOutput                    `json:"outputs,omitempty"`
+	OutputWork      []work.FactoryWorkItem                 `json:"output_work,omitempty"`
+	OutputResources []FactoryResourceUnit                  `json:"output_resources,omitempty"`
+	TraceData       *FactoryTraceData                      `json:"trace_data,omitempty"`
+	ProviderSession *providers.SessionMetadata             `json:"provider_session,omitempty"`
+	Diagnostics     *workerdiagnostics.SafeWorkDiagnostics `json:"diagnostics,omitempty"`
+	TerminalWork    *FactoryTerminalWork                   `json:"terminal_work,omitempty"`
 }
 
 // DispatchConsumedWorkRef identifies one work item consumed by a dispatch.
@@ -641,12 +705,50 @@ type DispatchResourceRef struct {
 // Correlation identity belongs to FactoryEventContext; the deprecated chaining
 // fields remain readable for compatibility with historical recordings.
 type DispatchRequestEventPayload struct {
-	CurrentChainingTraceID   *string                       `json:"currentChainingTraceId,omitempty"`
-	Inputs                   []DispatchConsumedWorkRef     `json:"inputs"`
-	Metadata                 *DispatchRequestEventMetadata `json:"metadata,omitempty"`
-	PreviousChainingTraceIDs *[]string                     `json:"previousChainingTraceIds,omitempty"`
-	Resources                *[]DispatchResourceRef        `json:"resources,omitempty"`
-	TransitionID             string                        `json:"transitionId"`
+	CurrentChainingTraceID   *string                               `json:"currentChainingTraceId,omitempty"`
+	Inputs                   []DispatchConsumedWorkRef             `json:"inputs"`
+	Metadata                 *DispatchRequestEventMetadata         `json:"metadata,omitempty"`
+	PreviousChainingTraceIDs *[]string                             `json:"previousChainingTraceIds,omitempty"`
+	Resources                *[]DispatchResourceRef                `json:"resources,omitempty"`
+	ExpectedArtifactContext  *work.ExpectedArtifactTemplateContext `json:"expectedArtifactContext,omitempty"`
+	TransitionID             string                                `json:"transitionId"`
+}
+
+// HumanApprovalDecision is one of the fixed operator decisions exposed by a
+// pending HUMAN_APPROVAL workstation. The requested event deliberately
+// records the decision vocabulary, not mutable prompt or Work content.
+type HumanApprovalDecision string
+
+const (
+	HumanApprovalDecisionApprove HumanApprovalDecision = "APPROVE"
+	HumanApprovalDecisionReject  HumanApprovalDecision = "REJECT"
+)
+
+// HumanApprovalStatus is the durable lifecycle state of an approval request.
+// Resolution is intentionally owned by a later workflow; this lane records
+// only the pending state.
+type HumanApprovalStatus string
+
+const HumanApprovalStatusPending HumanApprovalStatus = "PENDING"
+
+// HumanApprovalRequestedEventPayload contains only stable approval identity
+// and fixed decision vocabulary. Session, dispatch, Work, trace, and ordering
+// identity remain authoritative on FactoryEventContext.
+type HumanApprovalRequestedEventPayload struct {
+	ApprovalID    string                  `json:"approvalId"`
+	WorkstationID string                  `json:"workstationId"`
+	Decisions     []HumanApprovalDecision `json:"decisions"`
+	Status        HumanApprovalStatus     `json:"status"`
+}
+
+// DispatchWorkerSessionAssociationEventPayload records the canonical,
+// stable dispatch-to-Worker-Session identity association. Runtime commits
+// this record before invoking worker_sessions.Service.Start for the
+// associated dispatch, so the association is always observable before any
+// event that depends on it (the Worker Session's own opening or output
+// records). DispatchID remains authoritative on FactoryEventContext.
+type DispatchWorkerSessionAssociationEventPayload struct {
+	WorkerSessionID string `json:"workerSessionId"`
 }
 
 // WorkStateChangeEventPayload describes a canonical Petri marking position
@@ -737,9 +839,10 @@ type FactoryWorker struct {
 
 // FactoryWorkType describes a work type and its possible states.
 type FactoryWorkType struct {
-	ID     string                   `json:"id"`
-	Name   string                   `json:"name,omitempty"`
-	States []FactoryStateDefinition `json:"states,omitempty"`
+	ID                string                             `json:"id"`
+	Name              string                             `json:"name,omitempty"`
+	States            []FactoryStateDefinition           `json:"states,omitempty"`
+	ExpectedArtifacts []work.ExpectedArtifactDeclaration `json:"expected_artifacts,omitempty"`
 }
 
 // FactoryStateDefinition describes a named state in a work type lifecycle.
@@ -750,16 +853,18 @@ type FactoryStateDefinition struct {
 
 // FactoryWorkstation describes a transition that can execute work.
 type FactoryWorkstation struct {
-	ID                string            `json:"id"`
-	Name              string            `json:"name"`
-	WorkerID          string            `json:"worker_id,omitempty"`
-	Kind              string            `json:"kind,omitempty"`
-	Config            map[string]string `json:"config,omitempty"`
-	InputPlaceIDs     []string          `json:"input_place_ids,omitempty"`
-	OutputPlaceIDs    []string          `json:"output_place_ids,omitempty"`
-	ContinuePlaceIDs  []string          `json:"continue_place_ids,omitempty"`
-	RejectionPlaceIDs []string          `json:"rejection_place_ids,omitempty"`
-	FailurePlaceIDs   []string          `json:"failure_place_ids,omitempty"`
+	ID                string                             `json:"id"`
+	Name              string                             `json:"name"`
+	Description       *NameValueConfig                   `json:"description,omitempty"`
+	WorkerID          string                             `json:"worker_id,omitempty"`
+	Kind              string                             `json:"kind,omitempty"`
+	Config            map[string]string                  `json:"config,omitempty"`
+	InputPlaceIDs     []string                           `json:"input_place_ids,omitempty"`
+	OutputPlaceIDs    []string                           `json:"output_place_ids,omitempty"`
+	ContinuePlaceIDs  []string                           `json:"continue_place_ids,omitempty"`
+	RejectionPlaceIDs []string                           `json:"rejection_place_ids,omitempty"`
+	FailurePlaceIDs   []string                           `json:"failure_place_ids,omitempty"`
+	ExpectedArtifacts []work.ExpectedArtifactDeclaration `json:"expected_artifacts,omitempty"`
 }
 
 // FactoryWorkstationRef identifies a workstation in a runtime event.

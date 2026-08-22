@@ -94,10 +94,15 @@ export interface FactoryGraphEditorMessages {
   edgeWaypointSourceLabel: string;
   edgeWaypointTargetLabel: string;
   visualGroupAriaLabel: (group: { id: string; label?: string }) => string;
+  visualGroupOutlineAriaLabel: (
+    group: { id: string; label?: string },
+    edge: "top" | "right" | "bottom" | "left",
+  ) => string;
   visualGroupColorLabel: string;
   visualGroupColorOptionLabel: (
-    token: "primary" | "info" | "success" | "warning" | "outline",
+    token: "neutral" | "primary" | "info" | "success" | "warning" | "danger",
   ) => string;
+  visualGroupCustomColorLabel: string;
   visualGroupEmptyLabelError: string;
   visualGroupInvalidBoundsError: string;
   visualGroupLabelFieldLabel: string;
@@ -105,8 +110,8 @@ export interface FactoryGraphEditorMessages {
   visualGroupMembershipLabel: string;
   visualGroupMembershipNodeLabel: (label: string) => string;
   visualGroupMembershipStaleNodeLabel: (nodeId: string) => string;
-  visualGroupSelectedLabel: string;
   visualGroupDeleteLabel: string;
+  visualGroupFitLabel: string;
   visualGroupResizeHandleLabel: (corner: "ne" | "nw" | "se" | "sw") => string;
   toolbarCreateGroupDescription: string;
   toolbarCreateGroupLabel: string;
@@ -552,6 +557,12 @@ function describeEnglishConnectionAnchor(anchorId: string) {
         description: "Route successful output from this workstation.",
         label: "Success",
       };
+    case "workstation-approval-source":
+      return {
+        description:
+          "Route the approved output from this human approval workstation.",
+        label: "Approve",
+      };
     case "workstation-on-continue-source":
       return {
         description: "Route a continue transition from this workstation.",
@@ -713,8 +724,11 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         group.label?.trim()
           ? `Visual group ${group.label.trim()}`
           : `Visual group ${group.id}`,
+      visualGroupOutlineAriaLabel: (group, edge) =>
+        `${group.label?.trim() ? `Visual group ${group.label.trim()}` : `Visual group ${group.id}`} outline ${edge}`,
       visualGroupColorLabel: "Group color",
       visualGroupColorOptionLabel: (token) => `Use ${token} group color`,
+      visualGroupCustomColorLabel: "Custom group color",
       visualGroupEmptyLabelError: "Enter a group label.",
       visualGroupInvalidBoundsError:
         "Group bounds contain non-finite geometry. Resize the group to correct them before saving.",
@@ -726,8 +740,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         `Include ${label} in this group`,
       visualGroupMembershipStaleNodeLabel: (nodeId) =>
         `Saved member ${nodeId} is no longer on the canvas.`,
-      visualGroupSelectedLabel: "Selected visual group",
       visualGroupDeleteLabel: "Delete group",
+      visualGroupFitLabel: "Fit to members",
       visualGroupResizeHandleLabel: (corner) =>
         `Resize group from ${corner} corner`,
       toolbarCreateGroupDescription: "Create a labeled background group",
@@ -1093,6 +1107,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
             return "接收此工作站的资源需求。";
           case "workstation-output-source":
             return "从此工作站路由成功输出。";
+          case "workstation-approval-source":
+            return "从此人工审批工作站路由批准输出。";
           case "workstation-on-continue-source":
             return "从此工作站路由继续转换。";
           case "workstation-on-failure-source":
@@ -1120,6 +1136,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
             return "输入";
           case "workstation-output-source":
             return "成功";
+          case "workstation-approval-source":
+            return "批准";
           case "workstation-on-continue-source":
             return "继续";
           case "workstation-on-failure-source":
@@ -1160,8 +1178,11 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         group.label?.trim()
           ? `视觉分组 ${group.label.trim()}`
           : `视觉分组 ${group.id}`,
+      visualGroupOutlineAriaLabel: (group, edge) =>
+        `${group.label?.trim() ? `视觉分组 ${group.label.trim()}` : `视觉分组 ${group.id}`} 边框 ${edge}`,
       visualGroupColorLabel: "分组颜色",
       visualGroupColorOptionLabel: (token) => `使用 ${token} 分组颜色`,
+      visualGroupCustomColorLabel: "自定义分组颜色",
       visualGroupEmptyLabelError: "请输入分组标签。",
       visualGroupInvalidBoundsError:
         "分组边界包含非有限几何。请在保存前调整分组大小以修正。",
@@ -1171,8 +1192,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       visualGroupMembershipNodeLabel: (label) => `将 ${label} 加入此分组`,
       visualGroupMembershipStaleNodeLabel: (nodeId) =>
         `已保存的成员 ${nodeId} 已不在画布上。`,
-      visualGroupSelectedLabel: "已选视觉分组",
       visualGroupDeleteLabel: "删除分组",
+      visualGroupFitLabel: "适配成员",
       visualGroupResizeHandleLabel: (corner) => `从 ${corner} 角调整分组大小`,
       toolbarCreateGroupDescription: "创建带标签的背景分组",
       toolbarCreateGroupLabel: "创建分组",

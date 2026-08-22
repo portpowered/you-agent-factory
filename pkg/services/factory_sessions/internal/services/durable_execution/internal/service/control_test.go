@@ -7,6 +7,7 @@ import (
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/fixtures"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 )
 
 func TestDurableControlPauseAcceptedOnRunningSession(t *testing.T) {
@@ -136,7 +137,7 @@ func TestDurableControlFailuresStayDistinctFromOtherDurableErrors(t *testing.T) 
 }
 
 type controlFailureStub struct {
-	factorysessions.ExecutionService
+	durableexecution.Service
 }
 
 func (s *controlFailureStub) Pause(_ context.Context, sessionID string, _ factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {

@@ -10,9 +10,9 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/validationentry"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 func validateFactoryAPIPrePersistForTest(
@@ -253,7 +253,7 @@ func factoryWithResourceSlotRoutes() factoryapi.Factory {
 			OnRejection: &onRejection,
 			Outputs:     &outputs,
 			Type:        &workstationType,
-			Worker:      "processor",
+			Worker:      stringPtr("processor"),
 		}},
 	}
 }

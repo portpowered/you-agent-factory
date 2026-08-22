@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,11 +15,12 @@ import (
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
-	factoryruntimecli "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workcmd "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	"go.uber.org/zap"
@@ -194,6 +196,39 @@ func TestSessionCommandCompositionUsesTypedSessionsCLIAdapter(t *testing.T) {
 	}
 }
 
+func TestWorkCommandCompositionUsesResolvedOwnerAdapter(t *testing.T) {
+	t.Parallel()
+
+	var got workcmd.ListConfig
+	factory := NewCommandFactory(CommandOperations{
+		ListWork: func(cfg workcmd.ListConfig) error {
+			got = cfg
+			_, err := fmt.Fprintln(cfg.Output, "owner-list")
+			return err
+		},
+	})
+	root := factory.NewCommand(nil, nil, nil)
+	var stdout, stderr bytes.Buffer
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"work", "list", "--name", "review"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute work list: %v", err)
+	}
+	if got.Name != "review" {
+		t.Fatalf("work list name = %q, want review", got.Name)
+	}
+	if got.Context == nil || got.Output == nil {
+		t.Fatalf("work list owner config = %#v, want CLI context and output boundaries", got)
+	}
+	if stdout.String() != "owner-list\n" {
+		t.Fatalf("stdout = %q, want owner adapter output", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
 func TestSessionCreatePreservesBehaviorThroughProductionComposition(t *testing.T) {
 	t.Parallel()
 
@@ -265,28 +300,6 @@ func TestSessionShowPreservesBehaviorThroughProductionComposition(t *testing.T) 
 				if cfg.Context == nil || cfg.Server != "https://factory.example" ||
 					cfg.SessionID != "session-beta" || !cfg.JSON || !cfg.Verbose {
 					t.Fatalf("show config = %#v", cfg)
-				}
-				return writeSessionCompositionOutput(cfg.Output, cfg.Diagnostics, result)
-			},
-		})}
-	})
-}
-
-func TestSessionDispatchesPreservesBehaviorThroughProductionComposition(t *testing.T) {
-	t.Parallel()
-
-	args := []string{
-		"--verbose", "--json", "--server", "https://factory.example",
-		"session", "dispatches", "dur-sess-review-001",
-		"--phase", "review", "--status", "COMPLETED",
-	}
-	runSessionCompositionCases(t, args, errors.New("session operation failed"), func(result error) CommandOperations {
-		return CommandOperations{SessionsCLI: session.Bind(session.Operations{
-			ListDispatches: func(cfg session.DispatchesConfig) error {
-				if cfg.Context == nil || cfg.Server != "https://factory.example" ||
-					cfg.SessionID != "dur-sess-review-001" || cfg.Phase != "review" ||
-					cfg.Status != "COMPLETED" || !cfg.JSON || !cfg.Verbose {
-					t.Fatalf("dispatches config = %#v", cfg)
 				}
 				return writeSessionCompositionOutput(cfg.Output, cfg.Diagnostics, result)
 			},
@@ -367,6 +380,11 @@ func executeSessionComposition(
 	args []string,
 ) (string, string, error) {
 	t.Helper()
+	// These unit fixtures provide one adapter for the command family. Production
+	// composition supplies distinct local and remote services explicitly.
+	if operations.LocalSessionsCLI == nil {
+		operations.LocalSessionsCLI = operations.SessionsCLI
+	}
 	factory := NewCommandFactory(operations)
 	if factory.SessionsCLI == nil {
 		t.Fatal("SessionsCLI adapter is missing from production composition")
@@ -389,6 +407,225 @@ func writeSessionCompositionOutput(output, diagnostics io.Writer, result error) 
 	}
 	_, err := fmt.Fprintln(diagnostics, "session-diagnostic")
 	return err
+}
+
+func TestProductionMetricsCommandUsesInjectedRuntimeMetricsQuery(t *testing.T) {
+	called := false
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		runtimeMetricsQuery: func(_ context.Context, request factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
+			called = true
+			if !strings.HasSuffix(request.MetricsRoot, ".you-agent-factory\\metrics") && !strings.HasSuffix(request.MetricsRoot, ".you-agent-factory/metrics") {
+				t.Fatalf("metrics root = %q, want the default metrics directory", request.MetricsRoot)
+			}
+			return factoryvisualization.RuntimeMetricsQueryResult{
+				Providers: []factoryvisualization.RuntimeMetricsBreakdown{{Key: "provider-a"}},
+			}, nil
+		},
+	})
+	root := factory.NewCommand(
+		func() (string, error) { return t.TempDir(), nil },
+		func(string) (string, bool) { return "", false },
+		nil,
+	)
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"metrics", "--group-by", "provider"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute metrics: %v", err)
+	}
+	if !called {
+		t.Fatal("production metrics command did not use the injected query")
+	}
+	if !strings.Contains(output.String(), "Breakdown by provider: 1 rows") || !strings.Contains(output.String(), "provider-a:") {
+		t.Fatalf("output = %q, want provider breakdown", output.String())
+	}
+}
+
+func TestProductionMetricsCommandResolvesGlobalJSONAndSessionScope(t *testing.T) {
+	var gotRequest factoryvisualization.RuntimeMetricsQueryRequest
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		runtimeMetricsQuery: func(_ context.Context, request factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
+			gotRequest = request
+			return factoryvisualization.RuntimeMetricsQueryResult{
+				Providers: []factoryvisualization.RuntimeMetricsBreakdown{{Key: "provider-a"}},
+			}, nil
+		},
+	})
+	root := factory.NewCommand(
+		func() (string, error) { return t.TempDir(), nil },
+		func(string) (string, bool) { return "", false },
+		nil,
+	)
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"metrics", "--group-by", "provider", "--session", "session-a", "--json"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute metrics: %v", err)
+	}
+	if gotRequest.SessionID != "session-a" {
+		t.Fatalf("query session ID = %q, want session-a", gotRequest.SessionID)
+	}
+	var document struct {
+		Scope struct {
+			Kind             string  `json:"kind"`
+			FactorySessionID *string `json:"factory_session_id"`
+		} `json:"scope"`
+		GroupBy string `json:"group_by"`
+		Groups  []struct {
+			Key string `json:"key"`
+		} `json:"groups"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &document); err != nil {
+		t.Fatalf("decode metrics JSON: %v\n%s", err, output.String())
+	}
+	if document.Scope.Kind != "factory_session" || document.Scope.FactorySessionID == nil || *document.Scope.FactorySessionID != "session-a" {
+		t.Fatalf("JSON scope = %#v, want session-a", document.Scope)
+	}
+	if document.GroupBy != "provider" || len(document.Groups) != 1 || document.Groups[0].Key != "provider-a" {
+		t.Fatalf("JSON grouping = %q with groups %#v, want provider/provider-a", document.GroupBy, document.Groups)
+	}
+}
+
+type productionMetricsFailureCase struct {
+	name        string
+	args        []string
+	home        func() (string, error)
+	queryError  error
+	wantCode    string
+	wantFamily  string
+	wantMessage string
+	wantCalls   int
+	wantCause   error
+}
+
+func TestProductionMetricsCommandExecuteCommandPreservesCodedFailures(t *testing.T) {
+	t.Parallel()
+	queryCause := errors.New("metrics path=/private/credential=do-not-leak")
+	queryError := &factoryvisualization.RuntimeMetricsQueryError{
+		Kind:    factoryvisualization.RuntimeMetricsQueryReadFailed,
+		Message: "query Factory Runtime metrics: read artifacts",
+		Cause:   queryCause,
+	}
+	resolverCause := errors.New("home resolver credential=do-not-leak")
+	tests := []productionMetricsFailureCase{
+		{
+			name:        "invalid group",
+			args:        []string{"metrics", "--group-by", "region"},
+			home:        func() (string, error) { return "operator-home", nil },
+			wantCode:    "METRICS_INVALID_GROUP_BY",
+			wantFamily:  "BAD_REQUEST",
+			wantMessage: `invalid --group-by "region": choose workstation, worker, or provider`,
+		},
+		{
+			name:        "invalid group in JSON mode",
+			args:        []string{"--json", "metrics", "--group-by", "region"},
+			home:        func() (string, error) { return "operator-home", nil },
+			wantCode:    "METRICS_INVALID_GROUP_BY",
+			wantFamily:  "BAD_REQUEST",
+			wantMessage: `invalid --group-by "region": choose workstation, worker, or provider`,
+		},
+		{
+			name:        "home resolver failure",
+			args:        []string{"metrics"},
+			home:        func() (string, error) { return "", resolverCause },
+			wantCode:    "METRICS_HOME_DIRECTORY_FAILED",
+			wantFamily:  "INTERNAL_SERVER_ERROR",
+			wantMessage: "resolve metrics home directory: home directory could not be resolved; set HOME or USERPROFILE",
+			wantCause:   resolverCause,
+		},
+		{
+			name:        "empty home path",
+			args:        []string{"metrics"},
+			home:        func() (string, error) { return "  ", nil },
+			wantCode:    "METRICS_HOME_DIRECTORY_FAILED",
+			wantFamily:  "INTERNAL_SERVER_ERROR",
+			wantMessage: "resolve metrics home directory: resolver returned an empty path; set HOME or USERPROFILE",
+		},
+		{
+			name:        "query read failure",
+			args:        []string{"--json", "metrics"},
+			home:        func() (string, error) { return "operator-home", nil },
+			queryError:  queryError,
+			wantCode:    "METRICS_QUERY_FAILED",
+			wantFamily:  "INTERNAL_SERVER_ERROR",
+			wantMessage: "query Factory Runtime metrics: read artifacts",
+			wantCalls:   1,
+			wantCause:   queryCause,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			runProductionMetricsFailureCase(t, test)
+		})
+	}
+}
+
+func runProductionMetricsFailureCase(t *testing.T, test productionMetricsFailureCase) {
+	t.Helper()
+	queryCalls := 0
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		runtimeMetricsQuery: func(context.Context, factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
+			queryCalls++
+			return factoryvisualization.RuntimeMetricsQueryResult{}, test.queryError
+		},
+	})
+	var stdout, stderr bytes.Buffer
+	err := factory.ExecuteCommand(startupcli.CommandInvocation{
+		Arguments: test.args,
+		Stdin:     strings.NewReader(""),
+		Stdout:    &stdout,
+		Stderr:    &stderr,
+		Context:   context.Background(),
+		HomeDir:   test.home,
+		LookupEnv: func(string) (string, bool) { return "", false },
+	})
+	if err == nil {
+		t.Fatal("ExecuteCommand() error = nil, want metrics failure")
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty failure output", stdout.String())
+	}
+	assertSingleMetricsDiagnostic(t, stderr.String(), test.wantCode, test.wantFamily, test.wantMessage)
+	if queryCalls != test.wantCalls {
+		t.Fatalf("metrics query calls = %d, want %d", queryCalls, test.wantCalls)
+	}
+	if test.wantCause != nil && !errors.Is(err, test.wantCause) {
+		t.Fatalf("ExecuteCommand() error = %v, want to preserve cause", err)
+	}
+	if test.queryError != nil {
+		var gotQueryError *factoryvisualization.RuntimeMetricsQueryError
+		if !errors.As(err, &gotQueryError) {
+			t.Fatalf("ExecuteCommand() error = %v, want query error classification preserved", err)
+		}
+	}
+	if strings.Contains(stderr.String(), "do-not-leak") {
+		t.Fatalf("central diagnostic exposed an underlying payload: %q", stderr.String())
+	}
+}
+
+func assertSingleMetricsDiagnostic(t *testing.T, output, wantCode, wantFamily, wantMessage string) {
+	t.Helper()
+	trimmed := strings.TrimSpace(output)
+	lines := strings.Split(trimmed, "\n")
+	if trimmed == "" || len(lines) != 1 {
+		t.Fatalf("diagnostic output = %q, want exactly one JSON line", output)
+	}
+	var diagnostic struct {
+		Code    string `json:"code"`
+		Family  string `json:"family"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal([]byte(trimmed), &diagnostic); err != nil {
+		t.Fatalf("decode central diagnostic: %v; output=%q", err, output)
+	}
+	if diagnostic.Code != wantCode || diagnostic.Family != wantFamily || diagnostic.Message != wantMessage {
+		t.Fatalf("diagnostic = %#v, want code %q, family %q, and message %q", diagnostic, wantCode, wantFamily, wantMessage)
+	}
 }
 
 type injectedModelsCLIService struct {
@@ -481,6 +718,10 @@ func (compositionModelsRootForFactoryTest) GetModelReadiness(context.Context, mo
 	return modelinference.GetModelReadinessResult{}, modelinference.ErrUnsupportedOperation
 }
 
+func (compositionModelsRootForFactoryTest) ResolveModelReference(context.Context, modelinference.ResolveModelReferenceRequest) (modelinference.ResolveModelReferenceResult, error) {
+	return modelinference.ResolveModelReferenceResult{}, modelinference.ErrUnsupportedOperation
+}
+
 func (compositionModelsRootForFactoryTest) PullModelForScope(context.Context, modelinference.PullModelRequest) (modelinference.PullResult, error) {
 	return modelinference.PullResult{}, modelinference.ErrUnsupportedOperation
 }
@@ -525,12 +766,12 @@ func (compositionModelsRootForFactoryTest) InvokeModelWithLease(context.Context,
 	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
 }
 
-func (compositionModelsRootForFactoryTest) CancelInvocation(context.Context, modelinference.CancelInvocationRequest) (modelinference.CancelInvocationResult, error) {
-	return modelinference.CancelInvocationResult{}, modelinference.ErrUnsupportedOperation
+func (compositionModelsRootForFactoryTest) InvokeModel(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
 }
 
-func (compositionModelsRootForFactoryTest) ForRuntime(modelinference.RuntimeBinding) (modelinference.Service, error) {
-	return nil, modelinference.ErrUnsupportedOperation
+func (compositionModelsRootForFactoryTest) CancelInvocation(context.Context, modelinference.CancelInvocationRequest) (modelinference.CancelInvocationResult, error) {
+	return modelinference.CancelInvocationResult{}, modelinference.ErrUnsupportedOperation
 }
 
 func (compositionModelsRootForFactoryTest) InspectRuntime(context.Context, string) (modelinference.Runtime, error) {
@@ -549,19 +790,9 @@ func (compositionModelsRootForFactoryTest) InvokeLocal(context.Context, modelinf
 	return modelinference.LocalInvocationResult{}, modelinference.ErrUnsupportedOperation
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
-func TestNewCommandFactoryPreservesInjectedRuntimeCLIAdapter(t *testing.T) {
-	t.Parallel()
-
-	adapter := factoryruntimecli.BindService(factoryruntimecli.Config{})
-	factory := NewCommandFactory(CommandOperations{
-		RunDefaults: runcli.RunConfig{RuntimeCLI: adapter},
-	})
-	if factory.runDefaults.RuntimeCLI == nil {
-		t.Fatal("injected Runtime CLI adapter is missing from composed run defaults")
-	}
-}
-
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestNewCommandFactoryPreservesInjectedOperations(t *testing.T) {
 	t.Parallel()
 

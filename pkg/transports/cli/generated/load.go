@@ -1,7 +1,7 @@
 package generated
 
 import (
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 )
 
 // RepresentativeFamilyManifest returns generated §4.3 metadata for the
@@ -27,6 +27,12 @@ func WorkersFamilyManifest() (climanifest.Manifest, error) {
 	return workersFamilyManifestValue(), nil
 }
 
+// WorkerSessionsFamilyManifest returns generated worker-session observation
+// command metadata.
+func WorkerSessionsFamilyManifest() (climanifest.Manifest, error) {
+	return workerSessionsFamilyManifestValue(), nil
+}
+
 // FactoryConfigInitFamilyManifest returns generated §4.3 metadata for the
 // factory/config/init command family.
 func FactoryConfigInitFamilyManifest() (climanifest.Manifest, error) {
@@ -39,6 +45,18 @@ func ModelsDocsFamilyManifest() (climanifest.Manifest, error) {
 	return modelsDocsFamilyManifestValue(), nil
 }
 
+// ProvidersFamilyManifest returns generated metadata for the providers
+// capability-discovery command family.
+func ProvidersFamilyManifest() (climanifest.Manifest, error) {
+	return providersFamilyManifestValue(), nil
+}
+
+// MetricsFamilyManifest returns generated metadata for the runtime-metrics
+// inspection command family.
+func MetricsFamilyManifest() (climanifest.Manifest, error) {
+	return metricsFamilyManifestValue(), nil
+}
+
 // RunSubmitFamilyManifest returns generated metadata for the run/submit family.
 func RunSubmitFamilyManifest() (climanifest.Manifest, error) {
 	return runSubmitFamilyManifestValue(), nil
@@ -46,6 +64,11 @@ func RunSubmitFamilyManifest() (climanifest.Manifest, error) {
 
 func MCPFamilyManifest() (climanifest.Manifest, error) {
 	return mcpFamilyManifestValue(), nil
+}
+
+// ServeFamilyManifest returns generated metadata for you server and its ACP child.
+func ServeFamilyManifest() (climanifest.Manifest, error) {
+	return serveFamilyManifestValue(), nil
 }
 
 // CommandByID returns one generated representative-family command record.

@@ -33,7 +33,7 @@ type QueryCurrentConfig struct {
 	HTTP      clihttp.Protocol
 }
 
-// QueryConfig holds parameters for the factory query command.
+// QueryConfig holds parameters for the factory show command.
 type QueryConfig struct {
 	Context     context.Context
 	Server      string
@@ -112,12 +112,12 @@ func queryCurrent(cfg queryCurrentOptions) (factoryapi.Factory, error) {
 	}
 	endpoint, err := url.Parse(endpointURL)
 	if err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("parse factory query endpoint: %w", err)
+		return factoryapi.Factory{}, fmt.Errorf("parse factory show endpoint: %w", err)
 	}
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
-		"factory query request endpointPath=%s endpoint=%s server=%s session=%s",
+		"factory show request endpointPath=%s endpoint=%s server=%s session=%s",
 		endpoint.Path,
 		endpoint.String(),
 		cfg.Server,
@@ -131,7 +131,7 @@ func queryCurrent(cfg queryCurrentOptions) (factoryapi.Factory, error) {
 		&result,
 	)
 	if err != nil {
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "factory query response endpointPath=%s error=unreachable durationMillis=%d", endpoint.Path, response.Duration.Milliseconds())
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "factory show response endpointPath=%s error=unreachable durationMillis=%d", endpoint.Path, response.Duration.Milliseconds())
 		return factoryapi.Factory{}, fmt.Errorf("factory not reachable at %s: %w", endpoint.String(), err)
 	}
 	resp := response.HTTP
@@ -142,7 +142,7 @@ func queryCurrent(cfg queryCurrentOptions) (factoryapi.Factory, error) {
 		if err != nil {
 			return factoryapi.Factory{}, fmt.Errorf("read current factory response: %w", err)
 		}
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "factory query response endpointPath=%s status=%d durationMillis=%d responseBytes=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds(), len(body))
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "factory show response endpointPath=%s status=%d durationMillis=%d responseBytes=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds(), len(body))
 		return factoryapi.Factory{}, queryCurrentError(resp.StatusCode, body)
 	}
 
@@ -150,7 +150,7 @@ func queryCurrent(cfg queryCurrentOptions) (factoryapi.Factory, error) {
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
-	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "factory query response endpointPath=%s status=%d durationMillis=%d responseBytes=%d factoryKind=%s factoryName=%q", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds(), responseBytes, currentFactoryKind(result), result.Name)
+	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "factory show response endpointPath=%s status=%d durationMillis=%d responseBytes=%d factoryKind=%s factoryName=%q", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds(), responseBytes, currentFactoryKind(result), result.Name)
 	return result, nil
 }
 

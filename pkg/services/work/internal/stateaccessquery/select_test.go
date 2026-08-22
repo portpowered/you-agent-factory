@@ -75,6 +75,74 @@ func TestSelectSortsByStateTypeThenID(t *testing.T) {
 	}
 }
 
+func TestSelectTerminalityIncludesFailedAndExcludesUnknownStates(t *testing.T) {
+	t.Parallel()
+
+	items := []stateaccessquery.Item{
+		{ID: "tok-terminal", WorkTypeName: "story", State: &stateaccessquery.State{Type: stateaccessquery.StateTypeTerminal}},
+		{ID: "tok-failed", WorkTypeName: "story", State: &stateaccessquery.State{Type: stateaccessquery.StateTypeFailed}},
+		{ID: "tok-processing", WorkTypeName: "story", State: &stateaccessquery.State{Type: stateaccessquery.StateTypeProcessing}},
+		{ID: "tok-unknown", WorkTypeName: "story", State: &stateaccessquery.State{Type: "UNKNOWN"}},
+		{ID: "tok-missing", WorkTypeName: "story"},
+	}
+	terminal := true
+	nonTerminal := true
+
+	terminalSelection := mustSelection(t, stateaccessquery.SelectionOptions{
+		Terminal:     &terminal,
+		WorkTypeName: stringPointer("story"),
+	})
+	if got, want := itemIDs(terminalSelection.Apply(items)), []string{"tok-failed", "tok-terminal"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("terminal selection IDs = %v, want %v", got, want)
+	}
+	nonTerminalSelection := mustSelection(t, stateaccessquery.SelectionOptions{
+		NonTerminal:  &nonTerminal,
+		WorkTypeName: stringPointer("story"),
+	})
+	if got, want := itemIDs(nonTerminalSelection.Apply(items)), []string{"tok-processing"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("non-terminal selection IDs = %v, want %v", got, want)
+	}
+}
+
+func TestAnnotateSupersessionUsesNewestSameNameSuccessor(t *testing.T) {
+	t.Parallel()
+
+	items := []stateaccessquery.Item{
+		{ID: "tok-old", WorkID: "work-old", Name: "same", State: &stateaccessquery.State{Type: stateaccessquery.StateTypeFailed}},
+		{ID: "tok-processing", WorkID: "work-processing", Name: "same", State: &stateaccessquery.State{Type: stateaccessquery.StateTypeProcessing}},
+		{ID: "tok-new", WorkID: "work-new", Name: "same", State: &stateaccessquery.State{Type: stateaccessquery.StateTypeProcessing}},
+		{ID: "tok-different", WorkID: "work-different", Name: "different", State: &stateaccessquery.State{Type: stateaccessquery.StateTypeTerminal}},
+	}
+	admissions := []stateaccessquery.Admission{
+		{WorkID: "work-old", Name: "same", Order: 0},
+		{WorkID: "work-processing", Name: "same", Order: 1},
+		{WorkID: "work-new", Name: "same", Order: 2},
+		{WorkID: "work-different", Name: "different", Order: 3},
+	}
+
+	annotated := stateaccessquery.AnnotateSupersession(items, admissions)
+	if annotated[0].SupersededBy != "work-new" {
+		t.Fatalf("old item SupersededBy = %q, want work-new", annotated[0].SupersededBy)
+	}
+	for _, index := range []int{1, 2, 3} {
+		if annotated[index].SupersededBy != "" {
+			t.Fatalf("item %q SupersededBy = %q, want empty", annotated[index].ID, annotated[index].SupersededBy)
+		}
+	}
+	if items[0].SupersededBy != "" {
+		t.Fatalf("AnnotateSupersession mutated input: %#v", items[0])
+	}
+
+	defaultSelection := mustSelection(t, stateaccessquery.SelectionOptions{})
+	if got := itemIDs(defaultSelection.Apply(annotated)); !reflect.DeepEqual(got, []string{"tok-new", "tok-processing", "tok-different"}) {
+		t.Fatalf("default selection IDs = %v, want superseded item omitted", got)
+	}
+	includeSelection := mustSelection(t, stateaccessquery.SelectionOptions{IncludeSuperseded: true})
+	if got := itemIDs(includeSelection.Apply(annotated)); !reflect.DeepEqual(got, []string{"tok-new", "tok-processing", "tok-old", "tok-different"}) {
+		t.Fatalf("include-superseded selection IDs = %v, want complete history", got)
+	}
+}
+
 func TestValidateSelectionRejectsInvalidValues(t *testing.T) {
 	t.Parallel()
 
@@ -84,6 +152,10 @@ func TestValidateSelectionRejectsInvalidValues(t *testing.T) {
 	}
 	if err := stateaccessquery.ValidateSelection(stateaccessquery.SelectionOptions{SortBy: "name"}); err == nil || err.Error() != "sortBy must be state.type" {
 		t.Fatalf("ValidateSelection() sort error = %v", err)
+	}
+	terminal, nonTerminal := true, true
+	if err := stateaccessquery.ValidateSelection(stateaccessquery.SelectionOptions{Terminal: &terminal, NonTerminal: &nonTerminal}); err == nil || err.Error() != "terminal and nonTerminal cannot both be selected" {
+		t.Fatalf("ValidateSelection() terminality error = %v", err)
 	}
 }
 
@@ -101,10 +173,7 @@ func stringPointer(value string) *string {
 
 func mustSelection(t *testing.T, options stateaccessquery.SelectionOptions) stateaccessquery.Selection {
 	t.Helper()
-	selection, err := stateaccessquery.NewSelection(
-		options.StateName, options.StateType, options.Name,
-		options.WorkTypeName, options.TraceID, options.SortBy,
-	)
+	selection, err := stateaccessquery.NewSelectionWithOptions(options)
 	if err != nil {
 		t.Fatalf("NewSelection() error = %v", err)
 	}

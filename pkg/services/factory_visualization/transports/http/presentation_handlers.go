@@ -12,7 +12,7 @@ func (a *Adapter) OpenPresentationHTTP(
 	ctx context.Context,
 	body io.Reader,
 ) (OpenPresentationHTTPResponse, error) {
-	req, err := decodeOpenPresentationHTTPRequest(body)
+	req, diagnostics, err := decodeOpenPresentationHTTPRequest(body)
 	if err != nil {
 		return OpenPresentationHTTPResponse{}, err
 	}
@@ -23,7 +23,9 @@ func (a *Adapter) OpenPresentationHTTP(
 	if err != nil {
 		return OpenPresentationHTTPResponse{}, err
 	}
-	return openPresentationHTTPResponseFromResult(result), nil
+	response := openPresentationHTTPResponseFromResult(result)
+	response.ignoredJSONPaths = diagnostics.Paths()
+	return response, nil
 }
 
 // PresentProgressHTTP decodes an owned presentation-progress HTTP request,
@@ -33,7 +35,7 @@ func (a *Adapter) PresentProgressHTTP(
 	ctx context.Context,
 	body io.Reader,
 ) (PresentProgressHTTPResponse, error) {
-	req, err := decodePresentProgressHTTPRequest(body)
+	req, diagnostics, err := decodePresentProgressHTTPRequest(body)
 	if err != nil {
 		return PresentProgressHTTPResponse{}, err
 	}
@@ -44,7 +46,9 @@ func (a *Adapter) PresentProgressHTTP(
 	if err != nil {
 		return PresentProgressHTTPResponse{}, err
 	}
-	return presentProgressHTTPResponseFromResult(result), nil
+	response := presentProgressHTTPResponseFromResult(result)
+	response.ignoredJSONPaths = diagnostics.Paths()
+	return response, nil
 }
 
 // FinalizePresentationHTTP decodes an owned presentation-finalize HTTP request,
@@ -54,7 +58,7 @@ func (a *Adapter) FinalizePresentationHTTP(
 	ctx context.Context,
 	body io.Reader,
 ) (FinalizePresentationHTTPResponse, error) {
-	req, err := decodeFinalizePresentationHTTPRequest(body)
+	req, diagnostics, err := decodeFinalizePresentationHTTPRequest(body)
 	if err != nil {
 		return FinalizePresentationHTTPResponse{}, err
 	}
@@ -65,7 +69,9 @@ func (a *Adapter) FinalizePresentationHTTP(
 	if err != nil {
 		return FinalizePresentationHTTPResponse{}, err
 	}
-	return finalizePresentationHTTPResponseFromResult(result), nil
+	response := finalizePresentationHTTPResponseFromResult(result)
+	response.ignoredJSONPaths = diagnostics.Paths()
+	return response, nil
 }
 
 // ClosePresentationHTTP decodes an owned presentation-close HTTP request,
@@ -75,7 +81,7 @@ func (a *Adapter) ClosePresentationHTTP(
 	ctx context.Context,
 	body io.Reader,
 ) (ClosePresentationHTTPResponse, error) {
-	req, err := decodeClosePresentationHTTPRequest(body)
+	req, diagnostics, err := decodeClosePresentationHTTPRequest(body)
 	if err != nil {
 		return ClosePresentationHTTPResponse{}, err
 	}
@@ -86,7 +92,9 @@ func (a *Adapter) ClosePresentationHTTP(
 	if err != nil {
 		return ClosePresentationHTTPResponse{}, err
 	}
-	return closePresentationHTTPResponseFromResult(result), nil
+	response := closePresentationHTTPResponseFromResult(result)
+	response.ignoredJSONPaths = diagnostics.Paths()
+	return response, nil
 }
 
 // HandleOpenPresentation serves POST /factory-visualization/presentation/open.
@@ -96,6 +104,7 @@ func (a *Adapter) HandleOpenPresentation(w http.ResponseWriter, r *http.Request)
 		a.writePresentationRequestError(w, err)
 		return
 	}
+	a.writeCompatibilityWarning(w, "open_presentation", response.ignoredJSONPaths)
 	a.writeJSON(w, http.StatusOK, response)
 }
 
@@ -106,6 +115,7 @@ func (a *Adapter) HandlePresentProgress(w http.ResponseWriter, r *http.Request) 
 		a.writePresentationRequestError(w, err)
 		return
 	}
+	a.writeCompatibilityWarning(w, "present_progress", response.ignoredJSONPaths)
 	a.writeJSON(w, http.StatusOK, response)
 }
 
@@ -116,6 +126,7 @@ func (a *Adapter) HandleFinalizePresentation(w http.ResponseWriter, r *http.Requ
 		a.writePresentationRequestError(w, err)
 		return
 	}
+	a.writeCompatibilityWarning(w, "finalize_presentation", response.ignoredJSONPaths)
 	a.writeJSON(w, http.StatusOK, response)
 }
 
@@ -126,6 +137,7 @@ func (a *Adapter) HandleClosePresentation(w http.ResponseWriter, r *http.Request
 		a.writePresentationRequestError(w, err)
 		return
 	}
+	a.writeCompatibilityWarning(w, "close_presentation", response.ignoredJSONPaths)
 	a.writeJSON(w, http.StatusOK, response)
 }
 

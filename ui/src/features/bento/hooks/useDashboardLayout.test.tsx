@@ -2,13 +2,20 @@
 import "../../../testing/vitest-dom-capabilities.setup";
 
 import { act, renderHook } from "@testing-library/react";
+import { vi } from "vitest";
 
 import {
+  readStoredDashboardLayout,
+  writeStoredDashboardLayout,
+} from "./storage/dashboardLayoutStorage";
+import {
+  createDashboardLayoutScope,
   DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
   DASHBOARD_LAYOUT_STORAGE_KEY,
   DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS,
   DASHBOARD_WIDGET_IDS,
   DEFAULT_DASHBOARD_LAYOUT,
+  getDashboardLayoutStorageKey,
   reloadDashboardLayoutFromStorage,
   useDashboardLayout,
 } from "./useDashboardLayout";
@@ -116,12 +123,130 @@ describe("useDashboardLayout core migrations", () => {
           item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.providerSession,
       ),
     ).toEqual(
-      expect.objectContaining(
-        DEFAULT_DASHBOARD_LAYOUT.find(
-          (item) =>
-            item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.providerSession,
-        ),
+      expect.objectContaining({
+        id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.providerSession,
+        widgetType: DASHBOARD_WIDGET_IDS.providerSession,
+        y: 12,
+      }),
+    );
+  });
+});
+
+describe("useDashboardLayout scoped persistence", () => {
+  beforeEach(resetDashboardLayoutStorage);
+
+  it("does not re-read a loaded scope on every dashboard remount", () => {
+    const scope = createDashboardLayoutScope(
+      "factory-mount-guard",
+      "session-mount-guard",
+    );
+    const first = renderHook(() => useDashboardLayout(scope));
+    const loadedLayout = first.result.current.dashboardLayout;
+    first.unmount();
+
+    writeStoredDashboardLayout(
+      loadedLayout.map((item) =>
+        item.widgetType === DASHBOARD_WIDGET_IDS.workGraph
+          ? { ...item, h: item.h + 4 }
+          : item,
       ),
+      scope,
+    );
+
+    const second = renderHook(() => useDashboardLayout(scope));
+
+    expect(second.result.current.dashboardLayout).toEqual(loadedLayout);
+  });
+
+  it("keeps layouts isolated for sessions of the same Factory", () => {
+    const firstScope = createDashboardLayoutScope(
+      "factory-shared",
+      "session-alpha",
+    );
+    const secondScope = createDashboardLayoutScope(
+      "factory-shared",
+      "session-beta",
+    );
+    const firstLayout = DEFAULT_DASHBOARD_LAYOUT.map((item) =>
+      item.widgetType === DASHBOARD_WIDGET_IDS.workGraph
+        ? { ...item, h: 13 }
+        : item,
+    );
+    const secondLayout = DEFAULT_DASHBOARD_LAYOUT.map((item) =>
+      item.widgetType === DASHBOARD_WIDGET_IDS.workGraph
+        ? { ...item, h: 6 }
+        : item,
+    );
+
+    writeStoredDashboardLayout(firstLayout, firstScope);
+    writeStoredDashboardLayout(secondLayout, secondScope);
+
+    expect(
+      readStoredDashboardLayout(firstScope).find(
+        (item) => item.widgetType === DASHBOARD_WIDGET_IDS.workGraph,
+      ),
+    ).toMatchObject({ h: 13 });
+    expect(
+      readStoredDashboardLayout(secondScope).find(
+        (item) => item.widgetType === DASHBOARD_WIDGET_IDS.workGraph,
+      ),
+    ).toMatchObject({ h: 6 });
+
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(getDashboardLayoutStorageKey(firstScope)) ??
+          "{}",
+      ),
+    ).toMatchObject({
+      schemaVersion: 3,
+      scope: firstScope,
+    });
+  });
+
+  it("migrates the legacy global layout once without making it a live mirror", () => {
+    const firstScope = createDashboardLayoutScope(
+      "factory-shared",
+      "session-alpha",
+    );
+    const secondScope = createDashboardLayoutScope(
+      "factory-shared",
+      "session-beta",
+    );
+    const legacyLayout = DEFAULT_DASHBOARD_LAYOUT.map((item) =>
+      item.widgetType === DASHBOARD_WIDGET_IDS.workGraph
+        ? { ...item, h: 7 }
+        : item,
+    );
+    window.localStorage.setItem(
+      DASHBOARD_LAYOUT_STORAGE_KEY,
+      JSON.stringify(legacyLayout),
+    );
+
+    expect(
+      readStoredDashboardLayout(firstScope).find(
+        (item) => item.widgetType === DASHBOARD_WIDGET_IDS.workGraph,
+      ),
+    ).toMatchObject({ h: 7 });
+
+    const firstUpdatedLayout = legacyLayout.map((item) =>
+      item.widgetType === DASHBOARD_WIDGET_IDS.workGraph
+        ? { ...item, h: 11 }
+        : item,
+    );
+    writeStoredDashboardLayout(firstUpdatedLayout, firstScope);
+
+    expect(
+      readStoredDashboardLayout(secondScope).find(
+        (item) => item.widgetType === DASHBOARD_WIDGET_IDS.workGraph,
+      ),
+    ).toMatchObject({ h: 7 });
+    expect(
+      readStoredDashboardLayout(firstScope).find(
+        (item) => item.widgetType === DASHBOARD_WIDGET_IDS.workGraph,
+      ),
+    ).toMatchObject({ h: 11 });
+    expect(window.localStorage.getItem(DASHBOARD_LAYOUT_STORAGE_KEY)).toBe(
+      JSON.stringify(legacyLayout),
     );
   });
 });
@@ -228,7 +353,7 @@ describe("useDashboardLayout persisted layout merging", () => {
         h: 9,
         id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workGraph,
         widgetType: DASHBOARD_WIDGET_IDS.workGraph,
-        y: 3,
+        y: 4,
       }),
     );
   });
@@ -297,7 +422,7 @@ describe("useDashboardLayout work-outcome chart sizing", () => {
       result.current.dashboardLayout.find(
         (item) => item.id === DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
       ),
-    ).toMatchObject({ x: 8, y: 27 });
+    ).toMatchObject({ x: 0, y: 37 });
   });
 });
 
@@ -372,7 +497,7 @@ describe("useDashboardLayout migration-specific layout compaction", () => {
     );
   });
 
-  it("widens legacy trace cards and drops stale max-width constraints during reload migration", () => {
+  it("widens the primary trace card and drops duplicate singleton traces during reload migration", () => {
     window.localStorage.setItem(
       DASHBOARD_LAYOUT_STORAGE_KEY,
       JSON.stringify([
@@ -404,8 +529,8 @@ describe("useDashboardLayout migration-specific layout compaction", () => {
     const primaryTrace = result.current.dashboardLayout.find(
       (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.trace,
     );
-    const duplicateTrace = result.current.dashboardLayout.find(
-      (item) => item.id === "trace::instance-1",
+    const traceCards = result.current.dashboardLayout.filter(
+      (item) => item.widgetType === DASHBOARD_WIDGET_IDS.trace && !item.hidden,
     );
 
     expect(primaryTrace).toMatchObject({
@@ -418,13 +543,7 @@ describe("useDashboardLayout migration-specific layout compaction", () => {
       x: 0,
       y: 17,
     });
-    expect(duplicateTrace).toMatchObject({
-      id: "trace::instance-1",
-      widgetType: DASHBOARD_WIDGET_IDS.trace,
-      w: 8,
-      x: 0,
-      y: 17,
-    });
+    expect(traceCards).toHaveLength(1);
   });
 });
 
@@ -479,6 +598,45 @@ describe("useDashboardLayout widget instance persistence", () => {
     ).toHaveLength(1);
   });
 
+  it("rejects a second graph card without mutating or persisting the layout", () => {
+    const setItem = vi.spyOn(window.localStorage, "setItem");
+    const { result } = renderHook(() => useDashboardLayout());
+    const initialLayout = result.current.dashboardLayout;
+
+    act(() => {
+      result.current.addDashboardWidget(DASHBOARD_WIDGET_IDS.workGraph);
+    });
+
+    expect(result.current.dashboardLayout).toEqual(initialLayout);
+    expect(setItem).not.toHaveBeenCalled();
+    setItem.mockRestore();
+  });
+
+  it("allocates a fresh graph identity after removing the existing graph card", () => {
+    const { result } = renderHook(() => useDashboardLayout());
+    const graphCard = result.current.dashboardLayout.find(
+      (item) => item.widgetType === DASHBOARD_WIDGET_IDS.workGraph,
+    );
+
+    expect(graphCard).toBeDefined();
+
+    act(() => {
+      result.current.removeDashboardWidget(graphCard?.id ?? "");
+      reloadDashboardLayoutFromStorage();
+      result.current.addDashboardWidget(DASHBOARD_WIDGET_IDS.workGraph);
+    });
+
+    expect(result.current.dashboardLayout).toContainEqual(
+      expect.objectContaining({
+        id: "work-graph::instance-1",
+        widgetType: DASHBOARD_WIDGET_IDS.workGraph,
+      }),
+    );
+    expect(result.current.dashboardLayout).not.toContainEqual(
+      expect.objectContaining({ id: graphCard?.id }),
+    );
+  });
+
   it("removes only the targeted widget instance and keeps the inline add-widget card", () => {
     const { result } = renderHook(() => useDashboardLayout());
 
@@ -511,6 +669,194 @@ describe("useDashboardLayout widget instance persistence", () => {
         (item) => item.id === DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
       ),
     ).toBeDefined();
+  });
+});
+
+describe("useDashboardLayout highest instance allocation", () => {
+  beforeEach(resetDashboardLayoutStorage);
+
+  it("does not reuse the highest deleted instance after a scoped reload", () => {
+    const scope = createDashboardLayoutScope(
+      "factory-monotonic",
+      "session-highest",
+    );
+    const { result } = renderHook(() => useDashboardLayout(scope));
+
+    act(() => {
+      result.current.addDashboardWidget(DASHBOARD_WIDGET_IDS.workOutcomeChart);
+    });
+    expect(result.current.dashboardLayout).toContainEqual(
+      expect.objectContaining({
+        id: "work-outcome-chart::instance-1",
+        widgetType: DASHBOARD_WIDGET_IDS.workOutcomeChart,
+      }),
+    );
+
+    act(() => {
+      result.current.removeDashboardWidget("work-outcome-chart::instance-1");
+      reloadDashboardLayoutFromStorage(scope);
+    });
+
+    const storedEnvelope = JSON.parse(
+      window.localStorage.getItem(getDashboardLayoutStorageKey(scope)) ?? "{}",
+    ) as { instanceHighWaterMarks?: Record<string, number> };
+    expect(storedEnvelope.instanceHighWaterMarks).toMatchObject({
+      [DASHBOARD_WIDGET_IDS.workOutcomeChart]: 1,
+    });
+
+    act(() => {
+      result.current.addDashboardWidget(DASHBOARD_WIDGET_IDS.workOutcomeChart);
+    });
+
+    expect(result.current.dashboardLayout).toContainEqual(
+      expect.objectContaining({
+        id: "work-outcome-chart::instance-2",
+        widgetType: DASHBOARD_WIDGET_IDS.workOutcomeChart,
+      }),
+    );
+    expect(result.current.dashboardLayout).not.toContainEqual(
+      expect.objectContaining({ id: "work-outcome-chart::instance-1" }),
+    );
+  });
+});
+
+describe("useDashboardLayout middle instance allocation", () => {
+  beforeEach(resetDashboardLayoutStorage);
+
+  it("advances beyond a deleted middle instance and keeps scopes independent", () => {
+    const firstScope = createDashboardLayoutScope(
+      "factory-monotonic",
+      "session-middle",
+    );
+    const secondScope = createDashboardLayoutScope(
+      "factory-monotonic",
+      "session-independent",
+    );
+    const first = renderHook(() => useDashboardLayout(firstScope));
+    const second = renderHook(() => useDashboardLayout(secondScope));
+
+    act(() => {
+      first.result.current.addDashboardWidget(
+        DASHBOARD_WIDGET_IDS.workOutcomeChart,
+      );
+      first.result.current.addDashboardWidget(
+        DASHBOARD_WIDGET_IDS.workOutcomeChart,
+      );
+    });
+    expect(first.result.current.dashboardLayout).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "work-outcome-chart::instance-1" }),
+        expect.objectContaining({ id: "work-outcome-chart::instance-2" }),
+      ]),
+    );
+
+    act(() => {
+      first.result.current.removeDashboardWidget(
+        "work-outcome-chart::instance-1",
+      );
+      first.result.current.addDashboardWidget(
+        DASHBOARD_WIDGET_IDS.workOutcomeChart,
+      );
+      second.result.current.addDashboardWidget(
+        DASHBOARD_WIDGET_IDS.workOutcomeChart,
+      );
+    });
+
+    expect(first.result.current.dashboardLayout).toContainEqual(
+      expect.objectContaining({ id: "work-outcome-chart::instance-3" }),
+    );
+    expect(first.result.current.dashboardLayout).not.toContainEqual(
+      expect.objectContaining({ id: "work-outcome-chart::instance-1" }),
+    );
+    expect(second.result.current.dashboardLayout).toContainEqual(
+      expect.objectContaining({ id: "work-outcome-chart::instance-1" }),
+    );
+  });
+});
+
+describe("useDashboardLayout persisted allocation state", () => {
+  beforeEach(resetDashboardLayoutStorage);
+
+  it("seeds the high-water mark from repaired persisted instance ids", () => {
+    const scope = createDashboardLayoutScope(
+      "factory-monotonic",
+      "session-repaired",
+    );
+    window.localStorage.setItem(
+      getDashboardLayoutStorageKey(scope),
+      JSON.stringify({
+        layout: [
+          ...DEFAULT_DASHBOARD_LAYOUT,
+          {
+            ...DEFAULT_DASHBOARD_LAYOUT.find(
+              (item) =>
+                item.widgetType === DASHBOARD_WIDGET_IDS.workOutcomeChart,
+            ),
+            id: "work-outcome-chart::instance-7",
+          },
+        ],
+        schemaVersion: 3,
+        scope,
+      }),
+    );
+
+    act(() => {
+      reloadDashboardLayoutFromStorage(scope);
+    });
+    const { result } = renderHook(() => useDashboardLayout(scope));
+
+    act(() => {
+      result.current.removeDashboardWidget("work-outcome-chart::instance-7");
+      result.current.addDashboardWidget(DASHBOARD_WIDGET_IDS.workOutcomeChart);
+    });
+
+    expect(result.current.dashboardLayout).toContainEqual(
+      expect.objectContaining({ id: "work-outcome-chart::instance-8" }),
+    );
+  });
+
+  it("seeds the high-water mark when migrating a legacy layout", () => {
+    const scope = createDashboardLayoutScope(
+      "factory-monotonic",
+      "session-legacy",
+    );
+    const legacyItem = DEFAULT_DASHBOARD_LAYOUT.find(
+      (item) => item.widgetType === DASHBOARD_WIDGET_IDS.workOutcomeChart,
+    );
+    if (!legacyItem) {
+      throw new Error("default work-outcome layout is missing");
+    }
+
+    window.localStorage.setItem(
+      DASHBOARD_LAYOUT_STORAGE_KEY,
+      JSON.stringify([
+        ...DEFAULT_DASHBOARD_LAYOUT,
+        { ...legacyItem, id: "work-outcome-chart::instance-4" },
+      ]),
+    );
+
+    act(() => {
+      reloadDashboardLayoutFromStorage(scope);
+    });
+    const { result } = renderHook(() => useDashboardLayout(scope));
+
+    act(() => {
+      result.current.addDashboardWidget(DASHBOARD_WIDGET_IDS.workOutcomeChart);
+    });
+
+    expect(result.current.dashboardLayout).toContainEqual(
+      expect.objectContaining({ id: "work-outcome-chart::instance-5" }),
+    );
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(getDashboardLayoutStorageKey(scope)) ??
+          "{}",
+      ),
+    ).toMatchObject({
+      instanceHighWaterMarks: {
+        [DASHBOARD_WIDGET_IDS.workOutcomeChart]: 5,
+      },
+    });
   });
 });
 
@@ -572,8 +918,8 @@ describe("useDashboardLayout reload persistence", () => {
       id: "work-outcome-chart::instance-1",
       w: 6,
       widgetType: DASHBOARD_WIDGET_IDS.workOutcomeChart,
-      x: 2,
-      y: 28,
+      x: 0,
+      y: 37,
     });
     expect(
       reloadedLayout.filter(
@@ -589,8 +935,8 @@ describe("useDashboardLayout reload persistence", () => {
       id: DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
       w: 3,
       widgetType: DASHBOARD_WIDGET_IDS.addWidget,
-      x: 9,
-      y: 28,
+      x: 6,
+      y: 37,
     });
   });
 });

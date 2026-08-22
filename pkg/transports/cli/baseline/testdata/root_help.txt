@@ -23,26 +23,29 @@ Examples:
   you docs agents
 
 Available Commands:
-  completion  Generate the autocompletion script for the specified shell
-  config      Configuration command guide
-  docs        Print packaged markdown reference topics
-  factory     Inspect and manage factory definitions
-  help        Help about any command
-  init        Configure provider and model defaults
-  mcp         Model Context Protocol servers for Factory Session tools
-  models      Inspect discovered models from a running service
-  run         Load workflow and run the factory engine
-  server      Serve the Current Factory API and dashboard
-  session     List, open, and close factory sessions on a running host
-  submit      Submit work to a running factory
-  work        Inspect work from a running factory
-  workers     Manage worker execution integrations
+  completion      Generate the autocompletion script for the specified shell
+  config          Configuration command guide
+  docs            Print packaged markdown reference topics
+  factory         Inspect and manage factory definitions
+  help            Help about any command
+  init            Configure provider and model defaults
+  metrics         Inspect recorded Factory Runtime metrics
+  models          Inspect discovered models from a running service
+  providers       Discover provider capabilities
+  run             Load workflow and run the factory engine
+  server          Serve the Current Factory API and dashboard
+  session         List, open, and close factory sessions on a running host
+  submit          Submit work to a running factory
+  work            Inspect work from a running factory
+  worker-sessions Inspect Worker Sessions for Work
+  workers         Manage worker execution integrations
 
 Flags:
   -d, --debug           emit lower-level command diagnostics where supported (implies --verbose)
   -h, --help            help for you
       --json            emit structured JSON on stdout for supported commands; diagnostics remain on stderr
-      --server string   factory API base URI (http:// or https://); HTTP client commands target this URI, while you server and server-enabled runs bind its loopback host and port (default "http://localhost:7437")
+      --remote          execute a supported operation through a running You server; does not wait, follow, continue, or start a listener
+      --server string   factory API base URI (http:// or https://) for HTTP client commands and remote placement; listener-owning commands use --listen host:port for explicit local binds, while local --server binding remains a warned compatibility path (default "http://localhost:7437")
   -v, --verbose         emit concise command diagnostics to stderr
       --version         version for you
 

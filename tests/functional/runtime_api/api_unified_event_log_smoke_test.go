@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -56,14 +57,14 @@ func newUnifiedEventLogSmokeFixture(t *testing.T) unifiedEventLogSmokeFixture {
 	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"worker-a": {{
 			Content: "draft stage one complete. COMPLETE",
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
+			ProviderSession: &providers.SessionMetadata{
 				Provider: "codex",
 				Kind:     "session_id",
 				ID:       "sess-unified-event-log-draft-step-one",
 			},
 		}, {
 			Content: "review stage one complete. COMPLETE",
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
+			ProviderSession: &providers.SessionMetadata{
 				Provider: "codex",
 				Kind:     "session_id",
 				ID:       "sess-unified-event-log-review-step-one",
@@ -71,14 +72,14 @@ func newUnifiedEventLogSmokeFixture(t *testing.T) unifiedEventLogSmokeFixture {
 		}},
 		"worker-b": {{
 			Content: "draft stage two complete. COMPLETE",
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
+			ProviderSession: &providers.SessionMetadata{
 				Provider: "codex",
 				Kind:     "session_id",
 				ID:       "sess-unified-event-log-draft-step-two",
 			},
 		}, {
 			Content: "review stage two complete. COMPLETE",
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
+			ProviderSession: &providers.SessionMetadata{
 				Provider: "codex",
 				Kind:     "session_id",
 				ID:       "sess-unified-event-log-review-step-two",
@@ -126,10 +127,10 @@ func assertUnifiedEventLogUpsert(t *testing.T, server *functionalAPIServer, fixt
 				Payload:      map[string]string{"title": "review unified event log smoke"},
 			},
 		},
-		Relations: &[]factoryapi.Relation{{
+		Relations: &[]factoryapi.WorkRequestRelation{{
 			Type:           factoryapi.RelationTypeDependsOn,
 			SourceWorkName: "review",
-			TargetWorkName: "draft",
+			TargetWorkName: stringPointer("draft"),
 			RequiredState:  &requiredState,
 		}},
 	})
@@ -316,8 +317,13 @@ func assertUnifiedSmokeCanonicalEventOrdering(t *testing.T, events []factoryapi.
 		indices.factoryState < indices.runResponse) {
 		t.Fatalf("canonical event ordering mismatch in %v", functionalEventTypes(events))
 	}
-	if indices.runResponse != len(events)-1 {
-		t.Fatalf("final event type = %s, want RUN_RESPONSE in %v", events[len(events)-1].Type, functionalEventTypes(events))
+	// RUN_RESPONSE now precedes session completion, so the recorded timeline may carry
+	// SESSION_RESULT_UPDATED and SESSION_COMPLETED afterward; no run-scoped event may
+	// follow it (PR #1997).
+	for _, event := range events[indices.runResponse+1:] {
+		if event.Type != factoryapi.FactoryEventTypeSessionResultUpdated && event.Type != factoryapi.FactoryEventTypeSessionCompleted {
+			t.Fatalf("event type = %s follows RUN_RESPONSE, want session-lifecycle trailer in %v", event.Type, functionalEventTypes(events))
+		}
 	}
 }
 

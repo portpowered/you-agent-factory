@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strings"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
@@ -15,20 +16,20 @@ import (
 // PTY-backed execution, emit final stdout through observe, and return only
 // allowlisted execution facts.
 type Effect interface {
-	Execute(context.Context, providers.ExecuteRequest, func([]byte) error) (EffectResult, error)
+	Execute(context.Context, execution.ContinuationRequest, func([]byte) error) (EffectResult, error)
 }
 
 // EffectFunc adapts a function to Effect.
 type EffectFunc func(
 	context.Context,
-	providers.ExecuteRequest,
+	execution.ContinuationRequest,
 	func([]byte) error,
 ) (EffectResult, error)
 
 // Execute invokes the adapted function.
 func (effect EffectFunc) Execute(
 	ctx context.Context,
-	request providers.ExecuteRequest,
+	request execution.ContinuationRequest,
 	observe func([]byte) error,
 ) (EffectResult, error) {
 	return effect(ctx, request, observe)
@@ -49,6 +50,7 @@ func NewRegistration(effect Effect) execution.Registration {
 	return execution.Registration{
 		Provider: providers.IDAntigravity,
 		Attempt:  newAttempt(effect),
+		Continue: newContinuationAttempt(effect),
 	}
 }
 
@@ -59,6 +61,18 @@ func newAttempt(effect Effect) execution.Attempt {
 	return func(
 		ctx context.Context,
 		request providers.ExecuteRequest,
+	) (providers.ExecuteResult, error) {
+		return newContinuationAttempt(effect)(ctx, execution.ContinuationRequest{ExecuteRequest: request})
+	}
+}
+
+func newContinuationAttempt(effect Effect) execution.ContinuationAttempt {
+	if effect == nil {
+		return unavailableContinuationAttempt
+	}
+	return func(
+		ctx context.Context,
+		request execution.ContinuationRequest,
 	) (providers.ExecuteResult, error) {
 		var stdout bytes.Buffer
 		effectResult, effectErr := effect.Execute(ctx, request, func(chunk []byte) error {
@@ -74,7 +88,18 @@ func newAttempt(effect Effect) execution.Attempt {
 			failure = attachPartialTimeoutProgress(failure, effectResult.CapturedStdout, effectErr)
 			return providers.ExecuteResult{SessionRef: sessionRef}, failure
 		}
-		content, parseFailure := parseFinalOutput(stdout.Bytes())
+		expectedSchema := request.OutputSchema
+		if _, nativePrintOutput := effectResult.Metadata["output_format"]; !nativePrintOutput {
+			// The legacy PTY compatibility effect returns final text rather than
+			// AGY's print-mode response envelope. Structured contracts are
+			// enforced by the command-runner path that advertises its format.
+			expectedSchema = ""
+		}
+		parsed, parseFailure := parseAgyOutput(
+			stdout.Bytes(),
+			strings.EqualFold(effectResult.Metadata["output_format"], outputFormatStream),
+			expectedSchema,
+		)
 		if parseFailure != nil {
 			sessionRef := cloneSessionRef(effectResult.SessionRef)
 			if sessionRef == nil {
@@ -84,13 +109,28 @@ func newAttempt(effect Effect) execution.Attempt {
 			declared.SessionRef = sessionRef
 			return providers.ExecuteResult{SessionRef: sessionRef}, execution.AttemptFailure{Declared: &declared}
 		}
+		sessionRef := cloneSessionRef(parsed.SessionRef)
+		if sessionRef == nil {
+			sessionRef = cloneSessionRef(effectResult.SessionRef)
+		}
+		if parsed.SessionRef != nil {
+			request.ExecuteRequest.ObserveSession(*parsed.SessionRef)
+		}
+		metadata := cloneMetadata(effectResult.Metadata)
+		metadata = mergeMetadata(metadata, parsed.Diagnostics.Metadata)
+		if metadata == nil {
+			metadata = make(map[string]string, 1)
+		}
+		metadata["completion_evidence"] = "provider_response"
+		diagnostics := parsed.Diagnostics
+		diagnostics.Metadata = metadata
+		if !parsed.DurationSeen {
+			diagnostics.DurationMillis = effectResult.DurationMillis
+		}
 		return providers.ExecuteResult{
-			Content:    content,
-			SessionRef: cloneSessionRef(effectResult.SessionRef),
-			Diagnostics: &providers.ExecuteDiagnostics{
-				DurationMillis: effectResult.DurationMillis,
-				Metadata:       cloneMetadata(effectResult.Metadata),
-			},
+			Content:     parsed.Content,
+			SessionRef:  sessionRef,
+			Diagnostics: &diagnostics,
 		}, nil
 	}
 }
@@ -134,6 +174,16 @@ func unavailableAttempt(
 	}
 }
 
+func unavailableContinuationAttempt(
+	context.Context,
+	execution.ContinuationRequest,
+) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{}, providers.ExecuteFailure{
+		Kind:    providers.ExecuteFailureKindDependency,
+		Message: "Antigravity native execution is unavailable",
+	}
+}
+
 func cloneMetadata(metadata map[string]string) map[string]string {
 	if metadata == nil {
 		return nil
@@ -143,6 +193,19 @@ func cloneMetadata(metadata map[string]string) map[string]string {
 		cloned[key] = value
 	}
 	return cloned
+}
+
+func mergeMetadata(base, overlay map[string]string) map[string]string {
+	if len(overlay) == 0 {
+		return base
+	}
+	if base == nil {
+		base = make(map[string]string, len(overlay))
+	}
+	for key, value := range overlay {
+		base[key] = value
+	}
+	return base
 }
 
 func cloneSessionRef(sessionRef *providers.SessionRef) *providers.SessionRef {

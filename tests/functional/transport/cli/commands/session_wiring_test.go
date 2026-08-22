@@ -26,6 +26,7 @@ const (
 // TestCLISessionCreateListShowDelete proves you session create, list, show, and
 // delete work as a thin CLI lifecycle against a running Factory Session server,
 // yielding observable session identity and success or failure exit behavior.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestCLISessionCreateListShowDelete(t *testing.T) {
 	primaryFactoryDir := support.ScaffoldFactory(t, sessionWiringFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -141,9 +142,7 @@ func TestCLISessionCreateListShowDelete(t *testing.T) {
 		t.Fatalf("you session show after delete unexpectedly succeeded:\n%s", showAfterDeleteOut)
 	}
 	showAfterDelete := string(showAfterDeleteOut)
-	if !strings.Contains(showAfterDelete, "not found") {
-		t.Fatalf("session show after delete missing not-found diagnostic:\n%s", showAfterDelete)
-	}
+	support.RequireSafeCLIDiagnostic(t, showAfterDelete)
 	if strings.Contains(showAfterDelete, sessionID) && strings.Contains(showAfterDelete, `"id"`) {
 		t.Fatalf("session show after delete must not emit a success session payload:\n%s", showAfterDelete)
 	}
@@ -257,6 +256,13 @@ func TestCLISessionMissingIDReturnsNotFound(t *testing.T) {
 		"--port", fmt.Sprintf("%d", serverPort),
 	)
 	assertCLISessionNotFoundFailure(t, "delete", deleteOut, err, sessionWiringMissingSessionID, true)
+
+	for _, operation := range []string{"cancel", "terminate"} {
+		controlOut, controlErr := runYouCLI(ctx, processHarness, factoryDir, baseURL,
+			"--remote", "--json", "session", operation, sessionWiringMissingSessionID,
+		)
+		assertCLISessionNotFoundFailure(t, operation, controlOut, controlErr, sessionWiringMissingSessionID, false)
+	}
 }
 
 func sessionWiringFactoryConfig() map[string]any {
@@ -354,11 +360,9 @@ func assertCLISessionNotFoundFailure(
 	}
 
 	text := string(output)
-	if !strings.Contains(strings.ToLower(text), "not found") {
-		t.Fatalf("session %s missing not-found diagnostic:\n%s", operation, text)
-	}
-	if !strings.Contains(text, sessionID) {
-		t.Fatalf("session %s missing session id %q in diagnostic:\n%s", operation, sessionID, text)
+	support.RequireSafeCLIDiagnostic(t, text)
+	if strings.Contains(text, sessionID) {
+		t.Fatalf("session %s leaked session id %q in safe diagnostic:\n%s", operation, sessionID, text)
 	}
 
 	if expectDeleteConfirmation {
@@ -400,6 +404,7 @@ func runSessionLifecycleCLIJSON(
 	t.Helper()
 
 	out, err := runYouCLI(ctx, processHarness, workingDir, serverURL,
+		"--remote",
 		"--json",
 		"session", operation, sessionID,
 	)

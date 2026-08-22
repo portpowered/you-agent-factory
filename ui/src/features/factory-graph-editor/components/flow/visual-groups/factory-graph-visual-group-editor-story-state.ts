@@ -1,6 +1,6 @@
 import type { DashboardSnapshot } from "../../../../../api/dashboard/types";
 import type { SessionFactoryDocument } from "../../../../../api/session-factory";
-import { singleNodeDashboardSnapshot } from "../../../../../components/dashboard/test-fixtures";
+import { semanticWorkflowDashboardSnapshot } from "../../../../../components/dashboard/test-fixtures";
 import {
   defaultSessionFactoryVersion,
   incrementSessionFactoryVersion,
@@ -12,9 +12,9 @@ const VISUAL_GROUP_EDITOR_STORAGE_KEY =
   "factory-graph-visual-group-editor-persisted-factory";
 
 export function createVisualGroupEditorFactoryDocument(): SessionFactoryDocument {
-  const factory = singleNodeDashboardSnapshot.factory;
+  const factory = semanticWorkflowDashboardSnapshot.factory;
   if (!factory) {
-    throw new Error("Expected single-node dashboard snapshot factory.");
+    throw new Error("Expected semantic workflow dashboard snapshot factory.");
   }
 
   return {
@@ -75,7 +75,7 @@ export function adoptVisualGroupEditorPersistedFactory(
 }
 
 export function buildVisualGroupEditorSnapshot(): DashboardSnapshot {
-  const snapshot = structuredClone(singleNodeDashboardSnapshot);
+  const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
   snapshot.factory = getVisualGroupEditorPersistedFactory();
   snapshot.factory_state = "IDLE";
   snapshot.runtime.in_flight_dispatch_count = 0;

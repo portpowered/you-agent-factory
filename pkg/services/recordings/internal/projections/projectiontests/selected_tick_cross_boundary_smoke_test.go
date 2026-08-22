@@ -6,23 +6,23 @@ import (
 	"testing"
 	"time"
 
-	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingprojections "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections"
 	recordingdashboard "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections/dashboard"
+	"github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	clidashboard "github.com/portpowered/infinite-you/pkg/transports/cli/dashboard"
 	"github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/http/workstationprojection"
 )
 
 func TestSelectedTickCrossBoundarySmoke_ReconstructsCanonicalStateAcrossSupportedBoundaries(t *testing.T) {
 	t0 := time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC)
 
-	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(recordingprojections.ReconstructCanonicalFactoryWorldState, crossBoundarySelectedTickEvents(t0), 11)
+	worldState, err := recordingshttp.ReconstructFactoryWorldState(recordingprojections.ReconstructCanonicalFactoryWorldState, crossBoundarySelectedTickEvents(t0), 11)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -35,7 +35,7 @@ func TestSelectedTickCrossBoundarySmoke_ReconstructsCanonicalStateAcrossSupporte
 	projector := &selectedTickWorkstationProjector{
 		result: selectedTickWorkstationProjectionFixture(t0),
 	}
-	requestSlice := workstationprojection.Generated(projector.ProjectWorkstationRequests(worldState))
+	requestSlice := http.Generated(projector.ProjectWorkstationRequests(worldState))
 	if projector.received.Tick != worldState.Tick || len(projector.received.CompletedDispatches) != 2 {
 		t.Fatalf("workstation projector received state = %#v, want selected tick 11 with two completions", projector.received)
 	}
@@ -255,9 +255,9 @@ func assertTimeEqual(t *testing.T, label string, got, want time.Time) {
 }
 
 func crossBoundarySelectedTickEvents(t0 time.Time) []generated.FactoryEvent {
-	pending := work.FactoryWorkItem{ID: "work-runtime-pending", WorkTypeID: "task", DisplayName: "Pending Runtime Story", TraceID: "trace-runtime-pending", PlaceID: "task:init"}
-	completed := work.FactoryWorkItem{ID: "work-runtime-completed", WorkTypeID: "task", DisplayName: "Completed Runtime Story", TraceID: "trace-runtime-completed", PlaceID: "task:init"}
-	failed := work.FactoryWorkItem{ID: "work-runtime-failed", WorkTypeID: "task", DisplayName: "Failed Runtime Story", TraceID: "trace-runtime-failed", PlaceID: "task:init"}
+	pending := work.FactoryWorkItem{ID: "work-runtime-pending", WorkTypeID: "task", DisplayName: "Pending Runtime Story", TraceID: "trace-runtime-pending", State: "init"}
+	completed := work.FactoryWorkItem{ID: "work-runtime-completed", WorkTypeID: "task", DisplayName: "Completed Runtime Story", TraceID: "trace-runtime-completed", State: "init"}
+	failed := work.FactoryWorkItem{ID: "work-runtime-failed", WorkTypeID: "task", DisplayName: "Failed Runtime Story", TraceID: "trace-runtime-failed", State: "init"}
 
 	return []generated.FactoryEvent{
 		crossBoundaryInitialStructureEvent(t0),
@@ -528,7 +528,7 @@ func crossBoundaryGeneratedWorkstation() generated.Workstation {
 	return generated.Workstation{
 		Id:        stringPtr("t-review"),
 		Name:      "Review",
-		Worker:    "reviewer",
+		Worker:    stringPtr("reviewer"),
 		Inputs:    []generated.WorkstationIO{{WorkType: "task", State: "init"}},
 		Outputs:   &[]generated.WorkstationIO{{WorkType: "task", State: "complete"}},
 		OnFailure: &[]generated.WorkstationIO{{WorkType: "task", State: "failed"}},

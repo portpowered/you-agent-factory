@@ -191,6 +191,9 @@ func (t *sessionInvocationTelemetry) LogInvocationFailed(sessionID string, input
 	fields := invocationLogFields(sessionID, input.InputSource, input.InvocationReturn, input.FactoryConfig)
 	fields["request_id"], fields["trace_id"] = input.RequestID, input.TraceID
 	fields["status"], fields["error_code"], fields["failure_class"] = string(result.Status), result.ErrorCode, failureClass
+	if strings.TrimSpace(result.Message) != "" {
+		fields["error_message"] = result.Message
+	}
 	t.log("warn", "factory session invocation failed", fields, nil)
 }
 

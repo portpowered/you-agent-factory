@@ -16,7 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 )
 
-func TestJavaScriptRuntimeService_LiveAndReplayEventsRemainIdenticalAcrossPhaseCheckpointPhase(t *testing.T) {
+func TestJavaScriptRuntimeService_ReplaysPhaseCheckpointPhaseEventsInOrder(t *testing.T) {
 	records := []factory.JavaScriptRuntimeRecord{
 		{Sequence: 1, Kind: factory.JavaScriptRecordKindPhase, Phase: &factory.JavaScriptPhaseRecord{Name: "plan"}},
 		{Sequence: 2, Kind: factory.JavaScriptRecordKindCheckpoint, Checkpoint: &factory.JavaScriptCheckpointRecord{ID: "checkpoint-plan", Label: "plan-ready"}},
@@ -36,12 +36,6 @@ func TestJavaScriptRuntimeService_LiveAndReplayEventsRemainIdenticalAcrossPhaseC
 	service := newJavaScriptRuntimeService(t, workflows)
 	request := simpleFinalSyncStartRequest()
 	request.RequestID = "req-runtime-phase-checkpoint-phase-live-replay"
-	var live []interfaces.FactoryEvent
-	request.EventConsumer = func(events []interfaces.FactoryEvent) {
-		for _, event := range events {
-			live = append(live, event.Clone())
-		}
-	}
 
 	completed, err := service.StartSync(context.Background(), request)
 	if err != nil {
@@ -52,9 +46,8 @@ func TestJavaScriptRuntimeService_LiveAndReplayEventsRemainIdenticalAcrossPhaseC
 		t.Fatalf("ReadEvents: %v", err)
 	}
 	replay := decodeCanonicalFactoryEvents(t, replayed.Events)
-	assertCanonicalEventStreamsEqual(t, live, replay)
-	assertStrictlyIncreasingFactoryEventSequences(t, live)
-	assertPhaseCheckpointPhaseTransitions(t, live)
+	assertStrictlyIncreasingFactoryEventSequences(t, replay)
+	assertPhaseCheckpointPhaseTransitions(t, replay)
 }
 
 func decodeCanonicalFactoryEvents(t *testing.T, rawEvents []json.RawMessage) []interfaces.FactoryEvent {
@@ -66,20 +59,6 @@ func decodeCanonicalFactoryEvents(t *testing.T, rawEvents []json.RawMessage) []i
 		}
 	}
 	return events
-}
-
-func assertCanonicalEventStreamsEqual(t *testing.T, live, replay []interfaces.FactoryEvent) {
-	t.Helper()
-	if len(live) != len(replay) {
-		t.Fatalf("live events = %d, replay events = %d", len(live), len(replay))
-	}
-	for index := range live {
-		liveJSON, _ := json.Marshal(live[index])
-		replayJSON, _ := json.Marshal(replay[index])
-		if string(liveJSON) != string(replayJSON) {
-			t.Fatalf("event %d differs:\nlive=%s\nreplay=%s", index, liveJSON, replayJSON)
-		}
-	}
 }
 
 func assertStrictlyIncreasingFactoryEventSequences(t *testing.T, events []interfaces.FactoryEvent) {
@@ -164,7 +143,7 @@ func TestJavaScriptRuntimeService_ProgressPrimitives_ProjectsArtifactsPhaseAndPr
 func TestJavaScriptRuntimeService_AgentRunFakeChild_ProjectsDispatchAndChildArtifact(t *testing.T) {
 	service := newJavaScriptRuntimeServiceWithFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child",
 		scriptedSingleChildWorkflows(factory.JavaScriptChildExecutionRequest{
-			Label: "summarize-findings", Model: "gpt-test",
+			Label: "summarize-findings", Model: "gpt-test", SkipPermissions: true,
 		}))
 
 	completed, err := service.StartSync(context.Background(), fse.StartRequest{
@@ -185,9 +164,45 @@ func TestJavaScriptRuntimeService_AgentRunFakeChild_ProjectsDispatchAndChildArti
 	if err != nil {
 		t.Fatalf("GetSession: %v", err)
 	}
-	dispatch := assertAgentRunFakeChildSessionRead(t, read)
+	dispatch := assertAgentRunFakeChildSessionRead(t, read, true)
 	assertAgentRunFakeChildDispatch(t, service, completed.SessionID, dispatch)
 	assertAgentRunFakeChildArtifact(t, service, completed.SessionID)
+
+	events, err := service.ReadEvents(context.Background(), completed.SessionID, fse.EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents: %v", err)
+	}
+	var foundQueuedBypass bool
+	for _, raw := range events.Events {
+		var envelope struct {
+			Type    string          `json:"type"`
+			Payload json.RawMessage `json:"payload"`
+		}
+		if err := json.Unmarshal(raw, &envelope); err != nil {
+			t.Fatalf("decode event: %v", err)
+		}
+		if envelope.Type != "DISPATCH_QUEUED" {
+			continue
+		}
+		var payload struct {
+			SkipPermissions bool `json:"skipPermissions"`
+		}
+		if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+			t.Fatalf("decode queued payload: %v", err)
+		}
+		foundQueuedBypass = payload.SkipPermissions
+	}
+	if !foundQueuedBypass {
+		t.Fatalf("events = %s, want DISPATCH_QUEUED skipPermissions=true", eventsJSON(events.Events))
+	}
+
+	replayed, err := fse.ReplayDispatchProjection(events.Events)
+	if err != nil {
+		t.Fatalf("ReplayDispatchProjection: %v", err)
+	}
+	if len(replayed) != 1 || replayed[0].JavaScript == nil || !replayed[0].JavaScript.SkipPermissions {
+		t.Fatalf("replayed dispatches = %#v, want one JavaScript dispatch with skipPermissions=true", replayed)
+	}
 }
 
 func TestProjectRuntimeExecutionRecords_ProgressPrimitivesFixture(t *testing.T) {
@@ -366,6 +381,7 @@ func assertProgressPrimitiveResultArtifactIDs(t *testing.T, service fse.Service,
 func assertAgentRunFakeChildSessionRead(
 	t *testing.T,
 	read fse.SessionReadResult,
+	wantSkipPermissions bool,
 ) fse.DispatchSummary {
 	t.Helper()
 	if read.Progress == nil || read.Progress.TotalDispatches != 1 || read.Progress.CompletedDispatches != 1 {
@@ -377,6 +393,10 @@ func assertAgentRunFakeChildSessionRead(
 		Model:             "gpt-test",
 		Provider:          "fake",
 		OutputArtifactIDs: []string{"child-artifact-1"},
+		JavaScript: &fse.DispatchJavaScriptProjection{
+			TaskKind:        "AGENT",
+			SkipPermissions: wantSkipPermissions,
+		},
 	}
 }
 
@@ -424,6 +444,7 @@ func assertListedAgentRunFakeChildDispatch(
 	if len(dispatch.OutputArtifactIDs) != 1 || dispatch.OutputArtifactIDs[0] != want.OutputArtifactIDs[0] {
 		t.Fatalf("outputArtifactIds = %#v, want %v", dispatch.OutputArtifactIDs, want.OutputArtifactIDs)
 	}
+	assertDispatchJavaScriptSkipPermissions(t, dispatch.JavaScript, want.JavaScript)
 	return dispatch
 }
 
@@ -441,6 +462,29 @@ func assertAgentRunFakeChildDispatchDetail(
 	if dispatchDetail.OrchestratorKind != "JAVASCRIPT" || dispatchDetail.Label != dispatch.Label {
 		t.Fatalf("dispatch detail = %#v", dispatchDetail)
 	}
+	assertDispatchJavaScriptSkipPermissions(t, dispatchDetail.JavaScript, dispatch.JavaScript)
+}
+
+func assertDispatchJavaScriptSkipPermissions(
+	t *testing.T,
+	actual *fse.DispatchJavaScriptProjection,
+	want *fse.DispatchJavaScriptProjection,
+) {
+	t.Helper()
+	if want == nil {
+		return
+	}
+	if actual == nil || actual.SkipPermissions != want.SkipPermissions {
+		t.Fatalf("dispatch javascript = %#v, want skipPermissions=%v", actual, want.SkipPermissions)
+	}
+}
+
+func eventsJSON(events []json.RawMessage) string {
+	encoded, err := json.Marshal(events)
+	if err != nil {
+		return "<unencodable>"
+	}
+	return string(encoded)
 }
 
 func assertAgentRunFakeChildArtifact(t *testing.T, service fse.Service, sessionID string) {

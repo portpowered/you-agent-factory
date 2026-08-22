@@ -202,10 +202,10 @@ func TestResumeCronScheduleFacts_RejectsInvalidResumeFacts(t *testing.T) {
 	submitted := lastEvaluatedAt.Add(5 * time.Minute)
 
 	tests := []struct {
-		name   string
+		name     string
 		identity cron.CronScheduleIdentity
-		resume cron.CronScheduleFacts
-		want   error
+		resume   cron.CronScheduleFacts
+		want     error
 	}{
 		{
 			name: "foreign identity",
@@ -214,7 +214,7 @@ func TestResumeCronScheduleFacts_RejectsInvalidResumeFacts(t *testing.T) {
 				WorkstationName:  "daily-refresh",
 			},
 			resume: cron.CronScheduleFacts{
-				Identity: identity,
+				Identity:        identity,
 				LastEvaluatedAt: lastEvaluatedAt,
 			},
 			want: cron.ErrStaleResumeFacts,

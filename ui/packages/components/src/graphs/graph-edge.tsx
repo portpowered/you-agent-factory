@@ -1,4 +1,11 @@
-import { BaseEdge, type EdgeProps, getBezierPath } from "@xyflow/react";
+import {
+  BaseEdge,
+  type EdgeProps,
+  getBezierPath,
+  useReactFlow,
+  type XYPosition,
+} from "@xyflow/react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -8,8 +15,21 @@ import {
 
 export type GraphEdgeData = {
   alwaysShowLabel?: boolean;
+  interaction?: GraphEdgeInteraction;
   label?: string;
   waypoints?: GraphEdgeWaypoint[];
+};
+
+export type GraphEdgePointerInteraction = (
+  event: ReactPointerEvent<SVGPathElement>,
+  flowPosition: XYPosition,
+) => void;
+
+export type GraphEdgeInteraction = {
+  onPointerCancel?: GraphEdgePointerInteraction;
+  onPointerDown?: GraphEdgePointerInteraction;
+  onPointerMove?: GraphEdgePointerInteraction;
+  onPointerUp?: GraphEdgePointerInteraction;
 };
 
 export const GRAPH_EDGE_TYPES = {
@@ -21,6 +41,7 @@ export type GraphEdgeProps = EdgeProps & {
   labelClassName?: string;
 };
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: graph edge rendering keeps routing, labels, and opt-in pointer interactions together.
 export function GraphEdge({
   data,
   edgeClassName = "graph-edge",
@@ -37,6 +58,7 @@ export function GraphEdge({
   targetX,
   targetY,
 }: GraphEdgeProps) {
+  const { screenToFlowPosition } = useReactFlow();
   const edgeRef = useRef<SVGGElement | null>(null);
   const [inspected, setInspected] = useState(false);
   const edgeData = (data ?? {}) as GraphEdgeData;
@@ -95,6 +117,19 @@ export function GraphEdge({
   const revealLabel = Boolean(
     edgeData.label && (edgeData.alwaysShowLabel || inspected || selected),
   );
+  const handlePointerInteraction = (
+    handler: GraphEdgePointerInteraction | undefined,
+  ) =>
+    handler
+      ? (event: ReactPointerEvent<SVGPathElement>) =>
+          handler(
+            event,
+            screenToFlowPosition({
+              x: event.clientX,
+              y: event.clientY,
+            }),
+          )
+      : undefined;
 
   return (
     <g
@@ -104,11 +139,44 @@ export function GraphEdge({
       ref={edgeRef}
     >
       <BaseEdge
-        interactionWidth={interactionWidth}
+        interactionWidth={0}
         markerEnd={markerEnd}
+        onPointerCancel={handlePointerInteraction(
+          edgeData.interaction?.onPointerCancel,
+        )}
+        onPointerDown={handlePointerInteraction(
+          edgeData.interaction?.onPointerDown,
+        )}
+        onPointerMove={handlePointerInteraction(
+          edgeData.interaction?.onPointerMove,
+        )}
+        onPointerUp={handlePointerInteraction(
+          edgeData.interaction?.onPointerUp,
+        )}
         path={edgePath}
         style={style}
       />
+      {interactionWidth !== 0 ? (
+        <path
+          className="react-flow__edge-interaction"
+          d={edgePath}
+          fill="none"
+          onPointerCancel={handlePointerInteraction(
+            edgeData.interaction?.onPointerCancel,
+          )}
+          onPointerDown={handlePointerInteraction(
+            edgeData.interaction?.onPointerDown,
+          )}
+          onPointerMove={handlePointerInteraction(
+            edgeData.interaction?.onPointerMove,
+          )}
+          onPointerUp={handlePointerInteraction(
+            edgeData.interaction?.onPointerUp,
+          )}
+          strokeOpacity={0}
+          strokeWidth={interactionWidth ?? 20}
+        />
+      ) : null}
       {edgeData.label ? (
         <text
           className={labelClassName}

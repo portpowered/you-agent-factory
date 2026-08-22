@@ -22,5 +22,9 @@ func SerializeDocsTopicIndex() string {
 func formatDocsTopicLine(entry docscli.TopicIndexEntry) string {
 	description := strings.ReplaceAll(entry.Description, "\t", " ")
 	description = strings.ReplaceAll(description, "\n", " ")
-	return entry.Name + "\t" + description + "\t" + strings.Join(entry.Aliases, ",")
+	line := entry.Name + "\t" + description
+	if len(entry.Aliases) > 0 {
+		line += "\t" + strings.Join(entry.Aliases, ",")
+	}
+	return line
 }

@@ -10,9 +10,10 @@ import type {
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
-import type {
-  TerminalWorkItem,
-  TerminalWorkStatus,
+import {
+  type TerminalWorkItem,
+  type TerminalWorkStatus,
+  terminalWorkStatusFromOutcome,
 } from "../../../terminal-work/lib/types";
 import {
   findWorkItemReference,
@@ -46,60 +47,189 @@ export function buildTerminalWorkItems(
     Object.values(workstationRequestsByDispatchID ?? {}),
   );
 
-  return labels.map((label) => {
-    const matchingAttempts =
+  return labels.flatMap((label) => {
+    const canonicalItems = uniqueTerminalWorkItemsForLabel(
+      label,
+      attempts,
+      failureDetails,
+      requests,
+    );
+    return (canonicalItems.length > 1 ? canonicalItems : [undefined]).map(
+      (canonicalItem) => {
+        const matchingAttempts =
+          attempts?.filter((attempt) =>
+            attempt.work_items?.some((workItem) =>
+              canonicalItem
+                ? workItem.work_id === canonicalItem.work_id
+                : workItem.display_name === label || workItem.work_id === label,
+            ),
+          ) ?? [];
+        const latestAttempt = matchingAttempts[matchingAttempts.length - 1];
+        const matchedWorkItem =
+          canonicalItem ??
+          matchingAttempts
+            .flatMap((attempt) => attempt.work_items ?? [])
+            .find(
+              (workItem) =>
+                workItem.display_name === label || workItem.work_id === label,
+            );
+        const matchingRequests = requests.filter((request) =>
+          requestWorkItems(request).some((workItem) =>
+            matchedWorkItem
+              ? workItem.work_id === matchedWorkItem.work_id
+              : workItem.display_name === label || workItem.work_id === label,
+          ),
+        );
+        const latestRequest = matchingRequests[0];
+        const matchedFailureDetail = failureDetails.find((detail) =>
+          matchedWorkItem
+            ? detail.work_item.work_id === matchedWorkItem.work_id
+            : detail.work_item.display_name === label ||
+              detail.work_item.work_id === label,
+        );
+
+        return {
+          attempts: matchingAttempts,
+          dispatchID:
+            matchedFailureDetail?.dispatch_id ??
+            (latestRequest ? requestDispatchID(latestRequest) : undefined) ??
+            latestAttempt?.dispatch_id,
+          failureMessage:
+            matchedFailureDetail?.failure_message ??
+            (latestRequest
+              ? requestFailureMessage(latestRequest)
+              : undefined) ??
+            latestAttempt?.failure_message,
+          failureReason:
+            matchedFailureDetail?.failure_reason ??
+            (latestRequest ? requestFailureReason(latestRequest) : undefined) ??
+            latestAttempt?.failure_reason,
+          label: matchedWorkItem?.display_name?.trim() || label,
+          traceWorkID:
+            matchedWorkItem?.work_id ??
+            matchedFailureDetail?.work_item.work_id ??
+            label,
+          workItem: matchedWorkItem ?? matchedFailureDetail?.work_item,
+          workstationName: terminalWorkstationName(
+            matchedFailureDetail,
+            latestAttempt,
+            latestRequest,
+          ),
+        };
+      },
+    );
+  });
+}
+
+function uniqueTerminalWorkItemsForLabel(
+  label: string,
+  attempts: DashboardProviderSessionAttempt[] | undefined,
+  failureDetails: DashboardFailedWorkDetail[],
+  requests: DispatchWorkstationRequest[],
+): DashboardWorkItemRef[] {
+  const byWorkID = new Map<string, DashboardWorkItemRef>();
+  const addIfMatching = (workItem: DashboardWorkItemRef) => {
+    if (
+      (workItem.display_name === label || workItem.work_id === label) &&
+      !byWorkID.has(workItem.work_id)
+    ) {
+      byWorkID.set(workItem.work_id, workItem);
+    }
+  };
+  for (const detail of failureDetails) {
+    addIfMatching(detail.work_item);
+  }
+  for (const request of requests) {
+    for (const workItem of requestWorkItems(request)) {
+      addIfMatching(workItem);
+    }
+  }
+  for (const attempt of attempts ?? []) {
+    for (const workItem of attempt.work_items ?? []) {
+      addIfMatching(workItem);
+    }
+  }
+  return [...byWorkID.values()];
+}
+
+export function buildNonStandardTerminalWorkItems(
+  workstationRequestsByDispatchID:
+    | Record<string, DispatchWorkstationRequest>
+    | undefined,
+  attempts: DashboardProviderSessionAttempt[] | undefined,
+): Record<"canceled" | "terminated" | "unknown", TerminalWorkItem[]> {
+  const itemsByStatus: Record<
+    "canceled" | "terminated" | "unknown",
+    TerminalWorkItem[]
+  > = {
+    canceled: [],
+    terminated: [],
+    unknown: [],
+  };
+  const seen = new Set<string>();
+
+  for (const request of sortWorkstationRequests(
+    Object.values(workstationRequestsByDispatchID ?? {}),
+  )) {
+    const status = terminalWorkStatusFromOutcome(requestOutcome(request));
+    if (!status || status === "completed" || status === "failed") {
+      continue;
+    }
+
+    const requestID = requestDispatchID(request);
+    const requestAttempts =
       attempts?.filter((attempt) =>
         attempt.work_items?.some(
           (workItem) =>
-            workItem.display_name === label || workItem.work_id === label,
+            requestWorkItems(request).some(
+              (requestWorkItem) => requestWorkItem.work_id === workItem.work_id,
+            ) && attempt.dispatch_id === requestID,
         ),
       ) ?? [];
-    const latestAttempt = matchingAttempts[matchingAttempts.length - 1];
-    const matchedWorkItem = matchingAttempts
-      .flatMap((attempt) => attempt.work_items ?? [])
-      .find(
-        (workItem) =>
-          workItem.display_name === label || workItem.work_id === label,
-      );
-    const matchingRequests = requests.filter((request) =>
-      requestWorkItems(request).some(
-        (workItem) =>
-          workItem.display_name === label || workItem.work_id === label,
-      ),
-    );
-    const latestRequest = matchingRequests[0];
-    const matchedFailureDetail = failureDetails.find(
-      (detail) =>
-        detail.work_item.display_name === label ||
-        detail.work_item.work_id === label ||
-        (matchedWorkItem
-          ? detail.work_item.work_id === matchedWorkItem.work_id
-          : false),
-    );
+    for (const workItem of requestWorkItems(request)) {
+      const identity = `${requestID}:${workItem.work_id}`;
+      if (seen.has(identity)) {
+        continue;
+      }
+      seen.add(identity);
+      itemsByStatus[status].push({
+        attempts: requestAttempts,
+        dispatchID: requestID,
+        failureMessage: requestFailureMessage(request),
+        failureReason: requestFailureReason(request),
+        label: workItem.display_name?.trim() || workItem.work_id,
+        traceWorkID: workItem.work_id,
+        workItem,
+        workstationName: requestWorkstationName(request),
+      });
+    }
+  }
 
-    return {
-      attempts: matchingAttempts,
-      dispatchID:
-        matchedFailureDetail?.dispatch_id ??
-        (latestRequest ? requestDispatchID(latestRequest) : undefined) ??
-        latestAttempt?.dispatch_id,
-      failureMessage:
-        matchedFailureDetail?.failure_message ?? latestAttempt?.failure_message,
-      failureReason:
-        matchedFailureDetail?.failure_reason ?? latestAttempt?.failure_reason,
-      label,
-      traceWorkID:
-        matchedWorkItem?.work_id ??
-        matchedFailureDetail?.work_item.work_id ??
-        label,
-      workItem: matchedWorkItem ?? matchedFailureDetail?.work_item,
-      workstationName: terminalWorkstationName(
-        matchedFailureDetail,
-        latestAttempt,
-        latestRequest,
-      ),
-    };
-  });
+  return itemsByStatus;
+}
+
+function requestFailureMessage(
+  request: DispatchWorkstationRequest,
+): string | undefined {
+  return "workstation_node_id" in request
+    ? request.failure_message
+    : request.response?.failureDetail?.message;
+}
+
+function requestFailureReason(
+  request: DispatchWorkstationRequest,
+): string | undefined {
+  return "workstation_node_id" in request
+    ? request.failure_reason
+    : request.response?.failureDetail?.reason;
+}
+
+function requestOutcome(
+  request: DispatchWorkstationRequest,
+): string | undefined {
+  return "workstation_node_id" in request
+    ? request.outcome
+    : request.response?.outcome;
 }
 
 function terminalWorkstationName(
@@ -508,13 +638,19 @@ export function inferStateWorkTerminalStatus(
 export function findTerminalWorkItem(
   items: TerminalWorkItem[],
   workItem: DashboardWorkItemRef,
+  dispatchID?: string,
 ): TerminalWorkItem | undefined {
-  const workLabel = workItem.display_name?.trim() || workItem.work_id;
-  return items.find(
+  const matchingItems = items.filter(
     (item) =>
       item.traceWorkID === workItem.work_id ||
-      item.workItem?.work_id === workItem.work_id ||
-      item.label === workLabel,
+      item.workItem?.work_id === workItem.work_id,
+  );
+  if (!dispatchID) {
+    return matchingItems[0];
+  }
+  return (
+    matchingItems.find((item) => item.dispatchID === dispatchID) ??
+    matchingItems[0]
   );
 }
 

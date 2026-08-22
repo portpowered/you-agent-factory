@@ -4,17 +4,31 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 )
 
-func exitFailureFromCommandResult(result workers.CommandResult) error {
+const (
+	codexUntrustedWorkingDirectoryNeedle = "not inside a trusted directory"
+	codexSkipGitRepoCheckNeedle          = "--skip-git-repo-check was not specified"
+	codexUntrustedWorkingDirectoryExit   = 1
+	maxWorkingDirectoryDiagnosticRunes   = 256
+)
+
+func exitFailureFromCommandResult(result providerservice.CommandResult, workingDirectory string) error {
 	if failure, ok := declaredFailureFromCommandOutput(result.Stdout, result.Stderr); ok {
 		return failure
 	}
 	normalized := strings.ToLower(formatCombinedCommandOutput(result))
 	switch {
+	case containsAny(normalized, "no rollout found", "no conversation found", "no thread found", "thread not found"):
+		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindSessionNotFound, Message: declaredFailureMessage(providers.ExecuteFailureKindSessionNotFound)}
+	case result.ExitCode == codexUntrustedWorkingDirectoryExit &&
+		containsAny(normalized, codexUntrustedWorkingDirectoryNeedle) &&
+		strings.Contains(normalized, codexSkipGitRepoCheckNeedle):
+		return untrustedWorkingDirectoryFailure(workingDirectory)
 	case containsAny(normalized, "api key", "authentication", "unauthorized", "forbidden", "login required", "not authenticated"):
 		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindAuthentication, Message: declaredFailureMessage(providers.ExecuteFailureKindAuthentication)}
 	case containsAny(normalized, "invalid argument", "bad request", "invalid request"):
@@ -29,8 +43,57 @@ func exitFailureFromCommandResult(result workers.CommandResult) error {
 	return fmt.Errorf("codex exited with code %d", result.ExitCode)
 }
 
+func untrustedWorkingDirectoryFailure(workingDirectory string) providers.ExecuteFailure {
+	directory := safeWorkingDirectoryDiagnostic(workingDirectory)
+	if directory == "" {
+		directory = "the current working directory"
+	} else {
+		directory = "[" + directory + "]"
+	}
+	return providers.ExecuteFailure{
+		Kind: providers.ExecuteFailureKindInvalidRequest,
+		Message: fmt.Sprintf(
+			"Codex requires a trusted working directory: %s is not trusted. Run this invocation from a suitable trusted Git repository, or establish trust using Codex's supported workflow.",
+			directory,
+		),
+		Diagnostics: &providers.ExecuteDiagnostics{Metadata: map[string]string{
+			providers.ExecuteDiagnosticMetadataSafeFailureMessage: "true",
+		}},
+	}
+}
+
+func safeWorkingDirectoryDiagnostic(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	var builder strings.Builder
+	for _, character := range value {
+		switch character {
+		case '\r':
+			builder.WriteString(`\r`)
+		case '\n':
+			builder.WriteString(`\n`)
+		case '\t':
+			builder.WriteString(`\t`)
+		default:
+			if character < 0x20 || character == 0x7f || !utf8.ValidRune(character) {
+				builder.WriteRune('?')
+				continue
+			}
+			builder.WriteRune(character)
+		}
+	}
+	rendered := builder.String()
+	runes := []rune(rendered)
+	if len(runes) > maxWorkingDirectoryDiagnosticRunes {
+		return string(runes[:maxWorkingDirectoryDiagnosticRunes])
+	}
+	return rendered
+}
+
 func declaredFailureFromCommandOutput(stdout, stderr []byte) (providers.ExecuteFailure, bool) {
-	combined := formatCombinedCommandOutput(workers.CommandResult{Stdout: stdout, Stderr: stderr})
+	combined := formatCombinedCommandOutput(providerservice.CommandResult{Stdout: stdout, Stderr: stderr})
 	for _, line := range strings.Split(combined, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -45,28 +108,34 @@ func declaredFailureFromCommandOutput(stdout, stderr []byte) (providers.ExecuteF
 		}
 		if envelope.Error != nil {
 			failure := classifyDeclaredFailure(*envelope.Error)
-			if failure.Kind != providers.ExecuteFailureKindUnknown {
-				return failure, true
-			}
+			markUnrecognizedProviderRefusal(&failure)
+			return failure, true
 		}
 		if envelope.Type == "error" && strings.TrimSpace(envelope.Message) != "" {
 			failure := classifyDeclaredFailure(errorRecord{Message: envelope.Message})
-			if failure.Kind != providers.ExecuteFailureKindUnknown {
-				return failure, true
-			}
+			markUnrecognizedProviderRefusal(&failure)
+			return failure, true
 		}
 		var direct errorRecord
 		if json.Unmarshal([]byte(line), &direct) == nil && strings.TrimSpace(direct.Message) != "" {
 			failure := classifyDeclaredFailure(direct)
-			if failure.Kind != providers.ExecuteFailureKindUnknown {
-				return failure, true
-			}
+			markUnrecognizedProviderRefusal(&failure)
+			return failure, true
 		}
 	}
 	return providers.ExecuteFailure{}, false
 }
 
-func formatCombinedCommandOutput(result workers.CommandResult) string {
+func markUnrecognizedProviderRefusal(failure *providers.ExecuteFailure) {
+	if failure == nil || failure.Kind != providers.ExecuteFailureKindUnknown {
+		return
+	}
+	failure.Diagnostics = &providers.ExecuteDiagnostics{Metadata: map[string]string{
+		providers.ExecuteDiagnosticMetadataUnrecognizedProviderRefusal: "true",
+	}}
+}
+
+func formatCombinedCommandOutput(result providerservice.CommandResult) string {
 	stdout := strings.TrimSpace(string(result.Stdout))
 	stderr := strings.TrimSpace(string(result.Stderr))
 	switch {

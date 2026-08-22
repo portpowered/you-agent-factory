@@ -143,53 +143,6 @@ func TestWireFoldPreservesDispatchPlanThroughPublishedRoot(t *testing.T) {
 	}
 }
 
-func TestWireFoldRejectsActiveBindingOnNonWireRoot(t *testing.T) {
-	t.Parallel()
-
-	err := factoryruntimewire.BindActiveService(foldNonWireRoot{}, newFoldHostedRuntimeStub(interfaces.FactoryStateRunning))
-	if err == nil {
-		t.Fatal("BindActiveService(non-wire root) error = nil, want construction error")
-	}
-}
-
-type foldNonWireRoot struct{}
-
-func (foldNonWireRoot) ControlPause(context.Context, factoryruntime.PauseRequest) (factoryruntime.PauseResult, error) {
-	return factoryruntime.PauseResult{}, nil
-}
-func (foldNonWireRoot) ControlResume(context.Context, factoryruntime.ResumeRequest) (factoryruntime.ResumeResult, error) {
-	return factoryruntime.ResumeResult{}, nil
-}
-func (foldNonWireRoot) ControlTerminate(context.Context, factoryruntime.TerminateRequest) (factoryruntime.TerminateResult, error) {
-	return factoryruntime.TerminateResult{}, nil
-}
-func (foldNonWireRoot) ControlWaitToComplete(factoryruntime.WaitToCompleteRequest) factoryruntime.WaitToCompleteResult {
-	done := make(chan struct{})
-	close(done)
-	return factoryruntime.WaitToCompleteResult{Done: done}
-}
-func (foldNonWireRoot) ControlMoveWork(context.Context, factoryruntime.MoveWorkRequest) (factoryruntime.MoveWorkResult, error) {
-	return factoryruntime.MoveWorkResult{}, nil
-}
-func (foldNonWireRoot) Observe(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
-	return factoryruntime.ObserveResult{}, nil
-}
-func (foldNonWireRoot) PlanDispatch(context.Context, factoryruntime.PlanDispatchRequest) (factoryruntime.PlanDispatchResult, error) {
-	return factoryruntime.PlanDispatchResult{}, nil
-}
-func (foldNonWireRoot) AcceptDispatchResult(context.Context, factoryruntime.AcceptDispatchResultRequest) (factoryruntime.AcceptDispatchResultResult, error) {
-	return factoryruntime.AcceptDispatchResultResult{}, nil
-}
-func (foldNonWireRoot) CaptureCheckpoint(context.Context, factoryruntime.CaptureCheckpointRequest) (factoryruntime.CaptureCheckpointResult, error) {
-	return factoryruntime.CaptureCheckpointResult{}, nil
-}
-func (foldNonWireRoot) LoadCheckpoint(context.Context, factoryruntime.LoadCheckpointRequest) (factoryruntime.LoadCheckpointResult, error) {
-	return factoryruntime.LoadCheckpointResult{}, nil
-}
-func (foldNonWireRoot) RestoreCheckpoint(context.Context, factoryruntime.RestoreCheckpointRequest) (factoryruntime.RestoreCheckpointResult, error) {
-	return factoryruntime.RestoreCheckpointResult{}, nil
-}
-
 func wireFoldServiceWithHostedRuntime(
 	t *testing.T,
 	active factoryruntime.Service,
@@ -208,6 +161,12 @@ func wireFoldServiceWithHostedRuntime(
 		) (workers.WorkstationDispatchCancelResult, error) {
 			return workers.WorkstationDispatchCancelResult{}, nil
 		},
+		func(
+			context.Context,
+			factoryruntime.RuntimeActivationRequest,
+		) (*factoryruntime.RuntimeActivation, error) {
+			return &factoryruntime.RuntimeActivation{Service: active}, nil
+		},
 	)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
@@ -215,10 +174,23 @@ func wireFoldServiceWithHostedRuntime(
 	if service == nil {
 		t.Fatal("NewService() returned nil service")
 	}
-	if err := factoryruntimewire.BindActiveService(service, active); err != nil {
-		t.Fatalf("BindActiveService() = %v", err)
+	if _, err := service.Activate(context.Background(), foldRuntimeActivationRequest()); err != nil {
+		t.Fatalf("Activate() = %v", err)
 	}
 	return service
+}
+
+func foldRuntimeActivationRequest() factoryruntime.RuntimeActivationRequest {
+	return factoryruntime.RuntimeActivationRequest{
+		RuntimeID:        "fold-runtime-1",
+		FactorySessionID: "fold-session-1",
+		Snapshot: interfaces.RuntimeSnapshot{
+			FactoryDir:        "/factories/fold",
+			RuntimeBaseDir:    "/runtime/fold",
+			DefinitionVersion: &interfaces.FactoryVersion{Logical: 1},
+			EffectiveFactory:  interfaces.FactoryConfig{Name: "fold"},
+		},
+	}
 }
 
 type foldHostedRuntimeStub struct {
@@ -317,6 +289,10 @@ func (s *foldHostedRuntimeStub) Observe(
 	}, nil
 }
 
+func (*foldHostedRuntimeStub) CleanInvocationSnapshot(context.Context) (factoryruntime.CleanInvocationSnapshot, error) {
+	return factoryruntime.CleanInvocationSnapshot{}, nil
+}
+
 func (s *foldHostedRuntimeStub) PlanDispatch(
 	_ context.Context,
 	req factoryruntime.PlanDispatchRequest,
@@ -352,23 +328,6 @@ func (s *foldHostedRuntimeStub) AcceptDispatchResult(
 	}, nil
 }
 
-func (*foldHostedRuntimeStub) CaptureCheckpoint(
-	_ context.Context,
-	_ factoryruntime.CaptureCheckpointRequest,
-) (factoryruntime.CaptureCheckpointResult, error) {
-	return factoryruntime.CaptureCheckpointResult{}, factoryruntime.ErrCapabilityUnavailable
-}
-
-func (*foldHostedRuntimeStub) LoadCheckpoint(
-	_ context.Context,
-	_ factoryruntime.LoadCheckpointRequest,
-) (factoryruntime.LoadCheckpointResult, error) {
-	return factoryruntime.LoadCheckpointResult{}, factoryruntime.ErrCapabilityUnavailable
-}
-
-func (*foldHostedRuntimeStub) RestoreCheckpoint(
-	_ context.Context,
-	_ factoryruntime.RestoreCheckpointRequest,
-) (factoryruntime.RestoreCheckpointResult, error) {
-	return factoryruntime.RestoreCheckpointResult{}, factoryruntime.ErrCapabilityUnavailable
+func (s *foldHostedRuntimeStub) InvokeWorker(_ context.Context, _ factoryruntime.InvokeWorkerRequest) (factoryruntime.InvokeWorkerResult, error) {
+	return factoryruntime.InvokeWorkerResult{}, nil
 }

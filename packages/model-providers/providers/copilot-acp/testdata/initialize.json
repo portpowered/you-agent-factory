@@ -1,0 +1,6 @@
+{
+  "protocol": "acp",
+  "protocolVersion": "1",
+  "provider": "copilot-acp",
+  "fixture": "initialize-conformance"
+}

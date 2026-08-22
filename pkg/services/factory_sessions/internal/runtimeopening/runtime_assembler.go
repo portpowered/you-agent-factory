@@ -7,6 +7,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -26,14 +28,12 @@ type FactoryRuntimeAssembler interface {
 		string,
 		factorydefinitions.WorkstationLoader,
 		factoryruntime.LoadedFactoryLoader,
-		workers.Provider,
+		providers.Service,
 		workers.CommandRunner,
 		workers.CommandRunner,
 		*workers.MockWorkersConfig,
 		factorydefinitions.RuntimeMode,
 		factoryruntime.Scheduler,
-		map[string]workers.WorkerExecutor,
-		func(string, workers.WorkerExecutor) workers.WorkerExecutor,
 		bool,
 		recordings.SubmissionRecorder,
 		recordings.DispatchRecorder,
@@ -51,15 +51,12 @@ type FactoryRuntimeAssembler interface {
 		*bool,
 		factoryruntime.Clock,
 		*zap.Logger,
-		workers.RuntimeService,
-		factoryruntime.WorkersRuntimeExecutorsFactory,
 		factoryruntime.WorkersMockCommandRunnerFactory,
 		func(string) workers.ProgressPublisher,
 		func(string) func(string),
 		factoryruntime.PetriMutationRecorder,
 		factoryruntime.WorldStateProjector,
-		factoryruntime.RuntimeLedgerFactory,
-		recordings.RuntimeRecorderFactory,
+		recordings.RuntimeOpening,
 		factorydefinitions.InitialFactorySnapshotFactory,
 		string,
 		string,
@@ -67,15 +64,16 @@ type FactoryRuntimeAssembler interface {
 		factorydefinitions.MutableLoadedFactorySource,
 		string,
 		*factorydefinitions.ReplayArtifact,
-		recordings.ReplayExecutionFactory,
+		*recordings.LoadResumeInputResult,
+		*factorydefinitions.FactoryWorldState,
 		automations.Service,
 		bool,
 	) (
-		factoryruntime.ReplacementBuilder,
-		factoryruntime.HostedInstance,
+		runtimeports.RuntimeReplacementBuilder,
+		runtimeports.RuntimeInstance,
 		factoryruntime.SessionBuildSpec,
-		factoryruntime.Lifecycle,
-		factoryruntime.Sidecars,
+		runtimeports.RuntimeLifecycle,
+		runtimeports.RuntimeSidecarService,
 		error,
 	)
 }

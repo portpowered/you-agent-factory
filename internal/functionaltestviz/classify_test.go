@@ -99,6 +99,7 @@ func TestLoadCoverageSummaryFailsClosedForMissingAndMalformed(t *testing.T) {
 	}
 }
 
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestAssembleCatalogInputsClassifiesRecordsAndLoadsCoverage(t *testing.T) {
 	t.Parallel()
 
@@ -169,12 +170,31 @@ func TestAssembleCatalogInputsClassifiesRecordsAndLoadsCoverage(t *testing.T) {
 		},
 	}
 
-	inputs, err := functionaltestviz.AssembleCatalogInputs(records, summaryPath)
+	timingPath := filepath.Join(t.TempDir(), "functional-timing-summary.json")
+	const timingRaw = `{
+  "version": 1,
+  "complete": true,
+  "wallSeconds": 1.5,
+  "packageElapsedSecondsSum": 1.5,
+  "packageCount": 1,
+  "packages": [
+    {"package": "github.com/portpowered/infinite-you/tests/functional/transport", "seconds": 1.5, "outcome": "pass"}
+  ]
+}
+`
+	if err := os.WriteFile(timingPath, []byte(timingRaw), 0o644); err != nil {
+		t.Fatalf("write timing summary: %v", err)
+	}
+
+	inputs, err := functionaltestviz.AssembleCatalogInputs(records, summaryPath, timingPath)
 	if err != nil {
 		t.Fatalf("AssembleCatalogInputs() error = %v", err)
 	}
 	if inputs.Coverage.CoveredStatements != 1 || inputs.Coverage.MeasurableStatements != 2 {
 		t.Fatalf("coverage totals = %d/%d, want 1/2", inputs.Coverage.CoveredStatements, inputs.Coverage.MeasurableStatements)
+	}
+	if inputs.Timing.PackageCount != 1 || !inputs.Timing.Complete {
+		t.Fatalf("timing = %+v, want complete with 1 package", inputs.Timing)
 	}
 	if len(inputs.Records) != len(records) {
 		t.Fatalf("classified len = %d, want %d", len(inputs.Records), len(records))

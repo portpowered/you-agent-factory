@@ -33,7 +33,7 @@ func TestReviewRetryLoopBreaker_TerminatesAfterMaxRetries(t *testing.T) {
 		},
 	})
 	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
-	session := support.GetDefaultSession(t, server.URL())
+	listed := support.ListDefaultSessionWork(t, server.URL())
 
 	if got := len(support.ProviderCallsForWorker(provider, "swe")); got != 3 {
 		t.Errorf("expected swe called 3 times, got %d", got)
@@ -103,7 +103,7 @@ func TestReviewRetryLoopBreaker_SucceedsBeforeLimit(t *testing.T) {
 		support.AcceptedProviderResponse(),
 		support.AcceptedProviderResponse(),
 	)
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWorkStable(t, dir, serviceedges.Edges{ProviderOverride: provider}, 10*time.Second)
 
 	if got := len(support.ProviderCallsForWorker(provider, "swe")); got != 2 {
 		t.Errorf("expected swe called 2 times, got %d", got)

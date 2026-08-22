@@ -102,6 +102,9 @@ func newModelsRootWireService(t *testing.T) models.Service {
 		nil,
 		nil,
 		modelswire.LocalRuntimeHooks{},
+		nil,
+		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("models/wire.NewService() error = %v", err)

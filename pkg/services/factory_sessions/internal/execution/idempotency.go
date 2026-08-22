@@ -5,11 +5,16 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workflowsource "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 )
 
 // IdempotencyTupleHash returns a stable digest for the normalized execution tuple
@@ -438,7 +443,6 @@ func (s *JavaScriptRuntimeService) startWaitingSyncSession(
 	reserved.state.resolvedSource = resolved
 	reserved.state.sourceContent = sourceContent
 	s.mu.Unlock()
-	s.presentCurrentFactoryEvents(reserved.state.session.SessionID)
 
 	go s.runAsyncSession(
 		runCtx,
@@ -486,7 +490,6 @@ func (s *JavaScriptRuntimeService) completeImmediateSyncStart(
 		return SyncStartResult{}, err
 	}
 	s.mu.Unlock()
-	s.presentCurrentFactoryEvents(reserved.state.session.SessionID)
 
 	snapshot, err := s.snapshotSessionState(reserved.state.session.SessionID)
 	if err != nil {
@@ -594,4 +597,274 @@ func (s *JavaScriptRuntimeService) projectSyncWaitTimeout(
 	result.SyncOutcome = SyncOutcomeTimedOut
 	result.TimedOut = true
 	return result, nil
+}
+
+// ApplyLiveChange lets a durable JavaScript Factory Session mutate the active
+// Factory Runtime that owns its Worker children. The transport-facing session
+// gateway remains the public owner; this optional capability keeps durable
+// execution-specific state behind its existing boundary.
+func (s *JavaScriptRuntimeService) ApplyLiveChange(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.LiveChangeRequest,
+) (factorysessions.LiveChangeResult, error) {
+	return s.runDurableLiveChange(ctx, sessionID, request, "")
+}
+
+// RecoverLiveChange closes an admitted durable live change after a restart or
+// an interrupted application, using the request event retained in the session
+// history as the source of truth.
+func (s *JavaScriptRuntimeService) RecoverLiveChange(
+	ctx context.Context,
+	sessionID string,
+	requestID string,
+) (factorysessions.LiveChangeResult, error) {
+	return s.runDurableLiveChange(ctx, sessionID, factorysessions.LiveChangeRequest{}, requestID)
+}
+
+func (s *JavaScriptRuntimeService) runDurableLiveChange(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.LiveChangeRequest,
+	recoverRequestID string,
+) (factorysessions.LiveChangeResult, error) {
+	if s == nil {
+		return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	if err := ctx.Err(); err != nil {
+		return factorysessions.LiveChangeResult{}, err
+	}
+	id, err := NormalizeSessionID(sessionID)
+	if err != nil {
+		return factorysessions.LiveChangeResult{}, err
+	}
+	runtime := s.workerInvoker()
+	if runtime == nil {
+		return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{
+			Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
+			Message: "durable Factory Session runtime is unavailable",
+		}
+	}
+
+	s.liveChangeMu.Lock()
+	defer s.liveChangeMu.Unlock()
+
+	events := durableLiveChangeEventLog{service: s, sessionID: id}
+	application := runtimebinding.NewLiveChangeApplication(runtime)
+	if application == nil {
+		return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{
+			Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
+			Message: "resource capacity application is unavailable",
+		}
+	}
+	admission := runtimebinding.NewLiveChangeAdmission(runtime)
+	if admission == nil {
+		if _, requiresAdmission := runtime.(workflowsource.AdmittedResourceCapacityService); requiresAdmission {
+			return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{
+				Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
+				Message: "live change coordination is unavailable",
+			}
+		}
+	} else {
+		release, admissionErr := admission.AcquireLiveChange(ctx, id)
+		if admissionErr != nil {
+			return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{
+				Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
+				Message: "live change coordination is unavailable",
+				Cause:   admissionErr,
+			}
+		}
+		defer release()
+	}
+	stateProvider := s.durableLiveChangeStateProvider(id, events)
+	if s.liveChangeCoordinator == nil {
+		return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{
+			Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
+			Message: "live change coordinator is unavailable",
+		}
+	}
+	operation := factorysessions.LiveChangeOperation{
+		StateProvider: stateProvider,
+		Events:        events,
+		Application:   application,
+		Now:           s.now,
+	}
+	var result factorysessions.LiveChangeResult
+	var applyErr error
+	if recoverRequestID != "" {
+		result, applyErr = s.liveChangeCoordinator.RecoverLiveChange(ctx, id, recoverRequestID, operation)
+	} else {
+		result, applyErr = s.liveChangeCoordinator.ApplyLiveChange(ctx, id, request, operation)
+	}
+	if applyErr == nil || result.Outcome == factorysessions.LiveChangeOutcomeReplayed {
+		if revision, ok := runtime.(workflowsource.ResourceCapacityRevisionService); ok && result.NewRevision >= 0 {
+			revision.SetFactoryRevision(result.NewRevision)
+		}
+	}
+	return result, applyErr
+}
+
+func (s *JavaScriptRuntimeService) durableLiveChangeStateProvider(
+	sessionID string,
+	events factorysessions.LiveChangeEventLog,
+) livechange.StateProvider {
+	return func(_ context.Context, id string) (factorysessions.LiveChangeSessionState, error) {
+		state, err := s.snapshotSessionState(id)
+		if err != nil {
+			return factorysessions.LiveChangeSessionState{}, err
+		}
+		projected := livechange.ProjectState(sessionID, events.LiveChangeEvents())
+		projected.SessionID = sessionID
+		projected.Lifecycle = durableLiveChangeLifecycle(state.session.Status)
+		return projected, nil
+	}
+}
+
+func durableLiveChangeLifecycle(status LifecycleStatus) factorysessions.LiveChangeLifecycle {
+	switch status {
+	case LifecycleStatusPaused:
+		return factorysessions.LiveChangeLifecyclePaused
+	case LifecycleStatusSucceeded, LifecycleStatusCanceled, LifecycleStatusTimedOut,
+		LifecycleStatusInterrupted, LifecycleStatusTerminated:
+		return factorysessions.LiveChangeLifecycleCompleted
+	case LifecycleStatusFailed:
+		return factorysessions.LiveChangeLifecycleFailed
+	case LifecycleStatusQueued, LifecycleStatusAwaitingApproval:
+		return factorysessions.LiveChangeLifecycleFailed
+	default:
+		return factorysessions.LiveChangeLifecycleRunning
+	}
+}
+
+// durableLiveChangeEventLog appends the coordinator's canonical events to the
+// durable session snapshot. It does not use the live Factory ledger because a
+// durable session has its own identity, reconnect cursor, and recovery history.
+type durableLiveChangeEventLog struct {
+	service   *JavaScriptRuntimeService
+	sessionID string
+}
+
+func (log durableLiveChangeEventLog) LiveChangeEvents() []interfaces.FactoryEvent {
+	if log.service == nil {
+		return nil
+	}
+	log.service.mu.RLock()
+	state, ok := log.service.sessions[log.sessionID]
+	if ok {
+		cloned := cloneRuntimeSessionState(state)
+		state = &cloned
+	}
+	log.service.mu.RUnlock()
+	if !ok || state == nil {
+		return nil
+	}
+	return decodeDurableFactoryEvents(state.events)
+}
+
+func (log durableLiveChangeEventLog) AppendLiveChangeEvent(event interfaces.FactoryEvent) (interfaces.FactoryEvent, error) {
+	if log.service == nil {
+		return interfaces.FactoryEvent{}, errors.New("durable live change service is unavailable")
+	}
+	log.service.mu.Lock()
+	state, ok := log.service.sessions[log.sessionID]
+	if !ok || state == nil {
+		log.service.mu.Unlock()
+		return interfaces.FactoryEvent{}, factorysessions.ErrSessionNotFound
+	}
+
+	event = normalizeDurableLiveChangeEvent(event, state.events)
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		log.service.mu.Unlock()
+		return interfaces.FactoryEvent{}, fmt.Errorf("encode durable live change event: %w", err)
+	}
+	candidate := cloneRuntimeSessionState(state)
+	candidate.events = append(candidate.events, encoded)
+	if err := log.service.persistSessionSnapshot(candidate); err != nil {
+		log.service.mu.Unlock()
+		return interfaces.FactoryEvent{}, err
+	}
+	state.events = append(state.events, encoded)
+	log.service.mu.Unlock()
+
+	log.service.presentCurrentFactoryEvents(log.sessionID)
+	return event.Clone(), nil
+}
+
+func decodeDurableFactoryEvents(raw []json.RawMessage) []interfaces.FactoryEvent {
+	if len(raw) == 0 {
+		return nil
+	}
+	events := make([]interfaces.FactoryEvent, 0, len(raw))
+	for _, encoded := range raw {
+		var event interfaces.FactoryEvent
+		if err := json.Unmarshal(encoded, &event); err != nil || strings.TrimSpace(string(event.Type)) == "" {
+			continue
+		}
+		events = append(events, event)
+	}
+	return events
+}
+
+func hasDurableLiveChangeEvents(raw []json.RawMessage) bool {
+	for _, encoded := range raw {
+		var event interfaces.FactoryEvent
+		if json.Unmarshal(encoded, &event) != nil {
+			continue
+		}
+		switch event.Type {
+		case interfaces.FactoryEventTypeFactoryChangeRequest,
+			interfaces.FactoryEventTypeFactoryChange,
+			interfaces.FactoryEventTypeFactoryChangeFailed:
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeDurableLiveChangeEvent(event interfaces.FactoryEvent, prior []json.RawMessage) interfaces.FactoryEvent {
+	event.SchemaVersion = interfaces.FactoryEventSchemaVersionV1
+	event.Context.Sequence = nextDurableLiveChangeEventSequence(prior)
+	event.Context.Tick = event.Context.Sequence
+	sessionSequence := nextDurableLiveChangeSessionSequence(prior)
+	event.Context.SessionSequence = &sessionSequence
+	if event.Type == interfaces.FactoryEventTypeFactoryChange {
+		var payload interfaces.FactoryChangeEventPayload
+		if json.Unmarshal(event.Payload, &payload) == nil {
+			sequence := event.Context.Sequence
+			payload.EffectiveSequence = &sequence
+			if encoded, err := json.Marshal(payload); err == nil {
+				event.Payload = encoded
+			}
+		}
+	}
+	return event
+}
+
+func nextDurableLiveChangeEventSequence(raw []json.RawMessage) int {
+	next := 1
+	for _, encoded := range raw {
+		var event interfaces.FactoryEvent
+		if json.Unmarshal(encoded, &event) != nil {
+			continue
+		}
+		if event.Context.Sequence >= next {
+			next = event.Context.Sequence + 1
+		}
+	}
+	return next
+}
+
+func nextDurableLiveChangeSessionSequence(raw []json.RawMessage) int {
+	next := 0
+	for _, encoded := range raw {
+		var event interfaces.FactoryEvent
+		if json.Unmarshal(encoded, &event) != nil || event.Context.SessionSequence == nil {
+			continue
+		}
+		if *event.Context.SessionSequence >= next {
+			next = *event.Context.SessionSequence + 1
+		}
+	}
+	return next
 }

@@ -13,6 +13,7 @@ require (
 	github.com/google/wire v0.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/jonboulle/clockwork v0.5.0
+	github.com/mattn/go-shellwords v1.0.12
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/oapi-codegen/runtime v1.1.1
 	github.com/portpowered/go-agent-harness/go-agent-loop v0.0.1
@@ -24,7 +25,6 @@ require (
 	go.uber.org/zap v1.27.1
 	golang.org/x/sys v0.41.0
 	golang.org/x/text v0.20.0
-	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.28.0
 )
@@ -45,7 +45,6 @@ require (
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mattn/go-shellwords v1.0.12 // indirect
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect
 	github.com/oapi-codegen/oapi-codegen/v2 v2.5.1 // indirect
 	github.com/oasdiff/yaml v0.0.0-20250309154309-f31be36b4037 // indirect

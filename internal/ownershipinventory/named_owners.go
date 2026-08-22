@@ -6,7 +6,7 @@ import (
 )
 
 // RequiredNamedOwners are the PRD-named owners that must be confirmed onto the
-// committed 13-owner tree without another discovery or decomposition task.
+// committed product-owner tree without another discovery or decomposition task.
 var RequiredNamedOwners = []string{
 	"factory_visualization",
 	"operator_settings",
@@ -92,18 +92,6 @@ func committedNamedOwnerConfirmations() []NamedOwnerConfirmation {
 					Destination:   "providers",
 					Disposition:   DispositionMove,
 					Note:          "Agy/PTY adapter packages move into Providers native adapters under the singular Providers root.",
-				},
-				{
-					PackagePrefix: "pkg/services/providers/internal/services/execution/internal/provider",
-					Destination:   "providers",
-					Disposition:   DispositionMove,
-					Note:          "Workers provider execution/adapter packages move into Providers Execution; catalog and execution stay nested under Providers, not alternate top-level owners.",
-				},
-				{
-					PackagePrefix: "pkg/services/providers/internal/services/execution/internal/provider_test",
-					Destination:   "providers",
-					Disposition:   DispositionMove,
-					Note:          "Provider test/support packages follow the Providers extraction successor.",
 				},
 			},
 			Note: "Add Providers as the singular catalog+execution owner. Capabilities remain Catalog queries; native adapters remain responsibility clusters—not competing provider catalog/execution top-level abstractions.",

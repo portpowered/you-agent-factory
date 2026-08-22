@@ -24,7 +24,10 @@ var SessionFamilyCommandIDs = []string{
 	"you.session.delete",
 	"you.session.pause",
 	"you.session.resume",
-	"you.session.dispatches",
+	"you.session.cancel",
+	"you.session.terminate",
+	"you.session.resource",
+	"you.session.resource.set",
 }
 
 // IsSessionFamilyCommandID reports whether id belongs to the canonical session family.
@@ -62,10 +65,14 @@ func AssertRepresentativeFamilyCommandID(id string) error {
 // for the work inspection/control family cutover slice.
 var WorkFamilyCommandIDs = []string{
 	"you.work",
+	"you.work.approval",
+	"you.work.approval.list",
+	"you.work.approval.show",
 	"you.work.list",
+	"you.work.watch",
 	"you.work.show",
 	"you.work.move",
-	"you.work.visualize",
+	"you.work.render",
 }
 
 // WorkersFamilyCommandIDs are the stable command IDs for customer-facing
@@ -76,6 +83,42 @@ var WorkersFamilyCommandIDs = []string{
 	"you.workers.acp",
 	"you.workers.acp.add",
 	"you.workers.acp.delete",
+}
+
+// WorkerSessionsFamilyCommandIDs are the stable command IDs for worker-session
+// observation on one Factory Session.
+var WorkerSessionsFamilyCommandIDs = []string{
+	"you.worker-sessions",
+	"you.worker-sessions.invoke",
+	"you.worker-sessions.continue",
+	"you.worker-sessions.interrupt",
+	"you.worker-sessions.pause",
+	"you.worker-sessions.resume",
+	"you.worker-sessions.cancel",
+	"you.worker-sessions.terminate",
+	"you.worker-sessions.list",
+	"you.worker-sessions.read",
+	"you.worker-sessions.show",
+	"you.worker-sessions.stream",
+}
+
+// IsWorkerSessionsFamilyCommandID reports whether id belongs to the worker
+// session observation family.
+func IsWorkerSessionsFamilyCommandID(id string) bool {
+	return slices.Contains(WorkerSessionsFamilyCommandIDs, id)
+}
+
+// AssertWorkerSessionsFamilyCommandID rejects command IDs outside the worker
+// session observation family.
+func AssertWorkerSessionsFamilyCommandID(id string) error {
+	if IsWorkerSessionsFamilyCommandID(id) {
+		return nil
+	}
+	return fmt.Errorf(
+		"command id %q is outside the worker sessions family %v",
+		id,
+		WorkerSessionsFamilyCommandIDs,
+	)
 }
 
 // RunSubmitFamilyCommandIDs are the only stable command IDs the generator may

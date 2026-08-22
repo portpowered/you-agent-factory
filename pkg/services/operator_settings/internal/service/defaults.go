@@ -16,25 +16,43 @@ func loadFileConfig(
 	decode operatorsettings.ConfigDecoder,
 	path string,
 ) (operatorsettings.Config, error) {
+	config, _, err := loadFileConfigWithDiagnostics(files, decode, path, nil)
+	return config, err
+}
+
+func loadFileConfigWithDiagnostics(
+	files operatorsettings.FileSystem,
+	decode operatorsettings.ConfigDecoder,
+	path string,
+	diagnosticDecoder operatorsettings.ConfigDiagnosticsDecoder,
+) (operatorsettings.Config, []string, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return operatorsettings.Config{}, fmt.Errorf("operator config path is required")
+		return operatorsettings.Config{}, nil, fmt.Errorf("operator config path is required")
 	}
 	data, err := files.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return operatorsettings.Config{Runtime: defaultRuntimeSettings()}, nil
+			return operatorsettings.Config{PriceTable: operatorsettings.PriceTable{Currency: operatorsettings.PriceTableCurrencyUSD, Models: []operatorsettings.PriceTableModel{}}, Runtime: defaultRuntimeSettings()}, nil, nil
 		}
-		return operatorsettings.Config{}, fmt.Errorf("read operator config %s: %w", path, err)
+		return operatorsettings.Config{}, nil, fmt.Errorf("read operator config %s: %w", path, err)
 	}
-	if decode == nil {
-		return operatorsettings.Config{}, fmt.Errorf("parse operator config %s: global config decoder is required", path)
+	if decode == nil && diagnosticDecoder == nil {
+		return operatorsettings.Config{}, nil, fmt.Errorf("parse operator config %s: global config decoder is required", path)
 	}
-	config, err := decode(data)
+	var config operatorsettings.Config
+	var ignoredJSONPaths []string
+	if diagnosticDecoder != nil {
+		var diagnostics operatorsettings.ConfigDecodeDiagnostics
+		config, diagnostics, err = diagnosticDecoder(data)
+		ignoredJSONPaths = diagnostics.Paths()
+	} else {
+		config, err = decode(data)
+	}
 	if err != nil {
-		return operatorsettings.Config{}, fmt.Errorf("parse operator config %s: %w", path, err)
+		return operatorsettings.Config{}, nil, fmt.Errorf("parse operator config %s: %w", path, err)
 	}
-	return config, nil
+	return config, ignoredJSONPaths, nil
 }
 
 func defaultRuntimeSettings() operatorsettings.RuntimeSettings {

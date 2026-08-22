@@ -2,23 +2,8 @@ package internal
 
 import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
+	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/prompting"
 )
-
-func (*Service) BuildPromptTemplateContract(
-	inputCount int,
-	docPaths []string,
-) workers.PromptTemplateContract {
-	return workerprompting.BuildPromptTemplateContract(inputCount, docPaths)
-}
-
-func (*Service) ValidatePromptTemplate(
-	template string,
-	inputCount int,
-	docPaths []string,
-) workers.PromptTemplateValidationResult {
-	return workerprompting.ValidatePromptTemplate(template, inputCount, docPaths)
-}
 
 // ResolveTemplateFields exposes the Workers-owned template resolver to Wire
 // without exposing the prompting implementation package.

@@ -1,4 +1,8 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: coordinates layout draft session state with typed undo history and visual groups.
+import type {
+  FactoryGraphNodeDimensions,
+  FactoryGraphNodeFamily,
+} from "@you-agent-factory/factory-graph";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { CurrentFactoryDocument } from "../../lib/draft/factory-graph-draft-types";
@@ -17,6 +21,8 @@ import {
   hasFactoryLayoutChanges,
   moveFactoryLayoutNode,
   moveFactoryLayoutNodesByDelta,
+  resetFactoryLayoutNodeSize,
+  resizeFactoryLayoutNode,
   updateFactoryLayoutViewport,
 } from "../../lib/layout/factory-graph-layout-operations";
 import {
@@ -26,8 +32,11 @@ import {
   createMoveFactoryLayoutNodesCommand,
   createMoveFactoryLayoutVisualGroupCommand,
   createResetFactoryLayoutCommand,
+  createResetFactoryLayoutNodeSizeCommand,
+  createResizeFactoryLayoutNodeCommand,
   createUpdateFactoryLayoutEdgeWaypointsCommand,
   createUpdateFactoryLayoutGroupCommand,
+  createUpdateFactoryLayoutNodeSizeCommand,
   createUpdateFactoryLayoutViewportCommand,
   type FactoryLayoutCommand,
 } from "../../lib/layout/history/factory-graph-layout-commands";
@@ -48,8 +57,11 @@ import {
   createFactoryLayoutGroupId,
   defaultFactoryLayoutGroupBounds,
   type FactoryLayoutGroup,
-  type FactoryLayoutGroupColorToken,
+  type FactoryLayoutGroupNodeGeometry,
+  fitFactoryLayoutGroup,
+  fitFactoryLayoutGroupBounds,
   moveFactoryLayoutGroupByDelta,
+  normalizeFactoryLayoutGroupColor,
   removeFactoryLayoutGroup,
   removeNodeFromFactoryLayoutGroup,
   resizeFactoryLayoutGroup,
@@ -75,6 +87,19 @@ export interface FactoryGraphLayoutDraftDerivedState {
     position: FactoryLayoutPoint,
   ) => void;
   removeEdgeWaypoint: (edgeId: string, waypointIndex: number) => void;
+  resizeNode: (
+    nodeId: string,
+    family: FactoryGraphNodeFamily,
+    dimensions: FactoryGraphNodeDimensions,
+    position: FactoryLayoutPoint,
+  ) => void;
+  fitNode: (
+    nodeId: string,
+    family: FactoryGraphNodeFamily,
+    dimensions: FactoryGraphNodeDimensions,
+    position: FactoryLayoutPoint,
+  ) => void;
+  resetNodeSize: (nodeId: string) => void;
   moveNode: (nodeId: string, position: FactoryLayoutPoint) => void;
   moveNodesByDelta: (
     nodeIds: readonly string[],
@@ -87,12 +112,19 @@ export interface FactoryGraphLayoutDraftDerivedState {
   resetLayout: (options?: { recordHistory?: boolean }) => void;
   undoLayout: () => void;
   updateViewport: (viewport: FactoryLayoutViewport) => void;
-  createVisualGroup: (center: FactoryLayoutPoint) => FactoryLayoutGroup | null;
-  renameVisualGroup: (groupId: string, label: string) => void;
-  setVisualGroupColor: (
+  createVisualGroup: (
+    center: FactoryLayoutPoint,
+    options?: {
+      nodeGeometryById?: ReadonlyMap<string, FactoryLayoutGroupNodeGeometry>;
+      nodeIds?: readonly string[];
+    },
+  ) => FactoryLayoutGroup | null;
+  fitVisualGroup: (
     groupId: string,
-    color: FactoryLayoutGroupColorToken,
+    nodeGeometryById: ReadonlyMap<string, FactoryLayoutGroupNodeGeometry>,
   ) => void;
+  renameVisualGroup: (groupId: string, label: string) => void;
+  setVisualGroupColor: (groupId: string, color: string) => void;
   addNodeToVisualGroup: (groupId: string, nodeId: string) => void;
   removeNodeFromVisualGroup: (groupId: string, nodeId: string) => void;
   moveVisualGroupByDelta: (
@@ -120,6 +152,16 @@ interface LayoutDraftStoreState {
 interface UseFactoryGraphLayoutDraftStateOptions {
   currentFactoryDocument?: CurrentFactoryDocument;
   factoryDocumentScopeKey?: string | null;
+  initialLayout?: FactoryLayout;
+  /**
+   * Compatibility bridge for the parent editor's unified document history.
+   * The layout command history below remains available to direct layout-hook
+   * consumers until its callers can be removed mechanically.
+   */
+  onCommit?: (input: {
+    nextLayout: FactoryLayout;
+    previousLayout: FactoryLayout;
+  }) => void;
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: coordinates layout draft session state with typed undo history.
@@ -128,7 +170,11 @@ export function useFactoryGraphLayoutDraftState(
 ): FactoryGraphLayoutDraftDerivedState {
   const currentFactoryDocument = options.currentFactoryDocument;
   const factoryDocumentScopeKey = options.factoryDocumentScopeKey ?? null;
+  const onCommit = options.onCommit;
   const lastFactoryDocumentScopeKeyRef = useRef<string | null>(null);
+  const initialLayoutRef = useRef<FactoryLayout | undefined>(
+    options.initialLayout,
+  );
   const isApplyingHistoryRef = useRef(false);
   const [store, setStore] = useState<LayoutDraftStoreState>(() => ({
     history: clearFactoryLayoutHistoryState(),
@@ -161,6 +207,13 @@ export function useFactoryGraphLayoutDraftState(
             ? pushFactoryLayoutHistoryCommand(currentStore.history, command)
             : currentStore.history;
 
+        if (command && !isApplyingHistoryRef.current) {
+          onCommit?.({
+            nextLayout: layout,
+            previousLayout: currentLayout,
+          });
+        }
+
         return {
           history,
           sessionState: {
@@ -170,7 +223,7 @@ export function useFactoryGraphLayoutDraftState(
         };
       });
     },
-    [documentBaseLayout],
+    [documentBaseLayout, onCommit],
   );
 
   useEffect(() => {
@@ -189,11 +242,16 @@ export function useFactoryGraphLayoutDraftState(
       return;
     }
 
+    const restoredLayout = initialLayoutRef.current;
+    initialLayoutRef.current = undefined;
     setStore((currentStore) => {
       if (!currentStore.sessionState) {
         return {
           history: clearFactoryLayoutHistoryState(),
-          sessionState: createLayoutSessionState(documentBaseLayout),
+          sessionState: createLayoutSessionState(
+            documentBaseLayout,
+            restoredLayout,
+          ),
         };
       }
 
@@ -319,6 +377,76 @@ export function useFactoryGraphLayoutDraftState(
     },
     [commitLayoutUpdate],
   );
+  const resizeNode = useCallback(
+    (
+      nodeId: string,
+      family: FactoryGraphNodeFamily,
+      dimensions: FactoryGraphNodeDimensions,
+      position: FactoryLayoutPoint,
+    ) => {
+      commitLayoutUpdate(({ currentLayout }) => ({
+        command: createResizeFactoryLayoutNodeCommand({
+          family,
+          layout: currentLayout,
+          nodeId,
+          position,
+          requestedDimensions: dimensions,
+        }),
+        layout: resizeFactoryLayoutNode(
+          currentLayout,
+          nodeId,
+          family,
+          dimensions,
+          position,
+        ),
+      }));
+    },
+    [commitLayoutUpdate],
+  );
+  const fitNode = useCallback(
+    (
+      nodeId: string,
+      family: FactoryGraphNodeFamily,
+      dimensions: FactoryGraphNodeDimensions,
+      position: FactoryLayoutPoint,
+    ) => {
+      commitLayoutUpdate(({ currentLayout }) => {
+        const nextLayout = resizeFactoryLayoutNode(
+          currentLayout,
+          nodeId,
+          family,
+          dimensions,
+          position,
+        );
+        const nextSize = nextLayout.nodes?.find(
+          (node) => node.id === nodeId,
+        )?.size;
+
+        return {
+          command: createUpdateFactoryLayoutNodeSizeCommand({
+            layout: currentLayout,
+            nodeId,
+            position,
+            to: nextSize ?? null,
+          }),
+          layout: nextLayout,
+        };
+      });
+    },
+    [commitLayoutUpdate],
+  );
+  const resetNodeSize = useCallback(
+    (nodeId: string) => {
+      commitLayoutUpdate(({ currentLayout }) => ({
+        command: createResetFactoryLayoutNodeSizeCommand({
+          layout: currentLayout,
+          nodeId,
+        }),
+        layout: resetFactoryLayoutNodeSize(currentLayout, nodeId),
+      }));
+    },
+    [commitLayoutUpdate],
+  );
   const updateViewport = useCallback(
     (viewport: FactoryLayoutViewport) => {
       commitLayoutUpdate(({ currentLayout }) => ({
@@ -432,14 +560,29 @@ export function useFactoryGraphLayoutDraftState(
     [],
   );
   const createVisualGroup = useCallback(
-    (center: FactoryLayoutPoint): FactoryLayoutGroup | null => {
+    (
+      center: FactoryLayoutPoint,
+      options?: {
+        nodeGeometryById?: ReadonlyMap<string, FactoryLayoutGroupNodeGeometry>;
+        nodeIds?: readonly string[];
+      },
+    ): FactoryLayoutGroup | null => {
       let createdGroup: FactoryLayoutGroup | null = null;
       commitLayoutUpdate(({ currentLayout }) => {
         const groupId = createFactoryLayoutGroupId(currentLayout);
+        const nodeIds = [...new Set(options?.nodeIds ?? [])];
+        const fittedBounds =
+          nodeIds.length > 0 && options?.nodeGeometryById
+            ? fitFactoryLayoutGroupBounds({
+                nodeGeometryById: options.nodeGeometryById,
+                nodeIds,
+              })
+            : null;
         const group = createFactoryLayoutGroup({
-          bounds: defaultFactoryLayoutGroupBounds(center),
+          bounds: fittedBounds ?? defaultFactoryLayoutGroupBounds(center),
           id: groupId,
           layout: currentLayout,
+          nodeIds,
         });
         createdGroup = group;
         const nextLayout = addFactoryLayoutGroup(currentLayout, group);
@@ -449,6 +592,35 @@ export function useFactoryGraphLayoutDraftState(
         };
       });
       return createdGroup;
+    },
+    [commitLayoutUpdate],
+  );
+  const fitVisualGroup = useCallback(
+    (
+      groupId: string,
+      nodeGeometryById: ReadonlyMap<string, FactoryLayoutGroupNodeGeometry>,
+    ) => {
+      commitLayoutUpdate(({ currentLayout }) => {
+        const nextLayout = fitFactoryLayoutGroup(
+          currentLayout,
+          groupId,
+          nodeGeometryById,
+        );
+        const updatedGroup = nextLayout.groups?.find(
+          (group) => group.id === groupId,
+        );
+        return {
+          command:
+            updatedGroup === undefined
+              ? null
+              : createUpdateFactoryLayoutGroupCommand({
+                  groupId,
+                  layout: currentLayout,
+                  to: updatedGroup,
+                }),
+          layout: nextLayout,
+        };
+      });
     },
     [commitLayoutUpdate],
   );
@@ -482,14 +654,19 @@ export function useFactoryGraphLayoutDraftState(
     [commitLayoutUpdate],
   );
   const setVisualGroupColor = useCallback(
-    (groupId: string, color: FactoryLayoutGroupColorToken) => {
+    (groupId: string, color: string) => {
+      const normalizedColor = normalizeFactoryLayoutGroupColor(color);
+      if (normalizedColor === null) {
+        return;
+      }
+
       commitLayoutUpdate(({ currentLayout }) => {
         const nextLayout = updateFactoryLayoutGroup(
           currentLayout,
           groupId,
           (group) => ({
             ...group,
-            color,
+            color: normalizedColor,
           }),
         );
         const updatedGroup = nextLayout.groups?.find(
@@ -643,6 +820,9 @@ export function useFactoryGraphLayoutDraftState(
     layoutDirty,
     moveEdgeWaypoint,
     removeEdgeWaypoint,
+    resizeNode,
+    fitNode,
+    resetNodeSize,
     moveNode,
     moveNodesByDelta,
     pruneLayoutHistoryForNodeIds,
@@ -652,6 +832,7 @@ export function useFactoryGraphLayoutDraftState(
     undoLayout,
     updateViewport,
     createVisualGroup,
+    fitVisualGroup,
     renameVisualGroup,
     setVisualGroupColor,
     addNodeToVisualGroup,
@@ -663,12 +844,12 @@ export function useFactoryGraphLayoutDraftState(
 }
 
 function createLayoutSessionState(
-  layout: FactoryLayout,
+  baseLayout: FactoryLayout,
+  layout: FactoryLayout = baseLayout,
 ): FactoryGraphLayoutSessionState {
-  const clonedLayout = structuredClone(layout);
   return {
-    baseLayout: clonedLayout,
-    layout: structuredClone(clonedLayout),
+    baseLayout: structuredClone(baseLayout),
+    layout: structuredClone(layout),
   };
 }
 

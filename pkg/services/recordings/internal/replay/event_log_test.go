@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-file-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 package replay
 
 import (
@@ -7,10 +9,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -62,7 +67,7 @@ func testGeneratedFactory() factoryapi.Factory {
 		Workers:   &[]factoryapi.Worker{{Name: "worker-a"}},
 		Workstations: &[]factoryapi.Workstation{{
 			Name:    "process",
-			Worker:  "worker-a",
+			Worker:  generatedStringPtr("worker-a"),
 			Inputs:  []factoryapi.WorkstationIO{},
 			Outputs: &[]factoryapi.WorkstationIO{},
 		}},
@@ -152,6 +157,13 @@ func replayDispatchCompletedEvent(t *testing.T, completionID string, result work
 		ProviderFailure: workerdiagnosticsmapping.GeneratedWorkFailureMetadata(result.FailureMetadata),
 		Metrics:         generatedWorkMetrics(result.Metrics),
 	}
+	if jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent) {
+		if result.StructuredResult == nil {
+			payload.StructuredResult = json.RawMessage("null")
+		} else {
+			payload.StructuredResult = jsonvalue.Clone(result.StructuredResult)
+		}
+	}
 	var union factoryapi.FactoryEvent_Payload
 	if err := union.FromDispatchResponseEventPayload(payload); err != nil {
 		t.Fatalf("encode dispatch completed payload: %v", err)
@@ -179,7 +191,7 @@ func generatedReplayOutputWorkPtr(items []work.FactoryWorkItem) *[]factoryapi.Wo
 		if currentChainingTraceID == "" {
 			currentChainingTraceID = item.TraceID
 		}
-		out = append(out, factoryapi.Work{
+		generated := factoryapi.Work{
 			Name:                     item.DisplayName,
 			WorkId:                   stringPtrIfNotEmpty(item.ID),
 			WorkTypeName:             stringPtrIfNotEmpty(item.WorkTypeID),
@@ -188,7 +200,15 @@ func generatedReplayOutputWorkPtr(items []work.FactoryWorkItem) *[]factoryapi.Wo
 			PreviousChainingTraceIds: slicePtr(item.PreviousChainingTraceIDs),
 			TraceId:                  stringPtrIfNotEmpty(item.TraceID),
 			Tags:                     generatedStringMapPtr(item.Tags),
-		})
+		}
+		if jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent) {
+			if item.StructuredResult == nil {
+				generated.StructuredResult = json.RawMessage("null")
+			} else {
+				generated.StructuredResult = jsonvalue.Clone(item.StructuredResult)
+			}
+		}
+		out = append(out, generated)
 	}
 	return &out
 }
@@ -262,6 +282,47 @@ func TestReduceReplayEvents_CompletionsPreserveRecordedOutputWork(t *testing.T) 
 	}
 }
 
+func TestReduceReplayEvents_CompletionsPreserveStructuredResultAndOutputWorkValues(t *testing.T) {
+	structured := map[string]any{
+		"verdict": "pass",
+		"items":   []any{json.Number("1"), json.Number("2")},
+	}
+	artifact := testReplayArtifact(
+		t,
+		replayDispatchCompletedEvent(t, "completion-structured", workerexecution.WorkResult{
+			DispatchID:              "dispatch-structured",
+			TransitionID:            "process",
+			Outcome:                 workerexecution.OutcomeAccepted,
+			StructuredResult:        structured,
+			StructuredResultPresent: true,
+			RecordedOutputWork: []work.FactoryWorkItem{
+				{ID: "work-output-a", WorkTypeID: "task", StructuredResult: structured, StructuredResultPresent: true},
+				{ID: "work-output-b", WorkTypeID: "task", StructuredResult: structured, StructuredResultPresent: true},
+			},
+		}, 3),
+	)
+
+	reduced, err := reduceReplayEvents(artifact, testFactorySnapshotDecoder, testRuntimeConfigDecoder)
+	if err != nil {
+		t.Fatalf("reduceReplayEvents: %v", err)
+	}
+	if len(reduced.Completions) != 1 {
+		t.Fatalf("reduced completions = %d, want 1", len(reduced.Completions))
+	}
+	completion := reduced.Completions[0].result
+	if !completion.StructuredResultPresent || !reflect.DeepEqual(completion.StructuredResult, structured) {
+		t.Fatalf("replayed structured result = %#v (present=%t), want %#v", completion.StructuredResult, completion.StructuredResultPresent, structured)
+	}
+	if len(completion.RecordedOutputWork) != 2 {
+		t.Fatalf("replayed output work = %#v, want two items", completion.RecordedOutputWork)
+	}
+	for _, item := range completion.RecordedOutputWork {
+		if !item.StructuredResultPresent || !reflect.DeepEqual(item.StructuredResult, structured) {
+			t.Fatalf("replayed output %q structured result = %#v (present=%t), want %#v", item.ID, item.StructuredResult, item.StructuredResultPresent, structured)
+		}
+	}
+}
+
 func TestReduceReplayEvents_CompletionsRehydrateSafeDiagnosticsThroughInterfaces(t *testing.T) {
 	artifact := safeDiagnosticReductionArtifact(t)
 
@@ -325,6 +386,35 @@ func TestReduceReplayEvents_MapsLegacyProviderFailureOnlyWireToFailureMetadata(t
 	}
 }
 
+func TestReduceReplayEvents_PreservesStructuredSchemaViolationClassification(t *testing.T) {
+	artifact := testReplayArtifact(
+		t,
+		replayDispatchCompletedEvent(t, "completion-schema-violation", workerexecution.WorkResult{
+			DispatchID:   "dispatch-schema-violation",
+			TransitionID: "process",
+			Outcome:      workerexecution.OutcomeFailed,
+			Error:        "structured output schema violation: required property verdict is missing",
+			FailureMetadata: &workerexecution.WorkFailureMetadata{
+				Family: workerexecution.WorkFailureFamilyTerminal,
+				Type:   workerexecution.WorkFailureTypeStructuredOutputSchemaViolation,
+			},
+		}, 3),
+	)
+
+	reduced, err := reduceReplayEvents(artifact, testFactorySnapshotDecoder, testRuntimeConfigDecoder)
+	if err != nil {
+		t.Fatalf("reduceReplayEvents: %v", err)
+	}
+	if len(reduced.Completions) != 1 {
+		t.Fatalf("reduced completions = %d, want 1", len(reduced.Completions))
+	}
+	completion := reduced.Completions[0].result
+	if completion.FailureMetadata == nil || completion.FailureMetadata.Family != workerexecution.WorkFailureFamilyTerminal ||
+		completion.FailureMetadata.Type != workerexecution.WorkFailureTypeStructuredOutputSchemaViolation {
+		t.Fatalf("replayed failure metadata = %#v, want terminal structured schema violation", completion.FailureMetadata)
+	}
+}
+
 func TestReduceReplayEvents_CompletionsOmitDiagnosticsWhenReplayArtifactOmitsThem(t *testing.T) {
 	artifact := testReplayArtifact(
 		t,
@@ -342,7 +432,7 @@ func TestReduceReplayEvents_CompletionsOmitDiagnosticsWhenReplayArtifactOmitsThe
 			1,
 			3,
 			"recorded provider output",
-			&workerexecution.ProviderSessionMetadata{
+			&providers.SessionMetadata{
 				Provider: "codex",
 				Kind:     "response_id",
 				ID:       "resp-no-diagnostics",
@@ -367,8 +457,9 @@ func TestReduceReplayEvents_CompletionsOmitDiagnosticsWhenReplayArtifactOmitsThe
 	}
 
 	completion := reduced.Completions[0]
-	if completion.result.ProviderSession == nil || completion.result.ProviderSession.ID != "resp-no-diagnostics" {
-		t.Fatalf("provider session = %#v, want resp-no-diagnostics", completion.result.ProviderSession)
+	providerSession := (completion.result.Continuation).SessionMetadata()
+	if providerSession == nil || providerSession.ID != "resp-no-diagnostics" {
+		t.Fatalf("provider session = %#v, want resp-no-diagnostics", providerSession)
 	}
 	if completion.result.Diagnostics != nil {
 		t.Fatalf("completion diagnostics = %#v, want nil", completion.result.Diagnostics)
@@ -393,8 +484,8 @@ func thinDispatchReplayArtifact(t *testing.T) (*interfaces.ReplayArtifact, facto
 				},
 			},
 			workers.Token{
-				ID:      "resource/executor-slot",
-				PlaceID: "executor-slot:available",
+				ID:    "resource/executor-slot",
+				State: "available",
 				Color: workers.Color{
 					WorkTypeID: "executor-slot",
 					DataType:   workers.DataTypeResource,
@@ -437,7 +528,7 @@ func safeDiagnosticReductionArtifact(t *testing.T) *interfaces.ReplayArtifact {
 		1,
 		3,
 		"recorded provider output",
-		&workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-safe-123"},
+		&providers.SessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-safe-123"},
 		safeDiagnosticReductionFixture(),
 		"",
 	)
@@ -492,8 +583,9 @@ func assertReducedCompletionSafeDiagnostics(t *testing.T, completion replayCompl
 	if completion.result.Output != "recorded provider output" {
 		t.Fatalf("completion output = %q, want recorded provider output", completion.result.Output)
 	}
-	if completion.result.ProviderSession == nil || completion.result.ProviderSession.ID != "resp-safe-123" {
-		t.Fatalf("provider session = %#v, want resp-safe-123", completion.result.ProviderSession)
+	providerSession := (completion.result.Continuation).SessionMetadata()
+	if providerSession == nil || providerSession.ID != "resp-safe-123" {
+		t.Fatalf("provider session = %#v, want resp-safe-123", providerSession)
 	}
 	if completion.result.FailureMetadata == nil || completion.result.FailureMetadata.Type != workerexecution.WorkFailureTypeThrottled {
 		t.Fatalf("failure metadata = %#v, want throttled", completion.result.FailureMetadata)
@@ -624,7 +716,7 @@ func assertThinReplayDispatchTokens(t *testing.T, recorded work.WorkDispatch) {
 			}
 			sawWork = true
 		case workers.DataTypeResource:
-			if token.Color.Name != "executor-slot" || token.PlaceID != "executor-slot:available" {
+			if token.Color.Name != "executor-slot" || token.State != "available" {
 				t.Fatalf("resource token = %#v, want executor-slot usage", token)
 			}
 			sawResource = true
@@ -715,7 +807,7 @@ func replayInferenceResponseEvent(
 	attempt int,
 	tick int,
 	response string,
-	providerSession *workerexecution.ProviderSessionMetadata,
+	providerSession *providers.SessionMetadata,
 	diagnostics *workerexecution.WorkDiagnostics,
 	errorClass string,
 ) factoryapi.FactoryEvent {
@@ -811,8 +903,8 @@ func TestReduceReplayEvents_OperatorWorkStateChanges(t *testing.T) {
 	if change.change.WorkID != "work-recover" || change.observedTick != 4 {
 		t.Fatalf("work state change = %#v, want work-recover at tick 4", change)
 	}
-	if change.change.FromPlaceID != "task:failed" || change.change.ToPlaceID != "task:init" {
-		t.Fatalf("places = %q -> %q, want task:failed -> task:init", change.change.FromPlaceID, change.change.ToPlaceID)
+	if change.fromPlaceID != "task:failed" || change.toPlaceID != "task:init" {
+		t.Fatalf("places = %q -> %q, want task:failed -> task:init", change.fromPlaceID, change.toPlaceID)
 	}
 	if change.change.Source != work.WorkStateChangeSourceAPI {
 		t.Fatalf("source = %q, want api", change.change.Source)

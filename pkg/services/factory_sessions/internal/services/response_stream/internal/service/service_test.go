@@ -2,13 +2,13 @@ package service_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
@@ -16,7 +16,13 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/testing/eventsstub"
 )
+
+func newTestEventsService(t *testing.T) events.Service {
+	t.Helper()
+	return eventsstub.New()
+}
 
 type memoryCursorStore struct {
 	checkpoint cursors.Checkpoint
@@ -43,11 +49,19 @@ func newService(t *testing.T) responsestreamservice.Service {
 	var next atomic.Uint64
 	service, err := responsestreamwire.NewService(func() string {
 		return fmt.Sprintf("response-event-%d", next.Add(1))
-	}, nil)
+	}, nil, newTestEventsService(t))
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
 	return service
+}
+
+func serviceWithEvents(t *testing.T, eventsService events.Service) (responsestreamservice.Service, error) {
+	t.Helper()
+	var next atomic.Uint64
+	return responsestreamwire.NewService(func() string {
+		return fmt.Sprintf("response-event-%d", next.Add(1))
+	}, nil, eventsService)
 }
 
 func newStore(t *testing.T, service responsestreamservice.Service) *responseeventstore.SessionResponseEventStore {
@@ -59,34 +73,21 @@ func newStore(t *testing.T, service responsestreamservice.Service) *responseeven
 	return store
 }
 
-func publish(t *testing.T, store *responseeventstore.SessionResponseEventStore, kind responseevents.Kind, dispatchID string) responseevents.FactoryResponseEvent {
-	t.Helper()
-	event, err := store.Publish(responseevents.FactoryResponseEvent{
-		DispatchID: dispatchID,
-		RunID:      "run-1",
-		Kind:       kind,
-		Phase:      responseevents.PhaseDelta,
-		Provenance: responseevents.Provenance{
-			Provider: "test", NativeEventType: "delta",
-			Delivery:       responseevents.DeliveryNativeStream,
-			Representation: responseevents.RepresentationDelta,
-			Fidelity:       responseevents.FidelityLossless,
-		},
-		Payload: json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"hello"}`),
-	})
-	if err != nil {
-		t.Fatalf("Publish: %v", err)
-	}
-	return event
-}
-
+// TestService_SubscribeReconnectsAfterKnownCursorWithOrderedFilteredEvents
+// publishes through publishThroughService (service.Publish), not the store's
+// own Publish directly: this store is bound to the injected Events root (see
+// newStore/NewEventStore), so a test that published straight to the store
+// would produce a session with retained local content Events never
+// observed, which now correctly surfaces as a gap under
+// substituteFromEvents' no-fallback delegation instead of silently masking
+// the mismatch. See mirror_test.go's own doc comment on this exact pitfall.
 func TestService_SubscribeReconnectsAfterKnownCursorWithOrderedFilteredEvents(t *testing.T) {
 	t.Parallel()
 	service := newService(t)
 	store := newStore(t, service)
-	first := publish(t, store, responseevents.KindMessage, "dispatch-1")
-	publish(t, store, responseevents.KindMessage, "dispatch-2")
-	third := publish(t, store, responseevents.KindMessage, "dispatch-1")
+	first := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
+	publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-2")
+	third := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
 
 	cursor, err := service.Subscribe(context.Background(), store, responsestreamservice.SubscriptionRequest{
 		AfterSequence: first.Sequence,
@@ -113,8 +114,8 @@ func TestService_StaleCursorSignalsGapAndPreservesFirstAvailableEvent(t *testing
 	if err := store.SetRetentionLimits(responseeventstore.RetentionLimits{MaxEvents: 1, MaxBytes: 1 << 20}); err != nil {
 		t.Fatalf("SetRetentionLimits: %v", err)
 	}
-	publish(t, store, responseevents.KindMessage, "dispatch-1")
-	retained := publish(t, store, responseevents.KindMessage, "dispatch-1")
+	publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
+	retained := publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
 	cursor, err := service.Subscribe(context.Background(), store, responsestreamservice.SubscriptionRequest{})
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
@@ -138,7 +139,7 @@ func TestService_CancellationAndSlowSubscribersStayBounded(t *testing.T) {
 		t.Fatalf("Subscribe: %v", err)
 	}
 	for range 100 {
-		publish(t, store, responseevents.KindMessage, "dispatch-1")
+		publishThroughService(t, service, store, responseevents.KindMessage, "dispatch-1")
 	}
 	if got := store.SubscriberCount(); got != 1 {
 		t.Fatalf("SubscriberCount = %d, want 1", got)
@@ -167,7 +168,7 @@ func TestService_NewEventStoreAppliesConfiguredRetentionLimits(t *testing.T) {
 		MaxBytes:                 8192,
 		CompletedRetentionWindow: time.Minute,
 	}
-	service, err := responsestreamwire.NewService(func() string { return "response-event-1" }, wantLimits)
+	service, err := responsestreamwire.NewService(func() string { return "response-event-1" }, wantLimits, newTestEventsService(t))
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
@@ -186,8 +187,11 @@ func TestService_NewEventStoreAppliesConfiguredRetentionLimits(t *testing.T) {
 
 func TestService_ConstructionIsInertAndRejectsMissingEffects(t *testing.T) {
 	t.Parallel()
-	if service, err := responsestreamwire.NewService(nil, nil); err == nil || service != nil {
+	if service, err := responsestreamwire.NewService(nil, nil, newTestEventsService(t)); err == nil || service != nil {
 		t.Fatalf("NewService(nil) = %#v, %v; want deterministic dependency error", service, err)
+	}
+	if service, err := responsestreamwire.NewService(func() string { return "response-event-1" }, nil, nil); err == nil || service != nil {
+		t.Fatalf("NewService(eventsService=nil) = %#v, %v; want deterministic dependency error", service, err)
 	}
 	service := newService(t)
 	if store, err := service.NewEventStore("session-1", nil); err == nil || store != nil {

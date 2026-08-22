@@ -103,10 +103,22 @@ func (s *service) finishCompletedInvocation(
 	request models.InvokeModelRequest,
 	invocation models.ModelInvocationRef,
 	runtimeResult inference.InvocationRuntimeResult,
+	operation models.Operation,
 ) (models.InvokeModelResult, error) {
 	artifacts, err := s.registerInvocationArtifacts(runtimeResult.Artifacts)
 	if err != nil {
 		return s.finishFailedInvocation(ctx, request, invocation, err)
+	}
+	var outputs []models.InferenceOutput
+	if request.UsesGenericInvocationShape() {
+		outputs, err = models.NormalizeGenericInvocationOutputs(
+			operation,
+			runtimeResult.Content,
+			artifacts,
+		)
+		if err != nil {
+			return s.finishFailedInvocation(ctx, request, invocation, err)
+		}
 	}
 	result := models.InvokeModelResult{
 		Invocation:       invocation,
@@ -117,6 +129,7 @@ func (s *service) finishCompletedInvocation(
 		Status:           models.ModelInvocationStatusCompleted,
 		Content:          append([]models.InferenceContent(nil), runtimeResult.Content...),
 		Artifacts:        artifacts,
+		Outputs:          outputs,
 		LeaseDisposition: models.InvocationLeaseReleased,
 	}.Clone()
 	s.putInvocation(invocation, result)
@@ -157,6 +170,10 @@ func classifyInvokeCancellationError(err error) error {
 func classifyInvokeRuntimeError(ctx context.Context, err error) error {
 	if err == nil {
 		return nil
+	}
+	var invocationFailure *models.InvocationFailure
+	if errors.As(err, &invocationFailure) {
+		return err
 	}
 	if errors.Is(err, inference.ErrInvocationInFlight) {
 		return err

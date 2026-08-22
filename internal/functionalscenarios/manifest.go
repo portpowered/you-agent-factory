@@ -26,11 +26,15 @@ const (
 	SSEDeprecatedLaterRemoval = "deprecated-later-removal"
 	SSECurrentlyDeferred      = "currently-deferred"
 
-	sessionEventsStableID  = "sse/getEventsBySessionId"
-	globalEventsStableID   = "sse/getEvents"
-	responseEventsStableID = "sse/getFactoryResponseEventsBySessionId"
+	sessionEventsStableID                        = "sse/getEventsBySessionId"
+	globalEventsStableID                         = "sse/getEvents"
+	responseEventsStableID                       = "sse/getFactoryResponseEventsBySessionId"
+	workerSessionEventsStableID                  = "sse/streamWorkerSessionEventsBySessionId"
+	workerSessionEventsByWorkerSessionIDStableID = "sse/streamWorkerSessionEventsByWorkerSessionId"
+	topLevelWorkerSessionEventsStableID          = "sse/streamWorkerSessionEventsByTopLevelWorkerSessionId"
 
-	sessionEventsScope = "session Factory Event stream, including recovery after malformed JSON data"
+	sessionEventsScope       = "session Factory Event stream, including recovery after malformed JSON data"
+	workerSessionEventsScope = "session Worker Session event stream, including retained replay, live delivery, terminal completion, and cancellation"
 )
 
 // Manifest is the reviewed functional-coverage projection of canonical public components.
@@ -111,18 +115,34 @@ func applyReviewedEvidence(scenario *Scenario) {
 	switch scenario.StableID {
 	case "cli/you.docs":
 		markCovered(scenario, LaneShort, "tests/release/release_smoke_test.go::TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN", InterfaceCLI)
+	case "cli/you.providers.list":
+		markCovered(scenario, LaneShort, "tests/functional/providers/discovery/discovery_test.go::TestProvidersListThroughRootBuildProcess", InterfaceCLI)
 	case "cli/you.run":
 		markCovered(scenario, LaneShort, "tests/functional/transport/cli/commands/run_wiring_test.go::TestCLIRunFactoryByPath", InterfaceCLI)
+	case "cli/you.session.resource.set":
+		markCovered(scenario, LaneShort, "tests/functional/workers/mock/live_capacity_test.go::TestLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch", InterfaceCLI)
+	case "cli/you.server.acp":
+		markCovered(scenario, LaneShort, "tests/functional/transport/acp/stdio/cli_serve_acp_prompt_test.go::TestServeACP_RootBuildProcessCompletesOneFactoryPrompt", InterfaceCLI)
 	case "cli/you.submit.batch":
-		scenario.Status = StatusCovered
-		scenario.Lane = LaneLong
-		scenario.ReviewedReason = ""
-		scenario.Evidence = []Evidence{
-			{Test: "tests/functional/transport/cli/commands/submit_wiring_test.go::TestCLISubmitBatchFile", Boundary: InterfaceCLI},
-			{Test: "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go::TestCLISubmitBatchSuccessHumanAndJSONShapes", Boundary: InterfaceCLI},
-		}
+		applySubmitBatchEvidence(scenario)
 	case "cli/you.work.move":
 		markCovered(scenario, LaneLong, "tests/functional/transport/cli/commands/work_wiring_test.go::TestCLIWorkMoveChangesState", InterfaceCLI)
+	case "cli/you.work.approval.list", "cli/you.work.approval.show":
+		markCovered(scenario, LaneLong, "tests/functional/transport/cli/commands/human_approval_wiring_test.go::TestCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors", InterfaceCLI)
+	case "cli/you.work.watch":
+		markCovered(scenario, LaneLong, "tests/functional/work/watch/watch_test.go::TestWorkWatchFollowsStateTransitionsUntilTerminal", InterfaceCLI)
+	case "cli/you.worker-sessions.list", "cli/you.worker-sessions.read", "cli/you.worker-sessions.show", "cli/you.worker-sessions.stream":
+		markCovered(scenario, LaneLong, "tests/functional/provider_sessions/cli/worker_sessions_cli_test.go::TestWorkerSessionsCLI", InterfaceCLI)
+	case "cli/you.worker-sessions.pause", "cli/you.worker-sessions.resume", "cli/you.worker-sessions.cancel", "cli/you.worker-sessions.terminate":
+		markCovered(scenario, LaneLong, "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionRemoteControlsUseExactRoutesWithoutFallback", InterfaceCLI)
+	case "cli/you.worker-sessions.continue", "cli/you.worker-sessions.interrupt", "cli/you.worker-sessions.invoke":
+		if scenario.StableID == "cli/you.worker-sessions.interrupt" {
+			markCovered(scenario, LaneLong, "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionRemoteInterruptUsesExactRouteAndAdmissionSnapshots", InterfaceCLI)
+			break
+		}
+		markCovered(scenario, LaneLong, "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage", InterfaceCLI)
+	case "cli/you.workers.acp.add", "cli/you.workers.acp.delete", "cli/you.workers.list":
+		markCovered(scenario, LaneShort, "tests/functional/providers/acp/catalog_cli_test.go::TestRootBuiltACPCommandsAddDeleteAndUnifiedListOneSettingsBackedCatalogEntry", InterfaceCLI)
 	case "rest/submitWorkBySessionId", "rest/listWorkBySessionId", "rest/getStatusBySessionId":
 		markCovered(scenario, LaneLong, "tests/functional/transport/http/server/generated_client_test.go::TestGeneratedClientAndServerSchemaStayAligned", InterfaceREST)
 	case "rest/upsertWorkRequestBySessionId":
@@ -135,6 +155,25 @@ func applyReviewedEvidence(scenario *Scenario) {
 		markCovered(scenario, LaneLong, "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData", InterfaceREST)
 	case "rest/invokeFactorySessionBySessionId":
 		markCovered(scenario, LaneLong, "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData", InterfaceREST)
+	case "rest/startWorkerSession":
+		markCovered(scenario, LaneLong, "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive", InterfaceREST)
+	case "rest/interruptWorkerSession":
+		markCovered(scenario, LaneShort, "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPInterruptRejectsUnassociatedActiveSource", InterfaceREST)
+	case "rest/cancelWorkerSession":
+		markCovered(scenario, LaneLong, "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPControlCancelConvergesTerminalSnapshot", InterfaceREST)
+	case "rest/getWorkerSessionObservationByFactorySessionAndWorkerSessionId", "rest/getWorkerSessionObservationByWorkerSessionId":
+		markCovered(scenario, LaneLong, "tests/functional/workers/inference/worker_session_id_history_test.go::TestWSRFT010WorkerSessionIDHTTPHistory", InterfaceREST)
+	case "rest/readWorkerSessionTranscriptByFactorySessionAndWorkerSessionId", "rest/readWorkerSessionTranscriptByWorkerSessionId":
+		markCovered(scenario, LaneLong, "tests/functional/workers/inference/worker_session_id_history_test.go::TestWSRFT010WorkerSessionIDHTTPHistory", InterfaceREST)
+	case "rest/streamWorkerSessionEventsByWorkerSessionId":
+		markCovered(scenario, LaneLong, "tests/functional/workers/inference/opening_record_test.go::TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession", InterfaceREST)
+		appendEvidence(scenario, "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT011WorkerSessionCursorResumeAcrossRestart", InterfaceREST)
+	case "rest/getWorkerSessionObservationBySessionId":
+		markCovered(scenario, LaneLong, "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT012WorkerSessionFollowAndProviderReferenceParity", InterfaceREST)
+	case "rest/readWorkerSessionTranscriptBySessionId":
+		markCovered(scenario, LaneLong, "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT012WorkerSessionFollowAndProviderReferenceParity", InterfaceREST)
+	case "rest/streamWorkerSessionEventsBySessionId":
+		markCovered(scenario, LaneLong, "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT012WorkerSessionFollowAndProviderReferenceParity", InterfaceREST)
 	case "rest/getEventsBySessionId":
 		scenario.Status = StatusPartial
 		scenario.Lane = LaneLong
@@ -156,6 +195,16 @@ func applyReviewedEvidence(scenario *Scenario) {
 		scenario.Status = StatusNotApplicable
 		scenario.ReviewedReason = "Factory response-event stream functional coverage is non-required and currently deferred."
 		scenario.SSE = &SSEDisposition{Required: false, Disposition: SSECurrentlyDeferred, Scope: "session Factory response-event stream"}
+	case workerSessionEventsStableID:
+		markCovered(scenario, LaneLong, "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT012WorkerSessionFollowAndProviderReferenceParity", InterfaceSSE)
+		scenario.SSE = &SSEDisposition{Required: true, Disposition: SSERequired, Scope: workerSessionEventsScope}
+	case workerSessionEventsByWorkerSessionIDStableID:
+		markCovered(scenario, LaneLong, "tests/functional/workers/inference/opening_record_test.go::TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession", InterfaceSSE)
+		appendEvidence(scenario, "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT011WorkerSessionCursorResumeAcrossRestart", InterfaceSSE)
+		scenario.SSE = &SSEDisposition{Required: true, Disposition: SSERequired, Scope: workerSessionEventsScope}
+	case topLevelWorkerSessionEventsStableID:
+		markCovered(scenario, LaneLong, "tests/functional/workers/transports/http/worker_sessions_invoke_continue_test.go::TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect", InterfaceSSE)
+		scenario.SSE = &SSEDisposition{Required: true, Disposition: SSERequired, Scope: workerSessionEventsScope}
 	}
 }
 
@@ -164,6 +213,20 @@ func markCovered(scenario *Scenario, lane, test, boundary string) {
 	scenario.Lane = lane
 	scenario.ReviewedReason = ""
 	scenario.Evidence = []Evidence{{Test: test, Boundary: boundary}}
+}
+
+func applySubmitBatchEvidence(scenario *Scenario) {
+	scenario.Status = StatusCovered
+	scenario.Lane = LaneLong
+	scenario.ReviewedReason = ""
+	scenario.Evidence = []Evidence{
+		{Test: "tests/functional/transport/cli/commands/submit_wiring_test.go::TestCLISubmitBatchFile", Boundary: InterfaceCLI},
+		{Test: "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go::TestCLISubmitBatchSuccessHumanAndJSONShapes", Boundary: InterfaceCLI},
+	}
+}
+
+func appendEvidence(scenario *Scenario, test, boundary string) {
+	scenario.Evidence = append(scenario.Evidence, Evidence{Test: test, Boundary: boundary})
 }
 
 // ValidateManifest rejects semantically inconsistent reviewed coverage records.
@@ -310,6 +373,12 @@ func validateSSE(prefix string, scenario Scenario) error {
 		wantDisposition, wantScope = SSEDeprecatedLaterRemoval, "deprecated global Factory Event compatibility stream"
 	case responseEventsStableID:
 		wantDisposition, wantScope = SSECurrentlyDeferred, "session Factory response-event stream"
+	case workerSessionEventsStableID:
+		wantRequired, wantDisposition, wantScope = true, SSERequired, workerSessionEventsScope
+	case workerSessionEventsByWorkerSessionIDStableID:
+		wantRequired, wantDisposition, wantScope = true, SSERequired, workerSessionEventsScope
+	case topLevelWorkerSessionEventsStableID:
+		wantRequired, wantDisposition, wantScope = true, SSERequired, workerSessionEventsScope
 	default:
 		return fmt.Errorf("%s: unknown public SSE operation; add a reviewed required or non-required disposition", prefix)
 	}

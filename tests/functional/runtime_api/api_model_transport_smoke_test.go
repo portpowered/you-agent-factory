@@ -15,7 +15,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -323,7 +322,13 @@ func (p *modelTransportSmokeProvider) Infer(_ context.Context, req workerexecuti
 	defer p.mu.Unlock()
 
 	p.calls = append(p.calls, workerexecution.CloneProviderInferenceRequest(req))
-	return p.response, nil
+	response := p.response
+	if response.Content != "" && response.Diagnostics == nil {
+		response.Diagnostics = &workerexecution.WorkDiagnostics{Metadata: map[string]string{
+			workerexecution.ProviderResponseMetadataCompletionEvidence: "provider_response",
+		}}
+	}
+	return response, nil
 }
 
 func (p *modelTransportSmokeProvider) Calls() []workerexecution.ProviderInferenceRequest {
@@ -336,5 +341,3 @@ func (p *modelTransportSmokeProvider) Calls() []workerexecution.ProviderInferenc
 	}
 	return calls
 }
-
-var _ providercontract.Provider = (*modelTransportSmokeProvider)(nil)

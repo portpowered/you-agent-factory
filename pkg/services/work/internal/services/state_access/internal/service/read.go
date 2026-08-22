@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	stateaccess "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access"
 	"github.com/portpowered/infinite-you/pkg/services/work/internal/stateaccessquery"
@@ -19,54 +20,20 @@ func (s *Service) ListWork(
 	if err := requireContext(ctx); err != nil {
 		return work.ListResult{}, err
 	}
-	query, err := stateaccessquery.NormalizeList(stateaccessquery.ListOptions{
-		StateName:    options.StateName,
-		StateType:    options.StateType,
-		Name:         options.Name,
-		WorkTypeName: options.WorkTypeName,
-		TraceID:      options.TraceID,
-		SortBy:       options.SortBy,
-		MaxResults:   options.MaxResults,
-		NextToken:    options.NextToken,
-	})
+	query, err := work.NormalizeList(options)
 	if err != nil {
-		return work.ListResult{}, mapQueryValidationError(err)
+		return work.ListResult{}, err
 	}
 	snapshot, err := s.readSnapshot(ctx, sessionID)
 	if err != nil {
 		return work.ListResult{}, err
 	}
 	normalized := query.Options()
-	selection, err := stateaccessquery.NewSelection(
-		optional(normalized.StateName),
-		optional(normalized.StateType),
-		optional(normalized.Name),
-		optional(normalized.WorkTypeName),
-		optional(normalized.TraceID),
-		normalized.SortBy,
-	)
+	selection, err := newSelection(normalized)
 	if err != nil {
 		return work.ListResult{}, mapQueryValidationError(err)
 	}
-	byID := make(map[string]work.ReadModel, len(snapshot.Items))
-	items := make([]stateaccessquery.Item, 0, len(snapshot.Items))
-	for _, item := range snapshot.Items {
-		item = detachReadModel(item)
-		byID[item.CursorID] = item
-		items = append(items, stateaccessquery.Item{
-			ID:                     item.CursorID,
-			Name:                   item.Name,
-			WorkTypeName:           item.WorkTypeName,
-			State:                  stateToQueryState(item.State),
-			TraceID:                item.TraceID,
-			CurrentChainingTraceID: item.CurrentChainingTraceID,
-		})
-	}
-	selected := selection.Apply(items)
-	ordered := make([]work.ReadModel, 0, len(selected))
-	for _, item := range selected {
-		ordered = append(ordered, byID[item.ID])
-	}
+	ordered := orderedReadModels(snapshot, selection)
 	maxResults := normalized.MaxResults
 	if maxResults <= 0 {
 		maxResults = work.DefaultListMaxResults
@@ -80,6 +47,9 @@ func (s *Service) ListWork(
 	result := work.ListResult{
 		Results:    append([]work.ReadModel(nil), ordered[start:end]...),
 		MaxResults: maxResults,
+	}
+	if normalized.Counts {
+		result.Counts = &work.ListCountSummary{Total: len(ordered)}
 	}
 	if end < len(ordered) {
 		result.NextToken = base64.StdEncoding.EncodeToString([]byte(ordered[end-1].CursorID))
@@ -99,14 +69,15 @@ func (s *Service) GetWork(
 	if err != nil {
 		return work.ReadModel{}, err
 	}
-	for _, item := range snapshot.Items {
+	models := annotatedReadModels(snapshot)
+	for _, item := range models {
 		if item.CursorID == id {
-			return detachReadModel(item), nil
+			return item, nil
 		}
 	}
-	for _, item := range snapshot.Items {
+	for _, item := range models {
 		if item.WorkID == id {
-			return detachReadModel(item), nil
+			return item, nil
 		}
 	}
 	return work.ReadModel{}, work.ErrWorkNotFound
@@ -133,12 +104,12 @@ func (s *Service) readSnapshot(ctx context.Context, sessionID string) (work.Read
 		}
 		return snapshot, nil
 	}
-	if s == nil || s.recordings == nil {
-		return work.ReadSnapshot{}, errors.New("Work state access recordings adapter is required")
+	if s == nil || s.snapshots == nil {
+		return work.ReadSnapshot{}, errors.New("Work state access snapshot reader is required")
 	}
-	snapshot, err := s.recordings.ReadWorkSnapshot(ctx, sessionID)
+	snapshot, err := s.snapshots.ReadWorkSnapshot(ctx, sessionID)
 	if err != nil {
-		return work.ReadSnapshot{}, fmt.Errorf("read Work snapshot from Recordings: %w", err)
+		return work.ReadSnapshot{}, fmt.Errorf("read projected Work snapshot: %w", err)
 	}
 	return snapshot, nil
 }
@@ -161,6 +132,95 @@ func optional(value string) *string {
 	return &value
 }
 
+func optionalBool(value bool) *bool {
+	if !value {
+		return nil
+	}
+	return &value
+}
+
+func newSelection(options work.ListOptions) (stateaccessquery.Selection, error) {
+	return stateaccessquery.NewSelectionWithOptions(stateaccessquery.SelectionOptions{
+		StateName:         optional(options.StateName),
+		StateType:         optional(options.StateType),
+		Name:              optional(options.Name),
+		WorkTypeName:      optional(options.WorkTypeName),
+		TraceID:           optional(options.TraceID),
+		Terminal:          optionalBool(options.Terminal),
+		NonTerminal:       optionalBool(options.NonTerminal),
+		IncludeSuperseded: options.IncludeSuperseded,
+		SortBy:            options.SortBy,
+	})
+}
+
+func orderedReadModels(snapshot work.ReadSnapshot, selection stateaccessquery.Selection) []work.ReadModel {
+	annotated := annotatedReadModels(snapshot)
+	byID := make(map[string]work.ReadModel, len(annotated))
+	items := make([]stateaccessquery.Item, 0, len(annotated))
+	for _, item := range annotated {
+		byID[item.CursorID] = item
+		items = append(items, stateaccessquery.Item{
+			ID:                     item.CursorID,
+			WorkID:                 item.WorkID,
+			Name:                   item.Name,
+			WorkTypeName:           item.WorkTypeName,
+			State:                  stateToQueryState(item.State),
+			TraceID:                item.TraceID,
+			CurrentChainingTraceID: item.CurrentChainingTraceID,
+			SupersededBy:           item.SupersededBy,
+		})
+	}
+	selected := selection.Apply(items)
+	ordered := make([]work.ReadModel, 0, len(selected))
+	for _, item := range selected {
+		ordered = append(ordered, byID[item.ID])
+	}
+	return ordered
+}
+
+func annotatedReadModels(snapshot work.ReadSnapshot) []work.ReadModel {
+	models := make([]work.ReadModel, 0, len(snapshot.Items))
+	items := make([]stateaccessquery.Item, 0, len(snapshot.Items))
+	for _, item := range snapshot.Items {
+		item = detachReadModel(item)
+		// Supersession is a read-time derivation. Do not carry a provider-supplied
+		// value across the boundary when canonical admission facts are absent.
+		item.SupersededBy = ""
+		models = append(models, item)
+		items = append(items, stateaccessquery.Item{
+			ID:                     item.CursorID,
+			WorkID:                 item.WorkID,
+			Name:                   item.Name,
+			WorkTypeName:           item.WorkTypeName,
+			State:                  stateToQueryState(item.State),
+			TraceID:                item.TraceID,
+			CurrentChainingTraceID: item.CurrentChainingTraceID,
+		})
+	}
+
+	admissions := make([]stateaccessquery.Admission, 0, len(snapshot.Admissions))
+	for _, admission := range snapshot.Admissions {
+		admissions = append(admissions, stateaccessquery.Admission{
+			WorkID: admission.WorkID,
+			Name:   admission.Name,
+			Order:  admission.Order,
+		})
+	}
+	annotatedItems := stateaccessquery.AnnotateSupersession(items, admissions)
+	for index, item := range annotatedItems {
+		if index < len(models) {
+			models[index].SupersededBy = item.SupersededBy
+			if item.SupersededBy != "" {
+				// A superseded failed attempt is historical context, not the
+				// current failure for this Work name. Do not expose its detail
+				// through the public read projection.
+				models[index].FailureDetail = nil
+			}
+		}
+	}
+	return models
+}
+
 func nextIndex(items []work.ReadModel, cursor string) int {
 	for i, item := range items {
 		if item.CursorID == cursor {
@@ -173,8 +233,15 @@ func nextIndex(items []work.ReadModel, cursor string) int {
 func detachReadModel(item work.ReadModel) work.ReadModel {
 	item.PreviousChainingTraceIDs = append([]string(nil), item.PreviousChainingTraceIDs...)
 	item.Content = work.CloneWorkContentParts(item.Content)
+	item.StructuredResult = jsonvalue.Clone(item.StructuredResult)
+	item.StructuredResultPresent = jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent)
 	item.Tags = work.CloneTags(item.Tags)
 	item.Relations = append([]work.ReadRelation(nil), item.Relations...)
+	item.ExpectedArtifacts = append([]work.ExpectedArtifactReadModel(nil), item.ExpectedArtifacts...)
+	if item.FailureDetail != nil {
+		detail := *item.FailureDetail
+		item.FailureDetail = &detail
+	}
 	if item.State != nil {
 		state := *item.State
 		item.State = &state

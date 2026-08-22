@@ -1,6 +1,7 @@
 package state_test
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 	"time"
@@ -297,6 +298,57 @@ func TestProjectInitialStructure_RuntimeConfig_ProjectsConstraintsAndWorkstation
 	}
 }
 
+func TestProjectInitialStructure_LogicalPolicySurvivesSerializedProjectionAndLegacyOmission(t *testing.T) {
+	net, runtimeConfig := projectionNetAndRuntimeConfigWithConstraints()
+	live := runtimestate.ProjectInitialStructure(net, runtimeConfig)
+
+	encoded, err := json.Marshal(live)
+	if err != nil {
+		t.Fatalf("json.Marshal(initial structure) error = %v", err)
+	}
+	var replay interfaces.InitialStructurePayload
+	if err := json.Unmarshal(encoded, &replay); err != nil {
+		t.Fatalf("json.Unmarshal(initial structure) error = %v", err)
+	}
+	if !reflect.DeepEqual(replay.Constraints, live.Constraints) {
+		t.Fatalf("replayed constraints = %#v, want %#v", replay.Constraints, live.Constraints)
+	}
+
+	logical := findProjectionConstraint(replay.Constraints, "workstation/build/input/0/guard")
+	if logical == nil {
+		t.Fatal("serialized projection omitted the logical visit-count constraint")
+	}
+	if logical.Values["logical_round_trip_workstations"] != "build,review" || logical.Values["max_raw_visits"] != "6" {
+		t.Fatalf("serialized logical policy = %#v, want build/review and raw ceiling 6", logical.Values)
+	}
+
+	legacyNet := representativeProjectionNet()
+	legacyNet.Transitions["build"].InputArcs[0].Guard = &factoryruntime.PetriVisitCountGuard{
+		TransitionID: "build",
+		MaxVisits:    5,
+	}
+	legacy := runtimestate.ProjectInitialStructure(legacyNet)
+	legacyConstraint := findProjectionConstraint(legacy.Constraints, "workstation/build/input/0/guard")
+	if legacyConstraint == nil {
+		t.Fatal("legacy projection omitted the visit-count constraint")
+	}
+	if _, ok := legacyConstraint.Values["logical_round_trip_workstations"]; ok {
+		t.Fatalf("legacy projection fabricated logical workstations: %#v", legacyConstraint.Values)
+	}
+	if _, ok := legacyConstraint.Values["max_raw_visits"]; ok {
+		t.Fatalf("legacy projection fabricated raw ceiling: %#v", legacyConstraint.Values)
+	}
+}
+
+func findProjectionConstraint(constraints []interfaces.FactoryConstraint, id string) *interfaces.FactoryConstraint {
+	for index := range constraints {
+		if constraints[index].ID == id {
+			return &constraints[index]
+		}
+	}
+	return nil
+}
+
 func projectionNetAndRuntimeConfigWithConstraints() (*factoryruntime.Net, projectionRuntimeConfig) {
 	net := representativeProjectionNet()
 	net.Limits = factoryruntime.GlobalLimits{
@@ -306,6 +358,10 @@ func projectionNetAndRuntimeConfigWithConstraints() (*factoryruntime.Net, projec
 	net.Transitions["build"].InputArcs[0].Guard = &factoryruntime.PetriVisitCountGuard{
 		TransitionID: "build",
 		MaxVisits:    3,
+		LogicalRoundTrip: &factoryruntime.PetriLogicalRoundTripPolicy{
+			Transitions:  [2]string{"build", "review"},
+			MaxRawVisits: 6,
+		},
 	}
 	return net, projectionRuntimeConfig{
 		Workers: map[string]*interfaces.FactoryWorkerConfig{
@@ -329,7 +385,12 @@ func projectionNetAndRuntimeConfigWithConstraints() (*factoryruntime.Net, projec
 				},
 				Resources: []interfaces.ResourceConfig{{Name: "cpu", Capacity: 1}},
 				Guards: []interfaces.GuardConfig{
-					{Type: interfaces.GuardTypeVisitCount, Workstation: "Build", MaxVisits: 3},
+					{
+						Type: interfaces.GuardTypeVisitCount, Workstation: "Build", MaxVisits: 3,
+						LogicalRoundTrip: &interfaces.LogicalRoundTripConfig{
+							Workstations: []string{"Build", "review"}, MaxRawVisits: 6,
+						},
+					},
 				},
 				PromptFile:       "prompt.md",
 				OutputSchema:     "schema.json",
@@ -378,9 +439,11 @@ func projectionRuntimeConstraints() []interfaces.FactoryConstraint {
 			Type:  "configured_guard",
 			Scope: "workstation:build",
 			Values: map[string]string{
-				"type":        string(interfaces.GuardTypeVisitCount),
-				"workstation": "Build",
-				"max_visits":  "3",
+				"type":                            string(interfaces.GuardTypeVisitCount),
+				"workstation":                     "Build",
+				"max_visits":                      "3",
+				"logical_round_trip_workstations": "Build,review",
+				"max_raw_visits":                  "6",
 			},
 		},
 		{
@@ -399,13 +462,15 @@ func projectionRuntimeConstraints() []interfaces.FactoryConstraint {
 			Type:  "visit_count_guard",
 			Scope: "workstation:build",
 			Values: map[string]string{
-				"arc_set":               "input",
-				"binding":               "work",
-				"cardinality":           "ONE",
-				"max_visits":            "3",
-				"mode":                  "CONSUME",
-				"place_id":              "story:init",
-				"watched_transition_id": "build",
+				"arc_set":                         "input",
+				"binding":                         "work",
+				"cardinality":                     "ONE",
+				"max_visits":                      "3",
+				"mode":                            "CONSUME",
+				"place_id":                        "story:init",
+				"watched_transition_id":           "build",
+				"logical_round_trip_workstations": "build,review",
+				"max_raw_visits":                  "6",
 			},
 		},
 		{

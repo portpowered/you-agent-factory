@@ -2,7 +2,7 @@
   "layout": {
     "edges": [
       {
-        "id": "workstation-on-failure:workstation:process-\u003ework-state:task:failed",
+        "id": "workstation-on-failure:workstation:process->work-state:task:failed",
         "waypoints": [
           {
             "x": 1012.9581,
@@ -15,7 +15,7 @@
         ]
       },
       {
-        "id": "worker-assignment:worker:planner-\u003eworkstation:plan",
+        "id": "worker-assignment:worker:planner->workstation:plan",
         "waypoints": [
           {
             "x": 112.65571,
@@ -28,7 +28,7 @@
         ]
       },
       {
-        "id": "workstation-output:workstation:setup-workspace-\u003ework-state:task:init",
+        "id": "workstation-output:workstation:setup-workspace->work-state:task:init",
         "waypoints": [
           {
             "x": 1096.0092,
@@ -41,7 +41,7 @@
         ]
       },
       {
-        "id": "workstation-on-rejection:workstation:process-\u003ework-state:task:init",
+        "id": "workstation-on-rejection:workstation:process->work-state:task:init",
         "waypoints": [
           {
             "x": 881.63214,
@@ -54,7 +54,7 @@
         ]
       },
       {
-        "id": "workstation-on-continue:workstation:process-\u003ework-state:task:init",
+        "id": "workstation-on-continue:workstation:process->work-state:task:init",
         "waypoints": [
           {
             "x": 900.4263,
@@ -67,7 +67,7 @@
         ]
       },
       {
-        "id": "workstation-on-failure:workstation:review-\u003ework-state:task:failed",
+        "id": "workstation-on-failure:workstation:review->work-state:task:failed",
         "waypoints": [
           {
             "x": 1512.497,
@@ -76,7 +76,7 @@
         ]
       },
       {
-        "id": "worker-assignment:worker:ideafier-\u003eworkstation:ideafy",
+        "id": "worker-assignment:worker:ideafier->workstation:ideafy",
         "waypoints": [
           {
             "x": -165.4157,
@@ -98,6 +98,20 @@
         "position": {
           "x": 658.37067,
           "y": 1364.6238
+        }
+      },
+      {
+        "id": "work-state:task:awaiting-ci",
+        "position": {
+          "x": 760.0,
+          "y": 1310.0
+        }
+      },
+      {
+        "id": "workstation:ci-wait",
+        "position": {
+          "x": 815.0,
+          "y": 1275.0
         }
       },
       {
@@ -374,7 +388,7 @@
       "zoom": 1.0755962
     }
   },
-  "name": "factory",
+  "name": "infinite-you-factory",
   "resources": [
     {
       "capacity": 16,
@@ -411,6 +425,14 @@
         },
         "id": "factory/scripts/setup-workspace.py",
         "targetPath": "factory/scripts/setup-workspace.py",
+        "type": "SCRIPT"
+      },
+      {
+        "content": {
+          "encoding": "utf-8"
+        },
+        "id": "factory/scripts/ci-wait.py",
+        "targetPath": "factory/scripts/ci-wait.py",
         "type": "SCRIPT"
       }
     ]
@@ -449,6 +471,11 @@
           "id": "init",
           "name": "init",
           "type": "INITIAL"
+        },
+        {
+          "id": "awaiting-ci",
+          "name": "awaiting-ci",
+          "type": "PROCESSING"
         },
         {
           "id": "in-review",
@@ -548,12 +575,23 @@
   ],
   "workers": [
     {
-      "executorProvider": "ACP",
-      "modelProvider": "cursor-acp",
-      "model": "composer-2.5",
+      "executorProvider": "SCRIPT_WRAP",
+      "modelProvider": "codex",
+      "model": "gpt-5.6-luna",
+      "reasoningEffort": "max",
       "name": "processor",
       "skipPermissions": true,
-      "stopToken": "\u003cCOMPLETE\u003e",
+      "stopToken": "<COMPLETE>",
+      "type": "AGENT_WORKER"
+    },
+    {
+      "executorProvider": "SCRIPT_WRAP",
+      "modelProvider": "codex",
+      "model": "gpt-5.6-luna",
+      "reasoningEffort": "max",
+      "name": "reviewer",
+      "skipPermissions": true,
+      "stopToken": "<COMPLETE>",
       "type": "AGENT_WORKER"
     },
     {
@@ -567,20 +605,32 @@
       "type": "SCRIPT_WORKER"
     },
     {
-      "executorProvider": "ACP",
+      "args": [
+        "factory/scripts/ci-wait.py",
+        "{{ (index .Inputs 0).Name }}"
+      ],
+      "command": "python3",
+      "id": "ci-waiter",
+      "name": "ci-waiter",
+      "type": "SCRIPT_WORKER"
+    },
+    {
+      "executorProvider": "SCRIPT_WRAP",
+      "modelProvider": "codex",
+      "model": "gpt-5.6-sol",
+      "reasoningEffort": "medium",
       "id": "planner",
-      "modelProvider": "cursor-acp",
-      "model": "grok-4.5-high",
       "name": "planner",
       "skipPermissions": true,
-      "stopToken": "\u003cCOMPLETE\u003e",
+      "stopToken": "<COMPLETE>",
       "type": "AGENT_WORKER"
     },
     {
-      "executorProvider": "ACP",
+      "executorProvider": "SCRIPT_WRAP",
+      "modelProvider": "codex",
+      "model": "gpt-5.6-sol",
+      "reasoningEffort": "medium",
       "id": "ideafier",
-      "modelProvider": "cursor-acp",
-      "model": "grok-4.5-medium",
       "name": "ideafier",
       "skipPermissions": true,
       "type": "AGENT_WORKER"
@@ -718,6 +768,30 @@
       "worker": "workspace-setup"
     },
     {
+      "id": "ci-wait",
+      "inputs": [
+        {
+          "state": "awaiting-ci",
+          "workType": "task"
+        }
+      ],
+      "name": "ci-wait",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "task"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "in-review",
+          "workType": "task"
+        }
+      ],
+      "type": "SCRIPT_RUN",
+      "worker": "ci-waiter"
+    },
+    {
       "behavior": "REPEATER",
       "id": "process",
       "inputs": [
@@ -747,7 +821,7 @@
       ],
       "outputs": [
         {
-          "state": "in-review",
+          "state": "awaiting-ci",
           "workType": "task"
         },
         {
@@ -766,6 +840,7 @@
       "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}"
     },
     {
+      "behavior": "REPEATER",
       "id": "review",
       "inputs": [
         {
@@ -773,11 +848,27 @@
           "workType": "task"
         },
         {
+          "guards": [
+            {
+              "matchInput": "task",
+              "type": "SAME_NAME"
+            }
+          ],
           "state": "init",
           "workType": "review"
         }
       ],
       "name": "review",
+      "onContinue": [
+        {
+          "state": "awaiting-ci",
+          "workType": "task"
+        },
+        {
+          "state": "init",
+          "workType": "review"
+        }
+      ],
       "onFailure": [
         {
           "state": "failed",
@@ -811,13 +902,20 @@
         }
       ],
       "type": "AGENT_RUN",
-      "worker": "planner",
+      "worker": "reviewer",
       "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}"
     },
     {
       "guards": [
         {
-          "maxVisits": 50,
+          "logicalRoundTrip": {
+            "maxRawVisits": 24,
+            "workstations": [
+              "process",
+              "review"
+            ]
+          },
+          "maxVisits": 12,
           "type": "VISIT_COUNT",
           "workstation": "process"
         }
@@ -842,7 +940,14 @@
     {
       "guards": [
         {
-          "maxVisits": 10,
+          "logicalRoundTrip": {
+            "maxRawVisits": 24,
+            "workstations": [
+              "process",
+              "review"
+            ]
+          },
+          "maxVisits": 12,
           "type": "VISIT_COUNT",
           "workstation": "review"
         }

@@ -262,7 +262,7 @@ func TestLoadRuntimeConfig_RejectsLegacyResourceUsageAliasAtGeneratedBoundary(t 
 	}
 }
 
-func TestLoadRuntimeConfig_RejectsUnsupportedGeneratedBoundaryField(t *testing.T) {
+func TestLoadRuntimeConfig_AcceptsUnsupportedGeneratedBoundaryFieldWithDiagnostic(t *testing.T) {
 	factoryDir := t.TempDir()
 
 	writeRuntimeFactoryJSON(t, factoryDir, map[string]any{
@@ -288,15 +288,15 @@ func TestLoadRuntimeConfig_RejectsUnsupportedGeneratedBoundaryField(t *testing.T
 		},
 	})
 
-	_, err := LoadRuntimeConfig(factoryDir, nil)
-	if err == nil {
-		t.Fatal("expected unsupported factory.json boundary field to be rejected")
+	loaded, err := LoadRuntimeConfig(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig() error = %v", err)
 	}
-	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
-		t.Fatalf("expected generated boundary context, got %v", err)
-	}
-	if !strings.Contains(err.Error(), `json: unknown field "unsupportedField"`) {
-		t.Fatalf("expected generated boundary unknown-field error, got %v", err)
+	if got := loaded.FactoryConfig().IgnoredJSONPaths(); !reflect.DeepEqual(
+		got,
+		[]string{"$.workstations[0].unsupportedField"},
+	) {
+		t.Fatalf("ignored JSON paths = %#v, want workstation path", got)
 	}
 }
 

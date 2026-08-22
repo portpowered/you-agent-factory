@@ -5,8 +5,8 @@ import (
 	"fmt"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workercompatibility "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorydefinition/retiredboundary"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinition/retiredboundary"
 	"regexp"
 	"sort"
 	"strings"
@@ -19,25 +19,31 @@ var invocationInterpolationPlaceholderPattern = regexp.MustCompile(`^\$\{[A-Za-z
 // GeneratedFactoryFromOpenAPIJSON converts an OpenAPI-compatible factory JSON
 // payload into the generated Factory boundary model.
 func GeneratedFactoryFromOpenAPIJSON(data []byte) (factoryapi.Factory, error) {
-	boundary, err := decodeGeneratedFactoryBoundaryJSON(data)
+	factory, _, err := GeneratedFactoryFromOpenAPIJSONWithDiagnostics(data)
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
-	return boundary.generated, nil
+	return factory, nil
+}
+
+// GeneratedFactoryFromOpenAPIJSONWithDiagnostics converts an OpenAPI-compatible
+// Factory payload and returns safe paths for ignored forward-compatible fields.
+func GeneratedFactoryFromOpenAPIJSONWithDiagnostics(
+	data []byte,
+) (factoryapi.Factory, FactoryDecodeDiagnostics, error) {
+	boundary, err := decodeGeneratedFactoryBoundaryJSON(data)
+	if err != nil {
+		return factoryapi.Factory{}, FactoryDecodeDiagnostics{}, err
+	}
+	return boundary.generated, FactoryDecodeDiagnostics{
+		IgnoredJSONPaths: boundary.diagnostics.Paths(),
+	}, nil
 }
 
 // FactoryConfigFromOpenAPIJSON converts an OpenAPI-compatible factory JSON payload
 // into the internal config representation used by runtime mappers and tests.
 func FactoryConfigFromOpenAPIJSON(data []byte) (*interfaces.FactoryConfig, error) {
-	generated, err := GeneratedFactoryFromOpenAPIJSON(data)
-	if err != nil {
-		return nil, err
-	}
-	cfg, err := FactoryConfigFromOpenAPI(generated)
-	if err != nil {
-		return nil, err
-	}
-	return &cfg, nil
+	return defaultFactoryConfigMapper.Expand(data)
 }
 
 // MarshalCanonicalFactoryConfig serializes factory config using camelCase keys across
@@ -564,7 +570,11 @@ func normalizeFactoryWorkstationEntries(root map[string]any) error {
 		if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "runner", fmt.Sprintf("workstations[%d].runner", i), interfaces.StrictPublicFactoryRunnerID); err != nil {
 			return err
 		}
-		if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "type", fmt.Sprintf("workstations[%d].type", i), interfaces.StrictPublicFactoryWorkstationType); err != nil {
+		if preserveScheduledLegacyModelWorkstationType(root, workstation) {
+			if interfaces.StrictPublicFactoryWorkstationType(stringValueFromFactoryInputMap(workstation, "type")) == "" {
+				return fmt.Errorf("workstations[%d].type: unsupported value %q", i, stringValueFromFactoryInputMap(workstation, "type"))
+			}
+		} else if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "type", fmt.Sprintf("workstations[%d].type", i), interfaces.StrictPublicFactoryWorkstationType); err != nil {
 			return err
 		}
 		if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "outcomeFormat", fmt.Sprintf("workstations[%d].outcomeFormat", i), interfaces.StrictPublicFactoryWorkstationOutcomeFormat); err != nil {
@@ -585,6 +595,50 @@ func normalizeFactoryWorkstationEntries(root map[string]any) error {
 		normalizeRuntimeResourceRequirements(workstation, "resources")
 	}
 	return nil
+}
+
+// preserveScheduledLegacyModelWorkstationType keeps the legacy workstation
+// alias available to the compatibility projector. The generated boundary
+// normally canonicalizes MODEL_WORKSTATION to AGENT_RUN before worker usage is
+// inspected; for the legacy MODEL_WORKER pair on a scheduled workstation that
+// loses the distinction needed to project the worker as INFERENCE_WORKER.
+func preserveScheduledLegacyModelWorkstationType(
+	root map[string]any,
+	workstation map[string]any,
+) bool {
+	if stringValueFromFactoryInputMap(workstation, "type") != interfaces.WorkstationTypeModel {
+		return false
+	}
+	behavior := stringValueFromFactoryInputMap(workstation, "behavior")
+	if !strings.EqualFold(behavior, string(interfaces.WorkstationKindRepeater)) &&
+		!strings.EqualFold(behavior, string(interfaces.WorkstationKindCron)) {
+		return false
+	}
+	workerName := stringValueFromFactoryInputMap(workstation, "worker")
+	if workerName == "" {
+		return false
+	}
+	workers, ok := root["workers"].([]any)
+	if !ok {
+		return false
+	}
+	for _, item := range workers {
+		worker, ok := item.(map[string]any)
+		if !ok || stringValueFromFactoryInputMap(worker, "name") != workerName {
+			continue
+		}
+		workerType := stringValueFromFactoryInputMap(worker, "type")
+		if !strings.EqualFold(workerType, interfaces.WorkerTypeModel) &&
+			!strings.EqualFold(workerType, interfaces.WorkerTypeInference) {
+			return false
+		}
+		return interfaces.IsScheduledLegacyModelPair(
+			interfaces.WorkstationTypeModel,
+			workerType,
+			interfaces.WorkstationKind(behavior),
+		)
+	}
+	return false
 }
 
 func normalizeFactoryWorkstationOperationBindings(workstation map[string]any, workstationIndex int) error {

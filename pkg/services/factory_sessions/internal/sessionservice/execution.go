@@ -4,9 +4,10 @@ import (
 	"context"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 )
 
-func (s *Service) durableExecution() (factorysessions.ExecutionService, error) {
+func (s *Service) durableExecution() (durableexecution.Service, error) {
 	if s == nil || s.durable == nil {
 		return nil, factorysessions.ErrExecutionServiceNotConfigured
 	}

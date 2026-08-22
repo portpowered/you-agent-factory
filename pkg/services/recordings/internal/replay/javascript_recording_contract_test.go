@@ -9,11 +9,11 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorysnapshot"
 	factoryevents "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events"
 	replay "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 )
 
 var javascriptRecordingSnapshotDecoder interfaces.FactorySnapshotJSONDecoder = func(
@@ -147,7 +147,7 @@ func javascriptRecordingFactory() factoryapi.Factory {
 		WorkTypes: &[]factoryapi.WorkType{{Name: "task"}},
 		Workers:   &[]factoryapi.Worker{{Name: "worker-a"}},
 		Workstations: &[]factoryapi.Workstation{{
-			Name: "process", Worker: "worker-a", Inputs: []factoryapi.WorkstationIO{}, Outputs: &[]factoryapi.WorkstationIO{},
+			Name: "process", Worker: replayStringPtr("worker-a"), Inputs: []factoryapi.WorkstationIO{}, Outputs: &[]factoryapi.WorkstationIO{},
 		}},
 		Orchestrator: &factoryapi.FactoryOrchestrator{
 			Kind: kind,

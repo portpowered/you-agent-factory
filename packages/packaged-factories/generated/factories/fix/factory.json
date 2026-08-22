@@ -1,0 +1,353 @@
+{
+  "description": {
+    "type": "LOCALIZABLE_ASSET",
+    "value": "Plans and iterates a requested fix in an isolated named worktree, then repeats independent review until approval or bounded failure."
+  },
+  "examples": [
+    {
+      "args": {
+        "request": "Fix and verify the requested change",
+        "worktreeName": "fix-request"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Plan, implement, and independently review a fix in a named worktree."
+      },
+      "name": "plan-fix-review"
+    }
+  ],
+  "id": "builtin-fix",
+  "invocationReturn": {
+    "policy": "EXPLICIT",
+    "terminalState": "approved",
+    "workTypeName": "fix"
+  },
+  "invocationSignature": {
+    "parameters": [
+      {
+        "bindings": [
+          {
+            "kind": "POSITIONAL",
+            "position": 1
+          },
+          {
+            "kind": "STDIN"
+          },
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Request that Fix plans and completes in the isolated worktree.",
+        "externalName": "to",
+        "name": "request",
+        "required": true
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Required safe name for the isolated requester worktree.",
+        "externalName": "worktree-name",
+        "name": "worktreeName",
+        "required": true
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Optional model provider override for the planner; omitted values use operator defaults.",
+        "externalName": "planner-provider",
+        "name": "plannerProvider"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Optional model override for the planner; omitted values use operator defaults.",
+        "externalName": "planner-model",
+        "name": "plannerModel"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Optional model provider override for the iterator; omitted values use operator defaults.",
+        "externalName": "iterator-provider",
+        "name": "iteratorProvider"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Optional model override for the iterator; omitted values use operator defaults.",
+        "externalName": "iterator-model",
+        "name": "iteratorModel"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Optional model provider override for the reviewer; omitted values use operator defaults.",
+        "externalName": "reviewer-provider",
+        "name": "reviewerProvider"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Optional model override for the reviewer; omitted values use operator defaults.",
+        "externalName": "reviewer-model",
+        "name": "reviewerModel"
+      }
+    ]
+  },
+  "name": "fix",
+  "workTypes": [
+    {
+      "handlingBehavior": [
+        "DEFAULT"
+      ],
+      "name": "fix",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "execute",
+          "type": "PROCESSING"
+        },
+        {
+          "name": "review",
+          "type": "PROCESSING"
+        },
+        {
+          "name": "approved",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "model": "${plannerModel}",
+      "modelProvider": "${plannerProvider}",
+      "name": "fix-planner",
+      "skipPermissions": true,
+      "stopToken": "\u003cCOMPLETE\u003e",
+      "type": "AGENT_WORKER"
+    },
+    {
+      "model": "${iteratorModel}",
+      "modelProvider": "${iteratorProvider}",
+      "name": "fix-iterator",
+      "skipPermissions": true,
+      "stopToken": "\u003cCOMPLETE\u003e",
+      "type": "AGENT_WORKER"
+    },
+    {
+      "model": "${reviewerModel}",
+      "modelProvider": "${reviewerProvider}",
+      "name": "fix-reviewer",
+      "skipPermissions": true,
+      "type": "AGENT_WORKER"
+    }
+  ],
+  "workstations": [
+    {
+      "body": "You are the planning stage of @you/fix. Start from zero repository context and\nturn the submitted request into a durable, executable plan. The runtime has\nalready prepared the requester-named Git worktree before this prompt runs; do\nnot create a second worktree or ask for a different one.\n\nOriginal request:\n${request}\n\nRequester worktree name:\n${worktreeName}\n\nCurrent Work name:\n{{ (index .Inputs 0).Name }}\n\nVerify that you are operating in the prepared worktree, then inspect the\nrepository instructions, relevant source, tests, and current working tree\nbefore planning. Preserve unrelated user changes. Create both files below,\nusing the Work name exactly:\n\n- `tasks/todo/{{ (index .Inputs 0).Name }}.md`\n- `tasks/todo/{{ (index .Inputs 0).Name }}.json`\n\nThe Markdown file is the readable plan. The JSON file is the authoritative\ndurable plan and must contain `project`, `description`, `context`,\n`acceptanceCriteria`, and an ordered `stories` array. Every story must have a\nstable `id`, numeric `priority`, a standalone description, behavioral\nacceptance criteria, explicit tests, `passes: false`, and an empty `notes`\nvalue. Do not mark any story passed during planning. Include the original\nrequest, observable success and failure behavior, exact affected boundaries,\nand verification commands. Do not put implementation progress only in the\nresponse; the JSON plan on disk is the state later iterations must update.\n\nRead both files back and verify that the JSON parses before returning. End the\nresponse with the exact raw token below as its final non-empty line. Do not\nwrap it in backticks or add content after it:\n\n\u003cCOMPLETE\u003e\n",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "fix"
+        }
+      ],
+      "name": "plan-fix",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "fix"
+        }
+      ],
+      "onRejection": [
+        {
+          "state": "failed",
+          "workType": "fix"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "execute",
+          "workType": "fix"
+        }
+      ],
+      "promptFile": "prompts/planner.md",
+      "type": "AGENT_RUN",
+      "workPropagation": {
+        "mode": "OUTPUT_AS_PAYLOAD"
+      },
+      "worker": "fix-planner",
+      "worktree": "${worktreeName}"
+    },
+    {
+      "behavior": "REPEATER",
+      "body": "You are the iterative execution stage of @you/fix. Work from the durable plan\non disk, not from hidden conversation state. The runtime has already prepared\nthe requester-named Git worktree; keep all implementation and verification in\nthat worktree and preserve unrelated changes.\n\nOriginal request:\n${request}\n\nRequester worktree name:\n${worktreeName}\n\nCurrent Work name:\n{{ (index .Inputs 0).Name }}\n\nThe authoritative plan is:\n\n- `tasks/todo/{{ (index .Inputs 0).Name }}.json`\n- `tasks/todo/{{ (index .Inputs 0).Name }}.md`\n\nThe latest upstream plan or prior iteration output is below. It is context\nonly; reload the durable JSON plan before acting:\n\n{{ printf \"%s\" (index .Inputs 0).Payload }}\n\nRead the repository instructions and current working tree, then execute the\nnext incomplete story in priority order. Preserve unrelated changes. Exercise\nthe story's acceptance and failure cases, record concise verification evidence\nin that story's `notes`, and set `passes` to true only after the behavior is\nactually implemented and verified. Keep the original request unchanged and do\nnot replace the durable plan with a narrower task.\n\n{{ if gt (index .Inputs 0).History.AttemptNumber 1 -}}\nThis is a revision after independent review. The previous candidate and\nreviewer feedback are below. Address every concrete item before updating the\ndurable plan or returning a result.\n\nPrevious candidate:\n{{ (index .Inputs 0).PreviousOutput }}\n\nReviewer feedback:\n{{ (index .Inputs 0).RejectionFeedback }}\n{{ end -}}\n\nIf useful work remains, leave incomplete stories marked `passes: false` and\nreturn the progress summary followed by the exact raw token `\u003cCONTINUE\u003e` as the\nfinal non-empty line. On the next visit, continue from the on-disk plan and the\nprevious output.\n\nReturn `\u003cCOMPLETE\u003e` as the final non-empty line only after every story in the\ndurable JSON plan has `passes: true`, all required quality gates have been\nexercised, and the completed result is ready for independent review. A missing,\nmalformed, contradictory, or unverified plan is a failure: explain the blocker\nand do not emit either control token so the Factory can route it to failed.\n",
+      "inputs": [
+        {
+          "state": "execute",
+          "workType": "fix"
+        }
+      ],
+      "name": "iterate-fix",
+      "onContinue": [
+        {
+          "state": "execute",
+          "workType": "fix"
+        }
+      ],
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "fix"
+        }
+      ],
+      "onRejection": [
+        {
+          "state": "failed",
+          "workType": "fix"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "review",
+          "workType": "fix"
+        }
+      ],
+      "promptFile": "prompts/iterator.md",
+      "type": "AGENT_RUN",
+      "workPropagation": {
+        "mode": "OUTPUT_AS_PAYLOAD"
+      },
+      "worker": "fix-iterator",
+      "worktree": "${worktreeName}"
+    },
+    {
+      "body": "You are the independent review stage of @you/fix. The runtime has already\nprepared the requester-named Git worktree. Review the actual work in that\nworktree, not only the iterator's report, and do not make implementation edits\nyourself.\n\nOriginal request:\n${request}\n\nRequester worktree name:\n${worktreeName}\n\nCurrent Work name:\n{{ (index .Inputs 0).Name }}\n\nCandidate iterator result:\n{{ (index .Inputs 0).Payload }}\n\nRead the durable JSON plan and the repository instructions. Inspect the actual\ndiff and relevant source and tests in the prepared worktree. Check correctness,\ncompleteness, edge and failure behavior, compatibility, security implications,\narchitecture fit, preservation of unrelated work, and test adequacy. Approve\nonly when every durable plan story is marked `passes: true` with concise\nverification notes and the candidate satisfies the original request.\n\nReturn only a JSON object. If every material requirement is satisfied, return\n`{\"decision\":\"ACCEPTED\",\"output\":\"the complete approved result with concise evidence\"}`.\nIf it needs revision, return\n`{\"decision\":\"REJECTED\",\"feedback\":\"specific actionable feedback naming each required correction and why it matters\"}`.\nDo not approve without inspecting the actual worktree and do not reject for\npersonal style preferences.\n",
+      "inputs": [
+        {
+          "state": "review",
+          "workType": "fix"
+        }
+      ],
+      "name": "review-fix",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "fix"
+        }
+      ],
+      "onRejection": [
+        {
+          "state": "execute",
+          "workType": "fix"
+        }
+      ],
+      "outcomeFormat": "decision-envelope",
+      "outputs": [
+        {
+          "state": "approved",
+          "workType": "fix"
+        }
+      ],
+      "promptFile": "prompts/reviewer.md",
+      "type": "AGENT_RUN",
+      "workPropagation": {
+        "mode": "OUTPUT_AS_PAYLOAD"
+      },
+      "worker": "fix-reviewer",
+      "worktree": "${worktreeName}"
+    },
+    {
+      "guards": [
+        {
+          "maxVisits": 12,
+          "type": "VISIT_COUNT",
+          "workstation": "iterate-fix"
+        }
+      ],
+      "inputs": [
+        {
+          "state": "execute",
+          "workType": "fix"
+        }
+      ],
+      "name": "iterate-fix-loop-breaker",
+      "outputs": [
+        {
+          "state": "failed",
+          "workType": "fix"
+        }
+      ],
+      "type": "LOGICAL_MOVE"
+    },
+    {
+      "guards": [
+        {
+          "maxVisits": 8,
+          "type": "VISIT_COUNT",
+          "workstation": "review-fix"
+        }
+      ],
+      "inputs": [
+        {
+          "state": "review",
+          "workType": "fix"
+        }
+      ],
+      "name": "review-fix-loop-breaker",
+      "outputs": [
+        {
+          "state": "failed",
+          "workType": "fix"
+        }
+      ],
+      "type": "LOGICAL_MOVE"
+    }
+  ]
+}

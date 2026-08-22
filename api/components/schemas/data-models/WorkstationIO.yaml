@@ -1,6 +1,6 @@
 type: object
 description: One authored work-state reference consumed or emitted by a workstation.
-additionalProperties: false
+additionalProperties: true
 required:
   - workType
   - state

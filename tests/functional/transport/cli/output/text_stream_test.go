@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -57,9 +58,7 @@ func TestCLITextStreamSurfacesIncrementalMessages(t *testing.T) {
 	if writer.err != nil {
 		t.Fatalf("Process.Execute error = %v\nstdout:\n%s", writer.err, writer.String())
 	}
-	if writer.diagnosticText() != "" {
-		t.Fatalf("stderr = %q, want empty successful-run stderr", writer.diagnosticText())
-	}
+	assertStableWorkerProgress(t, writer.diagnosticText())
 
 	stdout := writer.String()
 	lines := nonEmptyStdoutLines(stdout)
@@ -85,7 +84,8 @@ func TestCLITextStreamSurfacesIncrementalMessages(t *testing.T) {
 // lifecycle chatter that clean invocation output must suppress.
 func TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise(t *testing.T) {
 	t.Run("human response-stream lifecycle presentation", func(t *testing.T) {
-		stdout := runGoalHumanInvocation(t, []string{"--output", "response-stream"})
+		stdout, stderr := runGoalHumanInvocation(t, []string{"--output", "response-stream"})
+		assertStableWorkerProgress(t, stderr)
 		assertHumanStdoutFreeOfStructuredEnvelopeNoise(t, stdout)
 		for _, line := range nonEmptyStdoutLines(stdout) {
 			if line == "--- primary result ---" || line == textStreamPrimaryResult {
@@ -98,10 +98,13 @@ func TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise(t *testing.T) {
 	})
 
 	t.Run("quiet clean primary result", func(t *testing.T) {
-		stdout := runGoalHumanInvocation(t, []string{"--quiet"})
+		stdout, stderr := runGoalHumanInvocation(t, []string{"--quiet"})
 		assertHumanStdoutFreeOfStructuredEnvelopeNoise(t, stdout)
 		if strings.TrimSpace(stdout) != textStreamPrimaryResult {
 			t.Fatalf("stdout = %q, want only raw primary result %q", stdout, textStreamPrimaryResult)
+		}
+		if stderr != "" {
+			t.Fatalf("stderr = %q, want quiet mode to suppress progress", stderr)
 		}
 	})
 }
@@ -228,6 +231,11 @@ func TestCLITextStreamInterruptedRunDoesNotClaimCompletion(t *testing.T) {
 			t.Fatalf("stdout line claims successful primary result after interrupt:\n%s", output)
 		}
 	}
+	for _, forbidden := range []string{"final output updated: FINAL", "factory completed: SUCCEEDED"} {
+		if strings.Contains(output, forbidden) {
+			t.Fatalf("stdout contains successful-completion claim %q after interrupt:\n%s", forbidden, output)
+		}
+	}
 }
 
 var humanTextStreamForbiddenEnvelopeLiterals = []string{
@@ -284,22 +292,16 @@ func assertHumanStdoutFreeOfStructuredEnvelopeNoise(t *testing.T, stdout string)
 	}
 }
 
-func runGoalHumanInvocation(t *testing.T, runArgs []string) string {
+func runGoalHumanInvocation(t *testing.T, runArgs []string) (string, string) {
 	t.Helper()
 
 	homeDir := t.TempDir()
 	support.InstallPackagedFactory(t, homeDir, goalFactoryName)
-	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      "goal-executor",
-			WorkstationName: "execute-goal",
-			RunType:         workers.MockWorkerRunTypeAccept,
-		}},
-	})
+	providerRunner := textStreamAcceptedProviderRunner()
 	args := []string{
 		"you", "run", "--named", goalFactoryName,
-		"--with-mock-workers", mockWorkersPath,
+		"--executor-provider", "codex",
+		"--executor-model", "gpt-5-codex",
 		"--no-record",
 	}
 	args = append(args, runArgs...)
@@ -307,13 +309,12 @@ func runGoalHumanInvocation(t *testing.T, runArgs []string) string {
 	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	inputs.Input.WorkingDirectory = t.TempDir()
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+	if err := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: providerRunner,
+	}).Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
 	}
-	if inputs.Stderr() != "" {
-		t.Fatalf("stderr = %q, want empty successful-run stderr", inputs.Stderr())
-	}
-	return inputs.Stdout()
+	return inputs.Stdout(), inputs.Stderr()
 }
 
 type firstChunkGatedStdoutWriter struct {
@@ -392,6 +393,22 @@ func containsHumanLifecycleLine(stdout string) bool {
 		}
 	}
 	return false
+}
+
+func assertStableWorkerProgress(t *testing.T, stderr string) {
+	t.Helper()
+	if !strings.Contains(stderr, "worker ") || !strings.Contains(stderr, ": active") {
+		t.Fatalf("stderr = %q, want stable worker progress", stderr)
+	}
+	if strings.ContainsAny(stderr, "\x1b\r") {
+		t.Fatalf("stderr = %q, want no ANSI or cursor controls for redirected output", stderr)
+	}
+}
+
+func textStreamAcceptedProviderRunner() *support.ShapedProviderCommandRunner {
+	return support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("{\"decision\":\"accepted\",\"feedback\":\"\",\"output\":\"mock worker accepted\"}"),
+	})
 }
 
 func nonEmptyStdoutLines(value string) []string {
@@ -545,17 +562,11 @@ func runGoalHumanResponseStreamWithStdout(t *testing.T, stdout *firstChunkGatedS
 
 	homeDir := t.TempDir()
 	support.InstallPackagedFactory(t, homeDir, goalFactoryName)
-	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      "goal-executor",
-			WorkstationName: "execute-goal",
-			RunType:         workers.MockWorkerRunTypeAccept,
-		}},
-	})
+	providerRunner := textStreamAcceptedProviderRunner()
 	args := []string{
 		"you", "run", "--named", goalFactoryName,
-		"--with-mock-workers", mockWorkersPath,
+		"--executor-provider", "codex",
+		"--executor-model", "gpt-5-codex",
 		"--no-record", "--output", "response-stream",
 		"deterministic human text-stream incremental contract",
 	}
@@ -564,7 +575,9 @@ func runGoalHumanResponseStreamWithStdout(t *testing.T, stdout *firstChunkGatedS
 	inputs.Input.WorkingDirectory = t.TempDir()
 	inputs.Input.Stdout = stdout
 	inputs.Input.Stderr = &stdout.diagnostic
-	process := support.BuildProcess(t, serviceedges.Edges{})
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: providerRunner,
+	})
 
 	go func() {
 		stdout.err = process.Execute(inputs.Input)

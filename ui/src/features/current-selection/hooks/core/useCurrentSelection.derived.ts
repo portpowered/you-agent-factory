@@ -7,6 +7,10 @@ import type {
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
 import {
+  type TerminalWorkItem,
+  terminalWorkIdentity,
+} from "../../../terminal-work/lib/types";
+import {
   type FactoryBundledDocFile,
   findFactoryBundledDocFile,
 } from "../../../workflow-activity/lib/factory-bundled-docs";
@@ -26,6 +30,7 @@ import {
 } from "../helpers/selected-work-operation-history";
 import {
   activeExecutionsForSelectedWorkstation,
+  buildNonStandardTerminalWorkItems,
   buildSelectedWorkDispatchAttempts,
   buildTerminalWorkItems,
   currentWorkItemsForPlace,
@@ -364,13 +369,20 @@ export function deriveCurrentSelectionState({
     snapshot?.runtime.session.failed_work_details_by_work_id,
     projectedWorkstationRequestsByDispatchID,
   );
+  const nonStandardTerminalWorkItems = buildNonStandardTerminalWorkItems(
+    projectedWorkstationRequestsByDispatchID,
+    snapshot?.runtime.session.provider_sessions,
+  );
 
   return {
+    canceledWorkItems: nonStandardTerminalWorkItems.canceled,
     completedWorkItems,
     completedWorkLabels,
     currentFactoryDefinition,
     failedWorkItems,
     failedWorkLabels,
+    terminatedWorkItems: nonStandardTerminalWorkItems.terminated,
+    unknownWorkItems: nonStandardTerminalWorkItems.unknown,
     selectedNode,
     selectedNodeActiveExecutions,
     selectedNodeProviderSessions,
@@ -402,37 +414,32 @@ export function deriveCurrentSelectionState({
 }
 
 export function useTerminalWorkDetailCleanup({
-  completedWorkLabels,
-  failedWorkLabels,
   replacePresent,
   selection,
+  terminalWorkItems,
   terminalWorkDetail,
 }: {
-  completedWorkLabels: string[];
-  failedWorkLabels: string[];
   replacePresent: (state: {
     selection: DashboardSelection | null;
     terminalWorkDetail: TerminalWorkDetail | null;
   }) => void;
   selection: DashboardSelection | null;
+  terminalWorkItems: TerminalWorkItem[];
   terminalWorkDetail: TerminalWorkDetail | null;
 }) {
   useEffect(() => {
     if (
       terminalWorkDetail &&
-      !completedWorkLabels.includes(terminalWorkDetail.label) &&
-      !failedWorkLabels.includes(terminalWorkDetail.label)
+      !terminalWorkItems.some(
+        (item) =>
+          terminalWorkIdentity(item) ===
+          terminalWorkIdentity(terminalWorkDetail),
+      )
     ) {
       replacePresent({
         selection,
         terminalWorkDetail: null,
       });
     }
-  }, [
-    completedWorkLabels,
-    failedWorkLabels,
-    replacePresent,
-    selection,
-    terminalWorkDetail,
-  ]);
+  }, [replacePresent, selection, terminalWorkItems, terminalWorkDetail]);
 }

@@ -102,10 +102,32 @@ describe("projectTraceDispatchesToFactoryGraph explicit lineage", () => {
         (edge) => edge.kind === "workstation-on-continue",
       ),
     ).toBe(true);
+    expect(projection.relations).toHaveLength(2);
+    expect(projection.relations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "predecessor",
+          relationType: "PREDECESSOR",
+          source: expect.objectContaining({
+            dispatchID: "dispatch-plan",
+            selectionIdentities: [
+              {
+                attempt: 1,
+                dispatch_id: "dispatch-plan",
+                work_id: "work-reviewed",
+              },
+            ],
+          }),
+          target: expect.objectContaining({
+            dispatchID: "dispatch-implement",
+          }),
+        }),
+      ]),
+    );
   });
 });
 
-describe("projectTraceDispatchesToFactoryGraph fallback lineage", () => {
+describe("projectTraceDispatchesToFactoryGraph recorded lineage", () => {
   it("falls back to output-to-input work lineage when chaining metadata is absent", () => {
     const projection = projectTraceDispatchesToFactoryGraph([
       buildDispatch("dispatch-plan", {
@@ -119,19 +141,25 @@ describe("projectTraceDispatchesToFactoryGraph fallback lineage", () => {
     expect(dispatchEdgePairs(projection)).toEqual([
       "dispatch-plan->dispatch-implement",
     ]);
+    expect(projection.relations.map((relation) => relation.kind)).toEqual([
+      "predecessor",
+    ]);
   });
 
-  it("falls back to sequential ordering when no explicit or work-item lineage is available", () => {
-    const projection = projectTraceDispatchesToFactoryGraph([
+  it("marks missing lineage unresolved instead of inventing sequential edges", () => {
+    const dispatches = [
       buildDispatch("dispatch-plan"),
       buildDispatch("dispatch-review"),
-      buildDispatch("dispatch-implement"),
-    ]);
+    ];
 
-    expect(dispatchEdgePairs(projection)).toEqual([
-      "dispatch-plan->dispatch-review",
-      "dispatch-review->dispatch-implement",
-    ]);
+    for (const orderedDispatches of [dispatches, [...dispatches].reverse()]) {
+      const projection =
+        projectTraceDispatchesToFactoryGraph(orderedDispatches);
+
+      expect(projection.lineageStatus).toBe("unresolved");
+      expect(dispatchEdgePairs(projection)).toEqual([]);
+      expect(projection.relations).toEqual([]);
+    }
   });
 });
 

@@ -7,6 +7,7 @@ import {
 } from "../current-factory-definition";
 import { listFactorySessions, openFactorySession } from "../factory-sessions";
 import type { components } from "../generated/openapi";
+import { isDefaultFactorySessionID } from "../session-routing";
 import { extractAPIErrorPayload } from "../transport";
 import {
   normalizeSessionFactoryAPIErrorCode,
@@ -74,9 +75,12 @@ export async function discoverSessionNamedFactoryNames(
 ): Promise<string[]> {
   const fetchImplementation = options.fetch ?? globalThis.fetch;
   const sessions = await listFactorySessions({ fetch: fetchImplementation });
-  const session = sessions.find(
-    (entry) => entry.id === normalizeSessionID(options.sessionID),
-  );
+  const requestedSessionID = normalizeSessionID(options.sessionID);
+  const session =
+    sessions.find((entry) => entry.id === requestedSessionID) ??
+    (isDefaultFactorySessionID(options.sessionID)
+      ? sessions.find((entry) => entry.isDefault)
+      : undefined);
   if (!session?.folderPath) {
     return [];
   }

@@ -78,7 +78,7 @@ export function factoryVisualizationCanonicalNodeIds(
 
   for (const workstation of factory.workstations ?? []) {
     addSubjectNode(nodeIds, "workstation", workstation.id, workstation.name);
-    const workerName = workstation.worker.trim();
+    const workerName = workstation.worker?.trim() ?? "";
     if (workerName) {
       addSubjectNode(nodeIds, "worker", workerIds.get(workerName), workerName);
     }

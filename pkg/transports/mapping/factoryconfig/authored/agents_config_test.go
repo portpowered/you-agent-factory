@@ -3,21 +3,11 @@ package authored
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
-
-func containsAll(value string, substrings ...string) bool {
-	for _, substring := range substrings {
-		if !strings.Contains(value, substring) {
-			return false
-		}
-	}
-	return true
-}
 
 func TestLoadWorkerConfig_ModelWorker(t *testing.T) {
 	dir := t.TempDir()
@@ -498,5 +488,42 @@ Minimal worker.
 	}
 	if cfg.Body != "Minimal worker." {
 		t.Errorf("unexpected body: %q", cfg.Body)
+	}
+}
+
+func TestLoadWorkstationConfig_PreservesExpectedArtifactDeclarationsFromYAML(t *testing.T) {
+	dir := t.TempDir()
+	agentsMD := `---
+type: MODEL_WORKSTATION
+worker: processor
+expectedArtifacts:
+  - name: report
+    pattern: reports/{{ (index .Inputs 0).Name }}.json
+    nonEmpty: true
+  - name: manifest
+    pattern: reports/manifest.json
+---
+
+Produce the declared files.
+`
+	if err := os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte(agentsMD), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadWorkstationConfig(dir)
+	if err != nil {
+		t.Fatalf("LoadWorkstationConfig: %v", err)
+	}
+	want := []interfaces.ExpectedArtifactConfig{
+		{Name: "report", Pattern: "reports/{{ (index .Inputs 0).Name }}.json", NonEmpty: true},
+		{Name: "manifest", Pattern: "reports/manifest.json"},
+	}
+	if len(cfg.ExpectedArtifacts) != len(want) {
+		t.Fatalf("expected %d artifact declarations, got %#v", len(want), cfg.ExpectedArtifacts)
+	}
+	for index := range want {
+		if cfg.ExpectedArtifacts[index] != want[index] {
+			t.Fatalf("artifact declaration %d = %#v, want %#v", index, cfg.ExpectedArtifacts[index], want[index])
+		}
 	}
 }

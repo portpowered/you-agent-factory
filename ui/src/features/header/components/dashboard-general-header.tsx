@@ -24,7 +24,7 @@ export function DashboardGeneralHeader({
   return (
     <DashboardPanelShell
       aria-label={headerMessages.dashboardSummaryLabel}
-      className="sticky top-1 z-20 mb-3 min-w-0 px-2 py-2 md:top-2"
+      className="sticky top-1 z-20 mb-5 min-w-0 px-3.5 py-3 md:top-2 md:mb-6"
     >
       <div className="grid min-w-0 gap-2 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center">
         <div
@@ -35,7 +35,7 @@ export function DashboardGeneralHeader({
           )}
         >
           <Heading
-            className="m-0 min-w-0 shrink-0 md:col-start-1 md:self-center"
+            className="m-0 flex min-w-0 shrink-0 items-center md:col-start-1 md:self-center"
             level="page"
           >
             <DashboardBrandLockup

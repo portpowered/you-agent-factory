@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -19,6 +20,9 @@ import (
 )
 
 const (
+	agyJavaScriptChildModel  = "gemini-3.6-flash-medium"
+	agyJavaScriptChildOutput = "real Antigravity JavaScript child output"
+
 	childCodexLabel           = "child-codex"
 	childClaudeLabel          = "child-claude"
 	childMockedLabel          = "child-mocked"
@@ -29,6 +33,14 @@ const (
 	mockedChildPrompt            = "mocked child prompt"
 	passthroughChildPrompt       = "passthrough child prompt"
 	unknownOverrideModelProvider = "Not_A_Provider"
+	liveProviderChildWorkflow    = `return (async function () {
+  return await agent.run({
+    prompt: "use the live provider command edge",
+    label: "live-provider-child",
+    modelProvider: "codex",
+    model: "live-child-model",
+  });
+})();`
 
 	perChildProviderModelWorkflow = `return (async function () {
   const codexChild = await agent.run({
@@ -71,6 +83,194 @@ const (
 	mockWorkerAcceptedOutput = "mock worker accepted"
 	livePassthroughChildText = "passthrough child provider output"
 )
+
+func TestJavaScriptAntigravityChildUsesModelEmbeddedEffortThroughRootProcess(t *testing.T) {
+	for _, executorProvider := range []string{"", "SCRIPT_WRAP"} {
+		t.Run("executorProvider="+executorProvider, func(t *testing.T) {
+			dir := support.ScaffoldFactory(t, overridesFactoryConfig())
+			runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+				Stdout: []byte(`{"event":"result","result":{"conversation_id":"js-agy-child","status":"SUCCESS","response":"` + agyJavaScriptChildOutput + `","duration_seconds":1,"num_turns":1,"usage":{"input_tokens":1,"output_tokens":1,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":2}}}` + "\n"),
+			})
+			server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+				FactoryDir:                dir,
+				WaitForServiceModeRuntime: true,
+				Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+			})
+			t.Cleanup(func() { server.Stop(t) })
+
+			workflow := `return (async function () {
+			return await agent.run({
+  prompt: "return a real Antigravity answer",
+  label: "javascript-antigravity-child",
+  executorProvider: "` + executorProvider + `",
+  modelProvider: "ANTIGRAVITY",
+  model: "` + agyJavaScriptChildModel + `",
+  reasoningEffort: "high",
+  skipPermissions: true
+});
+})();`
+			started := startOverridesWorkflow(t, server.URL(), "javascript-antigravity-"+strings.ToLower(strings.ReplaceAll(executorProvider, "_", "-")), workflow)
+			if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+				session := readOverridesDurableSession(t, server.URL(), started.SessionId)
+				t.Fatalf("session status = %q, want SUCCEEDED; result=%#v failure=%#v", started.Status, started.Result, session.FailureDetail)
+			}
+			if runner.CallCount() != 1 {
+				t.Fatalf("provider command calls = %d, want one", runner.CallCount())
+			}
+			request := runner.LastRequest()
+			if request.Command != "agy" {
+				t.Fatalf("provider command = %q, want agy", request.Command)
+			}
+			if !containsArgPair(request.Args, "--model", agyJavaScriptChildModel) {
+				t.Fatalf("provider argv = %#v, want exact model %q", request.Args, agyJavaScriptChildModel)
+			}
+			if containsArg(request.Args, "--effort") {
+				t.Fatalf("provider argv = %#v, want no separate Antigravity effort", request.Args)
+			}
+			assertSucceededPrimaryContains(t, started, agyJavaScriptChildOutput)
+		})
+	}
+}
+
+func TestJavaScriptAntigravityCommandRejectionRemainsTypedThroughRootProcess(t *testing.T) {
+	const rejection = "Agy does not support a separate reasoning effort."
+
+	dir := support.ScaffoldFactory(t, overridesFactoryConfig())
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stderr:   []byte(rejection),
+		ExitCode: 1,
+	})
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	started := startOverridesWorkflow(t, server.URL(), "javascript-antigravity-rejection", `return (async function () {
+  return await agent.run({
+    prompt: "force the provider rejection",
+    label: "javascript-antigravity-rejection",
+    modelProvider: "ANTIGRAVITY",
+    model: "gemini-3.6-flash-medium",
+    skipPermissions: true
+  });
+})();`)
+	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("session status = %q, want FAILED; result=%#v", started.Status, started.Result)
+	}
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command calls = %d, want one genuine Agy command attempt", runner.CallCount())
+	}
+	request := runner.LastRequest()
+	if request.Command != "agy" || !containsArgPair(request.Args, "--model", agyJavaScriptChildModel) {
+		t.Fatalf("provider command request = %#v, want Agy with the requested model", request)
+	}
+	assertUnavailableFactoryResult(t, started.Result)
+	durableResult := support.GetJSON[factoryapi.FactorySessionResult](
+		t,
+		strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/"+started.SessionId+"/results?mode=final",
+	)
+	assertUnavailableFactoryResult(t, &durableResult)
+	assertReadableAntigravityEvent(t, support.GetFactoryEventsForSessionAt(t, server.URL(), started.SessionId), rejection)
+
+	session := readOverridesDurableSession(t, server.URL(), started.SessionId)
+	if session.FailureDetail == nil || !strings.Contains(session.FailureDetail.Message, rejection) {
+		t.Fatalf("session failure detail = %#v, want typed provider rejection", session.FailureDetail)
+	}
+	assertNoGoMapFailure(t, session.FailureDetail.Message)
+
+	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
+		t,
+		strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/"+started.SessionId+"/dispatches",
+	)
+	if len(dispatches.Dispatches) != 1 {
+		t.Fatalf("dispatch count = %d, want one failed provider event", len(dispatches.Dispatches))
+	}
+	dispatch := dispatches.Dispatches[0]
+	if dispatch.Status != factoryapi.FactoryDispatchStatusFAILED ||
+		dispatch.Provider == nil || *dispatch.Provider != "antigravity" ||
+		dispatch.FailureDetail == nil || !strings.Contains(dispatch.FailureDetail.Message, rejection) {
+		t.Fatalf("failed dispatch = %#v, want Antigravity and typed rejection", dispatch)
+	}
+	assertNoGoMapFailure(t, dispatch.FailureDetail.Message)
+}
+
+func assertUnavailableFactoryResult(t *testing.T, result *factoryapi.FactorySessionResult) {
+	t.Helper()
+	if result == nil || result.ResultStatus != factoryapi.FactorySessionResultStatusUnavailable {
+		t.Fatalf("Factory result = %#v, want UNAVAILABLE after provider rejection", result)
+	}
+}
+
+func assertReadableAntigravityEvent(t *testing.T, events []factoryapi.FactoryEvent, reason string) {
+	t.Helper()
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchReconciled {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchReconciledEventPayload()
+		if err != nil {
+			t.Fatalf("decode Antigravity dispatch reconciliation event: %v", err)
+		}
+		if payload.FailureDetail == nil || !strings.Contains(payload.FailureDetail.Message, reason) {
+			continue
+		}
+		assertNoGoMapFailure(t, payload.FailureDetail.Message)
+		return
+	}
+	t.Fatalf("Factory events = %#v, want a typed Antigravity inference rejection", events)
+}
+
+func assertNoGoMapFailure(t *testing.T, message string) {
+	t.Helper()
+	if strings.Contains(message, "map[value:") || strings.Contains(message, "type=unknown") {
+		t.Fatalf("failure message = %q, must not expose a stringified Go map", message)
+	}
+}
+
+// TestJavaScriptChildUsesProviderCommandEdgeThroughRootProcess proves the
+// live provider-invocation route is assembled from the Providers root and
+// reaches the injected command edge when no mock-worker or provider override
+// is present.
+func TestJavaScriptChildUsesProviderCommandEdgeThroughRootProcess(t *testing.T) {
+	t.Parallel()
+
+	dir := support.ScaffoldFactory(t, overridesFactoryConfig())
+	runner := support.NewRecordingCommandRunner("live provider output")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	started := startOverridesWorkflow(t, server.URL(), "javascript-live-provider-root", liveProviderChildWorkflow)
+	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
+	}
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner call count = %d, want one live child invocation", runner.CallCount())
+	}
+	request := runner.LastRequest()
+	if request.Command != "codex" {
+		t.Fatalf("provider command = %q, want codex", request.Command)
+	}
+
+	dispatches := support.GetJSON[factoryapi.ListFactorySessionDispatchesResponse](
+		t,
+		strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/"+started.SessionId+"/dispatches",
+	)
+	if len(dispatches.Dispatches) != 1 {
+		t.Fatalf("dispatch count = %d, want one live provider child", len(dispatches.Dispatches))
+	}
+	dispatch := dispatches.Dispatches[0]
+	if dispatch.Status != factoryapi.FactoryDispatchStatusCOMPLETED ||
+		dispatch.ModelProvider == nil || *dispatch.ModelProvider != "codex" ||
+		dispatch.Model == nil || *dispatch.Model != "live-child-model" {
+		t.Fatalf("live provider dispatch = %#v, want completed codex/live-child-model dispatch", dispatch)
+	}
+}
 
 // TestJavaScriptChildrenSelectDifferentProvidersAndModels proves a JavaScript
 // Factory with multiple child dispatches can select distinct per-child provider
@@ -517,6 +717,43 @@ func startOverridesWorkflow(
 		t.Fatalf("decode overrides workflow response: %v", err)
 	}
 	return started
+}
+
+func containsArg(args []string, want string) bool {
+	for _, arg := range args {
+		if arg == want {
+			return true
+		}
+	}
+	return false
+}
+
+func containsArgPair(args []string, name, value string) bool {
+	for index := 0; index+1 < len(args); index++ {
+		if args[index] == name && args[index+1] == value {
+			return true
+		}
+	}
+	return false
+}
+
+func assertSucceededPrimaryContains(t *testing.T, response factoryapi.FactorySessionSyncExecutionResponse, fragments ...string) {
+	t.Helper()
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("session status = %q, want SUCCEEDED; result = %#v", response.Status, response.Result)
+	}
+	if response.Result == nil || response.Result.PrimaryResult == nil || len(*response.Result.PrimaryResult) != 1 {
+		t.Fatalf("primary result = %#v, want one JavaScript result", response.Result)
+	}
+	payload, err := json.Marshal((*response.Result.PrimaryResult)[0])
+	if err != nil {
+		t.Fatalf("marshal primary result: %v", err)
+	}
+	for _, fragment := range fragments {
+		if !strings.Contains(string(payload), fragment) {
+			t.Fatalf("primary result = %s, want %q", payload, fragment)
+		}
+	}
 }
 
 func assertPerChildProviderModelDispatches(

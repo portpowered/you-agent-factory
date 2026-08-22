@@ -60,6 +60,30 @@ func parseValidInputCases() []operatorsettings.InputCase {
 				Defaults: operatorsettings.DefaultsSnapshot{WorkerModel: "existing-model"},
 			},
 		},
+		{
+			ID:          "valid-unknown-top-level",
+			Category:    categoryParseUnknownField,
+			Entrypoint:  entrypointDecodeGlobalConfig,
+			Outcome:     outcomeAccept,
+			Fixture:     "invalid/unknown-top-level.json",
+			Description: "unknown top-level fields are ignored and reported by JSON path while known defaults remain",
+			ExpectedConfig: &operatorsettings.ConfigExpectation{
+				Defaults:         operatorsettings.DefaultsSnapshot{WorkerModelProvider: "codex"},
+				IgnoredJSONPaths: []string{"$.unexpectedTopLevel"},
+			},
+		},
+		{
+			ID:          "valid-unknown-nested-defaults",
+			Category:    categoryParseUnknownField,
+			Entrypoint:  entrypointDecodeGlobalConfig,
+			Outcome:     outcomeAccept,
+			Fixture:     "invalid/unknown-nested-defaults.json",
+			Description: "unknown nested defaults fields are ignored and reported by JSON path",
+			ExpectedConfig: &operatorsettings.ConfigExpectation{
+				Defaults:         operatorsettings.DefaultsSnapshot{WorkerModelProvider: "codex"},
+				IgnoredJSONPaths: []string{"$.defaults.unexpectedNested"},
+			},
+		},
 	}
 }
 
@@ -74,28 +98,6 @@ func parseInvalidDefaultsInputCases() []operatorsettings.InputCase {
 			Description: "malformed JSON fails parse",
 			ErrorFragments: []string{
 				"decode generated global config",
-			},
-		},
-		{
-			ID:          "invalid-unknown-top-level",
-			Category:    categoryParseUnknownField,
-			Entrypoint:  entrypointDecodeGlobalConfig,
-			Outcome:     outcomeReject,
-			Fixture:     "invalid/unknown-top-level.json",
-			Description: "unknown top-level keys are rejected under strict decode",
-			ErrorFragments: []string{
-				"unknown field",
-			},
-		},
-		{
-			ID:          "invalid-unknown-nested-defaults",
-			Category:    categoryParseUnknownField,
-			Entrypoint:  entrypointDecodeGlobalConfig,
-			Outcome:     outcomeReject,
-			Fixture:     "invalid/unknown-nested-defaults.json",
-			Description: "unknown nested defaults keys are rejected under strict decode",
-			ErrorFragments: []string{
-				"unknown field",
 			},
 		},
 		{

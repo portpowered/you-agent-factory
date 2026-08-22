@@ -34,6 +34,7 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	assertWorkContentSurfaceSchemas(t, schemas)
 	assertWorkerSurfaceSchemas(t, schemas)
 	assertWorkstationSurfaceSchemas(t, schemas)
+	assertHumanApprovalSurfaceSchemas(t, schemas, paths)
 	assertErrorSurfaceSchemas(t, schemas)
 }
 
@@ -158,6 +159,8 @@ func TestOpenAPIContract_SessionScopedRoutesUseFactorySessionVocabulary(t *testi
 		"/factory-sessions/{session_id}/work-requests/{request_id}": {"put"},
 		"/factory-sessions/{session_id}/work/{id}":                  {"get"},
 		"/factory-sessions/{session_id}/work/{id}/move":             {"post"},
+		"/factory-sessions/{session_id}/approvals":                  {"get"},
+		"/factory-sessions/{session_id}/approvals/{approval_id}":    {"get"},
 		"/factory-sessions/{session_id}/events":                     {"get"},
 		"/factory-sessions/{session_id}/sync-preflight":             {"get"},
 		"/factory-sessions/{session_id}/status":                     {"get"},
@@ -330,6 +333,8 @@ func TestOpenAPIContract_ListWorkReturnsStructuredWorkResults(t *testing.T) {
 	if _, ok := listWorkProperties["paginationContext"].(map[string]any); !ok {
 		t.Fatal("ListWorkResponse.properties.paginationContext is missing")
 	}
+	assertSchemaPropertyRef(t, schemas, "ListWorkResponse", "counts", "#/components/schemas/ListWorkCountSummary")
+	assertRequiredFields(t, schemaObject(t, schemas, "ListWorkCountSummary"), "total")
 
 	work := schemaObject(t, schemas, "Work")
 	workProperties := schemaProperties(t, work, "Work")
@@ -353,6 +358,11 @@ func TestOpenAPIContract_ListWorkReturnsStructuredWorkResults(t *testing.T) {
 	assertParameterRef(t, parameters, "#/components/parameters/WorkListName")
 	assertParameterRef(t, parameters, "#/components/parameters/WorkListWorkTypeName")
 	assertParameterRef(t, parameters, "#/components/parameters/WorkListTraceId")
+	assertParameterRef(t, parameters, "#/components/parameters/WorkListTerminal")
+	assertParameterRef(t, parameters, "#/components/parameters/WorkListNonTerminal")
+	assertParameterRef(t, parameters, "#/components/parameters/WorkListCounts")
+	assertParameterRef(t, parameters, "#/components/parameters/WorkListIncludeSuperseded")
+	assertResponseRef(t, listWork, "400", "#/components/responses/BadRequest")
 }
 
 func TestOpenAPIContract_PublicRuntimeAndFactoryWorldSchemasUseCamelCase(t *testing.T) {
@@ -451,9 +461,9 @@ func assertRemovedPaths(t *testing.T, paths map[string]any) {
 func assertPublishedSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	t.Helper()
 	for _, schema := range []string{
-		"SubmitWorkRequest", "SubmitWorkResponse", "InvocationInputSourceKind", "InvocationRequest", "InvocationResponse", "InvocationTerminalStatus", "StageSubmitWorkFileRequest", "StageSubmitWorkFileResponse", "UpsertWorkRequestResponse", "UpsertWorkRequestSubmittedWork", "WorkRequest", "Work", "WorkContent",
+		"SubmitWorkRequest", "SubmitWorkResponse", "InvocationInputSourceKind", "InvocationRequest", "InvocationResponse", "InvocationTerminalStatus", "StageSubmitWorkFileRequest", "StageSubmitWorkFileResponse", "UpsertWorkRequestResponse", "UpsertWorkRequestSubmittedWork", "WorkRequest", "WorkRequestRelation", "Work", "WorkContent",
 		"WorkContentPart", "WorkContentPartType", "WorkTextContentPart", "WorkImageContentPart", "Relation", "ListWorkResponse",
-		"TokenResponse", "ErrorFamily", "ErrorResponse", "FactoryName", "StatusCategories", "StatusResponse", "ListModelsResponse", "ManagedRuntime", "ManagedRuntimeLifecycleState", "ManagedRuntimePullOutcome", "ManagedRuntimePullResult", "ManagedRuntimeReadinessState", "ManagedRuntimeSourceDiagnostics", "ModelSummary", "ModelDetail", "ModelInvocationRequest", "ModelInvocationOptions", "ModelInvocationResponseMode", "ModelInvocationResponse", "ModelPullResponse", "ModelPullOutcome", "ModelPullDownloadedFile", "ResolvedModelOperationBinding", "ResolvedModelOperationBindingSource", "ModelCapability", "ModelResourceSummary", "ModelStatus", "ModelLoadState", "Factory", "InvocationReturn", "InvocationReturnPolicy", "FactoryValidationResult", "FactoryValidationTarget", "FactoryValidationSubject", "FactoryValidationSeverity", "FactoryValidationSubjectType", "FactoryValidationSubjectLocation", "Workstation", "WorkstationKind",
+		"TokenResponse", "ErrorFamily", "ErrorResponse", "FactoryName", "StatusCategories", "StatusResponse", "ListModelsResponse", "ManagedRuntime", "ManagedRuntimeLifecycleState", "ManagedRuntimePullOutcome", "ManagedRuntimePullResult", "ManagedRuntimeReadinessState", "ManagedRuntimeSourceDiagnostics", "ModelSummary", "ModelDetail", "ModelReference", "ModelInvocationInput", "ModelInvocationOutput", "ModelInvocationArtifact", "ModelInvocationParameter", "ModelInvocationOutputMode", "ModelInvocationFailureClass", "ModelInvocationFailure", "GenericModelInvocationRequest", "GenericModelInvocationResponse", "ModelInvocationRequest", "ModelInvocationOptions", "ModelInvocationResponseMode", "ModelInvocationResponse", "ModelPullResponse", "ModelPullOutcome", "ModelPullDownloadedFile", "ResolvedModelOperationBinding", "ResolvedModelOperationBindingSource", "ModelCapability", "ModelResourceSummary", "ModelStatus", "ModelLoadState", "Factory", "InvocationReturn", "InvocationReturnPolicy", "FactoryValidationResult", "FactoryValidationTarget", "FactoryValidationSubject", "FactoryValidationSeverity", "FactoryValidationSubjectType", "FactoryValidationSubjectLocation", "Workstation", "WorkstationKind",
 	} {
 		if _, ok := schemas[schema]; !ok {
 			t.Fatalf("components.schemas.%s is missing", schema)
@@ -580,30 +590,6 @@ func TestOpenAPIContract_MoveWorkRequestSchema(t *testing.T) {
 	assertRequiredFields(t, moveWorkRequestSchema, "stateName")
 	moveWorkRequestProperties := schemaProperties(t, moveWorkRequestSchema, "MoveWorkRequest")
 	assertSchemaPropertiesPresent(t, moveWorkRequestProperties, "MoveWorkRequest", "stateName", "requestId")
-}
-
-func assertWorkRequestSurfaceSchemas(t *testing.T, schemas map[string]any) {
-	t.Helper()
-	workRequestSchema := schemaObject(t, schemas, "WorkRequest")
-	assertRequiredFields(t, workRequestSchema, "requestId", "type")
-	workRequestProperties := schemaProperties(t, workRequestSchema, "WorkRequest")
-	assertSchemaPropertiesPresent(t, workRequestProperties, "WorkRequest", "requestId", "currentChainingTraceId", "type")
-	workRequestType := schemaObject(t, schemas, "WorkRequestType")
-	assertEnumValues(t, workRequestType, "WorkRequestType", []string{"FACTORY_REQUEST_BATCH"})
-	workRequestTypeVarNames, ok := workRequestType["x-enum-varnames"].([]any)
-	if !ok {
-		t.Fatalf("components.schemas.WorkRequestType.x-enum-varnames is missing")
-	}
-	if containsString(workRequestTypeVarNames, "WorkRequestTypeDefault") {
-		t.Fatalf("components.schemas.WorkRequestType must not advertise legacy DEFAULT request type")
-	}
-
-	workSchema := schemaObject(t, schemas, "Work")
-	workProperties := schemaProperties(t, workSchema, "Work")
-	assertSchemaPropertiesPresent(t, workProperties, "Work", "name", "workId", "requestId", "workTypeName", "state", "currentChainingTraceId", "previousChainingTraceIds", "traceId", "content", "payload", "tags", "relations")
-	assertPropertyRef(t, workProperties, "content", "#/components/schemas/WorkContent")
-	assertArrayItemRef(t, workProperties, "relations", "#/components/schemas/Relation")
-	assertPropertiesAbsent(t, workProperties, "Work", "work_type_id", "target_state")
 }
 
 func assertWorkContentSurfaceSchemas(t *testing.T, schemas map[string]any) {
@@ -735,7 +721,7 @@ func assertWorkstationSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	}
 	assertPropertiesAbsent(t, workstationProperties, "Workstation", "timeout", "runtime_type")
 	assertEnumValues(t, schemaObject(t, schemas, "WorkstationKind"), "WorkstationKind", []string{"STANDARD", "REPEATER", "CRON", "POLLER"})
-	assertEnumValues(t, schemaObject(t, schemas, "WorkstationType"), "WorkstationType", []string{"INFERENCE_RUN", "AGENT_RUN", "SCRIPT_RUN", "POLLER_RUN", "MODEL_WORKSTATION", "MODEL_INVOKE", "LOGICAL_MOVE", "CLASSIFIER_WORKSTATION"})
+	assertEnumValues(t, schemaObject(t, schemas, "WorkstationType"), "WorkstationType", []string{"INFERENCE_RUN", "AGENT_RUN", "SCRIPT_RUN", "POLLER_RUN", "MODEL_WORKSTATION", "MODEL_INVOKE", "LOGICAL_MOVE", "CLASSIFIER_WORKSTATION", "HUMAN_APPROVAL"})
 
 	classificationRouteSchema := schemaObject(t, schemas, "ClassificationRoute")
 	assertRequiredFields(t, classificationRouteSchema, "label", "outputs")
@@ -911,6 +897,8 @@ func assertRealBackendSessionAPISliceRoutes(t *testing.T, paths map[string]any) 
 		"/factory-sessions/{session_id}/dispatches/{dispatch_id}": {"get"},
 		"/factory-sessions/{session_id}/artifacts":                {"get"},
 		"/factory-sessions/{session_id}/artifacts/{artifact_id}":  {"get"},
+		"/factory-sessions/{session_id}/approvals":                {"get"},
+		"/factory-sessions/{session_id}/approvals/{approval_id}":  {"get"},
 		"/factory-sessions/{session_id}/approve":                  {"post"},
 		"/factory-sessions/{session_id}/pause":                    {"post"},
 		"/factory-sessions/{session_id}/resume":                   {"post"},
@@ -954,6 +942,8 @@ func assertDeferredRealBackendSessionRouteFamilies(t *testing.T, paths map[strin
 		"/factory-sessions/{session_id}/dispatches/{dispatch_id}": {},
 		"/factory-sessions/{session_id}/artifacts":                {},
 		"/factory-sessions/{session_id}/artifacts/{artifact_id}":  {},
+		"/factory-sessions/{session_id}/approvals":                {},
+		"/factory-sessions/{session_id}/approvals/{approval_id}":  {},
 		"/factory-sessions/{session_id}/approve":                  {},
 		"/factory-sessions/{session_id}/pause":                    {},
 		"/factory-sessions/{session_id}/resume":                   {},

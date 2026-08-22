@@ -6,11 +6,10 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 )
 
 type DefinitionHostCallbacks struct {
@@ -33,33 +32,6 @@ type DefinitionHostCallbacks struct {
 	NamedFactoryActivationPaths             func(*livesession.LiveSession) (string, string)
 	RequireIdleBeforeNamedFactoryActivation func(context.Context, string, *livesession.LiveSession) error
 	SwapPersistedNamedFactoryRuntime        func(context.Context, string, *livesession.LiveSession, string, string, string, string) error
-}
-
-// InstallFactoryDefinitions binds the wire-constructed Definitions service into
-// one session runtime. Runtime opening owns this one-way edge; Definitions
-// construction must not call back into Sessions through SessionHost.
-func InstallFactoryDefinitions(runtime roles.ApplicationRuntime, definitions interfaces.Service) error {
-	if runtime == nil {
-		return fmt.Errorf("session runtime is required")
-	}
-	if definitions == nil {
-		return fmt.Errorf("factory definitions service is required")
-	}
-	sessionRuntime, ok := runtime.(*SessionRuntime)
-	if !ok {
-		return fmt.Errorf("session runtime does not support Factory Definitions binding")
-	}
-	sessionRuntime.AttachFactoryDefinitionService(definitions)
-	return nil
-}
-
-// AttachFactoryDefinitionService installs the Wire-constructed definition
-// service used by the Factory Session runtime.
-func (h *SessionRuntime) AttachFactoryDefinitionService(service interfaces.Service) interfaces.Service {
-	if h != nil && service != nil {
-		h.definitions = service
-	}
-	return service
 }
 
 // DefinitionCallbacks exposes bounded Factory Session callbacks for composition
@@ -161,7 +133,7 @@ func DefinitionCallbacks(runtime *SessionRuntime) DefinitionHostCallbacks {
 			runtime.requireIdleRuntimeForSession,
 			runtime.requireIdleRuntime,
 			runtime.ReplaceSessionRuntime,
-			func(rootDir, name string, replacement factory.HostedInstance) error {
+			func(rootDir, name string, replacement runtimeports.RuntimeInstance) error {
 				return ActivateStartupRuntime(
 					rootDir, name, replacement, &runtime.runtimeState, runtime.syncActiveSessionDir,
 					runtime.namedPaths.WriteCurrentPointer,

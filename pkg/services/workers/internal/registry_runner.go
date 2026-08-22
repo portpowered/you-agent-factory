@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -14,29 +15,38 @@ import (
 // through the former provider conductor protocol.
 type registryCapabilityRunner struct {
 	next      workers.Runner
-	providers workers.ProviderRegistry
+	providers providers.Service
 }
 
 func (r registryCapabilityRunner) Execute(
 	ctx context.Context,
 	request workers.RunnerExecutionRequest,
 ) (workers.RunnerExecutionResult, error) {
-	if err := validateRequestedRunnerCapabilities(r.providers, request); err != nil {
+	if err := validateRequestedRunnerCapabilities(ctx, r.providers, request); err != nil {
 		return workers.RunnerExecutionResult{}, err
 	}
 	return r.next.Execute(ctx, request)
 }
 
 func validateRequestedRunnerCapabilities(
-	providers workers.ProviderRegistry,
+	ctx context.Context,
+	providerService providers.Service,
 	request workers.RunnerExecutionRequest,
 ) error {
-	if providers == nil {
+	if providerService == nil {
 		return nil
 	}
-	metadata, err := providers.RunnerMetadata(request.RunnerID)
-	if err != nil {
-		return err
+	metadata, builtIn := workers.BuiltInRunnerMetadata(request.RunnerID)
+	if !builtIn {
+		resolved, err := providerService.ResolveIdentity(ctx, providers.ResolveIdentityRequest{Identity: request.RunnerID})
+		if err != nil {
+			return err
+		}
+		descriptor, err := providerService.GetProvider(ctx, providers.GetProviderRequest{ID: resolved.ID})
+		if err != nil {
+			return err
+		}
+		metadata = runnerMetadataFromProvider(descriptor.Provider)
 	}
 	supported := make(map[workers.RunnerOptionalCapability]bool, len(metadata.Capabilities.Optional))
 	for _, capability := range metadata.Capabilities.Optional {
@@ -53,4 +63,33 @@ func validateRequestedRunnerCapabilities(
 		)
 	}
 	return nil
+}
+
+func runnerMetadataFromProvider(descriptor providers.Descriptor) workers.RunnerMetadata {
+	optional := make([]workers.RunnerOptionalCapabilitySupport, 0, 3)
+	for _, mapping := range []struct {
+		provider providers.Capability
+		worker   workers.RunnerOptionalCapability
+	}{
+		{providers.CapabilityImageInput, workers.RunnerOptionalCapabilityImageInput},
+		{providers.CapabilitySessionResume, workers.RunnerOptionalCapabilitySessionResume},
+		{providers.CapabilityStructuredOutput, workers.RunnerOptionalCapabilityStructuredOutput},
+	} {
+		status := workers.RunnerOptionalCapabilityStatusUnsupported
+		for _, capability := range descriptor.Capabilities {
+			if capability == mapping.provider {
+				status = workers.RunnerOptionalCapabilityStatusSupported
+				break
+			}
+		}
+		optional = append(optional, workers.RunnerOptionalCapabilitySupport{
+			Capability: mapping.worker,
+			Status:     status,
+		})
+	}
+	return workers.RunnerMetadata{
+		ID:           strings.ToLower(strings.TrimSpace(descriptor.ID.String())),
+		DisplayName:  descriptor.DisplayName,
+		Capabilities: workers.NewCapabilities(optional...),
+	}
 }

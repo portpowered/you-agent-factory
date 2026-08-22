@@ -89,7 +89,7 @@ export function validateFactoryGraphDraftSave(
     if (
       !isInternalSystemTimeWorkstation(workstation) &&
       workstationRequiresWorkerAssignment(workstation) &&
-      workstation.worker.trim().length === 0
+      (workstation.worker?.trim() ?? "").length === 0
     ) {
       errors.push(missingWorkerError(workstation.name, locale));
     }
@@ -167,7 +167,7 @@ function validateFinalWorkerAssignments(
     if (
       !isInternalSystemTimeWorkstation(workstation) &&
       workstationRequiresWorkerAssignment(workstation) &&
-      workstation.worker.trim().length === 0
+      (workstation.worker?.trim() ?? "").length === 0
     ) {
       errors.push(missingWorkerError(workstation.name, locale));
     }

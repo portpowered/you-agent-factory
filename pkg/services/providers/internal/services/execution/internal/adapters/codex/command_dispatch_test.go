@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
@@ -30,18 +31,18 @@ func TestCommandEffectRoutesDispatchContextThroughMockWorkerRunner(t *testing.T)
 			}},
 		},
 		Next: workers.AdaptCommandRunner(platformRunner),
-	})
+	}, platformclock.Real{})
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
 
-	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 		Provider:        providers.IDCodex,
 		AttemptID:       "mock-dispatch",
 		UserMessage:     "perform work",
 		WorkerType:      "mocked-worker",
 		WorkstationName: "mock-process",
-	}, func([]byte) error { return nil })
+	}}, func([]byte) error { return nil })
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -54,13 +55,13 @@ func TestCommandEffectRejectsUnsupportedReasoningEffortBeforeDispatch(t *testing
 	t.Parallel()
 
 	platformRunner := testutil.NewProviderCommandRunner()
-	effect := codex.NewCommandEffect(workers.AdaptCommandRunner(platformRunner))
-	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+	effect := codex.NewCommandEffect(workers.AdaptCommandRunner(platformRunner), platformclock.Real{})
+	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 		Provider:        providers.IDCodex,
 		AttemptID:       "invalid-effort-dispatch",
 		ReasoningEffort: "extreme",
 		UserMessage:     "perform work",
-	}, func([]byte) error { return nil })
+	}}, func([]byte) error { return nil })
 	var failure execution.AttemptFailure
 	if !errors.As(err, &failure) ||
 		failure.NativeError == nil ||
@@ -72,22 +73,62 @@ func TestCommandEffectRejectsUnsupportedReasoningEffortBeforeDispatch(t *testing
 	}
 }
 
-func TestCommandEffectRendersLunaXHighReasoningEffort(t *testing.T) {
+func TestCommandEffectRendersResumeSessionBeforeFreshSessionFlags(t *testing.T) {
 	t.Parallel()
 
 	platformRunner := testutil.NewProviderCommandRunner()
-	effect := codex.NewCommandEffect(workers.AdaptCommandRunner(platformRunner))
+	effect := codex.NewCommandEffect(workers.AdaptCommandRunner(platformRunner), platformclock.Real{})
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
 
-	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{
+		ExecuteRequest: providers.ExecuteRequest{
+			Provider:        providers.IDCodex,
+			AttemptID:       "resume-dispatch",
+			Model:           "gpt-5.6-luna",
+			ReasoningEffort: "xhigh",
+			UserMessage:     "continue the prior turn",
+		},
+		ResumeSession: &providers.SessionRef{
+			Provider: providers.IDCodex,
+			Kind:     providers.SessionIDKind,
+			ID:       "thread-previous",
+		},
+	}, func([]byte) error { return nil })
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	request := platformRunner.LastRequest()
+	want := []string{
+		"exec",
+		"--json",
+		"--model", "gpt-5.6-luna",
+		"--config", `model_reasoning_effort="xhigh"`,
+		"resume", "thread-previous",
+		"-",
+	}
+	if !reflect.DeepEqual(request.Args, want) {
+		t.Fatalf("command args = %#v, want %#v - a continued attempt must resume the exact referenced session instead of starting a fresh one", request.Args, want)
+	}
+}
+
+func TestCommandEffectRendersLunaXHighReasoningEffort(t *testing.T) {
+	t.Parallel()
+
+	platformRunner := testutil.NewProviderCommandRunner()
+	effect := codex.NewCommandEffect(workers.AdaptCommandRunner(platformRunner), platformclock.Real{})
+	if effect == nil {
+		t.Fatal("NewCommandEffect() returned nil")
+	}
+
+	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 		Provider:        providers.IDCodex,
 		AttemptID:       "luna-xhigh-dispatch",
 		Model:           "gpt-5.6-luna",
 		ReasoningEffort: "xhigh",
 		UserMessage:     "perform work",
-	}, func([]byte) error { return nil })
+	}}, func([]byte) error { return nil })
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}

@@ -6,10 +6,11 @@ import "encoding/json"
 
 // Tool names use Recordings vocabulary and align with accepted root operations.
 const (
-	ToolQueryStatus           = "you.recording.query_status"
-	ToolAppendEvent           = "you.recording.append_event"
-	ToolLoadReplay            = "you.recording.load_replay"
-	ToolReadPortableArtifact  = "you.recording.read_portable_artifact"
+	ToolQueryStatus          = "you.recording.query_status"
+	ToolQueryHistory         = "you.recording.query_history"
+	ToolAppendEvent          = "you.recording.append_event"
+	ToolLoadReplay           = "you.recording.load_replay"
+	ToolReadPortableArtifact = "you.recording.read_portable_artifact"
 )
 
 // Stable error envelope fields shared by every Recordings MCP tool.
@@ -23,11 +24,11 @@ var sharedErrorStableFields = []string{
 
 // ToolErrorEnvelope is the stable MCP failure shape for Recordings tools.
 type ToolErrorEnvelope struct {
-	Code       string         `json:"code"`
-	Message    string         `json:"message"`
-	Retryable  bool           `json:"retryable"`
-	RecordingID string        `json:"recordingId,omitempty"`
-	Details    map[string]any `json:"details,omitempty"`
+	Code        string         `json:"code"`
+	Message     string         `json:"message"`
+	Retryable   bool           `json:"retryable"`
+	RecordingID string         `json:"recordingId,omitempty"`
+	Details     map[string]any `json:"details,omitempty"`
 }
 
 // ToolResponse wraps one tool outcome with either a typed result or a stable error.

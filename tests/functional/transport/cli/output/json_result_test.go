@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -62,9 +63,9 @@ func TestCLIJSONFailureRemainsValidJSON(t *testing.T) {
 
 	t.Run("terminal failure emits failed InvocationResponse and one stderr ErrorResponse", func(t *testing.T) {
 		stdout, stderr, err := runSingleJSONInvocation(t, []string{
-			"you", "--json", "run", "--named", jsonGoalFactoryName, "--no-record",
+			"you", "--json", "run", "--factory", jsonTerminalFailureFactoryPath(t), "--no-record",
 			"deterministic terminal failure",
-		}, jsonGoalFactoryName, rejectingGoalMockWorkers())
+		}, "", nil)
 		if err == nil {
 			t.Fatal("Process.Execute error = nil, want terminal invocation failure")
 		}
@@ -75,6 +76,10 @@ func TestCLIJSONFailureRemainsValidJSON(t *testing.T) {
 		if response.ErrorCode == nil || response.Message == nil {
 			t.Fatalf("failed InvocationResponse lacks error detail: %#v", response)
 		}
+		if string(*response.ErrorCode) != "INVOCATION_RUNTIME_FAILURE" ||
+			!strings.HasPrefix(*response.Message, `invocation failed: work "work-1" reached failed state "goal:failed"`) {
+			t.Fatalf("InvocationResponse = %#v, want the pinned terminal failure", response)
+		}
 		errorResponse := decodeSingleJSONErrorResponse(t, stderr)
 		if errorResponse.Code != factoryapi.ErrorResponseCode(*response.ErrorCode) ||
 			errorResponse.Family != factoryapi.ErrorFamilyInternalServerError ||
@@ -82,6 +87,100 @@ func TestCLIJSONFailureRemainsValidJSON(t *testing.T) {
 			t.Fatalf("ErrorResponse = %#v, want code %s and message prefix %q", errorResponse, *response.ErrorCode, *response.Message)
 		}
 	})
+}
+
+func jsonTerminalFailureFactoryPath(t *testing.T) string {
+	t.Helper()
+
+	// Keep this failure in the logical runtime so worker teardown cannot replace
+	// the terminal failure that the stdout/stderr contract is checking.
+	return support.ScaffoldFactory(t, map[string]any{
+		"name": "json-terminal-failure",
+		"workTypes": []any{map[string]any{
+			"name":             "goal",
+			"handlingBehavior": []string{"DEFAULT"},
+			"states": []any{
+				map[string]any{"name": "init", "type": "INITIAL"},
+				map[string]any{"name": "complete", "type": "TERMINAL"},
+				map[string]any{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workstations": []map[string]any{{
+			"name":    "fail-goal",
+			"type":    "LOGICAL_MOVE",
+			"inputs":  []any{map[string]any{"workType": "goal", "state": "init"}},
+			"outputs": []any{map[string]any{"workType": "goal", "state": "failed"}},
+		}},
+	})
+}
+
+// TestCLIInvocationArgumentFailuresAreBadRequest proves malformed Factory
+// invocation arguments produce one standard client-error response in both
+// normal and quiet modes, before provider execution or runtime activation.
+func TestCLIInvocationArgumentFailuresAreBadRequest(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		wantCode factoryapi.ErrorResponseCode
+	}{
+		{
+			name: "unknown argument in normal JSON mode",
+			args: []string{
+				"you", "--json", "run", "--named", "@you/plan-parallel", "--no-record",
+				"--planer-model", "bad-model", "--to", "reproduce the typo",
+			},
+			wantCode: factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_UNKNOWN_ARGUMENT"),
+		},
+		{
+			name: "unknown argument in quiet mode",
+			args: []string{
+				"you", "run", "--named", "@you/plan-parallel", "--quiet", "--no-record",
+				"--planer-model", "bad-model", "--to", "reproduce the typo",
+			},
+			wantCode: factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_UNKNOWN_ARGUMENT"),
+		},
+		{
+			name: "missing value before next invocation flag",
+			args: []string{
+				"you", "run", "--named", "@you/plan-parallel", "--quiet", "--no-record",
+				"--planner-model", "--to", "request without a planner model",
+			},
+			wantCode: factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_MISSING_VALUE"),
+		},
+		{
+			name:     "missing value for run flag",
+			args:     []string{"you", "run", "--quiet", "--factory", "--no-record"},
+			wantCode: factoryapi.ErrorResponseCode("INVOCATION_ARGUMENT_MISSING_VALUE"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			homeDir := t.TempDir()
+			support.InstallPackagedFactory(t, homeDir, "@you/plan-parallel")
+			providerRunner := testutil.NewProviderCommandRunner()
+			inputs := support.FakeInputs(t.Context(), test.args)
+			inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+			inputs.Input.WorkingDirectory = t.TempDir()
+
+			err := support.BuildProcess(t, serviceedges.Edges{
+				ProviderCommandRunner: providerRunner,
+			}).Execute(inputs.Input)
+			if err == nil {
+				t.Fatalf("Process.Execute(%v) succeeded; stdout=%q stderr=%q", test.args, inputs.Stdout(), inputs.Stderr())
+			}
+			if inputs.Stdout() != "" {
+				t.Fatalf("stdout = %q, want empty for usage failure", inputs.Stdout())
+			}
+			response := decodeSingleJSONErrorResponse(t, inputs.Stderr())
+			if response.Code != test.wantCode || response.Family != factoryapi.ErrorFamilyBadRequest {
+				t.Fatalf("ErrorResponse = %#v, want code %s and family BAD_REQUEST", response, test.wantCode)
+			}
+			if providerRunner.CallCount() != 0 {
+				t.Fatalf("provider dispatch calls = %d, want 0", providerRunner.CallCount())
+			}
+		})
+	}
 }
 
 // TestCLIJSONContainsNoPrivateRuntimeFields proves terminal JSON success and

@@ -9,6 +9,7 @@ export interface SubmitWorkMessages {
   addItemMenuDescription: string;
   addItemOptionLabel: (type: SubmitWorkItemTypeLabelKey) => string;
   cardTitle: string;
+  destinationLabel: string;
   chooseFileAction: string;
   fileItemPlaceholder: (typeLabel: string) => string;
   fileItemDragActive: (typeLabel: string) => string;
@@ -135,6 +136,7 @@ const submitWorkMessagesByLocale = {
         video: "Video",
       })[type],
     cardTitle: "Submit work",
+    destinationLabel: "Factory Session destination",
     chooseFileAction: "Choose file",
     fileItemDragActive: (typeLabel) =>
       `Drop the ${typeLabel.toLowerCase()} file to stage it.`,
@@ -267,6 +269,7 @@ const submitWorkMessagesByLocale = {
         video: "视频",
       })[type],
     cardTitle: "提交工作",
+    destinationLabel: "Factory Session 目标",
     chooseFileAction: "选择文件",
     fileItemDragActive: (typeLabel) => `拖放${typeLabel}文件以上传暂存。`,
     fileItemFailure: (typeLabel) =>

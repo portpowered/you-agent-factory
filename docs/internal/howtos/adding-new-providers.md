@@ -1,150 +1,88 @@
 # Implementing a model provider integration
 
-The customer-implementable provider inference boundary is
-`pkg/services/providers/internal/services/execution/internal/provider/inferencecontract`. It is deliberately separate
-from built-in provider registration and Factory Session publication. This
-guide covers implementing and validating that public Go contract; wiring a new
-built-in provider into production is a separate migration.
+The provider-owned execution boundary is `pkg/services/providers`. A native
+integration exposes one normalized attempt through `providers.Service.Execute`;
+Providers also owns catalog selection, provider-session identity, and
+continuation. Workers owns work scheduling, retries, throttling, and output
+policy around that boundary.
 
 Provider-native commands, HTTP or SDK calls, event decoding, session
-extraction, and failure classification stay in the provider package. Shared
+extraction, and failure classification stay in the provider adapter. Shared
 orchestration must not branch on provider identity.
 
-## 1. Implement the public contract
+## 1. Implement one normalized execution attempt
 
-Implement `inferencecontract.Integration`:
+The parent-private adapter seam is:
 
 ```go
-type Integration interface {
-	Identity() inferencecontract.Identity
-	MaximumCapabilities() inferencecontract.CapabilitySet
-	Discover(context.Context) (inferencecontract.Discovery, error)
-	Capabilities(context.Context, inferencecontract.InvocationRequest) (inferencecontract.CapabilitySet, error)
-	Invoke(context.Context, inferencecontract.InvocationRequest, inferencecontract.ResponseWriter) error
-}
+type Attempt func(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error)
 ```
 
-`Identity` is an opaque, stable identifier. Do not use it to select special
-orchestration behavior. `MaximumCapabilities` declares the integration's
-maximum provider-neutral capability set. `Capabilities` returns the subset
-available for one immutable request and must never escalate beyond that
-maximum.
+Build the request from provider-neutral fields and return a detached
+`providers.ExecuteResult`. Content, an optional `SessionRef`, and bounded
+`ExecuteDiagnostics` are the only successful attempt facts that cross the
+boundary. A provider may report bounded live progress through
+`ExecuteRequest.ProgressObserver` and its final diagnostics.
 
-`Discover` returns current readiness plus sanitized prerequisites. Report only
-bounded setup guidance and prerequisite names or statuses. Never include
-credentials, raw environment assignments, machine-local paths, prompts, or
-provider-native payloads.
+Validate provider identity and attempt metadata before invoking native I/O.
+Do not put retry, fallback, scheduling, or throttle policy in the adapter.
+Provider-specific failures must be normalized to `providers.ExecuteFailure`
+with a safe message and one of the public `ExecuteFailureKind` values. Never
+return raw command output, credentials, prompts, machine-local paths, or live
+process objects as diagnostics.
 
-Use the public validators while developing an integration:
+## 2. Use Providers execution and continuation contracts
 
-```go
-if err := inferencecontract.ValidateIdentity(integration.Identity()); err != nil {
-	return err
-}
-maximum := integration.MaximumCapabilities()
-if err := inferencecontract.ValidateMaximumCapabilities(maximum); err != nil {
-	return err
-}
-discovery, err := integration.Discover(ctx)
-if err != nil {
-	return err
-}
-if err := inferencecontract.ValidateDiscovery(discovery); err != nil {
-	return err
-}
-negotiated, err := integration.Capabilities(ctx, request)
-if err != nil {
-	return err
-}
-if err := inferencecontract.ValidateNegotiatedCapabilities(maximum, negotiated); err != nil {
-	return err
-}
-```
-
-## 2. Emit drafts and one completion
-
-`Invoke` receives an immutable `InvocationRequest` and a `ResponseWriter`.
-Construct provider-neutral `EventDraft` values with
-`inferencecontract.NewEventDraft`, then write them in observation order. The
-draft vocabulary is owned by `pkg/services/workers`; see
-[`response-events.md`](../contract/response-events.md) for its semantic kinds,
-phases, and payloads.
-
-Provider code supplies semantic correlation and provenance, but never Factory
-Session envelopes, event IDs, timestamps, publication sequence numbers,
-retention metadata, replay gaps, or `STREAM_GAP` drafts. Message and tool
-lifecycles retain stable item or tool correlation. A provider may emit at most
-one authoritative `MESSAGE/COMPLETED` snapshot representing final response
-content.
-
-Close the writer exactly once with either:
-
-- `SuccessfulCompletion(NewResponse(...))`, or
-- `FailedCompletion(NewFailure(...))`.
-
-The response is authoritative. If an authoritative completed message was
-emitted, its content must agree with that response. A completed success message
-cannot be followed by a failure. Stop provider observation and return
-immediately when `WriteEvent` fails; later writes or closes cannot replace the
-first terminal outcome.
-
-Normalize failures into one of the public failure kinds: authentication,
-invalid request, throttling, timeout, cancellation, dependency failure,
-malformed provider output, or unknown failure. Messages and diagnostics must
-be bounded and safe for customers. Optional `ProviderSession` metadata is
-generic and detached; it does not expose transcript history or give the
-integration ownership of Provider Session lifecycle.
-
-Shared orchestration must invoke an implementation through
-`inferencecontract.ExecuteInvocation`. That boundary validates correlation,
-lifecycle order, terminal agreement, sink backpressure, and exactly-once close
-before buffered terminal drafts reach orchestration.
-
-## 3. Run the reusable conformance suites
-
-Use `pkg/services/providers/internal/services/execution/internal/provider/inferencecontract/testkit` with deterministic,
-sanitized fixtures. `testkit.Run` requires fresh integration factories for
-final-only, streaming, and correlated tool-lifecycle success. Supply at least
-two distinct valid identities to prove behavior is identity-neutral:
+Callers invoke an adapter only through the Providers root:
 
 ```go
-testkit.Run(t, testkit.Suite{
-	Identities: []inferencecontract.Identity{"customer.alpha", "customer-beta"},
-	FinalOnly:  finalOnlyFactory,
-	Streaming:  streamingFactory,
-	Tool:       toolFactory,
-	Fixture: testkit.Fixture{
-		FinalOnlyRequest: finalOnlyRequest,
-		StreamingRequest: streamingRequest,
-		ToolRequest:      toolRequest,
-		ExpectedResponse: expectedResponse,
-	},
+result, err := service.Execute(ctx, providers.ExecuteRequest{
+	Provider:  providerID,
+	AttemptID: attemptID,
+	UserMessage: prompt,
 })
 ```
 
-Also run `testkit.RunAdverse` with fresh factories for every field in
-`testkit.AdverseSuite`. It proves all normalized failure categories,
-cancellation, timeout, response-sink backpressure, double close, write after
-close, missing close, response/event disagreement, failure after a represented
-success, and conflicting authoritative completed messages. Run the provider
-contract tests with the race detector because cancellation, backpressure, and
-close behavior exercise concurrency.
+`Execute` owns exactly one normalized attempt and returns typed cancellation,
+timeout, capability-mismatch, and normalized execution failures. It does not
+accept a caller-supplied provider session. Native adapters report a detached
+session with `ExecuteRequest.SessionObserver` or `ExecuteResult.SessionRef`.
 
-The conformance suites require no Factory Session store, provider executable,
-credential, worktree, transcript reader, generated API artifact, or process
-composition.
+Resume an exact provider session through `Service.Continue` or
+`Service.ContinueReference`. Continuation validates provider identity and
+session lineage before adapter I/O, and returns a typed resumed or unsupported
+outcome. It never falls back to ordinary `Execute`.
+
+Structured output remains part of the provider-neutral execution request and
+result path; it does not require a response-stream executor or a second
+inference contract.
+
+## 3. Run native behavioral tests
+
+Use the parent-private Providers execution conformance package at
+`pkg/services/providers/internal/testutil/execution`. It exercises detached
+success results, optional sessions, ordered bounded progress, normalized
+declared and parse failures, cancellation, deadlines, cleanup, and late
+success suppression through `providers.Service`.
+
+Provider-specific behavior belongs beside the adapter under
+`pkg/services/providers/internal/services/execution/internal/adapters/<id>`.
+Keep root contract assertions in `pkg/services/providers` and composition
+assertions in `pkg/services/providers/wire`. Prefer observable execution
+results, typed failures, progress observations, session references, and
+continuation outcomes over source-shape checks.
+
+Run focused package tests with the race detector when an adapter owns
+concurrent process, cancellation, progress, or cleanup behavior.
 
 ## Completion checklist
 
-- Identity, maximum capabilities, discovery, and negotiated capabilities pass
-  their public validators.
-- Discovery and normalized failure details are bounded and customer-safe.
-- Draft lifecycles are ordered and correlated, with no Factory-owned fields.
-- The writer closes exactly once and final event content agrees with the
-  authoritative response.
-- Success and adverse conformance suites pass for at least two opaque
-  identities.
-- Focused package tests and race-enabled protocol tests pass.
-- No built-in provider switch, generated API, Factory Session ownership, or
-  production registration migration was added as part of the contract work.
-
+- The provider has a catalog descriptor and truthful capability facts.
+- One native adapter attempt returns detached `ExecuteResult` values.
+- Failures are normalized, typed, bounded, and customer-safe.
+- Progress and session observations are ordered, bounded, and detached.
+- Structured output, cancellation, and continuation are covered through the
+  Providers contracts.
+- Focused adapter, root contract, composition, and conformance tests pass.
+- No Workers provider registry, response-stream executor, legacy inference
+  contract, Factory Session ownership, or generated API artifact is added.

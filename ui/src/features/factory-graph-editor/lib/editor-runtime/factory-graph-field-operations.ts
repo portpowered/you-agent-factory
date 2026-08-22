@@ -1,46 +1,14 @@
 import type {
   CanonicalFactoryDefinition,
+  FactoryGraphNodeFieldUpdate,
   FactoryResource,
   FactoryWorker,
-  FactoryWorkState,
-  FactoryWorkstation,
   FactoryWorkType,
 } from "../draft/factory-graph-draft-types";
 import { nodeKeyId } from "../draft/factory-graph-draft-types";
 import type { FactoryGraphOperationResult } from "../operations/factory-graph-operations";
 
-export type FactoryGraphNodeFieldUpdate =
-  | {
-      field: "capacity";
-      kind: "resource";
-      name: string;
-      value: FactoryResource["capacity"];
-    }
-  | {
-      field: "model";
-      kind: "worker";
-      name: string;
-      value: FactoryWorker["model"];
-    }
-  | {
-      field: "type";
-      kind: "work-state";
-      stateName: string;
-      value: FactoryWorkState["type"];
-      workTypeName: string;
-    }
-  | {
-      field: "body" | "worker";
-      kind: "workstation";
-      name: string;
-      value: string;
-    }
-  | {
-      field: "behavior";
-      kind: "workstation";
-      name: string;
-      value: FactoryWorkstation["behavior"];
-    };
+export type { FactoryGraphNodeFieldUpdate } from "../draft/factory-graph-draft-types";
 
 export function updateFactoryGraphNodeField(options: {
   baseFactoryDefinition: CanonicalFactoryDefinition;

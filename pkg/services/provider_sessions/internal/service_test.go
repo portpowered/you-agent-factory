@@ -391,8 +391,8 @@ func assertLookupContext(t *testing.T, err error, provider providersessions.Prov
 		t.Fatalf("error = %v, want ErrSessionNotFound", err)
 	}
 	var lookupErr *providersessions.LookupError
-	if !errors.As(err, &lookupErr) || lookupErr.Provider != provider || lookupErr.Root != root {
-		t.Fatalf("lookup error = %#v, want provider=%q root=%q", lookupErr, provider, root)
+	if !errors.As(err, &lookupErr) || lookupErr.Provider != provider || lookupErr.Root != root || lookupErr.SessionID != "missing-session" {
+		t.Fatalf("lookup error = %#v, want provider=%q root=%q session=missing-session", lookupErr, provider, root)
 	}
 }
 

@@ -21,14 +21,21 @@ type ProcessLifecycle interface {
 }
 
 // Process is the inert, behavior-bearing process entrypoint assembled by
-// Wire. It retains only its command/lifecycle roles and immutable provider
-// authority, not runtime configuration, service graphs, or edge bundles; the
-// lazy Initializer owns runtime construction after CLI parsing.
+// Wire. It retains only its command/lifecycle roles, immutable provider
+// authority, and the production ACP server, not runtime configuration,
+// service graphs, or edge bundles; the lazy Initializer owns runtime
+// construction after CLI parsing.
 type Process struct {
 	commandFactory processcontract.CommandFactory
 	initializer    processcontract.Initializer
 	providers      ProviderRegistry
 	lifecycle      ProcessLifecycle
+	acpServer      processcontract.ACPServer
+	workerReader   processcontract.WorkerRecordingReader
+	detachedOps    processcontract.DetachedOperationsCapability
+	runtimeMetrics processcontract.RuntimeMetricsQueryCapability
+	executionOpen  processcontract.ExecutionRuntimeOpeningCapability
+	runtimeCosts   processcontract.RuntimeCostsQueryCapability
 }
 
 func NewProcess(
@@ -36,6 +43,43 @@ func NewProcess(
 	initializer processcontract.Initializer,
 	providers ProviderRegistry,
 	lifecycle ProcessLifecycle,
+	acpServer processcontract.ACPServer,
+	workerReader processcontract.WorkerRecordingReader,
+	detachedOps processcontract.DetachedOperationsCapability,
+	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
+	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
+) (*Process, error) {
+	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, nil)
+}
+
+// NewProcessWithRuntimeCostsAndExecution constructs the canonical process
+// with both the Costs query and durable Factory Session opening capabilities.
+func NewProcessWithRuntimeCostsAndExecution(
+	commandFactory processcontract.CommandFactory,
+	initializer processcontract.Initializer,
+	providers ProviderRegistry,
+	lifecycle ProcessLifecycle,
+	acpServer processcontract.ACPServer,
+	workerReader processcontract.WorkerRecordingReader,
+	detachedOps processcontract.DetachedOperationsCapability,
+	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
+	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
+	runtimeCosts processcontract.RuntimeCostsQueryCapability,
+) (*Process, error) {
+	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, runtimeCosts)
+}
+
+func newProcess(
+	commandFactory processcontract.CommandFactory,
+	initializer processcontract.Initializer,
+	providers ProviderRegistry,
+	lifecycle ProcessLifecycle,
+	acpServer processcontract.ACPServer,
+	workerReader processcontract.WorkerRecordingReader,
+	detachedOps processcontract.DetachedOperationsCapability,
+	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
+	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
+	runtimeCosts processcontract.RuntimeCostsQueryCapability,
 ) (*Process, error) {
 	if providers == nil {
 		return nil, fmt.Errorf("construct application process: provider registry is required")
@@ -48,6 +92,12 @@ func NewProcess(
 		initializer:    initializer,
 		providers:      providers,
 		lifecycle:      lifecycle,
+		acpServer:      acpServer,
+		workerReader:   workerReader,
+		detachedOps:    detachedOps,
+		runtimeMetrics: runtimeMetrics,
+		executionOpen:  executionOpen,
+		runtimeCosts:   runtimeCosts,
 	}, nil
 }
 
@@ -67,6 +117,64 @@ func (p *Process) ProviderRegistry() ProviderRegistry {
 		return nil
 	}
 	return p.providers
+}
+
+// ACPServer returns the production ACP stdio server Wire composed from this
+// same process's canonical Chat Sessions authority. It is exposed for
+// embedding and customer-scale verification; construction alone performs no
+// I/O, so returning it starts no connection.
+func (p *Process) ACPServer() processcontract.ACPServer {
+	if p == nil {
+		return nil
+	}
+	return p.acpServer
+}
+
+// WorkerRecordingReader returns the neutral detached Worker snapshot reader
+// composed for this process. The application process does not depend on the
+// Recordings service; the root boundary owns decoding into its public value.
+func (p *Process) WorkerRecordingReader() processcontract.WorkerRecordingReader {
+	if p == nil {
+		return nil
+	}
+	return p.workerReader
+}
+
+// DetachedOperations returns the opaque Factory Sessions capability composed
+// for this process. The root package owns its typed public projection.
+func (p *Process) DetachedOperations() processcontract.DetachedOperationsCapability {
+	if p == nil {
+		return nil
+	}
+	return p.detachedOps
+}
+
+// RuntimeMetricsQuery returns the opaque read-only Factory Runtime metrics
+// query composed for this process. The root package owns its typed public
+// projection.
+func (p *Process) RuntimeMetricsQuery() processcontract.RuntimeMetricsQueryCapability {
+	if p == nil {
+		return nil
+	}
+	return p.runtimeMetrics
+}
+
+// ExecutionRuntimeOpening returns the canonical Factory Sessions durable
+// execution opening capability composed for this process.
+func (p *Process) ExecutionRuntimeOpening() processcontract.ExecutionRuntimeOpeningCapability {
+	if p == nil {
+		return nil
+	}
+	return p.executionOpen
+}
+
+// RuntimeCostsQuery returns the opaque stateless Costs capability composed for
+// this process. pkg/root owns the typed public projection.
+func (p *Process) RuntimeCostsQuery() processcontract.RuntimeCostsQueryCapability {
+	if p == nil {
+		return nil
+	}
+	return p.runtimeCosts
 }
 
 // Execute constructs and runs one fresh command tree using invocation-local

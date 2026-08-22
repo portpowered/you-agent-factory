@@ -1,9 +1,12 @@
+import {
+  FACTORY_GRAPH_NODE_TYPES,
+  projectFactoryGraphReplayFlow,
+} from "@you-agent-factory/factory-graph";
 import { describe, expect, it } from "vitest";
 import type {
   DashboardTraceDispatch,
   DashboardWorkItemRef,
 } from "../../../api/dashboard/types";
-import { TRACE_DISPATCH_FACTORY_GRAPH_NODE_TYPES } from "../components/trace-dispatch-factory-graph-node";
 import { buildTraceDispatchFactoryGraphFlow } from "./trace-dispatch-factory-graph-flow";
 
 function buildWorkItem(
@@ -34,6 +37,53 @@ function buildDispatch(
   };
 }
 
+function buildReplayWorkstationFlow() {
+  return projectFactoryGraphReplayFlow({
+    factory: { name: "Trace parity" },
+    runtime: {
+      activity: {
+        activeDispatchOverlays: [],
+        activeWorkstationNodeIds: [],
+        issues: [],
+        resourceOccupancy: [],
+        selectedTick: 4,
+      },
+      load: {
+        issues: [],
+        resourceOccupancy: [],
+        selectedTick: 4,
+        workStateCounts: [],
+      },
+      topology: {
+        connections: [],
+        issues: [],
+        nodes: [
+          {
+            entityId: "review",
+            handles: [
+              { id: "workstation-input-target", role: "target" },
+              { id: "worker-assignment-target", role: "target" },
+              { id: "workstation-resource-target", role: "target" },
+              { id: "workstation-output-source", role: "source" },
+              { id: "workstation-approval-source", role: "source" },
+              { id: "workstation-on-continue-source", role: "source" },
+              { id: "workstation-on-failure-source", role: "source" },
+              { id: "workstation-on-rejection-source", role: "source" },
+            ],
+            id: "workstation:review",
+            kind: "workstation",
+            label: "review",
+          },
+        ],
+        ok: true,
+        selectedTick: 4,
+      },
+    },
+    selectedTick: 4,
+  });
+}
+
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: Flow coverage keeps shared-node parity and retry identity assertions together.
 describe("buildTraceDispatchFactoryGraphFlow", () => {
   it("projects dispatch history into shared workstation nodes and editor edges", () => {
     const flow = buildTraceDispatchFactoryGraphFlow([
@@ -65,16 +115,26 @@ describe("buildTraceDispatchFactoryGraphFlow", () => {
         workstation: {
           node_id: "dispatch-plan",
           transition_id: "dispatch-plan",
-          workstation_kind: "STANDARD",
           workstation_name: "dispatch-plan",
+        },
+        workstationSemantics: {
+          controlRole: "UNKNOWN",
+          runtimeRole: "UNKNOWN",
+          runtimeType: "UNKNOWN",
+          schedulingBehavior: "UNKNOWN",
         },
       },
     });
+    expect(
+      flow.nodes.find((node) => node.id === "dispatch-plan")?.data,
+    ).not.toHaveProperty("connectionAnchors");
     expect(flow.edges).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           source: "dispatch-plan",
+          sourceHandle: "workstation-output-source",
           target: "dispatch-implement",
+          targetHandle: "workstation-input-target",
           type: "factoryEditorEdge",
           data: expect.objectContaining({
             kind: "workstation-on-continue",
@@ -94,17 +154,103 @@ describe("buildTraceDispatchFactoryGraphFlow", () => {
     expect(flow.nodes[0]?.data.locale).toBe("zh");
   });
 
+  it("keeps retry nodes distinct when dispatch and work identifiers repeat", () => {
+    const flow = buildTraceDispatchFactoryGraphFlow(
+      [
+        buildDispatch("dispatch-retry", {
+          attempt: 1,
+          work_ids: ["work-shared"],
+        }),
+        buildDispatch("dispatch-retry", {
+          attempt: 2,
+          work_ids: ["work-shared"],
+        }),
+      ],
+      {
+        selectedTraceSelection: {
+          attempt: 2,
+          dispatch_id: "dispatch-retry",
+          work_id: "work-shared",
+        },
+      },
+    );
+
+    expect(flow.nodes.map((node) => node.id)).toEqual([
+      "dispatch-retry#work-shared#attempt-1",
+      "dispatch-retry#work-shared#attempt-2",
+    ]);
+    expect(flow.nodes.map((node) => node.data.selectionIdentities)).toEqual([
+      [
+        {
+          attempt: 1,
+          dispatch_id: "dispatch-retry",
+          work_id: "work-shared",
+        },
+      ],
+      [
+        {
+          attempt: 2,
+          dispatch_id: "dispatch-retry",
+          work_id: "work-shared",
+        },
+      ],
+    ]);
+    expect(flow.nodes[0]?.data.selectedWorkstation).toBe(false);
+    expect(flow.nodes[1]?.data.selectedWorkstation).toBe(true);
+    expect(flow.nodes[1]?.data.selectedWorkID).toBe("work-shared");
+  });
+
   it("registers only shared workstation graph React Flow node types", () => {
     const flow = buildTraceDispatchFactoryGraphFlow([
       buildDispatch("dispatch-plan"),
     ]);
 
-    expect(Object.keys(TRACE_DISPATCH_FACTORY_GRAPH_NODE_TYPES)).toEqual([
-      "workstation",
-    ]);
+    expect(Object.keys(FACTORY_GRAPH_NODE_TYPES).includes("workstation")).toBe(
+      true,
+    );
     expect(flow.nodes.every((node) => node.type === "workstation")).toBe(true);
     expect(flow.edges.every((edge) => edge.type === "factoryEditorEdge")).toBe(
       true,
     );
+  });
+
+  it("matches replay workstation semantics, dimensions, and handles", () => {
+    const flow = buildTraceDispatchFactoryGraphFlow([
+      buildDispatch("dispatch-review", {
+        transition_id: "review",
+        workstation_name: "review",
+      }),
+    ]);
+    const replay = buildReplayWorkstationFlow();
+    const traceNode = flow.nodes[0];
+    const replayNode = replay.nodes[0];
+
+    expect(traceNode?.type).toBe("workstation");
+    expect(replayNode?.type).toBe("workstation");
+    expect(traceNode?.data.workstationSemantics).toEqual(
+      expect.objectContaining({
+        controlRole: replayNode?.data.workstationSemantics?.controlRole,
+        runtimeRole: replayNode?.data.workstationSemantics?.runtimeRole,
+        runtimeType: replayNode?.data.workstationSemantics?.runtimeType,
+        schedulingBehavior:
+          replayNode?.data.workstationSemantics?.schedulingBehavior,
+      }),
+    );
+    expect(traceNode?.data.handles.map((handle) => handle.id)).toEqual(
+      replayNode?.data.handles.map((handle) => handle.id),
+    );
+    expect({
+      height: traceNode?.height,
+      initialHeight: traceNode?.initialHeight,
+      initialWidth: traceNode?.initialWidth,
+      measured: traceNode?.measured,
+      width: traceNode?.width,
+    }).toEqual({
+      height: replayNode?.height,
+      initialHeight: replayNode?.initialHeight,
+      initialWidth: replayNode?.initialWidth,
+      measured: replayNode?.measured,
+      width: replayNode?.width,
+    });
   });
 });

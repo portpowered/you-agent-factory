@@ -161,9 +161,15 @@ func TestAPIServerBindFailureUnwindsStartedLifecycleRoles(t *testing.T) {
 		}
 	}
 
+	stderr := inputs.Stderr()
+	const legacyBindWarning = "warning: --server is deprecated for local listener binding; use --listen <host:port> instead\n"
+	if !strings.HasPrefix(stderr, legacyBindWarning) {
+		t.Fatalf("run stderr is missing the legacy listener migration warning:\n%s", stderr)
+	}
+	stderr = strings.TrimPrefix(stderr, legacyBindWarning)
 	var response factoryapi.ErrorResponse
-	if err := json.Unmarshal([]byte(inputs.Stderr()), &response); err != nil {
-		t.Fatalf("run stderr is not exactly one ErrorResponse: %v\n%s", err, inputs.Stderr())
+	if err := json.Unmarshal([]byte(stderr), &response); err != nil {
+		t.Fatalf("run stderr is not exactly one ErrorResponse after the migration warning: %v\n%s", err, inputs.Stderr())
 	}
 	if response.Code != factoryapi.ErrorResponseCode("SERVER_BIND_FAILED") {
 		t.Fatalf("ErrorResponse = %#v, want SERVER_BIND_FAILED", response)

@@ -4,6 +4,250 @@
  */
 
 export interface paths {
+  "/metrics": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get canonical runtime metrics
+     * @description Reads the canonical Factory Visualization metrics projection. The default scope covers all retained Factory Sessions. When session_id is supplied, the server resolves that public live Factory Session ID through Factory Sessions before reading retained metrics; it never guesses a scope from the current working directory or definition. A valid resolved scope with no retained facts returns an explicit empty report.
+     */
+    get: operations["getMetrics"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/metrics/costs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get exact runtime cost rollups
+     * @description Values canonical Factory Runtime usage with the operator's explicit price table. The default scope covers all Factory Sessions. Supplying an unknown-but-valid Factory Session ID returns a successful no-usage report for that scope rather than unrelated usage. Missing prices are returned as UNPRICED rows and are never treated as zero.
+     */
+    get: operations["getMetricsCosts"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List top-level Worker Session observations
+     * @description Lists Worker Session observations through their stable top-level identity across the process. With no scope parameter, the fleet-wide view includes direct and Factory-originated observations. Explicit direct or factory scope filters remain available. Results are deterministically ordered by Worker Session identity and use an opaque cursor for bounded pagination. State filters compose with the selected origin scope, and limit is applied after filtering.
+     */
+    get: operations["listWorkerSessions"];
+    put?: never;
+    /**
+     * Start one directly resolved Worker Session
+     * @description Reserves and starts one already-resolved Worker execution. The server returns 202 only after the Worker Session identity is reserved, its opening record is retained-readable and subscribable on the returned event topic, and Workers has admitted the execution. The requestId is required for safe retries; replaying it with the same normalized start tuple returns the same Worker Session identity without another dispatch.
+     */
+    post: operations["startWorkerSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Show one top-level Worker Session observation
+     * @description Returns one authoritative Worker Session observation by its stable Worker Session identity. Direct observations expose their origin and any recorded Provider Session association without requiring callers to reconstruct a provider tuple.
+     */
+    get: operations["getWorkerSessionObservationByWorkerSessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}/continue": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Continue one terminal Worker Session
+     * @description Reserves one distinct successor Worker Session for a terminal source Worker Session and resumes the exact Provider Session association recorded by the server. The requestId and successor identity are idempotent inputs. A 202 response is returned only after the successor opening event is readable/subscribable and Workers has admitted the continuation; terminal output remains asynchronous.
+     */
+    post: operations["continueWorkerSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}/interrupt": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Interrupt one active Worker Session into a replacement
+     * @description Cancels the exact active source Worker Session dispatch, waits for its authoritative CANCELED outcome, and admits one distinct successor with replacement input. The requestId and successor identity are idempotent inputs. A 202 response is returned only after source cancellation and successor admission have crossed their authoritative barriers; successor terminal output remains asynchronous. Callers that need terminal output should inspect or stream the successor Worker Session.
+     */
+    post: operations["interruptWorkerSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}/pause": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Pause one active Worker Session
+     * @description Cancels the exact admitted Worker Session dispatch through the Workers boundary and returns only after the authoritative PAUSED snapshot is available. Repeated requests are idempotent.
+     */
+    post: operations["pauseWorkerSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}/resume": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Resume one paused Worker Session
+     * @description Admits exactly one continuation of a paused Worker Session using the exact Provider Session association recorded on that session. Repeated requests are idempotent and never select a fallback Provider Session.
+     */
+    post: operations["resumeWorkerSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}/cancel": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Cancel one Worker Session
+     * @description Requests cancellation of the exact admitted Worker Session dispatch. Cancellation is terminal and repeated requests are idempotent.
+     */
+    post: operations["cancelWorkerSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}/terminate": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Terminate one Worker Session
+     * @description Requests termination of the exact admitted Worker Session dispatch and joins its completion before returning. Repeated and concurrent calls are idempotent and return the canonical terminal snapshot.
+     */
+    post: operations["terminateWorkerSession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Stream top-level Worker Session events
+     * @description Streams the retained and live Worker Session Events topic by stable Worker Session identity. The server resolves the exact topic from its own observation registry; callers do not supply Provider Session identity fields. Retained records are emitted first, followed by live records unless replayOnly is true.
+     */
+    get: operations["streamWorkerSessionEventsByTopLevelWorkerSessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/worker-sessions/{worker_session_id}/transcript": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read one top-level Worker Session transcript
+     * @description Returns the normalized transcript for a terminal Worker Session by its stable identity. Provider Session association and projection are resolved by the Worker Sessions service; callers cannot substitute a provider, kind, or provider-issued id tuple.
+     */
+    get: operations["readWorkerSessionTranscriptByWorkerSessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/factory-sessions/{session_id}/work": {
     parameters: {
       query?: never;
@@ -22,6 +266,186 @@ export interface paths {
      * @description Submits one work item to the explicitly selected live factory session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
      */
     post: operations["submitWorkBySessionId"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/approvals": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List pending human approvals for one session
+     * @description Lists durable HUMAN_APPROVAL requests reconstructed from the canonical Factory Event ledger for the explicitly selected Factory Session. Results are deterministically ordered by approval identity and are read-only in this lane.
+     */
+    get: operations["listHumanApprovalsBySessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/approvals/{approval_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Show one pending human approval
+     * @description Returns one durable pending HUMAN_APPROVAL projection by stable approval identity.
+     */
+    get: operations["getHumanApprovalBySessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/worker-sessions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Worker Sessions correlated with one Work item
+     * @description Returns authoritative Worker Session observations for the requested Work item in the explicitly selected Factory Session. A known Work with no correlated sessions returns an empty sessions array; an unknown Work returns NOT_FOUND.
+     */
+    get: operations["listWorkerSessionsBySessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/worker-sessions/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Stream retained and live Worker Session events
+     * @description Streams the canonical Worker Session Events topic for the exact Provider Session identity in the explicitly selected Factory Session. Retained records are emitted first in aggregate order, followed by live records unless replayOnly is true. In replay-only mode the retained head is captured before delivery, no live follower is registered, and one REPLAY_SUMMARY frame closes the stream after the retained drain. Each data frame is serialized JSON matching WorkerSessionEvent. The terminal event is marked TERMINAL for an active session or TERMINAL_REPLAY for an already-terminal session. Source failures are emitted as an explicit SOURCE_FAILURE frame so clients can preserve complete records already written and return a typed non-success result. Every event record carries its Worker Session cursor. after_position is exclusive and may be paired with stream_generation_id; cursors are scoped to the Worker Session and never fall back to another history. The retained snapshot and live registration share one handoff, so records committed after the captured high-water mark are delivered exactly once. A terminal durable recording carries a COMPLETE, DEGRADED, or INCOMPLETE replay summary and does not wait for an unavailable live source.
+     */
+    get: operations["streamWorkerSessionEventsBySessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/worker-sessions/{worker_session_id}/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Stream retained and live Worker Session events by Worker Session identity
+     * @description Streams the canonical Worker Session Events topic for the stable Worker Session identity returned by the Worker Sessions list operation. This provider-neutral path remains available when the provider did not emit a native Provider Session reference. Retained records are emitted first in aggregate order, followed by live records unless replayOnly is true. In replay-only mode the retained head is captured before delivery, no live follower is registered, and one REPLAY_SUMMARY frame closes the stream after the retained drain. Every event record carries its Worker Session cursor. after_position is exclusive and may be paired with stream_generation_id; a cursor from another Worker Session, a future position, stale retained history, or an unavailable generation is rejected with a typed error. In follow mode the durable-to-live handoff is atomic and duplicate overlap is suppressed.
+     */
+    get: operations["streamWorkerSessionEventsByWorkerSessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/worker-sessions/{worker_session_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Show one Worker Session observation by Worker Session ID
+     * @description Returns the authoritative observation for the exact Worker Session identity in the explicitly selected Factory Session. The Worker Session ID is the canonical lookup key for live and durable history; Provider Session identity is optional enrichment and is never required for a Worker to be observable.
+     */
+    get: operations["getWorkerSessionObservationByFactorySessionAndWorkerSessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/worker-sessions/{worker_session_id}/transcript": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read one Worker Session transcript by Worker Session ID
+     * @description Returns normalized transcript entries for the exact Worker Session identity in the explicitly selected Factory Session. Provider-native transcript detail is optional; when it is absent the server returns a typed unavailable result while the canonical Worker history remains readable through the Worker-ID event route.
+     */
+    get: operations["readWorkerSessionTranscriptByFactorySessionAndWorkerSessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/worker-sessions/detail": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Show one Worker Session observation
+     * @description Returns one authoritative Worker Session observation for the exact Provider Session identity in the explicitly selected Factory Session. The response is derived from Worker Sessions lifecycle state, Work correlation, Provider Session projection facts, and canonical timing; it never exposes provider storage paths or raw rollout content.
+     */
+    get: operations["getWorkerSessionObservationBySessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/worker-sessions/transcript": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read one finished Worker Session transcript
+     * @description Returns the normalized, ordered transcript for a terminal Worker Session identified by its exact Provider Session identity in the explicitly selected Factory Session. The response is projected through Provider Sessions and never parses raw rollout files at the CLI boundary.
+     */
+    get: operations["readWorkerSessionTranscriptBySessionId"];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -142,6 +566,7 @@ export interface paths {
      *     Reconnect cursors: pass after_event_id or after_sequence to receive only events recorded after the acknowledged point. When both are present, after_event_id wins. For session-scoped streams, after_sequence prefers FactoryEvent.context.sessionSequence when that field is present; otherwise it falls back to FactoryEvent.context.sequence. Omitting both cursors starts replay from the beginning of the session's currently retained history.
      *     Replay bounds: live sessions replay only events retained for the current stream generation of the targeted Factory Session. Durable execution session identifiers replay persisted canonical records for that session without crossing into another session. Cursors that no longer match the retained history boundary return typed invalid-cursor handling (400 on SSE open, cursor_stale on JSON reconnect probe) rather than silently skipping events.
      *     Identity handshake before reconnect: compare the response headers X-Factory-Session-Backend-Scope-Id, X-Factory-Session-Logical-Session-Key-Id, X-Factory-Session-Factory-Session-Id, and X-Factory-Session-Stream-Generation-Id with the latest sync-preflight or session-read identity set before reusing a persisted reconnect cursor or stream-derived cache. A changed streamGenerationId means the current stream generation invalidates prior cursors even when factorySessionId is unchanged.
+     *     Bounded retained-history reads: X-Factory-Session-Retained-Event-Count reports exactly how many leading text/event-stream data frames make up the already-committed retained-history prefix, captured at subscribe time. Clients that need a point-in-time snapshot of committed history can read exactly this many records and stop, instead of inferring completion from stream quiescence.
      *     Keepalives: successful SSE responses use Connection keep-alive. Idle periods may occur while the Factory Session is waiting for new canonical events; clients must treat these as normal waiting state rather than terminal stream completion unless the HTTP connection closes.
      *     Expired-cursor recovery: when Accept includes application/json, the same route acts as a reconnect probe and returns FactorySessionEventStreamRecovery instead of opening Server-Sent Events. cursor_stale outcomes tell clients to retry with omitAfterEventId and omitAfterSequence set so the next open omits stale cursors. UNKNOWN_SESSION means the selector does not resolve to a live or durable session and never falls back to the default session.
      *     Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
@@ -229,6 +654,26 @@ export interface paths {
     get: operations["listModels"];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/models/invocations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Invoke a model through the generic contract
+     * @description Invokes a configured model or supported source reference through the provider-neutral Models contract. Ordered inputs and named outputs remain detached from backend and cache details.
+     */
+    post: operations["invokeGenericModel"];
     delete?: never;
     options?: never;
     head?: never;
@@ -513,6 +958,26 @@ export interface paths {
     get: operations["getFactorySessionDispatch"];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/resources/{resource_id}/capacity": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Set one Factory Session resource capacity
+     * @description Changes the effective capacity of one live Factory Session resource by stable Resource.id. The operation is revisioned and idempotent. It does not cancel, interrupt, terminate, restart, or admit work directly; a capacity increase wakes waiting runtime dispatches.
+     */
+    post: operations["setFactorySessionResourceCapacity"];
     delete?: never;
     options?: never;
     head?: never;
@@ -844,7 +1309,7 @@ export interface components {
       items?: components["schemas"]["SubmitWorkItemList"];
       /** @description Optional canonical ordered work content parts for this submission. */
       content?: components["schemas"]["WorkContent"];
-      /** @description Opaque work payload forwarded as raw JSON. */
+      /** @description Opaque work payload forwarded as raw JSON. Each submitted Work payload is limited to 65,536 bytes measured from its compact UTF-8 JSON value; exactly 65,536 bytes is allowed. An oversized submission returns the operation's 400 BAD_REQUEST ErrorResponse with payloadBytes and payloadLimitBytes; those values count bytes, not characters. */
       payload?: unknown;
       tags?: components["schemas"]["StringMap"];
       /** @description Optional token-level runtime relations preserved on the submitted work item. */
@@ -919,6 +1384,16 @@ export interface components {
       workName?: string;
       /** @description Current authored work state that best explains the non-success invocation outcome when one scoped work item is available. */
       workState?: string;
+      /** @description Pending human-approval identity when errorCode is INVOCATION_NEEDS_HUMAN. */
+      approvalId?: string;
+      /** @description Reserved dispatch identity that is waiting for operator input. */
+      dispatchId?: string;
+      /** @description Authored HUMAN_APPROVAL workstation identity. */
+      workstationId?: string;
+      /** @description Customer-authored HUMAN_APPROVAL workstation name. */
+      workstationName?: string;
+      /** @description Fixed decision vocabulary available to the operator. */
+      decisions?: InvocationResponseDecisions[];
     };
     /**
      * @description Terminal status for a factory-session invocation.
@@ -1015,6 +1490,646 @@ export interface components {
     ListWorkResponse: {
       results: components["schemas"]["Work"][];
       paginationContext?: components["schemas"]["PaginationContext"];
+      counts?: components["schemas"]["ListWorkCountSummary"];
+    };
+    ListWorkCountSummary: {
+      /** @description Complete filtered Work total before page slicing. */
+      total: number;
+    };
+    ListWorkerSessionsResponse: {
+      /** @description Deterministically ordered Worker Session observations correlated with the requested Work. */
+      sessions: components["schemas"]["WorkerSessionObservation"][];
+      /** @description Bounded pagination context for top-level Worker Session observation queries. */
+      paginationContext?: components["schemas"]["PaginationContext"];
+    };
+    /** @description One caller-owned idempotent request for a directly resolved Worker execution. Worker Sessions owns reservation, event visibility, supervision, and admission; it does not select a provider or runner from this payload. */
+    WorkerSessionStartRequest: {
+      /** @description Required caller idempotency key for this asynchronous start. */
+      requestId: string;
+      /** @description Stable Worker Session identity to reserve and return. */
+      workerSessionId: string;
+      /** @description Already-resolved Workers route and execution input. */
+      execution: components["schemas"]["WorkerSessionResolvedExecution"];
+      /** @description Bounded total attempt budget; omitted means one attempt. */
+      retry?: components["schemas"]["WorkerSessionStartRetryPolicy"];
+    };
+    /** @description Admission acknowledgment for one Worker Session. A successful response is emitted only after the opening event is readable/subscribable and Workers has admitted the execution; terminal Worker output remains asynchronous. */
+    WorkerSessionStartResponse: {
+      /** @description Caller idempotency key echoed for correlation. */
+      requestId: string;
+      /** @description Stable Worker Session identity for subsequent inspection and control. */
+      workerSessionId: string;
+      /** @description Always true for a 202 response. */
+      accepted: boolean;
+      /** @enum {string} */
+      state: WorkerSessionStartResponseState;
+      /** @description Deterministic Events topic whose retained opening record is ready to read and subscribe. */
+      eventTopic: string;
+    };
+    /** @description Idempotent continuation request for one terminal Worker Session. The server resolves and validates the source Provider Session association; callers may supply only the successor identity and follow-up input. */
+    WorkerSessionContinueRequest: {
+      /** @description Required caller idempotency key for this continuation. */
+      requestId: string;
+      /** @description Distinct Worker Session identity to reserve for the successor. */
+      successorWorkerSessionId: string;
+      /** @description Non-empty follow-up input delivered to the resumed Provider Session. */
+      followUpInput: string;
+    };
+    /** @description Admission acknowledgment for a Worker Session continuation. The response exposes the source-to-successor lineage needed to inspect or stream the successor without exposing provider selection inputs. */
+    WorkerSessionContinueResponse: {
+      /** @description Caller idempotency key echoed for correlation. */
+      requestId: string;
+      /** @description Stable terminal Worker Session identity used as the source. */
+      sourceWorkerSessionId: string;
+      /** @description Stable Worker Session identity reserved for the successor. */
+      successorWorkerSessionId: string;
+      /** @description Stable predecessor identity recorded on the successor; equal to sourceWorkerSessionId. */
+      predecessorWorkerSessionId: string;
+      /** @description Always true for a 202 response. */
+      accepted: boolean;
+      /** @enum {string} */
+      state: WorkerSessionContinueResponseState;
+      /** @description Deterministic Events topic whose retained opening record is ready to read and subscribe. */
+      eventTopic: string;
+    };
+    /** @description Idempotent interrupt-and-replace request for one active Worker Session. The server cancels the exact source dispatch, waits for its authoritative CANCELED outcome, and admits the distinct successor with this replacement input. The source identity is supplied by the route. */
+    WorkerSessionInterruptRequest: {
+      /** @description Required caller idempotency key for this interrupt. */
+      requestId: string;
+      /** @description Distinct Worker Session identity to reserve for the replacement. */
+      successorWorkerSessionId: string;
+      /** @description Non-empty replacement input delivered to the admitted successor. */
+      replacementMessage: string;
+    };
+    /** @description Detached lifecycle snapshot captured at an interrupt operation boundary. */
+    WorkerSessionInterruptSnapshot: {
+      /** @description Stable Worker Session identity. */
+      workerSessionId: string;
+      /** @enum {string} */
+      state: WorkerSessionInterruptSnapshotState;
+      /** @description Deterministic Events topic for this Worker Session. */
+      eventTopic: string;
+    };
+    /** @description Admission acknowledgment for an interrupt-and-replace operation. A 202 response is returned only after source cancellation has reached the authoritative CANCELED state and the successor has crossed its admission barrier. Successor terminal output remains asynchronous. */
+    WorkerSessionInterruptResponse: {
+      /** @description Caller idempotency key echoed for correlation. */
+      requestId: string;
+      /** @description Active source Worker Session that was interrupted. */
+      sourceWorkerSessionId: string;
+      /** @description Replacement Worker Session admitted after source cancellation. */
+      successorWorkerSessionId: string;
+      /**
+       * @description Authoritative phase reached by a successful interrupt.
+       * @enum {string}
+       */
+      phase: WorkerSessionInterruptResponsePhase;
+      /** @description Always true for a 202 response. */
+      accepted: boolean;
+      source: components["schemas"]["WorkerSessionInterruptSnapshot"];
+      successor: components["schemas"]["WorkerSessionInterruptSnapshot"];
+    };
+    /** @description Stable, phase-aware interrupt failure. Source and successor snapshots are included when the server reached the corresponding operation boundary. */
+    WorkerSessionInterruptError: {
+      message: string;
+      family: components["schemas"]["ErrorFamily"];
+      /** @description Stable machine-readable interrupt error code. */
+      code: string;
+      /**
+       * @description Stable operation boundary or caller/transport phase.
+       * @enum {string}
+       */
+      phase: WorkerSessionInterruptErrorPhase;
+      requestId?: string;
+      sourceWorkerSessionId?: string;
+      successorWorkerSessionId?: string;
+      source?: components["schemas"]["WorkerSessionInterruptSnapshot"];
+      successor?: components["schemas"]["WorkerSessionInterruptSnapshot"];
+    };
+    /** @description Detached result for one Worker Session lifecycle control. NOOP is used for idempotent requests, including a request against an already-terminal session; UNSUPPORTED identifies a valid lifecycle state that does not admit the requested action. */
+    WorkerSessionControlResponse: {
+      /** @description Stable Worker Session identity targeted by the control. */
+      workerSessionId: string;
+      /** @enum {string} */
+      action: WorkerSessionControlResponseAction;
+      /** @enum {string} */
+      outcome: WorkerSessionControlResponseOutcome;
+      /** @enum {string} */
+      state: WorkerSessionControlResponseState;
+      /** @description Exact admitted dispatch identity, or empty before admission. */
+      dispatchId: string;
+    };
+    WorkerSessionStartRetryPolicy: {
+      /**
+       * @description Total provider attempts, where zero and one both mean one attempt. Values above 16 are rejected at the HTTP boundary.
+       * @default 0
+       */
+      maxAttempts: number;
+    };
+    /** @description Workers-owned resolved execution input. All selection and prompt facts are supplied by the caller or an upstream resolver; Worker Sessions only passes this detached value to the named Workers route. */
+    WorkerSessionResolvedExecution: {
+      /** @description Authored workstation route or the reserved provider-invocation route. */
+      workstationName: string;
+      dispatch: components["schemas"]["WorkerSessionResolvedDispatch"];
+      workerType?: string;
+      workstationType?: string;
+      runnerId?: string;
+      runnerSelectionSource?: string;
+      executorProvider?: string;
+      projectId?: string;
+      factorySessionId?: string;
+      inputTokens?: unknown[];
+      modelOperation?: string;
+      modelBindings?: {
+        [key: string]: unknown;
+      }[];
+      model?: string;
+      modelProvider?: string;
+      reasoningEffort?: string;
+      systemPrompt?: string;
+      userMessage?: string;
+      outputSchema?: string;
+      outputContract?: string;
+      envVars?: {
+        [key: string]: string;
+      };
+      worktree?: string;
+      workingDirectory?: string;
+      workingDirectoryAuthored?: boolean;
+      resumeSession?: components["schemas"]["WorkerSessionProviderSessionRef"];
+      skipPermissions?: boolean;
+    };
+    WorkerSessionResolvedDispatch: {
+      /** @description Stable Workers dispatch or attempt identity. */
+      dispatchId: string;
+      transitionId?: string;
+      workerType?: string;
+      workstationName: string;
+      projectId?: string;
+      expectedArtifactContext?: {
+        [key: string]: unknown;
+      };
+      currentChainingTraceId?: string;
+      previousChainingTraceIds?: string[];
+      execution?: components["schemas"]["WorkerSessionExecutionMetadata"];
+      inputTokens?: unknown[];
+      inputBindings?: {
+        [key: string]: string[];
+      };
+    };
+    WorkerSessionExecutionMetadata: {
+      dispatchCreatedTick?: number;
+      currentTick?: number;
+      requestId?: string;
+      traceId?: string;
+      workIds?: string[];
+      replayKey?: string;
+    };
+    WorkerSessionTranscriptResponse: {
+      /** @description Stable Worker Session identity. */
+      workerSessionId: string;
+      /** @description Explicit Factory Session scope used for this transcript read. */
+      factorySessionId?: string;
+      providerSession: components["schemas"]["WorkerSessionProviderSessionRef"];
+      /** @description Work identities correlated with this Worker Session attempt. */
+      workIds: string[];
+      /** @description Optional turn correlation identifier. */
+      turnId?: string | null;
+      /** @description Stable attempt or dispatch identity. */
+      attemptId: string;
+      /** @description Terminal Worker Session lifecycle state at transcript read time. */
+      state: string;
+      /** @description Ordered normalized transcript entries projected by Provider Sessions. */
+      entries: components["schemas"]["ProviderSessionTranscriptEntry"][];
+    };
+    WorkerSessionObservation: {
+      /** @description Stable Worker Session identity. */
+      workerSessionId: string;
+      /** @description Whether this observation was admitted through the direct top-level Worker Session surface. */
+      direct: boolean;
+      /** @description Explicit Factory Session scope used for this observation. */
+      factorySessionId?: string;
+      /** @description Stable primary Work identity associated with this Worker Session. The complete correlation set remains available in workIds. */
+      workId?: string | null;
+      /** @description Display name of the primary associated Work when Work can be resolved. */
+      workName?: string | null;
+      providerSession?: components["schemas"]["WorkerSessionProviderSessionRef"];
+      /** @description Model identifier resolved for the provider invocation, when recorded. */
+      model?: string;
+      /** @description Reasoning effort resolved for the provider invocation, when recorded. */
+      reasoningEffort?: string;
+      /** @description Whether a provider-session identity is available for this attempt. */
+      providerSessionAvailable: boolean;
+      /** @description Work identities correlated with this Worker Session attempt. */
+      workIds: string[];
+      /** @description Optional turn correlation identifier. */
+      turnId: string | null;
+      /** @description Stable attempt or dispatch identity. */
+      attemptId: string;
+      /** @enum {string} */
+      state: WorkerSessionObservationState;
+      /** Format: date-time */
+      startedAt: string | null;
+      /** Format: date-time */
+      endedAt: string | null;
+      /**
+       * Format: int64
+       * @description Projected duration in milliseconds when authoritative timing exists.
+       */
+      durationMillis: number | null;
+      /** @enum {string} */
+      durationBasis: WorkerSessionObservationDurationBasis;
+      tokenUsage?: components["schemas"]["ProviderSessionTokenUsage"];
+      /** @description Optional provider-neutral per-turn context projection. Omitted when supported cumulative input evidence is unavailable. */
+      turnUsage?: components["schemas"]["WorkerSessionTurnUsage"];
+      /** @enum {string} */
+      transcript: WorkerSessionObservationTranscript;
+      failure?: components["schemas"]["WorkerSessionFailure"];
+      /**
+       * @description Recordings-owned capture health, independent of Worker execution outcome.
+       * @enum {string}
+       */
+      recordingHealth?: WorkerSessionObservationRecordingHealth;
+      /** @description Stable safe reason when recording health is DEGRADED or INCOMPLETE. */
+      recordingHealthReason?: string;
+      parse: components["schemas"]["WorkerSessionParseDiagnostics"];
+    };
+    /** @description Provider-neutral per-turn context projection derived from supported cumulative input counters. Absence means the transcript cannot support these metrics. */
+    WorkerSessionTurnUsage: {
+      /** @description Number of supported provider usage turns represented by the transcript's cumulative input counters. */
+      turnCount: number;
+      /** @description Input tokens for the final supported turn, derived by subtracting its prior cumulative counter. The first counter uses zero. */
+      finalContextTokens: number;
+      /** @description Largest derived per-turn input token count; this is a context metric, not a pricing or cost calculation. */
+      peakContextTokens: number;
+    };
+    WorkerSessionEvent: {
+      delivery: components["schemas"]["WorkerSessionEventDelivery"];
+      /** @description Stable Worker Session identity for this stream. */
+      workerSessionId: string;
+      /** @description Explicit Factory Session scope used for this event stream. */
+      factorySessionId?: string;
+      providerSession: components["schemas"]["WorkerSessionProviderSessionRef"];
+      /** @description Work identities correlated with the streamed attempt. */
+      workIds: string[];
+      /** @description Canonical event record, or null for an explicit source failure. */
+      event: components["schemas"]["WorkerSessionEventRecord"];
+      /** @description Stable source-failure code when delivery is SOURCE_FAILURE. */
+      errorCode: string | null;
+      /** @description Safe source-failure message when delivery is SOURCE_FAILURE. */
+      errorMessage: string | null;
+      /** @description Completeness marker when delivery is REPLAY_SUMMARY. */
+      replaySummary?: components["schemas"]["WorkerSessionReplaySummary"];
+      /**
+       * @description Recordings-owned capture health, independent of Worker execution outcome.
+       * @enum {string}
+       */
+      recordingHealth?: WorkerSessionEventRecordingHealth;
+      /** @description Stable safe reason when recording health is DEGRADED or INCOMPLETE. */
+      recordingHealthReason?: string;
+    };
+    WorkerSessionReplaySummary: {
+      /**
+       * @description Stable record kind for the finite Worker Session replay marker.
+       * @enum {string}
+       */
+      kind: WorkerSessionReplaySummaryKind;
+      /** @description Whether the retained capture represents a terminal Worker Session. */
+      complete: boolean;
+      /** @description Stable lifecycle classification for the replay result. */
+      reason: string;
+      /**
+       * Format: int64
+       * @description Number of canonical event records emitted before this summary.
+       */
+      eventsEmitted: number;
+    };
+    /**
+     * @description Delivery outcome for one Worker Session stream frame. RECORD is a retained or live canonical event, TERMINAL marks the live terminal event, and TERMINAL_REPLAY marks the terminal event in an already-terminal replay. SOURCE_FAILURE is an explicit non-event outcome after the stream has opened.
+     * @enum {string}
+     */
+    WorkerSessionEventDelivery: WorkerSessionEventDelivery;
+    WorkerSessionEventRecord: {
+      /** @description Typed reconnect cursor for this canonical event record. */
+      cursor: components["schemas"]["WorkerSessionEventCursor"];
+      /**
+       * Format: int64
+       * @description Aggregate position assigned by the canonical Events ledger.
+       */
+      position: number;
+      /** @description Source-native event family. */
+      sourceType: string;
+      /** @description Source-native event identity. */
+      sourceId: string;
+      /**
+       * Format: int64
+       * @description Source-native monotonic sequence.
+       */
+      sourceSequence: number;
+      /** @description Source-native idempotency event identity. */
+      sourceEventId: string;
+      /** @description Source-native payload schema identity. */
+      schemaId: string;
+      /** @description Source-native canonical event payload. */
+      payload: {
+        [key: string]: unknown;
+      };
+    };
+    WorkerSessionEventCursor: {
+      /** @description Worker Session identity that owns the acknowledged position. */
+      workerSessionId?: string;
+      /**
+       * Format: int64
+       * @description Exclusive Worker Session event position acknowledged by the client.
+       */
+      position: number;
+      /** @description Durable Factory event-stream generation that issued the position. */
+      streamGenerationId?: string;
+    };
+    CostsScope: {
+      /**
+       * @description Selection scope used to produce the report.
+       * @enum {string}
+       */
+      kind: CostsScopeKind;
+      /** @description Selected Factory Session identity when kind is FACTORY_SESSION. */
+      factory_session_id?: string;
+    };
+    CostsCoverage: {
+      /** @description Number of canonical usage rows encountered in the selection. */
+      encountered_rows: number;
+      /** @description Number of usage rows that have a complete configured valuation. */
+      priced_rows: number;
+      /** @description Number of usage rows returned as UNPRICED. */
+      unpriced_rows: number;
+      /** @description Distinct provider/model pairs encountered in the selection. */
+      encountered_provider_models: number;
+      /** @description Distinct provider/model pairs whose encountered rows are all priced. */
+      priced_provider_models: number;
+      /** @description Distinct provider/model pairs with one or more unpriced rows. */
+      unpriced_provider_models: number;
+    };
+    CostsTokenTotals: {
+      /**
+       * Format: int64
+       * @description Input tokens plus output tokens; subclass counts are not added a second time.
+       */
+      total_tokens: number | null;
+      /**
+       * Format: int64
+       * @description Aggregate input-token count, or null when the source measurement was absent.
+       */
+      input_tokens: number | null;
+      /**
+       * Format: int64
+       * @description Aggregate output-token count, or null when the source measurement was absent.
+       */
+      output_tokens: number | null;
+      /**
+       * Format: int64
+       * @description Aggregate cached-input subclass count, or null when no subclass measurement was present.
+       */
+      cached_input_tokens: number | null;
+      /**
+       * Format: int64
+       * @description Aggregate reasoning-output subclass count, or null when no subclass measurement was present.
+       */
+      reasoning_output_tokens: number | null;
+    };
+    CostsUnpricedPair: {
+      /** @description Canonical provider identity, or null when the usage identity was unavailable. */
+      provider: string | null;
+      /** @description Resolved model identity, or null when the usage identity was unavailable. */
+      model: string | null;
+      /** @description Distinct unpriced dispatches for this provider/model pair in the containing scope. */
+      dispatch_count: number;
+    };
+    CostsLineItem: {
+      factory_session_id?: string;
+      work_id?: string;
+      dispatch_id?: string;
+      worker_session_id?: string;
+      provider?: string;
+      model?: string;
+      /** Format: int64 */
+      input_tokens?: number;
+      /** Format: int64 */
+      output_tokens?: number;
+      /** Format: int64 */
+      cached_input_tokens?: number;
+      /** Format: int64 */
+      reasoning_output_tokens?: number;
+      /**
+       * @description PRICED means every measured token class has a configured rate; UNPRICED means the row is retained with its tokens but cannot be fully valued.
+       * @enum {string}
+       */
+      status: CostsLineItemStatus;
+      /** @description Exact USD decimal amount; absent for UNPRICED rows and present as "0" for explicitly free usage. */
+      priced_amount?: string;
+      /** @description Actionable reason when status is UNPRICED. */
+      reason?: string;
+    };
+    CostsRollup: {
+      /** @description Stable dimension key for this rollup. */
+      key: string;
+      /**
+       * @description Currency of the known cost amount.
+       * @enum {string}
+       */
+      currency: CostsRollupCurrency;
+      /** Format: int64 */
+      input_tokens?: number;
+      /** Format: int64 */
+      output_tokens?: number;
+      /** Format: int64 */
+      cached_input_tokens?: number;
+      /** Format: int64 */
+      reasoning_output_tokens?: number;
+      /**
+       * @description PRICED means all usage rows in the rollup are valued; PARTIAL means some are valued; UNPRICED means usage exists but none is valued; NO_USAGE means no canonical usage rows were encountered.
+       * @enum {string}
+       */
+      status: CostsRollupStatus;
+      /** @description Exact USD decimal for the priced portion of this rollup; PARTIAL never implies a complete total. */
+      known_cost: string | null;
+      /**
+       * @deprecated
+       * @description Exact USD decimal subtotal; absent when no usage is priced.
+       */
+      priced_subtotal?: string;
+      token_totals: components["schemas"]["CostsTokenTotals"];
+      /** @description Number of distinct dispatches whose usage is not fully valued in this rollup. */
+      unpriced_dispatch_count: number;
+      /** @description Deterministically ordered provider/model pairs contributing unpriced dispatches in this rollup. */
+      unpriced_pairs: components["schemas"]["CostsUnpricedPair"][];
+      coverage: components["schemas"]["CostsCoverage"];
+    };
+    CostsProviderModelRollup: {
+      /** @description Canonical provider identity, when known. */
+      provider: string;
+      /** @description Exact resolved model identity, when known. */
+      model: string;
+      /** @description Stable public provider/model pair key in the form provider/model. */
+      key: string;
+      /**
+       * @description Currency of the known cost amount.
+       * @enum {string}
+       */
+      currency: CostsProviderModelRollupCurrency;
+      /** Format: int64 */
+      input_tokens?: number;
+      /** Format: int64 */
+      output_tokens?: number;
+      /** Format: int64 */
+      cached_input_tokens?: number;
+      /** Format: int64 */
+      reasoning_output_tokens?: number;
+      /**
+       * @description PRICED means all usage rows for this provider/model are valued; PARTIAL means some are valued; UNPRICED means usage exists but none is valued; NO_USAGE means this pair has no usage rows.
+       * @enum {string}
+       */
+      status: CostsProviderModelRollupStatus;
+      /** @description Exact USD decimal for the priced portion of this provider/model rollup; PARTIAL never implies a complete total. */
+      known_cost: string | null;
+      /**
+       * @deprecated
+       * @description Exact USD decimal subtotal; absent when no usage is priced.
+       */
+      priced_subtotal?: string;
+      token_totals: components["schemas"]["CostsTokenTotals"];
+      /** @description Number of distinct dispatches whose usage is not fully valued for this provider/model. */
+      unpriced_dispatch_count: number;
+      /** @description Deterministically ordered unpriced provider/model facts for this rollup. */
+      unpriced_pairs: components["schemas"]["CostsUnpricedPair"][];
+      coverage: components["schemas"]["CostsCoverage"];
+    };
+    CostsReport: {
+      scope: components["schemas"]["CostsScope"];
+      /**
+       * @description Currency of all configured rates and monetary amounts.
+       * @enum {string}
+       */
+      currency: CostsReportCurrency;
+      /**
+       * @description PRICED means every usage row is valued; PARTIAL means some rows are valued; UNPRICED means usage exists but none is valued; NO_USAGE means no canonical usage rows were encountered. Missing price is never represented as zero.
+       * @enum {string}
+       */
+      status: CostsReportStatus;
+      /** @description Exact USD decimal for the priced portion. Null means no usage row had a known price; PARTIAL never implies a complete total. */
+      known_cost: string | null;
+      /**
+       * @deprecated
+       * @description Exact USD decimal subtotal for fully priced rows; absent when no row is priced.
+       */
+      priced_subtotal?: string;
+      token_totals: components["schemas"]["CostsTokenTotals"];
+      /** @description Number of distinct dispatches whose usage is not fully valued. */
+      unpriced_dispatch_count: number;
+      /** @description Deterministically ordered provider/model pairs contributing unpriced dispatches; null identities are explicit unknowns. */
+      unpriced_pairs: components["schemas"]["CostsUnpricedPair"][];
+      coverage: components["schemas"]["CostsCoverage"];
+      /** @description Deterministically ordered canonical usage rows and their valuation status. */
+      line_items: components["schemas"]["CostsLineItem"][];
+      /** @description Rollups keyed by Work item identity. */
+      work_items: components["schemas"]["CostsRollup"][];
+      /** @description Rollups keyed by Worker Session identity. */
+      worker_sessions: components["schemas"]["CostsRollup"][];
+      /** @description Rollups keyed by canonical provider/model pair. */
+      provider_models: components["schemas"]["CostsProviderModelRollup"][];
+      /** @description Rollups keyed by Factory Session identity. */
+      factory_sessions: components["schemas"]["CostsRollup"][];
+    };
+    MetricsScope: {
+      /** @description Selection scope used to produce the report: ALL_FACTORY_SESSIONS or FACTORY_SESSION. */
+      kind: string;
+      /** @description Public Factory Session identity when kind is FACTORY_SESSION. */
+      factory_session_id?: string;
+    };
+    MetricsCost: {
+      /** @description Cost is unavailable on the canonical metrics projection; no numeric price is implied. */
+      availability: string;
+    };
+    MetricsDuration: {
+      unit: string;
+      samples: number;
+      /** Format: double */
+      p50?: number | null;
+      /** Format: double */
+      p95?: number | null;
+    };
+    MetricsAggregate: {
+      /** Format: double */
+      input_tokens: number;
+      /** Format: double */
+      output_tokens: number;
+      /** Format: double */
+      completed_dispatches: number;
+      failures_by_reason: {
+        [key: string]: number;
+      };
+      dispatch_latency: components["schemas"]["MetricsDuration"];
+      provider_latency: components["schemas"]["MetricsDuration"];
+    };
+    MetricsBreakdown: {
+      key: string;
+      aggregate: components["schemas"]["MetricsAggregate"];
+    };
+    MetricsUsageRow: {
+      factory_session_id?: string;
+      work_id?: string;
+      dispatch_id?: string;
+      worker_session_id?: string;
+      provider?: string;
+      model?: string;
+      /** Format: int64 */
+      input_tokens?: number;
+      /** Format: int64 */
+      output_tokens?: number;
+      /** Format: int64 */
+      cached_input_tokens?: number;
+      /** Format: int64 */
+      reasoning_output_tokens?: number;
+    };
+    MetricsReport: {
+      scope: components["schemas"]["MetricsScope"];
+      cost: components["schemas"]["MetricsCost"];
+      totals: components["schemas"]["MetricsAggregate"];
+      workstations: components["schemas"]["MetricsBreakdown"][];
+      worker_types: components["schemas"]["MetricsBreakdown"][];
+      providers: components["schemas"]["MetricsBreakdown"][];
+      usage_rows: components["schemas"]["MetricsUsageRow"][];
+    };
+    WorkerSessionProviderSessionRef: {
+      /** @description Provider identity that issued the correlated session. */
+      provider: string;
+      /** @description Provider-defined identifier kind. */
+      kind: string;
+      /** @description Provider-issued session identifier. */
+      id: string;
+    };
+    WorkerSessionFailure: {
+      /** @description Bounded Worker Session failure classification. */
+      kind: string;
+      /** @description Customer-safe failure detail derived by Worker Sessions. */
+      detail: string;
+      /** @description Optional bounded Workers-owned agent-run class distinguishing provider and harness failures. */
+      agentRunFailureClass: string | null;
+      /** @description Optional bounded Providers failure classification. */
+      providerFailureKind: string | null;
+      /** @description Optional bounded continuation rejection classification. */
+      providerContinuationFailureKind: string | null;
+      /** @description Optional bounded unsupported continuation outcome. */
+      providerContinuationOutcome: string | null;
+    };
+    WorkerSessionParseDiagnostic: {
+      code: string;
+      lineNumber: number;
+      message: string;
+    };
+    WorkerSessionParseDiagnostics: {
+      eventCount: number;
+      malformedLineCount: number;
+      unknownEventCount: number;
+      errors: components["schemas"]["WorkerSessionParseDiagnostic"][];
     };
     PaginationContext: {
       maxResults: number;
@@ -1080,7 +2195,7 @@ export interface components {
       lifecycleState: components["schemas"]["ManagedRuntimeLifecycleState"];
       locality: components["schemas"]["WorkerModelLocality"];
       /** @description Provider-agnostic operations supported by this managed runtime. */
-      supportedOperations: components["schemas"]["ModelOperation"][];
+      supportedOperations: components["schemas"]["ModelInvocationOperation"][];
       /** @description Concise managed-runtime diagnostics in customer-relevant terms. */
       diagnostics?: components["schemas"]["StringMap"];
     };
@@ -1130,9 +2245,9 @@ export interface components {
       status: components["schemas"]["ModelStatus"];
       loadState: components["schemas"]["ModelLoadState"];
       /** @description Provider-agnostic operations supported by the managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier discovery fields. */
-      operations: components["schemas"]["ModelOperation"][];
+      operations: components["schemas"]["ModelInvocationOperation"][];
       /** @description Uppercase content modalities observed across the model's declared operation inputs and outputs. */
-      modalities: components["schemas"]["ModelOperationContentType"][];
+      modalities: components["schemas"]["ModelInvocationContentType"][];
       /** @description Factory resource summaries associated with this model's workers or explicit model metadata. */
       resources: components["schemas"]["ModelResourceSummary"][];
     };
@@ -1145,14 +2260,147 @@ export interface components {
       status: components["schemas"]["ModelStatus"];
       loadState: components["schemas"]["ModelLoadState"];
       /** @description Union of provider-agnostic operations supported by workers for this managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier inspect fields. */
-      operations: components["schemas"]["ModelOperation"][];
+      operations: components["schemas"]["ModelInvocationOperation"][];
       /** @description Uppercase content modalities observed across all declared operation inputs and outputs. */
-      modalities: components["schemas"]["ModelOperationContentType"][];
+      modalities: components["schemas"]["ModelInvocationContentType"][];
       /** @description Factory resource summaries associated with this model's workers or explicit model metadata. */
       resources: components["schemas"]["ModelResourceSummary"][];
       /** @description Worker-scoped capability declarations that contribute to this discovered model. */
       capabilities: components["schemas"]["ModelCapability"][];
       diagnostics: components["schemas"]["StringMap"];
+    };
+    /** @description Opaque model name or source URI accepted by the provider-neutral invocation contract. */
+    ModelReference: {
+      /** @description Configured model name or source URI. Resolution is owned by Models. */
+      nameOrUri: string;
+    };
+    /** @description One ordered value supplied to a named model-operation input slot. */
+    ModelInvocationInput: {
+      /** @description Input slot name declared by the selected operation. */
+      name: string;
+      /** @description Provider-neutral modality of the supplied value. */
+      modality: components["schemas"]["ModelInvocationContentType"];
+      /** @description Logical content type retained for compatibility with prepared invocation inputs. */
+      contentType?: string;
+      /** @description Concrete MIME type for media or file-backed content, when known. */
+      mediaType?: string;
+      /** @description Inline content. JSON values are carried as their canonical JSON text. */
+      content?: string;
+      /** @description Opaque Models-owned input artifact reference when content is not inline. */
+      artifactRef?: string;
+    };
+    /** @description One ordered, slot-named output of a generic model invocation. */
+    ModelInvocationOutput: {
+      /** @description Output slot name declared by the selected operation. */
+      name: string;
+      /** @description Provider-neutral modality of the output. */
+      modality: components["schemas"]["ModelInvocationContentType"];
+      /** @description Logical content type retained for compatibility with prepared invocation outputs. */
+      contentType?: string;
+      /** @description Concrete MIME type for media or file-backed output, when known. */
+      mediaType?: string;
+      /** @description Inline output content. JSON values are carried as their canonical JSON text. */
+      content?: string;
+      /** @description Optional opaque artifact metadata for materialized output. */
+      artifact?: components["schemas"]["ModelInvocationArtifact"];
+    };
+    /**
+     * @description Uppercase provider-neutral content modality used by generic model invocation contracts.
+     * @enum {string}
+     */
+    ModelInvocationContentType: ModelInvocationContentType;
+    /** @description One named provider-neutral slot in a generic model invocation operation. */
+    ModelInvocationSlot: {
+      /** @description Stable slot name used by generic invocation inputs, outputs, and diagnostics. */
+      name: string;
+      /** @description Uppercase content types accepted or produced by this generic slot. */
+      contentTypes: components["schemas"]["ModelInvocationContentType"][];
+      /** @description Provider-neutral modality of values accepted or produced by this slot. */
+      modality?: components["schemas"]["ModelInvocationContentType"];
+      /** @description Whether this slot is required by the selected operation. */
+      required?: boolean;
+      /** @description Whether the slot accepts or produces multiple ordered values. */
+      repeatable?: boolean;
+      /** @description Accepted or produced MIME-type patterns for this slot. */
+      mediaTypes?: string[];
+    };
+    /** @description One provider-neutral operation exposed by a managed model runtime. */
+    ModelInvocationOperation: {
+      name: components["schemas"]["ModelOperationName"];
+      /** @description Named generic invocation input slots this model can consume. */
+      inputs?: components["schemas"]["ModelInvocationSlot"][];
+      /** @description Named generic invocation output slots this model can produce. */
+      outputs?: components["schemas"]["ModelInvocationSlot"][];
+    };
+    ModelInvocationArtifact: {
+      /** @description Opaque Models-owned artifact reference; cache paths and storage handles are never exposed. */
+      artifactRef: string;
+      /** @description Customer-visible artifact name, when available. */
+      name?: string;
+      /** @description MIME type of the materialized artifact, when known. */
+      mediaType?: string;
+      /**
+       * Format: int64
+       * @description Artifact size in bytes, when known.
+       */
+      sizeBytes?: number;
+      /** @description Safe provider-neutral artifact metadata. */
+      properties?: components["schemas"]["StringMap"];
+    };
+    /** @description One ordered named JSON parameter supplied to a model operation. */
+    ModelInvocationParameter: {
+      /** @description Operation parameter name. */
+      name: string;
+      /** @description JSON-compatible parameter value preserved without backend-specific typing. */
+      value: unknown;
+    };
+    /**
+     * @description Provider-neutral representation requested for a generic model invocation result.
+     * @enum {string}
+     */
+    ModelInvocationOutputMode: ModelInvocationOutputMode;
+    /**
+     * @description Stable provider-neutral failure identity for generic model invocation.
+     * @enum {string}
+     */
+    ModelInvocationFailureClass: ModelInvocationFailureClass;
+    /** @description Customer-safe typed failure for a generic model invocation. */
+    ModelInvocationFailure: {
+      class: components["schemas"]["ModelInvocationFailureClass"];
+      /** @description Actionable failure explanation without cache paths, backend addresses, credentials, or protocol payloads. */
+      message: string;
+      model?: components["schemas"]["ModelReference"];
+      /** @description Operation associated with the failure, when known. */
+      operation?: string;
+      /** @description Input or output slot associated with the failure, when known. */
+      slot?: string;
+      /** @description Parameter associated with the failure, when known. */
+      parameter?: string;
+      /** @description Public request field associated with the failure, when known. */
+      field?: string;
+    };
+    /** @description Provider-neutral generic model invocation request. Inputs and parameters retain authored order. */
+    GenericModelInvocationRequest: {
+      /** @description Opaque Models runtime-scope reference. */
+      scope: string;
+      /** @description Non-empty caller identity used by the eventual capacity owner. */
+      holder: string;
+      model: components["schemas"]["ModelReference"];
+      operation: components["schemas"]["ModelOperationName"];
+      /** @description Ordered input values. Repeated slot names remain separate entries in this order. */
+      inputs?: components["schemas"]["ModelInvocationInput"][];
+      /** @description Ordered named JSON parameters for the selected operation. */
+      parameters?: components["schemas"]["ModelInvocationParameter"][];
+      outputMode?: components["schemas"]["ModelInvocationOutputMode"];
+      /** @description Whether resolution and preparation must remain cache-only. */
+      offline?: boolean;
+    };
+    /** @description Provider-neutral generic model invocation result with ordered slot-named outputs. */
+    GenericModelInvocationResponse: {
+      /** @description Ordered outputs. Distinct slots such as ASR transcript and segments remain separate entries. */
+      outputs: components["schemas"]["ModelInvocationOutput"][];
+      /** @description Optional typed failure when a transport chooses an envelope rather than an error response. */
+      failure?: components["schemas"]["ModelInvocationFailure"];
     };
     ModelInvocationRequest: {
       /** @description Uppercase provider-agnostic operation to invoke, such as `TTS`. */
@@ -1232,7 +2480,7 @@ export interface components {
       modelProvider?: components["schemas"]["WorkerModelProvider"];
       providerLocality: components["schemas"]["WorkerModelLocality"];
       /** @description Operations declared by this worker for the selected model. */
-      operations: components["schemas"]["ModelOperation"][];
+      operations: components["schemas"]["ModelInvocationOperation"][];
       /** @description Factory resource names referenced by the worker declaration. */
       resourceNames: string[];
     };
@@ -1276,6 +2524,8 @@ export interface components {
       code: ErrorResponseCode;
       /** @description Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields. */
       targets?: components["schemas"]["FactoryValidationTarget"][];
+      /** @description Resource accounting for a rejected capacity reduction. */
+      resourceCapacity?: components["schemas"]["FactorySessionResourceCapacityErrorDetails"];
     };
     ErrorTarget: {
       /** @description Client-visible target category such as form, node, edge, field, or save. */
@@ -1359,6 +2609,39 @@ export interface components {
       javascript?: components["schemas"]["FactorySessionJavaScriptProjection"];
       /** @description Shared artifact projections for the session runtime. */
       artifacts?: components["schemas"]["FactoryArtifact"][];
+      /** @description Durable pending HUMAN_APPROVAL requests reconstructed from canonical events. */
+      pendingHumanApprovals?: components["schemas"]["HumanApproval"][];
+    };
+    /** @description Safe read-only projection of one durable pending HUMAN_APPROVAL dispatch. The event ledger owns identity and status; display metadata is resolved from the effective factory topology. */
+    HumanApproval: {
+      /** @description Stable approval identity derived from the canonical dispatch. */
+      approvalId: string;
+      /** @description Factory Session that owns the pending approval. */
+      sessionId: string;
+      /** @description Dispatch reserved for the pending approval. */
+      dispatchId: string;
+      /** @description Stable authored HUMAN_APPROVAL workstation identity. */
+      workstationId: string;
+      /** @description Customer-authored workstation name. */
+      workstationName: string;
+      /** @description Localized safe description resolved from the effective factory. */
+      description?: string;
+      decisions: HumanApprovalDecisions[];
+      /** @enum {string} */
+      status: HumanApprovalStatus;
+      /** @description Work identities consumed by the reserved dispatch. */
+      workIds: string[];
+      /** @description Stable canonical HUMAN_APPROVAL_REQUESTED event identifier. */
+      eventId?: string;
+      /**
+       * Format: date-time
+       * @description Canonical event time for the pending approval request.
+       */
+      requestedAt?: string;
+    };
+    ListHumanApprovalsResponse: {
+      /** @description Deterministically ordered pending approvals for one session. */
+      approvals: components["schemas"]["HumanApproval"][];
     };
     /**
      * @description Canonical inspect classification for stopped automation on existing Factory Session and Work surfaces.
@@ -1827,6 +3110,8 @@ export interface components {
       taskLabel?: string;
       /** @description Durable child execution mode recorded for the JavaScript workflow task when available. */
       executionMode?: string;
+      /** @description Whether this child requested the selected provider's permission-bypass behavior. */
+      skipPermissions?: boolean;
     };
     FactoryDispatchUsage: {
       /** Format: int64 */
@@ -1853,6 +3138,63 @@ export interface components {
       /** @description Customer-safe, actionable explanation of the failure. */
       message: string;
     };
+    /** @description Stable terminal verification summary emitted when a successful worker does not satisfy its effective expected artifact declarations. */
+    ExpectedArtifactVerification: {
+      code: components["schemas"]["WorkFailureType"];
+      entries: components["schemas"]["ExpectedArtifactVerificationEntry"][];
+    };
+    ExpectedArtifactVerificationEntry: {
+      /** @description One-based position in the normalized expected-artifact declaration list. */
+      declarationIndex?: number;
+      name: string;
+      /** @description Workspace-relative rendered artifact pattern; host paths are never emitted. */
+      pattern: string;
+      reason: components["schemas"]["ExpectedArtifactVerificationReason"];
+    };
+    /** @description Stable, non-host context used when rendering expected-artifact patterns. Filesystem paths, environment variables, and Factory documentation are not part of this replayable vocabulary. */
+    ExpectedArtifactTemplateContext: {
+      /** @description Exact replay-safe input values captured when the dispatch was created. Artifact templates expose these values through `.Inputs`; prompt-only relations, content, retry history, and host context are not included. */
+      inputs?: components["schemas"]["ExpectedArtifactTemplateInput"][];
+      /** @description Stable project identifier for the dispatch. */
+      project?: string;
+      /** @description Stable Factory Session identifier for the dispatch. */
+      sessionId?: string;
+    } & {
+      [key: string]: unknown;
+    };
+    /** @description Stable replay-safe input value available to an expected-artifact template. This is intentionally smaller than the workstation prompt input surface so completion verification and historical Work reads can use the same values. */
+    ExpectedArtifactTemplateInput: {
+      name?: string;
+      workId?: string;
+      workTypeId?: string;
+      dataType?: string;
+      traceId?: string;
+      parentId?: string;
+      /** @description Per-input project value resolved from the input project tag, dispatch context, or the default project. */
+      project?: string;
+      tags?: components["schemas"]["StringMap"];
+      /** @description The dispatch-time textual payload value. It is retained only in the artifact template context and is not added to the normal Work read. */
+      payload?: string;
+    } & {
+      [key: string]: unknown;
+    };
+    /** @description One effective expected artifact declaration projected on a Work item. Pattern is the rendered workspace-relative literal path or glob, never a host path. */
+    WorkExpectedArtifact: {
+      /** @description Customer-visible declaration name. */
+      name: string;
+      /** @description Safe rendered path or glob relative to the dispatch workspace. */
+      pattern: string;
+      /** @description Whether every matching regular file must contain at least one byte. */
+      nonEmpty: boolean;
+      verification: components["schemas"]["WorkExpectedArtifactVerification"];
+      /** @description Why this declaration failed, when verification is FAILED. */
+      reason?: components["schemas"]["ExpectedArtifactVerificationReason"];
+    };
+    /**
+     * @description Latest recorded verification state for one expected artifact declaration on a Work item.
+     * @enum {string}
+     */
+    WorkExpectedArtifactVerification: WorkExpectedArtifactVerification;
     FactoryArtifact: {
       /** @description Stable artifact identifier referenced by session projections. */
       id: string;
@@ -1957,6 +3299,8 @@ export interface components {
        * @description When durable session execution started.
        */
       startedAt: string;
+    } & {
+      [key: string]: unknown;
     };
     /** @description Factory Session lifecycle pause recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control-transition facts only. */
     SessionPausedEventPayload: {
@@ -1978,7 +3322,7 @@ export interface components {
        */
       resumedAt: string;
     };
-    /** @description Durable Factory Session lifecycle control recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control facts only. */
+    /** @description Durable Factory Session lifecycle control recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control facts only. Its operation and outcome shape is intentionally closed because it is a fixed control contract, not an extensible event metadata bag. */
     SessionLifecycleControlEventPayload: {
       operation: components["schemas"]["FactorySessionLifecycleControlKind"];
       outcome: components["schemas"]["FactorySessionLifecycleControlOutcome"];
@@ -2079,6 +3423,8 @@ export interface components {
       reasoningEffort?: string;
       /** @description Selected provider identifier when applicable. */
       provider?: string;
+      /** @description Whether this child requested the selected provider's permission-bypass behavior. */
+      skipPermissions?: boolean;
       /** @description Parent dispatch identifier when this dispatch was spawned from another dispatch. */
       parentDispatchId?: string;
       /** @description Prior dispatch identifier when this dispatch is a retry. */
@@ -2691,6 +4037,59 @@ export interface components {
       /** @description Inspection links for session, results, dispatches, and artifacts. */
       links?: components["schemas"]["FactorySessionLifecycleControlLinks"];
     };
+    FactorySessionResourceCapacityRequest: {
+      /** @description Caller-owned idempotency identity for this capacity request. */
+      requestId: string;
+      /** @description Effective Factory revision observed before admission. */
+      expectedRevision: number;
+      /** @description Requested total resource capacity. Zero is valid only when no units are in use. */
+      capacity: number;
+      /** @description Optional safe operator reason retained with the canonical change request. */
+      reason?: string;
+    };
+    /** @description Accounting details explaining why a resource-capacity reduction was rejected. */
+    FactorySessionResourceCapacityErrorDetails: {
+      /** @description Stable authored Resource.id. */
+      resourceId: string;
+      currentCapacity: number;
+      requestedCapacity: number;
+      inUseCount: number;
+      availableCount: number;
+      minimumCapacity: number;
+    };
+    /**
+     * @description Terminal capacity decision outcome.
+     * @enum {string}
+     */
+    FactorySessionResourceCapacityOutcome: FactorySessionResourceCapacityOutcome;
+    /** @description Canonical relative links for inspecting the affected Factory Session and its events. */
+    FactorySessionResourceCapacityLinks: {
+      /** @description Relative URL for the affected Factory Session. */
+      session?: string;
+      /** @description Relative URL for the session's canonical Factory Events. */
+      events?: string;
+      /** @description Relative URL for the session status projection. */
+      status?: string;
+    };
+    FactorySessionResourceCapacityResponse: {
+      sessionId: string;
+      /** @description Stable authored Resource.id. This is the only resource identity used by the operation. */
+      resourceId: string;
+      /** @description Current display label, provided for presentation only. */
+      resourceName?: string;
+      previousCapacity: number;
+      requestedCapacity: number;
+      effectiveCapacity: number;
+      inUseCount: number;
+      availableCount: number;
+      /** @description Lowest capacity currently safe to admit without interrupting in-use work. */
+      minimumCapacity: number;
+      outcome: components["schemas"]["FactorySessionResourceCapacityOutcome"];
+      revision: number;
+      requestId: string;
+      changeId: string;
+      links?: components["schemas"]["FactorySessionResourceCapacityLinks"];
+    };
     LoadableProviderSessionRef: {
       provider: components["schemas"]["LoadableProviderSessionProvider"];
       kind: components["schemas"]["LoadableProviderSessionKind"];
@@ -3091,9 +4490,13 @@ export interface components {
         | components["schemas"]["RunRequestEventPayload"]
         | components["schemas"]["InitialStructureRequestEventPayload"]
         | components["schemas"]["FactoryChangeEventPayload"]
+        | components["schemas"]["FactoryChangeRequestEventPayload"]
+        | components["schemas"]["FactoryChangeFailedEventPayload"]
         | components["schemas"]["WorkRequestEventPayload"]
         | components["schemas"]["RelationshipChangeRequestEventPayload"]
         | components["schemas"]["DispatchRequestEventPayload"]
+        | components["schemas"]["HumanApprovalRequestedEventPayload"]
+        | components["schemas"]["DispatchWorkerSessionAssociationEventPayload"]
         | components["schemas"]["ModelRequestEventPayload"]
         | components["schemas"]["ModelResponseEventPayload"]
         | components["schemas"]["InferenceRequestEventPayload"]
@@ -3193,12 +4596,38 @@ export interface components {
       runnerId?: components["schemas"]["RunnerID"];
       runnerSelectionSource?: components["schemas"]["RunnerSelectionSource"];
     };
+    /** @description Detached resource-capacity accounting retained in a successful Factory change event so replay does not depend on mutable runtime state. */
+    FactoryResourceCapacityChange: {
+      /** @description Stable authored Resource.id whose capacity changed. */
+      resourceId: string;
+      /** @description Optional display name retained for inspection only. */
+      resourceName?: string;
+      /** @description Capacity immediately before the change. */
+      previousCapacity: number;
+      /** @description Capacity requested by the operator. */
+      requestedCapacity: number;
+      /** @description Capacity effective after the change. */
+      effectiveCapacity: number;
+      /** @description Number of leases in use at the decision boundary. */
+      inUseCount: number;
+      /** @description Number of currently available capacity units. */
+      availableCount: number;
+      /** @description Lowest capacity permitted by the current in-use count. */
+      minimumCapacity: number;
+      /**
+       * @description Terminal capacity decision recorded by the runtime.
+       * @enum {string}
+       */
+      outcome: FactoryResourceCapacityChangeOutcome;
+    };
     RunRequestEventPayload: {
       /** Format: date-time */
       recordedAt: string;
       factory: components["schemas"]["Factory"];
       wallClock?: components["schemas"]["WallClock"];
       diagnostics?: components["schemas"]["Diagnostics"];
+    } & {
+      [key: string]: unknown;
     };
     /** @description Runtime topology snapshot before work moves. */
     InitialStructureRequestEventPayload: {
@@ -3209,8 +4638,53 @@ export interface components {
     /** @description Runtime topology snapshot after a live factory definition change replaces the running factory. */
     FactoryChangeEventPayload: {
       factory: components["schemas"]["Factory"];
+      /** @description Stable live-change identity when this is a revisioned change boundary. */
+      changeId?: string;
+      /** @description Normalized live-change operation name. */
+      operation?: string;
+      /** @description Stable target identity changed by the operation. */
+      targetId?: string;
+      /** @description Effective Factory revision immediately before this change. */
+      previousRevision?: number;
+      /** @description Effective Factory revision created by this change. */
+      newRevision?: number;
+      /** @description Canonical Factory Event sequence at which this change became effective. */
+      effectiveSequence?: number;
+      /** @description Detached resource-capacity accounting for a capacity change. */
+      resourceCapacity?: components["schemas"]["FactoryResourceCapacityChange"];
       sourceDirectory?: string;
       metadata?: components["schemas"]["StringMap"];
+    };
+    /** @description Normalized live Factory Session change intent. Request identity and session scope are carried by FactoryEvent.context. */
+    FactoryChangeRequestEventPayload: {
+      /** @description Stable identity of the requested live change. */
+      changeId: string;
+      /** @description Effective Factory revision the operator observed before admission. */
+      expectedRevision: number;
+      /** @description Normalized live-change operation name. */
+      operation: string;
+      /** @description Stable target identity changed by the operation. */
+      targetId: string;
+      /** @description Canonical JSON value requested by the operation. */
+      requestedValue: unknown;
+      /** @description Safe actor identity supplied by the caller. */
+      actor?: string;
+      /** @description Safe source label such as cli or api. */
+      source?: string;
+      /** @description Optional normalized safe operator reason. */
+      reason?: string;
+    };
+    /** @description Safe terminal failure for an admitted live Factory Session change. Raw provider payloads, commands, stack traces, and requested values are excluded. */
+    FactoryChangeFailedEventPayload: {
+      changeId: string;
+      operation: string;
+      targetId: string;
+      expectedRevision: number;
+      previousRevision: number;
+      /** @description Stable safe failure category. */
+      failureCode: string;
+      /** @description Bounded safe failure explanation. */
+      failureMessage: string;
     };
     /** @description Normalized work request entering the factory. Single-work submissions accepted by POST /work are converted into this one-work request shape before an event is emitted. */
     WorkRequestEventPayload: {
@@ -3239,6 +4713,22 @@ export interface components {
       inputs: components["schemas"]["DispatchConsumedWorkRef"][];
       resources?: components["schemas"]["Resource"][];
       metadata?: components["schemas"]["DispatchRequestEventMetadata"];
+      expectedArtifactContext?: components["schemas"]["ExpectedArtifactTemplateContext"];
+    };
+    /** @description Canonical request for operator input at a HUMAN_APPROVAL workstation. FactoryEvent.context carries session, dispatch, request, trace, and Work lineage; this payload intentionally contains no mutable Work content or display text. */
+    HumanApprovalRequestedEventPayload: {
+      /** @description Stable approval identity derived from the reserved dispatch. */
+      approvalId: string;
+      /** @description Authored HUMAN_APPROVAL workstation identity. */
+      workstationId: string;
+      decisions: HumanApprovalRequestedEventPayloadDecisions[];
+      /** @enum {string} */
+      status: HumanApprovalRequestedEventPayloadStatus;
+    };
+    /** @description Canonical association between one Factory dispatch and the Worker Session allocated to execute it. Dispatch identity remains authoritative in FactoryEvent.context.dispatchId and is not repeated in this payload. This public projection intentionally remains closed: canonical recording data may retain execution-only model and reasoningEffort facts, but this event serves only the Worker Session identity. */
+    DispatchWorkerSessionAssociationEventPayload: {
+      /** @description Non-empty Worker Session identity allocated for the dispatch. */
+      workerSessionId: string;
     };
     /** @description Request details captured immediately before a model-backed worker invocation enters resource, load, and execution boundaries. FactoryEvent.context owns dispatch, request, trace, and work identity, and the matching dispatch-request event owns the transition identifier. */
     ModelRequestEventPayload: {
@@ -3406,12 +4896,17 @@ export interface components {
       previousChainingTraceIds?: string[];
       outcome: components["schemas"]["WorkOutcome"];
       output?: string;
+      /** @description Optional native JSON value produced when the workstation outputSchema validates the worker response. JSON null is distinct from an omitted value. */
+      structuredResult?: unknown;
       error?: string;
       feedback?: string;
       selectedClassificationLabel?: string;
+      artifactVerification?: components["schemas"]["ExpectedArtifactVerification"];
       failureDetail?: components["schemas"]["FailureDetail"];
       providerFailure?: components["schemas"]["ProviderFailureMetadata"];
       metrics?: components["schemas"]["WorkMetrics"];
+      /** @description Dispatch usage derived from the completed workstation result when available. */
+      usage?: components["schemas"]["FactoryDispatchUsage"];
       /** Format: int64 */
       durationMillis?: number;
       outputWork?: components["schemas"]["Work"][];
@@ -3482,6 +4977,11 @@ export interface components {
      * @enum {string}
      */
     WorkFailureType: WorkFailureType;
+    /**
+     * @description Stable reason that an expected artifact declaration was not satisfied.
+     * @enum {string}
+     */
+    ExpectedArtifactVerificationReason: ExpectedArtifactVerificationReason;
     ProviderFailureMetadata: {
       family?: components["schemas"]["WorkFailureFamily"];
       type?: components["schemas"]["WorkFailureType"];
@@ -3804,6 +5304,61 @@ export interface components {
     FactoryResponseEventSessionPayload: {
       /** @description Session lifecycle status when applicable. */
       status?: string;
+      /**
+       * Format: date-time
+       * @description Injected-clock timestamp at which the Worker Session opened.
+       */
+      startedAt?: string;
+      /** @description Stable Worker Session identity for the execution. */
+      workerSessionId?: string;
+      /** @description Authored Worker identity when the invocation supplied one. */
+      workerType?: string;
+      /** @description Factory Session identity when the invocation supplied one. */
+      factorySessionId?: string;
+      /** @description Recording identity when the invocation supplied one. */
+      recordingId?: string;
+      /** @description Project identity when the invocation supplied one. */
+      projectId?: string;
+      /** @description Stable dispatch identity for the execution attempt. */
+      dispatchId?: string;
+      /** @description Runtime transition identity when the dispatch supplied one. */
+      transitionId?: string;
+      /** @description Workstation route used by the canonical invocation. */
+      workstationName?: string;
+      /** @description Turn or request identity when the dispatch supplied one. */
+      turnId?: string;
+      /** @description Work trace identity when the dispatch supplied one. */
+      traceId?: string;
+      /** @description Replay correlation key when the dispatch supplied one. */
+      replayKey?: string;
+      /** @description Work identities carried by the canonical dispatch. */
+      workIds?: string[];
+      /** @description Stable identity of the opening attempt. */
+      attemptId?: string;
+      /** @description One-based attempt number when known. */
+      attempt?: number;
+      /**
+       * @description Bounded reason for the attempt lifecycle.
+       * @enum {string}
+       */
+      attemptReason?: FactoryResponseEventSessionPayloadAttemptReason;
+      /** @description Exact provider continuation identity when supplied. */
+      continuation?: {
+        provider?: string;
+        kind?: string;
+        id?: string;
+      };
+      /** @description Explicit provider and runner selection facts. */
+      providerSelection?: {
+        runnerId?: string;
+        source?: components["schemas"]["RunnerSelectionSource"];
+        executorProvider?: string;
+        modelProvider?: string;
+      };
+      /** @description Explicit model selection when supplied. */
+      model?: string;
+      /** @description Explicit reasoning-effort selection when supplied. */
+      reasoningEffort?: string;
       capabilities?: components["schemas"]["FactoryResponseEventCapabilities"];
     };
     /** @description Run-scoped lifecycle metadata payload. */
@@ -4072,6 +5627,8 @@ export interface components {
       invocationSignature?: components["schemas"]["FactoryInvocationSignature"];
       /** @description Ordered runnable invocation examples. Canonical Factory documents write examples here; legacy invocationSignature.examples are accepted only by the Factory input compatibility mapper. */
       examples?: components["schemas"]["FactoryInvocationExample"][];
+      /** @description Optional outbound webhook subscriptions. Existing Factory definitions without this field do not start outbound delivery work. */
+      webhooks?: components["schemas"]["FactoryWebhook"][];
       /** @description Root-level guards that apply across the factory instead of one specific workstation or input. */
       guards?: components["schemas"]["FactoryGuard"][];
       /** @description Customer-authored work item categories and the lifecycle states each one can occupy. */
@@ -4086,6 +5643,56 @@ export interface components {
       workers?: components["schemas"]["Worker"][];
       /** @description Processing steps that consume work, invoke workers, and emit the next work states. */
       workstations?: components["schemas"]["Workstation"][];
+    };
+    /** @description One Factory-configured outbound webhook subscription. Secret material is represented only by a reference and is resolved at delivery time. */
+    FactoryWebhook: {
+      /** @description Unique customer-authored subscription name. */
+      name: string;
+      /** @description Whether this subscription is active for future canonical events. */
+      enabled: boolean;
+      /** @description Absolute HTTP or HTTPS destination URL. */
+      url: string;
+      /** @description Secret reference resolved by the delivery boundary; raw secret values are never part of Factory configuration. */
+      signingSecretRef: string;
+      filter: components["schemas"]["FactoryWebhookFilter"];
+      /** @description Optional bounded delivery policy. Omitted fields use the documented defaults. */
+      deliveryPolicy?: components["schemas"]["FactoryWebhookDeliveryPolicy"];
+    } & {
+      [key: string]: unknown;
+    };
+    /** @description Canonical event filter for one outbound webhook subscription. */
+    FactoryWebhookFilter: {
+      /** @description Canonical event types selected for delivery. */
+      eventTypes: components["schemas"]["FactoryWebhookEventType"][];
+      /** @description Optional canonical dispatch statuses applied only to dispatch event types. */
+      dispatchStatuses?: components["schemas"]["FactoryWebhookDispatchStatus"][];
+    } & {
+      [key: string]: unknown;
+    };
+    /**
+     * @description Canonical Factory Event types supported by outbound webhook filters.
+     * @enum {string}
+     */
+    FactoryWebhookEventType: FactoryWebhookEventType;
+    /**
+     * @description Canonical dispatch statuses supported by outbound webhook filters.
+     * @enum {string}
+     */
+    FactoryWebhookDispatchStatus: FactoryWebhookDispatchStatus;
+    /** @description Bounded outbound delivery policy. Durations use Go duration syntax. Omitted values resolve to a 10 second request timeout, 5 total attempts, 1 second initial backoff, 2.0 multiplier, and 30 second maximum backoff. */
+    FactoryWebhookDeliveryPolicy: {
+      /** @description Positive Go duration allowed for one HTTP request attempt. */
+      requestTimeout?: string;
+      /** @description Total delivery attempts including the initial request. */
+      maxAttempts?: number;
+      /** @description Positive Go duration before the first retry. */
+      initialBackoff?: string;
+      /** @description Exponential retry multiplier; values below 1 are not supported. */
+      backoffMultiplier?: number;
+      /** @description Positive Go duration cap for one retry delay; it must not be below initialBackoff. */
+      maxBackoff?: string;
+    } & {
+      [key: string]: unknown;
     };
     /** @description Authored orchestrator identity for one factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI. */
     FactoryOrchestrator: {
@@ -4149,6 +5756,8 @@ export interface components {
       unknownNamedArgumentPolicy?: components["schemas"]["FactoryInvocationUnknownNamedArgumentPolicy"];
       /** @description Optional customer-facing hint for the factory's primary output shape. */
       outputContract?: components["schemas"]["FactoryInvocationOutputContract"];
+    } & {
+      [key: string]: unknown;
     };
     /** @description One canonical invocation parameter declared on a factory. */
     FactoryInvocationParameter: {
@@ -4176,6 +5785,8 @@ export interface components {
       defaultValues?: string[];
       /** @description Accepted invocation bindings for this parameter across positional, named, and stdin sources. */
       bindings?: components["schemas"]["FactoryInvocationParameterBinding"][];
+    } & {
+      [key: string]: unknown;
     };
     /** @description One public binding that exposes a parameter to callers. */
     FactoryInvocationParameterBinding: {
@@ -4183,6 +5794,8 @@ export interface components {
       kind: components["schemas"]["FactoryInvocationParameterBindingKind"];
       /** @description 1-based positional slot used when kind is POSITIONAL. */
       position?: number;
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description Public invocation binding kinds supported by factory signatures.
@@ -4216,6 +5829,8 @@ export interface components {
       fileExtension?: string;
       /** @description Human-readable summary of the primary output contract. */
       description?: string;
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description High-level output shape hint exposed by a factory invocation signature.
@@ -4230,6 +5845,8 @@ export interface components {
       description: components["schemas"]["NameValue"];
       /** @description Structured invocation arguments; values are never parsed or executed while loading the Factory. */
       args: components["schemas"]["FactoryInvocationArguments"];
+    } & {
+      [key: string]: unknown;
     };
     /** @description Structured Factory invocation arguments keyed by parameter name, external name, or alias. Each value is either one string or an ordered array of strings. */
     FactoryInvocationArguments: {
@@ -4245,6 +5862,8 @@ export interface components {
       terminalState?: string;
       /** @description Optional authored work name filter used by EXPLICIT policy selection. */
       workName?: string;
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description Primary-result selection policy for factory invocation responses. SUBMITTED_WORK_TERMINAL traces the work submitted by the invocation until it reaches its first terminal output. EXPLICIT selects configured work content from the invocation submit scope.
@@ -4279,6 +5898,8 @@ export interface components {
       purpose?: string;
       /** @description Optional argument vector used by future validation flows to probe the tool version without changing the executable lookup token. */
       versionArgs?: string[];
+    } & {
+      [key: string]: unknown;
     };
     /** @description One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., INPUT files target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile only when declared explicitly in bundledFiles. Export and flatten do not auto-discover project-root helpers. In v1 shared-factory exports, INPUT entries encode a share-time snapshot of starter work that is copied into the recipient factory as detached seeded work. */
     BundledFile: {
@@ -4292,6 +5913,8 @@ export interface components {
       /** @description Canonical factory-relative restoration target for the bundled file. Absolute paths, backslash-separated paths, and paths that require dot-segment normalization are rejected. */
       targetPath: string;
       content: components["schemas"]["BundledFileContent"];
+    } & {
+      [key: string]: unknown;
     };
     /** @description Inline content payload for a portable bundled file. */
     BundledFileContent: {
@@ -4302,12 +5925,16 @@ export interface components {
       encoding: BundledFileContentEncoding;
       /** @description Inline bundled file content carried in the manifest. SCRIPT and DOC files under factory/scripts/ and factory/docs/ may be discovered during flatten, but supported root helper paths such as Makefile are bundled only when they appear as explicit ROOT_HELPER entries in bundledFiles. */
       inline: string;
+    } & {
+      [key: string]: unknown;
     };
     /** @description Declared types of inputs. Used to force the inputs of a certain work type to be of a certain shape, like a specific JSON structure. */
     InputType: {
       /** @description Input type name. The reserved name "default" is implicit. */
       name: string;
       type: components["schemas"]["InputKind"];
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description Kinds of input. `DEFAULT` passes opaque input through to workstations as-is.
@@ -4326,6 +5953,8 @@ export interface components {
       states: components["schemas"]["WorkState"][];
       /** @description Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type. */
       handlingBehavior?: components["schemas"]["WorkTypeHandlingBehavior"][];
+      /** @description Expected output declarations inherited by workstations handling this work type. */
+      expectedArtifacts?: components["schemas"]["ExpectedArtifact"][];
     };
     /** @description A lifecycle state that a work item can occupy inside one work type. */
     WorkState: {
@@ -4408,6 +6037,8 @@ export interface components {
       agentTools?: components["schemas"]["AgentWorkerToolsConfig"];
       /** @description Inline worker instructions or script body when the worker is authored directly in factory config. */
       body?: string;
+    } & {
+      [key: string]: unknown;
     };
     /** @description Explicit agent-loop tool policy for AGENT_WORKER definitions. Tool execution stays disabled unless this block is present with a non-DISABLED policy. */
     AgentWorkerToolsConfig: {
@@ -4474,7 +6105,104 @@ export interface components {
       maximumExecutionCapabilities: components["schemas"]["ProviderExecutionCapabilities"];
       maximumResponseFidelityCapabilities: components["schemas"]["ProviderResponseFidelityCapabilities"];
       discovery: components["schemas"]["ProviderDiscoveryPrerequisites"];
+      harness?: components["schemas"]["ProviderHarness"];
+      modelCatalogPosture?: components["schemas"]["ProviderModelCatalogPosture"];
+      /** @description Directional routes implemented by the provider harness, independent of any model catalog claim. */
+      harnessRoutes?: components["schemas"]["ProviderModality"][];
+      /** @description Bounded evidence records used to qualify capability facts in this manifest. */
+      evidence?: components["schemas"]["ProviderCapabilityEvidence"][];
+      /** @description Named provider models and their complete capability facts in canonical model-ID order. */
+      models?: components["schemas"]["ProviderModel"][];
+      /** @description Named provider tool facts in canonical tool-name order. */
+      tools?: components["schemas"]["ProviderTool"][];
+      /** @description Named provider constraints and bounded behavior facts in canonical name order. */
+      knownLimits?: components["schemas"]["ProviderKnownLimit"][];
       deprecation?: components["schemas"]["ProviderDeprecation"];
+    };
+    /**
+     * @description Evidence state shared by harness, modality, and tool capability facts.
+     * @enum {string}
+     */
+    ProviderCapabilitySupport: ProviderCapabilitySupport;
+    /** @description Bounded evidence record qualifying one or more published capability facts. */
+    ProviderCapabilityEvidence: {
+      /** @description Stable manifest-local evidence identifier. */
+      id: string;
+      kind: components["schemas"]["ProviderCapabilityEvidenceKind"];
+      /**
+       * Format: date
+       * @description UTC calendar date on which the evidence was checked.
+       */
+      verifiedOn: string;
+      /**
+       * Format: uri
+       * @description Optional public HTTPS source for the evidence.
+       */
+      url?: string;
+      /** @description Optional harness version used when the evidence was checked. */
+      harnessVersion?: string;
+      /** @description Optional bounded references to facts qualified by this record. */
+      factRefs?: string[];
+    };
+    /**
+     * @description Source class for evidence supporting a published capability fact.
+     * @enum {string}
+     */
+    ProviderCapabilityEvidenceKind: ProviderCapabilityEvidenceKind;
+    /**
+     * @description How a provider's model identifiers are known to the published catalog.
+     * @enum {string}
+     */
+    ProviderModelCatalogPosture: ProviderModelCatalogPosture;
+    /** @description Provider harness metadata, kept separate from model capability facts. */
+    ProviderHarness: {
+      kind: components["schemas"]["ProviderHarnessKind"];
+      acpSupport?: components["schemas"]["ProviderACPSupport"];
+    };
+    /**
+     * @description Execution harness family represented by a provider manifest.
+     * @enum {string}
+     */
+    ProviderHarnessKind: ProviderHarnessKind;
+    /** @description Typed ACP support metadata for a provider harness. */
+    ProviderACPSupport: {
+      support: components["schemas"]["ProviderCapabilitySupport"];
+      /** @description Bounded operator-visible condition required when ACP support is conditional. */
+      condition?: string;
+      /** @description ACP protocol version known to the manifest author. */
+      protocolVersion?: string;
+      resourceDelivery?: components["schemas"]["ProviderACPResourceDelivery"];
+      /** @description Stable IDs of evidence records qualifying ACP support. */
+      evidenceRefs?: string[];
+    } & (
+      | {
+          /** @enum {string} */
+          support?: ProviderACPSupportOneOf0Support;
+          condition: string;
+        }
+      | {
+          /** @enum {string} */
+          support?: ProviderACPSupportOneOf1Support;
+        }
+    );
+    /**
+     * @description Evidence state for delivering a resource through the ACP harness.
+     * @enum {string}
+     */
+    ProviderACPResourceDelivery: ProviderACPResourceDelivery;
+    /** @description Optional bounded media constraints for one modality route. */
+    ProviderMediaConstraints: {
+      /** @description Accepted or emitted media types, such as image/png or audio/wav. */
+      mediaTypes?: string[];
+      /**
+       * Format: int64
+       * @description Maximum payload size in bytes when documented.
+       */
+      maxBytes?: number;
+      /** @description Maximum media duration in seconds when documented. */
+      maxDurationSeconds?: number;
+      /** @description Maximum number of media items accepted or emitted in one route. */
+      maxItems?: number;
     };
     /**
      * @description Maintainer-verified technical support posture for a provider integration. This value does not describe whether the provider is installed or ready on the current machine.
@@ -4510,6 +6238,8 @@ export interface components {
       sessionResume: boolean;
       /** @description Can constrain authoritative output using a structured schema. */
       structuredOutput: boolean;
+      /** @description Can explicitly bypass the provider's normal permission and sandbox prompts. */
+      permissionBypass: boolean;
       /** @description Can execute provider-managed tools during an invocation. */
       toolExecution: boolean;
       /** @description Can execute with an explicit working directory. */
@@ -4550,12 +6280,167 @@ export interface components {
       endpointKinds: components["schemas"]["ProviderDiscoveryEndpointKind"][];
       /** @description Required configuration-key names only; configuration and environment values are forbidden. */
       configurationKeys: string[];
+      /** @description Sanitized executable, authentication, workspace, or configuration requirements. */
+      prerequisites?: components["schemas"]["ProviderDiscoveryPrerequisite"][];
+    };
+    /** @description Sanitized prerequisite guidance that never carries a secret or machine-local value. */
+    ProviderDiscoveryPrerequisite: {
+      /**
+       * @description Sanitized prerequisite category.
+       * @enum {string}
+       */
+      kind: ProviderDiscoveryPrerequisiteKind;
+      /** @description Stable prerequisite name, never a secret value. */
+      name: string;
+      /** @description Bounded setup guidance without environment values or paths. */
+      description: string;
     };
     /**
      * @description Static endpoint transport kind that may be checked without credentials.
      * @enum {string}
      */
     ProviderDiscoveryEndpointKind: ProviderDiscoveryEndpointKind;
+    /**
+     * @description Provider-supported reasoning effort setting for one model.
+     * @enum {string}
+     */
+    ProviderEffort: ProviderEffort;
+    /** @description Capability facts for one named model exposed by a provider. */
+    ProviderModel: {
+      /** @description Exact model identifier accepted by the provider adapter. */
+      id: string;
+      /** @description Reasoning effort values accepted independently by this model. */
+      efforts: components["schemas"]["ProviderEffort"][];
+      /** @description Complete directional modality facts, including unsupported values. */
+      modalities: components["schemas"]["ProviderModality"][];
+    };
+    /** @description One explicit directional modality fact for a harness route or model. */
+    ProviderModality: {
+      direction: components["schemas"]["ProviderModalityDirection"];
+      modality: components["schemas"]["ProviderModalityKind"];
+      support: components["schemas"]["ProviderModalitySupport"];
+      transport: components["schemas"]["ProviderModalityTransport"];
+      /** @description Bounded operator-visible condition required when support is conditional. */
+      condition?: string;
+      mediaConstraints?: components["schemas"]["ProviderMediaConstraints"];
+      /** @description Stable IDs of evidence records qualifying this fact. */
+      evidenceRefs?: string[];
+    } & (
+      | {
+          /** @enum {string} */
+          support?: ProviderModalityOneOf0Support;
+          condition: string;
+        }
+      | {
+          /** @enum {string} */
+          support?: ProviderModalityOneOf1Support;
+        }
+    );
+    /**
+     * @description Direction in which a provider model accepts or emits a modality.
+     * @enum {string}
+     */
+    ProviderModalityDirection: ProviderModalityDirection;
+    /**
+     * @description Media or content modality understood by a provider model.
+     * @enum {string}
+     */
+    ProviderModalityKind: ProviderModalityKind;
+    /**
+     * @description Evidence state for a directional harness or model modality fact.
+     * @enum {string}
+     */
+    ProviderModalitySupport: ProviderModalitySupport;
+    /**
+     * @description How a supported modality is supplied or returned.
+     * @enum {string}
+     */
+    ProviderModalityTransport: ProviderModalityTransport;
+    /** @description One named provider tool fact used for execution planning. */
+    ProviderTool: {
+      /** @description Stable provider-neutral tool name. */
+      name: string;
+      support: components["schemas"]["ProviderToolSupport"];
+      /** @description Bounded explanation of the tool fact. */
+      description: string;
+      /** @description Bounded operator-visible condition required when tool support is conditional. */
+      condition?: string;
+      /** @description Stable IDs of evidence records qualifying this tool fact. */
+      evidenceRefs?: string[];
+      availability?: components["schemas"]["ProviderToolAvailability"];
+      /** @description Whether the tool is enabled by default; null means the default is unknown or operator-defined. */
+      defaultEnabled?: boolean | null;
+      /** @description Tool-produced modalities, kept separate from direct model output modalities. */
+      outputModalities?: components["schemas"]["ProviderToolOutputModality"][];
+    } & (
+      | {
+          /** @enum {string} */
+          support?: ProviderToolOneOf0Support;
+          condition: string;
+        }
+      | {
+          /** @enum {string} */
+          support?: ProviderToolOneOf1Support;
+        }
+    );
+    /**
+     * @description Evidence state for a named provider tool fact.
+     * @enum {string}
+     */
+    ProviderToolSupport: ProviderToolSupport;
+    /**
+     * @description How a named tool becomes available to the provider harness.
+     * @enum {string}
+     */
+    ProviderToolAvailability: ProviderToolAvailability;
+    /** @description A modality produced by a tool, explicitly separate from direct model output. */
+    ProviderToolOutputModality: {
+      modality: components["schemas"]["ProviderModalityKind"];
+      support: components["schemas"]["ProviderCapabilitySupport"];
+      transport: components["schemas"]["ProviderModalityTransport"];
+      /** @description Bounded operator-visible condition required when support is conditional. */
+      condition?: string;
+      mediaConstraints?: components["schemas"]["ProviderMediaConstraints"];
+      /** @description Stable IDs of evidence records qualifying this tool output fact. */
+      evidenceRefs?: string[];
+    } & (
+      | {
+          /** @enum {string} */
+          support?: ProviderToolOutputModalityOneOf0Support;
+          condition: string;
+        }
+      | {
+          /** @enum {string} */
+          support?: ProviderToolOutputModalityOneOf1Support;
+        }
+    );
+    /** @description Named bounded provider constraint or documented behavior. */
+    ProviderKnownLimit: {
+      /** @description Stable machine-readable limit name. */
+      name: string;
+      kind: components["schemas"]["ProviderKnownLimitKind"];
+      /** @description Unit or flag domain for the value. */
+      unit: string;
+      /** @description Bounded operator-facing explanation of the limit. */
+      description: string;
+      /**
+       * Format: int64
+       * @description Positive numeric maximum when kind is maximum.
+       */
+      maximum?: number;
+      /**
+       * Format: int64
+       * @description Positive numeric default when kind is default.
+       */
+      default?: number;
+      /** @description Bounded non-numeric behavior value when kind is behavior. */
+      value?: string;
+    };
+    /**
+     * @description Meaning of the value recorded by one named provider limit fact.
+     * @enum {string}
+     */
+    ProviderKnownLimitKind: ProviderKnownLimitKind;
     /** @description Coherent metadata for a deprecated provider entry. Presence of this object means the provider is deprecated. replacementProviderId, when present, must name a different canonical provider in the same catalog; it cannot identify the deprecated provider itself. */
     ProviderDeprecation: {
       /**
@@ -4582,6 +6467,8 @@ export interface components {
       inputs?: components["schemas"]["ModelOperationSlot"][];
       /** @description Named operation output slots this worker can produce. */
       outputs?: components["schemas"]["ModelOperationSlot"][];
+    } & {
+      [key: string]: unknown;
     };
     /** @description One named capability slot declared by a model operation. */
     ModelOperationSlot: {
@@ -4591,6 +6478,8 @@ export interface components {
       contentTypes: components["schemas"]["ModelOperationContentType"][];
       /** @description Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed. */
       required?: boolean;
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description Uppercase content-part categories supported by worker model-operation capability slots.
@@ -4623,14 +6512,16 @@ export interface components {
       operation?: components["schemas"]["ModelOperationName"];
       /** @description Optional workstation-authored slot bindings that resolve operation inputs from runtime content or static config content. */
       operationBindings?: components["schemas"]["WorkstationOperationBinding"][];
-      /** @description Name of a worker declared in the workers list. */
-      worker: string;
+      /** @description Name of a worker declared in the workers list. Omit this field for HUMAN_APPROVAL workstations. */
+      worker?: string;
       /** @description Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then worker modelProvider compatibility when no explicit runner is configured, then the default codex runner. */
       runner?: components["schemas"]["RunnerID"];
       /** @description Path to a prompt template file loaded for model-oriented workstation execution. */
       promptFile?: string;
       /** @description JSON schema string used to validate or parse structured model output when configured. */
       outputSchema?: string;
+      /** @description Provider-neutral semantic contract applied to a successful workstation response after provider execution. */
+      outputContract?: string;
       /** @description Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing. */
       outcomeFormat?: components["schemas"]["WorkstationOutcomeFormat"];
       /** @description Retry and execution ceilings applied to this workstation. */
@@ -4653,6 +6544,8 @@ export interface components {
       onRejection?: components["schemas"]["WorkstationIO"][];
       /** @description Optional destination emitted when the workstation fails permanently. */
       onFailure?: components["schemas"]["WorkstationIO"][];
+      /** @description Expected output declarations added by this workstation to its applicable work type contract. */
+      expectedArtifacts?: components["schemas"]["ExpectedArtifact"][];
       /** @description Resource capacity this workstation consumes while one dispatch is in flight. */
       resources?: components["schemas"]["ResourceRequirement"][];
       /** @description Copy supported referenced script files into the expanded workstation layout when config expand runs. */
@@ -4667,6 +6560,8 @@ export interface components {
       worktree?: string;
       /** @description Environment variables added to the workstation execution context. */
       env?: components["schemas"]["StringMap"];
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
@@ -4678,6 +6573,8 @@ export interface components {
       label: string;
       /** @description One or more authored destinations emitted when this classifier label is selected. */
       outputs: components["schemas"]["WorkstationIO"][];
+    } & {
+      [key: string]: unknown;
     };
     /** @description Retry and execution ceilings applied to one workstation definition. */
     WorkstationLimits: {
@@ -4691,6 +6588,8 @@ export interface components {
       maxGeneratedWorkItemsArgument?: string;
       /** @description Offset added to the invocation argument before applying the generated-Work ceiling. */
       maxGeneratedWorkItemsArgumentOffset?: number;
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied. Poller workstations bind a poller-capable worker that the service runtime supervises as a long-lived ingress loop.
@@ -4718,6 +6617,8 @@ export interface components {
       jitter?: string;
       /** @description Positive Go duration after due_at before a stale cron time token expires and can be consumed by the system expiry transition. Defaults to the duration until the next scheduled cron fire when omitted. */
       expiryWindow?: string;
+    } & {
+      [key: string]: unknown;
     };
     /** @description Optional workstation policy for how downstream work receives payload content after this workstation completes. When omitted, downstream work uses the workstation output payload. */
     WorkPropagation: {
@@ -4765,6 +6666,8 @@ export interface components {
       state: string;
       /** @description Per-input guards that must pass before this specific input can be used. */
       guards?: components["schemas"]["InputGuard"][];
+    } & {
+      [key: string]: unknown;
     };
     Transition: {
       /** @description Source workstation name. */
@@ -5041,10 +6944,14 @@ export interface components {
       /** @description Stable identifier for the local provider-backed runtime boundary. */
       backendScopeID?: string;
       defaults?: components["schemas"]["GlobalConfigDefaults"];
+      priceTable?: components["schemas"]["GlobalConfigPriceTable"];
       runtime?: components["schemas"]["GlobalConfigRuntime"];
+      models?: components["schemas"]["GlobalConfigModels"];
       workers?: components["schemas"]["GlobalConfigWorkers"];
       /** @description Named worker model presets loaded from the shared configuration file. */
       workerPresets?: components["schemas"]["GlobalConfigWorkerPreset"][];
+    } & {
+      [key: string]: unknown;
     };
     /** @description Operator defaults that participate independently in file, environment, and flag precedence. */
     GlobalConfigDefaults: {
@@ -5052,6 +6959,37 @@ export interface components {
       workerModelProvider?: string;
       /** @description Default worker model name. */
       workerModel?: string;
+    } & {
+      [key: string]: unknown;
+    };
+    /** @description Operator-authored USD rates per one million tokens. Omit this property to use an empty table; no provider or model prices are supplied by default. */
+    GlobalConfigPriceTable: {
+      /**
+       * @description Currency used by every configured rate. This contract supports USD only.
+       * @enum {string}
+       */
+      currency: GlobalConfigPriceTableCurrency;
+      /** @description Deterministic provider/model price entries. */
+      models: components["schemas"]["GlobalConfigPriceTableModel"][];
+    } & {
+      [key: string]: unknown;
+    };
+    /** @description Exact operator-authored rates for one provider and model identity. */
+    GlobalConfigPriceTableModel: {
+      /** @description Canonical provider identity or a supported built-in alias; the Operator Settings decoder trims and canonicalizes this value. */
+      provider: string;
+      /** @description Exact model identifier. It is trimmed but never guessed or aliased. */
+      model: string;
+      /** @description Non-negative USD rate per one million uncached input tokens. */
+      inputPerMillionTokens: string;
+      /** @description Non-negative USD rate per one million non-reasoning output tokens. */
+      outputPerMillionTokens: string;
+      /** @description Optional non-negative USD rate per one million cached input tokens. */
+      cachedInputPerMillionTokens?: string;
+      /** @description Optional non-negative USD rate per one million reasoning output tokens. */
+      reasoningOutputPerMillionTokens?: string;
+    } & {
+      [key: string]: unknown;
     };
     /** @description Runtime observability settings loaded from operator configuration before command-line overrides. */
     GlobalConfigRuntime: {
@@ -5059,6 +6997,8 @@ export interface components {
       logging?: components["schemas"]["GlobalConfigRuntimeArtifactSettings"];
       /** @description Runtime metrics storage settings. Omitted values use the documented production defaults. */
       metrics?: components["schemas"]["GlobalConfigRuntimeArtifactSettings"];
+    } & {
+      [key: string]: unknown;
     };
     /** @description Rolling-file storage settings for one runtime observability artifact. */
     GlobalConfigRuntimeArtifactSettings: {
@@ -5084,7 +7024,35 @@ export interface components {
        * @default false
        */
       compress: boolean;
+    } & {
+      [key: string]: unknown;
     };
+    /** @description Optional operator model overlays keyed by model name. A model entry may override one or more built-in fields or fully describe a new model name. */
+    GlobalConfigModels: {
+      [key: string]: components["schemas"]["GlobalConfigModel"];
+    };
+    /** @description Optional operator overlay for one model. Omitted fields preserve a built-in definition; new model names must provide every field. */
+    GlobalConfigModel: {
+      /** @description Model source path or provider-neutral source URI. */
+      source?: string;
+      /** @description Provider-neutral backend identity selected for this model. */
+      backend?: string;
+      loadPolicy?: components["schemas"]["GlobalConfigModelLoadPolicy"];
+      /** @description Ordered generic operation names supported by this model. */
+      operations?: components["schemas"]["GlobalConfigModelOperation"][];
+    } & {
+      [key: string]: unknown;
+    };
+    /**
+     * @description Operator model load policy. Runtime activation is owned by Models.
+     * @enum {string}
+     */
+    GlobalConfigModelLoadPolicy: GlobalConfigModelLoadPolicy;
+    /**
+     * @description Generic provider-neutral operation contract name.
+     * @enum {string}
+     */
+    GlobalConfigModelOperation: GlobalConfigModelOperation;
     /** @description Named worker model selection available to Factory Session runtime opening. */
     GlobalConfigWorkerPreset: {
       /** @description Non-empty preset identifier after surrounding whitespace is trimmed. */
@@ -5093,6 +7061,8 @@ export interface components {
       /** @description Optional model name, trimmed when present. */
       model?: string;
       reasoningEffort?: components["schemas"]["GlobalConfigWorkerPresetReasoningEffort"];
+    } & {
+      [key: string]: unknown;
     };
     /** @description Canonical provider identity or built-in compatibility alias; surrounding whitespace is trimmed, and symbolic DEFAULT is not accepted for presets. */
     GlobalConfigWorkerPresetModelProvider: string;
@@ -5104,11 +7074,24 @@ export interface components {
       /** @description Optional default chaining-trace identifier applied to submitted work items that omit it. */
       currentChainingTraceId?: string;
       type: components["schemas"]["WorkRequestType"];
-      /** @description A batch of work items to be submitted together. */
+      /** @description A batch of work items to be submitted together. Each Work payload uses the compact UTF-8 JSON byte limit documented by the Work schema; a batch is rejected atomically when any Work exceeds 65,536 bytes. */
       works?: components["schemas"]["Work"][];
-      /** @description Relationships between various work items. */
-      relations?: components["schemas"]["Relation"][];
+      /** @description Relationships between submitted or already-boarded work items. */
+      relations?: components["schemas"]["WorkRequestRelation"][];
     };
+    /** @description Relationship declared while admitting a Work Request. A target may be identified by its exact board name, stable Work ID, or both. When both are supplied they must resolve to the same Work. */
+    WorkRequestRelation:
+      | {
+          type: components["schemas"]["RelationType"];
+          sourceWorkName: string;
+          /** @description Stable Work ID on the selected Factory Session board. */
+          targetWorkId?: string;
+          /** @description Exact Work name on the selected Factory Session board. */
+          targetWorkName?: string;
+          requiredState?: string;
+        }
+      | unknown
+      | unknown;
     /**
      * @description Kind of work request accepted by the factory.
      * @enum {string}
@@ -5124,6 +7107,8 @@ export interface components {
       requestId?: string;
       /** @description Configured work type name from factory.json for this submitted work item. */
       workTypeName?: string;
+      /** @description Optional successor Work ID when this terminal or failed same-name Work item has been superseded by a later admission. */
+      supersededBy?: string;
       /** @description Current lifecycle state for this work item when returned by read APIs. Submit requests use the state's name when an explicit initial state is provided. */
       state?: components["schemas"]["WorkState"];
       /** @description Current chaining depth for this work item when the runtime already knows its upstream lineage. */
@@ -5136,14 +7121,22 @@ export interface components {
       traceId?: string;
       /** @description Optional canonical ordered work content parts for this work item. */
       content?: components["schemas"]["WorkContent"];
-      /** @description Opaque work payload forwarded as raw JSON, or a binary data, or whatever else. */
+      /** @description Opaque work payload forwarded as raw JSON. Each submitted Work payload is limited to 65,536 bytes measured from its compact UTF-8 JSON value; exactly 65,536 bytes is allowed. A batch is rejected atomically with a 400 BAD_REQUEST ErrorResponse when any Work payload exceeds this limit. The reported payloadBytes value is a byte count, not a character count. */
       payload?: unknown;
+      /** @description Optional JSON value produced by a workstation whose outputSchema validated the worker response. JSON null is distinct from an omitted value. */
+      structuredResult?: unknown;
       /** @description Key-value pairs for storing arbitrary metadata about the work. Both keys and values are strings. */
       tags?: components["schemas"]["StringMap"];
       /** @description Current outbound relationships attached to this listed source work item when returned by read APIs. */
       relations?: components["schemas"]["Relation"][];
+      /** @description Effective expected artifact declarations and their latest recorded verification state. */
+      expectedArtifacts?: components["schemas"]["WorkExpectedArtifact"][];
       /** @description Canonical stopped-state summary for existing work inspection reads when this work item explains paused, blocked, needs-human, or interrupted automation. */
       stopSummary?: components["schemas"]["FactoryStopSummary"];
+      /** @description Pending HUMAN_APPROVAL request currently owning this Work item, when present. */
+      humanApproval?: components["schemas"]["HumanApproval"];
+      /** @description Most recent bounded failure detail when this Work item is currently in a failed state. */
+      failureDetail?: components["schemas"]["FailureDetail"];
     };
     /** @description Ordered canonical content parts for one work item. */
     WorkContent: components["schemas"]["WorkContentPart"][];
@@ -5241,6 +7234,8 @@ export interface components {
       type?: components["schemas"]["ModelOperationContentType"];
       /** @description Match a content part by its role field. */
       role?: string;
+    } & {
+      [key: string]: unknown;
     };
     /** @description One workstation-authored binding for a provider-agnostic model-operation input slot. */
     WorkstationOperationBinding: {
@@ -5252,6 +7247,8 @@ export interface components {
       config?: components["schemas"]["WorkContent"];
       /** @description Optional final fallback content when neither runtime input nor config content resolves the slot. */
       defaultContent?: components["schemas"]["WorkContent"];
+    } & {
+      [key: string]: unknown;
     };
     /** @description Default worker selection for one named JavaScript child-agent role. */
     FactoryOrchestratorJavaScriptAgent: {
@@ -5268,6 +7265,20 @@ export interface components {
      * @enum {string}
      */
     WorkTypeHandlingBehavior: WorkTypeHandlingBehavior;
+    /** @description One expected output declaration relative to the dispatch workspace. Pattern is a workspace-relative literal path or glob and may use the replay-safe dispatch template fields `.Inputs` (the replay-safe fields are documented by `ExpectedArtifactTemplateInput`), `.Context.Project`, and `.Context.SessionID` inside a Go template action. Prompt-only fields, host paths, environment variables, and Factory documentation are not supported. */
+    ExpectedArtifact: {
+      /** @description Customer-visible name for this expected output declaration. */
+      name: string;
+      /** @description Workspace-relative literal path or glob template to verify. */
+      pattern: string;
+      /**
+       * @description Require every regular file matched by the pattern to be non-empty.
+       * @default false
+       */
+      nonEmpty: boolean;
+    } & {
+      [key: string]: unknown;
+    };
     /** @description Two-dimensional authored graph layout coordinate. */
     FactoryLayoutPoint: {
       /** @description Horizontal graph layout coordinate in authored canvas space. */
@@ -5477,11 +7488,15 @@ export interface components {
       workType?: string;
       /** @description Canonical submitted work state emitted for matched Linear issues. */
       state?: string;
+    } & {
+      [key: string]: unknown;
     };
     /** @description Optional claim-related configuration that v1 hosted Linear workers explicitly allow. */
     HostedLinearWorkerClaim: {
       /** @description Linear issue field name to use when deriving optional assignee claim metadata. */
       assigneeField?: string;
+    } & {
+      [key: string]: unknown;
     };
     /** @description Provider-specific poller configuration for the built-in hosted Linear worker. */
     HostedLinearWorkerConfig: {
@@ -5495,6 +7510,8 @@ export interface components {
       mapping?: components["schemas"]["HostedLinearWorkerMapping"];
       /** @description Optional claim-related configuration that v1 hosted Linear polling allows. */
       claim?: components["schemas"]["HostedLinearWorkerClaim"];
+    } & {
+      [key: string]: unknown;
     };
     /**
      * @description Guard condition attached to one specific workstation input.
@@ -5523,6 +7540,15 @@ export interface components {
      * @enum {string}
      */
     WorkstationGuardType: WorkstationGuardType;
+    /** @description Optional paired workstation policy for charging one logical visit per process/review round trip. */
+    LogicalRoundTrip: {
+      /** @description Exactly two workstation names whose visits form one logical round trip. */
+      workstations: string[];
+      /** @description Absolute raw-visit ceiling across both paired workstations; it must exceed the containing guard's maxVisits. */
+      maxRawVisits: number;
+    } & {
+      [key: string]: unknown;
+    };
     /** @description Guard attached to a workstation as a whole. */
     WorkstationGuard: {
       /** @description Guard condition to evaluate for this workstation-level attachment. */
@@ -5533,6 +7559,8 @@ export interface components {
       maxVisits?: number;
       /** @description Optional invocation argument whose positive integer value tightens the fixed visit ceiling. */
       maxVisitsArgument?: string;
+      /** @description Optional paired process/review policy. When present, the containing maxVisits is the logical cycle budget and maxRawVisits is the absolute raw-visit backstop. */
+      logicalRoundTrip?: components["schemas"]["LogicalRoundTrip"];
       /** @description For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs. */
       matchConfig?: components["schemas"]["GuardMatchConfig"];
       /** @description For parent-aware input guards, the parent workType name from another input in the same workstation. */
@@ -5555,12 +7583,23 @@ export interface components {
       /** @description Operator-authored ACP launch command preserved as one settings value. It contains no permission or timeout policy. */
       command: string;
     };
+    GlobalConfigACPAgentProfile: {
+      /** @description Unversioned namespaced Factory target reference, such as factory:@you/factory-builder. Factory Definitions owns enumeration and canonical reference resolution. */
+      defaultTarget: string;
+      /** @description Optional ordered allowlist of unversioned namespaced Factory target references. Order is authored and preserved. Omit this property to leave the profile unrestricted, which makes every installed Factory selectable. An explicitly empty array is rejected, so omission is the only way to express "no restriction". */
+      allowedTargets?: string[];
+    };
     GlobalConfigACPSettings: {
       /** @description Operator-selected ACP provider integrations. Availability is derived by the Providers catalog and is never persisted here. */
       integrations?: components["schemas"]["GlobalConfigACPIntegration"][];
+      agentProfile?: components["schemas"]["GlobalConfigACPAgentProfile"];
+    } & {
+      [key: string]: unknown;
     };
     GlobalConfigWorkers: {
       acp?: components["schemas"]["GlobalConfigACPSettings"];
+    } & {
+      [key: string]: unknown;
     };
   };
   responses: {
@@ -5645,6 +7684,123 @@ export interface components {
         "application/json": components["schemas"]["ErrorResponse"];
       };
     };
+    /** @description The Worker Session start conflicts with an existing reservation or request identity. */
+    WorkerSessionStartConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The Worker Session could not cross its event-readiness or Workers-admission barrier. */
+    WorkerSessionStartUnavailable: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The Worker Session continuation conflicts with source lifecycle, lineage, idempotency, or Provider Session validation. */
+    WorkerSessionContinuationConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The Worker Session continuation could not cross its event-readiness or Workers-admission barrier. */
+    WorkerSessionContinuationUnavailable: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The Worker Session interrupt request failed validation. */
+    WorkerSessionInterruptBadRequest: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["WorkerSessionInterruptError"];
+      };
+    };
+    /** @description The Worker Session interrupt source was not found. */
+    WorkerSessionInterruptNotFound: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["WorkerSessionInterruptError"];
+      };
+    };
+    /** @description The Worker Session interrupt conflicts with source, lineage, or idempotency state. */
+    WorkerSessionInterruptConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["WorkerSessionInterruptError"];
+      };
+    };
+    /** @description The Worker Session interrupt could not cross its cancellation or successor admission barrier. */
+    WorkerSessionInterruptUnavailable: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["WorkerSessionInterruptError"];
+      };
+    };
+    /** @description The server failed while handling an otherwise valid Worker Session interrupt. */
+    WorkerSessionInterruptInternalError: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["WorkerSessionInterruptError"];
+      };
+    };
+    /** @description The Worker Session lifecycle control conflicts with its current state. */
+    WorkerSessionControlConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The Worker Session lifecycle control could not reach its authoritative boundary. */
+    WorkerSessionControlUnavailable: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The server failed while applying the Worker Session lifecycle control. */
+    WorkerSessionControlInternalError: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The durable Worker Session recording could not be read. */
+    WorkerSessionRecordingUnavailable: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
     /** @description Lifecycle control request conflicts with current session state, another in-flight control, or a previously applied control requestId. */
     FactorySessionLifecycleControlConflict: {
       headers: {
@@ -5653,6 +7809,17 @@ export interface components {
       content: {
         "application/json":
           | components["schemas"]["FactorySessionLifecycleControlResponse"]
+          | components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description Resource capacity admission was rejected because the request revision or Factory Session lifecycle is stale, the requested capacity is below units in use. */
+    FactorySessionResourceCapacityConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json":
+          | components["schemas"]["FactorySessionResourceCapacityResponse"]
           | components["schemas"]["ErrorResponse"];
       };
     };
@@ -5692,12 +7859,31 @@ export interface components {
         "application/json": components["schemas"]["ErrorResponse"];
       };
     };
+    /** @description The selected live Factory Session has no retained metrics scope. */
+    MetricsSessionScopeUnavailable: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
   };
   parameters: {
     /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
     SessionID: string;
+    /** @description Stable pending human-approval identifier. */
+    HumanApprovalID: string;
+    /** @description Optional status filter for pending human approvals. */
+    HumanApprovalStatus: ComponentsParametersHumanApprovalStatus;
+    /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+    WorkerSessionID: string;
+    /** @description Stable authored Resource.id. Mutable display names are not accepted as identifiers. */
+    ResourceID: string;
     /** @description Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding. */
     MaxResults: number;
+    /** @description Optional positive result bound applied after state and origin filters. Omit to use the default page size of 50. Zero and negative values are invalid. */
+    WorkerSessionLimit: number;
     /** @description Optional base64-encoded token ID cursor. */
     NextToken: string;
     /** @description Optional current work state name filter. */
@@ -5712,6 +7898,14 @@ export interface components {
     WorkListWorkTypeName: string;
     /** @description Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly. */
     WorkListTraceId: string;
+    /** @description Optional terminality filter. When true, selects Work in canonical TERMINAL or FAILED states. It composes with every other supplied list filter. */
+    WorkListTerminal: boolean;
+    /** @description Optional terminality filter. When true, selects Work in INITIAL or PROCESSING states. It composes with every other supplied list filter and cannot be selected together with terminal=true. */
+    WorkListNonTerminal: boolean;
+    /** @description Optional count request. When true, the response includes counts.total for the complete filtered selection before ordering page slicing and pagination. */
+    WorkListCounts: boolean;
+    /** @description Optional historical view. When true, includes terminal or failed same-name Work items that have a later admitted successor; otherwise those superseded rows are omitted before counts and pagination. */
+    WorkListIncludeSuperseded: boolean;
     /** @description Work or token identifier, depending on route. */
     WorkOrTokenID: string;
     /** @description Optional session list scope. Defaults to live for backward-compatible live workspace session listing. */
@@ -5732,6 +7926,10 @@ export interface components {
     AfterEventId: string;
     /** @description Session-scoped reconnect cursor identifying the last acknowledged ordering point. Session-scoped FactoryEvent streams prefer FactoryEvent.context.sessionSequence when present and otherwise fall back to FactoryEvent.context.sequence. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. Cursors that no longer match the retained history boundary surface as cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE open. */
     AfterSequence: number;
+    /** @description Worker Session reconnect cursor identifying the last acknowledged canonical event position. The stream resumes exclusively after this position; a cursor from another Worker Session, a future position, or an unavailable retained position is rejected with a typed outcome. */
+    WorkerSessionAfterPosition: number;
+    /** @description Optional durable Worker Session event-stream generation that qualifies after_position. A generation mismatch never falls back to another history. */
+    WorkerSessionStreamGenerationID: string;
     /** @description Last acknowledged FactoryResponseEvent.sequence. The stream sends only retained response events with a greater sequence before continuing with live events. Omit this cursor to start at the beginning of retained response-event history. If the cursor predates retained history, the first emitted event is a STREAM_GAP record describing the loss instead of silently skipping it. */
     ResponseEventAfterSequence: number;
     /** @description Return only FactoryResponseEvent records associated with this exact dispatch identifier. Invalid or empty identifiers return the typed bad-request response. */
@@ -5749,6 +7947,382 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  getMetrics: {
+    parameters: {
+      query?: {
+        /** @description Optional discoverable live Factory Session identity. */
+        session_id?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Canonical runtime metrics for the selected scope. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MetricsReport"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      503: components["responses"]["MetricsSessionScopeUnavailable"];
+    };
+  };
+  getMetricsCosts: {
+    parameters: {
+      query?: {
+        /** @description Optional Factory Session identity to scope the report. */
+        session_id?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Exact cost report with priced and unpriced coverage. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CostsReport"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  listWorkerSessions: {
+    parameters: {
+      query?: {
+        /** @description Origin scope to inspect. Omit for the fleet-wide view. */
+        scope?: PathsWorkerSessionsGetParametersQueryScope;
+        /** @description Optional repeated Worker Session lifecycle state filters. */
+        state?: PathsWorkerSessionsGetParametersQueryState[];
+        /** @description Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding. */
+        maxResults?: components["parameters"]["MaxResults"];
+        /** @description Optional positive result bound applied after state and origin filters. Omit to use the default page size of 50. Zero and negative values are invalid. */
+        limit?: components["parameters"]["WorkerSessionLimit"];
+        /** @description Optional base64-encoded token ID cursor. */
+        nextToken?: components["parameters"]["NextToken"];
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Deterministically ordered top-level Worker Session observations. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListWorkerSessionsResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  startWorkerSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["WorkerSessionStartRequest"];
+      };
+    };
+    responses: {
+      /** @description Worker Session was admitted and is observable. */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionStartResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      409: components["responses"]["WorkerSessionStartConflict"];
+      503: components["responses"]["WorkerSessionStartUnavailable"];
+    };
+  };
+  getWorkerSessionObservationByWorkerSessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description One top-level Worker Session observation. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionObservation"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  continueWorkerSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["WorkerSessionContinueRequest"];
+      };
+    };
+    responses: {
+      /** @description The successor Worker Session was admitted and is observable. */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionContinueResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["WorkerSessionContinuationConflict"];
+      503: components["responses"]["WorkerSessionContinuationUnavailable"];
+    };
+  };
+  interruptWorkerSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["WorkerSessionInterruptRequest"];
+      };
+    };
+    responses: {
+      /** @description The source was canceled and the replacement successor was admitted. */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionInterruptResponse"];
+        };
+      };
+      400: components["responses"]["WorkerSessionInterruptBadRequest"];
+      404: components["responses"]["WorkerSessionInterruptNotFound"];
+      409: components["responses"]["WorkerSessionInterruptConflict"];
+      500: components["responses"]["WorkerSessionInterruptInternalError"];
+      503: components["responses"]["WorkerSessionInterruptUnavailable"];
+    };
+  };
+  pauseWorkerSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The Worker Session control result. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionControlResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["WorkerSessionControlConflict"];
+      500: components["responses"]["WorkerSessionControlInternalError"];
+      503: components["responses"]["WorkerSessionControlUnavailable"];
+    };
+  };
+  resumeWorkerSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The Worker Session control result. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionControlResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["WorkerSessionControlConflict"];
+      500: components["responses"]["WorkerSessionControlInternalError"];
+      503: components["responses"]["WorkerSessionControlUnavailable"];
+    };
+  };
+  cancelWorkerSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The Worker Session control result. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionControlResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["WorkerSessionControlConflict"];
+      500: components["responses"]["WorkerSessionControlInternalError"];
+      503: components["responses"]["WorkerSessionControlUnavailable"];
+    };
+  };
+  terminateWorkerSession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The Worker Session control result. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionControlResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["WorkerSessionControlConflict"];
+      500: components["responses"]["WorkerSessionControlInternalError"];
+      503: components["responses"]["WorkerSessionControlUnavailable"];
+    };
+  };
+  streamWorkerSessionEventsByTopLevelWorkerSessionId: {
+    parameters: {
+      query?: {
+        /** @description Drain retained history without registering a live follower. */
+        replayOnly?: boolean;
+      };
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Retained then live Worker Session event frames. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/event-stream": string;
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  readWorkerSessionTranscriptByWorkerSessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Normalized transcript for a finished Worker Session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionTranscriptResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      /** @description The Worker Session is still active and has no final transcript. */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      500: components["responses"]["InternalError"];
+    };
+  };
   listWorkBySessionId: {
     parameters: {
       query?: {
@@ -5768,6 +8342,14 @@ export interface operations {
         workTypeName?: components["parameters"]["WorkListWorkTypeName"];
         /** @description Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly. */
         traceId?: components["parameters"]["WorkListTraceId"];
+        /** @description Optional terminality filter. When true, selects Work in canonical TERMINAL or FAILED states. It composes with every other supplied list filter. */
+        terminal?: components["parameters"]["WorkListTerminal"];
+        /** @description Optional terminality filter. When true, selects Work in INITIAL or PROCESSING states. It composes with every other supplied list filter and cannot be selected together with terminal=true. */
+        nonTerminal?: components["parameters"]["WorkListNonTerminal"];
+        /** @description Optional count request. When true, the response includes counts.total for the complete filtered selection before ordering page slicing and pagination. */
+        counts?: components["parameters"]["WorkListCounts"];
+        /** @description Optional historical view. When true, includes terminal or failed same-name Work items that have a later admitted successor; otherwise those superseded rows are omitted before counts and pagination. */
+        includeSuperseded?: components["parameters"]["WorkListIncludeSuperseded"];
       };
       header?: never;
       path: {
@@ -5778,7 +8360,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Current work tokens for the targeted session. */
+      /** @description Current work tokens for the targeted session. All supplied filters compose with logical AND before deterministic ordering and pagination. When counts=true, counts.total is the complete filtered selection before page slicing and is stable across pages of an unchanged session snapshot. */
       200: {
         headers: {
           [name: string]: unknown;
@@ -5787,6 +8369,7 @@ export interface operations {
           "application/json": components["schemas"]["ListWorkResponse"];
         };
       };
+      400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
     };
@@ -5819,6 +8402,316 @@ export interface operations {
       400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
+    };
+  };
+  listHumanApprovalsBySessionId: {
+    parameters: {
+      query?: {
+        /** @description Optional status filter for pending human approvals. */
+        status?: components["parameters"]["HumanApprovalStatus"];
+      };
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Deterministically ordered pending approvals. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListHumanApprovalsResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getHumanApprovalBySessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+        /** @description Stable pending human-approval identifier. */
+        approval_id: components["parameters"]["HumanApprovalID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description One pending human approval. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HumanApproval"];
+        };
+      };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  listWorkerSessionsBySessionId: {
+    parameters: {
+      query: {
+        /** @description Work identity whose Worker Session attempts should be listed. */
+        workId: string;
+      };
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Deterministically ordered Worker Session observations. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListWorkerSessionsResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["WorkerSessionRecordingUnavailable"];
+    };
+  };
+  streamWorkerSessionEventsBySessionId: {
+    parameters: {
+      query: {
+        /** @description Provider that issued the correlated session identity. */
+        provider: components["schemas"]["LoadableProviderSessionProvider"];
+        /** @description Provider-session identifier kind. */
+        kind: components["schemas"]["LoadableProviderSessionKind"];
+        /** @description Provider-issued session identifier, not a filesystem path. */
+        id: string;
+        /** @description Drain the retained history through a captured Events head without registering a live follower. */
+        replayOnly?: boolean;
+        /** @description Worker Session reconnect cursor identifying the last acknowledged canonical event position. The stream resumes exclusively after this position; a cursor from another Worker Session, a future position, or an unavailable retained position is rejected with a typed outcome. */
+        after_position?: components["parameters"]["WorkerSessionAfterPosition"];
+        /** @description Session-scoped reconnect cursor identifying the last acknowledged ordering point. Session-scoped FactoryEvent streams prefer FactoryEvent.context.sessionSequence when present and otherwise fall back to FactoryEvent.context.sequence. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. Cursors that no longer match the retained history boundary surface as cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE open. */
+        after_sequence?: components["parameters"]["AfterSequence"];
+        /** @description Optional durable Worker Session event-stream generation that qualifies after_position. A generation mismatch never falls back to another history. */
+        stream_generation_id?: components["parameters"]["WorkerSessionStreamGenerationID"];
+      };
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Retained then live Worker Session event frames, or a finite retained replay ending in REPLAY_SUMMARY. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/event-stream": string;
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["WorkerSessionRecordingUnavailable"];
+    };
+  };
+  streamWorkerSessionEventsByWorkerSessionId: {
+    parameters: {
+      query?: {
+        /** @description Drain the retained history through a captured Events head without registering a live follower. */
+        replayOnly?: boolean;
+        /** @description Worker Session reconnect cursor identifying the last acknowledged canonical event position. The stream resumes exclusively after this position; a cursor from another Worker Session, a future position, or an unavailable retained position is rejected with a typed outcome. */
+        after_position?: components["parameters"]["WorkerSessionAfterPosition"];
+        /** @description Session-scoped reconnect cursor identifying the last acknowledged ordering point. Session-scoped FactoryEvent streams prefer FactoryEvent.context.sessionSequence when present and otherwise fall back to FactoryEvent.context.sequence. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. Cursors that no longer match the retained history boundary surface as cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE open. */
+        after_sequence?: components["parameters"]["AfterSequence"];
+        /** @description Optional durable Worker Session event-stream generation that qualifies after_position. A generation mismatch never falls back to another history. */
+        stream_generation_id?: components["parameters"]["WorkerSessionStreamGenerationID"];
+      };
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Retained then live Worker Session event frames, or a finite retained replay ending in REPLAY_SUMMARY. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/event-stream": string;
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["WorkerSessionRecordingUnavailable"];
+    };
+  };
+  getWorkerSessionObservationByFactorySessionAndWorkerSessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description One detached Worker Session observation. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionObservation"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["WorkerSessionRecordingUnavailable"];
+    };
+  };
+  readWorkerSessionTranscriptByFactorySessionAndWorkerSessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+        /** @description Stable Worker Session identity returned by the Worker Sessions list operation. */
+        worker_session_id: components["parameters"]["WorkerSessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Normalized transcript for a finished Worker Session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionTranscriptResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      /** @description The Worker Session is still active and has no final transcript. */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["WorkerSessionRecordingUnavailable"];
+    };
+  };
+  getWorkerSessionObservationBySessionId: {
+    parameters: {
+      query: {
+        /** @description Provider that issued the correlated session identity. */
+        provider: components["schemas"]["LoadableProviderSessionProvider"];
+        /** @description Provider-session identifier kind. */
+        kind: components["schemas"]["LoadableProviderSessionKind"];
+        /** @description Provider-issued session identifier, not a filesystem path. */
+        id: string;
+      };
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description One detached Worker Session observation. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionObservation"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["WorkerSessionRecordingUnavailable"];
+    };
+  };
+  readWorkerSessionTranscriptBySessionId: {
+    parameters: {
+      query: {
+        /** @description Provider that issued the correlated session identity. */
+        provider: components["schemas"]["LoadableProviderSessionProvider"];
+        /** @description Provider-session identifier kind. */
+        kind: components["schemas"]["LoadableProviderSessionKind"];
+        /** @description Provider-issued session identifier, not a filesystem path. */
+        id: string;
+      };
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Normalized transcript for a finished Worker Session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkerSessionTranscriptResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      /** @description The Worker Session is still active and has no final transcript. */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["WorkerSessionRecordingUnavailable"];
     };
   };
   invokeFactorySessionBySessionId: {
@@ -6001,6 +8894,8 @@ export interface operations {
           "X-Factory-Session-Factory-Session-Id"?: string;
           /** @description Opaque invalidation token for the current live Factory Session event history. Compare this handshake header with session-sync or preflight `streamGenerationID` values before reusing reconnect cursors or stream-derived projections. */
           "X-Factory-Session-Stream-Generation-Id"?: string;
+          /** @description Count of already-committed canonical FactoryEvent records written as the retained-history prefix before any live event, captured at subscribe time. A bounded reader can read exactly this many leading data frames instead of inferring completion from stream quiescence. */
+          "X-Factory-Session-Retained-Event-Count"?: number;
           [name: string]: unknown;
         };
         content: {
@@ -6119,6 +9014,33 @@ export interface operations {
           "application/json": components["schemas"]["ListModelsResponse"];
         };
       };
+      500: components["responses"]["InternalError"];
+    };
+  };
+  invokeGenericModel: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["GenericModelInvocationRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful generic model invocation result. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GenericModelInvocationResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
     };
   };
@@ -6526,6 +9448,39 @@ export interface operations {
         };
       };
       404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  setFactorySessionResourceCapacity: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+        /** @description Stable authored Resource.id. Mutable display names are not accepted as identifiers. */
+        resource_id: components["parameters"]["ResourceID"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["FactorySessionResourceCapacityRequest"];
+      };
+    };
+    responses: {
+      /** @description Capacity was applied, was an exact no-op, or replayed an identical request. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionResourceCapacityResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["FactorySessionResourceCapacityConflict"];
       500: components["responses"]["InternalError"];
     };
   };
@@ -7070,6 +10025,25 @@ export interface operations {
     };
   };
 }
+export const PathsWorkerSessionsGetParametersQueryScope = {
+  direct: "direct",
+  factory: "factory",
+  all: "all",
+} as const;
+export type PathsWorkerSessionsGetParametersQueryScope =
+  (typeof PathsWorkerSessionsGetParametersQueryScope)[keyof typeof PathsWorkerSessionsGetParametersQueryScope];
+export const PathsWorkerSessionsGetParametersQueryState = {
+  RESERVED: "RESERVED",
+  STARTING: "STARTING",
+  RUNNING: "RUNNING",
+  PAUSED: "PAUSED",
+  COMPLETED: "COMPLETED",
+  FAILED: "FAILED",
+  CANCELED: "CANCELED",
+  TERMINATED: "TERMINATED",
+} as const;
+export type PathsWorkerSessionsGetParametersQueryState =
+  (typeof PathsWorkerSessionsGetParametersQueryState)[keyof typeof PathsWorkerSessionsGetParametersQueryState];
 export const InvocationInputSourceKind = {
   // Text supplied in canonical WorkContent.
   InvocationInputSourceKindText: "text",
@@ -7094,6 +10068,12 @@ export const InvocationResponseErrorCode = {
 } as const;
 export type InvocationResponseErrorCode =
   (typeof InvocationResponseErrorCode)[keyof typeof InvocationResponseErrorCode];
+export const InvocationResponseDecisions = {
+  APPROVE: "APPROVE",
+  REJECT: "REJECT",
+} as const;
+export type InvocationResponseDecisions =
+  (typeof InvocationResponseDecisions)[keyof typeof InvocationResponseDecisions];
 export const InvocationTerminalStatus = {
   // Invocation completed and any primaryResult is authoritative.
   InvocationTerminalStatusCompleted: "COMPLETED",
@@ -7140,6 +10120,189 @@ export const SubmitWorkDocumentItemType = {
 } as const;
 export type SubmitWorkDocumentItemType =
   (typeof SubmitWorkDocumentItemType)[keyof typeof SubmitWorkDocumentItemType];
+export const WorkerSessionStartResponseState = {
+  WorkerSessionStartResponseStateReserved: "RESERVED",
+  WorkerSessionStartResponseStateStarting: "STARTING",
+  WorkerSessionStartResponseStateRunning: "RUNNING",
+  WorkerSessionStartResponseStatePaused: "PAUSED",
+  WorkerSessionStartResponseStateCompleted: "COMPLETED",
+  WorkerSessionStartResponseStateFailed: "FAILED",
+  WorkerSessionStartResponseStateCanceled: "CANCELED",
+  WorkerSessionStartResponseStateTerminated: "TERMINATED",
+} as const;
+export type WorkerSessionStartResponseState =
+  (typeof WorkerSessionStartResponseState)[keyof typeof WorkerSessionStartResponseState];
+export const WorkerSessionContinueResponseState = {
+  WorkerSessionContinueResponseStateReserved: "RESERVED",
+  WorkerSessionContinueResponseStateStarting: "STARTING",
+  WorkerSessionContinueResponseStateRunning: "RUNNING",
+  WorkerSessionContinueResponseStatePaused: "PAUSED",
+  WorkerSessionContinueResponseStateCompleted: "COMPLETED",
+  WorkerSessionContinueResponseStateFailed: "FAILED",
+  WorkerSessionContinueResponseStateCanceled: "CANCELED",
+  WorkerSessionContinueResponseStateTerminated: "TERMINATED",
+} as const;
+export type WorkerSessionContinueResponseState =
+  (typeof WorkerSessionContinueResponseState)[keyof typeof WorkerSessionContinueResponseState];
+export const WorkerSessionInterruptSnapshotState = {
+  WorkerSessionInterruptSnapshotStateReserved: "RESERVED",
+  WorkerSessionInterruptSnapshotStateStarting: "STARTING",
+  WorkerSessionInterruptSnapshotStateRunning: "RUNNING",
+  WorkerSessionInterruptSnapshotStatePaused: "PAUSED",
+  WorkerSessionInterruptSnapshotStateCompleted: "COMPLETED",
+  WorkerSessionInterruptSnapshotStateFailed: "FAILED",
+  WorkerSessionInterruptSnapshotStateCanceled: "CANCELED",
+  WorkerSessionInterruptSnapshotStateTerminated: "TERMINATED",
+} as const;
+export type WorkerSessionInterruptSnapshotState =
+  (typeof WorkerSessionInterruptSnapshotState)[keyof typeof WorkerSessionInterruptSnapshotState];
+export const WorkerSessionInterruptResponsePhase = {
+  WorkerSessionInterruptResponsePhaseSuccessorAdmission: "SUCCESSOR_ADMISSION",
+} as const;
+export type WorkerSessionInterruptResponsePhase =
+  (typeof WorkerSessionInterruptResponsePhase)[keyof typeof WorkerSessionInterruptResponsePhase];
+export const WorkerSessionInterruptErrorPhase = {
+  WorkerSessionInterruptErrorPhaseValidation: "VALIDATION",
+  WorkerSessionInterruptErrorPhaseSourceCancellation: "SOURCE_CANCELLATION",
+  WorkerSessionInterruptErrorPhaseSuccessorAdmission: "SUCCESSOR_ADMISSION",
+  WorkerSessionInterruptErrorPhaseTransport: "TRANSPORT",
+  WorkerSessionInterruptErrorPhaseResponse: "RESPONSE",
+  WorkerSessionInterruptErrorPhaseWait: "WAIT",
+} as const;
+export type WorkerSessionInterruptErrorPhase =
+  (typeof WorkerSessionInterruptErrorPhase)[keyof typeof WorkerSessionInterruptErrorPhase];
+export const WorkerSessionControlResponseAction = {
+  WorkerSessionControlResponseActionPause: "PAUSE",
+  WorkerSessionControlResponseActionResume: "RESUME",
+  WorkerSessionControlResponseActionCancel: "CANCEL",
+  WorkerSessionControlResponseActionTerminate: "TERMINATE",
+} as const;
+export type WorkerSessionControlResponseAction =
+  (typeof WorkerSessionControlResponseAction)[keyof typeof WorkerSessionControlResponseAction];
+export const WorkerSessionControlResponseOutcome = {
+  WorkerSessionControlResponseOutcomeApplied: "APPLIED",
+  WorkerSessionControlResponseOutcomeNoop: "NOOP",
+  WorkerSessionControlResponseOutcomeUnsupported: "UNSUPPORTED",
+  WorkerSessionControlResponseOutcomeFailed: "FAILED",
+} as const;
+export type WorkerSessionControlResponseOutcome =
+  (typeof WorkerSessionControlResponseOutcome)[keyof typeof WorkerSessionControlResponseOutcome];
+export const WorkerSessionControlResponseState = {
+  WorkerSessionControlResponseStateReserved: "RESERVED",
+  WorkerSessionControlResponseStateStarting: "STARTING",
+  WorkerSessionControlResponseStateRunning: "RUNNING",
+  WorkerSessionControlResponseStatePaused: "PAUSED",
+  WorkerSessionControlResponseStateCompleted: "COMPLETED",
+  WorkerSessionControlResponseStateFailed: "FAILED",
+  WorkerSessionControlResponseStateCanceled: "CANCELED",
+  WorkerSessionControlResponseStateTerminated: "TERMINATED",
+} as const;
+export type WorkerSessionControlResponseState =
+  (typeof WorkerSessionControlResponseState)[keyof typeof WorkerSessionControlResponseState];
+export const WorkerSessionObservationState = {
+  WorkerSessionObservationStateReserved: "RESERVED",
+  WorkerSessionObservationStateStarting: "STARTING",
+  WorkerSessionObservationStateRunning: "RUNNING",
+  WorkerSessionObservationStatePaused: "PAUSED",
+  WorkerSessionObservationStateCompleted: "COMPLETED",
+  WorkerSessionObservationStateFailed: "FAILED",
+  WorkerSessionObservationStateCanceled: "CANCELED",
+  WorkerSessionObservationStateTerminated: "TERMINATED",
+} as const;
+export type WorkerSessionObservationState =
+  (typeof WorkerSessionObservationState)[keyof typeof WorkerSessionObservationState];
+export const WorkerSessionObservationDurationBasis = {
+  UNAVAILABLE: "UNAVAILABLE",
+  ACTIVE_CLOCK: "ACTIVE_CLOCK",
+  RECORDED_TIMESTAMPS: "RECORDED_TIMESTAMPS",
+} as const;
+export type WorkerSessionObservationDurationBasis =
+  (typeof WorkerSessionObservationDurationBasis)[keyof typeof WorkerSessionObservationDurationBasis];
+export const WorkerSessionObservationTranscript = {
+  UNAVAILABLE: "UNAVAILABLE",
+  AVAILABLE: "AVAILABLE",
+} as const;
+export type WorkerSessionObservationTranscript =
+  (typeof WorkerSessionObservationTranscript)[keyof typeof WorkerSessionObservationTranscript];
+export const WorkerSessionObservationRecordingHealth = {
+  WorkerSessionObservationRecordingHealthComplete: "COMPLETE",
+  WorkerSessionObservationRecordingHealthDegraded: "DEGRADED",
+  WorkerSessionObservationRecordingHealthIncomplete: "INCOMPLETE",
+} as const;
+export type WorkerSessionObservationRecordingHealth =
+  (typeof WorkerSessionObservationRecordingHealth)[keyof typeof WorkerSessionObservationRecordingHealth];
+export const WorkerSessionEventRecordingHealth = {
+  WorkerSessionEventRecordingHealthComplete: "COMPLETE",
+  WorkerSessionEventRecordingHealthDegraded: "DEGRADED",
+  WorkerSessionEventRecordingHealthIncomplete: "INCOMPLETE",
+} as const;
+export type WorkerSessionEventRecordingHealth =
+  (typeof WorkerSessionEventRecordingHealth)[keyof typeof WorkerSessionEventRecordingHealth];
+export const WorkerSessionReplaySummaryKind = {
+  replay_summary: "replay-summary",
+} as const;
+export type WorkerSessionReplaySummaryKind =
+  (typeof WorkerSessionReplaySummaryKind)[keyof typeof WorkerSessionReplaySummaryKind];
+export const WorkerSessionEventDelivery = {
+  WorkerSessionEventDeliveryRecord: "RECORD",
+  WorkerSessionEventDeliveryTerminal: "TERMINAL",
+  WorkerSessionEventDeliveryTerminalReplay: "TERMINAL_REPLAY",
+  WorkerSessionEventDeliveryReplaySummary: "REPLAY_SUMMARY",
+  WorkerSessionEventDeliverySourceFailure: "SOURCE_FAILURE",
+} as const;
+export type WorkerSessionEventDelivery =
+  (typeof WorkerSessionEventDelivery)[keyof typeof WorkerSessionEventDelivery];
+export const CostsScopeKind = {
+  ALL_FACTORY_SESSIONS: "ALL_FACTORY_SESSIONS",
+  FACTORY_SESSION: "FACTORY_SESSION",
+} as const;
+export type CostsScopeKind =
+  (typeof CostsScopeKind)[keyof typeof CostsScopeKind];
+export const CostsLineItemStatus = {
+  PRICED: "PRICED",
+  UNPRICED: "UNPRICED",
+} as const;
+export type CostsLineItemStatus =
+  (typeof CostsLineItemStatus)[keyof typeof CostsLineItemStatus];
+export const CostsRollupCurrency = {
+  USD: "USD",
+} as const;
+export type CostsRollupCurrency =
+  (typeof CostsRollupCurrency)[keyof typeof CostsRollupCurrency];
+export const CostsRollupStatus = {
+  PRICED: "PRICED",
+  PARTIAL: "PARTIAL",
+  UNPRICED: "UNPRICED",
+  NO_USAGE: "NO_USAGE",
+} as const;
+export type CostsRollupStatus =
+  (typeof CostsRollupStatus)[keyof typeof CostsRollupStatus];
+export const CostsProviderModelRollupCurrency = {
+  USD: "USD",
+} as const;
+export type CostsProviderModelRollupCurrency =
+  (typeof CostsProviderModelRollupCurrency)[keyof typeof CostsProviderModelRollupCurrency];
+export const CostsProviderModelRollupStatus = {
+  PRICED: "PRICED",
+  PARTIAL: "PARTIAL",
+  UNPRICED: "UNPRICED",
+  NO_USAGE: "NO_USAGE",
+} as const;
+export type CostsProviderModelRollupStatus =
+  (typeof CostsProviderModelRollupStatus)[keyof typeof CostsProviderModelRollupStatus];
+export const CostsReportCurrency = {
+  USD: "USD",
+} as const;
+export type CostsReportCurrency =
+  (typeof CostsReportCurrency)[keyof typeof CostsReportCurrency];
+export const CostsReportStatus = {
+  PRICED: "PRICED",
+  PARTIAL: "PARTIAL",
+  UNPRICED: "UNPRICED",
+  NO_USAGE: "NO_USAGE",
+} as const;
+export type CostsReportStatus =
+  (typeof CostsReportStatus)[keyof typeof CostsReportStatus];
 export const ManagedRuntimeLifecycleState = {
   // Managed install and cache lifecycle does not apply, such as for cloud-backed runtimes.
   NOT_APPLICABLE: "NOT_APPLICABLE",
@@ -7188,6 +10351,42 @@ export const ManagedRuntimeReadinessState = {
 } as const;
 export type ManagedRuntimeReadinessState =
   (typeof ManagedRuntimeReadinessState)[keyof typeof ManagedRuntimeReadinessState];
+export const ModelInvocationContentType = {
+  TEXT: "TEXT",
+  IMAGE: "IMAGE",
+  AUDIO: "AUDIO",
+  VIDEO: "VIDEO",
+  JSON: "JSON",
+  BINARY: "BINARY",
+} as const;
+export type ModelInvocationContentType =
+  (typeof ModelInvocationContentType)[keyof typeof ModelInvocationContentType];
+export const ModelInvocationOutputMode = {
+  AUTO: "AUTO",
+  INLINE: "INLINE",
+  JSON: "JSON",
+  ARTIFACT: "ARTIFACT",
+} as const;
+export type ModelInvocationOutputMode =
+  (typeof ModelInvocationOutputMode)[keyof typeof ModelInvocationOutputMode];
+export const ModelInvocationFailureClass = {
+  INVALID_MODEL_REFERENCE: "INVALID_MODEL_REFERENCE",
+  INVALID_OPERATION: "INVALID_OPERATION",
+  INVALID_SLOT: "INVALID_SLOT",
+  SLOT_ARITY: "SLOT_ARITY",
+  INVALID_PARAMETER: "INVALID_PARAMETER",
+  MEDIA_CAPABILITY: "MEDIA_CAPABILITY",
+  CONFIGURATION: "CONFIGURATION",
+  OFFLINE_CACHE: "OFFLINE_CACHE",
+  ARTIFACT: "ARTIFACT",
+  BACKEND_READINESS: "BACKEND_READINESS",
+  BACKEND_PROTOCOL: "BACKEND_PROTOCOL",
+  CANCELLATION: "CANCELLATION",
+  TIMEOUT: "TIMEOUT",
+  MALFORMED_RESPONSE: "MALFORMED_RESPONSE",
+} as const;
+export type ModelInvocationFailureClass =
+  (typeof ModelInvocationFailureClass)[keyof typeof ModelInvocationFailureClass];
 export const ModelInvocationResponseMode = {
   METADATA: "METADATA",
   AUDIO_STREAM: "AUDIO_STREAM",
@@ -7253,20 +10452,107 @@ export const ErrorResponseCode = {
   METHOD_NOT_ALLOWED: "METHOD_NOT_ALLOWED",
   // Durable execution requestId was reused with materially different inputs.
   EXECUTION_REQUEST_ID_CONFLICT: "EXECUTION_REQUEST_ID_CONFLICT",
+  // A live-change requestId was reused with a different normalized request body.
+  REQUEST_CONFLICT: "REQUEST_CONFLICT",
+  // Worker Session start requestId was reused with different normalized inputs.
+  WORKER_SESSION_START_REQUEST_ID_CONFLICT:
+    "WORKER_SESSION_START_REQUEST_ID_CONFLICT",
+  // The requested Worker Session identity is already reserved or terminal.
+  WORKER_SESSION_NOT_STARTABLE: "WORKER_SESSION_NOT_STARTABLE",
+  // The Worker Session opening record could not be published.
+  WORKER_SESSION_START_OPENING_FAILED: "WORKER_SESSION_START_OPENING_FAILED",
+  // The Worker Session event topic did not reach the required readiness barrier.
+  WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE:
+    "WORKER_SESSION_EVENT_TOPIC_UNAVAILABLE",
+  // The Worker Session event cursor is malformed.
+  WORKER_SESSION_EVENT_CURSOR_INVALID: "WORKER_SESSION_EVENT_CURSOR_INVALID",
+  // The Worker Session event cursor belongs to another Worker Session.
+  WORKER_SESSION_EVENT_CURSOR_FOREIGN: "WORKER_SESSION_EVENT_CURSOR_FOREIGN",
+  // The Worker Session event cursor is ahead of the available history.
+  WORKER_SESSION_EVENT_CURSOR_FUTURE: "WORKER_SESSION_EVENT_CURSOR_FUTURE",
+  // The Worker Session event cursor no longer names retained history.
+  WORKER_SESSION_EVENT_CURSOR_STALE: "WORKER_SESSION_EVENT_CURSOR_STALE",
+  // The Worker Session event cursor's durable stream generation is unavailable.
+  WORKER_SESSION_EVENT_CURSOR_UNAVAILABLE:
+    "WORKER_SESSION_EVENT_CURSOR_UNAVAILABLE",
+  // Workers could not admit the Worker Session execution.
+  WORKER_SESSION_ADMISSION_FAILED: "WORKER_SESSION_ADMISSION_FAILED",
+  // Worker Session continuation requestId was reused with different inputs.
+  WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT:
+    "WORKER_SESSION_CONTINUATION_REQUEST_ID_CONFLICT",
+  // The Worker Session continuation conflicts with source lifecycle or successor lineage.
+  WORKER_SESSION_CONTINUATION_CONFLICT: "WORKER_SESSION_CONTINUATION_CONFLICT",
+  // The recorded Provider Session cannot be resumed for this Worker Session continuation.
+  WORKER_SESSION_PROVIDER_CONTINUATION_INVALID:
+    "WORKER_SESSION_PROVIDER_CONTINUATION_INVALID",
+  // Workers could not admit the Worker Session continuation.
+  WORKER_SESSION_CONTINUATION_ADMISSION_FAILED:
+    "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED",
+  // Worker Session interrupt requestId was reused with different inputs.
+  WORKER_SESSION_INTERRUPT_REQUEST_ID_CONFLICT:
+    "WORKER_SESSION_INTERRUPT_REQUEST_ID_CONFLICT",
+  // Worker Session interrupt conflicts with source lifecycle, lineage, or Provider Session state.
+  WORKER_SESSION_INTERRUPT_CONFLICT: "WORKER_SESSION_INTERRUPT_CONFLICT",
+  // Worker Sessions could not cancel the exact source dispatch for an interrupt.
+  WORKER_SESSION_INTERRUPT_SOURCE_CANCELLATION_FAILED:
+    "WORKER_SESSION_INTERRUPT_SOURCE_CANCELLATION_FAILED",
+  // Worker Sessions canceled the source but could not admit the replacement successor.
+  WORKER_SESSION_INTERRUPT_SUCCESSOR_ADMISSION_FAILED:
+    "WORKER_SESSION_INTERRUPT_SUCCESSOR_ADMISSION_FAILED",
+  // Workers could not admit the Worker Session interrupt replacement.
+  WORKER_SESSION_INTERRUPT_ADMISSION_FAILED:
+    "WORKER_SESSION_INTERRUPT_ADMISSION_FAILED",
   // Lifecycle control requestId was already applied with different control inputs.
+  WORKER_SESSION_CONTROL_INVALID: "WORKER_SESSION_CONTROL_INVALID",
+  // Requested resource capacity is below the number of units currently in use.
+  WORKER_SESSION_CONTROL_CONFLICT: "WORKER_SESSION_CONTROL_CONFLICT",
+  // The caller's expected Factory revision is no longer current.
+  WORKER_SESSION_CONTROL_FAILED: "WORKER_SESSION_CONTROL_FAILED",
+  // The Factory Session lifecycle does not admit the requested change.
   FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED:
     "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED",
+  // A live change was admitted but its runtime application failed.
+  RESOURCE_CAPACITY_IN_USE: "RESOURCE_CAPACITY_IN_USE",
   // The Factory Response Event reconnect cursor is invalid.
-  INVALID_RESPONSE_EVENT_CURSOR: "INVALID_RESPONSE_EVENT_CURSOR",
+  REVISION_CONFLICT: "REVISION_CONFLICT",
   // A Factory Response Event filter is invalid.
-  INVALID_RESPONSE_EVENT_FILTER: "INVALID_RESPONSE_EVENT_FILTER",
+  LIFECYCLE_CONFLICT: "LIFECYCLE_CONFLICT",
   // The explicitly selected Factory Session for response events does not exist.
-  RESPONSE_EVENT_SESSION_NOT_FOUND: "RESPONSE_EVENT_SESSION_NOT_FOUND",
+  ADMITTED_APPLICATION_FAILURE: "ADMITTED_APPLICATION_FAILURE",
   // The retained Factory Response Event stream is no longer available.
+  INVALID_RESPONSE_EVENT_CURSOR: "INVALID_RESPONSE_EVENT_CURSOR",
+  // The requested Provider Session provider is not loadable by this API.
+  INVALID_RESPONSE_EVENT_FILTER: "INVALID_RESPONSE_EVENT_FILTER",
+  // The requested Provider Session identifier kind is not loadable by this API.
+  RESPONSE_EVENT_SESSION_NOT_FOUND: "RESPONSE_EVENT_SESSION_NOT_FOUND",
+  // The correlated Worker Session projection is temporarily unavailable.
   RESPONSE_EVENT_STREAM_EXPIRED: "RESPONSE_EVENT_STREAM_EXPIRED",
+  // The durable Worker Session recording contains corrupt history.
+  PROVIDER_UNSUPPORTED: "PROVIDER_UNSUPPORTED",
+  // The durable Worker Session recording could not be read.
+  SESSION_KIND_UNSUPPORTED: "SESSION_KIND_UNSUPPORTED",
+  // The canonical Worker Session event stream is temporarily unavailable.
+  PROJECTION_UNAVAILABLE: "PROJECTION_UNAVAILABLE",
+  // The requested Worker Session has not reached a terminal state.
+  WORKER_SESSION_RECORDING_CORRUPT: "WORKER_SESSION_RECORDING_CORRUPT",
+  // The finished Worker Session has no normalized transcript available.
+  WORKER_SESSION_RECORDING_UNAVAILABLE: "WORKER_SESSION_RECORDING_UNAVAILABLE",
+  // Provider Sessions could not project the normalized Worker Session transcript.
+  WORKER_SESSION_STREAM_UNAVAILABLE: "WORKER_SESSION_STREAM_UNAVAILABLE",
+  // The metrics request could not be interpreted by the canonical metrics route.
+  WORKER_SESSION_TRANSCRIPT_ACTIVE: "WORKER_SESSION_TRANSCRIPT_ACTIVE",
+  // The requested live Factory Session identity was not discoverable.
+  WORKER_SESSION_TRANSCRIPT_UNAVAILABLE:
+    "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE",
+  // The live Factory Session was discoverable, but no retained metrics scope was available.
+  WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE:
+    "WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE",
   // The requested resource does not exist.
-  NOT_FOUND: "NOT_FOUND",
+  METRICS_INVALID_REQUEST: "METRICS_INVALID_REQUEST",
   // The server failed while handling an otherwise valid request.
+  METRICS_SESSION_NOT_FOUND: "METRICS_SESSION_NOT_FOUND",
+  METRICS_SESSION_SCOPE_UNAVAILABLE: "METRICS_SESSION_SCOPE_UNAVAILABLE",
+  NOT_FOUND: "NOT_FOUND",
   INTERNAL_ERROR: "INTERNAL_ERROR",
 } as const;
 export type ErrorResponseCode =
@@ -7277,10 +10563,21 @@ export const FactorySessionTargetRefKind = {
 } as const;
 export type FactorySessionTargetRefKind =
   (typeof FactorySessionTargetRefKind)[keyof typeof FactorySessionTargetRefKind];
+export const HumanApprovalDecisions = {
+  APPROVE: "APPROVE",
+  REJECT: "REJECT",
+} as const;
+export type HumanApprovalDecisions =
+  (typeof HumanApprovalDecisions)[keyof typeof HumanApprovalDecisions];
+export const HumanApprovalStatus = {
+  PENDING: "PENDING",
+} as const;
+export type HumanApprovalStatus =
+  (typeof HumanApprovalStatus)[keyof typeof HumanApprovalStatus];
 export const FactoryStopKind = {
   PAUSED: "PAUSED",
   BLOCKED: "BLOCKED",
-  NEEDS_HUMAN: "NEEDS_HUMAN",
+  NEEDSHUMAN: "NEEDS_HUMAN",
   INTERRUPTED: "INTERRUPTED",
 } as const;
 export type FactoryStopKind =
@@ -7385,6 +10682,13 @@ export const FactoryDispatchJavaScriptTaskKind = {
 } as const;
 export type FactoryDispatchJavaScriptTaskKind =
   (typeof FactoryDispatchJavaScriptTaskKind)[keyof typeof FactoryDispatchJavaScriptTaskKind];
+export const WorkExpectedArtifactVerification = {
+  WorkExpectedArtifactVerificationPending: "PENDING",
+  WorkExpectedArtifactVerificationSatisfied: "SATISFIED",
+  WorkExpectedArtifactVerificationFailed: "FAILED",
+} as const;
+export type WorkExpectedArtifactVerification =
+  (typeof WorkExpectedArtifactVerification)[keyof typeof WorkExpectedArtifactVerification];
 export const FactoryArtifactKind = {
   // Final session result artifact.
   FactoryArtifactKindFINALRESULT: "FINAL_RESULT",
@@ -7584,6 +10888,13 @@ export const FactorySessionLifecycleControlOutcome = {
 } as const;
 export type FactorySessionLifecycleControlOutcome =
   (typeof FactorySessionLifecycleControlOutcome)[keyof typeof FactorySessionLifecycleControlOutcome];
+export const FactorySessionResourceCapacityOutcome = {
+  APPLIED: "APPLIED",
+  NO_OP: "NO_OP",
+  REPLAYED: "REPLAYED",
+} as const;
+export type FactorySessionResourceCapacityOutcome =
+  (typeof FactorySessionResourceCapacityOutcome)[keyof typeof FactorySessionResourceCapacityOutcome];
 export const LoadableProviderSessionProvider = {
   Codex: "codex",
   Cursor: "cursor",
@@ -7669,12 +10980,21 @@ export const FactoryEventType = {
   FactoryEventTypeInitialStructureRequest: "INITIAL_STRUCTURE_REQUEST",
   // The running factory definition changed and a canonical replacement topology is now active.
   FactoryEventTypeFactoryChange: "FACTORY_CHANGE",
+  // A normalized live Factory Session change request was admitted before application.
+  FactoryEventTypeFactoryChangeRequest: "FACTORY_CHANGE_REQUEST",
+  // An admitted live Factory Session change could not become effective and was closed with a safe failure.
+  FactoryEventTypeFactoryChangeFailed: "FACTORY_CHANGE_FAILED",
   // Work entered the factory as a normalized request.
   FactoryEventTypeWorkRequest: "WORK_REQUEST",
   // A relationship-change request between work items was recorded.
   FactoryEventTypeRelationshipChangeRequest: "RELATIONSHIP_CHANGE_REQUEST",
   // A workstation request began processing a set of input work.
   FactoryEventTypeDispatchRequest: "DISPATCH_REQUEST",
+  // A HUMAN_APPROVAL workstation reserved its input Work and is waiting for operator input.
+  FactoryEventTypeHumanApprovalRequested: "HUMAN_APPROVAL_REQUESTED",
+  // A dispatch was associated with the Worker Session allocated to execute it.
+  FactoryEventTypeDispatchWorkerSessionAssociation:
+    "DISPATCH_WORKER_SESSION_ASSOCIATION",
   // A model-backed worker invocation request is about to enter resource, load, and execution boundaries.
   FactoryEventTypeModelRequest: "MODEL_REQUEST",
   // A model-backed worker invocation returned with resource, load, output, and failure evidence.
@@ -7739,6 +11059,23 @@ export const WorkStateChangeSource = {
 } as const;
 export type WorkStateChangeSource =
   (typeof WorkStateChangeSource)[keyof typeof WorkStateChangeSource];
+export const FactoryResourceCapacityChangeOutcome = {
+  APPLIED: "APPLIED",
+  NO_OP: "NO_OP",
+} as const;
+export type FactoryResourceCapacityChangeOutcome =
+  (typeof FactoryResourceCapacityChangeOutcome)[keyof typeof FactoryResourceCapacityChangeOutcome];
+export const HumanApprovalRequestedEventPayloadDecisions = {
+  APPROVE: "APPROVE",
+  REJECT: "REJECT",
+} as const;
+export type HumanApprovalRequestedEventPayloadDecisions =
+  (typeof HumanApprovalRequestedEventPayloadDecisions)[keyof typeof HumanApprovalRequestedEventPayloadDecisions];
+export const HumanApprovalRequestedEventPayloadStatus = {
+  PENDING: "PENDING",
+} as const;
+export type HumanApprovalRequestedEventPayloadStatus =
+  (typeof HumanApprovalRequestedEventPayloadStatus)[keyof typeof HumanApprovalRequestedEventPayloadStatus];
 export const InferenceOutcome = {
   // The provider attempt returned a successful response.
   InferenceOutcomeSucceeded: "SUCCEEDED",
@@ -7820,9 +11157,20 @@ export const WorkFailureType = {
   WorkFailureTypeMissingExecutable: "missing_executable",
   // The provider command exceeded the operating system command-line size limit.
   WorkFailureTypeCommandLineTooLong: "command_line_too_long",
+  // The worker response was malformed JSON or did not satisfy the workstation output schema.
+  WorkFailureTypeStructuredOutputSchemaViolation:
+    "structured_output_schema_violation",
+  // A successful worker did not satisfy its expected artifact declarations.
+  WorkFailureTypeExpectedArtifactsUnsatisfied: "EXPECTED_ARTIFACTS_UNSATISFIED",
 } as const;
 export type WorkFailureType =
   (typeof WorkFailureType)[keyof typeof WorkFailureType];
+export const ExpectedArtifactVerificationReason = {
+  ExpectedArtifactVerificationReasonMissing: "MISSING",
+  ExpectedArtifactVerificationReasonEmpty: "EMPTY",
+} as const;
+export type ExpectedArtifactVerificationReason =
+  (typeof ExpectedArtifactVerificationReason)[keyof typeof ExpectedArtifactVerificationReason];
 export const SafeAgentRunDiagnosticExecutionBehavior = {
   // Agent-loop execution through AGENT_RUN workstations.
   agent_run: "agent_run",
@@ -7961,6 +11309,13 @@ export const FactoryResponseEventStructuredOutputContentBlockKind = {
 } as const;
 export type FactoryResponseEventStructuredOutputContentBlockKind =
   (typeof FactoryResponseEventStructuredOutputContentBlockKind)[keyof typeof FactoryResponseEventStructuredOutputContentBlockKind];
+export const FactoryResponseEventSessionPayloadAttemptReason = {
+  INITIAL: "INITIAL",
+  RETRY: "RETRY",
+  RESUME: "RESUME",
+} as const;
+export type FactoryResponseEventSessionPayloadAttemptReason =
+  (typeof FactoryResponseEventSessionPayloadAttemptReason)[keyof typeof FactoryResponseEventSessionPayloadAttemptReason];
 export const FactorySaveMode = {
   // Replace the factory already current in the selected live session.
   FactorySaveModeReplaceCurrent: "REPLACE_CURRENT",
@@ -7969,6 +11324,20 @@ export const FactorySaveMode = {
 } as const;
 export type FactorySaveMode =
   (typeof FactorySaveMode)[keyof typeof FactorySaveMode];
+export const FactoryWebhookEventType = {
+  WORK_STATE_CHANGE: "WORK_STATE_CHANGE",
+  DISPATCH_RESPONSE: "DISPATCH_RESPONSE",
+  DISPATCH_RECONCILED: "DISPATCH_RECONCILED",
+  DISPATCH_INTERRUPTED: "DISPATCH_INTERRUPTED",
+} as const;
+export type FactoryWebhookEventType =
+  (typeof FactoryWebhookEventType)[keyof typeof FactoryWebhookEventType];
+export const FactoryWebhookDispatchStatus = {
+  FAILED: "FAILED",
+  INTERRUPTED: "INTERRUPTED",
+} as const;
+export type FactoryWebhookDispatchStatus =
+  (typeof FactoryWebhookDispatchStatus)[keyof typeof FactoryWebhookDispatchStatus];
 export const FactoryOrchestratorKind = {
   PETRI: "PETRI",
   JAVASCRIPT: "JAVASCRIPT",
@@ -8090,6 +11459,56 @@ export const ProviderCatalogProviderSchema = {
 } as const;
 export type ProviderCatalogProviderSchema =
   (typeof ProviderCatalogProviderSchema)[keyof typeof ProviderCatalogProviderSchema];
+export const ProviderCapabilitySupport = {
+  supported: "supported",
+  unsupported: "unsupported",
+  conditional: "conditional",
+  unknown: "unknown",
+} as const;
+export type ProviderCapabilitySupport =
+  (typeof ProviderCapabilitySupport)[keyof typeof ProviderCapabilitySupport];
+export const ProviderCapabilityEvidenceKind = {
+  primary_documentation: "primary_documentation",
+  protocol_probe: "protocol_probe",
+  conformance_fixture: "conformance_fixture",
+  maintainer_assertion: "maintainer_assertion",
+} as const;
+export type ProviderCapabilityEvidenceKind =
+  (typeof ProviderCapabilityEvidenceKind)[keyof typeof ProviderCapabilityEvidenceKind];
+export const ProviderModelCatalogPosture = {
+  exact: "exact",
+  runtime_discovered: "runtime_discovered",
+  operator_selected: "operator_selected",
+  unknown: "unknown",
+} as const;
+export type ProviderModelCatalogPosture =
+  (typeof ProviderModelCatalogPosture)[keyof typeof ProviderModelCatalogPosture];
+export const ProviderHarnessKind = {
+  native_cli: "native_cli",
+  acp: "acp",
+} as const;
+export type ProviderHarnessKind =
+  (typeof ProviderHarnessKind)[keyof typeof ProviderHarnessKind];
+export const ProviderACPSupportOneOf0Support = {
+  conditional: "conditional",
+} as const;
+export type ProviderACPSupportOneOf0Support =
+  (typeof ProviderACPSupportOneOf0Support)[keyof typeof ProviderACPSupportOneOf0Support];
+export const ProviderACPSupportOneOf1Support = {
+  supported: "supported",
+  unsupported: "unsupported",
+  unknown: "unknown",
+} as const;
+export type ProviderACPSupportOneOf1Support =
+  (typeof ProviderACPSupportOneOf1Support)[keyof typeof ProviderACPSupportOneOf1Support];
+export const ProviderACPResourceDelivery = {
+  implemented: "implemented",
+  unsupported: "unsupported",
+  conditional: "conditional",
+  unknown: "unknown",
+} as const;
+export type ProviderACPResourceDelivery =
+  (typeof ProviderACPResourceDelivery)[keyof typeof ProviderACPResourceDelivery];
 export const ProviderTechnicalSupportLevel = {
   production: "production",
   experimental: "experimental",
@@ -8112,6 +11531,14 @@ export const ProviderDocumentationLinkKind = {
 } as const;
 export type ProviderDocumentationLinkKind =
   (typeof ProviderDocumentationLinkKind)[keyof typeof ProviderDocumentationLinkKind];
+export const ProviderDiscoveryPrerequisiteKind = {
+  executable: "executable",
+  authentication: "authentication",
+  workspace: "workspace",
+  configuration: "configuration",
+} as const;
+export type ProviderDiscoveryPrerequisiteKind =
+  (typeof ProviderDiscoveryPrerequisiteKind)[keyof typeof ProviderDiscoveryPrerequisiteKind];
 export const ProviderDiscoveryEndpointKind = {
   local_http: "local-http",
   remote_http: "remote-http",
@@ -8120,6 +11547,107 @@ export const ProviderDiscoveryEndpointKind = {
 } as const;
 export type ProviderDiscoveryEndpointKind =
   (typeof ProviderDiscoveryEndpointKind)[keyof typeof ProviderDiscoveryEndpointKind];
+export const ProviderEffort = {
+  minimal: "minimal",
+  low: "low",
+  medium: "medium",
+  high: "high",
+  xhigh: "xhigh",
+  max: "max",
+} as const;
+export type ProviderEffort =
+  (typeof ProviderEffort)[keyof typeof ProviderEffort];
+export const ProviderModalityOneOf0Support = {
+  conditional: "conditional",
+} as const;
+export type ProviderModalityOneOf0Support =
+  (typeof ProviderModalityOneOf0Support)[keyof typeof ProviderModalityOneOf0Support];
+export const ProviderModalityOneOf1Support = {
+  supported: "supported",
+  unsupported: "unsupported",
+  unknown: "unknown",
+} as const;
+export type ProviderModalityOneOf1Support =
+  (typeof ProviderModalityOneOf1Support)[keyof typeof ProviderModalityOneOf1Support];
+export const ProviderModalityDirection = {
+  input: "input",
+  output: "output",
+} as const;
+export type ProviderModalityDirection =
+  (typeof ProviderModalityDirection)[keyof typeof ProviderModalityDirection];
+export const ProviderModalityKind = {
+  text: "text",
+  image: "image",
+  audio: "audio",
+  video: "video",
+} as const;
+export type ProviderModalityKind =
+  (typeof ProviderModalityKind)[keyof typeof ProviderModalityKind];
+export const ProviderModalitySupport = {
+  supported: "supported",
+  unsupported: "unsupported",
+  conditional: "conditional",
+  unknown: "unknown",
+} as const;
+export type ProviderModalitySupport =
+  (typeof ProviderModalitySupport)[keyof typeof ProviderModalitySupport];
+export const ProviderModalityTransport = {
+  inline: "inline",
+  file_path: "file_path",
+  acp_resource: "acp_resource",
+  tool_mediated: "tool_mediated",
+  none: "none",
+} as const;
+export type ProviderModalityTransport =
+  (typeof ProviderModalityTransport)[keyof typeof ProviderModalityTransport];
+export const ProviderToolOneOf0Support = {
+  conditional: "conditional",
+} as const;
+export type ProviderToolOneOf0Support =
+  (typeof ProviderToolOneOf0Support)[keyof typeof ProviderToolOneOf0Support];
+export const ProviderToolOneOf1Support = {
+  supported: "supported",
+  unsupported: "unsupported",
+  unknown: "unknown",
+} as const;
+export type ProviderToolOneOf1Support =
+  (typeof ProviderToolOneOf1Support)[keyof typeof ProviderToolOneOf1Support];
+export const ProviderToolSupport = {
+  supported: "supported",
+  unsupported: "unsupported",
+  conditional: "conditional",
+  unknown: "unknown",
+} as const;
+export type ProviderToolSupport =
+  (typeof ProviderToolSupport)[keyof typeof ProviderToolSupport];
+export const ProviderToolAvailability = {
+  built_in: "built_in",
+  optional: "optional",
+  operator_configured: "operator_configured",
+  external: "external",
+  unknown: "unknown",
+} as const;
+export type ProviderToolAvailability =
+  (typeof ProviderToolAvailability)[keyof typeof ProviderToolAvailability];
+export const ProviderToolOutputModalityOneOf0Support = {
+  conditional: "conditional",
+} as const;
+export type ProviderToolOutputModalityOneOf0Support =
+  (typeof ProviderToolOutputModalityOneOf0Support)[keyof typeof ProviderToolOutputModalityOneOf0Support];
+export const ProviderToolOutputModalityOneOf1Support = {
+  supported: "supported",
+  unsupported: "unsupported",
+  unknown: "unknown",
+} as const;
+export type ProviderToolOutputModalityOneOf1Support =
+  (typeof ProviderToolOutputModalityOneOf1Support)[keyof typeof ProviderToolOutputModalityOneOf1Support];
+export const ProviderKnownLimitKind = {
+  maximum: "maximum",
+  default: "default",
+  behavior: "behavior",
+} as const;
+export type ProviderKnownLimitKind =
+  (typeof ProviderKnownLimitKind)[keyof typeof ProviderKnownLimitKind];
 export const WorkerModelLocality = {
   LOCAL: "LOCAL",
   CLOUD: "CLOUD",
@@ -8175,6 +11703,7 @@ export const WorkstationType = {
   MODEL_INVOKE: "MODEL_INVOKE",
   LOGICAL_MOVE: "LOGICAL_MOVE",
   CLASSIFIER_WORKSTATION: "CLASSIFIER_WORKSTATION",
+  HUMAN_APPROVAL: "HUMAN_APPROVAL",
 } as const;
 export type WorkstationType =
   (typeof WorkstationType)[keyof typeof WorkstationType];
@@ -8249,6 +11778,24 @@ export const FactoryValidationSubjectLocation = {
 } as const;
 export type FactoryValidationSubjectLocation =
   (typeof FactoryValidationSubjectLocation)[keyof typeof FactoryValidationSubjectLocation];
+export const GlobalConfigPriceTableCurrency = {
+  USD: "USD",
+} as const;
+export type GlobalConfigPriceTableCurrency =
+  (typeof GlobalConfigPriceTableCurrency)[keyof typeof GlobalConfigPriceTableCurrency];
+export const GlobalConfigModelLoadPolicy = {
+  ON_DEMAND: "ON_DEMAND",
+} as const;
+export type GlobalConfigModelLoadPolicy =
+  (typeof GlobalConfigModelLoadPolicy)[keyof typeof GlobalConfigModelLoadPolicy];
+export const GlobalConfigModelOperation = {
+  OMNI: "OMNI",
+  EMBED: "EMBED",
+  TTS: "TTS",
+  ASR: "ASR",
+} as const;
+export type GlobalConfigModelOperation =
+  (typeof GlobalConfigModelOperation)[keyof typeof GlobalConfigModelOperation];
 export const WorkRequestType = {
   // Normalized request containing one or more work items and their relationships.
   WorkRequestTypeFactoryRequestBatch: "FACTORY_REQUEST_BATCH",
@@ -8383,6 +11930,11 @@ export const GlobalConfigACPIntegrationTransport = {
 } as const;
 export type GlobalConfigACPIntegrationTransport =
   (typeof GlobalConfigACPIntegrationTransport)[keyof typeof GlobalConfigACPIntegrationTransport];
+export const ComponentsParametersHumanApprovalStatus = {
+  PENDING: "PENDING",
+} as const;
+export type ComponentsParametersHumanApprovalStatus =
+  (typeof ComponentsParametersHumanApprovalStatus)[keyof typeof ComponentsParametersHumanApprovalStatus];
 export const ComponentsParametersSortBy = {
   state_type: "state.type",
 } as const;

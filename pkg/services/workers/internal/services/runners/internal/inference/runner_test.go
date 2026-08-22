@@ -48,6 +48,34 @@ func TestRunnerDelegatesToCompositionWhenModelsDeclines(t *testing.T) {
 	}
 }
 
+func TestRunnerDelegateFallbackUsesModelProviderWhenInferenceIdentityIsSelected(t *testing.T) {
+	modelsEdge := &captureModelsService{
+		result: models.LocalInvocationResult{Handled: false},
+	}
+	delegate := &captureDelegateRunner{
+		result: workers.RunnerExecutionResult{Content: "provider output"},
+	}
+	inferenceRunner, err := New(validConfig(), Dependencies{
+		Models: modelsEdge, Delegate: delegate,
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	request := validRequest()
+	request.ModelProvider = workers.RunnerIDCodex
+	result, err := inferenceRunner.Execute(t.Context(), request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Content != "provider output" {
+		t.Fatalf("result content = %q, want delegate output", result.Content)
+	}
+	if delegate.Request().RunnerID != workers.RunnerIDCodex {
+		t.Fatalf("delegate runner id = %q, want model provider %q", delegate.Request().RunnerID, workers.RunnerIDCodex)
+	}
+}
+
 func TestRunnerCompositionPreservesProviderRunnerIdentityAndDeclinesWithoutModelOperation(t *testing.T) {
 	modelsEdge := &captureModelsService{
 		result: models.LocalInvocationResult{Handled: false},
@@ -137,8 +165,9 @@ func TestRunnerNormalizesUnavailableModelReadinessFailure(t *testing.T) {
 	inferenceRunner := newTestRunner(t, modelsEdge)
 
 	_, err := inferenceRunner.Execute(t.Context(), validRequest())
-	failure, ok := workers.AsInferenceFailure(err)
-	if !ok || failure.Class != workers.InferenceFailureClassMissingModel {
+	var failure *models.InferenceFailure
+	ok := errors.As(err, &failure)
+	if !ok || failure.Class != models.InferenceFailureClassMissingModel {
 		t.Fatalf("Execute() error = %#v, want missing-model InferenceFailure", err)
 	}
 	if !errors.Is(err, models.ErrMissing) {
@@ -316,6 +345,129 @@ func TestRunnerRejectsInvalidRequestBeforeModelsInvocation(t *testing.T) {
 	}
 }
 
+func TestRunnerRejectsUnsupportedCapabilityBeforeModelsInvocation(t *testing.T) {
+	modelsEdge := &captureModelsService{}
+	inferenceRunner := newTestRunner(t, modelsEdge)
+	request := validRequest()
+	request.RequiredOptionalCapabilities = []workers.RunnerOptionalCapability{"unsupported"}
+
+	_, err := inferenceRunner.Execute(t.Context(), request)
+	if !errors.Is(err, workers.ErrUnsupportedRunnerCapability) {
+		t.Fatalf("Execute() error = %v, want unsupported-capability error", err)
+	}
+	if modelsEdge.Calls() != 0 {
+		t.Fatalf("Models calls = %d, want 0 before capability rejection", modelsEdge.Calls())
+	}
+}
+
+func TestRunnerReturnsModelErrorWhenModelsDeclinesWithoutDelegate(t *testing.T) {
+	wantErr := errors.New("local model declined request")
+	modelsEdge := &captureModelsService{
+		result: models.LocalInvocationResult{Handled: false},
+		err:    wantErr,
+	}
+	inferenceRunner := newTestRunner(t, modelsEdge)
+
+	_, err := inferenceRunner.Execute(t.Context(), validRequest())
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("Execute() error = %v, want model-declined error %v", err, wantErr)
+	}
+}
+
+func TestRunnerPreservesUnclassifiedHandledModelError(t *testing.T) {
+	wantErr := errors.New("unclassified model failure")
+	modelsEdge := &captureModelsService{
+		result: models.LocalInvocationResult{Handled: true},
+		err:    wantErr,
+	}
+	inferenceRunner := newTestRunner(t, modelsEdge)
+
+	_, err := inferenceRunner.Execute(t.Context(), validRequest())
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("Execute() error = %v, want unclassified model error %v", err, wantErr)
+	}
+}
+
+func TestRunnerAppliesRequestScopedWorkerOverrides(t *testing.T) {
+	modelsEdge := &captureModelsService{
+		result: models.LocalInvocationResult{Handled: true, Content: "overridden"},
+	}
+	inferenceRunner := newTestRunner(t, modelsEdge)
+	request := validRequest()
+	request.WorkerName = "request-worker-override"
+	request.Model = "request-model-override"
+	request.ModelLocality = models.RuntimeModelLocalityLocal
+
+	if _, err := inferenceRunner.Execute(t.Context(), request); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	captured := modelsEdge.Request().Worker
+	if captured.Name != request.WorkerName || captured.Model != request.Model ||
+		captured.ModelLocality != request.ModelLocality {
+		t.Fatalf("Models worker = %#v, want request overrides", captured)
+	}
+}
+
+func TestRunnerUsesRequestScopedModelRuntimeScope(t *testing.T) {
+	modelsEdge := &captureModelsService{
+		result: models.LocalInvocationResult{Handled: true, Content: "scoped"},
+	}
+	inferenceRunner, err := New(validConfig(), Dependencies{Models: modelsEdge})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:request-scope")
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	request := validRequest()
+	config := validConfig()
+	request.ModelRuntime = &workers.ModelRuntimeInput{
+		Scope:     scope,
+		Worker:    config.Worker,
+		Resources: config.Resources,
+	}
+	if _, err := inferenceRunner.Execute(t.Context(), request); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if got := modelsEdge.Request().Scope; got != scope {
+		t.Fatalf("Models scope = %q, want request scope %q", got, scope)
+	}
+}
+
+func TestRunnerFailsClosedForInvalidManagedRuntimeProjection(t *testing.T) {
+	modelsEdge := &captureModelsService{}
+	inferenceRunner := &runner{
+		worker: models.LocalWorker{
+			Name:          "invalid-worker",
+			Type:          interfaces.WorkerTypeInference,
+			ModelLocality: models.RuntimeModelLocalityLocal,
+		},
+		models: modelsEdge,
+	}
+
+	_, err := inferenceRunner.Execute(t.Context(), validRequest())
+	assertFailureType(t, err, workers.WorkFailureTypePermanentBadRequest)
+	if modelsEdge.Calls() != 0 {
+		t.Fatalf("Models calls = %d, want 0 after invalid managed-runtime projection", modelsEdge.Calls())
+	}
+}
+
+func TestInferenceProjectionHelpersHandleEmptyAndNilValues(t *testing.T) {
+	if got := firstNonEmpty(" ", "\t"); got != "" {
+		t.Fatalf("firstNonEmpty() = %q, want empty", got)
+	}
+	if got := (&runner{}).normalizeInvocationError(nil, workers.RunnerExecutionRequest{}); got != nil {
+		t.Fatalf("normalizeInvocationError(nil) = %v, want nil", got)
+	}
+	if got := WorkerFromFactory(nil); !reflect.DeepEqual(got, models.LocalWorker{}) {
+		t.Fatalf("WorkerFromFactory(nil) = %#v, want zero worker", got)
+	}
+	if got := ResourcesFromFactory(nil); got != nil {
+		t.Fatalf("ResourcesFromFactory(nil) = %#v, want nil", got)
+	}
+}
+
 func TestRunnerSnapshotsCallerOwnedDataBeforeModelsInvocation(t *testing.T) {
 	entered := make(chan struct{})
 	release := make(chan struct{})
@@ -436,8 +588,9 @@ func runInterruptedInferenceCase(t *testing.T, deadline bool) {
 	wantCause := context.Canceled
 	if deadline {
 		wantCause = context.DeadlineExceeded
-		failure, ok := workers.AsInferenceFailure(outcome.err)
-		if !ok || failure.Class != workers.InferenceFailureClassTimeout {
+		var failure *models.InferenceFailure
+		ok := errors.As(outcome.err, &failure)
+		if !ok || failure.Class != models.InferenceFailureClassTimeout {
 			t.Fatalf("Execute() error = %#v, want timeout InferenceFailure", outcome.err)
 		}
 	}
@@ -480,8 +633,9 @@ func TestRunnerNormalizesLeaseCapacityFailure(t *testing.T) {
 			inferenceRunner := newTestRunner(t, modelsEdge)
 
 			_, err := inferenceRunner.Execute(t.Context(), validRequest())
-			failure, ok := workers.AsInferenceFailure(err)
-			if !ok || failure.Class != workers.InferenceFailureClassRuntimeFailure {
+			var failure *models.InferenceFailure
+			ok := errors.As(err, &failure)
+			if !ok || failure.Class != models.InferenceFailureClassRuntimeFailure {
 				t.Fatalf("Execute() error = %#v, want runtime InferenceFailure", err)
 			}
 			if !errors.Is(err, models.ErrHostCapacityExhausted) {

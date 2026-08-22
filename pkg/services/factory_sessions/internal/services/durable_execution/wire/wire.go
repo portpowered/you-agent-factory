@@ -7,16 +7,16 @@ import (
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
-	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	durableexecutionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/internal/service"
+	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // NewService binds an existing durable implementation behind the private
 // capability contract without starting execution or performing IO.
-func NewService(execution factorysessions.ExecutionService) (durableexecution.Service, error) {
+func NewService(execution durableexecution.Service) (durableexecution.Service, error) {
 	service, err := durableexecutionservice.New(execution)
 	if err != nil {
 		return nil, err
@@ -29,7 +29,7 @@ func NewDurable(
 	projectRoot string,
 	persistencePolicy factorysessions.PersistencePolicy,
 	stores roles.RuntimePersistenceStoreFactory,
-	executor workers.InvocationExecutor,
+	childExecutorMode string,
 	clock factoryruntime.Clock,
 	syncWaits factorysessionexecution.SyncWaitScheduler,
 	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
@@ -40,15 +40,16 @@ func NewDurable(
 	workerSettings factoryruntime.JavaScriptWorkerSettings,
 	recordingWriter recordings.PortableRecordingWriter,
 	generateSessionID factorysessions.SessionIDGenerator,
-	liveChildInvocation factorysessionexecution.LiveChildInvocationFactory,
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseStreams responsestreamservice.Service,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (durableexecution.Service, error) {
 	return durableexecutionservice.NewDurable(
-		projectRoot, persistencePolicy, stores, executor, clock, syncWaits,
+		projectRoot, persistencePolicy, stores, childExecutorMode, clock, syncWaits,
 		checkpointSummaries, workflows, orchestration, childValues,
 		workerPresetIDs, workerSettings,
-		recordingWriter, generateSessionID, liveChildInvocation, generateResponseEventID, responseStreams,
+		recordingWriter, generateSessionID, generateResponseEventID, responseStreams,
+		liveChangeCoordinator,
 	)
 }
 
@@ -59,7 +60,7 @@ func NewStandalone(
 	stores roles.RuntimePersistenceStoreFactory,
 	fixtureCatalogPath string,
 	childExecutorMode string,
-	executor workers.InvocationExecutor,
+	execution factorysessionexecution.WorkerExecution,
 	clock factoryruntime.Clock,
 	syncWaits factorysessionexecution.SyncWaitScheduler,
 	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
@@ -69,10 +70,12 @@ func NewStandalone(
 	recordingWriter recordings.PortableRecordingWriter,
 	generateSessionID factorysessions.SessionIDGenerator,
 	fixtureFiles fileeffects.ContractFixtureReader,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (durableexecution.Service, error) {
 	return durableexecutionservice.NewStandalone(
 		provider, projectRoot, stores, fixtureCatalogPath, childExecutorMode,
-		executor, clock, syncWaits, checkpointSummaries, workflows, orchestration, childValues,
-		recordingWriter, generateSessionID, fixtureFiles,
+		execution,
+		clock, syncWaits, checkpointSummaries, workflows, orchestration, childValues,
+		recordingWriter, generateSessionID, fixtureFiles, liveChangeCoordinator,
 	)
 }

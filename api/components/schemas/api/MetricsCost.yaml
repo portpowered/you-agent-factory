@@ -1,0 +1,8 @@
+type: object
+additionalProperties: false
+required:
+  - availability
+properties:
+  availability:
+    type: string
+    description: Cost is unavailable on the canonical metrics projection; no numeric price is implied.

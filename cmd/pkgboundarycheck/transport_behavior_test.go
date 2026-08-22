@@ -147,7 +147,7 @@ func mapFailure(err error) {
 	_ = workers.NormalizeProviderExecutionError(err)
 	_ = workers.NewProviderError(workers.WorkFailureTypeTimeout, "timeout", err)
 	_ = workers.SafeWorkDiagnosticsFromWorkDiagnostics(nil)
-	_ = workers.CanonicalProviderSessionProvider("agent")
+	_ = providers.ID("agent").CanonicalSessionProvider()
 	var _ *workers.WorkDiagnostics
 }
 `)
@@ -366,10 +366,10 @@ func TestRunBlocksTransportNamedFactoryPathPolicyInProductionAndTests(t *testing
 
 	repoRoot := t.TempDir()
 	for _, path := range []string{
-		"pkg/transports/cli/factoryload/operator_error.go",
-		"pkg/transports/cli/factoryload/operator_error_test.go",
+		"pkg/transports/cli/factory/operator_error.go",
+		"pkg/transports/cli/factory/operator_error_test.go",
 	} {
-		writeGoSourceFile(t, repoRoot, path, `package factoryload
+		writeGoSourceFile(t, repoRoot, path, `package factory
 
 import factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 
@@ -387,8 +387,8 @@ func candidate(root, name string) (string, error) {
 	}
 	wantSymbol := "github.com/portpowered/infinite-you/pkg/services/factory_definitions.MapDir"
 	for _, want := range []string{
-		"prohibited transport named-factory-path-policy behavior: " + wantSymbol + " (pkg/transports/cli/factoryload/operator_error.go:",
-		"prohibited transport named-factory-path-policy behavior: " + wantSymbol + " (pkg/transports/cli/factoryload/operator_error_test.go:",
+		"prohibited transport named-factory-path-policy behavior: " + wantSymbol + " (pkg/transports/cli/factory/operator_error.go:",
+		"prohibited transport named-factory-path-policy behavior: " + wantSymbol + " (pkg/transports/cli/factory/operator_error_test.go:",
 	} {
 		if got := stderr.String(); !strings.Contains(got, want) {
 			t.Fatalf("run() stderr = %q, want substring %q", got, want)

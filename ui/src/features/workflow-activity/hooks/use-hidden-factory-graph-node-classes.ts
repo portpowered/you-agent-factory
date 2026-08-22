@@ -10,21 +10,88 @@ import {
   writeFactoryGraphEditorPreferencesForScope,
 } from "../../factory-graph-editor/lib/preferences/factory-graph-editor-preferences";
 
+interface InitialFactoryGraphViewPreferences {
+  hiddenNodeClasses?: readonly FactoryGraphNodeKind[];
+  hideShowMenuOpen?: boolean;
+  visibilityPreset?: FactoryGraphEditorVisibilityPreset;
+}
+
+function hydrateFactoryGraphViewPreferences({
+  hasHydratedPreferencesRef,
+  initialPreferencesRef,
+  normalizedScopeKey,
+  setHiddenNodeClasses,
+  setHideShowMenuOpen,
+  setVisibilityPresetState,
+}: {
+  hasHydratedPreferencesRef: { current: boolean };
+  initialPreferencesRef: {
+    current: InitialFactoryGraphViewPreferences | undefined;
+  };
+  normalizedScopeKey: string | null;
+  setHiddenNodeClasses: (value: ReadonlySet<FactoryGraphNodeKind>) => void;
+  setHideShowMenuOpen: (value: boolean) => void;
+  setVisibilityPresetState: (value: FactoryGraphEditorVisibilityPreset) => void;
+}): void {
+  const restoredPreferences = initialPreferencesRef.current;
+  initialPreferencesRef.current = undefined;
+  if (restoredPreferences) {
+    setHiddenNodeClasses(
+      new Set(
+        restoredPreferences.hiddenNodeClasses ??
+          DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES.hiddenNodeClasses,
+      ),
+    );
+    setVisibilityPresetState(
+      restoredPreferences.visibilityPreset ??
+        DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES.visibilityPreset,
+    );
+    setHideShowMenuOpen(restoredPreferences.hideShowMenuOpen ?? false);
+    hasHydratedPreferencesRef.current = true;
+    return;
+  }
+
+  if (normalizedScopeKey === null) {
+    setHiddenNodeClasses(
+      new Set(DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES.hiddenNodeClasses),
+    );
+    setVisibilityPresetState(
+      DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES.visibilityPreset,
+    );
+    hasHydratedPreferencesRef.current = true;
+    return;
+  }
+
+  const storedPreferences =
+    readFactoryGraphEditorPreferencesForScope(normalizedScopeKey);
+  setHiddenNodeClasses(new Set(storedPreferences.hiddenNodeClasses));
+  setVisibilityPresetState(storedPreferences.visibilityPreset);
+  hasHydratedPreferencesRef.current = true;
+}
+
 export function useHiddenFactoryGraphNodeClasses(
   factoryViewScopeKey?: string | null,
+  initialPreferences?: InitialFactoryGraphViewPreferences,
 ) {
   const normalizedScopeKey = factoryViewScopeKey ?? null;
+  const initialPreferencesRef = useRef(initialPreferences);
   const [hiddenNodeClasses, setHiddenNodeClasses] = useState<
     ReadonlySet<FactoryGraphNodeKind>
   >(
     () =>
-      new Set(DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES.hiddenNodeClasses),
+      new Set(
+        initialPreferences?.hiddenNodeClasses ??
+          DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES.hiddenNodeClasses,
+      ),
   );
   const [visibilityPreset, setVisibilityPresetState] =
     useState<FactoryGraphEditorVisibilityPreset>(
-      DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES.visibilityPreset,
+      initialPreferences?.visibilityPreset ??
+        DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES.visibilityPreset,
     );
-  const [hideShowMenuOpen, setHideShowMenuOpen] = useState(false);
+  const [hideShowMenuOpen, setHideShowMenuOpen] = useState(
+    initialPreferences?.hideShowMenuOpen ?? false,
+  );
   const hasHydratedPreferencesRef = useRef(false);
   const lastScopeKeyRef = useRef<string | null>(null);
 
@@ -35,25 +102,14 @@ export function useHiddenFactoryGraphNodeClasses(
 
     lastScopeKeyRef.current = normalizedScopeKey;
     hasHydratedPreferencesRef.current = false;
-
-    if (normalizedScopeKey === null) {
-      setHiddenNodeClasses(
-        new Set(
-          DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES.hiddenNodeClasses,
-        ),
-      );
-      setVisibilityPresetState(
-        DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES.visibilityPreset,
-      );
-      hasHydratedPreferencesRef.current = true;
-      return;
-    }
-
-    const storedPreferences =
-      readFactoryGraphEditorPreferencesForScope(normalizedScopeKey);
-    setHiddenNodeClasses(new Set(storedPreferences.hiddenNodeClasses));
-    setVisibilityPresetState(storedPreferences.visibilityPreset);
-    hasHydratedPreferencesRef.current = true;
+    hydrateFactoryGraphViewPreferences({
+      hasHydratedPreferencesRef,
+      initialPreferencesRef,
+      normalizedScopeKey,
+      setHiddenNodeClasses,
+      setHideShowMenuOpen,
+      setVisibilityPresetState,
+    });
   }, [normalizedScopeKey]);
 
   const currentPreferences = useMemo(

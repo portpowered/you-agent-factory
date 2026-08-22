@@ -110,6 +110,7 @@ argument contract is intentionally small:
 | `modelProvider` | Optional string |
 | `model` | Optional string |
 | `reasoningEffort` | Optional string |
+| `resourceId` | Optional stable Factory Runtime resource ID whose capacity admission governs the child |
 | `skipPermissions` | Optional boolean; set `true` only when the child is intentionally autonomous |
 
 This complete example uses every supported field:
@@ -123,6 +124,7 @@ const child = await agent.run({
   modelProvider: "cursor-acp",
   model: "gpt-example",
   reasoningEffort: "high",
+  resourceId: "reviewers",
   skipPermissions: true,
 });
 ```
@@ -131,7 +133,13 @@ All other per-child properties are rejected before dispatch. In particular,
 host-access fields, output schemas, per-child concurrency or agent caps, and
 duration controls are unsupported. Configure global budgets on an applicable
 factory or Factory Session policy surface when one exists. The only supported
-per-child permission control is the boolean `skipPermissions` field.
+per-child permission control is the boolean `skipPermissions` field. It is a
+dangerous child-level override for provider approval and sandbox restrictions,
+and the selected provider must advertise permission-bypass support. Unsupported
+routes fail before execution with a safe capability diagnostic. The field does
+not disable routing, model or reasoning allowlists, fanout, concurrency,
+duration, token, output, artifact, network, connector, or other resource
+controls.
 
 For example, this workflow fails validation with
 `agent.run() does not support field "writableRoots"`; the diagnostic names the
@@ -155,14 +163,15 @@ The current canonical operator story is intentionally bounded:
 - Durable JavaScript execution inspection belongs to `FactorySession`,
   `Dispatch`, `FactoryArtifact`, and `FactoryEvent` reads across CLI, API,
   dashboard, and MCP-compatible docs.
-- Replay-resume expansion, broader live-provider bridge parity, and broader MCP
-  host parity remain explicit follow-up scope, not implied capabilities of the
-  current shipped session model.
+- Portable JavaScript recording resume is not supported. See `you docs
+  record-replay` for the supported Factory Event resume path and portable
+  recording limits. Broader live-provider bridge parity and broader MCP host
+  parity remain follow-up scope for the current shipped session model.
 
 ## Related Topics
 
 - `you docs javascript-workflows` — select or author source, validate, start, inspect, and recover JavaScript workflows
-- `you docs mcp` — `you mcp serve` host setup, backing modes, smoke, and troubleshooting
-- `you docs sessions` — session list, show, factory query, status API, and routing
+- `you docs mcp` — `you server mcp` host setup, backing modes, smoke, and troubleshooting
+- `you docs sessions` — session list, show, factory show, status API, and routing
 - `you docs config` — `factory.json` topology and portability
 - `you docs work` — submitted work and verification commands

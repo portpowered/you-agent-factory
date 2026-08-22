@@ -1,0 +1,10 @@
+type: object
+additionalProperties: false
+required:
+  - key
+  - aggregate
+properties:
+  key:
+    type: string
+  aggregate:
+    $ref: './MetricsAggregate.yaml'

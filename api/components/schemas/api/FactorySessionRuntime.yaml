@@ -58,3 +58,8 @@ properties:
     items:
       $ref: '../data-models/FactoryArtifact.yaml'
     description: Shared artifact projections for the session runtime.
+  pendingHumanApprovals:
+    type: array
+    items:
+      $ref: './HumanApproval.yaml'
+    description: Durable pending HUMAN_APPROVAL requests reconstructed from canonical events.

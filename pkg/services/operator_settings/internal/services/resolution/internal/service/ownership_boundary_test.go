@@ -11,6 +11,7 @@ import (
 )
 
 type countingProvidersRoot struct {
+	providers.Service
 	getProviderCalls int
 }
 

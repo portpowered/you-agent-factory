@@ -3,15 +3,20 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -41,8 +46,60 @@ func TestSubmitWorkFileRequiresInjectedReader(t *testing.T) {
 	}
 }
 
+type replacementRuntimeBuilderFunc func(context.Context, string, string, string, string) (factory.RuntimeRecord, error)
+
+func (builder replacementRuntimeBuilderFunc) BuildReplacement(
+	ctx context.Context,
+	folderPath string,
+	factoryDir string,
+	sessionID string,
+	executionBaseDir string,
+) (factory.RuntimeRecord, error) {
+	return builder(ctx, folderPath, factoryDir, sessionID, executionBaseDir)
+}
+
+type replacementRuntimeRecord struct {
+	factory.RuntimeRecord
+	modelsScope models.RuntimeScopeRef
+}
+
+func (record *replacementRuntimeRecord) BindModelsRuntimeScope(scope models.RuntimeScopeRef) error {
+	record.modelsScope = scope
+	return nil
+}
+
+func TestBuildReplacementBindsModelsScopeForLocalModelRuntime(t *testing.T) {
+	t.Parallel()
+
+	scope, err := (models.RuntimeScopeRef{}).Parse("session-models-scope")
+	if err != nil {
+		t.Fatalf("parse Models scope: %v", err)
+	}
+	replacement := &replacementRuntimeRecord{}
+	runtime := &SessionRuntime{
+		modelsScope: scope,
+		runtimeBuild: replacementRuntimeBuilderFunc(func(
+			context.Context, string, string, string, string,
+		) (factory.RuntimeRecord, error) {
+			return replacement, nil
+		}),
+	}
+
+	got, err := runtime.buildReplacementFactoryRuntime(
+		context.Background(), "folder", "factory", "session",
+	)
+	if err != nil {
+		t.Fatalf("buildReplacementFactoryRuntime() error = %v", err)
+	}
+	if got != replacement {
+		t.Fatalf("replacement record = %p, want %p", got, replacement)
+	}
+	if replacement.modelsScope != scope {
+		t.Fatalf("replacement Models scope = %q, want opened scope %q", replacement.modelsScope, scope)
+	}
+}
+
 type registeredWorkRuntime struct {
-	factory.Factory
 	factory.Service
 }
 
@@ -74,6 +131,186 @@ func TestServiceRoutesWorkThroughRegisteredSessionRuntime(t *testing.T) {
 	}
 }
 
+func TestBindRuntimePublishesOpaqueServiceToSession(t *testing.T) {
+	t.Parallel()
+
+	state := newWorkResolverSessionState()
+	fallback := &registeredWorkRuntime{}
+	bound := &registeredWorkRuntime{}
+	state.Register(sessionruntime.Registration{
+		SessionID: "session-bound",
+		Handle:    struct{}{},
+		Runtime: &factorysessions.LiveRuntime{
+			Factory: fallback,
+		},
+	})
+
+	runtime := &SessionRuntime{sessionState: state}
+	binding := factory.RuntimeBinding{}.New("runtime-bound", bound)
+	if err := runtime.BindRuntime("session-bound", binding); err != nil {
+		t.Fatalf("BindRuntime: %v", err)
+	}
+	registered := state.Resolve("session-bound")
+	if registered == nil || registered.Runtime == nil {
+		t.Fatal("bound session runtime is unavailable")
+	}
+	if !registered.Runtime.Binding.Equal(binding) {
+		t.Fatal("session did not retain the published opaque binding")
+	}
+	if got := registered.Runtime.Factory; got != bound {
+		t.Fatalf("session Factory = %p, want bound Runtime service %p", got, bound)
+	}
+}
+
+type detachedRouterOwnerFake struct {
+	factorysessions.Service
+	name             string
+	invokedSessionID string
+	pausedSessionID  string
+}
+
+func (fake *detachedRouterOwnerFake) InvokeFactorySession(_ context.Context, sessionID string, _ factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
+	fake.invokedSessionID = sessionID
+	return factorysessions.InvocationResult{SessionID: sessionID}, nil
+}
+
+func (fake *detachedRouterOwnerFake) GetFactorySession(_ context.Context, sessionID string) (factorysessions.SessionProjection, error) {
+	return factorysessions.SessionProjection{
+		Context: factorysessions.ProjectionContext{FactorySessionID: sessionID},
+	}, nil
+}
+
+func (fake *detachedRouterOwnerFake) PauseLiveFactorySession(_ context.Context, sessionID string, _ factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+	fake.pausedSessionID = sessionID
+	return factorysessions.LifecycleControlResult{
+		Outcome: factorysessions.LifecycleControlOutcomeAccepted,
+		Status:  factorysessions.LifecycleStatusPaused,
+	}, nil
+}
+
+func (fake *detachedRouterOwnerFake) OpenFactorySession(context.Context, factorysessions.LiveControlOpenRequest) (*factorysessions.LiveControlOpenResult, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (fake *detachedRouterOwnerFake) ListFactorySessions(context.Context) ([]factorysessions.LiveControlListItem, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (fake *detachedRouterOwnerFake) ResumeLiveFactorySession(context.Context, string, factorysessions.LiveControlRequest) (factorysessions.LiveControlResult, error) {
+	return factorysessions.LiveControlResult{}, errors.New("not implemented")
+}
+
+func (fake *detachedRouterOwnerFake) CloseFactorySession(context.Context, string) error {
+	return errors.New("not implemented")
+}
+
+func (fake *detachedRouterOwnerFake) GetFactorySessionResult(context.Context, string) (factory.LiveSessionResult, error) {
+	return factory.LiveSessionResult{}, errors.New("not implemented")
+}
+
+func (fake *detachedRouterOwnerFake) GetFactorySessionPartialResult(context.Context, string) (factory.PartialSessionResult, error) {
+	return factory.PartialSessionResult{}, errors.New("not implemented")
+}
+
+func TestDetachedRouterRoutesSessionOperationsToOwningGateway(t *testing.T) {
+	first := &detachedRouterOwnerFake{name: "first"}
+	second := &detachedRouterOwnerFake{name: "second"}
+	assembly := &Assembly{}
+	assembly.registerDetachedGateway("session-first", first)
+	assembly.registerDetachedGateway("session-second", second)
+
+	operations, err := (&factorysessions.DetachedOperations{}).Bind(assembly)
+	if err != nil {
+		t.Fatalf("bind detached operations: %v", err)
+	}
+
+	for _, test := range []struct {
+		name    string
+		session string
+		owner   *detachedRouterOwnerFake
+		other   *detachedRouterOwnerFake
+	}{
+		{name: "first", session: "session-first", owner: first, other: second},
+		{name: "second", session: "session-second", owner: second, other: first},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := operations.Get(context.Background(), factorysessions.SessionGetRequest{
+				SessionID: test.session,
+				Mode:      factorysessions.SessionOperationModeLive,
+			})
+			if err != nil {
+				t.Fatalf("get session: %v", err)
+			}
+			if got.Session.SessionID != test.session {
+				t.Fatalf("session id = %q, want %q", got.Session.SessionID, test.session)
+			}
+
+			otherInvokedBefore := test.other.invokedSessionID
+			if _, err := operations.Invoke(context.Background(), factorysessions.SessionInvokeRequest{
+				SessionID: test.session,
+			}); err != nil {
+				t.Fatalf("invoke session: %v", err)
+			}
+			if test.owner.invokedSessionID != test.session || test.other.invokedSessionID != otherInvokedBefore {
+				t.Fatalf("invoke routing = owner %q, other %q", test.owner.invokedSessionID, test.other.invokedSessionID)
+			}
+
+			otherPausedBefore := test.other.pausedSessionID
+			if _, err := operations.Control(context.Background(), factorysessions.SessionControlRequest{
+				SessionID: test.session,
+				Mode:      factorysessions.SessionOperationModeLive,
+				Operation: factorysessions.SessionControlPause,
+			}); err != nil {
+				t.Fatalf("pause session: %v", err)
+			}
+			if test.owner.pausedSessionID != test.session || test.other.pausedSessionID != otherPausedBefore {
+				t.Fatalf("pause routing = owner %q, other %q", test.owner.pausedSessionID, test.other.pausedSessionID)
+			}
+		})
+	}
+
+	if _, err := operations.Get(context.Background(), factorysessions.SessionGetRequest{
+		SessionID: "missing",
+		Mode:      factorysessions.SessionOperationModeLive,
+	}); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("missing session error = %v, want ErrSessionNotFound", err)
+	}
+}
+
+func TestDetachedRouterKeepsConcurrentSessionsIsolated(t *testing.T) {
+	first := &detachedRouterOwnerFake{}
+	second := &detachedRouterOwnerFake{}
+	assembly := &Assembly{}
+	assembly.registerDetachedGateway("session-first", first)
+	assembly.registerDetachedGateway("session-second", second)
+	operations, err := (&factorysessions.DetachedOperations{}).Bind(assembly)
+	if err != nil {
+		t.Fatalf("bind detached operations: %v", err)
+	}
+
+	var wait sync.WaitGroup
+	errorsCh := make(chan error, 2)
+	for _, sessionID := range []string{"session-first", "session-second"} {
+		sessionID := sessionID
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			_, err := operations.Invoke(context.Background(), factorysessions.SessionInvokeRequest{SessionID: sessionID})
+			errorsCh <- err
+		}()
+	}
+	wait.Wait()
+	close(errorsCh)
+	for err := range errorsCh {
+		if err != nil {
+			t.Fatalf("concurrent invoke: %v", err)
+		}
+	}
+	if first.invokedSessionID != "session-first" || second.invokedSessionID != "session-second" {
+		t.Fatalf("concurrent routing = first %q, second %q", first.invokedSessionID, second.invokedSessionID)
+	}
+}
+
 func TestServiceReturnsCanonicalSessionNotFound(t *testing.T) {
 	assembly := &Assembly{
 		state: newWorkResolverSessionState(),
@@ -81,6 +318,74 @@ func TestServiceReturnsCanonicalSessionNotFound(t *testing.T) {
 	_, err := assembly.ResolveWorkRuntime("missing")
 	if !errors.Is(err, factorysessions.ErrSessionNotFound) {
 		t.Fatalf("error = %v, want ErrSessionNotFound", err)
+	}
+}
+
+type submitWorkFactory struct {
+	factory.Service
+	request work.WorkRequest
+	result  work.WorkRequestSubmitResult
+	err     error
+}
+
+func (f *submitWorkFactory) SubmitWorkRequest(_ context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	f.request = request
+	return f.result, f.err
+}
+
+func (f *submitWorkFactory) SubscribeFactoryEvents(
+	context.Context,
+	*interfaces.FactoryEventReconnectCursor,
+	interfaces.FactoryEventReconnectScope,
+) (*interfaces.FactoryEventStream, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func TestWorkRuntimeAdapterSubmitWorkRequestDelegatesToCanonicalRuntime(t *testing.T) {
+	canonical := &submitWorkFactory{result: work.WorkRequestSubmitResult{RequestID: "request-1"}}
+	adapter := workRuntimeAdapter{runtime: canonical, ingress: canonical}
+
+	got, err := adapter.SubmitWorkRequest(context.Background(), work.WorkRequest{RequestID: "request-1"})
+	if err != nil {
+		t.Fatalf("SubmitWorkRequest() error = %v, want nil", err)
+	}
+	if got.RequestID != "request-1" || canonical.request.RequestID != "request-1" {
+		t.Fatalf("SubmitWorkRequest() = %#v, request = %#v, want delegated round trip", got, canonical.request)
+	}
+}
+
+type serviceOnlyRuntime struct {
+	factory.Service
+}
+
+func TestWorkRuntimeAdapterSubmitWorkRequestRejectsServiceOnlyRuntimeSafely(t *testing.T) {
+	adapter := workRuntimeAdapter{runtime: serviceOnlyRuntime{}}
+
+	_, err := adapter.SubmitWorkRequest(context.Background(), work.WorkRequest{RequestID: "request-1"})
+	if err == nil || !strings.Contains(err.Error(), "Factory Runtime work submission is required") {
+		t.Fatalf("SubmitWorkRequest() error = %v, want safe legacy-submission-required error", err)
+	}
+}
+
+// TestWorkRuntimeAdapterDoesNotRecoverSubmitterFromRuntimeValue is the guard
+// that the retired Work projection fallback stays retired. The bound runtime
+// value here does serve SubmitWorkRequest, so a type assertion on the runtime
+// value would have succeeded; the adapter must instead fail closed because
+// Factory Sessions declared no Work and event ingress when it bound the
+// runtime.
+func TestWorkRuntimeAdapterDoesNotRecoverSubmitterFromRuntimeValue(t *testing.T) {
+	canonical := &submitWorkFactory{result: work.WorkRequestSubmitResult{RequestID: "request-1"}}
+	adapter := workRuntimeAdapter{runtime: canonical}
+
+	_, err := adapter.SubmitWorkRequest(context.Background(), work.WorkRequest{RequestID: "request-1"})
+	if err == nil || !strings.Contains(err.Error(), "Factory Runtime work submission is required") {
+		t.Fatalf("SubmitWorkRequest() error = %v, want submission-required error", err)
+	}
+	if canonical.request.RequestID != "" {
+		t.Fatalf(
+			"submitted request = %#v, want the runtime value untouched without a declared ingress",
+			canonical.request,
+		)
 	}
 }
 
@@ -103,12 +408,187 @@ func TestWorkRuntimeAdapterMapsRootMoveConflictToWorkContract(t *testing.T) {
 	}
 }
 
+type detachedMoveRuntime struct {
+	factory.Service
+	request factory.MoveWorkRequest
+}
+
+func (r *detachedMoveRuntime) ControlMoveWork(
+	_ context.Context,
+	request factory.MoveWorkRequest,
+) (factory.MoveWorkResult, error) {
+	r.request = request
+	return factory.MoveWorkResult{
+		WorkID: request.WorkID, WorkTypeID: "story",
+		FromState: "draft", ToState: request.StateName,
+	}, nil
+}
+
+// TestWorkRuntimeAdapterMoveWorkReturnsDetachedStateFacts pins the success half
+// of the Work move port: engine identity (place and token ids) ends at this
+// adapter and only detached Work state facts cross into Work.
+func TestWorkRuntimeAdapterMoveWorkReturnsDetachedStateFacts(t *testing.T) {
+	runtime := &detachedMoveRuntime{}
+	adapter := workRuntimeAdapter{runtime: runtime}
+
+	got, err := adapter.MoveWork(
+		context.Background(), "work-1", "review", work.WorkStateChangeSourceAPI, "move-1",
+	)
+	if err != nil {
+		t.Fatalf("MoveWork() error = %v, want nil", err)
+	}
+	if runtime.request.WorkID != "work-1" || runtime.request.StateName != "review" ||
+		runtime.request.RequestID != "move-1" ||
+		runtime.request.Source != factory.WorkMoveSource(work.WorkStateChangeSourceAPI) {
+		t.Fatalf("ControlMoveWork request = %#v, want the caller's move forwarded verbatim", runtime.request)
+	}
+	want := work.OperatorMoveResult{
+		WorkID: "work-1", WorkTypeID: "story", FromState: "draft", ToState: "review",
+	}
+	if got != want {
+		t.Fatalf("MoveWork() = %#v, want %#v", got, want)
+	}
+}
+
+type failingMoveRuntime struct {
+	factory.Service
+	err error
+}
+
+func (r failingMoveRuntime) ControlMoveWork(
+	context.Context,
+	factory.MoveWorkRequest,
+) (factory.MoveWorkResult, error) {
+	return factory.MoveWorkResult{}, r.err
+}
+
+// TestWorkRuntimeAdapterTranslatesEngineMoveFailuresToWorkSentinels pins the
+// failure half of the Work move port: every engine-classified move failure
+// crosses into Work as the matching Work-owned sentinel, so Work's transports
+// branch only on Work error identity. Unclassified failures pass through.
+func TestWorkRuntimeAdapterTranslatesEngineMoveFailuresToWorkSentinels(t *testing.T) {
+	opaque := errors.New("engine unavailable")
+	checks := []struct {
+		name     string
+		from     error
+		want     error
+		wantText string
+	}{
+		{
+			name: "request conflict",
+			from: factory.ErrMoveWorkRequestConflict,
+			want: work.ErrMoveWorkRequestAlreadyApplied,
+			// The conflict sentinel is the one translation that already
+			// restated the failure in Work's own operator wording.
+			wantText: "operator move request was already applied",
+		},
+		{
+			name: "work not found", from: factory.ErrMoveWorkNotFound,
+			want: work.ErrMoveWorkNotFound, wantText: "work not found",
+		},
+		{
+			name: "invalid state", from: factory.ErrMoveWorkInvalidState,
+			want: work.ErrMoveWorkInvalidState, wantText: "invalid target state for work type",
+		},
+		{
+			name: "in-flight dispatch", from: factory.ErrMoveWorkInFlightDispatch,
+			want: work.ErrMoveWorkInFlightDispatch, wantText: "work is in an active dispatch",
+		},
+		{
+			name: "engine terminated", from: factory.ErrMoveWorkEngineTerminated,
+			want: work.ErrMoveWorkEngineTerminated, wantText: "engine has terminated",
+		},
+		{name: "unclassified failure", from: opaque, want: opaque, wantText: "engine unavailable"},
+	}
+	for _, check := range checks {
+		t.Run(check.name, func(t *testing.T) {
+			adapter := workRuntimeAdapter{runtime: failingMoveRuntime{err: check.from}}
+
+			_, err := adapter.MoveWork(
+				context.Background(), "work-1", "done", work.WorkStateChangeSourceAPI, "move-1",
+			)
+			if !errors.Is(err, check.want) {
+				t.Fatalf("MoveWork() error = %v, want %v", err, check.want)
+			}
+			if err.Error() != check.wantText {
+				t.Fatalf("MoveWork() error text = %q, want %q", err.Error(), check.wantText)
+			}
+		})
+	}
+}
+
+// TestWorkRuntimeAdapterMoveWorkFailsClosedWithoutRuntime keeps Work's move
+// path fail-closed when Factory Sessions bound no runtime for the session.
+func TestWorkRuntimeAdapterMoveWorkFailsClosedWithoutRuntime(t *testing.T) {
+	adapter := workRuntimeAdapter{}
+
+	_, err := adapter.MoveWork(
+		context.Background(), "work-1", "done", work.WorkStateChangeSourceAPI, "move-1",
+	)
+	if err == nil || !strings.Contains(err.Error(), "Factory Runtime work move is required") {
+		t.Fatalf("MoveWork() error = %v, want move-required error", err)
+	}
+}
+
+type unavailableWorkHistoryRuntime struct {
+	factory.Service
+	snapshot   *legacysnapshot.Snapshot
+	stream     *interfaces.FactoryEventStream
+	historyErr error
+}
+
+func (runtime *unavailableWorkHistoryRuntime) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	return work.WorkRequestSubmitResult{}, nil
+}
+
+func (runtime *unavailableWorkHistoryRuntime) SubscribeFactoryEvents(
+	context.Context,
+	*interfaces.FactoryEventReconnectCursor,
+	interfaces.FactoryEventReconnectScope,
+) (*interfaces.FactoryEventStream, error) {
+	return runtime.stream, runtime.historyErr
+}
+
+func (runtime *unavailableWorkHistoryRuntime) GetEngineStateSnapshot(context.Context) (*legacysnapshot.Snapshot, error) {
+	return runtime.snapshot, nil
+}
+
+func TestWorkRuntimeAdapterFailsClosedWhenAdmissionHistoryUnavailable(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name        string
+		historyErr  error
+		withIngress bool
+		want        string
+	}{
+		{name: "missing ingress", want: "admission history is required"},
+		{name: "subscription error", historyErr: errors.New("history unavailable"), withIngress: true, want: "history unavailable"},
+		{name: "nil stream", withIngress: true, want: "stream is unavailable"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			runtime := &unavailableWorkHistoryRuntime{
+				snapshot:   &legacysnapshot.Snapshot{},
+				historyErr: test.historyErr,
+			}
+			adapter := workRuntimeAdapter{sessionID: "session-1", runtime: runtime}
+			if test.withIngress {
+				adapter.ingress = runtime
+			}
+			_, err := adapter.ReadWorkSnapshot(context.Background())
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("ReadWorkSnapshot() error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
 func TestWorkRuntimeAdapterProjectsDetachedPublicWorkIdentityStateAndRelations(t *testing.T) {
 	tags := map[string]string{"owner": "docs"}
 	previous := []string{"chain-a"}
 	token := &workers.Token{
-		ID:      "tok-review",
-		PlaceID: "story:review",
+		ID:    "tok-review",
+		State: "review",
 		Color: workers.Color{
 			WorkID: "work-review", WorkTypeID: "story", Name: "Review PRD",
 			TraceID: "trace-1", PreviousChainingTraceIDs: previous, Tags: tags,
@@ -116,15 +596,28 @@ func TestWorkRuntimeAdapterProjectsDetachedPublicWorkIdentityStateAndRelations(t
 		},
 	}
 	net := &factory.Net{
-		Places:    map[string]*factory.PetriPlace{"story:review": {ID: "story:review", TypeID: "story", State: "review"}},
-		WorkTypes: map[string]*factory.WorkType{"story": {ID: "story", States: []factory.StateDefinition{{Value: "review", Category: factory.StateCategoryProcessing}}}},
+		Places: map[string]*factory.PetriPlace{"story:review": {ID: "story:review", TypeID: "story", State: "review"}},
+		WorkTypes: map[string]*factory.WorkType{"story": {
+			ID: "story", States: []factory.StateDefinition{{Value: "review", Category: factory.StateCategoryProcessing}},
+			ExpectedArtifacts: []work.ExpectedArtifactDeclaration{{Name: "report", Pattern: "{{ .Context.Project }}/{{ .Context.SessionID }}/report.txt"}},
+		}},
 	}
-	got := runtimeWorkItem(token, net, false, map[string]string{"work-draft": "Draft PRD"})
+	got := runtimeWorkItem(token, net, false, map[string]string{"work-draft": "Draft PRD"}, runtimeReadFacts{
+		dispatchHistory: []factory.CompletedDispatch{{
+			DispatchID: "dispatch-context", Outcome: workers.OutcomeAccepted,
+			ExpectedArtifactContext: &work.ExpectedArtifactTemplateContext{Project: "project-7", SessionID: "session-9"},
+			ConsumedTokens:          []workers.Token{{ID: token.ID, State: "review", Color: token.Color}},
+		}},
+	})
 	if got.CursorID != "tok-review" || got.WorkID != "work-review" || got.State == nil || got.State.Name != "review" || got.State.Type != work.StateTypeProcessing {
 		t.Fatalf("runtimeWorkItem = %#v", got)
 	}
 	if len(got.Relations) != 1 || got.Relations[0].SourceWorkName != "Review PRD" || got.Relations[0].TargetWorkName != "Draft PRD" {
 		t.Fatalf("relations = %#v", got.Relations)
+	}
+	if len(got.ExpectedArtifacts) != 1 || got.ExpectedArtifacts[0].Pattern != "project-7/session-9/report.txt" ||
+		got.ExpectedArtifacts[0].Verification != work.ExpectedArtifactVerificationSatisfied {
+		t.Fatalf("expected artifacts = %#v, want recorded context", got.ExpectedArtifacts)
 	}
 	tags["owner"] = "mutated"
 	previous[0] = "mutated"
@@ -134,10 +627,37 @@ func TestWorkRuntimeAdapterProjectsDetachedPublicWorkIdentityStateAndRelations(t
 }
 
 func TestWorkRuntimeAdapterProjectsDispatchOnlyWorkAsProcessing(t *testing.T) {
-	token := &workers.Token{ID: "tok-dispatch", PlaceID: "story:review", Color: workers.Color{WorkID: "work-dispatch", WorkTypeID: "story"}}
+	token := &workers.Token{ID: "tok-dispatch", State: "review", Color: workers.Color{WorkID: "work-dispatch", WorkTypeID: "story"}}
 	got := runtimeWorkItem(token, &factory.Net{}, true, nil)
 	if got.State == nil || got.State.Name != "review" || got.State.Type != work.StateTypeProcessing {
 		t.Fatalf("dispatch-only Work state = %#v", got.State)
+	}
+}
+
+func TestWorkRuntimeAdapterProjectsLatestFailureDetailOnlyForCurrentFailedWork(t *testing.T) {
+	token := &workers.Token{ID: "tok-failed", State: "failed", Color: workers.Color{WorkID: "work-failed", WorkTypeID: "story"}}
+	net := &factory.Net{WorkTypes: map[string]*factory.WorkType{"story": {ID: "story", States: []factory.StateDefinition{{Value: "failed", Category: factory.StateCategoryFailed}}}}}
+	history := []factory.CompletedDispatch{
+		{
+			DispatchID: "dispatch-old", Outcome: workers.OutcomeFailed,
+			FailureDetail:  &workers.FailureDetail{Reason: workers.WorkFailureTypeUnknown, Message: "old failure"},
+			ConsumedTokens: []workers.Token{{Color: workers.Color{WorkID: "work-failed"}}},
+		},
+		{
+			DispatchID: "dispatch-latest", Outcome: workers.OutcomeFailed,
+			FailureDetail:  &workers.FailureDetail{Reason: workers.WorkFailureTypeInternalServerError, Message: "repository root is dirty"},
+			ConsumedTokens: []workers.Token{{Color: workers.Color{WorkID: "work-failed"}}},
+		},
+	}
+	got := runtimeWorkItem(token, net, false, nil, runtimeReadFacts{dispatchHistory: history})
+	if got.FailureDetail == nil || got.FailureDetail.Reason != string(workers.WorkFailureTypeInternalServerError) || got.FailureDetail.Message != "repository root is dirty" {
+		t.Fatalf("runtimeWorkItem failure detail = %#v, want latest typed failure", got.FailureDetail)
+	}
+
+	token.State = "done"
+	got = runtimeWorkItem(token, net, false, nil, runtimeReadFacts{dispatchHistory: history})
+	if got.FailureDetail != nil {
+		t.Fatalf("non-failed Work failure detail = %#v, want nil", got.FailureDetail)
 	}
 }
 

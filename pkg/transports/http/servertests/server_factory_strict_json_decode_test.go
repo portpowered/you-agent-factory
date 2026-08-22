@@ -20,6 +20,7 @@ type factoryStrictJSONDecodeCase struct {
 	wantCode    string
 	wantMessage string
 	wantTargets bool
+	wantWarning string
 }
 
 type apiOpenFactorySessionScript struct {
@@ -52,9 +53,8 @@ func TestFactoryStrictJSONDecode_ValidateFactory(t *testing.T) {
 		{
 			name:        "unknown_field",
 			body:        `{"name":"beta","unknownExtra":1}`,
-			wantStatus:  http.StatusBadRequest,
-			wantCode:    "BAD_REQUEST",
-			wantMessage: "invalid request payload",
+			wantStatus:  http.StatusOK,
+			wantWarning: "$.unknownExtra",
 		},
 		{
 			name:        "malformed",
@@ -92,6 +92,7 @@ func TestFactoryStrictJSONDecode_ValidateFactory(t *testing.T) {
 				if rec.Code != http.StatusOK {
 					t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
 				}
+				assertFactoryCompatibilityWarning(t, rec, tc.wantWarning)
 				result := decodeJSONResponse[factoryapi.FactoryValidationResult](t, rec)
 				if len(result.Targets) != 0 {
 					t.Fatalf("targets = %#v, want empty slice", result.Targets)
@@ -120,9 +121,8 @@ func TestFactoryStrictJSONDecode_OpenFactorySession(t *testing.T) {
 		{
 			name:        "unknown_field",
 			body:        `{"folderPath":"/workspace/fleet","unknownExtra":1}`,
-			wantStatus:  http.StatusBadRequest,
-			wantCode:    "BAD_REQUEST",
-			wantMessage: "invalid request payload",
+			wantStatus:  http.StatusOK,
+			wantWarning: "$.unknownExtra",
 		},
 		{
 			name:        "malformed",
@@ -160,6 +160,7 @@ func TestFactoryStrictJSONDecode_OpenFactorySession(t *testing.T) {
 				if rec.Code != http.StatusOK {
 					t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
 				}
+				assertFactoryCompatibilityWarning(t, rec, tc.wantWarning)
 				return
 			}
 			assertFactoryDecodeJSONError(t, rec, tc.wantStatus, tc.wantCode, tc.wantMessage, tc.wantTargets)
@@ -184,10 +185,8 @@ func TestFactoryStrictJSONDecode_SaveCurrentFactoryBySessionId(t *testing.T) {
 		{
 			name:        "unknown_field",
 			body:        `{"factory":{"name":"beta"},"unknownExtra":1}`,
-			wantStatus:  http.StatusBadRequest,
-			wantCode:    "BAD_REQUEST",
-			wantMessage: "invalid request payload",
-			wantTargets: true,
+			wantStatus:  http.StatusOK,
+			wantWarning: "$.unknownExtra",
 		},
 		{
 			name:        "malformed",
@@ -228,10 +227,38 @@ func TestFactoryStrictJSONDecode_SaveCurrentFactoryBySessionId(t *testing.T) {
 				if rec.Code != http.StatusOK {
 					t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
 				}
+				assertFactoryCompatibilityWarning(t, rec, tc.wantWarning)
 				return
 			}
 			assertFactoryDecodeJSONError(t, rec, tc.wantStatus, tc.wantCode, tc.wantMessage, tc.wantTargets)
 		})
+	}
+}
+
+func TestFactoryStrictJSONDecode_SaveCurrentFactoryBySessionIdPreservesCaseInsensitiveKnownFields(t *testing.T) {
+	var got factoryapi.Factory
+	srv := newAPITestServer(apiFactorySaveScript{
+		save: func(_ context.Context, _ string, _ factoryapi.FactorySaveMode, request factoryapi.Factory) (factoryapi.Factory, error) {
+			got = request
+			return request, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", strings.NewReader(`{
+		"factory": {
+			"name": "beta",
+			"workers": [{"Name": "worker", "futureWorker": true}]
+		}
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	assertFactoryCompatibilityWarning(t, rec, "$.factory.workers[0].futureWorker")
+	if got.Name != "beta" || got.Workers == nil || len(*got.Workers) != 1 || (*got.Workers)[0].Name != "worker" {
+		t.Fatalf("saved factory = %#v, want known fields decoded case-insensitively", got)
 	}
 }
 
@@ -244,7 +271,7 @@ func TestFactoryStrictJSONDecode_PromptTemplateValidation(t *testing.T) {
 				Name: "beta",
 				Workstations: &[]factoryapi.Workstation{{
 					Name:    "Review",
-					Worker:  "reviewer",
+					Worker:  strPtr("reviewer"),
 					Inputs:  []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}},
 					Outputs: &[]factoryapi.WorkstationIO{{State: "reviewed", WorkType: "task"}},
 				}},
@@ -260,9 +287,8 @@ func TestFactoryStrictJSONDecode_PromptTemplateValidation(t *testing.T) {
 		{
 			name:        "unknown_field",
 			body:        `{"prompt":"hello","unknownExtra":1}`,
-			wantStatus:  http.StatusBadRequest,
-			wantCode:    "BAD_REQUEST",
-			wantMessage: "invalid request payload",
+			wantStatus:  http.StatusOK,
+			wantWarning: "$.unknownExtra",
 		},
 		{
 			name:        "malformed",
@@ -304,6 +330,7 @@ func TestFactoryStrictJSONDecode_PromptTemplateValidation(t *testing.T) {
 				if rec.Code != http.StatusOK {
 					t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
 				}
+				assertFactoryCompatibilityWarning(t, rec, tc.wantWarning)
 				result := decodeJSONResponse[factoryapi.PromptTemplateValidationResult](t, rec)
 				if !result.Valid {
 					t.Fatalf("validation result = %#v, want valid prompt", result)
@@ -312,6 +339,20 @@ func TestFactoryStrictJSONDecode_PromptTemplateValidation(t *testing.T) {
 			}
 			assertFactoryDecodeJSONError(t, rec, tc.wantStatus, tc.wantCode, tc.wantMessage, tc.wantTargets)
 		})
+	}
+}
+
+func assertFactoryCompatibilityWarning(t *testing.T, rec *httptest.ResponseRecorder, wantPath string) {
+	t.Helper()
+	warning := rec.Header().Get("Warning")
+	if wantPath == "" {
+		if warning != "" {
+			t.Fatalf("Warning = %q, want absent for known-only request", warning)
+		}
+		return
+	}
+	if !strings.Contains(warning, "299") || !strings.Contains(warning, wantPath) {
+		t.Fatalf("Warning = %q, want code 299 and %s", warning, wantPath)
 	}
 }
 

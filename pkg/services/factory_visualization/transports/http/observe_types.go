@@ -6,7 +6,7 @@ import "time"
 // Observe. PSS-I02 later fans this into shared OpenAPI route registration; this
 // packet proves decode/map at the owner-local adapter edge.
 type ObserveHTTPRequest struct {
-	Mode      string                         `json:"mode"`
+	Mode      string                             `json:"mode"`
 	Reconnect *ObserveReconnectCursorHTTPRequest `json:"reconnect,omitempty"`
 }
 
@@ -21,7 +21,8 @@ type ObserveReconnectCursorHTTPRequest struct {
 // Visualization Observe. Plain projected-view facts are preserved from the root
 // contract outcome.
 type ObserveHTTPResponse struct {
-	View ObserveHTTPProjectedView `json:"view"`
+	View             ObserveHTTPProjectedView `json:"view"`
+	ignoredJSONPaths []string                 `json:"-"`
 }
 
 // ObserveHTTPProjectedView is the adapter-owned detached live view facts encoded

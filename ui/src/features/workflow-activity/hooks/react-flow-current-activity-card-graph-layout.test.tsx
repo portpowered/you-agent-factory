@@ -1,47 +1,23 @@
+// @component-test-runner vitest: full ELK graph-layout integration remains on the Vitest compatibility lane.
+// biome-ignore lint/style/noExcessiveLinesPerFile: layout cache coverage keeps related projection cases together.
 import "../../../testing/vitest-dom-capabilities.setup";
 
 import { renderHook, waitFor } from "@testing-library/react";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { singleNodeDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import { setFactoryLayoutNodeSize } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import { buildFactoryGraphLayoutTopologyKey } from "../../factory-graph-editor/lib/operations/factory-graph-topology-impact";
-import type { GraphLayout } from "../../flowchart/lib/layout";
-import * as currentActivityFactoryGraphLayout from "../lib/current-activity-factory-graph-layout";
+import { buildCurrentActivityGraphLayoutFromFactory } from "../lib/current-activity-factory-graph-layout";
 import {
+  type CurrentActivityGraphLayoutBuilder,
   resetCurrentActivityGraphLayoutCacheForTests,
   useCurrentActivityGraphLayoutForFactory,
 } from "./react-flow-current-activity-card-graph-layout";
 
-type BuildGraphLayout = (
-  topology: typeof singleNodeDashboardSnapshot.topology,
-) => Promise<GraphLayout>;
-
-const { actualBuildGraphLayoutRef, mockBuildGraphLayout } = vi.hoisted(() => ({
-  actualBuildGraphLayoutRef: { current: null as BuildGraphLayout | null },
-  mockBuildGraphLayout: vi.fn(),
-}));
-
-vi.mock("../../flowchart/lib/layout", async () => {
-  const actual = await vi.importActual("../../flowchart/lib/layout");
-  actualBuildGraphLayoutRef.current = actual.buildGraphLayout;
-
-  return {
-    ...actual,
-    buildGraphLayout: (...args: Parameters<typeof actual.buildGraphLayout>) => {
-      const implementation = mockBuildGraphLayout.getMockImplementation();
-      if (implementation) {
-        return mockBuildGraphLayout(...args);
-      }
-
-      return actual.buildGraphLayout(...args);
-    },
-  };
-});
-
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: edit-mode layout override cases share one mocked buildGraphLayout harness.
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: edit-mode layout override cases share one layout harness.
 describe("useCurrentActivityGraphLayout", () => {
   beforeEach(() => {
     resetCurrentActivityGraphLayoutCacheForTests();
-    mockBuildGraphLayout.mockReset();
     window.localStorage.clear();
   });
 
@@ -57,7 +33,6 @@ describe("useCurrentActivityGraphLayout", () => {
       expect(result.current.nodes).toHaveLength(0);
       expect(result.current.edges).toHaveLength(0);
     });
-    expect(mockBuildGraphLayout).not.toHaveBeenCalled();
   });
 
   it("builds observer graph layout from the snapshot factory graph when available", async () => {
@@ -110,7 +85,6 @@ describe("useCurrentActivityGraphLayout", () => {
       expect(result.current.nodes.length).toBeGreaterThan(0);
     });
 
-    expect(mockBuildGraphLayout).not.toHaveBeenCalled();
     expect(result.current.nodes.map((node) => node.nodeId).sort()).toEqual([
       "resource:gpu",
       "work-state:story:done",
@@ -241,13 +215,24 @@ describe("useCurrentActivityGraphLayout", () => {
       expect(result.current.nodes).toHaveLength(0);
       expect(result.current.edges).toHaveLength(0);
     });
-    expect(mockBuildGraphLayout).not.toHaveBeenCalled();
   });
 
   it("reuses cached layout when a non-topology factory override arrives", async () => {
-    const buildLayoutSpy = vi.spyOn(
-      currentActivityFactoryGraphLayout,
-      "buildCurrentActivityGraphLayoutFromFactory",
+    const buildLayout: CurrentActivityGraphLayoutBuilder = vi.fn(
+      (factory, hiddenNodeClasses, visibilityPreset) =>
+        buildCurrentActivityGraphLayoutFromFactory(
+          factory,
+          hiddenNodeClasses,
+          visibilityPreset,
+        ),
+    );
+    const replacementBuildLayout: CurrentActivityGraphLayoutBuilder = vi.fn(
+      (factory, hiddenNodeClasses, visibilityPreset) =>
+        buildCurrentActivityGraphLayoutFromFactory(
+          factory,
+          hiddenNodeClasses,
+          visibilityPreset,
+        ),
     );
     const snapshot: DashboardSnapshot = {
       ...structuredClone(singleNodeDashboardSnapshot),
@@ -305,25 +290,126 @@ describe("useCurrentActivityGraphLayout", () => {
     );
 
     const { result, rerender } = renderHook(
-      ({ factoryOverride }) =>
-        useCurrentActivityGraphLayoutForFactory(snapshot, factoryOverride),
-      { initialProps: { factoryOverride: snapshot.factory } },
+      ({ builder, factoryOverride }) =>
+        useCurrentActivityGraphLayoutForFactory(
+          snapshot,
+          factoryOverride,
+          new Set(),
+          "all",
+          builder,
+        ),
+      {
+        initialProps: {
+          builder: buildLayout,
+          factoryOverride: snapshot.factory,
+        },
+      },
     );
 
     await waitFor(() => {
       expect(result.current.nodes.length).toBeGreaterThan(0);
     });
-    const callsAfterInitialRender = buildLayoutSpy.mock.calls.length;
+    const callsAfterInitialRender = buildLayout.mock.calls.length;
     expect(callsAfterInitialRender).toBeGreaterThan(0);
 
-    rerender({ factoryOverride: promptOnlyUpdate });
+    rerender({ builder: buildLayout, factoryOverride: promptOnlyUpdate });
 
     await waitFor(() => {
       expect(result.current.nodes.length).toBeGreaterThan(0);
     });
-    expect(buildLayoutSpy.mock.calls.length).toBe(callsAfterInitialRender);
+    expect(buildLayout.mock.calls.length).toBe(callsAfterInitialRender);
 
-    buildLayoutSpy.mockRestore();
+    rerender({
+      builder: replacementBuildLayout,
+      factoryOverride: promptOnlyUpdate,
+    });
+
+    await waitFor(() => {
+      expect(replacementBuildLayout).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("projects canonical node-size changes without reloading the cached topology", async () => {
+    const buildLayout: CurrentActivityGraphLayoutBuilder = vi.fn(
+      (factory, hiddenNodeClasses, visibilityPreset) =>
+        buildCurrentActivityGraphLayoutFromFactory(
+          factory,
+          hiddenNodeClasses,
+          visibilityPreset,
+        ),
+    );
+    const snapshot: DashboardSnapshot = {
+      ...structuredClone(singleNodeDashboardSnapshot),
+      factory: {
+        name: "canonical-node-size-projection",
+        workTypes: [
+          {
+            name: "story",
+            states: [
+              { name: "queued", type: "INITIAL" },
+              { name: "done", type: "TERMINAL" },
+            ],
+          },
+        ],
+        workstations: [
+          {
+            id: "draft",
+            inputs: [{ state: "queued", workType: "story" }],
+            name: "Draft",
+            outputs: [{ state: "done", workType: "story" }],
+            type: "MODEL_WORKSTATION",
+            worker: "",
+          },
+        ],
+      },
+      topology: {
+        edges: [],
+        workstation_node_ids: [],
+        workstation_nodes_by_id: {},
+      },
+    };
+    const initialCanonicalLayout = { schemaVersion: 1 };
+    const authoredCanonicalLayout = setFactoryLayoutNodeSize(
+      initialCanonicalLayout,
+      "workstation:draft",
+      { height: 240, width: 300 },
+      { x: 0, y: 0 },
+    );
+
+    const { result, rerender } = renderHook(
+      ({ canonicalLayout }) =>
+        useCurrentActivityGraphLayoutForFactory(
+          snapshot,
+          snapshot.factory,
+          new Set(),
+          "all",
+          buildLayout,
+          canonicalLayout,
+        ),
+      { initialProps: { canonicalLayout: initialCanonicalLayout } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.nodes.length).toBeGreaterThan(0);
+    });
+    const initialWorkstation = result.current.nodes.find(
+      (node) => node.nodeId === "workstation:draft",
+    );
+    expect(initialWorkstation).toMatchObject({ height: 156, width: 156 });
+    const callsAfterInitialLayout = buildLayout.mock.calls.length;
+
+    rerender({ canonicalLayout: authoredCanonicalLayout });
+
+    expect(result.current.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          height: 240,
+          nodeId: "workstation:draft",
+          width: 300,
+        }),
+      ]),
+    );
+    expect(buildLayout.mock.calls.length).toBe(callsAfterInitialLayout);
   });
 
   it("drops stale resource nodes immediately when factory-change topology removes them", async () => {
@@ -389,7 +475,6 @@ describe("useCurrentActivityGraphLayout", () => {
 describe("useCurrentActivityGraphLayoutForFactory legacy routes", () => {
   beforeEach(() => {
     resetCurrentActivityGraphLayoutCacheForTests();
-    mockBuildGraphLayout.mockReset();
     window.localStorage.clear();
   });
 

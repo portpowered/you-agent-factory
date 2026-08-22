@@ -55,13 +55,11 @@ func (e *FactoryEngine) MoveWork(ctx context.Context, workID string, stateName s
 	}
 	if fromPlaceID == toPlaceID {
 		return work.OperatorMoveResult{
-			WorkID:      workID,
-			WorkTypeID:  token.Color.WorkTypeID,
-			FromState:   fromState,
-			ToState:     stateName,
-			FromPlaceID: fromPlaceID,
-			ToPlaceID:   toPlaceID,
-			TokenID:     token.ID,
+			WorkID:     workID,
+			WorkTypeID: token.Color.WorkTypeID,
+			FromState:  fromState,
+			ToState:    stateName,
+			TokenID:    token.ID,
 		}, nil
 	}
 
@@ -79,16 +77,15 @@ func (e *FactoryEngine) MoveWork(ctx context.Context, workID string, stateName s
 	if err := applyMutations(e.runtimeState.Marking, e.state.Places, []interfaces.MarkingMutation{mutation}, e.clock.Now()); err != nil {
 		return work.OperatorMoveResult{}, fmt.Errorf("apply operator move: %w", err)
 	}
+	e.publishRuntimeSnapshotLocked()
 	e.wakeForOperatorControl()
 
 	return work.OperatorMoveResult{
-		WorkID:      workID,
-		WorkTypeID:  token.Color.WorkTypeID,
-		FromState:   fromState,
-		ToState:     stateName,
-		FromPlaceID: fromPlaceID,
-		ToPlaceID:   toPlaceID,
-		TokenID:     token.ID,
+		WorkID:     workID,
+		WorkTypeID: token.Color.WorkTypeID,
+		FromState:  fromState,
+		ToState:    stateName,
+		TokenID:    token.ID,
 	}, nil
 }
 

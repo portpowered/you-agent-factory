@@ -1,63 +1,66 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
-import { GraphSemanticIcon } from "./semantic-icon.js";
 import { FactoryGraphNodeShell, } from "./semantic-node-shell.js";
-import { factoryGraphNodeHoverClassName, factoryGraphNodeSurfaceClassName, } from "./semantic-node-style.js";
-import { FactoryGraphWorkProgressMarker } from "./semantic-place-nodes.js";
-import { factoryGraphActiveItemsLabel as activeItemsLabel, factoryGraphClassNames as classNames, factoryGraphDurationText as durationText, factoryGraphGraphDuration as graphDuration, factoryGraphSelectExhaustionLabel as selectExhaustionLabel, factoryGraphSelectWorkstationLabel as selectWorkstationLabel, factoryGraphWorkItemLabel as workItemLabel, factoryGraphWorkItemLabelClassName as workItemLabelClassName, factoryGraphWorkstationPresentation as workstationPresentation, factoryGraphWorkstationTitleClassName as workstationTitleClassName, } from "./semantic-workstation-presentation.js";
-const VISIBLE_WORK_ITEM_LIMIT = 3;
+import { factoryGraphNodeHoverClassName, factoryGraphNodeSurfaceClassName, factoryGraphNodeWrappedTextClassName, } from "./semantic-node-style.js";
+import { FactoryGraphWorkProgressMarker } from "./semantic-work-progress-marker.js";
+import { factoryGraphActiveItemsLabel as activeItemsLabel, factoryGraphClassNames as classNames, factoryGraphDurationText as durationText, factoryGraphGraphDuration as graphDuration, factoryGraphSelectWorkstationLabel as selectWorkstationLabel, factoryGraphWorkItemLabel as workItemLabel, factoryGraphWorkItemLabelClassName as workItemLabelClassName, factoryGraphWorkstationPresentation as workstationPresentation, factoryGraphWorkstationTitleClassName as workstationTitleClassName, } from "./semantic-workstation-presentation.js";
+import { resolveFactoryGraphVisualState } from "./visual-state.js";
+import { factoryGraphWorkProgressMode } from "./work-progress-presentation.js";
+const WORKSTATION_WORK_ITEM_MODE_MAXIMUM = 2;
+const WORKSTATION_HEADER_CLASS_NAME = "flex min-w-0 w-full flex-wrap items-start justify-between gap-1 overflow-hidden";
 /** Original Factory workstation presentation, with host-owned selection callbacks. */
-export function FactoryGraphWorkstationNodeView({ data, }) {
-    const presentation = workstationPresentation(data.workstation, data.locale);
-    const exhaustion = presentation.semanticKind === "exhaustion";
+export function FactoryGraphWorkstationNodeView({ data, selected: reactFlowSelected, }) {
+    const presentation = workstationPresentation(data.workstationSemantics, data.locale);
     const title = data.workstation.workstation_name ||
         data.workstation.transition_id ||
         data.workstation.node_id;
+    const isExpanded = data.expanded === true;
     const entries = data.executions.flatMap((execution) => (execution.work_items ?? []).map((workItem) => ({ execution, workItem })));
-    const className = classNames(factoryGraphNodeSurfaceClassName("workstation"), "min-w-0 w-full justify-start overflow-hidden border-2", factoryGraphNodeHoverClassName({ muted: data.muted, selected: data.selectedWorkstation }, "primary"), exhaustion ? "border-dashed border-af-danger-border" : "border-info-border", !exhaustion && presentation.borderClassName, !exhaustion &&
-        data.active &&
-        !data.selectedWorkstation &&
-        "border-af-success-border shadow-af-success-chip", !exhaustion &&
-        data.activeFlow &&
-        !data.selectedWorkstation &&
-        "agent-flow-node--active ring-2 ring-af-success-border", data.selectedWorkstation && "border-primary shadow-af-accent-selected", !exhaustion &&
-        data.selectedWorkID !== null &&
-        "border-info-border shadow-af-info-selected", data.muted && "opacity-[0.45]");
-    return (_jsx(FactoryGraphNodeShell, { className: className, handles: data.handles, nodeType: "workstation", zAxisIncompleteHints: data.zAxisIncompleteHints, children: exhaustion ? (_jsx(Exhaustion, { data: data, presentation: presentation, title: title })) : data.summaryOnly ? (_jsx(Summary, { data: data, presentation: presentation, title: title })) : (_jsx(ActiveContent, { data: data, entries: entries, presentation: presentation, title: title })) }));
+    const selected = data.selectedWorkstation || reactFlowSelected;
+    const visualState = resolveFactoryGraphVisualState({
+        activeWork: data.active,
+        family: "workstation",
+        focused: data.focused,
+        lifecycle: data.active ? "PROCESSING" : undefined,
+        muted: data.muted,
+        runtimeStatus: data.runtimeStatus,
+        selected,
+        validation: data.validationError,
+    });
+    const className = classNames(factoryGraphNodeSurfaceClassName("workstation"), "min-w-0 w-full justify-start overflow-hidden border-2", factoryGraphNodeHoverClassName({ muted: data.muted, selected }, "primary"), "border-info-border", presentation.borderClassName, data.selectedWorkID !== null &&
+        "border-info-border shadow-af-info-selected");
+    return (_jsx(FactoryGraphNodeShell, { className: className, handles: data.handles, interactionOverlay: data.interactionOverlay, nodeType: "workstation", resizeControls: data.resizeControls, visualState: {
+            activeWork: data.active,
+            focused: data.focused,
+            lifecycle: data.active ? "PROCESSING" : undefined,
+            muted: data.muted,
+            runtimeStatus: data.runtimeStatus,
+            selected,
+            validation: data.validationError,
+        }, zAxisIncompleteHints: data.zAxisIncompleteHints, children: data.summaryOnly ? (_jsx(Summary, { data: data, isExpanded: isExpanded, presentation: presentation, title: title, visualState: visualState })) : (_jsx(ActiveContent, { data: data, entries: entries, isExpanded: isExpanded, presentation: presentation, title: title, visualState: visualState })) }));
 }
-function Summary({ data, presentation, title, }) {
-    return (_jsx(GraphNodeButton, { "aria-label": data.onSelectWorkstation
-            ? selectWorkstationLabel(title, data.locale)
-            : undefined, "aria-pressed": data.onSelectWorkstation ? data.selectedWorkstation : undefined, className: "flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden", "data-selected-workstation": data.selectedWorkstation ? "true" : undefined, "data-workstation-kind": presentation.semanticKind, disabled: data.onSelectWorkstation === undefined, onClick: data.onSelectWorkstation
-            ? (event) => {
-                event.stopPropagation();
-                data.onSelectWorkstation?.(data.workstation.node_id);
-            }
-            : undefined, title: title, children: _jsx(Header, { presentation: presentation, title: title }) }));
-}
-function Exhaustion({ data, presentation, title, }) {
-    const header = _jsx(Header, { presentation: presentation, title: title, compact: true });
-    if (!data.onSelectWorkstation)
-        return (_jsx("div", { className: "flex h-full min-w-0 w-full items-center gap-2 overflow-hidden", "data-selected-workstation": data.selectedWorkstation ? "true" : undefined, "data-workstation-kind": presentation.semanticKind, title: title, children: header }));
-    return (_jsx(GraphNodeButton, { "aria-label": selectExhaustionLabel(title, data.locale), "aria-pressed": data.selectedWorkstation, className: "flex h-full min-w-0 w-full items-center gap-2 overflow-hidden", "data-selected-workstation": data.selectedWorkstation ? "true" : undefined, "data-workstation-kind": presentation.semanticKind, onClick: (event) => {
-            event.stopPropagation();
-            data.onSelectWorkstation?.(data.workstation.node_id);
-        }, title: title, children: header }));
-}
-function ActiveContent({ data, entries, presentation, title, }) {
-    const visible = entries.slice(0, VISIBLE_WORK_ITEM_LIMIT);
-    const header = _jsx(Header, { presentation: presentation, title: title });
-    return (_jsxs("div", { className: "grid h-full min-w-0 grid-rows-[auto_1fr_auto]", "data-active": data.active ? "true" : undefined, "data-selected-work": data.selectedWorkID !== null ? "true" : undefined, "data-selected-workstation": data.selectedWorkstation ? "true" : undefined, "data-workstation-kind": presentation.semanticKind, children: [data.onSelectWorkstation ? (_jsx(GraphNodeButton, { "aria-label": selectWorkstationLabel(title, data.locale), "aria-pressed": data.selectedWorkstation, className: "flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden", onClick: (event) => {
+function Summary({ data, isExpanded, presentation, title, visualState, }) {
+    const header = (_jsx(Header, { presentation: presentation, showAuxiliaryDetails: isExpanded, title: title }));
+    return (_jsxs("div", { className: "grid min-w-0 gap-0.5", "data-workstation-control-role": presentation.controlRole, "data-workstation-density": "compact", "data-workstation-runtime-type": presentation.runtimeType, "data-workstation-scheduling-behavior": presentation.schedulingBehavior, children: [data.onSelectWorkstation ? (_jsx(GraphNodeButton, { "aria-label": selectWorkstationLabel(title, data.locale), "aria-pressed": visualState.selection, className: WORKSTATION_HEADER_CLASS_NAME, "data-selected-workstation": visualState.selection ? "true" : undefined, onClick: (event) => {
                     event.stopPropagation();
                     data.onSelectWorkstation?.(data.workstation.node_id);
-                }, title: title, children: header })) : (_jsx("div", { className: "flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden", title: title, children: header })), _jsx("ul", { className: "mt-2 grid min-w-0 list-none content-start gap-1 p-0", children: visible.map(({ execution, workItem }) => (_jsx(WorkItem, { data: data, execution: execution, workItem: workItem }, `${execution.dispatch_id}:${workItem.work_id}`))) }), _jsx(Overflow, { total: entries.length, visible: visible.length, locale: data.locale })] }));
+                }, title: title, children: header })) : (_jsx("div", { className: WORKSTATION_HEADER_CLASS_NAME, title: title, children: header })), _jsx(FactoryGraphWorkstationGuardedControlCard, { locale: data.locale, presentation: presentation })] }));
+}
+function ActiveContent({ data, entries, isExpanded, presentation, title, visualState, }) {
+    const progressMode = factoryGraphWorkProgressMode(entries.length, WORKSTATION_WORK_ITEM_MODE_MAXIMUM);
+    const visible = progressMode === "items" ? entries : [];
+    const header = (_jsx(Header, { presentation: presentation, showAuxiliaryDetails: isExpanded, title: title }));
+    return (_jsxs("div", { className: "grid h-full min-w-0 grid-rows-[auto_auto_1fr_auto]", "data-active": data.active ? "true" : undefined, "data-selected-work": data.selectedWorkID !== null ? "true" : undefined, "data-selected-workstation": visualState.selection ? "true" : undefined, "data-workstation-control-role": presentation.controlRole, "data-workstation-density": "compact", "data-workstation-runtime-type": presentation.runtimeType, "data-workstation-scheduling-behavior": presentation.schedulingBehavior, children: [data.onSelectWorkstation ? (_jsx(GraphNodeButton, { "aria-label": selectWorkstationLabel(title, data.locale), "aria-pressed": visualState.selection, className: WORKSTATION_HEADER_CLASS_NAME, onClick: (event) => {
+                    event.stopPropagation();
+                    data.onSelectWorkstation?.(data.workstation.node_id);
+                }, title: title, children: header })) : (_jsx("div", { className: WORKSTATION_HEADER_CLASS_NAME, title: title, children: header })), _jsx(FactoryGraphWorkstationGuardedControlCard, { locale: data.locale, presentation: presentation }), _jsx("ul", { className: "mt-1 grid min-h-0 min-w-0 list-none content-start gap-0.5 overflow-hidden p-0", children: visible.map(({ execution, workItem }) => (_jsx(WorkItem, { data: data, execution: execution, workItem: workItem }, `${execution.dispatch_id}:${workItem.work_id}`))) }), _jsx(Overflow, { total: entries.length, visible: visible.length, locale: data.locale })] }));
 }
 function WorkItem({ data, execution, workItem, }) {
     const selected = data.selectedWorkID === workItem.work_id;
     const label = workItemLabel(workItem);
     const duration = graphDuration(execution.started_at, data.now, data.locale);
     const durationTitle = durationText(execution.started_at, data.now, data.locale);
-    const content = (_jsxs(_Fragment, { children: [_jsx("span", { className: workItemLabelClassName(label), "data-active-work-label": true, children: label }), _jsx("span", { className: "shrink-0 whitespace-nowrap text-right font-mono text-[0.72rem] text-on-surface-subtle", "data-active-work-duration": true, children: duration })] }));
+    const content = (_jsxs(_Fragment, { children: [_jsx("span", { className: classNames(workItemLabelClassName(label), "!block !whitespace-nowrap truncate"), "data-active-work-label": true, children: label }), _jsx("span", { className: "shrink-0 whitespace-nowrap text-right font-mono text-[0.72rem] text-on-surface-subtle", "data-active-work-duration": true, children: duration })] }));
     const className = classNames("grid min-w-0 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-1 overflow-hidden rounded-lg border border-outline bg-surface px-1.5 py-1 text-[0.74rem]", selected && "border-info-border bg-info-container shadow-af-info-chip");
     return (_jsx("li", { children: data.onSelectWorkID ? (_jsx(GraphNodeButton, { "aria-pressed": selected, className: className, "data-selected": selected ? "true" : undefined, onClick: (event) => {
                 event.stopPropagation();
@@ -67,18 +70,20 @@ function WorkItem({ data, execution, workItem, }) {
                 });
             }, title: `${label} - ${durationTitle}`, children: content })) : (_jsx("div", { className: className, "data-selected": selected ? "true" : undefined, title: `${label} - ${durationTitle}`, children: content })) }));
 }
-function Header({ compact = false, presentation, title, }) {
+function Header({ compact = false, presentation, showAuxiliaryDetails = false, title, }) {
     return (_jsxs(_Fragment, { children: [_jsx("span", { className: compact
-                    ? "flex min-h-4 items-center"
-                    : "flex min-h-5 shrink-0 items-center", "data-workstation-semantic-icon": true, title: presentation.label, children: _jsx(GraphSemanticIcon, { className: classNames("h-4 w-4", presentation.className), kind: presentation.iconKind, label: presentation.label }) }), _jsx("span", { className: compact
-                    ? "block min-w-0 truncate whitespace-nowrap font-mono text-[0.74rem] font-bold leading-tight text-on-surface"
-                    : workstationTitleClassName(title), "data-workstation-title": true, children: title })] }));
+                    ? factoryGraphNodeWrappedTextClassName("block font-mono text-[0.74rem] font-bold leading-tight text-on-surface")
+                    : workstationTitleClassName(title), "data-factory-entity-title": true, "data-workstation-title": true, title: showAuxiliaryDetails ? undefined : presentation.label, children: title }), showAuxiliaryDetails ? (_jsx("span", { className: factoryGraphNodeWrappedTextClassName("text-[0.62rem] font-semibold leading-tight text-on-surface-subtle"), "data-workstation-runtime-label": true, title: presentation.label, children: presentation.label })) : null, showAuxiliaryDetails && presentation.schedulingLabel ? (_jsx("span", { className: "min-w-0 max-w-full shrink truncate whitespace-nowrap rounded-sm border border-outline-variant bg-surface px-1.5 py-0.5 text-[0.62rem] font-semibold leading-none text-on-surface-subtle", "data-workstation-scheduling-label": true, title: presentation.schedulingLabel, children: presentation.schedulingLabel })) : null] }));
+}
+export function FactoryGraphWorkstationGuardedControlCard({ locale, presentation, }) {
+    const control = presentation.guardedControl;
+    if (presentation.controlRole !== "LOOP_BREAKER" || !control)
+        return null;
+    const label = locale === "zh-CN" ? "断路器" : "Breaker";
+    return (_jsx("span", { className: "min-w-0 max-w-full shrink truncate whitespace-nowrap text-[0.62rem] font-semibold leading-none text-on-surface", "data-workstation-control-role": presentation.controlRole, "data-workstation-guard-card": true, "data-workstation-guard-type": control.guardType, title: label, children: label }));
 }
 function Overflow({ locale, total, visible, }) {
-    const remaining = Math.max(0, total - visible);
-    if (!remaining)
+    if (total <= visible)
         return null;
-    if (remaining > 10)
-        return (_jsx(FactoryGraphWorkProgressMarker, { ariaLabel: activeItemsLabel(total, locale), className: "mt-2 flex min-h-7 w-full rounded-lg px-3 py-1 text-[0.9rem]", count: total, "data-workstation-work-progress": "numeric", kind: "numeric" }));
-    return (_jsx(FactoryGraphWorkProgressMarker, { ariaLabel: activeItemsLabel(total, locale), className: "mt-2 flex min-h-7 gap-1 rounded-lg px-2", "data-workstation-work-progress": "dots", dotClassName: "h-1.5 w-1.5", dotCount: remaining, dotDataAttribute: "data-workstation-work-progress-dot", kind: "dots", suffix: _jsxs("span", { className: "ml-1 font-mono text-[0.68rem] font-bold text-success", children: ["+", remaining] }) }));
+    return (_jsx(FactoryGraphWorkProgressMarker, { ariaLabel: activeItemsLabel(total, locale), className: "mt-1 flex min-h-7 w-full px-3 py-1", count: total, "data-workstation-work-progress": "numeric", kind: "numeric" }));
 }

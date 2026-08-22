@@ -139,10 +139,10 @@ func TestQuery_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *testing.
 	}
 	diag := diagnostics.String()
 	for _, want := range []string{
-		"factory query request",
+		"factory show request",
 		"endpointPath=/factory-sessions/~default/factory",
 		"server=",
-		"factory query response",
+		"factory show response",
 		"status=200",
 		"factoryKind=named",
 		`factoryName="beta"`,
@@ -179,7 +179,7 @@ func TestQuery_VerboseLogsFailureStatus(t *testing.T) {
 		t.Fatalf("Query error = %v, want ErrCurrentFactoryNotFound", err)
 	}
 	diag := diagnostics.String()
-	if !strings.Contains(diag, "factory query response") || !strings.Contains(diag, "status=404") {
+	if !strings.Contains(diag, "factory show response") || !strings.Contains(diag, "status=404") {
 		t.Fatalf("diagnostics missing failure status:\n%s", diag)
 	}
 	if out.Len() != 0 {

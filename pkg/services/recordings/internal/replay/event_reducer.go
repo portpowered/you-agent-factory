@@ -3,9 +3,12 @@ package replay
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -17,6 +20,7 @@ type replayEventLog struct {
 	RuntimeConfig    interfaces.ReplayRuntimeConfig
 	Submissions      []replaySubmission
 	Dispatches       []replayDispatch
+	WorkerSessionIDs map[string]string
 	Completions      []replayCompletion
 	WorkStateChanges []replayWorkStateChange
 	Diagnostics      interfaces.ReplayDiagnostics
@@ -27,6 +31,8 @@ type replayWorkStateChange struct {
 	eventID      string
 	observedTick int
 	change       work.WorkStateChangeRecord
+	fromPlaceID  string
+	toPlaceID    string
 }
 
 type replaySubmission struct {
@@ -54,7 +60,7 @@ type replayCompletion struct {
 
 type replayInferenceAttempt struct {
 	attempt         int
-	providerSession *workerexecution.ProviderSessionMetadata
+	providerSession *providers.SessionMetadata
 	diagnostics     *workerexecution.WorkDiagnostics
 }
 
@@ -72,7 +78,7 @@ func reduceReplayEvents(
 	if decodeFactorySnapshot == nil {
 		return nil, fmt.Errorf("Factory snapshot decoder is required")
 	}
-	reduced := &replayEventLog{}
+	reduced := &replayEventLog{WorkerSessionIDs: make(map[string]string)}
 	inferenceAttemptsByDispatchID := make(map[string]replayInferenceAttempt)
 	workByID := make(map[string]work.Work)
 	for _, event := range artifact.Events {
@@ -111,6 +117,8 @@ func reduceReplayEvent(
 		)
 	case interfaces.FactoryEventTypeDispatchRequest:
 		return applyReplayDispatchRequest(reduced, event, workByID)
+	case interfaces.FactoryEventTypeDispatchWorkerSessionAssoc:
+		return applyReplayWorkerSessionAssociation(reduced, event)
 	case interfaces.FactoryEventTypeWorkStateChange:
 		return applyReplayWorkStateChange(reduced, event)
 	case interfaces.FactoryEventTypeWorkRequest:
@@ -127,6 +135,29 @@ func reduceReplayEvent(
 	default:
 		return nil
 	}
+}
+
+func applyReplayWorkerSessionAssociation(reduced *replayEventLog, event interfaces.FactoryEvent) error {
+	if reduced == nil {
+		return fmt.Errorf("replay event log is required")
+	}
+	dispatchID := stringValue(event.Context.DispatchID)
+	if dispatchID == "" {
+		return nil
+	}
+	var payload interfaces.DispatchWorkerSessionAssociationEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
+		return fmt.Errorf("decode Worker Session association event %q: %w", event.Id, err)
+	}
+	workerSessionID := strings.TrimSpace(payload.WorkerSessionID)
+	if workerSessionID == "" {
+		return nil
+	}
+	if previous := strings.TrimSpace(reduced.WorkerSessionIDs[dispatchID]); previous != "" && previous != workerSessionID {
+		return fmt.Errorf("replay Worker Session association for dispatch %q changes from %q to %q", dispatchID, previous, workerSessionID)
+	}
+	reduced.WorkerSessionIDs[dispatchID] = workerSessionID
+	return nil
 }
 
 func applyReplayWorkStateChange(reduced *replayEventLog, event interfaces.FactoryEvent) error {
@@ -165,13 +196,13 @@ func replayWorkStateChangeFromEvent(event interfaces.FactoryEvent) (*replayWorkS
 			WorkTypeName:  payload.WorkTypeName,
 			FromState:     payload.FromState,
 			ToState:       payload.ToState,
-			FromPlaceID:   payload.FromPlaceID,
-			ToPlaceID:     payload.ToPlaceID,
 			Source:        source,
 			RequestID:     stringValue(event.Context.RequestID),
 			TriggerWorkID: stringValue(payload.TriggerWorkID),
 			Reason:        stringValue(payload.Reason),
 		},
+		fromPlaceID: payload.FromPlaceID,
+		toPlaceID:   payload.ToPlaceID,
 	}, nil
 }
 
@@ -413,14 +444,23 @@ func replayWorkRequestRelations(works []work.WorkRequestEventWork, relations []w
 		targetName := relation.TargetWorkName
 		if targetName == "" {
 			targetName = namesByID[relation.TargetWorkID]
+		} else if relation.TargetWorkID != "" && targetName == relation.TargetWorkID {
+			// Event history uses the target ID as the required public name
+			// fallback when an ID-only relation is recorded. Do not replay that
+			// fallback as an authored name: a later admission must resolve the
+			// canonical ID against the selected session board.
+			targetName = namesByID[relation.TargetWorkID]
 		}
-		if targetName == "" {
-			targetName = relation.TargetWorkID
-		}
-		if sourceName == "" || targetName == "" {
+		if sourceName == "" || (targetName == "" && relation.TargetWorkID == "") {
 			continue
 		}
-		out = append(out, work.WorkRelation{Type: relation.Type, SourceWorkName: sourceName, TargetWorkName: targetName, RequiredState: relation.RequiredState})
+		out = append(out, work.WorkRelation{
+			Type:           relation.Type,
+			SourceWorkName: sourceName,
+			TargetWorkID:   relation.TargetWorkID,
+			TargetWorkName: targetName,
+			RequiredState:  relation.RequiredState,
+		})
 	}
 	return out
 }
@@ -436,11 +476,12 @@ func replayDispatchFromEvent(runtimeConfig interfaces.ReplayRuntimeConfig, event
 	}
 	workstation := replayWorkstation(runtimeConfig, payload.TransitionID)
 	dispatch := work.WorkDispatch{
-		DispatchID:      dispatchID,
-		TransitionID:    payload.TransitionID,
-		WorkerType:      replayWorkerName(workstation),
-		WorkstationName: replayWorkstationName(workstation, payload.TransitionID),
-		InputTokens:     replayInputTokensFromDispatchPayload(event.Context, payload, workByID),
+		DispatchID:              dispatchID,
+		TransitionID:            payload.TransitionID,
+		WorkerType:              replayWorkerName(workstation),
+		WorkstationName:         replayWorkstationName(workstation, payload.TransitionID),
+		ExpectedArtifactContext: cloneExpectedArtifactTemplateContext(payload.ExpectedArtifactContext),
+		InputTokens:             replayInputTokensFromDispatchPayload(event.Context, payload, workByID),
 		Execution: work.ExecutionMetadata{
 			RequestID:           stringValue(event.Context.RequestID),
 			TraceID:             firstString(event.Context.TraceIDs),
@@ -482,9 +523,23 @@ func replayInferenceAttemptFromEvent(event interfaces.FactoryEvent) (string, rep
 	if err != nil {
 		return "", replayInferenceAttempt{}, fmt.Errorf("decode inference response event %q: %w", event.Id, err)
 	}
+	providerSession := (payload.Continuation).SessionMetadata()
+	if providerSession == nil {
+		// Replay accepts older public event artifacts whose response payload
+		// carried providerSession before canonical events switched to the opaque
+		// continuation. This compatibility decode stays at the recording
+		// boundary; Workers still receives only Continuation.
+		var legacy struct {
+			ProviderSession *providers.SessionMetadata `json:"providerSession"`
+		}
+		if decodeErr := json.Unmarshal(event.Payload, &legacy); decodeErr != nil {
+			return "", replayInferenceAttempt{}, fmt.Errorf("decode legacy inference response event %q: %w", event.Id, decodeErr)
+		}
+		providerSession = (legacy.ProviderSession).Clone()
+	}
 	return stringValue(event.Context.DispatchID), replayInferenceAttempt{
 		attempt:         payload.Attempt,
-		providerSession: workerexecution.CloneProviderSessionMetadata(payload.ProviderSession),
+		providerSession: providerSession,
 		diagnostics:     diagnostics,
 	}, nil
 }
@@ -514,12 +569,14 @@ func replayCompletionFromEvent(event interfaces.FactoryEvent, inference replayIn
 			TransitionID:                payload.TransitionID,
 			Outcome:                     payload.Outcome,
 			Output:                      stringValue(payload.Output),
+			StructuredResult:            jsonvalue.Clone(payload.StructuredResult),
+			StructuredResultPresent:     jsonvalue.Present(payload.StructuredResult, payload.StructuredResultPresent),
 			Error:                       stringValue(payload.Error),
 			Feedback:                    stringValue(payload.Feedback),
 			SelectedClassificationLabel: stringValue(payload.SelectedClassificationLabel),
 			RecordedOutputWork:          recordedOutputWork,
 			FailureMetadata:             workerexecution.CloneWorkFailureMetadata(payload.ProviderFailure),
-			ProviderSession:             workerexecution.CloneProviderSessionMetadata(inference.providerSession),
+			Continuation:                (inference.providerSession).ContinuationRef(),
 			Metrics:                     replayWorkMetricsFromEvent(payload.Metrics),
 			Diagnostics:                 diagnostics,
 		},
@@ -559,7 +616,9 @@ func factoryWorkItemFromEventWork(eventWork work.WorkRequestEventWork) workdomai
 		PreviousChainingTraceIDs: append([]string(nil), eventWork.PreviousChainingTraceIDs...),
 		TraceID:                  eventWork.TraceID,
 		Content:                  content,
+		StructuredResult:         jsonvalue.Clone(eventWork.StructuredResult),
 		Tags:                     cloneStringMap(eventWork.Tags),
+		StructuredResultPresent:  jsonvalue.Present(eventWork.StructuredResult, eventWork.StructuredResultPresent),
 	}
 }
 
@@ -618,8 +677,8 @@ func workDispatchInputTokensForReplay(
 	}
 	for _, resource := range resourceValues(payload.Resources) {
 		tokens = append(tokens, workerexecution.Token{
-			ID:      "resource/" + resource.Name,
-			PlaceID: resource.Name + ":available",
+			ID:    "resource/" + resource.Name,
+			State: "available",
 			Color: workerexecution.Color{
 				WorkTypeID: resource.Name,
 				DataType:   workerexecution.DataTypeResource,
@@ -731,4 +790,10 @@ func resourceValues(resources *[]interfaces.DispatchResourceRef) []interfaces.Di
 
 func isWorkerOutputSource(source string) bool {
 	return len(source) >= len("worker-output:") && source[:len("worker-output:")] == "worker-output:"
+}
+
+func cloneExpectedArtifactTemplateContext(
+	context *work.ExpectedArtifactTemplateContext,
+) *work.ExpectedArtifactTemplateContext {
+	return context.Clone()
 }

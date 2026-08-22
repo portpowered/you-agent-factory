@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-06-03
+last-modified: 2026-08-21
 doc-id: agent-factory/work
 ---
 
@@ -20,6 +20,9 @@ For watched batch files under `inputs/`, relation fields, and the
 
 For confirming a factory service is running and routing `--server` or
 `--session` on submit and work commands, see `you docs sessions`.
+
+For the operator runbook covering long-lived runs, event-driven Work
+inspection, and restart recovery, use `you docs operations`.
 
 This is the canonical customer-facing guide for submitted-work contracts.
 Keep single-work API fields, batch cross-links, tag propagation, and
@@ -56,6 +59,91 @@ dispatch to workers, and route outcomes based on worker results:
 Each accepted submission references a `workTypeName` that must exist in
 `factory.json`. Workstation routing details are owned by
 `you docs config` and `you docs workstations`.
+
+## After a daemon restart
+
+When the addressed Factory Session has a retained current-board Recording,
+startup restores Work before list/show reads or normal scheduling begin. A
+process-bound attempt that was active at stop is recorded as interrupted, and
+its associated non-terminal Work returns to the last durable logical state.
+The Work remains subject to its normal guards, dependencies, retry policy, and
+capacity; the old attempt is never presented as a live `RUNNING` process.
+Use `you work list` or `you work show <work-id>` with the same session target
+to inspect the restored identity, payload, lineage, relations, and state. See
+`you docs operations` for the restart recovery runbook and the fallback when
+no current-board Recording is configured.
+
+## Work State Names And Lifecycle Categories
+
+Every configured Work state has two independent values:
+
+- `name` is the customer-authored state name, such as `queued`, `in-review`,
+  `shipped`, or `blocked`. This is the value used by submitted `state` fields
+  and workstation input or output routes.
+- `type` is the runtime lifecycle category. It is one of `INITIAL`,
+  `PROCESSING`, `TERMINAL`, or `FAILED`. The category is not a state name and
+  should not be substituted for one.
+
+For example, a Work type can give meaningful customer names to all four
+categories:
+
+```json
+{
+  "name": "release-task",
+  "states": [
+    { "name": "queued", "type": "INITIAL" },
+    { "name": "in-review", "type": "PROCESSING" },
+    { "name": "shipped", "type": "TERMINAL" },
+    { "name": "blocked", "type": "FAILED" }
+  ]
+}
+```
+
+| Lifecycle category | Runtime meaning | Observable completion meaning |
+|--------------------|-----------------|-------------------------------|
+| `INITIAL` | Entry or waiting category for newly admitted Work. | Non-terminal; a matching workstation may consume it. |
+| `PROCESSING` | Work is still progressing through the authored workflow. | Non-terminal; it may be routed to another authored state. |
+| `TERMINAL` | Work reached a successful completion state. | Terminal and successful; ordinary non-terminal processing stops. |
+| `FAILED` | Work reached an unsuccessful completion state. | Terminal and failed; ordinary non-terminal processing stops, and it remains distinct from successful `TERMINAL` Work. |
+
+### Starting placement
+
+For a batch request, omitting `works[].state` places the Work in the Work
+type's `INITIAL` state. To intentionally place it elsewhere, provide a
+customer-authored state name that is declared on that Work type:
+
+```json
+{
+  "name": "urgent-release",
+  "workTypeName": "release-task",
+  "state": "in-review",
+  "payload": { "title": "Ship the urgent release" }
+}
+```
+
+Here `in-review` is an explicit starting placement and `PROCESSING` is only
+the category declared for that state. An unknown name, or a name belonging to
+another Work type, is invalid. See `you docs batch-inputs` for the complete
+batch envelope and validation behavior.
+
+### Transitions come from the authored topology
+
+The lifecycle categories do not impose a universal sequence such as
+`INITIAL -> PROCESSING -> TERMINAL`. The Factory topology determines which
+transitions exist: a workstation `inputs` entry consumes a particular
+`{workType, state}` name, and its `outputs`, `onContinue`, `onRejection`, and
+`onFailure` routes name the next state. A workflow can therefore skip a
+processing state, loop back for another attempt, branch to a failed state, or
+use several processing states before success. See `you docs config` for Work
+type declarations and `you docs workstations` for workstation routes and
+outcomes.
+
+To inspect the current authored state name together with its lifecycle
+category, use the Work observation surfaces described in [Verify after
+submit](#verify-after-submit) and [Watch Work state transitions](#watch-work-state-transitions).
+The observation category is the reliable way to distinguish successful
+`TERMINAL` Work from failed `FAILED` Work when both have stopped ordinary
+processing.
 
 Submitted work payloads are not part of the `factory.json` topology contract.
 Use `you docs batch-inputs` for the watched-file and API request
@@ -327,8 +415,90 @@ again:
 
 `you work list` also supports `--state-name`, `--state-type`, `--sort-by`,
 `--max-results`, and `--session` for broader inspection. Human-mode list output
-is tabular (`WORK ID`, `NAME`, `STATE NAME`, `STATE TYPE`, `RELATIONS`); use
-`you --json work list` when scripts need the API-shaped `ListWorkResponse`.
+is tabular (`WORK ID`, `NAME`, `WORK TYPE`, `STATE NAME`, `STATE TYPE`,
+`STRUCTURED RESULT`, `RELATIONS`). The structured-result column contains one
+deterministic compact JSON value when a workstation validated one, including
+the literal `null`; it is blank when the Work has no structured result. Use
+`you --json work list` when scripts need the API-shaped `ListWorkResponse` with
+native `structuredResult` values.
+
+## Watch Work state transitions
+
+Use `you work watch` when a script needs to wait for Work transitions without
+repeatedly calling `you work list`:
+
+```text
+you --server http://localhost:7437 work watch
+you --server http://localhost:7437 work watch --session session-beta --follow
+```
+
+The command targets `~default` when `--session` is omitted. An explicit
+`--session` selects one live Factory Session. Stdout is NDJSON: each complete
+line is one `you.work.watch.v1` object for a canonical Work state transition.
+Required fields are `schemaVersion`, `sessionId`, `eventId`, `sequence`,
+`eventTime`, `workId`, `workTypeName`, `fromState`, `toState`, `source`, and
+`terminal`; `triggerWorkId`, `reason`, and `structuredResult` are omitted when
+they are absent. When a workstation result first enters canonical Work state,
+`structuredResult` appears on the first following transition line only. It is
+native JSON, including explicit `null`; failed or unstructured Work, unrelated
+transitions, and older recordings without the field omit it. Lines remain in
+strictly increasing canonical event sequence order, and other Factory Events do
+not become output lines. Diagnostics stay on stderr.
+
+Finite mode (the default) flushes the terminal transition and exits `0` after
+every Work in the observed cohort is terminal or failed. `--follow` emits
+terminal transitions but stays attached for later transitions until Ctrl-C or
+parent-context cancellation. A transient stream disconnect resumes from the
+last accepted event ID and sequence with bounded retries, suppressing replayed
+lines. Unknown sessions, stale retention cursors, and exhausted retries fail
+with a non-zero diagnostic. Watch does not persist a cursor or promise durable
+history; it observes the live session's canonical event stream.
+
+For `jq`, select terminal lines while preserving one JSON object per line:
+
+```bash
+you --server http://localhost:7437 work watch --session session-beta \
+  | jq -c 'select(.terminal)'
+```
+
+The equivalent PowerShell pipeline is:
+
+```powershell
+you --server http://localhost:7437 work watch --session session-beta |
+  ConvertFrom-Json |
+  Where-Object terminal
+```
+
+Press Ctrl-C to stop a follow stream. The command closes its active stream and
+does not write a partial JSON line.
+
+## Structured result handoffs
+
+Workstation `outputSchema` turns a successful worker response into a native
+JSON `structuredResult` on the resulting Work. The value is available to
+downstream workstation prompt templates without writing or passing an artifact
+file:
+
+```yaml
+workstations:
+  - name: classify
+    type: AGENT_RUN
+    outputSchema: '{"type":"object","properties":{"decision":{"type":"string"}},"required":["decision"],"additionalProperties":false}'
+    body: |
+      Return only JSON with a decision of "accept" or "reject".
+
+  - name: route
+    type: AGENT_RUN
+    body: |
+      Route this Work using the validated decision:
+      {{ (index .Inputs 0).StructuredResult.decision }}
+```
+
+After the first workstation completes, inspect the native value with
+`you --json work list` or observe it on the next `you work watch` transition.
+If the worker output does not satisfy `outputSchema`, the Work fails with the
+typed `structured_output_schema_violation` dispatch failure and no
+`structuredResult` is published.
 
 ## Tags And Prompt Templates
 

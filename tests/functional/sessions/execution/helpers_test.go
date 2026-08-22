@@ -1,3 +1,4 @@
+// backendsizecheck:ignore-file pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 package execution_test
 
 import (
@@ -14,11 +15,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -36,18 +38,37 @@ const (
 )
 
 type partialResultBlockingProvider struct {
+	testutil.NativeProvider
 	mu              sync.Mutex
 	calls           int
 	blockedOnce     bool
 	contextCanceled int
+	executeBlocked  chan struct{}
 	workflowName    string
 }
 
 func newPartialResultBlockingProvider(workflowName string) *partialResultBlockingProvider {
-	return &partialResultBlockingProvider{workflowName: workflowName}
+	provider := &partialResultBlockingProvider{
+		executeBlocked: make(chan struct{}),
+		workflowName:   workflowName,
+	}
+	provider.NativeProvider.ExecuteFunc = provider.Execute
+	return provider
 }
 
-func (p *partialResultBlockingProvider) waitForCanceledInfer(t *testing.T, timeout time.Duration) {
+func (p *partialResultBlockingProvider) waitForExecuteBlocked(t *testing.T, timeout time.Duration) {
+	t.Helper()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-p.executeBlocked:
+	case <-timer.C:
+		t.Fatal("provider Execute did not enter its cancellable wait")
+	}
+}
+
+func (p *partialResultBlockingProvider) waitForCanceledExecute(t *testing.T, timeout time.Duration) {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
@@ -60,13 +81,13 @@ func (p *partialResultBlockingProvider) waitForCanceledInfer(t *testing.T, timeo
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	t.Fatal("provider Infer did not observe canceled workflow context")
+	t.Fatal("provider Execute did not observe canceled workflow context")
 }
 
-func (p *partialResultBlockingProvider) Infer(
+func (p *partialResultBlockingProvider) Execute(
 	ctx context.Context,
-	_ workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
+	_ providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
 	p.mu.Lock()
 	p.calls++
 	call := p.calls
@@ -74,11 +95,11 @@ func (p *partialResultBlockingProvider) Infer(
 	p.mu.Unlock()
 
 	if call == 1 {
-		return workerexecution.InferenceResponse{
+		return providers.ExecuteResult{
 			Content: fmt.Sprintf(`{"text":"live:%s:step-one:step-one:workflows","label":"step-one"}`, p.workflowName),
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
+			SessionRef: &providers.SessionRef{
 				Provider: "mock",
-				Kind:     "session_id",
+				Kind:     providers.SessionIDKind,
 				ID:       "partial-result-provider-session-1",
 			},
 		}, nil
@@ -87,20 +108,21 @@ func (p *partialResultBlockingProvider) Infer(
 	if !alreadyBlocked {
 		p.mu.Lock()
 		p.blockedOnce = true
+		close(p.executeBlocked)
 		p.mu.Unlock()
 
 		<-ctx.Done()
 		p.mu.Lock()
 		p.contextCanceled++
 		p.mu.Unlock()
-		return workerexecution.InferenceResponse{}, ctx.Err()
+		return providers.ExecuteResult{}, ctx.Err()
 	}
 
-	return workerexecution.InferenceResponse{
+	return providers.ExecuteResult{
 		Content: fmt.Sprintf(`{"text":"live:%s:step-two:step-two:workflows","label":"step-two"}`, p.workflowName),
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
+		SessionRef: &providers.SessionRef{
 			Provider: "mock",
-			Kind:     "session_id",
+			Kind:     providers.SessionIDKind,
 			ID:       "partial-result-provider-session-2",
 		},
 	}, nil
@@ -536,16 +558,18 @@ func waitForDurableSessionStatus(
 ) {
 	t.Helper()
 
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		session := readDurableSession(t, serverURL, sessionID)
-		if session.Status == want {
-			return
-		}
-		time.Sleep(15 * time.Millisecond)
+	last, err := support.WaitForObservation(
+		timeout,
+		func() (factoryapi.FactorySessionDurableReadModel, error) {
+			return readDurableSession(t, serverURL, sessionID), nil
+		},
+		func(session factoryapi.FactorySessionDurableReadModel) bool {
+			return session.Status == want
+		},
+	)
+	if err != nil {
+		t.Fatalf("durable session %s status = %q, want %q: %v", sessionID, last.Status, want, err)
 	}
-	session := readDurableSession(t, serverURL, sessionID)
-	t.Fatalf("durable session %s status = %q, want %q within %s", sessionID, session.Status, want, timeout)
 }
 
 func waitForFactoryDispatchStatus(
@@ -556,20 +580,23 @@ func waitForFactoryDispatchStatus(
 ) {
 	t.Helper()
 
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		listed := listFactorySessionDispatches(t, serverURL, sessionID)
-		for _, dispatch := range listed.Dispatches {
-			if dispatch.Id != dispatchID {
-				continue
+	last, err := support.WaitForObservation(
+		timeout,
+		func() (factoryapi.ListFactorySessionDispatchesResponse, error) {
+			return listFactorySessionDispatches(t, serverURL, sessionID), nil
+		},
+		func(listed factoryapi.ListFactorySessionDispatchesResponse) bool {
+			for _, dispatch := range listed.Dispatches {
+				if dispatch.Id == dispatchID && dispatch.Status == want {
+					return true
+				}
 			}
-			if dispatch.Status == want {
-				return
-			}
-		}
-		time.Sleep(10 * time.Millisecond)
+			return false
+		},
+	)
+	if err != nil {
+		t.Fatalf("dispatch %s did not reach %s: %v; last dispatches=%#v", dispatchID, want, err, last.Dispatches)
 	}
-	t.Fatalf("dispatch %s did not reach %s within %s", dispatchID, want, timeout)
 }
 
 func waitForDurablePartialResult(
@@ -579,21 +606,19 @@ func waitForDurablePartialResult(
 ) factoryapi.FactorySessionResult {
 	t.Helper()
 
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		partial := readDurableSessionResultWithMode(t, serverURL, sessionID, "partial")
-		if partial.ResultStatus == factoryapi.FactorySessionResultStatusPartial &&
-			partial.PrimaryResult != nil && len(*partial.PrimaryResult) > 0 {
-			return partial
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
-	partial := readDurableSessionResultWithMode(t, serverURL, sessionID, "partial")
-	t.Fatalf(
-		"partial result = %#v, want PARTIAL status with primaryResult before %s",
-		partial,
+	partial, err := support.WaitForObservation(
 		timeout,
+		func() (factoryapi.FactorySessionResult, error) {
+			return readDurableSessionResultWithMode(t, serverURL, sessionID, "partial"), nil
+		},
+		func(partial factoryapi.FactorySessionResult) bool {
+			return partial.ResultStatus == factoryapi.FactorySessionResultStatusPartial &&
+				partial.PrimaryResult != nil && len(*partial.PrimaryResult) > 0
+		},
 	)
+	if err != nil {
+		t.Fatalf("partial result = %#v, want PARTIAL status with primaryResult: %v", partial, err)
+	}
 	return partial
 }
 
@@ -637,8 +662,9 @@ func releaseBlockedPartialResultSession(
 	t.Helper()
 
 	reason := "results dispatches partial result cleanup"
+	provider.waitForExecuteBlocked(t, 5*time.Second)
 	interruptFactoryDispatch(t, serverURL, sessionID, partialResultSecondDispatchID, reason)
-	provider.waitForCanceledInfer(t, 5*time.Second)
+	provider.waitForCanceledExecute(t, 5*time.Second)
 	waitForDurableSessionStatus(
 		t,
 		serverURL,

@@ -5,10 +5,11 @@ import (
 	"slices"
 )
 
-// MCPFamilyCommandIDs are canonical command IDs emitted from commands.json.
+// MCPFamilyCommandIDs are canonical command IDs emitted from commands.json
+// for the MCP child of the shared you server family.
 var MCPFamilyCommandIDs = []string{
-	"you.mcp",
-	"you.mcp.serve",
+	"you.server",
+	"you.server.mcp",
 }
 
 func AssertMCPFamilyCommandID(id string) error {

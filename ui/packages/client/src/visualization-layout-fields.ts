@@ -24,3 +24,11 @@ export const emptyStateFields = new Set(["nodeId", "content"]);
 export const textContentFields = new Set(["kind", "text"]);
 export const imageContentFields = new Set(["kind", "altText", "source"]);
 export const imageSourceFields = new Set(["kind", "mediaType", "base64"]);
+export const noteTones = new Set([
+  "neutral",
+  "accent",
+  "info",
+  "success",
+  "warning",
+  "danger",
+]);

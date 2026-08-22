@@ -3,8 +3,8 @@ package wire
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/cobracompletion"
 )
 
 func provideInstallPackagedFactoryOperation(

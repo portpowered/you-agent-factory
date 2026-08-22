@@ -1,0 +1,9 @@
+implementation:
+  kind: acp_agent
+  profile: reasonix-acp
+launch:
+  posture: installed_executable
+  transport: stdio
+  command: reasonix
+  arguments:
+    - acp

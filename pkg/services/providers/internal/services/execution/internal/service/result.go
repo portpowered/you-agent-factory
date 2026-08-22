@@ -42,6 +42,7 @@ var allowedSensitiveMetadataKeys = map[string]struct{}{
 	"output_tokens":           {},
 	"reasoning_tokens":        {},
 	"reasoning_output_tokens": {},
+	"thinking_tokens":         {},
 	"cached_input_tokens":     {},
 	"total_tokens":            {},
 	"cache_read_tokens":       {},
@@ -52,13 +53,14 @@ func normalizeSuccess(
 	result providers.ExecuteResult,
 	provider providers.ID,
 	request providers.ExecuteRequest,
+	extraSecrets ...string,
 ) (providers.ExecuteResult, error) {
 	normalized := result.Clone()
 	if err := validateSessionRef(normalized.SessionRef, provider); err != nil {
 		return providers.ExecuteResult{}, err
 	}
 	if normalized.Diagnostics != nil {
-		diagnostics := normalizeDiagnostics(*normalized.Diagnostics, request)
+		diagnostics := normalizeDiagnostics(*normalized.Diagnostics, request, extraSecrets...)
 		normalized.Diagnostics = &diagnostics
 	}
 	return normalized, nil
@@ -86,6 +88,7 @@ func validateSessionRef(ref *providers.SessionRef, provider providers.ID) error 
 func normalizeDiagnostics(
 	diagnostics providers.ExecuteDiagnostics,
 	request providers.ExecuteRequest,
+	extraSecrets ...string,
 ) providers.ExecuteDiagnostics {
 	if diagnostics.DurationMillis < 0 {
 		diagnostics.DurationMillis = 0
@@ -100,23 +103,26 @@ func normalizeDiagnostics(
 				diagnostics.Progress[i].Phase,
 				maxProgressPhaseRunes,
 				request,
+				extraSecrets...,
 			),
 			Detail: sanitizeDiagnosticText(
 				diagnostics.Progress[i].Detail,
 				maxDiagnosticRunes,
 				request,
+				extraSecrets...,
 			),
-			Metadata: sanitizeMetadata(diagnostics.Progress[i].Metadata, request),
+			Metadata: sanitizeMetadata(diagnostics.Progress[i].Metadata, request, extraSecrets...),
 		}
 	}
 	diagnostics.Progress = progress
-	diagnostics.Metadata = sanitizeMetadata(diagnostics.Metadata, request)
+	diagnostics.Metadata = sanitizeMetadata(diagnostics.Metadata, request, extraSecrets...)
 	return diagnostics
 }
 
 func sanitizeMetadata(
 	metadata map[string]string,
 	request providers.ExecuteRequest,
+	extraSecrets ...string,
 ) map[string]string {
 	if metadata == nil {
 		return nil
@@ -143,6 +149,7 @@ func sanitizeMetadata(
 			metadata[key],
 			maxDiagnosticRunes,
 			request,
+			extraSecrets...,
 		)
 	}
 	return sanitized
@@ -152,9 +159,10 @@ func sanitizeDiagnosticText(
 	value string,
 	limit int,
 	request providers.ExecuteRequest,
+	extraSecrets ...string,
 ) string {
 	sanitized := strings.ToValidUTF8(value, "")
-	for _, secret := range requestDiagnosticSecrets(request) {
+	for _, secret := range requestDiagnosticSecrets(request, extraSecrets...) {
 		if utf8.RuneCountInString(secret) >= 4 {
 			sanitized = strings.ReplaceAll(sanitized, secret, redactedValue)
 		}
@@ -162,7 +170,7 @@ func sanitizeDiagnosticText(
 	return boundedRunes(sanitized, limit)
 }
 
-func requestDiagnosticSecrets(request providers.ExecuteRequest) []string {
+func requestDiagnosticSecrets(request providers.ExecuteRequest, extraSecrets ...string) []string {
 	secrets := []string{
 		request.SystemPrompt,
 		request.UserMessage,
@@ -170,10 +178,7 @@ func requestDiagnosticSecrets(request providers.ExecuteRequest) []string {
 		request.WorkingDirectory,
 		request.Worktree,
 	}
-	if request.ResumeSession != nil {
-		secrets = append(secrets, request.ResumeSession.ID)
-	}
-	return secrets
+	return append(secrets, extraSecrets...)
 }
 
 func containsSensitiveMetadataTerm(key string) bool {

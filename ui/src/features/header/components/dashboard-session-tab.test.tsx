@@ -29,6 +29,10 @@ describe("DashboardSessionTab controls", () => {
         onClose={() => undefined}
         onKeyDown={() => undefined}
         session={session()}
+        streamState={{
+          message: "Factory event stream is live",
+          status: "live",
+        }}
         streamStatus="live"
         tabID="tab-root"
       />,
@@ -65,6 +69,10 @@ describe("DashboardSessionTab controls", () => {
           project: "beta",
           target: { kind: "named", name: "beta" },
         })}
+        streamState={{
+          message: "Factory event stream is offline",
+          status: "offline",
+        }}
         streamStatus="offline"
         tabID="tab-beta"
       />,
@@ -95,6 +103,7 @@ describe("DashboardSessionTab controls", () => {
     });
 
     expect(button.getAttribute("aria-haspopup")).toBe("dialog");
-    expect(button.className).toContain("rounded-xl");
+    expect(button.getAttribute("title")).toBe("Open another factory session");
+    expect(button.className).toContain("rounded-lg");
   });
 });

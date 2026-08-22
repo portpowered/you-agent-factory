@@ -1849,6 +1849,12 @@ function responsiveCatalogDetailCards({
     {
       children: (
         <TerminalWorkWidget
+          canceledItems={[
+            {
+              label: "Canceled Story",
+              traceWorkID: "work-canceled-story",
+            },
+          ]}
           completedItems={[
             {
               attempts: [completedAttempt],
@@ -1864,7 +1870,22 @@ function responsiveCatalogDetailCards({
             },
           ]}
           onSelectItem={() => undefined}
-          selectedItem={{ label: "Failed Story", status: "failed" }}
+          selectedItem={{
+            status: "failed",
+            traceWorkID: "work-failed-story",
+          }}
+          terminatedItems={[
+            {
+              label: "Terminated Story",
+              traceWorkID: "work-terminated-story",
+            },
+          ]}
+          unknownItems={[
+            {
+              label: "Unknown Story",
+              traceWorkID: "work-unknown-story",
+            },
+          ]}
           widgetId="terminal-work::responsive"
         />
       ),

@@ -42,7 +42,8 @@ func TestRuntimeMetricsSinkOwnsVocabularyAndCorrelationProjection(t *testing.T) 
 	}
 	fields := Fields{
 		DispatchID: "dispatch-1", WorkID: "work-1", TraceID: "trace-1",
-		Workstation: "review", WorkerType: "agent", Provider: "codex",
+		Workstation: "review", WorkerType: "agent", WorkerSessionID: "worker-session-1",
+		Provider: "codex", Model: "model-1",
 		Outcome: "complete", Reason: "ok",
 	}
 	if err := sink.Sample(context.Background(), RuntimeDispatchDuration, 42.5, "ms", fields); err != nil {
@@ -61,7 +62,8 @@ func TestRuntimeMetricsSinkOwnsVocabularyAndCorrelationProjection(t *testing.T) 
 		SessionID: "~default", RuntimeInstanceID: "runtime-1",
 		FolderPath: "/factory/folder", FactoryDir: "/factory",
 		DispatchID: "dispatch-1", WorkID: "work-1", TraceID: "trace-1",
-		Workstation: "review", WorkerType: "agent", Provider: "codex",
+		Workstation: "review", WorkerType: "agent", WorkerSessionID: "worker-session-1",
+		Provider: "codex", Model: "model-1",
 		Outcome: "complete", Reason: "ok",
 	}
 	if !reflect.DeepEqual(record, want) {
@@ -94,5 +96,24 @@ func TestRuntimeMetricsSinkProjectsCounterAndGaugeKinds(t *testing.T) {
 	if writer.records[0].(RuntimeMetricRecord).MetricType != RuntimeMetricTypeCounter ||
 		writer.records[1].(RuntimeMetricRecord).MetricType != RuntimeMetricTypeGauge {
 		t.Fatalf("records = %#v, want counter then gauge", writer.records)
+	}
+}
+
+func TestRuntimeMetricsSinkOmitsUnresolvedProviderTemplates(t *testing.T) {
+	t.Parallel()
+
+	writer := &runtimeMetricWriterFake{}
+	sink, err := NewRuntimeMetricsSink(
+		writer, RuntimeMetricsScope{}, func() time.Time { return time.Unix(0, 0) },
+		RuntimeMetricsArtifact{},
+	)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsSink: %v", err)
+	}
+	if err := sink.Counter(context.Background(), RuntimeDispatchComplete, 1, Fields{Provider: "${branchProvider}"}); err != nil {
+		t.Fatalf("Counter: %v", err)
+	}
+	if got := writer.records[0].(RuntimeMetricRecord).Provider; got != "" {
+		t.Fatalf("provider = %q, want unresolved provider omitted", got)
 	}
 }

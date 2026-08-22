@@ -8,19 +8,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
 const genericInputAnnotationPrefix = "infinite-you/input-id/"
 const genericArgumentAnnotationPrefix = "infinite-you/argument-value/"
-
-type encodedArgumentValue struct {
-	ValueType string          `json:"valueType"`
-	Present   bool            `json:"present"`
-	Value     json.RawMessage `json:"value"`
-}
 
 // InputValues returns the parsed flag and positional inputs declared for cmd,
 // keyed by stable manifest input ID. Returned repeated values are detached copies.
@@ -766,7 +760,7 @@ func resolveParticipant(
 	return participant, nil
 }
 
-func projectArgumentAndRelationshipRules(cmd *cobra.Command, plan plannedCommand) {
+func projectArgumentAndRelationshipRules(cmd *cobra.Command, plan plannedCommand, bindings GenericBindings) {
 	if len(plan.arguments) > 0 {
 		cmd.Args = func(command *cobra.Command, raw []string) error {
 			return assignArgumentValues(command, plan, raw)
@@ -775,9 +769,12 @@ func projectArgumentAndRelationshipRules(cmd *cobra.Command, plan plannedCommand
 	if len(plan.flags) == 0 && len(plan.relationships) == 0 {
 		return
 	}
+	deferRequiredValidation := plan.record.Handler != nil && bindings.DeferRequiredValidation[plan.record.Handler.ID]
 	cmd.PreRunE = func(command *cobra.Command, _ []string) error {
-		if err := validateRequiredGenericFlags(command, plan); err != nil {
-			return err
+		if !deferRequiredValidation {
+			if err := validateRequiredGenericFlags(command, plan.record); err != nil {
+				return err
+			}
 		}
 		return validateRelationships(command, plan.relationships)
 	}

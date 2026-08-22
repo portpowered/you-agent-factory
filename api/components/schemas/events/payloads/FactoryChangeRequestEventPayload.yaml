@@ -1,0 +1,39 @@
+type: object
+additionalProperties: false
+description: >-
+  Normalized live Factory Session change intent. Request identity and session
+  scope are carried by FactoryEvent.context.
+required:
+  - changeId
+  - expectedRevision
+  - operation
+  - targetId
+  - requestedValue
+properties:
+  changeId:
+    type: string
+    minLength: 1
+    description: Stable identity of the requested live change.
+  expectedRevision:
+    type: integer
+    minimum: 0
+    description: Effective Factory revision the operator observed before admission.
+  operation:
+    type: string
+    minLength: 1
+    description: Normalized live-change operation name.
+  targetId:
+    type: string
+    minLength: 1
+    description: Stable target identity changed by the operation.
+  requestedValue:
+    description: Canonical JSON value requested by the operation.
+  actor:
+    type: string
+    description: Safe actor identity supplied by the caller.
+  source:
+    type: string
+    description: Safe source label such as cli or api.
+  reason:
+    type: string
+    description: Optional normalized safe operator reason.

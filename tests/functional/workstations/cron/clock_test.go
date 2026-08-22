@@ -51,16 +51,16 @@ func TestCronFiresAtInjectedTimeWithoutWallClockSleep(t *testing.T) {
 	}
 	assertCronPublicMetadata(t, noInputWork, "poll-for-work")
 
+	noInputOutput := waitForTokenInPlaceByParent(t, fs, "task:init", noInputRecord.Request.WorkID, time.Second)
+	if got := support.StringPointerValue(noInputOutput.Work.WorkTypeName); got != "task" {
+		t.Fatalf("no-input cron output work type = %q, want task", got)
+	}
 	state := support.GetJSON[factoryapi.StatusResponse](t, fs.URL()+"/status")
 	if state.RuntimeStatus == "" {
 		t.Fatal("GET /state returned empty runtime_status after cron output")
 	}
 	if state.TotalTokens == 0 {
 		t.Fatal("GET /state returned zero tokens after cron output")
-	}
-	noInputOutput := waitForTokenInPlaceByParent(t, fs, "task:init", noInputRecord.Request.WorkID, time.Second)
-	if got := support.StringPointerValue(noInputOutput.Work.WorkTypeName); got != "task" {
-		t.Fatalf("no-input cron output work type = %q, want task", got)
 	}
 
 	requiredInputRecord := firstFireRecords["poll-with-input"]

@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -21,7 +21,7 @@ import (
 func startRecoveryAPIServer(
 	t *testing.T,
 	factoryDir string,
-	provider workerprovider.Provider,
+	provider providers.Service,
 ) *support.FunctionalAPIServer {
 	t.Helper()
 	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -176,6 +176,7 @@ func stringPtr(value string) *string {
 }
 
 type recoveryRedispatchBlockingProvider struct {
+	testutil.NativeProvider
 	failWorker   string
 	blockWorker  string
 	callCounts   map[string]int
@@ -185,33 +186,30 @@ type recoveryRedispatchBlockingProvider struct {
 	mu           sync.Mutex
 }
 
-var _ workerprovider.Provider = (*recoveryRedispatchBlockingProvider)(nil)
-
 func newRecoveryRedispatchBlockingProvider(failWorker, blockWorker string) *recoveryRedispatchBlockingProvider {
-	return &recoveryRedispatchBlockingProvider{
+	provider := &recoveryRedispatchBlockingProvider{
 		failWorker:   failWorker,
 		blockWorker:  blockWorker,
 		callCounts:   make(map[string]int),
 		blockStarted: make(chan struct{}, 1),
 		releaseBlock: make(chan struct{}),
 	}
+	provider.NativeProvider.ExecuteFunc = provider.Execute
+	return provider
 }
 
-func (p *recoveryRedispatchBlockingProvider) Infer(
+func (p *recoveryRedispatchBlockingProvider) Execute(
 	ctx context.Context,
-	req workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
+	req providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
 	workerName := req.WorkerType
-	if workerName == "" {
-		workerName = req.Dispatch.WorkerType
-	}
 	p.mu.Lock()
 	p.callCounts[workerName]++
 	callCount := p.callCounts[workerName]
 	p.mu.Unlock()
 
 	if workerName == p.failWorker && callCount == 1 {
-		return workerexecution.InferenceResponse{}, errors.New("initial terminal failure")
+		return providers.ExecuteResult{}, errors.New("initial terminal failure")
 	}
 	if workerName == p.blockWorker && callCount >= 1 {
 		select {
@@ -221,11 +219,11 @@ func (p *recoveryRedispatchBlockingProvider) Infer(
 		select {
 		case <-p.releaseBlock:
 		case <-ctx.Done():
-			return workerexecution.InferenceResponse{}, ctx.Err()
+			return providers.ExecuteResult{}, ctx.Err()
 		}
-		return workerexecution.InferenceResponse{}, errors.New("recovery redispatch failed again")
+		return providers.ExecuteResult{}, errors.New("recovery redispatch failed again")
 	}
-	return workerexecution.InferenceResponse{Content: "COMPLETE"}, nil
+	return providers.ExecuteResult{Content: "COMPLETE"}, nil
 }
 
 func (p *recoveryRedispatchBlockingProvider) CallCount(worker string) int {

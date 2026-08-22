@@ -1,11 +1,11 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import type { NodeProps } from "@xyflow/react";
+import { FACTORY_GRAPH_NODE_TYPES } from "@you-agent-factory/factory-graph";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { TraceDispatchFlowNode } from "../lib/trace-dispatch-factory-graph-flow";
-import { TRACE_DISPATCH_FACTORY_GRAPH_NODE_TYPES } from "./trace-dispatch-factory-graph-node";
 
-const DispatchNode = TRACE_DISPATCH_FACTORY_GRAPH_NODE_TYPES.workstation;
+const DispatchNode = FACTORY_GRAPH_NODE_TYPES.workstation;
 
 function dispatchNodeProps(
   data: TraceDispatchFlowNode["data"],

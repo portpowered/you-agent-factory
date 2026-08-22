@@ -67,6 +67,28 @@ type PathLeaseFreezeReport struct {
 	ManifestError             string
 }
 
+// ViolationCount returns the number of independently reported path-lease
+// findings represented by this validation report.
+func (r PathLeaseFreezeReport) ViolationCount() int {
+	count := len(r.MissingPackets) + len(r.EmptyExclusivePathPackets) + len(r.PortfolioHoldConflicts)
+	if r.InvalidFormatVersion {
+		count++
+	}
+	if r.MissingSourceInventory {
+		count++
+	}
+	if r.UnstablePacketSort {
+		count++
+	}
+	if r.OverlappingActiveLeases {
+		count++
+	}
+	if r.ManifestError != "" {
+		count++
+	}
+	return count
+}
+
 // OK reports whether path-lease freeze validation found no defects.
 func (r PathLeaseFreezeReport) OK() bool {
 	return len(r.MissingPackets) == 0 &&
@@ -134,10 +156,9 @@ func defaultPortfolioHoldExclusions() []PortfolioHoldExclusion {
 		{
 			ID: "provider-conductor",
 			Paths: []string{
-				"pkg/services/providers/internal/services/execution/internal/provider/",
 				"pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty/",
 			},
-			Note: "Standardized Providers neutral-conductor lane owns provider composition; do not claim those holds in this freeze.",
+			Note: "Standardized Providers neutral-conductor lane owns canonical Agy PTY composition; do not claim those holds in this freeze.",
 		},
 	}
 }
@@ -281,5 +302,3 @@ func freezePathPrefix(prefix, path string) bool {
 	remainder := path[len(prefix):]
 	return strings.HasPrefix(remainder, "/")
 }
-
-

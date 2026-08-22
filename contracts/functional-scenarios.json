@@ -117,8 +117,8 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
-      "stableId": "cli/you.factory.query",
-      "name": "you factory query",
+      "stableId": "cli/you.factory.replace-current",
+      "name": "you factory replace-current",
       "interface": "cli",
       "classification": "runnable",
       "status": "missing",
@@ -127,8 +127,8 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
-      "stableId": "cli/you.factory.replace-current",
-      "name": "you factory replace-current",
+      "stableId": "cli/you.factory.show",
+      "name": "you factory show",
       "interface": "cli",
       "classification": "runnable",
       "status": "missing",
@@ -157,24 +157,29 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
-      "stableId": "cli/you.mcp",
-      "name": "you mcp",
-      "interface": "cli",
-      "classification": "grouping",
-      "status": "not-applicable",
-      "lane": "short",
-      "executionClass": "deterministic",
-      "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
-    },
-    {
-      "stableId": "cli/you.mcp.serve",
-      "name": "you mcp serve",
+      "stableId": "cli/you.metrics",
+      "name": "you metrics",
       "interface": "cli",
       "classification": "runnable",
       "status": "missing",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "reviewedReason": "Focused CLI behavior is covered by package tests, but no qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.metrics.costs",
+      "name": "you metrics costs",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/factory/visualization/runtime_metrics/costs_cli_test.go::TestMetricsCostsCLITraversesProductionHTTPRoute",
+          "boundary": "cli"
+        }
+      ]
     },
     {
       "stableId": "cli/you.models",
@@ -227,6 +232,31 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
+      "stableId": "cli/you.providers",
+      "name": "you providers",
+      "interface": "cli",
+      "classification": "grouping",
+      "status": "not-applicable",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
+    },
+    {
+      "stableId": "cli/you.providers.list",
+      "name": "you providers list",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/providers/discovery/discovery_test.go::TestProvidersListThroughRootBuildProcess",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
       "stableId": "cli/you.run",
       "name": "you run",
       "interface": "cli",
@@ -252,6 +282,31 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
+      "stableId": "cli/you.server.acp",
+      "name": "you server acp",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/transport/acp/stdio/cli_serve_acp_prompt_test.go::TestServeACP_RootBuildProcessCompletesOneFactoryPrompt",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
+      "stableId": "cli/you.server.mcp",
+      "name": "you server mcp",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
       "stableId": "cli/you.session",
       "name": "you session",
       "interface": "cli",
@@ -260,6 +315,16 @@
       "lane": "short",
       "executionClass": "deterministic",
       "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
+    },
+    {
+      "stableId": "cli/you.session.cancel",
+      "name": "you session cancel",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
       "stableId": "cli/you.session.create",
@@ -274,16 +339,6 @@
     {
       "stableId": "cli/you.session.delete",
       "name": "you session delete",
-      "interface": "cli",
-      "classification": "runnable",
-      "status": "missing",
-      "lane": "short",
-      "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
-    },
-    {
-      "stableId": "cli/you.session.dispatches",
-      "name": "you session dispatches",
       "interface": "cli",
       "classification": "runnable",
       "status": "missing",
@@ -312,6 +367,31 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
+      "stableId": "cli/you.session.resource",
+      "name": "you session resource",
+      "interface": "cli",
+      "classification": "grouping",
+      "status": "not-applicable",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
+    },
+    {
+      "stableId": "cli/you.session.resource.set",
+      "name": "you session resource set",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/mock/live_capacity_test.go::TestLiveResourceCapacityIncreaseAdmitsWaitingMockDispatch",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
       "stableId": "cli/you.session.resume",
       "name": "you session resume",
       "interface": "cli",
@@ -324,6 +404,16 @@
     {
       "stableId": "cli/you.session.show",
       "name": "you session show",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.session.terminate",
+      "name": "you session terminate",
       "interface": "cli",
       "classification": "runnable",
       "status": "missing",
@@ -371,6 +461,46 @@
       "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
     },
     {
+      "stableId": "cli/you.work.approval",
+      "name": "you work approval",
+      "interface": "cli",
+      "classification": "grouping",
+      "status": "not-applicable",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
+    },
+    {
+      "stableId": "cli/you.work.approval.list",
+      "name": "you work approval list",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/transport/cli/commands/human_approval_wiring_test.go::TestCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
+      "stableId": "cli/you.work.approval.show",
+      "name": "you work approval show",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/transport/cli/commands/human_approval_wiring_test.go::TestCLIWorkApprovalListAndShowExposePendingApprovalAndSafeEmptyErrors",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
       "stableId": "cli/you.work.list",
       "name": "you work list",
       "interface": "cli",
@@ -396,6 +526,16 @@
       ]
     },
     {
+      "stableId": "cli/you.work.render",
+      "name": "you work render",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
       "stableId": "cli/you.work.show",
       "name": "you work show",
       "interface": "cli",
@@ -406,14 +546,194 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
-      "stableId": "cli/you.work.visualize",
-      "name": "you work visualize",
+      "stableId": "cli/you.work.watch",
+      "name": "you work watch",
       "interface": "cli",
       "classification": "runnable",
-      "status": "missing",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/work/watch/watch_test.go::TestWorkWatchFollowsStateTransitionsUntilTerminal",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
+      "stableId": "cli/you.worker-sessions",
+      "name": "you worker-sessions",
+      "interface": "cli",
+      "classification": "grouping",
+      "status": "not-applicable",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+      "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
+    },
+    {
+      "stableId": "cli/you.worker-sessions.cancel",
+      "name": "you worker-sessions cancel",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionRemoteControlsUseExactRoutesWithoutFallback",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
+      "stableId": "cli/you.worker-sessions.continue",
+      "name": "you worker-sessions continue",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
+      "stableId": "cli/you.worker-sessions.interrupt",
+      "name": "you worker-sessions interrupt",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionRemoteInterruptUsesExactRouteAndAdmissionSnapshots",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
+      "stableId": "cli/you.worker-sessions.invoke",
+      "name": "you worker-sessions invoke",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionInvokeContinueLocalPreservesSessionAndLineage",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
+      "stableId": "cli/you.worker-sessions.list",
+      "name": "you worker-sessions list",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/provider_sessions/cli/worker_sessions_cli_test.go::TestWorkerSessionsCLI",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
+      "stableId": "cli/you.worker-sessions.pause",
+      "name": "you worker-sessions pause",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionRemoteControlsUseExactRoutesWithoutFallback",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
+      "stableId": "cli/you.worker-sessions.read",
+      "name": "you worker-sessions read",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/provider_sessions/cli/worker_sessions_cli_test.go::TestWorkerSessionsCLI",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
+      "stableId": "cli/you.worker-sessions.resume",
+      "name": "you worker-sessions resume",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionRemoteControlsUseExactRoutesWithoutFallback",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
+      "stableId": "cli/you.worker-sessions.show",
+      "name": "you worker-sessions show",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/provider_sessions/cli/worker_sessions_cli_test.go::TestWorkerSessionsCLI",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
+      "stableId": "cli/you.worker-sessions.stream",
+      "name": "you worker-sessions stream",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/provider_sessions/cli/worker_sessions_cli_test.go::TestWorkerSessionsCLI",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
+      "stableId": "cli/you.worker-sessions.terminate",
+      "name": "you worker-sessions terminate",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/invoke_continue/worker_sessions_invoke_continue_test.go::TestDirectWorkerSessionRemoteControlsUseExactRoutesWithoutFallback",
+          "boundary": "cli"
+        }
+      ]
     },
     {
       "stableId": "cli/you.workers",
@@ -601,8 +921,33 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
+      "stableId": "rest/cancelWorkerSession",
+      "name": "cancelWorkerSession",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPControlCancelConvergesTerminalSnapshot",
+          "boundary": "rest"
+        }
+      ]
+    },
+    {
       "stableId": "rest/closeFactorySession",
       "name": "closeFactorySession",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/continueWorkerSession",
+      "name": "continueWorkerSession",
       "interface": "rest",
       "classification": "operation",
       "status": "missing",
@@ -737,6 +1082,41 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
+      "stableId": "rest/getHumanApprovalBySessionId",
+      "name": "getHumanApprovalBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/getMetrics",
+      "name": "getMetrics",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/factory/visualization/runtime_metrics/documented_workflow_test.go::TestMetricsDocumentedWorkflowThroughRootProcess",
+          "boundary": "rest"
+        }
+      ]
+    },
+    {
+      "stableId": "rest/getMetricsCosts",
+      "name": "getMetricsCosts",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
       "stableId": "rest/getModel",
       "name": "getModel",
       "interface": "rest",
@@ -792,6 +1172,51 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
+      "stableId": "rest/getWorkerSessionObservationByFactorySessionAndWorkerSessionId",
+      "name": "getWorkerSessionObservationByFactorySessionAndWorkerSessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/inference/worker_session_id_history_test.go::TestWSRFT010WorkerSessionIDHTTPHistory",
+          "boundary": "rest"
+        }
+      ]
+    },
+    {
+      "stableId": "rest/getWorkerSessionObservationBySessionId",
+      "name": "getWorkerSessionObservationBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT012WorkerSessionFollowAndProviderReferenceParity",
+          "boundary": "rest"
+        }
+      ]
+    },
+    {
+      "stableId": "rest/getWorkerSessionObservationByWorkerSessionId",
+      "name": "getWorkerSessionObservationByWorkerSessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/inference/worker_session_id_history_test.go::TestWSRFT010WorkerSessionIDHTTPHistory",
+          "boundary": "rest"
+        }
+      ]
+    },
+    {
       "stableId": "rest/interruptFactorySessionDispatch",
       "name": "interruptFactorySessionDispatch",
       "interface": "rest",
@@ -800,6 +1225,21 @@
       "lane": "short",
       "executionClass": "deterministic",
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/interruptWorkerSession",
+      "name": "interruptWorkerSession",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPInterruptRejectsUnassociatedActiveSource",
+          "boundary": "rest"
+        }
+      ]
     },
     {
       "stableId": "rest/invokeFactorySessionBySessionId",
@@ -812,6 +1252,21 @@
       "evidence": [
         {
           "test": "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIResultAndResultsExposeTerminalInvocationData",
+          "boundary": "rest"
+        }
+      ]
+    },
+    {
+      "stableId": "rest/invokeGenericModel",
+      "name": "invokeGenericModel",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/models/root_composition/inference_invoke_test.go::TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess",
           "boundary": "rest"
         }
       ]
@@ -862,6 +1317,16 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
+      "stableId": "rest/listHumanApprovalsBySessionId",
+      "name": "listHumanApprovalsBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
       "stableId": "rest/listModels",
       "name": "listModels",
       "interface": "rest",
@@ -895,6 +1360,26 @@
           "boundary": "rest"
         }
       ]
+    },
+    {
+      "stableId": "rest/listWorkerSessions",
+      "name": "listWorkerSessions",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/listWorkerSessionsBySessionId",
+      "name": "listWorkerSessionsBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
       "stableId": "rest/moveWorkBySessionId",
@@ -932,6 +1417,16 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
+      "stableId": "rest/pauseWorkerSession",
+      "name": "pauseWorkerSession",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
       "stableId": "rest/previewFactory",
       "name": "previewFactory",
       "interface": "rest",
@@ -952,8 +1447,63 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
+      "stableId": "rest/readWorkerSessionTranscriptByFactorySessionAndWorkerSessionId",
+      "name": "readWorkerSessionTranscriptByFactorySessionAndWorkerSessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/inference/worker_session_id_history_test.go::TestWSRFT010WorkerSessionIDHTTPHistory",
+          "boundary": "rest"
+        }
+      ]
+    },
+    {
+      "stableId": "rest/readWorkerSessionTranscriptBySessionId",
+      "name": "readWorkerSessionTranscriptBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT012WorkerSessionFollowAndProviderReferenceParity",
+          "boundary": "rest"
+        }
+      ]
+    },
+    {
+      "stableId": "rest/readWorkerSessionTranscriptByWorkerSessionId",
+      "name": "readWorkerSessionTranscriptByWorkerSessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/inference/worker_session_id_history_test.go::TestWSRFT010WorkerSessionIDHTTPHistory",
+          "boundary": "rest"
+        }
+      ]
+    },
+    {
       "stableId": "rest/resumeFactorySession",
       "name": "resumeFactorySession",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/resumeWorkerSession",
+      "name": "resumeWorkerSession",
       "interface": "rest",
       "classification": "operation",
       "status": "missing",
@@ -974,6 +1524,16 @@
     {
       "stableId": "rest/saveCurrentFactoryBySessionId",
       "name": "saveCurrentFactoryBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/setFactorySessionResourceCapacity",
+      "name": "setFactorySessionResourceCapacity",
       "interface": "rest",
       "classification": "operation",
       "status": "missing",
@@ -1012,6 +1572,65 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
+      "stableId": "rest/startWorkerSession",
+      "name": "startWorkerSession",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/transports/http/worker_sessions_lifecycle_test.go::TestWorkerSessionHTTPDisconnectKeepsAdmittedWorkerAlive",
+          "boundary": "rest"
+        }
+      ]
+    },
+    {
+      "stableId": "rest/streamWorkerSessionEventsBySessionId",
+      "name": "streamWorkerSessionEventsBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT012WorkerSessionFollowAndProviderReferenceParity",
+          "boundary": "rest"
+        }
+      ]
+    },
+    {
+      "stableId": "rest/streamWorkerSessionEventsByTopLevelWorkerSessionId",
+      "name": "streamWorkerSessionEventsByTopLevelWorkerSessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/streamWorkerSessionEventsByWorkerSessionId",
+      "name": "streamWorkerSessionEventsByWorkerSessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/inference/opening_record_test.go::TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession",
+          "boundary": "rest"
+        },
+        {
+          "test": "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT011WorkerSessionCursorResumeAcrossRestart",
+          "boundary": "rest"
+        }
+      ]
+    },
+    {
       "stableId": "rest/submitWorkBySessionId",
       "name": "submitWorkBySessionId",
       "interface": "rest",
@@ -1029,6 +1648,16 @@
     {
       "stableId": "rest/terminateFactorySession",
       "name": "terminateFactorySession",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/terminateWorkerSession",
+      "name": "terminateWorkerSession",
       "interface": "rest",
       "classification": "operation",
       "status": "missing",
@@ -1105,6 +1734,70 @@
         "required": false,
         "disposition": "currently-deferred",
         "scope": "session Factory response-event stream"
+      }
+    },
+    {
+      "stableId": "sse/streamWorkerSessionEventsBySessionId",
+      "name": "streamWorkerSessionEventsBySessionId",
+      "interface": "sse",
+      "classification": "event-stream",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT012WorkerSessionFollowAndProviderReferenceParity",
+          "boundary": "sse"
+        }
+      ],
+      "sse": {
+        "required": true,
+        "disposition": "required",
+        "scope": "session Worker Session event stream, including retained replay, live delivery, terminal completion, and cancellation"
+      }
+    },
+    {
+      "stableId": "sse/streamWorkerSessionEventsByTopLevelWorkerSessionId",
+      "name": "streamWorkerSessionEventsByTopLevelWorkerSessionId",
+      "interface": "sse",
+      "classification": "event-stream",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/transports/http/worker_sessions_invoke_continue_test.go::TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect",
+          "boundary": "sse"
+        }
+      ],
+      "sse": {
+        "required": true,
+        "disposition": "required",
+        "scope": "session Worker Session event stream, including retained replay, live delivery, terminal completion, and cancellation"
+      }
+    },
+    {
+      "stableId": "sse/streamWorkerSessionEventsByWorkerSessionId",
+      "name": "streamWorkerSessionEventsByWorkerSessionId",
+      "interface": "sse",
+      "classification": "event-stream",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/inference/opening_record_test.go::TestWSRFT003ProviderNeutralLifecycleWorksWithoutProviderSession",
+          "boundary": "sse"
+        },
+        {
+          "test": "tests/functional/workers/inference/worker_session_id_cursor_follow_test.go::TestWSRFT011WorkerSessionCursorResumeAcrossRestart",
+          "boundary": "sse"
+        }
+      ],
+      "sse": {
+        "required": true,
+        "disposition": "required",
+        "scope": "session Worker Session event stream, including retained replay, live delivery, terminal completion, and cancellation"
       }
     }
   ]

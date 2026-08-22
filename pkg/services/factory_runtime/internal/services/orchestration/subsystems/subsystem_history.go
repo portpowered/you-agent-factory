@@ -154,7 +154,7 @@ func consumedTokensForResult(snapshot *interfaces.EngineStateSnapshot[petri.Mark
 		return nil
 	}
 
-	return entry.ConsumedTokens
+	return factorytoken.FromWorkerSlice(entry.ConsumedTokens)
 }
 
 // evaluateStopWords checks whether the executor output contains any of the

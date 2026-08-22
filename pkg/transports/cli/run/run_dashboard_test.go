@@ -14,9 +14,9 @@ import (
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -136,18 +136,19 @@ func TestRun_CleanInvocationJSONEmitsSinglePrimaryResultObject(t *testing.T) {
 	}
 	assertNoOperatorChatter(t, output)
 
-	var got cleanInvocationSuccess
+	var got factoryapi.InvocationResponse
 	if err := json.Unmarshal([]byte(output), &got); err != nil {
 		t.Fatalf("stdout is not one JSON object: %v\n%s", err, output)
 	}
-	if got.Output != "mock worker accepted" {
-		t.Fatalf("output = %q, want primary clean invocation output", got.Output)
+	if got.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("status = %q, want completed", got.Status)
 	}
-	if got.WorkID != "dashboard-render-test-work" ||
-		got.WorkTypeName != "task" ||
-		got.TraceID != "dashboard-render-test-trace" ||
-		got.SessionID != defaultFactorySessionID {
-		t.Fatalf("json result = %#v", got)
+	if got.PrimaryResult == nil || len(*got.PrimaryResult) != 1 {
+		t.Fatalf("primary result = %#v, want one content part", got.PrimaryResult)
+	}
+	part, partErr := (*got.PrimaryResult)[0].AsWorkTextContentPart()
+	if partErr != nil || part.Text != "mock worker accepted" {
+		t.Fatalf("primary result = %#v, want accepted text", got.PrimaryResult)
 	}
 }
 
@@ -214,17 +215,21 @@ func TestRun_CleanInvocationSuccessRecordsStructuredLogAndMetrics(t *testing.T) 
 }
 
 func TestRun_CleanInvocationFailureReturnsStableErrorAndNoStdout(t *testing.T) {
-	originalBuilder := openTestRuntimeRunner
+	originalInvocation := openTestInvocationRunner
 	defer func() {
-		openTestRuntimeRunner = originalBuilder
+		openTestInvocationRunner = originalInvocation
 	}()
 
 	_, workFile := writeDashboardRunFixture(t)
-	openTestRuntimeRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
-		return stubFactoryService{
+	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (InvocationRunner, error) {
+		return stubInvocationService{
 			run: func(context.Context) error { return nil },
-			snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net], error) {
-				return failedCleanInvocationSnapshot("mock worker rejected"), nil
+			invoke: func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				return dashboardCleanInvocationResultWithStatus(
+					interfaces.InvocationTerminalStatusFailed,
+					InvocationErrorCodeFailed,
+					"mock worker rejected",
+				), nil
 			},
 		}, nil
 	}
@@ -234,35 +239,30 @@ func TestRun_CleanInvocationFailureReturnsStableErrorAndNoStdout(t *testing.T) {
 		CleanInvocation:         true,
 		DisableDefaultRecording: true,
 		Logger:                  zap.NewNop(),
-	}, openTestRuntimeRunner)
+	})
 	if output != "" {
 		t.Fatalf("stdout = %q, want empty on failure", output)
 	}
 
-	var invocationErr *InvocationError
-	if !errors.As(err, &invocationErr) {
-		t.Fatalf("error = %#v, want InvocationError", err)
-	}
-	if invocationErr.Code != InvocationErrorCodeFailed {
-		t.Fatalf("code = %q, want %q", invocationErr.Code, InvocationErrorCodeFailed)
-	}
-	if invocationErr.Message != "clean invocation failed: mock worker rejected" {
-		t.Fatalf("message = %q", invocationErr.Message)
-	}
+	assertCleanInvocationCLIError(t, err, InvocationErrorCodeFailed, "mock worker rejected")
 }
 
 func TestRun_CleanInvocationTimeoutReturnsStableErrorAndNoStdout(t *testing.T) {
-	originalBuilder := openTestRuntimeRunner
+	originalInvocation := openTestInvocationRunner
 	defer func() {
-		openTestRuntimeRunner = originalBuilder
+		openTestInvocationRunner = originalInvocation
 	}()
 
 	_, workFile := writeDashboardRunFixture(t)
-	openTestRuntimeRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
-		return stubFactoryService{
+	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (InvocationRunner, error) {
+		return stubInvocationService{
 			run: func(context.Context) error { return nil },
-			snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net], error) {
-				return timedOutCleanInvocationSnapshot(), nil
+			invoke: func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				return dashboardCleanInvocationResultWithStatus(
+					interfaces.InvocationTerminalStatusTimedOut,
+					InvocationErrorCodeTimeout,
+					"clean invocation timed out",
+				), nil
 			},
 		}, nil
 	}
@@ -272,35 +272,30 @@ func TestRun_CleanInvocationTimeoutReturnsStableErrorAndNoStdout(t *testing.T) {
 		CleanInvocation:         true,
 		DisableDefaultRecording: true,
 		Logger:                  zap.NewNop(),
-	}, openTestRuntimeRunner)
+	})
 	if output != "" {
 		t.Fatalf("stdout = %q, want empty on timeout", output)
 	}
 
-	var invocationErr *InvocationError
-	if !errors.As(err, &invocationErr) {
-		t.Fatalf("error = %#v, want InvocationError", err)
-	}
-	if invocationErr.Code != InvocationErrorCodeTimeout {
-		t.Fatalf("code = %q, want %q", invocationErr.Code, InvocationErrorCodeTimeout)
-	}
-	if invocationErr.Message != "clean invocation timed out" {
-		t.Fatalf("message = %q", invocationErr.Message)
-	}
+	assertCleanInvocationCLIError(t, err, InvocationErrorCodeTimeout, "clean invocation timed out")
 }
 
 func TestRun_CleanInvocationCancellationReturnsStableErrorAndNoStdout(t *testing.T) {
-	originalBuilder := openTestRuntimeRunner
+	originalInvocation := openTestInvocationRunner
 	defer func() {
-		openTestRuntimeRunner = originalBuilder
+		openTestInvocationRunner = originalInvocation
 	}()
 
 	_, workFile := writeDashboardRunFixture(t)
-	openTestRuntimeRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
-		return stubFactoryService{
-			run: func(context.Context) error { return context.Canceled },
-			snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net], error) {
-				return nil, errors.New("snapshot not needed")
+	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (InvocationRunner, error) {
+		return stubInvocationService{
+			run: func(context.Context) error { return nil },
+			invoke: func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				return dashboardCleanInvocationResultWithStatus(
+					interfaces.InvocationTerminalStatusCanceled,
+					InvocationErrorCodeCancelled,
+					"clean invocation cancelled",
+				), nil
 			},
 		}, nil
 	}
@@ -310,38 +305,33 @@ func TestRun_CleanInvocationCancellationReturnsStableErrorAndNoStdout(t *testing
 		CleanInvocation:         true,
 		DisableDefaultRecording: true,
 		Logger:                  zap.NewNop(),
-	}, openTestRuntimeRunner)
+	})
 	if output != "" {
 		t.Fatalf("stdout = %q, want empty on cancellation", output)
 	}
 
-	var invocationErr *InvocationError
-	if !errors.As(err, &invocationErr) {
-		t.Fatalf("error = %#v, want InvocationError", err)
-	}
-	if invocationErr.Code != InvocationErrorCodeCancelled {
-		t.Fatalf("code = %q, want %q", invocationErr.Code, InvocationErrorCodeCancelled)
-	}
-	if invocationErr.Message != "clean invocation cancelled" {
-		t.Fatalf("message = %q", invocationErr.Message)
-	}
+	assertCleanInvocationCLIError(t, err, InvocationErrorCodeCancelled, "clean invocation cancelled")
 }
 
 func TestRun_CleanInvocationCancellationRecordsStructuredLogAndMetrics(t *testing.T) {
 	resetCleanInvocationMetricsForTest()
 
-	originalBuilder := openTestRuntimeRunner
+	originalInvocation := openTestInvocationRunner
 	defer func() {
-		openTestRuntimeRunner = originalBuilder
+		openTestInvocationRunner = originalInvocation
 	}()
 
 	_, workFile := writeDashboardRunFixture(t)
 	core, observed := observer.New(zap.InfoLevel)
-	openTestRuntimeRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
-		return stubFactoryService{
-			run: func(context.Context) error { return context.Canceled },
-			snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net], error) {
-				return nil, errors.New("snapshot not needed")
+	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (InvocationRunner, error) {
+		return stubInvocationService{
+			run: func(context.Context) error { return nil },
+			invoke: func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				return dashboardCleanInvocationResultWithStatus(
+					interfaces.InvocationTerminalStatusCanceled,
+					InvocationErrorCodeCancelled,
+					"clean invocation cancelled",
+				), nil
 			},
 		}, nil
 	}
@@ -381,23 +371,25 @@ func TestRun_CleanInvocationCancellationRecordsStructuredLogAndMetrics(t *testin
 }
 
 func TestRun_CleanInvocationKeepsStdoutEmptyUntilTerminalOutcome(t *testing.T) {
-	originalBuilder := openTestRuntimeRunner
+	originalInvocation := openTestInvocationRunner
 	defer func() {
-		openTestRuntimeRunner = originalBuilder
+		openTestInvocationRunner = originalInvocation
 	}()
 
 	_, workFile := writeDashboardRunFixture(t)
 	started := make(chan struct{})
 	release := make(chan struct{})
-	openTestRuntimeRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
-		return stubFactoryService{
-			run: func(context.Context) error {
+	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (InvocationRunner, error) {
+		return stubInvocationService{
+			run: func(context.Context) error { return nil },
+			invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 				close(started)
 				<-release
-				return context.Canceled
-			},
-			snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net], error) {
-				return nil, errors.New("snapshot not needed")
+				return dashboardCleanInvocationResultWithStatus(
+					interfaces.InvocationTerminalStatusCanceled,
+					InvocationErrorCodeCancelled,
+					"clean invocation cancelled",
+				), nil
 			},
 		}, nil
 	}
@@ -431,13 +423,7 @@ func TestRun_CleanInvocationKeepsStdoutEmptyUntilTerminalOutcome(t *testing.T) {
 	if got := stdout.String(); got != "" {
 		t.Fatalf("stdout after terminal outcome = %q, want empty", got)
 	}
-	var invocationErr *InvocationError
-	if !errors.As(err, &invocationErr) {
-		t.Fatalf("error = %#v, want InvocationError", err)
-	}
-	if invocationErr.Code != InvocationErrorCodeCancelled {
-		t.Fatalf("code = %q, want %q", invocationErr.Code, InvocationErrorCodeCancelled)
-	}
+	assertCleanInvocationCLIError(t, err, InvocationErrorCodeCancelled, "clean invocation cancelled")
 }
 
 func TestRun_ContinuouslyUsesServiceModeUntilCanceled(t *testing.T) {
@@ -620,6 +606,52 @@ func writeFile(t *testing.T, path, content string) {
 	}
 }
 
+func dashboardCleanInvocationResult() apisurface.FactoryInvocationResult {
+	return dashboardCleanInvocationResultWithStatus(
+		interfaces.InvocationTerminalStatusCompleted,
+		"",
+		"",
+	)
+}
+
+func dashboardCleanInvocationResultWithStatus(
+	status interfaces.InvocationTerminalStatus,
+	code string,
+	message string,
+) apisurface.FactoryInvocationResult {
+	return apisurface.FactoryInvocationResult{
+		Status: status, ErrorCode: code, Message: message,
+		PrimaryResult: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText, Text: "mock worker accepted",
+		}},
+		SessionID: defaultFactorySessionID,
+		WorkID:    "dashboard-render-test-work",
+		WorkName:  "task",
+		TraceID:   "dashboard-render-test-trace",
+	}
+}
+
+func assertCleanInvocationCLIError(t *testing.T, err error, wantCode, wantMessage string) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("error = nil, want code %q", wantCode)
+	}
+	var cliErr interface {
+		error
+		InvocationErrorCode() string
+		InvocationErrorMessage() string
+	}
+	if !errors.As(err, &cliErr) {
+		t.Fatalf("error = %#v, want Invocation CLI error", err)
+	}
+	if cliErr.InvocationErrorCode() != wantCode {
+		t.Fatalf("code = %q, want %q", cliErr.InvocationErrorCode(), wantCode)
+	}
+	if !strings.Contains(cliErr.InvocationErrorMessage(), wantMessage) {
+		t.Fatalf("message = %q, want substring %q", cliErr.InvocationErrorMessage(), wantMessage)
+	}
+}
+
 func runWithCapturedStdout(
 	t *testing.T,
 	cfg RunConfig,
@@ -643,6 +675,22 @@ func runWithCapturedStdout(
 			return request, nil
 		}
 	}
+	originalInvocation := openTestInvocationRunner
+	if cfg.CleanInvocation && openTestInvocationRunner == nil {
+		openTestInvocationRunner = func(
+			context.Context,
+			*testRuntimeSelections,
+			serviceedges.Edges,
+		) (InvocationRunner, error) {
+			return stubInvocationService{
+				run: func(context.Context) error { return nil },
+				invoke: func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+					return dashboardCleanInvocationResult(), nil
+				},
+			}, nil
+		}
+	}
+	defer func() { openTestInvocationRunner = originalInvocation }()
 
 	cfg.Output = &output
 	builder := adaptTestRuntimeRunnerOpener(buildTransportTestRuntime)
@@ -652,43 +700,4 @@ func runWithCapturedStdout(
 	runErr := runWithTestRuntimeRunner(context.Background(), cfg, builder)
 
 	return output.String(), runErr
-}
-
-func failedCleanInvocationSnapshot(reason string) *interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net] {
-	return &interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net]{
-		DispatchHistory: []interfaces.CompletedDispatch{{
-			Outcome: workerexecution.OutcomeFailed,
-			Reason:  reason,
-			ConsumedTokens: []factoryruntime.RuntimeToken{{
-				ID:      "failed-token",
-				PlaceID: "task:init",
-				Color: factoryruntime.RuntimeTokenColor{
-					WorkID:     "dashboard-render-test-work",
-					WorkTypeID: "task",
-					TraceID:    "dashboard-render-test-trace",
-				},
-			}},
-		}},
-	}
-}
-
-func timedOutCleanInvocationSnapshot() *interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net] {
-	return &interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net]{
-		DispatchHistory: []interfaces.CompletedDispatch{{
-			Outcome: workerexecution.OutcomeFailed,
-			ConsumedTokens: []factoryruntime.RuntimeToken{{
-				ID:      "timeout-token",
-				PlaceID: "task:init",
-				Color: factoryruntime.RuntimeTokenColor{
-					WorkID:     "dashboard-render-test-work",
-					WorkTypeID: "task",
-					TraceID:    "dashboard-render-test-trace",
-				},
-			}},
-			FailureMetadata: &workerexecution.WorkFailureMetadata{
-				Family: workerexecution.WorkFailureFamilyRetryable,
-				Type:   workerexecution.WorkFailureTypeTimeout,
-			},
-		}},
-	}
 }

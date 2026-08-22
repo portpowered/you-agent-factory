@@ -879,13 +879,14 @@ func TestSessionScopedAPI_UnknownSessionReturnsNotFound(t *testing.T) {
 }
 
 func TestFactorySessionsAPI_ListFactorySessions(t *testing.T) {
+	const canonicalDefaultSessionID = "019e0000-0000-7000-8000-000000000042"
 	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{list: func(context.Context) (factoryapi.ListFactorySessionsResponse, error) {
 		return factoryapi.ListFactorySessionsResponse{
 			Sessions: []factoryapi.FactorySessionSummary{
 				{
 					FactoryDir: "/workspace/root",
 					FolderPath: "/workspace/root",
-					Id:         "~default",
+					Id:         canonicalDefaultSessionID,
 					IsDefault:  true,
 					Project:    "root",
 					Target: factoryapi.FactorySessionTargetRef{
@@ -925,8 +926,8 @@ func TestFactorySessionsAPI_ListFactorySessions(t *testing.T) {
 	for _, session := range response.Sessions {
 		ids[session.Id] = true
 	}
-	if !ids["~default"] || !ids["session-beta"] {
-		t.Fatalf("factory session ids = %#v, want ~default and session-beta", ids)
+	if !ids[canonicalDefaultSessionID] || !ids["session-beta"] {
+		t.Fatalf("factory session ids = %#v, want canonical default and session-beta", ids)
 	}
 }
 
@@ -1339,6 +1340,18 @@ func TestGetProviderSessionDetails_NotFoundIsDistinguishable(t *testing.T) {
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "provider session not found")
+}
+
+func TestGetProviderSessionDetails_ForwardsCanceledRequestContextToOwnerHandler(t *testing.T) {
+	srv := newTestServerWithProviderSessionCalls(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=session-123", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusInternalServerError, "INTERNAL_ERROR", "provider session inspection canceled")
 }
 
 func TestGetProviderSessionDetails_CursorNotFoundIsDistinguishable(t *testing.T) {

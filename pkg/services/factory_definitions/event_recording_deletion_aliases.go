@@ -8,36 +8,43 @@ import contracts "github.com/portpowered/infinite-you/pkg/services/factory_defin
 // instead; remove this file when downstream consumers finish cutover.
 
 type (
-	ArtifactCreatedEventPayload                = contracts.ArtifactCreatedEventPayload
-	DispatchInterruptedEventPayload            = contracts.DispatchInterruptedEventPayload
-	DispatchQueuedEventPayload                 = contracts.DispatchQueuedEventPayload
-	DispatchReconciledEventPayload             = contracts.DispatchReconciledEventPayload
-	DispatchRequestEventPayload                = contracts.DispatchRequestEventPayload
-	FactoryChangeEventPayload                  = contracts.FactoryChangeEventPayload
-	FactoryEvent                               = contracts.FactoryEvent
-	FactoryEventContext                        = contracts.FactoryEventContext
-	FactoryEventReconnectCursor                = contracts.FactoryEventReconnectCursor
-	FactoryEventReconnectScope                 = contracts.FactoryEventReconnectScope
-	FactoryEventStream                         = contracts.FactoryEventStream
-	FactoryEventType                           = contracts.FactoryEventType
-	FactorySessionCompletedEventPayload        = contracts.FactorySessionCompletedEventPayload
-	FactorySessionLifecycleControlEventPayload = contracts.FactorySessionLifecycleControlEventPayload
-	FactorySessionLogicalResolveHint           = contracts.FactorySessionLogicalResolveHint
-	FactorySessionPausedEventPayload           = contracts.FactorySessionPausedEventPayload
-	FactorySessionResultUpdatedEventPayload    = contracts.FactorySessionResultUpdatedEventPayload
-	FactorySessionResumedEventPayload          = contracts.FactorySessionResumedEventPayload
-	FactorySessionStartedEventPayload          = contracts.FactorySessionStartedEventPayload
-	FactorySessionSyncPreflightOptions         = contracts.FactorySessionSyncPreflightOptions
-	FactoryStateResponseEventPayload           = contracts.FactoryStateResponseEventPayload
-	InitialStructureRequestEventPayload        = contracts.InitialStructureRequestEventPayload
-	JavaScriptCheckpointRefEventPayload        = contracts.JavaScriptCheckpointRefEventPayload
-	JavaScriptPhaseChangeEventPayload          = contracts.JavaScriptPhaseChangeEventPayload
-	OrchestratorCheckpointWrittenEventPayload  = contracts.OrchestratorCheckpointWrittenEventPayload
-	OrchestratorPhaseChangedEventPayload       = contracts.OrchestratorPhaseChangedEventPayload
-	RunEventWallClock                          = contracts.RunEventWallClock
-	RunRequestEventPayload                     = contracts.RunRequestEventPayload
-	RunResponseEventPayload                    = contracts.RunResponseEventPayload
-	WorkStateChangeEventPayload                = contracts.WorkStateChangeEventPayload
+	ArtifactCreatedEventPayload                  = contracts.ArtifactCreatedEventPayload
+	DispatchInterruptedEventPayload              = contracts.DispatchInterruptedEventPayload
+	DispatchQueuedEventPayload                   = contracts.DispatchQueuedEventPayload
+	DispatchReconciledEventPayload               = contracts.DispatchReconciledEventPayload
+	DispatchRequestEventPayload                  = contracts.DispatchRequestEventPayload
+	HumanApprovalRequestedEventPayload           = contracts.HumanApprovalRequestedEventPayload
+	HumanApprovalDecision                        = contracts.HumanApprovalDecision
+	HumanApprovalStatus                          = contracts.HumanApprovalStatus
+	DispatchWorkerSessionAssociationEventPayload = contracts.DispatchWorkerSessionAssociationEventPayload
+	FactoryChangeEventPayload                    = contracts.FactoryChangeEventPayload
+	FactoryChangeRequestEventPayload             = contracts.FactoryChangeRequestEventPayload
+	FactoryChangeFailedEventPayload              = contracts.FactoryChangeFailedEventPayload
+	FactoryResourceCapacityChange                = contracts.FactoryResourceCapacityChange
+	FactoryEvent                                 = contracts.FactoryEvent
+	FactoryEventContext                          = contracts.FactoryEventContext
+	FactoryEventReconnectCursor                  = contracts.FactoryEventReconnectCursor
+	FactoryEventReconnectScope                   = contracts.FactoryEventReconnectScope
+	FactoryEventStream                           = contracts.FactoryEventStream
+	FactoryEventType                             = contracts.FactoryEventType
+	FactorySessionCompletedEventPayload          = contracts.FactorySessionCompletedEventPayload
+	FactorySessionLifecycleControlEventPayload   = contracts.FactorySessionLifecycleControlEventPayload
+	FactorySessionLogicalResolveHint             = contracts.FactorySessionLogicalResolveHint
+	FactorySessionPausedEventPayload             = contracts.FactorySessionPausedEventPayload
+	FactorySessionResultUpdatedEventPayload      = contracts.FactorySessionResultUpdatedEventPayload
+	FactorySessionResumedEventPayload            = contracts.FactorySessionResumedEventPayload
+	FactorySessionStartedEventPayload            = contracts.FactorySessionStartedEventPayload
+	FactorySessionSyncPreflightOptions           = contracts.FactorySessionSyncPreflightOptions
+	FactoryStateResponseEventPayload             = contracts.FactoryStateResponseEventPayload
+	InitialStructureRequestEventPayload          = contracts.InitialStructureRequestEventPayload
+	JavaScriptCheckpointRefEventPayload          = contracts.JavaScriptCheckpointRefEventPayload
+	JavaScriptPhaseChangeEventPayload            = contracts.JavaScriptPhaseChangeEventPayload
+	OrchestratorCheckpointWrittenEventPayload    = contracts.OrchestratorCheckpointWrittenEventPayload
+	OrchestratorPhaseChangedEventPayload         = contracts.OrchestratorPhaseChangedEventPayload
+	RunEventWallClock                            = contracts.RunEventWallClock
+	RunRequestEventPayload                       = contracts.RunRequestEventPayload
+	RunResponseEventPayload                      = contracts.RunResponseEventPayload
+	WorkStateChangeEventPayload                  = contracts.WorkStateChangeEventPayload
 )
 
 const (
@@ -50,7 +57,11 @@ const (
 	FactoryEventTypeDispatchReconciled            = contracts.FactoryEventTypeDispatchReconciled
 	FactoryEventTypeDispatchRequest               = contracts.FactoryEventTypeDispatchRequest
 	FactoryEventTypeDispatchResponse              = contracts.FactoryEventTypeDispatchResponse
+	FactoryEventTypeDispatchWorkerSessionAssoc    = contracts.FactoryEventTypeDispatchWorkerSessionAssoc
+	FactoryEventTypeHumanApprovalRequested        = contracts.FactoryEventTypeHumanApprovalRequested
 	FactoryEventTypeFactoryChange                 = contracts.FactoryEventTypeFactoryChange
+	FactoryEventTypeFactoryChangeRequest          = contracts.FactoryEventTypeFactoryChangeRequest
+	FactoryEventTypeFactoryChangeFailed           = contracts.FactoryEventTypeFactoryChangeFailed
 	FactoryEventTypeFactoryStateResponse          = contracts.FactoryEventTypeFactoryStateResponse
 	FactoryEventTypeInferenceRequest              = contracts.FactoryEventTypeInferenceRequest
 	FactoryEventTypeInferenceResponse             = contracts.FactoryEventTypeInferenceResponse
@@ -74,6 +85,9 @@ const (
 	FactoryEventTypeSessionStarted                = contracts.FactoryEventTypeSessionStarted
 	FactoryEventTypeWorkRequest                   = contracts.FactoryEventTypeWorkRequest
 	FactoryEventTypeWorkStateChange               = contracts.FactoryEventTypeWorkStateChange
+	HumanApprovalDecisionApprove                  = contracts.HumanApprovalDecisionApprove
+	HumanApprovalDecisionReject                   = contracts.HumanApprovalDecisionReject
+	HumanApprovalStatusPending                    = contracts.HumanApprovalStatusPending
 )
 
 var NewFactoryEvent = contracts.NewFactoryEvent

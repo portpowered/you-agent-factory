@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // EnablementEvaluator wraps transition enablement logic with structured logging.
@@ -44,7 +45,8 @@ func NewEnablementEvaluator(
 // in the current marking. Each transition evaluation is logged with its result.
 func (e *EnablementEvaluator) FindEnabledTransitions(ctx context.Context, n *state.Net, marking *petri.MarkingSnapshot) []interfaces.EnabledTransition {
 	return e.FindEnabledTransitionsWithSnapshot(ctx, n, &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: *marking,
+		Marking:  *marking,
+		Topology: n,
 	})
 }
 
@@ -146,11 +148,18 @@ func (e *EnablementEvaluator) checkTransitionEnabled(_ context.Context, tr *petr
 			return interfaces.EnabledTransition{}, false
 		}
 	}
+	if !e.bindingDependenciesMet(tr, snapshot, result) {
+		e.logger.Debug("enablement: transition disabled",
+			"transitionID", tr.ID,
+			"transitionName", tr.Name,
+			"reason", "dependency guard failed for selected binding")
+		return interfaces.EnabledTransition{}, false
+	}
 
 	return interfaces.EnabledTransition{
 		TransitionID: tr.ID,
 		WorkerType:   tr.WorkerType,
-		Bindings:     result,
+		Bindings:     workerBindings(result),
 		ArcModes:     arcModes,
 	}, true
 }
@@ -166,11 +175,14 @@ func (e *EnablementEvaluator) evaluateGuardedArc(
 ) bool {
 	candidates := stableTokens(marking.TokensInPlace(arc.PlaceID))
 	guardMatched, ok := e.evaluateGuard(arc.Guard, petri.RuntimeGuardContext{
-		Now:                 e.now(),
-		CurrentTransitionID: tr.ID,
-		DispatchHistory:     snapshot.DispatchHistory,
-		RuntimeConfig:       e.runtimeConfig,
-		TransitionWorkers:   transitionWorkerTypes(snapshot.Topology, tr),
+		Now:                      e.now(),
+		CurrentTransitionID:      tr.ID,
+		DispatchHistory:          snapshot.DispatchHistory,
+		ActiveDispatches:         snapshot.Dispatches,
+		RuntimeConfig:            e.runtimeConfig,
+		TransitionWorkers:        transitionWorkerTypes(snapshot.Topology, tr),
+		StateCategoryForPlace:    stateCategoryForPlace(snapshot.Topology),
+		ParentChildRegistrations: marking.ParentChildRegistrations,
 	}, candidates, guardBindings, marking)
 	if !ok {
 		e.logger.Debug("enablement: transition disabled",
@@ -246,7 +258,7 @@ func (e *EnablementEvaluator) findSingleTokenBindingTransition(
 	return interfaces.EnabledTransition{
 		TransitionID: tr.ID,
 		WorkerType:   tr.WorkerType,
-		Bindings:     search.result,
+		Bindings:     workerBindings(search.result),
 		ArcModes:     search.arcModes,
 	}, true
 }
@@ -286,11 +298,23 @@ func singleTokenBindingOrder(tr *petri.Transition) []int {
 
 func singleTokenRuntimeContext(e *EnablementEvaluator, tr *petri.Transition, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) petri.RuntimeGuardContext {
 	return petri.RuntimeGuardContext{
-		Now:                 e.now(),
-		CurrentTransitionID: tr.ID,
-		DispatchHistory:     snapshot.DispatchHistory,
-		RuntimeConfig:       e.runtimeConfig,
-		TransitionWorkers:   transitionWorkerTypes(snapshot.Topology, tr),
+		Now:                      e.now(),
+		CurrentTransitionID:      tr.ID,
+		DispatchHistory:          snapshot.DispatchHistory,
+		ActiveDispatches:         snapshot.Dispatches,
+		RuntimeConfig:            e.runtimeConfig,
+		TransitionWorkers:        transitionWorkerTypes(snapshot.Topology, tr),
+		StateCategoryForPlace:    stateCategoryForPlace(snapshot.Topology),
+		ParentChildRegistrations: snapshot.Marking.ParentChildRegistrations,
+	}
+}
+
+func stateCategoryForPlace(topology *state.Net) func(string) string {
+	if topology == nil || len(topology.WorkTypes) == 0 {
+		return nil
+	}
+	return func(placeID string) string {
+		return string(topology.StateCategoryForPlace(placeID))
 	}
 }
 
@@ -308,7 +332,7 @@ type singleTokenBindingSearch struct {
 
 func (s *singleTokenBindingSearch) search(position int) bool {
 	if position >= len(s.order) {
-		return true
+		return s.evaluator.bindingDependenciesMet(s.transition, s.snapshot, s.result)
 	}
 
 	arc := &s.transition.InputArcs[s.order[position]]
@@ -323,6 +347,46 @@ func (s *singleTokenBindingSearch) search(position int) bool {
 			continue
 		}
 		return true
+	}
+	return false
+}
+
+func (e *EnablementEvaluator) bindingDependenciesMet(
+	tr *petri.Transition,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	bindings map[string][]factorytoken.Token,
+) bool {
+	if tr == nil || !transitionUsesDependencyGuard(tr) {
+		return true
+	}
+	if snapshot == nil {
+		return false
+	}
+	return (&petri.DependencyGuard{}).AllDependenciesMet(bindings, &snapshot.Marking)
+}
+
+func transitionUsesDependencyGuard(tr *petri.Transition) bool {
+	if tr == nil {
+		return false
+	}
+	for i := range tr.InputArcs {
+		if guardUsesDependencyGuard(tr.InputArcs[i].Guard) {
+			return true
+		}
+	}
+	return false
+}
+
+func guardUsesDependencyGuard(guard petri.Guard) bool {
+	switch typed := guard.(type) {
+	case *petri.DependencyGuard:
+		return true
+	case *petri.AllGuard:
+		for _, nested := range typed.Guards {
+			if guardUsesDependencyGuard(nested) {
+				return true
+			}
+		}
 	}
 	return false
 }
@@ -517,7 +581,7 @@ func expandRepeatedBindingCandidates(
 			key := arcKey(arc)
 			arcModes[key] = arc.Mode
 			if arc.Mode == interfaces.ArcModeObserve {
-				bindings[key] = append([]factorytoken.Token(nil), base.Bindings[key]...)
+				bindings[key] = runtimeTokens(base.Bindings[key])
 				continue
 			}
 			bindings[key] = []factorytoken.Token{arcTokens[key][candidateIndex]}
@@ -525,11 +589,36 @@ func expandRepeatedBindingCandidates(
 		expanded = append(expanded, interfaces.EnabledTransition{
 			TransitionID: base.TransitionID,
 			WorkerType:   base.WorkerType,
-			Bindings:     bindings,
+			Bindings:     workerBindings(bindings),
 			ArcModes:     arcModes,
 		})
 	}
 	return expanded
+}
+
+func workerBindings(bindings map[string][]factorytoken.Token) map[string][]workerexecution.Token {
+	if len(bindings) == 0 {
+		return nil
+	}
+	projected := make(map[string][]workerexecution.Token, len(bindings))
+	for name, tokens := range bindings {
+		projected[name] = make([]workerexecution.Token, len(tokens))
+		for index, value := range tokens {
+			projected[name][index] = factorytoken.ToWorker(value)
+		}
+	}
+	return projected
+}
+
+func runtimeTokens(tokens []workerexecution.Token) []factorytoken.Token {
+	if len(tokens) == 0 {
+		return nil
+	}
+	projected := make([]factorytoken.Token, len(tokens))
+	for index, value := range tokens {
+		projected[index] = factorytoken.FromWorker(value)
+	}
+	return projected
 }
 
 func isSingleTokenCardinality(cardinality petri.ArcCardinality) bool {

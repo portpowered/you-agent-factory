@@ -1,4 +1,9 @@
 actions:
+    - target: $.components.schemas.FactoryWebhookDispatchStatus
+      update:
+        x-enum-varnames:
+            - FactoryWebhookDispatchStatusFailed
+            - FactoryWebhookDispatchStatusInterrupted
     - target: $.components.schemas.AgentWorkerToolPolicy
       update:
         x-enum-varnames:
@@ -74,6 +79,39 @@ actions:
             - ModelOperationContentTypeAudio
             - ModelOperationContentTypeJSON
             - ModelOperationContentTypeBinary
+    - target: $.components.schemas.ModelInvocationContentType
+      update:
+        x-enum-varnames:
+            - ModelInvocationContentTypeText
+            - ModelInvocationContentTypeImage
+            - ModelInvocationContentTypeAudio
+            - ModelInvocationContentTypeVideo
+            - ModelInvocationContentTypeJSON
+            - ModelInvocationContentTypeBinary
+    - target: $.components.schemas.ModelInvocationOutputMode
+      update:
+        x-enum-varnames:
+            - ModelInvocationOutputModeAuto
+            - ModelInvocationOutputModeInline
+            - ModelInvocationOutputModeJSON
+            - ModelInvocationOutputModeArtifact
+    - target: $.components.schemas.ModelInvocationFailureClass
+      update:
+        x-enum-varnames:
+            - ModelInvocationFailureClassInvalidModelReference
+            - ModelInvocationFailureClassInvalidOperation
+            - ModelInvocationFailureClassInvalidSlot
+            - ModelInvocationFailureClassSlotArity
+            - ModelInvocationFailureClassInvalidParameter
+            - ModelInvocationFailureClassMediaCapability
+            - ModelInvocationFailureClassConfiguration
+            - ModelInvocationFailureClassOfflineCache
+            - ModelInvocationFailureClassArtifact
+            - ModelInvocationFailureClassBackendReadiness
+            - ModelInvocationFailureClassBackendProtocol
+            - ModelInvocationFailureClassCancellation
+            - ModelInvocationFailureClassTimeout
+            - ModelInvocationFailureClassMalformedResponse
     - target: $.components.schemas.ProviderCatalog.properties.formatVersion
       update:
         x-enum-varnames:

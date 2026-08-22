@@ -3,6 +3,8 @@ package models
 import (
 	"errors"
 	"fmt"
+	"path"
+	"path/filepath"
 	"strings"
 )
 
@@ -39,6 +41,19 @@ var (
 	ErrAssetIntegrityFailed = errors.New("model asset integrity verification failed")
 	// ErrAssetCancelled reports cancellation of a Models asset operation.
 	ErrAssetCancelled = errors.New("model asset operation cancelled")
+	// ErrAssetOffline reports that an offline preparation request could not
+	// satisfy every requested artifact from the ordered local caches.
+	ErrAssetOffline = errors.New("model assets are missing while offline")
+)
+
+// AssetArtifactKind separates model payloads from backend runtime artifacts.
+// The distinction is part of the cache identity so one kind can never satisfy
+// a request for the other kind.
+type AssetArtifactKind string
+
+const (
+	AssetArtifactKindModel   AssetArtifactKind = "MODEL"
+	AssetArtifactKindBackend AssetArtifactKind = "BACKEND"
 )
 
 // AssetReadinessState names the detached availability state of scoped assets.
@@ -79,6 +94,7 @@ const (
 // AssetArtifact describes one prepared artifact without exposing its cache or
 // filesystem location.
 type AssetArtifact struct {
+	Kind   AssetArtifactKind
 	Name   string
 	Bytes  int64
 	SHA256 string
@@ -87,32 +103,151 @@ type AssetArtifact struct {
 // AssetSnapshot contains detached readiness, integrity, source, and artifact
 // facts for one scoped model.
 type AssetSnapshot struct {
-	ModelName  string
-	Readiness  AssetReadinessState
-	Integrity  AssetIntegrityState
-	Source     SourceMetadata
-	Revision   string
-	Artifacts  []AssetArtifact
-	TotalBytes int64
+	ModelName        string
+	Readiness        AssetReadinessState
+	Integrity        AssetIntegrityState
+	Source           SourceMetadata
+	Revision         string
+	Artifacts        []AssetArtifact
+	BackendArtifacts []AssetArtifact
+	TotalBytes       int64
 }
 
 // Clone returns a detached asset snapshot safe for a peer to retain.
 func (snapshot AssetSnapshot) Clone() AssetSnapshot {
 	snapshot.Artifacts = append([]AssetArtifact(nil), snapshot.Artifacts...)
+	snapshot.BackendArtifacts = append([]AssetArtifact(nil), snapshot.BackendArtifacts...)
 	return snapshot
+}
+
+// AssetRequirement describes one immutable artifact needed by a preparation
+// transaction. URL and filesystem details are derived privately from the
+// source reference and never appear in results.
+type AssetRequirement struct {
+	Name   string
+	Bytes  int64
+	SHA256 string
+}
+
+// Validate rejects unsafe artifact names before any cache, filesystem, or
+// network effect can occur.
+func (requirement AssetRequirement) Validate() error {
+	name := strings.TrimSpace(requirement.Name)
+	cleanName := filepath.ToSlash(filepath.Clean(filepath.FromSlash(name)))
+	if invalidAssetName(name, cleanName) {
+		return fmt.Errorf("%w: asset name is invalid", ErrAssetPreparationInterrupted)
+	}
+	if requirement.Bytes < 0 {
+		return fmt.Errorf("%w: asset %q has a negative size", ErrAssetPreparationInterrupted, name)
+	}
+	if err := validateAssetDigest(name, requirement.SHA256); err != nil {
+		return err
+	}
+	return nil
+}
+
+func invalidAssetName(name, cleanName string) bool {
+	return name == "" || cleanName != name || name == "." ||
+		strings.ContainsRune(name, '\x00') || strings.Contains(name, "\\") ||
+		path.IsAbs(filepath.ToSlash(name)) || filepath.IsAbs(filepath.FromSlash(name)) ||
+		filepath.VolumeName(name) != "" || hasWindowsDrivePrefix(name)
+}
+
+func hasWindowsDrivePrefix(name string) bool {
+	return len(name) >= 2 && name[1] == ':' &&
+		((name[0] >= 'a' && name[0] <= 'z') || (name[0] >= 'A' && name[0] <= 'Z'))
+}
+
+func validateAssetDigest(name, rawDigest string) error {
+	digest := strings.TrimSpace(rawDigest)
+	if digest == "" {
+		return nil
+	}
+	if len(digest) != 64 {
+		return fmt.Errorf("%w: asset %q digest is invalid", ErrAssetIntegrityFailed, name)
+	}
+	for _, character := range digest {
+		if !isAssetHexCharacter(character) {
+			return fmt.Errorf("%w: asset %q digest is invalid", ErrAssetIntegrityFailed, name)
+		}
+	}
+	return nil
+}
+
+func isAssetHexCharacter(character rune) bool {
+	return character >= '0' && character <= '9' || character >= 'a' && character <= 'f' ||
+		character >= 'A' && character <= 'F'
+}
+
+// AssetOfflineError lists every artifact that was unavailable when a
+// preparation request was explicitly offline. Names are safe logical names;
+// cache paths, URLs, and authorization details are deliberately omitted.
+type AssetOfflineError struct {
+	Missing []string
+}
+
+func (failure *AssetOfflineError) Error() string {
+	if failure == nil {
+		return ""
+	}
+	missing := append([]string(nil), failure.Missing...)
+	return fmt.Sprintf("%v: missing artifacts: %s", ErrAssetOffline, strings.Join(missing, ", "))
+}
+
+func (failure *AssetOfflineError) Unwrap() error {
+	if failure == nil {
+		return nil
+	}
+	return ErrAssetOffline
 }
 
 // PrepareModelAssetsRequest asks Models to make one scoped model's assets
 // available from its configured source.
 type PrepareModelAssetsRequest struct {
-	Scope RuntimeScopeRef
-	Name  string
+	Scope            RuntimeScopeRef
+	Name             string
+	Reference        ModelReference
+	Offline          bool
+	Artifacts        []AssetRequirement
+	Backend          string
+	BackendReference ModelReference
+	BackendArtifacts []AssetRequirement
 }
 
 // Validate checks fields whose validity does not depend on private scope,
 // source, or cache state.
 func (request PrepareModelAssetsRequest) Validate() error {
-	return validateAssetModelName(request.Name)
+	name := request.Name
+	if !request.Reference.IsZero() {
+		name = request.Reference.NameOrURI
+	}
+	if err := validateAssetModelName(name); err != nil {
+		return err
+	}
+	if err := validateAssetRequirements(request.Artifacts); err != nil {
+		return err
+	}
+	if err := validateAssetRequirements(request.BackendArtifacts); err != nil {
+		return err
+	}
+	if !request.BackendReference.IsZero() && strings.TrimSpace(request.Backend) == "" {
+		return fmt.Errorf("%w: backend identity is required", ErrAssetPreparationInterrupted)
+	}
+	return nil
+}
+
+func validateAssetRequirements(requirements []AssetRequirement) error {
+	seen := make(map[string]struct{}, len(requirements))
+	for _, requirement := range requirements {
+		if err := requirement.Validate(); err != nil {
+			return err
+		}
+		if _, exists := seen[requirement.Name]; exists {
+			return fmt.Errorf("%w: asset %q is requested more than once", ErrAssetPreparationInterrupted, requirement.Name)
+		}
+		seen[requirement.Name] = struct{}{}
+	}
+	return nil
 }
 
 // PrepareModelAssetsResult reports detached asset facts and whether the

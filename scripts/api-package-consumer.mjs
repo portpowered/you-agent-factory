@@ -202,7 +202,12 @@ function requireObject(value, message) {
 	return value;
 }
 
-function requireConfigurationSchema(document, specifier, expectedID) {
+function requireConfigurationSchema(
+	document,
+	specifier,
+	expectedID,
+	expectedAdditionalProperties,
+) {
 	const schema = requireObject(
 		document,
 		`[api-package-consumer] export is not a JSON Schema object: ${specifier}`,
@@ -211,7 +216,7 @@ function requireConfigurationSchema(document, specifier, expectedID) {
 		schema.$schema !== "https://json-schema.org/draft/2020-12/schema" ||
 		schema.$id !== expectedID ||
 		schema.type !== "object" ||
-		schema.additionalProperties !== false ||
+		schema.additionalProperties !== expectedAdditionalProperties ||
 		typeof schema.properties !== "object"
 	) {
 		throw new Error(
@@ -340,6 +345,7 @@ async function verifyJSONArtifactSemantics({
 			document,
 			specifier,
 			"https://schemas.portpowered.com/you/config/you-config.schema.json",
+			true,
 		);
 		if (!schema.properties.defaults || !schema.properties.workerPresets) {
 			throw new Error(
@@ -353,6 +359,7 @@ async function verifyJSONArtifactSemantics({
 			document,
 			specifier,
 			"https://schemas.portpowered.com/you/config/factory.schema.json",
+			false,
 		);
 		if (
 			!schema.required?.includes("name") ||
@@ -401,6 +408,7 @@ async function verifyJSONArtifactSemantics({
 			document,
 			specifier,
 			"https://schemas.portpowered.com/you/config/mock-workers.schema.json",
+			true,
 		);
 		const mockWorker = schema.$defs?.mockWorker;
 		if (
@@ -416,6 +424,7 @@ async function verifyJSONArtifactSemantics({
 }
 
 function requireFactoryEventSchema(document, specifier) {
+	const factoryEventVariantCount = 35;
 	const schema = requireObject(
 		document,
 		`[api-package-consumer] export is not a Factory Event schema object: ${specifier}`,
@@ -426,9 +435,12 @@ function requireFactoryEventSchema(document, specifier) {
 		!schema.required?.includes("type") ||
 		!schema.required?.includes("context") ||
 		!schema.required?.includes("payload") ||
-		schema.oneOf?.length !== 31 ||
+		schema.oneOf?.length !== factoryEventVariantCount ||
 		schema.discriminator?.propertyName !== "type" ||
-		Object.keys(schema.discriminator?.mapping ?? {}).length !== 31
+		Object.keys(schema.discriminator?.mapping ?? {}).length !==
+			factoryEventVariantCount ||
+		schema.discriminator?.mapping?.DISPATCH_WORKER_SESSION_ASSOCIATION !==
+			"#/$defs/DispatchWorkerSessionAssociationEventPayload"
 	) {
 		throw new Error(
 			`[api-package-consumer] Factory Event schema is incomplete: ${specifier}`,

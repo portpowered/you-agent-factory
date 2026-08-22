@@ -1,0 +1,306 @@
+package envelope
+
+import (
+	"encoding/json"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
+)
+
+func TestDecode_BindsConnectionMethodAndParams(t *testing.T) {
+	env, err := Decode("conn-1", 1, json.RawMessage(`{"jsonrpc":"2.0","id":1,"method":"session/prompt","params":{"sessionId":"sess-1"}}`))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if env.Method != "session/prompt" {
+		t.Fatalf("Method = %q, want session/prompt", env.Method)
+	}
+	if string(env.Params) != `{"sessionId":"sess-1"}` {
+		t.Fatalf("Params = %s, want the raw params object", env.Params)
+	}
+	if env.IsNotification {
+		t.Fatal("IsNotification = true, want false for a request method")
+	}
+	connID, ok := env.Identity.ConnectionID()
+	if !ok || connID != "conn-1" {
+		t.Fatalf("Identity.ConnectionID() = (%q, %v), want (\"conn-1\", true)", connID, ok)
+	}
+}
+
+func TestDecode_SameJSONRPCIDDifferentConnectionsProduceDistinctIdentities(t *testing.T) {
+	raw := json.RawMessage(`{"jsonrpc":"2.0","id":1,"method":"session/prompt","params":{}}`)
+
+	envA, err := Decode("conn-a", 1, raw)
+	if err != nil {
+		t.Fatalf("Decode(conn-a) unexpected error: %v", err)
+	}
+	envB, err := Decode("conn-b", 1, raw)
+	if err != nil {
+		t.Fatalf("Decode(conn-b) unexpected error: %v", err)
+	}
+	if envA.Identity.Equal(envB.Identity) {
+		t.Fatal("two connections sending the same JSON-RPC id produced equal identities")
+	}
+}
+
+func TestDecode_RejectsMalformedInput(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		// wantInvalidJSON selects ErrInvalidJSON; when false the case wants
+		// ErrInvalidRequestShape instead.
+		wantInvalidJSON bool
+		// wantID is the raw JSON-RPC id token DecodeError.ID() should
+		// recover, or "" when no id should be recoverable.
+		wantID string
+	}{
+		{name: "invalid JSON", raw: `{not json`, wantInvalidJSON: true},
+		{name: "valid JSON number, not a request object", raw: `1`},
+		{name: "valid JSON string, not a request object", raw: `"text"`},
+		{name: "valid JSON array, not a request object", raw: `[]`},
+		{name: "valid JSON object with wrong-typed method field", raw: `{"jsonrpc":"2.0","id":1,"method":123}`, wantID: "1"},
+		{name: "valid JSON object with wrong-typed method field and an invalid id shape", raw: `{"jsonrpc":"2.0","id":{},"method":123}`},
+		{name: "wrong jsonrpc version", raw: `{"jsonrpc":"1.0","id":1,"method":"session/prompt"}`, wantID: "1"},
+		{name: "missing jsonrpc version", raw: `{"id":1,"method":"session/prompt"}`, wantID: "1"},
+		{name: "missing method", raw: `{"jsonrpc":"2.0","id":1}`, wantID: "1"},
+		{name: "blank method", raw: `{"jsonrpc":"2.0","id":1,"method":"   "}`, wantID: "1"},
+		{name: "null id on a request method", raw: `{"jsonrpc":"2.0","id":null,"method":"session/prompt"}`},
+		{name: "object id", raw: `{"jsonrpc":"2.0","id":{},"method":"session/prompt"}`},
+		{name: "array id", raw: `{"jsonrpc":"2.0","id":[],"method":"session/prompt"}`},
+		{name: "boolean id", raw: `{"jsonrpc":"2.0","id":true,"method":"session/prompt"}`},
+		{name: "id-bearing session/cancel notification", raw: `{"jsonrpc":"2.0","id":1,"method":"session/cancel","params":{"sessionId":"s"}}`, wantID: "1"},
+		{name: "id-bearing session/update notification", raw: `{"jsonrpc":"2.0","id":2,"method":"session/update","params":{"sessionId":"s","update":{}}}`, wantID: "2"},
+		{name: "id-bearing session/cancel notification with a string id", raw: `{"jsonrpc":"2.0","id":"req-9","method":"session/cancel","params":{"sessionId":"s"}}`, wantID: `"req-9"`},
+		{name: "null id-bearing session/cancel notification", raw: `{"jsonrpc":"2.0","id":null,"method":"session/cancel","params":{"sessionId":"s"}}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Decode("conn-1", 1, json.RawMessage(tt.raw))
+			if err == nil {
+				t.Fatalf("Decode(%s) error = nil, want a malformed-envelope rejection", tt.raw)
+			}
+			if !errors.Is(err, ErrMalformedEnvelope) {
+				t.Fatalf("Decode(%s) error = %v, want it to wrap ErrMalformedEnvelope", tt.raw, err)
+			}
+
+			gotInvalidJSON := errors.Is(err, ErrInvalidJSON)
+			gotInvalidShape := errors.Is(err, ErrInvalidRequestShape)
+			if gotInvalidJSON == gotInvalidShape {
+				t.Fatalf("Decode(%s) error = %v, want exactly one of ErrInvalidJSON/ErrInvalidRequestShape", tt.raw, err)
+			}
+			if gotInvalidJSON != tt.wantInvalidJSON {
+				t.Fatalf("Decode(%s) classified as ErrInvalidJSON = %v, want %v", tt.raw, gotInvalidJSON, tt.wantInvalidJSON)
+			}
+
+			var decodeErr *DecodeError
+			if !errors.As(err, &decodeErr) {
+				t.Fatalf("Decode(%s) error = %v (%T), want *DecodeError", tt.raw, err, err)
+			}
+			id, hasID := decodeErr.ID()
+			if tt.wantID == "" {
+				if hasID {
+					t.Fatalf("Decode(%s) recovered id %+v, want no recoverable id", tt.raw, id)
+				}
+				return
+			}
+			if !hasID {
+				t.Fatalf("Decode(%s) recovered no id, want %s", tt.raw, tt.wantID)
+			}
+			gotID, err := id.MarshalJSON()
+			if err != nil {
+				t.Fatalf("Decode(%s) recovered id failed to marshal: %v", tt.raw, err)
+			}
+			if string(gotID) != tt.wantID {
+				t.Fatalf("Decode(%s) recovered id = %s, want %s", tt.raw, gotID, tt.wantID)
+			}
+		})
+	}
+}
+
+func TestDecodeError_ErrorReturnsCauseMessage(t *testing.T) {
+	_, err := Decode("conn-1", 1, json.RawMessage(`{not json`))
+
+	var decodeErr *DecodeError
+	if !errors.As(err, &decodeErr) {
+		t.Fatalf("Decode error = %v (%T), want *DecodeError", err, err)
+	}
+	if got, want := decodeErr.Error(), decodeErr.Unwrap().Error(); got != want {
+		t.Fatalf("DecodeError.Error() = %q, want it to equal Unwrap().Error() = %q", got, want)
+	}
+	if !strings.HasPrefix(decodeErr.Error(), ErrInvalidJSON.Error()) {
+		t.Fatalf("DecodeError.Error() = %q, want it to start with %q", decodeErr.Error(), ErrInvalidJSON.Error())
+	}
+}
+
+func TestDecode_RejectsBlankConnectionID(t *testing.T) {
+	_, err := Decode("", 1, json.RawMessage(`{"jsonrpc":"2.0","id":1,"method":"session/prompt"}`))
+	if !errors.Is(err, ErrMalformedEnvelope) {
+		t.Fatalf("Decode() with blank connection id error = %v, want it to wrap ErrMalformedEnvelope", err)
+	}
+}
+
+func TestDecode_AcceptsValidNotificationWithoutID(t *testing.T) {
+	for _, method := range []string{"session/cancel", "session/update"} {
+		t.Run(method, func(t *testing.T) {
+			raw := json.RawMessage(`{"jsonrpc":"2.0","method":"` + method + `","params":{"sessionId":"s"}}`)
+			env, err := Decode("conn-1", 1, raw)
+			if err != nil {
+				t.Fatalf("Decode() unexpected error: %v", err)
+			}
+			if !env.IsNotification {
+				t.Fatal("IsNotification = false, want true for a notification method")
+			}
+			if !env.Identity.IsMinted() {
+				t.Fatal("expected a notification's identity to be minted, not connection-correlated")
+			}
+			if _, ok := env.Identity.ConnectionID(); ok {
+				t.Fatal("expected a notification's identity to have no correlated connection id")
+			}
+		})
+	}
+}
+
+// TestDecode_TreatsAnyNoIDMessageAsANotificationRegardlessOfMethod proves
+// JSON-RPC 2.0 notification status is determined solely by the absence of
+// an id: a method that is neither in NotificationMethods nor implemented by
+// this transport still decodes successfully with IsNotification true when
+// it carries no id, since a server must never send a response for a
+// message the client never attached an id to.
+func TestDecode_TreatsAnyNoIDMessageAsANotificationRegardlessOfMethod(t *testing.T) {
+	for _, method := range []string{"session/prompt", "totally/unrecognized"} {
+		t.Run(method, func(t *testing.T) {
+			raw := json.RawMessage(`{"jsonrpc":"2.0","method":"` + method + `"}`)
+			env, err := Decode("conn-1", 1, raw)
+			if err != nil {
+				t.Fatalf("Decode() unexpected error: %v", err)
+			}
+			if env.Method != method {
+				t.Fatalf("Method = %q, want %q", env.Method, method)
+			}
+			if !env.IsNotification {
+				t.Fatal("IsNotification = false, want true for any no-id message")
+			}
+			if !env.Identity.IsMinted() {
+				t.Fatal("expected a no-id message's identity to be minted, not connection-correlated")
+			}
+		})
+	}
+}
+
+func TestDecode_NotificationIdentityIsDistinctPerConnection(t *testing.T) {
+	raw := json.RawMessage(`{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"s"}}`)
+
+	envA, err := Decode("conn-a", 1, raw)
+	if err != nil {
+		t.Fatalf("Decode(conn-a) unexpected error: %v", err)
+	}
+	envB, err := Decode("conn-b", 1, raw)
+	if err != nil {
+		t.Fatalf("Decode(conn-b) unexpected error: %v", err)
+	}
+	if envA.Identity.Equal(envB.Identity) {
+		t.Fatal("two connections sending the same notification produced equal minted identities")
+	}
+}
+
+// TestDecode_NotificationIdentityIsDistinctPerSequenceOnSameConnection proves
+// two same-method notifications received on the *same* connection do not
+// collide: a notification carries no JSON-RPC id, so its identity is minted
+// from the connection, method, and the caller-supplied notificationSeq. This
+// is the collision this transport must avoid in practice -- the
+// connection/framing layer sends a stream of session/update notifications on
+// one connection -- unlike the cross-connection case above, which two
+// different NewMinted inputs already made trivially distinct.
+func TestDecode_NotificationIdentityIsDistinctPerSequenceOnSameConnection(t *testing.T) {
+	raw := json.RawMessage(`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s","update":{}}}`)
+
+	first, err := Decode("conn-1", 1, raw)
+	if err != nil {
+		t.Fatalf("Decode(seq=1) unexpected error: %v", err)
+	}
+	second, err := Decode("conn-1", 2, raw)
+	if err != nil {
+		t.Fatalf("Decode(seq=2) unexpected error: %v", err)
+	}
+	if first.Identity.Equal(second.Identity) {
+		t.Fatal("two notifications on the same connection with different sequence numbers produced equal identities")
+	}
+
+	firstEncoded, err := json.Marshal(first)
+	if err != nil {
+		t.Fatalf("Marshal(first) error = %v", err)
+	}
+	var firstDecoded Envelope
+	if err := json.Unmarshal(firstEncoded, &firstDecoded); err != nil {
+		t.Fatalf("Unmarshal(first) error = %v", err)
+	}
+	if !firstDecoded.Identity.Equal(first.Identity) {
+		t.Fatalf("round-tripped identity = %+v, want %+v", firstDecoded.Identity, first.Identity)
+	}
+	if firstDecoded.Identity.Equal(second.Identity) {
+		t.Fatal("round-tripped notification identity collapsed onto a different sequence's identity")
+	}
+}
+
+func TestEnvelope_JSONRoundTrip(t *testing.T) {
+	env, err := Decode("conn-1", 1, json.RawMessage(`{"jsonrpc":"2.0","id":"req-7","method":"session/new","params":{"cwd":"/a"}}`))
+	if err != nil {
+		t.Fatalf("Decode() unexpected error: %v", err)
+	}
+
+	encoded, err := json.Marshal(env)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	var decoded Envelope
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if !decoded.Identity.Equal(env.Identity) {
+		t.Fatalf("round-tripped identity = %+v, want %+v", decoded.Identity, env.Identity)
+	}
+	if decoded.Method != env.Method || string(decoded.Params) != string(env.Params) || decoded.IsNotification != env.IsNotification {
+		t.Fatalf("round-tripped envelope = %+v, want %+v", decoded, env)
+	}
+}
+
+func TestEnvelope_NotificationJSONRoundTrip(t *testing.T) {
+	env, err := Decode("conn-1", 1, json.RawMessage(`{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"s"}}`))
+	if err != nil {
+		t.Fatalf("Decode() unexpected error: %v", err)
+	}
+
+	encoded, err := json.Marshal(env)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	var decoded Envelope
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if !decoded.IsNotification {
+		t.Fatal("round-tripped envelope lost IsNotification = true")
+	}
+	if !decoded.Identity.Equal(env.Identity) {
+		t.Fatalf("round-tripped identity = %+v, want %+v", decoded.Identity, env.Identity)
+	}
+}
+
+func TestEnvelope_MintedIdentityIsNotCorrelated(t *testing.T) {
+	minted, err := identity.NewMinted("permission-req-1")
+	if err != nil {
+		t.Fatalf("NewMinted() unexpected error: %v", err)
+	}
+	env := Envelope{Identity: minted, Method: "session/request_permission"}
+	if env.Method != "session/request_permission" {
+		t.Fatalf("Method = %q, want session/request_permission", env.Method)
+	}
+	if !env.Identity.IsMinted() {
+		t.Fatal("expected a minted identity to report IsMinted() = true")
+	}
+	if _, ok := env.Identity.ConnectionID(); ok {
+		t.Fatal("expected a minted identity to have no connection id")
+	}
+}

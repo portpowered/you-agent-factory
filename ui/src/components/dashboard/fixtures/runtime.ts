@@ -12,6 +12,10 @@ import { mediumBranchingDashboardTopology } from "./topologies";
 
 const DEFAULT_FIXTURE_OBSERVED_AT = "2026-04-08T12:00:00Z";
 
+type DashboardFixtureWorkStateType = NonNullable<
+  CanonicalFactoryDefinition["workTypes"]
+>[number]["states"][number]["type"];
+
 export type DashboardRuntimeOverlay = (
   runtime: DashboardRuntime,
   topology: DashboardTopology,
@@ -150,7 +154,8 @@ export function factoryFromDashboardTopology(
     if (!workType.states.some((state) => state.name === place.state_value)) {
       workType.states.push({
         name: place.state_value,
-        type: place.state_category ?? "PROCESSING",
+        type: (place.state_category ??
+          "PROCESSING") as DashboardFixtureWorkStateType,
       });
     }
     workTypes.set(place.type_id, workType);

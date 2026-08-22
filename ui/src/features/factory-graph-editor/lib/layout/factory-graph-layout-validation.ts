@@ -6,10 +6,13 @@ import {
   factoryLayoutEdgeWaypoints,
   isValidFactoryLayoutPoint,
 } from "./factory-graph-layout-edge-waypoints";
+import { normalizeFactoryLayoutNodeSizesForTopology } from "./factory-graph-layout-node-size-validation";
 import {
   FACTORY_LAYOUT_SCHEMA_VERSION,
   type FactoryLayout,
 } from "./factory-graph-layout-operations";
+
+export { normalizeFactoryLayoutNodeSizesForTopology } from "./factory-graph-layout-node-size-validation";
 
 type FactoryLayoutGroup = NonNullable<
   components["schemas"]["Factory"]["layout"]
@@ -336,9 +339,13 @@ export function preparePendingFactoryLayoutForSave(
     edgePrunedLayout,
     validNodeIds,
   );
+  const normalizedLayout = normalizeFactoryLayoutNodeSizesForTopology(
+    prunedLayout,
+    topology,
+  );
 
   return {
-    layout: prunedLayout,
+    layout: normalizedLayout,
   };
 }
 

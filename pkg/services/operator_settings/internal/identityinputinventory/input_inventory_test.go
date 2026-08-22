@@ -12,7 +12,7 @@ import (
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	identityinventory "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/identityinputinventory"
 	internaltestlink "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testlink"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 )
 
 const fixturesRelativeDir = "pkg/services/operator_settings/testdata/fixtures"
@@ -59,12 +59,19 @@ func runDecodeGlobalConfigCase(t *testing.T, inputCase operatorconfig.InputCase)
 	t.Helper()
 
 	data := readFixture(t, inputCase.Fixture)
-	cfg, err := globalconfigmapping.Decode(data)
+	cfg, diagnostics, err := globalconfigmapping.DecodeWithDiagnostics(data)
 	if inputCase.Outcome == "accept" {
 		if err != nil {
 			t.Fatalf("DecodeGlobalConfig() error = %v, want accept", err)
 		}
 		assertConfigExpectation(t, cfg, inputCase.ExpectedConfig)
+		if inputCase.ExpectedConfig != nil {
+			gotPaths := strings.Join(diagnostics.Paths(), "\n")
+			wantPaths := strings.Join(inputCase.ExpectedConfig.IgnoredJSONPaths, "\n")
+			if gotPaths != wantPaths {
+				t.Fatalf("ignored JSON paths = %#v, want %#v", diagnostics.Paths(), inputCase.ExpectedConfig.IgnoredJSONPaths)
+			}
+		}
 		return
 	}
 	if err == nil {

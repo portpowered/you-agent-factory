@@ -13,6 +13,7 @@ import type {
 import { buildEmptyDashboardRuntimeFixture } from "../../../../components/dashboard/fixtures/runtime";
 import {
   activeExecutionsForSelectedWorkstation,
+  buildNonStandardTerminalWorkItems,
   buildTerminalWorkItems,
   currentWorkItemsForPlace,
   findStatePlace,
@@ -483,7 +484,7 @@ describe("useCurrentSelection.selection-helpers", () => {
     ).toBeNull();
   });
 
-  it("finds terminal work items by trace id, work item id, or label", () => {
+  it("finds terminal work items by canonical Work ID and optional dispatch ID", () => {
     const terminalItem = {
       attempts: [],
       label: "Alpha Story",
@@ -492,16 +493,81 @@ describe("useCurrentSelection.selection-helpers", () => {
     };
 
     expect(findTerminalWorkItem([terminalItem], workAlpha)).toBe(terminalItem);
+    const secondAttempt = {
+      ...terminalItem,
+      dispatchID: "dispatch-second",
+    };
+    const firstAttempt = { ...terminalItem, dispatchID: "dispatch-first" };
+    expect(
+      findTerminalWorkItem(
+        [firstAttempt, secondAttempt],
+        workAlpha,
+        "dispatch-second",
+      ),
+    ).toBe(secondAttempt);
     expect(
       findTerminalWorkItem(
         [{ ...terminalItem, traceWorkID: "other-work", workItem: undefined }],
         workAlpha,
       ),
-    ).toEqual({
-      ...terminalItem,
-      traceWorkID: "other-work",
-      workItem: undefined,
+    ).toBeUndefined();
+  });
+
+  it("keeps canceled, terminated, and future terminal outcomes distinct", () => {
+    const makeRequest = (
+      dispatchID: string,
+      outcome: string,
+      workItem: DashboardWorkItemRef,
+    ): DashboardWorkstationRequest => ({
+      dispatch_id: dispatchID,
+      dispatched_request_count: 1,
+      errored_request_count: 0,
+      inference_attempts: [],
+      outcome,
+      responded_request_count: 1,
+      transition_id: "review",
+      work_items: [workItem],
+      workstation_name: "Review",
+      workstation_node_id: "review",
     });
+
+    const result = buildNonStandardTerminalWorkItems(
+      {
+        canceled: makeRequest("dispatch-canceled", "CANCELED", workAlpha),
+        completed: makeRequest("dispatch-completed", "COMPLETED", workBeta),
+        future: makeRequest("dispatch-future", "FUTURE_TERMINAL", {
+          ...workBeta,
+          work_id: "work-future",
+        }),
+        terminated: makeRequest("dispatch-terminated", "TERMINATED", {
+          ...workAlpha,
+          work_id: "work-terminated",
+        }),
+      },
+      [],
+    );
+
+    expect(result.canceled).toEqual([
+      expect.objectContaining({
+        dispatchID: "dispatch-canceled",
+        label: "Alpha Story",
+        traceWorkID: "work-alpha",
+      }),
+    ]);
+    expect(result.terminated).toEqual([
+      expect.objectContaining({
+        dispatchID: "dispatch-terminated",
+        label: "Alpha Story",
+        traceWorkID: "work-terminated",
+      }),
+    ]);
+    expect(result.unknown).toEqual([
+      expect.objectContaining({
+        dispatchID: "dispatch-future",
+        label: "Beta Story",
+        traceWorkID: "work-future",
+      }),
+    ]);
   });
 
   it("prefers request-history terminal context over latest provider attempt context", () => {

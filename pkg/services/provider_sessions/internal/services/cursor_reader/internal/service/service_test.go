@@ -465,6 +465,9 @@ func TestReadHonorsCancellationAndRedactsLookupFailures(t *testing.T) {
 	if !errors.As(err, &lookupErr) {
 		t.Fatalf("error = %T, want LookupError", err)
 	}
+	if lookupErr.SessionID != "missing-session" {
+		t.Fatalf("lookup error session id = %q, want missing-session", lookupErr.SessionID)
+	}
 	if strings.Contains(lookupErr.Error(), string(filepath.Separator)) && strings.Contains(lookupErr.Error(), "store.db") {
 		t.Fatalf("lookup error leaked absolute storage path: %v", lookupErr)
 	}

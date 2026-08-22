@@ -13,9 +13,9 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	factorydefinitionfixtures "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorysnapshot"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 	"gopkg.in/yaml.v3"
 )
 
@@ -215,8 +215,8 @@ func TestFactoryConfigSmoke_RepresentativeFactoryDirectoryRejectsLegacyCopy(t *t
 	if !strings.Contains(err.Error(), "decode factory generated-schema boundary") {
 		t.Fatalf("expected generated boundary context, got %v", err)
 	}
-	if !strings.Contains(err.Error(), `json: unknown field "work_types"`) {
-		t.Fatalf("expected work_types rejection, got %v", err)
+	if !strings.Contains(err.Error(), `work_types is not supported; use workTypes`) {
+		t.Fatalf("expected work_types retirement guidance, got %v", err)
 	}
 }
 

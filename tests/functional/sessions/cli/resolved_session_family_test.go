@@ -42,10 +42,8 @@ func TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition(
 		{"you", "--json", "session", "delete", "session-delete", "--port", port},
 		{"you", "--server", server.URL, "--json", "--debug", "session", "list"},
 		{"you", "--server", server.URL, "--json", "session", "show", "session-show"},
-		{"you", "--server", server.URL, "--json", "session", "dispatches",
-			"dur-sess-1", "--phase", "execute", "--status", "SUCCEEDED"},
-		{"you", "--server", server.URL, "--json", "session", "pause"},
-		{"you", "--server", server.URL, "--json", "session", "resume", "session-resume"},
+		{"you", "--remote", "--server", server.URL, "--json", "session", "pause"},
+		{"you", "--remote", "--server", server.URL, "--json", "session", "resume", "session-resume"},
 	}
 	for _, args := range invocations {
 		var stdout, stderr bytes.Buffer
@@ -188,15 +186,14 @@ func (requests *sessionRequests) assert(t *testing.T) {
 	t.Helper()
 	requests.mu.Lock()
 	defer requests.mu.Unlock()
-	if len(requests.requests) != 8 {
-		t.Fatalf("request count = %d, want 8: %#v", len(requests.requests), requests.requests)
+	if len(requests.requests) != 7 {
+		t.Fatalf("request count = %d, want 7: %#v", len(requests.requests), requests.requests)
 	}
 	want := []capturedRequest{
 		{method: http.MethodPost, path: "/factory-sessions"},
 		{method: http.MethodDelete, path: "/factory-sessions/session-delete"},
 		{method: http.MethodGet, path: "/factory-sessions"},
 		{method: http.MethodGet, path: "/factory-sessions/session-show"},
-		{method: http.MethodGet, path: "/factory-sessions/dur-sess-1/dispatches"},
 		{method: http.MethodPost, path: "/factory-sessions/~default/pause"},
 		{method: http.MethodPost, path: "/factory-sessions/session-resume/resume"},
 		{method: http.MethodGet, path: "/factory-sessions/~default"},
@@ -214,10 +211,6 @@ func (requests *sessionRequests) assert(t *testing.T) {
 	if target, ok := create["target"].(map[string]any); !ok ||
 		target["kind"] != "named" || target["name"] != "alpha" {
 		t.Fatalf("create target = %#v, want named alpha", create["target"])
-	}
-	dispatches := requests.requests[4].query
-	if dispatches.Get("phase") != "execute" || dispatches.Get("status") != "SUCCEEDED" {
-		t.Fatalf("dispatch query = %v", dispatches)
 	}
 }
 

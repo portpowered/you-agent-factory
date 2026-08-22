@@ -41,24 +41,16 @@ func (stub stubRuntimeRoot) Observe(context.Context, factoryruntime.ObserveReque
 	return factoryruntime.ObserveResult{}, stub.observeErr
 }
 
+func (stub stubRuntimeRoot) CleanInvocationSnapshot(context.Context) (factoryruntime.CleanInvocationSnapshot, error) {
+	return factoryruntime.CleanInvocationSnapshot{}, factoryruntime.ErrNotRunning
+}
+
 func (stub stubRuntimeRoot) PlanDispatch(context.Context, factoryruntime.PlanDispatchRequest) (factoryruntime.PlanDispatchResult, error) {
 	return factoryruntime.PlanDispatchResult{}, factoryruntime.ErrNotRunning
 }
 
 func (stub stubRuntimeRoot) AcceptDispatchResult(context.Context, factoryruntime.AcceptDispatchResultRequest) (factoryruntime.AcceptDispatchResultResult, error) {
 	return factoryruntime.AcceptDispatchResultResult{}, factoryruntime.ErrNotRunning
-}
-
-func (stub stubRuntimeRoot) CaptureCheckpoint(context.Context, factoryruntime.CaptureCheckpointRequest) (factoryruntime.CaptureCheckpointResult, error) {
-	return factoryruntime.CaptureCheckpointResult{}, factoryruntime.ErrNotRunning
-}
-
-func (stub stubRuntimeRoot) LoadCheckpoint(context.Context, factoryruntime.LoadCheckpointRequest) (factoryruntime.LoadCheckpointResult, error) {
-	return factoryruntime.LoadCheckpointResult{}, factoryruntime.ErrNotRunning
-}
-
-func (stub stubRuntimeRoot) RestoreCheckpoint(context.Context, factoryruntime.RestoreCheckpointRequest) (factoryruntime.RestoreCheckpointResult, error) {
-	return factoryruntime.RestoreCheckpointResult{}, factoryruntime.ErrNotRunning
 }
 
 func constructedRuntimeCLIService(

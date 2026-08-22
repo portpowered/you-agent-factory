@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   createDefaultFactoryLayout,
+  factoryLayoutNodePosition,
   hasFactoryLayoutChanges,
+  moveFactoryLayoutNode,
 } from "../factory-graph-layout-operations";
 import {
   addFactoryLayoutGroup,
@@ -11,6 +13,7 @@ import {
 import {
   applyFactoryLayoutCommand,
   createCreateFactoryLayoutGroupCommand,
+  createMoveFactoryLayoutVisualGroupCommand,
   createUpdateFactoryLayoutGroupCommand,
   type FactoryLayoutCommand,
   invertFactoryLayoutCommand,
@@ -103,5 +106,70 @@ describe("factory graph layout group commands", () => {
         to: group,
       }),
     ).toBeNull();
+  });
+});
+
+describe("factory graph visual group move commands", () => {
+  it("moves the group and every member in one undoable command", () => {
+    const group = createFactoryLayoutGroup({
+      bounds: { height: 240, width: 360, x: 40, y: 60 },
+      id: "group-1",
+      layout: createDefaultFactoryLayout(),
+      nodeIds: ["member-a", "member-b"],
+    });
+    let layout = addFactoryLayoutGroup(createDefaultFactoryLayout(), group);
+    layout = moveFactoryLayoutNode(layout, "member-a", { x: 80, y: 100 });
+    layout = moveFactoryLayoutNode(layout, "member-b", { x: 180, y: 140 });
+    layout = moveFactoryLayoutNode(layout, "unrelated", { x: 500, y: 520 });
+
+    const command = requireCommand(
+      createMoveFactoryLayoutVisualGroupCommand({
+        delta: { x: 32, y: -18 },
+        groupId: "group-1",
+        layout,
+      }),
+    );
+    expect(command.type).toBe("move-visual-group");
+
+    const moved = applyFactoryLayoutCommand(layout, command);
+    expect(moved.groups?.[0]?.bounds).toEqual({
+      height: 240,
+      width: 360,
+      x: 72,
+      y: 42,
+    });
+    expect(factoryLayoutNodePosition(moved, "member-a")).toEqual({
+      x: 112,
+      y: 82,
+    });
+    expect(factoryLayoutNodePosition(moved, "member-b")).toEqual({
+      x: 212,
+      y: 122,
+    });
+    expect(factoryLayoutNodePosition(moved, "unrelated")).toEqual({
+      x: 500,
+      y: 520,
+    });
+
+    const undone = applyFactoryLayoutCommand(
+      moved,
+      invertFactoryLayoutCommand(command),
+    );
+    expect(undone.groups?.[0]?.bounds).toEqual(group.bounds);
+    expect(factoryLayoutNodePosition(undone, "member-a")).toEqual({
+      x: 80,
+      y: 100,
+    });
+    expect(factoryLayoutNodePosition(undone, "member-b")).toEqual({
+      x: 180,
+      y: 140,
+    });
+    expect(factoryLayoutNodePosition(undone, "unrelated")).toEqual({
+      x: 500,
+      y: 520,
+    });
+
+    const redone = applyFactoryLayoutCommand(undone, command);
+    expect(redone).toEqual(moved);
   });
 });

@@ -1,23 +1,41 @@
 import type { Node, NodeProps } from "@xyflow/react";
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
-
+import type { FactoryGraphNodeInteractionOverlay } from "./node-interaction-overlay.js";
+import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
 import { GraphSemanticIcon } from "./semantic-icon.js";
-import { FactoryGraphNodeShell, type FactoryGraphNodeHandle } from "./semantic-node-shell.js";
+import {
+  FactoryGraphNodeExpandedContent,
+  type FactoryGraphNodeHandle,
+  FactoryGraphNodeShell,
+} from "./semantic-node-shell.js";
 import {
   factoryGraphNodeHoverClassName,
   factoryGraphNodeSurfaceClassName,
+  factoryGraphNodeVisualIconClassName,
+  factoryGraphNodeWrappedTextClassName,
 } from "./semantic-node-style.js";
+import {
+  type FactoryGraphVisualState,
+  resolveFactoryGraphVisualState,
+} from "./visual-state.js";
 
 export interface FactoryGraphDocNodeData extends Record<string, unknown> {
+  activeFlow?: boolean;
   displayLabel: string;
+  expanded?: boolean;
+  focused?: boolean;
   factoryGraphNodeId?: string;
   fileType?: string;
   handles: FactoryGraphNodeHandle[];
+  interactionOverlay?: FactoryGraphNodeInteractionOverlay;
   kind: "doc";
   locale?: string;
   onSelectDoc?: (targetPath: string) => void;
   selectedDoc: boolean;
   targetPath: string;
+  validationError?: boolean;
+  muted?: boolean;
+  resizeControls?: FactoryGraphNodeResizeControlsProps;
 }
 
 export type FactoryGraphDocNode = Node<FactoryGraphDocNodeData, "doc">;
@@ -25,29 +43,54 @@ export type FactoryGraphDocNode = Node<FactoryGraphDocNodeData, "doc">;
 /** Original Factory document node, with host-owned selection callback. */
 export function FactoryGraphDocNodeView({
   data,
+  selected: reactFlowSelected,
 }: NodeProps<FactoryGraphDocNode>) {
   const selectable = data.onSelectDoc !== undefined;
   const docLabel = "Document";
+  const isExpanded = data.expanded === true;
+  const selected = data.selectedDoc || reactFlowSelected;
+  const visualState = resolveFactoryGraphVisualState({
+    activeFlow: data.activeFlow,
+    family: "doc",
+    focused: data.focused,
+    muted: data.muted,
+    selected,
+    validation: data.validationError,
+  });
 
   return (
     <FactoryGraphNodeShell
       className={[
         factoryGraphNodeSurfaceClassName("neutral"),
         "justify-center text-left text-on-surface",
-        factoryGraphNodeHoverClassName({ selected: data.selectedDoc }),
-        data.selectedDoc && "border-primary shadow-af-accent-selected",
+        factoryGraphNodeHoverClassName({
+          activeFlow: data.activeFlow,
+          muted: data.muted,
+          selected,
+          validationError: data.validationError,
+        }),
       ]
         .filter(Boolean)
         .join(" ")}
       handles={data.handles}
+      interactionOverlay={data.interactionOverlay}
       nodeType="doc"
+      resizeControls={data.resizeControls}
+      visualState={{
+        activeFlow: data.activeFlow,
+        focused: data.focused,
+        muted: data.muted,
+        selected,
+        validation: data.validationError,
+      }}
     >
       {selectable ? (
         <GraphNodeButton
           aria-label={selectDocLabel(data.displayLabel, data.locale)}
-          aria-pressed={data.selectedDoc}
+          aria-invalid={data.validationError ? true : undefined}
+          aria-pressed={selected}
           className="grid min-w-0 gap-0.5 overflow-hidden"
-          data-selected-doc={data.selectedDoc ? "true" : undefined}
+          data-selected-doc={selected ? "true" : undefined}
           onClick={(event) => {
             event.stopPropagation();
             data.onSelectDoc?.(data.targetPath);
@@ -56,14 +99,20 @@ export function FactoryGraphDocNodeView({
           <FactoryGraphDocNodeContent
             displayLabel={data.displayLabel}
             docLabel={docLabel}
+            expanded={isExpanded}
+            fileType={data.fileType}
             targetPath={data.targetPath}
+            visualState={visualState}
           />
         </GraphNodeButton>
       ) : (
         <FactoryGraphDocNodeContent
           displayLabel={data.displayLabel}
           docLabel={docLabel}
+          expanded={isExpanded}
+          fileType={data.fileType}
           targetPath={data.targetPath}
+          visualState={visualState}
         />
       )}
     </FactoryGraphNodeShell>
@@ -73,27 +122,54 @@ export function FactoryGraphDocNodeView({
 function FactoryGraphDocNodeContent({
   displayLabel,
   docLabel,
+  expanded,
+  fileType,
   targetPath,
+  visualState,
 }: {
   displayLabel: string;
   docLabel: string;
+  expanded: boolean;
+  fileType?: string;
   targetPath: string;
+  visualState: FactoryGraphVisualState;
 }) {
   return (
     <div className="grid min-w-0 gap-1 px-2 py-1">
       <div className="flex min-w-0 items-center gap-1.5">
-        <GraphSemanticIcon
-          className="text-on-surface-variant"
-          kind="doc"
-          label={docLabel}
-        />
-        <span className="truncate text-sm font-medium text-on-surface">
+        <span data-factory-entity-semantic-icon>
+          <GraphSemanticIcon
+            className={factoryGraphNodeVisualIconClassName(
+              visualState,
+              "text-on-surface-variant",
+            )}
+            kind="doc"
+            label={docLabel}
+          />
+        </span>
+        <span
+          className={factoryGraphNodeWrappedTextClassName(
+            "block text-sm font-medium text-on-surface",
+          )}
+          data-factory-entity-title
+        >
           {displayLabel}
         </span>
       </div>
-      <span className="truncate text-xs text-on-surface-variant">
+      <span
+        className={factoryGraphNodeWrappedTextClassName(
+          "block text-xs text-on-surface-variant",
+        )}
+      >
         {targetPath}
       </span>
+      {expanded ? (
+        <FactoryGraphNodeExpandedContent family="doc">
+          <span data-factory-graph-expanded-field="file-type">
+            {fileType ?? docLabel}
+          </span>
+        </FactoryGraphNodeExpandedContent>
+      ) : null}
     </div>
   );
 }

@@ -80,7 +80,13 @@ func (r *runner) Execute(
 			return workers.RunnerExecutionResult{}, err
 		}
 	}
-	invocation := r.localInvocationRequest(request)
+	scope, worker, resources := modelRuntimeProjection(
+		request,
+		r.scope,
+		r.workerForRequest(request),
+		r.resources,
+	)
+	invocation := r.localInvocationRequest(request, scope, worker, resources)
 	if !composition {
 		if err := models.ValidateLocalInvocationRequest(invocation); err != nil {
 			return workers.RunnerExecutionResult{}, badRequest("inference request is invalid", err)
@@ -89,24 +95,65 @@ func (r *runner) Execute(
 	result, err := r.models.InvokeLocal(ctx, invocation)
 	if !result.Handled {
 		if r.delegate != nil {
-			return r.delegate.Execute(ctx, request)
+			return r.delegate.Execute(ctx, delegateRequest(request))
 		}
 		return workers.RunnerExecutionResult{}, err
 	}
 	if err != nil {
 		return workers.RunnerExecutionResult{}, r.normalizeInvocationError(err, request)
 	}
-	return workers.RunnerExecutionResult{Content: result.Content}, nil
+	return workers.RunnerExecutionResult{
+		Content: result.Content,
+		Diagnostics: &workers.WorkDiagnostics{Metadata: map[string]string{
+			workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
+		}},
+	}, nil
+}
+
+func modelRuntimeProjection(
+	request workers.RunnerExecutionRequest,
+	fallbackScope models.RuntimeScopeRef,
+	fallbackWorker models.LocalWorker,
+	fallbackResources []models.LocalResource,
+) (models.RuntimeScopeRef, models.LocalWorker, []models.LocalResource) {
+	projection := request.ModelRuntime
+	if projection == nil || projection.Scope.IsZero() {
+		return fallbackScope, fallbackWorker, snapshotResources(fallbackResources)
+	}
+	worker := snapshotWorker(projection.Worker)
+	if worker.Name == "" && worker.Model == "" {
+		worker = fallbackWorker
+	}
+	resources := snapshotResources(projection.Resources)
+	if len(resources) == 0 {
+		resources = snapshotResources(fallbackResources)
+	}
+	return projection.Scope, worker, resources
+}
+
+func delegateRequest(request workers.RunnerExecutionRequest) workers.RunnerExecutionRequest {
+	// A request selected only the private inference strategy when it carried
+	// no provider runner. Delegate fallback still needs the provider identity
+	// that was resolved on the model target.
+	if workers.NormalizeRunnerID(request.RunnerID) == Identity {
+		if provider := workers.NormalizeRunnerID(request.ModelProvider); provider != "" {
+			request.RunnerID = provider
+		}
+	}
+	return request
 }
 
 func (r *runner) localInvocationRequest(
 	request workers.RunnerExecutionRequest,
+	scope models.RuntimeScopeRef,
+	worker models.LocalWorker,
+	resources []models.LocalResource,
 ) models.LocalInvocationRequest {
 	return models.LocalInvocationRequest{
-		Scope:            r.scope,
+		Scope:            scope,
 		Holder:           invocationHolder(request),
-		Worker:           r.worker,
-		Resources:        r.resources,
+		Worker:           worker,
+		Resources:        resources,
 		Dispatch:         request.Dispatch,
 		ModelOperation:   request.ModelOperation,
 		ModelBindings:    modelBindingsForLocalRuntime(request.ModelBindings),
@@ -170,14 +217,28 @@ func (r *runner) normalizeInvocationError(
 		return err
 	}
 	failure, ok := workers.ClassifyInferenceFailure(err, workers.InferenceFailureContext{
-		ModelName:  r.worker.Model,
-		WorkerName: r.worker.Name,
+		ModelName:  firstNonEmpty(request.Model, r.worker.Model),
+		WorkerName: firstNonEmpty(request.WorkerName, request.WorkerType, r.worker.Name),
 		Operation:  request.ModelOperation,
 	})
 	if ok {
 		return failure
 	}
 	return err
+}
+
+func (r *runner) workerForRequest(request workers.RunnerExecutionRequest) models.LocalWorker {
+	worker := snapshotWorker(r.worker)
+	if name := strings.TrimSpace(request.WorkerName); name != "" {
+		worker.Name = name
+	}
+	if model := strings.TrimSpace(request.Model); model != "" {
+		worker.Model = model
+	}
+	if locality := strings.TrimSpace(request.ModelLocality); locality != "" {
+		worker.ModelLocality = locality
+	}
+	return worker
 }
 
 func validateWorker(worker models.LocalWorker) error {
@@ -231,6 +292,15 @@ func snapshotWorker(worker models.LocalWorker) models.LocalWorker {
 		ModelLocality: worker.ModelLocality,
 		Resources:     snapshotResources(worker.Resources),
 	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func snapshotResources(resources []models.LocalResource) []models.LocalResource {

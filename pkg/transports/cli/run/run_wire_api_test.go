@@ -1,10 +1,58 @@
 package run
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
 )
+
+func TestNormalizeWorkerReasoningEffort(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		raw     string
+		want    string
+		wantErr string
+	}{
+		{name: "omitted", raw: "", want: ""},
+		{name: "case and whitespace normalized", raw: "  XHIGH ", want: "xhigh"},
+		{name: "canonical value", raw: "medium", want: "medium"},
+		{name: "unsupported value", raw: "turbo", wantErr: "invalid --worker-reasoning-effort"},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := NormalizeWorkerReasoningEffort(tc.raw)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("NormalizeWorkerReasoningEffort(%q) error = %v, want %q", tc.raw, err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("NormalizeWorkerReasoningEffort(%q): %v", tc.raw, err)
+			}
+			if got != tc.want {
+				t.Fatalf("normalized effort = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestOpenRejectsInvalidWorkerReasoningEffortBeforeRuntimeConstruction(t *testing.T) {
+	_, err := Open(
+		context.Background(),
+		RunConfig{WorkerReasoningEffort: "turbo"},
+		nil, nil, nil, nil, nil, nil,
+	)
+	if err == nil || !strings.Contains(err.Error(), "invalid --worker-reasoning-effort") {
+		t.Fatalf("Open() error = %v, want pre-runtime effort validation", err)
+	}
+}
 
 func TestNormalizeInvocationOutputMode(t *testing.T) {
 	t.Parallel()

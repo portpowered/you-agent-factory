@@ -23,10 +23,31 @@ describe("workstationGraphPresentation", () => {
       }),
     ).toEqual({
       borderClassName: "border-dotted",
-      className: "text-primary",
+      className: "text-on-surface-subtle",
       iconKind: "poller",
       label: "Poller workstation",
       semanticKind: POLLER_WORKSTATION_KIND,
+    });
+  });
+
+  it("derives icon color from the owning parent status without changing kind identity", () => {
+    expect(
+      workstationGraphPresentation(
+        {
+          node_id: "cron",
+          transition_id: "cron",
+          workstation_kind: "CRON",
+          workstation_name: "Cron",
+          worker_type: "script",
+        },
+        undefined,
+        "danger",
+      ),
+    ).toMatchObject({
+      className: "text-error",
+      iconKind: "cron",
+      label: "Cron workstation",
+      semanticKind: CRON_WORKSTATION_KIND,
     });
   });
 

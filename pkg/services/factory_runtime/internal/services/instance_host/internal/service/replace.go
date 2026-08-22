@@ -5,11 +5,11 @@ import (
 	"fmt"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
+	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
 )
 
-func (h *Host) Replace(req instancehost.ReplaceRequest) (factoryruntime.HostedHandle, error) {
+func (h *Host) Replace(req instancehost.ReplaceRequest) (factoryruntime.RuntimeRun, error) {
 	current, err := h.requireControllableHandle(req.Current)
 	if err != nil {
 		return nil, err
@@ -69,7 +69,7 @@ func (h *Host) Replace(req instancehost.ReplaceRequest) (factoryruntime.HostedHa
 }
 
 func adaptSidecarStarter(
-	starter func(context.Context, factoryruntime.HostedHandle) error,
+	starter func(context.Context, factoryruntime.RuntimeRun) error,
 ) factoryhost.SidecarStarter {
 	if starter == nil {
 		return nil

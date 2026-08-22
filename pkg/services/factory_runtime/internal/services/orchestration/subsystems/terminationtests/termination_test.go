@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestTerminationCheck_TerminatesWhenNoWorkIsInTheSystem(t *testing.T) {
@@ -19,6 +20,15 @@ func TestTerminationCheck_TerminatesWhenNoWorkIsInTheSystem(t *testing.T) {
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
 			"res-tok0": {ID: "res-tok0", PlaceID: "gpu:available", Color: factorytoken.Color{WorkID: "gpu:0", WorkTypeID: "gpu"}},
+			"time-tok": {
+				ID:      "time-tok",
+				PlaceID: interfaces.SystemTimePendingPlaceID,
+				Color: factorytoken.Color{
+					DataType:   factorytoken.DataTypeWork,
+					WorkID:     "system-time",
+					WorkTypeID: interfaces.SystemTimeWorkTypeID,
+				},
+			},
 		}),
 	}
 
@@ -29,9 +39,12 @@ func TestTerminationCheck_TerminatesWhenNoWorkIsInTheSystem(t *testing.T) {
 	if result == nil || !result.ShouldTerminate {
 		t.Fatal("should terminate when no work is in the system")
 	}
+	if result.Termination == nil || result.Termination.Classification != interfaces.TerminationClassificationComplete {
+		t.Fatalf("termination = %+v, want complete classification", result.Termination)
+	}
 }
 
-func TestTerminationCheck_DoesNotTerminateWithNonTerminalWork(t *testing.T) {
+func TestTerminationCheck_DoesNotTerminateWithImmediatelyRunnableWork(t *testing.T) {
 	n := buildTerminationNet()
 	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
 
@@ -47,7 +60,7 @@ func TestTerminationCheck_DoesNotTerminateWithNonTerminalWork(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if result != nil && result.ShouldTerminate {
-		t.Fatal("should not terminate when work remains in a non-terminal state")
+		t.Fatal("should not terminate while non-terminal work remains immediately runnable")
 	}
 }
 
@@ -69,6 +82,9 @@ func TestTerminationCheck_TerminatesWhenAllWorkIsTerminal(t *testing.T) {
 	if result == nil || !result.ShouldTerminate {
 		t.Fatal("should terminate when all work is terminal")
 	}
+	if result.Termination == nil || result.Termination.Classification != interfaces.TerminationClassificationComplete {
+		t.Fatalf("termination = %+v, want complete classification", result.Termination)
+	}
 }
 
 func TestTerminationCheck_TerminatesWhenAllWorkHasFailed(t *testing.T) {
@@ -89,6 +105,40 @@ func TestTerminationCheck_TerminatesWhenAllWorkHasFailed(t *testing.T) {
 	if result == nil || !result.ShouldTerminate {
 		t.Fatal("should terminate when all work has failed")
 	}
+	if result.Termination == nil || result.Termination.Classification != interfaces.TerminationClassificationComplete {
+		t.Fatalf("termination = %+v, want complete classification", result.Termination)
+	}
+}
+
+func TestTerminationCheck_ClassifiesDrainedNonTerminalWorkByDistinctCustomerWorkID(t *testing.T) {
+	n := buildTerminationNetNoTransitions()
+	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
+
+	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
+			"tok1":      {ID: "tok1", PlaceID: "wt:init", Color: factorytoken.Color{WorkID: "w1"}},
+			"tok1-copy": {ID: "tok1-copy", PlaceID: "wt:init", Color: factorytoken.Color{WorkID: "w1"}},
+			"tok2":      {ID: "tok2", PlaceID: "wt:init", Color: factorytoken.Color{WorkID: "w2"}},
+			"res-tok0":  {ID: "res-tok0", PlaceID: "gpu:available", Color: factorytoken.Color{WorkID: "gpu:0", WorkTypeID: "gpu"}},
+		}),
+	}
+
+	result, err := tc.Execute(context.Background(), &snapshot)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil || !result.ShouldTerminate {
+		t.Fatal("drained non-terminal work should terminate the finite runtime")
+	}
+	if result.Termination == nil {
+		t.Fatal("expected explicit termination classification")
+	}
+	if result.Termination.Classification != interfaces.TerminationClassificationIncomplete {
+		t.Fatalf("classification = %q, want incomplete", result.Termination.Classification)
+	}
+	if result.Termination.NonTerminalWorkCount != 2 {
+		t.Fatalf("non-terminal work count = %d, want 2 distinct customer Work items", result.Termination.NonTerminalWorkCount)
+	}
 }
 
 func TestTerminationCheck_DoesNotTerminateWhileDispatchesAreInFlight(t *testing.T) {
@@ -97,6 +147,34 @@ func TestTerminationCheck_DoesNotTerminateWhileDispatchesAreInFlight(t *testing.
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		InFlightCount: 1,
+		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
+			"tok1":     {ID: "tok1", PlaceID: "wt:init", Color: factorytoken.Color{WorkID: "w1"}},
+			"res-tok0": {ID: "res-tok0", PlaceID: "gpu:available", Color: factorytoken.Color{WorkID: "gpu:0", WorkTypeID: "gpu"}},
+		}),
+	}
+
+	result, err := tc.Execute(context.Background(), &snapshot)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != nil && result.ShouldTerminate {
+		t.Fatal("should not terminate while work is still in flight")
+	}
+}
+
+func TestTerminationCheck_DoesNotTerminateWhileObservedResponseAwaitsRetirement(t *testing.T) {
+	n := buildTerminationNet()
+	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
+
+	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		InFlightCount: 1,
+		Dispatches: map[string]*interfaces.DispatchEntry{
+			"dispatch-throttled": {DispatchID: "dispatch-throttled"},
+		},
+		Results: []workerexecution.WorkResult{{
+			DispatchID: "dispatch-throttled",
+			Outcome:    workerexecution.OutcomeFailed,
+		}},
 		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
 			"tok1":     {ID: "tok1", PlaceID: "wt:done", Color: factorytoken.Color{WorkID: "w1"}},
 			"res-tok0": {ID: "res-tok0", PlaceID: "gpu:available", Color: factorytoken.Color{WorkID: "gpu:0", WorkTypeID: "gpu"}},
@@ -108,7 +186,7 @@ func TestTerminationCheck_DoesNotTerminateWhileDispatchesAreInFlight(t *testing.
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if result != nil && result.ShouldTerminate {
-		t.Fatal("should not terminate while work is still in flight")
+		t.Fatal("should not terminate before the observed dispatch is retired")
 	}
 }
 
@@ -148,6 +226,9 @@ func TestTerminationCheck_ResourcesOnlyTerminates(t *testing.T) {
 	if result == nil || !result.ShouldTerminate {
 		t.Fatal("should terminate when only returned resources remain")
 	}
+	if result.Termination == nil || result.Termination.Classification != interfaces.TerminationClassificationComplete {
+		t.Fatalf("termination = %+v, want complete classification", result.Termination)
+	}
 }
 
 func TestTerminationCheck_ServiceModeDoesNotTerminateIdleRuntime(t *testing.T) {
@@ -173,10 +254,11 @@ func TestTerminationCheck_ServiceModeDoesNotTerminateIdleRuntime(t *testing.T) {
 func buildTerminationNet() *state.Net {
 	return &state.Net{
 		Places: map[string]*petri.Place{
-			"wt:init":       {ID: "wt:init", TypeID: "wt", State: "init"},
-			"wt:done":       {ID: "wt:done", TypeID: "wt", State: "done"},
-			"wt:failed":     {ID: "wt:failed", TypeID: "wt", State: "failed"},
-			"gpu:available": {ID: "gpu:available", TypeID: "gpu", State: "available"},
+			"wt:init":                           {ID: "wt:init", TypeID: "wt", State: "init"},
+			"wt:done":                           {ID: "wt:done", TypeID: "wt", State: "done"},
+			"wt:failed":                         {ID: "wt:failed", TypeID: "wt", State: "failed"},
+			"gpu:available":                     {ID: "gpu:available", TypeID: "gpu", State: "available"},
+			interfaces.SystemTimePendingPlaceID: {ID: interfaces.SystemTimePendingPlaceID, TypeID: interfaces.SystemTimeWorkTypeID, State: interfaces.SystemTimePendingState},
 		},
 		Transitions: map[string]*petri.Transition{
 			"t1": {

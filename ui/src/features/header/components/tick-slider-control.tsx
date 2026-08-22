@@ -143,7 +143,7 @@ export function TickSliderControl({ locale }: TickSliderControlProps) {
         />
       </label>
 
-      <div className="ml-auto flex items-center">
+      <div className="ml-auto flex items-center gap-2">
         <output
           className="whitespace-nowrap text-xs font-medium tabular-nums text-on-surface-variant"
           id={tickStatusID}

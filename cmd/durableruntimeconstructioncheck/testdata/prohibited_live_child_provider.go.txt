@@ -4,7 +4,7 @@ import (
 	"context"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/providercompat"
 )
 
 func executeDirectly(ctx context.Context, live provider.Provider) {

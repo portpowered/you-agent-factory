@@ -7,6 +7,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -30,9 +31,9 @@ func TestFactoryEventHistory_RecordInferenceEvent_OwnsEnvelopeAndPreservesPublic
 			DurationMillis:     125,
 			InferenceRequestID: "dispatch-inference/inference-request/1",
 			Outcome:            workerexecution.InferenceOutcomeSucceeded,
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
+			Continuation: (&providers.SessionMetadata{
 				Provider: "mock", Kind: "session_id", ID: "provider-session-1",
-			},
+			}).ContinuationRef(),
 			Response: stringPtr("provider response"),
 		},
 	})
@@ -95,6 +96,7 @@ func TestFactoryEventHistory_RecordAgentRunEvent_OwnsEnvelopeAndPreservesPublicP
 		ID:         "factory-event/agent-run-response/dispatch-agent",
 		DispatchID: "dispatch-agent",
 		EventTime:  eventTime,
+		Tick:       14,
 		Payload: workerexecution.AgentRunResponseEventPayload{
 			AgentRunID:     "dispatch-agent/agent-run/1",
 			Diagnostics:    diagnostics,
@@ -112,6 +114,9 @@ func TestFactoryEventHistory_RecordAgentRunEvent_OwnsEnvelopeAndPreservesPublicP
 	}
 	if canonical[0].Context.DispatchID == nil || *canonical[0].Context.DispatchID != "dispatch-agent" {
 		t.Fatalf("dispatch ID = %#v, want dispatch-agent", canonical[0].Context.DispatchID)
+	}
+	if canonical[0].Context.Tick != 14 {
+		t.Fatalf("event tick = %d, want 14", canonical[0].Context.Tick)
 	}
 
 	publicEvents := generatedHistoryEvents(t, history)

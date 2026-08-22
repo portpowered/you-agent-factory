@@ -1,0 +1,27 @@
+type: object
+additionalProperties: false
+description: >-
+  Relationship declared while admitting a Work Request. A target may be
+  identified by its exact board name, stable Work ID, or both. When both are
+  supplied they must resolve to the same Work.
+required:
+  - type
+  - sourceWorkName
+anyOf:
+  - required:
+      - targetWorkName
+  - required:
+      - targetWorkId
+properties:
+  type:
+    $ref: '../data-models/RelationType.yaml'
+  sourceWorkName:
+    type: string
+  targetWorkId:
+    type: string
+    description: Stable Work ID on the selected Factory Session board.
+  targetWorkName:
+    type: string
+    description: Exact Work name on the selected Factory Session board.
+  requiredState:
+    type: string

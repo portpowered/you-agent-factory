@@ -16,7 +16,6 @@ import (
 )
 
 type durableResponseEventsProjectionFake struct {
-	apisurface.DurableSessionProjectionAPI
 	subscribe func(context.Context, factorysessions.ResponseEventSubscriptionRequest) (apisurface.FactoryResponseEventSubscription, error)
 }
 
@@ -50,7 +49,7 @@ func TestGetFactoryResponseEventsBySessionId_CanceledStreamCompletesWithoutHang(
 	t.Parallel()
 
 	handler := NewHandler(Dependencies{
-		DurableProjection: durableResponseEventsProjectionFake{
+		DurableResponseEvents: durableResponseEventsProjectionFake{
 			subscribe: func(ctx context.Context, request factorysessions.ResponseEventSubscriptionRequest) (apisurface.FactoryResponseEventSubscription, error) {
 				return &blockingResponseEventSubscription{}, nil
 			},
@@ -84,7 +83,7 @@ func TestGetFactoryResponseEventsBySessionId_DeadlineExceededStreamCompletesWith
 	t.Parallel()
 
 	handler := NewHandler(Dependencies{
-		DurableProjection: durableResponseEventsProjectionFake{
+		DurableResponseEvents: durableResponseEventsProjectionFake{
 			subscribe: func(ctx context.Context, request factorysessions.ResponseEventSubscriptionRequest) (apisurface.FactoryResponseEventSubscription, error) {
 				return &blockingResponseEventSubscription{}, nil
 			},
@@ -138,7 +137,7 @@ func TestGetFactoryResponseEventsBySessionId_DurableSessionStreamsSSE(t *testing
 	}
 
 	handler := NewHandler(Dependencies{
-		DurableProjection: durableResponseEventsProjectionFake{
+		DurableResponseEvents: durableResponseEventsProjectionFake{
 			subscribe: func(_ context.Context, request factorysessions.ResponseEventSubscriptionRequest) (apisurface.FactoryResponseEventSubscription, error) {
 				if request.SessionID != "dur-sess-1" || request.AfterSequence != 2 {
 					t.Fatalf("subscribe request = %#v", request)
@@ -170,7 +169,7 @@ func TestGetFactoryResponseEventsBySessionId_DurableSessionStreamsSSE(t *testing
 func TestGetFactoryResponseEventsBySessionId_RejectsInvalidAfterSequence(t *testing.T) {
 	t.Parallel()
 
-	handler := NewHandler(Dependencies{DurableProjection: durableResponseEventsProjectionFake{}}, zap.NewNop())
+	handler := NewHandler(Dependencies{DurableResponseEvents: durableResponseEventsProjectionFake{}}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	afterSequence := factoryapi.ResponseEventAfterSequence(-1)
 	handler.GetFactoryResponseEventsBySessionId(
@@ -187,7 +186,7 @@ func TestGetFactoryResponseEventsBySessionId_RejectsInvalidAfterSequence(t *test
 func TestGetFactoryResponseEventsBySessionId_RejectsInvalidKindFilter(t *testing.T) {
 	t.Parallel()
 
-	handler := NewHandler(Dependencies{DurableProjection: durableResponseEventsProjectionFake{}}, zap.NewNop())
+	handler := NewHandler(Dependencies{DurableResponseEvents: durableResponseEventsProjectionFake{}}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	kinds := factoryapi.ResponseEventKind{"NOT_A_KIND"}
 	handler.GetFactoryResponseEventsBySessionId(
@@ -205,7 +204,7 @@ func TestGetFactoryResponseEventsBySessionId_MapsDurableSessionNotFound(t *testi
 	t.Parallel()
 
 	handler := NewHandler(Dependencies{
-		DurableProjection: durableResponseEventsProjectionFake{
+		DurableResponseEvents: durableResponseEventsProjectionFake{
 			subscribe: func(context.Context, factorysessions.ResponseEventSubscriptionRequest) (apisurface.FactoryResponseEventSubscription, error) {
 				return nil, apisurface.ErrFactorySessionNotFound
 			},

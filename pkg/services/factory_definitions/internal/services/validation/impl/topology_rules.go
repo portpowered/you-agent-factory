@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/automations"
+	"github.com/portpowered/infinite-you/pkg/platform/cronschedule"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
@@ -137,6 +137,7 @@ func ruleGuards(cfg *factorydefinitions.FactoryConfig) []Finding {
 						Rule:    "guard-visit-count-max-visits",
 					})
 				}
+				findings = append(findings, validateLogicalRoundTrip(path, g, validWorkstations)...)
 			case factorydefinitions.GuardTypeMatchesFields:
 				if g.MatchConfig == nil || strings.TrimSpace(g.MatchConfig.InputKey) == "" {
 					findings = append(findings, Finding{
@@ -215,6 +216,10 @@ func ruleWorkstationKind(cfg *factorydefinitions.FactoryConfig) []Finding {
 		}
 	}
 	return findings
+}
+
+func ruleHumanApprovalWorkstations(cfg *factorydefinitions.FactoryConfig) []Finding {
+	return FactoryDefinitionFindings(humanApprovalWorkstationTargets(cfg))
 }
 
 func ruleClassifierWorkstations(cfg *factorydefinitions.FactoryConfig) []Finding {
@@ -433,7 +438,7 @@ func ruleCronWorkstations(cfg *factorydefinitions.FactoryConfig) []Finding {
 
 		findings = append(findings, validateCronTrigger(ws.Cron, basePath)...)
 		if strings.TrimSpace(ws.Cron.Jitter) != "" {
-			if _, err := automations.ParseCronJitter(ws.Cron); err != nil {
+			if _, err := cronschedule.ParseJitter(ws.Cron.Jitter); err != nil {
 				findings = append(findings, Finding{
 					Severity: SeverityError,
 					Path:     basePath + ".cron.jitter",
@@ -443,7 +448,7 @@ func ruleCronWorkstations(cfg *factorydefinitions.FactoryConfig) []Finding {
 			}
 		}
 		if strings.TrimSpace(ws.Cron.ExpiryWindow) != "" {
-			if _, err := automations.ParseCronExpiryWindow(ws.Cron, 1); err != nil {
+			if _, err := cronschedule.ParseExpiryWindow(ws.Cron.ExpiryWindow, 1); err != nil {
 				findings = append(findings, Finding{
 					Severity: SeverityError,
 					Path:     basePath + ".cron.expiry_window",
@@ -480,7 +485,7 @@ func validateCronTrigger(cron *factorydefinitions.CronConfig, basePath string) [
 		return []Finding{{Severity: SeverityError, Path: basePath + ".cron", Message: "cron workstation requires exactly one of 'schedule' or 'every'", Rule: "cron-schedule"}}
 	}
 	if hasSchedule {
-		if err := automations.ValidateCronSchedule(cron.Schedule); err != nil {
+		if err := cronschedule.ValidateSchedule(cron.Schedule); err != nil {
 			return []Finding{{Severity: SeverityError, Path: basePath + ".cron.schedule", Message: err.Error(), Rule: "cron-schedule"}}
 		}
 		return nil
@@ -497,7 +502,9 @@ func validateCronTrigger(cron *factorydefinitions.CronConfig, basePath string) [
 }
 
 func cronWorkstationRequiresWorker(ws factorydefinitions.FactoryWorkstationConfig) bool {
-	return strings.TrimSpace(ws.Type) != factorydefinitions.WorkstationTypeLogical
+	typeName := strings.TrimSpace(ws.Type)
+	return typeName != factorydefinitions.WorkstationTypeLogical &&
+		typeName != factorydefinitions.WorkstationTypeHumanApproval
 }
 
 // --- Rule: worker reference validation ---
@@ -630,6 +637,93 @@ func validateUnsupportedHostedWorkerFields(basePath string, worker factorydefini
 }
 
 // --- Rule: per-input guard validation ---
+
+const (
+	maxSupportedSameNameAllChildrenCompleteJoinInputs = 2
+	unsupportedSameNameAllChildrenCompleteJoinRule    = "same-name-all-children-complete-join-arity"
+)
+
+func unsupportedSameNameAllChildrenCompleteJoinArity(ws factorydefinitions.FactoryWorkstationConfig) bool {
+	if len(ws.Inputs) <= maxSupportedSameNameAllChildrenCompleteJoinInputs {
+		return false
+	}
+
+	hasSameName := false
+	hasAllChildrenComplete := false
+	for _, input := range ws.Inputs {
+		if input.Guard == nil {
+			continue
+		}
+		switch input.Guard.Type {
+		case factorydefinitions.GuardTypeSameName:
+			hasSameName = true
+		case factorydefinitions.GuardTypeAllChildrenComplete:
+			hasAllChildrenComplete = true
+		}
+	}
+	return hasSameName && hasAllChildrenComplete
+}
+
+func unsupportedSameNameAllChildrenCompleteJoinMessage(ws factorydefinitions.FactoryWorkstationConfig) string {
+	return fmt.Sprintf(
+		"workstation %q uses an unsupported SAME_NAME plus ALL_CHILDREN_COMPLETE join arity: observed arity is %d inputs, and at most %d inputs are supported for this join shape. Split the fan-in into supported two-input workstation stages or reduce the joined inputs.",
+		ws.Name,
+		len(ws.Inputs),
+		maxSupportedSameNameAllChildrenCompleteJoinInputs,
+	)
+}
+
+// ruleUnsupportedSameNameAllChildrenCompleteJoinArity rejects the only
+// currently unsupported multi-input combination before it reaches the runtime
+// mapper. SAME_NAME and ALL_CHILDREN_COMPLETE are each supported independently,
+// but their combined join shape is bounded to two inputs.
+func ruleUnsupportedSameNameAllChildrenCompleteJoinArity(cfg *factorydefinitions.FactoryConfig) []Finding {
+	if cfg == nil {
+		return nil
+	}
+
+	var findings []Finding
+	for wi, ws := range cfg.Workstations {
+		if !unsupportedSameNameAllChildrenCompleteJoinArity(ws) {
+			continue
+		}
+
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     fmt.Sprintf("workstations[%d](%s).inputs", wi, ws.Name),
+			Message:  unsupportedSameNameAllChildrenCompleteJoinMessage(ws),
+			Rule:     unsupportedSameNameAllChildrenCompleteJoinRule,
+		})
+	}
+	return findings
+}
+
+func unsupportedSameNameAllChildrenCompleteJoinArityTargets(cfg *factorydefinitions.FactoryConfig) []Target {
+	if cfg == nil {
+		return nil
+	}
+
+	var targets []Target
+	for workstationIndex, workstation := range cfg.Workstations {
+		if !unsupportedSameNameAllChildrenCompleteJoinArity(workstation) {
+			continue
+		}
+
+		basePath := fmt.Sprintf("%s.workstations[%d](%s)", validationRoot, workstationIndex, workstation.Name)
+		targets = append(targets, Target{
+			Code:     unsupportedSameNameAllChildrenCompleteJoinRule,
+			Severity: SeverityError,
+			Message:  unsupportedSameNameAllChildrenCompleteJoinMessage(workstation),
+			Subject: Subject{
+				Type:     SubjectTypeWorkstation,
+				ID:       factorydefinitions.CanonicalFactoryGraphWorkstationID(workstation),
+				Location: SubjectLocationInputs,
+			},
+			Path: basePath + ".inputs",
+		})
+	}
+	return targets
+}
 
 func rulePerInputGuards(cfg *factorydefinitions.FactoryConfig) []Finding {
 	var findings []Finding

@@ -662,7 +662,7 @@ func newFailureReleasesConsumedResourceFixture(workFirst bool) (*testPipeline, *
 			"d-1": {
 				DispatchID:     "d-1",
 				TransitionID:   "t1",
-				ConsumedTokens: consumedTokens,
+				ConsumedTokens: factorytoken.ToWorkerSlice(consumedTokens),
 			},
 		},
 	}
@@ -834,7 +834,7 @@ func newAcceptedReleasesConsumedResourceFixture(workFirst bool) (*testPipeline, 
 			"d-1": {
 				DispatchID:     "d-1",
 				TransitionID:   "t1",
-				ConsumedTokens: consumedTokens,
+				ConsumedTokens: factorytoken.ToWorkerSlice(consumedTokens),
 			},
 		},
 	}
@@ -865,7 +865,8 @@ func assertAcceptedMixedWorkResourceRelease(t *testing.T, result *interfaces.Tic
 	workMutation, released := findWorkAndResourceMutations(result.Mutations)
 	assertAcceptedMixedWorkOutputMutation(t, workMutation)
 	assertReleasedResourceMutationBasics(t, released, resourceConsumed)
-	assertReleasedResourcePipelineHistory(t, released.NewToken, resourceConsumed)
+	releasedToken := factorytoken.FromWorker(*released.NewToken)
+	assertReleasedResourcePipelineHistory(t, &releasedToken, resourceConsumed)
 }
 
 func TestTransitioner_CalculateMutations_PreservesCreatedAtForSameTypeTransitions(t *testing.T) {
@@ -990,7 +991,7 @@ func pipelineSnapshot(placeID, transitionID, dispatchID string, color factorytok
 			dispatchID: {
 				DispatchID:     dispatchID,
 				TransitionID:   transitionID,
-				ConsumedTokens: []factorytoken.Token{token},
+				ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{token}),
 			},
 		},
 	}

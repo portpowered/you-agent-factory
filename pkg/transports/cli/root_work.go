@@ -1,29 +1,36 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 
 	"github.com/portpowered/infinite-you/internal/cliversion"
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	costscli "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
+	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
+	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
+	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	providerscli "github.com/portpowered/infinite-you/pkg/services/providers/transports/cli"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/cobracompletion"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/factoryload"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
-	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *cobra.Command {
-	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	globals := &cliGlobalOptions{
+		server:    cliserver.DefaultBaseURI,
+		placement: climanifest.ResolveRootPlacement(false),
+	}
 	diagnostics := &cliDiagnosticsOptions{}
 	operatorDefaults := &cliOperatorDefaultsOptions{}
 
@@ -51,7 +58,6 @@ func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *co
 	if err != nil {
 		panic(fmt.Sprintf("build representative family command: %v", err))
 	}
-
 	factoryConfigInit := productionFactoryConfigInitCommands(diagnostics, options)
 	docsCmd, err := newProductionDocsCommand(diagnostics)
 	if err != nil {
@@ -61,13 +67,28 @@ func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *co
 	if err != nil {
 		panic(fmt.Sprintf("build models command: %v", err))
 	}
+	providersCmd, err := newProductionProvidersCommand(diagnostics, options)
+	if err != nil {
+		panic(fmt.Sprintf("build providers command: %v", err))
+	}
+	metricsCmd := visualizationcli.NewMetricsCommand(visualizationcli.MetricsCommandConfig{
+		Operation: options.metricsCLI,
+		Server:    func() string { return globals.server },
+		Query:     options.runtimeMetricsQuery, HomeDir: options.homeDir,
+		JSON: func() bool { return globals != nil && globals.json },
+		Costs: costscli.NewCostsCommand(costscli.CostsCommandConfig{
+			Operation: options.costsCLI,
+			Server:    func() string { return globals.server },
+			JSON:      func() bool { return globals != nil && globals.json },
+		}),
+	})
 	b12, err := newB12ProductionFamilies(globals, diagnostics, operatorDefaults, options)
 	if err != nil {
 		panic(fmt.Sprintf("build B12 production families: %v", err))
 	}
 
 	return NewRootCommandFromSubcommands(root, RootSubcommands{Commands: productionRootSubcommands(
-		globals, diagnostics, options, factoryConfigInit, docsCmd, modelsCmd, b12,
+		globals, diagnostics, options, factoryConfigInit, docsCmd, modelsCmd, providersCmd, metricsCmd, b12,
 	)})
 }
 
@@ -111,14 +132,26 @@ func newGenericRepresentativeFamily(
 		resolvedHandlers[record.Handler.ID] = registered.ResolvedRunE
 	}
 	root, err := climanifestcobra.NewCommandTree(manifest, climanifestcobra.GenericBindings{
-		CobraHandlers:         handlers,
-		ResolvedCobraHandlers: resolvedHandlers,
-		SourceValues:          sourceValues,
-		RootInputs:            rootInputs,
+		CobraHandlers:           handlers,
+		ResolvedCobraHandlers:   resolvedHandlers,
+		GuardUnknownSubcommands: true,
+		SourceValues:            sourceValues,
+		RootInputs:              rootInputs,
 	})
 	if err != nil {
 		return nil, err
 	}
+	session, _, err := root.Find([]string{"session"})
+	if err != nil {
+		return nil, fmt.Errorf("find generated session command: %w", err)
+	}
+	// Keep the generated session parent non-runnable while retaining the
+	// generic unknown-subcommand guard for retired or misspelled leaves.
+	session.Run = func(cmd *cobra.Command, _ []string) {
+		_ = cmd.Help()
+	}
+	session.RunE = nil
+	session.DisableFlagParsing = false
 	root.SilenceUsage = true
 	return root, nil
 }
@@ -159,6 +192,10 @@ func applyRepresentativeResolvedInputs(
 	if err != nil {
 		return err
 	}
+	remote, err := inputs.Bool("you.flag.remote")
+	if err != nil {
+		return err
+	}
 	verbose, err := inputs.Bool("you.flag.verbose")
 	if err != nil {
 		return err
@@ -167,6 +204,8 @@ func applyRepresentativeResolvedInputs(
 	diagnostics.debug = debug
 	globals.json = jsonOutput
 	globals.server = server
+	globals.remote = remote
+	globals.placement = climanifest.ResolveRootPlacement(remote)
 	diagnostics.verbose = verbose
 	return nil
 }
@@ -188,10 +227,9 @@ func NewRootCommandFromSubcommands(root *cobra.Command, subcommands RootSubcomma
 }
 
 // b12ProductionFamilies is the one shared production-root fan-in for the
-// session, workflow/MCP, run/server, and submit migrations. Each field is
+// session, protocol-host, run/server, and submit migrations. Each field is
 // constructed once through its family-local generated seam.
 type b12ProductionFamilies struct {
-	MCP    *cobra.Command
 	Run    *cobra.Command
 	Server *cobra.Command
 	Submit *cobra.Command
@@ -224,16 +262,43 @@ func newB12ProductionFamilies(
 	if err := preserveSubmitArgumentCompatibility(submitCommand); err != nil {
 		return b12ProductionFamilies{}, err
 	}
+	server := runServer.Server
+	if err := attachServerProtocolChild(server, productionServeCommand(options), "acp"); err != nil {
+		return b12ProductionFamilies{}, err
+	}
 	mcpCommand, err := newMCPCommand(options)
 	if err != nil {
 		return b12ProductionFamilies{}, err
 	}
+	if err := attachServerProtocolChild(server, mcpCommand, "mcp"); err != nil {
+		return b12ProductionFamilies{}, err
+	}
 	return b12ProductionFamilies{
-		MCP:    mcpCommand,
 		Run:    runServer.Run,
-		Server: runServer.Server,
+		Server: server,
 		Submit: submitCommand,
 	}, nil
+}
+
+func attachServerProtocolChild(server, family *cobra.Command, childName string) error {
+	if server == nil || family == nil {
+		return fmt.Errorf("attach server %s child: commands are required", childName)
+	}
+	child, _, err := family.Find([]string{childName})
+	if err != nil {
+		return fmt.Errorf("attach server %s child: find command: %w", childName, err)
+	}
+	if child == nil {
+		return fmt.Errorf("attach server %s child: command is required", childName)
+	}
+	family.RemoveCommand(child)
+	if child.LocalNonPersistentFlags().Lookup("listen") == nil {
+		if err := suppressUnrelatedServerProtocolListener(child, childName); err != nil {
+			return err
+		}
+	}
+	server.AddCommand(child)
+	return nil
 }
 
 // preserveSubmitArgumentCompatibility keeps the established public Cobra
@@ -289,6 +354,8 @@ func productionRootSubcommands(
 	factoryConfigInit factoryConfigInitProductionCommands,
 	docsCmd *cobra.Command,
 	modelsCmd *cobra.Command,
+	providersCmd *cobra.Command,
+	metricsCmd *cobra.Command,
 	b12 b12ProductionFamilies,
 ) []*cobra.Command {
 	return []*cobra.Command{
@@ -296,12 +363,14 @@ func productionRootSubcommands(
 		factoryConfigInit.Config,
 		factoryConfigInit.Factory,
 		factoryConfigInit.Init,
-		b12.MCP,
 		modelsCmd,
+		providersCmd,
+		metricsCmd,
 		b12.Run,
 		b12.Server,
 		b12.Submit,
 		productionWorkCommand(globals, diagnostics, options),
+		productionWorkerSessionsCommand(globals, diagnostics, options),
 		productionWorkersCommand(options),
 	}
 }
@@ -400,6 +469,10 @@ func executeRunCommand(cmd *cobra.Command, args []string, globals *cliGlobalOpti
 		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
 		return err
 	}
+	if err := validateRunRemoteHostingConflict(cmd, globals); err != nil {
+		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
+		return err
+	}
 	if err := applyRunCommandInvocationOutputMode(cmd, &resolvedConfig); err != nil {
 		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
 		return err
@@ -430,25 +503,7 @@ func executeRunCommand(cmd *cobra.Command, args []string, globals *cliGlobalOpti
 	basePolicy := diagnostics.resolvePolicy(resolvedConfig.SuppressDashboardRendering)
 	err = runFactoryWithOptions(cmd, resolvedConfig, promptArgs, globals, operatorDefaults, basePolicy, rootOptions, false)
 	if err != nil {
-		err = factoryload.MaybeFormatOperatorError(err, resolvedConfig.Dir)
-		err = runcli.MapServerFailure(err)
-		if currentFactorySelected {
-			err = runcli.MapCurrentFactoryFailure(err)
-		}
-		if len(promptArgs) > 0 {
-			err = runcli.MapInvocationFailure(err)
-		}
-		if runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json) {
-			return err
-		}
-		errorWriter := resolveEffectiveRunPolicy(cmd, resolvedConfig, basePolicy).HumanTerminalWriter(cmd.ErrOrStderr())
-		var ambiguousInputErr *runcli.AmbiguousInvocationInputError
-		if errors.As(err, &ambiguousInputErr) {
-			errorWriter = cmd.ErrOrStderr()
-		}
-		if errorWriter != nil {
-			_, _ = fmt.Fprintln(errorWriter, err)
-		}
+		return handleRunExecutionError(cmd, resolvedConfig, promptArgs, globals, basePolicy, err, currentFactorySelected)
 	}
 	return err
 }
@@ -466,7 +521,8 @@ func runUsesCurrentFactory(cmd *cobra.Command) bool {
 		!cmd.Flags().Changed("dir") &&
 		!cmd.Flags().Changed("factory") &&
 		!cmd.Flags().Changed("named") &&
-		!cmd.Flags().Changed("replay")
+		!cmd.Flags().Changed("replay") &&
+		!cmd.Flags().Changed("resume")
 }
 
 func selectCurrentFactoryFromWorkingDirectory(cmd *cobra.Command, cfg *runcli.RunConfig) error {
@@ -519,6 +575,14 @@ func resolveRunCommandInvocationInput(cmd *cobra.Command, args []string, base ru
 	if err != nil {
 		return nil, base, err
 	}
+	cfg.ListenExplicit, err = climanifestcobra.InputChanged(cmd, runListenInputID)
+	if err != nil {
+		return nil, base, err
+	}
+	cfg.InvocationFileExplicit, err = climanifestcobra.InputChanged(cmd, "you.run.flag.to-file")
+	if err != nil {
+		return nil, base, err
+	}
 	mockWorkersExplicit, err := climanifestcobra.InputChanged(cmd, "you.run.flag.with-mock-workers")
 	if err != nil {
 		return nil, base, err
@@ -565,7 +629,13 @@ func writeRunCommandHelp(cmd *cobra.Command, cfg *runcli.RunConfig, rootOptions 
 	); err != nil {
 		return err
 	}
-	wroteFactoryHelp, err := runcli.WriteFactoryInvocationHelp(cmd.OutOrStdout(), cliBinaryName, *cfg)
+	manifest, err := generated.RunSubmitFamilyManifest()
+	if err != nil {
+		return fmt.Errorf("load run CLI manifest: %w", err)
+	}
+	wroteFactoryHelp, err := runcli.WriteFactoryInvocationHelpWithManifest(
+		cmd.OutOrStdout(), cliBinaryName, *cfg, manifest,
+	)
 	if err != nil {
 		return err
 	}
@@ -583,7 +653,15 @@ func newRunServerHandlerRegistry(
 ) (*commandregistry.Registry, climanifestcobra.RunServerFlagBindings, error) {
 	registry, err := commandregistry.NewRunServerRegistry(commandregistry.RunServerHandlers{
 		Run: commandregistry.CommandHandlers{
-			PreRunE: rejectDeprecatedPortFlag,
+			PreRunE: func(cmd *cobra.Command, args []string) error {
+				if err := validateRunServerPlacement(globals, "you.run"); err != nil {
+					return err
+				}
+				if err := validateRunListenPlacement(cmd); err != nil {
+					return err
+				}
+				return rejectDeprecatedPortFlag(cmd, args)
+			},
 			RunE: func(cmd *cobra.Command, args []string) error {
 				return executeRunCommand(
 					cmd, args, globals, diagnostics, operatorDefaults, rootOptions,
@@ -591,7 +669,12 @@ func newRunServerHandlerRegistry(
 			},
 		},
 		Server: commandregistry.CommandHandlers{
-			PreRunE: rejectDeprecatedPortFlag,
+			PreRunE: func(cmd *cobra.Command, args []string) error {
+				if err := validateRunServerPlacement(globals, "you.server"); err != nil {
+					return err
+				}
+				return rejectDeprecatedPortFlag(cmd, args)
+			},
 			RunE: func(cmd *cobra.Command, _ []string) error {
 				return executeServerCommand(
 					cmd, globals, diagnostics, operatorDefaults, rootOptions,
@@ -605,69 +688,110 @@ func newRunServerHandlerRegistry(
 	return registry, newRunServerFlagBindings(), nil
 }
 
+func validateRunServerPlacement(globals *cliGlobalOptions, commandID string) error {
+	manifest, err := generated.RunSubmitFamilyManifest()
+	if err != nil {
+		return fmt.Errorf("resolve command %q placement: %w", commandID, err)
+	}
+	record, err := manifest.CommandByID(commandID)
+	if err != nil {
+		return fmt.Errorf("resolve command %q placement: %w", commandID, err)
+	}
+	remote := globals != nil && globals.remote
+	if _, err := record.ResolvePlacement(remote); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateRunListenPlacement(cmd *cobra.Command) error {
+	changed, err := climanifestcobra.InputChanged(cmd, runListenInputID)
+	if err != nil {
+		return err
+	}
+	if !changed {
+		return nil
+	}
+	withServer, err := climanifestcobra.InputChanged(cmd, "you.run.flag.with-server")
+	if err != nil {
+		return err
+	}
+	withSite, err := climanifestcobra.InputChanged(cmd, "you.run.flag.with-site")
+	if err != nil {
+		return err
+	}
+	if withServer || withSite {
+		return nil
+	}
+	return fmt.Errorf("input relationship %q: --listen requires --with-server or --with-site", "you.run.rel.listen-server")
+}
+
+func validateRunRemoteHostingConflict(cmd *cobra.Command, globals *cliGlobalOptions) error {
+	if globals == nil || !globals.remote {
+		return nil
+	}
+	withServer, err := climanifestcobra.InputChanged(cmd, "you.run.flag.with-server")
+	if err != nil {
+		return err
+	}
+	withSite, err := climanifestcobra.InputChanged(cmd, "you.run.flag.with-site")
+	if err != nil {
+		return err
+	}
+	if !withServer && !withSite {
+		return nil
+	}
+	return newRunRemoteLocalHostingConflictError()
+}
+
+func newRunRemoteLocalHostingConflictError() error {
+	return &runcli.InvocationError{
+		Code:    runcli.RemoteLocalHostingConflictCode,
+		Message: "--remote selects a running server through --server and cannot be combined with --with-server or --with-site; remove --remote for local hosting and use --listen <host:port> to choose an exact local bind",
+	}
+}
+
 func productionWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, injected ...CommandFactory) *cobra.Command {
 	dependencies := CommandFactory{}
 	if len(injected) > 0 {
 		dependencies = injected[0]
 	}
-	registry, bindings, err := newWorkHandlerRegistry(globals, diagnostics, dependencies)
-	if err != nil {
-		panic(fmt.Sprintf("build work handler registry: %v", err))
+	// The resolved-input owner adapters are the canonical production path. Cobra
+	// only forwards the generated values to the Work transport handlers.
+	handlers := commandregistry.ResolvedWorkHandlers{
+		ApprovalList: commandregistry.ResolvedApprovalListRunE(commandregistry.ResolvedApprovalListBinding{
+			ListHumanApprovals: dependencies.ListHumanApprovals,
+			DiagnosticsWriter:  diagnostics.writer,
+		}),
+		ApprovalShow: commandregistry.ResolvedApprovalShowRunE(commandregistry.ResolvedApprovalShowBinding{
+			ShowHumanApproval: dependencies.ShowHumanApproval,
+			DiagnosticsWriter: diagnostics.writer,
+		}),
+		List: commandregistry.ResolvedListRunE(commandregistry.ResolvedListBinding{
+			ListWork:          dependencies.ListWork,
+			DiagnosticsWriter: diagnostics.writer,
+		}),
+		Watch: commandregistry.ResolvedWatchRunE(commandregistry.ResolvedWatchBinding{
+			WatchWork:         dependencies.WatchWork,
+			DiagnosticsWriter: diagnostics.writer,
+		}),
+		Show: commandregistry.ResolvedShowRunE(commandregistry.ResolvedShowBinding{
+			ShowWork:          dependencies.ShowWork,
+			DiagnosticsWriter: diagnostics.writer,
+		}),
+		Move: commandregistry.ResolvedMoveRunE(commandregistry.ResolvedMoveBinding{
+			MoveWork:          dependencies.MoveWork,
+			DiagnosticsWriter: diagnostics.writer,
+		}),
+		Visualize: commandregistry.ResolvedVisualizeRunE(commandregistry.ResolvedVisualizeBinding{
+			VisualizeWork: dependencies.VisualizeWork,
+		}),
 	}
-	work, err := climanifestcobra.NewWorkFamilyCommand(registry, bindings)
+	work, err := climanifestcobra.NewResolvedWorkCommand(handlers)
 	if err != nil {
-		panic(fmt.Sprintf("build work family command: %v", err))
+		panic(fmt.Sprintf("build resolved work command: %v", err))
 	}
 	return work
-}
-
-func newWorkFamilyBindings() climanifestcobra.WorkFamilyBindings {
-	format := scalarTarget("mermaid")
-	return climanifestcobra.WorkFamilyBindings{LocalTargets: map[string]any{
-		"you.work.list.flag.state-name":     scalarTarget(""),
-		"you.work.list.flag.state-type":     scalarTarget(""),
-		"you.work.list.flag.name":           scalarTarget(""),
-		"you.work.list.flag.work-type-name": scalarTarget(""),
-		"you.work.list.flag.trace-id":       scalarTarget(""),
-		"you.work.list.flag.sort-by":        scalarTarget(""),
-		"you.work.list.flag.max-results":    scalarTarget(0),
-		"you.work.list.flag.next-token":     scalarTarget(""),
-		"you.work.list.flag.session":        scalarTarget(""),
-		"you.work.show.flag.session":        scalarTarget(""),
-		"you.work.move.flag.session":        scalarTarget(""),
-		"you.work.move.flag.request-id":     scalarTarget(""),
-		"you.work.visualize.flag.format":    format,
-	}}
-}
-
-func newWorkHandlerRegistry(
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	dependencies CommandFactory,
-) (*commandregistry.Registry, climanifestcobra.WorkFamilyBindings, error) {
-	bindings := newWorkFamilyBindings()
-	registry, err := commandregistry.NewWorkRegistry(commandregistry.WorkHandlers{
-		ListRunE: func(cmd *cobra.Command, _ []string) error {
-			return executeGeneratedWorkList(cmd, globals, diagnostics, dependencies.ListWork)
-		},
-		ShowRunE: func(cmd *cobra.Command, args []string) error {
-			return executeGeneratedWorkShow(cmd, args, globals, diagnostics, dependencies.ShowWork)
-		},
-		MoveRunE: func(cmd *cobra.Command, args []string) error {
-			return executeGeneratedWorkMove(cmd, args, globals, diagnostics, dependencies.MoveWork)
-		},
-		VisualizeRunE: func(cmd *cobra.Command, args []string) error {
-			return executeGeneratedWorkVisualize(cmd, args, dependencies.VisualizeWork)
-		},
-	})
-	if err != nil {
-		return nil, climanifestcobra.WorkFamilyBindings{}, err
-	}
-	return registry, bindings, nil
-}
-
-func scalarTarget[T bool | string | int](value T) *T {
-	return &value
 }
 
 func commandInputValue[T any](values map[string]any, inputID string) (T, error) {
@@ -683,134 +807,20 @@ func commandInputValue[T any](values map[string]any, inputID string) (T, error) 
 	return typed, nil
 }
 
+func optionalCommandInputValue[T any](values map[string]any, inputID string) (T, error) {
+	if _, ok := values[inputID]; !ok {
+		var zero T
+		return zero, nil
+	}
+	return commandInputValue[T](values, inputID)
+}
+
 func generatedCommandInputs(cmd *cobra.Command) (map[string]any, error) {
 	values, err := climanifestcobra.InputValues(cmd)
 	if err != nil {
 		return nil, fmt.Errorf("resolve generated command inputs: %w", err)
 	}
 	return values, nil
-}
-
-func executeGeneratedWorkList(
-	cmd *cobra.Command,
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	list func(workcli.ListConfig) error,
-) error {
-	if list == nil {
-		return fmt.Errorf("work list service is required")
-	}
-	values, err := generatedCommandInputs(cmd)
-	if err != nil {
-		return err
-	}
-	cfg := workcli.ListConfig{
-		Context: cmd.Context(), Server: globals.server, JSON: globals.json,
-		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
-		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,
-	}
-	fields := []struct {
-		id     string
-		target *string
-	}{
-		{"you.work.list.flag.state-name", &cfg.StateName},
-		{"you.work.list.flag.state-type", &cfg.StateType},
-		{"you.work.list.flag.name", &cfg.Name},
-		{"you.work.list.flag.work-type-name", &cfg.WorkTypeName},
-		{"you.work.list.flag.trace-id", &cfg.TraceID},
-		{"you.work.list.flag.sort-by", &cfg.SortBy},
-		{"you.work.list.flag.next-token", &cfg.NextToken},
-		{"you.work.list.flag.session", &cfg.SessionID},
-	}
-	for _, field := range fields {
-		*field.target, err = commandInputValue[string](values, field.id)
-		if err != nil {
-			return err
-		}
-	}
-	cfg.MaxResults, err = commandInputValue[int](values, "you.work.list.flag.max-results")
-	if err != nil {
-		return err
-	}
-	return list(cfg)
-}
-
-func executeGeneratedWorkShow(
-	cmd *cobra.Command,
-	args []string,
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	show func(workcli.ShowConfig) error,
-) error {
-	if show == nil {
-		return fmt.Errorf("work show service is required")
-	}
-	values, err := generatedCommandInputs(cmd)
-	if err != nil {
-		return err
-	}
-	sessionID, err := commandInputValue[string](values, "you.work.show.flag.session")
-	if err != nil {
-		return err
-	}
-	return show(workcli.ShowConfig{
-		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
-		WorkID: args[0], JSON: globals.json, Output: cmd.OutOrStdout(),
-		Diagnostics: diagnostics.writer(cmd), Verbose: diagnostics.verboseEnabled(),
-		Debug: diagnostics.debug,
-	})
-}
-
-func executeGeneratedWorkMove(
-	cmd *cobra.Command,
-	args []string,
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	move func(workcli.MoveConfig) error,
-) error {
-	if move == nil {
-		return fmt.Errorf("work move service is required")
-	}
-	values, err := generatedCommandInputs(cmd)
-	if err != nil {
-		return err
-	}
-	sessionID, err := commandInputValue[string](values, "you.work.move.flag.session")
-	if err != nil {
-		return err
-	}
-	requestID, err := commandInputValue[string](values, "you.work.move.flag.request-id")
-	if err != nil {
-		return err
-	}
-	return move(workcli.MoveConfig{
-		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
-		WorkID: args[0], StateName: args[1], RequestID: requestID,
-		JSON: globals.json, Output: cmd.OutOrStdout(),
-		Diagnostics: diagnostics.writer(cmd), Verbose: diagnostics.verboseEnabled(),
-		Debug: diagnostics.debug,
-	})
-}
-
-func executeGeneratedWorkVisualize(
-	cmd *cobra.Command,
-	args []string,
-	visualize func(workcli.VisualizeConfig) error,
-) error {
-	if visualize == nil {
-		return fmt.Errorf("work visualize service is required")
-	}
-	values, err := generatedCommandInputs(cmd)
-	if err != nil {
-		return err
-	}
-	format, err := commandInputValue[string](values, "you.work.visualize.flag.format")
-	if err != nil {
-		return err
-	}
-	return visualize(workcli.VisualizeConfig{
-		BatchFile: args[0], Format: format, Output: cmd.OutOrStdout(),
-	})
 }
 
 func newRepresentativeHandlerRegistry(
@@ -828,4 +838,50 @@ func newRepresentativeHandlerRegistry(
 			return runFactoryWithOptions(cmd, defaultcmd.OOTBRunConfig(rootOptions.runDefaults), nil, globals, operatorDefaults, policy, rootOptions, true)
 		},
 	})
+}
+
+func newProductionDocsCommand(
+	diagnostics *cliDiagnosticsOptions,
+) (*cobra.Command, error) {
+	return climanifestcobra.NewDocsCommand(commandregistry.DocsResolvedRunE(
+		commandregistry.DocsBinding{
+			BinaryName: cliBinaryName, DiagnosticsWriter: diagnostics.writer,
+			Verbose: diagnostics.verboseEnabled,
+		},
+	))
+}
+
+func newProductionModelsCommand(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	operatorDefaults *cliOperatorDefaultsOptions,
+	rootOptions CommandFactory,
+) (*cobra.Command, error) {
+	if operatorDefaults == nil {
+		operatorDefaults = &cliOperatorDefaultsOptions{}
+	}
+	handler := modelscli.NewCommandHandler(
+		rootOptions.ModelsCLI,
+		diagnostics.writer,
+		rootOptions.homeDir,
+		func(cmd *cobra.Command, homeDir string) (operatorconfig.ResolvedDefaults, error) {
+			return resolveOperatorDefaults(cmd, operatorDefaults, rootOptions, homeDir)
+		},
+		func() (*zap.Logger, error) {
+			policy := diagnostics.resolvePolicy(false)
+			return policy.BuildLogger(rootOptions.buildTerminalLogger)
+		},
+	)
+	return climanifestcobra.NewModelsCommand(handler)
+}
+
+func newProductionProvidersCommand(
+	diagnostics *cliDiagnosticsOptions,
+	rootOptions CommandFactory,
+) (*cobra.Command, error) {
+	handler := providerscli.NewCommandHandler(
+		rootOptions.ProvidersCLI,
+		diagnostics.writer,
+	)
+	return climanifestcobra.NewProvidersCommand(handler.List)
 }

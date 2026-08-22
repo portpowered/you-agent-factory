@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -81,21 +83,256 @@ func TestCLIRunCleanInvocationCompletesWithoutDashboardStartup(t *testing.T) {
 	}
 }
 
+// TestCLIRunToFilePreservesExactPromptAndRejectsBeforeProviderDispatch proves
+// the public one-shot run path carries a real multiline UTF-8 file and the
+// canonical xhigh effort through one injected Codex command edge unchanged,
+// while file conflicts and unreadable paths fail before any runtime/provider
+// effect is activated.
+func TestCLIRunToFilePreservesExactPromptAndRejectsBeforeProviderDispatch(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := scaffoldProviderBackedFactory(t)
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	support.WriteWorkstationConfig(t, factoryDir, "process", "---\ntype: MODEL_WORKSTATION\n---\n{{ (index .Inputs 0).Payload }}")
+
+	promptDir := filepath.Join(factoryDir, "prompt fixtures")
+	if err := os.MkdirAll(promptDir, 0o755); err != nil {
+		t.Fatalf("create prompt fixture directory: %v", err)
+	}
+	promptPath := filepath.Join(promptDir, "long prompt.txt")
+	var promptBuilder strings.Builder
+	for line := 1; line <= 30; line++ {
+		fmt.Fprintf(&promptBuilder, "line %02d — 東京\r\n", line)
+	}
+	wantPrompt := promptBuilder.String()
+	if err := os.WriteFile(promptPath, []byte(wantPrompt), 0o600); err != nil {
+		t.Fatalf("write prompt fixture: %v", err)
+	}
+
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("file prompt accepted COMPLETE"),
+	})
+	edges := serviceedges.Edges{
+		ProviderCommandRunner:          runner,
+		WorkSubmittedFileReader:        os.ReadFile,
+		WorkSubmittedFilePathInspector: os.Stat,
+	}
+	args := []string{
+		"you", "run", "--factory", factoryPath,
+		"--provider", "codex", "--worker-reasoning-effort", "xhigh",
+		"--to-file", promptPath, "--no-record", "--quiet",
+	}
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.WorkingDirectory = factoryDir
+	if err := support.BuildProcess(t, edges).Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
+	}
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner calls = %d, want exactly one file-backed dispatch", runner.CallCount())
+	}
+	request := runner.LastRequest()
+	if request.Command != string(modelprovider.ProviderCodex) {
+		t.Fatalf("provider command = %q, want %q", request.Command, modelprovider.ProviderCodex)
+	}
+	if got := string(request.Stdin); got != wantPrompt {
+		t.Fatalf("provider stdin = %q, want exact 30-line prompt %q", got, wantPrompt)
+	}
+	support.AssertArgsContainSequence(t, request.Args, []string{
+		"--config", `model_reasoning_effort="xhigh"`,
+	})
+	assertFilePromptConflicts(t, factoryDir, factoryPath, promptPath, args)
+	assertUnreadableFilePrompt(t, factoryDir, factoryPath, promptDir)
+}
+
+func assertFilePromptConflicts(t *testing.T, factoryDir, factoryPath, promptPath string, fileArgs []string) {
+	t.Helper()
+	for _, test := range []struct {
+		name        string
+		args        []string
+		stdin       string
+		stdinIsTTY  bool
+		wantSources []string
+	}{
+		{
+			name:        "file and positional",
+			args:        []string{"you", "run", "--factory", factoryPath, "also positional", "--to-file", promptPath, "--no-record", "--quiet"},
+			stdinIsTTY:  true,
+			wantSources: []string{"file_text", "positional_text"},
+		},
+		{
+			name:        "file and supplied stdin",
+			args:        fileArgs,
+			stdin:       "supplied stdin",
+			stdinIsTTY:  false,
+			wantSources: []string{"file_text", "stdin_text"},
+		},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			runner := support.NewShapedProviderCommandRunner()
+			inputs := support.FakeInputs(t.Context(), test.args)
+			inputs.Input.WorkingDirectory = factoryDir
+			inputs.Input.Stdin = strings.NewReader(test.stdin)
+			inputs.Input.StdinIsTTY = &test.stdinIsTTY
+			err := support.BuildProcess(t, serviceedges.Edges{
+				ProviderCommandRunner:          runner,
+				WorkSubmittedFileReader:        os.ReadFile,
+				WorkSubmittedFilePathInspector: os.Stat,
+			}).Execute(inputs.Input)
+			if err == nil || !strings.Contains(err.Error(), "INVOCATION_INPUT_SOURCE_CONFLICT") {
+				t.Fatalf("Process.Execute(%v) error = %v, want stable source conflict", test.args, err)
+			}
+			for _, source := range test.wantSources {
+				if !strings.Contains(err.Error(), source) {
+					t.Fatalf("error = %v, want source %q", err, source)
+				}
+			}
+			if runner.CallCount() != 0 {
+				t.Fatalf("provider command runner calls = %d, want zero for %s conflict", runner.CallCount(), test.name)
+			}
+		})
+	}
+}
+
+func assertUnreadableFilePrompt(t *testing.T, factoryDir, factoryPath, promptDir string) {
+	t.Helper()
+	missingPath := filepath.Join(promptDir, "missing prompt.txt")
+	runner := support.NewShapedProviderCommandRunner()
+	missingArgs := []string{
+		"you", "run", "--factory", factoryPath,
+		"--to-file", missingPath, "--no-record", "--quiet",
+	}
+	inputs := support.FakeInputs(t.Context(), missingArgs)
+	inputs.Input.WorkingDirectory = factoryDir
+	err := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner:          runner,
+		WorkSubmittedFileReader:        os.ReadFile,
+		WorkSubmittedFilePathInspector: os.Stat,
+	}).Execute(inputs.Input)
+	if err == nil || !strings.Contains(err.Error(), missingPath) {
+		t.Fatalf("Process.Execute(%v) error = %v, want unreadable path diagnostic", missingArgs, err)
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner calls = %d, want zero for unreadable file", runner.CallCount())
+	}
+
+	directoryArgs := []string{
+		"you", "run", "--factory", factoryPath,
+		"--to-file", promptDir, "--no-record", "--quiet",
+	}
+	directoryInputs := support.FakeInputs(t.Context(), directoryArgs)
+	directoryInputs.Input.WorkingDirectory = factoryDir
+	err = support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner:          runner,
+		WorkSubmittedFileReader:        os.ReadFile,
+		WorkSubmittedFilePathInspector: os.Stat,
+	}).Execute(directoryInputs.Input)
+	if err == nil || !strings.Contains(err.Error(), "regular file") {
+		t.Fatalf("Process.Execute(%v) error = %v, want non-regular source diagnostic", directoryArgs, err)
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner calls = %d, want zero for non-regular file", runner.CallCount())
+	}
+}
+
+// TestCLIRunWorkerReasoningEffortOverrideReachesCodexCommand proves the
+// run-scoped effort override crosses the public root process and reaches the
+// deterministic Codex command edge in canonical form.
+func TestCLIRunWorkerReasoningEffortOverrideReachesCodexCommand(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := scaffoldProviderBackedFactory(t)
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("reasoning effort override COMPLETE"),
+	})
+	edges := serviceedges.Edges{}
+	support.ConfigureWorkerCommands(t, &edges, runner, nil)
+
+	args := []string{
+		"you", "run",
+		"--factory", factoryPath,
+		"--provider", "codex",
+		"--worker-reasoning-effort", " XHIGH ",
+		"--no-record",
+		"--quiet",
+		"prove the explicit reasoning effort path",
+	}
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.WorkingDirectory = factoryDir
+	if err := support.BuildProcess(t, edges).Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
+	}
+
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner calls = %d, want one dispatch", runner.CallCount())
+	}
+	request := runner.LastRequest()
+	if request.Command != "codex" {
+		t.Fatalf("provider command = %q, want codex", request.Command)
+	}
+	support.AssertArgsContainSequence(t, request.Args, []string{
+		"--config", `model_reasoning_effort="xhigh"`,
+	})
+}
+
+// TestCLIRunUnsupportedWorkerReasoningEffortRejectsBeforeProviderDispatch
+// proves invalid run input fails at the public command boundary before the
+// injected provider effect can be invoked.
+func TestCLIRunUnsupportedWorkerReasoningEffortRejectsBeforeProviderDispatch(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := scaffoldProviderBackedFactory(t)
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("must not dispatch"),
+	})
+	edges := serviceedges.Edges{}
+	support.ConfigureWorkerCommands(t, &edges, runner, nil)
+
+	args := []string{
+		"you", "run",
+		"--factory", factoryPath,
+		"--provider", "codex",
+		"--worker-reasoning-effort", "turbo",
+		"--no-record",
+		"--quiet",
+		"reject the unsupported reasoning effort",
+	}
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.WorkingDirectory = factoryDir
+	err := support.BuildProcess(t, edges).Execute(inputs.Input)
+	if err == nil || !strings.Contains(err.Error(), `invalid --worker-reasoning-effort "turbo"`) {
+		t.Fatalf("Process.Execute(%v) error = %v, want actionable effort validation", args, err)
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner calls = %d, want zero for invalid effort", runner.CallCount())
+	}
+}
+
 // TestCLIRunServerAttachedInvocationTargetsExistingFactorySession proves a
 // hosted public you run --with-server invocation routes through the already-open
 // Factory Session on the live runtime host rather than a detached local one-shot
 // lifecycle, with Factory Event correlation on that hosted session identity.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.T) {
 	t.Parallel()
 
 	factoryDir := scaffoldProviderBackedFactory(t)
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
 
+	// The worker dispatch is held open until the polling goroutine below has
+	// deterministically observed the hosted Factory Session at least once.
+	// Without this gate, a mocked worker that returns instantly races the
+	// invocation's own completion (which cancels and tears down the hosted
+	// API listener) against the polling goroutine's first real HTTP round
+	// trip, and the listener side of that race wins essentially every time.
+	sessionObservedGate := make(chan struct{})
 	hostedServerEdges := serviceedges.Edges{}
 	support.ConfigureWorkerCommands(
 		t,
 		&hostedServerEdges,
-		support.NewStaticSuccessCommandRunner(wantServerAttachedInvocationPrimaryResult),
+		support.NewGatedSuccessCommandRunner(wantServerAttachedInvocationPrimaryResult, sessionObservedGate),
 		nil,
 	)
 	continuousHost := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -113,7 +350,15 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 		continuousBaseURL,
 	)
 
+	// The hosted API listener is likewise held open, once the invocation asks
+	// it to shut down, until the polling goroutine below has deterministically
+	// observed terminal Work at least once. Without this gate, the invocation
+	// completing (which cancels and tears down the listener) structurally
+	// outraces the polling goroutine's next HTTP round trip, making terminal
+	// Work observability a best-effort race rather than a guarantee.
+	workObservedGate := make(chan struct{})
 	hostedAPI := support.NewProcessAPIServer()
+	hostedAPI.HoldShutdownUntilSignaled(workObservedGate)
 	hostedServerEdges.APIServerStarter = hostedAPI.Start
 	hostedProcess := support.BuildProcess(t, hostedServerEdges)
 
@@ -135,6 +380,15 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 		err         error
 	}, 1)
 	go func() {
+		var releaseWorkerOnce, releaseShutdownOnce sync.Once
+		releaseWorker := func() { releaseWorkerOnce.Do(func() { close(sessionObservedGate) }) }
+		releaseShutdown := func() { releaseShutdownOnce.Do(func() { close(workObservedGate) }) }
+		// Always release both gates before this goroutine exits, even on a
+		// WaitForBaseURL timeout, so an unexpected failure here cannot hang
+		// Process.Execute (and this test's t.Cleanup teardown) forever.
+		defer releaseWorker()
+		defer releaseShutdown()
+
 		baseURL, err := hostedAPI.WaitForBaseURL(5 * time.Second)
 		if err != nil {
 			observationsReady <- struct {
@@ -147,6 +401,8 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 		session, workVisible, pollErr := pollHostedServerAttachedInvocationObservations(
 			baseURL,
 			wantServerAttachedInvocationPrimaryResult,
+			releaseWorker,
+			releaseShutdown,
 			command.Done(),
 		)
 		observationsReady <- struct {
@@ -183,7 +439,7 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 		t.Fatal("hosted Factory Session id observed during invocation is empty, want observable session identity")
 	}
 	if !observation.workVisible {
-		t.Logf("terminal /work was not observable before hosted API shutdown; stdout primary result remains the customer-visible proof")
+		t.Fatal("terminal /work was not observable before hosted API shutdown, want observable terminal Work content")
 	}
 }
 
@@ -296,6 +552,7 @@ func assertDetachedServerPrefRunCannotAttachToContinuousHost(
 
 func pollHostedServerAttachedInvocationObservations(
 	baseURL, wantWorkText string,
+	releaseWorker, releaseShutdown func(),
 	done <-chan struct{},
 ) (factoryapi.FactorySession, bool, error) {
 	ticker := time.NewTicker(10 * time.Millisecond)
@@ -313,6 +570,12 @@ func pollHostedServerAttachedInvocationObservations(
 			if session, ok, diagnostic := tryReadDefaultFactorySession(baseURL); ok {
 				sessionDuring = session
 				sessionRead = true
+				// The gated worker dispatch cannot return (and so the
+				// invocation cannot complete and tear down the hosted API
+				// listener) until this deterministic release fires, which
+				// guarantees the session identity was observable while the
+				// invocation was still active.
+				releaseWorker()
 			} else if diagnostic != "" {
 				lastSessionErr = diagnostic
 			}
@@ -320,6 +583,11 @@ func pollHostedServerAttachedInvocationObservations(
 		if !workVisible {
 			if ok, _ := tryReadTerminalWorkPrimaryText(baseURL, wantWorkText); ok {
 				workVisible = true
+				// The hosted API listener cannot close (and so the process
+				// cannot finish) until this deterministic release fires,
+				// which guarantees terminal Work was observable before host
+				// shutdown.
+				releaseShutdown()
 			}
 		}
 		if sessionRead && workVisible {

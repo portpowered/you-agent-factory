@@ -7,81 +7,68 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 )
 
 const (
-	manifestStage                  = "pss-fnd-01-package-target-manifest"
-	manifestRelativePath           = "docs/internal/packaged-service-structure/package-target-manifest.json"
-	edgesArchitectureExceptionNote = "Process Edges (pkg/services/edges) is the sole broad external-effect architecture exception for the Packaged Service Structure program."
-	DispositionRetain              = "retain"
-	DispositionMove                = "move"
-	DispositionDelete              = "delete"
+	unfinishedMovesStage                      = "pss-unfinished-package-moves"
+	unfinishedMovesRelativePath               = "docs/internal/baselines/unfinished-package-moves.json"
+	packageTargetTestOnlyBaselineRelativePath = "docs/internal/baselines/package-target-test-only-baseline.json"
 )
 
-// DestinationVocabulary is the closed set of destinations inventory rows may claim.
+// DestinationVocabulary is the closed set of destinations move rows may claim.
 type DestinationVocabulary struct {
 	ProductOwners          []string `json:"productOwners"`
 	NonServiceFamilies     []string `json:"nonServiceFamilies"`
 	ArchitectureExceptions []string `json:"architectureExceptions"`
 }
 
-// PackageMapping maps one production pkg path to a destination or deletion queue entry.
+// PackageMapping is one open-move row from the consolidated move ledger.
+//
+// Destination is the owner-relative committed destination bucket; Successor is
+// the repository-relative package path that replaces PackagePath once the move
+// lands. DeletionCondition names the closing cutover proof when the migration
+// packet named one.
 type PackageMapping struct {
 	PackagePath       string `json:"packagePath"`
-	Disposition       string `json:"disposition"`
 	Destination       string `json:"destination"`
-	DeletionSuccessor string `json:"deletionSuccessor,omitempty"`
+	Successor         string `json:"successor"`
 	DeletionCondition string `json:"deletionCondition,omitempty"`
 }
 
-// Manifest is the package-to-target and deletion inventory document.
-type Manifest struct {
-	Version                    int                   `json:"version"`
-	Stage                      string                `json:"stage"`
-	DestinationVocabulary      DestinationVocabulary `json:"destinationVocabulary"`
-	ArchitectureExceptionNotes map[string]string     `json:"architectureExceptionNotes"`
-	// FutureDebt records deferred migration work intentionally left outside
-	// this packet (for example FND-06 Edges narrowing).
-	FutureDebt []FutureDebt `json:"futureDebt"`
-	// Inventory is the stable-sorted ledger seed of every production pkg package
-	// path (repository-relative, slash-separated). Package destination rows are
-	// filled separately under Packages.
-	Inventory []string         `json:"inventory"`
-	Packages  []PackageMapping `json:"packages"`
+// UnfinishedMoves is the consolidated open-move ledger. The ledger only
+// shrinks: landing a move deletes its row, and when Moves is empty the file and
+// its checks are deleted outright.
+type UnfinishedMoves struct {
+	Version int              `json:"version"`
+	Stage   string           `json:"stage"`
+	Moves   []PackageMapping `json:"moves"`
 }
 
-func closedDestinationVocabulary() DestinationVocabulary {
-	return DestinationVocabulary{
-		ProductOwners: []string{
-			"factory_definitions",
-			"factory_sessions",
-			"factory_runtime",
-			"work",
-			"workers",
-			"providers",
-			"provider_sessions",
-			"models",
-			"automations",
-			"recordings",
-			"factory_visualization",
-			"operator_settings",
-			"system_initialization",
-		},
-		NonServiceFamilies: []string{
-			"initializer",
-			"root",
-			"wire",
-			"platform",
-			"transports",
-		},
-		ArchitectureExceptions: []string{
-			"edges",
-		},
+// derivedDestinationVocabulary builds the destination vocabulary for repoRoot.
+//
+// The product-owner half is derived from the live pkg/services directory by the
+// same ownershipinventory helper the ownership-inventory checker uses, so the two
+// tools cannot disagree about which services exist. Before this, both carried the
+// service names as hand-maintained Go literals and adding a service meant editing
+// each one; now a service is a directory and neither tool needs a code change.
+//
+// The non-service families stay closed on purpose: they encode the approved
+// top-level pkg/ families architectural rule, not a service roster.
+func derivedDestinationVocabulary(repoRoot string) (DestinationVocabulary, error) {
+	owners, err := ownershipinventory.DiscoverProductOwners(repoRoot)
+	if err != nil {
+		return DestinationVocabulary{}, err
 	}
+	return DestinationVocabulary{
+		ProductOwners:          owners,
+		NonServiceFamilies:     slices.Clone(ownershipinventory.NonServiceFamilies),
+		ArchitectureExceptions: []string{"edges"},
+	}, nil
 }
 
-func closedDestinationSet() map[string]struct{} {
-	vocab := closedDestinationVocabulary()
+func destinationSet(vocab DestinationVocabulary) map[string]struct{} {
 	set := make(map[string]struct{}, len(vocab.ProductOwners)+len(vocab.NonServiceFamilies)+len(vocab.ArchitectureExceptions))
 	for _, name := range vocab.ProductOwners {
 		set[name] = struct{}{}
@@ -95,112 +82,101 @@ func closedDestinationSet() map[string]struct{} {
 	return set
 }
 
-func loadManifest(relativePath string) (Manifest, error) {
-	data, err := os.ReadFile(relativePath)
+func loadUnfinishedMoves(path string) (UnfinishedMoves, error) {
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return Manifest{}, fmt.Errorf("read manifest %s: %w", relativePath, err)
-	}
-	var manifest Manifest
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return Manifest{}, fmt.Errorf("decode manifest %s: %w", relativePath, err)
-	}
-	return manifest, nil
-}
-
-func validateManifest(manifest Manifest) error {
-	// Schema-only validation used by unit fixtures that do not bind a repo tree.
-	return validateManifestSchema(manifest)
-}
-
-func validateManifestAt(repoRoot string, manifest Manifest) error {
-	if err := validateManifestSchema(manifest); err != nil {
-		return err
-	}
-	return validateInventory(repoRoot, manifest.Inventory)
-}
-
-func validateManifestSchema(manifest Manifest) error {
-	if manifest.Version != 1 {
-		return fmt.Errorf("manifest version %d is unsupported; want 1", manifest.Version)
-	}
-	if manifest.Stage != manifestStage {
-		return fmt.Errorf("manifest stage %q is unsupported; want %q", manifest.Stage, manifestStage)
-	}
-	if err := validateVocabulary(manifest.DestinationVocabulary); err != nil {
-		return err
-	}
-	if note := manifest.ArchitectureExceptionNotes["edges"]; note != edgesArchitectureExceptionNote {
-		return fmt.Errorf("architectureExceptionNotes.edges must record the Process Edges exception exactly")
-	}
-	if err := validateFutureDebt(manifest.FutureDebt); err != nil {
-		return err
-	}
-	closed := closedDestinationSet()
-	for i, row := range manifest.Packages {
-		if err := validatePackageMapping(i, row, closed); err != nil {
-			return err
+		if os.IsNotExist(err) {
+			// Every migration landed. That is this ledger's intended end state.
+			return UnfinishedMoves{}, nil
 		}
+		return UnfinishedMoves{}, fmt.Errorf("read unfinished package moves %s: %w", path, err)
 	}
-	if err := validateEdgesExceptionCoverage(manifest); err != nil {
+	var moves UnfinishedMoves
+	if err := json.Unmarshal(data, &moves); err != nil {
+		return UnfinishedMoves{}, fmt.Errorf("decode unfinished package moves %s: %w", path, err)
+	}
+	return moves, nil
+}
+
+// validateOpenMoveLedger checks the consolidated open-move ledger's schema and
+// that every remaining row still names a package that exists on disk.
+func validateOpenMoveLedger(repoRoot string, moves UnfinishedMoves) error {
+	if err := validateOpenMoveLedgerSchema(repoRoot, moves); err != nil {
 		return err
 	}
-	if err := validateResidualCoverage(manifest); err != nil {
+	return validateRowsNamePackagesThatExist(repoRoot, moves.Moves)
+}
+
+func validateOpenMoveLedgerSchema(repoRoot string, moves UnfinishedMoves) error {
+	vocabulary, err := derivedDestinationVocabulary(repoRoot)
+	if err != nil {
 		return err
 	}
-	// Complete one-destination coverage is required once the inventory ledger
-	// seed is present; schema-only fixtures may omit inventory.
-	if len(manifest.Inventory) > 0 {
-		if err := validatePackageCoverage(manifest); err != nil {
-			return err
+	if err := validateUnfinishedMovesSchema(moves, vocabulary); err != nil {
+		return err
+	}
+	return validateMovePackagePaths(moves.Moves)
+}
+
+func validateMovePackagePaths(packages []PackageMapping) error {
+	for i, row := range packages {
+		packagePath := row.PackagePath
+		if strings.Contains(packagePath, "\\") {
+			return fmt.Errorf("moves[%d] %q must use slash separators", i, packagePath)
+		}
+		if !strings.HasPrefix(packagePath, "pkg/") {
+			return fmt.Errorf("moves[%d] %q must be repository-relative under pkg/", i, packagePath)
 		}
 	}
 	return nil
 }
 
-func validateVocabulary(got DestinationVocabulary) error {
-	want := closedDestinationVocabulary()
-	if !slices.Equal(got.ProductOwners, want.ProductOwners) {
-		return fmt.Errorf("destination vocabulary productOwners must exactly match the closed 13-owner set")
+func validateUnfinishedMovesSchema(moves UnfinishedMoves, vocabulary DestinationVocabulary) error {
+	if len(moves.Moves) == 0 {
+		return nil
 	}
-	if !slices.Equal(got.NonServiceFamilies, want.NonServiceFamilies) {
-		return fmt.Errorf("destination vocabulary nonServiceFamilies must exactly match the closed approved family set")
+	if moves.Version != 1 {
+		return fmt.Errorf("unfinished package moves version %d is unsupported; want 1", moves.Version)
 	}
-	if !slices.Equal(got.ArchitectureExceptions, want.ArchitectureExceptions) {
-		return fmt.Errorf("destination vocabulary architectureExceptions must exactly match the closed exception set")
+	if moves.Stage != unfinishedMovesStage {
+		return fmt.Errorf("unfinished package moves stage %q is unsupported; want %q", moves.Stage, unfinishedMovesStage)
 	}
-	return nil
+	closed := destinationSet(vocabulary)
+	for i, row := range moves.Moves {
+		if err := validatePackageMapping(i, row, vocabulary, closed); err != nil {
+			return err
+		}
+	}
+	return validatePackageCoverage(moves)
 }
 
-func validatePackageMapping(index int, row PackageMapping, closed map[string]struct{}) error {
-	prefix := fmt.Sprintf("packages[%d]", index)
-	if strings.TrimSpace(row.PackagePath) == "" {
+func validatePackageMapping(index int, row PackageMapping, vocabulary DestinationVocabulary, closed map[string]struct{}) error {
+	prefix := fmt.Sprintf("moves[%d]", index)
+	packagePath := strings.TrimSpace(row.PackagePath)
+	if packagePath == "" {
 		return fmt.Errorf("%s.packagePath is required", prefix)
-	}
-	switch row.Disposition {
-	case DispositionRetain, DispositionMove, DispositionDelete:
-	default:
-		return fmt.Errorf("%s.disposition %q is invalid; want retain, move, or delete", prefix, row.Disposition)
 	}
 	if strings.TrimSpace(row.Destination) == "" {
 		return fmt.Errorf("%s.destination is required", prefix)
 	}
-	if err := validateDestination(row.Destination, closed); err != nil {
+	if err := validateDestination(row.Destination, vocabulary, closed); err != nil {
 		return fmt.Errorf("%s.destination: %w", prefix, err)
 	}
-	if row.Disposition == DispositionDelete {
-		if strings.TrimSpace(row.DeletionSuccessor) == "" {
-			return fmt.Errorf("%s.deletionSuccessor is required when disposition is delete", prefix)
-		}
-		if strings.TrimSpace(row.DeletionCondition) == "" {
-			return fmt.Errorf("%s.deletionCondition is required when disposition is delete", prefix)
-		}
-	} else if row.DeletionSuccessor != "" || row.DeletionCondition != "" {
-		return fmt.Errorf("%s deletionSuccessor/deletionCondition are only valid when disposition is delete", prefix)
+	successor := strings.TrimSpace(row.Successor)
+	if successor == "" {
+		return fmt.Errorf("%s.successor is required: an open move must name the package path that replaces it", prefix)
+	}
+	// A successor may equal its own packagePath: the transitional top-level
+	// fold rows record that a package folds into the tree it already sits in.
+	owner, _, _ := splitDestination(row.Destination)
+	ownerRoot := "pkg/services/" + owner
+	if successor != ownerRoot && !strings.HasPrefix(successor, ownerRoot+"/") {
+		return fmt.Errorf("%s.successor %q must sit under %s for destination %q", prefix, successor, ownerRoot, row.Destination)
 	}
 	return nil
 }
 
-func validateDestination(destination string, closed map[string]struct{}) error {
+func validateDestination(destination string, vocabulary DestinationVocabulary, closed map[string]struct{}) error {
 	root, nested, ok := splitDestination(destination)
 	if !ok {
 		return fmt.Errorf("%q is outside closed destination set", destination)
@@ -223,7 +199,7 @@ func validateDestination(destination string, closed map[string]struct{}) error {
 	if subservice == "" || strings.Contains(subservice, "/") {
 		return fmt.Errorf("%q must name exactly one internal/services/<subservice> segment", destination)
 	}
-	if _, isOwner := productOwnerSet()[root]; isOwner && !isCommittedNestedSubservice(root, subservice) {
+	if _, isOwner := productOwnerSet(vocabulary)[root]; isOwner && !isCommittedNestedSubservice(root, subservice) {
 		return fmt.Errorf("%q uses nested subservice %q outside the committed plan tree for %s", destination, subservice, root)
 	}
 	return nil
@@ -245,7 +221,7 @@ func splitDestination(destination string) (root, nested string, ok bool) {
 	return root, parts[1], true
 }
 
-func resolveManifestPath(repoRoot, relativePath string) string {
+func resolveRepoPath(repoRoot, relativePath string) string {
 	if filepath.IsAbs(relativePath) {
 		return relativePath
 	}

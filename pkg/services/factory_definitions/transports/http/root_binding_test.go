@@ -142,6 +142,13 @@ func (fake *httpDefinitionsRootFake) ValidateStructuralFactoryDefinition(
 
 func (fake *httpDefinitionsRootFake) ActivateNamedFactory(context.Context, string) error { return nil }
 
+func (fake *httpDefinitionsRootFake) ResolveExecutionCatalog(
+	context.Context,
+	factorydefinitions.ResolveExecutionCatalogRequest,
+) (factorydefinitions.ResolveExecutionCatalogResult, error) {
+	return factorydefinitions.ResolveExecutionCatalogResult{}, nil
+}
+
 func (fake *httpDefinitionsRootFake) Save(
 	context.Context,
 	string,

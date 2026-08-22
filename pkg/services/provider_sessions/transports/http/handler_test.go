@@ -233,8 +233,29 @@ func TestHandlerGetProviderSessionDetailsRejectsBlankIdentifierBeforeRoot(t *tes
 	}
 }
 
-func TestHandlerGetProviderSessionDetailsMapsTypedRootErrors(t *testing.T) {
-	root := t.TempDir()
+func TestHandlerGetProviderSessionDetailsMapsSessionNotFound(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		provider factoryapi.LoadableProviderSessionProvider
+	}{
+		{name: "codex", provider: factoryapi.Codex},
+		{name: "cursor", provider: factoryapi.Cursor},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			assertGetProviderSessionDetailsMapsRootError(
+				t,
+				test.provider,
+				factoryapi.LoadableProviderSessionKindSessionID,
+				providersessions.ErrSessionNotFound,
+				http.StatusNotFound,
+				"NOT_FOUND",
+				"provider session not found",
+			)
+		})
+	}
+}
+
+func TestHandlerGetProviderSessionDetailsMapsClientAndAmbiguousFailures(t *testing.T) {
 	tests := []struct {
 		name        string
 		provider    factoryapi.LoadableProviderSessionProvider
@@ -244,22 +265,6 @@ func TestHandlerGetProviderSessionDetailsMapsTypedRootErrors(t *testing.T) {
 		wantCode    string
 		wantMessage string
 	}{
-		{
-			name:        "session not found",
-			provider:    factoryapi.Codex,
-			rootErr:     providersessions.ErrSessionNotFound,
-			wantStatus:  http.StatusNotFound,
-			wantCode:    "NOT_FOUND",
-			wantMessage: "provider session not found",
-		},
-		{
-			name:        "cursor session not found",
-			provider:    factoryapi.Cursor,
-			rootErr:     providersessions.ErrSessionNotFound,
-			wantStatus:  http.StatusNotFound,
-			wantCode:    "NOT_FOUND",
-			wantMessage: "provider session not found",
-		},
 		{
 			name:     "codex invalid identifier",
 			provider: factoryapi.Codex,
@@ -307,18 +312,6 @@ func TestHandlerGetProviderSessionDetailsMapsTypedRootErrors(t *testing.T) {
 			wantCode:    "INTERNAL_ERROR",
 			wantMessage: "multiple provider session files match session identifier",
 		},
-		{
-			name:     "unmapped internal failure",
-			provider: factoryapi.Codex,
-			rootErr: &providersessions.LookupError{
-				Provider: providersessions.ProviderCodex,
-				Root:     root,
-				Err:      errors.New("pkg/services/provider_sessions/internal/codex_reader: stat failed"),
-			},
-			wantStatus:  http.StatusInternalServerError,
-			wantCode:    "INTERNAL_ERROR",
-			wantMessage: "failed to load provider session details",
-		},
 	}
 
 	for _, test := range tests {
@@ -327,32 +320,71 @@ func TestHandlerGetProviderSessionDetailsMapsTypedRootErrors(t *testing.T) {
 			if kind == "" {
 				kind = factoryapi.LoadableProviderSessionKindSessionID
 			}
-			fake := &rootServiceFake{detailErr: test.rootErr}
-			handler := NewHandler(NewAdapter(fake), zap.NewNop())
-			recorder := httptest.NewRecorder()
-
-			handler.GetProviderSessionDetails(recorder, httptest.NewRequest(http.MethodGet, "/provider-sessions/detail", nil), factoryapi.GetProviderSessionDetailsParams{
-				Provider: test.provider,
-				Kind:     kind,
-				Id:       "sess-123",
-			})
-
-			assertHandlerJSONError(t, recorder, test.wantStatus, test.wantCode, test.wantMessage)
-			if test.name == "unmapped internal failure" {
-				body := recorder.Body.String()
-				for _, forbidden := range []string{
-					root,
-					"pkg/services/provider_sessions/internal",
-					"codex_reader",
-					"stat failed",
-				} {
-					if strings.Contains(body, forbidden) {
-						t.Fatalf("body = %s, must not leak internal detail %q", body, forbidden)
-					}
-				}
-			}
+			assertGetProviderSessionDetailsMapsRootError(
+				t,
+				test.provider,
+				kind,
+				test.rootErr,
+				test.wantStatus,
+				test.wantCode,
+				test.wantMessage,
+			)
 		})
 	}
+}
+
+func TestHandlerGetProviderSessionDetailsMapsUnmappedInternalFailure(t *testing.T) {
+	root := t.TempDir()
+	recorder := assertGetProviderSessionDetailsMapsRootError(
+		t,
+		factoryapi.Codex,
+		factoryapi.LoadableProviderSessionKindSessionID,
+		&providersessions.LookupError{
+			Provider: providersessions.ProviderCodex,
+			Root:     root,
+			Err:      errors.New("pkg/services/provider_sessions/internal/codex_reader: stat failed"),
+		},
+		http.StatusInternalServerError,
+		"INTERNAL_ERROR",
+		"failed to load provider session details",
+	)
+
+	body := recorder.Body.String()
+	for _, forbidden := range []string{
+		root,
+		"pkg/services/provider_sessions/internal",
+		"codex_reader",
+		"stat failed",
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("body = %s, must not leak internal detail %q", body, forbidden)
+		}
+	}
+}
+
+func assertGetProviderSessionDetailsMapsRootError(
+	t *testing.T,
+	provider factoryapi.LoadableProviderSessionProvider,
+	kind factoryapi.LoadableProviderSessionKind,
+	rootErr error,
+	wantStatus int,
+	wantCode string,
+	wantMessage string,
+) *httptest.ResponseRecorder {
+	t.Helper()
+
+	fake := &rootServiceFake{detailErr: rootErr}
+	handler := NewHandler(NewAdapter(fake), zap.NewNop())
+	recorder := httptest.NewRecorder()
+
+	handler.GetProviderSessionDetails(recorder, httptest.NewRequest(http.MethodGet, "/provider-sessions/detail", nil), factoryapi.GetProviderSessionDetailsParams{
+		Provider: provider,
+		Kind:     kind,
+		Id:       "sess-123",
+	})
+
+	assertHandlerJSONError(t, recorder, wantStatus, wantCode, wantMessage)
+	return recorder
 }
 
 func TestHandlerGetProviderSessionDetailsCursorNotFoundLogsDiagnostic(t *testing.T) {

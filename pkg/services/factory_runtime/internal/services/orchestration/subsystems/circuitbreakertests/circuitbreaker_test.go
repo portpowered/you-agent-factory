@@ -2,6 +2,8 @@ package subsystems_test
 
 import (
 	"context"
+	"encoding/json"
+	"reflect"
 	"testing"
 	"time"
 
@@ -350,6 +352,198 @@ func TestCircuitBreaker_ExhaustionTransition(t *testing.T) {
 	if mut.TokenID != "tok-1" {
 		t.Errorf("expected tok-1, got %s", mut.TokenID)
 	}
+}
+
+func TestCircuitBreaker_LogicalRoundTripReportsRawBackstopReason(t *testing.T) {
+	n := buildTestNet()
+	n.Transitions["review-exhausted"] = &petri.Transition{
+		ID:   "review-exhausted",
+		Type: petri.TransitionExhaustion,
+		InputArcs: []petri.Arc{{
+			ID:      "exh-in",
+			Name:    "work",
+			PlaceID: "task:init",
+			Guard: &petri.VisitCountGuard{
+				TransitionID: "review",
+				MaxVisits:    12,
+				LogicalRoundTrip: &petri.LogicalRoundTripPolicy{
+					Transitions:  [2]string{"process", "review"},
+					MaxRawVisits: 24,
+				},
+			},
+			Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+		}},
+		OutputArcs: []petri.Arc{{ID: "exh-out", PlaceID: "task:failed"}},
+	}
+
+	marking := petri.NewMarking("test-wf")
+	tok := makeToken("tok-raw-backstop", "task:init", time.Now())
+	tok.History.TotalVisits["process"] = 24
+	marking.AddToken(tok)
+
+	markingSnap := marking.Snapshot()
+	snap := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: markingSnap}
+	cb := subsystems.NewCircuitBreakerWithClock(n, time.Now, nil, nil)
+	result, err := cb.Execute(context.Background(), &snap)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil || len(result.Mutations) != 1 {
+		t.Fatalf("expected one backstop mutation, got %+v", result)
+	}
+	if got := result.Mutations[0].Reason; got != "absolute raw-visit backstop reached: 24 >= 24" {
+		t.Fatalf("backstop mutation reason = %q, want actionable raw-limit reason", got)
+	}
+}
+
+func TestCircuitBreaker_VisitCountReplayPreservesLogicalAndLegacyDecisions(t *testing.T) {
+	tests := []struct {
+		name          string
+		guard         *petri.VisitCountGuard
+		processVisits int
+		reviewVisits  int
+		wantRaw       int
+		wantLogical   int
+		wantLimit     petri.VisitCountLimit
+		wantReason    string
+	}{
+		{
+			name:          "logical limit",
+			processVisits: 12,
+			reviewVisits:  12,
+			wantRaw:       24,
+			wantLogical:   12,
+			wantLimit:     petri.VisitCountLimitLogical,
+			wantReason:    "logical visit limit reached: 12 >= 12",
+			guard: &petri.VisitCountGuard{
+				TransitionID: "review",
+				MaxVisits:    12,
+				LogicalRoundTrip: &petri.LogicalRoundTripPolicy{
+					Transitions:  [2]string{"process", "review"},
+					MaxRawVisits: 24,
+				},
+			},
+		},
+		{
+			name:          "raw backstop",
+			processVisits: 24,
+			wantRaw:       24,
+			wantLimit:     petri.VisitCountLimitRaw,
+			wantReason:    "absolute raw-visit backstop reached: 24 >= 24",
+			guard: &petri.VisitCountGuard{
+				TransitionID: "review",
+				MaxVisits:    12,
+				LogicalRoundTrip: &petri.LogicalRoundTripPolicy{
+					Transitions:  [2]string{"process", "review"},
+					MaxRawVisits: 24,
+				},
+			},
+		},
+		{
+			name:         "legacy recording without logical mode",
+			reviewVisits: 5,
+			wantRaw:      5,
+			wantLogical:  5,
+			wantReason:   "exhaustion transition review-exhausted",
+			guard: &petri.VisitCountGuard{
+				TransitionID: "review",
+				MaxVisits:    5,
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assertCircuitBreakerVisitCountReplay(t, test)
+		})
+	}
+}
+
+func assertCircuitBreakerVisitCountReplay(t *testing.T, test struct {
+	name          string
+	guard         *petri.VisitCountGuard
+	processVisits int
+	reviewVisits  int
+	wantRaw       int
+	wantLogical   int
+	wantLimit     petri.VisitCountLimit
+	wantReason    string
+}) {
+	t.Helper()
+	net := buildTestNet()
+	net.Transitions["review-exhausted"] = &petri.Transition{
+		ID:   "review-exhausted",
+		Type: petri.TransitionExhaustion,
+		InputArcs: []petri.Arc{{
+			ID:          "exhaustion-input",
+			Name:        "work",
+			PlaceID:     "task:init",
+			Guard:       test.guard,
+			Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+		}},
+		OutputArcs: []petri.Arc{{ID: "exhaustion-output", PlaceID: "task:failed"}},
+	}
+
+	marking := petri.NewMarking("visit-count-replay")
+	token := makeToken("visit-count-replay-token", "task:init", time.Now())
+	token.History.TotalVisits["process"] = test.processVisits
+	token.History.TotalVisits["review"] = test.reviewVisits
+	marking.AddToken(token)
+	liveSnapshot := marking.Snapshot()
+
+	liveDecision := test.guard.Decision(*liveSnapshot.Tokens[token.ID])
+	if liveDecision.RawVisits != test.wantRaw || liveDecision.LogicalVisits != test.wantLogical || liveDecision.Limit != test.wantLimit {
+		t.Fatalf("live decision = %#v, want raw=%d logical=%d limit=%q", liveDecision, test.wantRaw, test.wantLogical, test.wantLimit)
+	}
+
+	live := executeCircuitBreakerSnapshot(t, net, liveSnapshot)
+	repeated := executeCircuitBreakerSnapshot(t, net, liveSnapshot)
+	if !reflect.DeepEqual(live.Mutations, repeated.Mutations) {
+		t.Fatalf("repeated live evaluation mutations = %#v, want %#v", repeated.Mutations, live.Mutations)
+	}
+
+	encoded, err := json.Marshal(liveSnapshot)
+	if err != nil {
+		t.Fatalf("json.Marshal(marking snapshot) error = %v", err)
+	}
+	var replaySnapshot petri.MarkingSnapshot
+	if err := json.Unmarshal(encoded, &replaySnapshot); err != nil {
+		t.Fatalf("json.Unmarshal(marking snapshot) error = %v", err)
+	}
+	replayDecision := test.guard.Decision(*replaySnapshot.Tokens[token.ID])
+	if !reflect.DeepEqual(liveDecision, replayDecision) {
+		t.Fatalf("replayed decision = %#v, want %#v", replayDecision, liveDecision)
+	}
+
+	replay := executeCircuitBreakerSnapshot(t, net, replaySnapshot)
+	if !reflect.DeepEqual(live.Mutations, replay.Mutations) {
+		t.Fatalf("replayed mutations = %#v, want %#v", replay.Mutations, live.Mutations)
+	}
+	if len(replay.Mutations) != 1 {
+		t.Fatalf("replayed mutations = %#v, want one terminal move", replay.Mutations)
+	}
+	if replay.Mutations[0].ToPlace != "task:failed" {
+		t.Fatalf("replayed terminal destination = %q, want task:failed", replay.Mutations[0].ToPlace)
+	}
+	if replay.Mutations[0].Reason != test.wantReason {
+		t.Fatalf("replayed terminal reason = %q, want %q", replay.Mutations[0].Reason, test.wantReason)
+	}
+	if replaySnapshot.Tokens[token.ID].History.TotalVisits["process"] != test.processVisits || replaySnapshot.Tokens[token.ID].History.TotalVisits["review"] != test.reviewVisits {
+		t.Fatalf("replayed visit history = %#v, want process=%d review=%d", replaySnapshot.Tokens[token.ID].History.TotalVisits, test.processVisits, test.reviewVisits)
+	}
+}
+
+func executeCircuitBreakerSnapshot(t *testing.T, net *state.Net, marking petri.MarkingSnapshot) *interfaces.TickResult {
+	t.Helper()
+	cb := subsystems.NewCircuitBreakerWithClock(net, time.Now, nil, nil)
+	result, err := cb.Execute(context.Background(), &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: marking})
+	if err != nil {
+		t.Fatalf("CircuitBreaker.Execute() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("CircuitBreaker.Execute() returned nil result")
+	}
+	return result
 }
 
 func TestCircuitBreaker_ExhaustionNotTriggered(t *testing.T) {

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
-
 import { useFactoryGraphVisualGroupEditor } from "../../factory-graph-editor/hooks/layout/factory-graph-visual-group-editor-hook";
+import type { FactoryLayoutGroupNodeGeometry } from "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
 import { pruneFactoryGraphEditorSelectionAfterRemoval } from "../../factory-graph-editor/lib/selection/factory-graph-editor-selection-batch-delete";
 import {
   type FactoryGraphEditorToolbarSelectionState,
@@ -12,6 +12,7 @@ import {
   resolveInitialPlacementTopLeftForViewport,
   viewportCenterFromPlacementViewport,
 } from "../lib/graph-editor-add-node-placement";
+import type { CurrentActivityNodeResizeController } from "../lib/react-flow-current-activity-card-editor-handles";
 import {
   type CurrentActivityGraphRenderProjection,
   type CurrentActivityGraphViewModelInput,
@@ -41,14 +42,52 @@ export function useCurrentActivityGraphCardViewModel(
   const graphProjection = currentActivityGraphRenderProjection(
     editorGraphProjection,
   );
+  const expandedNodeIds = useMemo(
+    () =>
+      new Set(
+        (graphProjection.renderedLayout.nodes ?? [])
+          .filter((node) => node.size !== undefined)
+          .map((node) => node.id),
+      ),
+    [graphProjection.renderedLayout],
+  );
+  const resizeLayoutNode = publicEditor.layoutControls.resizeNode;
+  const nodeResizeControls = useMemo<CurrentActivityNodeResizeController>(
+    () => ({
+      enabled:
+        publicEditor.editorControls.isEditing &&
+        publicEditor.editorControls.canInteract &&
+        publicEditor.editorControls.activeTool !== "delete",
+      onResizeEnd: (target, dimensions) => {
+        resizeLayoutNode(
+          target.nodeId,
+          target.family,
+          dimensions,
+          target.position,
+        );
+      },
+    }),
+    [
+      publicEditor.editorControls.activeTool,
+      publicEditor.editorControls.canInteract,
+      publicEditor.editorControls.isEditing,
+      resizeLayoutNode,
+    ],
+  );
   const graph = useCurrentActivityGraphViewModel({
     ...input,
     editor: {
       activeTool: publicEditor.editorControls.activeTool,
       canInteractWithEditor: publicEditor.editorControls.canInteract,
       editorMode: publicEditor.editorControls.isEditing,
+      expandedNodeIds,
       graphProjection,
       handleConnectionAnchorClick: connectionControls.handleAnchorClick,
+      nodeResizeControls,
+      edgePointerInteraction:
+        publicEditor.edgeWaypointControls.edgePointerInteraction,
+      edgeWaypointPreviews:
+        publicEditor.edgeWaypointControls.edgeWaypointPreviews,
       pendingConnectionSource: connectionControls.pendingSource,
       selectedWaypointEdgeId:
         publicEditor.edgeWaypointControls.selectedWaypointEdgeId,
@@ -97,6 +136,35 @@ export function useCurrentActivityGraphCardViewModel(
   const confirmRemoval = publicEditor.removalControls.confirm;
   const pendingRemovalIntent = publicEditor.removalControls.pendingIntent;
   const selectionState = graph.graphSelection.state;
+  const visualGroupNodeGeometryById = useMemo(() => {
+    const geometryById = new Map<string, FactoryLayoutGroupNodeGeometry>();
+
+    for (const node of graph.nodes) {
+      const factoryGraphNodeId =
+        (node.data as { factoryGraphNodeId?: string } | undefined)
+          ?.factoryGraphNodeId ?? node.id;
+      const width = node.width ?? node.measured?.width;
+      const height = node.height ?? node.measured?.height;
+      if (
+        !Number.isFinite(node.position.x) ||
+        !Number.isFinite(node.position.y) ||
+        !Number.isFinite(width) ||
+        !Number.isFinite(height) ||
+        width === undefined ||
+        height === undefined
+      ) {
+        continue;
+      }
+
+      geometryById.set(factoryGraphNodeId, {
+        height,
+        position: { x: node.position.x, y: node.position.y },
+        width,
+      });
+    }
+
+    return geometryById;
+  }, [graph.nodes]);
   const graphSelectionToolbarState =
     resolveFactoryGraphEditorToolbarSelectionState(selectionState);
   const canDeleteGraphSelection = canDeleteSelectionFn({
@@ -138,8 +206,10 @@ export function useCurrentActivityGraphCardViewModel(
     canvasNodeOptions: publicEditor.layoutControls.canvasNodeOptions,
     createVisualGroup: publicEditor.layoutControls.createVisualGroup,
     editorMode: publicEditor.editorControls.isEditing,
+    fitVisualGroup: publicEditor.layoutControls.fitVisualGroup,
     layout: publicEditor.layoutControls.currentLayout,
     locale: input.locale,
+    nodeGeometryById: visualGroupNodeGeometryById,
     removeNodeFromVisualGroup:
       publicEditor.layoutControls.removeNodeFromVisualGroup,
     moveVisualGroupByDelta: publicEditor.layoutControls.moveVisualGroupByDelta,
@@ -148,6 +218,7 @@ export function useCurrentActivityGraphCardViewModel(
     renameVisualGroup: publicEditor.layoutControls.renameVisualGroup,
     resolveViewportCenter,
     setVisualGroupColor: publicEditor.layoutControls.setVisualGroupColor,
+    selectedNodeIds: [...selectionState.selectedNodeIds],
   });
   const {
     canonicalLayoutViewport: _canonicalLayoutViewport,

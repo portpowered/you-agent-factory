@@ -5,10 +5,56 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+func generatedFactoryChangeEvents(t *testing.T, eventTime time.Time) []factoryapi.FactoryEvent {
+	t.Helper()
+	return []factoryapi.FactoryEvent{
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-factory-change-request",
+			Type:          factoryapi.FactoryEventTypeFactoryChangeRequest,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:  26,
+				Tick:      10,
+				EventTime: eventTime,
+			},
+			Payload: factoryEventPayload(t, factoryapi.FactoryChangeRequestEventPayload{
+				ChangeId:         "live-change/change-request-1",
+				ExpectedRevision: 0,
+				Operation:        "resource.capacity.set",
+				TargetId:         "reviewers",
+				RequestedValue:   8,
+				Actor:            stringPtr("operator"),
+				Source:           stringPtr("api"),
+				Reason:           stringPtr("raise throughput"),
+			}),
+		},
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-factory-change-failed",
+			Type:          factoryapi.FactoryEventTypeFactoryChangeFailed,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:  27,
+				Tick:      10,
+				EventTime: eventTime,
+			},
+			Payload: factoryEventPayload(t, factoryapi.FactoryChangeFailedEventPayload{
+				ChangeId:         "live-change/change-request-2",
+				ExpectedRevision: 0,
+				PreviousRevision: 0,
+				Operation:        "resource.capacity.set",
+				TargetId:         "missing-resource",
+				FailureCode:      "TARGET_NOT_FOUND",
+				FailureMessage:   "live change target was not found",
+			}),
+		},
+	}
+}
 
 func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
 	submitRequest := generatedSubmitRequestFixture(t)
@@ -64,7 +110,7 @@ func TestGeneratedFactoryContractsSupportClassifierRoutes(t *testing.T) {
 		Workstations: &[]factoryapi.Workstation{{
 			Name:   "classify-task",
 			Type:   &classifierType,
-			Worker: "planner",
+			Worker: stringPtr("planner"),
 			Inputs: []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
 			ClassificationRoutes: &[]factoryapi.ClassificationRoute{
 				{Label: "approved", Outputs: []factoryapi.WorkstationIO{{WorkType: "task", State: "done"}}},
@@ -125,6 +171,17 @@ func generatedWorkRequestFixture() factoryapi.WorkRequest {
 		TargetWorkName: "epic",
 	}
 	workRelations := []factoryapi.Relation{relation, parentChildRelation}
+	requestRelation := factoryapi.WorkRequestRelation{
+		Type:           factoryapi.RelationTypeDependsOn,
+		SourceWorkName: "publish",
+		TargetWorkName: stringPtr("draft"),
+		RequiredState:  stringPtr("complete"),
+	}
+	requestParentChildRelation := factoryapi.WorkRequestRelation{
+		Type:           factoryapi.RelationTypeParentChild,
+		SourceWorkName: "draft",
+		TargetWorkName: stringPtr("epic"),
+	}
 	batchWork := factoryapi.Work{
 		Name:                     "draft",
 		WorkId:                   &workID,
@@ -143,7 +200,7 @@ func generatedWorkRequestFixture() factoryapi.WorkRequest {
 		CurrentChainingTraceId: stringPtr("chain-request-1"),
 		Type:                   factoryapi.WorkRequestTypeFactoryRequestBatch,
 		Works:                  &[]factoryapi.Work{batchWork},
-		Relations:              &[]factoryapi.Relation{relation, parentChildRelation},
+		Relations:              &[]factoryapi.WorkRequestRelation{requestRelation, requestParentChildRelation},
 	}
 }
 
@@ -219,7 +276,7 @@ func assertGeneratedOpenAPISurfaceTypes(
 		Name:     "daily-refresh",
 		Behavior: &workstationKind,
 		Type:     &workstationRuntimeType,
-		Worker:   "agent",
+		Worker:   stringPtr("agent"),
 		Inputs:   []factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
 		Outputs:  &[]factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
 	}
@@ -427,7 +484,7 @@ func assertGeneratedNamedFactoryRoundTripFields(t *testing.T, namedFactory facto
 	if roundTripped.InvocationSignature == nil || roundTripped.InvocationSignature.Parameters == nil || len(*roundTripped.InvocationSignature.Parameters) != 1 {
 		t.Fatalf("round-tripped named factory invocationSignature = %#v, want one parameter", roundTripped.InvocationSignature)
 	}
-	if roundTripped.Workstations == nil || len(*roundTripped.Workstations) != 1 || (*roundTripped.Workstations)[0].Worker != "planner" {
+	if roundTripped.Workstations == nil || len(*roundTripped.Workstations) != 1 || (*roundTripped.Workstations)[0].Worker == nil || *(*roundTripped.Workstations)[0].Worker != "planner" {
 		t.Fatalf("round-tripped named factory workstations = %#v, want planner workstation", roundTripped.Workstations)
 	}
 }
@@ -699,4 +756,36 @@ func loadSyncPreflightRecoveryFixtureCatalog(t *testing.T) syncPreflightRecovery
 		t.Fatal("sync preflight recovery contract fixtures contain no scenarios")
 	}
 	return catalog
+}
+
+func assertWorkRequestSurfaceSchemas(t *testing.T, schemas map[string]any) {
+	t.Helper()
+	workRequestSchema := schemaObject(t, schemas, "WorkRequest")
+	assertRequiredFields(t, workRequestSchema, "requestId", "type")
+	workRequestProperties := schemaProperties(t, workRequestSchema, "WorkRequest")
+	assertSchemaPropertiesPresent(t, workRequestProperties, "WorkRequest", "requestId", "currentChainingTraceId", "type", "works", "relations")
+	assertArrayItemRef(t, workRequestProperties, "relations", "#/components/schemas/WorkRequestRelation")
+	workRequestRelation := schemaObject(t, schemas, "WorkRequestRelation")
+	assertRequiredFields(t, workRequestRelation, "type", "sourceWorkName")
+	workRequestRelationProperties := schemaProperties(t, workRequestRelation, "WorkRequestRelation")
+	assertSchemaPropertiesPresent(t, workRequestRelationProperties, "WorkRequestRelation", "type", "sourceWorkName", "targetWorkId", "targetWorkName", "requiredState")
+	if anyOf, ok := workRequestRelation["anyOf"].([]any); !ok || len(anyOf) != 2 {
+		t.Fatalf("WorkRequestRelation.anyOf = %#v, want name-or-ID alternatives", workRequestRelation["anyOf"])
+	}
+	workRequestType := schemaObject(t, schemas, "WorkRequestType")
+	assertEnumValues(t, workRequestType, "WorkRequestType", []string{"FACTORY_REQUEST_BATCH"})
+	workRequestTypeVarNames, ok := workRequestType["x-enum-varnames"].([]any)
+	if !ok {
+		t.Fatalf("components.schemas.WorkRequestType.x-enum-varnames is missing")
+	}
+	if containsString(workRequestTypeVarNames, "WorkRequestTypeDefault") {
+		t.Fatalf("components.schemas.WorkRequestType must not advertise legacy DEFAULT request type")
+	}
+
+	workSchema := schemaObject(t, schemas, "Work")
+	workProperties := schemaProperties(t, workSchema, "Work")
+	assertSchemaPropertiesPresent(t, workProperties, "Work", "name", "workId", "requestId", "workTypeName", "state", "currentChainingTraceId", "previousChainingTraceIds", "traceId", "content", "payload", "tags", "relations")
+	assertPropertyRef(t, workProperties, "content", "#/components/schemas/WorkContent")
+	assertArrayItemRef(t, workProperties, "relations", "#/components/schemas/Relation")
+	assertPropertiesAbsent(t, workProperties, "Work", "work_type_id", "target_state")
 }

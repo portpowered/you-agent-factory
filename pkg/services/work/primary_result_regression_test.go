@@ -132,7 +132,6 @@ func primaryResultWorkItem(workID, workTypeName, stateName, name, placeID string
 		State:       stateName,
 		DisplayName: name,
 		TraceID:     workID + "-trace",
-		PlaceID:     placeID,
 		Content: []work.WorkContentPart{{
 			Type: work.WorkContentPartTypeText,
 			Text: workID + "-content",

@@ -10,7 +10,7 @@ import (
 // Validate loads the effective ownership inventory for root and checks it
 // against production packages under pkg.
 func Validate(root string) (Report, error) {
-	inventory, reused, err := LoadEffective(root)
+	inventory, err := Load(root)
 	if err != nil {
 		return Report{}, err
 	}
@@ -18,14 +18,7 @@ func Validate(root string) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
-	discovered, err := DiscoverCrossServiceEdges(root, inventory.Packages)
-	if err != nil {
-		return Report{}, err
-	}
-	report := ValidateInventory(inventory, packages)
-	validateCrossServiceEdgeCoverage(inventory, discovered, &report)
-	report.ReusedFND01Seed = reused
-	return report, nil
+	return ValidateInventory(inventory, packages), nil
 }
 
 // ValidateInventory checks freeze properties against an explicit package list.
@@ -38,10 +31,12 @@ func ValidateInventory(inventory Inventory, packages []string) Report {
 		report.UnstableSort = true
 	}
 
+	report.InvalidMappings = append(report.InvalidMappings, ValidateUnfinishedMoves(inventory.UnfinishedMoves, inventory.Destinations)...)
+
 	seen := map[string]int{}
 	for _, row := range inventory.Packages {
 		seen[row.PackagePath]++
-		if msg := validateRow(row); msg != "" {
+		if msg := validateRow(row, inventory.Destinations); msg != "" {
 			report.InvalidMappings = append(report.InvalidMappings, msg)
 		}
 	}
@@ -53,30 +48,28 @@ func ValidateInventory(inventory Inventory, packages []string) Report {
 	slices.Sort(report.DuplicatePackages)
 	slices.Sort(report.InvalidMappings)
 
-	expected := map[string]struct{}{}
+	// A live package with no row is valid, expected state: its owner is derived
+	// from the tree by OwnerForPackage. Only the reverse direction still fails —
+	// a row naming a package path that no longer exists on disk is stale.
+	live := make(map[string]struct{}, len(packages))
 	for _, packagePath := range packages {
-		expected[packagePath] = struct{}{}
-		if seen[packagePath] == 0 {
-			report.MissingPackages = append(report.MissingPackages, packagePath)
-		}
+		live[packagePath] = struct{}{}
 	}
-	slices.Sort(report.MissingPackages)
-
 	for packagePath := range seen {
-		if _, ok := expected[packagePath]; !ok {
+		if _, ok := live[packagePath]; !ok {
 			report.UnexpectedPackages = append(report.UnexpectedPackages, packagePath)
 		}
 	}
 	slices.Sort(report.UnexpectedPackages)
 
-	if !hasProcessEdgesException(inventory) {
+	if !hasProcessEdgesException(inventory, packages) {
 		report.MissingProcessEdgesException = true
 	}
 
 	seedNames := map[string]struct{}{}
 	for _, seed := range inventory.SeedServices {
 		seedNames[seed.Name] = struct{}{}
-		if !isKnownDestination(seed.Destination) || seed.Destination == DestinationDeletionQueue {
+		if !inventory.Destinations.IsKnownDestination(seed.Destination) || seed.Destination == DestinationDeletionQueue {
 			report.InvalidMappings = append(report.InvalidMappings, fmt.Sprintf("seed service %q has invalid destination %q", seed.Name, seed.Destination))
 		}
 	}
@@ -98,13 +91,8 @@ func ValidateInventory(inventory Inventory, packages []string) Report {
 	}
 	slices.Sort(report.MissingAdditionalRoots)
 
-	validateRationales(inventory, &report)
-	validateResponsibilityClusters(inventory, &report)
-	validateCrossServiceEdges(inventory, &report)
 	validateNamedOwners(inventory, &report)
 	validateMisplacedGuards(inventory, &report)
-	validatePublicSurfaces(inventory, &report)
-	validateOwnedRoles(inventory, &report)
 
 	return report
 }
@@ -115,10 +103,17 @@ func validateMisplacedGuards(inventory Inventory, report *Report) {
 	}
 
 	byID := map[string]MisplacedGuardEntry{}
+	required := map[string]struct{}{}
+	for _, id := range RequiredMisplacedGuardIDs() {
+		required[id] = struct{}{}
+	}
 	for _, entry := range inventory.MisplacedGuards {
 		byID[entry.ID] = entry
-		if msg := validateMisplacedGuardEntry(entry); msg != "" {
+		if msg := validateMisplacedGuardEntry(entry, inventory.Destinations); msg != "" {
 			report.InvalidMisplacedGuards = append(report.InvalidMisplacedGuards, msg)
+		}
+		if _, expected := required[entry.ID]; !expected {
+			report.InvalidMisplacedGuards = append(report.InvalidMisplacedGuards, entry.ID+": no longer a committed misplaced guard; remove it after correcting ownership")
 		}
 	}
 	for _, id := range RequiredMisplacedGuardIDs() {
@@ -131,7 +126,7 @@ func validateMisplacedGuards(inventory Inventory, report *Report) {
 	report.InvalidMisplacedGuards = slices.Compact(report.InvalidMisplacedGuards)
 }
 
-func validateMisplacedGuardEntry(entry MisplacedGuardEntry) string {
+func validateMisplacedGuardEntry(entry MisplacedGuardEntry, vocabulary DestinationVocabulary) string {
 	if strings.TrimSpace(entry.ID) == "" {
 		return "misplaced guard missing id"
 	}
@@ -162,101 +157,8 @@ func validateMisplacedGuardEntry(entry MisplacedGuardEntry) string {
 	if strings.TrimSpace(entry.ReplacementOwner) == "" {
 		return entry.ID + ": missing replacementOwner"
 	}
-	if !isKnownDestination(entry.ReplacementOwner) || entry.ReplacementOwner == DestinationDeletionQueue {
+	if !vocabulary.IsKnownDestination(entry.ReplacementOwner) || entry.ReplacementOwner == DestinationDeletionQueue {
 		return entry.ID + ": replacementOwner outside product owner vocabulary"
-	}
-	if strings.TrimSpace(entry.Note) == "" {
-		return entry.ID + ": missing note"
-	}
-	return ""
-}
-
-func validatePublicSurfaces(inventory Inventory, report *Report) {
-	if !slices.IsSortedFunc(inventory.PublicSurfaces, comparePublicSurfaces) {
-		report.UnstablePublicSurfaceSort = true
-	}
-
-	byID := map[string]PublicSurfaceEntry{}
-	for _, entry := range inventory.PublicSurfaces {
-		byID[entry.ID] = entry
-		if msg := validatePublicSurfaceEntry(entry); msg != "" {
-			report.InvalidPublicSurfaces = append(report.InvalidPublicSurfaces, msg)
-		}
-	}
-	for _, id := range RequiredPublicSurfaceIDs() {
-		if _, ok := byID[id]; !ok {
-			report.MissingPublicSurfaces = append(report.MissingPublicSurfaces, id)
-		}
-	}
-	slices.Sort(report.MissingPublicSurfaces)
-	slices.Sort(report.InvalidPublicSurfaces)
-	report.InvalidPublicSurfaces = slices.Compact(report.InvalidPublicSurfaces)
-}
-
-func validatePublicSurfaceEntry(entry PublicSurfaceEntry) string {
-	if strings.TrimSpace(entry.ID) == "" {
-		return "public surface missing id"
-	}
-	switch entry.Kind {
-	case PublicSurfaceKindBehaviorTest, PublicSurfaceKindCLI, PublicSurfaceKindHTTP,
-		PublicSurfaceKindMCP, PublicSurfaceKindReplay, PublicSurfaceKindVisualization:
-	default:
-		return entry.ID + ": unknown kind " + strconv.Quote(entry.Kind)
-	}
-	if strings.TrimSpace(entry.SurfacePath) == "" {
-		return entry.ID + ": missing surfacePath"
-	}
-	if strings.TrimSpace(entry.ReplacementOwner) == "" {
-		return entry.ID + ": missing replacementOwner"
-	}
-	if !isKnownDestination(entry.ReplacementOwner) || entry.ReplacementOwner == DestinationDeletionQueue {
-		return entry.ID + ": replacementOwner outside closed vocabulary"
-	}
-	if strings.TrimSpace(entry.Note) == "" {
-		return entry.ID + ": missing note"
-	}
-	return ""
-}
-
-func validateOwnedRoles(inventory Inventory, report *Report) {
-	if !slices.IsSortedFunc(inventory.OwnedRoles, compareOwnedRoles) {
-		report.UnstableOwnedRoleSort = true
-	}
-
-	byID := map[string]OwnedRoleEntry{}
-	for _, entry := range inventory.OwnedRoles {
-		byID[entry.ID] = entry
-		if msg := validateOwnedRoleEntry(entry); msg != "" {
-			report.InvalidOwnedRoles = append(report.InvalidOwnedRoles, msg)
-		}
-	}
-	for _, id := range RequiredOwnedRoleIDs() {
-		if _, ok := byID[id]; !ok {
-			report.MissingOwnedRoles = append(report.MissingOwnedRoles, id)
-		}
-	}
-	slices.Sort(report.MissingOwnedRoles)
-	slices.Sort(report.InvalidOwnedRoles)
-	report.InvalidOwnedRoles = slices.Compact(report.InvalidOwnedRoles)
-}
-
-func validateOwnedRoleEntry(entry OwnedRoleEntry) string {
-	if strings.TrimSpace(entry.ID) == "" {
-		return "owned role missing id"
-	}
-	switch entry.Kind {
-	case OwnedRoleKindConstructor, OwnedRoleKindDatastore, OwnedRoleKindLifecycleRole, OwnedRoleKindProtocolAdapter:
-	default:
-		return entry.ID + ": unknown kind " + strconv.Quote(entry.Kind)
-	}
-	if strings.TrimSpace(entry.Name) == "" {
-		return entry.ID + ": missing name"
-	}
-	if strings.TrimSpace(entry.Destination) == "" {
-		return entry.ID + ": missing destination"
-	}
-	if !isKnownDestination(entry.Destination) {
-		return entry.ID + ": destination outside closed vocabulary"
 	}
 	if strings.TrimSpace(entry.Note) == "" {
 		return entry.ID + ": missing note"
@@ -272,7 +174,7 @@ func validateNamedOwners(inventory Inventory, report *Report) {
 	byOwner := map[string]NamedOwnerConfirmation{}
 	for _, confirmation := range inventory.NamedOwnerConfirmations {
 		byOwner[confirmation.Owner] = confirmation
-		if msg := validateNamedOwnerConfirmation(confirmation, inventory.Packages); msg != "" {
+		if msg := validateNamedOwnerConfirmation(confirmation, inventory.Packages, inventory.Destinations); msg != "" {
 			report.InvalidNamedOwnerMaps = append(report.InvalidNamedOwnerMaps, msg)
 		}
 		if confirmation.Status != NamedOwnerStatusConfirmed ||
@@ -280,10 +182,10 @@ func validateNamedOwners(inventory Inventory, report *Report) {
 			strings.Contains(strings.ToLower(confirmation.Status), "decomposition") {
 			report.UnconfirmedNamedOwners = append(report.UnconfirmedNamedOwners, confirmation.Owner)
 		}
-		if !slices.Contains(ProductOwners, confirmation.Owner) {
+		if !inventory.Destinations.IsOwner(confirmation.Owner) {
 			report.InvalidNamedOwnerMaps = append(
 				report.InvalidNamedOwnerMaps,
-				confirmation.Owner+": introduces alternate top-level owner outside the committed 13-owner tree",
+				confirmation.Owner+": introduces alternate top-level owner outside the committed product-owner tree",
 			)
 		}
 	}
@@ -312,7 +214,7 @@ func validateNamedOwners(inventory Inventory, report *Report) {
 	report.InvalidNamedOwnerMaps = slices.Compact(report.InvalidNamedOwnerMaps)
 }
 
-func validateNamedOwnerConfirmation(confirmation NamedOwnerConfirmation, packages []PackageRow) string {
+func validateNamedOwnerConfirmation(confirmation NamedOwnerConfirmation, packages []PackageRow, vocabulary DestinationVocabulary) string {
 	if strings.TrimSpace(confirmation.Owner) == "" {
 		return "named owner confirmation missing owner"
 	}
@@ -340,21 +242,21 @@ func validateNamedOwnerConfirmation(confirmation NamedOwnerConfirmation, package
 		return confirmation.Owner + ": missing note"
 	}
 	for _, rule := range confirmation.ResidualPackageRules {
-		if msg := validateResidualPackageRule(confirmation.Owner, rule, packages); msg != "" {
+		if msg := validateResidualPackageRule(confirmation.Owner, rule, packages, vocabulary); msg != "" {
 			return msg
 		}
 	}
 	return ""
 }
 
-func validateResidualPackageRule(owner string, rule ResidualPackageRule, packages []PackageRow) string {
+func validateResidualPackageRule(owner string, rule ResidualPackageRule, packages []PackageRow, vocabulary DestinationVocabulary) string {
 	if strings.TrimSpace(rule.PackagePrefix) == "" {
 		return owner + ": residual rule missing packagePrefix"
 	}
 	if strings.TrimSpace(rule.Destination) == "" {
 		return owner + ": residual rule " + rule.PackagePrefix + " missing destination"
 	}
-	if !isKnownDestination(rule.Destination) {
+	if !vocabulary.IsKnownDestination(rule.Destination) {
 		return owner + ": residual rule " + rule.PackagePrefix + " destination outside closed vocabulary"
 	}
 	if rule.Disposition != DispositionRetain && rule.Disposition != DispositionMove && rule.Disposition != DispositionDelete {
@@ -380,179 +282,6 @@ func validateResidualPackageRule(owner string, rule ResidualPackageRule, package
 	return ""
 }
 
-func validateCrossServiceEdges(inventory Inventory, report *Report) {
-	if len(inventory.CrossServiceEdges) == 0 {
-		report.MissingCrossServiceEdgeTable = true
-		return
-	}
-	if !slices.IsSortedFunc(inventory.CrossServiceEdges, compareCrossServiceEdges) {
-		report.UnstableEdgeSort = true
-	}
-	for _, edge := range inventory.CrossServiceEdges {
-		if msg := validateCrossServiceEdge(edge); msg != "" {
-			report.InvalidEdgeClassifications = append(report.InvalidEdgeClassifications, msg)
-		}
-	}
-	slices.Sort(report.InvalidEdgeClassifications)
-}
-
-func validateCrossServiceEdgeCoverage(inventory Inventory, discovered []CrossServiceEdge, report *Report) {
-	// Incomplete fixture trees may contain package stubs without real imports.
-	// Skip coverage reconciliation when discovery finds nothing.
-	if len(discovered) == 0 {
-		return
-	}
-	inventoried := map[string]CrossServiceEdge{}
-	for _, edge := range inventory.CrossServiceEdges {
-		inventoried[edgePairKey(edge.FromOwner, edge.ToOwner)] = edge
-	}
-	discoveredKeys := map[string]struct{}{}
-	for _, edge := range discovered {
-		key := edgePairKey(edge.FromOwner, edge.ToOwner)
-		discoveredKeys[key] = struct{}{}
-		if _, ok := inventoried[key]; !ok {
-			report.MissingCrossServiceEdges = append(report.MissingCrossServiceEdges, key)
-		}
-	}
-	for key := range inventoried {
-		if _, ok := discoveredKeys[key]; !ok {
-			report.UnexpectedCrossServiceEdges = append(report.UnexpectedCrossServiceEdges, key)
-		}
-	}
-	slices.Sort(report.MissingCrossServiceEdges)
-	slices.Sort(report.UnexpectedCrossServiceEdges)
-}
-
-func validateCrossServiceEdge(edge CrossServiceEdge) string {
-	key := edgePairKey(edge.FromOwner, edge.ToOwner)
-	if strings.TrimSpace(edge.FromOwner) == "" || strings.TrimSpace(edge.ToOwner) == "" {
-		return key + ": missing fromOwner/toOwner"
-	}
-	if edge.FromOwner == edge.ToOwner {
-		return key + ": edge is not cross-owner"
-	}
-	if strings.TrimSpace(edge.Class) == "" {
-		return key + ": missing class"
-	}
-	if !isAllowedEdgeClass(edge.Class) {
-		return key + ": unknown class " + strconv.Quote(edge.Class)
-	}
-	involvesProcessEdges := edge.FromOwner == DestinationEdges || edge.ToOwner == DestinationEdges
-	if involvesProcessEdges {
-		if !edge.ArchitectureException {
-			return key + ": Process Edges edge must set architectureException"
-		}
-		if edge.Class != EdgeClassConstruction && edge.Class != EdgeClassExternalEffect {
-			return key + ": Process Edges edge class must be construction or external_effect"
-		}
-	} else if edge.ArchitectureException {
-		return key + ": architectureException reserved for Process Edges edges"
-	}
-	if strings.TrimSpace(edge.Evidence) == "" {
-		return key + ": missing evidence"
-	}
-	return ""
-}
-
-func validateRationales(inventory Inventory, report *Report) {
-	if !slices.IsSortedFunc(inventory.OwnerRationales, func(a, b OwnerRationaleCard) int {
-		return strings.Compare(a.ServiceID, b.ServiceID)
-	}) {
-		report.UnstableRationaleSort = true
-	}
-
-	byID := map[string]OwnerRationaleCard{}
-	for _, card := range inventory.OwnerRationales {
-		byID[card.ServiceID] = card
-		if msg := validateRationaleCard(card); msg != "" {
-			report.InvalidRationaleFields = append(report.InvalidRationaleFields, msg)
-		}
-	}
-
-	for _, owner := range ProductOwners {
-		card, ok := byID[owner]
-		if !ok || card.Kind != RationaleKindTopLevel || card.Owner != owner {
-			report.MissingOwnerRationales = append(report.MissingOwnerRationales, owner)
-		}
-	}
-	slices.Sort(report.MissingOwnerRationales)
-
-	for _, serviceID := range CommittedNestedServiceIDs {
-		card, ok := byID[serviceID]
-		if !ok || card.Kind != RationaleKindNested {
-			report.MissingNestedRationales = append(report.MissingNestedRationales, serviceID)
-		}
-	}
-	slices.Sort(report.MissingNestedRationales)
-	slices.Sort(report.InvalidRationaleFields)
-}
-
-func validateResponsibilityClusters(inventory Inventory, report *Report) {
-	if !slices.IsSortedFunc(inventory.ResponsibilityClusters, func(a, b ResponsibilityCluster) int {
-		if cmp := strings.Compare(a.Owner, b.Owner); cmp != 0 {
-			return cmp
-		}
-		return strings.Compare(a.ClusterID, b.ClusterID)
-	}) {
-		report.UnstableResponsibilitySort = true
-	}
-
-	seen := map[string]ResponsibilityCluster{}
-	for _, cluster := range inventory.ResponsibilityClusters {
-		key := cluster.Owner + "/" + cluster.ClusterID
-		seen[key] = cluster
-		if strings.TrimSpace(cluster.Owner) == "" ||
-			strings.TrimSpace(cluster.ClusterID) == "" ||
-			strings.TrimSpace(cluster.Name) == "" ||
-			strings.TrimSpace(cluster.Note) == "" {
-			report.MissingResponsibilityClusters = append(report.MissingResponsibilityClusters, key)
-		}
-	}
-	for _, key := range CommittedResponsibilityClusterIDs {
-		if _, ok := seen[key]; !ok {
-			report.MissingResponsibilityClusters = append(report.MissingResponsibilityClusters, key)
-		}
-	}
-	slices.Sort(report.MissingResponsibilityClusters)
-	report.MissingResponsibilityClusters = slices.Compact(report.MissingResponsibilityClusters)
-}
-
-func validateRationaleCard(card OwnerRationaleCard) string {
-	if strings.TrimSpace(card.ServiceID) == "" {
-		return "rationale card missing serviceId"
-	}
-	switch card.Kind {
-	case RationaleKindTopLevel, RationaleKindNested:
-	default:
-		return card.ServiceID + ": unknown rationale kind " + strconv.Quote(card.Kind)
-	}
-	if strings.TrimSpace(card.Owner) == "" {
-		return card.ServiceID + ": missing owner"
-	}
-	if strings.TrimSpace(card.TargetPath) == "" {
-		return card.ServiceID + ": missing targetPath"
-	}
-	if card.Kind == RationaleKindNested && strings.TrimSpace(card.ParentServiceID) == "" {
-		return card.ServiceID + ": nested rationale missing parentServiceId"
-	}
-	for _, field := range []struct {
-		name  string
-		value string
-	}{
-		{"authority", card.Authority},
-		{"stateStore", card.StateStore},
-		{"lifecycle", card.Lifecycle},
-		{"consumers", card.Consumers},
-		{"transactionBoundary", card.TransactionBoundary},
-		{"failureRecovery", card.FailureRecovery},
-	} {
-		if strings.TrimSpace(field.value) == "" {
-			return card.ServiceID + ": missing " + field.name
-		}
-	}
-	return ""
-}
-
 func packagePaths(rows []PackageRow) []string {
 	out := make([]string, len(rows))
 	for i, row := range rows {
@@ -561,7 +290,7 @@ func packagePaths(rows []PackageRow) []string {
 	return out
 }
 
-func validateRow(row PackageRow) string {
+func validateRow(row PackageRow, vocabulary DestinationVocabulary) string {
 	if row.PackagePath == "" {
 		return "package row missing packagePath"
 	}
@@ -573,7 +302,7 @@ func validateRow(row PackageRow) string {
 	if row.Destination == "" {
 		return fmt.Sprintf("%s: missing destination", row.PackagePath)
 	}
-	kind, ok := closedDestinationSet()[row.Destination]
+	kind, ok := vocabulary.KindOf(row.Destination)
 	if !ok {
 		return fmt.Sprintf("%s: destination %q outside closed vocabulary", row.PackagePath, row.Destination)
 	}
@@ -592,8 +321,11 @@ func validateRow(row PackageRow) string {
 		if row.Destination == DestinationDeletionQueue {
 			return fmt.Sprintf("%s: move disposition requires an owner/family/exception destination", row.PackagePath)
 		}
-		if strings.TrimSpace(row.Successor) == "" || strings.TrimSpace(row.DeletionCondition) == "" {
-			return fmt.Sprintf("%s: move mapping requires successor and deletionCondition", row.PackagePath)
+		// deletionCondition stays optional: the consolidated move ledger carries
+		// rows that only ever existed in the package-target manifest, which
+		// never recorded a closing condition for them.
+		if strings.TrimSpace(row.Successor) == "" {
+			return fmt.Sprintf("%s: move mapping requires a successor", row.PackagePath)
 		}
 	case DispositionRetain:
 		if row.Destination == DestinationDeletionQueue {
@@ -603,7 +335,11 @@ func validateRow(row PackageRow) string {
 	return ""
 }
 
-func hasProcessEdgesException(inventory Inventory) bool {
+// hasProcessEdgesException proves the declared architecture exception against
+// the live tree rather than against a package row. The declaration carries the
+// decision; the tree carries the fact that Process Edges still exists and still
+// derives to the exception destination.
+func hasProcessEdgesException(inventory Inventory, livePackages []string) bool {
 	exception := inventory.ProcessEdgesException
 	if exception.PackagePath != ProcessEdgesPackagePath ||
 		exception.Destination != DestinationEdges ||
@@ -611,13 +347,9 @@ func hasProcessEdgesException(inventory Inventory) bool {
 		strings.TrimSpace(exception.Note) == "" {
 		return false
 	}
-	for _, row := range inventory.Packages {
-		if row.PackagePath != ProcessEdgesPackagePath {
-			continue
-		}
-		return row.Destination == DestinationEdges &&
-			row.DestinationKind == DestinationKindArchitectureException &&
-			row.Disposition == DispositionRetain
+	owner, ok := OwnerForPackage(ProcessEdgesPackagePath)
+	if !ok || owner != DestinationEdges {
+		return false
 	}
-	return false
+	return slices.Contains(livePackages, ProcessEdgesPackagePath)
 }

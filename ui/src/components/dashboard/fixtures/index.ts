@@ -1,3 +1,5 @@
+export * from "./dashboard-regression";
+export * from "./dashboard-regression-controller";
 export * from "./failure-analysis-events";
 export * from "./graph-state-smoke-events";
 export * from "./resource-count-events";

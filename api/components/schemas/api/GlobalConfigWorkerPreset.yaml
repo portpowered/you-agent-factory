@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 description: Named worker model selection available to Factory Session runtime opening.
 required:
   - id

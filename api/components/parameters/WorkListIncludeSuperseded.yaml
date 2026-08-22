@@ -1,0 +1,9 @@
+name: includeSuperseded
+in: query
+required: false
+description: >-
+  Optional historical view. When true, includes terminal or failed same-name
+  Work items that have a later admitted successor; otherwise those superseded
+  rows are omitted before counts and pagination.
+schema:
+  type: boolean

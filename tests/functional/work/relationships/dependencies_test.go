@@ -12,9 +12,8 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -141,8 +140,8 @@ func TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure(t *testing.T) {
 		},
 	})
 
-	provider := testutil.NewMockProviderWithErrors(
-		[]workerexecution.InferenceResponse{
+	provider := testutil.NewNativeMockProviderWithErrors(
+		[]providers.ExecuteResult{
 			{Content: "COMPLETE"},
 			{Content: "COMPLETE"},
 		},
@@ -172,10 +171,10 @@ func TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure(t *testing.T) {
 		t.Fatalf("dependent work %q reached processing after prerequisite failure: %#v", dependentWorkID, listed)
 	}
 
-	if got := len(support.ProviderCallsForWorker(provider, "starter")); got != 1 {
+	if got := len(provider.CallsForWorker("starter")); got != 1 {
 		t.Fatalf("starter provider calls = %d, want 1 (prerequisite only)", got)
 	}
-	if got := len(support.ProviderCallsForWorker(provider, "finisher")); got != 1 {
+	if got := len(provider.CallsForWorker("finisher")); got != 1 {
 		t.Fatalf("finisher provider calls = %d, want 1 (prerequisite only)", got)
 	}
 
@@ -255,6 +254,7 @@ func TestWorkWithoutDependsOnRelationsDispatchesNormally(t *testing.T) {
 // undispatched while only a proper subset of prerequisites has reached the
 // declared requiredState, then proceeds only after every prerequisite target
 // state is satisfied.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestFanInReleasesOnlyAfterEveryPrerequisite(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_tracking_dir"))
 
@@ -671,7 +671,7 @@ func assertNoDependentStartDispatch(t *testing.T, events []factoryapi.FactoryEve
 func startDependencyFactory(
 	t *testing.T,
 	dir string,
-	provider workerprovider.Provider,
+	provider providers.Service,
 ) (baseURL string, daemon *support.ProcessCommand) {
 	t.Helper()
 
@@ -707,31 +707,40 @@ func waitForPartialFanInObservation(
 	completeLocation := support.WorkCustomerLocation("task", dependencyRequiredState)
 	processingLocation := support.WorkCustomerLocation("task", "processing")
 	initLocation := support.WorkCustomerLocation("task", "init")
-	deadline := time.Now().Add(timeout)
-
-	for time.Now().Before(deadline) {
-		listed := support.ListDefaultSessionWork(t, baseURL)
-		events := support.GetFactoryEventsAt(t, baseURL)
-
-		aComplete := support.HasWorkAtCustomerState(listed, prerequisiteAWorkID, completeLocation)
-		bComplete := support.HasWorkAtCustomerState(listed, prerequisiteBWorkID, completeLocation)
-		if aComplete != bComplete &&
-			!support.HasWorkAtCustomerState(listed, dependentWorkID, completeLocation) &&
-			!support.HasWorkAtCustomerState(listed, dependentWorkID, processingLocation) &&
-			support.HasWorkAtCustomerState(listed, dependentWorkID, initLocation) {
-			return listed, events
-		}
-
-		time.Sleep(50 * time.Millisecond)
+	type observation struct {
+		listed factoryapi.ListWorkResponse
+		events []factoryapi.FactoryEvent
 	}
-
-	listed := support.ListDefaultSessionWork(t, baseURL)
-	t.Fatalf(
-		"timed out waiting %s for partial fan-in observation; listed=%#v",
+	last, err := support.WaitForObservation(
 		timeout,
-		listed,
+		func() (observation, error) {
+			return observation{
+				listed: support.ListDefaultSessionWork(t, baseURL),
+				events: support.GetFactoryEventsAt(t, baseURL),
+			}, nil
+		},
+		func(current observation) bool {
+			listed := current.listed
+			aComplete := support.HasWorkAtCustomerState(listed, prerequisiteAWorkID, completeLocation)
+			bComplete := support.HasWorkAtCustomerState(listed, prerequisiteBWorkID, completeLocation)
+			if aComplete != bComplete &&
+				!support.HasWorkAtCustomerState(listed, dependentWorkID, completeLocation) &&
+				!support.HasWorkAtCustomerState(listed, dependentWorkID, processingLocation) &&
+				support.HasWorkAtCustomerState(listed, dependentWorkID, initLocation) {
+				return true
+			}
+			return false
+		},
 	)
-	return listed, nil
+	if err != nil {
+		t.Fatalf(
+			"timed out waiting %s for partial fan-in observation: %v; listed=%#v",
+			timeout,
+			err,
+			last.listed,
+		)
+	}
+	return last.listed, last.events
 }
 
 func assertFanInBlockedAfterPartialPrerequisites(
@@ -835,6 +844,7 @@ func fanInDispatchOrdering(
 }
 
 type fanInSecondFinisherGateProvider struct {
+	testutil.NativeProvider
 	secondFinisherReached chan struct{}
 	release               chan struct{}
 	releaseOnce           sync.Once
@@ -843,23 +853,20 @@ type fanInSecondFinisherGateProvider struct {
 	starterCalls          int
 }
 
-var _ workerprovider.Provider = (*fanInSecondFinisherGateProvider)(nil)
-
 func newFanInSecondFinisherGateProvider() *fanInSecondFinisherGateProvider {
-	return &fanInSecondFinisherGateProvider{
+	provider := &fanInSecondFinisherGateProvider{
 		secondFinisherReached: make(chan struct{}, 1),
 		release:               make(chan struct{}),
 	}
+	provider.NativeProvider.ExecuteFunc = provider.Execute
+	return provider
 }
 
-func (p *fanInSecondFinisherGateProvider) Infer(
+func (p *fanInSecondFinisherGateProvider) Execute(
 	ctx context.Context,
-	req workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
+	req providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
 	workerType := req.WorkerType
-	if workerType == "" {
-		workerType = req.Dispatch.WorkerType
-	}
 
 	p.mu.Lock()
 	switch workerType {
@@ -878,17 +885,28 @@ func (p *fanInSecondFinisherGateProvider) Infer(
 			select {
 			case <-p.release:
 			case <-ctx.Done():
-				return workerexecution.InferenceResponse{}, ctx.Err()
+				return providers.ExecuteResult{}, ctx.Err()
 			}
 		}
-		return workerexecution.InferenceResponse{Content: "COMPLETE"}, nil
+		return fanInGateProviderCompleteResponse(), nil
 	default:
 		p.mu.Unlock()
-		return workerexecution.InferenceResponse{}, errors.New("unexpected worker type: " + workerType)
+		return providers.ExecuteResult{}, errors.New("unexpected worker type: " + workerType)
 	}
 
 	p.mu.Unlock()
-	return workerexecution.InferenceResponse{Content: "COMPLETE"}, nil
+	return fanInGateProviderCompleteResponse(), nil
+}
+
+func fanInGateProviderCompleteResponse() providers.ExecuteResult {
+	return providers.ExecuteResult{
+		Content: "COMPLETE",
+		Diagnostics: &providers.ExecuteDiagnostics{
+			Metadata: map[string]string{
+				"completion_evidence": "provider_response",
+			},
+		},
+	}
 }
 
 func (p *fanInSecondFinisherGateProvider) WaitForSecondFinisherGate(t *testing.T, timeout time.Duration) {

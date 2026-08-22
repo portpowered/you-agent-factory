@@ -18,6 +18,7 @@ type Service struct {
 	secretResolver hostedlinear.SecretResolver
 	checkpoints    hostedlinear.CheckpointStore
 	linearEndpoint string
+	jitter         retryJitter
 }
 
 // New constructs hosted polling without starting its lifecycle.
@@ -27,6 +28,7 @@ func New(
 	httpClient hostedlinear.HTTPDoer,
 	secretResolver hostedlinear.SecretResolver,
 	linearEndpoint string,
+	random RetryRandomSource,
 	checkpointStores ...hostedlinear.CheckpointStore,
 ) *Service {
 	var checkpoints hostedlinear.CheckpointStore
@@ -36,6 +38,7 @@ func New(
 	return &Service{
 		logger: defaultLogger(logger), clock: clock, httpClient: httpClient,
 		secretResolver: secretResolver, checkpoints: checkpoints, linearEndpoint: defaultLinearEndpoint(linearEndpoint),
+		jitter: retryJitterFromRandomSource(random),
 	}
 }
 
@@ -50,7 +53,7 @@ func (s *Service) StartLinearPoller(
 	return StartLinearPoller(
 		ctx, sidecars,
 		s.logger, s.clock, s.httpClient, s.secretResolver, s.checkpoints, s.linearEndpoint,
-		runtimeConfig, workstation, worker, submitter,
+		runtimeConfig, workstation, worker, s.jitter, submitter,
 	)
 }
 
@@ -62,7 +65,7 @@ func (s *Service) ValidateLinearPoller(
 ) error {
 	_, err := NewLinearPoller(
 		s.logger, s.clock, s.httpClient, s.secretResolver, s.checkpoints, s.linearEndpoint,
-		runtimeConfig, workstation, worker, submitter,
+		runtimeConfig, workstation, worker, s.jitter, submitter,
 	)
 	return err
 }

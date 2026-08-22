@@ -347,7 +347,7 @@ func newResultPolicyFixtureMCPClient(t *testing.T) *testClient {
 }
 
 type resultPolicyExecutionScript struct {
-	factorysessions.ExecutionService
+	mcpfactorysession.DurableExecution
 }
 
 func (resultPolicyExecutionScript) ListSessions(

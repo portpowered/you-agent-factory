@@ -4,6 +4,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -12,6 +13,8 @@ import { expect, test, vi } from "vitest";
 
 import {
   buildUiCoveragePhases,
+  bunUnitCoverageDirectory,
+  bunUnitCoveragePhaseName,
   cleanCoverageArtifacts,
   defaultCapturedStdoutMaxBuffer,
   defaultMainCoveredMaxWorkers,
@@ -19,6 +22,7 @@ import {
   formatPhaseElapsed,
   getMainCoveredMaxWorkers,
   mainCoveredPhaseName,
+  mergeBunUnitCoverage,
   parseVitestFileDurationsFromLog,
   phaseLogPrefix,
   rankSlowestTestFiles,
@@ -44,11 +48,24 @@ test("formats stable elapsed output for comparable coverage phases", () => {
   );
 });
 
-test("uses one covered pass followed by the standalone script-style check", () => {
+test("runs Vitest coverage, Bun coverage, then the standalone script-style check", () => {
   expect(uiCoveragePhases.map((phase) => phase.name)).toEqual([
     mainCoveredPhaseName,
+    bunUnitCoveragePhaseName,
     "Standalone script-style test",
   ]);
+});
+
+test("keeps Bun coverage in an isolated supplemental directory", () => {
+  const bunCoveragePhase = buildUiCoveragePhases().find(
+    (phase) => phase.name === bunUnitCoveragePhaseName,
+  );
+
+  expect(bunCoveragePhase).toMatchObject({
+    command: "bun",
+    args: ["run", "test:unit:bun:coverage"],
+  });
+  expect(bunUnitCoverageDirectory).toBe("coverage/bun-unit");
 });
 
 test("uses configured parallelism for the monolithic Node covered pass", () => {
@@ -77,7 +94,8 @@ test("allows the repo-owned coverage command to tune workers", () => {
 });
 
 test("keeps browser, script-style, and performance tests outside unit coverage", () => {
-  const [mainCoveredPass, standaloneScriptStyleTest] = buildUiCoveragePhases();
+  const [mainCoveredPass, , standaloneScriptStyleTest] =
+    buildUiCoveragePhases();
 
   expect(mainCoveredPass.args).toEqual(
     expect.arrayContaining([
@@ -166,20 +184,44 @@ test("runUiCoverage executes the monolithic pass and standalone check", () => {
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
   const exit = vi.spyOn(process, "exit").mockImplementation(() => {});
 
-  runUiCoverage(uiCoveragePhases, { rootDirectory, spawn });
+  const mergeCoverage = vi.fn();
+  runUiCoverage(uiCoveragePhases, { rootDirectory, spawn, mergeCoverage });
 
-  expect(spawn).toHaveBeenCalledTimes(2);
+  expect(spawn).toHaveBeenCalledTimes(3);
   expect(spawn.mock.calls[0][1]).not.toEqual(
     expect.arrayContaining([expect.stringMatching(/^--shard=/)]),
   );
   expect(log).toHaveBeenCalledWith(
     expect.stringContaining("Main covered pass slowest test files"),
   );
+  expect(mergeCoverage).toHaveBeenCalledWith(rootDirectory);
   expect(exit).not.toHaveBeenCalled();
 
   log.mockRestore();
   exit.mockRestore();
   rmSync(rootDirectory, { force: true, recursive: true });
+});
+
+test("mergeBunUnitCoverage combines the raw Bun report with Vitest LCOV", () => {
+  const rootDirectory = mkdtempSync(join(tmpdir(), "ui-coverage-merge-"));
+  const coverageDirectory = join(rootDirectory, "coverage");
+  const bunCoverageDirectory = join(rootDirectory, bunUnitCoverageDirectory);
+  mkdirSync(bunCoverageDirectory, { recursive: true });
+
+  try {
+    const baseReport = `TN:\nSF:src/lib/cn.ts\nDA:1,0\nLF:1\nLH:0\nend_of_record\n`;
+    const bunReport = `TN:\nSF:src/lib/cn.ts\nDA:1,1\nLF:1\nLH:1\nend_of_record\n`;
+    writeFileSync(join(coverageDirectory, "lcov.info"), baseReport, "utf8");
+    writeFileSync(join(bunCoverageDirectory, "lcov.info"), bunReport, "utf8");
+
+    mergeBunUnitCoverage(rootDirectory);
+
+    expect(
+      readFileSync(join(coverageDirectory, "lcov.info"), "utf8"),
+    ).toContain("DA:1,1");
+  } finally {
+    rmSync(rootDirectory, { force: true, recursive: true });
+  }
 });
 
 test("emits elapsed output before returning a failing phase status", () => {

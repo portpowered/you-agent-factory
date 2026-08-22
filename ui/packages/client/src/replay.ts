@@ -1,6 +1,7 @@
 import type { FactoryEvent } from "./contracts.js";
 import { orderFactoryEvents } from "./event-ordering.js";
 import {
+  isRecordingValidationCompatibilityIssueCode,
   type RecordingValidationIssueCode,
   validateFactoryEventEnvelope,
   validateFactoryEventSchemaVersion,
@@ -17,8 +18,16 @@ export interface FactoryReplayTextIssue {
 }
 
 export type SafeParseFactoryEventReplayTextResult =
-  | { success: true; data: FactoryEvent[] }
-  | { success: false; issues: readonly FactoryReplayTextIssue[] };
+  | {
+      success: true;
+      data: FactoryEvent[];
+      diagnostics: readonly FactoryReplayTextIssue[];
+    }
+  | {
+      success: false;
+      issues: readonly FactoryReplayTextIssue[];
+      diagnostics: readonly FactoryReplayTextIssue[];
+    };
 
 export class FactoryReplayTextParseError extends Error {
   readonly issues: readonly FactoryReplayTextIssue[];
@@ -42,6 +51,7 @@ function dataFrames(replayText: string): string[] {
 
   for (const block of normalizedText.split(/\n[\t ]*\n/)) {
     const dataLines: string[] = [];
+    let eventType = "message";
     for (const line of block.split("\n")) {
       if (line.startsWith(":")) {
         continue;
@@ -49,6 +59,10 @@ function dataFrames(replayText: string): string[] {
 
       const separator = line.indexOf(":");
       const field = separator === -1 ? line : line.slice(0, separator);
+      if (field === "event") {
+        eventType = separator === -1 ? "" : line.slice(separator + 1).trim();
+        continue;
+      }
       if (field !== "data") {
         continue;
       }
@@ -60,7 +74,10 @@ function dataFrames(replayText: string): string[] {
       dataLines.push(value);
     }
 
-    if (dataLines.length > 0) {
+    if (
+      dataLines.length > 0 &&
+      (eventType === "message" || eventType.length === 0)
+    ) {
       frames.push(dataLines.join("\n"));
     }
   }
@@ -73,6 +90,7 @@ export function safeParseFactoryEventReplayText(
 ): SafeParseFactoryEventReplayTextResult {
   const events: FactoryEvent[] = [];
   const issues: FactoryReplayTextIssue[] = [];
+  const diagnostics: FactoryReplayTextIssue[] = [];
 
   for (const [frameIndex, data] of dataFrames(replayText).entries()) {
     let input: unknown;
@@ -92,14 +110,21 @@ export function safeParseFactoryEventReplayText(
       ...validateFactoryEventEnvelope(input, framePath),
       ...validateFactoryEventSchemaVersion(input, framePath),
     ];
-    if (validationIssues.length > 0) {
-      issues.push(
-        ...validationIssues.map(({ code, path, message }) => ({
-          code,
-          path,
-          message,
-        })),
-      );
+    const frameIssues = validationIssues.map(({ code, path, message }) => ({
+      code,
+      path,
+      message,
+    }));
+    const blockingFrameIssues = frameIssues.filter(
+      ({ code }) => !isRecordingValidationCompatibilityIssueCode(code),
+    );
+    diagnostics.push(
+      ...frameIssues.filter(({ code }) =>
+        isRecordingValidationCompatibilityIssueCode(code),
+      ),
+    );
+    if (blockingFrameIssues.length > 0) {
+      issues.push(...blockingFrameIssues);
       continue;
     }
 
@@ -107,8 +132,8 @@ export function safeParseFactoryEventReplayText(
   }
 
   return issues.length > 0
-    ? { success: false, issues }
-    : { success: true, data: orderFactoryEvents(events) };
+    ? { success: false, issues, diagnostics }
+    : { success: true, data: orderFactoryEvents(events), diagnostics };
 }
 
 export function parseFactoryEventReplayText(

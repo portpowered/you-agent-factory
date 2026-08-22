@@ -3,16 +3,11 @@ package process
 import (
 	"context"
 	"errors"
-	"fmt"
-	"io"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -23,7 +18,29 @@ import (
 // commandHelperSpawnTimeoutBudget allows slow CI hosts (especially Windows) to
 // start the helper, spawn the child, and write the pid file before the test
 // context deadline fires. spawn-child sleeps 10s after spawning.
-const commandHelperSpawnTimeoutBudget = 3 * time.Second
+//
+// This bounds a failure, so it only costs wall time when a guard is already
+// broken: budgeting generously is free. A tighter 3s budget expired against
+// nothing worse than two Windows process creations under package load, which
+// surfaced as a missing pid file in whichever guard happened to run then.
+const commandHelperSpawnTimeoutBudget = 20 * time.Second
+
+// commandHelperInterruptionBudget bounds how long the guards that interrupt a
+// run let it proceed before their deadline fires. Unlike the budget above this
+// one is spent on every pass, so it trades wall time for headroom, and it is
+// squeezed from both sides: it has to outlast two process creations (the
+// helper, then the helper's own child) plus the helper's fixed pre-spawn pause,
+// or the run is torn down before the descendant it is meant to interrupt ever
+// exists -- yet stay under the 10s the helper sleeps, or the run ends on its
+// own and no deadline is ever observed.
+const commandHelperInterruptionBudget = 4 * time.Second
+
+// commandHelperDelayedSideEffectDelay is how long an escaped descendant waits
+// before producing its side effect. Keeping it above
+// commandHelperInterruptionBudget makes the guard's ordering unconditional: the
+// descendant starts no earlier than the run, so its side effect is always still
+// pending when the interruption lands, on any host and under any load.
+const commandHelperDelayedSideEffectDelay = 6 * time.Second
 
 func requireProcessIntegration(t *testing.T) {
 	t.Helper()
@@ -62,6 +79,7 @@ type recordingCommandLogger struct {
 	infos    []recordedCommandLog
 	verboses []recordedCommandLog
 	warns    []recordedCommandLog
+	errors   []recordedCommandLog
 }
 
 type recordedCommandLog struct {
@@ -82,7 +100,12 @@ func (l *recordingCommandLogger) Warn(msg string, keysAndValues ...any) {
 		fields: commandLogFieldsMap(keysAndValues...),
 	})
 }
-func (l *recordingCommandLogger) Error(_ string, _ ...any) {}
+func (l *recordingCommandLogger) Error(msg string, keysAndValues ...any) {
+	l.errors = append(l.errors, recordedCommandLog{
+		msg:    msg,
+		fields: commandLogFieldsMap(keysAndValues...),
+	})
+}
 func (l *recordingCommandLogger) Verbose(msg string, keysAndValues ...any) {
 	l.verboses = append(l.verboses, recordedCommandLog{
 		msg:    msg,
@@ -101,7 +124,7 @@ func (r fixedCommandRunnerWithError) Run(context.Context, CommandRequest) (Comma
 
 func testExecCommandRunner(t testing.TB, logger logging.Logger) ExecCommandRunner {
 	t.Helper()
-	runner, err := NewExecCommandRunner(exec.Command, platformclock.Real{}, logger)
+	runner, err := NewExecCommandRunner(exec.Command, platformclock.Real{}, logger, nil)
 	if err != nil {
 		t.Fatalf("NewExecCommandRunner() error = %v", err)
 	}
@@ -255,7 +278,7 @@ func testExecCommandRunnerAgentStyleSuccessLeavesNoChildProcess(t *testing.T) {
 func TestExecCommandRunner_ContextDeadlineTerminatesSpawnedChildProcess(t *testing.T) {
 	requireProcessIntegration(t)
 	pidFile := filepath.Join(t.TempDir(), "child.pid")
-	ctx, cancel := context.WithTimeout(context.Background(), commandHelperSpawnTimeoutBudget)
+	ctx, cancel := context.WithTimeout(context.Background(), commandHelperInterruptionBudget)
 	defer cancel()
 
 	result, err := testExecCommandRunner(t, nil).Run(ctx, CommandRequest{
@@ -335,66 +358,6 @@ func TestExecCommandRunner_ContextCancelTerminatesSpawnedChildProcess(t *testing
 
 	if !waitForCommandHelperProcessExit(childPID, 2*time.Second) {
 		t.Fatalf("spawned child process %d is still running after context cancel", childPID)
-	}
-}
-
-func TestExecCommandRunner_InterruptionPreventsDelayedDescendantSideEffect(t *testing.T) {
-	t.Run("cancellation", func(t *testing.T) {
-		assertInterruptionPreventsDelayedSideEffect(t, false)
-	})
-	t.Run("deadline", func(t *testing.T) {
-		assertInterruptionPreventsDelayedSideEffect(t, true)
-	})
-}
-
-func assertInterruptionPreventsDelayedSideEffect(t *testing.T, deadline bool) {
-	t.Helper()
-	requireProcessIntegration(t)
-	tempDir := t.TempDir()
-	pidFile := filepath.Join(tempDir, "child.pid")
-	sideEffectFile := filepath.Join(tempDir, "delayed-side-effect")
-
-	ctx, cancel := context.WithCancel(context.Background())
-	if deadline {
-		ctx, cancel = context.WithTimeout(context.Background(), 500*time.Millisecond)
-	}
-	defer cancel()
-	runDone := make(chan error, 1)
-	go func() {
-		_, err := testExecCommandRunner(t, nil).Run(ctx, CommandRequest{
-			Command: os.Args[0],
-			Args: []string{
-				"-test.run=TestExecCommandRunner_HelperProcess",
-				"--",
-				"spawn-child-side-effect",
-			},
-			Env: append(os.Environ(),
-				"GO_WANT_COMMAND_HELPER=1",
-				"COMMAND_HELPER_PID_FILE="+pidFile,
-				"COMMAND_HELPER_SIDE_EFFECT_FILE="+sideEffectFile,
-			),
-		})
-		runDone <- err
-	}()
-
-	childPID := waitForCommandHelperPID(t, pidFile, commandHelperSpawnTimeoutBudget)
-	t.Cleanup(func() {
-		commandTestTerminateProcess(childPID)
-	})
-	if !deadline {
-		cancel()
-	}
-	err := <-runDone
-	wantErr := context.Canceled
-	if deadline {
-		wantErr = context.DeadlineExceeded
-	}
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("Run error = %v, want %v", err, wantErr)
-	}
-	time.Sleep(time.Second)
-	if _, statErr := os.Stat(sideEffectFile); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatalf("delayed descendant side effect exists after Run returned: %v", statErr)
 	}
 }
 
@@ -772,206 +735,224 @@ func assertLoggingCommandRunnerVerboseCompletionLog(t *testing.T, fields map[str
 	}
 }
 
-func TestExecCommandRunner_HelperProcess(t *testing.T) {
-	if os.Getenv("GO_WANT_COMMAND_HELPER") != "1" {
-		return
-	}
-	if len(os.Args) == 0 {
-		fmt.Fprintln(os.Stderr, "missing args")
-		os.Exit(2)
+func TestComposedCommandLineLength_MeasuresTheStringTheProcessLoaderReceives(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		command string
+		args    []string
+		want    int
+	}{
+		{name: "bare command", command: "claude", want: len("claude")},
+		{
+			name:    "plain arguments join with single separators",
+			command: "claude",
+			args:    []string{"-p", "--verbose"},
+			want:    len(`claude -p --verbose`),
+		},
+		{
+			name:    "arguments containing spaces gain surrounding quotes",
+			command: "claude",
+			args:    []string{"--system-prompt", "be brief"},
+			want:    len(`claude --system-prompt "be brief"`),
+		},
+		{
+			name:    "embedded quotes gain an escaping backslash",
+			command: "claude",
+			args:    []string{`say "hi"`},
+			want:    len(`claude "say \"hi\""`),
+		},
+		{
+			name:    "trailing backslashes double before the closing quote",
+			command: "claude",
+			args:    []string{`C:\work dir\`},
+			want:    len(`claude "C:\work dir\\"`),
+		},
+		{
+			name:    "empty arguments are emitted as an empty quoted pair",
+			command: "claude",
+			args:    []string{""},
+			want:    len(`claude ""`),
+		},
+		{
+			name:    "characters outside the basic multilingual plane cost two code units",
+			command: "claude",
+			args:    []string{"\U0001F600"},
+			want:    len("claude ") + 2,
+		},
 	}
 
-	mode := os.Args[len(os.Args)-1]
-	switch mode {
-	case "success":
-		assertCommandHelperInputs()
-		fmt.Fprintln(os.Stdout, "command helper success")
-		os.Exit(0)
-	case "fail":
-		fmt.Fprintln(os.Stderr, "command helper failed")
-		os.Exit(17)
-	case "sleep":
-		time.Sleep(time.Second)
-		os.Exit(0)
-	case "spawn-child", "spawn-child-success", "spawn-child-side-effect":
-		runCommandHelperSpawnMode(mode)
-	case "child-sleep", "delayed-side-effect":
-		runCommandHelperChildMode(mode)
-	case "pid-sleep":
-		if os.Getenv("COMMAND_HELPER_PID_WRITTEN_BY_PARENT") != "1" {
-			writeCommandHelperPID()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := ComposedCommandLineLength(tc.command, tc.args); got != tc.want {
+				t.Fatalf("ComposedCommandLineLength(%q, %#v) = %d, want %d", tc.command, tc.args, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestComposedCommandLineLength_GrowsWithInlinedArgumentContent(t *testing.T) {
+	t.Parallel()
+
+	small := ComposedCommandLineLength("claude", []string{"-p", strings.Repeat("a", 9152)})
+	large := ComposedCommandLineLength("claude", []string{"-p", strings.Repeat("a", 9819)})
+	if large-small != 9819-9152 {
+		t.Fatalf("inline argument growth = %d, want %d", large-small, 9819-9152)
+	}
+
+	viaStdin := ComposedCommandLineLength("claude", []string{"-p"})
+	if viaStdin >= small {
+		t.Fatalf("command line with the prompt removed = %d, want below the inline measurement %d", viaStdin, small)
+	}
+}
+
+func TestCommandStartError_NamesAnOversizedCommandLineWithItsMeasuredSize(t *testing.T) {
+	t.Parallel()
+
+	overLimit := &CommandStartError{
+		Command:           "claude",
+		ArgsCount:         12,
+		CommandLineLength: 33012,
+		CommandLineLimit:  WindowsCommandLineLimit,
+		Cause:             errors.New("The filename or extension is too long."),
+	}
+	if !overLimit.OverCommandLineLimit() {
+		t.Fatalf("OverCommandLineLimit() = false, want true for %d against %d", overLimit.CommandLineLength, overLimit.CommandLineLimit)
+	}
+	message := overLimit.Error()
+	for _, want := range []string{"claude", "33012", "12", "32767", "command-line limit", "The filename or extension is too long."} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("Error() = %q, want it to name %q", message, want)
 		}
-		time.Sleep(10 * time.Second)
-		os.Exit(0)
-	case "pid-term-exit":
-		writeCommandHelperPID()
-		sigc := make(chan os.Signal, 1)
-		signal.Notify(sigc, syscall.SIGTERM)
-		<-sigc
-		os.Exit(0)
-	case "pid-ignore-term":
-		writeCommandHelperPID()
-		signal.Ignore(syscall.SIGTERM)
-		select {}
-	default:
-		fmt.Fprintf(os.Stderr, "unknown helper mode %q\n", mode)
-		os.Exit(2)
+	}
+
+	underLimit := &CommandStartError{
+		Command:           "claude",
+		ArgsCount:         3,
+		CommandLineLength: 64,
+		CommandLineLimit:  WindowsCommandLineLimit,
+		Cause:             errors.New("executable file not found"),
+	}
+	if underLimit.OverCommandLineLimit() {
+		t.Fatalf("OverCommandLineLimit() = true, want false for %d against %d", underLimit.CommandLineLength, underLimit.CommandLineLimit)
+	}
+	if got := underLimit.Error(); strings.Contains(got, "command-line limit") {
+		t.Fatalf("Error() = %q, want it not to blame the command-line limit", got)
+	}
+
+	unbounded := &CommandStartError{CommandLineLength: 1 << 20, CommandLineLimit: 0, Cause: errors.New("boom")}
+	if unbounded.OverCommandLineLimit() {
+		t.Fatalf("OverCommandLineLimit() = true, want false when the host states no command-line limit")
 	}
 }
 
-func runCommandHelperSpawnMode(mode string) {
-	childMode := "child-sleep"
-	if mode == "spawn-child-side-effect" {
-		childMode = "delayed-side-effect"
+func TestCommandStartError_UnwrapsTheOperatingSystemCause(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New("fork/exec failed")
+	err := error(&CommandStartError{Command: "claude", Cause: cause})
+	if !errors.Is(err, cause) {
+		t.Fatalf("errors.Is(%v, cause) = false, want true", err)
 	}
-	spawnCommandHelperChildMode(childMode)
-	if mode != "spawn-child-success" {
-		time.Sleep(10 * time.Second)
-	}
-	os.Exit(0)
 }
 
-func runCommandHelperChildMode(mode string) {
-	if mode == "child-sleep" {
-		time.Sleep(10 * time.Second)
-		os.Exit(0)
+func TestExecCommandRunner_StartFailureReturnsANamedErrorAndLogsIt(t *testing.T) {
+	logger := &recordingCommandLogger{}
+	missing := filepath.Join(t.TempDir(), "provider-executable-that-does-not-exist")
+	req := CommandRequest{
+		Command: missing,
+		Args:    []string{"-p", strings.Repeat("prompt ", 512)},
+		Stdin:   []byte("stdin payload"),
+		WorkDir: t.TempDir(),
 	}
-	time.Sleep(800 * time.Millisecond)
-	if err := os.WriteFile(os.Getenv("COMMAND_HELPER_SIDE_EFFECT_FILE"), []byte("unexpected"), 0o600); err != nil {
-		fmt.Fprintf(os.Stderr, "write delayed side effect: %v\n", err)
-		os.Exit(2)
+
+	_, err := testExecCommandRunner(t, logger).Run(context.Background(), req)
+
+	var startErr *CommandStartError
+	if !errors.As(err, &startErr) {
+		t.Fatalf("Run() error = %#v, want a *CommandStartError", err)
 	}
-	os.Exit(0)
+	if startErr.Command != missing {
+		t.Fatalf("start error command = %q, want %q", startErr.Command, missing)
+	}
+	if want := ComposedCommandLineLength(req.Command, req.Args); startErr.CommandLineLength != want {
+		t.Fatalf("start error command line length = %d, want %d", startErr.CommandLineLength, want)
+	}
+	if startErr.ArgsCount != len(req.Args) || startErr.StdinBytes != len(req.Stdin) {
+		t.Fatalf("start error = %#v, want args %d and stdin %d", startErr, len(req.Args), len(req.Stdin))
+	}
+	if startErr.Cause == nil {
+		t.Fatalf("start error cause = nil, want the operating system failure")
+	}
+
+	logged := commandStartFailureLogs(logger)
+	if len(logged) != 1 {
+		t.Fatalf("start failure logs = %d, want exactly 1: %#v", len(logged), logger.errors)
+	}
+	fields := logged[0].fields
+	if fields["command"] != missing {
+		t.Fatalf("start failure log command = %#v, want %q", fields["command"], missing)
+	}
+	if fields["command_line_chars"] != startErr.CommandLineLength {
+		t.Fatalf("start failure log command_line_chars = %#v, want %d", fields["command_line_chars"], startErr.CommandLineLength)
+	}
+	if fields["over_command_line_limit"] != startErr.OverCommandLineLimit() {
+		t.Fatalf("start failure log over_command_line_limit = %#v, want %v", fields["over_command_line_limit"], startErr.OverCommandLineLimit())
+	}
+	if fields["error"] == nil || fields["error"] == "" {
+		t.Fatalf("start failure log error = %#v, want the operating system failure text", fields["error"])
+	}
 }
 
-func commandLogFieldsMap(keysAndValues ...any) map[string]any {
-	fields := make(map[string]any, len(keysAndValues)/2)
-	for i := 0; i+1 < len(keysAndValues); i += 2 {
-		key, ok := keysAndValues[i].(string)
-		if !ok {
-			continue
+// TestExecCommandRunner_StartFailureUsesTheInjectedCommandLineLimit pins the
+// classification to the bound injected into the runner rather than to the
+// operating system the test happens to run on. That is what keeps the Windows
+// over-limit case observable from a non-Windows CI host, which was impossible
+// while the limit was computed from the ambient runtime.
+func TestExecCommandRunner_StartFailureUsesTheInjectedCommandLineLimit(t *testing.T) {
+	logger := &recordingCommandLogger{}
+	runner := testExecCommandRunner(t, logger)
+	runner.CommandLineLimit = WindowsCommandLineLimit
+
+	_, err := runner.Run(context.Background(), CommandRequest{
+		Command: filepath.Join(t.TempDir(), "provider-executable-that-does-not-exist"),
+		Args:    []string{"--system-prompt", strings.Repeat("s", 20_000), strings.Repeat("p", 13_000)},
+	})
+
+	var startErr *CommandStartError
+	if !errors.As(err, &startErr) {
+		t.Fatalf("Run() error = %#v, want a *CommandStartError", err)
+	}
+	if startErr.CommandLineLimit != WindowsCommandLineLimit || !startErr.OverCommandLineLimit() {
+		t.Fatalf("start error limit = %d and over-limit = %v, want the injected %d and true",
+			startErr.CommandLineLimit, startErr.OverCommandLineLimit(), WindowsCommandLineLimit)
+	}
+	logged := commandStartFailureLogs(logger)
+	if len(logged) != 1 || logged[0].fields["command_line_limit"] != WindowsCommandLineLimit {
+		t.Fatalf("start failure logs = %#v, want exactly one carrying the injected limit %d", logged, WindowsCommandLineLimit)
+	}
+}
+
+func TestExecCommandRunner_SuccessfulStartLogsNoStartFailure(t *testing.T) {
+	requireProcessIntegration(t)
+	logger := &recordingCommandLogger{}
+
+	if _, err := testExecCommandRunner(t, logger).Run(context.Background(), commandCleanupTestRequest(t)); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if logged := commandStartFailureLogs(logger); len(logged) != 0 {
+		t.Fatalf("start failure logs = %#v, want none for a command that started", logged)
+	}
+}
+
+func commandStartFailureLogs(logger *recordingCommandLogger) []recordedCommandLog {
+	var matched []recordedCommandLog
+	for _, entry := range logger.errors {
+		if entry.fields["event_name"] == commandRunnerStartFailedEvent {
+			matched = append(matched, entry)
 		}
-		fields[key] = keysAndValues[i+1]
 	}
-	return fields
-}
-
-func assertCommandHelperInputs() {
-	stdin, err := io.ReadAll(os.Stdin)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "read stdin: %v\n", err)
-		os.Exit(2)
-	}
-	if want := os.Getenv("COMMAND_HELPER_WANT_STDIN"); string(stdin) != want {
-		fmt.Fprintf(os.Stderr, "stdin = %q, want %q\n", stdin, want)
-		os.Exit(2)
-	}
-
-	cwd, err := os.Getwd()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "get cwd: %v\n", err)
-		os.Exit(2)
-	}
-	wantCWD := os.Getenv("COMMAND_HELPER_WANT_CWD")
-	if got, want := canonicalWorkerTestPath(cwd), canonicalWorkerTestPath(wantCWD); got != want {
-		fmt.Fprintf(os.Stderr, "cwd = %q, want %q\n", got, want)
-		os.Exit(2)
-	}
-}
-
-func spawnCommandHelperChildMode(mode string) {
-	pidFile := os.Getenv("COMMAND_HELPER_PID_FILE")
-	if pidFile == "" {
-		fmt.Fprintln(os.Stderr, "missing COMMAND_HELPER_PID_FILE")
-		os.Exit(2)
-	}
-	time.Sleep(100 * time.Millisecond)
-	child := exec.Command(os.Args[0],
-		"-test.run=TestExecCommandRunner_HelperProcess",
-		"--",
-		mode,
-	)
-	child.Env = append(os.Environ(),
-		"GO_WANT_COMMAND_HELPER=1",
-		"COMMAND_HELPER_PID_FILE="+pidFile,
-		"COMMAND_HELPER_PID_WRITTEN_BY_PARENT=1",
-	)
-	if err := child.Start(); err != nil {
-		fmt.Fprintf(os.Stderr, "start child: %v\n", err)
-		os.Exit(2)
-	}
-	if err := writeCommandHelperPIDFile(pidFile, child.Process.Pid); err != nil {
-		fmt.Fprintf(os.Stderr, "write child pid file: %v\n", err)
-		_ = child.Process.Kill()
-		os.Exit(2)
-	}
-}
-
-func writeCommandHelperPID() {
-	pidFile := os.Getenv("COMMAND_HELPER_PID_FILE")
-	if pidFile == "" {
-		fmt.Fprintln(os.Stderr, "missing COMMAND_HELPER_PID_FILE")
-		os.Exit(2)
-	}
-	if err := writeCommandHelperPIDFile(pidFile, os.Getpid()); err != nil {
-		fmt.Fprintf(os.Stderr, "write pid file: %v\n", err)
-		os.Exit(2)
-	}
-}
-
-func writeCommandHelperPIDFile(pidFile string, pid int) error {
-	temporary := pidFile + ".tmp"
-	if err := os.WriteFile(temporary, []byte(strconv.Itoa(pid)), 0o600); err != nil {
-		return err
-	}
-	return os.Rename(temporary, pidFile)
-}
-
-func waitForCommandHelperPID(t *testing.T, pidFile string, timeout time.Duration) int {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	var lastErr error
-	for timeout <= 0 || time.Now().Before(deadline) {
-		pid, err := readCommandHelperPIDFile(pidFile)
-		if err == nil {
-			return pid
-		}
-		lastErr = err
-		if timeout <= 0 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if lastErr == nil {
-		lastErr = fmt.Errorf("child pid file %s is empty", pidFile)
-	}
-	t.Fatalf("parse child pid from %s: %v", pidFile, lastErr)
-	return 0
-}
-
-func readCommandHelperPIDFile(pidFile string) (int, error) {
-	raw, err := os.ReadFile(pidFile)
-	if err != nil {
-		return 0, err
-	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
-	if err != nil {
-		return 0, err
-	}
-	if pid <= 0 {
-		return 0, fmt.Errorf("child pid must be positive, got %d", pid)
-	}
-	return pid, nil
-}
-
-func waitForCommandHelperProcessExit(pid int, timeout time.Duration) bool {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if !commandTestProcessRunning(pid) {
-			return true
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
-	return !commandTestProcessRunning(pid)
+	return matched
 }

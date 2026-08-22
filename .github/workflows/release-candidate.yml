@@ -75,6 +75,10 @@ jobs:
         working-directory: ui
         run: bun install --frozen-lockfile
 
+      - name: Install Playwright browser
+        working-directory: ui
+        run: bunx playwright install chromium
+
       - name: Verify the canonical frontend package release family
         run: make ui-public-package-release
 

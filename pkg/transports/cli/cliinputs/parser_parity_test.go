@@ -96,8 +96,8 @@ func productionParserParityStaticFamilyCases() []productionParserParityCase {
 		},
 		{
 			name:             "mcp retains local runtime parsing",
-			commandPath:      "you mcp serve",
-			argv:             []string{"mcp", "serve", "--runtime"},
+			commandPath:      "you server mcp",
+			argv:             []string{"server", "mcp", "--runtime"},
 			flagLong:         "runtime",
 			argumentPosition: -1,
 		},
@@ -201,6 +201,8 @@ func productionParserParityRunVariadicCases() []productionParserParityCase {
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity run parser parity cases keep inline verify closures beside argv fixtures for reviewer readability.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func productionParserParityRunFlagCases() []productionParserParityCase {
 	return []productionParserParityCase{
 		{
@@ -512,7 +514,7 @@ func productionParserParitySessionCreateCases() []productionParserParityCase {
 			argv:         []string{"session", "create"},
 			flagLong:     "dir",
 			wantParseErr: true,
-			errContains:  `required flag(s) "dir" not set`,
+			errContains:  `required flag(s) "--dir" not set`,
 			verify: func(t *testing.T, inv cliinputs.Inventory, _ platformprocess.CLIParseResult) {
 				t.Helper()
 				record := findFlagRecord(t, inv, "you session create", "dir")

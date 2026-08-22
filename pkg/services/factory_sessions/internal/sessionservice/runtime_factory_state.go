@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"go.uber.org/zap"
 )
 
@@ -29,11 +30,11 @@ func (fs *SessionRuntime) SubmitWorkRequest(ctx context.Context, request work.Wo
 	var result work.WorkRequestSubmitResult
 	err := fs.sessionState.WithRuntimeRead(func(runtime *factorysessions.LiveRuntime) error {
 		var submitErr error
-		legacyRuntime, ok := runtime.Factory.(factory.APIFactory)
+		submitter, ok := runtimebinding.WorkAndEventIngressForLiveRuntime(runtime)
 		if !ok {
-			return fmt.Errorf("legacy Factory Runtime submission is required")
+			return fmt.Errorf("Factory Runtime work submission is required")
 		}
-		result, submitErr = legacyRuntime.SubmitWorkRequest(ctx, request)
+		result, submitErr = submitter.SubmitWorkRequest(ctx, request)
 		return submitErr
 	})
 	return result, err
@@ -49,11 +50,11 @@ func (fs *SessionRuntime) SubscribeFactoryEvents(ctx context.Context, reconnect 
 	if runtime == nil {
 		return nil, fmt.Errorf("factory runtime is not available")
 	}
-	legacyRuntime, ok := runtime.(factory.APIFactory)
+	events, ok := runtimebinding.WorkAndEventIngressForService(runtime)
 	if !ok {
-		return nil, fmt.Errorf("legacy Factory Runtime event subscription is required")
+		return nil, fmt.Errorf("Factory Runtime event subscription is required until Recordings migration")
 	}
-	return legacyRuntime.SubscribeFactoryEvents(ctx, reconnect, scope)
+	return events.SubscribeFactoryEvents(ctx, reconnect, scope)
 }
 
 // GetEngineStateSnapshot returns the factory boundary's aggregate
@@ -71,6 +72,16 @@ func (fs *SessionRuntime) GetEngineStateSnapshot(ctx context.Context) (*interfac
 		return nil, err
 	}
 	return legacyObservation.GetEngineStateSnapshot(ctx)
+}
+
+// CleanInvocationSnapshot forwards the Runtime-owned clean-invocation
+// projection through the replaceable Factory Session runtime.
+func (fs *SessionRuntime) CleanInvocationSnapshot(ctx context.Context) (factory.CleanInvocationSnapshot, error) {
+	runtime := fs.currentRuntimeService()
+	if runtime == nil {
+		return factory.CleanInvocationSnapshot{}, factory.ErrNotRunning
+	}
+	return runtime.CleanInvocationSnapshot(ctx)
 }
 
 // ControlPause routes root control to the current replaceable runtime.
@@ -147,31 +158,53 @@ func (fs *SessionRuntime) AcceptDispatchResult(ctx context.Context, req factory.
 	return runtime.AcceptDispatchResult(ctx, req)
 }
 
-// CaptureCheckpoint routes checkpoint capture to the current replaceable runtime.
-func (fs *SessionRuntime) CaptureCheckpoint(ctx context.Context, req factory.CaptureCheckpointRequest) (factory.CaptureCheckpointResult, error) {
+// InvokeWorker routes one orchestrator-resolved Worker invocation to the
+// current runtime, which owns the Worker Sessions service and the canonical
+// ledger the invocation's dispatch/Worker Session association must land on.
+func (fs *SessionRuntime) InvokeWorker(ctx context.Context, req factory.InvokeWorkerRequest) (factory.InvokeWorkerResult, error) {
 	runtime := fs.currentRuntimeService()
 	if runtime == nil {
-		return factory.CaptureCheckpointResult{}, factory.ErrNotFound
+		return factory.InvokeWorkerResult{}, factory.ErrNotFound
 	}
-	return runtime.CaptureCheckpoint(ctx, req)
+	return runtime.InvokeWorker(ctx, req)
 }
 
-// LoadCheckpoint routes checkpoint loading to the current replaceable runtime.
-func (fs *SessionRuntime) LoadCheckpoint(ctx context.Context, req factory.LoadCheckpointRequest) (factory.LoadCheckpointResult, error) {
-	runtime := fs.currentRuntimeService()
-	if runtime == nil {
-		return factory.LoadCheckpointResult{}, factory.ErrNotFound
-	}
-	return runtime.LoadCheckpoint(ctx, req)
+type workerSessionsObservationProvider interface {
+	WorkerSessionsObservation() workersessions.ObservationService
 }
 
-// RestoreCheckpoint routes checkpoint restoration to the current replaceable runtime.
-func (fs *SessionRuntime) RestoreCheckpoint(ctx context.Context, req factory.RestoreCheckpointRequest) (factory.RestoreCheckpointResult, error) {
+// WorkerSessionsObservation forwards the optional runtime projection through
+// the replaceable Factory Session runtime. Without this capability adapter,
+// service-mode HTTP binding sees only the broad Factory Runtime contract and
+// leaves the public Worker Sessions routes unavailable.
+func (fs *SessionRuntime) WorkerSessionsObservation() workersessions.ObservationService {
 	runtime := fs.currentRuntimeService()
-	if runtime == nil {
-		return factory.RestoreCheckpointResult{}, factory.ErrNotFound
+	provider, _ := runtime.(workerSessionsObservationProvider)
+	if provider == nil {
+		return nil
 	}
-	return runtime.RestoreCheckpoint(ctx, req)
+	return provider.WorkerSessionsObservation()
+}
+
+// WorkerSessionsObservationForSession forwards the effective public Factory
+// Session identity through the replaceable runtime read projection.
+func (fs *SessionRuntime) WorkerSessionsObservationForSession(factorySessionID string) workersessions.ObservationService {
+	var runtime factory.Service
+	if fs != nil && fs.sessionState != nil {
+		if instance, err := runtimebinding.BundleForSession(fs.sessionState, factorySessionID); err == nil && instance != nil {
+			runtime = instance.RuntimeService()
+		}
+	}
+	if runtime == nil {
+		runtime = fs.currentRuntimeService()
+	}
+	provider, _ := runtime.(interface {
+		WorkerSessionsObservationForSession(string) workersessions.ObservationService
+	})
+	if provider == nil {
+		return nil
+	}
+	return provider.WorkerSessionsObservationForSession(factorySessionID)
 }
 
 func (fs *SessionRuntime) submitWorkFile(ctx context.Context) error {
@@ -191,11 +224,11 @@ func (fs *SessionRuntime) submitWorkFile(ctx context.Context) error {
 	if target == nil {
 		return fmt.Errorf("factory runtime is not available")
 	}
-	legacyRuntime, ok := target.(factory.APIFactory)
+	submitter, ok := runtimebinding.WorkAndEventIngressForService(target)
 	if !ok {
-		return fmt.Errorf("legacy Factory Runtime submission is required")
+		return fmt.Errorf("Factory Runtime work submission is required")
 	}
-	if _, err := legacyRuntime.SubmitWorkRequest(ctx, request); err != nil {
+	if _, err := submitter.SubmitWorkRequest(ctx, request); err != nil {
 		return fmt.Errorf("submit initial work: %w", err)
 	}
 	fs.logger.Info("submitted initial work", zap.String("file", workFile))
@@ -203,6 +236,11 @@ func (fs *SessionRuntime) submitWorkFile(ctx context.Context) error {
 }
 
 func (fs *SessionRuntime) currentRuntimeConfig() interfaces.LoadedFactorySource {
+	if fs != nil && fs.sessionState != nil {
+		if runtime := fs.sessionState.CurrentRuntime(); runtime != nil && runtime.RuntimeConfig != nil {
+			return runtime.RuntimeConfig
+		}
+	}
 	if bundle := fs.currentRuntimeBundle(); bundle != nil {
 		loaded, _ := bundle.LoadedRuntimeConfig().(interfaces.LoadedFactorySource)
 		return loaded
@@ -225,6 +263,13 @@ func (fs *SessionRuntime) CurrentRuntimeConfig() interfaces.LoadedFactorySource 
 }
 
 func (fs *SessionRuntime) currentRuntimeService() factory.Service {
+	if fs != nil && fs.sessionState != nil {
+		if runtime := fs.sessionState.CurrentRuntime(); runtime != nil {
+			if service := runtimebinding.ServiceForLiveRuntime(runtime); service != nil {
+				return service
+			}
+		}
+	}
 	if instance := fs.currentRuntimeBundle(); instance != nil {
 		return instance.RuntimeService()
 	}

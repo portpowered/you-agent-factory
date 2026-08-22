@@ -15,6 +15,7 @@ import (
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -23,19 +24,37 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-func startCurrentFactoryServer(t *testing.T, rootDir string) *support.FunctionalAPIServer {
+type currentFactoryServerSetup func(testing.TB, support.Process, root.Input)
+
+func currentFactorySetup(
+	t *testing.T,
+	action func(support.Process, []string),
+) currentFactoryServerSetup {
+	t.Helper()
+	return func(_ testing.TB, process support.Process, inputs root.Input) {
+		action(process, append([]string(nil), inputs.Env...))
+	}
+}
+
+func startCurrentFactoryServerWithSetup(
+	t *testing.T,
+	rootDir string,
+	setup currentFactoryServerSetup,
+) *support.FunctionalAPIServer {
 	t.Helper()
 	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                rootDir,
 		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
+		BeforeStart:               setup,
 	})
 }
 
-func startCurrentFactoryServerWithProviderRunner(
+func startCurrentFactoryServerWithProviderRunnerAndSetup(
 	t *testing.T,
 	rootDir string,
 	runner platformprocess.CommandRunner,
+	setup currentFactoryServerSetup,
 ) *support.FunctionalAPIServer {
 	t.Helper()
 	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -44,39 +63,103 @@ func startCurrentFactoryServerWithProviderRunner(
 		Edges: serviceedges.Edges{
 			ProviderCommandRunner: runner,
 		},
+		BeforeStart: setup,
 	})
 }
 
-func seedNamedFactoryRootWithTerminalState(t *testing.T, rootDir, name, terminalState string) string {
+func seedNamedFactoryRootWithProcess(
+	t *testing.T,
+	process support.Process,
+	env []string,
+	rootDir, name, workType string,
+) string {
 	t.Helper()
 
 	sourceDir := t.TempDir()
 	sourcePath := filepath.Join(sourceDir, interfaces.FactoryConfigFile)
-	payload := functionalNamedFactoryPayloadWithTerminalState(t, name, terminalState)
-	if err := os.WriteFile(sourcePath, payload, 0o600); err != nil {
+	if err := os.WriteFile(sourcePath, functionalNamedFactoryPayloadWithWorkType(t, name, workType), 0o600); err != nil {
 		t.Fatalf("write customer Factory source %s: %v", name, err)
 	}
-	return support.CreateAndActivateNamedFactoryAtRoot(t, sourceDir, rootDir, name, sourcePath)
+	return support.CreateAndActivateNamedFactoryAtRootWithProcess(
+		t,
+		process,
+		env,
+		sourceDir,
+		rootDir,
+		name,
+		sourcePath,
+	)
 }
 
-func seedFilewatcherNamedFactoryRoot(t *testing.T, rootDir, name string, activate bool) string {
+func seedNamedFactoryRootWithTerminalStateAndProcess(
+	t *testing.T,
+	process support.Process,
+	env []string,
+	rootDir, name, terminalState string,
+) string {
+	t.Helper()
+
+	sourceDir := t.TempDir()
+	sourcePath := filepath.Join(sourceDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(sourcePath, functionalNamedFactoryPayloadWithTerminalState(t, name, terminalState), 0o600); err != nil {
+		t.Fatalf("write customer Factory source %s: %v", name, err)
+	}
+	return support.CreateAndActivateNamedFactoryAtRootWithProcess(
+		t,
+		process,
+		env,
+		sourceDir,
+		rootDir,
+		name,
+		sourcePath,
+	)
+}
+
+func seedFilewatcherNamedFactoryRootWithProcess(
+	t *testing.T,
+	process support.Process,
+	env []string,
+	rootDir, name string,
+	activate bool,
+) string {
 	t.Helper()
 
 	srcDir := support.LegacyFixtureDir(t, "filewatcher_flow")
 	sourcePath := filepath.Join(srcDir, interfaces.FactoryConfigFile)
 	if activate {
-		return support.CreateAndActivateNamedFactoryAtRoot(t, srcDir, rootDir, name, sourcePath)
+		return support.CreateAndActivateNamedFactoryAtRootWithProcess(
+			t,
+			process,
+			env,
+			srcDir,
+			rootDir,
+			name,
+			sourcePath,
+		)
 	}
-	return support.CreateNamedFactoryAtRoot(t, srcDir, rootDir, name, sourcePath)
+	return support.CreateNamedFactoryAtRootWithProcess(
+		t,
+		process,
+		env,
+		srcDir,
+		rootDir,
+		name,
+		sourcePath,
+	)
 }
 
-func namedFilewatcherFactoryPayload(t *testing.T, name string) []byte {
+func namedFilewatcherFactoryPayloadWithProcess(
+	t *testing.T,
+	process support.Process,
+	env []string,
+	name string,
+) []byte {
 	t.Helper()
 
 	sourcePath := filepath.Join(support.LegacyFixtureDir(t, "filewatcher_flow"), interfaces.FactoryConfigFile)
-	factory, err := support.LoadedFactory(t, sourcePath)
+	factory, err := support.LoadedFactoryWithProcessAndEnv(t, process, env, sourcePath)
 	if err != nil {
-		t.Fatalf("LoadedFactory: %v", err)
+		t.Fatalf("LoadedFactoryWithProcess: %v", err)
 	}
 	factory.Name = factoryapi.FactoryName(name)
 	id := name
@@ -295,18 +378,13 @@ func workTraceID(work factoryapi.Work) string {
 	return *work.TraceId
 }
 
-func seedNamedFactoryRoot(t *testing.T, rootDir, name, workType string) string {
-	t.Helper()
-
-	sourceDir := t.TempDir()
-	sourcePath := filepath.Join(sourceDir, interfaces.FactoryConfigFile)
-	if err := os.WriteFile(sourcePath, functionalNamedFactoryPayloadWithWorkType(t, name, workType), 0o600); err != nil {
-		t.Fatalf("write customer Factory source %s: %v", name, err)
-	}
-	return support.CreateAndActivateNamedFactoryAtRoot(t, sourceDir, rootDir, name, sourcePath)
-}
-
-func createNamedFactoryFixture(t *testing.T, rootDir, name string, payload []byte) string {
+func createNamedFactoryFixtureWithProcess(
+	t *testing.T,
+	process support.Process,
+	env []string,
+	rootDir, name string,
+	payload []byte,
+) string {
 	t.Helper()
 
 	sourceDir := t.TempDir()
@@ -314,7 +392,15 @@ func createNamedFactoryFixture(t *testing.T, rootDir, name string, payload []byt
 	if err := os.WriteFile(sourcePath, payload, 0o600); err != nil {
 		t.Fatalf("write customer Factory source %s: %v", name, err)
 	}
-	return support.CreateNamedFactoryAtRoot(t, sourceDir, rootDir, name, sourcePath)
+	return support.CreateNamedFactoryAtRootWithProcess(
+		t,
+		process,
+		env,
+		sourceDir,
+		rootDir,
+		name,
+		sourcePath,
+	)
 }
 
 func openNamedFactorySession(t *testing.T, serverURL, folderPath, name string) string {

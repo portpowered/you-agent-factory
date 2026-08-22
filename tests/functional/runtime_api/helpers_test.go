@@ -2,6 +2,7 @@ package runtime_api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -12,9 +13,10 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -29,8 +31,21 @@ func withClock(clock platformclock.Source) runtimeOption {
 	return func(cfg *support.FunctionalAPIServerConfig) { cfg.Edges.Clock = clock }
 }
 
-func withProvider(provider workerprovider.Provider) runtimeOption {
-	return func(cfg *support.FunctionalAPIServerConfig) { cfg.Edges.ProviderOverride = provider }
+func withProvider(provider any) runtimeOption {
+	return func(cfg *support.FunctionalAPIServerConfig) {
+		switch provider := provider.(type) {
+		case nil:
+			cfg.Edges.ProviderOverride = nil
+		case providers.Service:
+			cfg.Edges.ProviderOverride = provider
+		case interface {
+			Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error)
+		}:
+			cfg.Edges.ProviderOverride = support.ProviderServiceFromInference(provider)
+		default:
+			panic("withProvider requires a Providers service or legacy test provider")
+		}
+	}
 }
 
 func withWorkerCommands(providerRunner, scriptRunner platformprocess.CommandRunner) runtimeOption {

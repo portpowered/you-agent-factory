@@ -4,15 +4,15 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/validationentry"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 // ValidateFactory handles POST /factory-validations by decoding the request and
 // invoking the injected Definitions validation operation or root adapter.
 func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
-	req, err := decodeNamedFactoryBody(r.Body)
+	decoded, err := decodeJSONWithDiagnostics[factoryapi.Factory](r.Body)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
@@ -21,6 +21,7 @@ func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
+	req := decoded.Value
 
 	validation, ok := s.requireSubmittedDefinitionValidation(w)
 	if !ok {
@@ -43,9 +44,11 @@ func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.writeCompatibilityWarning(w, "validate_factory", decoded.Diagnostics.Paths())
 	s.writeJSON(w, http.StatusOK, apisurface.FactoryValidationResultToAPI(result))
 }
 
 func decodeNamedFactoryBody(body io.Reader) (factoryapi.Factory, error) {
-	return decodeStrictJSON[factoryapi.Factory](body)
+	result, err := decodeJSONWithDiagnostics[factoryapi.Factory](body)
+	return result.Value, err
 }

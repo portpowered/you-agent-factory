@@ -9,19 +9,22 @@ package wire
 import (
 	"fmt"
 
+	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/requestpreparation"
 	factorysessionroot "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	durableexecutionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/wire"
 	identitywire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity/wire"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
 	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // NewRequestPreparation constructs the private request-normalization
@@ -41,6 +44,12 @@ func NewWorkStopSummaryProjector() factorysessions.WorkStopSummaryProjector {
 			request.SessionStopSummary,
 		)
 	}
+}
+
+// NewLiveChangeCoordinator constructs the one process-scoped admission
+// coordinator shared by live and durable Factory Session execution.
+func NewLiveChangeCoordinator() factorysessioncontracts.LiveChangeCoordinator {
+	return livechange.NewCoordinator()
 }
 
 // NewService constructs an inert Factory Sessions root from construction and
@@ -63,6 +72,9 @@ func NewService(
 	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
+	eventsService events.Service,
+	clock factoryruntime.Clock,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (factorysessions.Service, error) {
 	if sessionResultProjection == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: session result projection is required")
@@ -88,11 +100,17 @@ func NewService(
 	if initialWorkFiles == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: initial Work reader is required")
 	}
+	if clock == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: clock is required")
+	}
+	if liveChangeCoordinator == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: live-change coordinator is required")
+	}
 	identityService, err := identitywire.NewService(resolveSymlinks, resolveHome, directoryInspection)
 	if err != nil {
 		return nil, err
 	}
-	responseStreams, err := responsestreamwire.NewService(eventIDs, responseEventRetentionLimits)
+	responseStreams, err := responsestreamwire.NewService(eventIDs, responseEventRetentionLimits, eventsService)
 	if err != nil {
 		return nil, err
 	}
@@ -112,6 +130,8 @@ func NewService(
 		initialWorkFiles,
 		identityService,
 		responseStreams,
+		clock,
+		liveChangeCoordinator,
 	)
 	if err != nil {
 		return nil, err
@@ -122,13 +142,31 @@ func NewService(
 	return service, nil
 }
 
+// NewDetachedOperations binds the build-first Sessions operation view to the
+// already-composed root. It performs no child construction or lifecycle work.
+
+type detachedOperationsProvider interface {
+	DetachedOperations() factorysessions.DetachedService
+}
+
+func NewDetachedOperations(owner factorysessions.Service) (factorysessions.DetachedService, error) {
+	if provider, ok := owner.(detachedOperationsProvider); ok {
+		if operations := provider.DetachedOperations(); operations != nil {
+			return operations, nil
+		}
+	}
+	return (&factorysessions.DetachedOperations{}).Bind(owner)
+}
+
+// TODO(btrc-p4-sessions-lifecycle-003): remove after application Wire callers
+// use the root-owned detached capability.
 // NewDurableExecution constructs the configured durable execution capability
 // without exposing its implementation package to application Wire.
 func NewDurableExecution(
 	projectRoot string,
 	persistencePolicy factorysessions.PersistencePolicy,
 	stores RuntimePersistenceStoreFactory,
-	executor workers.InvocationExecutor,
+	childExecutorMode string,
 	clock factoryruntime.Clock,
 	syncWaits factorysessionexecution.SyncWaitScheduler,
 	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
@@ -138,22 +176,26 @@ func NewDurableExecution(
 	workerSettings factoryruntime.JavaScriptWorkerSettings,
 	recordingWriter recordings.PortableRecordingWriter,
 	generateSessionID factorysessions.SessionIDGenerator,
-	liveChildInvocation factorysessionexecution.LiveChildInvocationFactory,
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
-) (factorysessions.ExecutionService, error) {
-	responseStreams, err := responsestreamwire.NewService(generateResponseEventID, responseEventRetentionLimits)
+	eventsService events.Service,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+) (durableexecution.Service, error) {
+	responseStreams, err := responsestreamwire.NewService(generateResponseEventID, responseEventRetentionLimits, eventsService)
 	if err != nil {
 		return nil, err
 	}
 	return durableexecutionwire.NewDurable(
-		projectRoot, persistencePolicy, stores, executor, clock, syncWaits,
+		projectRoot, persistencePolicy, stores, childExecutorMode, clock, syncWaits,
 		checkpointSummaries, workflows, orchestration, workflows,
 		workerPresetIDs, workerSettings,
-		recordingWriter, generateSessionID, liveChildInvocation, generateResponseEventID, responseStreams,
+		recordingWriter, generateSessionID, generateResponseEventID, responseStreams,
+		liveChangeCoordinator,
 	)
 }
 
+// TODO(btrc-p4-sessions-lifecycle-003): remove after application Wire callers
+// use the root-owned detached capability.
 // NewStandaloneExecution constructs the configured standalone execution
 // capability without exposing its implementation package to application Wire.
 func NewStandaloneExecution(
@@ -162,7 +204,7 @@ func NewStandaloneExecution(
 	stores RuntimePersistenceStoreFactory,
 	fixtureCatalogPath string,
 	childExecutorMode string,
-	executor workers.InvocationExecutor,
+	execution factorysessionexecution.WorkerExecution,
 	clock factoryruntime.Clock,
 	syncWaits factorysessionexecution.SyncWaitScheduler,
 	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
@@ -171,10 +213,12 @@ func NewStandaloneExecution(
 	recordingWriter recordings.PortableRecordingWriter,
 	generateSessionID factorysessions.SessionIDGenerator,
 	fixtureFiles fileeffects.ContractFixtureReader,
-) (factorysessions.ExecutionService, error) {
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+) (durableexecution.Service, error) {
 	return durableexecutionwire.NewStandalone(
 		provider, projectRoot, stores, fixtureCatalogPath, childExecutorMode,
-		executor, clock, syncWaits, checkpointSummaries, workflows, orchestration, workflows,
-		recordingWriter, generateSessionID, fixtureFiles,
+		execution,
+		clock, syncWaits, checkpointSummaries, workflows, orchestration, workflows,
+		recordingWriter, generateSessionID, fixtureFiles, liveChangeCoordinator,
 	)
 }

@@ -3,11 +3,14 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -37,6 +40,24 @@ func assertJSONObject(t *testing.T, object map[string]any, field string) map[str
 	return value
 }
 
+func assertExpectedArtifactContext(t *testing.T, context *work.ExpectedArtifactTemplateContext) {
+	t.Helper()
+	if context == nil || context.Project != "project-7" || context.SessionID != "session-9" ||
+		len(context.Inputs) != 1 || context.Inputs[0].Project != "input-project-7" || context.Inputs[0].Payload != "payload-7" {
+		t.Fatalf("canonical expected artifact context = %#v", context)
+	}
+}
+
+func assertGeneratedExpectedArtifactContext(t *testing.T, context *factoryapi.ExpectedArtifactTemplateContext) {
+	t.Helper()
+	if context == nil || stringValueForEventHistoryTest(context.Project) != "project-7" || stringValueForEventHistoryTest(context.SessionId) != "session-9" ||
+		context.Inputs == nil || len(*context.Inputs) != 1 ||
+		stringValueForEventHistoryTest((*context.Inputs)[0].Project) != "input-project-7" ||
+		stringValueForEventHistoryTest((*context.Inputs)[0].Payload) != "payload-7" {
+		t.Fatalf("generated expected artifact context = %#v", context)
+	}
+}
+
 func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdentity(t *testing.T) {
 	eventTime := time.Date(2026, 4, 22, 16, 0, 0, 0, time.UTC)
 	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
@@ -49,6 +70,14 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdent
 			TransitionID:    "build",
 			WorkerType:      "builder",
 			WorkstationName: "Build",
+			ExpectedArtifactContext: &work.ExpectedArtifactTemplateContext{
+				Project:   "project-7",
+				SessionID: "session-9",
+				Inputs: []work.ExpectedArtifactInput{{
+					Project: "input-project-7",
+					Payload: "payload-7",
+				}},
+			},
 			Execution: work.ExecutionMetadata{
 				RequestID: "request-1",
 				ReplayKey: "replay-1",
@@ -71,6 +100,7 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdent
 	if canonicalPayload.Metadata == nil || stringValueForEventHistoryTest(canonicalPayload.Metadata.ReplayKey) != "replay-1" {
 		t.Fatalf("canonical metadata = %#v, want replay-1", canonicalPayload.Metadata)
 	}
+	assertExpectedArtifactContext(t, canonicalPayload.ExpectedArtifactContext)
 
 	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
@@ -92,6 +122,117 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdent
 	}
 	if stringValueForEventHistoryTest(payload.Metadata.ReplayKey) != "replay-1" {
 		t.Fatalf("metadata replayKey = %q, want replay-1", stringValueForEventHistoryTest(payload.Metadata.ReplayKey))
+	}
+	assertGeneratedExpectedArtifactContext(t, payload.ExpectedArtifactContext)
+}
+
+func TestFactoryEventHistory_RecordHumanApprovalRequestedFollowsDispatchAndContainsNoWorkPayload(t *testing.T) {
+	eventTime := time.Date(2026, 4, 22, 16, 5, 0, 0, time.UTC)
+	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+	record := interfaces.FactoryDispatchRecord{
+		DispatchID:    "dispatch-approval-1",
+		CreatedTick:   7,
+		HumanApproval: true,
+		Dispatch: work.WorkDispatch{
+			DispatchID:      "dispatch-approval-1",
+			TransitionID:    "approval-workstation",
+			WorkstationName: "Release Approval",
+			Execution: work.ExecutionMetadata{
+				RequestID: "request-approval-1",
+			},
+			InputTokens: workerexecution.InputTokens(workerexecution.Token{
+				ID: "token-approval-1",
+				Color: workerexecution.Color{
+					WorkID:  "work-approval-1",
+					TraceID: "trace-approval-1",
+					StructuredResult: map[string]any{
+						"secret": "must-not-be-copied",
+					},
+				},
+			}),
+		},
+	}
+
+	history.RecordWorkstationRequest(7, record, eventTime)
+	history.RecordHumanApprovalRequested(7, record, eventTime)
+	events := generatedHistoryEvents(t, history)
+	assertHumanApprovalEventSequence(t, events)
+	assertHumanApprovalEventPayload(t, events[1])
+	assertHumanApprovalEventDoesNotCopyWorkPayload(t, events[1])
+}
+
+func assertHumanApprovalEventSequence(t *testing.T, events []factoryapi.FactoryEvent) {
+	t.Helper()
+	if len(events) != 2 {
+		t.Fatalf("canonical events = %d, want DISPATCH_REQUEST plus HUMAN_APPROVAL_REQUESTED", len(events))
+	}
+	if events[0].Type != factoryapi.FactoryEventTypeDispatchRequest || events[1].Type != factoryapi.FactoryEventTypeHumanApprovalRequested {
+		t.Fatalf("canonical event order = (%s, %s), want dispatch then human approval", events[0].Type, events[1].Type)
+	}
+	if events[1].Id != "factory-event/human-approval-requested/approval-dispatch-approval-1" {
+		t.Fatalf("approval event ID = %q, want stable approval identity", events[1].Id)
+	}
+	if events[1].Context.DispatchId == nil || *events[1].Context.DispatchId != "dispatch-approval-1" ||
+		events[1].Context.RequestId == nil || *events[1].Context.RequestId != "request-approval-1" {
+		t.Fatalf("approval event context = %#v, want dispatch/request correlation", events[1].Context)
+	}
+	if got := stringSliceValueForEventHistoryTest(events[1].Context.WorkIds); len(got) != 1 || got[0] != "work-approval-1" {
+		t.Fatalf("approval event Work IDs = %#v, want ordered work correlation", got)
+	}
+}
+
+func assertHumanApprovalEventPayload(t *testing.T, event factoryapi.FactoryEvent) {
+	t.Helper()
+	payload, err := event.Payload.AsHumanApprovalRequestedEventPayload()
+	if err != nil {
+		t.Fatalf("decode approval payload: %v", err)
+	}
+	if payload.ApprovalId != "approval-dispatch-approval-1" || payload.WorkstationId != "approval-workstation" ||
+		payload.Status != factoryapi.HumanApprovalRequestedEventPayloadStatusPENDING || !reflect.DeepEqual(payload.Decisions, []factoryapi.HumanApprovalRequestedEventPayloadDecisions{
+		factoryapi.HumanApprovalRequestedEventPayloadDecisionsAPPROVE,
+		factoryapi.HumanApprovalRequestedEventPayloadDecisionsREJECT,
+	}) {
+		t.Fatalf("approval payload = %#v, want fixed decisions and pending status", payload)
+	}
+}
+
+func assertHumanApprovalEventDoesNotCopyWorkPayload(t *testing.T, event factoryapi.FactoryEvent) {
+	t.Helper()
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		t.Fatalf("marshal approval event: %v", err)
+	}
+	if strings.Contains(string(encoded), "must-not-be-copied") || strings.Contains(string(encoded), "secret") {
+		t.Fatalf("approval event copied mutable Work payload: %s", encoded)
+	}
+}
+
+func TestFactoryEventHistory_RecordHumanApprovalRequestedUsesCanonicalWorkstationID(t *testing.T) {
+	runtimeConfig := eventHistoryDefinitionOnlyRuntimeConfig{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"Release Approval": &interfaces.FactoryWorkstationConfig{ID: "approval-workstation", Name: "Release Approval"},
+		},
+	}
+	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), time.Now, runtimeConfig)
+	record := interfaces.FactoryDispatchRecord{
+		HumanApproval: true,
+		Dispatch: work.WorkDispatch{
+			DispatchID:      "dispatch-canonical-workstation",
+			TransitionID:    "Release Approval",
+			WorkstationName: "Release Approval",
+		},
+	}
+	history.RecordHumanApprovalRequested(1, record, time.Now())
+	events := generatedHistoryEvents(t, history)
+	if len(events) != 1 {
+		t.Fatalf("canonical events = %d, want one human approval event", len(events))
+	}
+	payload, err := events[0].Payload.AsHumanApprovalRequestedEventPayload()
+	if err != nil {
+		t.Fatalf("decode approval payload: %v", err)
+	}
+	if payload.WorkstationId != "approval-workstation" {
+		t.Fatalf("approval workstation id = %q, want explicit canonical id", payload.WorkstationId)
 	}
 }
 
@@ -263,6 +404,215 @@ func TestFactoryEventHistory_RecordWorkstationResponse_FailedResultIncludesFailu
 	assertJSONField(t, providerFailure, "type", "throttled")
 }
 
+func TestFactoryEventHistory_RecordWorkstationResponse_RecordsDurationAndProviderTokenUsage(t *testing.T) {
+	eventTime := time.Date(2026, 4, 17, 11, 30, 0, 0, time.UTC)
+	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+	history.RecordWorkstationResponse(9, workerexecution.WorkResult{
+		DispatchID:   "dispatch-usage-present",
+		TransitionID: "build",
+		Outcome:      workerexecution.OutcomeAccepted,
+		Metrics:      workerexecution.WorkMetrics{Duration: 99 * time.Millisecond},
+		Diagnostics: &workerexecution.WorkDiagnostics{Provider: &workerexecution.ProviderDiagnostic{
+			ResponseMetadata: map[string]string{
+				workerexecution.ProviderResponseMetadataInputTokens:  "12",
+				workerexecution.ProviderResponseMetadataOutputTokens: "8",
+			},
+		}},
+	}, interfaces.CompletedDispatch{
+		DispatchID:   "dispatch-usage-present",
+		TransitionID: "build",
+		Outcome:      workerexecution.OutcomeAccepted,
+		EndTime:      eventTime,
+		Duration:     1500 * time.Millisecond,
+	})
+
+	events := generatedHistoryEvents(t, history)
+	if len(events) != 1 || events[0].Type != factoryapi.FactoryEventTypeDispatchResponse {
+		t.Fatalf("events = %#v, want one DISPATCH_RESPONSE", events)
+	}
+	payload, err := events[0].Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode dispatch response payload: %v", err)
+	}
+	if payload.Usage == nil || payload.Usage.DurationMillis == nil || *payload.Usage.DurationMillis != 1500 {
+		t.Fatalf("usage duration = %#v, want 1500ms from completed dispatch", payload.Usage)
+	}
+	if payload.Usage.InputTokens == nil || *payload.Usage.InputTokens != 12 ||
+		payload.Usage.OutputTokens == nil || *payload.Usage.OutputTokens != 8 ||
+		payload.Usage.TotalTokens == nil || *payload.Usage.TotalTokens != 20 {
+		t.Fatalf("usage token facts = %#v, want input=12 output=8 total=20", payload.Usage)
+	}
+	if payload.Usage.CostUsd != nil {
+		t.Fatalf("usage cost = %#v, want unset", payload.Usage.CostUsd)
+	}
+}
+
+func TestFactoryEventHistory_RecordWorkstationResponse_LeavesTokenUsageUnsetWithoutProviderMetadata(t *testing.T) {
+	eventTime := time.Date(2026, 4, 17, 11, 45, 0, 0, time.UTC)
+	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+	history.RecordWorkstationResponse(9, workerexecution.WorkResult{
+		DispatchID:   "dispatch-usage-absent",
+		TransitionID: "build",
+		Outcome:      workerexecution.OutcomeAccepted,
+	}, interfaces.CompletedDispatch{
+		DispatchID:   "dispatch-usage-absent",
+		TransitionID: "build",
+		Outcome:      workerexecution.OutcomeAccepted,
+		EndTime:      eventTime,
+		Duration:     2 * time.Second,
+	})
+
+	events := generatedHistoryEvents(t, history)
+	if len(events) != 1 || events[0].Type != factoryapi.FactoryEventTypeDispatchResponse {
+		t.Fatalf("events = %#v, want one DISPATCH_RESPONSE", events)
+	}
+	payload, err := events[0].Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode dispatch response payload: %v", err)
+	}
+	if payload.Usage == nil || payload.Usage.DurationMillis == nil || *payload.Usage.DurationMillis != 2000 {
+		t.Fatalf("usage duration = %#v, want 2000ms", payload.Usage)
+	}
+	if payload.Usage.InputTokens != nil || payload.Usage.OutputTokens != nil || payload.Usage.TotalTokens != nil || payload.Usage.CostUsd != nil {
+		t.Fatalf("usage without metadata = %#v, want only duration", payload.Usage)
+	}
+}
+
+func TestFactoryEventHistory_RecordWorkstationResponse_PreservesStructuredResult(t *testing.T) {
+	eventTime := time.Date(2026, 4, 17, 10, 30, 0, 0, time.UTC)
+	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+	result := workerexecution.WorkResult{
+		DispatchID:              "dispatch-structured",
+		TransitionID:            "build",
+		Outcome:                 workerexecution.OutcomeAccepted,
+		Output:                  `{"items":[{"name":"one"},{"name":"two"}]}`,
+		StructuredResult:        map[string]any{"items": []any{map[string]any{"name": "one"}, map[string]any{"name": "two"}}},
+		StructuredResultPresent: true,
+	}
+	completed := interfaces.CompletedDispatch{
+		DispatchID:   result.DispatchID,
+		TransitionID: result.TransitionID,
+		Outcome:      workerexecution.OutcomeAccepted,
+		EndTime:      eventTime,
+		Duration:     time.Second,
+	}
+
+	history.RecordWorkstationResponse(9, result, completed)
+	events := generatedHistoryEvents(t, history)
+	if len(events) != 1 {
+		t.Fatalf("event count = %d, want 1", len(events))
+	}
+
+	canonical, err := events[0].Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("dispatch response payload: %v", err)
+	}
+	want := map[string]any{"items": []any{map[string]any{"name": "one"}, map[string]any{"name": "two"}}}
+	if !reflect.DeepEqual(canonical.StructuredResult, want) {
+		t.Fatalf("canonical structured result = %#v, want %#v", canonical.StructuredResult, want)
+	}
+
+	data, err := json.Marshal(events[0])
+	if err != nil {
+		t.Fatalf("marshal event: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("unmarshal event: %v", err)
+	}
+	structured := assertJSONObject(t, assertJSONObject(t, decoded, "payload"), "structuredResult")
+	if !reflect.DeepEqual(structured, want) {
+		t.Fatalf("serialized structured result = %#v, want %#v", structured, want)
+	}
+}
+
+func TestFactoryEventHistory_RecordWorkstationResponse_PersistsExpectedArtifactVerification(t *testing.T) {
+	eventTime := time.Date(2026, 8, 10, 9, 30, 0, 0, time.UTC)
+	history := newTestFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return eventTime })
+	result := expectedArtifactFailureWorkResult()
+	history.RecordWorkstationResponse(4, result, interfaces.CompletedDispatch{
+		DispatchID:      result.DispatchID,
+		TransitionID:    result.TransitionID,
+		WorkstationName: "Build",
+		Outcome:         workerexecution.OutcomeFailed,
+		Reason:          result.Error,
+		EndTime:         eventTime,
+		Duration:        time.Second,
+	})
+	assertExpectedArtifactCanonicalEvent(t, history)
+	assertExpectedArtifactPublicEvent(t, history)
+	assertExpectedArtifactWorldState(t, history)
+}
+
+func expectedArtifactFailureWorkResult() workerexecution.WorkResult {
+	return workerexecution.WorkResult{
+		DispatchID:   "dispatch-artifact-failed",
+		TransitionID: "build",
+		Outcome:      workerexecution.OutcomeFailed,
+		Output:       "worker output retained",
+		Error:        "EXPECTED_ARTIFACTS_UNSATISFIED: report=reports/*.json (EMPTY)",
+		ArtifactVerification: &workerexecution.ExpectedArtifactVerification{
+			Code: workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied,
+			Entries: []workerexecution.ExpectedArtifactVerificationEntry{{
+				Name: "report", Pattern: "reports/*.json", Reason: workerexecution.ExpectedArtifactVerificationReasonEmpty,
+			}},
+		},
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyTerminal,
+			Type:   workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied,
+		},
+	}
+}
+
+func assertExpectedArtifactCanonicalEvent(t *testing.T, history *FactoryEventHistory) {
+	t.Helper()
+	events := history.CanonicalEvents()
+	if len(events) != 1 {
+		t.Fatalf("canonical event count = %d, want 1", len(events))
+	}
+	var canonicalPayload workerexecution.DispatchResponseEventPayload
+	if err := events[0].DecodePayload(&canonicalPayload); err != nil {
+		t.Fatalf("decode canonical dispatch response: %v", err)
+	}
+	if canonicalPayload.ArtifactVerification == nil || len(canonicalPayload.ArtifactVerification.Entries) != 1 {
+		t.Fatalf("canonical verification = %#v, want one entry", canonicalPayload.ArtifactVerification)
+	}
+	if canonicalPayload.ArtifactVerification.Code != workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied {
+		t.Fatalf("canonical verification code = %q", canonicalPayload.ArtifactVerification.Code)
+	}
+	if canonicalPayload.FailureDetail == nil || canonicalPayload.FailureDetail.Reason != workerexecution.WorkFailureTypeExpectedArtifactsUnsatisfied {
+		t.Fatalf("canonical failure detail = %#v, want expected-artifact code", canonicalPayload.FailureDetail)
+	}
+}
+
+func assertExpectedArtifactPublicEvent(t *testing.T, history *FactoryEventHistory) {
+	t.Helper()
+	generated := generatedHistoryEvents(t, history)
+	publicPayload, err := generated[0].Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode generated dispatch response: %v", err)
+	}
+	if publicPayload.ArtifactVerification == nil || len(publicPayload.ArtifactVerification.Entries) != 1 {
+		t.Fatalf("generated verification = %#v, want one entry", publicPayload.ArtifactVerification)
+	}
+}
+
+func assertExpectedArtifactWorldState(t *testing.T, history *FactoryEventHistory) {
+	t.Helper()
+	events := history.CanonicalEvents()
+	world, err := projections.ReconstructCanonicalFactoryWorldState(events, 4)
+	if err != nil {
+		t.Fatalf("reconstruct world state: %v", err)
+	}
+	if len(world.CompletedDispatches) != 1 || world.CompletedDispatches[0].Result.ArtifactVerification == nil {
+		t.Fatalf("world completion = %#v, want persisted verification", world.CompletedDispatches)
+	}
+	entry := world.CompletedDispatches[0].Result.ArtifactVerification.Entries[0]
+	if entry.Name != "report" || entry.Pattern != "reports/*.json" || entry.Reason != workerexecution.ExpectedArtifactVerificationReasonEmpty {
+		t.Fatalf("world verification entry = %#v", entry)
+	}
+}
+
 func TestFactoryEventHistory_RecordWorkstationResponse_UsesUTCFallbackAndDurationMillisForMissingEndTime(t *testing.T) {
 	localZone := time.FixedZone("Factory/Local", -5*60*60)
 	fallbackTime := time.Date(2026, 4, 17, 9, 30, 0, 0, localZone)
@@ -392,11 +742,11 @@ func safeDiagnosticsWorkResult() workerexecution.WorkResult {
 		TransitionID: "build",
 		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "completed",
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
+		Continuation: (&providers.SessionMetadata{
 			Provider: "codex",
 			Kind:     "response_id",
 			ID:       "resp-safe-123",
-		},
+		}).ContinuationRef(),
 		Diagnostics: &workerexecution.WorkDiagnostics{
 			RenderedPrompt: &workerexecution.RenderedPromptDiagnostic{
 				SystemPromptHash: "system-hash-123",

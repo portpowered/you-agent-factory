@@ -53,16 +53,16 @@ func TestMapPackageMarksProcessEdgesAsArchitectureException(t *testing.T) {
 	}
 }
 
-func TestMapPackageMovesProviderPackagesOutOfWorkers(t *testing.T) {
-	row, err := ownershipinventory.MapPackage("pkg/services/providers/internal/services/execution/internal/provider/codex")
+func TestMapPackageRetainsWorkerSessionsPackages(t *testing.T) {
+	row, err := ownershipinventory.MapPackage("pkg/services/worker_sessions/transports/http")
 	if err != nil {
 		t.Fatalf("MapPackage() error = %v", err)
 	}
-	if row.Destination != "providers" || row.Disposition != ownershipinventory.DispositionMove {
-		t.Fatalf("row = %#v, want move to providers", row)
+	if row.Destination != "worker_sessions" || row.Disposition != ownershipinventory.DispositionRetain {
+		t.Fatalf("row = %#v, want retain under worker_sessions", row)
 	}
-	if row.Successor == "" || row.DeletionCondition == "" {
-		t.Fatalf("move row missing successor/condition: %#v", row)
+	if row.DestinationKind != ownershipinventory.DestinationKindOwner {
+		t.Fatalf("destinationKind = %q, want owner", row.DestinationKind)
 	}
 }
 
@@ -92,4 +92,3 @@ func TestInventoryArtifactExistsAtCanonicalPath(t *testing.T) {
 		t.Fatalf("ownership inventory artifact missing at %s: %v", ownershipinventory.InventoryRelativePath, err)
 	}
 }
-

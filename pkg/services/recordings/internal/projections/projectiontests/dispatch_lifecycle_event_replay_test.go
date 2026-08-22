@@ -121,6 +121,63 @@ func TestReconstructFactoryWorldState_PetriDispatchRequestResponseRemainsReprese
 	}
 }
 
+func TestReconstructFactoryWorldState_PetriDispatchInterruptionRearmsLastLogicalInput(t *testing.T) {
+	t0 := time.Date(2026, 6, 9, 14, 16, 0, 0, time.UTC)
+	workItem := work.FactoryWorkItem{ID: "work-restarted", WorkTypeID: "task", DisplayName: "draft", TraceID: "trace-1"}
+	dispatchID := "dispatch-restarted"
+	events := []factoryapi.FactoryEvent{
+		initialStructureEvent(t0),
+		workInputEvent(1, t0.Add(time.Second), workItem),
+		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
+			DispatchID:   dispatchID,
+			TransitionID: "t-review",
+			Workstation:  interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
+			Inputs: []interfaces.WorkstationInput{{
+				TokenID: "work-restarted", PlaceID: "task:init", WorkItem: &workItem,
+			}},
+		}),
+		generatedProjectionEvent(
+			factoryapi.FactoryEventTypeDispatchInterrupted,
+			"interrupt/"+dispatchID,
+			2,
+			t0.Add(3*time.Second),
+			factoryapi.FactoryEventContext{
+				DispatchId: stringPtrForProjectionTest(dispatchID),
+				WorkIds:    stringSlicePtrForProjectionTest([]string{workItem.ID}),
+			},
+			factoryapi.DispatchInterruptedEventPayload{
+				InterruptedAt:  t0.Add(3 * time.Second),
+				ObservedStatus: factoryapi.FactoryDispatchStatusRUNNING,
+				Reason:         "daemon restart interrupted process-bound attempt",
+				RetryPlanned:   true,
+			},
+		),
+	}
+
+	worldState, err := ReconstructFactoryWorldState(events, 2)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	if len(worldState.ActiveDispatches) != 0 {
+		t.Fatalf("active dispatches = %#v, want no pre-restart live dispatch", worldState.ActiveDispatches)
+	}
+	if got := worldState.PlaceOccupancyByID["task:init"].WorkItemIDs; len(got) != 1 || got[0] != workItem.ID {
+		t.Fatalf("task:init occupancy = %#v, want the interrupted Work re-armed", got)
+	}
+	if _, ok := worldState.ActiveWorkItemsByID[workItem.ID]; !ok {
+		t.Fatalf("active Work = %#v, want interrupted Work eligible for normal scheduling", worldState.ActiveWorkItemsByID)
+	}
+	if _, ok := worldState.TerminalWorkByID[workItem.ID]; ok {
+		t.Fatalf("terminal Work = %#v, want interrupted Work nonterminal", worldState.TerminalWorkByID)
+	}
+	if worldState.JavaScriptRuntime == nil || len(worldState.JavaScriptRuntime.Dispatches) != 1 {
+		t.Fatalf("dispatch lifecycle projection = %#v, want one interrupted dispatch", worldState.JavaScriptRuntime)
+	}
+	if got := worldState.JavaScriptRuntime.Dispatches[0].RelatedWorkIDs; len(got) != 1 || got[0] != workItem.ID {
+		t.Fatalf("interrupted dispatch Work relation = %#v, want %q", got, workItem.ID)
+	}
+}
+
 func TestReconstructFactoryWorldState_ContinueDispatchReplaysNextTurnContent(t *testing.T) {
 	t0 := time.Date(2026, 7, 12, 19, 0, 0, 0, time.UTC)
 	input := work.FactoryWorkItem{
@@ -128,7 +185,7 @@ func TestReconstructFactoryWorldState_ContinueDispatchReplaysNextTurnContent(t *
 		WorkTypeID:  "task",
 		DisplayName: "draft",
 		TraceID:     "trace-1",
-		PlaceID:     "task:init",
+		State:       "init",
 		Content: []work.WorkContentPart{{
 			Type: work.WorkContentPartTypeText,
 			Text: "input-content",
@@ -139,7 +196,7 @@ func TestReconstructFactoryWorldState_ContinueDispatchReplaysNextTurnContent(t *
 		WorkTypeID:  "task",
 		DisplayName: "draft",
 		TraceID:     "trace-1",
-		PlaceID:     "task:init",
+		State:       "init",
 		Content: []work.WorkContentPart{{
 			Type: work.WorkContentPartTypeText,
 			Text: "next-turn-output",
@@ -206,7 +263,7 @@ func TestReconstructFactoryWorldState_FailedDispatchReplaysRequestContent(t *tes
 		WorkTypeID:  "task",
 		DisplayName: "draft",
 		TraceID:     "trace-1",
-		PlaceID:     "task:init",
+		State:       "init",
 		Content: []work.WorkContentPart{{
 			Type: work.WorkContentPartTypeText,
 			Text: "input-content",
@@ -217,7 +274,7 @@ func TestReconstructFactoryWorldState_FailedDispatchReplaysRequestContent(t *tes
 		WorkTypeID:  "task",
 		DisplayName: "draft",
 		TraceID:     "trace-1",
-		PlaceID:     "task:failed",
+		State:       "failed",
 		Content: []work.WorkContentPart{{
 			Type: work.WorkContentPartTypeText,
 			Text: "input-content",
@@ -296,6 +353,9 @@ func assertJavaScriptDispatchLifecycleReplay(t *testing.T, worldState interfaces
 	if dispatch.JavaScript == nil || dispatch.JavaScript.TaskKind != "AGENT" {
 		t.Fatalf("javascript dispatch = %#v, want AGENT task kind", dispatch.JavaScript)
 	}
+	if !dispatch.JavaScript.SkipPermissions {
+		t.Fatalf("javascript dispatch = %#v, want skipPermissions=true", dispatch.JavaScript)
+	}
 	if len(dispatch.ArtifactIDs) != 1 || dispatch.ArtifactIDs[0] != "artifact-result-1" {
 		t.Fatalf("dispatch artifact ids = %#v, want artifact-result-1", dispatch.ArtifactIDs)
 	}
@@ -337,6 +397,8 @@ func dispatchQueuedEvent(tick int, eventTime time.Time) factoryapi.FactoryEvent 
 		SchemaDigest:  stringPointer("sha256:schema"),
 		InputWorkIds:  &[]string{"work-1"},
 	}
+	skipPermissions := true
+	payload.SkipPermissions = &skipPermissions
 	return generatedProjectionEvent(factoryapi.FactoryEventTypeDispatchQueued, "dispatch-queued/"+dispatchID, tick, eventTime, context, payload)
 }
 

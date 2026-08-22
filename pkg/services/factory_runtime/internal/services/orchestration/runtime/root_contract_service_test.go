@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -10,6 +11,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -19,15 +24,51 @@ type testRuntimeClock struct{}
 func (testRuntimeClock) Now() time.Time { return time.Now() }
 
 type controlledWorkstationBoundary struct {
+	workers.ModelInvoker
 	requests chan workers.WorkstationDispatchRequest
 	results  chan workers.WorkstationDispatchResult
 	cancels  chan workers.WorkstationDispatchCancelRequest
-	stops    atomic.Int32
 }
 
 type countingWorkerExecutor struct {
 	calls atomic.Int32
 }
+
+type gatedRuntimeLogger struct {
+	armed       atomic.Bool
+	entered     chan struct{}
+	release     chan struct{}
+	releaseOnce sync.Once
+}
+
+func newGatedRuntimeLogger() *gatedRuntimeLogger {
+	return &gatedRuntimeLogger{
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+}
+
+func (l *gatedRuntimeLogger) arm() {
+	l.armed.Store(true)
+}
+
+func (l *gatedRuntimeLogger) releaseTick() {
+	l.releaseOnce.Do(func() { close(l.release) })
+}
+
+func (l *gatedRuntimeLogger) Debug(message string, _ ...any) {
+	if message != "transitioner: processing results" || !l.armed.CompareAndSwap(true, false) {
+		return
+	}
+	close(l.entered)
+	<-l.release
+}
+
+func (l *gatedRuntimeLogger) Info(string, ...any) {}
+
+func (l *gatedRuntimeLogger) Warn(string, ...any)    {}
+func (l *gatedRuntimeLogger) Error(string, ...any)   {}
+func (l *gatedRuntimeLogger) Verbose(string, ...any) {}
 
 func (e *countingWorkerExecutor) Execute(
 	context.Context,
@@ -45,46 +86,29 @@ func newControlledWorkstationBoundary() *controlledWorkstationBoundary {
 	}
 }
 
-func (*controlledWorkstationBoundary) StartWorkstationPool(
-	context.Context,
-	workers.WorkstationPoolStartRequest,
-) (workers.WorkstationPoolStartResult, error) {
-	return workers.WorkstationPoolStartResult{
-		Outcome: workers.WorkstationPoolLifecycleOutcomeStarted,
-	}, nil
-}
-
-func (b *controlledWorkstationBoundary) StopWorkstationPool(
-	context.Context,
-) (workers.WorkstationPoolStopResult, error) {
-	b.stops.Add(1)
-	return workers.WorkstationPoolStopResult{
-		Outcome: workers.WorkstationPoolLifecycleOutcomeStopped,
-	}, nil
-}
-
-func (b *controlledWorkstationBoundary) DispatchWorkstation(
+func (b *controlledWorkstationBoundary) Execute(
 	ctx context.Context,
-	request workers.WorkstationDispatchRequest,
-) (workers.WorkstationDispatchResult, error) {
-	b.requests <- request
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	legacy := testLegacyRequestFromExecute(request)
+	b.requests <- legacy
 	select {
 	case result := <-b.results:
-		return result, nil
+		output := workers.ProposedOutputFromLegacyWorkResult(result.Result)
+		executeResult := workers.ExecuteResult{
+			Correlation: request.Correlation,
+			Outcome:     executeOutcomeFromWorkResult(result.Result),
+			Failure:     executeFailureFromWorkResult(result.Result),
+			Output:      output,
+		}
+		if result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCanceled {
+			executeResult.Outcome = workers.ExecutionOutcomeCanceled
+		}
+		return executeResult, nil
 	case <-ctx.Done():
-		return workers.WorkstationDispatchResult{}, ctx.Err()
+		b.cancels <- workers.WorkstationDispatchCancelRequest{DispatchID: legacy.Execution.Dispatch.DispatchID}
+		return workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeCanceled}, ctx.Err()
 	}
-}
-
-func (b *controlledWorkstationBoundary) CancelWorkstationDispatch(
-	_ context.Context,
-	request workers.WorkstationDispatchCancelRequest,
-) (workers.WorkstationDispatchCancelResult, error) {
-	b.cancels <- request
-	return workers.WorkstationDispatchCancelResult{
-		DispatchID: request.DispatchID,
-		Outcome:    workers.WorkstationDispatchCancelOutcomeCanceled,
-	}, nil
 }
 
 func newRootContractTestFactory(t *testing.T) *factoryImpl {
@@ -210,6 +234,137 @@ func TestFactoryImpl_Observe_ProjectsSanitizedObservation(t *testing.T) {
 	impl.state = interfaces.FactoryState("unknown")
 	_, err = impl.Observe(ctx, factory.ObserveRequest{})
 	requireRootErrIs(t, err, factory.ErrNotRunning, "Observe(unknown)")
+}
+
+func TestFactoryImpl_CleanInvocationSnapshotProjectsDetachedRuntimeFacts(t *testing.T) {
+	impl := newRootContractTestFactory(t)
+	if _, err := submitWorkRequests(context.Background(), impl, []work.SubmitRequest{{
+		WorkID: "work-clean-snapshot", WorkTypeID: "task", TraceID: "trace-clean-snapshot",
+	}}); err != nil {
+		t.Fatalf("SubmitWorkRequest: %v", err)
+	}
+	if err := impl.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+
+	snapshot, err := impl.CleanInvocationSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("CleanInvocationSnapshot: %v", err)
+	}
+	assertCleanInvocationSnapshot(t, snapshot)
+}
+
+func assertCleanInvocationSnapshot(t *testing.T, snapshot factory.CleanInvocationSnapshot) {
+	t.Helper()
+	if len(snapshot.Work) != 1 {
+		t.Fatalf("clean Work = %#v, want one terminal item", snapshot.Work)
+	}
+	terminal := snapshot.Work[0]
+	if terminal.WorkID != "work-clean-snapshot" || terminal.WorkTypeID != "task" ||
+		terminal.StateCategory != string(factory.StateCategoryTerminal) ||
+		terminal.Output != "done" || terminal.TraceID != "trace-clean-snapshot" {
+		t.Fatalf("clean terminal Work = %#v, want detached terminal facts", terminal)
+	}
+	if len(snapshot.DispatchHistory) != 1 {
+		t.Fatalf("clean dispatch history = %#v, want one completion", snapshot.DispatchHistory)
+	}
+	completion := snapshot.DispatchHistory[0]
+	if completion.Outcome != string(workers.OutcomeAccepted) || len(completion.Consumed) != 1 || len(completion.Outputs) != 1 {
+		t.Fatalf("clean dispatch completion = %#v, want accepted consumed/output facts", completion)
+	}
+	if completion.Consumed[0].WorkID != terminal.WorkID || completion.Outputs[0].WorkID != terminal.WorkID {
+		t.Fatalf("clean dispatch lineage = %#v, want Work %q", completion, terminal.WorkID)
+	}
+}
+
+func TestCleanInvocationWorkFromTokenHandlesNilAndUnknownTopology(t *testing.T) {
+	if got := cleanInvocationWorkFromToken(nil, nil); got != (factory.CleanInvocationWork{}) {
+		t.Fatalf("nil token projection = %#v, want zero value", got)
+	}
+	got := cleanInvocationWorkFromToken(nil, &factorytoken.Token{
+		PlaceID: "unknown-place",
+		Color: factorytoken.Color{
+			WorkID: "work-processing", WorkTypeID: "task", TraceID: "trace-processing",
+			DataType: factorytoken.DataTypeWork, Payload: []byte("payload"),
+		},
+	})
+	want := factory.CleanInvocationWork{
+		WorkID: "work-processing", WorkTypeID: "task", StateCategory: string(factory.StateCategoryProcessing),
+		Output: "payload", TraceID: "trace-processing", DataType: string(factorytoken.DataTypeWork),
+	}
+	if got != want {
+		t.Fatalf("unknown topology projection = %#v, want %#v", got, want)
+	}
+}
+
+func TestCleanInvocationSnapshotHandlesReaderErrorAndNilSnapshot(t *testing.T) {
+	wantErr := errors.New("snapshot unavailable")
+	if _, err := cleanInvocationSnapshot(context.Background(), func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+		return nil, wantErr
+	}); !errors.Is(err, wantErr) {
+		t.Fatalf("cleanInvocationSnapshot(error) = %v, want %v", err, wantErr)
+	}
+	got, err := cleanInvocationSnapshot(context.Background(), func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+		return nil, nil
+	})
+	if err != nil {
+		t.Fatalf("cleanInvocationSnapshot(nil) = %v, want nil error", err)
+	}
+	if len(got.Work) != 0 || len(got.DispatchHistory) != 0 {
+		t.Fatalf("cleanInvocationSnapshot(nil) = %#v, want zero snapshot", got)
+	}
+}
+
+func TestProjectCleanInvocationSnapshotSkipsNilTokensAndProjectsFailureFacts(t *testing.T) {
+	token := &factorytoken.Token{
+		PlaceID: "unknown-place",
+		Color: factorytoken.Color{
+			WorkID: "work-failed", WorkTypeID: "task", TraceID: "trace-failed",
+			DataType: factorytoken.DataTypeWork, Payload: []byte("failed output"),
+		},
+	}
+	workerToken := factorytoken.ToWorker(*token)
+	outputToken := workerToken
+	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Marking: petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+			"nil-token":    nil,
+			"failed-token": token,
+		}},
+		DispatchHistory: []interfaces.CompletedDispatch{{
+			Outcome:         workers.OutcomeFailed,
+			Reason:          "worker failed",
+			FailureMetadata: &workers.WorkFailureMetadata{Type: workers.WorkFailureTypeTimeout},
+			ConsumedTokens:  []workers.Token{workerToken},
+			OutputMutations: []interfaces.TokenMutationRecord{{Token: nil}, {Token: &outputToken}},
+		}},
+	}
+
+	got := projectCleanInvocationSnapshot(snapshot)
+	if len(got.Work) != 1 || got.Work[0].WorkID != "work-failed" {
+		t.Fatalf("projected Work = %#v, want one nonnil token", got.Work)
+	}
+	if len(got.DispatchHistory) != 1 {
+		t.Fatalf("projected dispatch history = %#v, want one completion", got.DispatchHistory)
+	}
+	completion := got.DispatchHistory[0]
+	if completion.Outcome != string(workers.OutcomeFailed) || completion.FailureType != string(workers.WorkFailureTypeTimeout) ||
+		len(completion.Consumed) != 1 || len(completion.Outputs) != 1 {
+		t.Fatalf("projected failure completion = %#v, want failure metadata and nonnil lineage", completion)
+	}
+}
+
+func TestFactoryImpl_RuntimeConfigurationAccessorsRemainSafe(t *testing.T) {
+	impl := newRootContractTestFactory(t)
+	impl.SetProgressPublisher(nil)
+	impl.SetMockWorkersConfig(&workers.MockWorkersConfig{})
+	impl.SetPromptSourceReader(nil)
+	if impl.WorkflowContext() != nil {
+		t.Fatalf("WorkflowContext() = %#v, want nil for the default test runtime", impl.WorkflowContext())
+	}
+	var adapter *schedulerAdapter
+	if adapter.SupportsRepeatedTransitionBindings() {
+		t.Fatal("nil scheduler adapter reports repeated transition bindings")
+	}
 }
 
 func TestFactoryImpl_DispatchContracts_UseCanonicalPlanningState(t *testing.T) {
@@ -405,6 +560,61 @@ func TestFactoryImpl_RunCancellationPropagatesThroughWorkersBoundary(t *testing.
 	}
 }
 
+// TestFactoryImpl_RunCancellationAbsorbsLateCanceledResult fixes the ordering
+// that previously routed a cancellation-induced result through the ordinary
+// FAILED transition path: the result is admitted, the transitioner starts,
+// cancellation happens inside Execute, and routing then observes cancellation.
+func TestFactoryImpl_RunCancellationAbsorbsLateCanceledResult(t *testing.T) {
+	boundary := newControlledWorkstationBoundary()
+	logger := newGatedRuntimeLogger()
+	runtime, err := newTestFactory(
+		withNet(buildSimpleNet()), withServiceMode(), withWorkerService(boundary),
+		withWorkerExecutor("mock", &passExecutor{}), withLogger(logger),
+	)
+	requireNoRootErr(t, err, "New")
+	impl := runtime.(*factoryImpl)
+	if _, err := submitWorkRequests(t.Context(), runtime, []work.SubmitRequest{{
+		WorkID: "work-cancel-gated", WorkTypeID: "task", TraceID: "trace-cancel-gated",
+	}}); err != nil {
+		t.Fatalf("SubmitWorkRequest: %v", err)
+	}
+	defer logger.releaseTick()
+	runCtx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	runDone := make(chan error, 1)
+	go func() { runDone <- runtime.Run(runCtx) }()
+	request := awaitCanonicalWorkersRequest(t, boundary.requests)
+	if request.Execution.Dispatch.TransitionID != "t-process" {
+		t.Fatalf("gated dispatch transition = %q, want t-process", request.Execution.Dispatch.TransitionID)
+	}
+	written := observeNextBufferedResult(t, runtime)
+	logger.arm()
+	boundary.results <- canceledWorkersResult(request)
+	waitForBufferedResult(t, written)
+	impl.engine.NotifyResult()
+	select {
+	case <-logger.entered:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for the gated transitioner")
+	}
+	cancel()
+	logger.releaseTick()
+
+	err = <-runDone
+	if err != nil {
+		t.Fatalf("Run after deterministic late cancellation result = %v, want nil", err)
+	}
+	state := impl.dispatchPlan.State()
+	if state.Mode != "STOPPED" || state.StopReason != "CANCELLED" {
+		t.Fatalf("cancelled Runtime outbox state = %#v, want STOPPED/CANCELLED", state)
+	}
+	snapshot := impl.engine.GetRuntimeStateSnapshot()
+	if len(snapshot.Results) != 1 || snapshot.Results[0].Outcome != workers.OutcomeFailed ||
+		snapshot.Results[0].Error != workers.ErrWorkstationDispatchCanceled.Error() {
+		t.Fatalf("absorbed late cancellation results = %#v, want retained FAILED cancellation result", snapshot.Results)
+	}
+}
+
 func TestFactoryImpl_PausedDispatchPlanPublishesOnlyAfterResume(t *testing.T) {
 	impl := newRootContractTestFactory(t)
 	ctx := context.Background()
@@ -504,6 +714,20 @@ func completedWorkersResult(
 	}
 }
 
+func failedWorkersResult(
+	request workers.WorkstationDispatchRequest,
+) workers.WorkstationDispatchResult {
+	dispatch := request.Execution.Dispatch
+	return workers.WorkstationDispatchResult{
+		DispatchID: dispatch.DispatchID, WorkstationName: request.WorkstationName,
+		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
+		Result: workers.WorkResult{
+			DispatchID: dispatch.DispatchID, TransitionID: dispatch.TransitionID,
+			Outcome: workers.OutcomeFailed, Error: "simulated worker session failure",
+		},
+	}
+}
+
 func canceledWorkersResult(
 	request workers.WorkstationDispatchRequest,
 ) workers.WorkstationDispatchResult {
@@ -520,7 +744,7 @@ func canceledWorkersResult(
 
 func assertCanonicalResultProgression(
 	t *testing.T,
-	runtime factory.Factory,
+	runtime factoryhost.Engine,
 	ledger interface {
 		CallCount(string) int
 		CallsSnapshot() []string
@@ -578,8 +802,8 @@ func assertStoppedRuntimeLateResult(
 		time.Sleep(time.Millisecond)
 	}
 	state := impl.dispatchPlan.State()
-	if state.Mode != "STOPPED" || impl.workers == nil {
-		t.Fatalf("stopped Runtime state = %#v, Workers = %#v", state, impl.workers)
+	if state.Mode != "STOPPED" {
+		t.Fatalf("stopped Runtime state = %#v", state)
 	}
 	late, err := impl.AcceptDispatchResult(t.Context(), factory.AcceptDispatchResultRequest{
 		DispatchID: dispatchID, CorrelationID: dispatchID, WorkID: "work-terminate",
@@ -589,83 +813,4 @@ func assertStoppedRuntimeLateResult(
 	if late.Outcome != factory.DispatchPlanOutcomeDuplicateIdempotent {
 		t.Fatalf("late result outcome = %q, want DUPLICATE_IDEMPOTENT", late.Outcome)
 	}
-}
-
-func TestFactoryImpl_CheckpointContracts_DoNotReportFalseSuccess(t *testing.T) {
-	impl := newRootContractTestFactory(t)
-	ctx := context.Background()
-	impl.state = interfaces.FactoryStatePaused
-
-	captured, err := impl.CaptureCheckpoint(ctx, factory.CaptureCheckpointRequest{CheckpointID: "cp-1"})
-	requireNoRootErr(t, err, "CaptureCheckpoint(paused)")
-	if captured.Outcome != factory.CheckpointOutcomeCaptured {
-		t.Fatalf("CaptureCheckpoint(paused) outcome = %q, want CAPTURED", captured.Outcome)
-	}
-	if captured.Checkpoint.CheckpointID != "cp-1" ||
-		captured.Checkpoint.SchemaVersion <= 0 ||
-		len(captured.Checkpoint.Payload) == 0 {
-		t.Fatalf("CaptureCheckpoint(paused) checkpoint = %#v, want opaque captured checkpoint", captured.Checkpoint)
-	}
-	_, err = impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{})
-	requireRootErrIs(t, err, factory.ErrCheckpointNotFound, "LoadCheckpoint(empty)")
-	loaded, err := impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "cp-1"})
-	requireNoRootErr(t, err, "LoadCheckpoint(cp-1)")
-	if loaded.Outcome != factory.CheckpointOutcomeLoaded {
-		t.Fatalf("LoadCheckpoint(cp-1) outcome = %q, want LOADED", loaded.Outcome)
-	}
-	if loaded.Checkpoint.CheckpointID != "cp-1" ||
-		loaded.Checkpoint.SchemaVersion != captured.Checkpoint.SchemaVersion ||
-		len(loaded.Checkpoint.Payload) == 0 {
-		t.Fatalf("LoadCheckpoint(cp-1) checkpoint = %#v, want stored opaque checkpoint", loaded.Checkpoint)
-	}
-	compatible, err := impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{
-		CheckpointID:          "cp-1",
-		ExpectedSchemaVersion: captured.Checkpoint.SchemaVersion,
-	})
-	requireNoRootErr(t, err, "LoadCheckpoint(compatible)")
-	if !compatible.Compatible {
-		t.Fatal("LoadCheckpoint(compatible) Compatible = false, want true")
-	}
-	incompatible, err := impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{
-		CheckpointID:          "cp-1",
-		ExpectedSchemaVersion: captured.Checkpoint.SchemaVersion + 1,
-	})
-	requireNoRootErr(t, err, "LoadCheckpoint(incompatible)")
-	if incompatible.Compatible {
-		t.Fatal("LoadCheckpoint(incompatible) Compatible = true, want false")
-	}
-	_, err = impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "missing"})
-	requireRootErrIs(t, err, factory.ErrCheckpointNotFound, "LoadCheckpoint(missing)")
-
-	restored, err := impl.RestoreCheckpoint(ctx, factory.RestoreCheckpointRequest{Checkpoint: captured.Checkpoint})
-	requireNoRootErr(t, err, "RestoreCheckpoint(captured)")
-	if restored.Outcome != factory.CheckpointOutcomeRestored || restored.CheckpointID != "cp-1" {
-		t.Fatalf("RestoreCheckpoint(captured) = %#v, want RESTORED cp-1", restored)
-	}
-	loadedAfterRestore, err := impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "cp-1"})
-	requireNoRootErr(t, err, "LoadCheckpoint(after restore)")
-	if loadedAfterRestore.Checkpoint.CheckpointID != captured.Checkpoint.CheckpointID ||
-		loadedAfterRestore.Checkpoint.SchemaVersion != captured.Checkpoint.SchemaVersion ||
-		string(loadedAfterRestore.Checkpoint.Payload) != string(captured.Checkpoint.Payload) {
-		t.Fatalf("LoadCheckpoint(after restore) checkpoint = %#v, want restored envelope %#v", loadedAfterRestore.Checkpoint, captured.Checkpoint)
-	}
-	_, err = impl.RestoreCheckpoint(ctx, factory.RestoreCheckpointRequest{Checkpoint: factory.Checkpoint{CheckpointID: "bad", SchemaVersion: 1}})
-	requireRootErrIs(t, err, factory.ErrCorruptCheckpoint, "RestoreCheckpoint(corrupt)")
-	_, err = impl.RestoreCheckpoint(ctx, factory.RestoreCheckpointRequest{
-		Checkpoint: factory.Checkpoint{CheckpointID: "cp-2", SchemaVersion: 2, Payload: []byte(`{"factoryState":"PAUSED"}`)},
-	})
-	requireRootErrIs(t, err, factory.ErrIncompatibleCheckpoint, "RestoreCheckpoint(incompatible)")
-
-	impl.state = interfaces.FactoryStateCompleted
-	_, err = impl.CaptureCheckpoint(ctx, factory.CaptureCheckpointRequest{CheckpointID: "cp-2"})
-	requireRootErrIs(t, err, factory.ErrNotRunning, "CaptureCheckpoint(completed)")
-	loadedAfterComplete, err := impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "cp-1"})
-	requireNoRootErr(t, err, "LoadCheckpoint(completed)")
-	if loadedAfterComplete.Outcome != factory.CheckpointOutcomeLoaded {
-		t.Fatalf("LoadCheckpoint(completed) outcome = %q, want LOADED", loadedAfterComplete.Outcome)
-	}
-	_, err = impl.RestoreCheckpoint(ctx, factory.RestoreCheckpointRequest{
-		Checkpoint: factory.Checkpoint{CheckpointID: "cp-2", SchemaVersion: 1, Payload: []byte(`{"factoryState":"PAUSED"}`)},
-	})
-	requireRootErrIs(t, err, factory.ErrNotRunning, "RestoreCheckpoint(completed)")
 }

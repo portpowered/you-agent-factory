@@ -18,6 +18,7 @@ EXPECTED_RESULT_KEYS = {
     "branch",
     "prd_path",
     "prd_md_path",
+    "standing_rules_path",
     "reused",
 }
 
@@ -58,6 +59,26 @@ def git(args, cwd, check=True):
 
 
 def write_prd(repo_path, prd_name, include_md=False):
+    exclude_path = repo_path / ".git" / "info" / "exclude"
+    existing_excludes = (
+        exclude_path.read_text(encoding="utf-8")
+        if exclude_path.exists()
+        else ""
+    )
+    missing_excludes = [
+        entry
+        for entry in ("tasks/todo/", ".claude/")
+        if entry not in existing_excludes.splitlines()
+    ]
+    if missing_excludes:
+        exclude_path.write_text(
+            existing_excludes.rstrip("\n")
+            + "\n"
+            + "\n".join(missing_excludes)
+            + "\n",
+            encoding="utf-8",
+        )
+
     tasks_dir = repo_path / "tasks" / "todo"
     tasks_dir.mkdir(parents=True)
     prd_json = tasks_dir / f"{prd_name}.json"
@@ -92,9 +113,33 @@ def setup_repo_with_origin_main_ahead(local_repo, repo_root):
     git(["clone", str(bare_remote), str(local_repo.name)], repo_root)
     git(["reset", "--hard", "HEAD~1"], local_repo)
     git(["checkout", "-b", "feature-branch"], local_repo)
-    (local_repo / "dirty.txt").write_text("unstaged change\n", encoding="utf-8")
+    (local_repo / ".git" / "info" / "exclude").write_text(
+        "tasks/todo/\n.claude/\n",
+        encoding="utf-8",
+    )
     git(["fetch", "origin"], local_repo)
 
+    return bare_remote
+
+
+def setup_repo_with_local_main_ahead(local_repo, repo_root, ahead_commits=1):
+    """Create a bare remote; local main carries unpushed commits ahead of it."""
+    bare_remote = repo_root / "remote.git"
+    bare_remote.mkdir()
+    git(["init", "--bare", "-b", "main"], bare_remote)
+
+    local_repo.mkdir()
+    init_local_repo(local_repo)
+    git(["remote", "add", "origin", str(bare_remote)], local_repo)
+    git(["push", "-u", "origin", "main"], local_repo)
+
+    for index in range(ahead_commits):
+        ahead_file = local_repo / f"unpushed-{index}.txt"
+        ahead_file.write_text("local main is ahead\n", encoding="utf-8")
+        git(["add", ahead_file.name], local_repo)
+        git(["commit", "-m", f"unpushed local commit {index}"], local_repo)
+
+    git(["fetch", "origin"], local_repo)
     return bare_remote
 
 
@@ -202,6 +247,55 @@ class SetupWorkspaceWorktreeTest(unittest.TestCase):
         self.assertEqual(branch_sha, main_sha)
         self.assertTrue(self.module.branch_exists_locally(self.repo_path, prd_name))
 
+    def test_new_worktree_branches_from_origin_main_when_local_main_is_ahead(self):
+        local_repo = self.repo_path / "local"
+        setup_repo_with_local_main_ahead(local_repo, self.repo_path, ahead_commits=2)
+
+        origin_main_sha = git(
+            ["rev-parse", "refs/remotes/origin/main"],
+            local_repo,
+        ).stdout.strip()
+        local_main_sha = git(
+            ["rev-parse", "refs/heads/main"],
+            local_repo,
+        ).stdout.strip()
+        self.assertNotEqual(local_main_sha, origin_main_sha)
+
+        prd_name = "local-main-ahead-prd"
+        write_prd(local_repo, prd_name)
+
+        result = run_setup_workspace(local_repo, prd_name)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        payload = json.loads(result.stdout)
+        worktree_path = Path(payload["worktree"])
+        self.assertTrue(worktree_path.exists())
+
+        worktree_head = git(["rev-parse", "HEAD"], worktree_path).stdout.strip()
+        self.assertEqual(worktree_head, origin_main_sha)
+        self.assertNotEqual(worktree_head, local_main_sha)
+        for index in range(2):
+            self.assertFalse((worktree_path / f"unpushed-{index}.txt").exists())
+        ancestor_check = git(
+            ["merge-base", "--is-ancestor", local_main_sha, worktree_head],
+            worktree_path,
+            check=False,
+        )
+        self.assertNotEqual(ancestor_check.returncode, 0)
+
+        # Local main must be untouched: the ahead commits stay on it.
+        self.assertEqual(
+            git(["rev-parse", "refs/heads/main"], local_repo).stdout.strip(),
+            local_main_sha,
+        )
+
+    def test_resolve_worktree_start_point_falls_back_to_main_without_origin(self):
+        init_local_repo(self.repo_path)
+        self.assertEqual(
+            self.module.resolve_worktree_start_point(self.repo_path),
+            "main",
+        )
+
     def test_copies_prd_json_and_optional_markdown(self):
         init_local_repo(self.repo_path)
         prd_name = "copy-prd-prd"
@@ -241,10 +335,6 @@ class SetupWorkspaceWorktreeTest(unittest.TestCase):
         local_repo = self.repo_path / "local"
         setup_repo_with_origin_main_ahead(local_repo, self.repo_path)
 
-        staged_file = local_repo / "staged.txt"
-        staged_file.write_text("staged change\n", encoding="utf-8")
-        git(["add", "staged.txt"], local_repo)
-
         prd_name = "reuse-dirty-root-prd"
         write_prd(local_repo, prd_name)
 
@@ -254,14 +344,16 @@ class SetupWorkspaceWorktreeTest(unittest.TestCase):
         marker = Path(first_payload["worktree"]) / "reuse-marker.txt"
         marker.write_text("keep me\n", encoding="utf-8")
 
+        staged_file = local_repo / "staged.txt"
+        staged_file.write_text("staged change\n", encoding="utf-8")
+        git(["add", "staged.txt"], local_repo)
+
         second = run_setup_workspace(local_repo, prd_name)
-        self.assertEqual(second.returncode, 0, second.stderr)
-        second_payload = json.loads(second.stdout)
-        self.assertTrue(second_payload["reused"])
-        self.assertEqual(second_payload["worktree"], first_payload["worktree"])
+        self.assertEqual(second.returncode, 1, second.stdout)
+        self.assertEqual(second.stdout, "")
+        self.assertIn("repository root is dirty", second.stderr.lower())
         self.assertTrue(marker.exists())
         self.assertIn("A  staged.txt", git(["status", "--porcelain"], local_repo).stdout)
-        self.assertIn("?? dirty.txt", git(["status", "--porcelain"], local_repo).stdout)
 
     def test_reused_worktree_stashes_local_changes_before_syncing_upstream(self):
         bare_remote = self.repo_path / "remote.git"
@@ -348,7 +440,7 @@ class SetupWorkspaceWorktreeTest(unittest.TestCase):
         self.assertTrue(marker.exists())
         self.assertIn("no upstream", second.stderr.lower())
 
-    def test_reports_worktree_preparation_failure_when_branch_update_unsafe(self):
+    def test_keeps_local_worktree_state_when_branch_diverged_from_upstream(self):
         bare_remote = self.repo_path / "remote.git"
         bare_remote.mkdir()
         git(["init", "--bare", "-b", "main"], bare_remote)
@@ -387,11 +479,45 @@ class SetupWorkspaceWorktreeTest(unittest.TestCase):
         git(["push", "origin", prd_name], upstream)
         git(["fetch", "origin"], local_repo)
 
+        local_tip = git(["rev-parse", "HEAD"], worktree_path).stdout.strip()
+        dirty_file = worktree_path / "diverged-dirty.txt"
+        dirty_file.write_text("keep me dirty\n", encoding="utf-8")
+
         second = run_setup_workspace(local_repo, prd_name)
-        self.assertEqual(second.returncode, 1, second.stdout)
-        self.assertIn("Worktree preparation failed", second.stderr)
-        self.assertNotIn("Root sync failed", second.stderr)
-        self.assertIn("worktree branch update failed", second.stderr.lower())
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertIn(
+            "skipped (local branch diverged from upstream", second.stderr,
+        )
+        self.assertIn("stashed local changes", second.stderr.lower())
+        self.assertNotIn("worktree branch update failed", second.stderr.lower())
+        second_payload = json.loads(second.stdout)
+        self.assertTrue(second_payload["reused"])
+
+        # The unpushed local commits survive: HEAD still equals the pre-sync
+        # local tip, and the worktree was not reset to the remote history.
+        self.assertEqual(
+            git(["rev-parse", "HEAD"], worktree_path).stdout.strip(),
+            local_tip,
+        )
+        self.assertTrue((worktree_path / "local-only.txt").exists())
+        self.assertFalse((worktree_path / "remote-only.txt").exists())
+
+        # Stashed local changes are restored by the finally block.
+        self.assertEqual(
+            dirty_file.read_text(encoding="utf-8"),
+            "keep me dirty\n",
+        )
+        self.assertIn(
+            "?? diverged-dirty.txt",
+            git(["status", "--porcelain"], worktree_path).stdout,
+        )
+
+        # Nothing is lost remotely either: the diverged remote commits remain
+        # reachable on the fetched upstream ref for push-time reconciliation.
+        remote_tip = git(
+            ["rev-parse", f"origin/{prd_name}"], worktree_path,
+        ).stdout.strip()
+        self.assertNotEqual(remote_tip, local_tip)
 
 
 if __name__ == "__main__":

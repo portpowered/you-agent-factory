@@ -72,6 +72,7 @@ func evaluateHostedOwnershipClaims(claims []hostedOwnershipClaim) []finding {
 				Rule:     ruleHostedOwnershipAssignment,
 				FilePath: hostedOwnershipClaimsFile,
 				Target:   fmt.Sprintf("unknown responsibility %q", claim.Responsibility),
+				Class:    productionSourceClass,
 			})
 			continue
 		}
@@ -81,6 +82,7 @@ func evaluateHostedOwnershipClaims(claims []hostedOwnershipClaim) []finding {
 		findings = append(findings, finding{
 			Rule:     ruleHostedOwnershipAssignment,
 			FilePath: hostedOwnershipClaimsFile,
+			Class:    productionSourceClass,
 			Target: fmt.Sprintf(
 				"responsibility %q claimed by %q; durable owner is %s",
 				claim.Responsibility,

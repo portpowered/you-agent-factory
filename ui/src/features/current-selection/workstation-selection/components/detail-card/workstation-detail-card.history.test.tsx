@@ -3,6 +3,7 @@ import "../../../../../testing/vitest-dom-capabilities.setup";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { vi } from "vitest";
 import {
+  buildDashboardInferenceAttemptFixture,
   buildDashboardWorkstationRequestFixture,
   dashboardWorkstationRequestFixtures,
 } from "../../../../../components/dashboard/fixtures";
@@ -16,6 +17,46 @@ function requireValue<T>(value: T | null | undefined, message: string): T {
   }
 
   return value;
+}
+
+function buildMultiWorkstationRequest(dispatchID: string) {
+  const workItems = [
+    ["First Story", "work-first-story"],
+    ["Second Story", "work-second-story"],
+    ["Third Story", "work-third-story"],
+  ].map(([displayName, workID]) => ({
+    display_name: displayName,
+    trace_id: `trace-${workID}`,
+    work_id: workID,
+    work_type_id: "story",
+  }));
+
+  return buildDashboardWorkstationRequestFixture(dispatchID, {
+    inference_attempts: [
+      buildDashboardInferenceAttemptFixture(dispatchID, {
+        attempt: 2,
+        inference_request_id: `${dispatchID}/inference-request/2`,
+        outcome: "SUCCEEDED",
+      }),
+      buildDashboardInferenceAttemptFixture(dispatchID, {
+        attempt: 1,
+        inference_request_id: `${dispatchID}/inference-request/1`,
+        outcome: "FAILED",
+      }),
+    ],
+    request_id: "request-review-multi-work",
+    script_request: {
+      attempt: 1,
+      command: "review-script",
+      script_request_id: `${dispatchID}/script-request/1`,
+    },
+    script_response: {
+      duration_millis: 125,
+      outcome: "SUCCEEDED",
+      script_request_id: `${dispatchID}/script-request/1`,
+    },
+    work_items: workItems,
+  });
 }
 
 describe("WorkstationDetailCard run history", () => {
@@ -130,6 +171,127 @@ describe("WorkstationDetailCard run history", () => {
   });
 });
 
+describe("WorkstationDetailCard preserves every request Work and attempt", () => {
+  it("renders every work item and recorded inference or script attempt", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const onSelectWorkID = vi.fn();
+    const dispatchID = "dispatch-review-multi-work";
+    const workstationRequest = buildMultiWorkstationRequest(dispatchID);
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        now={DETAIL_CARD_NOW}
+        onSelectWorkID={onSelectWorkID}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+        workstationRequests={[workstationRequest]}
+      />,
+    );
+
+    const requestHistorySection = requireValue(
+      screen
+        .getByRole("heading", { name: "Request history" })
+        .closest("section"),
+      "expected request history section",
+    );
+    fireEvent.click(
+      within(requestHistorySection).getByRole("button", { name: "Expand" }),
+    );
+
+    expect(
+      within(requestHistorySection).getByText("Work ID: work-first-story"),
+    ).toBeTruthy();
+    expect(
+      within(requestHistorySection).getByText("Work ID: work-second-story"),
+    ).toBeTruthy();
+    expect(
+      within(requestHistorySection).getByText("Work ID: work-third-story"),
+    ).toBeTruthy();
+    expect(
+      within(requestHistorySection).getByText(
+        `${dispatchID}/inference-request/1`,
+      ),
+    ).toBeTruthy();
+    expect(
+      within(requestHistorySection).getByText(
+        `${dispatchID}/inference-request/2`,
+      ),
+    ).toBeTruthy();
+    expect(
+      within(requestHistorySection).getAllByText(
+        `${dispatchID}/script-request/1`,
+      ).length,
+    ).toBeGreaterThan(1);
+
+    const historyText = requestHistorySection.textContent ?? "";
+    expect(
+      historyText.indexOf(`${dispatchID}/inference-request/1`),
+    ).toBeLessThan(historyText.indexOf(`${dispatchID}/inference-request/2`));
+
+    for (const work of [
+      ["First Story", "work-first-story"],
+      ["Second Story", "work-second-story"],
+      ["Third Story", "work-third-story"],
+    ]) {
+      fireEvent.click(
+        within(requestHistorySection).getByRole("button", {
+          name: `Select work item ${work[0]}`,
+        }),
+      );
+    }
+
+    expect(onSelectWorkID.mock.calls.map(([workID]) => workID)).toEqual([
+      "work-first-story",
+      "work-second-story",
+      "work-third-story",
+    ]);
+  });
+});
+
+describe("WorkstationDetailCard request history empty work", () => {
+  it("renders an explicit unknown work state when a request has no work items", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        now={DETAIL_CARD_NOW}
+        onSelectWorkID={vi.fn()}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+        workstationRequests={[
+          buildDashboardWorkstationRequestFixture("dispatch-review-empty", {
+            request_id: "request-review-empty",
+            work_items: [],
+          }),
+        ]}
+      />,
+    );
+
+    const requestHistorySection = requireValue(
+      screen
+        .getByRole("heading", { name: "Request history" })
+        .closest("section"),
+      "expected request history section",
+    );
+    fireEvent.click(
+      within(requestHistorySection).getByRole("button", { name: "Expand" }),
+    );
+
+    expect(
+      within(requestHistorySection).getByText("Unknown work"),
+    ).toBeTruthy();
+    expect(
+      within(requestHistorySection).queryByRole("button", {
+        name: /Select work item/,
+      }),
+    ).toBeNull();
+  });
+});
+
 describe("WorkstationDetailCard request history", () => {
   it("renders dispatch-keyed request history as the primary historical surface when projections exist", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
@@ -194,8 +356,8 @@ describe("WorkstationDetailCard request history", () => {
       within(requestHistorySection).getAllByText("Active Story").length,
     ).toBeGreaterThan(0);
     expect(
-      within(requestHistorySection).queryByText("request-script-success-story"),
-    ).toBeNull();
+      within(requestHistorySection).getByText("request-script-success-story"),
+    ).toBeTruthy();
     const successfulRuntimePill = within(requestHistorySection).getByText(
       "Total runtime: 222ms",
     );

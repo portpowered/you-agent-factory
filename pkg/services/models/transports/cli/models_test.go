@@ -220,8 +220,8 @@ func TestRenderList_WritesDiscoveredModelsTable(t *testing.T) {
 				LifecycleState: factoryapi.ManagedRuntimeLifecycleStateINSTALLED,
 				Locality:       factoryapi.WorkerModelLocalityLocal,
 			},
-			Operations: []factoryapi.ModelOperation{{Name: "TTS"}},
-			Modalities: []factoryapi.ModelOperationContentType{factoryapi.ModelOperationContentTypeAudio, factoryapi.ModelOperationContentTypeText},
+			Operations: []factoryapi.ModelInvocationOperation{{Name: "TTS"}},
+			Modalities: []factoryapi.ModelInvocationContentType{factoryapi.ModelInvocationContentTypeAudio, factoryapi.ModelInvocationContentTypeText},
 			Resources:  []factoryapi.ModelResourceSummary{{Name: "voice-cache", Type: factoryapi.ResourceTypeModel, Capacity: 1}},
 		}},
 	}, &out)
@@ -264,7 +264,7 @@ func TestRenderModel_WritesManagedRuntimeInspectFields(t *testing.T) {
 			Diagnostics:    &diagnostics,
 		},
 		ProviderLocality: factoryapi.WorkerModelLocalityLocal,
-		Operations:       []factoryapi.ModelOperation{{Name: "EMBED"}},
+		Operations:       []factoryapi.ModelInvocationOperation{{Name: "EMBED"}},
 	}, &out)
 	if err != nil {
 		t.Fatalf("RenderModel: %v", err)

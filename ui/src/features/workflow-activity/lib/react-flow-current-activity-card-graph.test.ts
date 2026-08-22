@@ -24,6 +24,7 @@ import { buildGraphLayout } from "../../flowchart/lib/layout";
 import {
   buildCurrentActivityGraphLayoutFromFactory,
   dashboardWorkstationFromFactory,
+  findFactoryWorkstationByNodeId,
 } from "./current-activity-factory-graph-layout";
 import { buildGraphEdges } from "./react-flow-current-activity-card-edges";
 import {
@@ -115,9 +116,141 @@ describe("dashboardWorkstationFromFactory", () => {
       },
     ]);
   });
+
+  it("does not join an id-backed workstation through a renamed name", () => {
+    const factory = {
+      ...baseFactoryDefinition,
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations?.[0],
+          id: "stable-workstation",
+          name: "Renamed process",
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+
+    expect(findFactoryWorkstationByNodeId(factory, "Renamed process")).toBe(
+      null,
+    );
+    expect(
+      findFactoryWorkstationByNodeId(factory, "stable-workstation"),
+    ).toEqual(expect.objectContaining({ workstation_name: "Renamed process" }));
+  });
 });
 
 describe("current activity graph editor handles", () => {
+  it("projects canonical worker type and resolved runner metadata onto worker nodes", async () => {
+    const factory = {
+      ...baseFactoryDefinition,
+      runner: "claude",
+      workers: [
+        {
+          ...baseFactoryDefinition.workers?.[0],
+          modelProvider: "CODEX",
+          name: "writer",
+          type: "AGENT_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations?.[0],
+          runner: "antigravity",
+          worker: "writer",
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const snapshot = buildSampleFactorySnapshot(factory);
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights(
+        [],
+        visibleGraphEdges,
+        graphLayout.nodes,
+      ),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectDoc: vi.fn(),
+      onSelectResource: vi.fn(),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkType: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot,
+    });
+
+    expect(nodes.find((node) => node.id === "worker:writer")).toMatchObject({
+      data: {
+        kind: "worker",
+        runnerId: "antigravity",
+        workerType: "AGENT_WORKER",
+      },
+      type: "worker",
+    });
+  });
+
+  it("uses the generic worker glyph when reusable workstation runners conflict regardless of order", async () => {
+    const worker = {
+      ...baseFactoryDefinition.workers?.[0],
+      modelProvider: "CODEX",
+      name: "writer",
+      type: "AGENT_WORKER",
+    };
+    const workstations = ["codex", "claude"].map((runner) => ({
+      ...baseFactoryDefinition.workstations?.[0],
+      name: `draft-${runner}`,
+      runner,
+      worker: "writer",
+    }));
+
+    for (const orderedWorkstations of [
+      workstations,
+      [...workstations].reverse(),
+    ]) {
+      const factory = {
+        ...baseFactoryDefinition,
+        workers: [worker],
+        workstations: orderedWorkstations,
+      } satisfies CanonicalFactoryDefinition;
+      const snapshot = buildSampleFactorySnapshot(factory);
+      const graphLayout =
+        await buildCurrentActivityGraphLayoutFromFactory(factory);
+      const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+      const nodes = buildCurrentActivityNodes({
+        activeExecutionsByWorkstationNodeID: {},
+        activeGraphHighlights: buildActiveGraphHighlights(
+          [],
+          visibleGraphEdges,
+          graphLayout.nodes,
+        ),
+        activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+        graphLayout,
+        now: Date.parse("2026-05-24T00:00:00Z"),
+        onSelectDoc: vi.fn(),
+        onSelectResource: vi.fn(),
+        onSelectStateNode: vi.fn(),
+        onSelectWorkID: vi.fn(),
+        onSelectWorker: vi.fn(),
+        onSelectWorkType: vi.fn(),
+        onSelectWorkstation: vi.fn(),
+        selection: null,
+        snapshot,
+      });
+      const workerNode = nodes.find((node) => node.id === "worker:writer");
+
+      expect(workerNode).toMatchObject({
+        data: { kind: "worker", workerType: "AGENT_WORKER" },
+        type: "worker",
+      });
+      expect(workerNode).not.toHaveProperty("data.runnerId");
+    }
+  });
+
   it("marks factory-derived workstation nodes active from runtime execution ids", async () => {
     const factory = baseFactoryDefinition;
     const graphLayout =
@@ -176,6 +309,12 @@ describe("current activity graph editor handles", () => {
       activeFlow: true,
       selectedWorkstation: true,
       workstation: expect.objectContaining({ node_id: "draft" }),
+      workstationSemantics: {
+        controlRole: "NONE",
+        runtimeRole: "AGENT",
+        runtimeType: "MODEL_WORKSTATION",
+        schedulingBehavior: "UNKNOWN",
+      },
     });
   });
 
@@ -1055,7 +1194,7 @@ describe("current activity graph editor handles", () => {
         }),
       ]),
     );
-    expect(workstationNode?.data.handles).toHaveLength(7);
+    expect(workstationNode?.data.handles).toHaveLength(8);
     expect(workstationNode?.data.handles).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -2071,11 +2210,16 @@ describe("current activity graph active item labels", () => {
         displayLabel: "guide.md",
         fileType: "DOC",
         kind: "doc",
-        onSelectDoc,
         selectedDoc: true,
         targetPath: "factory/docs/guide.md",
       },
     });
+    (
+      docNode?.data as
+        | { onSelectDoc?: (targetPath: string) => void }
+        | undefined
+    )?.onSelectDoc?.("factory/docs/guide.md");
+    expect(onSelectDoc).toHaveBeenCalledWith("factory/docs/guide.md");
     expect(scriptNode).toMatchObject({
       type: "doc",
       data: {
@@ -2137,11 +2281,16 @@ describe("current activity graph active item labels", () => {
         displayLabel: "review.md",
         fileType: "DOC",
         kind: "doc",
-        onSelectDoc,
         selectedDoc: true,
         targetPath: nestedDocPath,
       },
     });
+    (
+      docNode?.data as
+        | { onSelectDoc?: (targetPath: string) => void }
+        | undefined
+    )?.onSelectDoc?.(nestedDocPath);
+    expect(onSelectDoc).toHaveBeenCalledWith(nestedDocPath);
   });
 
   it("updates doc nodes when the saved factory document changes", async () => {
@@ -2183,5 +2332,100 @@ describe("current activity graph active item labels", () => {
     expect(refreshedLayout.nodes.map((node) => node.nodeId)).not.toContain(
       "doc:factory/docs/overview.md",
     );
+  });
+
+  it("gates selected-node resize controls by editor mode and family axes", async () => {
+    const factory = loadSampleFactoryDefinition();
+    const snapshot = buildSampleFactorySnapshot(factory);
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const resizeController = {
+      enabled: true,
+      onResizeEnd: vi.fn(),
+    };
+    const editorNodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights(
+        [],
+        graphLayout.edges,
+        graphLayout.nodes,
+      ),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      editor: {
+        activeTool: "connect",
+        canInteractWithEditor: true,
+        editorMode: true,
+        nodeResizeControls: resizeController,
+        onConnectionAnchorClick: vi.fn(),
+        pendingConnectionSource: null,
+      },
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-06-08T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectDoc: vi.fn(),
+      onSelectResource: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkType: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: { kind: "node", nodeId: "workstation:process" },
+      snapshot,
+    });
+    const workstationControls = (
+      editorNodes.find((node) => node.id === "workstation:process")?.data as
+        | {
+            resizeControls?: {
+              allowedAxes: { height: boolean; width: boolean };
+            };
+          }
+        | undefined
+    )?.resizeControls;
+    const workerControls = (
+      editorNodes.find((node) => node.id === "worker:processor")?.data as
+        | {
+            resizeControls?: {
+              allowedAxes: { height: boolean; width: boolean };
+            };
+          }
+        | undefined
+    )?.resizeControls;
+
+    expect(workstationControls?.allowedAxes).toEqual({
+      height: true,
+      width: true,
+    });
+    expect(workerControls?.allowedAxes).toEqual({
+      height: false,
+      width: true,
+    });
+
+    const observeNodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights(
+        [],
+        graphLayout.edges,
+        graphLayout.nodes,
+      ),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-06-08T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkType: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: null,
+      snapshot,
+    });
+
+    expect(
+      (
+        observeNodes.find((node) => node.id === "workstation:process")?.data as
+          | { resizeControls?: unknown }
+          | undefined
+      )?.resizeControls,
+    ).toBeUndefined();
   });
 });

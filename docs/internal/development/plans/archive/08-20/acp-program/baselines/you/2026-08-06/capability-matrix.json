@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "agent": "you",
+  "capturedAtUtc": "2026-08-06T19:57:52Z",
+  "scenarios": [
+    "01-initialize",
+    "02-capabilities-full",
+    "03-config-and-models",
+    "04-thinking-and-tools",
+    "05-subagent"
+  ],
+  "agentMethodsAccepted": [
+    "initialize",
+    "session/new",
+    "session/prompt",
+    "session/set_config_option"
+  ],
+  "agentMethodsRejected": {
+    "session/select_model": -32601,
+    "session/set_mode": -32601,
+    "session/set_model": -32601
+  },
+  "clientMethodsInvoked": [
+    "session/update"
+  ],
+  "sessionUpdateVariants": {
+    "available_commands_update": 5,
+    "tool_call": 3,
+    "tool_call_update": 3
+  },
+  "agentCapabilities": [
+    "auth",
+    "loadSession",
+    "mcpCapabilities",
+    "promptCapabilities",
+    "sessionCapabilities.close",
+    "sessionCapabilities.resume"
+  ],
+  "configOptionCategory": "model",
+  "configOptionCount": 15,
+  "caveats": [
+    "prompts completed but produced no agent_message_chunk: the capture environment most likely had no model provider configured, so message-bearing rows are not evidence of a missing capability"
+  ],
+  "notes": [
+    "A null result is a valid finding: if a subagent surfaces only as an ordinary tool_call, the matrix records that rather than failing.",
+    "Collects any available_commands_update or current_mode_update the agent pushes unprompted.",
+    "Diffing this against 01 shows what an agent withholds when a client claims it cannot read files.",
+    "Empty clientCapabilities mirrors what our own production ACP client sends, so the advertised capabilities are directly comparable.",
+    "Method naming for model switching is unstable across agents. A -32601 here is baseline data, not a failure.",
+    "Proves the session is live, so an empty capability advertisement is not mistaken for a dead session.",
+    "Yields agent_thought_chunk plus tool_call and tool_call_update with their kinds, status progression, and content block shapes."
+  ]
+}

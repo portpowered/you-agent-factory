@@ -10,9 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
+	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	agy "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
@@ -55,7 +57,7 @@ func TestAgyBuiltInRegistrationFailsClosedWithoutEffect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewBuiltInService() = %v", err)
 	}
-	root, err := providerservice.New(catalog, executionService)
+	root, err := providerservice.New(catalog, executionService, logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("providerservice.New() = %v", err)
 	}
@@ -83,20 +85,26 @@ func TestAgyRootPTYExecutionEndToEnd(t *testing.T) {
 	})
 	root := newAgyRoot(t, effect)
 
-	result, err := root.Execute(t.Context(), providers.ExecuteRequest{
-		Provider:         providers.IDAntigravity,
-		AttemptID:        "dispatch-agy-e2e",
-		WorkingDirectory: ".",
-		UserMessage:      privatePrompt,
-		ResumeSession: &providers.SessionRef{
+	continued, err := root.Continue(t.Context(), providers.ContinueRequest{
+		Reference: providers.SessionRef{
 			Provider: providers.IDAntigravity,
 			Kind:     providers.SessionIDKind,
 			ID:       "session-e2e",
 		},
+		Attempt: providers.ExecuteRequest{
+			Provider:         providers.IDAntigravity,
+			AttemptID:        "dispatch-agy-e2e",
+			WorkingDirectory: ".",
+			UserMessage:      privatePrompt,
+		},
 	})
 	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
+		t.Fatalf("Continue() error = %v", err)
 	}
+	if continued.Outcome != providers.ContinuationOutcomeResumed {
+		t.Fatalf("Continue().Outcome = %q, want resumed", continued.Outcome)
+	}
+	result := continued.Result
 	if result.Content != "Hello from Agy" {
 		t.Fatalf("Content = %q, want cleaned final text", result.Content)
 	}
@@ -148,10 +156,10 @@ func TestAgyRootPreservesRequestAndFinalStdout(t *testing.T) {
 	var received providers.ExecuteRequest
 	effect := agy.EffectFunc(func(
 		_ context.Context,
-		got providers.ExecuteRequest,
+		got execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (agy.EffectResult, error) {
-		received = got.Clone()
+		received = got.ExecuteRequest.Clone()
 		if err := observe([]byte(content)); err != nil {
 			return agy.EffectResult{}, err
 		}
@@ -206,7 +214,7 @@ func TestAgyRootCancellationAndDeadlineReachEffectAndCleanUpOnce(t *testing.T) {
 			var cleanups atomic.Int32
 			effect := agy.EffectFunc(func(
 				ctx context.Context,
-				_ providers.ExecuteRequest,
+				_ execution.ContinuationRequest,
 				_ func([]byte) error,
 			) (agy.EffectResult, error) {
 				close(started)
@@ -256,19 +264,22 @@ func TestAgyRootTimeoutPreservesResumeSessionOnFailure(t *testing.T) {
 	})
 	root := newAgyRoot(t, effect)
 
-	result, err := root.Execute(t.Context(), providers.ExecuteRequest{
-		Provider:    providers.IDAntigravity,
-		AttemptID:   "dispatch-agy-timeout-session",
-		UserMessage: "plan the goal",
-		ResumeSession: &providers.SessionRef{
+	continued, err := root.Continue(t.Context(), providers.ContinueRequest{
+		Reference: providers.SessionRef{
 			Provider: providers.IDAntigravity,
 			Kind:     providers.SessionIDKind,
 			ID:       "session-on-failure",
 		},
+		Attempt: providers.ExecuteRequest{
+			Provider:    providers.IDAntigravity,
+			AttemptID:   "dispatch-agy-timeout-session",
+			UserMessage: "plan the goal",
+		},
 	})
 	if err == nil {
-		t.Fatal("Execute() error = nil, want timeout failure")
+		t.Fatal("Continue() error = nil, want timeout failure")
 	}
+	result := continued.Result
 	if result.Content != "" {
 		t.Fatalf("result content = %q, want empty result on timeout failure", result.Content)
 	}
@@ -303,14 +314,16 @@ func TestAgyRootMissingExecutablePreservesResumeSessionOnFailure(t *testing.T) {
 	})
 	root := newAgyRoot(t, effect)
 
-	_, err := root.Execute(t.Context(), providers.ExecuteRequest{
-		Provider:    providers.IDAntigravity,
-		AttemptID:   "dispatch-agy-missing-session",
-		UserMessage: "hello",
-		ResumeSession: &providers.SessionRef{
+	_, err := root.Continue(t.Context(), providers.ContinueRequest{
+		Reference: providers.SessionRef{
 			Provider: providers.IDAntigravity,
 			Kind:     providers.SessionIDKind,
 			ID:       "session-on-setup-failure",
+		},
+		Attempt: providers.ExecuteRequest{
+			Provider:    providers.IDAntigravity,
+			AttemptID:   "dispatch-agy-missing-session",
+			UserMessage: "hello",
 		},
 	})
 	var failure providers.ExecuteFailure
@@ -365,7 +378,7 @@ func newAgyRoot(t *testing.T, effect agy.Effect) providers.Service {
 	if err != nil {
 		t.Fatal(err)
 	}
-	root, err := providerservice.New(catalog, executionService)
+	root, err := providerservice.New(catalog, executionService, logging.NoopLogger{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -9,7 +9,12 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { Background, ReactFlow, ReactFlowProvider } from "@xyflow/react";
+import { FACTORY_GRAPH_NODE_TYPES } from "@you-agent-factory/factory-graph";
 
+import {
+  WorkstationKind,
+  WorkstationType,
+} from "../../../../api/generated/openapi";
 import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
 import "../../../../styles.css";
 import { baseFactoryDefinition } from "../../lib/draft/factory-graph-draft.test-helpers";
@@ -19,6 +24,7 @@ import type {
   FactoryGraphTopology,
 } from "../../lib/draft/factory-graph-draft-types";
 import { buildFactoryGraphEditorLayout } from "../../lib/editor/factory-graph-editor-layout";
+import { projectFactoryGraphToReactFlow } from "../../lib/projection/factory-graph-react-flow-projection";
 import {
   buildFactoryGraphEditorFlowModel,
   FACTORY_GRAPH_EDITOR_EDGE_TYPES,
@@ -284,20 +290,125 @@ describe("factory graph editor edge labels", () => {
       reviewNode.querySelector(
         "[data-factory-entity-semantic-icon] [data-graph-semantic-icon='workstation']",
       ),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       reviewNode.querySelector("[data-factory-entity-title]")?.textContent,
     ).toContain("review");
-    expect(reviewNode.textContent).toContain("Workstation");
+    expect(reviewNode.textContent).not.toContain("Default scheduler");
     expect(reviewNode.textContent).toContain("Pending");
 
     expect(
       writerNode.querySelector(
-        "[data-factory-entity-semantic-icon] [data-graph-semantic-icon='active-work']",
+        "[data-factory-entity-semantic-icon] [data-graph-semantic-icon='worker']",
       ),
     ).not.toBeNull();
     expect(writerNode.textContent).toContain("Worker");
     expect(writerNode.textContent).toContain("Active");
+  });
+
+  it("uses the package semantic registry for equivalent observe and edit projections", () => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const observer = projectFactoryGraphToReactFlow({
+      mode: "observer",
+      topology,
+    });
+    const editor = buildFactoryGraphEditorFlowModel({
+      canEditConnections: false,
+      pendingAdditionEdgeIds: new Set<string>(),
+      pendingAdditionNodeIds: new Set<string>(),
+      pendingConnectionSource: null,
+      pendingRemovalEdgeIds: new Set<string>(),
+      pendingRemovalNodeIds: new Set<string>(),
+      topology,
+    });
+
+    expect(FACTORY_GRAPH_EDITOR_NODE_TYPES).toBe(FACTORY_GRAPH_NODE_TYPES);
+    expect(editor.nodes.map((node) => node.type)).toEqual(
+      observer.nodes.map((node) => node.type),
+    );
+    expect(editor.nodes.map((node) => node.id)).toEqual(
+      observer.nodes.map((node) => node.id),
+    );
+    for (const editorNode of editor.nodes) {
+      const observerNode = observer.nodes.find(
+        (node) => node.id === editorNode.id,
+      );
+      expect(observerNode).toBeDefined();
+      expect(editorNode).toMatchObject({
+        height: observerNode?.height,
+        initialHeight: observerNode?.initialHeight,
+        initialWidth: observerNode?.initialWidth,
+        measured: observerNode?.measured,
+        position: observerNode?.position,
+        width: observerNode?.width,
+      });
+      expect(editorNode.data.kind).toBe(observerNode?.data.kind);
+      expect(editorNode.data.handles.map((handle) => handle.id)).toEqual(
+        observerNode?.data.handles.map((handle) => handle.id),
+      );
+    }
+    expect(
+      editor.edges.map(({ source, sourceHandle, target, targetHandle }) => ({
+        source,
+        sourceHandle,
+        target,
+        targetHandle,
+      })),
+    ).toEqual(
+      observer.edges.map(({ source, sourceHandle, target, targetHandle }) => ({
+        source,
+        sourceHandle,
+        target,
+        targetHandle,
+      })),
+    );
+  });
+
+  it("joins authored semantics for a legacy workstation with a blank topology id", async () => {
+    const legacyFactory = {
+      ...baseFactoryDefinition,
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations[0],
+          behavior: WorkstationKind.REPEATER,
+          id: undefined,
+          type: WorkstationType.AGENT_RUN,
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const legacyTopology: FactoryGraphTopology = {
+      edges: [],
+      nodes: [
+        {
+          id: "workstation:draft",
+          key: { id: "", kind: "workstation", name: "draft" },
+          kind: "workstation",
+          label: "draft",
+        },
+      ],
+    };
+
+    renderEditorFlow(false, legacyTopology, {
+      factoryDefinition: legacyFactory,
+    });
+
+    const workstationNode = (await screen.findByTitle("draft")).closest(
+      "article",
+    );
+
+    expect(workstationNode).not.toBeNull();
+    expect(
+      workstationNode
+        ?.querySelector("[data-workstation-runtime-type]")
+        ?.getAttribute("data-workstation-runtime-type"),
+    ).toBe(WorkstationType.AGENT_RUN);
+    expect(
+      workstationNode
+        ?.querySelector("[data-workstation-scheduling-behavior]")
+        ?.getAttribute("data-workstation-scheduling-behavior"),
+    ).toBe(WorkstationKind.REPEATER);
   });
 
   it("keeps inline labels hidden by default while preserving accessible edge names", async () => {
@@ -419,17 +530,27 @@ describe("factory graph editor work state lifecycle styling", () => {
       factoryDefinition: lifecycleFactoryDefinition,
     });
 
-    const expectSurface = async (title: string) => {
+    const expectSurface = async (title: string, surfaceClass: string) => {
       const node = (await screen.findByTitle(title)).closest("article");
       expect(node).not.toBeNull();
-      expect(node?.className).toContain("border-info-border");
-      expect(node?.className).toContain("bg-info-container");
+      for (const className of surfaceClass.split(" ")) {
+        expect(node?.className).toContain(className);
+      }
     };
 
-    await expectSurface("story:queued");
-    await expectSurface("story:review");
-    await expectSurface("story:done");
-    await expectSurface("story:failed");
+    await expectSurface("story:queued", "border-info-border bg-info-container");
+    await expectSurface(
+      "story:review",
+      "border-af-warning-border bg-warning-container",
+    );
+    await expectSurface(
+      "story:done",
+      "border-af-success-border bg-success-container",
+    );
+    await expectSurface(
+      "story:failed",
+      "border-af-danger-border bg-error-container",
+    );
   });
 
   it("keeps non-work-state nodes on existing kind styling", async () => {
@@ -448,8 +569,8 @@ describe("factory graph editor work state lifecycle styling", () => {
     const queuedNode = (await screen.findByTitle("story:queued")).closest(
       "article",
     );
-    expect(queuedNode?.className).toContain("border-info-border");
-    expect(queuedNode?.className).toContain("bg-info-container");
+    expect(queuedNode?.className).toContain("border-outline");
+    expect(queuedNode?.className).toContain("bg-surface");
   });
 
   it("keeps draft addition and removal treatments visible on phase-colored nodes", async () => {

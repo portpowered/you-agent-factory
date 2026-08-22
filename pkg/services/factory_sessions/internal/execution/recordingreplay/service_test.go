@@ -63,7 +63,7 @@ func TestServiceExposesRecordedArtifactsAndEmptyDispatches(t *testing.T) {
 		t.Fatalf("GetArtifact missing error = %v", err)
 	}
 	dispatches, err := service.ListDispatches(ctx, sessionID)
-	if err != nil || len(dispatches.Dispatches) != 0 {
+	if err != nil || dispatches.Dispatches == nil || len(dispatches.Dispatches) != 0 {
 		t.Fatalf("ListDispatches = %#v, %v", dispatches, err)
 	}
 	if _, err := service.GetDispatch(ctx, sessionID, "missing"); !errors.Is(err, fse.ErrDispatchNotFound) {
@@ -73,6 +73,29 @@ func TestServiceExposesRecordedArtifactsAndEmptyDispatches(t *testing.T) {
 	sessions, err := service.ListSessions(ctx, fse.ListSessionsRequest{})
 	if err != nil || len(sessions.DurableSessions) != 1 || sessions.DurableSessions[0].SessionID != sessionID {
 		t.Fatalf("ListSessions = %#v, %v", sessions, err)
+	}
+}
+
+func TestServiceHistoricalDispatchQueriesRemainEmptyForEveryFilter(t *testing.T) {
+	t.Parallel()
+	projection, err := ReplayRecording(buildTerminalRecording(t, "SUCCEEDED", terminalResult()))
+	if err != nil {
+		t.Fatalf("ReplayRecording: %v", err)
+	}
+	service := NewService(projection)
+	sessionID := projection.Session.SessionID
+	for _, filters := range []fse.DispatchFilters{
+		{},
+		{Phase: "omitted-phase"},
+		{Status: fse.DispatchStatusCompleted},
+	} {
+		filtered, filterErr := service.QueryDispatches(context.Background(), fse.DispatchQueryRequest{
+			SessionID: sessionID,
+			Filters:   filters,
+		})
+		if filterErr != nil || filtered.SessionID != sessionID || filtered.Dispatches == nil || len(filtered.Dispatches) != 0 {
+			t.Fatalf("QueryDispatches filters=%#v = %#v, %v; want a non-nil empty result", filters, filtered, filterErr)
+		}
 	}
 }
 
@@ -87,6 +110,12 @@ func TestServiceRejectsUnknownSessionsAndLiveOperations(t *testing.T) {
 
 	if _, err := service.GetSession(ctx, "missing"); !errors.Is(err, fse.ErrSessionNotFound) {
 		t.Fatalf("GetSession missing error = %v", err)
+	}
+	if _, err := service.ListDispatches(ctx, "missing"); !errors.Is(err, fse.ErrSessionNotFound) {
+		t.Fatalf("ListDispatches missing error = %v", err)
+	}
+	if _, err := service.QueryDispatches(ctx, fse.DispatchQueryRequest{SessionID: "missing"}); !errors.Is(err, fse.ErrSessionNotFound) {
+		t.Fatalf("QueryDispatches missing error = %v", err)
 	}
 	var nilService *Service
 	if _, err := nilService.GetSession(ctx, projection.Session.SessionID); !errors.Is(err, fse.ErrSessionNotFound) {

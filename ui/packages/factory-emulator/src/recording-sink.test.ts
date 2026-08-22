@@ -106,6 +106,43 @@ describe("RecordingFactoryEventSink", () => {
     });
   });
 
+  it("accepts additive event metadata while retaining recording diagnostics", async () => {
+    const sink = createSink();
+    const event = topologyEvent("future-event", 1) as FactoryEvent & {
+      futureMetadata?: unknown;
+    };
+    event.futureMetadata = { source: "new-runtime" };
+    (event.context as unknown as Record<string, unknown>).futureMetadata = {
+      traceFormat: "v2",
+    };
+    (event.payload as Record<string, unknown>).futureMetadata = {
+      display: "new-dashboard-only",
+    };
+
+    await expect(sink.write([event])).resolves.toBeUndefined();
+
+    const parsed = safeParseFactoryRecording(sink.snapshot());
+    expect(parsed).toMatchObject({ success: true });
+    if (parsed.success) {
+      expect(parsed.diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: "unsupported_field",
+            path: ["events", 0, "futureMetadata"],
+          }),
+          expect.objectContaining({
+            code: "unsupported_field",
+            path: ["events", 0, "context", "futureMetadata"],
+          }),
+          expect.objectContaining({
+            code: "unsupported_field",
+            path: ["events", 0, "payload", "futureMetadata"],
+          }),
+        ]),
+      );
+    }
+  });
+
   it("rejects mixed Factory and session identities without changing history", async () => {
     const sink = createSink();
     await sink.write([topologyEvent("event-1", 1)]);
@@ -143,6 +180,8 @@ describe("RecordingFactoryEventSink", () => {
       unexpected?: boolean;
     };
     invalid.unexpected = true;
+    (invalid.context as unknown as Record<string, unknown>).sequence =
+      "not-a-number";
 
     await expectSinkError(sink.write([invalid]), "invalid_recording");
     await expectSinkError(

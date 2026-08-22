@@ -2,8 +2,11 @@ package internal
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io/fs"
+	"sync"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -13,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -23,24 +27,26 @@ import (
 
 const defaultSessionID = "~default"
 
-type runtimeWorkstationService = workers.WorkstationExecutionService
-
 // RuntimeFactory constructs hosted runtime bundles. It is stateless.
+
 type RuntimeFactory struct {
 	quorumPolicy             interfaces.QuorumPolicyService
 	outputShaping            interfaces.InvocationOutputShapingService
 	workPropagation          interfaces.WorkPropagationPolicyService
 	workService              work.Service
 	decisionEnvelopes        interfaces.DecisionEnvelopeService
+	invocationInterpolation  interfaces.InvocationInterpolationService
+	baseLogger               *zap.Logger
 	loggerFactory            factory.RuntimeLoggerFactory
-	runtimeLogs              factory.RuntimeLogSinkFactory
-	runtimeMetrics           factory.RuntimeMetricsSinkFactory
+	runtimeLogs              factory.RuntimeLogOwner
+	runtimeMetrics           factory.RuntimeMetricsOwner
 	newID                    factory.IDGenerator
 	workRequestIDs           work.RequestIDGenerator
 	runtimeDirs              factory.RuntimeDirectoryFileSystem
 	inputFiles               factory.InputFileSystem
 	inputDirectoryWalker     factory.InputDirectoryWalker
 	orchestrationCompilation factory.OrchestrationCompilation
+	providerSessions         providersessions.Service
 }
 
 func NewRuntimeFactory(
@@ -49,15 +55,18 @@ func NewRuntimeFactory(
 	workPropagation interfaces.WorkPropagationPolicyService,
 	workService work.Service,
 	decisionEnvelopes interfaces.DecisionEnvelopeService,
+	invocationInterpolation interfaces.InvocationInterpolationService,
+	baseLogger *zap.Logger,
 	loggerFactory factory.RuntimeLoggerFactory,
-	runtimeLogs factory.RuntimeLogSinkFactory,
-	runtimeMetrics factory.RuntimeMetricsSinkFactory,
+	runtimeLogs factory.RuntimeLogOwner,
+	runtimeMetrics factory.RuntimeMetricsOwner,
 	newID factory.IDGenerator,
 	workRequestIDs work.RequestIDGenerator,
 	runtimeDirs factory.RuntimeDirectoryFileSystem,
 	inputFiles factory.InputFileSystem,
 	inputDirectoryWalker factory.InputDirectoryWalker,
 	orchestrationCompilation factory.OrchestrationCompilation,
+	providerSessions providersessions.Service,
 ) *RuntimeFactory {
 	return &RuntimeFactory{
 		quorumPolicy:             quorumPolicy,
@@ -65,6 +74,8 @@ func NewRuntimeFactory(
 		workPropagation:          workPropagation,
 		workService:              workService,
 		decisionEnvelopes:        decisionEnvelopes,
+		invocationInterpolation:  invocationInterpolation,
+		baseLogger:               baseLogger,
 		loggerFactory:            loggerFactory,
 		runtimeLogs:              runtimeLogs,
 		runtimeMetrics:           runtimeMetrics,
@@ -74,6 +85,7 @@ func NewRuntimeFactory(
 		inputFiles:               inputFiles,
 		inputDirectoryWalker:     inputDirectoryWalker,
 		orchestrationCompilation: orchestrationCompilation,
+		providerSessions:         providerSessions,
 	}
 }
 
@@ -92,8 +104,6 @@ func (f *RuntimeFactory) Build(
 	runtimeMode interfaces.RuntimeMode,
 	verbose bool,
 	runtimeScheduler scheduler.Scheduler,
-	workerExecutorOverrides map[string]workers.WorkerExecutor,
-	workerExecutorDecorator func(string, workers.WorkerExecutor) workers.WorkerExecutor,
 	inlineDispatch bool,
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
@@ -104,21 +114,22 @@ func (f *RuntimeFactory) Build(
 	runtimeMetricsDir string,
 	runtimeMetricsConfig factory.RuntimeMetricsStorageConfig,
 	loadedFactoryCfg factory.LoadedConfig,
-	baseLogger *zap.Logger,
 	runtimeInstanceID string,
 	backendScopeID string,
 	clock factory.Clock,
 	recordPath string,
-	recording recordings.RuntimeRecorder,
 	initialFactory *interfaces.FactorySnapshot,
+	restoredWorldState *interfaces.FactoryWorldState,
+	skipRestoredDispatchReconciliation bool,
 	submissionHooks []factory.SubmissionHook,
 	completionPlanner factory.CompletionDeliveryPlanner,
 	petriMutationRecorder factory.PetriMutationRecorder,
 	worldStateProjector factory.WorldStateProjector,
-	newRuntimeLedger factory.RuntimeLedgerFactory,
-	loadWorkerExecutors func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error),
-	workerService runtimeWorkstationService,
+	recordingsRuntime recordings.RuntimeOpening,
+	workerService workers.Service,
+	workerSessionsFactory factory.WorkerSessionsFactory,
 	dispatchCompleted func(string),
+	mockWorkersConfigs ...*workers.MockWorkersConfig,
 ) (*factoryhost.Bundle, error) {
 	if f == nil || f.newID == nil {
 		return nil, fmt.Errorf("Factory Runtime ID generator is required")
@@ -142,29 +153,35 @@ func (f *RuntimeFactory) Build(
 	if f == nil || f.loggerFactory == nil {
 		return nil, fmt.Errorf("runtime logger factory is required")
 	}
-	logSink, runtimeInstanceID, err := buildRuntimeLogSink(
+	logSink, runtimeInstanceID, err := openRuntimeLogScope(
 		f.runtimeLogs,
 		runtimeFileLoggingPolicy,
 		runtimeLogDir,
 		runtimeLogConfig,
-		baseLogger,
+		sessionID,
+		folderPath,
+		dir,
 		runtimeInstanceID,
 	)
 	if err != nil {
 		return nil, err
 	}
 	logger := newSessionLogger(
-		runtimeSessionBaseLogger(baseLogger, logSink),
+		runtimeSessionBaseLogger(f.baseLogger, logSink),
 		sessionID,
 		folderPath,
 		dir,
 	)
 	structuredLogger := f.loggerFactory(logger, verbose)
 	if structuredLogger == nil {
-		_ = logSink.Close()
+		_ = factoryhost.CloseBundleSinks(logSink, nil)
 		return nil, fmt.Errorf("runtime logger factory returned nil")
 	}
-	metricsSink, err := buildRuntimeMetricsSink(
+	if workerSessionsFactory == nil {
+		_ = factoryhost.CloseBundleSinks(logSink, nil)
+		return nil, fmt.Errorf("Worker Sessions factory is required")
+	}
+	metricsSink, err := openRuntimeMetricsScope(
 		f.runtimeMetrics,
 		runtimeMetricsPolicy,
 		runtimeMetricsDir,
@@ -175,14 +192,17 @@ func (f *RuntimeFactory) Build(
 		dir,
 	)
 	if err != nil {
-		if logSink != nil {
-			_ = logSink.Close()
-		}
+		_ = factoryhost.CloseBundleSinks(logSink, nil)
 		return nil, err
 	}
 	bundleBuilt := false
+	runtimeScopeOwned := false
+	var runtimeScopeRecorder recordings.RuntimeRecorder
 	defer func() {
 		if !bundleBuilt {
+			if runtimeScopeOwned && runtimeScopeRecorder != nil {
+				_ = runtimeScopeRecorder.Finalize(clock.Now().UTC())
+			}
 			_ = factoryhost.CloseBundleSinks(logSink, metricsSink)
 		}
 	}()
@@ -192,33 +212,57 @@ func (f *RuntimeFactory) Build(
 	}
 
 	effectiveFactoryRunnerID := effectiveFactoryRunnerID(runnerID, loadedFactoryCfg.FactoryConfig())
-	if newRuntimeLedger == nil {
-		return nil, fmt.Errorf("Recordings runtime ledger factory is required")
+	if recordingsRuntime == nil {
+		return nil, fmt.Errorf("Recordings runtime opening is required")
 	}
-	eventHistory := newRuntimeLedger(net, clock.Now, loadedFactoryCfg)
+	loaded, ok := loadedFactoryCfg.(interfaces.LoadedFactorySource)
+	if !ok || loaded == nil {
+		return nil, fmt.Errorf("loaded Factory source is required for Recordings runtime scope")
+	}
+	if err := validateConfiguredRuntimeWorkers(loadedFactoryCfg); err != nil {
+		return nil, err
+	}
+	opened, openErr := recordingsRuntime.OpenRuntime(ctx, recordings.RuntimeScopeRequest{
+		Topology:         net,
+		Definitions:      loadedFactoryCfg,
+		LoadedFactory:    loaded,
+		Now:              clock.Now,
+		RecordingID:      runtimeInstanceID,
+		RecordPath:       recordPath,
+		FactorySessionID: sessionID,
+	})
+	if openErr != nil {
+		return nil, openErr
+	}
+	eventHistory := opened.Ledger
+	recording := opened.Recorder
+	runtimeScopeRecorder = opened.Recorder
+	runtimeScopeOwned = opened.Recorder != nil
+	if eventHistory == nil {
+		return nil, fmt.Errorf("Recordings runtime ledger is required")
+	}
 	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
 	if initialFactory != nil {
 		eventHistory.SetInitialStructureFactory(initialFactory)
 	}
-	var workerExecutors map[string]workers.WorkerExecutor
-	if loadWorkerExecutors != nil {
-		workerExecutors, err = loadWorkerExecutors(eventHistory, logger)
-		if err != nil {
-			return nil, err
-		}
+	var mockWorkersConfig *workers.MockWorkersConfig
+	if len(mockWorkersConfigs) > 0 {
+		mockWorkersConfig = mockWorkersConfigs[0]
 	}
-
-	bundleBuilt = true
-	return assembleRuntimeBundle(
+	bundle, err := assembleRuntimeBundle(
+		ctx,
 		dir, folderPath, sessionID, runtimeMode, verbose, runtimeScheduler,
-		workerExecutorOverrides, workerExecutorDecorator, inlineDispatch, submissionRecorder,
+		inlineDispatch, submissionRecorder,
 		dispatchRecorder,
 		loadedFactoryCfg, runtimeInstanceID,
 		backendScopeID, clock, recordPath, recording, submissionHooks,
-		completionPlanner, petriMutationRecorder, worldStateProjector,
+		completionPlanner, petriMutationRecorder, worldStateProjector, restoredWorldState,
+		skipRestoredDispatchReconciliation,
 		dispatchCompleted, logger, structuredLogger, logSink, metricsSink, net, eventHistory,
-		workerExecutors,
 		workerService,
+		mockWorkersConfig,
+		workerSessionsFactory,
+		f.providerSessions,
 		f.workService,
 		f.quorumPolicy,
 		f.outputShaping,
@@ -229,20 +273,44 @@ func (f *RuntimeFactory) Build(
 		f.inputFiles,
 		f.inputDirectoryWalker,
 		f.decisionEnvelopes,
+		f.invocationInterpolation,
 	)
+	if err != nil {
+		return nil, err
+	}
+	bundleBuilt = true
+	return bundle, nil
+}
+
+func validateConfiguredRuntimeWorkers(loaded factory.LoadedConfig) error {
+	if loaded == nil || loaded.FactoryConfig() == nil {
+		return fmt.Errorf("factory config is required")
+	}
+	for _, configured := range loaded.FactoryConfig().Workers {
+		definition, ok := loaded.Worker(configured.Name)
+		if !ok || definition == nil {
+			continue
+		}
+		if interfaces.IsScriptWorkerType(definition.Type) && strings.TrimSpace(definition.Command) == "" {
+			return fmt.Errorf(
+				"construct script worker %q: misconfigured: script command is required",
+				configured.Name,
+			)
+		}
+	}
+	return nil
 }
 
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func assembleRuntimeBundle(
+	ctx context.Context,
 	dir string,
 	folderPath string,
 	sessionID string,
 	runtimeMode interfaces.RuntimeMode,
 	verbose bool,
 	runtimeScheduler scheduler.Scheduler,
-	workerExecutorOverrides map[string]workers.WorkerExecutor,
-	workerExecutorDecorator func(string, workers.WorkerExecutor) workers.WorkerExecutor,
 	inlineDispatch bool,
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
@@ -256,6 +324,8 @@ func assembleRuntimeBundle(
 	completionPlanner factory.CompletionDeliveryPlanner,
 	petriMutationRecorder factory.PetriMutationRecorder,
 	worldStateProjector factory.WorldStateProjector,
+	restoredWorldState *interfaces.FactoryWorldState,
+	skipRestoredDispatchReconciliation bool,
 	dispatchCompleted func(string),
 	logger *zap.Logger,
 	structuredLogger factory.Logger,
@@ -263,8 +333,10 @@ func assembleRuntimeBundle(
 	metricsSink factory.RuntimeMetricsSink,
 	net *state.Net,
 	eventHistory recordings.RuntimeLedger,
-	workerExecutors map[string]workers.WorkerExecutor,
-	workerService runtimeWorkstationService,
+	workerService workers.Service,
+	mockWorkersConfig *workers.MockWorkersConfig,
+	workerSessionsFactory factory.WorkerSessionsFactory,
+	providerSessions providersessions.Service,
 	workService work.Service,
 	quorumPolicy interfaces.QuorumPolicyService,
 	outputShaping interfaces.InvocationOutputShapingService,
@@ -275,6 +347,7 @@ func assembleRuntimeBundle(
 	inputFiles factory.InputFileSystem,
 	inputDirectoryWalker factory.InputDirectoryWalker,
 	decisionEnvelopes interfaces.DecisionEnvelopeService,
+	invocationInterpolation interfaces.InvocationInterpolationService,
 ) (*factoryhost.Bundle, error) {
 	bundle := factoryhost.NewBundle(
 		dir, folderPath, runtimeInstanceID, strings.TrimSpace(backendScopeID),
@@ -290,13 +363,12 @@ func assembleRuntimeBundle(
 			recording.RecordEvent(event)
 		}
 	}
-	for workerType, executor := range workerExecutorOverrides {
-		workerExecutors[workerType] = executor
+	workerSessions, err := workerSessionsFactory(workerService, clock)
+	if err != nil {
+		return nil, fmt.Errorf("construct Worker Sessions service: %w", err)
 	}
-	if workerExecutorDecorator != nil {
-		for workerType, executor := range workerExecutors {
-			workerExecutors[workerType] = workerExecutorDecorator(workerType, executor)
-		}
+	if workerSessions == nil {
+		return nil, fmt.Errorf("construct Worker Sessions service: factory returned nil")
 	}
 	effectiveSubmissionRecorder := recordings.SubmissionRecorder(bundle.RecordSubmissionMetric)
 	if submissionRecorder != nil {
@@ -305,16 +377,23 @@ func assembleRuntimeBundle(
 	activeFactory, err := runtime.New(
 		net,
 		runtimeScheduler,
-		workerExecutors,
 		workerService,
+		workerSessions,
 		loadedFactoryCfg,
+		invocationInterpolation,
+		invocationFileReader(inputFiles),
 		RuntimeWorkflowContext(loadedFactoryCfg.FactoryConfig(), sessionID),
 		runtimeMode,
 		structuredLogger,
 		clock,
 		inlineDispatch,
 		eventHistory,
+		workerRecordingIdentity(runtimeInstanceID, recordPath),
+		runtimeInstanceID,
 		worldStateProjector,
+		restoredWorldState,
+		skipRestoredDispatchReconciliation,
+		providerSessions,
 		effectiveSubmissionRecorder,
 		factoryEventRecorder,
 		submissionHooks,
@@ -328,10 +407,21 @@ func assembleRuntimeBundle(
 		workService,
 		workRequestIDs,
 		newID,
+		runtimeDirs,
 		decisionEnvelopes,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create factory: %w", err)
+	}
+	if configurable, ok := activeFactory.(interface {
+		SetMockWorkersConfig(*workers.MockWorkersConfig)
+	}); ok {
+		configurable.SetMockWorkersConfig(mockWorkersConfig)
+	}
+	if configurable, ok := activeFactory.(interface {
+		SetPromptSourceReader(func(string) ([]byte, error))
+	}); ok && inputFiles != nil {
+		configurable.SetPromptSourceReader(inputFiles.ReadFile)
 	}
 	if err := ensureRuntimeInputsDir(dir, logger, runtimeDirs); err != nil {
 		return nil, err
@@ -342,6 +432,30 @@ func assembleRuntimeBundle(
 	bundle.InputDirectoryWalker = inputDirectoryWalker
 	bundle.WorkRequestIDs = workRequestIDs
 	return bundle, nil
+}
+
+func invocationFileReader(inputFiles factory.InputFileSystem) interfaces.FileReader {
+	if inputFiles == nil {
+		return nil
+	}
+	return inputFiles.ReadFile
+}
+
+// workerRecordingIdentity keeps the Worker source-native recording identity
+// distinct from the user-facing artifact path. Artifact paths are allowed to
+// be absolute and may contain platform-specific separators or spaces, while
+// Events source identities must remain portable opaque tokens. The identity is
+// derived from the concrete runtime/Recording lifecycle identity, so all
+// Worker Sessions captured by one Factory recording share one durable snapshot
+// identity without allowing later recordings at the same path to collide.
+func workerRecordingIdentity(recordingID, recordPath string) string {
+	recordPath = strings.TrimSpace(recordPath)
+	recordingID = strings.TrimSpace(recordingID)
+	if recordPath == "" || recordingID == "" {
+		return ""
+	}
+	digest := sha256.Sum256([]byte(recordingID))
+	return "worker-recording-" + hex.EncodeToString(digest[:])
 }
 
 func ensureRuntimeInputsDir(
@@ -468,31 +582,37 @@ func dirExists(path string, files factory.RuntimeDirectoryFileSystem) bool {
 	return err == nil && info.IsDir()
 }
 
-func buildRuntimeLogSink(
-	build factory.RuntimeLogSinkFactory,
+func openRuntimeLogScope(
+	owner factory.RuntimeLogOwner,
 	policy RuntimeFileLoggingPolicy,
 	runtimeLogDir string,
 	runtimeLogConfig factory.RuntimeLogStorageConfig,
-	baseLogger *zap.Logger,
+	sessionID string,
+	folderPath string,
+	factoryDir string,
 	runtimeInstanceID string,
 ) (factory.RuntimeLogSink, string, error) {
-	if baseLogger == nil {
-		return nil, runtimeInstanceID, fmt.Errorf("base logger is required")
-	}
 	if strings.TrimSpace(runtimeInstanceID) == "" {
 		return nil, runtimeInstanceID, fmt.Errorf("runtime instance ID is required")
 	}
 	if !runtimeFileLoggingEnabled(policy) {
 		return nil, runtimeInstanceID, nil
 	}
-	if build == nil {
-		return nil, runtimeInstanceID, fmt.Errorf("runtime log sink factory is required")
+	if owner == nil {
+		return nil, runtimeInstanceID, fmt.Errorf("runtime log owner is required")
 	}
-	logSink, err := build(baseLogger, runtimeInstanceID, runtimeLogDir, runtimeLogConfig)
+	logSink, err := owner.Open(factory.RuntimeLogScopeRequest{
+		SessionID: sessionID, RuntimeInstanceID: runtimeInstanceID,
+		FolderPath: folderPath, FactoryDirectory: factoryDir,
+		RootDirectory: runtimeLogDir, Policy: policy, Config: runtimeLogConfig,
+	})
 	if err != nil {
-		return nil, runtimeInstanceID, fmt.Errorf("build runtime logger: %w", err)
+		return nil, runtimeInstanceID, fmt.Errorf("open runtime log scope: %w", err)
 	}
-	return logSink, runtimeInstanceID, nil
+	if logSink == nil {
+		return nil, runtimeInstanceID, fmt.Errorf("runtime log owner returned nil scope")
+	}
+	return &closeOnceRuntimeLogSink{RuntimeLogSink: logSink}, runtimeInstanceID, nil
 }
 
 func runtimeFileLoggingEnabled(policy RuntimeFileLoggingPolicy) bool {
@@ -527,8 +647,8 @@ func runtimeSessionBaseLogger(baseLogger *zap.Logger, logSink factory.RuntimeLog
 	return zap.NewNop()
 }
 
-func buildRuntimeMetricsSink(
-	build factory.RuntimeMetricsSinkFactory,
+func openRuntimeMetricsScope(
+	owner factory.RuntimeMetricsOwner,
 	policy RuntimeMetricsPolicy,
 	runtimeMetricsDir string,
 	runtimeMetricsConfig factory.RuntimeMetricsStorageConfig,
@@ -540,19 +660,51 @@ func buildRuntimeMetricsSink(
 	if !runtimeMetricsEnabled(policy) {
 		return nil, nil
 	}
-	if build == nil {
-		return nil, fmt.Errorf("runtime metrics sink factory is required")
+	if owner == nil {
+		return nil, fmt.Errorf("runtime metrics owner is required")
 	}
-	metricsSink, err := build(
-		factory.RuntimeMetricsScope{
+	metricsSink, err := owner.Open(factory.RuntimeMetricsScopeRequest{
+		Scope: factory.RuntimeMetricsScope{
 			SessionID: sessionID, RuntimeInstanceID: runtimeInstanceID,
 			FolderPath: folderPath, FactoryDir: factoryDir,
 		},
-		runtimeMetricsDir,
-		runtimeMetricsConfig,
-	)
+		RootDirectory: runtimeMetricsDir,
+		Policy:        policy,
+		Config:        runtimeMetricsConfig,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("build runtime metrics sink: %w", err)
+		return nil, fmt.Errorf("open runtime metrics scope: %w", err)
 	}
-	return metricsSink, nil
+	if metricsSink == nil {
+		return nil, fmt.Errorf("runtime metrics owner returned nil scope")
+	}
+	return &closeOnceRuntimeMetricsSink{RuntimeMetricsSink: metricsSink}, nil
+}
+
+type closeOnceRuntimeLogSink struct {
+	factory.RuntimeLogSink
+	once sync.Once
+	err  error
+}
+
+func (sink *closeOnceRuntimeLogSink) Close() error {
+	if sink == nil || sink.RuntimeLogSink == nil {
+		return nil
+	}
+	sink.once.Do(func() { sink.err = sink.RuntimeLogSink.Close() })
+	return sink.err
+}
+
+type closeOnceRuntimeMetricsSink struct {
+	factory.RuntimeMetricsSink
+	once sync.Once
+	err  error
+}
+
+func (sink *closeOnceRuntimeMetricsSink) Close() error {
+	if sink == nil || sink.RuntimeMetricsSink == nil {
+		return nil
+	}
+	sink.once.Do(func() { sink.err = sink.RuntimeMetricsSink.Close() })
+	return sink.err
 }

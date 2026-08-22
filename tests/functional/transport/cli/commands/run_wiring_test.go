@@ -27,6 +27,7 @@ const (
 
 // TestCLIRunNamedFactory proves you run resolves named and packaged Factory
 // identities through the CLI and writes the expected primary-result outcome to stdout on success.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestCLIRunNamedFactory(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow CLI run named/packaged factory wiring")
@@ -60,7 +61,7 @@ func TestCLIRunNamedFactory(t *testing.T) {
 		cmd := processHarness.CommandContext(ctx,
 			"run",
 			"--named", runWiringNamedFactoryName,
-			"--with-mock-workers=" + mockWorkersPath,
+			"--with-mock-workers="+mockWorkersPath,
 			"--no-record",
 			"--server", baseURL,
 			"--quiet",
@@ -117,7 +118,7 @@ func TestCLIRunNamedFactory(t *testing.T) {
 		cmd := processHarness.CommandContext(ctx,
 			"run",
 			"--named", interfaces.PackagedGoalFactoryName,
-			"--with-mock-workers=" + mockWorkersPath,
+			"--with-mock-workers="+mockWorkersPath,
 			"--no-record",
 			"--server", baseURL,
 			"--quiet",
@@ -221,7 +222,7 @@ func TestCLIRunFactoryByPath(t *testing.T) {
 	cmd := processHarness.CommandContext(ctx,
 		"run",
 		"--factory", factoryPath,
-		"--with-mock-workers=" + mockWorkersPath,
+		"--with-mock-workers="+mockWorkersPath,
 		"--no-record",
 		"--server", baseURL,
 		"--quiet",
@@ -271,7 +272,7 @@ func TestCLIRunFactoryWritesPrimaryResultFromStdin(t *testing.T) {
 	cmd := processHarness.CommandContext(ctx,
 		"run",
 		"--factory", factoryPath,
-		"--with-mock-workers=" + mockWorkersPath,
+		"--with-mock-workers="+mockWorkersPath,
 		"--no-record",
 		"--server", baseURL,
 		"--quiet",
@@ -319,7 +320,7 @@ func TestCLIRunRejectsConflictingPositionalAndStdinInput(t *testing.T) {
 	cmd := processHarness.CommandContext(ctx,
 		"run",
 		"--factory", factoryPath,
-		"--with-mock-workers=" + mockWorkersPath,
+		"--with-mock-workers="+mockWorkersPath,
 		"--no-record",
 		"--server", baseURL,
 		"--quiet",
@@ -369,7 +370,7 @@ func TestCLIRunFailureWritesNoSuccessPayloadToStdout(t *testing.T) {
 	cmd := processHarness.CommandContext(ctx,
 		"run",
 		"--factory", factoryPath,
-		"--with-mock-workers=" + mockWorkersPath,
+		"--with-mock-workers="+mockWorkersPath,
 		"--no-record",
 		"--server", baseURL,
 		"--quiet",

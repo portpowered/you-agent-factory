@@ -153,7 +153,7 @@ func validateNewSessionParams(raw json.RawMessage) error {
 	if err != nil {
 		return err
 	}
-	if params.Cwd != want || params.MCPServers == nil || len(params.MCPServers) != 0 {
+	if !sameDirectory(params.Cwd, want) || params.MCPServers == nil || len(params.MCPServers) != 0 {
 		return fmt.Errorf("session/new params = %s, want cwd %q and an explicit empty mcpServers list", raw, want)
 	}
 	if os.Getenv("YOU_ACP_GOLDEN_SENTINEL") != "preserved" {
@@ -289,4 +289,28 @@ func (p *goldenRPCPeer) write(message rpcEnvelope) error {
 		return err
 	}
 	return p.writer.Flush()
+}
+
+// sameDirectory reports whether two paths name the same directory once
+// symlinks are resolved.
+//
+// This peer runs with its working directory set to the path the parent also
+// sends as session/new's cwd, but the two spellings need not match
+// byte-for-byte. On macOS the system temp root is /var/folders/..., and /var
+// is a symlink to /private/var: the parent passes the unresolved path while
+// this child's own os.Getwd reports the resolved one. Comparing the raw
+// strings therefore fails on macOS for a cwd that is in fact correct.
+func sameDirectory(left, right string) bool {
+	if filepath.Clean(left) == filepath.Clean(right) {
+		return true
+	}
+	resolvedLeft, err := filepath.EvalSymlinks(left)
+	if err != nil {
+		return false
+	}
+	resolvedRight, err := filepath.EvalSymlinks(right)
+	if err != nil {
+		return false
+	}
+	return filepath.Clean(resolvedLeft) == filepath.Clean(resolvedRight)
 }

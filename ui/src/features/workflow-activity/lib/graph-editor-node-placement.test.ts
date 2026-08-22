@@ -158,3 +158,24 @@ describe("resolveViewportCenterNodePlacement", () => {
     expect(GRAPH_EDITOR_NODE_PLACEMENT_MAX_ATTEMPTS).toBe(48);
   });
 });
+
+describe("resolveViewportCenterNodePlacement viewport bounds", () => {
+  it("clamps an otherwise-free candidate to the visible viewport bounds", () => {
+    const result = resolveViewportCenterNodePlacement({
+      candidateSize: workerSize,
+      occupiedRects: [],
+      viewportBounds: { height: 240, width: 400, x: 0, y: 0 },
+      viewportCenter: { x: 20, y: 20 },
+    });
+
+    expect(result).toEqual({
+      attemptsUsed: 1,
+      center: {
+        x: workerSize.width / 2,
+        y: workerSize.height / 2,
+      },
+      collidesAtCenter: false,
+      exhaustedSearch: false,
+    });
+  });
+});

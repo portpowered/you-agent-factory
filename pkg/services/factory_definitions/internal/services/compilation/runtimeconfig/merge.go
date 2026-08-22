@@ -131,6 +131,9 @@ func applyWorkerRuntimeDefinition(
 	if runtimeDefinition.Body != "" {
 		worker.Body = runtimeDefinition.Body
 	}
+	if runtimeDefinition.PromptSourcePath != "" {
+		worker.PromptSourcePath = runtimeDefinition.PromptSourcePath
+	}
 	if len(runtimeDefinition.Resources) > 0 {
 		worker.Resources = append(
 			[]factorydefinitions.ResourceConfig(nil),
@@ -226,6 +229,12 @@ func applyWorkstationRuntimeTopology(
 			runtimeDefinition.Resources...,
 		)
 	}
+	if len(runtimeDefinition.ExpectedArtifacts) > 0 {
+		workstation.ExpectedArtifacts = append(
+			[]factorydefinitions.ExpectedArtifactConfig(nil),
+			runtimeDefinition.ExpectedArtifacts...,
+		)
+	}
 	if len(runtimeDefinition.Guards) > 0 {
 		workstation.Guards = append(
 			[]factorydefinitions.GuardConfig(nil),
@@ -245,6 +254,9 @@ func applyWorkstationRuntimeTemplate(
 	if runtimeDefinition.OutputSchema != "" {
 		workstation.OutputSchema = runtimeDefinition.OutputSchema
 	}
+	if runtimeDefinition.OutputContract != "" {
+		workstation.OutputContract = runtimeDefinition.OutputContract
+	}
 	workstation.Limits = mergeWorkstationLimits(workstation.Limits, runtimeDefinition.Limits)
 	workstationexecution.NormalizeExecutionLimit(workstation)
 	workstation.StopWords = mergeStopWords(
@@ -256,6 +268,10 @@ func applyWorkstationRuntimeTemplate(
 	}
 	if runtimeDefinition.PromptTemplate != "" {
 		workstation.PromptTemplate = runtimeDefinition.PromptTemplate
+	}
+	if runtimeDefinition.PromptSourcePath != "" {
+		workstation.PromptSourcePath = runtimeDefinition.PromptSourcePath
+		workstation.PromptSourceIsTemplate = runtimeDefinition.PromptSourceIsTemplate
 	}
 	if runtimeDefinition.WorkingDirectory != "" {
 		workstation.WorkingDirectory = runtimeDefinition.WorkingDirectory

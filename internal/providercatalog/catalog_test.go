@@ -42,9 +42,12 @@ func TestBuildProducesDeterministicValidatedSortedArtifacts(t *testing.T) {
 	for _, value := range providers {
 		ids = append(ids, value.(map[string]any)["id"].(string))
 	}
-	want := "agy, claude, codex, cursor, gemini, kiro, opencode, pi"
+	want := "antigravity, claude, codex, copilot-acp, cursor-acp, droid-acp, fast-agent-acp, gemini-acp, grok-build-acp, iflow-acp, kilocode-acp, kimi-acp, kiro-acp, mux-acp, openclaw-acp, opencode-acp, pi-acp, pool-acp, qoder-acp, qwen-acp, reasonix-acp, trae-acp, zeroclaw-acp"
 	if got := strings.Join(ids, ", "); got != want {
 		t.Fatalf("provider order = %s, want %s", got, want)
+	}
+	if !bytes.Equal(first.Files[RuntimeCatalogPath], second.Files[RuntimeCatalogPath]) {
+		t.Fatalf("%s changed across identical generation passes", RuntimeCatalogPath)
 	}
 	assertSchemaIdentifier(t, first.Files[ManifestSchemaPath], ManifestSchemaID)
 	assertSchemaIdentifier(t, first.Files[CatalogSchemaPath], CatalogSchemaID)
@@ -57,9 +60,9 @@ func TestBuildRejectsInvalidAuthoredManifestValues(t *testing.T) {
 		new     string
 		wantErr string
 	}{
-		{name: "malformed canonical id", old: "id: agy", new: "id: Agy", wantErr: "schema validation failed"},
+		{name: "malformed canonical id", old: "id: antigravity", new: "id: Antigravity", wantErr: "schema validation failed"},
 		{name: "malformed alias", old: "aliases: []", new: "aliases: [Bad_Alias]", wantErr: "schema validation failed"},
-		{name: "unknown support level", old: "technicalSupportLevel: not-supported", new: "technicalSupportLevel: preview", wantErr: "schema validation failed"},
+		{name: "unknown support level", old: "technicalSupportLevel: experimental", new: "technicalSupportLevel: preview", wantErr: "schema validation failed"},
 		{name: "secret value", old: "  configurationKeys: []", new: "  configurationKeys: []\n  credentialValue: secret", wantErr: "schema validation failed"},
 		{name: "environment value", old: "  configurationKeys: []", new: "  configurationKeys: []\n  environmentValues: [TOKEN=secret]", wantErr: "schema validation failed"},
 		{name: "live readiness", old: "  configurationKeys: []", new: "  configurationKeys: []\n  ready: true", wantErr: "schema validation failed"},
@@ -72,12 +75,26 @@ func TestBuildRejectsInvalidAuthoredManifestValues(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			source := repositoryFixture(t)
-			mutateFixture(t, source, "packages/model-providers/providers/agy/provider.yaml", test.old, test.new)
+			mutateFixture(t, source, "packages/model-providers/providers/antigravity/provider.yaml", test.old, test.new)
 			_, err := Build(source)
 			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
 				t.Fatalf("Build() error = %v, want containing %q", err, test.wantErr)
 			}
 		})
+	}
+}
+
+func TestBuildRejectsACPProviderWithoutRuntimeDefinition(t *testing.T) {
+	source := repositoryFixture(t)
+	codex := string(source["packages/model-providers/providers/codex/provider.yaml"].Data)
+	codex = strings.Replace(codex, "id: codex", "id: cursor-acp", 1)
+	codex = strings.Replace(codex, "kind: native_cli", "kind: acp\n  acpSupport:\n    support: unknown", 1)
+	source["packages/model-providers/providers/cursor-acp/provider.yaml"] = &fstest.MapFile{Data: []byte(codex), Mode: 0o644}
+	delete(source, "packages/model-providers/providers/cursor-acp/harness.yaml")
+
+	_, err := Build(source)
+	if err == nil || !strings.Contains(err.Error(), "requires harness.yaml") {
+		t.Fatalf("Build() error = %v, want missing ACP runtime definition", err)
 	}
 }
 
@@ -138,6 +155,76 @@ func TestValidateCatalogSemanticsRejectsImpossibleCapabilitiesAndDeprecation(t *
 	}
 }
 
+func TestValidateCatalogSemanticsRejectsInvalidCapabilityFactsAndLimits(t *testing.T) {
+	tests := []struct {
+		name    string
+		mutate  func(map[string]any)
+		wantErr string
+	}{
+		{
+			name: "duplicate models",
+			mutate: func(manifest map[string]any) {
+				model := semanticModel("gpt-5.6")
+				manifest["models"] = []any{model, semanticModel("gpt-5.6")}
+			},
+			wantErr: `duplicate model id "gpt-5.6"`,
+		},
+		{
+			name: "unknown effort",
+			mutate: func(manifest map[string]any) {
+				model := semanticModel("gpt-5.6")
+				model["efforts"] = []any{"extreme"}
+				manifest["models"] = []any{model}
+			},
+			wantErr: `unknown effort "extreme"`,
+		},
+		{
+			name: "unknown modality direction",
+			mutate: func(manifest map[string]any) {
+				model := semanticModel("gpt-5.6")
+				model["modalities"].([]any)[0].(map[string]any)["direction"] = "sideways"
+				manifest["models"] = []any{model}
+			},
+			wantErr: `unknown modality direction "sideways"`,
+		},
+		{
+			name: "non-positive maximum",
+			mutate: func(manifest map[string]any) {
+				manifest["knownLimits"] = []any{map[string]any{
+					"name":        "referenced_image_paths",
+					"kind":        "maximum",
+					"unit":        "paths",
+					"description": "Image paths.",
+					"maximum":     float64(0),
+				}}
+			},
+			wantErr: `maximum record is incomplete`,
+		},
+		{
+			name: "incomplete named limit",
+			mutate: func(manifest map[string]any) {
+				manifest["knownLimits"] = []any{map[string]any{
+					"name":        "referenced_image_paths",
+					"kind":        "maximum",
+					"unit":        "paths",
+					"description": "Image paths.",
+				}}
+			},
+			wantErr: `maximum record is incomplete`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := semanticManifest("codex", nil)
+			test.mutate(manifest)
+			err := validateCatalogSemantics([]any{manifest})
+			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("validateCatalogSemantics() error = %v, want containing %q", err, test.wantErr)
+			}
+		})
+	}
+}
+
 func assertSchemaIdentifier(t *testing.T, payload []byte, want string) {
 	t.Helper()
 	var schema map[string]any
@@ -156,7 +243,7 @@ func repositoryFixture(t *testing.T) fstest.MapFS {
 	t.Helper()
 	root := repositoryRoot(t)
 	paths := []string{openAPIPath}
-	matches, err := filepath.Glob(filepath.Join(root, authoredProvidersDir, "*", "provider.yaml"))
+	matches, err := filepath.Glob(filepath.Join(root, authoredProvidersDir, "*", "*.yaml"))
 	if err != nil {
 		t.Fatalf("glob provider manifests: %v", err)
 	}
@@ -211,6 +298,21 @@ func semanticManifest(id string, aliases []any) map[string]any {
 			"toolOutputDeltas":  false,
 			"providerReconnect": false,
 			"toolLifecycle":     false,
+		},
+	}
+}
+
+func semanticModel(id string) map[string]any {
+	return map[string]any{
+		"id":      id,
+		"efforts": []any{"low"},
+		"modalities": []any{
+			map[string]any{
+				"direction": "input",
+				"modality":  "text",
+				"support":   "supported",
+				"transport": "inline",
+			},
 		},
 	}
 }

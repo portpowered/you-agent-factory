@@ -153,16 +153,39 @@ var productionDefaultAllowances = []productionDefaultAllowance{
 	{filePath: "pkg/platform/replay/storage.go", operation: "Local.WriteFile", symbol: "os.Rename", wireSymbol: repositoryImportPrefix + "pkg/platform/replay.NewLocal"},
 	{filePath: "pkg/platform/replay/storage.go", operation: "Local.ReadFile", symbol: "os.ReadFile", wireSymbol: repositoryImportPrefix + "pkg/platform/replay.NewLocal"},
 
-	{filePath: "pkg/services/recordings/internal/services/artifacts_export/wire/publication.go", operation: "NewOSPublication", symbol: "os.MkdirAll", wireSymbol: repositoryImportPrefix + "pkg/services/recordings/internal.NewPortableArtifactPublication"},
-	{filePath: "pkg/services/recordings/internal/services/artifacts_export/wire/publication.go", operation: "NewOSPublication", symbol: "os.CreateTemp", wireSymbol: repositoryImportPrefix + "pkg/services/recordings/internal.NewPortableArtifactPublication"},
-	{filePath: "pkg/services/recordings/internal/services/artifacts_export/wire/publication.go", operation: "NewOSPublication", symbol: "os.Remove", wireSymbol: repositoryImportPrefix + "pkg/services/recordings/internal.NewPortableArtifactPublication"},
-	{filePath: "pkg/services/recordings/internal/services/artifacts_export/wire/publication.go", operation: "NewOSPublication", symbol: "os.Rename", wireSymbol: repositoryImportPrefix + "pkg/services/recordings/internal.NewPortableArtifactPublication"},
-	{filePath: "pkg/services/recordings/internal/services/artifacts_export/wire/publication.go", operation: "NewOSPublication", symbol: "os.ReadFile", wireSymbol: repositoryImportPrefix + "pkg/services/recordings/internal.NewPortableArtifactPublication"},
+	// rollingfile is the shared policy-free writer used by the Wire-selected
+	// runtime log, metrics, and ACP transcript openers. Keep these as exact
+	// file/operation allowances so a new ambient effect elsewhere still fails.
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.currentTime", symbol: "time.Now", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.nextBackupPath", symbol: "os.Lstat", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.openExistingOrNew", symbol: "os.OpenFile", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.openExistingOrNew", symbol: "os.Stat", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.openNew", symbol: "os.MkdirAll", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.openNew", symbol: "os.OpenFile", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.openNew", symbol: "os.Rename", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.openNew", symbol: "os.Stat", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.openFile", symbol: "os.OpenFile", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.Prepare", symbol: "os.OpenFile", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.Prepare", symbol: "os.Stat", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.readBackups", symbol: "os.ReadDir", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.rollbackClosedActiveFile", symbol: "os.OpenFile", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.rollbackOpenActiveFile", symbol: "os.OpenFile", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.rollbackOpenFile", symbol: "os.Remove", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.rollbackRotation", symbol: "os.OpenFile", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.rollbackRotation", symbol: "os.Remove", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.rollbackRotation", symbol: "os.Rename", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.rotateForReservation", symbol: "os.Rename", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "Writer.rotateForReservation", symbol: "os.Stat", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "compress", symbol: "os.Open", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "compress", symbol: "os.Remove", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "compressReader", symbol: "os.OpenFile", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "compressReader", symbol: "os.Remove", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "package", symbol: "os.File", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
+	{filePath: "pkg/platform/rollingfile/rollingfile.go", operation: "removeBackups", symbol: "os.Remove", wireSymbol: repositoryImportPrefix + "pkg/platform/logging.NewRuntimeLogOpener"},
 
 	// These become allowed only after Wire explicitly selects the adapter. Until
 	// then their ambient effects remain ordinary deletion-only findings.
 	{filePath: "pkg/platform/process/command.go", operation: "ExecCommandRunner.Run", symbol: "os/exec.Command", wireSymbol: repositoryImportPrefix + "pkg/platform/process.ExecCommandRunner"},
-	{filePath: "pkg/platform/process/streaming_command_runner.go", operation: "StreamingExecCommandRunner.Run", symbol: "os/exec.Command", wireSymbol: repositoryImportPrefix + "pkg/platform/process.StreamingExecCommandRunner"},
 	{filePath: "pkg/platform/process/executable.go", operation: "HostExecutableLocator.LookPath", symbol: "os/exec.LookPath", wireSymbol: repositoryImportPrefix + "pkg/platform/process.HostExecutableLocator"},
 	{filePath: "pkg/platform/pty/platform_unix.go", operation: "package", symbol: "os.File", wireSymbol: repositoryImportPrefix + "pkg/platform/pty.NewHost"},
 	{filePath: "pkg/platform/pty/platform_unix.go", operation: "posixPTYAllocation.Master", symbol: "os.File", wireSymbol: repositoryImportPrefix + "pkg/platform/pty.NewHost"},
@@ -184,6 +207,9 @@ func scanProductionDefaultSelections(repoRoot string) ([]productionDefaultFindin
 	err = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+			return filepath.SkipDir
 		}
 		if entry.IsDir() {
 			relative, relErr := filepath.Rel(repoRoot, path)
@@ -292,6 +318,9 @@ func scanPlatformAdapterSelections(
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+			return filepath.SkipDir
 		}
 		if entry.IsDir() {
 			relative, err := filepath.Rel(repoRoot, path)
@@ -428,6 +457,9 @@ func readWireProductionSelections(repoRoot string) (map[string]struct{}, error) 
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+			return filepath.SkipDir
 		}
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" ||
 			strings.HasSuffix(entry.Name(), "_test.go") || entry.Name() == "wire_gen.go" {

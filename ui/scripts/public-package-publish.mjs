@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { assertPackedExportTargets } from "../../scripts/package-export-validation.mjs";
+import { normalizeStagedMtimes } from "../../scripts/package-release-candidate.mjs";
 import {
   assertCandidateSetEvidence,
   FRONTEND_ONLY_CANDIDATE_SCOPE,
@@ -33,6 +34,7 @@ export const PUBLIC_PACKAGES = Object.freeze([
     directory: "factory-emulator",
   },
   { name: "@you-agent-factory/components", directory: "components" },
+  { name: "@you-agent-factory/factory-graph", directory: "factory-graph" },
   {
     name: "@you-agent-factory/factory-visualizers",
     directory: "factory-visualizers",
@@ -151,6 +153,7 @@ async function stagePackage({ packageSpec, version, stagingRoot }) {
     );
   }
   await writeFile(manifestPath, `${JSON.stringify(patched, null, 2)}\n`);
+  await normalizeStagedMtimes(stagedDirectory);
   return { manifest: patched, stagedDirectory };
 }
 

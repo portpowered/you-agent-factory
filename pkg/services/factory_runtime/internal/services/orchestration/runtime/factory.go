@@ -10,14 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/work"
-
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
-	checkpointrecovery "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery"
-	checkpointrecoverywire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/wire"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
 	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
@@ -28,7 +25,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token_transformer"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -39,7 +40,7 @@ const defaultRuntimeBufferSize = 64
 // Used by the test harness to drive the engine step-by-step without
 // starting the async Run loop.
 type TickableFactory interface {
-	factory.Factory
+	factoryhost.Engine
 	Tick(ctx context.Context) error
 	TickN(ctx context.Context, n int) error
 	TickUntil(ctx context.Context, pred func(*petri.MarkingSnapshot) bool, maxTicks int) error
@@ -47,64 +48,84 @@ type TickableFactory interface {
 
 // factoryImpl is the concrete Factory implementation.
 type factoryImpl struct {
-	engine             *engine.FactoryEngine
-	cfg                *runtimeConfig
-	topology           *state.Net
-	logger             logging.Logger
-	resultBuffer       *buffers.TypedBuffer[workerexecution.WorkResult]
-	dispatchFlow       *dispatchPlanningResultHook
-	dispatchPlan       dispatchplanning.Service
-	checkpointRecovery checkpointrecovery.Service
-	workers            workers.WorkstationPoolBoundary
-	eventHistory       recordings.RuntimeLedger
-	state              interfaces.FactoryState
-	startedAt          time.Time
-	clock              factory.Clock
-	mu                 sync.RWMutex
+	engine       *engine.FactoryEngine
+	cfg          *runtimeConfig
+	topology     *state.Net
+	logger       logging.Logger
+	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult]
+	dispatchFlow *dispatchPlanningResultHook
+	dispatchPlan dispatchplanning.Service
+	eventHistory recordings.RuntimeLedger
+	state        interfaces.FactoryState
+	startedAt    time.Time
+	clock        factory.Clock
+	mu           sync.RWMutex
 	// completeCh is closed when Run() returns (either by termination or error).
 	// WaitToComplete() returns this channel.
-	completeCh           chan struct{}
-	completeOnce         sync.Once
-	runCancel            context.CancelFunc
-	operatorMoveRequests map[string]appliedOperatorMove
-	resumeDrainPending   bool
+	completeCh                  chan struct{}
+	completeOnce                sync.Once
+	runCancel                   context.CancelFunc
+	operatorMoveRequests        map[string]appliedOperatorMove
+	resumeDrainPending          bool
+	workerSessionControlMu      sync.Mutex
+	workerSessionControlResults map[workerSessionControlKey]factory.WorkerSessionControlResult
+	capacitySnapshotMu          sync.Mutex
+	effectiveFactoryConfig      *interfaces.FactoryConfig
 }
-
 type appliedOperatorMove struct {
 	workID string
 	result work.OperatorMoveResult
 }
-
+type runtimePromptRenderer interface {
+	RenderPrompt(string, []workers.Token, *workers.Context) (string, error)
+}
 type runtimeConfig struct {
-	net                       *state.Net
-	scheduler                 scheduler.Scheduler
-	workerExecutors           map[string]workers.WorkerExecutor
-	workerService             workers.WorkstationExecutionService
-	runtimeConfig             interfaces.RuntimeDefinitionLookup
-	workflowContext           *factory_context.FactoryContext
-	runtimeMode               interfaces.RuntimeMode
-	logger                    logging.Logger
-	clock                     factory.Clock
-	workRequestIDs            work.RequestIDGenerator
-	eventHistory              recordings.RuntimeLedger
-	worldStateProjector       factory.WorldStateProjector
-	submissionRecorder        recordings.SubmissionRecorder
-	factoryEventRecorder      factory.FactoryEventRecorder
-	submissionHooks           []factory.SubmissionHook
-	dispatchRecorder          recordings.DispatchRecorder
-	completionRecorder        factory.CompletionRecorder
-	petriMutationRecorder     factory.PetriMutationRecorder
-	completionDeliveryPlanner factory.CompletionDeliveryPlanner
-	inlineDispatch            bool
-	quorumPolicy              interfaces.QuorumPolicyService
-	outputShaping             interfaces.InvocationOutputShapingService
-	workPropagation           interfaces.WorkPropagationPolicyService
-	workService               work.Service
-	decisionEnvelopes         interfaces.DecisionEnvelopeService
+	net                                *state.Net
+	scheduler                          scheduler.Scheduler
+	executeService                     executeCapability
+	promptRenderer                     runtimePromptRenderer
+	templateFieldResolver              runtimeTemplateFieldResolver
+	promptSourceReader                 func(string) ([]byte, error)
+	attempts                           *attemptLifecycle
+	attemptCapacity                    int
+	newID                              factory.IDGenerator
+	workerSessions                     workersessions.Service
+	runtimeConfig                      interfaces.RuntimeDefinitionLookup
+	invocationInterpolation            interfaces.InvocationInterpolationService
+	invocationFileReader               interfaces.FileReader
+	workflowContext                    *factory_context.FactoryContext
+	runtimeMode                        interfaces.RuntimeMode
+	logger                             logging.Logger
+	clock                              factory.Clock
+	workRequestIDs                     work.RequestIDGenerator
+	eventHistory                       recordings.RuntimeLedger
+	recordingID                        string // optional Worker recording target propagated to Worker Sessions
+	runtimeID                          string // stable runtime-instance identity used for attempt correlation
+	worldStateProjector                factory.WorldStateProjector
+	restoredWorldState                 *interfaces.FactoryWorldState
+	skipRestoredDispatchReconciliation bool
+	providerSessions                   providersessions.Service
+	submissionRecorder                 recordings.SubmissionRecorder
+	factoryEventRecorder               factory.FactoryEventRecorder
+	submissionHooks                    []factory.SubmissionHook
+	dispatchRecorder                   recordings.DispatchRecorder
+	completionRecorder                 factory.CompletionRecorder
+	petriMutationRecorder              factory.PetriMutationRecorder
+	completionDeliveryPlanner          factory.CompletionDeliveryPlanner
+	replayEvents                       []interfaces.FactoryEvent
+	inlineDispatch                     bool
+	quorumPolicy                       interfaces.QuorumPolicyService
+	outputShaping                      interfaces.InvocationOutputShapingService
+	workPropagation                    interfaces.WorkPropagationPolicyService
+	workService                        work.Service
+	decisionEnvelopes                  interfaces.DecisionEnvelopeService
+	expectedArtifactFileSystem         expectedArtifactFileSystem
+	mockWorkersConfig                  *workers.MockWorkersConfig
+	progressPublisher                  workers.ProgressPublisher
+	modelRuntimeScope                  modelprovider.RuntimeScopeRef
 }
 
-// Compile-time checks.
-var _ factory.Factory = (*factoryImpl)(nil)
+var _ factoryhost.Engine = (*factoryImpl)(nil)
 var _ factory.Service = (*factoryImpl)(nil)
 var _ TickableFactory = (*factoryImpl)(nil)
 
@@ -114,16 +135,23 @@ var _ TickableFactory = (*factoryImpl)(nil)
 func New(
 	net *state.Net,
 	runtimeScheduler scheduler.Scheduler,
-	workerExecutors map[string]workers.WorkerExecutor,
-	workerService workers.WorkstationExecutionService,
+	statelessService executeCapability,
+	workerSessionsService workersessions.Service,
 	runtimeDefinitions interfaces.RuntimeDefinitionLookup,
+	invocationInterpolation interfaces.InvocationInterpolationService,
+	invocationFileReader interfaces.FileReader,
 	workflowContext *factory_context.FactoryContext,
 	runtimeMode interfaces.RuntimeMode,
 	logger logging.Logger,
 	clock factory.Clock,
 	inlineDispatch bool,
 	eventHistory recordings.RuntimeLedger,
+	recordingID string,
+	runtimeID string,
 	worldStateProjector factory.WorldStateProjector,
+	restoredWorldState *interfaces.FactoryWorldState,
+	skipRestoredDispatchReconciliation bool,
+	providerSessions providersessions.Service,
 	submissionRecorder recordings.SubmissionRecorder,
 	factoryEventRecorder factory.FactoryEventRecorder,
 	submissionHooks []factory.SubmissionHook,
@@ -137,69 +165,81 @@ func New(
 	workService work.Service,
 	workRequestIDs work.RequestIDGenerator,
 	newID factory.IDGenerator,
+	expectedArtifactFileSystemValue any,
 	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
-) (factory.Factory, error) {
-	if net == nil {
-		return nil, fmt.Errorf("a factory specification is required")
+) (factoryhost.Engine, error) {
+	if err := validateFactoryRuntimeDependencies(net, eventHistory, clock, workRequestIDs, newID, statelessService, workerSessionsService); err != nil {
+		return nil, err
 	}
-	if eventHistory == nil {
-		return nil, fmt.Errorf("a Recordings runtime ledger is required")
-	}
-	if clock == nil {
-		return nil, fmt.Errorf("a Factory Runtime clock is required")
-	}
-	if workRequestIDs == nil {
-		return nil, fmt.Errorf("a Work Request ID generator is required")
-	}
-	if newID == nil {
-		return nil, fmt.Errorf("a Factory Runtime ID generator is required")
-	}
-	if workerService == nil {
-		return nil, fmt.Errorf("a canonical Workers workstation service is required")
-	}
-	if runtimeMode == "" {
-		runtimeMode = interfaces.RuntimeModeBatch
-	}
+	runtimeMode = normalizeRuntimeMode(runtimeMode)
+	promptRenderer, _ := statelessService.(runtimePromptRenderer)
+	templateFieldResolver, _ := statelessService.(runtimeTemplateFieldResolver)
 	cfg := &runtimeConfig{
-		net:                       net,
-		scheduler:                 runtimeScheduler,
-		workerExecutors:           workerExecutors,
-		workerService:             workerService,
-		runtimeConfig:             runtimeDefinitions,
-		workflowContext:           workflowContext,
-		runtimeMode:               runtimeMode,
-		logger:                    logger,
-		clock:                     clock,
-		workRequestIDs:            workRequestIDs,
-		inlineDispatch:            inlineDispatch,
-		eventHistory:              eventHistory,
-		worldStateProjector:       worldStateProjector,
-		submissionRecorder:        submissionRecorder,
-		factoryEventRecorder:      factoryEventRecorder,
-		submissionHooks:           append([]factory.SubmissionHook(nil), submissionHooks...),
-		dispatchRecorder:          dispatchRecorder,
-		completionRecorder:        completionRecorder,
-		petriMutationRecorder:     petriMutationRecorder,
-		completionDeliveryPlanner: completionDeliveryPlanner,
-		quorumPolicy:              quorumPolicy,
-		outputShaping:             outputShaping,
-		workPropagation:           workPropagation,
-		workService:               workService,
-		decisionEnvelopes:         firstDecisionEnvelopeService(decisionEnvelopes),
+		net:                                net,
+		scheduler:                          runtimeScheduler,
+		executeService:                     statelessService,
+		promptRenderer:                     promptRenderer,
+		templateFieldResolver:              templateFieldResolver,
+		workerSessions:                     workerSessionsService,
+		attemptCapacity:                    defaultRuntimeAttemptCapacity,
+		newID:                              newID,
+		runtimeConfig:                      runtimeDefinitions,
+		invocationInterpolation:            invocationInterpolation,
+		invocationFileReader:               invocationFileReader,
+		workflowContext:                    workflowContext.Clone(),
+		runtimeMode:                        runtimeMode,
+		logger:                             logger,
+		clock:                              clock,
+		workRequestIDs:                     workRequestIDs,
+		inlineDispatch:                     inlineDispatch,
+		eventHistory:                       eventHistory,
+		recordingID:                        strings.TrimSpace(recordingID),
+		runtimeID:                          strings.TrimSpace(runtimeID),
+		worldStateProjector:                worldStateProjector,
+		restoredWorldState:                 restoredWorldState,
+		skipRestoredDispatchReconciliation: skipRestoredDispatchReconciliation,
+		providerSessions:                   providerSessions,
+		submissionRecorder:                 submissionRecorder,
+		factoryEventRecorder:               factoryEventRecorder,
+		submissionHooks:                    append([]factory.SubmissionHook(nil), submissionHooks...),
+		dispatchRecorder:                   dispatchRecorder,
+		completionRecorder:                 completionRecorder,
+		petriMutationRecorder:              petriMutationRecorder,
+		completionDeliveryPlanner:          completionDeliveryPlanner,
+		quorumPolicy:                       quorumPolicy,
+		outputShaping:                      outputShaping,
+		workPropagation:                    workPropagation,
+		workService:                        workService,
+		expectedArtifactFileSystem:         expectedArtifactFileSystemFrom(expectedArtifactFileSystemValue),
+		decisionEnvelopes:                  firstDecisionEnvelopeService(decisionEnvelopes),
+	}
+	if cfg.executeService != nil {
+		cfg.attempts = newAttemptLifecycle(cfg.executeService, cfg.newID, cfg.attemptCapacity)
 	}
 
 	sched := buildRuntimeScheduler(cfg)
 	effectiveLogger := logging.EnsureLogger(cfg.logger)
-	sharedTransformer, subs := buildRuntimeSubsystems(cfg, sched, effectiveLogger, newID)
-	marking := buildRuntimeMarking(cfg)
+	marking, seededRestoredWorkIDs, seededReplayWorkIDsWithRecordedDispatch, err := buildRuntimeMarking(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("restore Factory Runtime Work board: %w", err)
+	}
+	sharedTransformer, subs := buildRuntimeSubsystems(cfg, sched, effectiveLogger, newID, seededRestoredWorkIDs)
 	resultBuffer := buffers.NewTypedBuffer[workerexecution.WorkResult](defaultRuntimeBufferSize)
 	effectiveEventHistory := ensureEventHistory(cfg)
-	dispatchResultHook, dispatchPlan, workersBoundary := configureRuntimeDispatch(
-		cfg, resultBuffer,
+	if !cfg.skipRestoredDispatchReconciliation {
+		if err := reconcileRestoredDispatches(cfg, effectiveEventHistory); err != nil {
+			return nil, fmt.Errorf("reconcile restored Factory Runtime dispatches: %w", err)
+		}
+	}
+	dispatchResultHook, dispatchPlan, err := configureRuntimeDispatch(
+		cfg, resultBuffer, effectiveEventHistory,
 	)
+	if err != nil {
+		return nil, err
+	}
 	impl := newFactoryImpl(
 		cfg, nil, effectiveLogger, resultBuffer,
-		dispatchResultHook, dispatchPlan, checkpointrecoverywire.New(), workersBoundary, effectiveEventHistory,
+		dispatchResultHook, dispatchPlan, effectiveEventHistory,
 	)
 	var recordPetriMutations func([]interfaces.TokenMutationRecord) error
 	if cfg.petriMutationRecorder != nil {
@@ -224,12 +264,19 @@ func New(
 			effectiveEventHistory.RecordWorkRequest(tick, record, cfg.clock.Now())
 		},
 		func(tick int, req work.SubmitRequest, token factorytoken.Token) {
-			effectiveEventHistory.RecordWorkInput(tick, req, token, cfg.clock.Now())
+			effectiveEventHistory.RecordWorkInput(tick, req, factorytoken.ToWorker(token), cfg.clock.Now())
 		},
 		func(record interfaces.FactoryDispatchRecord) {
 			effectiveEventHistory.RecordWorkstationRequest(
 				record.Dispatch.Execution.DispatchCreatedTick, record, cfg.clock.Now(),
 			)
+			if record.HumanApproval {
+				if approvalRecorder, ok := effectiveEventHistory.(recordings.HumanApprovalRequestRecorder); ok {
+					approvalRecorder.RecordHumanApprovalRequested(
+						record.Dispatch.Execution.DispatchCreatedTick, record, cfg.clock.Now(),
+					)
+				}
+			}
 			if cfg.dispatchRecorder != nil {
 				cfg.dispatchRecorder(record)
 			}
@@ -241,6 +288,8 @@ func New(
 		recordPetriMutations,
 		impl.automaticTicksPaused,
 		impl.observePostResumeBufferedDrain,
+		seededRestoredWorkIDs,
+		seededReplayWorkIDsWithRecordedDispatch,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create Factory Runtime engine: %w", err)
@@ -248,7 +297,6 @@ func New(
 	impl.engine = runtimeEngine
 	return impl, nil
 }
-
 func buildRuntimeScheduler(cfg *runtimeConfig) scheduler.Scheduler {
 	if cfg.scheduler != nil {
 		scheduler.ApplyRuntimeConfig(cfg.scheduler, cfg.runtimeConfig)
@@ -257,8 +305,12 @@ func buildRuntimeScheduler(cfg *runtimeConfig) scheduler.Scheduler {
 	return scheduler.NewWorkInQueueScheduler(50, cfg.runtimeConfig)
 }
 
-func buildRuntimeSubsystems(cfg *runtimeConfig, sched scheduler.Scheduler, logger logging.Logger, newID factory.IDGenerator) (*token_transformer.Transformer, []subsystems.Subsystem) {
+func buildRuntimeSubsystems(cfg *runtimeConfig, sched scheduler.Scheduler, logger logging.Logger, newID factory.IDGenerator, seededRestoredWorkIDs map[string]struct{}) (*token_transformer.Transformer, []subsystems.Subsystem) {
 	workIDGen := petri.NewWorkIDGenerator()
+	var replayIDs factory.ReplayDispatchIDResolver
+	if resolver, ok := cfg.completionDeliveryPlanner.(factory.ReplayDispatchIDResolver); ok {
+		replayIDs = resolver
+	}
 	sharedTransformer := token_transformer.New(
 		cfg.net.Places,
 		cfg.net.WorkTypes,
@@ -271,14 +323,16 @@ func buildRuntimeSubsystems(cfg *runtimeConfig, sched scheduler.Scheduler, logge
 			logger,
 			cfg.runtimeConfig),
 
-		subsystems.NewDispatcher(
+		subsystems.NewDispatcherWithSeededReplay(
 			cfg.net,
 			sched,
 			cfg.workflowContext,
 			logger,
 			cfg.runtimeConfig,
 			cfg.clock.Now,
-			newID),
+			newID,
+			replayIDs,
+			seededRestoredWorkIDs),
 
 		subsystems.NewHistory(logger),
 		subsystems.NewTransitioner(
@@ -293,7 +347,7 @@ func buildRuntimeSubsystems(cfg *runtimeConfig, sched scheduler.Scheduler, logge
 			cfg.decisionEnvelopes,
 		),
 		subsystems.NewCascadingFailure(cfg.net, logger, cfg.clock.Now),
-		subsystems.NewTerminationCheck(cfg.net, logger, cfg.runtimeMode),
+		subsystems.NewTerminationCheckWithRuntime(cfg.net, logger, cfg.runtimeMode, cfg.runtimeConfig, cfg.clock.Now),
 	}
 }
 
@@ -306,44 +360,62 @@ func firstDecisionEnvelopeService(
 	return services[0]
 }
 
-func buildRuntimeMarking(cfg *runtimeConfig) *petri.Marking {
+// buildRuntimeMarking returns the fresh marking, the exact restored Work
+// identities inserted into it, and the restored Work identities with recorded
+// dispatch facts. Invalid or unoccupied historical Work is deliberately absent
+// from the first returned set.
+func buildRuntimeMarking(cfg *runtimeConfig) (*petri.Marking, map[string]struct{}, map[string]struct{}, error) {
 	marking := petri.NewMarking(cfg.net.ID)
+	seededRestoredWorkIDs := make(map[string]struct{})
+	seededReplayWorkIDsWithRecordedDispatch := restoredWorkIDsWithRecordedDispatch(cfg.restoredWorldState)
+	resourcePlaceIDs := make(map[string]struct{}, len(cfg.net.Resources))
+	var constructionNow time.Time
+	hasConstructionNow := false
 	for _, rd := range cfg.net.Resources {
-		_, tokens := state.GenerateResourcePlaces(rd, cfg.clock.Now())
+		now := cfg.clock.Now()
+		if !hasConstructionNow {
+			constructionNow = now
+			hasConstructionNow = true
+		}
+		place, tokens := state.GenerateResourcePlaces(rd, now)
+		resourcePlaceIDs[place.ID] = struct{}{}
 		for _, tok := range tokens {
 			marking.AddToken(tok)
 		}
 	}
-	return marking
+	if cfg.restoredWorldState != nil {
+		if !hasConstructionNow {
+			constructionNow = cfg.clock.Now()
+		}
+		var err error
+		excludedWorkIDs := map[string]struct{}(nil)
+		if cfg.skipRestoredDispatchReconciliation {
+			excludedWorkIDs = seededReplayWorkIDsWithRecordedDispatch
+		}
+		seededRestoredWorkIDs, err = seedRestoredWork(
+			marking,
+			cfg.net,
+			cfg.restoredWorldState,
+			constructionNow,
+			resourcePlaceIDs,
+			excludedWorkIDs,
+		)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
+	return marking, seededRestoredWorkIDs, seededReplayWorkIDsWithRecordedDispatch, nil
 }
-
 func ensureEventHistory(cfg *runtimeConfig) recordings.RuntimeLedger {
 	eventHistory := cfg.eventHistory
 	eventHistory.RecordRunRequest()
 	eventHistory.AddEventRecorder(cfg.factoryEventRecorder)
 	eventHistory.RecordInitialStructure()
 	recordSessionStartedFromFactoryConfig(cfg, eventHistory)
+	if !cfg.skipRestoredDispatchReconciliation {
+		recordRestoredWorkRequests(cfg, eventHistory)
+	}
 	return eventHistory
-}
-
-func sessionIDFromFactoryConfig(cfg *runtimeConfig) string {
-	if cfg != nil && cfg.workflowContext != nil {
-		if sessionID := strings.TrimSpace(cfg.workflowContext.SessionID); sessionID != "" {
-			return sessionID
-		}
-	}
-	return factory_context.DefaultSessionID
-}
-
-func factoryConfigFromFactoryConfig(cfg *runtimeConfig) *interfaces.FactoryConfig {
-	if cfg == nil {
-		return nil
-	}
-	provider, ok := cfg.runtimeConfig.(interfaces.RuntimeFactoryConfigLookup)
-	if !ok {
-		return nil
-	}
-	return provider.FactoryConfig()
 }
 
 func recordSessionStartedFromFactoryConfig(cfg *runtimeConfig, eventHistory recordings.RuntimeLedger) {
@@ -413,23 +485,22 @@ func (f *factoryImpl) recordSessionLifecycleResume() {
 func configureRuntimeDispatch(
 	cfg *runtimeConfig,
 	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult],
+	eventHistory recordings.RuntimeLedger,
 ) (
 	*dispatchPlanningResultHook,
 	dispatchplanning.Service,
-	workers.WorkstationPoolBoundary,
+	error,
 ) {
-	workersBoundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
-		Service:    cfg.workerService,
-		Executors:  cfg.workerExecutors,
-		RouteNames: runtimeWorkstationRouteNames(cfg.net, cfg.workerExecutors),
-		Async:      !cfg.inlineDispatch && cfg.completionDeliveryPlanner == nil,
-	})
 	var resultHook *dispatchPlanningResultHook
+	publisher := func(ctx context.Context, request workers.WorkstationDispatchRequest) error {
+		return startThroughStatelessWorkers(ctx, cfg, request, resultHook.acceptWorkersResult)
+	}
+	canceler := func(ctx context.Context, request workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+		return cancelStatelessAttempt(ctx, cfg, request)
+	}
 	planner := dispatchplanningwire.New(
-		func(ctx context.Context, request workers.WorkstationDispatchRequest) error {
-			return workersBoundary.Publish(ctx, request, resultHook.acceptWorkersResult)
-		},
-		workersBoundary.Cancel,
+		publisher,
+		canceler,
 	)
 	resultHook = newCanonicalDispatchPlanningResultHook(
 		planner,
@@ -440,7 +511,7 @@ func configureRuntimeDispatch(
 		cfg.workRequestIDs,
 		sessionIDFromFactoryConfig(cfg),
 	)
-	return resultHook, planner, workersBoundary
+	return resultHook, planner, nil
 }
 
 func newFactoryImpl(
@@ -450,25 +521,22 @@ func newFactoryImpl(
 	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult],
 	dispatchFlow *dispatchPlanningResultHook,
 	dispatchPlan dispatchplanning.Service,
-	checkpointRecovery checkpointrecovery.Service,
-	workersBoundary workers.WorkstationPoolBoundary,
 	eventHistory recordings.RuntimeLedger,
 ) *factoryImpl {
 	return &factoryImpl{
-		engine:               eng,
-		cfg:                  cfg,
-		topology:             cfg.net,
-		logger:               logger,
-		resultBuffer:         resultBuffer,
-		dispatchFlow:         dispatchFlow,
-		dispatchPlan:         dispatchPlan,
-		checkpointRecovery:   checkpointRecovery,
-		workers:              workersBoundary,
-		eventHistory:         eventHistory,
-		state:                interfaces.FactoryStateIdle,
-		clock:                cfg.clock,
-		completeCh:           make(chan struct{}),
-		operatorMoveRequests: make(map[string]appliedOperatorMove),
+		engine:                      eng,
+		cfg:                         cfg,
+		topology:                    cfg.net,
+		logger:                      logger,
+		resultBuffer:                resultBuffer,
+		dispatchFlow:                dispatchFlow,
+		dispatchPlan:                dispatchPlan,
+		eventHistory:                eventHistory,
+		state:                       interfaces.FactoryStateIdle,
+		clock:                       cfg.clock,
+		completeCh:                  make(chan struct{}),
+		operatorMoveRequests:        make(map[string]appliedOperatorMove),
+		workerSessionControlResults: make(map[workerSessionControlKey]factory.WorkerSessionControlResult),
 	}
 }
 
@@ -594,12 +662,11 @@ func (f *factoryImpl) recordOperatorWorkStateChange(result work.OperatorMoveResu
 		WorkTypeName:  workTypeName,
 		FromState:     result.FromState,
 		ToState:       result.ToState,
-		FromPlaceID:   result.FromPlaceID,
-		ToPlaceID:     result.ToPlaceID,
 		Source:        source,
 		RequestID:     requestID,
 		TriggerWorkID: triggerWorkID,
 		Reason:        reason,
+		SessionID:     sessionIDFromFactoryConfig(f.cfg),
 	}, f.clock.Now())
 }
 
@@ -614,6 +681,8 @@ func (f *factoryImpl) SubscribeFactoryEvents(ctx context.Context, reconnect *int
 
 // Pause pauses the factory. Repeated calls while already paused are a no-op.
 func (f *factoryImpl) Pause(ctx context.Context) error {
+	f.workerSessionControlMu.Lock()
+	defer f.workerSessionControlMu.Unlock()
 	_, previousState, err := f.applyPauseControl()
 	if err != nil {
 		return fmt.Errorf("pause factory: invalid state %s", previousState)
@@ -653,6 +722,8 @@ func (f *factoryImpl) applyPauseControl() (factory.ControlOutcome, interfaces.Fa
 
 // Resume resumes a paused factory.
 func (f *factoryImpl) Resume(ctx context.Context) error {
+	f.workerSessionControlMu.Lock()
+	defer f.workerSessionControlMu.Unlock()
 	_, previousState, err := f.applyResumeControl()
 	if err != nil {
 		return fmt.Errorf("resume factory: invalid state %s", previousState)
@@ -696,35 +767,6 @@ func (f *factoryImpl) automaticTicksPaused() bool {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.state == interfaces.FactoryStatePaused
-}
-
-// GetEngineStateSnapshot returns the aggregate observability snapshot for
-// service-facing callers.
-func (f *factoryImpl) GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
-	runtimeSnap := f.engine.GetRuntimeStateSnapshot()
-	runtimeSnap.StreamGenerationID = f.eventHistory.StreamGenerationID()
-
-	f.mu.RLock()
-	currentState := f.state
-	startedAt := f.startedAt
-	now := f.clock.Now()
-	f.mu.RUnlock()
-
-	worldState := f.currentWorldState(runtimeSnap.TickCount)
-	runtimeSnap.RuntimeStatus = f.deriveRuntimeStatus(currentState, runtimeSnap, worldState)
-	uptime := time.Duration(0)
-	if !startedAt.IsZero() {
-		uptime = now.Sub(startedAt)
-	}
-
-	snap := state.NewEngineStateSnapshot(runtimeSnap, string(currentState), uptime, f.topology)
-	snap.LifecycleControlStatus = lifecycleControlStatusFromWorldState(worldState, string(currentState))
-	snap.EnabledTransitions = scheduler.NewEnablementEvaluator(
-		f.logger,
-		f.clock.Now,
-		f.cfg.runtimeConfig,
-	).FindEnabledTransitions(ctx, f.topology, &snap.Marking)
-	return &snap, nil
 }
 
 // GetFactoryEvents returns the current-process canonical event history.
@@ -871,27 +913,46 @@ func (f *factoryImpl) observePostResumeBufferedDrain(drainedCount int) {
 	)
 }
 
-func (f *factoryImpl) currentWorldState(tick int) *interfaces.FactoryWorldState {
-	if f.eventHistory == nil {
-		return nil
-	}
-	if f.cfg == nil || f.cfg.worldStateProjector == nil {
-		return nil
-	}
-	state, err := f.cfg.worldStateProjector(f.eventHistory.CanonicalEvents(), tick)
-	if err != nil {
-		f.logger.Warn("factory world-state reconstruction failed; falling back to runtime snapshot", "error", err)
-		return nil
-	}
-	return &state
-}
-
 func lifecycleControlStatusFromWorldState(worldState *interfaces.FactoryWorldState, factoryState string) string {
 	_ = factoryState
 	if worldState != nil && worldState.SessionBracket != nil {
 		return strings.TrimSpace(worldState.SessionBracket.LifecycleControlStatus)
 	}
 	return ""
+}
+
+// SetProgressPublisher installs the Runtime-owned observation bridge.
+func (f *factoryImpl) SetProgressPublisher(publisher workers.ProgressPublisher) {
+	if f == nil || f.cfg == nil {
+		return
+	}
+	f.cfg.progressPublisher = publisher
+}
+
+// RuntimeProgressPublisher exposes the already-bound runtime observation
+// bridge to the Factory Sessions child Execute seam. The concrete publisher
+// remains runtime-owned; callers receive only its detached function value.
+func (f *factoryImpl) RuntimeProgressPublisher() workers.ProgressPublisher {
+	if f == nil || f.cfg == nil {
+		return nil
+	}
+	return f.cfg.progressPublisher
+}
+
+// SetMockWorkersConfig installs a cloned request-scoped testing override.
+func (f *factoryImpl) SetMockWorkersConfig(config *workers.MockWorkersConfig) {
+	if f == nil || f.cfg == nil {
+		return
+	}
+	f.cfg.mockWorkersConfig = config.Clone()
+}
+
+// SetPromptSourceReader installs the read-only prompt-source filesystem edge.
+func (f *factoryImpl) SetPromptSourceReader(reader func(string) ([]byte, error)) {
+	if f == nil || f.cfg == nil {
+		return
+	}
+	f.cfg.promptSourceReader = reader
 }
 
 // schedulerAdapter adapts factory.TransitionScheduler to scheduler.Scheduler.
@@ -921,51 +982,9 @@ func (a *schedulerAdapter) SupportsRepeatedTransitionBindings() bool {
 	return scheduler.SupportsRepeatedTransitionBindings(a.inner)
 }
 
-func (f *factoryImpl) deriveRuntimeStatus(currentState interfaces.FactoryState, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], worldState *interfaces.FactoryWorldState) interfaces.RuntimeStatus {
-	if currentState == interfaces.FactoryStateCompleted || currentState == interfaces.FactoryStateFailed {
-		return interfaces.RuntimeStatusFinished
-	}
-
-	if snapshot.InFlightCount > 0 || len(snapshot.Dispatches) > 0 || hasNonTerminalWork(snapshot.Marking, f.topology) {
-		return interfaces.RuntimeStatusActive
-	}
-
-	return interfaces.RuntimeStatusIdle
-}
-
-func hasNonTerminalWork(marking petri.MarkingSnapshot, topology *state.Net) bool {
-	if topology == nil {
-		return false
-	}
-
-	for _, token := range marking.Tokens {
-		if token == nil || token.Color.DataType == factorytoken.DataTypeResource || token.Color.WorkTypeID == "" {
-			continue
-		}
-
-		category := topology.StateCategoryForPlace(token.PlaceID)
-		if category != state.StateCategoryTerminal && category != state.StateCategoryFailed {
-			return true
-		}
-	}
-
-	return false
-}
-
 func (f *factoryImpl) WorkflowContext() *factory_context.FactoryContext {
 	if f == nil || f.cfg == nil {
 		return nil
 	}
-	return f.cfg.workflowContext
-}
-
-func closeRuntimeEventSubscriptions(ledger recordings.RuntimeLedger) {
-	if ledger == nil {
-		return
-	}
-	closer, ok := ledger.(interface{ CloseLiveSubscriptions() })
-	if !ok {
-		return
-	}
-	closer.CloseLiveSubscriptions()
+	return f.cfg.workflowContext.Clone()
 }

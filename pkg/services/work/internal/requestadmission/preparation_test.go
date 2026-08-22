@@ -329,3 +329,57 @@ func mustRequestPreparationService(t *testing.T) RequestPreparationService {
 	}
 	return service
 }
+
+// belowLimitWorkPayloadSize leaves room for the surrounding JSON value while
+// exercising a payload that is large enough to cover the previous command-line
+// failure without crossing the Work admission boundary.
+const belowLimitWorkPayloadSize = MaxWorkPayloadBytes - 2_048
+
+func TestPrepareWorkRequestAdmitsPayloadBelowLimit(t *testing.T) {
+	t.Parallel()
+
+	service := mustRequestPreparationService(t)
+	text := strings.Repeat("u", belowLimitWorkPayloadSize)
+
+	prepared, err := service.PrepareWorkRequest(context.Background(), WorkRequestPreparation{
+		Request: Request{
+			RequestID: "request-oversized",
+			Type:      RequestTypeFactoryRequestBatch,
+			Works: []Work{{
+				Name:       "oversized-idea",
+				WorkTypeID: "idea",
+				Content:    []ContentPart{{Type: ContentPartTypeText, Text: text}},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PrepareWorkRequest with a %d-character payload: %v", len(text), err)
+	}
+	if got := prepared.Works[0].Content[0].Text; got != text {
+		t.Fatalf("admitted content length = %d, want the submitted %d characters intact", len(got), len(text))
+	}
+}
+
+func TestPrepareWorkRequestAdmitsLegacyPayloadBelowLimit(t *testing.T) {
+	t.Parallel()
+
+	service := mustRequestPreparationService(t)
+	text := strings.Repeat("p", belowLimitWorkPayloadSize)
+
+	prepared, err := service.PrepareWorkRequest(context.Background(), WorkRequestPreparation{
+		Request: Request{
+			Works: []Work{{
+				Name:       "oversized-idea",
+				WorkTypeID: "idea",
+				Payload:    map[string]any{"description": text},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PrepareWorkRequest with a %d-character payload field: %v", len(text), err)
+	}
+	payload, ok := prepared.Works[0].Payload.(map[string]any)
+	if !ok || payload["description"] != text {
+		t.Fatalf("admitted payload = %T, want the submitted %d characters intact", prepared.Works[0].Payload, len(text))
+	}
+}

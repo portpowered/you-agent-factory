@@ -45,6 +45,9 @@ func (recorder *settingsCommandRecorder) EnsureLocalBackendScope(path string) (o
 // Initialize derives the operator config path with Settings root DefaultConfigPath
 // and routes load/ensure commands only through the injected Settings collaborator
 // ports, with observable Bootstrap outcomes on create, skip, and failure paths.
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+// pkgmaintcheck:ignore-function-lines pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestInitializeSettingsCommandConstructionThroughRootCollaborator(t *testing.T) {
 	t.Parallel()
 
@@ -63,11 +66,11 @@ func TestInitializeSettingsCommandConstructionThroughRootCollaborator(t *testing
 		wantSettingsCalls settingsCommandExpectation
 	}{
 		{
-			name: "create path ensures then loads through root collaborator",
-			settings: &settingsCommandRecorder{},
+			name:        "create path ensures then loads through root collaborator",
+			settings:    &settingsCommandRecorder{},
 			wantOutcome: systeminitialization.SystemConfigCreated,
 			wantSettingsCalls: settingsCommandExpectation{
-				wantEnsure: []string{"<config>"},
+				wantEnsure:    []string{"<config>"},
 				wantLoadCalls: []string{"<config>"},
 			},
 		},

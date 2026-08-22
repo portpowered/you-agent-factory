@@ -7,7 +7,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -26,17 +25,15 @@ type FactorySaveAPI interface {
 	SaveCurrentFactoryForSession(ctx context.Context, sessionID string, request factoryapi.Factory) (factoryapi.Factory, error)
 }
 
-// RuntimeAPI owns the legacy unscoped runtime reads and work submission
-// operations retained by the HTTP compatibility routes.
+// RuntimeAPI owns the compatibility unscoped runtime reads retained by the
+// HTTP routes. Work admission is owned by the Work transport and root.
 type RuntimeAPI interface {
-	factory.APIFactory
-	// GetEngineStateSnapshot is migration-only and not part of the APIFactory peer contract.
-	GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net], error)
+	SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error)
 	GetCurrentFactory(ctx context.Context) (factoryapi.Factory, error)
 }
 
 // FactoryStatusAPI is the exact detached Factory Runtime status read used by
-// protocol transports. An empty session ID selects the compatibility current
+// protocol transports. An empty session ID selects the default Factory Session
 // runtime; a non-empty ID selects that Factory Session.
 type FactoryStatusAPI interface {
 	ProjectFactoryStatus(ctx context.Context, sessionID string) (factory.FactoryStatus, error)
@@ -56,15 +53,6 @@ type LiveSessionAPI interface {
 	PauseLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
 	ResumeLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
 	SubscribeFactoryResponseEventsForSession(ctx context.Context, request factorysessions.ResponseEventSubscriptionRequest) (FactoryResponseEventSubscription, error)
-}
-
-// SessionAPI retains the historical aggregate contract for compatibility
-// facades. New transports should request RuntimeAPI, LiveSessionAPI, and WorkAPI
-// independently.
-type SessionAPI interface {
-	RuntimeAPI
-	LiveSessionAPI
-	WorkAPI
 }
 
 // WorkAPI is the session-scoped work submission, operator move, and runtime observability seam.
@@ -103,8 +91,8 @@ type DurableSessionLifecycleAPI interface {
 }
 
 // DurableSessionExecutionAPI is the shared durable factory-session execution start
-// seam for async and sync dynamic workflow sessions. Live-session open and
-// invocation remain on SessionAPI and InvocationAPI.
+// seam for async and sync dynamic workflow sessions. Live-session open remains on
+// LiveSessionAPI and invocation remains on InvocationAPI.
 type DurableSessionExecutionAPI interface {
 	StartDurableFactorySessionAsync(ctx context.Context, request factorysessions.StartRequest) (factoryapi.FactorySessionExecutionResponse, error)
 	StartDurableFactorySessionSync(ctx context.Context, request factorysessions.StartRequest) (factoryapi.FactorySessionSyncExecutionResponse, error)
@@ -163,16 +151,26 @@ func InvocationResponseFromResult(result FactoryInvocationResult) factoryapi.Inv
 	if workState := strings.TrimSpace(result.WorkState); workState != "" {
 		response.WorkState = &workState
 	}
-	return response
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
+	if approvalID := strings.TrimSpace(result.ApprovalID); approvalID != "" {
+		response.ApprovalId = &approvalID
 	}
-	return ""
+	if dispatchID := strings.TrimSpace(result.DispatchID); dispatchID != "" {
+		response.DispatchId = &dispatchID
+	}
+	if workstationID := strings.TrimSpace(result.WorkstationID); workstationID != "" {
+		response.WorkstationId = &workstationID
+	}
+	if workstationName := strings.TrimSpace(result.WorkstationName); workstationName != "" {
+		response.WorkstationName = &workstationName
+	}
+	if len(result.Decisions) > 0 {
+		decisions := make([]factoryapi.InvocationResponseDecisions, 0, len(result.Decisions))
+		for _, decision := range result.Decisions {
+			decisions = append(decisions, factoryapi.InvocationResponseDecisions(decision))
+		}
+		response.Decisions = &decisions
+	}
+	return response
 }
 
 // RequestValidationError reports a stable client-side validation failure that

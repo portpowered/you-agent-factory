@@ -1,143 +1,15 @@
 package wire
 
 import (
-	"time"
-
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
-	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
-	"go.uber.org/zap"
+	modelrecording "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution/recording"
+	runnermockworker "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing"
 )
-
-// ProviderRegistryRebinder reconstructs the provider registry for runtime command edges.
-type ProviderRegistryRebinder = workersinternal.ProviderRegistryRebinder
-
-// CurrentRuntimeResolver resolves the active Factory Session runtime.
-type CurrentRuntimeResolver = workersinternal.CurrentRuntimeResolver
-
-// NewRuntimeWithSelection constructs the Workers runtime through owner-internal implementation.
-func NewRuntimeWithSelection(
-	sessions CurrentRuntimeResolver,
-	modelService models.Service,
-	providersService providers.Service,
-	modelsScope models.RuntimeScopeRef,
-	providerCommandRunner workers.CommandRunner,
-	scriptCommandRunner workers.CommandRunner,
-	allocator workers.PTYAllocator,
-	logger *zap.Logger,
-	verbose bool,
-	factoryRunnerID string,
-	runWorktree string,
-	invocationSkipPermissionsOverride *bool,
-	providerOverride workers.Provider,
-	now func() time.Time,
-	processEnvironment func() []string,
-	currentWorkingDirectory func() (string, error),
-	contentMaterializer work.ContentMaterializer,
-	interpolation factorydefinitions.InvocationInterpolationService,
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
-	factoryDocs workers.FactoryDocsLoader,
-	resolveSymlinks workers.ResolveExecutableSymlinks,
-	executableLocator platformprocess.ExecutableLocator,
-	executableInspector platformfilesystem.PathInspector,
-	executableFiles platformfilesystem.ReadOpener,
-	operatingSystem workers.OperatingSystem,
-	worktreePreparer workers.FactoryWorktreePreparer,
-	agentRunHarness workeragentrun.HarnessAdapter,
-	retryRandom platformrandom.Source,
-	workstationFiles platformfilesystem.ReadFileInspector,
-	temporaryFiles platformfilesystem.TemporaryFileSystem,
-	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
-	providerCommandInjected bool,
-	scriptCommandInjected bool,
-	providersLifecycleOwned bool,
-	providerRegistry workers.ProviderRegistry,
-	providerRegistryRebinder ProviderRegistryRebinder,
-) (workers.RuntimeService, error) {
-	return workersinternal.NewRuntimeWithSelection(
-		sessions,
-		modelService,
-		providersService,
-		modelsScope,
-		providerCommandRunner,
-		scriptCommandRunner,
-		allocator,
-		logger,
-		verbose,
-		factoryRunnerID,
-		runWorktree,
-		invocationSkipPermissionsOverride,
-		providerOverride,
-		now,
-		processEnvironment,
-		currentWorkingDirectory,
-		contentMaterializer,
-		interpolation,
-		executionPolicy,
-		factoryDocs,
-		resolveSymlinks,
-		executableLocator,
-		executableInspector,
-		executableFiles,
-		operatingSystem,
-		worktreePreparer,
-		agentRunHarness,
-		retryRandom,
-		workstationFiles,
-		temporaryFiles,
-		decisionEnvelopes,
-		providerCommandInjected,
-		scriptCommandInjected,
-		providersLifecycleOwned,
-		providerRegistry,
-		providerRegistryRebinder,
-	)
-}
-
-// BuildRuntimeExecutors invokes the concrete Workers runtime implementation.
-func BuildRuntimeExecutors(
-	runtimeService workers.RuntimeService,
-	runtimeConfig factorydefinitions.RuntimeConfigLookup,
-	factoryConfig *factorydefinitions.FactoryConfig,
-	factoryRunnerID string,
-	workflowContext *workers.Context,
-	logger logging.Logger,
-	skipBuiltInRunnerPrerequisiteValidation bool,
-	invocationSkipPermissionsOverride *bool,
-	providerOverride workers.Provider,
-	progressPublisher workers.ProgressPublisher,
-	scriptRecorder workers.ScriptEventRecorder,
-	inferenceRecorder workers.InferenceEventRecorder,
-	modelRecorder workers.ModelEventRecorder,
-	agentRunRecorder workers.AgentRunEventRecorder,
-	now func() time.Time,
-) (map[string]workers.WorkerExecutor, error) {
-	return workersinternal.BuildRuntimeExecutors(
-		runtimeService,
-		runtimeConfig,
-		factoryConfig,
-		factoryRunnerID,
-		workflowContext,
-		logger,
-		skipBuiltInRunnerPrerequisiteValidation,
-		invocationSkipPermissionsOverride,
-		providerOverride,
-		progressPublisher,
-		scriptRecorder,
-		inferenceRecorder,
-		modelRecorder,
-		agentRunRecorder,
-		now,
-	)
-}
 
 // NewMockCommandRunner decorates a command edge with configured mock behavior.
 func NewMockCommandRunner(
@@ -145,71 +17,26 @@ func NewMockCommandRunner(
 	runtimeConfig factorydefinitions.RuntimeDefinitionLookup,
 	next workers.CommandRunner,
 ) workers.CommandRunner {
-	return workersinternal.NewMockCommandRunner(config, runtimeConfig, next)
+	return &runnermockworker.MockWorkerCommandRunner{
+		Config:        config,
+		RuntimeConfig: runtimeConfig,
+		Next:          next,
+	}
 }
 
 // LocalRuntimeHooks returns Workers-owned recording hooks for the Models runtime.
 func LocalRuntimeHooks() workers.LocalRuntimeHooks {
-	return workersinternal.LocalRuntimeHooks()
+	return modelrecording.Hooks()
 }
 
-// NewInvocation constructs the narrow direct-invocation role.
-func NewInvocation(
-	providersService providers.Service,
-	commandRunner workers.CommandRunner,
-	commandClock workers.Clock,
-	allocator workers.PTYAllocator,
-	resolveSymlinks workers.ResolveExecutableSymlinks,
-	executableLocator platformprocess.ExecutableLocator,
-	executableInspector platformfilesystem.PathInspector,
-	executableFiles platformfilesystem.ReadOpener,
-	operatingSystem workers.OperatingSystem,
-	temporaryFileSystems ...platformfilesystem.TemporaryFileSystem,
-) (workers.InvocationExecutor, error) {
-	return workersinternal.NewInvocation(
-		providersService,
-		commandRunner,
-		commandClock,
-		allocator,
-		resolveSymlinks,
-		executableLocator,
-		executableInspector,
-		executableFiles,
-		operatingSystem,
-		temporaryFileSystems...,
-	)
-}
-
-// NewInvocationWithProgress constructs direct invocation with provider progress publishing.
-func NewInvocationWithProgress(
-	providersService providers.Service,
-	commandRunner workers.CommandRunner,
-	commandClock workers.Clock,
-	allocator workers.PTYAllocator,
-	resolveSymlinks workers.ResolveExecutableSymlinks,
-	executableLocator platformprocess.ExecutableLocator,
-	executableInspector platformfilesystem.PathInspector,
-	executableFiles platformfilesystem.ReadOpener,
-	operatingSystem workers.OperatingSystem,
-	progressPublisher workers.ProgressPublisher,
-	temporaryFileSystems ...platformfilesystem.TemporaryFileSystem,
-) (workers.InvocationExecutor, error) {
-	return workersinternal.NewInvocationWithProgress(
-		providersService,
-		commandRunner,
-		commandClock,
-		allocator,
-		resolveSymlinks,
-		executableLocator,
-		executableInspector,
-		executableFiles,
-		operatingSystem,
-		progressPublisher,
-		temporaryFileSystems...,
-	)
-}
-
-// NewConductorInvocationWithProgress routes external integrations through the conductor.
+// NewConductorInvocationWithProgress routes external integrations through the
+// conductor. It is the only direct-invocation constructor with a remaining
+// production caller (pkg/wire/session_runtime_providers.go composes it for
+// standalone Factory Session execution); its zero-caller siblings
+// NewInvocation and NewInvocationWithProgress were retired in P6-C.
+//
+// TODO(P6-C): retire this bridge once that caller passes detached values to
+// workers.Service.Execute, which is the named successor boundary.
 func NewConductorInvocationWithProgress(
 	providersService providers.Service,
 	commandRunner workers.CommandRunner,
@@ -250,7 +77,7 @@ func NewProviderFromCommandRunner(
 	executableFiles platformfilesystem.ReadOpener,
 	operatingSystem workers.OperatingSystem,
 	temporaryFileSystems ...platformfilesystem.TemporaryFileSystem,
-) (workers.Provider, error) {
+) (providers.Service, error) {
 	return workersinternal.NewProviderFromService(providersService)
 }
 

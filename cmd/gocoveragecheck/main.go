@@ -7,11 +7,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -26,10 +28,12 @@ var (
 )
 
 type commandInvocation struct {
-	name string
-	args []string
-	env  []string
-	dir  string
+	name         string
+	args         []string
+	env          []string
+	dir          string
+	stdoutWriter io.Writer
+	stderrWriter io.Writer
 }
 
 type commandRunnerFunc func(commandInvocation) (string, string, error)
@@ -38,8 +42,13 @@ const modulePath = "github.com/portpowered/infinite-you"
 const defaultPackageCoverageBaselinePath = "docs/internal/baselines/go-coverage-package-baseline.txt"
 const defaultFunctionalPackageCoverageBaselinePath = "docs/internal/baselines/go-functional-coverage-package-baseline.txt"
 const defaultPackageCoverageMin = 80.0
+const defaultPackageFloorEpsilon = 0.25
 const defaultCoverageJobs = 2
-const windowsCoveragePackageArgumentLimit = 16_000
+
+const (
+	coverageFloorPolicyBlocking = "blocking"
+	coverageFloorPolicyAdvisory = "advisory"
+)
 
 var (
 	defaultCoveragePatterns                   = []string{"./pkg/..."}
@@ -56,8 +65,16 @@ var (
 		}
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
+		if invocation.stdoutWriter == nil {
+			cmd.Stdout = &stdout
+		} else {
+			cmd.Stdout = io.MultiWriter(&stdout, invocation.stdoutWriter)
+		}
+		if invocation.stderrWriter == nil {
+			cmd.Stderr = &stderr
+		} else {
+			cmd.Stderr = io.MultiWriter(&stderr, invocation.stderrWriter)
+		}
 		err := cmd.Run()
 		return stdout.String(), stderr.String(), err
 	}
@@ -67,32 +84,49 @@ var (
 )
 
 type config struct {
-	covermode        string
-	coverpkg         string
-	jobs             int
-	generateManifest string
-	updateManifest   string
-	packageManifest  string
-	jsonOutput       string
-	min              float64
-	packageBaseline  string
-	packageMin       float64
-	packages         string
-	profile          string
-	short            bool
-	suite            string
-	timeout          time.Duration
-	totalOnly        bool
+	covermode            string
+	coverpkg             string
+	functionalQuarantine string
+	jobs                 int
+	generateManifest     string
+	updateManifest       string
+	updateProfiles       string
+	packageManifest      string
+	varianceProfiles     string
+	varianceOutput       string
+	varianceCommit       string
+	varianceJobs         int
+	varianceAnnotations  string
+	jsonOutput           string
+	timingOutput         string
+	min                  float64
+	packageBaseline      string
+	packageMin           float64
+	packageFloorEpsilon  float64
+	packageFloorPolicy   string
+	packages             string
+	profile              string
+	short                bool
+	suite                string
+	stream               bool
+	timeout              time.Duration
+	totalOnly            bool
+	phaseTiming          *coveragePhaseTimer
 }
 
 type coverageResult struct {
 	actual                       float64
 	insufficientCoveragePackages []packageCoverageSummary
+	coverageBlocks               map[string]coverageBlock
 	packageTotals                map[string]packageCoverageTotals
 	packageSummaries             []packageCoverageSummary
 	packageGates                 map[string]packageCoverageGate
 	zeroCoveragePackages         []string
 	packageMinimumFailures       []string
+	packageMinimumWarnings       []string
+	manifestCompletenessWarnings []string
+	unmeasuredPackageDiagnostics []string
+	packageFloorPolicy           string
 }
 
 type packageCoverageTotals struct {
@@ -103,14 +137,6 @@ type packageCoverageTotals struct {
 type packageCoverageSummary struct {
 	importPath string
 	coverage   float64
-}
-
-type coverageBlock struct {
-	canonicalPath  string
-	importPath     string
-	rangeSpec      string
-	statementCount int
-	executionCount int
 }
 
 func main() {
@@ -124,41 +150,61 @@ func execute(cfg config) error {
 	if err := validateConfig(cfg); err != nil {
 		return err
 	}
+	if cfg.varianceProfiles != "" || cfg.varianceOutput != "" {
+		return executeVarianceReport(cfg)
+	}
+	if strings.TrimSpace(cfg.updateProfiles) != "" {
+		return executeSampledManifestUpdate(cfg)
+	}
+	if cfg.packageFloorPolicyIsAdvisory() {
+		writeAdvisoryFloorPolicyBanner()
+	}
+	if cfg.phaseTiming == nil && unitCoveragePhaseTimingEnabled(cfg) {
+		cfg.phaseTiming = newCoveragePhaseTimer(stdoutWriter)
+		defer cfg.phaseTiming.emit()
+	}
 	result, err := run(cfg)
 	if err != nil {
+		writeCoverageTestFailureWarning(err)
+		var validationErr *coverageManifestValidationError
+		if errors.As(err, &validationErr) {
+			// A malformed manifest aborts before the coverage-summary JSON is
+			// written, so this path keeps the complete per-package listing: it
+			// is the only surviving copy of the measurement.
+			writePackageCoverageSummaries(result.packageSummaries)
+		}
 		return err
 	}
+	result.packageFloorPolicy = cfg.packageFloorPolicyValue()
 
 	var failures []string
 	if result.actual < cfg.min {
 		failures = append(failures, fmt.Sprintf("go coverage %.1f%% is below minimum %.1f%%", result.actual, cfg.min))
 	}
 	if len(result.insufficientCoveragePackages) > 0 {
-		failures = append(failures, formatInsufficientCoverageFailure(result.insufficientCoveragePackages, cfg.packageCoverageMin()))
+		insufficientFailure := formatInsufficientCoverageFailure(result.insufficientCoveragePackages, cfg.packageCoverageMin())
+		if cfg.packageFloorPolicyIsAdvisory() {
+			result.packageMinimumWarnings = append(result.packageMinimumWarnings, insufficientFailure)
+		} else {
+			failures = append(failures, insufficientFailure)
+		}
 	}
 	failures = append(failures, result.packageMinimumFailures...)
 
-	for _, summary := range result.packageSummaries {
-		fmt.Fprintf(stdoutWriter, "%s\tcoverage: %.1f%% of statements\n", summary.importPath, summary.coverage)
-	}
+	writeCoverageLaneReport(cfg, result, failures)
 	if cfg.generateManifest != "" {
 		if err := createCoverageManifest(cfg.generateManifest, cfg.suite, result.packageTotals, packageImportPaths(result.packageSummaries)); err != nil {
+			cfg.finishCoveragePhase(coveragePhaseManifest, coveragePhaseStatusError)
 			return err
 		}
 		fmt.Fprintf(stdoutWriter, "Created %s coverage manifest at %s.\n", cfg.suite, cfg.generateManifest)
 	}
-	if cfg.updateManifest != "" {
-		updates, err := updateCoverageManifestFile(cfg.updateManifest, cfg.suite, result.packageTotals, packageImportPaths(result.packageSummaries))
-		for _, update := range updates {
-			fmt.Fprintln(stdoutWriter, update.String())
-		}
-		if err != nil {
-			return err
-		}
-	}
 	if err := writeCoverageSummaryJSON(cfg.jsonOutput, result); err != nil {
+		cfg.finishCoveragePhase(coveragePhaseManifest, coveragePhaseStatusError)
 		return err
 	}
+	writeCoverageDiagnostics(result)
+	cfg.finishCoveragePhase(coveragePhaseManifest, coveragePhaseStatusComplete)
 
 	if len(failures) > 0 {
 		return errors.New(strings.Join(failures, "\n"))
@@ -171,18 +217,29 @@ func parseConfig() config {
 	var cfg config
 	flag.StringVar(&cfg.covermode, "covermode", "count", "go test -covermode value")
 	flag.StringVar(&cfg.coverpkg, "coverpkg", "", "comma-separated import paths to measure; defaults to backend-owned packages")
-	flag.IntVar(&cfg.jobs, "jobs", 0, "number of isolated coverage shards; defaults to 2")
+	flag.StringVar(&cfg.functionalQuarantine, "functional-quarantine", "", "strict functional quarantine JSON manifest; discovers and subtracts its package/test selectors")
+	flag.IntVar(&cfg.jobs, "jobs", 0, "maximum concurrent go test packages; defaults to runtime CPU count for non-Windows unit coverage, 1 for Windows unit coverage, and 2 for functional coverage")
 	flag.StringVar(&cfg.generateManifest, "generate-manifest", "", "create a deterministic package-minimum manifest from this lane's coverage profile")
-	flag.StringVar(&cfg.updateManifest, "update-manifest", "", "monotonically add or raise floors in an existing package-minimum manifest")
+	flag.StringVar(&cfg.updateManifest, "update-manifest", "", "update an existing package-minimum manifest from a complete compatible profile sample set")
+	flag.StringVar(&cfg.updateProfiles, "update-profiles", "", "comma-separated complete coverage profiles for -update-manifest; requires at least five compatible profiles")
 	flag.StringVar(&cfg.packageManifest, "package-manifest", "", "enforce the active lane's checked-in package-minimum manifest")
+	flag.StringVar(&cfg.varianceProfiles, "variance-profiles", "", "comma-separated functional coverage profiles to aggregate into a variance report")
+	flag.StringVar(&cfg.varianceOutput, "variance-output", "", "write a deterministic functional coverage variance report to this path")
+	flag.StringVar(&cfg.varianceCommit, "variance-commit", "", "full unchanged commit SHA named by a functional coverage variance report")
+	flag.IntVar(&cfg.varianceJobs, "variance-jobs", defaultCoverageJobs, "package-concurrency setting used to capture the profiles named by a variance report")
+	flag.StringVar(&cfg.varianceAnnotations, "variance-annotations", "", "optional validated JSON annotations to append to a variance report")
 	flag.StringVar(&cfg.jsonOutput, "json-output", "", "optional path for a deterministic machine-readable coverage summary JSON document")
+	flag.StringVar(&cfg.timingOutput, "timing-output", "", "optional path for a deterministic machine-readable functional package timing summary JSON document, captured from the same go test run")
 	flag.Float64Var(&cfg.min, "min", 0, "minimum total statement coverage percentage")
 	flag.StringVar(&cfg.packageBaseline, "package-baseline", "", "newline-delimited list of backend packages temporarily exempt from the per-package minimum coverage gate; defaults by suite")
 	flag.Float64Var(&cfg.packageMin, "package-min", defaultPackageCoverageMin, "minimum statement coverage required for each non-baselined backend package")
+	flag.Float64Var(&cfg.packageFloorEpsilon, "package-floor-epsilon", defaultPackageFloorEpsilon, "allowed manifest package-floor drift in percentage points; only applies with -package-manifest")
+	flag.StringVar(&cfg.packageFloorPolicy, "package-floor-policy", coverageFloorPolicyBlocking, "package-floor enforcement policy: blocking or advisory")
 	flag.StringVar(&cfg.packages, "packages", "", "space-separated go test package patterns; overrides -suite package discovery")
 	flag.StringVar(&cfg.profile, "profile", "", "coverage profile output path; defaults to a temp file")
 	flag.BoolVar(&cfg.short, "short", true, "run with go test -short")
 	flag.StringVar(&cfg.suite, "suite", "unit", "test suite to execute when -packages is empty: unit or functional")
+	flag.BoolVar(&cfg.stream, "stream", false, "stream coverage-test child stdout and stderr to their output sinks while running")
 	flag.DurationVar(&cfg.timeout, "timeout", 5*time.Minute, "go test timeout")
 	flag.BoolVar(&cfg.totalOnly, "total-only", false, "disable package-local coverage gates while retaining per-package reporting")
 	flag.Parse()
@@ -190,6 +247,9 @@ func parseConfig() config {
 }
 
 func validateConfig(cfg config) error {
+	if policy := cfg.packageFloorPolicyValue(); policy != coverageFloorPolicyBlocking && policy != coverageFloorPolicyAdvisory {
+		return fmt.Errorf("configure go coverage: -package-floor-policy must be %q or %q (got %q)", coverageFloorPolicyBlocking, coverageFloorPolicyAdvisory, cfg.packageFloorPolicy)
+	}
 	manifestOperations := 0
 	for _, value := range []string{cfg.generateManifest, cfg.updateManifest, cfg.packageManifest} {
 		if strings.TrimSpace(value) != "" {
@@ -199,7 +259,55 @@ func validateConfig(cfg config) error {
 	if manifestOperations > 1 {
 		return errors.New("configure go coverage: choose only one of -generate-manifest, -update-manifest, or -package-manifest")
 	}
+	if cfg.packageFloorEpsilon < 0 || math.IsNaN(cfg.packageFloorEpsilon) || math.IsInf(cfg.packageFloorEpsilon, 0) {
+		return fmt.Errorf("configure go coverage: -package-floor-epsilon must be a finite non-negative percentage-point value (got %v); set it to 0 or greater", cfg.packageFloorEpsilon)
+	}
+	if strings.TrimSpace(cfg.updateManifest) != "" && strings.TrimSpace(cfg.updateProfiles) == "" {
+		return errors.New("configure go coverage manifest update: -update-manifest requires -update-profiles with at least five compatible profiles")
+	}
+	if strings.TrimSpace(cfg.functionalQuarantine) != "" && cfg.suite != "functional" {
+		return fmt.Errorf("configure functional quarantine: -functional-quarantine requires -suite functional (got %q)", cfg.suite)
+	}
+	if strings.TrimSpace(cfg.updateProfiles) != "" && strings.TrimSpace(cfg.updateManifest) == "" {
+		return errors.New("configure go coverage manifest update: -update-profiles requires -update-manifest")
+	}
+	varianceRequested := strings.TrimSpace(cfg.varianceProfiles) != "" || strings.TrimSpace(cfg.varianceOutput) != ""
+	if strings.TrimSpace(cfg.varianceAnnotations) != "" && !varianceRequested {
+		return errors.New("configure coverage variance: -variance-annotations requires -variance-profiles and -variance-output")
+	}
+	if varianceRequested {
+		if strings.TrimSpace(cfg.varianceProfiles) == "" || strings.TrimSpace(cfg.varianceOutput) == "" {
+			return errors.New("configure coverage variance: -variance-profiles and -variance-output must be provided together")
+		}
+		if cfg.suite != "functional" {
+			return fmt.Errorf("configure coverage variance: -suite must be functional (got %q)", cfg.suite)
+		}
+		if strings.TrimSpace(cfg.generateManifest) != "" || strings.TrimSpace(cfg.updateManifest) != "" || strings.TrimSpace(cfg.updateProfiles) != "" {
+			return errors.New("configure coverage variance: do not combine variance reporting with manifest generation or update")
+		}
+		if strings.TrimSpace(cfg.varianceCommit) == "" {
+			return errors.New("configure coverage variance: -variance-commit must name the unchanged commit used for every profile")
+		}
+	}
 	return nil
+}
+
+func (cfg config) packageFloorPolicyValue() string {
+	policy := strings.ToLower(strings.TrimSpace(cfg.packageFloorPolicy))
+	if policy == "" {
+		return coverageFloorPolicyBlocking
+	}
+	return policy
+}
+
+func (cfg config) packageFloorPolicyIsAdvisory() bool {
+	return cfg.packageFloorPolicyValue() == coverageFloorPolicyAdvisory
+}
+
+func writeAdvisoryFloorPolicyBanner() {
+	fmt.Fprintln(stderrWriter, "!!! COVERAGE FLOOR POLICY: advisory !!!")
+	fmt.Fprintln(stderrWriter, "Package floors and missing-manifest findings are report-only during the test-corpus rebuild.")
+	fmt.Fprintln(stderrWriter, "Set -package-floor-policy=blocking to restore blocking enforcement.")
 }
 
 func (cfg config) packageCoverageBaselinePath() string {
@@ -220,103 +328,144 @@ func (cfg config) packageCoverageMin() float64 {
 }
 
 func run(cfg config) (coverageResult, error) {
-	profilePath := cfg.profile
-	cleanup := func() error { return nil }
-	if profilePath == "" {
-		file, err := os.CreateTemp("", "go-coverage-*.out")
-		if err != nil {
-			return coverageResult{}, fmt.Errorf("create temp coverage profile: %w", err)
-		}
-		profilePath = file.Name()
-		if err := file.Close(); err != nil {
-			return coverageResult{}, fmt.Errorf("close temp coverage profile: %w", err)
-		}
-		cleanup = func() error {
-			return os.Remove(profilePath)
-		}
-	}
-	defer func() {
-		_ = cleanup()
-	}()
+	return runForOS(cfg, runtime.GOOS)
+}
 
-	coverPackages, testPackages, err := resolveCoverageLane(cfg)
+func runForOS(cfg config, targetOS string) (result coverageResult, runErr error) {
+	return runForOSWithCPU(cfg, targetOS, runtime.NumCPU())
+}
+
+func runForOSWithCPU(cfg config, targetOS string, logicalCPUs int) (result coverageResult, runErr error) {
+	profilePath, cleanup, err := prepareCoverageProfile(cfg.profile)
 	if err != nil {
 		return coverageResult{}, err
 	}
+	defer func() {
+		if cleanupErr := cleanup(); cleanupErr != nil {
+			runErr = errors.Join(runErr, fmt.Errorf("remove temporary coverage profile: %w", cleanupErr))
+		}
+	}()
+	return runCoverageProfile(cfg, targetOS, logicalCPUs, profilePath)
+}
+
+func runCoverageProfile(cfg config, targetOS string, logicalCPUs int, profilePath string) (result coverageResult, runErr error) {
 	repoRoot, err := repoRootDir()
 	if err != nil {
 		return coverageResult{}, err
 	}
-	mergedTestArgs := []string{
-		"test",
-		fmt.Sprintf("-coverpkg=%s", strings.Join(coverPackages, ",")),
-		"-p=1",
+	selectorVerification := startFunctionalQuarantineSelectorVerification(cfg, targetOS, logicalCPUs, repoRoot)
+	if selectorVerification != nil {
+		selectorVerification.ratchet = startFunctionalQuarantineRatchetVerification(
+			selectorVerification.manifest,
+			cfg.timeout,
+			cfg.short,
+			repoRoot,
+		)
+		defer func() {
+			runErr = errors.Join(runErr, selectorVerification.waitAll())
+		}()
 	}
-	if cfg.short {
-		mergedTestArgs = append(mergedTestArgs, "-short")
-	}
-	mergedTestArgs = append(mergedTestArgs,
-		fmt.Sprintf("-covermode=%s", cfg.covermode),
-		fmt.Sprintf("-timeout=%s", cfg.timeout),
-	)
 
-	if err := runGoTestCoverageShards(mergedTestArgs, testPackages, cfg.testJobs(), profilePath, repoRoot, coverPackages); err != nil {
+	var coverPackages []string
+	var testPackages []string
+	var packageDiscovery coveragePackageDiscovery
+	var functionalMetadata []functionalGoListPackage
+	var functionalDiscoveryStarted time.Time
+	var canonicalBlocks map[string]coverageBlock
+	if err := cfg.measureCoveragePhase(coveragePhaseList, func() error {
+		var err error
+		if strings.TrimSpace(cfg.functionalQuarantine) != "" {
+			coverPackages, err = resolveCoverPackages(cfg)
+			if err != nil {
+				return err
+			}
+			testPackages, functionalMetadata, functionalDiscoveryStarted, err = resolveCoverageTestPackages(cfg, repoRoot, selectorVerification)
+			return err
+		}
+		packageDiscovery, coverPackages, testPackages, err = resolveCoverageLaneWithDiscovery(cfg)
+		return err
+	}); err != nil {
 		return coverageResult{}, err
 	}
 
-	coverStdout, coverStderr, err := runCommand(commandInvocation{
-		name: "go",
-		args: []string{"tool", "cover", "-func", profilePath},
-		env:  os.Environ(),
+	var prepared preparedCoverageRun
+	if err := cfg.measureCoveragePhase(coveragePhasePlan, func() error {
+		var err error
+		prepared, err = prepareCoverageRunWithFunctionalMetadata(
+			cfg,
+			targetOS,
+			logicalCPUs,
+			profilePath,
+			coverPackages,
+			testPackages,
+			packageDiscovery.allPackages,
+			functionalMetadata,
+			functionalDiscoveryStarted,
+			selectorVerification,
+		)
+		return err
+	}); err != nil {
+		return coverageResult{}, err
+	}
+
+	runErr = cfg.measureCoveragePhase(coveragePhaseTest, func() error {
+		return executeCoverageInvocationPlan(
+			cfg,
+			prepared.plan,
+			prepared.testPackages,
+			profilePath,
+			prepared.repoRoot,
+			coverPackages,
+			"run go test coverage lane",
+			prepared.expectedFunctionalInventory,
+		)
 	})
-	// Print for utility
-	fmt.Println(formatCommandLine("go", "tool", "cover", "-func", profilePath))
-
-	if err != nil {
-		detail := strings.TrimSpace(coverStderr)
-		if detail == "" {
-			detail = strings.TrimSpace(coverStdout)
-		}
-		if detail != "" {
-			return coverageResult{}, fmt.Errorf("summarize go coverage: %w\n%s", err, detail)
-		}
-		return coverageResult{}, fmt.Errorf("summarize go coverage: %w", err)
+	if runErr != nil {
+		return coverageResult{}, runErr
 	}
-
-	legacyPackageGateEnabled := !cfg.totalOnly && cfg.generateManifest == "" && cfg.updateManifest == "" && strings.TrimSpace(cfg.packageManifest) == ""
-	baselinePackages := map[string]struct{}{}
-	if legacyPackageGateEnabled {
-		baselinePackages, err = packageCoverageBaselinePackages(cfg, repoRoot)
-		if err != nil {
-			return coverageResult{}, err
-		}
-	}
-
-	result, totalLine, err := evaluateCoverage(coverStdout, "", profilePath, repoRoot, coverPackages, cfg.packageCoverageMin(), baselinePackages, legacyPackageGateEnabled)
-	if err != nil {
+	if err := cfg.measureCoveragePhase(coveragePhaseCanonicalize, func() error {
+		var err error
+		canonicalBlocks, err = canonicalizeCoverageProfileWithBlocks(profilePath, prepared.repoRoot, coverPackages)
+		return err
+	}); err != nil {
 		return coverageResult{}, err
 	}
-	if !cfg.totalOnly && strings.TrimSpace(cfg.packageManifest) != "" {
-		manifestPath := cfg.packageManifest
-		if !filepath.IsAbs(manifestPath) {
-			manifestPath = filepath.Join(repoRoot, manifestPath)
-		}
-		manifest, err := readCoverageManifestFile(manifestPath, cfg.suite, packageImportPaths(result.packageSummaries))
-		if err != nil {
-			return coverageResult{}, err
-		}
-		result.packageMinimumFailures = checkCoverageManifest(manifest, result.packageTotals, cfg.packageManifest)
-		result.packageGates = packageGatesFromManifest(manifest)
-	} else if legacyPackageGateEnabled {
-		result.packageGates = packageGatesFromLegacyMin(result.packageSummaries, cfg.packageCoverageMin(), baselinePackages)
+
+	var evaluated evaluatedCoverageRun
+	if err := cfg.measureCoveragePhase(coveragePhaseEvaluate, func() error {
+		var err error
+		evaluated, err = evaluateCoverageRun(cfg, profilePath, prepared.repoRoot, coverPackages, canonicalBlocks)
+		return err
+	}); err != nil {
+		return coverageResult{}, err
 	}
-	fmt.Fprintln(stdoutWriter, totalLine)
+
+	cfg.beginCoveragePhase(coveragePhaseManifest)
+	result, err = applyCoverageManifestGate(cfg, evaluated.result, prepared.repoRoot, evaluated.baselinePackages)
+	if err != nil {
+		cfg.finishCoveragePhase(coveragePhaseManifest, coveragePhaseStatusError)
+		return result, err
+	}
 	return result, nil
 }
 
-func (cfg config) testJobs() int {
+func (cfg config) testJobs(targetOS string, logicalCPUs int) int {
 	if cfg.jobs > 0 {
 		return cfg.jobs
+	}
+	if targetOS == "windows" && (cfg.suite == "" || cfg.suite == "unit") {
+		// Full unit coverage instrumentation exceeds the Windows host's stable
+		// memory boundary when go test builds two instrumented packages at once.
+		return 1
+	}
+	if cfg.suite == "" || cfg.suite == "unit" {
+		// Unit coverage is one instrumented go test, so non-Windows hosts can
+		// use their full logical CPU budget without changing functional coverage.
+		if logicalCPUs > 0 {
+			return logicalCPUs
+		}
+		// Keep the historical shared default if the runtime cannot provide a
+		// usable count. runtime.NumCPU normally guarantees a positive value.
 	}
 	return defaultCoverageJobs
 }
@@ -329,58 +478,8 @@ func packageCoverageBaselinePackages(cfg config, repoRoot string) (map[string]st
 	return readPackageCoverageBaseline(baselinePath)
 }
 
-func runGoTestCoverageLane(args []string, failurePrefix string) (string, string, error) {
-	stdout, stderr, err := runCommand(commandInvocation{
-		name: "go",
-		args: args,
-		env:  os.Environ(),
-	})
-	if err != nil {
-		detail := mergeGoTestFailureDetail(stderr, stdout)
-		if detail != "" {
-			return "", "", fmt.Errorf("%s: %w\n%s", failurePrefix, err, detail)
-		}
-		return "", "", fmt.Errorf("%s: %w", failurePrefix, err)
-	}
-	return stdout, stderr, nil
-}
-
-func runCommand(invocation commandInvocation) (string, string, error) {
-	return commandRunner(invocation)
-}
-
-func formatCommandLine(name string, args ...string) string {
-	parts := make([]string, 0, len(args)+1)
-	parts = append(parts, name)
-	parts = append(parts, args...)
-	return strings.Join(parts, " ")
-}
-
-func mergeGoTestFailureDetail(stderr string, stdout string) string {
-	stderr = strings.TrimSpace(compactCoverageOutput(stderr))
-	stdout = strings.TrimSpace(compactCoverageOutput(stdout))
-	switch {
-	case stdout == "":
-		return stderr
-	case stderr == "":
-		return stdout
-	case strings.Contains(stdout, "\nFAIL") || strings.Contains(stdout, "--- FAIL:"):
-		return stdout + "\n" + stderr
-	default:
-		return stderr + "\n" + stdout
-	}
-}
-
-func compactCoverageOutput(output string) string {
-	return coveragePackageListPattern.ReplaceAllString(output, "$1")
-}
-
 func resolveCoverageLane(cfg config) ([]string, []string, error) {
-	coverPackages, err := resolveCoverPackages(cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	testPackages, err := resolveTestPackages(cfg)
+	_, coverPackages, testPackages, err := resolveCoverageLaneWithDiscovery(cfg)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -391,7 +490,11 @@ func resolveCoverPackages(cfg config) ([]string, error) {
 	if strings.TrimSpace(cfg.coverpkg) != "" {
 		return splitList(cfg.coverpkg, ",", false), nil
 	}
-	return listGoPackages(defaultCoveragePatterns, isBackendCoveragePackage, true)
+	listings, err := listGoPackageListings(defaultCoveragePatterns)
+	if err != nil {
+		return nil, err
+	}
+	return filterCoveragePackageListings(listings, isBackendCoveragePackage, true)
 }
 
 func resolveTestPackages(cfg config) ([]string, error) {
@@ -399,9 +502,9 @@ func resolveTestPackages(cfg config) ([]string, error) {
 		return splitList(cfg.packages, " ", true), nil
 	}
 	switch cfg.suite {
-	case "", "unit":
+	case "", unitCoverageSuite:
 		return listGoPackages(unitTestPatterns, isBackendCoveragePackage, false)
-	case "functional":
+	case functionalCoverageSuite:
 		return listGoPackages(functionalTestPatterns, isFunctionalTestPackage, false)
 	default:
 		return nil, fmt.Errorf("resolve go coverage lane: unsupported suite %q", cfg.suite)
@@ -409,49 +512,34 @@ func resolveTestPackages(cfg config) ([]string, error) {
 }
 
 func listGoPackages(patterns []string, include func(string) bool, requireNonTestGoFiles bool) ([]string, error) {
-	args := append([]string{"list", "-f", "{{.ImportPath}}	{{len .GoFiles}}"}, patterns...)
-	rootDir, err := repoRootDir()
+	listings, err := listGoPackageListings(patterns)
 	if err != nil {
 		return nil, err
 	}
-	stdout, stderr, err := runCommand(commandInvocation{
-		name: "go",
-		args: args,
-		env:  os.Environ(),
-		dir:  rootDir,
-	})
-	if err != nil {
-		detail := strings.TrimSpace(stderr)
-		if detail == "" {
-			detail = strings.TrimSpace(stdout)
-		}
-		if detail != "" {
-			return nil, fmt.Errorf("list go packages: %w\n%s", err, detail)
-		}
-		return nil, fmt.Errorf("list go packages: %w", err)
-	}
+	return filterCoveragePackageListings(listings, include, requireNonTestGoFiles)
+}
 
-	seen := make(map[string]struct{})
-	var packages []string
-	for _, line := range strings.Split(stdout, "\n") {
-		importPath, goFiles, hasGoFiles := parseGoListPackageLine(line)
-		if importPath == "" || !include(importPath) {
-			continue
-		}
-		if requireNonTestGoFiles && hasGoFiles && goFiles == 0 {
-			continue
-		}
-		if _, ok := seen[importPath]; ok {
-			continue
-		}
-		seen[importPath] = struct{}{}
-		packages = append(packages, importPath)
+func compactUnitTestPackageArgs(cfg config, testPackages []string, targetOS string, packageUniverse ...[]string) []string {
+	// The compact patterns are safe only for the default unit package universe:
+	// custom package lists and functional packages retain their existing args.
+	if targetOS != "windows" || (cfg.suite != "" && cfg.suite != "unit") || strings.TrimSpace(cfg.packages) != "" {
+		return nil
 	}
-	slices.Sort(packages)
-	if len(packages) == 0 {
-		return nil, errors.New("resolve go coverage lane: no packages matched")
+	var allPackages []string
+	if len(packageUniverse) > 0 && len(packageUniverse[0]) > 0 {
+		allPackages = append([]string(nil), packageUniverse[0]...)
+	} else {
+		var err error
+		allPackages, err = listGoPackages([]string{"./pkg/..."}, func(string) bool { return true }, false)
+		if err != nil {
+			return nil
+		}
 	}
-	return packages, nil
+	patterns, err := compactGoPackagePatterns(allPackages, testPackages, modulePath+"/pkg")
+	if err != nil {
+		return nil
+	}
+	return patterns
 }
 
 func parseGoListPackageLine(line string) (string, int, bool) {
@@ -515,162 +603,6 @@ func splitList(value string, separator string, filterEmpty bool) []string {
 		items = append(items, trimmed)
 	}
 	return items
-}
-
-func parseTotalCoverage(report string) (float64, string, error) {
-	matches := totalCoveragePattern.FindStringSubmatch(report)
-	if len(matches) != 2 {
-		return 0, "", errors.New("parse go coverage total: missing total statements line")
-	}
-	value, err := strconv.ParseFloat(matches[1], 64)
-	if err != nil {
-		return 0, "", fmt.Errorf("parse go coverage percentage %q: %w", matches[1], err)
-	}
-	for _, line := range strings.Split(report, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "total:") {
-			return value, fmt.Sprintf("total: (statements) %.1f%%", value), nil
-		}
-	}
-	return value, fmt.Sprintf("total: (statements) %.1f%%", value), nil
-}
-
-func evaluateCoverage(_ string, _ string, profilePath string, repoRoot string, coverPackages []string, minCoverage float64, baselinePackages map[string]struct{}, packageGate ...bool) (coverageResult, string, error) {
-	packageTotals, err := readCoverageProfileTotals(profilePath, repoRoot)
-	if err != nil {
-		return coverageResult{}, "", err
-	}
-	actual, totalLine := calculateTotalCoverage(packageTotals, coverPackages)
-	packageGateEnabled := len(packageGate) == 0 || packageGate[0]
-	packageSummaries := summarizePackageCoverageFromTotals(packageTotals, coverPackages)
-	var insufficientCoveragePackages []packageCoverageSummary
-	if packageGateEnabled {
-		insufficientCoveragePackages = findInsufficientCoveragePackages(packageSummaries, minCoverage, baselinePackages)
-	}
-	zeroCoveragePackages := findZeroCoveragePackagesFromSummaries(packageSummaries, baselinePackages)
-
-	return coverageResult{
-		actual:                       actual,
-		insufficientCoveragePackages: insufficientCoveragePackages,
-		packageTotals:                packageTotals,
-		packageSummaries:             packageSummaries,
-		zeroCoveragePackages:         zeroCoveragePackages,
-	}, totalLine, nil
-}
-
-func readPackageCoverageBaseline(path string) (map[string]struct{}, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read go coverage package baseline: %w", err)
-	}
-
-	packages := make(map[string]struct{})
-	for _, rawLine := range strings.Split(string(data), "\n") {
-		line := strings.TrimSpace(rawLine)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		packages[line] = struct{}{}
-	}
-	return packages, nil
-}
-
-func readCoverageProfileTotals(profilePath string, repoRoot string) (map[string]packageCoverageTotals, error) {
-	profile, err := os.Open(profilePath)
-	if err != nil {
-		return nil, fmt.Errorf("read go coverage profile: %w", err)
-	}
-	defer profile.Close()
-
-	_, coverageBlocks, err := scanCoverageProfile(profile, repoRoot)
-	if err != nil {
-		return nil, err
-	}
-	return coverageTotals(coverageBlocks), nil
-}
-
-func calculateTotalCoverage(packageTotals map[string]packageCoverageTotals, coverPackages []string) (float64, string) {
-	totalCovered, totalStatements := summedCoverageTotals(packageTotals, coverPackages)
-	if totalStatements == 0 {
-		return 0, "total: (statements) 0.0%"
-	}
-	actual := float64(totalCovered) * 100 / float64(totalStatements)
-	return actual, fmt.Sprintf("total: (statements) %.1f%%", actual)
-}
-
-func summedCoverageTotals(packageTotals map[string]packageCoverageTotals, coverPackages []string) (int, int) {
-	selectedPackages := selectedCoveragePackages(coverPackages)
-	totalCovered := 0
-	totalStatements := 0
-	for _, coverPackage := range selectedPackages {
-		totals := packageTotals[coverPackage]
-		totalCovered += totals.coveredStatements
-		totalStatements += totals.totalStatements
-	}
-	return totalCovered, totalStatements
-}
-
-func selectedCoveragePackages(coverPackages []string) []string {
-	seen := make(map[string]struct{}, len(coverPackages))
-	selected := make([]string, 0, len(coverPackages))
-	for _, coverPackage := range coverPackages {
-		if !isBackendCoveragePackage(coverPackage) {
-			continue
-		}
-		if _, ok := seen[coverPackage]; ok {
-			continue
-		}
-		seen[coverPackage] = struct{}{}
-		selected = append(selected, coverPackage)
-	}
-	slices.Sort(selected)
-	return selected
-}
-
-func summarizePackageCoverageFromTotals(packageTotals map[string]packageCoverageTotals, coverPackages []string) []packageCoverageSummary {
-	selectedPackages := selectedCoveragePackages(coverPackages)
-	summaries := make([]packageCoverageSummary, 0, len(selectedPackages))
-	for _, coverPackage := range selectedPackages {
-		totals := packageTotals[coverPackage]
-		coverage := 0.0
-		if totals.totalStatements > 0 {
-			coverage = float64(totals.coveredStatements) * 100 / float64(totals.totalStatements)
-		}
-		summaries = append(summaries, packageCoverageSummary{
-			importPath: coverPackage,
-			coverage:   coverage,
-		})
-	}
-	return summaries
-}
-
-func findInsufficientCoveragePackages(summaries []packageCoverageSummary, minCoverage float64, baselinePackages map[string]struct{}) []packageCoverageSummary {
-	packages := make([]packageCoverageSummary, 0)
-	for _, summary := range summaries {
-		if summary.coverage >= minCoverage {
-			continue
-		}
-		if _, ok := baselinePackages[summary.importPath]; ok {
-			continue
-		}
-		packages = append(packages, summary)
-	}
-	return packages
-}
-
-func findZeroCoveragePackagesFromSummaries(summaries []packageCoverageSummary, baselinePackages map[string]struct{}) []string {
-	zeroCoveragePackages := make([]string, 0, len(summaries))
-	for _, summary := range summaries {
-		if summary.coverage != 0 {
-			continue
-		}
-		if _, ok := baselinePackages[summary.importPath]; ok {
-			continue
-		}
-		zeroCoveragePackages = append(zeroCoveragePackages, summary.importPath)
-	}
-	slices.Sort(zeroCoveragePackages)
-	return zeroCoveragePackages
 }
 
 func parseCoverageProfile(profileData []byte, repoRoot string) (map[string]packageCoverageTotals, error) {
@@ -770,34 +702,44 @@ func coverageTotals(coverageBlocks map[string]coverageBlock) map[string]packageC
 }
 
 func canonicalizeCoverageProfile(profilePath string, repoRoot string, coverPackages []string) error {
-	return mergeCoverageProfiles([]string{profilePath}, profilePath, repoRoot, coverPackages)
+	_, err := canonicalizeCoverageProfileWithBlocks(profilePath, repoRoot, coverPackages)
+	return err
 }
 
 func mergeCoverageProfiles(profilePaths []string, outputPath string, repoRoot string, coverPackages []string) error {
+	_, err := mergeCoverageProfilesWithBlocks(profilePaths, outputPath, repoRoot, coverPackages)
+	return err
+}
+
+func canonicalizeCoverageProfileWithBlocks(profilePath string, repoRoot string, coverPackages []string) (map[string]coverageBlock, error) {
+	return mergeCoverageProfilesWithBlocks([]string{profilePath}, profilePath, repoRoot, coverPackages)
+}
+
+func mergeCoverageProfilesWithBlocks(profilePaths []string, outputPath string, repoRoot string, coverPackages []string) (map[string]coverageBlock, error) {
 	coverageBlocks := make(map[string]coverageBlock)
 	header := ""
 	for _, profilePath := range profilePaths {
 		profile, err := os.Open(profilePath)
 		if err != nil {
-			return fmt.Errorf("read go coverage profile: %w", err)
+			return nil, fmt.Errorf("read go coverage profile: %w", err)
 		}
 		profileHeader, profileBlocks, scanErr := scanCoverageProfile(profile, repoRoot)
 		closeErr := profile.Close()
 		if scanErr != nil {
-			return scanErr
+			return nil, scanErr
 		}
 		if closeErr != nil {
-			return fmt.Errorf("close go coverage profile: %w", closeErr)
+			return nil, fmt.Errorf("close go coverage profile: %w", closeErr)
 		}
 		if header == "" {
 			header = profileHeader
 		} else if header != profileHeader {
-			return fmt.Errorf("merge go coverage profiles: mode headers differ: %q and %q", header, profileHeader)
+			return nil, fmt.Errorf("merge go coverage profiles: mode headers differ: %q and %q", header, profileHeader)
 		}
 		for key, block := range profileBlocks {
 			merged := coverageBlocks[key]
 			if merged.statementCount != 0 && merged.statementCount != block.statementCount {
-				return fmt.Errorf("merge go coverage profiles: source block %s has inconsistent statement counts %d and %d", key, merged.statementCount, block.statementCount)
+				return nil, fmt.Errorf("merge go coverage profiles: source block %s has inconsistent statement counts %d and %d", key, merged.statementCount, block.statementCount)
 			}
 			if block.executionCount > merged.executionCount {
 				merged.executionCount = block.executionCount
@@ -824,15 +766,17 @@ func mergeCoverageProfiles(profilePaths []string, outputPath string, repoRoot st
 
 	output, err := os.Create(outputPath)
 	if err != nil {
-		return fmt.Errorf("rewrite canonical go coverage profile: %w", err)
+		return nil, fmt.Errorf("rewrite canonical go coverage profile: %w", err)
 	}
 	writer := bufio.NewWriter(output)
 	_, writeErr := fmt.Fprintln(writer, header)
+	selectedBlocks := make(map[string]coverageBlock, len(keys))
 	for _, key := range keys {
 		if writeErr != nil {
 			break
 		}
 		block := coverageBlocks[key]
+		selectedBlocks[key] = block
 		_, writeErr = fmt.Fprintf(writer, "%s:%s %d %d\n", block.canonicalPath, block.rangeSpec, block.statementCount, block.executionCount)
 	}
 	if writeErr == nil {
@@ -840,12 +784,12 @@ func mergeCoverageProfiles(profilePaths []string, outputPath string, repoRoot st
 	}
 	closeErr := output.Close()
 	if writeErr != nil {
-		return fmt.Errorf("rewrite canonical go coverage profile: %w", writeErr)
+		return nil, fmt.Errorf("rewrite canonical go coverage profile: %w", writeErr)
 	}
 	if closeErr != nil {
-		return fmt.Errorf("close canonical go coverage profile: %w", closeErr)
+		return nil, fmt.Errorf("close canonical go coverage profile: %w", closeErr)
 	}
-	return nil
+	return selectedBlocks, nil
 }
 
 func coverageCanonicalFilePath(filePath string, repoRoot string) (string, error) {

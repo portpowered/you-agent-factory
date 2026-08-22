@@ -209,6 +209,28 @@ func FailedWorkResultFromDecisionEnvelopeError(
 		Outcome:      MalformedEnvelopeFailureOutcome,
 		Error:        message,
 		Feedback:     partial.Feedback,
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyTerminal,
+			Type:   workerexecution.WorkFailureTypeUnknown,
+		},
+		Diagnostics: decisionEnvelopeCompletionValidationDiagnostics(),
+	}
+}
+
+// decisionEnvelopeCompletionValidationDiagnostics records that a cleanly
+// readable worker response did not satisfy the required decision payload.
+// The raw response and parser error remain on the transient WorkResult only;
+// Worker Sessions uses these bounded facts for its public classification.
+func decisionEnvelopeCompletionValidationDiagnostics() *workerexecution.WorkDiagnostics {
+	return &workerexecution.WorkDiagnostics{
+		Provider: &workerexecution.ProviderDiagnostic{
+			ResponseMetadata: map[string]string{
+				workerexecution.ProviderResponseMetadataFailureFamily:         string(workerexecution.WorkFailureFamilyTerminal),
+				workerexecution.ProviderResponseMetadataFailureType:           string(workerexecution.WorkFailureTypeUnknown),
+				workerexecution.ProviderResponseMetadataFailureOperation:      "completion_validation",
+				workerexecution.ProviderResponseMetadataFailureClassification: "missing_required_output",
+			},
+		},
 	}
 }
 

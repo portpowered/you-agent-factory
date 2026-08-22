@@ -1,0 +1,8 @@
+name: status
+in: query
+required: false
+description: Optional status filter for pending human approvals.
+schema:
+  type: string
+  enum:
+    - PENDING

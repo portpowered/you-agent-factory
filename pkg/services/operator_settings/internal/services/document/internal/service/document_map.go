@@ -13,10 +13,13 @@ func documentFromConfig(config operatorsettings.Config) operatorsettings.Documen
 			WorkerModelProvider: config.Defaults.WorkerModelProvider,
 			WorkerModel:         config.Defaults.WorkerModel,
 		},
-		Runtime: documentRuntimeFromConfig(config.Runtime),
+		PriceTable: config.PriceTable.Clone(),
+		Runtime:    documentRuntimeFromConfig(config.Runtime),
 		Workers: operatorsettings.DocumentWorkerSettings{ACP: operatorsettings.DocumentACPSettings{
 			Integrations: append([]operatorsettings.ACPIntegration(nil), config.Workers.ACP.Integrations...),
+			AgentProfile: cloneACPAgentProfilePointer(config.Workers.ACP.AgentProfile),
 		}},
+		Models: cloneModelConfigs(config.Models),
 	}
 	if config.WorkerPresets != nil {
 		document.WorkerPresets = make([]operatorsettings.DocumentWorkerPreset, len(config.WorkerPresets))
@@ -30,6 +33,16 @@ func documentFromConfig(config operatorsettings.Config) operatorsettings.Documen
 		}
 	}
 	return document
+}
+
+// cloneACPAgentProfilePointer returns a detached copy of an optional ACP
+// Agent profile pointer, preserving nil for an absent profile.
+func cloneACPAgentProfilePointer(profile *operatorsettings.ACPAgentProfile) *operatorsettings.ACPAgentProfile {
+	if profile == nil {
+		return nil
+	}
+	cloned := profile.Clone()
+	return &cloned
 }
 
 func documentRuntimeFromConfig(runtime operatorsettings.RuntimeSettings) operatorsettings.DocumentRuntimeSettings {
@@ -46,13 +59,16 @@ func configFromDocument(document operatorsettings.Document) operatorsettings.Con
 			WorkerModelProvider: document.Defaults.WorkerModelProvider,
 			WorkerModel:         document.Defaults.WorkerModel,
 		},
+		PriceTable: document.PriceTable.Clone(),
 		Runtime: operatorsettings.RuntimeSettings{
 			Logging: operatorsettings.RuntimeArtifactSettings(document.Runtime.Logging),
 			Metrics: operatorsettings.RuntimeArtifactSettings(document.Runtime.Metrics),
 		},
 		Workers: operatorsettings.WorkerSettings{ACP: operatorsettings.ACPSettings{
 			Integrations: append([]operatorsettings.ACPIntegration(nil), document.Workers.ACP.Integrations...),
+			AgentProfile: cloneACPAgentProfilePointer(document.Workers.ACP.AgentProfile),
 		}},
+		Models: cloneModelConfigs(document.Models),
 	}
 	if document.WorkerPresets != nil {
 		config.WorkerPresets = make([]operatorsettings.WorkerPreset, len(document.WorkerPresets))
@@ -66,4 +82,15 @@ func configFromDocument(document operatorsettings.Document) operatorsettings.Con
 		}
 	}
 	return config
+}
+
+func cloneModelConfigs(values map[string]operatorsettings.ModelConfig) map[string]operatorsettings.ModelConfig {
+	if values == nil {
+		return nil
+	}
+	cloned := make(map[string]operatorsettings.ModelConfig, len(values))
+	for name, config := range values {
+		cloned[name] = config.Clone()
+	}
+	return cloned
 }

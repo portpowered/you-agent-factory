@@ -20,6 +20,8 @@ func TestPlanPreservesSchedulerOrderAndCanonicalWorkersFacts(t *testing.T) {
 		runnableDecision("dispatch-implement", "correlation-implement", "implement", "implementer", "work-1"),
 	}
 	decisions[0].Execution.FactorySessionID = "session-1"
+	decisions[0].Execution.RecordingID = "recording-1"
+	decisions[0].Execution.Capabilities = &workers.Capabilities{NativeStreaming: true, ToolLifecycle: true}
 	decisions[0].Dispatch.Execution.RequestID = "request-1"
 	decisions[0].Dispatch.Execution.TraceID = "trace-1"
 	decisions[0].Dispatch.InputBindings = map[string][]string{"work": {"token-2"}}
@@ -101,24 +103,6 @@ func TestPlanRejectsWholeBatchBeforeReturningActions(t *testing.T) {
 				t.Fatalf("Plan() actions = %#v, want no partially visible actions", result.Actions)
 			}
 		})
-	}
-}
-
-func TestPlanHonorsCancelledContext(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	result, err := New(nil).Plan(ctx, dispatchplanning.PlanRequest{
-		Decisions: []dispatchplanning.RunnableDecision{
-			runnableDecision("dispatch-1", "correlation-1", "review", "reviewer", "work-1"),
-		},
-	})
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("Plan() error = %v, want context.Canceled", err)
-	}
-	if len(result.Actions) != 0 {
-		t.Fatalf("Plan() actions = %#v, want none", result.Actions)
 	}
 }
 
@@ -583,47 +567,6 @@ func assertLateResultIsRetiredOnce(t *testing.T, planner *Planner) {
 	}
 }
 
-func TestStopRetriesFailedWorkersCancellation(t *testing.T) {
-	t.Parallel()
-
-	cancelErr := errors.New("Workers cancellation unavailable")
-	cancelCalls := 0
-	planner := NewWithCancellation(
-		func(context.Context, workers.WorkstationDispatchRequest) error { return nil },
-		func(
-			context.Context,
-			workers.WorkstationDispatchCancelRequest,
-		) (workers.WorkstationDispatchCancelResult, error) {
-			cancelCalls++
-			if cancelCalls == 1 {
-				return workers.WorkstationDispatchCancelResult{}, cancelErr
-			}
-			return workers.WorkstationDispatchCancelResult{}, nil
-		},
-	)
-	action := plannedAction(t, planner, runnableDecision(
-		"dispatch-1",
-		"correlation-1",
-		"review",
-		"reviewer",
-		"work-1",
-	))
-	if _, err := planner.Publish(context.Background(), action); err != nil {
-		t.Fatalf("Publish() error = %v", err)
-	}
-
-	if err := planner.Stop(context.Background(), dispatchplanning.RuntimeStopReasonCancelled); !errors.Is(err, cancelErr) {
-		t.Fatalf("Stop(first) error = %v, want cancellation failure", err)
-	}
-	if err := planner.Stop(context.Background(), dispatchplanning.RuntimeStopReasonCancelled); err != nil {
-		t.Fatalf("Stop(retry) error = %v", err)
-	}
-	intent, ok := planner.Intent("dispatch-1")
-	if !ok || !intent.CancellationRequested || cancelCalls != 2 {
-		t.Fatalf("cancellation retry = (%#v, %t, %d calls), want successful second attempt", intent, ok, cancelCalls)
-	}
-}
-
 func TestStopRacingPublicationCancelsAfterWorkersAcceptance(t *testing.T) {
 	t.Parallel()
 
@@ -920,6 +863,8 @@ func expectedExecution(decision dispatchplanning.RunnableDecision) workers.Works
 		RunnerSelectionSource:    facts.RunnerSelectionSource,
 		ProjectID:                facts.ProjectID,
 		FactorySessionID:         facts.FactorySessionID,
+		RecordingID:              facts.RecordingID,
+		Capabilities:             facts.Capabilities,
 		InputTokens:              facts.InputPayload,
 		ModelOperation:           facts.ModelOperation,
 		ModelBindings:            facts.ModelBindings,

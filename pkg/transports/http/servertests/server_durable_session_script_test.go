@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
@@ -16,13 +15,6 @@ import (
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
 )
-
-// apiExecutionLifecycleRoute is the exact lifecycle role normally supplied by
-// the Factory Sessions gateway. Protocol tests route it to their programmed
-// public ExecutionService without constructing a product implementation.
-type apiExecutionLifecycleRoute struct {
-	execution factorysessions.ExecutionService
-}
 
 // apiRequestPreparation is a strict public-role transport fake. Durable API
 // protocol scenarios author already-prepared values and do not invoke the
@@ -178,59 +170,15 @@ func (script apiLiveSessionScript) ResumeLiveFactorySession(ctx context.Context,
 	return script.resume(ctx, sessionID, request)
 }
 
-func (route apiExecutionLifecycleRoute) PauseDurableFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
-	return route.execution.Pause(ctx, sessionID, request)
-}
-
-func (route apiExecutionLifecycleRoute) ResumeDurableFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
-	return route.execution.Resume(ctx, sessionID, request)
-}
-
-func (route apiExecutionLifecycleRoute) CancelDurableFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
-	return route.execution.Cancel(ctx, sessionID, request)
-}
-
-func (route apiExecutionLifecycleRoute) TerminateDurableFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
-	return route.execution.Terminate(ctx, sessionID, request)
-}
-
-func (route apiExecutionLifecycleRoute) ApproveDurableFactorySession(ctx context.Context, sessionID string, request factorysessions.ApproveRequest) (factorysessions.LifecycleControlResult, error) {
-	return route.execution.Approve(ctx, sessionID, request)
-}
-
-func (route apiExecutionLifecycleRoute) RetryDurableFactorySessionDispatch(ctx context.Context, sessionID string, request factorysessions.RetryDispatchRequest) (factorysessions.LifecycleControlResult, error) {
-	return route.execution.RetryDispatch(ctx, sessionID, request)
-}
-
-func (route apiExecutionLifecycleRoute) InterruptDurableFactorySessionDispatch(ctx context.Context, sessionID string, request factorysessions.InterruptDispatchRequest) (factorysessions.LifecycleControlResult, error) {
-	return route.execution.InterruptDispatch(ctx, sessionID, request)
-}
-
-func (route apiExecutionLifecycleRoute) ReadDurableFactorySessionEventStream(ctx context.Context, sessionID string, request factorysessions.EventReconnectRequest) (*interfaces.FactoryEventStream, error) {
-	result, err := route.execution.ReadEvents(ctx, sessionID, request)
-	if err != nil {
-		return nil, err
-	}
-	return factorysessions.MaterializeEventReadStream(result), nil
-}
-
-func (route apiExecutionLifecycleRoute) ProbeDurableFactorySessionEvents(ctx context.Context, sessionID string, request factorysessions.EventReconnectRequest) error {
-	_, err := route.execution.ReadEvents(ctx, sessionID, request)
-	return err
-}
-
-func newDurableAPITestServer(execution factorysessions.ExecutionService) *api.Server {
+func newDurableAPITestServer(execution factorysessionmapping.DurableExecution) *api.Server {
 	return newDurableAndLiveAPITestServer(execution, nil)
 }
 
-func newDurableAndLiveAPITestServer(execution factorysessions.ExecutionService, live apisurface.LiveSessionAPI) *api.Server {
+func newDurableAndLiveAPITestServer(execution factorysessionmapping.DurableExecution, live apisurface.LiveSessionAPI) *api.Server {
 	preparation := canonicalAPIRequestPreparation()
 	var durable *factorysessionmapping.DurableAPI
 	if execution != nil {
-		durable = factorysessionmapping.NewDurableAPI(
-			execution,
-			apiExecutionLifecycleRoute{execution: execution},
-		)
+		durable = factorysessionmapping.NewDurableAPI(execution)
 	}
 	liveLister, _ := live.(factorysessionshttp.LiveSessionListReader)
 	return newAPIServerFromRoles(
@@ -247,7 +195,7 @@ func newWorkAPITestServer(work apisurface.WorkAPI) *api.Server {
 	)
 }
 
-func durableRoleHTTPServer(t *testing.T, execution factorysessions.ExecutionService) string {
+func durableRoleHTTPServer(t *testing.T, execution factorysessionmapping.DurableExecution) string {
 	t.Helper()
 	server := httptest.NewServer(newDurableAPITestServer(execution).Handler())
 	t.Cleanup(server.Close)
@@ -258,7 +206,7 @@ func durableRoleHTTPServer(t *testing.T, execution factorysessions.ExecutionServ
 // execution contract. Tests must install every callback they exercise; it has
 // no storage, reduction, lifecycle, replay, or execution behavior of its own.
 type apiExecutionScript struct {
-	factorysessions.ExecutionService
+	factorysessionmapping.DurableExecution
 	startAsync               func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error)
 	startSync                func(context.Context, factorysessions.StartRequest) (factorysessions.SyncStartResult, error)
 	resumeInterruptedSession func(context.Context, string, factorysessions.ResumeSessionRequest) (factorysessions.AsyncStartResult, error)

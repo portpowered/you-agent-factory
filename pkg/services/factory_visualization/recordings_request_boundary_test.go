@@ -10,34 +10,40 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
-// TestVisualizationConstructsRecordingsRequestsThroughRoot proves CUT-VIS-REC story 003:
-// Factory Visualization projection-query edges construct Recordings root requests
-// and invoke recordings.Service with observable acceptance or typed rejection outcomes.
-func TestVisualizationConstructsRecordingsRequestsThroughRoot(t *testing.T) {
-	t.Parallel()
+type recordingsRootBoundaryFixture struct {
+	events    []factorydefinitions.FactoryEvent
+	sessionID string
+	scope     factorydefinitions.FactoryEventReconnectScope
+}
 
-	events := []factorydefinitions.FactoryEvent{
-		{
-			Id:   "evt-history",
-			Type: "WORK_REQUEST",
-			Context: factorydefinitions.FactoryEventContext{
-				Sequence: 3,
-				Tick:     3,
-			},
-		},
-		{
-			Id:   "evt-live",
-			Type: "WORK_STATE_CHANGE",
-			Context: factorydefinitions.FactoryEventContext{
-				Sequence: 4,
-				Tick:     4,
-			},
-		},
-	}
+func newRecordingsRootBoundaryFixture() recordingsRootBoundaryFixture {
 	sessionID := "session-visualization-boundary"
-	scope := factorydefinitions.FactoryEventReconnectScope{SessionID: sessionID}
+	return recordingsRootBoundaryFixture{
+		events: []factorydefinitions.FactoryEvent{
+			{
+				Id:   "evt-history",
+				Type: "WORK_REQUEST",
+				Context: factorydefinitions.FactoryEventContext{
+					Sequence: 3,
+					Tick:     3,
+				},
+			},
+			{
+				Id:   "evt-live",
+				Type: "WORK_STATE_CHANGE",
+				Context: factorydefinitions.FactoryEventContext{
+					Sequence: 4,
+					Tick:     4,
+				},
+			},
+		},
+		sessionID: sessionID,
+		scope:     factorydefinitions.FactoryEventReconnectScope{SessionID: sessionID},
+	}
+}
 
-	stub := &recordingsRequestBoundaryStub{
+func newRecordingsRequestBoundaryStub() *recordingsRequestBoundaryStub {
+	return &recordingsRequestBoundaryStub{
 		reconstructResult: recordings.ReconstructWorldStateResult{
 			WorldState: recordings.WorldStateView{
 				SchemaVersion: recordings.WorldStateViewSchemaV1,
@@ -49,8 +55,30 @@ func TestVisualizationConstructsRecordingsRequestsThroughRoot(t *testing.T) {
 			Data: recordings.SimpleDashboardRenderData{InFlightDispatchCount: 2},
 		},
 	}
+}
 
-	worldView, err := recordingsqueries.ReconstructWorldState(stub, events, 4)
+// TestVisualizationConstructsRecordingsRequestsThroughRoot proves CUT-VIS-REC story 003:
+// Factory Visualization projection-query edges construct Recordings root requests
+// and invoke recordings.Service with observable acceptance or typed rejection outcomes.
+func TestVisualizationConstructsRecordingsRequestsThroughRoot(t *testing.T) {
+	t.Parallel()
+
+	fixture := newRecordingsRootBoundaryFixture()
+	stub := newRecordingsRequestBoundaryStub()
+	worldView := runRecordingsReconstructThroughRootProof(t, stub, fixture)
+	runRecordingsDashboardThroughRootProof(t, stub, worldView)
+	runRecordingsValidateThroughRootProof(t, stub, fixture)
+	runRecordingsNilServiceRejectionProof(t, fixture, worldView)
+}
+
+func runRecordingsReconstructThroughRootProof(
+	t *testing.T,
+	stub *recordingsRequestBoundaryStub,
+	fixture recordingsRootBoundaryFixture,
+) recordings.WorldStateView {
+	t.Helper()
+
+	worldView, err := recordingsqueries.ReconstructWorldState(stub, fixture.events, 4)
 	if err != nil {
 		t.Fatalf("ReconstructWorldState: %v", err)
 	}
@@ -68,6 +96,15 @@ func TestVisualizationConstructsRecordingsRequestsThroughRoot(t *testing.T) {
 	if worldView.SelectedTick != 4 || worldView.SchemaVersion != recordings.WorldStateViewSchemaV1 {
 		t.Fatalf("world view = %#v, want selected tick 4 and schema v1", worldView)
 	}
+	return worldView
+}
+
+func runRecordingsDashboardThroughRootProof(
+	t *testing.T,
+	stub *recordingsRequestBoundaryStub,
+	worldView recordings.WorldStateView,
+) {
+	t.Helper()
 
 	renderData, err := recordingsqueries.QuerySimpleDashboard(stub, worldView)
 	if err != nil {
@@ -94,35 +131,51 @@ func TestVisualizationConstructsRecordingsRequestsThroughRoot(t *testing.T) {
 		renderData.ActiveThrottlePauses[0].AffectedWorkstationNames[0] != "review" {
 		t.Fatalf("active throttle pauses = %#v, want review workstation projection", renderData.ActiveThrottlePauses)
 	}
+}
+
+func runRecordingsValidateThroughRootProof(
+	t *testing.T,
+	stub *recordingsRequestBoundaryStub,
+	fixture recordingsRootBoundaryFixture,
+) {
+	t.Helper()
 
 	afterSequence := 3
 	if err := recordingsqueries.ValidateReconnectReplay(
 		stub,
-		events,
+		fixture.events,
 		factorydefinitions.FactoryEventReconnectCursor{AfterSequence: &afterSequence},
-		scope,
+		fixture.scope,
 	); err != nil {
 		t.Fatalf("ValidateReconnectReplay success path: %v", err)
 	}
-	if stub.lastValidate.Scope.FactorySessionID != sessionID {
-		t.Fatalf("validate scope session = %q, want %q", stub.lastValidate.Scope.FactorySessionID, sessionID)
+	if stub.lastValidate.Scope.FactorySessionID != fixture.sessionID {
+		t.Fatalf("validate scope session = %q, want %q", stub.lastValidate.Scope.FactorySessionID, fixture.sessionID)
 	}
 	if stub.lastValidate.Cursor.StreamGenerationID != "factory-visualization" {
 		t.Fatalf("validate cursor stream = %q, want factory-visualization", stub.lastValidate.Cursor.StreamGenerationID)
 	}
 
 	stub.validateErr = recordings.ErrReconnectCursorNotFound
-	err = recordingsqueries.ValidateReconnectReplay(
+	err := recordingsqueries.ValidateReconnectReplay(
 		stub,
-		events,
+		fixture.events,
 		factorydefinitions.FactoryEventReconnectCursor{AfterEventID: "missing-event"},
-		scope,
+		fixture.scope,
 	)
 	if !errors.Is(err, recordings.ErrReconnectCursorNotFound) {
 		t.Fatalf("missing cursor error = %v, want ErrReconnectCursorNotFound", err)
 	}
+}
 
-	_, err = recordingsqueries.ReconstructWorldState(nil, events, 4)
+func runRecordingsNilServiceRejectionProof(
+	t *testing.T,
+	fixture recordingsRootBoundaryFixture,
+	worldView recordings.WorldStateView,
+) {
+	t.Helper()
+
+	_, err := recordingsqueries.ReconstructWorldState(nil, fixture.events, 4)
 	if !errors.Is(err, recordings.ErrInvalidProjectionInput) {
 		t.Fatalf("nil service reconstruct error = %v, want ErrInvalidProjectionInput", err)
 	}
@@ -130,7 +183,7 @@ func TestVisualizationConstructsRecordingsRequestsThroughRoot(t *testing.T) {
 	if !errors.Is(err, recordings.ErrInvalidProjectionInput) {
 		t.Fatalf("nil service dashboard error = %v, want ErrInvalidProjectionInput", err)
 	}
-	err = recordingsqueries.ValidateReconnectReplay(nil, events, factorydefinitions.FactoryEventReconnectCursor{}, scope)
+	err = recordingsqueries.ValidateReconnectReplay(nil, fixture.events, factorydefinitions.FactoryEventReconnectCursor{}, fixture.scope)
 	if !errors.Is(err, recordings.ErrInvalidProjectionInput) {
 		t.Fatalf("nil service validate error = %v, want ErrInvalidProjectionInput", err)
 	}
@@ -151,6 +204,15 @@ type recordingsRequestBoundaryStub struct {
 }
 
 var _ recordings.Service = (*recordingsRequestBoundaryStub)(nil)
+
+func (stub *recordingsRequestBoundaryStub) QueryHistoricalRecording(
+	request recordings.HistoricalRecordingQueryRequest,
+) (recordings.HistoricalRecordingQueryResult, error) {
+	return recordings.HistoricalRecordingQueryResult{}, &recordings.HistoricalRecordingQueryError{
+		Kind:        recordings.HistoricalRecordingQueryErrorUnavailable,
+		RecordingID: request.Recording.RecordingID,
+	}
+}
 
 func (stub *recordingsRequestBoundaryStub) ReconstructWorldState(
 	request recordings.ReconstructWorldStateRequest,
@@ -221,6 +283,10 @@ func (stub *recordingsRequestBoundaryStub) LoadReplayRecording(recordings.LoadRe
 	return recordings.LoadReplayRecordingResult{}, recordings.ErrMissingReplayArtifact
 }
 
+func (stub *recordingsRequestBoundaryStub) LoadReplayRecordingForResume(recordings.LoadReplayRecordingForResumeRequest) (recordings.LoadReplayRecordingForResumeResult, error) {
+	return recordings.LoadReplayRecordingForResumeResult{}, recordings.ErrMissingReplayArtifact
+}
+
 func (stub *recordingsRequestBoundaryStub) CreateReplayPlan(recordings.CreateReplayPlanRequest) (recordings.CreateReplayPlanResult, error) {
 	return recordings.CreateReplayPlanResult{}, recordings.ErrInvalidReplayArtifact
 }
@@ -255,4 +321,72 @@ func (stub *recordingsRequestBoundaryStub) ExportPortableArtifact(context.Contex
 
 func (stub *recordingsRequestBoundaryStub) ReadPortableArtifact(context.Context, recordings.ReadPortableArtifactRequest) (recordings.ReadPortableArtifactResult, error) {
 	return recordings.ReadPortableArtifactResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func (stub *recordingsRequestBoundaryStub) BeginRecordingScope(context.Context, recordings.BeginRecordingScopeRequest) (recordings.BeginRecordingScopeResult, error) {
+	return recordings.BeginRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) AppendRecordingScopeEvent(context.Context, recordings.AppendRecordingScopeEventRequest) (recordings.AppendRecordingScopeEventResult, error) {
+	return recordings.AppendRecordingScopeEventResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) FlushRecordingScope(context.Context, recordings.FlushRecordingScopeRequest) (recordings.FlushRecordingScopeResult, error) {
+	return recordings.FlushRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) FinalizeRecordingScope(context.Context, recordings.FinalizeRecordingScopeRequest) (recordings.FinalizeRecordingScopeResult, error) {
+	return recordings.FinalizeRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) CloseRecordingScope(context.Context, recordings.CloseRecordingScopeRequest) (recordings.CloseRecordingScopeResult, error) {
+	return recordings.CloseRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) QueryRecordingScope(context.Context, recordings.QueryRecordingScopeRequest) (recordings.QueryRecordingScopeResult, error) {
+	return recordings.QueryRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) OpenRecordingScope(context.Context, recordings.OpenRecordingScopeRequest) (recordings.OpenRecordingScopeResult, error) {
+	return recordings.OpenRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) SubscribeRecordingScope(context.Context, recordings.SubscribeRecordingScopeRequest) (recordings.SubscribeRecordingScopeResult, error) {
+	return recordings.SubscribeRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) LoadReplayRecordingScope(context.Context, recordings.LoadReplayRecordingScopeRequest) (recordings.LoadReplayRecordingScopeResult, error) {
+	return recordings.LoadReplayRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) CreateReplayPlanScope(context.Context, recordings.CreateReplayPlanScopeRequest) (recordings.CreateReplayPlanScopeResult, error) {
+	return recordings.CreateReplayPlanScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) ObserveReplayScope(context.Context, recordings.ObserveReplayScopeRequest) (recordings.ObserveReplayScopeResult, error) {
+	return recordings.ObserveReplayScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) ReconstructRecordingScope(context.Context, recordings.ReconstructRecordingScopeRequest) (recordings.ReconstructRecordingScopeResult, error) {
+	return recordings.ReconstructRecordingScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) QuerySimpleDashboardScope(context.Context, recordings.QuerySimpleDashboardScopeRequest) (recordings.QuerySimpleDashboardScopeResult, error) {
+	return recordings.QuerySimpleDashboardScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) QueryWorkstationRequestsScope(context.Context, recordings.QueryWorkstationRequestsScopeRequest) (recordings.QueryWorkstationRequestsScopeResult, error) {
+	return recordings.QueryWorkstationRequestsScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) BuildPortableArtifactScope(context.Context, recordings.BuildPortableArtifactScopeRequest) (recordings.BuildPortableArtifactScopeResult, error) {
+	return recordings.BuildPortableArtifactScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) ExportPortableArtifactScope(context.Context, recordings.ExportPortableArtifactScopeRequest) (recordings.ExportPortableArtifactScopeResult, error) {
+	return recordings.ExportPortableArtifactScopeResult{}, recordings.ErrRecordingScopeUnknown
+}
+
+func (stub *recordingsRequestBoundaryStub) ReadPortableArtifactScope(context.Context, recordings.ReadPortableArtifactScopeRequest) (recordings.ReadPortableArtifactScopeResult, error) {
+	return recordings.ReadPortableArtifactScopeResult{}, recordings.ErrRecordingScopeUnknown
 }

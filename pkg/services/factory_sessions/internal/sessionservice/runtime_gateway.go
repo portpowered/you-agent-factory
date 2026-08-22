@@ -12,15 +12,48 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"go.uber.org/zap"
 )
 
 type sessionGateway interface {
 	factorysessions.Service
+	factorysessions.LiveControlService
 	JavaScriptCheckpointStore(*livesession.LiveSession) factoryruntime.JavaScriptCheckpointStore
 	InferenceProgressPublisherFactory(*zap.Logger) func(string) factorysessions.ProgressPublisher
+}
+
+// ObserveForSession routes a status read through the live-runtime capability
+// bound to the requested Factory Session.
+func (s *Service) ObserveForSession(
+	ctx context.Context,
+	sessionID string,
+	request factoryruntime.ObserveRequest,
+) (factoryruntime.ObserveResult, error) {
+	if s == nil || s.liveRuntime == nil {
+		return factoryruntime.ObserveResult{}, fmt.Errorf("Factory Sessions live runtime gateway is required")
+	}
+	return s.liveRuntime.Observe(ctx, sessionID, request)
+}
+
+// WorkerSessionsObservationForSession resolves the opened runtime behind the
+// requested Factory Session and forwards its detached Worker Sessions read
+// projection. The HTTP process is built once, so session-scoped reads must not
+// retain the observation service from the session that happened to start it.
+func (s *Service) WorkerSessionsObservationForSession(factorySessionID string) workersessions.ObservationService {
+	if s == nil || s.host == nil {
+		return nil
+	}
+	provider, _ := s.host.(interface {
+		WorkerSessionsObservationForSession(string) workersessions.ObservationService
+	})
+	if provider == nil {
+		return nil
+	}
+	return provider.WorkerSessionsObservationForSession(factorySessionID)
 }
 
 // SubscribeFactoryEventsForSession routes session-scoped observation through
@@ -37,9 +70,9 @@ func (s *Service) SubscribeFactoryEventsForSession(
 	if err != nil {
 		return nil, err
 	}
-	legacyRuntime, ok := runtime.(factoryruntime.APIFactory)
+	legacyRuntime, ok := runtimebinding.WorkAndEventIngressForService(runtime)
 	if !ok {
-		return nil, fmt.Errorf("legacy Factory Runtime event subscription is required")
+		return nil, fmt.Errorf("Factory Runtime event subscription is required until Recordings migration")
 	}
 	stream, err := legacyRuntime.SubscribeFactoryEvents(
 		ctx, reconnect, interfaces.FactoryEventReconnectScope{SessionID: sessionID},
@@ -97,18 +130,6 @@ func (s *Service) ProbeDurableFactorySessionEvents(
 	return err
 }
 
-// ObserveForSession returns one live session's orchestration-neutral observation.
-func (s *Service) ObserveForSession(
-	ctx context.Context,
-	sessionID string,
-	req factoryruntime.ObserveRequest,
-) (factoryruntime.ObserveResult, error) {
-	if s == nil || s.host == nil {
-		return factoryruntime.ObserveResult{}, fmt.Errorf("Factory Sessions gateway is required")
-	}
-	return s.liveRuntime.Observe(ctx, sessionID, req)
-}
-
 func (fs *SessionRuntime) inferenceProgressPublisher(
 	sessionID string,
 	logger *zap.Logger,
@@ -123,7 +144,7 @@ func (fs *SessionRuntime) inferenceProgressPublisher(
 	return factory(sessionID)
 }
 
-func (fs *SessionRuntime) durableExecutionService() factorysessions.ExecutionService {
+func (fs *SessionRuntime) durableExecutionService() durableexecution.Service {
 	if fs == nil {
 		return nil
 	}
@@ -217,7 +238,7 @@ func SessionServiceHost(runtime *SessionRuntime) Host {
 	if runtime == nil {
 		return newSessionHost(
 			nil, nil, initializeFactoryScaffold, nil, nil, nil,
-			nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+			nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		)
 	}
 	discoverTargets := func(folderPath string) ([]factorysessions.Target, error) {
@@ -266,6 +287,7 @@ func SessionServiceHost(runtime *SessionRuntime) Host {
 		backendScopeID,
 		logicalSessionKeyID,
 		streamGenerationID,
+		runtime.WorkerSessionsObservationForSession,
 		runtime.stopFactorySession,
 		runtime.observeLiveLifecycleControl,
 		runtime.durableExecutionService,

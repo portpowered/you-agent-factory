@@ -46,8 +46,6 @@ workTypes:
     states:
       - name: init
         type: INITIAL
-      - name: execute
-        type: PROCESSING
       - name: complete
         type: TERMINAL
       - name: blocked
@@ -60,7 +58,6 @@ workers:
     skipPermissions: true
     modelProvider: ${executorProvider}
     model: ${executorModel}
-    promptFile: prompts/executor.md
 workstations:
   - name: execute-goal
     type: AGENT_RUN

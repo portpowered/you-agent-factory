@@ -9,13 +9,13 @@ import (
 )
 
 const (
-	errorCodeBadRequest           = "BAD_REQUEST"
-	errorCodeServiceUnavailable   = "factory_visualization.service.unavailable"
-	errorCodeRequestCanceled      = "factory_visualization.request.canceled"
-	errorCodeRequestTimedOut      = "factory_visualization.request.timed_out"
+	errorCodeBadRequest            = "BAD_REQUEST"
+	errorCodeServiceUnavailable    = "factory_visualization.service.unavailable"
+	errorCodeRequestCanceled       = "factory_visualization.request.canceled"
+	errorCodeRequestTimedOut       = "factory_visualization.request.timed_out"
 	errorMessageServiceUnavailable = "factory visualization service is unavailable"
-	errorMessageRequestCanceled   = "factory visualization request was canceled"
-	errorMessageRequestTimedOut   = "factory visualization request timed out"
+	errorMessageRequestCanceled    = "factory visualization request was canceled"
+	errorMessageRequestTimedOut    = "factory visualization request timed out"
 )
 
 func requestContextErrorResponse[T any](ctx context.Context) (ToolResponse[T], bool) {

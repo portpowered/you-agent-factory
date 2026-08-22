@@ -91,13 +91,16 @@ func TestRenderPackageCoverageMarkdownUsesSummaryFieldsOnly(t *testing.T) {
 	configIdx := strings.Index(first, "| `github.com/portpowered/infinite-you/pkg/config` |")
 	serviceIdx := strings.Index(first, "| `github.com/portpowered/infinite-you/pkg/service` |")
 	if configIdx < 0 || serviceIdx < 0 || configIdx >= serviceIdx {
-		t.Fatalf("packages must render in stable path order:\n%s", first)
+		t.Fatalf("a gated package must render before an ungated one:\n%s", first)
 	}
-	if !strings.Contains(first, "| `github.com/portpowered/infinite-you/pkg/config` | 3 | 3 | 100.0 | 66.66 | — |") {
-		t.Fatalf("config package row missing floor rendering:\n%s", first)
+	if !strings.Contains(first, "| Package | Covered | Measurable | Coverage % | Floor | Headroom | Measurement exception |\n") {
+		t.Fatalf("coverage table lost a column:\n%s", first)
 	}
-	if !strings.Contains(first, "| `github.com/portpowered/infinite-you/pkg/service` | 0 | 0 | 0.0 | — | measurement: no measurable statements (owner=backend-quality; deadline=2027-07-15; removalGate=profile reports measurable statements) |") {
-		t.Fatalf("service package row missing measurement exception:\n%s", first)
+	if !strings.Contains(first, "| `github.com/portpowered/infinite-you/pkg/config` | 3 | 3 | 100.0 | 66.66 | 33.34 | — |") {
+		t.Fatalf("config package row missing floor or headroom rendering:\n%s", first)
+	}
+	if !strings.Contains(first, "| `github.com/portpowered/infinite-you/pkg/service` | 0 | 0 | 0.0 | — |  | measurement: no measurable statements (owner=backend-quality; deadline=2027-07-15; removalGate=profile reports measurable statements) |") {
+		t.Fatalf("service package row missing measurement exception or blank headroom:\n%s", first)
 	}
 }
 
@@ -157,7 +160,55 @@ func TestRenderCatalogMarkdownAppendsPackageCoverageAfterDebt(t *testing.T) {
 	if !strings.Contains(catalog, "- Coverage percent: 50.0%\n") {
 		t.Fatalf("overall coverage percent missing from catalog:\n%s", catalog)
 	}
-	if !strings.Contains(catalog, "| `github.com/portpowered/infinite-you/pkg/example` | 1 | 2 | 50.0 | 40 | — |") {
+	if !strings.Contains(catalog, "| `github.com/portpowered/infinite-you/pkg/example` | 1 | 2 | 50.0 | 40 | 10.00 | — |") {
 		t.Fatalf("package coverage row missing from catalog:\n%s", catalog)
+	}
+}
+
+func TestRenderPackageCoverageMarkdownOrdersRowsByHeadroomAscending(t *testing.T) {
+	t.Parallel()
+
+	tightFloor := 90.0
+	violatedFloor := 80.0
+	looseFloor := 10.0
+	summary := functionaltestviz.CoverageSummary{
+		CoveredStatements:    10,
+		MeasurableStatements: 20,
+		CoveragePercent:      50.0,
+		Packages: []functionaltestviz.PackageCoverage{
+			{Package: "github.com/portpowered/infinite-you/pkg/alpha", CoveragePercent: 99.0, PackageFloor: &looseFloor},
+			{Package: "github.com/portpowered/infinite-you/pkg/bravo", CoveragePercent: 90.5, PackageFloor: &tightFloor},
+			{Package: "github.com/portpowered/infinite-you/pkg/charlie", CoveragePercent: 70.0, PackageFloor: &violatedFloor},
+			{Package: "github.com/portpowered/infinite-you/pkg/delta", CoveragePercent: 12.0},
+			{Package: "github.com/portpowered/infinite-you/pkg/echo", CoveragePercent: 90.5, PackageFloor: &tightFloor},
+		},
+	}
+
+	rendered := functionaltestviz.RenderPackageCoverageMarkdown(summary)
+	// Violated floor first, then the two 0.5pp near-misses in import-path
+	// order, then ample headroom, then the ungated package last.
+	want := []string{
+		"| `github.com/portpowered/infinite-you/pkg/charlie` |",
+		"| `github.com/portpowered/infinite-you/pkg/bravo` |",
+		"| `github.com/portpowered/infinite-you/pkg/echo` |",
+		"| `github.com/portpowered/infinite-you/pkg/alpha` |",
+		"| `github.com/portpowered/infinite-you/pkg/delta` |",
+	}
+	previous := -1
+	for _, row := range want {
+		index := strings.Index(rendered, row)
+		if index < 0 {
+			t.Fatalf("row %q missing:\n%s", row, rendered)
+		}
+		if index <= previous {
+			t.Fatalf("row %q is out of headroom order:\n%s", row, rendered)
+		}
+		previous = index
+	}
+	if !strings.Contains(rendered, "| `github.com/portpowered/infinite-you/pkg/charlie` | 0 | 0 | 70.0 | 80 | -10.00 | \u2014 |") {
+		t.Fatalf("a violated floor must render a negative headroom:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "| `github.com/portpowered/infinite-you/pkg/delta` | 0 | 0 | 12.0 | \u2014 |  | \u2014 |") {
+		t.Fatalf("an ungated package must render a blank headroom:\n%s", rendered)
 	}
 }

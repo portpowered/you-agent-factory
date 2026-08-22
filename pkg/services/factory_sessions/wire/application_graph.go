@@ -1,6 +1,8 @@
 package wire
 
 import (
+	"fmt"
+
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -16,12 +18,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimehosting"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	invocationwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/wire"
+	factorysessionwirecontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/work"
+	"go.uber.org/zap"
 )
 
 // The aliases in this file are the service-owned construction vocabulary used
@@ -38,9 +39,11 @@ type (
 	InvocationMetricsRecorder            = roles.InvocationMetricsRecorder
 	RuntimeResolver                      = roles.RuntimeResolver
 	CurrentRuntimeResolver               = roles.CurrentRuntimeResolver
+	RuntimeAssembly                      = roles.RuntimeAssembly
 	RuntimeReader                        = roles.RuntimeReader
 	OwnedExecutionService                = roles.OwnedExecutionService
 	ExecutionServiceBuilder              = roles.ExecutionServiceBuilder
+	DurableExecutionService              = durableexecution.Service
 	StdioApplication                     = roles.StdioApplication
 	FixtureStdioApplicationBuilder       = roles.FixtureStdioApplicationBuilder
 	RuntimeStdioApplicationBuilder       = roles.RuntimeStdioApplicationBuilder
@@ -49,7 +52,6 @@ type (
 	DirectJavaScriptRunOperation         = roles.DirectJavaScriptRunOperation
 	DirectJavaScriptSyncRunner           = roles.DirectJavaScriptSyncRunner
 	DirectJavaScriptHostAdapter          = roles.DirectJavaScriptHostAdapter
-	DirectJavaScriptLifecycle            = roles.DirectJavaScriptLifecycle
 	RequestPreparation                   = roles.RequestPreparation
 	Registry                             = roles.Registry
 	RuntimePersistenceStore              = roles.RuntimePersistenceStore
@@ -67,10 +69,9 @@ type (
 	InvocationOperation                  = roles.InvocationOperation
 	InvocationTarget                     = roles.InvocationTarget
 	FactoryInvocationOutcome             = roles.FactoryInvocationOutcome
-	ApplicationOpeningPorts              = roles.ApplicationOpeningPorts
-	ApplicationOpeningRequest            = roles.ApplicationOpeningRequest
+	LiveChangeCoordinator                = factorysessionwirecontracts.LiveChangeCoordinator
+	OpeningPresentationOwner             = factorysessions.OpeningPresentationOwner
 	RuntimeResources                     = roles.RuntimeResources
-	RuntimeHTTPServices                  = roles.RuntimeHTTPServices
 	RuntimeVisualizationServices         = roles.RuntimeVisualizationServices
 	OpenedApplicationRuntime             = roles.OpenedApplicationRuntime
 	OpenedProcessApplication             = roles.OpenedProcessApplication
@@ -79,7 +80,6 @@ type (
 
 	ApplicationRuntimeInputs        = applicationopening.RuntimeInputs
 	ApplicationRuntimeInputResolver = applicationopening.RuntimeInputResolver
-	RuntimeOpener                   = applicationopening.RuntimeOpener
 	RuntimeAdapter                  = applicationopening.RuntimeAdapter
 	ApplicationService              = applicationopening.Service
 
@@ -90,41 +90,66 @@ type (
 	ReplayRecordingReader = fileeffects.ReplayRecordingReader
 	InitialWorkReader     = fileeffects.InitialWorkReader
 
-	ProcessLifecycleFactory = processlifecycle.Factory
-	RuntimeHostService      = runtimehosting.Service
-
-	RuntimeOpeningExternalEffects          = runtimeopening.ExternalEffects
+	ApplicationRuntimeOpening              = runtimeopening.ApplicationRuntimeOpening
+	InvocationRuntimeOpening               = runtimeopening.InvocationRuntimeOpening
+	ExecutionRuntimeOpening                = runtimeopening.ExecutionRuntimeOpening
+	ProviderSessionsRuntimeOpeningPorts    = runtimeopening.ProviderSessionsPorts
+	ProviderOverrideService                = runtimeopening.ProviderOverrideService
+	FactoryRuntimeOpeningPorts             = runtimeopening.FactoryRuntimePorts
+	FactoryDefinitionsRuntimeOpeningPorts  = runtimeopening.FactoryDefinitionsPorts
+	FactorySessionsRuntimeOpeningPorts     = runtimeopening.FactorySessionsPorts
+	WorkRuntimeOpeningPorts                = runtimeopening.WorkPorts
+	AutomationsRuntimeOpeningPorts         = runtimeopening.AutomationsPorts
+	ModelsRuntimeOpeningPorts              = runtimeopening.ModelsPorts
+	RecordingsRuntimeOpeningPorts          = runtimeopening.RecordingsPorts
+	WebhooksRuntimeOpeningPorts            = runtimeopening.WebhooksPorts
+	WorkersRuntimeOpeningPorts             = runtimeopening.WorkersPorts
+	OperatorSettingsRuntimeOpeningPorts    = runtimeopening.OperatorSettingsPorts
 	WorkFactory                            = runtimeopening.WorkFactory
-	AutomationFactory                      = runtimeopening.AutomationFactory
 	FactorySessionExecutionFactory         = runtimeopening.FactorySessionExecutionFactory
 	ConductorInvocationWithProgressFactory = runtimeopening.ConductorInvocationWithProgressFactory
-	RecordingsProjectionFactory            = runtimeopening.RecordingsProjectionFactory
-	RecordingsFactory                      = runtimeopening.RecordingsFactory
-	RuntimeLedgerFactory                   = runtimeopening.RuntimeLedgerFactory
-	ReplayClockFactory                     = runtimeopening.ReplayClockFactory
-	WorkersRuntimeFactory                  = runtimeopening.WorkersRuntimeFactory
-	AutomationHostedSourcesFactory         = runtimeopening.AutomationHostedSourcesFactory
-	WorkersLocalRuntimeHooksFactory        = runtimeopening.WorkersLocalRuntimeHooksFactory
-	FactoryDefinitionsFactory              = runtimeopening.FactoryDefinitionsFactory
 	DurableExecutionFactory                = runtimeopening.DurableExecutionFactory
 	DurableExecution                       = runtimeopening.DurableExecution
-	WorkerExecutionFactory                 = runtimeopening.WorkerExecutionFactory
 	WorkerCommandRunnerAdapter             = runtimeopening.WorkerCommandRunnerAdapter
+	ProviderCommandRunner                  = runtimeopening.ProviderCommandRunner
+	ScriptCommandRunner                    = runtimeopening.ScriptCommandRunner
 	ProviderFromCommandRunnerFactory       = runtimeopening.ProviderFromCommandRunnerFactory
 	FactoryRuntimeAssembler                = runtimeopening.FactoryRuntimeAssembler
-	RuntimeOpeningFactory                  = runtimeopening.Factory
+	FactoryRuntimeRoot                     = runtimeopening.FactoryRuntimeRoot
+	RuntimeRootFactory                     = runtimeopening.RuntimeRootFactory
+	RuntimeOpening                         = runtimeopening.Factory
 	RuntimeRoot                            = runtimeopening.RuntimeRoot
 	ModelPullMetricsRecorder               = factorysessioncontracts.ModelPullMetricsRecorder
 	InvocationArtifactFileSystem           = factorysessioncontracts.InvocationArtifactFileSystem
 	InvocationArtifactExporter             = factorysessioncontracts.InvocationArtifactExporter
 
 	StandaloneSessionExecutionFactory   = executionopening.StandaloneSessionExecutionFactory
-	WorkerInvocationFactory             = executionopening.WorkerInvocationFactory
+	WorkerExecution                     = executionopening.WorkerExecution
 	WorkerInvocationWithProgressFactory = executionopening.WorkerInvocationWithProgressFactory
-	LiveChildInvocationFactory          = execution.LiveChildInvocationFactory
 	ExecutionOpeningFactory             = executionopening.Factory
 	StdioOpeningService                 = executionopening.StdioOpeningService
 )
+
+// NewDefinitionRuntimeRouter returns the zero-value, inert Definitions
+// routing capability used by the canonical process graph.
+func NewDefinitionRuntimeRouter() *factorysessions.DefinitionRuntimeRouter {
+	return &factorysessions.DefinitionRuntimeRouter{}
+}
+
+// RuntimeAssemblyFromService narrows the one Wire-constructed Factory
+// Sessions root to its owner-private runtime capability. The assertion is
+// performed once during process composition; runtime operations never ask the
+// public root to construct or discover another service.
+func RuntimeAssemblyFromService(service factorysessions.Service) (RuntimeAssembly, error) {
+	if service == nil {
+		return nil, fmt.Errorf("Factory Sessions runtime assembly requires the service root")
+	}
+	assembly, ok := service.(RuntimeAssembly)
+	if !ok || assembly == nil {
+		return nil, fmt.Errorf("Factory Sessions service root does not expose its runtime capability")
+	}
+	return assembly, nil
+}
 
 var (
 	NewCursorFileStore         = persistence.NewFileStore
@@ -132,79 +157,36 @@ var (
 	NewProcessLifecycleFactory = processlifecycle.NewFactory
 	NewRuntimeHostService      = runtimehosting.New
 	NewDurableExecutionRuntime = runtimeopening.NewDurableExecution
-	NewWorkerExecutionRuntime  = runtimeopening.NewWorkerExecution
 	ModelHostDiagnosticLogger  = runtimeopening.ModelHostDiagnosticLogger
 	ModelHostDiagnosticMetrics = runtimeopening.ModelHostDiagnosticMetrics
 	NewExecutionOpeningFactory = executionopening.NewFactory
 )
 
-type RuntimeOpeningDependencies struct {
-	ProviderSessions                 providersessions.Service
-	FactoryWorkflows                 factoryruntime.JavaScriptWorkflowDefinitions
-	WorkflowPreview                  factoryruntime.WorkflowPreviewOperation
-	FactoryDefinitionValidator       factorydefinitions.Validator
-	NamedPaths                       factorydefinitions.NamedPathResolver
-	DurableExecutionFactory          DurableExecutionFactory
-	WorkerExecutionFactory           WorkerExecutionFactory
-	ModelService                     models.Service
-	WorkFactory                      WorkFactory
-	AutomationFactory                AutomationFactory
-	FactorySessionsService           factorysessions.Service
-	FactorySessionExecutionFactory   FactorySessionExecutionFactory
-	RecordingsProjectionFactory      RecordingsProjectionFactory
-	RecordingsFactory                RecordingsFactory
-	RuntimeLedgerFactory             RuntimeLedgerFactory
-	RuntimeRecorderFactory           recordings.RuntimeRecorderFactory
-	ReplayClockFactory               ReplayClockFactory
-	ReplayExecutionFactory           recordings.ReplayExecutionFactory
-	WorkersRuntimeFactory            WorkersRuntimeFactory
-	WorkersRuntimeExecutorsFactory   factoryruntime.WorkersRuntimeExecutorsFactory
-	WorkersMockCommandRunnerFactory  factoryruntime.WorkersMockCommandRunnerFactory
-	AutomationHostedSourcesFactory   AutomationHostedSourcesFactory
-	WorkersLocalRuntimeHooksFactory  WorkersLocalRuntimeHooksFactory
-	FactoryDefinitionsFactory        FactoryDefinitionsFactory
-	FactoryScaffoldInitializer       factorysessions.FactoryScaffoldInitializer
-	EditableFactoryValidator         factorysessions.EditableFactoryValidator
-	InitialFactorySnapshotFactory    factorydefinitions.InitialFactorySnapshotFactory
-	FactoryRuntimeAssembler          FactoryRuntimeAssembler
-	ContentMaterializer              work.ContentMaterializer
-	LoadFactory                      factorydefinitions.LoadedFactoryLoader
-	NewLoadedFactory                 factorydefinitions.LoadedFactorySourceFactory
-	DecodeReplayConfig               factorydefinitions.ReplayRuntimeConfigDecoder
-	LoadReplay                       recordings.ReplayArtifactLoader
-	CaptureLoadedFactorySnapshot     factorydefinitions.LoadedFactorySnapshotCapturer
-	ResolveClock                     factoryruntime.ClockResolver
-	NewSessionLogger                 factoryruntime.SessionLoggerFactory
-	AdaptWorkerCommandRunner         WorkerCommandRunnerAdapter
-	ProviderFromCommandRunnerFactory ProviderFromCommandRunnerFactory
-	ProcessRuntimeFactory            ProcessRuntimeFactory
-	EnsureOperatorBackendScope       operatorsettings.BackendScopeEnsurer
-	GenerateRuntimeInstanceID        factorysessions.RuntimeInstanceIDGenerator
-	ResolveHome                      factorysessions.HomeDirectoryResolver
-	ReplayFiles                      ReplayRecordingReader
-	ProviderIdentities               factorysessions.ProviderIdentityResolver
-}
-
-func NewRuntimeOpeningFactory(deps RuntimeOpeningDependencies) (*RuntimeOpeningFactory, error) {
+func NewRuntimeOpening(
+	providerSessions *ProviderSessionsRuntimeOpeningPorts,
+	factoryRuntime *FactoryRuntimeOpeningPorts,
+	factoryDefinitions *FactoryDefinitionsRuntimeOpeningPorts,
+	factorySessions *FactorySessionsRuntimeOpeningPorts,
+	workPorts *WorkRuntimeOpeningPorts,
+	automations *AutomationsRuntimeOpeningPorts,
+	modelsPorts *ModelsRuntimeOpeningPorts,
+	recordingsPorts *RecordingsRuntimeOpeningPorts,
+	webhooksPorts *WebhooksRuntimeOpeningPorts,
+	workersPorts *WorkersRuntimeOpeningPorts,
+	operatorSettings *OperatorSettingsRuntimeOpeningPorts,
+) (*RuntimeOpening, error) {
 	return runtimeopening.NewFactory(
-		deps.ProviderSessions, deps.FactoryWorkflows, deps.WorkflowPreview,
-		deps.FactoryDefinitionValidator, deps.NamedPaths, deps.DurableExecutionFactory,
-		deps.WorkerExecutionFactory, deps.ModelService, deps.WorkFactory, deps.AutomationFactory,
-		deps.FactorySessionsService, deps.FactorySessionExecutionFactory,
-		deps.RecordingsProjectionFactory, deps.RecordingsFactory, deps.RuntimeLedgerFactory,
-		deps.RuntimeRecorderFactory, deps.ReplayClockFactory, deps.ReplayExecutionFactory,
-		deps.WorkersRuntimeFactory, deps.WorkersRuntimeExecutorsFactory,
-		deps.WorkersMockCommandRunnerFactory, deps.AutomationHostedSourcesFactory,
-		deps.WorkersLocalRuntimeHooksFactory, deps.FactoryDefinitionsFactory,
-		deps.FactoryScaffoldInitializer, deps.EditableFactoryValidator,
-		deps.InitialFactorySnapshotFactory, deps.FactoryRuntimeAssembler,
-		work.MaterializationService(deps.ContentMaterializer),
-		deps.LoadFactory, deps.NewLoadedFactory, deps.DecodeReplayConfig, deps.LoadReplay,
-		deps.CaptureLoadedFactorySnapshot, deps.ResolveClock, deps.NewSessionLogger,
-		deps.AdaptWorkerCommandRunner, deps.ProviderFromCommandRunnerFactory, deps.ProcessRuntimeFactory,
-		deps.EnsureOperatorBackendScope,
-		deps.GenerateRuntimeInstanceID, deps.ResolveHome, deps.ReplayFiles,
-		deps.ProviderIdentities,
+		providerSessions,
+		factoryRuntime,
+		factoryDefinitions,
+		factorySessions,
+		workPorts,
+		automations,
+		modelsPorts,
+		recordingsPorts,
+		webhooksPorts,
+		workersPorts,
+		operatorSettings,
 	)
 }
 
@@ -214,7 +196,7 @@ func NewLifecyclePlanOperation() LifecyclePlanOperation {
 
 func NewApplicationService(
 	resolveInputs ApplicationRuntimeInputResolver,
-	openRuntime RuntimeOpener,
+	openRuntime ApplicationRuntimeOpening,
 	adaptRuntime RuntimeAdapter,
 	planLifecycle LifecyclePlanOperation,
 ) (*ApplicationService, error) {
@@ -222,24 +204,28 @@ func NewApplicationService(
 }
 
 func NewInvocationOperation(
-	openRuntime *RuntimeOpeningFactory,
-	effects RuntimeOpeningExternalEffects,
+	openRuntime InvocationRuntimeOpening,
+	modelsRoot models.Service,
 	workingDirectory platformfilesystem.WorkingDirectory,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
 	artifactExporter InvocationArtifactExporter,
 	modelTimeout factorysessions.ModelInvocationTimeout,
 	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
 	generateSessionID factorysessions.SessionIDGenerator,
+	logger *zap.Logger,
+	presentations OpeningPresentationOwner,
 ) (InvocationOperation, error) {
 	return invocationwire.NewOperation(
 		openRuntime,
-		effects,
+		modelsRoot,
 		workingDirectory,
 		resolveCurrentDir,
 		artifactExporter,
 		modelTimeout,
 		artifactRoots,
 		generateSessionID,
+		logger,
+		presentations,
 	)
 }
 
@@ -252,14 +238,16 @@ func NewDirectJavaScriptRunOperation(
 	runSync DirectJavaScriptSyncRunner,
 	generateSessionID factorysessions.SessionIDGenerator,
 	host roles.DirectJavaScriptHostAdapter,
+	presentations OpeningPresentationOwner,
 ) (DirectJavaScriptRunOperation, error) {
-	return executionopening.NewDirectJavaScriptRunOperation(build, runSync, generateSessionID, host)
+	return executionopening.NewDirectJavaScriptRunOperation(build, runSync, generateSessionID, host, presentations)
 }
 
 func NewStdioOpeningService(
 	opening StdioExecutionOpening,
 	buildFixture FixtureStdioApplicationBuilder,
 	buildRuntime RuntimeStdioApplicationBuilder,
+	presentations OpeningPresentationOwner,
 ) (*StdioOpeningService, error) {
-	return executionopening.NewStdioOpeningService(opening, buildFixture, buildRuntime)
+	return executionopening.NewStdioOpeningService(opening, buildFixture, buildRuntime, presentations)
 }

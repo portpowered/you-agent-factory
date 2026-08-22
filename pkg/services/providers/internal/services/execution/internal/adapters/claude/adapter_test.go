@@ -6,9 +6,11 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
+	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	claude "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 )
@@ -16,25 +18,27 @@ import (
 func TestClaudeRootPreservesRequestOrderedStreamFinalAndSession(t *testing.T) {
 	t.Parallel()
 
-	request := providers.ExecuteRequest{
-		Provider:         providers.IDClaude,
-		AttemptID:        "attempt-claude-success",
-		SystemPrompt:     "system contract",
-		UserMessage:      "perform the accepted work",
-		OutputSchema:     `{"type":"object"}`,
-		WorkingDirectory: "C:/factory",
-		Worktree:         "C:/factory/tree",
+	request := execution.ContinuationRequest{
+		ExecuteRequest: providers.ExecuteRequest{
+			Provider:         providers.IDClaude,
+			AttemptID:        "attempt-claude-success",
+			SystemPrompt:     "system contract",
+			UserMessage:      "perform the accepted work",
+			OutputSchema:     `{"type":"object"}`,
+			WorkingDirectory: "C:/factory",
+			Worktree:         "C:/factory/tree",
+		},
 		ResumeSession: &providers.SessionRef{
 			Provider: providers.IDClaude,
 			Kind:     providers.SessionIDKind,
 			ID:       "session-previous",
 		},
 	}
-	var received providers.ExecuteRequest
+	var received execution.ContinuationRequest
 	stream := claudeSuccessStream()
 	effect := claude.EffectFunc(func(
 		_ context.Context,
-		got providers.ExecuteRequest,
+		got execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (claude.EffectResult, error) {
 		received = got.Clone()
@@ -45,24 +49,80 @@ func TestClaudeRootPreservesRequestOrderedStreamFinalAndSession(t *testing.T) {
 		}
 		return claude.EffectResult{
 			DurationMillis: 19,
-			Metadata:       map[string]string{"transport": "stream-json"},
+			Metadata: map[string]string{
+				"transport": "stream-json",
+				"api-token": "secret-value",
+			},
 		}, nil
 	})
 	root := newClaudeRoot(t, effect)
 
-	result, err := root.Execute(t.Context(), request)
+	attempt := request.ExecuteRequest.Clone()
+	continued, err := root.Continue(t.Context(), providers.ContinueRequest{
+		Reference: *request.ResumeSession,
+		Attempt:   attempt,
+	})
 	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
+		t.Fatalf("Continue() error = %v", err)
 	}
+	if continued.Outcome != providers.ContinuationOutcomeResumed {
+		t.Fatalf("Continue().Outcome = %q, want resumed", continued.Outcome)
+	}
+	result := continued.Result
 	assertClaudeSuccessResult(t, result, received, request)
 
 	result.SessionRef.ID = "caller-mutated"
 	result.Diagnostics.Progress[2].Metadata["caller"] = "mutated"
-	second, err := root.Execute(t.Context(), request)
+	secondContinued, err := root.Continue(t.Context(), providers.ContinueRequest{
+		Reference: *request.ResumeSession,
+		Attempt:   attempt,
+	})
 	if err != nil {
-		t.Fatalf("second Execute() error = %v", err)
+		t.Fatalf("second Continue() error = %v", err)
 	}
-	assertRepeatedClaudeResultDetached(t, second)
+	assertRepeatedClaudeResultDetached(t, secondContinued.Result)
+}
+
+func TestClaudeRootObservesProviderSessionWhileNativeAttemptIsLive(t *testing.T) {
+	t.Parallel()
+
+	observed := make(chan providers.SessionRef, 1)
+	effect := claude.EffectFunc(func(
+		_ context.Context,
+		_ execution.ContinuationRequest,
+		observe func([]byte) error,
+	) (claude.EffectResult, error) {
+		if err := observe([]byte(`{"type":"system","subtype":"init","session_id":"claude-live-observation"}` + "\n")); err != nil {
+			return claude.EffectResult{}, err
+		}
+		select {
+		case reference := <-observed:
+			want := providers.SessionRef{Provider: providers.IDClaude, Kind: providers.SessionIDKind, ID: "claude-live-observation"}
+			if reference != want {
+				t.Fatalf("live SessionObserver reference = %#v, want %#v", reference, want)
+			}
+		default:
+			t.Fatal("SessionObserver was not called before native effect returned")
+		}
+		if err := observe([]byte(`{"type":"result","subtype":"success","is_error":false,"result":"observed live","session_id":"claude-live-observation"}` + "\n")); err != nil {
+			return claude.EffectResult{}, err
+		}
+		return claude.EffectResult{}, nil
+	})
+	root := newClaudeRoot(t, effect)
+
+	result, err := root.Execute(t.Context(), providers.ExecuteRequest{
+		Provider: providers.IDClaude, AttemptID: "attempt-live-observation", UserMessage: "observe the provider session",
+		SessionObserver: func(reference providers.SessionRef) {
+			observed <- reference
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.SessionRef == nil || result.SessionRef.ID != "claude-live-observation" {
+		t.Fatalf("Execute().SessionRef = %#v, want live session reference", result.SessionRef)
+	}
 }
 
 func TestClaudeStreamDeltaPreservesWhitespace(t *testing.T) {
@@ -116,7 +176,7 @@ func TestClaudeStreamDeltaPreservesWhitespace(t *testing.T) {
 	})
 	effect := claude.EffectFunc(func(
 		_ context.Context,
-		_ providers.ExecuteRequest,
+		_ execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (claude.EffectResult, error) {
 		return claude.EffectResult{}, observe(stream)
@@ -146,8 +206,8 @@ func TestClaudeStreamDeltaPreservesWhitespace(t *testing.T) {
 func assertClaudeSuccessResult(
 	t *testing.T,
 	result providers.ExecuteResult,
-	received providers.ExecuteRequest,
-	request providers.ExecuteRequest,
+	received execution.ContinuationRequest,
+	request execution.ContinuationRequest,
 ) {
 	t.Helper()
 	if !reflect.DeepEqual(received, request) {
@@ -167,7 +227,10 @@ func assertClaudeSuccessResult(
 	}
 	if result.Diagnostics == nil ||
 		result.Diagnostics.DurationMillis != 19 ||
-		result.Diagnostics.Metadata["transport"] != "stream-json" {
+		result.Diagnostics.Metadata["transport"] != "stream-json" ||
+		result.Diagnostics.Metadata["input_tokens"] != "123" ||
+		result.Diagnostics.Metadata["output_tokens"] != "45" ||
+		result.Diagnostics.Metadata["api-token"] != "<redacted>" {
 		t.Fatalf("Diagnostics = %#v", result.Diagnostics)
 	}
 	assertProgress(t, result.Diagnostics.Progress)
@@ -199,7 +262,7 @@ func TestClaudeDecoderFinalizesUnterminatedRecordOnce(t *testing.T) {
 	)
 	effect := claude.EffectFunc(func(
 		_ context.Context,
-		_ providers.ExecuteRequest,
+		_ execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (claude.EffectResult, error) {
 		for _, chunk := range splitEvery(stream, 3) {
@@ -227,7 +290,7 @@ func TestClaudeDecoderMapsMixedTextAndToolProgress(t *testing.T) {
 	stream := claudeToolStream()
 	effect := claude.EffectFunc(func(
 		_ context.Context,
-		_ providers.ExecuteRequest,
+		_ execution.ContinuationRequest,
 		observe func([]byte) error,
 	) (claude.EffectResult, error) {
 		return claude.EffectResult{}, observe(stream)
@@ -250,6 +313,11 @@ func TestClaudeDecoderMapsMixedTextAndToolProgress(t *testing.T) {
 	}
 	if got := countPhase(result.Diagnostics.Progress, "tool.completed"); got < 1 {
 		t.Fatalf("tool.completed facts = %d, want at least 1", got)
+	}
+	for _, key := range []string{"input_tokens", "output_tokens"} {
+		if _, exists := result.Diagnostics.Metadata[key]; exists {
+			t.Fatalf("Diagnostics.Metadata[%q] = %q, want usage omitted without terminal usage", key, result.Diagnostics.Metadata[key])
+		}
 	}
 }
 
@@ -352,6 +420,7 @@ func claudeSuccessStream() []byte {
 		map[string]any{
 			"type": "result", "subtype": "success", "is_error": false,
 			"result": "authoritative final answer", "session_id": "claude-session-42",
+			"usage": map[string]any{"input_tokens": 123, "output_tokens": 45},
 		},
 	}
 	return encodeRecords(records)
@@ -463,7 +532,7 @@ func newClaudeRoot(t *testing.T, effect claude.Effect) providers.Service {
 	if err != nil {
 		t.Fatal(err)
 	}
-	root, err := providerservice.New(catalog, executionService)
+	root, err := providerservice.New(catalog, executionService, logging.NoopLogger{})
 	if err != nil {
 		t.Fatal(err)
 	}

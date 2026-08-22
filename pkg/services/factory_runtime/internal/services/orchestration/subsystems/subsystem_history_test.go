@@ -2,6 +2,7 @@ package subsystems
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -24,7 +25,7 @@ func TestHistorySubsystem_Execute_MergesHistoryFromDispatchConsumedTokens(t *tes
 		Dispatches: map[string]*interfaces.DispatchEntry{
 			"dispatch-1": {
 				DispatchID: "dispatch-1",
-				ConsumedTokens: []factorytoken.Token{
+				ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{
 					{
 						ID:      "token-1",
 						PlaceID: "story:init",
@@ -51,7 +52,7 @@ func TestHistorySubsystem_Execute_MergesHistoryFromDispatchConsumedTokens(t *tes
 							}},
 						},
 					},
-				},
+				}),
 			},
 		},
 	}
@@ -91,6 +92,50 @@ func TestHistorySubsystem_Execute_MergesHistoryFromDispatchConsumedTokens(t *tes
 	}
 }
 
+func TestHistorySubsystem_RepeatedSnapshotExecutionDoesNotDoubleCountVisitHistory(t *testing.T) {
+	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Results: []workerexecution.WorkResult{{
+			DispatchID:   "dispatch-repeated",
+			TransitionID: "review",
+			Outcome:      workerexecution.OutcomeRejected,
+		}},
+		Dispatches: map[string]*interfaces.DispatchEntry{
+			"dispatch-repeated": {
+				ConsumedTokens: factorytoken.ToWorkerSlice([]factorytoken.Token{{
+					Color: factorytoken.Color{WorkID: "work-repeated", WorkTypeID: "task"},
+					History: factorytoken.History{TotalVisits: map[string]int{
+						"process": 12,
+						"review":  11,
+					}},
+				}}),
+			},
+		},
+	}
+
+	subsystem := NewHistory(nil)
+	first, err := subsystem.Execute(context.Background(), snapshot)
+	if err != nil {
+		t.Fatalf("first Execute() error = %v", err)
+	}
+	second, err := subsystem.Execute(context.Background(), snapshot)
+	if err != nil {
+		t.Fatalf("repeated Execute() error = %v", err)
+	}
+	if first == nil || second == nil {
+		t.Fatalf("Execute() results = (%#v, %#v), want history results", first, second)
+	}
+	if !reflect.DeepEqual(first.Histories, second.Histories) {
+		t.Fatalf("repeated histories = %#v, want %#v", second.Histories, first.Histories)
+	}
+	history := first.Histories[0]
+	if history.TotalVisits["process"] != 12 || history.TotalVisits["review"] != 12 {
+		t.Fatalf("computed history = %#v, want process=12 review=12", history.TotalVisits)
+	}
+	if snapshot.Dispatches["dispatch-repeated"].ConsumedTokens[0].History.TotalVisits["review"] != 11 {
+		t.Fatalf("source snapshot review visits = %d, want unchanged 11", snapshot.Dispatches["dispatch-repeated"].ConsumedTokens[0].History.TotalVisits["review"])
+	}
+}
+
 func TestBuildHistory_MergesSharedLineageVisitCountsWithMaxNotSum(t *testing.T) {
 	consumed := []factorytoken.Token{
 		{
@@ -117,6 +162,52 @@ func TestBuildHistory_MergesSharedLineageVisitCountsWithMaxNotSum(t *testing.T) 
 	}
 	if got := history.TotalVisits["review"]; got != 3 {
 		t.Fatalf("TotalVisits[review] = %d, want 3", got)
+	}
+}
+
+func TestBuildHistory_ContinueResetsConsecutiveFailureStrike(t *testing.T) {
+	consumed := []factorytoken.Token{{
+		Color: factorytoken.Color{WorkID: "task-1", WorkTypeID: "task"},
+		History: factorytoken.History{
+			TotalVisits:         map[string]int{"review": 4},
+			ConsecutiveFailures: map[string]int{"review": 2},
+		},
+	}}
+
+	history := buildHistory(consumed, &workerexecution.WorkResult{
+		TransitionID: "review",
+		Outcome:      workerexecution.OutcomeContinue,
+	}, "task-1")
+
+	if got := history.TotalVisits["review"]; got != 5 {
+		t.Fatalf("TotalVisits[review] = %d, want 5 for the continued visit", got)
+	}
+	if got := history.ConsecutiveFailures["review"]; got != 0 {
+		t.Fatalf("ConsecutiveFailures[review] = %d, want 0 for a non-failing continue", got)
+	}
+}
+
+func TestBuildHistory_IncompleteOutputRemainsConsecutiveFailure(t *testing.T) {
+	consumed := []factorytoken.Token{{
+		Color: factorytoken.Color{WorkID: "review-1", WorkTypeID: "review"},
+		History: factorytoken.History{
+			ConsecutiveFailures: map[string]int{"review": 1},
+		},
+	}}
+
+	history := buildHistory(consumed, &workerexecution.WorkResult{
+		TransitionID: "review",
+		Outcome:      workerexecution.OutcomeFailed,
+		Diagnostics: &workerexecution.WorkDiagnostics{Provider: &workerexecution.ProviderDiagnostic{
+			ResponseMetadata: map[string]string{
+				workerexecution.ProviderResponseMetadataFailureOperation:      "completion_validation",
+				workerexecution.ProviderResponseMetadataFailureClassification: "missing_required_output",
+			},
+		}},
+	}, "review-1")
+
+	if got := history.ConsecutiveFailures["review"]; got != 2 {
+		t.Fatalf("ConsecutiveFailures[review] = %d, want 2 for INCOMPLETE_OUTPUT", got)
 	}
 }
 

@@ -5,6 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"reflect"
+	"sort"
+	"strconv"
+	"strings"
 )
 
 type MockWorkerRunType string
@@ -70,47 +74,283 @@ func NewEmptyMockWorkersConfig() *MockWorkersConfig {
 	return &MockWorkersConfig{MockWorkers: []MockWorkerConfig{}}
 }
 
+// Clone returns a detached copy suitable for carrying one mock-worker
+// selection into a request-scoped execution. The Workers root never retains a
+// caller-owned config or its nested mutable values.
+func (config *MockWorkersConfig) Clone() *MockWorkersConfig {
+	if config == nil {
+		return nil
+	}
+	clone := &MockWorkersConfig{
+		UnmatchedDispatchPolicy: config.UnmatchedDispatchPolicy,
+		MockWorkers:             make([]MockWorkerConfig, len(config.MockWorkers)),
+	}
+	for index, worker := range config.MockWorkers {
+		clone.MockWorkers[index] = worker
+		clone.MockWorkers[index].WorkInputs = append(
+			[]MockWorkInputSelector(nil),
+			worker.WorkInputs...,
+		)
+		if worker.ScriptConfig != nil {
+			script := *worker.ScriptConfig
+			script.Args = append([]string(nil), worker.ScriptConfig.Args...)
+			script.Env = cloneStringMap(worker.ScriptConfig.Env)
+			clone.MockWorkers[index].ScriptConfig = &script
+		}
+		if worker.RejectConfig != nil {
+			reject := *worker.RejectConfig
+			if worker.RejectConfig.ExitCode != nil {
+				exitCode := *worker.RejectConfig.ExitCode
+				reject.ExitCode = &exitCode
+			}
+			clone.MockWorkers[index].RejectConfig = &reject
+		}
+	}
+	return clone
+}
+
 type MockWorkersConfigFileSystem interface{ ReadFile(string) ([]byte, error) }
 type MockWorkersConfigLoader func(string) (*MockWorkersConfig, error)
 
+// MockWorkersConfigDecodeDiagnostics contains safe metadata produced while
+// decoding one mock-worker configuration. It records ignored paths only; the
+// ignored values are never retained for logging or persistence.
+type MockWorkersConfigDecodeDiagnostics struct {
+	IgnoredJSONPaths []string
+}
+
+// Paths returns a detached, deterministic copy of ignored JSON paths.
+func (diagnostics MockWorkersConfigDecodeDiagnostics) Paths() []string {
+	return sortedMockWorkersJSONPaths(diagnostics.IgnoredJSONPaths)
+}
+
+// MockWorkersConfigDiagnosticsLoader is the optional diagnostics-aware loader
+// used by customer-facing callers that need to warn about ignored fields.
+type MockWorkersConfigDiagnosticsLoader func(string) (*MockWorkersConfig, MockWorkersConfigDecodeDiagnostics, error)
+
+// MockWorkersConfigCodec owns the Workers mock-worker configuration codecs.
+// Methods keep construction and diagnostics behavior behind the service
+// contract without adding more package-level root functions.
+type MockWorkersConfigCodec struct{}
+
 func NewMockWorkersConfigLoader(files MockWorkersConfigFileSystem) (MockWorkersConfigLoader, error) {
-	if files == nil {
-		return nil, fmt.Errorf("Workers mock-worker config filesystem is required")
+	load, err := (MockWorkersConfigCodec{}).NewDiagnosticsLoader(files)
+	if err != nil {
+		return nil, err
 	}
 	return func(path string) (*MockWorkersConfig, error) {
-		if path == "" {
-			return NewEmptyMockWorkersConfig(), nil
-		}
-		data, err := files.ReadFile(path)
-		if err != nil {
-			return nil, fmt.Errorf("read mock workers config %s: %w", path, err)
-		}
-		config, err := ParseMockWorkersConfig(data)
-		if err != nil {
-			return nil, fmt.Errorf("parse mock workers config %s: %w", path, err)
-		}
-		return config, nil
+		config, _, err := load(path)
+		return config, err
 	}, nil
 }
 
+// NewDiagnosticsLoader constructs the Workers-owned loader that retains safe
+// ignored-field paths for an operational caller.
+func (MockWorkersConfigCodec) NewDiagnosticsLoader(
+	files MockWorkersConfigFileSystem,
+) (MockWorkersConfigDiagnosticsLoader, error) {
+	if files == nil {
+		return nil, fmt.Errorf("Workers mock-worker config filesystem is required")
+	}
+	return func(path string) (*MockWorkersConfig, MockWorkersConfigDecodeDiagnostics, error) {
+		if path == "" {
+			return NewEmptyMockWorkersConfig(), MockWorkersConfigDecodeDiagnostics{}, nil
+		}
+		data, err := files.ReadFile(path)
+		if err != nil {
+			return nil, MockWorkersConfigDecodeDiagnostics{}, fmt.Errorf("read mock workers config %s: %w", path, err)
+		}
+		config, diagnostics, err := (MockWorkersConfigCodec{}).ParseWithDiagnostics(data)
+		if err != nil {
+			return nil, MockWorkersConfigDecodeDiagnostics{}, fmt.Errorf("parse mock workers config %s: %w", path, err)
+		}
+		return config, diagnostics, nil
+	}, nil
+}
+
+// ParseMockWorkersConfig validates raw JSON into the normalized runtime
+// mock-worker configuration. Unknown object fields are ignored; callers that
+// need safe paths for warnings should use MockWorkersConfigCodec.ParseWithDiagnostics.
 func ParseMockWorkersConfig(data []byte) (*MockWorkersConfig, error) {
+	config, _, err := (MockWorkersConfigCodec{}).ParseWithDiagnostics(data)
+	return config, err
+}
+
+// ParseWithDiagnostics validates one mock-worker JSON document and reports
+// sorted unique paths for unknown object fields. Known field types, run-type
+// validation, and exactly-one-document enforcement stay strict.
+func (MockWorkersConfigCodec) ParseWithDiagnostics(
+	data []byte,
+) (*MockWorkersConfig, MockWorkersConfigDecodeDiagnostics, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 	config := NewEmptyMockWorkersConfig()
 	if err := decoder.Decode(config); err != nil {
-		return nil, fmt.Errorf("decode mock workers JSON: %w", err)
+		return nil, MockWorkersConfigDecodeDiagnostics{}, fmt.Errorf("decode mock workers JSON: %w", err)
 	}
 	var trailing any
 	if err := decoder.Decode(&trailing); err != io.EOF {
-		return nil, fmt.Errorf("decode mock workers JSON: unexpected trailing JSON")
+		return nil, MockWorkersConfigDecodeDiagnostics{}, fmt.Errorf("decode mock workers JSON: unexpected trailing JSON")
 	}
 	if config.MockWorkers == nil {
 		config.MockWorkers = []MockWorkerConfig{}
 	}
 	if err := config.Validate(); err != nil {
+		return nil, MockWorkersConfigDecodeDiagnostics{}, err
+	}
+	paths, err := collectMockWorkersJSONPaths(data)
+	if err != nil {
+		return nil, MockWorkersConfigDecodeDiagnostics{}, fmt.Errorf("decode mock workers JSON: %w", err)
+	}
+	return config, MockWorkersConfigDecodeDiagnostics{IgnoredJSONPaths: paths}, nil
+}
+
+var mockWorkersRawMessageType = reflect.TypeOf(json.RawMessage{})
+
+func collectMockWorkersJSONPaths(data []byte) ([]string, error) {
+	value, err := decodeOneMockWorkersJSONValue(data)
+	if err != nil {
 		return nil, err
 	}
-	return config, nil
+	var paths []string
+	collectMockWorkersJSONPathsForType(value, reflect.TypeOf(MockWorkersConfig{}), "$", &paths)
+	return sortedMockWorkersJSONPaths(paths), nil
+}
+
+func decodeOneMockWorkersJSONValue(data []byte) (any, error) {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, err
+	}
+	var trailing json.RawMessage
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return nil, fmt.Errorf("unexpected trailing JSON value")
+		}
+		return nil, err
+	}
+	return value, nil
+}
+
+func collectMockWorkersJSONPathsForType(value any, typ reflect.Type, path string, paths *[]string) {
+	if value == nil || typ == nil {
+		return
+	}
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	if typ == mockWorkersRawMessageType {
+		return
+	}
+
+	switch typ.Kind() {
+	case reflect.Map:
+		collectMockWorkersJSONPathsForMap(value, typ, path, paths)
+	case reflect.Slice, reflect.Array:
+		collectMockWorkersJSONPathsForSequence(value, typ, path, paths)
+	case reflect.Struct:
+		collectMockWorkersJSONPathsForStruct(value, typ, path, paths)
+	}
+}
+
+func collectMockWorkersJSONPathsForMap(value any, typ reflect.Type, path string, paths *[]string) {
+	object, ok := value.(map[string]any)
+	if !ok || typ.Key().Kind() != reflect.String {
+		return
+	}
+	for key, child := range object {
+		collectMockWorkersJSONPathsForType(child, typ.Elem(), appendMockWorkersJSONPath(path, key), paths)
+	}
+}
+
+func collectMockWorkersJSONPathsForSequence(value any, typ reflect.Type, path string, paths *[]string) {
+	values, ok := value.([]any)
+	if !ok {
+		return
+	}
+	for index, item := range values {
+		collectMockWorkersJSONPathsForType(item, typ.Elem(), path+"["+strconv.Itoa(index)+"]", paths)
+	}
+}
+
+func collectMockWorkersJSONPathsForStruct(value any, typ reflect.Type, path string, paths *[]string) {
+	object, ok := value.(map[string]any)
+	if !ok {
+		return
+	}
+	fields := mockWorkersJSONFieldTypes(typ)
+	for key, child := range object {
+		fieldPath := appendMockWorkersJSONPath(path, key)
+		fieldType, known := fields[strings.ToLower(key)]
+		if !known {
+			*paths = append(*paths, fieldPath)
+			continue
+		}
+		collectMockWorkersJSONPathsForType(child, fieldType, fieldPath, paths)
+	}
+}
+
+func mockWorkersJSONFieldTypes(typ reflect.Type) map[string]reflect.Type {
+	fields := make(map[string]reflect.Type)
+	for index := 0; index < typ.NumField(); index++ {
+		field := typ.Field(index)
+		if field.PkgPath != "" {
+			continue
+		}
+		tag := field.Tag.Get("json")
+		if tag == "-" {
+			continue
+		}
+		name := strings.Split(tag, ",")[0]
+		if name == "" {
+			name = field.Name
+		}
+		fields[strings.ToLower(name)] = field.Type
+	}
+	return fields
+}
+
+func appendMockWorkersJSONPath(path, key string) string {
+	if isSimpleMockWorkersJSONPathKey(key) {
+		return path + "." + key
+	}
+	return path + "[" + strconv.Quote(key) + "]"
+}
+
+func isSimpleMockWorkersJSONPathKey(key string) bool {
+	if key == "" {
+		return false
+	}
+	for index, character := range key {
+		if (character >= 'a' && character <= 'z') ||
+			(character >= 'A' && character <= 'Z') ||
+			(character >= '0' && character <= '9' && index > 0) ||
+			character == '_' || character == '-' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func sortedMockWorkersJSONPaths(paths []string) []string {
+	if len(paths) == 0 {
+		return nil
+	}
+	unique := make(map[string]struct{}, len(paths))
+	for _, path := range paths {
+		path = strings.TrimSpace(path)
+		if path != "" {
+			unique[path] = struct{}{}
+		}
+	}
+	result := make([]string, 0, len(unique))
+	for path := range unique {
+		result = append(result, path)
+	}
+	sort.Strings(result)
+	return result
 }
 
 func (config *MockWorkersConfig) Validate() error {

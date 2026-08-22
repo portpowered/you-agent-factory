@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"sync/atomic"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -35,6 +36,8 @@ type FactoryEngine struct {
 	submitSignal          chan struct{}
 	submissionHook        *queuedSubmissionHook
 	submissionHooks       []factory.SubmissionHook
+	seededRestoredWorkIDs map[string]struct{}
+	replayDispatchWorkIDs map[string]struct{}
 	submissionState       map[string]map[string]string
 	workRequests          map[string]workdomain.WorkRequestSubmitResult
 	projectionWaiters     map[string]chan struct{}
@@ -54,6 +57,21 @@ type FactoryEngine struct {
 	mu                    sync.Mutex
 	transformer           *token_transformer.Transformer
 	acceptingSubmits      bool
+	terminationResult     *interfaces.TerminationResult
+	// admissionGate serializes a complete live-change admission transaction
+	// with ticks that may acquire or release resource tokens.
+	admissionGate       chan struct{}
+	capacityWakePending bool
+	capacityChanged     chan struct{}
+	resourceLeases      map[string]resourceCapacityLease
+	nextResourceLeaseID uint64
+	factoryRevision     int
+
+	// publishedSnapshot is the last complete runtime boundary. Readers use it
+	// when the engine is busy in a tick so read-only observation never waits on
+	// dispatch, submission hooks, or other work performed under mu.
+	publishedSnapshot           atomic.Pointer[engineStateSnapshot]
+	pendingProjectionRequestIDs map[string]struct{}
 }
 
 // NewFactoryEngine creates a new engine for the given net and marking.
@@ -79,6 +97,8 @@ func NewFactoryEngine(
 	recordPetriMutations func([]interfaces.TokenMutationRecord) error,
 	automaticTicksPaused func() bool,
 	onResultBufferDrained func(int),
+	seededRestoredWorkIDs map[string]struct{},
+	seededReplayWorkIDsWithRecordedDispatch map[string]struct{},
 ) (*FactoryEngine, error) {
 	if clock == nil {
 		return nil, fmt.Errorf("Factory Runtime engine clock is required")
@@ -114,6 +134,8 @@ func NewFactoryEngine(
 		submitSignal:          make(chan struct{}, 1),
 		submissionHook:        newQueuedSubmissionHook(),
 		submissionHooks:       append([]factory.SubmissionHook(nil), submissionHooks...),
+		seededRestoredWorkIDs: cloneWorkIDSet(seededRestoredWorkIDs),
+		replayDispatchWorkIDs: cloneWorkIDSet(seededReplayWorkIDsWithRecordedDispatch),
 		submissionState:       make(map[string]map[string]string),
 		workRequests:          make(map[string]workdomain.WorkRequestSubmitResult),
 		projectionWaiters:     make(map[string]chan struct{}),
@@ -130,7 +152,14 @@ func NewFactoryEngine(
 		onResultBufferDrained: onResultBufferDrained,
 		transformer:           transformer,
 		acceptingSubmits:      true,
+		admissionGate:         make(chan struct{}, 1),
+		capacityChanged:       make(chan struct{}),
+		resourceLeases:        make(map[string]resourceCapacityLease),
+
+		pendingProjectionRequestIDs: make(map[string]struct{}),
 	}
+	e.admissionGate <- struct{}{}
+	e.publishRuntimeSnapshotLocked()
 	e.submissionHooks = append([]factory.SubmissionHook{e.submissionHook}, e.submissionHooks...)
 	e.submissionHooks = sortedSubmissionHooks(e.submissionHooks)
 	return e, nil
@@ -185,16 +214,18 @@ func (e *FactoryEngine) retireCompletedDispatches(results []workerexecution.Work
 			if !hasCompletedRecord {
 				now := e.clock.Now()
 				completedDispatch = interfaces.CompletedDispatch{
-					DispatchID:      entry.DispatchID,
-					TransitionID:    entry.TransitionID,
-					WorkstationName: entry.WorkstationName,
-					Outcome:         r.Outcome,
-					Reason:          completedDispatchReasonFromResult(r),
-					ProviderSession: workerexecution.CloneProviderSessionMetadata(r.ProviderSession),
-					StartTime:       entry.StartTime,
-					EndTime:         now,
-					Duration:        now.Sub(entry.StartTime),
-					ConsumedTokens:  entry.ConsumedTokens,
+					DispatchID:           entry.DispatchID,
+					TransitionID:         entry.TransitionID,
+					WorkstationName:      entry.WorkstationName,
+					Outcome:              r.Outcome,
+					Reason:               completedDispatchReasonFromResult(r),
+					ArtifactVerification: r.ArtifactVerification.Clone(),
+					FailureDetail:        workerexecution.CloneFailureDetail(r.FailureDetail),
+					ProviderSession:      (r.Continuation).SessionMetadata(),
+					StartTime:            entry.StartTime,
+					EndTime:              now,
+					Duration:             now.Sub(entry.StartTime),
+					ConsumedTokens:       entry.ConsumedTokens,
 				}
 			}
 			e.runtimeState.DispatchHistory = append(e.runtimeState.DispatchHistory, completedDispatch)
@@ -224,6 +255,10 @@ func completedDispatchReasonFromResult(result workerexecution.WorkResult) string
 
 func workResultForCompletedDispatch(result workerexecution.WorkResult, completed interfaces.CompletedDispatch) workerexecution.WorkResult {
 	result.Outcome = completed.Outcome
+	result.SelectedClassificationLabel = completed.SelectedClassificationLabel
+	if completed.FailureDetail != nil {
+		result.FailureDetail = workerexecution.CloneFailureDetail(completed.FailureDetail)
+	}
 	switch completed.Outcome {
 	case workerexecution.OutcomeFailed:
 		result.Error = completed.Reason
@@ -262,49 +297,29 @@ func (e *FactoryEngine) WakeForPendingProcessing() {
 	e.wakeForPendingProcessing()
 }
 
-func (e *FactoryEngine) wakeForPendingProcessing() {
-	if !e.hasBufferedInputs() {
-		return
-	}
-	select {
-	case e.submitSignal <- struct{}{}:
-	default:
-	}
-	if hook, ok := e.dispatchHook.(factory.DispatchResultHookWakeSignaler); ok && hook.HasBufferedResults() {
-		hook.SignalBufferedResults()
-	}
-}
-
-func (e *FactoryEngine) hasBufferedInputs() bool {
-	if e.submissionHook != nil && len(e.submissionHook.batches) > 0 {
-		return true
-	}
-	buffer := e.runtimeState.ResultBuffer
-	if buffer != nil && buffer.HasData() {
-		return true
-	}
-	if e.dispatchHook != nil && e.dispatchHook.HasPendingResults() {
-		return true
-	}
-	return false
-}
-
 // SubmitWorkRequest validates and enqueues a canonical work request batch.
 // Repeated request IDs are treated as idempotent no-ops.
 func (e *FactoryEngine) SubmitWorkRequest(context context.Context, request workdomain.WorkRequest) (workdomain.WorkRequestSubmitResult, error) {
+	release, err := e.AcquireResourceCapacityAdmission(context)
+	if err != nil {
+		return workdomain.WorkRequestSubmitResult{}, err
+	}
+
 	e.mu.Lock()
 	if existing, exists := e.workRequests[request.RequestID]; exists && request.RequestID != "" {
 		e.mu.Unlock()
+		release()
 		existing.Accepted = false
 		return existing, nil
 	}
-	e.mu.Unlock()
-
 	normalized, err := workdomain.NormalizeWorkRequest(request, workdomain.WorkRequestNormalizeOptions{
 		ValidWorkTypes:    e.validWorkTypes(),
 		ValidStatesByType: state.ValidStatesByType(e.state.WorkTypes),
 		IDGenerator:       e.workRequestIDs,
+		ExistingWorks:     e.existingWorksForAdmissionLocked(),
 	})
+	e.mu.Unlock()
+	release()
 	if err != nil {
 		return workdomain.WorkRequestSubmitResult{}, err
 	}
@@ -433,12 +448,70 @@ func (e *FactoryEngine) validWorkTypes() map[string]bool {
 	return valid
 }
 
+// existingWorksForAdmissionLocked returns the current board identities used
+// by live relation admission. Marking tokens cover queued, terminal, and
+// failed Work; consumed dispatch tokens cover Work that is currently active
+// and therefore temporarily absent from the marking.
+//
+// The caller must hold e.mu and the admission gate must prevent a tick from
+// changing the board while this snapshot is consumed by normalization.
+func (e *FactoryEngine) existingWorksForAdmissionLocked() []workdomain.ExistingWork {
+	byID := make(map[string]workdomain.ExistingWork)
+	add := func(color factorytoken.Color) {
+		if color.DataType == factorytoken.DataTypeResource || color.WorkID == "" {
+			return
+		}
+		candidate := workdomain.ExistingWork{
+			WorkID:     color.WorkID,
+			Name:       color.Name,
+			WorkTypeID: color.WorkTypeID,
+		}
+		if current, exists := byID[candidate.WorkID]; exists {
+			if current.Name == "" {
+				current.Name = candidate.Name
+			}
+			if current.WorkTypeID == "" {
+				current.WorkTypeID = candidate.WorkTypeID
+			}
+			byID[candidate.WorkID] = current
+			return
+		}
+		byID[candidate.WorkID] = candidate
+	}
+
+	if e.runtimeState != nil && e.runtimeState.Marking != nil {
+		for _, token := range e.runtimeState.Marking.Tokens {
+			if token != nil {
+				add(token.Color)
+			}
+		}
+	}
+	if e.runtimeState != nil {
+		for _, dispatch := range e.runtimeState.Dispatches {
+			if dispatch == nil {
+				continue
+			}
+			for _, token := range dispatch.ConsumedTokens {
+				add(token.Color)
+			}
+		}
+	}
+
+	works := make([]workdomain.ExistingWork, 0, len(byID))
+	for _, candidate := range byID {
+		works = append(works, candidate)
+	}
+	sort.Slice(works, func(i, j int) bool { return works[i].WorkID < works[j].WorkID })
+	return works
+}
+
 // Run is the main execution loop. Blocks on a select over wake channels until
 // ctx is cancelled or the marking has no more actionable tokens.
 func (e *FactoryEngine) Run(ctx context.Context) error {
 	e.logger.Info("engine started")
 	e.mu.Lock()
 	e.runLoopActive = true
+	e.terminationResult = nil
 	e.mu.Unlock()
 	defer func() {
 		e.mu.Lock()
@@ -458,7 +531,7 @@ func (e *FactoryEngine) Run(ctx context.Context) error {
 	}
 	if terminated {
 		e.logger.Info("engine terminated during initial tick pass")
-		return nil
+		return e.terminationError()
 	}
 
 	var dispatchWait <-chan struct{}
@@ -476,8 +549,24 @@ func (e *FactoryEngine) Run(ctx context.Context) error {
 		}
 		if terminated {
 			e.logger.Info("engine terminated")
-			return nil
+			return e.terminationError()
 		}
+	}
+}
+
+func (e *FactoryEngine) terminationError() error {
+	e.mu.Lock()
+	var termination interfaces.TerminationResult
+	if e.terminationResult != nil {
+		termination = *e.terminationResult
+	}
+	e.mu.Unlock()
+
+	if termination.Classification != interfaces.TerminationClassificationIncomplete {
+		return nil
+	}
+	return &factory.IncompleteDrainError{
+		NonTerminalWorkCount: termination.NonTerminalWorkCount,
 	}
 }
 
@@ -518,7 +607,12 @@ func (e *FactoryEngine) runUntilQuiescent(ctx context.Context) (bool, error) {
 			return false, err
 		}
 		if shouldTerminate {
-			return e.finishTerminationDrain()
+			if e.finishTerminationDrain() {
+				return true, nil
+			}
+			// A wake-up arrived while preparing to terminate. The drain
+			// consumed it, so immediately rerun the canonical tick.
+			continue
 		}
 		if !mutated {
 			e.mu.Lock()
@@ -536,127 +630,6 @@ func (e *FactoryEngine) runUntilQuiescent(ctx context.Context) (bool, error) {
 	}
 }
 
-func (e *FactoryEngine) tickOnce(ctx context.Context) (bool, bool, error) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.tick(ctx)
-}
-
-func (e *FactoryEngine) finishTerminationDrain() (bool, error) {
-	e.mu.Lock()
-	e.acceptingSubmits = false
-	drained := e.drainChannels()
-	if drained {
-		e.acceptingSubmits = true
-	}
-	e.mu.Unlock()
-	if drained {
-		return false, nil
-	}
-	return true, nil
-}
-
-// Tick executes a single tick synchronously. Drains all pending channel events
-// first, then runs the full tick cycle. For deterministic testing.
-func (e *FactoryEngine) Tick(ctx context.Context) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	e.drainChannels()
-	_, _, err := e.tick(ctx)
-	return err
-}
-
-// TickN executes n ticks sequentially. For testing.
-func (e *FactoryEngine) TickN(ctx context.Context, n int) error {
-	for i := range n {
-		if err := e.Tick(ctx); err != nil {
-			return fmt.Errorf("tick %d: %w", i, err)
-		}
-	}
-	return nil
-}
-
-// TickUntil ticks until the predicate returns true or maxTicks is exceeded.
-func (e *FactoryEngine) TickUntil(ctx context.Context, pred func(*petri.MarkingSnapshot) bool, maxTicks int) error {
-	for range maxTicks {
-		if err := e.Tick(ctx); err != nil {
-			return err
-		}
-		snap := e.runtimeState.Marking.Snapshot()
-		if pred(&snap) {
-			return nil
-		}
-	}
-	return fmt.Errorf("predicate not satisfied after %d ticks", maxTicks)
-}
-
-// GetMarking returns a snapshot of the current marking.
-func (e *FactoryEngine) GetMarking() petri.MarkingSnapshot {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.runtimeState.Marking.Snapshot()
-}
-
-// GetRuntimeStateSnapshot returns a full snapshot of the engine's runtime state.
-func (e *FactoryEngine) GetRuntimeStateSnapshot() interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.runtimeState.Snapshot()
-}
-
-// GetResultBuffer returns the runtime-owned work result buffer used to hand
-// completed worker results back to the engine.
-func (e *FactoryEngine) GetResultBuffer() *buffers.TypedBuffer[workerexecution.WorkResult] {
-	return e.runtimeState.ResultBuffer
-}
-
-// drainChannels non-blocking drains all pending wake signals from resultCh and queued submissions.
-// Returns true when at least one signal was drained.
-func (e *FactoryEngine) drainChannels() bool {
-	drained := false
-	for {
-		select {
-		case <-e.resultCh:
-			e.handleResult()
-			drained = true
-		default:
-			select {
-			case <-e.submitSignal:
-				drained = true
-				continue
-			default:
-				return drained
-			}
-		}
-	}
-}
-
-// handleResult processes a single worker-result wake signal.
-func (e *FactoryEngine) handleResult() {
-	// Dispatch entries are NOT removed here. They are retired at end-of-tick
-	// by retireCompletedDispatches, after all subsystems (including
-	// TerminationCheck) have observed them. The actual WorkResult is in
-	// pendingResults and will be drained at the start of the next tick.
-	if e.resultHandler != nil {
-		e.resultHandler()
-	}
-}
-
-// RunningDispatches returns a copy of the current running dispatches mapping.
-// Each entry maps a dispatch ID to the marking mutations consumed to fire it.
-func (e *FactoryEngine) RunningDispatches() map[string][]interfaces.MarkingMutation {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	result := make(map[string][]interfaces.MarkingMutation, len(e.runtimeState.Dispatches))
-	for k, v := range e.runtimeState.Dispatches {
-		muts := make([]interfaces.MarkingMutation, len(v.HeldMutations))
-		copy(muts, v.HeldMutations)
-		result[k] = muts
-	}
-	return result
-}
-
 // tick runs a single tick cycle: execute subsystems in order, apply mutations
 // atomically between each subsystem execution. Returns (mutated, shouldTerminate, error).
 // mutated is true if any mutations were applied (another tick may be needed).
@@ -666,6 +639,8 @@ func (e *FactoryEngine) tick(ctx context.Context) (bool, bool, error) {
 		e.logger.Debug("engine: skipping automatic tick while factory is paused")
 		return false, false, nil
 	}
+	e.capacityWakePending = false
+	e.terminationResult = nil
 
 	rtSnapshot, mutated, keepAlive, err := e.beginTick(ctx)
 	if err != nil {
@@ -690,6 +665,12 @@ func (e *FactoryEngine) tick(ctx context.Context) (bool, bool, error) {
 
 		if result.ShouldTerminate {
 			shouldTerminate = true
+			if result.Termination == nil {
+				e.terminationResult = nil
+			} else {
+				termination := *result.Termination
+				e.terminationResult = &termination
+			}
 		}
 
 		rtSnapshot, mutated, err = e.applySubsystemResult(ctx, sub.TickGroup(), result, rtSnapshot, mutated)
@@ -781,7 +762,7 @@ func (e *FactoryEngine) applySubsystemResult(ctx context.Context, tickGroup subs
 		mutated = true
 	}
 	if len(result.GeneratedBatches) > 0 {
-		if _, err := e.processGeneratedSubmissionBatches(result.GeneratedBatches, "tick-result"); err != nil {
+		if _, err := e.processGeneratedSubmissionBatches(result.GeneratedBatches, "tick-result", false); err != nil {
 			return snapshot, mutated, fmt.Errorf("processing generated batches from tick-group %d: %w", tickGroup, err)
 		}
 		snapshot = e.runtimeState.Snapshot()
@@ -791,7 +772,10 @@ func (e *FactoryEngine) applySubsystemResult(ctx context.Context, tickGroup subs
 }
 
 func (e *FactoryEngine) forwardDispatches(ctx context.Context, records []interfaces.DispatchRecord, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (bool, interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
-	if len(records) == 0 || (e.dispatchHandler == nil && e.dispatchHook == nil) {
+	if len(records) == 0 {
+		return false, snapshot, nil
+	}
+	if e.dispatchHandler == nil && e.dispatchHook == nil && !containsHumanApprovalDispatch(e.state, records) {
 		return false, snapshot, nil
 	}
 	for _, rec := range records {
@@ -805,15 +789,17 @@ func (e *FactoryEngine) forwardDispatches(ctx context.Context, records []interfa
 
 func (e *FactoryEngine) forwardDispatchRecord(ctx context.Context, rec interfaces.DispatchRecord) error {
 	now := e.clock.Now()
+	humanApproval := isHumanApprovalDispatch(e.state, rec.Dispatch)
 	rec.Dispatch.Execution.DispatchCreatedTick = e.runtimeState.TickCount
 	rec.Dispatch.Execution.CurrentTick = e.runtimeState.TickCount
 	e.runtimeState.Dispatches[rec.Dispatch.DispatchID] = &interfaces.DispatchEntry{
-		DispatchID:      rec.Dispatch.DispatchID,
-		TransitionID:    rec.Dispatch.TransitionID,
-		WorkstationName: rec.Dispatch.WorkstationName,
-		StartTime:       now,
-		ConsumedTokens:  workers.WorkDispatchInputTokens(rec.Dispatch),
-		HeldMutations:   rec.Mutations,
+		DispatchID:              rec.Dispatch.DispatchID,
+		TransitionID:            rec.Dispatch.TransitionID,
+		WorkstationName:         rec.Dispatch.WorkstationName,
+		ExpectedArtifactContext: cloneExpectedArtifactTemplateContext(rec.Dispatch.ExpectedArtifactContext),
+		StartTime:               now,
+		ConsumedTokens:          workers.WorkDispatchInputTokens(rec.Dispatch),
+		HeldMutations:           rec.Mutations,
 	}
 	e.runtimeState.InFlightCount++
 	if e.recordDispatch != nil {
@@ -822,8 +808,15 @@ func (e *FactoryEngine) forwardDispatchRecord(ctx context.Context, rec interface
 			CreatedTick:    e.runtimeState.TickCount,
 			Dispatch:       rec.Dispatch,
 			HeldMutations:  rec.Mutations,
-			ConsumedTokens: consumedTokenIDs(workers.WorkDispatchInputTokens(rec.Dispatch)),
+			ConsumedTokens: consumedTokenIDs(factorytoken.FromWorkerSlice(workers.WorkDispatchInputTokens(rec.Dispatch))),
+			HumanApproval:  humanApproval,
 		})
+	}
+	// A HUMAN_APPROVAL dispatch remains reserved in the in-flight table until a
+	// later resolution lane supplies an explicit result. It never enters the
+	// worker/provider/model/script or capacity execution boundary.
+	if humanApproval {
+		return nil
 	}
 	if e.dispatchHook != nil {
 		if err := e.dispatchHook.SubmitDispatch(ctx, rec.Dispatch); err != nil {
@@ -836,11 +829,31 @@ func (e *FactoryEngine) forwardDispatchRecord(ctx context.Context, rec interface
 	return nil
 }
 
+func isHumanApprovalDispatch(net *state.Net, dispatch work.WorkDispatch) bool {
+	if net == nil {
+		return false
+	}
+	transition := net.Transitions[dispatch.TransitionID]
+	return transition != nil && transition.Type == petri.TransitionHumanApproval
+}
+
+func containsHumanApprovalDispatch(net *state.Net, records []interfaces.DispatchRecord) bool {
+	for _, record := range records {
+		if isHumanApprovalDispatch(net, record.Dispatch) {
+			return true
+		}
+	}
+	return false
+}
+
 func (e *FactoryEngine) finishTick(keepAlive bool, shouldTerminate bool, totalDispatches int, completedDispatches map[string]interfaces.CompletedDispatch, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], mutated bool) bool {
 	e.retireCompletedDispatches(e.runtimeState.Results, completedDispatches)
 	e.runtimeState.Results = nil
+	e.publishRuntimeSnapshotLocked()
+	e.signalPendingObservableProjections()
 	if keepAlive {
 		shouldTerminate = false
+		e.terminationResult = nil
 	}
 	e.logger.Info("engine: [END] tick complete",
 		"tick", e.runtimeState.TickCount,
@@ -849,6 +862,13 @@ func (e *FactoryEngine) finishTick(keepAlive bool, shouldTerminate bool, totalDi
 		"shouldTerminate", shouldTerminate,
 		"tokens", len(snapshot.Marking.Tokens))
 	return shouldTerminate
+}
+
+func (e *FactoryEngine) signalPendingObservableProjections() {
+	for requestID := range e.pendingProjectionRequestIDs {
+		e.signalObservableProjection(requestID)
+		delete(e.pendingProjectionRequestIDs, requestID)
+	}
 }
 
 func cloneActiveThrottlePauses(pauses []interfaces.ActiveThrottlePause) []interfaces.ActiveThrottlePause {
@@ -908,7 +928,11 @@ func (e *FactoryEngine) invokeSubmissionHooks(ctx context.Context) (int, bool, e
 					generated[i].Metadata.Source = hookName
 				}
 			}
-			count, err := e.processGeneratedSubmissionBatches(generated, hookName)
+			count, err := e.processGeneratedSubmissionBatches(
+				generated,
+				hookName,
+				hookName == factory.ReplaySubmissionHookName,
+			)
 			if err != nil {
 				return 0, false, fmt.Errorf("submission hook %q generated batches: %w", hookName, err)
 			}
@@ -942,127 +966,26 @@ func (e *FactoryEngine) applyHookMarkingMutations(mutations []interfaces.Marking
 	return applyMutations(e.runtimeState.Marking, e.state.Places, mutations, e.clock.Now())
 }
 
-func (e *FactoryEngine) processGeneratedSubmissionBatches(batches []work.GeneratedSubmissionBatch, defaultSource string) (int, error) {
-	total := 0
-	for i := range batches {
-		batch := batches[i]
-		source := generatedSubmissionSource(batch, defaultSource)
-		normalized, requestID, err := e.normalizeGeneratedSubmissionBatch(batch)
-		if err != nil {
-			return total, err
-		}
-		if e.skipGeneratedSubmissionRequest(requestID, source) {
-			continue
-		}
-		tokens, err := e.tokensFromGeneratedSubmissions(normalized)
-		if err != nil {
-			return total, err
-		}
-		e.recordGeneratedSubmissionRequest(requestID, source, batch, normalized)
-		e.recordGeneratedSubmissionTokens(source, normalized, tokens)
-		if source == externalSubmissionHookName {
-			e.signalObservableProjection(requestID)
-		}
-		total += len(tokens)
-	}
-	return total, nil
-}
-
-func generatedSubmissionSource(batch work.GeneratedSubmissionBatch, defaultSource string) string {
-	if batch.Metadata.Source != "" {
-		return batch.Metadata.Source
-	}
-	if defaultSource != "" {
-		return defaultSource
-	}
-	return "generated-batch"
-}
-
-func (e *FactoryEngine) normalizeGeneratedSubmissionBatch(batch work.GeneratedSubmissionBatch) ([]workdomain.SubmitRequest, string, error) {
-	normalized, err := workdomain.NormalizeGeneratedSubmissionBatch(batch, workdomain.WorkRequestNormalizeOptions{
-		ValidWorkTypes:    e.validWorkTypes(),
-		ValidStatesByType: state.ValidStatesByType(e.state.WorkTypes),
-		IDGenerator:       e.workRequestIDs,
-	})
-	if err != nil {
-		return nil, "", err
-	}
-	requestID := ""
-	if len(normalized) > 0 {
-		requestID = normalized[0].RequestID
-	}
-	return normalized, requestID, nil
-}
-
-func (e *FactoryEngine) skipGeneratedSubmissionRequest(requestID string, source string) bool {
-	if requestID == "" || source == externalSubmissionHookName {
-		return false
-	}
-	_, exists := e.workRequests[requestID]
-	return exists
-}
-
-func (e *FactoryEngine) tokensFromGeneratedSubmissions(normalized []workdomain.SubmitRequest) ([]*factorytoken.Token, error) {
-	now := e.clock.Now()
-	tokens := make([]*factorytoken.Token, 0, len(normalized))
-	for _, req := range normalized {
-		token, err := e.transformer.InitialTokenFromSubmit(req, now)
-		if err != nil {
-			return nil, err
-		}
-		tokens = append(tokens, token)
-	}
-	return tokens, nil
-}
-
-func (e *FactoryEngine) recordGeneratedSubmissionRequest(
-	requestID string,
-	source string,
-	batch work.GeneratedSubmissionBatch,
-	normalized []workdomain.SubmitRequest,
-) {
-	e.workRequests[requestID] = workdomain.WorkRequestSubmitResultFromNormalized(requestID, normalized, true)
-	if e.recordWorkRequest == nil {
-		return
-	}
-	record := workdomain.WorkRequestRecordFromSubmitRequests(requestID, source, normalized)
-	record.ParentLineage = append([]string(nil), batch.Metadata.ParentLineage...)
-	e.recordWorkRequest(e.runtimeState.TickCount, record)
-}
-
-func (e *FactoryEngine) recordGeneratedSubmissionTokens(
-	source string,
-	normalized []workdomain.SubmitRequest,
-	tokens []*factorytoken.Token,
-) {
-	for index, token := range tokens {
-		if e.recordSubmission != nil {
-			e.recordSubmission(work.FactorySubmissionRecord{
-				SubmissionID: submissionRecordID(e.runtimeState.TickCount, source, index),
-				ObservedTick: e.runtimeState.TickCount,
-				Request:      normalized[index],
-				Source:       source,
-			})
-		}
-		e.runtimeState.Marking.AddToken(token)
-		if e.recordWorkInput != nil {
-			e.recordWorkInput(e.runtimeState.TickCount, normalized[index], *token)
-		}
-	}
-}
-
 // injectTokens creates tokens from submit requests and places them in INITIAL places.
 func (e *FactoryEngine) injectTokens(requests []workdomain.SubmitRequest) {
 	e.logger.Info("engine: injecting tokens", "count", len(requests))
+	parentIDs := make(map[string]struct{})
 	for _, req := range requests {
 		token, err := e.transformer.InitialTokenFromSubmit(req, e.clock.Now())
 		if err != nil {
 			e.logger.Error("engine: failed to convert submit request to token", "work_type_id", req.WorkTypeID, "error", err)
 			continue
 		}
+		e.runtimeState.Marking.RecordParentChildRegistration(token)
 		e.runtimeState.Marking.AddToken(token)
+		if token.Color.ParentID != "" {
+			parentIDs[token.Color.ParentID] = struct{}{}
+		}
 		if e.recordWorkInput != nil {
 			e.recordWorkInput(e.runtimeState.TickCount, req, *token)
 		}
+	}
+	for parentID := range parentIDs {
+		e.runtimeState.Marking.CompleteParentChildRegistration(parentID)
 	}
 }

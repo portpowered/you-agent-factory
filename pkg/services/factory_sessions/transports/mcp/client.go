@@ -24,7 +24,6 @@ type RequestPreparation interface {
 	PrepareInterruptDispatch(factorysessionexecution.InterruptDispatchRequest) (factorysessionexecution.InterruptDispatchRequest, error)
 	PrepareListSessions(factorysessionexecution.ListSessionsRequest) (factorysessionexecution.ListSessionsRequest, error)
 	PrepareResult(factorysessionexecution.ResultRequest) (factorysessionexecution.ResultRequest, error)
-	PrepareEventReconnect(factorysessionexecution.EventReconnectRequest) (factorysessionexecution.EventReconnectRequest, error)
 }
 
 // ToolOperation is the single injected execution role used by every MCP
@@ -37,9 +36,10 @@ type ToolOperation func(context.Context, string, json.RawMessage) (json.RawMessa
 // singular Service root; transports inject an implementation or test fake
 // rather than importing Sessions internals or constructing canonical state.
 type RootDependencies struct {
-	Execution factorysessionexecution.ExecutionService
-	Prepare   RequestPreparation
-	Workflows factoryruntime.WorkflowPreviewOperation
+	Execution  DurableExecution
+	Recordings RecordingsInspection
+	Prepare    RequestPreparation
+	Workflows  factoryruntime.WorkflowPreviewOperation
 }
 
 // Bind constructs the canonical ToolOperation from explicit Sessions root
@@ -47,21 +47,23 @@ type RootDependencies struct {
 // without constructing real session durability or live runtime state.
 func Bind(deps RootDependencies) ToolOperation {
 	return func(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
-		return CallTool(ctx, deps.Execution, deps.Prepare, deps.Workflows, name, input)
+		return CallTool(ctx, deps.Execution, deps.Prepare, deps.Workflows, name, input, deps.Recordings)
 	}
 }
 
 // BindToolOperation binds the canonical tool registry to explicit Factory
 // Sessions and workflow roles without constructing an alternate MCP client.
 func BindToolOperation(
-	service factorysessionexecution.ExecutionService,
+	service DurableExecution,
+	recordingsService RecordingsInspection,
 	prepare RequestPreparation,
 	workflows factoryruntime.WorkflowPreviewOperation,
 ) ToolOperation {
 	return Bind(RootDependencies{
-		Execution: service,
-		Prepare:   prepare,
-		Workflows: workflows,
+		Execution:  service,
+		Recordings: recordingsService,
+		Prepare:    prepare,
+		Workflows:  workflows,
 	})
 }
 
@@ -80,9 +82,10 @@ func callToolJSON[Input any, Output any](
 
 type canonicalToolHandler func(
 	context.Context,
-	factorysessionexecution.ExecutionService,
+	DurableExecution,
 	RequestPreparation,
 	factoryruntime.WorkflowPreviewOperation,
+	RecordingsInspection,
 	json.RawMessage,
 ) (json.RawMessage, error)
 
@@ -127,52 +130,52 @@ const (
 // recorded alongside them so catalog identity never moves business logic into
 // generated discovery code.
 var canonicalToolHandlersByID = map[string]canonicalToolBinding{
-	stableToolID(ToolListSessions): handwrittenToolBinding(ToolListSessions, func(ctx context.Context, service factorysessionexecution.ExecutionService, prepare RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, input json.RawMessage) (json.RawMessage, error) {
+	stableToolID(ToolListSessions): handwrittenToolBinding(ToolListSessions, func(ctx context.Context, service DurableExecution, prepare RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, _ RecordingsInspection, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode list sessions input", func(request ListSessionsInput) ToolResponse[factoryapi.ListFactorySessionsResponse] {
 			return ListSessions(ctx, service, prepare, request)
 		})
 	}),
-	stableToolID(ToolValidateSource): handwrittenToolBinding(ToolValidateSource, func(ctx context.Context, _ factorysessionexecution.ExecutionService, _ RequestPreparation, workflows factoryruntime.WorkflowPreviewOperation, input json.RawMessage) (json.RawMessage, error) {
+	stableToolID(ToolValidateSource): handwrittenToolBinding(ToolValidateSource, func(ctx context.Context, _ DurableExecution, _ RequestPreparation, workflows factoryruntime.WorkflowPreviewOperation, _ RecordingsInspection, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode validate source input", func(request factoryapi.FactoryPreviewRequest) ToolResponse[factoryapi.FactoryPreviewResult] {
 			return ValidateSource(ctx, workflows, request)
 		})
 	}),
-	stableToolID(ToolStartSync): handwrittenToolBinding(ToolStartSync, func(ctx context.Context, service factorysessionexecution.ExecutionService, prepare RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, input json.RawMessage) (json.RawMessage, error) {
+	stableToolID(ToolStartSync): handwrittenToolBinding(ToolStartSync, func(ctx context.Context, service DurableExecution, prepare RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, _ RecordingsInspection, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode start sync input", func(request factoryapi.FactorySessionExecutionRequest) ToolResponse[factoryapi.FactorySessionSyncExecutionResponse] {
 			return StartSync(ctx, service, prepare, request)
 		})
 	}),
-	stableToolID(ToolStartAsync): handwrittenToolBinding(ToolStartAsync, func(ctx context.Context, service factorysessionexecution.ExecutionService, prepare RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, input json.RawMessage) (json.RawMessage, error) {
+	stableToolID(ToolStartAsync): handwrittenToolBinding(ToolStartAsync, func(ctx context.Context, service DurableExecution, prepare RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, _ RecordingsInspection, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode start async input", func(request factoryapi.FactorySessionExecutionRequest) ToolResponse[factoryapi.FactorySessionExecutionResponse] {
 			return StartAsync(ctx, service, prepare, request)
 		})
 	}),
-	stableToolID(ToolGetSession): handwrittenToolBinding(ToolGetSession, func(ctx context.Context, service factorysessionexecution.ExecutionService, _ RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, input json.RawMessage) (json.RawMessage, error) {
+	stableToolID(ToolGetSession): handwrittenToolBinding(ToolGetSession, func(ctx context.Context, service DurableExecution, _ RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, _ RecordingsInspection, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode get session input", func(request GetSessionInput) ToolResponse[factoryapi.FactorySessionDurableReadModel] {
 			return GetSession(ctx, service, request)
 		})
 	}),
-	stableToolID(ToolGetResult): handwrittenToolBinding(ToolGetResult, func(ctx context.Context, service factorysessionexecution.ExecutionService, prepare RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, input json.RawMessage) (json.RawMessage, error) {
+	stableToolID(ToolGetResult): handwrittenToolBinding(ToolGetResult, func(ctx context.Context, service DurableExecution, prepare RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, _ RecordingsInspection, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode get result input", func(request GetResultInput) ToolResponse[factoryapi.FactorySessionResult] {
 			return GetResult(ctx, service, prepare, request)
 		})
 	}),
-	stableToolID(ToolListDispatches): handwrittenToolBinding(ToolListDispatches, func(ctx context.Context, service factorysessionexecution.ExecutionService, _ RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, input json.RawMessage) (json.RawMessage, error) {
+	stableToolID(ToolListDispatches): handwrittenToolBinding(ToolListDispatches, func(ctx context.Context, service DurableExecution, _ RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, recordingsService RecordingsInspection, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode list dispatches input", func(request ListDispatchesInput) ToolResponse[factoryapi.ListFactorySessionDispatchesResponse] {
-			return ListDispatches(ctx, service, request)
+			return ListDispatchesWithFallback(ctx, service, recordingsService, request)
 		})
 	}),
-	stableToolID(ToolListArtifacts): handwrittenToolBinding(ToolListArtifacts, func(ctx context.Context, service factorysessionexecution.ExecutionService, _ RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, input json.RawMessage) (json.RawMessage, error) {
+	stableToolID(ToolListArtifacts): handwrittenToolBinding(ToolListArtifacts, func(ctx context.Context, _ DurableExecution, _ RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, recordingsService RecordingsInspection, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode list artifacts input", func(request ListArtifactsInput) ToolResponse[factoryapi.ListFactorySessionArtifactsResponse] {
-			return ListArtifacts(ctx, service, request)
+			return ListArtifacts(ctx, recordingsService, request)
 		})
 	}),
-	stableToolID(ToolReadEvents): handwrittenToolBinding(ToolReadEvents, func(ctx context.Context, service factorysessionexecution.ExecutionService, prepare RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, input json.RawMessage) (json.RawMessage, error) {
+	stableToolID(ToolReadEvents): handwrittenToolBinding(ToolReadEvents, func(ctx context.Context, _ DurableExecution, _ RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, recordingsService RecordingsInspection, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode read events input", func(request ReadEventsInput) ToolResponse[ReadEventsResult] {
-			return ReadEvents(ctx, service, prepare, request)
+			return ReadEvents(ctx, recordingsService, request)
 		})
 	}),
-	stableToolID(ToolControl): handwrittenToolBinding(ToolControl, func(ctx context.Context, service factorysessionexecution.ExecutionService, prepare RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, input json.RawMessage) (json.RawMessage, error) {
+	stableToolID(ToolControl): handwrittenToolBinding(ToolControl, func(ctx context.Context, service DurableExecution, prepare RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, _ RecordingsInspection, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode control input", func(request ControlInput) ToolResponse[factoryapi.FactorySessionLifecycleControlResponse] {
 			return Control(ctx, service, prepare, request)
 		})
@@ -205,11 +208,12 @@ func ResolveToolHandlerBinding(name string) (ToolHandlerBinding, bool) {
 // ToolOperation rather than choosing between construction paths.
 func CallTool(
 	ctx context.Context,
-	service factorysessionexecution.ExecutionService,
+	service DurableExecution,
 	prepare RequestPreparation,
 	workflows factoryruntime.WorkflowPreviewOperation,
 	name string,
 	input json.RawMessage,
+	recordingsService RecordingsInspection,
 ) (json.RawMessage, error) {
 	if ctx == nil {
 		return nil, fmt.Errorf("call MCP tool: %w", errMissingRequestContext)
@@ -219,7 +223,7 @@ func CallTool(
 		return nil, fmt.Errorf("unsupported tool %q", name)
 	}
 	binding := canonicalToolHandlersByID[bindingIdentity.ToolID]
-	return binding.handler(ctx, service, prepare, workflows, input)
+	return binding.handler(ctx, service, prepare, workflows, recordingsService, input)
 }
 
 func generatedToolIDByName(name string) (string, bool) {

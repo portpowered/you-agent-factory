@@ -70,15 +70,15 @@ func (*hostedInstanceFake) RecordingLedger() recordings.Ledger { return nil }
 func (*hostedInstanceFake) CloseArtifacts() error              { return nil }
 
 type hostedHandleFake struct {
-	instance factory.HostedInstance
+	instance factory.RuntimeRecord
 	done     chan struct{}
 }
 
-func newHostedHandleFake(instance factory.HostedInstance) *hostedHandleFake {
+func newHostedHandleFake(instance factory.RuntimeRecord) *hostedHandleFake {
 	return &hostedHandleFake{instance: instance, done: make(chan struct{})}
 }
 
-func (handle *hostedHandleFake) RuntimeInstance() factory.HostedInstance {
+func (handle *hostedHandleFake) RuntimeInstance() factory.RuntimeRecord {
 	return handle.instance
 }
 func (handle *hostedHandleFake) Completed() bool {
@@ -103,23 +103,23 @@ func (handle *hostedHandleFake) RunDoneCh() <-chan struct{} { return handle.done
 
 type lifecycleFake struct{}
 
-func (lifecycleFake) Start(_ context.Context, instance factory.HostedInstance) (factory.HostedHandle, error) {
+func (lifecycleFake) Start(_ context.Context, instance factory.RuntimeRecord) (factory.RuntimeRun, error) {
 	return newHostedHandleFake(instance), nil
 }
-func (lifecycleFake) WaitForStart(context.Context, factory.HostedHandle) error { return nil }
-func (lifecycleFake) Stop(handle factory.HostedHandle) error {
+func (lifecycleFake) WaitForStart(context.Context, factory.RuntimeRun) error { return nil }
+func (lifecycleFake) Stop(handle factory.RuntimeRun) error {
 	handle.CancelRun()
 	return nil
 }
-func (lifecycleFake) StopSidecars(factory.HostedHandle) {}
-func (lifecycleFake) PublishReplacement(context.Context, factory.HostedHandle, factory.HostedInstance) error {
+func (lifecycleFake) StopSidecars(factory.RuntimeRun) {}
+func (lifecycleFake) PublishReplacement(context.Context, factory.RuntimeRun, factory.RuntimeRecord) error {
 	return nil
 }
 
 var (
-	_ factory.HostedInstance = (*hostedInstanceFake)(nil)
-	_ factory.HostedHandle   = (*hostedHandleFake)(nil)
-	_ factory.Lifecycle      = lifecycleFake{}
+	_ factory.RuntimeRecord    = (*hostedInstanceFake)(nil)
+	_ factory.RuntimeRun       = (*hostedHandleFake)(nil)
+	_ factory.RuntimeLifecycle = lifecycleFake{}
 )
 
 func TestSyncActiveDirectoryUsesBundleAndFallsBackToFactoryRoot(t *testing.T) {
@@ -149,8 +149,8 @@ func TestStopSessionSelectsAnotherLiveRuntime(t *testing.T) {
 	var active runtimebinding.State
 	active.SetActive(context.Background(), first.ID, runtimebinding.HandleFromSession(first))
 
-	var stopped factory.HostedHandle
-	err := runtimebinding.StopSession(state, &active, first.ID, func(handle factory.HostedHandle) error {
+	var stopped factory.RuntimeRun
+	err := runtimebinding.StopSession(state, &active, first.ID, func(handle factory.RuntimeRun) error {
 		stopped = handle
 		return nil
 	})
@@ -168,18 +168,93 @@ func TestStopSessionSelectsAnotherLiveRuntime(t *testing.T) {
 	}
 }
 
+func TestStopSessionRetiresRegisteredTerminalRuntime(t *testing.T) {
+	state := newRuntimeBindingState()
+	terminal := registerTestSession(state, "terminal")
+	successor := registerTestSession(state, "successor")
+	terminalHandle := runtimebinding.HandleFromSession(terminal).(*hostedHandleFake)
+	terminalHandle.instance = nil
+	var active runtimebinding.State
+	active.SetActive(context.Background(), terminal.ID, runtimebinding.HandleFromSession(terminal))
+
+	var stopped factory.RuntimeRun
+	err := runtimebinding.StopSession(state, &active, terminal.ID, func(handle factory.RuntimeRun) error {
+		stopped = handle
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("StopSession terminal runtime: %v", err)
+	}
+	if stopped != terminalHandle {
+		t.Fatal("StopSession did not stop the registered terminal handle")
+	}
+	if state.Resolve(terminal.ID) != nil {
+		t.Fatal("terminal session remains registered")
+	}
+	if got := active.Active(); got == nil || got.SessionID != successor.ID {
+		t.Fatalf("active runtime = %#v, want successor session", got)
+	}
+}
+
+func TestOpaqueBindingRoutesSessionServiceAndCleanup(t *testing.T) {
+	t.Parallel()
+
+	sessions := newRuntimeBindingState()
+	fallback := &replacementFactory{}
+	bound := &replacementFactory{}
+	instance := &hostedInstanceFake{service: fallback}
+	handle := newHostedHandleFake(instance)
+	deactivationCalls := 0
+	binding := factory.RuntimeBinding{}.New(
+		"runtime-bound",
+		bound,
+		func(context.Context) (factory.RuntimeDeactivationResult, error) {
+			deactivationCalls++
+			return factory.RuntimeDeactivationResult{RuntimeID: "runtime-bound", State: factory.RuntimeLifecycleStateStopped}, nil
+		},
+	)
+	sessions.Register(sessionruntime.Registration{
+		SessionID: "bound-session",
+		Handle:    &runtimebinding.SessionState{Instance: instance, Handle: handle},
+		Runtime: &factorysessions.LiveRuntime{
+			Factory: fallback,
+			Binding: binding,
+		},
+	})
+
+	resolved, err := runtimebinding.FactoryForSession(sessions, "bound-session")
+	if err != nil {
+		t.Fatalf("FactoryForSession: %v", err)
+	}
+	if resolved != bound {
+		t.Fatalf("FactoryForSession = %p, want opaque binding service %p", resolved, bound)
+	}
+
+	var runtimeState runtimebinding.State
+	runtimeState.SetActive(context.Background(), "bound-session", handle)
+	if err := runtimebinding.StopSession(sessions, &runtimeState, "bound-session", func(factory.RuntimeRun) error { return nil }); err != nil {
+		t.Fatalf("StopSession: %v", err)
+	}
+	if deactivationCalls != 1 {
+		t.Fatalf("binding deactivation calls = %d, want one", deactivationCalls)
+	}
+	if sessions.Resolve("bound-session") != nil {
+		t.Fatal("bound session remains registered after cleanup")
+	}
+}
+
 func TestShutdownOtherLiveSessionsKeepsExceptAndJoinsFailures(t *testing.T) {
 	state := newRuntimeBindingState()
 	keep := registerTestSession(state, "keep")
 	first := registerTestSession(state, "first")
 	second := registerTestSession(state, "second")
 	stopErr := errors.New("stop failed")
-	stopped := map[factory.HostedHandle]bool{}
+	stopped := map[factory.RuntimeRun]bool{}
 
 	err := runtimebinding.ShutdownOtherLiveSessions(
 		state,
 		runtimebinding.HandleFromSession(keep),
-		func(hosted factory.HostedHandle) error {
+		func(hosted factory.RuntimeRun) error {
 			stopped[hosted] = true
 			if hosted == runtimebinding.HandleFromSession(first) {
 				return stopErr
@@ -239,7 +314,7 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 	replacement := &hostedInstanceFake{
 		dir: "/new", service: replacementFactory{}, backendScope: "backend-new",
 	}
-	var stopped factory.HostedHandle
+	var stopped factory.RuntimeRun
 
 	updated, err := runtimebinding.Replace(
 		context.Background(),
@@ -250,7 +325,7 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 		false,
 		lifecycleFake{},
 		nil,
-		func(handle factory.HostedHandle) error {
+		func(handle factory.RuntimeRun) error {
 			stopped = handle
 			return nil
 		},
@@ -263,21 +338,51 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 		t.Fatal("Replace did not stop the previous runtime")
 	}
 	newHandle := runtimebinding.HandleFromSession(updated)
-	if updated == nil || updated == original || newHandle == nil || newHandle == oldHandle {
+	assertReplacementSession(t, original, updated, oldHandle, newHandle, preparedSpec)
+	assertActiveReplacement(t, &runtimeState, updated, newHandle)
+	newHandle.CancelRun()
+	<-newHandle.RunDoneCh()
+}
+
+func assertReplacementSession(
+	t *testing.T,
+	original *livesession.LiveSession,
+	updated *livesession.LiveSession,
+	oldHandle factory.RuntimeRun,
+	newHandle factory.RuntimeRun,
+	preparedSpec any,
+) {
+	t.Helper()
+	if updated == nil {
+		t.Fatal("replacement session is nil")
+		return
+	}
+	if updated == original || newHandle == nil || newHandle == oldHandle {
 		t.Fatalf("updated session/runtime = (%p, %p), want replacement", updated, newHandle)
 	}
 	if updated.FactoryDir != "/new" || updated.ExecutionBaseDir != "/old-execution" ||
 		updated.RuntimeFactorySessionID != "runtime-session-1" {
 		t.Fatalf("replacement metadata = %#v", updated)
 	}
+	if updated.ResponseEvents == nil || updated.ResponseEvents.FactorySessionID() != "runtime-session-1" {
+		t.Fatalf("replacement response-event store = %#v, want runtime-session-1", updated.ResponseEvents)
+	}
 	if runtimebinding.PreparedSpecFromSession(updated) != preparedSpec {
 		t.Fatal("replacement did not preserve the prepared runtime specification")
 	}
-	if active := runtimeState.Active(); active == nil || active.SessionID != updated.ID || active.Handle != newHandle {
+}
+
+func assertActiveReplacement(
+	t *testing.T,
+	runtimeState *runtimebinding.State,
+	updated *livesession.LiveSession,
+	newHandle factory.RuntimeRun,
+) {
+	t.Helper()
+	active := runtimeState.Active()
+	if active == nil || active.SessionID != updated.ID || active.Handle != newHandle {
 		t.Fatalf("active runtime = %#v, want replacement handle", active)
 	}
-	newHandle.CancelRun()
-	<-newHandle.RunDoneCh()
 }
 
 func TestStartDefaultRegistersAndSelectsCanonicalSession(t *testing.T) {
@@ -346,7 +451,7 @@ func TestHandleStartFailureTreatsClosedServiceSessionAsExpected(t *testing.T) {
 
 	err := runtimebinding.HandleStartFailure(
 		context.Background(), sessions, &runtimeState, factorysessions.DefaultSessionID,
-		handle, func(factory.HostedHandle) error {
+		handle, func(factory.RuntimeRun) error {
 			stopped = true
 			return nil
 		},
@@ -369,7 +474,7 @@ func TestHandleStartFailureUnregistersFailedBatchSession(t *testing.T) {
 
 	err := runtimebinding.HandleStartFailure(
 		context.Background(), sessions, &runtimeState, factorysessions.DefaultSessionID,
-		runtimebinding.HandleFromSession(session), func(factory.HostedHandle) error { return nil },
+		runtimebinding.HandleFromSession(session), func(factory.RuntimeRun) error { return nil },
 		startErr, interfaces.RuntimeModeBatch,
 	)
 	if !errors.Is(err, startErr) {
@@ -377,6 +482,28 @@ func TestHandleStartFailureUnregistersFailedBatchSession(t *testing.T) {
 	}
 	if sessions.Resolve(factorysessions.DefaultSessionID) != nil || runtimeState.Active() != nil {
 		t.Fatal("failed batch session remains active")
+	}
+}
+
+func TestHandleStartFailureIgnoresAlreadyStoppedCleanupAfterCancellation(t *testing.T) {
+	sessions := newRuntimeBindingState()
+	session := registerTestSession(sessions, factorysessions.DefaultSessionID)
+	var runtimeState runtimebinding.State
+	runtimeState.SetActive(context.Background(), session.ID, runtimebinding.HandleFromSession(session))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := runtimebinding.HandleStartFailure(
+		ctx, sessions, &runtimeState, factorysessions.DefaultSessionID,
+		runtimebinding.HandleFromSession(session),
+		func(factory.RuntimeRun) error { return factory.ErrAlreadyStopped },
+		context.Canceled, interfaces.RuntimeModeBatch,
+	)
+	if err != nil {
+		t.Fatalf("HandleStartFailure: %v, want canceled startup cleanup to be idempotent", err)
+	}
+	if sessions.Resolve(factorysessions.DefaultSessionID) != nil || runtimeState.Active() != nil {
+		t.Fatal("canceled startup session remains active")
 	}
 }
 

@@ -53,6 +53,9 @@ func (s *service) PrepareModelAssets(
 	ctx context.Context,
 	request models.PrepareModelAssetsRequest,
 ) (models.PrepareModelAssetsResult, error) {
+	if shouldPrepareGenericAssets(request) {
+		return s.prepareGenericAssets(ctx, request)
+	}
 	if err := request.Validate(); err != nil {
 		return models.PrepareModelAssetsResult{}, err
 	}
@@ -501,16 +504,15 @@ func validateDownloadResponse(ctx context.Context, response *http.Response, asse
 	if response.StatusCode == http.StatusOK {
 		return nil
 	}
-	body, _ := io.ReadAll(io.LimitReader(response.Body, 512))
+	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 512))
 	if contextErr := assetContextError(ctx); contextErr != nil {
 		return contextErr
 	}
 	return fmt.Errorf(
-		"%w: download asset %q failed (%d): %s",
+		"%w: download asset %q failed (%d)",
 		models.ErrSourceFetchFailed,
 		assetPath,
 		response.StatusCode,
-		strings.TrimSpace(string(body)),
 	)
 }
 
@@ -596,7 +598,26 @@ func (s *service) doWithRetry(request *http.Request) (*http.Response, error) {
 }
 
 func interruptedAssetError(operation string, cause error) error {
-	return fmt.Errorf("%w: %s: %w", models.ErrAssetPreparationInterrupted, operation, cause)
+	return &assetPreparationInterruption{operation: operation, cause: cause}
+}
+
+type assetPreparationInterruption struct {
+	operation string
+	cause     error
+}
+
+func (failure *assetPreparationInterruption) Error() string {
+	if failure == nil {
+		return ""
+	}
+	return fmt.Sprintf("%s: %s", models.ErrAssetPreparationInterrupted, failure.operation)
+}
+
+func (failure *assetPreparationInterruption) Unwrap() error {
+	if failure == nil {
+		return nil
+	}
+	return errors.Join(models.ErrAssetPreparationInterrupted, failure.cause)
 }
 
 type contextAssetReader struct {

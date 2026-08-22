@@ -7,8 +7,8 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // Adapt translates Recordings-owned replay actions at the Factory Runtime
@@ -64,13 +64,13 @@ func (a replayHookAdapter) OnTick(
 	}, nil
 }
 
-func replayTokensByWorkID(tokens map[string]*workers.Token) map[string]recordings.ReplayWorkToken {
+func replayTokensByWorkID(tokens map[string]*factorytoken.Token) map[string]recordings.ReplayWorkToken {
 	if len(tokens) == 0 {
 		return nil
 	}
 	byWorkID := make(map[string]recordings.ReplayWorkToken)
 	for tokenID, token := range tokens {
-		if token == nil || token.Color.WorkID == "" || token.Color.DataType == workers.DataTypeResource {
+		if token == nil || token.Color.WorkID == "" || token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		byWorkID[token.Color.WorkID] = recordings.ReplayWorkToken{

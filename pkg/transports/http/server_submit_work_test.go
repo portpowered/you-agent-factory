@@ -361,12 +361,12 @@ func TestSubmitWork_RejectsBlankOnlyStructuredItems(t *testing.T) {
 			Message: "items must contain at least one non-empty item",
 		}
 	}
-	srv.Adapter = srv.Adapter.WithWorkService(work.AdmissionContentService(
+	srv.workAdapter = &workAdapter{Adapter: srv.workAdapter.WithAdmissionService(work.AdmissionContentService(
 		staging,
 		&workRequestPreparationFake{prepare: func(_ context.Context, input work.WorkRequestPreparation) (work.WorkRequest, error) {
 			return input.Request, nil
 		}},
-	))
+	))}
 	rec := submitWorkRequest(t, srv, `{"name":"blank-items","workTypeName":"prd","items":[{"type":"text","text":"   \t"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items must contain at least one non-empty item")
 }

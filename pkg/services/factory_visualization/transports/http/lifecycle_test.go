@@ -7,13 +7,16 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	factoryvisualizationhttp "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http"
+	httpcompat "github.com/portpowered/infinite-you/pkg/transports/http/compat"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestActivateLifecycleHTTP_DecodesModeAndMapsSuccess(t *testing.T) {
@@ -103,24 +106,49 @@ func TestActivateLifecycleHTTP_RejectsMalformedJSONBeforeRoot(t *testing.T) {
 	}
 }
 
-func TestActivateLifecycleHTTP_RejectsUnknownFieldsBeforeRoot(t *testing.T) {
+func TestHandleActivateLifecycle_AcceptsUnknownFieldsWithWarning(t *testing.T) {
 	t.Parallel()
 
+	core, logs := observer.New(zap.WarnLevel)
 	root := &lifecycleVisualizationRootFake{}
 	handler := factoryvisualizationhttp.NewHandlerFromRoot(
 		factoryvisualizationhttp.RootBinding{Visualization: root},
-		zap.NewNop(),
+		zap.New(core),
 	)
-
-	_, err := handler.ActivateLifecycleHTTP(
-		context.Background(),
-		strings.NewReader(`{"mode":"RETAINED_THEN_LIVE","extra":true}`),
+	recorder := httptest.NewRecorder()
+	handler.HandleActivateLifecycle(
+		recorder,
+		httptest.NewRequest(
+			http.MethodPost,
+			"/factory-visualization/lifecycle/activate",
+			strings.NewReader(`{"mode":"RETAINED_THEN_LIVE","future":{"value":"secret"}}`),
+		),
 	)
-	if err == nil {
-		t.Fatal("ActivateLifecycleHTTP unknown field = nil, want error")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", recorder.Code, recorder.Body.String())
 	}
-	if root.activateInvoked {
-		t.Fatal("unknown-field Activate HTTP request must not invoke root")
+	if !root.activateInvoked || root.lastActivateMode != factoryvisualization.ActivateModeRetainedThenLive {
+		t.Fatalf("root invocation = %v/%q, want known mode", root.activateInvoked, root.lastActivateMode)
+	}
+	warning := recorder.Header().Get("Warning")
+	if !strings.Contains(warning, "299") || !strings.Contains(warning, "$.future") {
+		t.Fatalf("Warning = %q, want code 299 and $.future", warning)
+	}
+	entries := logs.All()
+	if len(entries) != 1 {
+		t.Fatalf("warning log count = %d, want one", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if fields["warning_code"] != int64(httpcompat.WarningCode) ||
+		fields["boundary"] != "factory_visualization.http" ||
+		fields["operation"] != "activate_lifecycle" {
+		t.Fatalf("warning fields = %#v, want HTTP compatibility metadata", fields)
+	}
+	if got, ok := fields["json_paths"].([]interface{}); !ok || !reflect.DeepEqual(got, []interface{}{"$.future"}) {
+		t.Fatalf("json_paths = %#v, want [$.future]", fields["json_paths"])
+	}
+	if strings.Contains(entries[0].Message, "secret") || strings.Contains(recorder.Body.String(), "secret") {
+		t.Fatal("compatibility diagnostics exposed an ignored field value")
 	}
 }
 

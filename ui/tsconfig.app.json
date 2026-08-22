@@ -15,6 +15,12 @@
       "@you-agent-factory/factory-graph": [
         "packages/factory-graph/src/index.ts"
       ],
+      "@you-agent-factory/factory-graph/group-regions": [
+        "packages/factory-graph/src/group-region-presentation.tsx"
+      ],
+      "@you-agent-factory/factory-graph/visual-state": [
+        "packages/factory-graph/src/visual-state.ts"
+      ],
       "@you-agent-factory/factory-replay": [
         "./packages/factory-replay/src/index.ts"
       ],

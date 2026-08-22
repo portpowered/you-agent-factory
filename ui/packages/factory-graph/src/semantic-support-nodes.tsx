@@ -1,16 +1,27 @@
+// biome-ignore lint/style/noExcessiveLinesPerFile: support node renderers share one semantic data contract and presentation vocabulary.
 import type { Node, NodeProps } from "@xyflow/react";
 import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
-
+import type { FactoryGraphNodeInteractionOverlay } from "./node-interaction-overlay.js";
+import type { FactoryGraphNodeResizeControlsProps } from "./node-resize-controls.js";
 import { GraphSemanticIcon } from "./semantic-icon.js";
 import {
-  FactoryGraphNodeShell,
+  FactoryGraphNodeExpandedContent,
   type FactoryGraphNodeHandle,
+  FactoryGraphNodeShell,
 } from "./semantic-node-shell.js";
 import {
   factoryGraphNodeHoverClassName,
   factoryGraphNodeSurfaceClassName,
+  factoryGraphNodeVisualIconClassName,
+  factoryGraphNodeWrappedTextClassName,
 } from "./semantic-node-style.js";
+import { resolveFactoryGraphVisualState } from "./visual-state.js";
+import {
+  factoryGraphUnknownWorkerType,
+  factoryGraphWorkerIconClassName,
+  factoryGraphWorkerIconKind,
+} from "./worker-icon.js";
 
 /** The portion of a Factory place needed by the original semantic node views. */
 export interface FactoryGraphPlaceRef {
@@ -22,28 +33,39 @@ export interface FactoryGraphPlaceRef {
 
 export interface FactoryGraphWorkerNodeData extends Record<string, unknown> {
   activeFlow: boolean;
+  expanded?: boolean;
+  focused?: boolean;
   factoryGraphNodeId?: string;
   handles: FactoryGraphNodeHandle[];
+  interactionOverlay?: FactoryGraphNodeInteractionOverlay;
   kind: "worker";
   locale?: string;
   muted: boolean;
   onSelectWorker?: (workerName: string) => void;
   place: FactoryGraphPlaceRef;
+  runnerId?: string | null;
+  resizeControls?: FactoryGraphNodeResizeControlsProps;
   selectedWorker: boolean;
+  validationError?: boolean;
+  workerType?: string | null;
 }
 
 export type FactoryGraphWorkerNode = Node<FactoryGraphWorkerNodeData, "worker">;
 
 export interface FactoryGraphWorkTypeNodeData extends Record<string, unknown> {
   activeFlow: boolean;
+  expanded?: boolean;
+  focused?: boolean;
   factoryGraphNodeId?: string;
   handles: FactoryGraphNodeHandle[];
+  interactionOverlay?: FactoryGraphNodeInteractionOverlay;
   isDefaultWorkType?: boolean;
   kind: "work-type";
   locale?: string;
   muted: boolean;
   onSelectWorkType?: (workTypeName: string) => void;
   place: FactoryGraphPlaceRef;
+  resizeControls?: FactoryGraphNodeResizeControlsProps;
   selectedWorkType?: boolean;
   validationError?: boolean;
   validationMessage?: string;
@@ -56,15 +78,20 @@ export type FactoryGraphWorkTypeNode = Node<
 
 export interface FactoryGraphResourceNodeData extends Record<string, unknown> {
   activeFlow: boolean;
+  expanded?: boolean;
+  focused?: boolean;
   factoryGraphNodeId?: string;
   handles: FactoryGraphNodeHandle[];
+  interactionOverlay?: FactoryGraphNodeInteractionOverlay;
   kind: "resource";
   locale?: string;
   muted: boolean;
   onSelectResource?: (resourceName: string) => void;
   place: FactoryGraphPlaceRef;
+  resizeControls?: FactoryGraphNodeResizeControlsProps;
   selectedResource: boolean;
   tokenCount: number;
+  validationError?: boolean;
 }
 
 export type FactoryGraphResourceNode = Node<
@@ -75,60 +102,125 @@ export type FactoryGraphResourceNode = Node<
 /** Original Factory worker node, with host-owned worker selection. */
 export function FactoryGraphWorkerNodeView({
   data,
+  selected: reactFlowSelected,
 }: NodeProps<FactoryGraphWorkerNode>) {
   const workerName = resolveWorkerName(data);
-  const label = `worker:${workerName}`;
+  const unknownWorkerType = factoryGraphUnknownWorkerType(data.workerType);
+  const label = unknownWorkerType
+    ? `worker:${workerName} (${unknownWorkerType})`
+    : `worker:${workerName}`;
   const workerLabel = semanticLabel("worker", data.locale);
+  const workerKindLabel = unknownWorkerType ?? workerLabel;
+  const workerIconKind = factoryGraphWorkerIconKind(
+    data.workerType,
+    data.runnerId,
+  );
   const selectable = data.onSelectWorker !== undefined;
+  const selected = data.selectedWorker || reactFlowSelected;
+  const visualState = resolveFactoryGraphVisualState({
+    activeFlow: data.activeFlow,
+    family: "worker",
+    focused: data.focused,
+    muted: data.muted,
+    selected,
+    validation: data.validationError,
+  });
   const content = (
-    <span
-      aria-label={label}
-      className="flex min-w-0 items-center gap-1.5 overflow-hidden"
-      data-worker-label-zone
-      role="img"
-      title={label}
-    >
-      <span className="sr-only">{label}</span>
-      <GraphSemanticIcon
-        className="h-3.5 w-3.5 shrink-0 text-info"
-        kind="worker"
-        label={workerLabel}
-      />
-      <span className="grid min-w-0 gap-px overflow-hidden">
-        <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-info">
-          {workerLabel}
+    <>
+      <span
+        aria-label={label}
+        className="flex h-full min-h-0 min-w-0 items-center gap-1.5 overflow-hidden"
+        data-factory-entity-semantic-icon
+        data-worker-label-zone
+        role="img"
+        title={label}
+      >
+        <span className="sr-only">{label}</span>
+        <GraphSemanticIcon
+          className={classNames(
+            "h-3.5 w-3.5 shrink-0",
+            factoryGraphWorkerIconClassName(
+              visualState,
+              unknownWorkerType ? "text-on-surface-variant" : "text-info",
+            ),
+          )}
+          kind={workerIconKind}
+          label={workerLabel}
+        />
+        <span className="grid min-w-0 gap-px overflow-hidden">
+          <span
+            className={factoryGraphNodeWrappedTextClassName(
+              classNames(
+                "block overflow-hidden text-[0.62rem] font-bold uppercase leading-none",
+                unknownWorkerType ? "text-on-surface-variant" : "text-info",
+              ),
+            )}
+            data-worker-kind-label
+          >
+            {workerKindLabel}
+          </span>
+          <strong
+            className={factoryGraphNodeWrappedTextClassName(
+              "block font-mono text-[0.8rem] font-bold leading-tight text-on-surface",
+            )}
+            data-factory-entity-title
+            title={workerName}
+          >
+            {workerName}
+          </strong>
         </span>
-        <strong className="block min-w-0 truncate whitespace-nowrap font-mono text-[0.8rem] font-bold leading-tight text-on-surface">
-          {workerName}
-        </strong>
       </span>
-    </span>
+      {data.expanded === true ? (
+        <FactoryGraphNodeExpandedContent family="worker">
+          <span data-factory-graph-expanded-field="worker-type">
+            {data.workerType ?? workerLabel}
+          </span>
+          {data.runnerId ? (
+            <span data-factory-graph-expanded-field="runner">
+              {data.runnerId}
+            </span>
+          ) : null}
+        </FactoryGraphNodeExpandedContent>
+      ) : null}
+    </>
   );
   return (
     <FactoryGraphNodeShell
       className={classNames(
-        factoryGraphNodeSurfaceClassName("info"),
+        factoryGraphNodeSurfaceClassName(
+          unknownWorkerType ? "neutral" : "info",
+        ),
         "justify-center text-left text-on-surface",
         factoryGraphNodeHoverClassName({
           activeFlow: data.activeFlow,
           muted: data.muted,
-          selected: data.selectedWorker,
+          selected,
         }),
-        data.activeFlow &&
-          !data.selectedWorker &&
-          "border-af-success-border shadow-af-success-chip",
-        data.selectedWorker && "border-primary shadow-af-accent-selected",
-        data.muted && "opacity-[0.45]",
       )}
       handles={data.handles}
+      interactionOverlay={data.interactionOverlay}
       nodeType="worker"
+      resizeControls={data.resizeControls}
+      visualState={{
+        activeFlow: data.activeFlow,
+        focused: data.focused,
+        muted: data.muted,
+        selected,
+        validation: data.validationError,
+      }}
     >
       {selectable ? (
         <GraphNodeButton
-          aria-label={selectLabel("worker", workerName, data.locale)}
-          aria-pressed={data.selectedWorker}
-          className="grid min-w-0 gap-0.5 overflow-hidden"
-          data-selected-worker={data.selectedWorker ? "true" : undefined}
+          aria-label={selectLabel(
+            "worker",
+            unknownWorkerType
+              ? `${workerName} (${unknownWorkerType})`
+              : workerName,
+            data.locale,
+          )}
+          aria-pressed={selected}
+          className="grid h-full min-h-0 min-w-0 place-content-center gap-0.5 overflow-hidden"
+          data-selected-worker={selected ? "true" : undefined}
           onClick={(event) => {
             event.stopPropagation();
             data.onSelectWorker?.(workerName);
@@ -146,46 +238,77 @@ export function FactoryGraphWorkerNodeView({
 /** Original Factory work-type node, with host-owned selection and validation. */
 export function FactoryGraphWorkTypeNodeView({
   data,
+  selected: reactFlowSelected,
 }: NodeProps<FactoryGraphWorkTypeNode>) {
   const name = workTypeName(data.place);
   const label = `work-type:${name}`;
   const workTypeLabel = semanticLabel("work-type", data.locale);
   const selectable = data.onSelectWorkType !== undefined;
+  const isExpanded = data.expanded === true;
+  const selected = (data.selectedWorkType ?? false) || reactFlowSelected;
+  const visualState = resolveFactoryGraphVisualState({
+    activeFlow: data.activeFlow,
+    family: "work-type",
+    focused: data.focused,
+    muted: data.muted,
+    selected,
+    validation: data.validationError,
+  });
   const content = (
-    <span
-      aria-hidden={selectable ? true : undefined}
-      className="flex min-w-0 items-center gap-1.5 overflow-hidden"
-      data-work-type-label-zone
-      {...(selectable ? {} : { "aria-label": label, role: "img" as const })}
-      title={data.validationMessage ?? label}
-    >
-      {selectable ? null : <span className="sr-only">{label}</span>}
-      <GraphSemanticIcon
-        className="h-3.5 w-3.5 shrink-0 text-info"
-        kind="work-type"
-        label={workTypeLabel}
-      />
-      <span className="grid min-w-0 gap-px overflow-hidden">
-        <span className="flex min-w-0 items-center gap-1 overflow-hidden">
-          <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-info">
-            {workTypeLabel}
-          </span>
-          {data.isDefaultWorkType ? (
-            <FactoryGraphNodeBadge
-              className="max-w-full shrink"
-              role="status"
-              tone="info"
-              weight="label"
+    <>
+      <span
+        aria-hidden={selectable ? true : undefined}
+        className="flex min-w-0 items-center gap-1.5 overflow-hidden"
+        data-work-type-label-zone
+        {...(selectable ? {} : { "aria-label": label, role: "img" as const })}
+        title={data.validationMessage ?? label}
+      >
+        {selectable ? null : <span className="sr-only">{label}</span>}
+        <GraphSemanticIcon
+          className={classNames(
+            "h-3.5 w-3.5 shrink-0",
+            factoryGraphNodeVisualIconClassName(visualState, "text-info"),
+          )}
+          kind="work-type"
+          label={workTypeLabel}
+        />
+        <span className="grid min-w-0 gap-px overflow-hidden">
+          <span className="flex min-w-0 items-start gap-1 overflow-hidden">
+            <span
+              className={factoryGraphNodeWrappedTextClassName(
+                "block overflow-hidden text-[0.62rem] font-bold uppercase leading-none text-info",
+              )}
             >
-              {defaultWorkTypeLabel(data.locale)}
-            </FactoryGraphNodeBadge>
-          ) : null}
+              {workTypeLabel}
+            </span>
+            {data.isDefaultWorkType ? (
+              <FactoryGraphNodeBadge
+                className="max-w-full shrink"
+                role="status"
+                tone="info"
+                weight="label"
+              >
+                {defaultWorkTypeLabel(data.locale)}
+              </FactoryGraphNodeBadge>
+            ) : null}
+          </span>
+          <strong
+            className={factoryGraphNodeWrappedTextClassName(
+              "block font-mono text-[0.8rem] font-bold leading-tight text-on-surface",
+            )}
+          >
+            {name}
+          </strong>
         </span>
-        <strong className="block min-w-0 truncate whitespace-nowrap font-mono text-[0.8rem] font-bold leading-tight text-on-surface">
-          {name}
-        </strong>
       </span>
-    </span>
+      {isExpanded ? (
+        <FactoryGraphNodeExpandedContent family="work-type">
+          <span data-factory-graph-expanded-field="place-id">
+            {data.place.place_id}
+          </span>
+        </FactoryGraphNodeExpandedContent>
+      ) : null}
+    </>
   );
   return (
     <FactoryGraphNodeShell
@@ -195,27 +318,29 @@ export function FactoryGraphWorkTypeNodeView({
         factoryGraphNodeHoverClassName({
           activeFlow: data.activeFlow,
           muted: data.muted,
-          selected: data.selectedWorkType,
+          selected,
           validationError: data.validationError,
         }),
-        data.activeFlow && "border-info shadow-af-info-chip",
-        data.muted && "opacity-[0.45]",
-        data.validationError &&
-          "ring-2 ring-af-danger-border motion-safe:animate-pulse",
-        data.selectedWorkType &&
-          !data.validationError &&
-          "border-primary shadow-af-accent-selected",
       )}
       handles={data.handles}
+      interactionOverlay={data.interactionOverlay}
       nodeType="workType"
+      resizeControls={data.resizeControls}
+      visualState={{
+        activeFlow: data.activeFlow,
+        focused: data.focused,
+        muted: data.muted,
+        selected,
+        validation: data.validationError,
+      }}
     >
       {selectable ? (
         <GraphNodeButton
           aria-invalid={data.validationError ? true : undefined}
           aria-label={selectLabel("work type", name, data.locale)}
-          aria-pressed={data.selectedWorkType}
+          aria-pressed={selected}
           className="grid min-w-0 gap-0.5 overflow-hidden"
-          data-selected-work-type={data.selectedWorkType ? "true" : undefined}
+          data-selected-work-type={selected ? "true" : undefined}
           onClick={(event) => {
             event.stopPropagation();
             data.onSelectWorkType?.(name);
@@ -233,17 +358,30 @@ export function FactoryGraphWorkTypeNodeView({
 /** Original Factory resource node, with host-owned resource selection. */
 export function FactoryGraphResourceNodeView({
   data,
+  selected: reactFlowSelected,
 }: NodeProps<FactoryGraphResourceNode>) {
   const label = resourceName(data.place);
   const resourceLabel = semanticLabel("resource", data.locale);
   const selectable = data.onSelectResource !== undefined;
+  const isExpanded = data.expanded === true;
+  const selected = data.selectedResource || reactFlowSelected;
+  const visualState = resolveFactoryGraphVisualState({
+    activeFlow: data.activeFlow,
+    family: "resource",
+    focused: data.focused,
+    muted: data.muted,
+    selected,
+    validation: data.validationError,
+  });
   const content = (
     <FactoryGraphResourceNodeContent
       label={label}
       locale={data.locale}
       place={data.place}
       resourceLabel={resourceLabel}
+      expanded={isExpanded}
       tokenCount={data.tokenCount}
+      visualState={visualState}
     />
   );
   return (
@@ -254,23 +392,27 @@ export function FactoryGraphResourceNodeView({
         factoryGraphNodeHoverClassName({
           activeFlow: data.activeFlow,
           muted: data.muted,
-          selected: data.selectedResource,
+          selected,
         }),
-        data.activeFlow &&
-          !data.selectedResource &&
-          "border-af-success-border shadow-af-success-chip",
-        data.selectedResource && "border-primary shadow-af-accent-selected",
-        data.muted && "opacity-[0.45]",
       )}
       handles={data.handles}
+      interactionOverlay={data.interactionOverlay}
       nodeType="resource"
+      resizeControls={data.resizeControls}
+      visualState={{
+        activeFlow: data.activeFlow,
+        focused: data.focused,
+        muted: data.muted,
+        selected,
+        validation: data.validationError,
+      }}
     >
       {selectable ? (
         <GraphNodeButton
           aria-label={selectLabel("resource", label, data.locale)}
-          aria-pressed={data.selectedResource}
+          aria-pressed={selected}
           className="flex min-w-0 w-full flex-col overflow-hidden"
-          data-selected-resource={data.selectedResource ? "true" : undefined}
+          data-selected-resource={selected ? "true" : undefined}
           onClick={(event) => {
             event.stopPropagation();
             data.onSelectResource?.(label);
@@ -286,23 +428,27 @@ export function FactoryGraphResourceNodeView({
 }
 
 function FactoryGraphResourceNodeContent({
+  expanded,
   label,
   locale,
   place,
   resourceLabel,
   tokenCount,
+  visualState,
 }: {
+  expanded: boolean;
   label: string;
   locale?: string;
   place: FactoryGraphPlaceRef;
   resourceLabel: string;
   tokenCount: number;
+  visualState: ReturnType<typeof resolveFactoryGraphVisualState>;
 }) {
   return (
     <div className="flex min-w-0 w-full flex-col overflow-hidden">
       <span
         aria-label={label}
-        className="grid h-6 max-h-6 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5 overflow-hidden"
+        className="grid min-h-6 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-1.5 overflow-hidden"
         data-resource-label-zone
         role="img"
       >
@@ -311,14 +457,19 @@ function FactoryGraphResourceNodeContent({
           title={resourceLabel}
         >
           <GraphSemanticIcon
-            className="h-3.5 w-3.5 text-success"
+            className={classNames(
+              "h-3.5 w-3.5",
+              factoryGraphNodeVisualIconClassName(visualState, "text-success"),
+            )}
             kind="resource"
             label={resourceLabel}
           />
         </span>
         <span className="flex min-w-0 overflow-hidden" title={label}>
           <span
-            className="block min-w-0 overflow-hidden truncate whitespace-nowrap font-mono text-[0.76rem] font-bold leading-[0.82rem] text-on-surface"
+            className={factoryGraphNodeWrappedTextClassName(
+              "block overflow-hidden font-mono text-[0.76rem] font-bold leading-[0.82rem] text-on-surface",
+            )}
             data-resource-name
             title={label}
           >
@@ -340,6 +491,13 @@ function FactoryGraphResourceNodeContent({
           {tokenCount}
         </FactoryGraphNodeBadge>
       </span>
+      {expanded ? (
+        <FactoryGraphNodeExpandedContent family="resource">
+          <span data-factory-graph-expanded-field="place-id">
+            {place.place_id}
+          </span>
+        </FactoryGraphNodeExpandedContent>
+      ) : null}
     </div>
   );
 }

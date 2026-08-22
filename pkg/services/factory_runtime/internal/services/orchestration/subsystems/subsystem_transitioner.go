@@ -7,10 +7,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
@@ -46,6 +48,8 @@ type resolvedWorkResult struct {
 	outcome                     workerexecution.WorkOutcome
 	selectedClassificationLabel string
 	output                      string
+	structuredResult            any
+	structuredResultPresent     bool
 	recordedOutputWork          []work.FactoryWorkItem
 	err                         string
 	feedback                    string
@@ -115,7 +119,7 @@ func (t *TransitionerSubsystem) TickGroup() TickGroup {
 // TODO: this thing needs more tests.
 // Execute reads results and raw dispatch snapshots from the RuntimeStateSnapshot
 // and produces marking mutations for token routing.
-func (t *TransitionerSubsystem) Execute(_ context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+func (t *TransitionerSubsystem) Execute(ctx context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
 	if len(snapshot.Results) == 0 {
 		return nil, nil
 	}
@@ -127,7 +131,7 @@ func (t *TransitionerSubsystem) Execute(_ context.Context, snapshot *interfaces.
 	var generatedBatches []work.GeneratedSubmissionBatch
 	var completedDispatches []interfaces.CompletedDispatch
 	for i := range results {
-		muts, completedDispatch, batchRecords, err := t.mapToCorrespondingTokenMutations(snapshot, &results[i])
+		muts, completedDispatch, batchRecords, err := t.mapToCorrespondingTokenMutations(ctx, snapshot, &results[i])
 		if err != nil {
 			t.logger.Error("transitioner: error processing result", "error", err, "transition", results[i].TransitionID)
 			return nil, fmt.Errorf("processing result for transition %s: %w", results[i].TransitionID, err)
@@ -152,7 +156,7 @@ func (t *TransitionerSubsystem) Execute(_ context.Context, snapshot *interfaces.
 // arc set and creates new tokens with embedded history.
 // TODO: we should break out the logic here to be referentially transparent and testable independent of the subsystem. Right now its too reliant on internal state.
 // Break out dependency on ID generation as well as the logger/mocker.
-func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], result *workerexecution.WorkResult) ([]interfaces.MarkingMutation, interfaces.CompletedDispatch, []work.GeneratedSubmissionBatch, error) {
+func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(ctx context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], result *workerexecution.WorkResult) ([]interfaces.MarkingMutation, interfaces.CompletedDispatch, []work.GeneratedSubmissionBatch, error) {
 	currentTransition, ok := t.netDefinition.Transitions[result.TransitionID]
 	if !ok {
 		t.logger.Error("transitioner: unknown transition in result", "transitionID", result.TransitionID)
@@ -175,7 +179,7 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *inter
 	var generatedBatches []work.GeneratedSubmissionBatch
 	generatedWorkCount := 0
 	if resolved.outcome == workerexecution.OutcomeAccepted {
-		generatedBatch, detectedBatch, batchErr := t.workerEmittedBatchWork(resolved, inputColors)
+		generatedBatch, detectedBatch, batchErr := t.workerEmittedBatchWork(resolved, inputColors, existingWorksForAdmission(snapshot))
 		if batchErr != nil {
 			resolved.outcome = workerexecution.OutcomeFailed
 			resolved.err = batchErr.Error()
@@ -201,13 +205,13 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *inter
 		}
 	}
 
-	arcs, resolved, err := t.calculateArcsForResolvedResult(currentTransition, resolved)
+	arcs, resolved, err := t.calculateArcsForResolvedResult(currentTransition, resolved, consumedTokens)
 	if err != nil {
 		return nil, interfaces.CompletedDispatch{}, nil, err
 	}
 	t.logArcSelection(result.TransitionID, resolved.outcome)
 	if len(arcs) == 0 {
-		return nil, interfaces.CompletedDispatch{}, nil, fmt.Errorf("transition %s has no arcs for outcome %s", result.TransitionID, resolved.outcome)
+		return nil, interfaces.CompletedDispatch{}, nil, transitionRoutingError(ctx, result.TransitionID, resolved.outcome)
 	}
 
 	var workstationDef *interfaces.FactoryWorkstationConfig
@@ -248,6 +252,13 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *inter
 
 	t.logger.Info("releasing tokens", "transition", result.TransitionID, "outcome", resolved.outcome, "mutation_count", len(mutations))
 	return mutations, t.buildCompletedDispatch(snapshot, result, resolved, consumedTokens, mutations, now), generatedBatches, nil
+}
+
+func transitionRoutingError(ctx context.Context, transitionID string, outcome workerexecution.WorkOutcome) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return fmt.Errorf("transition %s has no arcs for outcome %s", transitionID, outcome)
 }
 
 func effectiveGeneratedWorkItemLimit(limits interfaces.WorkstationLimits, inputColors []factorytoken.Color) int {
@@ -291,10 +302,12 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 		Outcome:                     resolved.outcome,
 		SelectedClassificationLabel: resolved.selectedClassificationLabel,
 		Reason:                      completedDispatchReason(resolved),
+		ArtifactVerification:        result.ArtifactVerification.Clone(),
 		FailureMetadata:             failureMetadata,
-		ProviderSession:             workerexecution.CloneProviderSessionMetadata(result.ProviderSession),
+		FailureDetail:               workerexecution.CloneFailureDetail(result.FailureDetail),
+		ProviderSession:             (result.Continuation).SessionMetadata(),
 		EndTime:                     endTime,
-		ConsumedTokens:              factorytoken.CloneSlice(consumedTokens),
+		ConsumedTokens:              factorytoken.ToWorkerSlice(consumedTokens),
 		OutputMutations: mutationRecordsForDispatch(
 			result.DispatchID,
 			result.TransitionID,
@@ -307,9 +320,16 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 	}
 
 	completed.WorkstationName = dispatchEntry.WorkstationName
+	completed.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(dispatchEntry.ExpectedArtifactContext)
 	completed.StartTime = dispatchEntry.StartTime
 	completed.Duration = completed.EndTime.Sub(dispatchEntry.StartTime)
 	return completed
+}
+
+func cloneExpectedArtifactTemplateContext(
+	context *work.ExpectedArtifactTemplateContext,
+) *work.ExpectedArtifactTemplateContext {
+	return context.Clone()
 }
 
 func completedDispatchReason(result resolvedWorkResult) string {
@@ -323,26 +343,6 @@ func completedDispatchReason(result resolvedWorkResult) string {
 	default:
 		return ""
 	}
-}
-
-func (t *TransitionerSubsystem) calculateArcsForResolvedResult(currentTransition *petri.Transition, resolved resolvedWorkResult) ([]petri.Arc, resolvedWorkResult, error) {
-	workstation, ok := runtimeWorkstation(currentTransition.Name, t.runtimeConfig)
-	if ok &&
-		workstation != nil &&
-		t.decisionEnvelopes != nil &&
-		t.decisionEnvelopes.UsesGoalRoutingDecisionEnvelope(workstation) {
-		if resolved.outcome == workerexecution.OutcomeAccepted {
-			return matchClassificationLabelArcs(currentTransition, resolved.selectedClassificationLabel, resolved, "decision %q did not match any authored routing route")
-		}
-		arcs, err := calculateArcs(currentTransition, resolved.outcome)
-		return arcs, resolved, err
-	}
-	if !ok || workstation == nil || workstation.Type != interfaces.WorkstationTypeClassify || resolved.outcome != workerexecution.OutcomeAccepted {
-		arcs, err := calculateArcs(currentTransition, resolved.outcome)
-		return arcs, resolved, err
-	}
-
-	return matchClassificationLabelArcs(currentTransition, resolved.output, resolved, "classifier label %q did not match any authored classification route")
 }
 
 func firstDecisionEnvelopeService(
@@ -413,13 +413,13 @@ func mutationRecordsForDispatch(
 			Reason:       mutation.Reason,
 		}
 		if mutation.NewToken != nil {
-			tokenCopy := factorytoken.Clone(*mutation.NewToken)
-			record.Token = &tokenCopy
+			runtimeToken := factorytoken.FromWorker(*mutation.NewToken)
+			record.Token = workerTokenPointer(&runtimeToken)
 			if record.TokenID == "" {
 				record.TokenID = mutation.NewToken.ID
 			}
 			if record.ToPlace == "" {
-				record.ToPlace = mutation.NewToken.PlaceID
+				record.ToPlace = runtimeToken.PlaceID
 			}
 		}
 		records = append(records, record)
@@ -439,8 +439,10 @@ func cloneFactoryWorkItems(items []work.FactoryWorkItem) []work.FactoryWorkItem 
 			clone[i].PreviousChainingTraceIDs = append([]string(nil), items[i].PreviousChainingTraceIDs...)
 		}
 		if items[i].Content != nil {
-			clone[i].Content = append([]work.WorkContentPart(nil), items[i].Content...)
+			clone[i].Content = work.CloneWorkContentParts(items[i].Content)
 		}
+		clone[i].StructuredResult = jsonvalue.Clone(items[i].StructuredResult)
+		clone[i].StructuredResultPresent = jsonvalue.Present(items[i].StructuredResult, items[i].StructuredResultPresent)
 		if items[i].Tags != nil {
 			clone[i].Tags = cloneTags(items[i].Tags)
 		}
@@ -466,13 +468,17 @@ func resolveWorkResult(transition *petri.Transition, result *workerexecution.Wor
 		transitionID:                result.TransitionID,
 		outcome:                     result.Outcome,
 		output:                      result.Output,
+		structuredResult:            jsonvalue.Clone(result.StructuredResult),
+		structuredResultPresent:     jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent),
 		selectedClassificationLabel: result.SelectedClassificationLabel,
 		recordedOutputWork:          cloneFactoryWorkItems(result.RecordedOutputWork),
 		err:                         result.Error,
 		feedback:                    result.Feedback,
 		failureMetadata:             result.FailureMetadata,
 	}
-	if workstation, ok := runtimeWorkstation(transition.Name, runtimeConfig); ok && workstation != nil && len(workstation.StopWords) > 0 {
+	if workstation, ok := runtimeWorkstation(transition.Name, runtimeConfig); ok && workstation != nil &&
+		len(workstation.StopWords) > 0 &&
+		strings.TrimSpace(workstation.OutcomeFormat) != interfaces.WorkstationOutcomeFormatDecisionEnvelope {
 		resolved.outcome = evaluateStopWords(workstation.StopWords, result.Output)
 	}
 	return resolved
@@ -485,7 +491,7 @@ func shouldRequeueIntermittentFailureResult(result resolvedWorkResult) bool {
 	return workerexecution.FailureDecisionFromMetadata(result.failureMetadata).Retryable
 }
 
-func (t *TransitionerSubsystem) workerEmittedBatchWork(result resolvedWorkResult, inputColors []factorytoken.Color) (generatedBatchWork, bool, error) {
+func (t *TransitionerSubsystem) workerEmittedBatchWork(result resolvedWorkResult, inputColors []factorytoken.Color, existingWorks []work.ExistingWork) (generatedBatchWork, bool, error) {
 	output := strings.TrimSpace(result.output)
 	if output == "" || !strings.HasPrefix(output, "{") {
 		return generatedBatchWork{}, false, nil
@@ -534,11 +540,67 @@ func (t *TransitionerSubsystem) workerEmittedBatchWork(result resolvedWorkResult
 	}
 	normalized, err := work.NormalizeGeneratedSubmissionBatch(batch, work.WorkRequestNormalizeOptions{
 		ValidWorkTypes: t.validWorkTypes(),
+		ExistingWorks:  existingWorks,
 	})
 	if err != nil {
 		return generatedBatchWork{}, true, fmt.Errorf("worker-emitted work request batch: %w", err)
 	}
 	return generatedBatchWork{request: request, submits: normalized, metadata: metadata}, true, nil
+}
+
+// existingWorksForAdmission returns the point-in-time board identities visible
+// to a worker-emitted batch. A dispatched Work is absent from Marking while it
+// is active, so consumed dispatch tokens are included alongside marking
+// tokens. The engine performs the same snapshot for external admission before
+// queueing the request.
+func existingWorksForAdmission(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) []work.ExistingWork {
+	if snapshot == nil {
+		return nil
+	}
+
+	byID := make(map[string]work.ExistingWork)
+	add := func(color factorytoken.Color) {
+		if color.DataType == factorytoken.DataTypeResource || color.WorkID == "" {
+			return
+		}
+		candidate := work.ExistingWork{
+			WorkID:     color.WorkID,
+			Name:       color.Name,
+			WorkTypeID: color.WorkTypeID,
+		}
+		if current, exists := byID[candidate.WorkID]; exists {
+			if current.Name == "" {
+				current.Name = candidate.Name
+			}
+			if current.WorkTypeID == "" {
+				current.WorkTypeID = candidate.WorkTypeID
+			}
+			byID[candidate.WorkID] = current
+			return
+		}
+		byID[candidate.WorkID] = candidate
+	}
+
+	for _, token := range snapshot.Marking.Tokens {
+		if token != nil {
+			add(token.Color)
+		}
+	}
+	for _, dispatch := range snapshot.Dispatches {
+		if dispatch == nil {
+			continue
+		}
+		for _, token := range dispatch.ConsumedTokens {
+			add(token.Color)
+		}
+	}
+
+	works := make([]work.ExistingWork, 0, len(byID))
+	for _, candidate := range byID {
+		works = append(works, candidate)
+	}
+	sort.Slice(works, func(i, j int) bool { return works[i].WorkID < works[j].WorkID })
+	return works
 }
 
 type workerEmittedBatchEnvelope struct {
@@ -706,8 +768,9 @@ func calculateArcs(currentTransition *petri.Transition, outcome workerexecution.
 
 func (t *TransitionerSubsystem) createFanoutGuardToken(inputColors []factorytoken.Color, transitionID string, expectedCount int, now time.Time) []interfaces.MarkingMutation {
 	mutations := []interfaces.MarkingMutation{}
-	if expectedCount > 0 || t.hasFanoutGroup(transitionID) {
-		if countPlaceID, ok := t.netDefinition.FanoutGroups[transitionID]; ok {
+	countPlaceID, hasFanoutGroup := t.netDefinition.FanoutGroups[transitionID]
+	if expectedCount > 0 || hasFanoutGroup {
+		if hasFanoutGroup {
 			parentWorkID := ""
 			if first := firstNonResourceInput(inputColors); first != nil {
 				parentWorkID = first.WorkID
@@ -717,7 +780,7 @@ func (t *TransitionerSubsystem) createFanoutGuardToken(inputColors []factorytoke
 			mutations = append(mutations, interfaces.MarkingMutation{
 				Type:     interfaces.MutationCreate,
 				ToPlace:  countPlaceID,
-				NewToken: countToken,
+				NewToken: workerTokenPointer(countToken),
 				Reason:   fmt.Sprintf("fanout count token for transition %s (expected %d children)", transitionID, expectedCount),
 			})
 		}
@@ -738,20 +801,22 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 	}
 	for arcIdx, arc := range in.arcs {
 		baseInput := token_transformer.OutputTokenInput{
-			ArcIndex:            arcIdx,
-			Arcs:                in.arcs,
-			ConsumedTokens:      in.consumed,
-			InputColors:         in.inputColors,
-			Output:              in.result.output,
-			WorkPropagationMode: workPropagationMode,
-			WorkstationName:     workstationName,
-			WorkstationType:     workstationType(in.workstation),
-			Outcome:             in.result.outcome,
-			TransitionID:        in.result.transitionID,
-			Error:               in.result.err,
-			Feedback:            in.result.feedback,
-			Now:                 in.now,
-			History:             in.history,
+			ArcIndex:                arcIdx,
+			Arcs:                    in.arcs,
+			ConsumedTokens:          in.consumed,
+			InputColors:             in.inputColors,
+			Output:                  in.result.output,
+			StructuredResult:        in.result.structuredResult,
+			StructuredResultPresent: in.result.structuredResultPresent,
+			WorkPropagationMode:     workPropagationMode,
+			WorkstationName:         workstationName,
+			WorkstationType:         workstationType(in.workstation),
+			Outcome:                 in.result.outcome,
+			TransitionID:            in.result.transitionID,
+			Error:                   in.result.err,
+			Feedback:                in.result.feedback,
+			Now:                     in.now,
+			History:                 in.history,
 		}
 		repeatCount := mutationRepeatCountForArc(arc, in.consumed)
 		for resourceTokenIndex := 0; resourceTokenIndex < repeatCount; resourceTokenIndex++ {
@@ -783,7 +848,7 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 			mutations = append(mutations, interfaces.MarkingMutation{
 				Type:     interfaces.MutationCreate,
 				ToPlace:  arc.PlaceID,
-				NewToken: newToken,
+				NewToken: workerTokenPointer(newToken),
 				Reason:   fmt.Sprintf("transitioner: %s from transition %s", in.result.outcome, in.transition.ID),
 			})
 		}
@@ -857,46 +922,6 @@ func consumedResourceTokenCountForPlace(consumedTokens []factorytoken.Token, pla
 	return count
 }
 
-func applyRecordedOutputWorkIdentity(token *factorytoken.Token, recorded work.FactoryWorkItem) {
-	if token == nil {
-		return
-	}
-	if recorded.WorkTypeID != "" && token.Color.WorkTypeID != "" && recorded.WorkTypeID != token.Color.WorkTypeID {
-		return
-	}
-	if recorded.ID != "" {
-		token.ID = recorded.ID
-		token.Color.WorkID = recorded.ID
-	}
-	if recorded.WorkTypeID != "" {
-		token.Color.WorkTypeID = recorded.WorkTypeID
-	}
-	if recorded.DisplayName != "" {
-		token.Color.Name = recorded.DisplayName
-	}
-	if recorded.CurrentChainingTraceID != "" {
-		token.Color.CurrentChainingTraceID = recorded.CurrentChainingTraceID
-	}
-	if len(recorded.PreviousChainingTraceIDs) > 0 {
-		token.Color.PreviousChainingTraceIDs = append([]string(nil), recorded.PreviousChainingTraceIDs...)
-	}
-	if recorded.ChainingTraceDepth > 0 {
-		token.Color.ChainingTraceDepth = recorded.ChainingTraceDepth
-	}
-	if recorded.TraceID != "" {
-		token.Color.TraceID = recorded.TraceID
-	}
-	if recorded.ParentID != "" {
-		token.Color.ParentID = recorded.ParentID
-	}
-	if len(recorded.Tags) > 0 {
-		token.Color.Tags = cloneTags(recorded.Tags)
-	}
-	if len(recorded.Content) > 0 {
-		token.Color.Content = work.CloneWorkContentParts(recorded.Content)
-	}
-}
-
 func (t *TransitionerSubsystem) buildIntermittentFailureRequeueMutations(
 	consumedTokens []factorytoken.Token,
 	history factorytoken.History,
@@ -918,7 +943,7 @@ func (t *TransitionerSubsystem) buildIntermittentFailureRequeueMutations(
 		mutations = append(mutations, interfaces.MarkingMutation{
 			Type:     interfaces.MutationCreate,
 			ToPlace:  consumed.PlaceID,
-			NewToken: &requeued,
+			NewToken: workerTokenPointer(&requeued),
 			Reason:   fmt.Sprintf("transitioner: requeue intermittent failure from transition %s", result.transitionID),
 		})
 	}
@@ -939,38 +964,6 @@ func cloneHistoryForIntermittentFailureRequeue(
 		Attempt:      history.TotalVisits[result.transitionID],
 	})
 	return cloned
-}
-
-// hasFanoutGroup checks if a transition has a fanout group configured.
-func (t *TransitionerSubsystem) hasFanoutGroup(transitionID string) bool {
-	if t.netDefinition.FanoutGroups == nil {
-		return false
-	}
-	_, ok := t.netDefinition.FanoutGroups[transitionID]
-	return ok
-}
-
-// releaseResourceTokens returns consumed resource tokens back to their original resource places.
-func (t *TransitionerSubsystem) releaseResourceTokens(consumedTokens []factorytoken.Token, alreadyCovered map[string]int, transitionID string, now time.Time) []interfaces.MarkingMutation {
-	var mutations []interfaces.MarkingMutation
-	for i := range consumedTokens {
-		consumed := consumedTokens[i]
-		if consumed.Color.DataType != factorytoken.DataTypeResource {
-			continue
-		}
-		if alreadyCovered[consumed.PlaceID] > 0 {
-			alreadyCovered[consumed.PlaceID]--
-			continue
-		}
-		resourceToken := t.transformer.ReleasedResourceToken(consumed, consumed.PlaceID, now)
-		mutations = append(mutations, interfaces.MarkingMutation{
-			Type:     interfaces.MutationCreate,
-			ToPlace:  consumed.PlaceID,
-			NewToken: resourceToken,
-			Reason:   fmt.Sprintf("release resource %s for transition %s", consumed.PlaceID, transitionID),
-		})
-	}
-	return mutations
 }
 
 func tokenColorsFromTokens(tokens []factorytoken.Token) []factorytoken.Color {

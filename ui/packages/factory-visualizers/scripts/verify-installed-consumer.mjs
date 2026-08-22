@@ -36,7 +36,7 @@ import {
   type FactoryTopologyReplayError,
   type WorkProgressVisualizerMessages,
 } from "@you-agent-factory/factory-visualizers";
-import { createFactoryGraphSource } from "@you-agent-factory/factory-graph";
+import { createFactoryGraphSource, FactoryGraphReplaySurface } from "@you-agent-factory/factory-graph";
 import { parseFactoryRecording, type FactoryDefinition, type FactoryEvent } from "@you-agent-factory/client";
 import {
   createFactoryEmulatorSession,
@@ -105,6 +105,115 @@ const topology = createFactoryGraphSource({
     topology: projectFactoryTopologyAtTick({ events, tick: selectedTick }),
   },
   selectedTick,
+});
+const graphParitySource = createFactoryGraphSource({
+  factory: {
+    layout: {
+      groups: [
+        {
+          bounds: { height: 420, width: 720, x: -40, y: -40 },
+          color: "info",
+          id: "execution-lane",
+          label: "Execution lane",
+          nodeIds: ["workstation:review", "workstation:batch", "work-state:task:queued", "work-state:task:processing"],
+        },
+        {
+          bounds: { height: 300, width: 720, x: -40, y: 420 },
+          color: "warning",
+          id: "outcome-lane",
+          label: "Outcome lane",
+          nodeIds: ["workstation:idle", "work-state:task:done", "work-state:task:failed"],
+        },
+      ],
+      nodes: [
+        { id: "worker:alice", position: { x: 0, y: 40 }, size: { height: 96, width: 220 } },
+        { id: "workstation:review", position: { x: 260, y: 0 }, size: { height: 180, width: 320 } },
+        { id: "workstation:batch", position: { x: 260, y: 220 }, size: { height: 220, width: 360 } },
+        { id: "workstation:idle", position: { x: 260, y: 500 }, size: { height: 132, width: 180 } },
+        { id: "work-state:task:queued", position: { x: 660, y: 0 }, size: { height: 112, width: 240 } },
+        { id: "work-state:task:processing", position: { x: 660, y: 150 }, size: { height: 124, width: 260 } },
+        { id: "work-state:task:done", position: { x: 660, y: 500 }, size: { height: 136, width: 280 } },
+        { id: "work-state:task:failed", position: { x: 660, y: 660 }, size: { height: 148, width: 300 } },
+      ],
+      schemaVersion: 1,
+      viewport: { x: 24, y: 24, zoom: 0.72 },
+    },
+    name: "Packed graph parity",
+    workTypes: [{ name: "task", states: [
+      { name: "queued", type: "INITIAL" },
+      { name: "processing", type: "PROCESSING" },
+      { name: "done", type: "TERMINAL" },
+      { name: "failed", type: "FAILED" },
+    ] }],
+    workers: [{ id: "alice", name: "Alice", type: "AGENT_WORKER" }],
+    workstations: [
+      { behavior: "STANDARD", id: "review", inputs: [], name: "Review", outputs: [], type: "AGENT_RUN", worker: "Alice" },
+      { behavior: "REPEATER", id: "batch", inputs: [], name: "Batch", outputs: [], type: "SCRIPT_RUN" },
+      { behavior: "STANDARD", id: "idle", inputs: [], name: "Idle approval", outputs: [], type: "HUMAN_APPROVAL" },
+    ],
+  },
+  runtime: {
+    activity: {
+      activeDispatchOverlays: [
+        {
+          connectionIds: ["worker-review", "review-processing"],
+          dispatchId: "dispatch-review",
+          evidence: { resources: "unavailable", route: "known", work: "known", worker: "known", workstation: "known" },
+          id: "overlay:dispatch-review",
+          startedTick: 9,
+          workIds: ["work-1", "work-2", "work-3", "work-4"],
+          workerNodeId: "worker:alice",
+          workstationNodeId: "workstation:review",
+        },
+        {
+          connectionIds: [],
+          dispatchId: "dispatch-batch",
+          evidence: { resources: "unavailable", route: "unavailable", work: "known", worker: "unavailable", workstation: "known" },
+          id: "overlay:dispatch-batch",
+          startedTick: 8,
+          workIds: Array.from({ length: 25 }, (_, index) => "batch-work-" + (index + 1)),
+          workstationNodeId: "workstation:batch",
+        },
+      ],
+      activeWorkstationNodeIds: ["workstation:review", "workstation:batch"],
+      issues: [],
+      resourceOccupancy: [],
+      selectedTick: 12,
+    },
+    load: {
+      issues: [],
+      resourceOccupancy: [],
+      selectedTick: 12,
+      workStateCounts: [
+        { count: 1, evidence: "known", workStateId: "queued", workStateNodeId: "work-state:task:queued", workTypeId: "task" },
+        { count: 3, evidence: "known", workStateId: "processing", workStateNodeId: "work-state:task:processing", workTypeId: "task" },
+        { count: 4, evidence: "known", workStateId: "done", workStateNodeId: "work-state:task:done", workTypeId: "task" },
+        { count: 25, evidence: "known", workStateId: "failed", workStateNodeId: "work-state:task:failed", workTypeId: "task" },
+      ],
+    },
+    topology: {
+      connections: [
+        { id: "worker-review", kind: "worker-assignment", source: { handleId: "worker-assignment-source", nodeId: "worker:alice" }, target: { handleId: "worker-assignment-target", nodeId: "workstation:review" } },
+        { id: "review-processing", kind: "workstation-input", source: { handleId: "workstation-input-source", nodeId: "work-state:task:processing" }, target: { handleId: "workstation-input-target", nodeId: "workstation:review" } },
+        { id: "review-done", kind: "workstation-output", source: { handleId: "workstation-output-source", nodeId: "workstation:review" }, target: { handleId: "work-state-input-target", nodeId: "work-state:task:done" } },
+        { id: "review-failed", kind: "workstation-on-failure", source: { handleId: "workstation-on-failure-source", nodeId: "workstation:review" }, target: { handleId: "work-state-input-target", nodeId: "work-state:task:failed" } },
+      ],
+      issues: [],
+      nodes: [
+        { entityId: "alice", handles: [{ id: "worker-assignment-source", role: "source" }], id: "worker:alice", kind: "worker", label: "Alice" },
+        { entityId: "review", handles: [{ id: "worker-assignment-target", role: "target" }, { id: "workstation-input-target", role: "target" }, { id: "workstation-output-source", role: "source" }, { id: "workstation-on-failure-source", role: "source" }], id: "workstation:review", kind: "workstation", label: "Review" },
+        { entityId: "batch", handles: [], id: "workstation:batch", kind: "workstation", label: "Batch" },
+        { entityId: "idle", handles: [], id: "workstation:idle", kind: "workstation", label: "Idle approval" },
+        { category: "INITIAL", entityId: "task:queued", handles: [], id: "work-state:task:queued", kind: "work-state", label: "Queued", workTypeId: "task" },
+        { category: "PROCESSING", entityId: "task:processing", handles: [{ id: "workstation-input-source", role: "source" }], id: "work-state:task:processing", kind: "work-state", label: "Processing", workTypeId: "task" },
+        { category: "TERMINAL", entityId: "task:done", handles: [{ id: "work-state-input-target", role: "target" }], id: "work-state:task:done", kind: "work-state", label: "Done", workTypeId: "task" },
+        { category: "FAILED", entityId: "task:failed", handles: [{ id: "work-state-input-target", role: "target" }], id: "work-state:task:failed", kind: "work-state", label: "Failed", workTypeId: "task" },
+      ],
+      ok: true,
+      selectedTick: 12,
+    },
+  },
+  selectedTick: 12,
 });
 const reportError = (_error: FactoryTopologyReplayError) => {};
 const reportRecordingError = (_error: FactoryRecordingTopologyReplayError) => {};
@@ -257,6 +366,9 @@ function App() {
     <section aria-label="Valid packaged recording">
       <FactoryTopologyReplay messages={topologyMessages} onError={reportError} state={{ source: topology, status: "ready" }} />
     </section>
+    <section aria-label="Packed graph semantic parity">
+      <FactoryGraphReplaySurface source={graphParitySource} />
+    </section>
     <FactoryTimelineScrubber formatTick={String} messages={timelineMessages} onFollowLatest={() => {}} onSelectTick={() => {}} state={{ earliestTick: 0, latestTick: 4, mode: "history", selectedTick: 2, status: "available" }} />
     <WorkProgressVisualizer formatNumber={(value) => new Intl.NumberFormat("en").format(value)} messages={progressMessages} projection={progress} />
     <section aria-label="Invalid packaged recording">
@@ -325,6 +437,7 @@ async function writeConsumer(root, tarballs) {
     devDependencies: {
       "@types/react": "19.2.2",
       "@types/react-dom": "19.2.2",
+      "@vitejs/plugin-react-swc": "4.1.0",
       typescript: "5.9.3",
       vite: "7.1.7",
     },
@@ -334,6 +447,8 @@ async function writeConsumer(root, tarballs) {
     "index.html":
       '<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Visualizer consumer</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>\n',
     "src/main.tsx": mainSource,
+    "vite.config.ts":
+      'import react from "@vitejs/plugin-react-swc";\nimport { defineConfig } from "vite";\n\nexport default defineConfig({ plugins: [react()] });\n',
     "src/styles.css":
       "* { box-sizing: border-box; } html, body { margin: 0; } main { display: grid; gap: 1rem; margin: auto; max-width: 72rem; padding: 1rem; } .factory-topology-replay { min-height: 18rem; }\n",
     "tsconfig.json": `${JSON.stringify(
@@ -533,6 +648,47 @@ async function verifyBrowser(distRoot) {
       .first()
       .waitFor();
     await page.getByText("6 total", { exact: true }).waitFor();
+    const graphParity = page.getByRole("region", {
+      name: "Packed graph semantic parity",
+    });
+    await graphParity
+      .locator('[data-graph-visual-lifecycle="processing"]')
+      .first()
+      .waitFor();
+    await graphParity
+      .locator('[data-graph-visual-lifecycle="terminal"]')
+      .first()
+      .waitFor();
+    await graphParity
+      .locator('[data-graph-visual-lifecycle="failed"]')
+      .first()
+      .waitFor();
+    await graphParity
+      .locator('[data-workstation-work-progress="numeric"]')
+      .first()
+      .waitFor();
+    await graphParity
+      .locator('[data-state-work-progress="numeric"]')
+      .first()
+      .waitFor();
+    if (
+      (await graphParity
+        .locator("[data-factory-graph-group-region]")
+        .count()) !== 2
+    ) {
+      throw new Error(
+        "packed graph consumer did not render both authored groups",
+      );
+    }
+    if (
+      (
+        await graphParity
+          .locator('[data-factory-graph-group-region="execution-lane"]')
+          .getAttribute("style")
+      )?.includes("var(--color-info)") !== true
+    ) {
+      throw new Error("packed graph consumer lost the authored group color");
+    }
     const invalidRecording = page.getByRole("region", {
       name: "Invalid packaged recording",
     });

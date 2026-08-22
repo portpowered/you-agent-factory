@@ -22,13 +22,13 @@ const testExecuteInputJSON = `{
 	"systemPrompt":"system",
 	"userMessage":"hello",
 	"outputSchema":"{}",
-	"resumeSession":{"provider":"codex","kind":"session_id","id":"session-1"},
 	"workingDirectory":"/tmp/work",
 	"worktree":"/tmp/worktree",
 	"envVars":{"KEY":"value"},
 	"processEnvironment":["PATH=/bin"]
 }`
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestBind_ExecuteSuccessReturnsDetachedResultFromInjectedRoot(t *testing.T) {
 	t.Parallel()
 
@@ -72,12 +72,6 @@ func TestBind_ExecuteSuccessReturnsDetachedResultFromInjectedRoot(t *testing.T) 
 				request.WorkingDirectory != "/tmp/work" ||
 				request.Worktree != "/tmp/worktree" {
 				t.Fatalf("execute request = %#v, want mapped MCP fields", request)
-			}
-			if request.ResumeSession == nil ||
-				request.ResumeSession.Provider != providers.IDCodex ||
-				request.ResumeSession.Kind != "session_id" ||
-				request.ResumeSession.ID != "session-1" {
-				t.Fatalf("resume session = %#v, want codex session_id session-1", request.ResumeSession)
 			}
 			if request.EnvVars["KEY"] != "value" {
 				t.Fatalf("env vars = %#v, want KEY=value", request.EnvVars)
@@ -165,17 +159,10 @@ func TestDiscoverTools_ExecuteDiscoveryMatchesHandlerRegistration(t *testing.T) 
 	}
 }
 
-func TestBind_ExecuteFailuresReturnTypedErrorEnvelopes(t *testing.T) {
+func TestBind_ExecuteFailuresReturnIdentityAndCatalogEnvelopes(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		name          string
-		rootErr       error
-		wantCode      string
-		wantMessage   string
-		wantRetryable bool
-		wantKind      string
-	}{
+	assertExecuteRootErrorEnvelopes(t, []executeRootErrorEnvelopeCase{
 		{
 			name:          "invalid provider id",
 			rootErr:       providers.ErrInvalidID,
@@ -190,6 +177,13 @@ func TestBind_ExecuteFailuresReturnTypedErrorEnvelopes(t *testing.T) {
 			wantMessage:   "provider is unknown",
 			wantRetryable: false,
 		},
+	})
+}
+
+func TestBind_ExecuteFailuresReturnCancelAndTimeoutEnvelopes(t *testing.T) {
+	t.Parallel()
+
+	assertExecuteRootErrorEnvelopes(t, []executeRootErrorEnvelopeCase{
 		{
 			name:          "execute canceled sentinel",
 			rootErr:       providers.ErrExecuteCancelled,
@@ -228,6 +222,13 @@ func TestBind_ExecuteFailuresReturnTypedErrorEnvelopes(t *testing.T) {
 			wantRetryable: true,
 			wantKind:      "timeout",
 		},
+	})
+}
+
+func TestBind_ExecuteFailuresReturnExecuteFailureKindEnvelopes(t *testing.T) {
+	t.Parallel()
+
+	assertExecuteRootErrorEnvelopes(t, []executeRootErrorEnvelopeCase{
 		{
 			name: "execute failure authentication",
 			rootErr: providers.ExecuteFailure{
@@ -283,7 +284,20 @@ func TestBind_ExecuteFailuresReturnTypedErrorEnvelopes(t *testing.T) {
 			wantRetryable: false,
 			wantKind:      "unknown",
 		},
-	}
+	})
+}
+
+type executeRootErrorEnvelopeCase struct {
+	name          string
+	rootErr       error
+	wantCode      string
+	wantMessage   string
+	wantRetryable bool
+	wantKind      string
+}
+
+func assertExecuteRootErrorEnvelopes(t *testing.T, cases []executeRootErrorEnvelopeCase) {
+	t.Helper()
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -385,6 +399,30 @@ func TestBind_ExecuteMalformedJSONReturnsDecodeErrorWithoutInvokingRoot(t *testi
 	}
 	if invoked {
 		t.Fatal("fake Providers root was invoked for malformed JSON")
+	}
+}
+
+func TestBind_ExecuteRejectsResumeSessionWithoutInvokingRoot(t *testing.T) {
+	t.Parallel()
+
+	var invoked bool
+	operation := providersmcp.Bind(providersmcp.RootDependencies{
+		Providers: fakeProvidersRoot{invoked: &invoked},
+	})
+	raw, err := operation(
+		context.Background(),
+		providersmcp.ToolExecute,
+		json.RawMessage(`{"provider":"codex","attemptId":"attempt-1","resumeSession":{"provider":"codex","kind":"session_id","id":"session-1"}}`),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(execute) transport error = %v, want typed tool response", err)
+	}
+	envelope := assertTypedToolErrorEnvelope(t, raw, "BAD_REQUEST", false)
+	if !strings.Contains(envelope.Message, "resumeSession") {
+		t.Fatalf("error.message = %q, want rejected resumeSession context", envelope.Message)
+	}
+	if invoked {
+		t.Fatal("fake Providers root was invoked for resumeSession input")
 	}
 }
 

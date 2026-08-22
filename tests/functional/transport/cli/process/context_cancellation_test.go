@@ -25,6 +25,12 @@ const (
 	contextCancellationExecuteStation  = "execute-goal"
 )
 
+// This executable-boundary cell intentionally uses the CLI's serialized
+// --with-mock-workers fixture instead of an injected ProviderCommandRunner.
+// The latter is an in-process root.BuildProcess edge and cannot cross into the
+// built child executable; it therefore cannot prove that cancellation reaps
+// the attributable external child process observed through its PID file.
+
 // TestCLIContextCancellationStopsExternalWork proves cancelling the CLI process
 // context stops the injected provider/external worker process attributable to the
 // invocation, so cancelled runs do not leave orphaned external work running.
@@ -46,7 +52,7 @@ func TestCLIContextCancellationStopsExternalWork(t *testing.T) {
 	args = append(args,
 		"run",
 		"--factory", factoryPath,
-		"--with-mock-workers=" + mockWorkersPath,
+		"--with-mock-workers="+mockWorkersPath,
 		"--no-record",
 		"--quiet",
 		prompt,
@@ -63,16 +69,22 @@ func TestCLIContextCancellationStopsExternalWork(t *testing.T) {
 	if err := command.Start(); err != nil {
 		t.Fatalf("start root process: %v", err)
 	}
+	providerPID := 0
+	t.Cleanup(func() {
+		command.Cancel()
+		_ = command.Wait()
+		if providerPID > 0 {
+			terminateContextCancellationProcess(providerPID)
+			_ = waitForContextCancellationProcessExit(providerPID, 15*time.Second)
+		}
+	})
 
 	waitResult := make(chan error, 1)
 	go func() {
 		waitResult <- command.Wait()
 	}()
 
-	providerPID := waitForContextCancellationProviderPID(t, providerPIDFile, 45*time.Second)
-	t.Cleanup(func() {
-		terminateContextCancellationProcess(providerPID)
-	})
+	providerPID = waitForContextCancellationProviderPID(t, providerPIDFile, 45*time.Second)
 
 	command.Cancel()
 
@@ -124,7 +136,7 @@ func TestCLIContextCancellationEmitsNoSuccessResult(t *testing.T) {
 	args = append(args,
 		"run",
 		"--factory", factoryPath,
-		"--with-mock-workers=" + mockWorkersPath,
+		"--with-mock-workers="+mockWorkersPath,
 		"--no-record",
 		"--quiet",
 		prompt,
@@ -141,16 +153,22 @@ func TestCLIContextCancellationEmitsNoSuccessResult(t *testing.T) {
 	if err := command.Start(); err != nil {
 		t.Fatalf("start root process: %v", err)
 	}
+	providerPID := 0
+	t.Cleanup(func() {
+		command.Cancel()
+		_ = command.Wait()
+		if providerPID > 0 {
+			terminateContextCancellationProcess(providerPID)
+			_ = waitForContextCancellationProcessExit(providerPID, 15*time.Second)
+		}
+	})
 
 	waitResult := make(chan error, 1)
 	go func() {
 		waitResult <- command.Wait()
 	}()
 
-	providerPID := waitForContextCancellationProviderPID(t, providerPIDFile, 45*time.Second)
-	t.Cleanup(func() {
-		terminateContextCancellationProcess(providerPID)
-	})
+	providerPID = waitForContextCancellationProviderPID(t, providerPIDFile, 45*time.Second)
 
 	command.Cancel()
 
@@ -300,32 +318,81 @@ func writeBlockingGoalExecutorMockWorkers(t *testing.T, providerPIDFile string) 
 	return path
 }
 
+func TestContextCancellationPIDReadinessIgnoresPartialPublication(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		want int
+		ok   bool
+	}{
+		{name: "empty publication", raw: "", want: 0, ok: false},
+		{name: "whitespace publication", raw: "\n", want: 0, ok: false},
+		{name: "partial publication", raw: "12x", want: 0, ok: false},
+		{name: "non numeric publication", raw: "worker", want: 0, ok: false},
+		{name: "complete publication", raw: "12345\n", want: 12345, ok: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := parseContextCancellationProviderPID([]byte(tc.raw))
+			if got != tc.want || ok != tc.ok {
+				t.Fatalf("parseContextCancellationProviderPID(%q) = (%d, %t), want (%d, %t)", tc.raw, got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}
+
+func parseContextCancellationProviderPID(raw []byte) (int, bool) {
+	contents := strings.TrimSpace(string(raw))
+	if contents == "" {
+		return 0, false
+	}
+	pid, err := strconv.Atoi(contents)
+	if err != nil || pid <= 0 {
+		return 0, false
+	}
+	return pid, true
+}
+
 func waitForContextCancellationProviderPID(t *testing.T, pidFile string, timeout time.Duration) int {
 	t.Helper()
 
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	// The blocking external worker is a separate OS process and exposes its
+	// readiness through a PID file whose shell redirection is not atomic. Poll
+	// until the durable contents are a complete numeric PID; the timer is a
+	// bounded failure guard, not a readiness delay.
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	var lastContents string
+	for {
 		raw, err := os.ReadFile(pidFile)
 		if err == nil {
-			pid, parseErr := strconv.Atoi(strings.TrimSpace(string(raw)))
-			if parseErr != nil {
-				t.Fatalf("parse provider pid %q: %v", raw, parseErr)
+			lastContents = strings.TrimSpace(string(raw))
+			if pid, ok := parseContextCancellationProviderPID(raw); ok {
+				return pid
 			}
-			return pid
-		}
-		if !os.IsNotExist(err) {
+		} else if !os.IsNotExist(err) {
 			t.Fatalf("read provider pid file: %v", err)
 		}
-		time.Sleep(25 * time.Millisecond)
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatalf(
+				"timed out waiting for provider/external worker process to start; last pid file contents %q",
+				lastContents,
+			)
+		}
 	}
-	t.Fatalf("timed out waiting for provider/external worker process to start")
-	return -1
 }
 
 func waitForContextCancellationProcessExit(pid int, timeout time.Duration) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
+	// Process exit is not exposed through the root-process command once the
+	// provider has become an external child, so observe the OS process state
+	// until the terminal condition is visible within the bounded guard.
 	ticker := time.NewTicker(25 * time.Millisecond)
 	defer ticker.Stop()
 

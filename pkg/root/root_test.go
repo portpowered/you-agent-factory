@@ -5,22 +5,28 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
 	"github.com/spf13/cobra"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	inference "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestMain(m *testing.M) {
@@ -67,6 +73,287 @@ func TestBuildProcessConstructionFailureDoesNotStartExternalLifecycle(t *testing
 	}
 }
 
+func TestBuildStatelessWorkersValidatesContextBeforeComposition(t *testing.T) {
+	t.Parallel()
+
+	if service, err := BuildStatelessWorkers(nil, serviceedges.Edges{}); service != nil ||
+		err == nil || !strings.Contains(err.Error(), "context is required") {
+		t.Fatalf("BuildStatelessWorkers(nil) = (%#v, %v), want required-context failure", service, err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if service, err := BuildStatelessWorkers(ctx, serviceedges.Edges{}); service != nil ||
+		!errors.Is(err, context.Canceled) {
+		t.Fatalf("BuildStatelessWorkers(canceled) = (%#v, %v), want context.Canceled", service, err)
+	}
+}
+
+func TestBuildStatelessWorkersComposesAndPropagatesProviderValidation(t *testing.T) {
+	t.Parallel()
+
+	service, err := BuildStatelessWorkers(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildStatelessWorkers() error = %v", err)
+	}
+	if service == nil {
+		t.Fatal("BuildStatelessWorkers() returned nil service")
+	}
+
+	_, err = BuildStatelessWorkers(context.Background(), serviceedges.Edges{
+		ProviderRegistrations: []inference.Registration{{
+			Manifest:    rootExternalManifest(t, "claude", "collision"),
+			Integration: &rootRecordingIntegration{identity: "claude"},
+		}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "provider registry validation failed") {
+		t.Fatalf("BuildStatelessWorkers(invalid provider) error = %v, want provider validation failure", err)
+	}
+}
+
+func TestBuildMockStatelessWorkersValidatesContextBeforeComposition(t *testing.T) {
+	t.Parallel()
+
+	mockWorkers := workers.NewEmptyMockWorkersConfig()
+	if service, err := BuildMockStatelessWorkers(nil, serviceedges.Edges{}, mockWorkers); service != nil ||
+		err == nil || !strings.Contains(err.Error(), "context is required") {
+		t.Fatalf("BuildMockStatelessWorkers(nil) = (%#v, %v), want required-context failure", service, err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if service, err := BuildMockStatelessWorkers(ctx, serviceedges.Edges{}, mockWorkers); service != nil ||
+		!errors.Is(err, context.Canceled) {
+		t.Fatalf("BuildMockStatelessWorkers(canceled) = (%#v, %v), want context.Canceled", service, err)
+	}
+}
+
+func TestBuildMockStatelessWorkersComposesAndPropagatesProviderValidation(t *testing.T) {
+	t.Parallel()
+
+	service, err := BuildMockStatelessWorkers(
+		context.Background(),
+		serviceedges.Edges{},
+		workers.NewEmptyMockWorkersConfig(),
+	)
+	if err != nil {
+		t.Fatalf("BuildMockStatelessWorkers() error = %v", err)
+	}
+	if service == nil {
+		t.Fatal("BuildMockStatelessWorkers() returned nil service")
+	}
+
+	_, err = BuildMockStatelessWorkers(
+		context.Background(),
+		serviceedges.Edges{
+			ProviderRegistrations: []inference.Registration{{
+				Manifest:    rootExternalManifest(t, "claude", "collision"),
+				Integration: &rootRecordingIntegration{identity: "claude"},
+			}},
+		},
+		workers.NewEmptyMockWorkersConfig(),
+	)
+	if err == nil || !strings.Contains(err.Error(), "provider registry validation failed") {
+		t.Fatalf("BuildMockStatelessWorkers(invalid provider) error = %v, want provider validation failure", err)
+	}
+}
+
+func TestWorkerRecordingReaderFromProcessUsesComposedReader(t *testing.T) {
+	t.Parallel()
+
+	if reader := WorkerRecordingReaderFromProcess(nil); reader != nil {
+		t.Fatalf("WorkerRecordingReaderFromProcess(nil) = %#v, want nil", reader)
+	}
+	if operations := DetachedOperationsFromProcess(nil); operations != nil {
+		t.Fatalf("DetachedOperationsFromProcess(nil) = %#v, want nil", operations)
+	}
+	processWithoutReader, err := initializerapplication.NewProcess(
+		nil,
+		nil,
+		rootWorkerProcessRegistry{},
+		rootWorkerProcessLifecycle{},
+		nil, nil,
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewProcess(without reader) error = %v", err)
+	}
+	if reader := WorkerRecordingReaderFromProcess(processWithoutReader); reader != nil {
+		t.Fatalf("WorkerRecordingReaderFromProcess(without reader) = %#v, want nil", reader)
+	}
+	if operations := DetachedOperationsFromProcess(processWithoutReader); operations != nil {
+		t.Fatalf("DetachedOperationsFromProcess(without capability) = %#v, want nil", operations)
+	}
+	if query := RuntimeMetricsQueryFromProcess(processWithoutReader); query != nil {
+		t.Fatalf("RuntimeMetricsQueryFromProcess(without capability) = %#v, want nil", query)
+	}
+
+	readerWriter := &rootWorkerRecordingReaderProbe{}
+	process, err := BuildProcess(context.Background(), serviceedges.Edges{
+		WorkerRecordingWriter: readerWriter,
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess(reader writer) error = %v", err)
+	}
+	got := WorkerRecordingReaderFromProcess(process)
+	if got == nil {
+		t.Fatal("WorkerRecordingReaderFromProcess() returned nil")
+	}
+	if snapshot, err := got.LoadWorkerRecording(t.Context(), "root-recording"); err != nil {
+		t.Fatalf("WorkerRecordingReaderFromProcess.LoadWorkerRecording() error = %v", err)
+	} else if snapshot.RecordingID != "" || len(snapshot.Sessions) != 0 {
+		t.Fatalf("WorkerRecordingReaderFromProcess snapshot = %#v, want empty snapshot", snapshot)
+	}
+	if operations := DetachedOperationsFromProcess(process); operations == nil {
+		t.Fatal("DetachedOperationsFromProcess(composed process) returned nil, want the composed view")
+	}
+	writeOnlyProcess, err := BuildProcess(context.Background(), serviceedges.Edges{
+		WorkerRecordingWriter: recordings.WorkerRecordingWriterFunc(func(context.Context, recordings.WorkerRecordingRecord) error {
+			return nil
+		}),
+	})
+	if writeOnlyProcess != nil {
+		t.Fatal("BuildProcess(write-only writer) returned a process")
+	}
+	if !errors.Is(err, recordings.ErrMissingWorkerRecordingReader) {
+		t.Fatalf("BuildProcess(write-only writer) error = %v, want ErrMissingWorkerRecordingReader", err)
+	}
+}
+
+func TestDetachedOperationsFromProcessResolvesTypedCapability(t *testing.T) {
+	t.Parallel()
+
+	want := &factorysessions.DetachedOperations{}
+	process, err := initializerapplication.NewProcess(
+		nil,
+		nil,
+		rootWorkerProcessRegistry{},
+		rootWorkerProcessLifecycle{},
+		nil, nil,
+		rootDetachedOperationsCapabilityProbe{operations: want},
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewProcess(detached capability) error = %v", err)
+	}
+	if got := DetachedOperationsFromProcess(process); got != want {
+		t.Fatalf("DetachedOperationsFromProcess() = %#v, want %#v", got, want)
+	}
+
+	wrongType, err := initializerapplication.NewProcess(
+		nil,
+		nil,
+		rootWorkerProcessRegistry{},
+		rootWorkerProcessLifecycle{},
+		nil, nil,
+		rootDetachedOperationsCapabilityProbe{operations: struct{}{}},
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewProcess(wrong-type capability) error = %v", err)
+	}
+	if got := DetachedOperationsFromProcess(wrongType); got != nil {
+		t.Fatalf("DetachedOperationsFromProcess(wrong type) = %#v, want nil", got)
+	}
+}
+
+func TestWorkerRecordingReaderFromProcessPropagatesReaderError(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("worker recording reader unavailable")
+	process, err := initializerapplication.NewProcess(
+		nil,
+		nil,
+		rootWorkerProcessRegistry{},
+		rootWorkerProcessLifecycle{},
+		nil,
+		rootWorkerProcessReader{err: wantErr},
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewProcess() error = %v", err)
+	}
+
+	reader := WorkerRecordingReaderFromProcess(process)
+	if reader == nil {
+		t.Fatal("WorkerRecordingReaderFromProcess() returned nil")
+	}
+	if _, err := reader.LoadWorkerRecording(t.Context(), "root-recording"); !errors.Is(err, wantErr) {
+		t.Fatalf("LoadWorkerRecording() error = %v, want %v", err, wantErr)
+	}
+}
+
+func TestWorkerRecordingReaderFromProcessRejectsMalformedSnapshot(t *testing.T) {
+	t.Parallel()
+
+	process, err := initializerapplication.NewProcess(
+		nil,
+		nil,
+		rootWorkerProcessRegistry{},
+		rootWorkerProcessLifecycle{},
+		nil,
+		rootWorkerProcessReader{payload: json.RawMessage(`{"recordingId":`)},
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewProcess() error = %v", err)
+	}
+
+	reader := WorkerRecordingReaderFromProcess(process)
+	if reader == nil {
+		t.Fatal("WorkerRecordingReaderFromProcess() returned nil")
+	}
+	if _, err := reader.LoadWorkerRecording(t.Context(), "root-recording"); err == nil ||
+		!strings.Contains(err.Error(), "decode Worker recording snapshot") {
+		t.Fatalf("LoadWorkerRecording() error = %v, want decode diagnostic", err)
+	}
+}
+
+type rootWorkerRecordingReaderProbe struct{}
+
+type rootDetachedOperationsCapabilityProbe struct {
+	operations any
+}
+
+func (probe rootDetachedOperationsCapabilityProbe) DetachedOperations() any {
+	return probe.operations
+}
+
+type rootWorkerProcessRegistry struct{}
+
+func (rootWorkerProcessRegistry) CanonicalIdentity(identity string) (string, error) {
+	return identity, nil
+}
+
+type rootWorkerProcessLifecycle struct{}
+
+func (rootWorkerProcessLifecycle) Close(context.Context) error { return nil }
+
+type rootWorkerProcessReader struct {
+	payload json.RawMessage
+	err     error
+}
+
+func (reader rootWorkerProcessReader) LoadWorkerRecording(context.Context, string) (json.RawMessage, error) {
+	return reader.payload, reader.err
+}
+
+func (*rootWorkerRecordingReaderProbe) PersistWorkerRecord(context.Context, recordings.WorkerRecordingRecord) error {
+	return nil
+}
+
+func (*rootWorkerRecordingReaderProbe) LoadWorkerRecording(context.Context, string) (recordings.WorkerRecordingSnapshot, error) {
+	return recordings.WorkerRecordingSnapshot{}, nil
+}
+
 func TestBuildProcessComposesInertModelsRuntimeHost(t *testing.T) {
 	t.Parallel()
 
@@ -91,8 +378,12 @@ type rootRecordingModelHostLauncher struct {
 
 func (launcher *rootRecordingModelHostLauncher) Start(
 	context.Context,
-	modelswire.HostProcessStartSpec,
-) (modelswire.HostManagedProcess, error) {
+	serviceedges.HostProcessStartSpec,
+) (interface {
+	HealthEndpoint() string
+	Wait() error
+	Stop(context.Context) error
+}, error) {
 	launcher.starts++
 	panic("model host process launcher called during inert construction")
 }
@@ -203,6 +494,94 @@ func TestBuildProcessOpensFactoryWithRegisteredExternalProviderWithoutProviderIO
 			integration.capabilityCalls,
 			integration.invokeCalls,
 		)
+	}
+}
+
+// TestBuildProcessDefersAndOpensOneFactoryRuntime proves that the canonical
+// process graph remains inert across repeated construction, then opens one
+// Factory Session runtime for one selected live application execution.
+func TestBuildProcessDefersAndOpensOneFactoryRuntime(t *testing.T) {
+	t.Parallel()
+
+	var openedRuntimeIDs atomic.Int32
+	edges := serviceedges.Edges{
+		FactorySessionRuntimeInstanceIDGenerator: func() string {
+			openedRuntimeIDs.Add(1)
+			return "root-runtime-opening"
+		},
+	}
+	process, err := BuildProcess(context.Background(), edges)
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	second, err := BuildProcess(context.Background(), edges)
+	if err != nil {
+		t.Fatalf("second BuildProcess() error = %v", err)
+	}
+	if got := openedRuntimeIDs.Load(); got != 0 {
+		t.Fatalf("runtime IDs generated during process construction = %d, want 0", got)
+	}
+
+	factoryDir := rootFactoryWithProvider(t, "codex")
+	if err := process.Execute(Input{
+		Args: []string{
+			"you", "run", "--dir", factoryDir, "--with-mock-workers", "--quiet", "--no-record",
+		},
+		Env:              homeEnvironment(t.TempDir()),
+		Context:          context.Background(),
+		WorkingDirectory: factoryDir,
+	}); err != nil {
+		t.Fatalf("Process.Execute(run) error = %v", err)
+	}
+	if got := openedRuntimeIDs.Load(); got != 1 {
+		t.Fatalf("runtime IDs generated during one process execution = %d, want 1", got)
+	}
+	if err := process.Close(context.Background()); err != nil {
+		t.Fatalf("Process.Close() error = %v", err)
+	}
+	if err := second.Close(context.Background()); err != nil {
+		t.Fatalf("second Process.Close() error = %v", err)
+	}
+}
+
+// TestBuildProcessReusesCanonicalRootsAcrossTwoIsolatedExecutions proves that
+// one inert process graph can open two Factory Sessions without rebuilding a
+// Work or Recordings root or leaking one execution's runtime identity into the
+// other.
+func TestBuildProcessReusesCanonicalRootsAcrossTwoIsolatedExecutions(t *testing.T) {
+	t.Parallel()
+
+	var openedRuntimeIDs []string
+	edges := serviceedges.Edges{
+		FactorySessionRuntimeInstanceIDGenerator: func() string {
+			id := fmt.Sprintf("root-runtime-%d", len(openedRuntimeIDs)+1)
+			openedRuntimeIDs = append(openedRuntimeIDs, id)
+			return id
+		},
+	}
+	process, err := BuildProcess(context.Background(), edges)
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+
+	for index := 0; index < 2; index++ {
+		factoryDir := rootFactoryWithProvider(t, "codex")
+		if err := process.Execute(Input{
+			Args: []string{
+				"you", "run", "--dir", factoryDir, "--with-mock-workers", "--quiet", "--no-record",
+			},
+			Env:              homeEnvironment(t.TempDir()),
+			Context:          context.Background(),
+			WorkingDirectory: factoryDir,
+		}); err != nil {
+			t.Fatalf("Process.Execute(run %d) error = %v", index+1, err)
+		}
+	}
+	if !slices.Equal(openedRuntimeIDs, []string{"root-runtime-1", "root-runtime-2"}) {
+		t.Fatalf("runtime IDs = %v, want two isolated runtime identities", openedRuntimeIDs)
+	}
+	if err := process.Close(context.Background()); err != nil {
+		t.Fatalf("Process.Close() error = %v", err)
 	}
 }
 

@@ -3,8 +3,7 @@ package wire
 import (
 	"fmt"
 
-	"github.com/google/uuid"
-
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	operatorservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service"
 	documentwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/wire"
@@ -14,11 +13,15 @@ import (
 
 // NewServiceFromHomePorts constructs the accepted Settings root from the
 // filesystem and decoder ports Wire already injects for defaults resolution.
+// logger is the direct, required operation-logging abstraction; callers with
+// no operation logging pass logging.NoopLogger{}.
 func NewServiceFromHomePorts(
 	files operatorsettings.FileSystem,
 	decode operatorsettings.ConfigDecoder,
 	providersRoot providers.Service,
-	idGenerators ...operatorsettings.IDGenerator,
+	idGenerator operatorsettings.IDGenerator,
+	logger logging.Logger,
+	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
 ) (operatorsettings.Service, error) {
 	if files == nil {
 		return nil, fmt.Errorf("operator settings filesystem is required")
@@ -29,11 +32,10 @@ func NewServiceFromHomePorts(
 	if providersRoot == nil {
 		return nil, fmt.Errorf("operator settings providers root is required")
 	}
-	idGenerator := operatorsettings.IDGenerator(uuid.NewString)
-	if len(idGenerators) > 0 && idGenerators[0] != nil {
-		idGenerator = idGenerators[0]
+	if idGenerator == nil {
+		return nil, fmt.Errorf("operator settings ID generator is required")
 	}
-	document := documentwire.NewService(files, nil, decode, nil, nil)
+	document := documentwire.NewService(files, nil, decode, nil, nil, diagnosticDecoders...)
 	resolution, err := resolutionwire.NewService(providersRoot)
 	if err != nil {
 		return nil, err
@@ -46,5 +48,7 @@ func NewServiceFromHomePorts(
 		decode,
 		nil,
 		idGenerator,
+		logger,
+		diagnosticDecoders...,
 	)
 }

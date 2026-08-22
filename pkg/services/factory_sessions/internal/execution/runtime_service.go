@@ -4,18 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"strings"
 	"sync"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	internalcontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/livechild"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -210,9 +211,14 @@ func resolvedDialect(resolved ResolvedSource) string {
 // JavaScriptRuntimeService executes simple JavaScript workflows through the real
 // workflow runtime and projects outcomes through shared durable session read models.
 type JavaScriptRuntimeService struct {
-	projectRoot             string
-	childExecutorMode       string
-	providerExecutor        workers.InvocationExecutor
+	projectRoot       string
+	childExecutorMode string
+	// directChildInvocation remains only for legacy in-package construction
+	// helpers and tests. Production standalone opening supplies the narrow
+	// Workers Execute capability through directChildExecution; P6-C can remove
+	// this compatibility input after those callers are retired.
+	directChildInvocation   workers.InvocationExecutor
+	directChildExecution    childExecuteService
 	persistence             runtimepersist.Store
 	clock                   factory.Clock
 	syncWaits               SyncWaitScheduler
@@ -224,15 +230,30 @@ type JavaScriptRuntimeService struct {
 	workerSettings          factory.JavaScriptWorkerSettings
 	recordingWriter         recording.PortableRecordingWriter
 	generateSessionID       internalcontracts.SessionIDGenerator
-	liveChildInvocation     LiveChildInvocationFactory
 	generateResponseEventID factorysessions.ResponseEventIDGenerator
 	responseStreams         responsestreamservice.Service
+	liveChangeCoordinator   factorysessioncontracts.LiveChangeCoordinator
+	// workerInvokerService is guarded by its own lock, not the session lock. It
+	// is attached once after construction and read on paths that already hold the
+	// session lock; sharing one mutex between them deadlocks.
+	invokerMu            sync.RWMutex
+	workerInvokerService factory.Service
+	workerExecution      *childWorkerExecutionBinding
+
+	// workerSessions maps one Workers dispatch identity to the durable session
+	// that owns that Worker. A Worker's progress arrives from Workers, which
+	// knows only the dispatch it belongs to, so this is what routes a child's
+	// output back to the response-event store its own session reads. It has its
+	// own lock for the same reason invokerMu does.
+	workerSessionsMu sync.RWMutex
+	workerSessions   map[string]string
 
 	mu            sync.RWMutex
 	sessions      map[string]*runtimeSessionState
 	startReplay   map[string]startReplayRecord
 	startInflight map[string]*startInflightFlight
 	controlReplay map[string]controlReplayRecord
+	liveChangeMu  sync.Mutex
 }
 
 var _ Service = (*JavaScriptRuntimeService)(nil)
@@ -242,7 +263,7 @@ var _ Service = (*JavaScriptRuntimeService)(nil)
 func NewJavaScriptRuntimeService(
 	projectRoot string,
 	childExecutorMode string,
-	providerExecutor workers.InvocationExecutor,
+	directChildInvocation workers.InvocationExecutor,
 	persistence runtimepersist.Store,
 	clock factory.Clock,
 	syncWaits SyncWaitScheduler,
@@ -254,9 +275,9 @@ func NewJavaScriptRuntimeService(
 	workerSettings factory.JavaScriptWorkerSettings,
 	recordingWriter recording.PortableRecordingWriter,
 	generateSessionID internalcontracts.SessionIDGenerator,
-	liveChildInvocation LiveChildInvocationFactory,
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseStreams responsestreamservice.Service,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) *JavaScriptRuntimeService {
 	if generateSessionID == nil {
 		return nil
@@ -265,7 +286,7 @@ func NewJavaScriptRuntimeService(
 	service := &JavaScriptRuntimeService{
 		projectRoot:             projectRoot,
 		childExecutorMode:       normalizeChildExecutorMode(childExecutorMode),
-		providerExecutor:        providerExecutor,
+		directChildInvocation:   directChildInvocation,
 		clock:                   clock,
 		syncWaits:               syncWaits,
 		checkpointSummaries:     checkpointSummaries,
@@ -276,9 +297,9 @@ func NewJavaScriptRuntimeService(
 		workerSettings:          workerSettings,
 		recordingWriter:         recordingWriter,
 		generateSessionID:       generateSessionID,
-		liveChildInvocation:     liveChildInvocation,
 		generateResponseEventID: generateResponseEventID,
 		responseStreams:         responseStreams,
+		liveChangeCoordinator:   liveChangeCoordinator,
 		persistence:             persistence,
 		sessions:                make(map[string]*runtimeSessionState),
 		startReplay:             make(map[string]startReplayRecord),
@@ -295,6 +316,60 @@ func (s *JavaScriptRuntimeService) PersistenceStore() runtimepersist.Store {
 		return nil
 	}
 	return s.persistence
+}
+
+// HasDurableState performs the read-only persistence probe used while opening
+// the current board. It intentionally does not apply interrupted-session
+// resume validation or cache the snapshot: startup only needs to distinguish a
+// genuinely new session from a fresh process with prior durable state before
+// deciding whether missing board history may be treated as an initial open.
+func (s *JavaScriptRuntimeService) HasDurableState(ctx context.Context, sessionID string) (bool, error) {
+	if s == nil {
+		return false, ErrSessionNotFound
+	}
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	id, err := NormalizeSessionID(sessionID)
+	if err != nil {
+		return false, err
+	}
+
+	s.mu.RLock()
+	persistence := s.persistence
+	s.mu.RUnlock()
+	if persistence == nil {
+		return false, nil
+	}
+
+	snapshot, err := persistence.Load(id)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, nil
+		}
+		return false, &ResumeError{
+			Outcome:   ResumeOutcomeCorruptedPersistence,
+			SessionID: id,
+			Message:   "persisted session snapshot could not be read",
+		}
+	}
+
+	var persisted PersistedRuntimeSessionState
+	if err := json.Unmarshal(snapshot, &persisted); err != nil {
+		return false, &ResumeError{
+			Outcome:   ResumeOutcomeCorruptedPersistence,
+			SessionID: id,
+			Message:   "persisted session snapshot is corrupted and cannot be inspected",
+		}
+	}
+	if strings.TrimSpace(persisted.Session.SessionID) != id {
+		return false, &ResumeError{
+			Outcome:   ResumeOutcomeCorruptedPersistence,
+			SessionID: id,
+			Message:   "persisted session snapshot has no matching session identity",
+		}
+	}
+	return true, nil
 }
 
 func (s *JavaScriptRuntimeService) now() time.Time { return s.clock.Now().UTC() }
@@ -318,7 +393,7 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 	if err != nil {
 		return AsyncStartResult{}, err
 	}
-	if err := validateLiveChildProviderExecutor(resolveChildExecutorMode(s.childExecutorMode, normalized), s.providerExecutor, s.liveChildInvocation); err != nil {
+	if err := validateChildExecutorMode(resolveChildExecutorMode(s.childExecutorMode, normalized)); err != nil {
 		return AsyncStartResult{}, err
 	}
 	resolved := prepared.ResolvedSource
@@ -355,12 +430,13 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 	reserved.state.startRequest = cloneStartRequest(normalized)
 	reserved.state.resolvedSource = resolved
 	reserved.state.sourceContent = sourceContent
+	s.mu.Unlock()
 	if err := s.ensureSessionResponseEventsIfNeeded(reserved.state); err != nil {
-		s.mu.Unlock()
 		return AsyncStartResult{}, err
 	}
+	s.mu.RLock()
 	startState := cloneRuntimeSessionState(reserved.state)
-	s.mu.Unlock()
+	s.mu.RUnlock()
 	go s.runAsyncSession(runCtx, reserved.state.session.SessionID, normalized, resolved, sourceContent, policyResolution, startedAt)
 
 	result := s.asyncStartFromState(startState)
@@ -369,6 +445,13 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 }
 
 func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartRequest) (SyncStartResult, error) {
+	return s.startSync(ctx, req)
+}
+
+func (s *JavaScriptRuntimeService) startSync(
+	ctx context.Context,
+	req StartRequest,
+) (SyncStartResult, error) {
 	if err := ctx.Err(); err != nil {
 		return SyncStartResult{}, err
 	}
@@ -387,7 +470,7 @@ func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartReque
 	if err != nil {
 		return SyncStartResult{}, err
 	}
-	if err := validateLiveChildProviderExecutor(resolveChildExecutorMode(s.childExecutorMode, normalized), s.providerExecutor, s.liveChildInvocation); err != nil {
+	if err := validateChildExecutorMode(resolveChildExecutorMode(s.childExecutorMode, normalized)); err != nil {
 		return SyncStartResult{}, err
 	}
 	resolved := prepared.ResolvedSource
@@ -410,13 +493,9 @@ func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartReque
 	}
 	stopObservingFactoryEvents := s.observeFactoryEvents(reserved.state, normalized.EventConsumer)
 	defer stopObservingFactoryEvents()
-
-	s.mu.Lock()
 	if err := s.ensureSessionResponseEventsIfNeeded(reserved.state); err != nil {
-		s.mu.Unlock()
 		return SyncStartResult{}, err
 	}
-	s.mu.Unlock()
 
 	if hasSyncWait {
 		return s.startWaitingSyncSession(
@@ -907,30 +986,4 @@ func workflowMetadataFromResolved(resolved ResolvedSource, req StartRequest) map
 		}
 	}
 	return metadata
-}
-
-func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) factory.JavaScriptRuntimeHooks {
-	hooks := factory.JavaScriptRuntimeHooks{
-		OnRecord: func(record factory.JavaScriptRuntimeRecord) {
-			s.applyRunningRuntimeRecord(sessionID, record)
-		},
-	}
-	if mode != ChildExecutorModeLive {
-		return hooks
-	}
-	hooks.NewChildExecutor = func(childSessionID string, records factory.JavaScriptChildRecordSink, policy factory.JavaScriptPolicy) factory.JavaScriptChildExecutor {
-		s.mu.RLock()
-		state := s.sessions[sessionID]
-		s.mu.RUnlock()
-		executor := s.liveChildExecutor(sessionID, state)
-		return livechild.NewRetryingProviderChildExecutor(
-			childSessionID,
-			executor,
-			records,
-			policy.MaxRetries,
-			s.childValues,
-			s.projectRoot,
-		)
-	}
-	return hooks
 }

@@ -13,10 +13,11 @@ import (
 
 const manifestPath = "packages/api/generated/manifest.json"
 
-// Check runs the complete read-only configuration contract closeout.
-func Check(repositoryRoot string) ([]Diagnostic, error) {
-	families := Families()
-	diagnostics := ValidateFamilies(families)
+// Check runs the complete read-only configuration contract closeout with the
+// production global configuration parser selected by the command root.
+func Check(repositoryRoot string, globalParser ParseFunc) ([]Diagnostic, error) {
+	families := FamiliesWithParser(globalParser)
+	diagnostics := ValidateFamilies(families, globalParser)
 
 	_, acceptanceDiagnostics := CheckAcceptanceParity(repositoryRoot, families, AcceptanceCases())
 	diagnostics = append(diagnostics, acceptanceDiagnostics...)

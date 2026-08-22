@@ -1,7 +1,7 @@
 import type { MutableRefObject } from "react";
 import { useLayoutEffect, useState } from "react";
 
-interface MeasuredCurrentActivityGraphViewport {
+export interface MeasuredCurrentActivityGraphViewport {
   height: number;
   ready: boolean;
   width: number;

@@ -1,8 +1,6 @@
 package session_resume_test
 
 import (
-	"bytes"
-	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +9,8 @@ import (
 )
 
 func TestCLIResumeSmokeLane_NonResumeTerminalSessionShowPreservesShippedCLIReadSemantics(t *testing.T) {
+	t.Parallel()
+
 	harness := newCLIResumeSmokeSucceededHarness(t)
 	sessionID := harness.startSucceededSession(t)
 
@@ -28,20 +28,22 @@ func TestCLIResumeSmokeLane_NonResumeTerminalSessionShowPreservesShippedCLIReadS
 		t.Fatalf("resultSummary = %#v, want FINAL", read.ResultSummary)
 	}
 
-	dispatches := readDispatchesViaCLI(t, harness, sessionID)
+	dispatches := readDispatchesViaHTTP(t, harness, sessionID)
 	if len(dispatches.Dispatches) != 0 {
 		t.Fatalf("terminal simple-final dispatches = %#v, want empty", dispatches.Dispatches)
 	}
 }
 
-func TestCLIResumeSmokeLane_ResumeInspectionStaysOnSharedSessionHTTPSurface(t *testing.T) {
+func TestCLIResumeSmokeLane_RetiredDispatchCommandLeavesRESTReadAvailable(t *testing.T) {
+	t.Parallel()
+
 	projectRoot := setupCLIResumeSmokeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
 	serverURL, process := startRootCLIResumeAPIServer(t, projectRoot, nil)
 	harness := &cliResumeSmokeHarness{serverURL: serverURL, projectRoot: projectRoot, process: process}
 
 	_, err := harness.executeCLI(t, "session", "dispatches", "session-beta")
-	if err == nil || !strings.Contains(err.Error(), "dur-sess-*") {
-		t.Fatalf("dispatches on live session id = %v, want durable-session validation error", err)
+	if err == nil || !strings.Contains(err.Error(), `unknown command "dispatches"`) {
+		t.Fatalf("retired session dispatches command = %v, want unknown command", err)
 	}
 
 	workflowName := "simple-final"
@@ -62,15 +64,7 @@ func TestCLIResumeSmokeLane_ResumeInspectionStaysOnSharedSessionHTTPSurface(t *t
 		factoryapi.FactorySessionDurableLifecycleStatusSucceeded, 15*time.Second,
 	)
 
-	out, err := harness.executeCLI(t, "session", "dispatches", started.SessionId)
-	if err != nil {
-		t.Fatalf("session dispatches durable HTTP: %v", err)
-	}
-
-	var listed factoryapi.ListFactorySessionDispatchesResponse
-	if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &listed); err != nil {
-		t.Fatalf("decode dispatches JSON: %v\n%s", err, out.String())
-	}
+	listed := readDispatchesViaHTTP(t, harness, started.SessionId)
 	if listed.SessionId != started.SessionId {
 		t.Fatalf("dispatch sessionId = %q, want %q", listed.SessionId, started.SessionId)
 	}

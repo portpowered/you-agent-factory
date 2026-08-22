@@ -16,10 +16,18 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	"go.uber.org/zap"
 )
 
 const startupReadabilityDelay = 250 * time.Millisecond
+
+func runtimeModeOrDefault(mode interfaces.RuntimeMode) interfaces.RuntimeMode {
+	if mode == "" {
+		return interfaces.RuntimeModeBatch
+	}
+	return mode
+}
 
 // Service hosts the API edge and completes the startup protocol for one
 // already-started Factory Session runtime.
@@ -49,7 +57,11 @@ func (service *Service) Run(
 		logger = hosted.RuntimeLogger()
 	}
 
-	transportCtx, cancel := context.WithCancel(ctx)
+	// Keep the transport alive while cancellation is unwound through the
+	// runtime. Factory.Run records RUN_RESPONSE and drains live subscribers as
+	// part of runtime stop; inheriting ctx here would close the HTTP connection
+	// before that terminal frame can be written.
+	transportCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	var transport sync.WaitGroup
 	defer func() {
 		cancel()
@@ -58,7 +70,7 @@ func (service *Service) Run(
 
 	bound := make(chan platformhttpserver.Binding, 1)
 	apiExit := service.startAPI(transportCtx, &transport, handler, request, logger, bound)
-	serviceMode := factoryruntime.RuntimeModeOrDefault(request.RuntimeMode) == interfaces.RuntimeModeService
+	serviceMode := runtimeModeOrDefault(request.RuntimeMode) == interfaces.RuntimeModeService
 	binding, err := service.waitForStartupReadability(
 		ctx, serviceMode, request.WorkFile, apiExit, request.Port, bound,
 	)
@@ -72,12 +84,19 @@ func (service *Service) Run(
 	if err := runtime.CompleteStartup(ctx); err != nil {
 		return err
 	}
-	if binding.Port > 0 && observer != nil {
+	if observer != nil {
 		observer(factorysessions.RuntimeHostBinding{Host: binding.Host, Port: binding.Port})
 	}
 	logStartup(logger, runtime.CurrentRuntimeBundle(), request)
-	if err := runtime.WaitForRuntime(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		return fmt.Errorf("factory run: %w", err)
+	if err := runtime.WaitForRuntime(ctx); err != nil {
+		if !errors.Is(err, context.Canceled) {
+			return fmt.Errorf("factory run: %w", err)
+		}
+		if stopErr := runtime.StopLifecycle(context.Background()); stopErr != nil &&
+			!errors.Is(stopErr, context.Canceled) &&
+			!errors.Is(stopErr, factoryruntime.ErrAlreadyStopped) {
+			return fmt.Errorf("stop Factory Session runtime: %w", stopErr)
+		}
 	}
 	return nil
 }
@@ -106,7 +125,11 @@ func (service *Service) startAPI(
 		})
 		exit <- err
 		close(exit)
-		if err != nil && logger != nil {
+		// Terminal listener-binding failures are translated into the public
+		// SERVER_BIND_FAILED response by the caller. Logging the raw starter
+		// error here as well duplicates that response on the CLI's stderr now
+		// that the process-scoped runtime logger is injected during opening.
+		if err != nil && logger != nil && !platformhttpserver.IsBindError(err) {
 			logger.Error("API server error", zap.Error(err))
 		}
 	}()
@@ -153,7 +176,7 @@ func (service *Service) waitForStartupReadability(
 
 func logStartup(
 	logger *zap.Logger,
-	runtime factoryruntime.HostedInstance,
+	runtime runtimeports.RuntimeInstance,
 	request factorysessions.RuntimeHostRequest,
 ) {
 	if logger == nil || runtime == nil {
@@ -178,7 +201,7 @@ func logStartup(
 		zap.String("runtime_failure_command_output", logging.RuntimeFailureCommandOutputPolicy),
 		zap.String("runtime_verbose_command_output", logging.RuntimeVerboseCommandOutputPolicy),
 		zap.String("record_command_diagnostics", logging.RuntimeRecordCommandDiagnosticsMode),
-		zap.String("runtime_mode", string(factoryruntime.RuntimeModeOrDefault(request.RuntimeMode))),
+		zap.String("runtime_mode", string(runtimeModeOrDefault(request.RuntimeMode))),
 		zap.Bool("mock-workers", request.MockWorkers),
 		zap.Int("port", request.Port),
 	)

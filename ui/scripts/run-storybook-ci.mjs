@@ -345,7 +345,26 @@ export async function runStorybookCI({
       ]);
     }
     await Promise.race([
+      runCommand(["run", "storybook:monaco-scrollbar-check"]),
+      serverExit,
+    ]);
+    await Promise.race([
       runCommand(["run", "storybook:factory-graph-touch-check"]),
+      serverExit,
+    ]);
+    await Promise.race([
+      runCommand([
+        "run",
+        "storybook:factory-graph-visual-group-save-browser-check",
+      ]),
+      serverExit,
+    ]);
+    await Promise.race([
+      runCommand(["run", "storybook:factory-graph-node-size-check"]),
+      serverExit,
+    ]);
+    await Promise.race([
+      runCommand(["run", "storybook:factory-graph-large-parity-check"]),
       serverExit,
     ]);
     await Promise.race([
@@ -354,6 +373,22 @@ export async function runStorybookCI({
     ]);
     await Promise.race([
       runCommand(["run", "storybook:dashboard-viewport-check"]),
+      serverExit,
+    ]);
+    await Promise.race([
+      runCommand(["run", "storybook:dashboard-session-reconciliation-check"]),
+      serverExit,
+    ]);
+    await Promise.race([
+      runCommand(["run", "storybook:dashboard-open-new-factory-check"]),
+      serverExit,
+    ]);
+    await Promise.race([
+      runCommand(["run", "storybook:work-chart-check"]),
+      serverExit,
+    ]);
+    await Promise.race([
+      runCommand(["run", "storybook:submit-work-session-check"]),
       serverExit,
     ]);
     if (includeInteractionSuite) {

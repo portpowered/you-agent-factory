@@ -115,7 +115,6 @@
       "agentTools": {
         "policy": "READ_ONLY"
       },
-      "body": "You are the one-pass subagent worker for @you/subagent. You inherit no hidden\nconversation or project knowledge. Treat the workstation prompt and observable\nworkspace as your complete context. Read applicable contributor instructions,\nrelevant source and tests, and current state before making claims or changes.\n\nRespond directly to the submitted request in a single bounded pass. Preserve\nunrelated changes, validate important assumptions, perform proportional\nverification, and make the response self-contained for a caller that will not\nsee your intermediate reasoning. Do not plan multi-stage work or defer follow-up\nactions.\n",
       "model": "${workerModel}",
       "modelProvider": "${workerProvider}",
       "name": "subagent-worker",

@@ -19,9 +19,9 @@ import (
 // the same session.
 func TestAPIGetAndSaveCurrentFactoryWithinOneSession(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
-
-	server := startCurrentFactoryServer(t, rootDir)
+	server := startCurrentFactoryServerWithSetup(t, rootDir, currentFactorySetup(t, func(process support.Process, env []string) {
+		seedNamedFactoryRootWithProcess(t, process, env, rootDir, "alpha", "alpha-task")
+	}))
 	defer server.Stop(t)
 
 	current := getCurrentFactory(t, server.URL())
@@ -50,9 +50,9 @@ func TestAPIGetAndSaveCurrentFactoryWithinOneSession(t *testing.T) {
 // subsequent readback within the same session.
 func TestAPISaveCurrentFactoryValidatesBeforePersistence(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
-
-	server := startCurrentFactoryServer(t, rootDir)
+	server := startCurrentFactoryServerWithSetup(t, rootDir, currentFactorySetup(t, func(process support.Process, env []string) {
+		seedNamedFactoryRootWithProcess(t, process, env, rootDir, "alpha", "alpha-task")
+	}))
 	defer server.Stop(t)
 
 	current := getCurrentFactory(t, server.URL())
@@ -98,15 +98,17 @@ func TestAPISaveCurrentFactoryValidatesBeforePersistence(t *testing.T) {
 // session's readback while another session's Current Factory remains unchanged.
 func TestAPICurrentFactoriesRemainSessionScoped(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
-	createNamedFactoryFixture(
-		t,
-		rootDir,
-		"beta",
-		functionalNamedFactoryPayloadWithWorkType(t, "beta", "beta-task"),
-	)
-
-	server := startCurrentFactoryServer(t, rootDir)
+	server := startCurrentFactoryServerWithSetup(t, rootDir, currentFactorySetup(t, func(process support.Process, env []string) {
+		seedNamedFactoryRootWithProcess(t, process, env, rootDir, "alpha", "alpha-task")
+		createNamedFactoryFixtureWithProcess(
+			t,
+			process,
+			env,
+			rootDir,
+			"beta",
+			functionalNamedFactoryPayloadWithWorkType(t, "beta", "beta-task"),
+		)
+	}))
 	defer server.Stop(t)
 
 	betaSessionID := openNamedFactorySession(t, server.URL(), rootDir, "beta")

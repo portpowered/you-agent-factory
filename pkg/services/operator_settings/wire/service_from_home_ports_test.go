@@ -7,16 +7,21 @@ import (
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
+
+func testIDGenerator() operatorsettings.IDGenerator {
+	return func() string { return "00000000-0000-4000-8000-000000000001" }
+}
 
 func TestNewServiceFromHomePortsRequiresFilesystem(t *testing.T) {
 	t.Parallel()
 
-	_, err := settingswire.NewServiceFromHomePorts(nil, globalconfigmapping.Decode, internaltestproviders.StandardCatalog())
+	_, err := settingswire.NewServiceFromHomePorts(nil, globalconfigmapping.Decode, internaltestproviders.StandardCatalog(), testIDGenerator(), logging.NoopLogger{})
 	if err == nil || !strings.Contains(err.Error(), "filesystem is required") {
 		t.Fatalf("NewServiceFromHomePorts(nil, decode) error = %v, want filesystem required", err)
 	}
@@ -25,7 +30,7 @@ func TestNewServiceFromHomePortsRequiresFilesystem(t *testing.T) {
 func TestNewServiceFromHomePortsRequiresDecoder(t *testing.T) {
 	t.Parallel()
 
-	_, err := settingswire.NewServiceFromHomePorts(platformfilesystem.Local{}, nil, internaltestproviders.StandardCatalog())
+	_, err := settingswire.NewServiceFromHomePorts(platformfilesystem.Local{}, nil, internaltestproviders.StandardCatalog(), testIDGenerator(), logging.NoopLogger{})
 	if err == nil || !strings.Contains(err.Error(), "decoder is required") {
 		t.Fatalf("NewServiceFromHomePorts(files, nil) error = %v, want decoder required", err)
 	}
@@ -38,6 +43,8 @@ func TestNewServiceFromHomePortsConstructsAcceptedSettingsRoot(t *testing.T) {
 		platformfilesystem.Local{},
 		globalconfigmapping.Decode,
 		internaltestproviders.StandardCatalog(),
+		testIDGenerator(),
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
@@ -68,6 +75,8 @@ func TestResolveFromHomeViaSettingsCLIAdapterOwnershipPath(t *testing.T) {
 		platformfilesystem.Local{},
 		globalconfigmapping.Decode,
 		internaltestproviders.StandardCatalog(),
+		testIDGenerator(),
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
@@ -95,8 +104,25 @@ func TestResolveFromHomeViaSettingsCLIRejectsMissingFilesystemPorts(t *testing.T
 		nil,
 		globalconfigmapping.Decode,
 		internaltestproviders.StandardCatalog(),
+		testIDGenerator(),
+		logging.NoopLogger{},
 	)
 	if err == nil || !strings.Contains(err.Error(), "filesystem is required") {
 		t.Fatalf("NewServiceFromHomePorts() error = %v, want home-port construction failure", err)
+	}
+}
+
+func TestNewServiceFromHomePortsRejectsMissingIDGenerator(t *testing.T) {
+	t.Parallel()
+
+	_, err := settingswire.NewServiceFromHomePorts(
+		platformfilesystem.Local{},
+		globalconfigmapping.Decode,
+		internaltestproviders.StandardCatalog(),
+		nil,
+		logging.NoopLogger{},
+	)
+	if err == nil || err.Error() != "operator settings ID generator is required" {
+		t.Fatalf("NewServiceFromHomePorts() error = %v, want missing ID generator", err)
 	}
 }

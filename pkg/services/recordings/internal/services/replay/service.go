@@ -9,6 +9,7 @@ import recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 // parent-private subservice boundary.
 type Service interface {
 	LoadReplayRecording(recordings.LoadReplayRecordingRequest) (recordings.LoadReplayRecordingResult, error)
+	LoadReplayRecordingForResume(recordings.LoadReplayRecordingForResumeRequest) (recordings.LoadReplayRecordingForResumeResult, error)
 	CreateReplayPlan(recordings.CreateReplayPlanRequest) (recordings.CreateReplayPlanResult, error)
 	ObserveReplay(recordings.ObserveReplayRequest) (recordings.ObserveReplayResult, error)
 }

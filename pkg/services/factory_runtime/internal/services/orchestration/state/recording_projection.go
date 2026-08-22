@@ -118,9 +118,10 @@ func factoryWorkTypes(workTypes map[string]*WorkType) []interfaces.FactoryWorkTy
 			})
 		}
 		out = append(out, interfaces.FactoryWorkType{
-			ID:     workType.ID,
-			Name:   workType.Name,
-			States: states,
+			ID:                workType.ID,
+			Name:              workType.Name,
+			States:            states,
+			ExpectedArtifacts: append([]work.ExpectedArtifactDeclaration(nil), workType.ExpectedArtifacts...),
 		})
 	}
 	return out
@@ -216,6 +217,7 @@ func factoryWorkstations(transitions map[string]*petri.Transition, runtimeConfig
 		out = append(out, interfaces.FactoryWorkstation{
 			ID:                transition.ID,
 			Name:              transition.Name,
+			Description:       workstationDescription(transition.Name, runtimeConfig),
 			WorkerID:          transition.WorkerType,
 			Kind:              kind,
 			Config:            workstationConfig(transition, runtimeConfig),
@@ -224,9 +226,29 @@ func factoryWorkstations(transitions map[string]*petri.Transition, runtimeConfig
 			ContinuePlaceIDs:  arcPlaceIDs(transition.ContinueArcs),
 			RejectionPlaceIDs: arcPlaceIDs(transition.RejectionArcs),
 			FailurePlaceIDs:   arcPlaceIDs(transition.FailureArcs),
+			ExpectedArtifacts: append([]work.ExpectedArtifactDeclaration(nil), transition.ExpectedArtifacts...),
 		})
 	}
 	return out
+}
+
+func workstationDescription(name string, runtimeConfig interfaces.RuntimeWorkstationLookup) *interfaces.NameValueConfig {
+	if runtimeConfig == nil {
+		return nil
+	}
+	workstation, ok := runtimeWorkstation(name, runtimeConfig)
+	if !ok || workstation == nil || workstation.Description == nil {
+		return nil
+	}
+	copyValue := *workstation.Description
+	copyValue.Locales = append([]string(nil), workstation.Description.Locales...)
+	if workstation.Description.Values != nil {
+		copyValue.Values = make(map[string]string, len(workstation.Description.Values))
+		for locale, value := range workstation.Description.Values {
+			copyValue.Values[locale] = value
+		}
+	}
+	return &copyValue
 }
 
 func workstationConfig(transition *petri.Transition, runtimeConfig interfaces.RuntimeWorkstationLookup) map[string]string {
@@ -353,6 +375,12 @@ func guardConstraintValues(arc petri.Arc, arcSet string) map[string]string {
 		addStringValue(values, "watched_transition_id", guard.TransitionID)
 		if guard.MaxVisits > 0 {
 			values["max_visits"] = strconv.Itoa(guard.MaxVisits)
+		}
+		if guard.LogicalRoundTrip != nil {
+			values["logical_round_trip_workstations"] = strings.Join(guard.LogicalRoundTrip.Transitions[:], ",")
+			if guard.LogicalRoundTrip.MaxRawVisits > 0 {
+				values["max_raw_visits"] = strconv.Itoa(guard.LogicalRoundTrip.MaxRawVisits)
+			}
 		}
 	case *petri.AllWithParentGuard:
 		addStringValue(values, "match_binding", guard.MatchBinding)
@@ -548,6 +576,12 @@ func guardConfigValues(guard interfaces.GuardConfig) map[string]string {
 	addStringValue(values, "workstation", guard.Workstation)
 	if guard.MaxVisits > 0 {
 		values["max_visits"] = strconv.Itoa(guard.MaxVisits)
+	}
+	if guard.LogicalRoundTrip != nil {
+		values["logical_round_trip_workstations"] = strings.Join(guard.LogicalRoundTrip.Workstations, ",")
+		if guard.LogicalRoundTrip.MaxRawVisits > 0 {
+			values["max_raw_visits"] = strconv.Itoa(guard.LogicalRoundTrip.MaxRawVisits)
+		}
 	}
 	return values
 }

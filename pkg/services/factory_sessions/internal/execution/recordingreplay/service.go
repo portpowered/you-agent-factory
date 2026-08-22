@@ -3,23 +3,74 @@ package recordingreplay
 import (
 	"context"
 	"errors"
+	"sync"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 )
 
 // ErrNonLiveReplay reports an operation that would require live execution.
 var ErrNonLiveReplay = errors.New("recorded Factory Sessions are historical and do not support live execution")
 
-// Service exposes one validated recording through the canonical public read contract.
-type Service struct{ projection RecordingReplayProjection }
+// Service exposes one validated recording through the canonical public read
+// contract and owns the narrow transition to an already-composed live owner.
+type Service struct {
+	projection RecordingReplayProjection
+	live       fse.Service
 
-func NewService(projection RecordingReplayProjection) *Service {
-	return &Service{projection: projection}
+	mu        sync.RWMutex
+	handedOff bool
+	handoffMu sync.Mutex
+}
+
+// NewService constructs a historical replay. An optional live owner is used
+// only for the explicit resume handoff; the replay projection never executes
+// work or restores checkpoint state itself.
+func NewService(projection RecordingReplayProjection, liveOwners ...fse.Service) *Service {
+	var live fse.Service
+	if len(liveOwners) > 0 {
+		live = liveOwners[0]
+	}
+	return &Service{projection: projection, live: live}
+}
+
+// Inspection returns the complete public read model for the recording. The
+// caller receives only the bounded facts already restored by ReplayRecording;
+// no live execution or mutable checkpoint state is exposed.
+func (s *Service) Inspection() factorysessions.HistoricalReplayInspection {
+	if s == nil {
+		return factorysessions.HistoricalReplayInspection{}
+	}
+	inspection := factorysessions.HistoricalReplayInspection{
+		Session:       s.projection.Session,
+		Events:        s.projection.Events,
+		Artifacts:     s.projection.Artifacts,
+		Result:        s.projection.Result,
+		WorkerHistory: s.projection.WorkerHistory,
+		Redaction: factorysessions.HistoricalReplayRedaction{
+			RuntimeStateOmitted:        s.projection.Redaction.RuntimeStateOmitted,
+			CheckpointBodiesOmitted:    s.projection.Redaction.CheckpointBodiesOmitted,
+			ProviderTranscriptsOmitted: s.projection.Redaction.ProviderTranscriptsOmitted,
+			ChildDispatchesOmitted:     s.projection.Redaction.ChildDispatchesOmitted,
+			SecretsRedacted:            s.projection.Redaction.SecretsRedacted,
+		},
+	}
+	if checkpoint := s.projection.Checkpoint; checkpoint != nil {
+		inspection.Checkpoint = &factorysessions.HistoricalReplayCheckpoint{
+			ID: checkpoint.ID, Label: checkpoint.Label, Summary: checkpoint.Summary,
+			ArtifactID: checkpoint.ArtifactID, Timestamp: checkpoint.Timestamp,
+		}
+	}
+	return inspection
 }
 
 // IsNonLiveReplay lets control-plane routing recognize recorded canonical
 // session identities that predate the durable-execution ID prefix convention.
-func (*Service) IsNonLiveReplay() bool { return true }
+// The exception remains true after handoff because this service still owns the
+// replay identity and delegates subsequent operations to the live owner.
+func (s *Service) IsNonLiveReplay() bool {
+	return true
+}
 
 var _ fse.Service = (*Service)(nil)
 
@@ -29,45 +80,132 @@ func (s *Service) session(sessionID string) error {
 	}
 	return nil
 }
-func (*Service) StartAsync(context.Context, fse.StartRequest) (fse.AsyncStartResult, error) {
-	return fse.AsyncStartResult{}, ErrNonLiveReplay
+func (s *Service) StartAsync(ctx context.Context, request fse.StartRequest) (fse.AsyncStartResult, error) {
+	owner, handedOff := s.handedOffOwner()
+	if !handedOff {
+		return fse.AsyncStartResult{}, ErrNonLiveReplay
+	}
+	return owner.StartAsync(ctx, request)
 }
-func (*Service) StartSync(context.Context, fse.StartRequest) (fse.SyncStartResult, error) {
-	return fse.SyncStartResult{}, ErrNonLiveReplay
+func (s *Service) StartSync(ctx context.Context, request fse.StartRequest) (fse.SyncStartResult, error) {
+	owner, handedOff := s.handedOffOwner()
+	if !handedOff {
+		return fse.SyncStartResult{}, ErrNonLiveReplay
+	}
+	return owner.StartSync(ctx, request)
 }
-func (*Service) ResumeInterruptedSession(context.Context, string, fse.ResumeSessionRequest) (fse.AsyncStartResult, error) {
-	return fse.AsyncStartResult{}, ErrNonLiveReplay
+func (s *Service) ResumeInterruptedSession(
+	ctx context.Context,
+	sessionID string,
+	request fse.ResumeSessionRequest,
+) (fse.AsyncStartResult, error) {
+	s.handoffMu.Lock()
+	defer s.handoffMu.Unlock()
+	owner, err := s.resumeOwnerLocked(ctx, sessionID)
+	if err != nil {
+		return fse.AsyncStartResult{}, err
+	}
+	result, err := owner.ResumeInterruptedSession(ctx, sessionID, request)
+	if err == nil {
+		s.markHandedOff()
+	}
+	return result, err
 }
-func (s *Service) GetSession(_ context.Context, id string) (fse.SessionReadResult, error) {
+
+// SubscribeResponseEvents keeps the response-event read surface behind the
+// replay wall until the explicit resume handoff succeeds. Once handed off,
+// the cursor is served by the already-composed durable owner.
+func (s *Service) SubscribeResponseEvents(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.ResponseEventSubscriptionRequest,
+) (*factorysessions.ResponseEventCursor, error) {
+	if err := s.session(sessionID); err != nil {
+		return nil, err
+	}
+	owner, handedOff := s.handedOffOwnerForSession(sessionID)
+	if !handedOff {
+		return nil, ErrNonLiveReplay
+	}
+	subscriber, ok := owner.(interface {
+		SubscribeResponseEvents(context.Context, string, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error)
+	})
+	if !ok {
+		return nil, factorysessions.ErrRuntimeNotAvailable
+	}
+	return subscriber.SubscribeResponseEvents(ctx, sessionID, request)
+}
+
+func (s *Service) GetSession(ctx context.Context, id string) (fse.SessionReadResult, error) {
 	if err := s.session(id); err != nil {
 		return fse.SessionReadResult{}, err
 	}
+	if owner, handedOff := s.handedOffOwnerForSession(id); handedOff {
+		return owner.GetSession(ctx, id)
+	}
 	return s.projection.Session, nil
 }
-func (*Service) Pause(context.Context, string, fse.ControlRequest) (fse.LifecycleControlResult, error) {
-	return fse.LifecycleControlResult{}, ErrNonLiveReplay
+func (s *Service) Pause(ctx context.Context, id string, request fse.ControlRequest) (fse.LifecycleControlResult, error) {
+	owner, err := s.handedOffOwnerForSessionOperation(id)
+	if err != nil {
+		return fse.LifecycleControlResult{}, err
+	}
+	return owner.Pause(ctx, id, request)
 }
-func (*Service) Resume(context.Context, string, fse.ControlRequest) (fse.LifecycleControlResult, error) {
-	return fse.LifecycleControlResult{}, ErrNonLiveReplay
+func (s *Service) Resume(ctx context.Context, id string, request fse.ControlRequest) (fse.LifecycleControlResult, error) {
+	s.handoffMu.Lock()
+	defer s.handoffMu.Unlock()
+	owner, err := s.resumeOwnerLocked(ctx, id)
+	if err != nil {
+		return fse.LifecycleControlResult{}, err
+	}
+	result, err := owner.Resume(ctx, id, request)
+	if err == nil {
+		s.markHandedOff()
+	}
+	return result, err
 }
-func (*Service) Cancel(context.Context, string, fse.ControlRequest) (fse.LifecycleControlResult, error) {
-	return fse.LifecycleControlResult{}, ErrNonLiveReplay
+func (s *Service) Cancel(ctx context.Context, id string, request fse.ControlRequest) (fse.LifecycleControlResult, error) {
+	owner, err := s.handedOffOwnerForSessionOperation(id)
+	if err != nil {
+		return fse.LifecycleControlResult{}, err
+	}
+	return owner.Cancel(ctx, id, request)
 }
-func (*Service) Terminate(context.Context, string, fse.ControlRequest) (fse.LifecycleControlResult, error) {
-	return fse.LifecycleControlResult{}, ErrNonLiveReplay
+func (s *Service) Terminate(ctx context.Context, id string, request fse.ControlRequest) (fse.LifecycleControlResult, error) {
+	owner, err := s.handedOffOwnerForSessionOperation(id)
+	if err != nil {
+		return fse.LifecycleControlResult{}, err
+	}
+	return owner.Terminate(ctx, id, request)
 }
-func (*Service) Approve(context.Context, string, fse.ApproveRequest) (fse.LifecycleControlResult, error) {
-	return fse.LifecycleControlResult{}, ErrNonLiveReplay
+func (s *Service) Approve(ctx context.Context, id string, request fse.ApproveRequest) (fse.LifecycleControlResult, error) {
+	owner, err := s.handedOffOwnerForSessionOperation(id)
+	if err != nil {
+		return fse.LifecycleControlResult{}, err
+	}
+	return owner.Approve(ctx, id, request)
 }
-func (*Service) RetryDispatch(context.Context, string, fse.RetryDispatchRequest) (fse.LifecycleControlResult, error) {
-	return fse.LifecycleControlResult{}, ErrNonLiveReplay
+func (s *Service) RetryDispatch(ctx context.Context, id string, request fse.RetryDispatchRequest) (fse.LifecycleControlResult, error) {
+	owner, err := s.handedOffOwnerForSessionOperation(id)
+	if err != nil {
+		return fse.LifecycleControlResult{}, err
+	}
+	return owner.RetryDispatch(ctx, id, request)
 }
-func (*Service) InterruptDispatch(context.Context, string, fse.InterruptDispatchRequest) (fse.LifecycleControlResult, error) {
-	return fse.LifecycleControlResult{}, ErrNonLiveReplay
+func (s *Service) InterruptDispatch(ctx context.Context, id string, request fse.InterruptDispatchRequest) (fse.LifecycleControlResult, error) {
+	owner, err := s.handedOffOwnerForSessionOperation(id)
+	if err != nil {
+		return fse.LifecycleControlResult{}, err
+	}
+	return owner.InterruptDispatch(ctx, id, request)
 }
-func (s *Service) GetResult(_ context.Context, id string, req fse.ResultRequest) (fse.ResultReadResult, error) {
+func (s *Service) GetResult(ctx context.Context, id string, req fse.ResultRequest) (fse.ResultReadResult, error) {
 	if err := s.session(id); err != nil {
 		return fse.ResultReadResult{}, err
+	}
+	if owner, handedOff := s.handedOffOwnerForSession(id); handedOff {
+		return owner.GetResult(ctx, id, req)
 	}
 	normalized, err := fse.NormalizeResultRequest(req)
 	if err != nil {
@@ -81,35 +219,56 @@ func (s *Service) GetResult(_ context.Context, id string, req fse.ResultRequest)
 	}
 	return result, nil
 }
-func (s *Service) ListDispatches(_ context.Context, id string) (fse.ListDispatchesResult, error) {
+func (s *Service) ListDispatches(ctx context.Context, id string) (fse.ListDispatchesResult, error) {
 	if err := s.session(id); err != nil {
 		return fse.ListDispatchesResult{}, err
 	}
-	return fse.ListDispatchesResult{SessionID: id}, nil
+	if owner, handedOff := s.handedOffOwnerForSession(id); handedOff {
+		return owner.ListDispatches(ctx, id)
+	}
+	return fse.ListDispatchesResult{
+		SessionID:  id,
+		Dispatches: []fse.DispatchSummary{},
+	}, nil
 }
 
 func (s *Service) QueryDispatches(ctx context.Context, request fse.DispatchQueryRequest) (fse.ListDispatchesResult, error) {
+	if err := s.session(request.SessionID); err != nil {
+		return fse.ListDispatchesResult{}, err
+	}
+	if owner, handedOff := s.handedOffOwnerForSession(request.SessionID); handedOff {
+		return owner.QueryDispatches(ctx, request)
+	}
 	result, err := s.ListDispatches(ctx, request.SessionID)
 	if err != nil {
 		return fse.ListDispatchesResult{}, err
 	}
 	return fse.FilterDispatches(result, request.Filters)
 }
-func (s *Service) GetDispatch(_ context.Context, id, _ string) (fse.DispatchDetail, error) {
+func (s *Service) GetDispatch(ctx context.Context, id, dispatchID string) (fse.DispatchDetail, error) {
 	if err := s.session(id); err != nil {
 		return fse.DispatchDetail{}, err
 	}
+	if owner, handedOff := s.handedOffOwnerForSession(id); handedOff {
+		return owner.GetDispatch(ctx, id, dispatchID)
+	}
 	return fse.DispatchDetail{}, fse.ErrDispatchNotFound
 }
-func (s *Service) ListArtifacts(_ context.Context, id string) (fse.ListArtifactsResult, error) {
+func (s *Service) ListArtifacts(ctx context.Context, id string) (fse.ListArtifactsResult, error) {
 	if err := s.session(id); err != nil {
 		return fse.ListArtifactsResult{}, err
 	}
+	if owner, handedOff := s.handedOffOwnerForSession(id); handedOff {
+		return owner.ListArtifacts(ctx, id)
+	}
 	return s.projection.Artifacts, nil
 }
-func (s *Service) GetArtifact(_ context.Context, id, artifactID string) (fse.ArtifactDetail, error) {
+func (s *Service) GetArtifact(ctx context.Context, id, artifactID string) (fse.ArtifactDetail, error) {
 	if err := s.session(id); err != nil {
 		return fse.ArtifactDetail{}, err
+	}
+	if owner, handedOff := s.handedOffOwnerForSession(id); handedOff {
+		return owner.GetArtifact(ctx, id, artifactID)
 	}
 	for _, artifact := range s.projection.Artifacts.Artifacts {
 		if artifact.ID == artifactID {
@@ -118,14 +277,20 @@ func (s *Service) GetArtifact(_ context.Context, id, artifactID string) (fse.Art
 	}
 	return fse.ArtifactDetail{}, fse.ErrArtifactNotFound
 }
-func (s *Service) ReadEvents(_ context.Context, id string, req fse.EventReconnectRequest) (fse.EventReadResult, error) {
+func (s *Service) ReadEvents(ctx context.Context, id string, req fse.EventReconnectRequest) (fse.EventReadResult, error) {
 	if err := s.session(id); err != nil {
 		return fse.EventReadResult{}, err
+	}
+	if owner, handedOff := s.handedOffOwnerForSession(id); handedOff {
+		return owner.ReadEvents(ctx, id, req)
 	}
 	events, err := fse.FilterEventsAfterReconnect(s.projection.Events.Events, req, id)
 	return fse.EventReadResult{SessionID: id, Events: events}, err
 }
-func (s *Service) ListSessions(context.Context, fse.ListSessionsRequest) (fse.ListSessionsResult, error) {
+func (s *Service) ListSessions(ctx context.Context, request fse.ListSessionsRequest) (fse.ListSessionsResult, error) {
+	if owner, handedOff := s.handedOffOwner(); handedOff {
+		return owner.ListSessions(ctx, request)
+	}
 	session := s.projection.Session
 	return fse.ListSessionsResult{DurableSessions: []fse.DurableSessionListSummary{{SessionID: session.SessionID, Status: session.Status, OrchestratorKind: session.OrchestratorKind, ResolvedSource: session.ResolvedSource, SourceHash: session.SourceHash, Policy: session.Policy, ResultSummary: session.ResultSummary, ArtifactCount: session.ArtifactCount, Lifecycle: session.Lifecycle, Links: session.Links}}}, nil
 }

@@ -65,4 +65,3 @@ func (a *Adapter) writeMoveDecodeError(w http.ResponseWriter, err error) {
 	}
 	a.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 }
-

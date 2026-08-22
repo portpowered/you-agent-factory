@@ -21,11 +21,12 @@ func ProjectRuntimeContract(ctx ProjectionContext) RuntimeProjection {
 	now := ctx.Now
 	kind := interfaces.EffectiveOrchestratorKind(ctx.FactoryCfg)
 	runtime := RuntimeProjection{
-		OrchestratorKind: kind,
-		Status:           projectedSessionStatus(ctx),
-		Progress:         projectedSessionProgress(ctx),
-		Usage:            projectedSessionUsage(ctx),
-		Lifecycle:        projectedSessionLifecycle(ctx, now),
+		OrchestratorKind:      kind,
+		Status:                projectedSessionStatus(ctx),
+		Progress:              projectedSessionProgress(ctx),
+		Usage:                 projectedSessionUsage(ctx),
+		Lifecycle:             projectedSessionLifecycle(ctx, now),
+		PendingHumanApprovals: append([]interfaces.FactoryWorldHumanApproval(nil), ctx.PendingHumanApprovals...),
 	}
 	if streamIdentity := projectedSessionStreamIdentity(ctx, runtime.Lifecycle); streamIdentity != nil {
 		runtime.StreamIdentity = streamIdentity
@@ -180,9 +181,66 @@ func projectedSessionProgress(ctx ProjectionContext) RuntimeProgress {
 	return RuntimeProgress{
 		FactoryState:  projectedSessionFactoryState(ctx),
 		Categories:    categories,
-		InFlightCount: ctx.Snapshot.InFlightCount,
+		InFlightCount: projectedSnapshotInFlightDispatchCount(ctx.Snapshot),
 		TotalTokens:   countProjectionTokens(&ctx.Snapshot.Marking),
 	}
+}
+
+func projectedSnapshotInFlightDispatchCount(
+	snapshot *interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.RuntimeNet],
+) int {
+	if snapshot == nil {
+		return 0
+	}
+	active := make(map[string]struct{}, len(snapshot.Dispatches))
+	for mapKey, entry := range snapshot.Dispatches {
+		if entry == nil {
+			continue
+		}
+		dispatchID := entry.DispatchID
+		if dispatchID == "" {
+			dispatchID = mapKey
+		}
+		active[dispatchID] = struct{}{}
+	}
+	completed := make([]string, 0, len(snapshot.Results)+len(snapshot.DispatchHistory))
+	for _, result := range snapshot.Results {
+		if result.DispatchID != "" {
+			completed = append(completed, result.DispatchID)
+		}
+	}
+	for _, dispatch := range snapshot.DispatchHistory {
+		if dispatch.DispatchID != "" {
+			completed = append(completed, dispatch.DispatchID)
+		}
+	}
+	return reconcileInFlightDispatchCount(snapshot.InFlightCount, active, completed)
+}
+
+func reconcileInFlightDispatchCount(
+	reportedCount int,
+	activeDispatchIDs map[string]struct{},
+	completedDispatchIDs []string,
+) int {
+	if reportedCount <= 0 || len(activeDispatchIDs) == 0 {
+		return 0
+	}
+
+	completed := 0
+	seen := make(map[string]struct{}, len(completedDispatchIDs))
+	for _, dispatchID := range completedDispatchIDs {
+		if _, alreadySeen := seen[dispatchID]; alreadySeen {
+			continue
+		}
+		seen[dispatchID] = struct{}{}
+		if _, active := activeDispatchIDs[dispatchID]; active {
+			completed++
+		}
+	}
+	if completed >= reportedCount {
+		return 0
+	}
+	return reportedCount - completed
 }
 
 func projectedSessionUsage(ctx ProjectionContext) RuntimeUsage {
@@ -362,23 +420,21 @@ func projectedJavaScriptBudgets(raw json.RawMessage) *RuntimeBudgets {
 }
 
 func projectedMarkingTokens(marking *factory.PetriMarkingSnapshot) []RuntimeToken {
-	if marking == nil || len(marking.Tokens) == 0 {
+	if marking == nil {
 		return []RuntimeToken{}
 	}
-	tokenIDs := make([]string, 0, len(marking.Tokens))
-	for tokenID := range marking.Tokens {
-		tokenIDs = append(tokenIDs, tokenID)
+	tokens := factory.CollectPublicWorkTokens(marking.Tokens, nil).MarkingTokens
+	if len(tokens) == 0 {
+		return []RuntimeToken{}
 	}
-	sort.Strings(tokenIDs)
-	tokens := make([]RuntimeToken, 0, len(tokenIDs))
-	for _, tokenID := range tokenIDs {
-		token := marking.Tokens[tokenID]
-		if token == nil || interfaces.IsSystemTimeToken(token) {
+	projected := make([]RuntimeToken, 0, len(tokens))
+	for _, token := range tokens {
+		if token.Color.WorkTypeID == interfaces.SystemTimeWorkTypeID {
 			continue
 		}
-		tokens = append(tokens, projectedTokenResponse(token))
+		projected = append(projected, projectedTokenResponse(token))
 	}
-	return tokens
+	return projected
 }
 
 func projectedEnabledTransitions(
@@ -403,10 +459,10 @@ func projectedEnabledTransitions(
 	return projected
 }
 
-func projectedTokenResponse(token *workerexecution.Token) RuntimeToken {
+func projectedTokenResponse(token workerexecution.Token) RuntimeToken {
 	resp := RuntimeToken{
 		ID:        token.ID,
-		PlaceID:   token.PlaceID,
+		PlaceID:   workerTokenPlaceID(token),
 		WorkID:    token.Color.WorkID,
 		WorkType:  token.Color.WorkTypeID,
 		TraceID:   token.Color.TraceID,
@@ -440,6 +496,18 @@ func projectedTokenResponse(token *workerexecution.Token) RuntimeToken {
 	return resp
 }
 
+func workerTokenPlaceID(token workerexecution.Token) string {
+	prefix := firstNonEmptyString(token.Color.WorkTypeID, token.Color.Name)
+	state := strings.TrimSpace(token.State)
+	if prefix == "" {
+		return state
+	}
+	if state == "" {
+		return prefix
+	}
+	return prefix + ":" + state
+}
+
 func categorizeProjectionTokens(
 	marking *factory.PetriMarkingSnapshot,
 	net *factory.RuntimeNet,
@@ -450,12 +518,12 @@ func categorizeProjectionTokens(
 	if marking == nil {
 		return categories, resourceUsage(resourceCounts, resourceTotals)
 	}
-	for _, token := range marking.Tokens {
-		if token == nil || interfaces.IsSystemTimeToken(token) {
+	for _, token := range factory.CollectPublicWorkTokens(marking.Tokens, nil).MarkingTokens {
+		if token.Color.WorkTypeID == interfaces.SystemTimeWorkTypeID {
 			continue
 		}
 		if token.Color.DataType == workerexecution.DataTypeResource {
-			resourceID, resourceState := factory.SplitPlaceID(token.PlaceID)
+			resourceID, resourceState := workerResourceIdentity(token)
 			if _, ok := resourceTotals[resourceID]; !ok {
 				resourceTotals[resourceID]++
 			}
@@ -464,7 +532,7 @@ func categorizeProjectionTokens(
 			}
 			continue
 		}
-		switch projectionStateCategory(net, token.PlaceID) {
+		switch projectionStateCategory(net, token.Color.WorkTypeID, token.State) {
 		case factory.StateCategoryFailed:
 			categories.Failed++
 		case factory.StateCategoryTerminal:
@@ -483,8 +551,8 @@ func countProjectionTokens(marking *factory.PetriMarkingSnapshot) int {
 		return 0
 	}
 	count := 0
-	for _, token := range marking.Tokens {
-		if token == nil || interfaces.IsSystemTimeToken(token) {
+	for _, token := range factory.CollectPublicWorkTokens(marking.Tokens, nil).MarkingTokens {
+		if token.Color.WorkTypeID == interfaces.SystemTimeWorkTypeID {
 			continue
 		}
 		count++
@@ -492,11 +560,15 @@ func countProjectionTokens(marking *factory.PetriMarkingSnapshot) int {
 	return count
 }
 
-func projectionStateCategory(net *factory.RuntimeNet, placeID string) factory.StateCategory {
+func projectionStateCategory(net *factory.RuntimeNet, workTypeID, stateName string) factory.StateCategory {
 	if net == nil {
 		return factory.StateCategoryProcessing
 	}
-	return net.StateCategoryForPlace(placeID)
+	return factory.CategoryForState(net.WorkTypes, workTypeID, stateName)
+}
+
+func workerResourceIdentity(token workerexecution.Token) (string, string) {
+	return firstNonEmptyString(token.Color.WorkTypeID, token.Color.Name, token.Color.WorkID), token.State
 }
 
 func resourceTotalsFromTopology(net *factory.RuntimeNet) map[string]int {

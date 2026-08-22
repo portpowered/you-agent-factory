@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -15,9 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -59,8 +58,6 @@ const parallelPartialFailureWorkflow = `return (async function () {
 // public Factory Session and dispatch surfaces, using controllable provider edges
 // instead of wall-clock sleeps to observe concurrency.
 func TestJavaScriptParallelDispatchesChildrenConcurrently(t *testing.T) {
-	t.Parallel()
-
 	dir := support.ScaffoldFactory(t, parallelCompositionFactoryConfig())
 	support.WriteAgentConfig(t, dir, "worker-a", "---\ntype: MODEL_WORKER\n---\n")
 	homeDir := writeParallelCompositionGlobalConfig(t)
@@ -88,7 +85,7 @@ func TestJavaScriptParallelDispatchesChildrenConcurrently(t *testing.T) {
 		t.Fatal("session id unexpectedly empty")
 	}
 
-	waitForParallelCompositionInFlightDispatches(t, baseURL, sessionID, 2, 5*time.Second)
+	provider.waitForConcurrentCalls(t, 5*time.Second)
 	provider.releaseAll()
 
 	completed := waitForParallelCompositionSessionStatus(
@@ -597,16 +594,33 @@ func waitForParallelCompositionLabelCompletion(
 }
 
 type gatedParallelChildProvider struct {
-	mu          sync.Mutex
-	active      int
-	peak        int
-	release     chan struct{}
-	releaseOnce sync.Once
+	testutil.NativeProvider
+	mu                  sync.Mutex
+	active              int
+	peak                int
+	release             chan struct{}
+	concurrent          chan struct{}
+	releaseOnce         sync.Once
+	concurrentCallsOnce sync.Once
 }
 
 func newGatedParallelChildProvider() *gatedParallelChildProvider {
-	return &gatedParallelChildProvider{
-		release: make(chan struct{}),
+	provider := &gatedParallelChildProvider{
+		release:    make(chan struct{}),
+		concurrent: make(chan struct{}),
+	}
+	provider.NativeProvider.ExecuteFunc = provider.Execute
+	return provider
+}
+
+func (p *gatedParallelChildProvider) waitForConcurrentCalls(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-p.concurrent:
+	case <-timer.C:
+		t.Fatalf("provider did not observe two concurrent child calls within %s; peak active calls = %d", timeout, p.peakActive())
 	}
 }
 
@@ -622,14 +636,17 @@ func (p *gatedParallelChildProvider) peakActive() int {
 	return p.peak
 }
 
-func (p *gatedParallelChildProvider) Infer(
+func (p *gatedParallelChildProvider) Execute(
 	ctx context.Context,
-	req workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
+	req providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
 	p.mu.Lock()
 	p.active++
 	if p.active > p.peak {
 		p.peak = p.active
+	}
+	if p.active >= 2 {
+		p.concurrentCallsOnce.Do(func() { close(p.concurrent) })
 	}
 	p.mu.Unlock()
 
@@ -639,7 +656,7 @@ func (p *gatedParallelChildProvider) Infer(
 		p.mu.Lock()
 		p.active--
 		p.mu.Unlock()
-		return workerexecution.InferenceResponse{}, ctx.Err()
+		return providers.ExecuteResult{}, ctx.Err()
 	}
 
 	p.mu.Lock()
@@ -647,12 +664,12 @@ func (p *gatedParallelChildProvider) Infer(
 	p.mu.Unlock()
 
 	label := parallelChildLabelFromRequest(req)
-	return workerexecution.InferenceResponse{
+	return providers.ExecuteResult{
 		Content: fmt.Sprintf(`{"text":"parallel-child:%s:COMPLETE","label":%q}`, label, label),
 	}, nil
 }
 
-func parallelChildLabelFromRequest(req workerexecution.ProviderInferenceRequest) string {
+func parallelChildLabelFromRequest(req providers.ExecuteRequest) string {
 	for _, token := range req.InputTokens {
 		payload, ok := token.(map[string]any)
 		if !ok {
@@ -677,9 +694,8 @@ func parallelChildLabelFromRequest(req workerexecution.ProviderInferenceRequest)
 	return message
 }
 
-var _ workerprovider.Provider = (*gatedParallelChildProvider)(nil)
-
 type labelGatedParallelChildProvider struct {
+	testutil.NativeProvider
 	mu              sync.Mutex
 	gates           map[string]chan struct{}
 	releaseOnce     map[string]*sync.Once
@@ -695,6 +711,7 @@ func newLabelGatedParallelChildProvider(labels []string) *labelGatedParallelChil
 		provider.gates[label] = make(chan struct{})
 		provider.releaseOnce[label] = &sync.Once{}
 	}
+	provider.NativeProvider.ExecuteFunc = provider.Execute
 	return provider
 }
 
@@ -725,55 +742,54 @@ func (p *labelGatedParallelChildProvider) completionOrder() []string {
 	return append([]string(nil), p.completedLabels...)
 }
 
-func (p *labelGatedParallelChildProvider) Infer(
+func (p *labelGatedParallelChildProvider) Execute(
 	ctx context.Context,
-	req workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
+	req providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
 	label := parallelChildLabelFromRequest(req)
 	gate, ok := p.gates[label]
 	if !ok {
-		return workerexecution.InferenceResponse{}, fmt.Errorf("unexpected parallel child label %q", label)
+		return providers.ExecuteResult{}, fmt.Errorf("unexpected parallel child label %q", label)
 	}
 
 	select {
 	case <-gate:
 	case <-ctx.Done():
-		return workerexecution.InferenceResponse{}, ctx.Err()
+		return providers.ExecuteResult{}, ctx.Err()
 	}
 
 	p.mu.Lock()
 	p.completedLabels = append(p.completedLabels, label)
 	p.mu.Unlock()
 
-	return workerexecution.InferenceResponse{
+	return providers.ExecuteResult{
 		Content: fmt.Sprintf(`{"text":"parallel-child:%s:COMPLETE","label":%q}`, label, label),
 	}, nil
 }
 
-var _ workerprovider.Provider = (*labelGatedParallelChildProvider)(nil)
-
-type partialFailureParallelChildProvider struct{}
-
-func newPartialFailureParallelChildProvider() *partialFailureParallelChildProvider {
-	return &partialFailureParallelChildProvider{}
+type partialFailureParallelChildProvider struct {
+	testutil.NativeProvider
 }
 
-func (p *partialFailureParallelChildProvider) Infer(
+func newPartialFailureParallelChildProvider() *partialFailureParallelChildProvider {
+	provider := &partialFailureParallelChildProvider{}
+	provider.NativeProvider.ExecuteFunc = provider.Execute
+	return provider
+}
+
+func (p *partialFailureParallelChildProvider) Execute(
 	_ context.Context,
-	req workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
+	req providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
 	if strings.Contains(req.UserMessage, "force provider failure") {
-		return workerexecution.InferenceResponse{}, workerexecution.NewProviderError(
-			workerexecution.WorkFailureTypePermanentBadRequest,
-			"Provider rejected the request as invalid.",
-			errors.New("scripted parallel child failure"),
-		)
+		return providers.ExecuteResult{}, providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindInvalidRequest,
+			Message: "Provider rejected the request as invalid.",
+		}
 	}
 
 	label := parallelChildLabelFromRequest(req)
-	return workerexecution.InferenceResponse{
+	return providers.ExecuteResult{
 		Content: fmt.Sprintf(`{"text":"parallel-child:%s:COMPLETE","label":%q}`, label, label),
 	}, nil
 }
-
-var _ workerprovider.Provider = (*partialFailureParallelChildProvider)(nil)

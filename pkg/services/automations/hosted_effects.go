@@ -2,7 +2,6 @@ package automations
 
 import (
 	hostedsources "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources"
-	"go.uber.org/zap"
 )
 
 // HostedLinearCheckpointStore persists hosted Linear resume positions for
@@ -25,13 +24,3 @@ type HostedLinearClock = hostedsources.Clock
 
 // HostedLinearDefaultRequestTimeout is the default hosted Linear HTTP timeout.
 const HostedLinearDefaultRequestTimeout = hostedsources.DefaultRequestTimeout
-
-// HostedSourcesFactory constructs the Automations-owned hosted-sources owner
-// from explicit external effects.
-type HostedSourcesFactory func(
-	*zap.Logger,
-	HostedLinearClock,
-	HostedLinearHTTPDoer,
-	HostedLinearSecretResolver,
-	string,
-) HostedPollers

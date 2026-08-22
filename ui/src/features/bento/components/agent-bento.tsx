@@ -1,5 +1,5 @@
 import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Layout, LayoutItem } from "react-grid-layout";
 import { GridLayout, useContainerWidth } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
@@ -9,7 +9,10 @@ import { ScrollArea } from "@you-agent-factory/components/overlays";
 import { Heading } from "@you-agent-factory/components/primitives";
 import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
 import { cn } from "../../../lib/cn";
+import { useDashboardLayoutTouch } from "../hooks/touch/dashboardLayoutTouch";
 import { getAgentBentoMessages } from "../messages/agent-bento";
+import { DashboardCardErrorBoundary } from "./card-error/dashboard-card-error-boundary";
+import { renderBentoResizeHandle } from "./resize/bento-resize-handle";
 
 export interface AgentBentoLayoutItem {
   h: number;
@@ -61,9 +64,8 @@ export interface AgentBentoCardHeaderProps {
 
 const DEFAULT_BENTO_WIDTH = 1180;
 const BENTO_COLUMNS = 12;
-const BENTO_INTERACTION_BREAKPOINT_PX = 768;
 export const BENTO_ROW_HEIGHT = 72;
-const BENTO_COMPACT_BREAKPOINT_PX = 640;
+const BENTO_COMPACT_BREAKPOINT_PX = 768;
 export const BENTO_MARGIN = [16, 16] as const;
 
 export function getBentoGridItemHeightPx(h: number): number {
@@ -75,7 +77,8 @@ const BENTO_DRAG_HANDLE_SELECTOR = "[data-bento-drag-handle='true']";
 const BENTO_DRAG_CANCEL_SELECTOR =
   "button,a,input,select,textarea,.react-resizable-handle";
 const BENTO_LAYOUT_CLASS = "min-w-0 w-full overflow-x-clip";
-const BENTO_CARD_CLASS = "flex h-full min-w-0 flex-col";
+const BENTO_CARD_CLASS =
+  "flex h-full min-w-0 flex-col [&_a]:relative [&_a]:z-20 [&_button]:relative [&_button]:z-20 [&_input]:relative [&_input]:z-20 [&_select]:relative [&_select]:z-20 [&_textarea]:relative [&_textarea]:z-20";
 const BENTO_CARD_SCROLL_CLASS = "overflow-hidden";
 const BENTO_CARD_HEADER_CLASS =
   "relative z-10 flex min-h-13 shrink-0 cursor-grab items-center justify-between gap-3 border-b border-outline bg-surface-container-high px-3.5 py-3 active:cursor-grabbing";
@@ -186,6 +189,7 @@ function toNonInteractiveGridLayout(layout: Layout): Layout {
   }));
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: the bento layout keeps grid projection, pointer callbacks, and per-card keyboard context synchronized.
 export function AgentBentoLayout({
   cards,
   className = "",
@@ -202,6 +206,7 @@ export function AgentBentoLayout({
     [layout],
   );
   const [currentLayout, setCurrentLayout] = useState<Layout>(normalizedLayout);
+  const isGridInteractionActiveRef = useRef(false);
   const { containerRef, width } = useContainerWidth({ initialWidth });
   const renderedLayout = hasSameLayoutItems(currentLayout, normalizedLayout)
     ? currentLayout
@@ -220,13 +225,28 @@ export function AgentBentoLayout({
   const renderedWidth = Math.max(measuredWidth, 320);
   const usesCompactLayout =
     responsiveMode === "adaptive" &&
-    renderedWidth < BENTO_COMPACT_BREAKPOINT_PX;
+    renderedWidth <= BENTO_COMPACT_BREAKPOINT_PX;
   const allowsInteractiveGrid =
     responsiveMode === "interactive" ||
-    (renderedWidth > BENTO_INTERACTION_BREAKPOINT_PX && !usesCompactLayout);
+    (renderedWidth > BENTO_COMPACT_BREAKPOINT_PX && !usesCompactLayout);
+
+  const previewLayoutChange = (nextLayout: Layout) => {
+    if (allowsInteractiveGrid) {
+      setCurrentLayout(nextLayout);
+    }
+  };
+
+  const commitLayoutChange = (nextLayout: Layout) => {
+    if (!allowsInteractiveGrid) {
+      return;
+    }
+
+    setCurrentLayout(nextLayout);
+    onLayoutChange?.(toBentoLayout(nextLayout, layoutByID));
+  };
 
   const handleLayoutChange = (nextLayout: Layout) => {
-    if (!allowsInteractiveGrid) {
+    if (!allowsInteractiveGrid || !isGridInteractionActiveRef.current) {
       return;
     }
 
@@ -237,7 +257,19 @@ export function AgentBentoLayout({
     }
 
     setCurrentLayout(nextLayout);
-    onLayoutChange?.(toBentoLayout(nextLayout, layoutByID));
+  };
+
+  const handleGridInteractionStart = () => {
+    isGridInteractionActiveRef.current = allowsInteractiveGrid;
+  };
+
+  const handleGridInteractionStop = (nextLayout: Layout) => {
+    const wasActive = isGridInteractionActiveRef.current;
+    isGridInteractionActiveRef.current = false;
+
+    if (wasActive) {
+      commitLayoutChange(nextLayout);
+    }
   };
 
   const layoutClassName = cn(BENTO_LAYOUT_CLASS, className);
@@ -246,11 +278,34 @@ export function AgentBentoLayout({
     : allowsInteractiveGrid
       ? renderedLayout
       : toNonInteractiveGridLayout(renderedLayout);
+  const touchHandlers = useDashboardLayoutTouch({
+    columns: BENTO_COLUMNS,
+    enabled: allowsInteractiveGrid,
+    layout: renderedLayout,
+    margin: BENTO_MARGIN,
+    onCommitLayout: commitLayoutChange,
+    onPreviewLayout: previewLayoutChange,
+    rowHeight: BENTO_ROW_HEIGHT,
+    width: renderedWidth,
+  });
+  const cardsForRender = usesCompactLayout
+    ? [...cards].sort((left, right) => {
+        const leftIndex = effectiveLayout.findIndex(
+          (item) => item.i === left.id,
+        );
+        const rightIndex = effectiveLayout.findIndex(
+          (item) => item.i === right.id,
+        );
+        return leftIndex - rightIndex;
+      })
+    : cards;
 
   return (
     <section
       aria-label={messages.boardLabel}
       className={layoutClassName}
+      onPointerDownCapture={touchHandlers.onPointerDownCapture}
+      onTouchStartCapture={touchHandlers.onTouchStartCapture}
       ref={containerRef}
     >
       <GridLayout
@@ -268,14 +323,19 @@ export function AgentBentoLayout({
           rowHeight: BENTO_ROW_HEIGHT,
         }}
         layout={effectiveLayout}
+        onDragStart={handleGridInteractionStart}
+        onDragStop={handleGridInteractionStop}
         onLayoutChange={handleLayoutChange}
+        onResizeStart={handleGridInteractionStart}
+        onResizeStop={handleGridInteractionStop}
         resizeConfig={{
           enabled: allowsInteractiveGrid,
+          handleComponent: renderBentoResizeHandle,
           handles: [...BENTO_RESIZE_HANDLES],
         }}
         width={renderedWidth}
       >
-        {cards.map((card) => (
+        {cardsForRender.map((card) => (
           <div
             className="min-w-0 overflow-visible"
             data-bento-card-id={card.widgetType}
@@ -288,7 +348,9 @@ export function AgentBentoLayout({
             id={card.id}
             key={card.id}
           >
-            {card.children}
+            <DashboardCardErrorBoundary locale={locale}>
+              {card.children}
+            </DashboardCardErrorBoundary>
           </div>
         ))}
       </GridLayout>
@@ -329,6 +391,7 @@ export function AgentBentoCard({
     ) : (
       <ScrollArea
         className={BENTO_CARD_BODY_SCROLL_CLASS}
+        type="hover"
         viewportClassName={cn(
           BENTO_CARD_BODY_SCROLL_VIEWPORT_CLASS,
           cardBodyClassName,
@@ -369,6 +432,7 @@ export function AgentBentoCardHeader({
       className={cn(
         BENTO_CARD_HEADER_CLASS,
         compactChrome && BENTO_CARD_HEADER_COMPACT_CLASS,
+        "touch-none",
       )}
       data-bento-drag-handle="true"
     >

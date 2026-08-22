@@ -13,45 +13,267 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionshttp "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	factoryevents "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 )
 
-func TestListPackagedFactoriesReturnsPublishedCatalog(t *testing.T) {
-	srv := NewServer(nil, nil, nil, zap.NewNop())
+func TestListPackagedFactoriesReturnsUnavailableErrorWithoutDefinitionsHandler(t *testing.T) {
+	srv := NewServer(nil, nil, nil, nil, nil, zap.NewNop())
+	recorder := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/packaged-factories", nil))
+
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusInternalServerError, recorder.Body.String())
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Code != factoryapi.ErrorResponseCodeINTERNALERROR {
+		t.Fatalf("error code = %q, want %q", response.Code, factoryapi.ErrorResponseCodeINTERNALERROR)
+	}
+}
+
+func TestListPackagedFactoriesRoutesThroughDefinitionsHandler(t *testing.T) {
+	root := &packagedFactoryCatalogServiceFake{
+		listed: interfaces.ListBuiltInPackagedFactoriesResult{
+			Entries: []interfaces.BuiltInPackagedFactoryEntry{{
+				Name: "@you/alpha", Project: "builtin-alpha",
+			}},
+		},
+		definitions: map[string]interfaces.PackagedDefinition{
+			"@you/alpha": {
+				Name:    "@you/alpha",
+				Project: "builtin-alpha",
+				JSON:    []byte(`{"name":"@you/alpha","description":{"type":"LOCALIZABLE_ASSET","value":"Alpha"},"examples":[{"name":"run-alpha","description":{"type":"LOCALIZABLE_ASSET","value":"Run alpha"},"args":{"input":"sample"}}]}`),
+				YAML:    []byte("name: alpha\n"),
+			},
+		},
+	}
+	factoryDefinitionsHandler := factorydefinitionshttp.NewHandlerFromRoot(
+		factorydefinitionshttp.RootBinding{Definitions: root},
+		zap.NewNop(),
+	)
+	srv := NewServer(nil, nil, nil, nil, factoryDefinitionsHandler, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/packaged-factories", nil))
 
 	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+		t.Fatalf("status = %d, want 200: %s", recorder.Code, recorder.Body.String())
 	}
 	var response factoryapi.PackagedFactoryCatalogResponse
 	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
-		t.Fatalf("decode response: %v", err)
+		t.Fatalf("decode catalog response: %v", err)
 	}
-	if len(response.Factories) == 0 {
-		t.Fatal("catalog response contained no factories")
+	if len(response.Factories) != 1 || response.Factories[0].Name != "@you/alpha" {
+		t.Fatalf("catalog response = %#v, want one API-shaped alpha entry", response.Factories)
 	}
-	for _, factory := range response.Factories {
-		if factory.Name == "" || factory.Project == "" || factory.Slug == "" || len(factory.Json) == 0 || factory.Yaml == "" {
-			t.Fatalf("catalog entry is incomplete: %#v", factory)
-		}
+	if response.Factories[0].Yaml != "name: alpha\n" || response.Factories[0].Json["name"] != "@you/alpha" {
+		t.Fatalf("catalog artifacts = %#v, want backend-provided JSON/YAML", response.Factories[0])
+	}
+}
+
+type packagedFactoryCatalogServiceFake struct {
+	interfaces.Service
+	listed      interfaces.ListBuiltInPackagedFactoriesResult
+	definitions map[string]interfaces.PackagedDefinition
+}
+
+func (fake *packagedFactoryCatalogServiceFake) ListBuiltInPackagedFactories(
+	context.Context,
+	interfaces.ListBuiltInPackagedFactoriesRequest,
+) (interfaces.ListBuiltInPackagedFactoriesResult, error) {
+	return fake.listed, nil
+}
+
+func (fake *packagedFactoryCatalogServiceFake) ResolveBuiltInPackagedFactory(
+	_ context.Context,
+	request interfaces.ResolveBuiltInPackagedFactoryRequest,
+) (interfaces.ResolveBuiltInPackagedFactoryResult, error) {
+	definition, ok := fake.definitions[request.Name]
+	if !ok {
+		return interfaces.ResolveBuiltInPackagedFactoryResult{}, interfaces.ErrUnknownPackagedFactoryIdentity
+	}
+	return interfaces.ResolveBuiltInPackagedFactoryResult{Definition: definition, Formats: definition.Formats}, nil
+}
+
+func TestWorkerSessionOperationsReturnStructuredErrorWhenHandlerIsUnavailable(t *testing.T) {
+	srv := NewServer(nil, nil, nil, nil, nil, zap.NewNop())
+	sessionID := factoryapi.SessionID("missing")
+	cases := []struct {
+		name string
+		call func(*httptest.ResponseRecorder)
+	}{
+		{
+			name: "start",
+			call: func(recorder *httptest.ResponseRecorder) {
+				srv.StartWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/", nil))
+			},
+		},
+		{
+			name: "continue",
+			call: func(recorder *httptest.ResponseRecorder) {
+				srv.ContinueWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/", nil), factoryapi.WorkerSessionID("source-missing"))
+			},
+		},
+		{
+			name: "top-level list",
+			call: func(recorder *httptest.ResponseRecorder) {
+				srv.ListWorkerSessions(recorder, httptest.NewRequest(http.MethodGet, "/", nil), factoryapi.ListWorkerSessionsParams{})
+			},
+		},
+		{
+			name: "top-level show",
+			call: func(recorder *httptest.ResponseRecorder) {
+				srv.GetWorkerSessionObservationByWorkerSessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), factoryapi.WorkerSessionID("worker-missing"))
+			},
+		},
+		{
+			name: "top-level read",
+			call: func(recorder *httptest.ResponseRecorder) {
+				srv.ReadWorkerSessionTranscriptByWorkerSessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), factoryapi.WorkerSessionID("worker-missing"))
+			},
+		},
+		{
+			name: "top-level stream",
+			call: func(recorder *httptest.ResponseRecorder) {
+				srv.StreamWorkerSessionEventsByTopLevelWorkerSessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), factoryapi.WorkerSessionID("worker-missing"), factoryapi.StreamWorkerSessionEventsByTopLevelWorkerSessionIdParams{})
+			},
+		},
+		{
+			name: "list",
+			call: func(recorder *httptest.ResponseRecorder) {
+				srv.ListWorkerSessionsBySessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), sessionID, factoryapi.ListWorkerSessionsBySessionIdParams{})
+			},
+		},
+		{
+			name: "show",
+			call: func(recorder *httptest.ResponseRecorder) {
+				srv.GetWorkerSessionObservationBySessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), sessionID, factoryapi.GetWorkerSessionObservationBySessionIdParams{})
+			},
+		},
+		{
+			name: "read",
+			call: func(recorder *httptest.ResponseRecorder) {
+				srv.ReadWorkerSessionTranscriptBySessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), sessionID, factoryapi.ReadWorkerSessionTranscriptBySessionIdParams{})
+			},
+		},
+		{
+			name: "stream",
+			call: func(recorder *httptest.ResponseRecorder) {
+				srv.StreamWorkerSessionEventsBySessionId(recorder, httptest.NewRequest(http.MethodGet, "/", nil), sessionID, factoryapi.StreamWorkerSessionEventsBySessionIdParams{})
+			},
+		},
+		{
+			name: "stream by worker session id",
+			call: func(recorder *httptest.ResponseRecorder) {
+				srv.StreamWorkerSessionEventsByWorkerSessionId(
+					recorder,
+					httptest.NewRequest(http.MethodGet, "/", nil),
+					sessionID,
+					factoryapi.WorkerSessionID("worker-missing"),
+					factoryapi.StreamWorkerSessionEventsByWorkerSessionIdParams{},
+				)
+			},
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			test.call(recorder)
+			if recorder.Code != http.StatusInternalServerError {
+				t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusInternalServerError, recorder.Body.String())
+			}
+			var response factoryapi.ErrorResponse
+			if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+				t.Fatalf("decode structured error: %v", err)
+			}
+			if response.Code != factoryapi.ErrorResponseCodeINTERNALERROR {
+				t.Fatalf("error code = %q, want %q", response.Code, factoryapi.ErrorResponseCodeINTERNALERROR)
+			}
+		})
+	}
+}
+
+func TestWorkerSessionControlForwardersReturnStructuredErrorWhenHandlerIsUnavailable(t *testing.T) {
+	srv := NewServer(nil, nil, nil, nil, nil, zap.NewNop())
+	cases := []struct {
+		name string
+		call func(*httptest.ResponseRecorder)
+	}{
+		{name: "interrupt", call: func(recorder *httptest.ResponseRecorder) {
+			srv.InterruptWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/", nil), factoryapi.WorkerSessionID("source-missing"))
+		}},
+		{name: "pause", call: func(recorder *httptest.ResponseRecorder) {
+			srv.PauseWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/", nil), factoryapi.WorkerSessionID("worker-missing"))
+		}},
+		{name: "resume", call: func(recorder *httptest.ResponseRecorder) {
+			srv.ResumeWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/", nil), factoryapi.WorkerSessionID("worker-missing"))
+		}},
+		{name: "cancel", call: func(recorder *httptest.ResponseRecorder) {
+			srv.CancelWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/", nil), factoryapi.WorkerSessionID("worker-missing"))
+		}},
+		{name: "terminate", call: func(recorder *httptest.ResponseRecorder) {
+			srv.TerminateWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/", nil), factoryapi.WorkerSessionID("worker-missing"))
+		}},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			test.call(recorder)
+			if recorder.Code != http.StatusInternalServerError {
+				t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusInternalServerError, recorder.Body.String())
+			}
+		})
+	}
+}
+
+func TestDashboardRoutesServeEmbeddedShellAssetsAndFallback(t *testing.T) {
+	srv := NewServer(nil, nil, nil, nil, nil, zap.NewNop())
+
+	shell := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(shell, httptest.NewRequest(http.MethodGet, "/dashboard/ui", nil))
+	if shell.Code != http.StatusOK {
+		t.Fatalf("dashboard shell status = %d, want %d: %s", shell.Code, http.StatusOK, shell.Body.String())
+	}
+	const assetMarker = "/dashboard/ui/assets/"
+	assetStart := strings.Index(shell.Body.String(), assetMarker)
+	if assetStart < 0 {
+		t.Fatalf("dashboard shell did not contain %q", assetMarker)
+	}
+	assetEnd := strings.Index(shell.Body.String()[assetStart:], "\"")
+	if assetEnd < 0 {
+		t.Fatalf("dashboard shell asset path was not quoted")
+	}
+	assetPath := shell.Body.String()[assetStart : assetStart+assetEnd]
+
+	asset := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(asset, httptest.NewRequest(http.MethodGet, assetPath, nil))
+	if asset.Code != http.StatusOK || asset.Body.Len() == 0 {
+		t.Fatalf("dashboard asset response = status %d len %d", asset.Code, asset.Body.Len())
+	}
+
+	fallback := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(fallback, httptest.NewRequest(http.MethodGet, "/dashboard/ui/client-route", nil))
+	if fallback.Code != http.StatusOK || !strings.Contains(fallback.Body.String(), "<div id=\"root\"></div>") {
+		t.Fatalf("dashboard fallback response = status %d body %q", fallback.Code, fallback.Body.String())
 	}
 }
 
 type strictModelsServiceFake struct {
 	modelinference.Service
-	list   func(context.Context) (modelinference.List, error)
-	get    func(context.Context, string) (modelinference.Detail, error)
-	invoke func(context.Context, string, modelinference.Request) (modelinference.Result, error)
-	pull   func(context.Context, string) (modelinference.PullResult, error)
+	list          func(context.Context) (modelinference.List, error)
+	get           func(context.Context, string) (modelinference.Detail, error)
+	invoke        func(context.Context, string, modelinference.Request) (modelinference.Result, error)
+	genericInvoke func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error)
+	pull          func(context.Context, string) (modelinference.PullResult, error)
 }
 
 func (fake strictModelsServiceFake) ListCatalog(ctx context.Context, _ modelinference.ListModelsRequest) (modelinference.ListModelsResult, error) {
@@ -70,7 +292,19 @@ func (fake strictModelsServiceFake) GetCatalogModel(ctx context.Context, request
 	return modelinference.GetModelResult{Model: detail}, err
 }
 
-func (fake strictModelsServiceFake) InvokeModel(ctx context.Context, name string, request modelinference.Request) (modelinference.Result, error) {
+func (fake strictModelsServiceFake) InvokeModel(ctx context.Context, request modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+	if fake.genericInvoke != nil {
+		return fake.genericInvoke(ctx, request)
+	}
+	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
+}
+
+type strictModelsServiceInvoker struct {
+	fake strictModelsServiceFake
+}
+
+func (invoker strictModelsServiceInvoker) InvokeModel(ctx context.Context, name string, request modelinference.Request) (modelinference.Result, error) {
+	fake := invoker.fake
 	if fake.invoke == nil {
 		panic("unexpected models.Service.InvokeModel call")
 	}
@@ -88,10 +322,46 @@ func newStrictModelTestServer(models strictModelsServiceFake) *Server {
 	logger := zap.NewNop()
 	return newServerFromRoles(
 		nil, nil, nil, nil, nil, nil,
-		modelshttp.NewHandler(modelshttp.NewAdapter(models, models, modelHTTPContentPreparation{}, modelHTTPTestScope()), logger),
+		modelshttp.NewHandler(modelshttp.NewAdapter(models, strictModelsServiceInvoker{fake: models}, modelHTTPContentPreparation{}, modelHTTPTestScope()), logger),
 		nil, httpFactoryValidator{}, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, logger,
 	)
+}
+
+func TestGenericModelInvocationRouteUsesRegisteredModelsHandler(t *testing.T) {
+	t.Parallel()
+
+	var captured modelinference.InvokeModelRequest
+	srv := newStrictModelTestServer(strictModelsServiceFake{
+		genericInvoke: func(_ context.Context, request modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+			captured = request
+			return modelinference.InvokeModelResult{Outputs: []modelinference.InferenceOutput{
+				{Name: "transcript", Modality: modelinference.ModalityText, ContentType: "text/plain", Content: "hello"},
+				{Name: "segments", Modality: modelinference.ModalityJSON, ContentType: "application/json", Content: "[]"},
+			}}, nil
+		},
+	})
+	recorder := httptest.NewRecorder()
+	body := `{"scope":"factory-session:caller-supplied","holder":"http-test","model":{"nameOrUri":"asr"},"operation":"ASR","inputs":[{"name":"audio","modality":"AUDIO","content":"fixture"}]}`
+
+	srv.Handler().ServeHTTP(
+		recorder,
+		httptest.NewRequest(http.MethodPost, "/models/invocations", strings.NewReader(body)),
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("generic route status = %d body = %s, want 200", recorder.Code, recorder.Body.String())
+	}
+	if captured.Scope != modelHTTPTestScope() || captured.Model.NameOrURI != "asr" || captured.Operation != "ASR" || len(captured.Inputs) != 1 {
+		t.Fatalf("generic root request = %#v, want mapped request", captured)
+	}
+	var response factoryapi.GenericModelInvocationResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode generic route response: %v", err)
+	}
+	if len(response.Outputs) != 2 || response.Outputs[0].Name != "transcript" || response.Outputs[1].Name != "segments" {
+		t.Fatalf("generic route outputs = %#v, want ordered named outputs", response.Outputs)
+	}
 }
 
 func modelHTTPTestScope() modelinference.RuntimeScopeRef {
@@ -110,7 +380,7 @@ func (modelHTTPContentPreparation) PrepareWorkContent(_ context.Context, content
 
 func newEventStreamTestServer() *Server {
 	logger := zap.NewNop()
-	return &Server{Adapter: factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{}, logger), logger: logger}
+	return &Server{factorySessionsAdapter: &factorySessionsAdapter{Adapter: factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{}, logger)}, logger: logger}
 }
 
 func canonicalFactoryEventForHTTPTest(t *testing.T, event factoryapi.FactoryEvent) interfaces.FactoryEvent {
@@ -397,8 +667,8 @@ func testInvokeModelRuntimeErrors(t *testing.T) {
 		{
 			name: "provider_execution_timeout",
 			body: validBody,
-			invokeErr: &workers.InferenceFailure{
-				Class:   workers.InferenceFailureClassTimeout,
+			invokeErr: &modelinference.InferenceFailure{
+				Class:   modelinference.InferenceFailureClassTimeout,
 				Message: "inference timed out for model \"OMNIVOICE_Q4_K_M\" operation \"TTS\": wait and retry the request",
 			},
 			wantStatus: http.StatusGatewayTimeout,

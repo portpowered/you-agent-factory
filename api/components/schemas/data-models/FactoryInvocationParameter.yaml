@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 required:
   - name
 description: One canonical invocation parameter declared on a factory.

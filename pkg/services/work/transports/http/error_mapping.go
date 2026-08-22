@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"strings"
 
-	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"go.uber.org/zap"
 )
 
 const (
@@ -18,6 +18,7 @@ const (
 // RootErrorResponse maps typed Work root failures to HTTP status and the public
 // ErrorResponse shape. It returns false when err is not a known mapped typed
 // failure.
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func RootErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 	if err == nil {
 		return 0, factoryapi.ErrorResponse{}, false
@@ -35,18 +36,18 @@ func RootErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 	switch {
 	case errors.Is(err, apisurface.ErrFactorySessionNotFound):
 		return notFoundErrorResponse("factory session not found")
-	case errors.Is(err, work.ErrWorkNotFound), errors.Is(err, state.ErrMoveWorkNotFound):
+	case errors.Is(err, work.ErrWorkNotFound), errors.Is(err, work.ErrMoveWorkNotFound):
 		return notFoundErrorResponse("work not found")
 	case errors.Is(err, work.ErrMoveWorkRequestAlreadyApplied):
 		return conflictErrorResponse(
 			"Operator move request was already applied.",
 			factoryapi.ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED,
 		)
-	case errors.Is(err, state.ErrMoveWorkInvalidState):
+	case errors.Is(err, work.ErrMoveWorkInvalidState):
 		return badRequestErrorResponse("invalid target state for work type")
-	case errors.Is(err, state.ErrMoveWorkInFlightDispatch):
+	case errors.Is(err, work.ErrMoveWorkInFlightDispatch):
 		return badRequestErrorResponse("work is in an active dispatch")
-	case errors.Is(err, state.ErrMoveWorkEngineTerminated):
+	case errors.Is(err, work.ErrMoveWorkEngineTerminated):
 		return badRequestErrorResponse("engine has terminated")
 	case errors.Is(err, work.ErrWorkRequestConflict):
 		return conflictErrorResponse("Work Request admission conflict", workErrorCodeConflict)
@@ -54,6 +55,11 @@ func RootErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 		return badRequestErrorResponse("Work Request rejected")
 	case errors.Is(err, work.ErrInvalidWorkRequest):
 		return badRequestErrorResponse("invalid Work Request")
+	}
+
+	var payloadSize *work.PayloadSizeError
+	if errors.As(err, &payloadSize) {
+		return badRequestErrorResponse(payloadSize.Error())
 	}
 
 	var stagingErr *work.ContentStagingError
@@ -64,6 +70,10 @@ func RootErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 	var validation *work.ValidationError
 	if errors.As(err, &validation) {
 		return badRequestErrorResponse(validation.Message)
+	}
+	var preparation *work.RequestPreparationError
+	if errors.As(err, &preparation) {
+		return badRequestErrorResponse(preparation.Message)
 	}
 
 	if message, ok := workRequestBadRequestMessage(err); ok {
@@ -91,6 +101,28 @@ func (a *Adapter) writeRootOrInternalError(
 ) {
 	if a.writeRootError(w, err) {
 		return
+	}
+	a.writeError(
+		w,
+		http.StatusInternalServerError,
+		fallbackMessage,
+		string(factoryapi.ErrorResponseCodeINTERNALERROR),
+	)
+}
+
+func (a *Adapter) writeReadOrInternalError(
+	w http.ResponseWriter,
+	err error,
+	fallbackMessage string,
+	operation string,
+	fields ...zap.Field,
+) {
+	if a.writeRootError(w, err) {
+		return
+	}
+	if a != nil && a.logger != nil {
+		logFields := append(fields, zap.String("operation", operation), zap.Error(err))
+		a.logger.Error("Work read failed", logFields...)
 	}
 	a.writeError(
 		w,

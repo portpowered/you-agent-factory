@@ -3,9 +3,11 @@ This is the table of contents for the Agent Factory documentation.
 The installed CLI also packages a fixed reference surface under
 `you docs`. Run `you docs` to list the packaged topics, or
 run `you docs <topic>` for packaged topics such as `agents`,
-`authoring-factories`, `config`, `mock-workers`, `record-replay`, `guards`,
-`relationships`, `work`, `workstations`, `workers`, `resources`, `models`,
-`batch-inputs`, or `templates`.
+`authoring-factories`, `packaged-factories`, `config`, `factory-validation`,
+`mock-workers`, `record-replay`, `guards`, `relationships`, `operations`,
+`work`, `workstations`, `workers`, `resources`, `models`, `providers`,
+`batch-inputs`, or
+`templates`.
 
 ## For agents
 
@@ -31,9 +33,16 @@ These are the fixed topic names accepted by `you docs <topic>`.
 - `authoring-factories` is the packaged practical factory authoring guide. Run
   `you docs authoring-factories` for workflow sequencing, runnable examples,
   mock-worker checks, and replay recording.
+- `packaged-factories` is the first-party `@you/*` Factory operator guide. Run
+  `you docs packaged-factories` for catalog discovery, live invocation help, and
+  the common per-Factory entry contract.
 - `config` is the packaged `factory.json` topology reference. Run `you docs
   config` for work types, states, workers, workstations, resources,
   portability, and top-level layout fields.
+- `factory-validation` is the packaged pre-run static validation guide. Run
+  `you docs factory-validation` for the required validate-only gate, exact
+  file/directory commands, current checks, and the boundary between static
+  acceptance and runtime execution.
 - `mock-workers` is the packaged mock-worker reference. Run `you docs
   mock-workers` for `--with-mock-workers` and the `mockWorkers` JSON contract.
 - `record-replay` is the packaged record and replay reference. Run `you docs
@@ -44,6 +53,9 @@ These are the fixed topic names accepted by `you docs <topic>`.
 - `relationships` is the packaged batch and lineage relations reference. Run
   `you docs relationships` for `DEPENDS_ON`, `PARENT_CHILD`, and runtime
   `SPAWNED_BY` semantics.
+- `operations` is the packaged real-pipeline lifetime and restart-recovery
+  runbook. Run `you docs operations` for continuous operation, finite-drain
+  classification, and same-name Work restoration.
 - `work` is the packaged submitted-work reference. Run `you docs work` for
   session-scoped work routes, tags, batch cross-links, and submission-oriented runtime flow.
 - `workstations` is the packaged workstation reference. `workstation` remains
@@ -51,6 +63,9 @@ These are the fixed topic names accepted by `you docs <topic>`.
   workstations` for the canonical workstation guide.
 - `workers` is the packaged worker quick reference. Run `you docs workers` for
   the canonical worker guide.
+- `providers` is the canonical worker/provider selection and limits guide. Run
+  `you docs providers` for configured model roles, modality and tool limits,
+  Factory versus ad-hoc settings, AGY semantics, and ACP integrations.
 - `resources` is the packaged bounded-concurrency reference. Run `you docs
   resources` for the resource slice and `you docs config` for top-level topology
   fields.
@@ -76,11 +91,16 @@ These are the fixed topic names accepted by `you docs <topic>`.
     behavior, and workstation-scoped execution settings.
   - `you docs workers` owns worker types, worker-scoped runtime fields, and split
     `workers/<name>/AGENTS.md` placement.
+  - `you docs providers` owns worker/provider selection, model capabilities and
+    limits, provider-specific effort, Factory versus ad-hoc settings, and AGY
+    or ACP provider guidance.
   - `you docs batch-inputs` owns `FACTORY_REQUEST_BATCH` ingress, watched-file
     placement, and authored relation types (`batch-work` remains a CLI alias for
     the same guide).
 - Run `you docs config` for the canonical split layout, `factory.json`, and where
   worker, workstation, and input files live.
+- Run `you docs factory-validation` before the first Factory run and after
+  authored topology, guard, route, schema, or split-layout changes.
 - Run `you docs resources` for top-level resource pools and workstation or
   worker resource requirements.
 - Run `you docs templates` for supported Go-template surfaces, the complete

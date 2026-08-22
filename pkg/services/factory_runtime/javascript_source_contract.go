@@ -1,6 +1,6 @@
 package factory
 
-import workflowsource "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/source"
+import workflowsource "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript/source"
 
 type (
 	WorkflowSourceKind                 = workflowsource.Kind

@@ -2,6 +2,7 @@
 
 export const mockedBackendBrowserIntegrationFiles = [
   "integration/browser-test-harness.artifacts.integration.test.mjs",
+  "integration/native-scrollbar.integration.test.mjs",
   "integration/dashboard-session-recovery-manual-scenarios-switching.integration.test.mjs",
   "integration/dashboard-session-recovery-manual-scenarios.integration.test.mjs",
   "integration/dashboard-session-recovery.integration.test.mjs",
@@ -15,6 +16,7 @@ export const mockedBackendBrowserIntegrationFiles = [
   "integration/factory-import-second-session.integration.test.mjs",
   "integration/maintainer-phantom-worker-graph.integration.test.mjs",
   "integration/packaged-factories-hosted-route.integration.test.mjs",
+  "integration/worker-session-timeline.integration.test.mjs",
 ];
 
 export const mockedBackendBrowserIntegrationPhaseName =

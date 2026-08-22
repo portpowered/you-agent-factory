@@ -31,6 +31,10 @@ func AnnotateDrift(base generatedartifacts.Drift) Drift {
 		RunSubmitFamilyCommandIDsPath: RunSubmitFamilyCommandIDs,
 		MCPFamilyJSONPath:             MCPFamilyCommandIDs,
 		MCPFamilyCommandIDsPath:       MCPFamilyCommandIDs,
+		ProvidersFamilyJSONPath:       ProvidersFamilyCommandIDs,
+		ProvidersFamilyCommandIDsPath: ProvidersFamilyCommandIDs,
+		MetricsFamilyJSONPath:         MetricsFamilyCommandIDs,
+		MetricsFamilyCommandIDsPath:   MetricsFamilyCommandIDs,
 	}
 	for _, paths := range [][]string{drift.Missing, drift.Stale} {
 		for _, path := range paths {

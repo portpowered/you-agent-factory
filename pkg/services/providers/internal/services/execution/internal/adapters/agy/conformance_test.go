@@ -5,6 +5,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
@@ -39,7 +40,7 @@ func newAgyConformanceRoot(
 	if err != nil {
 		return nil, err
 	}
-	return providerservice.New(catalog, executionService)
+	return providerservice.New(catalog, executionService, logging.NoopLogger{})
 }
 
 type agyConformanceState struct {
@@ -65,14 +66,14 @@ func newAgyConformanceAdapter(plan executiontest.Plan) executiontest.Adapter {
 
 func (state *agyConformanceState) execute(
 	ctx context.Context,
-	request providers.ExecuteRequest,
+	request execution.ContinuationRequest,
 	observe func([]byte) error,
 ) (agy.EffectResult, error) {
 	state.mu.Lock()
 	state.observation.Calls++
 	state.observation.Requests = append(
 		state.observation.Requests,
-		request.Clone(),
+		request.ExecuteRequest.Clone(),
 	)
 	state.mu.Unlock()
 	state.startOnce.Do(func() { close(state.started) })
@@ -82,7 +83,7 @@ func (state *agyConformanceState) execute(
 		state.mu.Unlock()
 	}()
 	if state.plan.MutateRequest {
-		request.ResumeSession.ID = "agy-effect-mutated"
+		request.UserMessage = "agy-effect-mutated"
 	}
 	if state.plan.WaitForContext {
 		<-ctx.Done()

@@ -107,6 +107,8 @@ type WorkItem struct {
 	Content                  []ContentPart
 	ParentID                 string
 	PlaceID                  string
+	StructuredResult         any
+	StructuredResultPresent  bool
 	Tags                     map[string]string
 }
 
@@ -121,9 +123,21 @@ type InvocationWorldState struct {
 	FailedWorkItemsByID      map[string]WorkItem
 	TerminalWorkByID         map[string]InvocationTerminalWork
 	WorkStateChangesByWorkID map[string][]InvocationWorkStateChange
+	PendingHumanApprovals    []InvocationHumanApproval
 	FactoryState             string
 	JavaScriptRuntime        *InvocationJavaScriptRuntime
 	SessionBracket           *InvocationSessionBracket
+}
+
+type InvocationHumanApproval struct {
+	ApprovalID      string
+	SessionID       string
+	DispatchID      string
+	WorkstationID   string
+	WorkstationName string
+	Decisions       []string
+	Status          string
+	WorkItemIDs     []string
 }
 
 func (s InvocationWorldState) InvocationWorldState() InvocationWorldState { return s }

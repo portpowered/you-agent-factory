@@ -81,44 +81,71 @@ func TestCoverageTestJobs(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name string
-		cfg  config
-		want int
+		name        string
+		cfg         config
+		targetOS    string
+		logicalCPUs int
+		want        int
 	}{
-		{name: "unit serializes coverage writers", cfg: config{suite: "unit"}, want: defaultCoverageJobs},
-		{name: "functional serializes coverage writers", cfg: config{suite: "functional"}, want: defaultCoverageJobs},
-		{name: "explicit override", cfg: config{suite: "functional", jobs: 1}, want: 1},
+		{name: "unit uses the non-Windows runner CPU count", cfg: config{suite: "unit"}, targetOS: "linux", logicalCPUs: 4, want: 4},
+		{name: "unit follows another positive non-Windows CPU count", cfg: config{suite: "unit"}, targetOS: "linux", logicalCPUs: 8, want: 8},
+		{name: "unit defaults to one Windows coverage builder", cfg: config{suite: "unit"}, targetOS: "windows", logicalCPUs: 64, want: 1},
+		{name: "empty suite defaults to one Windows unit builder", cfg: config{}, targetOS: "windows", logicalCPUs: 64, want: 1},
+		{name: "functional keeps the shared Windows default", cfg: config{suite: "functional"}, targetOS: "windows", logicalCPUs: 64, want: defaultCoverageJobs},
+		{name: "functional keeps the shared non-Windows default", cfg: config{suite: "functional"}, targetOS: "linux", logicalCPUs: 64, want: defaultCoverageJobs},
+		{name: "invalid CPU input uses the shared fallback", cfg: config{suite: "unit"}, targetOS: "linux", logicalCPUs: 0, want: defaultCoverageJobs},
+		{name: "explicit override wins on Windows", cfg: config{suite: "unit", jobs: 9}, targetOS: "windows", logicalCPUs: 64, want: 9},
+		{name: "explicit override wins on non-Windows", cfg: config{suite: "unit", jobs: 7}, targetOS: "linux", logicalCPUs: 4, want: 7},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := tc.cfg.testJobs(); got != tc.want {
-				t.Fatalf("config.testJobs() = %d, want %d", got, tc.want)
+			if got := tc.cfg.testJobs(tc.targetOS, tc.logicalCPUs); got != tc.want {
+				t.Fatalf("config.testJobs(%q, %d) = %d, want %d", tc.targetOS, tc.logicalCPUs, got, tc.want)
 			}
 		})
 	}
 }
 
-func TestPartitionCoveragePackagesKeepsExactInventoryWithinArgumentLimit(t *testing.T) {
-	packages := []string{"example.com/alpha", "example.com/beta", "example.com/gamma"}
-	shards := partitionCoveragePackages(packages, len("-coverpkg=example.com/alpha,example.com/beta"))
-	if len(shards) != 2 {
-		t.Fatalf("shard count = %d, want 2: %v", len(shards), shards)
-	}
-	var flattened []string
-	for _, shard := range shards {
-		flattened = append(flattened, shard...)
-		if got := len("-coverpkg=" + strings.Join(shard, ",")); got > len("-coverpkg=example.com/alpha,example.com/beta") {
-			t.Fatalf("coverage argument length = %d", got)
-		}
-	}
-	if !slices.Equal(flattened, packages) {
-		t.Fatalf("flattened packages = %v, want %v", flattened, packages)
-	}
+func TestRunForOSWithCPUUsesDerivedUnitJobs(t *testing.T) {
+	originalCommandRunner := commandRunner
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	t.Cleanup(func() {
+		commandRunner = originalCommandRunner
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	})
 
-	args := replaceCoveragePackageArgument([]string{"test", "-coverpkg=old", "-short"}, shards[0])
-	if got := strings.Join(args, " "); got != "test -coverpkg=example.com/alpha,example.com/beta -short" {
-		t.Fatalf("replaced args = %q", got)
+	var invocations []commandInvocation
+	var stdout strings.Builder
+	var stderr strings.Builder
+	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		invocations = append(invocations, invocation)
+		return fakeGoCoverageCommandPassing(invocation)
+	}
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	_, err := runForOSWithCPU(config{
+		min:       0,
+		suite:     "unit",
+		totalOnly: true,
+		coverpkg:  strings.Join([]string{modulePath + "/pkg/config", modulePath + "/pkg/service"}, ","),
+		packages:  "./pkg/config",
+		profile:   filepath.Join(t.TempDir(), "coverage.out"),
+	}, "linux", 4)
+	if err != nil {
+		t.Fatalf("runForOSWithCPU() error = %v", err)
+	}
+	if len(invocations) != 1 {
+		t.Fatalf("coverage invocations = %d, want one", len(invocations))
+	}
+	if !slices.Contains(invocations[0].args, "-p=4") {
+		t.Fatalf("go test args = %v, want CPU-derived -p=4", invocations[0].args)
+	}
+	if stdout.Len() == 0 || stderr.Len() != 0 {
+		t.Fatalf("coverage output = stdout %q, stderr %q; want stdout only", stdout.String(), stderr.String())
 	}
 }
 
@@ -201,8 +228,22 @@ func TestValidateConfigRejectsConflictingManifestOperations(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "choose only one") {
 		t.Fatalf("validateConfig() error = %v, want conflicting operation diagnostic", err)
 	}
-	if err := validateConfig(config{updateManifest: "minimums.json"}); err != nil {
-		t.Fatalf("validateConfig() single update error = %v", err)
+	if err := validateConfig(config{updateManifest: "minimums.json"}); err == nil || !strings.Contains(err.Error(), "-update-manifest requires -update-profiles") {
+		t.Fatalf("validateConfig() single update error = %v, want sampled-update requirement", err)
+	}
+	if err := validateConfig(config{updateProfiles: "one.out,two.out"}); err == nil || !strings.Contains(err.Error(), "-update-profiles requires -update-manifest") {
+		t.Fatalf("validateConfig() profile-only update error = %v, want manifest requirement", err)
+	}
+}
+
+func TestValidateConfigRejectsInvalidPackageFloorEpsilon(t *testing.T) {
+	t.Parallel()
+
+	for _, epsilon := range []float64{-0.01, -1} {
+		err := validateConfig(config{packageFloorEpsilon: epsilon})
+		if err == nil || !strings.Contains(err.Error(), "-package-floor-epsilon must be a finite non-negative percentage-point value") {
+			t.Fatalf("validateConfig(%v) error = %v, want actionable epsilon diagnostic", epsilon, err)
+		}
 	}
 }
 

@@ -13,6 +13,7 @@ type recordingsHTTPOperation int
 const (
 	recordingsHTTPOperationEventSubscribe recordingsHTTPOperation = iota
 	recordingsHTTPOperationArtifactRead
+	recordingsHTTPOperationHistoricalRead
 )
 
 // RootErrorResponse maps typed Recordings root failures to HTTP status and the
@@ -34,6 +35,22 @@ func RootErrorResponse(err error, operation recordingsHTTPOperation) (int, facto
 		}
 		if isRecordingMissingTargetError(err) {
 			return notFoundErrorResponse("factory session artifact not found")
+		}
+	case recordingsHTTPOperationHistoricalRead:
+		var historicalErr *recordings.HistoricalRecordingQueryError
+		if errors.As(err, &historicalErr) {
+			switch historicalErr.Kind {
+			case recordings.HistoricalRecordingQueryErrorInvalidRequest:
+				return badRequestErrorResponse("invalid historical recording request")
+			case recordings.HistoricalRecordingQueryErrorMissingHistory:
+				return notFoundErrorResponse("factory session history not found")
+			case recordings.HistoricalRecordingQueryErrorUnavailable:
+				return http.StatusConflict, factoryapi.ErrorResponse{
+					Message: "factory session history is not finalized",
+					Family:  factoryapi.ErrorFamilyConflict,
+					Code:    factoryapi.ErrorResponseCodePROJECTIONUNAVAILABLE,
+				}, true
+			}
 		}
 	}
 
@@ -111,6 +128,8 @@ func internalErrorMessage(operation recordingsHTTPOperation) string {
 	switch operation {
 	case recordingsHTTPOperationEventSubscribe:
 		return "failed to subscribe to factory events"
+	case recordingsHTTPOperationHistoricalRead:
+		return "failed to read factory session history"
 	default:
 		return "failed to read factory session artifacts"
 	}

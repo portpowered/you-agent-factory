@@ -2,11 +2,15 @@ package wire
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -17,7 +21,9 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
+	factoryvisualizationhttp "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"go.uber.org/zap"
@@ -40,13 +46,118 @@ type testStdioApplication struct{}
 
 func (testStdioApplication) Run(context.Context) error { return nil }
 
+type workerSessionsObservationServiceStub struct {
+	workersessions.Service
+}
+
+type workerSessionsObservationGatewayStub struct {
+	factorysessions.Service
+	observation workersessions.ObservationService
+}
+
+type metricsSessionProjectionReaderStub struct {
+	projection factorysessions.SessionProjection
+	err        error
+	gotID      string
+}
+
+func (stub *metricsSessionProjectionReaderStub) GetFactorySession(
+	_ context.Context,
+	sessionID string,
+) (factorysessions.SessionProjection, error) {
+	stub.gotID = sessionID
+	return stub.projection, stub.err
+}
+
+func TestMetricsSessionScopeResolverUsesRetainedProjectionIdentities(t *testing.T) {
+	reader := &metricsSessionProjectionReaderStub{
+		projection: factorysessions.SessionProjection{
+			Context: factorysessions.ProjectionContext{
+				Session:             &factorysessions.ScopedLiveSessionSummary{IsDefault: true},
+				FactorySessionID:    "public-live-id",
+				BackendScopeID:      "context-backend-id",
+				LogicalSessionKeyID: "context-logical-id",
+			},
+			Runtime: factorysessions.RuntimeProjection{
+				StreamIdentity: &factorysessions.RuntimeStreamIdentity{
+					FactorySessionID:    "retained-runtime-id",
+					BackendScopeID:      "runtime-backend-id",
+					LogicalSessionKeyID: "retained-logical-id",
+				},
+			},
+		},
+	}
+	resolver := newMetricsFactorySessionScopeResolver(reader)
+	got, err := resolver.ResolveMetricsSessionScope(context.Background(), " public-live-id ")
+	if err != nil {
+		t.Fatalf("ResolveMetricsSessionScope() error = %v", err)
+	}
+	if reader.gotID != "public-live-id" {
+		t.Fatalf("reader selector = %q, want trimmed selector", reader.gotID)
+	}
+	want := []string{
+		"retained-runtime-id", "public-live-id", factorysessions.DefaultSessionID,
+	}
+	if len(got.RetainedIDs) != len(want) {
+		t.Fatalf("retained IDs = %#v, want %#v", got.RetainedIDs, want)
+	}
+	for index := range want {
+		if got.RetainedIDs[index] != want[index] {
+			t.Fatalf("retained IDs = %#v, want %#v", got.RetainedIDs, want)
+		}
+	}
+}
+
+func TestMetricsSessionScopeResolverRejectsDiscoverableProjectionWithoutRetainedIdentity(t *testing.T) {
+	resolver := newMetricsFactorySessionScopeResolver(&metricsSessionProjectionReaderStub{
+		projection: factorysessions.SessionProjection{
+			Context: factorysessions.ProjectionContext{
+				FactorySessionID: "public-live-id",
+			},
+		},
+	})
+	_, err := resolver.ResolveMetricsSessionScope(context.Background(), "public-live-id")
+	if err == nil || !strings.Contains(err.Error(), "no retained metrics scope") {
+		t.Fatalf("ResolveMetricsSessionScope() error = %v, want retained-scope failure", err)
+	}
+	var typed *factoryvisualizationhttp.MetricsScopeError
+	if !errors.As(err, &typed) {
+		t.Fatalf("error = %T, want typed MetricsScopeError", err)
+	}
+}
+
+func (stub *workerSessionsObservationGatewayStub) WorkerSessionsObservationForSession(
+	string,
+) workersessions.ObservationService {
+	return stub.observation
+}
+
+func TestWorkerSessionsScopeResolverForwardsObservationCapability(t *testing.T) {
+	t.Parallel()
+
+	expected := &workerSessionsObservationServiceStub{}
+	resolver := newWorkerSessionsFactorySessionScopeResolver(&workerSessionsObservationGatewayStub{
+		observation: expected,
+	})
+	provider, ok := resolver.(interface {
+		WorkerSessionsObservationForSession(string) workersessions.ObservationService
+	})
+	if !ok {
+		t.Fatal("Worker Sessions scope resolver does not expose the optional observation capability")
+	}
+	if got := provider.WorkerSessionsObservationForSession("factory-session-1"); got != expected {
+		t.Fatalf("forwarded observation service = %T, want %T", got, expected)
+	}
+}
+
 func TestStdioApplicationOpenerMapsOnlyInvocationEdgeValues(t *testing.T) {
 	t.Parallel()
 
 	input := strings.NewReader("request")
 	output := &strings.Builder{}
 	opening := &recordingStdioOpening{result: testStdioApplication{}}
-	adapter, err := provideStdioApplicationOpener(opening)
+	owner := factorysessionwire.NewOpeningPresentationOwner()
+	adapter, err := provideStdioApplicationOpener(opening, owner)
 	if err != nil {
 		t.Fatalf("provideStdioApplicationOpener(): %v", err)
 	}
@@ -61,21 +172,25 @@ func TestStdioApplicationOpenerMapsOnlyInvocationEdgeValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenStdio(): %v", err)
 	}
-	if application != opening.result {
-		t.Fatal("OpenStdio() did not return the exact lifecycle-ready application")
+	if application == nil {
+		t.Fatal("OpenStdio() returned a nil lifecycle-ready application")
 	}
 	request := opening.request
+	presentation, ok := owner.Stdio(request.ScopeID)
+	if !ok {
+		t.Fatalf("stdio opening scope %q was not registered", request.ScopeID)
+	}
 	if request.FixtureCatalogPath != "fixtures.json" || !request.RuntimeBacked ||
 		request.ProjectRoot != "/project" || request.SystemConfigHome != "/home" ||
-		request.Input != input || request.Output != output {
-		t.Fatalf("mapped stdio opening request = %#v", request)
+		presentation.Input != input || presentation.Output != output {
+		t.Fatalf("mapped stdio opening = request:%#v presentation:%#v", request, presentation)
 	}
 }
 
 func TestStdioApplicationOpenerRequiresOwnerOperation(t *testing.T) {
 	t.Parallel()
 
-	adapter, err := provideStdioApplicationOpener(nil)
+	adapter, err := provideStdioApplicationOpener(nil, nil)
 	if err == nil || adapter != nil {
 		t.Fatalf("provideStdioApplicationOpener(nil) = (%v, %v), want nil and error", adapter, err)
 	}
@@ -120,7 +235,7 @@ func TestWorkRequestEffectsUseExplicitEdgesOrProcessDefaults(t *testing.T) {
 	}
 }
 
-func TestProvideWorkFactoryConstructsThroughWorkWireBridge(t *testing.T) {
+func TestProvideWorkServiceConstructsThroughWorkWireBridge(t *testing.T) {
 	t.Parallel()
 
 	staging, err := provideWorkContentStagingService(serviceedges.Edges{})
@@ -133,14 +248,11 @@ func TestProvideWorkFactoryConstructsThroughWorkWireBridge(t *testing.T) {
 		t.Fatalf("provideContentMaterializer() error = %v", err)
 	}
 	readFile := provideWorkSubmittedFileReader(serviceedges.Edges{})
+	inspectPath := provideWorkSubmittedFilePathInspector(serviceedges.Edges{})
 
-	factory := provideWorkFactory(readFile, staging, materializer)
-	if factory == nil {
-		t.Fatal("provideWorkFactory() returned nil factory")
-	}
-	service := factory(nil)
+	service := provideWorkService(nil, readFile, inspectPath, staging, materializer)
 	if service == nil {
-		t.Fatal("Work factory returned nil service")
+		t.Fatal("provideWorkService() returned nil service")
 	}
 	var root work.Service = service
 	if root == nil {
@@ -425,10 +537,11 @@ func TestRuntimeOpeningRequestFactoryMapsSelectionsIntoOwnerRequests(t *testing.
 		HomeDir: "home", WorkFile: "work.json", BindHost: "127.0.0.1",
 		Port: 8080, AutoPort: true,
 		Continuously: true, Verbose: true, RecordPath: "record.json",
-		ReplayPath: "replay.json", Workflow: "flow", ModelCacheDir: "models",
+		ReplayPath: "replay.json", ResumePath: "source.recording.json", Workflow: "flow", ModelCacheDir: "models",
+		WorkerReasoningEffort:             "xhigh",
 		InvocationSkipPermissionsOverride: &skip,
-	}, mocks, func(factorysessions.RuntimeHostBinding) {})
-	request := opening.Runtime
+	}, mocks)
+	request := opening
 
 	if request.FactoryDefinition.Directory != "factory" ||
 		request.FactoryDefinition.SourcePath != "/tmp/factory.json" ||
@@ -444,34 +557,54 @@ func TestRuntimeOpeningRequestFactoryMapsSelectionsIntoOwnerRequests(t *testing.
 		!request.FactorySession.Host.AutoPort {
 		t.Fatalf("Factory Session request = %#v", request.FactorySession)
 	}
+	if request.FactorySession.PersistencePolicy != factorysessions.PersistencePolicyEnabled {
+		t.Fatalf("Factory Session persistence policy = %q, want %q", request.FactorySession.PersistencePolicy, factorysessions.PersistencePolicyEnabled)
+	}
 	if request.Workers.RunnerID != "runner" || request.Workers.Worktree != "feature-login" ||
+		request.Workers.WorkerReasoningEffort != "xhigh" ||
 		request.Workers.MockWorkers != mocks || request.Workers.InvocationSkipPermissionsOverride != &skip {
 		t.Fatalf("Workers request = %#v", request.Workers)
 	}
-	if request.Recordings.RecordPath != "record.json" || request.Recordings.ReplayPath != "replay.json" || request.Recordings.WorkflowID != "flow" {
+	if request.Recordings.RecordPath != "record.json" || request.Recordings.ReplayPath != "replay.json" ||
+		request.Recordings.ResumePath != "source.recording.json" || request.Recordings.WorkflowID != "flow" {
 		t.Fatalf("Recordings request = %#v", request.Recordings)
 	}
-	if request.Models.CacheDirectory != "models" || opening.Ports.InvocationMetricsRecorder != nil || opening.Ports.RuntimeHostObserver == nil {
-		t.Fatalf("Models/ports = %#v / %#v", request.Models, opening.Ports)
+	if request.ModelCacheDirectory != "models" {
+		t.Fatalf("Model cache directory = %#v", request.ModelCacheDirectory)
 	}
 }
 
-func TestRuntimeInputResolverMergesEdgesAndProjectsExactExternalEffects(t *testing.T) {
+func TestRuntimeOpeningRequestFactorySelectsEnabledPersistenceForBatchAndService(t *testing.T) {
 	t.Parallel()
-	defaultClock := platformclock.Real{}
-	defaultMetrics := &runtimeInputMetricsRecorder{}
-	invocationMetrics := &runtimeInputMetricsRecorder{}
-	invocationObserver := factorysessions.RuntimeHostObserver(func(factorysessions.RuntimeHostBinding) {})
+	for _, test := range []struct {
+		name         string
+		continuously bool
+		mode         factorydefinitions.RuntimeMode
+	}{
+		{name: "batch", mode: factorydefinitions.RuntimeModeBatch},
+		{name: "service", continuously: true, mode: factorydefinitions.RuntimeModeService},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := provideRuntimeOpeningRequestFactory()(runcli.RunConfig{
+				Dir:          "factory",
+				Continuously: test.continuously,
+			}, nil)
+			if request.FactoryRuntime.Mode != test.mode {
+				t.Fatalf("runtime mode = %q, want %q", request.FactoryRuntime.Mode, test.mode)
+			}
+			if request.FactorySession.PersistencePolicy != factorysessions.PersistencePolicyEnabled {
+				t.Fatalf("persistence policy = %q, want %q", request.FactorySession.PersistencePolicy, factorysessions.PersistencePolicyEnabled)
+			}
+		})
+	}
+}
+
+func TestRuntimeInputResolverCopiesRequestWithoutSelectingEffects(t *testing.T) {
+	t.Parallel()
 	request := &factorysessions.RuntimeOpeningRequest{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "factory"},
 	}
-	resolver := provideRuntimeInputResolver(
-		serviceedges.Edges{Clock: defaultClock, InvocationMetricsRecorder: defaultMetrics}, provideFactoryRuntimeClockResolver(),
-	)
-	resolved, err := resolver(t.Context(), request, factorysessionwire.ApplicationOpeningPorts{
-		InvocationMetricsRecorder: invocationMetrics,
-		RuntimeHostObserver:       invocationObserver,
-	}, zap.NewNop())
+	resolved, err := provideRuntimeInputResolver()(t.Context(), request)
 	if err != nil {
 		t.Fatalf("resolve inputs: %v", err)
 	}
@@ -482,70 +615,54 @@ func TestRuntimeInputResolverMergesEdgesAndProjectsExactExternalEffects(t *testi
 	if resolved.Request.FactoryDefinition.Directory != "factory" {
 		t.Fatal("resolved request retained caller mutation")
 	}
-	if resolved.Effects.Clock == nil || resolved.Logger == nil {
-		t.Fatalf("resolved effects/logger = %#v / %#v", resolved.Effects, resolved.Logger)
-	}
-	if resolved.Effects.InvocationMetricsRecorder != invocationMetrics || resolved.Effects.RuntimeHostObserver == nil {
-		t.Fatalf("resolved invocation ports = %#v, want exact invocation replacements", resolved.Effects)
-	}
 }
 
-func TestProjectRuntimeOpeningExternalEffectsSelectsExactPortsFromProcessEdges(t *testing.T) {
+func TestFactoryRuntimeEffectProvidersSelectExactProcessEdges(t *testing.T) {
 	t.Parallel()
-
 	clock := platformclock.Real{}
 	metrics := &runtimeInputMetricsRecorder{}
-	observer := factorysessions.RuntimeHostObserver(func(factorysessions.RuntimeHostBinding) {})
-	effects := projectRuntimeOpeningExternalEffects(serviceedges.Edges{
-		Clock:                     clock,
-		InvocationMetricsRecorder: metrics,
-		RuntimeHostObserver:       observer,
-		HostedLinearEndpoint:      "https://example.test",
-	})
-	if effects.Clock != clock {
-		t.Fatalf("Clock = %v, want process-edge override", effects.Clock)
-	}
-	if effects.InvocationMetricsRecorder != metrics || effects.RuntimeHostObserver == nil {
-		t.Fatalf("invocation ports = %#v, want projected replacements", effects)
-	}
-	if effects.HostedLinearEndpoint != "https://example.test" {
-		t.Fatalf("HostedLinearEndpoint = %q, want process-edge override", effects.HostedLinearEndpoint)
-	}
-}
-
-func TestProjectRuntimeOpeningExternalEffectsDefaultsCommandRunnersWhenUnset(t *testing.T) {
-	t.Parallel()
-
-	effects := projectRuntimeOpeningExternalEffects(serviceedges.Edges{
-		Clock: platformclock.Real{},
-	})
-	if effects.ProviderCommandRunner == nil || effects.ScriptCommandRunner == nil {
-		t.Fatalf(
-			"command runners = (%v, %v), want default platform runners when process edges omit overrides",
-			effects.ProviderCommandRunner,
-			effects.ScriptCommandRunner,
-		)
-	}
-}
-
-func TestProjectRuntimeOpeningExternalEffectsPreservesCommandRunnerOverrides(t *testing.T) {
-	t.Parallel()
-
 	providerRunner := &processCommandRunner{}
 	scriptRunner := &processCommandRunner{}
-	effects := projectRuntimeOpeningExternalEffects(serviceedges.Edges{
-		Clock:                 platformclock.Real{},
-		ProviderCommandRunner: providerRunner,
-		ScriptCommandRunner:   scriptRunner,
-	})
-	if effects.ProviderCommandRunner != providerRunner || effects.ScriptCommandRunner != scriptRunner {
-		t.Fatalf(
-			"command runners = (%v, %v), want explicit process-edge overrides (%v, %v)",
-			effects.ProviderCommandRunner,
-			effects.ScriptCommandRunner,
-			providerRunner,
-			scriptRunner,
-		)
+	edges := serviceedges.Edges{
+		Clock:                     clock,
+		InvocationMetricsRecorder: metrics,
+		ProviderCommandRunner:     providerRunner,
+		ScriptCommandRunner:       scriptRunner,
+	}
+	if got := provideFactoryRuntimeClock(edges); got != clock {
+		t.Fatalf("clock = %v, want exact edge", got)
+	}
+	if got := provideFactorySessionInvocationMetricsRecorder(edges); got != metrics {
+		t.Fatalf("metrics recorder = %v, want exact edge", got)
+	}
+	gotProvider, err := provideFactoryRuntimeProviderCommandRunner(edges)
+	if err != nil {
+		t.Fatalf("provider command runner: %v", err)
+	}
+	gotScript, err := provideFactoryRuntimeScriptCommandRunner(edges)
+	if err != nil {
+		t.Fatalf("script command runner: %v", err)
+	}
+	if workers.ProjectPlatformCommandRunner(gotProvider) != providerRunner {
+		t.Fatalf("provider command runner = %v, want edge runner %v", gotProvider, providerRunner)
+	}
+	if workers.ProjectPlatformCommandRunner(gotScript) != scriptRunner {
+		t.Fatalf("script command runner = %v, want edge runner %v", gotScript, scriptRunner)
+	}
+}
+
+func TestFactoryRuntimeEffectProvidersDefaultCommandRunnersWhenUnset(t *testing.T) {
+	t.Parallel()
+	providerRunner, err := provideFactoryRuntimeProviderCommandRunner(serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("provider command runner: %v", err)
+	}
+	scriptRunner, err := provideFactoryRuntimeScriptCommandRunner(serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("script command runner: %v", err)
+	}
+	if providerRunner == nil || scriptRunner == nil {
+		t.Fatalf("command runners = (%v, %v), want defaults", providerRunner, scriptRunner)
 	}
 }
 
@@ -556,28 +673,204 @@ func (*runtimeInputMetricsRecorder) RecordInvocationMetric(factorysessions.Invoc
 func TestRuntimeInputResolverRejectsMissingRequiredInputs(t *testing.T) {
 	t.Parallel()
 	request := &factorysessions.RuntimeOpeningRequest{}
-	validEdges := serviceedges.Edges{Clock: platformclock.Real{}}
 	tests := []struct {
 		name    string
 		ctx     context.Context
 		request *factorysessions.RuntimeOpeningRequest
-		edges   serviceedges.Edges
-		logger  *zap.Logger
 		want    string
 	}{
-		{name: "nil context", request: request, edges: validEdges, logger: zap.NewNop(), want: "context is required"},
-		{name: "nil request", ctx: t.Context(), edges: validEdges, logger: zap.NewNop(), want: "runtime opening request is required"},
-		{name: "nil logger", ctx: t.Context(), request: request, edges: validEdges, want: "runtime logger is required"},
-		{name: "nil clock", ctx: t.Context(), request: request, logger: zap.NewNop(), want: "runtime clock edge is required"},
+		{name: "nil context", request: request, want: "context is required"},
+		{name: "nil request", ctx: t.Context(), want: "runtime opening request is required"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := provideRuntimeInputResolver(test.edges, func(clock factoryruntime.Clock) factoryruntime.Clock {
-				return clock
-			})(test.ctx, test.request, factorysessionwire.ApplicationOpeningPorts{}, test.logger)
+			_, err := provideRuntimeInputResolver()(test.ctx, test.request)
 			if err == nil || err.Error() != test.want {
 				t.Fatalf("error = %v, want %q", err, test.want)
 			}
 		})
+	}
+}
+
+type runtimeObservabilityTestOwners struct {
+	logOwner     factoryruntime.RuntimeLogOwner
+	metricsOwner factoryruntime.RuntimeMetricsOwner
+	logRoot      string
+	metricsRoot  string
+}
+
+func newRuntimeObservabilityTestOwners(t *testing.T) runtimeObservabilityTestOwners {
+	t.Helper()
+	at := time.Date(2026, time.August, 10, 15, 4, 2, 0, time.UTC)
+	root := t.TempDir()
+	owners := runtimeObservabilityTestOwners{
+		logRoot:     filepath.Join(root, "logs"),
+		metricsRoot: filepath.Join(root, "metrics"),
+	}
+	reserver, err := provideRuntimeArtifactPathReserver()
+	if err != nil {
+		t.Fatalf("provideRuntimeArtifactPathReserver(): %v", err)
+	}
+	var logCollision atomic.Int32
+	owners.logOwner, err = provideRuntimeLogOwner(
+		zap.NewNop(), func() time.Time { return at },
+		func() string { return "log-" + strconv.Itoa(int(logCollision.Add(1))) }, reserver,
+	)
+	if err != nil {
+		t.Fatalf("provideRuntimeLogOwner(): %v", err)
+	}
+	var metricCollision atomic.Int32
+	owners.metricsOwner, err = provideRuntimeMetricsOwner(
+		func() time.Time { return at },
+		func() string { return "metric-" + strconv.Itoa(int(metricCollision.Add(1))) }, reserver,
+	)
+	if err != nil {
+		t.Fatalf("provideRuntimeMetricsOwner(): %v", err)
+	}
+	assertRuntimeObservabilityConstructionIsInert(t, owners)
+	return owners
+}
+
+func assertRuntimeObservabilityConstructionIsInert(t *testing.T, owners runtimeObservabilityTestOwners) {
+	t.Helper()
+	for name, root := range map[string]string{"log": owners.logRoot, "metrics": owners.metricsRoot} {
+		if _, err := os.Stat(root); !os.IsNotExist(err) {
+			t.Fatalf("%s root after owner construction stat error = %v, want not exist", name, err)
+		}
+	}
+}
+
+func TestRuntimeLogOwnerKeepsPrivateScopesIsolated(t *testing.T) {
+	t.Parallel()
+	owners := newRuntimeObservabilityTestOwners(t)
+	first := openRuntimeLogTestScope(t, owners.logOwner, owners.logRoot, "session-first")
+	second := openRuntimeLogTestScope(t, owners.logOwner, owners.logRoot, "session-second")
+	if first.Artifact().Path == second.Artifact().Path {
+		t.Fatalf("log scope paths collide: %q", first.Artifact().Path)
+	}
+	first.Logger().Info("first session log")
+	second.Logger().Info("second session log")
+	if err := first.Close(); err != nil {
+		t.Fatalf("close first log scope: %v", err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatalf("close first log scope twice: %v", err)
+	}
+	second.Logger().Info("second session remains open")
+	defer second.Close()
+	assertRuntimeLogRecords(t, first, second)
+}
+
+func openRuntimeLogTestScope(t *testing.T, owner factoryruntime.RuntimeLogOwner, root, sessionID string) factoryruntime.RuntimeLogSink {
+	t.Helper()
+	sink, err := owner.Open(factoryruntime.RuntimeLogScopeRequest{
+		SessionID: sessionID, RuntimeInstanceID: "runtime-shared",
+		FolderPath: "/folder", FactoryDirectory: "/factory", RootDirectory: root,
+		Policy: factoryruntime.RuntimeFileLoggingPolicyEnabled,
+	})
+	if err != nil {
+		t.Fatalf("open log scope %q: %v", sessionID, err)
+	}
+	return sink
+}
+
+func assertRuntimeLogRecords(t *testing.T, first, second factoryruntime.RuntimeLogSink) {
+	t.Helper()
+	firstBytes, err := os.ReadFile(first.Artifact().Path)
+	if err != nil {
+		t.Fatalf("read first log scope: %v", err)
+	}
+	secondBytes, err := os.ReadFile(second.Artifact().Path)
+	if err != nil {
+		t.Fatalf("read second log scope: %v", err)
+	}
+	if !strings.Contains(string(firstBytes), "first session log") || strings.Contains(string(firstBytes), "second session log") {
+		t.Fatalf("first log scope leaked another session: %s", firstBytes)
+	}
+	if !strings.Contains(string(secondBytes), "second session remains open") {
+		t.Fatalf("second log scope did not remain writable: %s", secondBytes)
+	}
+}
+
+func TestRuntimeMetricsOwnerKeepsPrivateScopesIsolated(t *testing.T) {
+	t.Parallel()
+	owners := newRuntimeObservabilityTestOwners(t)
+	first := openRuntimeMetricsTestScope(t, owners.metricsOwner, owners.metricsRoot, "session-first")
+	second := openRuntimeMetricsTestScope(t, owners.metricsOwner, owners.metricsRoot, "session-second")
+	if first.Path() == second.Path() {
+		t.Fatalf("metrics scope paths collide: %q", first.Path())
+	}
+	if err := first.Counter(t.Context(), "first.metric", 1, factoryruntime.Fields{}); err != nil {
+		t.Fatalf("write first metrics scope: %v", err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatalf("close first metrics scope: %v", err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatalf("close first metrics scope twice: %v", err)
+	}
+	if err := second.Counter(t.Context(), "second.metric", 1, factoryruntime.Fields{}); err != nil {
+		t.Fatalf("write second metrics scope after first close: %v", err)
+	}
+	defer second.Close()
+	assertRuntimeMetricsRecords(t, first, second)
+}
+
+func openRuntimeMetricsTestScope(t *testing.T, owner factoryruntime.RuntimeMetricsOwner, root, sessionID string) factoryruntime.RuntimeMetricsSink {
+	t.Helper()
+	sink, err := owner.Open(factoryruntime.RuntimeMetricsScopeRequest{
+		Scope: factoryruntime.RuntimeMetricsScope{
+			SessionID: sessionID, RuntimeInstanceID: "runtime-shared",
+			FolderPath: "/folder", FactoryDir: "/factory",
+		},
+		RootDirectory: root, Policy: factoryruntime.RuntimeMetricsPolicyEnabled,
+	})
+	if err != nil {
+		t.Fatalf("open metrics scope %q: %v", sessionID, err)
+	}
+	return sink
+}
+
+func assertRuntimeMetricsRecords(t *testing.T, first, second factoryruntime.RuntimeMetricsSink) {
+	t.Helper()
+	firstBytes, err := os.ReadFile(first.Path())
+	if err != nil {
+		t.Fatalf("read first metrics scope: %v", err)
+	}
+	secondBytes, err := os.ReadFile(second.Path())
+	if err != nil {
+		t.Fatalf("read second metrics scope: %v", err)
+	}
+	if !strings.Contains(string(firstBytes), "session-first") || strings.Contains(string(firstBytes), "second.metric") {
+		t.Fatalf("first metrics scope leaked another session: %s", firstBytes)
+	}
+	if !strings.Contains(string(secondBytes), "session-second") {
+		t.Fatalf("second metrics scope did not record after first close: %s", secondBytes)
+	}
+}
+
+func TestRuntimeObservabilityOwnerRejectsUnwritableDestination(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	unwritable := filepath.Join(root, "not-a-directory")
+	if err := os.WriteFile(unwritable, []byte("file"), 0o600); err != nil {
+		t.Fatalf("create destination sentinel: %v", err)
+	}
+	reserver, err := provideRuntimeArtifactPathReserver()
+	if err != nil {
+		t.Fatalf("provideRuntimeArtifactPathReserver(): %v", err)
+	}
+	owner, err := provideRuntimeLogOwner(
+		zap.NewNop(), time.Now, func() string { return "unwritable" }, reserver,
+	)
+	if err != nil {
+		t.Fatalf("provideRuntimeLogOwner(): %v", err)
+	}
+	_, err = owner.Open(factoryruntime.RuntimeLogScopeRequest{
+		RuntimeInstanceID: "runtime-unwritable", RootDirectory: unwritable,
+		Policy: factoryruntime.RuntimeFileLoggingPolicyEnabled,
+	})
+	if err == nil || !strings.Contains(err.Error(), "runtime artifact") {
+		t.Fatalf("unwritable log destination error = %v, want actionable runtime artifact error", err)
 	}
 }

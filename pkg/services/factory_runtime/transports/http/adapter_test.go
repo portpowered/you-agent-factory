@@ -3,9 +3,15 @@ package http
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	runtimehttpcontrol "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/control"
+	runtimehttpdispatch "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/dispatch"
+	runtimehttpcommon "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/internal/common"
+	runtimehttpobservation "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http/observation"
 )
 
 func TestAdapter_BindsRuntimeRootViaFakeRootSeam(t *testing.T) {
@@ -49,7 +55,61 @@ func TestNewAdapter_RejectsNilRoot(t *testing.T) {
 	}
 }
 
+func TestNewAdapter_RejectsTypedNilRoot(t *testing.T) {
+	t.Parallel()
+
+	var typedNil *typedNilRuntimeRoot
+	if NewAdapter(typedNil) != nil {
+		t.Fatal("NewAdapter(typed nil root) must return nil")
+	}
+
+	adapter := &Adapter{root: typedNil}
+	if adapter.Root() != nil {
+		t.Fatal("Root() must return nil for a typed nil root")
+	}
+}
+
+func TestOperationHandlers_RejectTypedNilRoot(t *testing.T) {
+	t.Parallel()
+
+	var typedNil *typedNilRuntimeRoot
+	if root, err := runtimehttpcommon.RequireRuntimeRoot(typedNil); root != nil || err == nil {
+		t.Fatalf("RequireRuntimeRoot(typed nil root) = (%v, %v), want (nil, error)", root, err)
+	}
+	for _, test := range []struct {
+		name  string
+		isNil func() bool
+	}{
+		{name: "observation", isNil: func() bool { return runtimehttpobservation.NewHandler(typedNil) == nil }},
+		{name: "control", isNil: func() bool { return runtimehttpcontrol.NewHandler(typedNil) == nil }},
+		{name: "dispatch", isNil: func() bool { return runtimehttpdispatch.NewHandler(typedNil) == nil }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if !test.isNil() {
+				t.Fatal("NewHandler(typed nil root) must return nil")
+			}
+		})
+	}
+}
+
+func TestOperationHandlers_TypedNilRootFailClosed(t *testing.T) {
+	t.Parallel()
+
+	var typedNil *runtimeRootFake
+	handler := runtimehttpcontrol.NewHandler(typedNil)
+	recorder := httptest.NewRecorder()
+	handler.ControlPause(recorder, httptest.NewRequest(http.MethodPost, "/control/pause", nil))
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("ControlPause typed nil root status = %d, want 500", recorder.Code)
+	}
+}
+
+type typedNilRuntimeRoot struct {
+	factoryruntime.Service
+}
+
 type runtimeRootFake struct {
+	factoryruntime.Service
 	observe              func(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error)
 	pause                func(context.Context, factoryruntime.PauseRequest) (factoryruntime.PauseResult, error)
 	resume               func(context.Context, factoryruntime.ResumeRequest) (factoryruntime.ResumeResult, error)
@@ -57,9 +117,6 @@ type runtimeRootFake struct {
 	moveWork             func(context.Context, factoryruntime.MoveWorkRequest) (factoryruntime.MoveWorkResult, error)
 	planDispatch         func(context.Context, factoryruntime.PlanDispatchRequest) (factoryruntime.PlanDispatchResult, error)
 	acceptDispatchResult func(context.Context, factoryruntime.AcceptDispatchResultRequest) (factoryruntime.AcceptDispatchResultResult, error)
-	captureCheckpoint    func(context.Context, factoryruntime.CaptureCheckpointRequest) (factoryruntime.CaptureCheckpointResult, error)
-	loadCheckpoint       func(context.Context, factoryruntime.LoadCheckpointRequest) (factoryruntime.LoadCheckpointResult, error)
-	restoreCheckpoint    func(context.Context, factoryruntime.RestoreCheckpointRequest) (factoryruntime.RestoreCheckpointResult, error)
 }
 
 var _ factoryruntime.Service = (*runtimeRootFake)(nil)
@@ -111,21 +168,7 @@ func (fake *runtimeRootFake) AcceptDispatchResult(ctx context.Context, req facto
 	}
 	return factoryruntime.AcceptDispatchResultResult{}, nil
 }
-func (fake *runtimeRootFake) CaptureCheckpoint(ctx context.Context, req factoryruntime.CaptureCheckpointRequest) (factoryruntime.CaptureCheckpointResult, error) {
-	if fake.captureCheckpoint != nil {
-		return fake.captureCheckpoint(ctx, req)
-	}
-	return factoryruntime.CaptureCheckpointResult{}, nil
-}
-func (fake *runtimeRootFake) LoadCheckpoint(ctx context.Context, req factoryruntime.LoadCheckpointRequest) (factoryruntime.LoadCheckpointResult, error) {
-	if fake.loadCheckpoint != nil {
-		return fake.loadCheckpoint(ctx, req)
-	}
-	return factoryruntime.LoadCheckpointResult{}, nil
-}
-func (fake *runtimeRootFake) RestoreCheckpoint(ctx context.Context, req factoryruntime.RestoreCheckpointRequest) (factoryruntime.RestoreCheckpointResult, error) {
-	if fake.restoreCheckpoint != nil {
-		return fake.restoreCheckpoint(ctx, req)
-	}
-	return factoryruntime.RestoreCheckpointResult{}, nil
+
+func (fake *runtimeRootFake) InvokeWorker(_ context.Context, _ factoryruntime.InvokeWorkerRequest) (factoryruntime.InvokeWorkerResult, error) {
+	return factoryruntime.InvokeWorkerResult{}, nil
 }

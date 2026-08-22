@@ -20,9 +20,11 @@ describe("getActivityGraphMessages", () => {
     const messages = getActivityGraphMessages("en");
     const semanticIconLabels: Array<[GraphSemanticIconKind, string]> = [
       ["active-work", "Active work"],
+      ["antigravity", "Antigravity runner"],
+      ["claude", "Claude runner"],
+      ["codex", "Codex runner"],
       ["constraint", "Constraint"],
       ["cron", "Cron workstation"],
-      ["exhaustion", "Exhaustion rule"],
       ["failed", "Failed state"],
       ["limit", "Limit"],
       ["poller", "Poller workstation"],
@@ -30,6 +32,7 @@ describe("getActivityGraphMessages", () => {
       ["queue", "Queue state"],
       ["repeater", "Repeater workstation"],
       ["resource", "Resource"],
+      ["script", "Script worker"],
       ["terminal", "Terminal state"],
       ["worker", "Worker"],
       ["workstation", "Workstation"],
@@ -40,7 +43,7 @@ describe("getActivityGraphMessages", () => {
       ["POLLER", "Poller workstation"],
       ["REPEATER", "Repeater workstation"],
       ["STANDARD", "Standard workstation"],
-      ["exhaustion", "Exhaustion rule"],
+      ["UNKNOWN", "Unknown workstation semantics"],
     ];
 
     for (const [kind, label] of semanticIconLabels) {
@@ -83,9 +86,11 @@ describe("getActivityGraphMessages", () => {
     const messages = getActivityGraphMessages("zh-CN");
     const semanticIconLabels: Array<[GraphSemanticIconKind, string]> = [
       ["active-work", "活动工作"],
+      ["antigravity", "Antigravity runner"],
+      ["claude", "Claude runner"],
+      ["codex", "Codex runner"],
       ["constraint", "约束"],
       ["cron", "Cron 工作站"],
-      ["exhaustion", "耗尽规则"],
       ["failed", "失败状态"],
       ["limit", "限制"],
       ["poller", "轮询器工作站"],
@@ -93,6 +98,7 @@ describe("getActivityGraphMessages", () => {
       ["queue", "队列状态"],
       ["repeater", "重复器工作站"],
       ["resource", "资源"],
+      ["script", "脚本工作者"],
       ["terminal", "终止状态"],
       ["worker", "工作者"],
       ["workstation", "工作站"],
@@ -103,7 +109,7 @@ describe("getActivityGraphMessages", () => {
       ["POLLER", "轮询器工作站"],
       ["REPEATER", "重复器工作站"],
       ["STANDARD", "标准工作站"],
-      ["exhaustion", "耗尽规则"],
+      ["UNKNOWN", "未知工作站语义"],
     ];
 
     for (const [kind, label] of semanticIconLabels) {

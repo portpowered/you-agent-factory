@@ -43,6 +43,7 @@ func TestProtocolFailuresMapToStableExecuteFailureKinds(t *testing.T) {
 		{mode: "malformed", want: providers.ExecuteFailureKindUnknown},
 		{mode: "eof", want: providers.ExecuteFailureKindUnknown},
 		{mode: "fail", want: providers.ExecuteFailureKindUnknown, wantSessionID: "acp-session-service-1"},
+		{mode: "server-failure", want: providers.ExecuteFailureKindDependency, wantSessionID: "acp-session-service-1"},
 	} {
 		t.Run(test.mode, func(t *testing.T) {
 			var starts atomic.Int32
@@ -61,7 +62,7 @@ func TestProtocolFailuresMapToStableExecuteFailureKinds(t *testing.T) {
 				Model:              "test-model",
 				UserMessage:        "classify ACP failure",
 				WorkingDirectory:   cwd,
-				ProcessEnvironment: append(os.Environ(), protocolHelperEnvironment+"="+test.mode),
+				ProcessEnvironment: protocolHelperProcessEnvironment(test.mode),
 			})
 			var failure providers.ExecuteFailure
 			if !errors.As(err, &failure) {
@@ -79,6 +80,171 @@ func TestProtocolFailuresMapToStableExecuteFailureKinds(t *testing.T) {
 				t.Fatal("ACP protocol failure did not start the Agent process")
 			}
 		})
+	}
+}
+
+// TestPromptCancelledStopReasonMapsToExecuteFailureKindCanceled proves the
+// established ACP cancellation normalization independent of any real
+// concurrent control call: whenever session/prompt returns
+// StopReasonCancelled (the ACP protocol's outcome for a session/cancel
+// notification the agent honored, whether triggered through
+// ControlAttempt or otherwise), daemon.execute reports the same
+// ExecuteFailureKindCanceled every other cancellation path in this service
+// already normalizes to.
+func TestPromptCancelledStopReasonMapsToExecuteFailureKindCanceled(t *testing.T) {
+	var starts atomic.Int32
+	serviceValue, err := New([]providers.ACPIntegration{{
+		ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
+	}}, protocolHelperCommandFactory(&starts), availableLocator{})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	t.Cleanup(func() { _ = serviceValue.Close(context.Background()) })
+
+	_, err = serviceValue.Execute(context.Background(), "cursor-acp", providers.ExecuteRequest{
+		Provider:           "cursor-acp",
+		AttemptID:          "attempt-cancelled-turn",
+		Model:              "test-model",
+		UserMessage:        "cancelled turn",
+		WorkingDirectory:   t.TempDir(),
+		ProcessEnvironment: protocolHelperProcessEnvironment("cancelled-turn"),
+	})
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("Execute() error = %v (%T), want ExecuteFailure", err, err)
+	}
+	if failure.Kind != providers.ExecuteFailureKindCanceled {
+		t.Fatalf("ExecuteFailure.Kind = %q, want %q", failure.Kind, providers.ExecuteFailureKindCanceled)
+	}
+}
+
+func TestACPExecuteObservesProviderSessionWhileAttemptIsLive(t *testing.T) {
+	var starts atomic.Int32
+	serviceValue, err := New([]providers.ACPIntegration{{
+		ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
+	}}, protocolHelperCommandFactory(&starts), availableLocator{})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	t.Cleanup(func() { _ = serviceValue.Close(context.Background()) })
+
+	observed := make(chan providers.SessionRef, 1)
+	releaseObservation := make(chan struct{})
+	workingDirectory := t.TempDir()
+	type executeOutcome struct {
+		result providers.ExecuteResult
+		err    error
+	}
+	completed := make(chan executeOutcome, 1)
+	go func() {
+		result, executeErr := serviceValue.Execute(context.Background(), "cursor-acp", providers.ExecuteRequest{
+			Provider: "cursor-acp", AttemptID: "attempt-live-observation", UserMessage: "observe the provider session",
+			WorkingDirectory: workingDirectory, ProcessEnvironment: protocolHelperProcessEnvironment("normal"),
+			SessionObserver: func(reference providers.SessionRef) {
+				observed <- reference
+				<-releaseObservation
+			},
+		})
+		completed <- executeOutcome{result: result, err: executeErr}
+	}()
+
+	reference := <-observed
+	want := providers.SessionRef{Provider: "cursor-acp", Kind: providers.SessionIDKind, ID: "acp-session-service-1"}
+	if reference != want {
+		t.Fatalf("live SessionObserver reference = %#v, want %#v", reference, want)
+	}
+	select {
+	case outcome := <-completed:
+		t.Fatalf("Execute() completed before live observation released: %#v", outcome)
+	default:
+	}
+	close(releaseObservation)
+	outcome := <-completed
+	if outcome.err != nil {
+		t.Fatalf("Execute() error = %v", outcome.err)
+	}
+	if outcome.result.SessionRef == nil || *outcome.result.SessionRef != want {
+		t.Fatalf("Execute().SessionRef = %#v, want %#v", outcome.result.SessionRef, want)
+	}
+}
+
+// TestContinuationResumesExactSessionThroughSessionLoad proves a request
+// carried through the private continuation boundary reaches the ACP peer through session/load with the
+// exact opaque session id forwarded unchanged, and the returned result
+// preserves that exact id - never a new one session/new would have minted.
+// The helper peer in "resume" mode does not implement session/new at all, so
+// any regression back to unconditionally starting a fresh session fails this
+// test instead of silently substituting a different Provider Session.
+func TestContinuationResumesExactSessionThroughSessionLoad(t *testing.T) {
+	var starts atomic.Int32
+	serviceValue, err := New([]providers.ACPIntegration{{
+		ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
+	}}, protocolHelperCommandFactory(&starts), availableLocator{})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	t.Cleanup(func() { _ = serviceValue.Close(context.Background()) })
+
+	reference := providers.SessionRef{
+		Provider: "cursor-acp",
+		Kind:     providers.SessionIDKind,
+		ID:       "resume-target-session",
+	}
+	result, err := serviceValue.Continue(context.Background(), "cursor-acp", providers.ExecuteRequest{
+		Provider:           "cursor-acp",
+		AttemptID:          "attempt-resume",
+		UserMessage:        "continue the prior turn",
+		WorkingDirectory:   t.TempDir(),
+		ProcessEnvironment: protocolHelperProcessEnvironment("resume"),
+	}, reference)
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want nil - the peer only implements session/load in resume mode", err)
+	}
+	if result.SessionRef == nil || result.SessionRef.ID != "resume-target-session" {
+		t.Fatalf("SessionRef = %#v, want the exact resumed session id unchanged", result.SessionRef)
+	}
+}
+
+// TestContinuationSessionLoadFailureDoesNotFallBackToFreshSession proves a
+// session/load ResourceNotFound failure (a stale or unknown session) is
+// classified as ExecuteFailureKindSessionNotFound - the typed vocabulary
+// Continue translates into the closed stale continuation failure - instead
+// of the generic RPC failure kind, and is reported as-is instead of silently
+// starting a fresh session. The helper peer in "resume-not-found" mode also
+// does not implement session/new, so a regression to a fresh-session
+// fallback would fail this test rather than masking the failure with an
+// unrelated new session.
+func TestContinuationSessionLoadFailureDoesNotFallBackToFreshSession(t *testing.T) {
+	var starts atomic.Int32
+	serviceValue, err := New([]providers.ACPIntegration{{
+		ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
+	}}, protocolHelperCommandFactory(&starts), availableLocator{})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	t.Cleanup(func() { _ = serviceValue.Close(context.Background()) })
+
+	reference := providers.SessionRef{
+		Provider: "cursor-acp",
+		Kind:     providers.SessionIDKind,
+		ID:       "stale-session",
+	}
+	_, err = serviceValue.Continue(context.Background(), "cursor-acp", providers.ExecuteRequest{
+		Provider:           "cursor-acp",
+		AttemptID:          "attempt-resume-not-found",
+		UserMessage:        "continue the prior turn",
+		WorkingDirectory:   t.TempDir(),
+		ProcessEnvironment: protocolHelperProcessEnvironment("resume-not-found"),
+	}, reference)
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("Execute() error = %v (%T), want ExecuteFailure - a session/load failure must be reported, not silently retried as a fresh session", err, err)
+	}
+	if failure.Kind != providers.ExecuteFailureKindSessionNotFound {
+		t.Fatalf("ExecuteFailure.Kind = %q, want %q", failure.Kind, providers.ExecuteFailureKindSessionNotFound)
+	}
+	if starts.Load() != 1 {
+		t.Fatalf("ACP daemon starts = %d, want exactly 1 - a stale reference must not start a second daemon or fresh-session attempt", starts.Load())
 	}
 }
 
@@ -124,15 +290,12 @@ func TestInitializeFailureRedactsConfiguredSecretsFromStderr(t *testing.T) {
 	t.Cleanup(func() { _ = serviceValue.Close(context.Background()) })
 
 	_, err = serviceValue.Execute(context.Background(), "cursor-acp", providers.ExecuteRequest{
-		Provider:         "cursor-acp",
-		AttemptID:        "attempt-stderr",
-		UserMessage:      "redact stderr",
-		WorkingDirectory: t.TempDir(),
-		EnvVars:          map[string]string{"ACP_TEST_API_TOKEN": "super-secret-token"},
-		ProcessEnvironment: append(os.Environ(),
-			protocolHelperEnvironment+"=stderr",
-			"ACP_TEST_API_TOKEN=super-secret-token",
-		),
+		Provider:           "cursor-acp",
+		AttemptID:          "attempt-stderr",
+		UserMessage:        "redact stderr",
+		WorkingDirectory:   t.TempDir(),
+		EnvVars:            map[string]string{"ACP_TEST_API_TOKEN": "super-secret-token"},
+		ProcessEnvironment: append(protocolHelperProcessEnvironment("stderr"), "ACP_TEST_API_TOKEN=super-secret-token"),
 	})
 	var failure providers.ExecuteFailure
 	if !errors.As(err, &failure) {
@@ -185,6 +348,19 @@ func protocolHelperCommandFactory(starts *atomic.Int32) func(name string, args .
 	}
 }
 
+func protocolHelperProcessEnvironment(mode string) []string {
+	environment := make([]string, 0, len(os.Environ())+1)
+	for _, entry := range os.Environ() {
+		name, _, _ := strings.Cut(entry, "=")
+		if strings.EqualFold(name, protocolHelperEnvironment) {
+			continue
+		}
+		environment = append(environment, entry)
+	}
+	return append(environment, protocolHelperEnvironment+"="+mode)
+}
+
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func runProtocolFailurePeer(mode string, stdin io.Reader, stdout, stderr io.Writer) error {
 	if mode == "malformed" {
 		_, err := fmt.Fprintln(stdout, "{not-json")
@@ -222,12 +398,31 @@ func runProtocolFailurePeer(mode string, stdin io.Reader, stdout, stderr io.Writ
 				return nil
 			}
 		case "session/new":
+			if mode == "resume" || mode == "resume-not-found" {
+				return fmt.Errorf("unexpected session/new during a continuation - the continued attempt must resume through session/load instead of starting a fresh session")
+			}
 			if err := writeRPCResult(writer, request.ID, `{"sessionId":"acp-session-service-1","configOptions":[]}`); err != nil {
+				return err
+			}
+		case "session/load":
+			if mode == "resume-not-found" {
+				// -32002 is the ACP schema's ErrorCodeResourceNotFound - the
+				// real code a conformant agent returns for an unrecognized
+				// session/load id.
+				return writeRPCError(writer, request.ID, -32002, "no rollout found for that session")
+			}
+			if err := writeRPCResult(writer, request.ID, `{"configOptions":[]}`); err != nil {
 				return err
 			}
 		case "session/prompt":
 			if mode == "fail" {
 				return writeRPCError(writer, request.ID, -32603, "Internal error")
+			}
+			if mode == "server-failure" {
+				return writeRPCError(writer, request.ID, -32001, "temporarily unavailable")
+			}
+			if mode == "cancelled-turn" {
+				return writeRPCResult(writer, request.ID, `{"stopReason":"cancelled"}`)
 			}
 			return writeRPCResult(writer, request.ID, `{"stopReason":"end_turn"}`)
 		case "$/cancel_request", "session/cancel":

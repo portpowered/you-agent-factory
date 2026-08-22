@@ -15,377 +15,13 @@ import (
 	"testing"
 
 	workservice "github.com/portpowered/infinite-you/pkg/services/work"
+	workcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
-	cligenerated "github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
-	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/spf13/cobra"
 )
-
-func TestNewWorkRegistryRegistersContractedRunnableIDs(t *testing.T) {
-	registry, err := commandregistry.NewWorkRegistry(commandregistry.WorkHandlers{
-		ListRunE:      noopRunE,
-		ShowRunE:      noopRunE,
-		MoveRunE:      noopRunE,
-		VisualizeRunE: noopRunE,
-	})
-	if err != nil {
-		t.Fatalf("NewWorkRegistry() error = %v", err)
-	}
-	for _, commandID := range []string{
-		"you.work.list",
-		"you.work.show",
-		"you.work.move",
-		"you.work.visualize",
-	} {
-		if _, lookupErr := registry.Lookup(commandID); lookupErr != nil {
-			t.Fatalf("Lookup(%q) error = %v", commandID, lookupErr)
-		}
-	}
-}
-
-func TestNewWorkRegistryRejectsMissingHandlers(t *testing.T) {
-	cases := []struct {
-		name     string
-		handlers commandregistry.WorkHandlers
-	}{
-		{
-			name: "missing list",
-			handlers: commandregistry.WorkHandlers{
-				ShowRunE:      noopRunE,
-				MoveRunE:      noopRunE,
-				VisualizeRunE: noopRunE,
-			},
-		},
-		{
-			name: "missing show",
-			handlers: commandregistry.WorkHandlers{
-				ListRunE:      noopRunE,
-				MoveRunE:      noopRunE,
-				VisualizeRunE: noopRunE,
-			},
-		},
-		{
-			name: "missing move",
-			handlers: commandregistry.WorkHandlers{
-				ListRunE:      noopRunE,
-				ShowRunE:      noopRunE,
-				VisualizeRunE: noopRunE,
-			},
-		},
-		{
-			name: "missing visualize",
-			handlers: commandregistry.WorkHandlers{
-				ListRunE: noopRunE,
-				ShowRunE: noopRunE,
-				MoveRunE: noopRunE,
-			},
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if _, err := commandregistry.NewWorkRegistry(tc.handlers); err == nil {
-				t.Fatal("NewWorkRegistry() missing handler = nil, want error")
-			}
-		})
-	}
-}
-
-func TestListRunEUsesHandwrittenServicePath(t *testing.T) {
-	var gotMethod string
-	var gotPath string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod = r.Method
-		gotPath = r.URL.Path
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"results":[]}`))
-	}))
-	defer srv.Close()
-
-	listCfg := workcli.ListConfig{Context: context.Background()}
-	registry, err := commandregistry.NewWorkRegistry(commandregistry.WorkHandlers{
-		ListRunE: commandregistry.ListRunE(commandregistry.ListBinding{
-			Config:   &listCfg,
-			Server:   stringPtr(srv.URL),
-			ListWork: workcli.NewList(testHTTPProtocol(t), commandRegistryListPreparation{}),
-		}),
-		ShowRunE:      noopRunE,
-		MoveRunE:      noopRunE,
-		VisualizeRunE: noopRunE,
-	})
-	if err != nil {
-		t.Fatalf("NewWorkRegistry() error = %v", err)
-	}
-
-	cmd := &cobra.Command{Use: "list"}
-	if err := registry.AttachRunE(cmd, "you.work.list"); err != nil {
-		t.Fatalf("AttachRunE() error = %v", err)
-	}
-
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if gotMethod != http.MethodGet {
-		t.Fatalf("HTTP method = %q, want GET for listWorkBySessionId binding", gotMethod)
-	}
-	if gotPath != "/factory-sessions/~default/work" {
-		t.Fatalf("HTTP path = %q, want /factory-sessions/~default/work", gotPath)
-	}
-}
-
-type commandRegistryListPreparation struct{}
-
-func (commandRegistryListPreparation) PrepareListRequest(
-	_ context.Context,
-	options workservice.ListOptions,
-) (workservice.PreparedListRequest, error) {
-	return workservice.PreparedListRequest{Options: options, FilterSummary: "test"}, nil
-}
-
-func TestShowRunEUsesHandwrittenServicePath(t *testing.T) {
-	var gotMethod string
-	var gotPath string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod = r.Method
-		gotPath = r.URL.Path
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(factoryapi.Work{
-			Name:   "Review PRD",
-			WorkId: stringPtr("work-review-1"),
-			State: &factoryapi.WorkState{
-				Name: "review",
-				Type: factoryapi.WorkStateTypePROCESSING,
-			},
-		}); err != nil {
-			t.Fatalf("encode response: %v", err)
-		}
-	}))
-	defer srv.Close()
-
-	showCfg := workcli.ShowConfig{Context: context.Background()}
-	registry, err := commandregistry.NewWorkRegistry(commandregistry.WorkHandlers{
-		ListRunE: noopRunE,
-		ShowRunE: commandregistry.ShowRunE(commandregistry.ShowBinding{
-			Config:   &showCfg,
-			Server:   stringPtr(srv.URL),
-			ShowWork: workcli.NewShow(testHTTPProtocol(t)),
-		}),
-		MoveRunE:      noopRunE,
-		VisualizeRunE: noopRunE,
-	})
-	if err != nil {
-		t.Fatalf("NewWorkRegistry() error = %v", err)
-	}
-
-	cmd := &cobra.Command{Use: "show"}
-	if err := registry.AttachRunE(cmd, "you.work.show"); err != nil {
-		t.Fatalf("AttachRunE() error = %v", err)
-	}
-
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetArgs([]string{"work-review-1"})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if gotMethod != http.MethodGet {
-		t.Fatalf("HTTP method = %q, want GET for getWorkBySessionId binding", gotMethod)
-	}
-	if gotPath != "/factory-sessions/~default/work/work-review-1" {
-		t.Fatalf("HTTP path = %q, want /factory-sessions/~default/work/work-review-1", gotPath)
-	}
-}
-
-func TestMoveRunEUsesHandwrittenServicePath(t *testing.T) {
-	var gotMoveMethod string
-	var gotMovePath string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet:
-			writeWorkJSON(t, w, factoryapi.Work{
-				WorkId: stringPtr("work-move-1"),
-				State:  &factoryapi.WorkState{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
-			})
-		case r.Method == http.MethodPost:
-			gotMoveMethod = r.Method
-			gotMovePath = r.URL.Path
-			writeWorkJSON(t, w, factoryapi.Work{
-				WorkId: stringPtr("work-move-1"),
-				State:  &factoryapi.WorkState{Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL},
-			})
-		default:
-			t.Fatalf("unexpected %s %s", r.Method, r.URL.Path)
-		}
-	}))
-	defer srv.Close()
-
-	moveCfg := workcli.MoveConfig{Context: context.Background()}
-	registry, err := commandregistry.NewWorkRegistry(commandregistry.WorkHandlers{
-		ListRunE: noopRunE,
-		ShowRunE: noopRunE,
-		MoveRunE: commandregistry.MoveRunE(commandregistry.MoveBinding{
-			Config:   &moveCfg,
-			Server:   stringPtr(srv.URL),
-			MoveWork: workcli.NewMove(testHTTPProtocol(t)),
-		}),
-		VisualizeRunE: noopRunE,
-	})
-	if err != nil {
-		t.Fatalf("NewWorkRegistry() error = %v", err)
-	}
-
-	cmd := &cobra.Command{Use: "move"}
-	if err := registry.AttachRunE(cmd, "you.work.move"); err != nil {
-		t.Fatalf("AttachRunE() error = %v", err)
-	}
-
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetArgs([]string{"work-move-1", "complete"})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if gotMoveMethod != http.MethodPost {
-		t.Fatalf("HTTP method = %q, want POST for moveWorkBySessionId binding", gotMoveMethod)
-	}
-	if gotMovePath != "/factory-sessions/~default/work/work-move-1/move" {
-		t.Fatalf("HTTP path = %q, want /factory-sessions/~default/work/work-move-1/move", gotMovePath)
-	}
-}
-
-func TestVisualizeRunERemainsLocalReadOnly(t *testing.T) {
-	path := writeWorkHandlerBatchFile(t, `{
-  "requestId": "visualize-registry-test",
-  "type": "FACTORY_REQUEST_BATCH",
-  "works": [
-    {"name": "alpha", "workTypeName": "task"},
-    {"name": "beta", "workTypeName": "task"}
-  ],
-  "relations": [
-    {"type": "DEPENDS_ON", "sourceWorkName": "beta", "targetWorkName": "alpha"}
-  ]
-}`)
-	format := "mermaid"
-
-	registry, err := commandregistry.NewWorkRegistry(commandregistry.WorkHandlers{
-		ListRunE: noopRunE,
-		ShowRunE: noopRunE,
-		MoveRunE: noopRunE,
-		VisualizeRunE: commandregistry.VisualizeRunE(commandregistry.VisualizeBinding{
-			Format: &format,
-			Visualize: func(cfg workcli.VisualizeConfig) error {
-				_, err := io.WriteString(cfg.Output, "flowchart TD\n")
-				return err
-			},
-		}),
-	})
-	if err != nil {
-		t.Fatalf("NewWorkRegistry() error = %v", err)
-	}
-
-	cmd := &cobra.Command{Use: "visualize"}
-	if err := registry.AttachRunE(cmd, "you.work.visualize"); err != nil {
-		t.Fatalf("AttachRunE() error = %v", err)
-	}
-
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetArgs([]string{path})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if !strings.HasPrefix(out.String(), "flowchart TD\n") {
-		t.Fatalf("output missing flowchart header:\n%s", out.String())
-	}
-}
-
-func TestListRunEWritesDiagnosticsToConfiguredWriter(t *testing.T) {
-	var diagnostic bytes.Buffer
-	listCfg := workcli.ListConfig{Context: context.Background()}
-	runE := commandregistry.ListRunE(commandregistry.ListBinding{
-		Config: &listCfg,
-		DiagnosticsWriter: func(cmd *cobra.Command) io.Writer {
-			return &diagnostic
-		},
-		ListWork: func(cfg workcli.ListConfig) error {
-			if cfg.Diagnostics != &diagnostic {
-				t.Fatalf("diagnostics writer = %T, want *bytes.Buffer", cfg.Diagnostics)
-			}
-			return nil
-		},
-	})
-	cmd := &cobra.Command{Use: "list"}
-	if err := runE(cmd, nil); err != nil {
-		t.Fatalf("RunE() error = %v", err)
-	}
-}
-
-func writeWorkJSON(t *testing.T, w http.ResponseWriter, payload any) {
-	t.Helper()
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(payload); err != nil {
-		t.Fatalf("encode response: %v", err)
-	}
-}
-
-func writeWorkHandlerBatchFile(t *testing.T, contents string) string {
-	t.Helper()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "batch.json")
-	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
-		t.Fatalf("write batch file: %v", err)
-	}
-	return path
-}
-
-func TestRunnableWorkCommandIDsFromGeneratedManifest(t *testing.T) {
-	manifest, err := cligenerated.WorkFamilyManifest()
-	if err != nil {
-		t.Fatalf("WorkFamilyManifest() error = %v", err)
-	}
-	ids, err := commandregistry.RunnableWorkCommandIDs(manifest)
-	if err != nil {
-		t.Fatalf("RunnableWorkCommandIDs() error = %v", err)
-	}
-	want := []string{
-		"you.work.list",
-		"you.work.move",
-		"you.work.show",
-		"you.work.visualize",
-	}
-	if len(ids) != len(want) {
-		t.Fatalf("runnable IDs = %#v, want %#v", ids, want)
-	}
-	for i, commandID := range want {
-		if ids[i] != commandID {
-			t.Fatalf("runnable IDs[%d] = %q, want %q", i, ids[i], commandID)
-		}
-	}
-}
-
-func TestVerifyWorkRunnableCoverageRejectsMissingHandler(t *testing.T) {
-	manifest, err := cligenerated.WorkFamilyManifest()
-	if err != nil {
-		t.Fatalf("WorkFamilyManifest() error = %v", err)
-	}
-	registry := commandregistry.NewRegistry()
-	for _, commandID := range []string{
-		"you.work.show",
-		"you.work.move",
-		"you.work.visualize",
-	} {
-		if err := registry.Register(commandID, noopRunE); err != nil {
-			t.Fatalf("Register(%q) error = %v", commandID, err)
-		}
-	}
-	if err := registry.VerifyWorkRunnableCoverage(manifest); err == nil {
-		t.Fatal("VerifyWorkRunnableCoverage() missing list handler = nil, want error")
-	}
-}
 
 func TestResolvedMoveRunEMapsStableInputsIntoFreshRequests(t *testing.T) {
 	var requests []workcli.MoveConfig
@@ -642,12 +278,12 @@ func TestResolvedVisualizeRunEMapsStableInputsIntoFreshRequests(t *testing.T) {
 		},
 	})
 	executeResolvedVisualize(
-		t, handler, []string{"work", "visualize", "first.json"},
+		t, handler, []string{"work", "render", "first.json"},
 		io.Discard, context.Background(),
 	)
 	executeResolvedVisualize(
 		t, handler,
-		[]string{"work", "visualize", "--format", "markdown-mermaid", "second.json"},
+		[]string{"work", "render", "--format", "markdown-mermaid", "second.json"},
 		io.Discard, context.Background(),
 	)
 	if len(requests) != 2 {
@@ -691,11 +327,11 @@ func TestResolvedWorkVisualizePublicCommandPreservesLocalBehavior(t *testing.T) 
 		args []string
 		want []string
 	}{
-		{"default mermaid", []string{"--server", server.URL, "work", "visualize", path},
+		{"default mermaid", []string{"--server", server.URL, "work", "render", path},
 			[]string{"flowchart TD", "beta --> alpha"}},
-		{"format spelling", []string{"work", "visualize", "--format", "MERMAID", path},
+		{"format spelling", []string{"work", "render", "--format", "MERMAID", path},
 			[]string{"flowchart TD", "beta --> alpha"}},
-		{"markdown", []string{"work", "visualize", "--format", "markdown-mermaid", path},
+		{"markdown", []string{"work", "render", "--format", "markdown-mermaid", path},
 			[]string{"# Work Dependency Graph", "```mermaid", "beta --> alpha"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -723,13 +359,13 @@ func TestResolvedWorkVisualizePublicCommandPreservesFailures(t *testing.T) {
 		operation workservice.VisualizationOperation
 		want      string
 	}{
-		{"missing argument", []string{"work", "visualize"}, nil, "requires at least 1 arg"},
-		{"extra argument", []string{"work", "visualize", invalid, "extra"}, nil, "accepts at most 1 arg"},
-		{"invalid format", []string{"work", "visualize", "--format", "svg", invalid},
+		{"missing argument", []string{"work", "render"}, nil, "requires at least 1 arg"},
+		{"extra argument", []string{"work", "render", invalid, "extra"}, nil, "accepts at most 1 arg"},
+		{"invalid format", []string{"work", "render", "--format", "svg", invalid},
 			visualizationFailure(`unsupported format "svg"`), `unsupported format "svg"`},
-		{"unreadable file", []string{"work", "visualize", filepath.Join(t.TempDir(), "missing.json")},
+		{"unreadable file", []string{"work", "render", filepath.Join(t.TempDir(), "missing.json")},
 			visualizationFailure("batch file not found"), "batch file not found"},
-		{"invalid content", []string{"work", "visualize", invalid},
+		{"invalid content", []string{"work", "render", invalid},
 			visualizationFailure("invalid JSON"), "invalid JSON"},
 	}
 	for _, test := range tests {
@@ -759,7 +395,7 @@ func TestResolvedWorkVisualizePublicCommandPreservesFailures(t *testing.T) {
 				t.Fatal("visualization operation called after cancellation")
 				return "", nil
 			}),
-			[]string{"work", "visualize", invalid}, io.Discard, ctx,
+			[]string{"work", "render", invalid}, io.Discard, ctx,
 		)
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("Execute() error = %v, want context canceled", err)
@@ -770,7 +406,7 @@ func TestResolvedWorkVisualizePublicCommandPreservesFailures(t *testing.T) {
 		writeErr := errors.New("write failed")
 		err := executeResolvedVisualizeError(
 			t, resolvedVisualizeTransportHandler(visualizationFailure("invalid JSON")),
-			[]string{"work", "visualize", invalid},
+			[]string{"work", "render", invalid},
 			errorWriter{err: writeErr}, context.Background(),
 		)
 		if err == nil || errors.Is(err, writeErr) {
@@ -784,7 +420,7 @@ func TestResolvedWorkVisualizePublicCommandPreservesFailures(t *testing.T) {
 			t, resolvedVisualizeTransportHandler(func(workservice.VisualizationRequest) (string, error) {
 				return "flowchart TD\n", nil
 			}),
-			[]string{"work", "visualize", valid},
+			[]string{"work", "render", valid},
 			errorWriter{err: writeErr}, context.Background(),
 		)
 		if !errors.Is(err, writeErr) {
@@ -912,81 +548,12 @@ func assertResolvedMoveJSONAndDiagnostics(
 	}
 }
 
-func TestResolvedWorkAdaptersReportEveryMissingStableInput(t *testing.T) {
-	stringInput := func(id string) resolvedTestValue {
-		return resolvedTestValue{id: id, source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("value")}
+func writeWorkHandlerBatchFile(t *testing.T, contents string) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "batch.json")
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatalf("write batch file: %v", err)
 	}
-	local := []resolvedTestValue{
-		stringInput("you.work.list.flag.state-name"), stringInput("you.work.list.flag.state-type"),
-		stringInput("you.work.list.flag.name"), stringInput("you.work.list.flag.work-type-name"),
-		stringInput("you.work.list.flag.trace-id"), stringInput("you.work.list.flag.sort-by"),
-		{id: "you.work.list.flag.max-results", source: resolvedinput.SourceCLIFlag, value: resolvedinput.IntValue(1)},
-		stringInput("you.work.list.flag.next-token"), stringInput("you.work.list.flag.session"),
-		stringInput("you.work.show.arg.0"), stringInput("you.work.show.flag.session"),
-		stringInput("you.work.move.arg.0"), stringInput("you.work.move.arg.1"),
-		stringInput("you.work.move.flag.session"), stringInput("you.work.move.flag.request-id"),
-		stringInput("you.work.visualize.arg.0"), stringInput("you.work.visualize.flag.format"),
-	}
-	globals := []resolvedTestValue{
-		stringInput("you.flag.server"),
-		{id: "you.flag.json", source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(false)},
-		{id: "you.flag.verbose", source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(false)},
-		{id: "you.flag.debug", source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(false)},
-	}
-	noList := func(workcli.ListConfig) error { return nil }
-	noShow := func(workcli.ShowConfig) error { return nil }
-	noMove := func(workcli.MoveConfig) error { return nil }
-	noVisualize := func(workcli.VisualizeConfig) error { return nil }
-	tests := []struct {
-		name    string
-		handler commandregistry.ResolvedWorkRunE
-		missing []string
-	}{
-		{"list", commandregistry.ResolvedListRunE(commandregistry.ResolvedListBinding{ListWork: noList}),
-			[]string{"you.work.list.flag.state-name", "you.work.list.flag.state-type", "you.work.list.flag.name", "you.work.list.flag.work-type-name", "you.work.list.flag.trace-id", "you.work.list.flag.sort-by", "you.work.list.flag.max-results", "you.work.list.flag.next-token", "you.work.list.flag.session"}},
-		{"show", commandregistry.ResolvedShowRunE(commandregistry.ResolvedShowBinding{ShowWork: noShow}),
-			[]string{"you.work.show.arg.0", "you.work.show.flag.session"}},
-		{"move", commandregistry.ResolvedMoveRunE(commandregistry.ResolvedMoveBinding{MoveWork: noMove}),
-			[]string{"you.work.move.arg.0", "you.work.move.arg.1", "you.work.move.flag.session", "you.work.move.flag.request-id"}},
-		{"visualize", commandregistry.ResolvedVisualizeRunE(commandregistry.ResolvedVisualizeBinding{VisualizeWork: noVisualize}),
-			[]string{"you.work.visualize.arg.0", "you.work.visualize.flag.format"}},
-	}
-	for _, test := range tests {
-		missingInputs := test.missing
-		if test.name != "visualize" {
-			missingInputs = append(missingInputs, "you.flag.server", "you.flag.json", "you.flag.verbose", "you.flag.debug")
-		}
-		for _, missing := range missingInputs {
-			t.Run(test.name+"/"+missing, func(t *testing.T) {
-				inputs := resolvedTestInputsWithout(t, local, missing)
-				inherited := resolvedTestInputsWithout(t, globals, missing)
-				err := test.handler(&cobra.Command{}, inputs, inherited)
-				var accessErr *resolvedinput.AccessError
-				if !errors.As(err, &accessErr) || accessErr.InputID != missing {
-					t.Fatalf("handler error = %v, want missing stable input %q", err, missing)
-				}
-			})
-		}
-	}
-}
-
-func TestVerifyWorkRunnableCoverageAcceptsCompleteRegistry(t *testing.T) {
-	manifest, err := cligenerated.WorkFamilyManifest()
-	if err != nil {
-		t.Fatalf("WorkFamilyManifest() error = %v", err)
-	}
-	registry := commandregistry.NewRegistry()
-	for _, commandID := range []string{
-		"you.work.list",
-		"you.work.show",
-		"you.work.move",
-		"you.work.visualize",
-	} {
-		if err := registry.Register(commandID, noopRunE); err != nil {
-			t.Fatalf("Register(%q) error = %v", commandID, err)
-		}
-	}
-	if err := registry.VerifyWorkRunnableCoverage(manifest); err != nil {
-		t.Fatalf("VerifyWorkRunnableCoverage() error = %v", err)
-	}
+	return path
 }

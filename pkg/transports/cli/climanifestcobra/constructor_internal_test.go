@@ -7,7 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -31,7 +34,6 @@ func TestGenericConstructorRejectsSiblingAliasCollisionBeforeDispatch(t *testing
 		t.Fatalf("handler calls = %d, want 0", calls)
 	}
 }
-
 func TestGenericCompletionReservesLaterRequiredArgumentLikeParser(t *testing.T) {
 	manifest := feedbackManifest()
 	delete(manifest.Commands, "feedback.zeta")
@@ -86,7 +88,6 @@ func TestGenericCompletionReservesLaterRequiredArgumentLikeParser(t *testing.T) 
 		t.Fatalf("first completion = %v, want required static input", values)
 	}
 }
-
 func TestGenericHelpDerivesCardinalityAndExposesFlagAliases(t *testing.T) {
 	manifest := feedbackManifest()
 	delete(manifest.Commands, "feedback.zeta")
@@ -137,7 +138,6 @@ func TestGenericHelpDerivesCardinalityAndExposesFlagAliases(t *testing.T) {
 		t.Fatalf("help does not project cardinality and flag alias:\n%s", help)
 	}
 }
-
 func TestGenericArgumentsSupportCobraDoubleDashTermination(t *testing.T) {
 	manifest := feedbackManifest()
 	delete(manifest.Commands, "feedback.zeta")
@@ -169,7 +169,6 @@ func TestGenericArgumentsSupportCobraDoubleDashTermination(t *testing.T) {
 		t.Fatalf("handler values = %#v, want bare -- to terminate flags", received)
 	}
 }
-
 func TestGenericArgumentsRejectInvalidDoubleDashModesBeforeDispatch(t *testing.T) {
 	tests := []struct {
 		name string
@@ -191,7 +190,6 @@ func TestGenericArgumentsRejectInvalidDoubleDashModesBeforeDispatch(t *testing.T
 		})
 	}
 }
-
 func TestGenericHiddenArgumentParsesWithoutAppearingInHelp(t *testing.T) {
 	visible := canonicalFeedbackArgument("feedback.alpha.arg.visible", "visible", 0, "visible")
 	hidden := canonicalFeedbackArgument("feedback.alpha.arg.secret", "secret", 1, "hidden")
@@ -229,7 +227,6 @@ func TestGenericHiddenArgumentParsesWithoutAppearingInHelp(t *testing.T) {
 		t.Fatalf("handler values = %#v, want hidden argument parsed", received)
 	}
 }
-
 func TestGenericArgumentsRejectIncompleteCanonicalRecordsBeforeDispatch(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -261,7 +258,6 @@ func TestGenericArgumentsRejectIncompleteCanonicalRecordsBeforeDispatch(t *testi
 		})
 	}
 }
-
 func TestGenericFlagsRejectIncompleteCanonicalRecordsBeforeDispatch(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -296,7 +292,6 @@ func TestGenericFlagsRejectIncompleteCanonicalRecordsBeforeDispatch(t *testing.T
 		})
 	}
 }
-
 func TestCanonicalInputTablesRejectIncompleteBindingsAndPrecedenceBeforeDispatch(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -345,7 +340,6 @@ func TestCanonicalInputTablesRejectIncompleteBindingsAndPrecedenceBeforeDispatch
 		})
 	}
 }
-
 func TestCanonicalFlagNormalizationDispatchesDefaultsAndExplicitValues(t *testing.T) {
 	manifest := feedbackManifest()
 	delete(manifest.Commands, "feedback.zeta")
@@ -404,7 +398,6 @@ func TestCanonicalFlagNormalizationDispatchesDefaultsAndExplicitValues(t *testin
 		t.Fatalf("explicit values = %#v, want lowercase/trim normalization", received)
 	}
 }
-
 func TestCanonicalFlagsRejectUnsupportedNoOptionDefaultTypes(t *testing.T) {
 	integer, integer64 := 7, int64(9)
 	repeated := []string{"worker"}
@@ -457,7 +450,6 @@ func TestCanonicalFlagsRejectUnsupportedNoOptionDefaultTypes(t *testing.T) {
 		})
 	}
 }
-
 func TestRelationshipSetsRejectDuplicatesContradictionsAndCyclesBeforeDispatch(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -484,7 +476,6 @@ func TestRelationshipSetsRejectDuplicatesContradictionsAndCyclesBeforeDispatch(t
 		})
 	}
 }
-
 func TestInheritedFlagGroupsConstructAndEnforceBeforeDispatch(t *testing.T) {
 	tests := []struct {
 		kind     string
@@ -503,7 +494,6 @@ func TestInheritedFlagGroupsConstructAndEnforceBeforeDispatch(t *testing.T) {
 		})
 	}
 }
-
 func TestInheritedFlagGroupsRejectDuplicateEffectiveParticipantsBeforeDispatch(t *testing.T) {
 	manifest := inheritedRelationshipManifest("mutually-exclusive")
 	alpha := manifest.Commands["feedback.alpha"]
@@ -832,7 +822,6 @@ func feedbackBindings(manifest climanifest.Manifest, handler GenericHandler) Gen
 	}
 	return bindings
 }
-
 func TestRegisterFlagSupportsBoolStringAndInt(t *testing.T) {
 	t.Run("bool shorthand", func(t *testing.T) {
 		var value bool
@@ -883,7 +872,6 @@ func TestRegisterFlagSupportsBoolStringAndInt(t *testing.T) {
 		}
 	})
 }
-
 func TestPositionalArgsFromManifestCoversCardinalityModes(t *testing.T) {
 	exact := positionalArgsFromManifest(climanifest.Command{
 		Arguments: map[string]climanifest.Argument{
@@ -929,7 +917,6 @@ func TestPositionalArgsFromManifestCoversCardinalityModes(t *testing.T) {
 		t.Fatal("two required args accepted one positional, want rejection")
 	}
 }
-
 func TestApplyFlagContractSetsHiddenAndNoOptDefault(t *testing.T) {
 	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	flags.Bool("json", false, "json")
@@ -945,7 +932,6 @@ func TestApplyFlagContractSetsHiddenAndNoOptDefault(t *testing.T) {
 		t.Fatalf("flag = %#v, want hidden with no-opt default", flag)
 	}
 }
-
 func TestRejectDeprecatedPortFlagAllowsUnsetPort(t *testing.T) {
 	cmd := &cobra.Command{Use: "show"}
 	var port int
@@ -973,5 +959,41 @@ func TestRegisterFlagRejectsUnsupportedValueType(t *testing.T) {
 		ValueType: "float",
 	}, flagTarget{}, "help"); err == nil {
 		t.Fatal("registerFlag(float) = nil, want error")
+	}
+}
+
+func TestResolvedWorkHandlerBindingsCoversMissingAndOptionalWatch(t *testing.T) {
+	manifest, err := generated.WorkFamilyManifest()
+	if err != nil {
+		t.Fatalf("WorkFamilyManifest() error = %v", err)
+	}
+	allHandlers := commandregistry.ResolvedWorkHandlers{List: noopResolvedInputHandler, Watch: noopResolvedInputHandler, Show: noopResolvedInputHandler, Move: noopResolvedInputHandler, Visualize: noopResolvedInputHandler}
+	missingList := allHandlers
+	missingList.List = nil
+	if _, err := resolvedWorkHandlerBindings(manifest, missingList); err == nil {
+		t.Fatal("resolvedWorkHandlerBindings(missing list) error = nil")
+	}
+	optionalWatch := allHandlers
+	optionalWatch.Watch = nil
+	watchRecord := manifest.Commands["you.work.watch"]
+	watchRecord.Arguments, watchRecord.Flags = nil, nil
+	manifest.Commands[watchRecord.ID] = watchRecord
+	bindings, err := resolvedWorkHandlerBindings(manifest, optionalWatch)
+	if err != nil {
+		t.Fatalf("resolvedWorkHandlerBindings(optional watch) error = %v", err)
+	}
+	watchHandler := bindings[watchRecord.Handler.ID]
+	if watchHandler == nil {
+		t.Fatal("optional watch handler was not bound")
+	}
+	if err := watchHandler(&cobra.Command{}, nil, nil, resolvedinput.Inputs{}); err == nil {
+		t.Fatal("optional watch handler error = nil")
+	}
+	duplicate := cloneWorkerCoverageManifest(manifest)
+	showRecord := duplicate.Commands["you.work.show"]
+	showRecord.Handler.ID = duplicate.Commands["you.work.list"].Handler.ID
+	duplicate.Commands[showRecord.ID] = showRecord
+	if _, err := resolvedWorkHandlerBindings(duplicate, allHandlers); err == nil {
+		t.Fatal("resolvedWorkHandlerBindings(duplicate handler) error = nil")
 	}
 }

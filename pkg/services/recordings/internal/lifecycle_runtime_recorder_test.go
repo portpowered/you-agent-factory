@@ -54,8 +54,8 @@ func TestLifecycleRuntimeRecorderUsesComposedRootForBindingFailuresAndFinalizati
 		Payload: []byte(`{"workId":"work-1"}`),
 	})
 	scope := recordings.CanonicalEventScope{FactorySessionID: "~default"}
-	if err := recorder.BindRecordingService(root, scope); err != nil {
-		t.Fatalf("BindRecordingService: %v", err)
+	if err := recorder.BindRecordingLifecycle(root.(recordings.RecordingLifecycle), scope); err != nil {
+		t.Fatalf("BindRecordingLifecycle: %v", err)
 	}
 
 	if err := recorder.Flush(); err != nil {
@@ -67,7 +67,7 @@ func TestLifecycleRuntimeRecorderUsesComposedRootForBindingFailuresAndFinalizati
 	}
 
 	status, err := root.QueryRecordingStatus(recordings.RecordingStatusRequest{
-		RecordingID: recorder.recordingID,
+		RecordingID: recordings.RecordingID(recorder.recordingID),
 	})
 	if err != nil {
 		t.Fatalf("QueryRecordingStatus: %v", err)
@@ -112,10 +112,10 @@ func TestReplayRecordingSnapshotWriterPreservesReplayCompatibility(t *testing.T)
 		runtimeRecorderTestClock{now: startedAt},
 	)
 	recorder := newLifecycleRecorderForTest(t, startedAt, path)
-	if err := recorder.BindRecordingService(root, recordings.CanonicalEventScope{
+	if err := recorder.BindRecordingLifecycle(root.(recordings.RecordingLifecycle), recordings.CanonicalEventScope{
 		FactorySessionID: "~default",
 	}); err != nil {
-		t.Fatalf("BindRecordingService: %v", err)
+		t.Fatalf("BindRecordingLifecycle: %v", err)
 	}
 	if err := recorder.Finalize(finishedAt); err != nil {
 		t.Fatalf("Finalize: %v", err)
@@ -144,11 +144,25 @@ func TestReplayRecordingSnapshotWriterPreservesReplayCompatibility(t *testing.T)
 			len(artifact.Events),
 		)
 	}
+	for index, event := range artifact.Events {
+		if event.Context.SessionID == nil || *event.Context.SessionID != "~default" {
+			t.Fatalf("replay artifact event %d session id = %v, want ~default", index, event.Context.SessionID)
+		}
+	}
 }
 
 func newLifecycleRecorderForTest(
 	t *testing.T,
 	startedAt time.Time,
+	path string,
+) *lifecycleRuntimeRecorder {
+	return newLifecycleRecorderWithIDForTest(t, startedAt, "", path)
+}
+
+func newLifecycleRecorderWithIDForTest(
+	t *testing.T,
+	startedAt time.Time,
+	recordingID string,
 	path string,
 ) *lifecycleRuntimeRecorder {
 	t.Helper()
@@ -162,6 +176,7 @@ func newLifecycleRecorderForTest(
 		time.Hour,
 		nil,
 		func() time.Time { return startedAt },
+		recordingID,
 		path,
 		func(
 			factorydefinitions.FactorySnapshotSource,
@@ -181,6 +196,124 @@ func newLifecycleRecorderForTest(
 	return recorder
 }
 
+// stubRecordingLifecycle is a controllable recordings.RecordingLifecycle fake
+// used to prove BindRecordingLifecycle stops (joins) periodic lifecycle work
+// when the initial Factory snapshot append fails after Begin has already
+// started it, rather than leaking it.
+type stubRecordingLifecycle struct {
+	beginResult  recordings.RecordingLifecycleResult
+	beginErr     error
+	beginRequest recordings.BeginRecordingRequest
+	appendErr    error
+	appendCalls  int
+	stopCalls    int
+	stopErr      error
+}
+
+func (s *stubRecordingLifecycle) Begin(request recordings.BeginRecordingRequest) (recordings.RecordingLifecycleResult, error) {
+	s.beginRequest = request
+	return s.beginResult, s.beginErr
+}
+
+func (s *stubRecordingLifecycle) Bind(recordings.BindLifecycleRequest) (recordings.RecordingLifecycleResult, error) {
+	return recordings.RecordingLifecycleResult{}, nil
+}
+
+func (s *stubRecordingLifecycle) AppendEvent(recordings.AppendLifecycleEventRequest) (recordings.RecordingLifecycleResult, error) {
+	s.appendCalls++
+	return recordings.RecordingLifecycleResult{}, s.appendErr
+}
+
+func (s *stubRecordingLifecycle) RecordFailure(recordings.RecordLifecycleFailureRequest) (recordings.RecordingLifecycleResult, error) {
+	return recordings.RecordingLifecycleResult{}, nil
+}
+
+func (s *stubRecordingLifecycle) Flush(recordings.FlushLifecycleRequest) (recordings.RecordingLifecycleResult, error) {
+	return recordings.RecordingLifecycleResult{}, nil
+}
+
+func (s *stubRecordingLifecycle) Stop(recordings.StopLifecycleRequest) error {
+	s.stopCalls++
+	return s.stopErr
+}
+
+func (s *stubRecordingLifecycle) Finish(recordings.FinishLifecycleRequest) (recordings.RecordingLifecycleResult, error) {
+	return recordings.RecordingLifecycleResult{}, nil
+}
+
+func (s *stubRecordingLifecycle) Status(recordings.LifecycleStatusRequest) (recordings.RecordingLifecycleResult, error) {
+	return recordings.RecordingLifecycleResult{}, nil
+}
+
+var _ recordings.RecordingLifecycle = (*stubRecordingLifecycle)(nil)
+
+func TestLifecycleRuntimeRecorderBindStopsPeriodicWorkOnInitialAppendFailure(t *testing.T) {
+	t.Parallel()
+
+	startedAt := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
+	appendErr := errors.New("initial snapshot append failed")
+	stopErr := errors.New("stop cleanup failed")
+	lifecycle := &stubRecordingLifecycle{
+		beginResult: recordings.RecordingLifecycleResult{
+			Status: recordings.LifecycleStatus{RecordingID: "leaked-recording"},
+		},
+		appendErr: appendErr,
+		stopErr:   stopErr,
+	}
+	recorder := newLifecycleRecorderForTest(t, startedAt, "leak-check.json")
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-leak-check"}
+
+	err := recorder.BindRecordingLifecycle(lifecycle, scope)
+	if err == nil {
+		t.Fatal("BindRecordingLifecycle() error = nil, want initial append failure")
+	}
+	if !errors.Is(err, appendErr) {
+		t.Fatalf("BindRecordingLifecycle() error = %v, want it to preserve the initiating append cause", err)
+	}
+	if !errors.Is(err, stopErr) {
+		t.Fatalf("BindRecordingLifecycle() error = %v, want it to preserve the cleanup stop cause", err)
+	}
+	if lifecycle.appendCalls != 1 {
+		t.Fatalf("append calls = %d, want exactly 1", lifecycle.appendCalls)
+	}
+	if lifecycle.stopCalls != 1 {
+		t.Fatalf(
+			"lifecycle Stop calls = %d, want exactly 1 (periodic work must be stopped/joined on partial-bind failure, not leaked)",
+			lifecycle.stopCalls,
+		)
+	}
+	if recorderErr := recorder.Err(); !errors.Is(recorderErr, stopErr) {
+		t.Fatalf("recorder.Err() = %v, want it to observe the preserved stop cleanup cause", recorderErr)
+	}
+}
+
+func TestLifecycleRuntimeRecorderBindsConcreteRecordingIdentity(t *testing.T) {
+	t.Parallel()
+
+	startedAt := time.Date(2026, 8, 4, 13, 0, 0, 0, time.UTC)
+	const recordingID recordings.LifecycleRecordingID = "runtime-recording-identity"
+	lifecycle := &stubRecordingLifecycle{
+		beginResult: recordings.RecordingLifecycleResult{
+			Status: recordings.LifecycleStatus{RecordingID: recordingID},
+		},
+	}
+	recorder := newLifecycleRecorderWithIDForTest(
+		t, startedAt, string(recordingID), "identity-check.json",
+	)
+
+	if err := recorder.BindRecordingLifecycle(lifecycle, recordings.CanonicalEventScope{
+		FactorySessionID: "session-identity-check",
+	}); err != nil {
+		t.Fatalf("BindRecordingLifecycle: %v", err)
+	}
+	if lifecycle.beginRequest.RecordingID != recordingID {
+		t.Fatalf("Begin recording identity = %q, want %q", lifecycle.beginRequest.RecordingID, recordingID)
+	}
+	if recorder.recordingID != recordingID {
+		t.Fatalf("bound recording identity = %q, want %q", recorder.recordingID, recordingID)
+	}
+}
+
 func TestLifecycleRuntimeRecorderStopAndIdempotentRecordEvent(t *testing.T) {
 	t.Parallel()
 
@@ -196,8 +329,8 @@ func TestLifecycleRuntimeRecorderStopAndIdempotentRecordEvent(t *testing.T) {
 	)
 	recorder := newLifecycleRecorderForTest(t, startedAt, "recording-stop.json")
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-stop"}
-	if err := recorder.BindRecordingService(root, scope); err != nil {
-		t.Fatalf("BindRecordingService: %v", err)
+	if err := recorder.BindRecordingLifecycle(root.(recordings.RecordingLifecycle), scope); err != nil {
+		t.Fatalf("BindRecordingLifecycle: %v", err)
 	}
 	event := factorydefinitions.FactoryEvent{
 		Id:   "dup-event",

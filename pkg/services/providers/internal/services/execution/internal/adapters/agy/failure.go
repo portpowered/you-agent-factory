@@ -10,7 +10,6 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // ErrMissingExecutable reports that the configured Agy binary could not be resolved.
@@ -51,7 +50,7 @@ func declaredFailureFromPTY(
 			Message: TimeoutFailureMessage,
 		}, true
 	}
-	if failureType := classifyOutputFailure(result.CleanedText); failureType != workers.WorkFailureTypeUnknown {
+	if failureType := classifyOutputFailure(result.CleanedText); failureType != providers.ExecuteFailureKindUnknown {
 		return declaredFailureFromWorkFailure(failureType), true
 	}
 	if errors.Is(err, agypty.ErrNonzeroExit) || result.ExitCode != 0 {
@@ -88,25 +87,25 @@ func classifySetupError(err error) *providers.ExecuteFailure {
 	}
 }
 
-func classifyOutputFailure(stdout string) workers.WorkFailureType {
+func classifyOutputFailure(stdout string) providers.ExecuteFailureKind {
 	normalized := strings.ToLower(strings.TrimSpace(stdout))
 	if normalized == "" {
-		return workers.WorkFailureTypeUnknown
+		return providers.ExecuteFailureKindUnknown
 	}
 	for _, signal := range []string{
 		"api key", "authentication", "unauthorized", "forbidden",
 		"login required", "not authenticated",
 	} {
 		if strings.Contains(normalized, signal) {
-			return workers.WorkFailureTypeAuthFailure
+			return providers.ExecuteFailureKindAuthentication
 		}
 	}
-	return workers.WorkFailureTypeUnknown
+	return providers.ExecuteFailureKindUnknown
 }
 
-func declaredFailureFromWorkFailure(failureType workers.WorkFailureType) providers.ExecuteFailure {
+func declaredFailureFromWorkFailure(failureType providers.ExecuteFailureKind) providers.ExecuteFailure {
 	switch failureType {
-	case workers.WorkFailureTypeAuthFailure:
+	case providers.ExecuteFailureKindAuthentication:
 		return providers.ExecuteFailure{
 			Kind:    providers.ExecuteFailureKindAuthentication,
 			Message: "Agy authentication failed.",

@@ -9,7 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -206,6 +206,7 @@ func TestPetriConcurrentFailureDoesNotDuplicateDispatch(t *testing.T) {
 		rejectTraceID: failTraceID,
 		reviewCounts:  make(map[string]int),
 	}
+	provider.NativeProvider.ExecuteFunc = provider.Execute
 	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
 		ProviderOverride: provider,
 	}, 15*time.Second)
@@ -242,31 +243,38 @@ func TestPetriConcurrentFailureDoesNotDuplicateDispatch(t *testing.T) {
 }
 
 type traceAwareReviewInferenceProvider struct {
+	testutil.NativeProvider
 	rejectTraceID string
 	mu            sync.Mutex
 	reviewCounts  map[string]int
 }
 
-func (p *traceAwareReviewInferenceProvider) Infer(
+func (p *traceAwareReviewInferenceProvider) Execute(
 	_ context.Context,
-	req workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
-	traceID := req.Dispatch.Execution.TraceID
-	if traceID == "" {
-		traceID = req.Dispatch.CurrentChainingTraceID
-	}
+	req providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	traceID := req.Correlation.TraceID
 	if req.WorkerType == "reviewer" {
 		p.mu.Lock()
 		p.reviewCounts[traceID]++
 		p.mu.Unlock()
 		if traceID == p.rejectTraceID {
-			return workerexecution.InferenceResponse{Content: "needs revision"}, nil
+			return traceAwareReviewResponse("needs revision"), nil
 		}
 	}
-	return workerexecution.InferenceResponse{Content: "Done. COMPLETE ACCEPTED"}, nil
+	return traceAwareReviewResponse("Done. COMPLETE ACCEPTED"), nil
 }
 
-var _ workerprovider.Provider = (*traceAwareReviewInferenceProvider)(nil)
+func traceAwareReviewResponse(content string) providers.ExecuteResult {
+	return providers.ExecuteResult{
+		Content: content,
+		Diagnostics: &providers.ExecuteDiagnostics{
+			Metadata: map[string]string{
+				"completion_evidence": "provider_response",
+			},
+		},
+	}
+}
 
 type seedIdea struct {
 	traceID string

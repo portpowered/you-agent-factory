@@ -5,7 +5,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorycontext "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -17,11 +16,6 @@ type Scheduler = scheduler.Scheduler
 // Factory runtime without exposing its implementation.
 type WorkflowContextProvider interface {
 	WorkflowContext() *factorycontext.FactoryContext
-}
-
-// WorkMover is synchronous operator control ingress for relocating work tokens.
-type WorkMover interface {
-	MoveWork(ctx context.Context, workID string, stateName string, source work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error)
 }
 
 // APIFactory is the migration-only factory boundary required by legacy HTTP
@@ -37,13 +31,9 @@ type APIFactory interface {
 	SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error)
 }
 
-// LegacySnapshotProvider is migration-only Petri snapshot access retained for
-// hosted runtimes. It is not part of the APIFactory or Service peer contracts.
-type LegacySnapshotProvider = legacysnapshot.Provider
-
 // Service is the singular Factory Runtime root contract and the only
-// cross-service runtime authority for control, observation, dispatch-plan, and
-// checkpoint slices published at this package root. Peers depend on this named
+// cross-service runtime authority for control, observation, and dispatch-plan
+// slices published at this package root. Peers depend on this named
 // interface rather than hosting bundles, run-loop engines, or JavaScript-only
 // strategy seams. A service may route these operations to a replaceable hosted
 // engine and therefore does not expose the engine run loop.
@@ -58,10 +48,12 @@ type Service interface {
 	// Returns ErrNotRunning when the instance is not running.
 	ControlResume(ctx context.Context, req ResumeRequest) (ResumeResult, error)
 
-	// ControlTerminate requests cooperative stop of the Factory Runtime instance using
-	// the published plain terminate/stop control contract. Returns
-	// ErrAlreadyStopped, ErrNotRunning, or ErrInvalidLifecycleTransition for
-	// typed lifecycle failures. Nested IMP-RUN packets own durable stop wiring.
+	// ControlTerminate requests cooperative stop of the Factory Runtime instance
+	// using the published plain stop control contract. A turn-scoped request
+	// fans its captured CANCEL or TERMINATE action to associated Worker Sessions
+	// before the shared workstation pool shuts down. Returns ErrAlreadyStopped,
+	// ErrNotRunning, or ErrInvalidLifecycleTransition for typed lifecycle
+	// failures. Nested IMP-RUN packets own durable stop wiring.
 	ControlTerminate(ctx context.Context, req TerminateRequest) (TerminateResult, error)
 
 	// ControlWaitToComplete returns a channel that is closed when all tokens reach
@@ -82,57 +74,42 @@ type Service interface {
 	// source of truth for this published slice.
 	Observe(ctx context.Context, req ObserveRequest) (ObserveResult, error)
 
+	// CleanInvocationSnapshot projects the current Runtime state into the
+	// detached vocabulary consumed by clean invocation result classification.
+	CleanInvocationSnapshot(ctx context.Context) (CleanInvocationSnapshot, error)
+
 	// PlanDispatch publishes a stable dispatch intent into Runtime-owned
 	// planning/outbox vocabulary. Workers remains the execution owner. Returns
 	// ErrDuplicateDispatchIntent, ErrNotRunning, or ErrNotFound for typed
-	// dispatch-plan failures, or ErrCapabilityUnavailable until the canonical
-	// outbox implementation lands. Nested IMP-RUN packets own durable wiring.
+	// dispatch-plan failures. Nested IMP-RUN packets own durable wiring.
 	PlanDispatch(ctx context.Context, req PlanDispatchRequest) (PlanDispatchResult, error)
 
 	// AcceptDispatchResult accepts or retires a correlated worker result against
 	// a previously planned dispatch intent, including idempotent duplicate
 	// handling vocabulary on success. Returns ErrUnknownDispatchCorrelation,
 	// ErrInvalidDispatchResultBoundary, ErrNotRunning, or ErrNotFound for typed
-	// dispatch-plan failures, or ErrCapabilityUnavailable until the canonical
-	// result-ingress implementation lands.
+	// dispatch-plan failures.
 	AcceptDispatchResult(ctx context.Context, req AcceptDispatchResultRequest) (AcceptDispatchResultResult, error)
 
-	// CaptureCheckpoint captures a versioned Runtime execution checkpoint with
-	// opaque strategy payload bytes. Returns ErrNotRunning or ErrNotFound for
-	// typed availability failures. Does not claim Recordings immutable history
-	// ownership. Returns ErrCapabilityUnavailable until nested IMP-RUN packets
-	// provide canonical execution-state codec wiring.
-	CaptureCheckpoint(ctx context.Context, req CaptureCheckpointRequest) (CaptureCheckpointResult, error)
-
-	// LoadCheckpoint loads or inspects compatibility of a previously captured
-	// checkpoint without restoring it. Returns ErrCheckpointNotFound,
-	// ErrCorruptCheckpoint, ErrIncompatibleCheckpoint, ErrNotRunning, or
-	// ErrNotFound for typed failures, or ErrCapabilityUnavailable until the
-	// canonical checkpoint store implementation lands.
-	LoadCheckpoint(ctx context.Context, req LoadCheckpointRequest) (LoadCheckpointResult, error)
-
-	// RestoreCheckpoint restores a compatible opaque checkpoint into mutable
-	// Runtime execution state. Returns ErrCheckpointNotFound,
-	// ErrCorruptCheckpoint, ErrIncompatibleCheckpoint, ErrNotRunning, or
-	// ErrNotFound for typed failures, or ErrCapabilityUnavailable until the
-	// canonical mutable-state restore implementation lands.
-	RestoreCheckpoint(ctx context.Context, req RestoreCheckpointRequest) (RestoreCheckpointResult, error)
-}
-
-// Factory retains the migration-era engine and blocking run-loop surface for
-// hosting-owned construction. Concrete hosted runtimes also implement Service;
-// cross-service root-slice peers depend on Service rather than this engine seam.
-type Factory interface {
-	APIFactory
-	LegacySnapshotProvider
-	WorkMover
-	Pause(ctx context.Context) error
-	Resume(ctx context.Context) error
-	GetFactoryEvents(ctx context.Context) ([]interfaces.FactoryEvent, error)
-	WaitToComplete() <-chan struct{}
-	// Run starts the factory loop. Blocks until ctx is cancelled or all
-	// work reaches terminal states.
-	Run(ctx context.Context) error
+	// InvokeWorker runs one Worker that this session's orchestrator resolved
+	// itself, through the same Worker Sessions supervision a Petri dispatch
+	// gets: a reserved Worker Session identity, a committed dispatch/Worker
+	// Session association on this runtime's canonical Factory Events, and the
+	// established publication window, controls, and retry.
+	//
+	// It exists for orchestrators whose Workers have no authored workstation
+	// behind them -- a JavaScript workflow's agent.run children are Workers,
+	// but the caller has already resolved every selection they need, so there
+	// is no workstation to render. Runtime routes them through
+	// workers.ProviderInvocationRoute rather than a named workstation.
+	//
+	// This is deliberately an operation on the runtime rather than a
+	// collaborator handed out to callers: the association must land on this
+	// runtime's own ledger to be visible to anything reading canonical Factory
+	// Events, and only the runtime owns that ledger.
+	//
+	// Returns ErrNotRunning when the instance is not running.
+	InvokeWorker(ctx context.Context, req InvokeWorkerRequest) (InvokeWorkerResult, error)
 }
 
 // WorldStateProjector reconstructs canonical query state from recorded events.

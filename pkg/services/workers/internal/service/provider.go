@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/skippermissions"
 )
 
 // authorizeProviderTarget resolves provider aliases and validates prerequisites
@@ -21,42 +22,55 @@ func (s *Service) authorizeProviderTarget(
 	if identity != runners.AgentIdentity {
 		return nil
 	}
+	// A composed provider override is the execution authority for legacy
+	// provider work whose execution mechanism is blank or SCRIPT_WRAP. Named
+	// executor providers remain catalog-selected, even when a process-scoped
+	// compatibility edge is present; otherwise an unknown named provider could
+	// silently fall through to that edge.
+	if providerOverrideApplies(request, configuredProviderOverride(s)) {
+		return nil
+	}
 	if s == nil || s.providers == nil {
 		return fmt.Errorf(
 			"%w: Providers service is required for agent execution",
 			workers.ErrExecuteUnavailable,
 		)
 	}
-	raw := firstNonEmpty(
-		request.Target.Provider.ID,
-		request.Target.Provider.Alias,
-		request.Target.RunnerID,
-	)
-	if resume := request.Input.Resume; resume != nil {
-		if provider := strings.TrimSpace(resume.Provider); provider != "" {
-			raw = firstNonEmpty(raw, provider)
-		}
-	}
+	raw := providerTargetIdentity(request)
 	if strings.TrimSpace(raw) == "" {
 		return fmt.Errorf(
 			"%w: provider identity is required for agent execution",
 			workers.ErrInvalidExecuteRequest,
 		)
 	}
-	resolved, err := providers.ResolveIdentity(
+	resolved, err := s.providers.ResolveIdentity(
 		ctx,
-		s.providers,
 		providers.ResolveIdentityRequest{Identity: raw},
 	)
 	if err != nil {
 		return fmt.Errorf("%w: %w", workers.ErrInvalidExecuteRequest, err)
 	}
-	if err := providers.ValidatePrerequisites(
-		ctx,
-		s.providers,
-		providers.ValidatePrerequisitesRequest{ID: resolved.ID},
-	); err != nil {
-		return fmt.Errorf("%w: %w", workers.ErrInvalidExecuteRequest, err)
+	if !request.Input.SkipBuiltInPrerequisiteValidation {
+		if err := s.providers.ValidatePrerequisites(
+			ctx,
+			providers.ValidatePrerequisitesRequest{ID: resolved.ID},
+		); err != nil {
+			return fmt.Errorf("%w: %w", workers.ErrInvalidExecuteRequest, err)
+		}
+	}
+	request.Target.Permissions.SkipPermissions = skippermissions.EffectiveSkipPermissions(
+		request.Target.Permissions.SkipPermissions,
+		request.Target.WorkerType,
+		request.Input.InvocationSkipPermissionsOverride,
+	)
+	// Antigravity's catalog intentionally publishes only its stable baseline
+	// capabilities. Its command adapter still accepts authored media and
+	// structured-output flags, so those legacy request capabilities must not be
+	// rejected before the adapter gets a chance to handle them.
+	if resolved.ID != providers.IDAntigravity {
+		if err := validateProviderCapabilities(ctx, s.providers, resolved.ID, request.Target.Tools.RequiredOptionalCapabilities); err != nil {
+			return err
+		}
 	}
 	request.Target.Provider.ID = resolved.ID.String()
 	request.Target.Provider.Alias = ""
@@ -68,6 +82,103 @@ func (s *Service) authorizeProviderTarget(
 		request.Target.RunnerID = runnerIDForProvider(resolved.ID)
 	}
 	return nil
+}
+
+func providerTargetIdentity(request *workers.ExecuteRequest) string {
+	if request == nil {
+		return ""
+	}
+	raw := firstNonEmpty(
+		request.Target.Provider.ID,
+		request.Target.Provider.Alias,
+		request.Target.RunnerID,
+	)
+	if resume := request.Input.Resume; resume != nil {
+		if provider := strings.TrimSpace(resume.Provider); provider != "" {
+			raw = firstNonEmpty(raw, provider)
+		}
+	}
+	return raw
+}
+
+func configuredProviderOverride(s *Service) providers.Service {
+	if s == nil {
+		return nil
+	}
+	return s.providerOverride
+}
+
+func providerOverrideApplies(
+	request *workers.ExecuteRequest,
+	serviceOverride providers.Service,
+) bool {
+	if request == nil ||
+		(request.Input.ProviderOverride == nil && serviceOverride == nil) {
+		return false
+	}
+	executorProvider := strings.TrimSpace(request.Target.ExecutorProvider)
+	return executorProvider == "" || strings.EqualFold(executorProvider, "SCRIPT_WRAP")
+}
+
+func validateProviderCapabilities(
+	ctx context.Context,
+	service providers.Service,
+	id providers.ID,
+	required []workers.RunnerOptionalCapability,
+) error {
+	providerCapabilities := make([]providers.Capability, 0, len(required))
+	for _, capability := range required {
+		providerCapability, ok := providerCapabilityForRunnerCapability(capability)
+		if !ok {
+			continue
+		}
+		providerCapabilities = append(providerCapabilities, providerCapability)
+	}
+	if len(providerCapabilities) == 0 {
+		return nil
+	}
+	descriptor, err := service.GetProvider(ctx, providers.GetProviderRequest{ID: id})
+	if err != nil {
+		return fmt.Errorf("%w: get provider capabilities: %v", workers.ErrInvalidExecuteRequest, err)
+	}
+	for _, requiredCapability := range providerCapabilities {
+		if providerDescriptorHasCapability(descriptor.Provider, requiredCapability) {
+			continue
+		}
+		return workers.NewProviderError(
+			workers.WorkFailureTypePermanentBadRequest,
+			fmt.Sprintf("provider %q does not support capability %q", id, requiredCapability),
+			providers.ErrCapabilityMismatch,
+		)
+	}
+	return nil
+}
+
+func providerCapabilityForRunnerCapability(
+	capability workers.RunnerOptionalCapability,
+) (providers.Capability, bool) {
+	switch capability {
+	case workers.RunnerOptionalCapabilityImageInput:
+		return providers.CapabilityImageInput, true
+	case workers.RunnerOptionalCapabilitySessionResume:
+		return providers.CapabilitySessionResume, true
+	case workers.RunnerOptionalCapabilityStructuredOutput:
+		return providers.CapabilityStructuredOutput, true
+	default:
+		return "", false
+	}
+}
+
+func providerDescriptorHasCapability(
+	descriptor providers.Descriptor,
+	required providers.Capability,
+) bool {
+	for _, capability := range descriptor.Capabilities {
+		if capability == required {
+			return true
+		}
+	}
+	return false
 }
 
 func runnerIDForProvider(id providers.ID) string {

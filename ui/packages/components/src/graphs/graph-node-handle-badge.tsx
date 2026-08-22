@@ -108,12 +108,12 @@ function handleDotColor(tone: GraphNodeHandleTone): string {
 function anchoredHandleStyle(side: GraphNodeHandle["side"]): CSSProperties {
   return side === "left"
     ? {
-        left: "50%",
+        left: 0,
         top: "50%",
         transform: "translateY(-50%)",
       }
     : {
-        left: "50%",
+        left: "100%",
         top: "50%",
         transform: "translate(-100%, -50%)",
       };

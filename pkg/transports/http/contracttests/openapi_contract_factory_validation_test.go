@@ -2,7 +2,255 @@ package apicontract_test
 
 import (
 	"testing"
+
+	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 )
+
+func TestOpenAPIContract_WorkerSessionObservationPublishesOptionalResolvedFacts(t *testing.T) {
+	doc := loadBundledOpenAPIDocument(t)
+	schemas := componentSchemas(t, doc)
+	assertWorkerSessionOptionalResolvedFacts(t, schemas)
+	assertWorkerSessionListContract(t, doc, schemas)
+}
+
+func assertWorkerSessionOptionalResolvedFacts(t *testing.T, schemas map[string]any) {
+	t.Helper()
+	observation := schemaObject(t, schemas, "WorkerSessionObservation")
+	properties := schemaProperties(t, observation, "WorkerSessionObservation")
+
+	assertSchemaPropertiesPresent(t, properties, "WorkerSessionObservation", "model", "reasoningEffort", "workId", "workName")
+	required, ok := observation["required"].([]any)
+	if !ok {
+		t.Fatalf("WorkerSessionObservation.required is missing")
+	}
+	for _, field := range []string{"model", "reasoningEffort", "workId", "workName"} {
+		if containsString(required, field) {
+			t.Fatalf("WorkerSessionObservation.%s must remain optional", field)
+		}
+		property := properties[field].(map[string]any)
+		if property["type"] != "string" {
+			t.Fatalf("WorkerSessionObservation.%s type = %#v, want string", field, property["type"])
+		}
+		if description, ok := property["description"].(string); !ok || description == "" {
+			t.Fatalf("WorkerSessionObservation.%s description is missing", field)
+		}
+	}
+	for _, field := range []string{"workId", "workName"} {
+		property := properties[field].(map[string]any)
+		if nullable, ok := property["nullable"].(bool); !ok || !nullable {
+			t.Fatalf("WorkerSessionObservation.%s nullable = %#v, want true", field, property["nullable"])
+		}
+	}
+}
+
+func TestOpenAPIContract_CostsReportIsTypedAndAmountsAreOptionalStrings(t *testing.T) {
+	doc := loadBundledOpenAPIDocument(t)
+	paths := objectField(t, doc, "paths")
+	operation := pathOperation(t, paths, "/metrics/costs", "get")
+	assertCostsOperation(t, operation)
+
+	schemas := componentSchemas(t, doc)
+	assertCostsReportSchema(t, schemas)
+	assertCostsTokenTotalsSchema(t, schemas)
+	assertCostsRollupSchema(t, schemas)
+}
+
+func assertCostsOperation(t *testing.T, operation map[string]any) {
+	t.Helper()
+	if operation["operationId"] != "getMetricsCosts" {
+		t.Fatalf("costs operationId = %v, want getMetricsCosts", operation["operationId"])
+	}
+	parameters, ok := operation["parameters"].([]any)
+	if !ok || len(parameters) != 1 {
+		t.Fatalf("costs parameters = %#v, want one optional session_id parameter", operation["parameters"])
+	}
+	parameter, ok := parameters[0].(map[string]any)
+	if !ok || parameter["name"] != "session_id" || parameter["in"] != "query" || parameter["required"] != false {
+		t.Fatalf("costs session parameter = %#v", parameters[0])
+	}
+	assertResponseRef(t, operation, "400", "#/components/responses/BadRequest")
+	assertResponseRef(t, operation, "500", "#/components/responses/InternalError")
+}
+
+func assertCostsReportSchema(t *testing.T, schemas map[string]any) {
+	t.Helper()
+	report := schemaObject(t, schemas, "CostsReport")
+	assertRequiredFields(t, report, "scope", "currency", "status", "known_cost", "token_totals", "unpriced_dispatch_count", "unpriced_pairs", "coverage", "line_items", "work_items", "worker_sessions", "provider_models", "factory_sessions")
+	reportProperties := schemaProperties(t, report, "CostsReport")
+	knownCost, ok := reportProperties["known_cost"].(map[string]any)
+	if !ok || knownCost["type"] != "string" || knownCost["nullable"] != true {
+		t.Fatalf("CostsReport.known_cost = %#v, want nullable string", reportProperties["known_cost"])
+	}
+	pricedSubtotal, ok := reportProperties["priced_subtotal"].(map[string]any)
+	if !ok || pricedSubtotal["type"] != "string" {
+		t.Fatalf("CostsReport.priced_subtotal = %#v, want optional string", reportProperties["priced_subtotal"])
+	}
+	lineItem := schemaObject(t, schemas, "CostsLineItem")
+	lineProperties := schemaProperties(t, lineItem, "CostsLineItem")
+	for _, field := range []string{"input_tokens", "output_tokens", "cached_input_tokens", "reasoning_output_tokens"} {
+		property, ok := lineProperties[field].(map[string]any)
+		if !ok || property["type"] != "integer" {
+			t.Fatalf("CostsLineItem.%s = %#v, want integer", field, lineProperties[field])
+		}
+	}
+	status, ok := reportProperties["status"].(map[string]any)
+	if !ok {
+		t.Fatalf("CostsReport.status = %#v", reportProperties["status"])
+	}
+	assertEnumValues(t, status, "CostsReport.status", []string{"PRICED", "PARTIAL", "UNPRICED", "NO_USAGE"})
+}
+
+func assertCostsTokenTotalsSchema(t *testing.T, schemas map[string]any) {
+	t.Helper()
+	tokenTotals := schemaObject(t, schemas, "CostsTokenTotals")
+	assertRequiredFields(t, tokenTotals, "total_tokens", "input_tokens", "output_tokens", "cached_input_tokens", "reasoning_output_tokens")
+	for _, field := range []string{"total_tokens", "input_tokens", "output_tokens", "cached_input_tokens", "reasoning_output_tokens"} {
+		property := schemaProperties(t, tokenTotals, "CostsTokenTotals")[field].(map[string]any)
+		if property["type"] != "integer" || property["nullable"] != true {
+			t.Fatalf("CostsTokenTotals.%s = %#v, want nullable integer", field, property)
+		}
+	}
+}
+
+func assertCostsRollupSchema(t *testing.T, schemas map[string]any) {
+	t.Helper()
+	unpricedPair := schemaObject(t, schemas, "CostsUnpricedPair")
+	assertRequiredFields(t, unpricedPair, "provider", "model", "dispatch_count")
+	rollup := schemaObject(t, schemas, "CostsRollup")
+	assertRequiredFields(t, rollup, "key", "currency", "status", "known_cost", "token_totals", "unpriced_dispatch_count", "unpriced_pairs", "coverage")
+}
+
+func TestGeneratedGoClientBuildsMetricsCostsRequestAndExposesTypedResponses(t *testing.T) {
+	sessionID := "session one"
+	request, err := generatedclient.NewGetMetricsCostsRequest(
+		"http://localhost:7437",
+		&generatedclient.GetMetricsCostsParams{SessionId: &sessionID},
+	)
+	if err != nil {
+		t.Fatalf("build generated costs request: %v", err)
+	}
+	if got, want := request.URL.EscapedPath(), "/metrics/costs"; got != want {
+		t.Fatalf("generated costs path = %q, want %q", got, want)
+	}
+	if got := request.URL.Query().Get("session_id"); got != sessionID {
+		t.Fatalf("generated costs query session_id = %q, want %q", got, sessionID)
+	}
+
+	response := generatedclient.GetMetricsCostsClientResponse{
+		JSON200: &generatedclient.CostsReport{},
+		JSON400: &generatedclient.BadRequest{},
+		JSON500: &generatedclient.InternalError{},
+	}
+	if response.JSON200 == nil || response.JSON400 == nil || response.JSON500 == nil {
+		t.Fatal("generated costs client must expose success and typed error responses")
+	}
+}
+
+func assertWorkerSessionListContract(t *testing.T, doc map[string]any, schemas map[string]any) {
+	t.Helper()
+	listResponse := schemaObject(t, schemas, "ListWorkerSessionsResponse")
+	listProperties := schemaProperties(t, listResponse, "ListWorkerSessionsResponse")
+	sessions := listProperties["sessions"].(map[string]any)
+	items := sessions["items"].(map[string]any)
+	if items["$ref"] != "#/components/schemas/WorkerSessionObservation" {
+		t.Fatalf("ListWorkerSessionsResponse.sessions.items = %#v, want WorkerSessionObservation", items["$ref"])
+	}
+
+	paths, ok := doc["paths"].(map[string]any)
+	if !ok {
+		t.Fatalf("paths object is missing")
+	}
+	listOperation := pathOperation(t, paths, "/worker-sessions", "get")
+	parameters, ok := listOperation["parameters"].([]any)
+	if !ok {
+		t.Fatalf("top-level Worker Session list parameters are missing")
+	}
+	assertParameterRef(t, parameters, "#/components/parameters/WorkerSessionLimit")
+	for _, raw := range parameters {
+		parameter, ok := raw.(map[string]any)
+		if !ok || parameter["name"] != "scope" {
+			continue
+		}
+		schema, ok := parameter["schema"].(map[string]any)
+		if !ok || schema["default"] != "all" {
+			t.Fatalf("top-level scope default = %#v, want all", parameter["schema"])
+		}
+	}
+}
+
+func assertHumanApprovalSurfaceSchemas(t *testing.T, schemas map[string]any, paths map[string]any) {
+	t.Helper()
+	listOperation := pathOperation(t, paths, "/factory-sessions/{session_id}/approvals", "get")
+	if got := listOperation["operationId"]; got != "listHumanApprovalsBySessionId" {
+		t.Fatalf("human approval list operationId = %v, want listHumanApprovalsBySessionId", got)
+	}
+	listParameters, ok := listOperation["parameters"].([]any)
+	if !ok {
+		t.Fatalf("human approval list parameters are missing")
+	}
+	assertParameterRef(t, listParameters, "#/components/parameters/SessionID")
+	assertParameterRef(t, listParameters, "#/components/parameters/HumanApprovalStatus")
+	assertResponseSchemaRef(t, listOperation, "200", "#/components/schemas/ListHumanApprovalsResponse")
+	assertResponseRef(t, listOperation, "400", "#/components/responses/BadRequest")
+	assertResponseRef(t, listOperation, "404", "#/components/responses/NotFound")
+	assertResponseRef(t, listOperation, "500", "#/components/responses/InternalError")
+
+	showOperation := pathOperation(t, paths, "/factory-sessions/{session_id}/approvals/{approval_id}", "get")
+	if got := showOperation["operationId"]; got != "getHumanApprovalBySessionId" {
+		t.Fatalf("human approval show operationId = %v, want getHumanApprovalBySessionId", got)
+	}
+	showParameters, ok := showOperation["parameters"].([]any)
+	if !ok {
+		t.Fatalf("human approval show parameters are missing")
+	}
+	assertParameterRef(t, showParameters, "#/components/parameters/SessionID")
+	assertParameterRef(t, showParameters, "#/components/parameters/HumanApprovalID")
+	assertResponseSchemaRef(t, showOperation, "200", "#/components/schemas/HumanApproval")
+	assertResponseRef(t, showOperation, "404", "#/components/responses/NotFound")
+	assertResponseRef(t, showOperation, "500", "#/components/responses/InternalError")
+
+	approval := schemaObject(t, schemas, "HumanApproval")
+	assertRequiredFields(t, approval, "approvalId", "sessionId", "dispatchId", "workstationId", "workstationName", "decisions", "status", "workIds")
+	approvalProperties := schemaProperties(t, approval, "HumanApproval")
+	assertStringArrayProperty(t, approvalProperties, "workIds")
+	decisions, ok := approvalProperties["decisions"].(map[string]any)
+	if !ok {
+		t.Fatalf("HumanApproval.properties.decisions is missing")
+	}
+	decisionItems, ok := decisions["items"].(map[string]any)
+	if !ok {
+		t.Fatalf("HumanApproval.properties.decisions.items is missing")
+	}
+	assertEnumValues(t, decisionItems, "HumanApproval.decisions", []string{"APPROVE", "REJECT"})
+	status, ok := approvalProperties["status"].(map[string]any)
+	if !ok {
+		t.Fatalf("HumanApproval.properties.status is missing")
+	}
+	assertEnumValues(t, status, "HumanApproval.status", []string{"PENDING"})
+
+	eventPayload := schemaObject(t, schemas, "HumanApprovalRequestedEventPayload")
+	assertRequiredFields(t, eventPayload, "approvalId", "workstationId", "decisions", "status")
+	eventPayloadProperties := schemaProperties(t, eventPayload, "HumanApprovalRequestedEventPayload")
+	eventDecisions, ok := eventPayloadProperties["decisions"].(map[string]any)
+	if !ok {
+		t.Fatalf("HumanApprovalRequestedEventPayload.properties.decisions is missing")
+	}
+	eventDecisionItems, ok := eventDecisions["items"].(map[string]any)
+	if !ok {
+		t.Fatalf("HumanApprovalRequestedEventPayload.properties.decisions.items is missing")
+	}
+	assertEnumValues(t, eventDecisionItems, "HumanApprovalRequestedEventPayload.decisions", []string{"APPROVE", "REJECT"})
+	eventStatus, ok := eventPayloadProperties["status"].(map[string]any)
+	if !ok {
+		t.Fatalf("HumanApprovalRequestedEventPayload.properties.status is missing")
+	}
+	assertEnumValues(t, eventStatus, "HumanApprovalRequestedEventPayload.status", []string{"PENDING"})
+
+	runtimeProperties := schemaProperties(t, schemaObject(t, schemas, "FactorySessionRuntime"), "FactorySessionRuntime")
+	assertArrayItemRef(t, runtimeProperties, "pendingHumanApprovals", "#/components/schemas/HumanApproval")
+	workProperties := schemaProperties(t, schemaObject(t, schemas, "Work"), "Work")
+	assertPropertyRef(t, workProperties, "humanApproval", "#/components/schemas/HumanApproval")
+}
 
 func TestOpenAPIContract_DefinesFactoryValidationEndpoint(t *testing.T) {
 	doc := loadBundledOpenAPIDocument(t)
@@ -148,4 +396,72 @@ func TestOpenAPIContract_FactoryPreviewResultSchemaMatchesSharedContract(t *test
 	assertPropertyRef(t, resultProperties, "sourceResolution", "#/components/schemas/WorkflowSourceResolution")
 	assertPropertyRef(t, resultProperties, "policyPreview", "#/components/schemas/WorkflowPolicyPreview")
 	assertPropertyRef(t, resultProperties, "resultConstraints", "#/components/schemas/WorkflowResultConstraints")
+}
+
+func TestOpenAPIContract_AcceptsAdditiveCanonicalEventFields(t *testing.T) {
+	doc := loadValidatedOpenAPIContract(t)
+	payload := validRunRequestPayloadFixture()
+	payload["futurePayload"] = map[string]any{"introducedBy": "newer-you"}
+	event := map[string]any{
+		"schemaVersion": "agent-factory.event.v1",
+		"id":            "event-future-fields",
+		"type":          "RUN_REQUEST",
+		"context": map[string]any{
+			"sequence":  1,
+			"tick":      1,
+			"eventTime": "2026-04-10T12:00:00Z",
+		},
+		"payload": payload,
+	}
+	if err := doc.Components.Schemas["FactoryEvent"].Value.VisitJSON(event); err != nil {
+		t.Fatalf("FactoryEvent should accept additive payload fields: %v", err)
+	}
+	eventContext := event["context"].(map[string]any)
+	eventContext["futureContext"] = map[string]any{"introducedBy": "newer-you"}
+	if err := doc.Components.Schemas["FactoryEvent"].Value.VisitJSON(event); err == nil {
+		t.Fatal("FactoryEvent accepted an additive field in its strict context envelope")
+	}
+	delete(eventContext, "futureContext")
+	event["futureEnvelope"] = true
+	if err := doc.Components.Schemas["FactoryEvent"].Value.VisitJSON(event); err == nil {
+		t.Fatal("FactoryEvent accepted an additive envelope field at its strict root")
+	}
+	delete(event, "futureEnvelope")
+
+	recording := map[string]any{
+		"schemaVersion": "agent-factory.recording.v1",
+		"sessionId":     "session-future-fields",
+		"events":        []any{event},
+	}
+	if err := doc.Components.Schemas["FactoryRecording"].Value.VisitJSON(recording); err != nil {
+		t.Fatalf("FactoryRecording should accept events with additive payload fields: %v", err)
+	}
+	recording["futureRecording"] = map[string]any{"revision": 2}
+	if err := doc.Components.Schemas["FactoryRecording"].Value.VisitJSON(recording); err == nil {
+		t.Fatal("FactoryRecording accepted an additive envelope field at its strict root")
+	}
+	delete(recording, "futureRecording")
+
+	sessionEvent := map[string]any{
+		"schemaVersion": "agent-factory.event.v1",
+		"id":            "event-session-started-future-fields",
+		"type":          "SESSION_STARTED",
+		"context": map[string]any{
+			"sequence":  2,
+			"tick":      2,
+			"eventTime": "2026-04-10T12:00:01Z",
+		},
+		"payload": map[string]any{
+			"startedAt":     "2026-04-10T12:00:01Z",
+			"futurePayload": map[string]any{"revision": 2},
+		},
+	}
+	if err := doc.Components.Schemas["FactoryEvent"].Value.VisitJSON(sessionEvent); err != nil {
+		t.Fatalf("SessionStartedEventPayload should accept additive fields: %v", err)
+	}
+
+	event["schemaVersion"] = "agent-factory.event.v2"
+	if err := doc.Components.Schemas["FactoryEvent"].Value.VisitJSON(event); err == nil {
+		t.Fatal("FactoryEvent accepted an invalid known schemaVersion")
+	}
 }

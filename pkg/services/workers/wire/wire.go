@@ -1,8 +1,7 @@
 // Package wire is the Workers service composition boundary.
 //
 // Wire performs construction only, returns the singular workers.Service root
-// interface, and starts no lifecycle components. Parent-private runtime_assembly,
-// workstations, and runners (agent/script/inference) owner wiring stays inside
+// interface, and starts no lifecycle components. Runner ownership stays inside
 // the owner service assembly path; peers depend on Service rather than owner
 // internals or construction ports. Hosted runner ownership is not constructed.
 package wire
@@ -14,18 +13,18 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 
 	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
+	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/prompting"
 	executeservice "github.com/portpowered/infinite-you/pkg/services/workers/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
-	runtimeassemblywire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation"
-	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
 
-	worktree "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/worktree"
+	worktree "github.com/portpowered/infinite-you/pkg/services/workers/internal/worktree"
 )
 
 var (
@@ -33,28 +32,35 @@ var (
 	NewPlatformGitCommander = worktree.NewPlatformGitCommander
 )
 
-// ExecuteOptions are optional process-scoped Execute edges. Omitted values use
-// inert defaults so construction remains side-effect free.
-type ExecuteOptions struct {
-	Observe  workers.ObservationSink
-	Logger   logging.Logger
-	Clock    func() time.Time
-	Worktree workers.FactoryWorktreePreparer
-}
+// The runner construction records stay private to the Workers wire package;
+// these aliases expose only their detached inputs to the canonical process
+// graph without exposing runner implementations or registries.
+type AgentDependencies = runners.AgentDependencies
+type ScriptConfig = runners.ScriptConfig
+type ScriptDependencies = runners.ScriptDependencies
+type InferenceConfig = runners.InferenceConfig
+type InferenceDependencies = runners.InferenceDependencies
+type MockConfig = runners.MockConfig
+type MockDependencies = runners.MockDependencies
 
 // NewService constructs an inert Workers root from construction ports. It
-// composes the accepted root through parent-private runtime_assembly,
-// workstations, and runners (agent/script/inference) owner construction
-// without publishing owner types on the returned peer surface. Missing required
-// construction ports fail with a deterministic construction error and a nil
-// service.
+// composes the private runner registry once and installs a request-scoped
+// Execute capability without publishing runner or executor objects on the
+// returned service root.
 func NewService(
-	agentDependencies runners.AgentDependencies,
-	scriptConfig runners.ScriptConfig,
-	scriptDependencies runners.ScriptDependencies,
-	inferenceConfig runners.InferenceConfig,
-	inferenceDependencies runners.InferenceDependencies,
-	options ...ExecuteOptions,
+	agentDependencies AgentDependencies,
+	scriptConfig ScriptConfig,
+	scriptDependencies ScriptDependencies,
+	inferenceConfig InferenceConfig,
+	inferenceDependencies InferenceDependencies,
+	observe workers.ObservationSink,
+	logger logging.Logger,
+	clock func() time.Time,
+	worktree workers.FactoryWorktreePreparer,
+	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
+	temporaryFiles workers.TemporaryFileSystem,
+	agentToolFiles workers.AgentToolFileSystem,
+	providerOverrides ...providers.Service,
 ) (workers.Service, error) {
 	if err := validateConstructionPorts(
 		agentDependencies,
@@ -65,50 +71,116 @@ func NewService(
 	); err != nil {
 		return nil, err
 	}
-	agentRegistry, err := runnerswire.NewAgentRegistry(agentDependencies)
+	runnerRegistry, err := runnerswire.NewProductionRegistry(
+		agentDependencies,
+		scriptConfig,
+		scriptDependencies,
+		inferenceConfig,
+		inferenceDependencies,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("construct Workers: %w", err)
 	}
-	scriptRegistry, err := runnerswire.NewScriptRegistry(scriptConfig, scriptDependencies)
+	var providerOverride providers.Service
+	if len(providerOverrides) > 0 {
+		providerOverride = providerOverrides[0]
+	}
+	executeService, err := executeservice.NewWithProviderOverride(
+		runnerRegistry,
+		agentDependencies.Providers,
+		observe,
+		logger,
+		clock,
+		worktree,
+		worktreeRelease,
+		temporaryFiles,
+		providerOverride,
+		agentrun.NewLibraryHarnessAdapter(agentToolFiles),
+		agentDependencies.DecisionEnvelopes,
+		scriptDependencies.FactoryDocs,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("construct Workers: %w", err)
 	}
-	inferenceRegistry, err := runnerswire.NewInferenceRegistry(inferenceConfig, inferenceDependencies)
-	if err != nil {
-		return nil, fmt.Errorf("construct Workers: %w", err)
+	return workersinternal.NewRoot(executeService)
+}
+
+// NewMockService constructs the explicit Workers mock-feature root. The mock
+// strategy is registered only in this opt-in composition path; ordinary
+// NewService construction remains a production registry with no mock entry.
+// The returned root uses the same Execute normalization, observations,
+// cleanup, and Worktree behavior as production Workers.
+func NewMockService(
+	agentDependencies AgentDependencies,
+	scriptConfig ScriptConfig,
+	scriptDependencies ScriptDependencies,
+	inferenceConfig InferenceConfig,
+	inferenceDependencies InferenceDependencies,
+	mockWorkers *workers.MockWorkersConfig,
+	mockDependencies MockDependencies,
+	observe workers.ObservationSink,
+	logger logging.Logger,
+	clock func() time.Time,
+	worktree workers.FactoryWorktreePreparer,
+	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
+	temporaryFiles workers.TemporaryFileSystem,
+	agentToolFiles workers.AgentToolFileSystem,
+	providerOverrides ...providers.Service,
+) (workers.Service, error) {
+	if mockWorkers == nil {
+		return nil, fmt.Errorf("construct mock Workers: mock workers config is required")
 	}
-	runnerRegistry, err := combineRunnerRegistries(agentRegistry, scriptRegistry, inferenceRegistry)
-	if err != nil {
+	if err := validateConstructionPorts(
+		agentDependencies,
+		scriptConfig,
+		scriptDependencies,
+		inferenceConfig,
+		inferenceDependencies,
+	); err != nil {
 		return nil, err
 	}
-	runtimeAssembly, err := runtimeassemblywire.NewService(runnerRegistry, defaultBindingAssembler)
+	runnerRegistry, err := runnerswire.NewMockProductionRegistry(
+		agentDependencies,
+		scriptConfig,
+		scriptDependencies,
+		inferenceConfig,
+		inferenceDependencies,
+		MockConfig{WorkersConfig: mockWorkers},
+		mockDependencies,
+	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("construct mock Workers: %w", err)
 	}
-	executeOptions := ExecuteOptions{}
-	if len(options) > 0 {
-		executeOptions = options[0]
+	var providerOverride providers.Service
+	if len(providerOverrides) > 0 {
+		providerOverride = providerOverrides[0]
 	}
-	executeService, err := executeservice.New(executeservice.Dependencies{
-		Runners:   runnerRegistry,
-		Providers: agentDependencies.Providers,
-		Observe:   executeOptions.Observe,
-		Logger:    executeOptions.Logger,
-		Clock:     executeOptions.Clock,
-		Worktree:  executeOptions.Worktree,
-	})
+	executeService, err := executeservice.NewWithProviderOverride(
+		runnerRegistry,
+		agentDependencies.Providers,
+		observe,
+		logger,
+		clock,
+		worktree,
+		worktreeRelease,
+		temporaryFiles,
+		providerOverride,
+		agentrun.NewLibraryHarnessAdapter(agentToolFiles),
+		agentDependencies.DecisionEnvelopes,
+		scriptDependencies.FactoryDocs,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("construct Workers: %w", err)
+		return nil, fmt.Errorf("construct mock Workers: %w", err)
 	}
-	return workersinternal.NewRoot(runtimeAssembly, workstationswire.NewService(), executeService)
+	return workersinternal.NewRoot(executeService)
 }
 
 func validateConstructionPorts(
-	agentDependencies runners.AgentDependencies,
-	scriptConfig runners.ScriptConfig,
-	scriptDependencies runners.ScriptDependencies,
-	inferenceConfig runners.InferenceConfig,
-	inferenceDependencies runners.InferenceDependencies,
+	agentDependencies AgentDependencies,
+	scriptConfig ScriptConfig,
+	scriptDependencies ScriptDependencies,
+	inferenceConfig InferenceConfig,
+	inferenceDependencies InferenceDependencies,
 ) error {
 	if agentDependencies.Providers == nil {
 		return fmt.Errorf("construct Workers: agent Providers service is required")
@@ -116,7 +188,7 @@ func validateConstructionPorts(
 	if agentDependencies.Publish == nil {
 		return fmt.Errorf("construct Workers: agent progress publisher is required")
 	}
-	if strings.TrimSpace(scriptConfig.Command) == "" {
+	if strings.TrimSpace(scriptConfig.Command) == "" && !scriptConfig.RequestSelected {
 		return fmt.Errorf("construct Workers: script command is required")
 	}
 	if scriptDependencies.CommandRunner == nil {
@@ -143,53 +215,7 @@ func validateConstructionPorts(
 	return nil
 }
 
-func combineRunnerRegistries(
-	agentRegistry runners.Service,
-	scriptRegistry runners.Service,
-	inferenceRegistry runners.Service,
-) (runners.Service, error) {
-	registrations := make([]runners.Registration, 0, 3)
-	for _, entry := range []struct {
-		service  runners.Service
-		identity string
-	}{
-		{agentRegistry, runners.AgentIdentity},
-		{scriptRegistry, runners.ScriptIdentity},
-		{inferenceRegistry, runners.InferenceIdentity},
-	} {
-		binding, err := entry.service.Resolve(runners.ResolutionRequest{
-			Identity: entry.identity,
-		})
-		if err != nil {
-			return nil, fmt.Errorf(
-				"construct Workers runner registry: resolve %s runner: %w",
-				entry.identity,
-				err,
-			)
-		}
-		registrations = append(registrations, runners.Registration{
-			Identity: binding.Identity,
-			Metadata: binding.Metadata,
-			Runner:   binding.Runner,
-		})
-	}
-	return runnerswire.NewService(registrations)
-}
-
-func defaultBindingAssembler(
-	_ context.Context,
-	role workers.RuntimeBuildRoleRequest,
-	_ workers.RuntimeBuildOpeningOptions,
-	selection workers.ResolvedRunnerSelection,
-) (workers.AssembledRuntimeBinding, error) {
-	return workers.AssembledRuntimeBinding{
-		RoleName:        role.Name,
-		RoleKind:        role.Kind,
-		RunnerSelection: selection,
-	}, nil
-}
-
-var NewFactoryDocsLoader = workstationswire.NewFactoryDocsLoader
+var NewFactoryDocsLoader = workerprompting.NewFactoryDocsLoader
 
 var NewExecutor = invocation.NewExecutor
 var NewLibraryHarnessAdapter = agentrun.NewLibraryHarnessAdapter

@@ -1,25 +1,26 @@
 package ownershipinventory_test
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 )
 
-const packageTargetManifestRelativePath = "docs/internal/packaged-service-structure/package-target-manifest.json"
-
-type packageTargetManifestRow struct {
-	PackagePath string `json:"packagePath"`
-	Disposition string `json:"disposition"`
-	Destination string `json:"destination"`
-}
-
-type packageTargetManifestFile struct {
-	Packages []packageTargetManifestRow `json:"packages"`
+// committedMoveLedger loads the consolidated open-move ledger keyed by package
+// path. Every row in it is an open move; a package that is settled where it
+// already lives carries no row at all.
+func committedMoveLedger(t *testing.T, root string) map[string]ownershipinventory.UnfinishedMoveRow {
+	t.Helper()
+	moves, err := ownershipinventory.LoadUnfinishedMoves(root)
+	if err != nil {
+		t.Fatalf("LoadUnfinishedMoves() error = %v", err)
+	}
+	byPath := make(map[string]ownershipinventory.UnfinishedMoveRow, len(moves.Moves))
+	for _, row := range moves.Moves {
+		byPath[row.PackagePath] = row
+	}
+	return byPath
 }
 
 func TestFrozenInventoryFactoryDefinitionsRejectsRetainToOwnerRoot(t *testing.T) {
@@ -55,55 +56,35 @@ func TestFrozenInventoryFactoryDefinitionsRejectsRetainToOwnerRoot(t *testing.T)
 	}
 }
 
+// Each consolidated row carries both the owner-relative destination bucket and
+// the repository-relative successor path. For Factory Definitions the two must
+// describe the same target, so a row cannot claim one destination while sending
+// the package somewhere else.
 func TestFactoryDefinitionsCommittedBaselinesAlignMoveDestinations(t *testing.T) {
 	t.Parallel()
 
 	root := repositoryRoot(t)
-	inventory, err := ownershipinventory.Load(root)
+	moves, err := ownershipinventory.LoadUnfinishedMoves(root)
 	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	manifest, err := loadPackageTargetManifest(root)
-	if err != nil {
-		t.Fatalf("loadPackageTargetManifest() error = %v", err)
-	}
-
-	ownershipByPath := make(map[string]ownershipinventory.PackageRow, len(inventory.Packages))
-	for _, row := range inventory.Packages {
-		ownershipByPath[row.PackagePath] = row
+		t.Fatalf("LoadUnfinishedMoves() error = %v", err)
 	}
 
 	const ownerPrefix = "pkg/services/factory_definitions/"
-	for _, row := range manifest.Packages {
+	checked := 0
+	for _, row := range moves.Moves {
 		if !strings.HasPrefix(row.PackagePath, ownerPrefix) {
 			continue
 		}
-		if row.Disposition != ownershipinventory.DispositionMove {
-			continue
-		}
-		ownershipRow, ok := ownershipByPath[row.PackagePath]
-		if !ok {
-			t.Fatalf("ownership inventory missing committed manifest move row %q", row.PackagePath)
-		}
+		checked++
 		wantSuccessor := "pkg/services/" + row.Destination
-		if ownershipRow.Successor != wantSuccessor {
-			t.Fatalf("dual-ledger drift for %q: manifest destination %q => successor %q, ownership has %q",
-				row.PackagePath, row.Destination, wantSuccessor, ownershipRow.Successor)
+		if row.Successor != wantSuccessor {
+			t.Fatalf("move ledger drift for %q: destination %q => successor %q, ledger has %q",
+				row.PackagePath, row.Destination, wantSuccessor, row.Successor)
 		}
 	}
-}
-
-func loadPackageTargetManifest(root string) (packageTargetManifestFile, error) {
-	path := filepath.Join(root, filepath.FromSlash(packageTargetManifestRelativePath))
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return packageTargetManifestFile{}, err
+	if checked == 0 {
+		t.Fatal("no Factory Definitions rows found in the move ledger; the alignment check proved nothing")
 	}
-	var manifest packageTargetManifestFile
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return packageTargetManifestFile{}, err
-	}
-	return manifest, nil
 }
 
 func factoryDefinitionsCanonicalRetainRest(rest string) bool {

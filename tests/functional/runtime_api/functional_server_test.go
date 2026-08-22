@@ -2,12 +2,14 @@ package runtime_api_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -18,9 +20,20 @@ type FunctionalServer struct {
 
 type runtimeOption func(*support.FunctionalAPIServerConfig)
 
-func withProvider(provider workerprovider.Provider) runtimeOption {
+func withProvider(provider any) runtimeOption {
 	return func(cfg *support.FunctionalAPIServerConfig) {
-		cfg.Edges.ProviderOverride = provider
+		switch provider := provider.(type) {
+		case nil:
+			cfg.Edges.ProviderOverride = nil
+		case providers.Service:
+			cfg.Edges.ProviderOverride = provider
+		case interface {
+			Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error)
+		}:
+			cfg.Edges.ProviderOverride = support.ProviderServiceFromInference(provider)
+		default:
+			panic("withProvider requires a Providers service or legacy test provider")
+		}
 	}
 }
 

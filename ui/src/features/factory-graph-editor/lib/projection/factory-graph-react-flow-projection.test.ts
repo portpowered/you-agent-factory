@@ -15,7 +15,10 @@ import {
   removeFactoryLayoutEdgeWaypoint,
   setFactoryLayoutEdgeWaypoints,
 } from "../layout/factory-graph-layout-edge-waypoints";
-import { createDefaultFactoryLayout } from "../layout/factory-graph-layout-operations";
+import {
+  createDefaultFactoryLayout,
+  setFactoryLayoutNodeSize,
+} from "../layout/factory-graph-layout-operations";
 import {
   SYSTEM_TIME_EXPIRY_TRANSITION_ID,
   SYSTEM_TIME_WORK_TYPE_ID,
@@ -58,7 +61,7 @@ describe("factory graph React Flow projection", () => {
         label: "gpu",
       },
       position: { x: 0, y: 0 },
-      type: "factoryEntity",
+      type: "resource",
     });
     expect(projection.edges).toEqual(
       expect.arrayContaining([
@@ -79,6 +82,125 @@ describe("factory graph React Flow projection", () => {
         edge.className?.includes(FACTORY_GRAPH_EDITOR_EDGE_HOVER_CLASS),
       ),
     ).toBe(true);
+  });
+
+  it("forwards future worker kinds to the semantic worker node", () => {
+    const factoryDefinition = {
+      ...baseFactoryDefinition,
+      workers: baseFactoryDefinition.workers?.map((worker) => ({
+        ...worker,
+        type: "FUTURE_WORKER_KIND" as never,
+      })),
+    } satisfies CanonicalFactoryDefinition;
+    const topology = buildFactoryGraphTopologyFromDefinition(factoryDefinition);
+
+    const worker = projectFactoryGraphToReactFlow({
+      factoryDefinition,
+      topology,
+    }).nodes.find((node) => node.id === "worker:writer");
+
+    expect(worker?.data.workerType).toBe("FUTURE_WORKER_KIND");
+  });
+
+  it("projects authored node sizes into every React Flow dimension field", () => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const layout = setFactoryLayoutNodeSize(
+      createDefaultFactoryLayout(),
+      "workstation:draft",
+      { height: 340, width: 420 },
+      { x: 0, y: 0 },
+    );
+
+    const node = projectFactoryGraphToReactFlow({
+      layout,
+      topology,
+    }).nodes.find((candidate) => candidate.id === "workstation:draft");
+
+    expect(node).toMatchObject({
+      height: 340,
+      initialHeight: 340,
+      initialWidth: 420,
+      measured: { height: 340, width: 420 },
+      width: 420,
+    });
+  });
+
+  it("normalizes invalid authored sizes to finite family dimensions", () => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const layout = setFactoryLayoutNodeSize(
+      createDefaultFactoryLayout(),
+      "workstation:draft",
+      { height: Number.NaN, width: Number.POSITIVE_INFINITY },
+      { x: 0, y: 0 },
+    );
+
+    const node = projectFactoryGraphToReactFlow({
+      layout,
+      topology,
+    }).nodes.find((candidate) => candidate.id === "workstation:draft");
+
+    expect(Number.isFinite(node?.height)).toBe(true);
+    expect(Number.isFinite(node?.width)).toBe(true);
+    expect(node?.measured?.height).toBe(node?.height);
+    expect(node?.measured?.width).toBe(node?.width);
+  });
+
+  it("projects human approval output edges onto the stable approval handle", () => {
+    const humanApprovalDefinition = {
+      ...baseFactoryDefinition,
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations?.[0],
+          description: {
+            type: "LOCALIZABLE_ASSET" as const,
+            value: "Confirm the release",
+          },
+          id: "release-approval",
+          name: "release-approval",
+          onRejection: [{ state: "queued", workType: "story" }],
+          type: WorkstationType.HUMAN_APPROVAL,
+          worker: undefined,
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      humanApprovalDefinition,
+    );
+
+    const projection = projectFactoryGraphToReactFlow({
+      factoryDefinition: humanApprovalDefinition,
+      topology,
+      workstationResolver: createFactoryGraphWorkstationResolver(
+        humanApprovalDefinition.workstations,
+      ),
+    });
+
+    expect(projection.edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "workstation-output:workstation:release-approval->work-state:story:done",
+          sourceHandle: "workstation-approval-source",
+        }),
+        expect.objectContaining({
+          id: "workstation-on-rejection:workstation:release-approval->work-state:story:queued",
+          sourceHandle: "workstation-on-rejection-source",
+        }),
+      ]),
+    );
+    expect(
+      projection.nodes
+        .find((node) => node.id === "workstation:release-approval")
+        ?.data.handles.map((anchor) => anchor.id),
+    ).toEqual(
+      expect.arrayContaining([
+        "workstation-approval-source",
+        "workstation-on-rejection-source",
+      ]),
+    );
   });
 
   it("projects renamed work-state node ids and labels from an updated factory definition", () => {
@@ -161,17 +283,17 @@ describe("factory graph React Flow projection", () => {
       expect.arrayContaining([
         expect.objectContaining({
           data: expect.objectContaining({
-            connectionAnchors: [],
+            handles: [],
             kind: "doc",
             kindLabel: "Doc",
             label: "factory/docs/guide.md",
           }),
           id: "doc:factory/docs/guide.md",
-          type: "factoryEntity",
+          type: "doc",
         }),
         expect.objectContaining({
           data: expect.objectContaining({
-            connectionAnchors: [],
+            handles: [],
             kind: "doc",
             label: "factory/scripts/setup-workspace.py",
           }),
@@ -395,11 +517,20 @@ describe("factory graph React Flow projection", () => {
         activeTool: "connect",
         canEditConnections: true,
         draftStatus: "addition",
+        interactionOverlay: {
+          connectionHint: expect.any(String),
+          draftStatus: "addition",
+          badges: [
+            expect.objectContaining({
+              tone: "warning",
+            }),
+          ],
+        },
         validationMessage: "Workstation body is required.",
       },
     });
     expect(
-      draftNode?.data.connectionAnchors.find(
+      draftNode?.data.handles.find(
         (anchor) => anchor.id === "workstation-output-source",
       ),
     ).toMatchObject({
@@ -408,7 +539,7 @@ describe("factory graph React Flow projection", () => {
       variant: "selected",
     });
     expect(
-      queuedNode?.data.connectionAnchors.find(
+      queuedNode?.data.handles.find(
         (anchor) => anchor.id === "work-state-input-target",
       ),
     ).toMatchObject({
@@ -574,7 +705,7 @@ describe("factory graph React Flow projection", () => {
     const anchorIds =
       projection.nodes
         .find((node) => node.id === "workstation:draft")
-        ?.data.connectionAnchors.map((anchor) => anchor.id) ?? [];
+        ?.data.handles.map((anchor) => anchor.id) ?? [];
     const edgeKinds = projection.edges.map((edge) => edge.data?.kind);
 
     expect(anchorIds).toEqual(
@@ -676,11 +807,11 @@ describe("factory graph React Flow projection", () => {
     const logicalMoveAnchorIds =
       projection.nodes
         .find((node) => node.id === "workstation:router")
-        ?.data.connectionAnchors.map((anchor) => anchor.id) ?? [];
+        ?.data.handles.map((anchor) => anchor.id) ?? [];
     const modelWorkstationAnchorIds =
       projection.nodes
         .find((node) => node.id === "workstation:draft")
-        ?.data.connectionAnchors.map((anchor) => anchor.id) ?? [];
+        ?.data.handles.map((anchor) => anchor.id) ?? [];
 
     expect(logicalMoveAnchorIds).not.toContain("worker-assignment-target");
     expect(modelWorkstationAnchorIds).toContain("worker-assignment-target");
@@ -735,7 +866,7 @@ describe("factory graph React Flow projection", () => {
     const anchorIds =
       projection.nodes
         .find((node) => node.id === "workstation:draft")
-        ?.data.connectionAnchors.map((anchor) => anchor.id) ?? [];
+        ?.data.handles.map((anchor) => anchor.id) ?? [];
     const edgeKinds = projection.edges.map((edge) => edge.data?.kind);
 
     expect(anchorIds).toContain("workstation-on-continue-source");
@@ -792,7 +923,7 @@ describe("factory graph React Flow projection", () => {
     const anchorIds =
       projection.nodes
         .find((node) => node.id === "workstation:draft")
-        ?.data.connectionAnchors.map((anchor) => anchor.id) ?? [];
+        ?.data.handles.map((anchor) => anchor.id) ?? [];
     const progressOutcomeEdges = projection.edges.filter((edge) =>
       ["workstation-on-continue", "workstation-on-rejection"].includes(
         edge.data?.kind ?? "",
@@ -874,12 +1005,12 @@ describe("factory graph React Flow projection", () => {
     expect(
       projection.nodes
         .find((node) => node.id === "workstation:draft")
-        ?.data.connectionAnchors.some(
+        ?.data.handles.some(
           (anchor) => anchor.id === "workstation-on-continue-source",
         ),
     ).toBe(true);
     expect(
-      queuedNode?.data.connectionAnchors.find(
+      queuedNode?.data.handles.find(
         (anchor) => anchor.id === "work-state-input-target",
       ),
     ).toMatchObject({
@@ -887,7 +1018,7 @@ describe("factory graph React Flow projection", () => {
     });
   });
 
-  it("projects poller workstation behavior into editor semantic icon metadata", () => {
+  it("projects authored poller semantics into the editor node", () => {
     const factoryWithPoller = {
       ...baseFactoryDefinition,
       workers: [
@@ -910,6 +1041,7 @@ describe("factory graph React Flow projection", () => {
     const topology = buildFactoryGraphTopologyFromDefinition(factoryWithPoller);
 
     const projection = projectFactoryGraphToReactFlow({
+      factoryDefinition: factoryWithPoller,
       topology,
       workstationResolver: createFactoryGraphWorkstationResolver(
         factoryWithPoller.workstations,
@@ -921,9 +1053,53 @@ describe("factory graph React Flow projection", () => {
     );
 
     expect(pollerNode?.data).toMatchObject({
-      workstationSemanticBorderClassName: "border-dotted",
-      workstationSemanticIconKind: "poller",
-      workstationSemanticLabel: "Poller workstation",
+      workstationSemantics: {
+        controlRole: "UNKNOWN",
+        runtimeRole: "UNKNOWN",
+        runtimeType: "UNKNOWN",
+        schedulingBehavior: "POLLER",
+      },
+    });
+  });
+
+  it("does not join id-backed workstation semantics through a renamed name", () => {
+    const factoryWithStableWorkstation = {
+      ...baseFactoryDefinition,
+      workstations: [
+        {
+          ...baseFactoryDefinition.workstations?.[0],
+          id: "stable-workstation",
+          name: "Renamed process",
+          type: WorkstationType.AGENT_RUN,
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const topology: FactoryGraphTopology = {
+      edges: [],
+      nodes: [
+        {
+          id: "workstation:old-workstation",
+          key: {
+            id: "old-workstation",
+            kind: "workstation",
+            name: "Renamed process",
+          },
+          kind: "workstation",
+          label: "Renamed process",
+        },
+      ],
+    };
+
+    const projection = projectFactoryGraphToReactFlow({
+      factoryDefinition: factoryWithStableWorkstation,
+      topology,
+    });
+
+    expect(projection.nodes[0]?.data.workstationSemantics).toEqual({
+      controlRole: "UNKNOWN",
+      runtimeRole: "UNKNOWN",
+      runtimeType: "UNKNOWN",
+      schedulingBehavior: "UNKNOWN",
     });
   });
 });
@@ -1025,14 +1201,12 @@ describe("factory graph React Flow projection waypoint semantics", () => {
       }
 
       const sourceAnchorIds = new Set(
-        nodesById
-          .get(edge.source)
-          ?.data.connectionAnchors.map((anchor) => anchor.id) ?? [],
+        nodesById.get(edge.source)?.data.handles.map((anchor) => anchor.id) ??
+          [],
       );
       const targetAnchorIds = new Set(
-        nodesById
-          .get(edge.target)
-          ?.data.connectionAnchors.map((anchor) => anchor.id) ?? [],
+        nodesById.get(edge.target)?.data.handles.map((anchor) => anchor.id) ??
+          [],
       );
 
       expect(sourceAnchorIds.has(edge.sourceHandle)).toBe(true);

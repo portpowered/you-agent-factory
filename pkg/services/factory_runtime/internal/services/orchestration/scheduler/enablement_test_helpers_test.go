@@ -7,6 +7,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type capturingLogger struct {
@@ -106,10 +107,19 @@ func transitionIDs(enabled []interfaces.EnabledTransition) []string {
 	return ids
 }
 
-func tokenIDs(tokens []factorytoken.Token) []string {
-	ids := make([]string, len(tokens))
-	for i := range tokens {
-		ids[i] = tokens[i].ID
+func tokenIDs(tokens any) []string {
+	var ids []string
+	switch values := tokens.(type) {
+	case []factorytoken.Token:
+		ids = make([]string, len(values))
+		for i := range values {
+			ids[i] = values[i].ID
+		}
+	case []workerexecution.Token:
+		ids = make([]string, len(values))
+		for i := range values {
+			ids[i] = values[i].ID
+		}
 	}
 	return ids
 }

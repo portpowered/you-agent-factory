@@ -1,8 +1,9 @@
 continuously		false	keep the factory alive while idle until cancelled
 debug	d	false	emit lower-level command diagnostics where supported (implies --verbose)
 dir		factory	factory base directory
-factory			path to a JSON or YAML Factory file, or an unambiguous Factory directory, for portable one-shot runs; use positional text or piped stdin for the invocation input
+factory			path to a JSON or YAML Factory file, or an unambiguous Factory directory, for portable one-shot runs; use positional text, --to-file, or piped stdin for the invocation input
 json		false	emit structured JSON on stdout for supported commands; diagnostics remain on stderr
+listen			exact local listener host:port for local --with-server or --with-site (for example 127.0.0.1:7437); loopback hosts only; conflicts with --remote
 model			override the optional model selected within the provider for this run
 named	a		canonical persisted factory name resolved from ./factory before ~/.you-agent-factory/factories; built-ins materialize there on first use and remain editable
 no-record		false	disable the default replay artifact for this invocation
@@ -11,7 +12,9 @@ port		0	deprecated; use --server
 provider			override the worker modelProvider for this run (for example cursor-acp)
 quiet		false	suppress dashboard output for quiet or CI-oriented runs
 record			path to write a replay artifact for this run; replay artifacts are sensitive, and default live runs record automatically unless --no-record is used
-replay			path to replay an existing sensitive replay artifact
+remote		false	execute a supported operation through a running You server; does not wait, follow, continue, or start a listener
+replay			recording to replay deterministically or inspect read-only; replay does not write a new recording
+resume			recording to continue live Factory execution from; writes a successor recording by default; use --record to choose its path
 runtime-log-compress		false	compress rotated runtime log files
 runtime-log-dir			root directory for structured runtime log files grouped by UTC start date (default: ~/.you-agent-factory/logs)
 runtime-log-max-age-days		30	maximum days to retain rotated runtime log files
@@ -22,10 +25,13 @@ runtime-metrics-dir			root directory for structured runtime metrics JSONL files 
 runtime-metrics-max-age-days		30	maximum days to retain rotated runtime metrics files
 runtime-metrics-max-backups		20	maximum rotated runtime metrics files to retain
 runtime-metrics-max-size-mb		100	rotate each runtime metrics file after this many megabytes
-server		http://localhost:7437	factory API base URI (http:// or https://); HTTP client commands target this URI, while you server and server-enabled runs bind its loopback host and port
+server		http://localhost:7437	factory API base URI (http:// or https://) for HTTP client commands and remote placement; listener-owning commands use --listen host:port for explicit local binds, while local --server binding remains a warned compatibility path
 skip-permissions		false	request an invocation-only unsafe permission bypass for agent workers without changing persisted factory configuration
+to-file			read one exact, logically non-empty UTF-8 primary prompt from a regular file for one-shot invocation; preserves spaces, Unicode, line endings, blank lines, and a trailing newline; strictly conflicts with signature-defined --to, positional input, and supplied non-empty stdin
 verbose	v	false	emit concise command diagnostics to stderr
 with-mock-workers			enable mock-worker execution with an optional mock-workers JSON config path
-with-server		false	serve the Current Factory API for the lifetime of this run without opening a browser
-with-site		false	serve the embedded dashboard and open it once after listener readiness
+with-server		false	serve the Current Factory API locally for the lifetime of this run without opening a browser; conflicts with --remote
+with-site		false	serve the embedded dashboard locally and open it once after listener readiness; conflicts with --remote
 work			path to initial FACTORY_REQUEST_BATCH JSON file to submit
+worker-reasoning-effort			override the worker reasoning effort for applicable one-shot worker invocations; accepts canonical authored-Worker values minimal, low, medium, high, xhigh, or max with case and surrounding whitespace normalized; unsupported values fail before dispatch
+worktree			create or reuse a Git worktree under the invocation working directory and execute this run in its checkout

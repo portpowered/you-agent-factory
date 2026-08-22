@@ -2,7 +2,6 @@ package cursor
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -11,19 +10,19 @@ import (
 var errInspectionCanceled = providersessions.ErrOperationCanceled
 
 type inspection struct {
-	ctx              context.Context
-	bytesRead        int64
-	walkEntries      int
-	candidates       int
-	rowsQueried      int
-	transcriptFacts  int
-	malformedBlobs   int
-	malformedMeta    int
-	unknownRecords   int
-	protobufWork     int
-	exhaustedLimit   string
-	diagnostics      []providersessions.LineError
-	stopReconstruct  bool
+	ctx             context.Context
+	bytesRead       int64
+	walkEntries     int
+	candidates      int
+	rowsQueried     int
+	transcriptFacts int
+	malformedBlobs  int
+	malformedMeta   int
+	unknownRecords  int
+	protobufWork    int
+	exhaustedLimit  string
+	diagnostics     []providersessions.LineError
+	stopReconstruct bool
 }
 
 func newInspection(ctx context.Context) *inspection {
@@ -192,10 +191,6 @@ func (ins *inspection) limitError(limit string) error {
 		ins.recordLimitDiagnostic(limit)
 	}
 	return fmt.Errorf("%w: %s", providersessions.ErrResourceLimitExceeded, limit)
-}
-
-func (ins *inspection) canceled() bool {
-	return ins != nil && errors.Is(ins.checkCanceled(), errInspectionCanceled)
 }
 
 func (ins *inspection) mergeStats(stats *SessionParseStats) {

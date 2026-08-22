@@ -6,13 +6,14 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 )
 
-func bootstrapCompositionTestPersistence(t *testing.T) factorydefinitions.Persistence {
+func bootstrapCompositionTestPersistence(t *testing.T) factorydefinitions.PackagedFactoryPersistence {
 	t.Helper()
 
 	edges := serviceedges.Edges{}
@@ -109,20 +110,18 @@ func TestProvideSystemInitializationServiceComposedInitializeCreatesThenSkipsPac
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
-	providerRegistry, err := provideProviderRegistry(edges, providersRoot)
-	if err != nil {
-		t.Fatalf("provideProviderRegistry() error = %v", err)
-	}
 	decoder := provideOperatorConfigDecoder()
 	encoder := provideOperatorConfigEncoder()
 	settings, err := provideOperatorSettingsService(
 		files,
 		provideOperatorSettingsCreateTemporaryFile(edges),
-		provideOperatorSettingsProviderCatalog(providerRegistry),
+		provideOperatorSettingsProviderCatalog(providersRoot),
 		decoder,
+		provideOperatorConfigDiagnosticsDecoder(),
 		encoder,
 		provideOperatorSettingsIDGenerator(edges),
 		providersRoot,
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("provideOperatorSettingsService() error = %v", err)
@@ -133,11 +132,13 @@ func TestProvideSystemInitializationServiceComposedInitializeCreatesThenSkipsPac
 	service, err := provideSystemInitializationService(
 		bootstrapCompositionTestPersistence(t),
 		platformfilesystem.Local{},
+		provideFactoryDefinitionPackagedInstallationDirectoryCreator(edges),
 		bootstrapCompositionGoalCatalog(t),
 		loadOperatorConfig,
 		ensureOperatorBackendScope,
 		provideSystemInitializationInspectPath(edges),
 		provideSystemInitializationLegacyFactoryMigrationFileSystem(edges),
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("provideSystemInitializationService() error = %v", err)

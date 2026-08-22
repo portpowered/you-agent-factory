@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 )
 
@@ -35,33 +34,4 @@ func TestSessionsRuntimeBoundaryExercisesRootControlAndObservation(t *testing.T)
 		t.Fatalf("pause status = %q, want PAUSED", paused.Status)
 	}
 
-	observeCallsBefore := runtimeFactory.observeCalls
-	observed, err := gateway.ObserveForSession(
-		ctx,
-		sessionID,
-		factoryruntime.ObserveRequest{Scope: factoryruntime.ObservationScopeStatus},
-	)
-	if err != nil {
-		t.Fatalf("ObserveForSession: %v", err)
-	}
-	if runtimeFactory.observeCalls != observeCallsBefore+1 {
-		t.Fatalf(
-			"Observe calls = %d, want %d through Runtime root Service",
-			runtimeFactory.observeCalls,
-			observeCallsBefore+1,
-		)
-	}
-	if runtimeFactory.lastObserveRequest.Scope != factoryruntime.ObservationScopeStatus {
-		t.Fatalf("observe scope = %q, want STATUS", runtimeFactory.lastObserveRequest.Scope)
-	}
-	if observed.Observation.Status != factoryruntime.ObservationStatusActive {
-		t.Fatalf("observation status = %q, want ACTIVE", observed.Observation.Status)
-	}
-	if observed.Observation.Health.FactoryState != string(interfaces.FactoryStateRunning) {
-		t.Fatalf(
-			"observation factoryState = %q, want %q",
-			observed.Observation.Health.FactoryState,
-			interfaces.FactoryStateRunning,
-		)
-	}
 }

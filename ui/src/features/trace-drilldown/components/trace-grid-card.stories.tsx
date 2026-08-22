@@ -1,4 +1,7 @@
+import { useState } from "react";
+import { expect, userEvent, within } from "storybook/test";
 import type { DashboardTrace } from "../../../api/dashboard/types";
+import type { TraceSelectionIdentity } from "../lib/trace-selection";
 import { TraceGridBentoCard } from "./trace-grid-card";
 
 const populatedTrace: DashboardTrace = {
@@ -103,6 +106,22 @@ export const PopulatedTrace = {
   },
 };
 
+export const RelationOnlyTrace = {
+  args: {
+    state: {
+      status: "ready",
+      trace: {
+        ...populatedTrace,
+        dispatches: [],
+        trace_id: "trace-relation-only-story",
+        transition_ids: [],
+        workstation_sequence: [],
+      },
+    },
+    widgetId: "trace-relation-only-story",
+  },
+};
+
 export const EmptyTrace = {
   args: {
     state: { status: "empty", workID: "work-missing" },
@@ -132,5 +151,41 @@ export const LocalizedZhCN = {
     locale: "zh-CN",
     state: { status: "ready", trace: populatedTrace },
     widgetId: "trace-zh-cn-story",
+  },
+};
+
+function SelectionSynchronizationStory() {
+  const [selectedTraceSelection, setSelectedTraceSelection] =
+    useState<TraceSelectionIdentity | null>(null);
+
+  return (
+    <TraceGridBentoCard
+      onSelectTraceSelection={setSelectedTraceSelection}
+      selectedTraceSelection={selectedTraceSelection}
+      state={{ status: "ready", trace: populatedTrace }}
+      widgetId="trace-selection-synchronization-story"
+    />
+  );
+}
+
+export const SelectionSynchronization = {
+  tags: ["test"],
+  render: () => <SelectionSynchronizationStory />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const dispatchButton = await canvas.findByRole("button", {
+      name: "Select dispatch dispatch-review-active, Work work-active-story, attempt 1.",
+    });
+    const graphButton = await canvas.findByRole("button", {
+      name: "Select Plan workstation",
+    });
+
+    await userEvent.click(dispatchButton);
+    await expect(graphButton).toHaveAttribute("aria-pressed", "true");
+    await expect(graphButton).toHaveFocus();
+
+    await userEvent.keyboard("{Enter}");
+    await expect(dispatchButton).toHaveAttribute("aria-pressed", "true");
+    await expect(dispatchButton).toHaveFocus();
   },
 };

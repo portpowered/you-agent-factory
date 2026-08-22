@@ -63,8 +63,12 @@ func assertPublishedPackagedFactoryNames(t *testing.T, listed factorydefinitions
 		gotNames[index] = entry.Name
 	}
 	wantNames := []string{
+		"@you/agy-clip-qa",
+		"@you/agy-cold-watch",
 		"@you/classify",
 		"@you/deep-research",
+		"@you/factory-builder",
+		"@you/fix",
 		"@you/full-flow",
 		"@you/fusion",
 		"@you/goal",
@@ -72,6 +76,7 @@ func assertPublishedPackagedFactoryNames(t *testing.T, listed factorydefinitions
 		"@you/plan-execute",
 		"@you/plan-parallel",
 		"@you/quorum",
+		"@you/ralph",
 		"@you/review",
 		"@you/spawn",
 		"@you/subagent",

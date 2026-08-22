@@ -11,9 +11,6 @@ func TestSessionCommands_RequireCallerOwnedOutput(t *testing.T) {
 	tests := map[string]func() error{
 		"create": func() error { return NewCreate(testHTTPProtocol(t))(CreateConfig{Dir: "."}) },
 		"delete": func() error { return NewDelete(testHTTPProtocol(t))(DeleteConfig{SessionID: "session-1"}) },
-		"dispatches": func() error {
-			return NewDispatches(testHTTPProtocol(t))(DispatchesConfig{Context: context.Background()})
-		},
 		"pause": func() error {
 			return NewPause(testHTTPProtocol(t))(LifecycleControlConfig{Context: context.Background()})
 		},

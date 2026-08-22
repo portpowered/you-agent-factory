@@ -1,5 +1,5 @@
 type: object
-additionalProperties: false
+additionalProperties: true
 description: Shared operator configuration stored in .you-agent-factory/config.json.
 properties:
   backendScopeID:
@@ -7,8 +7,12 @@ properties:
     description: Stable identifier for the local provider-backed runtime boundary.
   defaults:
     $ref: './GlobalConfigDefaults.yaml'
+  priceTable:
+    $ref: './GlobalConfigPriceTable.yaml'
   runtime:
     $ref: './GlobalConfigRuntime.yaml'
+  models:
+    $ref: './GlobalConfigModels.yaml'
   workers:
     $ref: './GlobalConfigWorkers.yaml'
   workerPresets:

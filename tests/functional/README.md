@@ -4,34 +4,22 @@
 
 ## Commands
 
-- Default non-long lane: `make test-functional`
+- Default non-long lane: `make test-functional` (cache-aware developer feedback)
+- Fresh non-long lane: `make test-functional-fresh` (CI-equivalent reruns and flake investigation; explicitly executes every package)
 - Ordinary unit and package-integration lane: `make test-unit`
 - Stress lane: `make test-stress`
 - Release-package lane: `make test-release`
-- Independent functional coverage report: `make test-functional-coverage` (runs `functional-boundary-check` first; coverage-only local rerun)
+- Independent functional coverage report: `make test-functional-coverage` (runs `functional-boundary-check` first, discovers the complete package/test population with `go test -list`, subtracts only `functional-quarantine.json`, and performs an explicit `-count=1` instrumented run; coverage-only local rerun)
 - Independent backend unit coverage report: `make test-unit-coverage`
-- Inventory-plus-coverage Markdown catalog (boundary → one coverage run → viz): `make functional-test-viz` (fail-closed; keeps already-written `.artifacts/functional-test-viz/` diagnostics on later-step failure). Required CI Backend Functional Coverage runs this target with `FUNCTIONAL_TEST_VIZ_DIR=.artifacts/backend-functional-coverage` and uploads `functional-tests.md`, `coverage-summary.json`, `coverage.out`, and `command.log` on success and failure when present. Wiring is covered by stubbed/dry-run Make contract smoke under `tests/functional/observability/coverage/functional_test_viz_contract_test.go` (does not run the full functional suite).
+- Inventory-plus-coverage Markdown catalog (boundary → one coverage run → viz): `make functional-test-viz` (fail-closed; keeps already-written `.artifacts/functional-test-viz/` diagnostics on later-step failure). Required CI Backend Functional Coverage runs this target with `FUNCTIONAL_TEST_VIZ_DIR=.artifacts/backend-functional-coverage` and uploads `functional-tests.md`, `coverage-summary.json`, `functional-timing-summary.json`, `coverage.out`, and `command.log` on success and failure when present. The timing artifact is produced by that same full `./tests/functional/...` run and reports discovered/observed package counts, every observed top-level test outcome, elapsed time, and concise failure-reason diagnostics; it does not use a one-test allow-list. Wiring is covered by stubbed/dry-run Make contract smoke under `tests/functional/observability/coverage/functional_test_viz_contract_test.go` (does not run the full functional suite).
 - Root-process S24 acceptance lane (also run by `make verify-pr`): `make test-root-process-acceptance`
 - Opt-in long lane: `make test-functional-long`
-- Real local-inference lane: `make long-tests`
+- Managed-runtime specialty lane: `make long-tests-managed-runtime`
 
-`make long-tests` is the maintainer entrypoint for OMNIVOICE real local
-inference coverage. It first reruns the managed-local-model integration tests
-in `pkg/models/local`, then runs the tagged runtime API long test
-that exercises `POST /models/{model_name}/pull`, direct
-`/models/{model_name}/invocations`, and a factory-level `MODEL_INVOKE` path.
-The real-runtime test is opt-in: set `INFINITE_YOU_RUN_OMNIVOICE_LONG_TESTS=1`
-and ensure the `omnivoice-llamacpp` command is available on `PATH`, or point
-`INFINITE_YOU_OMNIVOICE_COMMAND` at the executable explicitly. Set
-`INFINITE_YOU_OMNIVOICE_CACHE_DIR` to reuse an existing managed cache; when
-omitted, the long test pulls assets into a temporary managed cache directory.
-GitHub Actions automation for that lane lives in
-`.github/workflows/long-local-inference.yml`; it restores `.cache/managed-models`
-between runs, installs the runtime from per-platform
-`OMNIVOICE_COMMAND_URL_*` repository variables when available, and otherwise
-builds the real `ServeurpersoCom/omnivoice.cpp` `omnivoice-tts` backend from a
-pinned commit before building the repo-owned `cmd/omnivoice-llamacpp` adapter
-that speaks the shared subprocess contract used by the service and long tests.
+`make long-tests` is the maintainer entrypoint for opt-in UI performance and
+managed local-model runtime coverage. It reruns the managed-local-model
+integration tests in `pkg/services/models/internal/local`; the dedicated
+end-to-end long inference test and workflow have been retired.
 
 The default lane runs `go run ./cmd/functionallane`, which passes
 `./tests/functional/...` directly to one `go test -p 8 -short` command. It does
@@ -39,6 +27,14 @@ not run a separate `go list` package-discovery or package-structure validation
 step. The long lane runs the full behavior tree plus any `functionallong`-tagged
 files, so broad or slow scenarios stay available without widening the default
 feedback loop.
+
+The default lane leaves `-count` unspecified so Go can reuse valid successful
+results on unchanged local runs. Use `make test-functional-fresh` when the
+result must come from a new execution, including CI-equivalent evidence and
+flake investigation. The functional coverage lane is authoritative and does
+not use the cache: `cmd/gocoveragecheck` passes `-count=1` together with its
+coverage profile, timing, and configured tier's `-short` flag, then retains the existing
+coverage-floor and package-manifest checks.
 
 The coverage lanes intentionally use separate profiles. The
 `make test-functional-coverage` command executes only the maintained non-long
@@ -56,6 +52,40 @@ Provider test destinations are test packages rather than measured backend
 packages, so adding an empty destination does not create a package-minimum
 manifest entry. Its scenarios still contribute to the shared backend profile
 as soon as tests are added there.
+
+The required functional coverage gate is subtractive. Its versioned manifest is
+`tests/functional/functional-quarantine.json`; each entry names a discovered
+package or an exact top-level test, an `ENVIRONMENT-DEPENDENT` or `GENUINELY
+FAILING` bucket, and a reason. Genuine failures must also name a follow-up.
+Package-plus-test entries become package-specific `-run` selectors, while
+package entries remove the whole package. Duplicate, malformed, stale, or
+overlapping selectors fail closed before the instrumented run, so a new
+functional package or test is selected automatically without a manifest edit.
+Entries normally use one isolated observation, while unreliable selectors may
+declare `"measurement": "repeated-isolated"` and an explicit `"attempts"`
+count from 2 through 15. Each repeated attempt starts a fresh exact-selector
+`go test` process; the ratchet reports aggregate pass, fail, and skip counts,
+rejects an all-pass sample as unexpected recovery, and retains a sample that
+contains the bucket's expected failure.
+Before the selected green run, CI executes every quarantine entry independently
+with `go test -json`: environment-dependent entries must still emit `skip`, and
+genuine-failure entries must still emit `fail`. A passing entry fails the gate
+with an instruction to remove or narrow the quarantine; missing terminal events,
+unexpected outcomes, and subprocess errors fail closed and remain visible in
+the ratchet diagnostics.
+
+The required backend CI tier for pull requests and pushes to `main` is
+`merge-full`: it runs the complete discovered tree with `-short=false`,
+subtracts only the true environment quarantine, and uses a 75-minute runner
+budget. Both triggers use the same subtractive selection and required pinned
+real-client ACPX evidence, so tests previously skipped only because of
+`testing.Short()` execute before merge. The Makefile and local runner retain
+`pr-short` defaults for fast developer feedback; set `FUNCTIONAL_SHORT=false`
+locally to exercise the full tier.
+The Linux job allows an additional five minutes for always-run summary and
+artifact-upload steps after a tier timeout. The runner fails on budget expiry,
+preserves its command log and any partial inventory/timing/quarantine output,
+and reports each tier's trigger, budget, selection rule, and quarantine path.
 
 The `make test-unit-coverage` command executes only backend package tests
 against that same owned code set. Functional coverage therefore remains

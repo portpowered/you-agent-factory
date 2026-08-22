@@ -11,18 +11,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestRunServe_RuntimeResumeSmoke_InterruptedSessionResumesThroughMCPControl(t *testing.T) {
+	t.Parallel()
+
 	harness := newMCPRuntimeResumeSmokeHarness(t)
-	client, shutdown, serveErr := startRootRuntimeMCPServer(t, harness.projectRoot, harness.provider)
+	client, shutdown := startRootRuntimeMCPServer(t, harness.projectRoot, harness.provider)
 	assertInstallSmokeInitialize(t, client)
 	assertRuntimeResumeSmokeDiscovery(t, client)
 
@@ -71,16 +73,17 @@ func TestRunServe_RuntimeResumeSmoke_InterruptedSessionResumesThroughMCPControl(
 	assertRuntimeSmokeTerminalResult(t, client, sessionID, mode)
 
 	if harness.provider.callCount() < 3 {
-		t.Fatalf("provider infer calls = %d, want at least 3 after resume completion", harness.provider.callCount())
+		t.Fatalf("provider execute calls = %d, want at least 3 after resume completion", harness.provider.callCount())
 	}
 
 	shutdown()
-	closeRunServeSmokeServer(t, nil, serveErr)
 }
 
 func TestRunServe_RuntimeResumeSmoke_DispatchContinuityPreservesCompletedChildDispatchesWithoutReplay(t *testing.T) {
+	t.Parallel()
+
 	harness := newMCPRuntimeResumeSmokeHarness(t)
-	client, shutdown, serveErr := startRootRuntimeMCPServer(t, harness.projectRoot, harness.provider)
+	client, shutdown := startRootRuntimeMCPServer(t, harness.projectRoot, harness.provider)
 	assertInstallSmokeInitialize(t, client)
 
 	sessionID := startMCPRuntimeResumeSmokeInterruptedSession(t, client, harness)
@@ -143,16 +146,17 @@ func TestRunServe_RuntimeResumeSmoke_DispatchContinuityPreservesCompletedChildDi
 	}
 
 	if harness.provider.callCount() != 3 {
-		t.Fatalf("provider infer calls = %d, want exactly 3 (step-one once, blocked step-two once, resumed step-two once)", harness.provider.callCount())
+		t.Fatalf("provider execute calls = %d, want exactly 3 (step-one once, blocked step-two once, resumed step-two once)", harness.provider.callCount())
 	}
 
 	shutdown()
-	closeRunServeSmokeServer(t, nil, serveErr)
 }
 
 func TestRunServe_RuntimeResumeSmoke_TerminalSessionResumeReturnsTypedRejectionAndPreservesSessionRead(t *testing.T) {
+	t.Parallel()
+
 	harness := newMCPRuntimeResumeSmokeSucceededHarness(t)
-	client, shutdown, serveErr := startRootRuntimeMCPServer(t, harness.projectRoot, nil)
+	client, shutdown := startRootRuntimeMCPServer(t, harness.projectRoot, nil)
 	assertInstallSmokeInitialize(t, client)
 
 	sessionID := startMCPRuntimeResumeSmokeSucceededSession(t, client)
@@ -197,12 +201,13 @@ func TestRunServe_RuntimeResumeSmoke_TerminalSessionResumeReturnsTypedRejectionA
 	}
 
 	shutdown()
-	closeRunServeSmokeServer(t, nil, serveErr)
 }
 
 func TestRunServe_RuntimeResumeSmoke_RunningSessionResumeReturnsTypedNoOpAndPreservesSessionRead(t *testing.T) {
+	t.Parallel()
+
 	harness := newMCPRuntimeResumeSmokeRunningHarness(t)
-	client, shutdown, serveErr := startRootRuntimeMCPServer(t, harness.projectRoot, nil)
+	client, shutdown := startRootRuntimeMCPServer(t, harness.projectRoot, nil)
 	assertInstallSmokeInitialize(t, client)
 
 	sessionID := startMCPRuntimeResumeSmokeRunningSession(t, client)
@@ -237,7 +242,6 @@ func TestRunServe_RuntimeResumeSmoke_RunningSessionResumeReturnsTypedNoOpAndPres
 	}
 
 	shutdown()
-	closeRunServeSmokeServer(t, nil, serveErr)
 }
 
 type mcpRuntimeResumeSmokeHarness struct {
@@ -285,11 +289,13 @@ func newMCPRuntimeResumeSmokeRunningHarness(t *testing.T) *mcpRuntimeResumeSmoke
 func startRootRuntimeMCPServer(
 	t *testing.T,
 	projectRoot string,
-	provider workerprovider.Provider,
-) (*stdioMCPClient, func(), <-chan error) {
+	provider providers.Service,
+) (*stdioMCPClient, func()) {
 	t.Helper()
 
-	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{ProviderOverride: provider})
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		ProviderOverride: provider,
+	})
 	if err != nil {
 		t.Fatalf("BuildProcess: %v", err)
 	}
@@ -321,7 +327,7 @@ func startRootRuntimeMCPServer(
 	var stderr bytes.Buffer
 	go func() {
 		serveErr <- process.Execute(root.Input{
-			Args:             []string{"you", "mcp", "serve", "--runtime", "--project-root", projectRoot},
+			Args:             []string{"you", "server", "mcp", "--runtime", "--project-root", projectRoot},
 			Env:              env,
 			Stdin:            stdinRead,
 			Stdout:           stdoutWrite,
@@ -330,22 +336,18 @@ func startRootRuntimeMCPServer(
 			WorkingDirectory: projectRoot,
 		})
 	}()
-	select {
-	case err := <-serveErr:
-		t.Fatalf("start root MCP runtime process: %v; stderr=%s", err, stderr.String())
-	case <-time.After(100 * time.Millisecond):
-	}
 
 	var shutdownOnce sync.Once
 	shutdown := func() {
 		shutdownOnce.Do(func() {
 			cancel()
 			_ = stdinWrite.Close()
+			closeRunServeSmokeServer(t, nil, serveErr)
 		})
 	}
 	t.Cleanup(shutdown)
 
-	return newStdioMCPClient(t, stdinWrite, stdoutRead), shutdown, serveErr
+	return newStdioMCPClient(t, stdinWrite, stdoutRead), shutdown
 }
 
 func startMCPRuntimeResumeSmokeSucceededSession(t *testing.T, client *stdioMCPClient) string {
@@ -478,6 +480,7 @@ func startMCPRuntimeResumeSmokeInterruptedSession(
 	)
 
 	interruptReason := "mcp runtime resume smoke interrupt"
+	harness.provider.waitForExecuteBlocked(t, 5*time.Second)
 	interrupted := decodeToolResponse[factoryapi.FactorySessionLifecycleControlResponse](
 		t,
 		client.callTool(mcpfactorysession.ToolControl, map[string]any{
@@ -494,7 +497,7 @@ func startMCPRuntimeResumeSmokeInterruptedSession(
 		t.Fatalf("interrupt outcome = %q, want ACCEPTED", interrupted.Result.Outcome)
 	}
 
-	harness.provider.waitForCanceledInfer(t, 5*time.Second)
+	harness.provider.waitForCanceledExecute(t, 5*time.Second)
 	waitForMCPSessionStatus(
 		t,
 		client,
@@ -781,15 +784,34 @@ func containsString(values []string, want string) bool {
 }
 
 type mcpRuntimeResumeSmokeBlockingProvider struct {
+	testutil.NativeProvider
 	mu              sync.Mutex
 	calls           int
 	blockedOnce     bool
 	contextCanceled int
+	executeBlocked  chan struct{}
 	workflowName    string
 }
 
 func newMCPRuntimeResumeSmokeBlockingProvider(workflowName string) *mcpRuntimeResumeSmokeBlockingProvider {
-	return &mcpRuntimeResumeSmokeBlockingProvider{workflowName: workflowName}
+	provider := &mcpRuntimeResumeSmokeBlockingProvider{
+		executeBlocked: make(chan struct{}),
+		workflowName:   workflowName,
+	}
+	provider.NativeProvider.ExecuteFunc = provider.Execute
+	return provider
+}
+
+func (p *mcpRuntimeResumeSmokeBlockingProvider) waitForExecuteBlocked(t *testing.T, timeout time.Duration) {
+	t.Helper()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-p.executeBlocked:
+	case <-timer.C:
+		t.Fatal("provider Execute did not enter its cancellable wait")
+	}
 }
 
 func (p *mcpRuntimeResumeSmokeBlockingProvider) callCount() int {
@@ -798,7 +820,7 @@ func (p *mcpRuntimeResumeSmokeBlockingProvider) callCount() int {
 	return p.calls
 }
 
-func (p *mcpRuntimeResumeSmokeBlockingProvider) Infer(ctx context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
+func (p *mcpRuntimeResumeSmokeBlockingProvider) Execute(ctx context.Context, _ providers.ExecuteRequest) (providers.ExecuteResult, error) {
 	p.mu.Lock()
 	p.calls++
 	call := p.calls
@@ -806,11 +828,11 @@ func (p *mcpRuntimeResumeSmokeBlockingProvider) Infer(ctx context.Context, _ wor
 	p.mu.Unlock()
 
 	if call == 1 {
-		return workerexecution.InferenceResponse{
+		return providers.ExecuteResult{
 			Content: fmt.Sprintf(`{"text":"live:%s:step-one:step-one:workflows","label":"step-one"}`, p.workflowName),
-			ProviderSession: &workerexecution.ProviderSessionMetadata{
+			SessionRef: &providers.SessionRef{
 				Provider: "mock",
-				Kind:     "session_id",
+				Kind:     providers.SessionIDKind,
 				ID:       "live-provider-session-1",
 			},
 		}, nil
@@ -819,26 +841,27 @@ func (p *mcpRuntimeResumeSmokeBlockingProvider) Infer(ctx context.Context, _ wor
 	if !alreadyBlocked {
 		p.mu.Lock()
 		p.blockedOnce = true
+		close(p.executeBlocked)
 		p.mu.Unlock()
 
 		<-ctx.Done()
 		p.mu.Lock()
 		p.contextCanceled++
 		p.mu.Unlock()
-		return workerexecution.InferenceResponse{}, ctx.Err()
+		return providers.ExecuteResult{}, ctx.Err()
 	}
 
-	return workerexecution.InferenceResponse{
+	return providers.ExecuteResult{
 		Content: fmt.Sprintf(`{"text":"live:%s:step-two:step-two:workflows","label":"step-two"}`, p.workflowName),
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
+		SessionRef: &providers.SessionRef{
 			Provider: "mock",
-			Kind:     "session_id",
+			Kind:     providers.SessionIDKind,
 			ID:       "live-provider-session-2",
 		},
 	}, nil
 }
 
-func (p *mcpRuntimeResumeSmokeBlockingProvider) waitForCanceledInfer(t *testing.T, timeout time.Duration) {
+func (p *mcpRuntimeResumeSmokeBlockingProvider) waitForCanceledExecute(t *testing.T, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -850,5 +873,5 @@ func (p *mcpRuntimeResumeSmokeBlockingProvider) waitForCanceledInfer(t *testing.
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	t.Fatal("provider Infer did not observe canceled workflow context")
+	t.Fatal("provider Execute did not observe canceled workflow context")
 }

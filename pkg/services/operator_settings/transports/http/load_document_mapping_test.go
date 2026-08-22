@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
+	"github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 )
 
 func TestLoadDocumentRequestFromHTTP_MapsRootRequest(t *testing.T) {

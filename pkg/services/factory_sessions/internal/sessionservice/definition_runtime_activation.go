@@ -6,10 +6,10 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 )
 
 // NamedFactoryActivationPaths resolves persistence and runtime roots for one
@@ -64,9 +64,9 @@ func ActivateSessionRuntime(
 	factoryDir string,
 	name string,
 	runtimeName string,
-	build func(context.Context, string, string, string) (factory.HostedInstance, error),
+	build func(context.Context, string, string, string) (runtimeports.RuntimeInstance, error),
 	requireIdle func(context.Context, string) error,
-	replace func(context.Context, *livesession.LiveSession, string, factory.HostedInstance) error,
+	replace func(context.Context, *livesession.LiveSession, string, runtimeports.RuntimeInstance) error,
 ) error {
 	if build == nil || requireIdle == nil || replace == nil {
 		return fmt.Errorf("factory runtime activation dependencies are required")
@@ -90,11 +90,11 @@ func ApplyNamedReplacement(
 	liveRuntime bool,
 	persistRoot string,
 	name string,
-	replacement factory.HostedInstance,
+	replacement runtimeports.RuntimeInstance,
 	requireSessionIdle func(context.Context, string) error,
 	requireRuntimeIdle func(context.Context) error,
-	replaceSession func(context.Context, *livesession.LiveSession, string, factory.HostedInstance) error,
-	activateWithoutLiveRuntime func(string, string, factory.HostedInstance) error,
+	replaceSession func(context.Context, *livesession.LiveSession, string, runtimeports.RuntimeInstance) error,
+	activateWithoutLiveRuntime func(string, string, runtimeports.RuntimeInstance) error,
 	writeCurrent factorydefinitions.CurrentFactoryPointerWriter,
 ) error {
 	if writeCurrent == nil {
@@ -126,9 +126,9 @@ func ApplyNamedReplacement(
 func ActivateStartupRuntime(
 	persistRoot string,
 	name string,
-	replacement factory.HostedInstance,
+	replacement runtimeports.RuntimeInstance,
 	runtimeState *runtimebinding.State,
-	syncDirectory func(factory.HostedInstance),
+	syncDirectory func(runtimeports.RuntimeInstance),
 	writeCurrent factorydefinitions.CurrentFactoryPointerWriter,
 ) error {
 	if runtimeState == nil {

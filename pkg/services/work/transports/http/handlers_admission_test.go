@@ -150,6 +150,34 @@ func TestSubmitWorkBySessionId_EncodesFakeRootAdmissionResult(t *testing.T) {
 	}
 }
 
+func TestSubmitWorkBySessionId_PassesSessionDefaultWorkTypeToRoot(t *testing.T) {
+	t.Parallel()
+
+	var gotDefault string
+	adapter := NewAdapter(&rootFake{
+		prepareWorkRequest: func(_ context.Context, input work.WorkRequestPreparation) (work.WorkRequest, error) {
+			gotDefault = input.DefaultWorkTypeID
+			return input.Request, nil
+		},
+		submitWorkRequestForSession: func(context.Context, string, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+			return work.WorkRequestSubmitResult{Accepted: true, RequestID: "request-1"}, nil
+		},
+	}).WithDefaultWorkTypeResolver(func(context.Context, string) (string, error) {
+		return "default-task", nil
+	})
+	recorder := httptest.NewRecorder()
+
+	adapter.SubmitWorkBySessionId(
+		recorder,
+		httptest.NewRequest(http.MethodPost, "/factory-sessions/session-1/work", strings.NewReader(`{"name":"draft"}`)),
+		"session-1",
+	)
+
+	if recorder.Code != http.StatusCreated || gotDefault != "default-task" {
+		t.Fatalf("status = %d, default work type = %q, want 201/default-task", recorder.Code, gotDefault)
+	}
+}
+
 func TestSubmitWorkBySessionId_RejectsInvalidContentBeforeFakeRoot(t *testing.T) {
 	t.Parallel()
 

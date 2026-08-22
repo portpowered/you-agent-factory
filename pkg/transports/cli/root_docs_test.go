@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
@@ -183,6 +185,7 @@ func TestRunDocumentation_RepresentativeExamplesReachCurrentCLIBoundary(t *testi
 		"you run --work ./docs/examples/startup-work.json",
 		`you run --factory ./factory.json "Review the release notes"`,
 		"you run --dir ./factory --work ./docs/examples/startup-work.json",
+		`you run --provider codex --worker-reasoning-effort xhigh --to-file "prompt files\release brief.txt"`,
 	} {
 		if !strings.Contains(doc, command) {
 			t.Fatalf("packaged run guide missing executable example %q", command)
@@ -220,6 +223,59 @@ func TestRunDocumentation_RepresentativeExamplesReachCurrentCLIBoundary(t *testi
 	}
 	if got := runs[2].WorkFile; got != "./docs/examples/startup-work.json" {
 		t.Fatalf("directory batch WorkFile = %q, want explicit documented Work", got)
+	}
+}
+
+func TestRunDocumentation_FileBackedEffortExampleReachesCurrentCLIBoundary(t *testing.T) {
+	doc, err := docscli.Markdown("run")
+	if err != nil {
+		t.Fatalf("Markdown(run) error = %v", err)
+	}
+	for _, marker := range []string{
+		"--worker-reasoning-effort",
+		"canonical authored-Worker values",
+		"--to-file",
+		"strictly conflicts",
+		"signature-defined",
+		"CRLF/LF",
+		`you run --provider codex --worker-reasoning-effort xhigh --to-file "prompt files\release brief.txt"`,
+	} {
+		if !strings.Contains(doc, marker) {
+			t.Fatalf("packaged run guide missing file-backed effort contract marker %q", marker)
+		}
+	}
+
+	originalRunCLI := runCLI
+	defer func() { runCLI = originalRunCLI }()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+	factoryPath := writePortableFactoryWithDefaultHandling(t, t.TempDir())
+	promptPath := filepath.Join(t.TempDir(), "prompt files", "release brief.txt")
+	if err := os.MkdirAll(filepath.Dir(promptPath), 0o755); err != nil {
+		t.Fatalf("create documented prompt directory: %v", err)
+	}
+	if err := os.WriteFile(promptPath, []byte("documented prompt\n"), 0o600); err != nil {
+		t.Fatalf("write documented prompt: %v", err)
+	}
+	executeDocumentedRunExample(t, []string{
+		"run", "--factory", factoryPath,
+		"--provider", "codex",
+		"--worker-reasoning-effort", "xhigh",
+		"--to-file", promptPath,
+	})
+
+	if got.ProviderOverride != "codex" || got.WorkerReasoningEffort != "xhigh" {
+		t.Fatalf("documented run overrides = provider %q, effort %q; want codex/xhigh", got.ProviderOverride, got.WorkerReasoningEffort)
+	}
+	if got.InvocationFilePath != promptPath || !got.InvocationFileExplicit {
+		t.Fatalf("documented file input = path %q explicit %t; want %q/true", got.InvocationFilePath, got.InvocationFileExplicit, promptPath)
+	}
+	if got.InvocationPositionalText != nil {
+		t.Fatalf("documented file input unexpectedly carried positional text %q", *got.InvocationPositionalText)
 	}
 }
 
@@ -322,12 +378,14 @@ func TestDocsCommand_NoTopicPrintsDocsIndex(t *testing.T) {
 		"`authoring-factories` - Practical factory authoring workflow",
 		"`run` - Supported local, one-shot, batch, continuous, and mock-worker run shapes",
 		"`config` - Operator initialization and Factory validation, flattening, expansion, and minimum authoring contract",
+		"`factory-validation` - Pre-run static Factory validation gate",
 		"`mock-workers` - Mock-worker runs",
 		"`record-replay` - Record and replay run modes",
 		"`guards` - Workstation, input, and factory guards",
 		"`relationships` - Batch DEPENDS_ON",
 		"`work` - Submitted work: session-scoped work routes, tags, batch cross-links, and submission contracts",
-		"`sessions` - Live factory sessions: session list, session show, pause and resume, factory query, status API, dashboard URL, and run modes",
+		"`sessions` - Live factory sessions: session list, session show, pause and resume, factory show, status API, dashboard URL, and run modes",
+		"`metrics` - Factory Runtime token, dispatch, failure, and latency metrics with deterministic grouping and Factory Session scope",
 		"`workstations` - Workstation kinds",
 		"`workers` - Worker types",
 		"`batch-inputs` - Batch input files",
@@ -462,10 +520,12 @@ func TestDocsCommand_CanonicalOperatorTopicsResolve(t *testing.T) {
 		heading string
 	}{
 		{topic: "run", heading: "# Run"},
+		{topic: "packaged-factories", heading: "# Packaged Factories"},
 		{topic: "config", heading: "# Config"},
 		{topic: "models", heading: "# Models"},
 		{topic: "mcp", heading: "# MCP Host Setup"},
 		{topic: "javascript-workflows", heading: "# JavaScript Workflows"},
+		{topic: "serve-acp", heading: "# Host You As An ACP Agent"},
 	}
 
 	for _, tc := range cases {
@@ -526,7 +586,7 @@ func TestDocsCommand_UnsupportedTopicReturnsCanonicalTopicError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, run, config, mock-workers, record-replay, guards, relationships, work, sessions, orchestrators, javascript-workflows, mcp, workstations, workers, providers, resources, models, batch-inputs, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, packaged-factories, run, config, factory-validation, mock-workers, record-replay, guards, relationships, operations, work, sessions, metrics, orchestrators, javascript-workflows, mcp, workstations, workers, providers, serve-acp, resources, models, batch-inputs, templates)` {
 		t.Fatalf("unexpected docs error %q", got)
 	}
 	if got := stdout.String(); got != "" {
@@ -561,6 +621,7 @@ func TestRootCommand_HelpDocumentsConciseOrientation(t *testing.T) {
 		"you run --work ./docs/examples/startup-work.json",
 		"exact Current Factory at ./factory/factory.json",
 		"you server",
+		"--remote",
 		"--with-server",
 		"--with-site",
 		"you docs agents",
@@ -665,6 +726,23 @@ func sectionProseLines(long, sectionName string) []string {
 		return nil
 	}
 	return strings.Split(rest, "\n")
+}
+
+func TestPlacementHelpDescribesRemoteExecutionWithoutListenerSemantics(t *testing.T) {
+	for _, args := range [][]string{{"--help"}, {"run", "--help"}} {
+		var out bytes.Buffer
+		root := newLegacyTestRootCommand()
+		root.SetOut(&out)
+		root.SetErr(io.Discard)
+		root.SetArgs(args)
+		if err := root.Execute(); err != nil {
+			t.Fatalf("execute %q: %v", strings.Join(args, " "), err)
+		}
+		help := out.String()
+		if !strings.Contains(help, "--remote") || !strings.Contains(help, "execute a supported operation through a running You server") {
+			t.Fatalf("help %q missing remote placement guidance:\n%s", strings.Join(args, " "), help)
+		}
+	}
 }
 
 func TestRootCommand_HelpDocumentsDiagnosticsOneLiner(t *testing.T) {

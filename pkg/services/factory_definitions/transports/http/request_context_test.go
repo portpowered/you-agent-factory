@@ -294,3 +294,38 @@ func assertDefinitionsErrorResponse(
 		t.Fatalf("message = %q, want %q", errResp.Message, wantMessage)
 	}
 }
+
+func unavailableRuntimeSnapshot(
+	ctx context.Context,
+	request factorydefinitions.ResolveRuntimeSnapshotRequest,
+) (factorydefinitions.ResolveRuntimeSnapshotResult, error) {
+	return factorydefinitions.UnimplementedService{}.ResolveRuntimeSnapshot(ctx, request)
+}
+
+func (*httpDefinitionsRootFake) ResolveRuntimeSnapshot(
+	ctx context.Context,
+	request factorydefinitions.ResolveRuntimeSnapshotRequest,
+) (factorydefinitions.ResolveRuntimeSnapshotResult, error) {
+	return unavailableRuntimeSnapshot(ctx, request)
+}
+
+func (*blockingCurrentFactoryRootFake) ResolveRuntimeSnapshot(
+	ctx context.Context,
+	request factorydefinitions.ResolveRuntimeSnapshotRequest,
+) (factorydefinitions.ResolveRuntimeSnapshotResult, error) {
+	return unavailableRuntimeSnapshot(ctx, request)
+}
+
+func (*packagedFactoryCatalogRootFake) ResolveRuntimeSnapshot(
+	ctx context.Context,
+	request factorydefinitions.ResolveRuntimeSnapshotRequest,
+) (factorydefinitions.ResolveRuntimeSnapshotResult, error) {
+	return unavailableRuntimeSnapshot(ctx, request)
+}
+
+func (*capturingCurrentFactoryRootFake) ResolveRuntimeSnapshot(
+	ctx context.Context,
+	request factorydefinitions.ResolveRuntimeSnapshotRequest,
+) (factorydefinitions.ResolveRuntimeSnapshotResult, error) {
+	return unavailableRuntimeSnapshot(ctx, request)
+}

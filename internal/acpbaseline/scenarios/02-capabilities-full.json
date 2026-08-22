@@ -1,0 +1,13 @@
+{
+  "name": "02-capabilities-full",
+  "description": "The same initialization with full filesystem and terminal client capabilities, to expose capability-sensitive agent behavior.",
+  "clientCapabilities": {"fs": {"readTextFile": true, "writeTextFile": true}, "terminal": true},
+  "steps": [
+    {"kind": "request", "method": "initialize",
+     "params": {"protocolVersion": 1, "clientCapabilities": "${clientCapabilities}"},
+     "note": "Diffing this against 01 shows what an agent withholds when a client claims it cannot read files."},
+    {"kind": "request", "method": "session/new",
+     "params": {"cwd": "${cwd}", "mcpServers": []}},
+    {"kind": "snapshot", "name": "capabilities-full"}
+  ]
+}

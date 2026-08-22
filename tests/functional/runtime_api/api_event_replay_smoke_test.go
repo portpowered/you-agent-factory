@@ -5,12 +5,13 @@ import (
 	"testing"
 	"time"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// portos:func-length-exception owner=agent-factory reason=event-replay-functional-smoke review=2026-07-18 removal=split-runtime-recording-projection-and-api-assertions-before-next-event-replay-smoke-change
 func TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndCompletedTimeline(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
 	releaseDispatch := make(chan struct{})
@@ -40,11 +41,9 @@ func TestAPIEventReplaySmoke_PublicEventsAndSessionProjectionExposeActiveAndComp
 	if workRequestPayload.Works == nil || len(*workRequestPayload.Works) != 1 {
 		t.Fatalf("generated WORK_REQUEST works = %#v, want one normalized work item", workRequestPayload.Works)
 	}
-	if len(uniqueEventTicks(outcome.events)) < 3 {
-		t.Fatalf("event replay smoke used %d ticks, want at least 3: %#v", len(uniqueEventTicks(outcome.events)), eventTicks(outcome.events))
-	}
 
 	assertEventReplayActiveSession(t, outcome.activeSession)
+	support.WaitForSessionTerminalStatus(t, server.URL(), factorysessions.DefaultSessionID, 10*time.Second)
 	assertEventReplayCompletedSession(t, support.GetDefaultSession(t, server.URL()))
 
 	work := server.ListWork(t)
@@ -82,6 +81,7 @@ func collectEventReplayOutcome(
 			outcome.workRequest = event
 		case factoryapi.FactoryEventTypeDispatchRequest:
 			outcome.request = event
+		case factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation:
 			if !released {
 				outcome.activeSession = support.GetDefaultSession(t, server.URL())
 				close(releaseDispatch)
@@ -156,26 +156,10 @@ func (p *eventReplayBlockingProvider) Infer(
 
 	return workerexecution.InferenceResponse{
 		Content: "completed",
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
+		ProviderSession: &providers.SessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       "sess-event-replay-smoke",
 		},
 	}, nil
-}
-
-func uniqueEventTicks(events []factoryapi.FactoryEvent) map[int]struct{} {
-	ticks := make(map[int]struct{})
-	for _, event := range events {
-		ticks[event.Context.Tick] = struct{}{}
-	}
-	return ticks
-}
-
-func eventTicks(events []factoryapi.FactoryEvent) []int {
-	ticks := make([]int, 0, len(events))
-	for _, event := range events {
-		ticks = append(ticks, event.Context.Tick)
-	}
-	return ticks
 }

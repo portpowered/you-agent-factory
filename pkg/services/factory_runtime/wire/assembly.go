@@ -4,7 +4,10 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimeinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
 )
 
 // RuntimeFactory constructs hosted runtime bundles.
@@ -21,15 +24,18 @@ func NewRuntimeFactory(
 	workPropagation factorydefinitions.WorkPropagationPolicyService,
 	workService work.Service,
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
+	invocationInterpolation factorydefinitions.InvocationInterpolationService,
+	baseLogger *zap.Logger,
 	loggerFactory factoryruntime.RuntimeLoggerFactory,
-	runtimeLogs factoryruntime.RuntimeLogSinkFactory,
-	runtimeMetrics factoryruntime.RuntimeMetricsSinkFactory,
+	runtimeLogs factoryruntime.RuntimeLogOwner,
+	runtimeMetrics factoryruntime.RuntimeMetricsOwner,
 	newID factoryruntime.IDGenerator,
 	workRequestIDs work.RequestIDGenerator,
 	runtimeDirs factoryruntime.RuntimeDirectoryFileSystem,
 	inputFiles factoryruntime.InputFileSystem,
 	inputDirectoryWalker factoryruntime.InputDirectoryWalker,
 	orchestrationCompilation factoryruntime.OrchestrationCompilation,
+	providerSessions providersessions.Service,
 ) *RuntimeFactory {
 	return factoryruntimeinternal.NewRuntimeFactory(
 		quorumPolicy,
@@ -37,6 +43,8 @@ func NewRuntimeFactory(
 		workPropagation,
 		workService,
 		decisionEnvelopes,
+		invocationInterpolation,
+		baseLogger,
 		loggerFactory,
 		runtimeLogs,
 		runtimeMetrics,
@@ -46,13 +54,18 @@ func NewRuntimeFactory(
 		inputFiles,
 		inputDirectoryWalker,
 		orchestrationCompilation,
+		providerSessions,
 	)
 }
 
 // NewAssembly constructs the inert Factory Runtime assembly service selected by
 // Wire. It does not start a runtime or sidecar.
-func NewAssembly(runtimeFactory *RuntimeFactory) (*Assembly, error) {
-	return factoryruntimeinternal.NewAssembly(runtimeFactory)
+func NewAssembly(
+	runtimeFactory *RuntimeFactory,
+	workerSessionsFactory factoryruntime.WorkerSessionsFactory,
+	workerService workers.Service,
+) (*Assembly, error) {
+	return factoryruntimeinternal.NewAssembly(runtimeFactory, workerSessionsFactory, workerService)
 }
 
 // NewOrchestratorDefinitionValidator returns the runtime-owned orchestrator

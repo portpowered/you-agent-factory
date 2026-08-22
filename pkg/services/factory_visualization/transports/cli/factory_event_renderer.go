@@ -57,28 +57,36 @@ type factoryEventStream interface {
 }
 
 type humanFactoryEventRenderer struct {
-	stream   factoryEventStream
-	progress *humanWorkerProgressRenderer
+	stream                 factoryEventStream
+	progress               *humanWorkerProgressRenderer
+	pendingTerminalSuccess []interfaces.FactoryEvent
 }
 
 func newHumanFactoryEventRenderer(
 	cfg FactoryEventRendererConfig,
 	presentation factoryvisualization.ResponsePresentation,
 ) *humanFactoryEventRenderer {
-	formatter := formatHumanFactoryEvent
-	if cfg.Color {
-		formatter = formatColorHumanFactoryEvent
-	}
 	return &humanFactoryEventRenderer{stream: presentation.OpenBestEffortFactoryEventStream(
 		cfg.Output,
-		formatter,
+		newHumanFactoryEventFormatter(cfg.Color),
 	), progress: newHumanWorkerProgressRenderer(cfg.ProgressOutput, cfg.ProgressIsTTY, cfg.ProgressTicks)}
 }
 
 func (renderer *humanFactoryEventRenderer) PresentFactoryEvents(events []interfaces.FactoryEvent) {
-	if renderer != nil {
-		renderer.stream.PresentFactoryEvents(events)
-		renderer.progress.PresentFactoryEvents(events)
+	if renderer == nil {
+		return
+	}
+	renderer.progress.PresentFactoryEvents(events)
+	liveEvents := make([]interfaces.FactoryEvent, 0, len(events))
+	for _, event := range events {
+		if isHumanTerminalSuccessClaim(event) {
+			renderer.pendingTerminalSuccess = append(renderer.pendingTerminalSuccess, event)
+			continue
+		}
+		liveEvents = append(liveEvents, event)
+	}
+	if len(liveEvents) > 0 {
+		renderer.stream.PresentFactoryEvents(liveEvents)
 	}
 }
 
@@ -96,6 +104,10 @@ func (renderer *humanFactoryEventRenderer) WriteFinalInvocationResult(
 		return fmt.Errorf("Factory Event renderer is nil")
 	}
 	renderer.progress.Stop()
+	if result.Status == interfaces.InvocationTerminalStatusCompleted {
+		renderer.stream.PresentFactoryEvents(renderer.pendingTerminalSuccess)
+	}
+	renderer.pendingTerminalSuccess = nil
 	_, err := renderer.stream.Finalize(func(writer io.Writer, progressSeen bool) error {
 		if result.Status == interfaces.InvocationTerminalStatusCompleted {
 			text, textErr := invocationPrimaryResultText(result.PrimaryResult)

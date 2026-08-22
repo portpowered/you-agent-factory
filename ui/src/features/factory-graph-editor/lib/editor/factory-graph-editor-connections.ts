@@ -1,4 +1,6 @@
-// biome-ignore lint/style/noExcessiveLinesPerFile: connection anchor registry and draft edge helpers stay co-located for one graph-editor seam.
+// biome-ignore-all lint/style/noExcessiveLinesPerFile: connection anchor registry and draft edge helpers stay co-located for one graph-editor seam.
+
+import { isHumanApprovalWorkstationType } from "../../../current-factory-definition/lib/worker-workstation-taxonomy";
 import {
   type WorkstationProgressOutcomeRouteContext,
   workstationSupportsProgressOutcomeFailureRoute,
@@ -156,6 +158,14 @@ const ANCHORS_BY_KIND: Record<
     },
     {
       description: "",
+      edgeKind: "workstation-output",
+      id: "workstation-approval-source",
+      label: "",
+      role: "source",
+      side: "right",
+    },
+    {
+      description: "",
       edgeKind: "workstation-on-continue",
       id: "workstation-on-continue-source",
       label: "",
@@ -223,10 +233,21 @@ function filterWorkstationConnectionAnchors(
     return filtered;
   }
 
-  let result = filtered;
+  const isHumanApproval = isHumanApprovalWorkstationType(
+    context.workstation.type,
+  );
+  let result = isHumanApproval
+    ? filtered.filter(
+        (anchor) =>
+          anchor.id !== "workstation-resource-target" &&
+          anchor.id !== "workstation-output-source",
+      )
+    : filtered;
   if (!workstationSupportsProgressOutcomeRoutes(context.workstation)) {
     result = result.filter(
-      (anchor) => !PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS.has(anchor.id),
+      (anchor) =>
+        !PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS.has(anchor.id) ||
+        (isHumanApproval && anchor.id === "workstation-on-rejection-source"),
     );
   }
   if (!workstationSupportsProgressOutcomeFailureRoute(context.workstation)) {

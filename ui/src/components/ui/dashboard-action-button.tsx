@@ -9,7 +9,7 @@ import { cn } from "../../lib/cn";
 const DASHBOARD_ACTION_BUTTON_BASE_CLASS =
   "relative shrink-0 rounded-lg border text-sm font-semibold";
 const DASHBOARD_ACTION_BUTTON_SIZE_CLASS = {
-  text: "min-h-10 px-3.5 py-2",
+  text: "min-h-11 px-3.5 py-2",
 };
 
 export interface DashboardActionButtonProps

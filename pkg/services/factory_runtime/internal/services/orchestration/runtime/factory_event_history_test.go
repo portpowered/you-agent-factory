@@ -3,17 +3,21 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -67,7 +71,7 @@ type providerBoundaryExecutor struct {
 
 func (e providerBoundaryExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	response := "provider contract output"
-	session := &workerexecution.ProviderSessionMetadata{
+	session := &providers.SessionMetadata{
 		Provider: "mock", Kind: "session_id", ID: "petri-provider-session-1",
 	}
 	diagnostics := json.RawMessage(`{"provider":{"provider":"mock","model":"fixture-model","responseMetadata":{"provider_session_id":"petri-provider-session-1"}}}`)
@@ -86,16 +90,16 @@ func (e providerBoundaryExecutor) Execute(_ context.Context, dispatch work.WorkD
 			WorkIDs:    append([]string(nil), dispatch.Execution.WorkIDs...),
 			Response: &workerexecution.InferenceResponseEventPayload{
 				Attempt: 1, Diagnostics: diagnostics, InferenceRequestID: dispatch.DispatchID + "/inference-request/1",
-				Outcome: workerexecution.InferenceOutcomeSucceeded, ProviderSession: session, Response: &response,
+				Outcome: workerexecution.InferenceOutcomeSucceeded, Continuation: (session).ContinuationRef(), Response: &response,
 			},
 		})
 	}
 	return workerexecution.WorkResult{
-		DispatchID:      dispatch.DispatchID,
-		TransitionID:    dispatch.TransitionID,
-		Outcome:         workerexecution.OutcomeAccepted,
-		Output:          response,
-		ProviderSession: session,
+		DispatchID:   dispatch.DispatchID,
+		TransitionID: dispatch.TransitionID,
+		Outcome:      workerexecution.OutcomeAccepted,
+		Output:       response,
+		Continuation: (session).ContinuationRef(),
 		Diagnostics: &workerexecution.WorkDiagnostics{Provider: &workerexecution.ProviderDiagnostic{
 			Provider: "mock", Model: "fixture-model",
 		}},
@@ -251,7 +255,7 @@ func TestFactoryEventHistory_GeneratedBatchPreservesMetadataAndOrdering(t *testi
 	// TestReconstructFactoryWorldState_ResolvesBatchRelationSourcesByWorkName.
 }
 
-func newSafeBoundaryRuntime(t *testing.T) (factory.Factory, *recordingfixtures.ScriptedRuntimeLedger) {
+func newSafeBoundaryRuntime(t *testing.T) (factoryhost.Engine, *recordingfixtures.ScriptedRuntimeLedger) {
 	t.Helper()
 	f, history, err := newTestFactoryWithScriptedLedger(
 		withNet(buildSimpleNetWithFailureArc()),
@@ -265,7 +269,7 @@ func newSafeBoundaryRuntime(t *testing.T) (factory.Factory, *recordingfixtures.S
 	return f, history
 }
 
-func submitSafeBoundaryRequests(t *testing.T, f factory.Factory) {
+func submitSafeBoundaryRequests(t *testing.T, f factoryhost.Engine) {
 	t.Helper()
 	_, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{
 		{WorkID: "work-safe-success", WorkTypeID: "task", TraceID: "trace-safe-success", Payload: json.RawMessage(`{"story":"safe success"}`)},
@@ -307,14 +311,7 @@ func assertRuntimeLedgerCallsInOrder(t *testing.T, calls []string, want ...strin
 	}
 }
 
-func assertDispatchResponseCount(t *testing.T, events []factoryapi.FactoryEvent, want int) {
-	t.Helper()
-	if got := countFactoryEventType(events, factoryapi.FactoryEventTypeDispatchResponse); got != want {
-		t.Fatalf("dispatch completed event count = %d, want %d; events = %#v", got, want, events)
-	}
-}
-
-func submitOrderedEventHistoryRequest(t *testing.T, f factory.Factory) {
+func submitOrderedEventHistoryRequest(t *testing.T, f factoryhost.Engine) {
 	t.Helper()
 	_, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
 		WorkID:     "work-1",
@@ -332,7 +329,7 @@ func submitOrderedEventHistoryRequest(t *testing.T, f factory.Factory) {
 	}
 }
 
-func tickAndPauseRuntime(t *testing.T, f factory.Factory) {
+func tickAndPauseRuntime(t *testing.T, f factoryhost.Engine) {
 	t.Helper()
 	tickable := tickableFactory(t, f)
 	if err := tickable.Tick(context.Background()); err != nil {
@@ -340,93 +337,6 @@ func tickAndPauseRuntime(t *testing.T, f factory.Factory) {
 	}
 	if err := f.Pause(context.Background()); err != nil {
 		t.Fatalf("Pause: %v", err)
-	}
-}
-
-func assertOrderedEventSequence(t *testing.T, events []factoryapi.FactoryEvent) {
-	t.Helper()
-	wantTypes := append(append([]factoryapi.FactoryEventType(nil), runtimeStartupEventTypes()...), []factoryapi.FactoryEventType{
-		factoryapi.FactoryEventTypeWorkRequest,
-		factoryapi.FactoryEventTypeRelationshipChangeRequest,
-		factoryapi.FactoryEventTypeDispatchRequest,
-		factoryapi.FactoryEventTypeDispatchResponse,
-		factoryapi.FactoryEventTypeFactoryStateResponse,
-		factoryapi.FactoryEventTypeSessionLifecycleControl,
-		factoryapi.FactoryEventTypeSessionPaused,
-	}...)
-	if len(events) != len(wantTypes) {
-		t.Fatalf("event count = %d, want %d: %#v", len(events), len(wantTypes), events)
-	}
-	for i, wantType := range wantTypes {
-		if events[i].Type != wantType {
-			t.Fatalf("event[%d] type = %q, want %q", i, events[i].Type, wantType)
-		}
-		if events[i].Id == "" {
-			t.Fatalf("event[%d] has empty id", i)
-		}
-		if i > 0 && events[i].Context.Tick < events[i-1].Context.Tick {
-			t.Fatalf("event[%d] tick = %d before event[%d] tick = %d", i, events[i].Context.Tick, i-1, events[i-1].Context.Tick)
-		}
-	}
-}
-
-// pkgmaintcheck:ignore-cyclomatic-complexity this helper intentionally checks the ordered event payload contract in one reviewer-readable pass.
-func assertOrderedEventPayloads(t *testing.T, events []factoryapi.FactoryEvent) {
-	t.Helper()
-	batch, err := events[runtimeEventIndex(0)].Payload.AsWorkRequestEventPayload()
-	if err != nil {
-		t.Fatalf("work request payload: %v", err)
-	}
-	workRequestEvent := events[runtimeEventIndex(0)]
-	if workRequestEvent.Context.RequestId == nil || batch.Type != factoryapi.WorkRequestTypeFactoryRequestBatch || firstRuntimeTestString(workRequestEvent.Context.TraceIds) != "trace-1" {
-		t.Fatalf("work request payload = %#v, want canonical batch identity", batch)
-	}
-	if batch.Works == nil || len(*batch.Works) != 1 || stringValueForRuntimeTest((*batch.Works)[0].WorkId) != "work-1" {
-		t.Fatalf("work request items = %#v, want work-1", batch.Works)
-	}
-
-	relation, err := events[runtimeEventIndex(1)].Payload.AsRelationshipChangeRequestEventPayload()
-	if err != nil {
-		t.Fatalf("relationship payload: %v", err)
-	}
-	relationEvent := events[runtimeEventIndex(1)]
-	if relation.Relation.Type != factoryapi.RelationTypeDependsOn ||
-		relationEvent.Context.WorkIds == nil ||
-		stringValueForRuntimeTest(relation.Relation.TargetWorkId) != "upstream-1" {
-		t.Fatalf("relationship payload = %#v, want submitted dependency", relation)
-	}
-
-	request, err := events[runtimeEventIndex(2)].Payload.AsDispatchRequestEventPayload()
-	if err != nil {
-		t.Fatalf("dispatch created payload: %v", err)
-	}
-	dispatchRequestEvent := events[runtimeEventIndex(2)]
-	if stringValueForRuntimeTest(dispatchRequestEvent.Context.DispatchId) == "" || request.TransitionId != "t-process" {
-		t.Fatalf("workstation request payload = %#v, want dispatch identity", request)
-	}
-	if len(request.Inputs) != 1 || request.Inputs[0].WorkId != "work-1" {
-		t.Fatalf("workstation request inputs = %#v, want consumed work item", request.Inputs)
-	}
-
-	response, err := events[runtimeEventIndex(3)].Payload.AsDispatchResponseEventPayload()
-	if err != nil {
-		t.Fatalf("dispatch completed payload: %v", err)
-	}
-	if stringValueForRuntimeTest(events[runtimeEventIndex(3)].Context.DispatchId) != stringValueForRuntimeTest(dispatchRequestEvent.Context.DispatchId) || response.Outcome != factoryapi.WorkOutcomeAccepted {
-		t.Fatalf("workstation response payload = %#v, want accepted dispatch response", response)
-	}
-	if response.OutputWork == nil || len(*response.OutputWork) == 0 || stringValueForRuntimeTest((*response.OutputWork)[0].WorkId) != "work-1" {
-		t.Fatalf("output work = %#v, want completed work item", response.OutputWork)
-	}
-}
-
-func assertRuntimeEventIDsStable(t *testing.T, f factory.Factory, events []factoryapi.FactoryEvent) {
-	t.Helper()
-	again := runtimeGeneratedEvents(t, f)
-	for i := range events {
-		if again[i].Id != events[i].Id {
-			t.Fatalf("event[%d] id changed from %q to %q", i, events[i].Id, again[i].Id)
-		}
 	}
 }
 
@@ -439,7 +349,7 @@ func mustUnmarshalRuntimeWorkRequest(t *testing.T, body string) work.WorkRequest
 	return request
 }
 
-func assertIdempotentBatchSubmit(t *testing.T, f factory.Factory, request work.WorkRequest) {
+func assertIdempotentBatchSubmit(t *testing.T, f factoryhost.Engine, request work.WorkRequest) {
 	t.Helper()
 	result, err := f.SubmitWorkRequest(context.Background(), request)
 	if err != nil {
@@ -454,57 +364,6 @@ func assertIdempotentBatchSubmit(t *testing.T, f factory.Factory, request work.W
 	}
 	if repeated.RequestID != result.RequestID || repeated.TraceID != result.TraceID || repeated.Accepted {
 		t.Fatalf("duplicate submit result = %#v, want original metadata with Accepted=false", repeated)
-	}
-}
-
-func assertFactoryEventTypesPrefix(t *testing.T, got []factoryapi.FactoryEventType, want ...factoryapi.FactoryEventType) {
-	t.Helper()
-	if len(got) < len(want) {
-		t.Fatalf("event types = %v, want at least %v", got, want)
-	}
-	for i, expected := range want {
-		if got[i] != expected {
-			t.Fatalf("event[%d] type = %q, want %q (all types %v)", i, got[i], expected, got)
-		}
-	}
-}
-
-// pkgmaintcheck:ignore-cyclomatic-complexity this helper keeps the batch replay event contract visible in one assertion owner.
-func assertBatchRequestReplayEvents(t *testing.T, events []factoryapi.FactoryEvent) {
-	t.Helper()
-	batch, err := events[runtimeEventIndex(0)].Payload.AsWorkRequestEventPayload()
-	if err != nil {
-		t.Fatalf("batch payload: %v", err)
-	}
-	workRequestEvent := events[runtimeEventIndex(0)]
-	if stringValueForRuntimeTest(workRequestEvent.Context.RequestId) != "request-batch-events" ||
-		stringValueForRuntimeTest(batch.Source) != "external-submit" ||
-		firstRuntimeTestString(workRequestEvent.Context.TraceIds) != "trace-batch" {
-		t.Fatalf("batch payload = %#v, want request/source/trace metadata", batch)
-	}
-	if batch.Works == nil || len(*batch.Works) != 2 ||
-		stringValueForRuntimeTest((*batch.Works)[0].WorkId) != "work-first" ||
-		stringValueForRuntimeTest((*batch.Works)[1].WorkId) != "work-second" ||
-		stringValueForRuntimeTest((*batch.Works)[0].WorkTypeName) != "task" ||
-		stringValueForRuntimeTest((*batch.Works)[1].WorkTypeName) != "task" {
-		t.Fatalf("batch work items = %#v, want first and second", batch.Works)
-	}
-	if workRequestEvents := countFactoryEventsByType(events, factoryapi.FactoryEventTypeWorkRequest); workRequestEvents != 1 {
-		t.Fatalf("work request events = %d, want 1 after idempotent retry", workRequestEvents)
-	}
-
-	relation, err := events[runtimeEventIndex(1)].Payload.AsRelationshipChangeRequestEventPayload()
-	if err != nil {
-		t.Fatalf("relationship payload: %v", err)
-	}
-	relationEvent := events[runtimeEventIndex(1)]
-	if relation.Relation.SourceWorkName != "second" ||
-		stringValueForRuntimeTest(relation.Relation.TargetWorkId) != "work-first" ||
-		relation.Relation.TargetWorkName != "first" ||
-		stringValueForRuntimeTest(relation.Relation.RequiredState) != "done" ||
-		stringValueForRuntimeTest(relationEvent.Context.RequestId) != "request-batch-events" ||
-		firstRuntimeTestString(relationEvent.Context.TraceIds) != "trace-batch" {
-		t.Fatalf("relationship payload = %#v, want named batch dependency", relation)
 	}
 }
 
@@ -537,52 +396,207 @@ func generatedRuntimeBatchFixture() work.GeneratedSubmissionBatch {
 	}
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity this helper keeps the generated batch event contract together across request, relation, and response assertions.
-func assertGeneratedBatchEvents(t *testing.T, events []factoryapi.FactoryEvent) {
-	t.Helper()
-	requestPayload, err := events[runtimeEventIndex(0)].Payload.AsWorkRequestEventPayload()
+func TestRecordedWorkerSessionObservationHistoricalProjectionOutcomes(t *testing.T) {
+	fixture := newRecordedExactObservationFixture(t)
+	adapter := fixture.service.(*recordedWorkerSessionObservation)
+
+	adapter.providerSessions = nil
+	if _, err := adapter.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: fixture.ref}); err != nil {
+		t.Fatalf("GetObservation(without optional Provider Sessions detail) error = %v", err)
+	}
+	if _, err := adapter.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: fixture.ref}); !errors.Is(err, workersessions.ErrObservationTranscriptProjectionUnavailable) {
+		t.Fatalf("ReadTranscript(without Provider Sessions detail) error = %v", err)
+	}
+
+	for _, test := range []struct {
+		name string
+		err  error
+		want error
+	}{
+		{name: "canceled", err: context.Canceled, want: workersessions.ErrObservationCanceled},
+		{name: "provider canceled", err: providersessions.ErrOperationCanceled, want: workersessions.ErrObservationCanceled},
+		{name: "source unavailable", err: providersessions.ErrSessionNotFound, want: workersessions.ErrObservationTranscriptUnavailable},
+		{name: "projection failure", err: errors.New("projection failed"), want: workersessions.ErrObservationTranscriptProjectionUnavailable},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			current := newRecordedExactObservationFixture(t)
+			currentAdapter := current.service.(*recordedWorkerSessionObservation)
+			currentAdapter.providerSessions = &historicalProviderSessions{err: test.err}
+			_, err := currentAdapter.ReadTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: current.ref})
+			if !errors.Is(err, test.want) {
+				t.Fatalf("ReadTranscript() error = %v, want %v", err, test.want)
+			}
+		})
+	}
+
+	current := newRecordedExactObservationFixture(t)
+	currentAdapter := current.service.(*recordedWorkerSessionObservation)
+	currentAdapter.providerSessions = &historicalProviderSessions{err: context.Canceled}
+	if _, err := currentAdapter.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: current.ref}); !errors.Is(err, workersessions.ErrObservationCanceled) {
+		t.Fatalf("GetObservation(provider canceled) error = %v", err)
+	}
+	currentAdapter.providerSessions = &historicalProviderSessions{err: errors.New("optional detail unavailable")}
+	if observation, err := currentAdapter.GetObservation(context.Background(), workersessions.GetObservationRequest{ProviderSession: current.ref}); err != nil || observation.Transcript != workersessions.TranscriptAvailabilityUnavailable {
+		t.Fatalf("GetObservation(optional detail failure) = %#v, %v", observation, err)
+	}
+
+	if _, err := currentAdapter.readRecordedTranscript(context.Background(), workersessions.ReadTranscriptRequest{ProviderSession: current.ref}, recordedDispatchObservation{}); !errors.Is(err, workersessions.ErrObservationTranscriptUnavailable) {
+		t.Fatalf("readRecordedTranscript(without provider metadata) error = %v", err)
+	}
+	if _, err := historicalTranscriptResult(recordedDispatchObservation{}, nil, current.ref); err == nil {
+		t.Fatal("historicalTranscriptResult(invalid identity) error = nil")
+	}
+}
+
+func TestRecordedWorkerSessionObservationStreamOutcomes(t *testing.T) {
+	fixture := newRecordedExactObservationFixture(t)
+	adapter := fixture.service.(*recordedWorkerSessionObservation)
+	ledger := adapter.ledger.(*recordingfixtures.ScriptedRuntimeLedger)
+
+	for _, test := range []struct {
+		name string
+		err  error
+		want error
+	}{
+		{name: "canceled subscribe", err: context.Canceled, want: workersessions.ErrObservationCanceled},
+		{name: "source subscribe failure", err: errors.New("subscribe failed"), want: workersessions.ErrObservationSourceUnavailable},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ledger.SubscribeError = test.err
+			_, err := adapter.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: fixture.ref})
+			if !errors.Is(err, test.want) {
+				t.Fatalf("StreamObservations() error = %v, want %v", err, test.want)
+			}
+			ledger.SubscribeError = nil
+		})
+	}
+
+	missing := fixture.ref.Clone()
+	missing.ID = "missing-provider-session"
+	if _, err := adapter.StreamObservations(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: missing}); !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		t.Fatalf("StreamObservations(missing) error = %v", err)
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := adapter.StreamObservations(canceled, workersessions.StreamObservationsRequest{ProviderSession: fixture.ref}); !errors.Is(err, workersessions.ErrObservationCanceled) {
+		t.Fatalf("StreamObservations(canceled) error = %v", err)
+	}
+	if _, handled, err := (&recordedWorkerSessionObservation{}).streamRecorded(context.Background(), workersessions.StreamObservationsRequest{ProviderSession: fixture.ref}); handled || err != nil {
+		t.Fatalf("streamRecorded(without recording projection) = handled=%v err=%v", handled, err)
+	}
+
+	liveEvents := make(chan interfaces.FactoryEvent, 1)
+	terminalEvent := interfaces.FactoryEvent{
+		Context: interfaces.FactoryEventContext{Sequence: 4, DispatchID: stringPointerForRecordedTest("dispatch-recorded-exact")},
+		Id:      "live-terminal",
+		Type:    interfaces.FactoryEventTypeDispatchInterrupted,
+	}
+	liveEvents <- terminalEvent
+	ledger.SubscribeResult = interfaces.FactoryEventStream{History: []interfaces.FactoryEvent{terminalEvent}, Events: liveEvents}
+	subscription, err := adapter.StreamObservations(nil, workersessions.StreamObservationsRequest{ProviderSession: fixture.ref})
 	if err != nil {
-		t.Fatalf("request payload: %v", err)
+		t.Fatalf("StreamObservations(nil context) error = %v", err)
 	}
-	workRequestEvent := events[runtimeEventIndex(0)]
-	if stringValueForRuntimeTest(workRequestEvent.Context.RequestId) != "generated-request-events" ||
-		stringValueForRuntimeTest(requestPayload.Source) != "worker-output:dispatch-parent" ||
-		firstRuntimeTestString(workRequestEvent.Context.TraceIds) != "trace-generated" {
-		t.Fatalf("request payload = %#v, want generated request metadata", requestPayload)
+	if delivery := subscription.Next(context.Background()); delivery.Kind != workersessions.ObservationDeliveryTerminalReplay {
+		t.Fatalf("live terminal replay delivery = %#v", delivery)
 	}
-	if got := strings.Join(sliceValueForRuntimeTest(requestPayload.ParentLineage), ","); got != "request-parent,work-parent" {
-		t.Fatalf("parent lineage = %#v, want generated lineage metadata", requestPayload.ParentLineage)
-	}
-	if requestPayload.Works == nil || len(*requestPayload.Works) != 2 {
-		t.Fatalf("request works = %#v, want generated work metadata", requestPayload.Works)
-	}
-	if requestPayload.Relations == nil || len(*requestPayload.Relations) != 1 {
-		t.Fatalf("request relations = %#v, want canonical generated dependency", requestPayload.Relations)
-	}
-	if got := (*requestPayload.Relations)[0]; got.SourceWorkName != "review" ||
-		got.TargetWorkName != "draft" ||
-		stringValueForRuntimeTest(got.TargetWorkId) != "work-draft" ||
-		stringValueForRuntimeTest(got.RequiredState) != "done" {
-		t.Fatalf("request relation = %#v, want review depends on draft", got)
-	}
-	for _, work := range *requestPayload.Works {
-		if stringValueForRuntimeTest(work.CurrentChainingTraceId) != "trace-generated" {
-			t.Fatalf("generated work current chaining trace ID = %q, want trace-generated", stringValueForRuntimeTest(work.CurrentChainingTraceId))
-		}
-		if got := sliceValueForRuntimeTest(work.PreviousChainingTraceIds); len(got) != 0 {
-			t.Fatalf("generated hook work previous chaining trace IDs = %#v, want none without consumed input lineage", got)
+	subscription.Close()
+}
+
+func TestRecordedObservationSubscriptionMapsLiveAndClosedOutcomes(t *testing.T) {
+	dispatchID := "dispatch-subscription"
+	event := func(eventType interfaces.FactoryEventType, sequence int, id string) interfaces.FactoryEvent {
+		return interfaces.FactoryEvent{
+			Context: interfaces.FactoryEventContext{DispatchID: stringPointerForRecordedTest(dispatchID), Sequence: sequence},
+			Id:      id,
+			Type:    eventType,
 		}
 	}
 
-	relationPayload, err := events[runtimeEventIndex(1)].Payload.AsRelationshipChangeRequestEventPayload()
-	if err != nil {
-		t.Fatalf("relationship payload: %v", err)
+	closedEvents := make(chan interfaces.FactoryEvent)
+	close(closedEvents)
+	closed := newRecordedObservationSubscription(interfaces.FactoryEventStream{Events: closedEvents}, dispatchID, false, nil, nil)
+	if delivery := closed.Next(context.Background()); delivery.Kind != workersessions.ObservationDeliverySourceFailure || !errors.Is(delivery.Err, workersessions.ErrObservationSourceClosed) {
+		t.Fatalf("closed source delivery = %#v", delivery)
 	}
-	relationEvent := events[runtimeEventIndex(1)]
-	if relationPayload.Relation.SourceWorkName != "review" ||
-		stringValueForRuntimeTest(relationPayload.Relation.TargetWorkId) != "work-draft" ||
-		stringValueForRuntimeTest(relationEvent.Context.RequestId) != "generated-request-events" ||
-		firstRuntimeTestString(relationEvent.Context.TraceIds) != "trace-generated" {
-		t.Fatalf("relationship payload = %#v, want generated request dependency", relationPayload)
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	canceledSubscription := newRecordedObservationSubscription(interfaces.FactoryEventStream{Events: make(chan interfaces.FactoryEvent)}, dispatchID, false, nil, nil)
+	if delivery := canceledSubscription.Next(canceled); delivery.Kind != workersessions.ObservationDeliveryCanceled || !errors.Is(delivery.Err, workersessions.ErrObservationCanceled) {
+		t.Fatalf("canceled subscription delivery = %#v", delivery)
+	}
+
+	sourceContext, sourceCancel := context.WithCancel(context.Background())
+	sourceCancel()
+	sourceClosed := newRecordedObservationSubscription(interfaces.FactoryEventStream{Events: make(chan interfaces.FactoryEvent)}, dispatchID, false, nil, sourceContext)
+	if delivery := sourceClosed.Next(context.Background()); delivery.Kind != workersessions.ObservationDeliveryClosed {
+		t.Fatalf("source-context-closed delivery = %#v", delivery)
+	}
+
+	liveEvents := make(chan interfaces.FactoryEvent, 1)
+	liveEvents <- event(interfaces.FactoryEventTypeDispatchReconciled, 2, "live-reconciled")
+	live := newRecordedObservationSubscription(interfaces.FactoryEventStream{Events: liveEvents}, dispatchID, false, nil, nil)
+	if delivery := live.Next(context.Background()); delivery.Kind != workersessions.ObservationDeliveryTerminal || delivery.Event.SourceSequence != 2 {
+		t.Fatalf("live terminal delivery = %#v", delivery)
+	}
+
+	if got := (&recordedObservationSubscription{}).streamContext(); got == nil {
+		t.Fatal("streamContext(nil source context) returned nil")
+	}
+	nilEvents := newRecordedObservationSubscription(interfaces.FactoryEventStream{}, dispatchID, false, nil, nil)
+	if delivery := nilEvents.Next(context.Background()); delivery.Kind != workersessions.ObservationDeliverySourceFailure || !errors.Is(delivery.Err, workersessions.ErrObservationSourceClosed) {
+		t.Fatalf("nil source delivery = %#v", delivery)
+	}
+}
+
+func TestRecordedTranscriptDiagnostics(t *testing.T) {
+	if got := recordedDiagnosticMessage(""); got == "" {
+		t.Fatal("empty diagnostic message returned empty fallback")
+	}
+	for _, message := range []string{"path C:\\secret", "authorization bearer token", "secret prompt", strings.Repeat("x", 300)} {
+		if got := recordedDiagnosticMessage(message); got == "" || len(got) > 256 {
+			t.Fatalf("recordedDiagnosticMessage(%q) = %q", message, got)
+		}
+	}
+}
+
+func TestRecordedTranscriptTokenAndParseValues(t *testing.T) {
+	values := []int{1, 2, 3, 4, 5, 6}
+	usage := recordedTokenUsage(&providersessions.TokenUsage{
+		CacheWriteTokens: &values[0], CachedInputTokens: &values[1], InputTokens: &values[2],
+		OutputTokens: &values[3], ReasoningOutputTokens: &values[4], TotalTokens: &values[5],
+	})
+	if usage == nil || usage.TotalTokens == nil || *usage.TotalTokens != 6 || recordedTokenUsage(nil) != nil {
+		t.Fatalf("recordedTokenUsage() = %#v", usage)
+	}
+	parse := recordedParseDiagnostics(providersessions.ParseSummary{ParseErrors: []providersessions.LineError{{LineNumber: 7, Message: "parse failed"}}})
+	if len(parse.Errors) != 1 || parse.Errors[0].LineNumber != 7 {
+		t.Fatalf("recordedParseDiagnostics() = %#v", parse)
+	}
+	negative := recordedObservationEvent(interfaces.FactoryEvent{Context: interfaces.FactoryEventContext{Sequence: -1}, Id: "negative"})
+	if negative.Position != 0 || negative.SourceSequence != 0 {
+		t.Fatalf("recordedObservationEvent(negative sequence) = %#v", negative)
+	}
+}
+
+func TestRecordedTranscriptOptionalValuesAndSourceClassification(t *testing.T) {
+	applyRecordedProviderDetail(nil, providersessions.Detail{})
+	if cloneRecordedBool(nil) != nil || cloneRecordedInt(nil) != nil || cloneRecordedString(nil) != nil || cloneRecordedTime(nil) != nil {
+		t.Fatal("nil recorded pointer clones returned values")
+	}
+	for _, sourceErr := range []error{
+		providersessions.ErrSessionNotFound,
+		providersessions.ErrAmbiguousSessionFile,
+		providersessions.ErrSessionSourceNotRegularFile,
+		providersessions.ErrSessionStorageUnavailable,
+		providersessions.ErrSessionOutsideRoot,
+	} {
+		if !recordedTranscriptSourceUnavailable(sourceErr) {
+			t.Fatalf("recordedTranscriptSourceUnavailable(%v) = false", sourceErr)
+		}
+	}
+	if recordedTranscriptSourceUnavailable(errors.New("other")) {
+		t.Fatal("recordedTranscriptSourceUnavailable(other) = true")
 	}
 }

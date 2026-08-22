@@ -6,6 +6,7 @@ import (
 	"time"
 
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
@@ -54,6 +55,39 @@ func TestResultResponseToAPI_MapsProjectionFixtures(t *testing.T) {
 	unavailableMapped := factorysession.ResultResponseToAPI(resultFromFixture(unavailable["result"].(map[string]any)))
 	if unavailableMapped.ResultStatus != factoryapi.FactorySessionResultStatusUnavailable {
 		t.Fatalf("unavailable status = %q", unavailableMapped.ResultStatus)
+	}
+}
+
+func TestResultResponseToAPI_PreservesOrderedMixedTerminalContentParts(t *testing.T) {
+	mapped := factorysession.ResultResponseToAPI(factorysessionexecution.ResultReadResult{
+		SessionID:     "dur-sess-terminal-001",
+		ResultStatus:  factorysessionexecution.ResultStatusFinal,
+		SessionStatus: factorysessionexecution.LifecycleStatusSucceeded,
+		Mode:          factorysessionexecution.ResultModeFinal,
+		PrimaryResult: json.RawMessage(`[{"type":"text","text":"first"},{"type":"JSON","json":{"answer":42}},{"type":"image","url":"you-artifact://dur-sess-terminal-001/image-1"}]`),
+	})
+	if mapped.ResultStatus != factoryapi.FactorySessionResultStatusFinal || mapped.PrimaryResult == nil {
+		t.Fatalf("mapped terminal result = %#v, want FINAL result with content", mapped)
+	}
+	if len(*mapped.PrimaryResult) != 3 {
+		t.Fatalf("primaryResult = %#v, want three ordered parts", mapped.PrimaryResult)
+	}
+
+	textPart, err := (*mapped.PrimaryResult)[0].AsWorkTextContentPart()
+	if err != nil || textPart.Text != "first" {
+		t.Fatalf("primaryResult[0] = %#v (decode error %v), want first text part", textPart, err)
+	}
+	jsonPart, err := (*mapped.PrimaryResult)[1].AsWorkJsonContentPart()
+	if err != nil || jsonPart.Type != factoryapi.WorkContentPartTypeJSON {
+		t.Fatalf("primaryResult[1] = %#v (decode error %v), want JSON part", jsonPart, err)
+	}
+	jsonValue, ok := jsonPart.Json.(map[string]any)
+	if !ok || jsonValue["answer"] != float64(42) {
+		t.Fatalf("primaryResult[1].json = %#v, want answer=42", jsonPart.Json)
+	}
+	imagePart, err := (*mapped.PrimaryResult)[2].AsWorkImageContentPart()
+	if err != nil || imagePart.Type != factoryapi.WorkContentPartTypeImage || imagePart.Url != "you-artifact://dur-sess-terminal-001/image-1" {
+		t.Fatalf("primaryResult[2] = %#v (decode error %v), want image artifact reference", imagePart, err)
 	}
 }
 
@@ -436,17 +470,6 @@ func TestValidateProjectionConsistencyFromFixtures(t *testing.T) {
 	}
 }
 
-func resultRequestFromFixture(result map[string]any) factorysessionexecution.ResultRequest {
-	req := factorysessionexecution.ResultRequest{}
-	if mode := stringValue(result, "mode"); mode != "" {
-		req.Mode = factorysessionexecution.ResultMode(mode)
-	}
-	if includeArtifacts, ok := result["includeArtifacts"].(bool); ok {
-		req.IncludeArtifacts = includeArtifacts
-	}
-	return req
-}
-
 func resultFromFixture(result map[string]any) factorysessionexecution.ResultReadResult {
 	out := factorysessionexecution.ResultReadResult{
 		SessionID:    stringValue(result, "sessionId"),
@@ -668,4 +691,191 @@ func mustParseTime(t *testing.T, raw string) time.Time {
 		t.Fatalf("time.Parse(%q): %v", raw, err)
 	}
 	return value
+}
+
+func TestHistoricalDispatchListToAPI_ProjectsDetachedDispatchFacts(t *testing.T) {
+	t.Parallel()
+
+	response := factorysession.HistoricalDispatchListToAPI("dur-sess-hist-001", []factorysession.HistoricalDispatchInput{
+		{ID: "dispatch-1", Status: "COMPLETED", DispatchKind: "JAVASCRIPT_SCRIPT"},
+		{ID: "dispatch-2", Status: "FAILED", DispatchKind: "PETRI_TRANSITION"},
+	})
+	if response.SessionId != "dur-sess-hist-001" || len(response.Dispatches) != 2 {
+		t.Fatalf("response = %#v, want two dispatches for dur-sess-hist-001", response)
+	}
+	first := response.Dispatches[0]
+	if first.Id != "dispatch-1" ||
+		first.Status != factoryapi.FactoryDispatchStatus("COMPLETED") ||
+		first.DispatchKind != factoryapi.FactoryDispatchKind("JAVASCRIPT_SCRIPT") {
+		t.Fatalf("first dispatch = %#v, want dispatch-1 COMPLETED JAVASCRIPT_SCRIPT", first)
+	}
+	if response.Dispatches[1].Id != "dispatch-2" {
+		t.Fatalf("second dispatch = %#v, want dispatch-2", response.Dispatches[1])
+	}
+}
+
+func TestHistoricalDispatchMappingPreservesPetriUsagePresence(t *testing.T) {
+	t.Parallel()
+
+	durationWithTokens := int64(1500)
+	inputTokens := int64(12)
+	outputTokens := int64(8)
+	totalTokens := int64(20)
+	durationWithoutTokens := int64(2000)
+	response := factorysession.HistoricalDispatchListToAPI("dur-sess-hist-usage-001", []factorysession.HistoricalDispatchInput{
+		{
+			ID: "dispatch-with-tokens", Status: "COMPLETED", DispatchKind: "PETRI_TRANSITION",
+			Usage: &recordings.FactoryDispatchUsage{
+				DurationMillis: &durationWithTokens,
+				InputTokens:    &inputTokens,
+				OutputTokens:   &outputTokens,
+				TotalTokens:    &totalTokens,
+			},
+		},
+		{
+			ID: "dispatch-without-tokens", Status: "COMPLETED", DispatchKind: "PETRI_TRANSITION",
+			Usage: &recordings.FactoryDispatchUsage{DurationMillis: &durationWithoutTokens},
+		},
+	})
+	if len(response.Dispatches) != 2 {
+		t.Fatalf("dispatches = %#v, want two dispatches", response.Dispatches)
+	}
+	assertHistoricalUsageWithTokens(t, response.Dispatches[0].Usage, durationWithTokens, inputTokens, outputTokens, totalTokens)
+	assertHistoricalDurationOnlyUsage(t, response.Dispatches[1].Usage, durationWithoutTokens)
+
+	detail := factorysession.HistoricalDispatchDetailToAPI(
+		"dur-sess-hist-usage-001",
+		factorysession.HistoricalDispatchInput{
+			ID: "dispatch-with-tokens", Status: "COMPLETED", DispatchKind: "PETRI_TRANSITION",
+			Usage: &recordings.FactoryDispatchUsage{
+				DurationMillis: &durationWithTokens,
+				InputTokens:    &inputTokens,
+				OutputTokens:   &outputTokens,
+				TotalTokens:    &totalTokens,
+			},
+		},
+		"PETRI",
+	)
+	if detail.Usage == nil || detail.Usage.TotalTokens == nil || *detail.Usage.TotalTokens != totalTokens {
+		t.Fatalf("detail usage = %#v, want token facts", detail.Usage)
+	}
+}
+
+func assertHistoricalUsageWithTokens(t *testing.T, usage *factoryapi.FactoryDispatchUsage, duration, input, output, total int64) {
+	t.Helper()
+	if usage == nil {
+		t.Fatal("token-present usage = nil")
+	}
+	if usage.DurationMillis == nil || *usage.DurationMillis != duration {
+		t.Fatalf("token-present duration = %#v, want %d", usage.DurationMillis, duration)
+	}
+	if usage.InputTokens == nil || *usage.InputTokens != input {
+		t.Fatalf("token-present input tokens = %#v, want %d", usage.InputTokens, input)
+	}
+	if usage.OutputTokens == nil || *usage.OutputTokens != output {
+		t.Fatalf("token-present output tokens = %#v, want %d", usage.OutputTokens, output)
+	}
+	if usage.TotalTokens == nil || *usage.TotalTokens != total {
+		t.Fatalf("token-present total tokens = %#v, want %d", usage.TotalTokens, total)
+	}
+	if usage.CostUsd != nil {
+		t.Fatalf("token-present cost = %#v, want unset", usage.CostUsd)
+	}
+}
+
+func assertHistoricalDurationOnlyUsage(t *testing.T, usage *factoryapi.FactoryDispatchUsage, duration int64) {
+	t.Helper()
+	if usage == nil {
+		t.Fatal("token-absent usage = nil")
+	}
+	if usage.DurationMillis == nil || *usage.DurationMillis != duration {
+		t.Fatalf("token-absent duration = %#v, want %d", usage.DurationMillis, duration)
+	}
+	if usage.InputTokens != nil {
+		t.Fatalf("token-absent input tokens = %#v, want nil", usage.InputTokens)
+	}
+	if usage.OutputTokens != nil {
+		t.Fatalf("token-absent output tokens = %#v, want nil", usage.OutputTokens)
+	}
+	if usage.TotalTokens != nil {
+		t.Fatalf("token-absent total tokens = %#v, want nil", usage.TotalTokens)
+	}
+	if usage.CostUsd != nil {
+		t.Fatalf("token-absent cost = %#v, want nil", usage.CostUsd)
+	}
+}
+
+func TestHistoricalDispatchListToAPI_EmitsAnEmptyListWithoutDispatches(t *testing.T) {
+	t.Parallel()
+
+	response := factorysession.HistoricalDispatchListToAPI("dur-sess-hist-002", nil)
+	if response.SessionId != "dur-sess-hist-002" || response.Dispatches == nil || len(response.Dispatches) != 0 {
+		t.Fatalf("response = %#v, want an empty dispatch list", response)
+	}
+}
+
+func TestHistoricalDispatchDetailToAPI_CarriesResolvedOrchestratorKind(t *testing.T) {
+	t.Parallel()
+
+	response := factorysession.HistoricalDispatchDetailToAPI(
+		"dur-sess-hist-003",
+		factorysession.HistoricalDispatchInput{ID: "dispatch-9", Status: "RUNNING", DispatchKind: "JAVASCRIPT_SCRIPT"},
+		"JAVASCRIPT",
+	)
+	if response.Id != "dispatch-9" || response.SessionId != "dur-sess-hist-003" {
+		t.Fatalf("response = %#v, want dispatch-9 on dur-sess-hist-003", response)
+	}
+	if response.OrchestratorKind != factoryapi.FactoryOrchestratorKind("JAVASCRIPT") {
+		t.Fatalf("orchestratorKind = %q, want JAVASCRIPT", response.OrchestratorKind)
+	}
+	if response.Status != factoryapi.FactoryDispatchStatus("RUNNING") {
+		t.Fatalf("status = %q, want RUNNING", response.Status)
+	}
+}
+
+func TestHistoricalResultToAPI_ProjectsFailureAndPrimaryResult(t *testing.T) {
+	t.Parallel()
+
+	response := factorysession.HistoricalResultToAPI(factorysession.HistoricalResultInput{
+		SessionID:        "dur-sess-hist-004",
+		ResultStatus:     "FAILED_WITH_PARTIAL",
+		SessionStatus:    "FAILED",
+		Mode:             "final",
+		IncludeArtifacts: true,
+		PrimaryResult:    json.RawMessage(`[{"type":"text","text":"partial"}]`),
+		ArtifactIDs:      []string{"artifact-1"},
+		Failure: &factorysession.HistoricalFailureInput{
+			Reason: "WORKER_FAILURE", Message: "worker exited", PartialResultAvailable: true,
+		},
+	})
+	if response.SessionId != "dur-sess-hist-004" {
+		t.Fatalf("sessionId = %q, want dur-sess-hist-004", response.SessionId)
+	}
+	if response.ResultStatus != factoryapi.FactorySessionResultStatus("FAILED_WITH_PARTIAL") {
+		t.Fatalf("resultStatus = %q, want FAILED_WITH_PARTIAL", response.ResultStatus)
+	}
+	if response.FailureDetail == nil || response.FailureDetail.Message != "worker exited" {
+		t.Fatalf("failureDetail = %#v, want the projected worker failure", response.FailureDetail)
+	}
+	if response.PartialResultAvailable == nil || !*response.PartialResultAvailable {
+		t.Fatal("partialResultAvailable should be published when the failure reports a partial result")
+	}
+	if response.PrimaryResult == nil {
+		t.Fatal("primaryResult should be carried onto the public response")
+	}
+}
+
+func TestHistoricalResultToAPI_OmitsFailureWhenAbsent(t *testing.T) {
+	t.Parallel()
+
+	response := factorysession.HistoricalResultToAPI(factorysession.HistoricalResultInput{
+		SessionID: "dur-sess-hist-005", ResultStatus: "FINAL", SessionStatus: "SUCCEEDED", Mode: "final",
+	})
+	if response.FailureDetail != nil {
+		t.Fatalf("failureDetail = %#v, want none", response.FailureDetail)
+	}
+	if response.SessionStatus == nil ||
+		*response.SessionStatus != factoryapi.FactorySessionDurableLifecycleStatus("SUCCEEDED") {
+		t.Fatalf("sessionStatus = %v, want SUCCEEDED", response.SessionStatus)
+	}
 }

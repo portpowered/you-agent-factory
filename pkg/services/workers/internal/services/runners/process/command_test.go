@@ -230,25 +230,6 @@ func TestLoggingCommandRunnerRunStreamingSupportsStreamingAndFallbackEdges(t *te
 	}
 }
 
-func TestStreamingExecCommandRunnerRequiresAndForwardsStreamingEdge(t *testing.T) {
-	if _, err := (StreamingExecCommandRunner{}).Run(t.Context(), commandTestRequest()); err == nil {
-		t.Fatal("Run() error = nil, want missing runner")
-	}
-	nonStreaming := workerCommandRunnerFunc(func(context.Context, CommandRequest) (CommandResult, error) {
-		return CommandResult{}, nil
-	})
-	if _, err := (StreamingExecCommandRunner{Runner: nonStreaming}).Run(
-		t.Context(), commandTestRequest(),
-	); err == nil {
-		t.Fatal("Run() error = nil, want unsupported streaming edge")
-	}
-	streaming := &streamingWorkerRunner{}
-	result, err := (StreamingExecCommandRunner{Runner: streaming}).Run(t.Context(), commandTestRequest())
-	if err != nil || string(result.Stdout) != "live" || !streaming.called {
-		t.Fatalf("Run() result = %#v error = %v called = %t", result, err, streaming.called)
-	}
-}
-
 func TestCommandRunnerWithLoggingPreservesExistingRunnerIdentity(t *testing.T) {
 	clock := &sequenceCommandClock{times: []time.Time{time.Unix(1, 0)}}
 	existing := &LoggingCommandRunner{Runner: AdaptCommandRunner(&recordingEffect{})}
@@ -285,7 +266,7 @@ func TestExecCommandRunnerAddsWorkContextToPlatformCleanupLogs(t *testing.T) {
 	request.Args = []string{"-test.run=TestExecCommandRunnerAddsWorkContextToPlatformCleanupLogs"}
 	request.Env = append(os.Environ(), "GO_WANT_WORKER_COMMAND_HELPER=1")
 	request.WorkDir = t.TempDir()
-	effect, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, nil)
+	effect, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewExecCommandRunner() error = %v", err)
 	}

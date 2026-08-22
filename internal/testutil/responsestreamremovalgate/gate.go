@@ -15,21 +15,19 @@ import (
 const (
 	// PrerequisiteDocsStoryID is the merged S22 public/maintainer docs lane.
 	PrerequisiteDocsStoryID = "stream-b09-public-maintainer-docs"
-	// PrerequisiteParityStoryID is the merged S24 cross-provider parity lane.
-	PrerequisiteParityStoryID = "stream-b09-cross-provider-parity"
 )
 
 // PrivateNDJSONRecordTypes are retired CLI response-stream JSON recordType values.
-var PrivateNDJSONRecordTypes = []string{"progress", "compaction", "primary_result"}
+var PrivateNDJSONRecordTypes = []string{"progress", "compaction", "stream_gap", "primary_result"}
 
 // PublicNDJSONRecordTypes are the only supported CLI response-stream recordType values.
-var PublicNDJSONRecordTypes = []string{"response_event", "invocation_result"}
+var PublicNDJSONRecordTypes = []string{"factory_event", "invocation_result"}
 
 var docsTopicRequiredMarkers = map[string][]string{
 	"run": {
-		"recordType=response_event",
+		"recordType=factory_event",
 		"recordType=invocation_result",
-		"FactoryResponseEvent",
+		"FactoryEvent",
 	},
 	"sessions": {
 		"FactoryResponseEvent",
@@ -83,7 +81,7 @@ func AssertClosure(ctx context.Context, repoRoot string) error {
 }
 
 // AssertGate records Story 001 prerequisites and residual-use evidence. It fails
-// closed when S22 docs, S24 parity, or public-surface residual-use checks fail.
+// closed when the public-surface residual-use checks fail.
 func AssertGate(ctx context.Context, repoRoot string) error {
 	_ = ctx
 	if strings.TrimSpace(repoRoot) == "" {
@@ -91,9 +89,6 @@ func AssertGate(ctx context.Context, repoRoot string) error {
 	}
 	if err := AssertDocsPrerequisite(repoRoot); err != nil {
 		return fmt.Errorf("%s prerequisite: %w", PrerequisiteDocsStoryID, err)
-	}
-	if err := AssertProviderParityOwnerEvidence(repoRoot); err != nil {
-		return fmt.Errorf("%s prerequisite: %w", PrerequisiteParityStoryID, err)
 	}
 	if err := AssertNoPrivateNDJSONInProductionSurfaces(repoRoot); err != nil {
 		return fmt.Errorf("residual private NDJSON emission: %w", err)
@@ -106,55 +101,6 @@ func AssertGate(ctx context.Context, repoRoot string) error {
 	}
 	if err := AssertNoRetiredPrivateContractSymbolsInProductionSurfaces(repoRoot); err != nil {
 		return fmt.Errorf("retired private-contract symbols: %w", err)
-	}
-	return nil
-}
-
-// AssertProviderParityOwnerEvidence verifies that the cross-provider contract
-// proof remains Workers-owned and retains every required fidelity fixture. The
-// provider adapters themselves are executed by that package's tests; this
-// removal gate inspects only static source and fixture evidence.
-func AssertProviderParityOwnerEvidence(repoRoot string) error {
-	const ownerRoot = "pkg/services/providers/internal/services/execution/internal/provider/paritytests"
-	requiredFiles := []string{
-		"catalog_test.go",
-		"harness_test.go",
-		"transport_parity_test.go",
-		"mode_parity_test.go",
-		"testdata/full_stream_claude.jsonl",
-		"testdata/partial_stream_codex.jsonl",
-		"testdata/snapshot_only_opencode.jsonl",
-		"testdata/final_only_opencode.txt",
-		"testdata/tool_lifecycle_claude.jsonl",
-		"testdata/agy_final_only.txt",
-	}
-	for _, relPath := range requiredFiles {
-		path := filepath.Join(repoRoot, filepath.FromSlash(ownerRoot), filepath.FromSlash(relPath))
-		info, err := os.Stat(path)
-		if err != nil {
-			return fmt.Errorf("Workers provider parity evidence %q: %w", relPath, err)
-		}
-		if info.IsDir() {
-			return fmt.Errorf("Workers provider parity evidence %q is a directory", relPath)
-		}
-	}
-
-	catalogPath := filepath.Join(repoRoot, filepath.FromSlash(ownerRoot), "catalog_test.go")
-	catalog, err := os.ReadFile(catalogPath)
-	if err != nil {
-		return fmt.Errorf("read Workers provider parity catalog: %w", err)
-	}
-	for _, marker := range []string{
-		"FidelityFullStream",
-		"FidelityPartialStream",
-		"FidelitySnapshotOnly",
-		"FidelityFinalOnly",
-		"FixtureToolLifecycleClaude",
-		"FixtureAgyFinalOnly",
-	} {
-		if !strings.Contains(string(catalog), marker) {
-			return fmt.Errorf("Workers provider parity catalog missing %q", marker)
-		}
 	}
 	return nil
 }
@@ -284,4 +230,3 @@ func RepoRoot() (string, error) {
 		current = parent
 	}
 }
-

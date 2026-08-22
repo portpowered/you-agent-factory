@@ -1,17 +1,26 @@
 import { chromium } from "playwright";
 
+import { assertWorkstationDescendantsContained } from "./factory-graph-browser-geometry.mjs";
+
 const storybookURL =
   process.env.AGENT_FACTORY_STORYBOOK_URL ?? "http://127.0.0.1:6008";
-const storyURL = new URL(
-  "/iframe.html?id=agent-factory-dashboard-react-flow-current-activity-card--touch-pane-panning&viewMode=story",
-  storybookURL,
-).toString();
+const touchStoryID =
+  "agent-factory-dashboard-react-flow-current-activity-card--touch-pane-panning";
+const denseWorkStoryID =
+  "agent-factory-dashboard-react-flow-current-activity-card--workstation-three-active";
 
-async function openStory(browser, contextOptions) {
+function storyURL(storyID) {
+  return new URL(
+    `/iframe.html?id=${storyID}&viewMode=story`,
+    storybookURL,
+  ).toString();
+}
+
+async function openStory(browser, contextOptions, storyID = touchStoryID) {
   const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
   page.setDefaultTimeout(60_000);
-  await page.goto(storyURL, {
+  await page.goto(storyURL(storyID), {
     timeout: 60_000,
     waitUntil: "domcontentloaded",
   });
@@ -54,6 +63,259 @@ async function viewportTransform(page) {
     .evaluate((viewport) => viewport.style.transform);
 }
 
+async function verifyLoopBreakerLabel(guardCard) {
+  await guardCard.waitFor({ state: "visible" });
+  const guardText = (await guardCard.textContent())?.trim();
+  if (guardText !== "Breaker") {
+    throw new Error(
+      `Expected the single-line breaker label to read "Breaker": ${guardText ?? "<empty>"}`,
+    );
+  }
+  if (
+    (await guardCard.getAttribute("data-workstation-guard-type")) !==
+    "VISIT_COUNT"
+  ) {
+    throw new Error(
+      "Breaker label did not carry its VISIT_COUNT guard type attribute",
+    );
+  }
+
+  const guardRows = guardCard.locator("[data-workstation-guard-row]");
+  if ((await guardRows.count()) !== 0) {
+    throw new Error(
+      `Expected the single-line breaker label to have no detail rows, found ${await guardRows.count()}`,
+    );
+  }
+
+  const guardNode = guardCard.locator(
+    "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' react-flow__node ')][1]",
+  );
+  const selectionControl = guardNode.getByRole("button", {
+    name: "Select goal-loop-breaker workstation",
+  });
+  await selectionControl.waitFor({ state: "visible" });
+  await selectionControl.hover();
+
+  const guardNodeBounds = await guardNode.boundingBox();
+  const guardCardBounds = await guardCard.boundingBox();
+  if (!guardNodeBounds || !guardCardBounds) {
+    throw new Error("Could not measure the loop-breaker node and guard label");
+  }
+  if (
+    guardCardBounds.x < guardNodeBounds.x ||
+    guardCardBounds.y < guardNodeBounds.y ||
+    guardCardBounds.x + guardCardBounds.width >
+      guardNodeBounds.x + guardNodeBounds.width ||
+    guardCardBounds.y + guardCardBounds.height >
+      guardNodeBounds.y + guardNodeBounds.height
+  ) {
+    throw new Error(
+      `Loop-breaker label escaped its workstation node: label=${JSON.stringify(guardCardBounds)} node=${JSON.stringify(guardNodeBounds)}`,
+    );
+  }
+
+  const guardLabelStyle = await guardCard.evaluate((value) => {
+    const style = getComputedStyle(value);
+    return {
+      backgroundColor: style.backgroundColor,
+      borderWidth: style.borderWidth,
+      overflow: style.overflow,
+      paddingInline: style.paddingInline,
+      textOverflow: style.textOverflow,
+      whiteSpace: style.whiteSpace,
+    };
+  });
+  if (
+    guardLabelStyle.overflow !== "hidden" ||
+    guardLabelStyle.textOverflow !== "ellipsis" ||
+    guardLabelStyle.whiteSpace !== "nowrap"
+  ) {
+    throw new Error(
+      `Breaker label is not a single-line truncating field: ${JSON.stringify(guardLabelStyle)}`,
+    );
+  }
+
+  const hasTransparentBackground =
+    guardLabelStyle.backgroundColor === "transparent" ||
+    /^rgba\([^)]*,\s*0(?:\.\d+)?\)$/.test(guardLabelStyle.backgroundColor);
+  if (
+    guardLabelStyle.borderWidth !== "0px" ||
+    guardLabelStyle.paddingInline !== "0px" ||
+    !hasTransparentBackground
+  ) {
+    throw new Error(
+      `Breaker label is still boxed or inset: ${JSON.stringify(guardLabelStyle)}`,
+    );
+  }
+
+  const titleBounds = await guardNode
+    .locator("[data-workstation-title]")
+    .boundingBox();
+  if (!titleBounds || Math.abs(titleBounds.x - guardCardBounds.x) > 1) {
+    throw new Error(
+      `Breaker label is not flush with the workstation header: title=${JSON.stringify(titleBounds)} label=${JSON.stringify(guardCardBounds)}`,
+    );
+  }
+
+  const loopNodeStyle = await guardNode.getAttribute("style");
+  if (!loopNodeStyle?.includes("height: 156px")) {
+    throw new Error(
+      `Expected the default loop-breaker workstation height to be 156px: ${loopNodeStyle ?? "<missing>"}`,
+    );
+  }
+
+  return guardNode;
+}
+
+async function verifyMixedWorkstationSemantics(page) {
+  const viewportTransformValue = await viewportTransform(page);
+  if (!/scale\([^)]*\)/.test(viewportTransformValue)) {
+    throw new Error(
+      `Factory graph did not settle at fit-to-view zoom: ${viewportTransformValue}`,
+    );
+  }
+
+  // Collapsed workstation nodes no longer render runtime/scheduling label
+  // rows; the runtime semantic label is exposed through the title attribute
+  // of the workstation title until a node is expanded by resizing it.
+  const expectedWorkstations = [
+    ["Classifier route", "Classifier"],
+    ["Logical route", "Logical move"],
+    [
+      "Inference workstation with a deliberately long authored title",
+      "Inference",
+    ],
+    ["Agent worker", "Agent"],
+    ["execute-goal", "Agent"],
+    ["Script cron", "Script"],
+    ["Poller source", "Poller"],
+  ];
+
+  for (const [name, semanticLabel] of expectedWorkstations) {
+    const button = page.getByRole("button", {
+      name: `Select ${name} workstation`,
+    });
+    await button.waitFor({ state: "visible" });
+    const title = button.locator("[data-workstation-title]");
+    await title.waitFor({ state: "visible" });
+    const semanticTitle = await title.getAttribute("title");
+    if (semanticTitle !== semanticLabel) {
+      throw new Error(
+        `Expected the collapsed ${name} workstation title to expose the ${semanticLabel} semantic label, found ${semanticTitle ?? "<missing>"}`,
+      );
+    }
+    const auxiliaryLabelCount = await button
+      .locator(
+        "[data-workstation-runtime-label], [data-workstation-scheduling-label]",
+      )
+      .count();
+    if (auxiliaryLabelCount !== 0) {
+      throw new Error(
+        `Collapsed ${name} workstation rendered ${auxiliaryLabelCount} auxiliary semantic label rows`,
+      );
+    }
+  }
+
+  const guardCard = page.locator("[data-workstation-guard-card]");
+  const guardNode = await verifyLoopBreakerLabel(guardCard);
+
+  await assertWorkstationDescendantsContained(guardNode, "Loop-breaker");
+
+  const defaultSchedulerButton = page.getByRole("button", {
+    name: "Select Poller source workstation",
+  });
+  await defaultSchedulerButton.waitFor({ state: "visible" });
+  const defaultSchedulerNode = defaultSchedulerButton.locator(
+    "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' react-flow__node ')][1]",
+  );
+  await assertWorkstationDescendantsContained(
+    defaultSchedulerNode,
+    "Default scheduler",
+  );
+}
+
+async function verifyDenseActiveWork(page) {
+  const reviewButton = page.getByRole("button", {
+    name: "Select Review workstation",
+  });
+  await reviewButton.waitFor({ state: "visible" });
+  const reviewNode = reviewButton.locator(
+    "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' react-flow__node ')][1]",
+  );
+  const count = reviewNode.getByRole("status", { name: "3 active items" });
+  await count.waitFor({ state: "visible" });
+
+  const details = await reviewNode.evaluate((node) => {
+    const nodeBounds = node.getBoundingClientRect();
+    const title = node.querySelector("[data-workstation-title]");
+    const marker = node.querySelector(
+      '[data-workstation-work-progress="numeric"]',
+    );
+    const content = Array.from(node.querySelectorAll("*")).filter((element) => {
+      const bounds = element.getBoundingClientRect();
+      return bounds.width > 0 && bounds.height > 0;
+    });
+    const escaped = content
+      .map((element) => {
+        const bounds = element.getBoundingClientRect();
+        return {
+          selector:
+            element
+              .getAttributeNames()
+              .find((name) => name.startsWith("data-")) ?? element.tagName,
+          left: bounds.left < nodeBounds.left,
+          right: bounds.right > nodeBounds.right,
+          top: bounds.top < nodeBounds.top,
+          bottom: bounds.bottom > nodeBounds.bottom,
+        };
+      })
+      .filter(
+        (bounds) => bounds.left || bounds.right || bounds.top || bounds.bottom,
+      );
+
+    return {
+      countFontSize: marker
+        ? Number.parseFloat(getComputedStyle(marker).fontSize)
+        : Number.NaN,
+      titleFontSize: title
+        ? Number.parseFloat(getComputedStyle(title).fontSize)
+        : Number.NaN,
+      escaped,
+      hasLabels: Boolean(
+        node.querySelector(
+          "[data-active-work-label], [data-active-work-duration]",
+        ),
+      ),
+    };
+  });
+
+  if (details.hasLabels) {
+    throw new Error(
+      "Dense workstation rendered active-work names or durations",
+    );
+  }
+  if (details.escaped.length > 0) {
+    throw new Error(
+      `Dense workstation content escaped its node: ${JSON.stringify(details.escaped)}`,
+    );
+  }
+  if (
+    !Number.isFinite(details.countFontSize) ||
+    !Number.isFinite(details.titleFontSize) ||
+    details.countFontSize < details.titleFontSize
+  ) {
+    throw new Error(
+      `Dense workstation count was not title-sized: ${JSON.stringify(details)}`,
+    );
+  }
+  await reviewButton.focus();
+  if ((await reviewButton.getAttribute("aria-pressed")) !== "false") {
+    throw new Error(
+      "Dense workstation selection control was not keyboard-ready",
+    );
+  }
+}
+
 async function waitForAnimationFrame(page) {
   await page.evaluate(
     () => new Promise((resolve) => requestAnimationFrame(() => resolve())),
@@ -76,6 +338,7 @@ async function verifyTouchGestures(browser) {
   });
 
   try {
+    await verifyMixedWorkstationSemantics(page);
     const client = await context.newCDPSession(page);
     const nodeButtons = page.locator(".react-flow__node button");
     let station = null;
@@ -165,6 +428,7 @@ async function verifyDesktopPaneSelectionDrag(browser) {
   });
 
   try {
+    await verifyMixedWorkstationSemantics(page);
     const point = await emptyPanePoint(page);
     const initialTransform = await viewportTransform(page);
     const initialScroll = await page.evaluate(() => ({
@@ -197,6 +461,18 @@ async function verifyDesktopPaneSelectionDrag(browser) {
 
 const browser = await chromium.launch({ headless: true });
 try {
+  const denseStory = await openStory(
+    browser,
+    {
+      viewport: { height: 900, width: 1280 },
+    },
+    denseWorkStoryID,
+  );
+  try {
+    await verifyDenseActiveWork(denseStory.page);
+  } finally {
+    await denseStory.context.close();
+  }
   await verifyTouchGestures(browser);
   await verifyDesktopPaneSelectionDrag(browser);
   console.log(

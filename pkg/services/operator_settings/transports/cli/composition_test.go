@@ -321,6 +321,26 @@ func (root *compositionSettingsRoot) EnsurePackagedACPIntegrations(
 	return operatorsettings.Document{}, errors.New("test composition root does not implement ACP")
 }
 
+func (root *compositionSettingsRoot) ResolveACPAgentProfile(string) (operatorsettings.ACPAgentProfile, error) {
+	return operatorsettings.ACPAgentProfile{}, errors.New("test composition root does not implement ACP Agent profile")
+}
+
+func (root *compositionSettingsRoot) UpdateACPAgentProfile(
+	context.Context,
+	string,
+	operatorsettings.ACPAgentProfile,
+) (operatorsettings.ACPAgentProfile, error) {
+	return operatorsettings.ACPAgentProfile{}, errors.New("test composition root does not implement ACP Agent profile")
+}
+
+func (root *compositionSettingsRoot) UpdatePriceTable(
+	context.Context,
+	string,
+	operatorsettings.PriceTable,
+) (operatorsettings.PriceTable, error) {
+	return operatorsettings.PriceTable{}, errors.New("test composition root does not implement price table")
+}
+
 func compositionWinningValue(fileValue, environmentValue, flagValue string) (string, operatorsettings.Source) {
 	switch {
 	case strings.TrimSpace(flagValue) != "":

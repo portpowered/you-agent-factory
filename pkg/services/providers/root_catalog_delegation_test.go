@@ -69,6 +69,7 @@ func TestRootCatalogDelegation_RegistersCodexAdapter(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestProvidersRootWireBoundaryPublishesExternalRegistrationThroughService(t *testing.T) {
 	t.Parallel()
 
@@ -126,6 +127,83 @@ func TestProvidersRootWireBoundaryPublishesExternalRegistrationThroughService(t 
 	}
 }
 
+func TestProvidersRootWireBoundaryRejectsExternalBypassBeforeInvocation(t *testing.T) {
+	t.Parallel()
+
+	integration := providerswire.ProgressingExternalIntegration("sealed-incapable", "must not execute")
+	root, err := providerswire.NewService(providerswire.WithRegistrations(providerswire.Registration{
+		Manifest: providerswire.Manifest{
+			ID:                         "sealed-incapable",
+			ImplementationAvailability: providerswire.ImplementationExternallySupplied,
+			TechnicalSupportLevel:      providerswire.SupportProduction,
+			MaximumExecutionCapabilities: providerswire.ExecutionCapabilities{
+				PromptSubmission: true,
+			},
+		},
+		Integration: integration,
+	}))
+	if err != nil {
+		t.Fatalf("providers/wire.NewService() error = %v", err)
+	}
+
+	_, err = root.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:        providers.ID("sealed-incapable"),
+		AttemptID:       "sealed-incapable-attempt",
+		SkipPermissions: true,
+	})
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) ||
+		failure.Kind != providers.ExecuteFailureKindCapabilityMismatch ||
+		!strings.Contains(failure.Message, `provider "sealed-incapable"`) ||
+		!strings.Contains(failure.Message, "permission_bypass") {
+		t.Fatalf("Execute(unsupported external bypass) error = %#v, want bounded capability mismatch", err)
+	}
+	if stats := integration.Stats(); stats.InvokeCalls != 0 || stats.ProgressWrites != 0 || stats.TerminalCloses != 0 {
+		t.Fatalf("external integration stats = %#v, want no execution side effects", stats)
+	}
+}
+
+func TestProvidersRootWireBoundaryRejectsNegotiatedExternalBypassBeforeInvocation(t *testing.T) {
+	t.Parallel()
+
+	integration := &negotiatedExternalIntegration{
+		identity:   "sealed-negotiated-incapable",
+		maximum:    providerswire.NewCapabilitySet(providerswire.CapabilityPromptSubmission, providerswire.CapabilityPermissionBypass),
+		negotiated: providerswire.NewCapabilitySet(providerswire.CapabilityPromptSubmission),
+		content:    "must not execute",
+	}
+	root, err := providerswire.NewService(providerswire.WithRegistrations(providerswire.Registration{
+		Manifest: providerswire.Manifest{
+			ID:                         string(integration.identity),
+			ImplementationAvailability: providerswire.ImplementationExternallySupplied,
+			TechnicalSupportLevel:      providerswire.SupportProduction,
+			MaximumExecutionCapabilities: providerswire.ExecutionCapabilities{
+				PromptSubmission: true,
+				PermissionBypass: true,
+			},
+		},
+		Integration: integration,
+	}))
+	if err != nil {
+		t.Fatalf("providers/wire.NewService() error = %v", err)
+	}
+
+	_, err = root.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:        providers.ID(integration.identity),
+		AttemptID:       "sealed-negotiated-incapable-attempt",
+		SkipPermissions: true,
+	})
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) ||
+		failure.Kind != providers.ExecuteFailureKindCapabilityMismatch ||
+		failure.Message != `provider "sealed-negotiated-incapable" does not support capability "permission_bypass"` {
+		t.Fatalf("Execute(negotiated unsupported external bypass) error = %#v, want stable capability mismatch", err)
+	}
+	if integration.capabilityCalls != 1 || integration.invokeCalls != 0 {
+		t.Fatalf("external integration calls = capabilities %d invoke %d, want 1 and 0", integration.capabilityCalls, integration.invokeCalls)
+	}
+}
+
 func TestProvidersRootWireBoundaryPreservesTypedFailuresAndRegistrationValidation(t *testing.T) {
 	t.Parallel()
 
@@ -178,4 +256,35 @@ func findProviderDescriptor(descriptors []providers.Descriptor, id providers.ID)
 		}
 	}
 	return providers.Descriptor{}, false
+}
+
+type negotiatedExternalIntegration struct {
+	identity        providerswire.Identity
+	maximum         providerswire.CapabilitySet
+	negotiated      providerswire.CapabilitySet
+	content         string
+	capabilityCalls int
+	invokeCalls     int
+}
+
+func (integration *negotiatedExternalIntegration) Identity() providerswire.Identity {
+	return integration.identity
+}
+
+func (integration *negotiatedExternalIntegration) MaximumCapabilities() providerswire.CapabilitySet {
+	return integration.maximum
+}
+
+func (*negotiatedExternalIntegration) Discover(context.Context) (providerswire.Discovery, error) {
+	return providerswire.Discovery{}, nil
+}
+
+func (integration *negotiatedExternalIntegration) Capabilities(context.Context, providerswire.InvocationRequest) (providerswire.CapabilitySet, error) {
+	integration.capabilityCalls++
+	return integration.negotiated, nil
+}
+
+func (integration *negotiatedExternalIntegration) Invoke(ctx context.Context, _ providerswire.InvocationRequest, writer providerswire.ResponseWriter) error {
+	integration.invokeCalls++
+	return writer.Close(ctx, providerswire.SuccessfulCompletion(providerswire.Response{Content: integration.content}))
 }

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	checkpointrecovery "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery"
 )
 
@@ -26,7 +25,7 @@ func TestEncodeRuntimeOpaquePayloadRejectsMissingFactoryState(t *testing.T) {
 	t.Parallel()
 
 	_, err := checkpointrecovery.EncodeRuntimeOpaquePayload(checkpointrecovery.ExecutionCaptureFacts{})
-	if !errors.Is(err, factoryruntime.ErrCorruptCheckpoint) {
+	if !errors.Is(err, checkpointrecovery.ErrCorruptCheckpoint) {
 		t.Fatalf("EncodeRuntimeOpaquePayload() error = %v, want ErrCorruptCheckpoint", err)
 	}
 }

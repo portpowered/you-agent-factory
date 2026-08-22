@@ -22,14 +22,16 @@ import (
 // DispatcherSubsystem fires transitions by consuming input tokens and producing
 // WorkDispatches for worker executors. It runs at TickGroup 5 (after Scheduler).
 type DispatcherSubsystem struct {
-	state         *state.Net
-	sched         scheduler.Scheduler
-	wfCtx         *factory_context.FactoryContext
-	logger        logging.Logger
-	evaluator     *scheduler.EnablementEvaluator
-	runtimeConfig interfaces.RuntimeDefinitionLookup
-	now           func() time.Time
-	newID         factoryruntime.IDGenerator
+	state               *state.Net
+	sched               scheduler.Scheduler
+	wfCtx               *factory_context.FactoryContext
+	logger              logging.Logger
+	evaluator           *scheduler.EnablementEvaluator
+	runtimeConfig       interfaces.RuntimeDefinitionLookup
+	now                 func() time.Time
+	newID               factoryruntime.IDGenerator
+	replayIDs           factoryruntime.ReplayDispatchIDResolver
+	seededReplayWorkIDs map[string]struct{}
 }
 
 // NewDispatcher creates a new DispatcherSubsystem.
@@ -41,6 +43,43 @@ func NewDispatcher(
 	runtimeConfig interfaces.RuntimeDefinitionLookup,
 	now func() time.Time,
 	newID factoryruntime.IDGenerator,
+	replayIDs ...factoryruntime.ReplayDispatchIDResolver,
+) *DispatcherSubsystem {
+	var replayIDResolver factoryruntime.ReplayDispatchIDResolver
+	if len(replayIDs) > 0 {
+		replayIDResolver = replayIDs[0]
+	}
+	return newDispatcher(n, sched, wfCtx, logger, runtimeConfig, now, newID, replayIDResolver, nil)
+}
+
+// NewDispatcherWithSeededReplay creates a dispatcher that preserves restored
+// Work at its recorded place when replay has no matching recorded dispatch.
+// The replay resolver still allows recorded dispatches, including pending
+// human-approval dispatches, to proceed normally.
+func NewDispatcherWithSeededReplay(
+	n *state.Net,
+	sched scheduler.Scheduler,
+	wfCtx *factory_context.FactoryContext,
+	logger logging.Logger,
+	runtimeConfig interfaces.RuntimeDefinitionLookup,
+	now func() time.Time,
+	newID factoryruntime.IDGenerator,
+	replayIDs factoryruntime.ReplayDispatchIDResolver,
+	seededRestoredWorkIDs map[string]struct{},
+) *DispatcherSubsystem {
+	return newDispatcher(n, sched, wfCtx, logger, runtimeConfig, now, newID, replayIDs, seededRestoredWorkIDs)
+}
+
+func newDispatcher(
+	n *state.Net,
+	sched scheduler.Scheduler,
+	wfCtx *factory_context.FactoryContext,
+	logger logging.Logger,
+	runtimeConfig interfaces.RuntimeDefinitionLookup,
+	now func() time.Time,
+	newID factoryruntime.IDGenerator,
+	replayIDs factoryruntime.ReplayDispatchIDResolver,
+	seededRestoredWorkIDs map[string]struct{},
 ) *DispatcherSubsystem {
 	l := logging.EnsureLogger(logger)
 	if now == nil {
@@ -50,13 +89,15 @@ func NewDispatcher(
 		panic("Factory Runtime dispatcher ID generator is required")
 	}
 	dispatcher := &DispatcherSubsystem{
-		state:         n,
-		sched:         sched,
-		wfCtx:         wfCtx,
-		logger:        l,
-		runtimeConfig: runtimeConfig,
-		now:           now,
-		newID:         newID,
+		state:               n,
+		sched:               sched,
+		wfCtx:               wfCtx,
+		logger:              l,
+		runtimeConfig:       runtimeConfig,
+		now:                 now,
+		newID:               newID,
+		replayIDs:           replayIDs,
+		seededReplayWorkIDs: cloneWorkIDSet(seededRestoredWorkIDs),
 	}
 	dispatcher.evaluator = scheduler.NewEnablementEvaluator(
 		l,
@@ -153,10 +194,53 @@ func (d *DispatcherSubsystem) dispatchRecordFromDecision(snapshot *interfaces.En
 	if !ok {
 		return interfaces.DispatchRecord{}, false
 	}
-	consumeMutations := consumeMutationsForDecision(decision.TransitionID, decision.ConsumeTokens, inputTokens, claimedTokens)
 	dispatch := d.buildWorkDispatch(snapshot, decision, tr, inputTokens)
+	if d.shouldSuppressUnrecordedSeededReplayDispatch(dispatch, inputTokens) {
+		d.logger.Info(
+			"dispatcher: preserving seeded replay Work without an unrecorded dispatch",
+			"transitionID", decision.TransitionID,
+			"workIDs", dispatch.Execution.WorkIDs,
+		)
+		return interfaces.DispatchRecord{}, false
+	}
+	consumeMutations := consumeMutationsForDecision(decision.TransitionID, decision.ConsumeTokens, inputTokens, claimedTokens)
 	d.logDispatch(decision, inputTokens, dispatch)
 	return interfaces.DispatchRecord{Dispatch: dispatch, Mutations: consumeMutations}, true
+}
+
+func (d *DispatcherSubsystem) shouldSuppressUnrecordedSeededReplayDispatch(
+	dispatch work.WorkDispatch,
+	inputTokens []factorytoken.Token,
+) bool {
+	if d.replayIDs == nil || len(d.seededReplayWorkIDs) == 0 {
+		return false
+	}
+	hasSeededWork := false
+	for _, token := range inputTokens {
+		if token.Color.DataType == workers.DataTypeResource {
+			continue
+		}
+		if _, seeded := d.seededReplayWorkIDs[token.Color.WorkID]; !seeded {
+			return false
+		}
+		hasSeededWork = true
+	}
+	if !hasSeededWork {
+		return false
+	}
+	_, recorded := d.replayIDs.DispatchIDForDispatch(dispatch)
+	return !recorded
+}
+
+func cloneWorkIDSet(values map[string]struct{}) map[string]struct{} {
+	if len(values) == 0 {
+		return nil
+	}
+	clone := make(map[string]struct{}, len(values))
+	for workID := range values {
+		clone[workID] = struct{}{}
+	}
+	return clone
 }
 
 func (d *DispatcherSubsystem) collectDecisionTokens(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], decision interfaces.FiringDecision, claimedTokens map[string]bool) ([]factorytoken.Token, bool) {
@@ -225,14 +309,129 @@ func (d *DispatcherSubsystem) buildWorkDispatch(snapshot *interfaces.EngineState
 		CurrentChainingTraceID:   factorytoken.CurrentChainingTraceID(inputTokens, interfaces.SystemTimeWorkTypeID),
 		PreviousChainingTraceIDs: factorytoken.PreviousChainingTraceIDs(inputTokens),
 		Execution:                executionMetadataForDispatch(decision.TransitionID, snapshot.TickCount, inputTokens),
-		InputTokens:              workers.InputTokens(inputTokens...),
+		InputTokens:              workers.InputTokens(factorytoken.ToWorkerSlice(inputTokens)...),
 		InputBindings:            cloneDispatchInputBindings(decision.InputBindings),
 		WorkstationName:          tr.Name,
+	}
+	if d.replayIDs != nil {
+		if dispatchID, ok := d.replayIDs.DispatchIDForDispatch(dispatch); ok {
+			dispatch.DispatchID = dispatchID
+		}
 	}
 	if d.wfCtx != nil {
 		dispatch.ProjectID = d.wfCtx.ProjectID
 	}
+	dispatch.ExpectedArtifactContext = d.expectedArtifactContext(tr, inputTokens)
 	return dispatch
+}
+
+func (d *DispatcherSubsystem) expectedArtifactContext(
+	tr *petri.Transition,
+	inputTokens []factorytoken.Token,
+) *work.ExpectedArtifactTemplateContext {
+	if tr == nil || !d.transitionHasExpectedArtifacts(tr, inputTokens) {
+		return nil
+	}
+	project := ""
+	if d.wfCtx != nil {
+		candidate := strings.TrimSpace(d.wfCtx.ProjectID)
+		if candidate != "" && candidate != workers.DefaultProjectID {
+			project = candidate
+		}
+	}
+	if strings.TrimSpace(project) == "" {
+		for _, token := range inputTokens {
+			if token.Color.DataType == workers.DataTypeResource {
+				continue
+			}
+			if candidate := strings.TrimSpace(token.Color.Tags[workers.ProjectTagKey]); candidate != "" {
+				project = candidate
+				break
+			}
+		}
+	}
+	sessionID := workers.DefaultSessionID
+	if d.wfCtx != nil && strings.TrimSpace(d.wfCtx.SessionID) != "" {
+		sessionID = strings.TrimSpace(d.wfCtx.SessionID)
+	}
+	inputProject := workers.DefaultProjectID
+	if d.wfCtx != nil {
+		inputProject = workers.ResolveProjectID(d.wfCtx.ProjectID)
+	}
+	return &work.ExpectedArtifactTemplateContext{
+		Inputs:    expectedArtifactTemplateInputs(inputTokens, inputProject),
+		Project:   workers.ResolveProjectID(project),
+		SessionID: sessionID,
+	}
+}
+
+func expectedArtifactTemplateInputs(
+	inputTokens []factorytoken.Token,
+	inputProject string,
+) []work.ExpectedArtifactInput {
+	if len(inputTokens) == 0 {
+		return nil
+	}
+	inputProject = workers.ResolveProjectID(inputProject)
+	inputs := make([]work.ExpectedArtifactInput, 0, len(inputTokens))
+	for _, token := range inputTokens {
+		project := strings.TrimSpace(token.Color.Tags[workers.ProjectTagKey])
+		if project == "" {
+			project = inputProject
+		} else {
+			project = workers.ResolveProjectID(project)
+		}
+		inputs = append(inputs, work.ExpectedArtifactInput{
+			Name:       token.Color.Name,
+			WorkID:     token.Color.WorkID,
+			WorkTypeID: token.Color.WorkTypeID,
+			DataType:   string(token.Color.DataType),
+			TraceID:    token.Color.TraceID,
+			ParentID:   token.Color.ParentID,
+			Project:    project,
+			Tags:       work.CloneTags(token.Color.Tags),
+			Payload:    string(token.Color.Payload),
+		})
+	}
+	return inputs
+}
+
+func (d *DispatcherSubsystem) transitionHasExpectedArtifacts(
+	tr *petri.Transition,
+	inputTokens []factorytoken.Token,
+) bool {
+	if len(tr.ExpectedArtifacts) > 0 {
+		return true
+	}
+	if d.state == nil {
+		return false
+	}
+	for _, token := range inputTokens {
+		if token.Color.DataType == workers.DataTypeResource {
+			continue
+		}
+		if workType := dispatchWorkType(d.state.WorkTypes, token.Color.WorkTypeID); workType != nil {
+			if len(workType.ExpectedArtifacts) > 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func dispatchWorkType(
+	workTypes map[string]*state.WorkType,
+	workTypeID string,
+) *state.WorkType {
+	if workType, ok := workTypes[workTypeID]; ok {
+		return workType
+	}
+	for _, workType := range workTypes {
+		if workType != nil && (workType.ID == workTypeID || workType.Name == workTypeID) {
+			return workType
+		}
+	}
+	return nil
 }
 
 func (d *DispatcherSubsystem) logDispatch(decision interfaces.FiringDecision, inputTokens []factorytoken.Token, dispatch work.WorkDispatch) {

@@ -7,6 +7,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -94,6 +95,134 @@ func ListDispatchesResponseToAPI(result factorysessionexecution.ListDispatchesRe
 		response.Dispatches = dispatches
 	}
 	return response
+}
+
+// HistoricalDispatchInput carries one detached historical dispatch fact from a
+// transport that reconstructs dispatch history from its own ledger instead of
+// the live Factory Sessions projection.
+type HistoricalDispatchInput struct {
+	ID           string
+	Status       string
+	DispatchKind string
+	Usage        *recordings.FactoryDispatchUsage
+}
+
+// HistoricalDispatchListToAPI maps detached historical dispatch facts to the
+// public dispatch listing response.
+func HistoricalDispatchListToAPI(
+	sessionID string,
+	dispatches []HistoricalDispatchInput,
+) factoryapi.ListFactorySessionDispatchesResponse {
+	response := factoryapi.ListFactorySessionDispatchesResponse{
+		SessionId:  sessionID,
+		Dispatches: []factoryapi.FactorySessionDispatchSummary{},
+	}
+	if len(dispatches) == 0 {
+		return response
+	}
+	mapped := make([]factoryapi.FactorySessionDispatchSummary, 0, len(dispatches))
+	for _, dispatch := range dispatches {
+		mapped = append(mapped, historicalDispatchSummaryToAPI(dispatch))
+	}
+	response.Dispatches = mapped
+	return response
+}
+
+// HistoricalDispatchDetailToAPI maps one detached historical dispatch fact and
+// its resolved orchestrator kind to the public dispatch response.
+func HistoricalDispatchDetailToAPI(
+	sessionID string,
+	dispatch HistoricalDispatchInput,
+	orchestratorKind string,
+) factoryapi.FactoryDispatch {
+	response := DispatchDetailResponseToAPI(factorysessionexecution.DispatchDetail{
+		DispatchSummary:  historicalDispatchSummary(dispatch),
+		SessionID:        sessionID,
+		OrchestratorKind: orchestratorKind,
+	})
+	response.Usage = historicalDispatchUsageToAPI(dispatch.Usage)
+	return response
+}
+
+func historicalDispatchSummary(dispatch HistoricalDispatchInput) factorysessionexecution.DispatchSummary {
+	return factorysessionexecution.DispatchSummary{
+		ID:           dispatch.ID,
+		Status:       factorysessionexecution.DispatchStatus(dispatch.Status),
+		DispatchKind: dispatch.DispatchKind,
+	}
+}
+
+func historicalDispatchSummaryToAPI(dispatch HistoricalDispatchInput) factoryapi.FactorySessionDispatchSummary {
+	response := dispatchSummaryToAPI(historicalDispatchSummary(dispatch))
+	response.Usage = historicalDispatchUsageToAPI(dispatch.Usage)
+	return response
+}
+
+func historicalDispatchUsageToAPI(usage *recordings.FactoryDispatchUsage) *factoryapi.FactoryDispatchUsage {
+	if usage == nil {
+		return nil
+	}
+	response := &factoryapi.FactoryDispatchUsage{}
+	if usage.InputTokens != nil {
+		value := *usage.InputTokens
+		response.InputTokens = &value
+	}
+	if usage.OutputTokens != nil {
+		value := *usage.OutputTokens
+		response.OutputTokens = &value
+	}
+	if usage.TotalTokens != nil {
+		value := *usage.TotalTokens
+		response.TotalTokens = &value
+	}
+	if usage.DurationMillis != nil {
+		value := *usage.DurationMillis
+		response.DurationMillis = &value
+	}
+	return response
+}
+
+// HistoricalFailureInput carries the detached failure facts of one finalized
+// Factory Session result.
+type HistoricalFailureInput struct {
+	Reason                 string
+	Message                string
+	PartialResultAvailable bool
+}
+
+// HistoricalResultInput carries one finalized Factory Session result
+// reconstructed from a detached historical projection.
+type HistoricalResultInput struct {
+	SessionID        string
+	ResultStatus     string
+	SessionStatus    string
+	Mode             string
+	IncludeArtifacts bool
+	PrimaryResult    json.RawMessage
+	ArtifactIDs      []string
+	Failure          *HistoricalFailureInput
+}
+
+// HistoricalResultToAPI maps one detached historical result projection to the
+// public result response shape.
+func HistoricalResultToAPI(input HistoricalResultInput) factoryapi.FactorySessionResult {
+	read := factorysessionexecution.ResultReadResult{
+		SessionID:        input.SessionID,
+		ResultStatus:     factorysessionexecution.ResultStatus(input.ResultStatus),
+		SessionStatus:    factorysessionexecution.LifecycleStatus(input.SessionStatus),
+		Mode:             factorysessionexecution.ResultMode(input.Mode),
+		IncludeArtifacts: input.IncludeArtifacts,
+		PrimaryResult:    input.PrimaryResult,
+		ArtifactIDs:      input.ArtifactIDs,
+	}
+	if input.Failure != nil {
+		read.Failure = &factorysessionexecution.FailureSummary{
+			Reason:                 input.Failure.Reason,
+			Message:                input.Failure.Message,
+			PartialResultAvailable: input.Failure.PartialResultAvailable,
+		}
+	}
+	return ResultResponseToAPI(read)
 }
 
 // DispatchDetailResponseToAPI maps one durable dispatch projection to the public response shape.
@@ -490,6 +619,10 @@ func dispatchJavaScriptToAPI(javascript *factorysessionexecution.DispatchJavaScr
 	}
 	if mode := strings.TrimSpace(javascript.ExecutionMode); mode != "" {
 		out.ExecutionMode = &mode
+	}
+	if javascript.SkipPermissions {
+		skipPermissions := true
+		out.SkipPermissions = &skipPermissions
 	}
 	return &out
 }

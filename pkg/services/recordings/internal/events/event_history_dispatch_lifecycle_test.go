@@ -6,6 +6,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -41,8 +42,7 @@ func recordDispatchLifecycleSequence(
 	t.Helper()
 	queuedAt := t0.Add(2 * time.Second)
 	interruptedAt := t0.Add(3 * time.Second)
-	reconciledAt := t0.Add(4 * time.Second)
-	artifactAt := t0.Add(5 * time.Second)
+	reconciledAt, artifactAt := t0.Add(4*time.Second), t0.Add(5*time.Second)
 	kind := interfaces.OrchestratorKindJavaScript
 	queuePosition := 0
 	hash := "sha256:result-body"
@@ -71,6 +71,7 @@ func recordDispatchLifecycleSequence(
 		PromptDigest:     "sha256:prompt",
 		SchemaDigest:     "sha256:schema",
 		InputWorkIDs:     []string{"work-1"},
+		SkipPermissions:  true,
 	}, queuedAt)
 	history.RecordDispatchInterrupted(DispatchInterruptedInput{
 		SessionID:        "session-js",
@@ -83,7 +84,7 @@ func recordDispatchLifecycleSequence(
 		Reason:           "provider disconnected",
 		ObservedStatus:   interfaces.FactoryDispatchStatusFailed,
 		RetryPlanned:     true,
-		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
+		ProviderSessionRef: &providers.SessionMetadata{
 			Provider: "cursor", Kind: "session_id", ID: "provider-session-1",
 		},
 		CheckpointRef: &interfaces.FactorySessionJavaScriptCheckpointEventRef{
@@ -136,9 +137,21 @@ func recordDispatchLifecycleSequence(
 
 func assertDispatchLifecycleOptionalMetadata(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
+	assertQueuedOptionalMetadata(t, events[0])
 	assertInterruptedOptionalMetadata(t, events[1])
 	assertReconciledOptionalMetadata(t, events[2])
 	assertArtifactOptionalMetadata(t, events[3])
+}
+
+func assertQueuedOptionalMetadata(t *testing.T, event factoryapi.FactoryEvent) {
+	t.Helper()
+	queued, err := event.Payload.AsDispatchQueuedEventPayload()
+	if err != nil {
+		t.Fatalf("decode queued payload: %v", err)
+	}
+	if queued.SkipPermissions == nil || !*queued.SkipPermissions {
+		t.Fatalf("queued skipPermissions = %#v, want true", queued.SkipPermissions)
+	}
 }
 
 func assertInterruptedOptionalMetadata(t *testing.T, event factoryapi.FactoryEvent) {
@@ -205,6 +218,9 @@ func assertDispatchLifecycleWorldState(
 	if dispatch.PromptDigest != "sha256:prompt" || dispatch.Label != "summarize findings" {
 		t.Fatalf("dispatch metadata = %#v, want prompt digest and label preserved", dispatch)
 	}
+	if dispatch.JavaScript == nil || !dispatch.JavaScript.SkipPermissions {
+		t.Fatalf("javascript dispatch = %#v, want skipPermissions=true", dispatch.JavaScript)
+	}
 	if len(worldState.Artifacts) != 1 || worldState.Artifacts[0].ID != "artifact-result-1" {
 		t.Fatalf("artifacts = %#v, want artifact-result-1", worldState.Artifacts)
 	}
@@ -270,6 +286,27 @@ func TestFailureDetailsForResult_FailureMetadataOverridesWorkerErrorReason(t *te
 	}
 	if message != "provider error: timeout: context deadline exceeded" {
 		t.Fatalf("failure message = %q, want preserved rendered timeout text", message)
+	}
+}
+
+func TestFailureDetailsForResult_TypedDetailOverridesFallbacks(t *testing.T) {
+	reason, message := failureDetailsForResult(workerexecution.WorkResult{
+		DispatchID:      "dispatch-script-failure",
+		TransitionID:    "build",
+		Outcome:         workerexecution.OutcomeFailed,
+		Error:           "script exited with status 1",
+		FailureMetadata: &workerexecution.WorkFailureMetadata{Type: workerexecution.WorkFailureTypeUnknown},
+		FailureDetail: &workerexecution.FailureDetail{
+			Reason:  workerexecution.WorkFailureTypeInternalServerError,
+			Message: "script exited with status 1: repository root is dirty",
+		},
+	})
+
+	if reason != string(workerexecution.WorkFailureTypeInternalServerError) {
+		t.Fatalf("failure reason = %q, want internal server error", reason)
+	}
+	if message != "script exited with status 1: repository root is dirty" {
+		t.Fatalf("failure message = %q, want typed diagnostic", message)
 	}
 }
 

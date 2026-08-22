@@ -201,6 +201,9 @@ func (o *SessionOwner) failedResult(
 		ErrorCode: string(primaryErr.Code), Message: primaryErr.Message,
 		SessionID: primaryErr.Context.SessionID, WorkID: primaryErr.Context.WorkID,
 		WorkName: primaryErr.Context.WorkName, WorkState: primaryErr.Context.WorkState,
+		ApprovalID: primaryErr.Context.ApprovalID, DispatchID: primaryErr.Context.DispatchID,
+		WorkstationID: primaryErr.Context.WorkstationID, WorkstationName: primaryErr.Context.WorkstationName,
+		Decisions: append([]string(nil), primaryErr.Context.Decisions...),
 	}
 	o.recordFailure(sessionID, input, result, failureClassForPrimaryResultError(primaryErr.Code))
 	return result

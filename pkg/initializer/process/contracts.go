@@ -4,6 +4,7 @@ package process
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
@@ -104,6 +105,53 @@ type CommandInvocation struct {
 
 type CommandFactory interface {
 	ExecuteCommand(CommandInvocation) error
+}
+
+// WorkerRecordingReader is the neutral process capability for loading one
+// detached Worker recording snapshot. The application process carries the
+// JSON value across the initializer boundary; the Recordings-owned root
+// adapter decodes it back into the domain snapshot without exposing a product
+// service dependency to pkg/initializer/application.
+type WorkerRecordingReader interface {
+	LoadWorkerRecording(context.Context, string) (json.RawMessage, error)
+}
+
+// DetachedOperationsCapability is the neutral process handoff for the
+// Factory Sessions detached operation view. The initializer retains the
+// selected capability without importing the Sessions service; pkg/root
+// reifies the opaque value at the caller-facing boundary.
+type DetachedOperationsCapability interface {
+	DetachedOperations() any
+}
+
+// RuntimeMetricsQueryCapability is the neutral process handoff for the
+// read-only Factory Runtime metrics query. The initializer retains the
+// selected capability without importing the Factory Visualization service;
+// pkg/root reifies the opaque value at the caller-facing boundary.
+type RuntimeMetricsQueryCapability interface {
+	RuntimeMetricsQuery() any
+}
+
+// ExecutionRuntimeOpeningCapability is the neutral process handoff for the
+// canonical Factory Sessions durable-execution opening. The initializer keeps
+// the capability opaque; pkg/root reifies its public service-owned contract.
+type ExecutionRuntimeOpeningCapability interface {
+	ExecutionRuntimeOpening() any
+}
+
+// RuntimeCostsQueryCapability is the neutral process handoff for the
+// stateless Costs valuation operation. The initializer retains the selected
+// capability without importing either Operator Settings or Factory
+// Visualization; pkg/root reifies the opaque value at the caller boundary.
+type RuntimeCostsQueryCapability interface {
+	RuntimeCostsQuery() any
+}
+
+// ACPServer is the neutral application-process capability for serving the ACP
+// protocol. The transport package supplies the concrete implementation at the
+// composition root; the initializer only retains the protocol operation.
+type ACPServer interface {
+	Serve(context.Context, io.Reader, io.Writer) error
 }
 
 type Functions struct {

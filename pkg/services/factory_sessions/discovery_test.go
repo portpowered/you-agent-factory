@@ -213,11 +213,12 @@ func TestCloneTargets_ReturnsDefensiveCopy(t *testing.T) {
 
 // --- merged from live_control_contract_characterization_test.go ---
 
-// peerLiveControlFake exercises the published live-control root slice through
-// the singular Service. It compiles against only the Sessions root package and
-// never imports factory_sessions/internal or live-runtime registry/host types.
+// peerLiveControlFake exercises the owner-published LiveControlService
+// capability. It has exactly the six live-control methods, never embeds the
+// broad Service aggregate, and never imports factory_sessions/internal or
+// live-runtime registry/host types.
 type peerLiveControlFake struct {
-	*peerRootServiceFake
+	sessions    map[string]LiveControlSnapshot
 	openResults map[string]*OpenResult
 	listed      []ReadProjection
 	lifecycle   map[string]LifecycleStatus
@@ -226,14 +227,32 @@ type peerLiveControlFake struct {
 
 func newPeerLiveControlFake() *peerLiveControlFake {
 	return &peerLiveControlFake{
-		peerRootServiceFake: newPeerRootServiceFake(),
-		openResults:         make(map[string]*OpenResult),
-		lifecycle:           make(map[string]LifecycleStatus),
-		closed:              make(map[string]bool),
+		sessions:    make(map[string]LiveControlSnapshot),
+		openResults: make(map[string]*OpenResult),
+		lifecycle:   make(map[string]LifecycleStatus),
+		closed:      make(map[string]bool),
 	}
 }
 
-var _ Service = (*peerLiveControlFake)(nil)
+var _ LiveControlService = (*peerLiveControlFake)(nil)
+
+// exactLiveControlService is a bidirectional compile-time check that the
+// published capability has precisely the six owner-defined live operations.
+// It protects the capability boundary without scanning source or depending on
+// private implementation types.
+type exactLiveControlService interface {
+	OpenFactorySession(context.Context, LiveControlOpenRequest) (*LiveControlOpenResult, error)
+	ListFactorySessions(context.Context) ([]LiveControlListItem, error)
+	GetFactorySession(context.Context, string) (LiveControlSnapshot, error)
+	PauseLiveFactorySession(context.Context, string, LiveControlRequest) (LiveControlResult, error)
+	ResumeLiveFactorySession(context.Context, string, LiveControlRequest) (LiveControlResult, error)
+	CloseFactorySession(context.Context, string) error
+}
+
+var (
+	_ exactLiveControlService = (LiveControlService)(nil)
+	_ LiveControlService      = (exactLiveControlService)(nil)
+)
 
 func (fake *peerLiveControlFake) OpenFactorySession(
 	_ context.Context,
@@ -416,7 +435,7 @@ func requireAcceptedPause(
 	}
 }
 
-func TestLiveControlRootContract_OpenListGetStableIdentity(t *testing.T) {
+func TestLiveControlCapability_OpenListGetStableIdentity(t *testing.T) {
 	t.Parallel()
 
 	fake := newPeerLiveControlFake()
@@ -424,7 +443,7 @@ func TestLiveControlRootContract_OpenListGetStableIdentity(t *testing.T) {
 	folder := "/workspace/factories/demo"
 	seedRunningLiveControlSession(fake, sessionID, folder)
 
-	var service Service = fake
+	var service LiveControlService = fake
 	ctx := context.Background()
 
 	opened, err := service.OpenFactorySession(ctx, LiveControlOpenRequest{FolderPath: folder})
@@ -456,7 +475,7 @@ func TestLiveControlRootContract_OpenListGetStableIdentity(t *testing.T) {
 	requireAcceptedPause(t, paused, sessionID)
 }
 
-func TestLiveControlRootContract_TypedMissingAndLifecycleFailures(t *testing.T) {
+func TestLiveControlCapability_TypedMissingAndLifecycleFailures(t *testing.T) {
 	t.Parallel()
 
 	fake := newPeerLiveControlFake()
@@ -467,7 +486,7 @@ func TestLiveControlRootContract_TypedMissingAndLifecycleFailures(t *testing.T) 
 		Runtime: RuntimeProjection{Status: "SUCCEEDED"},
 	}
 
-	var service Service = fake
+	var service LiveControlService = fake
 	ctx := context.Background()
 
 	_, err := service.GetFactorySession(ctx, "missing-live-session")

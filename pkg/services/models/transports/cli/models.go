@@ -53,6 +53,7 @@ type InvokeConfig struct {
 	Operation        string
 	Text             string
 	OutputPath       string
+	OutputMappings   []string
 	Server           string
 	FactoryDir       string
 	HomeDir          string
@@ -93,8 +94,24 @@ type httpService struct {
 // composition. It is a thin facade over the owned adapter Service built from
 // composition collaborators when a Models root is available, with HTTP and
 // bootstrap invoke behavior retained for remote and legacy composition paths.
-func New(httpProtocol clihttp.Protocol, invocation InvocationOperation) Service {
-	return bindCompositionService(httpProtocol, adaptCompositionInvocation(invocation))
+func New(
+	httpProtocol clihttp.Protocol,
+	invocation InvocationOperation,
+	providers ...CompositionScopeProvider,
+) Service {
+	return NewWithOutputFileSystem(httpProtocol, invocation, nil, providers...)
+}
+
+// NewWithOutputFileSystem constructs the composition-stable Models CLI
+// service with the exact filesystem effect used by explicit generic output
+// mappings.
+func NewWithOutputFileSystem(
+	httpProtocol clihttp.Protocol,
+	invocation InvocationOperation,
+	outputFileSystem OutputFileSystem,
+	providers ...CompositionScopeProvider,
+) Service {
+	return bindCompositionService(httpProtocol, invocation, outputFileSystem, providers...)
 }
 
 func (service *httpService) List(cfg ListConfig) error {
@@ -162,6 +179,9 @@ func (service *httpService) Invoke(cfg InvokeConfig) error {
 	text := strings.TrimSpace(cfg.Text)
 	if text == "" {
 		return fmt.Errorf("--text is required")
+	}
+	if len(cfg.OutputMappings) > 0 {
+		return fmt.Errorf("explicit output mappings require the local Models composition")
 	}
 
 	if cfg.JSON {
@@ -661,7 +681,7 @@ func managedRuntimeDiagnosticsMap(model factoryapi.ModelDetail) factoryapi.Strin
 	return model.Diagnostics
 }
 
-func modelOperationNames(operations []factoryapi.ModelOperation) string {
+func modelOperationNames(operations []factoryapi.ModelInvocationOperation) string {
 	names := make([]string, 0, len(operations))
 	for _, operation := range operations {
 		names = append(names, operation.Name)
@@ -670,7 +690,7 @@ func modelOperationNames(operations []factoryapi.ModelOperation) string {
 	return strings.Join(names, ",")
 }
 
-func modelModalities(modalities []factoryapi.ModelOperationContentType) string {
+func modelModalities(modalities []factoryapi.ModelInvocationContentType) string {
 	values := make([]string, 0, len(modalities))
 	for _, modality := range modalities {
 		values = append(values, string(modality))

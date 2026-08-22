@@ -10,6 +10,7 @@ import (
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -346,7 +347,7 @@ func (h *WorkStateChangeHook) OnTick(ctx context.Context, input recordings.Repla
 	for h.next < len(h.changes) && h.changes[h.next].observedTick <= input.Tick {
 		recorded := h.changes[h.next]
 		h.next++
-		mutation, ok := replayWorkStateChangeMutation(input, recorded.change)
+		mutation, ok := replayWorkStateChangeMutation(input, recorded)
 		if !ok {
 			continue
 		}
@@ -364,12 +365,13 @@ func (h *WorkStateChangeHook) OnTick(ctx context.Context, input recordings.Repla
 
 func replayWorkStateChangeMutation(
 	snapshot recordings.ReplaySnapshot,
-	change work.WorkStateChangeRecord,
+	recorded replayWorkStateChange,
 ) (interfaces.MarkingMutation, bool) {
-	if change.WorkID == "" || change.FromPlaceID == "" || change.ToPlaceID == "" {
+	change := recorded.change
+	if change.WorkID == "" || recorded.fromPlaceID == "" || recorded.toPlaceID == "" {
 		return interfaces.MarkingMutation{}, false
 	}
-	if change.FromPlaceID == change.ToPlaceID {
+	if recorded.fromPlaceID == recorded.toPlaceID {
 		return interfaces.MarkingMutation{}, false
 	}
 	token, ok := snapshot.TokenByWorkID[change.WorkID]
@@ -383,8 +385,8 @@ func replayWorkStateChangeMutation(
 	return interfaces.MarkingMutation{
 		Type:      interfaces.MutationMove,
 		TokenID:   token.TokenID,
-		FromPlace: change.FromPlaceID,
-		ToPlace:   change.ToPlaceID,
+		FromPlace: recorded.fromPlaceID,
+		ToPlace:   recorded.toPlaceID,
 		Reason:    reason,
 	}, true
 }
@@ -392,9 +394,11 @@ func replayWorkStateChangeMutation(
 // CompletionDeliveryPlan maps observed replay dispatches to recorded
 // completion delivery ticks.
 type CompletionDeliveryPlan struct {
-	mu             sync.Mutex
-	records        []completionDeliveryRecord
-	plannedResults map[string]workerexecution.WorkResult
+	mu                          sync.Mutex
+	records                     []completionDeliveryRecord
+	plannedResults              map[string]workerexecution.WorkResult
+	workerSessionIDs            map[string]string
+	workerSessionIDsByReplayKey map[string]string
 }
 
 type completionDeliveryRecord struct {
@@ -462,10 +466,69 @@ func NewCompletionDeliveryPlan(
 			hasCompletion: record.hasCompletion,
 		})
 	}
+	workerSessionIDs := cloneReplayWorkerSessionIDs(eventLog.WorkerSessionIDs)
+	workerSessionIDsByReplayKey := make(map[string]string)
+	for _, record := range records {
+		workerSessionID := workerSessionIDs[record.dispatch.dispatchID]
+		if strings.TrimSpace(workerSessionID) == "" || strings.TrimSpace(record.dispatch.dispatch.Execution.ReplayKey) == "" {
+			continue
+		}
+		workerSessionIDsByReplayKey[record.dispatch.dispatch.Execution.ReplayKey] = workerSessionID
+	}
 	return &CompletionDeliveryPlan{
-		records:        records,
-		plannedResults: make(map[string]workerexecution.WorkResult),
+		records:                     records,
+		plannedResults:              make(map[string]workerexecution.WorkResult),
+		workerSessionIDs:            workerSessionIDs,
+		workerSessionIDsByReplayKey: workerSessionIDsByReplayKey,
 	}, nil
+}
+
+// WorkerSessionIDForDispatch returns the identity recorded alongside one
+// dispatch, allowing replay to preserve the stable Worker Session address.
+func (p *CompletionDeliveryPlan) WorkerSessionIDForDispatch(dispatch work.WorkDispatch) (string, bool) {
+	if p == nil {
+		return "", false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	workerSessionID, ok := p.workerSessionIDs[strings.TrimSpace(dispatch.DispatchID)]
+	if !ok {
+		workerSessionID, ok = p.workerSessionIDsByReplayKey[strings.TrimSpace(dispatch.Execution.ReplayKey)]
+	}
+	return workerSessionID, ok && strings.TrimSpace(workerSessionID) != ""
+}
+
+// DispatchIDForDispatch returns the canonical dispatch identity recorded for
+// an equivalent replay dispatch. Reusing this identity is important for
+// durable operator-input claims, whose approval ID is derived from dispatch
+// identity and must not fork during replay.
+func (p *CompletionDeliveryPlan) DispatchIDForDispatch(dispatch work.WorkDispatch) (string, bool) {
+	if p == nil {
+		return "", false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, record := range p.records {
+		if strings.TrimSpace(record.dispatch.dispatchID) == "" || record.used {
+			continue
+		}
+		if !recordedDispatchMatches(record.dispatch, dispatch) {
+			continue
+		}
+		return record.dispatch.dispatchID, true
+	}
+	return "", false
+}
+
+func cloneReplayWorkerSessionIDs(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	clone := make(map[string]string, len(values))
+	for dispatchID, workerSessionID := range values {
+		clone[dispatchID] = workerSessionID
+	}
+	return clone
 }
 
 func (p *CompletionDeliveryPlan) DeliveryTickForDispatch(dispatch work.WorkDispatch) (int, bool, error) {
@@ -550,11 +613,16 @@ func (p *CompletionDeliveryPlan) PlannedResultForDispatch(dispatch work.WorkDisp
 
 func cloneReplayPlannedResult(result workerexecution.WorkResult) workerexecution.WorkResult {
 	clone := result
+	clone.StructuredResult = jsonvalue.Clone(result.StructuredResult)
+	clone.StructuredResultPresent = jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent)
 	if result.RecordedOutputWork != nil {
 		clone.RecordedOutputWork = cloneReplayFactoryWorkItems(result.RecordedOutputWork)
 	}
 	clone.FailureMetadata = workerexecution.CloneWorkFailureMetadata(result.FailureMetadata)
-	clone.ProviderSession = workerexecution.CloneProviderSessionMetadata(result.ProviderSession)
+	if result.Continuation != nil {
+		continuation := result.Continuation.Clone()
+		clone.Continuation = &continuation
+	}
 	clone.Diagnostics = workerexecution.CloneWorkDiagnostics(result.Diagnostics)
 	return clone
 }
@@ -572,6 +640,8 @@ func cloneReplayFactoryWorkItems(items []work.FactoryWorkItem) []work.FactoryWor
 		if items[i].Content != nil {
 			out[i].Content = append([]work.WorkContentPart(nil), items[i].Content...)
 		}
+		out[i].StructuredResult = jsonvalue.Clone(items[i].StructuredResult)
+		out[i].StructuredResultPresent = jsonvalue.Present(items[i].StructuredResult, items[i].StructuredResultPresent)
 		if items[i].Tags != nil {
 			out[i].Tags = cloneStringMap(items[i].Tags)
 		}
@@ -675,9 +745,6 @@ func resourceTokenName(token workerexecution.Token) string {
 		return token.Color.Name
 	}
 	if before, _, ok := strings.Cut(token.ID, ":resource:"); ok && before != "" {
-		return before
-	}
-	if before, _, ok := strings.Cut(token.PlaceID, ":"); ok && before != "" {
 		return before
 	}
 	return token.ID

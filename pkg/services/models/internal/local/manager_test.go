@@ -46,7 +46,7 @@ type countingLocalRuntime struct {
 }
 
 func (r *countingLocalRuntime) Supports(resource modelRuntimeResource, worker *modelRuntimeWorker) bool {
-	return CanonicalBackendName(resource.Backend) == "LLAMACPP" && CanonicalModelName(worker.Model) == CanonicalModelName("OMNIVOICE_Q4_K_M")
+	return apisurface.IsManagedRuntimeBackend(resource.Backend) && CanonicalModelName(worker.Model) == CanonicalModelName("OMNIVOICE_Q4_K_M")
 }
 
 func (r *countingLocalRuntime) Load(context.Context, LoadRequest) (Handle, error) {

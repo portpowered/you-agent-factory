@@ -22,10 +22,20 @@ type Service interface {
 
 // ProbeFacts are live readiness and prerequisite facts for one projected catalog
 // provider. Descriptions must stay bounded and must not include raw environment
-// values, filesystem paths, or native probe output.
+// values, filesystem paths, or native probe output. They replace the static
+// unverified/required values emitted by the authored catalog.
 type ProbeFacts struct {
 	Readiness     providers.Readiness
 	Prerequisites []providers.Prerequisite
+}
+
+// CapabilityOverride replaces the static capability facts for one existing
+// catalog provider identity during process construction. It is a construction
+// seam for hosts that supply an authoritative route-specific capability view;
+// it cannot add a provider that is absent from the catalog.
+type CapabilityOverride struct {
+	Provider     providers.ID
+	Capabilities []providers.Capability
 }
 
 // ProbeQuery reports current readiness facts for one projected catalog provider.

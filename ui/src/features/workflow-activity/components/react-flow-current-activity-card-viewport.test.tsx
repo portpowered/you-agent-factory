@@ -7,6 +7,8 @@ import type { CurrentActivityImportController } from "../hooks/current-activity-
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
 const setViewport = vi.fn().mockResolvedValue(true);
+const graphStore = { nodeLookup: new Map() };
+const mockUpdateNodeInternals = vi.fn();
 
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual("@xyflow/react");
@@ -15,6 +17,9 @@ vi.mock("@xyflow/react", async () => {
     ...actual,
     Background: () => <div data-testid="graph-background" />,
     Controls: () => <div data-testid="graph-controls" />,
+    useStore: (selector: (state: typeof graphStore) => string) =>
+      selector(graphStore),
+    useUpdateNodeInternals: () => mockUpdateNodeInternals,
     ReactFlow: ({
       className,
       children,
@@ -138,51 +143,52 @@ const importController: CurrentActivityImportController = {
   onDrop: vi.fn(),
 };
 
-const DEFAULT_GRAPH_RECT = {
-  bottom: 720,
+const DEFAULT_VIEWPORT_MEASUREMENT = {
   height: 720,
-  left: 0,
-  right: 1280,
-  top: 0,
+  ready: true,
   width: 1280,
-  x: 0,
-  y: 0,
-  toJSON: () => ({}),
-} as DOMRect;
+} as const;
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: viewport coverage keeps related mocked React Flow click paths together.
 describe("CurrentActivityGraphViewport", () => {
-  const originalBoundingClientRect =
-    HTMLElement.prototype.getBoundingClientRect;
-  const originalResizeObserver = globalThis.ResizeObserver;
-
   beforeEach(() => {
+    graphStore.nodeLookup.clear();
+    mockUpdateNodeInternals.mockClear();
     setViewport.mockClear();
-    HTMLElement.prototype.getBoundingClientRect = () => DEFAULT_GRAPH_RECT;
-    globalThis.ResizeObserver = class {
-      public constructor(private readonly callback: ResizeObserverCallback) {}
-
-      public disconnect(): void {}
-
-      public observe(target: Element): void {
-        this.callback(
-          [
-            {
-              contentRect: DEFAULT_GRAPH_RECT,
-              target,
-            } as ResizeObserverEntry,
-          ],
-          this as unknown as ResizeObserver,
-        );
-      }
-
-      public unobserve(): void {}
-    } as unknown as typeof ResizeObserver;
   });
 
-  afterEach(() => {
-    HTMLElement.prototype.getBoundingClientRect = originalBoundingClientRect;
-    globalThis.ResizeObserver = originalResizeObserver;
+  it("exposes selection readiness only after graph handles and dimensions exist", () => {
+    graphStore.nodeLookup.set("worker:writer", {
+      id: "worker:writer",
+      internals: { handleBounds: { source: [], target: [] } },
+      measured: { height: 50, width: 120 },
+    });
+
+    const { container } = renderViewport({
+      nodes: [{ id: "worker:writer", position: { x: 0, y: 0 } }],
+    });
+
+    expect(
+      container.querySelector('[data-factory-graph-selection-ready="true"]'),
+    ).toBeTruthy();
+    expect(mockUpdateNodeInternals).not.toHaveBeenCalled();
+  });
+
+  it("refreshes graph internals while selection dimensions are incomplete", () => {
+    graphStore.nodeLookup.set("worker:writer", {
+      id: "worker:writer",
+      internals: { handleBounds: undefined },
+      measured: { height: 0, width: 0 },
+    });
+
+    const { container } = renderViewport({
+      nodes: [{ id: "worker:writer", position: { x: 0, y: 0 } }],
+    });
+
+    expect(
+      container.querySelector('[data-factory-graph-selection-ready="false"]'),
+    ).toBeTruthy();
+    expect(mockUpdateNodeInternals).toHaveBeenCalledWith(["worker:writer"]);
   });
 
   it("renders hide/show controls in observer mode without editor tools", () => {
@@ -446,7 +452,7 @@ describe("CurrentActivityGraphViewport", () => {
 
     const reactFlow = await screen.findByTestId("mock-react-flow");
     expect(reactFlow.getAttribute("data-selection-on-drag")).toBe("true");
-    expect(reactFlow.getAttribute("data-pan-on-drag")).toBe("");
+    expect(reactFlow.getAttribute("data-pan-on-drag")).toBe("1");
     expect(reactFlow.getAttribute("data-pan-on-scroll")).toBe("true");
     expect(reactFlow.getAttribute("data-zoom-on-scroll")).toBe("false");
     expect(reactFlow.getAttribute("data-delete-key-code")).toBe("null");
@@ -568,6 +574,7 @@ function renderViewport({
       }}
       edges={edges}
       flowContainerRef={flowContainerRef}
+      viewportMeasurement={DEFAULT_VIEWPORT_MEASUREMENT}
       handleGraphSelectionChange={handleGraphSelectionChange}
       handleNodesChange={vi.fn()}
       hasPendingChanges={false}

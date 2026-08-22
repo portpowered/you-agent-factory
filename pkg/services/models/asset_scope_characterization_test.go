@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
@@ -338,5 +339,90 @@ func assertPrepareAssetErrorIs(
 	_, err := service.PrepareModelAssets(context.Background(), request)
 	if !errors.Is(err, want) {
 		t.Fatalf("PrepareModelAssets(%q) = %v, want %v", request.Name, err, want)
+	}
+}
+
+func TestAssetContractValidationAndDetachedErrors(t *testing.T) {
+	t.Parallel()
+
+	assertAssetRequirementValidation(t)
+	assertAssetPreparationValidation(t)
+	assertAssetSnapshotClone(t)
+	assertAssetTypedErrors(t)
+}
+
+func assertAssetRequirementValidation(t *testing.T) {
+	t.Helper()
+	validDigest := strings.Repeat("a", 64)
+	if err := (models.AssetRequirement{Name: "weights/model.bin", Bytes: 3, SHA256: validDigest}).Validate(); err != nil {
+		t.Fatalf("valid AssetRequirement.Validate() = %v", err)
+	}
+	for _, requirement := range []models.AssetRequirement{
+		{Name: ""}, {Name: "."}, {Name: "foo/../model.bin"}, {Name: `..\model.bin`},
+		{Name: "/model.bin"}, {Name: "C:model.bin"}, {Name: "model.bin", Bytes: -1},
+		{Name: "model.bin", SHA256: "short"}, {Name: "model.bin", SHA256: strings.Repeat("g", 64)},
+	} {
+		if err := requirement.Validate(); err == nil {
+			t.Fatalf("invalid AssetRequirement %#v returned nil", requirement)
+		}
+	}
+}
+
+func assertAssetPreparationValidation(t *testing.T) {
+	t.Helper()
+
+	source := models.ModelReference{NameOrURI: "hf://owner/repo@0123456789abcdef0123456789abcdef01234567"}
+	validRequest := models.PrepareModelAssetsRequest{
+		Reference:        source,
+		Backend:          "backend-v1",
+		BackendReference: models.ModelReference{NameOrURI: "hf://owner/backend@0123456789abcdef0123456789abcdef01234567"},
+		Artifacts:        []models.AssetRequirement{{Name: "weights/model.bin"}},
+		BackendArtifacts: []models.AssetRequirement{{Name: "runtime/backend.bin"}},
+	}
+	if err := validRequest.Validate(); err != nil {
+		t.Fatalf("valid PrepareModelAssetsRequest.Validate() = %v", err)
+	}
+	duplicate := validRequest
+	duplicate.Artifacts = append(duplicate.Artifacts, models.AssetRequirement{Name: "weights/model.bin"})
+	if err := duplicate.Validate(); err == nil {
+		t.Fatal("duplicate asset requirements returned nil")
+	}
+	missingBackend := validRequest
+	missingBackend.Backend = ""
+	if err := missingBackend.Validate(); err == nil {
+		t.Fatal("backend reference without identity returned nil")
+	}
+}
+
+func assertAssetSnapshotClone(t *testing.T) {
+	t.Helper()
+
+	snapshot := models.AssetSnapshot{
+		Artifacts:        []models.AssetArtifact{{Kind: models.AssetArtifactKindModel, Name: "model.bin"}},
+		BackendArtifacts: []models.AssetArtifact{{Kind: models.AssetArtifactKindBackend, Name: "backend.bin"}},
+	}
+	clone := snapshot.Clone()
+	snapshot.Artifacts[0].Name = "changed-model.bin"
+	snapshot.BackendArtifacts[0].Name = "changed-backend.bin"
+	if clone.Artifacts[0].Name != "model.bin" || clone.BackendArtifacts[0].Name != "backend.bin" {
+		t.Fatalf("AssetSnapshot.Clone() retained mutable slices: %#v", clone)
+	}
+}
+
+func assertAssetTypedErrors(t *testing.T) {
+	t.Helper()
+
+	cause := errors.New("private download cause")
+	offline := &models.AssetOfflineError{Missing: []string{"model.bin", "backend.bin"}}
+	if !errors.Is(offline, models.ErrAssetOffline) || !strings.Contains(offline.Error(), "model.bin, backend.bin") {
+		t.Fatalf("offline error = %v, want typed complete missing set", offline)
+	}
+	var nilOffline *models.AssetOfflineError
+	if nilOffline.Error() != "" || nilOffline.Unwrap() != nil {
+		t.Fatal("nil AssetOfflineError methods should be safe")
+	}
+	pull := &models.PullError{Result: models.PullResult{ModelName: "model", ManagedPullOutcome: "FAILED", ReadinessState: "MISSING"}, Cause: cause}
+	if !errors.Is(pull, cause) || !strings.Contains(pull.Error(), "FAILED") {
+		t.Fatalf("pull error = %v, want classified cause and outcome", pull)
 	}
 }

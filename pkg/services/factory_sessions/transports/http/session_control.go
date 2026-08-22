@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	httpcompat "github.com/portpowered/infinite-you/pkg/transports/http/compat"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
@@ -16,78 +17,123 @@ func decodeOpenFactorySessionRequest(body io.Reader) (factoryapi.OpenFactorySess
 }
 
 func decodeStartFactorySessionRequest(body io.Reader, prepare RequestPreparation) (factorysessions.StartRequest, error) {
-	req, err := decodeStrictJSON[factoryapi.FactorySessionExecutionRequest](body)
+	request, _, err := decodeStartFactorySessionRequestWithDiagnostics(body, prepare)
+	return request, err
+}
+
+func decodeStartFactorySessionRequestWithDiagnostics(
+	body io.Reader,
+	prepare RequestPreparation,
+) (factorysessions.StartRequest, httpcompat.Diagnostics, error) {
+	decoded, err := decodeJSONWithDiagnostics[factoryapi.FactorySessionExecutionRequest](body)
 	if err != nil {
-		return factorysessions.StartRequest{}, err
+		return factorysessions.StartRequest{}, decoded.Diagnostics, err
 	}
-	raw, err := factorysession.StartRequestFromAPI(req)
+	raw, err := factorysession.StartRequestFromAPI(decoded.Value)
 	if err != nil {
-		return factorysessions.StartRequest{}, err
+		return factorysessions.StartRequest{}, decoded.Diagnostics, err
 	}
 	if prepare == nil {
 		prepare = noopRequestPreparation{}
 	}
-	return prepare.PrepareStart(raw)
+	prepared, err := prepare.PrepareStart(raw)
+	return prepared, decoded.Diagnostics, err
 }
 
 func decodeLifecycleControlRequest(body io.Reader, prepare RequestPreparation) (factorysessions.ControlRequest, error) {
-	req, err := decodeOptionalLifecycleControlRequest(body)
+	request, _, err := decodeLifecycleControlRequestWithDiagnostics(body, prepare)
+	return request, err
+}
+
+func decodeLifecycleControlRequestWithDiagnostics(
+	body io.Reader,
+	prepare RequestPreparation,
+) (factorysessions.ControlRequest, httpcompat.Diagnostics, error) {
+	decoded, err := decodeOptionalLifecycleControlRequestWithDiagnostics(body)
 	if err != nil {
-		return factorysessions.ControlRequest{}, err
+		return factorysessions.ControlRequest{}, decoded.Diagnostics, err
 	}
-	control, err := factorysession.ControlRequestFromAPI(req)
+	control, err := factorysession.ControlRequestFromAPI(decoded.Value)
 	if err != nil {
-		return factorysessions.ControlRequest{}, err
+		return factorysessions.ControlRequest{}, decoded.Diagnostics, err
 	}
 	if prepare == nil {
 		prepare = noopRequestPreparation{}
 	}
-	return prepare.PrepareControl(control)
+	prepared, err := prepare.PrepareControl(control)
+	return prepared, decoded.Diagnostics, err
 }
 
 func decodeApproveFactorySessionRequest(body io.Reader, prepare RequestPreparation) (factorysessions.ApproveRequest, error) {
-	req, err := decodeOptionalApproveRequest(body)
+	request, _, err := decodeApproveFactorySessionRequestWithDiagnostics(body, prepare)
+	return request, err
+}
+
+func decodeApproveFactorySessionRequestWithDiagnostics(
+	body io.Reader,
+	prepare RequestPreparation,
+) (factorysessions.ApproveRequest, httpcompat.Diagnostics, error) {
+	decoded, err := decodeOptionalApproveRequestWithDiagnostics(body)
 	if err != nil {
-		return factorysessions.ApproveRequest{}, err
+		return factorysessions.ApproveRequest{}, decoded.Diagnostics, err
 	}
-	approve, err := factorysession.ApproveRequestFromAPI(req)
+	approve, err := factorysession.ApproveRequestFromAPI(decoded.Value)
 	if err != nil {
-		return factorysessions.ApproveRequest{}, err
+		return factorysessions.ApproveRequest{}, decoded.Diagnostics, err
 	}
 	if prepare == nil {
 		prepare = noopRequestPreparation{}
 	}
-	return prepare.PrepareApprove(approve)
+	prepared, err := prepare.PrepareApprove(approve)
+	return prepared, decoded.Diagnostics, err
 }
 
 func decodeRetryDispatchRequest(body io.Reader, prepare RequestPreparation) (factorysessions.RetryDispatchRequest, error) {
-	req, err := decodeOptionalRetryDispatchRequest(body)
+	request, _, err := decodeRetryDispatchRequestWithDiagnostics(body, prepare)
+	return request, err
+}
+
+func decodeRetryDispatchRequestWithDiagnostics(
+	body io.Reader,
+	prepare RequestPreparation,
+) (factorysessions.RetryDispatchRequest, httpcompat.Diagnostics, error) {
+	decoded, err := decodeOptionalRetryDispatchRequestWithDiagnostics(body)
 	if err != nil {
-		return factorysessions.RetryDispatchRequest{}, err
+		return factorysessions.RetryDispatchRequest{}, decoded.Diagnostics, err
 	}
-	retry, err := factorysession.RetryDispatchRequestFromAPI(req)
+	retry, err := factorysession.RetryDispatchRequestFromAPI(decoded.Value)
 	if err != nil {
-		return factorysessions.RetryDispatchRequest{}, err
+		return factorysessions.RetryDispatchRequest{}, decoded.Diagnostics, err
 	}
 	if prepare == nil {
 		prepare = noopRequestPreparation{}
 	}
-	return prepare.PrepareRetryDispatch(retry)
+	prepared, err := prepare.PrepareRetryDispatch(retry)
+	return prepared, decoded.Diagnostics, err
 }
 
 func decodeInterruptDispatchRequest(body io.Reader, prepare RequestPreparation) (factorysessions.InterruptDispatchRequest, error) {
-	req, err := decodeOptionalInterruptDispatchRequest(body)
+	request, _, err := decodeInterruptDispatchRequestWithDiagnostics(body, prepare)
+	return request, err
+}
+
+func decodeInterruptDispatchRequestWithDiagnostics(
+	body io.Reader,
+	prepare RequestPreparation,
+) (factorysessions.InterruptDispatchRequest, httpcompat.Diagnostics, error) {
+	decoded, err := decodeOptionalInterruptDispatchRequestWithDiagnostics(body)
 	if err != nil {
-		return factorysessions.InterruptDispatchRequest{}, err
+		return factorysessions.InterruptDispatchRequest{}, decoded.Diagnostics, err
 	}
-	interrupt, err := factorysession.InterruptDispatchRequestFromAPI(req)
+	interrupt, err := factorysession.InterruptDispatchRequestFromAPI(decoded.Value)
 	if err != nil {
-		return factorysessions.InterruptDispatchRequest{}, err
+		return factorysessions.InterruptDispatchRequest{}, decoded.Diagnostics, err
 	}
 	if prepare == nil {
 		prepare = noopRequestPreparation{}
 	}
-	return prepare.PrepareInterruptDispatch(interrupt)
+	prepared, err := prepare.PrepareInterruptDispatch(interrupt)
+	return prepared, decoded.Diagnostics, err
 }
 
 func (s *Server) finishRootLifecycleControl(
@@ -95,6 +141,7 @@ func (s *Server) finishRootLifecycleControl(
 	sessionID string,
 	operation string,
 	result factorysessions.LifecycleControlResult,
+	paths []string,
 	err error,
 ) {
 	if err != nil {
@@ -109,32 +156,7 @@ func (s *Server) finishRootLifecycleControl(
 		s.writeSessionsRootErrorOrInternal(w, sessionID, err, "factory session lifecycle control failed")
 		return
 	}
-	s.writeLifecycleControlSuccess(w, factorysession.LifecycleControlResponseToAPI(result))
-}
-
-func (s *Server) invokeRootDurableLifecycleControl(
-	w http.ResponseWriter,
-	ctx context.Context,
-	sessionID factoryapi.SessionID,
-	operation string,
-	control factorysessions.ControlRequest,
-) {
-	switch operation {
-	case "pause":
-		result, err := s.sessionsRoot.PauseDurableFactorySession(ctx, string(sessionID), control)
-		s.finishRootLifecycleControl(w, string(sessionID), operation, result, err)
-	case "resume":
-		result, err := s.sessionsRoot.ResumeDurableFactorySession(ctx, string(sessionID), control)
-		s.finishRootLifecycleControl(w, string(sessionID), operation, result, err)
-	case "cancel":
-		result, err := s.sessionsRoot.CancelDurableFactorySession(ctx, string(sessionID), control)
-		s.finishRootLifecycleControl(w, string(sessionID), operation, result, err)
-	case "terminate":
-		result, err := s.sessionsRoot.TerminateDurableFactorySession(ctx, string(sessionID), control)
-		s.finishRootLifecycleControl(w, string(sessionID), operation, result, err)
-	default:
-		s.writeError(w, http.StatusInternalServerError, "durable factory session lifecycle control failed", "INTERNAL_ERROR")
-	}
+	s.writeLifecycleControlSuccessWithDiagnostics(w, factorysession.LifecycleControlResponseToAPI(result), paths)
 }
 
 func (s *Server) invokeRootLiveLifecycleControl(
@@ -143,14 +165,15 @@ func (s *Server) invokeRootLiveLifecycleControl(
 	sessionID factoryapi.SessionID,
 	operation string,
 	control factorysessions.ControlRequest,
+	paths []string,
 ) {
 	switch operation {
 	case "pause":
-		result, err := s.sessionsRoot.PauseLiveFactorySession(ctx, string(sessionID), control)
-		s.finishRootLifecycleControl(w, string(sessionID), operation, result, err)
+		result, err := s.liveControl.PauseLiveFactorySession(ctx, string(sessionID), control)
+		s.finishRootLifecycleControl(w, string(sessionID), operation, result, paths, err)
 	case "resume":
-		result, err := s.sessionsRoot.ResumeLiveFactorySession(ctx, string(sessionID), control)
-		s.finishRootLifecycleControl(w, string(sessionID), operation, result, err)
+		result, err := s.liveControl.ResumeLiveFactorySession(ctx, string(sessionID), control)
+		s.finishRootLifecycleControl(w, string(sessionID), operation, result, paths, err)
 	default:
 		s.writeError(w, http.StatusInternalServerError, "live factory session lifecycle control failed", "INTERNAL_ERROR")
 	}

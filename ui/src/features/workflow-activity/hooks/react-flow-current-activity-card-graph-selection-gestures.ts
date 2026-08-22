@@ -33,6 +33,9 @@ export function useCurrentActivityGraphSelectionGestures(
   graphSelectionEnabled: boolean,
 ) {
   const additiveMarqueeRef = useRef(false);
+  const graphSelectionStateRef = useRef(graphSelection.state);
+  graphSelectionStateRef.current = graphSelection.state;
+  const { applyReactFlowSelection } = graphSelection;
 
   const handleGraphSelectionChange = useCallback<OnSelectionChangeFunc>(
     (params) => {
@@ -41,17 +44,14 @@ export function useCurrentActivityGraphSelectionGestures(
         edges: params.edges,
         enabled: graphSelectionEnabled,
         nodes: params.nodes,
-        selectionState: graphSelection.state,
+        selectionState: graphSelectionStateRef.current,
       });
       if (resolution) {
-        graphSelection.applyReactFlowSelection(
-          resolution.items,
-          resolution.mode,
-        );
+        applyReactFlowSelection(resolution.items, resolution.mode);
       }
       additiveMarqueeRef.current = false;
     },
-    [graphSelection, graphSelectionEnabled],
+    [applyReactFlowSelection, graphSelectionEnabled],
   );
 
   const handleGraphSelectionStart = useCallback(

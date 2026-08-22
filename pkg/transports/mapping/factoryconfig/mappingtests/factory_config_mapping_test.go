@@ -287,7 +287,7 @@ func TestFactoryConfigFromOpenAPI_CopiesOptionalCollections(t *testing.T) {
 		Workstations: &[]factoryapi.Workstation{{
 			Id:        stringPtr("execute-story-id"),
 			Name:      "execute-story",
-			Worker:    "executor",
+			Worker:    stringPtr("executor"),
 			Inputs:    []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}},
 			Outputs:   &[]factoryapi.WorkstationIO{{WorkType: "story", State: "complete"}},
 			StopWords: &stopWords,
@@ -334,7 +334,7 @@ func TestFactoryConfigFromOpenAPI_MapsInvocationReturn(t *testing.T) {
 			},
 		}},
 		Workers:      &[]factoryapi.Worker{{Name: "executor"}},
-		Workstations: &[]factoryapi.Workstation{{Name: "execute-story", Worker: "executor", Outputs: &[]factoryapi.WorkstationIO{{WorkType: "story", State: "complete"}}}},
+		Workstations: &[]factoryapi.Workstation{{Name: "execute-story", Worker: stringPtr("executor"), Outputs: &[]factoryapi.WorkstationIO{{WorkType: "story", State: "complete"}}}},
 	}
 
 	cfg, err := FactoryConfigFromOpenAPI(apiCfg)

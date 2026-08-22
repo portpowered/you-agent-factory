@@ -84,6 +84,23 @@ func TestScanRejectsJavaScriptSpecificLiveProviderPath(t *testing.T) {
 	}
 }
 
+func TestScanRejectsJavaScriptSpecificProviderPathAfterOrchestrationMove(t *testing.T) {
+	root := fixtureRepository(t, map[string]string{
+		"pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime/provider.go": "testdata/prohibited_live_child_provider.go.txt",
+	})
+
+	findings, err := scan(root)
+	if err != nil {
+		t.Fatalf("scan fixture: %v", err)
+	}
+
+	for _, prohibited := range []string{providerPackagePath, providerInferenceName, "pkg/services/workers"} {
+		if !containsFinding(findings, prohibited) {
+			t.Errorf("findings %#v do not report %s", findings, prohibited)
+		}
+	}
+}
+
 func TestScanAllowsLiveChildSharedBoundaryAndTestDoubles(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
 		"pkg/services/factory_sessions/internal/execution/livechild/provider.go":      "testdata/approved_live_child_boundary.go.txt",

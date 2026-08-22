@@ -1,12 +1,13 @@
 # Relationships
 
-Use work-item relationships when one submission should order sibling work,
-attach children to a parent for fan-in, or when templates and runtime surfaces
-need to read how tokens relate to each other.
+Use these constructs when one submission should order sibling Work, attach
+children to a parent for fan-in, or make a workstation join inputs by authored
+Work name.
 
 `you docs relationships` is the canonical guide for `DEPENDS_ON`,
-`PARENT_CHILD`, and `SPAWNED_BY` semantics. See `you docs guards` for
-parent-aware input guards that match `PARENT_CHILD` lineage, and
+`PARENT_CHILD`, and `SAME_NAME` semantics. `SPAWNED_BY` is the runtime lineage
+record for work created by a workstation. See `you docs guards` for the full
+per-input guard contract, and
 `you docs batch-inputs` for full batch file field tables and watched
 folder placement.
 
@@ -16,28 +17,53 @@ folder placement.
 |------|---------------|---------------------|
 | One sibling work item must wait for another sibling to reach a state | `DEPENDS_ON` | `relations[]` on a `FACTORY_REQUEST_BATCH` |
 | Child membership under one parent for parent-aware guards | `PARENT_CHILD` | `relations[]` on a `FACTORY_REQUEST_BATCH` |
+| Join workstation inputs whose authored Work names match | `SAME_NAME` | `workstations[].inputs[].guards[]` |
 | Read which workstation spawned a child token in templates or traces | `SPAWNED_BY` | Runtime on work tokens; appears in `.Relations` |
 | Gate dispatch until a condition is true | Guards, not relations | `you docs guards` |
 
 `DEPENDS_ON` and `PARENT_CHILD` can appear in the same submitted batch when
-the workflow needs both prerequisite ordering and parent membership.
+the workflow needs both prerequisite ordering and parent membership. `SAME_NAME`
+is different: it is a per-input workstation guard, not an entry in batch
+`relations[]`. A workstation can use `SAME_NAME` together with either batch
+relation.
+
+## Submitted relation endpoints
+
+`sourceWorkName` always identifies a Work declared in the submitted
+`FACTORY_REQUEST_BATCH`. A `DEPENDS_ON` target can be declared in that batch or
+can already exist on the selected Factory Session board.
+
+For a `DEPENDS_ON` target, use one of these exact references:
+
+- `targetWorkName` resolves an unambiguous Work name.
+- `targetWorkId` resolves a stable Work ID.
+- Both fields are allowed when they identify the same Work.
+
+Live admission searches only the selected Factory Session board. A target in a
+different session is not visible. An ambiguous name must use `targetWorkId`.
+`PARENT_CHILD` keeps its stricter rule: both endpoints must be declared in the
+submitted batch. `SAME_NAME` remains a workstation guard and does not change
+either batch relation rule.
 
 ## Source And Target Semantics
 
 | Relation type | Source means | Target means | `requiredState` |
 |---------------|--------------|--------------|-----------------|
 | `DEPENDS_ON` | The blocked work item | The prerequisite work item | Optional. Defaults to `complete`. Names a state on the target work type. |
-| `PARENT_CHILD` | The child work item | The parent work item | Not used. Ignore this field on `PARENT_CHILD`. |
+| `PARENT_CHILD` | The child work item | The parent work item | Must be omitted. Supplying it rejects the whole batch. |
+| `SAME_NAME` | No relation source; the input carrying the guard | The peer input named by `matchInput` | Not applicable. The selected Work names must be equal. |
 | `SPAWNED_BY` | The spawned child work item | The spawning context (for example a parent work item or fanout source) | Not used on batch files. Runtime records the spawn lineage. |
 
 Read `DEPENDS_ON` as: the source waits for the target. Read `PARENT_CHILD` as:
-the source is a child of the target.
+the source is a child of the target. `SAME_NAME` has no source-to-target
+direction: put it on the guarded input, and set `matchInput` to the peer input
+whose selected Work name must equal the guarded input's Work name.
 
 ## `DEPENDS_ON`
 
-Use `DEPENDS_ON` for ordinary prerequisite ordering between siblings in one
-batch. It blocks dispatch ordering; it does not create parent lineage for
-parent-aware input guards.
+Use `DEPENDS_ON` for prerequisite ordering between Work items in one batch or
+across batches. It blocks dispatch ordering; it does not create parent lineage
+for parent-aware input guards.
 
 ```json
 {
@@ -82,12 +108,186 @@ Read that as: `publish` waits until `review` reaches `complete`. When
 
 After validation, the factory attaches each `DEPENDS_ON` relation to the
 blocked source work token. The scheduler keeps the source from running until
-the target reaches the required state.
+the target reaches the required state. If the source is one input of a
+multi-input workstation, this dependency is still checked after the complete
+input binding is assembled; see [Joined-input dispatch invariant](#joined-input-dispatch-invariant).
+
+### Cross-batch targets and terminal outcomes
+
+When a `DEPENDS_ON` target is not declared in the new batch, live admission
+resolves it on the selected Factory Session board. Name lookup is exact. If
+multiple board Work items have that name, admission rejects the batch and tells
+the operator to use `targetWorkId`.
+
+The normalized relation stores the target's canonical Work ID. If both target
+fields are supplied, different resolutions reject the whole batch. Unknown or
+cross-session targets also reject the whole batch before any Work is admitted.
+
+An active target keeps the source undispatched. A target already in
+`requiredState` releases the source immediately after admission. A failed target
+does not satisfy a normal successful dependency, so the source enters the
+standard dependency failure cascade and receives no worker dispatch.
+
+With multiple `DEPENDS_ON` relations, every target must satisfy its required
+state. Any failed target causes the dependent source to follow the failure
+cascade. These terminal rules also apply when all targets were already terminal
+before the dependent batch was submitted.
+
+For example, submit `review` first with Work ID `review-work-id`. Submit the
+dependent Work later with either `targetWorkName` or `targetWorkId`:
+
+```json
+{
+  "requestId": "publish-after-review",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "publish",
+      "workId": "publish-work-id",
+      "workTypeName": "story",
+      "payload": { "title": "Publish release" }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "publish",
+      "targetWorkId": "review-work-id",
+      "requiredState": "complete"
+    }
+  ]
+}
+```
+
+Use `targetWorkName: "review"` instead when the board name is unique. If both
+fields are present, they must identify `review-work-id`.
+
+## `SAME_NAME`
+
+Use `SAME_NAME` when one workstation consumes two normal inputs and should fire
+only when the selected Work items share the same authored name. The guard
+belongs on the input being constrained. `matchInput` names the peer input on
+the same workstation by its `workType` value:
+
+```json
+{
+  "name": "join-plan-and-task",
+  "worker": "matcher",
+  "inputs": [
+    { "workType": "plan", "state": "ready" },
+    {
+      "workType": "task",
+      "state": "ready",
+      "guards": [
+        {
+          "type": "SAME_NAME",
+          "matchInput": "plan"
+        }
+      ]
+    }
+  ],
+  "outputs": [{ "workType": "task", "state": "matched" }]
+}
+```
+
+This guard only selects a compatible pair. It does not satisfy, replace, or
+create a `DEPENDS_ON` prerequisite, and it does not create `PARENT_CHILD`
+lineage. The matching Work items may come from different submissions; that
+does not widen the same-batch rule for `DEPENDS_ON` or `PARENT_CHILD` relation
+endpoints. If either selected Work item has no usable authored name, or the
+names differ, the workstation remains disabled.
+
+## Joined-input dispatch invariant
+
+A complete input join is necessary but is not by itself permission to dispatch.
+For a workstation with multiple inputs, the scheduler evaluates enablement in
+this order:
+
+1. All input arcs and their guards select a complete binding, including any
+   `SAME_NAME` match.
+2. Every `DEPENDS_ON` relation attached to every selected Work item is checked.
+   Each relation target must exist and be in its `requiredState`; a missing
+   target or a target in any other state blocks the binding.
+3. Only then can the workstation dispatch, and only if its other guards,
+   resource capacity, worker capacity, and scheduler rules also permit it.
+
+This means a dependency carried only by a secondary `SAME_NAME`-joined input
+still gates the whole workstation. The name match does not hide the secondary
+Work's relations, and the primary input's lack of a dependency does not make
+the binding eligible.
+
+### Worked two-input example
+
+Assume the `join-plan-and-task` workstation above. The `task` Work is the
+secondary input and carries a dependency on a `producer` Work. Submit the
+producer and task together so the relation endpoints are in one batch:
+
+```json
+{
+  "requestId": "joined-task",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "producer",
+      "workTypeName": "producer",
+      "payload": { "role": "controlled prerequisite" }
+    },
+    {
+      "name": "joined-item",
+      "workTypeName": "task",
+      "payload": { "role": "secondary join input" }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "joined-item",
+      "targetWorkName": "producer",
+      "requiredState": "complete"
+    }
+  ]
+}
+```
+
+Then make the primary `plan` Work available under the same authored name. It
+can be a separate batch because `SAME_NAME` is a workstation guard, not a
+batch relation:
+
+```json
+{
+  "requestId": "joined-plan",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "joined-item",
+      "workTypeName": "plan",
+      "payload": { "role": "primary join input" }
+    }
+  ]
+}
+```
+
+The two batches each have unique Work names, and the `DEPENDS_ON` source and
+target both belong to `joined-task`. Once both `plan` and `task` are in
+`ready`, `SAME_NAME` can select them as one complete binding, but the
+workstation still waits for `producer`:
+
+| Moment | Relevant state | Dispatch result |
+|--------|----------------|-----------------|
+| `t0` | `plan` and `task` named `joined-item` are both `ready`; `producer` is `ready` or running | The full join is visible, but the secondary `task` dependency is incomplete. No `join-plan-and-task` dispatch. |
+| `t1` | `producer` has been dispatched but has not reached `complete` | The binding remains undispatched; a running or otherwise non-`complete` target does not satisfy `requiredState`. |
+| `t2` | `producer` reaches `complete` | The next scheduler evaluation can admit the join, subject to all other guards, capacity, and scheduler rules. |
+| `t3` | The join workstation consumes both `joined-item` Work items | One joined dispatch can produce the configured `matched` output. |
+
+The invariant applies to every selected input, not only the input carrying the
+`SAME_NAME` guard or the first input listed in the workstation configuration.
 
 ## `PARENT_CHILD`
 
 Use `PARENT_CHILD` when a child work item should belong to a parent's child
-set for parent-aware fan-in. It records parent lineage on the child token.
+set for parent-aware fan-in. It records parent lineage on the child Work; it is
+not a prerequisite-state gate. Use `DEPENDS_ON` when the child or another Work
+must wait for a named state.
 
 ```json
 {
@@ -183,15 +383,24 @@ Common rejection reasons:
 | Problem | Result |
 |---------|--------|
 | Invalid JSON or retired field aliases | Whole batch rejected |
-| Duplicate work names in `works[]` | Whole batch rejected |
-| Relation `sourceWorkName` or `targetWorkName` does not match a work name | Whole batch rejected |
+| Duplicate `works[].name` values anywhere in the batch, including across Work types | Whole batch rejected |
+| `DEPENDS_ON` target cannot resolve by name or ID on the selected Factory Session board | Whole batch rejected |
+| `PARENT_CHILD` source or target is absent from this request's `works[]` | Whole batch rejected |
 | Self-relation (`source` equals `target`) | Whole batch rejected |
 | `DEPENDS_ON` cycle between siblings | Whole batch rejected |
 | `requiredState` names a state that does not exist on the target work type | Whole batch rejected |
 | Unknown `workTypeName` or invalid batch shape | Whole batch rejected |
 
-Declare batch relations by work name. Do not use `targetWorkId` in submitted
-batch relations.
+For `DEPENDS_ON`, declare the source with `sourceWorkName`, then identify the
+target with `targetWorkName`, `targetWorkId`, or both. The target lookup uses
+the selected Factory Session during live admission. For `PARENT_CHILD`, declare
+both endpoints in this request's `works[]`; an existing Work does not satisfy
+that rule.
+
+The duplicate-name and same-batch endpoint checks are topology-independent and
+also run during `you submit batch --dry-run`. Dry run cannot inspect a live
+board, so live submission performs the target lookup and related state checks.
+A rejected live request creates no partial Work or relationship side effects.
 
 ## Normalization Outcomes
 
@@ -199,10 +408,11 @@ After a batch passes validation, the factory normalizes it:
 
 1. Missing work IDs are generated as `batch-<requestId>-<work-name>`.
 2. Work item tags receive `_work_name` and `_work_type` values.
-3. `DEPENDS_ON` relations attach to the blocked source work token.
-4. `PARENT_CHILD` relations attach to the child work token and set parent
+3. `DEPENDS_ON` target references normalize to the canonical target Work ID.
+4. `DEPENDS_ON` relations attach to the blocked source work token.
+5. `PARENT_CHILD` relations attach to the child work token and set parent
    lineage for parent-aware guards.
-5. Canonical history records a `WORK_REQUEST` event before related work-input
+6. Canonical history records a `WORK_REQUEST` event before related work-input
    and relationship-change events.
 
 Independent items in the same batch may dispatch in parallel, subject to the
@@ -241,6 +451,7 @@ parent-aware guards. Use `DEPENDS_ON` only for sibling prerequisite ordering.
 | Surface | What authors write | What runtime exposes |
 |---------|-------------------|----------------------|
 | Batch file or API `FACTORY_REQUEST_BATCH` | `relations[]` with `DEPENDS_ON` and `PARENT_CHILD` | Normalized attachments on work tokens |
+| Factory workstation input | `SAME_NAME` in `workstations[].inputs[].guards[]` | Join selection during scheduler enablement |
 | Prompt templates | Not authored directly | `.Relations` on each input token |
 | CLI work listings and traces | Not authored directly | Human-readable relation summaries |
 
@@ -252,6 +463,10 @@ page for relation semantics and scheduling impact.
 - Reversing `PARENT_CHILD` direction — keep `sourceWorkName` on the child and
   `targetWorkName` on the parent.
 - Using `DEPENDS_ON` where `PARENT_CHILD` is required for parent-aware guards.
+- Adding `SAME_NAME` to batch `relations[]` — it belongs on a workstation input
+  guard and does not create dependency ordering or parent lineage.
+- Assuming a complete `SAME_NAME` join bypasses dependencies on a secondary
+  input — every selected Work's `DEPENDS_ON` relations must be satisfied.
 - Setting `requiredState` on `PARENT_CHILD` — that field applies only to
   `DEPENDS_ON`.
 - Expecting partial work after a validation failure — the whole batch is

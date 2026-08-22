@@ -3,14 +3,13 @@ package factorysession
 import (
 	"context"
 
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apifactorysession "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 // StartAsync runs the durable async Factory Session contract for the
 // you.factory_session.start_async MCP tool through the shared execution service.
-func StartAsync(ctx context.Context, service factorysessionexecution.ExecutionService, prepare RequestPreparation, input factoryapi.FactorySessionExecutionRequest) ToolResponse[factoryapi.FactorySessionExecutionResponse] {
+func StartAsync(ctx context.Context, service DurableExecution, prepare RequestPreparation, input factoryapi.FactorySessionExecutionRequest) ToolResponse[factoryapi.FactorySessionExecutionResponse] {
 	if ctx == nil {
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[factoryapi.FactorySessionExecutionResponse]{Error: &envelope}
@@ -44,7 +43,7 @@ func StartAsync(ctx context.Context, service factorysessionexecution.ExecutionSe
 
 // StartSync runs the durable sync Factory Session contract for the
 // you.factory_session.start_sync MCP tool through the shared execution service.
-func StartSync(ctx context.Context, service factorysessionexecution.ExecutionService, prepare RequestPreparation, input factoryapi.FactorySessionExecutionRequest) ToolResponse[factoryapi.FactorySessionSyncExecutionResponse] {
+func StartSync(ctx context.Context, service DurableExecution, prepare RequestPreparation, input factoryapi.FactorySessionExecutionRequest) ToolResponse[factoryapi.FactorySessionSyncExecutionResponse] {
 	if ctx == nil {
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[factoryapi.FactorySessionSyncExecutionResponse]{Error: &envelope}

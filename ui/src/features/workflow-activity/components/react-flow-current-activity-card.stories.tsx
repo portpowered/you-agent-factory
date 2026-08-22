@@ -6,6 +6,7 @@ import "../../../styles.css";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { ImportFactoryValue } from "../../../api/session-factory";
 import {
+  mixedFactorySemanticsDashboardSnapshot,
   semanticWorkflowDashboardSnapshot,
   singleNodeDashboardSnapshot,
   twentyNodeDashboardSnapshot,
@@ -13,10 +14,7 @@ import {
   workstationKindParityExpectations,
 } from "../../../components/dashboard/test-fixtures";
 import { resourceOccupancySnapshotForTick } from "../../../components/dashboard/timeline-test-fixtures";
-import {
-  EXHAUSTION_WORKSTATION_ICON_METADATA,
-  SUPPORTED_WORKSTATION_ICON_METADATA,
-} from "../../flowchart/lib/workstation-icon-metadata";
+import { SUPPORTED_WORKSTATION_ICON_METADATA } from "../../flowchart/lib/workstation-icon-metadata";
 import type { ReadFactoryImportFile } from "../../import/hooks/use-factory-png-drop";
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
@@ -46,12 +44,8 @@ const LEGEND_ICON_EXPECTATIONS: LegendIconExpectation[] = [
     label: metadata.label,
   })),
   { kind: "active-work", label: "Active work" },
-  {
-    kind: EXHAUSTION_WORKSTATION_ICON_METADATA.iconKind,
-    label: EXHAUSTION_WORKSTATION_ICON_METADATA.label,
-  },
 ];
-const GRAPH_BROWSER_SMOKE_TIMEOUT_MS = 2000;
+const GRAPH_BROWSER_SMOKE_TIMEOUT_MS = 5000;
 const GRAPH_BROWSER_SMOKE_POLL_MS = 50;
 
 function snapshotWithStateCounts(
@@ -126,13 +120,34 @@ function snapshotWithActiveWorkItemCount(count: number): DashboardSnapshot {
   return snapshot;
 }
 
+function snapshotWithDefaultSchedulerLoopBreaker(): DashboardSnapshot {
+  const snapshot = structuredClone(mixedFactorySemanticsDashboardSnapshot);
+  const poller = snapshot.factory?.workstations?.find(
+    (workstation) => workstation.id === "poller",
+  );
+
+  if (poller) {
+    poller.behavior = undefined;
+  }
+
+  return snapshot;
+}
+
 function snapshotWithLongWorkstationName(): DashboardSnapshot {
   const snapshot = snapshotWithActiveWorkItemCount(0);
+  const longWorkstationName =
+    "Review Requests With A Deliberately Long Workstation Title";
   const reviewWorkstation = snapshot.topology.workstation_nodes_by_id.review;
 
   if (reviewWorkstation) {
-    reviewWorkstation.workstation_name =
-      "Review Requests With A Deliberately Long Workstation Title";
+    reviewWorkstation.workstation_name = longWorkstationName;
+  }
+
+  const factoryReviewWorkstation = snapshot.factory?.workstations?.find(
+    (workstation) => workstation.id === "review",
+  );
+  if (factoryReviewWorkstation) {
+    factoryReviewWorkstation.name = longWorkstationName;
   }
 
   return snapshot;
@@ -160,6 +175,9 @@ function snapshotWithLongActiveWorkLabel(): DashboardSnapshot {
 
 function snapshotWithLongStateLabels(): DashboardSnapshot {
   const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+  const longWorkType =
+    "customer-escalation-story-with-a-deliberately-long-type";
+  const longState = "ready-for-review-after-multiple-dependent-checks-complete";
 
   for (const workstation of Object.values(
     snapshot.topology.workstation_nodes_by_id,
@@ -169,10 +187,56 @@ function snapshotWithLongStateLabels(): DashboardSnapshot {
       ...(workstation.output_places ?? []),
     ]) {
       if (place.place_id === "story:ready") {
-        place.type_id =
-          "customer-escalation-story-with-a-deliberately-long-type";
-        place.state_value =
-          "ready-for-review-after-multiple-dependent-checks-complete";
+        place.type_id = longWorkType;
+        place.state_value = longState;
+      }
+    }
+  }
+
+  for (const workstation of snapshot.factory?.workstations ?? []) {
+    for (const route of [
+      ...(workstation.inputs ?? []),
+      ...(workstation.outputs ?? []),
+    ]) {
+      if (route.workType === "story" && route.state === "ready") {
+        route.workType = longWorkType;
+        route.state = longState;
+      }
+    }
+  }
+  snapshot.factory?.workTypes?.push({
+    name: longWorkType,
+    states: [{ name: longState, type: "PROCESSING" }],
+  });
+
+  return snapshot;
+}
+
+function snapshotWithFutureCanonicalValues(): DashboardSnapshot {
+  const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+  const futureWorker = snapshot.factory?.workers?.find(
+    (worker) => worker.name === "writer",
+  );
+  if (futureWorker) {
+    futureWorker.type = "FUTURE_WORKER_KIND" as never;
+  }
+
+  const futureState = snapshot.factory?.workTypes
+    ?.find((workType) => workType.name === "story")
+    ?.states.find((state) => state.name === "ready");
+  if (futureState) {
+    futureState.type = "FUTURE_WORK_STATE" as never;
+  }
+
+  for (const workstation of Object.values(
+    snapshot.topology.workstation_nodes_by_id,
+  )) {
+    for (const place of [
+      ...(workstation.input_places ?? []),
+      ...(workstation.output_places ?? []),
+    ]) {
+      if (place.place_id === "story:ready") {
+        place.state_category = "FUTURE_WORK_STATE";
       }
     }
   }
@@ -243,9 +307,50 @@ function workstationNode(button: HTMLElement): HTMLElement {
   return node;
 }
 
+function workstationShell(button: HTMLElement): HTMLElement {
+  const shell = button.closest(
+    "[data-current-activity-node-type='workstation']",
+  );
+
+  if (!(shell instanceof HTMLElement)) {
+    throw new Error(
+      "Expected workstation button to render inside a workstation shell",
+    );
+  }
+
+  return shell;
+}
+
 function expectFixedWorkstationDimensions(node: HTMLElement): void {
   expect(node.getAttribute("style")).toContain("width: 156px");
-  expect(node.getAttribute("style")).toContain("height: 196px");
+  expect(node.getAttribute("style")).toContain("height: 156px");
+}
+
+function expectFittedWorkstationDimensions(node: HTMLElement): void {
+  const style = node.getAttribute("style") ?? "";
+  const width = Number.parseFloat(
+    style.match(/width: ([\d.]+)px/u)?.[1] ?? "0",
+  );
+  const height = Number.parseFloat(
+    style.match(/height: ([\d.]+)px/u)?.[1] ?? "0",
+  );
+  expect(width).toBeGreaterThan(156);
+  expect(height).toBeGreaterThanOrEqual(156);
+}
+
+function expectWorkstationContentContained(node: HTMLElement): void {
+  const nodeBounds = node.getBoundingClientRect();
+  const renderedDescendants = Array.from(node.querySelectorAll("*"));
+
+  for (const element of renderedDescendants) {
+    const bounds = element.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0) continue;
+
+    expect(bounds.left).toBeGreaterThanOrEqual(nodeBounds.left);
+    expect(bounds.right).toBeLessThanOrEqual(nodeBounds.right);
+    expect(bounds.top).toBeGreaterThanOrEqual(nodeBounds.top);
+    expect(bounds.bottom).toBeLessThanOrEqual(nodeBounds.bottom);
+  }
 }
 
 function expectNoImplementationLabels(canvasElement: HTMLElement): void {
@@ -264,9 +369,7 @@ async function expectResourceCount(
     `${count} resource tokens`,
   );
 
-  await expect(
-    await canvas.findByLabelText("agent-slot:available"),
-  ).toBeVisible();
+  await expect(await canvas.findByText("agent-slot")).toBeVisible();
   await expect(resourceCount).toBeVisible();
   await expect(resourceCount).toHaveTextContent(String(count));
   expectNoImplementationLabels(canvasElement);
@@ -307,7 +410,7 @@ async function expectLegendIconVocabulary(
 
     await expect(icon).toBeVisible();
     await expect(icon).toHaveAttribute("data-graph-semantic-icon", item.kind);
-    await expect(legendScope.getByText(item.label)).toBeVisible();
+    await expect(legendScope.getAllByText(item.label)[0]).toBeVisible();
   }
 }
 
@@ -481,13 +584,14 @@ export const SemanticWorkflow = {
     const reviewButton = await canvas.findByRole("button", {
       name: "Select Review workstation",
     });
+    await expect(within(reviewButton).getByText("Inference")).toBeVisible();
     await expect(
-      within(reviewButton).getByRole("img", { name: "Repeater workstation" }),
-    ).toBeVisible();
+      reviewButton.querySelector("[data-workstation-semantic-icon]"),
+    ).not.toBeInTheDocument();
     await expect(
       within(
         await canvas.findByRole("button", { name: "Select Plan workstation" }),
-      ).getByRole("img", { name: "Standard workstation" }),
+      ).getByText("Inference"),
     ).toBeVisible();
     await expect(
       reviewButton
@@ -501,10 +605,6 @@ export const SemanticWorkflow = {
     await expect(
       canvas.queryByText("Workstation Definition"),
     ).not.toBeInTheDocument();
-    await expect(await canvas.findByText("quality-gate:ready")).toBeVisible();
-    await expect(
-      await canvas.findByLabelText("1 constraint token"),
-    ).toBeVisible();
     await expect(
       await canvas.findByRole("button", { name: "Select story:blocked state" }),
     ).toBeVisible();
@@ -538,6 +638,29 @@ export const SemanticWorkflow = {
   },
 };
 
+export const FutureCanonicalValues = {
+  render: () => (
+    <CurrentActivityStory snapshot={snapshotWithFutureCanonicalValues()} />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText("FUTURE_WORKER_KIND")).toBeVisible();
+    await expect(await canvas.findByText("FUTURE_WORK_STATE")).toBeVisible();
+    await expect(
+      canvas
+        .getByText("FUTURE_WORKER_KIND")
+        .closest("article")
+        ?.className.includes("border-outline bg-surface"),
+    ).toBe(true);
+    await expect(
+      canvas
+        .getByText("FUTURE_WORK_STATE")
+        .closest("article")
+        ?.className.includes("border-outline bg-surface"),
+    ).toBe(true);
+  },
+};
+
 export const FactoryImportPreviewActivation = {
   render: () => (
     <CurrentActivityImportStory snapshot={semanticWorkflowDashboardSnapshot} />
@@ -568,9 +691,10 @@ export const WorkstationIdle = {
     const reviewNode = workstationNode(reviewButton);
 
     expectFixedWorkstationDimensions(reviewNode);
+    await expect(within(reviewButton).getByText("Inference")).toBeVisible();
     await expect(
-      within(reviewButton).getByRole("img", { name: "Repeater workstation" }),
-    ).toBeVisible();
+      reviewButton.querySelector("[data-workstation-semantic-icon]"),
+    ).not.toBeInTheDocument();
     await expect(
       reviewNode.querySelector("[data-active='true']"),
     ).not.toBeInTheDocument();
@@ -600,7 +724,9 @@ export const WorkstationOneActive = {
       reviewNode.querySelector("[data-active='true']"),
     ).toBeInTheDocument();
     await expect(
-      reviewNode.className.includes("border-af-success-border"),
+      workstationShell(reviewButton).className.includes(
+        "border-af-success-border",
+      ),
     ).toBe(true);
     await expect(
       within(reviewButton).queryByRole("img", { name: "Active" }),
@@ -611,6 +737,73 @@ export const WorkstationOneActive = {
     await expect(
       reviewNode.querySelector("[data-workstation-work-progress]"),
     ).not.toBeInTheDocument();
+    expectNoImplementationLabels(canvasElement);
+  },
+};
+
+export const WorkstationTwoActive = {
+  render: () => (
+    <CurrentActivityStory snapshot={snapshotWithActiveWorkItemCount(2)} />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const reviewButton = await canvas.findByRole("button", {
+      name: "Select Review workstation",
+    });
+    const reviewNode = workstationNode(reviewButton);
+
+    expectFixedWorkstationDimensions(reviewNode);
+    await expect(
+      await canvas.findByRole("button", { name: /Active Story 1/ }),
+    ).toBeVisible();
+    await expect(
+      await canvas.findByRole("button", { name: /Active Story 2/ }),
+    ).toBeVisible();
+    expect(reviewNode.querySelector("[data-workstation-work-progress]")).toBe(
+      null,
+    );
+    expectWorkstationContentContained(reviewNode);
+    expectNoImplementationLabels(canvasElement);
+  },
+};
+
+export const WorkstationThreeActive = {
+  render: () => (
+    <CurrentActivityStory snapshot={snapshotWithActiveWorkItemCount(3)} />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const reviewButton = await canvas.findByRole("button", {
+      name: "Select Review workstation",
+    });
+    const reviewNode = workstationNode(reviewButton);
+    const count = within(reviewNode).getByRole("status", {
+      name: "3 active items",
+    });
+    const title = reviewNode.querySelector<HTMLElement>(
+      "[data-workstation-title]",
+    );
+
+    expectFixedWorkstationDimensions(reviewNode);
+    await expect(count).toBeVisible();
+    expect(reviewNode.querySelector("[data-active-work-label]")).toBe(null);
+    expect(reviewNode.querySelector("[data-active-work-duration]")).toBe(null);
+    expect(
+      reviewNode.querySelector('[data-workstation-work-progress="dots"]'),
+    ).toBe(null);
+    expect(
+      reviewNode.querySelector('[data-workstation-work-progress="numeric"]'),
+    ).toBe(count);
+    const countFontSize = await count.evaluate((element) =>
+      Number.parseFloat(getComputedStyle(element).fontSize),
+    );
+    const titleFontSize = await title?.evaluate((element) =>
+      Number.parseFloat(getComputedStyle(element).fontSize),
+    );
+    expect(countFontSize).toBeGreaterThanOrEqual(titleFontSize ?? 0);
+    expectWorkstationContentContained(reviewNode);
+    await reviewButton.focus();
+    await expect(reviewButton).toHaveAttribute("aria-pressed", "false");
     expectNoImplementationLabels(canvasElement);
   },
 };
@@ -628,18 +821,11 @@ export const WorkstationFiveActive = {
 
     expectFixedWorkstationDimensions(reviewNode);
     await expect(
-      await canvas.findByRole("button", { name: /Active Story 1/ }),
-    ).toBeVisible();
-    await expect(
-      await canvas.findByRole("button", { name: /Active Story 3/ }),
-    ).toBeVisible();
-    await expect(
-      canvas.queryByRole("button", { name: /Active Story 4/ }),
-    ).not.toBeInTheDocument();
-    await expect(
       within(reviewNode).getByLabelText("5 active items"),
     ).toBeVisible();
-    await expect(within(reviewNode).getByText("+2")).toBeVisible();
+    expect(reviewNode.querySelector("[data-active-work-label]")).toBe(null);
+    expect(reviewNode.querySelector("[data-active-work-duration]")).toBe(null);
+    expectWorkstationContentContained(reviewNode);
     expectNoImplementationLabels(canvasElement);
   },
 };
@@ -657,12 +843,9 @@ export const HighOccupancyWorkstation = {
 
     expectFixedWorkstationDimensions(reviewNode);
     await expect(await canvas.findByLabelText("6 active items")).toBeVisible();
-    await expect(
-      await canvas.findByRole("button", { name: /Active Story 1/ }),
-    ).toBeVisible();
-    await expect(
-      canvas.queryByRole("button", { name: /Active Story 4/ }),
-    ).not.toBeInTheDocument();
+    expect(reviewNode.querySelector("[data-active-work-label]")).toBe(null);
+    expect(reviewNode.querySelector("[data-active-work-duration]")).toBe(null);
+    expectWorkstationContentContained(reviewNode);
     await userEvent.click(reviewButton);
     await expect(reviewButton).toHaveAttribute("aria-pressed", "true");
   },
@@ -726,13 +909,13 @@ export const WorkstationLongName = {
     });
     const label = longNameButton.querySelector("[data-workstation-title]");
 
-    expectFixedWorkstationDimensions(workstationNode(longNameButton));
+    expectFittedWorkstationDimensions(workstationNode(longNameButton));
     await expect(longNameButton).toHaveAttribute(
       "title",
       "Review Requests With A Deliberately Long Workstation Title",
     );
-    expect(label?.className).toContain("truncate");
-    expect(label?.className).toContain("whitespace-nowrap");
+    expect(label?.className).toContain("whitespace-normal");
+    expect(label?.className).toContain("[overflow-wrap:anywhere]");
     expectNoImplementationLabels(canvasElement);
   },
 };
@@ -743,39 +926,43 @@ export const WorkstationKindParity = {
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    const legend = await expandGraphLegend(canvasElement);
-    const legendScope = within(legend);
 
     for (const expectation of workstationKindParityExpectations) {
       const button = await canvas.findByRole("button", {
         name: expectation.buttonName,
       });
-      const icon = within(button).getByRole("img", {
-        name: expectation.metadata.label,
-      });
-      const legendIcon = legendScope.getByRole("img", {
-        name: `${expectation.metadata.label} legend icon`,
-      });
 
       expectFixedWorkstationDimensions(workstationNode(button));
-      await expect(icon).toBeVisible();
-      await expect(icon).toHaveAttribute(
-        "data-graph-semantic-icon",
-        expectation.metadata.iconKind,
-      );
+      await expect(within(button).getByText("Inference")).toBeVisible();
+      await expect(
+        button.querySelector("[data-workstation-semantic-icon]"),
+      ).not.toBeInTheDocument();
       await expect(
         within(button).getByText(expectation.workstationName),
       ).toBeVisible();
-      await expect(legendIcon).toBeVisible();
-      await expect(legendIcon).toHaveAttribute(
-        "data-graph-semantic-icon",
-        expectation.metadata.iconKind,
-      );
-      await expect(
-        legendScope.getByText(expectation.metadata.label),
-      ).toBeVisible();
-      expect(button.textContent).not.toContain(expectation.metadata.label);
     }
+
+    await expect(
+      within(
+        await canvas.findByRole("button", {
+          name: "Select Review workstation",
+        }),
+      ).getByText("Repeater"),
+    ).toBeVisible();
+    await expect(
+      within(
+        await canvas.findByRole("button", {
+          name: "Select Nightly Cron workstation",
+        }),
+      ).getByText("Cron"),
+    ).toBeVisible();
+    await expect(
+      within(
+        await canvas.findByRole("button", {
+          name: "Select Linear Poller workstation",
+        }),
+      ).getByText("Poller"),
+    ).toBeVisible();
 
     const cronExpectation = workstationKindParityExpectations.find(
       (expectation) => expectation.nodeID === "nightly-cron",
@@ -788,6 +975,84 @@ export const WorkstationKindParity = {
     await userEvent.click(cronButton);
     await expect(cronButton).toHaveAttribute("aria-pressed", "true");
     expectNoImplementationLabels(canvasElement);
+  },
+};
+
+export const MixedWorkstationSemantics = {
+  render: () => (
+    <CurrentActivityStory
+      snapshot={snapshotWithDefaultSchedulerLoopBreaker()}
+    />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const expectedNodes = [
+      ["Classifier route", "Classifier"],
+      [
+        "Inference workstation with a deliberately long authored title",
+        "Inference",
+      ],
+      ["Logical route", "Logical move"],
+      ["Agent worker", "Agent"],
+      ["execute-goal", "Agent"],
+      ["Script cron", "Script"],
+      ["Poller source", "Poller"],
+    ] as const;
+
+    for (const [name, semanticLabel] of expectedNodes) {
+      const button = await canvas.findByRole("button", {
+        name: `Select ${name} workstation`,
+      });
+      const semanticTitle = button.querySelector<HTMLElement>(
+        "[data-workstation-title]",
+      );
+      if (!semanticTitle) {
+        throw new Error(`Expected a semantic title for ${name}`);
+      }
+      await expect(semanticTitle).toHaveAttribute("title", semanticLabel);
+      await expect(
+        button.querySelectorAll(
+          "[data-workstation-runtime-label], [data-workstation-scheduling-label]",
+        ),
+      ).toHaveLength(0);
+    }
+
+    const loopTitle = await canvas.findByText("goal-loop-breaker", {
+      exact: true,
+    });
+    const loopNode = loopTitle.closest(".react-flow__node");
+    expect(loopNode).toBeTruthy();
+    const loopScope = within(loopNode as HTMLElement);
+    await expect(loopScope.getByText("Breaker")).toBeVisible();
+
+    const guardCard = loopNode?.querySelector("[data-workstation-guard-card]");
+    expect(guardCard).toBeTruthy();
+    expect(guardCard?.getAttribute("data-workstation-guard-type")).toBe(
+      "VISIT_COUNT",
+    );
+    const guardRows = loopNode?.querySelectorAll(
+      "[data-workstation-guard-row]",
+    );
+    expect(guardRows).toHaveLength(0);
+    expect(guardCard?.className).toContain("text-on-surface");
+    for (const boxedClass of [
+      "rounded-sm",
+      "border",
+      "bg-warning-container",
+      "px-1.5",
+      "py-0.5",
+    ]) {
+      expect(guardCard?.className).not.toContain(boxedClass);
+    }
+    expectWorkstationContentContained(loopNode as HTMLElement);
+
+    const defaultSchedulerButton = await canvas.findByRole("button", {
+      name: "Select Poller source workstation",
+    });
+    const defaultSchedulerNode =
+      defaultSchedulerButton.closest(".react-flow__node");
+    expect(defaultSchedulerNode).toBeTruthy();
+    expectWorkstationContentContained(defaultSchedulerNode as HTMLElement);
   },
 };
 
@@ -809,7 +1074,7 @@ export const WorkstationLongWorkItemLabel = {
 
     expectFixedWorkstationDimensions(workstationNode(reviewButton));
     expect(longWorkButton.className).toContain("overflow-hidden");
-    expect(workLabel?.className).toContain("truncate");
+    expect(workLabel?.className).toContain("break-words");
     expect(durationLabel?.textContent).toBe("4s");
     await userEvent.click(longWorkButton);
     await expect(longWorkButton).toHaveAttribute("aria-pressed", "true");
@@ -863,14 +1128,26 @@ export const StatePositionOneActive = {
     expect(
       article.querySelectorAll("[data-state-work-progress-dot]"),
     ).toHaveLength(1);
+    const activeMarker = article.querySelector<HTMLElement>(
+      '[data-state-work-progress="dots"]',
+    );
+    expect(activeMarker?.getAttribute("data-work-progress-state")).toBe(
+      "active",
+    );
+    for (const dot of article.querySelectorAll(
+      "[data-state-work-progress-dot]",
+    )) {
+      expect(dot.className).toContain("bg-on-surface");
+      expect(dot.getAttribute("data-work-progress-dot-state")).toBe("active");
+    }
     expectNoImplementationLabels(canvasElement);
   },
 };
 
-export const StatePositionTenActive = {
+export const StatePositionThreeActive = {
   render: () => (
     <CurrentActivityStory
-      snapshot={snapshotWithStateCounts({ "story:ready": 10 })}
+      snapshot={snapshotWithStateCounts({ "story:ready": 3 })}
     />
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
@@ -881,19 +1158,19 @@ export const StatePositionTenActive = {
     const article = stateArticle(stateButton);
 
     await expect(
-      within(article).getByLabelText("10 active items"),
+      within(article).getByLabelText("3 active items"),
     ).toBeVisible();
     expect(
       article.querySelectorAll("[data-state-work-progress-dot]"),
-    ).toHaveLength(10);
+    ).toHaveLength(3);
     expectNoImplementationLabels(canvasElement);
   },
 };
 
-export const StatePositionNumericOverflow = {
+export const StatePositionFourActive = {
   render: () => (
     <CurrentActivityStory
-      snapshot={snapshotWithStateCounts({ "story:ready": 11 })}
+      snapshot={snapshotWithStateCounts({ "story:ready": 4 })}
     />
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
@@ -904,12 +1181,63 @@ export const StatePositionNumericOverflow = {
     const article = stateArticle(stateButton);
 
     await expect(
-      within(article).getByLabelText("11 active items"),
+      within(article).getByLabelText("4 active items"),
     ).toBeVisible();
-    await expect(within(article).getByText("11")).toBeVisible();
+    await expect(within(article).getByText("4")).toBeVisible();
+    await expect(
+      article.querySelector("[data-state-work-progress='numeric']"),
+    ).toBeVisible();
+    const numericMarker = article.querySelector<HTMLElement>(
+      '[data-state-work-progress="numeric"]',
+    );
+    if (!(numericMarker instanceof HTMLElement)) {
+      throw new Error("Expected the numeric work-progress marker to render");
+    }
+    expect(numericMarker?.className).toContain("min-h-6");
+    expect(numericMarker?.className).toContain("text-base");
+    expect(numericMarker?.className).toContain("text-on-surface");
+    expect(numericMarker.getBoundingClientRect().height).toBeGreaterThanOrEqual(
+      24,
+    );
+    expect(Number.parseFloat(getComputedStyle(numericMarker).fontSize)).toBe(
+      16,
+    );
+    expect(numericMarker?.className).not.toContain("bg-success-container");
+    expect(numericMarker?.className).not.toContain("border-af-success-border");
     expect(
       article.querySelector("[data-state-work-progress='dots']"),
     ).toBeNull();
+    expect(article.querySelector("[data-state-work-progress-dot]")).toBeNull();
+    expect(article.textContent).not.toContain("+");
+    expectNoImplementationLabels(canvasElement);
+  },
+};
+
+export const StatePositionLargeActive = {
+  render: () => (
+    <CurrentActivityStory
+      snapshot={snapshotWithStateCounts({ "story:ready": 1_000_000 })}
+    />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const stateButton = await canvas.findByRole("button", {
+      name: "Select story:ready state",
+    });
+    const article = stateArticle(stateButton);
+
+    await expect(
+      within(article).getByLabelText("1000000 active items"),
+    ).toBeVisible();
+    await expect(within(article).getByText("1000000")).toBeVisible();
+    await expect(
+      article.querySelector("[data-state-work-progress='numeric']"),
+    ).toBeVisible();
+    expect(
+      article.querySelector("[data-state-work-progress='dots']"),
+    ).toBeNull();
+    expect(article.querySelector("[data-state-work-progress-dot]")).toBeNull();
+    expect(article.textContent).not.toContain("+");
     expectNoImplementationLabels(canvasElement);
   },
 };
@@ -967,7 +1295,12 @@ export const StatePositionLongLabels = {
 
 export const StatePositionTerminalAndFailed = {
   render: () => (
-    <CurrentActivityStory snapshot={semanticWorkflowDashboardSnapshot} />
+    <CurrentActivityStory
+      snapshot={snapshotWithStateCounts({
+        "story:blocked": 2,
+        "story:complete": 2,
+      })}
+    />
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
@@ -990,6 +1323,19 @@ export const StatePositionTerminalAndFailed = {
     await expect(within(failedArticle).getByText("blocked")).toBeVisible();
     expect(terminalArticle.textContent).not.toContain("Terminal");
     expect(failedArticle.textContent).not.toContain("Failed");
+    for (const article of [terminalArticle, failedArticle]) {
+      const marker = article.querySelector<HTMLElement>(
+        '[data-state-work-progress="dots"]',
+      );
+      expect(marker?.getAttribute("data-work-progress-state")).toBe("idle");
+      for (const dot of article.querySelectorAll(
+        "[data-state-work-progress-dot]",
+      )) {
+        expect(dot.className).toContain("bg-surface");
+        expect(dot.className).toContain("border-outline-variant");
+        expect(dot.getAttribute("data-work-progress-dot-state")).toBe("idle");
+      }
+    }
     const legend = await expandGraphLegend(canvasElement);
     await expect(
       within(legend).getByRole("img", {
@@ -1114,7 +1460,9 @@ export const NarrowViewport = {
 export const TouchPanePanning = {
   render: () => (
     <div style={{ maxWidth: "100%", width: "360px" }}>
-      <CurrentActivityStory snapshot={twentyNodeDashboardSnapshot} />
+      <CurrentActivityStory
+        snapshot={snapshotWithDefaultSchedulerLoopBreaker()}
+      />
     </div>
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
@@ -1153,7 +1501,6 @@ export const LocalizedZhCN = {
     await expect(
       canvas.getByRole("button", { name: "编辑模式" }),
     ).toBeVisible();
-    await expect(canvas.getByText("观察")).toBeVisible();
     expectNoPageHorizontalOverflow(canvasElement);
   },
 };

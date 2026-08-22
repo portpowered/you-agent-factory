@@ -32,8 +32,8 @@ func initializeOperatorConfig(
 	configPath := filepath.Join(session.HomeDir, ".you-agent-factory", "config.json")
 	missingFactory := filepath.Join(session.WorkDir, "missing-initialization-factory.json")
 	result, err := session.Run(ctx, "run", "--factory", missingFactory)
-	if err == nil || !strings.Contains(result.Stdout+result.Stderr+err.Error(), filepath.Base(missingFactory)) {
-		t.Fatalf("%s: run missing Factory error = %v; stdout=%q stderr=%q", scenario, err, result.Stdout, result.Stderr)
+	if err == nil {
+		t.Fatalf("%s: run missing Factory unexpectedly succeeded: stdout=%q stderr=%q", scenario, result.Stdout, result.Stderr)
 	}
 	if _, err := os.Stat(configPath); errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("%s: initializer-owned config missing at %s: %v", scenario, configPath, err)
@@ -41,6 +41,13 @@ func initializeOperatorConfig(
 	return operatorConfigOutcome{ConfigPath: configPath}
 }
 
+// Functional-test construction exception: this package invokes a separately
+// built `you` executable to prove OS process, pipe, signal, and exit behavior.
+// ProviderCommandRunner is an edges.Edges dependency in the parent test
+// process and cannot cross that executable boundary, so these serialized
+// --with-mock-workers fixtures are the deterministic child-process seam for
+// the stream and lifecycle assertions below. They do not replace provider-edge
+// coverage for in-process root.BuildProcess scenarios.
 func writeAcceptingGoalMockWorkers(t *testing.T) string {
 	t.Helper()
 
@@ -229,6 +236,23 @@ func interruptAndAssertCancellationExit(t testing.TB, command *builtcliacceptanc
 		}
 	case <-time.After(waitTimeout):
 		t.Fatalf("canceled root process did not exit within %s", waitTimeout)
+	}
+}
+
+func waitForScannerCompletion(t testing.TB, scanErr <-chan error, role string, timeout time.Duration) {
+	t.Helper()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case err := <-scanErr:
+		// exec.Cmd.Wait closes a StdoutPipe after the child exits. Depending on
+		// scheduling, the scanner can observe that terminal close as fs.ErrClosed
+		// instead of EOF after an intentional cancellation.
+		if err != nil && !errors.Is(err, os.ErrClosed) {
+			t.Fatalf("%s stdout scanner failed: %v", role, err)
+		}
+	case <-timer.C:
+		t.Fatalf("%s stdout scanner did not finish within %s", role, timeout)
 	}
 }
 

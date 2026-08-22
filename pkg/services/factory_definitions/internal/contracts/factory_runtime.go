@@ -1,12 +1,116 @@
 package factorycontracts
 
 import (
+	"fmt"
+	"math"
+	"strings"
 	"time"
 
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+const (
+	FactoryWebhookEventTypeWorkStateChange     = "WORK_STATE_CHANGE"
+	FactoryWebhookEventTypeDispatchResponse    = "DISPATCH_RESPONSE"
+	FactoryWebhookEventTypeDispatchReconciled  = "DISPATCH_RECONCILED"
+	FactoryWebhookEventTypeDispatchInterrupted = "DISPATCH_INTERRUPTED"
+
+	FactoryWebhookDispatchStatusFailed      = "FAILED"
+	FactoryWebhookDispatchStatusInterrupted = "INTERRUPTED"
+
+	DefaultFactoryWebhookRequestTimeout    = 10 * time.Second
+	DefaultFactoryWebhookMaxAttempts       = 5
+	DefaultFactoryWebhookInitialBackoff    = time.Second
+	DefaultFactoryWebhookBackoffMultiplier = 2.0
+	DefaultFactoryWebhookMaxBackoff        = 30 * time.Second
+)
+
+// FactoryWebhookConfig declares one outbound subscription without carrying
+// resolved secret material. Delivery policy is resolved only at runtime.
+type FactoryWebhookConfig struct {
+	Name             string                              `json:"name" yaml:"name"`
+	Enabled          bool                                `json:"enabled" yaml:"enabled"`
+	URL              string                              `json:"url" yaml:"url"`
+	SigningSecretRef string                              `json:"signingSecretRef" yaml:"signingSecretRef"`
+	Filter           FactoryWebhookFilterConfig          `json:"filter" yaml:"filter"`
+	DeliveryPolicy   *FactoryWebhookDeliveryPolicyConfig `json:"deliveryPolicy,omitempty" yaml:"deliveryPolicy,omitempty"`
+}
+
+// FactoryWebhookFilterConfig selects canonical Factory Event types and, for
+// dispatch event types, optional canonical dispatch statuses.
+type FactoryWebhookFilterConfig struct {
+	EventTypes       []string `json:"eventTypes" yaml:"eventTypes"`
+	DispatchStatuses []string `json:"dispatchStatuses,omitempty" yaml:"dispatchStatuses,omitempty"`
+}
+
+// FactoryWebhookDeliveryPolicyConfig keeps optional authored values distinct
+// from their effective defaults so explicit invalid zero values are rejected.
+type FactoryWebhookDeliveryPolicyConfig struct {
+	RequestTimeout    *string  `json:"requestTimeout,omitempty" yaml:"requestTimeout,omitempty"`
+	MaxAttempts       *int     `json:"maxAttempts,omitempty" yaml:"maxAttempts,omitempty"`
+	InitialBackoff    *string  `json:"initialBackoff,omitempty" yaml:"initialBackoff,omitempty"`
+	BackoffMultiplier *float64 `json:"backoffMultiplier,omitempty" yaml:"backoffMultiplier,omitempty"`
+	MaxBackoff        *string  `json:"maxBackoff,omitempty" yaml:"maxBackoff,omitempty"`
+}
+
+// FactoryWebhookEffectiveDeliveryPolicy contains parsed, bounded values used
+// by the delivery runtime.
+type FactoryWebhookEffectiveDeliveryPolicy struct {
+	RequestTimeout    time.Duration
+	MaxAttempts       int
+	InitialBackoff    time.Duration
+	BackoffMultiplier float64
+	MaxBackoff        time.Duration
+}
+
+// ResolveFactoryWebhookDeliveryPolicy applies the documented defaults and
+// parses authored Go duration values for a webhook delivery policy.
+func ResolveFactoryWebhookDeliveryPolicy(config *FactoryWebhookDeliveryPolicyConfig) (FactoryWebhookEffectiveDeliveryPolicy, error) {
+	effective := FactoryWebhookEffectiveDeliveryPolicy{RequestTimeout: DefaultFactoryWebhookRequestTimeout, MaxAttempts: DefaultFactoryWebhookMaxAttempts, InitialBackoff: DefaultFactoryWebhookInitialBackoff, BackoffMultiplier: DefaultFactoryWebhookBackoffMultiplier, MaxBackoff: DefaultFactoryWebhookMaxBackoff}
+	if config == nil {
+		return effective, nil
+	}
+	var err error
+	if effective.RequestTimeout, err = resolveFactoryWebhookDuration("requestTimeout", config.RequestTimeout, effective.RequestTimeout); err != nil {
+		return FactoryWebhookEffectiveDeliveryPolicy{}, err
+	}
+	if config.MaxAttempts != nil {
+		if *config.MaxAttempts <= 0 {
+			return FactoryWebhookEffectiveDeliveryPolicy{}, fmt.Errorf("maxAttempts must be positive")
+		}
+		effective.MaxAttempts = *config.MaxAttempts
+	}
+	if effective.InitialBackoff, err = resolveFactoryWebhookDuration("initialBackoff", config.InitialBackoff, effective.InitialBackoff); err != nil {
+		return FactoryWebhookEffectiveDeliveryPolicy{}, err
+	}
+	if config.BackoffMultiplier != nil {
+		if math.IsNaN(*config.BackoffMultiplier) || math.IsInf(*config.BackoffMultiplier, 0) || *config.BackoffMultiplier < 1 {
+			return FactoryWebhookEffectiveDeliveryPolicy{}, fmt.Errorf("backoffMultiplier must be at least 1")
+		}
+		effective.BackoffMultiplier = *config.BackoffMultiplier
+	}
+	if effective.MaxBackoff, err = resolveFactoryWebhookDuration("maxBackoff", config.MaxBackoff, effective.MaxBackoff); err != nil {
+		return FactoryWebhookEffectiveDeliveryPolicy{}, err
+	}
+	if effective.MaxBackoff < effective.InitialBackoff {
+		return FactoryWebhookEffectiveDeliveryPolicy{}, fmt.Errorf("maxBackoff must not be less than initialBackoff")
+	}
+	return effective, nil
+}
+
+func resolveFactoryWebhookDuration(field string, value *string, fallback time.Duration) (time.Duration, error) {
+	if value == nil {
+		return fallback, nil
+	}
+	duration, err := time.ParseDuration(strings.TrimSpace(*value))
+	if err != nil || duration <= 0 {
+		return 0, fmt.Errorf("%s must be a positive Go duration", field)
+	}
+	return duration, nil
+}
 
 // RequestValidationError reports a stable client-side validation failure.
 type RequestValidationError struct {
@@ -40,6 +144,25 @@ const (
 	RuntimeModeService RuntimeMode = "SERVICE"
 )
 
+// TerminationClassification describes the outcome of a finite runtime drain.
+// It is carried with the tick result so the engine can preserve the final
+// submission-drain race protection before converting an incomplete drain into
+// a runtime error.
+type TerminationClassification string
+
+const (
+	TerminationClassificationComplete   TerminationClassification = "COMPLETE"
+	TerminationClassificationIncomplete TerminationClassification = "INCOMPLETE"
+)
+
+// TerminationResult is the authoritative finite-runtime termination decision.
+// NonTerminalWorkCount is the number of distinct customer Work items that were
+// still non-terminal when the runtime became quiescent.
+type TerminationResult struct {
+	Classification       TerminationClassification `json:"classification"`
+	NonTerminalWorkCount int                       `json:"non_terminal_work_count,omitempty"`
+}
+
 // InvocationTerminalStatus is the Factory Session-owned terminal outcome for
 // one invocation. Transport adapters map it to their generated contract.
 type InvocationTerminalStatus = string
@@ -64,16 +187,21 @@ const (
 // FactoryInvocationResult carries the transport-independent outcome of one
 // Factory Session invocation after input resolution and result selection.
 type FactoryInvocationResult struct {
-	RequestID     string
-	TraceID       string
-	Status        InvocationTerminalStatus
-	PrimaryResult []work.WorkContentPart
-	ErrorCode     string
-	Message       string
-	SessionID     string
-	WorkID        string
-	WorkName      string
-	WorkState     string
+	RequestID       string
+	TraceID         string
+	Status          InvocationTerminalStatus
+	PrimaryResult   []work.WorkContentPart
+	ErrorCode       string
+	Message         string
+	SessionID       string
+	WorkID          string
+	WorkName        string
+	WorkState       string
+	ApprovalID      string
+	DispatchID      string
+	WorkstationID   string
+	WorkstationName string
+	Decisions       []string
 }
 
 // CanonicalEventTime normalizes runtime event boundary timestamps to UTC while
@@ -100,6 +228,20 @@ type RuntimeDefinitionLookup interface {
 // a consumer needs optional access to factory-level settings.
 type RuntimeFactoryConfigLookup interface {
 	FactoryConfig() *FactoryConfig
+}
+
+// PromptSource identifies the fixed authored file used to refresh one prompt
+// at dispatch time. It is runtime metadata, not Factory configuration.
+type PromptSource struct {
+	Path       string
+	IsTemplate bool
+}
+
+// RuntimePromptSourceLookup exposes authored prompt identity without adding
+// source paths to the customer-facing runtime Factory Definition.
+type RuntimePromptSourceLookup interface {
+	WorkerPromptSource(name string) (PromptSource, bool)
+	WorkstationPromptSource(name string) (PromptSource, bool)
 }
 
 // RuntimeConfigLookup exposes the canonical public runtime-facing lookup
@@ -176,29 +318,33 @@ type TokenMutationRecord struct {
 
 // DispatchEntry tracks an in-flight dispatch awaiting a worker result.
 type DispatchEntry struct {
-	DispatchID      string                  `json:"dispatch_id"`
-	TransitionID    string                  `json:"transition_id"`
-	WorkstationName string                  `json:"workstation_name,omitempty"`
-	StartTime       time.Time               `json:"start_time"`
-	ConsumedTokens  []workerexecution.Token `json:"consumed_tokens"`
-	HeldMutations   []MarkingMutation       `json:"held_mutations"`
+	DispatchID              string                                `json:"dispatch_id"`
+	TransitionID            string                                `json:"transition_id"`
+	WorkstationName         string                                `json:"workstation_name,omitempty"`
+	ExpectedArtifactContext *work.ExpectedArtifactTemplateContext `json:"expected_artifact_context,omitempty"`
+	StartTime               time.Time                             `json:"start_time"`
+	ConsumedTokens          []workerexecution.Token               `json:"consumed_tokens"`
+	HeldMutations           []MarkingMutation                     `json:"held_mutations"`
 }
 
 // CompletedDispatch records a dispatch that has finished, with timing data.
 type CompletedDispatch struct {
-	DispatchID                  string                                   `json:"dispatch_id"`
-	TransitionID                string                                   `json:"transition_id"`
-	WorkstationName             string                                   `json:"workstation_name,omitempty"`
-	Outcome                     workerexecution.WorkOutcome              `json:"outcome"`
-	SelectedClassificationLabel string                                   `json:"selected_classification_label,omitempty"`
-	Reason                      string                                   `json:"reason,omitempty"`
-	FailureMetadata             *workerexecution.WorkFailureMetadata     `json:"failure_metadata,omitempty"`
-	ProviderSession             *workerexecution.ProviderSessionMetadata `json:"provider_session,omitempty"`
-	StartTime                   time.Time                                `json:"start_time"`
-	EndTime                     time.Time                                `json:"end_time"`
-	Duration                    time.Duration                            `json:"duration"`
-	ConsumedTokens              []workerexecution.Token                  `json:"consumed_tokens,omitempty"`
-	OutputMutations             []TokenMutationRecord                    `json:"output_mutations,omitempty"`
+	DispatchID                  string                                        `json:"dispatch_id"`
+	TransitionID                string                                        `json:"transition_id"`
+	WorkstationName             string                                        `json:"workstation_name,omitempty"`
+	ExpectedArtifactContext     *work.ExpectedArtifactTemplateContext         `json:"expected_artifact_context,omitempty"`
+	Outcome                     workerexecution.WorkOutcome                   `json:"outcome"`
+	SelectedClassificationLabel string                                        `json:"selected_classification_label,omitempty"`
+	Reason                      string                                        `json:"reason,omitempty"`
+	ArtifactVerification        *workerexecution.ExpectedArtifactVerification `json:"artifact_verification,omitempty"`
+	FailureMetadata             *workerexecution.WorkFailureMetadata          `json:"failure_metadata,omitempty"`
+	FailureDetail               *workerexecution.FailureDetail                `json:"failure_detail,omitempty"`
+	ProviderSession             *providers.SessionMetadata                    `json:"provider_session,omitempty"`
+	StartTime                   time.Time                                     `json:"start_time"`
+	EndTime                     time.Time                                     `json:"end_time"`
+	Duration                    time.Duration                                 `json:"duration"`
+	ConsumedTokens              []workerexecution.Token                       `json:"consumed_tokens,omitempty"`
+	OutputMutations             []TokenMutationRecord                         `json:"output_mutations,omitempty"`
 }
 
 // ActiveThrottlePause records an active provider/model dispatch pause window.
@@ -245,6 +391,7 @@ type TickResult struct {
 	ActiveThrottlePauses   []ActiveThrottlePause           `json:"active_throttle_pauses,omitempty"`
 	ThrottlePausesObserved bool                            `json:"throttle_pauses_observed,omitempty"`
 	ShouldTerminate        bool                            `json:"should_terminate,omitempty"`
+	Termination            *TerminationResult              `json:"termination,omitempty"`
 }
 
 // DispatchRecord pairs a WorkDispatch with the marking mutations consumed to fire it.
@@ -322,6 +469,10 @@ type FactoryDispatchRecord struct {
 	Dispatch       work.WorkDispatch
 	HeldMutations  []MarkingMutation
 	ConsumedTokens []string
+	// HumanApproval marks a dispatch that is durably pending operator input.
+	// Such a dispatch owns its consumed tokens but must never enter a Worker,
+	// Provider, Model, script, runner, or capacity execution path.
+	HumanApproval bool
 }
 
 // FactoryCompletionRecord stores a worker result at the logical tick where the
