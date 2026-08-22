@@ -81,6 +81,15 @@ func (o *SessionOwner) resolveObservation(
 		RequestID: input.RequestID, InvocationReturn: input.InvocationReturn, WorldState: observation.WorldState,
 	}
 	selection, err := o.workService.ResolvePrimaryResult(ctx, selectionInput)
+	// Work checks the context before selecting a result. Re-check it after the
+	// call so a cancellation racing with that check cannot be classified as a
+	// successful or runtime-failed invocation.
+	if ctx != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			result, waitErr := o.waitErrorResult(sessionID, input, contextErr)
+			return result, true, waitErr
+		}
+	}
 	if err == nil {
 		if packaged {
 			if telemetry, ok := o.telemetry.(SessionInvocationPackagedTelemetry); ok {

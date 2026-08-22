@@ -534,6 +534,28 @@ func TestSessionOwnerWait_MapsTimeoutAndCancellation(t *testing.T) {
 	}
 }
 
+func TestSessionOwnerWait_CancellationAfterPrimaryResultResolutionWinsOverFailureClassification(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	owner := newTestSessionOwner(sessionOwnerFixture{
+		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
+			return failedSessionInvocationObservation(), nil
+		},
+		Work: &cancelAfterPrimaryResultResolutionWorkService{
+			Service: testInvocationWorkService(),
+			Cancel:  cancel,
+		},
+	})
+
+	result, err := owner.waitForResult(ctx, "session-1", sessionWaitInput(nil))
+	if err != nil {
+		t.Fatalf("waitForResult: %v", err)
+	}
+	assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusCanceled)
+	assertSessionOwnerEqual(t, "error code", result.ErrorCode, string(interfaces.InvocationErrorCodeCanceled))
+}
+
 func TestSessionOwnerWait_ConfiguredTimeoutReachesInjectedWaitBoundary(t *testing.T) {
 	timeoutMillis := int64(250)
 	owner := newTestSessionOwner(sessionOwnerFixture{
@@ -680,6 +702,20 @@ func waitForSessionOwnerObservation(t *testing.T, observation SessionInvocationO
 		t.Fatalf("waitForResult: %v", err)
 	}
 	return result
+}
+
+type cancelAfterPrimaryResultResolutionWorkService struct {
+	work.Service
+	Cancel context.CancelFunc
+}
+
+func (s *cancelAfterPrimaryResultResolutionWorkService) ResolvePrimaryResult(
+	_ context.Context,
+	input work.PrimaryResultSelectionInput,
+) (work.PrimaryResultSelection, error) {
+	selection, err := s.Service.ResolvePrimaryResult(context.Background(), input)
+	s.Cancel()
+	return selection, err
 }
 
 func sessionWaitInput(policy *interfaces.InvocationReturnConfig) SessionInvocationWaitInput {
