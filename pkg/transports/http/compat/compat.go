@@ -77,7 +77,11 @@ func DecodeBytes[T any](data []byte) (DecodeResult[T], error) {
 	if err != nil {
 		return result, err
 	}
-	if err := json.Unmarshal(document, &result.Value); err != nil {
+	normalized, err := canonicalizeKnownJSONFieldNames(document, reflect.TypeOf((*T)(nil)).Elem())
+	if err != nil {
+		return DecodeResult[T]{}, err
+	}
+	if err := json.Unmarshal(normalized, &result.Value); err != nil {
 		return DecodeResult[T]{}, err
 	}
 	paths, err := collectUnknownJSONPaths(document, reflect.TypeOf((*T)(nil)).Elem())
@@ -192,6 +196,93 @@ func collectUnknownJSONPaths(document []byte, typ reflect.Type) ([]string, error
 	return SortedUniquePaths(paths), nil
 }
 
+// canonicalizeKnownJSONFieldNames restores encoding/json's historical
+// case-insensitive field matching before decoding generated open-schema
+// models. Their AdditionalProperties-aware UnmarshalJSON implementations use
+// exact map keys, so without this normalization an input such as "Name" can
+// be treated as unknown even though the ordinary encoding/json contract would
+// populate the known name field. Diagnostics still inspect the original
+// document, preserving authored spellings in reported paths.
+func canonicalizeKnownJSONFieldNames(document []byte, typ reflect.Type) ([]byte, error) {
+	decoder := json.NewDecoder(bytes.NewReader(document))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, err
+	}
+	return json.Marshal(canonicalizeKnownJSONValue(value, typ))
+}
+
+func canonicalizeKnownJSONValue(value any, typ reflect.Type) any {
+	if value == nil || typ == nil {
+		return value
+	}
+	typ = dereference(typ)
+	if typ == nil || typ == rawMessageType || typ == timeType {
+		return value
+	}
+
+	switch typ.Kind() {
+	case reflect.Map:
+		return canonicalizeKnownJSONMap(value, typ)
+	case reflect.Slice, reflect.Array:
+		return canonicalizeKnownJSONSequence(value, typ)
+	case reflect.Struct:
+		return canonicalizeKnownJSONStruct(value, typ)
+	default:
+		return value
+	}
+}
+
+func canonicalizeKnownJSONMap(value any, typ reflect.Type) any {
+	object, ok := value.(map[string]any)
+	if !ok || typ.Key().Kind() != reflect.String {
+		return value
+	}
+	normalized := make(map[string]any, len(object))
+	for key, child := range object {
+		normalized[key] = canonicalizeKnownJSONValue(child, typ.Elem())
+	}
+	return normalized
+}
+
+func canonicalizeKnownJSONSequence(value any, typ reflect.Type) any {
+	values, ok := value.([]any)
+	if !ok {
+		return value
+	}
+	normalized := make([]any, len(values))
+	for index, item := range values {
+		normalized[index] = canonicalizeKnownJSONValue(item, typ.Elem())
+	}
+	return normalized
+}
+
+func canonicalizeKnownJSONStruct(value any, typ reflect.Type) any {
+	object, ok := value.(map[string]any)
+	if !ok {
+		return value
+	}
+	fields := jsonFields(typ)
+	normalized := make(map[string]any, len(object))
+	exactKnown := make(map[string]bool)
+	for key, child := range object {
+		field, known := fields[strings.ToLower(key)]
+		if !known {
+			normalized[key] = child
+			continue
+		}
+		if exactKnown[field.name] {
+			continue
+		}
+		normalized[field.name] = canonicalizeKnownJSONValue(child, field.typ)
+		if key == field.name {
+			exactKnown[field.name] = true
+		}
+	}
+	return normalized
+}
+
 func collect(value any, typ reflect.Type, path string, paths *[]string) {
 	if value == nil || typ == nil {
 		return
@@ -249,7 +340,21 @@ func collectStruct(value any, typ reflect.Type, path string, paths *[]string) {
 }
 
 func jsonFieldTypes(typ reflect.Type) map[string]reflect.Type {
-	fields := make(map[string]reflect.Type)
+	fields := jsonFields(typ)
+	types := make(map[string]reflect.Type, len(fields))
+	for key, field := range fields {
+		types[key] = field.typ
+	}
+	return types
+}
+
+type jsonField struct {
+	name string
+	typ  reflect.Type
+}
+
+func jsonFields(typ reflect.Type) map[string]jsonField {
+	fields := make(map[string]jsonField)
 	for index := 0; index < typ.NumField(); index++ {
 		field := typ.Field(index)
 		if field.PkgPath != "" {
@@ -263,9 +368,9 @@ func jsonFieldTypes(typ reflect.Type) map[string]reflect.Type {
 		if name == "" && field.Anonymous {
 			embedded := dereference(field.Type)
 			if embedded != nil && embedded.Kind() == reflect.Struct && embedded != timeType {
-				for key, fieldType := range jsonFieldTypes(embedded) {
+				for key, embeddedField := range jsonFields(embedded) {
 					if _, exists := fields[key]; !exists {
-						fields[key] = fieldType
+						fields[key] = embeddedField
 					}
 				}
 				continue
@@ -274,7 +379,7 @@ func jsonFieldTypes(typ reflect.Type) map[string]reflect.Type {
 		if name == "" {
 			name = field.Name
 		}
-		fields[strings.ToLower(name)] = field.Type
+		fields[strings.ToLower(name)] = jsonField{name: name, typ: field.Type}
 	}
 	return fields
 }

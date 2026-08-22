@@ -235,6 +235,33 @@ func TestFactoryStrictJSONDecode_SaveCurrentFactoryBySessionId(t *testing.T) {
 	}
 }
 
+func TestFactoryStrictJSONDecode_SaveCurrentFactoryBySessionIdPreservesCaseInsensitiveKnownFields(t *testing.T) {
+	var got factoryapi.Factory
+	srv := newAPITestServer(apiFactorySaveScript{
+		save: func(_ context.Context, _ string, _ factoryapi.FactorySaveMode, request factoryapi.Factory) (factoryapi.Factory, error) {
+			got = request
+			return request, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/~default/factory", strings.NewReader(`{
+		"factory": {
+			"name": "beta",
+			"workers": [{"Name": "worker", "futureWorker": true}]
+		}
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	assertFactoryCompatibilityWarning(t, rec, "$.factory.workers[0].futureWorker")
+	if got.Name != "beta" || got.Workers == nil || len(*got.Workers) != 1 || (*got.Workers)[0].Name != "worker" {
+		t.Fatalf("saved factory = %#v, want known fields decoded case-insensitively", got)
+	}
+}
+
 func TestFactoryStrictJSONDecode_PromptTemplateValidation(t *testing.T) {
 	t.Parallel()
 

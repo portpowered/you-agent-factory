@@ -165,6 +165,24 @@ func TestOperatorConfigCore_FutureFieldsWarnAndSurviveConfigRewrite(t *testing.T
 	if !ok || !reflect.DeepEqual(models["llm"].(map[string]any)["futureModel"], "preserve") {
 		t.Fatalf("models after rewrite = %#v, want preserved future child", document["models"])
 	}
+
+	omittedContainer, err := globalconfigmapping.PreserveUnknownFields(
+		[]byte(`{"runtime":{"logging":{"futureLogging":{"enabled":true}},"futureRuntime":"keep"}}`),
+		[]byte(`{"defaults":{"workerModel":"after"}}`),
+	)
+	if err != nil {
+		t.Fatalf("PreserveUnknownFields(omitted runtime) error = %v", err)
+	}
+	var omittedDocument map[string]any
+	if err := json.Unmarshal(omittedContainer, &omittedDocument); err != nil {
+		t.Fatalf("decode omitted runtime rewrite: %v", err)
+	}
+	runtime, ok := omittedDocument["runtime"].(map[string]any)
+	if !ok || runtime["futureRuntime"] != "keep" || !reflect.DeepEqual(runtime["logging"], map[string]any{
+		"futureLogging": map[string]any{"enabled": true},
+	}) {
+		t.Fatalf("runtime after omitted-container rewrite = %#v, want preserved future values", omittedDocument["runtime"])
+	}
 }
 
 func TestOperatorConfigCore_PromptedAndPresuppliedUpdatesShareAtomicBehavior(t *testing.T) {

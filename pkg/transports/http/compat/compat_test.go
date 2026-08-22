@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	httpcompat "github.com/portpowered/infinite-you/pkg/transports/http/compat"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -43,6 +44,26 @@ func TestDecodeReportsSortedNestedUnknownPathsAndPreservesKnownFields(t *testing
 	want := []string{"$.items[0].unknownItem", "$.nested.unknownNested", "$.unknownA", "$.unknownZ"}
 	if got := result.Diagnostics.Paths(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("unknown paths = %#v, want %#v", got, want)
+	}
+}
+
+func TestDecodePreservesCaseInsensitiveKnownFieldsInGeneratedOpenSchemas(t *testing.T) {
+	result, err := httpcompat.DecodeBytes[factoryapi.SaveFactoryForSessionRequest]([]byte(`{
+		"factory": {
+			"name": "factory",
+			"workers": [{"Name": "worker", "futureWorker": true}]
+		}
+	}`))
+	if err != nil {
+		t.Fatalf("DecodeBytes() error = %v", err)
+	}
+	if result.Value.Factory.Name != "factory" || result.Value.Factory.Workers == nil ||
+		len(*result.Value.Factory.Workers) != 1 || (*result.Value.Factory.Workers)[0].Name != "worker" {
+		t.Fatalf("decoded generated request = %#v, want case-insensitive known fields preserved", result.Value)
+	}
+	wantPaths := []string{"$.factory.workers[0].futureWorker"}
+	if got := result.Diagnostics.Paths(); !reflect.DeepEqual(got, wantPaths) {
+		t.Fatalf("ignored JSON paths = %#v, want %#v", got, wantPaths)
 	}
 }
 
