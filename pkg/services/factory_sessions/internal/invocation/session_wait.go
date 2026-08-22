@@ -62,6 +62,18 @@ func (o *SessionOwner) waitForResult(
 			loggedActive = true
 		}
 		if result, done, err := o.resolveObservation(ctx, sessionID, input, observation, packaged); done {
+			// A cancellation can arrive after resolveObservation's result check
+			// but before it returns from failure classification. Re-check at the
+			// wait boundary so that classification cannot publish a stale result.
+			if ctx != nil {
+				if contextErr := ctx.Err(); contextErr != nil {
+					alreadyCanceled := result.Status == interfaces.InvocationTerminalStatusCanceled && err == nil
+					if !alreadyCanceled {
+						result, waitErr := o.waitErrorResult(sessionID, input, contextErr)
+						return result, waitErr
+					}
+				}
+			}
 			return result, err
 		}
 		if err := o.waitNext(waitCtx); err != nil {
