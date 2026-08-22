@@ -103,6 +103,8 @@ const activityGraphMessagesByLocale: LocalizedMessageCatalog<ActivityGraphMessag
             return "Claude runner";
           case "doc":
             return "Doc";
+          case "gemini":
+            return "Gemini runner";
           case "antigravity":
             return "Antigravity runner";
           case "cron":
@@ -165,6 +167,8 @@ const activityGraphMessagesByLocale: LocalizedMessageCatalog<ActivityGraphMessag
             return "Claude runner";
           case "doc":
             return "文档";
+          case "gemini":
+            return "Gemini runner";
           case "antigravity":
             return "Antigravity runner";
           case "cron":

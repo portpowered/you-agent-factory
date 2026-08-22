@@ -196,10 +196,13 @@ export {
 export {
   FACTORY_GRAPH_WORKER_TYPES,
   type FactoryGraphWorkerIconKind,
+  type FactoryGraphWorkerProviderKind,
   type FactoryGraphWorkerType,
   factoryGraphUnknownWorkerType,
   factoryGraphWorkerIconClassName,
   factoryGraphWorkerIconKind,
+  factoryGraphWorkerProviderKind,
+  factoryGraphWorkerProviderLabel,
   isFactoryGraphKnownWorkerType,
 } from "./worker-icon.js";
 export {
