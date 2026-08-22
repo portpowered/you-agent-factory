@@ -47,7 +47,7 @@ jobs:
     name: Build ${{ matrix.backend }} (${{ matrix.target }})
     needs: validate-inputs
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 90
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.validate-inputs.outputs.matrix) }}

@@ -247,6 +247,7 @@ test("the backend build uses one mutually-exclusive literal shell per runner OS"
 
 test("the workflow uses immutable actions, package inputs, and the pinned tag guard", async () => {
 	const workflow = await readFile(".github/workflows/localai-backend-artifacts.yml", "utf8");
+	assert.match(workflow, /timeout-minutes: 180/);
 	for (const revision of Object.values(config.workflowPins)) assert.match(workflow, new RegExp(`@${revision}`));
 	assert.doesNotMatch(workflow, /uses:\s+[^\n]+@(v\d|main|master|latest)\b/);
 	assert.doesNotMatch(workflow, /update:\s*true/);
