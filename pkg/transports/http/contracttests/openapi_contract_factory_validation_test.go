@@ -374,15 +374,18 @@ func TestOpenAPIContract_AcceptsAdditiveCanonicalEventFields(t *testing.T) {
 			"sequence":  1,
 			"tick":      1,
 			"eventTime": "2026-04-10T12:00:00Z",
-			"futureContext": map[string]any{
-				"introducedBy": "newer-you",
-			},
 		},
 		"payload": payload,
 	}
 	if err := doc.Components.Schemas["FactoryEvent"].Value.VisitJSON(event); err != nil {
-		t.Fatalf("FactoryEvent should accept additive context and payload fields: %v", err)
+		t.Fatalf("FactoryEvent should accept additive payload fields: %v", err)
 	}
+	eventContext := event["context"].(map[string]any)
+	eventContext["futureContext"] = map[string]any{"introducedBy": "newer-you"}
+	if err := doc.Components.Schemas["FactoryEvent"].Value.VisitJSON(event); err == nil {
+		t.Fatal("FactoryEvent accepted an additive field in its strict context envelope")
+	}
+	delete(eventContext, "futureContext")
 	event["futureEnvelope"] = true
 	if err := doc.Components.Schemas["FactoryEvent"].Value.VisitJSON(event); err == nil {
 		t.Fatal("FactoryEvent accepted an additive envelope field at its strict root")
@@ -395,7 +398,7 @@ func TestOpenAPIContract_AcceptsAdditiveCanonicalEventFields(t *testing.T) {
 		"events":        []any{event},
 	}
 	if err := doc.Components.Schemas["FactoryRecording"].Value.VisitJSON(recording); err != nil {
-		t.Fatalf("FactoryRecording should accept events with additive context/payload fields: %v", err)
+		t.Fatalf("FactoryRecording should accept events with additive payload fields: %v", err)
 	}
 	recording["futureRecording"] = map[string]any{"revision": 2}
 	if err := doc.Components.Schemas["FactoryRecording"].Value.VisitJSON(recording); err == nil {
