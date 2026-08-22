@@ -36,6 +36,7 @@ func TestConstructedService_InitializeHumanOutcomesMatchPackageCommand(t *testin
 		name                string
 		systemConfigOutcome systeminitialization.SystemConfigOutcome
 		factoryOutcome      systeminitialization.PackagedFactoryOutcome
+		backupDir           string
 		wantContains        []string
 	}{
 		{
@@ -58,6 +59,26 @@ func TestConstructedService_InitializeHumanOutcomesMatchPackageCommand(t *testin
 				"Packaged factory @you/goal is already installed at " + factoryDir,
 			},
 		},
+		{
+			name:                "current",
+			systemConfigOutcome: systeminitialization.SystemConfigSkipped,
+			factoryOutcome:      systeminitialization.PackagedFactoryCurrent,
+			wantContains: []string{
+				"Operator config already present at " + configPath,
+				"Packaged factory @you/goal is current at " + factoryDir,
+			},
+		},
+		{
+			name:                "refreshed",
+			systemConfigOutcome: systeminitialization.SystemConfigSkipped,
+			factoryOutcome:      systeminitialization.PackagedFactoryRefreshed,
+			backupDir:           "/home/operator/.you-agent-factory/factories/.you-packaged-backups/goal",
+			wantContains: []string{
+				"Operator config already present at " + configPath,
+				"Refreshed packaged factory @you/goal",
+				"Previous content backup: /home/operator/.you-agent-factory/factories/.you-packaged-backups/goal",
+			},
+		},
 	}
 	for _, tc := range cases {
 		tc := tc
@@ -75,6 +96,7 @@ func TestConstructedService_InitializeHumanOutcomesMatchPackageCommand(t *testin
 							Name:       "@you/goal",
 							FactoryDir: factoryDir,
 							Outcome:    tc.factoryOutcome,
+							BackupDir:  tc.backupDir,
 						},
 					},
 				},
@@ -111,6 +133,7 @@ func TestConstructedService_InitializeJSONOutcomesMatchPackageCommand(t *testing
 		name                string
 		systemConfigOutcome systeminitialization.SystemConfigOutcome
 		factoryOutcome      systeminitialization.PackagedFactoryOutcome
+		backupDir           string
 	}{
 		{
 			name:                "created",
@@ -121,6 +144,17 @@ func TestConstructedService_InitializeJSONOutcomesMatchPackageCommand(t *testing
 			name:                "skipped",
 			systemConfigOutcome: systeminitialization.SystemConfigSkipped,
 			factoryOutcome:      systeminitialization.PackagedFactorySkipped,
+		},
+		{
+			name:                "current",
+			systemConfigOutcome: systeminitialization.SystemConfigSkipped,
+			factoryOutcome:      systeminitialization.PackagedFactoryCurrent,
+		},
+		{
+			name:                "refreshed",
+			systemConfigOutcome: systeminitialization.SystemConfigSkipped,
+			factoryOutcome:      systeminitialization.PackagedFactoryRefreshed,
+			backupDir:           "/home/operator/.you-agent-factory/factories/.you-packaged-backups/goal",
 		},
 	}
 	for _, tc := range cases {
@@ -139,6 +173,7 @@ func TestConstructedService_InitializeJSONOutcomesMatchPackageCommand(t *testing
 							Name:       "@you/goal",
 							FactoryDir: factoryDir,
 							Outcome:    tc.factoryOutcome,
+							BackupDir:  tc.backupDir,
 						},
 					},
 				},
@@ -169,7 +204,8 @@ func TestConstructedService_InitializeJSONOutcomesMatchPackageCommand(t *testing
 			if len(payload.PackagedFactories) != 1 ||
 				payload.PackagedFactories[0].Name != "@you/goal" ||
 				payload.PackagedFactories[0].FactoryDir != factoryDir ||
-				payload.PackagedFactories[0].Outcome != string(tc.factoryOutcome) {
+				payload.PackagedFactories[0].Outcome != string(tc.factoryOutcome) ||
+				payload.PackagedFactories[0].BackupDir != tc.backupDir {
 				t.Fatalf("packaged factories = %#v, want retained JSON fields", payload.PackagedFactories)
 			}
 		})
