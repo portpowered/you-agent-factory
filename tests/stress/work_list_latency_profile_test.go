@@ -119,7 +119,8 @@ type workListLatencyProfile struct {
 	totalWalk             time.Duration
 	returnedWorkIDs       []string
 	expectedWorkIDs       []string
-	operationEstimates    workListOperationEstimates
+	observedOperations    workListOperationCounts
+	observedPhases        workListPhaseTotals
 }
 
 type phaseSample struct {
@@ -135,13 +136,22 @@ type workListProfilePage struct {
 	nextToken string
 }
 
-type workListOperationEstimates struct {
-	snapshotReads int
-	// Work admission history is session-projected, so page reads do not open
-	// event subscriptions or visit the retained event prefix.
+type workListOperationCounts struct {
+	snapshotReads       int
+	snapshotRows        int
 	eventSubscriptions  int
 	eventRecordsVisited int
+	admissionRows       int
 	workRowsProjected   int
+}
+
+type workListPhaseTotals struct {
+	snapshotDuration        time.Duration
+	mappingDuration         time.Duration
+	admissionDuration       time.Duration
+	projectionLockWait      time.Duration
+	projectionCatchup       time.Duration
+	projectionEventsVisited int
 }
 
 type workListStabilitySample struct {
@@ -157,7 +167,100 @@ type workListStabilitySample struct {
 	totalWalk             time.Duration
 	returnedWorkIDs       []string
 	expectedWorkIDs       []string
-	operationEstimates    workListOperationEstimates
+	observedOperations    workListOperationCounts
+	observedPhases        workListPhaseTotals
+}
+
+type workListReadMetricsRecorder struct {
+	mu      sync.Mutex
+	metrics []factorysessions.InvocationMetric
+}
+
+func newWorkListReadMetricsRecorder() *workListReadMetricsRecorder {
+	return &workListReadMetricsRecorder{}
+}
+
+func startWorkListLatencyProcess(
+	t *testing.T,
+	dir string,
+) (*stressProcessHarness, *workListReadMetricsRecorder) {
+	t.Helper()
+	mux := workerMuxExecutor{}
+	readMetrics := newWorkListReadMetricsRecorder()
+	harness := startStressProcessWithMetrics(
+		t,
+		dir,
+		workerExecutorProvider{executor: mux},
+		readMetrics,
+	)
+	harness.workers = mux
+	return harness, readMetrics
+}
+
+func (r *workListReadMetricsRecorder) RecordInvocationMetric(metric factorysessions.InvocationMetric) {
+	if r == nil || metric.Name != "work.read.snapshot" {
+		return
+	}
+	labels := make(map[string]string, len(metric.Labels))
+	for key, value := range metric.Labels {
+		labels[key] = value
+	}
+	r.mu.Lock()
+	r.metrics = append(r.metrics, factorysessions.InvocationMetric{Name: metric.Name, Labels: labels})
+	r.mu.Unlock()
+}
+
+func (r *workListReadMetricsRecorder) reset() {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	r.metrics = nil
+	r.mu.Unlock()
+}
+
+func (r *workListReadMetricsRecorder) take(t *testing.T, expectedReads int) (workListOperationCounts, workListPhaseTotals) {
+	t.Helper()
+	r.mu.Lock()
+	metrics := append([]factorysessions.InvocationMetric(nil), r.metrics...)
+	r.metrics = nil
+	r.mu.Unlock()
+	if len(metrics) != expectedReads {
+		t.Fatalf("observed Work read metrics = %d, want one per public page (%d)", len(metrics), expectedReads)
+	}
+	operations := workListOperationCounts{}
+	phases := workListPhaseTotals{}
+	for _, metric := range metrics {
+		operations.snapshotReads += workListMetricInt(t, metric, "snapshot_reads")
+		operations.snapshotRows += workListMetricInt(t, metric, "snapshot_rows")
+		operations.eventSubscriptions += workListMetricInt(t, metric, "event_subscriptions")
+		operations.eventRecordsVisited += workListMetricInt(t, metric, "event_records_visited")
+		operations.admissionRows += workListMetricInt(t, metric, "admission_rows")
+		operations.workRowsProjected += workListMetricInt(t, metric, "work_rows_projected")
+		phases.snapshotDuration += workListMetricDuration(t, metric, "snapshot_duration_ns")
+		phases.mappingDuration += workListMetricDuration(t, metric, "mapping_duration_ns")
+		phases.admissionDuration += workListMetricDuration(t, metric, "admission_duration_ns")
+		phases.projectionLockWait += workListMetricDuration(t, metric, "projection_lock_wait_ns")
+		phases.projectionCatchup += workListMetricDuration(t, metric, "projection_catchup_ns")
+		projectionEventsVisited := workListMetricInt(t, metric, "projection_events_visited")
+		if projectionEventsVisited > phases.projectionEventsVisited {
+			phases.projectionEventsVisited = projectionEventsVisited
+		}
+	}
+	return operations, phases
+}
+
+func workListMetricInt(t *testing.T, metric factorysessions.InvocationMetric, name string) int {
+	t.Helper()
+	value, err := strconv.Atoi(metric.Labels[name])
+	if err != nil || value < 0 {
+		t.Fatalf("Work read metric %q = %q, want non-negative integer", name, metric.Labels[name])
+	}
+	return value
+}
+
+func workListMetricDuration(t *testing.T, metric factorysessions.InvocationMetric, name string) time.Duration {
+	return time.Duration(workListMetricInt(t, metric, name))
 }
 
 func runWorkListLatencyProfile(t *testing.T, workerLoad int) workListLatencyProfile {
@@ -165,7 +268,7 @@ func runWorkListLatencyProfile(t *testing.T, workerLoad int) workListLatencyProf
 
 	const workerName = "work-list-profile-worker"
 	dir := testutil.ScaffoldFactoryDir(t, testutil.PipelineConfig(1, workerName))
-	harness := startStressProcessWithWorkerMux(t, dir)
+	harness, readMetrics := startWorkListLatencyProcess(t, dir)
 	var executor *queryLatencyExecutor
 	if workerLoad > 0 {
 		executor = newQueryLatencyExecutor(workListProfileRows)
@@ -187,25 +290,25 @@ func runWorkListLatencyProfile(t *testing.T, workerLoad int) workListLatencyProf
 		harness.WaitForTerminalCount(workListProfileRows, queryLatencyWait)
 	}
 
+	readMetrics.reset()
 	eventSubscription := measureWorkListEventSubscription(t, harness)
 	snapshotRead := measureWorkListSessionRead(t, harness)
 	pages, totalWalk, returnedIDs := walkWorkListPages(t, harness, expectedIDs, workerLoad)
+	observedOperations, observedPhases := readMetrics.take(t, len(pages))
 
 	return workListLatencyProfile{
-		scenario:          "worker-contention",
-		boardRows:         len(returnedIDs),
-		workerLoad:        workerLoad,
-		retainedEvents:    eventSubscription.retainedEvents,
-		snapshotRead:      snapshotRead,
-		eventSubscription: phaseSample{duration: eventSubscription.duration, bytes: eventSubscription.bytes},
-		pages:             pages,
-		totalWalk:         totalWalk,
-		returnedWorkIDs:   returnedIDs,
-		expectedWorkIDs:   submitRequestWorkIDs(expectedIDs),
-		operationEstimates: workListOperationEstimates{
-			snapshotReads:     len(pages),
-			workRowsProjected: len(returnedIDs),
-		},
+		scenario:           "worker-contention",
+		boardRows:          len(returnedIDs),
+		workerLoad:         workerLoad,
+		retainedEvents:     eventSubscription.retainedEvents,
+		snapshotRead:       snapshotRead,
+		eventSubscription:  phaseSample{duration: eventSubscription.duration, bytes: eventSubscription.bytes},
+		pages:              pages,
+		totalWalk:          totalWalk,
+		returnedWorkIDs:    returnedIDs,
+		expectedWorkIDs:    submitRequestWorkIDs(expectedIDs),
+		observedOperations: observedOperations,
+		observedPhases:     observedPhases,
 	}
 }
 
@@ -217,7 +320,7 @@ func runAccumulatedWorkListLatencyProfile(t *testing.T) workListLatencyProfile {
 		loopState  = "loop"
 	)
 	dir := testutil.ScaffoldFactoryDir(t, accumulatedWorkListProfileConfig(workerName))
-	harness := startStressProcessWithWorkerMux(t, dir)
+	harness, readMetrics := startWorkListLatencyProcess(t, dir)
 	executor := newAccumulatedDispatchExecutor(workListProfileAccumulatedDispatches)
 	harness.SetWorkerExecutor(workerName, executor)
 	defer func() {
@@ -230,9 +333,11 @@ func runAccumulatedWorkListLatencyProfile(t *testing.T) workListLatencyProfile {
 	harness.SubmitFull(t.Context(), expectedRequests)
 	executor.waitForTarget(t)
 
+	readMetrics.reset()
 	eventSubscription := measureWorkListEventSubscription(t, harness)
 	snapshotRead := measureWorkListSessionRead(t, harness)
 	pages, totalWalk, returnedIDs := walkWorkListPages(t, harness, expectedRequests, 1)
+	observedOperations, observedPhases := readMetrics.take(t, len(pages))
 
 	return workListLatencyProfile{
 		scenario:              "event-growth",
@@ -246,10 +351,8 @@ func runAccumulatedWorkListLatencyProfile(t *testing.T) workListLatencyProfile {
 		totalWalk:             totalWalk,
 		returnedWorkIDs:       returnedIDs,
 		expectedWorkIDs:       submitRequestWorkIDs(expectedRequests),
-		operationEstimates: workListOperationEstimates{
-			snapshotReads:     len(pages),
-			workRowsProjected: len(returnedIDs),
-		},
+		observedOperations:    observedOperations,
+		observedPhases:        observedPhases,
 	}
 }
 
@@ -258,7 +361,7 @@ func runWorkerContentionStability(t *testing.T, workerLoad int) []workListStabil
 
 	const workerName = "work-list-stability-worker"
 	dir := testutil.ScaffoldFactoryDir(t, testutil.PipelineConfig(1, workerName))
-	harness := startStressProcessWithWorkerMux(t, dir)
+	harness, readMetrics := startWorkListLatencyProcess(t, dir)
 	var executor *queryLatencyExecutor
 	if workerLoad > 0 {
 		executor = newQueryLatencyExecutor(workListProfileRows)
@@ -283,7 +386,7 @@ func runWorkerContentionStability(t *testing.T, workerLoad int) []workListStabil
 	// This is an observed request, not time-based synchronization; readiness is
 	// established by the completed public census itself.
 	walkWorkListPages(t, harness, expectedRequests, workerLoad)
-	return repeatWorkListWalks(t, harness, expectedRequests, workerLoad, "worker-contention", workListStabilityRounds)
+	return repeatWorkListWalks(t, harness, expectedRequests, readMetrics, workerLoad, "worker-contention", workListStabilityRounds)
 }
 
 func runEventGrowthStability(t *testing.T) []workListStabilitySample {
@@ -295,7 +398,7 @@ func runEventGrowthStability(t *testing.T) []workListStabilitySample {
 	)
 	checkpoints := []int{1, 50, 100, workListProfileAccumulatedDispatches}
 	dir := testutil.ScaffoldFactoryDir(t, accumulatedWorkListProfileConfig(workerName))
-	harness := startStressProcessWithWorkerMux(t, dir)
+	harness, readMetrics := startWorkListLatencyProcess(t, dir)
 	executor := newCheckpointedDispatchExecutor(checkpoints)
 	harness.SetWorkerExecutor(workerName, executor)
 	defer func() {
@@ -312,6 +415,7 @@ func runEventGrowthStability(t *testing.T) []workListStabilitySample {
 		// Warm each event-history level through the public endpoint before
 		// recording its repeated-read sample.
 		walkWorkListPages(t, harness, expectedRequests, 1)
+		readMetrics.reset()
 		eventSubscription := measureWorkListEventSubscription(t, harness)
 		updatesDuringWalk := dispatches != checkpoints[len(checkpoints)-1]
 		pages, totalWalk, returnedIDs := walkWorkListPagesWithHook(
@@ -325,6 +429,7 @@ func runEventGrowthStability(t *testing.T) []workListStabilitySample {
 				}
 			},
 		)
+		observedOperations, observedPhases := readMetrics.take(t, len(pages))
 		samples = append(samples, workListStabilitySample{
 			scenario:              "event-growth",
 			round:                 len(samples) + 1,
@@ -338,10 +443,8 @@ func runEventGrowthStability(t *testing.T) []workListStabilitySample {
 			totalWalk:             totalWalk,
 			returnedWorkIDs:       returnedIDs,
 			expectedWorkIDs:       expectedWorkListOrder(expectedRequests, 1),
-			operationEstimates: workListOperationEstimates{
-				snapshotReads:     len(pages),
-				workRowsProjected: len(returnedIDs),
-			},
+			observedOperations:    observedOperations,
+			observedPhases:        observedPhases,
 		})
 	}
 	return samples
@@ -351,6 +454,7 @@ func repeatWorkListWalks(
 	t *testing.T,
 	harness *stressProcessHarness,
 	expectedRequests []work.SubmitRequest,
+	readMetrics *workListReadMetricsRecorder,
 	workerLoad int,
 	scenario string,
 	rounds int,
@@ -359,23 +463,23 @@ func repeatWorkListWalks(
 	samples := make([]workListStabilitySample, 0, rounds)
 	expectedWorkIDs := expectedWorkListOrder(expectedRequests, workerLoad)
 	for round := 1; round <= rounds; round++ {
+		readMetrics.reset()
 		eventSubscription := measureWorkListEventSubscription(t, harness)
 		pages, totalWalk, returnedIDs := walkWorkListPages(t, harness, expectedRequests, workerLoad)
+		observedOperations, observedPhases := readMetrics.take(t, len(pages))
 		samples = append(samples, workListStabilitySample{
-			scenario:          scenario,
-			round:             round,
-			boardRows:         len(returnedIDs),
-			workerLoad:        workerLoad,
-			retainedEvents:    eventSubscription.retainedEvents,
-			eventSubscription: eventSubscription.phaseSample,
-			pages:             pages,
-			totalWalk:         totalWalk,
-			returnedWorkIDs:   returnedIDs,
-			expectedWorkIDs:   expectedWorkIDs,
-			operationEstimates: workListOperationEstimates{
-				snapshotReads:     len(pages),
-				workRowsProjected: len(returnedIDs),
-			},
+			scenario:           scenario,
+			round:              round,
+			boardRows:          len(returnedIDs),
+			workerLoad:         workerLoad,
+			retainedEvents:     eventSubscription.retainedEvents,
+			eventSubscription:  eventSubscription.phaseSample,
+			pages:              pages,
+			totalWalk:          totalWalk,
+			returnedWorkIDs:    returnedIDs,
+			expectedWorkIDs:    expectedWorkIDs,
+			observedOperations: observedOperations,
+			observedPhases:     observedPhases,
 		})
 	}
 	return samples
@@ -387,7 +491,7 @@ func assertWorkListStabilitySamples(t *testing.T, samples []workListStabilitySam
 		t.Fatal("Work list stability profile returned no samples")
 	}
 	baselineIDs := samples[0].returnedWorkIDs
-	baselineEstimates := samples[0].operationEstimates
+	baselineOperations := samples[0].observedOperations
 	for _, sample := range samples {
 		logWorkListStabilitySample(t, sample)
 		if sample.boardRows != workListProfileRows {
@@ -399,11 +503,17 @@ func assertWorkListStabilitySamples(t *testing.T, samples []workListStabilitySam
 		if !slices.Equal(sample.returnedWorkIDs, sample.expectedWorkIDs) {
 			t.Errorf("%s round %d returned Work IDs different from expected order", sample.scenario, sample.round)
 		}
-		if sample.operationEstimates != baselineEstimates {
-			t.Errorf("%s round %d operation estimates = %+v, want stable %+v", sample.scenario, sample.round, sample.operationEstimates, baselineEstimates)
+		if sample.observedOperations != baselineOperations {
+			t.Errorf("%s round %d observed operation counts = %+v, want stable %+v", sample.scenario, sample.round, sample.observedOperations, baselineOperations)
 		}
-		if sample.operationEstimates.eventSubscriptions != 0 || sample.operationEstimates.eventRecordsVisited != 0 {
-			t.Errorf("%s round %d revisited canonical history: %+v", sample.scenario, sample.round, sample.operationEstimates)
+		if sample.observedOperations.snapshotReads != len(sample.pages) {
+			t.Errorf("%s round %d observed snapshot reads = %d, want %d", sample.scenario, sample.round, sample.observedOperations.snapshotReads, len(sample.pages))
+		}
+		if sample.observedOperations.workRowsProjected != len(sample.returnedWorkIDs)*len(sample.pages) {
+			t.Errorf("%s round %d observed projected rows = %d, want %d", sample.scenario, sample.round, sample.observedOperations.workRowsProjected, len(sample.returnedWorkIDs)*len(sample.pages))
+		}
+		if sample.observedOperations.eventSubscriptions != 0 || sample.observedOperations.eventRecordsVisited != 0 {
+			t.Errorf("%s round %d revisited canonical history: %+v", sample.scenario, sample.round, sample.observedOperations)
 		}
 		if enforceTarget {
 			assertWorkListLatencyTimingTarget(t, sample.pages, sample.totalWalk)
@@ -418,7 +528,7 @@ func logWorkListStabilitySample(t *testing.T, sample workListStabilitySample) {
 		pageDurations = append(pageDurations, page.duration)
 	}
 	t.Logf(
-		"work list stability scenario=%s round=%d board_rows=%d worker_load=%d accumulated_dispatches=%d retained_events=%d updates_during_walk=%t pages=%d rows=%d total_walk=%s page_durations=%s event_subscription=%s operation_estimates=snapshot_reads:%d,event_subscriptions:%d,event_records_visited:%d,work_rows_projected:%d first_id=%q last_id=%q",
+		"work list stability scenario=%s round=%d board_rows=%d worker_load=%d accumulated_dispatches=%d retained_events=%d updates_during_walk=%t pages=%d rows=%d total_walk=%s page_durations=%s event_subscription=%s observed_operations=snapshot_reads:%d,snapshot_rows:%d,event_subscriptions:%d,event_records_visited:%d,admission_rows:%d,work_rows_projected:%d,projection_events_visited:%d observed_phases=snapshot:%s,mapping:%s,admission:%s,projection_catchup:%s,projection_lock_wait:%s first_id=%q last_id=%q",
 		sample.scenario,
 		sample.round,
 		sample.boardRows,
@@ -431,10 +541,18 @@ func logWorkListStabilitySample(t *testing.T, sample workListStabilitySample) {
 		sample.totalWalk,
 		formatDurationSamples(pageDurations),
 		sample.eventSubscription.duration,
-		sample.operationEstimates.snapshotReads,
-		sample.operationEstimates.eventSubscriptions,
-		sample.operationEstimates.eventRecordsVisited,
-		sample.operationEstimates.workRowsProjected,
+		sample.observedOperations.snapshotReads,
+		sample.observedOperations.snapshotRows,
+		sample.observedOperations.eventSubscriptions,
+		sample.observedOperations.eventRecordsVisited,
+		sample.observedOperations.admissionRows,
+		sample.observedOperations.workRowsProjected,
+		sample.observedPhases.projectionEventsVisited,
+		sample.observedPhases.snapshotDuration,
+		sample.observedPhases.mappingDuration,
+		sample.observedPhases.admissionDuration,
+		sample.observedPhases.projectionCatchup,
+		sample.observedPhases.projectionLockWait,
 		sample.returnedWorkIDs[0],
 		sample.returnedWorkIDs[len(sample.returnedWorkIDs)-1],
 	)
@@ -865,7 +983,7 @@ func logWorkListLatencyProfile(t *testing.T, profile workListLatencyProfile) {
 		pageBytes = append(pageBytes, page.bytes)
 	}
 	t.Logf(
-		"work list profile scenario=%s board_rows=%d worker_load=%d accumulated_dispatches=%d retained_events=%d pages=%d rows=%d total_walk=%s page_durations=%s page_bytes=%v snapshot_read=%s/%dB event_subscription=%s/%dB operation_estimates=snapshot_reads:%d,event_subscriptions:%d,event_records_visited:%d,work_rows_projected:%d first_id=%q last_id=%q",
+		"work list profile scenario=%s board_rows=%d worker_load=%d accumulated_dispatches=%d retained_events=%d pages=%d rows=%d total_walk=%s page_durations=%s page_bytes=%v snapshot_read=%s/%dB event_subscription=%s/%dB observed_operations=snapshot_reads:%d,snapshot_rows:%d,event_subscriptions:%d,event_records_visited:%d,admission_rows:%d,work_rows_projected:%d,projection_events_visited:%d observed_phases=snapshot:%s,mapping:%s,admission:%s,projection_catchup:%s,projection_lock_wait:%s first_id=%q last_id=%q",
 		profile.scenario,
 		profile.boardRows,
 		profile.workerLoad,
@@ -880,15 +998,30 @@ func logWorkListLatencyProfile(t *testing.T, profile workListLatencyProfile) {
 		profile.snapshotRead.bytes,
 		profile.eventSubscription.duration,
 		profile.eventSubscription.bytes,
-		profile.operationEstimates.snapshotReads,
-		profile.operationEstimates.eventSubscriptions,
-		profile.operationEstimates.eventRecordsVisited,
-		profile.operationEstimates.workRowsProjected,
+		profile.observedOperations.snapshotReads,
+		profile.observedOperations.snapshotRows,
+		profile.observedOperations.eventSubscriptions,
+		profile.observedOperations.eventRecordsVisited,
+		profile.observedOperations.admissionRows,
+		profile.observedOperations.workRowsProjected,
+		profile.observedPhases.projectionEventsVisited,
+		profile.observedPhases.snapshotDuration,
+		profile.observedPhases.mappingDuration,
+		profile.observedPhases.admissionDuration,
+		profile.observedPhases.projectionCatchup,
+		profile.observedPhases.projectionLockWait,
 		profile.returnedWorkIDs[0],
 		profile.returnedWorkIDs[len(profile.returnedWorkIDs)-1],
 	)
 	if len(profile.returnedWorkIDs) != len(profile.expectedWorkIDs) {
 		t.Fatalf("profile Work ID census = %d, want %d", len(profile.returnedWorkIDs), len(profile.expectedWorkIDs))
+	}
+	if profile.observedOperations.snapshotReads != len(profile.pages) {
+		t.Fatalf("profile observed snapshot reads = %d, want %d", profile.observedOperations.snapshotReads, len(profile.pages))
+	}
+	wantProjectedRows := len(profile.returnedWorkIDs) * len(profile.pages)
+	if profile.observedOperations.workRowsProjected != wantProjectedRows {
+		t.Fatalf("profile observed projected rows = %d, want %d", profile.observedOperations.workRowsProjected, wantProjectedRows)
 	}
 }
 

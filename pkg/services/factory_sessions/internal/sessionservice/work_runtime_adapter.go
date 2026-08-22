@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -34,7 +35,32 @@ type workRuntimeAdapter struct {
 	// admissions is the session-scoped canonical Work admission projection.
 	// It is initialized by Assembly from the runtime's ledger and advances from
 	// appended events instead of replaying the full event history per read.
-	admissions *workAdmissionProjection
+	admissions  *workAdmissionProjection
+	readMetrics factorysessions.InvocationMetricsRecorder
+}
+
+const workReadMetricName = "work.read.snapshot"
+
+type workReadObservation struct {
+	snapshotDuration        time.Duration
+	snapshotRows            int
+	mappingDuration         time.Duration
+	workRowsProjected       int
+	admissionDuration       time.Duration
+	admissionRows           int
+	eventSubscriptions      int
+	eventRecordsVisited     int
+	projectionEventsVisited int
+	projectionLockWait      time.Duration
+	projectionCatchup       time.Duration
+}
+
+type workAdmissionReadStats struct {
+	eventSubscriptions      int
+	eventRecordsVisited     int
+	projectionEventsVisited int
+	projectionLockWait      time.Duration
+	projectionCatchup       time.Duration
 }
 
 func (a workRuntimeAdapter) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
@@ -82,6 +108,7 @@ func translateMoveWorkFailure(err error) error {
 }
 
 func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnapshot, error) {
+	snapshotStarted := time.Now()
 	legacyObservation, err := runtimebinding.LegacyObservationForService(a.runtime)
 	if err != nil {
 		return work.ReadSnapshot{}, err
@@ -93,6 +120,8 @@ func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnap
 	if snapshot == nil {
 		return work.ReadSnapshot{}, nil
 	}
+	snapshotDuration := time.Since(snapshotStarted)
+	mappingStarted := time.Now()
 	materialized := factoryruntime.CollectPublicWorkTokens(snapshot.Marking.Tokens, snapshot.Dispatches)
 	names := runtimeWorkNames(materialized.Tokens)
 	sessionSummary := sessionprojection.ProjectFactorySessionStopSummary(a.sessionID, snapshot, nil)
@@ -106,16 +135,56 @@ func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnap
 		item.StopSummary = runtimeWorkStopSummary(sessionprojection.ProjectWorkStopSummary(a.sessionID, snapshot, token, sessionSummary))
 		result.Items = append(result.Items, item)
 	}
+	mappingDuration := time.Since(mappingStarted)
+	admissionStarted := time.Now()
+	admissionStats := workAdmissionReadStats{}
 	if a.admissions != nil {
-		result.Admissions = a.admissions.Snapshot()
+		result.Admissions, admissionStats.projectionEventsVisited, admissionStats.projectionLockWait, admissionStats.projectionCatchup = a.admissions.SnapshotWithStats()
 	} else {
-		admissions, err := a.readWorkAdmissions(ctx)
+		admissions, stats, err := a.readWorkAdmissionsWithStats(ctx)
 		if err != nil {
 			return work.ReadSnapshot{}, err
 		}
 		result.Admissions = admissions
+		admissionStats = stats
 	}
+	a.recordWorkRead(workReadObservation{
+		snapshotDuration:        snapshotDuration,
+		snapshotRows:            len(materialized.Tokens),
+		mappingDuration:         mappingDuration,
+		workRowsProjected:       len(result.Items),
+		admissionDuration:       time.Since(admissionStarted),
+		admissionRows:           len(result.Admissions),
+		eventSubscriptions:      admissionStats.eventSubscriptions,
+		eventRecordsVisited:     admissionStats.eventRecordsVisited,
+		projectionEventsVisited: admissionStats.projectionEventsVisited,
+		projectionLockWait:      admissionStats.projectionLockWait,
+		projectionCatchup:       admissionStats.projectionCatchup,
+	})
 	return result, nil
+}
+
+func (a workRuntimeAdapter) recordWorkRead(observation workReadObservation) {
+	if a.readMetrics == nil {
+		return
+	}
+	a.readMetrics.RecordInvocationMetric(factorysessions.InvocationMetric{
+		Name: workReadMetricName,
+		Labels: map[string]string{
+			"snapshot_reads":            "1",
+			"snapshot_rows":             strconv.Itoa(observation.snapshotRows),
+			"snapshot_duration_ns":      strconv.FormatInt(observation.snapshotDuration.Nanoseconds(), 10),
+			"mapping_duration_ns":       strconv.FormatInt(observation.mappingDuration.Nanoseconds(), 10),
+			"work_rows_projected":       strconv.Itoa(observation.workRowsProjected),
+			"admission_duration_ns":     strconv.FormatInt(observation.admissionDuration.Nanoseconds(), 10),
+			"admission_rows":            strconv.Itoa(observation.admissionRows),
+			"event_subscriptions":       strconv.Itoa(observation.eventSubscriptions),
+			"event_records_visited":     strconv.Itoa(observation.eventRecordsVisited),
+			"projection_events_visited": strconv.Itoa(observation.projectionEventsVisited),
+			"projection_lock_wait_ns":   strconv.FormatInt(observation.projectionLockWait.Nanoseconds(), 10),
+			"projection_catchup_ns":     strconv.FormatInt(observation.projectionCatchup.Nanoseconds(), 10),
+		},
+	})
 }
 
 func workRuntimeSnapshot(
@@ -147,9 +216,11 @@ type workAdmissionProjection struct {
 }
 
 type workAdmissionProjectionBinding struct {
-	ledger    recordings.Ledger
-	ready     chan struct{}
-	readyOnce sync.Once
+	ledger        recordings.Ledger
+	ready         chan struct{}
+	readyOnce     sync.Once
+	eventsVisited int
+	catchup       time.Duration
 }
 
 func newWorkAdmissionProjection(sessionID string) *workAdmissionProjection {
@@ -215,9 +286,11 @@ func (p *workAdmissionProjection) Bind(ledger recordings.Ledger) {
 		p.seenEvents = make(map[string]struct{})
 		p.mu.Unlock()
 
+		startedAt := time.Now()
 		ledger.AddEventRecorder(func(event factorydefinitions.FactoryEvent) {
 			p.applyEvent(binding, event)
 		})
+		binding.catchup = time.Since(startedAt)
 		binding.readyOnce.Do(func() { close(binding.ready) })
 		return
 	}
@@ -226,29 +299,41 @@ func (p *workAdmissionProjection) Bind(ledger recordings.Ledger) {
 // Snapshot returns the current admission facts without exposing mutable
 // projection storage to Work's query path.
 func (p *workAdmissionProjection) Snapshot() []work.WorkAdmission {
+	admissions, _, _, _ := p.SnapshotWithStats()
+	return admissions
+}
+
+func (p *workAdmissionProjection) SnapshotWithStats() ([]work.WorkAdmission, int, time.Duration, time.Duration) {
 	if p == nil {
-		return nil
+		return nil, 0, 0, 0
 	}
+	var lockWait time.Duration
 	for {
+		lockStarted := time.Now()
 		p.mu.RLock()
+		lockWait += time.Since(lockStarted)
 		binding := p.binding
 		if binding == nil {
 			admissions := append([]work.WorkAdmission(nil), p.admissions...)
 			p.mu.RUnlock()
-			return admissions
+			return admissions, 0, lockWait, 0
 		}
 		ready := binding.ready
 		p.mu.RUnlock()
 		<-ready
 
+		lockStarted = time.Now()
 		p.mu.RLock()
+		lockWait += time.Since(lockStarted)
 		if p.binding != binding {
 			p.mu.RUnlock()
 			continue
 		}
 		admissions := append([]work.WorkAdmission(nil), p.admissions...)
+		eventsVisited := binding.eventsVisited
+		catchup := binding.catchup
 		p.mu.RUnlock()
-		return admissions
+		return admissions, eventsVisited, lockWait, catchup
 	}
 }
 
@@ -274,7 +359,17 @@ func (p *workAdmissionProjection) applyEvent(
 	binding *workAdmissionProjectionBinding,
 	event factorydefinitions.FactoryEvent,
 ) {
-	if p == nil || event.Type != factorydefinitions.FactoryEventTypeWorkRequest {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	if p.binding != binding || p.closed {
+		p.mu.Unlock()
+		return
+	}
+	binding.eventsVisited++
+	p.mu.Unlock()
+	if event.Type != factorydefinitions.FactoryEventTypeWorkRequest {
 		return
 	}
 	admissions := workAdmissionsFromFactoryEvents(p.sessionID, []factorydefinitions.FactoryEvent{event})
@@ -320,9 +415,10 @@ func sameLedger(left, right recordings.Ledger) bool {
 	return leftValue.Interface() == rightValue.Interface()
 }
 
-func (a workRuntimeAdapter) readWorkAdmissions(ctx context.Context) ([]work.WorkAdmission, error) {
+func (a workRuntimeAdapter) readWorkAdmissionsWithStats(ctx context.Context) ([]work.WorkAdmission, workAdmissionReadStats, error) {
+	stats := workAdmissionReadStats{eventSubscriptions: 1}
 	if a.ingress == nil {
-		return nil, errors.New("Factory Runtime Work admission history is required")
+		return nil, stats, errors.New("Factory Runtime Work admission history is required")
 	}
 	historyContext := ctx
 	if historyContext == nil {
@@ -336,12 +432,13 @@ func (a workRuntimeAdapter) readWorkAdmissions(ctx context.Context) ([]work.Work
 		factorydefinitions.FactoryEventReconnectScope{SessionID: a.sessionID},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("subscribe Work admission history: %w", err)
+		return nil, stats, fmt.Errorf("subscribe Work admission history: %w", err)
 	}
 	if stream == nil {
-		return nil, errors.New("subscribe Work admission history: stream is unavailable")
+		return nil, stats, errors.New("subscribe Work admission history: stream is unavailable")
 	}
-	return workAdmissionsFromFactoryEvents(a.sessionID, stream.History), nil
+	stats.eventRecordsVisited = len(stream.History)
+	return workAdmissionsFromFactoryEvents(a.sessionID, stream.History), stats, nil
 }
 
 func workAdmissionsFromFactoryEvents(

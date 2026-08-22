@@ -54,6 +54,7 @@ type Assembly struct {
 	detachedGateways             map[string]factorysessions.Service
 	workAdmissionsMu             sync.Mutex
 	workAdmissions               map[string][]*workAdmissionProjection
+	workReadMetricsRecorder      roles.InvocationMetricsRecorder
 	detachedGatewayOrder         []string
 }
 
@@ -143,10 +144,11 @@ func (a *Assembly) ResolveWorkRuntime(sessionID string) (work.Runtime, error) {
 		ledger = bundle.RecordingLedger()
 	}
 	return workRuntimeAdapter{
-		sessionID:  sessionID,
-		runtime:    runtimebinding.ServiceForSession(session),
-		ingress:    ingress,
-		admissions: a.workAdmissionProjection(sessionID, session.Runtime, ledger),
+		sessionID:   sessionID,
+		runtime:     runtimebinding.ServiceForSession(session),
+		ingress:     ingress,
+		admissions:  a.workAdmissionProjection(sessionID, session.Runtime, ledger),
+		readMetrics: a.workReadMetricsRecorder,
 	}, nil
 }
 
@@ -252,6 +254,7 @@ func (a *Assembly) Complete(
 	if a == nil || a.state == nil || a.registry == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Sessions assembly is required")
 	}
+	a.workReadMetricsRecorder = invocationMetricsRecorder
 	if startupRuntime == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("default Factory Runtime is required")
 	}
