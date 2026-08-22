@@ -6,10 +6,12 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 )
 
@@ -139,5 +141,69 @@ func TestStorePropagatesInjectedFileSystemFailures(t *testing.T) {
 	readErr := errors.New("read unavailable")
 	if _, err := runtimepersist.LoadBytes(t.TempDir(), sessionID, failingFileSystem{readErr: readErr}); !errors.Is(err, readErr) || !strings.Contains(err.Error(), "read durable session snapshot") {
 		t.Fatalf("LoadBytes injected read error = %v", err)
+	}
+}
+
+type interruptingStorage struct {
+	directories platformfilesystem.Local
+	delegate    platformreplay.Storage
+	failWrite   bool
+}
+
+var errSnapshotInterrupted = errors.New("injected snapshot interruption")
+
+func (s *interruptingStorage) MkdirAll(path string, mode fs.FileMode) error {
+	return s.directories.MkdirAll(path, mode)
+}
+
+func (s *interruptingStorage) ReadFile(path string) ([]byte, error) {
+	return s.delegate.ReadFile(path)
+}
+
+func (s *interruptingStorage) WriteFile(path string, data []byte, _ fs.FileMode) error {
+	if s.failWrite {
+		return errSnapshotInterrupted
+	}
+	return s.delegate.WriteFile(path, data)
+}
+
+func TestDirectoryStore_InterruptedSavePreservesPriorSnapshotAndSuccessfulSaveReplacesIt(t *testing.T) {
+	const sessionID = "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	storage := &interruptingStorage{delegate: platformreplay.NewLocal(runtime.GOOS)}
+	store, err := runtimepersist.NewDirectoryStore(t.TempDir(), storage)
+	if err != nil {
+		t.Fatalf("NewDirectoryStore: %v", err)
+	}
+	previous := []byte(`{"status":"RUNNING","sequence":1}`)
+	next := []byte(`{"status":"COMPLETED","sequence":2}`)
+	if err := store.Save(sessionID, previous); err != nil {
+		t.Fatalf("Save(previous): %v", err)
+	}
+
+	storage.failWrite = true
+	if err := store.Save(sessionID, next); err == nil || !errors.Is(err, errSnapshotInterrupted) || !strings.Contains(err.Error(), "write durable session snapshot") {
+		t.Fatalf("Save(interrupted) error = %v, want wrapped interruption", err)
+	}
+	loaded, err := store.Load(sessionID)
+	if err != nil {
+		t.Fatalf("Load after interrupted save: %v", err)
+	}
+	if !json.Valid(loaded) {
+		t.Fatalf("snapshot after interrupted save is invalid JSON: %s", loaded)
+	}
+	if string(loaded) != string(previous) {
+		t.Fatalf("snapshot after interrupted save = %s, want previous %s", loaded, previous)
+	}
+
+	storage.failWrite = false
+	if err := store.Save(sessionID, next); err != nil {
+		t.Fatalf("Save(next): %v", err)
+	}
+	loaded, err = store.Load(sessionID)
+	if err != nil {
+		t.Fatalf("Load after successful save: %v", err)
+	}
+	if !json.Valid(loaded) || string(loaded) != string(next) {
+		t.Fatalf("snapshot after successful save = %s, want complete new payload %s", loaded, next)
 	}
 }

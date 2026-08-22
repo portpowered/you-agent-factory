@@ -22,8 +22,8 @@ type Store interface {
 }
 
 // FileSystem is the exact host-filesystem capability consumed by this private
-// persistence implementation. The public Factory Sessions edge is structurally
-// compatible without coupling this implementation back to its parent package.
+// persistence implementation. The canonical Wire-selected implementation
+// delegates WriteFile to platform/replay's atomic storage capability.
 type FileSystem interface {
 	MkdirAll(string, fs.FileMode) error
 	ReadFile(string) ([]byte, error)
