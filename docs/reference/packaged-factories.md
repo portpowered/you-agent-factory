@@ -1191,18 +1191,19 @@ you run --named @you/tts --no-record --output primary --to "The release is ready
 ```
 
 **Observed output evidence.** A fresh binary ran the exact command from a blank
-directory after the prompt-binding fix. Prompt rendering completed, but the
-local model execution failed before producing an audio artifact:
+directory after the prompt-binding and managed-runtime handoff fixes. With the
+pinned `OMNIVOICE_Q4_K_M` cache and the repository's `omnivoice-llamacpp`
+wrapper plus native runtime available in the isolated verification PATH, the
+command returned primary metadata for the synthesized artifact:
 
 ```text
-{"code":"INVOCATION_TTS_GENERATION_FAILED","family":"INTERNAL_SERVER_ERROR","message":"unknown Codex reported a terminal error"}
+{"artifactPath":"C:\\Users\\andre\\AppData\\Local\\Temp\\infinite-you-tts-verification\\managed-cache\\OMNIVOICE_Q4_K_M\\361609388ae572a820d085185bbbe2a2aac4b30e\\omnivoice-710657892.wav","mediaType":"audio/wav","backend":"OMNIVOICE_Q4_K_M/LLAMACPP","traceId":"trace-request-b77ca9b2-35b7-4221-a735-1efc73f49307"}
 ```
 
-The result proves that the repaired path reached model execution without a
-prompt-render failure. It is not success evidence: no readable audio artifact
-was produced in this environment. The focused behavioral assertion
-`TestPackagedTTSRequiredInputProducesAudioArtifactMetadata` still verifies the
-successful primary-result contract with the injected model edge.
+The returned artifact was 63,884 bytes and began with the `RIFF`/`WAVE` header,
+confirming readable non-empty WAV output. The focused behavioral assertion
+`TestPackagedTTSRequiredInputProducesAudioArtifactMetadata` continues to verify
+the primary-result contract with the injected model edge.
 
 ## Detailed media-review entries
 
