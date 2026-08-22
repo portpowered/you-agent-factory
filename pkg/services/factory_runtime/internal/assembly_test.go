@@ -235,6 +235,43 @@ func TestBoundRuntimeServiceUsesConcreteDelegateForWideOperations(t *testing.T) 
 	}
 }
 
+func TestBoundRuntimeServiceUsesConcreteDelegateForLegacyWorkSnapshot(t *testing.T) {
+	t.Parallel()
+
+	root, err := NewRoot(
+		func() string { return "runtime-test-id" },
+		nil,
+		nil,
+		clockwork.NewFakeClock(),
+		func(context.Context, workers.WorkstationDispatchRequest) error { return nil },
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewRoot() error = %v", err)
+	}
+	snapshot := &interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.RuntimeNet]{}
+	engine := &legacySnapshotRuntimeFake{snapshot: snapshot}
+	root.active["runtime-1"] = &runtimeActivationState{
+		service: &runtimeDelegateWrapper{Service: engine, delegate: engine},
+		ingress: engine,
+	}
+
+	binding := &boundRuntimeService{root: root, runtimeID: "runtime-1"}
+	legacyObservation, ok := factoryruntime.Service(binding).(interface {
+		GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.RuntimeNet], error)
+	})
+	if !ok {
+		t.Fatal("bound Runtime service does not expose the legacy Work snapshot capability")
+	}
+	got, err := legacyObservation.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot() error = %v", err)
+	}
+	if got != snapshot {
+		t.Fatalf("GetEngineStateSnapshot() = %p, want concrete delegate snapshot %p", got, snapshot)
+	}
+}
+
 type runtimeDelegateWrapper struct {
 	factoryruntime.Service
 	delegate    factoryruntime.Service
@@ -264,6 +301,15 @@ type wideOperationRuntimeFake struct {
 	factoryruntime.Service
 	submitCalls int
 	eventCalls  int
+}
+
+type legacySnapshotRuntimeFake struct {
+	wideOperationRuntimeFake
+	snapshot *interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.RuntimeNet]
+}
+
+func (service *legacySnapshotRuntimeFake) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.RuntimeNet], error) {
+	return service.snapshot, nil
 }
 
 func (service *wideOperationRuntimeFake) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {

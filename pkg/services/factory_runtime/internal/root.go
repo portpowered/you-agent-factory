@@ -722,6 +722,24 @@ func (service *boundRuntimeService) SubscribeFactoryEvents(
 	return ingress.SubscribeFactoryEvents(ctx, reconnect, scope)
 }
 
+// GetEngineStateSnapshot preserves the migration-only Work read bridge for a
+// bound Runtime. The published Service intentionally omits engine snapshots,
+// but Work's Factory Sessions adapter still consumes this legacy projection
+// until its read model is fully Runtime-owned. Route the request through the
+// detached binding so it cannot outlive the owning activation.
+func (service *boundRuntimeService) GetEngineStateSnapshot(
+	ctx context.Context,
+) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.RuntimeNet], error) {
+	target := service.target()
+	provider, ok := target.(interface {
+		GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.RuntimeNet], error)
+	})
+	if !ok || provider == nil {
+		return nil, factoryruntime.ErrNotRunning
+	}
+	return provider.GetEngineStateSnapshot(ctx)
+}
+
 func closeActivation(activation *factoryruntime.RuntimeActivation, ctx context.Context) error {
 	if activation == nil || activation.Close == nil {
 		return nil

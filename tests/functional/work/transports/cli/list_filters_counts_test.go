@@ -228,6 +228,39 @@ func TestWorkListPublicCLITraversesThreeRESTPages(t *testing.T) {
 	}
 }
 
+// TestWorkShowPublicCLILooksUpWorkBeyondFirstRESTPage proves that Work detail
+// lookup remains independent of collection pagination on a large board.
+func TestWorkShowPublicCLILooksUpWorkBeyondFirstRESTPage(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, workListFiltersCountsFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		WaitForServiceModeRuntime: true,
+	})
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	home := t.TempDir()
+
+	works := make([]workListFiltersCountsWork, 0, 51)
+	for index := 1; index <= 51; index++ {
+		works = append(works, workListFiltersCountsWork{
+			Name:         fmt.Sprintf("page-work-%02d", index),
+			WorkID:       fmt.Sprintf("work-page-%02d", index),
+			WorkTypeName: "task",
+		})
+	}
+	submitWorkListFiltersCountsBatchWithRequestID(t, process, home, server.URL(), "work-show-large-board", works)
+
+	output := executeWorkListFiltersCountsCLI(t, process, home, "--server", server.URL(),
+		"--json", "work", "show", "work-page-51")
+	var shown factoryapi.Work
+	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &shown); err != nil {
+		t.Fatalf("decode Work show response: %v\noutput:\n%s", err, output)
+	}
+	if support.StringPointerValue(shown.WorkId) != "work-page-51" || shown.Name != "page-work-51" {
+		t.Fatalf("shown Work = %#v, want work-page-51/page-work-51", shown)
+	}
+}
+
 // TestWorkListAllAnnotatesSupersededSameName proves that the public CLI keeps
 // the current same-name Work visible by default while --all restores the
 // superseded attempt and identifies its successor in both JSON and human
