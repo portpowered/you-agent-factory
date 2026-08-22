@@ -187,6 +187,178 @@ func TestMainPackageManifestEpsilonCases(t *testing.T) {
 	}
 }
 
+func TestMainPackageFloorPolicyAdvisoryReportsRegressionAndBlockingRestoresEnforcement(t *testing.T) {
+	configPackage := modulePath + "/pkg/config"
+	manifestPath := writePackageMinimumManifest(t, "unit", configPackage, "80.00")
+
+	for _, tc := range []struct {
+		name           string
+		policy         string
+		wantExit       int
+		wantBanner     bool
+		wantSuccess    bool
+		wantDiagnostic string
+	}{
+		{
+			name:           "advisory",
+			policy:         coverageFloorPolicyAdvisory,
+			wantBanner:     true,
+			wantSuccess:    true,
+			wantDiagnostic: "package coverage regression: package=" + configPackage + " lane=unit expected-minimum=80.00% actual=0.0000% delta=-80.0000 percentage-points covered=0/3 statements",
+		},
+		{
+			name:           "blocking",
+			policy:         coverageFloorPolicyBlocking,
+			wantExit:       1,
+			wantDiagnostic: "package coverage regression: package=" + configPackage + " lane=unit expected-minimum=80.00% actual=0.0000% delta=-80.0000 percentage-points covered=0/3 statements",
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			args := []string{
+				"-min=0",
+				"-suite=unit",
+				"-package-floor-policy=" + tc.policy,
+				"-package-manifest=" + manifestPath,
+				"-coverpkg=" + configPackage,
+				"-packages=./pkg/config",
+			}
+			stdout, stderr, exitCode := runMainForTest(t, args, fakeGoCoverageCommandWithMeasuredZeroConfig)
+
+			if exitCode != tc.wantExit {
+				t.Fatalf("main() exit code = %d, want %d; stdout=%q stderr=%q", exitCode, tc.wantExit, stdout, stderr)
+			}
+			if tc.wantBanner {
+				for _, want := range []string{
+					"!!! COVERAGE FLOOR POLICY: advisory !!!",
+					"Package floors and missing-manifest findings are report-only",
+					"Set -package-floor-policy=blocking to restore blocking enforcement.",
+				} {
+					if !strings.Contains(stderr, want) {
+						t.Fatalf("main() stderr = %q, want advisory banner containing %q", stderr, want)
+					}
+				}
+			} else if strings.Contains(stderr, "COVERAGE FLOOR POLICY") {
+				t.Fatalf("main() stderr = %q, did not expect advisory banner in blocking mode", stderr)
+			}
+			if !strings.Contains(stderr, tc.wantDiagnostic) {
+				t.Fatalf("main() stderr = %q, want regression diagnostic containing %q", stderr, tc.wantDiagnostic)
+			}
+			if tc.wantSuccess {
+				if !strings.Contains(stdout, "Go coverage 0.0% meets minimum 0.0%.") {
+					t.Fatalf("main() stdout = %q, want successful aggregate message", stdout)
+				}
+			} else if strings.Contains(stdout, "meets minimum") {
+				t.Fatalf("main() stdout = %q, did not expect success message", stdout)
+			}
+		})
+	}
+}
+
+func TestMainPackageFloorPolicyAdvisoryReportsMissingManifestEntryAndBlockingRestoresEnforcement(t *testing.T) {
+	rootObservationPackage := modulePath + "/pkg/services/factory_runtime/internal/rootobservation"
+	manifestPath := writePackageMinimumManifest(t, "unit", rootObservationPackage, "0.00")
+
+	for _, tc := range []struct {
+		name       string
+		policy     string
+		wantExit   int
+		wantBanner bool
+	}{
+		{name: "advisory", policy: coverageFloorPolicyAdvisory, wantBanner: true},
+		{name: "blocking", policy: coverageFloorPolicyBlocking, wantExit: 1},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			args := []string{
+				"-min=0",
+				"-suite=unit",
+				"-package-floor-policy=" + tc.policy,
+				"-package-manifest=" + manifestPath,
+				"-coverpkg=" + rootObservationPackage,
+				"-packages=./pkg/services/factory_runtime/internal/rootobservation",
+			}
+			stdout, stderr, exitCode := runMainForTest(t, args, fakeGoCoverageCommandWithRootObservationRegression)
+
+			if exitCode != tc.wantExit {
+				t.Fatalf("main() exit code = %d, want %d; stdout=%q stderr=%q", exitCode, tc.wantExit, stdout, stderr)
+			}
+			wantDiagnostic := "coverage manifest missing entry: package=" + modulePath + "/pkg/services/factory_runtime lane=unit"
+			if !tc.wantBanner {
+				wantDiagnostic = "measured unit services have no root manifest entry"
+			}
+			if !strings.Contains(stderr, wantDiagnostic) {
+				t.Fatalf("main() stderr = %q, want missing-manifest diagnostic containing %q", stderr, wantDiagnostic)
+			}
+			if tc.wantBanner && !strings.Contains(stderr, "COVERAGE FLOOR POLICY: advisory") {
+				t.Fatalf("main() stderr = %q, want advisory banner", stderr)
+			}
+			if tc.wantBanner {
+				if !strings.Contains(stdout, "Go coverage 95.6% meets minimum 0.0%.") {
+					t.Fatalf("main() stdout = %q, want successful aggregate message", stdout)
+				}
+			} else if strings.Contains(stdout, "meets minimum") {
+				t.Fatalf("main() stdout = %q, did not expect success message", stdout)
+			}
+		})
+	}
+}
+
+func TestMainPackageFloorPolicyAdvisoryDoesNotMaskFailedTests(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		policy     string
+		wantBanner bool
+	}{
+		{name: "advisory", policy: coverageFloorPolicyAdvisory, wantBanner: true},
+		{name: "blocking", policy: coverageFloorPolicyBlocking},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			stdout, stderr, exitCode := runMainForTest(t, []string{
+				"-package-floor-policy=" + tc.policy,
+				"-coverpkg=" + modulePath + "/pkg/config",
+				"-packages=./pkg/config",
+			}, fakeGoCoverageCommandTestFailsWithObservedFailures)
+
+			if exitCode != 1 {
+				t.Fatalf("main() exit code = %d, want 1; stdout=%q stderr=%q", exitCode, stdout, stderr)
+			}
+			want := "coverage not evaluated: 2 failed tests observed; package floors were NOT checked because the coverage test run failed"
+			if !strings.Contains(stderr, want) {
+				t.Fatalf("main() stderr = %q, want exact failed-test diagnostic containing %q", stderr, want)
+			}
+			if strings.Contains(stderr, "package coverage regression") || strings.Contains(stdout, "meets minimum") {
+				t.Fatalf("failed-test run was reclassified: stdout=%q stderr=%q", stdout, stderr)
+			}
+			if tc.wantBanner && !strings.Contains(stderr, "COVERAGE FLOOR POLICY: advisory") {
+				t.Fatalf("main() stderr = %q, want advisory banner", stderr)
+			}
+			if !tc.wantBanner && strings.Contains(stderr, "COVERAGE FLOOR POLICY") {
+				t.Fatalf("main() stderr = %q, did not expect advisory banner in blocking mode", stderr)
+			}
+		})
+	}
+}
+
+func TestMainRejectsUnknownPackageFloorPolicyBeforeCoverageWork(t *testing.T) {
+	called := false
+	_, stderr, exitCode := runMainForTest(t, []string{"-package-floor-policy=unknown"}, func(commandInvocation) (string, string, error) {
+		called = true
+		return "", "", nil
+	})
+
+	if called {
+		t.Fatal("main() started coverage work for invalid package floor policy")
+	}
+	if exitCode != 1 {
+		t.Fatalf("main() exit code = %d, want 1", exitCode)
+	}
+	if !strings.Contains(stderr, "-package-floor-policy must be") {
+		t.Fatalf("main() stderr = %q, want actionable policy diagnostic", stderr)
+	}
+}
+
 func TestMainRejectsNegativePackageFloorEpsilonBeforeCoverageWork(t *testing.T) {
 	called := false
 	_, stderr, exitCode := runMainForTest(t, []string{"-package-floor-epsilon=-0.01"}, func(commandInvocation) (string, string, error) {

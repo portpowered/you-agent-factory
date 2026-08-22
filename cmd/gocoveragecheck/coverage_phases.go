@@ -106,7 +106,14 @@ func applyCoverageManifestGate(cfg config, result coverageResult, repoRoot strin
 		if !filepath.IsAbs(manifestPath) {
 			manifestPath = filepath.Join(repoRoot, manifestPath)
 		}
-		manifest, err := readCoverageManifestFileWithTotals(manifestPath, cfg.suite, packageImportPaths(result.packageSummaries), result.packageTotals)
+		measuredPackages := packageImportPaths(result.packageSummaries)
+		manifest, err := readCoverageManifestFileWithTotalsAtMode(
+			manifestPath,
+			cfg.suite,
+			measuredPackages,
+			result.packageTotals,
+			!cfg.packageFloorPolicyIsAdvisory(),
+		)
 		if err != nil {
 			var validationErr *coverageManifestValidationError
 			if errors.As(err, &validationErr) {
@@ -115,6 +122,16 @@ func applyCoverageManifestGate(cfg config, result coverageResult, repoRoot strin
 			return coverageResult{}, err
 		}
 		result.packageMinimumFailures, result.packageMinimumWarnings = checkCoverageManifestWithEpsilonAndBlocks(manifest, result.packageTotals, cfg.packageManifest, cfg.packageFloorEpsilon, result.coverageBlocks)
+		if cfg.packageFloorPolicyIsAdvisory() {
+			result.packageMinimumWarnings = append(result.packageMinimumWarnings, result.packageMinimumFailures...)
+			result.packageMinimumFailures = nil
+			result.manifestCompletenessWarnings = formatMissingCoverageManifestServiceRootDiagnostics(
+				cfg.suite,
+				measuredPackages,
+				manifestPackageSet(manifest),
+				result.packageTotals,
+			)
+		}
 		result.unmeasuredPackageDiagnostics = formatUnmeasuredCoverageManifestDiagnostics(manifest, result.packageTotals)
 		result.packageGates = coverageManifestGatedPackages(manifest, result.packageTotals)
 	} else if legacyPackageGateEnabled(cfg) {
