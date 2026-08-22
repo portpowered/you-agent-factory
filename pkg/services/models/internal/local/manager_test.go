@@ -37,7 +37,10 @@ func (s staticCatalogAssetPuller) ResolveModelCache(context.Context, *modelRunti
 }
 
 func (s staticCatalogAssetPuller) InspectRuntimeCache(context.Context, *modelRuntimeConfig, string) (RuntimeCacheInspection, error) {
-	return RuntimeCacheInspection{}, nil
+	return RuntimeCacheInspection{
+		Supported: true,
+		Installed: true,
+	}, nil
 }
 
 type countingLocalRuntime struct {

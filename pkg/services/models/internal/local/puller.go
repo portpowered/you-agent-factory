@@ -149,6 +149,13 @@ func (p *assetPuller) InspectRuntimeCache(ctx context.Context, runtimeCfg *model
 		InstalledFileCount: inspection.InstalledFileCount,
 		MissingAssets:      inspection.MissingAssets,
 		PartialArtifacts:   inspection.PartialArtifacts,
+		ManifestPresent:    inspection.ManifestPresent,
+		ManifestValid:      inspection.ManifestValid,
+		ExpectedArtifacts:  append([]models.AssetRequirement(nil), inspection.ExpectedArtifacts...),
+		ObservedArtifacts:  append([]models.AssetArtifact(nil), inspection.ObservedArtifacts...),
+		ActivePull:         inspection.ActivePull,
+		IntegrityVerified:  inspection.IntegrityVerified,
+		FailureReason:      inspection.FailureReason,
 	}, nil
 }
 

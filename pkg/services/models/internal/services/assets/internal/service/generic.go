@@ -110,6 +110,14 @@ func (s *service) prepareGenericAssets(
 	if err != nil {
 		return models.PrepareModelAssetsResult{}, err
 	}
+	expected := make([]models.AssetRequirement, 0, len(plan.modelRequirements)+len(plan.backendRequirements))
+	for _, artifact := range plan.modelRequirements {
+		expected = append(expected, artifact.requirement)
+	}
+	for _, artifact := range plan.backendRequirements {
+		expected = append(expected, artifact.requirement)
+	}
+	s.updateActivePull(request.Scope, request.Name, expected, plan.source.revision)
 
 	modelResult, modelErr := s.acquireGenericCache(
 		ctx, assetKindModel, models.AssetArtifactKindModel, plan.source,
@@ -123,6 +131,11 @@ func (s *service) prepareGenericAssets(
 		s.rememberPreparedRuntime(request.Scope, request.Name, scopedassets.RuntimeCacheInspection{
 			Supported:             true,
 			Installed:             modelResult.snapshotPath != "",
+			ManifestPresent:       true,
+			ManifestValid:         true,
+			ExpectedArtifacts:     append([]models.AssetRequirement(nil), expected...),
+			ObservedArtifacts:     append([]models.AssetArtifact(nil), append(modelResult.artifacts, backendResult.artifacts...)...),
+			IntegrityVerified:     true,
 			Revision:              plan.source.revision,
 			CachePath:             modelResult.snapshotPath,
 			InstalledFileCount:    len(modelResult.artifacts),

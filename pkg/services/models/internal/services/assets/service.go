@@ -65,6 +65,13 @@ type RuntimeCacheInspection struct {
 	InstalledFileCount    int
 	MissingAssets         []string
 	PartialArtifacts      bool
+	ManifestPresent       bool
+	ManifestValid         bool
+	ExpectedArtifacts     []models.AssetRequirement
+	ObservedArtifacts     []models.AssetArtifact
+	ActivePull            bool
+	IntegrityVerified     bool
+	FailureReason         string
 	BackendRequired       bool
 	BackendCachePath      string
 	BackendRevision       string

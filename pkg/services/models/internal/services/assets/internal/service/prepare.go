@@ -52,6 +52,22 @@ type upstreamLFS struct {
 func (s *service) PrepareModelAssets(
 	ctx context.Context,
 	request models.PrepareModelAssetsRequest,
+) (result models.PrepareModelAssetsResult, resultErr error) {
+	if err := request.Validate(); err != nil {
+		return models.PrepareModelAssetsResult{}, err
+	}
+	expected := append([]models.AssetRequirement(nil), request.Artifacts...)
+	expected = append(expected, request.BackendArtifacts...)
+	s.beginActivePull(request.Scope, request.Name, expected)
+	defer func() {
+		s.finishActivePull(request.Scope, request.Name, resultErr)
+	}()
+	return s.prepareModelAssets(ctx, request)
+}
+
+func (s *service) prepareModelAssets(
+	ctx context.Context,
+	request models.PrepareModelAssetsRequest,
 ) (models.PrepareModelAssetsResult, error) {
 	if shouldPrepareGenericAssets(request) {
 		return s.prepareGenericAssets(ctx, request)
@@ -67,6 +83,7 @@ func (s *service) PrepareModelAssets(
 	if err != nil {
 		return models.PrepareModelAssetsResult{}, err
 	}
+	s.updateActivePull(request.Scope, request.Name, assetRequirementsForSpec(spec), "")
 	if err := assetContextError(ctx); err != nil {
 		return models.PrepareModelAssetsResult{}, err
 	}
@@ -85,6 +102,7 @@ func (s *service) PrepareModelAssets(
 	if err != nil {
 		return models.PrepareModelAssetsResult{}, err
 	}
+	s.updateActivePull(request.Scope, request.Name, requirementsFromManifest(manifest), manifest.revision)
 	if snapshot, available, inspectErr := s.inspectManifestCache(
 		ctx, scope.CacheDirectory, spec, source, manifest,
 	); inspectErr != nil {
@@ -101,6 +119,24 @@ func (s *service) PrepareModelAssets(
 	return models.PrepareModelAssetsResult{
 		Asset: snapshot.Clone(), Outcome: models.AssetPreparationPrepared,
 	}, nil
+}
+
+func assetRequirementsForSpec(spec assetSpec) []models.AssetRequirement {
+	result := make([]models.AssetRequirement, 0, len(spec.requiredArtifacts))
+	for _, name := range spec.requiredArtifacts {
+		result = append(result, models.AssetRequirement{Name: name})
+	}
+	return result
+}
+
+func requirementsFromManifest(manifest remoteManifest) []models.AssetRequirement {
+	result := make([]models.AssetRequirement, 0, len(manifest.files))
+	for _, file := range manifest.files {
+		result = append(result, models.AssetRequirement{
+			Name: file.path, Bytes: file.bytes, SHA256: file.sha256,
+		})
+	}
+	return result
 }
 
 // inspectManifestCache reconciles complete caches written by the retired

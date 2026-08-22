@@ -555,6 +555,8 @@ func TestScopedCatalogPreservesCompatibilityBehavior(t *testing.T) {
 
 	currentReadiness.ReadinessState = models.ReadinessStateReady
 	currentReadiness.LifecycleState = models.LifecycleStateInstalled
+	currentReadiness.Diagnostics["readinessState"] = string(models.ReadinessStateReady)
+	currentReadiness.Diagnostics["lifecycleState"] = string(models.LifecycleStateInstalled)
 	host.snapshot = readinessSnapshot(currentReadiness)
 	legacyReadiness, err := compatibility.InspectRuntime(context.Background(), "compatibility-model")
 	if err != nil {

@@ -163,7 +163,8 @@ func (s *service) EnsureModelHost(
 		return models.EnsureModelHostResult{}, err
 	}
 	cacheInspection := cacheInspectionFromAssets(inspection)
-	if !cacheInspection.Installed {
+	cacheProjection := projectAssetCacheState(inspection)
+	if cacheProjection.ReadinessState != models.ReadinessStateReady {
 		return models.EnsureModelHostResult{}, fmt.Errorf(
 			"%w: model assets are not installed",
 			models.ErrHostMissingAssets,
@@ -405,7 +406,8 @@ func (s *service) overlaySupervisedReadiness(
 	snapshot models.ModelHostSnapshot,
 ) models.ModelHostSnapshot {
 	identity := supervisedIdentityForModel(binding.RuntimeConfig(), binding.OperatorModels, modelName)
-	if !requiresRuntimeHostBackend(identity.Backend) || !inspection.Installed {
+	if !requiresRuntimeHostBackend(identity.Backend) ||
+		projectAssetCacheState(inspection).ReadinessState != models.ReadinessStateReady {
 		return snapshot
 	}
 	slot := s.peekRuntimeSlot(runtimeSlotKey(scope, modelName))
@@ -532,26 +534,53 @@ func hostSnapshotFromAssets(
 		snapshot.LifecycleState = models.LifecycleStateNotApplicable
 		return snapshot
 	}
-	if inspection.Installed {
-		snapshot.ReadinessState = models.ReadinessStateReady
-		snapshot.LifecycleState = models.LifecycleStateInstalled
-		if inspection.CachePath != "" {
-			snapshot.Diagnostics["cachePath"] = inspection.CachePath
-		}
-		if inspection.Revision != "" {
-			snapshot.Diagnostics["revision"] = inspection.Revision
-		}
-		if inspection.InstalledFileCount > 0 {
-			snapshot.Diagnostics["installedFileCount"] = fmt.Sprintf("%d", inspection.InstalledFileCount)
-		}
-		return snapshot
+	projection := projectAssetCacheState(inspection)
+	snapshot.ReadinessState = projection.ReadinessState
+	snapshot.LifecycleState = projection.LifecycleState
+	if inspection.CachePath != "" {
+		snapshot.Diagnostics["cachePath"] = inspection.CachePath
 	}
-	snapshot.ReadinessState = models.ReadinessStateMissing
-	snapshot.LifecycleState = models.LifecycleStateNotInstalled
+	if inspection.Revision != "" {
+		snapshot.Diagnostics["revision"] = inspection.Revision
+	}
+	if inspection.InstalledFileCount > 0 {
+		snapshot.Diagnostics["installedFileCount"] = fmt.Sprintf("%d", inspection.InstalledFileCount)
+	}
 	if len(inspection.MissingAssets) > 0 {
 		snapshot.Diagnostics["missingAssets"] = strings.Join(inspection.MissingAssets, ",")
 	}
+	if inspection.ManifestPresent {
+		snapshot.Diagnostics["manifestValid"] = fmt.Sprintf("%t", inspection.ManifestValid)
+	}
+	if inspection.ActivePull {
+		snapshot.Diagnostics["activePull"] = "true"
+	}
+	if reason := strings.TrimSpace(projection.FailureReason); reason != "" {
+		snapshot.Diagnostics["failureReason"] = reason
+	}
 	return snapshot
+}
+
+func projectAssetCacheState(
+	inspection scopedassets.RuntimeCacheInspection,
+) models.ManagedRuntimeStateProjection {
+	return models.ProjectManagedRuntimeState(
+		models.ManagedRuntimeCacheFacts{
+			Locality:           models.LocalityLocal,
+			Supported:          inspection.Supported,
+			Installed:          inspection.Installed,
+			ManifestPresent:    inspection.ManifestPresent,
+			ManifestValid:      inspection.ManifestValid,
+			ExpectedArtifacts:  append([]models.AssetRequirement(nil), inspection.ExpectedArtifacts...),
+			ObservedArtifacts:  append([]models.AssetArtifact(nil), inspection.ObservedArtifacts...),
+			InstalledFileCount: inspection.InstalledFileCount,
+			PartialArtifacts:   inspection.PartialArtifacts,
+			ActivePull:         inspection.ActivePull,
+			IntegrityVerified:  inspection.IntegrityVerified,
+			FailureReason:      inspection.FailureReason,
+		},
+		models.ManagedRuntimeHostFacts{},
+	)
 }
 
 func sanitizeManagedHostSnapshot(

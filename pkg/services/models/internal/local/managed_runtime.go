@@ -54,20 +54,48 @@ func buildManagedRuntimeProjection(input managedRuntimeProjection) managedruntim
 }
 
 func managedRuntimeStates(input managedRuntimeProjection) (managedruntime.ReadinessState, managedruntime.LifecycleState) {
-	if input.cacheInspection != nil && input.cacheInspection.Supported {
+	if input.cacheInspection != nil {
 		inspection := *input.cacheInspection
-		if inspection.Installed {
-			return managedruntime.ReadinessStateReady, managedruntime.LifecycleStateInstalled
-		}
-		if inspection.PartialArtifacts && inspection.InstalledFileCount == 0 {
-			return managedruntime.ReadinessStateFailed, managedruntime.LifecycleStateNotInstalled
-		}
-		if inspection.InstalledFileCount > 0 || inspection.PartialArtifacts {
-			return managedruntime.ReadinessStateLoading, managedruntime.LifecycleStateInstalling
-		}
-		return managedruntime.ReadinessStateMissing, managedruntime.LifecycleStateNotInstalled
+		projection := models.ProjectManagedRuntimeState(
+			managedRuntimeCacheFacts(input.summary.locality, inspection),
+			models.ManagedRuntimeHostFacts{},
+		)
+		return projection.ReadinessState, projection.LifecycleState
 	}
-	return input.summary.readiness, input.summary.lifecycle
+	if input.summary.locality == managedruntime.LocalityLocal {
+		projection := models.ProjectManagedRuntimeState(
+			models.ManagedRuntimeCacheFacts{
+				Locality:  models.LocalityLocal,
+				Supported: true,
+			},
+			models.ManagedRuntimeHostFacts{},
+		)
+		return projection.ReadinessState, projection.LifecycleState
+	}
+	readiness, lifecycle := models.NormalizeManagedRuntimeState(
+		models.Locality(input.summary.locality), input.summary.readiness, input.summary.lifecycle,
+	)
+	return readiness, lifecycle
+}
+
+func managedRuntimeCacheFacts(
+	locality managedruntime.Locality,
+	inspection RuntimeCacheInspection,
+) models.ManagedRuntimeCacheFacts {
+	return models.ManagedRuntimeCacheFacts{
+		Locality:           models.Locality(locality),
+		Supported:          inspection.Supported,
+		Installed:          inspection.Installed,
+		ManifestPresent:    inspection.ManifestPresent,
+		ManifestValid:      inspection.ManifestValid,
+		ExpectedArtifacts:  append([]models.AssetRequirement(nil), inspection.ExpectedArtifacts...),
+		ObservedArtifacts:  append([]models.AssetArtifact(nil), inspection.ObservedArtifacts...),
+		InstalledFileCount: inspection.InstalledFileCount,
+		PartialArtifacts:   inspection.PartialArtifacts,
+		ActivePull:         inspection.ActivePull,
+		IntegrityVerified:  inspection.IntegrityVerified,
+		FailureReason:      inspection.FailureReason,
+	}
 }
 
 func managedRuntimeSourceResolutionValue(input managedRuntimeProjection) ManagedRuntimeSourceResolution {
@@ -90,6 +118,9 @@ func managedRuntimeDiagnostics(
 	}
 	for key, value := range diagnostics {
 		result[key] = value
+	}
+	if readiness == managedruntime.ReadinessStateFailed && result["failureReason"] == "" {
+		result["failureReason"] = "managed runtime cache or host state is not usable"
 	}
 	return result
 }

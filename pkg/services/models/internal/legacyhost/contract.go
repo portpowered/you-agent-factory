@@ -3,10 +3,11 @@ package modelhost
 import (
 	"context"
 	"errors"
-	models "github.com/portpowered/infinite-you/pkg/services/models"
-	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
 	"strconv"
 	"strings"
+
+	models "github.com/portpowered/infinite-you/pkg/services/models"
+	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
 )
 
 var (
@@ -52,6 +53,13 @@ type CacheInspection struct {
 	InstalledFileCount int
 	MissingAssets      []string
 	PartialArtifacts   bool
+	ManifestPresent    bool
+	ManifestValid      bool
+	ExpectedArtifacts  []models.AssetRequirement
+	ObservedArtifacts  []models.AssetArtifact
+	ActivePull         bool
+	IntegrityVerified  bool
+	FailureReason      string
 }
 
 // ReadinessSnapshot carries managed-runtime-compatible readiness for one identity.
@@ -200,6 +208,9 @@ func FailureClassFromError(err error) FailureClass {
 
 // ManagedRuntimeFromSnapshot projects one host readiness snapshot into the public contract.
 func ManagedRuntimeFromSnapshot(snapshot ReadinessSnapshot) managedruntime.Runtime {
+	readiness, lifecycle := models.NormalizeManagedRuntimeState(
+		snapshot.Identity.Locality, snapshot.ReadinessState, snapshot.LifecycleState,
+	)
 	diagnostics := make(map[string]string, len(snapshot.Diagnostics)+1)
 	for key, value := range snapshot.Diagnostics {
 		diagnostics[key] = value
@@ -207,6 +218,8 @@ func ManagedRuntimeFromSnapshot(snapshot ReadinessSnapshot) managedruntime.Runti
 	if snapshot.FailureClass != FailureClassNone {
 		diagnostics["failureClass"] = string(snapshot.FailureClass)
 	}
+	diagnostics["readinessState"] = string(readiness)
+	diagnostics["lifecycleState"] = string(lifecycle)
 	var operations []managedruntime.Operation
 	if snapshot.Identity.SupportedOperations != nil {
 		operations = make([]managedruntime.Operation, len(snapshot.Identity.SupportedOperations))
@@ -217,8 +230,8 @@ func ManagedRuntimeFromSnapshot(snapshot ReadinessSnapshot) managedruntime.Runti
 		}
 	}
 	return managedruntime.Runtime{
-		Identity: snapshot.Identity.Name, ReadinessState: snapshot.ReadinessState,
-		LifecycleState: snapshot.LifecycleState, Locality: snapshot.Identity.Locality,
+		Identity: snapshot.Identity.Name, ReadinessState: readiness,
+		LifecycleState: lifecycle, Locality: snapshot.Identity.Locality,
 		SupportedOperations: operations, Diagnostics: diagnostics,
 	}
 }
@@ -251,7 +264,15 @@ func ClassifyReadiness(identity Identity, inspection CacheInspection, unsupporte
 		}
 	}
 	if inspection.Supported {
-		readiness, lifecycle, failureClass := readinessFromCacheInspection(inspection)
+		projection := models.ProjectManagedRuntimeState(
+			managedRuntimeCacheFacts(identity.Locality, inspection),
+			models.ManagedRuntimeHostFacts{},
+		)
+		readiness, lifecycle := projection.ReadinessState, projection.LifecycleState
+		failureClass := FailureClassForReadinessState(readiness)
+		if readiness == managedruntime.ReadinessStateFailed {
+			failureClass = FailureClassMissingAssets
+		}
 		return ReadinessSnapshot{
 			Identity:       identity,
 			ReadinessState: readiness,
@@ -271,29 +292,24 @@ func ClassifyReadiness(identity Identity, inspection CacheInspection, unsupporte
 	}
 }
 
-func readinessFromCacheInspection(inspection CacheInspection) (
-	managedruntime.ReadinessState,
-	managedruntime.LifecycleState,
-	FailureClass,
-) {
-	if inspection.Installed {
-		return managedruntime.ReadinessStateReady,
-			managedruntime.LifecycleStateInstalled,
-			FailureClassNone
+func managedRuntimeCacheFacts(
+	locality managedruntime.Locality,
+	inspection CacheInspection,
+) models.ManagedRuntimeCacheFacts {
+	return models.ManagedRuntimeCacheFacts{
+		Locality:           models.Locality(locality),
+		Supported:          inspection.Supported,
+		Installed:          inspection.Installed,
+		ManifestPresent:    inspection.ManifestPresent,
+		ManifestValid:      inspection.ManifestValid,
+		ExpectedArtifacts:  append([]models.AssetRequirement(nil), inspection.ExpectedArtifacts...),
+		ObservedArtifacts:  append([]models.AssetArtifact(nil), inspection.ObservedArtifacts...),
+		InstalledFileCount: inspection.InstalledFileCount,
+		PartialArtifacts:   inspection.PartialArtifacts,
+		ActivePull:         inspection.ActivePull,
+		IntegrityVerified:  inspection.IntegrityVerified,
+		FailureReason:      inspection.FailureReason,
 	}
-	if inspection.PartialArtifacts && inspection.InstalledFileCount == 0 {
-		return managedruntime.ReadinessStateFailed,
-			managedruntime.LifecycleStateNotInstalled,
-			FailureClassMissingAssets
-	}
-	if inspection.InstalledFileCount > 0 || inspection.PartialArtifacts {
-		return managedruntime.ReadinessStateLoading,
-			managedruntime.LifecycleStateInstalling,
-			FailureClassLoadingTimeout
-	}
-	return managedruntime.ReadinessStateMissing,
-		managedruntime.LifecycleStateNotInstalled,
-		FailureClassMissingAssets
 }
 
 func readinessFromLocality(locality managedruntime.Locality) managedruntime.ReadinessState {
@@ -364,6 +380,21 @@ func cacheDiagnostics(inspection CacheInspection) map[string]string {
 	diagnostics := make(map[string]string)
 	if len(inspection.MissingAssets) > 0 {
 		diagnostics["missingAssets"] = strings.Join(inspection.MissingAssets, ",")
+	}
+	if inspection.ManifestPresent {
+		diagnostics["manifestValid"] = strconv.FormatBool(inspection.ManifestValid)
+	}
+	if len(inspection.ExpectedArtifacts) > 0 {
+		diagnostics["expectedFileCount"] = strconv.Itoa(len(inspection.ExpectedArtifacts))
+	}
+	if len(inspection.ObservedArtifacts) > 0 {
+		diagnostics["observedFileCount"] = strconv.Itoa(len(inspection.ObservedArtifacts))
+	}
+	if inspection.ActivePull {
+		diagnostics["activePull"] = "true"
+	}
+	if reason := strings.TrimSpace(inspection.FailureReason); reason != "" {
+		diagnostics["failureReason"] = reason
 	}
 	if inspection.Revision != "" {
 		diagnostics["revision"] = inspection.Revision

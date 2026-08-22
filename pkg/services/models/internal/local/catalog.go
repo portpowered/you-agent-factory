@@ -824,20 +824,27 @@ func classifySuccessfulPull(result models.PullResult, inspection RuntimeCacheIns
 	}
 
 	if inspection.Supported {
-		if inspection.Installed {
-			readiness = managedReadinessReady
-			lifecycle = managedLifecycleInstalled
+		projection := models.ProjectManagedRuntimeState(
+			managedRuntimeCacheFacts(managedruntime.LocalityLocal, inspection),
+			models.ManagedRuntimeHostFacts{},
+		)
+		readiness = string(projection.ReadinessState)
+		lifecycle = string(projection.LifecycleState)
+		switch projection.ReadinessState {
+		case managedruntime.ReadinessStateReady:
 			if pullOutcome == managedPullOutcomeAlreadyPresent {
 				pullOutcome = managedPullOutcomeAlreadyReady
 			}
-			return pullOutcome, readiness, lifecycle
-		}
-		readiness = managedReadinessMissing
-		lifecycle = managedLifecycleNotInstalled
-		if pullOutcome == managedPullOutcomeInstalledSuccessfully {
-			readiness = managedReadinessLoading
-			lifecycle = managedLifecycleInstalling
+		case managedruntime.ReadinessStateLoading:
 			pullOutcome = managedPullOutcomeStillLoading
+		case managedruntime.ReadinessStateFailed:
+			pullOutcome = managedPullOutcomeSourceFetchFailed
+		case managedruntime.ReadinessStateMissing:
+			if pullOutcome == managedPullOutcomeInstalledSuccessfully {
+				readiness = managedReadinessLoading
+				lifecycle = managedLifecycleInstalling
+				pullOutcome = managedPullOutcomeStillLoading
+			}
 		}
 		return pullOutcome, readiness, lifecycle
 	}

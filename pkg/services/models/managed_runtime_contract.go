@@ -280,6 +280,259 @@ func (runtime Runtime) Clone() Runtime {
 	return runtime
 }
 
+// ManagedRuntimeCacheFacts are the Models-owned observations used to derive
+// managed local-model installation state. Expected artifacts come from the
+// cache manifest or the active preparation plan; observed artifacts come from
+// the cache inspection effect. Installed is retained as a compatibility fact
+// for older adapters that cannot provide manifest details yet.
+type ManagedRuntimeCacheFacts struct {
+	Locality           Locality
+	Supported          bool
+	Installed          bool
+	ManifestPresent    bool
+	ManifestValid      bool
+	ExpectedArtifacts  []AssetRequirement
+	ObservedArtifacts  []AssetArtifact
+	InstalledFileCount int
+	PartialArtifacts   bool
+	ActivePull         bool
+	IntegrityVerified  bool
+	FailureReason      string
+}
+
+// ManagedRuntimeHostFacts are the detached runtime-host observations layered
+// over verified installation facts. A host cannot make an uninstalled model
+// ready; the projection falls back to cache state when the facts conflict.
+type ManagedRuntimeHostFacts struct {
+	Observed       bool
+	ReadinessState ReadinessState
+	LifecycleState LifecycleState
+}
+
+// ManagedRuntimeStateProjection is the canonical compatible state pair for a
+// managed runtime. FailureReason is safe diagnostic context owned by Models,
+// not a transport error or provider-native message.
+type ManagedRuntimeStateProjection struct {
+	ReadinessState ReadinessState
+	LifecycleState LifecycleState
+	FailureReason  string
+}
+
+// ProjectManagedRuntimeState derives one compatible managed-runtime state from
+// cache and host facts. READY/NOT_INSTALLED is deliberately unrepresentable
+// for a supported managed local model: absent or incomplete evidence is
+// MISSING, an active pull is LOADING/INSTALLING, verified assets are
+// READY/INSTALLED, and host lifecycle overlays are applied only after assets
+// are complete.
+//
+// Compatibility matrix for supported local models:
+//
+//	cache evidence                         readiness/lifecycle
+//	no manifest or no artifacts             MISSING/NOT_INSTALLED
+//	partial or wrong-sized cache            FAILED/NOT_INSTALLED
+//	active pull with incomplete artifacts   LOADING/INSTALLING
+//	verified complete cache                 READY/INSTALLED
+//	complete cache plus loading host        LOADING/LOADING
+//	complete cache plus healthy host        READY/LOADED
+func ProjectManagedRuntimeState(
+	cache ManagedRuntimeCacheFacts,
+	host ManagedRuntimeHostFacts,
+) ManagedRuntimeStateProjection {
+	if !cache.Supported && cache.Locality != LocalityLocal {
+		return ManagedRuntimeStateProjection{
+			ReadinessState: ReadinessStateUnsupported,
+			LifecycleState: LifecycleStateNotApplicable,
+			FailureReason:  nonEmptyManagedRuntimeReason(cache.FailureReason, "cache is not supported"),
+		}
+	}
+	if !cache.Supported && cache.Locality == LocalityLocal && strings.TrimSpace(cache.FailureReason) == "" {
+		return ManagedRuntimeStateProjection{
+			ReadinessState: ReadinessStateMissing,
+			LifecycleState: LifecycleStateNotInstalled,
+		}
+	}
+
+	cacheState := projectManagedRuntimeCacheState(cache)
+	if !host.Observed {
+		return cacheState
+	}
+	if !managedRuntimeCacheIsComplete(cache) {
+		return cacheState
+	}
+
+	switch host.ReadinessState {
+	case ReadinessStateReady:
+		lifecycle := host.LifecycleState
+		if lifecycle != LifecycleStateLoaded {
+			lifecycle = LifecycleStateInstalled
+		}
+		return ManagedRuntimeStateProjection{
+			ReadinessState: ReadinessStateReady,
+			LifecycleState: lifecycle,
+		}
+	case ReadinessStateLoading:
+		return ManagedRuntimeStateProjection{
+			ReadinessState: ReadinessStateLoading,
+			LifecycleState: LifecycleStateLoading,
+		}
+	case ReadinessStateFailed:
+		lifecycle := host.LifecycleState
+		if lifecycle == LifecycleStateNotInstalled || lifecycle == LifecycleStateInstalling || lifecycle == "" {
+			lifecycle = LifecycleStateInstalled
+		}
+		return ManagedRuntimeStateProjection{
+			ReadinessState: ReadinessStateFailed,
+			LifecycleState: lifecycle,
+			FailureReason:  nonEmptyManagedRuntimeReason(cache.FailureReason, "runtime host failed"),
+		}
+	default:
+		return cacheState
+	}
+}
+
+// NormalizeManagedRuntimeState repairs a detached compatibility snapshot at
+// the Models boundary. It is used for host and pull adapters that predate the
+// cache-fact projection and therefore cannot be allowed to publish the
+// contradictory READY/NOT_INSTALLED pair.
+func NormalizeManagedRuntimeState(
+	locality Locality,
+	readiness ReadinessState,
+	lifecycle LifecycleState,
+) (ReadinessState, LifecycleState) {
+	if locality != LocalityLocal {
+		return readiness, lifecycle
+	}
+	switch readiness {
+	case ReadinessStateReady:
+		if lifecycle == LifecycleStateNotInstalled || lifecycle == LifecycleStateInstalling || lifecycle == "" {
+			return ReadinessStateMissing, LifecycleStateNotInstalled
+		}
+	case ReadinessStateMissing:
+		return ReadinessStateMissing, LifecycleStateNotInstalled
+	case ReadinessStateLoading:
+		if lifecycle == LifecycleStateNotInstalled || lifecycle == "" {
+			return ReadinessStateLoading, LifecycleStateInstalling
+		}
+	}
+	return readiness, lifecycle
+}
+
+func projectManagedRuntimeCacheState(cache ManagedRuntimeCacheFacts) ManagedRuntimeStateProjection {
+	if cache.ActivePull && !managedRuntimeCacheIsComplete(cache) {
+		return ManagedRuntimeStateProjection{
+			ReadinessState: ReadinessStateLoading,
+			LifecycleState: LifecycleStateInstalling,
+		}
+	}
+	if reason := strings.TrimSpace(cache.FailureReason); reason != "" {
+		return ManagedRuntimeStateProjection{
+			ReadinessState: ReadinessStateFailed,
+			LifecycleState: LifecycleStateNotInstalled,
+			FailureReason:  reason,
+		}
+	}
+	if managedRuntimeCacheIsComplete(cache) {
+		return ManagedRuntimeStateProjection{
+			ReadinessState: ReadinessStateReady,
+			LifecycleState: LifecycleStateInstalled,
+		}
+	}
+	if cache.ActivePull {
+		return ManagedRuntimeStateProjection{
+			ReadinessState: ReadinessStateLoading,
+			LifecycleState: LifecycleStateInstalling,
+		}
+	}
+	if managedRuntimeLegacyPartialEvidence(cache) {
+		if cache.PartialArtifacts && cache.InstalledFileCount == 0 {
+			return ManagedRuntimeStateProjection{
+				ReadinessState: ReadinessStateFailed,
+				LifecycleState: LifecycleStateNotInstalled,
+				FailureReason:  "managed cache contains incomplete artifacts",
+			}
+		}
+		return ManagedRuntimeStateProjection{
+			ReadinessState: ReadinessStateLoading,
+			LifecycleState: LifecycleStateInstalling,
+		}
+	}
+	if managedRuntimeCacheHasPartialEvidence(cache) {
+		return ManagedRuntimeStateProjection{
+			ReadinessState: ReadinessStateFailed,
+			LifecycleState: LifecycleStateNotInstalled,
+			FailureReason:  "managed cache is incomplete or its manifest is invalid",
+		}
+	}
+	return ManagedRuntimeStateProjection{
+		ReadinessState: ReadinessStateMissing,
+		LifecycleState: LifecycleStateNotInstalled,
+	}
+}
+
+func managedRuntimeCacheIsComplete(cache ManagedRuntimeCacheFacts) bool {
+	if cache.FailureReason != "" || !cache.ManifestValid {
+		return legacyManagedRuntimeInstalled(cache)
+	}
+	if len(cache.ExpectedArtifacts) == 0 {
+		return cache.Installed
+	}
+	observed := make(map[string]AssetArtifact, len(cache.ObservedArtifacts))
+	for _, artifact := range cache.ObservedArtifacts {
+		observed[strings.TrimSpace(artifact.Name)] = artifact
+	}
+	for _, expected := range cache.ExpectedArtifacts {
+		artifact, ok := observed[strings.TrimSpace(expected.Name)]
+		if !ok {
+			return false
+		}
+		if expected.Bytes > 0 && artifact.Bytes != expected.Bytes {
+			return false
+		}
+		if managedRuntimeDigestIsVerifiable(expected.SHA256) && !cache.IntegrityVerified {
+			return false
+		}
+	}
+	return true
+}
+
+func managedRuntimeDigestIsVerifiable(value string) bool {
+	value = strings.TrimSpace(value)
+	if len(value) != 64 {
+		return false
+	}
+	for _, character := range value {
+		if (character < '0' || character > '9') &&
+			(character < 'a' || character > 'f') &&
+			(character < 'A' || character > 'F') {
+			return false
+		}
+	}
+	return true
+}
+
+func legacyManagedRuntimeInstalled(cache ManagedRuntimeCacheFacts) bool {
+	return cache.Installed && !cache.ManifestPresent && len(cache.ExpectedArtifacts) == 0 &&
+		len(cache.ObservedArtifacts) == 0 && !cache.ActivePull
+}
+
+func managedRuntimeCacheHasPartialEvidence(cache ManagedRuntimeCacheFacts) bool {
+	return len(cache.ObservedArtifacts) > 0 ||
+		(cache.ManifestPresent && !cache.ManifestValid) || cache.PartialArtifacts
+}
+
+func managedRuntimeLegacyPartialEvidence(cache ManagedRuntimeCacheFacts) bool {
+	return !cache.ManifestPresent && len(cache.ExpectedArtifacts) == 0 &&
+		len(cache.ObservedArtifacts) == 0 &&
+		(cache.InstalledFileCount > 0 || cache.PartialArtifacts)
+}
+
+func nonEmptyManagedRuntimeReason(value, fallback string) string {
+	if value = strings.TrimSpace(value); value != "" {
+		return value
+	}
+	return fallback
+}
+
 const genericInvocationOutputLimitBytes int64 = 16 << 20
 
 // NormalizeGenericInvocationOutputs validates and detaches named outputs from
