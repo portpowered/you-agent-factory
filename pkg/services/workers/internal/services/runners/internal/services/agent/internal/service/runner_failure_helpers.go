@@ -45,19 +45,36 @@ func failureTypeForProviderKind(kind providers.ExecuteFailureKind) workers.WorkF
 		return workers.WorkFailureTypeInternalServerError
 	case providers.ExecuteFailureKindTimeout:
 		return workers.WorkFailureTypeTimeout
+	case providers.ExecuteFailureKindUnknown, providers.ExecuteFailureKindSessionNotFound:
+		// A provider refusal that has no specific classifier is deterministic
+		// for the same request. Map it onto the existing terminal route so it
+		// cannot follow an authored retry arc or expose provider output.
+		return workers.WorkFailureTypePermanentBadRequest
 	default:
-		return workers.WorkFailureTypeUnknown
+		return workers.WorkFailureTypePermanentBadRequest
 	}
 }
 
 const failureMessageRuneLimit = 512
 
 const (
-	agentTimeoutFailureMessage  = "provider invocation timed out"
-	agentCanceledFailureMessage = "provider invocation was canceled"
+	agentTimeoutFailureMessage           = "provider invocation timed out"
+	agentCanceledFailureMessage          = "provider invocation was canceled"
+	unrecognizedProviderFailureMessage   = "provider rejected the execution request"
+	missingProviderSessionFailureMessage = "provider session was not found"
 )
 
-func canonicalAgentFailureMessage(failureType workers.WorkFailureType, providerMessage string) string {
+func canonicalAgentFailureMessage(
+	providerKind providers.ExecuteFailureKind,
+	failureType workers.WorkFailureType,
+	providerMessage string,
+) string {
+	switch providerKind {
+	case providers.ExecuteFailureKindUnknown:
+		return unrecognizedProviderFailureMessage
+	case providers.ExecuteFailureKindSessionNotFound:
+		return missingProviderSessionFailureMessage
+	}
 	switch failureType {
 	case workers.WorkFailureTypeTimeout:
 		return agentTimeoutFailureMessage

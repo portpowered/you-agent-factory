@@ -138,7 +138,15 @@ func TestExecuteCanonicalizesTimeoutAndUnknownFailureMessages(t *testing.T) {
 			failure: providers.ExecuteFailure{
 				Kind: providers.ExecuteFailureKindUnknown,
 			},
-			wantMsg: "provider invocation failed",
+			wantMsg: unrecognizedProviderFailureMessage,
+		},
+		{
+			name: "unknown provider-specific message is suppressed",
+			failure: providers.ExecuteFailure{
+				Kind:    providers.ExecuteFailureKindUnknown,
+				Message: "Agy execution exited with code 2: provider secret",
+			},
+			wantMsg: unrecognizedProviderFailureMessage,
 		},
 		{
 			name: "canceled provider attempt",
@@ -174,7 +182,7 @@ func TestExecuteFailurePreservesSessionRefAndBoundsMessages(t *testing.T) {
 
 	longMessage := strings.Repeat("x", failureMessageRuneLimit+32)
 	failure := providers.ExecuteFailure{
-		Kind:    providers.ExecuteFailureKindUnknown,
+		Kind:    providers.ExecuteFailureKindInvalidRequest,
 		Message: longMessage,
 		SessionRef: &providers.SessionRef{
 			Provider: providers.IDCodex,
@@ -602,7 +610,8 @@ func TestFailureTypeForProviderKindPreservesProviderClassification(t *testing.T)
 		{kind: providers.ExecuteFailureKindThrottled, want: workers.WorkFailureTypeThrottled},
 		{kind: providers.ExecuteFailureKindDependency, want: workers.WorkFailureTypeInternalServerError},
 		{kind: providers.ExecuteFailureKindTimeout, want: workers.WorkFailureTypeTimeout},
-		{kind: providers.ExecuteFailureKindUnknown, want: workers.WorkFailureTypeUnknown},
+		{kind: providers.ExecuteFailureKindUnknown, want: workers.WorkFailureTypePermanentBadRequest},
+		{kind: providers.ExecuteFailureKindSessionNotFound, want: workers.WorkFailureTypePermanentBadRequest},
 	}
 	for _, test := range tests {
 		if got := failureTypeForProviderKind(test.kind); got != test.want {
@@ -654,7 +663,8 @@ type observingProvidersFake struct {
 
 type failingProvidersFake struct {
 	providers.Service
-	failure providers.ExecuteFailure
+	failure      providers.ExecuteFailure
+	executeCalls int
 }
 
 type pointerFailureProvidersFake struct {
@@ -858,6 +868,7 @@ func (fake *failingProvidersFake) Execute(
 	context.Context,
 	providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
+	fake.executeCalls++
 	return providers.ExecuteResult{}, fake.failure
 }
 

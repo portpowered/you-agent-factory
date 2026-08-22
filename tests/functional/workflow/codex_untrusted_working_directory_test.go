@@ -80,6 +80,59 @@ func TestCodexUntrustedWorkingDirectoryFailsOnceWithActionableDiagnostic(t *test
 	}
 }
 
+func TestCodexUnrecognizedRefusalFailsOnceWithNeutralDiagnostic(t *testing.T) {
+	dir := scaffoldCodexWorkingDirectoryFactory(t)
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		ExitCode: 77,
+		Stderr:   []byte("future refusal: credential=secret"),
+	})
+	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		15*time.Second,
+	)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed place tokens = %d, want one terminal failure; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:init"); got != 0 {
+		t.Fatalf("init place tokens = %d, want zero after terminal refusal; listed=%#v", got, listed)
+	}
+	if got := runner.CallCount(); got != 1 {
+		t.Fatalf("provider command calls = %d, want one unrecognized refusal", got)
+	}
+
+	processFailures := 0
+	for _, dispatch := range support.ObserveDispatchEvents(t, events) {
+		if dispatch.Request.TransitionId != "process" || dispatch.Response == nil {
+			continue
+		}
+		if dispatch.Response.Outcome != factoryapi.WorkOutcomeFailed {
+			t.Errorf("process response outcome = %q, want FAILED", dispatch.Response.Outcome)
+		}
+		if dispatch.Response.Error == nil {
+			t.Error("process response error = nil, want neutral provider refusal diagnostic")
+		} else {
+			if !strings.Contains(*dispatch.Response.Error, "provider rejected the execution request") {
+				t.Errorf("process response error = %q, want neutral refusal diagnostic", *dispatch.Response.Error)
+			}
+			for _, forbidden := range []string{"future refusal", "credential=secret", "codex exited"} {
+				if strings.Contains(*dispatch.Response.Error, forbidden) {
+					t.Errorf("process response error = %q, must not expose %q", *dispatch.Response.Error, forbidden)
+				}
+			}
+		}
+		if dispatch.Response.FailureDetail == nil || dispatch.Response.FailureDetail.Reason != factoryapi.WorkFailureTypePermanentBadRequest {
+			t.Errorf("process failure detail = %#v, want permanent bad request", dispatch.Response.FailureDetail)
+		}
+		processFailures++
+	}
+	if processFailures != 1 {
+		t.Fatalf("failed process dispatches = %d, want one without authored retry or circuit-breaker retries", processFailures)
+	}
+}
+
 func TestCodexTrustedGitWorkingDirectoryStillCompletes(t *testing.T) {
 	dir := scaffoldCodexWorkingDirectoryFactory(t)
 	initTrustedGitRepository(t, dir)

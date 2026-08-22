@@ -874,7 +874,7 @@ func normalizeProviderFailure(
 	}
 	normalized := workers.NewProviderError(
 		failureType,
-		boundedFailureMessage(canonicalAgentFailureMessage(failureType, failure.Message)),
+		boundedFailureMessage(canonicalAgentFailureMessage(failure.Kind, failureType, failure.Message)),
 		errors.Join(interruption, cause),
 	)
 	// Providers has already normalized and sanitized this message. Retain the

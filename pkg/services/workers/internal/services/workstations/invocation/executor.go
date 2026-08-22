@@ -328,8 +328,17 @@ func workersFailureType(kind providers.ExecuteFailureKind) workers.WorkFailureTy
 		return workers.WorkFailureTypeThrottled
 	case providers.ExecuteFailureKindMisconfigured:
 		return workers.WorkFailureTypeMisconfigured
-	default:
+	case providers.ExecuteFailureKindDependency:
+		// Preserve the invocation path's existing dependency classification;
+		// only unrecognized provider refusals use the terminal fallback below.
 		return workers.WorkFailureTypeUnknown
+	case providers.ExecuteFailureKindUnknown, providers.ExecuteFailureKindSessionNotFound:
+		// An unrecognized provider refusal is deterministic for the same
+		// invocation. Preserve the existing terminal runtime route instead of
+		// allowing a provider-specific fallback to re-enter authored retries.
+		return workers.WorkFailureTypePermanentBadRequest
+	default:
+		return workers.WorkFailureTypePermanentBadRequest
 	}
 }
 
