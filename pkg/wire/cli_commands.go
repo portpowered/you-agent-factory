@@ -860,7 +860,6 @@ func provideCLIExecutionServiceBuilder(
 	}
 }
 
-<<<<<<< HEAD
 func provideRunOpener(
 	prepareWorkTarget work.SingleWorkTargetPreparation,
 	loadMockWorkers workers.MockWorkersConfigDiagnosticsLoader,
