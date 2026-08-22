@@ -349,7 +349,9 @@ func (s *service) publishTerminalFailure(
 			message = providerErr.Message
 		}
 	}
-	if strings.TrimSpace(providerMessage) != "" && !errors.Is(err, context.Canceled) {
+	if strings.TrimSpace(providerMessage) != "" &&
+		!errors.Is(err, context.Canceled) &&
+		!hasUnrecognizedProviderRefusalMarker(providerErr) {
 		message = providerMessage
 	}
 	if len(metadata) == 0 {

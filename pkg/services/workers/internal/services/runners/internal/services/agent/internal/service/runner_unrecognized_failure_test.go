@@ -48,7 +48,10 @@ func TestExecuteUnrecognizedProviderFailureIsTerminalAndProviderNeutral(t *testi
 			providers.ExecuteDiagnosticMetadataUnrecognizedProviderRefusal: "true",
 		}},
 	}}
-	runner, err := New(fake, noopPublisher)
+	var published []workers.ProgressFragment
+	runner, err := New(fake, func(fragment workers.ProgressFragment) {
+		published = append(published, fragment)
+	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -71,5 +74,13 @@ func TestExecuteUnrecognizedProviderFailureIsTerminalAndProviderNeutral(t *testi
 	}
 	if strings.Contains(providerErr.Message, providerDetail) {
 		t.Fatalf("provider detail leaked into neutral refusal message: %q", providerErr.Message)
+	}
+	if len(published) != 1 || published[0].Kind != workers.FailedFragmentKind {
+		t.Fatalf("published failure fragments = %#v, want one terminal failure", published)
+	}
+	if published[0].Payload != unrecognizedProviderFailureMessage ||
+		strings.Contains(published[0].Payload, providerDetail) ||
+		strings.Contains(published[0].Payload, "credential=secret") {
+		t.Fatalf("published failure payload leaked provider detail: %q", published[0].Payload)
 	}
 }

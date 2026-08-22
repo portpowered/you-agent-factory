@@ -121,6 +121,37 @@ func TestCodexRootPreservesStartedSessionOnFailure(t *testing.T) {
 	}
 }
 
+func TestCodexRootMarksUnknownTurnFailedAsUnrecognizedProviderRefusal(t *testing.T) {
+	t.Parallel()
+
+	const providerDetail = "future turn failure credential=secret"
+	effect := codex.EffectFunc(func(
+		_ context.Context,
+		_ execution.ContinuationRequest,
+		observe func([]byte) error,
+	) (codex.EffectResult, error) {
+		return codex.EffectResult{}, observe([]byte(
+			`{"type":"turn.failed","error":{"message":"` + providerDetail + `"}}` + "\n",
+		))
+	})
+
+	_, err := newCodexRoot(t, effect).Execute(t.Context(), codexFailureRequest())
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("Execute() error = %v, want providers.ExecuteFailure", err)
+	}
+	if failure.Kind != providers.ExecuteFailureKindUnknown {
+		t.Fatalf("failure kind = %q, want unknown", failure.Kind)
+	}
+	if failure.Diagnostics == nil ||
+		failure.Diagnostics.Metadata[providers.ExecuteDiagnosticMetadataUnrecognizedProviderRefusal] != "true" {
+		t.Fatalf("failure diagnostics = %#v, want unrecognized-refusal marker", failure.Diagnostics)
+	}
+	if strings.Contains(err.Error(), providerDetail) {
+		t.Fatalf("failure error leaked provider detail: %v", err)
+	}
+}
+
 func TestCodexRootCancellationAndDeadlineReachEffectAndCleanUpOnce(t *testing.T) {
 	t.Parallel()
 

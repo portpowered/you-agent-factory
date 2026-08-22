@@ -65,6 +65,17 @@ func isUnrecognizedProviderRefusal(failure providers.ExecuteFailure) bool {
 		failure.Diagnostics.Metadata[providers.ExecuteDiagnosticMetadataUnrecognizedProviderRefusal] == "true"
 }
 
+func hasUnrecognizedProviderRefusalMarker(failure *workers.ProviderError) bool {
+	if failure == nil || failure.Diagnostics == nil {
+		return false
+	}
+	if failure.Diagnostics.Metadata[providers.ExecuteDiagnosticMetadataUnrecognizedProviderRefusal] == "true" {
+		return true
+	}
+	return failure.Diagnostics.Provider != nil &&
+		failure.Diagnostics.Provider.ResponseMetadata[providers.ExecuteDiagnosticMetadataUnrecognizedProviderRefusal] == "true"
+}
+
 const failureMessageRuneLimit = 512
 
 const (

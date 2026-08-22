@@ -108,9 +108,7 @@ func declaredFailureFromCommandOutput(stdout, stderr []byte) (providers.ExecuteF
 		}
 		if envelope.Error != nil {
 			failure := classifyDeclaredFailure(*envelope.Error)
-			if envelope.Type == "error" {
-				markUnrecognizedProviderRefusal(&failure)
-			}
+			markUnrecognizedProviderRefusal(&failure)
 			return failure, true
 		}
 		if envelope.Type == "error" && strings.TrimSpace(envelope.Message) != "" {

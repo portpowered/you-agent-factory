@@ -106,6 +106,34 @@ func TestCodexCommandEffectClassifiesUntrustedWorkingDirectoryAsTerminalWithSafe
 	}
 }
 
+func TestCodexCommandEffectMarksUnknownTurnFailedFromExitOutput(t *testing.T) {
+	t.Parallel()
+
+	const providerDetail = "future turn failure credential=secret"
+	effect := codex.NewCommandEffect(codexCommandRunnerStub{
+		result: workers.CommandResult{
+			ExitCode: 1,
+			Stderr:   []byte(`{"type":"turn.failed","error":{"message":"` + providerDetail + `"}}`),
+		},
+	}, platformclock.Real{})
+	_, err := newCodexRoot(t, effect).Execute(t.Context(), codexFailureRequest())
+
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("Execute() error = %v, want providers.ExecuteFailure", err)
+	}
+	if failure.Kind != providers.ExecuteFailureKindUnknown {
+		t.Fatalf("failure kind = %q, want unknown", failure.Kind)
+	}
+	if failure.Diagnostics == nil ||
+		failure.Diagnostics.Metadata[providers.ExecuteDiagnosticMetadataUnrecognizedProviderRefusal] != "true" {
+		t.Fatalf("failure diagnostics = %#v, want unrecognized-refusal marker", failure.Diagnostics)
+	}
+	if strings.Contains(err.Error(), providerDetail) {
+		t.Fatalf("failure error leaked provider detail: %v", err)
+	}
+}
+
 type codexCommandRunnerStub struct {
 	result workers.CommandResult
 }
