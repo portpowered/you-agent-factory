@@ -13,13 +13,13 @@ import (
 //
 // The values come from the measured distribution of existing floors: the unit
 // lane's tenth percentile is 50.00, so a new package that reaches the default
-// sits in the bottom decile rather than failing on arrival. Functional tests
-// exercise flows rather than packages, so a positive functional default would
-// fail ordinary packages en masse; 0.00 keeps a package measured and reported
-// without demanding that a flow reach it.
+// sits in the bottom decile rather than failing on arrival. The functional
+// lane's positive default is a conservative floor just below its measured
+// positive-floor tenth percentile, so a measurable package must be exercised
+// by at least one end-to-end flow rather than passing at zero coverage.
 const (
 	unitLaneDefaultFloorPercent       = "50.00"
-	functionalLaneDefaultFloorPercent = "0.00"
+	functionalLaneDefaultFloorPercent = "15.00"
 )
 
 // laneDefaultCoverageFloor reports the built-in default floor for lane. It is

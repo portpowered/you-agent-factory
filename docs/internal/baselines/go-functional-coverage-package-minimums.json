@@ -1,7 +1,7 @@
 {
   "version": 1,
   "lane": "functional",
-  "defaultFloorPercent": 0.00,
+  "defaultFloorPercent": 15.00,
   "packages": [
     {
       "package": "github.com/portpowered/infinite-you/pkg/initializer/application",
