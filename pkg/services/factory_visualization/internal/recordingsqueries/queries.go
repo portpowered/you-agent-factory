@@ -68,9 +68,10 @@ func ReconstructWorldStateRequest(
 	events []factorydefinitions.FactoryEvent,
 	selectedTick int,
 ) recordings.ReconstructWorldStateRequest {
+	canonicalEvents := canonicalEventsForProjection(events)
 	return recordings.ReconstructWorldStateRequest{
-		Scope:        reconnectScope(scopeFromFactoryReconnect(factorydefinitions.FactoryEventReconnectScope{})),
-		Events:       canonicalEventsFromFactory(events),
+		Scope:        recordings.CanonicalEventScope{},
+		Events:       canonicalEvents,
 		SelectedTick: selectedTick,
 	}
 }
@@ -126,6 +127,18 @@ func canonicalEventsFromFactory(events []factorydefinitions.FactoryEvent) []reco
 	canonical := make([]recordings.CanonicalEvent, len(events))
 	for index, event := range events {
 		canonical[index] = canonicalEventFromFactory(event)
+	}
+	return canonical
+}
+
+func canonicalEventsForProjection(events []factorydefinitions.FactoryEvent) []recordings.CanonicalEvent {
+	canonical := canonicalEventsFromFactory(events)
+	for index := range canonical {
+		// A live Factory stream contains both global runtime facts and
+		// session-scoped lifecycle facts. The legacy projection peer reduces the
+		// complete stream, while SourceContext preserves each event's original
+		// session metadata for the reducer.
+		canonical[index].Scope = recordings.CanonicalEventScope{}
 	}
 	return canonical
 }

@@ -3,6 +3,7 @@ package factory_visualization_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -69,6 +70,31 @@ func TestVisualizationConstructsRecordingsRequestsThroughRoot(t *testing.T) {
 	runRecordingsDashboardThroughRootProof(t, stub, worldView)
 	runRecordingsValidateThroughRootProof(t, stub, fixture)
 	runRecordingsNilServiceRejectionProof(t, fixture, worldView)
+}
+
+func TestVisualizationProjectionRequestKeepsMixedStreamUnscoped(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "~default"
+	request := recordingsqueries.ReconstructWorldStateRequest([]factorydefinitions.FactoryEvent{
+		{Id: "global", Context: factorydefinitions.FactoryEventContext{Sequence: 0}},
+		{Id: "session", Context: factorydefinitions.FactoryEventContext{Sequence: 1, SessionID: &sessionID}},
+	}, 1)
+
+	if request.Scope != (recordings.CanonicalEventScope{}) {
+		t.Fatalf("projection request scope = %#v, want unscoped mixed stream", request.Scope)
+	}
+	if len(request.Events) != 2 {
+		t.Fatalf("projection request events = %d, want 2", len(request.Events))
+	}
+	for index, event := range request.Events {
+		if event.Scope != (recordings.CanonicalEventScope{}) {
+			t.Fatalf("projection event %d scope = %#v, want unscoped event", index, event.Scope)
+		}
+	}
+	if !strings.Contains(request.Events[1].SourceContext, `"sessionId":"~default"`) {
+		t.Fatalf("projection event source context = %q, want preserved session metadata", request.Events[1].SourceContext)
+	}
 }
 
 func runRecordingsReconstructThroughRootProof(
