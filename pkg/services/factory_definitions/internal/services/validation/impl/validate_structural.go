@@ -792,6 +792,14 @@ var managedRuntimeDependencySpecs = map[string]managedRuntimeDependencySpec{
 	canonicalManagedRuntimeIdentity("embed"):            {backend: "LOCALAI-LLAMACPP"},
 }
 
+// managedRuntimeBackendAlias is the intentionally explicit Factory-side
+// mirror of the Models-owned managed-runtime alias. The enforced service
+// graph already contains factory_definitions -> workers -> models, so this
+// validator cannot import the Models root without creating a cycle regression.
+// TestManagedRuntimeValidationMatchesModelsBackendMembership compares this
+// mirror's observable validation decisions with models.IsManagedRuntimeBackend.
+const managedRuntimeBackendAlias = "LLAMACPP"
+
 var supportedManagedRuntimeLoadPolicies = map[string]struct{}{
 	"ON_DEMAND": {},
 	"EAGER":     {},
@@ -801,13 +809,17 @@ func canonicalManagedRuntimeIdentity(model string) string {
 	return strings.ToUpper(strings.TrimSpace(model))
 }
 
-func canonicalManagedRuntimeBackend(value string) string {
-	return strings.ToUpper(strings.TrimSpace(value))
+func isManagedRuntimeBackend(value string) bool {
+	return canonicalManagedRuntimeIdentity(value) == managedRuntimeBackendAlias
 }
 
 func isKnownManagedRuntimeIdentity(model string) bool {
 	_, ok := managedRuntimeDependencySpecs[canonicalManagedRuntimeIdentity(model)]
 	return ok
+}
+
+func canonicalManagedRuntimeBackend(value string) string {
+	return strings.ToUpper(strings.TrimSpace(value))
 }
 
 func requiredBackendForManagedRuntime(model string) (string, bool) {
@@ -857,20 +869,26 @@ func managedRuntimeResourceTargets(index int, resource factoryresource.Config) [
 			fmt.Sprintf("managed runtime identity %q is not supported in this environment", modelIdentity),
 		)}
 	}
-	if requiredBackend, ok := requiredBackendForManagedRuntime(modelIdentity); ok {
-		if canonicalManagedRuntimeBackend(resource.Backend) != requiredBackend {
-			return []Target{managedRuntimeResourceTarget(
-				CodeManagedRuntimeInvalidBackend,
-				resource.Name,
-				basePath+".backend",
-				fmt.Sprintf(
-					"managed runtime %q requires backend %q, got %q",
-					modelIdentity,
-					requiredBackend,
-					strings.TrimSpace(resource.Backend),
-				),
-			)}
-		}
+	requiredBackend, ok := requiredBackendForManagedRuntime(modelIdentity)
+	if !ok {
+		return nil
+	}
+	validBackend := canonicalManagedRuntimeBackend(resource.Backend) == requiredBackend
+	if canonicalManagedRuntimeIdentity(modelIdentity) == canonicalManagedRuntimeIdentity("OMNIVOICE_Q4_K_M") {
+		validBackend = isManagedRuntimeBackend(resource.Backend)
+	}
+	if !validBackend {
+		return []Target{managedRuntimeResourceTarget(
+			CodeManagedRuntimeInvalidBackend,
+			resource.Name,
+			basePath+".backend",
+			fmt.Sprintf(
+				"managed runtime %q requires backend %q, got %q",
+				modelIdentity,
+				requiredBackend,
+				strings.TrimSpace(resource.Backend),
+			),
+		)}
 	}
 	if loadPolicy := strings.ToUpper(strings.TrimSpace(resource.LoadPolicy)); loadPolicy != "" {
 		if _, ok := supportedManagedRuntimeLoadPolicies[loadPolicy]; !ok {

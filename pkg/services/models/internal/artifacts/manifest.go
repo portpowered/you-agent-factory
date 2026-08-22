@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	backendregistry "github.com/portpowered/infinite-you/pkg/services/models/internal/backendregistry"
 )
 
 const manifestSchemaVersion = 1
@@ -22,26 +24,6 @@ var (
 	namePattern   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 	tokenPattern  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 )
-
-type backendFacts struct {
-	sourceRepository string
-	sourcePath       string
-}
-
-var supportedBackends = map[string]backendFacts{
-	"localai-llamacpp": {
-		sourceRepository: "https://github.com/ggerganov/llama.cpp",
-		sourcePath:       "backend/cpp/llama-cpp",
-	},
-	"localai-whisper": {
-		sourceRepository: "https://github.com/ggml-org/whisper.cpp",
-		sourcePath:       "backend/go/whisper",
-	},
-	"localai-vibevoice": {
-		sourceRepository: "https://github.com/mudler/vibevoice.cpp",
-		sourcePath:       "backend/go/vibevoice-cpp",
-	},
-}
 
 type targetFacts struct {
 	operatingSystem string
@@ -345,11 +327,11 @@ func validateEntry(raw wireArtifact, publication publication, index int) (manife
 	if !validIdentity(raw.ID) {
 		return manifestEntry{}, failure(FailureMalformedManifest, prefix+".id", raw.ID, "must be a non-empty safe identity")
 	}
-	facts, known := supportedBackends[raw.Backend.ID]
+	facts, known := backendregistry.LookupArtifact(raw.Backend.ID)
 	if !known {
 		return manifestEntry{}, failure(FailureUnknownBackend, prefix+".backend.id", raw.Backend.ID, "backend is outside the supported LocalAI set")
 	}
-	if raw.Backend.Source.Repository != facts.sourceRepository {
+	if raw.Backend.Source.Repository != facts.Artifact.SourceRepository {
 		return manifestEntry{}, failure(FailureMalformedManifest, prefix+".backend.source.repository", raw.Backend.Source.Repository, "does not match the pinned backend identity")
 	}
 	if !commitPattern.MatchString(raw.Backend.Source.Commit) || !validToken(raw.Backend.Source.PinVariable) {
@@ -359,7 +341,7 @@ func validateEntry(raw wireArtifact, publication publication, index int) (manife
 	if err != nil {
 		return manifestEntry{}, err
 	}
-	if source.Repository != publication.source.Repository || source.Commit != publication.source.Commit || source.Path != facts.sourcePath {
+	if source.Repository != publication.source.Repository || source.Commit != publication.source.Commit || source.Path != facts.Artifact.SourcePath {
 		return manifestEntry{}, failure(FailureMalformedManifest, prefix+".source", "", "does not match publication or backend provenance")
 	}
 	protocol, err := validateProtocol(raw.Protocol, prefix+".protocol")

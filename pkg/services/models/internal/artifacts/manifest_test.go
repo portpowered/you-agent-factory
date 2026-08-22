@@ -117,6 +117,53 @@ func TestVerifyBytesRejectsTamperedFixtureBytes(t *testing.T) {
 	}
 }
 
+func TestManifestAcceptsEveryRegisteredArtifactBackend(t *testing.T) {
+	t.Parallel()
+
+	backends := []struct {
+		id         string
+		repository string
+		path       string
+	}{
+		{id: "localai-llamacpp", repository: "https://github.com/ggerganov/llama.cpp", path: "backend/cpp/llama-cpp"},
+		{id: "localai-whisper", repository: "https://github.com/ggml-org/whisper.cpp", path: "backend/go/whisper"},
+		{id: "localai-vibevoice", repository: "https://github.com/mudler/vibevoice.cpp", path: "backend/go/vibevoice-cpp"},
+	}
+	for _, backend := range backends {
+		backend := backend
+		t.Run(backend.id, func(t *testing.T) {
+			data := mutatedFixture(t, func(document map[string]any) {
+				publication := document["publication"].(map[string]any)
+				publicationSource := publication["source"].(map[string]any)
+				publicationSource["repository"] = backend.repository
+
+				entry := document["artifacts"].([]any)[0].(map[string]any)
+				manifestBackend := entry["backend"].(map[string]any)
+				manifestBackend["id"] = backend.id
+				manifestBackend["source"].(map[string]any)["repository"] = backend.repository
+				entrySource := entry["source"].(map[string]any)
+				entrySource["repository"] = backend.repository
+				entrySource["path"] = backend.path
+			})
+
+			manifest, err := artifacts.Decode(data)
+			if err != nil {
+				t.Fatalf("Decode(%q): %v", backend.id, err)
+			}
+			descriptor, err := manifest.Select(artifacts.SelectionRequest{
+				Backend: backend.id, OperatingSystem: "linux", Architecture: "amd64",
+				ProtocolRevision: fixtureProtocolRevision, Accelerator: "cpu",
+			})
+			if err != nil {
+				t.Fatalf("Select(%q): %v", backend.id, err)
+			}
+			if descriptor.Backend.ID != backend.id || descriptor.Source.Repository != backend.repository || descriptor.Source.Path != backend.path {
+				t.Fatalf("descriptor = %#v, want registered artifact facts", descriptor)
+			}
+		})
+	}
+}
+
 func TestDecodeRejectsMalformedManifestFacts(t *testing.T) {
 	t.Parallel()
 

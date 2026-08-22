@@ -175,7 +175,7 @@ func (s *service) EnsureModelHost(
 	baseSnapshot := hostSnapshotFromAssets(request.Scope, request.Name, inspection)
 	baseSnapshot = sanitizeManagedHostSnapshot(baseSnapshot, identity)
 
-	if !requiresSupervisedBackend(identity.Backend) {
+	if !requiresRuntimeHostBackend(identity.Backend) {
 		return models.EnsureModelHostResult{
 			Host:    baseSnapshot,
 			Outcome: models.HostEnsureAlreadyReady,
@@ -405,7 +405,7 @@ func (s *service) overlaySupervisedReadiness(
 	snapshot models.ModelHostSnapshot,
 ) models.ModelHostSnapshot {
 	identity := supervisedIdentityForModel(binding.RuntimeConfig(), binding.OperatorModels, modelName)
-	if !requiresSupervisedBackend(identity.Backend) || !inspection.Installed {
+	if !requiresRuntimeHostBackend(identity.Backend) || !inspection.Installed {
 		return snapshot
 	}
 	slot := s.peekRuntimeSlot(runtimeSlotKey(scope, modelName))

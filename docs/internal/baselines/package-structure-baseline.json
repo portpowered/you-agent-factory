@@ -1624,6 +1624,11 @@
     },
     {
       "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/managed_runtime_contract.go",
+      "target": "IsManagedRuntimeBackend"
+    },
+    {
+      "rule": "service-root-exported-function",
       "filePath": "pkg/services/models/catalog_contract.go",
       "target": "ValidateGetModelRequest"
     },

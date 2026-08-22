@@ -102,11 +102,7 @@ type supervisedRuntime struct {
 }
 
 func requiresSupervisedBackend(identity Identity) bool {
-	return canonicalBackendName(identity.Backend) == "LLAMACPP"
-}
-
-func canonicalBackendName(value string) string {
-	return strings.ToUpper(strings.TrimSpace(value))
+	return models.IsManagedRuntimeBackend(identity.Backend)
 }
 
 func (r *supervisedRuntime) readinessOverlay(identity Identity, base ReadinessSnapshot) ReadinessSnapshot {

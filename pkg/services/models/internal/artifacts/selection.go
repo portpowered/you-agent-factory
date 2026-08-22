@@ -1,5 +1,7 @@
 package artifacts
 
+import backendregistry "github.com/portpowered/infinite-you/pkg/services/models/internal/backendregistry"
+
 // Select returns the one artifact compatible with the exact request.
 func (manifest Manifest) Select(request SelectionRequest) (ArtifactDescriptor, error) {
 	if err := validateSelectionRequest(request); err != nil {
@@ -44,12 +46,12 @@ func (manifest Manifest) SelectArtifact(request SelectionRequest) (ArtifactDescr
 
 func validateSelectionRequest(request SelectionRequest) error {
 	if !validToken(request.Backend) {
-		if _, known := supportedBackends[request.Backend]; !known {
+		if _, known := backendregistry.LookupArtifact(request.Backend); !known {
 			return failure(FailureUnknownBackend, "backend", request.Backend, "backend is outside the supported LocalAI set")
 		}
 		return failure(FailureInvalidSelection, "backend", request.Backend, "must be a safe backend identifier")
 	}
-	if _, known := supportedBackends[request.Backend]; !known {
+	if _, known := backendregistry.LookupArtifact(request.Backend); !known {
 		return failure(FailureUnknownBackend, "backend", request.Backend, "backend is outside the supported LocalAI set")
 	}
 	targetID := request.OperatingSystem + "-" + request.Architecture
