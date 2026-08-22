@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -95,6 +96,7 @@ func startLocalAIConformanceServer(
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
+		ServerReadyTimeout:        60 * time.Second,
 		Env:                       functionalHomeEnvironment(home),
 		Edges:                     edges,
 	})
