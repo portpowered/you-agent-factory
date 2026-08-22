@@ -82,6 +82,7 @@ type stubFactoryService struct {
 	runtimehost.Service
 	run                   func(context.Context) error
 	snapshot              func(context.Context) (*interfaces.EngineStateSnapshot[runtimehost.PetriMarkingSnapshot, *runtimehost.Net], error)
+	cleanInvocation       runtimehost.CleanInvocationSnapshot
 	runtimeLogDiagnostics runtimehost.RuntimeLogDiagnostics
 }
 
@@ -107,30 +108,7 @@ func (s stubFactoryService) GetEngineStateSnapshot(ctx context.Context) (*interf
 }
 
 func (s stubFactoryService) CleanInvocationSnapshot(ctx context.Context) (runtimehost.CleanInvocationSnapshot, error) {
-	snapshot, err := s.GetEngineStateSnapshot(ctx)
-	if err != nil {
-		return runtimehost.CleanInvocationSnapshot{}, err
-	}
-	if snapshot == nil {
-		return runtimehost.CleanInvocationSnapshot{}, nil
-	}
-	projected := runtimehost.CleanInvocationSnapshot{}
-	for _, token := range snapshot.Marking.Tokens {
-		if token == nil {
-			continue
-		}
-		workTypeID, stateValue := runtimehost.SplitPlaceID(token.PlaceID)
-		category := runtimehost.StateCategoryProcessing
-		if snapshot.Topology != nil {
-			category = runtimehost.CategoryForState(snapshot.Topology.WorkTypes, workTypeID, stateValue)
-		}
-		projected.Work = append(projected.Work, runtimehost.CleanInvocationWork{
-			WorkID: token.Color.WorkID, Name: token.Color.Name, WorkTypeID: workTypeID,
-			State: stateValue, StateCategory: string(category), Output: string(token.Color.Payload),
-			TraceID: token.Color.TraceID, DataType: string(token.Color.DataType),
-		})
-	}
-	return projected, nil
+	return s.cleanInvocation, nil
 }
 
 func (s stubFactoryService) RuntimeObservation(ctx context.Context) (factoryvisualization.RuntimeObservation, error) {
@@ -157,6 +135,11 @@ func buildTransportTestRuntime(
 	snapshot := completedTransportTestSnapshot()
 	return stubFactoryService{
 		run: func(context.Context) error { return nil },
+		cleanInvocation: runtimehost.CleanInvocationSnapshot{Work: []runtimehost.CleanInvocationWork{{
+			WorkID: "dashboard-render-test-work", Name: "dashboard-render-test-work", WorkTypeID: "task",
+			State: "done", StateCategory: string(runtimehost.StateCategoryTerminal),
+			Output: "mock worker accepted", TraceID: "dashboard-render-test-trace",
+		}}},
 		snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[runtimehost.PetriMarkingSnapshot, *runtimehost.Net], error) {
 			return snapshot, nil
 		},

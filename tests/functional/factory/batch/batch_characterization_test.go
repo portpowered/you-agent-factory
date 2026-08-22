@@ -71,8 +71,8 @@ func TestBTRCP0BatchSuccessCharacterization(t *testing.T) {
 func TestBTRCP0BatchPartialFailureCharacterization(t *testing.T) {
 	provider := newBTRCBatchProvider(true)
 	artifact, executeErr := runBTRCBatch(t, btrcBatchRequest(), provider)
-	if executeErr != nil {
-		t.Fatalf("Process.Execute(partial batch) error = %v", executeErr)
+	if executeErr == nil {
+		t.Fatal("Process.Execute(partial batch) error = nil, want truthful failed-Work result")
 	}
 	if got := provider.CallCount(); got != 2 {
 		t.Fatalf("injected provider calls = %d, want 2", got)

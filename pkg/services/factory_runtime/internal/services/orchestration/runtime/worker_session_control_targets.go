@@ -270,12 +270,11 @@ func processGoneDispatchResult(
 }
 
 func processGoneResultError(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" || strings.EqualFold(value, workers.ErrWorkstationDispatchCanceled.Error()) ||
-		strings.EqualFold(value, "execution canceled") {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized == "" || strings.Contains(normalized, "cancel") || strings.Contains(normalized, "context canceled") {
 		return ""
 	}
-	return value
+	return strings.TrimSpace(value)
 }
 
 type PromptRenderer = runtimePromptRenderer

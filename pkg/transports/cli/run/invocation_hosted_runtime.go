@@ -113,13 +113,9 @@ func (runner historicalReplayRunner) CleanInvocationSnapshot(
 func (runner historicalReplayRunner) ControlWaitToComplete(
 	req factoryruntime.WaitToCompleteRequest,
 ) factoryruntime.WaitToCompleteResult {
-	provider, ok := runner.runner.(interface {
-		ControlWaitToComplete(factoryruntime.WaitToCompleteRequest) factoryruntime.WaitToCompleteResult
-	})
-	if !ok {
-		done := make(chan struct{})
-		close(done)
-		return factoryruntime.WaitToCompleteResult{Done: done}
+	provider, ok := runner.runner.(batchReportProvider)
+	if !ok || provider == nil {
+		return factoryruntime.WaitToCompleteResult{}
 	}
 	return provider.ControlWaitToComplete(req)
 }
@@ -275,7 +271,7 @@ func WithHostedInvocation(
 
 type cleanInvocationSnapshotRunner struct {
 	runner   initializer.LocalRuntimeRunner
-	provider batchReportProvider
+	provider factoryruntime.Service
 }
 
 func (runner cleanInvocationSnapshotRunner) Run(ctx context.Context) error {
@@ -305,15 +301,10 @@ func (runner cleanInvocationSnapshotRunner) CleanInvocationSnapshot(
 func (runner cleanInvocationSnapshotRunner) ControlWaitToComplete(
 	req factoryruntime.WaitToCompleteRequest,
 ) factoryruntime.WaitToCompleteResult {
-	provider, ok := runner.provider.(interface {
-		ControlWaitToComplete(factoryruntime.WaitToCompleteRequest) factoryruntime.WaitToCompleteResult
-	})
-	if !ok {
-		done := make(chan struct{})
-		close(done)
-		return factoryruntime.WaitToCompleteResult{Done: done}
+	if runner.provider == nil {
+		return factoryruntime.WaitToCompleteResult{}
 	}
-	return provider.ControlWaitToComplete(req)
+	return runner.provider.ControlWaitToComplete(req)
 }
 
 func (runner cleanInvocationSnapshotRunner) RuntimeHostBinding(ctx context.Context) (initializer.RuntimeHostBinding, error) {
@@ -359,9 +350,7 @@ func (runner cleanInvocationSnapshotRunner) HistoricalReplay() *factorysessions.
 // beside the neutral lifecycle runner for finite --work batch reporting.
 func WithCleanInvocationSnapshot(
 	runner initializer.LocalRuntimeRunner,
-	provider interface {
-		CleanInvocationSnapshot(context.Context) (factoryruntime.CleanInvocationSnapshot, error)
-	},
+	provider factoryruntime.Service,
 ) initializer.LocalRuntimeRunner {
 	if runner == nil || provider == nil {
 		return runner
@@ -734,6 +723,7 @@ const batchFailureCode = "RUN_BATCH_FAILED"
 
 type batchReportProvider interface {
 	CleanInvocationSnapshot(context.Context) (factoryruntime.CleanInvocationSnapshot, error)
+	ControlWaitToComplete(factoryruntime.WaitToCompleteRequest) factoryruntime.WaitToCompleteResult
 }
 
 type batchReport struct {
