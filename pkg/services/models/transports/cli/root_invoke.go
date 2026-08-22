@@ -108,7 +108,10 @@ func (service *rootService) invokeInScope(
 	if validationOnlyModelInvoke(cfg) {
 		return writeValidationOnlyModelInvokeResponse(cfg.Output, modelName, operation)
 	}
-	handled, err := service.tryJoinedInvocation(cfg, scope, modelName, operation, text, inputs, catalog)
+	if !shouldUseGenericCLIInvocation(cfg, catalog, operation) {
+		return service.invokePreparedLease(cfg, scope, modelName, operation, text, catalog)
+	}
+	handled, err := service.invokeGenericInScope(cfg, scope, modelName, operation, text, inputs, catalog)
 	if err != nil {
 		return err
 	}
@@ -156,7 +159,14 @@ func (service *rootService) refreshInvokeReadiness(
 	return modelinference.Detail{}, mapModelsClientError(err)
 }
 
-func (service *rootService) tryJoinedInvocation(
+func shouldUseGenericCLIInvocation(cfg InvokeConfig, catalog modelinference.Detail, operation string) bool {
+	if cfg.JSON || len(cfg.InputMappings) > 0 || len(cfg.ParameterSpecs) > 0 || len(cfg.OutputMappings) > 0 {
+		return true
+	}
+	return genericCLIInlineOutput(cfg, catalog, operation)
+}
+
+func (service *rootService) invokeGenericInScope(
 	cfg InvokeConfig,
 	scope modelinference.RuntimeScopeRef,
 	modelName string,
@@ -172,26 +182,32 @@ func (service *rootService) tryJoinedInvocation(
 	}
 	parameters, err := parseGenericCLIParameterSpecs(cfg.ParameterSpecs)
 	if err != nil {
-		return false, err
+		return true, err
 	}
 	request := joinedCLIInvocationRequest(scope, modelName, operation, text, inputs, parameters, catalog)
-	joinedResult, err := service.models.InvokeModel(cfg.Context, request)
-	if err != nil {
-		if len(inputs) == 0 && len(parameters) == 0 &&
-			(errors.Is(err, modelinference.ErrUnsupportedOperation) ||
-				errors.Is(err, modelinference.ErrModelReferenceUnknown)) {
-			return false, nil
-		}
-		return false, mapModelsClientError(err)
+	result, err := service.models.InvokeModel(cfg.Context, request)
+	if err == nil {
+		return true, service.writeGenericCLIInvocationResult(cfg, result, catalog, operation, text)
 	}
-	return true, service.writeJoinedInvocation(cfg, catalog, operation, joinedResult, text)
+	if len(inputs) > 0 || len(parameters) > 0 {
+		return true, mapModelsRootError(err)
+	}
+	if !genericCLIInvocationFallbackError(err) {
+		return true, mapModelsRootError(err)
+	}
+	return false, nil
 }
 
-func (service *rootService) writeJoinedInvocation(
+func genericCLIInvocationFallbackError(err error) bool {
+	return errors.Is(err, modelinference.ErrUnsupportedOperation) ||
+		errors.Is(err, modelinference.ErrModelReferenceUnknown)
+}
+
+func (service *rootService) writeGenericCLIInvocationResult(
 	cfg InvokeConfig,
+	result modelinference.InvokeModelResult,
 	catalog modelinference.Detail,
 	operation string,
-	result modelinference.InvokeModelResult,
 	text string,
 ) error {
 	if len(cfg.OutputMappings) > 0 {

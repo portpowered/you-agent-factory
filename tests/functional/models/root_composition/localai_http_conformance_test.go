@@ -322,111 +322,108 @@ func conformanceModelName(operation string) string {
 }
 
 func assertConformanceResponse(row conformance.Row, response factoryapi.GenericModelInvocationResponse) error {
-	findOutput := func(name string) (factoryapi.ModelInvocationOutput, error) {
-		for _, output := range response.Outputs {
-			if output.Name == name {
-				return output, nil
-			}
-		}
-		return factoryapi.ModelInvocationOutput{}, fmt.Errorf("%s response is missing %q output", row.Label, name)
+	switch row.Operation.Name {
+	case models.OperationOMNI:
+		return assertOmniResponse(row, response)
+	case models.OperationEMBED:
+		return assertEmbeddingResponse(row, response)
+	case models.OperationTTS:
+		return assertTTSResponse(row, response)
+	case models.OperationASR:
+		return assertASRResponse(row, response)
+	default:
+		return fmt.Errorf("%s has no semantic assertion", row.Label)
 	}
-	content := func(output factoryapi.ModelInvocationOutput) (string, error) {
+}
+
+func conformanceOutput(row conformance.Row, response factoryapi.GenericModelInvocationResponse, name string) (string, error) {
+	for _, output := range response.Outputs {
+		if output.Name != name {
+			continue
+		}
 		if output.Content == nil {
-			return "", fmt.Errorf("%s output %q has no inline content", row.Label, output.Name)
+			return "", fmt.Errorf("%s output %q has no inline content", row.Label, name)
 		}
 		return *output.Content, nil
 	}
+	return "", fmt.Errorf("%s response is missing %q output", row.Label, name)
+}
 
-	switch row.Operation.Name {
-	case models.OperationOMNI:
-		output, err := findOutput("text")
-		if err != nil {
-			return err
+func assertOmniResponse(row conformance.Row, response factoryapi.GenericModelInvocationResponse) error {
+	got, err := conformanceOutput(row, response, "text")
+	if err != nil {
+		return err
+	}
+	var prompt string
+	var images, audios, videos []string
+	for _, input := range row.Inputs {
+		switch input.Modality {
+		case models.ModalityText:
+			prompt = input.Content
+		case models.ModalityImage:
+			images = append(images, input.Content)
+		case models.ModalityAudio:
+			audios = append(audios, input.Content)
+		case models.ModalityVideo:
+			videos = append(videos, input.Content)
 		}
-		got, err := content(output)
-		if err != nil {
-			return err
-		}
-		var prompt string
-		var images, audios, videos []string
-		for _, input := range row.Inputs {
-			switch input.Modality {
-			case models.ModalityText:
-				prompt = input.Content
-			case models.ModalityImage:
-				images = append(images, input.Content)
-			case models.ModalityAudio:
-				audios = append(audios, input.Content)
-			case models.ModalityVideo:
-				videos = append(videos, input.Content)
-			}
-		}
-		if want := localai.ExpectedOmniText(prompt, images, audios, videos); got != want {
-			return fmt.Errorf("%s OMNI text = %q, want %q", row.Label, got, want)
-		}
-	case models.OperationEMBED:
-		output, err := findOutput("embedding")
-		if err != nil {
-			return err
-		}
-		got, err := content(output)
-		if err != nil {
-			return err
-		}
-		var values []float32
-		if err := json.Unmarshal([]byte(got), &values); err != nil {
-			return fmt.Errorf("%s embedding JSON: %w", row.Label, err)
-		}
-		if len(values) != 5 || values[0] == 0 {
-			return fmt.Errorf("%s embedding dimensions/value = %d/%v, want 5/non-zero", row.Label, len(values), values)
-		}
-	case models.OperationTTS:
-		output, err := findOutput("audio")
-		if err != nil {
-			return err
-		}
-		got, err := content(output)
-		if err != nil {
-			return err
-		}
-		audio, err := base64.StdEncoding.DecodeString(got)
-		if err != nil {
-			return fmt.Errorf("%s audio base64: %w", row.Label, err)
-		}
-		if len(audio) <= 44 || string(audio[:4]) != "RIFF" || string(audio[8:12]) != "WAVE" || string(audio[36:40]) != "data" {
-			return fmt.Errorf("%s audio is not a non-trivial WAV (%d bytes)", row.Label, len(audio))
-		}
-	case models.OperationASR:
-		transcript, err := findOutput("transcript")
-		if err != nil {
-			return err
-		}
-		transcriptText, err := content(transcript)
-		if err != nil {
-			return err
-		}
-		if transcriptText != localai.FixtureTranscript {
-			return fmt.Errorf("%s transcript = %q, want %q", row.Label, transcriptText, localai.FixtureTranscript)
-		}
-		segments, err := findOutput("segments")
-		if err != nil {
-			return err
-		}
-		segmentJSON, err := content(segments)
-		if err != nil {
-			return err
-		}
-		var values []struct {
-			Text string `json:"text"`
-		}
-		if err := json.Unmarshal([]byte(segmentJSON), &values); err != nil {
-			return fmt.Errorf("%s segments JSON: %w", row.Label, err)
-		}
-		if len(values) == 0 || values[0].Text != localai.FixtureTranscriptSegment {
-			return fmt.Errorf("%s segments = %#v, want transcript segment", row.Label, values)
-		}
-	default:
-		return fmt.Errorf("%s has no semantic assertion", row.Label)
+	}
+	if want := localai.ExpectedOmniText(prompt, images, audios, videos); got != want {
+		return fmt.Errorf("%s OMNI text = %q, want %q", row.Label, got, want)
+	}
+	return nil
+}
+
+func assertEmbeddingResponse(row conformance.Row, response factoryapi.GenericModelInvocationResponse) error {
+	got, err := conformanceOutput(row, response, "embedding")
+	if err != nil {
+		return err
+	}
+	var values []float32
+	if err := json.Unmarshal([]byte(got), &values); err != nil {
+		return fmt.Errorf("%s embedding JSON: %w", row.Label, err)
+	}
+	if len(values) != 5 || values[0] == 0 {
+		return fmt.Errorf("%s embedding dimensions/value = %d/%v, want 5/non-zero", row.Label, len(values), values)
+	}
+	return nil
+}
+
+func assertTTSResponse(row conformance.Row, response factoryapi.GenericModelInvocationResponse) error {
+	got, err := conformanceOutput(row, response, "audio")
+	if err != nil {
+		return err
+	}
+	audio, err := base64.StdEncoding.DecodeString(got)
+	if err != nil {
+		return fmt.Errorf("%s audio base64: %w", row.Label, err)
+	}
+	if len(audio) <= 44 || string(audio[:4]) != "RIFF" || string(audio[8:12]) != "WAVE" || string(audio[36:40]) != "data" {
+		return fmt.Errorf("%s audio is not a non-trivial WAV (%d bytes)", row.Label, len(audio))
+	}
+	return nil
+}
+
+func assertASRResponse(row conformance.Row, response factoryapi.GenericModelInvocationResponse) error {
+	transcript, err := conformanceOutput(row, response, "transcript")
+	if err != nil {
+		return err
+	}
+	if transcript != localai.FixtureTranscript {
+		return fmt.Errorf("%s transcript = %q, want %q", row.Label, transcript, localai.FixtureTranscript)
+	}
+	segmentJSON, err := conformanceOutput(row, response, "segments")
+	if err != nil {
+		return err
+	}
+	var values []struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal([]byte(segmentJSON), &values); err != nil {
+		return fmt.Errorf("%s segments JSON: %w", row.Label, err)
+	}
+	if len(values) == 0 || values[0].Text != localai.FixtureTranscriptSegment {
+		return fmt.Errorf("%s segments = %#v, want transcript segment", row.Label, values)
 	}
 	return nil
 }
