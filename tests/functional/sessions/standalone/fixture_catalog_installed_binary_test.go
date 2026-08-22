@@ -1,4 +1,4 @@
-package process_test
+package standalone_test
 
 import (
 	"bufio"
@@ -381,6 +381,22 @@ func decodeToolResult(t testing.TB, toolName, text string, target any) {
 	if err := json.Unmarshal(envelope.Result, target); err != nil {
 		t.Fatalf("decode %s tool result: %v; text=%s", toolName, err, text)
 	}
+}
+
+func buildYouBinary(t testing.TB, ctx context.Context, repoRoot string) string {
+	t.Helper()
+	binaryName := "you"
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+	binaryPath := filepath.Join(t.TempDir(), binaryName)
+	command := exec.CommandContext(ctx, "go", "build", "-o", binaryPath, "./cmd/factory")
+	command.Dir = repoRoot
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("build you CLI: %v\n%s", err, output)
+	}
+	return binaryPath
 }
 
 func copyInstalledYouBinary(t testing.TB, sourcePath string) string {
