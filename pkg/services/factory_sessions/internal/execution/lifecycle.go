@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"strings"
 	"time"
 
@@ -33,6 +34,60 @@ func ProjectedLifecycleControlStatus(lifecycleControlStatus string, factoryState
 		return trimmed
 	}
 	return LifecycleStatusFromFactoryRuntimeState(factoryState)
+}
+
+// HasDurableState performs the read-only persistence probe used while opening
+// the current board. It intentionally does not apply interrupted-session
+// resume validation or cache the snapshot: startup only needs to distinguish a
+// genuinely new session from a fresh process with prior durable state before
+// deciding whether missing board history may be treated as an initial open.
+func (s *JavaScriptRuntimeService) HasDurableState(ctx context.Context, sessionID string) (bool, error) {
+	if s == nil {
+		return false, ErrSessionNotFound
+	}
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	id, err := NormalizeSessionID(sessionID)
+	if err != nil {
+		return false, err
+	}
+
+	s.mu.RLock()
+	persistence := s.persistence
+	s.mu.RUnlock()
+	if persistence == nil {
+		return false, nil
+	}
+
+	snapshot, err := persistence.Load(id)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, nil
+		}
+		return false, &ResumeError{
+			Outcome:   ResumeOutcomeCorruptedPersistence,
+			SessionID: id,
+			Message:   "persisted session snapshot could not be read",
+		}
+	}
+
+	var persisted PersistedRuntimeSessionState
+	if err := json.Unmarshal(snapshot, &persisted); err != nil {
+		return false, &ResumeError{
+			Outcome:   ResumeOutcomeCorruptedPersistence,
+			SessionID: id,
+			Message:   "persisted session snapshot is corrupted and cannot be inspected",
+		}
+	}
+	if strings.TrimSpace(persisted.Session.SessionID) != id {
+		return false, &ResumeError{
+			Outcome:   ResumeOutcomeCorruptedPersistence,
+			SessionID: id,
+			Message:   "persisted session snapshot has no matching session identity",
+		}
+	}
+	return true, nil
 }
 
 // Close cancels every asynchronous durable session owned by this service and
