@@ -197,11 +197,16 @@ jobs:
       pull-requests: write
     env:
       PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-      # Keep both coverage matrix lanes report-only for package-floor and
-      # manifest-completeness findings while the test corpus is rebuilt. The
-      # Makefile default remains blocking, so removing this one setting
-      # restores enforcement for local and hosted coverage runs.
-      GO_COVERAGE_FLOOR_POLICY: advisory
+      # Package-floor enforcement is BLOCKING. Both coverage lanes inherit the
+      # Makefile default (GO_COVERAGE_FLOOR_POLICY ?= blocking), so a package
+      # that drops below its floor fails CI and the floor must be updated
+      # deliberately in the manifest rather than drifting silently.
+      #
+      # A measured package with no manifest entry is NOT a failure: it is held
+      # to its lane's default floor (cmd/gocoveragecheck/manifest_default_floor.go),
+      # so adding a package does not require a manifest edit.
+      #
+      # Do not reintroduce an advisory override here.
     strategy:
       fail-fast: false
       matrix:
