@@ -788,10 +788,15 @@ func (r *factoryWorldReducer) applyDispatchInterruptedEvent(event interfaces.Fac
 		r.interruptedDispatchIDs = make(map[string]struct{})
 	}
 	r.interruptedDispatchIDs[dispatchID] = struct{}{}
+	if dispatch, ok := r.stateValue.ActiveDispatches[dispatchID]; ok {
+		delete(r.stateValue.ActiveDispatches, dispatchID)
+		r.rearmInterruptedDispatch(dispatch)
+	}
 	state := interfaces.FactorySessionDispatchState{
-		ID:     dispatchID,
-		Status: string(interfaces.FactoryDispatchStatusInterrupted),
-		Phase:  dispatchLifecyclePhase(event.Context),
+		ID:             dispatchID,
+		Status:         string(interfaces.FactoryDispatchStatusInterrupted),
+		Phase:          dispatchLifecyclePhase(event.Context),
+		RelatedWorkIDs: cloneStringSlice(sliceValue(event.Context.WorkIDs)),
 	}
 	if payload.Reason != "" {
 		state.FailureDetail = &interfaces.FactorySessionDispatchFailureDetail{

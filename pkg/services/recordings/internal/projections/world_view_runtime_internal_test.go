@@ -266,6 +266,82 @@ func TestCanonicalDispatchResponseReconstructsCompletionAndReleasesResources(t *
 	}
 }
 
+func TestDispatchInterruptedRearmsNonTerminalInputsAndResources(t *testing.T) {
+	t.Parallel()
+
+	reducer := newFactoryWorldReducer(3)
+	dispatchID := "dispatch-interrupted"
+	live := work.FactoryWorkItem{ID: "work-live", WorkTypeID: "task", State: "processing", TraceID: "trace-live"}
+	fallback := work.FactoryWorkItem{ID: "work-fallback", WorkTypeID: "task", TraceID: "trace-fallback"}
+	terminal := work.FactoryWorkItem{ID: "work-terminal", WorkTypeID: "task", State: "done"}
+	failed := work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", State: "failed"}
+	noPlace := work.FactoryWorkItem{ID: "work-no-place", WorkTypeID: "task"}
+	reducer.stateValue.WorkItemsByID[live.ID] = live
+	reducer.stateValue.WorkItemsByID[fallback.ID] = fallback
+	reducer.stateValue.WorkItemsByID[terminal.ID] = terminal
+	reducer.stateValue.WorkItemsByID[failed.ID] = failed
+	reducer.stateValue.TerminalWorkByID[terminal.ID] = interfaces.FactoryTerminalWork{WorkItem: terminal, Status: "TERMINAL"}
+	reducer.stateValue.FailedWorkItemsByID[failed.ID] = failed
+	reducer.workPlaces[fallback.ID] = "task:ready"
+	reducer.stateValue.ActiveDispatches[dispatchID] = interfaces.FactoryWorldDispatch{
+		DispatchID: dispatchID,
+		Inputs: []interfaces.WorkstationInput{
+			{TokenID: live.ID, PlaceID: "task:processing", WorkItem: &live},
+			{TokenID: fallback.ID, WorkItem: nil},
+			{TokenID: terminal.ID, PlaceID: "task:done", WorkItem: &terminal},
+			{TokenID: failed.ID, PlaceID: "task:failed", WorkItem: &failed},
+			{TokenID: noPlace.ID, WorkItem: &noPlace},
+			{TokenID: "", PlaceID: "task:processing"},
+		},
+		Resources: []interfaces.FactoryResourceUnit{
+			{ResourceID: "gpu", TokenID: "gpu-token", PlaceID: "gpu:held"},
+			{ResourceID: "cpu", TokenID: "cpu-token"},
+			{ResourceID: "ignored", TokenID: ""},
+		},
+	}
+	reason := "daemon restart interrupted process-bound attempt"
+	event := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeDispatchInterrupted, interfaces.FactoryEventContext{
+		DispatchID: &dispatchID,
+		EventTime:  time.Date(2026, time.July, 16, 6, 0, 0, 0, time.UTC),
+		Tick:       3,
+	}, interfaces.DispatchInterruptedEventPayload{Reason: reason})
+
+	if err := reducer.applyDispatchInterruptedEvent(event); err != nil {
+		t.Fatalf("applyDispatchInterruptedEvent: %v", err)
+	}
+	if _, active := reducer.stateValue.ActiveDispatches[dispatchID]; active {
+		t.Fatal("interrupted dispatch remains active")
+	}
+	if got := reducer.tokenPlaces[live.ID]; got != "task:processing" {
+		t.Fatalf("re-armed live Work place = %q, want task:processing", got)
+	}
+	if got := reducer.tokenPlaces[fallback.ID]; got != "task:ready" {
+		t.Fatalf("fallback Work place = %q, want task:ready", got)
+	}
+	if got := reducer.tokenPlaces["gpu-token"]; got != "gpu:held" {
+		t.Fatalf("explicit resource place = %q, want gpu:held", got)
+	}
+	if got := reducer.tokenPlaces["cpu-token"]; got != "cpu:available" {
+		t.Fatalf("fallback resource place = %q, want cpu:available", got)
+	}
+	if _, present := reducer.tokenPlaces[terminal.ID]; present {
+		t.Fatalf("terminal Work was re-armed: %#v", reducer.tokenPlaces)
+	}
+	if _, present := reducer.tokenPlaces[failed.ID]; present {
+		t.Fatalf("failed Work was re-armed: %#v", reducer.tokenPlaces)
+	}
+	if _, present := reducer.tokenPlaces[noPlace.ID]; present {
+		t.Fatalf("Work without a logical place was re-armed: %#v", reducer.tokenPlaces)
+	}
+	if reducer.stateValue.ActiveWorkItemsByID[live.ID].ID != live.ID ||
+		reducer.stateValue.ActiveWorkItemsByID[fallback.ID].ID != fallback.ID {
+		t.Fatalf("active Work after interruption = %#v", reducer.stateValue.ActiveWorkItemsByID)
+	}
+	if got := reducer.stateValue.JavaScriptRuntime.Dispatches[0].Status; got != string(interfaces.FactoryDispatchStatusInterrupted) {
+		t.Fatalf("interrupted dispatch projection status = %q, want %q", got, interfaces.FactoryDispatchStatusInterrupted)
+	}
+}
+
 type worldViewProjectionFixture struct {
 	factory   *factoryapi.Factory
 	state     interfaces.FactoryWorldState

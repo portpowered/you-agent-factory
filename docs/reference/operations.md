@@ -14,8 +14,10 @@ must distinguish an idle queue from completed Work.
 For the complete command and output-mode reference, use `you docs run`. For
 the submitted-Work event schema, use `you docs work`; for worker and
 workstation prompt fields, use `you docs workers` and `you docs workstations`.
-This page owns the operational lifetime and restart boundary; it does not add
-a storage engine or change runtime behavior.
+This page owns the operational lifetime and restart boundary. When a Factory
+Session has a configured Recordings record path, startup restores its retained
+current-board state through the public Recordings history contract before the
+session is ready; this does not make arbitrary in-memory queues durable.
 
 ## Use a continuous server for real pipelines
 
@@ -449,6 +451,36 @@ passed to `--resume`. Unfinalized recordings with a valid complete event prefix
 are supported. A truncated final event-stream block can be skipped after
 earlier complete events. Mid-stream corruption and recordings without a valid
 complete event are rejected.
+When the Factory Session has a configured Recordings record path, startup
+reconstructs the latest retained current-board state before accepting Work or
+starting normal scheduling. Work identity, request identity, payload,
+lineage, relations, and logical state are restored for the current session, so
+`you work list` and `you work show` can read the board without an explicit
+`--resume` invocation.
+
+An attempt whose dispatch or Worker Session was active when the daemon stopped
+is not resumed as a live process. Startup records a daemon-restart interruption
+for that attempt, preserves its dispatch and Worker Session history, and
+reports the old Worker Session as terminal process-gone rather than `RUNNING`.
+Associated non-terminal Work is re-armed at its last durable logical state;
+guards, dependencies, retry policy, and capacity decide whether and when a new
+dispatch becomes eligible. Work with no in-flight attempt and terminal Work
+are not changed by this reconciliation. No duplicate live attempt is restored.
+
+Verify recovery with the same session target used for submission:
+
+1. Run `you work list` and `you work show <work-id>` to confirm Work identity,
+   state, payload, and relations.
+2. Run `you session dispatches <session-id>` or inspect the Factory Session
+   dispatch API to confirm the prior dispatch is interrupted, not running.
+3. Read the Factory Session events or Worker Session observation when the
+   interruption reason and original attempt identity are needed.
+
+If no current-board Recording was configured, the live Factory Session queue
+remains process-local and in memory. Inspect durable artifacts first, then
+resubmit through the normal Work ingress while preserving each Work's
+authored `name`; a resubmission is a new attempt and is not automatic replay
+of the old queue.
 
 Use this recovery sequence:
 

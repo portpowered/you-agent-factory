@@ -41,6 +41,12 @@ type SessionBuildSpec struct {
 	// Recordings. Factory Runtime converts only its recorded Work placement;
 	// current-definition resources are always generated during construction.
 	RestoredWorldState *factorydefinitions.FactoryWorldState
+	// SkipRestoredDispatchReconciliation is true only for deterministic replay.
+	// Replay seeds the recorded world state so its events can be reproduced, but
+	// must not classify those recorded dispatches as processes lost to a daemon
+	// restart. Live successor sessions leave this false so process-bound
+	// attempts are interrupted and re-armed normally.
+	SkipRestoredDispatchReconciliation bool
 	// ReplayCommandRunner is kept separate from the selected production
 	// command edge so direct Workers execution can reproduce recorded script
 	// effects even when normal composition supplied a host runner.

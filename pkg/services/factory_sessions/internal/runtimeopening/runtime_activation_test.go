@@ -2,20 +2,296 @@ package runtimeopening
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestRestoreCurrentBoardStatePreservesDetachedMixedWorkProjection(t *testing.T) {
+	t.Parallel()
+
+	scope := recordings.CanonicalEventScope{FactorySessionID: "~default"}
+	want := factorydefinitions.FactoryWorldState{
+		Tick: 19,
+		WorkRequestsByID: map[string]factorydefinitions.WorkRequestPayload{
+			"request-batch-1": {
+				RequestID: "request-batch-1",
+				WorkItems: []work.FactoryWorkItem{{ID: "work-init"}, {ID: "work-processing"}, {ID: "work-awaiting-ci"}},
+			},
+		},
+		WorkItemsByID: map[string]work.FactoryWorkItem{
+			"work-init": {
+				ID: "work-init", WorkTypeID: "task", State: "init", DisplayName: "Initialize",
+				TraceID: "trace-batch", Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "first"}},
+				Tags: map[string]string{"lane": "one"}, StructuredResult: nil, StructuredResultPresent: true,
+			},
+			"work-processing": {
+				ID: "work-processing", WorkTypeID: "task", State: "PROCESSING", DisplayName: "Process",
+				TraceID: "trace-batch", ParentID: "work-init", StructuredResult: map[string]any{"step": 2},
+			},
+			"work-awaiting-ci": {
+				ID: "work-awaiting-ci", WorkTypeID: "task", State: "awaiting-ci", DisplayName: "Await CI",
+				TraceID: "trace-batch", Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "third"}},
+			},
+		},
+		RelationsByWorkID: map[string][]work.FactoryRelation{
+			"work-processing": {{
+				Type: string(work.WorkRelationDependsOn), TargetWorkID: "work-init", RequiredState: "done",
+			}},
+		},
+		PlaceOccupancyByID: map[string]factorydefinitions.FactoryPlaceOccupancy{
+			"task:init":        {PlaceID: "task:init", WorkItemIDs: []string{"work-init"}},
+			"task:PROCESSING":  {PlaceID: "task:PROCESSING", WorkItemIDs: []string{"work-processing"}},
+			"task:awaiting-ci": {PlaceID: "task:awaiting-ci", WorkItemIDs: []string{"work-awaiting-ci"}},
+		},
+	}
+	payload, err := json.Marshal(want)
+	if err != nil {
+		t.Fatalf("marshal world state: %v", err)
+	}
+	var expected factorydefinitions.FactoryWorldState
+	if err := json.Unmarshal(payload, &expected); err != nil {
+		t.Fatalf("unmarshal expected world state: %v", err)
+	}
+	reader := &historicalBoardReaderStub{
+		result: recordings.HistoricalRecordingQueryResult{
+			WorldState: recordings.WorldStateView{
+				SchemaVersion: recordings.WorldStateViewSchemaV1,
+				Scope:         scope,
+				Payload:       string(payload),
+			},
+		},
+	}
+
+	first, err := restoreCurrentBoardState(reader, "board.json", "~default", false)
+	if err != nil {
+		t.Fatalf("first restore: %v", err)
+	}
+	if first == nil || !reflect.DeepEqual(*first, expected) {
+		t.Fatalf("first restored state = %#v, want %#v", first, expected)
+	}
+	first.WorkItemsByID["work-init"] = work.FactoryWorkItem{ID: "mutated"}
+
+	second, err := restoreCurrentBoardState(reader, "board.json", "~default", false)
+	if err != nil {
+		t.Fatalf("second restore: %v", err)
+	}
+	if second == nil || !reflect.DeepEqual(*second, expected) {
+		t.Fatalf("second restored state = %#v, want original state", second)
+	}
+	if reader.calls != 2 {
+		t.Fatalf("history query calls = %d, want 2", reader.calls)
+	}
+	if reader.request.Recording.Scope != scope ||
+		reader.request.Recording.Artifact != "board.json" ||
+		reader.request.Recording.RecordingID != "current-board/~default" {
+		t.Fatalf("history query request = %#v", reader.request)
+	}
+}
+
+func TestRestoreCurrentBoardStateFailsClosedForCorruptHistory(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		stub historicalBoardReaderStub
+		want string
+	}{
+		{
+			name: "query failure",
+			stub: historicalBoardReaderStub{err: errors.New("corrupt canonical history")},
+			want: "restore current Factory Session board from \"board.json\"",
+		},
+		{
+			name: "incompatible view",
+			stub: historicalBoardReaderStub{result: recordings.HistoricalRecordingQueryResult{
+				WorldState: recordings.WorldStateView{SchemaVersion: "unknown", Scope: recordings.CanonicalEventScope{FactorySessionID: "~default"}, Payload: "{}"},
+			}},
+			want: "incompatible world-state view",
+		},
+		{
+			name: "invalid payload",
+			stub: historicalBoardReaderStub{result: recordings.HistoricalRecordingQueryResult{
+				WorldState: recordings.WorldStateView{SchemaVersion: recordings.WorldStateViewSchemaV1, Scope: recordings.CanonicalEventScope{FactorySessionID: "~default"}, Payload: "not-json"},
+			}},
+			want: "decode world state",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := restoreCurrentBoardState(&tc.stub, "board.json", "~default", false)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("restore error = %v, want substring %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestRestoreCurrentBoardStateTreatsMissingArtifactAsInitialOpen(t *testing.T) {
+	t.Parallel()
+
+	state, err := restoreCurrentBoardState(&historicalBoardReaderStub{err: &recordings.HistoricalRecordingQueryError{
+		Kind: recordings.HistoricalRecordingQueryErrorMissingHistory,
+	}}, "board.json", "~default", true)
+	if err != nil {
+		t.Fatalf("missing history restore error = %v, want nil", err)
+	}
+	if state != nil {
+		t.Fatalf("missing history state = %#v, want nil", state)
+	}
+}
+
+func TestRestoreCurrentBoardStateRejectsMissingArtifactAfterDurableState(t *testing.T) {
+	t.Parallel()
+
+	allowMissing, err := currentBoardHistoryMayBeUninitialized(
+		context.Background(),
+		&durableSessionStateStub{hasDurableState: true},
+		"~default",
+	)
+	if err != nil {
+		t.Fatalf("inspect durable session state: %v", err)
+	}
+	if allowMissing {
+		t.Fatal("durable session state marked prior state as uninitialized")
+	}
+	_, err = restoreCurrentBoardState(&historicalBoardReaderStub{err: &recordings.HistoricalRecordingQueryError{
+		Kind: recordings.HistoricalRecordingQueryErrorMissingHistory,
+	}}, "board.json", "~default", allowMissing)
+	if err == nil || !strings.Contains(err.Error(), "durable state exists but recording history is missing") {
+		t.Fatalf("missing history after durable state error = %v, want fail-closed diagnostic", err)
+	}
+}
+
+func TestCurrentBoardHistoryMayBeUninitializedUsesPersistenceBackedStateProbe(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name              string
+		hasDurableState   bool
+		wantUninitialized bool
+	}{
+		{name: "fresh factory", hasDurableState: false, wantUninitialized: true},
+		{name: "durable factory", hasDurableState: true, wantUninitialized: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stub := durableSessionStateStub{hasDurableState: tc.hasDurableState}
+			got, err := currentBoardHistoryMayBeUninitialized(context.Background(), &stub, "~default")
+			if err != nil {
+				t.Fatalf("currentBoardHistoryMayBeUninitialized: %v", err)
+			}
+			if got != tc.wantUninitialized {
+				t.Fatalf("uninitialized = %t, want %t", got, tc.wantUninitialized)
+			}
+		})
+	}
+}
+
+func TestCurrentBoardHistoryMayBeUninitializedUsesFreshPersistentOwnerBeforeMissingBoardRead(t *testing.T) {
+	t.Parallel()
+	const sessionID = "~default"
+	projectRoot := t.TempDir()
+	store, err := runtimepersist.NewDirectoryStore(
+		runtimepersist.DirForProjectRoot(projectRoot),
+		platformfilesystem.Local{},
+	)
+	if err != nil {
+		t.Fatalf("NewDirectoryStore: %v", err)
+	}
+	firstOwner := newRuntimeOpeningPersistentOwner(projectRoot, store)
+	if err := firstOwner.RecordPetriTokenMutations(sessionID, []factorydefinitions.TokenMutationRecord{{}}); err != nil {
+		t.Fatalf("RecordPetriTokenMutations: %v", err)
+	}
+
+	// The fresh owner has no in-memory session state. The missing board reader
+	// must therefore be evaluated against the snapshot left by the first owner.
+	freshOwner := newRuntimeOpeningPersistentOwner(projectRoot, store)
+	allowMissing, err := currentBoardHistoryMayBeUninitialized(
+		context.Background(),
+		freshOwner,
+		sessionID,
+	)
+	if err != nil {
+		t.Fatalf("inspect fresh persistent owner: %v", err)
+	}
+	if allowMissing {
+		t.Fatal("missing board history after a prior owner was accepted as initial open")
+	}
+	_, err = restoreCurrentBoardState(&historicalBoardReaderStub{err: &recordings.HistoricalRecordingQueryError{
+		Kind: recordings.HistoricalRecordingQueryErrorMissingHistory,
+	}}, "missing-board.json", sessionID, allowMissing)
+	if err == nil || !strings.Contains(err.Error(), "durable state exists but recording history is missing") {
+		t.Fatalf("missing board history error = %v, want fail-closed diagnostic", err)
+	}
+}
+
+func newRuntimeOpeningPersistentOwner(
+	projectRoot string,
+	store runtimepersist.Store,
+) *factorysessionexecution.JavaScriptRuntimeService {
+	return factorysessionexecution.NewJavaScriptRuntimeService(
+		projectRoot,
+		factorysessionexecution.ChildExecutorModeFake,
+		nil,
+		store,
+		openingCoordinatorClock{},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		factoryruntime.JavaScriptWorkerSettings{},
+		nil,
+		func() string { return "runtime-opening-test-session" },
+		nil,
+		nil,
+		nil,
+	)
+}
+
+type durableSessionStateStub struct {
+	hasDurableState bool
+}
+
+func (stub *durableSessionStateStub) HasDurableState(
+	_ context.Context,
+	_ string,
+) (bool, error) {
+	return stub.hasDurableState, nil
+}
+
+type historicalBoardReaderStub struct {
+	result  recordings.HistoricalRecordingQueryResult
+	err     error
+	calls   int
+	request recordings.HistoricalRecordingQueryRequest
+}
+
+func (stub *historicalBoardReaderStub) QueryHistoricalRecording(
+	request recordings.HistoricalRecordingQueryRequest,
+) (recordings.HistoricalRecordingQueryResult, error) {
+	stub.calls++
+	stub.request = request
+	return stub.result, stub.err
+}
 
 func TestRuntimeActivationUsesEngineServiceForDetachedHandoff(t *testing.T) {
 	t.Parallel()

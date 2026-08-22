@@ -112,12 +112,16 @@ func (e *FactoryEngine) processGeneratedSubmissionBatches(
 		if e.skipGeneratedSubmissionRequest(requestID, source) {
 			continue
 		}
+		recordedNormalized := append([]workdomain.SubmitRequest(nil), normalized...)
 		normalized, replacedSeededWorkIDs := e.dedupeSeededReplaySubmissions(normalized, dedupeSeededReplay)
 		tokens, err := e.tokensFromGeneratedSubmissions(normalized)
 		if err != nil {
 			return total, err
 		}
-		e.recordGeneratedSubmissionRequest(requestID, source, batch, normalized)
+		// Replay may acknowledge a seeded Work without injecting a second
+		// token. Keep the original normalized request in canonical history even
+		// when every token was already present in the restored marking.
+		e.recordGeneratedSubmissionRequest(requestID, source, batch, recordedNormalized)
 		e.recordGeneratedSubmissionTokens(source, normalized, tokens, replacedSeededWorkIDs)
 		if source == externalSubmissionHookName {
 			e.pendingProjectionRequestIDs[requestID] = struct{}{}

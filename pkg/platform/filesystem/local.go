@@ -9,7 +9,12 @@ import (
 	"path/filepath"
 )
 
-type Local struct{}
+// Local exposes the host filesystem effects selected by Wire. The replacement
+// policy is supplied by the composition boundary because this platform leaf
+// must not inspect process-wide operating-system state itself.
+type Local struct {
+	AllowRenameReplacement bool
+}
 
 // WorkingDirectory is the exact process-directory effect supplied by this
 // Platform adapter to services that resolve invocation-local paths.

@@ -195,6 +195,38 @@ func TestBuildReconnectReplay_ReconstructsDispatchStateWithoutSessionCompleted(t
 	}
 }
 
+func TestBuildReconnectReplay_AllowsAcknowledgementPrefixWithoutJavaScriptRuntime(t *testing.T) {
+	history := newTestFactoryEventHistory(nil, func() time.Time { return time.Unix(0, 0).UTC() })
+	history.RecordRunRequest()
+	prefix := history.CanonicalEvents()
+	if len(prefix) != 1 {
+		t.Fatalf("run request prefix = %#v, want one event", prefix)
+	}
+
+	phase := domainFactoryEvent(
+		interfaces.FactoryEventTypeJavaScriptPhaseChange,
+		"javascript-phase/review",
+		interfaces.FactoryEventContext{Tick: 1, Sequence: 1, EventTime: time.Unix(1, 0).UTC()},
+		interfaces.JavaScriptPhaseChangeEventPayload{
+			ChildDispatchCounts: interfaces.FactorySessionChildDispatchCounts{},
+			Phase:               "review",
+			Phases:              []string{"review"},
+			ScriptStatus:        interfaces.FactorySessionJavaScriptScriptStatusRunning,
+		},
+	)
+	events := append(append([]interfaces.FactoryEvent(nil), prefix...), phase)
+
+	replay, err := BuildCanonicalReconnectReplay(events, interfaces.FactoryEventReconnectCursor{
+		AfterEventID: prefix[0].Id,
+	}, interfaces.FactoryEventReconnectScope{})
+	if err != nil {
+		t.Fatalf("BuildReconnectReplay: %v", err)
+	}
+	if len(replay) != 1 || replay[0].Id != phase.Id {
+		t.Fatalf("replay = %#v, want the JavaScript phase event after the acknowledgement", replay)
+	}
+}
+
 func TestBuildReconnectReplay_IdempotentWhenNoNewEvents(t *testing.T) {
 	events := reconnectFixtureEvents(t)
 	cursor := interfaces.FactoryEventReconnectCursor{AfterEventID: "dispatch-reconciled/dispatch-js-1"}

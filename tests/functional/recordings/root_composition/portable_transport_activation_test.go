@@ -81,7 +81,9 @@ func TestRecordingsPortableBuildValidateAndTransportsActivateThroughRootBuildPro
 	}
 
 	cliArtifactPath := filepath.Join(t.TempDir(), "fun-recordings-cli-transport.replay.json")
-	assertRecordingsCLITransportRecordPathActivates(t, dir, cliArtifactPath)
+	cliFactoryDir := support.ScaffoldFactory(t, recordingsTransportActivationFactoryConfig())
+	testutil.WriteSeedFile(t, cliFactoryDir, "task", []byte(`{"title":"FUN Recordings CLI transport activation"}`))
+	assertRecordingsCLITransportRecordPathActivates(t, cliFactoryDir, cliArtifactPath)
 
 	recordingsService := recordingsTransportActivationService(t, edges)
 	assertRecordingsPortableValidateAdverseOutcome(t, recordingsService)

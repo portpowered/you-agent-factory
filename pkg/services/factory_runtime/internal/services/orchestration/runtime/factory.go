@@ -80,48 +80,49 @@ type runtimePromptRenderer interface {
 	RenderPrompt(string, []workers.Token, *workers.Context) (string, error)
 }
 type runtimeConfig struct {
-	net                        *state.Net
-	scheduler                  scheduler.Scheduler
-	executeService             executeCapability
-	promptRenderer             runtimePromptRenderer
-	templateFieldResolver      runtimeTemplateFieldResolver
-	promptSourceReader         func(string) ([]byte, error)
-	attempts                   *attemptLifecycle
-	attemptCapacity            int
-	newID                      factory.IDGenerator
-	workerSessions             workersessions.Service
-	runtimeConfig              interfaces.RuntimeDefinitionLookup
-	invocationInterpolation    interfaces.InvocationInterpolationService
-	invocationFileReader       interfaces.FileReader
-	workflowContext            *factory_context.FactoryContext
-	runtimeMode                interfaces.RuntimeMode
-	logger                     logging.Logger
-	clock                      factory.Clock
-	workRequestIDs             work.RequestIDGenerator
-	eventHistory               recordings.RuntimeLedger
-	recordingID                string // optional Worker recording target propagated to Worker Sessions
-	runtimeID                  string // stable runtime-instance identity used for attempt correlation
-	worldStateProjector        factory.WorldStateProjector
-	restoredWorldState         *interfaces.FactoryWorldState
-	providerSessions           providersessions.Service
-	submissionRecorder         recordings.SubmissionRecorder
-	factoryEventRecorder       factory.FactoryEventRecorder
-	submissionHooks            []factory.SubmissionHook
-	dispatchRecorder           recordings.DispatchRecorder
-	completionRecorder         factory.CompletionRecorder
-	petriMutationRecorder      factory.PetriMutationRecorder
-	completionDeliveryPlanner  factory.CompletionDeliveryPlanner
-	replayEvents               []interfaces.FactoryEvent
-	inlineDispatch             bool
-	quorumPolicy               interfaces.QuorumPolicyService
-	outputShaping              interfaces.InvocationOutputShapingService
-	workPropagation            interfaces.WorkPropagationPolicyService
-	workService                work.Service
-	decisionEnvelopes          interfaces.DecisionEnvelopeService
-	expectedArtifactFileSystem expectedArtifactFileSystem
-	mockWorkersConfig          *workers.MockWorkersConfig
-	progressPublisher          workers.ProgressPublisher
-	modelRuntimeScope          modelprovider.RuntimeScopeRef
+	net                                *state.Net
+	scheduler                          scheduler.Scheduler
+	executeService                     executeCapability
+	promptRenderer                     runtimePromptRenderer
+	templateFieldResolver              runtimeTemplateFieldResolver
+	promptSourceReader                 func(string) ([]byte, error)
+	attempts                           *attemptLifecycle
+	attemptCapacity                    int
+	newID                              factory.IDGenerator
+	workerSessions                     workersessions.Service
+	runtimeConfig                      interfaces.RuntimeDefinitionLookup
+	invocationInterpolation            interfaces.InvocationInterpolationService
+	invocationFileReader               interfaces.FileReader
+	workflowContext                    *factory_context.FactoryContext
+	runtimeMode                        interfaces.RuntimeMode
+	logger                             logging.Logger
+	clock                              factory.Clock
+	workRequestIDs                     work.RequestIDGenerator
+	eventHistory                       recordings.RuntimeLedger
+	recordingID                        string // optional Worker recording target propagated to Worker Sessions
+	runtimeID                          string // stable runtime-instance identity used for attempt correlation
+	worldStateProjector                factory.WorldStateProjector
+	restoredWorldState                 *interfaces.FactoryWorldState
+	skipRestoredDispatchReconciliation bool
+	providerSessions                   providersessions.Service
+	submissionRecorder                 recordings.SubmissionRecorder
+	factoryEventRecorder               factory.FactoryEventRecorder
+	submissionHooks                    []factory.SubmissionHook
+	dispatchRecorder                   recordings.DispatchRecorder
+	completionRecorder                 factory.CompletionRecorder
+	petriMutationRecorder              factory.PetriMutationRecorder
+	completionDeliveryPlanner          factory.CompletionDeliveryPlanner
+	replayEvents                       []interfaces.FactoryEvent
+	inlineDispatch                     bool
+	quorumPolicy                       interfaces.QuorumPolicyService
+	outputShaping                      interfaces.InvocationOutputShapingService
+	workPropagation                    interfaces.WorkPropagationPolicyService
+	workService                        work.Service
+	decisionEnvelopes                  interfaces.DecisionEnvelopeService
+	expectedArtifactFileSystem         expectedArtifactFileSystem
+	mockWorkersConfig                  *workers.MockWorkersConfig
+	progressPublisher                  workers.ProgressPublisher
+	modelRuntimeScope                  modelprovider.RuntimeScopeRef
 }
 
 var _ factoryhost.Engine = (*factoryImpl)(nil)
@@ -149,6 +150,7 @@ func New(
 	runtimeID string,
 	worldStateProjector factory.WorldStateProjector,
 	restoredWorldState *interfaces.FactoryWorldState,
+	skipRestoredDispatchReconciliation bool,
 	providerSessions providersessions.Service,
 	submissionRecorder recordings.SubmissionRecorder,
 	factoryEventRecorder factory.FactoryEventRecorder,
@@ -166,67 +168,50 @@ func New(
 	expectedArtifactFileSystemValue any,
 	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
 ) (factoryhost.Engine, error) {
-	if net == nil {
-		return nil, fmt.Errorf("a factory specification is required")
-	}
-	if eventHistory == nil {
-		return nil, fmt.Errorf("a Recordings runtime ledger is required")
-	}
-	if clock == nil {
-		return nil, fmt.Errorf("a Factory Runtime clock is required")
-	}
-	if workRequestIDs == nil {
-		return nil, fmt.Errorf("a Work Request ID generator is required")
-	}
-	if newID == nil {
-		return nil, fmt.Errorf("a Factory Runtime ID generator is required")
-	}
-	if statelessService == nil {
-		return nil, fmt.Errorf("a stateless Workers service is required")
-	}
-	if workerSessionsService == nil {
-		return nil, fmt.Errorf("a Worker Sessions service is required")
+	if err := validateFactoryRuntimeDependencies(net, eventHistory, clock, workRequestIDs, newID, statelessService, workerSessionsService); err != nil {
+		return nil, err
 	}
 	runtimeMode = normalizeRuntimeMode(runtimeMode)
 	promptRenderer, _ := statelessService.(runtimePromptRenderer)
 	templateFieldResolver, _ := statelessService.(runtimeTemplateFieldResolver)
 	cfg := &runtimeConfig{
-		net:                        net,
-		scheduler:                  runtimeScheduler,
-		executeService:             statelessService,
-		promptRenderer:             promptRenderer,
-		templateFieldResolver:      templateFieldResolver,
-		workerSessions:             workerSessionsService,
-		attemptCapacity:            defaultRuntimeAttemptCapacity,
-		newID:                      newID,
-		runtimeConfig:              runtimeDefinitions,
-		invocationInterpolation:    invocationInterpolation,
-		invocationFileReader:       invocationFileReader,
-		workflowContext:            workflowContext.Clone(),
-		runtimeMode:                runtimeMode,
-		logger:                     logger,
-		clock:                      clock,
-		workRequestIDs:             workRequestIDs,
-		inlineDispatch:             inlineDispatch,
-		eventHistory:               eventHistory,
-		recordingID:                strings.TrimSpace(recordingID),
-		runtimeID:                  strings.TrimSpace(runtimeID),
-		worldStateProjector:        worldStateProjector,
-		restoredWorldState:         restoredWorldState,
-		providerSessions:           providerSessions,
-		submissionRecorder:         submissionRecorder,
-		factoryEventRecorder:       factoryEventRecorder,
-		submissionHooks:            append([]factory.SubmissionHook(nil), submissionHooks...),
-		dispatchRecorder:           dispatchRecorder,
-		completionRecorder:         completionRecorder,
-		petriMutationRecorder:      petriMutationRecorder,
-		completionDeliveryPlanner:  completionDeliveryPlanner,
-		quorumPolicy:               quorumPolicy,
-		outputShaping:              outputShaping,
-		workPropagation:            workPropagation,
-		workService:                workService,
-		expectedArtifactFileSystem: expectedArtifactFileSystemFrom(expectedArtifactFileSystemValue),
-		decisionEnvelopes:          firstDecisionEnvelopeService(decisionEnvelopes),
+		net:                                net,
+		scheduler:                          runtimeScheduler,
+		executeService:                     statelessService,
+		promptRenderer:                     promptRenderer,
+		templateFieldResolver:              templateFieldResolver,
+		workerSessions:                     workerSessionsService,
+		attemptCapacity:                    defaultRuntimeAttemptCapacity,
+		newID:                              newID,
+		runtimeConfig:                      runtimeDefinitions,
+		invocationInterpolation:            invocationInterpolation,
+		invocationFileReader:               invocationFileReader,
+		workflowContext:                    workflowContext.Clone(),
+		runtimeMode:                        runtimeMode,
+		logger:                             logger,
+		clock:                              clock,
+		workRequestIDs:                     workRequestIDs,
+		inlineDispatch:                     inlineDispatch,
+		eventHistory:                       eventHistory,
+		recordingID:                        strings.TrimSpace(recordingID),
+		runtimeID:                          strings.TrimSpace(runtimeID),
+		worldStateProjector:                worldStateProjector,
+		restoredWorldState:                 restoredWorldState,
+		skipRestoredDispatchReconciliation: skipRestoredDispatchReconciliation,
+		providerSessions:                   providerSessions,
+		submissionRecorder:                 submissionRecorder,
+		factoryEventRecorder:               factoryEventRecorder,
+		submissionHooks:                    append([]factory.SubmissionHook(nil), submissionHooks...),
+		dispatchRecorder:                   dispatchRecorder,
+		completionRecorder:                 completionRecorder,
+		petriMutationRecorder:              petriMutationRecorder,
+		completionDeliveryPlanner:          completionDeliveryPlanner,
+		quorumPolicy:                       quorumPolicy,
+		outputShaping:                      outputShaping,
+		workPropagation:                    workPropagation,
+		workService:                        workService,
+		expectedArtifactFileSystem:         expectedArtifactFileSystemFrom(expectedArtifactFileSystemValue),
+		decisionEnvelopes:                  firstDecisionEnvelopeService(decisionEnvelopes),
 	}
 	if cfg.executeService != nil {
 		cfg.attempts = newAttemptLifecycle(cfg.executeService, cfg.newID, cfg.attemptCapacity)
@@ -234,10 +219,18 @@ func New(
 
 	sched := buildRuntimeScheduler(cfg)
 	effectiveLogger := logging.EnsureLogger(cfg.logger)
-	marking, seededRestoredWorkIDs, seededReplayWorkIDsWithRecordedDispatch := buildRuntimeMarking(cfg)
+	marking, seededRestoredWorkIDs, seededReplayWorkIDsWithRecordedDispatch, err := buildRuntimeMarking(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("restore Factory Runtime Work board: %w", err)
+	}
 	sharedTransformer, subs := buildRuntimeSubsystems(cfg, sched, effectiveLogger, newID, seededRestoredWorkIDs)
 	resultBuffer := buffers.NewTypedBuffer[workerexecution.WorkResult](defaultRuntimeBufferSize)
 	effectiveEventHistory := ensureEventHistory(cfg)
+	if !cfg.skipRestoredDispatchReconciliation {
+		if err := reconcileRestoredDispatches(cfg, effectiveEventHistory); err != nil {
+			return nil, fmt.Errorf("reconcile restored Factory Runtime dispatches: %w", err)
+		}
+	}
 	dispatchResultHook, dispatchPlan, err := configureRuntimeDispatch(
 		cfg, resultBuffer, effectiveEventHistory,
 	)
@@ -371,7 +364,7 @@ func firstDecisionEnvelopeService(
 // identities inserted into it, and the restored Work identities with recorded
 // dispatch facts. Invalid or unoccupied historical Work is deliberately absent
 // from the first returned set.
-func buildRuntimeMarking(cfg *runtimeConfig) (*petri.Marking, map[string]struct{}, map[string]struct{}) {
+func buildRuntimeMarking(cfg *runtimeConfig) (*petri.Marking, map[string]struct{}, map[string]struct{}, error) {
 	marking := petri.NewMarking(cfg.net.ID)
 	seededRestoredWorkIDs := make(map[string]struct{})
 	seededReplayWorkIDsWithRecordedDispatch := restoredWorkIDsWithRecordedDispatch(cfg.restoredWorldState)
@@ -390,13 +383,28 @@ func buildRuntimeMarking(cfg *runtimeConfig) (*petri.Marking, map[string]struct{
 			marking.AddToken(tok)
 		}
 	}
-	if restoredWorkCount(cfg.restoredWorldState) > 0 {
+	if cfg.restoredWorldState != nil {
 		if !hasConstructionNow {
 			constructionNow = cfg.clock.Now()
 		}
-		seededRestoredWorkIDs = seedRestoredWork(marking, cfg.net, cfg.restoredWorldState, constructionNow, resourcePlaceIDs)
+		var err error
+		excludedWorkIDs := map[string]struct{}(nil)
+		if cfg.skipRestoredDispatchReconciliation {
+			excludedWorkIDs = seededReplayWorkIDsWithRecordedDispatch
+		}
+		seededRestoredWorkIDs, err = seedRestoredWork(
+			marking,
+			cfg.net,
+			cfg.restoredWorldState,
+			constructionNow,
+			resourcePlaceIDs,
+			excludedWorkIDs,
+		)
+		if err != nil {
+			return nil, nil, nil, err
+		}
 	}
-	return marking, seededRestoredWorkIDs, seededReplayWorkIDsWithRecordedDispatch
+	return marking, seededRestoredWorkIDs, seededReplayWorkIDsWithRecordedDispatch, nil
 }
 func ensureEventHistory(cfg *runtimeConfig) recordings.RuntimeLedger {
 	eventHistory := cfg.eventHistory
@@ -404,27 +412,10 @@ func ensureEventHistory(cfg *runtimeConfig) recordings.RuntimeLedger {
 	eventHistory.AddEventRecorder(cfg.factoryEventRecorder)
 	eventHistory.RecordInitialStructure()
 	recordSessionStartedFromFactoryConfig(cfg, eventHistory)
+	if !cfg.skipRestoredDispatchReconciliation {
+		recordRestoredWorkRequests(cfg, eventHistory)
+	}
 	return eventHistory
-}
-
-func sessionIDFromFactoryConfig(cfg *runtimeConfig) string {
-	if cfg != nil && cfg.workflowContext != nil {
-		if sessionID := strings.TrimSpace(cfg.workflowContext.SessionID); sessionID != "" {
-			return sessionID
-		}
-	}
-	return factory_context.DefaultSessionID
-}
-
-func factoryConfigFromFactoryConfig(cfg *runtimeConfig) *interfaces.FactoryConfig {
-	if cfg == nil {
-		return nil
-	}
-	provider, ok := cfg.runtimeConfig.(interfaces.RuntimeFactoryConfigLookup)
-	if !ok {
-		return nil
-	}
-	return provider.FactoryConfig()
 }
 
 func recordSessionStartedFromFactoryConfig(cfg *runtimeConfig, eventHistory recordings.RuntimeLedger) {

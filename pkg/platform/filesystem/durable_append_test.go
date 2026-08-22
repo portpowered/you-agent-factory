@@ -57,3 +57,25 @@ func TestLocalAppendDurableRejectsInvalidTargets(t *testing.T) {
 		t.Fatal("AppendDurable(os.DevNull) succeeded, want sync error")
 	}
 }
+
+func TestLocalRenameReplacingMissingSourcePreservesDestination(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	oldPath := filepath.Join(dir, "missing.tmp")
+	newPath := filepath.Join(dir, "recording.json")
+	if err := os.WriteFile(newPath, []byte("durable recording"), 0o600); err != nil {
+		t.Fatalf("write destination: %v", err)
+	}
+
+	if err := (Local{}).RenameReplacing(oldPath, newPath); err == nil {
+		t.Fatal("RenameReplacing(missing source) succeeded, want error")
+	}
+	contents, err := os.ReadFile(newPath)
+	if err != nil {
+		t.Fatalf("read destination after failed replacement: %v", err)
+	}
+	if got, want := string(contents), "durable recording"; got != want {
+		t.Fatalf("destination contents = %q, want %q", got, want)
+	}
+}

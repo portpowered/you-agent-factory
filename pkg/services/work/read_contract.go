@@ -44,6 +44,7 @@ type ReadModel struct {
 	CursorID                 string
 	Name                     string
 	WorkID                   string
+	RequestID                string
 	WorkTypeName             string
 	State                    *State
 	SupersededBy             string

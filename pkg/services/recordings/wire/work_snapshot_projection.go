@@ -54,6 +54,7 @@ func readModelFromWorkItem(
 	read := work.ReadModel{
 		CursorID:                 item.ID,
 		WorkID:                   item.ID,
+		RequestID:                requestIDForWork(state, item.ID),
 		Name:                     firstNonEmpty(item.DisplayName, names[item.ID], item.ID),
 		WorkTypeName:             item.WorkTypeID,
 		ChainingTraceDepth:       item.ChainingTraceDepth,
@@ -166,6 +167,27 @@ func activeWorkItemIDs(items map[string]work.FactoryWorkItem) map[string]struct{
 		active[id] = struct{}{}
 	}
 	return active
+}
+
+func requestIDForWork(state factorydefinitions.FactoryWorldState, workID string) string {
+	if workID == "" || len(state.WorkRequestsByID) == 0 {
+		return ""
+	}
+	requestIDs := make([]string, 0, len(state.WorkRequestsByID))
+	for requestID := range state.WorkRequestsByID {
+		requestIDs = append(requestIDs, requestID)
+	}
+	sort.Strings(requestIDs)
+	for _, requestKey := range requestIDs {
+		request := state.WorkRequestsByID[requestKey]
+		requestID := firstNonEmpty(request.RequestID, requestKey)
+		for _, item := range request.WorkItems {
+			if item.ID == workID {
+				return requestID
+			}
+		}
+	}
+	return ""
 }
 
 func firstNonEmpty(values ...string) string {

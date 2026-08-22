@@ -589,7 +589,10 @@ func synthesizeDispatchReconciliationEvents(
 		return nil, nil
 	}
 
-	ackDispatches := dispatchStatesByID(ackState.JavaScriptRuntime.Dispatches)
+	ackDispatches := make(map[string]interfaces.FactorySessionDispatchState)
+	if ackState.JavaScriptRuntime != nil {
+		ackDispatches = dispatchStatesByID(ackState.JavaScriptRuntime.Dispatches)
+	}
 	missedDispatchCoverage := dispatchLifecycleCoverage(missed)
 	now := latestCanonicalEventTime(events)
 	synthetic := make([]interfaces.FactoryEvent, 0)

@@ -81,6 +81,7 @@ func WorkReadModelToAPI(item work.ReadModel) factoryapi.Work {
 	result := factoryapi.Work{
 		Name:                     item.Name,
 		WorkId:                   optional.NonEmptyStringPtr(item.WorkID),
+		RequestId:                optional.NonEmptyStringPtr(item.RequestID),
 		WorkTypeName:             optional.NonEmptyStringPtr(item.WorkTypeName),
 		ChainingTraceDepth:       optional.PositiveIntPtr(item.ChainingTraceDepth),
 		CurrentChainingTraceId:   optional.NonEmptyStringPtr(item.CurrentChainingTraceID),

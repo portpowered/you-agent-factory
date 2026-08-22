@@ -19,17 +19,9 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// startThroughWorkerSessions is the W4 Runtime dispatch cutover seam. For
-// every resolved dispatch it reserves one stable, control-addressable Worker
-// Session identity, commits
-// that association to canonical Factory Events before Start can publish Worker
-// Session lifecycle records, then hands the resolved request to
-// worker_sessions.Service.Start (which drives the injected Workers execution
-// service underneath).
-// The Worker Sessions terminal outcome is translated back into the exact
-// workers.WorkstationDispatchResult shape the pre-cutover accept callback
-// expects, so existing Work materialization and Factory result behavior is
-// unchanged.
+// startThroughWorkerSessions reserves a stable Worker Session identity, records
+// the association before lifecycle publication, and preserves the pre-cutover
+// dispatch result shape.
 func startThroughWorkerSessions(
 	ctx context.Context,
 	cfg *runtimeConfig,
@@ -67,11 +59,7 @@ func startThroughWorkerSessions(
 		cfg.clock.Now(),
 	)
 	execute := func() {
-		// Retry is left at its zero value on purpose: Petri dispatch has always
-		// been one attempt, with retryability classified and handed outward for
-		// the graph to act on. Converging JavaScript children onto this call
-		// must not quietly give every Petri Worker attempt-level retry it never
-		// had.
+		// Petri dispatch remains one attempt; retryability is classified outward.
 		startResult, startErr := cfg.workerSessions.InvokeSession(
 			context.WithoutCancel(ctx),
 			workersessions.InvokeSessionRequest{ID: sessionID, Execution: request},
@@ -161,16 +149,8 @@ func runtimeWorkerSessionID(
 	return sessionID
 }
 
-// workerSessionDispatchOutcome translates one Worker Sessions Start result
-// into the exact workers.WorkstationDispatchResult/error shape the Runtime
-// accept callback expects. When Start handed the attempt off to Workers, the
-// raw StartResult.Dispatch/DispatchErr already carry that exact shape and are
-// returned unchanged. This includes a canceled terminal result when a control
-// won after identity reservation but before Workers admission. When Start
-// rejected the request before any Workers call (invalid request, conflicting
-// start, or a before-handoff Events publication failure), a synthesized FAILED
-// result is returned instead of fabricating a Workers payload that never
-// existed.
+// workerSessionDispatchOutcome preserves handed-off dispatch results and
+// synthesizes a failure for requests rejected before Workers admission.
 func workerSessionDispatchOutcome(
 	request workers.WorkstationDispatchRequest,
 	startResult workersessions.InvokeSessionResult,
@@ -211,13 +191,8 @@ func workerSessionDispatchOutcome(
 	}, nil
 }
 
-// handedOffToWorkers reports whether Start actually reached the Workers
-// DispatchWorkstation call. The only FAILED terminal Start commits without a
-// Workers handoff is FailureCauseEventPublicationFailure. A canceled terminal
-// Session with no cause also carries a synthesized canceled dispatch when
-// control won before admission; all other terminal causes (start failure,
-// adapter failure, executor panic, or Workers execution failure) are produced
-// from within the handoff itself.
+// handedOffToWorkers reports whether Start reached DispatchWorkstation; only a
+// pre-handoff Events publication failure is treated as not handed off.
 func handedOffToWorkers(startResult workersessions.InvokeSessionResult) bool {
 	result := startResult.Session.Result
 	if result == nil || result.Cause == nil {
@@ -226,8 +201,7 @@ func handedOffToWorkers(startResult workersessions.InvokeSessionResult) bool {
 	return result.Cause.Kind != workersessions.FailureCauseEventPublicationFailure
 }
 
-// WorkerSessionsObservation returns the runtime-bound detached Worker Session
-// observation projection for the current Factory Session.
+// WorkerSessionsObservation returns detached Worker Session observations.
 func (f *factoryImpl) WorkerSessionsObservation() workersessions.ObservationService {
 	if f == nil || f.cfg == nil {
 		return nil
@@ -235,10 +209,8 @@ func (f *factoryImpl) WorkerSessionsObservation() workersessions.ObservationServ
 	return f.WorkerSessionsObservationForSession(sessionIDFromFactoryConfig(f.cfg))
 }
 
-// WorkerSessionsObservationForSession binds the detached Worker Session read
-// projection to the effective Factory Session identity exposed by the live
-// Factory Sessions registry. Runtime execution may retain the ~default alias,
-// while public reads use the resolved canonical identity.
+// WorkerSessionsObservationForSession binds detached reads to the effective
+// Factory Session identity exposed by the live registry.
 func (f *factoryImpl) WorkerSessionsObservationForSession(factorySessionID string) workersessions.ObservationService {
 	if f == nil || f.cfg == nil {
 		return nil
@@ -264,10 +236,8 @@ func (f *factoryImpl) WorkerSessionsObservationForSession(factorySessionID strin
 	)
 }
 
-// recordedWorkerSessionObservation is the runtime-facing observation adapter.
-// Factory Runtime owns the per-session canonical ledger and Recordings owns
-// its world-state projector; Worker Sessions remains the owner of the public
-// detached observation vocabulary and Provider Sessions enrichment.
+// recordedWorkerSessionObservation adapts the runtime ledger and projector to
+// the detached Worker Session observation vocabulary.
 type recordedWorkerSessionObservation struct {
 	workersessions.Service
 	ledger           recordings.RuntimeLedger
@@ -414,6 +384,26 @@ func recordedDispatchFact(
 		))
 		break
 	}
+	if interruption, ok := recordedDispatchInterruption(events, dispatchID); ok && !fact.state.Terminal() {
+		fact.state = workersessions.StateFailed
+		fact.workIDs = firstRecordedWorkIDs(interruption.workIDs, fact.workIDs)
+		endedAt := interruption.interruptedAt
+		if endedAt.IsZero() {
+			endedAt = interruption.eventTime
+		}
+		if !endedAt.IsZero() {
+			endedAt = endedAt.UTC()
+			fact.endedAt = &endedAt
+		}
+		reason := strings.TrimSpace(interruption.reason)
+		if reason == "" {
+			reason = "dispatch interrupted"
+		}
+		fact.failure = &workersessions.FailureCause{
+			Kind:   workersessions.FailureCauseProcessGone,
+			Detail: reason,
+		}
+	}
 	return fact
 }
 
@@ -481,6 +471,39 @@ func recordedDispatchFacts(events []interfaces.FactoryEvent) (map[string]recorde
 		}
 	}
 	return associations, requests
+}
+
+type recordedDispatchInterruptionFact struct {
+	workIDs       []string
+	interruptedAt time.Time
+	eventTime     time.Time
+	reason        string
+}
+
+func recordedDispatchInterruption(
+	events []interfaces.FactoryEvent,
+	dispatchID string,
+) (recordedDispatchInterruptionFact, bool) {
+	var fact recordedDispatchInterruptionFact
+	found := false
+	for _, event := range events {
+		if event.Type != interfaces.FactoryEventTypeDispatchInterrupted ||
+			stringPointerValue(event.Context.DispatchID) != dispatchID {
+			continue
+		}
+		var payload interfaces.DispatchInterruptedEventPayload
+		if json.Unmarshal(event.Payload, &payload) != nil {
+			continue
+		}
+		fact = recordedDispatchInterruptionFact{
+			workIDs:       append([]string(nil), pointerStringSlice(event.Context.WorkIDs)...),
+			interruptedAt: payload.InterruptedAt,
+			eventTime:     event.Context.EventTime,
+			reason:        payload.Reason,
+		}
+		found = true
+	}
+	return fact, found
 }
 func newRecordedWorkerSessionObservation(
 	live workersessions.Service,
@@ -558,11 +581,7 @@ func (s *recordedWorkerSessionObservation) listLive(
 	return s.Service.ListObservations(ctx, req)
 }
 
-// Start carries the runtime-owned Worker recording identity into direct
-// Worker Session admission when the caller did not supply one explicitly.
-// Factory dispatch already fills this field at its orchestration boundary;
-// this adapter keeps the public HTTP/CLI start path on the same durable
-// recording contract.
+// Start carries the runtime-owned recording identity into direct admission.
 func (s *recordedWorkerSessionObservation) Start(
 	ctx context.Context,
 	req workersessions.StartRequest,
@@ -607,9 +626,7 @@ func recordingHealthLoadError(err error) error {
 	case errors.Is(err, os.ErrNotExist):
 		return nil
 	case errors.Is(err, recordings.ErrWorkerRecordingIncomplete):
-		// A live recording is a valid partial source while its terminal
-		// snapshot is still being persisted. Keep the projected Worker Session
-		// facts readable and let the live registry provide any newer fields.
+		// A live recording is a valid partial source while its snapshot persists.
 		return nil
 	case isCorruptWorkerRecordingError(err):
 		return fmt.Errorf("%w: %v", workersessions.ErrObservationRecordingCorrupt, err)
@@ -626,9 +643,7 @@ func workerRecordingHealthMap(
 		return nil, fmt.Errorf("%w: recording identity %q does not match %q", workersessions.ErrObservationRecordingCorrupt, snapshot.RecordingID, recordingID)
 	}
 	if len(snapshot.Sessions) == 0 {
-		// The capture may be visible to the runtime before its first Worker
-		// Session record is durably written. An empty snapshot is therefore an
-		// empty health sidecar, not a malformed recording.
+		// The capture may be visible before its first Worker Session is persisted.
 		return map[string]workerRecordingHealth{}, nil
 	}
 	health := make(map[string]workerRecordingHealth, len(snapshot.Sessions))
@@ -760,11 +775,8 @@ func (s *recordedWorkerSessionObservation) GetObservation(
 	return s.withRecordingHealth(ctx, observation)
 }
 
-// GetObservationByWorkerSessionID resolves the canonical Worker Session
-// identity against this Factory Session's durable event history before
-// consulting the process-local registry. The wrapper is deliberately
-// Factory-Session scoped, so an identical Worker Session ID in another
-// session cannot leak into this response.
+// GetObservationByWorkerSessionID resolves the Worker Session against this
+// Factory Session's durable history before consulting the process-local registry.
 func (s *recordedWorkerSessionObservation) GetObservationByWorkerSessionID(
 	ctx context.Context,
 	req workersessions.GetObservationByWorkerSessionIDRequest,

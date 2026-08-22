@@ -101,6 +101,7 @@ func (a *Assembly) Assemble(
 	runtimeInstanceID string,
 	replayArtifact *factorydefinitions.ReplayArtifact,
 	resumeInput *recordings.LoadResumeInputResult,
+	restoredWorldState *factorydefinitions.FactoryWorldState,
 	automationService automations.Service,
 	serviceMode bool,
 ) (
@@ -194,25 +195,13 @@ func (a *Assembly) Assemble(
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
 	}
 	spec.ReplayEvents = cloneReplayArtifactEvents(replayArtifact)
-	// Resume is a live continuation, not deterministic replay: use the
-	// Recordings-selected event history only to reconstruct the successor's
-	// starting world state. The normal RecordPath remains the live successor
-	// recording destination on the runtime build.
-	restoredEvents, err := restoredEventsForOpening(spec.ReplayEvents, resumeInput)
-	if err != nil {
-		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
-	}
-	if resumeInput != nil {
-		// The resumed ledger must expose the recorded prefix before the live
-		// successor starts emitting events; otherwise public reconnect cursors
-		// cannot cross the process boundary.
-		spec.ResumeCanonicalEvents = cloneFactoryEvents(restoredEvents)
-	}
-	spec.RestoredWorldState, err = reconstructRestoredWorldState(
+	if err := a.configureRestoredWorldState(
+		&spec,
+		replayArtifact,
+		resumeInput,
+		restoredWorldState,
 		recordingsRuntime,
-		restoredEvents,
-	)
-	if err != nil {
+	); err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
 	}
 	instance, err := builder.Build(ctx, spec)
@@ -235,6 +224,52 @@ func (a *Assembly) Assemble(
 		lifecycle,
 		NewRuntimeSidecars(automationService, serviceMode),
 		nil
+}
+
+func (a *Assembly) configureRestoredWorldState(
+	spec *factoryruntime.SessionBuildSpec,
+	replayArtifact *factorydefinitions.ReplayArtifact,
+	resumeInput *recordings.LoadResumeInputResult,
+	restoredWorldState *factorydefinitions.FactoryWorldState,
+	recordingsRuntime recordings.RuntimeOpening,
+) error {
+	if spec == nil {
+		return fmt.Errorf("Factory Runtime build spec is required")
+	}
+	// Deterministic replay also needs a detached starting board: replay hooks
+	// reproduce the event history, while the runtime marking supplies the Work
+	// identities that those hooks observe. It is not a daemon restart, so its
+	// recorded active dispatches must not be interrupted or re-armed.
+	if replayArtifact != nil {
+		restored, err := reconstructRestoredWorldState(recordingsRuntime, spec.ReplayEvents)
+		if err != nil {
+			return err
+		}
+		spec.RestoredWorldState = restored
+		spec.SkipRestoredDispatchReconciliation = true
+		return nil
+	}
+	// Live daemon openings supply detached current-board state explicitly.
+	if restoredWorldState != nil {
+		spec.RestoredWorldState = restoredWorldState
+		return nil
+	}
+	// Resume is a live continuation: reconstruct the successor's starting
+	// state from the Recordings-selected history while retaining that prefix in
+	// the successor ledger for public reconnect cursors.
+	restoredEvents, err := restoredEventsForOpening(spec.ReplayEvents, resumeInput)
+	if err != nil {
+		return err
+	}
+	if resumeInput != nil {
+		spec.ResumeCanonicalEvents = cloneFactoryEvents(restoredEvents)
+	}
+	restored, err := reconstructRestoredWorldState(recordingsRuntime, restoredEvents)
+	if err != nil {
+		return err
+	}
+	spec.RestoredWorldState = restored
+	return nil
 }
 
 func cloneReplayArtifactEvents(artifact *factorydefinitions.ReplayArtifact) []factorydefinitions.FactoryEvent {

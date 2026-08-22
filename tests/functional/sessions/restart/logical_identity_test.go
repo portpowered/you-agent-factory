@@ -569,6 +569,7 @@ func listFactorySessionEvents(
 
 	var collected []factoryapi.FactoryEvent
 	scanner := bufio.NewScanner(response.Body)
+	scanner.Buffer(make([]byte, 64*1024), boardPersistenceMaxEventLineBytes)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "data:") {
