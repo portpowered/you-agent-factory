@@ -106,7 +106,7 @@ func prepareUnitCoverageImportFile(testPackages []string, listings []coveragePac
 
 func chooseUnitCoverageImportCarrier(importPath string, deps []string, carriers []unitCoverageImportCarrier) (int, bool) {
 	bestIndex := -1
-	bestPrefixLength := -1
+	bestDepth := -1
 	for index, carrier := range carriers {
 		if !canUnitCoverageImport(carrier.listing.importPath, importPath) {
 			continue
@@ -114,23 +114,13 @@ func chooseUnitCoverageImportCarrier(importPath string, deps []string, carriers 
 		if slices.Contains(deps, carrier.listing.importPath) {
 			continue
 		}
-		prefixLength := commonImportPathPrefixLength(carrier.listing.importPath, importPath)
-		if prefixLength > bestPrefixLength {
+		depth := strings.Count(carrier.listing.importPath, "/")
+		if bestIndex < 0 || depth > bestDepth || (depth == bestDepth && strings.Compare(carrier.listing.importPath, carriers[bestIndex].listing.importPath) < 0) {
 			bestIndex = index
-			bestPrefixLength = prefixLength
+			bestDepth = depth
 		}
 	}
 	return bestIndex, bestIndex >= 0
-}
-
-func commonImportPathPrefixLength(left, right string) int {
-	leftParts := strings.Split(left, "/")
-	rightParts := strings.Split(right, "/")
-	length := 0
-	for length < len(leftParts) && length < len(rightParts) && leftParts[length] == rightParts[length] {
-		length++
-	}
-	return length
 }
 
 func canUnitCoverageImport(importer, imported string) bool {
