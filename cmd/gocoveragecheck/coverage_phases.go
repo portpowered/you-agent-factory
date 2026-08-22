@@ -107,29 +107,9 @@ func prepareCoverageRunWithFunctionalMetadata(
 		fmt.Sprintf("-timeout=%s", cfg.timeout),
 	)
 	testPackageArgs := compactUnitTestPackageArgs(cfg, testPackages, targetOS, packageUniverse)
-	unitCoverageImportCleanup := func() error { return nil }
-	if len(unitPackageFiles) > 0 && strings.TrimSpace(cfg.packages) == "" && strings.TrimSpace(cfg.coverpkg) == "" && (cfg.suite == "" || cfg.suite == unitCoverageSuite) {
-		unitCoverageImportCleanup, err = prepareUnitCoverageImportFile(testPackages, unitPackageFiles)
-		if err != nil {
-			return preparedCoverageRun{}, err
-		}
-	}
-
-	var plan coverageInvocationPlan
-	if functionalSelection == nil {
-		plan, err = planGoTestCoverageLane(coverageTestArgs, testPackages, profilePath, cfg, targetOS, testPackageArgs)
-	} else {
-		plan, err = planGoTestCoverageLaneWithSelection(coverageTestArgs, profilePath, cfg, targetOS, *functionalSelection)
-	}
+	plan, err := planCoverageInvocationWithUnitImports(cfg, coverageTestArgs, testPackages, profilePath, targetOS, testPackageArgs, functionalSelection, unitPackageFiles)
 	if err != nil {
-		if cleanupErr := unitCoverageImportCleanup(); cleanupErr != nil {
-			return preparedCoverageRun{}, errors.Join(err, cleanupErr)
-		}
 		return preparedCoverageRun{}, err
-	}
-	planCleanup := plan.cleanup
-	plan.cleanup = func() error {
-		return errors.Join(planCleanup(), unitCoverageImportCleanup())
 	}
 	return preparedCoverageRun{
 		plan:                        plan,
@@ -137,6 +117,42 @@ func prepareCoverageRunWithFunctionalMetadata(
 		testPackages:                testPackages,
 		expectedFunctionalInventory: expectedFunctionalInventory,
 	}, nil
+}
+
+func planCoverageInvocationWithUnitImports(
+	cfg config,
+	coverageTestArgs []string,
+	testPackages []string,
+	profilePath string,
+	targetOS string,
+	testPackageArgs []string,
+	functionalSelection *functionalCoverageSelection,
+	unitPackageFiles []coveragePackageListing,
+) (coverageInvocationPlan, error) {
+	unitCoverageImportCleanup := func() error { return nil }
+	if len(unitPackageFiles) > 0 && strings.TrimSpace(cfg.packages) == "" && strings.TrimSpace(cfg.coverpkg) == "" && (cfg.suite == "" || cfg.suite == unitCoverageSuite) {
+		var err error
+		unitCoverageImportCleanup, err = prepareUnitCoverageImportFile(testPackages, unitPackageFiles)
+		if err != nil {
+			return coverageInvocationPlan{}, err
+		}
+	}
+
+	var plan coverageInvocationPlan
+	var err error
+	if functionalSelection == nil {
+		plan, err = planGoTestCoverageLane(coverageTestArgs, testPackages, profilePath, cfg, targetOS, testPackageArgs)
+	} else {
+		plan, err = planGoTestCoverageLaneWithSelection(coverageTestArgs, profilePath, cfg, targetOS, *functionalSelection)
+	}
+	if err != nil {
+		return coverageInvocationPlan{}, errors.Join(err, unitCoverageImportCleanup())
+	}
+	planCleanup := plan.cleanup
+	plan.cleanup = func() error {
+		return errors.Join(planCleanup(), unitCoverageImportCleanup())
+	}
+	return plan, nil
 }
 
 type evaluatedCoverageRun struct {

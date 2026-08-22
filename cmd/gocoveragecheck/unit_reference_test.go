@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"maps"
 	"math"
@@ -406,25 +407,32 @@ func captureUnitCoverageReference(t *testing.T, fixture unitCoverageReferenceFix
 		stdout:             stdout,
 		stderr:             stderr,
 	}
-	if data, readErr := os.ReadFile(coverageSummaryPath); readErr == nil {
-		var summary coverageSummaryJSON
-		if err := json.Unmarshal(data, &summary); err != nil {
-			t.Fatalf("decode unit reference coverage summary: %v", err)
-		}
-		reference.coverageSummary = &summary
-		reference.coveragePackages = sortedUnitReferencePackageNamesFromSummary(summary.Packages)
-		reference.coverageProfile, err = os.ReadFile(profilePath)
-		if err != nil {
-			t.Fatalf("read unit reference canonical coverage profile: %v", err)
-		}
-		reference.coverageBlocks, err = readCoverageProfileBlocks(profilePath, fixture.root)
-		if err != nil {
-			t.Fatalf("read unit reference canonical coverage blocks: %v", err)
-		}
-	} else if !os.IsNotExist(readErr) {
-		t.Fatalf("read unit reference coverage summary: %v", readErr)
-	}
+	reference.coverageSummary, reference.coveragePackages, reference.coverageProfile, reference.coverageBlocks = readUnitReferenceArtifacts(t, coverageSummaryPath, profilePath, fixture.root)
 	return reference
+}
+
+func readUnitReferenceArtifacts(t *testing.T, summaryPath string, profilePath string, repoRoot string) (*coverageSummaryJSON, []string, []byte, map[string]coverageBlock) {
+	t.Helper()
+	data, err := os.ReadFile(summaryPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil, nil, nil
+	}
+	if err != nil {
+		t.Fatalf("read unit reference coverage summary: %v", err)
+	}
+	var summary coverageSummaryJSON
+	if err := json.Unmarshal(data, &summary); err != nil {
+		t.Fatalf("decode unit reference coverage summary: %v", err)
+	}
+	profile, err := os.ReadFile(profilePath)
+	if err != nil {
+		t.Fatalf("read unit reference canonical coverage profile: %v", err)
+	}
+	blocks, err := readCoverageProfileBlocks(profilePath, repoRoot)
+	if err != nil {
+		t.Fatalf("read unit reference canonical coverage blocks: %v", err)
+	}
+	return &summary, sortedUnitReferencePackageNamesFromSummary(summary.Packages), profile, blocks
 }
 
 func restoreUnitReferenceEnvironment(name string, previousValue string, wasSet bool) error {
