@@ -371,6 +371,7 @@ func openRuntime(
 		startupRuntime.RuntimeLogger(),
 		runtimebuildService,
 		startupRuntime,
+		modelsBind.Scope,
 		startupSpec,
 		runtimeLifecycle,
 		runtimeSidecars,
@@ -399,6 +400,13 @@ func openRuntime(
 	)
 	if err != nil {
 		return runtimeProducts{}, err
+	}
+	if binder, ok := startupRuntime.(interface {
+		BindModelsRuntimeScope(models.RuntimeScopeRef) error
+	}); ok {
+		if err := binder.BindModelsRuntimeScope(modelsBind.Scope); err != nil {
+			return runtimeProducts{}, fmt.Errorf("bind Models runtime scope to Factory Runtime: %w", err)
+		}
 	}
 	if err := definitionRuntimeRouter.Bind(
 		sessionID,

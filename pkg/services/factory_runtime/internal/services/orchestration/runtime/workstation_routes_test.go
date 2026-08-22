@@ -528,6 +528,16 @@ func TestOrderedRuntimeWorkDispatchTokensUsesAuthoredInputAndResourceOrder(t *te
 	}
 }
 
+func TestResolveExecutionRequestUsesDirectInputTokensForAuthoredPrompt(t *testing.T) {
+	t.Parallel()
+	cfg, request, modelScope := directInputPromptRuntimeFixture(t)
+	executeRequest, err := executeRequestFromWorkstationRequest(cfg, request)
+	if err != nil {
+		t.Fatalf("executeRequestFromWorkstationRequest() error = %v", err)
+	}
+	assertDirectInputPromptExecuteRequest(t, executeRequest, modelScope)
+}
+
 func TestAttemptLifecycleAllowsExplicitRetryAfterTerminal(t *testing.T) {
 	t.Parallel()
 

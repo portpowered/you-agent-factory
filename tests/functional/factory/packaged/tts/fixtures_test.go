@@ -161,6 +161,10 @@ func overwritePackagedTTSFactoryWithProviderFakeTopology(t *testing.T, factoryDi
 	overwritePackagedTTSFactoryTopology(t, factoryDir, scaffoldPackagedTTSLikeFactory)
 }
 
+func overwritePackagedTTSFactoryWithCommandRunnerTopology(t *testing.T, factoryDir string) {
+	overwritePackagedTTSFactoryTopology(t, factoryDir, scaffoldPackagedTTSLikeFactory)
+}
+
 func overwritePackagedTTSFactoryWithOptionalVoiceAndFormatTopology(t *testing.T, factoryDir string) {
 	overwritePackagedTTSFactoryTopology(t, factoryDir, scaffoldPackagedTTSLikeFactoryWithOptionalVoiceAndFormat)
 }
@@ -172,6 +176,15 @@ func overwritePackagedTTSFactoryTopology(
 ) {
 	t.Helper()
 
+	packagedConfig, err := os.ReadFile(filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("read installed packaged TTS factory.json: %v", err)
+	}
+	var packaged map[string]any
+	if err := json.Unmarshal(packagedConfig, &packaged); err != nil {
+		t.Fatalf("unmarshal installed packaged TTS factory.json: %v", err)
+	}
+
 	scaffoldDir := scaffoldFactory(t)
 	scaffoldConfig, err := os.ReadFile(filepath.Join(scaffoldDir, factorydefinitions.FactoryConfigFile))
 	if err != nil {
@@ -182,6 +195,7 @@ func overwritePackagedTTSFactoryTopology(
 	if err := json.Unmarshal(scaffoldConfig, &scaffold); err != nil {
 		t.Fatalf("unmarshal scaffold factory.json: %v", err)
 	}
+	preservePackagedTTSWorkstationPrompt(t, factoryDir, packaged, scaffold)
 	scaffold["id"] = factorydefinitions.PackagedTTSFactoryProject
 	scaffold["name"] = "tts"
 
@@ -207,6 +221,68 @@ func overwritePackagedTTSFactoryTopology(
 	}
 }
 
+func preservePackagedTTSWorkstationPrompt(
+	t *testing.T,
+	factoryDir string,
+	packaged map[string]any,
+	scaffold map[string]any,
+) {
+	t.Helper()
+
+	packagedWorkstations, ok := packaged["workstations"].([]any)
+	if !ok {
+		t.Fatalf("installed packaged TTS workstations = %#v, want array", packaged["workstations"])
+	}
+	var prompt any
+	for _, raw := range packagedWorkstations {
+		workstation, ok := raw.(map[string]any)
+		if !ok || workstation["name"] != factorydefinitions.PackagedTTSInvokeWorkstationName {
+			continue
+		}
+		prompt = workstation["body"]
+		break
+	}
+	if prompt == nil {
+		agentsPath := filepath.Join(
+			factoryDir,
+			factorydefinitions.WorkstationsDir,
+			factorydefinitions.PackagedTTSInvokeWorkstationName,
+			factorydefinitions.FactoryAgentsFileName,
+		)
+		agents, err := os.ReadFile(agentsPath)
+		if err != nil {
+			t.Fatalf("read installed packaged TTS workstation prompt: %v", err)
+		}
+		prompt = authoredPromptBody(string(agents))
+	}
+
+	scaffoldWorkstations, ok := scaffold["workstations"].([]any)
+	if !ok {
+		t.Fatalf("scaffold TTS workstations = %#v, want array", scaffold["workstations"])
+	}
+	for _, raw := range scaffoldWorkstations {
+		workstation, ok := raw.(map[string]any)
+		if !ok || workstation["name"] != factorydefinitions.PackagedTTSInvokeWorkstationName {
+			continue
+		}
+		workstation["body"] = prompt
+		return
+	}
+	t.Fatalf("scaffold TTS workstation %q is missing", factorydefinitions.PackagedTTSInvokeWorkstationName)
+}
+
+func authoredPromptBody(content string) string {
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	if !strings.HasPrefix(content, "---\n") {
+		return content
+	}
+	rest := content[len("---\n"):]
+	if index := strings.Index(rest, "\n---\n"); index >= 0 {
+		return strings.TrimSpace(rest[index+len("\n---\n"):])
+	}
+	return content
+}
+
 func scaffoldPackagedTTSLikeFactory(t *testing.T) string {
 	return scaffoldTTSLikeFactory(t, factorydefinitions.PackagedTTSInvokeWorkstationName)
 }
@@ -219,6 +295,18 @@ func scaffoldTTSLikeFactory(t *testing.T, workstationName string) string {
 	t.Helper()
 	return support.ScaffoldFactory(t, map[string]any{
 		"name": "tts",
+		"invocationSignature": map[string]any{
+			"parameters": []map[string]any{{
+				"name":         "text",
+				"externalName": "to",
+				"required":     true,
+				"bindings": []map[string]any{
+					{"kind": "POSITIONAL", "position": 1},
+					{"kind": "STDIN"},
+					{"kind": "NAMED"},
+				},
+			}},
+		},
 		"resources": []map[string]any{{
 			"name":       "omnivoice-cache",
 			"type":       "MODEL",

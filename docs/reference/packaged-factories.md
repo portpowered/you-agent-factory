@@ -1183,29 +1183,27 @@ locate the audio. The generated audio content is not byte-stable. A failed
 run returns a TTS generation/model-readiness error without success-shaped
 metadata.
 
-**Worked invocation.** After `OMNIVOICE_Q4_K_M` reports `READY`, this exact
-command was executed against the current binary with a disposable managed
-cache and controlled local runtime:
+**Worked invocation.** After `OMNIVOICE_Q4_K_M` reports `READY`, run this exact
+command from a blank directory:
 
 ```bash
 you run --named @you/tts --no-record --output primary --to "The release is ready."
 ```
 
-**Observed output evidence.** The exact command returned this successful
-primary-result shape (the temporary artifact path and trace identifier are
-intentionally shown as opaque runtime values):
+**Observed output evidence.** A fresh binary ran the exact command from a blank
+directory after the prompt-binding and managed-runtime handoff fixes. With the
+pinned `OMNIVOICE_Q4_K_M` cache and the repository's `omnivoice-llamacpp`
+wrapper plus native runtime available in the isolated verification PATH, the
+command returned primary metadata for the synthesized artifact:
 
 ```text
-{"artifactPath":"<runtime-generated-path>\\omnivoice-<run-generated>.wav","mediaType":"audio/wav","backend":"OMNIVOICE_Q4_K_M/LLAMACPP","traceId":"trace-<run-generated>"}
+{"artifactPath":"C:\\Users\\andre\\AppData\\Local\\Temp\\infinite-you-tts-verification\\managed-cache\\OMNIVOICE_Q4_K_M\\361609388ae572a820d085185bbbe2a2aac4b30e\\omnivoice-710657892.wav","mediaType":"audio/wav","backend":"OMNIVOICE_Q4_K_M/LLAMACPP","traceId":"trace-request-b77ca9b2-35b7-4221-a735-1efc73f49307"}
 ```
 
-The command was run with the model cache marked ready and a local runtime that
-wrote a valid audio payload; the existing behavioral assertion
-`TestPackagedTTSRequiredInputProducesAudioArtifactMetadata` additionally
-checks the public primary result, `audio/wav` metadata, non-empty artifact
-path, and readable audio artifact. The captured audio payload and generated
-identifiers are evidence of the result shape, not a deterministic audio
-golden.
+The returned artifact was 63,884 bytes and began with the `RIFF`/`WAVE` header,
+confirming readable non-empty WAV output. The focused behavioral assertion
+`TestPackagedTTSRequiredInputProducesAudioArtifactMetadata` continues to verify
+the primary-result contract with the injected model edge.
 
 ## Detailed media-review entries
 

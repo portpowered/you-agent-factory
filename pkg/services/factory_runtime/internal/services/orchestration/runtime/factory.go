@@ -25,6 +25,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token_transformer"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -120,6 +121,7 @@ type runtimeConfig struct {
 	expectedArtifactFileSystem expectedArtifactFileSystem
 	mockWorkersConfig          *workers.MockWorkersConfig
 	progressPublisher          workers.ProgressPublisher
+	modelRuntimeScope          modelprovider.RuntimeScopeRef
 }
 
 var _ factoryhost.Engine = (*factoryImpl)(nil)

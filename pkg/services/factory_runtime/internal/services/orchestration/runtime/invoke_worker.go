@@ -267,7 +267,11 @@ func executeRequestFromWorkstationRequest(
 	request workers.WorkstationDispatchRequest,
 ) (workers.ExecuteRequest, error) {
 	execution := request.Execution
-	dispatch := execution.Dispatch
+	dispatch := workstationDispatchWithExecutionInputTokens(execution)
+	// Keep the effective dispatch on the request because token ordering and
+	// downstream WorkInput construction both consume the nested dispatch.
+	execution.Dispatch = dispatch
+	request.Execution = execution
 	workstationName := firstRuntimeValue(request.WorkstationName, dispatch.WorkstationName)
 	request.WorkstationName = workstationName
 	tokens := workers.WorkDispatchInputTokens(dispatch)
@@ -312,6 +316,7 @@ func executeRequestFromWorkstationRequest(
 			Invocation:               invocation,
 			ModelBindings:            modelBindings,
 			ModelOperation:           firstRuntimeValue(selection.modelOperation, execution.ModelOperation),
+			ModelRuntime:             modelRuntimeInputForSelection(cfg, selection),
 			Resume:                   cloneRuntimeContinuation(execution.Continuation),
 			WorkflowContext:          workflowContext,
 			MockWorkers:              cfg.mockWorkersConfig.Clone(),
@@ -323,6 +328,23 @@ func executeRequestFromWorkstationRequest(
 		},
 		Attempt: workers.AttemptContext{Number: attemptNumber},
 	}, nil
+}
+
+// workstationDispatchWithExecutionInputTokens bridges the direct Worker
+// Session request shape into Runtime's canonical per-input dispatch shape.
+// Older/direct callers carry resolved tokens on WorkstationExecutionRequest,
+// while Factory dispatches carry them on WorkDispatch. Prefer the dispatch
+// value when it already contains decodable tokens so a caller cannot provide
+// two competing input lists.
+func workstationDispatchWithExecutionInputTokens(
+	execution workers.WorkstationExecutionRequest,
+) work.WorkDispatch {
+	dispatch := execution.Dispatch
+	if len(workers.WorkDispatchInputTokens(dispatch)) > 0 || len(execution.InputTokens) == 0 {
+		return dispatch
+	}
+	dispatch.InputTokens = append([]any(nil), execution.InputTokens...)
+	return dispatch
 }
 
 func executionCorrelationFromDispatch(

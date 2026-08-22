@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -18,6 +20,78 @@ import (
 )
 
 const packagedTTSFakeAudioFixture = "RIFF....WAVEpayload"
+
+// TestPackagedTTSNoServerPromptUsesCanonicalInputContract proves that the
+// customer-facing named invocation renders the installed workstation prompt
+// with the canonical per-input Work data while preserving the complete text
+// binding that the TTS operation consumes.
+func TestPackagedTTSNoServerPromptUsesCanonicalInputContract(t *testing.T) {
+	text := "The release is ready, with the complete bound sentence preserved."
+	homeDir := t.TempDir()
+	factoryDir := support.InstallPackagedFactory(
+		t,
+		homeDir,
+		factorydefinitions.PackagedTTSFactoryName,
+	)
+	overwritePackagedTTSFactoryWithCommandRunnerTopology(t, factoryDir)
+	audioPath := filepath.Join(t.TempDir(), "packaged-tts-command-runner.wav")
+	if err := os.WriteFile(audioPath, []byte(packagedTTSFakeAudioFixture), 0o644); err != nil {
+		t.Fatalf("write command-runner audio fixture: %v", err)
+	}
+	audioContent, err := json.Marshal([]work.WorkContentPart{{
+		Type:        work.WorkContentPartTypeAudio,
+		File:        audioPath,
+		ContentType: "audio/wav",
+		Slot:        "audio",
+	}})
+	if err != nil {
+		t.Fatalf("marshal command-runner audio content: %v", err)
+	}
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{Stdout: audioContent})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run",
+		"--named", factorydefinitions.PackagedTTSFactoryName,
+		"--no-record",
+		"--output", "primary",
+		"--to", text,
+	})
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = t.TempDir()
+
+	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
+	support.CleanupProcess(t, process)
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(packaged TTS) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("invocation status = %q, want COMPLETED; response = %#v", response.Status, response)
+	}
+
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command call count = %d, want one named packaged invocation", runner.CallCount())
+	}
+	request := runner.LastRequest()
+	prompt := string(request.Stdin)
+	const promptPrefix = "For Work "
+	if !strings.HasPrefix(prompt, promptPrefix) {
+		t.Fatalf("rendered provider prompt = %q, want installed prompt with consumed WorkID", prompt)
+	}
+	comma := strings.Index(prompt[len(promptPrefix):], ",")
+	if comma <= 0 {
+		t.Fatalf("rendered provider prompt = %q, want non-empty consumed WorkID", prompt)
+	}
+	workID := strings.TrimSpace(prompt[len(promptPrefix) : len(promptPrefix)+comma])
+	if workID == "" || !strings.Contains(prompt, "read the complete bound text input") {
+		t.Fatalf("rendered provider prompt = %q, want consumed WorkID and complete authored prompt", prompt)
+	}
+	if !primaryResultContainsTTSArtifactMetadata(t, response.PrimaryResult) {
+		t.Fatalf("primary result = %#v, want command-runner audio metadata", response.PrimaryResult)
+	}
+	if got, err := os.ReadFile(audioPath); err != nil || string(got) != packagedTTSFakeAudioFixture {
+		t.Fatalf("command-runner audio artifact = %q, %v; want fixture", got, err)
+	}
+}
 
 // TestPackagedTTSRequiredInputProducesAudioArtifactMetadata proves that invoking
 // the packaged @you/tts Factory with required text input completes under a fake

@@ -2066,3 +2066,106 @@ func canceledRuntimeDispatch(request workers.WorkstationDispatchRequest) workers
 		},
 	}
 }
+
+func directInputPromptRuntimeFixture(
+	t *testing.T,
+) (*runtimeConfig, workers.WorkstationDispatchRequest, modelinference.RuntimeScopeRef) {
+	t.Helper()
+	const (
+		workstationName = "execute-tts"
+		workerName      = "tts-executor"
+		promptTemplate  = "For Work {{ (index .Inputs 0).WorkID }}, read the complete bound text input."
+		workID          = "work-tts-1"
+		boundText       = "The release is ready."
+	)
+	modelScope, err := (modelinference.RuntimeScopeRef{}).Parse("factory-session:models")
+	if err != nil {
+		t.Fatalf("parse Models scope: %v", err)
+	}
+	cfg := &runtimeConfig{
+		modelRuntimeScope: modelScope,
+		newID:             func() string { return "attempt-1" },
+		promptRenderer: runtimePromptRendererFunc(func(
+			prompt string,
+			tokens []workers.Token,
+			_ *workers.Context,
+		) (string, error) {
+			if prompt != promptTemplate {
+				t.Fatalf("prompt template = %q, want authored template", prompt)
+			}
+			if len(tokens) != 1 || tokens[0].Color.WorkID != workID ||
+				len(tokens[0].Color.Content) != 1 || tokens[0].Color.Content[0].Text != boundText {
+				t.Fatalf("prompt tokens = %#v, want WorkID %q with complete bound text", tokens, workID)
+			}
+			return "For Work " + tokens[0].Color.WorkID + ", read: " + tokens[0].Color.Content[0].Text, nil
+		}),
+		runtimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				workstationName: {
+					Name: workstationName, Type: interfaces.WorkstationTypeInference,
+					WorkerTypeName: workerName, PromptTemplate: promptTemplate,
+					Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "ready"}},
+				},
+			},
+			Workers: map[string]*interfaces.FactoryWorkerConfig{
+				workerName: {
+					Name: workerName, Type: interfaces.WorkerTypeInference,
+					Model: "OMNIVOICE_Q4_K_M", ModelProvider: "CODEX",
+					ModelLocality: modelinference.RuntimeModelLocalityLocal,
+					Resources:     []interfaces.ResourceConfig{{Name: "omnivoice-cache", Capacity: 1}},
+				},
+			},
+			Factory: &interfaces.FactoryConfig{Resources: []interfaces.ResourceConfig{{
+				Name: "omnivoice-cache", Type: interfaces.ResourceTypeModel, Capacity: 1,
+				Model: "OMNIVOICE_Q4_K_M", Backend: "LLAMACPP", LoadPolicy: "ON_DEMAND",
+			}}},
+		},
+	}
+	return cfg, directInputPromptRequest(workstationName, workerName, workID, boundText), modelScope
+}
+
+func directInputPromptRequest(
+	workstationName, workerName, workID, boundText string,
+) workers.WorkstationDispatchRequest {
+	return workers.WorkstationDispatchRequest{
+		WorkstationName: workstationName,
+		Execution: workers.WorkstationExecutionRequest{
+			WorkerName: workerName, WorkerType: interfaces.WorkerTypeInference,
+			RunnerID: workers.RunnerIDCodex, FactorySessionID: "session-1",
+			RuntimeID: "runtime-1", GenerationID: "generation-1",
+			InputTokens: workers.InputTokens(workers.Token{ID: "token-1", State: "ready", Color: workers.Color{
+				WorkID: workID, WorkTypeID: "task", RequestID: "request-1", DataType: workers.DataTypeWork,
+				Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: boundText, Slot: "text"}},
+			}}),
+			Dispatch: work.WorkDispatch{
+				DispatchID: "dispatch-1", WorkstationName: workstationName, WorkerType: workerName,
+				Execution: work.ExecutionMetadata{RequestID: "request-1", WorkIDs: []string{workID}},
+			},
+		},
+	}
+}
+
+func assertDirectInputPromptExecuteRequest(
+	t *testing.T,
+	request workers.ExecuteRequest,
+	modelScope modelinference.RuntimeScopeRef,
+) {
+	t.Helper()
+	if got := request.Target.Prompt.UserMessage; got != "For Work work-tts-1, read: The release is ready." {
+		t.Fatalf("rendered user message = %q, want WorkID and complete bound text", got)
+	}
+	if len(request.Input.Work) != 1 || request.Input.Work[0].WorkID != "work-tts-1" ||
+		len(request.Input.Work[0].Content) != 1 || request.Input.Work[0].Content[0].Text != "The release is ready." {
+		t.Fatalf("detached Work inputs = %#v, want canonical per-input Work", request.Input.Work)
+	}
+	if len(workers.WorkDispatchInputTokens(request.Input.Dispatch)) != 1 {
+		t.Fatalf("detached dispatch inputs = %#v, want direct input token bridged into dispatch", request.Input.Dispatch.InputTokens)
+	}
+	modelRuntime := request.Input.ModelRuntime
+	if modelRuntime == nil || modelRuntime.Scope != modelScope ||
+		modelRuntime.Worker.Name != "tts-executor" || modelRuntime.Worker.Model != "OMNIVOICE_Q4_K_M" ||
+		len(modelRuntime.Worker.Resources) != 1 || modelRuntime.Worker.Resources[0].Name != "omnivoice-cache" ||
+		len(modelRuntime.Resources) != 1 || modelRuntime.Resources[0].Backend != "LLAMACPP" {
+		t.Fatalf("managed Models projection = %#v, want opened scope and authored worker", modelRuntime)
+	}
+}

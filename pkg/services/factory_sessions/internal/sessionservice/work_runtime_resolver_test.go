@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -42,6 +43,59 @@ func TestSubmitWorkFileRequiresInjectedReader(t *testing.T) {
 	err := runtime.submitWorkFile(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "initial Work file reader is required") {
 		t.Fatalf("submitWorkFile missing reader error = %v", err)
+	}
+}
+
+type replacementRuntimeBuilderFunc func(context.Context, string, string, string, string) (factory.RuntimeRecord, error)
+
+func (builder replacementRuntimeBuilderFunc) BuildReplacement(
+	ctx context.Context,
+	folderPath string,
+	factoryDir string,
+	sessionID string,
+	executionBaseDir string,
+) (factory.RuntimeRecord, error) {
+	return builder(ctx, folderPath, factoryDir, sessionID, executionBaseDir)
+}
+
+type replacementRuntimeRecord struct {
+	factory.RuntimeRecord
+	modelsScope models.RuntimeScopeRef
+}
+
+func (record *replacementRuntimeRecord) BindModelsRuntimeScope(scope models.RuntimeScopeRef) error {
+	record.modelsScope = scope
+	return nil
+}
+
+func TestBuildReplacementBindsModelsScopeForLocalModelRuntime(t *testing.T) {
+	t.Parallel()
+
+	scope, err := (models.RuntimeScopeRef{}).Parse("session-models-scope")
+	if err != nil {
+		t.Fatalf("parse Models scope: %v", err)
+	}
+	replacement := &replacementRuntimeRecord{}
+	runtime := &SessionRuntime{
+		modelsScope: scope,
+		runtimeBuild: replacementRuntimeBuilderFunc(func(
+			context.Context, string, string, string, string,
+		) (factory.RuntimeRecord, error) {
+			return replacement, nil
+		}),
+	}
+
+	got, err := runtime.buildReplacementFactoryRuntime(
+		context.Background(), "folder", "factory", "session",
+	)
+	if err != nil {
+		t.Fatalf("buildReplacementFactoryRuntime() error = %v", err)
+	}
+	if got != replacement {
+		t.Fatalf("replacement record = %p, want %p", got, replacement)
+	}
+	if replacement.modelsScope != scope {
+		t.Fatalf("replacement Models scope = %q, want opened scope %q", replacement.modelsScope, scope)
 	}
 }
 

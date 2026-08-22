@@ -313,6 +313,7 @@ type RuntimeAssembly interface {
 		logger *zap.Logger,
 		runtimeBuild runtimeports.RuntimeReplacementBuilder,
 		startupRuntime runtimeports.RuntimeInstance,
+		modelsScope models.RuntimeScopeRef,
 		startupSpec factoryruntime.SessionBuildSpec,
 		runtimeLifecycle runtimeports.RuntimeLifecycle,
 		runtimeSidecars factorysessions.RuntimeSidecars,
