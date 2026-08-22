@@ -395,4 +395,39 @@ func TestPriceTableNormalizeCanonicalizesAndDetachesEntries(t *testing.T) {
 	}
 }
 
+func TestPriceTableReaderFuncReturnsDetachedEntries(t *testing.T) {
+	t.Parallel()
+
+	cached := "0"
+	table := providers.PriceTable{
+		Currency: providers.PriceTableCurrencyUSD,
+		Models: []providers.PriceTableModel{{
+			Provider:                    providers.IDCodex,
+			Model:                       "gpt-5",
+			InputPerMillionTokens:       "1",
+			OutputPerMillionTokens:      "2",
+			CachedInputPerMillionTokens: &cached,
+			SourceURL:                   "https://example.com/pricing",
+			AsOfDate:                    "2026-08-21",
+		}},
+	}
+	reader := providers.PriceTableReaderFunc(func() (providers.PriceTable, error) {
+		return table, nil
+	})
+
+	first, err := reader.ReadPriceTable()
+	if err != nil {
+		t.Fatalf("ReadPriceTable() = %v", err)
+	}
+	first.Models[0].Model = "mutated"
+	*first.Models[0].CachedInputPerMillionTokens = "9"
+	second, err := reader.ReadPriceTable()
+	if err != nil {
+		t.Fatalf("second ReadPriceTable() = %v", err)
+	}
+	if second.Models[0].Model != "gpt-5" || *second.Models[0].CachedInputPerMillionTokens != "0" {
+		t.Fatalf("ReadPriceTable() returned aliased data: %#v", second.Models[0])
+	}
+}
+
 func stringPointer(value string) *string { return &value }

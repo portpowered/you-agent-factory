@@ -156,7 +156,11 @@ func (reader PriceTableReaderFunc) ReadPriceTable() (PriceTable, error) {
 	if reader == nil {
 		return PriceTable{}, fmt.Errorf("read provider price table: reader is required")
 	}
-	return reader()
+	table, err := reader()
+	if err != nil {
+		return PriceTable{}, err
+	}
+	return table.Clone(), nil
 }
 
 // Clone returns a detached price table.
