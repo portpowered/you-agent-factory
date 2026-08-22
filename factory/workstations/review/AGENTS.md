@@ -75,19 +75,46 @@ If the change involves modification to the website, you should use the playwrigh
   hold routes this task back through the `ci-wait` gate, which does the
   waiting for you and costs no review visit. Never end with `<REJECTED>`
   merely because CI is pending — waiting on CI is not executor rework.
-- Known-baseline flake policy: if a required check fails ONLY on a test in a
-  package the PR diff does not touch, and that test is a known baseline flake
-  (see the deflake lane list in docs/temp/scale-program-rules.md in the root
-  repo, or verify it reproduces on the base SHA), rerun the failed jobs ONCE
-  (`gh run rerun <id> --failed`) and immediately end `<CONTINUE>` — the
-  `ci-wait` gate waits out the rerun and hands the task back to review with
-  terminal checks. If on that next pass the rerun greened, proceed. If
-  the same untouched-package flake fails twice, post ONE comment naming the
-  test and the owning deflake lane, state explicitly "NO EXECUTOR ACTION
-  REQUIRED — waiting on baseline deflake", and end `<CONTINUE>`. That is a wait
-  on another lane, not executor rework, so it takes the hold route; post that
-  comment at most once and stay silent on later holds for the same flake. Never
-  demand code changes for a baseline flake in a package the diff does not touch.
+- Known-baseline flake policy: preserve both existing qualification paths. If a
+  required check fails ONLY on a test in a package the PR diff does not touch,
+  and that test is either a known baseline flake (see the deflake lane list in
+  docs/temp/scale-program-rules.md in the root repo) or is verified to
+  reproduce on the base SHA, rerun the failed jobs ONCE (`gh run rerun <id>
+  --failed`) and immediately end `<CONTINUE>` — the `ci-wait` gate waits out
+  the rerun and hands the task back to review with terminal checks. If on that
+  next pass the rerun greened, proceed. If the same untouched-package flake
+  fails twice, post ONE comment naming the test and the owning deflake lane,
+  state explicitly "NO EXECUTOR ACTION REQUIRED — waiting on baseline
+  deflake", and end `<CONTINUE>`. That is a wait on another lane, not executor
+  rework, so it takes the hold route; post that comment at most once and stay
+  silent on later holds for the same flake.
+
+  There is also a third, narrow candidate-baseline-flake path for a required
+  check that fails ONLY on a test in a package the PR diff does not touch. It
+  qualifies only when ALL of these facts are established:
+
+  1. The failed test passes locally with `-count=20` or more on both the PR
+     head and the base SHA.
+  2. Review finds no obvious causal connection to the diff, including through
+     a shared symbol, changed construction order, or equivalent behavior.
+  3. No other independent blocking evidence applies.
+
+  Repeated local non-reproduction on both head and base is evidence supporting
+  a candidate flake; it is not grounds to block an otherwise unrelated lane.
+  For a qualifying candidate, rerun the failed jobs exactly ONCE (`gh run
+  rerun <id> --failed`), then post at most ONE PR conversation comment naming
+  the test and stating exactly "NO EXECUTOR ACTION REQUIRED -- candidate
+  baseline flake, operator notified" while asking the operator to add the
+  test to the deflake list. Return the hold route with `<CONTINUE>`; do not
+  reject the lane or demand executor code changes. This comment and rerun are
+  a bounded exception to the otherwise silent hold rules: later visits for the
+  same candidate do not repeat either action. The candidate path cannot bypass
+  a failing project acceptance criterion, a failure in a touched or causally
+  affected package, or any other independent blocker, and grants no general
+  authority to waive red CI.
+
+  Never demand code changes for a baseline or qualifying candidate flake in a
+  package the diff does not touch.
 
 ### Step 3 — Verify project acceptance criteria
 
