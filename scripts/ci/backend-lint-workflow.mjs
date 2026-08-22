@@ -4,6 +4,7 @@ export const BACKEND_LINT_EVENTS = Object.freeze(["pull_request", "push"]);
 // Keep this positive: the workflow must never pass an empty jobs value to
 // lintlane when runner parallelism discovery is unavailable.
 export const BACKEND_LINT_FALLBACK_JOBS = 2;
+const COMMIT_SHA_PATTERN = /^[0-9a-f]{40}$/i;
 
 const RUNNER_PARALLELISM_MODULE = "./runner-parallelism.mjs";
 
@@ -66,17 +67,29 @@ export async function resolveBackendLintParallelism(
 export function selectBackendLint({
 	eventName = "",
 	ref = "",
-	pullRequestHeadSha = "",
 	sha = "",
 } = {}) {
 	const selected =
 		eventName === "pull_request" ||
 		(eventName === "push" && ref === "refs/heads/main");
-	const headSha = String(pullRequestHeadSha || sha).trim();
+	if (!selected) {
+		return {
+			selected: false,
+			testedSha: "",
+			checkoutRef: "",
+			error: "",
+		};
+	}
+
+	const testedSha = String(sha || "").trim();
+	const error = COMMIT_SHA_PATTERN.test(testedSha)
+		? ""
+		: `Backend Lint requires github.sha to be a 40-character commit SHA for ${eventName} events; received ${testedSha || "(empty)"}.`;
 	return {
 		selected,
-		headSha,
-		checkoutRef: selected ? headSha : "",
+		testedSha: error ? "" : testedSha,
+		checkoutRef: error ? "" : testedSha,
+		error,
 	};
 }
 

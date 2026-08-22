@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -302,6 +303,159 @@ func TestMakeBackendSizeAllowsRemovingDirectiveWithBaselineEntry(t *testing.T) {
 	writeGoFile(t, fixtureRoot, "pkg/service/legacy.go", "package service\n")
 	writeExemptionBaseline(t, fixtureRoot)
 	assertMakeBackendSizePasses(t, repoRoot, fixtureRoot)
+}
+
+func TestMakeBackendSizeRejectsViolationCreatedOnlyByCleanMerge(t *testing.T) {
+	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("resolve source repository root: %v", err)
+	}
+	fixtureRoot := t.TempDir()
+	fixturePath := "pkg/mergefixture/merge_fixture.go"
+	commonSource := backendSizeMergeFixtureSource()
+	writeGoFile(t, fixtureRoot, fixturePath, commonSource)
+	assertFixtureLineCount(t, fixtureRoot, fixturePath, 950)
+
+	initBackendSizeGitFixture(t, fixtureRoot)
+	runGitFixtureCommand(t, fixtureRoot, "add", "--all")
+	runGitFixtureCommand(t, fixtureRoot, "commit", "--quiet", "-m", "common ancestor")
+	runGitFixtureCommand(t, fixtureRoot, "branch", "base")
+
+	runGitFixtureCommand(t, fixtureRoot, "checkout", "--quiet", "base")
+	insertBackendSizeFixtureLines(t, fixtureRoot, fixturePath, "// base insertion point", 39, "base")
+	assertFixtureLineCount(t, fixtureRoot, fixturePath, 989)
+	runGitFixtureCommand(t, fixtureRoot, "add", "--all")
+	runGitFixtureCommand(t, fixtureRoot, "commit", "--quiet", "-m", "base side")
+
+	baseOutput, err := runBackendSizeMake(t, repoRoot, fixtureRoot)
+	if err != nil {
+		t.Fatalf("base side should pass backend-size: %v\n%s", err, baseOutput)
+	}
+	if !strings.Contains(baseOutput, "all owned Go backend files are within file limit 1000") {
+		t.Fatalf("base output = %q, want the unchanged 1000-line gate to pass", baseOutput)
+	}
+
+	runGitFixtureCommand(t, fixtureRoot, "checkout", "--quiet", "-b", "pull-request", "main")
+	insertBackendSizeFixtureLines(t, fixtureRoot, fixturePath, "// pull-request insertion point", 40, "pull-request")
+	assertFixtureLineCount(t, fixtureRoot, fixturePath, 990)
+	runGitFixtureCommand(t, fixtureRoot, "add", "--all")
+	runGitFixtureCommand(t, fixtureRoot, "commit", "--quiet", "-m", "pull-request side")
+
+	prOutput, err := runBackendSizeMake(t, repoRoot, fixtureRoot)
+	if err != nil {
+		t.Fatalf("head-only pull-request side should pass backend-size: %v\n%s", err, prOutput)
+	}
+	if !strings.Contains(prOutput, "all owned Go backend files are within file limit 1000") {
+		t.Fatalf("head-only pull-request output = %q, want the unchanged 1000-line gate to pass", prOutput)
+	}
+
+	runGitFixtureCommand(t, fixtureRoot, "checkout", "--quiet", "base")
+	runGitFixtureCommand(t, fixtureRoot, "merge", "--no-ff", "--no-commit", "pull-request")
+	assertFixtureLineCount(t, fixtureRoot, fixturePath, 1029)
+
+	combinedOutput, err := runBackendSizeMake(t, repoRoot, fixtureRoot)
+	if err == nil {
+		t.Fatalf("clean combined tree should fail backend-size, output:\n%s", combinedOutput)
+	}
+	for _, want := range []string{
+		"pkg/mergefixture | file pkg/mergefixture/merge_fixture.go has 1029 lines (limit 1000)",
+		"LINT_VIOLATION_COUNT: 1",
+	} {
+		if !strings.Contains(combinedOutput, want) {
+			t.Fatalf("combined backend-size output = %q, want property-specific diagnostic %q", combinedOutput, want)
+		}
+	}
+	t.Logf("combined backend-size diagnostic:\n%s", strings.TrimSpace(combinedOutput))
+}
+
+func backendSizeMergeFixtureSource() string {
+	lines := []string{"package mergefixture", ""}
+	for len(lines) < 400 {
+		lines = append(lines, fmt.Sprintf("// common line %03d", len(lines)+1))
+	}
+	lines = append(lines, "// pull-request insertion point")
+	for len(lines) < 800 {
+		lines = append(lines, fmt.Sprintf("// common line %03d", len(lines)+1))
+	}
+	lines = append(lines, "// base insertion point")
+	for len(lines) < 950 {
+		lines = append(lines, fmt.Sprintf("// common line %03d", len(lines)+1))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func initBackendSizeGitFixture(t *testing.T, repoRoot string) {
+	t.Helper()
+	runGitFixtureCommand(t, repoRoot, "init", "--quiet")
+	runGitFixtureCommand(t, repoRoot, "branch", "-M", "main")
+	runGitFixtureCommand(t, repoRoot, "config", "user.email", "backend-size-test@example.invalid")
+	runGitFixtureCommand(t, repoRoot, "config", "user.name", "Backend Size Test")
+	runGitFixtureCommand(t, repoRoot, "config", "commit.gpgSign", "false")
+}
+
+func insertBackendSizeFixtureLines(t *testing.T, repoRoot, relativePath, marker string, count int, label string) {
+	t.Helper()
+	path := filepath.Join(repoRoot, filepath.FromSlash(relativePath))
+	source, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read fixture %s: %v", relativePath, err)
+	}
+	lines := strings.Split(string(source), "\n")
+	markerIndex := -1
+	for index, line := range lines {
+		if line == marker {
+			markerIndex = index
+			break
+		}
+	}
+	if markerIndex == -1 {
+		t.Fatalf("fixture %s does not contain insertion marker %q", relativePath, marker)
+	}
+	additions := make([]string, count)
+	for index := range additions {
+		additions[index] = fmt.Sprintf("// %s line %02d", label, index+1)
+	}
+	updated := make([]string, 0, len(lines)+len(additions))
+	updated = append(updated, lines[:markerIndex+1]...)
+	updated = append(updated, additions...)
+	updated = append(updated, lines[markerIndex+1:]...)
+	if err := os.WriteFile(path, []byte(strings.Join(updated, "\n")), 0o644); err != nil {
+		t.Fatalf("write fixture %s: %v", relativePath, err)
+	}
+}
+
+func assertFixtureLineCount(t *testing.T, repoRoot, relativePath string, want int) {
+	t.Helper()
+	source, err := os.ReadFile(filepath.Join(repoRoot, filepath.FromSlash(relativePath)))
+	if err != nil {
+		t.Fatalf("read fixture %s: %v", relativePath, err)
+	}
+	got := 0
+	if len(source) > 0 {
+		got = strings.Count(string(source), "\n") + 1
+	}
+	if got != want {
+		t.Fatalf("fixture %s has %d lines, want %d", relativePath, got, want)
+	}
+}
+
+func runGitFixtureCommand(t *testing.T, repoRoot string, args ...string) string {
+	t.Helper()
+	commandArgs := append([]string{"-C", repoRoot}, args...)
+	command := exec.Command("git", commandArgs...)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, output)
+	}
+	return string(output)
+}
+
+func runBackendSizeMake(t *testing.T, repoRoot, fixtureRoot string) (string, error) {
+	t.Helper()
+	command := exec.Command("make", "backend-size", "BACKEND_SIZE_ROOT="+filepath.ToSlash(fixtureRoot))
+	command.Dir = repoRoot
+	output, err := command.CombinedOutput()
+	return string(output), err
 }
 
 func assertMakeBackendSizePasses(t *testing.T, repoRoot, fixtureRoot string) {

@@ -440,8 +440,8 @@ export function renderBackendLintSummary(summary) {
 
 export function renderBackendLintComment(summary, metadata = {}) {
 	const lines = [BACKEND_LINT_COMMENT_MARKER, renderBackendLintSummary(summary).trim()];
-	if (textValue(metadata.headSha)) {
-		lines.push(`- Hosted head: \`${textValue(metadata.headSha)}\``);
+	if (textValue(metadata.testedSha)) {
+		lines.push(`- Hosted tested SHA: \`${textValue(metadata.testedSha)}\``);
 	}
 	if (textValue(metadata.runUrl)) {
 		lines.push(`- Hosted run: ${textValue(metadata.runUrl)}`);
@@ -483,7 +483,7 @@ function runCli() {
 	const markdown = renderBackendLintSummary(summary);
 	appendFileSync(summaryPath, markdown);
 	writeFileSync(commentPath, renderBackendLintComment(summary, {
-		headSha: process.env.BACKEND_LINT_HEAD_SHA || process.env.GITHUB_SHA,
+		testedSha: process.env.BACKEND_LINT_TESTED_SHA,
 		runUrl: process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY && process.env.GITHUB_RUN_ID
 			? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
 			: "",

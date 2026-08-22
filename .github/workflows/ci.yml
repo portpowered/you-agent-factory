@@ -493,11 +493,11 @@ jobs:
       LINT_REPORT_FILE: .artifacts/backend-lint/report.json
       LINT_LOG_FILE: .artifacts/backend-lint/lint.log
       LINT_COMMENT_FILE: .artifacts/backend-lint/comment.md
-      BACKEND_LINT_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      BACKEND_LINT_TESTED_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
@@ -518,7 +518,6 @@ jobs:
         env:
           BACKEND_LINT_EVENT_NAME: ${{ github.event_name }}
           BACKEND_LINT_REF: ${{ github.ref }}
-          BACKEND_LINT_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
           BACKEND_LINT_SHA: ${{ github.sha }}
         run: |
           node --input-type=module <<'NODE'
@@ -526,13 +525,15 @@ jobs:
           const selection = selectBackendLint({
             eventName: process.env.BACKEND_LINT_EVENT_NAME,
             ref: process.env.BACKEND_LINT_REF,
-            pullRequestHeadSha: process.env.BACKEND_LINT_PR_HEAD_SHA,
             sha: process.env.BACKEND_LINT_SHA,
           });
-          if (!selection.selected || !selection.headSha) {
+          if (!selection.selected || selection.error) {
             throw new Error(`Backend Lint was not selected for its hosted event: ${JSON.stringify(selection)}`);
           }
-          console.log(`Backend Lint selected at ${selection.headSha}`);
+          if (selection.checkoutRef !== process.env.BACKEND_LINT_SHA) {
+            throw new Error(`Backend Lint checkout identity disagrees with its tested identity: ${JSON.stringify(selection)}`);
+          }
+          console.log(`Backend Lint selected tested SHA ${selection.testedSha}`);
           NODE
       - name: Compile functionallong test packages
         id: compile-functionallong
