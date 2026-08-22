@@ -85,6 +85,10 @@ def create_remote_repository(root, remote_ahead):
 
     local = root / "local"
     git(["clone", str(remote), local.name], root)
+    (local / ".git" / "info" / "exclude").write_text(
+        "tasks/todo/\n.claude/\n",
+        encoding="utf-8",
+    )
     if remote_ahead:
         git(["reset", "--hard", "HEAD^"], local)
         git(["fetch", "origin"], local)
@@ -485,8 +489,6 @@ class SetupWorkspaceRootResidueTest(unittest.TestCase):
         git(["push", "-u", "origin", lane], upstream)
         git(["fetch", "origin"], local)
 
-        root_only_file = local / "root-only-untracked.txt"
-        root_only_file.write_bytes(b"root only\n")
         tasks_dir = local / "tasks" / "todo"
         tasks_dir.mkdir(parents=True, exist_ok=True)
         (tasks_dir / f"{lane}.json").write_text(
@@ -513,7 +515,6 @@ class SetupWorkspaceRootResidueTest(unittest.TestCase):
             git(["rev-parse", f"origin/{lane}"], worktree).stdout.strip(),
             lane_sha,
         )
-        self.assertFalse((worktree / root_only_file.name).exists())
         self.assertEqual(
             git(["rev-parse", "HEAD"], local).stdout.strip(), remote_sha,
         )
@@ -551,13 +552,12 @@ class SetupWorkspaceRootResidueTest(unittest.TestCase):
             lane_next_sha,
         )
         self.assertEqual(marker.read_bytes(), b"keep lane marker\n")
-        self.assertFalse((worktree / root_only_file.name).exists())
         self.assertEqual(
             git(["rev-parse", "HEAD"], local).stdout.strip(), remote_sha,
         )
         self.assertEqual(
             git(["status", "--porcelain"], local).stdout,
-            f"?? {root_only_file.name}\n",
+            "",
         )
 
     def test_guard_rejects_ancestor_equivalent_index_and_worktree_without_repairing(self):
@@ -725,8 +725,8 @@ class SetupWorkspaceRootResidueTest(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 1, result.stdout)
-        self.assertIn("Root sync failed:", result.stderr)
-        self.assertIn("ancestor-residue guard", result.stderr)
+        self.assertIn("Root cleanliness check failed", result.stderr)
+        self.assertIn("repository root is dirty", result.stderr.lower())
         self.assertIn("merged.txt", result.stderr)
         self.assertFalse(
             (local / ".claude" / "worktrees" / prd_name).exists(),

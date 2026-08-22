@@ -27,6 +27,9 @@ IMMUTABLE_OBJECT_ID = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 SNAPSHOT_REF_PREFIX = "refs/factory-snapshots/"
 ROOT_SYNC_LOCK_FILENAME = "setup-workspace-root-sync.lock"
 MAX_ANCESTOR_RESIDUE_PATHS = 20
+MAX_DIRTY_ROOT_SAMPLE_ENTRIES = 12
+MAX_STATUS_FAILURE_DETAILS = 512
+MAX_DISPLAYED_STATUS_PATH_LENGTH = 240
 _ROOT_SYNC_THREAD_LOCKS = {}
 _ROOT_SYNC_THREAD_LOCKS_GUARD = threading.Lock()
 
@@ -38,6 +41,8 @@ def run_git(*args, cwd=None, check=True, env=None):
         cwd=cwd,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="surrogateescape",
         env=env,
     )
     if check and result.returncode != 0:
@@ -64,6 +69,174 @@ def working_tree_has_local_changes(repo_path):
     """True when the working tree has staged, unstaged, or untracked changes."""
     status = run_git("status", "--porcelain", cwd=repo_path, check=False)
     return bool(status.stdout.strip())
+
+
+def truncate_status_details(details):
+    """Keep status-command failures useful without emitting unbounded output."""
+    if len(details) <= MAX_STATUS_FAILURE_DETAILS:
+        return details
+    omitted = len(details) - MAX_STATUS_FAILURE_DETAILS
+    return f"{details[:MAX_STATUS_FAILURE_DETAILS]}... ({omitted} more characters)"
+
+
+def parse_porcelain_status(output):
+    """Parse NUL-delimited porcelain-v1 status entries safely."""
+    entries = []
+    tokens = output.split("\0")
+    token_index = 0
+    while token_index < len(tokens):
+        token = tokens[token_index]
+        token_index += 1
+        if not token:
+            continue
+        if len(token) < 4 or token[2] != " ":
+            raise RuntimeError(
+                "git status returned malformed porcelain output"
+            )
+
+        status = token[:2]
+        paths = [token[3:]]
+        if "R" in status or "C" in status:
+            if token_index >= len(tokens) or not tokens[token_index]:
+                raise RuntimeError(
+                    "git status returned an incomplete rename or copy entry"
+                )
+            paths.append(tokens[token_index])
+            token_index += 1
+        entries.append({"status": status, "paths": tuple(paths)})
+
+    return entries
+
+
+def repository_status_entries(repo_path):
+    """Return non-ignored root status entries, or raise a bounded failure."""
+    try:
+        result = run_git(
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+            cwd=repo_path,
+            check=False,
+        )
+    except OSError as error:
+        raise RuntimeError(f"could not run git status: {error}") from error
+
+    if result.returncode != 0:
+        details = truncate_status_details(command_failure_details(result))
+        raise RuntimeError(
+            "git status --porcelain=v1 failed "
+            f"(exit {result.returncode}): {details}"
+        )
+
+    try:
+        return parse_porcelain_status(result.stdout)
+    except RuntimeError as error:
+        raise RuntimeError(f"could not inspect repository status: {error}") from error
+
+
+def status_entry_kind(entry):
+    """Return the operator-facing category for one porcelain status entry."""
+    return "untracked" if entry["status"] == "??" else "tracked"
+
+
+def status_entry_sort_key(entry):
+    """Return a stable sort key independent of Git's presentation order."""
+    kind_order = 0 if status_entry_kind(entry) == "tracked" else 1
+    return kind_order, entry["paths"], entry["status"]
+
+
+def status_entry_path(entry):
+    """Render one status path as a safely escaped, bounded display value."""
+    paths = entry["paths"]
+    if "R" in entry["status"] or "C" in entry["status"]:
+        paths = tuple(reversed(paths))
+
+    rendered_paths = []
+    for path in paths:
+        if len(path) > MAX_DISPLAYED_STATUS_PATH_LENGTH:
+            path = (
+                path[: MAX_DISPLAYED_STATUS_PATH_LENGTH - 1]
+                + "…"
+            )
+        rendered_paths.append(json.dumps(path, ensure_ascii=True))
+    return " -> ".join(rendered_paths)
+
+
+def dirty_root_sample(entries):
+    """Select a stable bounded sample while retaining both status categories."""
+    grouped = {
+        "tracked": sorted(
+            (entry for entry in entries if status_entry_kind(entry) == "tracked"),
+            key=status_entry_sort_key,
+        ),
+        "untracked": sorted(
+            (entry for entry in entries if status_entry_kind(entry) == "untracked"),
+            key=status_entry_sort_key,
+        ),
+    }
+
+    sample = [group[0] for group in grouped.values() if group]
+    remaining = [
+        entry
+        for entry in entries
+        if all(entry is not selected for selected in sample)
+    ]
+    remaining.sort(key=status_entry_sort_key)
+    sample.extend(remaining[: max(0, MAX_DIRTY_ROOT_SAMPLE_ENTRIES - len(sample))])
+    sample.sort(key=status_entry_sort_key)
+    return sample
+
+
+def dirty_root_diagnostic(repo_path, entries):
+    """Describe dirty-root evidence and safe manual recovery guidance."""
+    tracked_count = sum(
+        status_entry_kind(entry) == "tracked" for entry in entries
+    )
+    untracked_count = len(entries) - tracked_count
+    sample = dirty_root_sample(entries)
+    omitted_count = len(entries) - len(sample)
+
+    lines = [
+        f"repository root is dirty: {repo_path}",
+        "status counts: "
+        f"total entries={len(entries)}; "
+        f"tracked changes={tracked_count}; "
+        f"untracked files={untracked_count}",
+        "workspace setup stopped before root synchronization, snapshot "
+        "capture, worktree preparation, pruning, or PRD copy",
+        f"status sample (up to {MAX_DIRTY_ROOT_SAMPLE_ENTRIES} entries):",
+    ]
+
+    for kind in ("tracked", "untracked"):
+        lines.append(f"  {kind}:")
+        category_sample = [
+            entry for entry in sample if status_entry_kind(entry) == kind
+        ]
+        if not category_sample:
+            lines.append("    (none)")
+            continue
+        for entry in category_sample:
+            lines.append(
+                f"    {entry['status']} {status_entry_path(entry)}"
+            )
+
+    if omitted_count:
+        lines.append(
+            f"  {omitted_count} additional path(s) omitted from the sample"
+        )
+    lines.append(
+        "Inspect the repository root manually, then commit the changes or "
+        "back them up and restore them manually before retrying."
+    )
+    return "\n".join(lines)
+
+
+def ensure_clean_repository_root(repo_root):
+    """Refuse setup before any root synchronization or workspace mutation."""
+    entries = repository_status_entries(repo_root)
+    if entries:
+        raise RuntimeError(dirty_root_diagnostic(repo_root, entries))
 
 
 def command_failure_details(result):
@@ -953,6 +1126,15 @@ def main():
     branch = f"{prd_name}"
     if not branch:
         print("PRD name must not be empty", file=sys.stderr)
+        sys.exit(1)
+
+    # Root setup is deliberately fail-closed: the legacy synchronization path
+    # can snapshot and restore local changes, but intake must not mutate an
+    # operator's repository before the lane has even been created.
+    try:
+        ensure_clean_repository_root(repo_root)
+    except RuntimeError as e:
+        print(f"Root cleanliness check failed: {e}", file=sys.stderr)
         sys.exit(1)
 
     # Sync main and prune worktrees.

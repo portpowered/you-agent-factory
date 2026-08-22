@@ -59,6 +59,26 @@ def git(args, cwd, check=True):
 
 
 def write_prd(repo_path, prd_name, include_md=False):
+    exclude_path = repo_path / ".git" / "info" / "exclude"
+    existing_excludes = (
+        exclude_path.read_text(encoding="utf-8")
+        if exclude_path.exists()
+        else ""
+    )
+    missing_excludes = [
+        entry
+        for entry in ("tasks/todo/", ".claude/")
+        if entry not in existing_excludes.splitlines()
+    ]
+    if missing_excludes:
+        exclude_path.write_text(
+            existing_excludes.rstrip("\n")
+            + "\n"
+            + "\n".join(missing_excludes)
+            + "\n",
+            encoding="utf-8",
+        )
+
     tasks_dir = repo_path / "tasks" / "todo"
     tasks_dir.mkdir(parents=True)
     prd_json = tasks_dir / f"{prd_name}.json"
@@ -93,7 +113,10 @@ def setup_repo_with_origin_main_ahead(local_repo, repo_root):
     git(["clone", str(bare_remote), str(local_repo.name)], repo_root)
     git(["reset", "--hard", "HEAD~1"], local_repo)
     git(["checkout", "-b", "feature-branch"], local_repo)
-    (local_repo / "dirty.txt").write_text("unstaged change\n", encoding="utf-8")
+    (local_repo / ".git" / "info" / "exclude").write_text(
+        "tasks/todo/\n.claude/\n",
+        encoding="utf-8",
+    )
     git(["fetch", "origin"], local_repo)
 
     return bare_remote
@@ -312,10 +335,6 @@ class SetupWorkspaceWorktreeTest(unittest.TestCase):
         local_repo = self.repo_path / "local"
         setup_repo_with_origin_main_ahead(local_repo, self.repo_path)
 
-        staged_file = local_repo / "staged.txt"
-        staged_file.write_text("staged change\n", encoding="utf-8")
-        git(["add", "staged.txt"], local_repo)
-
         prd_name = "reuse-dirty-root-prd"
         write_prd(local_repo, prd_name)
 
@@ -325,14 +344,16 @@ class SetupWorkspaceWorktreeTest(unittest.TestCase):
         marker = Path(first_payload["worktree"]) / "reuse-marker.txt"
         marker.write_text("keep me\n", encoding="utf-8")
 
+        staged_file = local_repo / "staged.txt"
+        staged_file.write_text("staged change\n", encoding="utf-8")
+        git(["add", "staged.txt"], local_repo)
+
         second = run_setup_workspace(local_repo, prd_name)
-        self.assertEqual(second.returncode, 0, second.stderr)
-        second_payload = json.loads(second.stdout)
-        self.assertTrue(second_payload["reused"])
-        self.assertEqual(second_payload["worktree"], first_payload["worktree"])
+        self.assertEqual(second.returncode, 1, second.stdout)
+        self.assertEqual(second.stdout, "")
+        self.assertIn("repository root is dirty", second.stderr.lower())
         self.assertTrue(marker.exists())
         self.assertIn("A  staged.txt", git(["status", "--porcelain"], local_repo).stdout)
-        self.assertIn("?? dirty.txt", git(["status", "--porcelain"], local_repo).stdout)
 
     def test_reused_worktree_stashes_local_changes_before_syncing_upstream(self):
         bare_remote = self.repo_path / "remote.git"
