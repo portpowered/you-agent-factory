@@ -6,7 +6,9 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
+	"time"
 
 	costs "github.com/portpowered/infinite-you/pkg/services/costs"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -88,6 +90,88 @@ func TestHandlerMapsCostsFailureToInternalError(t *testing.T) {
 	}
 	if response.Code != factoryapi.ErrorResponseCode("COSTS_QUERY_FAILED") || response.Message != "runtime metrics query failed" {
 		t.Fatalf("error response = %#v", response)
+	}
+}
+
+func TestHandlerCharacterizesSlowCostsQueryAtLowAndConcurrentLoad(t *testing.T) {
+	t.Parallel()
+
+	t.Run("low load", func(t *testing.T) {
+		runBlockedCostsLoad(t, 1)
+	})
+	t.Run("representative concurrent load", func(t *testing.T) {
+		runBlockedCostsLoad(t, 16)
+	})
+}
+
+// runBlockedCostsLoad is a characterization harness for the pre-bound
+// metrics-costs route. The gate models a canonical metrics read that has not
+// completed; channels make the observation deterministic without sleeps, a
+// live daemon, or assumptions about artifact layout. Story 004 can retain
+// this harness while changing the assertion from "waits for the query" to a
+// bounded timeout/cancellation result.
+func runBlockedCostsLoad(t *testing.T, requestCount int) {
+	t.Helper()
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseQuery := func() { releaseOnce.Do(func() { close(release) }) }
+	defer releaseQuery()
+	started := make(chan struct{}, requestCount)
+	query := costs.CostsQuery(func(context.Context, costs.QueryRequest) (costs.Report, error) {
+		started <- struct{}{}
+		<-release
+		return costs.Report{Status: costs.StatusNoUsage}, nil
+	})
+	handler := NewHandler(NewAdapter(query, "metrics", "settings"), zap.NewNop())
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler.GetMetricsCosts(w, r, factoryapi.GetMetricsCostsParams{})
+	}))
+	defer server.Close()
+
+	type result struct {
+		status int
+		err    error
+	}
+	results := make(chan result, requestCount)
+	for i := 0; i < requestCount; i++ {
+		go func() {
+			response, err := server.Client().Get(server.URL + "/metrics/costs")
+			item := result{err: err}
+			if response != nil {
+				item.status = response.StatusCode
+				_ = response.Body.Close()
+			}
+			results <- item
+		}()
+	}
+
+	for i := 0; i < requestCount; i++ {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatalf("request %d did not reach the canonical costs query", i+1)
+		}
+	}
+	select {
+	case got := <-results:
+		t.Fatalf("costs request completed before the canonical query was released: %#v", got)
+	default:
+	}
+
+	releaseQuery()
+	completionDeadline := time.After(time.Second)
+	for i := 0; i < requestCount; i++ {
+		select {
+		case got := <-results:
+			if got.err != nil {
+				t.Fatalf("costs request %d error after release: %v", i+1, got.err)
+			}
+			if got.status != http.StatusOK {
+				t.Fatalf("costs request %d status = %d, want %d", i+1, got.status, http.StatusOK)
+			}
+		case <-completionDeadline:
+			t.Fatalf("costs request %d did not complete after the canonical query was released", i+1)
+		}
 	}
 }
 
