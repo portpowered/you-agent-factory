@@ -74,9 +74,18 @@ func validateFunctionalRuntimeInventory(jsonOutput string, expected functionalTe
 		observedTests[key] = struct{}{}
 	}
 
+	// A package is part of the observed runtime inventory only after test2json
+	// emits its terminal package outcome. Start, output, and test events prove
+	// that the package was mentioned, but they do not prove that the package run
+	// completed. The coverage gate must reject that partial stream.
+	terminalPackages := make(map[string]struct{}, len(parsed.packageOutcomes))
+	for packagePath := range parsed.packageOutcomes {
+		terminalPackages[packagePath] = struct{}{}
+	}
 	missingPackages, unexpectedPackages := functionalInventorySetDiff(expectedPackages, parsed.observedPackages)
+	missingTerminalPackages, _ := functionalInventorySetDiff(expectedPackages, terminalPackages)
 	missingTests, unexpectedTests := functionalInventorySetDiff(expectedTests, observedTests)
-	if parsed.complete && len(missingPackages) == 0 && len(unexpectedPackages) == 0 && len(missingTests) == 0 && len(unexpectedTests) == 0 {
+	if parsed.complete && len(missingPackages) == 0 && len(missingTerminalPackages) == 0 && len(unexpectedPackages) == 0 && len(missingTests) == 0 && len(unexpectedTests) == 0 {
 		return nil
 	}
 
@@ -86,6 +95,9 @@ func validateFunctionalRuntimeInventory(jsonOutput string, expected functionalTe
 	}
 	if len(missingPackages) > 0 {
 		details = append(details, "missing-packages="+formatFunctionalInventoryKeys(missingPackages))
+	}
+	if len(missingTerminalPackages) > 0 {
+		details = append(details, "missing-package-outcomes="+formatFunctionalInventoryKeys(missingTerminalPackages))
 	}
 	if len(unexpectedPackages) > 0 {
 		details = append(details, "unexpected-packages="+formatFunctionalInventoryKeys(unexpectedPackages))

@@ -348,6 +348,97 @@ func TestResolveFunctionalTestPackagesWithMetadataSkipsBuildExcludedCandidates(t
 	}
 }
 
+func TestFunctionalQuarantineResolvesConfiguredPackagePatternsBeforeSelection(t *testing.T) {
+	originalRunner := commandRunner
+	originalStdout := stdoutWriter
+	t.Cleanup(func() {
+		commandRunner = originalRunner
+		stdoutWriter = originalStdout
+	})
+
+	packagePath := modulePath + "/tests/functional/wildcard/selected"
+	keptPackagePath := modulePath + "/tests/functional/wildcard/kept"
+	repoRoot := t.TempDir()
+	packageDir := filepath.Join(repoRoot, "tests", "functional", "wildcard", "selected")
+	keptPackageDir := filepath.Join(repoRoot, "tests", "functional", "wildcard", "kept")
+	if err := os.MkdirAll(packageDir, 0o755); err != nil {
+		t.Fatalf("create package directory: %v", err)
+	}
+	if err := os.MkdirAll(keptPackageDir, 0o755); err != nil {
+		t.Fatalf("create kept package directory: %v", err)
+	}
+	writeFunctionalDiscoveryFixture(t, packageDir, "selected_test.go", `package selected
+
+import "testing"
+
+func TestSelected(t *testing.T) {}
+`)
+	writeFunctionalDiscoveryFixture(t, keptPackageDir, "kept_test.go", `package kept
+
+import "testing"
+
+func TestKept(t *testing.T) {}
+`)
+	quarantinePath := filepath.Join(t.TempDir(), "functional-quarantine.json")
+	manifest := `{"version":1,"suite":"functional","entries":[{"package":"` + packagePath + `","bucket":"ENVIRONMENT-DEPENDENT","reason":"wildcard quarantine fixture"}]}`
+	if err := os.WriteFile(quarantinePath, []byte(manifest), 0o644); err != nil {
+		t.Fatalf("write quarantine fixture: %v", err)
+	}
+
+	var invocations []commandInvocation
+	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		invocations = append(invocations, invocation)
+		switch {
+		case slices.Equal(invocation.args, []string{"list", functionalGoListErrorFlag, functionalGoListIdentityJSONFields, "-find", "./tests/functional/wildcard/..."}):
+			return strings.Join([]string{
+				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: packagePath, Dir: packageDir}),
+				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: keptPackagePath, Dir: keptPackageDir}),
+			}, "\n"), "", nil
+		case slices.Equal(invocation.args, []string{"list", functionalGoListErrorFlag, functionalGoListJSONFields, "-find", modulePath + "/tests/functional/wildcard/..."}):
+			return strings.Join([]string{
+				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: packagePath, Dir: packageDir, TestGoFiles: []string{"selected_test.go"}}),
+				marshalFunctionalGoListPackage(t, functionalGoListPackage{ImportPath: keptPackagePath, Dir: keptPackageDir, TestGoFiles: []string{"kept_test.go"}}),
+			}, "\n"), "", nil
+		case invocation.name == "go" && len(invocation.args) > 0 && invocation.args[0] == "test":
+			return marshalFunctionalTimingEvents(
+				goTestTimingEvent{Action: "start", Package: packagePath},
+				goTestTimingEvent{Action: timingOutcomeSkip, Package: packagePath},
+			), "", nil
+		default:
+			t.Fatalf("unexpected subprocess: %+v", invocation)
+			return "", "", nil
+		}
+	}
+
+	var stdout bytes.Buffer
+	stdoutWriter = &stdout
+	cfg := config{
+		suite:                functionalSuiteName,
+		packages:             "./tests/functional/wildcard/...",
+		functionalQuarantine: quarantinePath,
+		timeout:              time.Minute,
+	}
+	packages, listed, started, err := resolveCoverageTestPackages(cfg, repoRoot, nil)
+	if err != nil {
+		t.Fatalf("resolveCoverageTestPackages() error = %v", err)
+	}
+	if !slices.Equal(packages, []string{keptPackagePath, packagePath}) || len(listed) != 2 || listed[0].ImportPath != keptPackagePath || listed[1].ImportPath != packagePath {
+		t.Fatalf("resolved packages/listed metadata = %v/%+v, want concrete wildcard result", packages, listed)
+	}
+	selected, selection, err := prepareCoverageTestPackages(cfg, packages, "linux", 4, repoRoot, listed, started)
+	if err != nil {
+		t.Fatalf("prepareCoverageTestPackages() error = %v", err)
+	}
+	if !slices.Equal(selected, []string{keptPackagePath}) || selection == nil || selection.QuarantinedPackageCount != 1 || selection.SelectedPackageCount != 1 {
+		t.Fatalf("selection = %+v, selected = %v, want package-level quarantine to subtract concrete package", selection, selected)
+	}
+	for _, invocation := range invocations {
+		if slices.Contains(invocation.args, "-list") {
+			t.Fatalf("package-level quarantine unexpectedly used runtime selector listing: %+v", invocation)
+		}
+	}
+}
+
 func TestFunctionalMetadataPatternBatchesBalanceCurrentTreePackages(t *testing.T) {
 	packages := []string{
 		modulePath + "/tests/functional/factory",

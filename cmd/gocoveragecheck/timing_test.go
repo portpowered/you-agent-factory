@@ -130,6 +130,25 @@ func TestValidateFunctionalRuntimeInventoryAcceptsExactSelectedTests(t *testing.
 	}
 }
 
+func TestValidateFunctionalRuntimeInventoryRejectsMissingPackageTerminalEvent(t *testing.T) {
+	t.Parallel()
+
+	pkg := modulePath + "/tests/functional/inventory"
+	expected := functionalTestInventory{
+		Packages: []string{pkg},
+		Tests:    map[string][]string{pkg: {"TestKeep"}},
+	}
+	output := strings.Join([]string{
+		goTestEventLine(t, goTestTimingEvent{Action: "start", Package: pkg}),
+		goTestEventLine(t, goTestTimingEvent{Action: timingOutcomePass, Package: pkg, Test: "TestKeep", Elapsed: 0.1}),
+	}, "\n")
+
+	err := validateFunctionalRuntimeInventory(output, expected)
+	if err == nil || !strings.Contains(err.Error(), "missing-package-outcomes=1["+pkg+"]") {
+		t.Fatalf("validateFunctionalRuntimeInventory() error = %v, want missing terminal package outcome diagnostic", err)
+	}
+}
+
 func TestValidateFunctionalRuntimeInventoryRejectsMismatch(t *testing.T) {
 	t.Parallel()
 

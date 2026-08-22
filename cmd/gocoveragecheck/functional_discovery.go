@@ -432,7 +432,16 @@ func listFunctionalTestPackageMetadataBatches(batches [][]string, repoRoot strin
 
 func resolveFunctionalTestPackagesWithMetadata(cfg config, repoRoot string) ([]string, []functionalGoListPackage, error) {
 	if strings.TrimSpace(cfg.packages) != "" {
-		return splitList(cfg.packages, " ", true), nil, nil
+		patterns := splitList(cfg.packages, " ", true)
+		listedPackages, err := listFunctionalTestPackageMetadataFromPatterns(patterns, repoRoot)
+		if err != nil {
+			return nil, nil, err
+		}
+		packages := make([]string, 0, len(listedPackages))
+		for _, pkg := range listedPackages {
+			packages = append(packages, pkg.ImportPath)
+		}
+		return sortedUniqueStrings(packages), listedPackages, nil
 	}
 
 	listedPackages, err := listFunctionalTestPackageMetadata(functionalTestPatterns, repoRoot)
