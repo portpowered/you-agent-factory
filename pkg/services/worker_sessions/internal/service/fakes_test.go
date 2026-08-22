@@ -412,6 +412,22 @@ func (f *failOnNthAppendEventsAppender) Append(ctx context.Context, req events.A
 	return f.Service.Append(ctx, req)
 }
 
+// failOnTopicAppendEventsAppender rejects publication for one session topic
+// while preserving the real Events implementation for every other session.
+// It makes before-handoff publication failures deterministic without relying
+// on unrelated lifecycle records sharing one global append count.
+type failOnTopicAppendEventsAppender struct {
+	events.Service
+	topic events.Topic
+}
+
+func (f *failOnTopicAppendEventsAppender) Append(ctx context.Context, req events.AppendRequest) (events.AppendResult, error) {
+	if req.Topic == f.topic {
+		return events.AppendResult{}, errors.New("failOnTopicAppendEventsAppender: simulated append failure")
+	}
+	return f.Service.Append(ctx, req)
+}
+
 // blockingTerminalAppendEventsAppender pauses the terminal append after the
 // Worker Session state has committed. It lets replay tests observe the exact
 // interleaving in which a terminal state exists without a terminal lifecycle

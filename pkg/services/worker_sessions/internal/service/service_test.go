@@ -790,7 +790,14 @@ func TestInterrupt_IdempotencyAndRequestConflictAvoidDuplicateEffects(t *testing
 
 func TestInterrupt_ReportsSuccessorAdmissionPhaseAfterSourceCancellation(t *testing.T) {
 	boundary := newControlledBoundary()
-	registry := newControlledRegistry(t, boundary)
+	registry, err := newService(
+		asCanonicalExecution(boundary),
+		&failOnTopicAppendEventsAppender{Service: newEventsAppender(), topic: workersessions.Topic("successor-session")},
+		logging.NoopLogger{},
+	)
+	if err != nil {
+		t.Fatalf("service.New() error = %v", err)
+	}
 	sourceResult := startControlledSession(t, registry, boundary, "source-session", "dispatch-source")
 	reference := providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind, ID: "provider-session-admission-failure"}
 	if _, err := registry.AssociateProviderSession(context.Background(), workersessions.ProviderSessionAssociationRequest{
@@ -798,12 +805,6 @@ func TestInterrupt_ReportsSuccessorAdmissionPhaseAfterSourceCancellation(t *test
 	}); err != nil {
 		t.Fatalf("AssociateProviderSession() error = %v", err)
 	}
-	boundary.setPublishError(func(call int, _ workers.WorkstationDispatchRequest) error {
-		if call == 2 {
-			return errors.New("successor admission unavailable")
-		}
-		return nil
-	})
 	result, err := registry.Interrupt(context.Background(), workersessions.InterruptRequest{
 		RequestID: "interrupt-admission-failure", SourceWorkerSessionID: "source-session",
 		SuccessorWorkerSessionID: "successor-session", ReplacementMessage: "replacement",
@@ -814,8 +815,8 @@ func TestInterrupt_ReportsSuccessorAdmissionPhaseAfterSourceCancellation(t *test
 		result.Source.State != workersessions.StateCanceled || result.Successor.State != workersessions.StateFailed {
 		t.Fatalf("successor admission failure = %#v, %v, want SUCCESSOR_ADMISSION with canceled source and failed successor", result, err)
 	}
-	if boundary.publishCount() != 2 || len(boundary.cancellations()) != 1 {
-		t.Fatalf("successor admission failure effects = publishes %d, cancels %d, want 2/1", boundary.publishCount(), len(boundary.cancellations()))
+	if boundary.publishCount() != 1 || len(boundary.cancellations()) != 1 {
+		t.Fatalf("successor admission failure effects = publishes %d, cancels %d, want 1/1", boundary.publishCount(), len(boundary.cancellations()))
 	}
 	if got := <-sourceResult; got.Session.State != workersessions.StateCanceled {
 		t.Fatalf("source cleanup InvokeSession() = %#v, want CANCELED", got.Session)
