@@ -152,7 +152,7 @@ func assertDirectorySnapshotUnchanged(t *testing.T, root string, before map[stri
 	}
 }
 
-func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndPreservesEdits(t *testing.T) {
+func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndBacksUpEdits(t *testing.T) {
 	t.Parallel()
 
 	definition := assembledScriptPackageDefinition(t)
@@ -184,9 +184,7 @@ func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndPreser
 	if err := os.Chmod(editedPath, 0o600); err != nil {
 		t.Fatalf("Chmod(operator-edited script): %v", err)
 	}
-	beforeRerun := snapshotDirectoryContents(t, factoryDir)
-
-	skipped, err := packagedinstallation.New(packagedScriptsTestPersistence(), platformfilesystem.Local{}, os.Mkdir).
+	refreshed, err := packagedinstallation.New(packagedScriptsTestPersistence(), platformfilesystem.Local{}, os.Mkdir).
 		EnsurePackagedFactories(
 			t.Context(),
 			factorydefinitions.NamedFactoriesRoot(homeDir),
@@ -196,10 +194,24 @@ func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndPreser
 	if err != nil {
 		t.Fatalf("Initialize(rerun): %v", err)
 	}
-	if len(skipped) != 1 || skipped[0].Outcome != factorydefinitions.PackagedFactoryInstallSkipped {
-		t.Fatalf("rerun results = %#v, want one skipped package", skipped)
+	if len(refreshed) != 1 || refreshed[0].Outcome != factorydefinitions.PackagedFactoryInstallCustomerModified {
+		t.Fatalf("rerun results = %#v, want one customer-modified refresh", refreshed)
 	}
-	assertDirectorySnapshotUnchanged(t, factoryDir, beforeRerun)
+	if refreshed[0].BackupDir == "" {
+		t.Fatal("rerun backup path is empty")
+	}
+	assertInstalledPackagedScript(
+		t,
+		refreshed[0].BackupDir,
+		"scripts/nested/check.py",
+		"print('operator edit')\n",
+	)
+	assertInstalledPackagedScript(
+		t,
+		factoryDir,
+		"scripts/nested/check.py",
+		"print('nested packaged script')\n",
+	)
 }
 
 func assembledScriptPackageDefinition(t *testing.T) factorydefinitions.PackagedDefinition {

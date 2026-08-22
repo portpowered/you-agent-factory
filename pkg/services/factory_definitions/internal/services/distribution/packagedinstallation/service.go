@@ -100,17 +100,15 @@ func (service *Service) EnsurePackagedFactories(
 ) ([]factorydefinitions.PackagedFactoryInstallResult, error) {
 	results := make([]factorydefinitions.PackagedFactoryInstallResult, 0, len(definitions))
 	for _, definition := range definitions {
-		result, err := service.InstallPackagedFactory(
+		result, err := service.ensureManagedPackagedFactory(
 			ctx,
-			factorydefinitions.PackagedFactoryInstallParams{
-				NamedFactoriesRoot: namedFactoriesRoot,
-				BackendScopeID:     backendScopeID,
-				Definition:         definition,
-				Format:             factorydefinitions.PackagedFactoryFormatJSON,
-			},
+			namedFactoriesRoot,
+			backendScopeID,
+			definition,
 		)
 		if err != nil {
-			return nil, err
+			results = append(results, result)
+			return results, err
 		}
 		results = append(results, result)
 	}
@@ -120,15 +118,20 @@ func (service *Service) EnsurePackagedFactories(
 func (service *Service) InstallPackagedFactory(
 	ctx context.Context,
 	params factorydefinitions.PackagedFactoryInstallParams,
-) (factorydefinitions.PackagedFactoryInstallResult, error) {
+) (result factorydefinitions.PackagedFactoryInstallResult, installErr error) {
 	definition := params.Definition
 	format := params.Format
 	namedFactoriesRoot := params.NamedFactoriesRoot
 	backendScopeID := normalizedBackendScopeID(params.BackendScopeID)
-	result := factorydefinitions.PackagedFactoryInstallResult{
+	result = factorydefinitions.PackagedFactoryInstallResult{
 		Name:   definition.Name,
 		Format: format,
 	}
+	defer func() {
+		if installErr != nil && params.ManagedRefresh {
+			result.Outcome = factorydefinitions.PackagedFactoryInstallFailed
+		}
+	}()
 	if err := ctx.Err(); err != nil {
 		return result, service.installationError(backendScopeID, namedFactoriesRoot, definition.Name, "", ownerLivenessIndeterminate, err)
 	}
@@ -178,6 +181,16 @@ func (service *Service) InstallPackagedFactory(
 		result,
 		recoveredLease,
 		func() (factorydefinitions.PackagedFactoryInstallResult, error) {
+			if params.ManagedRefresh {
+				return service.createManagedPackagedFactory(
+					ctx,
+					namedFactoriesRoot,
+					definition.Name,
+					payload,
+					rootFileName,
+					result,
+				)
+			}
 			return service.createPackagedFactory(
 				ctx,
 				namedFactoriesRoot,
@@ -204,6 +217,28 @@ func (service *Service) installExistingPackagedFactory(
 ) (factorydefinitions.PackagedFactoryInstallResult, error) {
 	name := params.Definition.Name
 	rootDir := params.NamedFactoriesRoot
+	if params.ManagedRefresh {
+		return service.withStagingOwnership(
+			ctx,
+			rootDir,
+			name,
+			backendScopeID,
+			result,
+			recoveredLease,
+			func() (factorydefinitions.PackagedFactoryInstallResult, error) {
+				return service.reconcileManagedPackagedFactory(
+					ctx,
+					rootDir,
+					name,
+					normalizedFormat,
+					targetDir,
+					payload,
+					rootFileName,
+					result,
+				)
+			},
+		)
+	}
 	if err := service.persistence.ValidateFactoryLayout(targetDir); err != nil {
 		if releaseErr := service.releaseStagingOwnership(recoveredLease); releaseErr != nil {
 			err = errors.Join(err, releaseErr)
@@ -317,14 +352,7 @@ func (service *Service) withStagingOwnership(
 	}()
 	installResult, installErr = operation()
 	if installErr == nil {
-		service.logOutcome(
-			backendScopeID,
-			name,
-			lease.path,
-			"success",
-			ownerLivenessActive,
-			lease.owner.PID,
-		)
+		service.logInstallationOutcome(backendScopeID, installResult, lease)
 	} else {
 		service.logOutcome(
 			backendScopeID,
