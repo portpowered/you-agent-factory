@@ -213,3 +213,18 @@ func TestChooseUnitCoverageImportCarrierSkipsDependencyCycle(t *testing.T) {
 		t.Fatalf("chooseUnitCoverageImportCarrier() = (%d, %t), want fallback carrier %q", index, ok, fallback)
 	}
 }
+
+func TestChooseUnitCoverageImportCarrierPrefersShallowLegalCarrier(t *testing.T) {
+	testFree := modulePath + "/pkg/services/automations/internal/services/cron"
+	shallow := modulePath + "/pkg/services/automations"
+	deep := modulePath + "/pkg/services/automations/internal/services/cron/wire"
+	carriers := []unitCoverageImportCarrier{
+		{listing: coveragePackageListing{importPath: deep}},
+		{listing: coveragePackageListing{importPath: shallow}},
+	}
+
+	index, ok := chooseUnitCoverageImportCarrier(testFree, nil, carriers)
+	if !ok || carriers[index].listing.importPath != shallow {
+		t.Fatalf("chooseUnitCoverageImportCarrier() = (%d, %t), want shallow carrier %q", index, ok, shallow)
+	}
+}
