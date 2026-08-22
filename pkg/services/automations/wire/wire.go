@@ -16,7 +16,7 @@ import (
 	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	hostedsources "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources"
 	hostedsourceswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire"
-	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
+	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -32,7 +32,7 @@ type HostedSourceInputs struct {
 	SecretResolver   automations.HostedLinearSecretResolver
 	LinearEndpoint   string
 	CheckpointStore  automations.HostedLinearCheckpointStore
-	CursorFileSystem scriptpollers.CursorPersistenceFileSystem
+	CursorFileSystem scriptpollerswire.CursorPersistenceFileSystem
 }
 
 // NewRoot constructs the singular Automations root. Hosted-source mechanics
@@ -108,7 +108,7 @@ func newService(
 	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
-	cursorFileSystem scriptpollers.CursorPersistenceFileSystem,
+	cursorFileSystem scriptpollerswire.CursorPersistenceFileSystem,
 ) (*automationinternal.Service, error) {
 	if err := validateDirectDependencies(
 		logger,

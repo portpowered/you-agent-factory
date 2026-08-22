@@ -1,4 +1,4 @@
-package script_pollers
+package service
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
+	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 )
 
 const (
@@ -36,7 +37,7 @@ type durableCursorRecorder struct {
 	mu    sync.RWMutex
 }
 
-var _ CursorRecorder = (*durableCursorRecorder)(nil)
+var _ scriptpollers.CursorRecorder = (*durableCursorRecorder)(nil)
 
 type persistedCursor struct {
 	SchemaVersion string             `json:"schemaVersion"`
@@ -52,7 +53,7 @@ type persistedCursor struct {
 func NewDurableCursorRecorder(
 	baseDir string,
 	files CursorPersistenceFileSystem,
-) (CursorRecorder, error) {
+) (scriptpollers.CursorRecorder, error) {
 	if files == nil {
 		return nil, errors.New("script poller cursor filesystem is required")
 	}
@@ -75,7 +76,7 @@ func (r *durableCursorRecorder) GetCursor(
 	}
 	instanceID := strings.TrimSpace(request.InstanceID)
 	if instanceID == "" || instanceID != request.InstanceID {
-		return automations.GetCursorResult{}, invalidCursorOperationError(GetCursorOperation, "malformed instance identity")
+		return automations.GetCursorResult{}, invalidCursorOperationError(scriptpollers.GetCursorOperation, "malformed instance identity")
 	}
 
 	r.mu.RLock()
@@ -83,7 +84,7 @@ func (r *durableCursorRecorder) GetCursor(
 	persisted, err := r.load(instanceID)
 	if errors.Is(err, fs.ErrNotExist) {
 		return automations.GetCursorResult{}, &automations.Error{
-			Op:   GetCursorOperation,
+			Op:   scriptpollers.GetCursorOperation,
 			Code: automations.ErrorCodeNotFound,
 			Err:  automations.ErrNotFound,
 		}
@@ -92,7 +93,7 @@ func (r *durableCursorRecorder) GetCursor(
 		return automations.GetCursorResult{}, durableCursorReadError(err)
 	}
 	if request.ExpectedCursor != "" && request.ExpectedCursor != persisted.Cursor {
-		return automations.GetCursorResult{}, CursorConflictError(GetCursorOperation)
+		return automations.GetCursorResult{}, scriptpollers.CursorConflictError(scriptpollers.GetCursorOperation)
 	}
 	return automations.GetCursorResult{
 		AutomationID: persisted.AutomationID,
@@ -104,34 +105,65 @@ func (r *durableCursorRecorder) GetCursor(
 
 func (r *durableCursorRecorder) CommitCursor(
 	ctx context.Context,
-	request CommitCursorRequest,
+	request scriptpollers.CommitCursorRequest,
 ) error {
 	if err := cursorContextError(ctx); err != nil {
 		return err
 	}
-	instanceID := strings.TrimSpace(request.InstanceID)
-	if instanceID == "" || instanceID != request.InstanceID {
-		return invalidCursorOperationError(CommitCursorOperation, "malformed instance identity")
-	}
-	if strings.TrimSpace(string(request.Cursor)) == "" {
-		return invalidCursorOperationError(CommitCursorOperation, "cursor must be non-empty")
+	instanceID, err := commitCursorInstanceID(request)
+	if err != nil {
+		return err
 	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	current, err := r.load(instanceID)
-	exists := err == nil
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("read script poller cursor before commit: %w", err)
+	current, exists, err := r.loadForCommit(instanceID)
+	if err != nil {
+		return err
 	}
-	if request.ExpectedCursor != "" {
-		if !exists || current.Cursor != request.ExpectedCursor {
-			return CursorConflictError(CommitCursorOperation)
-		}
-	} else if exists && current.Cursor != "" {
-		return CursorConflictError(CommitCursorOperation)
+	if err := validateExpectedCursor(request.ExpectedCursor, current, exists); err != nil {
+		return err
 	}
+	return r.persist(ctx, instanceID, request)
+}
 
+func commitCursorInstanceID(request scriptpollers.CommitCursorRequest) (string, error) {
+	instanceID := strings.TrimSpace(request.InstanceID)
+	if instanceID == "" || instanceID != request.InstanceID {
+		return "", invalidCursorOperationError(scriptpollers.CommitCursorOperation, "malformed instance identity")
+	}
+	if strings.TrimSpace(string(request.Cursor)) == "" {
+		return "", invalidCursorOperationError(scriptpollers.CommitCursorOperation, "cursor must be non-empty")
+	}
+	return instanceID, nil
+}
+
+func (r *durableCursorRecorder) loadForCommit(instanceID string) (persistedCursor, bool, error) {
+	current, err := r.load(instanceID)
+	if errors.Is(err, fs.ErrNotExist) {
+		return persistedCursor{}, false, nil
+	}
+	if err != nil {
+		return persistedCursor{}, false, fmt.Errorf("read script poller cursor before commit: %w", err)
+	}
+	return current, true, nil
+}
+
+func validateExpectedCursor(expected automations.Cursor, current persistedCursor, exists bool) error {
+	if expected != "" && (!exists || current.Cursor != expected) {
+		return scriptpollers.CursorConflictError(scriptpollers.CommitCursorOperation)
+	}
+	if expected == "" && exists && current.Cursor != "" {
+		return scriptpollers.CursorConflictError(scriptpollers.CommitCursorOperation)
+	}
+	return nil
+}
+
+func (r *durableCursorRecorder) persist(
+	ctx context.Context,
+	instanceID string,
+	request scriptpollers.CommitCursorRequest,
+) error {
 	persisted := persistedCursor{
 		SchemaVersion: durableCursorSchemaVersion,
 		AutomationID:  strings.TrimSpace(request.AutomationID),
@@ -198,9 +230,17 @@ func (r *durableCursorRecorder) cursorPath(instanceID string) string {
 
 func durableCursorReadError(err error) error {
 	return &automations.Error{
-		Op:   GetCursorOperation,
+		Op:   scriptpollers.GetCursorOperation,
 		Code: automations.ErrorCodeFailed,
 		Err:  fmt.Errorf("read script poller cursor persistence failed: %w", err),
+	}
+}
+
+func invalidCursorOperationError(op, message string) error {
+	return &automations.Error{
+		Op:   op,
+		Code: automations.ErrorCodeInvalid,
+		Err:  fmt.Errorf("%w: %s", automations.ErrInvalidRequest, message),
 	}
 }
 

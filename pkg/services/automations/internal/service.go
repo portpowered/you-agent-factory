@@ -44,7 +44,7 @@ type Service struct {
 	hostedPollers      automations.HostedPollers
 	resolveTemplates   workers.TemplateFieldResolver
 	executionPolicy    factorydefinitions.WorkstationExecutionPolicyService
-	cursorFileSystem   scriptpollers.CursorPersistenceFileSystem
+	cursorFileSystem   scriptpollerswire.CursorPersistenceFileSystem
 	reconciler         reconciliation.Service
 	scriptPollers      scriptpollers.Service
 	cron               cron.Service
@@ -93,7 +93,7 @@ func NewWithCursorFileSystem(
 	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
-	cursorFileSystem scriptpollers.CursorPersistenceFileSystem,
+	cursorFileSystem scriptpollerswire.CursorPersistenceFileSystem,
 ) *Service {
 	return newService(
 		logger,
@@ -117,7 +117,7 @@ func newService(
 	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
-	cursorFileSystem scriptpollers.CursorPersistenceFileSystem,
+	cursorFileSystem scriptpollerswire.CursorPersistenceFileSystem,
 ) *Service {
 	service := &Service{
 		loggerValue:       logger,
@@ -143,7 +143,7 @@ func newService(
 func (s *Service) newScriptPollers() scriptpollers.Service {
 	cursorRecorder := scriptpollers.NewMemoryCursorRecorder()
 	if s.cursorFileSystem != nil {
-		if durable, err := scriptpollers.NewDurableCursorRecorder(s.defaultFactoryDir, s.cursorFileSystem); err == nil {
+		if durable, err := scriptpollerswire.NewDurableCursorRecorder(s.defaultFactoryDir, s.cursorFileSystem); err == nil {
 			cursorRecorder = durable
 		}
 	}

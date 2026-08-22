@@ -10,6 +10,7 @@ import (
 
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
+	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
 )
 
 func TestDurableCursorRecorder_RestartRecoversExactOpaqueFacts(t *testing.T) {
@@ -24,7 +25,7 @@ func TestDurableCursorRecorder_RestartRecoversExactOpaqueFacts(t *testing.T) {
 		checkpoint   = `{"last":"issue-7","updated":"2026-08-21T12:34:56Z"}`
 	)
 
-	first, err := scriptpollers.NewDurableCursorRecorder(baseDir, osFileSystem{})
+	first, err := scriptpollerswire.NewDurableCursorRecorder(baseDir, osFileSystem{})
 	if err != nil {
 		t.Fatalf("NewDurableCursorRecorder(first): %v", err)
 	}
@@ -37,7 +38,7 @@ func TestDurableCursorRecorder_RestartRecoversExactOpaqueFacts(t *testing.T) {
 		t.Fatalf("first CommitCursor(): %v", err)
 	}
 
-	second, err := scriptpollers.NewDurableCursorRecorder(baseDir, osFileSystem{})
+	second, err := scriptpollerswire.NewDurableCursorRecorder(baseDir, osFileSystem{})
 	if err != nil {
 		t.Fatalf("NewDurableCursorRecorder(second): %v", err)
 	}
@@ -58,7 +59,7 @@ func TestDurableCursorRecorder_PreservesOptimisticSemantics(t *testing.T) {
 	t.Parallel()
 
 	baseDir := t.TempDir()
-	recorder, err := scriptpollers.NewDurableCursorRecorder(baseDir, osFileSystem{})
+	recorder, err := scriptpollerswire.NewDurableCursorRecorder(baseDir, osFileSystem{})
 	if err != nil {
 		t.Fatalf("NewDurableCursorRecorder(): %v", err)
 	}
@@ -101,7 +102,7 @@ func TestDurableCursorRecorder_FailedReplacementLeavesLastCommitReadable(t *test
 	baseDir := t.TempDir()
 	ctx := context.Background()
 	const instanceID = "script-poller-instance:durable-failure"
-	first, err := scriptpollers.NewDurableCursorRecorder(baseDir, osFileSystem{})
+	first, err := scriptpollerswire.NewDurableCursorRecorder(baseDir, osFileSystem{})
 	if err != nil {
 		t.Fatalf("NewDurableCursorRecorder(first): %v", err)
 	}
@@ -115,7 +116,7 @@ func TestDurableCursorRecorder_FailedReplacementLeavesLastCommitReadable(t *test
 	}
 
 	persistErr := errors.New("rename destination is unavailable")
-	failing, err := scriptpollers.NewDurableCursorRecorder(baseDir, osFileSystem{renameErr: persistErr})
+	failing, err := scriptpollerswire.NewDurableCursorRecorder(baseDir, osFileSystem{renameErr: persistErr})
 	if err != nil {
 		t.Fatalf("NewDurableCursorRecorder(failing): %v", err)
 	}
@@ -130,7 +131,7 @@ func TestDurableCursorRecorder_FailedReplacementLeavesLastCommitReadable(t *test
 		t.Fatalf("failed CommitCursor() error = %v, want actionable persistence failure", err)
 	}
 
-	second, err := scriptpollers.NewDurableCursorRecorder(baseDir, osFileSystem{})
+	second, err := scriptpollerswire.NewDurableCursorRecorder(baseDir, osFileSystem{})
 	if err != nil {
 		t.Fatalf("NewDurableCursorRecorder(second): %v", err)
 	}
@@ -147,7 +148,7 @@ func TestDurableCursorRecorder_ClassifiesCorruptState(t *testing.T) {
 	t.Parallel()
 
 	baseDir := t.TempDir()
-	recorder, err := scriptpollers.NewDurableCursorRecorder(baseDir, osFileSystem{})
+	recorder, err := scriptpollerswire.NewDurableCursorRecorder(baseDir, osFileSystem{})
 	if err != nil {
 		t.Fatalf("NewDurableCursorRecorder(): %v", err)
 	}
