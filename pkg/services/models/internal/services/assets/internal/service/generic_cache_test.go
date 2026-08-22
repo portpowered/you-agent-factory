@@ -419,6 +419,10 @@ func TestPrepareGenericAssetsOfflineDiscoversPublishedRequirements(t *testing.T)
 		len(result.Asset.Artifacts) != 1 || result.Asset.Artifacts[0].Name != "weights.bin" {
 		t.Fatalf("offline discovery result = %#v, network requests = %d", result, requests.Load())
 	}
+	explicit, err := service.PrepareModelAssets(context.Background(), models.PrepareModelAssetsRequest{Scope: scope, Reference: request.Reference, Offline: true, Artifacts: request.Artifacts})
+	if err != nil || explicit.Outcome != models.AssetPreparationAlreadyAvailable {
+		t.Fatalf("offline explicit discovery result = %#v, error = %v", explicit, err)
+	}
 }
 
 func TestPrepareGenericAssetsDigestMismatchLeavesNoSnapshotAndCanRetry(t *testing.T) {

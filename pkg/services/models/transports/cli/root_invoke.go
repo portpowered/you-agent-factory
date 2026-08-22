@@ -1,9 +1,12 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"path/filepath"
 	"strings"
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
@@ -69,11 +72,14 @@ func (service *rootService) invokeInScope(
 	if err := validateCLIOutputShape(cfg, catalogResult.Model, operation); err != nil {
 		return err
 	}
-	if cfg.JSON || genericCLIInlineOutput(cfg, catalogResult.Model, operation) {
+	if cfg.JSON || len(cfg.OutputMappings) > 0 || genericCLIInlineOutput(cfg, catalogResult.Model, operation) {
 		joinedResult, joinedErr := service.models.InvokeModel(cfg.Context, joinedCLIInvocationRequest(
 			scope, modelName, operation, text, catalogResult.Model,
 		))
 		if joinedErr == nil {
+			if len(cfg.OutputMappings) > 0 {
+				return service.writeGenericCLIOutputMappings(cfg, joinedResult)
+			}
 			if genericCLIJSONResult(cfg, catalogResult.Model, operation, joinedResult) {
 				return json.NewEncoder(cfg.Output).Encode(genericInvocationResponseFromInferenceResult(joinedResult))
 			}
@@ -96,10 +102,16 @@ func validateCLIOutputShape(
 	catalog modelinference.Detail,
 	operation string,
 ) error {
+	selected, ok := catalogOperationForName(catalog, operation)
+	if len(cfg.OutputMappings) > 0 {
+		if strings.TrimSpace(cfg.OutputPath) != "" {
+			return fmt.Errorf("--output cannot be combined with explicit output mappings")
+		}
+		return validateGenericCLIOutputMappings(cfg.OutputMappings, selected, ok)
+	}
 	if cfg.JSON {
 		return nil
 	}
-	selected, ok := catalogOperationForName(catalog, operation)
 	if ok && len(selected.Outputs) > 1 {
 		return fmt.Errorf(
 			"multiple model outputs require --json or explicit output mappings: %s",
@@ -154,7 +166,7 @@ func genericCLIJSONResult(
 	return ok && len(selected.Outputs) == 1 && genericCLIInlineModality(selected.Outputs[0].Modality)
 }
 
-func writeGenericCLIOutput(output interface{ Write([]byte) (int, error) }, result modelinference.InvokeModelResult) error {
+func writeGenericCLIOutput(output io.Writer, result modelinference.InvokeModelResult) error {
 	if len(result.Outputs) != 1 {
 		return fmt.Errorf("multiple model outputs require --json or explicit output mappings")
 	}
@@ -164,6 +176,164 @@ func writeGenericCLIOutput(output interface{ Write([]byte) (int, error) }, resul
 	}
 	_, err := output.Write([]byte(value))
 	return err
+}
+
+type genericCLIOutputMapping struct {
+	slot string
+	path string
+}
+
+func parseGenericCLIOutputMappings(values []string) ([]genericCLIOutputMapping, error) {
+	mappings := make([]genericCLIOutputMapping, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	paths := make(map[string]string, len(values))
+	for _, value := range values {
+		parts := strings.SplitN(value, "=", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid output mapping %q: expected slot=path", value)
+		}
+		slot := strings.TrimSpace(parts[0])
+		path := strings.TrimSpace(parts[1])
+		if slot == "" || path == "" {
+			return nil, fmt.Errorf("invalid output mapping %q: slot and path are required", value)
+		}
+		if path == "-" {
+			return nil, fmt.Errorf("invalid output mapping for slot %q: path '-' is not supported", slot)
+		}
+		if _, exists := seen[slot]; exists {
+			return nil, fmt.Errorf("duplicate output mapping for slot %q", slot)
+		}
+		canonicalPath, err := filepath.Abs(path)
+		if err != nil {
+			return nil, fmt.Errorf("resolve output mapping for slot %q: %w", slot, err)
+		}
+		if priorSlot, exists := paths[canonicalPath]; exists {
+			return nil, fmt.Errorf("output mappings for slots %q and %q use the same path", priorSlot, slot)
+		}
+		seen[slot] = struct{}{}
+		paths[canonicalPath] = slot
+		mappings = append(mappings, genericCLIOutputMapping{slot: slot, path: path})
+	}
+	return mappings, nil
+}
+
+func validateGenericCLIOutputMappings(
+	values []string,
+	operation modelinference.Operation,
+	found bool,
+) error {
+	mappings, err := parseGenericCLIOutputMappings(values)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("cannot map outputs for unknown operation")
+	}
+	if len(mappings) != len(operation.Outputs) {
+		return fmt.Errorf(
+			"explicit output mappings must cover every output slot: %s",
+			genericOutputSlotNames(operation.Outputs),
+		)
+	}
+	declared := make(map[string]struct{}, len(operation.Outputs))
+	for _, output := range operation.Outputs {
+		declared[strings.TrimSpace(output.Name)] = struct{}{}
+	}
+	for _, mapping := range mappings {
+		if _, exists := declared[mapping.slot]; !exists {
+			return fmt.Errorf("output mapping names unknown slot %q; valid slots: %s", mapping.slot, genericOutputSlotNames(operation.Outputs))
+		}
+	}
+	return nil
+}
+
+func (service *rootService) writeGenericCLIOutputMappings(cfg InvokeConfig, result modelinference.InvokeModelResult) error {
+	if service.outputFileSystem == nil {
+		return fmt.Errorf("Models CLI output filesystem is required for explicit output mappings")
+	}
+	mappings, err := parseGenericCLIOutputMappings(cfg.OutputMappings)
+	if err != nil {
+		return err
+	}
+	bySlot := make(map[string]genericCLIOutputMapping, len(mappings))
+	for _, mapping := range mappings {
+		bySlot[mapping.slot] = mapping
+	}
+	if len(result.Outputs) != len(mappings) {
+		return fmt.Errorf("model invocation returned %d outputs for %d explicit output mappings", len(result.Outputs), len(mappings))
+	}
+	type stagedOutput struct {
+		targetPath string
+		temporary  string
+	}
+	staged := make([]stagedOutput, 0, len(result.Outputs))
+	defer func() {
+		for _, output := range staged {
+			if output.temporary != "" {
+				_ = service.outputFileSystem.Remove(output.temporary)
+			}
+		}
+	}()
+	for _, output := range result.Outputs {
+		mapping, ok := bySlot[output.Name]
+		if !ok {
+			return fmt.Errorf("model invocation returned unmapped output slot %q", output.Name)
+		}
+		if output.Content == "" {
+			return fmt.Errorf("output slot %q has no inline bytes for mapped publication", output.Name)
+		}
+		temporary, err := stageGenericCLIOutputFile(cfg.Context, service.outputFileSystem, mapping.path, []byte(output.Content))
+		if err != nil {
+			return fmt.Errorf("write mapped output %q: %w", output.Name, err)
+		}
+		staged = append(staged, stagedOutput{targetPath: mapping.path, temporary: temporary})
+	}
+	if err := cfg.Context.Err(); err != nil {
+		return err
+	}
+	for index, output := range staged {
+		if err := service.outputFileSystem.Rename(output.temporary, output.targetPath); err != nil {
+			return fmt.Errorf("publish mapped output %q: %w", result.Outputs[index].Name, err)
+		}
+		staged[index].temporary = ""
+	}
+	return json.NewEncoder(cfg.Output).Encode(genericInvocationResponseFromInferenceResult(result))
+}
+
+func stageGenericCLIOutputFile(ctx context.Context, fileSystem OutputFileSystem, path string, data []byte) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	directory := filepath.Dir(path)
+	temporary, err := fileSystem.CreateTemp(directory, ".you-model-output-*")
+	if err != nil {
+		return "", err
+	}
+	if temporary == nil {
+		return "", fmt.Errorf("create temporary output file returned no handle")
+	}
+	temporaryPath := temporary.Name()
+	removeTemporary := true
+	defer func() {
+		if removeTemporary {
+			_ = fileSystem.Remove(temporaryPath)
+		}
+	}()
+	if written, err := temporary.Write(data); err != nil {
+		_ = temporary.Close()
+		return "", err
+	} else if written != len(data) {
+		_ = temporary.Close()
+		return "", io.ErrShortWrite
+	}
+	if err := temporary.Close(); err != nil {
+		return "", err
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	removeTemporary = false
+	return temporaryPath, nil
 }
 
 func (service *rootService) invokePreparedLease(

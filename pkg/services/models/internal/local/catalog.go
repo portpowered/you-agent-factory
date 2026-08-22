@@ -399,15 +399,57 @@ func catalogModelOperationSlot(slot models.RuntimeOperationSlot) managedruntime.
 	sort.Slice(contentTypes, func(i, j int) bool {
 		return contentTypes[i] < contentTypes[j]
 	})
+	mediaTypes := make([]string, 0, len(contentTypes))
+	for _, contentType := range contentTypes {
+		if mediaType := catalogOperationMediaType(contentType); mediaType != "" &&
+			!containsCatalogOperationMediaType(mediaTypes, mediaType) {
+			mediaTypes = append(mediaTypes, mediaType)
+		}
+	}
 	result := managedruntime.OperationSlot{
 		Name:         strings.TrimSpace(slot.Name),
 		ContentTypes: contentTypes,
+		MediaTypes:   mediaTypes,
+	}
+	if len(contentTypes) > 0 {
+		result.Modality = models.Modality(strings.ToUpper(contentTypes[0]))
 	}
 	if slot.Required {
 		required := true
 		result.Required = &required
 	}
 	return result
+}
+
+func catalogOperationMediaType(contentType string) string {
+	switch strings.ToUpper(strings.TrimSpace(contentType)) {
+	case string(models.ModalityText):
+		return "text/plain"
+	case string(models.ModalityJSON):
+		return "application/json"
+	case string(models.ModalityAudio):
+		return "audio/*"
+	case string(models.ModalityImage):
+		return "image/*"
+	case string(models.ModalityVideo):
+		return "video/*"
+	case string(models.ModalityBinary):
+		return "application/octet-stream"
+	default:
+		if strings.Contains(strings.TrimSpace(contentType), "/") {
+			return strings.TrimSpace(contentType)
+		}
+		return ""
+	}
+}
+
+func containsCatalogOperationMediaType(mediaTypes []string, candidate string) bool {
+	for _, mediaType := range mediaTypes {
+		if strings.EqualFold(mediaType, candidate) {
+			return true
+		}
+	}
+	return false
 }
 
 func catalogModelResourceSummary(resource models.RuntimeResource) modelcatalog.ResourceSummary {

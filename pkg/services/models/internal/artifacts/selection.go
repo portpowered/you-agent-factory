@@ -123,3 +123,9 @@ func (manifest Manifest) Clone() Manifest {
 func (manifest Manifest) ArtifactCount() int {
 	return len(manifest.entries)
 }
+
+// ProtocolRevision returns the immutable protocol revision shared by every
+// artifact in the validated publication.
+func (manifest Manifest) ProtocolRevision() string {
+	return manifest.publication.protocol.Revision
+}

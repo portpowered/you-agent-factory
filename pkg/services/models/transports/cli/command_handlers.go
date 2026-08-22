@@ -41,6 +41,7 @@ const (
 	modelsInvokeOperationID  = "you.models.invoke.flag.operation"
 	modelsInvokeTextID       = "you.models.invoke.flag.text"
 	modelsInvokeOutputID     = "you.models.invoke.flag.output"
+	modelsInvokeOutputMapID  = "you.models.invoke.flag.output-map"
 	modelsPullNameInputID    = "you.models.pull.arg.0"
 	serverInputID            = "you.flag.server"
 	jsonInputID              = "you.flag.json"
@@ -129,21 +130,9 @@ func (h *CommandHandler) Invoke(
 	if h.resolveOperatorDefaults == nil {
 		return fmt.Errorf("model invocation operator defaults resolver is required")
 	}
-	modelName, err := inputs.String(modelsInvokeNameInputID)
+	invokeInputs, err := readModelsInvokeInputs(inputs)
 	if err != nil {
-		return fmt.Errorf("read models invoke model name: %w", err)
-	}
-	operation, err := inputs.String(modelsInvokeOperationID)
-	if err != nil {
-		return fmt.Errorf("read models invoke operation: %w", err)
-	}
-	text, err := inputs.String(modelsInvokeTextID)
-	if err != nil {
-		return fmt.Errorf("read models invoke text: %w", err)
-	}
-	outputPath, err := inputs.String(modelsInvokeOutputID)
-	if err != nil {
-		return fmt.Errorf("read models invoke output: %w", err)
+		return err
 	}
 	logger, err := h.buildLogger()
 	if err != nil {
@@ -158,8 +147,9 @@ func (h *CommandHandler) Invoke(
 		return err
 	}
 	cfg := InvokeConfig{
-		Context: cmd.Context(), ModelName: modelName, Operation: operation,
-		Text: text, OutputPath: outputPath, Output: cmd.OutOrStdout(),
+		Context: cmd.Context(), ModelName: invokeInputs.modelName, Operation: invokeInputs.operation,
+		Text: invokeInputs.text, OutputPath: invokeInputs.outputPath,
+		OutputMappings: invokeInputs.outputMappings, Output: cmd.OutOrStdout(),
 		HomeDir: homeDir, FactoryDir: startupcli.WorkingDirectory(cmd.Context()),
 		OperatorDefaults: defaults, Logger: logger,
 	}
@@ -167,6 +157,44 @@ func (h *CommandHandler) Invoke(
 		return fmt.Errorf("resolve models invoke inputs: %w", err)
 	}
 	return h.models.Invoke(cfg)
+}
+
+type modelsInvokeInputs struct {
+	modelName      string
+	operation      string
+	text           string
+	outputPath     string
+	outputMappings []string
+}
+
+func readModelsInvokeInputs(inputs resolvedinput.Inputs) (modelsInvokeInputs, error) {
+	modelName, err := inputs.String(modelsInvokeNameInputID)
+	if err != nil {
+		return modelsInvokeInputs{}, fmt.Errorf("read models invoke model name: %w", err)
+	}
+	operation, err := inputs.String(modelsInvokeOperationID)
+	if err != nil {
+		return modelsInvokeInputs{}, fmt.Errorf("read models invoke operation: %w", err)
+	}
+	text, err := inputs.String(modelsInvokeTextID)
+	if err != nil {
+		return modelsInvokeInputs{}, fmt.Errorf("read models invoke text: %w", err)
+	}
+	outputPath, err := inputs.String(modelsInvokeOutputID)
+	if err != nil {
+		return modelsInvokeInputs{}, fmt.Errorf("read models invoke output: %w", err)
+	}
+	var outputMappings []string
+	if _, present := inputs.State(modelsInvokeOutputMapID); present {
+		outputMappings, err = inputs.StringArray(modelsInvokeOutputMapID)
+		if err != nil {
+			return modelsInvokeInputs{}, fmt.Errorf("read models invoke output mappings: %w", err)
+		}
+	}
+	return modelsInvokeInputs{
+		modelName: modelName, operation: operation, text: text,
+		outputPath: outputPath, outputMappings: outputMappings,
+	}, nil
 }
 
 func (h *CommandHandler) Pull(

@@ -14,13 +14,16 @@ type compositionService struct {
 func bindCompositionService(
 	httpProtocol clihttp.Protocol,
 	invocation InvocationOperation,
+	outputFileSystem OutputFileSystem,
 	providers ...CompositionScopeProvider,
 ) Service {
 	if httpProtocol == nil || invocation == nil {
 		return nil
 	}
 	legacy := &httpService{http: httpProtocol, invocation: invocation}
-	owned := NewService(ConfigFromComposition(httpProtocol, invocation, providers...))
+	cfg := ConfigFromComposition(httpProtocol, invocation, providers...)
+	cfg.OutputFileSystem = outputFileSystem
+	owned := NewService(cfg)
 	if owned == nil {
 		return legacy
 	}

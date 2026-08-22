@@ -84,6 +84,9 @@ type Edges struct {
 	ModelAssetReadDirectory         AssetReadDirectory
 	ModelAssetCreateFile            AssetCreateFile
 	ModelAssetOpenFile              AssetOpenFile
+	ModelCLIOutputCreateTempFile    ModelCLIOutputCreateTempFile
+	ModelCLIOutputRemovePath        AssetRemovePath
+	ModelCLIOutputRenamePath        AssetRenamePath
 	ModelHostProcessLauncher        interface {
 		Start(context.Context, HostProcessStartSpec) (interface {
 			HealthEndpoint() string
@@ -357,6 +360,15 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.ModelAssetOpenFile != nil {
 		defaults.ModelAssetOpenFile = replacements.ModelAssetOpenFile
+	}
+	if replacements.ModelCLIOutputCreateTempFile != nil {
+		defaults.ModelCLIOutputCreateTempFile = replacements.ModelCLIOutputCreateTempFile
+	}
+	if replacements.ModelCLIOutputRemovePath != nil {
+		defaults.ModelCLIOutputRemovePath = replacements.ModelCLIOutputRemovePath
+	}
+	if replacements.ModelCLIOutputRenamePath != nil {
+		defaults.ModelCLIOutputRenamePath = replacements.ModelCLIOutputRenamePath
 	}
 	if replacements.ModelHostProcessLauncher != nil {
 		defaults.ModelHostProcessLauncher = replacements.ModelHostProcessLauncher

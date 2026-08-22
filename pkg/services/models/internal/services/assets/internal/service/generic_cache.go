@@ -22,9 +22,18 @@ func (s *service) acquireGenericCache(
 	roots []string,
 	offline bool,
 ) (genericCacheResult, error) {
-	if len(artifacts) == 0 && source.kind == genericSourceHF {
-		if discovered := s.discoverCachedRequirements(kind, source, roots); len(discovered) > 0 {
-			artifacts = s.genericArtifactsFromRequirements(source, discovered)
+	if source.kind == genericSourceHF {
+		if discovered := s.discoverContentAddressedRequirementsAcrossRoots(kind, source, roots); len(discovered) > 0 {
+			cachedArtifacts := s.genericArtifactsFromRequirements(source, discovered)
+			if len(artifacts) == 0 {
+				artifacts = cachedArtifacts
+			} else {
+				var err error
+				artifacts, err = mergeGenericManifest(artifacts, cachedArtifacts)
+				if err != nil {
+					return genericCacheResult{}, err
+				}
+			}
 		}
 	}
 	key := genericCacheKey(kind, source, artifacts)
@@ -259,6 +268,19 @@ func (s *service) publishGenericCache(
 	result.snapshotPath = finalPath
 	result.prepared = true
 	return result, nil
+}
+
+func (s *service) discoverContentAddressedRequirementsAcrossRoots(
+	kind string,
+	source genericSource,
+	roots []string,
+) []models.AssetRequirement {
+	for _, root := range roots {
+		if requirements := s.discoverContentAddressedRequirements(root, kind, source); len(requirements) > 0 {
+			return requirements
+		}
+	}
+	return nil
 }
 
 func (s *service) moveExistingGenericSnapshot(finalPath string) (string, bool, error) {

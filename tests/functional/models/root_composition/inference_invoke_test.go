@@ -13,10 +13,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	models "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -188,7 +191,7 @@ func TestModelsJoinedInvokeConsumesGenericCacheThroughRootBuildProcess(t *testin
 		ModelHostProcessLauncher:       hostLauncher,
 		ModelHostProtocolNegotiator:    protocol,
 		ModelHostCompatibilityChecker:  compatibility,
-		ModelResolveBackendArtifact:    resolvePinnedTTSBackend,
+		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		ModelHostHTTPClient:            modelServer.Client(),
 		ModelRuntimeHTTPClient:         modelServer.Client(),
 	})
@@ -295,6 +298,132 @@ func TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess(t *testing.T
 	functionalevidence.Covers(t, "rest/invokeGenericModel")
 }
 
+func TestModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t *testing.T) {
+	t.Parallel()
+
+	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/health" {
+			writer.WriteHeader(http.StatusOK)
+			return
+		}
+		http.NotFound(writer, request)
+	}))
+	t.Cleanup(modelServer.Close)
+
+	home := t.TempDir()
+	writeGenericBuiltinModelCache(t, home, "hf://unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf@bfc15c382204943c3a8fff0c750b94ae2364d7a3")
+	writeGenericBackendCache(t, home, "localai-llamacpp", serviceedges.ModelBackendArtifactSelection{
+		Name:     "localai-backend-localai-llamacpp-linux-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
+		Location: "https://github.com/portpowered/infinite-you/releases/download/localai-backends-v1-374fb240161479665f1e4d2c422dbe152f7eb585fc4ee82dabd182517feae2f1/localai-backend-localai-llamacpp-linux-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
+		Bytes:    28,
+		SHA256:   "9285e7ffc76aaadf4dfcc6b2de5e23c6b01d4e7068e8f2dd65673626cc5de4ed",
+	}, []byte("localai-llamacpp/linux-amd64"))
+	rejectingNetwork := &rejectingModelAssetHTTP{}
+	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
+	protocol := &joinedProtocolNegotiator{}
+	compatibility := &joinedCompatibilityChecker{}
+	assetFiles := functionalModelAssetFileSystem{home: home}
+	dir := support.ScaffoldFactory(t, multiOutputModelFactoryConfig(modelServer.URL))
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ModelAssetHTTPClient:           rejectingNetwork,
+		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
+		ModelAssetInspectPath:          assetFiles.Stat,
+		ModelAssetResolveHomeDirectory: assetFiles.UserHomeDir,
+		ModelAssetResolveEnvironment:   func(string) string { return "" },
+		ModelAssetWriteFile:            assetFiles.WriteFile,
+		ModelAssetRenamePath:           assetFiles.Rename,
+		ModelAssetRemovePath:           assetFiles.Remove,
+		ModelAssetReadFile:             assetFiles.ReadFile,
+		ModelAssetReadDirectory:        assetFiles.ReadDir,
+		ModelAssetCreateFile:           assetFiles.Create,
+		ModelAssetOpenFile:             assetFiles.Open,
+		ModelHostProcessLauncher:       hostLauncher,
+		ModelHostProtocolNegotiator:    protocol,
+		ModelHostCompatibilityChecker:  compatibility,
+		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		ModelHostHTTPClient:            modelServer.Client(),
+		ModelRuntimeHTTPClient:         modelServer.Client(),
+	})
+	environment := functionalHomeEnvironment(home)
+
+	var output bytes.Buffer
+	rejected := support.FakeInputs(t.Context(), []string{
+		"you", "models", "invoke", "llm", "--operation", "OMNI", "--text", "multi output preflight",
+	})
+	err := executeRootModelsCLI(t, process, dir, environment, &output, rejected.Input.Args)
+	if err == nil || !strings.Contains(err.Error(), "text, usage") {
+		t.Fatalf("multi-output CLI error = %v, want named preflight slots", err)
+	}
+	if hostLauncher.Calls() != 0 || rejectingNetwork.Calls() != 0 {
+		t.Fatalf("multi-output preflight effects = starts %d, network %d; want 0/0", hostLauncher.Calls(), rejectingNetwork.Calls())
+	}
+
+	jsonInvoke := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "models", "invoke", "llm", "--operation", "OMNI", "--text", "all outputs",
+	})
+	if err := executeRootModelsCLI(t, process, dir, environment, &output, jsonInvoke.Input.Args); err != nil {
+		t.Fatalf("Process.Execute(multi-output --json) error = %v", err)
+	}
+	var jsonResponse factoryapi.GenericModelInvocationResponse
+	if err := json.Unmarshal(output.Bytes(), &jsonResponse); err != nil {
+		t.Fatalf("decode multi-output JSON = %v\n%s", err, output.String())
+	}
+	if len(jsonResponse.Outputs) != 2 || jsonResponse.Outputs[0].Name != "text" || jsonResponse.Outputs[1].Name != "usage" {
+		t.Fatalf("multi-output JSON = %#v, want text and usage", jsonResponse.Outputs)
+	}
+
+	textPath := filepath.Join(t.TempDir(), "text.out")
+	usagePath := filepath.Join(t.TempDir(), "usage.out")
+	output.Reset()
+	mappedInvoke := support.FakeInputs(t.Context(), []string{
+		"you", "models", "invoke", "llm", "--operation", "OMNI", "--text", "mapped outputs",
+		"--output-map", "text=" + textPath, "--output-map", "usage=" + usagePath,
+	})
+	if err := executeRootModelsCLI(t, process, dir, environment, &output, mappedInvoke.Input.Args); err != nil {
+		t.Fatalf("Process.Execute(multi-output mappings) error = %v", err)
+	}
+	for _, test := range []struct{ path, want string }{
+		{path: textPath, want: "mapped outputs"}, {path: usagePath, want: "mapped outputs"},
+	} {
+		data, err := os.ReadFile(test.path)
+		if err != nil || string(data) != test.want {
+			t.Fatalf("mapped output %s = %q, %v; want %q", test.path, data, err, test.want)
+		}
+	}
+	if !strings.Contains(output.String(), `"name":"usage"`) || hostLauncher.Calls() != 2 {
+		t.Fatalf("mapped output response/effects = %q, starts %d; want metadata and one start per invocation", output.String(), hostLauncher.Calls())
+	}
+	closeRootProcess(t, process, "close multi-output root process")
+}
+
+func executeRootModelsCLI(
+	t testing.TB,
+	process support.Process,
+	directory string,
+	environment []string,
+	output io.Writer,
+	args []string,
+) error {
+	t.Helper()
+	inputs := support.FakeInputs(context.Background(), args)
+	inputs.Input.Env = environment
+	inputs.Input.WorkingDirectory = directory
+	inputs.Input.Stdout = output
+	inputs.Input.Stderr = io.Discard
+	return process.Execute(inputs.Input)
+}
+
+func closeRootProcess(t testing.TB, process support.Process, message string) {
+	t.Helper()
+	closer, ok := process.(interface{ Close(context.Context) error })
+	if !ok {
+		t.Fatal("root process does not expose lifecycle close")
+	}
+	if err := closer.Close(context.Background()); err != nil {
+		t.Fatalf("%s: %v", message, err)
+	}
+}
+
 func genericHTTPInvocationEdges(
 	rejectingNetwork *rejectingModelAssetHTTP,
 	assetFiles functionalModelAssetFileSystem,
@@ -319,10 +448,36 @@ func genericHTTPInvocationEdges(
 		ModelHostProcessLauncher:       hostLauncher,
 		ModelHostProtocolNegotiator:    protocol,
 		ModelHostCompatibilityChecker:  compatibility,
-		ModelResolveBackendArtifact:    resolvePinnedTTSBackend,
+		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		ModelHostHTTPClient:            modelServer.Client(),
 		ModelRuntimeHTTPClient:         modelServer.Client(),
 	}
+}
+
+func multiOutputModelFactoryConfig(endpoint string) map[string]any {
+	config := localModelReadinessAssetsHostFactoryConfig(endpoint)
+	resources := config["resources"].([]map[string]any)
+	resources[0]["name"] = "llm-cache"
+	resources[0]["model"] = "llm"
+	resources[0]["backend"] = "localai-llamacpp"
+	workers := config["workers"].([]map[string]any)
+	workers[0]["name"] = "llm-worker"
+	workers[0]["model"] = "llm"
+	workers[0]["command"] = "llama-cpp"
+	workers[0]["args"] = []string{"--grpc-endpoint", endpoint}
+	workerResources := workers[0]["resources"].([]map[string]any)
+	workerResources[0]["name"] = "llm-cache"
+	workers[0]["operations"] = []map[string]any{{
+		"name": "OMNI",
+		"inputs": []map[string]any{{
+			"name": "prompt", "contentTypes": []string{interfaces.ModelOperationContentTypeText}, "required": true,
+		}},
+		"outputs": []map[string]any{
+			{"name": "text", "contentTypes": []string{interfaces.ModelOperationContentTypeText}},
+			{"name": "usage", "contentTypes": []string{interfaces.ModelOperationContentTypeJSON}},
+		},
+	}}
+	return config
 }
 
 func TestModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuildProcess(t *testing.T) {
@@ -365,7 +520,7 @@ func TestModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuil
 		ModelHostProcessLauncher:       hostLauncher,
 		ModelHostProtocolNegotiator:    protocol,
 		ModelHostCompatibilityChecker:  compatibility,
-		ModelResolveBackendArtifact:    resolvePinnedTTSBackend,
+		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "freebsd", Architecture: "amd64"},
 		ModelHostHTTPClient:            modelServer.Client(),
 		ModelRuntimeHTTPClient:         modelServer.Client(),
 	})
@@ -380,9 +535,9 @@ func TestModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuil
 	if err := process.Execute(inputs.Input); err == nil {
 		t.Fatal("Process.Execute(incompatible joined invoke) error = nil, want preflight failure")
 	}
-	if compatibility.Calls() != 1 || protocol.Calls() != 0 || hostLauncher.Calls() != 0 {
+	if compatibility.Calls() != 0 || protocol.Calls() != 0 || hostLauncher.Calls() != 0 {
 		t.Fatalf(
-			"pinned preflight effects = compatibility %d, protocol %d, starts %d; want 1/0/0",
+			"pinned preflight effects = compatibility %d, protocol %d, starts %d; want 0/0/0",
 			compatibility.Calls(), protocol.Calls(), hostLauncher.Calls(),
 		)
 	}
@@ -423,8 +578,18 @@ func writeReadyOmniVoiceInvokeCache(t *testing.T, home string) {
 
 func writeGenericBuiltinTTSCache(t *testing.T, home string) {
 	t.Helper()
-	const source = "hf://vibevoice/VibeVoice-7B@505114ae6ad17be74df98e6939707434ec49c187"
+	writeGenericBuiltinModelCache(t, home, "hf://vibevoice/VibeVoice-7B@505114ae6ad17be74df98e6939707434ec49c187")
+}
+
+func writeGenericBuiltinModelCache(t *testing.T, home, source string) {
+	t.Helper()
 	name := "weights.bin"
+	if sourcePath := strings.Split(strings.TrimSuffix(strings.TrimSpace(source), "@"), "@")[0]; strings.Contains(sourcePath, "/") {
+		parts := strings.Split(strings.Trim(sourcePath, "/"), "/")
+		if candidate := strings.TrimSpace(parts[len(parts)-1]); candidate != "" && candidate != "VibeVoice-7B" {
+			name = candidate
+		}
+	}
 	body := []byte("joined built-in tts fixture")
 	digest := fmt.Sprintf("%x", sha256.Sum256(body))
 	identity := fmt.Sprintf("model|%s|%s:%d:%s", source, name, len(body), digest)
@@ -448,20 +613,10 @@ func writeGenericBuiltinTTSCache(t *testing.T, home string) {
 	}
 }
 
-func resolvePinnedTTSBackend(
-	_ context.Context,
-	request serviceedges.ModelBackendArtifactSelectionRequest,
-) (serviceedges.ModelBackendArtifactSelection, error) {
-	if request.Backend != "localai-vibevoice" || request.ProtocolVersion != "localai-backend-v1" {
-		return serviceedges.ModelBackendArtifactSelection{}, fmt.Errorf("unexpected pinned backend selection request")
-	}
-	return pinnedTTSBackendSelection(), nil
-}
-
 func pinnedTTSBackendSelection() serviceedges.ModelBackendArtifactSelection {
 	return serviceedges.ModelBackendArtifactSelection{
 		Name:     "localai-backend-localai-vibevoice-linux-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
-		Location: "https://github.com/portpowered/infinite-you/releases/download/localai-backends-v1-fixture/localai-backend-localai-vibevoice-linux-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
+		Location: "https://github.com/portpowered/infinite-you/releases/download/localai-backends-v1-374fb240161479665f1e4d2c422dbe152f7eb585fc4ee82dabd182517feae2f1/localai-backend-localai-vibevoice-linux-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
 		Bytes:    22,
 		SHA256:   "10a84e67d02d078f711608accf13cb80b6724a4c03dc4acae5ba936831801172",
 	}
@@ -470,8 +625,13 @@ func pinnedTTSBackendSelection() serviceedges.ModelBackendArtifactSelection {
 func writeGenericBuiltinTTSBackendCache(t *testing.T, home string) {
 	t.Helper()
 	selection := pinnedTTSBackendSelection()
+	writeGenericBackendCache(t, home, "localai-vibevoice", selection, []byte("pinned-backend-fixture"))
+}
+
+func writeGenericBackendCache(t *testing.T, home, backend string, selection serviceedges.ModelBackendArtifactSelection, body []byte) {
+	t.Helper()
 	urlHash := fmt.Sprintf("%x", sha256.Sum256([]byte(selection.Location)))
-	source := "backend://localai-vibevoice/release://" + urlHash
+	source := "backend://" + backend + "/release://" + urlHash
 	digest := selection.SHA256
 	identity := fmt.Sprintf("backend|%s|%s:%d:%s", source, selection.Name, selection.Bytes, digest)
 	identityHash := fmt.Sprintf("%x", sha256.Sum256([]byte(identity)))
@@ -479,7 +639,7 @@ func writeGenericBuiltinTTSBackendCache(t *testing.T, home string) {
 	if err := os.MkdirAll(snapshot, 0o755); err != nil {
 		t.Fatalf("create generic backend snapshot: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(snapshot, selection.Name), []byte("pinned-backend-fixture"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(snapshot, selection.Name), body, 0o644); err != nil {
 		t.Fatalf("write generic backend snapshot: %v", err)
 	}
 	metadata, err := json.Marshal(map[string]any{
@@ -502,16 +662,16 @@ type joinedProtocolNegotiator struct {
 }
 
 func (negotiator *joinedProtocolNegotiator) Negotiate(
-	context.Context,
-	string,
-	serviceedges.ModelHostProtocolNegotiationRequest,
+	_ context.Context,
+	_ string,
+	request serviceedges.ModelHostProtocolNegotiationRequest,
 ) (serviceedges.ModelHostProtocolNegotiationResult, error) {
 	negotiator.mu.Lock()
 	negotiator.calls++
 	negotiator.mu.Unlock()
 	return serviceedges.ModelHostProtocolNegotiationResult{
 		ProtocolVersion: "localai-backend-v1",
-		Backend:         "localai-vibevoice",
+		Backend:         request.Backend,
 		Ready:           true,
 	}, nil
 }

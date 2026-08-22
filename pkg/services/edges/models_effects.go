@@ -26,6 +26,15 @@ type AssetReadDirectory func(string) ([]os.DirEntry, error)
 type AssetCreateFile func(string) (io.WriteCloser, error)
 type AssetOpenFile func(string) (io.ReadCloser, error)
 
+// ModelCLIOutputCreateTempFile is the host effect used by the Models CLI
+// output publisher. The caller selects the directory, naming pattern, and
+// publication lifecycle; the edge supplies only the writable handle.
+type ModelCLIOutputCreateTempFile func(string, string) (interface {
+	io.Writer
+	io.Closer
+	Name() string
+}, error)
+
 // ModelBackendArtifactSelectionRequest contains the safe host facts needed by
 // the pinned backend publication selector. The edge owns manifest lookup;
 // Models receives only the selected immutable archive facts.

@@ -114,6 +114,13 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 	}
 	compatibilityChecker := adaptModelHostCompatibilityChecker(edges.ModelHostCompatibilityChecker)
 	backendArtifactResolver := adaptModelBackendArtifactResolver(edges.ModelResolveBackendArtifact)
+	if backendArtifactResolver == nil {
+		var resolverErr error
+		backendArtifactResolver, resolverErr = modelswire.NewDefaultBackendArtifactResolver()
+		if resolverErr != nil {
+			return nil, fmt.Errorf("construct Models backend artifact selector: %w", resolverErr)
+		}
+	}
 	runtimeRunner := edges.ModelRuntimeCommandRunner
 	if runtimeRunner == nil {
 		var runnerErr error

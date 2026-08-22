@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -666,6 +668,84 @@ func TestRootAdapter_InvokeGenericJSONPreservesAllNamedOutputs(t *testing.T) {
 	}
 	if response.Outputs[1].Artifact == nil || response.Outputs[1].Artifact.ArtifactRef != "artifact:usage" || response.Outputs[1].Artifact.SizeBytes == nil || *response.Outputs[1].Artifact.SizeBytes != 7 {
 		t.Fatalf("generic artifact = %#v, want preserved metadata", response.Outputs[1].Artifact)
+	}
+}
+
+func TestRootAdapter_InvokeGenericExplicitMappingsPublishBytesAndMetadata(t *testing.T) {
+	t.Parallel()
+
+	scope := testRuntimeScope(t)
+	textPath := filepath.Join(t.TempDir(), "text.out")
+	usagePath := filepath.Join(t.TempDir(), "usage.out")
+	artifact := testArtifactRef(t, "artifact:usage")
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return genericCLIModel("omni", modelinference.OperationOMNI,
+					modelinference.OperationSlot{Name: "text", Modality: modelinference.ModalityText},
+					modelinference.OperationSlot{Name: "usage", Modality: modelinference.ModalityJSON}), nil
+			},
+			invokeModel: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				return modelinference.InvokeModelResult{Outputs: []modelinference.InferenceOutput{
+					{Name: "text", Modality: modelinference.ModalityText, ContentType: "text/plain", MediaType: "text/plain", Content: "answer"},
+					{Name: "usage", Modality: modelinference.ModalityJSON, ContentType: "application/json", MediaType: "application/json", Content: "{\"tokens\":2}", Artifact: &modelinference.InferenceArtifact{
+						Artifact: artifact, MediaType: "application/json", SizeBytes: 14,
+						Properties: map[string]string{"digest": "sha256:usage"},
+					}},
+				}}, nil
+			},
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
+		OutputFileSystem: localOutputFileSystem{},
+	})
+
+	var out bytes.Buffer
+	if err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: "omni", Operation: modelinference.OperationOMNI,
+		Text: "hello", OutputMappings: []string{"text=" + textPath, "usage=" + usagePath}, Output: &out,
+	}); err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	assertMappedCLIFile(t, textPath, "answer")
+	assertMappedCLIFile(t, usagePath, "{\"tokens\":2}")
+	assertMappedCLIResponse(t, out.Bytes())
+}
+
+type localOutputFileSystem struct{}
+
+func (localOutputFileSystem) CreateTemp(dir, pattern string) (modelscli.OutputTemporaryFile, error) {
+	return os.CreateTemp(dir, pattern)
+}
+
+func (localOutputFileSystem) Remove(path string) error {
+	return os.Remove(path)
+}
+
+func (localOutputFileSystem) Rename(oldPath, newPath string) error {
+	return os.Rename(oldPath, newPath)
+}
+
+func assertMappedCLIFile(t *testing.T, path, want string) {
+	t.Helper()
+	got, err := os.ReadFile(path)
+	if err != nil || string(got) != want {
+		t.Fatalf("mapped output %s = %q, %v; want %q", path, got, err, want)
+	}
+}
+
+func assertMappedCLIResponse(t *testing.T, data []byte) {
+	t.Helper()
+	var response factoryapi.GenericModelInvocationResponse
+	if err := json.Unmarshal(data, &response); err != nil {
+		t.Fatalf("decode mapped response: %v", err)
+	}
+	if len(response.Outputs) != 2 || response.Outputs[1].Name != "usage" || response.Outputs[1].MediaType == nil || *response.Outputs[1].MediaType != "application/json" {
+		t.Fatalf("mapped response outputs = %#v, want named media metadata", response.Outputs)
+	}
+	if response.Outputs[1].Artifact == nil || response.Outputs[1].Artifact.SizeBytes == nil || *response.Outputs[1].Artifact.SizeBytes != 14 || response.Outputs[1].Artifact.Properties == nil || (*response.Outputs[1].Artifact.Properties)["digest"] != "sha256:usage" {
+		t.Fatalf("mapped response artifact = %#v, want digest and bytes metadata", response.Outputs[1].Artifact)
 	}
 }
 

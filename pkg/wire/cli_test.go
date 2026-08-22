@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -33,6 +34,55 @@ import (
 )
 
 type processCommandRunner struct{}
+
+func TestModelsCLIOutputFileSystemUsesExplicitEdges(t *testing.T) {
+	t.Parallel()
+
+	createCalled := false
+	removeCalled := false
+	renameCalled := false
+	fileSystem := provideModelsCLIOutputFileSystem(serviceedges.Edges{
+		ModelCLIOutputCreateTempFile: func(dir, pattern string) (interface {
+			io.Writer
+			io.Closer
+			Name() string
+		}, error) {
+			createCalled = true
+			return os.CreateTemp(dir, pattern)
+		},
+		ModelCLIOutputRemovePath: func(path string) error {
+			removeCalled = true
+			return os.Remove(path)
+		},
+		ModelCLIOutputRenamePath: func(oldPath, newPath string) error {
+			renameCalled = true
+			return os.Rename(oldPath, newPath)
+		},
+	})
+
+	directory := t.TempDir()
+	temporary, err := fileSystem.CreateTemp(directory, ".models-output-*")
+	if err != nil {
+		t.Fatalf("CreateTemp() error = %v", err)
+	}
+	temporaryPath := temporary.Name()
+	if _, err := temporary.Write([]byte("output")); err != nil {
+		t.Fatalf("temporary Write() error = %v", err)
+	}
+	if err := temporary.Close(); err != nil {
+		t.Fatalf("temporary Close() error = %v", err)
+	}
+	destination := filepath.Join(directory, "published.out")
+	if err := fileSystem.Rename(temporaryPath, destination); err != nil {
+		t.Fatalf("Rename() error = %v", err)
+	}
+	if err := fileSystem.Remove(destination); err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+	if !createCalled || !renameCalled || !removeCalled {
+		t.Fatalf("edge calls = create:%v rename:%v remove:%v, want all true", createCalled, renameCalled, removeCalled)
+	}
+}
 
 func TestProvideSessionsCLIServiceReturnsConstructedAdapter(t *testing.T) {
 	t.Parallel()

@@ -13213,12 +13213,13 @@
           },
           "description": {
             "id": "you.models.invoke.description",
-            "canonicalEnglish": "Invoke one discovered model through the shared in-process bootstrap. Requires a model name, an uppercase --operation, non-empty --text, and either --output for streamed audio or global --json for structured invocation metadata. Readiness-gated execution uses the current factory configuration without starting a full workflow."
+            "canonicalEnglish": "Invoke one discovered model through the shared in-process bootstrap. Requires a model name, an uppercase --operation, non-empty --text, and either --output for streamed audio, repeatable --output-map slot=path mappings for named generic outputs, or global --json for structured invocation metadata. Readiness-gated execution uses the current factory configuration without starting a full workflow."
           }
         },
         "examples": [
           "you models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\" --output ./speech.wav",
-          "you --json models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\""
+          "you --json models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\"",
+          "you models invoke omni --operation OMNI --text \"Summarize this.\" --output-map text=./answer.txt --output-map usage=./usage.json"
         ],
         "visibility": "public",
         "sourceHash": "b469b217b664304f713e17511a3cb96c37ba5cc8cca78419a699575f309fcd54"
@@ -13234,7 +13235,7 @@
       "placement": "remote-only",
       "usage": {
         "line": "invoke <model-name>",
-        "example": "  # Stream TTS audio to a file.\n  you models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\" --output ./speech.wav\n\n  # Emit structured invocation metadata.\n  you --json models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\""
+        "example": "  # Stream TTS audio to a file.\n  you models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\" --output ./speech.wav\n\n  # Emit structured invocation metadata.\n  you --json models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\"\n\n  # Map every named generic output to an atomic file.\n  you models invoke omni --operation OMNI --text \"Summarize this.\" --output-map text=./answer.txt --output-map usage=./usage.json"
       },
       "arguments": {
         "you.models.invoke.arg.0": {
@@ -13429,6 +13430,9 @@
             "string": "TTS"
           },
           "enum": [
+            "ASR",
+            "EMBED",
+            "OMNI",
             "TTS"
           ],
           "handlerBindingId": "you.models.invoke.binding.operation",
@@ -13516,6 +13520,38 @@
           "usage": "path for streamed model output",
           "valueType": "string",
           "visibility": "visible"
+        },
+        "you.models.invoke.flag.output-map": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "stringArray": []
+          },
+          "handlerBindingId": "you.models.invoke.binding.output-map",
+          "id": "you.models.invoke.flag.output-map",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.invoke.flag.output-map",
+            "state": "active",
+            "since": "1.0.0"
+          },
+          "long": "output-map",
+          "maxCardinality": -1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": true,
+          "required": false,
+          "sensitivity": "public",
+          "scope": "local",
+          "shorthand": "",
+          "usage": "named output mapping in the form slot=path (repeatable)",
+          "valueType": "stringArray",
+          "visibility": "visible"
         }
       },
       "precedence": {
@@ -13558,6 +13594,10 @@
         "you.models.invoke.binding.output": {
           "id": "you.models.invoke.binding.output",
           "inputId": "you.models.invoke.flag.output"
+        },
+        "you.models.invoke.binding.output-map": {
+          "id": "you.models.invoke.binding.output-map",
+          "inputId": "you.models.invoke.flag.output-map"
         },
         "you.models.invoke.binding.port": {
           "id": "you.models.invoke.binding.port",

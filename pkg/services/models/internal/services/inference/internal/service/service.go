@@ -136,8 +136,9 @@ func (s *service) InvokeModelWithLease(
 	defer cancelDeadline()
 
 	runtimeResult, err := s.runtime.Invoke(invokeCtx, inference.InvocationRuntimeRequest{
-		Request:  request,
-		HostSlot: hostSlot,
+		Request:   request,
+		Operation: catalogOperation(catalogResult.Model, request.Operation),
+		HostSlot:  hostSlot,
 	})
 	if isInvocationInFlight(err) {
 		return accepted.Clone(), nil

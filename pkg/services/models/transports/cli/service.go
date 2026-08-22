@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"io"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
@@ -16,6 +17,23 @@ type ArtifactExporter interface {
 	ExportInvocationArtifact(sourcePath, destinationPath string) error
 }
 
+// OutputTemporaryFile is the narrow writable handle used to stage one
+// provider-neutral output before atomic publication.
+type OutputTemporaryFile interface {
+	io.Writer
+	io.Closer
+	Name() string
+}
+
+// OutputFileSystem is the exact filesystem effect required by explicit
+// generic output mappings. The CLI owns validation and lifecycle; composition
+// supplies the host implementation.
+type OutputFileSystem interface {
+	CreateTemp(string, string) (OutputTemporaryFile, error)
+	Remove(string) error
+	Rename(string, string) error
+}
+
 // InvokeRuntimeScope carries one opened Models runtime scope for invoke.
 type InvokeRuntimeScope struct {
 	Scope models.RuntimeScopeRef
@@ -27,6 +45,7 @@ type Config struct {
 	Models           models.Service
 	HTTP             clihttp.Protocol
 	Artifacts        ArtifactExporter
+	OutputFileSystem OutputFileSystem
 	OpenInvokeScope  func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
 	OpenCatalogScope func(context.Context) (InvokeRuntimeScope, error)
 }
@@ -35,6 +54,7 @@ type rootService struct {
 	models           models.Service
 	http             clihttp.Protocol
 	artifacts        ArtifactExporter
+	outputFileSystem OutputFileSystem
 	openInvokeScope  func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
 	openCatalogScope func(context.Context) (InvokeRuntimeScope, error)
 }
@@ -48,6 +68,7 @@ func NewService(cfg Config) Service {
 		models:           cfg.Models,
 		http:             cfg.HTTP,
 		artifacts:        cfg.Artifacts,
+		outputFileSystem: cfg.OutputFileSystem,
 		openInvokeScope:  cfg.OpenInvokeScope,
 		openCatalogScope: cfg.OpenCatalogScope,
 	}
