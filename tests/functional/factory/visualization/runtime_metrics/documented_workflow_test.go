@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -22,7 +24,7 @@ import (
 // not construct a second metrics adapter or transport graph.
 func TestMetricsDocumentedWorkflowThroughRootProcess(t *testing.T) {
 	t.Parallel()
-	serverURL, env, workingDirectory := startDocumentedMetricsServer(t)
+	serverURL, env, workingDirectory, scopeClock := startDocumentedMetricsServer(t)
 	process := support.BuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
 
@@ -33,20 +35,23 @@ func TestMetricsDocumentedWorkflowThroughRootProcess(t *testing.T) {
 	assertDocumentedGroupings(t, process, serverURL, env, workingDirectory, publicID)
 	assertDocumentedProviderArithmetic(t, process, serverURL, env, workingDirectory, publicID)
 	assertDocumentedHTTPParity(t, serverURL, publicID, scoped)
-	assertDocumentedScopeFailures(t, process, serverURL, env, workingDirectory)
+	assertDocumentedScopeFailures(t, process, serverURL, env, workingDirectory, scopeClock)
 	functionalevidence.Covers(t, "rest/getMetrics")
 }
 
 func startDocumentedMetricsServer(
 	t *testing.T,
-) (string, []string, string) {
+) (string, []string, string, *documentedMetricsScopeClock) {
 	t.Helper()
 	home := t.TempDir()
 	workingDirectory := t.TempDir()
 	factoryDirectory := support.ScaffoldSingleStepFactory(t, "metrics-documentation-workflow")
 	environment := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
 	server := support.NewProcessAPIServer()
-	process := support.BuildProcess(t, serviceedges.Edges{APIServerStarter: server.Start})
+	scopeClock := &documentedMetricsScopeClock{}
+	process := support.BuildProcess(t, serviceedges.Edges{
+		APIServerStarter: server.Start, Clock: scopeClock,
+	})
 	support.CleanupProcess(t, process)
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run", "--dir", factoryDirectory, "--continuously", "--with-server",
@@ -57,7 +62,28 @@ func startDocumentedMetricsServer(
 	support.StartProcessCommand(t, process, inputs.Input)
 	serverURL := server.WaitForURL(t)
 	writeDocumentedMetrics(t, home)
-	return serverURL, environment, workingDirectory
+	return serverURL, environment, workingDirectory, scopeClock
+}
+
+type documentedMetricsScopeClock struct {
+	mu         sync.RWMutex
+	returnZero bool
+}
+
+func (clock *documentedMetricsScopeClock) EnableUnavailable() {
+	clock.mu.Lock()
+	defer clock.mu.Unlock()
+	clock.returnZero = true
+}
+
+func (clock *documentedMetricsScopeClock) Now() time.Time {
+	clock.mu.RLock()
+	returnZero := clock.returnZero
+	clock.mu.RUnlock()
+	if returnZero {
+		return time.Time{}
+	}
+	return time.Now()
 }
 
 func writeDocumentedMetrics(t *testing.T, home string) {
@@ -218,6 +244,7 @@ func assertDocumentedScopeFailures(
 	serverURL string,
 	environment []string,
 	workingDirectory string,
+	scopeClock *documentedMetricsScopeClock,
 ) {
 	t.Helper()
 	result := runDocumentedCommand(t, process, environment, workingDirectory,
@@ -232,6 +259,79 @@ func assertDocumentedScopeFailures(
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusNotFound {
 		t.Fatalf("unknown metrics session status = %d, want 404", response.StatusCode)
+	}
+
+	unmappableFactory := support.ScaffoldSingleStepFactory(t, "metrics-unmappable-session")
+	opened := support.OpenFactorySessionAt(t, serverURL, unmappableFactory)
+	if opened.Session == nil || strings.TrimSpace(opened.Session.Id) == "" || strings.TrimSpace(opened.Session.FactoryDir) == "" {
+		t.Fatalf("opened unmappable Factory Session = %#v, want public identity", opened)
+	}
+	actualFactoryDirectory := opened.Session.FactoryDir
+	// A live session remains discoverable through the control-plane fallback
+	// when its projection cannot be built. Make the canonical projection clock
+	// unavailable only after opening this real session so the list route retains
+	// its public identity while detail resolution returns scope unavailable.
+	scopeClock.EnableUnavailable()
+	unmappableID := discoverDocumentedLiveSessionForFactory(t, process, serverURL, environment, workingDirectory, actualFactoryDirectory)
+	assertDocumentedUnmappableFailure(t, process, serverURL, environment, workingDirectory, unmappableID)
+}
+
+func discoverDocumentedLiveSessionForFactory(
+	t *testing.T,
+	process support.Process,
+	serverURL string,
+	environment []string,
+	workingDirectory, factoryDirectory string,
+) string {
+	t.Helper()
+	result := runDocumentedCommand(t, process, environment, workingDirectory,
+		"you", "--json", "--server", serverURL, "session", "list", "--scope", "live")
+	if result.err != nil {
+		t.Fatalf("live session list for unmappable scope: %v\nstderr:\n%s", result.err, result.inputs.Stderr())
+	}
+	var response factoryapi.ListFactorySessionsResponse
+	if err := json.Unmarshal([]byte(result.inputs.Stdout()), &response); err != nil {
+		t.Fatalf("decode live session list for unmappable scope: %v\n%s", err, result.inputs.Stdout())
+	}
+	for _, session := range response.Sessions {
+		if filepath.Clean(session.FactoryDir) == filepath.Clean(factoryDirectory) {
+			return session.Id
+		}
+	}
+	t.Fatalf("live session list = %#v, want session for %q", response.Sessions, factoryDirectory)
+	return ""
+}
+
+func assertDocumentedUnmappableFailure(
+	t *testing.T,
+	process support.Process,
+	serverURL string,
+	environment []string,
+	workingDirectory, sessionID string,
+) {
+	t.Helper()
+	result := runDocumentedCommand(t, process, environment, workingDirectory,
+		"you", "--json", "--server", serverURL, "metrics", "--session", sessionID)
+	if result.err == nil || result.inputs.Stdout() != "" ||
+		!strings.Contains(result.inputs.Stderr(), "METRICS_SESSION_SCOPE_UNAVAILABLE") ||
+		!strings.Contains(result.inputs.Stderr(), "you session list --scope live") {
+		t.Fatalf("unmappable session result: error=%v stdout=%q stderr=%q", result.err, result.inputs.Stdout(), result.inputs.Stderr())
+	}
+	response, err := http.Get(serverURL + "/metrics?session_id=" + sessionID)
+	if err != nil {
+		t.Fatalf("GET unmappable metrics session: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("unmappable metrics session status = %d, want 503", response.StatusCode)
+	}
+	var body factoryapi.ErrorResponse
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode unmappable metrics error: %v", err)
+	}
+	if body.Code != factoryapi.ErrorResponseCode("METRICS_SESSION_SCOPE_UNAVAILABLE") ||
+		!strings.Contains(body.Message, "you session list --scope live") {
+		t.Fatalf("unmappable metrics response = %#v, want coded guidance", body)
 	}
 }
 
