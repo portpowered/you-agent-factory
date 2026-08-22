@@ -4,112 +4,143 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"strings"
 	"testing"
 
 	costscli "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 )
 
-func TestCostsHumanOutputAllPricedShowsRoundedCostAndAllTokenClasses(t *testing.T) {
+func TestCostsHumanOutputExactGoldens(t *testing.T) {
 	t.Parallel()
 
 	amount := "1.235"
-	report := humanReport("PRICED", &amount, 0, nil)
-	output, err := runHumanCostsOutput(t, report)
-	if err != nil {
-		t.Fatalf("execute all-priced costs command: %v", err)
-	}
-	for _, want := range []string{
-		"Cost (USD): $1.24",
-		"Total tokens: 10",
-		"Input tokens: 7",
-		"Cached-input tokens: 2",
-		"Output tokens: 3",
-		"Reasoning-output tokens: 4",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("all-priced output missing %q:\n%s", want, output)
-		}
-	}
-	if strings.Contains(output, "?? unknown") {
-		t.Fatalf("all-priced output contains an unknown marker:\n%s", output)
-	}
-}
-
-func TestCostsHumanOutputNonePricedShowsUnknownCoverage(t *testing.T) {
-	t.Parallel()
-
-	provider, model := "codex", "mystery"
-	report := humanReport("UNPRICED", nil, 2, []generatedclient.CostsUnpricedPair{
-		{Provider: &provider, Model: &model, DispatchCount: 2},
-	})
-	output, err := runHumanCostsOutput(t, report)
-	if err != nil {
-		t.Fatalf("execute none-priced costs command: %v", err)
-	}
-	for _, want := range []string{
-		"Cost (USD): ?? unknown",
-		"Unpriced dispatches: 2",
-		"Unpriced provider/models: 1",
-		"codex/mystery: 2 dispatches",
-		"Total tokens: 10",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("none-priced output missing %q:\n%s", want, output)
-		}
-	}
-	if strings.Contains(output, "$0.00") {
-		t.Fatalf("none-priced output presents unknown usage as zero:\n%s", output)
-	}
-}
-
-func TestCostsHumanOutputMixedShowsKnownCostAndUnknownRemainder(t *testing.T) {
-	t.Parallel()
-
-	amount := "12.345678"
+	mixedAmount := "12.345678"
 	openAIProvider, mysteryModel := "openai", "mystery"
 	codexProvider, alphaModel := "codex", "alpha"
-	report := humanReport("PARTIAL", &amount, 2, []generatedclient.CostsUnpricedPair{
-		{Provider: &openAIProvider, Model: &mysteryModel, DispatchCount: 1},
-		{Provider: &codexProvider, Model: &alphaModel, DispatchCount: 1},
-	})
-	output, err := runHumanCostsOutput(t, report)
-	if err != nil {
-		t.Fatalf("execute mixed costs command: %v", err)
-	}
-	for _, want := range []string{
-		"Cost (USD): $12.35 + ?? unknown",
-		"Unpriced dispatches: 2",
-		"openai/mystery: 1 dispatches",
-		"codex/alpha: 1 dispatches",
-		"Total tokens: 10",
-	} {
-		if !strings.Contains(output, want) {
-			t.Fatalf("mixed output missing %q:\n%s", want, output)
-		}
-	}
-	if strings.Index(output, "codex/alpha: 1 dispatches") > strings.Index(output, "openai/mystery: 1 dispatches") {
-		t.Fatalf("mixed unpriced pairs are not deterministically ordered:\n%s", output)
-	}
-}
+	unknownProvider, unknownModel := "codex", "unknown-model"
+	cases := []struct {
+		name   string
+		report generatedclient.CostsReport
+		want   string
+	}{
+		{
+			name:   "all-priced",
+			report: humanReport("PRICED", &amount, 0, nil),
+			want: `Scope: all Factory Sessions
+Currency: USD
+Status: PRICED
+Cost (USD): $1.24
+Priced subtotal (USD): 1.235
+Total tokens: 10
+Input tokens: 7
+Cached-input tokens: 2
+Output tokens: 3
+Reasoning-output tokens: 4
+Coverage: rows priced 0/0; provider/models priced 0/0
+Unpriced dispatches: 0
+Unpriced provider/models: 0
 
-func TestCostsHumanOutputUnknownModelRemainsUnpriced(t *testing.T) {
-	t.Parallel()
+Work items: 0
+Worker Sessions: 0
+Provider/models: 0
+Factory Sessions: 0
+Unpriced usage: 0 rows
+`,
+		},
+		{
+			name: "none-priced",
+			report: humanReport("UNPRICED", nil, 2, []generatedclient.CostsUnpricedPair{
+				{Provider: &codexProvider, Model: &mysteryModel, DispatchCount: 2},
+			}),
+			want: `Scope: all Factory Sessions
+Currency: USD
+Status: UNPRICED
+Cost (USD): ?? unknown
+Priced subtotal (USD): unavailable
+Total tokens: 10
+Input tokens: 7
+Cached-input tokens: 2
+Output tokens: 3
+Reasoning-output tokens: 4
+Coverage: rows priced 0/0; provider/models priced 0/0
+Unpriced dispatches: 2
+Unpriced provider/models: 1
+  codex/mystery: 2 dispatches
 
-	provider, model := "codex", "unknown-model"
-	report := humanReport("UNPRICED", nil, 1, []generatedclient.CostsUnpricedPair{
-		{Provider: &provider, Model: &model, DispatchCount: 1},
-	})
-	output, err := runHumanCostsOutput(t, report)
-	if err != nil {
-		t.Fatalf("execute unknown-model costs command: %v", err)
+Work items: 0
+Worker Sessions: 0
+Provider/models: 0
+Factory Sessions: 0
+Unpriced usage: 0 rows
+`,
+		},
+		{
+			name: "mixed",
+			report: humanReport("PARTIAL", &mixedAmount, 2, []generatedclient.CostsUnpricedPair{
+				{Provider: &openAIProvider, Model: &mysteryModel, DispatchCount: 1},
+				{Provider: &codexProvider, Model: &alphaModel, DispatchCount: 1},
+			}),
+			want: `Scope: all Factory Sessions
+Currency: USD
+Status: PARTIAL
+Cost (USD): $12.35 + ?? unknown
+Priced subtotal (USD): 12.345678
+Total tokens: 10
+Input tokens: 7
+Cached-input tokens: 2
+Output tokens: 3
+Reasoning-output tokens: 4
+Coverage: rows priced 0/0; provider/models priced 0/0
+Unpriced dispatches: 2
+Unpriced provider/models: 2
+  codex/alpha: 1 dispatches
+  openai/mystery: 1 dispatches
+
+Work items: 0
+Worker Sessions: 0
+Provider/models: 0
+Factory Sessions: 0
+Unpriced usage: 0 rows
+`,
+		},
+		{
+			name: "unknown-model",
+			report: humanReport("UNPRICED", nil, 1, []generatedclient.CostsUnpricedPair{
+				{Provider: &unknownProvider, Model: &unknownModel, DispatchCount: 1},
+			}),
+			want: `Scope: all Factory Sessions
+Currency: USD
+Status: UNPRICED
+Cost (USD): ?? unknown
+Priced subtotal (USD): unavailable
+Total tokens: 10
+Input tokens: 7
+Cached-input tokens: 2
+Output tokens: 3
+Reasoning-output tokens: 4
+Coverage: rows priced 0/0; provider/models priced 0/0
+Unpriced dispatches: 1
+Unpriced provider/models: 1
+  codex/unknown-model: 1 dispatches
+
+Work items: 0
+Worker Sessions: 0
+Provider/models: 0
+Factory Sessions: 0
+Unpriced usage: 0 rows
+`,
+		},
 	}
-	if !strings.Contains(output, "codex/unknown-model: 1 dispatches") {
-		t.Fatalf("unknown model was not shown as an unpriced pair:\n%s", output)
-	}
-	if strings.Contains(output, "$0.00") {
-		t.Fatalf("unknown model was silently valued at zero:\n%s", output)
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			output, err := runHumanCostsOutput(t, testCase.report)
+			if err != nil {
+				t.Fatalf("execute %s costs command: %v", testCase.name, err)
+			}
+			if output != testCase.want {
+				t.Errorf("%s output mismatch:\n--- want ---\n%s--- got ---\n%s", testCase.name, testCase.want, output)
+			}
+		})
 	}
 }
 
