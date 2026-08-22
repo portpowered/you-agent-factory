@@ -49,6 +49,16 @@ func (l *transitionerLogCapture) record(level, message string, fields ...any) {
 
 var _ logging.Logger = (*transitionerLogCapture)(nil)
 
+type transitionerLogCase struct {
+	name          string
+	result        workerexecution.WorkResult
+	wantLevel     string
+	wantMessage   string
+	wantReason    string
+	wantCancel    string
+	wantSafeField string
+}
+
 func TestTransitioner_CanceledDispatchRestoresConsumedWorkWithoutFailureRoute(t *testing.T) {
 	now := time.Date(2026, time.August, 22, 12, 0, 0, 0, time.UTC)
 	net := workerBatchTestNet()
@@ -130,15 +140,7 @@ func TestCalculateArcs_CanceledDispatchHasNoBusinessRoute(t *testing.T) {
 }
 
 func TestTransitionerLogsCancellationAndFailuresWithSafeDispatchContext(t *testing.T) {
-	cases := []struct {
-		name          string
-		result        workerexecution.WorkResult
-		wantLevel     string
-		wantMessage   string
-		wantReason    string
-		wantCancel    string
-		wantSafeField string
-	}{
+	cases := []transitionerLogCase{
 		{
 			name: "superseded cancellation",
 			result: workerexecution.WorkResult{
@@ -181,53 +183,58 @@ func TestTransitionerLogsCancellationAndFailuresWithSafeDispatchContext(t *testi
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			net := workerBatchTestNet()
-			logger := &transitionerLogCapture{}
-			transitioner := NewTransitioner(
-				net, logger, testSubsystemNow, testTokenTransformer(net),
-				nil, nil, nil, testWorkPropagationPolicy(),
-			)
-			snapshot := workerBatchSnapshot("")
-			snapshot.Results[0] = tc.result
-
-			if _, err := transitioner.Execute(context.Background(), snapshot); err != nil {
-				t.Fatalf("Execute() error = %v", err)
-			}
-			var outcome *transitionerLogEntry
-			for index := range logger.entries {
-				entry := &logger.entries[index]
-				if entry.message == tc.wantMessage {
-					outcome = entry
-				}
-			}
-			if outcome == nil {
-				t.Fatalf("logs = %#v, want %q", logger.entries, tc.wantMessage)
-			}
-			if outcome.level != tc.wantLevel {
-				t.Fatalf("outcome log level = %q, want %q: %#v", outcome.level, tc.wantLevel, outcome)
-			}
-			for key, want := range map[string]any{
-				"dispatch_id":   "dispatch-1",
-				"transition_id": "t1",
-				"work_id":       "work-source",
-				"work_name":     "source",
-			} {
-				if outcome.fields[key] != want {
-					t.Fatalf("log field %s = %#v, want %#v: %#v", key, outcome.fields[key], want, outcome.fields)
-				}
-			}
-			if tc.wantCancel != "" && outcome.fields["cancellation_reason"] != tc.wantCancel {
-				t.Fatalf("cancellation_reason = %#v, want %q", outcome.fields["cancellation_reason"], tc.wantCancel)
-			}
-			if tc.wantReason != "" && outcome.fields["failure_reason"] != tc.wantReason {
-				t.Fatalf("failure_reason = %#v, want %q", outcome.fields["failure_reason"], tc.wantReason)
-			}
-			if tc.wantSafeField != "" && outcome.fields[tc.wantSafeField] == nil {
-				t.Fatalf("safe field %q missing: %#v", tc.wantSafeField, outcome.fields)
-			}
-			if _, ok := outcome.fields["error"]; ok {
-				t.Fatalf("outcome log exposed raw error: %#v", outcome.fields["error"])
-			}
+			assertTransitionerLogCase(t, tc)
 		})
+	}
+}
+
+func assertTransitionerLogCase(t *testing.T, tc transitionerLogCase) {
+	t.Helper()
+	net := workerBatchTestNet()
+	logger := &transitionerLogCapture{}
+	transitioner := NewTransitioner(
+		net, logger, testSubsystemNow, testTokenTransformer(net),
+		nil, nil, nil, testWorkPropagationPolicy(),
+	)
+	snapshot := workerBatchSnapshot("")
+	snapshot.Results[0] = tc.result
+
+	if _, err := transitioner.Execute(context.Background(), snapshot); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	var outcome *transitionerLogEntry
+	for index := range logger.entries {
+		entry := &logger.entries[index]
+		if entry.message == tc.wantMessage {
+			outcome = entry
+		}
+	}
+	if outcome == nil {
+		t.Fatalf("logs = %#v, want %q", logger.entries, tc.wantMessage)
+	}
+	if outcome.level != tc.wantLevel {
+		t.Fatalf("outcome log level = %q, want %q: %#v", outcome.level, tc.wantLevel, outcome)
+	}
+	for key, want := range map[string]any{
+		"dispatch_id":   "dispatch-1",
+		"transition_id": "t1",
+		"work_id":       "work-source",
+		"work_name":     "source",
+	} {
+		if outcome.fields[key] != want {
+			t.Fatalf("log field %s = %#v, want %#v: %#v", key, outcome.fields[key], want, outcome.fields)
+		}
+	}
+	if tc.wantCancel != "" && outcome.fields["cancellation_reason"] != tc.wantCancel {
+		t.Fatalf("cancellation_reason = %#v, want %q", outcome.fields["cancellation_reason"], tc.wantCancel)
+	}
+	if tc.wantReason != "" && outcome.fields["failure_reason"] != tc.wantReason {
+		t.Fatalf("failure_reason = %#v, want %q", outcome.fields["failure_reason"], tc.wantReason)
+	}
+	if tc.wantSafeField != "" && outcome.fields[tc.wantSafeField] == nil {
+		t.Fatalf("safe field %q missing: %#v", tc.wantSafeField, outcome.fields)
+	}
+	if _, ok := outcome.fields["error"]; ok {
+		t.Fatalf("outcome log exposed raw error: %#v", outcome.fields["error"])
 	}
 }

@@ -163,7 +163,6 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(ctx context.Con
 		t.logger.Error("transitioner: unknown transition in result", "transitionID", result.TransitionID)
 		return nil, interfaces.CompletedDispatch{}, nil, fmt.Errorf("unknown transition %s", result.TransitionID)
 	}
-
 	resolved := resolveWorkResult(currentTransition, result, t.runtimeConfig)
 	consumedTokens := consumedTokensForResult(snapshot, result)
 	history := buildHistory(consumedTokens, result, candidateWorkID(t.netDefinition, result.TransitionID, consumedTokens))
@@ -175,14 +174,12 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(ctx context.Con
 		return mutations, t.buildCompletedDispatch(snapshot, result, resolved, consumedTokens, mutations, now), nil, nil
 	}
 	//TODO: the intermittent failure arc should be denoted as a preconstructed output, teh calculate arcs function should be a mapping of arcs for a current workstation/transition, and one such mapping would be the intermitten failure arc.
-
 	if shouldRequeueIntermittentFailureResult(resolved) {
 		t.logArcSelection(result, resolved, consumedTokens)
 		mutations := t.buildIntermittentFailureRequeueMutations(consumedTokens, history, resolved, now)
 		mutations = append(mutations, t.releaseResourceTokensOnFailureMutations(resolved.outcome, result.TransitionID, consumedTokens, nil, now)...)
 		return mutations, t.buildCompletedDispatch(snapshot, result, resolved, consumedTokens, mutations, now), nil, nil
 	}
-
 	var generatedBatches []work.GeneratedSubmissionBatch
 	generatedWorkCount := 0
 	if resolved.outcome == workerexecution.OutcomeAccepted {

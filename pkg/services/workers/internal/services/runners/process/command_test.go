@@ -54,6 +54,14 @@ type streamingWorkerRunner struct {
 	called bool
 }
 
+type loggingCommandOutcomeCase struct {
+	name       string
+	result     CommandResult
+	err        error
+	wantStatus string
+	wantLevel  string
+}
+
 func (r *streamingWorkerRunner) Run(
 	ctx context.Context,
 	request CommandRequest,
@@ -141,13 +149,7 @@ func TestLoggingCommandRunnerOwnsWorkCorrelationProjection(t *testing.T) {
 }
 
 func TestLoggingCommandRunnerSeparatesFailureAndCancellationLevels(t *testing.T) {
-	cases := []struct {
-		name       string
-		result     CommandResult
-		err        error
-		wantStatus string
-		wantLevel  string
-	}{
+	cases := []loggingCommandOutcomeCase{
 		{
 			name:       "non-zero exit",
 			result:     CommandResult{ExitCode: 7},
@@ -171,54 +173,64 @@ func TestLoggingCommandRunnerSeparatesFailureAndCancellationLevels(t *testing.T)
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			logger := &recordingLogger{}
-			request := commandTestRequest()
-			request.Inputs = []workers.WorkInput{{WorkID: "work-1", Name: "checkout"}}
-			runner := LoggingCommandRunner{
-				Runner: workerCommandRunnerFunc(func(context.Context, CommandRequest) (CommandResult, error) {
-					return tc.result, tc.err
-				}),
-				Logger: logger,
-				Clock:  &sequenceCommandClock{times: []time.Time{time.Unix(1, 0), time.Unix(2, 0)}},
-			}
-
-			_, err := runner.Run(context.Background(), request)
-			if !errors.Is(err, tc.err) {
-				t.Fatalf("Run() error = %v, want %v", err, tc.err)
-			}
-			completion := logger.byEventWithLevel("command_runner.completed")
-			if len(completion) != 1 {
-				t.Fatalf("completion records = %#v, want one", completion)
-			}
-			if completion[0].level != tc.wantLevel {
-				t.Fatalf("completion level = %q, want %q", completion[0].level, tc.wantLevel)
-			}
-			fields := completion[0].fields
-			if fields["status"] != tc.wantStatus || fields["outcome"] != tc.wantStatus {
-				t.Fatalf("completion status/outcome = %#v/%#v, want %q", fields["status"], fields["outcome"], tc.wantStatus)
-			}
-			if fields["work_name"] != "checkout" || fields["dispatch_id"] != "dispatch-1" || fields["transition_id"] != "transition-1" {
-				t.Fatalf("completion correlation fields = %#v", fields)
-			}
-			if tc.wantLevel == "error" {
-				if fields["failure_reason"] == nil {
-					t.Fatalf("failure fields = %#v, want safe reason", fields)
-				}
-				if tc.err != nil && fields["has_error"] != true {
-					t.Fatalf("failure fields = %#v, want error marker for returned error", fields)
-				}
-				if _, ok := fields["error"]; ok {
-					t.Fatalf("failure log exposed raw error: %#v", fields["error"])
-				}
-			} else {
-				if fields["cancellation_reason"] != string(platformprocess.CancellationReasonSuperseded) {
-					t.Fatalf("cancellation fields = %#v", fields)
-				}
-				if _, ok := fields["has_error"]; ok {
-					t.Fatalf("cancellation log has error marker: %#v", fields)
-				}
-			}
+			assertLoggingCommandOutcome(t, tc)
 		})
+	}
+}
+
+func assertLoggingCommandOutcome(t *testing.T, tc loggingCommandOutcomeCase) {
+	t.Helper()
+	logger := &recordingLogger{}
+	request := commandTestRequest()
+	request.Inputs = []workers.WorkInput{{WorkID: "work-1", Name: "checkout"}}
+	runner := LoggingCommandRunner{
+		Runner: workerCommandRunnerFunc(func(context.Context, CommandRequest) (CommandResult, error) {
+			return tc.result, tc.err
+		}),
+		Logger: logger,
+		Clock:  &sequenceCommandClock{times: []time.Time{time.Unix(1, 0), time.Unix(2, 0)}},
+	}
+
+	_, err := runner.Run(context.Background(), request)
+	if !errors.Is(err, tc.err) {
+		t.Fatalf("Run() error = %v, want %v", err, tc.err)
+	}
+	completion := logger.byEventWithLevel("command_runner.completed")
+	if len(completion) != 1 {
+		t.Fatalf("completion records = %#v, want one", completion)
+	}
+	if completion[0].level != tc.wantLevel {
+		t.Fatalf("completion level = %q, want %q", completion[0].level, tc.wantLevel)
+	}
+	fields := completion[0].fields
+	if fields["status"] != tc.wantStatus || fields["outcome"] != tc.wantStatus {
+		t.Fatalf("completion status/outcome = %#v/%#v, want %q", fields["status"], fields["outcome"], tc.wantStatus)
+	}
+	if fields["work_name"] != "checkout" || fields["dispatch_id"] != "dispatch-1" || fields["transition_id"] != "transition-1" {
+		t.Fatalf("completion correlation fields = %#v", fields)
+	}
+	if tc.wantLevel == "error" {
+		assertLoggingFailureFields(t, fields, tc.err)
+		return
+	}
+	if fields["cancellation_reason"] != string(platformprocess.CancellationReasonSuperseded) {
+		t.Fatalf("cancellation fields = %#v", fields)
+	}
+	if _, ok := fields["has_error"]; ok {
+		t.Fatalf("cancellation log has error marker: %#v", fields)
+	}
+}
+
+func assertLoggingFailureFields(t *testing.T, fields map[string]any, returnedError error) {
+	t.Helper()
+	if fields["failure_reason"] == nil {
+		t.Fatalf("failure fields = %#v, want safe reason", fields)
+	}
+	if returnedError != nil && fields["has_error"] != true {
+		t.Fatalf("failure fields = %#v, want error marker for returned error", fields)
+	}
+	if _, ok := fields["error"]; ok {
+		t.Fatalf("failure log exposed raw error: %#v", fields["error"])
 	}
 }
 
