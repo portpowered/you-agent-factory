@@ -154,7 +154,7 @@ build_grpc_dependencies() {
 	local protoc_path="${install_path}/bin/protoc"
 	local plugin_path="${install_path}/bin/grpc_cpp_plugin"
 	local grpc_cmake_args="${cmake_args_text}"
-	grpc_added_cmake_args="-Dabsl_DIR=${install_path}/lib/cmake/absl -DProtobuf_DIR=${install_path}/lib/cmake/protobuf -Dutf8_range_DIR=${install_path}/lib/cmake/utf8_range -DgRPC_DIR=${install_path}/lib/cmake/grpc -DCMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES=${install_path}/include"
+	grpc_added_cmake_args="-Dabsl_DIR=${install_path}/lib/cmake/absl -DProtobuf_DIR=${install_path}/lib/cmake/protobuf -DProtobuf_PROTOC_EXECUTABLE=${protoc_path} -Dutf8_range_DIR=${install_path}/lib/cmake/utf8_range -DgRPC_DIR=${install_path}/lib/cmake/grpc -DCMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES=${install_path}/include"
 
 	if [[ ! -f "${grpc_path}/Makefile" ]]; then
 		echo "pinned LocalAI gRPC build directory is missing: ${grpc_path}" >&2

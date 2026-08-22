@@ -292,6 +292,7 @@ test("the pinned build repairs LocalAI path and Darwin shell incompatibilities",
 test("the pinned llama build preserves recursive protobuf arguments and Darwin compatibility", async () => {
 	const buildScript = await readFile("scripts/build-localai-backend-artifact.sh", "utf8");
 	assert.match(buildScript, /CMAKE_ARGS="\$cmake_args_text" "\$make_command" -C "\$backend_path" BUILD_TYPE=cpu BUILD_GRPC_FOR_BACKEND_LLAMA=1 grpc-server/);
+	assert.match(buildScript, /-DProtobuf_PROTOC_EXECUTABLE=\$\{protoc_path\}/);
 	assert.match(buildScript, /darwin_llama_cmake_args="\$\{cmake_args_text\} \$\{grpc_added_cmake_args\} -DGGML_CPU_ARM_ARCH=armv8\.2-a\+dotprod"/);
 	assert.match(buildScript, /CMAKE_ARGS="\$darwin_llama_cmake_args" "\$make_command" -C "\$backend_path" "\$\{os_make_args\[@\]\}" BUILD_TYPE="\$BUILD_TYPE" BUILD_GRPC_FOR_BACKEND_LLAMA=1 grpc-server/);
 	assert.match(buildScript, /cp -f "\$\{backend_path\}\/grpc-server" "\$\{backend_path\}\/llama-cpp-cpu-all"/);
