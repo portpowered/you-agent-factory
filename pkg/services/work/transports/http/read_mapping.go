@@ -90,6 +90,7 @@ func WorkReadModelToAPI(item work.ReadModel) factoryapi.Work {
 		SupersededBy:             optional.NonEmptyStringPtr(item.SupersededBy),
 		Content:                  contentcontract.GeneratedPtrFromParts(item.Content),
 		Tags:                     optional.CopiedStringMapPtr(item.Tags),
+		FailureDetail:            workFailureDetailToAPI(item.FailureDetail),
 		StopSummary:              workStopSummaryToAPI(item.StopSummary),
 	}
 	if jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent) {
@@ -158,6 +159,16 @@ func WorkReadModelToAPI(item work.ReadModel) factoryapi.Work {
 		result.ExpectedArtifacts = &expectedArtifacts
 	}
 	return result
+}
+
+func workFailureDetailToAPI(detail *work.FailureDetail) *factoryapi.FailureDetail {
+	if detail == nil {
+		return nil
+	}
+	return &factoryapi.FailureDetail{
+		Reason:  factoryapi.WorkFailureType(detail.Reason),
+		Message: detail.Message,
+	}
 }
 
 func WorkReadModelToGenerated(item work.ReadModel) factoryapi.Work {

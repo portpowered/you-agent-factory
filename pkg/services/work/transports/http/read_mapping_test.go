@@ -138,6 +138,9 @@ func TestWorkReadModelToAPI_EncodesDetachedReadModel(t *testing.T) {
 			{Type: work.WorkContentPartTypeText, Text: "Review screenshot"},
 		},
 		Tags: map[string]string{"owner": "docs"},
+		FailureDetail: &work.FailureDetail{
+			Reason: "internal_server_error", Message: "repository root is dirty",
+		},
 		Relations: []work.ReadRelation{{
 			Type:           work.RelationDependsOn,
 			SourceWorkName: "Review PRD",
@@ -171,6 +174,9 @@ func TestWorkReadModelToAPI_EncodesDetachedReadModel(t *testing.T) {
 		t.Fatalf("human approval = %#v, want safe pending approval projection", got.HumanApproval)
 	}
 	assertExpectedArtifactAPI(t, got)
+	if got.FailureDetail == nil || got.FailureDetail.Reason != factoryapi.WorkFailureTypeInternalServerError || got.FailureDetail.Message != "repository root is dirty" {
+		t.Fatalf("failure detail = %#v, want mapped current Work failure", got.FailureDetail)
+	}
 }
 
 func TestWorkReadModelToAPI_PreservesOrderedMixedContentParts(t *testing.T) {
@@ -337,7 +343,7 @@ func TestWorkReadModelToAPI_OmitsEmptyOptionalCollections(t *testing.T) {
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		t.Fatal(err)
 	}
-	for _, field := range []string{"content", "tags", "relations", "expectedArtifacts", "previousChainingTraceIds", "stopSummary"} {
+	for _, field := range []string{"content", "tags", "relations", "expectedArtifacts", "previousChainingTraceIds", "failureDetail", "stopSummary"} {
 		if _, present := fields[field]; present {
 			t.Fatalf("optional field %q unexpectedly present: %s", field, string(raw))
 		}

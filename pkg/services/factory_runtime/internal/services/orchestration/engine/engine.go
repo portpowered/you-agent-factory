@@ -220,6 +220,7 @@ func (e *FactoryEngine) retireCompletedDispatches(results []workerexecution.Work
 					Outcome:              r.Outcome,
 					Reason:               completedDispatchReasonFromResult(r),
 					ArtifactVerification: r.ArtifactVerification.Clone(),
+					FailureDetail:        workerexecution.CloneFailureDetail(r.FailureDetail),
 					ProviderSession:      (r.Continuation).SessionMetadata(),
 					StartTime:            entry.StartTime,
 					EndTime:              now,
@@ -255,6 +256,9 @@ func completedDispatchReasonFromResult(result workerexecution.WorkResult) string
 func workResultForCompletedDispatch(result workerexecution.WorkResult, completed interfaces.CompletedDispatch) workerexecution.WorkResult {
 	result.Outcome = completed.Outcome
 	result.SelectedClassificationLabel = completed.SelectedClassificationLabel
+	if completed.FailureDetail != nil {
+		result.FailureDetail = workerexecution.CloneFailureDetail(completed.FailureDetail)
+	}
 	switch completed.Outcome {
 	case workerexecution.OutcomeFailed:
 		result.Error = completed.Reason

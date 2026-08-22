@@ -141,6 +141,61 @@ func TestReadSnapshotFromFactoryWorldStateMapsActiveFailedTerminalAndRelations(t
 	}
 }
 
+func TestReadSnapshotFromFactoryWorldStateProjectsOnlyCurrentLatestWorkFailure(t *testing.T) {
+	t.Parallel()
+
+	state := factorydefinitions.FactoryWorldState{
+		WorkItemsByID: map[string]work.FactoryWorkItem{
+			"work-failed":    {ID: "work-failed", WorkTypeID: "story", State: "rejected"},
+			"work-recovered": {ID: "work-recovered", WorkTypeID: "story", State: "review"},
+			"work-unrelated": {ID: "work-unrelated", WorkTypeID: "story", State: "review"},
+		},
+		FailedWorkItemsByID: map[string]work.FactoryWorkItem{
+			"work-failed": {ID: "work-failed", WorkTypeID: "story", State: "rejected"},
+		},
+		FailedDispatches: []factorydefinitions.FactoryWorldDispatchCompletion{
+			{
+				DispatchID: "dispatch-old", WorkItemIDs: []string{"work-failed"},
+				Result: workers.WorkstationResult{FailureDetail: &workers.FailureDetail{
+					Reason: workers.WorkFailureTypeUnknown, Message: "old setup failure",
+				}},
+			},
+			{
+				DispatchID: "dispatch-unrelated", WorkItemIDs: []string{"work-unrelated"},
+				Result: workers.WorkstationResult{FailureDetail: &workers.FailureDetail{
+					Reason: workers.WorkFailureTypeUnknown, Message: "unrelated failure",
+				}},
+			},
+			{
+				DispatchID: "dispatch-new", WorkItemIDs: []string{"work-failed"},
+				Result: workers.WorkstationResult{FailureDetail: &workers.FailureDetail{
+					Reason: workers.WorkFailureTypeInternalServerError, Message: "latest setup failure",
+				}},
+			},
+		},
+		FailureDetailsByWorkID: map[string]factorydefinitions.FactoryWorldFailureDetail{
+			"work-recovered": {
+				FailureDetail: &workers.FailureDetail{
+					Reason: workers.WorkFailureTypeUnknown, Message: "stale recovered failure",
+				},
+			},
+		},
+	}
+
+	snapshot := readSnapshotFromFactoryWorldState(state)
+	byID := make(map[string]work.ReadModel, len(snapshot.Items))
+	for _, item := range snapshot.Items {
+		byID[item.WorkID] = item
+	}
+	failed := byID["work-failed"].FailureDetail
+	if failed == nil || failed.Reason != string(workers.WorkFailureTypeInternalServerError) || failed.Message != "latest setup failure" {
+		t.Fatalf("current failed detail = %#v, want latest matching dispatch", failed)
+	}
+	if byID["work-recovered"].FailureDetail != nil || byID["work-unrelated"].FailureDetail != nil {
+		t.Fatalf("stale or unrelated failure details = recovered=%#v unrelated=%#v, want nil", byID["work-recovered"].FailureDetail, byID["work-unrelated"].FailureDetail)
+	}
+}
+
 func TestReadSnapshotFromFactoryWorldStateLinksPendingHumanApprovalsToWork(t *testing.T) {
 	t.Parallel()
 

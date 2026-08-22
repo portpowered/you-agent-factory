@@ -6997,6 +6997,31 @@ export interface components {
     } & {
       [key: string]: unknown;
     };
+    /** @description Operator-authored USD rates per one million tokens. Omit this property to use an empty table; no provider or model prices are supplied by default. */
+    GlobalConfigPriceTable: {
+      /**
+       * @description Currency used by every configured rate. This contract supports USD only.
+       * @enum {string}
+       */
+      currency: GlobalConfigPriceTableCurrency;
+      /** @description Deterministic provider/model price entries. */
+      models: components["schemas"]["GlobalConfigPriceTableModel"][];
+    };
+    /** @description Exact operator-authored rates for one provider and model identity. */
+    GlobalConfigPriceTableModel: {
+      /** @description Canonical provider identity or a supported built-in alias; the Operator Settings decoder trims and canonicalizes this value. */
+      provider: string;
+      /** @description Exact model identifier. It is trimmed but never guessed or aliased. */
+      model: string;
+      /** @description Non-negative USD rate per one million uncached input tokens. */
+      inputPerMillionTokens: string;
+      /** @description Non-negative USD rate per one million non-reasoning output tokens. */
+      outputPerMillionTokens: string;
+      /** @description Optional non-negative USD rate per one million cached input tokens. */
+      cachedInputPerMillionTokens?: string;
+      /** @description Optional non-negative USD rate per one million reasoning output tokens. */
+      reasoningOutputPerMillionTokens?: string;
+    };
     /** @description Runtime observability settings loaded from operator configuration before command-line overrides. */
     GlobalConfigRuntime: {
       /** @description Structured runtime log storage settings. Omitted values use the documented production defaults. */
@@ -7141,6 +7166,8 @@ export interface components {
       stopSummary?: components["schemas"]["FactoryStopSummary"];
       /** @description Pending HUMAN_APPROVAL request currently owning this Work item, when present. */
       humanApproval?: components["schemas"]["HumanApproval"];
+      /** @description Most recent bounded failure detail when this Work item is currently in a failed state. */
+      failureDetail?: components["schemas"]["FailureDetail"];
     };
     /** @description Ordered canonical content parts for one work item. */
     WorkContent: components["schemas"]["WorkContentPart"][];

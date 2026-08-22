@@ -84,6 +84,7 @@ func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.Comple
 	cp := d
 	cp.ExpectedArtifactContext = cloneExpectedArtifactTemplateContext(d.ExpectedArtifactContext)
 	cp.ArtifactVerification = d.ArtifactVerification.Clone()
+	cp.FailureDetail = workerexecution.CloneFailureDetail(d.FailureDetail)
 	cp.ProviderSession = (d.ProviderSession).Clone()
 	cp.ConsumedTokens = cloneWorkerTokens(d.ConsumedTokens)
 	if d.OutputMutations != nil {
@@ -110,6 +111,7 @@ func deepCopyWorkResult(result workerexecution.WorkResult) workerexecution.WorkR
 	cp.StructuredResult = jsonvalue.Clone(result.StructuredResult)
 	cp.StructuredResultPresent = jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent)
 	cp.ArtifactVerification = result.ArtifactVerification.Clone()
+	cp.FailureDetail = workerexecution.CloneFailureDetail(result.FailureDetail)
 	return cp
 }
 

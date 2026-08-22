@@ -14494,6 +14494,9 @@ components:
         humanApproval:
           $ref: '#/components/schemas/HumanApproval'
           description: Pending HUMAN_APPROVAL request currently owning this Work item, when present.
+        failureDetail:
+          $ref: '#/components/schemas/FailureDetail'
+          description: Most recent bounded failure detail when this Work item is currently in a failed state.
     WorkContent:
       type: array
       description: Ordered canonical content parts for one work item.

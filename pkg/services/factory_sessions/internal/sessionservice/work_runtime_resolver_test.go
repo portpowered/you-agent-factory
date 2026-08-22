@@ -634,6 +634,33 @@ func TestWorkRuntimeAdapterProjectsDispatchOnlyWorkAsProcessing(t *testing.T) {
 	}
 }
 
+func TestWorkRuntimeAdapterProjectsLatestFailureDetailOnlyForCurrentFailedWork(t *testing.T) {
+	token := &workers.Token{ID: "tok-failed", State: "failed", Color: workers.Color{WorkID: "work-failed", WorkTypeID: "story"}}
+	net := &factory.Net{WorkTypes: map[string]*factory.WorkType{"story": {ID: "story", States: []factory.StateDefinition{{Value: "failed", Category: factory.StateCategoryFailed}}}}}
+	history := []factory.CompletedDispatch{
+		{
+			DispatchID: "dispatch-old", Outcome: workers.OutcomeFailed,
+			FailureDetail:  &workers.FailureDetail{Reason: workers.WorkFailureTypeUnknown, Message: "old failure"},
+			ConsumedTokens: []workers.Token{{Color: workers.Color{WorkID: "work-failed"}}},
+		},
+		{
+			DispatchID: "dispatch-latest", Outcome: workers.OutcomeFailed,
+			FailureDetail:  &workers.FailureDetail{Reason: workers.WorkFailureTypeInternalServerError, Message: "repository root is dirty"},
+			ConsumedTokens: []workers.Token{{Color: workers.Color{WorkID: "work-failed"}}},
+		},
+	}
+	got := runtimeWorkItem(token, net, false, nil, runtimeReadFacts{dispatchHistory: history})
+	if got.FailureDetail == nil || got.FailureDetail.Reason != string(workers.WorkFailureTypeInternalServerError) || got.FailureDetail.Message != "repository root is dirty" {
+		t.Fatalf("runtimeWorkItem failure detail = %#v, want latest typed failure", got.FailureDetail)
+	}
+
+	token.State = "done"
+	got = runtimeWorkItem(token, net, false, nil, runtimeReadFacts{dispatchHistory: history})
+	if got.FailureDetail != nil {
+		t.Fatalf("non-failed Work failure detail = %#v, want nil", got.FailureDetail)
+	}
+}
+
 func TestWorkRuntimeAdapterDetachesFactorySessionStopSummary(t *testing.T) {
 	workID := "work-1"
 	summary := &factorysessions.StopSummary{

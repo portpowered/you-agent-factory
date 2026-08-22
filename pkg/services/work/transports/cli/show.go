@@ -175,7 +175,21 @@ func renderShowResult(output io.Writer, work factoryapi.Work) error {
 	if err := writeWorkStopSummary(output, work.StopSummary); err != nil {
 		return err
 	}
+	if err := writeWorkFailureDetail(output, work.FailureDetail); err != nil {
+		return err
+	}
 	return nil
+}
+
+func writeWorkFailureDetail(output io.Writer, detail *factoryapi.FailureDetail) error {
+	if detail == nil {
+		return nil
+	}
+	if _, err := fmt.Fprintf(output, "Failure reason:\t%s\n", detail.Reason); err != nil {
+		return err
+	}
+	_, err := fmt.Fprintf(output, "Failure message:\t%s\n", detail.Message)
+	return err
 }
 
 func primaryWorkTrace(work factoryapi.Work) string {

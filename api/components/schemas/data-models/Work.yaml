@@ -69,3 +69,6 @@ properties:
   humanApproval:
     $ref: '../api/HumanApproval.yaml'
     description: Pending HUMAN_APPROVAL request currently owning this Work item, when present.
+  failureDetail:
+    $ref: './FailureDetail.yaml'
+    description: Most recent bounded failure detail when this Work item is currently in a failed state.

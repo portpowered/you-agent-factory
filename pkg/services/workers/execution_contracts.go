@@ -423,6 +423,7 @@ type WorkResult struct {
 	StructuredResult            any                           `json:"structuredResult,omitempty"`
 	RecordedOutputWork          []work.FactoryWorkItem        `json:"recorded_output_work,omitempty"`
 	Error                       string                        `json:"error,omitempty"`
+	FailureDetail               *FailureDetail                `json:"failureDetail,omitempty"`
 	Feedback                    string                        `json:"feedback,omitempty"`
 	SelectedClassificationLabel string                        `json:"selected_classification_label,omitempty"`
 	ArtifactVerification        *ExpectedArtifactVerification `json:"artifact_verification,omitempty"`

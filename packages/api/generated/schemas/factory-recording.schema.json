@@ -5161,6 +5161,9 @@
           },
           "type": "array"
         },
+        "failureDetail": {
+          "$ref": "#/$defs/FailureDetail"
+        },
         "humanApproval": {
           "$ref": "#/$defs/HumanApproval"
         },
