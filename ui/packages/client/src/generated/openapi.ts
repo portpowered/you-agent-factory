@@ -4409,8 +4409,6 @@ export interface components {
       previousChainingTraceIds?: string[];
       /** @description Human-readable source such as api, filewatcher, replay, cron, or worker. */
       source?: string;
-    } & {
-      [key: string]: unknown;
     };
     /**
      * @description Origin of a WORK_STATE_CHANGE event.

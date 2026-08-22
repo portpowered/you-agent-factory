@@ -1211,7 +1211,7 @@
       "type": "object"
     },
     "FactoryEventContext": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "checkpointId": {
           "description": "Canonical checkpoint identifier for checkpoint-scoped events; payloads must not restate it.",

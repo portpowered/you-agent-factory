@@ -15,8 +15,9 @@ The following objects use `additionalProperties: true`:
 - additive metadata-bearing Factory children whose fields do not change the
   execution contract, including invocation, portability, worker, and
   workstation metadata objects;
-- the evolving `FactoryEventContext` and selected additive event payloads,
-  including run-request and session-start payloads.
+- selected additive event payloads, including run-request and session-start
+  payloads; the fixed `FactoryEventContext` identity and ordering envelope
+  remains closed.
 
 The customer-facing Factory runtime mapper is independently tolerant at its
 decode boundary and reports ignored paths, while the published Factory schema

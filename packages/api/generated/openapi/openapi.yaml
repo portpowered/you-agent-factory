@@ -9267,7 +9267,7 @@ components:
         - A customer-visible factory artifact was created without exposing raw artifact bodies.
     FactoryEventContext:
       type: object
-      additionalProperties: true
+      additionalProperties: false
       required:
         - sequence
         - tick

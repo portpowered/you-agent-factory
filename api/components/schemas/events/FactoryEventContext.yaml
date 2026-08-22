@@ -1,5 +1,5 @@
 type: object
-additionalProperties: true
+additionalProperties: false
 required:
   - sequence
   - tick
