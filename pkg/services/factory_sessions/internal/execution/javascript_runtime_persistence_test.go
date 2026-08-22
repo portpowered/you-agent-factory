@@ -716,6 +716,47 @@ func TestJavaScriptRuntimeService_ProjectRootAloneDoesNotEnablePersistence(t *te
 	}
 }
 
+func TestJavaScriptRuntimeService_HasDurableStateReadsFreshOwnerAndRejectsCorruption(t *testing.T) {
+	t.Parallel()
+	const sessionID = "~default"
+	projectRoot := t.TempDir()
+	store := mustTestRuntimePersistenceStore(t, runtimepersist.DirForProjectRoot(projectRoot))
+	firstOwner := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
+		Persistence: store,
+	})
+	if err := firstOwner.RecordPetriTokenMutations(sessionID, []interfaces.TokenMutationRecord{{
+		Type:         interfaces.MutationCreate,
+		TransitionID: "submit",
+		TokenID:      "token-durable-state-probe",
+	}}); err != nil {
+		t.Fatalf("RecordPetriTokenMutations: %v", err)
+	}
+
+	// A new execution owner has no in-memory session map. Its answer must come
+	// from the same injected store used by the prior owner.
+	freshOwner := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
+		Persistence: store,
+	})
+	hasDurableState, err := freshOwner.HasDurableState(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("HasDurableState after fresh owner: %v", err)
+	}
+	if !hasDurableState {
+		t.Fatal("HasDurableState after fresh owner = false, want true")
+	}
+
+	if err := store.Save(sessionID, []byte("{")); err != nil {
+		t.Fatalf("save corrupt snapshot: %v", err)
+	}
+	_, err = freshOwner.HasDurableState(context.Background(), sessionID)
+	var resumeErr *ResumeError
+	if !errors.As(err, &resumeErr) || resumeErr.Outcome != ResumeOutcomeCorruptedPersistence {
+		t.Fatalf("HasDurableState corrupt snapshot error = %v, want %q ResumeError", err, ResumeOutcomeCorruptedPersistence)
+	}
+}
+
 func TestPersistAndMetadataNoOpBranches(t *testing.T) {
 	t.Parallel()
 	if err := (&JavaScriptRuntimeService{}).persistTerminalSessionState(runtimeSessionState{}); err != nil {

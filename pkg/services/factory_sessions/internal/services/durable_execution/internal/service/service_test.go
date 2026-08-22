@@ -87,6 +87,20 @@ func TestServiceForwardsOptionalRestorableStateProbe(t *testing.T) {
 	}
 }
 
+func TestServiceForwardsPersistenceBackedStateProbe(t *testing.T) {
+	t.Parallel()
+
+	stub := &restorableStateExecutionStub{restorable: true}
+	service, err := New(stub)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	got, err := service.HasDurableState(context.Background(), "~default")
+	if err != nil || !got {
+		t.Fatalf("HasDurableState = (%v, %v), want true", got, err)
+	}
+}
+
 func TestServicePreflightsLifecycleResumeOnlyForInterruptedSessions(t *testing.T) {
 	t.Parallel()
 
@@ -163,6 +177,10 @@ type restorableStateExecutionStub struct {
 
 func (s *restorableStateExecutionStub) HasRestorableState(context.Context, string) (bool, error) {
 	s.calls++
+	return s.restorable, nil
+}
+
+func (s *restorableStateExecutionStub) HasDurableState(context.Context, string) (bool, error) {
 	return s.restorable, nil
 }
 

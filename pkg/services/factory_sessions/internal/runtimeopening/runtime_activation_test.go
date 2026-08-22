@@ -11,9 +11,12 @@ import (
 	"sync/atomic"
 	"testing"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -159,13 +162,14 @@ func TestRestoreCurrentBoardStateRejectsMissingArtifactAfterDurableState(t *test
 
 	allowMissing, err := currentBoardHistoryMayBeUninitialized(
 		context.Background(),
-		&durableSessionInventoryStub{durableCount: 1},
+		&durableSessionStateStub{hasDurableState: true},
+		"~default",
 	)
 	if err != nil {
-		t.Fatalf("inspect durable session inventory: %v", err)
+		t.Fatalf("inspect durable session state: %v", err)
 	}
 	if allowMissing {
-		t.Fatal("durable session inventory marked prior state as uninitialized")
+		t.Fatal("durable session state marked prior state as uninitialized")
 	}
 	_, err = restoreCurrentBoardState(&historicalBoardReaderStub{err: &recordings.HistoricalRecordingQueryError{
 		Kind: recordings.HistoricalRecordingQueryErrorMissingHistory,
@@ -175,61 +179,103 @@ func TestRestoreCurrentBoardStateRejectsMissingArtifactAfterDurableState(t *test
 	}
 }
 
-func TestCurrentBoardHistoryMayBeUninitializedUsesPersistedSessionInventory(t *testing.T) {
+func TestCurrentBoardHistoryMayBeUninitializedUsesPersistenceBackedStateProbe(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
 		name              string
-		durableCount      int
+		hasDurableState   bool
 		wantUninitialized bool
 	}{
-		{name: "fresh factory", durableCount: 0, wantUninitialized: true},
-		{name: "durable factory", durableCount: 1, wantUninitialized: false},
+		{name: "fresh factory", hasDurableState: false, wantUninitialized: true},
+		{name: "durable factory", hasDurableState: true, wantUninitialized: false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			stub := durableSessionInventoryStub{durableCount: tc.durableCount}
-			got, err := currentBoardHistoryMayBeUninitialized(context.Background(), &stub)
+			stub := durableSessionStateStub{hasDurableState: tc.hasDurableState}
+			got, err := currentBoardHistoryMayBeUninitialized(context.Background(), &stub, "~default")
 			if err != nil {
 				t.Fatalf("currentBoardHistoryMayBeUninitialized: %v", err)
 			}
 			if got != tc.wantUninitialized {
 				t.Fatalf("uninitialized = %t, want %t", got, tc.wantUninitialized)
 			}
-			if stub.request.Scope != factorysessions.SessionListScopePersisted {
-				t.Fatalf("inventory request = %#v, want persisted scope", stub.request)
-			}
 		})
 	}
 }
 
-func TestCurrentBoardHistoryMayBeUninitializedFailsClosedWhenInventoryUnavailable(t *testing.T) {
+func TestCurrentBoardHistoryMayBeUninitializedUsesFreshPersistentOwnerBeforeMissingBoardRead(t *testing.T) {
 	t.Parallel()
+	const sessionID = "~default"
+	projectRoot := t.TempDir()
+	store, err := runtimepersist.NewDirectoryStore(
+		runtimepersist.DirForProjectRoot(projectRoot),
+		platformfilesystem.Local{},
+	)
+	if err != nil {
+		t.Fatalf("NewDirectoryStore: %v", err)
+	}
+	firstOwner := newRuntimeOpeningPersistentOwner(projectRoot, store)
+	if err := firstOwner.RecordPetriTokenMutations(sessionID, []factorydefinitions.TokenMutationRecord{{}}); err != nil {
+		t.Fatalf("RecordPetriTokenMutations: %v", err)
+	}
 
-	_, err := currentBoardHistoryMayBeUninitialized(context.Background(), &durableSessionInventoryStub{err: errors.New("inventory unavailable")})
-	if err == nil || !strings.Contains(err.Error(), "inspect current Factory Session board history initialization") {
-		t.Fatalf("inventory error = %v, want wrapped diagnostic", err)
+	// The fresh owner has no in-memory session state. The missing board reader
+	// must therefore be evaluated against the snapshot left by the first owner.
+	freshOwner := newRuntimeOpeningPersistentOwner(projectRoot, store)
+	allowMissing, err := currentBoardHistoryMayBeUninitialized(
+		context.Background(),
+		freshOwner,
+		sessionID,
+	)
+	if err != nil {
+		t.Fatalf("inspect fresh persistent owner: %v", err)
+	}
+	if allowMissing {
+		t.Fatal("missing board history after a prior owner was accepted as initial open")
+	}
+	_, err = restoreCurrentBoardState(&historicalBoardReaderStub{err: &recordings.HistoricalRecordingQueryError{
+		Kind: recordings.HistoricalRecordingQueryErrorMissingHistory,
+	}}, "missing-board.json", sessionID, allowMissing)
+	if err == nil || !strings.Contains(err.Error(), "durable state exists but recording history is missing") {
+		t.Fatalf("missing board history error = %v, want fail-closed diagnostic", err)
 	}
 }
 
-type durableSessionInventoryStub struct {
-	durableCount int
-	err          error
-	request      factorysessions.ListSessionsRequest
+func newRuntimeOpeningPersistentOwner(
+	projectRoot string,
+	store runtimepersist.Store,
+) *factorysessionexecution.JavaScriptRuntimeService {
+	return factorysessionexecution.NewJavaScriptRuntimeService(
+		projectRoot,
+		factorysessionexecution.ChildExecutorModeFake,
+		nil,
+		store,
+		openingCoordinatorClock{},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		factoryruntime.JavaScriptWorkerSettings{},
+		nil,
+		func() string { return "runtime-opening-test-session" },
+		nil,
+		nil,
+		nil,
+	)
 }
 
-func (stub *durableSessionInventoryStub) ListSessions(
+type durableSessionStateStub struct {
+	hasDurableState bool
+}
+
+func (stub *durableSessionStateStub) HasDurableState(
 	_ context.Context,
-	request factorysessions.ListSessionsRequest,
-) (factorysessions.ListSessionsResult, error) {
-	stub.request = request
-	if stub.err != nil {
-		return factorysessions.ListSessionsResult{}, stub.err
-	}
-	return factorysessions.ListSessionsResult{
-		Scope:           request.Scope,
-		DurableSessions: make([]factorysessions.DurableSessionListSummary, stub.durableCount),
-	}, nil
+	_ string,
+) (bool, error) {
+	return stub.hasDurableState, nil
 }
 
 type historicalBoardReaderStub struct {

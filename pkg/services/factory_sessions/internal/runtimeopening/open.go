@@ -283,6 +283,7 @@ func openRuntime(
 			allowMissingBoardHistory, err = currentBoardHistoryMayBeUninitialized(
 				ctx,
 				durableExecution.Service,
+				sessionID,
 			)
 			if err != nil {
 				return runtimeProducts{}, err
@@ -780,8 +781,8 @@ type historicalRecordingReader interface {
 	QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error)
 }
 
-type durableSessionInventoryReader interface {
-	ListSessions(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
+type durableSessionStateReader interface {
+	HasDurableState(context.Context, string) (bool, error)
 }
 
 // currentBoardHistoryMayBeUninitialized makes the missing-history escape hatch
@@ -790,18 +791,21 @@ type durableSessionInventoryReader interface {
 // missing board recording is a data-loss condition and must fail closed.
 func currentBoardHistoryMayBeUninitialized(
 	ctx context.Context,
-	service durableSessionInventoryReader,
+	service any,
+	sessionID string,
 ) (bool, error) {
 	if service == nil {
-		return false, fmt.Errorf("inspect current Factory Session board history: durable session inventory is unavailable")
+		return false, fmt.Errorf("inspect current Factory Session board history: durable session state probe is unavailable")
 	}
-	result, err := service.ListSessions(ctx, factorysessions.ListSessionsRequest{
-		Scope: factorysessions.SessionListScopePersisted,
-	})
+	probe, ok := service.(durableSessionStateReader)
+	if !ok {
+		return false, fmt.Errorf("inspect current Factory Session board history: durable session state probe is unavailable")
+	}
+	hasDurableState, err := probe.HasDurableState(ctx, sessionID)
 	if err != nil {
 		return false, fmt.Errorf("inspect current Factory Session board history initialization: %w", err)
 	}
-	return len(result.DurableSessions) == 0, nil
+	return !hasDurableState, nil
 }
 
 // restoreCurrentBoardState loads a detached Factory world state through the

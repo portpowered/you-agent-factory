@@ -210,6 +210,23 @@ func (s *Service) HasRestorableState(ctx context.Context, sessionID string) (boo
 	return probe.HasRestorableState(ctx, sessionID)
 }
 
+// HasDurableState forwards the read-only persistence probe used by runtime
+// opening to distinguish a first session from a fresh process with prior
+// durable state. Unlike HasRestorableState, it does not require an interrupted
+// lifecycle or a resume checkpoint.
+func (s *Service) HasDurableState(ctx context.Context, sessionID string) (bool, error) {
+	if s == nil || s.Service == nil {
+		return false, fmt.Errorf("durable execution is unavailable")
+	}
+	probe, ok := s.Service.(interface {
+		HasDurableState(context.Context, string) (bool, error)
+	})
+	if !ok {
+		return false, fmt.Errorf("durable execution does not expose a persistence-backed state probe")
+	}
+	return probe.HasDurableState(ctx, sessionID)
+}
+
 // Resume preserves the ordinary lifecycle-control path for running and paused
 // sessions. Interrupted sessions use the same read-only eligibility probe as
 // restart-resume before the underlying control operation can mutate state.
