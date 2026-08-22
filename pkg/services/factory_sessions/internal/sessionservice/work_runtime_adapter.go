@@ -136,14 +136,20 @@ func workRuntimeSnapshot(
 type workAdmissionProjection struct {
 	sessionID string
 
-	mu         sync.RWMutex
-	admissions []work.WorkAdmission
-	seenEvents map[string]struct{}
-	binding    *workAdmissionProjectionBinding
+	mu                sync.RWMutex
+	admissions        []work.WorkAdmission
+	seenEvents        map[string]struct{}
+	binding           *workAdmissionProjectionBinding
+	generationRuntime *factorysessions.LiveRuntime
+	generationLedger  recordings.Ledger
+	generationSet     bool
+	closed            bool
 }
 
 type workAdmissionProjectionBinding struct {
-	ledger recordings.Ledger
+	ledger    recordings.Ledger
+	ready     chan struct{}
+	readyOnce sync.Once
 }
 
 func newWorkAdmissionProjection(sessionID string) *workAdmissionProjection {
@@ -151,6 +157,31 @@ func newWorkAdmissionProjection(sessionID string) *workAdmissionProjection {
 		sessionID:  strings.TrimSpace(sessionID),
 		seenEvents: make(map[string]struct{}),
 	}
+}
+
+func newWorkAdmissionProjectionForGeneration(
+	sessionID string,
+	runtime *factorysessions.LiveRuntime,
+	ledger recordings.Ledger,
+) *workAdmissionProjection {
+	projection := newWorkAdmissionProjection(sessionID)
+	projection.generationRuntime = runtime
+	projection.generationLedger = ledger
+	projection.generationSet = true
+	return projection
+}
+
+func (p *workAdmissionProjection) matchesGeneration(
+	runtime *factorysessions.LiveRuntime,
+	ledger recordings.Ledger,
+) bool {
+	if p == nil {
+		return false
+	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return !p.closed && p.generationSet &&
+		p.generationRuntime == runtime && sameLedger(p.generationLedger, ledger)
 }
 
 // Bind attaches the projection to one canonical ledger. AddEventRecorder
@@ -162,19 +193,34 @@ func (p *workAdmissionProjection) Bind(ledger recordings.Ledger) {
 	if p == nil || ledger == nil {
 		return
 	}
-	binding := &workAdmissionProjectionBinding{ledger: ledger}
-	p.mu.Lock()
-	if p.binding != nil && sameLedger(p.binding.ledger, ledger) {
+	for {
+		p.mu.Lock()
+		if p.closed {
+			p.mu.Unlock()
+			return
+		}
+		if !p.generationSet {
+			p.generationLedger = ledger
+			p.generationSet = true
+		}
+		if p.binding != nil && sameLedger(p.binding.ledger, ledger) {
+			ready := p.binding.ready
+			p.mu.Unlock()
+			<-ready
+			return
+		}
+		binding := &workAdmissionProjectionBinding{ledger: ledger, ready: make(chan struct{})}
+		p.binding = binding
+		p.admissions = nil
+		p.seenEvents = make(map[string]struct{})
 		p.mu.Unlock()
+
+		ledger.AddEventRecorder(func(event factorydefinitions.FactoryEvent) {
+			p.applyEvent(binding, event)
+		})
+		binding.readyOnce.Do(func() { close(binding.ready) })
 		return
 	}
-	p.binding = binding
-	p.admissions = nil
-	p.seenEvents = make(map[string]struct{})
-	p.mu.Unlock()
-	ledger.AddEventRecorder(func(event factorydefinitions.FactoryEvent) {
-		p.applyEvent(binding, event)
-	})
 }
 
 // Snapshot returns the current admission facts without exposing mutable
@@ -183,9 +229,45 @@ func (p *workAdmissionProjection) Snapshot() []work.WorkAdmission {
 	if p == nil {
 		return nil
 	}
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return append([]work.WorkAdmission(nil), p.admissions...)
+	for {
+		p.mu.RLock()
+		binding := p.binding
+		if binding == nil {
+			admissions := append([]work.WorkAdmission(nil), p.admissions...)
+			p.mu.RUnlock()
+			return admissions
+		}
+		ready := binding.ready
+		p.mu.RUnlock()
+		<-ready
+
+		p.mu.RLock()
+		if p.binding != binding {
+			p.mu.RUnlock()
+			continue
+		}
+		admissions := append([]work.WorkAdmission(nil), p.admissions...)
+		p.mu.RUnlock()
+		return admissions
+	}
+}
+
+// Release retires the projection and prevents callbacks retained by a
+// recording ledger from keeping session state alive or mutating it after the
+// session has been removed. Existing detached readers retain their immutable
+// admission slice until they finish.
+func (p *workAdmissionProjection) Release() {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	p.closed = true
+	binding := p.binding
+	p.binding = nil
+	p.mu.Unlock()
+	if binding != nil {
+		binding.readyOnce.Do(func() { close(binding.ready) })
+	}
 }
 
 func (p *workAdmissionProjection) applyEvent(

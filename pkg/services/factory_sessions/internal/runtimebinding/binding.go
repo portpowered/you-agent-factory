@@ -68,6 +68,7 @@ func StartDefault(
 	lifecycle RuntimeLifecycle,
 	startSidecars func(context.Context, RuntimeHandle) error,
 	stop func(RuntimeHandle) error,
+	onSessionRemoved func(string),
 ) (RuntimeHandle, error) {
 	if bundle == nil {
 		return nil, fmt.Errorf("runtime bundle is required")
@@ -88,6 +89,7 @@ func StartDefault(
 	})
 	if strings.TrimSpace(registeredSessionID) == "" ||
 		state.Resolve(factorysessions.DefaultSessionID) == nil {
+		unregisterSession(state, factorysessions.DefaultSessionID, onSessionRemoved)
 		if stop != nil {
 			_ = stop(handle)
 		}
@@ -98,16 +100,17 @@ func StartDefault(
 	if err := lifecycle.WaitForStart(readinessContext, handle); err != nil {
 		return nil, HandleStartFailure(
 			readinessContext, state, runtimeState,
-			factorysessions.DefaultSessionID, handle, stop, err, runtimeMode,
+			factorysessions.DefaultSessionID, handle, stop, err, runtimeMode, onSessionRemoved,
 		)
 	}
 	if serviceMode && startSidecars != nil {
 		if err := startSidecars(runContext, handle); err != nil {
 			if DefaultSessionClosedDuringStartup(state, runtimeMode) {
+				unregisterSession(state, factorysessions.DefaultSessionID, onSessionRemoved)
 				return nil, nil
 			}
 			runtimeState.ClearActive()
-			state.Unregister(factorysessions.DefaultSessionID)
+			unregisterSession(state, factorysessions.DefaultSessionID, onSessionRemoved)
 			if stop != nil {
 				_ = stop(handle)
 			}
@@ -691,18 +694,18 @@ func HandleStartFailure(
 	stop func(RuntimeHandle) error,
 	startErr error,
 	mode interfaces.RuntimeMode,
+	onSessionRemoved func(string),
 ) error {
 	if DefaultSessionClosedDuringStartup(state, mode) {
 		runtimeState.ClearActive()
+		unregisterSession(state, sessionID, onSessionRemoved)
 		if stop != nil {
 			_ = stop(handle)
 		}
 		return nil
 	}
 	runtimeState.ClearActive()
-	if state != nil {
-		state.Unregister(sessionID)
-	}
+	unregisterSession(state, sessionID, onSessionRemoved)
 	var stopErr error
 	if stop != nil {
 		stopErr = stop(handle)
@@ -720,6 +723,19 @@ func HandleStartFailure(
 		return errors.Join(wrapped, stopErr)
 	}
 	return wrapped
+}
+
+func unregisterSession(
+	state *sessionruntime.Service,
+	sessionID string,
+	onSessionRemoved func(string),
+) {
+	if state != nil {
+		state.Unregister(sessionID)
+	}
+	if onSessionRemoved != nil {
+		onSessionRemoved(sessionID)
+	}
 }
 
 // ShutdownOtherLiveSessions stops and unregisters every session except the

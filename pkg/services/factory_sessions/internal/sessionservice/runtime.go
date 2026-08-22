@@ -178,6 +178,7 @@ func (fs *SessionRuntime) StartDefaultRuntime(
 		fs.runtimeLifecycle,
 		fs.StartLiveRuntimeSidecars,
 		fs.StopLiveRuntime,
+		fs.releaseWorkAdmissionProjection,
 	)
 }
 

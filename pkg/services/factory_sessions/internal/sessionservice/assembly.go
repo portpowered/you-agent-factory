@@ -53,7 +53,7 @@ type Assembly struct {
 	detachedMu                   sync.RWMutex
 	detachedGateways             map[string]factorysessions.Service
 	workAdmissionsMu             sync.Mutex
-	workAdmissions               map[string]*workAdmissionProjection
+	workAdmissions               map[string][]*workAdmissionProjection
 	detachedGatewayOrder         []string
 }
 
@@ -111,7 +111,7 @@ func NewAssembly(
 		identity:                     identityService,
 		responseStreams:              responseStreamService,
 		detachedGateways:             make(map[string]factorysessions.Service),
-		workAdmissions:               make(map[string]*workAdmissionProjection),
+		workAdmissions:               make(map[string][]*workAdmissionProjection),
 	}
 }
 
@@ -146,22 +146,32 @@ func (a *Assembly) ResolveWorkRuntime(sessionID string) (work.Runtime, error) {
 		sessionID:  sessionID,
 		runtime:    runtimebinding.ServiceForSession(session),
 		ingress:    ingress,
-		admissions: a.workAdmissionProjection(sessionID, ledger),
+		admissions: a.workAdmissionProjection(sessionID, session.Runtime, ledger),
 	}, nil
 }
 
-func (a *Assembly) workAdmissionProjection(sessionID string, ledger recordings.Ledger) *workAdmissionProjection {
+func (a *Assembly) workAdmissionProjection(
+	sessionID string,
+	runtime *factorysessions.LiveRuntime,
+	ledger recordings.Ledger,
+) *workAdmissionProjection {
 	if a == nil {
 		return nil
 	}
 	a.workAdmissionsMu.Lock()
 	if a.workAdmissions == nil {
-		a.workAdmissions = make(map[string]*workAdmissionProjection)
+		a.workAdmissions = make(map[string][]*workAdmissionProjection)
 	}
-	projection := a.workAdmissions[sessionID]
+	var projection *workAdmissionProjection
+	for _, candidate := range a.workAdmissions[sessionID] {
+		if candidate.matchesGeneration(runtime, ledger) {
+			projection = candidate
+			break
+		}
+	}
 	if projection == nil {
-		projection = newWorkAdmissionProjection(sessionID)
-		a.workAdmissions[sessionID] = projection
+		projection = newWorkAdmissionProjectionForGeneration(sessionID, runtime, ledger)
+		a.workAdmissions[sessionID] = append(a.workAdmissions[sessionID], projection)
 	}
 	a.workAdmissionsMu.Unlock()
 	projection.Bind(ledger)
@@ -173,8 +183,12 @@ func (a *Assembly) releaseWorkAdmissionProjection(sessionID string) {
 		return
 	}
 	a.workAdmissionsMu.Lock()
+	projections := a.workAdmissions[sessionID]
 	delete(a.workAdmissions, sessionID)
 	a.workAdmissionsMu.Unlock()
+	for _, projection := range projections {
+		projection.Release()
+	}
 }
 
 func (a *Assembly) WithRuntimeRead(read func(*factorysessions.LiveRuntime) error) error {

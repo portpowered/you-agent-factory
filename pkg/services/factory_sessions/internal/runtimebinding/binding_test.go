@@ -3,6 +3,7 @@ package runtimebinding_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -406,6 +407,7 @@ func TestStartDefaultRegistersAndSelectsCanonicalSession(t *testing.T) {
 		lifecycleFake{},
 		nil,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("StartDefault: %v", err)
@@ -422,6 +424,31 @@ func TestStartDefaultRegistersAndSelectsCanonicalSession(t *testing.T) {
 	}
 	handle.CancelRun()
 	<-handle.RunDoneCh()
+}
+
+func TestStartDefaultSidecarFailureInvokesSessionRemovalCleanup(t *testing.T) {
+	sessions := newRuntimeBindingState()
+	var runtimeState runtimebinding.State
+	bundle := &hostedInstanceFake{dir: "/factory", service: replacementFactory{}}
+	var removed []string
+
+	_, err := runtimebinding.StartDefault(
+		context.Background(), context.Background(), sessions, &runtimeState, "/factory", bundle,
+		factorysessions.Target{Ref: factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}},
+		true, interfaces.RuntimeModeService, lifecycleFake{},
+		func(context.Context, factory.RuntimeRun) error { return errors.New("sidecars unavailable") },
+		func(factory.RuntimeRun) error { return nil },
+		func(sessionID string) { removed = append(removed, sessionID) },
+	)
+	if err == nil || !strings.Contains(err.Error(), "sidecars unavailable") {
+		t.Fatalf("StartDefault error = %v, want sidecar failure", err)
+	}
+	if len(removed) != 1 || removed[0] != factorysessions.DefaultSessionID {
+		t.Fatalf("removed sessions = %#v, want default session cleanup", removed)
+	}
+	if sessions.Resolve(factorysessions.DefaultSessionID) != nil || runtimeState.Active() != nil {
+		t.Fatal("sidecar failure retained the default session or active runtime")
+	}
 }
 
 func TestCurrentBundleIgnoresPreparedDefaultWithoutLiveHandle(t *testing.T) {
@@ -448,6 +475,7 @@ func TestHandleStartFailureTreatsClosedServiceSessionAsExpected(t *testing.T) {
 	handle := newHostedHandleFake(&hostedInstanceFake{})
 	runtimeState.SetActive(context.Background(), factorysessions.DefaultSessionID, handle)
 	var stopped bool
+	var removed string
 
 	err := runtimebinding.HandleStartFailure(
 		context.Background(), sessions, &runtimeState, factorysessions.DefaultSessionID,
@@ -456,12 +484,16 @@ func TestHandleStartFailureTreatsClosedServiceSessionAsExpected(t *testing.T) {
 			return nil
 		},
 		errors.New("startup failed"), interfaces.RuntimeModeService,
+		func(sessionID string) { removed = sessionID },
 	)
 	if err != nil {
 		t.Fatalf("HandleStartFailure: %v", err)
 	}
 	if !stopped || runtimeState.Active() != nil {
 		t.Fatalf("cleanup = (stopped %v, active %#v)", stopped, runtimeState.Active())
+	}
+	if removed != factorysessions.DefaultSessionID {
+		t.Fatalf("removed session = %q, want default session", removed)
 	}
 }
 
@@ -475,7 +507,7 @@ func TestHandleStartFailureUnregistersFailedBatchSession(t *testing.T) {
 	err := runtimebinding.HandleStartFailure(
 		context.Background(), sessions, &runtimeState, factorysessions.DefaultSessionID,
 		runtimebinding.HandleFromSession(session), func(factory.RuntimeRun) error { return nil },
-		startErr, interfaces.RuntimeModeBatch,
+		startErr, interfaces.RuntimeModeBatch, nil,
 	)
 	if !errors.Is(err, startErr) {
 		t.Fatalf("HandleStartFailure error = %v, want startup failure", err)
@@ -497,7 +529,7 @@ func TestHandleStartFailureIgnoresAlreadyStoppedCleanupAfterCancellation(t *test
 		ctx, sessions, &runtimeState, factorysessions.DefaultSessionID,
 		runtimebinding.HandleFromSession(session),
 		func(factory.RuntimeRun) error { return factory.ErrAlreadyStopped },
-		context.Canceled, interfaces.RuntimeModeBatch,
+		context.Canceled, interfaces.RuntimeModeBatch, nil,
 	)
 	if err != nil {
 		t.Fatalf("HandleStartFailure: %v, want canceled startup cleanup to be idempotent", err)
