@@ -40,6 +40,19 @@ const (
 	defaultAssetAPIBaseURL = "https://huggingface.co/api"
 )
 
+// InvocationBackend is the narrow external effect used to execute one
+// prepared generic request. The Models service owns preparation, lifecycle,
+// output normalization, and lease release; an injected backend supplies only
+// detached provider-neutral output facts.
+type InvocationBackend func(
+	context.Context,
+	models.InvokeModelRequest,
+) ([]models.InferenceContent, []models.InferenceArtifact, error)
+
+type invocationRuntime interface {
+	Invoke(context.Context, inference.InvocationRuntimeRequest) (inference.InvocationRuntimeResult, error)
+}
+
 // NewService constructs an inert Models root from construction and process-edge
 // ports. It composes the accepted root through parent-private runtime_scopes,
 // catalog, assets, runtime_host, and inference owner construction without
@@ -86,7 +99,7 @@ func NewService(
 		assetCreate, assetOpen, processLauncher, hostHTTP, hostClock, runtimeRunner,
 		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
 		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
-		resolveEnvironment, protocolNegotiator, compatibilityChecker, nil,
+		resolveEnvironment, protocolNegotiator, compatibilityChecker, nil, nil,
 		revisionResolvers...,
 	)
 }
@@ -126,6 +139,59 @@ func NewServiceWithBackendArtifactResolver(
 	protocolNegotiator HostProtocolNegotiator,
 	compatibilityChecker HostCompatibilityChecker,
 	backendResolver BackendArtifactResolver,
+	invocationBackend InvocationBackend,
+	revisionResolvers ...func(context.Context, string) (string, error),
+) (models.Service, error) {
+	return newService(
+		assetPlatform, assetHTTP, assetEndpoints, assetMkdirAll, assetStat, assetHome,
+		assetWriteFile, assetRename, assetRemove, assetReadFile, assetReadDir,
+		assetCreate, assetOpen, processLauncher, hostHTTP, hostClock, runtimeRunner,
+		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
+		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
+		resolveEnvironment, protocolNegotiator, compatibilityChecker, backendResolver, nil,
+		revisionResolvers...,
+	)
+}
+
+// NewServiceWithBackendArtifactResolverAndInvocationBackend constructs the
+// Models root with both the pinned backend selector and one injected backend
+// operation effect. It exists as an additive construction variant so existing
+// callers retain the production input-echo default until a real backend
+// adapter is selected by the composition root.
+func NewServiceWithBackendArtifactResolverAndInvocationBackend(
+	assetPlatform models.AssetHostPlatform,
+	assetHTTP AssetHTTPDoer,
+	assetEndpoints models.RuntimeAssetEndpoints,
+	assetMkdirAll AssetMakeDirectories,
+	assetStat AssetInspectPath,
+	assetHome AssetResolveHomeDirectory,
+	assetWriteFile AssetWriteFile,
+	assetRename AssetRenamePath,
+	assetRemove AssetRemovePath,
+	assetReadFile AssetReadFile,
+	assetReadDir AssetReadDirectory,
+	assetCreate AssetCreateFile,
+	assetOpen AssetOpenFile,
+	processLauncher HostProcessLauncher,
+	hostHTTP HostHTTPDoer,
+	hostClock HostClock,
+	runtimeRunner platformprocess.CommandRunner,
+	runtimeHTTP RuntimeHTTPDoer,
+	runtimeInspect RuntimeInspectFile,
+	runtimeTempDir RuntimeTempDirectory,
+	runtimeTempFile RuntimeCreateTempFile,
+	logger *zap.Logger,
+	now func() time.Time,
+	issuerEntropy platformrandom.Source,
+	pullMetrics PullMetricsRecorder,
+	hostLogger HostDiagnosticLogger,
+	hostMetrics HostMetricsRecorder,
+	localHooks LocalRuntimeHooks,
+	resolveEnvironment AssetResolveEnvironment,
+	protocolNegotiator HostProtocolNegotiator,
+	compatibilityChecker HostCompatibilityChecker,
+	backendResolver BackendArtifactResolver,
+	invocationBackend InvocationBackend,
 	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
 	return newService(
@@ -135,7 +201,7 @@ func NewServiceWithBackendArtifactResolver(
 		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
 		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
 		resolveEnvironment, protocolNegotiator, compatibilityChecker, backendResolver,
-		revisionResolvers...,
+		invocationBackend, revisionResolvers...,
 	)
 }
 
@@ -172,6 +238,7 @@ func newService(
 	protocolNegotiator HostProtocolNegotiator,
 	compatibilityChecker HostCompatibilityChecker,
 	backendResolver BackendArtifactResolver,
+	invocationBackend InvocationBackend,
 	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
 	if err := validateConstructionInputs(
@@ -233,6 +300,7 @@ func newService(
 		protocolNegotiator,
 		compatibilityChecker,
 		backendResolver,
+		invocationBackend,
 		revisionResolvers...,
 	)
 }
@@ -270,6 +338,7 @@ func composeModelsService(
 	protocolNegotiator HostProtocolNegotiator,
 	compatibilityChecker HostCompatibilityChecker,
 	backendResolver BackendArtifactResolver,
+	invocationBackend InvocationBackend,
 	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
 	resolvedEndpoints := resolveAssetEndpoints(assetEndpoints)
@@ -281,7 +350,8 @@ func composeModelsService(
 		assetHome, assetWriteFile, assetRename, assetRemove, assetReadFile,
 		assetReadDir, assetCreate, assetOpen, processLauncher, hostHTTP, hostClock,
 		hostLogger, hostMetrics, resolveEnvironment, protocolNegotiator,
-		compatibilityChecker, now, issuerEntropy, firstRevisionResolver(revisionResolvers),
+		compatibilityChecker, invocationBackend, now, issuerEntropy,
+		firstRevisionResolver(revisionResolvers),
 	)
 	if err != nil {
 		return nil, err
@@ -299,6 +369,48 @@ func composeModelsService(
 			BackendArtifactPlatform:    assetPlatform,
 		},
 	)
+}
+
+type backendInvocationRuntime struct {
+	backend InvocationBackend
+}
+
+func (runtime backendInvocationRuntime) Invoke(
+	ctx context.Context,
+	request inference.InvocationRuntimeRequest,
+) (inference.InvocationRuntimeResult, error) {
+	content, artifacts, err := runtime.backend(ctx, request.Request)
+	if err != nil {
+		return inference.InvocationRuntimeResult{}, err
+	}
+	return inference.InvocationRuntimeResult{
+		Content:   content,
+		Artifacts: invocationArtifactSources(artifacts),
+	}, nil
+}
+
+func inferenceRuntime(backend InvocationBackend) invocationRuntime {
+	if backend == nil {
+		return inference.InputEchoInvocationRuntime{}
+	}
+	return backendInvocationRuntime{backend: backend}
+}
+
+func invocationArtifactSources(artifacts []models.InferenceArtifact) []inference.InvocationArtifactSource {
+	if len(artifacts) == 0 {
+		return nil
+	}
+	sources := make([]inference.InvocationArtifactSource, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		sources = append(sources, inference.InvocationArtifactSource{
+			RefValue:   artifact.Artifact.String(),
+			Name:       artifact.Name,
+			MediaType:  artifact.MediaType,
+			SizeBytes:  artifact.SizeBytes,
+			Properties: artifact.Properties,
+		})
+	}
+	return sources
 }
 
 type modelsServiceComponents struct {
@@ -331,6 +443,7 @@ func buildModelsServiceComponents(
 	resolveEnvironment AssetResolveEnvironment,
 	protocolNegotiator HostProtocolNegotiator,
 	compatibilityChecker HostCompatibilityChecker,
+	invocationBackend InvocationBackend,
 	now func() time.Time,
 	issuerEntropy platformrandom.Source,
 	revisionResolver func(context.Context, string) (string, error),
@@ -368,7 +481,7 @@ func buildModelsServiceComponents(
 	}
 	inferenceService, err := inferencewire.NewService(
 		runtimeScopes, assetService, catalogService, runtimeHost,
-		inference.InputEchoInvocationRuntime{}, inference.InertArtifactFileSystem{}, now,
+		inferenceRuntime(invocationBackend), inference.InertArtifactFileSystem{}, now,
 	)
 	if err != nil {
 		return modelsServiceComponents{}, err

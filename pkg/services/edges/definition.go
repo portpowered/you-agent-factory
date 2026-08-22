@@ -125,6 +125,7 @@ type Edges struct {
 		Check(context.Context, ModelHostCompatibilityRequest) error
 	}
 	ModelResolveBackendArtifact ModelResolveBackendArtifact
+	ModelInvocationBackend     ModelInvocationBackend
 	ModelRuntimeCommandRunner   platformprocess.CommandRunner
 	ModelRuntimeHTTPClient      interface {
 		Do(*http.Request) (*http.Response, error)
@@ -411,6 +412,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.ModelResolveBackendArtifact != nil {
 		defaults.ModelResolveBackendArtifact = replacements.ModelResolveBackendArtifact
+	}
+	if replacements.ModelInvocationBackend != nil {
+		defaults.ModelInvocationBackend = replacements.ModelInvocationBackend
 	}
 	if replacements.ModelRuntimeCommandRunner != nil {
 		defaults.ModelRuntimeCommandRunner = replacements.ModelRuntimeCommandRunner

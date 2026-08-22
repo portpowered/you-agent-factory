@@ -124,6 +124,7 @@ func TestPackageOwnsOnlyTheEdgeAggregator(t *testing.T) {
 		"HostProcessStartSpec":                 {},
 		"ModelBackendArtifactSelectionRequest": {}, "ModelBackendArtifactSelection": {},
 		"ModelResolveBackendArtifact":         {},
+		"ModelInvocationBackend":              {},
 		"ModelHostProtocolNegotiationRequest": {}, "ModelHostProtocolNegotiationResult": {},
 		"ModelHostProtocolNegotiator": {}, "ModelHostGRPCDialer": {}, "ModelHostGRPCConnection": {},
 		"ModelHostCompatibilityRequest": {}, "ModelHostCompatibilityChecker": {},

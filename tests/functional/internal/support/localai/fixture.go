@@ -24,6 +24,14 @@ const (
 	fixtureHealthMessage       = "LOCALAI_FIXTURE_READY"
 	fixtureTranscript          = "LOCALAI_FIXTURE_TRANSCRIPT"
 	fixtureTranscriptSegment   = "LOCALAI_FIXTURE_SEGMENT"
+
+	// FixtureHealthMessage, FixtureTranscript, and FixtureTranscriptSegment
+	// are the stable semantic values returned through the managed fixture
+	// adapter. The lower-case aliases above keep package-local protocol tests
+	// concise.
+	FixtureHealthMessage     = fixtureHealthMessage
+	FixtureTranscript        = fixtureTranscript
+	FixtureTranscriptSegment = fixtureTranscriptSegment
 )
 
 // Mode selects the observable backend behavior for one fixture instance.

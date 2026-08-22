@@ -64,6 +64,15 @@ type ModelResolveBackendArtifact func(
 	ModelBackendArtifactSelectionRequest,
 ) (ModelBackendArtifactSelection, error)
 
+// ModelInvocationBackend is the replaceable backend operation effect used by
+// functional fixtures and future managed-backend adapters. It returns only
+// detached provider-neutral output facts; Models retains ownership of
+// invocation status, output normalization, artifacts, and lease lifecycle.
+type ModelInvocationBackend func(
+	context.Context,
+	models.InvokeModelRequest,
+) ([]models.InferenceContent, []models.InferenceArtifact, error)
+
 type HostProcessStartSpec struct {
 	Command                 string
 	Args, Env               []string
