@@ -33,7 +33,7 @@ func TestList_SendsTerminalFilterAndCountsBeforePagination(t *testing.T) {
 					Type: factoryapi.WorkStateTypeFAILED,
 				},
 			}},
-			PaginationContext: &factoryapi.PaginationContext{MaxResults: 1, NextToken: &requestToken},
+			PaginationContext: &factoryapi.PaginationContext{MaxResults: 1},
 			Counts:            &factoryapi.ListWorkCountSummary{Total: 3},
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)

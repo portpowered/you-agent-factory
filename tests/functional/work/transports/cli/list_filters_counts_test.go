@@ -2,6 +2,8 @@ package cli_test
 
 import (
 	"encoding/json"
+	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -98,17 +100,14 @@ func TestWorkListFiltersAndCounts(t *testing.T) {
 
 	page := listWorkListFiltersCounts(t, process, home, server.URL(),
 		"--non-terminal", "--work-type", "task", "--counts", "--max-results", "1")
-	assertWorkListFiltersCountsSummary(t, page, 2, 1)
-	if page.PaginationContext == nil || page.PaginationContext.NextToken == nil ||
-		strings.TrimSpace(*page.PaginationContext.NextToken) == "" {
-		t.Fatalf("first filtered page missing next token: %#v", page.PaginationContext)
+	assertWorkListFiltersCountsSummary(t, page, 2, 2)
+	assertWorkListFiltersCountsIDs(t, page, map[string]bool{
+		"work-task-initial":    true,
+		"work-task-processing": true,
+	})
+	if page.PaginationContext != nil && page.PaginationContext.NextToken != nil {
+		t.Fatalf("aggregate filtered list retained a continuation token: %#v", page.PaginationContext)
 	}
-
-	secondPage := listWorkListFiltersCounts(t, process, home, server.URL(),
-		"--non-terminal", "--work-type", "task", "--counts", "--max-results", "1",
-		"--next-token", *page.PaginationContext.NextToken)
-	assertWorkListFiltersCountsSummary(t, secondPage, 2, 1)
-	assertDisjointWorkListFiltersCountsPages(t, page, secondPage)
 
 	terminal := listWorkListFiltersCounts(t, process, home, server.URL(),
 		"--terminal", "--work-type", "task", "--counts")
@@ -136,6 +135,129 @@ func TestWorkListFiltersAndCounts(t *testing.T) {
 		"--server", server.URL(), "work", "list", "--non-terminal", "--work-type", "other", "--state", "complete", "--counts")
 	if !strings.Contains(zeroHuman, "Total: 0") || !strings.Contains(zeroHuman, "No work found.") {
 		t.Fatalf("human zero-match list missing total or empty treatment:\n%s", zeroHuman)
+	}
+}
+
+// TestWorkListPublicCLITraversesThreeRESTPages proves the customer-facing CLI
+// exhausts a three-page REST collection while an independent direct REST walk
+// remains page-shaped and canonical.
+func TestWorkListPublicCLITraversesThreeRESTPages(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, workListFiltersCountsFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		WaitForServiceModeRuntime: true,
+	})
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	home := t.TempDir()
+
+	works := make([]workListFiltersCountsWork, 0, 51)
+	wantIDs := make([]string, 0, 51)
+	for index := 1; index <= 51; index++ {
+		workID := fmt.Sprintf("work-page-%02d", index)
+		works = append(works, workListFiltersCountsWork{
+			Name:         fmt.Sprintf("page-work-%02d", index),
+			WorkID:       workID,
+			WorkTypeName: "task",
+		})
+		wantIDs = append(wantIDs, workID)
+	}
+	submitWorkListFiltersCountsBatchWithRequestID(t, process, home, server.URL(), "work-list-three-pages", works)
+
+	manualPages := manualWorkListRESTWalk(t, server.URL(), 17)
+	if len(manualPages) != 3 {
+		t.Fatalf("manual REST page count = %d, want three", len(manualPages))
+	}
+	manualIDs := make([]string, 0, 51)
+	for pageIndex, page := range manualPages {
+		if len(page.Results) != 17 {
+			t.Fatalf("manual REST page %d size = %d, want 17", pageIndex+1, len(page.Results))
+		}
+		for _, item := range page.Results {
+			manualIDs = append(manualIDs, support.StringPointerValue(item.WorkId))
+		}
+	}
+	expectedIDCounts := make(map[string]int, len(wantIDs))
+	for _, workID := range wantIDs {
+		expectedIDCounts[workID] = 1
+	}
+	if len(manualIDs) != len(wantIDs) {
+		t.Fatalf("manual REST ID count = %d, want %d: %#v", len(manualIDs), len(wantIDs), manualIDs)
+	}
+	for _, workID := range manualIDs {
+		if expectedIDCounts[workID] != 1 {
+			t.Fatalf("manual REST IDs contain unexpected or duplicate Work %q: %#v", workID, manualIDs)
+		}
+		expectedIDCounts[workID] = 0
+	}
+	for workID, count := range expectedIDCounts {
+		if count != 0 {
+			t.Fatalf("manual REST IDs are missing Work %q: %#v", workID, manualIDs)
+		}
+	}
+
+	jsonOutput := executeWorkListFiltersCountsCLI(t, process, home, "--server", server.URL(),
+		"--json", "work", "list", "--counts", "--max-results", "17")
+	var listed factoryapi.ListWorkResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(jsonOutput)), &listed); err != nil {
+		t.Fatalf("decode aggregate Work list: %v\noutput:\n%s", err, jsonOutput)
+	}
+	if listed.Counts == nil || listed.Counts.Total != 51 || len(listed.Results) != 51 {
+		t.Fatalf("aggregate Work list summary = counts=%#v results=%d, want total/results 51", listed.Counts, len(listed.Results))
+	}
+	cliIDs := make([]string, 0, len(listed.Results))
+	for _, item := range listed.Results {
+		cliIDs = append(cliIDs, support.StringPointerValue(item.WorkId))
+	}
+	if !equalWorkIDs(cliIDs, manualIDs) {
+		t.Fatalf("CLI IDs = %#v, want independent REST walk IDs %#v", cliIDs, manualIDs)
+	}
+	if listed.PaginationContext == nil || listed.PaginationContext.MaxResults != 17 || listed.PaginationContext.NextToken != nil {
+		t.Fatalf("aggregate pagination = %#v, want maxResults=17 and exhausted continuation", listed.PaginationContext)
+	}
+
+	humanOutput := executeWorkListFiltersCountsCLI(t, process, home, "--server", server.URL(),
+		"work", "list", "--max-results", "17")
+	if strings.Count(humanOutput, "WORK ID\tNAME\tWORK TYPE") != 1 {
+		t.Fatalf("human header count = %d, want one", strings.Count(humanOutput, "WORK ID\tNAME\tWORK TYPE"))
+	}
+	for _, workID := range wantIDs {
+		if strings.Count(humanOutput, workID) != 1 {
+			t.Fatalf("human output occurrence count for %q = %d, want one", workID, strings.Count(humanOutput, workID))
+		}
+	}
+}
+
+// TestWorkShowPublicCLILooksUpWorkBeyondFirstRESTPage proves that Work detail
+// lookup remains independent of collection pagination on a large board.
+func TestWorkShowPublicCLILooksUpWorkBeyondFirstRESTPage(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, workListFiltersCountsFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		WaitForServiceModeRuntime: true,
+	})
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	home := t.TempDir()
+
+	works := make([]workListFiltersCountsWork, 0, 51)
+	for index := 1; index <= 51; index++ {
+		works = append(works, workListFiltersCountsWork{
+			Name:         fmt.Sprintf("page-work-%02d", index),
+			WorkID:       fmt.Sprintf("work-page-%02d", index),
+			WorkTypeName: "task",
+		})
+	}
+	submitWorkListFiltersCountsBatchWithRequestID(t, process, home, server.URL(), "work-show-large-board", works)
+
+	output := executeWorkListFiltersCountsCLI(t, process, home, "--server", server.URL(),
+		"--json", "work", "show", "work-page-51")
+	var shown factoryapi.Work
+	if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &shown); err != nil {
+		t.Fatalf("decode Work show response: %v\noutput:\n%s", err, output)
+	}
+	if support.StringPointerValue(shown.WorkId) != "work-page-51" || shown.Name != "page-work-51" {
+		t.Fatalf("shown Work = %#v, want work-page-51/page-work-51", shown)
 	}
 }
 
@@ -228,18 +350,13 @@ func assertWorkListSupersessionHistory(
 	assertWorkListFiltersCountsSummary(t, nonTerminal, 1, 1)
 	assertWorkListFiltersCountsIDs(t, nonTerminal, map[string]bool{newWork.WorkID: true})
 
-	firstPage := listWorkListFiltersCounts(t, process, home, serverURL,
+	allPage := listWorkListFiltersCounts(t, process, home, serverURL,
 		"--all", "--name", oldWork.Name, "--counts", "--max-results", "1")
-	assertWorkListFiltersCountsSummary(t, firstPage, 2, 1)
-	if firstPage.PaginationContext == nil || firstPage.PaginationContext.NextToken == nil ||
-		strings.TrimSpace(*firstPage.PaginationContext.NextToken) == "" {
-		t.Fatalf("--all same-name page missing next token: %#v", firstPage.PaginationContext)
+	assertWorkListFiltersCountsSummary(t, allPage, 2, 2)
+	assertWorkListFiltersCountsIDs(t, allPage, map[string]bool{oldWork.WorkID: true, newWork.WorkID: true})
+	if allPage.PaginationContext != nil && allPage.PaginationContext.NextToken != nil {
+		t.Fatalf("--all aggregate retained a continuation token: %#v", allPage.PaginationContext)
 	}
-	secondPage := listWorkListFiltersCounts(t, process, home, serverURL,
-		"--all", "--name", oldWork.Name, "--counts", "--max-results", "1",
-		"--next-token", *firstPage.PaginationContext.NextToken)
-	assertWorkListFiltersCountsSummary(t, secondPage, 2, 1)
-	assertDisjointWorkListFiltersCountsPages(t, firstPage, secondPage)
 
 	allOutput := executeWorkListFiltersCountsCLI(t, process, home, "--server", serverURL,
 		"--json", "work", "list", "--all", "--name", oldWork.Name, "--counts")
@@ -386,6 +503,47 @@ func listWorkListFiltersCounts(
 	return listed
 }
 
+func manualWorkListRESTWalk(
+	t *testing.T,
+	serverURL string,
+	maxResults int,
+) []factoryapi.ListWorkResponse {
+	t.Helper()
+	query := url.Values{
+		"counts":     []string{"true"},
+		"maxResults": []string{fmt.Sprintf("%d", maxResults)},
+	}
+	seenTokens := make(map[string]bool)
+	pages := make([]factoryapi.ListWorkResponse, 0, 3)
+	for {
+		endpoint := support.DefaultSessionWorkURL(serverURL, "/work") + "?" + query.Encode()
+		page := support.GetJSON[factoryapi.ListWorkResponse](t, endpoint)
+		pages = append(pages, page)
+		if page.PaginationContext == nil || page.PaginationContext.NextToken == nil ||
+			strings.TrimSpace(*page.PaginationContext.NextToken) == "" {
+			return pages
+		}
+		nextToken := *page.PaginationContext.NextToken
+		if seenTokens[nextToken] {
+			t.Fatalf("manual REST walk repeated next token after %d pages", len(pages))
+		}
+		seenTokens[nextToken] = true
+		query.Set("nextToken", nextToken)
+	}
+}
+
+func equalWorkIDs(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
 func executeWorkListFiltersCountsCLI(
 	t *testing.T,
 	process support.Process,
@@ -449,23 +607,5 @@ func assertWorkListFiltersCountsIDs(
 	}
 	if len(seen) != len(want) {
 		t.Fatalf("filtered Work IDs = %#v, want all of %#v", seen, want)
-	}
-}
-
-func assertDisjointWorkListFiltersCountsPages(
-	t *testing.T,
-	first factoryapi.ListWorkResponse,
-	second factoryapi.ListWorkResponse,
-) {
-	t.Helper()
-	firstIDs := make(map[string]bool, len(first.Results))
-	for _, item := range first.Results {
-		firstIDs[support.StringPointerValue(item.WorkId)] = true
-	}
-	for _, item := range second.Results {
-		workID := support.StringPointerValue(item.WorkId)
-		if firstIDs[workID] {
-			t.Fatalf("filtered pagination repeated Work %q: first=%#v second=%#v", workID, first.Results, second.Results)
-		}
 	}
 }

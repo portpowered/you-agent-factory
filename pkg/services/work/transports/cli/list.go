@@ -62,17 +62,8 @@ func List(prepare workdomain.ListRequestPreparation, cfg ListConfig) error {
 }
 
 func (service *service) List(cfg ListConfig) error {
-	if cfg.Context == nil {
-		return fmt.Errorf("context is required")
-	}
-	if cfg.Output == nil {
-		return fmt.Errorf("output writer is required")
-	}
-	if cfg.HTTP == nil {
-		return fmt.Errorf("CLI HTTP protocol is required")
-	}
-	if service.listPrepare == nil {
-		return fmt.Errorf("Work list request preparation is required")
+	if err := validateListConfig(cfg, service); err != nil {
+		return err
 	}
 
 	prepared, err := service.listPrepare.PrepareListRequest(cfg.Context, workdomain.ListOptions{
@@ -92,65 +83,317 @@ func (service *service) List(cfg ListConfig) error {
 	if err != nil {
 		return listConfigError(err)
 	}
-	request, err := buildListRequest(cfg, prepared)
+	result, err := fetchAllListPages(cfg, prepared)
 	if err != nil {
 		return err
 	}
-	endpoint := request.endpoint
-	clidiag.Printf(
-		cfg.Diagnostics,
-		cfg.Verbose,
-		"work list request endpointPath=%s endpoint=%s server=%s session=%s filters=%s maxResults=%d nextTokenPresent=%t",
-		endpoint.Path,
-		endpoint.String(),
-		cfg.Server,
-		clidiag.SessionLabel(cfg.SessionID),
-		request.filterSummary,
-		prepared.Options.MaxResults,
-		prepared.Options.NextToken != "",
-	)
-
-	var responsePayload json.RawMessage
-	response, err := cfg.HTTP.GetJSON(
-		cfg.Context,
-		endpoint.String(),
-		&responsePayload,
-	)
-	if err != nil {
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work list response endpointPath=%s error=unreachable durationMillis=%d", endpoint.Path, response.Duration.Milliseconds())
-		return fmt.Errorf("factory not reachable at %s: %w", endpoint.String(), err)
-	}
-	resp := response.HTTP
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
-			clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work list response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
-			return fmt.Errorf("list work failed (%d): %s", resp.StatusCode, errResp.Message)
-		}
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work list response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
-		return fmt.Errorf("list work failed (%d)", resp.StatusCode)
-	}
-	result, err := decodeListWorkResponse(responsePayload)
-	if err != nil {
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work list response endpointPath=%s status=%d durationMillis=%d error=decode", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
-		return fmt.Errorf("decode work list response: %w", err)
-	}
-	clidiag.Printf(
-		cfg.Diagnostics,
-		cfg.Verbose,
-		"work list response endpointPath=%s status=%d durationMillis=%d resultCount=%d nextTokenPresent=%t",
-		endpoint.Path,
-		resp.StatusCode,
-		response.Duration.Milliseconds(),
-		len(result.Results),
-		result.PaginationContext != nil && result.PaginationContext.NextToken != nil && *result.PaginationContext.NextToken != "",
-	)
 	if cfg.JSON {
 		encoder := json.NewEncoder(cfg.Output)
 		return encoder.Encode(result)
 	}
 	return renderListResult(cfg.Output, result)
+}
+
+func validateListConfig(cfg ListConfig, service *service) error {
+	if cfg.Context == nil {
+		return fmt.Errorf("context is required")
+	}
+	if cfg.Output == nil {
+		return fmt.Errorf("output writer is required")
+	}
+	if cfg.HTTP == nil {
+		return fmt.Errorf("CLI HTTP protocol is required")
+	}
+	if service == nil || service.listPrepare == nil {
+		return fmt.Errorf("Work list request preparation is required")
+	}
+	return nil
+}
+
+func fetchAllListPages(
+	cfg ListConfig,
+	prepared workdomain.PreparedListRequest,
+) (factoryapi.ListWorkResponse, error) {
+	options := prepared.Options
+	seenTokens := make(map[string]struct{})
+	if options.NextToken != "" {
+		seenTokens[options.NextToken] = struct{}{}
+	}
+
+	var aggregate factoryapi.ListWorkResponse
+	for pageNumber := 1; ; pageNumber++ {
+		if err := cfg.Context.Err(); err != nil {
+			return factoryapi.ListWorkResponse{}, err
+		}
+
+		page, err := fetchListPage(cfg, prepared, options, pageNumber)
+		if err != nil {
+			return factoryapi.ListWorkResponse{}, err
+		}
+		if pageNumber == 1 {
+			aggregate = page
+		} else {
+			aggregate.Results = append(aggregate.Results, page.Results...)
+			if aggregate.Counts == nil {
+				aggregate.Counts = page.Counts
+			}
+			aggregate.PaginationContext = page.PaginationContext
+		}
+
+		nextToken := listPageNextToken(page)
+		if nextToken == "" {
+			return aggregate, nil
+		}
+		if err := validateListPageContinuation(nextToken); err != nil {
+			return factoryapi.ListWorkResponse{}, fmt.Errorf(
+				"work list pagination failed after page %d: %w",
+				pageNumber,
+				err,
+			)
+		}
+		if _, repeated := seenTokens[nextToken]; repeated {
+			return factoryapi.ListWorkResponse{}, fmt.Errorf(
+				"work list pagination did not advance after page %d: repeated continuation token",
+				pageNumber,
+			)
+		}
+		seenTokens[nextToken] = struct{}{}
+		options.NextToken = nextToken
+	}
+}
+
+func fetchListPage(
+	cfg ListConfig,
+	prepared workdomain.PreparedListRequest,
+	options workdomain.ListOptions,
+	pageNumber int,
+) (factoryapi.ListWorkResponse, error) {
+	prepared.Options = options
+	request, err := buildListRequest(cfg, prepared)
+	if err != nil {
+		return factoryapi.ListWorkResponse{}, err
+	}
+	endpoint := request.endpoint
+	clidiag.Printf(
+		cfg.Diagnostics,
+		cfg.Verbose,
+		"work list request page=%d endpointPath=%s server=%s session=%s filters=%s maxResults=%d nextTokenPresent=%t",
+		pageNumber,
+		endpoint.Path,
+		cfg.Server,
+		clidiag.SessionLabel(cfg.SessionID),
+		request.filterSummary,
+		options.MaxResults,
+		options.NextToken != "",
+	)
+
+	var responsePayload json.RawMessage
+	response, err := cfg.HTTP.GetJSON(cfg.Context, endpoint.String(), &responsePayload)
+	if err != nil {
+		return factoryapi.ListWorkResponse{}, handleListPageRequestError(cfg, endpoint, options, pageNumber, response, err)
+	}
+	resp := response.HTTP
+	if resp == nil {
+		logListPageFailure(cfg, endpoint, options, pageNumber, response, 0, "invalid-response")
+		return factoryapi.ListWorkResponse{}, listPageEmptyResponseError(pageNumber)
+	}
+	if resp.Body != nil {
+		defer resp.Body.Close()
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return factoryapi.ListWorkResponse{}, listPageStatusError(cfg, endpoint, options, pageNumber, response, resp)
+	}
+	result, err := decodeListWorkResponse(responsePayload)
+	if err != nil {
+		logListPageFailure(cfg, endpoint, options, pageNumber, response, resp.StatusCode, "decode")
+		return factoryapi.ListWorkResponse{}, listPageDecodeError(pageNumber, err)
+	}
+	clidiag.Printf(
+		cfg.Diagnostics,
+		cfg.Verbose,
+		"work list response page=%d endpointPath=%s status=%d durationMillis=%d resultCount=%d nextTokenPresent=%t",
+		pageNumber,
+		endpoint.Path,
+		resp.StatusCode,
+		response.Duration.Milliseconds(),
+		len(result.Results),
+		listPageNextToken(result) != "",
+	)
+	return result, nil
+}
+
+func handleListPageRequestError(
+	cfg ListConfig,
+	endpoint url.URL,
+	options workdomain.ListOptions,
+	pageNumber int,
+	response clihttp.Response,
+	requestErr error,
+) error {
+	if ctxErr := cfg.Context.Err(); ctxErr != nil {
+		logListPageFailure(cfg, endpoint, options, pageNumber, response, 0, "context-canceled")
+		return newListCancellationError(pageNumber, ctxErr)
+	}
+	if errors.Is(requestErr, context.Canceled) || errors.Is(requestErr, context.DeadlineExceeded) {
+		logListPageFailure(cfg, endpoint, options, pageNumber, response, 0, "context-canceled")
+		return newListCancellationError(pageNumber, requestErr)
+	}
+	if response.HTTP != nil && response.HTTP.StatusCode == http.StatusOK {
+		closeListResponse(response)
+		logListPageFailure(cfg, endpoint, options, pageNumber, response, response.HTTP.StatusCode, "decode")
+		return listPageDecodeError(pageNumber, requestErr)
+	}
+	logListPageFailure(cfg, endpoint, options, pageNumber, response, 0, "unreachable")
+	return newListTransportError(pageNumber, safeListEndpoint(endpoint), requestErr)
+}
+
+func listPageEmptyResponseError(pageNumber int) error {
+	if pageNumber == 1 {
+		return fmt.Errorf("list work failed: HTTP response was empty")
+	}
+	return fmt.Errorf("work list page %d failed: HTTP response was empty", pageNumber)
+}
+
+func listPageStatusError(
+	cfg ListConfig,
+	endpoint url.URL,
+	options workdomain.ListOptions,
+	pageNumber int,
+	response clihttp.Response,
+	resp *http.Response,
+) error {
+	logListPageFailure(cfg, endpoint, options, pageNumber, response, resp.StatusCode, "status")
+	if errResp, ok := clihttp.DecodeAPIError(resp); ok {
+		if pageNumber == 1 {
+			return fmt.Errorf("list work failed (%d): %s", resp.StatusCode, errResp.Message)
+		}
+		return fmt.Errorf("work list page %d failed (%d): %s", pageNumber, resp.StatusCode, errResp.Message)
+	}
+	if pageNumber == 1 {
+		return fmt.Errorf("list work failed (%d)", resp.StatusCode)
+	}
+	return fmt.Errorf("work list page %d failed (%d)", pageNumber, resp.StatusCode)
+}
+
+func listPageDecodeError(pageNumber int, decodeErr error) error {
+	if pageNumber == 1 {
+		return fmt.Errorf("decode work list response: %w", decodeErr)
+	}
+	return fmt.Errorf("work list page %d response decode: %w", pageNumber, decodeErr)
+}
+
+func logListPageFailure(
+	cfg ListConfig,
+	endpoint url.URL,
+	options workdomain.ListOptions,
+	pageNumber int,
+	response clihttp.Response,
+	status int,
+	kind string,
+) {
+	if status > 0 {
+		clidiag.Printf(
+			cfg.Diagnostics,
+			cfg.Verbose,
+			"work list response page=%d endpointPath=%s nextTokenPresent=%t status=%d durationMillis=%d error=%s",
+			pageNumber,
+			endpoint.Path,
+			options.NextToken != "",
+			status,
+			response.Duration.Milliseconds(),
+			kind,
+		)
+		return
+	}
+	clidiag.Printf(
+		cfg.Diagnostics,
+		cfg.Verbose,
+		"work list response page=%d endpointPath=%s nextTokenPresent=%t error=%s durationMillis=%d",
+		pageNumber,
+		endpoint.Path,
+		options.NextToken != "",
+		kind,
+		response.Duration.Milliseconds(),
+	)
+}
+
+func listPageNextToken(result factoryapi.ListWorkResponse) string {
+	if result.PaginationContext == nil || result.PaginationContext.NextToken == nil {
+		return ""
+	}
+	return *result.PaginationContext.NextToken
+}
+
+func validateListPageContinuation(token string) error {
+	if token != "" && strings.TrimSpace(token) == "" {
+		return fmt.Errorf("continuation token was blank")
+	}
+	return nil
+}
+
+func closeListResponse(response clihttp.Response) {
+	if response.HTTP == nil || response.HTTP.Body == nil {
+		return
+	}
+	_ = response.HTTP.Body.Close()
+}
+
+func safeListEndpoint(endpoint url.URL) string {
+	endpoint.RawQuery = ""
+	endpoint.ForceQuery = false
+	endpoint.Fragment = ""
+	return endpoint.String()
+}
+
+type listTransportError struct {
+	message string
+	cause   error
+}
+
+func newListTransportError(pageNumber int, endpoint string, cause error) error {
+	message := fmt.Sprintf("factory not reachable at %s: transport request failed", endpoint)
+	if pageNumber > 1 {
+		message = fmt.Sprintf("work list page %d: %s", pageNumber, message)
+	}
+	return &listTransportError{message: message, cause: cause}
+}
+
+func (err *listTransportError) Error() string {
+	if err == nil {
+		return ""
+	}
+	return err.message
+}
+
+func (err *listTransportError) Unwrap() error {
+	if err == nil {
+		return nil
+	}
+	return err.cause
+}
+
+type listCancellationError struct {
+	page  int
+	cause error
+}
+
+func newListCancellationError(pageNumber int, cause error) error {
+	return &listCancellationError{page: pageNumber, cause: cause}
+}
+
+func (err *listCancellationError) Error() string {
+	if err == nil {
+		return ""
+	}
+	return fmt.Sprintf("work list page %d canceled", err.page)
+}
+
+func (err *listCancellationError) Unwrap() error {
+	if err == nil {
+		return nil
+	}
+	return err.cause
 }
 
 func listConfigError(err error) error {

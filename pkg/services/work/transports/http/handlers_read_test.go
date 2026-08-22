@@ -13,6 +13,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestListWorkBySessionId_EncodesFakeRootListResults(t *testing.T) {
@@ -243,6 +246,142 @@ func TestListWorkBySessionId_MapsRootValidationError(t *testing.T) {
 func TestListWorkBySessionId_MapsUnmappedRootFailureToInternalError(t *testing.T) {
 	t.Parallel()
 
+	core, logs := observer.New(zapcore.InfoLevel)
+	adapter := NewAdapter(&rootFake{
+		listWork: func(context.Context, string, work.ListOptions) (work.ListResult, error) {
+			return work.ListResult{}, fmt.Errorf("unexpected list failure")
+		},
+	}).WithLogger(zap.New(core))
+	recorder := httptest.NewRecorder()
+	cursor := factoryapi.NextToken("Y3Vyc29y")
+
+	adapter.ListWorkBySessionId(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/session-1/work?nextToken=Y3Vyc29y", nil),
+		"session-1",
+		factoryapi.ListWorkBySessionIdParams{NextToken: &cursor},
+	)
+
+	if recorder.Code != http.StatusInternalServerError || !strings.Contains(recorder.Body.String(), `"code":"INTERNAL_ERROR"`) {
+		t.Fatalf("response = %d %s, want internal error", recorder.Code, recorder.Body.String())
+	}
+	assertSingleUnexpectedWorkReadLog(t, logs, workListReadOperation, "session-1", "", "unexpected list failure", "Y3Vyc29y")
+}
+
+func TestGetWorkBySessionId_MapsUnmappedRootFailureToInternalError(t *testing.T) {
+	t.Parallel()
+
+	core, logs := observer.New(zapcore.InfoLevel)
+	adapter := NewAdapter(&rootFake{
+		getWork: func(context.Context, string, string) (work.ReadModel, error) {
+			return work.ReadModel{}, fmt.Errorf("unexpected get failure")
+		},
+	}).WithLogger(zap.New(core))
+	recorder := httptest.NewRecorder()
+
+	adapter.GetWorkBySessionId(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/session-1/work/work-1", nil),
+		"session-1",
+		"work-1",
+	)
+
+	if recorder.Code != http.StatusInternalServerError || !strings.Contains(recorder.Body.String(), `"code":"INTERNAL_ERROR"`) {
+		t.Fatalf("response = %d %s, want internal error", recorder.Code, recorder.Body.String())
+	}
+	assertSingleUnexpectedWorkReadLog(t, logs, workShowReadOperation, "session-1", "work-1", "unexpected get failure", "")
+}
+
+func TestWorkReadExpectedOutcomesDoNotLogInternalErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		call func(*Adapter, *httptest.ResponseRecorder)
+	}{
+		{
+			name: "list validation",
+			call: func(adapter *Adapter, recorder *httptest.ResponseRecorder) {
+				invalid := factoryapi.StateType("RUNNING")
+				adapter.ListWorkBySessionId(
+					recorder,
+					httptest.NewRequest(http.MethodGet, "/factory-sessions/session-1/work", nil),
+					"session-1",
+					factoryapi.ListWorkBySessionIdParams{StateType: &invalid},
+				)
+			},
+		},
+		{
+			name: "show not found",
+			call: func(adapter *Adapter, recorder *httptest.ResponseRecorder) {
+				adapter.GetWorkBySessionId(
+					recorder,
+					httptest.NewRequest(http.MethodGet, "/factory-sessions/session-1/work/missing", nil),
+					"session-1",
+					"missing",
+				)
+			},
+		},
+		{
+			name: "list canceled",
+			call: func(adapter *Adapter, recorder *httptest.ResponseRecorder) {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				adapter.ListWorkBySessionId(
+					recorder,
+					httptest.NewRequestWithContext(ctx, http.MethodGet, "/factory-sessions/session-1/work", nil),
+					"session-1",
+					factoryapi.ListWorkBySessionIdParams{},
+				)
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			core, logs := observer.New(zapcore.InfoLevel)
+			adapter := NewAdapter(&rootFake{}).WithLogger(zap.New(core))
+			recorder := httptest.NewRecorder()
+
+			test.call(adapter, recorder)
+
+			if logs.Len() != 0 {
+				t.Fatalf("unexpected internal-error logs = %#v", logs.All())
+			}
+		})
+	}
+}
+
+func assertSingleUnexpectedWorkReadLog(
+	t *testing.T,
+	logs *observer.ObservedLogs,
+	wantOperation, wantSessionID, wantWorkID, wantError, forbidden string,
+) {
+	t.Helper()
+	entries := logs.All()
+	if len(entries) != 1 {
+		t.Fatalf("log count = %d, want one: %#v", len(entries), entries)
+	}
+	entry := entries[0]
+	if entry.Level != zapcore.ErrorLevel {
+		t.Fatalf("log level = %s, want error", entry.Level)
+	}
+	fields := entry.ContextMap()
+	if entry.Message != "Work read failed" || fields["operation"] != wantOperation ||
+		fields["session_id"] != wantSessionID || fields["error"] != wantError {
+		t.Fatalf("log = message %q fields %#v, want Work read operation context", entry.Message, fields)
+	}
+	if wantWorkID != "" && fields["work_id"] != wantWorkID {
+		t.Fatalf("work_id = %#v, want %q", fields["work_id"], wantWorkID)
+	}
+	if forbidden != "" && (strings.Contains(entry.Message, forbidden) || strings.Contains(fmt.Sprint(fields), forbidden)) {
+		t.Fatalf("log exposed forbidden value %q: message=%q fields=%#v", forbidden, entry.Message, fields)
+	}
+}
+
+func TestListWorkBySessionId_MapsUnmappedRootFailureToInternalErrorWithoutLogger(t *testing.T) {
+	t.Parallel()
+
 	adapter := NewAdapter(&rootFake{
 		listWork: func(context.Context, string, work.ListOptions) (work.ListResult, error) {
 			return work.ListResult{}, fmt.Errorf("unexpected list failure")
@@ -262,7 +401,7 @@ func TestListWorkBySessionId_MapsUnmappedRootFailureToInternalError(t *testing.T
 	}
 }
 
-func TestGetWorkBySessionId_MapsUnmappedRootFailureToInternalError(t *testing.T) {
+func TestGetWorkBySessionId_MapsUnmappedRootFailureToInternalErrorWithoutLogger(t *testing.T) {
 	t.Parallel()
 
 	adapter := NewAdapter(&rootFake{

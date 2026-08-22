@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"go.uber.org/zap"
 )
 
 const (
@@ -100,6 +101,28 @@ func (a *Adapter) writeRootOrInternalError(
 ) {
 	if a.writeRootError(w, err) {
 		return
+	}
+	a.writeError(
+		w,
+		http.StatusInternalServerError,
+		fallbackMessage,
+		string(factoryapi.ErrorResponseCodeINTERNALERROR),
+	)
+}
+
+func (a *Adapter) writeReadOrInternalError(
+	w http.ResponseWriter,
+	err error,
+	fallbackMessage string,
+	operation string,
+	fields ...zap.Field,
+) {
+	if a.writeRootError(w, err) {
+		return
+	}
+	if a != nil && a.logger != nil {
+		logFields := append(fields, zap.String("operation", operation), zap.Error(err))
+		a.logger.Error("Work read failed", logFields...)
 	}
 	a.writeError(
 		w,

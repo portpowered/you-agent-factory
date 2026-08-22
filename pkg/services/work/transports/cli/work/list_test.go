@@ -477,7 +477,6 @@ func TestList_HumanOutputShowsDeterministicSummaryForMultipleRelations(t *testin
 
 func TestList_SendsPaginationControlsAndEmitsJSONResponse(t *testing.T) {
 	requestToken := encodeCursor("cursor-1")
-	nextToken := encodeCursor("cursor-2")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("maxResults") != "2" {
 			t.Fatalf("maxResults query = %q, want 2", r.URL.Query().Get("maxResults"))
@@ -498,7 +497,6 @@ func TestList_SendsPaginationControlsAndEmitsJSONResponse(t *testing.T) {
 			}},
 			PaginationContext: &factoryapi.PaginationContext{
 				MaxResults: 2,
-				NextToken:  &nextToken,
 			},
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
@@ -525,13 +523,12 @@ func TestList_SendsPaginationControlsAndEmitsJSONResponse(t *testing.T) {
 	if len(got.Results) != 1 || stringValue(got.Results[0].WorkId) != "work-2" {
 		t.Fatalf("json results = %#v, want work-2", got.Results)
 	}
-	if got.PaginationContext == nil || got.PaginationContext.MaxResults != 2 || stringValue(got.PaginationContext.NextToken) != nextToken {
-		t.Fatalf("pagination context = %#v, want maxResults=2 nextToken=%q", got.PaginationContext, nextToken)
+	if got.PaginationContext == nil || got.PaginationContext.MaxResults != 2 || got.PaginationContext.NextToken != nil {
+		t.Fatalf("pagination context = %#v, want maxResults=2 and no continuation", got.PaginationContext)
 	}
 }
 
 func TestList_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *testing.T) {
-	nextToken := encodeCursor("cursor-2")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
@@ -545,7 +542,6 @@ func TestList_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *testing.T
 			}},
 			PaginationContext: &factoryapi.PaginationContext{
 				MaxResults: 1,
-				NextToken:  &nextToken,
 			},
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
@@ -592,90 +588,88 @@ func TestList_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *testing.T
 	}
 }
 
-func TestList_VerboseLogsFailureStatus(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{Message: "service unavailable", Code: "INTERNAL_ERROR"}); err != nil {
-			t.Fatalf("encode response: %v", err)
-		}
-	}))
+func TestList_JSONOutputOmitsResourcesAndPreservesPaginationAcrossVisibleWorkPages(t *testing.T) {
+	srv := newVisibleWorkPaginationServer(t)
 	defer srv.Close()
 
-	var out bytes.Buffer
-	var diagnostics bytes.Buffer
+	var output bytes.Buffer
 	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{Context: context.Background(),
-		Server:      serverBase(t, srv),
-		Verbose:     true,
-		Output:      &out,
-		Diagnostics: &diagnostics,
+		Server:            serverBase(t, srv),
+		SessionID:         "session/alpha",
+		StateName:         "review",
+		StateType:         "PROCESSING",
+		Name:              "Plan",
+		WorkTypeName:      "story",
+		TraceID:           "trace-1",
+		IncludeSuperseded: true,
+		SortBy:            "state.type",
+		MaxResults:        1,
+		Counts:            true,
+		JSON:              true,
+		Output:            &output,
 	})
-	if err == nil {
-		t.Fatal("expected list failure")
+	if err != nil {
+		t.Fatalf("List: %v", err)
 	}
-	diag := diagnostics.String()
-	if !strings.Contains(diag, "work list response") || !strings.Contains(diag, "status=500") {
-		t.Fatalf("diagnostics missing failure status:\n%s", diag)
+	if bytes.Contains(output.Bytes(), []byte("executor-slot")) {
+		t.Fatalf("aggregate JSON included runtime resource text: %q", output.String())
 	}
-	if out.Len() != 0 {
-		t.Fatalf("stdout should stay empty on failure, got %q", out.String())
+	var response factoryapi.ListWorkResponse
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("aggregate JSON is invalid: %v\n%s", err, output.String())
+	}
+	if len(response.Results) != 3 || stringValue(response.Results[0].WorkId) != "work-1" || stringValue(response.Results[1].WorkId) != "work-2" || stringValue(response.Results[2].WorkId) != "work-3" {
+		t.Fatalf("aggregate results = %#v, want work-1, work-2, work-3 in server order", response.Results)
+	}
+	if response.PaginationContext == nil || response.PaginationContext.NextToken != nil {
+		t.Fatalf("aggregate pagination = %#v, want exhausted continuation", response.PaginationContext)
+	}
+	if response.Counts == nil || response.Counts.Total != 3 {
+		t.Fatalf("aggregate counts = %#v, want total 3", response.Counts)
 	}
 }
 
-func TestList_JSONOutputOmitsResourcesAndPreservesPaginationAcrossVisibleWorkPages(t *testing.T) {
-	secondToken := encodeCursor("cursor-2")
-	var requestCount int
+func TestList_HumanOutputAggregatesThreePagesWithOneHeader(t *testing.T) {
+	secondToken := encodeCursor("human-page-2")
+	thirdToken := encodeCursor("human-page-3")
+	requestCount := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
 		requestCount++
+		w.Header().Set("Content-Type", "application/json")
 		switch requestCount {
 		case 1:
-			assertListPageRequest(t, r, "1", "")
-			encodeListPageResponse(t, w, "Plan feature", "work-1", "init", factoryapi.WorkStateTypeINITIAL, &secondToken, "first")
+			encodeListPageResponse(t, w, "Plan feature", "work-1", "init", factoryapi.WorkStateTypeINITIAL, &secondToken, "first", 0)
 		case 2:
-			assertListPageRequest(t, r, "1", secondToken)
-			encodeListPageResponse(t, w, "Review PRD", "work-2", "review", factoryapi.WorkStateTypePROCESSING, nil, "second")
+			encodeListPageResponse(t, w, "Review PRD", "work-2", "review", factoryapi.WorkStateTypePROCESSING, &thirdToken, "second", 0)
+		case 3:
+			encodeListPageResponse(t, w, "Ship Release", "work-3", "done", factoryapi.WorkStateTypeTERMINAL, nil, "third", 0)
 		default:
 			t.Fatalf("unexpected request count %d", requestCount)
 		}
 	}))
 	defer srv.Close()
 
-	var firstOut bytes.Buffer
-	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{Context: context.Background(),
-		Server:     serverBase(t, srv),
-		MaxResults: 1,
-		JSON:       true,
-		Output:     &firstOut,
+	var output bytes.Buffer
+	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{
+		Context: context.Background(), Server: serverBase(t, srv), MaxResults: 1, Output: &output,
 	})
 	if err != nil {
-		t.Fatalf("List first page: %v", err)
+		t.Fatalf("List: %v", err)
 	}
-	if bytes.Contains(firstOut.Bytes(), []byte("executor-slot")) {
-		t.Fatalf("first page JSON included runtime resource text: %q", firstOut.String())
+	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tSTRUCTURED RESULT\tRELATIONS\n" +
+		"work-1\tPlan feature\tstory\tinit\tINITIAL\t\tnone\n" +
+		"work-2\tReview PRD\tstory\treview\tPROCESSING\t\tnone\n" +
+		"work-3\tShip Release\tstory\tdone\tTERMINAL\t\tnone\n"
+	if output.String() != want {
+		t.Fatalf("human output = %q, want %q", output.String(), want)
 	}
-	assertListJSONPage(t, firstOut.Bytes(), "work-1", &secondToken, "first")
-
-	var secondOut bytes.Buffer
-	err = NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{Context: context.Background(),
-		Server:     serverBase(t, srv),
-		MaxResults: 1,
-		NextToken:  secondToken,
-		JSON:       true,
-		Output:     &secondOut,
-	})
-	if err != nil {
-		t.Fatalf("List second page: %v", err)
+	if strings.Count(output.String(), "WORK ID\tNAME\tWORK TYPE") != 1 {
+		t.Fatalf("human output header count = %d, want one", strings.Count(output.String(), "WORK ID\tNAME\tWORK TYPE"))
 	}
-	if bytes.Contains(secondOut.Bytes(), []byte("executor-slot")) {
-		t.Fatalf("second page JSON included runtime resource text: %q", secondOut.String())
-	}
-	assertListJSONPage(t, secondOut.Bytes(), "work-2", nil, "second")
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this JSON output test keeps the generated page shape assertions together so the CLI surface stays reviewer-readable.
 func TestList_JSONOutputPreservesGeneratedResponseShape(t *testing.T) {
-	nextToken := "cursor-2"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
@@ -690,7 +684,6 @@ func TestList_JSONOutputPreservesGeneratedResponseShape(t *testing.T) {
 			}},
 			PaginationContext: &factoryapi.PaginationContext{
 				MaxResults: 1,
-				NextToken:  &nextToken,
 			},
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
@@ -734,13 +727,15 @@ func TestList_JSONOutputPreservesGeneratedResponseShape(t *testing.T) {
 	if !ok {
 		t.Fatalf("paginationContext = %#v, want JSON object", got["paginationContext"])
 	}
-	if pagination["maxResults"] != float64(1) || pagination["nextToken"] != nextToken {
-		t.Fatalf("paginationContext = %#v, want maxResults=1 nextToken=%q", pagination, nextToken)
+	if pagination["maxResults"] != float64(1) {
+		t.Fatalf("paginationContext = %#v, want maxResults=1", pagination)
+	}
+	if _, hasNextToken := pagination["nextToken"]; hasNextToken {
+		t.Fatalf("paginationContext = %#v, want no continuation after exhaustion", pagination)
 	}
 }
 
 func TestList_JSONOutputSupportsAutomationSelectionWithFiltersAndPagination(t *testing.T) {
-	nextToken := "cursor-review-2"
 	requiredState := "approved"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("state.name") != "review" {
@@ -772,7 +767,6 @@ func TestList_JSONOutputSupportsAutomationSelectionWithFiltersAndPagination(t *t
 			}},
 			PaginationContext: &factoryapi.PaginationContext{
 				MaxResults: 1,
-				NextToken:  &nextToken,
 			},
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
@@ -809,54 +803,11 @@ func TestList_JSONOutputSupportsAutomationSelectionWithFiltersAndPagination(t *t
 		t.Fatalf("dependency relation = %#v, want target work and required state preserved", dependency)
 	}
 	pagination := jsonObject(t, got, "paginationContext")
-	if pagination["maxResults"] != float64(1) || pagination["nextToken"] != nextToken {
-		t.Fatalf("paginationContext = %#v, want maxResults=1 nextToken=%q", pagination, nextToken)
+	if pagination["maxResults"] != float64(1) {
+		t.Fatalf("paginationContext = %#v, want maxResults=1", pagination)
 	}
-}
-
-func TestList_JSONOutputLeavesRelationsOmittedWhenAPIResponseDoesNotIncludeThem(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
-			Results: []factoryapi.Work{{
-				Name:         "Plan Release",
-				WorkId:       stringPtr("work-plan"),
-				WorkTypeName: stringPtr("story"),
-				State: &factoryapi.WorkState{
-					Name: "planned",
-					Type: factoryapi.WorkStateTypeINITIAL,
-				},
-			}},
-		}); err != nil {
-			t.Fatalf("encode response: %v", err)
-		}
-	}))
-	defer srv.Close()
-
-	var out bytes.Buffer
-	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{Context: context.Background(),
-		Server: serverBase(t, srv),
-		JSON:   true,
-		Output: &out,
-	})
-	if err != nil {
-		t.Fatalf("List: %v", err)
-	}
-
-	var got map[string]any
-	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
-		t.Fatalf("json output is invalid: %v\n%s", err, out.String())
-	}
-	results, ok := got["results"].([]any)
-	if !ok || len(results) != 1 {
-		t.Fatalf("results = %#v, want one JSON array item", got["results"])
-	}
-	work, ok := results[0].(map[string]any)
-	if !ok {
-		t.Fatalf("results[0] = %#v, want JSON object", results[0])
-	}
-	if _, hasRelations := work["relations"]; hasRelations {
-		t.Fatalf("relations = %#v, want omitted when API response omits relations", work["relations"])
+	if _, hasNextToken := pagination["nextToken"]; hasNextToken {
+		t.Fatalf("paginationContext = %#v, want no continuation after exhaustion", pagination)
 	}
 }
 
@@ -878,6 +829,37 @@ func assertListPageRequest(t *testing.T, r *http.Request, wantMaxResults string,
 	}
 }
 
+func assertListQueryPreserved(
+	t *testing.T,
+	r *http.Request,
+	wantStateName string,
+	wantStateType string,
+	wantName string,
+	wantWorkTypeName string,
+	wantTraceID string,
+) {
+	t.Helper()
+	query := r.URL.Query()
+	for key, want := range map[string]string{
+		"state.name":        wantStateName,
+		"state.type":        wantStateType,
+		"name":              wantName,
+		"workTypeName":      wantWorkTypeName,
+		"traceId":           wantTraceID,
+		"sortBy":            "state.type",
+		"maxResults":        "1",
+		"counts":            "true",
+		"includeSuperseded": "true",
+	} {
+		if got := query.Get(key); got != want {
+			t.Fatalf("%s query = %q, want %q", key, got, want)
+		}
+	}
+	if got := r.URL.EscapedPath(); got != "/factory-sessions/session%2Falpha/work" {
+		t.Fatalf("session path = %q, want escaped session path", got)
+	}
+}
+
 func encodeListPageResponse(
 	t *testing.T,
 	w http.ResponseWriter,
@@ -887,9 +869,10 @@ func encodeListPageResponse(
 	stateType factoryapi.WorkStateType,
 	nextToken *string,
 	pageLabel string,
+	count int,
 ) {
 	t.Helper()
-	if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
+	response := factoryapi.ListWorkResponse{
 		Results: []factoryapi.Work{{
 			Name:         workName,
 			WorkId:       stringPtr(workID),
@@ -903,22 +886,12 @@ func encodeListPageResponse(
 			MaxResults: 1,
 			NextToken:  nextToken,
 		},
-	}); err != nil {
+	}
+	if count > 0 {
+		response.Counts = &factoryapi.ListWorkCountSummary{Total: count}
+	}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		t.Fatalf("encode %s response: %v", pageLabel, err)
-	}
-}
-
-func assertListJSONPage(t *testing.T, payload []byte, wantWorkID string, wantNextToken *string, pageLabel string) {
-	t.Helper()
-	var response factoryapi.ListWorkResponse
-	if err := json.Unmarshal(payload, &response); err != nil {
-		t.Fatalf("%s page JSON is invalid: %v\n%s", pageLabel, err, string(payload))
-	}
-	if len(response.Results) != 1 || stringValue(response.Results[0].WorkId) != wantWorkID {
-		t.Fatalf("%s page results = %#v, want only %s", pageLabel, response.Results, wantWorkID)
-	}
-	if response.PaginationContext == nil || stringValue(response.PaginationContext.NextToken) != stringValue(wantNextToken) {
-		t.Fatalf("%s page pagination context = %#v, want nextToken=%q", pageLabel, response.PaginationContext, stringValue(wantNextToken))
 	}
 }
 

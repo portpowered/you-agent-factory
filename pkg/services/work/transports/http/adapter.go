@@ -12,6 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"go.uber.org/zap"
 )
 
 // NewAdapterFromRoles is a compatibility composition helper for narrow
@@ -95,6 +96,7 @@ var _ work.Service = (*roleRoot)(nil)
 // Adapter maps Work service values at the outward HTTP boundary.
 type Adapter struct {
 	root            work.Service
+	logger          *zap.Logger
 	sessionScope    func(context.Context, string) error
 	defaultWorkType func(context.Context, string) (string, error)
 }
@@ -124,6 +126,18 @@ func (a *Adapter) WithSessionScope(scope func(context.Context, string) error) *A
 	}
 	bound := *a
 	bound.sessionScope = scope
+	return &bound
+}
+
+// WithLogger returns a copy bound to the injected HTTP logger. Work read
+// failures use this logger after typed and request-context outcomes have been
+// handled, so expected client outcomes are not reported as internal errors.
+func (a *Adapter) WithLogger(logger *zap.Logger) *Adapter {
+	if a == nil {
+		return nil
+	}
+	bound := *a
+	bound.logger = logger
 	return &bound
 }
 
