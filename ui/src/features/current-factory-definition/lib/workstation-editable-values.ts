@@ -8,7 +8,10 @@ import {
   type RunnerSelectionSource,
   resolveRunnerSelection,
 } from "./runner-selection";
-import { preferredInferenceRunWorkstationType } from "./worker-workstation-taxonomy";
+import {
+  isScriptRunWorkstationType,
+  preferredInferenceRunWorkstationType,
+} from "./worker-workstation-taxonomy";
 import {
   applyEditableWorkstationInputs,
   resolveCanonicalWorkstation,
@@ -188,7 +191,7 @@ export function resolveEditableWorkstationValues(
     workerTypeByName: resolveWorkerTypeByName(factory),
     workerModelProvider,
     workerName: workstation.worker ?? "",
-    workerOptions: resolveWorkerOptions(factory),
+    workerOptions: resolveWorkerOptions(factory, workstation.type),
     guards: resolveEditableWorkstationGuards(workstation),
     inputs: resolveEditableWorkstationInputs(workstation),
     workstationName: workstation.name,
@@ -263,7 +266,7 @@ export function applyEditableWorkstationDraft(
 
   const nextWorkstation = isModelInvokeWorkstationType(draft.workstationType)
     ? buildModelInvokeWorkstationFromDraft(workstation, draft, trimmedName)
-    : buildPromptOrientedWorkstationFromDraft(workstation, draft, trimmedName);
+    : buildPromptOrScriptWorkstationFromDraft(workstation, draft, trimmedName);
 
   return applyWorkstationNameChangeToFactory(
     factory,
@@ -274,7 +277,7 @@ export function applyEditableWorkstationDraft(
   );
 }
 
-function buildPromptOrientedWorkstationFromDraft(
+function buildPromptOrScriptWorkstationFromDraft(
   workstation: CanonicalWorkstation,
   draft: EditableWorkstationDraft,
   trimmedName: string,
@@ -290,9 +293,8 @@ function buildPromptOrientedWorkstationFromDraft(
     ...workstationWithoutCronRunner
   } = workstation;
 
-  return {
+  const nextWorkstation = {
     ...workstationWithoutCronRunner,
-    body: draft.prompt,
     inputs: applyEditableWorkstationInputs(draft.inputs),
     name: trimmedName,
     type: draft.workstationType,
@@ -307,6 +309,10 @@ function buildPromptOrientedWorkstationFromDraft(
       ? { cron: buildCanonicalWorkstationCronFromDraft(draft.cron) }
       : {}),
   };
+
+  return isScriptRunWorkstationType(draft.workstationType)
+    ? nextWorkstation
+    : { ...nextWorkstation, body: draft.prompt };
 }
 
 function buildModelInvokeWorkstationFromDraft(

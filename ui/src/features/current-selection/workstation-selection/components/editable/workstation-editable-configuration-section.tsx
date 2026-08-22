@@ -8,25 +8,30 @@ import { surfacePanelVariants } from "@you-agent-factory/components/layout";
 import { Label, Text } from "@you-agent-factory/components/primitives";
 import { type ReactNode, useId } from "react";
 
-import { AlertPanel, AlertPanelText } from "../../../../../components/ui/alert-panel";
-import { Input } from "../../../../../components/ui/input";
+import {
+  AlertPanel,
+  AlertPanelText,
+} from "../../../../../components/ui/alert-panel";
 import { formatList } from "../../../../../components/ui/formatters";
+import { Input } from "../../../../../components/ui/input";
 import { cn } from "../../../../../lib/cn";
-import { isModelInvokeWorkstationType } from "../../../../current-factory-definition/lib/workstation/workstation-model-invoke";
+import {
+  isModelInvokeWorkstationType,
+  workstationUsesPromptOrientedEditing,
+} from "../../../../current-factory-definition/lib/workstation/workstation-model-invoke";
 import type { EditableWorkstationType } from "../../../../current-factory-definition/lib/workstation/workstation-type";
 import { supportsEditableWorkstationTypeConversion } from "../../../../current-factory-definition/lib/workstation/workstation-type";
+import { workstationBehaviorRequiresPrompt } from "../../../../current-factory-definition/lib/workstation-behavior";
 import type { WorkstationLevelGuard } from "../../../../current-factory-definition/lib/workstation-guards";
 import { workstationRequiresWorkerAssignment } from "../../../../current-factory-definition/lib/workstation-worker-assignment";
 import { GraphSemanticIcon } from "../../../../flowchart/components/graph-semantic-icon";
+import { CurrentSelectionDetailFeedback } from "../../../base/components/detail/current-selection-detail-feedback";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
-import { mergeDetailCardSaveFieldErrors } from "../../../base/components/save/detail-card-factory-save-feedback";
-import {
-  CurrentSelectionDetailFeedback,
-} from "../../../base/components/detail/current-selection-detail-feedback";
 import {
   CurrentSelectionFormField,
   CurrentSelectionFormFields,
 } from "../../../base/components/layout/current-selection-form-layout";
+import { mergeDetailCardSaveFieldErrors } from "../../../base/components/save/detail-card-factory-save-feedback";
 import { formatEditableOverwriteFieldLabels } from "../../editing/editable-workstation-overwrite-fields";
 import type {
   EditableWorkstationOverwriteField,
@@ -130,6 +135,9 @@ function EditableConfigurationReadyForm({
   const isModelInvoke = isModelInvokeWorkstationType(
     state.draft.workstationType,
   );
+  const showPromptField =
+    workstationUsesPromptOrientedEditing(state.draft.workstationType) &&
+    workstationBehaviorRequiresPrompt(state.draft.behavior);
   const showWorkstationTypeField =
     requiresWorkerAssignment &&
     supportsEditableWorkstationTypeConversion(
@@ -261,24 +269,26 @@ function EditableConfigurationReadyForm({
               />
             }
           />
-          <EditableConfigurationField
-            errorMessage={validationErrors.prompt}
-            fieldId="editable-workstation-prompt"
-            input={
-              <EditableConfigurationPromptInput
-                messages={messages}
-                state={renderState}
-              />
-            }
-            label={messages.promptFieldLabel}
-            supportingContent={
-              <EditableConfigurationServerChangedHint
-                fieldName="prompt"
-                messages={messages}
-                state={state}
-              />
-            }
-          />
+          {showPromptField ? (
+            <EditableConfigurationField
+              errorMessage={validationErrors.prompt}
+              fieldId="editable-workstation-prompt"
+              input={
+                <EditableConfigurationPromptInput
+                  messages={messages}
+                  state={renderState}
+                />
+              }
+              label={messages.promptFieldLabel}
+              supportingContent={
+                <EditableConfigurationServerChangedHint
+                  fieldName="prompt"
+                  messages={messages}
+                  state={state}
+                />
+              }
+            />
+          ) : null}
         </CurrentSelectionFormFields>
       ) : null}
       <EditableConfigurationWorkstationGuardsField

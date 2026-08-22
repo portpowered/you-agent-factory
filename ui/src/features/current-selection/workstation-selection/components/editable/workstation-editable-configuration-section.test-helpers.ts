@@ -56,7 +56,8 @@ function buildEditableConfigurationSectionDraftDefaults(
     | "INFERENCE_RUN"
     | "MODEL_WORKSTATION"
     | "MODEL_INVOKE"
-    | "LOGICAL_MOVE" = "AGENT_RUN",
+    | "LOGICAL_MOVE"
+    | "SCRIPT_RUN" = "AGENT_RUN",
 ) {
   const behavior = overrides?.behavior ?? ("STANDARD" as const);
   const cron =
@@ -86,9 +87,13 @@ function buildEditableConfigurationSectionDraftDefaults(
         selector: { label: "utterance", role: "", slot: "", type: "TEXT" },
       },
     ],
-    prompt: overrides?.prompt ?? "Review prompt",
+    prompt:
+      overrides?.prompt ??
+      (workstationType === "SCRIPT_RUN" ? "" : "Review prompt"),
     runnerName: overrides?.runnerName ?? ("gemini" as const),
-    workerName: overrides?.workerName ?? "reviewer",
+    workerName:
+      overrides?.workerName ??
+      (workstationType === "SCRIPT_RUN" ? "script-runner" : "reviewer"),
     workstationType,
   };
 }
@@ -102,8 +107,11 @@ function buildEditableConfigurationSectionInitialValues(
     | "INFERENCE_RUN"
     | "MODEL_WORKSTATION"
     | "MODEL_INVOKE"
-    | "LOGICAL_MOVE" = "AGENT_RUN",
+    | "LOGICAL_MOVE"
+    | "SCRIPT_RUN" = "AGENT_RUN",
 ) {
+  const isScriptRun = workstationType === "SCRIPT_RUN";
+
   return {
     behavior: "STANDARD" as const,
     behaviorOptions: ["STANDARD", "REPEATER", "POLLER"] as const,
@@ -131,7 +139,7 @@ function buildEditableConfigurationSectionInitialValues(
         selector: { label: "utterance", role: "", slot: "", type: "TEXT" },
       },
     ],
-    prompt: "Review prompt",
+    prompt: isScriptRun ? null : "Review prompt",
     resolvedRunnerSelection: {
       runnerId: "gemini",
       source: "workstation" as const,
@@ -143,11 +151,12 @@ function buildEditableConfigurationSectionInitialValues(
     sharedWorkerWorkstationNamesByWorkerName:
       overrides?.sharedWorkerWorkstationNamesByWorkerName ?? {},
     workerModelProvider: null,
-    workerName: "reviewer",
-    workerOptions: ["reviewer", "planner"],
+    workerName: isScriptRun ? "script-runner" : "reviewer",
+    workerOptions: isScriptRun ? ["script-runner"] : ["reviewer", "planner"],
     workerTypeByName: {
       planner: "MODEL_WORKER" as const,
       reviewer: "MODEL_WORKER" as const,
+      ...(isScriptRun ? { "script-runner": "SCRIPT_WORKER" as const } : {}),
     },
     workstationName: "Review",
     workstationOptions: ["Plan", "Review"],
@@ -223,7 +232,8 @@ export function buildEditableConfigurationSectionReadyState(
       | "INFERENCE_RUN"
       | "MODEL_WORKSTATION"
       | "MODEL_INVOKE"
-      | "LOGICAL_MOVE";
+      | "LOGICAL_MOVE"
+      | "SCRIPT_RUN";
   }>,
 ): EditableConfigurationSectionReadyState {
   const workstationType = overrides?.workstationType ?? "AGENT_RUN";
@@ -282,7 +292,10 @@ export function buildEditableConfigurationSectionReadyState(
       status: "ready" as const,
     },
     workerOptionsState: overrides?.workerOptionsState ?? {
-      options: ["reviewer", "planner"],
+      options:
+        workstationType === "SCRIPT_RUN"
+          ? ["script-runner"]
+          : ["reviewer", "planner"],
       status: "ready" as const,
     },
     workstationOptionsState: {

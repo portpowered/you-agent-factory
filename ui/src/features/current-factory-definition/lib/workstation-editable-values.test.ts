@@ -62,11 +62,7 @@ describe("resolveEditableWorkstationValues", () => {
         source: "default",
       },
       runnerName: null,
-      runnerOptions: [
-        "codex",
-        "claude",
-        "antigravity",
-      ],
+      runnerOptions: ["codex", "claude", "antigravity"],
       runnerSelectionSource: "default",
       sharedWorkerWorkstationNamesByWorkerName: {},
       sharedWorkerWorkstationNames: [],
@@ -446,11 +442,7 @@ describe("resolveEditableWorkstationValues", () => {
         source: "default",
       },
       runnerName: null,
-      runnerOptions: [
-        "codex",
-        "claude",
-        "antigravity",
-      ],
+      runnerOptions: ["codex", "claude", "antigravity"],
       runnerSelectionSource: "default",
       sharedWorkerWorkstationNamesByWorkerName: {},
       sharedWorkerWorkstationNames: [],
@@ -627,11 +619,7 @@ describe("resolveEditableWorkstationValues", () => {
         source: "default",
       },
       runnerName: null,
-      runnerOptions: [
-        "codex",
-        "claude",
-        "antigravity",
-      ],
+      runnerOptions: ["codex", "claude", "antigravity"],
       runnerSelectionSource: "default",
       sharedWorkerWorkstationNamesByWorkerName: {
         coder: ["Code"],
@@ -2064,6 +2052,89 @@ describe("editable workstation name draft", () => {
 });
 
 describe("workstation taxonomy save projection", () => {
+  it("projects and saves promptless SCRIPT_RUN workstations without adding a body", () => {
+    const scriptNode: DashboardWorkstationNode = {
+      model: "script",
+      node_id: "run-script",
+      transition_id: "run-script",
+      workstation_kind: WorkstationType.SCRIPT_RUN,
+      workstation_name: "Run Script",
+    };
+    const scriptFactory: CanonicalFactoryDefinition = {
+      metadata: { description: "Script factory metadata survives edits." },
+      name: "Script Factory",
+      resources: [{ initial: 1, name: "script-slot" }],
+      version: { logical: "4", physical: "2026-06-01T00:00:00Z" },
+      workers: [
+        {
+          args: ["--input", "story.json"],
+          command: "node",
+          name: "script-runner",
+          type: WorkerType.SCRIPT_WORKER,
+        },
+        {
+          model: "gpt-5.4",
+          name: "unrelated-model",
+          type: WorkerType.MODEL_WORKER,
+        },
+      ],
+      workTypes: [{ name: "story" }],
+      workstations: [
+        {
+          behavior: "STANDARD",
+          guards: [{ maxVisits: 2, type: "VISIT_COUNT" }],
+          id: "run-script",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Run Script",
+          outputs: [{ state: "done", workType: "story" }],
+          runner: "codex",
+          type: WorkstationType.SCRIPT_RUN,
+          worker: "script-runner",
+        },
+        {
+          body: "Leave this workstation unchanged.",
+          id: "unrelated",
+          name: "Unrelated",
+          worker: "unrelated-model",
+        },
+      ],
+    };
+
+    const values = resolveEditableWorkstationValues(scriptFactory, scriptNode);
+    expect(values).toMatchObject({
+      prompt: null,
+      workerName: "script-runner",
+      workerOptions: ["script-runner"],
+      workstationType: WorkstationType.SCRIPT_RUN,
+      workstationTypeOptions: [WorkstationType.SCRIPT_RUN],
+    });
+    if (!values) {
+      throw new Error("expected editable script workstation values");
+    }
+
+    const saved = applyEditableWorkstationDraft(scriptFactory, scriptNode, {
+      ...editableWorkstationDraftFromValues(values),
+      name: "Run Script Updated",
+    });
+
+    expect(saved?.workers).toEqual(scriptFactory.workers);
+    expect(saved?.workTypes).toEqual(scriptFactory.workTypes);
+    expect(saved?.resources).toEqual(scriptFactory.resources);
+    expect(saved?.workstations?.[0]).toMatchObject({
+      behavior: "STANDARD",
+      guards: [{ maxVisits: 2, type: "VISIT_COUNT" }],
+      id: "run-script",
+      inputs: [{ state: "queued", workType: "story" }],
+      name: "Run Script Updated",
+      outputs: [{ state: "done", workType: "story" }],
+      runner: "codex",
+      type: WorkstationType.SCRIPT_RUN,
+      worker: "script-runner",
+    });
+    expect(saved?.workstations?.[0]).not.toHaveProperty("body");
+    expect(saved?.workstations?.[1]).toEqual(scriptFactory.workstations?.[1]);
+  });
+
   it("round-trips new taxonomy workstation saves without downgrading to legacy names", () => {
     const taxonomyFactory: CanonicalFactoryDefinition = {
       name: "Legacy Factory",

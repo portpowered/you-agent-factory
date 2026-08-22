@@ -239,6 +239,59 @@ describe("validateEditableWorkstationDraft model workstation", () => {
   });
 });
 
+describe("validateEditableWorkstationDraft script workstation", () => {
+  const scriptValues = {
+    ...modelWorkstationValues,
+    prompt: null,
+    workerName: "script-runner",
+    workerOptions: ["script-runner"],
+    workerTypeByName: { "script-runner": "SCRIPT_WORKER" as const },
+    workstationType: "SCRIPT_RUN" as const,
+    workstationTypeOptions: ["SCRIPT_RUN"] as const,
+  };
+
+  it("does not require prompt content or prompt validation for SCRIPT_RUN", () => {
+    const errors = validateEditableWorkstationDraft(
+      {
+        ...baseEditableWorkstationDraft,
+        prompt: "",
+        workerName: "script-runner",
+        workstationType: "SCRIPT_RUN",
+      },
+      scriptValues,
+      {
+        diagnostics: [
+          { message: "prompt should not be checked", severity: "error" },
+        ],
+        result: { diagnostics: [], valid: false },
+        status: "ready",
+      },
+      editableWorkstationValidationMessages,
+    );
+
+    expect(errors).toEqual({});
+  });
+
+  it("blocks a missing or incompatible script worker with worker feedback", () => {
+    const errors = validateEditableWorkstationDraft(
+      {
+        ...baseEditableWorkstationDraft,
+        prompt: "",
+        workerName: "reviewer",
+        workstationType: "SCRIPT_RUN",
+      },
+      scriptValues,
+      { status: "idle" },
+      editableWorkstationValidationMessages,
+    );
+
+    expect(errors.workerName).toBe(
+      editableWorkstationValidationMessages.editableConfigurationWorkerUnavailable,
+    );
+    expect(errors.prompt).toBeUndefined();
+  });
+});
+
 describe("validateEditableWorkstationDraft MATCHES_FIELDS guards", () => {
   it("requires inputKey for empty or whitespace-only selectors", () => {
     const errors = validateEditableWorkstationDraft(

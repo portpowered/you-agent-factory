@@ -675,14 +675,7 @@ describe("useEditableWorkstationConfigurationState", () => {
         source: "default",
       },
       runnerName: null,
-      runnerOptions: [
-        "codex",
-        "gemini",
-        "kiro",
-        "codex",
-        "opencode",
-        "pi",
-      ],
+      runnerOptions: ["codex", "gemini", "kiro", "codex", "opencode", "pi"],
       runnerSelectionSource: "default",
       sharedWorkerWorkstationNamesByWorkerName: {},
       sharedWorkerWorkstationNames: [],
@@ -910,14 +903,7 @@ describe("useEditableWorkstationConfigurationState guards and cron", () => {
         source: "default",
       },
       runnerName: null,
-      runnerOptions: [
-        "codex",
-        "gemini",
-        "kiro",
-        "codex",
-        "opencode",
-        "pi",
-      ],
+      runnerOptions: ["codex", "gemini", "kiro", "codex", "opencode", "pi"],
       runnerSelectionSource: "default",
       sharedWorkerWorkstationNamesByWorkerName: {},
       sharedWorkerWorkstationNames: [],
@@ -1050,6 +1036,67 @@ describe("useEditableWorkstationConfigurationState guards and cron", () => {
         },
       ],
     });
+  });
+
+  it("projects promptless script workstations with compatible workers only", async () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildEditableFactoryDefinition({
+          prompt: undefined,
+          workerName: "script-runner",
+          workerOptions: [
+            { name: "script-runner", type: "SCRIPT_WORKER" },
+            { name: "reviewer", type: "MODEL_WORKER" },
+          ],
+          workstationType: "SCRIPT_RUN",
+        }),
+      ),
+    );
+
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    expect(result.current).toMatchObject({
+      draft: {
+        prompt: "",
+        workerName: "script-runner",
+        workstationType: "SCRIPT_RUN",
+      },
+      hasValidationErrors: false,
+      initialValues: {
+        prompt: null,
+        workerOptions: ["script-runner"],
+      },
+      status: "ready",
+      validationErrors: {},
+      workerOptionsState: {
+        options: ["script-runner"],
+        status: "ready",
+      },
+    });
+    expect(
+      result.current?.status === "ready"
+        ? result.current.pendingFactoryDefinition
+        : undefined,
+    ).toMatchObject({
+      workstations: [
+        {
+          type: "SCRIPT_RUN",
+          worker: "script-runner",
+        },
+      ],
+    });
+    expect(
+      vi.mocked(useCurrentWorkstationPromptTemplateContract),
+    ).toHaveBeenLastCalledWith("Review", false);
+    expect(
+      vi.mocked(useCurrentWorkstationPromptTemplateValidation),
+    ).toHaveBeenLastCalledWith("Review", "", false);
   });
 
   it("validates cron fields for CRON workstations and skips them for other behaviors", () => {
@@ -1313,7 +1360,7 @@ function buildEditableFactoryDefinition(overrides?: {
     name: string;
     type: "HOSTED_WORKER" | "MODEL_WORKER" | "SCRIPT_WORKER";
   }>;
-  workstationType?: "MODEL_WORKSTATION" | "LOGICAL_MOVE";
+  workstationType?: "MODEL_WORKSTATION" | "LOGICAL_MOVE" | "SCRIPT_RUN";
 }): CurrentFactoryDocument {
   return {
     name: "Current Factory",
@@ -1329,15 +1376,21 @@ function buildEditableFactoryDefinition(overrides?: {
     ).map((worker, index) => ({
       model: worker.type === "MODEL_WORKER" ? `gpt-5.${index + 5}` : undefined,
       name: worker.name,
-      ...(worker.type === "SCRIPT_WORKER" ? { command: "./poller.sh" } : {}),
+      ...(worker.type === "SCRIPT_WORKER"
+        ? { command: "./poller.sh", args: ["--mode", "script"] }
+        : {}),
       type: worker.type,
     })),
     workstations: [
       {
         behavior: overrides?.behavior,
-        body:
-          overrides?.prompt ??
-          "Review the latest story changes before approval.",
+        ...(overrides?.workstationType === "SCRIPT_RUN"
+          ? {}
+          : {
+              body:
+                overrides?.prompt ??
+                "Review the latest story changes before approval.",
+            }),
         ...(overrides?.behavior === "CRON" && overrides.cron
           ? {
               cron: {
@@ -1352,7 +1405,9 @@ function buildEditableFactoryDefinition(overrides?: {
         inputs: [{ state: "queued", workType: "story" }],
         name: "Review",
         outputs: [{ state: "approved", workType: "story" }],
-        promptFile: "prompts/review.md",
+        ...(overrides?.workstationType === "SCRIPT_RUN"
+          ? {}
+          : { promptFile: "prompts/review.md" }),
         runner: overrides?.runnerName ?? "gemini",
         type: overrides?.workstationType,
         worker: overrides?.workerName ?? "reviewer",

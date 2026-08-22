@@ -139,6 +139,75 @@ describe("useSaveEditableWorkstationConfiguration", () => {
     expect(result.current.saveState).toEqual({ status: "idle" });
   });
 
+  it("saves a promptless script definition without adding a workstation body", async () => {
+    const scriptFactory = {
+      name: "Script Factory",
+      version: {
+        logical: "7",
+        physical: "2026-05-23T15:52:00Z",
+      },
+      workers: [
+        {
+          args: ["--mode", "script"],
+          command: "./run-script.sh",
+          name: "script-runner",
+          type: "SCRIPT_WORKER" as const,
+        },
+      ],
+      workstations: [
+        {
+          id: "run-script",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Run Script",
+          outputs: [{ state: "done", workType: "story" }],
+          type: "SCRIPT_RUN" as const,
+          worker: "script-runner",
+        },
+      ],
+    };
+    const saveAsync = vi.fn().mockResolvedValue(scriptFactory);
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue({
+      isPending: false,
+      saveAsync,
+    } as never);
+
+    const { result } = renderHook(
+      () =>
+        useSaveEditableWorkstationConfiguration({
+          editableConfigurationState: buildReadyEditableConfigurationState({
+            pendingFactoryDefinition: scriptFactory,
+            prompt: "",
+            workstationType: "SCRIPT_RUN",
+            draft: {
+              prompt: "",
+              workerName: "script-runner",
+              workstationType: "SCRIPT_RUN",
+            },
+          }),
+          scopeKey: "run-script:transition:Run Script",
+        }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    expect(result.current.canSave).toBe(true);
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    expect(saveAsync).toHaveBeenCalledWith({
+      baseVersion: {
+        logical: "7",
+        physical: "2026-05-23T15:52:00Z",
+      },
+      factory: scriptFactory,
+    });
+    expect(scriptFactory.workstations[0]).not.toHaveProperty("body");
+  });
+
   it("saves workstation edits through the selected session current-factory route", async () => {
     useDashboardSessionStore.setState({ selectedSessionID: "session-beta" });
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
@@ -669,7 +738,6 @@ function buildModelInvokeSaveScenario() {
   };
 }
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: the fixture builder keeps the complete ready-state defaults visible for save-hook cases.
 function buildReadyEditableConfigurationState(overrides?: {
   behavior?: "STANDARD" | "REPEATER" | "POLLER" | "CRON";
   cron?: {
@@ -702,7 +770,11 @@ function buildReadyEditableConfigurationState(overrides?: {
     EditableWorkstationConfigurationState,
     { status: "ready" }
   >["validationErrors"];
-  workstationType?: "MODEL_WORKSTATION" | "MODEL_INVOKE" | "LOGICAL_MOVE";
+  workstationType?:
+    | "MODEL_WORKSTATION"
+    | "MODEL_INVOKE"
+    | "LOGICAL_MOVE"
+    | "SCRIPT_RUN";
 }): EditableWorkstationConfigurationState {
   const behavior = overrides?.behavior ?? "STANDARD";
   const cron =
@@ -743,14 +815,7 @@ function buildReadyEditableConfigurationState(overrides?: {
         source: "default",
       },
       runnerName: null,
-      runnerOptions: [
-        "codex",
-        "gemini",
-        "kiro",
-        "codex",
-        "opencode",
-        "pi",
-      ],
+      runnerOptions: ["codex", "gemini", "kiro", "codex", "opencode", "pi"],
       runnerSelectionSource: "default",
       sharedWorkerWorkstationNamesByWorkerName: {},
       sharedWorkerWorkstationNames: [],
