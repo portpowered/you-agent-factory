@@ -38,6 +38,12 @@ func RuntimeArtifactPath(rootDir string, at time.Time, kind RuntimeArtifactKind,
 	return RuntimeArtifactPathWithCollision(rootDir, at, kind, suffix, 0)
 }
 
+// RuntimeNamedArtifactPath builds root/YYYY/MM/DD/<name><ext> using the
+// supplied UTC-normalized time.
+func RuntimeNamedArtifactPath(rootDir string, at time.Time, name, ext string) string {
+	return RuntimeNamedArtifactPathWithCollision(rootDir, at, name, ext, 0)
+}
+
 // RuntimeNamedArtifactPathWithCollision builds a named runtime artifact path
 // and, when collisionIndex is greater than zero, appends the next human
 // numbered candidate before the extension.
