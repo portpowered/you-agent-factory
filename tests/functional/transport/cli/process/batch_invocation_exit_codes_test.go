@@ -257,8 +257,14 @@ func runCompiledBatchCircuitBreaker(t *testing.T, binaryPath string, harness *bu
 	session := newConfiguredGoalSession(t, ctx, harness, "compiled-batch-circuit-breaker")
 	writeBatchRetryFactory(t, session.WorkDir)
 	workFile := writeBatchWorksWithTypes(t, batchWorkSpec{Name: "circuit breaker Work", WorkTypeID: "retry-task"})
+	programPath := writeBatchFailingScript(t)
+	// A normalized terminal provider rejection routes directly to FAILED; use
+	// a retryable script failure so this fixture exercises the retry breaker.
 	mockWorkersPath := writeBatchMockWorkersConfig(t, workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{
-		WorkerName: "retry-worker", WorkstationName: "retry-work", RunType: workers.MockWorkerRunTypeReject,
+		WorkerName: "retry-worker", WorkstationName: "retry-work", RunType: workers.MockWorkerRunTypeScript,
+		ScriptConfig: &workers.MockWorkerScriptConfig{
+			Command: "go", Args: []string{"run", programPath}, Env: map[string]string{"GO111MODULE": "off"},
+		},
 	}}})
 	args := batchRunArgs(session, workFile, mockWorkersPath)
 	if jsonOutput {
@@ -485,7 +491,7 @@ func writeBatchRetryFactory(t testing.TB, workingDirectory string) {
 			"retry-work", "retry-worker", "retry-task", "complete", "init", map[string]any{"maxRetries": 1},
 		)},
 	}, map[string]string{
-		"retry-worker": batchModelWorkerConfig(),
+		"retry-worker": batchScriptWorkerConfig(),
 	}, map[string]string{
 		"retry-work": batchModelWorkstationConfig(),
 	})
