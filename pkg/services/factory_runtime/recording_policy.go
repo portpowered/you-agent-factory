@@ -15,11 +15,15 @@ func ValidateRecordReplayPaths(recordPath, replayPath string) error {
 	return nil
 }
 
-// SessionScopedRecordPath applies the recording path policy shared by the
-// runtime writer and current-board restore. Tokenized paths retain their
-// existing layout while resolving to the concrete Factory Session; explicit
-// non-default paths receive the writer's established session suffix.
-func SessionScopedRecordPath(basePath string, sessionID string) string {
+// RecordingPath applies the recording path policy shared by the runtime writer
+// and current-board restore. Tokenized paths retain their existing layout
+// while resolving to the concrete Factory Session; explicit non-default paths
+// receive the writer's established session suffix.
+type RecordingPath string
+
+// ForSession resolves a recording path to the concrete Factory Session.
+func (path RecordingPath) ForSession(sessionID string) string {
+	basePath := string(path)
 	if strings.TrimSpace(basePath) == "" {
 		return basePath
 	}
