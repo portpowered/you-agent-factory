@@ -75,7 +75,7 @@ func TestParserOnlyAcceptanceProducesMismatchDiagnostic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("compileFamilySchema() error = %v", err)
 	}
-	payload, err := os.ReadFile(filepath.Join(repositoryRoot, "pkg", "services", "operator_settings", "testdata", "fixtures", "invalid", "unknown-top-level.json"))
+	payload, err := os.ReadFile(filepath.Join(repositoryRoot, "pkg", "services", "operator_settings", "testdata", "fixtures", "invalid", "preset-unsupported-provider.json"))
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestAcceptanceRejectPathMismatchIsStable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("compileFamilySchema() error = %v", err)
 	}
-	payload, err := os.ReadFile(filepath.Join(repositoryRoot, "pkg", "services", "operator_settings", "testdata", "fixtures", "invalid", "unknown-top-level.json"))
+	payload, err := os.ReadFile(filepath.Join(repositoryRoot, "pkg", "services", "operator_settings", "testdata", "fixtures", "invalid", "preset-unsupported-provider.json"))
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}

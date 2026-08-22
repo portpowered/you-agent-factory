@@ -378,22 +378,30 @@ func TestOpenAPIContract_AcceptsAdditiveCanonicalEventFields(t *testing.T) {
 				"introducedBy": "newer-you",
 			},
 		},
-		"payload":        payload,
-		"futureEnvelope": true,
+		"payload": payload,
 	}
 	if err := doc.Components.Schemas["FactoryEvent"].Value.VisitJSON(event); err != nil {
-		t.Fatalf("FactoryEvent should accept additive envelope, context, and payload fields: %v", err)
+		t.Fatalf("FactoryEvent should accept additive context and payload fields: %v", err)
 	}
+	event["futureEnvelope"] = true
+	if err := doc.Components.Schemas["FactoryEvent"].Value.VisitJSON(event); err == nil {
+		t.Fatal("FactoryEvent accepted an additive envelope field at its strict root")
+	}
+	delete(event, "futureEnvelope")
 
 	recording := map[string]any{
-		"schemaVersion":   "agent-factory.recording.v1",
-		"sessionId":       "session-future-fields",
-		"events":          []any{event},
-		"futureRecording": map[string]any{"revision": 2},
+		"schemaVersion": "agent-factory.recording.v1",
+		"sessionId":     "session-future-fields",
+		"events":        []any{event},
 	}
 	if err := doc.Components.Schemas["FactoryRecording"].Value.VisitJSON(recording); err != nil {
-		t.Fatalf("FactoryRecording should accept additive envelope fields: %v", err)
+		t.Fatalf("FactoryRecording should accept events with additive context/payload fields: %v", err)
 	}
+	recording["futureRecording"] = map[string]any{"revision": 2}
+	if err := doc.Components.Schemas["FactoryRecording"].Value.VisitJSON(recording); err == nil {
+		t.Fatal("FactoryRecording accepted an additive envelope field at its strict root")
+	}
+	delete(recording, "futureRecording")
 
 	sessionEvent := map[string]any{
 		"schemaVersion": "agent-factory.event.v1",

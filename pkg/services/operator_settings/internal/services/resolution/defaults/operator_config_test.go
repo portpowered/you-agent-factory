@@ -1,11 +1,9 @@
 package settingsresolution_test
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	settingsresolution "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/defaults"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -51,50 +50,14 @@ func TestDefaultRuntimeSettingsMatchProductionArtifactPolicies(t *testing.T) {
 
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func decodeTestConfig(data []byte) (operatorsettings.Config, error) {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	var generated *factoryapi.GlobalConfig
-	if err := decoder.Decode(&generated); err != nil {
+	config, diagnostics, err := globalconfigmapping.DecodeWithDiagnostics(data)
+	if err != nil {
 		return operatorsettings.Config{}, err
 	}
-	if generated == nil {
-		return operatorsettings.Config{}, fmt.Errorf("expected a JSON object")
+	if paths := diagnostics.Paths(); len(paths) > 0 {
+		return operatorsettings.Config{}, fmt.Errorf("json: unknown field %q", paths[0])
 	}
-	var trailing json.RawMessage
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		return operatorsettings.Config{}, fmt.Errorf("unexpected trailing JSON")
-	}
-	config := operatorsettings.Config{}
-	if generated.BackendScopeID != nil {
-		config.BackendScopeID = *generated.BackendScopeID
-	}
-	if generated.Defaults != nil {
-		if generated.Defaults.WorkerModelProvider != nil {
-			config.Defaults.WorkerModelProvider = *generated.Defaults.WorkerModelProvider
-		}
-		if generated.Defaults.WorkerModel != nil {
-			config.Defaults.WorkerModel = *generated.Defaults.WorkerModel
-		}
-	}
-	if generated.WorkerPresets != nil {
-		for _, preset := range *generated.WorkerPresets {
-			mapped := operatorsettings.WorkerPreset{ID: preset.Id, ModelProvider: string(preset.ModelProvider)}
-			if preset.Model != nil {
-				mapped.Model = *preset.Model
-			}
-			if preset.ReasoningEffort != nil {
-				mapped.ReasoningEffort = string(*preset.ReasoningEffort)
-			}
-			config.WorkerPresets = append(config.WorkerPresets, mapped)
-		}
-	}
-	if generated.Workers != nil && generated.Workers.Acp != nil && generated.Workers.Acp.Integrations != nil {
-		for _, integration := range *generated.Workers.Acp.Integrations {
-			config.Workers.ACP.Integrations = append(config.Workers.ACP.Integrations, operatorsettings.ACPIntegration{
-				ID: integration.Id, Name: integration.Name, Transport: string(integration.Transport), Command: integration.Command,
-			})
-		}
-	}
-	return config.Normalize()
+	return config, nil
 }
 
 func encodeTestConfig(config operatorsettings.Config) ([]byte, error) {
@@ -348,19 +311,15 @@ func controlledProviderCatalog(value string) (string, bool) {
 	}
 }
 
-func TestLoadConfigDocument_InvalidContentFailsBeforeMutationAndUnknownFieldsPreserveKnownValues(t *testing.T) {
+func TestLoadConfigDocument_InvalidContentFailsBeforeMutation(t *testing.T) {
 	t.Parallel()
 	service := testConfigDocumentService()
 	service.Files = testFiles
-	for _, test := range []struct {
-		name    string
-		data    string
-		wantErr bool
-	}{
-		{name: "malformed", data: `{"defaults":`, wantErr: true},
-		{name: "trailing", data: `{} {}`, wantErr: true},
-		{name: "unknown", data: `{"defaults":{"workerModelProvider":"codex"},"unexpected":true}`},
-		{name: "null", data: `null`, wantErr: true},
+	for _, test := range []struct{ name, data string }{
+		{name: "malformed", data: `{"defaults":`},
+		{name: "trailing", data: `{} {}`},
+		{name: "unknown", data: `{"unexpected":true}`},
+		{name: "null", data: `null`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "config.json")
@@ -371,16 +330,7 @@ func TestLoadConfigDocument_InvalidContentFailsBeforeMutationAndUnknownFieldsPre
 			if err != nil {
 				t.Fatalf("ReadFile before: %v", err)
 			}
-			loaded, err := service.Load(path)
-			if !test.wantErr {
-				if err != nil {
-					t.Fatalf("LoadConfigDocument() error = %v, want unknown fields tolerated", err)
-				}
-				if got := loaded.FileConfig().Defaults.WorkerModelProvider; got != "codex" {
-					t.Fatalf("known provider = %q, want codex", got)
-				}
-				return
-			}
+			_, err = service.Load(path)
 			if err == nil || !strings.Contains(err.Error(), path) {
 				t.Fatalf("LoadConfigDocument() error = %v, want invalid config error naming path", err)
 			}

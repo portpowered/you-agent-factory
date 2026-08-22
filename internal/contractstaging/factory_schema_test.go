@@ -300,8 +300,7 @@ func TestFactorySchemaAcceptsAdditiveFieldsAtEvolvingBoundaries(t *testing.T) {
 	}
 
 	document := map[string]any{
-		"name":           "future-compatible",
-		"futureTopLevel": map[string]any{"introducedBy": "newer-you"},
+		"name": "future-compatible",
 		"workers": []any{
 			map[string]any{
 				"name":          "worker",

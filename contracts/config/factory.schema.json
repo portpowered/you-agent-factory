@@ -130,7 +130,7 @@
       "type": "object"
     },
     "FactoryGuard": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "description": "Factory-level guard attached at the root factory definition.",
       "properties": {
         "model": {
@@ -1361,7 +1361,7 @@
       "type": "object"
     },
     "InputGuard": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "description": "Guard attached to one specific workstation input.",
       "properties": {
         "matchConfig": {
@@ -1662,7 +1662,7 @@
       "type": "object"
     },
     "Resource": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "description": "Shared capacity that limits how much work the factory can run at once, such as worker slots or external service quotas.",
       "properties": {
         "backend": {
@@ -1710,7 +1710,7 @@
       "type": "object"
     },
     "ResourceManifest": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "description": "Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary.",
       "properties": {
         "bundledFiles": {
@@ -1984,7 +1984,7 @@
       "description": "Ordered JSON content for one work item."
     },
     "WorkPropagation": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "description": "Optional workstation policy for how downstream work receives payload content after this workstation completes. When omitted, downstream work uses the workstation output payload.",
       "properties": {
         "mode": {
@@ -2010,7 +2010,7 @@
       "type": "string"
     },
     "WorkState": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "description": "A lifecycle state that a work item can occupy inside one work type.",
       "properties": {
         "id": {
@@ -2079,7 +2079,7 @@
       "description": "Ordered inline text content for one work item."
     },
     "WorkType": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "description": "A named category of work that can move through the factory. Each work type declares the lifecycle states its work items can occupy.",
       "properties": {
         "description": {
@@ -2136,6 +2136,11 @@
     "Worker": {
       "additionalProperties": true,
       "description": "A reusable worker definition that tells the factory how a workstation should execute work, such as through a model-backed agent or a script.",
+      "not": {
+        "required": [
+          "promptFile"
+        ]
+      },
       "properties": {
         "agentTools": {
           "allOf": [
@@ -2544,7 +2549,7 @@
       "type": "object"
     },
     "WorkstationGuard": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "description": "Guard attached to a workstation as a whole.",
       "properties": {
         "logicalRoundTrip": {
@@ -2766,7 +2771,7 @@
   },
   "$id": "https://schemas.portpowered.com/you/config/factory.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "description": "Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.",
   "properties": {
     "description": {

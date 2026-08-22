@@ -1,7 +1,7 @@
 type: object
 description: >- 
   A piece of work.
-additionalProperties: true
+additionalProperties: false
 required:
   - name
 properties: 

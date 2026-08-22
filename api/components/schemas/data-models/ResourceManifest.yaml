@@ -1,5 +1,5 @@
 type: object
-additionalProperties: true
+additionalProperties: false
 description: Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary.
 properties:
   requiredTools:

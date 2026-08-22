@@ -1,11 +1,14 @@
 package globalconfig_test
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -691,6 +694,54 @@ func TestGeneratedLoaderAndConfigDocumentServiceAgreeOnEffectiveConfig(t *testin
 				t.Fatalf("document service config = %#v, generated loader config = %#v", got, loaded)
 			}
 		})
+	}
+}
+
+func TestConfigDocumentUpdatePreservesUnknownGlobalConfigFields(t *testing.T) {
+	path := writeConfig(t, `{
+		"defaults": {
+			"workerModel": "before",
+			"futureNested": {"secret": "retain-me"}
+		},
+		"futureTopLevel": {"enabled": true, "secret": "retain-me-too"}
+	}`)
+	service := settingswire.NewConfigDocumentServiceWithPreserver(
+		platformfilesystem.Local{},
+		func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
+			return os.CreateTemp(dir, pattern)
+		},
+		globalconfig.Decode,
+		globalconfig.Encode,
+		func(string) (string, bool) { return "", false },
+		&sync.Mutex{},
+		globalconfig.PreserveUnknownFields,
+		globalconfig.DecodeWithDiagnostics,
+	)
+	model := "after"
+	if _, err := service.ConfigureProviderModel(context.Background(), path, operatorsettings.ProviderModelUpdate{Model: &model}); err != nil {
+		t.Fatalf("ConfigureProviderModel() error = %v", err)
+	}
+
+	persisted, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(persisted, &document); err != nil {
+		t.Fatalf("decode persisted document: %v", err)
+	}
+	if got := document["futureTopLevel"]; !reflect.DeepEqual(got, map[string]any{"enabled": true, "secret": "retain-me-too"}) {
+		t.Fatalf("futureTopLevel = %#v, want original value", got)
+	}
+	defaults, ok := document["defaults"].(map[string]any)
+	if !ok {
+		t.Fatalf("defaults = %#v, want object", document["defaults"])
+	}
+	if got, want := defaults["workerModel"], "after"; got != want {
+		t.Fatalf("defaults.workerModel = %#v, want %q", got, want)
+	}
+	if got := defaults["futureNested"]; !reflect.DeepEqual(got, map[string]any{"secret": "retain-me"}) {
+		t.Fatalf("defaults.futureNested = %#v, want original value", got)
 	}
 }
 

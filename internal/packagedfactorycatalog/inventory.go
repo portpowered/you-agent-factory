@@ -230,7 +230,7 @@ func decodeCanonicalFactory(
 		return nil, fmt.Errorf("%s: asset flattening: normalize authored Factory assets: %w", sourcePath, err)
 	}
 
-	cfg, err := factorymapping.NewFactoryConfigMapper().Expand(assembled)
+	cfg, err := factorymapping.NewFactoryConfigMapper().ExpandStrict(assembled)
 	if err != nil {
 		return nil, fmt.Errorf("%s: decode and map canonical Factory: %w", sourcePath, err)
 	}

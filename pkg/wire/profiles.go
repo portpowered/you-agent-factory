@@ -44,6 +44,7 @@ import (
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -289,12 +290,13 @@ func provideOperatorSettingsService(
 ) (operatorsettings.Service, error) {
 	return settingswire.NewServiceFromConfigDocument(
 		operatorsettings.ConfigDocumentService{
-			Files:             files,
-			CreateTemp:        createTemp,
-			Providers:         providerCatalog,
-			Decoder:           decode,
-			DiagnosticDecoder: diagnosticDecode,
-			Encoder:           encode,
+			Files:                 files,
+			CreateTemp:            createTemp,
+			Providers:             providerCatalog,
+			Decoder:               decode,
+			DiagnosticDecoder:     diagnosticDecode,
+			Encoder:               encode,
+			PreserveUnknownFields: globalconfigmapping.PreserveUnknownFields,
 		},
 		providersRoot,
 		idGenerator,

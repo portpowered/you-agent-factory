@@ -1,5 +1,5 @@
 type: object
-additionalProperties: true
+additionalProperties: false
 description: >-
   A named category of work that can move through the factory. Each work
   type declares the lifecycle states its work items can occupy.

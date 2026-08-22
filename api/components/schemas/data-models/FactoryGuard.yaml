@@ -1,6 +1,6 @@
 type: object
 description: Factory-level guard attached at the root factory definition.
-additionalProperties: true
+additionalProperties: false
 required:
   - type
   - modelProvider

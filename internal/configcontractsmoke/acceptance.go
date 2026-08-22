@@ -49,7 +49,7 @@ func AcceptanceCases() []AcceptanceCase {
 		{ID: "global-valid-defaults", Family: FamilyGlobal, Category: CategoryValid, FixturePath: "pkg/services/operator_settings/testdata/fixtures/valid/defaults-only.json", Outcome: OutcomeAccept},
 		{ID: "global-compat-missing-presets", Family: FamilyGlobal, Category: CategoryCompatibility, FixturePath: "pkg/services/operator_settings/testdata/fixtures/valid/worker-presets-missing.json", Outcome: OutcomeAccept},
 		{ID: "global-malformed-json", Family: FamilyGlobal, Category: CategoryMalformedDocument, FixturePath: "pkg/services/operator_settings/testdata/fixtures/invalid/malformed-json.json", Outcome: OutcomeReject, DocumentPath: "/"},
-		{ID: "global-unknown-field", Family: FamilyGlobal, Category: CategoryUnknownField, FixturePath: "pkg/services/operator_settings/testdata/fixtures/invalid/unknown-top-level.json", Outcome: OutcomeReject, DocumentPath: "/unexpectedTopLevel"},
+		{ID: "global-unknown-field", Family: FamilyGlobal, Category: CategoryUnknownField, FixturePath: "pkg/services/operator_settings/testdata/fixtures/invalid/unknown-top-level.json", Outcome: OutcomeAccept},
 		{ID: "global-incompatible-provider", Family: FamilyGlobal, Category: CategoryIncompatibleValue, FixturePath: "pkg/services/operator_settings/testdata/fixtures/invalid/preset-unsupported-provider.json", Outcome: OutcomeReject, DocumentPath: "/workerPresets/0/modelProvider"},
 
 		{ID: "mock-worker-valid-empty", Family: FamilyMockWorker, Category: CategoryValid, FixturePath: "pkg/services/workers/internal/interface/testdata/fixtures/valid/empty-accept.json", Outcome: OutcomeAccept},

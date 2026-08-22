@@ -1,5 +1,5 @@
 type: object
-additionalProperties: true
+additionalProperties: false
 description: >-
   One effective expected artifact declaration projected on a Work item. Pattern
   is the rendered workspace-relative literal path or glob, never a host path.

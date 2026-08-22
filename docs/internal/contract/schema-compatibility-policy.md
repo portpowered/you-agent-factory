@@ -1,22 +1,28 @@
 # Schema compatibility policy
 
 This policy is the source-of-truth classification for additive compatibility
-in customer-facing schemas. Runtime decoders apply the same boundary promise:
-they validate known fields, accept one complete JSON document, ignore unknown
-object fields, and report the ignored JSON paths without retaining their
-values.
+in customer-facing schemas. Runtime decoders validate known fields, accept one
+complete JSON document, and report ignored JSON paths without retaining their
+values. Published schemas remain closed where an unknown field could change an
+execution or interpretation contract.
 
 ## Open boundaries
 
 The following objects use `additionalProperties: true`:
 
-- version-skewed customer configuration: the `Factory` document and its
-  evolving authored topology, invocation, portability, resource, worker, and
-  workstation objects; and `GlobalConfig` plus its defaults, runtime, model,
-  price-table, worker-preset, and worker-settings objects;
-- portable and canonical recording envelopes (`FactoryRecording`,
-  `FactoryEvent`, and `FactoryEventContext`);
-- evolving public Factory Event payload objects.
+- version-skewed operator configuration: `GlobalConfig` plus its defaults,
+  runtime, model, price-table, worker-preset, and worker-settings objects;
+- additive metadata-bearing Factory children whose fields do not change the
+  execution contract, including invocation, portability, worker, and
+  workstation metadata objects;
+- the evolving `FactoryEventContext` and selected additive event payloads,
+  including run-request and session-start payloads.
+
+The customer-facing Factory runtime mapper is independently tolerant at its
+decode boundary and reports ignored paths, while the published Factory schema
+keeps its root and fixed execution-shape objects closed. This prevents a
+packaged-factory consumer or validation ratchet from silently treating an
+unknown top-level definition as executable configuration.
 
 Open schema properties are compatibility-only. A future value in a known
 field is still rejected when that field violates its type, enum, required-field,
@@ -47,6 +53,12 @@ are:
   projections into accepted aliases;
 - repository-owned inventories, generated manifests, diagnostics, and other
   fixed semantic read models.
+
+Factory, Work, WorkType, Guard, Resource, FactoryEvent, and FactoryRecording
+are also intentionally closed at their published roots. Their runtime-owned
+compatibility decoders may still report additive fields without using them;
+the closed schemas keep package consumers and repository ratchets from
+accepting unknown execution semantics.
 
 These objects remain closed because accepting an unrecognized command,
 authorization value, discriminator branch, or fixed-shape field could change

@@ -3014,8 +3014,6 @@ export interface components {
       verification: components["schemas"]["WorkExpectedArtifactVerification"];
       /** @description Why this declaration failed, when verification is FAILED. */
       reason?: components["schemas"]["ExpectedArtifactVerificationReason"];
-    } & {
-      [key: string]: unknown;
     };
     /**
      * @description Latest recorded verification state for one expected artifact declaration on a Work item.
@@ -4349,8 +4347,6 @@ export interface components {
         | components["schemas"]["JavaScriptCheckpointRefEventPayload"]
         | components["schemas"]["JavaScriptPhaseChangeEventPayload"]
         | components["schemas"]["ArtifactCreatedEventPayload"];
-    } & {
-      [key: string]: unknown;
     };
     /** @description Chapter-free recording of canonical Factory Events for exactly one Factory Session. Events remain in their recorded canonical order. */
     FactoryRecording: {
@@ -4363,8 +4359,6 @@ export interface components {
       sessionId: string;
       /** @description Canonical Factory Events in their original recorded order. */
       events: components["schemas"]["FactoryEvent"][];
-    } & {
-      [key: string]: unknown;
     };
     /**
      * @description Canonical event vocabulary for customer-visible runtime changes. Work entering the factory is represented as WORK_REQUEST, including single-work submissions that are normalized into one-work requests.
@@ -5476,8 +5470,6 @@ export interface components {
       workers?: components["schemas"]["Worker"][];
       /** @description Processing steps that consume work, invoke workers, and emit the next work states. */
       workstations?: components["schemas"]["Workstation"][];
-    } & {
-      [key: string]: unknown;
     };
     /** @description One Factory-configured outbound webhook subscription. Secret material is represented only by a reference and is resolved at delivery time. */
     FactoryWebhook: {
@@ -5715,8 +5707,6 @@ export interface components {
       model?: string;
       /** @description Duration string that controls how long the factory should keep re-checking throttle history before allowing the lane again. */
       refreshWindow: string;
-    } & {
-      [key: string]: unknown;
     };
     /** @description Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary. */
     ResourceManifest: {
@@ -5724,8 +5714,6 @@ export interface components {
       requiredTools?: components["schemas"]["RequiredTool"][];
       /** @description Portable bundled files that belong inside the factory boundary. Entries are explicit only, use factory-relative target paths, and must stay under the canonical script, docs, or inputs roots for SCRIPT, DOC, or INPUT entries, or match the supported root-helper allowlist for ROOT_HELPER entries. Export, share, flatten, and materialize flows auto-discover SCRIPT and DOC files under the documented factory subtrees, but ROOT_HELPER entries such as Makefile are opt-in manifest entries that travel only when explicitly declared here. In v1 shared-factory flows, INPUT entries capture the source factory's current starter work at share time and are restored as independent recipient copies. */
       bundledFiles?: components["schemas"]["BundledFile"][];
-    } & {
-      [key: string]: unknown;
     };
     /** @description One declarative external tool dependency for a portable factory. */
     RequiredTool: {
@@ -5794,8 +5782,6 @@ export interface components {
       handlingBehavior?: components["schemas"]["WorkTypeHandlingBehavior"][];
       /** @description Expected output declarations inherited by workstations handling this work type. */
       expectedArtifacts?: components["schemas"]["ExpectedArtifact"][];
-    } & {
-      [key: string]: unknown;
     };
     /** @description A lifecycle state that a work item can occupy inside one work type. */
     WorkState: {
@@ -5805,8 +5791,6 @@ export interface components {
       name: string;
       /** @description Lifecycle category for this state, such as initial, processing, terminal, or failed. */
       type: components["schemas"]["WorkStateType"];
-    } & {
-      [key: string]: unknown;
     };
     /**
      * @description Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes. Initial: The work is waiting to be picked up by a workstation. Processing: The work has been partially processed, and is continuing through its lifecycle. Terminal: The work has completed successfully. Failed: The work has failed.
@@ -5831,8 +5815,6 @@ export interface components {
       loadPolicy?: string;
       /** @description Provider identity associated with this resource, especially for `PROVIDER_QUOTA` resources. */
       provider?: string;
-    } & {
-      [key: string]: unknown;
     };
     /**
      * @description Uppercase resource families supported by the public factory-config contract.
@@ -6469,8 +6451,6 @@ export interface components {
     WorkPropagation: {
       /** @description Propagation mode for downstream work payload selection after this workstation succeeds. */
       mode: components["schemas"]["WorkPropagationMode"];
-    } & {
-      [key: string]: unknown;
     };
     /**
      * @description Work payload propagation mode for a workstation. OUTPUT_AS_PAYLOAD uses the workstation output as the downstream work payload. PRESERVE_INPUT keeps the consumed input payload for downstream work instead of replacing it with the workstation output.
@@ -6500,8 +6480,6 @@ export interface components {
       matchInput?: string;
       /** @description For dynamic fanout input guards, the workstation that spawns the children for count tracking. */
       spawnedBy?: string;
-    } & {
-      [key: string]: unknown;
     };
     GuardMatchConfig: {
       /** @description Field selector resolved against each candidate input, such as `.Name` or `.Tags["_last_output"]`. */
@@ -6984,8 +6962,6 @@ export interface components {
       stopSummary?: components["schemas"]["FactoryStopSummary"];
       /** @description Pending HUMAN_APPROVAL request currently owning this Work item, when present. */
       humanApproval?: components["schemas"]["HumanApproval"];
-    } & {
-      [key: string]: unknown;
     };
     /** @description Ordered canonical content parts for one work item. */
     WorkContent: components["schemas"]["WorkContentPart"][];
@@ -7383,8 +7359,6 @@ export interface components {
       matchInput?: string;
       /** @description For dynamic fanout input guards, the workstation that spawns the children for count tracking. */
       spawnedBy?: string;
-    } & {
-      [key: string]: unknown;
     };
     /**
      * @description Guard condition attached to a workstation as a whole.
@@ -7420,8 +7394,6 @@ export interface components {
       matchInput?: string;
       /** @description For dynamic fanout input guards, the workstation that spawns the children for count tracking. */
       spawnedBy?: string;
-    } & {
-      [key: string]: unknown;
     };
     GlobalConfigACPIntegration: {
       /** @description Stable settings-entry identity. This is distinct from the provider name selected by a Worker. */

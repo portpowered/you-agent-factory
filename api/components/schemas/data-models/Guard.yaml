@@ -1,6 +1,6 @@
 type: object
 description: Shared guard attached either to a workstation as a whole or to one specific workstation input.
-additionalProperties: true
+additionalProperties: false
 required:
   - type
 properties:

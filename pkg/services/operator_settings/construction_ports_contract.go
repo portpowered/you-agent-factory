@@ -48,8 +48,8 @@ type IDGenerator func() string
 type ConfigDecoder func([]byte) (Config, error)
 
 // ConfigDecodeDiagnostics contains safe metadata produced while decoding one
-// operator configuration. It retains paths only; ignored values are never
-// retained for logging or persistence.
+// operator configuration. It retains paths only; ignored values are not
+// materialized in the domain diagnostics.
 type ConfigDecodeDiagnostics struct {
 	IgnoredJSONPaths []string
 }
@@ -81,6 +81,13 @@ type ConfigDiagnosticsDecoder func([]byte) (Config, ConfigDecodeDiagnostics, err
 // ConfigEncoder maps domain values into the serialized generated global
 // configuration contract. Wire supplies the transport-boundary implementation.
 type ConfigEncoder func(Config) ([]byte, error)
+
+// ConfigDocumentPreserver merges ignored forward-compatible fields from an
+// existing serialized document into a newly encoded canonical document. The
+// document service uses this only for atomic updates of an existing file; the
+// domain Config remains deliberately limited to fields owned by Operator
+// Settings.
+type ConfigDocumentPreserver func(original, canonical []byte) ([]byte, error)
 
 // ConfigLoader loads the operator-owned configuration from an explicit path.
 type ConfigLoader func(string) (Config, error)

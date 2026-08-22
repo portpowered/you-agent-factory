@@ -30,7 +30,19 @@ func NewServiceFromConfigDocument(
 			service.Encoder == nil || service.Providers == nil {
 			return nil, fmt.Errorf("operator settings document ports are required")
 		}
-		owner = NewDocumentOwner(service.Files, service.CreateTemp, service.Decoder, service.Encoder, service.Providers, service.DiagnosticDecoder)
+		if service.PreserveUnknownFields != nil {
+			owner = NewDocumentOwnerWithPreserver(
+				service.Files,
+				service.CreateTemp,
+				service.Decoder,
+				service.Encoder,
+				service.Providers,
+				service.PreserveUnknownFields,
+				service.DiagnosticDecoder,
+			)
+		} else {
+			owner = NewDocumentOwner(service.Files, service.CreateTemp, service.Decoder, service.Encoder, service.Providers, service.DiagnosticDecoder)
+		}
 	}
 	document, ok := owner.(settingsdocument.Service)
 	if !ok {
