@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -696,13 +695,6 @@ func (e *FactoryEngine) recordCompletedPetriMutations(completed []interfaces.Com
 		}
 	}
 	return nil
-}
-
-func isNonFatalPetriMutationPersistenceError(err error) bool {
-	var marker interface {
-		NonFatalPetriMutationPersistenceError()
-	}
-	return errors.As(err, &marker)
 }
 
 func (e *FactoryEngine) beginTick(ctx context.Context) (interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], bool, bool, error) {

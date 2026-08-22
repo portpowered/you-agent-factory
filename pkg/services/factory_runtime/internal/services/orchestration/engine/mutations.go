@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -8,6 +9,13 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 )
+
+func isNonFatalPetriMutationPersistenceError(err error) bool {
+	var marker interface {
+		NonFatalPetriMutationPersistenceError()
+	}
+	return errors.As(err, &marker)
+}
 
 // applyMutations applies a batch of mutations to a marking atomically.
 // It returns an error if any mutation references a non-existent token or place.
