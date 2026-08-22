@@ -33,18 +33,6 @@ var ErrCapabilityMismatch = errors.New("provider capability mismatch")
 // without importing the Antigravity adapter or duplicating its policy.
 const DefaultAntigravityPrintTimeout = 5 * time.Minute
 
-// DefaultNativeAttemptTimeout returns the provider-owned default deadline for
-// one native attempt. A zero result means that the provider has no published
-// default and the caller must rely on its configured or parent deadline.
-func DefaultNativeAttemptTimeout(provider ID) time.Duration {
-	switch strings.ToLower(strings.TrimSpace(provider.CanonicalSessionProvider())) {
-	case string(IDAntigravity):
-		return DefaultAntigravityPrintTimeout
-	default:
-		return 0
-	}
-}
-
 // ExecuteFailureKind is a provider-neutral one-attempt failure category.
 // Providers owns the normalized attempt outcome; Workers and other callers own
 // retry, throttle, and scheduling policy.

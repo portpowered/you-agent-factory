@@ -2,11 +2,14 @@ package factorysessionexecution
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -445,4 +448,313 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) fa
 		return executor
 	}
 	return hooks
+}
+
+// childWorkerProgressBridge keeps provider-owned terminal fragments from
+// racing the canonical Execute result. Provider runners may publish a
+// STREAM_COMPLETED/STREAM_FAILED fragment before Execute returns, while a
+// plain provider, model, harness, cancellation, or timeout may publish none.
+// Buffering that one fragment lets the child publish exactly one final
+// response outcome after the retry budget and Execute result are known.
+type childWorkerProgressBridge struct {
+	mu         sync.Mutex
+	publish    childWorkerProgressPublisher
+	dispatchID string
+	pending    *workers.ProgressFragment
+	terminal   bool
+}
+
+func newChildWorkerProgressBridge(
+	publish childWorkerProgressPublisher,
+	dispatchID string,
+) *childWorkerProgressBridge {
+	return &childWorkerProgressBridge{
+		publish:    publish,
+		dispatchID: dispatchID,
+	}
+}
+
+func (b *childWorkerProgressBridge) publishProgress(fragment workers.ProgressFragment) {
+	if b == nil || b.publish == nil {
+		return
+	}
+	fragment = b.normalize(fragment)
+	b.mu.Lock()
+	if b.terminal {
+		b.mu.Unlock()
+		return
+	}
+	if isChildTerminalProgress(fragment) {
+		b.pending = &fragment
+		b.mu.Unlock()
+		return
+	}
+	publish := b.publish
+	dispatchID := b.dispatchID
+	b.mu.Unlock()
+	publish(dispatchID, fragment)
+}
+
+func (b *childWorkerProgressBridge) resetAttempt() {
+	if b == nil {
+		return
+	}
+	b.mu.Lock()
+	if b.terminal {
+		b.mu.Unlock()
+		return
+	}
+	b.pending = nil
+	b.mu.Unlock()
+}
+
+func (b *childWorkerProgressBridge) publishTerminal(
+	result workers.ExecuteResult,
+	executeErr error,
+) {
+	if b == nil || b.publish == nil {
+		return
+	}
+	b.mu.Lock()
+	if b.terminal {
+		b.mu.Unlock()
+		return
+	}
+	b.terminal = true
+	pending := b.pending
+	b.pending = nil
+	b.mu.Unlock()
+	if pending != nil && childTerminalProgressMatches(*pending, result, executeErr) {
+		b.publish(b.dispatchID, *pending)
+		return
+	}
+	b.publish(b.dispatchID, childTerminalProgressFromResult(b.dispatchID, result, executeErr))
+}
+
+func (b *childWorkerProgressBridge) normalize(fragment workers.ProgressFragment) workers.ProgressFragment {
+	if strings.TrimSpace(fragment.DispatchID) == "" {
+		fragment.DispatchID = b.dispatchID
+	}
+	if strings.TrimSpace(fragment.Correlation.DispatchID) == "" {
+		fragment.Correlation.DispatchID = b.dispatchID
+	}
+	return fragment
+}
+
+func isChildTerminalProgress(fragment workers.ProgressFragment) bool {
+	return fragment.Kind == workers.CompletedFragmentKind || fragment.Kind == workers.FailedFragmentKind
+}
+
+func childTerminalProgressMatches(
+	fragment workers.ProgressFragment,
+	result workers.ExecuteResult,
+	executeErr error,
+) bool {
+	switch fragment.Kind {
+	case workers.CompletedFragmentKind:
+		return executeErr == nil && childExecutionSucceeded(result.Outcome)
+	case workers.FailedFragmentKind:
+		// A provider's failed fragment can be less specific than the
+		// canonical Execute result (for example STREAM_FAILED versus a typed
+		// timeout or cancellation). Always synthesize the canonical terminal
+		// for unhappy outcomes so the durable response keeps that classification.
+		return false
+	default:
+		return false
+	}
+}
+
+func childTerminalProgressFromResult(
+	dispatchID string,
+	result workers.ExecuteResult,
+	executeErr error,
+) workers.ProgressFragment {
+	fragment := workers.ProgressFragment{
+		DispatchID:   dispatchID,
+		Correlation:  result.Correlation,
+		Provider:     childProviderName(result),
+		Continuation: (result.Continuation).ClonePtr(),
+	}
+	if strings.TrimSpace(fragment.Correlation.DispatchID) == "" {
+		fragment.Correlation.DispatchID = dispatchID
+	}
+	fragment.Kind = workers.CompletedFragmentKind
+	fragment.Type = "COMPLETED"
+	fragment.ExternalEventType = "STREAM_COMPLETED"
+	if !childExecutionSucceeded(result.Outcome) || executeErr != nil {
+		fragment.Kind = workers.FailedFragmentKind
+		fragment.Type = "FAILED"
+		fragment.ExternalEventType = "STREAM_FAILED"
+		if result.Outcome == workers.ExecutionOutcomeCanceled || errors.Is(executeErr, context.Canceled) {
+			fragment.Type = "CANCELED"
+		}
+		fragment.Payload = childExecutionDiagnostic(result, executeErr)
+		if result.Failure != nil {
+			fragment.Metadata = map[string]string{
+				"work_failure_type": string(result.Failure.Type),
+				"retryable":         fmt.Sprintf("%t", result.Failure.RetryHint),
+			}
+		}
+	}
+	return fragment
+}
+
+func childProviderName(result workers.ExecuteResult) string {
+	provider, _ := childProviderSession(result)
+	if provider != "" {
+		return provider
+	}
+	if result.Diagnostics != nil && result.Diagnostics.Provider != nil {
+		return canonicalChildProvider(result.Diagnostics.Provider.Provider)
+	}
+	return ""
+}
+
+func childExecutionDiagnostic(result workers.ExecuteResult, executeErr error) string {
+	return childFailureDiagnostic(result, executeErr, factory.JavaScriptChildExecutionRequest{})
+}
+
+// normalizeChildExecuteFailure keeps a typed Worker/Provider error typed when a
+// child executor returns it as the operation error rather than embedding the
+// failure on ExecuteResult. Only an error with no typed Worker detail takes the
+// terminal/unknown fallback path.
+func normalizeChildExecuteFailure(
+	result workers.ExecuteResult,
+	executeErr error,
+) workers.ExecuteResult {
+	if result.Failure != nil || executeErr == nil {
+		return result
+	}
+	if providerErr := workers.NormalizeProviderExecutionError(executeErr); providerErr != nil {
+		metadata := workers.WorkFailureMetadataFromProviderError(providerErr)
+		decision := workers.FailureDecisionFromMetadata(metadata)
+		failureType := workers.WorkFailureTypeUnknown
+		family := workers.WorkFailureFamilyTerminal
+		if metadata != nil {
+			failureType = metadata.Type
+			family = metadata.Family
+		}
+		message := strings.TrimSpace(providerErr.Message)
+		if providerErr.ProviderFailureKind == "" {
+			message = ""
+		}
+		if message == "" {
+			message = childSafeFailureMessage(failureType)
+		}
+		result.Failure = &workers.ExecutionFailure{
+			Type:                            failureType,
+			Family:                          family,
+			Message:                         message,
+			RetryHint:                       decision.Retryable,
+			ProviderFailureKind:             providerErr.ProviderFailureKind,
+			ProviderContinuationFailureKind: providerErr.ProviderContinuationFailureKind,
+			ProviderContinuationOutcome:     providerErr.ProviderContinuationOutcome,
+			Detail:                          &workers.FailureDetail{Reason: failureType, Message: message},
+		}
+		if result.Diagnostics == nil {
+			result.Diagnostics = providerErr.Diagnostics.ToSafeDiagnostics()
+		}
+		if result.Continuation == nil {
+			result.Continuation = (providerErr.Continuation).ClonePtr()
+		}
+		return result
+	}
+
+	message := strings.TrimSpace(executeErr.Error())
+	if message == "" {
+		message = "Provider execution failed."
+	}
+	result.Failure = &workers.ExecutionFailure{
+		Type:    workers.WorkFailureTypeUnknown,
+		Family:  workers.WorkFailureFamilyTerminal,
+		Message: message,
+		Detail:  &workers.FailureDetail{Reason: workers.WorkFailureTypeUnknown, Message: message},
+	}
+	return result
+}
+
+func childFailureDiagnostic(
+	result workers.ExecuteResult,
+	executeErr error,
+	req factory.JavaScriptChildExecutionRequest,
+) string {
+	message := childFailureMessage(result, executeErr)
+	provider := childProviderName(result)
+	if provider == "" {
+		provider = canonicalChildProvider(req.ModelProvider)
+	}
+	if provider == "" && req.ExecutorProvider != "" &&
+		!strings.EqualFold(strings.TrimSpace(req.ExecutorProvider), workers.ExecutorProviderACP) &&
+		!strings.EqualFold(strings.TrimSpace(req.ExecutorProvider), "SCRIPT_WRAP") {
+		provider = canonicalChildProvider(req.ExecutorProvider)
+	}
+	return formatChildProviderFailure(provider, message)
+}
+
+func childFailureMessage(result workers.ExecuteResult, executeErr error) string {
+	message := ""
+	if result.Failure != nil && result.Failure.Detail != nil {
+		message = strings.TrimSpace(result.Failure.Detail.Message)
+	}
+	if message == "" && result.Failure != nil {
+		message = strings.TrimSpace(result.Failure.Message)
+	}
+	if message == "" && executeErr != nil {
+		message = strings.TrimSpace(executeErr.Error())
+	}
+	if message == "" {
+		if result.Outcome == workers.ExecutionOutcomeCanceled {
+			message = "Provider execution canceled."
+		} else {
+			message = "Provider execution failed."
+		}
+	}
+	return message
+}
+
+func childSafeFailureMessage(reason workers.WorkFailureType) string {
+	switch reason {
+	case workers.WorkFailureTypeAuthFailure:
+		return "Provider authentication failed."
+	case workers.WorkFailureTypePermanentBadRequest:
+		return "Provider rejected the request as invalid."
+	case workers.WorkFailureTypeThrottled:
+		return "Provider is temporarily unavailable due to usage or capacity limits."
+	case workers.WorkFailureTypeInternalServerError:
+		return "Provider encountered a temporary server error."
+	case workers.WorkFailureTypeTimeout:
+		return "Provider request timed out."
+	case workers.WorkFailureTypeMisconfigured:
+		return "Provider command could not be started."
+	default:
+		return "Provider execution failed."
+	}
+}
+
+func canonicalChildProvider(provider string) string {
+	provider = strings.TrimSpace(provider)
+	if provider == "" {
+		return ""
+	}
+	canonical := providers.ID(strings.ToLower(provider)).CanonicalSessionProvider()
+	if canonical == "" {
+		return strings.ToLower(provider)
+	}
+	return canonical
+}
+
+func formatChildProviderFailure(provider, message string) string {
+	provider = canonicalChildProvider(provider)
+	message = strings.TrimSpace(message)
+	if provider == "" || message == "" {
+		return message
+	}
+	display := provider
+	if runes := []rune(display); len(runes) > 0 {
+		display = strings.ToUpper(string(runes[0])) + string(runes[1:])
+	}
+	if strings.HasPrefix(strings.ToLower(message), strings.ToLower(display)+":") {
+		return message
+	}
+	return fmt.Sprintf("%s: %s", display, message)
 }

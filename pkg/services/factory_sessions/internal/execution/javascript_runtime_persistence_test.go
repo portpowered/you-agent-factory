@@ -21,6 +21,53 @@ import (
 	"time"
 )
 
+func TestChildWorkerExecutor_PreservesTypedProviderReasonWithoutSessionReference(t *testing.T) {
+	const rejection = "Agy does not support a separate reasoning effort."
+	invoker := &recordingWorkerExecution{result: workers.ExecuteResult{
+		Outcome: workers.ExecutionOutcomeFailed,
+		Failure: &workers.ExecutionFailure{
+			Type:    workers.WorkFailureTypePermanentBadRequest,
+			Family:  workers.WorkFailureFamilyTerminal,
+			Message: "Provider rejected the request as invalid.",
+			Detail: &workers.FailureDetail{
+				Reason:  workers.WorkFailureTypePermanentBadRequest,
+				Message: rejection,
+			},
+		},
+		Diagnostics: &workers.SafeDiagnostics{
+			Provider: &workers.SafeProviderDiagnostic{Provider: "antigravity"},
+		},
+	}}
+	sink := newChildRecordSink()
+	executor := newTestChildWorkerExecutor(invoker, sink, nil)
+
+	result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{
+		Prompt:        "invalid Antigravity request",
+		ModelProvider: "antigravity",
+		Model:         "gemini-3.6-flash-medium",
+	})
+	if err == nil || !strings.Contains(err.Error(), "Antigravity") || !strings.Contains(err.Error(), rejection) {
+		t.Fatalf("child error = %v, want provider identity and safe rejection reason", err)
+	}
+	if result.Status != factory.JavaScriptChildDispatchStatusFailed {
+		t.Fatalf("child status = %q, want FAILED", result.Status)
+	}
+	terminal := sink.terminalChildDispatch(t)
+	if terminal.Provider != "antigravity" {
+		t.Fatalf("terminal provider = %q, want antigravity without a session reference", terminal.Provider)
+	}
+	if terminal.FailureDetail == nil || terminal.FailureDetail.Message != rejection {
+		t.Fatalf("terminal failure detail = %#v, want typed provider reason", terminal.FailureDetail)
+	}
+	summary := dispatchSummaryFromChildRecord("FAILED", terminal)
+	if summary.Provider != "antigravity" {
+		t.Fatalf("dispatch summary provider = %q, want antigravity", summary.Provider)
+	}
+	if summary.FailureDetail == nil || summary.FailureDetail.Message != rejection {
+		t.Fatalf("dispatch summary failure detail = %#v, want typed provider reason", summary.FailureDetail)
+	}
+}
+
 func TestTaggedDurableHistoryIsAuthoritativeDuringHydrationAndResave(t *testing.T) {
 	t.Parallel()
 	canonical := json.RawMessage(`{"type":"SESSION_STARTED","context":{"sessionId":"dur-sess-tagged"}}`)

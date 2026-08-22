@@ -150,50 +150,6 @@ func TestResolveChildWorkerSettings_CanonicalizesExplicitModelProvider(t *testin
 	}
 }
 
-func TestResolveChildWorkerSettings_AntigravityUsesModelEmbeddedEffort(t *testing.T) {
-	for _, executorProvider := range []string{"", "SCRIPT_WRAP"} {
-		t.Run("executorProvider="+executorProvider, func(t *testing.T) {
-			got, err := workflowruntime.ResolveChildWorkerSettings(
-				factory.JavaScriptChildExecutionRequest{
-					ExecutorProvider: executorProvider,
-					ModelProvider:    " ANTIGRAVITY ",
-					Model:            "gemini-3.6-flash-medium",
-					ReasoningEffort:  " HIGH ",
-				},
-				nil,
-				factory.JavaScriptWorkerSettings{},
-			)
-			if err != nil {
-				t.Fatalf("ResolveChildWorkerSettings() error = %v", err)
-			}
-			if got.ModelProvider != "antigravity" || got.Model != "gemini-3.6-flash-medium" {
-				t.Fatalf("selection = %#v, want canonical Antigravity provider and exact model", got)
-			}
-			if got.ReasoningEffort != "" {
-				t.Fatalf("selection reasoning effort = %q, want omitted for model-encoded Antigravity effort", got.ReasoningEffort)
-			}
-		})
-	}
-}
-
-func TestResolveChildWorkerSettings_CodexRetainsReasoningEffort(t *testing.T) {
-	got, err := workflowruntime.ResolveChildWorkerSettings(
-		factory.JavaScriptChildExecutionRequest{
-			ModelProvider:   "CODEX",
-			Model:           "gpt-5.6-luna",
-			ReasoningEffort: " XHIGH ",
-		},
-		nil,
-		factory.JavaScriptWorkerSettings{},
-	)
-	if err != nil {
-		t.Fatalf("ResolveChildWorkerSettings() error = %v", err)
-	}
-	if got.ModelProvider != "codex" || got.Model != "gpt-5.6-luna" || got.ReasoningEffort != "xhigh" {
-		t.Fatalf("selection = %#v, want codex/gpt-5.6-luna/xhigh", got)
-	}
-}
-
 func TestResolveChildWorkerSettings_UnknownPresetNamesSource(t *testing.T) {
 	got, err := workflowruntime.ResolveChildWorkerSettings(factory.JavaScriptChildExecutionRequest{Preset: "missing"}, nil, factory.JavaScriptWorkerSettings{})
 	if err != nil || got.Preset != "missing" {

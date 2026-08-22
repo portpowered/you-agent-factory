@@ -227,7 +227,19 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_TimeoutSettlesSessionAndDisp
 		}),
 	})
 
-	completed, err := service.StartSync(context.Background(), fse.StartRequest{
+	completed, err := service.StartSync(context.Background(), liveChildTimeoutStartRequest())
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+
+	provider.waitForInferStart(t)
+	waitForInferContextHonored(t, provider, 2*time.Second)
+	assertLiveChildTimeoutSession(t, service, completed.SessionID)
+	assertLiveChildTimeoutDispatch(t, service, completed.SessionID)
+}
+
+func liveChildTimeoutStartRequest() fse.StartRequest {
+	return fse.StartRequest{
 		RequestID: "req-runtime-agent-run-live-child-child-timeout",
 		Source: fse.Source{
 			Kind:         factory.WorkflowSourceKindWorkflowName,
@@ -242,15 +254,12 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_TimeoutSettlesSessionAndDisp
 		RequestedPolicy: map[string]any{
 			"maxWorkerDurationMs": int64(25),
 		},
-	})
-	if err != nil {
-		t.Fatalf("StartSync: %v", err)
 	}
+}
 
-	provider.waitForInferStart(t)
-	waitForInferContextHonored(t, provider, 2*time.Second)
-
-	read, err := service.GetSession(context.Background(), completed.SessionID)
+func assertLiveChildTimeoutSession(t *testing.T, service *fse.JavaScriptRuntimeService, sessionID string) {
+	t.Helper()
+	read, err := service.GetSession(context.Background(), sessionID)
 	if err != nil {
 		t.Fatalf("GetSession: %v", err)
 	}
@@ -264,8 +273,11 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_TimeoutSettlesSessionAndDisp
 	if read.Progress == nil || read.Progress.TotalDispatches != 1 || read.Progress.FailedDispatches != 1 {
 		t.Fatalf("progress = %#v, want one failed dispatch", read.Progress)
 	}
+}
 
-	dispatch, err := service.GetDispatch(context.Background(), completed.SessionID, "dispatch-1")
+func assertLiveChildTimeoutDispatch(t *testing.T, service *fse.JavaScriptRuntimeService, sessionID string) {
+	t.Helper()
+	dispatch, err := service.GetDispatch(context.Background(), sessionID, "dispatch-1")
 	if err != nil {
 		t.Fatalf("GetDispatch: %v", err)
 	}
