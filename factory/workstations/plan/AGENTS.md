@@ -68,6 +68,49 @@ unless that structure is itself the product behavior under test. Prefer
 behavioral requirements that describe observable runtime, API, CLI, UI, or
 emitted-event outcomes from a user or maintainer perspective.
 
+## Plan against wiring and defaults, not only against code
+
+A repeatedly measured failure in this repository is a complete, well-structured,
+fully-tested implementation that does nothing at runtime because one wiring or
+data step was never done. Real instances, all of which passed CI and review:
+
+- a built-in catalog type defining every supported model had zero production
+  callers, so the public list endpoint returned an empty result forever and
+  every invocation failed with "model not found"
+- a price table's default constructor returned an empty model list, so every
+  usage row resolved UNPRICED and a month of running produced no cost figure at
+  all, while the emitter, metric names, token capture and their tests all existed
+- a cost field was never populated, so an `if value > 0` emission guard silently
+  skipped every sample
+
+In each case the code existed, the tests passed, and the reviewers approved. The
+defect was never in the code that was written; it was in the step nobody wrote.
+
+Therefore, whenever the ask introduces or depends on a registry, catalog, table,
+default constructor, feature flag, provider list, or any other value that some
+other component must READ in order for the feature to matter, the plan must
+require proof that it is both populated and actually read. Write criteria that
+demand:
+
+- a named PRODUCTION caller for every new or modified registry, catalog, or
+  default, demonstrated by exercising the real public surface (CLI command, HTTP
+  endpoint, emitted event) and reading the observed output — never by asserting
+  that a symbol exists, is exported, or is referenced from a test
+- assertions on VALUES, not on presence. `len(x) > 0`, `err == nil`, and "the
+  field is set" are precisely the assertions that allowed every failure above to
+  ship. Name the expected value in the criterion
+- explicit treatment of empty and zero as suspicious. If a default constructor
+  returns an empty collection or a zero value, the plan must state whether that
+  emptiness is deliberate; where it is not, populating it is part of the work
+- at least one test that FAILS before the change and passes after, so the test is
+  demonstrated to be capable of detecting the defect it guards
+- for any guard shaped like "emit or act only when value > 0 / non-empty", a
+  criterion that the value is genuinely produced upstream, not merely guarded
+- a distinction between a zero that means "measured zero" and a zero that means
+  "unknown"; a value that can mean either is itself a defect worth planning out
+
+Never accept "the type, function, or route exists" as an acceptance criterion.
+IT EXISTS is not IT WORKS.
 
 The markdown PRD should include, when relevant:
 - context with customer ask, concrete problem, and high-level solution
@@ -122,6 +165,14 @@ The JSON file must be implementation-ready and contain:
 Story-writing rules:
 - every story must be small enough for one focused implementation iteration
 - every story must include at least one behavioral acceptance criterion
+- when a story adds or changes a registry, catalog, table, default constructor,
+  or any other value another component must read, it must carry a criterion that
+  exercises the real public surface and asserts the OBSERVED VALUE, plus a
+  criterion naming the production caller that reads it. "It exists", "it is
+  exported", or "a test references it" does not satisfy this
+- when a story introduces or relies on a guard shaped like "only when value > 0"
+  or "only when non-empty", it must carry a criterion proving the value is
+  actually produced upstream
 - `Typecheck passes` must appear in every story
 - add `Tests pass` when testable logic changes
 - add direct browser verification when the story changes visible UI behavior

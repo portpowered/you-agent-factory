@@ -107,6 +107,35 @@ enforce command, route, or registration inventories without proving observable
 runtime, API, CLI, UI, or emitted-event behavior, raise that as a BLOCKING
 quality-rule violation and ask for behavioral coverage instead.
 
+**Wiring and defaults check — IT EXISTS is not IT WORKS:**
+The most expensive defects merged through this factory were not bad code. They
+were correct, tested code that nothing called or that read an empty default: a
+model catalog with zero production callers (the list endpoint returned empty
+forever), a price table whose default constructor returned no models (a month of
+running produced no cost figure), and an `if value > 0` emission guard on a field
+nothing ever populated. All three passed CI and were approved.
+
+So when the diff adds or changes a registry, catalog, table, default constructor,
+feature flag, or any value another component must read, verify — do not assume:
+
+- **Trace the call path to a real PRODUCTION caller.** A definition referenced
+  only by its own tests is dead. Where the PR claims a caller, confirm it exists
+  in non-test code.
+- **Check that defaults are actually populated.** An empty collection or zero
+  value returned by a default constructor is a defect unless the PR states
+  explicitly that the emptiness is deliberate and says why.
+- **Require assertions on values, not presence.** Evidence resting on
+  `len(x) > 0`, `err == nil`, or "the field is set" does not prove the feature
+  works. Ask for the observed value.
+- **Distrust a zero that could mean "unknown".** If the change lets a measured
+  zero and an unknown render identically, that is a BLOCKING correctness issue.
+- **For any `> 0` or non-empty guard, confirm the value is produced upstream**,
+  not merely guarded.
+
+Raise a failure of any of these as BLOCKING, naming the specific symbol and the
+missing caller or unpopulated default. Do not accept "the type, function, or
+route exists" as evidence that a criterion is met.
+
 ### Step 4 — Apply the review rules in order
 
 Check the PR directly against the review rules above and confirm whether it
