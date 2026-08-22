@@ -30,7 +30,7 @@ const controlHarnessProviderResult = "control fixture result COMPLETE"
 // dispatch, rather than waiting on timing.
 func TestServeACP_RootBuildProcessCancelTerminalizesOnlyCapturedPrompt(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test driving you serve acp cancellation through root.BuildProcess")
+		t.Skip("integration test driving you server acp cancellation through root.BuildProcess")
 	}
 
 	harness := newServeACPControlHarness(t, newControlProviderCommandRunner(1))
@@ -65,7 +65,7 @@ func TestServeACP_RootBuildProcessCancelTerminalizesOnlyCapturedPrompt(t *testin
 // Chat Session, and rejects later prompts without another provider command.
 func TestServeACP_RootBuildProcessCloseStopsCapturedFactorySession(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test driving you serve acp close through root.BuildProcess")
+		t.Skip("integration test driving you server acp close through root.BuildProcess")
 	}
 
 	harness := newServeACPControlHarness(t, newControlProviderCommandRunner(1))
@@ -194,7 +194,7 @@ func newServeACPControlHarness(t *testing.T, runner *controlProviderCommandRunne
 
 	var stderr bytes.Buffer
 	command := support.StartProcessCommand(t, process, root.Input{
-		Args:             []string{"you", "serve", "acp"},
+		Args:             []string{"you", "server", "acp"},
 		Env:              append(os.Environ(), "HOME="+home, "USERPROFILE="+home),
 		Stdin:            stdinRead,
 		Stdout:           stdoutWrite,

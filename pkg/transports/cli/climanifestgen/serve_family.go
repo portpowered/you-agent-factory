@@ -1,8 +1,8 @@
 package climanifestgen
 
 // ServeFamilyCommandIDs are canonical command IDs emitted from commands.json
-// for the you serve family that hosts the composed process ACP server.
+// for the ACP child of the shared you server family.
 var ServeFamilyCommandIDs = []string{
-	"you.serve",
-	"you.serve.acp",
+	"you.server",
+	"you.server.acp",
 }

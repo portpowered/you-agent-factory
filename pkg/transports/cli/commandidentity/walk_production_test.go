@@ -61,7 +61,7 @@ func TestWalk_ProductionRootRepresentativeCommandsRetainIdentity(t *testing.T) {
 		{path: "you run", visibility: "visible", runnable: true},
 		{path: "you submit batch", visibility: "visible", runnable: true},
 		{path: "you session show", visibility: "visible", runnable: true},
-		{path: "you mcp serve", visibility: "visible", runnable: true},
+		{path: "you server mcp", visibility: "visible", runnable: true},
 	}
 	if _, ok := byPath["you workflow"]; ok {
 		t.Fatal("production command tree must not expose the removed workflow alias family")

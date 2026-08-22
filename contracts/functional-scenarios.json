@@ -157,26 +157,6 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
-      "stableId": "cli/you.mcp",
-      "name": "you mcp",
-      "interface": "cli",
-      "classification": "grouping",
-      "status": "not-applicable",
-      "lane": "short",
-      "executionClass": "deterministic",
-      "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
-    },
-    {
-      "stableId": "cli/you.mcp.serve",
-      "name": "you mcp serve",
-      "interface": "cli",
-      "classification": "runnable",
-      "status": "missing",
-      "lane": "short",
-      "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
-    },
-    {
       "stableId": "cli/you.metrics",
       "name": "you metrics",
       "interface": "cli",
@@ -292,18 +272,18 @@
       ]
     },
     {
-      "stableId": "cli/you.serve",
-      "name": "you serve",
+      "stableId": "cli/you.server",
+      "name": "you server",
       "interface": "cli",
-      "classification": "grouping",
-      "status": "not-applicable",
+      "classification": "runnable",
+      "status": "missing",
       "lane": "short",
       "executionClass": "deterministic",
-      "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
-      "stableId": "cli/you.serve.acp",
-      "name": "you serve acp",
+      "stableId": "cli/you.server.acp",
+      "name": "you server acp",
       "interface": "cli",
       "classification": "runnable",
       "status": "covered",
@@ -317,8 +297,8 @@
       ]
     },
     {
-      "stableId": "cli/you.server",
-      "name": "you server",
+      "stableId": "cli/you.server.mcp",
+      "name": "you server mcp",
       "interface": "cli",
       "classification": "runnable",
       "status": "missing",

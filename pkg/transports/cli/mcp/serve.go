@@ -9,9 +9,9 @@ import (
 )
 
 const (
-	fixtureCatalogInputID = "you.mcp.serve.flag.fixture-catalog"
-	runtimeInputID        = "you.mcp.serve.flag.runtime"
-	projectRootInputID    = "you.mcp.serve.flag.project-root"
+	fixtureCatalogInputID = "you.server.mcp.flag.fixture-catalog"
+	runtimeInputID        = "you.server.mcp.flag.runtime"
+	projectRootInputID    = "you.server.mcp.flag.project-root"
 )
 
 // MCPIntent is the stdio serve intent delivered to the injected initializer.

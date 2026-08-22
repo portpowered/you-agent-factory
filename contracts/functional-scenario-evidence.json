@@ -59,7 +59,7 @@
     {
       "test": "tests/functional/transport/acp/stdio/cli_serve_acp_prompt_test.go::TestServeACP_RootBuildProcessCompletesOneFactoryPrompt",
       "stableIds": [
-        "cli/you.serve.acp"
+        "cli/you.server.acp"
       ]
     },
     {

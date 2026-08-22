@@ -5,6 +5,6 @@ package generated
 // ServeFamilyCommandIDs lists the stable command IDs emitted from
 // contracts/cli/commands.json for the canonical serve family.
 var ServeFamilyCommandIDs = []string{
-	"you.serve",
-	"you.serve.acp",
+	"you.server",
+	"you.server.acp",
 }

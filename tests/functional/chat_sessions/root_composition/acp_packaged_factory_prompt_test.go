@@ -16,7 +16,7 @@ import (
 )
 
 // packagedFactoryPromptCase is one packaged Factory driven end to end over the
-// real "you serve acp" command.
+// real "you server acp" command.
 type packagedFactoryPromptCase struct {
 	name string
 	// target is the ACP Factory target reference selected for the session.
@@ -44,7 +44,7 @@ type packagedFactoryPromptCase struct {
 // ACP prompt -- waited forever rather than returning its first execution.
 func TestPackagedFactoriesCompleteOneACPPromptTurn(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test driving root.BuildProcess through the you serve acp CLI command")
+		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
 	cases := []packagedFactoryPromptCase{
@@ -178,7 +178,7 @@ func (runner *planParallelACPRunner) Run(
 // must each be answered by shape rather than by call order.
 func TestPackagedPlanParallelCompletesOneACPPromptTurn(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test driving root.BuildProcess through the you serve acp CLI command")
+		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
 	home := t.TempDir()
@@ -253,7 +253,7 @@ func (runner *builderGreetingACPRunner) buildCount() int {
 // target, so "hi" used to go straight into authoring and installing a Factory.
 func TestFactoryBuilderGreetsOnAVagueFirstACPTurn(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test driving root.BuildProcess through the you serve acp CLI command")
+		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
 	home := t.TempDir()
@@ -346,7 +346,7 @@ func (runner *spawnACPRunner) callCount() int {
 // and the merged result reaches the client as streamed assistant text.
 func TestPackagedJavaScriptFactoryCompletesOneACPPromptTurn(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test driving root.BuildProcess through the you serve acp CLI command")
+		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
 	home := t.TempDir()
@@ -435,7 +435,7 @@ func (runner *deepResearchACPRunner) callCount() int {
 // Factory's own output reaches the client, not merely that some text did.
 func TestPackagedJavaScriptFactoryWithStructuredResultStreamsItsResult(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test driving root.BuildProcess through the you serve acp CLI command")
+		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
 	home := t.TempDir()

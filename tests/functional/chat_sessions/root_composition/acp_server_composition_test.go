@@ -171,7 +171,7 @@ func decodeRPCMessage(t *testing.T, out *bytes.Buffer) rpcMessage {
 
 // seedEveryInstalledPackagedFactory materializes every published built-in
 // packaged Factory under home's global named-Factory root, reproducing the
-// state a real `you serve acp` process reaches after system initialization
+// state a real `you server acp` process reaches after system initialization
 // runs. It returns the installed names.
 func seedEveryInstalledPackagedFactory(t *testing.T, home string) []string {
 	t.Helper()

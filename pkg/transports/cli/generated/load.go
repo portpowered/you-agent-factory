@@ -66,7 +66,7 @@ func MCPFamilyManifest() (climanifest.Manifest, error) {
 	return mcpFamilyManifestValue(), nil
 }
 
-// ServeFamilyManifest returns generated metadata for you serve and you serve acp.
+// ServeFamilyManifest returns generated metadata for you server and its ACP child.
 func ServeFamilyManifest() (climanifest.Manifest, error) {
 	return serveFamilyManifestValue(), nil
 }

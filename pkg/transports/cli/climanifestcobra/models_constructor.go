@@ -496,52 +496,51 @@ func resolvedSubmitFlags(
 	return definitions, candidates, nil
 }
 
-// NewMCPCommand builds the independently injected `you mcp` family through
-// the accepted generic manifest constructor.
+// NewMCPCommand builds the independently injected MCP child of the shared
+// `you server` family through the accepted generic manifest constructor.
 func NewMCPCommand(handler ResolvedCobraHandler) (*cobra.Command, error) {
 	manifest, err := generated.MCPFamilyManifest()
 	if err != nil {
-		return nil, fmt.Errorf("build MCP command: %w", err)
+		return nil, fmt.Errorf("build server MCP command: %w", err)
 	}
 	rootManifest, err := generated.RepresentativeFamilyManifest()
 	if err != nil {
-		return nil, fmt.Errorf("build MCP command: %w", err)
+		return nil, fmt.Errorf("build server MCP command: %w", err)
 	}
 	rootRecord, err := rootManifest.CommandByID("you")
 	if err != nil {
-		return nil, fmt.Errorf("build MCP command: %w", err)
+		return nil, fmt.Errorf("build server MCP command: %w", err)
 	}
 	manifest.Commands[rootRecord.ID] = rootRecord
 	return NewMCPCommandFromManifest(manifest, handler)
 }
 
-// NewMCPCommandFromManifest projects and detaches the complete MCP family.
+// NewMCPCommandFromManifest projects and detaches the shared server parent
+// with its MCP child.
 func NewMCPCommandFromManifest(
 	manifest climanifest.Manifest,
 	handler ResolvedCobraHandler,
 ) (*cobra.Command, error) {
 	if handler == nil {
-		return nil, fmt.Errorf("build MCP command: handler is required")
+		return nil, fmt.Errorf("build server MCP command: handler is required")
 	}
 	rootRecord, err := manifest.CommandByID("you")
 	if err != nil {
-		return nil, fmt.Errorf("build MCP command: %w", err)
+		return nil, fmt.Errorf("build server MCP command: %w", err)
 	}
-	parentRecord, err := manifest.CommandByID("you.mcp")
+	parentRecord, err := manifest.CommandByID("you.server")
 	if err != nil {
-		return nil, fmt.Errorf("build MCP command: %w", err)
+		return nil, fmt.Errorf("build server MCP command: %w", err)
 	}
-	if parentRecord.Runnable {
-		return nil, fmt.Errorf("build MCP command: %q must remain non-runnable", parentRecord.ID)
-	}
-	serveRecord, err := manifest.CommandByID("you.mcp.serve")
+	serveRecord, err := manifest.CommandByID("you.server.mcp")
 	if err != nil {
-		return nil, fmt.Errorf("build MCP command: %w", err)
+		return nil, fmt.Errorf("build server MCP command: %w", err)
 	}
+	parentRecord = protocolServerParentRecord(parentRecord)
 	manifest.Commands = map[string]climanifest.Command{
-		rootRecord.ID:   rootRecord,
-		parentRecord.ID: parentRecord,
-		serveRecord.ID:  serveRecord,
+		rootRecord.ID:  rootRecord,
+		"you.server":   parentRecord,
+		serveRecord.ID: serveRecord,
 	}
 	root, err := NewCommandTree(manifest, GenericBindings{
 		Handlers: HandlerRegistry{
@@ -552,16 +551,16 @@ func NewMCPCommandFromManifest(
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("build MCP command: %w", err)
+		return nil, fmt.Errorf("build server MCP command: %w", err)
 	}
-	parent, _, err := root.Find([]string{parentRecord.Name})
+	parent, _, err := root.Find([]string{"server"})
 	if err != nil {
-		return nil, fmt.Errorf("build MCP command: find projected command: %w", err)
+		return nil, fmt.Errorf("build server MCP command: find projected command: %w", err)
 	}
 	root.RemoveCommand(parent)
 	serve, _, err := parent.Find([]string{serveRecord.Name})
 	if err != nil {
-		return nil, fmt.Errorf("build MCP command: find projected serve command: %w", err)
+		return nil, fmt.Errorf("build server MCP command: find projected MCP command: %w", err)
 	}
 	preserveMCPSourceRelationshipDiagnostic(serve, serveRecord)
 	return parent, nil
@@ -571,7 +570,7 @@ func preserveMCPSourceRelationshipDiagnostic(
 	command *cobra.Command,
 	record climanifest.Command,
 ) {
-	const relationshipID = "you.mcp.serve.relationship.runtime-source"
+	const relationshipID = "you.server.mcp.relationship.runtime-source"
 	if _, declared := record.Relationships[relationshipID]; !declared {
 		return
 	}

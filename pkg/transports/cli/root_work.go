@@ -227,10 +227,9 @@ func NewRootCommandFromSubcommands(root *cobra.Command, subcommands RootSubcomma
 }
 
 // b12ProductionFamilies is the one shared production-root fan-in for the
-// session, workflow/MCP, run/server, and submit migrations. Each field is
+// session, protocol-host, run/server, and submit migrations. Each field is
 // constructed once through its family-local generated seam.
 type b12ProductionFamilies struct {
-	MCP    *cobra.Command
 	Run    *cobra.Command
 	Server *cobra.Command
 	Submit *cobra.Command
@@ -263,16 +262,43 @@ func newB12ProductionFamilies(
 	if err := preserveSubmitArgumentCompatibility(submitCommand); err != nil {
 		return b12ProductionFamilies{}, err
 	}
+	server := runServer.Server
+	if err := attachServerProtocolChild(server, productionServeCommand(options), "acp"); err != nil {
+		return b12ProductionFamilies{}, err
+	}
 	mcpCommand, err := newMCPCommand(options)
 	if err != nil {
 		return b12ProductionFamilies{}, err
 	}
+	if err := attachServerProtocolChild(server, mcpCommand, "mcp"); err != nil {
+		return b12ProductionFamilies{}, err
+	}
 	return b12ProductionFamilies{
-		MCP:    mcpCommand,
 		Run:    runServer.Run,
-		Server: runServer.Server,
+		Server: server,
 		Submit: submitCommand,
 	}, nil
+}
+
+func attachServerProtocolChild(server, family *cobra.Command, childName string) error {
+	if server == nil || family == nil {
+		return fmt.Errorf("attach server %s child: commands are required", childName)
+	}
+	child, _, err := family.Find([]string{childName})
+	if err != nil {
+		return fmt.Errorf("attach server %s child: find command: %w", childName, err)
+	}
+	if child == nil {
+		return fmt.Errorf("attach server %s child: command is required", childName)
+	}
+	family.RemoveCommand(child)
+	if child.LocalNonPersistentFlags().Lookup("listen") == nil {
+		if err := suppressUnrelatedServerProtocolListener(child, childName); err != nil {
+			return err
+		}
+	}
+	server.AddCommand(child)
+	return nil
 }
 
 // preserveSubmitArgumentCompatibility keeps the established public Cobra
@@ -337,14 +363,12 @@ func productionRootSubcommands(
 		factoryConfigInit.Config,
 		factoryConfigInit.Factory,
 		factoryConfigInit.Init,
-		b12.MCP,
 		modelsCmd,
 		providersCmd,
 		metricsCmd,
 		b12.Run,
 		b12.Server,
 		b12.Submit,
-		productionServeCommand(options),
 		productionWorkCommand(globals, diagnostics, options),
 		productionWorkerSessionsCommand(globals, diagnostics, options),
 		productionWorkersCommand(options),

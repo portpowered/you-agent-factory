@@ -28,13 +28,13 @@ const (
 	fixtureFactoryScope     = "acp-serve-fixture"
 	fixtureFactoryName      = "single-worker"
 	fixtureFactoryTargetID  = operatorsettings.ACPFactoryTargetNamespace + "@" + fixtureFactoryScope + "/" + fixtureFactoryName
-	fixtureFinalAnswerText  = "acknowledged fixture prompt via you serve acp. COMPLETE"
+	fixtureFinalAnswerText  = "acknowledged fixture prompt via you server acp. COMPLETE"
 	fixturePromptText       = "please answer this fixture prompt"
 	fixtureInitializeParams = `{"protocolVersion":1,"clientCapabilities":{"fs":{"readTextFile":true,"writeTextFile":true},"terminal":true}}`
 )
 
 // rpcFrame is the minimal JSON-RPC 2.0 line shape this test reads off the
-// real ACP stdio Server's "you serve acp" stdout: a response carries no
+// real ACP stdio Server's "you server acp" stdout: a response carries no
 // "method", a notification (only "session/update" in this V1 slice) carries
 // no "id".
 type rpcFrame struct {
@@ -49,7 +49,7 @@ type rpcFrame struct {
 // command end to end: it seeds a real installed Factory target and a real
 // persisted ACP Agent profile, builds the reusable application through
 // root.BuildProcess (the exact public entrypoint the you binary uses),
-// executes "you serve acp" itself (not Process.ACPServer() directly), and
+// executes "you server acp" itself (not Process.ACPServer() directly), and
 // drives one real "initialize" -> "session/new" -> "session/prompt" exchange
 // over the command's own caller-owned stdin/stdout. Provider effects are
 // replaced only through edges.Edges, via a deterministic ProviderCommandRunner
@@ -57,7 +57,7 @@ type rpcFrame struct {
 // prompt response's mapped text is exactly the fixture's own literal answer
 // rather than a fabricated or coincidental value.
 //
-// This is the "you serve acp" transport-mechanics sibling of
+// This is the "you server acp" transport-mechanics sibling of
 // tests/functional/chat_sessions/root_composition/acp_server_composition_test.go,
 // which drives Process.ACPServer() directly rather than the CLI command
 // tree; both share support.SeedACPAgentProfile instead of each owning a
@@ -65,7 +65,7 @@ type rpcFrame struct {
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test driving you serve acp through root.BuildProcess")
+		t.Skip("integration test driving you server acp through root.BuildProcess")
 	}
 
 	home := t.TempDir()
@@ -109,7 +109,7 @@ func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 
 	var stderr bytes.Buffer
 	command := support.StartProcessCommand(t, process, root.Input{
-		Args:             []string{"you", "serve", "acp"},
+		Args:             []string{"you", "server", "acp"},
 		Env:              environment,
 		Stdin:            stdinRead,
 		Stdout:           stdoutWrite,
@@ -228,7 +228,7 @@ func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 		t.Fatalf("stderr leaked the fixture final answer text: %s", stderr.String())
 	}
 
-	functionalevidence.Covers(t, "cli/you.serve.acp")
+	functionalevidence.Covers(t, "cli/you.server.acp")
 }
 
 func writeRPCLine(t *testing.T, w io.Writer, line string) {

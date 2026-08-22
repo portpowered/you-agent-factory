@@ -50,7 +50,7 @@ const acpWorkerChildCompletionText = "the child-events fixture genuinely finishe
 // that Worker's tool call.
 func TestOneACPWorkerDeliversEveryUpdateAsChildContent(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test driving root.BuildProcess through the you serve acp CLI command")
+		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
 	notifications := runACPWorkerChildFixture(t, "one-worker", 1)
@@ -112,7 +112,7 @@ func TestOneACPWorkerDeliversEveryUpdateAsChildContent(t *testing.T) {
 // implementation makes.
 func TestTwoACPWorkersKeepChildStreamsAttributed(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test driving root.BuildProcess through the you serve acp CLI command")
+		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
 	notifications := runACPWorkerChildFixture(t, "two-workers", 2)
@@ -181,7 +181,7 @@ func acpWorkerChildPeerMarker(body string) string {
 // to its original identity is delivered to the client twice.
 //
 // Cross-process replay is deliberately not the vehicle here: Chat Sessions
-// are process-local, so a second `you serve acp` process cannot resolve the
+// are process-local, so a second `you server acp` process cannot resolve the
 // session at all. Same-connection session/load is also not it -- that path
 // correctly reuses its acknowledged cursor and redelivers nothing by design
 // (see loadSession's own doc comment). The in-run retained sweep is the
@@ -189,7 +189,7 @@ func acpWorkerChildPeerMarker(body string) string {
 // observable right here.
 func TestACPWorkerChildStreamSurvivesRetainedReplay(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test driving root.BuildProcess through the you serve acp CLI command")
+		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
 	notifications := runACPWorkerChildFixture(t, "replay", 1)
@@ -499,7 +499,7 @@ func TestACPWorkerChildPeerProcess(t *testing.T) {
 // than one per child, or that cannot keep concurrent children apart.
 func TestJavaScriptFactoryChildrenAreVisibleAsWorkers(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test driving root.BuildProcess through the you serve acp CLI command")
+		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
 	home := t.TempDir()

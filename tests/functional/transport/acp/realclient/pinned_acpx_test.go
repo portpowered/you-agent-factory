@@ -165,7 +165,7 @@ func (scenario *pinnedAcpxScenario) writeConfig(t *testing.T) {
 		Agents: map[string]struct {
 			Argv []string `json:"argv"`
 		}{
-			realClientAgentName: {Argv: []string{scenario.serverPath, "serve", "acp"}},
+			realClientAgentName: {Argv: []string{scenario.serverPath, "server", "acp"}},
 		},
 	}
 	payload, err := json.Marshal(config)

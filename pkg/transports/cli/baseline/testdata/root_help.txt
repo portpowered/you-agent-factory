@@ -29,12 +29,10 @@ Available Commands:
   factory         Inspect and manage factory definitions
   help            Help about any command
   init            Configure provider and model defaults
-  mcp             Model Context Protocol servers for Factory Session tools
   metrics         Inspect recorded Factory Runtime metrics
   models          Inspect discovered models from a running service
   providers       Discover provider capabilities
   run             Load workflow and run the factory engine
-  serve           Host You as a protocol server
   server          Serve the Current Factory API and dashboard
   session         List, open, and close factory sessions on a running host
   submit          Submit work to a running factory

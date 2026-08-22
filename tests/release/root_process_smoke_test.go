@@ -94,7 +94,7 @@ func TestRootProcessCompiledBinaryModeMatrix(t *testing.T) {
 		fixturePath := testutil.MustRepoPath(t, "pkg/transports/http/testdata/durable-session-contract-fixtures.json")
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, binaryPath, "mcp", "serve", "--fixture-catalog", fixturePath)
+		cmd := exec.CommandContext(ctx, binaryPath, "server", "mcp", "--fixture-catalog", fixturePath)
 		cmd.Env = environment
 		cmd.Stdin = strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"root-smoke","version":"test"}}}` + "\n")
 		output, err := cmd.CombinedOutput()

@@ -38,7 +38,7 @@ import (
 // it too (proving the result reached the customer).
 func TestACPSessionAnswersEachTurnWithThatTurnsOwnResult(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test driving root.BuildProcess through the you serve acp CLI command")
+		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
 	home := t.TempDir()

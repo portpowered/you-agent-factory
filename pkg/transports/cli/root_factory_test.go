@@ -37,7 +37,7 @@ func TestProductionMCPServeGeneratedMetadataDelegatesStdioInitializer(t *testing
 	root.SetIn(stdin)
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"mcp", "serve", "--runtime", "--project-root", "project"})
+	root.SetArgs([]string{"server", "mcp", "--runtime", "--project-root", "project"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute generated mcp serve: %v", err)

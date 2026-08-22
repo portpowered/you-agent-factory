@@ -25,10 +25,10 @@ import (
 // canonical application graph"). Unlike acp_prompt_delegation_test.go and
 // acp_server_composition_test.go -- which both call process.ACPServer().Serve
 // directly, bypassing the CLI command tree -- this cell drives the real
-// customer-facing "you serve acp" Cobra command (pkg/transports/cli/root_serve.go)
+// customer-facing "you server acp" Cobra command (pkg/transports/cli/root_serve.go)
 // through Process.Execute, exactly the entrypoint the published you binary
 // runs, exercising strictly more of the production graph: Cobra command
-// construction -> the manifest-bound "you.serve.acp" handler ->
+// construction -> the manifest-bound "you.server.acp" handler ->
 // Process.ACPServer()'s same singular acp.Server -> the real Chat Sessions,
 // Events, and Factory Sessions authorities root.BuildProcess composes. It
 // supplies the one external provider effect through
@@ -103,7 +103,7 @@ import (
 // iteration picks up Factory Sessions work.
 func TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test driving root.BuildProcess through the you serve acp CLI command")
+		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
 	home := t.TempDir()
@@ -117,7 +117,7 @@ func TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText(
 	seedInstalledPackagedFactory(t, home, "@you/goal")
 	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
 
-	const wantPrimaryResultText = "goal genuinely completed through you serve acp"
+	const wantPrimaryResultText = "goal genuinely completed through you server acp"
 	rawEnvelopeStdout := fmt.Appendf(nil, `{"decision":"accepted","feedback":"","output":%q}`, wantPrimaryResultText)
 	runner := support.NewShapedProviderCommandRunner(process.CommandResult{
 		Stdout: rawEnvelopeStdout,
@@ -151,7 +151,7 @@ func TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText(
 // either a decision-envelope ProviderCommandRunner fixture or an ACP-execution
 // PlatformProcessCommandFactory/ProvidersExecutableLocator pair, see
 // acp_streaming_usage_composition_test.go's usage-update sibling cell), then
-// drives the real "you serve acp" Cobra command through Process.Execute over a
+// drives the real "you server acp" Cobra command through Process.Execute over a
 // pair of OS pipes, in a background goroutine, exactly the entrypoint the
 // published you binary runs. It registers cleanup that cancels the
 // invocation's context and closes stdin, then waits (bounded by a fixed
@@ -189,7 +189,7 @@ func startServeACPHarness(t *testing.T, home, cwd string, edges serviceedges.Edg
 	var stderr bytes.Buffer
 	go func() {
 		serveErr <- buildProcess.Execute(root.Input{
-			Args:             []string{"you", "serve", "acp"},
+			Args:             []string{"you", "server", "acp"},
 			Env:              env,
 			Stdin:            stdinRead,
 			Stdout:           stdoutWrite,

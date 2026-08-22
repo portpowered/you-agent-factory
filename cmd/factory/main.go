@@ -94,6 +94,7 @@ func selectedCommandPath(args []string) string {
 	}
 
 	parts := make([]string, 0, 2)
+	var lastExact string
 	for index := 1; index < len(args); index++ {
 		arg := args[index]
 		if arg == "--" {
@@ -117,9 +118,16 @@ func selectedCommandPath(args []string) string {
 		for rootPath := range rootPaths {
 			candidate := strings.TrimSpace(rootPath + " " + strings.Join(parts, " "))
 			if canonicalPath, exact := commandPaths[candidate]; exact {
-				// Once Cobra has selected a runnable command, later non-flag
-				// tokens are command arguments rather than command path parts.
-				return canonicalPath
+				lastExact = canonicalPath
+				// A runnable command can own runnable protocol children (for
+				// example, `you server` owns `you server mcp`). Keep walking
+				// while the exact path is also a prefix so the child lifecycle
+				// contract wins over the parent's cancellation code.
+				if !cancellationPathHasPrefix(commandPaths, candidate) {
+					return canonicalPath
+				}
+				matchedPrefix = true
+				break
 			}
 			if cancellationPathHasPrefix(commandPaths, candidate) {
 				matchedPrefix = true
@@ -127,10 +135,10 @@ func selectedCommandPath(args []string) string {
 			}
 		}
 		if !matchedPrefix {
-			return ""
+			return lastExact
 		}
 	}
-	return ""
+	return lastExact
 }
 
 func cancellationCommandMetadata() (map[string]string, map[string]climanifest.Flag, map[string]struct{}) {
@@ -140,6 +148,8 @@ func cancellationCommandMetadata() (map[string]string, map[string]climanifest.Fl
 	manifests := []func() (climanifest.Manifest, error){
 		generated.RunSubmitFamilyManifest,
 		generated.WorkerSessionsFamilyManifest,
+		generated.MCPFamilyManifest,
+		generated.ServeFamilyManifest,
 	}
 	for _, loadManifest := range manifests {
 		manifest, err := loadManifest()

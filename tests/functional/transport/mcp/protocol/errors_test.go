@@ -160,7 +160,7 @@ func startFixtureBackedMCPServer(t *testing.T) *fixtureBackedMCPServer {
 	var stderr bytes.Buffer
 	go func() {
 		serveErr <- process.Execute(root.Input{
-			Args:             []string{"you", "mcp", "serve", "--fixture-catalog", fixturePath},
+			Args:             []string{"you", "server", "mcp", "--fixture-catalog", fixturePath},
 			Env:              os.Environ(),
 			Stdin:            stdinRead,
 			Stdout:           stdoutWrite,

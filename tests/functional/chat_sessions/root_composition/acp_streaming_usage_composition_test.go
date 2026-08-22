@@ -54,7 +54,7 @@ const acpStreamUsageSessionTitle = "Delivering the ACP streaming fixture"
 // AGENT_RUN/decision-envelope fixture never produces USAGE or REASONING
 // response events at all) to also prove a real usage_update notification
 // delivered through the full production graph: root.BuildProcess -> the real
-// "you serve acp" Cobra command via Process.Execute -> the real ACP stdio
+// "you server acp" Cobra command via Process.Execute -> the real ACP stdio
 // transport -> the real Chat Sessions/Events authorities -> the real producer
 // bridge -> this PRD's own outbound projector.
 //
@@ -115,7 +115,7 @@ const acpStreamUsageSessionTitle = "Delivering the ACP streaming fixture"
 // before the fix flaked within a handful of iterations).
 func TestACPServeCommandStreamsUsageUpdateThroughRootBuildProcess(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test driving root.BuildProcess through the you serve acp CLI command")
+		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
 	home := t.TempDir()

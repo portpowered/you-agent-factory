@@ -430,7 +430,7 @@ func startStandaloneFixtureServer(t *testing.T, fixtureCatalog string) *standalo
 	serveErr := make(chan error, 1)
 	go func() {
 		serveErr <- process.Execute(root.Input{
-			Args:             []string{"you", "mcp", "serve", "--fixture-catalog", fixtureCatalog},
+			Args:             []string{"you", "server", "mcp", "--fixture-catalog", fixtureCatalog},
 			Env:              os.Environ(),
 			Stdin:            stdinRead,
 			Stdout:           stdoutWrite,

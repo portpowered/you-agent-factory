@@ -11,8 +11,8 @@ import (
 )
 
 // TestNewServeCommandBuildsAcpLeafBoundToHandler proves the isolated family
-// constructor projects exactly "you serve acp" as a runnable leaf bound to
-// the injected handler's stable manifest ID, and "you serve" itself stays a
+// constructor projects exactly "you server acp" as a runnable leaf bound to
+// the injected handler's stable manifest ID, and "you server" stays a
 // non-runnable parent. Actually invoking the leaf's RunE requires the root
 // "you" command's own PersistentPreRunE to resolve root inputs onto the
 // command's context first (see bindings.go's "invocation has not resolved
@@ -25,14 +25,14 @@ func TestNewServeCommandBuildsAcpLeafBoundToHandler(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewServeCommand() error = %v", err)
 	}
-	if serve.Name() != "serve" {
-		t.Fatalf("serve name = %q, want serve", serve.Name())
+	if serve.Name() != "server" {
+		t.Fatalf("serve name = %q, want server", serve.Name())
 	}
 	if serve.Runnable() {
-		t.Fatal("you serve must remain non-runnable")
+		t.Fatal("detached you server protocol family must remain non-runnable")
 	}
 	if len(serve.Commands()) != 1 {
-		t.Fatalf("you serve child count = %d, want exactly 1 (acp)", len(serve.Commands()))
+		t.Fatalf("you server child count = %d, want exactly 1 (acp)", len(serve.Commands()))
 	}
 
 	acp, _, err := serve.Find([]string{"acp"})
@@ -40,10 +40,10 @@ func TestNewServeCommandBuildsAcpLeafBoundToHandler(t *testing.T) {
 		t.Fatalf("Find(acp) error = %v", err)
 	}
 	if !acp.Runnable() {
-		t.Fatal("you serve acp must be runnable")
+		t.Fatal("you server acp must be runnable")
 	}
 	if acp.RunE == nil {
-		t.Fatal("you serve acp must attach a RunE")
+		t.Fatal("you server acp must attach a RunE")
 	}
 }
 
@@ -54,19 +54,19 @@ func TestNewServeCommandRejectsNilHandler(t *testing.T) {
 }
 
 // TestNewServeCommandFromManifestRejectsOutOfFamilyAcpRecord proves
-// NewServeCommandFromManifest rejects a manifest whose "you.serve.acp" entry
+// NewServeCommandFromManifest rejects a manifest whose "you.server.acp" entry
 // does not carry a canonical serve-family command ID (for example, corrupted
 // upstream generation that mapped a foreign command's record under that
 // key). NewServeCommandFromManifest rebuilds its working manifest keyed by
-// the exact "you.serve"/"you.serve.acp" identities it looked the records up
+// the exact "you.server"/"you.server.acp" identities it looked the records up
 // by, not by each record's own (here, mislabeled) ID field, so
 // NewCommandTree's own shared map-key/record-id consistency check rejects
 // the tree instead of silently projecting a mislabeled command.
 func TestNewServeCommandFromManifestRejectsOutOfFamilyAcpRecord(t *testing.T) {
 	manifest := mustServeManifestWithRoot(t)
-	foreign := manifest.Commands["you.serve.acp"]
-	foreign.ID = "you.mcp.serve"
-	manifest.Commands["you.serve.acp"] = foreign
+	foreign := manifest.Commands["you.server.acp"]
+	foreign.ID = "you.server.mcp"
+	manifest.Commands["you.server.acp"] = foreign
 
 	_, err := climanifestcobra.NewServeCommandFromManifest(manifest, noopResolvedHandler)
 	if err == nil {
@@ -76,9 +76,9 @@ func TestNewServeCommandFromManifestRejectsOutOfFamilyAcpRecord(t *testing.T) {
 
 func TestNewServeCommandFromManifestRejectsOutOfFamilyParentRecord(t *testing.T) {
 	manifest := mustServeManifestWithRoot(t)
-	foreign := manifest.Commands["you.serve"]
-	foreign.ID = "you.mcp"
-	manifest.Commands["you.serve"] = foreign
+	foreign := manifest.Commands["you.server"]
+	foreign.ID = "you.server.mcp"
+	manifest.Commands["you.server"] = foreign
 
 	_, err := climanifestcobra.NewServeCommandFromManifest(manifest, noopResolvedHandler)
 	if err == nil {
@@ -101,11 +101,11 @@ func TestNewServeCommandFromManifestRejectsMissingRootRecord(t *testing.T) {
 }
 
 // TestNewServeCommandFromManifestRejectsMissingParentRecord proves the
-// "you.serve" parent lookup surfaces a manifest error when a corrupted
+// "you.server" parent lookup surfaces a manifest error when a corrupted
 // upstream manifest snapshot omits the serve family's own parent record.
 func TestNewServeCommandFromManifestRejectsMissingParentRecord(t *testing.T) {
 	manifest := mustServeManifestWithRoot(t)
-	delete(manifest.Commands, "you.serve")
+	delete(manifest.Commands, "you.server")
 
 	_, err := climanifestcobra.NewServeCommandFromManifest(manifest, noopResolvedHandler)
 	if err == nil {
@@ -114,11 +114,11 @@ func TestNewServeCommandFromManifestRejectsMissingParentRecord(t *testing.T) {
 }
 
 // TestNewServeCommandFromManifestRejectsMissingAcpRecord proves the
-// "you.serve.acp" leaf lookup surfaces a manifest error when a corrupted
+// "you.server.acp" leaf lookup surfaces a manifest error when a corrupted
 // upstream manifest snapshot omits the acp leaf's own record.
 func TestNewServeCommandFromManifestRejectsMissingAcpRecord(t *testing.T) {
 	manifest := mustServeManifestWithRoot(t)
-	delete(manifest.Commands, "you.serve.acp")
+	delete(manifest.Commands, "you.server.acp")
 
 	_, err := climanifestcobra.NewServeCommandFromManifest(manifest, noopResolvedHandler)
 	if err == nil {

@@ -23,7 +23,7 @@ import (
 )
 
 // TestMCPStdioInitializeAndToolDiscovery proves MCP stdio initialize and
-// tools/list succeed through the public you mcp serve boundary without widening
+// tools/list succeed through the public you server mcp boundary without widening
 // into Factory Session lifecycle semantics.
 func TestMCPStdioInitializeAndToolDiscovery(t *testing.T) {
 	client, shutdown, serveErr := startFixtureBackedMCPServer(t)
@@ -120,7 +120,7 @@ func TestMCPDiscoveryContainsCanonicalFactorySessionTools(t *testing.T) {
 func TestMCPStdioRuntimeRejectsMissingHomeEnvironment(t *testing.T) {
 	process := support.BuildProcess(t, serviceedges.Edges{})
 	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "mcp", "serve", "--runtime", "--project-root", t.TempDir(),
+		"you", "server", "mcp", "--runtime", "--project-root", t.TempDir(),
 	})
 	inputs.Env = []string{"PATH="}
 	inputs.WorkingDirectory = t.TempDir()
@@ -138,7 +138,7 @@ func TestMCPStdioRuntimeRejectsInvalidRuntimeProjectRoot(t *testing.T) {
 	projectRoot := t.TempDir()
 	homeDir := t.TempDir()
 	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "mcp", "serve", "--runtime", "--project-root", projectRoot,
+		"you", "server", "mcp", "--runtime", "--project-root", projectRoot,
 	})
 	inputs.Env = append([]string{"PATH=", "HOME=" + homeDir, "USERPROFILE=" + homeDir}, os.Environ()...)
 	inputs.WorkingDirectory = projectRoot
@@ -149,7 +149,7 @@ func TestMCPStdioRuntimeRejectsInvalidRuntimeProjectRoot(t *testing.T) {
 }
 
 // TestMCPStdioFixtureAndRuntimePathsReachInitializer proves fixture-backed and
-// runtime-backed you mcp serve both reach a successful stdio initialize through
+// runtime-backed you server mcp both reach a successful stdio initialize through
 // the public process boundary with injected transport dependencies.
 func TestMCPStdioFixtureAndRuntimePathsReachInitializer(t *testing.T) {
 	t.Run("fixture-backed", func(t *testing.T) {
@@ -310,7 +310,7 @@ func startFixtureBackedMCPServer(t *testing.T) (*stdioMCPClient, func(), <-chan 
 	go func() {
 		serveErr <- process.Execute(root.Input{
 			Args: []string{
-				"you", "mcp", "serve",
+				"you", "server", "mcp",
 				"--fixture-catalog", fixtureCatalog,
 			},
 			Env:              os.Environ(),
@@ -369,7 +369,7 @@ func startRuntimeBackedMCPServer(t *testing.T, projectRoot string) (*stdioMCPCli
 	go func() {
 		serveErr <- process.Execute(root.Input{
 			Args: []string{
-				"you", "mcp", "serve",
+				"you", "server", "mcp",
 				"--runtime", "--project-root", projectRoot,
 			},
 			Env:              env,

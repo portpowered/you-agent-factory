@@ -5,6 +5,6 @@ package generated
 // MCPFamilyCommandIDs lists the stable command IDs emitted from
 // contracts/cli/commands.json for the canonical MCP family.
 var MCPFamilyCommandIDs = []string{
-	"you.mcp",
-	"you.mcp.serve",
+	"you.server",
+	"you.server.mcp",
 }
