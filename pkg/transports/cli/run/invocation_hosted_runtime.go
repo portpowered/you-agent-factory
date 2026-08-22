@@ -3,9 +3,13 @@ package run
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
@@ -17,8 +21,11 @@ import (
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/timedisplay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
@@ -721,4 +728,401 @@ func invocationFactoryEventRenderer(
 		ProgressIsTTY:        cfg.ProgressIsTTY && !cfg.JSONOutput,
 		InvocationOutputMode: cfg.InvocationOutputMode,
 	})
+}
+
+const batchFailureCode = "RUN_BATCH_FAILED"
+
+type batchReportProvider interface {
+	CleanInvocationSnapshot(context.Context) (factoryruntime.CleanInvocationSnapshot, error)
+}
+
+type batchReport struct {
+	Status   string         `json:"status"`
+	Failures []batchFailure `json:"failures"`
+}
+
+type batchFailure struct {
+	WorkID    string `json:"workId,omitempty"`
+	WorkName  string `json:"workName"`
+	WorkState string `json:"workState"`
+	Reason    string `json:"reason"`
+}
+
+func reportBatchResult(
+	cfg RunConfig,
+	snapshot factoryruntime.CleanInvocationSnapshot,
+) error {
+	report := buildBatchReport(snapshot)
+	output := cfg.Output
+	if output == nil {
+		output = cfg.StartupOutput
+	}
+	if output == nil {
+		return fmt.Errorf("write batch result: process output is required")
+	}
+
+	if cfg.JSON || cfg.JSONOutput {
+		if err := json.NewEncoder(output).Encode(report); err != nil {
+			return fmt.Errorf("write batch JSON result: %w", err)
+		}
+	} else if err := writeHumanBatchReport(output, report); err != nil {
+		return err
+	}
+
+	if len(report.Failures) == 0 {
+		return nil
+	}
+	return &InvocationError{
+		Code:    batchFailureCode,
+		Message: batchFailureMessage(report.Failures),
+	}
+}
+
+func buildBatchReport(snapshot factoryruntime.CleanInvocationSnapshot) batchReport {
+	failuresByKey := make(map[string]batchFailure)
+	for _, work := range snapshot.Work {
+		if work.StateCategory != string(factoryruntime.StateCategoryFailed) {
+			continue
+		}
+		failure := batchFailure{
+			WorkID:    strings.TrimSpace(work.WorkID),
+			WorkName:  batchWorkName(work),
+			WorkState: batchWorkState(work),
+			Reason:    batchFailureReason(work, snapshot.DispatchHistory),
+		}
+		key := failure.WorkID
+		if key == "" {
+			key = failure.WorkName + "\x00" + failure.WorkState
+		}
+		if current, exists := failuresByKey[key]; !exists || batchFailureLess(failure, current) {
+			failuresByKey[key] = failure
+		}
+	}
+
+	failures := make([]batchFailure, 0, len(failuresByKey))
+	for _, failure := range failuresByKey {
+		failures = append(failures, failure)
+	}
+	sort.Slice(failures, func(i, j int) bool {
+		return batchFailureLess(failures[i], failures[j])
+	})
+	status := "COMPLETED"
+	if len(failures) > 0 {
+		status = "FAILED"
+	}
+	return batchReport{Status: status, Failures: failures}
+}
+
+func batchFailureLess(left, right batchFailure) bool {
+	if left.WorkID != right.WorkID {
+		return left.WorkID < right.WorkID
+	}
+	if left.WorkName != right.WorkName {
+		return left.WorkName < right.WorkName
+	}
+	if left.WorkState != right.WorkState {
+		return left.WorkState < right.WorkState
+	}
+	return left.Reason < right.Reason
+}
+
+func batchWorkName(work factoryruntime.CleanInvocationWork) string {
+	if name := strings.TrimSpace(work.Name); name != "" {
+		return name
+	}
+	if workID := strings.TrimSpace(work.WorkID); workID != "" {
+		return workID
+	}
+	return "<unnamed Work>"
+}
+
+func batchWorkState(work factoryruntime.CleanInvocationWork) string {
+	state := strings.TrimSpace(work.State)
+	if state == "" {
+		state = strings.ToLower(strings.TrimSpace(work.StateCategory))
+	}
+	if state == "" {
+		state = "failed"
+	}
+	workTypeID := strings.TrimSpace(work.WorkTypeID)
+	if workTypeID == "" {
+		return state
+	}
+	return workTypeID + ":" + state
+}
+
+func batchFailureReason(
+	work factoryruntime.CleanInvocationWork,
+	dispatches []factoryruntime.CleanInvocationDispatch,
+) string {
+	if reason := strings.TrimSpace(work.FailureReason); reason != "" {
+		return reason
+	}
+	for index := len(dispatches) - 1; index >= 0; index-- {
+		dispatch := dispatches[index]
+		if dispatch.Outcome != "FAILED" || !batchDispatchMatches(work, dispatch) {
+			continue
+		}
+		if reason := strings.TrimSpace(dispatch.Reason); reason != "" {
+			return reason
+		}
+		if failureType := strings.TrimSpace(dispatch.FailureType); failureType != "" {
+			return "worker dispatch failed (" + failureType + ")"
+		}
+	}
+	return "Work reached a failed terminal state; inspect the latest dispatch for recovery guidance."
+}
+
+func batchDispatchMatches(
+	work factoryruntime.CleanInvocationWork,
+	dispatch factoryruntime.CleanInvocationDispatch,
+) bool {
+	for _, candidate := range dispatch.Consumed {
+		if batchWorkMatches(work, candidate) {
+			return true
+		}
+	}
+	for _, candidate := range dispatch.Outputs {
+		if batchWorkMatches(work, candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+func batchWorkMatches(left, right factoryruntime.CleanInvocationWork) bool {
+	if left.WorkID != "" && right.WorkID != "" {
+		return left.WorkID == right.WorkID
+	}
+	if left.TraceID != "" && right.TraceID != "" {
+		return left.TraceID == right.TraceID
+	}
+	return left.Name != "" && left.Name == right.Name && left.WorkTypeID == right.WorkTypeID
+}
+
+func writeHumanBatchReport(output io.Writer, report batchReport) error {
+	if len(report.Failures) == 0 {
+		if _, err := fmt.Fprintln(output, "Batch completed successfully."); err != nil {
+			return fmt.Errorf("write batch result: %w", err)
+		}
+		return nil
+	}
+	if _, err := fmt.Fprintln(output, "Batch failed:"); err != nil {
+		return fmt.Errorf("write batch result: %w", err)
+	}
+	for _, failure := range report.Failures {
+		if _, err := fmt.Fprintf(
+			output,
+			"Work %q reached failed terminal state %s: %s\n",
+			failure.WorkName,
+			failure.WorkState,
+			failure.Reason,
+		); err != nil {
+			return fmt.Errorf("write batch result: %w", err)
+		}
+	}
+	return nil
+}
+
+func batchFailureMessage(failures []batchFailure) string {
+	parts := make([]string, 0, len(failures))
+	for _, failure := range failures {
+		parts = append(parts, fmt.Sprintf(
+			"Work %q reached %s: %s",
+			failure.WorkName,
+			failure.WorkState,
+			failure.Reason,
+		))
+	}
+	return strings.Join(parts, "; ")
+}
+
+func emitVerboseStartupDiagnostics(cfg RunConfig, recordPath resolvedRunRecordPath, requestedPort int) {
+	resolvedFactoryDir := resolveFactoryDirForDiagnostics(cfg.Dir, cfg.ResolveCurrentFactoryDir)
+	diagnosticsEnabled := terminalpolicy.DiagnosticsEnabled(cfg.TerminalPolicy, cfg.Verbose)
+	clidiag.Printf(
+		cfg.Diagnostics,
+		diagnosticsEnabled,
+		"run startup factoryDir=%q configuredDir=%q runtimeMode=%s workflow=%q mockWorkers=%t mockWorkersConfigPath=%q recording=%s runtimeLogDir=%q runtimeLogRoll=%s runtimeMetricsDir=%q runtimeMetricsRoll=%s dashboardPort=%d requestedDashboardPort=%d autoPort=%s",
+		resolvedFactoryDir,
+		cfg.Dir,
+		runtimeModeForRun(cfg),
+		workflowLabel(cfg.Workflow),
+		cfg.MockWorkersEnabled,
+		cfg.MockWorkersConfigPath,
+		recordingDiagnostics(cfg.RecordingsCLI, recordPath, cfg.ReplayPath),
+		runtimeLogDirLabel(cfg.RuntimeLogDir),
+		rollingPolicyDiagnostics(cfg.RuntimeLogConfig.MaxSize, cfg.RuntimeLogConfig.MaxBackups, cfg.RuntimeLogConfig.MaxAge, cfg.RuntimeLogConfig.Compress),
+		runtimeMetricsDirLabel(cfg.RuntimeMetricsDir),
+		rollingPolicyDiagnostics(cfg.RuntimeMetricsConfig.MaxSize, cfg.RuntimeMetricsConfig.MaxBackups, cfg.RuntimeMetricsConfig.MaxAge, cfg.RuntimeMetricsConfig.Compress),
+		cfg.Port,
+		requestedPort,
+		autoPortDiagnostics(cfg.AutoPort, requestedPort, cfg.Port),
+	)
+	clidiag.Printf(cfg.Diagnostics, diagnosticsEnabled, "%s", cfg.OperatorDefaults.DiagnosticsLine())
+}
+
+func emitNamedFactoryResolutionDiagnostics(cfg RunConfig, logger *zap.Logger) {
+	resolution := cfg.NamedFactoryResolution
+	if resolution == nil {
+		return
+	}
+
+	clidiag.Printf(
+		cfg.Diagnostics,
+		terminalpolicy.DiagnosticsEnabled(cfg.TerminalPolicy, cfg.Verbose),
+		"run named-factory resolution name=%q source=%s resolvedFactoryDir=%q projectRoot=%q globalRoot=%q precedence=%s",
+		resolution.Name,
+		resolution.Source,
+		resolution.FactoryDir,
+		resolution.ProjectRoot,
+		resolution.GlobalRoot,
+		resolution.PrecedenceDecision,
+	)
+	logger.Info(
+		"named factory resolved",
+		zap.String("named_factory_name", resolution.Name),
+		zap.String("named_factory_resolution_source", string(resolution.Source)),
+		zap.String("named_factory_dir", resolution.FactoryDir),
+		zap.String("named_factory_project_root", resolution.ProjectRoot),
+		zap.String("named_factory_global_root", resolution.GlobalRoot),
+		zap.String("named_factory_precedence_decision", string(resolution.PrecedenceDecision)),
+	)
+	if resolution.PrecedenceDecision == interfaces.NamedFactoryPrecedenceDecisionProjectOverGlobal {
+		logger.Info(
+			"named factory precedence selected",
+			zap.String("named_factory_name", resolution.Name),
+			zap.String("named_factory_precedence_decision", string(resolution.PrecedenceDecision)),
+			zap.String("named_factory_resolution_source", string(resolution.Source)),
+		)
+	}
+}
+
+func resolveFactoryDirForDiagnostics(
+	dir string,
+	resolve interfaces.CurrentFactoryDirectoryResolver,
+) string {
+	if resolve == nil {
+		return "unresolved"
+	}
+	resolved, err := resolve(dir)
+	if err != nil {
+		return "unresolved"
+	}
+	return resolved
+}
+
+func workflowLabel(workflow string) string {
+	if strings.TrimSpace(workflow) == "" {
+		return "all"
+	}
+	return workflow
+}
+
+func runtimeLogDirLabel(dir string) string {
+	if strings.TrimSpace(dir) == "" {
+		return "default"
+	}
+	return dir
+}
+
+func runtimeMetricsDirLabel(dir string) string {
+	if strings.TrimSpace(dir) == "" {
+		return "default"
+	}
+	return dir
+}
+
+func rollingPolicyDiagnostics(maxSize, maxBackups, maxAge int, compress bool) string {
+	return fmt.Sprintf("size_mb=%d backups=%d age_days=%d compress=%t", maxSize, maxBackups, maxAge, compress)
+}
+
+func recordingDiagnostics(
+	adapter recordingscli.Adapter,
+	recordPath resolvedRunRecordPath,
+	replayPath string,
+) string {
+	if adapter == nil {
+		return "disabled"
+	}
+	return adapter.RecordingDiagnosticsLabel(recordingscli.ResolvedRecordPath{
+		ServicePath:   recordPath.servicePath,
+		ReportedPath:  recordPath.reportedPath,
+		AutoGenerated: recordPath.autoGenerated,
+	}, replayPath)
+}
+
+func autoPortDiagnostics(autoPort bool, requestedPort, resolvedPort int) string {
+	switch {
+	case requestedPort <= 0:
+		return "dashboard-disabled"
+	case !autoPort:
+		return "disabled"
+	case requestedPort == resolvedPort:
+		return "preferred-available"
+	default:
+		return "fallback"
+	}
+}
+
+func bindDashboardHost(cfg RunConfig) string {
+	if strings.TrimSpace(cfg.BindHost) != "" {
+		return cfg.BindHost
+	}
+	return "localhost"
+}
+
+// DashboardURL returns the embedded browser dashboard URL for the configured
+// local factory server host and port.
+func DashboardURL(host string, port int) string {
+	if port <= 0 {
+		return ""
+	}
+	if strings.TrimSpace(host) == "" {
+		host = "localhost"
+	}
+	authority := net.JoinHostPort(host, strconv.Itoa(port))
+	return "http://" + authority + "/dashboard/ui"
+}
+
+func shouldOpenDashboard(cfg RunConfig) bool {
+	return cfg.OpenDashboard
+}
+
+func reportRecordingPathOnShutdown(
+	output io.Writer,
+	recordPath resolvedRunRecordPath,
+	adapter recordingscli.Adapter,
+) {
+	if adapter == nil {
+		return
+	}
+	adapter.ReportRecordingPathOnShutdown(output, recordingscli.ResolvedRecordPath{
+		ServicePath:   recordPath.servicePath,
+		ReportedPath:  recordPath.reportedPath,
+		AutoGenerated: recordPath.autoGenerated,
+	})
+}
+
+func openDashboardAtBoundEndpoint(
+	ctx context.Context,
+	cfg RunConfig,
+	openDashboard func(context.Context, string) error,
+) {
+	url := DashboardURL(bindDashboardHost(cfg), cfg.Port)
+	if openDashboard == nil {
+		if cfg.StartupOutput != nil {
+			fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open unavailable: browser opener is required\nOpen the dashboard at %s\n", url)
+		}
+		return
+	}
+	if err := openDashboard(ctx, url); err != nil {
+		if cfg.StartupOutput != nil {
+			fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open unavailable: %v\nOpen the dashboard at %s\n", err, url)
+		}
+		return
+	}
+	if cfg.StartupOutput != nil {
+		fmt.Fprintf(cfg.StartupOutput, "Opening dashboard: %s\n", url)
+	}
 }

@@ -80,6 +80,11 @@ func (cb *CircuitBreakerSubsystem) Execute(_ context.Context, snapshot *interfac
 				FromPlace: token.PlaceID,
 				ToPlace:   failedPlace,
 				Reason:    reason,
+				FailureRecords: circuitBreakerFailureRecords(
+					token,
+					"",
+					reason,
+				),
 			})
 			handled[token.ID] = true
 		}
@@ -249,12 +254,34 @@ func (cb *CircuitBreakerSubsystem) exhaustionMutation(tr *petri.Transition, tok 
 		reason = fmt.Sprintf("consumed by system transition %s", tr.ID)
 	}
 	return interfaces.MarkingMutation{
-		Type:      mutationType,
-		TokenID:   tok.ID,
-		FromPlace: tok.PlaceID,
-		ToPlace:   outputPlace,
-		Reason:    reason,
+		Type:           mutationType,
+		TokenID:        tok.ID,
+		FromPlace:      tok.PlaceID,
+		ToPlace:        outputPlace,
+		Reason:         reason,
+		FailureRecords: circuitBreakerFailureRecords(tok, tr.ID, reason),
 	}
+}
+
+func circuitBreakerFailureRecords(
+	token *factorytoken.Token,
+	transitionID string,
+	reason string,
+) []factorytoken.Failure {
+	if token == nil || reason == "" {
+		return nil
+	}
+	timestamp := token.EnteredAt
+	if timestamp.IsZero() {
+		timestamp = token.CreatedAt
+	}
+	timestamp = timestamp.UTC()
+	return []factorytoken.Failure{{
+		TransitionID: transitionID,
+		Timestamp:    timestamp,
+		Error:        reason,
+		Attempt:      len(token.History.FailureLog) + 1,
+	}}
 }
 
 func visitCountLimitReason(guard petri.Guard, token factorytoken.Token) string {

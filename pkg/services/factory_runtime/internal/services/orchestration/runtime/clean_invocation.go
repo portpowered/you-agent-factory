@@ -249,6 +249,7 @@ func cleanInvocationWorkFromToken(topology *state.Net, token *factorytoken.Token
 		WorkTypeID:    workTypeID,
 		State:         stateValue,
 		StateCategory: string(category),
+		FailureReason: token.History.LastError,
 		Output:        string(token.Color.Payload),
 		TraceID:       token.Color.TraceID,
 		DataType:      string(token.Color.DataType),

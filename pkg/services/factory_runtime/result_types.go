@@ -91,6 +91,7 @@ type CleanInvocationWork struct {
 	WorkTypeID    string
 	State         string
 	StateCategory string
+	FailureReason string
 	Output        string
 	TraceID       string
 	DataType      string
