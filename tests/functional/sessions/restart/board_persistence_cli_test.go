@@ -755,9 +755,34 @@ func assertBoardWork(t *testing.T, item factoryapi.Work, want boardPersistenceEx
 
 func assertBoardPersistenceWorkerOutput(t *testing.T, got, sentinel string) {
 	t.Helper()
-	base := sentinel + "\nPASS"
-	if got != base && got != base+"\ncoverage: [no statements]" {
-		t.Fatalf("worker output = %q, want the sentinel plus the known Go test harness suffix", got)
+	lines := strings.Split(got, "\n")
+	if len(lines) < 2 || lines[0] != sentinel || lines[1] != "PASS" {
+		t.Fatalf("worker output = %q, want exactly the sentinel and PASS worker lines", got)
+	}
+
+	suffix := lines[2:]
+	if len(suffix) == 0 {
+		return
+	}
+	if len(suffix) == 1 && suffix[0] == "coverage: [no statements]" {
+		return
+	}
+
+	const coveragePrefix = "coverage: 0.0% of statements"
+	if !strings.HasPrefix(suffix[0], coveragePrefix) {
+		t.Fatalf("worker output = %q, want the sentinel/PASS lines plus a recognized Go coverage suffix", got)
+	}
+	coverageDetail := strings.TrimPrefix(suffix[0], coveragePrefix)
+	if coverageDetail != "" && !strings.HasPrefix(coverageDetail, " in ") {
+		t.Fatalf("worker output = %q, want Go coverage detail to use the standard ' in <package list>' form", got)
+	}
+	if strings.TrimSpace(coverageDetail) == "in" {
+		t.Fatalf("worker output = %q, want a non-empty Go coverage package list", got)
+	}
+	for _, packageLine := range suffix[1:] {
+		if !strings.Contains(packageLine, "github.com/portpowered/infinite-you/") {
+			t.Fatalf("worker output = %q, want only the Go harness package-list suffix after coverage", got)
+		}
 	}
 }
 
