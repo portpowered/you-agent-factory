@@ -739,9 +739,8 @@ func (h *recordingSessionHost) ReplaceFactoryLayoutAtDir(
 	return nil, nil
 }
 
-func TestNewServiceInstallAndScaffoldReturnMatchingDistributedFacts(t *testing.T) {
-	t.Parallel()
-
+func newServiceForInstallAndScaffoldFacts(t *testing.T) factorydefinitions.Service {
+	t.Helper()
 	goalJSON, err := json.Marshal(map[string]string{"name": "goal", "project": "builtin-goal"})
 	if err != nil {
 		t.Fatalf("marshal goal factory: %v", err)
@@ -808,6 +807,13 @@ func TestNewServiceInstallAndScaffoldReturnMatchingDistributedFacts(t *testing.T
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
+	return service
+}
+
+func TestNewServiceInstallAndScaffoldReturnMatchingDistributedFacts(t *testing.T) {
+	t.Parallel()
+
+	service := newServiceForInstallAndScaffoldFacts(t)
 
 	installed, err := service.InstallPackagedFactory(
 		t.Context(),
