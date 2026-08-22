@@ -364,6 +364,7 @@ func captureUnitCoverageReference(t *testing.T, fixture unitCoverageReferenceFix
 	}
 	stdout, stderr, exitCode := runMainForTest(t, []string{
 		"-suite=unit",
+		"-packages=" + strings.Join(fixture.packages, " "),
 		"-min=0",
 		"-jobs=1",
 		"-short=false",

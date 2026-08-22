@@ -382,7 +382,7 @@ func runCoverageProfile(cfg config, targetOS string, logicalCPUs int, profilePat
 			testPackages, functionalMetadata, functionalDiscoveryStarted, err = resolveCoverageTestPackages(cfg, repoRoot, selectorVerification)
 			return err
 		}
-		packageDiscovery, coverPackages, testPackages, err = resolveCoverageLaneWithDiscovery(cfg)
+		packageDiscovery, coverPackages, testPackages, err = resolveCoverageLaneWithDiscoveryForOS(cfg, targetOS)
 		return err
 	}); err != nil {
 		return coverageResult{}, err
