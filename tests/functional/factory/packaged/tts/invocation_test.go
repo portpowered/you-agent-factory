@@ -13,11 +13,73 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const packagedTTSFakeAudioFixture = "RIFF....WAVEpayload"
+
+// TestPackagedTTSNoServerPromptUsesCanonicalInputContract proves that the
+// customer-facing named invocation renders the installed workstation prompt
+// with the canonical per-input Work data while preserving the complete text
+// binding that the TTS operation consumes.
+func TestPackagedTTSNoServerPromptUsesCanonicalInputContract(t *testing.T) {
+	text := "The release is ready, with the complete bound sentence preserved."
+	homeDir := t.TempDir()
+	factoryDir := support.InstallPackagedFactory(
+		t,
+		homeDir,
+		factorydefinitions.PackagedTTSFactoryName,
+	)
+	overwritePackagedTTSFactoryWithProviderFakeTopology(t, factoryDir)
+
+	fakeProvider := newPackagedTTSFakeProvider([]byte(packagedTTSFakeAudioFixture))
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run",
+		"--named", factorydefinitions.PackagedTTSFactoryName,
+		"--no-record",
+		"--output", "primary",
+		"--to", text,
+	})
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = t.TempDir()
+
+	process := support.BuildProcess(t, serviceedges.Edges{ProviderOverride: fakeProvider})
+	support.CleanupProcess(t, process)
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(packaged TTS) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("invocation status = %q, want COMPLETED; response = %#v", response.Status, response)
+	}
+
+	request := fakeProvider.lastRequest()
+	if request == nil {
+		t.Fatal("fake provider Infer was not called, want named packaged invocation to reach provider edge")
+	}
+	tokens := workerexecution.WorkDispatchInputTokens(request.Dispatch)
+	if len(tokens) != 1 || strings.TrimSpace(tokens[0].Color.WorkID) == "" {
+		t.Fatalf("provider dispatch input tokens = %#v, want one Work token with WorkID", request.Dispatch.InputTokens)
+	}
+	workID := tokens[0].Color.WorkID
+	wantPromptPrefix := "For Work " + workID + ", read the complete bound text input"
+	if !strings.HasPrefix(request.UserMessage, wantPromptPrefix) {
+		t.Fatalf("rendered provider prompt = %q, want installed prompt rendered with WorkID %q", request.UserMessage, workID)
+	}
+
+	var textBinding []work.WorkContentPart
+	for _, binding := range request.ModelBindings {
+		if binding.Slot == "text" {
+			textBinding = binding.Content
+			break
+		}
+	}
+	if len(textBinding) != 1 || textBinding[0].Type != work.WorkContentPartTypeText || textBinding[0].Text != text {
+		t.Fatalf("text operation binding = %#v, want complete bound text %q", textBinding, text)
+	}
+}
 
 // TestPackagedTTSRequiredInputProducesAudioArtifactMetadata proves that invoking
 // the packaged @you/tts Factory with required text input completes under a fake
