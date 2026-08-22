@@ -236,6 +236,7 @@ func normalizeChangedPath(path string) string {
 func isAPIContractPath(path string) bool {
 	return strings.HasPrefix(path, "api/") ||
 		strings.HasPrefix(path, "contracts/") ||
+		strings.HasPrefix(path, "cmd/contractscheck/") ||
 		strings.HasPrefix(path, "pkg/transports/http/") ||
 		strings.HasPrefix(path, "pkg/transports/mapping/") ||
 		strings.Contains(path, "/transports/http/") ||
