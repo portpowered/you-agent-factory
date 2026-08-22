@@ -5,14 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
-	platformruntimeartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 )
@@ -62,14 +60,16 @@ func (q *metricsQuery) QueryRuntimeMetrics(
 	}
 
 	sessionID := strings.TrimSpace(request.SessionID)
+	sessionIDs := normalizedMetricsSessionIDs(request.SessionIDs)
 	runtimeID := strings.TrimSpace(request.RuntimeInstanceID)
 	projection, err := newMetricsProjection(request.GroupBy)
 	if err != nil {
 		return RuntimeMetricsQueryResult{}, err
 	}
-	selection, err := runtimeMetricsStreamSelection(
+	selection, err := runtimeMetricsStreamSelectionForSessions(
 		root,
 		sessionID,
+		sessionIDs,
 		runtimeID,
 		request.StartTimeUTC,
 		request.EndTimeUTC,
@@ -94,7 +94,7 @@ func (q *metricsQuery) QueryRuntimeMetrics(
 			callbackErr = err
 			return err
 		}
-		if !runtimeMetricRecordMatches(record, sessionID, runtimeID) {
+		if !runtimeMetricRecordMatches(record, sessionID, sessionIDs, runtimeID) {
 			return nil
 		}
 		recognized, err := q.addRecord(accumulator, record, root)
@@ -169,6 +169,7 @@ func (q *metricsQuery) addRecord(
 	record RuntimeMetricRecord,
 	root string,
 ) (bool, error) {
+	accumulator.observeAttribution(record)
 	metricName, _ := recordString(record, "metric_name")
 	isUsage := isUsageRuntimeMetric(metricName)
 	if accumulator.projection.includeUsage && isUsage {
@@ -263,6 +264,12 @@ func metricNamesForProjection(includeUsage bool) map[string]struct{} {
 		factoryruntime.RuntimeDispatchDuration:     {},
 		factoryruntime.RuntimeProviderDuration:     {},
 	}
+	for _, name := range providerAttributionMetricNames() {
+		if !includeUsage && isUsageRuntimeMetric(name) {
+			continue
+		}
+		names[name] = struct{}{}
+	}
 	if includeUsage {
 		names[factoryruntime.RuntimeProviderCachedInputTokens] = struct{}{}
 		names[factoryruntime.RuntimeProviderReasoningOutputTokens] = struct{}{}
@@ -278,6 +285,26 @@ func runtimeMetricsStreamSelection(
 	endTimeUTC time.Time,
 	projection metricsProjection,
 ) (platformmetrics.StreamSelection, error) {
+	return runtimeMetricsStreamSelectionForSessions(
+		root,
+		sessionID,
+		nil,
+		runtimeID,
+		startTimeUTC,
+		endTimeUTC,
+		projection,
+	)
+}
+
+func runtimeMetricsStreamSelectionForSessions(
+	root string,
+	sessionID string,
+	sessionIDs []string,
+	runtimeID string,
+	startTimeUTC time.Time,
+	endTimeUTC time.Time,
+	projection metricsProjection,
+) (platformmetrics.StreamSelection, error) {
 	startTimeUTC = startTimeUTC.UTC()
 	endTimeUTC = endTimeUTC.UTC()
 	if err := validateMetricsTimeWindow(startTimeUTC, endTimeUTC); err != nil {
@@ -285,12 +312,12 @@ func runtimeMetricsStreamSelection(
 	}
 
 	selection := platformmetrics.StreamSelection{}
-	if needsMetricsPathSelection(sessionID, runtimeID, startTimeUTC, endTimeUTC) {
-		selection.Path = runtimeMetricsPathSelector(root, sessionID, runtimeID, startTimeUTC, endTimeUTC)
+	if needsMetricsPathSelection(sessionID, sessionIDs, runtimeID, startTimeUTC, endTimeUTC) {
+		selection.Path = runtimeMetricsPathSelector(root, sessionID, sessionIDs, runtimeID, startTimeUTC, endTimeUTC)
 	}
-	if needsMetricsEnvelopeSelection(sessionID, runtimeID, projection) {
+	if needsMetricsEnvelopeSelection(sessionID, sessionIDs, runtimeID, projection) {
 		selection.EnvelopeFields = []string{"metric_name", "session_id", "runtime_instance_id"}
-		selection.IncludeEnvelope = runtimeMetricsEnvelopeSelector(sessionID, runtimeID, projection)
+		selection.IncludeEnvelope = runtimeMetricsEnvelopeSelector(sessionID, sessionIDs, runtimeID, projection)
 	}
 	return selection, nil
 }
@@ -305,21 +332,22 @@ func validateMetricsTimeWindow(startTimeUTC, endTimeUTC time.Time) error {
 	}
 }
 
-func needsMetricsPathSelection(sessionID, runtimeID string, startTimeUTC, endTimeUTC time.Time) bool {
-	return sessionID != "" || runtimeID != "" || !startTimeUTC.IsZero() || !endTimeUTC.IsZero()
+func needsMetricsPathSelection(sessionID string, sessionIDs []string, runtimeID string, startTimeUTC, endTimeUTC time.Time) bool {
+	return sessionID != "" || len(sessionIDs) > 0 || runtimeID != "" || !startTimeUTC.IsZero() || !endTimeUTC.IsZero()
 }
 
-func needsMetricsEnvelopeSelection(sessionID, runtimeID string, projection metricsProjection) bool {
-	return sessionID != "" || runtimeID != "" || !projection.allDimensions
+func needsMetricsEnvelopeSelection(sessionID string, sessionIDs []string, runtimeID string, projection metricsProjection) bool {
+	return sessionID != "" || len(sessionIDs) > 0 || runtimeID != "" || !projection.allDimensions
 }
 
 func runtimeMetricsEnvelopeSelector(
 	sessionID string,
+	sessionIDs []string,
 	runtimeID string,
 	projection metricsProjection,
 ) func(platformmetrics.RuntimeMetricRecordEnvelope) bool {
 	return func(envelope platformmetrics.RuntimeMetricRecordEnvelope) bool {
-		return runtimeMetricsEnvelopeMatchesScope(envelope, sessionID, runtimeID) &&
+		return runtimeMetricsEnvelopeMatchesScope(envelope, sessionID, sessionIDs, runtimeID) &&
 			runtimeMetricsEnvelopeMatchesProjection(envelope, projection)
 	}
 }
@@ -327,9 +355,14 @@ func runtimeMetricsEnvelopeSelector(
 func runtimeMetricsEnvelopeMatchesScope(
 	envelope platformmetrics.RuntimeMetricRecordEnvelope,
 	sessionID string,
+	sessionIDs []string,
 	runtimeID string,
 ) bool {
-	if sessionID != "" && envelope.Fields["session_id"] != sessionID {
+	if len(sessionIDs) > 0 {
+		if !containsMetricSessionID(sessionIDs, envelope.Fields["session_id"]) {
+			return false
+		}
+	} else if sessionID != "" && envelope.Fields["session_id"] != sessionID {
 		return false
 	}
 	if runtimeID != "" && envelope.Fields["runtime_instance_id"] != runtimeID {
@@ -349,98 +382,20 @@ func runtimeMetricsEnvelopeMatchesProjection(
 	return supported
 }
 
-func runtimeMetricsPathSelector(
-	root string,
-	sessionID string,
-	runtimeID string,
-	startTimeUTC time.Time,
-	endTimeUTC time.Time,
-) func(string, bool) bool {
-	sessionComponent := platformruntimeartifact.RuntimeArtifactPathComponents(sessionID)
-	runtimeComponent := platformruntimeartifact.RuntimeArtifactPathComponents(runtimeID)
-	return func(path string, isDirectory bool) bool {
-		if !runtimeMetricsDatePathInWindow(root, path, isDirectory, startTimeUTC, endTimeUTC) {
-			return false
-		}
-		if isDirectory || (sessionID == "" && runtimeID == "") {
-			return true
-		}
-		base := filepath.Base(path)
-		marker := "-runtime-metrics-"
-		if sessionID != "" && !strings.Contains(base, marker+sessionComponent+"-") {
-			return false
-		}
-		if runtimeID != "" {
-			if sessionID != "" {
-				if !runtimeMetricsArtifactContains(base, marker+sessionComponent+"-"+runtimeComponent) {
-					return false
-				}
-			} else if !runtimeMetricsArtifactContains(base, "-"+runtimeComponent) {
-				return false
-			}
-		}
-		return true
-	}
-}
-
-func runtimeMetricsArtifactContains(base, component string) bool {
-	return strings.Contains(base, component+"-") ||
-		strings.Contains(base, component+".log")
-}
-
-func runtimeMetricsDatePathInWindow(
-	root string,
-	path string,
-	isDirectory bool,
-	startTimeUTC time.Time,
-	endTimeUTC time.Time,
-) bool {
-	if startTimeUTC.IsZero() && endTimeUTC.IsZero() {
-		return true
-	}
-	relative, err := filepath.Rel(root, path)
-	if err != nil {
-		return true
-	}
-	parts := strings.Split(filepath.ToSlash(relative), "/")
-	if len(parts) < 3 {
-		return true
-	}
-	day, ok := parseRuntimeMetricsDate(parts[:3])
-	if !ok {
-		return true
-	}
-	if !isDirectory && len(parts) == 3 {
-		return true
-	}
-	dayEnd := day.AddDate(0, 0, 1)
-	if !endTimeUTC.IsZero() && !day.Before(endTimeUTC) {
-		return false
-	}
-	if !startTimeUTC.IsZero() && !dayEnd.After(startTimeUTC) {
-		return false
-	}
-	return true
-}
-
-func parseRuntimeMetricsDate(parts []string) (time.Time, bool) {
-	if len(parts) != 3 {
-		return time.Time{}, false
-	}
-	value, err := time.ParseInLocation("2006/01/02", strings.Join(parts, "/"), time.UTC)
-	if err != nil {
-		return time.Time{}, false
-	}
-	return value, true
-}
-
 type metricsAccumulator struct {
-	projection   metricsProjection
-	totals       metricAggregateBuilder
-	workstations map[string]*metricAggregateBuilder
-	workerTypes  map[string]*metricAggregateBuilder
-	providers    map[string]*metricAggregateBuilder
-	usage        map[usageIdentity]*usageBuilder
+	projection    metricsProjection
+	attribution   metricProviderAttributionBuilder
+	totals        metricAggregateBuilder
+	workstations  map[string]*metricAggregateBuilder
+	workerTypes   map[string]*metricAggregateBuilder
+	providers     map[string]*metricAggregateBuilder
+	providerFacts map[providerAggregateKey]*metricAggregateBuilder
+	usage         map[usageIdentity]*usageBuilder
+}
+
+type providerAggregateKey struct {
+	dispatchID string
+	provider   string
 }
 
 type usageIdentity struct {
@@ -484,11 +439,17 @@ func newMetricsAccumulator(projection metricsProjection) *metricsAccumulator {
 	}
 	if projection.allDimensions || projection.groupBy == factoryvisualization.RuntimeMetricsGroupByProvider {
 		accumulator.providers = make(map[string]*metricAggregateBuilder)
+		accumulator.providerFacts = make(map[providerAggregateKey]*metricAggregateBuilder)
 	}
 	if projection.includeUsage {
 		accumulator.usage = make(map[usageIdentity]*usageBuilder)
 	}
+	accumulator.attribution = newMetricProviderAttributionBuilder()
 	return accumulator
+}
+
+func (a *metricsAccumulator) observeAttribution(record RuntimeMetricRecord) {
+	a.attribution.add(record)
 }
 
 func (a *metricsAccumulator) addUsage(record RuntimeMetricRecord) error {
@@ -533,6 +494,38 @@ func (builder *usageBuilder) add(metricName string, value int64) error {
 	}
 	**target += value
 	return nil
+}
+
+func (builder *usageBuilder) merge(source *usageBuilder) error {
+	var err error
+	if builder.inputTokens, err = mergeTokenCounts(builder.inputTokens, source.inputTokens); err != nil {
+		return err
+	}
+	if builder.outputTokens, err = mergeTokenCounts(builder.outputTokens, source.outputTokens); err != nil {
+		return err
+	}
+	if builder.cachedInputTokens, err = mergeTokenCounts(builder.cachedInputTokens, source.cachedInputTokens); err != nil {
+		return err
+	}
+	if builder.reasoningOutputTokens, err = mergeTokenCounts(builder.reasoningOutputTokens, source.reasoningOutputTokens); err != nil {
+		return err
+	}
+	return nil
+}
+
+func mergeTokenCounts(left, right *int64) (*int64, error) {
+	if right == nil {
+		return left, nil
+	}
+	if left == nil {
+		value := *right
+		return &value, nil
+	}
+	if *right > math.MaxInt64-*left {
+		return nil, fmt.Errorf("token count overflows int64")
+	}
+	value := *left + *right
+	return &value, nil
 }
 
 func usageIdentityFromRecord(record RuntimeMetricRecord) usageIdentity {
@@ -589,8 +582,17 @@ func (a *metricsAccumulator) add(record RuntimeMetricRecord) bool {
 	if a.workerTypes != nil {
 		addLabeledAggregate(a.workerTypes, record, "worker_type", apply)
 	}
-	if a.providers != nil {
-		addLabeledAggregate(a.providers, record, "provider", apply)
+	if a.providerFacts != nil {
+		key := providerAggregateKey{
+			dispatchID: recordStringValue(record, "dispatch_id"),
+			provider:   recordStringValue(record, "provider"),
+		}
+		builder := a.providerFacts[key]
+		if builder == nil {
+			builder = &metricAggregateBuilder{}
+			a.providerFacts[key] = builder
+		}
+		apply(builder)
 	}
 	return true
 }
@@ -674,7 +676,12 @@ func (d *durationBuilder) add(value float64, unit string) {
 }
 
 func (a *metricsAccumulator) result() (RuntimeMetricsQueryResult, error) {
-	usageRows, err := sortedUsageRows(a.usage)
+	attribution := a.attribution.result()
+	usageGroups, err := attributedUsageGroups(a.usage, attribution)
+	if err != nil {
+		return RuntimeMetricsQueryResult{}, err
+	}
+	usageRows, err := sortedUsageRows(usageGroups)
 	if err != nil {
 		return RuntimeMetricsQueryResult{}, err
 	}
@@ -683,9 +690,78 @@ func (a *metricsAccumulator) result() (RuntimeMetricsQueryResult, error) {
 		Totals:       a.totals.result(),
 		Workstations: sortedBreakdowns(a.workstations),
 		WorkerTypes:  sortedBreakdowns(a.workerTypes),
-		Providers:    sortedBreakdowns(a.providers),
+		Providers:    sortedBreakdowns(a.attributedProviders(attribution)),
 		UsageRows:    usageRows,
 	}, nil
+}
+
+func (a *metricsAccumulator) attributedProviders(
+	attribution metricProviderAttribution,
+) map[string]*metricAggregateBuilder {
+	if a.providers == nil {
+		return nil
+	}
+	for key, source := range a.providerFacts {
+		record := RuntimeMetricRecord{
+			"dispatch_id": key.dispatchID,
+			"provider":    key.provider,
+		}
+		provider := attribution.providerFor(record)
+		target := a.providers[provider]
+		if target == nil {
+			target = &metricAggregateBuilder{}
+			a.providers[provider] = target
+		}
+		mergeMetricAggregate(target, source)
+	}
+	return a.providers
+}
+
+func mergeMetricAggregate(target, source *metricAggregateBuilder) {
+	target.inputTokens += source.inputTokens
+	target.outputTokens += source.outputTokens
+	target.completedDispatches += source.completedDispatches
+	for reason, value := range source.failuresByReason {
+		if target.failuresByReason == nil {
+			target.failuresByReason = make(map[string]float64)
+		}
+		target.failuresByReason[reason] += value
+	}
+	mergeDuration(&target.dispatchDuration, &source.dispatchDuration)
+	mergeDuration(&target.providerDuration, &source.providerDuration)
+}
+
+func mergeDuration(target, source *durationBuilder) {
+	if target.unit == "" {
+		target.unit = source.unit
+	}
+	target.samples = append(target.samples, source.samples...)
+}
+
+func attributedUsageGroups(
+	groups map[usageIdentity]*usageBuilder,
+	attribution metricProviderAttribution,
+) (map[usageIdentity]*usageBuilder, error) {
+	if len(groups) == 0 {
+		return groups, nil
+	}
+	attributed := make(map[usageIdentity]*usageBuilder, len(groups))
+	for identity, source := range groups {
+		record := RuntimeMetricRecord{
+			"dispatch_id": identity.dispatchID,
+			"provider":    identity.provider,
+		}
+		identity.provider = providerForUsageRecord(attribution, record)
+		target := attributed[identity]
+		if target == nil {
+			target = &usageBuilder{identity: identity}
+			attributed[identity] = target
+		}
+		if err := target.merge(source); err != nil {
+			return nil, err
+		}
+	}
+	return attributed, nil
 }
 
 func sortedUsageRows(groups map[usageIdentity]*usageBuilder) ([]RuntimeMetricsUsageRow, error) {
@@ -817,8 +893,13 @@ func cloneFloatMap(values map[string]float64) map[string]float64 {
 	return clone
 }
 
-func runtimeMetricRecordMatches(record RuntimeMetricRecord, sessionID, runtimeID string) bool {
-	if sessionID != "" {
+func runtimeMetricRecordMatches(record RuntimeMetricRecord, sessionID string, sessionIDs []string, runtimeID string) bool {
+	if len(sessionIDs) > 0 {
+		value, ok := recordString(record, "session_id")
+		if !ok || !containsMetricSessionID(sessionIDs, value) {
+			return false
+		}
+	} else if sessionID != "" {
 		value, ok := recordString(record, "session_id")
 		if !ok || value != sessionID {
 			return false
@@ -831,6 +912,35 @@ func runtimeMetricRecordMatches(record RuntimeMetricRecord, sessionID, runtimeID
 		}
 	}
 	return true
+}
+
+func normalizedMetricsSessionIDs(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(values))
+	ids := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		ids = append(ids, value)
+	}
+	return ids
+}
+
+func containsMetricSessionID(values []string, value string) bool {
+	for _, candidate := range values {
+		if candidate == value {
+			return true
+		}
+	}
+	return false
 }
 
 func recordString(record RuntimeMetricRecord, key string) (string, bool) {

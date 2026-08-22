@@ -63,7 +63,7 @@ paths:
         - Metrics
       operationId: getMetricsCosts
       summary: Get exact runtime cost rollups
-      description: Values canonical Factory Runtime usage with the operator's explicit price table. The default scope covers all Factory Sessions. Supplying an unknown-but-valid Factory Session ID returns a successful no-usage report for that scope rather than unrelated usage. Missing prices are returned as UNPRICED rows and are never treated as zero.
+      description: Values canonical Factory Runtime usage with the operator's explicit price table. The default scope covers all Factory Sessions. Supplying an unknown-but-valid Factory Session ID returns a successful no-usage report for that scope rather than unrelated usage. Missing prices are returned as UNPRICED rows and are never treated as zero. The server bounds one cost query at eight seconds and returns a typed timeout response when the canonical read does not complete in that window.
       parameters:
         - name: session_id
           in: query
@@ -80,8 +80,12 @@ paths:
                 $ref: '#/components/schemas/CostsReport'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '408':
+          $ref: '#/components/responses/RequestTimeout'
         '500':
           $ref: '#/components/responses/InternalError'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
   /worker-sessions:
     get:
       tags:
@@ -2683,6 +2687,18 @@ components:
                 code: RESPONSE_EVENT_STREAM_EXPIRED
     MetricsSessionScopeUnavailable:
       description: The selected live Factory Session has no retained metrics scope.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RequestTimeout:
+      description: The metrics cost query was canceled before it completed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    GatewayTimeout:
+      description: The metrics cost query exceeded the server-side completion bound.
       content:
         application/json:
           schema:
@@ -5550,6 +5566,10 @@ components:
             - MODEL_CACHE_IN_USE
             - NOT_FOUND
             - INTERNAL_ERROR
+            - COSTS_INVALID_REQUEST
+            - COSTS_QUERY_CANCELED
+            - COSTS_QUERY_FAILED
+            - COSTS_QUERY_TIMEOUT
           x-enum-descriptions:
             - Request payload or parameter validation failed.
             - Factory session discovery found a readable factory target whose config could not be loaded.
@@ -5606,6 +5626,10 @@ components:
             - The selected managed model cache revision is held by an active model host or invocation.
             - The requested resource does not exist.
             - The server failed while handling an otherwise valid request.
+            - The metrics costs request contained invalid configuration or selection input.
+            - The metrics costs request was canceled before the report completed.
+            - The metrics costs query failed while reading or valuing runtime usage.
+            - The metrics costs query exceeded its server-side completion bound.
         targets:
           type: array
           description: Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields.
