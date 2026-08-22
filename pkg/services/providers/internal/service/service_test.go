@@ -20,7 +20,6 @@ import (
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestNew_RejectsNilCatalog(t *testing.T) {
@@ -611,7 +610,7 @@ func TestRegisteredCompositionIsInert(t *testing.T) {
 func TestRootSelectsAntigravityThroughAuthoritativeCatalogIdentity(t *testing.T) {
 	t.Parallel()
 
-	service := newAgyProvidersServiceWithPTY(t, &workers.MockPTYAllocator{})
+	service := newAgyProvidersServiceWithPTY(t, &mockPTYAllocator{})
 	resolved, err := service.ResolveIdentity(
 		context.Background(),
 		providers.ResolveIdentityRequest{Identity: " ANTIGRAVITY "},
@@ -645,8 +644,8 @@ func TestRootSelectsAntigravityThroughAuthoritativeCatalogIdentity(t *testing.T)
 func TestRootExecutesAntigravityThroughCanonicalProvider(t *testing.T) {
 	t.Parallel()
 
-	mock := &workers.MockPTYAllocator{
-		Result: workers.PTYSessionResult{ExitCode: 0, CleanedText: "agy provider answer"},
+	mock := &mockPTYAllocator{
+		Result: providerswire.PTYSessionResult{ExitCode: 0, CleanedText: "agy provider answer"},
 	}
 	service := newAgyProvidersServiceWithPTY(t, mock)
 	result, err := service.Execute(context.Background(), providers.ExecuteRequest{
@@ -673,8 +672,8 @@ func TestRootExecutesAntigravityThroughCanonicalProvider(t *testing.T) {
 func TestRootContinuesAntigravityThroughCanonicalProvider(t *testing.T) {
 	t.Parallel()
 
-	mock := &workers.MockPTYAllocator{
-		Result: workers.PTYSessionResult{ExitCode: 0, CleanedText: "continued Agy response"},
+	mock := &mockPTYAllocator{
+		Result: providerswire.PTYSessionResult{ExitCode: 0, CleanedText: "continued Agy response"},
 	}
 	service := newAgyProvidersServiceWithPTY(t, mock)
 	continued, err := service.Continue(context.Background(), providers.ContinueRequest{
@@ -710,8 +709,8 @@ func TestRootContinuesAntigravityThroughCanonicalProvider(t *testing.T) {
 func TestRootSanitizesAntigravityFailureDetails(t *testing.T) {
 	t.Parallel()
 
-	mock := &workers.MockPTYAllocator{
-		Result: workers.PTYSessionResult{
+	mock := &mockPTYAllocator{
+		Result: providerswire.PTYSessionResult{
 			ExitCode: 1,
 			RawBytes: []byte("failed reading /tmp/secret-key and private prompt"),
 		},
@@ -737,7 +736,34 @@ func TestRootSanitizesAntigravityFailureDetails(t *testing.T) {
 	}
 }
 
-func newAgyProvidersServiceWithPTY(t *testing.T, allocator *workers.MockPTYAllocator) providers.Service {
+type mockPTYAllocator struct {
+	Sessions []providerswire.PTYSession
+	Result   providerswire.PTYSessionResult
+}
+
+func (allocator *mockPTYAllocator) Allocate(
+	_ context.Context,
+	launch providerswire.PTYProcessLaunch,
+	config providerswire.PTYSessionConfig,
+) (providerswire.PTYSession, error) {
+	session := &mockPTYSession{Launch: launch, Config: config, Result: allocator.Result}
+	allocator.Sessions = append(allocator.Sessions, session)
+	return session, nil
+}
+
+type mockPTYSession struct {
+	Launch providerswire.PTYProcessLaunch
+	Config providerswire.PTYSessionConfig
+	Result providerswire.PTYSessionResult
+}
+
+func (session *mockPTYSession) Run(context.Context) (providerswire.PTYSessionResult, error) {
+	return session.Result, nil
+}
+
+func (session *mockPTYSession) Close() error { return nil }
+
+func newAgyProvidersServiceWithPTY(t *testing.T, allocator *mockPTYAllocator) providers.Service {
 	t.Helper()
 	service, err := providerswire.NewService(
 		providerswire.WithCommandRunner(testutil.NewProviderCommandRunner()),

@@ -335,7 +335,7 @@ func provideFactoryRuntimeDirectories(edges serviceedges.Edges) factoryruntime.R
 	return platformfilesystem.Local{}
 }
 
-func provideFactoryRuntimeInputs(edges serviceedges.Edges) factoryruntime.InputFileSystem {
+func provideFactoryRuntimeInputs(edges serviceedges.Edges) factoryruntimewire.InputFileSystem {
 	if edges.FactoryRuntimeInputs != nil {
 		return edges.FactoryRuntimeInputs
 	}
@@ -745,7 +745,7 @@ func provideFactorySessionExecutionFactory(
 	sessionIDs factorysessions.SessionIDGenerator,
 	responseEventIDs factorysessions.ResponseEventIDGenerator,
 	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
-	allocator workers.PTYAllocator,
+	allocator providerswire.PTYAllocator,
 	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
 	providerOverride providerOverrideService,
 	eventsService events.Service,
@@ -1151,6 +1151,7 @@ func provideWorkersMockCommandRunnerFactory() factoryruntime.WorkersMockCommandR
 func provideConductorInvocationWithProgressFactory(
 	providersService providers.Service,
 	edges serviceedges.Edges,
+	allocator providerswire.PTYAllocator,
 ) factorysessionwire.ConductorInvocationWithProgressFactory {
 	commandClock := edges.Clock
 	if commandClock == nil {
@@ -1177,7 +1178,6 @@ func provideConductorInvocationWithProgressFactory(
 	return func(
 		selectedProviders providers.Service,
 		runner platformprocess.CommandRunner,
-		allocator workers.PTYAllocator,
 		publisher workers.ProgressPublisher,
 	) (workers.InvocationExecutor, error) {
 		if selectedProviders == nil {
@@ -1202,7 +1202,6 @@ func provideConductorInvocationWithProgressFactory(
 func provideProviderFromCommandRunnerFactory(
 	providersService providers.Service,
 	edges serviceedges.Edges,
-	allocator workers.PTYAllocator,
 ) factorysessionwire.ProviderFromCommandRunnerFactory {
 	commandClock := edges.Clock
 	if commandClock == nil {
@@ -1228,7 +1227,7 @@ func provideProviderFromCommandRunnerFactory(
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
 	return func(runner platformprocess.CommandRunner) (providers.Service, error) {
 		return workerswire.NewProviderFromCommandRunner(
-			providersService, runner, commandClock, allocator, resolveSymlinks,
+			providersService, runner, commandClock, resolveSymlinks,
 			executableLocator, executableInspector, executableFiles, operatingSystem, temporaryFiles,
 		)
 	}

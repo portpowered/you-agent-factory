@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"sync"
 	"time"
 
@@ -17,6 +18,14 @@ import (
 	"go.uber.org/zap"
 )
 
+// InputFileSystem is the host bundle's private view of the runtime input-tree
+// effect. It is intentionally not part of the Factory Runtime service root.
+type InputFileSystem interface {
+	ReadDir(string) ([]fs.DirEntry, error)
+	ReadFile(string) ([]byte, error)
+	Stat(string) (fs.FileInfo, error)
+}
+
 // Bundle is the runtime wiring produced by Build and referenced from live handles.
 type Bundle struct {
 	Dir                  string
@@ -26,7 +35,7 @@ type Bundle struct {
 	StartedAtUTC         time.Time
 	EventHistory         recordings.RuntimeLedger
 	Factory              Engine
-	InputFiles           factory.InputFileSystem
+	InputFiles           InputFileSystem
 	InputDirectoryWalker factory.InputDirectoryWalker
 	WorkRequestIDs       work.RequestIDGenerator
 	Net                  *state.Net

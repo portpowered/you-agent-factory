@@ -36,7 +36,6 @@ type StandaloneSessionExecutionFactory = func(
 
 type WorkerInvocationWithProgressFactory = func(
 	platformprocess.CommandRunner,
-	workers.PTYAllocator,
 	workers.ProgressPublisher,
 ) (workers.InvocationExecutor, error)
 

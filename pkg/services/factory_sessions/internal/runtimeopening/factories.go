@@ -35,7 +35,6 @@ type FactorySessionExecutionFactory = func(
 type ConductorInvocationWithProgressFactory = func(
 	providers.Service,
 	platformprocess.CommandRunner,
-	workers.PTYAllocator,
 	workers.ProgressPublisher,
 ) (workers.InvocationExecutor, error)
 

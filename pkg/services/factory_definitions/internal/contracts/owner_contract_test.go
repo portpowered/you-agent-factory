@@ -37,7 +37,6 @@ type (
 	SafeProviderDiagnostic          = workerexecution.SafeProviderDiagnostic
 	SafeRenderedPromptDiagnostic    = workerexecution.SafeRenderedPromptDiagnostic
 	SafeWorkDiagnostics             = workerexecution.SafeWorkDiagnostics
-	SubprocessExecutionRequest      = workerexecution.SubprocessExecutionRequest
 	ProviderInferenceRequest        = workerexecution.ProviderInferenceRequest
 	WorkstationExecutionRequest     = workerexecution.WorkstationExecutionRequest
 	ResolvedModelOperationBinding   = workerexecution.ResolvedModelOperationBinding
@@ -95,7 +94,6 @@ const (
 var (
 	CloneProviderInferenceRequest             = workerexecution.CloneProviderInferenceRequest
 	CloneProviderSessionMetadata              = func(session *providers.SessionMetadata) *providers.SessionMetadata { return session.Clone() }
-	CloneSubprocessExecutionRequest           = workerexecution.CloneSubprocessExecutionRequest
 	CloneWorkDispatch                         = work.CloneWorkDispatch
 	CloneWorkstationExecutionRequest          = workerexecution.CloneWorkstationExecutionRequest
 	CloneWorkFailureMetadata                  = workerexecution.CloneWorkFailureMetadata

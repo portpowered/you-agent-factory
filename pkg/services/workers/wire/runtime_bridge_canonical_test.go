@@ -11,6 +11,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
 )
 
@@ -280,7 +281,7 @@ type canonicalInvocationEdges struct {
 	providers     providers.Service
 	commandRunner platformprocess.CommandRunner
 	commandClock  platformclock.Source
-	allocator     workers.PTYAllocator
+	allocator     workersinternal.PTYAllocator
 }
 
 func canonicalInvocationTestEdges() canonicalInvocationEdges {
@@ -288,7 +289,7 @@ func canonicalInvocationTestEdges() canonicalInvocationEdges {
 		providers:     &statelessTestProviders{},
 		commandRunner: stubCanonicalCommandRunner{},
 		commandClock:  platformclock.Real{},
-		allocator:     &workers.MockPTYAllocator{},
+		allocator:     &workersinternal.MockPTYAllocator{},
 	}
 }
 

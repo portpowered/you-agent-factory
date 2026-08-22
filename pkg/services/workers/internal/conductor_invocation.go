@@ -20,7 +20,7 @@ func NewConductorInvocationWithProgress(
 	providersService providers.Service,
 	commandRunner platformprocess.CommandRunner,
 	commandClock platformclock.Source,
-	allocator workers.PTYAllocator,
+	allocator PTYAllocator,
 	resolveSymlinks workers.ResolveExecutableSymlinks,
 	executableLocator platformprocess.ExecutableLocator,
 	executableInspector platformfilesystem.PathInspector,

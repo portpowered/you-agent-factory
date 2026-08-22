@@ -29,6 +29,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -153,7 +154,7 @@ type Edges struct {
 	FactorySessionInitialWorkReader                factorysessions.InitialWorkReader
 	FactoryRuntimeIDGenerator                      factoryruntime.IDGenerator
 	FactoryRuntimeDirectories                      factoryruntime.RuntimeDirectoryFileSystem
-	FactoryRuntimeInputs                           factoryruntime.InputFileSystem
+	FactoryRuntimeInputs                           factoryruntimewire.InputFileSystem
 	FactoryRuntimeInputDirectoryWalker             factoryruntime.InputDirectoryWalker
 	FactoryRuntimeWorkflowSources                  factoryruntime.WorkflowSourceFileSystem
 	FactoryRuntimeWorkflowSourceResolveSymlinks    factoryruntime.WorkflowSourceResolveSymlinks

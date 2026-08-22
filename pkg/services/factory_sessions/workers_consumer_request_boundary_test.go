@@ -225,7 +225,6 @@ func TestFactorySessionsWorkersRootContractsCompileAtSessionsRoot(t *testing.T) 
 		_ providers.Service
 		_ workers.InvocationExecutor
 		_ platformprocess.CommandRunner
-		_ workers.PTYAllocator
 	)
 }
 
