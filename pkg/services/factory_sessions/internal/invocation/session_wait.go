@@ -96,11 +96,8 @@ func (o *SessionOwner) resolveObservation(
 	// Work checks the context before selecting a result. Re-check it after the
 	// call so a cancellation racing with that check cannot be classified as a
 	// successful or runtime-failed invocation.
-	if ctx != nil {
-		if contextErr := ctx.Err(); contextErr != nil {
-			result, waitErr := o.waitErrorResult(sessionID, input, contextErr)
-			return result, true, waitErr
-		}
+	if result, canceled, waitErr := o.canceledObservationResult(ctx, sessionID, input); canceled {
+		return result, true, waitErr
 	}
 	if err == nil {
 		if packaged {
@@ -110,7 +107,7 @@ func (o *SessionOwner) resolveObservation(
 		}
 		return o.completedResult(sessionID, input, selection), true, nil
 	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if isInvocationWaitError(err) {
 		result, waitErr := o.waitErrorResult(sessionID, input, err)
 		return result, true, waitErr
 	}
@@ -140,6 +137,26 @@ func (o *SessionOwner) resolveObservation(
 		return FactoryInvocationResult{}, false, nil
 	}
 	return o.resolveStoppedInvocation(sessionID, input, selectionInput, primaryErr, packaged), true, nil
+}
+
+func (o *SessionOwner) canceledObservationResult(
+	ctx context.Context,
+	sessionID string,
+	input SessionInvocationWaitInput,
+) (FactoryInvocationResult, bool, error) {
+	if ctx == nil {
+		return FactoryInvocationResult{}, false, nil
+	}
+	contextErr := ctx.Err()
+	if contextErr == nil {
+		return FactoryInvocationResult{}, false, nil
+	}
+	result, waitErr := o.waitErrorResult(sessionID, input, contextErr)
+	return result, true, waitErr
+}
+
+func isInvocationWaitError(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func (o *SessionOwner) resolveStoppedInvocation(

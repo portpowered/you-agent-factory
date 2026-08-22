@@ -591,7 +591,7 @@ func TestSessionOwnerWait_CancellationAfterObservationResolutionWinsAtWaitBounda
 		Work: testInvocationWorkService(),
 	})
 
-	result, err := owner.waitForResult(&cancelOnSecondErrContext{}, "session-1", sessionWaitInput(nil))
+	result, err := owner.waitForResult(&cancelOnThirdErrContext{}, "session-1", sessionWaitInput(nil))
 	if err != nil {
 		t.Fatalf("waitForResult: %v", err)
 	}
@@ -752,23 +752,23 @@ type cancelAfterPrimaryResultResolutionWorkService struct {
 	Cancel context.CancelFunc
 }
 
-type cancelOnSecondErrContext struct {
+type cancelOnThirdErrContext struct {
 	errCalls int
 }
 
-func (c *cancelOnSecondErrContext) Deadline() (time.Time, bool) { return time.Time{}, false }
+func (c *cancelOnThirdErrContext) Deadline() (time.Time, bool) { return time.Time{}, false }
 
-func (c *cancelOnSecondErrContext) Done() <-chan struct{} { return nil }
+func (c *cancelOnThirdErrContext) Done() <-chan struct{} { return nil }
 
-func (c *cancelOnSecondErrContext) Err() error {
+func (c *cancelOnThirdErrContext) Err() error {
 	c.errCalls++
-	if c.errCalls >= 2 {
+	if c.errCalls >= 3 {
 		return context.Canceled
 	}
 	return nil
 }
 
-func (c *cancelOnSecondErrContext) Value(any) any { return nil }
+func (c *cancelOnThirdErrContext) Value(any) any { return nil }
 
 func (s *cancelAfterPrimaryResultResolutionWorkService) ResolvePrimaryResult(
 	_ context.Context,
