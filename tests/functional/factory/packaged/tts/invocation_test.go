@@ -109,6 +109,7 @@ func TestPackagedTTSRequiredInputProducesAudioArtifactMetadata(t *testing.T) {
 		homeDir,
 		factorydefinitions.PackagedTTSFactoryName,
 	)
+	factoryDir = support.CopyFactoryAsNamed(t, factoryDir, homeDir, "@test/tts")
 	overwritePackagedTTSFactoryWithProviderFakeTopology(t, factoryDir)
 
 	fakeProvider := newPackagedTTSFakeProvider([]byte(packagedTTSFakeAudioFixture))
@@ -724,6 +725,7 @@ func TestPackagedTTSOptionalVoiceAndFormatReachModel(t *testing.T) {
 		homeDir,
 		factorydefinitions.PackagedTTSFactoryName,
 	)
+	factoryDir = support.CopyFactoryAsNamed(t, factoryDir, homeDir, "@test/tts")
 	overwritePackagedTTSFactoryWithOptionalVoiceAndFormatTopology(t, factoryDir)
 
 	fakeProvider := newPackagedTTSFakeProvider([]byte(packagedTTSFakeAudioFixture))
@@ -780,6 +782,7 @@ func TestPackagedTTSModelFailureReturnsNoFalseArtifact(t *testing.T) {
 		homeDir,
 		factorydefinitions.PackagedTTSFactoryName,
 	)
+	factoryDir = support.CopyFactoryAsNamed(t, factoryDir, homeDir, "@test/tts")
 	overwritePackagedTTSFactoryWithProviderFakeTopology(t, factoryDir)
 
 	fakeProvider := newPackagedTTSFailingFakeProvider("omnivoice invoke failed: exit status 1")

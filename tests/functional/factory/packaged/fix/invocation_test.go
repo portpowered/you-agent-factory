@@ -20,7 +20,10 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const packagedFixFactoryName = "@you/fix"
+const (
+	packagedFixFactoryName           = "@you/fix"
+	configuredPackagedFixFactoryName = "@test/fix"
+)
 
 var packagedFixPlanFile = regexp.MustCompile(`tasks/todo/([A-Za-z0-9._-]+)\.json`)
 
@@ -377,11 +380,14 @@ func runPackagedFixCLIWithFactorySetup(
 	t.Helper()
 	home := t.TempDir()
 	factoryDir := support.InstallPackagedFactory(t, home, packagedFixFactoryName)
+	factoryName := packagedFixFactoryName
 	if configure != nil {
 		configure(t, factoryDir)
+		factoryDir = support.CopyFactoryAsNamed(t, factoryDir, home, configuredPackagedFixFactoryName)
+		factoryName = configuredPackagedFixFactoryName
 	}
 	inputArgs := []string{
-		"you", "--json", "run", "--named", packagedFixFactoryName, "--no-record",
+		"you", "--json", "run", "--named", factoryName, "--no-record",
 	}
 	inputArgs = append(inputArgs, args...)
 	inputs := support.FakeInputs(t.Context(), inputArgs)

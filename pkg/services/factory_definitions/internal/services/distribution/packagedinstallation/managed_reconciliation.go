@@ -485,10 +485,14 @@ func (service *Service) copyManagedDirectory(ctx context.Context, sourceDir, tar
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
 		sourcePath := filepath.Join(sourceDir, entry.Name())
 		targetPath := filepath.Join(targetDir, entry.Name())
 		if entry.IsDir() {
-			if err := service.fileSystem.MkdirAll(targetPath, 0o755); err != nil {
+			if err := service.fileSystem.MkdirAll(targetPath, info.Mode().Perm()); err != nil {
 				return err
 			}
 			if err := service.copyManagedDirectory(ctx, sourcePath, targetPath); err != nil {
@@ -500,7 +504,7 @@ func (service *Service) copyManagedDirectory(ctx context.Context, sourceDir, tar
 		if err != nil {
 			return err
 		}
-		if err := service.fileSystem.WriteFile(targetPath, data, 0o600); err != nil {
+		if err := service.fileSystem.WriteFile(targetPath, data, info.Mode().Perm()); err != nil {
 			return err
 		}
 	}

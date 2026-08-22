@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -106,6 +107,48 @@ func InstallPackagedFactory(t testing.TB, homeDir, name string) string {
 		t.Fatalf("initializer omitted packaged Factory %q at %s: %v", name, factoryDir, err)
 	}
 	return factoryDir
+}
+
+// CopyFactoryAsNamed copies a customized fixture to a customer-owned named
+// Factory. Bundled @you directories are refreshed during every initialization,
+// so tests that intentionally edit a packaged payload must invoke the copy.
+func CopyFactoryAsNamed(t testing.TB, sourceDir, homeDir, name string) string {
+	t.Helper()
+	targetDir := filepath.Join(
+		append([]string{homeDir, ".you-agent-factory", "factories"}, strings.Split(name, "/")...)...,
+	)
+	if err := copyFactoryDirectory(sourceDir, targetDir); err != nil {
+		t.Fatalf("copy Factory fixture %q to %q: %v", sourceDir, targetDir, err)
+	}
+	return targetDir
+}
+
+func copyFactoryDirectory(sourceDir, targetDir string) error {
+	return filepath.WalkDir(sourceDir, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		relative, err := filepath.Rel(sourceDir, path)
+		if err != nil {
+			return err
+		}
+		if relative == "." {
+			return os.MkdirAll(targetDir, 0o755)
+		}
+		targetPath := filepath.Join(targetDir, relative)
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return os.MkdirAll(targetPath, info.Mode().Perm())
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(targetPath, data, info.Mode().Perm())
+	})
 }
 
 // InstallPackagedFactoryWithProcess materializes a packaged Factory through a

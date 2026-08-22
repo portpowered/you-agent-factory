@@ -68,13 +68,16 @@ func runPackagedReviewCLIJSONInvocationWithFactorySetup(
 
 	homeDir := t.TempDir()
 	factoryDir := support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedReviewFactoryName)
+	factoryName := factorydefinitions.PackagedReviewFactoryName
 	if configure != nil {
 		configure(t, factoryDir)
+		factoryDir = support.CopyFactoryAsNamed(t, factoryDir, homeDir, "@test/review")
+		factoryName = "@test/review"
 	}
 
 	args := []string{
 		"you", "--json", "run",
-		"--named", factorydefinitions.PackagedReviewFactoryName,
+		"--named", factoryName,
 		"--no-record",
 	}
 	args = append(args, extraArgs...)
