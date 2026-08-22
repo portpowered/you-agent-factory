@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -538,10 +539,15 @@ func TestResolveExecutionRequestUsesDirectInputTokensForAuthoredPrompt(t *testin
 		workID          = "work-tts-1"
 		boundText       = "The release is ready."
 	)
+	modelScope, err := (modelprovider.RuntimeScopeRef{}).Parse("factory-session:models")
+	if err != nil {
+		t.Fatalf("parse Models scope: %v", err)
+	}
 
 	var renderedTokens []workers.Token
 	cfg := &runtimeConfig{
-		newID: func() string { return "attempt-1" },
+		modelRuntimeScope: modelScope,
+		newID:             func() string { return "attempt-1" },
 		promptRenderer: runtimePromptRendererFunc(func(
 			prompt string,
 			tokens []workers.Token,
@@ -576,9 +582,16 @@ func TestResolveExecutionRequestUsesDirectInputTokensForAuthoredPrompt(t *testin
 					Type:          interfaces.WorkerTypeInference,
 					Model:         "OMNIVOICE_Q4_K_M",
 					ModelProvider: "CODEX",
-					ModelLocality: interfaces.ModelLocalityCloud,
+					ModelLocality: modelprovider.RuntimeModelLocalityLocal,
+					Resources: []interfaces.ResourceConfig{{
+						Name: "omnivoice-cache", Capacity: 1,
+					}},
 				},
 			},
+			Factory: &interfaces.FactoryConfig{Resources: []interfaces.ResourceConfig{{
+				Name: "omnivoice-cache", Type: interfaces.ResourceTypeModel, Capacity: 1,
+				Model: "OMNIVOICE_Q4_K_M", Backend: "LLAMACPP", LoadPolicy: "ON_DEMAND",
+			}}},
 		},
 	}
 
@@ -631,6 +644,16 @@ func TestResolveExecutionRequestUsesDirectInputTokensForAuthoredPrompt(t *testin
 	}
 	if len(workers.WorkDispatchInputTokens(executeRequest.Input.Dispatch)) != 1 {
 		t.Fatalf("detached dispatch inputs = %#v, want direct input token bridged into dispatch", executeRequest.Input.Dispatch.InputTokens)
+	}
+	if executeRequest.Input.ModelRuntime == nil ||
+		executeRequest.Input.ModelRuntime.Scope != modelScope ||
+		executeRequest.Input.ModelRuntime.Worker.Name != workerName ||
+		executeRequest.Input.ModelRuntime.Worker.Model != "OMNIVOICE_Q4_K_M" ||
+		len(executeRequest.Input.ModelRuntime.Worker.Resources) != 1 ||
+		executeRequest.Input.ModelRuntime.Worker.Resources[0].Name != "omnivoice-cache" ||
+		len(executeRequest.Input.ModelRuntime.Resources) != 1 ||
+		executeRequest.Input.ModelRuntime.Resources[0].Backend != "LLAMACPP" {
+		t.Fatalf("managed Models projection = %#v, want opened scope and authored worker", executeRequest.Input.ModelRuntime)
 	}
 }
 

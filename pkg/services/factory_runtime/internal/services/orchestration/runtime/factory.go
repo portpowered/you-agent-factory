@@ -25,6 +25,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token_transformer"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -120,6 +121,7 @@ type runtimeConfig struct {
 	expectedArtifactFileSystem expectedArtifactFileSystem
 	mockWorkersConfig          *workers.MockWorkersConfig
 	progressPublisher          workers.ProgressPublisher
+	modelRuntimeScope          modelprovider.RuntimeScopeRef
 }
 
 var _ factoryhost.Engine = (*factoryImpl)(nil)
@@ -952,6 +954,20 @@ func (f *factoryImpl) SetMockWorkersConfig(config *workers.MockWorkersConfig) {
 		return
 	}
 	f.cfg.mockWorkersConfig = config.Clone()
+}
+
+// BindModelsRuntimeScope attaches the opened Models capability to this
+// session's managed-model dispatches. The scope is a runtime-owned binding;
+// Workers still owns inference selection and execution through Execute.
+func (f *factoryImpl) BindModelsRuntimeScope(scope modelprovider.RuntimeScopeRef) error {
+	if f == nil || f.cfg == nil {
+		return fmt.Errorf("Factory Runtime is unavailable")
+	}
+	if scope.IsZero() {
+		return modelprovider.ErrRuntimeScopeInvalid
+	}
+	f.cfg.modelRuntimeScope = scope
+	return nil
 }
 
 // SetPromptSourceReader installs the read-only prompt-source filesystem edge.

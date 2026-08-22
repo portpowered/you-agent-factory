@@ -316,6 +316,7 @@ func executeRequestFromWorkstationRequest(
 			Invocation:               invocation,
 			ModelBindings:            modelBindings,
 			ModelOperation:           firstRuntimeValue(selection.modelOperation, execution.ModelOperation),
+			ModelRuntime:             modelRuntimeInputForSelection(cfg, selection),
 			Resume:                   cloneRuntimeContinuation(execution.Continuation),
 			WorkflowContext:          workflowContext,
 			MockWorkers:              cfg.mockWorkersConfig.Clone(),

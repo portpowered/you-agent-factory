@@ -13,6 +13,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -117,6 +118,21 @@ func (wrapped *invocationScheduleFactory) RuntimeProgressPublisher() workers.Pro
 		return nil
 	}
 	return provider.RuntimeProgressPublisher()
+}
+
+// BindModelsRuntimeScope forwards the session-owned Models capability through
+// the schedule decorator installed on the Factory engine.
+func (wrapped *invocationScheduleFactory) BindModelsRuntimeScope(scope modelprovider.RuntimeScopeRef) error {
+	if wrapped == nil {
+		return fmt.Errorf("Factory Runtime is unavailable")
+	}
+	binder, _ := wrapped.Engine.(interface {
+		BindModelsRuntimeScope(modelprovider.RuntimeScopeRef) error
+	})
+	if binder == nil {
+		return fmt.Errorf("Factory Runtime does not support Models runtime scope binding")
+	}
+	return binder.BindModelsRuntimeScope(scope)
 }
 
 // BeginWorkerAttempt forwards the optional Runtime-owned Worker Session

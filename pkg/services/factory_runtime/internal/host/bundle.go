@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	runtimemetrics "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/metrics"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -78,6 +80,23 @@ func (r *Bundle) RuntimeService() factory.Service {
 	}
 	service, _ := r.Factory.(factory.Service)
 	return service
+}
+
+// BindModelsRuntimeScope forwards the opened Models capability to the
+// concrete Factory implementation held by this runtime record. The public
+// RuntimeRecord remains opaque; this narrow composition hook keeps the
+// request-owned Models scope out of the public Factory service contract.
+func (r *Bundle) BindModelsRuntimeScope(scope modelprovider.RuntimeScopeRef) error {
+	if r == nil || r.Factory == nil {
+		return fmt.Errorf("Factory Runtime is unavailable")
+	}
+	binder, ok := r.Factory.(interface {
+		BindModelsRuntimeScope(modelprovider.RuntimeScopeRef) error
+	})
+	if !ok {
+		return fmt.Errorf("Factory Runtime does not support Models runtime scope binding")
+	}
+	return binder.BindModelsRuntimeScope(scope)
 }
 
 // RuntimeProgressPublisher returns the runtime-scoped Workers observation
