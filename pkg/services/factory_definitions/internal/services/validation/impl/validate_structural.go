@@ -7,6 +7,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 )
 
 func duplicateIdentifierTargets(cfg *factorydefinitions.FactoryConfig) []Target {
@@ -801,13 +802,13 @@ func canonicalManagedRuntimeIdentity(model string) string {
 	return strings.ToUpper(strings.TrimSpace(model))
 }
 
-func canonicalManagedRuntimeBackend(value string) string {
-	return strings.ToUpper(strings.TrimSpace(value))
-}
-
 func isKnownManagedRuntimeIdentity(model string) bool {
 	_, ok := managedRuntimeDependencySpecs[canonicalManagedRuntimeIdentity(model)]
 	return ok
+}
+
+func canonicalManagedRuntimeBackend(value string) string {
+	return strings.ToUpper(strings.TrimSpace(value))
 }
 
 func requiredBackendForManagedRuntime(model string) (string, bool) {
@@ -857,20 +858,26 @@ func managedRuntimeResourceTargets(index int, resource factoryresource.Config) [
 			fmt.Sprintf("managed runtime identity %q is not supported in this environment", modelIdentity),
 		)}
 	}
-	if requiredBackend, ok := requiredBackendForManagedRuntime(modelIdentity); ok {
-		if canonicalManagedRuntimeBackend(resource.Backend) != requiredBackend {
-			return []Target{managedRuntimeResourceTarget(
-				CodeManagedRuntimeInvalidBackend,
-				resource.Name,
-				basePath+".backend",
-				fmt.Sprintf(
-					"managed runtime %q requires backend %q, got %q",
-					modelIdentity,
-					requiredBackend,
-					strings.TrimSpace(resource.Backend),
-				),
-			)}
-		}
+	requiredBackend, ok := requiredBackendForManagedRuntime(modelIdentity)
+	if !ok {
+		return nil
+	}
+	validBackend := canonicalManagedRuntimeBackend(resource.Backend) == requiredBackend
+	if canonicalManagedRuntimeIdentity(modelIdentity) == canonicalManagedRuntimeIdentity("OMNIVOICE_Q4_K_M") {
+		validBackend = models.IsManagedRuntimeBackend(resource.Backend)
+	}
+	if !validBackend {
+		return []Target{managedRuntimeResourceTarget(
+			CodeManagedRuntimeInvalidBackend,
+			resource.Name,
+			basePath+".backend",
+			fmt.Sprintf(
+				"managed runtime %q requires backend %q, got %q",
+				modelIdentity,
+				requiredBackend,
+				strings.TrimSpace(resource.Backend),
+			),
+		)}
 	}
 	if loadPolicy := strings.ToUpper(strings.TrimSpace(resource.LoadPolicy)); loadPolicy != "" {
 		if _, ok := supportedManagedRuntimeLoadPolicies[loadPolicy]; !ok {
