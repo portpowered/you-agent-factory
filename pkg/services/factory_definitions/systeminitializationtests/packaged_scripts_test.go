@@ -172,8 +172,8 @@ func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndBacksU
 	}
 
 	factoryDir := created[0].FactoryDir
-	assertInstalledPackagedScript(t, factoryDir, "scripts/setup.sh", "#!/bin/sh\nprintf 'packaged setup\\n'\n")
-	assertInstalledPackagedScript(t, factoryDir, "scripts/nested/check.py", "print('nested packaged script')\n")
+	assertInstalledPackagedScript(t, factoryDir, "scripts/setup.sh", "#!/bin/sh\nprintf 'packaged setup\\n'\n", 0o755)
+	assertInstalledPackagedScript(t, factoryDir, "scripts/nested/check.py", "print('nested packaged script')\n", 0o755)
 	assertThinPackagedScriptManifest(t, factoryDir)
 	assertInstalledPackagedScriptRuntimeConfig(t, factoryDir)
 
@@ -205,12 +205,14 @@ func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndBacksU
 		refreshed[0].BackupDir,
 		"scripts/nested/check.py",
 		"print('operator edit')\n",
+		0o600,
 	)
 	assertInstalledPackagedScript(
 		t,
 		factoryDir,
 		"scripts/nested/check.py",
 		"print('nested packaged script')\n",
+		0o755,
 	)
 }
 
@@ -236,7 +238,7 @@ func assembledScriptPackageDefinition(t *testing.T) factorydefinitions.PackagedD
 	return factorydefinitions.PackagedDefinition{Name: "@test/scripts", Project: "packaged-script-fixture", JSON: payload}
 }
 
-func assertInstalledPackagedScript(t *testing.T, factoryDir, relativePath, wantContent string) {
+func assertInstalledPackagedScript(t *testing.T, factoryDir, relativePath, wantContent string, wantMode fs.FileMode) {
 	t.Helper()
 
 	path := filepath.Join(factoryDir, filepath.FromSlash(relativePath))
@@ -251,8 +253,8 @@ func assertInstalledPackagedScript(t *testing.T, factoryDir, relativePath, wantC
 	if err != nil {
 		t.Fatalf("Stat(%s): %v", relativePath, err)
 	}
-	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o755 {
-		t.Fatalf("%s mode = %04o, want 0755", relativePath, info.Mode().Perm())
+	if runtime.GOOS != "windows" && info.Mode().Perm() != wantMode.Perm() {
+		t.Fatalf("%s mode = %04o, want %04o", relativePath, info.Mode().Perm(), wantMode.Perm())
 	}
 }
 
