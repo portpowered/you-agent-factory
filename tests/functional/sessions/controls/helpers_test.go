@@ -442,21 +442,16 @@ func stringPointerValue(value *string) string {
 	return *value
 }
 
-func pauseResumeControlsSlowMockWorkersConfig() *workers.MockWorkersConfig {
+func pauseResumeControlsMockWorkersConfig() *workers.MockWorkersConfig {
+	// Keep the drain fixture in-process so full-suite CPU/process load cannot
+	// starve an external worker command before the ordering assertion runs.
 	return &workers.MockWorkersConfig{
 		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
 		MockWorkers: []workers.MockWorkerConfig{
 			{
 				WorkerName:      "mock-worker",
 				WorkstationName: pauseResumeProcessTaskWorkstation,
-				RunType:         workers.MockWorkerRunTypeScript,
-				ScriptConfig: &workers.MockWorkerScriptConfig{
-					Command: "/bin/sh",
-					Args: []string{
-						"-c",
-						"sleep 2 && echo mock worker accepted",
-					},
-				},
+				RunType:         workers.MockWorkerRunTypeAccept,
 			},
 		},
 	}
