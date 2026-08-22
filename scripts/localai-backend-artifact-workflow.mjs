@@ -220,7 +220,7 @@ function validateHostToolchain(errors, hostToolchain) {
 	if (!isPlainObject(windows)) {
 		addError(errors, "hostToolchain.windows must be an object");
 	} else {
-		if (windows.vcpkgTriplet !== "x64-mingw-static") addError(errors, "hostToolchain.windows.vcpkgTriplet must be x64-mingw-static");
+		if (windows.vcpkgTriplet !== "x64-mingw-static-release") addError(errors, "hostToolchain.windows.vcpkgTriplet must be x64-mingw-static-release");
 		if (JSON.stringify(windows.msysPackages) !== JSON.stringify(expectedWindowsMsysPackages)) {
 			addError(errors, "hostToolchain.windows.msysPackages must be the pinned native build package set");
 		}

@@ -37,8 +37,11 @@ directory. The CPU package target produces `llama-cpp-cpu-all`; that is the
 payload name recorded in the config and metadata. Linux uses the upstream
 package target, Darwin stages the Mach-O binary and `.dylib` files without the
 Linux-loader packaging branch, and Windows builds with the static
-`x64-mingw-static` vcpkg triplet before recursively staging and verifying its
-remaining DLL closure.
+`x64-mingw-static-release` vcpkg triplet before recursively staging and
+verifying its remaining DLL closure. The release-only community triplet keeps
+vcpkg from compiling the large gRPC dependency twice (Debug and Release) and
+avoids MinGW object-file limits on the hosted Windows runner; it remains a
+static library triplet, so the runtime closure is still staged and verified.
 
 ## Update procedure
 

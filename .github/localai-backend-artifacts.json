@@ -40,7 +40,7 @@
         "mingw-w64-x86_64-gcc=16.2.0-3",
         "mingw-w64-x86_64-ninja=1.13.2-1"
       ],
-      "vcpkgTriplet": "x64-mingw-static"
+      "vcpkgTriplet": "x64-mingw-static-release"
     }
   },
   "backends": [

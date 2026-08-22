@@ -130,7 +130,7 @@ test("the validation CLI emits a matrix output suitable for GitHub Actions", asy
 	assert.match(outputText, /localai_commit=b224c96db6f4b87306a33a808650bfce63b12588/);
 	assert.match(outputText, /protobuf_version=24\.3/);
 	assert.match(outputText, /windows_msys_packages=make=4\.4\.1-3/);
-	assert.match(outputText, /windows_vcpkg_triplet=x64-mingw-static/);
+	assert.match(outputText, /windows_vcpkg_triplet=x64-mingw-static-release/);
 	assert.match(result.stdout, /LOCALAI_BACKEND_ARTIFACT_INPUTS_OK combinations=9/);
 });
 
@@ -265,6 +265,7 @@ test("the workflow uses immutable actions, package inputs, and the pinned tag gu
 		workflow,
 		/vcpkg\.exe install grpc:\$\{\{ needs\.validate-inputs\.outputs\.windows_vcpkg_triplet \}\}[^\n]*--overlay-triplets=\$overlayTriplets/,
 	);
+	assert.match(workflow, /windows_vcpkg_triplet/);
 	assert.match(workflow, /git\/ref\/tags/);
 	assert.match(workflow, /git\/tags/);
 	assert.match(workflow, /exists but its target could not be resolved/);
