@@ -11,6 +11,7 @@ const REPORT_VERSION = 1;
 const DIAGNOSTIC_PREVIEW_LIMIT = 4000;
 const CLEAN_TARGET_BASELINE = 0;
 const ADDED_FINDINGS_HEADER = "New unused frontend code:";
+const REPORT_TARGET_STATUSES = new Set(["pass", "fail"]);
 export const BACKEND_LINT_COMMENT_MARKER = "<!-- backend-lint-report -->";
 
 function textValue(value) {
@@ -106,24 +107,81 @@ export function countViolations(target) {
 	return { count: null, source: "unavailable" };
 }
 
-function reportErrorSummary(error, log) {
-	const details = textValue(error) || textValue(log);
-	return details ? `Backend Lint could not produce its report: ${details}` : "Backend Lint did not produce a report.";
+function isRecord(value) {
+	return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isNonNegativeSafeInteger(value) {
+	return Number.isSafeInteger(value) && value >= 0;
+}
+
+function isReportTarget(value) {
+	return isRecord(value)
+		&& typeof value.name === "string"
+		&& textValue(value.name) !== ""
+		&& REPORT_TARGET_STATUSES.has(value.status)
+		&& isNonNegativeSafeInteger(value.durationMillis)
+		&& typeof value.output === "string";
+}
+
+function reportShapeFailure(report) {
+	if (report === null || report === undefined) {
+		return "the report is missing or could not be parsed";
+	}
+	if (
+		!isRecord(report)
+		|| report.version !== REPORT_VERSION
+		|| !Array.isArray(report.targets)
+	) {
+		return "the report is malformed";
+	}
+	if (!report.targets.every(isReportTarget)) {
+		return "the report contains malformed checker entries";
+	}
+	return "";
+}
+
+function combinedDiagnostic(error, log) {
+	return [textValue(error), textValue(log)].filter(Boolean).join("\n");
+}
+
+function reportErrorSummary(reason, error, log) {
+	const details = combinedDiagnostic(error, log);
+	const reportState = reason === "the report is missing or could not be parsed"
+		? "Backend Lint could not produce its report."
+		: "Backend Lint produced no trustworthy checker result.";
+	const diagnostic = details
+		? ` Underlying diagnostic (bounded): ${preview(details, "(no underlying setup or execution diagnostic was captured)")}`
+		: " No underlying setup or execution diagnostic was captured.";
+	return `Backend Lint harness failure: ${reason}; zero checkers were observed. ${reportState}${diagnostic}`;
+}
+
+function harnessFailureSummary(reason, report, options = {}) {
+	const diagnostic = combinedDiagnostic(options.error, options.log);
+	const error = reportErrorSummary(reason, options.error, options.log);
+	return {
+		ok: false,
+		harnessFailure: true,
+		harnessFailureReason: reason,
+		harnessDiagnostic: preview(diagnostic, "(no underlying setup or execution diagnostic was captured)"),
+		targets: [],
+		failures: [error],
+		error,
+		totalDurationMillis: numericValue(report?.totalDurationMillis),
+		jobs: Number.isInteger(report?.jobs) ? report.jobs : null,
+		baselineSource: BACKEND_LINT_BASELINE_SOURCE,
+		allowances: [],
+		requiredTargets: [],
+	};
 }
 
 export function summarizeBackendLintReport(report, options = {}) {
-	if (!report || report.version !== REPORT_VERSION || !Array.isArray(report.targets)) {
-		return {
-			ok: false,
-			targets: [],
-			failures: [reportErrorSummary(options.error, options.log)],
-			error: reportErrorSummary(options.error, options.log),
-			totalDurationMillis: 0,
-			jobs: null,
-			baselineSource: BACKEND_LINT_BASELINE_SOURCE,
-			allowances: [],
-			requiredTargets: [],
-		};
+	const shapeFailure = reportShapeFailure(report);
+	if (shapeFailure) {
+		return harnessFailureSummary(shapeFailure, report, options);
+	}
+	if (report.targets.length === 0) {
+		return harnessFailureSummary("the report contained zero checker results", report, options);
 	}
 
 	const targets = report.targets.map((target) => {
@@ -144,6 +202,7 @@ export function summarizeBackendLintReport(report, options = {}) {
 
 	return {
 		ok: policy.ok,
+		harnessFailure: false,
 		targets: policy.targets,
 		failures: policy.failures,
 		baselineSource: BACKEND_LINT_BASELINE_SOURCE,
@@ -218,6 +277,15 @@ function formatPolicyFailure(target) {
 }
 
 export function renderBackendLintVerdict(summary) {
+	if (summary.harnessFailure) {
+		return [
+			"### Backend Lint harness verdict: FAILED",
+			"**BACKEND LINT HARNESS FAILED:** no trustworthy checker inventory was observed.",
+			`- Harness cause: ${summary.harnessFailureReason}.`,
+			"- Zero checkers were observed; this is not a clean report or an ordinary checker-violation result.",
+		].join("\n");
+	}
+
 	const toleratedTargets = summary.targets.filter((target) => target.policyStatus === "allowed");
 	const failedTargets = summary.targets.filter(
 		(target) => !["clean", "allowed"].includes(target.policyStatus),
@@ -250,10 +318,10 @@ export function renderBackendLintVerdict(summary) {
 	return lines.join("\n");
 }
 
-function preview(text) {
+function preview(text, empty = "(no checker output was captured)") {
 	const safe = textValue(text).replaceAll("```", "``\\`");
 	if (safe.length <= DIAGNOSTIC_PREVIEW_LIMIT) {
-		return safe || "(no checker output was captured)";
+		return safe || empty;
 	}
 	return `${safe.slice(0, DIAGNOSTIC_PREVIEW_LIMIT)}\n... truncated; full output is in the uploaded artifact.`;
 }
@@ -269,13 +337,33 @@ export function renderBackendLintSummary(summary) {
 	const lines = [
 		"## Backend Lint",
 		"",
-		"**Measurement only:** the raw `make lint` inventory, including any `LINT FAILED: N target(s)` line, is not the gate result. The ratchet verdict below is authoritative and controls this step's exit code.",
-		"Targets without a recorded allowance use an effective baseline of `0`; any positive count remains a `new failure`.",
+		summary.harnessFailure
+			? "**Harness result:** the lint report is not trustworthy. This failed harness verdict is distinct from both a clean report and an ordinary checker violation."
+			: "**Measurement only:** the raw `make lint` inventory, including any `LINT FAILED: N target(s)` line, is not the gate result. The ratchet verdict below is authoritative and controls this step's exit code.",
+		...(summary.harnessFailure
+			? []
+			: ["Targets without a recorded allowance use an effective baseline of `0`; any positive count remains a `new failure`."]),
 		"",
 		renderBackendLintVerdict(summary),
 		"",
 		`- Result: \`${summary.ok ? "passed" : "failed"}\``,
 		`- Canonical checkers observed: \`${summary.targets.length}\``,
+	];
+	if (summary.harnessFailure) {
+		lines.push(
+			`- LINT_JOBS: \`${summary.jobs ?? "unknown"}\``,
+			`- Total Backend Lint wall time: \`${formatDuration(summary.totalDurationMillis)}\``,
+			"",
+			"### Underlying harness diagnostic (bounded)",
+			"",
+			"```text",
+			preview(summary.harnessDiagnostic, "(no underlying setup or execution diagnostic was captured)"),
+			"```",
+		);
+		return `${lines.join("\n")}\n`;
+	}
+
+	lines.push(
 		`- Clean checkers gated: \`${summary.targets.filter((target) => target.policyStatus === "clean").length}\``,
 		`- Allowed baseline debt: \`${summary.targets.filter((target) => target.policyStatus === "allowed").length}\` checker(s) within measured limits`,
 		`- Baseline source: ${summary.baselineSource || "not recorded"}`,
@@ -284,7 +372,7 @@ export function renderBackendLintSummary(summary) {
 		"",
 		"| Checker | Result | Baseline | Current | Delta | Wall time | Policy |",
 		"| --- | --- | ---: | ---: | ---: | ---: | --- |",
-	];
+	);
 	for (const target of summary.targets) {
 		lines.push(
 			`| ${target.name} | \`${target.status}\` | ${effectiveBaseline(target)} | ${formatCount(target.violationCount)} | ${formatSignedDelta(target.violationCount, effectiveBaseline(target))} | ${formatDuration(target.durationMillis)} | ${target.policyStatus || "unknown"} |`,

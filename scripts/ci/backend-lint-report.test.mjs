@@ -114,6 +114,7 @@ test("all clean current-main checkers pass the baseline policy", () => {
 	const summary = summarizeBackendLintReport(report({ targets: baselineTargets() }));
 
 	assert.equal(summary.ok, true);
+	assert.equal(summary.harnessFailure, false);
 	assert.equal(summary.failures.length, 0);
 	assert.equal(
 		summary.targets.filter((target) => target.policyStatus === "clean").length,
@@ -165,6 +166,7 @@ test("an unallowlisted ui-deadcode failure is the authoritative failed verdict",
 	const markdown = renderBackendLintSummary(summary);
 
 	assert.equal(summary.ok, false);
+	assert.equal(summary.harnessFailure, false);
 	assert.match(markdown, /BACKEND LINT RATCHET FAILED/);
 	assert.match(markdown, /ui-deadcode: baseline 0 -> current 1 \(delta \+1; new failure\)/);
 	assert.match(summary.failures.join("\n"), /ui-deadcode failed with 1 reported violation\(s\); no baseline allowance exists/);
@@ -386,15 +388,73 @@ test("ownership-inventory-check has no allowance left to absorb a regression", (
 	);
 });
 
-test("missing or malformed hosted reports fail closed", () => {
+test("missing or malformed hosted reports are explicit bounded harness failures", () => {
 	const summary = summarizeBackendLintReport(null, {
 		error: "ENOENT",
-		log: "make lint could not start",
+		log: `${"make lint could not start; setup detail ".repeat(200)}tail-only`,
 	});
+	const markdown = renderBackendLintSummary(summary);
 
 	assert.equal(summary.ok, false);
+	assert.equal(summary.harnessFailure, true);
 	assert.equal(summary.targets.length, 0);
-	assert.match(renderBackendLintSummary(summary), /could not produce its report/);
+	assert.match(summary.error, /Backend Lint harness failure/);
+	assert.match(summary.error, /zero checkers were observed/);
+	assert.match(summary.error, /could not produce its report/);
+	assert.match(markdown, /BACKEND LINT HARNESS FAILED/);
+	assert.match(markdown, /Canonical checkers observed: `0`/);
+	assert.match(markdown, /Underlying harness diagnostic \(bounded\)/);
+	assert.match(markdown, /truncated; full output is in the uploaded artifact/);
+	assert.doesNotMatch(markdown, /tail-only/);
+
+	const malformed = summarizeBackendLintReport({ version: 1, targets: [null] }, {
+		log: "lintlane wrote an invalid checker entry",
+	});
+	assert.equal(malformed.harnessFailure, true);
+	assert.match(malformed.error, /malformed checker entries/);
+	assert.match(renderBackendLintSummary(malformed), /Zero checkers were observed/);
+});
+
+test("incomplete or invalid checker records are harness failures", () => {
+	const incomplete = summarizeBackendLintReport(report({
+		targets: baselineTargets().map(({ name, status }) => ({ name, status })),
+	}), {
+		log: "lintlane emitted checker records without producer fields",
+	});
+
+	assert.equal(incomplete.ok, false);
+	assert.equal(incomplete.harnessFailure, true);
+	assert.equal(incomplete.targets.length, 0);
+	assert.match(incomplete.error, /malformed checker entries/);
+	assert.match(incomplete.error, /zero checkers were observed/);
+	assert.match(renderBackendLintSummary(incomplete), /BACKEND LINT HARNESS FAILED/);
+	assert.doesNotMatch(renderBackendLintSummary(incomplete), /BACKEND LINT RATCHET/);
+
+	const invalidStatus = summarizeBackendLintReport(report({
+		targets: baselineTargets({
+			"service-cycle-check": { status: "unknown" },
+		}),
+	}));
+
+	assert.equal(invalidStatus.harnessFailure, true);
+	assert.match(invalidStatus.error, /malformed checker entries/);
+});
+
+test("a structurally valid report with zero checkers is a harness failure", () => {
+	const summary = summarizeBackendLintReport(report({ targets: [] }), {
+		log: "ERR_MODULE_NOT_FOUND: scripts/ci/runner-parallelism.mjs",
+	});
+	const markdown = renderBackendLintSummary(summary);
+
+	assert.equal(summary.ok, false);
+	assert.equal(summary.harnessFailure, true);
+	assert.equal(summary.targets.length, 0);
+	assert.match(summary.error, /the report contained zero checker results/);
+	assert.match(summary.error, /zero checkers were observed/);
+	assert.match(markdown, /BACKEND LINT HARNESS FAILED/);
+	assert.match(markdown, /ERR_MODULE_NOT_FOUND/);
+	assert.doesNotMatch(markdown, /BACKEND LINT RATCHET/);
+	assert.doesNotMatch(markdown, /Policy failures/);
 });
 
 test("PR publication includes a stable marker and hosted identity", () => {

@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -96,8 +97,12 @@ func parseConfig(args []string, stderr io.Writer) (config, error) {
 	checkerCacheDir := flags.String("cache-dir", ".cache/lint-checkers", "directory for temporary lint lane executables")
 	goTool := flags.String("go", "go", "Go executable used to compile the lint checker driver")
 	reportFile := flags.String("report-file", "", "JSON file for the complete per-target lint report")
-	jobs := flags.Int("jobs", defaultLintJobs, "maximum number of lint targets to run concurrently")
+	jobsRaw := flags.String("jobs", strconv.Itoa(defaultLintJobs), "maximum number of lint targets to run concurrently")
 	if err := flags.Parse(args); err != nil {
+		return config{}, err
+	}
+	jobs, err := parseLintJobs(*jobsRaw)
+	if err != nil {
 		return config{}, err
 	}
 	if strings.TrimSpace(*makeTool) == "" {
@@ -118,9 +123,6 @@ func parseConfig(args []string, stderr io.Writer) (config, error) {
 	if strings.TrimSpace(*reportFile) == "" && *reportFile != "" {
 		return config{}, errors.New("report file must not be empty")
 	}
-	if *jobs < 1 {
-		return config{}, fmt.Errorf("lint job limit must be positive, got %d", *jobs)
-	}
 	targets := append([]string(nil), flags.Args()...)
 	if len(targets) == 0 {
 		return config{}, errors.New("at least one lint target is required")
@@ -137,9 +139,20 @@ func parseConfig(args []string, stderr io.Writer) (config, error) {
 		checkerCacheDir: *checkerCacheDir,
 		goTool:          *goTool,
 		reportFile:      *reportFile,
-		jobs:            *jobs,
+		jobs:            jobs,
 		targets:         targets,
 	}, nil
+}
+
+func parseLintJobs(raw string) (int, error) {
+	if strings.TrimSpace(raw) == "" {
+		return 0, fmt.Errorf("invalid -jobs value: expected a positive integer, received %q", raw)
+	}
+	jobs, err := strconv.Atoi(raw)
+	if err != nil || jobs < 1 {
+		return 0, fmt.Errorf("invalid -jobs value: expected a positive integer, received %q", raw)
+	}
+	return jobs, nil
 }
 
 func prepareCheckerDriver(cfg config, stderr io.Writer) (string, func(), error) {

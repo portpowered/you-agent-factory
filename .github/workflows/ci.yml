@@ -540,9 +540,12 @@ jobs:
           runner_cpus="$(nproc 2>/dev/null || true)"
           RUNNER_LOGICAL_CPUS="$runner_cpus" node --input-type=module <<'NODE'
           import { appendFileSync } from 'node:fs';
-          import { resolveRunnerParallelism } from './scripts/ci/runner-parallelism.mjs';
+          import { resolveBackendLintParallelism } from './scripts/ci/backend-lint-workflow.mjs';
 
-          const { logicalCPUs, jobs } = resolveRunnerParallelism(process.env.RUNNER_LOGICAL_CPUS);
+          const { logicalCPUs, jobs, warning } = await resolveBackendLintParallelism(process.env.RUNNER_LOGICAL_CPUS);
+          if (warning) {
+            console.warn(`::warning::${warning}`);
+          }
           console.log(`Backend Lint CI runner: logical_cpus=${logicalCPUs} jobs=${jobs}`);
           appendFileSync(process.env.GITHUB_OUTPUT, `jobs=${jobs}\n`);
           NODE

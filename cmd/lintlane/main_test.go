@@ -230,21 +230,50 @@ func TestLintlaneHelperProcess(t *testing.T) {
 	os.Exit(0)
 }
 
-func TestParseConfigRejectsInvalidJobLimitAndMissingTargets(t *testing.T) {
+func TestRunRejectsInvalidJobsBeforeCheckerExecution(t *testing.T) {
 	for _, test := range []struct {
-		name string
-		args []string
-		want string
+		name     string
+		rawJobs  string
+		wantCode int
 	}{
-		{name: "zero", args: []string{"-jobs", "0", "lint"}, want: "positive"},
-		{name: "negative", args: []string{"-jobs", "-1", "lint"}, want: "positive"},
-		{name: "missing targets", args: []string{"-jobs", "2"}, want: "at least one lint target"},
+		{name: "empty", rawJobs: "", wantCode: 2},
+		{name: "whitespace only", rawJobs: " \t ", wantCode: 2},
+		{name: "non numeric", rawJobs: "many", wantCode: 2},
+		{name: "zero", rawJobs: "0", wantCode: 2},
+		{name: "negative", rawJobs: "-1", wantCode: 2},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := parseConfig(test.args, &bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("parseConfig() error = %v, want %q", err, test.want)
+			original := executeTarget
+			t.Cleanup(func() { executeTarget = original })
+			var executions atomic.Int32
+			executeTarget = func(_, _ string, _, _ io.Writer) error {
+				executions.Add(1)
+				return nil
+			}
+
+			var stdout, stderr bytes.Buffer
+			code := run([]string{"-jobs", test.rawJobs, "lint"}, &stdout, &stderr)
+			if code != test.wantCode {
+				t.Fatalf("run() exit code = %d, want %d; stderr = %q", code, test.wantCode, stderr.String())
+			}
+			if executions.Load() != 0 {
+				t.Fatalf("checker execution count = %d, want validation to stop the lane first", executions.Load())
+			}
+			wantReceived := fmt.Sprintf("received %q", test.rawJobs)
+			if !strings.Contains(stderr.String(), "invalid -jobs value") || !strings.Contains(stderr.String(), wantReceived) {
+				t.Fatalf("validation diagnostic = %q, want -jobs and %q", stderr.String(), wantReceived)
 			}
 		})
+	}
+}
+
+func TestParseConfigUsesDefaultJobsWhenOmitted(t *testing.T) {
+	cfg, err := parseConfig([]string{"lint"}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("parseConfig() error = %v", err)
+	}
+	if cfg.jobs != defaultLintJobs {
+		t.Fatalf("default jobs = %d, want %d", cfg.jobs, defaultLintJobs)
 	}
 }
 
