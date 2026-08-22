@@ -221,6 +221,28 @@ run_direct_grpc_server_make() {
 		"$make_command" -C "$backend_path" "$@"
 }
 
+patch_llama_grpc_source() {
+	local grpc_source="${backend_path}/llama.cpp/tools/grpc-server/grpc-server.cpp"
+	"$make_command" -C "$backend_path" llama.cpp/tools/grpc-server
+	if [[ ! -f "$grpc_source" ]]; then
+		echo "pinned LocalAI llama gRPC source is missing: ${grpc_source}" >&2
+		exit 1
+	fi
+	node -e '
+const fs = require("node:fs");
+const path = process.argv[1];
+const source = fs.readFileSync(path, "utf8");
+const needle = "reply->set_message(arr);";
+const replacement = "reply->set_message(arr.dump());";
+const count = source.split(needle).length - 1;
+if (count !== 1) {
+  console.error(`expected one multi-result protobuf string conversion in ${path}, found ${count}`);
+  process.exit(1);
+}
+fs.writeFileSync(path, source.replace(needle, replacement));
+' "$grpc_source"
+}
+
 generate_go_protocol() {
 	local grpc_path="${LOCALAI_ROOT}/backend/cpp/grpc"
 	local protoc_path="${grpc_path}/installed_packages/bin/protoc"
@@ -366,6 +388,7 @@ if [[ "$TARGET_ID" == "darwin-arm64" ]]; then
 fi
 if [[ "$BACKEND_ID" == "localai-llamacpp" ]]; then
 	ensure_localai_grpc_compat_path
+	patch_llama_grpc_source
 fi
 
 if [[ "$TARGET_ID" == "windows-amd64" ]]; then
