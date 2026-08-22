@@ -63,6 +63,25 @@ func (b failingPublishBoundary) Execute(context.Context, workers.ExecuteRequest)
 	return workers.ExecuteResult{}, b.err
 }
 
+// controlClaimLogger is a deterministic observation point immediately after
+// beginCancellation has claimed a supervision. The test holds the logger call
+// until the admission gate is released, so the interleaving is controlled by
+// channels rather than by scheduler timing.
+type controlClaimLogger struct {
+	logging.NoopLogger
+	claimed chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (l *controlClaimLogger) Info(message string, _ ...any) {
+	if message != "worker session control claimed" {
+		return
+	}
+	l.once.Do(func() { close(l.claimed) })
+	<-l.release
+}
+
 // newTestRegistry returns the concrete *registry (not just the Service
 // interface) so white-box tests in this package can drive reserveIfAbsent
 // and transitionToStarting directly.
@@ -640,35 +659,193 @@ func dispatchHandoff(dispatchID string) workers.WorkstationDispatchRequest {
 	}
 }
 
-func TestCancel_BeforeBoundaryAdmissionEitherWaitsOrTerminatesTheExactSupervision(t *testing.T) {
+type admissionHandoffOutcome struct {
+	result workers.WorkstationDispatchResult
+	err    error
+}
+
+type admissionControlOutcome struct {
+	result workersessions.ControlResult
+	err    error
+}
+
+type admissionCancellationFixture struct {
+	registry         *registry
+	sessionID        string
+	dispatchID       string
+	supervision      *supervision
+	request          workers.WorkstationDispatchRequest
+	logger           *controlClaimLogger
+	admissionStarted chan struct{}
+	releaseAdmission chan struct{}
+	executionCalled  chan struct{}
+	executionDone    chan admissionHandoffOutcome
+	closeAdmission   func()
+}
+
+func newAdmissionCancellationFixture(t *testing.T) admissionCancellationFixture {
+	t.Helper()
 	r := newTestRegistry(t)
-	r.reserveIfAbsent("worker-1")
-	if _, err := r.transitionToStarting("worker-1"); err != nil {
+	const sessionID = "worker-1"
+	const dispatchID = "dispatch-1"
+	r.reserveIfAbsent(sessionID)
+	if _, err := r.transitionToStarting(sessionID); err != nil {
 		t.Fatalf("transitionToStarting: %v", err)
 	}
-	supervision, ok := r.registerSupervision("worker-1", "dispatch-1", "")
+	request := dispatchHandoff(dispatchID)
+	supervision, ok := r.registerSupervision(sessionID, dispatchID, "", request)
 	if !ok {
 		t.Fatal("registerSupervision: want supervised STARTING attempt")
 	}
+	fixture := admissionCancellationFixture{
+		registry:         r,
+		sessionID:        sessionID,
+		dispatchID:       dispatchID,
+		supervision:      supervision,
+		request:          request,
+		admissionStarted: make(chan struct{}),
+		releaseAdmission: make(chan struct{}),
+		executionCalled:  make(chan struct{}, 1),
+		executionDone:    make(chan admissionHandoffOutcome, 1),
+	}
+	logger := &controlClaimLogger{claimed: make(chan struct{}), release: make(chan struct{})}
+	fixture.logger = logger
+	var releaseOnce sync.Once
+	fixture.closeAdmission = func() {
+		releaseOnce.Do(func() {
+			close(fixture.releaseAdmission)
+			close(logger.release)
+		})
+	}
+	r.logger = logger
 	supervision.mu.Lock()
 	supervision.publishing = true
 	supervision.mu.Unlock()
-	resultCh := make(chan workersessions.ControlResult, 1)
-	errCh := make(chan error, 1)
 	go func() {
-		result, err := r.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-1"})
-		resultCh <- result
-		errCh <- err
+		result, err := executeWithService(
+			context.Background(),
+			coverageExecution{execute: func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+				fixture.executionCalled <- struct{}{}
+				return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
+			}},
+			fixture.request,
+			supervision,
+			func() {
+				close(fixture.admissionStarted)
+				<-fixture.releaseAdmission
+				if supervision.admissionAllowed() {
+					r.acceptSupervision(fixture.sessionID, supervision)
+				}
+			},
+		)
+		r.finishSupervisionPublication(supervision)
+		fixture.executionDone <- admissionHandoffOutcome{result: result, err: err}
 	}()
-	supervision.mu.Lock()
-	supervision.publishing = false
-	supervision.mu.Unlock()
-	supervision.signalPublished()
-	result := <-resultCh
-	if err := <-errCh; err != nil || result.Outcome != workersessions.ControlOutcomeApplied || result.Session.State != workersessions.StateCanceled {
-		t.Fatalf("Cancel() before admission = %#v, %v, want applied CANCELED", result, err)
-	}
+	return fixture
+}
 
+func (f *admissionCancellationFixture) release() {
+	f.closeAdmission()
+}
+
+func (f *admissionCancellationFixture) waitAtAdmission(t *testing.T) {
+	t.Helper()
+	select {
+	case <-f.admissionStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("execution did not reach the controlled admission gate")
+	}
+	starting, err := f.registry.Get(context.Background(), workersessions.GetRequest{ID: f.sessionID})
+	if err != nil || starting.State != workersessions.StateStarting {
+		t.Fatalf("session at admission gate = %+v, %v, want STARTING", starting, err)
+	}
+	f.supervision.mu.Lock()
+	accepted, publishing := f.supervision.accepted, f.supervision.publishing
+	f.supervision.mu.Unlock()
+	if accepted || !publishing {
+		t.Fatalf("supervision at admission gate accepted=%t publishing=%t, want false/true", accepted, publishing)
+	}
+}
+
+func (f *admissionCancellationFixture) startCancel(t *testing.T) <-chan admissionControlOutcome {
+	t.Helper()
+	controlDone := make(chan admissionControlOutcome, 1)
+	go func() {
+		result, err := f.registry.Cancel(context.Background(), workersessions.ControlRequest{ID: f.sessionID})
+		controlDone <- admissionControlOutcome{result: result, err: err}
+	}()
+	select {
+	case <-f.logger.claimed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Cancel did not claim the exact supervision at the admission gate")
+	}
+	f.supervision.mu.Lock()
+	queued := f.supervision.preAdmissionAction
+	f.supervision.mu.Unlock()
+	if queued != workersessions.ControlActionCancel {
+		t.Fatalf("queued admission control = %q, want CANCEL", queued)
+	}
+	return controlDone
+}
+
+func waitAdmissionControl(t *testing.T, controlDone <-chan admissionControlOutcome) admissionControlOutcome {
+	t.Helper()
+	select {
+	case control := <-controlDone:
+		return control
+	case <-time.After(2 * time.Second):
+		t.Fatal("Cancel did not resolve after releasing the admission gate")
+	}
+	return admissionControlOutcome{}
+}
+
+func waitAdmissionHandoff(t *testing.T, handoffDone <-chan admissionHandoffOutcome) admissionHandoffOutcome {
+	t.Helper()
+	select {
+	case handoff := <-handoffDone:
+		return handoff
+	case <-time.After(2 * time.Second):
+		t.Fatal("execution handoff did not finish after pre-admission cancellation")
+	}
+	return admissionHandoffOutcome{}
+}
+
+func assertAdmissionCancellation(t *testing.T, fixture *admissionCancellationFixture, control admissionControlOutcome, handoff admissionHandoffOutcome) {
+	t.Helper()
+	if control.err != nil || control.result.Outcome != workersessions.ControlOutcomeApplied ||
+		control.result.DispatchID != fixture.dispatchID || control.result.Session.State != workersessions.StateCanceled {
+		t.Fatalf("Cancel() during admission = %#v, %v, want applied exact CANCELED supervision", control.result, control.err)
+	}
+	if !errors.Is(handoff.err, workers.ErrWorkstationDispatchCanceled) ||
+		handoff.result.DispatchID != fixture.dispatchID ||
+		handoff.result.TerminalOutcome != workers.WorkstationDispatchTerminalOutcomeCanceled {
+		t.Fatalf("execution handoff = %#v, %v, want exact canceled dispatch", handoff.result, handoff.err)
+	}
+	select {
+	case <-fixture.executionCalled:
+		t.Fatal("Workers execution ran after cancellation won before admission")
+	default:
+	}
+	fixture.registry.completeSupervision(fixture.sessionID, fixture.supervision, handoff.result, handoff.err)
+	final, err := fixture.registry.Get(context.Background(), workersessions.GetRequest{ID: fixture.sessionID})
+	if err != nil || final.State != workersessions.StateCanceled {
+		t.Fatalf("late admission completion session = %+v, %v, want absorbing CANCELED", final, err)
+	}
+}
+
+func TestCancel_BeforeBoundaryAdmissionEitherWaitsOrTerminatesTheExactSupervision(t *testing.T) {
+	fixture := newAdmissionCancellationFixture(t)
+	defer fixture.release()
+	fixture.waitAtAdmission(t)
+	controlDone := fixture.startCancel(t)
+	fixture.release()
+	control := waitAdmissionControl(t, controlDone)
+	handoff := waitAdmissionHandoff(t, fixture.executionDone)
+	assertAdmissionCancellation(t, &fixture, control, handoff)
+}
+
+func TestCancel_PreAdmissionTerminalAndConcurrentControlRemainNoop(t *testing.T) {
+	r := newTestRegistry(t)
 	r.reserveIfAbsent("worker-2")
 	if _, err := r.transitionToStarting("worker-2"); err != nil {
 		t.Fatalf("transitionToStarting(worker-2): %v", err)
@@ -683,6 +860,7 @@ func TestCancel_BeforeBoundaryAdmissionEitherWaitsOrTerminatesTheExactSupervisio
 	if err != nil || noOp.Outcome != workersessions.ControlOutcomeNoop {
 		t.Fatalf("repeated pre-admission Cancel() = %#v, %v, want NOOP", noOp, err)
 	}
+
 	requestedSupervision := newSupervision("dispatch-requested", "")
 	requestedSupervision.requestedAction = workersessions.ControlActionPause
 	if attempt := requestedSupervision.beginCancellation(workersessions.ControlActionCancel); attempt.kind != cancellationAttemptNoop {
@@ -706,6 +884,183 @@ func TestCancel_BeforeBoundaryAdmissionEitherWaitsOrTerminatesTheExactSupervisio
 	attempt := activeSupervision.beginCancellation(workersessions.ControlActionCancel)
 	if attempt.kind != cancellationAttemptWait || attempt.wait != closedWait {
 		t.Fatalf("beginCancellation() with another active control = %#v, want wait for that control", attempt)
+	}
+}
+
+func TestCancel_BeforePublicationUsesRegisteredSupervision(t *testing.T) {
+	r := newTestRegistry(t)
+	r.reserveIfAbsent("worker-before-publication")
+	if _, err := r.transitionToStarting("worker-before-publication"); err != nil {
+		t.Fatalf("transitionToStarting: %v", err)
+	}
+	supervision, ok := r.registerSupervision(
+		"worker-before-publication",
+		"dispatch-before-publication",
+		"",
+		dispatchHandoff("dispatch-before-publication"),
+	)
+	if !ok {
+		t.Fatal("registerSupervision: want exact pre-publication supervision")
+	}
+
+	result, err := r.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-before-publication"})
+	if err != nil || result.Outcome != workersessions.ControlOutcomeApplied ||
+		result.DispatchID != "dispatch-before-publication" || result.Session.State != workersessions.StateCanceled {
+		t.Fatalf("Cancel() before publication = %#v, %v, want applied exact CANCELED supervision", result, err)
+	}
+	if errors.Is(err, workers.ErrUnknownWorkstationDispatch) {
+		t.Fatalf("Cancel() before publication returned unknown dispatch: %v", err)
+	}
+
+	r.completeSupervision(
+		"worker-before-publication",
+		supervision,
+		canceledBeforeAdmissionResult(dispatchHandoff("dispatch-before-publication")),
+		workers.ErrWorkstationDispatchCanceled,
+	)
+	final, err := r.Get(context.Background(), workersessions.GetRequest{ID: "worker-before-publication"})
+	if err != nil || final.State != workersessions.StateCanceled {
+		t.Fatalf("late pre-publication completion session = %+v, %v, want absorbing CANCELED", final, err)
+	}
+}
+
+func TestTerminate_BeforePublicationUsesRegisteredSupervisionAndIsIdempotent(t *testing.T) {
+	r := newTestRegistry(t)
+	const sessionID = "worker-terminate-before-publication"
+	const dispatchID = "dispatch-terminate-before-publication"
+	r.reserveIfAbsent(sessionID)
+	if _, err := r.transitionToStarting(sessionID); err != nil {
+		t.Fatalf("transitionToStarting: %v", err)
+	}
+	request := dispatchHandoff(dispatchID)
+	supervision, ok := r.registerSupervision(sessionID, dispatchID, "", request)
+	if !ok {
+		t.Fatal("registerSupervision: want exact pre-publication supervision")
+	}
+
+	result, err := r.Terminate(context.Background(), workersessions.ControlRequest{ID: sessionID})
+	if err != nil || result.Outcome != workersessions.ControlOutcomeApplied ||
+		result.DispatchID != dispatchID || result.Session.State != workersessions.StateTerminated {
+		t.Fatalf("Terminate() before publication = %#v, %v, want applied exact TERMINATED supervision", result, err)
+	}
+	if errors.Is(err, workers.ErrUnknownWorkstationDispatch) {
+		t.Fatalf("Terminate() before publication returned unknown dispatch: %v", err)
+	}
+
+	repeated, err := r.Terminate(context.Background(), workersessions.ControlRequest{ID: sessionID})
+	if err != nil || repeated.Outcome != workersessions.ControlOutcomeNoop ||
+		repeated.DispatchID != dispatchID || repeated.Session.State != workersessions.StateTerminated {
+		t.Fatalf("repeated Terminate() = %#v, %v, want exact terminal NOOP", repeated, err)
+	}
+
+	// A late canceled publication belongs to the same supervision and cannot
+	// replace the absorbing terminal state or make a second boundary request.
+	r.completeSupervision(sessionID, supervision, canceledBeforeAdmissionResult(request), workers.ErrWorkstationDispatchCanceled)
+	final, err := r.Get(context.Background(), workersessions.GetRequest{ID: sessionID})
+	if err != nil || final.State != workersessions.StateTerminated {
+		t.Fatalf("late pre-publication completion session = %+v, %v, want absorbing TERMINATED", final, err)
+	}
+}
+
+func TestCancel_KnownSessionWithAbsentOrUnknownBoundaryDispatchFailsClosed(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		install    func(*supervision)
+		wantReason string
+	}{
+		{
+			name:       "absent cancellation handle",
+			wantReason: "absent",
+		},
+		{
+			name: "unknown boundary identity",
+			install: func(supervision *supervision) {
+				supervision.installCancelFailure(func() error { return workers.ErrUnknownWorkstationDispatch })
+			},
+			wantReason: "unknown",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			r := newTestRegistry(t)
+			const sessionID = "worker-fail-closed"
+			const dispatchID = "dispatch-fail-closed"
+			r.sessions[sessionID] = workersessions.Session{ID: sessionID, State: workersessions.StateRunning}
+			supervision := newSupervision(dispatchID, "", dispatchHandoff(dispatchID))
+			supervision.accepted = true
+			if test.install != nil {
+				test.install(supervision)
+			}
+			r.supervisions[sessionID] = supervision
+			r.dispatchOwners[dispatchID] = sessionID
+
+			result, err := r.Cancel(context.Background(), workersessions.ControlRequest{ID: sessionID})
+			if !errors.Is(err, workers.ErrUnknownWorkstationDispatch) ||
+				result.Outcome != workersessions.ControlOutcomeFailed || result.DispatchID != dispatchID ||
+				result.Session.State != workersessions.StateRunning {
+				t.Fatalf("Cancel() with %s boundary dispatch = %#v, %v, want failed exact RUNNING result", test.wantReason, result, err)
+			}
+			current, getErr := r.Get(context.Background(), workersessions.GetRequest{ID: sessionID})
+			if getErr != nil || current.State != workersessions.StateRunning {
+				t.Fatalf("session after %s boundary failure = %+v, %v, want RUNNING", test.wantReason, current, getErr)
+			}
+		})
+	}
+}
+
+func TestPublishRegisteredAttempt_CanceledBeforeAdmissionRetainsExactTerminal(t *testing.T) {
+	r := newTestRegistry(t)
+	const sessionID = "worker-publish-canceled"
+	const dispatchID = "dispatch-publish-canceled"
+	r.reserveIfAbsent(sessionID)
+	if _, err := r.transitionToStarting(sessionID); err != nil {
+		t.Fatalf("transitionToStarting: %v", err)
+	}
+	request := dispatchHandoff(dispatchID)
+	supervision, ok := r.registerSupervision(sessionID, dispatchID, "", request)
+	if !ok {
+		t.Fatal("registerSupervision: want exact publication supervision")
+	}
+	supervision.mu.Lock()
+	supervision.publishing = true
+	supervision.mu.Unlock()
+
+	logger := &controlClaimLogger{claimed: make(chan struct{}), release: make(chan struct{})}
+	r.logger = logger
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(logger.release) }) }
+	defer release()
+	controlDone := make(chan struct {
+		result workersessions.ControlResult
+		err    error
+	}, 1)
+	go func() {
+		result, err := r.Cancel(context.Background(), workersessions.ControlRequest{ID: sessionID})
+		controlDone <- struct {
+			result workersessions.ControlResult
+			err    error
+		}{result: result, err: err}
+	}()
+	select {
+	case <-logger.claimed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Cancel did not claim publication supervision")
+	}
+	release()
+
+	result, retry := r.publishRegisteredAttempt(context.Background(), sessionID, request, supervision, true)
+	if retry || result.Session.State != workersessions.StateCanceled ||
+		result.Dispatch.DispatchID != dispatchID ||
+		!errors.Is(result.DispatchErr, workers.ErrWorkstationDispatchCanceled) {
+		t.Fatalf("publishRegisteredAttempt() = %#v, retry %t, want exact canceled terminal", result, retry)
+	}
+	select {
+	case control := <-controlDone:
+		if control.err != nil || control.result.Outcome != workersessions.ControlOutcomeApplied ||
+			control.result.DispatchID != dispatchID || control.result.Session.State != workersessions.StateCanceled {
+			t.Fatalf("Cancel() after publication cancellation = %#v, %v, want applied exact CANCELED supervision", control.result, control.err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Cancel did not resolve after canceled publication")
 	}
 }
 
