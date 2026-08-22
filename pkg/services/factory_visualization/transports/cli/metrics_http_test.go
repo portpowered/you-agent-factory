@@ -76,6 +76,30 @@ func TestMetricsOperationUsesGeneratedClientAndRendersCompleteReport(t *testing.
 	}
 }
 
+func TestMetricsOperationNormalizesAcceptedGroupBeforeRendering(t *testing.T) {
+	client := &metricsClientStub{response: &generatedclient.GetMetricsClientResponse{
+		JSON200: &generatedclient.MetricsReport{
+			Cost:      generatedclient.MetricsCost{Availability: "UNAVAILABLE"},
+			Providers: []generatedclient.MetricsBreakdown{{Key: "provider-a"}},
+		},
+	}}
+	operation := NewOperation(func(string) (Client, error) { return client, nil })
+
+	var output bytes.Buffer
+	if err := RunMetricsOperation(context.Background(), operation, MetricsConfig{
+		Server:  "http://metrics.test",
+		GroupBy: " PROVIDER ",
+		JSON:    false,
+		Output:  &output,
+	}); err != nil {
+		t.Fatalf("RunMetricsOperation() error = %v", err)
+	}
+	if !strings.Contains(output.String(), "Breakdown by provider: 1 rows") ||
+		!strings.Contains(output.String(), "provider-a:") {
+		t.Fatalf("normalized provider output = %q", output.String())
+	}
+}
+
 func TestMetricsOperationMapsTypedHTTPFailuresWithoutPartialOutput(t *testing.T) {
 	tests := []struct {
 		name     string

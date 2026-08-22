@@ -14,9 +14,11 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
 	costscli "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
@@ -58,6 +60,7 @@ import (
 const (
 	standardCLIHTTPTimeout = 10 * time.Second
 	extendedCLIHTTPTimeout = 15 * time.Second
+	metricsCLIHTTPTimeout  = 5 * time.Minute
 )
 
 type standardCLIHTTPProtocol struct {
@@ -97,7 +100,7 @@ func provideMetricsCLI() visualizationcli.Operation {
 	return visualizationcli.NewOperation(func(server string) (visualizationcli.Client, error) {
 		return generatedhttpclient.NewClientWithResponses(
 			server,
-			generatedhttpclient.WithHTTPClient(&http.Client{Timeout: standardCLIHTTPTimeout}),
+			generatedhttpclient.WithHTTPClient(&http.Client{Timeout: metricsCLIHTTPTimeout}),
 		)
 	})
 }
@@ -857,6 +860,7 @@ func provideCLIExecutionServiceBuilder(
 	}
 }
 
+<<<<<<< HEAD
 func provideRunOpener(
 	prepareWorkTarget work.SingleWorkTargetPreparation,
 	loadMockWorkers workers.MockWorkersConfigDiagnosticsLoader,
@@ -876,4 +880,12 @@ func provideRunOpener(
 			prepareWorkTarget, nil, loadMockWorkers, buildRuntimeRequest, presentations, visualizations,
 		)
 	}
+}
+
+func provideCLIObserver(edges serviceedges.Edges) platformprocess.CLIObserver {
+	return edges.CLIObserver
+}
+
+func provideCLICommandFactory(operations cli.CommandOperations) cli.CommandFactory {
+	return cli.NewCommandFactory(operations)
 }

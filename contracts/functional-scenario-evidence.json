@@ -8,6 +8,12 @@
       ]
     },
     {
+      "test": "tests/functional/factory/visualization/runtime_metrics/documented_workflow_test.go::TestMetricsDocumentedWorkflowThroughRootProcess",
+      "stableIds": [
+        "rest/getMetrics"
+      ]
+    },
+    {
       "test": "tests/functional/provider_sessions/cli/worker_sessions_cli_test.go::TestWorkerSessionsCLI",
       "stableIds": [
         "cli/you.worker-sessions.list",

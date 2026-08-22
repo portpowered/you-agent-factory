@@ -53,7 +53,11 @@ func NewOperation(factory ClientFactory) Operation {
 			return metricsResponseError(response)
 		}
 		result := metricsReportFromAPI(*response.JSON200)
-		output, err := renderMetricsOutput(config.GroupBy, config.SessionID, config.JSON, result)
+		groupBy, err := normalizeMetricsGroupBy(config.GroupBy)
+		if err != nil {
+			return err
+		}
+		output, err := renderMetricsOutput(groupBy, config.SessionID, config.JSON, result)
 		if err != nil {
 			return err
 		}

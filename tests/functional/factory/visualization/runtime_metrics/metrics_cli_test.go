@@ -1,19 +1,14 @@
 package runtime_metrics_test
 
 import (
-	"context"
 	"encoding/json"
-	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
-	factoryvisualizationhttp "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http"
-	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"go.uber.org/zap"
 )
 
 // TestMetricsInvalidGroupThroughRootProcessPreservesCodedDiagnostic proves
@@ -43,32 +38,23 @@ func TestMetricsInvalidGroupThroughRootProcessPreservesCodedDiagnostic(t *testin
 // both public presenters consume the query result returned by the canonical
 // process rather than relying on a presenter-local cost constant.
 func TestMetricsSuccessThroughRootProcessRendersQueryCostAvailability(t *testing.T) {
-	t.Parallel()
-
-	query := factoryvisualization.RuntimeMetricsQuery(func(context.Context, factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
-		return factoryvisualization.RuntimeMetricsQueryResult{
-			Cost: factoryvisualization.RuntimeMetricsCost{
-				Availability: factoryvisualization.RuntimeMetricsCostUnavailable,
-			},
-		}, nil
+	home := t.TempDir()
+	factoryDirectory := support.ScaffoldSingleStepFactory(t, "metrics-cost-availability")
+	workingDirectory := t.TempDir()
+	environment := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDirectory,
+		WorkingDirectory:          workingDirectory,
+		WaitForServiceModeRuntime: true,
+		Env:                       environment,
 	})
-	metricsHandler := factoryvisualizationhttp.NewMetricsHandler(
-		factoryvisualizationhttp.NewMetricsAdapter(query, nil, t.TempDir()),
-		zap.NewNop(),
-	)
-	apiServer := transporthttp.NewServerWithRecordingsAndMetricsAndCosts(
-		nil, nil, nil, nil, nil, nil, zap.NewNop(), metricsHandler, nil,
-	)
-	server := httptest.NewServer(apiServer.Handler())
-	t.Cleanup(server.Close)
 
 	process := support.BuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
-	env := []string{"HOME=" + t.TempDir(), "USERPROFILE=" + t.TempDir()}
 
-	human := support.FakeInputs(t.Context(), []string{"you", "--server", server.URL, "metrics"})
-	human.Input.Env = env
-	human.Input.WorkingDirectory = t.TempDir()
+	human := support.FakeInputs(t.Context(), []string{"you", "--server", server.URL(), "metrics"})
+	human.Input.Env = environment
+	human.Input.WorkingDirectory = workingDirectory
 	if err := process.Execute(human.Input); err != nil {
 		t.Fatalf("Process.Execute(metrics human) error = %v\nstdout:\n%s\nstderr:\n%s", err, human.Stdout(), human.Stderr())
 	}
@@ -76,9 +62,9 @@ func TestMetricsSuccessThroughRootProcessRendersQueryCostAvailability(t *testing
 		t.Fatalf("human metrics output = %q, stderr = %q", human.Stdout(), human.Stderr())
 	}
 
-	machine := support.FakeInputs(t.Context(), []string{"you", "--json", "--server", server.URL, "metrics"})
-	machine.Input.Env = env
-	machine.Input.WorkingDirectory = t.TempDir()
+	machine := support.FakeInputs(t.Context(), []string{"you", "--json", "--server", server.URL(), "metrics"})
+	machine.Input.Env = environment
+	machine.Input.WorkingDirectory = workingDirectory
 	if err := process.Execute(machine.Input); err != nil {
 		t.Fatalf("Process.Execute(metrics JSON) error = %v\nstdout:\n%s\nstderr:\n%s", err, machine.Stdout(), machine.Stderr())
 	}

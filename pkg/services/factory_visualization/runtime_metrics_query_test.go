@@ -187,6 +187,16 @@ func assertBreakdownInputs(t *testing.T, breakdowns []factoryvisualization.Runti
 func TestRuntimeMetricsQueryReconcilesProviderAttributionWithoutDuplicatingFacts(t *testing.T) {
 	t.Parallel()
 
+	records := providerAttributionRecords()
+	originalRecords := cloneRuntimeMetricRecords(records)
+	result, repeated := queryProviderAttributionMetrics(t, records)
+	assertProviderAttributionDeterminism(t, records, originalRecords, result, repeated)
+	assertProviderAttributionTotals(t, result)
+	assertProviderAttributionBreakdowns(t, result.Providers)
+	assertProviderAttributionHasNoTemplateKeys(t, result)
+}
+
+func providerAttributionRecords() []factoryvisualization.RuntimeMetricRecord {
 	var records []factoryvisualization.RuntimeMetricRecord
 	appendDispatch := func(dispatchID, name string, value float64, provider, reason, unit string) {
 		record := metricRecord(name, value, "session-a", "runtime-a", "ws", "worker", provider, reason, unit)
@@ -199,20 +209,16 @@ func TestRuntimeMetricsQueryReconcilesProviderAttributionWithoutDuplicatingFacts
 	appendDispatch("authoritative", "provider.input_tokens", 3, "${branchProvider}", "", "tokens")
 	appendDispatch("authoritative", "provider.failed", 1, "${plannerProvider}", "timeout", "")
 	appendDispatch("authoritative", "provider.duration", 8, "${reviewerProvider}", "", "ms")
-
 	appendDispatch("fallback", "dispatch.completed", 1, "", "", "")
 	appendDispatch("fallback", "provider.completed", 1, "claude", "", "")
 	appendDispatch("fallback", "provider.input_tokens", 2, "${workerProvider}", "", "tokens")
 	appendDispatch("fallback", "provider.duration", 4, "", "", "ms")
-
 	appendDispatch("conflict", "dispatch.completed", 1, "", "", "")
 	appendDispatch("conflict", "provider.input_tokens", 5, "provider-a", "", "tokens")
 	appendDispatch("conflict", "provider.duration", 7, "provider-b", "", "ms")
-
 	appendDispatch("missing", "dispatch.completed", 1, "", "", "")
 	appendDispatch("missing", "dispatch.duration", 9, "", "", "ms")
 	appendDispatch("missing", "provider.failed", 1, "", "lost", "")
-
 	appendDispatch("", "dispatch.completed", 1, "", "", "")
 	appendDispatch("", "provider.input_tokens", 7, "orphan-provider", "", "tokens")
 	appendDispatch("", "provider.duration", 3, "${secondProvider}", "", "ms")
@@ -226,15 +232,26 @@ func TestRuntimeMetricsQueryReconcilesProviderAttributionWithoutDuplicatingFacts
 		appendDispatch(dispatchID, "provider.input_tokens", 1, placeholder, "", "tokens")
 		appendDispatch(dispatchID, "provider.duration", 2, "codex", "", "ms")
 	}
-	originalRecords := make([]factoryvisualization.RuntimeMetricRecord, len(records))
+	return records
+}
+
+func cloneRuntimeMetricRecords(records []factoryvisualization.RuntimeMetricRecord) []factoryvisualization.RuntimeMetricRecord {
+	clones := make([]factoryvisualization.RuntimeMetricRecord, len(records))
 	for index, record := range records {
 		clone := make(factoryvisualization.RuntimeMetricRecord, len(record))
 		for key, value := range record {
 			clone[key] = value
 		}
-		originalRecords[index] = clone
+		clones[index] = clone
 	}
+	return clones
+}
 
+func queryProviderAttributionMetrics(
+	t *testing.T,
+	records []factoryvisualization.RuntimeMetricRecord,
+) (factoryvisualization.RuntimeMetricsQueryResult, factoryvisualization.RuntimeMetricsQueryResult) {
+	t.Helper()
 	reader := &runtimeMetricsReaderStub{records: records}
 	query, err := factoryvisualizationwire.NewRuntimeMetricsQuery(reader, logging.NoopLogger{})
 	if err != nil {
@@ -249,28 +266,52 @@ func TestRuntimeMetricsQueryReconcilesProviderAttributionWithoutDuplicatingFacts
 	if err != nil {
 		t.Fatalf("QueryRuntimeMetrics(repeated) error = %v", err)
 	}
+	return result, repeated
+}
+
+func assertProviderAttributionDeterminism(
+	t *testing.T,
+	records, originalRecords []factoryvisualization.RuntimeMetricRecord,
+	result, repeated factoryvisualization.RuntimeMetricsQueryResult,
+) {
+	t.Helper()
 	if !reflect.DeepEqual(result, repeated) {
 		t.Fatalf("repeated query result changed: first=%#v second=%#v", result, repeated)
 	}
 	if !reflect.DeepEqual(records, originalRecords) {
 		t.Fatalf("query mutated retained metric records: got=%#v want=%#v", records, originalRecords)
 	}
+}
 
+func assertProviderAttributionTotals(t *testing.T, result factoryvisualization.RuntimeMetricsQueryResult) {
+	t.Helper()
 	if result.Totals.CompletedDispatches != 11 || result.Totals.InputTokens != 23 {
 		t.Fatalf("totals = %#v, want 11 completed dispatches and 23 input tokens", result.Totals)
 	}
-	if got := breakdownForKey(t, result.Providers, "codex"); got.CompletedDispatches != 7 || got.InputTokens != 9 {
-		t.Fatalf("codex aggregate = %#v, want completion 7 and input 9", got)
+}
+
+func assertProviderAttributionBreakdowns(t *testing.T, breakdowns []factoryvisualization.RuntimeMetricsBreakdown) {
+	t.Helper()
+	wants := []struct {
+		key         string
+		completed   float64
+		inputTokens float64
+	}{
+		{key: "codex", completed: 7, inputTokens: 9},
+		{key: "claude", completed: 1, inputTokens: 2},
+		{key: factoryvisualization.RuntimeMetricsUnavailableProviderKey, completed: 3, inputTokens: 5},
+		{key: "orphan-provider", inputTokens: 7},
 	}
-	if got := breakdownForKey(t, result.Providers, "claude"); got.CompletedDispatches != 1 || got.InputTokens != 2 {
-		t.Fatalf("claude aggregate = %#v, want completion 1 and input 2", got)
+	for _, want := range wants {
+		got := breakdownForKey(t, breakdowns, want.key)
+		if got.CompletedDispatches != want.completed || got.InputTokens != want.inputTokens {
+			t.Fatalf("%s aggregate = %#v, want completion %v and input %v", want.key, got, want.completed, want.inputTokens)
+		}
 	}
-	if got := breakdownForKey(t, result.Providers, factoryvisualization.RuntimeMetricsUnavailableProviderKey); got.CompletedDispatches != 3 || got.InputTokens != 5 {
-		t.Fatalf("unavailable aggregate = %#v, want completion 3 and input 5", got)
-	}
-	if got := breakdownForKey(t, result.Providers, "orphan-provider"); got.InputTokens != 7 {
-		t.Fatalf("orphan aggregate = %#v, want input 7", got)
-	}
+}
+
+func assertProviderAttributionHasNoTemplateKeys(t *testing.T, result factoryvisualization.RuntimeMetricsQueryResult) {
+	t.Helper()
 	for _, breakdown := range result.Providers {
 		if strings.Contains(breakdown.Key, "${") {
 			t.Fatalf("provider breakdown leaked template key: %#v", breakdown)

@@ -1,205 +1,238 @@
 package runtime_metrics_test
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
-	factoryvisualizationhttp "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http"
-	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"go.uber.org/zap"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 // TestMetricsDocumentedWorkflowThroughRootProcess follows the packaged guide
-// from live-session discovery through scoped human/JSON reports. The server
-// returns deterministic runtime facts, but every command crosses the same
-// root-built generated-client and authored HTTP route used by customers.
+// through a server assembled by the canonical root/wire graph. The CLI and
+// direct HTTP assertions share that customer-facing server, so the test does
+// not construct a second metrics adapter or transport graph.
 func TestMetricsDocumentedWorkflowThroughRootProcess(t *testing.T) {
 	t.Parallel()
-
-	query := factoryvisualization.RuntimeMetricsQuery(func(_ context.Context, request factoryvisualization.RuntimeMetricsQueryRequest) (factoryvisualization.RuntimeMetricsQueryResult, error) {
-		switch request.SessionID {
-		case "":
-			return documentedMetricsResult(false), nil
-		case "retained-live-id":
-			return documentedMetricsResult(true), nil
-		default:
-			t.Fatalf("metrics query session ID = %q, want unscoped or resolved retained scope", request.SessionID)
-			return factoryvisualization.RuntimeMetricsQueryResult{}, nil
-		}
-	})
-	resolver := documentedMetricsScopeResolver(func(_ context.Context, sessionID string) (factoryvisualizationhttp.MetricsSessionScope, error) {
-		switch sessionID {
-		case "live-public-id":
-			return factoryvisualizationhttp.MetricsSessionScope{
-				RequestedID: sessionID,
-				RetainedIDs: []string{"retained-live-id"},
-			}, nil
-		case "unmappable-live-id":
-			return factoryvisualizationhttp.MetricsSessionScope{}, factoryvisualizationhttp.NewMetricsScopeUnavailableError(sessionID, nil)
-		default:
-			return factoryvisualizationhttp.MetricsSessionScope{}, factoryvisualizationhttp.NewMetricsSessionNotFoundError(sessionID, nil)
-		}
-	})
-	metricsHandler := factoryvisualizationhttp.NewMetricsHandler(
-		factoryvisualizationhttp.NewMetricsAdapter(query, resolver, t.TempDir()),
-		zap.NewNop(),
-	)
-	apiServer := transporthttp.NewServerWithRecordingsAndMetricsAndCosts(
-		nil, nil, nil, nil, nil, nil, zap.NewNop(), metricsHandler, nil,
-	)
-	mux := http.NewServeMux()
-	mux.Handle("/metrics", apiServer.Handler())
-	mux.HandleFunc("/factory-sessions", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(factoryapi.ListFactorySessionsResponse{
-			Sessions: []factoryapi.FactorySessionSummary{{
-				Id:      "live-public-id",
-				Project: "metrics-workflow",
-			}},
-		})
-	})
-	server := httptest.NewServer(mux)
-	t.Cleanup(server.Close)
-
+	serverURL, env, workingDirectory := startDocumentedMetricsServer(t)
 	process := support.BuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
+
+	publicID := discoverDocumentedLiveSession(t, process, serverURL, env, workingDirectory)
+	unscoped := runDocumentedMetrics(t, process, serverURL, env, workingDirectory)
+	scoped := runDocumentedMetrics(t, process, serverURL, env, workingDirectory, "--session", publicID)
+	assertDocumentedScopeSubset(t, unscoped, scoped, publicID)
+	assertDocumentedGroupings(t, process, serverURL, env, workingDirectory, publicID)
+	assertDocumentedProviderArithmetic(t, process, serverURL, env, workingDirectory, publicID)
+	assertDocumentedHTTPParity(t, serverURL, publicID, scoped)
+	assertDocumentedScopeFailures(t, process, serverURL, env, workingDirectory)
+	functionalevidence.Covers(t, "rest/getMetrics")
+}
+
+func startDocumentedMetricsServer(
+	t *testing.T,
+) (string, []string, string) {
+	t.Helper()
 	home := t.TempDir()
 	workingDirectory := t.TempDir()
-	env := []string{"HOME=" + home, "USERPROFILE=" + home}
+	factoryDirectory := support.ScaffoldSingleStepFactory(t, "metrics-documentation-workflow")
+	environment := append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	server := support.NewProcessAPIServer()
+	process := support.BuildProcess(t, serviceedges.Edges{APIServerStarter: server.Start})
+	support.CleanupProcess(t, process)
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--dir", factoryDirectory, "--continuously", "--with-server",
+		"--server", "http://127.0.0.1:1", "--quiet", "--no-record",
+	})
+	inputs.Input.Env = environment
+	inputs.Input.WorkingDirectory = workingDirectory
+	support.StartProcessCommand(t, process, inputs.Input)
+	serverURL := server.WaitForURL(t)
+	writeDocumentedMetrics(t, home)
+	return serverURL, environment, workingDirectory
+}
 
-	list := runDocumentedMetricsCommand(t, process, env, workingDirectory,
-		"you", "--json", "--server", server.URL, "session", "list", "--scope", "live")
-	if list.err != nil {
-		t.Fatalf("session list: %v\nstderr:\n%s", list.err, list.inputs.Stderr())
+func writeDocumentedMetrics(t *testing.T, home string) {
+	t.Helper()
+	root := platformmetrics.RuntimeMetricsRoot(home)
+	common := func(sessionID, dispatchID, metric string, value float64) map[string]any {
+		return map[string]any{
+			"metric_name": metric, "value": value, "unit": "tokens",
+			"session_id": sessionID, "dispatch_id": dispatchID,
+			"workstation": "workstation-a", "worker_type": "worker-a",
+		}
 	}
-	var sessions factoryapi.ListFactorySessionsResponse
-	if err := json.Unmarshal([]byte(list.inputs.Stdout()), &sessions); err != nil {
-		t.Fatalf("decode live session list: %v\n%s", err, list.inputs.Stdout())
+	records := []map[string]any{
+		common(factorysessions.DefaultSessionID, "dispatch-codex", runtimeDispatchComplete, 1),
+		common(factorysessions.DefaultSessionID, "dispatch-codex", runtimeProviderInputTokens, 4),
+		common(factorysessions.DefaultSessionID, "dispatch-unknown", runtimeDispatchComplete, 1),
+		common(factorysessions.DefaultSessionID, "dispatch-unknown", runtimeProviderInputTokens, 3),
+		common("other-session", "dispatch-other", runtimeDispatchComplete, 1),
+		common("other-session", "dispatch-other", runtimeProviderInputTokens, 100),
 	}
-	if len(sessions.Sessions) != 1 || sessions.Sessions[0].Id == "" {
-		t.Fatalf("live sessions = %#v, want one public ID", sessions.Sessions)
-	}
-	publicSessionID := sessions.Sessions[0].Id
+	records[1]["provider"] = "codex"
+	records[3]["provider"] = "${workerProvider}"
+	writeRuntimeMetricsArtifact(t, filepath.Join(root, "120000.000000000-runtime-metrics-documented.log"), false, records)
+}
 
-	unscoped := runDocumentedMetricsCommand(t, process, env, workingDirectory,
-		"you", "--json", "--server", server.URL, "metrics")
-	scoped := runDocumentedMetricsCommand(t, process, env, workingDirectory,
-		"you", "--json", "--server", server.URL, "metrics", "--session", publicSessionID)
-	if unscoped.err != nil || scoped.err != nil {
-		t.Fatalf("metrics workflow failed: unscoped=%v scoped=%v\nunscoped stderr=%s\nscoped stderr=%s", unscoped.err, scoped.err, unscoped.inputs.Stderr(), scoped.inputs.Stderr())
+func discoverDocumentedLiveSession(
+	t *testing.T,
+	process support.Process,
+	serverURL string,
+	environment []string,
+	workingDirectory string,
+) string {
+	t.Helper()
+	result := runDocumentedCommand(t, process, environment, workingDirectory,
+		"you", "--json", "--server", serverURL, "session", "list", "--scope", "live")
+	if result.err != nil {
+		t.Fatalf("live session list: %v\nstderr:\n%s", result.err, result.inputs.Stderr())
 	}
-	var unscopedReport, scopedReport factoryapi.MetricsReport
-	decodeDocumentedMetricsReport(t, unscoped.inputs.Stdout(), &unscopedReport)
+	var response factoryapi.ListFactorySessionsResponse
+	if err := json.Unmarshal([]byte(result.inputs.Stdout()), &response); err != nil {
+		t.Fatalf("decode live session list: %v\n%s", err, result.inputs.Stdout())
+	}
+	if len(response.Sessions) == 0 || strings.TrimSpace(response.Sessions[0].Id) == "" {
+		t.Fatalf("live sessions = %#v, want a public Factory Session ID", response.Sessions)
+	}
+	return response.Sessions[0].Id
+}
+
+func runDocumentedMetrics(
+	t *testing.T,
+	process support.Process,
+	serverURL string,
+	environment []string,
+	workingDirectory string,
+	args ...string,
+) documentedMetricsCommandResult {
+	t.Helper()
+	return runDocumentedCommand(t, process, environment, workingDirectory,
+		append([]string{"you", "--json", "--server", serverURL, "metrics"}, args...)...)
+}
+
+func assertDocumentedScopeSubset(
+	t *testing.T,
+	unscoped, scoped documentedMetricsCommandResult,
+	publicID string,
+) {
+	t.Helper()
+	var allReport, scopedReport factoryapi.MetricsReport
+	decodeDocumentedMetricsReport(t, unscoped.inputs.Stdout(), &allReport)
 	decodeDocumentedMetricsReport(t, scoped.inputs.Stdout(), &scopedReport)
-	if scopedReport.Totals.CompletedDispatches <= 0 || scopedReport.Totals.CompletedDispatches > unscopedReport.Totals.CompletedDispatches {
-		t.Fatalf("scoped completion total = %v, unscoped = %v, want non-zero proper subset", scopedReport.Totals.CompletedDispatches, unscopedReport.Totals.CompletedDispatches)
+	if scopedReport.Scope.FactorySessionId == nil || *scopedReport.Scope.FactorySessionId != publicID {
+		t.Fatalf("scoped report scope = %#v, want %q", scopedReport.Scope, publicID)
 	}
-	if scopedReport.Totals.InputTokens > unscopedReport.Totals.InputTokens || scopedReport.Totals.OutputTokens > unscopedReport.Totals.OutputTokens {
-		t.Fatalf("scoped token totals = (%v, %v), unscoped = (%v, %v), want component-wise subset", scopedReport.Totals.InputTokens, scopedReport.Totals.OutputTokens, unscopedReport.Totals.InputTokens, unscopedReport.Totals.OutputTokens)
+	if scopedReport.Totals.CompletedDispatches <= 0 || scopedReport.Totals.CompletedDispatches >= allReport.Totals.CompletedDispatches {
+		t.Fatalf("scoped completed dispatches = %v, unscoped = %v, want a non-zero proper subset", scopedReport.Totals.CompletedDispatches, allReport.Totals.CompletedDispatches)
 	}
-
-	for _, grouping := range []string{"workstation", "worker", "provider"} {
-		human := runDocumentedMetricsCommand(t, process, env, workingDirectory,
-			"you", "--server", server.URL, "metrics", "--group-by", grouping, "--session", publicSessionID)
-		if human.err != nil {
-			t.Fatalf("human metrics group=%s: %v\nstderr:\n%s", grouping, human.err, human.inputs.Stderr())
-		}
-		if !strings.Contains(human.inputs.Stdout(), "Breakdown by "+grouping) || human.inputs.Stderr() != "" {
-			t.Fatalf("human metrics group=%s output=%q stderr=%q", grouping, human.inputs.Stdout(), human.inputs.Stderr())
-		}
-	}
-
-	providerJSON := runDocumentedMetricsCommand(t, process, env, workingDirectory,
-		"you", "--json", "--server", server.URL, "metrics", "--group-by", "provider", "--session", publicSessionID)
-	if providerJSON.err != nil {
-		t.Fatalf("provider JSON metrics: %v", providerJSON.err)
-	}
-	var providerReport struct {
-		Totals factoryapi.MetricsAggregate `json:"totals"`
-		Groups []struct {
-			Key       string                      `json:"key"`
-			Aggregate factoryapi.MetricsAggregate `json:"aggregate"`
-		} `json:"groups"`
-	}
-	if err := json.Unmarshal([]byte(providerJSON.inputs.Stdout()), &providerReport); err != nil {
-		t.Fatalf("decode provider metrics JSON: %v\n%s", err, providerJSON.inputs.Stdout())
-	}
-	completedByProvider := 0.0
-	for _, group := range providerReport.Groups {
-		if strings.Contains(group.Key, "${") {
-			t.Fatalf("provider JSON exposed template key %q", group.Key)
-		}
-		completedByProvider += group.Aggregate.CompletedDispatches
-	}
-	if completedByProvider != providerReport.Totals.CompletedDispatches {
-		t.Fatalf("provider completed dispatches = %v, want total %v", completedByProvider, providerReport.Totals.CompletedDispatches)
-	}
-
-	routeResponse, err := http.Get(server.URL + "/metrics?session_id=" + publicSessionID)
-	if err != nil {
-		t.Fatalf("GET /metrics: %v", err)
-	}
-	defer routeResponse.Body.Close()
-	if routeResponse.StatusCode != http.StatusOK {
-		t.Fatalf("GET /metrics status = %d, want 200", routeResponse.StatusCode)
-	}
-	var routeReport factoryapi.MetricsReport
-	if err := json.NewDecoder(routeResponse.Body).Decode(&routeReport); err != nil {
-		t.Fatalf("decode GET /metrics: %v", err)
-	}
-	if routeReport.Totals.CompletedDispatches != scopedReport.Totals.CompletedDispatches {
-		t.Fatalf("route completed dispatches = %v, CLI = %v, want parity", routeReport.Totals.CompletedDispatches, scopedReport.Totals.CompletedDispatches)
-	}
-
-	for _, failure := range []struct {
-		name       string
-		sessionID  string
-		wantCode   string
-		wantPhrase string
-	}{
-		{name: "unknown", sessionID: "missing-live-id", wantCode: "METRICS_SESSION_NOT_FOUND", wantPhrase: "you session list --scope live"},
-		{name: "unmappable", sessionID: "unmappable-live-id", wantCode: "METRICS_SESSION_SCOPE_UNAVAILABLE", wantPhrase: "you session list --scope live"},
-	} {
-		t.Run(failure.name, func(t *testing.T) {
-			result := runDocumentedMetricsCommand(t, process, env, workingDirectory,
-				"you", "--json", "--server", server.URL, "metrics", "--session", failure.sessionID)
-			if result.err == nil {
-				t.Fatal("metrics failure returned nil error")
-			}
-			if result.inputs.Stdout() != "" {
-				t.Fatalf("metrics failure stdout = %q, want empty", result.inputs.Stdout())
-			}
-			assertMetricsDiagnostic(t, result.inputs.Stderr(), failure.wantCode,
-				"Factory Session \""+failure.sessionID+"\" "+map[string]string{
-					"METRICS_SESSION_NOT_FOUND":         "was not found; use `you session list --scope live` to choose a live ID",
-					"METRICS_SESSION_SCOPE_UNAVAILABLE": "has no retained metrics scope; use `you session list --scope live` to choose a live ID",
-				}[failure.wantCode])
-			if !strings.Contains(result.inputs.Stderr(), failure.wantPhrase) {
-				t.Fatalf("metrics failure stderr = %q, want recovery phrase %q", result.inputs.Stderr(), failure.wantPhrase)
-			}
-		})
+	if scopedReport.Totals.InputTokens > allReport.Totals.InputTokens || scopedReport.Totals.OutputTokens > allReport.Totals.OutputTokens {
+		t.Fatalf("scoped token totals = (%v, %v), unscoped = (%v, %v), want component-wise subset", scopedReport.Totals.InputTokens, scopedReport.Totals.OutputTokens, allReport.Totals.InputTokens, allReport.Totals.OutputTokens)
 	}
 }
 
-type documentedMetricsScopeResolver func(context.Context, string) (factoryvisualizationhttp.MetricsSessionScope, error)
+func assertDocumentedGroupings(
+	t *testing.T,
+	process support.Process,
+	serverURL string,
+	environment []string,
+	workingDirectory, publicID string,
+) {
+	t.Helper()
+	for _, grouping := range []string{"workstation", "worker", "provider"} {
+		result := runDocumentedCommand(t, process, environment, workingDirectory,
+			"you", "--server", serverURL, "metrics", "--group-by", grouping, "--session", publicID)
+		if result.err != nil || !strings.Contains(result.inputs.Stdout(), "Breakdown by "+grouping) || result.inputs.Stderr() != "" {
+			t.Fatalf("human metrics group=%s: error=%v stdout=%q stderr=%q", grouping, result.err, result.inputs.Stdout(), result.inputs.Stderr())
+		}
+	}
+}
 
-func (resolver documentedMetricsScopeResolver) ResolveMetricsSessionScope(
-	ctx context.Context,
-	sessionID string,
-) (factoryvisualizationhttp.MetricsSessionScope, error) {
-	return resolver(ctx, sessionID)
+func assertDocumentedProviderArithmetic(
+	t *testing.T,
+	process support.Process,
+	serverURL string,
+	environment []string,
+	workingDirectory, publicID string,
+) {
+	t.Helper()
+	providerJSON := runDocumentedCommand(t, process, environment, workingDirectory,
+		"you", "--json", "--server", serverURL, "metrics", "--group-by", "provider", "--session", publicID)
+	if providerJSON.err != nil || providerJSON.inputs.Stderr() != "" {
+		t.Fatalf("provider JSON metrics: error=%v stderr=%q", providerJSON.err, providerJSON.inputs.Stderr())
+	}
+	var report struct {
+		Totals factoryapi.MetricsAggregate   `json:"totals"`
+		Groups []factoryapi.MetricsBreakdown `json:"groups"`
+	}
+	if err := json.Unmarshal([]byte(providerJSON.inputs.Stdout()), &report); err != nil {
+		t.Fatalf("decode provider JSON metrics: %v\n%s", err, providerJSON.inputs.Stdout())
+	}
+	completed := 0.0
+	for _, group := range report.Groups {
+		if strings.Contains(group.Key, "${") {
+			t.Fatalf("provider report exposed template key %q", group.Key)
+		}
+		completed += group.Aggregate.CompletedDispatches
+	}
+	if completed != report.Totals.CompletedDispatches || len(report.Groups) == 0 {
+		t.Fatalf("provider completed dispatches = %v, total = %v, groups = %#v", completed, report.Totals.CompletedDispatches, report.Groups)
+	}
+}
+
+func assertDocumentedHTTPParity(
+	t *testing.T,
+	serverURL, publicID string,
+	scoped documentedMetricsCommandResult,
+) {
+	t.Helper()
+	response, err := http.Get(serverURL + "/metrics?session_id=" + publicID)
+	if err != nil {
+		t.Fatalf("GET /metrics: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("GET /metrics status = %d, want 200", response.StatusCode)
+	}
+	var routeReport, cliReport factoryapi.MetricsReport
+	if err := json.NewDecoder(response.Body).Decode(&routeReport); err != nil {
+		t.Fatalf("decode GET /metrics: %v", err)
+	}
+	decodeDocumentedMetricsReport(t, scoped.inputs.Stdout(), &cliReport)
+	if routeReport.Totals.CompletedDispatches != cliReport.Totals.CompletedDispatches {
+		t.Fatalf("HTTP completed dispatches = %v, CLI = %v, want parity", routeReport.Totals.CompletedDispatches, cliReport.Totals.CompletedDispatches)
+	}
+}
+
+func assertDocumentedScopeFailures(
+	t *testing.T,
+	process support.Process,
+	serverURL string,
+	environment []string,
+	workingDirectory string,
+) {
+	t.Helper()
+	result := runDocumentedCommand(t, process, environment, workingDirectory,
+		"you", "--json", "--server", serverURL, "metrics", "--session", "missing-live-id")
+	if result.err == nil || result.inputs.Stdout() != "" || !strings.Contains(result.inputs.Stderr(), "METRICS_SESSION_NOT_FOUND") || !strings.Contains(result.inputs.Stderr(), "you session list --scope live") {
+		t.Fatalf("unknown session result: error=%v stdout=%q stderr=%q", result.err, result.inputs.Stdout(), result.inputs.Stderr())
+	}
+	response, err := http.Get(serverURL + "/metrics?session_id=missing-live-id")
+	if err != nil {
+		t.Fatalf("GET unknown metrics session: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("unknown metrics session status = %d, want 404", response.StatusCode)
+	}
 }
 
 type documentedMetricsCommandResult struct {
@@ -207,16 +240,16 @@ type documentedMetricsCommandResult struct {
 	err    error
 }
 
-func runDocumentedMetricsCommand(
+func runDocumentedCommand(
 	t *testing.T,
 	process support.Process,
-	env []string,
+	environment []string,
 	workingDirectory string,
 	args ...string,
 ) documentedMetricsCommandResult {
 	t.Helper()
 	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = append([]string(nil), env...)
+	inputs.Input.Env = append([]string(nil), environment...)
 	inputs.Input.WorkingDirectory = workingDirectory
 	return documentedMetricsCommandResult{inputs: inputs, err: process.Execute(inputs.Input)}
 }
@@ -225,41 +258,5 @@ func decodeDocumentedMetricsReport(t *testing.T, output string, report *factorya
 	t.Helper()
 	if err := json.Unmarshal([]byte(output), report); err != nil {
 		t.Fatalf("decode metrics report: %v\n%s", err, output)
-	}
-}
-
-func documentedMetricsResult(scoped bool) factoryvisualization.RuntimeMetricsQueryResult {
-	inputTokens := 12.0
-	outputTokens := 8.0
-	completedDispatches := 5.0
-	if scoped {
-		inputTokens = 7
-		outputTokens = 4
-		completedDispatches = 2
-	}
-	aggregate := factoryvisualization.RuntimeMetricsAggregate{
-		InputTokens:         inputTokens,
-		OutputTokens:        outputTokens,
-		CompletedDispatches: completedDispatches,
-	}
-	return factoryvisualization.RuntimeMetricsQueryResult{
-		Cost:   factoryvisualization.RuntimeMetricsCost{Availability: factoryvisualization.RuntimeMetricsCostUnavailable},
-		Totals: aggregate,
-		Workstations: []factoryvisualization.RuntimeMetricsBreakdown{{
-			Key:       "workstation-a",
-			Aggregate: aggregate,
-		}},
-		WorkerTypes: []factoryvisualization.RuntimeMetricsBreakdown{{
-			Key:       "worker-a",
-			Aggregate: aggregate,
-		}},
-		Providers: []factoryvisualization.RuntimeMetricsBreakdown{
-			{Key: "codex", Aggregate: factoryvisualization.RuntimeMetricsAggregate{
-				InputTokens: 3, OutputTokens: 2, CompletedDispatches: 1,
-			}},
-			{Key: factoryvisualization.RuntimeMetricsUnavailableProviderKey, Aggregate: factoryvisualization.RuntimeMetricsAggregate{
-				InputTokens: inputTokens - 3, OutputTokens: outputTokens - 2, CompletedDispatches: completedDispatches - 1,
-			}},
-		},
 	}
 }
