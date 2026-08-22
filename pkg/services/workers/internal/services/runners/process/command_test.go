@@ -2,6 +2,7 @@ package process
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type recordingEffect struct {
@@ -135,6 +137,88 @@ func TestLoggingCommandRunnerOwnsWorkCorrelationProjection(t *testing.T) {
 		if fields[key] != want {
 			t.Fatalf("%s = %#v, want %#v", key, fields[key], want)
 		}
+	}
+}
+
+func TestLoggingCommandRunnerSeparatesFailureAndCancellationLevels(t *testing.T) {
+	cases := []struct {
+		name       string
+		result     CommandResult
+		err        error
+		wantStatus string
+		wantLevel  string
+	}{
+		{
+			name:       "non-zero exit",
+			result:     CommandResult{ExitCode: 7},
+			wantStatus: "failed",
+			wantLevel:  "error",
+		},
+		{
+			name:       "timeout",
+			err:        context.DeadlineExceeded,
+			wantStatus: "timed_out",
+			wantLevel:  "error",
+		},
+		{
+			name:       "superseded cancellation",
+			result:     CommandResult{CancellationReason: platformprocess.CancellationReasonSuperseded},
+			err:        context.Canceled,
+			wantStatus: "canceled",
+			wantLevel:  "info",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			logger := &recordingLogger{}
+			request := commandTestRequest()
+			request.Inputs = []workers.WorkInput{{WorkID: "work-1", Name: "checkout"}}
+			runner := LoggingCommandRunner{
+				Runner: workerCommandRunnerFunc(func(context.Context, CommandRequest) (CommandResult, error) {
+					return tc.result, tc.err
+				}),
+				Logger: logger,
+				Clock:  &sequenceCommandClock{times: []time.Time{time.Unix(1, 0), time.Unix(2, 0)}},
+			}
+
+			_, err := runner.Run(context.Background(), request)
+			if !errors.Is(err, tc.err) {
+				t.Fatalf("Run() error = %v, want %v", err, tc.err)
+			}
+			completion := logger.byEventWithLevel("command_runner.completed")
+			if len(completion) != 1 {
+				t.Fatalf("completion records = %#v, want one", completion)
+			}
+			if completion[0].level != tc.wantLevel {
+				t.Fatalf("completion level = %q, want %q", completion[0].level, tc.wantLevel)
+			}
+			fields := completion[0].fields
+			if fields["status"] != tc.wantStatus || fields["outcome"] != tc.wantStatus {
+				t.Fatalf("completion status/outcome = %#v/%#v, want %q", fields["status"], fields["outcome"], tc.wantStatus)
+			}
+			if fields["work_name"] != "checkout" || fields["dispatch_id"] != "dispatch-1" || fields["transition_id"] != "transition-1" {
+				t.Fatalf("completion correlation fields = %#v", fields)
+			}
+			if tc.wantLevel == "error" {
+				if fields["failure_reason"] == nil {
+					t.Fatalf("failure fields = %#v, want safe reason", fields)
+				}
+				if tc.err != nil && fields["has_error"] != true {
+					t.Fatalf("failure fields = %#v, want error marker for returned error", fields)
+				}
+				if _, ok := fields["error"]; ok {
+					t.Fatalf("failure log exposed raw error: %#v", fields["error"])
+				}
+			} else {
+				if fields["cancellation_reason"] != string(platformprocess.CancellationReasonSuperseded) {
+					t.Fatalf("cancellation fields = %#v", fields)
+				}
+				if _, ok := fields["has_error"]; ok {
+					t.Fatalf("cancellation log has error marker: %#v", fields)
+				}
+			}
+		})
 	}
 }
 
@@ -295,7 +379,7 @@ func TestExecCommandRunnerAddsWorkContextToPlatformCleanupLogs(t *testing.T) {
 func commandTestRequest() CommandRequest {
 	return CommandRequest{
 		Command: "worker-tool", Args: []string{"--fixture"}, Stdin: []byte("input"),
-		Env: []string{"VISIBLE=1"}, WorkDir: "work-dir", DispatchID: "dispatch-1",
+		Env: []string{"VISIBLE=1"}, WorkDir: "work-dir", DispatchID: "dispatch-1", TransitionID: "transition-1",
 		WorkerType: "script", WorkstationName: "station-1",
 		Execution: work.ExecutionMetadata{RequestID: "request-1", TraceID: "trace-1", WorkIDs: []string{"work-1"}},
 	}
@@ -381,15 +465,21 @@ func (runner *privateRequestRecorder) Run(
 }
 
 type recordingLogger struct {
-	entries []map[string]any
+	entries []recordedWorkerLog
 }
 
 func (*recordingLogger) Debug(string, ...any)              {}
-func (l *recordingLogger) Info(_ string, fields ...any)    { l.record(fields) }
-func (l *recordingLogger) Warn(_ string, fields ...any)    { l.record(fields) }
-func (*recordingLogger) Error(string, ...any)              {}
-func (l *recordingLogger) Verbose(_ string, fields ...any) { l.record(fields) }
-func (l *recordingLogger) record(fields []any) {
+func (l *recordingLogger) Info(_ string, fields ...any)    { l.record("info", fields) }
+func (l *recordingLogger) Warn(_ string, fields ...any)    { l.record("warn", fields) }
+func (l *recordingLogger) Error(_ string, fields ...any)   { l.record("error", fields) }
+func (l *recordingLogger) Verbose(_ string, fields ...any) { l.record("verbose", fields) }
+
+type recordedWorkerLog struct {
+	level  string
+	fields map[string]any
+}
+
+func (l *recordingLogger) record(level string, fields []any) {
 	record := make(map[string]any)
 	for i := 0; i+1 < len(fields); i += 2 {
 		key, ok := fields[i].(string)
@@ -397,12 +487,22 @@ func (l *recordingLogger) record(fields []any) {
 			record[key] = fields[i+1]
 		}
 	}
-	l.entries = append(l.entries, record)
+	l.entries = append(l.entries, recordedWorkerLog{level: level, fields: record})
 }
 func (l *recordingLogger) byEvent(event string) []map[string]any {
 	var result []map[string]any
 	for _, entry := range l.entries {
-		if entry["event_name"] == event {
+		if entry.fields["event_name"] == event {
+			result = append(result, entry.fields)
+		}
+	}
+	return result
+}
+
+func (l *recordingLogger) byEventWithLevel(event string) []recordedWorkerLog {
+	var result []recordedWorkerLog
+	for _, entry := range l.entries {
+		if entry.fields["event_name"] == event {
 			result = append(result, entry)
 		}
 	}

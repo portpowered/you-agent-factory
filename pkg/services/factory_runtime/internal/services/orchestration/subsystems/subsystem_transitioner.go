@@ -170,12 +170,14 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(ctx context.Con
 	now := t.now()
 	inputColors := tokenColorsFromTokens(consumedTokens)
 	if resolved.cancellation != nil || resolved.outcome == workerexecution.OutcomeCanceled {
+		t.logArcSelection(result, resolved, consumedTokens)
 		mutations := t.restoreCanceledDispatchMutations(snapshot, result.DispatchID, resolved, now)
 		return mutations, t.buildCompletedDispatch(snapshot, result, resolved, consumedTokens, mutations, now), nil, nil
 	}
 	//TODO: the intermittent failure arc should be denoted as a preconstructed output, teh calculate arcs function should be a mapping of arcs for a current workstation/transition, and one such mapping would be the intermitten failure arc.
 
 	if shouldRequeueIntermittentFailureResult(resolved) {
+		t.logArcSelection(result, resolved, consumedTokens)
 		mutations := t.buildIntermittentFailureRequeueMutations(consumedTokens, history, resolved, now)
 		mutations = append(mutations, t.releaseResourceTokensOnFailureMutations(resolved.outcome, result.TransitionID, consumedTokens, nil, now)...)
 		return mutations, t.buildCompletedDispatch(snapshot, result, resolved, consumedTokens, mutations, now), nil, nil
@@ -214,7 +216,7 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(ctx context.Con
 	if err != nil {
 		return nil, interfaces.CompletedDispatch{}, nil, err
 	}
-	t.logArcSelection(result.TransitionID, resolved.outcome)
+	t.logArcSelection(result, resolved, consumedTokens)
 	if len(arcs) == 0 {
 		return nil, interfaces.CompletedDispatch{}, nil, transitionRoutingError(ctx, result.TransitionID, resolved.outcome)
 	}
@@ -794,19 +796,93 @@ func (t *TransitionerSubsystem) validWorkTypes() map[string]bool {
 	return valid
 }
 
-func (t *TransitionerSubsystem) logArcSelection(transitionID string, outcome workerexecution.WorkOutcome) {
-	switch outcome {
-	case workerexecution.OutcomeAccepted:
-		t.logger.Info("transitioner: result accepted", "transitionID", transitionID)
-	case workerexecution.OutcomeContinue:
-		t.logger.Info("transitioner: result continued", "transitionID", transitionID)
-	case workerexecution.OutcomeRejected:
-		t.logger.Info("transitioner: result rejected", "transitionID", transitionID)
-	case workerexecution.OutcomeFailed:
-		t.logger.Info("transitioner: result failed", "transitionID", transitionID)
-	case workerexecution.OutcomeCanceled:
-		t.logger.Info("transitioner: result canceled", "transitionID", transitionID)
+func (t *TransitionerSubsystem) logArcSelection(
+	result *workerexecution.WorkResult,
+	resolved resolvedWorkResult,
+	consumedTokens []factorytoken.Token,
+) {
+	workID, workName := dispatchWorkIdentity(consumedTokens)
+	fields := []any{
+		"event_name", "factory_runtime.dispatch_result",
+		"dispatch_id", result.DispatchID,
+		"transition_id", result.TransitionID,
+		"work_id", workID,
+		"work_name", workName,
+		"outcome", string(resolved.outcome),
 	}
+	switch resolved.outcome {
+	case workerexecution.OutcomeAccepted:
+		t.logger.Info("transitioner: result accepted", fields...)
+	case workerexecution.OutcomeContinue:
+		t.logger.Info("transitioner: result continued", fields...)
+	case workerexecution.OutcomeRejected:
+		t.logger.Info("transitioner: result rejected", fields...)
+	case workerexecution.OutcomeFailed:
+		fields = append(fields,
+			"status", "error",
+			"failure_reason", safeDispatchFailureReason(result, resolved),
+		)
+		if message := safeDispatchFailureMessage(result); message != "" {
+			fields = append(fields, "failure_message", message)
+		}
+		t.logger.Error("transitioner: result failed", fields...)
+	case workerexecution.OutcomeCanceled:
+		cancellationReason := string(workerexecution.DispatchCancellationReasonCanceled)
+		if resolved.cancellation != nil && resolved.cancellation.Reason != "" {
+			cancellationReason = string(resolved.cancellation.Reason)
+		}
+		fields = append(fields,
+			"status", "canceled",
+			"cancellation_reason", cancellationReason,
+		)
+		t.logger.Info("transitioner: result canceled", fields...)
+	}
+}
+
+func dispatchWorkIdentity(tokens []factorytoken.Token) (workID, workName string) {
+	for _, token := range tokens {
+		if token.Color.WorkID == "" {
+			continue
+		}
+		return token.Color.WorkID, token.Color.Name
+	}
+	return "", ""
+}
+
+func safeDispatchFailureReason(result *workerexecution.WorkResult, resolved resolvedWorkResult) string {
+	if result != nil && result.FailureMetadata != nil {
+		if failureType := strings.TrimSpace(string(result.FailureMetadata.Type)); failureType != "" {
+			return failureType
+		}
+		if family := strings.TrimSpace(string(result.FailureMetadata.Family)); family != "" {
+			return family
+		}
+	}
+	if result != nil && result.FailureDetail != nil {
+		if failureType := strings.TrimSpace(string(result.FailureDetail.Reason)); failureType != "" {
+			return failureType
+		}
+	}
+	if value := strings.ToLower(strings.TrimSpace(resolved.err)); value != "" {
+		switch {
+		case strings.Contains(value, "deadline"), strings.Contains(value, "timeout"):
+			return string(workerexecution.WorkFailureTypeTimeout)
+		case strings.Contains(value, "process"):
+			return "process_error"
+		}
+	}
+	return "execution_failure"
+}
+
+func safeDispatchFailureMessage(result *workerexecution.WorkResult) string {
+	if result == nil || result.FailureDetail == nil {
+		return ""
+	}
+	message := strings.Join(strings.Fields(result.FailureDetail.Message), " ")
+	if len(message) > 160 {
+		message = message[:160] + "..."
+	}
+	return message
 }
 
 func (t *TransitionerSubsystem) releaseResourceTokensOnFailureMutations(outcome workerexecution.WorkOutcome, transitionID string, consumedTokens []factorytoken.Token, arcs []petri.Arc, now time.Time) []interfaces.MarkingMutation {

@@ -375,8 +375,8 @@ func TestLoggingCommandRunnerAndStatusProjection(t *testing.T) {
 	if err == nil || failed.ExitCode != 7 || len(failedLogger.warns) != 0 {
 		t.Fatalf("logged failure = %#v, %v, warns=%d", failed, err, len(failedLogger.warns))
 	}
-	if len(failedLogger.infos) != 2 {
-		t.Fatalf("logged failure info entries = %d, want request and completion", len(failedLogger.infos))
+	if len(failedLogger.infos) != 1 || len(failedLogger.errors) != 1 {
+		t.Fatalf("logged failure info/error entries = %d/%d, want request plus error completion", len(failedLogger.infos), len(failedLogger.errors))
 	}
 
 	if got := commandResultStatus(context.Background(), CommandResult{}, context.DeadlineExceeded); got != "timed_out" {
