@@ -113,7 +113,7 @@ func (runner historicalReplayRunner) CleanInvocationSnapshot(
 func (runner historicalReplayRunner) ControlWaitToComplete(
 	req factoryruntime.WaitToCompleteRequest,
 ) factoryruntime.WaitToCompleteResult {
-	provider, ok := runner.runner.(batchReportProvider)
+	provider, ok := runner.runner.(batchCompletionWaiter)
 	if !ok || provider == nil {
 		return factoryruntime.WaitToCompleteResult{}
 	}
@@ -723,6 +723,9 @@ const batchFailureCode = "RUN_BATCH_FAILED"
 
 type batchReportProvider interface {
 	CleanInvocationSnapshot(context.Context) (factoryruntime.CleanInvocationSnapshot, error)
+}
+
+type batchCompletionWaiter interface {
 	ControlWaitToComplete(factoryruntime.WaitToCompleteRequest) factoryruntime.WaitToCompleteResult
 }
 

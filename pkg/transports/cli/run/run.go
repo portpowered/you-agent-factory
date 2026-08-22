@@ -796,12 +796,14 @@ func runFactoryService(
 		return factorySvc.Run(ctx)
 	}
 	return managed.RunWithCompletion(ctx, func(completionCtx context.Context) error {
-		waitResult := batchProvider.ControlWaitToComplete(state.WaitToCompleteRequest{})
-		if waitResult.Done != nil {
-			select {
-			case <-waitResult.Done:
-			case <-completionCtx.Done():
-				return completionCtx.Err()
+		if waiter, ok := batchProvider.(batchCompletionWaiter); ok {
+			waitResult := waiter.ControlWaitToComplete(state.WaitToCompleteRequest{})
+			if waitResult.Done != nil {
+				select {
+				case <-waitResult.Done:
+				case <-completionCtx.Done():
+					return completionCtx.Err()
+				}
 			}
 		}
 		captured, err := batchProvider.CleanInvocationSnapshot(completionCtx)
