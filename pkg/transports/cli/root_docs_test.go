@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
 	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"

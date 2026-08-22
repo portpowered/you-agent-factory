@@ -45,7 +45,7 @@ func TestSubmitDueCronTick_InvalidSchedulePerformsNoWorkSubmission(t *testing.T)
 		},
 		{
 			name: "missing cron config",
-			ws: interfaces.FactoryWorkstationConfig{Name: "daily-refresh"},
+			ws:   interfaces.FactoryWorkstationConfig{Name: "daily-refresh"},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {

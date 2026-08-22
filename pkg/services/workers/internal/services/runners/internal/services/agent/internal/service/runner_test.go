@@ -348,8 +348,8 @@ func TestExecuteExactContinuationFailurePreservesClassificationWithoutFallback(t
 		wantError                   error
 	}{
 		{
-			name: "malformed reference",
-			reference: providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind},
+			name:                        "malformed reference",
+			reference:                   providers.SessionRef{Provider: providers.IDCodex, Kind: providers.SessionIDKind},
 			wantContinuationFailureKind: providers.ContinuationFailureKindInvalid,
 			wantError:                   providers.ErrInvalidContinuationRequest,
 		},

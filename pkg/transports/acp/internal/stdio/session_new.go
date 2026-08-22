@@ -9,6 +9,7 @@ import (
 	acpsdk "github.com/coder/acp-go-sdk"
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/chat_sessions/transports/acp/factorytarget"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
@@ -16,7 +17,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/protocol"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/session"
-	"github.com/portpowered/infinite-you/pkg/services/chat_sessions/transports/acp/factorytarget"
 )
 
 // errSessionNewUnavailable marks a "session/new" call this Server was never

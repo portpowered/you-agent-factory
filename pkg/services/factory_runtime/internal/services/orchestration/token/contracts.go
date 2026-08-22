@@ -37,9 +37,9 @@ type Token struct {
 // runtime snapshot can remain self-contained after crossing the Worker port.
 func FromWorker(value workerexecution.Token) Token {
 	return Token{
-		ID: value.ID,
+		ID:      value.ID,
 		PlaceID: placeFromState(value),
-		Color: value.Color, CreatedAt: value.CreatedAt,
+		Color:   value.Color, CreatedAt: value.CreatedAt,
 		EnteredAt: value.EnteredAt, History: value.History,
 	}
 }
@@ -48,12 +48,12 @@ func FromWorker(value workerexecution.Token) Token {
 func ToWorker(value Token) workerexecution.Token {
 	value = Clone(value)
 	return workerexecution.Token{
-		ID: value.ID,
-		State: stateFromPlace(value.PlaceID),
-		Color: value.Color,
+		ID:        value.ID,
+		State:     stateFromPlace(value.PlaceID),
+		Color:     value.Color,
 		CreatedAt: value.CreatedAt,
 		EnteredAt: value.EnteredAt,
-		History: value.History,
+		History:   value.History,
 	}
 }
 

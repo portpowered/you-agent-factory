@@ -24,7 +24,7 @@ func TestPolicyServiceResolvePrimaryResultAllowsNilContext(t *testing.T) {
 	t.Parallel()
 
 	_, err := NewPolicyService().ResolvePrimaryResult(nil, PrimaryResultSelectionInput{
-		RequestID: "request-1",
+		RequestID:        "request-1",
 		InvocationReturn: &InvocationReturnConfig{Policy: "NOT_A_POLICY"},
 		WorldState: InvocationWorldState{
 			WorkRequestsByID: map[string]InvocationWorkRequest{

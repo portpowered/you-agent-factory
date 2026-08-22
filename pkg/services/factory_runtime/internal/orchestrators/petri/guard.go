@@ -710,7 +710,6 @@ func parentChildTokens(marking *MarkingSnapshot, activeDispatches map[string]*in
 	return children
 }
 
-
 func isRegisteredChild(token factorytoken.Token, parentWorkID, childWorkTypeID string) bool {
 	if token.Color.DataType == factorytoken.DataTypeResource || token.Color.ParentID != parentWorkID || token.Color.WorkID == "" {
 		return false

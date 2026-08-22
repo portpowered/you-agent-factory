@@ -172,7 +172,7 @@ func TestServeACPCommand_HelpRendersManifestExamplesAndNoLocalFlags(t *testing.T
 }
 
 // TestServeACPCommand_RejectsUnrelatedGlobalFlags proves --json, --remote, and --server
-	// are not silently accepted and ignored: passing any of them fails the invocation
+// are not silently accepted and ignored: passing any of them fails the invocation
 // with a clear diagnostic before any ACP server is dispatched.
 func TestServeACPCommand_RejectsUnrelatedGlobalFlags(t *testing.T) {
 	for _, args := range [][]string{

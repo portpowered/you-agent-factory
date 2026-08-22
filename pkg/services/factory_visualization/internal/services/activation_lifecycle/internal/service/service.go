@@ -7,8 +7,8 @@ import (
 	"sync"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
 	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/recordingsqueries"
+	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 

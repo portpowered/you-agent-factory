@@ -547,9 +547,9 @@ type WorkStateChangeRecord struct {
 // the root Service state-access slice (MoveWorkForSession). Peers consume Work
 // identity and from/to state facts without importing Factory Runtime types.
 type OperatorMoveResult struct {
-	WorkID, WorkTypeID     string
-	FromState, ToState     string
-	TokenID                string
+	WorkID, WorkTypeID string
+	FromState, ToState string
+	TokenID            string
 }
 
 // CloneTags returns a detached copy of Work tag metadata while preserving nil.

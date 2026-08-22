@@ -25,11 +25,11 @@ type InitializeConfig struct {
 // InitializeResult is the structured success payload for Bootstrap initialize
 // presentation.
 type InitializeResult struct {
-	HomeDir             string                         `json:"homeDir"`
-	ConfigPath          string                         `json:"configPath"`
-	NamedFactoriesRoot  string                         `json:"namedFactoriesRoot"`
-	SystemConfigOutcome string                         `json:"systemConfigOutcome"`
-	PackagedFactories   []InitializePackagedFactory    `json:"packagedFactories"`
+	HomeDir             string                      `json:"homeDir"`
+	ConfigPath          string                      `json:"configPath"`
+	NamedFactoriesRoot  string                      `json:"namedFactoriesRoot"`
+	SystemConfigOutcome string                      `json:"systemConfigOutcome"`
+	PackagedFactories   []InitializePackagedFactory `json:"packagedFactories"`
 }
 
 // InitializePackagedFactory summarizes one packaged Factory outcome for CLI

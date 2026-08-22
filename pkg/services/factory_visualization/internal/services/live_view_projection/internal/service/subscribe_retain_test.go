@@ -215,8 +215,8 @@ func TestStartSubscribesOnceForRetainedThenLive(t *testing.T) {
 	subscribeCalls := 0
 	live := make(chan factorydefinitions.FactoryEvent)
 	source := &sourceStub{
-		stream: &factorydefinitions.FactoryEventStream{Events: live},
-		snapshot: snapshotFacts(1),
+		stream:        &factorydefinitions.FactoryEventStream{Events: live},
+		snapshot:      snapshotFacts(1),
 		subscribeHook: func() { subscribeCalls++ },
 	}
 	svc, err := projectionservice.New(

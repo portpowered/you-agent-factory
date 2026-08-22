@@ -538,4 +538,3 @@ func assertForeignCatalogScope(
 		t.Fatalf("%s GetModelReadiness returned foreign readiness: %#v", name, readiness)
 	}
 }
-

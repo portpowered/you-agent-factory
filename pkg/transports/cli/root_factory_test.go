@@ -14,9 +14,9 @@ import (
 	"testing"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
-	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"

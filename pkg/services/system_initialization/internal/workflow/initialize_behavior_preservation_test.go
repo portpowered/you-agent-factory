@@ -99,8 +99,8 @@ func TestInitializeSettingsFailurePreservesPartialFailureRollbackFactsThroughRoo
 			settings: &settingsCommandRecorder{
 				loadErr: errors.New("load denied"),
 			},
-			wantCause:  "read existing operator config",
-			wantLoad:   1,
+			wantCause: "read existing operator config",
+			wantLoad:  1,
 		},
 	}
 

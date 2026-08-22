@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
-	"github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/services/chat_sessions/transports/acp/factorytarget"
+	"github.com/portpowered/infinite-you/pkg/transports/acp"
 )
 
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption

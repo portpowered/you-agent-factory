@@ -34,8 +34,8 @@ type Service interface {
 }
 
 type service struct {
-	root           factoryvisualization.Root
-	presentation   factoryvisualization.ResponsePresentation
+	root         factoryvisualization.Root
+	presentation factoryvisualization.ResponsePresentation
 }
 
 // New constructs the Visualization CLI adapter from the accepted Visualization

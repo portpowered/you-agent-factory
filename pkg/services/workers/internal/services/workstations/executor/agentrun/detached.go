@@ -13,7 +13,6 @@ import (
 // the request-scoped Workers Execute path. The caller has already resolved the
 // workstation and worker taxonomy, prompt, provider target, and tool policy, so
 // this entry point reads no Factory definition and keeps no workstation state.
-//
 type DetachedRequest struct {
 	// Attempt is the resolved provider request that every harness turn runs.
 	Attempt workerexecution.RunnerExecutionRequest

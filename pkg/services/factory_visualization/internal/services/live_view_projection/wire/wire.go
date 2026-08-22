@@ -2,10 +2,10 @@
 package wire
 
 import (
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
 	projectionservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection/internal/service"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 // NewService constructs the private live_view_projection capability.

@@ -111,11 +111,11 @@ func (prepared PreparedInvocationSchedules) Abort() {
 // composing a peer and invoke explicit methods on Root.
 type Root struct {
 	Operations Service
-	Lifecycle interface {
+	Lifecycle  interface {
 		ActivateRuntime(context.Context, RuntimeActivationRequest) (RuntimeActivationResult, error)
 		DeactivateRuntime(context.Context, RuntimeDeactivationRequest) (RuntimeDeactivationResult, error)
 	}
-	Runtime    any
+	Runtime any
 }
 
 var _ Service = Root{}
