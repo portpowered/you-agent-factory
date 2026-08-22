@@ -406,6 +406,10 @@ func executionTargetFromSelection(
 		!selection.workingDirectoryAuthored &&
 		strings.EqualFold(strings.TrimSpace(selection.modelProvider), string(modelprovider.ProviderCodex))
 	workingDirectory := selection.workingDirectory
+	worktreeFactoryDirectory := firstRuntimeValue(
+		selection.worktreeFactoryDirectory,
+		selection.factoryDirectory,
+	)
 	if prepareFactoryWorktree {
 		// Workers prepares the checkout before adapting the runner request. Keep
 		// the preflight default out of the target so preparation can promote the
@@ -468,7 +472,7 @@ func executionTargetFromSelection(
 			WorkingDirectory:   workingDirectory,
 			PrepareWorktree:    prepareFactoryWorktree,
 			RetainWorktree:     prepareFactoryWorktree,
-			FactoryDirectory:   selection.factoryDirectory,
+			FactoryDirectory:   worktreeFactoryDirectory,
 			CheckoutIdentifier: selection.worktree,
 		},
 		Permissions: workers.PermissionPolicy{SkipPermissions: selection.skipPermissions},

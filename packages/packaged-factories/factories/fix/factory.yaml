@@ -1,0 +1,196 @@
+name: "@you/fix"
+id: builtin-fix
+description:
+  type: LOCALIZABLE_ASSET
+  value: Plans and iterates a requested fix in an isolated named worktree, then repeats independent review until approval or bounded failure.
+invocationReturn:
+  policy: EXPLICIT
+  workTypeName: fix
+  terminalState: approved
+invocationSignature:
+  parameters:
+    - name: request
+      description: Request that Fix plans and completes in the isolated worktree.
+      externalName: to
+      required: true
+      bindings:
+        - kind: POSITIONAL
+          position: 1
+        - kind: STDIN
+        - kind: NAMED
+    - name: worktreeName
+      description: Required safe name for the isolated requester worktree.
+      externalName: worktree-name
+      required: true
+      bindings:
+        - kind: NAMED
+    - name: plannerProvider
+      description: Optional model provider override for the planner; omitted values use operator defaults.
+      externalName: planner-provider
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: plannerModel
+      description: Optional model override for the planner; omitted values use operator defaults.
+      externalName: planner-model
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: iteratorProvider
+      description: Optional model provider override for the iterator; omitted values use operator defaults.
+      externalName: iterator-provider
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: iteratorModel
+      description: Optional model override for the iterator; omitted values use operator defaults.
+      externalName: iterator-model
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: reviewerProvider
+      description: Optional model provider override for the reviewer; omitted values use operator defaults.
+      externalName: reviewer-provider
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: reviewerModel
+      description: Optional model override for the reviewer; omitted values use operator defaults.
+      externalName: reviewer-model
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+examples:
+  - name: plan-fix-review
+    description:
+      type: LOCALIZABLE_ASSET
+      value: Plan, implement, and independently review a fix in a named worktree.
+    args:
+      request: Fix and verify the requested change
+      worktreeName: fix-request
+workers:
+  - name: fix-planner
+    type: AGENT_WORKER
+    modelProvider: ${plannerProvider}
+    model: ${plannerModel}
+    skipPermissions: true
+    stopToken: <COMPLETE>
+  - name: fix-iterator
+    type: AGENT_WORKER
+    modelProvider: ${iteratorProvider}
+    model: ${iteratorModel}
+    skipPermissions: true
+    stopToken: <COMPLETE>
+  - name: fix-reviewer
+    type: AGENT_WORKER
+    modelProvider: ${reviewerProvider}
+    model: ${reviewerModel}
+    skipPermissions: true
+workTypes:
+  - name: fix
+    handlingBehavior:
+      - DEFAULT
+    states:
+      - name: init
+        type: INITIAL
+      - name: execute
+        type: PROCESSING
+      - name: review
+        type: PROCESSING
+      - name: approved
+        type: TERMINAL
+      - name: failed
+        type: FAILED
+workstations:
+  - name: plan-fix
+    type: AGENT_RUN
+    worker: fix-planner
+    worktree: ${worktreeName}
+    workPropagation:
+      mode: OUTPUT_AS_PAYLOAD
+    inputs:
+      - workType: fix
+        state: init
+    outputs:
+      - workType: fix
+        state: execute
+    onRejection:
+      - workType: fix
+        state: failed
+    onFailure:
+      - workType: fix
+        state: failed
+    promptFile: prompts/planner.md
+  - name: iterate-fix
+    type: AGENT_RUN
+    behavior: REPEATER
+    worker: fix-iterator
+    worktree: ${worktreeName}
+    workPropagation:
+      mode: OUTPUT_AS_PAYLOAD
+    inputs:
+      - workType: fix
+        state: execute
+    outputs:
+      - workType: fix
+        state: review
+    onContinue:
+      - workType: fix
+        state: execute
+    onRejection:
+      - workType: fix
+        state: failed
+    onFailure:
+      - workType: fix
+        state: failed
+    promptFile: prompts/iterator.md
+  - name: review-fix
+    type: AGENT_RUN
+    worker: fix-reviewer
+    outcomeFormat: decision-envelope
+    worktree: ${worktreeName}
+    workPropagation:
+      mode: OUTPUT_AS_PAYLOAD
+    inputs:
+      - workType: fix
+        state: review
+    outputs:
+      - workType: fix
+        state: approved
+    onRejection:
+      - workType: fix
+        state: execute
+    onFailure:
+      - workType: fix
+        state: failed
+    promptFile: prompts/reviewer.md
+  - name: iterate-fix-loop-breaker
+    type: LOGICAL_MOVE
+    guards:
+      - type: VISIT_COUNT
+        workstation: iterate-fix
+        maxVisits: 12
+    inputs:
+      - workType: fix
+        state: execute
+    outputs:
+      - workType: fix
+        state: failed
+  - name: review-fix-loop-breaker
+    type: LOGICAL_MOVE
+    guards:
+      - type: VISIT_COUNT
+        workstation: review-fix
+        maxVisits: 8
+    inputs:
+      - workType: fix
+        state: review
+    outputs:
+      - workType: fix
+        state: failed

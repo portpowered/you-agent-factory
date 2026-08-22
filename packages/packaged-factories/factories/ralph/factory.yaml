@@ -1,0 +1,134 @@
+name: "@you/ralph"
+id: builtin-ralph
+description:
+  type: LOCALIZABLE_ASSET
+  value: Plans a request, iterates through every incomplete plan story, and returns only after the durable plan is complete.
+invocationReturn:
+  policy: EXPLICIT
+  workTypeName: ralph
+  terminalState: complete
+invocationSignature:
+  parameters:
+    - name: request
+      description: Request that Ralph plans and works to completion.
+      externalName: to
+      required: true
+      bindings:
+        - kind: POSITIONAL
+          position: 1
+        - kind: STDIN
+        - kind: NAMED
+    - name: plannerProvider
+      description: Optional model provider override for the planner; omitted values use operator defaults.
+      externalName: planner-provider
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: plannerModel
+      description: Optional model override for the planner; omitted values use operator defaults.
+      externalName: planner-model
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: iteratorProvider
+      description: Optional model provider override for the iterator; omitted values use operator defaults.
+      externalName: iterator-provider
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: iteratorModel
+      description: Optional model override for the iterator; omitted values use operator defaults.
+      externalName: iterator-model
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+examples:
+  - name: plan-and-iterate
+    description:
+      type: LOCALIZABLE_ASSET
+      value: Plan and complete a multi-step request.
+    args:
+      request: Implement and verify the requested change
+workers:
+  - name: ralph-planner
+    type: AGENT_WORKER
+    modelProvider: ${plannerProvider}
+    model: ${plannerModel}
+    skipPermissions: true
+    stopToken: <COMPLETE>
+  - name: ralph-iterator
+    type: AGENT_WORKER
+    modelProvider: ${iteratorProvider}
+    model: ${iteratorModel}
+    skipPermissions: true
+    stopToken: <COMPLETE>
+workTypes:
+  - name: ralph
+    handlingBehavior:
+      - DEFAULT
+    states:
+      - name: init
+        type: INITIAL
+      - name: execute
+        type: PROCESSING
+      - name: complete
+        type: TERMINAL
+      - name: failed
+        type: FAILED
+workstations:
+  - name: plan-ralph
+    type: AGENT_RUN
+    worker: ralph-planner
+    workPropagation:
+      mode: OUTPUT_AS_PAYLOAD
+    inputs:
+      - workType: ralph
+        state: init
+    outputs:
+      - workType: ralph
+        state: execute
+    onRejection:
+      - workType: ralph
+        state: failed
+    onFailure:
+      - workType: ralph
+        state: failed
+    promptFile: prompts/planner.md
+  - name: iterate-ralph
+    type: AGENT_RUN
+    behavior: REPEATER
+    worker: ralph-iterator
+    workPropagation:
+      mode: OUTPUT_AS_PAYLOAD
+    inputs:
+      - workType: ralph
+        state: execute
+    outputs:
+      - workType: ralph
+        state: complete
+    onContinue:
+      - workType: ralph
+        state: execute
+    onRejection:
+      - workType: ralph
+        state: failed
+    onFailure:
+      - workType: ralph
+        state: failed
+    promptFile: prompts/iterator.md
+  - name: iterate-ralph-loop-breaker
+    type: LOGICAL_MOVE
+    guards:
+      - type: VISIT_COUNT
+        workstation: iterate-ralph
+        maxVisits: 12
+    inputs:
+      - workType: ralph
+        state: execute
+    outputs:
+      - workType: ralph
+        state: failed

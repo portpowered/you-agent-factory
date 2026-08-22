@@ -45,6 +45,9 @@ func TestEveryPackagedFactoryIsInvocableFromASingleTextPrompt(t *testing.T) {
 			if !parameter.Required {
 				continue
 			}
+			if requiredStructuredInputIsIntentional(entry.Factory.Name, parameter.Name) {
+				continue
+			}
 			if parameterAcceptsUnstructuredText(parameter) {
 				continue
 			}
@@ -67,6 +70,15 @@ func TestEveryPackagedFactoryIsInvocableFromASingleTextPrompt(t *testing.T) {
 	if checked == 0 {
 		t.Fatal("no packaged Factory declared an invocation signature")
 	}
+}
+
+// requiredStructuredInputIsIntentional identifies a required parameter whose
+// safety contract deliberately cannot be inferred from an ACP text turn. Fix
+// must receive an explicit requester-chosen worktree name; its public CLI and
+// API paths carry that named value, while single-text ACP invocation remains
+// intentionally unsupported for this Factory.
+func requiredStructuredInputIsIntentional(factoryName, parameterName string) bool {
+	return factoryName == "@you/fix" && parameterName == "worktreeName"
 }
 
 // parameterAcceptsUnstructuredText reports whether a transport carrying only
