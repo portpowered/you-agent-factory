@@ -365,6 +365,11 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 	sourceContent := prepared.SourceContent
 	policyResolution := policyResolutionFromPrepared(prepared)
 
+	admission, err := s.beginRunAdmission()
+	if err != nil {
+		return AsyncStartResult{}, err
+	}
+	defer admission.release()
 	reserved, err := s.reserveStartSession(ctx, normalized, tupleHash, true)
 	if err != nil {
 		return AsyncStartResult{}, err
@@ -408,7 +413,7 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 	s.mu.RLock()
 	startState := cloneRuntimeSessionState(reserved.state)
 	s.mu.RUnlock()
-	if err := s.launchAsyncRun(func() {
+	if err := admission.launch(func() {
 		s.runAsyncSession(runCtx, reserved.state.session.SessionID, normalized, resolved, sourceContent, policyResolution, startedAt, runDone)
 	}); err != nil {
 		runCancel()
@@ -461,6 +466,14 @@ func (s *JavaScriptRuntimeService) startSync(
 	policyResolution := policyResolutionFromPrepared(prepared)
 
 	waitTimeout, hasSyncWait := syncWaitTimeout(normalized)
+	var admission *durableRunAdmission
+	if hasSyncWait {
+		admission, err = s.beginRunAdmission()
+		if err != nil {
+			return SyncStartResult{}, err
+		}
+		defer admission.release()
+	}
 	reserved, err := s.reserveStartSession(ctx, normalized, tupleHash, !hasSyncWait)
 	if err != nil {
 		return SyncStartResult{}, err
@@ -482,7 +495,7 @@ func (s *JavaScriptRuntimeService) startSync(
 
 	if hasSyncWait {
 		return s.startWaitingSyncSession(
-			ctx, reserved, normalized, resolved, sourceContent, policyResolution, waitTimeout,
+			ctx, reserved, normalized, resolved, sourceContent, policyResolution, waitTimeout, admission,
 		)
 	}
 	return s.completeImmediateSyncStart(

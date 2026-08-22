@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"strings"
+	"sync"
 	"time"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -142,17 +143,51 @@ func (s *JavaScriptRuntimeService) cancelAsyncRuns() {
 	}
 }
 
-func (s *JavaScriptRuntimeService) launchAsyncRun(run func()) error {
-	if run == nil {
-		return errors.New("durable execution run is required")
-	}
+// durableRunAdmission keeps session reservation, run-state publication, and
+// wait-group admission atomic with Close marking the owner closed. Without
+// this boundary, Close could finish between the early ensureOpen check and
+// launchAsyncRun, leaving a nonterminal session with no owning goroutine.
+type durableRunAdmission struct {
+	service     *JavaScriptRuntimeService
+	releaseOnce sync.Once
+}
+
+func (s *JavaScriptRuntimeService) beginRunAdmission() (*durableRunAdmission, error) {
 	s.runLifecycleMu.Lock()
 	if s.runClosed {
 		s.runLifecycleMu.Unlock()
+		return nil, ErrDurableExecutionClosed
+	}
+	return &durableRunAdmission{service: s}, nil
+}
+
+func (admission *durableRunAdmission) release() {
+	if admission == nil || admission.service == nil {
+		return
+	}
+	admission.releaseOnce.Do(func() {
+		admission.service.runLifecycleMu.Unlock()
+	})
+}
+
+func (admission *durableRunAdmission) launch(run func()) error {
+	if admission == nil || admission.service == nil {
+		return errors.New("durable execution run admission is required")
+	}
+	return admission.service.launchAsyncRunLocked(run)
+}
+
+// launchAsyncRunLocked admits one run while the caller holds runLifecycleMu.
+// The caller must release that mutex after the session's runCancel has been
+// published so Close can cancel the newly admitted run.
+func (s *JavaScriptRuntimeService) launchAsyncRunLocked(run func()) error {
+	if run == nil {
+		return errors.New("durable execution run is required")
+	}
+	if s.runClosed {
 		return ErrDurableExecutionClosed
 	}
 	s.runWaitGroup.Add(1)
-	s.runLifecycleMu.Unlock()
 	go func() {
 		defer s.runWaitGroup.Done()
 		run()

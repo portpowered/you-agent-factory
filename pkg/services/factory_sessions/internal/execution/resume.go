@@ -26,6 +26,12 @@ func (s *JavaScriptRuntimeService) ResumeInterruptedSession(
 		return AsyncStartResult{}, err
 	}
 
+	admission, err := s.beginRunAdmission()
+	if err != nil {
+		return AsyncStartResult{}, err
+	}
+	defer admission.release()
+
 	s.mu.Lock()
 	if existing, ok := s.sessions[id]; ok && existing.runCancel != nil {
 		s.mu.Unlock()
@@ -76,7 +82,7 @@ func (s *JavaScriptRuntimeService) ResumeInterruptedSession(
 	runDone := resumed.runDone
 	s.mu.Unlock()
 
-	if err := s.launchAsyncRun(func() {
+	if err := admission.launch(func() {
 		s.runResumedAsyncSession(
 			runCtx,
 			id,
@@ -98,8 +104,10 @@ func (s *JavaScriptRuntimeService) ResumeInterruptedSession(
 			delete(s.sessions, id)
 		}
 		s.mu.Unlock()
+		admission.release()
 		return AsyncStartResult{}, err
 	}
+	admission.release()
 
 	snapshot, err := s.snapshotSessionState(id)
 	if err != nil {

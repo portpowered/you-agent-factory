@@ -431,6 +431,97 @@ func TestJavaScriptRuntimeService_CloseCancelsJoinsAndPersistsAsyncSession(t *te
 	}
 }
 
+func TestJavaScriptRuntimeService_CloseRejectsStartWithoutOrphaningReservation(t *testing.T) {
+	t.Parallel()
+
+	t.Run("async", func(t *testing.T) {
+		exerciseStartAdmissionAfterClose(t, func(service *JavaScriptRuntimeService) error {
+			_, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
+				"req-runtime-close-admission-async-001",
+				simpleFinalWorkflowSource,
+				map[string]any{"subject": "shutdown"},
+				nil,
+			))
+			return err
+		})
+	})
+
+	t.Run("wait sync", func(t *testing.T) {
+		waitMillis := int64(100)
+		exerciseStartAdmissionAfterClose(t, func(service *JavaScriptRuntimeService) error {
+			request := inlineWorkflowStartRequest(
+				"req-runtime-close-admission-sync-001",
+				simpleFinalWorkflowSource,
+				map[string]any{"subject": "shutdown"},
+				nil,
+			)
+			request.Wait = &WaitOptions{TimeoutMillis: &waitMillis}
+			_, err := service.StartSync(context.Background(), request)
+			return err
+		})
+	})
+}
+
+func exerciseStartAdmissionAfterClose(
+	t *testing.T,
+	start func(*JavaScriptRuntimeService) error,
+) {
+	t.Helper()
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	workflows := &blockingWorkflowDefinitions{
+		JavaScriptWorkflows: scriptedSuccessfulRuntimeWorkflows(map[string]any{"status": "started"}),
+		entered:             entered,
+		release:             release,
+	}
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
+		ProjectRoot: t.TempDir(),
+		Workflows:   workflows,
+	})
+	startDone := make(chan error, 1)
+	go func() { startDone <- start(service) }()
+
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for start preparation")
+	}
+	if err := service.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	close(release)
+	if err := <-startDone; !errors.Is(err, ErrDurableExecutionClosed) {
+		t.Fatalf("start error = %v, want ErrDurableExecutionClosed", err)
+	}
+
+	service.mu.RLock()
+	sessionCount := len(service.sessions)
+	replayCount := len(service.startReplay)
+	inflightCount := len(service.startInflight)
+	service.mu.RUnlock()
+	if sessionCount != 0 || replayCount != 0 || inflightCount != 0 {
+		t.Fatalf(
+			"close-rejected start left durable state: sessions=%d replay=%d inflight=%d",
+			sessionCount, replayCount, inflightCount,
+		)
+	}
+}
+
+type blockingWorkflowDefinitions struct {
+	factory.JavaScriptWorkflows
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (workflows *blockingWorkflowDefinitions) ResolveSource(
+	request factory.WorkflowSourceRequest,
+	context factory.WorkflowSourceContext,
+) factory.WorkflowSourceResolution {
+	close(workflows.entered)
+	<-workflows.release
+	return workflows.JavaScriptWorkflows.ResolveSource(request, context)
+}
+
 func TestJavaScriptRuntimeService_CloseReportsNonCooperativeRunTimeout(t *testing.T) {
 	t.Parallel()
 
@@ -581,6 +672,7 @@ type javaScriptRuntimeServiceConfig struct {
 	InvocationExecutor    workers.InvocationExecutor
 	Persistence           runtimepersist.Store
 	Clock                 factory.Clock
+	CheckpointSummaries   factory.JavaScriptCheckpointSummaries
 	Workflows             factory.JavaScriptWorkflows
 	LiveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator
 }
@@ -607,12 +699,16 @@ func newConfiguredJavaScriptRuntimeService(config javaScriptRuntimeServiceConfig
 	if clock == nil {
 		clock = durableFixedClock{now: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
 	}
-	return NewJavaScriptRuntimeService(
-		config.ProjectRoot, config.ChildExecutorMode, config.InvocationExecutor,
-		config.Persistence, clock, testSyncWaitScheduler{}, checkpointfixtures.CheckpointSummariesFixture{
+	checkpointSummaries := config.CheckpointSummaries
+	if checkpointSummaries == nil {
+		checkpointSummaries = checkpointfixtures.CheckpointSummariesFixture{
 			BuildResult:  checkpointfixtures.ResumableCheckpointSummaryResult(),
 			LatestResult: checkpointfixtures.ResumableCheckpointSummaryResult(),
-		},
+		}
+	}
+	return NewJavaScriptRuntimeService(
+		config.ProjectRoot, config.ChildExecutorMode, config.InvocationExecutor,
+		config.Persistence, clock, testSyncWaitScheduler{}, checkpointSummaries,
 		workflows, orchestrationJavaScriptFromWorkflows(workflows), workflows,
 		nil, factory.JavaScriptWorkerSettings{}, mustTestRecordingWriter(),
 		testSessionIDGenerator,
