@@ -177,7 +177,7 @@ LINT_JOBS ?= $(GO_LANE_BUDGET)
 # during -n so recursive builds can receive the dry-run flag.
 LINT_MAKE ?= $(MAKE)
 LINT_REPORT_FILE ?=
-LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure service-cycle-check package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check ownership-inventory-check deadcode
+LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure service-cycle-check package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-check provider-catalog-check model-provider-package-check durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check ownership-inventory-check deadcode fmt-check
 
 define run_lint_checker
 $(if $(LINT_CHECKER_DRIVER),"$(LINT_CHECKER_DRIVER)",$(GO) run $(LINT_CHECKER_DRIVER_PACKAGE)) -cache-dir "$(LINT_CHECKER_CACHE_DIR)" -go "$(GO)" $(if $(filter 1 true yes,$(LINT_CHECKER_FALLBACK)),-fallback,) -package "$(1)" -- $(2)
@@ -922,7 +922,7 @@ fmt-check:
 	@set -e; \
 	paths_file="$${TMPDIR:-.}/you-gofmt-check-$$.paths"; \
 	trap 'rm -f "$$paths_file"' 0 1 2 3 15; \
-	git ls-files -z --cached -- 'cmd/**/*.go' 'pkg/**/*.go' > "$$paths_file"; \
+	git ls-files -z --cached -- 'cmd/**/*.go' 'pkg/**/*.go' 'tests/**/*.go' > "$$paths_file"; \
 	violations="$$(xargs -0 $(GO)fmt -l < "$$paths_file")"; \
 	if test -n "$$violations"; then \
 		printf '%s\n' "$$violations"; \
