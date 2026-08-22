@@ -3,6 +3,7 @@ package codex_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -64,6 +65,44 @@ func TestCodexCommandEffectClassifiesStderrExitFailures(t *testing.T) {
 				t.Fatalf("failure kind = %q, want %q", failure.Kind, test.wantKind)
 			}
 		})
+	}
+}
+
+func TestCodexCommandEffectClassifiesUntrustedWorkingDirectoryAsTerminalWithSafeDiagnostic(t *testing.T) {
+	t.Parallel()
+
+	workingDirectory := `C:\isolated\factory\with spaces`
+	effect := codex.NewCommandEffect(codexCommandRunnerStub{
+		result: workers.CommandResult{
+			ExitCode: 1,
+			Stderr:   []byte("Not inside a trusted directory and --skip-git-repo-check was not specified."),
+		},
+	}, platformclock.Real{})
+	request := codexFailureRequest()
+	request.WorkingDirectory = workingDirectory
+	_, err := newCodexRoot(t, effect).Execute(t.Context(), request)
+
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("Execute() error = %v, want providers.ExecuteFailure", err)
+	}
+	if failure.Kind != providers.ExecuteFailureKindInvalidRequest {
+		t.Fatalf("failure kind = %q, want %q", failure.Kind, providers.ExecuteFailureKindInvalidRequest)
+	}
+	for _, required := range []string{
+		workingDirectory,
+		"Codex requires a trusted working directory",
+		"suitable trusted Git repository",
+	} {
+		if !strings.Contains(failure.Message, required) {
+			t.Errorf("failure message = %q, want it to contain %q", failure.Message, required)
+		}
+	}
+	if strings.Contains(failure.Message, "--skip-git-repo-check") {
+		t.Fatalf("failure message echoed native provider output: %q", failure.Message)
+	}
+	if failure.Diagnostics == nil || failure.Diagnostics.Metadata[providers.ExecuteDiagnosticMetadataSafeFailureMessage] != "true" {
+		t.Fatalf("failure diagnostics = %#v, want safe-message marker", failure.Diagnostics)
 	}
 }
 

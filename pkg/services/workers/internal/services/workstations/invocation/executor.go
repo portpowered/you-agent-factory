@@ -444,9 +444,22 @@ func failedInvocationResult(attempt int, err error) workers.InvocationResult {
 	}
 }
 
+const providerUnrecognizedRefusalMessage = "provider rejected the execution request"
+
 func providerFailureMessage(providerErr *workers.ProviderError) string {
 	if providerErr == nil {
 		return safeFailureMessage(workers.WorkFailureTypeUnknown)
+	}
+	if providerErr.Diagnostics != nil && providerErr.Diagnostics.Provider != nil {
+		metadata := providerErr.Diagnostics.Provider.ResponseMetadata
+		if metadata[providers.ExecuteDiagnosticMetadataUnrecognizedProviderRefusal] == "true" {
+			return providerUnrecognizedRefusalMessage
+		}
+		if metadata[providers.ExecuteDiagnosticMetadataSafeFailureMessage] == "true" {
+			if message := strings.TrimSpace(providerErr.Message); message != "" {
+				return message
+			}
+		}
 	}
 	// Providers normalizes ExecuteFailure.Message before it crosses into
 	// Workers. ProviderFailureKind is the marker that this is that safe,

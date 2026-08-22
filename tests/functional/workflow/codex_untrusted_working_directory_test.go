@@ -1,6 +1,8 @@
 package workflow
 
 import (
+	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,15 +19,107 @@ const (
 	// starts outside a trusted Git directory without changing trust settings.
 	codexUntrustedWorkingDirectoryStderr   = "Not inside a trusted directory and --skip-git-repo-check was not specified."
 	codexUntrustedWorkingDirectoryExitCode = 1
-	codexGenericProviderFailureMessage     = "provider execution failed"
 )
 
-// TestCodexUntrustedWorkingDirectoryCharacterization records the pre-fix
-// behavior: Codex's deterministic trust refusal is retried three times and
-// then reaches the configured process loop breaker as a generic failure.
-func TestCodexUntrustedWorkingDirectoryCharacterization(t *testing.T) {
+func TestCodexUntrustedWorkingDirectoryFailsOnceWithActionableDiagnostic(t *testing.T) {
+	dir := scaffoldCodexWorkingDirectoryFactory(t)
+	runner := support.NewShapedProviderCommandRunner(codexUntrustedWorkingDirectoryCommandResult())
+	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		15*time.Second,
+	)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed place tokens = %d, want one terminal failure; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:init"); got != 0 {
+		t.Fatalf("init place tokens = %d, want zero after terminal refusal; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:complete"); got != 0 {
+		t.Fatalf("complete place tokens = %d, want zero after refusal; listed=%#v", got, listed)
+	}
+	if got := runner.CallCount(); got != 1 {
+		t.Fatalf("provider command calls = %d, want one terminal Codex refusal", got)
+	}
+	requests := runner.Requests()
+	if len(requests) != 1 || requests[0].Command != string(modelprovider.ProviderCodex) || requests[0].WorkDir != dir {
+		t.Fatalf("Codex command request = %#v, want one request in isolated directory %q", requests, dir)
+	}
+
+	dispatches := support.ObserveDispatchEvents(t, events)
+	processFailures := 0
+	for _, dispatch := range dispatches {
+		if dispatch.Request.TransitionId != "process" || dispatch.Response == nil {
+			continue
+		}
+		if dispatch.Response.Outcome != factoryapi.WorkOutcomeFailed {
+			t.Errorf("process response outcome = %q, want FAILED", dispatch.Response.Outcome)
+		}
+		if dispatch.Response.Error == nil {
+			t.Error("process response error = nil, want actionable Codex trust diagnostic")
+		} else {
+			for _, required := range []string{
+				dir,
+				"Codex requires a trusted working directory",
+				"suitable trusted Git repository",
+			} {
+				if !strings.Contains(*dispatch.Response.Error, required) {
+					t.Errorf("process response error = %q, want it to contain %q", *dispatch.Response.Error, required)
+				}
+			}
+		}
+		if dispatch.Response.FailureDetail == nil || dispatch.Response.FailureDetail.Reason != factoryapi.WorkFailureTypePermanentBadRequest {
+			t.Errorf("process failure detail = %#v, want permanent bad request", dispatch.Response.FailureDetail)
+		}
+		processFailures++
+	}
+	if processFailures != 1 {
+		t.Fatalf("failed process dispatches = %d, want one without circuit-breaker retries", processFailures)
+	}
+}
+
+func TestCodexTrustedGitWorkingDirectoryStillCompletes(t *testing.T) {
+	dir := scaffoldCodexWorkingDirectoryFactory(t)
+	initTrustedGitRepository(t, dir)
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("trusted Git invocation COMPLETE"),
+	})
+	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		15*time.Second,
+	)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:complete"); got != 1 {
+		t.Fatalf("complete place tokens = %d, want one trusted invocation; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
+		t.Fatalf("failed place tokens = %d, want zero for trusted invocation; listed=%#v", got, listed)
+	}
+	if got := runner.CallCount(); got != 1 {
+		t.Fatalf("provider command calls = %d, want one trusted Codex invocation", got)
+	}
+	requests := runner.Requests()
+	if len(requests) != 1 || requests[0].WorkDir != dir {
+		t.Fatalf("Codex command request = %#v, want trusted Git directory %q", requests, dir)
+	}
+	for _, dispatch := range support.ObserveDispatchEvents(t, events) {
+		if dispatch.Request.TransitionId != "process" || dispatch.Response == nil {
+			continue
+		}
+		if dispatch.Response.Outcome != factoryapi.WorkOutcomeAccepted || dispatch.Response.Error != nil {
+			t.Fatalf("trusted process response = %#v, want ACCEPTED without error", dispatch.Response)
+		}
+	}
+}
+
+func scaffoldCodexWorkingDirectoryFactory(t *testing.T) string {
+	t.Helper()
 	dir := support.ScaffoldFactory(t, map[string]any{
-		"name": "codex_untrusted_working_directory",
+		"name": "codex_working_directory",
 		"workTypes": []any{map[string]any{
 			"name": "task",
 			"states": []any{
@@ -50,74 +144,20 @@ func TestCodexUntrustedWorkingDirectoryCharacterization(t *testing.T) {
 			"limits": map[string]any{"maxRetries": 3},
 		}},
 	})
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"codex trusted working directory refusal"}`))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"codex working directory diagnostic"}`))
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(
 		modelprovider.ProviderCodex,
 		"gpt-5-codex",
 	))
+	return dir
+}
 
-	runner := support.NewShapedProviderCommandRunner(
-		codexUntrustedWorkingDirectoryCommandResult(),
-		codexUntrustedWorkingDirectoryCommandResult(),
-		codexUntrustedWorkingDirectoryCommandResult(),
-	)
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		15*time.Second,
-	)
-
-	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
-		t.Fatalf("failed place tokens = %d, want one after loop breaker; listed=%#v", got, listed)
+func initTrustedGitRepository(t *testing.T, dir string) {
+	t.Helper()
+	command := exec.Command("git", "-C", dir, "init")
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("git init in trusted fixture directory failed: %v; output=%s", err, output)
 	}
-	if got := support.CountWorkAtCustomerState(listed, "task:init"); got != 0 {
-		t.Fatalf("init place tokens = %d, want zero after loop breaker; listed=%#v", got, listed)
-	}
-	if got := support.CountWorkAtCustomerState(listed, "task:complete"); got != 0 {
-		t.Fatalf("complete place tokens = %d, want zero after refusal; listed=%#v", got, listed)
-	}
-	if got := runner.CallCount(); got != 3 {
-		t.Fatalf("provider command calls = %d, want three equivalent Codex refusals before the circuit breaker", got)
-	}
-	for index, request := range runner.Requests() {
-		if request.Command != string(modelprovider.ProviderCodex) {
-			t.Fatalf("provider request %d command = %q, want codex", index+1, request.Command)
-		}
-		if request.WorkDir != dir {
-			t.Fatalf("provider request %d working directory = %q, want isolated non-Git directory %q", index+1, request.WorkDir, dir)
-		}
-	}
-
-	dispatches := support.ObserveDispatchEvents(t, events)
-	processFailures := 0
-	for _, dispatch := range dispatches {
-		if dispatch.Request.TransitionId != "process" || dispatch.Response == nil {
-			continue
-		}
-		if dispatch.Response.Outcome != factoryapi.WorkOutcomeFailed {
-			t.Errorf("process response outcome = %q, want FAILED", dispatch.Response.Outcome)
-		}
-		if dispatch.Response.Error == nil || *dispatch.Response.Error != codexGenericProviderFailureMessage {
-			actual := "<nil>"
-			if dispatch.Response.Error != nil {
-				actual = *dispatch.Response.Error
-			}
-			t.Errorf("process response error = %q, want generic provider failure", actual)
-		}
-		processFailures++
-	}
-	if processFailures != 3 {
-		t.Fatalf("failed process dispatches = %d, want three before circuit-breaker exhaustion", processFailures)
-	}
-	t.Logf(
-		"before reproduction: stderr=%q exit_code=%d working_directory=%q public_failure=%q provider_attempts=%d circuit_breaker=tripped",
-		codexUntrustedWorkingDirectoryStderr,
-		codexUntrustedWorkingDirectoryExitCode,
-		dir,
-		codexGenericProviderFailureMessage,
-		runner.CallCount(),
-	)
 }
 
 func codexUntrustedWorkingDirectoryCommandResult() platformprocess.CommandResult {

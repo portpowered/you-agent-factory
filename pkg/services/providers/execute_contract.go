@@ -323,6 +323,10 @@ func (progress ExecuteProgress) Clone() ExecuteProgress {
 	return progress
 }
 
+// ExecuteDiagnosticMetadataSafeFailureMessage marks an adapter-authored
+// failure message as safe to preserve through the Workers boundary.
+const ExecuteDiagnosticMetadataSafeFailureMessage = "safe_failure_message"
+
 // ExecuteDiagnostics carries sanitized one-attempt diagnostic facts on success
 // or failure without raw provider command output.
 type ExecuteDiagnostics struct {

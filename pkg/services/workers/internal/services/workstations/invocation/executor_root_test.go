@@ -105,6 +105,36 @@ func TestProviderExecutorExecutePreservesTypedProviderReasonAndIdentity(t *testi
 	}
 }
 
+func TestProviderExecutorExecutePreservesProviderMarkedSafeFailureMessage(t *testing.T) {
+	const message = "Codex requires a trusted working directory: [C:\\isolated\\factory] is not trusted."
+	providerErr := workerexecution.NewProviderError(
+		workerexecution.WorkFailureTypePermanentBadRequest,
+		message,
+		errors.New("provider refusal"),
+	)
+	providerErr.Diagnostics = &workerexecution.WorkDiagnostics{
+		Provider: &workerexecution.ProviderDiagnostic{
+			ResponseMetadata: map[string]string{
+				providers.ExecuteDiagnosticMetadataSafeFailureMessage: "true",
+			},
+		},
+	}
+
+	result, err := workerinvocation.NewProviderExecutor(&executionTestProvider{err: providerErr}).Execute(
+		context.Background(),
+		workerexecution.InvocationInput{},
+	)
+	if !errors.Is(err, providerErr) {
+		t.Fatalf("err = %v, want provider error", err)
+	}
+	if result.FailureMetadata == nil || result.FailureMetadata.Family != workerexecution.WorkFailureFamilyTerminal {
+		t.Fatalf("failure metadata = %#v, want terminal family", result.FailureMetadata)
+	}
+	if result.FailureDetail == nil || result.FailureDetail.Message != message {
+		t.Fatalf("failure detail = %#v, want safe provider message %q", result.FailureDetail, message)
+	}
+}
+
 func TestProviderExecutorExecutePropagatesCancellationWithoutRetry(t *testing.T) {
 	provider := newBlockingExecutionTestProvider()
 	ctx, cancel := context.WithCancel(context.Background())

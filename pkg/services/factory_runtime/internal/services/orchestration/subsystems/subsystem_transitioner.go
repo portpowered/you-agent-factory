@@ -205,7 +205,7 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(ctx context.Con
 		}
 	}
 
-	arcs, resolved, err := t.calculateArcsForResolvedResult(currentTransition, resolved)
+	arcs, resolved, err := t.calculateArcsForResolvedResult(currentTransition, resolved, consumedTokens)
 	if err != nil {
 		return nil, interfaces.CompletedDispatch{}, nil, err
 	}
@@ -344,7 +344,17 @@ func completedDispatchReason(result resolvedWorkResult) string {
 	}
 }
 
-func (t *TransitionerSubsystem) calculateArcsForResolvedResult(currentTransition *petri.Transition, resolved resolvedWorkResult) ([]petri.Arc, resolvedWorkResult, error) {
+func (t *TransitionerSubsystem) calculateArcsForResolvedResult(
+	currentTransition *petri.Transition,
+	resolved resolvedWorkResult,
+	consumedTokens []factorytoken.Token,
+) ([]petri.Arc, resolvedWorkResult, error) {
+	if shouldRouteTerminalFailureToFailedState(resolved) {
+		if arcs := t.terminalFailureArcs(currentTransition, consumedTokens); len(arcs) > 0 {
+			return arcs, resolved, nil
+		}
+	}
+
 	workstation, ok := runtimeWorkstation(currentTransition.Name, t.runtimeConfig)
 	if ok &&
 		workstation != nil &&
@@ -362,6 +372,80 @@ func (t *TransitionerSubsystem) calculateArcsForResolvedResult(currentTransition
 	}
 
 	return matchClassificationLabelArcs(currentTransition, resolved.output, resolved, "classifier label %q did not match any authored classification route")
+}
+
+func shouldRouteTerminalFailureToFailedState(result resolvedWorkResult) bool {
+	if result.outcome != workerexecution.OutcomeFailed || result.failureMetadata == nil {
+		return false
+	}
+	// A permanent provider bad request is deterministic for the same invocation
+	// and must not follow an authored onFailure retry route. Other terminal
+	// failures retain their existing authored routing semantics.
+	return result.failureMetadata.Type == workerexecution.WorkFailureTypePermanentBadRequest &&
+		workerexecution.FailureDecisionFromMetadata(result.failureMetadata).Terminal
+}
+
+func (t *TransitionerSubsystem) terminalFailureArcs(
+	transition *petri.Transition,
+	consumedTokens []factorytoken.Token,
+) []petri.Arc {
+	if t.netDefinition == nil || transition == nil {
+		return nil
+	}
+
+	workTypeIDs := make([]string, 0, len(consumedTokens))
+	seenWorkTypes := make(map[string]struct{}, len(consumedTokens))
+	appendWorkType := func(workTypeID string) {
+		if workTypeID == "" {
+			return
+		}
+		if _, seen := seenWorkTypes[workTypeID]; seen {
+			return
+		}
+		if _, exists := t.netDefinition.WorkTypes[workTypeID]; !exists {
+			return
+		}
+		seenWorkTypes[workTypeID] = struct{}{}
+		workTypeIDs = append(workTypeIDs, workTypeID)
+	}
+
+	for _, token := range consumedTokens {
+		appendWorkType(token.Color.WorkTypeID)
+	}
+	if len(workTypeIDs) == 0 {
+		for _, arc := range transition.InputArcs {
+			place, ok := t.netDefinition.Places[arc.PlaceID]
+			if !ok {
+				continue
+			}
+			appendWorkType(place.TypeID)
+		}
+	}
+
+	arcs := make([]petri.Arc, 0, len(workTypeIDs))
+	for _, workTypeID := range workTypeIDs {
+		workType := t.netDefinition.WorkTypes[workTypeID]
+		failedState := ""
+		for _, stateDefinition := range workType.States {
+			if stateDefinition.Category == state.StateCategoryFailed {
+				failedState = stateDefinition.Value
+				break
+			}
+		}
+		if failedState == "" {
+			continue
+		}
+		failedPlaceID := state.PlaceID(workTypeID, failedState)
+		arcs = append(arcs, petri.Arc{
+			ID:           fmt.Sprintf("%s:terminal-failure:%s", transition.ID, failedPlaceID),
+			Name:         fmt.Sprintf("%s:terminal-failure:%s", transition.ID, failedPlaceID),
+			PlaceID:      failedPlaceID,
+			TransitionID: transition.ID,
+			Direction:    petri.ArcOutput,
+			Cardinality:  petri.ArcCardinality{Mode: petri.CardinalityOne},
+		})
+	}
+	return arcs
 }
 
 func firstDecisionEnvelopeService(
