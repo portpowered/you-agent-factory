@@ -227,7 +227,7 @@ func TestCommandEffectPreservesTypedSeparateEffortRejection(t *testing.T) {
 		Stderr:   []byte("Agy does not support a separate reasoning effort"),
 		ExitCode: 1,
 	})
-	effect := newAgyCommandEffect(workers.AdaptCommandRunner(runner))
+	effect := newAgyCommandEffect(runner)
 	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{
 		ExecuteRequest: providers.ExecuteRequest{
 			Provider:         providers.IDAntigravity,

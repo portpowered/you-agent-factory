@@ -73,7 +73,7 @@ func TestCodexCommandEffectClassifiesUntrustedWorkingDirectoryAsTerminalWithSafe
 
 	workingDirectory := `C:\isolated\factory\with spaces`
 	effect := codex.NewCommandEffect(codexCommandRunnerStub{
-		result: workers.CommandResult{
+		result: platformprocess.CommandResult{
 			ExitCode: 1,
 			Stderr:   []byte("Not inside a trusted directory and --skip-git-repo-check was not specified."),
 		},
@@ -111,7 +111,7 @@ func TestCodexCommandEffectMarksUnknownTurnFailedFromExitOutput(t *testing.T) {
 
 	const providerDetail = "future turn failure credential=secret"
 	effect := codex.NewCommandEffect(codexCommandRunnerStub{
-		result: workers.CommandResult{
+		result: platformprocess.CommandResult{
 			ExitCode: 1,
 			Stderr:   []byte(`{"type":"turn.failed","error":{"message":"` + providerDetail + `"}}`),
 		},

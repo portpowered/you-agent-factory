@@ -426,7 +426,7 @@ func TestNewRootUsesDurableCursorRecorderAcrossReconstruction(t *testing.T) {
 	operation, ok := first.Operations.(interface {
 		RunScriptPoller(
 			context.Context,
-			workers.CommandRunner,
+			platformprocess.CommandRunner,
 			factorydefinitions.RuntimeConfigLookup,
 			factorydefinitions.FactoryWorkstationConfig,
 			*factorydefinitions.FactoryWorkerConfig,
@@ -587,7 +587,7 @@ func newRuntimeCursorComposition(
 func newRuntimeCursorRoot(
 	t *testing.T,
 	ports constructionPorts,
-	runner workers.CommandRunner,
+	runner platformprocess.CommandRunner,
 	workflowID string,
 	inputs automationswire.HostedSourceInputs,
 ) automations.Root {
@@ -646,13 +646,13 @@ type runtimeCursorCommandRunner struct {
 	once    sync.Once
 }
 
-func (runner *runtimeCursorCommandRunner) Run(ctx context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
+func (runner *runtimeCursorCommandRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	runner.once.Do(func() { close(runner.started) })
 	select {
 	case <-ctx.Done():
-		return workers.CommandResult{}, ctx.Err()
+		return platformprocess.CommandResult{}, ctx.Err()
 	default:
-		return workers.CommandResult{Stdout: runner.stdout}, nil
+		return platformprocess.CommandResult{Stdout: runner.stdout}, nil
 	}
 }
 
@@ -662,8 +662,8 @@ type cursorCommandRunner struct {
 	stdout string
 }
 
-func (r cursorCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{Stdout: []byte(r.stdout)}, nil
+func (r cursorCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{Stdout: []byte(r.stdout)}, nil
 }
 
 type cursorRuntimeConfig struct {

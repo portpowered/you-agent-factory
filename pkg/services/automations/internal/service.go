@@ -89,7 +89,7 @@ func New(
 func NewWithCursorFileSystem(
 	logger *zap.Logger,
 	clock Clock,
-	commandRunner workers.CommandRunner,
+	commandRunner platformprocess.CommandRunner,
 	workflowID string,
 	defaultFactoryDir string,
 	hostedPollers automations.HostedPollers,
@@ -113,7 +113,7 @@ func NewWithCursorFileSystem(
 func newService(
 	logger *zap.Logger,
 	clock Clock,
-	commandRunner workers.CommandRunner,
+	commandRunner platformprocess.CommandRunner,
 	workflowID string,
 	defaultFactoryDir string,
 	hostedPollers automations.HostedPollers,
