@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
+	"time"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -39,156 +39,6 @@ type childWorkerAttemptStarter func(
 	context.Context,
 	workers.ExecuteRequest,
 ) (func(context.Context, workers.ExecuteResult, error) error, error)
-
-// childWorkerProgressBridge keeps provider-owned terminal fragments from
-// racing the canonical Execute result. Provider runners may publish a
-// STREAM_COMPLETED/STREAM_FAILED fragment before Execute returns, while a
-// plain provider, model, harness, cancellation, or timeout may publish none.
-// Buffering that one fragment lets the child publish exactly one final
-// response outcome after the retry budget and Execute result are known.
-type childWorkerProgressBridge struct {
-	mu         sync.Mutex
-	publish    childWorkerProgressPublisher
-	dispatchID string
-	pending    *workers.ProgressFragment
-}
-
-func newChildWorkerProgressBridge(
-	publish childWorkerProgressPublisher,
-	dispatchID string,
-) *childWorkerProgressBridge {
-	return &childWorkerProgressBridge{
-		publish:    publish,
-		dispatchID: dispatchID,
-	}
-}
-
-func (b *childWorkerProgressBridge) publishProgress(fragment workers.ProgressFragment) {
-	if b == nil || b.publish == nil {
-		return
-	}
-	fragment = b.normalize(fragment)
-	if isChildTerminalProgress(fragment) {
-		b.mu.Lock()
-		b.pending = &fragment
-		b.mu.Unlock()
-		return
-	}
-	b.publish(b.dispatchID, fragment)
-}
-
-func (b *childWorkerProgressBridge) resetAttempt() {
-	if b == nil {
-		return
-	}
-	b.mu.Lock()
-	b.pending = nil
-	b.mu.Unlock()
-}
-
-func (b *childWorkerProgressBridge) publishTerminal(
-	result workers.ExecuteResult,
-	executeErr error,
-) {
-	if b == nil || b.publish == nil {
-		return
-	}
-	b.mu.Lock()
-	pending := b.pending
-	b.pending = nil
-	b.mu.Unlock()
-	if pending != nil && childTerminalProgressMatches(*pending, result, executeErr) {
-		b.publish(b.dispatchID, *pending)
-		return
-	}
-	b.publish(b.dispatchID, childTerminalProgressFromResult(b.dispatchID, result, executeErr))
-}
-
-func (b *childWorkerProgressBridge) normalize(fragment workers.ProgressFragment) workers.ProgressFragment {
-	if strings.TrimSpace(fragment.DispatchID) == "" {
-		fragment.DispatchID = b.dispatchID
-	}
-	if strings.TrimSpace(fragment.Correlation.DispatchID) == "" {
-		fragment.Correlation.DispatchID = b.dispatchID
-	}
-	return fragment
-}
-
-func isChildTerminalProgress(fragment workers.ProgressFragment) bool {
-	return fragment.Kind == workers.CompletedFragmentKind || fragment.Kind == workers.FailedFragmentKind
-}
-
-func childTerminalProgressMatches(
-	fragment workers.ProgressFragment,
-	result workers.ExecuteResult,
-	executeErr error,
-) bool {
-	switch fragment.Kind {
-	case workers.CompletedFragmentKind:
-		return executeErr == nil && childExecutionSucceeded(result.Outcome)
-	case workers.FailedFragmentKind:
-		// A provider's failed fragment can be less specific than the
-		// canonical Execute result (for example STREAM_FAILED versus a typed
-		// timeout or cancellation). Always synthesize the canonical terminal
-		// for unhappy outcomes so the durable response keeps that classification.
-		return false
-	default:
-		return false
-	}
-}
-
-func childTerminalProgressFromResult(
-	dispatchID string,
-	result workers.ExecuteResult,
-	executeErr error,
-) workers.ProgressFragment {
-	fragment := workers.ProgressFragment{
-		DispatchID:   dispatchID,
-		Correlation:  result.Correlation,
-		Provider:     childProviderName(result),
-		Continuation: (result.Continuation).ClonePtr(),
-	}
-	if strings.TrimSpace(fragment.Correlation.DispatchID) == "" {
-		fragment.Correlation.DispatchID = dispatchID
-	}
-	fragment.Kind = workers.CompletedFragmentKind
-	fragment.Type = "COMPLETED"
-	fragment.ExternalEventType = "STREAM_COMPLETED"
-	if !childExecutionSucceeded(result.Outcome) || executeErr != nil {
-		fragment.Kind = workers.FailedFragmentKind
-		fragment.Type = "FAILED"
-		fragment.ExternalEventType = "STREAM_FAILED"
-		if result.Outcome == workers.ExecutionOutcomeCanceled || errors.Is(executeErr, context.Canceled) {
-			fragment.Type = "CANCELED"
-		}
-		fragment.Payload = childExecutionDiagnostic(result, executeErr)
-		if result.Failure != nil {
-			fragment.Metadata = map[string]string{
-				"work_failure_type": string(result.Failure.Type),
-				"retryable":         fmt.Sprintf("%t", result.Failure.RetryHint),
-			}
-		}
-	}
-	return fragment
-}
-
-func childProviderName(result workers.ExecuteResult) string {
-	provider, _ := childProviderSession(result)
-	return provider
-}
-
-func childExecutionDiagnostic(result workers.ExecuteResult, executeErr error) string {
-	if result.Failure != nil && strings.TrimSpace(result.Failure.Message) != "" {
-		return strings.TrimSpace(result.Failure.Message)
-	}
-	if executeErr != nil && strings.TrimSpace(executeErr.Error()) != "" {
-		return strings.TrimSpace(executeErr.Error())
-	}
-	if result.Outcome == workers.ExecutionOutcomeCanceled {
-		return "Provider execution canceled."
-	}
-	return "Provider execution failed."
-}
 
 // SetWorkerInvoker attaches the Runtime capability used by durable live-change
 // control. Child execution deliberately does not use this broad capability;
@@ -384,6 +234,7 @@ type childWorkerExecutor struct {
 	attemptStarter        childWorkerAttemptStarter
 	maxAttempts           int
 	resourceLeaseAcquirer childResourceLeaseAcquirer
+	maxWorkerDuration     time.Duration
 }
 
 // childResourceLease is the execution-owned view of a resource lease. The
@@ -494,7 +345,7 @@ func (e *childWorkerExecutor) Execute(
 				return e.failedChild(base, req, dispatchID, childIndex, preStartResult, err)
 			}
 		}
-		invoked, err := e.execute.Execute(ctx, request)
+		invoked, err := executeChildAttempt(ctx, e.execute, request)
 		if childExecutionShouldRetry(ctx, invoked, err, attemptNumber, e.maxAttempts) {
 			if progress != nil {
 				progress.resetAttempt()
@@ -542,6 +393,131 @@ func failedChildWorkerExecuteResult(
 			Message: err.Error(),
 		},
 	}
+}
+
+// executeChildAttempt keeps the JavaScript child boundary bounded even when a
+// test, legacy adapter, or provider effect returns after its context has been
+// canceled. The buffered result channel lets that late operation finish
+// without retaining the child caller, while the caller publishes the timeout
+// result exactly once at the deadline.
+func executeChildAttempt(
+	ctx context.Context,
+	execute childExecuteService,
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if request.Target.Timeout <= 0 {
+		return execute.Execute(ctx, request)
+	}
+	attemptCtx := ctx
+	cancel := func() {}
+	if request.Target.Timeout > 0 {
+		attemptCtx, cancel = context.WithTimeout(ctx, request.Target.Timeout)
+	}
+	defer cancel()
+
+	type completion struct {
+		result workers.ExecuteResult
+		err    error
+	}
+	completed := make(chan completion, 1)
+	go func() {
+		result, err := execute.Execute(attemptCtx, request)
+		completed <- completion{result: result, err: err}
+	}()
+
+	for {
+		select {
+		case outcome := <-completed:
+			// If the deadline won the race with a late successful result, the
+			// timeout remains authoritative. A caller-owned deadline or
+			// cancellation remains the caller's terminal outcome.
+			if timedOutChildAttempt(attemptCtx, ctx, request.Target.Timeout) {
+				return childTimeoutExecuteResult(request), context.DeadlineExceeded
+			}
+			return outcome.result, outcome.err
+		case <-attemptCtx.Done():
+			if timedOutChildAttempt(attemptCtx, ctx, request.Target.Timeout) {
+				return childTimeoutExecuteResult(request), context.DeadlineExceeded
+			}
+			return workers.ExecuteResult{Correlation: request.Correlation}, attemptCtx.Err()
+		}
+	}
+}
+
+func timedOutChildAttempt(attemptCtx, parentCtx context.Context, timeout time.Duration) bool {
+	return timeout > 0 &&
+		errors.Is(attemptCtx.Err(), context.DeadlineExceeded) &&
+		(parentCtx == nil || parentCtx.Err() == nil)
+}
+
+func childTimeoutExecuteResult(request workers.ExecuteRequest) workers.ExecuteResult {
+	provider := childProviderForExecuteRequest(request)
+	timeout := request.Target.Timeout
+	message := "child execution timed out"
+	if timeout > 0 {
+		message = fmt.Sprintf("child execution timed out after %s", timeout)
+	}
+	return workers.ExecuteResult{
+		Correlation: request.Correlation,
+		Outcome:     workers.ExecutionOutcomeFailed,
+		Failure: &workers.ExecutionFailure{
+			Type:                workers.WorkFailureTypeTimeout,
+			Family:              workers.WorkFailureFamilyTerminal,
+			Message:             message,
+			RetryHint:           false,
+			ProviderFailureKind: providers.ExecuteFailureKindTimeout,
+			Detail: &workers.FailureDetail{
+				Reason:  workers.WorkFailureTypeTimeout,
+				Message: message,
+			},
+		},
+		Diagnostics: &workers.SafeDiagnostics{
+			Provider: &workers.SafeProviderDiagnostic{Provider: provider},
+		},
+	}
+}
+
+func childProviderForExecuteRequest(request workers.ExecuteRequest) string {
+	provider := firstNonBlank(
+		request.Target.Model.Provider,
+		request.Target.Provider.ID,
+		request.Target.Provider.Alias,
+	)
+	if provider == "" &&
+		!strings.EqualFold(strings.TrimSpace(request.Target.ExecutorProvider), workers.ExecutorProviderACP) &&
+		!strings.EqualFold(strings.TrimSpace(request.Target.ExecutorProvider), "SCRIPT_WRAP") {
+		provider = request.Target.RunnerID
+	}
+	return canonicalChildProvider(provider)
+}
+
+func childWorkerDurationFromPolicy(policy factory.JavaScriptPolicy) time.Duration {
+	if policy.MaxWorkerDurationMs == nil || *policy.MaxWorkerDurationMs <= 0 {
+		return 0
+	}
+	return time.Duration(*policy.MaxWorkerDurationMs) * time.Millisecond
+}
+
+func childAttemptTimeout(
+	request factory.JavaScriptChildExecutionRequest,
+	runnerID string,
+	configured time.Duration,
+) time.Duration {
+	provider := ""
+	if !strings.EqualFold(strings.TrimSpace(request.ExecutorProvider), workers.ExecutorProviderACP) {
+		provider = firstNonBlank(request.ModelProvider, runnerID)
+	}
+	providerDefault := providers.ID(provider).NativeAttemptTimeout()
+	if configured <= 0 {
+		return providerDefault
+	}
+	if providerDefault <= 0 || configured < providerDefault {
+		return configured
+	}
+	return providerDefault
 }
 
 func finishChildWorkerAttempt(
@@ -665,6 +641,7 @@ func (e *childWorkerExecutor) executeRequest(
 				FactoryDirectory: e.workingDir,
 			},
 			Permissions: workers.PermissionPolicy{SkipPermissions: req.SkipPermissions},
+			Timeout:     childAttemptTimeout(req, base.RunnerID, e.maxWorkerDuration),
 		},
 		Input: workers.ExecutionInput{
 			Dispatch:              dispatch,
@@ -792,17 +769,15 @@ func (e *childWorkerExecutor) failedChild(
 	result workers.ExecuteResult,
 	executeErr error,
 ) (factory.JavaScriptChildExecutionResult, error) {
-	diagnostic := ""
-	if result.Failure != nil {
-		diagnostic = strings.TrimSpace(result.Failure.Message)
-	}
-	if diagnostic == "" && executeErr != nil {
-		diagnostic = strings.TrimSpace(executeErr.Error())
-	}
-	if diagnostic == "" {
-		diagnostic = "Provider execution failed."
-	}
+	result = normalizeChildExecuteFailure(result, executeErr)
+	diagnostic := childFailureDiagnostic(result, executeErr, req)
 	provider, providerSessionRef := childProviderSession(result)
+	if provider == "" {
+		provider = childProviderName(result)
+	}
+	if provider == "" {
+		provider = canonicalChildProvider(req.ModelProvider)
+	}
 	failed := base
 	failed.Status = factory.JavaScriptChildDispatchStatusFailed
 	// The provider travels with its session reference or not at all. A
@@ -818,7 +793,7 @@ func (e *childWorkerExecutor) failedChild(
 		if failed.FailureDetail == nil {
 			failed.FailureDetail = &workers.FailureDetail{
 				Reason:  result.Failure.Type,
-				Message: diagnostic,
+				Message: childFailureMessage(result, executeErr),
 			}
 		}
 		retryable := result.Failure.RetryHint

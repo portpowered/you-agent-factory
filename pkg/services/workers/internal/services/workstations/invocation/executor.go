@@ -110,14 +110,14 @@ func (e *Executor) Execute(
 	}
 	result, err := e.executeRequest(ctx, input.Request, request)
 	if err != nil {
-		normalized := normalizeProvidersFailure(err, input.Request.Model)
+		normalized := normalizeProvidersFailure(err, input.Request.Model, request.Provider.String())
 		return failedInvocationResult(attempt, normalized), normalized
 	}
 	response := workers.InferenceResponse{
 		Content:      result.Content,
 		Outcome:      workers.WorkOutcome(result.Outcome),
 		Continuation: continuationFromSessionRef(result.SessionRef),
-		Diagnostics:  workersDiagnostics(result.Diagnostics, result.SessionRef, input.Request.Model),
+		Diagnostics:  workersDiagnostics(result.Diagnostics, result.SessionRef, input.Request.Model, request.Provider.String()),
 	}
 	return workers.InvocationResult{
 		Response:     response,
@@ -274,7 +274,7 @@ func providerModelOperationBindings(values []workers.ResolvedModelOperationBindi
 	return converted
 }
 
-func normalizeProvidersFailure(err error, model string) error {
+func normalizeProvidersFailure(err error, model, provider string) error {
 	var continuation providers.ContinuationFailure
 	if errors.As(err, &continuation) {
 		normalized := workers.NewProviderError(
@@ -284,6 +284,7 @@ func normalizeProvidersFailure(err error, model string) error {
 		)
 		normalized.ProviderContinuationFailureKind = continuation.Kind
 		normalized.Continuation = continuationFromSessionRef(&continuation.Reference)
+		normalized.Diagnostics = workersDiagnostics(nil, &continuation.Reference, model, provider)
 		return normalized
 	}
 	var failure providers.ExecuteFailure
@@ -295,8 +296,9 @@ func normalizeProvidersFailure(err error, model string) error {
 		failure.Message,
 		err,
 	)
+	normalized.ProviderFailureKind = failure.Kind
 	normalized.Continuation = continuationFromSessionRef(failure.SessionRef)
-	normalized.Diagnostics = workersDiagnostics(failure.Diagnostics, failure.SessionRef, model)
+	normalized.Diagnostics = workersDiagnostics(failure.Diagnostics, failure.SessionRef, model, provider)
 	return normalized
 }
 
@@ -339,21 +341,21 @@ func continuationFromSessionRef(reference *providers.SessionRef) *workers.Provid
 	return &continuation
 }
 
-func workersDiagnostics(diagnostics *providers.ExecuteDiagnostics, reference *providers.SessionRef, model string) *workers.WorkDiagnostics {
-	if diagnostics == nil && reference == nil && strings.TrimSpace(model) == "" {
+func workersDiagnostics(diagnostics *providers.ExecuteDiagnostics, reference *providers.SessionRef, model, provider string) *workers.WorkDiagnostics {
+	if diagnostics == nil && reference == nil && strings.TrimSpace(model) == "" && strings.TrimSpace(provider) == "" {
 		return nil
 	}
 	metadata := map[string]string(nil)
 	if diagnostics != nil {
 		metadata = cloneStringMap(diagnostics.Metadata)
 	}
-	provider := ""
+	providerName := strings.TrimSpace(provider)
 	if reference != nil {
-		provider = reference.Provider.String()
+		providerName = reference.Provider.String()
 	}
 	result := &workers.WorkDiagnostics{
 		Provider: &workers.ProviderDiagnostic{
-			Provider:         provider,
+			Provider:         providerName,
 			Model:            strings.TrimSpace(model),
 			ResponseMetadata: metadata,
 		},
@@ -436,10 +438,27 @@ func failedInvocationResult(attempt int, err error) workers.InvocationResult {
 		FailureDecision: &decision,
 		FailureDetail: &workers.FailureDetail{
 			Reason:  providerErr.Type,
-			Message: safeFailureMessage(providerErr.Type),
+			Message: providerFailureMessage(providerErr),
 		},
 		Diagnostics: workers.SafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics),
 	}
+}
+
+func providerFailureMessage(providerErr *workers.ProviderError) string {
+	if providerErr == nil {
+		return safeFailureMessage(workers.WorkFailureTypeUnknown)
+	}
+	// Providers normalizes ExecuteFailure.Message before it crosses into
+	// Workers. ProviderFailureKind is the marker that this is that safe,
+	// provider-owned explanation; hand-built Worker errors still use the stable
+	// type allowlist below so arbitrary error text cannot leak into the public
+	// invocation result.
+	if providerErr.ProviderFailureKind != "" {
+		if message := strings.TrimSpace(providerErr.Message); message != "" {
+			return message
+		}
+	}
+	return safeFailureMessage(providerErr.Type)
 }
 
 func cloneContinuation(reference *workers.ProviderContinuationRef) *workers.ProviderContinuationRef {

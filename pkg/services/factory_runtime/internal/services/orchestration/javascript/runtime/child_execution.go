@@ -109,6 +109,12 @@ func ResolveChildWorkerSettings(req ChildExecutionRequest, agents map[string]int
 		}
 		req.ReasoningEffort = effort
 	}
+	// Antigravity selects its reasoning behavior through the model name. Keep
+	// the exact model while omitting the provider-level effort option, which
+	// Antigravity rejects as a separate reasoning control.
+	if req.ModelProvider == workerexecution.RunnerIDAntigravity {
+		req.ReasoningEffort = ""
+	}
 	return req, nil
 }
 

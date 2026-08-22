@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // ErrInvalidID reports that a provider identity string is empty or otherwise
@@ -128,6 +129,18 @@ func (id ID) Validate() error {
 // String returns the canonical provider id string.
 func (id ID) String() string {
 	return string(id)
+}
+
+// NativeAttemptTimeout returns the Providers-owned default deadline for one
+// native attempt. A zero result means that the provider has no published
+// default and the caller must rely on its configured or parent deadline.
+func (id ID) NativeAttemptTimeout() time.Duration {
+	switch strings.ToLower(strings.TrimSpace(id.CanonicalSessionProvider())) {
+	case string(IDAntigravity):
+		return DefaultAntigravityPrintTimeout
+	default:
+		return 0
+	}
 }
 
 // Descriptor is the Providers-owned enumeration value for one catalog provider.

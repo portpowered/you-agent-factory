@@ -27,6 +27,12 @@ var ErrExecuteFailed = errors.New("provider execution failed")
 // for a capability it does not truthfully advertise.
 var ErrCapabilityMismatch = errors.New("provider capability mismatch")
 
+// DefaultAntigravityPrintTimeout is the native AGY print-mode deadline used
+// when a caller does not provide a narrower worker timeout. It is published at
+// the Providers boundary so child orchestration can apply the same bound
+// without importing the Antigravity adapter or duplicating its policy.
+const DefaultAntigravityPrintTimeout = 5 * time.Minute
+
 // ExecuteFailureKind is a provider-neutral one-attempt failure category.
 // Providers owns the normalized attempt outcome; Workers and other callers own
 // retry, throttle, and scheduling policy.
