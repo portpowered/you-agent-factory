@@ -2,6 +2,7 @@ package factorysessionexecution
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -31,6 +32,13 @@ type startReplayRecord struct {
 	syncStart  *SyncStartResult
 	asyncStart *AsyncStartResult
 }
+
+// embeddedContractFixtureCatalog is the immutable deterministic catalog used by
+// the default standalone Factory Session execution path. It is owned here so
+// the installed binary does not need a repository-relative file at runtime.
+//
+//go:embed testdata/durable-session-contract-fixtures.json
+var embeddedContractFixtureCatalog []byte
 
 // NewFakeService constructs one deterministic fake durable session service.
 func NewFakeService(clock factory.Clock, scenarios ...FakeScenario) (*FakeService, error) {
@@ -67,6 +75,19 @@ func NewFakeServiceFromContractFixtures(
 		return nil, fmt.Errorf("Factory Session execution clock is required")
 	}
 	scenarios, err := LoadFakeScenariosFromContractFixtures(path, files)
+	if err != nil {
+		return nil, err
+	}
+	return NewFakeService(clock, scenarios...)
+}
+
+// NewFakeServiceFromEmbeddedContractFixtures constructs the default fixture
+// service without consulting the host filesystem.
+func NewFakeServiceFromEmbeddedContractFixtures(clock factory.Clock) (*FakeService, error) {
+	if clock == nil {
+		return nil, fmt.Errorf("Factory Session execution clock is required")
+	}
+	scenarios, err := loadFakeScenariosFromContractFixtureData(embeddedContractFixtureCatalog)
 	if err != nil {
 		return nil, err
 	}
