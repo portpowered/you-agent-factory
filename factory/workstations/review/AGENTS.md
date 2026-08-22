@@ -136,6 +136,38 @@ Raise a failure of any of these as BLOCKING, naming the specific symbol and the
 missing caller or unpopulated default. Do not accept "the type, function, or
 route exists" as evidence that a criterion is met.
 
+**An unmet criterion is BLOCKING. You may not approve around your own findings:**
+The most common reviewer defect in this factory is a single comment that both
+admits a criterion is unmet and approves the merge anyway — "criterion 6: FAIL /
+DEFERRED" in one paragraph and "the PR is ready to merge" in the next. This has
+merged real regressions. In one measured case the deferred criterion was the
+PR's *primary* acceptance criterion, the follow-up it promised never landed, and
+a later measurement showed the change did not achieve its goal at all.
+
+So: **if you record any acceptance criterion as FAIL, DEFERRED, not met, not
+verified, or "could not confirm", your verdict is BLOCKING.** There is no
+approving variant of that sentence. Specifically:
+
+- **Do not treat a promised follow-up as a remedy.** "Preserve the measurement
+  follow-up in the PR conversation" is not a remedy — a follow-up recorded only
+  in a comment has no owner, no token, and nothing that makes it happen. It will
+  not land.
+- **Do not downgrade a criterion because it is inconvenient to measure.** A
+  criterion you skipped is not a criterion you passed.
+- **Do not approve because the remaining gap is "not a correctness issue".**
+  Whether the gap is correctness is not the test; whether the criterion was met
+  is the test.
+
+**If a criterion genuinely cannot be evaluated before merge** — it requires
+post-merge runs, an operator-only resource, or state that does not exist yet —
+then the criterion is ill-formed, and that is itself the finding. Say so
+explicitly: name the criterion, state precisely why it is unsatisfiable from a
+pre-merge position, and request that the operator either waive it by name or
+reshape it. Then stop. **Do not re-block the same unsatisfiable criterion round
+after round** — repeating a verdict the lane cannot possibly satisfy burns its
+remaining visits and kills it. Escalating once and waiting is correct; silently
+approving is not, and neither is looping.
+
 ### Step 4 — Apply the review rules in order
 
 Check the PR directly against the review rules above and confirm whether it
