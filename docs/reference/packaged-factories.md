@@ -1183,29 +1183,26 @@ locate the audio. The generated audio content is not byte-stable. A failed
 run returns a TTS generation/model-readiness error without success-shaped
 metadata.
 
-**Worked invocation.** After `OMNIVOICE_Q4_K_M` reports `READY`, this exact
-command was executed against the current binary with a disposable managed
-cache and controlled local runtime:
+**Worked invocation.** After `OMNIVOICE_Q4_K_M` reports `READY`, run this exact
+command from a blank directory:
 
 ```bash
 you run --named @you/tts --no-record --output primary --to "The release is ready."
 ```
 
-**Observed output evidence.** The exact command returned this successful
-primary-result shape (the temporary artifact path and trace identifier are
-intentionally shown as opaque runtime values):
+**Observed output evidence.** A fresh binary ran the exact command from a blank
+directory after the prompt-binding fix. Prompt rendering completed, but the
+local model execution failed before producing an audio artifact:
 
 ```text
-{"artifactPath":"<runtime-generated-path>\\omnivoice-<run-generated>.wav","mediaType":"audio/wav","backend":"OMNIVOICE_Q4_K_M/LLAMACPP","traceId":"trace-<run-generated>"}
+{"code":"INVOCATION_TTS_GENERATION_FAILED","family":"INTERNAL_SERVER_ERROR","message":"unknown Codex reported a terminal error"}
 ```
 
-The command was run with the model cache marked ready and a local runtime that
-wrote a valid audio payload; the existing behavioral assertion
-`TestPackagedTTSRequiredInputProducesAudioArtifactMetadata` additionally
-checks the public primary result, `audio/wav` metadata, non-empty artifact
-path, and readable audio artifact. The captured audio payload and generated
-identifiers are evidence of the result shape, not a deterministic audio
-golden.
+The result proves that the repaired path reached model execution without a
+prompt-render failure. It is not success evidence: no readable audio artifact
+was produced in this environment. The focused behavioral assertion
+`TestPackagedTTSRequiredInputProducesAudioArtifactMetadata` still verifies the
+successful primary-result contract with the injected model edge.
 
 ## Detailed media-review entries
 
