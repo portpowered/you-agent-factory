@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"strings"
 	"sync"
@@ -56,6 +57,17 @@ type runtimeSessionState struct {
 type startInflightFlight struct {
 	done chan struct{}
 }
+
+var (
+	// ErrDurableExecutionClosed reports a start raced with application
+	// shutdown after the durable execution owner stopped accepting work.
+	ErrDurableExecutionClosed = errors.New("durable execution service is closed")
+	// ErrDurableExecutionShutdownTimeout keeps a non-cooperative workflow from
+	// making shutdown appear complete while its owner is still running.
+	ErrDurableExecutionShutdownTimeout = errors.New("durable execution shutdown timed out")
+)
+
+const durableExecutionShutdownTimeout = 10 * time.Second
 
 func projectRuntimeSessionState(
 	sessionID string,
@@ -257,6 +269,12 @@ type JavaScriptRuntimeService struct {
 	dispatchDurabilityMu       sync.RWMutex
 	dispatchDurability         recording.CompletedFlushWatermarkReader
 	dispatchStreamGenerationID string
+
+	runLifecycleMu sync.Mutex
+	runWaitGroup   sync.WaitGroup
+	runClosed      bool
+	closeOnce      sync.Once
+	closeErr       error
 }
 
 // NewJavaScriptRuntimeService constructs the durable session service.
@@ -372,10 +390,92 @@ func (s *JavaScriptRuntimeService) HasDurableState(ctx context.Context, sessionI
 	return true, nil
 }
 
+// Close cancels every asynchronous durable session owned by this service and
+// waits for the corresponding execution goroutines to finish their terminal
+// projection and persistence before returning. The owner is closed exactly
+// once; subsequent calls return the same shutdown result.
+func (s *JavaScriptRuntimeService) Close() error {
+	return s.closeWithTimeout(durableExecutionShutdownTimeout)
+}
+
+func (s *JavaScriptRuntimeService) closeWithTimeout(timeout time.Duration) error {
+	if s == nil {
+		return nil
+	}
+	s.closeOnce.Do(func() {
+		s.runLifecycleMu.Lock()
+		s.runClosed = true
+		s.runLifecycleMu.Unlock()
+
+		s.cancelAsyncRuns()
+		done := make(chan struct{})
+		go func() {
+			s.runWaitGroup.Wait()
+			close(done)
+		}()
+
+		timer := time.NewTimer(timeout)
+		defer timer.Stop()
+		select {
+		case <-done:
+		case <-timer.C:
+			s.closeErr = fmt.Errorf(
+				"close durable session execution: %w",
+				ErrDurableExecutionShutdownTimeout,
+			)
+		}
+	})
+	return s.closeErr
+}
+
+func (s *JavaScriptRuntimeService) cancelAsyncRuns() {
+	s.mu.RLock()
+	cancels := make([]context.CancelFunc, 0, len(s.sessions))
+	for _, state := range s.sessions {
+		if state != nil && state.runCancel != nil {
+			cancels = append(cancels, state.runCancel)
+		}
+	}
+	s.mu.RUnlock()
+	for _, cancel := range cancels {
+		cancel()
+	}
+}
+
+func (s *JavaScriptRuntimeService) launchAsyncRun(run func()) error {
+	if run == nil {
+		return errors.New("durable execution run is required")
+	}
+	s.runLifecycleMu.Lock()
+	if s.runClosed {
+		s.runLifecycleMu.Unlock()
+		return ErrDurableExecutionClosed
+	}
+	s.runWaitGroup.Add(1)
+	s.runLifecycleMu.Unlock()
+	go func() {
+		defer s.runWaitGroup.Done()
+		run()
+	}()
+	return nil
+}
+
+func (s *JavaScriptRuntimeService) ensureOpen() error {
+	s.runLifecycleMu.Lock()
+	defer s.runLifecycleMu.Unlock()
+	if s.runClosed {
+		return ErrDurableExecutionClosed
+	}
+	return nil
+}
+
 func (s *JavaScriptRuntimeService) now() time.Time { return s.clock.Now().UTC() }
 
 func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequest) (AsyncStartResult, error) {
 	if err := ctx.Err(); err != nil {
+		return AsyncStartResult{}, err
+	}
+	if err := s.ensureOpen(); err != nil {
 		return AsyncStartResult{}, err
 	}
 	normalized, tupleHash, err := normalizeStartTuple(req)
@@ -443,7 +543,16 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 	s.mu.RLock()
 	startState := cloneRuntimeSessionState(reserved.state)
 	s.mu.RUnlock()
-	go s.runAsyncSession(runCtx, reserved.state.session.SessionID, normalized, resolved, sourceContent, policyResolution, startedAt, runDone)
+	if err := s.launchAsyncRun(func() {
+		s.runAsyncSession(runCtx, reserved.state.session.SessionID, normalized, resolved, sourceContent, policyResolution, startedAt, runDone)
+	}); err != nil {
+		runCancel()
+		s.mu.Lock()
+		reserved.state.runCancel = nil
+		close(runDone)
+		s.mu.Unlock()
+		return AsyncStartResult{}, err
+	}
 
 	result := s.asyncStartFromState(startState)
 	s.recordAsyncStartReplay(normalized.RequestID, result)
@@ -459,6 +568,9 @@ func (s *JavaScriptRuntimeService) startSync(
 	req StartRequest,
 ) (SyncStartResult, error) {
 	if err := ctx.Err(); err != nil {
+		return SyncStartResult{}, err
+	}
+	if err := s.ensureOpen(); err != nil {
 		return SyncStartResult{}, err
 	}
 	normalized, tupleHash, err := normalizeStartTuple(req)

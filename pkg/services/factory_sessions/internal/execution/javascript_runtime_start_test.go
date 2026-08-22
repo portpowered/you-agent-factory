@@ -380,6 +380,97 @@ func TestJavaScriptRuntimeService_StartAsync_RunningCancelAndReads(t *testing.T)
 	}
 }
 
+func TestJavaScriptRuntimeService_CloseCancelsJoinsAndPersistsAsyncSession(t *testing.T) {
+	t.Parallel()
+
+	projectRoot := t.TempDir()
+	store := mustTestRuntimePersistenceStore(t, runtimepersist.DirForProjectRoot(projectRoot))
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
+		Persistence: store,
+		Workflows:   scriptedBlockingRuntimeWorkflows(),
+	})
+	started, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
+		"req-runtime-close-joins-001",
+		busyLoopWorkflowSource,
+		map[string]any{"subject": "shutdown"},
+		nil,
+	))
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+
+	if err := service.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	session, err := service.GetSession(context.Background(), started.SessionID)
+	if err != nil {
+		t.Fatalf("GetSession after Close: %v", err)
+	}
+	if session.Status != LifecycleStatusCanceled {
+		t.Fatalf("session status after Close = %q, want CANCELED", session.Status)
+	}
+	if session.Failure == nil || session.Failure.Reason != "WORKFLOW_RUNTIME_CANCELED" {
+		t.Fatalf("session failure after Close = %#v, want WORKFLOW_RUNTIME_CANCELED", session.Failure)
+	}
+	snapshotPath := filepath.Join(runtimepersist.DirForProjectRoot(projectRoot), started.SessionID+".json")
+	if _, err := os.Stat(snapshotPath); err != nil {
+		t.Fatalf("terminal snapshot after Close: %v", err)
+	}
+	if err := service.Close(); err != nil {
+		t.Fatalf("repeated Close: %v", err)
+	}
+	if _, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
+		"req-runtime-close-rejected-001",
+		busyLoopWorkflowSource,
+		nil,
+		nil,
+	)); !errors.Is(err, ErrDurableExecutionClosed) {
+		t.Fatalf("StartAsync after Close error = %v, want ErrDurableExecutionClosed", err)
+	}
+}
+
+func TestJavaScriptRuntimeService_CloseReportsNonCooperativeRunTimeout(t *testing.T) {
+	t.Parallel()
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
+		ProjectRoot: t.TempDir(),
+		Workflows: scriptedRuntimeWorkflows(func(
+			context.Context,
+			factory.JavaScriptRuntimeRequest,
+			factory.JavaScriptRuntimeHooks,
+		) (factory.JavaScriptRuntimeOutcome, error) {
+			close(entered)
+			<-release
+			return factory.JavaScriptRuntimeOutcome{OK: true}, nil
+		}),
+	})
+	defer func() {
+		close(release)
+		service.runWaitGroup.Wait()
+	}()
+	if _, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
+		"req-runtime-close-timeout-001",
+		busyLoopWorkflowSource,
+		nil,
+		nil,
+	)); err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for the non-cooperative workflow to start")
+	}
+
+	if err := service.closeWithTimeout(time.Millisecond); !errors.Is(err, ErrDurableExecutionShutdownTimeout) {
+		t.Fatalf("closeWithTimeout error = %v, want ErrDurableExecutionShutdownTimeout", err)
+	}
+}
+
 func TestJavaScriptRuntimeService_StartAsync_FailedAndTimedOut(t *testing.T) {
 	t.Parallel()
 	t.Run("failed", func(t *testing.T) {

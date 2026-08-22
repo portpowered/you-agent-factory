@@ -446,16 +446,25 @@ func (s *JavaScriptRuntimeService) startWaitingSyncSession(
 	reserved.state.sourceContent = sourceContent
 	s.mu.Unlock()
 
-	go s.runAsyncSession(
-		runCtx,
-		reserved.state.session.SessionID,
-		normalized,
-		resolved,
-		sourceContent,
-		policyResolution,
-		startedAt,
-		runDone,
-	)
+	if err := s.launchAsyncRun(func() {
+		s.runAsyncSession(
+			runCtx,
+			reserved.state.session.SessionID,
+			normalized,
+			resolved,
+			sourceContent,
+			policyResolution,
+			startedAt,
+			runDone,
+		)
+	}); err != nil {
+		runCancel()
+		s.mu.Lock()
+		reserved.state.runCancel = nil
+		close(runDone)
+		s.mu.Unlock()
+		return SyncStartResult{}, err
+	}
 
 	result, err := s.waitSyncCompletion(
 		ctx,

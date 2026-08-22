@@ -251,10 +251,13 @@ type ownedExecutionService struct {
 }
 
 func (service ownedExecutionService) Close() error {
-	if service.close == nil {
-		return nil
+	if service.close != nil {
+		return service.close()
 	}
-	return service.close()
+	if closer, ok := service.Service.(interface{ Close() error }); ok {
+		return closer.Close()
+	}
+	return nil
 }
 
 func normalizeSessionExecutionProvider(value string) (factorysessions.ExecutionProvider, error) {

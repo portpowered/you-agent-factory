@@ -206,6 +206,21 @@ func New(execution durableexecution.Service) (*Service, error) {
 	return &Service{Service: execution}, nil
 }
 
+// Close forwards the optional execution-owner shutdown boundary. The public
+// durable execution contract intentionally stays focused on customer
+// operations; only implementations that own asynchronous work need to expose
+// this private lifecycle capability.
+func (s *Service) Close() error {
+	if s == nil || s.Service == nil {
+		return nil
+	}
+	closer, ok := s.Service.(interface{ Close() error })
+	if !ok {
+		return nil
+	}
+	return closer.Close()
+}
+
 // IsNonLiveReplay preserves the optional replay routing capability without
 // exposing the underlying recording-replay implementation.
 func (s *Service) IsNonLiveReplay() bool {

@@ -24,6 +24,9 @@ func (s *JavaScriptRuntimeService) ResumeInterruptedSession(
 	if err := ctx.Err(); err != nil {
 		return AsyncStartResult{}, err
 	}
+	if err := s.ensureOpen(); err != nil {
+		return AsyncStartResult{}, err
+	}
 	id, err := NormalizeSessionID(sessionID)
 	if err != nil {
 		return AsyncStartResult{}, err
@@ -90,18 +93,30 @@ func (s *JavaScriptRuntimeService) ResumeInterruptedSession(
 	runDone := resumed.runDone
 	s.mu.Unlock()
 
-	go s.runResumedAsyncSession(
-		runCtx,
-		id,
-		normalized,
-		resolved,
-		sourceContent,
-		policyResolution,
-		state.checkpointSummary,
-		state.runtimeRecords,
-		resumingAt,
-		runDone,
-	)
+	if err := s.launchAsyncRun(func() {
+		s.runResumedAsyncSession(
+			runCtx,
+			id,
+			normalized,
+			resolved,
+			sourceContent,
+			policyResolution,
+			state.checkpointSummary,
+			state.runtimeRecords,
+			resumingAt,
+			runDone,
+		)
+	}); err != nil {
+		runCancel()
+		s.mu.Lock()
+		if active, ok := s.sessions[id]; ok && active == &resumed {
+			active.runCancel = nil
+			close(runDone)
+			delete(s.sessions, id)
+		}
+		s.mu.Unlock()
+		return AsyncStartResult{}, err
+	}
 
 	snapshot, err := s.snapshotSessionState(id)
 	if err != nil {
