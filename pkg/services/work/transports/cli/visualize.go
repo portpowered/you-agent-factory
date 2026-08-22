@@ -8,7 +8,7 @@ import (
 	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
 )
 
-// VisualizeConfig holds parameters for the work visualize command.
+// VisualizeConfig holds parameters for the work render command.
 type VisualizeConfig struct {
 	Context   context.Context
 	BatchFile string

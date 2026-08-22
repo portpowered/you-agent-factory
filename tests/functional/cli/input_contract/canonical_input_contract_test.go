@@ -199,8 +199,8 @@ func TestGenericSessionProjectionEnforcesProductionInputContracts(t *testing.T) 
 		want string
 	}{
 		{
-			name: "required positional",
-			args: []string{"you", "session", "dispatches"},
+			name: "required positional on retained command",
+			args: []string{"you", "session", "delete"},
 			want: "requires at least 1 arg",
 		},
 		{
@@ -276,14 +276,6 @@ func TestGenericSessionProjectionCoversProductionCommandShapes(t *testing.T) {
 			name: "list default scope",
 			args: []string{"you", "session", "list"},
 			path: "you session list",
-		},
-		{
-			name: "dispatch filters",
-			args: []string{
-				"you", "session", "dispatches", "missing-session",
-				"--phase", "queued", "--status", "active",
-			},
-			path: "you session dispatches",
 		},
 		{
 			name: "delete required id",

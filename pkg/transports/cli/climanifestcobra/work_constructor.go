@@ -109,8 +109,10 @@ func clearWorkGroupExecution(work *cobra.Command) error {
 	}
 	groups = append(groups, approval)
 	for _, group := range groups {
+		group.Run = func(cmd *cobra.Command, _ []string) {
+			_ = cmd.Help()
+		}
 		group.RunE = nil
-		group.Args = nil
 		group.DisableFlagParsing = false
 	}
 	return nil
@@ -123,7 +125,7 @@ var resolvedWorkRunnableCommandIDs = [...]string{
 	"you.work.watch",
 	"you.work.show",
 	"you.work.move",
-	"you.work.visualize",
+	"you.work.render",
 }
 
 func validateResolvedWorkFamily(manifest climanifest.Manifest) error {
@@ -168,7 +170,7 @@ func resolvedWorkHandlerBindings(
 		"you.work.watch":         handlers.Watch,
 		"you.work.show":          handlers.Show,
 		"you.work.move":          handlers.Move,
-		"you.work.visualize":     handlers.Visualize,
+		"you.work.render":        handlers.Visualize,
 	}
 	bindings := make(CobraHandlerRegistry, len(supplied))
 	for _, commandID := range resolvedWorkRunnableCommandIDs {

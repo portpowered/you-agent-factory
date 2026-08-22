@@ -497,7 +497,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Inspect live factory runtime state and manage persisted named factories.\n\nSubcommands:\n  query    show the current active factory from a running service\n  list     list persisted named factories under a factory root\n  config   inspect and transform factory configuration\n  create   create a named factory from factory.json\n  update   replace an existing named factory from factory.json\n  replace-current  persist the live current factory from a running service\n  delete   remove an unused named factory from disk\n\nUse query against a running service. Use config validate, flatten, and expand for factory configuration inspection and transformation. Use list, create, update, and delete for on-disk named factories under --dir (default factory/). Use replace-current with global --server and --session like query to persist the live current factory.",
+            "canonicalEnglish": "Inspect live factory runtime state and manage persisted named factories.\n\nSubcommands:\n  show     show the current active factory from a running service\n  list     list persisted named factories under a factory root\n  config   inspect and transform factory configuration\n  create   create a named factory from factory.json\n  update   replace an existing named factory from factory.json\n  replace-current  persist the live current factory from a running service\n  delete   remove an unused named factory from disk\n\nUse show against a running service. Use config validate, flatten, and expand for factory configuration inspection and transformation. Use list, create, update, and delete for on-disk named factories under --dir (default factory/). Use replace-current with global --server and --session like show to persist the live current factory.",
             "id": "you.factory.description"
           },
           "title": {
@@ -506,7 +506,7 @@
           }
         },
         "examples": [
-          "you factory query",
+          "you factory show",
           "you factory config validate ./factory.json",
           "you factory list"
         ],
@@ -648,7 +648,7 @@
       "path": "you factory",
       "runnable": false,
       "usage": {
-        "example": "  # Show the active factory from the running service.\n  you factory query\n\n  # Validate a factory config before creating or updating it.\n  you factory config validate ./factory.json\n\n  # List persisted named factories and which one is current.\n  you factory list\n\n  # Create a new named factory from a config file.\n  you factory create staging --from ./factory.json --set-current\n\n  # Replace an existing named factory definition.\n  you factory update staging --from ./factory.json\n\n  # Delete an unused named factory.\n  you factory delete staging\n\n  # Persist the live current factory back to durable storage.\n  you factory replace-current",
+        "example": "  # Show the active factory from the running service.\n  you factory show\n\n  # Validate a factory config before creating or updating it.\n  you factory config validate ./factory.json\n\n  # List persisted named factories and which one is current.\n  you factory list\n\n  # Create a new named factory from a config file.\n  you factory create staging --from ./factory.json --set-current\n\n  # Replace an existing named factory definition.\n  you factory update staging --from ./factory.json\n\n  # Delete an unused named factory.\n  you factory delete staging\n\n  # Persist the live current factory back to durable storage.\n  you factory replace-current",
         "line": "factory"
       },
       "visibility": "visible"
@@ -2584,7 +2584,7 @@
       },
       "visibility": "visible"
     },
-    "you.factory.query": {
+    "you.factory.show": {
       "aliases": [],
       "channels": {
         "input": [
@@ -2612,51 +2612,51 @@
         "documentation": {
           "description": {
             "canonicalEnglish": "Show the current active factory from a running you-agent-factory service.\n\nBy default the command writes a human-readable table with the current factory name and runtime-identifying fields. Use global --json for the API-shaped current-factory payload, and use global --server to target the same factory API base URI as work list and submit. Run you session list to discover live session ids when routing other commands with --session.",
-            "id": "you.factory.query.description"
+            "id": "you.factory.show.description"
           },
           "title": {
             "canonicalEnglish": "Show the current active factory",
-            "id": "you.factory.query.title"
+            "id": "you.factory.show.title"
           }
         },
         "examples": [
-          "you factory query",
-          "you --json factory query",
-          "you --server http://localhost:9090 --json factory query"
+          "you factory show",
+          "you --json factory show",
+          "you --server http://localhost:9090 --json factory show"
         ],
         "formatVersion": "1.0.0",
-        "itemId": "you.factory.query",
+        "itemId": "you.factory.show",
         "sourceHash": "b39d6cc087e78db8c6349c2da774fe17b8e7c9c16bb83d5a7583e454fdf1464f",
         "visibility": "public"
       },
       "exits": {
-        "you.factory.query.exit.failure": {
+        "you.factory.show.exit.failure": {
           "code": 1,
-          "id": "you.factory.query.exit.failure",
+          "id": "you.factory.show.exit.failure",
           "kind": "failure"
         },
-        "you.factory.query.exit.success": {
+        "you.factory.show.exit.success": {
           "code": 0,
-          "id": "you.factory.query.exit.success",
+          "id": "you.factory.show.exit.success",
           "kind": "success"
         },
-        "you.factory.query.exit.usage": {
+        "you.factory.show.exit.usage": {
           "code": 1,
-          "id": "you.factory.query.exit.usage",
+          "id": "you.factory.show.exit.usage",
           "kind": "usage"
         }
       },
       "flags": {
-        "you.factory.query.flag.debug": {
+        "you.factory.show.flag.debug": {
           "aliases": [],
           "binding": "",
           "changedDefault": false,
           "completion": "none",
           "default": "false",
-          "id": "you.factory.query.flag.debug",
+          "id": "you.factory.show.flag.debug",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.factory.query.flag.debug",
+            "itemId": "you.factory.show.flag.debug",
             "since": "1.0.0",
             "state": "active"
           },
@@ -2671,16 +2671,16 @@
           "valueType": "bool",
           "visibility": "visible"
         },
-        "you.factory.query.flag.json": {
+        "you.factory.show.flag.json": {
           "aliases": [],
           "binding": "",
           "changedDefault": false,
           "completion": "none",
           "default": "false",
-          "id": "you.factory.query.flag.json",
+          "id": "you.factory.show.flag.json",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.factory.query.flag.json",
+            "itemId": "you.factory.show.flag.json",
             "since": "1.0.0",
             "state": "active"
           },
@@ -2695,7 +2695,7 @@
           "valueType": "bool",
           "visibility": "visible"
         },
-        "you.factory.query.flag.port": {
+        "you.factory.show.flag.port": {
           "acceptedSources": [
             "cli",
             "manifest-default"
@@ -2705,12 +2705,12 @@
           "defaultValue": {
             "int": 0
           },
-          "handlerBindingId": "you.factory.query.binding.port",
-          "id": "you.factory.query.flag.port",
+          "handlerBindingId": "you.factory.show.binding.port",
+          "id": "you.factory.show.flag.port",
           "kind": "named",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.factory.query.flag.port",
+            "itemId": "you.factory.show.flag.port",
             "since": "1.0.0",
             "state": "active"
           },
@@ -2727,16 +2727,16 @@
           "valueType": "int",
           "visibility": "hidden"
         },
-        "you.factory.query.flag.remote": {
+        "you.factory.show.flag.remote": {
           "aliases": [],
           "binding": "",
           "changedDefault": false,
           "completion": "none",
           "default": "false",
-          "id": "you.factory.query.flag.remote",
+          "id": "you.factory.show.flag.remote",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.factory.query.flag.remote",
+            "itemId": "you.factory.show.flag.remote",
             "since": "1.0.0",
             "state": "active"
           },
@@ -2751,16 +2751,16 @@
           "valueType": "bool",
           "visibility": "visible"
         },
-        "you.factory.query.flag.server": {
+        "you.factory.show.flag.server": {
           "aliases": [],
           "binding": "",
           "changedDefault": false,
           "completion": "none",
           "default": "http://localhost:7437",
-          "id": "you.factory.query.flag.server",
+          "id": "you.factory.show.flag.server",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.factory.query.flag.server",
+            "itemId": "you.factory.show.flag.server",
             "since": "1.0.0",
             "state": "active"
           },
@@ -2775,16 +2775,16 @@
           "valueType": "string",
           "visibility": "visible"
         },
-        "you.factory.query.flag.verbose": {
+        "you.factory.show.flag.verbose": {
           "aliases": [],
           "binding": "",
           "changedDefault": false,
           "completion": "none",
           "default": "false",
-          "id": "you.factory.query.flag.verbose",
+          "id": "you.factory.show.flag.verbose",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.factory.query.flag.verbose",
+            "itemId": "you.factory.show.flag.verbose",
             "since": "1.0.0",
             "state": "active"
           },
@@ -2801,36 +2801,36 @@
         }
       },
       "handlerBindings": {
-        "you.factory.query.binding.port": {
-          "id": "you.factory.query.binding.port",
-          "inputId": "you.factory.query.flag.port"
+        "you.factory.show.binding.port": {
+          "id": "you.factory.show.binding.port",
+          "inputId": "you.factory.show.flag.port"
         }
       },
       "handler": {
-        "id": "you.factory.query.handler",
+        "id": "you.factory.show.handler",
         "operationId": "getCurrentFactoryBySessionId"
       },
-      "id": "you.factory.query",
+      "id": "you.factory.show",
       "lifecycle": {
         "formatVersion": "1.0.0",
-        "itemId": "you.factory.query",
+        "itemId": "you.factory.show",
         "since": "1.0.0",
         "state": "active"
       },
-      "name": "query",
+      "name": "show",
       "outputs": {
-        "you.factory.query.output.human": {
+        "you.factory.show.output.human": {
           "channel": "stdout",
           "format": "text",
-          "id": "you.factory.query.output.human"
+          "id": "you.factory.show.output.human"
         },
-        "you.factory.query.output.json": {
+        "you.factory.show.output.json": {
           "channel": "stdout",
           "format": "json",
-          "id": "you.factory.query.output.json"
+          "id": "you.factory.show.output.json"
         }
       },
-      "path": "you factory query",
+      "path": "you factory show",
       "precedence": {
         "order": [
           "cli",
@@ -2850,14 +2850,14 @@
       "runnable": true,
       "placement": "remote-only",
       "sideEffects": {
-        "you.factory.query.side-effect.network": {
-          "id": "you.factory.query.side-effect.network",
+        "you.factory.show.side-effect.network": {
+          "id": "you.factory.show.side-effect.network",
           "kind": "network"
         }
       },
       "usage": {
-        "example": "  # Show the current factory from the default local service.\n  you factory query\n\n  # Emit API-shaped JSON for automation from the default local service.\n  you --json factory query\n\n  # Query a factory API on a non-default host or port.\n  you --server http://localhost:9090 --json factory query",
-        "line": "query"
+        "example": "  # Show the current factory from the default local service.\n  you factory show\n\n  # Emit API-shaped JSON for automation from the default local service.\n  you --json factory show\n\n  # Query a factory API on a non-default host or port.\n  you --server http://localhost:9090 --json factory show",
+        "line": "show"
       },
       "visibility": "visible"
     },
@@ -2888,7 +2888,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Read the session current factory from a running service and persist it with PUT.\n\nThe command uses global --server and --session like factory query.",
+            "canonicalEnglish": "Read the session current factory from a running service and persist it with PUT.\n\nThe command uses global --server and --session like factory show.",
             "id": "you.factory.replace-current.description"
           },
           "title": {
@@ -3975,7 +3975,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Manage factory sessions on a running you-agent-factory service.\n\nSubcommands:\n  list       list live workspace sessions or durable Factory Sessions with --scope live|persisted|all\n  show       show one live or durable Factory Session from GET /factory-sessions/{session_id}\n  dispatches list durable Factory Session dispatches from GET /factory-sessions/{session_id}/dispatches\n  pause      pause one live or durable Factory Session through POST /factory-sessions/{session_id}/pause\n  resume     resume one paused live or durable Factory Session through POST /factory-sessions/{session_id}/resume\n  create     open another live session from a folder path\n  delete     close a live session by session id\n\nDurable list output uses Factory Session status, source identity, result availability, progress, and action availability. Session commands use the same default --port as work list. Use --json to emit API-shaped responses on stdout; diagnostics stay on stderr when --verbose or --debug is set.",
+            "canonicalEnglish": "Manage factory sessions on a running you-agent-factory service.\n\nSubcommands:\n  list       list live workspace sessions or durable Factory Sessions with --scope live|persisted|all\n  show       show one live or durable Factory Session from GET /factory-sessions/{session_id}\n  pause      pause one live or durable Factory Session through POST /factory-sessions/{session_id}/pause\n  resume     resume one paused live or durable Factory Session through POST /factory-sessions/{session_id}/resume\n  create     open another live session from a folder path\n  delete     close a live session by session id\n\nDurable list output uses Factory Session status, source identity, result availability, progress, and action availability. Session commands use the same default --port as work list. Use --json to emit API-shaped responses on stdout; diagnostics stay on stderr when --verbose or --debug is set.",
             "id": "you.session.description"
           },
           "title": {
@@ -4832,336 +4832,6 @@
       "usage": {
         "example": "",
         "line": "delete <session-id>"
-      },
-      "visibility": "visible"
-    },
-    "you.session.dispatches": {
-      "aliases": [],
-      "arguments": {
-        "you.session.dispatches.arg.0": {
-          "channels": [
-            "cli"
-          ],
-          "completion": "none",
-          "doubleDash": "terminates-flags",
-          "enum": [],
-          "id": "you.session.dispatches.arg.0",
-          "kind": "positional",
-          "maxCardinality": 1,
-          "minCardinality": 1,
-          "name": "session-id",
-          "pattern": "",
-          "position": 0,
-          "required": true,
-          "valueType": "string",
-          "variadic": false
-        }
-      },
-      "channels": {
-        "input": [
-          "cli",
-          "env",
-          "config",
-          "stdin"
-        ],
-        "output": [
-          "stdout",
-          "stderr"
-        ]
-      },
-      "constraints": {
-        "platforms": [
-          "linux",
-          "darwin",
-          "windows"
-        ],
-        "runtime": [
-          "local"
-        ]
-      },
-      "documentation": {
-        "documentation": {
-          "description": {
-            "canonicalEnglish": "List durable Factory Session dispatches from GET /factory-sessions/{session_id}/dispatches.\n\nHuman output uses FactorySession, Dispatch, and FactoryArtifact vocabulary for dispatch id, status, kind, label, and output artifact ids. The command requires a durable dur-sess-* session id. Use global --json for the API-shaped ListFactorySessionDispatchesResponse and global --server to target the same factory API base URI as session show and session resume.",
-            "id": "you.session.dispatches.description"
-          },
-          "title": {
-            "canonicalEnglish": "List durable Factory Session dispatches",
-            "id": "you.session.dispatches.title"
-          }
-        },
-        "examples": [
-          "you session dispatches dur-sess-js-interrupted-001",
-          "you --json session dispatches dur-sess-js-interrupted-001"
-        ],
-        "formatVersion": "1.0.0",
-        "itemId": "you.session.dispatches",
-        "sourceHash": "aeb93c7206b6e9f19e8fa95eb849f6d0c41226ae2ed2df70d6495530ace9f91a",
-        "visibility": "public"
-      },
-      "exits": {
-        "you.session.dispatches.exit.failure": {
-          "code": 1,
-          "id": "you.session.dispatches.exit.failure",
-          "kind": "failure"
-        },
-        "you.session.dispatches.exit.success": {
-          "code": 0,
-          "id": "you.session.dispatches.exit.success",
-          "kind": "success"
-        },
-        "you.session.dispatches.exit.usage": {
-          "code": 1,
-          "id": "you.session.dispatches.exit.usage",
-          "kind": "usage"
-        }
-      },
-      "flags": {
-        "you.session.dispatches.flag.debug": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "false",
-          "id": "you.session.dispatches.flag.debug",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.dispatches.flag.debug",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "debug",
-          "noOptionDefault": "true",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.debug",
-          "shorthand": "d",
-          "valueType": "bool",
-          "visibility": "visible"
-        },
-        "you.session.dispatches.flag.json": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "false",
-          "id": "you.session.dispatches.flag.json",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.dispatches.flag.json",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "json",
-          "noOptionDefault": "true",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.json",
-          "shorthand": "",
-          "valueType": "bool",
-          "visibility": "visible"
-        },
-        "you.session.dispatches.flag.phase": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.session.dispatches.flag.phase",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.dispatches.flag.phase",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "phase",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "local",
-          "shorthand": "",
-          "usage": "filter by exact Dispatch phase",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.session.dispatches.flag.port": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "0",
-          "id": "you.session.dispatches.flag.port",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.dispatches.flag.port",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "port",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "local",
-          "shorthand": "",
-          "usage": "deprecated; use --server",
-          "valueType": "int",
-          "visibility": "hidden"
-        },
-        "you.session.dispatches.flag.remote": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "false",
-          "id": "you.session.dispatches.flag.remote",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.dispatches.flag.remote",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "remote",
-          "noOptionDefault": "true",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.remote",
-          "shorthand": "",
-          "valueType": "bool",
-          "visibility": "visible"
-        },
-        "you.session.dispatches.flag.server": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "http://localhost:7437",
-          "id": "you.session.dispatches.flag.server",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.dispatches.flag.server",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "server",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.server",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.session.dispatches.flag.status": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.session.dispatches.flag.status",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.dispatches.flag.status",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "status",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "local",
-          "shorthand": "",
-          "usage": "filter by canonical Dispatch status",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.session.dispatches.flag.verbose": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "false",
-          "id": "you.session.dispatches.flag.verbose",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.dispatches.flag.verbose",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "verbose",
-          "noOptionDefault": "true",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.verbose",
-          "shorthand": "v",
-          "valueType": "bool",
-          "visibility": "visible"
-        }
-      },
-      "handler": {
-        "id": "you.session.dispatches.handler",
-        "operationId": "listFactorySessionDispatches"
-      },
-      "id": "you.session.dispatches",
-      "lifecycle": {
-        "formatVersion": "1.0.0",
-        "itemId": "you.session.dispatches",
-        "since": "1.0.0",
-        "state": "active"
-      },
-      "name": "dispatches",
-      "outputs": {
-        "you.session.dispatches.output.human": {
-          "channel": "stdout",
-          "format": "text",
-          "id": "you.session.dispatches.output.human"
-        },
-        "you.session.dispatches.output.json": {
-          "channel": "stdout",
-          "format": "json",
-          "id": "you.session.dispatches.output.json"
-        }
-      },
-      "path": "you session dispatches",
-      "precedence": {
-        "order": [
-          "cli",
-          "stdin",
-          "environment",
-          "operator-config",
-          "manifest-default",
-          "factory-signature-default"
-        ],
-        "withinTier": {
-          "scalar": "last",
-          "repeated": "append"
-        },
-        "acrossTiers": "replace",
-        "multipleBindings": "reject"
-      },
-      "runnable": true,
-      "placement": "remote-only",
-      "sideEffects": {
-        "you.session.dispatches.side-effect.network": {
-          "id": "you.session.dispatches.side-effect.network",
-          "kind": "network"
-        }
-      },
-      "usage": {
-        "example": "  # List dispatches for one interrupted durable Factory Session.\n  you session dispatches dur-sess-js-interrupted-001\n\n  # Emit API-shaped JSON for automation.\n  you --json session dispatches dur-sess-js-interrupted-001",
-        "line": "dispatches [session-id]"
       },
       "visibility": "visible"
     },
@@ -6553,7 +6223,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Show one live factory session from GET /factory-sessions/{session_id}.\n\nHuman output uses FactorySession as the canonical runtime noun and prints orchestrator kind plus Petri or JavaScript runtime projections. Dynamic workflow wording appears only as JavaScript shorthand. Omit session-id to target the default compatibility session (~default). Use global --json for the API-shaped FactorySession payload and global --server to target the same factory API base URI as work list and factory query.",
+            "canonicalEnglish": "Show one live factory session from GET /factory-sessions/{session_id}.\n\nHuman output uses FactorySession as the canonical runtime noun and prints orchestrator kind plus Petri or JavaScript runtime projections. Dynamic workflow wording appears only as JavaScript shorthand. Omit session-id to target the default compatibility session (~default). Use global --json for the API-shaped FactorySession payload and global --server to target the same factory API base URI as work list and factory show.",
             "id": "you.session.show.description"
           },
           "title": {
@@ -6804,13 +6474,13 @@
           },
           "description": {
             "id": "you.work.description",
-            "canonicalEnglish": "Inspect and control work on a running you-agent-factory service.\n\nSubcommands:\n  list       list work from GET /factory-sessions/{session_id}/work with optional filters and pagination\n  show       show one work item from GET /factory-sessions/{session_id}/work/{work_id}\n  move       move one work item to another authored state through POST /factory-sessions/{session_id}/work/{work_id}/move\n  visualize  read a local FACTORY_REQUEST_BATCH JSON file and render its dependency graph to stdout\n\nAPI-backed list, show, and move commands target the default compatibility session unless --session is set. Use global --json to emit API-shaped responses on stdout; diagnostics stay on stderr when --verbose or --debug is set."
+            "canonicalEnglish": "Inspect and control work on a running you-agent-factory service.\n\nSubcommands:\n  list       list work from GET /factory-sessions/{session_id}/work with optional filters and pagination\n  show       show one work item from GET /factory-sessions/{session_id}/work/{work_id}\n  move       move one work item to another authored state through POST /factory-sessions/{session_id}/work/{work_id}/move\n  render     read a local FACTORY_REQUEST_BATCH JSON file and render its dependency graph to stdout\n\nAPI-backed list, show, and move commands target the default compatibility session unless --session is set. Use global --json to emit API-shaped responses on stdout; diagnostics stay on stderr when --verbose or --debug is set."
           }
         },
         "examples": [
           "you work list",
           "you work show work-123",
-          "you work visualize batch.json"
+          "you work render batch.json"
         ],
         "visibility": "public",
         "sourceHash": "1c5e9c676da355e5e981a4a64db36f2e5264a63ea42a00aca07844e07a825e0a"
@@ -6825,7 +6495,7 @@
       "runnable": false,
       "usage": {
         "line": "work",
-        "example": "  # List work on the default compatibility session.\n  you work list\n\n  # Show one work item after submit.\n  you work show work-123\n\n  # Render a local batch dependency graph.\n  you work visualize batch.json > graph.mermaid"
+        "example": "  # List work on the default compatibility session.\n  you work list\n\n  # Show one work item after submit.\n  you work show work-123\n\n  # Render a local batch dependency graph.\n  you work render batch.json > graph.mermaid"
       },
       "flags": {
         "you.work.flag.debug": {
@@ -8928,34 +8598,34 @@
         ]
       }
     },
-    "you.work.visualize": {
-      "id": "you.work.visualize",
-      "name": "visualize",
-      "path": "you work visualize",
+    "you.work.render": {
+      "id": "you.work.render",
+      "name": "render",
+      "path": "you work render",
       "aliases": [],
       "documentation": {
         "formatVersion": "1.0.0",
-        "itemId": "you.work.visualize",
+        "itemId": "you.work.render",
         "documentation": {
           "title": {
-            "id": "you.work.visualize.title",
+            "id": "you.work.render.title",
             "canonicalEnglish": "Render a work batch dependency graph as Mermaid"
           },
           "description": {
-            "id": "you.work.visualize.description",
-            "canonicalEnglish": "Read a local FACTORY_REQUEST_BATCH JSON file from disk and render its declared work dependencies as a diagram.\n\nThe required <batch-file.json> argument is a path to any readable batch file. Graph nodes represent work items; directed edges represent declared dependency relations from the batch.\n\nOutput format (default: mermaid):\n  mermaid           Raw Mermaid flowchart syntax written to stdout.\n  markdown-mermaid  Markdown with a title and one fenced mermaid code block.\n\nThis command is read-only. It does not submit work, contact a running factory, or render diagram images.\n\nRedirect stdout to save output, for example:\n  you work visualize batch.json > my-graph.mermaid\n  you work visualize --format markdown-mermaid batch.json > graph.md"
+            "id": "you.work.render.description",
+            "canonicalEnglish": "Read a local FACTORY_REQUEST_BATCH JSON file from disk and render its declared work dependencies as a diagram.\n\nThe required <batch-file.json> argument is a path to any readable batch file. Graph nodes represent work items; directed edges represent declared dependency relations from the batch.\n\nOutput format (default: mermaid):\n  mermaid           Raw Mermaid flowchart syntax written to stdout.\n  markdown-mermaid  Markdown with a title and one fenced mermaid code block.\n\nThis command is read-only. It does not submit work, contact a running factory, or render diagram images.\n\nRedirect stdout to save output, for example:\n  you work render batch.json > my-graph.mermaid\n  you work render --format markdown-mermaid batch.json > graph.md"
           }
         },
         "examples": [
-          "you work visualize batch.json",
-          "you work visualize --format markdown-mermaid batch.json"
+          "you work render batch.json",
+          "you work render --format markdown-mermaid batch.json"
         ],
         "visibility": "public",
         "sourceHash": "b3c7f04e96b30509996b53c99586102e5bfe92661b99dea91eeb46d4a43354b8"
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
-        "itemId": "you.work.visualize",
+        "itemId": "you.work.render",
         "state": "active",
         "since": "1.0.0"
       },
@@ -8963,12 +8633,12 @@
       "runnable": true,
       "placement": "local-only",
       "usage": {
-        "line": "visualize <batch-file.json>",
-        "example": "  # Default: raw Mermaid flowchart to stdout.\n  you work visualize batch.json > my-graph.mermaid\n\n  # Markdown with embedded Mermaid diagram.\n  you work visualize --format markdown-mermaid batch.json > graph.md"
+        "line": "render <batch-file.json>",
+        "example": "  # Default: raw Mermaid flowchart to stdout.\n  you work render batch.json > my-graph.mermaid\n\n  # Markdown with embedded Mermaid diagram.\n  you work render --format markdown-mermaid batch.json > graph.md"
       },
       "arguments": {
-        "you.work.visualize.arg.0": {
-          "id": "you.work.visualize.arg.0",
+        "you.work.render.arg.0": {
+          "id": "you.work.render.arg.0",
           "name": "batch-file.json",
           "position": 0,
           "kind": "positional",
@@ -8987,8 +8657,8 @@
         }
       },
       "flags": {
-        "you.work.visualize.flag.debug": {
-          "id": "you.work.visualize.flag.debug",
+        "you.work.render.flag.debug": {
+          "id": "you.work.render.flag.debug",
           "long": "debug",
           "shorthand": "d",
           "aliases": [],
@@ -9006,13 +8676,13 @@
           "visibility": "visible",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.work.visualize.flag.debug",
+            "itemId": "you.work.render.flag.debug",
             "state": "active",
             "since": "1.0.0"
           }
         },
-        "you.work.visualize.flag.json": {
-          "id": "you.work.visualize.flag.json",
+        "you.work.render.flag.json": {
+          "id": "you.work.render.flag.json",
           "long": "json",
           "shorthand": "",
           "aliases": [],
@@ -9030,21 +8700,21 @@
           "visibility": "visible",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.work.visualize.flag.json",
+            "itemId": "you.work.render.flag.json",
             "state": "active",
             "since": "1.0.0"
           }
         },
-        "you.work.visualize.flag.remote": {
+        "you.work.render.flag.remote": {
           "aliases": [],
           "binding": "",
           "changedDefault": false,
           "completion": "none",
           "default": "false",
-          "id": "you.work.visualize.flag.remote",
+          "id": "you.work.render.flag.remote",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.work.visualize.flag.remote",
+            "itemId": "you.work.render.flag.remote",
             "since": "1.0.0",
             "state": "active"
           },
@@ -9059,8 +8729,8 @@
           "valueType": "bool",
           "visibility": "visible"
         },
-        "you.work.visualize.flag.server": {
-          "id": "you.work.visualize.flag.server",
+        "you.work.render.flag.server": {
+          "id": "you.work.render.flag.server",
           "long": "server",
           "shorthand": "",
           "aliases": [],
@@ -9078,13 +8748,13 @@
           "visibility": "visible",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.work.visualize.flag.server",
+            "itemId": "you.work.render.flag.server",
             "state": "active",
             "since": "1.0.0"
           }
         },
-        "you.work.visualize.flag.verbose": {
-          "id": "you.work.visualize.flag.verbose",
+        "you.work.render.flag.verbose": {
+          "id": "you.work.render.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
           "aliases": [],
@@ -9102,13 +8772,13 @@
           "visibility": "visible",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.work.visualize.flag.verbose",
+            "itemId": "you.work.render.flag.verbose",
             "state": "active",
             "since": "1.0.0"
           }
         },
-        "you.work.visualize.flag.format": {
-          "id": "you.work.visualize.flag.format",
+        "you.work.render.flag.format": {
+          "id": "you.work.render.flag.format",
           "long": "format",
           "usage": "output format: mermaid or markdown-mermaid",
           "shorthand": "",
@@ -9126,13 +8796,13 @@
           "visibility": "visible",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.work.visualize.flag.format",
+            "itemId": "you.work.render.flag.format",
             "state": "active",
             "since": "1.0.0"
           }
         },
-        "you.work.visualize.flag.port": {
-          "id": "you.work.visualize.flag.port",
+        "you.work.render.flag.port": {
+          "id": "you.work.render.flag.port",
           "long": "port",
           "usage": "deprecated; use --server",
           "shorthand": "",
@@ -9150,14 +8820,14 @@
           "visibility": "hidden",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.work.visualize.flag.port",
+            "itemId": "you.work.render.flag.port",
             "state": "active",
             "since": "1.0.0"
           }
         }
       },
       "handler": {
-        "id": "you.work.visualize.handler"
+        "id": "you.work.render.handler"
       },
       "precedence": {
         "order": [
@@ -9188,37 +8858,37 @@
         ]
       },
       "outputs": {
-        "you.work.visualize.output.mermaid": {
-          "id": "you.work.visualize.output.mermaid",
+        "you.work.render.output.mermaid": {
+          "id": "you.work.render.output.mermaid",
           "channel": "stdout",
           "format": "text"
         },
-        "you.work.visualize.output.markdown-mermaid": {
-          "id": "you.work.visualize.output.markdown-mermaid",
+        "you.work.render.output.markdown-mermaid": {
+          "id": "you.work.render.output.markdown-mermaid",
           "channel": "stdout",
           "format": "text"
         }
       },
       "exits": {
-        "you.work.visualize.exit.success": {
-          "id": "you.work.visualize.exit.success",
+        "you.work.render.exit.success": {
+          "id": "you.work.render.exit.success",
           "code": 0,
           "kind": "success"
         },
-        "you.work.visualize.exit.failure": {
-          "id": "you.work.visualize.exit.failure",
+        "you.work.render.exit.failure": {
+          "id": "you.work.render.exit.failure",
           "code": 1,
           "kind": "failure"
         },
-        "you.work.visualize.exit.usage": {
-          "id": "you.work.visualize.exit.usage",
+        "you.work.render.exit.usage": {
+          "id": "you.work.render.exit.usage",
           "code": 1,
           "kind": "usage"
         }
       },
       "sideEffects": {
-        "you.work.visualize.side-effect.filesystem": {
-          "id": "you.work.visualize.side-effect.filesystem",
+        "you.work.render.side-effect.filesystem": {
+          "id": "you.work.render.side-effect.filesystem",
           "kind": "filesystem"
         }
       },

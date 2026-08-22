@@ -25,6 +25,9 @@ var settledRetiredCLIInvocations = []struct {
 	{name: "factory save bare", args: []string{"factory", "save"}},
 	{name: "factory save name only", args: []string{"factory", "save", "staging"}},
 	{name: "factory validate", args: []string{"factory", "validate", "./factory.json"}},
+	{name: "factory query", args: []string{"factory", "query"}},
+	{name: "work visualize", args: []string{"work", "visualize"}},
+	{name: "session dispatches", args: []string{"session", "dispatches", "session-customer"}},
 }
 
 var canonicalCLIReplacementPaths = [][]string{

@@ -193,7 +193,7 @@ func TestWorkListCommand_SharedDiagnosticsFlagsMapToConfig(t *testing.T) {
 	}
 }
 
-func TestFactoryQueryCommand_JSONVerboseKeepsStdoutParseableAndDiagnosticsOnStderr(t *testing.T) {
+func TestFactoryShowCommand_JSONVerboseKeepsStdoutParseableAndDiagnosticsOnStderr(t *testing.T) {
 	originalQueryFactory := queryFactory
 	defer func() {
 		queryFactory = originalQueryFactory
@@ -206,7 +206,7 @@ func TestFactoryQueryCommand_JSONVerboseKeepsStdoutParseableAndDiagnosticsOnStde
 		if cfg.Diagnostics == nil {
 			t.Fatal("expected diagnostics writer")
 		}
-		if _, err := fmt.Fprintln(cfg.Diagnostics, "diagnostic: factory query"); err != nil {
+		if _, err := fmt.Fprintln(cfg.Diagnostics, "diagnostic: factory show"); err != nil {
 			return err
 		}
 		_, err := fmt.Fprintln(cfg.Output, `{"name":"default"}`)
@@ -218,10 +218,10 @@ func TestFactoryQueryCommand_JSONVerboseKeepsStdoutParseableAndDiagnosticsOnStde
 	root := newLegacyTestRootCommand()
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
-	root.SetArgs([]string{"--json", "factory", "query", "--verbose"})
+	root.SetArgs([]string{"--json", "factory", "show", "--verbose"})
 
 	if err := root.Execute(); err != nil {
-		t.Fatalf("execute factory query --json --verbose: %v", err)
+		t.Fatalf("execute factory show --json --verbose: %v", err)
 	}
 
 	var payload map[string]any
@@ -231,7 +231,7 @@ func TestFactoryQueryCommand_JSONVerboseKeepsStdoutParseableAndDiagnosticsOnStde
 	if payload["name"] != "default" {
 		t.Fatalf("stdout JSON = %#v, want default factory name", payload)
 	}
-	if got := stderr.String(); !strings.Contains(got, "diagnostic: factory query") {
+	if got := stderr.String(); !strings.Contains(got, "diagnostic: factory show") {
 		t.Fatalf("stderr = %q, want diagnostics", got)
 	}
 }

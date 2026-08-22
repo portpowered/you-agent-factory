@@ -160,10 +160,6 @@ const (
 	sessionListScopeInputID                   = "you.session.list.flag.scope"
 	sessionShowIDInputID                      = "you.session.show.arg.0"
 	sessionShowPortInputID                    = "you.session.show.flag.port"
-	sessionDispatchesIDInputID                = "you.session.dispatches.arg.0"
-	sessionDispatchesPortInputID              = "you.session.dispatches.flag.port"
-	sessionDispatchesPhaseInputID             = "you.session.dispatches.flag.phase"
-	sessionDispatchesStatusInputID            = "you.session.dispatches.flag.status"
 	sessionPauseIDInputID                     = "you.session.pause.arg.0"
 	sessionPausePortInputID                   = "you.session.pause.flag.port"
 	sessionResumeIDInputID                    = "you.session.resume.arg.0"
@@ -241,7 +237,6 @@ type SessionResolvedHandlers struct {
 	Delete      ResolvedRunE
 	List        ResolvedRunE
 	Show        ResolvedRunE
-	Dispatches  ResolvedRunE
 	Pause       ResolvedRunE
 	Resume      ResolvedRunE
 	Cancel      ResolvedRunE
@@ -255,7 +250,7 @@ func BindSessionResolvedHandlers(services SessionResolvedServices) SessionResolv
 	handler := &SessionResolvedHandler{services: services}
 	return SessionResolvedHandlers{
 		Create: handler.Create, Delete: handler.Delete, List: handler.List,
-		Show: handler.Show, Dispatches: handler.Dispatches,
+		Show:  handler.Show,
 		Pause: handler.Pause, Resume: handler.Resume,
 		Cancel: handler.Cancel, Terminate: handler.Terminate,
 		ResourceSet: handler.ResourceSet,
@@ -273,7 +268,6 @@ func NewSessionResolvedRegistry(
 		"you.session.delete":       handlers.Delete,
 		"you.session.list":         handlers.List,
 		"you.session.show":         handlers.Show,
-		"you.session.dispatches":   handlers.Dispatches,
 		"you.session.pause":        handlers.Pause,
 		"you.session.resume":       handlers.Resume,
 		"you.session.cancel":       handlers.Cancel,
@@ -499,41 +493,6 @@ func (h *SessionResolvedHandler) Show(
 	return h.services.remote().Show(sessioncli.ShowConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
 		JSON: globals.json, Verbose: globals.verbose, Debug: globals.debug,
-		Output: cmd.OutOrStdout(), Diagnostics: diagnostics,
-	})
-}
-
-func (h *SessionResolvedHandler) Dispatches(
-	cmd *cobra.Command,
-	inputs resolvedinput.Inputs,
-	inherited resolvedinput.Inputs,
-) error {
-	if h == nil || h.services.remote() == nil {
-		return fmt.Errorf("session dispatches service is required")
-	}
-	if err := rejectDeprecatedSessionPort(inputs, sessionDispatchesPortInputID); err != nil {
-		return err
-	}
-	sessionID, err := inputs.String(sessionDispatchesIDInputID)
-	if err != nil {
-		return fmt.Errorf("resolve session dispatches inputs: %w", err)
-	}
-	phase, err := inputs.String(sessionDispatchesPhaseInputID)
-	if err != nil {
-		return fmt.Errorf("resolve session dispatches inputs: %w", err)
-	}
-	status, err := inputs.String(sessionDispatchesStatusInputID)
-	if err != nil {
-		return fmt.Errorf("resolve session dispatches inputs: %w", err)
-	}
-	globals, diagnostics, err := h.base(cmd, inherited)
-	if err != nil {
-		return fmt.Errorf("resolve session dispatches inputs: %w", err)
-	}
-	return h.services.remote().ListDispatches(sessioncli.DispatchesConfig{
-		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
-		Phase: phase, Status: status, JSON: globals.json,
-		Verbose: globals.verbose, Debug: globals.debug,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics,
 	})
 }

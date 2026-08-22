@@ -17,7 +17,7 @@ var FactoryConfigInitFamilyCommandIDs = []string{
 	"you.factory.create",
 	"you.factory.delete",
 	"you.factory.list",
-	"you.factory.query",
+	"you.factory.show",
 	"you.factory.replace-current",
 	"you.factory.update",
 	"you.init",

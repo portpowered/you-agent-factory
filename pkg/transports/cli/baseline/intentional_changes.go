@@ -11,10 +11,13 @@ import (
 const intentionalChangesLedgerFixture = "testdata/intentional_changes.json"
 
 // IntentionalChangesLedger records commands and flags deliberately planned for
-// removal or relocation during upcoming CLI migrations.
+// removal or relocation, plus completed path changes retained as migration
+// evidence after the live baselines have been reconciled.
 type IntentionalChangesLedger struct {
-	PlannedRemovals []PlannedRemoval `json:"planned_removals"`
-	PlannedMoves    []PlannedMove    `json:"planned_moves"`
+	PlannedRemovals   []PlannedRemoval `json:"planned_removals"`
+	PlannedMoves      []PlannedMove    `json:"planned_moves"`
+	CompletedRemovals []PlannedRemoval `json:"completed_removals"`
+	CompletedMoves    []PlannedMove    `json:"completed_moves"`
 }
 
 // PlannedRemoval names a production command or run flag slated for removal.

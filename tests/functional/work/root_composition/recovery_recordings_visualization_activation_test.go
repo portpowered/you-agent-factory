@@ -349,7 +349,7 @@ func executeVisualizationActivationCLI(t *testing.T, process support.Process, ba
 	t.Helper()
 
 	home := t.TempDir()
-	args := []string{"you", "work", "visualize", batchPath}
+	args := []string{"you", "work", "render", batchPath}
 	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.Env = recoveryActivationHomeEnvironment(home)
 	inputs.Input.WorkingDirectory = home
@@ -358,7 +358,7 @@ func executeVisualizationActivationCLI(t *testing.T, process support.Process, ba
 	inputs.Input.Stdin = strings.NewReader("")
 	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf(
-			"Process.Execute(work visualize) error = %v\nstdout:\n%s\nstderr:\n%s",
+			"Process.Execute(work render) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
 			inputs.Stdout(),
 			inputs.Stderr(),

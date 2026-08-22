@@ -254,7 +254,7 @@ func TestSessionFamilyCommandExecutesManifestBoundLeaf(t *testing.T) {
 		t.Fatalf("NewSessionFamilyCommandFromManifest() error = %v", err)
 	}
 	for _, leaf := range []string{
-		"create", "delete", "list", "show", "dispatches", "pause", "resume",
+		"create", "delete", "list", "show", "pause", "resume",
 	} {
 		command, _, findErr := root.Find([]string{"session", leaf})
 		if findErr != nil {

@@ -26,7 +26,6 @@ var SessionFamilyCommandIDs = []string{
 	"you.session.resume",
 	"you.session.cancel",
 	"you.session.terminate",
-	"you.session.dispatches",
 	"you.session.resource",
 	"you.session.resource.set",
 }
@@ -73,7 +72,7 @@ var WorkFamilyCommandIDs = []string{
 	"you.work.watch",
 	"you.work.show",
 	"you.work.move",
-	"you.work.visualize",
+	"you.work.render",
 }
 
 // WorkersFamilyCommandIDs are the stable command IDs for customer-facing

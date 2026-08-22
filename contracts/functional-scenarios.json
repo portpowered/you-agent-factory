@@ -117,8 +117,8 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
-      "stableId": "cli/you.factory.query",
-      "name": "you factory query",
+      "stableId": "cli/you.factory.replace-current",
+      "name": "you factory replace-current",
       "interface": "cli",
       "classification": "runnable",
       "status": "missing",
@@ -127,8 +127,8 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
-      "stableId": "cli/you.factory.replace-current",
-      "name": "you factory replace-current",
+      "stableId": "cli/you.factory.show",
+      "name": "you factory show",
       "interface": "cli",
       "classification": "runnable",
       "status": "missing",
@@ -367,16 +367,6 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
-      "stableId": "cli/you.session.dispatches",
-      "name": "you session dispatches",
-      "interface": "cli",
-      "classification": "runnable",
-      "status": "missing",
-      "lane": "short",
-      "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
-    },
-    {
       "stableId": "cli/you.session.list",
       "name": "you session list",
       "interface": "cli",
@@ -556,8 +546,8 @@
       ]
     },
     {
-      "stableId": "cli/you.work.show",
-      "name": "you work show",
+      "stableId": "cli/you.work.render",
+      "name": "you work render",
       "interface": "cli",
       "classification": "runnable",
       "status": "missing",
@@ -566,8 +556,8 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
-      "stableId": "cli/you.work.visualize",
-      "name": "you work visualize",
+      "stableId": "cli/you.work.show",
+      "name": "you work show",
       "interface": "cli",
       "classification": "runnable",
       "status": "missing",

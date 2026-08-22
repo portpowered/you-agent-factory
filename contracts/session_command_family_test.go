@@ -13,13 +13,16 @@ func TestProductionSessionManifestContractsCanonicalFamily(t *testing.T) {
 
 	wantIDs := []string{
 		"you.session",
+		"you.session.cancel",
 		"you.session.create",
 		"you.session.delete",
-		"you.session.dispatches",
 		"you.session.list",
 		"you.session.pause",
+		"you.session.resource",
+		"you.session.resource.set",
 		"you.session.resume",
 		"you.session.show",
+		"you.session.terminate",
 	}
 	gotIDs := make([]string, 0, len(wantIDs))
 	for id := range commands {
@@ -43,13 +46,15 @@ func TestProductionSessionManifestContractsCanonicalFamily(t *testing.T) {
 		argRequired bool
 		portMode    bool
 	}{
+		{id: "you.session.cancel", operationID: "cancelFactorySession"},
 		{id: "you.session.create", operationID: "openFactorySession", portMode: true},
 		{id: "you.session.delete", operationID: "closeFactorySession", argRequired: true, portMode: true},
-		{id: "you.session.dispatches", operationID: "listFactorySessionDispatches", argRequired: true},
 		{id: "you.session.list", operationID: "listFactorySessions", portMode: true},
 		{id: "you.session.pause", operationID: "pauseFactorySession"},
+		{id: "you.session.resource.set", operationID: "setFactorySessionResourceCapacity", argRequired: true},
 		{id: "you.session.resume", operationID: "resumeFactorySession"},
 		{id: "you.session.show", operationID: "getFactorySession"},
+		{id: "you.session.terminate", operationID: "terminateFactorySession"},
 	}
 	for _, leaf := range leaves {
 		t.Run(leaf.id, func(t *testing.T) {
@@ -57,8 +62,12 @@ func TestProductionSessionManifestContractsCanonicalFamily(t *testing.T) {
 			if runnable, _ := record["runnable"].(bool); !runnable {
 				t.Fatalf("%s must be runnable", leaf.id)
 			}
-			if path, _ := record["path"].(string); path != "you session "+record["name"].(string) {
-				t.Fatalf("%s path = %q", leaf.id, path)
+			wantPath := "you session " + record["name"].(string)
+			if leaf.id == "you.session.resource.set" {
+				wantPath = "you session resource set"
+			}
+			if path, _ := record["path"].(string); path != wantPath {
+				t.Fatalf("%s path = %q, want %q", leaf.id, path, wantPath)
 			}
 			handler := requireObject(t, record, "handler")
 			if got := handler["id"]; got != leaf.id+".handler" {
@@ -68,7 +77,9 @@ func TestProductionSessionManifestContractsCanonicalFamily(t *testing.T) {
 				t.Fatalf("%s operationId = %v, want %s", leaf.id, got, leaf.operationID)
 			}
 			assertCompleteSessionExecutionMetadata(t, leaf.id, record)
-			assertSessionPortMode(t, leaf.id, record, leaf.portMode)
+			if leaf.id != "you.session.resource.set" {
+				assertSessionPortMode(t, leaf.id, record, leaf.portMode)
+			}
 			assertSessionArgument(t, leaf.id, record, leaf.argRequired)
 		})
 	}

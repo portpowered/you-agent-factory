@@ -219,34 +219,32 @@ func TestBindServiceDelegatesToInjectedOperations(t *testing.T) {
 			calls++
 			return nil
 		},
-		Show:           func(ShowConfig) error { calls++; return nil },
-		Pause:          func(LifecycleControlConfig) error { calls++; return nil },
-		Resume:         func(LifecycleControlConfig) error { calls++; return nil },
-		Cancel:         func(LifecycleControlConfig) error { calls++; return nil },
-		Terminate:      func(LifecycleControlConfig) error { calls++; return nil },
-		ListDispatches: func(DispatchesConfig) error { calls++; return nil },
-		Create:         func(CreateConfig) error { calls++; return nil },
-		Delete:         func(DeleteConfig) error { calls++; return nil },
+		Show:      func(ShowConfig) error { calls++; return nil },
+		Pause:     func(LifecycleControlConfig) error { calls++; return nil },
+		Resume:    func(LifecycleControlConfig) error { calls++; return nil },
+		Cancel:    func(LifecycleControlConfig) error { calls++; return nil },
+		Terminate: func(LifecycleControlConfig) error { calls++; return nil },
+		Create:    func(CreateConfig) error { calls++; return nil },
+		Delete:    func(DeleteConfig) error { calls++; return nil },
 	})
 	if err := service.List(ListConfig{Context: context.Background()}); err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
 	for name, call := range map[string]func() error{
-		"show":       func() error { return service.Show(ShowConfig{}) },
-		"pause":      func() error { return service.Pause(LifecycleControlConfig{}) },
-		"resume":     func() error { return service.Resume(LifecycleControlConfig{}) },
-		"cancel":     func() error { return service.Cancel(LifecycleControlConfig{}) },
-		"terminate":  func() error { return service.Terminate(LifecycleControlConfig{}) },
-		"dispatches": func() error { return service.ListDispatches(DispatchesConfig{}) },
-		"create":     func() error { return service.Create(CreateConfig{}) },
-		"delete":     func() error { return service.Delete(DeleteConfig{}) },
+		"show":      func() error { return service.Show(ShowConfig{}) },
+		"pause":     func() error { return service.Pause(LifecycleControlConfig{}) },
+		"resume":    func() error { return service.Resume(LifecycleControlConfig{}) },
+		"cancel":    func() error { return service.Cancel(LifecycleControlConfig{}) },
+		"terminate": func() error { return service.Terminate(LifecycleControlConfig{}) },
+		"create":    func() error { return service.Create(CreateConfig{}) },
+		"delete":    func() error { return service.Delete(DeleteConfig{}) },
 	} {
 		if err := call(); err != nil {
 			t.Fatalf("%s error = %v", name, err)
 		}
 	}
-	if calls != 9 {
-		t.Fatalf("calls = %d, want 9", calls)
+	if calls != 8 {
+		t.Fatalf("calls = %d, want 8", calls)
 	}
 }
 
@@ -255,15 +253,14 @@ func TestBindServiceRequiresInjectedOperations(t *testing.T) {
 
 	service := Bind(Operations{})
 	for name, call := range map[string]func() error{
-		"list":       func() error { return service.List(ListConfig{}) },
-		"show":       func() error { return service.Show(ShowConfig{}) },
-		"pause":      func() error { return service.Pause(LifecycleControlConfig{}) },
-		"resume":     func() error { return service.Resume(LifecycleControlConfig{}) },
-		"cancel":     func() error { return service.Cancel(LifecycleControlConfig{}) },
-		"terminate":  func() error { return service.Terminate(LifecycleControlConfig{}) },
-		"dispatches": func() error { return service.ListDispatches(DispatchesConfig{}) },
-		"create":     func() error { return service.Create(CreateConfig{}) },
-		"delete":     func() error { return service.Delete(DeleteConfig{}) },
+		"list":      func() error { return service.List(ListConfig{}) },
+		"show":      func() error { return service.Show(ShowConfig{}) },
+		"pause":     func() error { return service.Pause(LifecycleControlConfig{}) },
+		"resume":    func() error { return service.Resume(LifecycleControlConfig{}) },
+		"cancel":    func() error { return service.Cancel(LifecycleControlConfig{}) },
+		"terminate": func() error { return service.Terminate(LifecycleControlConfig{}) },
+		"create":    func() error { return service.Create(CreateConfig{}) },
+		"delete":    func() error { return service.Delete(DeleteConfig{}) },
 	} {
 		if err := call(); err == nil {
 			t.Fatalf("%s error = nil, want required-edge failure", name)

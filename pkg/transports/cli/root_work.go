@@ -130,14 +130,26 @@ func newGenericRepresentativeFamily(
 		resolvedHandlers[record.Handler.ID] = registered.ResolvedRunE
 	}
 	root, err := climanifestcobra.NewCommandTree(manifest, climanifestcobra.GenericBindings{
-		CobraHandlers:         handlers,
-		ResolvedCobraHandlers: resolvedHandlers,
-		SourceValues:          sourceValues,
-		RootInputs:            rootInputs,
+		CobraHandlers:           handlers,
+		ResolvedCobraHandlers:   resolvedHandlers,
+		GuardUnknownSubcommands: true,
+		SourceValues:            sourceValues,
+		RootInputs:              rootInputs,
 	})
 	if err != nil {
 		return nil, err
 	}
+	session, _, err := root.Find([]string{"session"})
+	if err != nil {
+		return nil, fmt.Errorf("find generated session command: %w", err)
+	}
+	// Keep the generated session parent non-runnable while retaining the
+	// generic unknown-subcommand guard for retired or misspelled leaves.
+	session.Run = func(cmd *cobra.Command, _ []string) {
+		_ = cmd.Help()
+	}
+	session.RunE = nil
+	session.DisableFlagParsing = false
 	root.SilenceUsage = true
 	return root, nil
 }

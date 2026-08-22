@@ -213,7 +213,7 @@ result availability have the same meaning on every surface.
 | Start and wait | `you run --named FACTORY` for canonical named-Factory invocation | `POST /factory-sessions/sync` | `you.factory_session.start_sync` |
 | Start for polling | — | `POST /factory-sessions/async` | `you.factory_session.start_async` |
 | Read status or final/partial result | `you session show SESSION_ID` | `GET /factory-sessions/SESSION_ID`; `GET /factory-sessions/SESSION_ID/results` | `you.factory_session.get`; `you.factory_session.get_result` |
-| Inspect child work and durable facts | `you session dispatches SESSION_ID` | `GET /factory-sessions/SESSION_ID/dispatches`; `artifacts`; `events` | `you.factory_session.list_dispatches`; `list_artifacts`; `read_events` |
+| Inspect child work and durable facts | `you session show SESSION_ID` for status; use `you metrics --session SESSION_ID --group-by worker` for aggregates | `GET /factory-sessions/SESSION_ID/dispatches`; `artifacts`; `events` | `you.factory_session.list_dispatches`; `list_artifacts`; `read_events` |
 
 Start requests use the shared `FactorySessionExecutionRequest` shape: one source
 selector, JSON-compatible `args`, requested policy where applicable, and the

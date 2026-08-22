@@ -341,7 +341,7 @@ Investigate an unexpectedly expensive session:
 
 ```bash
 you metrics session <session-id> --lens cost --by-worker --by-dispatch
-you session dispatches <session-id>
+GET /factory-sessions/<session-id>/dispatches
 ```
 
 Export a complete machine-readable report:

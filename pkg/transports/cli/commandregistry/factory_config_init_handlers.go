@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	factoryQueryPortInputID          = "you.factory.query.flag.port"
+	factoryShowPortInputID           = "you.factory.show.flag.port"
 	factoryListDirInputID            = "you.factory.list.flag.dir"
 	factoryCreateNameInputID         = "you.factory.create.arg.0"
 	factoryCreateDirInputID          = "you.factory.create.flag.dir"
@@ -138,14 +138,14 @@ func (h *FactoryConfigInitCommandHandler) FactoryQuery(
 	inherited resolvedinput.Inputs,
 ) error {
 	if h == nil || h.services.QueryFactory == nil {
-		return fmt.Errorf("factory query service is required")
+		return fmt.Errorf("factory show service is required")
 	}
-	if err := rejectResolvedDeprecatedPort(inputs, factoryQueryPortInputID); err != nil {
+	if err := rejectResolvedDeprecatedPort(inputs, factoryShowPortInputID); err != nil {
 		return err
 	}
 	globals, err := readFactoryConfigInitGlobals(inherited)
 	if err != nil {
-		return fmt.Errorf("resolve factory query inputs: %w", err)
+		return fmt.Errorf("resolve factory show inputs: %w", err)
 	}
 	return h.services.QueryFactory(factorycli.QueryConfig{
 		Context: cmd.Context(), Server: globals.server, JSON: globals.json,

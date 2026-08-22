@@ -307,28 +307,6 @@ func TestSessionShowPreservesBehaviorThroughProductionComposition(t *testing.T) 
 	})
 }
 
-func TestSessionDispatchesPreservesBehaviorThroughProductionComposition(t *testing.T) {
-	t.Parallel()
-
-	args := []string{
-		"--verbose", "--json", "--server", "https://factory.example",
-		"session", "dispatches", "dur-sess-review-001",
-		"--phase", "review", "--status", "COMPLETED",
-	}
-	runSessionCompositionCases(t, args, errors.New("session operation failed"), func(result error) CommandOperations {
-		return CommandOperations{SessionsCLI: session.Bind(session.Operations{
-			ListDispatches: func(cfg session.DispatchesConfig) error {
-				if cfg.Context == nil || cfg.Server != "https://factory.example" ||
-					cfg.SessionID != "dur-sess-review-001" || cfg.Phase != "review" ||
-					cfg.Status != "COMPLETED" || !cfg.JSON || !cfg.Verbose {
-					t.Fatalf("dispatches config = %#v", cfg)
-				}
-				return writeSessionCompositionOutput(cfg.Output, cfg.Diagnostics, result)
-			},
-		})}
-	})
-}
-
 func TestSessionPausePreservesBehaviorThroughProductionComposition(t *testing.T) {
 	t.Parallel()
 

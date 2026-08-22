@@ -42,7 +42,7 @@ func TestResolvedWorkAdaptersReportEveryMissingStableInput(t *testing.T) {
 		return resolvedTestValue{id: id, source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(false)}
 	}
 	local := []resolvedTestValue{
-		stringInput("you.work.list.flag.state-name"), stringInput("you.work.list.flag.state-type"), stringInput("you.work.list.flag.name"), stringInput("you.work.list.flag.work-type-name"), stringInput("you.work.list.flag.trace-id"), stringInput("you.work.list.flag.sort-by"), boolInput("you.work.list.flag.terminal"), boolInput("you.work.list.flag.non-terminal"), boolInput("you.work.list.flag.all"), {id: "you.work.list.flag.max-results", source: resolvedinput.SourceCLIFlag, value: resolvedinput.IntValue(1)}, stringInput("you.work.list.flag.next-token"), boolInput("you.work.list.flag.counts"), stringInput("you.work.list.flag.session"), stringInput("you.work.show.arg.0"), stringInput("you.work.show.flag.session"), stringInput("you.work.move.arg.0"), stringInput("you.work.move.arg.1"), stringInput("you.work.move.flag.session"), stringInput("you.work.move.flag.request-id"), stringInput("you.work.visualize.arg.0"), stringInput("you.work.visualize.flag.format"),
+		stringInput("you.work.list.flag.state-name"), stringInput("you.work.list.flag.state-type"), stringInput("you.work.list.flag.name"), stringInput("you.work.list.flag.work-type-name"), stringInput("you.work.list.flag.trace-id"), stringInput("you.work.list.flag.sort-by"), boolInput("you.work.list.flag.terminal"), boolInput("you.work.list.flag.non-terminal"), boolInput("you.work.list.flag.all"), {id: "you.work.list.flag.max-results", source: resolvedinput.SourceCLIFlag, value: resolvedinput.IntValue(1)}, stringInput("you.work.list.flag.next-token"), boolInput("you.work.list.flag.counts"), stringInput("you.work.list.flag.session"), stringInput("you.work.show.arg.0"), stringInput("you.work.show.flag.session"), stringInput("you.work.move.arg.0"), stringInput("you.work.move.arg.1"), stringInput("you.work.move.flag.session"), stringInput("you.work.move.flag.request-id"), stringInput("you.work.render.arg.0"), stringInput("you.work.render.flag.format"),
 	}
 	globals := []resolvedTestValue{stringInput("you.flag.server"), {id: "you.flag.json", source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(false)}, {id: "you.flag.verbose", source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(false)}, {id: "you.flag.debug", source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(false)}}
 	noList := func(workcli.ListConfig) error { return nil }
@@ -57,11 +57,11 @@ func TestResolvedWorkAdaptersReportEveryMissingStableInput(t *testing.T) {
 		{"list", commandregistry.ResolvedListRunE(commandregistry.ResolvedListBinding{ListWork: noList}), []string{"you.work.list.flag.state-name", "you.work.list.flag.state-type", "you.work.list.flag.name", "you.work.list.flag.work-type-name", "you.work.list.flag.trace-id", "you.work.list.flag.sort-by", "you.work.list.flag.terminal", "you.work.list.flag.non-terminal", "you.work.list.flag.all", "you.work.list.flag.max-results", "you.work.list.flag.next-token", "you.work.list.flag.counts", "you.work.list.flag.session"}},
 		{"show", commandregistry.ResolvedShowRunE(commandregistry.ResolvedShowBinding{ShowWork: noShow}), []string{"you.work.show.arg.0", "you.work.show.flag.session"}},
 		{"move", commandregistry.ResolvedMoveRunE(commandregistry.ResolvedMoveBinding{MoveWork: noMove}), []string{"you.work.move.arg.0", "you.work.move.arg.1", "you.work.move.flag.session", "you.work.move.flag.request-id"}},
-		{"visualize", commandregistry.ResolvedVisualizeRunE(commandregistry.ResolvedVisualizeBinding{VisualizeWork: noVisualize}), []string{"you.work.visualize.arg.0", "you.work.visualize.flag.format"}},
+		{"render", commandregistry.ResolvedVisualizeRunE(commandregistry.ResolvedVisualizeBinding{VisualizeWork: noVisualize}), []string{"you.work.render.arg.0", "you.work.render.flag.format"}},
 	}
 	for _, test := range tests {
 		missingInputs := test.missing
-		if test.name != "visualize" {
+		if test.name != "render" {
 			missingInputs = append(missingInputs, "you.flag.server", "you.flag.json", "you.flag.verbose", "you.flag.debug")
 		}
 		for _, missing := range missingInputs {
@@ -88,7 +88,7 @@ func TestResolvedWorkAdaptersRequireServices(t *testing.T) {
 		{"list", commandregistry.ResolvedListRunE(commandregistry.ResolvedListBinding{})},
 		{"show", commandregistry.ResolvedShowRunE(commandregistry.ResolvedShowBinding{})},
 		{"move", commandregistry.ResolvedMoveRunE(commandregistry.ResolvedMoveBinding{})},
-		{"visualize", commandregistry.ResolvedVisualizeRunE(commandregistry.ResolvedVisualizeBinding{})},
+		{"render", commandregistry.ResolvedVisualizeRunE(commandregistry.ResolvedVisualizeBinding{})},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

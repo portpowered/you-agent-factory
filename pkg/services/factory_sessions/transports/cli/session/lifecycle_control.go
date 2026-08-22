@@ -45,7 +45,6 @@ type Service interface {
 	Cancel(LifecycleControlConfig) error
 	Terminate(LifecycleControlConfig) error
 	SetResourceCapacity(ResourceCapacityConfig) error
-	ListDispatches(DispatchesConfig) error
 	Create(CreateConfig) error
 	Delete(DeleteConfig) error
 }
@@ -64,7 +63,6 @@ type Operations struct {
 	Cancel              func(LifecycleControlConfig) error
 	Terminate           func(LifecycleControlConfig) error
 	SetResourceCapacity func(ResourceCapacityConfig) error
-	ListDispatches      func(DispatchesConfig) error
 	Create              func(CreateConfig) error
 	Delete              func(DeleteConfig) error
 }
@@ -83,7 +81,6 @@ type boundService struct {
 	cancel              func(LifecycleControlConfig) error
 	terminate           func(LifecycleControlConfig) error
 	setResourceCapacity func(ResourceCapacityConfig) error
-	listDispatches      func(DispatchesConfig) error
 	create              func(CreateConfig) error
 	delete              func(DeleteConfig) error
 }
@@ -126,7 +123,6 @@ func Bind(ops Operations) Service {
 		cancel:              ops.Cancel,
 		terminate:           ops.Terminate,
 		setResourceCapacity: ops.SetResourceCapacity,
-		listDispatches:      ops.ListDispatches,
 		create:              ops.Create,
 		delete:              ops.Delete,
 	}
@@ -167,11 +163,6 @@ func (service *service) SetResourceCapacity(cfg ResourceCapacityConfig) error {
 	cfg.HTTP = service.http
 	cfg.GenerateRequestID = service.generateRequestID
 	return SetResourceCapacity(cfg)
-}
-
-func (service *service) ListDispatches(cfg DispatchesConfig) error {
-	cfg.HTTP = service.http
-	return Dispatches(cfg)
 }
 
 func (service *service) Create(cfg CreateConfig) error {
@@ -231,13 +222,6 @@ func (service *boundService) SetResourceCapacity(cfg ResourceCapacityConfig) err
 		return fmt.Errorf("session resource capacity service is required")
 	}
 	return service.setResourceCapacity(cfg)
-}
-
-func (service *boundService) ListDispatches(cfg DispatchesConfig) error {
-	if service == nil || service.listDispatches == nil {
-		return fmt.Errorf("session dispatches service is required")
-	}
-	return service.listDispatches(cfg)
 }
 
 func (service *boundService) Create(cfg CreateConfig) error {

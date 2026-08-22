@@ -278,12 +278,12 @@ func TestResolvedVisualizeRunEMapsStableInputsIntoFreshRequests(t *testing.T) {
 		},
 	})
 	executeResolvedVisualize(
-		t, handler, []string{"work", "visualize", "first.json"},
+		t, handler, []string{"work", "render", "first.json"},
 		io.Discard, context.Background(),
 	)
 	executeResolvedVisualize(
 		t, handler,
-		[]string{"work", "visualize", "--format", "markdown-mermaid", "second.json"},
+		[]string{"work", "render", "--format", "markdown-mermaid", "second.json"},
 		io.Discard, context.Background(),
 	)
 	if len(requests) != 2 {
@@ -327,11 +327,11 @@ func TestResolvedWorkVisualizePublicCommandPreservesLocalBehavior(t *testing.T) 
 		args []string
 		want []string
 	}{
-		{"default mermaid", []string{"--server", server.URL, "work", "visualize", path},
+		{"default mermaid", []string{"--server", server.URL, "work", "render", path},
 			[]string{"flowchart TD", "beta --> alpha"}},
-		{"format spelling", []string{"work", "visualize", "--format", "MERMAID", path},
+		{"format spelling", []string{"work", "render", "--format", "MERMAID", path},
 			[]string{"flowchart TD", "beta --> alpha"}},
-		{"markdown", []string{"work", "visualize", "--format", "markdown-mermaid", path},
+		{"markdown", []string{"work", "render", "--format", "markdown-mermaid", path},
 			[]string{"# Work Dependency Graph", "```mermaid", "beta --> alpha"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -359,13 +359,13 @@ func TestResolvedWorkVisualizePublicCommandPreservesFailures(t *testing.T) {
 		operation workservice.VisualizationOperation
 		want      string
 	}{
-		{"missing argument", []string{"work", "visualize"}, nil, "requires at least 1 arg"},
-		{"extra argument", []string{"work", "visualize", invalid, "extra"}, nil, "accepts at most 1 arg"},
-		{"invalid format", []string{"work", "visualize", "--format", "svg", invalid},
+		{"missing argument", []string{"work", "render"}, nil, "requires at least 1 arg"},
+		{"extra argument", []string{"work", "render", invalid, "extra"}, nil, "accepts at most 1 arg"},
+		{"invalid format", []string{"work", "render", "--format", "svg", invalid},
 			visualizationFailure(`unsupported format "svg"`), `unsupported format "svg"`},
-		{"unreadable file", []string{"work", "visualize", filepath.Join(t.TempDir(), "missing.json")},
+		{"unreadable file", []string{"work", "render", filepath.Join(t.TempDir(), "missing.json")},
 			visualizationFailure("batch file not found"), "batch file not found"},
-		{"invalid content", []string{"work", "visualize", invalid},
+		{"invalid content", []string{"work", "render", invalid},
 			visualizationFailure("invalid JSON"), "invalid JSON"},
 	}
 	for _, test := range tests {
@@ -395,7 +395,7 @@ func TestResolvedWorkVisualizePublicCommandPreservesFailures(t *testing.T) {
 				t.Fatal("visualization operation called after cancellation")
 				return "", nil
 			}),
-			[]string{"work", "visualize", invalid}, io.Discard, ctx,
+			[]string{"work", "render", invalid}, io.Discard, ctx,
 		)
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("Execute() error = %v, want context canceled", err)
@@ -406,7 +406,7 @@ func TestResolvedWorkVisualizePublicCommandPreservesFailures(t *testing.T) {
 		writeErr := errors.New("write failed")
 		err := executeResolvedVisualizeError(
 			t, resolvedVisualizeTransportHandler(visualizationFailure("invalid JSON")),
-			[]string{"work", "visualize", invalid},
+			[]string{"work", "render", invalid},
 			errorWriter{err: writeErr}, context.Background(),
 		)
 		if err == nil || errors.Is(err, writeErr) {
@@ -420,7 +420,7 @@ func TestResolvedWorkVisualizePublicCommandPreservesFailures(t *testing.T) {
 			t, resolvedVisualizeTransportHandler(func(workservice.VisualizationRequest) (string, error) {
 				return "flowchart TD\n", nil
 			}),
-			[]string{"work", "visualize", valid},
+			[]string{"work", "render", valid},
 			errorWriter{err: writeErr}, context.Background(),
 		)
 		if !errors.Is(err, writeErr) {

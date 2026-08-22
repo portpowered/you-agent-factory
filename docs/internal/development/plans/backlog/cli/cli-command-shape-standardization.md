@@ -6,6 +6,11 @@ Proposed. This is a breaking public CLI contract migration. The repository is
 currently its own primary consumer, so the plan deliberately prefers one
 coherent command tree over compatibility aliases.
 
+All old command literals in this plan are historical migration records. They
+describe the source side of an intentional cutover; they are not active
+customer invocations. Active guidance and the executable target tree use only
+the target paths.
+
 ## Problem statement
 
 The CLI has a strong manifest and drift-detection system, but it does not have
@@ -286,9 +291,13 @@ of old command paths. Each migrated path is removed from the canonical
 manifest and production tree in the same change that adds its successor.
 
 Before implementation begins, record the complete moves and removals in
-`pkg/transports/cli/baseline/testdata/intentional_changes.md`,
-`contracts/cli/deprecated-commands.json`, and `contracts/cli/deprecated.json`.
-The ledger is planning evidence, not an instruction to keep compatibility
+`pkg/transports/cli/baseline/testdata/intentional_changes.md`. The CLI
+compatibility manifests (`contracts/cli/deprecated-commands.json` and
+`contracts/cli/deprecated.json`) are reserved for callable, separately
+approved compatibility surfaces. A no-alias breaking cutover leaves those
+manifests empty at final reconciliation; its historical move/removal evidence
+lives in the intentional-change ledger and release notes. These records are
+planning and migration evidence, not an instruction to keep compatibility
 commands alive.
 
 The release notes must contain the old-to-new command map. Old paths

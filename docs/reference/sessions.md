@@ -86,11 +86,25 @@ currently shipped pause, resume, cancel, and terminate controls.
 | Start asynchronously | `POST /factory-sessions/async` | No Factory Session-named spelling; use the API or MCP path | `you.factory_session.start_async` | Start from the Factory Session entry surface when offered |
 | List or read sessions | `GET /factory-sessions`, `GET /factory-sessions/{session_id}` | `you session list --scope persisted`, `you session show {session_id}` | `you.factory_session.list`, `you.factory_session.get` | Factory Sessions list and Factory Session detail |
 | Read the result | `GET /factory-sessions/{session_id}/results` | `you session show {session_id}` exposes result availability and refs | `you.factory_session.get_result` | Factory Session detail result state |
-| Inspect dispatches | `GET /factory-sessions/{session_id}/dispatches` | `you session dispatches {session_id}` | `you.factory_session.list_dispatches` | Factory Session detail dispatches |
+| Inspect dispatches | `GET /factory-sessions/{session_id}/dispatches` | Use the dispatch inspection guidance below | `you.factory_session.list_dispatches` | Factory Session detail dispatches |
 | Inspect artifacts | `GET /factory-sessions/{session_id}/artifacts` | `you session show {session_id}` exposes artifact refs | `you.factory_session.list_artifacts` | Factory Session detail artifacts |
 | Read ordered events | `GET /factory-sessions/{session_id}/events` | No Factory Session-named spelling; use the API or MCP path | `you.factory_session.read_events` | Factory Session detail live updates and history |
 | Observe ephemeral response events | `GET /factory-sessions/{session_id}/response-events` | No Factory Session-named spelling; use the API path | No Factory Session-named spelling; use the API path | No dashboard-owned response-event stream today |
 | Control lifecycle | `POST /factory-sessions/{session_id}/{pause\|resume\|cancel\|terminate}` | `you session pause\|resume\|cancel\|terminate {session_id}` | `you.factory_session.control` | Available actions on Factory Session detail |
+
+### Migration guidance: dispatch inspection after CLI removal
+
+The `you session dispatches` command is removed. No single CLI command replaces every dispatch inspection need.
+
+- Use `you session show SESSION_ID` for Factory Session status and summary.
+- Use `you metrics --session SESSION_ID --group-by workstation` for workstation aggregates.
+- Use `you metrics --session SESSION_ID --group-by worker` for worker aggregates.
+- Use `you metrics --session SESSION_ID --group-by provider` for provider aggregates.
+- Use `GET /factory-sessions/SESSION_ID/dispatches` for exact durable dispatch records.
+- Use `you.factory_session.list_dispatches` for exact dispatch records through MCP.
+- Use `you worker-sessions list --work-id WORK_ID` for Work-specific Worker Session drill-down.
+
+The Work-specific command requires a Work identifier. It does not replace session-level dispatch reads.
 
 The start response supplies `{session_id}`. Keep that exact id for every later
 call. `Dispatch`, `FactoryArtifact`, and `FactoryEvent` are session-owned facts:
@@ -213,7 +227,7 @@ you use this proof for closeout review.
 | Validate JavaScript source before durable execution | [JavaScript Factory Session model](#javascript-factory-session-model) and `you docs javascript-workflows` |
 | Recover a stopped `@you/goal` run through existing session and work controls | [Stopped goal inspect and recovery](#stopped-goal-inspect-and-recovery) and `you docs run` |
 | Confirm anything is listening before `you submit` or `POST /factory-sessions/{session_id}/work` | [Session list](#session-list) |
-| Read the active factory name and directory on a live host | [Factory query](#factory-query) |
+| Read the active factory name and directory on a live host | [Factory show](#factory-show) |
 | Inspect lifecycle phase, engine activity, and token buckets | [Session status API](#session-status-api) |
 | Open the operator dashboard in a browser | [Dashboard](#dashboard) |
 | Inspect orchestrator-aware runtime for one live session | [Session show](#session-show) and `you docs orchestrators` |
@@ -461,9 +475,9 @@ identifier.
 After editing this reference topic, run `make docs-reference-smoke` from the
 repository root.
 
-## Factory query
+## Factory show
 
-`you factory query` reads the **current factory definition** for a live session
+`you factory show` reads the **current factory definition** for a live session
 from `GET /factory-sessions/{session_id}/factory`. When you omit `--session` on
 downstream commands, the API uses the default compatibility session (`~default`).
 
@@ -474,14 +488,14 @@ which `factory.json` exists in a checkout.
 
 ```bash
 # Human table from the default API base URI.
-you factory query
+you factory show
 
 # API-shaped JSON (place global flags before the subcommand).
-you --json factory query
+you --json factory show
 
 # Non-default host or port via global --server.
-you --server http://localhost:9090 factory query
-you --server http://localhost:9090 --json factory query
+you --server http://localhost:9090 factory show
+you --server http://localhost:9090 --json factory show
 ```
 
 ### Human output
@@ -504,7 +518,7 @@ Run `you session list` first when you are unsure which sessions exist.
 
 ## Session status API
 
-For deeper runtime health than list or factory query, call:
+For deeper runtime health than list or factory show, call:
 
 ```http
 GET /factory-sessions/{session_id}/status
@@ -697,7 +711,7 @@ you --server http://localhost:9090 --json work list
 |----------------|----------------|-----------------|
 | `you session list` / `create` / `delete` | `--port` (default `7437`) | Session id is a subcommand argument on `create` / `delete` |
 | `you session show`, `you session pause`, `you session resume` | Global `--server` | Session UUID is an optional subcommand argument; omission accepts the `~default` compatibility selector |
-| `you factory query`, `you submit`, `you work …` | Global `--server` | `--session` on submit, batch submit, and work commands |
+| `you factory show`, `you submit`, `you work …` | Global `--server` | `--session` on submit, batch submit, and work commands |
 | `you server --listen <host:port>` | Binds the Current Factory continuously to the exact loopback host/port | N/A — starts a runtime |
 | `you run --with-server --listen <host:port>` / `--with-site` | Binds only for the run lifetime to the exact loopback host/port | N/A — starts a runtime |
 | Ordinary `you run` | Does not bind an HTTP listener | N/A — starts a runtime |
@@ -775,7 +789,7 @@ with `Accept: application/json` on the same route when the UI needs structured
 |---------|---------------------------|
 | Validate-first setup | `POST /factories/preview` or MCP `you.factory_session.validate_source` confirms source and policy readiness before a durable session exists. |
 | API | `GET /factory-sessions/{session_id}/events` is the normal event stream for dashboard, Factory Session, durable replay, and reconnect traffic; pass `after_event_id` or `after_sequence` on that route. `GET /events` remains a **compatibility-only** process-global stream for legacy tooling and operator diagnostics—new session-aware consumers should migrate to the session-scoped route. |
-| CLI | `you session show` prints Factory Session lifecycle timestamps, dispatch status, artifact refs, and best-effort partial/final result refs; `you session dispatches` lists durable session Dispatch records. |
+| CLI | `you session show` prints Factory Session lifecycle timestamps, dispatch status, artifact refs, and best-effort partial/final result refs. Use `you metrics --session SESSION_ID --group-by worker` for aggregates. |
 | Dashboard | Opens the selected session's `GET /factory-sessions/{session_id}/events` stream, replays lifecycle events into the timeline projection, and shows reconnecting/stale, partial, paused, running, and terminal states in the session lifecycle banner. |
 | MCP (planned) | Status/result/event tools should map `NOT_READY`, `PARTIAL`, `FINAL`, `FAILED_WITH_PARTIAL`, `INTERRUPTED`, and `RECONCILED` to the same `FactorySessionResultStatus` and dispatch status vocabulary as the session API and event stream. |
 

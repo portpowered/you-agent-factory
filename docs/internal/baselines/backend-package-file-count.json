@@ -141,7 +141,7 @@
     },
     {
       "packagePath": "pkg/services/factory_sessions/transports/cli/session",
-      "fileCount": 21,
+      "fileCount": 20,
       "owner": "factory-session-maintainers",
       "removalReason": "Separate session command lifecycle and rendering behavior."
     },
