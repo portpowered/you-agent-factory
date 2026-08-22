@@ -11,6 +11,7 @@ const REPORT_VERSION = 1;
 const DIAGNOSTIC_PREVIEW_LIMIT = 4000;
 const CLEAN_TARGET_BASELINE = 0;
 const ADDED_FINDINGS_HEADER = "New unused frontend code:";
+const REPORT_TARGET_STATUSES = new Set(["pass", "fail"]);
 export const BACKEND_LINT_COMMENT_MARKER = "<!-- backend-lint-report -->";
 
 function textValue(value) {
@@ -110,11 +111,17 @@ function isRecord(value) {
 	return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function isNonNegativeSafeInteger(value) {
+	return Number.isSafeInteger(value) && value >= 0;
+}
+
 function isReportTarget(value) {
 	return isRecord(value)
 		&& typeof value.name === "string"
 		&& textValue(value.name) !== ""
-		&& typeof value.status === "string";
+		&& REPORT_TARGET_STATUSES.has(value.status)
+		&& isNonNegativeSafeInteger(value.durationMillis)
+		&& typeof value.output === "string";
 }
 
 function reportShapeFailure(report) {

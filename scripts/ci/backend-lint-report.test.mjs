@@ -415,6 +415,31 @@ test("missing or malformed hosted reports are explicit bounded harness failures"
 	assert.match(renderBackendLintSummary(malformed), /Zero checkers were observed/);
 });
 
+test("incomplete or invalid checker records are harness failures", () => {
+	const incomplete = summarizeBackendLintReport(report({
+		targets: baselineTargets().map(({ name, status }) => ({ name, status })),
+	}), {
+		log: "lintlane emitted checker records without producer fields",
+	});
+
+	assert.equal(incomplete.ok, false);
+	assert.equal(incomplete.harnessFailure, true);
+	assert.equal(incomplete.targets.length, 0);
+	assert.match(incomplete.error, /malformed checker entries/);
+	assert.match(incomplete.error, /zero checkers were observed/);
+	assert.match(renderBackendLintSummary(incomplete), /BACKEND LINT HARNESS FAILED/);
+	assert.doesNotMatch(renderBackendLintSummary(incomplete), /BACKEND LINT RATCHET/);
+
+	const invalidStatus = summarizeBackendLintReport(report({
+		targets: baselineTargets({
+			"service-cycle-check": { status: "unknown" },
+		}),
+	}));
+
+	assert.equal(invalidStatus.harnessFailure, true);
+	assert.match(invalidStatus.error, /malformed checker entries/);
+});
+
 test("a structurally valid report with zero checkers is a harness failure", () => {
 	const summary = summarizeBackendLintReport(report({ targets: [] }), {
 		log: "ERR_MODULE_NOT_FOUND: scripts/ci/runner-parallelism.mjs",
