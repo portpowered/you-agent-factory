@@ -7,7 +7,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
-	"github.com/portpowered/infinite-you/pkg/services/models"
 )
 
 func duplicateIdentifierTargets(cfg *factorydefinitions.FactoryConfig) []Target {
@@ -793,6 +792,14 @@ var managedRuntimeDependencySpecs = map[string]managedRuntimeDependencySpec{
 	canonicalManagedRuntimeIdentity("embed"):            {backend: "LOCALAI-LLAMACPP"},
 }
 
+// managedRuntimeBackendAlias is the intentionally explicit Factory-side
+// mirror of the Models-owned managed-runtime alias. The enforced service
+// graph already contains factory_definitions -> workers -> models, so this
+// validator cannot import the Models root without creating a cycle regression.
+// TestManagedRuntimeValidationMatchesModelsBackendMembership compares this
+// mirror's observable validation decisions with models.IsManagedRuntimeBackend.
+const managedRuntimeBackendAlias = "LLAMACPP"
+
 var supportedManagedRuntimeLoadPolicies = map[string]struct{}{
 	"ON_DEMAND": {},
 	"EAGER":     {},
@@ -800,6 +807,10 @@ var supportedManagedRuntimeLoadPolicies = map[string]struct{}{
 
 func canonicalManagedRuntimeIdentity(model string) string {
 	return strings.ToUpper(strings.TrimSpace(model))
+}
+
+func isManagedRuntimeBackend(value string) bool {
+	return canonicalManagedRuntimeIdentity(value) == managedRuntimeBackendAlias
 }
 
 func isKnownManagedRuntimeIdentity(model string) bool {
@@ -864,7 +875,7 @@ func managedRuntimeResourceTargets(index int, resource factoryresource.Config) [
 	}
 	validBackend := canonicalManagedRuntimeBackend(resource.Backend) == requiredBackend
 	if canonicalManagedRuntimeIdentity(modelIdentity) == canonicalManagedRuntimeIdentity("OMNIVOICE_Q4_K_M") {
-		validBackend = models.IsManagedRuntimeBackend(resource.Backend)
+		validBackend = isManagedRuntimeBackend(resource.Backend)
 	}
 	if !validBackend {
 		return []Target{managedRuntimeResourceTarget(
