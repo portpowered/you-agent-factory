@@ -10,23 +10,9 @@ import (
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 )
 
-func TestCostsHumanOutputExactGoldens(t *testing.T) {
-	t.Parallel()
-
+func TestCostsHumanOutputAllPricedGolden(t *testing.T) {
 	amount := "1.235"
-	mixedAmount := "12.345678"
-	openAIProvider, mysteryModel := "openai", "mystery"
-	codexProvider, alphaModel := "codex", "alpha"
-	unknownProvider, unknownModel := "codex", "unknown-model"
-	cases := []struct {
-		name   string
-		report generatedclient.CostsReport
-		want   string
-	}{
-		{
-			name:   "all-priced",
-			report: humanReport("PRICED", &amount, 0, nil),
-			want: `Scope: all Factory Sessions
+	assertHumanOutputGolden(t, "all-priced", humanReport("PRICED", &amount, 0, nil), `Scope: all Factory Sessions
 Currency: USD
 Status: PRICED
 Cost (USD): $1.24
@@ -46,13 +32,14 @@ Provider/models: 0
 Factory Sessions: 0
 Unpriced usage: 0 rows
 `,
-		},
-		{
-			name: "none-priced",
-			report: humanReport("UNPRICED", nil, 2, []generatedclient.CostsUnpricedPair{
-				{Provider: &codexProvider, Model: &mysteryModel, DispatchCount: 2},
-			}),
-			want: `Scope: all Factory Sessions
+	)
+}
+
+func TestCostsHumanOutputNonePricedGolden(t *testing.T) {
+	codexProvider, mysteryModel := "codex", "mystery"
+	assertHumanOutputGolden(t, "none-priced", humanReport("UNPRICED", nil, 2, []generatedclient.CostsUnpricedPair{
+		{Provider: &codexProvider, Model: &mysteryModel, DispatchCount: 2},
+	}), `Scope: all Factory Sessions
 Currency: USD
 Status: UNPRICED
 Cost (USD): ?? unknown
@@ -73,14 +60,17 @@ Provider/models: 0
 Factory Sessions: 0
 Unpriced usage: 0 rows
 `,
-		},
-		{
-			name: "mixed",
-			report: humanReport("PARTIAL", &mixedAmount, 2, []generatedclient.CostsUnpricedPair{
-				{Provider: &openAIProvider, Model: &mysteryModel, DispatchCount: 1},
-				{Provider: &codexProvider, Model: &alphaModel, DispatchCount: 1},
-			}),
-			want: `Scope: all Factory Sessions
+	)
+}
+
+func TestCostsHumanOutputMixedGolden(t *testing.T) {
+	mixedAmount := "12.345678"
+	openAIProvider, mysteryModel := "openai", "mystery"
+	codexProvider, alphaModel := "codex", "alpha"
+	assertHumanOutputGolden(t, "mixed", humanReport("PARTIAL", &mixedAmount, 2, []generatedclient.CostsUnpricedPair{
+		{Provider: &openAIProvider, Model: &mysteryModel, DispatchCount: 1},
+		{Provider: &codexProvider, Model: &alphaModel, DispatchCount: 1},
+	}), `Scope: all Factory Sessions
 Currency: USD
 Status: PARTIAL
 Cost (USD): $12.35 + ?? unknown
@@ -102,13 +92,14 @@ Provider/models: 0
 Factory Sessions: 0
 Unpriced usage: 0 rows
 `,
-		},
-		{
-			name: "unknown-model",
-			report: humanReport("UNPRICED", nil, 1, []generatedclient.CostsUnpricedPair{
-				{Provider: &unknownProvider, Model: &unknownModel, DispatchCount: 1},
-			}),
-			want: `Scope: all Factory Sessions
+	)
+}
+
+func TestCostsHumanOutputUnknownModelGolden(t *testing.T) {
+	unknownProvider, unknownModel := "codex", "unknown-model"
+	assertHumanOutputGolden(t, "unknown-model", humanReport("UNPRICED", nil, 1, []generatedclient.CostsUnpricedPair{
+		{Provider: &unknownProvider, Model: &unknownModel, DispatchCount: 1},
+	}), `Scope: all Factory Sessions
 Currency: USD
 Status: UNPRICED
 Cost (USD): ?? unknown
@@ -129,18 +120,17 @@ Provider/models: 0
 Factory Sessions: 0
 Unpriced usage: 0 rows
 `,
-		},
+	)
+}
+
+func assertHumanOutputGolden(t *testing.T, name string, report generatedclient.CostsReport, want string) {
+	t.Helper()
+	output, err := runHumanCostsOutput(t, report)
+	if err != nil {
+		t.Fatalf("execute %s costs command: %v", name, err)
 	}
-	for _, testCase := range cases {
-		t.Run(testCase.name, func(t *testing.T) {
-			output, err := runHumanCostsOutput(t, testCase.report)
-			if err != nil {
-				t.Fatalf("execute %s costs command: %v", testCase.name, err)
-			}
-			if output != testCase.want {
-				t.Errorf("%s output mismatch:\n--- want ---\n%s--- got ---\n%s", testCase.name, testCase.want, output)
-			}
-		})
+	if output != want {
+		t.Errorf("%s output mismatch:\n--- want ---\n%s--- got ---\n%s", name, want, output)
 	}
 }
 
