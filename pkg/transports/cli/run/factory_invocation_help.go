@@ -76,12 +76,44 @@ type factoryInvocationHelpData struct {
 }
 
 func WriteFactoryInvocationHelp(w io.Writer, cliName string, cfg RunConfig) (bool, error) {
+	return writeFactoryInvocationHelp(w, cliName, cfg, nil)
+}
+
+// WriteFactoryInvocationHelpWithManifest validates the selected Factory
+// signature against the generated run-command inputs before rendering it.
+// The ordinary helper remains available for callers that only need detached
+// formatting; the production CLI uses this manifest-aware entrypoint so help
+// cannot advertise a signature that invocation would reject.
+func WriteFactoryInvocationHelpWithManifest(
+	w io.Writer,
+	cliName string,
+	cfg RunConfig,
+	manifest climanifest.Manifest,
+) (bool, error) {
+	return writeFactoryInvocationHelp(w, cliName, cfg, &manifest)
+}
+
+func writeFactoryInvocationHelp(
+	w io.Writer,
+	cliName string,
+	cfg RunConfig,
+	manifest *climanifest.Manifest,
+) (bool, error) {
 	data, err := loadFactoryInvocationHelpData(cliName, cfg)
 	if err != nil {
 		return false, err
 	}
 	if data == nil || data.signature == nil {
 		return false, nil
+	}
+	if manifest != nil {
+		_, diagnostics, err := climanifest.ComposeRunInputs(*manifest, "you.run", data.signature)
+		if err != nil {
+			return false, fmt.Errorf("compose Factory invocation help inputs: %w", err)
+		}
+		if err := MapCompositionDiagnostics(diagnostics); err != nil {
+			return false, err
+		}
 	}
 
 	_, err = io.WriteString(w, formatFactoryInvocationHelp(*data))

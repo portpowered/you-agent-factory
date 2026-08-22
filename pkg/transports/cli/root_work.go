@@ -603,7 +603,13 @@ func writeRunCommandHelp(cmd *cobra.Command, cfg *runcli.RunConfig, rootOptions 
 	); err != nil {
 		return err
 	}
-	wroteFactoryHelp, err := runcli.WriteFactoryInvocationHelp(cmd.OutOrStdout(), cliBinaryName, *cfg)
+	manifest, err := generated.RunSubmitFamilyManifest()
+	if err != nil {
+		return fmt.Errorf("load run CLI manifest: %w", err)
+	}
+	wroteFactoryHelp, err := runcli.WriteFactoryInvocationHelpWithManifest(
+		cmd.OutOrStdout(), cliBinaryName, *cfg, manifest,
+	)
 	if err != nil {
 		return err
 	}
