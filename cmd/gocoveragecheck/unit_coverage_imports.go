@@ -1,18 +1,26 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"slices"
 	"strings"
 )
 
-// prepareUnitCoverageImportFile adds a temporary, test-function-free internal
-// test file to one selected unit-test package. Blank imports make Go's
-// coverage instrumenter load every test-free measured package into that test
+type unitCoverageImportCarrier struct {
+	listing coveragePackageListing
+	imports []string
+}
+
+// prepareUnitCoverageImportFile adds temporary, test-function-free internal
+// test files to selected unit-test packages. Blank imports make Go's coverage
+// instrumenter load every test-free measured package into an existing test
 // binary, so those packages retain their zero-count coverage blocks without
-// receiving their own go test invocation. The file is removed by the returned
-// cleanup after the invocation plan completes.
+// receiving their own go test invocation. Imports are grouped by a legal
+// carrier because Go's internal-package visibility rules still apply to test
+// source. The files are removed by the returned cleanup after the invocation
+// plan completes.
 func prepareUnitCoverageImportFile(testPackages []string, listings []coveragePackageListing) (func() error, error) {
 	selected := make(map[string]struct{}, len(testPackages))
 	for _, importPath := range testPackages {
@@ -20,17 +28,14 @@ func prepareUnitCoverageImportFile(testPackages []string, listings []coveragePac
 	}
 
 	toImport := make([]coveragePackageListing, 0)
-	var target *coveragePackageListing
+	carriers := make([]unitCoverageImportCarrier, 0)
 	for index := range listings {
 		listing := listings[index]
 		if !isBackendCoveragePackage(listing.importPath) || listing.goFiles == 0 {
 			continue
 		}
 		if _, isTestPackage := selected[listing.importPath]; isTestPackage {
-			if target == nil || len(listing.testGoFiles) > 0 {
-				candidate := listing
-				target = &candidate
-			}
+			carriers = append(carriers, unitCoverageImportCarrier{listing: listing})
 			continue
 		}
 		toImport = append(toImport, listing)
@@ -38,47 +43,110 @@ func prepareUnitCoverageImportFile(testPackages []string, listings []coveragePac
 	if len(toImport) == 0 {
 		return func() error { return nil }, nil
 	}
-	if target == nil {
+	if len(carriers) == 0 {
 		return nil, fmt.Errorf("prepare unit coverage imports: no build-selected test package is available to carry %d test-free package imports", len(toImport))
 	}
-	if strings.TrimSpace(target.directory) == "" || strings.TrimSpace(target.packageName) == "" {
-		return nil, fmt.Errorf("prepare unit coverage imports: incomplete go list metadata for test package %q (Dir and Name are required)", target.importPath)
-	}
-	for _, listing := range toImport {
-		if strings.TrimSpace(listing.importPath) == "" {
-			return nil, fmt.Errorf("prepare unit coverage imports: incomplete go list metadata for measured package %q", listing.importPath)
-		}
-	}
-
+	slices.SortFunc(carriers, func(left, right unitCoverageImportCarrier) int {
+		return strings.Compare(left.listing.importPath, right.listing.importPath)
+	})
 	slices.SortFunc(toImport, func(left, right coveragePackageListing) int {
 		return strings.Compare(left.importPath, right.importPath)
 	})
-	var source strings.Builder
-	fmt.Fprintf(&source, "package %s\n\nimport (\n", target.packageName)
+
 	for _, listing := range toImport {
-		fmt.Fprintf(&source, "\t_ %q\n", listing.importPath)
-	}
-	source.WriteString(")\n")
-
-	file, err := os.CreateTemp(target.directory, "gocoveragecheck_coverage_imports_*_test.go")
-	if err != nil {
-		return nil, fmt.Errorf("prepare unit coverage imports: create temporary test file in %q: %w", target.directory, err)
-	}
-	filename := file.Name()
-	if _, err := file.WriteString(source.String()); err != nil {
-		_ = file.Close()
-		_ = os.Remove(filename)
-		return nil, fmt.Errorf("prepare unit coverage imports: write temporary test file %q: %w", filename, err)
-	}
-	if err := file.Close(); err != nil {
-		_ = os.Remove(filename)
-		return nil, fmt.Errorf("prepare unit coverage imports: close temporary test file %q: %w", filename, err)
-	}
-
-	return func() error {
-		if err := os.Remove(filename); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("remove temporary unit coverage imports %q: %w", filename, err)
+		carrierIndex, ok := chooseUnitCoverageImportCarrier(listing.importPath, listing.deps, carriers)
+		if !ok {
+			return nil, fmt.Errorf("prepare unit coverage imports: no selected test package can legally import test-free package %q", listing.importPath)
 		}
-		return nil
-	}, nil
+		carriers[carrierIndex].imports = append(carriers[carrierIndex].imports, listing.importPath)
+	}
+
+	filenames := make([]string, 0, len(carriers))
+	cleanup := func() error {
+		var cleanupErr error
+		for _, filename := range filenames {
+			if err := os.Remove(filename); err != nil && !os.IsNotExist(err) {
+				cleanupErr = errors.Join(cleanupErr, fmt.Errorf("remove temporary unit coverage imports %q: %w", filename, err))
+			}
+		}
+		return cleanupErr
+	}
+
+	for _, carrier := range carriers {
+		if len(carrier.imports) == 0 {
+			continue
+		}
+		if strings.TrimSpace(carrier.listing.directory) == "" || strings.TrimSpace(carrier.listing.packageName) == "" {
+			return cleanup, fmt.Errorf("prepare unit coverage imports: incomplete go list metadata for test package %q (Dir and Name are required)", carrier.listing.importPath)
+		}
+		var source strings.Builder
+		fmt.Fprintf(&source, "package %s\n\nimport (\n", carrier.listing.packageName)
+		for _, importPath := range carrier.imports {
+			fmt.Fprintf(&source, "\t_ %q\n", importPath)
+		}
+		source.WriteString(")\n")
+
+		file, err := os.CreateTemp(carrier.listing.directory, "gocoveragecheck_coverage_imports_*_test.go")
+		if err != nil {
+			return cleanup, fmt.Errorf("prepare unit coverage imports: create temporary test file in %q: %w", carrier.listing.directory, err)
+		}
+		filename := file.Name()
+		filenames = append(filenames, filename)
+		if _, err := file.WriteString(source.String()); err != nil {
+			_ = file.Close()
+			return cleanup, fmt.Errorf("prepare unit coverage imports: write temporary test file %q: %w", filename, err)
+		}
+		if err := file.Close(); err != nil {
+			return cleanup, fmt.Errorf("prepare unit coverage imports: close temporary test file %q: %w", filename, err)
+		}
+	}
+
+	return cleanup, nil
+}
+
+func chooseUnitCoverageImportCarrier(importPath string, deps []string, carriers []unitCoverageImportCarrier) (int, bool) {
+	bestIndex := -1
+	bestPrefixLength := -1
+	for index, carrier := range carriers {
+		if !canUnitCoverageImport(carrier.listing.importPath, importPath) {
+			continue
+		}
+		if slices.Contains(deps, carrier.listing.importPath) {
+			continue
+		}
+		prefixLength := commonImportPathPrefixLength(carrier.listing.importPath, importPath)
+		if prefixLength > bestPrefixLength {
+			bestIndex = index
+			bestPrefixLength = prefixLength
+		}
+	}
+	return bestIndex, bestIndex >= 0
+}
+
+func canUnitCoverageImport(importer, imported string) bool {
+	if importer == imported {
+		return false
+	}
+	parts := strings.Split(imported, "/")
+	internalIndex := -1
+	for index, part := range parts {
+		if part == "internal" {
+			internalIndex = index
+		}
+	}
+	if internalIndex < 0 {
+		return true
+	}
+	parent := strings.Join(parts[:internalIndex], "/")
+	return importer == parent || strings.HasPrefix(importer, parent+"/")
+}
+
+func commonImportPathPrefixLength(left, right string) int {
+	leftParts := strings.Split(left, "/")
+	rightParts := strings.Split(right, "/")
+	length := 0
+	for length < len(leftParts) && length < len(rightParts) && leftParts[length] == rightParts[length] {
+		length++
+	}
+	return length
 }

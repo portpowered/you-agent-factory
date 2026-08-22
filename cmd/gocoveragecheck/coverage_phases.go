@@ -134,6 +134,9 @@ func planCoverageInvocationWithUnitImports(
 		var err error
 		unitCoverageImportCleanup, err = prepareUnitCoverageImportFile(testPackages, unitPackageFiles)
 		if err != nil {
+			if unitCoverageImportCleanup != nil {
+				err = errors.Join(err, unitCoverageImportCleanup())
+			}
 			return coverageInvocationPlan{}, err
 		}
 	}

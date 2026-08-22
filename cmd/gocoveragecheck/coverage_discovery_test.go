@@ -68,7 +68,7 @@ func TestResolveCoverageLaneUsesOneFreshSweepForDefaultUnitSets(t *testing.T) {
 	if len(listCalls) != 1 {
 		t.Fatalf("go list calls = %d, want one fresh sweep: %#v", len(listCalls), listCalls)
 	}
-	if got := listCalls[0].args[1:]; !reflect.DeepEqual(got, []string{"-e", coverageUnitGoListJSONFields, "-find", "./pkg/..."}) {
+	if got := listCalls[0].args[1:]; !reflect.DeepEqual(got, []string{"-e", coverageUnitGoListJSONFields, "./pkg/..."}) {
 		t.Fatalf("go list patterns = %v, want one default unit pattern", got)
 	}
 

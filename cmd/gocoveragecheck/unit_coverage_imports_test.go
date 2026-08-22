@@ -91,3 +91,125 @@ func TestPrepareUnitCoverageImportFileFailsClosedOnMissingMetadata(t *testing.T)
 		t.Fatalf("prepareUnitCoverageImportFile() error = %v, want incomplete target metadata diagnostic", err)
 	}
 }
+
+func TestPrepareUnitCoverageImportFileRespectsInternalVisibility(t *testing.T) {
+	root := t.TempDir()
+	generalDir := filepath.Join(root, "general")
+	internalDir := filepath.Join(root, "internal")
+	for _, directory := range []string{generalDir, internalDir} {
+		if err := os.MkdirAll(directory, 0o755); err != nil {
+			t.Fatalf("create carrier directory %q: %v", directory, err)
+		}
+	}
+
+	generalCarrier := modulePath + "/pkg/coverageimports/carrier"
+	internalCarrier := modulePath + "/pkg/services/automations"
+	generalTestFree := modulePath + "/pkg/coverageimports/testless"
+	internalTestFree := modulePath + "/pkg/services/automations/internal/cron"
+	cleanup, err := prepareUnitCoverageImportFile(
+		[]string{generalCarrier, internalCarrier},
+		[]coveragePackageListing{
+			{importPath: generalCarrier, directory: generalDir, packageName: "carrier", goFiles: 1, testGoFiles: []string{"carrier_test.go"}},
+			{importPath: internalCarrier, directory: internalDir, packageName: "automations", goFiles: 1, testGoFiles: []string{"automations_test.go"}},
+			{importPath: generalTestFree, goFiles: 1},
+			{importPath: internalTestFree, goFiles: 1},
+		},
+	)
+	if err != nil {
+		t.Fatalf("prepareUnitCoverageImportFile() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if cleanupErr := cleanup(); cleanupErr != nil {
+			t.Errorf("temporary coverage import cleanup: %v", cleanupErr)
+		}
+	})
+
+	generalFiles, err := filepath.Glob(filepath.Join(generalDir, "gocoveragecheck_coverage_imports_*_test.go"))
+	if err != nil {
+		t.Fatalf("find general carrier file: %v", err)
+	}
+	internalFiles, err := filepath.Glob(filepath.Join(internalDir, "gocoveragecheck_coverage_imports_*_test.go"))
+	if err != nil {
+		t.Fatalf("find internal carrier file: %v", err)
+	}
+	if len(generalFiles) != 1 || len(internalFiles) != 1 {
+		t.Fatalf("temporary carrier files = general %v, internal %v; want one per legal carrier", generalFiles, internalFiles)
+	}
+
+	generalSource, err := os.ReadFile(generalFiles[0])
+	if err != nil {
+		t.Fatalf("read general carrier file: %v", err)
+	}
+	if !strings.Contains(string(generalSource), "_ \""+generalTestFree+"\"") || strings.Contains(string(generalSource), internalTestFree) {
+		t.Fatalf("general carrier source = %q, want only the general test-free package", generalSource)
+	}
+	internalSource, err := os.ReadFile(internalFiles[0])
+	if err != nil {
+		t.Fatalf("read internal carrier file: %v", err)
+	}
+	if !strings.Contains(string(internalSource), "_ \""+internalTestFree+"\"") || strings.Contains(string(internalSource), generalTestFree) {
+		t.Fatalf("internal carrier source = %q, want only the internal test-free package", internalSource)
+	}
+}
+
+func TestCanUnitCoverageImport(t *testing.T) {
+	tests := []struct {
+		name     string
+		importer string
+		imported string
+		want     bool
+	}{
+		{
+			name:     "external package",
+			importer: modulePath + "/pkg/coverageimports/carrier",
+			imported: modulePath + "/pkg/coverageimports/testless",
+			want:     true,
+		},
+		{
+			name:     "internal parent",
+			importer: modulePath + "/pkg/services/automations",
+			imported: modulePath + "/pkg/services/automations/internal/cron",
+			want:     true,
+		},
+		{
+			name:     "internal descendant",
+			importer: modulePath + "/pkg/services/automations/wire",
+			imported: modulePath + "/pkg/services/automations/internal/cron",
+			want:     true,
+		},
+		{
+			name:     "internal sibling",
+			importer: modulePath + "/pkg/services/work",
+			imported: modulePath + "/pkg/services/automations/internal/cron",
+			want:     false,
+		},
+		{
+			name:     "self",
+			importer: modulePath + "/pkg/coverageimports/carrier",
+			imported: modulePath + "/pkg/coverageimports/carrier",
+			want:     false,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := canUnitCoverageImport(test.importer, test.imported); got != test.want {
+				t.Fatalf("canUnitCoverageImport(%q, %q) = %t, want %t", test.importer, test.imported, got, test.want)
+			}
+		})
+	}
+}
+
+func TestChooseUnitCoverageImportCarrierSkipsDependencyCycle(t *testing.T) {
+	testFree := modulePath + "/pkg/services/factory_definitions/internal/services/catalog"
+	closest := modulePath + "/pkg/services/factory_definitions/internal/services/catalog/wire"
+	fallback := modulePath + "/pkg/services/factory_definitions"
+	carriers := []unitCoverageImportCarrier{
+		{listing: coveragePackageListing{importPath: closest}},
+		{listing: coveragePackageListing{importPath: fallback}},
+	}
+
+	index, ok := chooseUnitCoverageImportCarrier(testFree, []string{closest}, carriers)
+	if !ok || carriers[index].listing.importPath != fallback {
+		t.Fatalf("chooseUnitCoverageImportCarrier() = (%d, %t), want fallback carrier %q", index, ok, fallback)
+	}
+}
