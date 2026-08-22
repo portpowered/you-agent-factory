@@ -227,11 +227,11 @@ func assertMockWorkersSmokeRecordedOutcomes(t *testing.T, artifact *interfaces.R
 	if rejectResult.FailureDetail == nil || rejectResult.FailureDetail.Reason == "" {
 		t.Fatal("reject-process result missing failure reason")
 	}
-	if string(rejectResult.FailureDetail.Reason) != string(workerexecution.WorkFailureTypeUnknown) {
-		t.Fatalf("reject-process failure reason = %q, want stable %q", rejectResult.FailureDetail.Reason, workerexecution.WorkFailureTypeUnknown)
+	if string(rejectResult.FailureDetail.Reason) != string(workerexecution.WorkFailureTypePermanentBadRequest) {
+		t.Fatalf("reject-process failure reason = %q, want neutral terminal refusal", rejectResult.FailureDetail.Reason)
 	}
-	if !strings.Contains(stringPointerValue(rejectResult.Error), "provider error: unknown: Codex reported a terminal error") {
-		t.Fatalf("reject-process error = %q, want stable unknown code with audited message", stringPointerValue(rejectResult.Error))
+	if !strings.Contains(stringPointerValue(rejectResult.Error), "provider error: permanent_bad_request: provider rejected the execution request") {
+		t.Fatalf("reject-process error = %q, want neutral terminal refusal", stringPointerValue(rejectResult.Error))
 	}
 	scriptResult := outcomes["script-process"]
 	if scriptResult.Outcome != factoryapi.WorkOutcome(workerexecution.OutcomeAccepted) {
