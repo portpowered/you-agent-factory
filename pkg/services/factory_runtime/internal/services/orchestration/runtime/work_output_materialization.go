@@ -321,13 +321,7 @@ func workstationDispatchResultFromExecute(
 	}
 	if result.Failure != nil {
 		workResult.Error = strings.TrimSpace(result.Failure.Message)
-		workResult.FailureDetail = workers.CloneFailureDetail(result.Failure.Detail)
-		if workResult.FailureDetail == nil && workResult.Error != "" {
-			workResult.FailureDetail = &workers.FailureDetail{
-				Reason:  result.Failure.Type,
-				Message: workResult.Error,
-			}
-		}
+		workResult.FailureDetail = workFailureDetail(result.Failure, workResult.Error)
 		if shouldPropagateFailureMetadata(request, result.Failure) {
 			workResult.FailureMetadata = &workers.WorkFailureMetadata{
 				Family: result.Failure.Family,
@@ -354,6 +348,14 @@ func workstationDispatchResultFromExecute(
 		Result:               workResult,
 		ProposedOutput:       &proposedOutput,
 	}, executeErr
+}
+
+func workFailureDetail(failure *workers.ExecutionFailure, message string) *workers.FailureDetail {
+	detail := workers.CloneFailureDetail(failure.Detail)
+	if detail != nil || message == "" {
+		return detail
+	}
+	return &workers.FailureDetail{Reason: failure.Type, Message: message}
 }
 
 func workstationDispatchRequestForResult(
