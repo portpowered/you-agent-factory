@@ -55,11 +55,14 @@ type InspectConfig struct {
 }
 
 type InvokeConfig struct {
-	Context          context.Context
-	ModelName        string
-	Operation        string
-	Text             string
-	InputMappings    []string
+	Context       context.Context
+	ModelName     string
+	Operation     string
+	Text          string
+	InputMappings []string
+	// ParameterSpecs contains repeatable JSON-encoded generic operation
+	// parameters. Each value preserves one parameter's name and JSON value.
+	ParameterSpecs   []string
 	OutputPath       string
 	OutputMappings   []string
 	Server           string
@@ -286,6 +289,9 @@ func (service *httpService) Invoke(cfg InvokeConfig) error {
 	}
 	if len(cfg.InputMappings) > 0 {
 		return fmt.Errorf("explicit input mappings require the local Models composition")
+	}
+	if len(cfg.ParameterSpecs) > 0 {
+		return fmt.Errorf("explicit generic parameters require the local Models composition")
 	}
 	if len(cfg.OutputMappings) > 0 {
 		return fmt.Errorf("explicit output mappings require the local Models composition")

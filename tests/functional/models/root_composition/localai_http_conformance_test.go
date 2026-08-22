@@ -91,41 +91,49 @@ func startLocalAIConformanceServer(
 	fixture *localai.Fixture,
 ) (*support.FunctionalAPIServer, *joinedCompatibilityChecker) {
 	t.Helper()
-	rejectingNetwork := &rejectingModelAssetHTTP{}
-	assetFiles := functionalModelAssetFileSystem{home: home}
-	hostLauncher := &recordingModelHostLauncher{endpoint: fixture.Endpoint()}
-	compatibility := &joinedCompatibilityChecker{}
+	edges, rejectingNetwork, compatibility, _ := localAIConformanceEdges(home, fixture)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Env:                       functionalHomeEnvironment(home),
-		Edges: serviceedges.Edges{
-			ModelAssetHTTPClient:           rejectingNetwork,
-			ModelAssetMakeDirectories:      assetFiles.MkdirAll,
-			ModelAssetInspectPath:          assetFiles.Stat,
-			ModelAssetResolveHomeDirectory: assetFiles.UserHomeDir,
-			ModelAssetResolveEnvironment:   func(string) string { return "" },
-			ModelAssetWriteFile:            assetFiles.WriteFile,
-			ModelAssetRenamePath:           assetFiles.Rename,
-			ModelAssetRemovePath:           assetFiles.Remove,
-			ModelAssetReadFile:             assetFiles.ReadFile,
-			ModelAssetReadDirectory:        assetFiles.ReadDir,
-			ModelAssetCreateFile:           assetFiles.Create,
-			ModelAssetOpenFile:             assetFiles.Open,
-			ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
-			ModelHostProcessLauncher:       hostLauncher,
-			ModelHostHTTPClient:            fixtureHostHTTPClient{},
-			ModelHostGRPCDialer:            fixture.GRPCDialer(),
-			ModelHostCompatibilityChecker:  compatibility,
-			ModelRuntimeHTTPClient:         fixtureHostHTTPClient{},
-			ModelResolveBackendArtifact:    conformanceBackendArtifactResolver,
-			ModelInvocationBackend:         serviceedges.ModelInvocationBackend(fixture.InvocationBackend),
-		},
+		Edges:                     edges,
 	})
 	if rejectingNetwork.Calls() != 0 {
 		t.Fatalf("model asset network calls during server startup = %d, want 0", rejectingNetwork.Calls())
 	}
 	return server, compatibility
+}
+
+func localAIConformanceEdges(
+	home string,
+	fixture *localai.Fixture,
+) (serviceedges.Edges, *rejectingModelAssetHTTP, *joinedCompatibilityChecker, *recordingModelHostLauncher) {
+	rejectingNetwork := &rejectingModelAssetHTTP{}
+	assetFiles := functionalModelAssetFileSystem{home: home}
+	hostLauncher := &recordingModelHostLauncher{endpoint: fixture.Endpoint()}
+	compatibility := &joinedCompatibilityChecker{}
+	return serviceedges.Edges{
+		ModelAssetHTTPClient:           rejectingNetwork,
+		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
+		ModelAssetInspectPath:          assetFiles.Stat,
+		ModelAssetResolveHomeDirectory: assetFiles.UserHomeDir,
+		ModelAssetResolveEnvironment:   func(string) string { return "" },
+		ModelAssetWriteFile:            assetFiles.WriteFile,
+		ModelAssetRenamePath:           assetFiles.Rename,
+		ModelAssetRemovePath:           assetFiles.Remove,
+		ModelAssetReadFile:             assetFiles.ReadFile,
+		ModelAssetReadDirectory:        assetFiles.ReadDir,
+		ModelAssetCreateFile:           assetFiles.Create,
+		ModelAssetOpenFile:             assetFiles.Open,
+		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		ModelHostProcessLauncher:       hostLauncher,
+		ModelHostHTTPClient:            fixtureHostHTTPClient{},
+		ModelHostGRPCDialer:            fixture.GRPCDialer(),
+		ModelHostCompatibilityChecker:  compatibility,
+		ModelRuntimeHTTPClient:         fixtureHostHTTPClient{},
+		ModelResolveBackendArtifact:    conformanceBackendArtifactResolver,
+		ModelInvocationBackend:         serviceedges.ModelInvocationBackend(fixture.InvocationBackend),
+	}, rejectingNetwork, compatibility, hostLauncher
 }
 
 func writeGenericConformanceCaches(t *testing.T, home string) {
@@ -246,8 +254,15 @@ func postConformanceInvocationForModel(
 			ContentType: &contentType, MediaType: &mediaType, Content: &content,
 		})
 	}
+	parameterValues := conformanceParameters()
+	parameters := make([]factoryapi.ModelInvocationParameter, 0, len(parameterValues))
+	for _, parameter := range parameterValues {
+		parameters = append(parameters, factoryapi.ModelInvocationParameter{
+			Name: parameter.Name, Value: parameter.Value,
+		})
+	}
 	request := factoryapi.GenericModelInvocationRequest{
-		Holder: "localai-http-conformance", Inputs: &inputs,
+		Holder: "localai-http-conformance", Inputs: &inputs, Parameters: &parameters,
 		Model:     factoryapi.ModelReference{NameOrUri: modelName},
 		Operation: factoryapi.ModelOperationName(row.Operation.Name), Scope: "factory-session:localai-conformance",
 	}
@@ -283,6 +298,12 @@ func postConformanceInvocationForModel(
 		return factoryapi.GenericModelInvocationResponse{}, factoryapi.ErrorResponse{}, response.StatusCode, fmt.Errorf("decode generic response: %w (%s)", err, body)
 	}
 	return result, factoryapi.ErrorResponse{}, response.StatusCode, nil
+}
+
+func conformanceParameters() []models.OperationParameter {
+	return []models.OperationParameter{{
+		Name: "temperature", Value: map[string]any{"value": 0.2},
+	}}
 }
 
 func conformanceModelName(operation string) string {
@@ -411,6 +432,10 @@ func assertConformanceResponse(row conformance.Row, response factoryapi.GenericM
 }
 
 func assertFixtureConformanceCalls(t *testing.T, fixture *localai.Fixture) {
+	assertFixtureConformanceCallCounts(t, fixture, 1)
+}
+
+func assertFixtureConformanceCallCounts(t *testing.T, fixture *localai.Fixture, runs int) {
 	t.Helper()
 	calls := fixture.Calls()
 	var predicts, embeddings, tts, transcriptions int
@@ -429,8 +454,13 @@ func assertFixtureConformanceCalls(t *testing.T, fixture *localai.Fixture) {
 			transcriptions++
 		}
 	}
-	if predicts != 4 || embeddings != 1 || tts != 1 || transcriptions != 1 {
-		t.Fatalf("fixture calls = predict %d, embedding %d, tts %d, asr %d; want 4/1/1/1", predicts, embeddings, tts, transcriptions)
+	wantPredicts, wantEmbeddings, wantTTS, wantTranscriptions := 4*runs, runs, runs, runs
+	if predicts != wantPredicts || embeddings != wantEmbeddings || tts != wantTTS || transcriptions != wantTranscriptions {
+		t.Fatalf(
+			"fixture calls = predict %d, embedding %d, tts %d, asr %d; want %d/%d/%d/%d",
+			predicts, embeddings, tts, transcriptions,
+			wantPredicts, wantEmbeddings, wantTTS, wantTranscriptions,
+		)
 	}
 }
 

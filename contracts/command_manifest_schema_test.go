@@ -447,6 +447,8 @@ func TestCommandManifestSchemaProductionModelsFamily(t *testing.T) {
 	for _, flagID := range []string{
 		"you.models.invoke.flag.operation",
 		"you.models.invoke.flag.text",
+		"you.models.invoke.flag.input",
+		"you.models.invoke.flag.parameter",
 		"you.models.invoke.flag.output",
 	} {
 		if _, ok := invokeFlags[flagID]; !ok {

@@ -127,19 +127,45 @@ func (service *rootService) prepareGenericCLIInputs(
 			fmt.Sprintf("unknown operation %q", operation), operation, nil,
 		)
 	}
-	mappings, err := parseGenericCLIInputMappings(cfg.InputMappings)
-	if err != nil {
-		return nil, err
+	mappingValues, specValues := splitGenericCLIInputValues(cfg.InputMappings)
+	var inputs []modelinference.InferenceInput
+	if len(mappingValues) > 0 {
+		mappings, err := parseGenericCLIInputMappings(mappingValues)
+		if err != nil {
+			return nil, err
+		}
+		slots, validNames := genericCLIInputSlots(selected.Inputs)
+		counts, err := validateGenericCLIInputMappings(mappings, slots, validNames)
+		if err != nil {
+			return nil, err
+		}
+		if err := validateMissingGenericCLIInputSlots(selected.Inputs, counts, validNames); err != nil {
+			return nil, err
+		}
+		inputs, err = service.bindGenericCLIInputs(cfg, mappings, slots)
+		if err != nil {
+			return nil, err
+		}
 	}
-	slots, validNames := genericCLIInputSlots(selected.Inputs)
-	counts, err := validateGenericCLIInputMappings(mappings, slots, validNames)
-	if err != nil {
-		return nil, err
+	if len(specValues) > 0 {
+		specInputs, err := parseGenericCLIInputSpecs(specValues)
+		if err != nil {
+			return nil, err
+		}
+		inputs = append(inputs, specInputs...)
 	}
-	if err := validateMissingGenericCLIInputSlots(selected.Inputs, counts, validNames); err != nil {
-		return nil, err
+	return inputs, nil
+}
+
+func splitGenericCLIInputValues(values []string) (mappings, specs []string) {
+	for _, value := range values {
+		if strings.HasPrefix(strings.TrimSpace(value), "{") {
+			specs = append(specs, value)
+			continue
+		}
+		mappings = append(mappings, value)
 	}
-	return service.bindGenericCLIInputs(cfg, mappings, slots)
+	return mappings, specs
 }
 
 func genericCLIInputSlots(inputSlots []modelinference.OperationSlot) (map[string]modelinference.OperationSlot, []string) {

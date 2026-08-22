@@ -165,18 +165,21 @@ func (service *rootService) tryJoinedInvocation(
 	inputs []modelinference.InferenceInput,
 	catalog modelinference.Detail,
 ) (bool, error) {
-	if len(inputs) == 0 && !cfg.JSON && len(cfg.OutputMappings) == 0 &&
-		strings.TrimSpace(cfg.OutputPath) == "" && !genericCLIStdoutOutput(cfg, catalog, operation) {
+	if len(inputs) == 0 && len(cfg.ParameterSpecs) == 0 && !cfg.JSON &&
+		len(cfg.OutputMappings) == 0 && strings.TrimSpace(cfg.OutputPath) == "" &&
+		!genericCLIStdoutOutput(cfg, catalog, operation) {
 		return false, nil
 	}
-	request := joinedCLIInvocationRequest(scope, modelName, operation, text, catalog)
-	if len(inputs) > 0 {
-		request.Inputs = append([]modelinference.InferenceInput(nil), inputs...)
+	parameters, err := parseGenericCLIParameterSpecs(cfg.ParameterSpecs)
+	if err != nil {
+		return false, err
 	}
+	request := joinedCLIInvocationRequest(scope, modelName, operation, text, inputs, parameters, catalog)
 	joinedResult, err := service.models.InvokeModel(cfg.Context, request)
 	if err != nil {
-		if len(inputs) == 0 && (errors.Is(err, modelinference.ErrUnsupportedOperation) ||
-			errors.Is(err, modelinference.ErrModelReferenceUnknown)) {
+		if len(inputs) == 0 && len(parameters) == 0 &&
+			(errors.Is(err, modelinference.ErrUnsupportedOperation) ||
+				errors.Is(err, modelinference.ErrModelReferenceUnknown)) {
 			return false, nil
 		}
 		return false, mapModelsClientError(err)
@@ -283,6 +286,9 @@ func genericCLIJSONResult(
 ) bool {
 	if !cfg.JSON || len(result.Outputs) == 0 {
 		return false
+	}
+	if len(cfg.InputMappings) > 0 || len(cfg.ParameterSpecs) > 0 || len(cfg.OutputMappings) > 0 {
+		return true
 	}
 	if len(result.Outputs) > 1 {
 		return true
@@ -718,8 +724,18 @@ func joinedCLIInvocationRequest(
 	modelName string,
 	operation string,
 	text string,
+	inputs []modelinference.InferenceInput,
+	parameters []modelinference.OperationParameter,
 	catalog modelinference.Detail,
 ) modelinference.InvokeModelRequest {
+	if len(inputs) > 0 || len(parameters) > 0 {
+		return modelinference.InvokeModelRequest{
+			Scope: scope, Holder: modelsCLIInvokeHolder,
+			Model: modelinference.ModelReference{NameOrURI: modelName}, Operation: operation,
+			Inputs: inputs, Parameters: parameters,
+		}
+	}
+
 	inputName := "input"
 	modality := modelinference.ModalityText
 	contentType := "text/plain"
@@ -747,6 +763,75 @@ func joinedCLIInvocationRequest(
 			Name: inputName, Modality: modality, ContentType: contentType, MediaType: contentType, Content: text,
 		}},
 	}
+}
+
+type genericCLIInputSpec struct {
+	Name        string `json:"name"`
+	Modality    string `json:"modality"`
+	ContentType string `json:"contentType"`
+	MediaType   string `json:"mediaType"`
+	Content     string `json:"content"`
+}
+
+func parseGenericCLIInputSpecs(values []string) ([]modelinference.InferenceInput, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	inputs := make([]modelinference.InferenceInput, 0, len(values))
+	for index, value := range values {
+		var spec genericCLIInputSpec
+		if err := json.Unmarshal([]byte(value), &spec); err != nil {
+			return nil, fmt.Errorf("parse --input %d: %w", index+1, err)
+		}
+		name := strings.TrimSpace(spec.Name)
+		if name == "" {
+			return nil, fmt.Errorf("parse --input %d: name is required", index+1)
+		}
+		modality := modelinference.Modality(strings.ToUpper(strings.TrimSpace(spec.Modality)))
+		if modality == "" {
+			return nil, fmt.Errorf("parse --input %d (%s): modality is required", index+1, name)
+		}
+		if strings.TrimSpace(spec.Content) == "" {
+			return nil, fmt.Errorf("parse --input %d (%s): content is required", index+1, name)
+		}
+		inputs = append(inputs, modelinference.InferenceInput{
+			Name: name, Modality: modality,
+			ContentType: strings.TrimSpace(spec.ContentType),
+			MediaType:   strings.TrimSpace(spec.MediaType), Content: spec.Content,
+		})
+	}
+	return inputs, nil
+}
+
+type genericCLIParameterSpec struct {
+	Name  string          `json:"name"`
+	Value json.RawMessage `json:"value"`
+}
+
+func parseGenericCLIParameterSpecs(values []string) ([]modelinference.OperationParameter, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	parameters := make([]modelinference.OperationParameter, 0, len(values))
+	for index, value := range values {
+		var spec genericCLIParameterSpec
+		if err := json.Unmarshal([]byte(value), &spec); err != nil {
+			return nil, fmt.Errorf("parse --parameter %d: %w", index+1, err)
+		}
+		name := strings.TrimSpace(spec.Name)
+		if name == "" {
+			return nil, fmt.Errorf("parse --parameter %d: name is required", index+1)
+		}
+		if len(spec.Value) == 0 {
+			return nil, fmt.Errorf("parse --parameter %d (%s): value is required", index+1, name)
+		}
+		var parameterValue any
+		if err := json.Unmarshal(spec.Value, &parameterValue); err != nil {
+			return nil, fmt.Errorf("parse --parameter %d (%s) value: %w", index+1, name, err)
+		}
+		parameters = append(parameters, modelinference.OperationParameter{Name: name, Value: parameterValue})
+	}
+	return parameters, nil
 }
 
 func joinedCLITextInput(inputs []modelinference.OperationSlot) *modelinference.OperationSlot {

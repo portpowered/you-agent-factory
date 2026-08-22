@@ -12644,14 +12644,15 @@
           },
           "description": {
             "id": "you.models.invoke.description",
-            "canonicalEnglish": "Invoke one discovered model through the shared in-process bootstrap. Requires a model name, an uppercase --operation, either non-empty --text or repeatable named --input slot=value values (use @path for file bytes), and either repeatable --output paths or repeatable --output slot=path mappings for named outputs, or global --json for structured invocation metadata. Readiness-gated execution uses the current factory configuration without starting a full workflow."
+            "canonicalEnglish": "Invoke one discovered model through the shared in-process bootstrap. Requires a model name, an uppercase --operation, either non-empty --text or repeatable --input values (slot=value with @path file bytes, or named generic-input JSON), and either repeatable --output paths or named output mappings, or global --json for structured invocation metadata. Repeatable --parameter JSON values preserve operation parameter names and values for generic multimodal operations. Readiness-gated execution uses the current factory configuration without starting a full workflow."
           }
         },
         "examples": [
           "you models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\" --output ./speech.wav",
           "you --json models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\"",
           "you models invoke omni --operation OMNI --text \"Summarize this.\" --output text=./answer.txt --output usage=./usage.json",
-          "you models invoke asr --operation ASR --input audio=@meeting.wav --output transcript=./transcript.txt --output segments=./segments.json"
+          "you models invoke asr --operation ASR --input audio=@meeting.wav --output transcript=./transcript.txt --output segments=./segments.json",
+          "you models invoke omni --operation OMNI --input '{\"name\":\"prompt\",\"modality\":\"TEXT\",\"contentType\":\"TEXT\",\"mediaType\":\"text/plain\",\"content\":\"Summarize this.\"}' --parameter '{\"name\":\"temperature\",\"value\":0.2}' --output-map text=./answer.txt --output-map usage=./usage.json"
         ],
         "visibility": "public",
         "sourceHash": "b469b217b664304f713e17511a3cb96c37ba5cc8cca78419a699575f309fcd54"
@@ -12667,7 +12668,7 @@
       "placement": "remote-only",
       "usage": {
         "line": "invoke <model-name>",
-        "example": "  # Stream TTS audio to a file.\n  you models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\" --output ./speech.wav\n\n  # Emit structured invocation metadata.\n  you --json models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\"\n\n  # Map every named generic output to an atomic file.\n  you models invoke omni --operation OMNI --text \"Summarize this.\" --output text=./answer.txt --output usage=./usage.json\n\n  # Transcribe audio into canonical transcript and timestamped segments files.\n  you models invoke asr --operation ASR --input audio=@meeting.wav --output transcript=./transcript.txt --output segments=./segments.json"
+        "example": "  # Stream TTS audio to a file.\n  you models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\" --output ./speech.wav\n\n  # Emit structured invocation metadata.\n  you --json models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\"\n\n  # Map every named generic output to an atomic file.\n  you models invoke omni --operation OMNI --text \"Summarize this.\" --output text=./answer.txt --output usage=./usage.json\n\n  # Transcribe audio into canonical transcript and timestamped segments files.\n  you models invoke asr --operation ASR --input audio=@meeting.wav --output transcript=./transcript.txt --output segments=./segments.json\n\n  # Preserve named multimodal inputs and operation parameters.\n  you models invoke omni --operation OMNI --input '{\"name\":\"prompt\",\"modality\":\"TEXT\",\"contentType\":\"TEXT\",\"mediaType\":\"text/plain\",\"content\":\"Summarize this.\"}' --parameter '{\"name\":\"temperature\",\"value\":0.2}' --output-map text=./answer.txt --output-map usage=./usage.json"
       },
       "arguments": {
         "you.models.invoke.arg.0": {
@@ -12949,7 +12950,39 @@
           "sensitivity": "sensitive",
           "scope": "local",
           "shorthand": "",
-          "usage": "named model input in the form slot=value; prefix value with @ to read a file (repeatable)",
+          "usage": "named model input as slot=value (prefix value with @ to read a file) or named generic input as JSON; repeatable and preserves order",
+          "valueType": "stringArray",
+          "visibility": "visible"
+        },
+        "you.models.invoke.flag.parameter": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "stringArray": []
+          },
+          "handlerBindingId": "you.models.invoke.binding.parameter",
+          "id": "you.models.invoke.flag.parameter",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.invoke.flag.parameter",
+            "state": "active",
+            "since": "1.0.0"
+          },
+          "long": "parameter",
+          "maxCardinality": -1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": true,
+          "required": false,
+          "sensitivity": "sensitive",
+          "scope": "local",
+          "shorthand": "",
+          "usage": "named generic operation parameter as JSON (repeatable; preserves order)",
           "valueType": "stringArray",
           "visibility": "visible"
         },
@@ -13058,6 +13091,14 @@
         "you.models.invoke.binding.output": {
           "id": "you.models.invoke.binding.output",
           "inputId": "you.models.invoke.flag.output"
+        },
+        "you.models.invoke.binding.input": {
+          "id": "you.models.invoke.binding.input",
+          "inputId": "you.models.invoke.flag.input"
+        },
+        "you.models.invoke.binding.parameter": {
+          "id": "you.models.invoke.binding.parameter",
+          "inputId": "you.models.invoke.flag.parameter"
         },
         "you.models.invoke.binding.output-map": {
           "id": "you.models.invoke.binding.output-map",
