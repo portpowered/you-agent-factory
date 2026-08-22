@@ -136,7 +136,7 @@ func runInstalledMCPProcess(
 		"-e", "trace=%file",
 		"-o", tracePath,
 		binaryPath,
-		"mcp", "serve",
+		"server", "mcp",
 	}
 	command := exec.CommandContext(ctx, "strace", args...)
 	command.Dir = workingDir
