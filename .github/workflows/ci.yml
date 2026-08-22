@@ -218,9 +218,6 @@ jobs:
         if: matrix.suite == 'functional'
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - name: Compile functionallong test packages
-        if: matrix.suite == 'unit'
-        run: make test-functional-long-compile
       - name: Select functional runner parallelism
         if: matrix.suite == 'functional'
         id: functional-parallelism
@@ -532,6 +529,10 @@ jobs:
           }
           console.log(`Backend Lint selected at ${selection.headSha}`);
           NODE
+      - name: Compile functionallong test packages
+        id: compile-functionallong
+        continue-on-error: true
+        run: make test-functional-long-compile
       - name: Select Backend Lint runner parallelism
         id: backend-lint-parallelism
         shell: bash
@@ -615,6 +616,15 @@ jobs:
                 body: publication.body,
               });
             }
+      - name: Enforce functionallong compile guard
+        if: always()
+        env:
+          FUNCTIONALLONG_COMPILE_OUTCOME: ${{ steps.compile-functionallong.outcome }}
+        run: |
+          if [ "$FUNCTIONALLONG_COMPILE_OUTCOME" != "success" ]; then
+            echo "functionallong compile guard failed with outcome: ${FUNCTIONALLONG_COMPILE_OUTCOME:-unknown}"
+            exit 1
+          fi
 
   ui-backend-integration:
     name: UI Backend Integration
