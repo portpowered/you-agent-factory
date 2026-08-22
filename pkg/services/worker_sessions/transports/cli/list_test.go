@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -316,6 +317,90 @@ func TestListTopLevelSupportsRepeatedStatesAndPositiveLimit(t *testing.T) {
 	}
 	if got := gotQuery["nextToken"]; len(got) != 1 || got[0] != "cursor-1" {
 		t.Fatalf("nextToken query = %#v, want cursor-1", got)
+	}
+}
+
+func TestListTopLevelIsBoundedAndResumesWithExplicitNextToken(t *testing.T) {
+	var requests []url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.URL.Query())
+		w.Header().Set("Content-Type", "application/json")
+		nextToken := "cursor-2"
+		if r.URL.Query().Get("nextToken") == "" {
+			_ = json.NewEncoder(w).Encode(factoryapi.ListWorkerSessionsResponse{
+				Sessions: []factoryapi.WorkerSessionObservation{{
+					WorkerSessionId: "worker-session-1",
+					AttemptId:       "attempt-1",
+				}},
+				PaginationContext: &factoryapi.PaginationContext{MaxResults: 1, NextToken: &nextToken},
+			})
+			return
+		}
+		if got := r.URL.Query().Get("nextToken"); got != nextToken {
+			t.Fatalf("continuation token = %q, want %q", got, nextToken)
+		}
+		_ = json.NewEncoder(w).Encode(factoryapi.ListWorkerSessionsResponse{
+			Sessions: []factoryapi.WorkerSessionObservation{{
+				WorkerSessionId: "worker-session-2",
+				AttemptId:       "attempt-2",
+			}},
+			PaginationContext: &factoryapi.PaginationContext{MaxResults: 1},
+		})
+	}))
+	defer server.Close()
+
+	var firstOutput bytes.Buffer
+	if err := NewList(testHTTPProtocol(t))(ListConfig{
+		Context: context.Background(), Server: server.URL,
+		MaxResults: 1, MaxResultsSet: true, OutputFormat: "json", Output: &firstOutput,
+	}); err != nil {
+		t.Fatalf("first bounded List() error = %v", err)
+	}
+	var first factoryapi.ListWorkerSessionsResponse
+	if err := json.Unmarshal(firstOutput.Bytes(), &first); err != nil {
+		t.Fatalf("decode first JSON output: %v; output=%q", err, firstOutput.String())
+	}
+	if len(first.Sessions) != 1 || first.Sessions[0].WorkerSessionId != "worker-session-1" {
+		t.Fatalf("first page = %#v, want worker-session-1", first.Sessions)
+	}
+	if first.PaginationContext == nil || first.PaginationContext.NextToken == nil || *first.PaginationContext.NextToken != "cursor-2" {
+		t.Fatalf("first pagination = %#v, want cursor-2", first.PaginationContext)
+	}
+	if len(requests) != 1 {
+		t.Fatalf("first invocation made %d requests, want one bounded page", len(requests))
+	}
+	if got := requests[0].Get("maxResults"); got != "1" {
+		t.Fatalf("first maxResults = %q, want 1", got)
+	}
+	if got := requests[0].Get("nextToken"); got != "" {
+		t.Fatalf("first nextToken = %q, want omitted", got)
+	}
+
+	var secondOutput bytes.Buffer
+	if err := NewList(testHTTPProtocol(t))(ListConfig{
+		Context: context.Background(), Server: server.URL,
+		MaxResults: 1, MaxResultsSet: true, NextToken: "cursor-2", OutputFormat: "json", Output: &secondOutput,
+	}); err != nil {
+		t.Fatalf("explicit continuation List() error = %v", err)
+	}
+	var second factoryapi.ListWorkerSessionsResponse
+	if err := json.Unmarshal(secondOutput.Bytes(), &second); err != nil {
+		t.Fatalf("decode second JSON output: %v; output=%q", err, secondOutput.String())
+	}
+	if len(second.Sessions) != 1 || second.Sessions[0].WorkerSessionId != "worker-session-2" {
+		t.Fatalf("second page = %#v, want worker-session-2", second.Sessions)
+	}
+	if second.PaginationContext == nil || second.PaginationContext.NextToken != nil {
+		t.Fatalf("second pagination = %#v, want exhausted page", second.PaginationContext)
+	}
+	if len(requests) != 2 {
+		t.Fatalf("explicit continuation made %d total requests, want two", len(requests))
+	}
+	if got := requests[1].Get("maxResults"); got != "1" {
+		t.Fatalf("second maxResults = %q, want 1", got)
+	}
+	if got := requests[1].Get("nextToken"); got != "cursor-2" {
+		t.Fatalf("second nextToken = %q, want cursor-2", got)
 	}
 }
 
