@@ -7,6 +7,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 	runnermockworker "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing"
@@ -37,6 +38,93 @@ func NewLoggingCommandRunner(
 	return workerprocess.ProjectPlatformCommandRunner(
 		workerprocess.CommandRunnerWithLogging(private, logger, workerprocess.ClockFunc(clock)),
 	)
+}
+
+// NewProviderCommandRunner projects the Workers-private command request onto
+// the Providers-owned effect shape at the composition boundary. The returned
+// value intentionally has an opaque structural shape: Providers adapts it
+// without importing Workers' private command types, while the request-scoped
+// mock configuration continues to flow through context unchanged.
+func NewProviderCommandRunner(next platformprocess.CommandRunner) any {
+	return providerCommandRunner{
+		runner: workerprocess.AdaptPlatformCommandRunner(next),
+	}
+}
+
+type providerCommandRunner struct {
+	runner workerprocess.CommandRunner
+}
+
+type providerCommandRequest struct {
+	Command                  string
+	Args                     []string
+	Stdin                    []byte
+	Env                      []string
+	WorkDir                  string
+	DispatchID               string
+	AttemptID                string
+	TransitionID             string
+	WorkerType               string
+	WorkstationName          string
+	ProjectID                string
+	InputTokens              []any
+	InputBindings            map[string][]string
+	Execution                work.ExecutionMetadata
+	ExecutionLogger          logging.Logger
+	ProcessLifecycleObserver platformprocess.ProcessLifecycleObserver
+}
+
+func (runner providerCommandRunner) Run(
+	ctx context.Context,
+	request providerCommandRequest,
+) (workerprocess.CommandResult, error) {
+	if runner.runner == nil {
+		return workerprocess.CommandResult{}, errors.New("provider command runner is required")
+	}
+	return runner.runner.Run(ctx, workerCommandRequest(request))
+}
+
+func (runner providerCommandRunner) RunStreaming(
+	ctx context.Context,
+	request providerCommandRequest,
+	observer platformprocess.OutputChunkObserver,
+) (workerprocess.CommandResult, error) {
+	if runner.runner == nil {
+		return workerprocess.CommandResult{}, errors.New("provider command runner is required")
+	}
+	if streaming, ok := runner.runner.(interface {
+		RunStreaming(context.Context, workerprocess.CommandRequest, platformprocess.OutputChunkObserver) (workerprocess.CommandResult, error)
+	}); ok {
+		return streaming.RunStreaming(ctx, workerCommandRequest(request), observer)
+	}
+	result, err := runner.Run(ctx, request)
+	publishCompleteCommandOutput(observer, result.Stdout, result.Stderr)
+	return result, err
+}
+
+func workerCommandRequest(request providerCommandRequest) workerprocess.CommandRequest {
+	dispatchID := request.DispatchID
+	if dispatchID == "" {
+		dispatchID = request.AttemptID
+	}
+	private := workerprocess.SubprocessRequestBase(work.WorkDispatch{
+		DispatchID:      dispatchID,
+		TransitionID:    request.TransitionID,
+		WorkerType:      request.WorkerType,
+		WorkstationName: request.WorkstationName,
+		ProjectID:       request.ProjectID,
+		InputTokens:     request.InputTokens,
+		InputBindings:   request.InputBindings,
+		Execution:       request.Execution,
+	})
+	private.Command = request.Command
+	private.Args = request.Args
+	private.Stdin = request.Stdin
+	private.Env = request.Env
+	private.WorkDir = request.WorkDir
+	private.ExecutionLogger = request.ExecutionLogger
+	private.ProcessLifecycleObserver = request.ProcessLifecycleObserver
+	return private
 }
 
 type contextualMockWorkerCommandRunner struct {

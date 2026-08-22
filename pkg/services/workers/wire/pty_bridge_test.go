@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -10,8 +11,17 @@ import (
 
 func TestAdaptPTYAllocatorProjectsForeignOwnerShape(t *testing.T) {
 	t.Parallel()
+	candidate := foreignPTYFixture()
+	allocator := requirePTYAllocator(t, candidate)
+	session := allocateForeignPTY(t, allocator)
+	assertForeignPTYLaunch(t, candidate)
+	assertForeignPTYConfig(t, candidate)
+	assertForeignPTYResult(t, session)
+	closeForeignPTY(t, candidate, session)
+}
 
-	candidate := &foreignPTYAllocator{
+func foreignPTYFixture() *foreignPTYAllocator {
+	return &foreignPTYAllocator{
 		session: &foreignPTYSession{
 			result: foreignPTYSessionResult{
 				ExitCode:    7,
@@ -22,11 +32,19 @@ func TestAdaptPTYAllocatorProjectsForeignOwnerShape(t *testing.T) {
 			},
 		},
 	}
+}
+
+func requirePTYAllocator(t *testing.T, candidate *foreignPTYAllocator) workersinternal.PTYAllocator {
+	t.Helper()
 	allocator := adaptPTYAllocator(candidate)
 	if allocator == nil {
 		t.Fatal("adaptPTYAllocator() = nil, want structural adapter")
 	}
+	return allocator
+}
 
+func allocateForeignPTY(t *testing.T, allocator workersinternal.PTYAllocator) workersinternal.PTYSession {
+	t.Helper()
 	session, err := allocator.Allocate(nil, workersinternal.PTYProcessLaunch{
 		Executable: "agy",
 		Argv:       []string{"--headless"},
@@ -40,24 +58,43 @@ func TestAdaptPTYAllocatorProjectsForeignOwnerShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Allocate() error = %v", err)
 	}
-	if candidate.launch.Executable != "agy" || candidate.launch.WorkDir != "factory" ||
-		len(candidate.launch.Argv) != 1 || candidate.launch.Argv[0] != "--headless" ||
-		len(candidate.launch.Env) != 1 || candidate.launch.Env[0] != "MODE=test" {
-		t.Fatalf("foreign launch = %#v", candidate.launch)
-	}
-	if candidate.config.MaxCaptureBytes != 12 || candidate.config.IdleTimeout != time.Second ||
-		candidate.config.HardTimeout != 2*time.Second {
-		t.Fatalf("foreign config = %#v", candidate.config)
-	}
+	return session
+}
 
+func assertForeignPTYLaunch(t *testing.T, candidate *foreignPTYAllocator) {
+	t.Helper()
+	want := foreignPTYProcessLaunch{
+		Executable: "agy", Argv: []string{"--headless"}, WorkDir: "factory", Env: []string{"MODE=test"},
+	}
+	if !reflect.DeepEqual(candidate.launch, want) {
+		t.Fatalf("foreign launch = %#v, want %#v", candidate.launch, want)
+	}
+}
+
+func assertForeignPTYConfig(t *testing.T, candidate *foreignPTYAllocator) {
+	t.Helper()
+	want := foreignPTYSessionConfig{MaxCaptureBytes: 12, IdleTimeout: time.Second, HardTimeout: 2 * time.Second}
+	if !reflect.DeepEqual(candidate.config, want) {
+		t.Fatalf("foreign config = %#v, want %#v", candidate.config, want)
+	}
+}
+
+func assertForeignPTYResult(t *testing.T, session workersinternal.PTYSession) {
+	t.Helper()
 	result, err := session.Run(nil)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if result.ExitCode != 7 || string(result.RawBytes) != "raw" || result.CleanedText != "clean" ||
-		!result.TimedOut || !result.CapacityHit {
-		t.Fatalf("session result = %#v", result)
+	want := workersinternal.PTYSessionResult{
+		ExitCode: 7, RawBytes: []byte("raw"), CleanedText: "clean", TimedOut: true, CapacityHit: true,
 	}
+	if !reflect.DeepEqual(result, want) {
+		t.Fatalf("session result = %#v, want %#v", result, want)
+	}
+}
+
+func closeForeignPTY(t *testing.T, candidate *foreignPTYAllocator, session workersinternal.PTYSession) {
+	t.Helper()
 	if err := session.Close(); err != nil {
 		t.Fatalf("Close() error = %v", err)
 	}

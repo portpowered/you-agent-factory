@@ -147,14 +147,18 @@ func provideConfiguredProvidersService(
 	if workersRunner != nil {
 		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(workersRunner)
 		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
-		options = append(options, providerswire.WithWorkersCommandRunner(loggedRunner))
+		options = append(options, providerswire.WithWorkersCommandRunner(
+			workerswire.NewProviderCommandRunner(loggedRunner),
+		))
 		return newConfiguredProvidersService(options, loggedRunner)
 	}
 	if edges.ProviderCommandRunner != nil {
 		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(edges.ProviderCommandRunner)
 		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
 		options = append(options, providerswire.WithCommandRunner(edges.ProviderCommandRunner))
-		options = append(options, providerswire.WithWorkersCommandRunner(loggedRunner))
+		options = append(options, providerswire.WithWorkersCommandRunner(
+			workerswire.NewProviderCommandRunner(loggedRunner),
+		))
 		return newConfiguredProvidersService(options, loggedRunner)
 	}
 	commandRunner, err := providePlatformProcessCommandRunner(edges)
@@ -164,7 +168,9 @@ func provideConfiguredProvidersService(
 	contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(commandRunner)
 	loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
 	options = append(options, providerswire.WithCommandRunner(commandRunner))
-	options = append(options, providerswire.WithWorkersCommandRunner(loggedRunner))
+	options = append(options, providerswire.WithWorkersCommandRunner(
+		workerswire.NewProviderCommandRunner(loggedRunner),
+	))
 	return newConfiguredProvidersService(options, loggedRunner)
 }
 

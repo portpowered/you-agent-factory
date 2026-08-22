@@ -10,7 +10,6 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type recordingEffect struct {
@@ -324,7 +323,7 @@ func TestProjectPlatformCommandRunnerRoundTripsAdaptedRunner(t *testing.T) {
 	}
 }
 
-func TestAdaptPlatformCommandRunnerRecoversPrivateRequestContext(t *testing.T) {
+func TestAdaptPlatformCommandRunnerPreservesPrivateRunnerIdentity(t *testing.T) {
 	private := &privateRequestRecorder{}
 	projected := ProjectPlatformCommandRunner(private)
 	recovered := AdaptPlatformCommandRunner(projected)
@@ -337,48 +336,6 @@ func TestAdaptPlatformCommandRunnerRecoversPrivateRequestContext(t *testing.T) {
 		private.request.WorkstationName != request.WorkstationName ||
 		private.request.DispatchID != request.DispatchID {
 		t.Fatalf("private request = %#v, want Workers correlation from %#v", private.request, request)
-	}
-}
-
-func TestProjectPlatformCommandRunnerRestoresDispatchContext(t *testing.T) {
-	private := &privateRequestRecorder{}
-	projected := ProjectPlatformCommandRunner(private)
-	dispatch := work.WorkDispatch{
-		DispatchID:      "dispatch-1",
-		WorkerType:      "mocked-worker",
-		WorkstationName: "mock-process",
-		ProjectID:       "project-1",
-		InputTokens: workers.InputTokens(workers.Token{
-			ID:    "token-1",
-			State: "ready",
-			Color: workers.Color{
-				Name:       "input",
-				RequestID:  "request-1",
-				WorkID:     "work-1",
-				WorkTypeID: "type-1",
-				DataType:   workers.DataTypeWork,
-				Content: []work.WorkContentPart{{
-					Type: work.WorkContentPartTypeText,
-					Text: "payload",
-				}},
-			},
-		}),
-		InputBindings: map[string][]string{"primary": {"token-1"}},
-	}
-	ctx := work.WithCommandDispatch(t.Context(), dispatch)
-	if _, err := projected.Run(ctx, platformprocess.CommandRequest{Command: "codex"}); err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
-	if private.request.DispatchID != dispatch.DispatchID ||
-		private.request.WorkerType != dispatch.WorkerType ||
-		private.request.WorkstationName != dispatch.WorkstationName ||
-		private.request.ProjectID != dispatch.ProjectID {
-		t.Fatalf("private dispatch metadata = %#v, want %#v", private.request, dispatch)
-	}
-	if len(private.request.Inputs) != 1 ||
-		private.request.Inputs[0].InputNames[0] != "primary" ||
-		private.request.Inputs[0].WorkID != "work-1" {
-		t.Fatalf("private inputs = %#v, want the dispatch input projection", private.request.Inputs)
 	}
 }
 

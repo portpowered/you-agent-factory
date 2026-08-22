@@ -40,7 +40,6 @@ func NewCommandEffect(candidate any, clock platformclock.Source) Effect {
 		if err != nil {
 			return EffectResult{}, execution.AttemptFailure{NativeError: err}
 		}
-		ctx = commanddispatch.WithRequestContext(ctx, request.ExecuteRequest)
 		result, runErr := runStreaming(ctx, runner, request.ExecuteRequest, command, observe)
 		effectResult := EffectResult{DurationMillis: clock.Now().Sub(started).Milliseconds()}
 		if runErr != nil {

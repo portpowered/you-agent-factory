@@ -1,7 +1,6 @@
 package commanddispatch
 
 import (
-	"context"
 	"errors"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -9,44 +8,6 @@ import (
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
-
-// WithRequestContext carries the request-owned dispatch metadata through a
-// platform-shaped command effect so an owner-private adapter can restore it.
-func WithRequestContext(ctx context.Context, request providers.ExecuteRequest) context.Context {
-	if ctx == nil {
-		return nil
-	}
-	dispatchID := request.Correlation.DispatchID
-	if dispatchID == "" {
-		dispatchID = request.AttemptID
-	}
-	return work.WithCommandDispatch(ctx, work.WorkDispatch{
-		DispatchID:      dispatchID,
-		TransitionID:    request.TransitionID,
-		WorkerType:      request.WorkerType,
-		WorkstationName: request.WorkstationName,
-		ProjectID:       request.ProjectID,
-		InputTokens:     append([]any(nil), request.InputTokens...),
-		InputBindings:   cloneStringSliceMap(request.InputBindings),
-		Execution: work.ExecutionMetadata{
-			RequestID: request.Correlation.RequestID,
-			TraceID:   request.Correlation.TraceID,
-			ReplayKey: request.Correlation.ReplayKey,
-			WorkIDs:   append([]string(nil), request.Correlation.WorkIDs...),
-		},
-	})
-}
-
-func cloneStringSliceMap(values map[string][]string) map[string][]string {
-	if len(values) == 0 {
-		return nil
-	}
-	clone := make(map[string][]string, len(values))
-	for key, items := range values {
-		clone[key] = append([]string(nil), items...)
-	}
-	return clone
-}
 
 // workFailureType* mirror the Workers normalized failure vocabulary that
 // execution diagnostics are keyed by. Providers does not depend on Workers, so
@@ -89,9 +50,18 @@ func Request(
 	request providers.ExecuteRequest,
 	command providerservice.CommandRequest,
 ) providerservice.CommandRequest {
+	dispatchID := request.Correlation.DispatchID
+	if dispatchID == "" {
+		dispatchID = request.AttemptID
+	}
+	command.DispatchID = dispatchID
 	command.AttemptID = request.AttemptID
+	command.TransitionID = request.TransitionID
 	command.WorkerType = request.WorkerType
 	command.WorkstationName = request.WorkstationName
+	command.ProjectID = request.ProjectID
+	command.InputTokens = append([]any(nil), request.InputTokens...)
+	command.InputBindings = cloneStringSliceMap(request.InputBindings)
 	command.Execution = work.ExecutionMetadata{
 		RequestID: request.Correlation.RequestID,
 		TraceID:   request.Correlation.TraceID,
@@ -101,4 +71,15 @@ func Request(
 	command.ExecutionLogger = request.ExecutionLogger
 	command.ProcessLifecycleObserver = request.ProcessLifecycleObserver
 	return command
+}
+
+func cloneStringSliceMap(values map[string][]string) map[string][]string {
+	if len(values) == 0 {
+		return nil
+	}
+	clone := make(map[string][]string, len(values))
+	for key, items := range values {
+		clone[key] = append([]string(nil), items...)
+	}
+	return clone
 }
