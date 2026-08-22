@@ -232,3 +232,230 @@ func TestHandlerPullModelOwnsErrorMapping(t *testing.T) {
 		t.Fatalf("response = %d %s, want mapped internal error", recorder.Code, recorder.Body.String())
 	}
 }
+
+// TestModelsHTTPCharacterizationListResponse pins the complete JSON body
+// emitted by GET /models at the public Models handler boundary.
+func TestModelsHTTPCharacterizationListResponse(t *testing.T) {
+	t.Parallel()
+	root := &rootFake{
+		listCatalog: func(context.Context, modelcontract.ListModelsRequest) (modelcontract.ListModelsResult, error) {
+			return modelcontract.ListModelsResult{Models: []modelcontract.Summary{characterizationHTTPModelSummary()}}, nil
+		},
+	}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.ListModels(recorder, httptest.NewRequest(http.MethodGet, "/models", nil))
+	assertModelsHTTPCharacterizationJSON(t, recorder, http.StatusOK, characterizationHTTPListBody)
+}
+
+func TestModelsHTTPCharacterizationDetailResponse(t *testing.T) {
+	t.Parallel()
+	root := &rootFake{
+		getCatalog: func(context.Context, modelcontract.GetModelRequest) (modelcontract.GetModelResult, error) {
+			return modelcontract.GetModelResult{Model: characterizationHTTPModelDetail()}, nil
+		},
+	}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.GetModel(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/models/OMNIVOICE_Q4_K_M", nil),
+		"OMNIVOICE_Q4_K_M",
+	)
+	assertModelsHTTPCharacterizationJSON(t, recorder, http.StatusOK, characterizationHTTPDetailBody)
+}
+
+func TestModelsHTTPCharacterizationInvocationResponse(t *testing.T) {
+	t.Parallel()
+	invoker := modelInvokerFake{
+		invoke: func(_ context.Context, name string, request modelcontract.Request) (modelcontract.Result, error) {
+			if name != "OMNIVOICE_Q4_K_M" || request.Operation != "TTS" {
+				t.Fatalf("invoke request = (%q, %#v), want OMNIVOICE_Q4_K_M/TTS", name, request)
+			}
+			return modelcontract.Result{
+				ModelName: name, Worker: "tts-executor", Operation: request.Operation,
+				ProviderLocality: string(modelcontract.LocalityLocal),
+				Content: []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeAudio, File: "artifacts/output.wav", ContentType: "audio/wav",
+				}},
+				Bindings: []modelcontract.ResolvedModelOperationBinding{{
+					Slot: "text", Source: "INPUT", Content: []work.WorkContentPart{{
+						Type: work.WorkContentPartTypeText, Text: "hello world",
+					}},
+				}},
+			}, nil
+		},
+	}
+	handler := NewHandlerFromRoot(RootBinding{Models: &rootFake{}, Invoker: invoker}, zap.NewNop())
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPost, "/models/OMNIVOICE_Q4_K_M/invocations",
+		strings.NewReader(`{"operation":"TTS","content":[{"type":"TEXT","text":"hello world"}]}`),
+	)
+	handler.InvokeModel(recorder, request, "OMNIVOICE_Q4_K_M")
+	assertModelsHTTPCharacterizationJSON(t, recorder, http.StatusOK, characterizationHTTPInvocationBody)
+}
+
+func TestModelsHTTPCharacterizationPullResponse(t *testing.T) {
+	t.Parallel()
+	root := &rootFake{
+		pullForScope: func(_ context.Context, request modelcontract.PullModelRequest) (modelcontract.PullResult, error) {
+			return modelcontract.PullResult{
+				ModelName: request.Name, ProviderLocality: string(modelcontract.LocalityLocal), Outcome: "PULLED",
+				CachePath: "/models/OMNIVOICE_Q4_K_M/rev-2026", Revision: "rev-2026",
+				ManagedPullOutcome: "INSTALLED_SUCCESSFULLY", ReadinessState: "READY",
+				DownloadedFiles: []modelcontract.DownloadedFile{
+					{Path: "weights.gguf", Bytes: 42, SHA256: "abc123"}, {Path: "config.json", Bytes: 7},
+				},
+			}, nil
+		},
+	}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.PullModel(
+		recorder,
+		httptest.NewRequest(http.MethodPost, "/models/OMNIVOICE_Q4_K_M/pull", nil),
+		"OMNIVOICE_Q4_K_M",
+	)
+	assertModelsHTTPCharacterizationJSON(t, recorder, http.StatusOK, characterizationHTTPPullBody)
+}
+
+func TestModelsHTTPCharacterizationUnknownModelErrors(t *testing.T) {
+	t.Parallel()
+
+	t.Run("catalog detail", func(t *testing.T) {
+		t.Parallel()
+		root := &rootFake{
+			getCatalog: func(context.Context, modelcontract.GetModelRequest) (modelcontract.GetModelResult, error) {
+				return modelcontract.GetModelResult{}, modelcontract.ErrNotFound
+			},
+		}
+		handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+		recorder := httptest.NewRecorder()
+
+		handler.GetModel(recorder, httptest.NewRequest(http.MethodGet, "/models/MISSING", nil), "MISSING")
+
+		assertModelsHTTPCharacterizationJSON(t, recorder, http.StatusNotFound, characterizationHTTPNotFoundBody)
+	})
+
+	t.Run("pull", func(t *testing.T) {
+		t.Parallel()
+		root := &rootFake{
+			pullForScope: func(context.Context, modelcontract.PullModelRequest) (modelcontract.PullResult, error) {
+				return modelcontract.PullResult{}, modelcontract.ErrNotFound
+			},
+		}
+		handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+		recorder := httptest.NewRecorder()
+
+		handler.PullModel(recorder, httptest.NewRequest(http.MethodPost, "/models/MISSING/pull", nil), "MISSING")
+
+		assertModelsHTTPCharacterizationJSON(t, recorder, http.StatusNotFound, characterizationHTTPNotFoundBody)
+	})
+
+	t.Run("invocation", func(t *testing.T) {
+		t.Parallel()
+		invoker := modelInvokerFake{
+			invoke: func(context.Context, string, modelcontract.Request) (modelcontract.Result, error) {
+				// Characterized, not endorsed: an unknown direct-invocation model
+				// currently reaches the runtime classifier as a generic failure,
+				// unlike catalog and pull lookups that preserve NOT_FOUND.
+				return modelcontract.Result{}, &modelcontract.InferenceFailure{
+					Class:     modelcontract.InferenceFailureClassRuntimeFailure,
+					Message:   `inference failed for model "MISSING" operation "TTS": model not found: MISSING`,
+					ModelName: "MISSING",
+					Operation: "TTS",
+				}
+			},
+		}
+		handler := NewHandlerFromRoot(RootBinding{Models: &rootFake{}, Invoker: invoker}, zap.NewNop())
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(
+			http.MethodPost,
+			"/models/MISSING/invocations",
+			strings.NewReader(`{"operation":"TTS","content":[{"type":"TEXT","text":"hello world"}]}`),
+		)
+
+		handler.InvokeModel(recorder, request, "MISSING")
+
+		assertModelsHTTPCharacterizationJSON(t, recorder, http.StatusInternalServerError, characterizationHTTPInvocationNotFoundBody)
+	})
+}
+
+func assertModelsHTTPCharacterizationJSON(
+	t *testing.T,
+	recorder *httptest.ResponseRecorder,
+	wantStatus int,
+	wantBody string,
+) {
+	t.Helper()
+	if recorder.Code != wantStatus {
+		t.Fatalf("status = %d, want %d body = %q", recorder.Code, wantStatus, recorder.Body.String())
+	}
+	if got := recorder.Header().Get("Content-Type"); got != "application/json" {
+		t.Fatalf("Content-Type = %q, want application/json", got)
+	}
+	wantBody = strings.ReplaceAll(wantBody, `\n`, "\n")
+	if got := recorder.Body.String(); got != wantBody {
+		t.Fatalf("body = %q, want exact %q", got, wantBody)
+	}
+}
+
+func characterizationHTTPModelSummary() modelcontract.Summary {
+	return modelcontract.Summary{
+		Name: "OMNIVOICE_Q4_K_M", ProviderLocality: modelcontract.LocalityLocal,
+		Status: modelcontract.StatusReady, LoadState: modelcontract.LoadStateUnloaded,
+		Operations: []modelcontract.Operation{characterizationHTTPTTSOperation()},
+		Modalities: []string{"TEXT", "AUDIO"},
+		Resources: []modelcontract.ResourceSummary{{
+			Name: "omnivoice-cache", Type: "MODEL", Capacity: 1,
+			Model: characterizationHTTPString("OMNIVOICE_Q4_K_M"), Backend: characterizationHTTPString("LLAMACPP"),
+			LoadPolicy: characterizationHTTPString("ON_DEMAND"),
+		}},
+		ManagedRuntime: modelcontract.Runtime{
+			Identity: "OMNIVOICE_Q4_K_M", ReadinessState: modelcontract.ReadinessStateReady,
+			LifecycleState: modelcontract.LifecycleStateInstalled, Locality: modelcontract.LocalityLocal,
+			SupportedOperations: []modelcontract.Operation{characterizationHTTPTTSOperation()},
+			Diagnostics:         map[string]string{"cache": "omnivoice-cache"},
+		},
+	}
+}
+
+func characterizationHTTPModelDetail() modelcontract.Detail {
+	summary := characterizationHTTPModelSummary()
+	return modelcontract.Detail{
+		Summary: summary,
+		Capabilities: []modelcontract.Capability{{
+			Worker: "tts-executor", ProviderLocality: modelcontract.LocalityLocal,
+			ModelProvider: characterizationHTTPString("CODEX"), Operations: []modelcontract.Operation{characterizationHTTPTTSOperation()},
+			ResourceNames: []string{"omnivoice-cache"},
+		}},
+		Diagnostics: map[string]string{"statusReason": "managed runtime is discoverable"},
+	}
+}
+
+func characterizationHTTPTTSOperation() modelcontract.Operation {
+	required := true
+	return modelcontract.Operation{
+		Name: "TTS",
+		Inputs: []modelcontract.OperationSlot{{
+			Name: "text", ContentTypes: []string{"TEXT"}, Required: &required,
+		}},
+		Outputs: []modelcontract.OperationSlot{{
+			Name: "audio", ContentTypes: []string{"AUDIO"},
+		}},
+	}
+}
+
+func characterizationHTTPString(value string) *string {
+	return &value
+}
+
+const (
+	characterizationHTTPListBody               = `{"results":[{"loadState":"UNLOADED","managedRuntime":{"diagnostics":{"cache":"omnivoice-cache"},"identity":"OMNIVOICE_Q4_K_M","lifecycleState":"INSTALLED","locality":"LOCAL","readinessState":"READY","supportedOperations":[{"inputs":[{"contentTypes":["TEXT"],"name":"text","required":true}],"name":"TTS","outputs":[{"contentTypes":["AUDIO"],"name":"audio"}]}]},"modalities":["TEXT","AUDIO"],"name":"OMNIVOICE_Q4_K_M","operations":[{"inputs":[{"contentTypes":["TEXT"],"name":"text","required":true}],"name":"TTS","outputs":[{"contentTypes":["AUDIO"],"name":"audio"}]}],"providerLocality":"LOCAL","resources":[{"backend":"LLAMACPP","capacity":1,"loadPolicy":"ON_DEMAND","model":"OMNIVOICE_Q4_K_M","name":"omnivoice-cache","type":"MODEL"}],"status":"READY"}]}\n`
+	characterizationHTTPDetailBody             = `{"capabilities":[{"modelProvider":"CODEX","operations":[{"inputs":[{"contentTypes":["TEXT"],"name":"text","required":true}],"name":"TTS","outputs":[{"contentTypes":["AUDIO"],"name":"audio"}]}],"providerLocality":"LOCAL","resourceNames":["omnivoice-cache"],"worker":"tts-executor"}],"diagnostics":{"statusReason":"managed runtime is discoverable"},"loadState":"UNLOADED","managedRuntime":{"diagnostics":{"cache":"omnivoice-cache"},"identity":"OMNIVOICE_Q4_K_M","lifecycleState":"INSTALLED","locality":"LOCAL","readinessState":"READY","supportedOperations":[{"inputs":[{"contentTypes":["TEXT"],"name":"text","required":true}],"name":"TTS","outputs":[{"contentTypes":["AUDIO"],"name":"audio"}]}]},"modalities":["TEXT","AUDIO"],"name":"OMNIVOICE_Q4_K_M","operations":[{"inputs":[{"contentTypes":["TEXT"],"name":"text","required":true}],"name":"TTS","outputs":[{"contentTypes":["AUDIO"],"name":"audio"}]}],"providerLocality":"LOCAL","resources":[{"backend":"LLAMACPP","capacity":1,"loadPolicy":"ON_DEMAND","model":"OMNIVOICE_Q4_K_M","name":"omnivoice-cache","type":"MODEL"}],"status":"READY"}\n`
+	characterizationHTTPInvocationBody         = `{"bindings":[{"content":[{"text":"hello world","type":"text"}],"slot":"text","source":"INPUT"}],"content":[{"contentType":"audio/wav","file":"artifacts/output.wav","type":"AUDIO","url":""}],"modelName":"OMNIVOICE_Q4_K_M","operation":"TTS","providerLocality":"LOCAL","worker":"tts-executor"}\n`
+	characterizationHTTPPullBody               = `{"cachePath":"/models/OMNIVOICE_Q4_K_M/rev-2026","downloadedFiles":[{"bytes":42,"path":"weights.gguf","sha256":"abc123"},{"bytes":7,"path":"config.json"}],"managedRuntimePull":{"cachePath":"/models/OMNIVOICE_Q4_K_M/rev-2026","downloadedFiles":[{"bytes":42,"path":"weights.gguf","sha256":"abc123"},{"bytes":7,"path":"config.json"}],"identity":"OMNIVOICE_Q4_K_M","pullOutcome":"INSTALLED_SUCCESSFULLY","readinessState":"READY","revision":"rev-2026"},"modelName":"OMNIVOICE_Q4_K_M","outcome":"PULLED","providerLocality":"LOCAL","revision":"rev-2026"}\n`
+	characterizationHTTPNotFoundBody           = `{"code":"NOT_FOUND","family":"NOT_FOUND","message":"model not found"}\n`
+	characterizationHTTPInvocationNotFoundBody = `{"code":"MODEL_INFERENCE_RUNTIME_FAILURE","family":"INTERNAL_SERVER_ERROR","message":"inference failed for model \"MISSING\" operation \"TTS\": model not found: MISSING"}\n`
+)
