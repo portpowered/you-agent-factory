@@ -28,6 +28,8 @@ var settledRetiredCLIInvocations = []struct {
 	{name: "factory query", args: []string{"factory", "query"}},
 	{name: "work visualize", args: []string{"work", "visualize"}},
 	{name: "session dispatches", args: []string{"session", "dispatches", "session-customer"}},
+	{name: "serve acp", args: []string{"serve", "acp"}},
+	{name: "mcp serve", args: []string{"mcp", "serve"}},
 }
 
 var canonicalCLIReplacementPaths = [][]string{

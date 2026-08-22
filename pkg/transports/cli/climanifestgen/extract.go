@@ -47,14 +47,16 @@ func ExtractFactoryConfigInitFamily(manifest climanifest.Manifest) (climanifest.
 	return extractFamily(manifest, "factory/config/init", FactoryConfigInitFamilyCommandIDs)
 }
 
-// ExtractMCPFamily returns canonical metadata for you mcp and you mcp serve.
+// ExtractMCPFamily returns canonical metadata for the shared server parent and
+// its MCP child.
 func ExtractMCPFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
-	return extractFamily(manifest, "canonical MCP", MCPFamilyCommandIDs)
+	return extractFamily(manifest, "canonical server MCP", MCPFamilyCommandIDs)
 }
 
-// ExtractServeFamily returns canonical metadata for you serve and you serve acp.
+// ExtractServeFamily returns canonical metadata for the shared server parent
+// and its ACP child.
 func ExtractServeFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
-	return extractFamily(manifest, "canonical serve", ServeFamilyCommandIDs)
+	return extractFamily(manifest, "canonical server ACP", ServeFamilyCommandIDs)
 }
 
 func extractFamily(

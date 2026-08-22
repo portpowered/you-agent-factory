@@ -11903,583 +11903,8 @@
         "id": "you.workers.acp.delete.handler"
       }
     },
-    "you.mcp": {
-      "aliases": [],
-      "channels": {
-        "input": [
-          "cli",
-          "env",
-          "config"
-        ],
-        "output": [
-          "stdout",
-          "stderr"
-        ]
-      },
-      "completeness": "authoritative",
-      "constraints": {
-        "platforms": [
-          "linux",
-          "darwin",
-          "windows"
-        ],
-        "runtime": [
-          "local"
-        ]
-      },
-      "documentation": {
-        "documentation": {
-          "description": {
-            "canonicalEnglish": "Model Context Protocol servers for Factory Session tools.",
-            "id": "you.mcp.description"
-          },
-          "title": {
-            "canonicalEnglish": "Model Context Protocol servers for Factory Session tools",
-            "id": "you.mcp.title"
-          }
-        },
-        "examples": [
-          "you mcp serve"
-        ],
-        "formatVersion": "1.0.0",
-        "itemId": "you.mcp",
-        "sourceHash": "88976e1033d956915b9954b5cc6aebd0fe3788f03858869e685640a415133b57",
-        "visibility": "public"
-      },
-      "id": "you.mcp",
-      "lifecycle": {
-        "formatVersion": "1.0.0",
-        "itemId": "you.mcp",
-        "since": "1.0.0",
-        "state": "active"
-      },
-      "name": "mcp",
-      "path": "you mcp",
-      "flags": {
-        "you.mcp.flag.debug": {
-          "id": "you.mcp.flag.debug",
-          "long": "debug",
-          "shorthand": "d",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.debug",
-          "valueType": "bool",
-          "required": false,
-          "default": "false",
-          "changedDefault": false,
-          "noOptionDefault": "true",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.mcp.flag.debug",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.mcp.flag.json": {
-          "id": "you.mcp.flag.json",
-          "long": "json",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.json",
-          "valueType": "bool",
-          "required": false,
-          "default": "false",
-          "changedDefault": false,
-          "noOptionDefault": "true",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.mcp.flag.json",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.mcp.flag.remote": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "false",
-          "id": "you.mcp.flag.remote",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.mcp.flag.remote",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "remote",
-          "noOptionDefault": "true",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.remote",
-          "shorthand": "",
-          "valueType": "bool",
-          "visibility": "visible"
-        },
-        "you.mcp.flag.server": {
-          "id": "you.mcp.flag.server",
-          "long": "server",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.server",
-          "valueType": "string",
-          "required": false,
-          "default": "http://localhost:7437",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.mcp.flag.server",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.mcp.flag.verbose": {
-          "id": "you.mcp.flag.verbose",
-          "long": "verbose",
-          "shorthand": "v",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.verbose",
-          "valueType": "bool",
-          "required": false,
-          "default": "false",
-          "changedDefault": false,
-          "noOptionDefault": "true",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.mcp.flag.verbose",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        }
-      },
-      "precedence": {
-        "order": [
-          "cli",
-          "stdin",
-          "environment",
-          "operator-config",
-          "manifest-default",
-          "factory-signature-default"
-        ],
-        "withinTier": {
-          "scalar": "last",
-          "repeated": "append"
-        },
-        "acrossTiers": "replace",
-        "multipleBindings": "reject"
-      },
-      "runnable": false,
-      "usage": {
-        "line": "mcp"
-      },
-      "visibility": "visible"
-    },
-    "you.mcp.serve": {
-      "aliases": [],
-      "channels": {
-        "input": [
-          "cli",
-          "env",
-          "config",
-          "stdin"
-        ],
-        "output": [
-          "stdout",
-          "stderr"
-        ]
-      },
-      "completeness": "authoritative",
-      "constraints": {
-        "platforms": [
-          "linux",
-          "darwin",
-          "windows"
-        ],
-        "runtime": [
-          "local"
-        ]
-      },
-      "documentation": {
-        "documentation": {
-          "description": {
-            "canonicalEnglish": "Start the dynamic workflow Factory Session MCP server over stdio.\n\nHosts launch this command as a child process and communicate through newline-delimited JSON-RPC on stdin and stdout. The default backing service is the deterministic durable session fixture catalog used by workflow CLI commands.\n\nUse --runtime to select the shared durable JavaScript runtime execution service instead of the fixture catalog. Runtime mode requires workflow sources to resolve from the MCP host working directory or an explicit --project-root.\n\nSet the MCP host working directory to the project root where workflow sources and the fixture catalog resolve. See `you docs mcp` for host configuration, serve modes, smoke, and troubleshooting.",
-            "id": "you.mcp.serve.description"
-          },
-          "title": {
-            "canonicalEnglish": "Start the Factory Session MCP stdio server",
-            "id": "you.mcp.serve.title"
-          }
-        },
-        "examples": [
-          "you mcp serve",
-          "you mcp serve --fixture-catalog ./pkg/transports/http/testdata/durable-session-contract-fixtures.json",
-          "you mcp serve --runtime"
-        ],
-        "formatVersion": "1.0.0",
-        "itemId": "you.mcp.serve",
-        "sourceHash": "88976e1033d956915b9954b5cc6aebd0fe3788f03858869e685640a415133b57",
-        "visibility": "public"
-      },
-      "exits": {
-        "you.mcp.serve.exit.cancel": {
-          "code": 1,
-          "id": "you.mcp.serve.exit.cancel",
-          "kind": "cancel"
-        },
-        "you.mcp.serve.exit.failure": {
-          "code": 1,
-          "id": "you.mcp.serve.exit.failure",
-          "kind": "failure"
-        },
-        "you.mcp.serve.exit.success": {
-          "code": 0,
-          "id": "you.mcp.serve.exit.success",
-          "kind": "success"
-        },
-        "you.mcp.serve.exit.usage": {
-          "code": 1,
-          "id": "you.mcp.serve.exit.usage",
-          "kind": "usage"
-        }
-      },
-      "flags": {
-        "you.mcp.serve.flag.debug": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "false",
-          "id": "you.mcp.serve.flag.debug",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.mcp.serve.flag.debug",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "debug",
-          "noOptionDefault": "true",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.debug",
-          "shorthand": "d",
-          "valueType": "bool",
-          "visibility": "visible"
-        },
-        "you.mcp.serve.flag.fixture-catalog": {
-          "acceptedSources": [
-            "cli",
-            "manifest-default"
-          ],
-          "aliases": [],
-          "completion": "none",
-          "defaultValue": {
-            "string": ""
-          },
-          "handlerBindingId": "you.mcp.serve.binding.fixture-catalog",
-          "id": "you.mcp.serve.flag.fixture-catalog",
-          "kind": "named",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.mcp.serve.flag.fixture-catalog",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "fixture-catalog",
-          "maxCardinality": 1,
-          "minCardinality": 0,
-          "normalization": "trim",
-          "repeatable": false,
-          "required": false,
-          "scope": "local",
-          "sensitivity": "public",
-          "shorthand": "",
-          "usage": "optional path to durable-session contract fixtures; defaults to the catalog discovered from the current working directory",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.mcp.serve.flag.json": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "false",
-          "id": "you.mcp.serve.flag.json",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.mcp.serve.flag.json",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "json",
-          "noOptionDefault": "true",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.json",
-          "shorthand": "",
-          "valueType": "bool",
-          "visibility": "visible"
-        },
-        "you.mcp.serve.flag.project-root": {
-          "acceptedSources": [
-            "cli",
-            "manifest-default"
-          ],
-          "aliases": [],
-          "completion": "none",
-          "defaultValue": {
-            "string": ""
-          },
-          "handlerBindingId": "you.mcp.serve.binding.project-root",
-          "id": "you.mcp.serve.flag.project-root",
-          "kind": "named",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.mcp.serve.flag.project-root",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "project-root",
-          "maxCardinality": 1,
-          "minCardinality": 0,
-          "normalization": "trim",
-          "repeatable": false,
-          "required": false,
-          "scope": "local",
-          "sensitivity": "public",
-          "shorthand": "",
-          "usage": "project root for workflow source resolution in --runtime mode; defaults to the current working directory",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.mcp.serve.flag.runtime": {
-          "acceptedSources": [
-            "cli",
-            "manifest-default"
-          ],
-          "aliases": [],
-          "completion": "none",
-          "defaultValue": {
-            "boolean": false
-          },
-          "handlerBindingId": "you.mcp.serve.binding.runtime",
-          "id": "you.mcp.serve.flag.runtime",
-          "kind": "named",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.mcp.serve.flag.runtime",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "runtime",
-          "maxCardinality": 1,
-          "minCardinality": 0,
-          "noOptionDefaultValue": {
-            "boolean": true
-          },
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "local",
-          "sensitivity": "public",
-          "shorthand": "",
-          "usage": "select the shared durable JavaScript runtime execution service instead of the fixture catalog",
-          "valueType": "bool",
-          "visibility": "visible"
-        },
-        "you.mcp.serve.flag.remote": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "false",
-          "id": "you.mcp.serve.flag.remote",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.mcp.serve.flag.remote",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "remote",
-          "noOptionDefault": "true",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.remote",
-          "shorthand": "",
-          "valueType": "bool",
-          "visibility": "visible"
-        },
-        "you.mcp.serve.flag.server": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "http://localhost:7437",
-          "id": "you.mcp.serve.flag.server",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.mcp.serve.flag.server",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "server",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.server",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.mcp.serve.flag.verbose": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "false",
-          "id": "you.mcp.serve.flag.verbose",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.mcp.serve.flag.verbose",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "verbose",
-          "noOptionDefault": "true",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.verbose",
-          "shorthand": "v",
-          "valueType": "bool",
-          "visibility": "visible"
-        }
-      },
-      "handler": {
-        "id": "you.mcp.serve.handler"
-      },
-      "handlerBindings": {
-        "you.mcp.serve.binding.fixture-catalog": {
-          "id": "you.mcp.serve.binding.fixture-catalog",
-          "inputId": "you.mcp.serve.flag.fixture-catalog"
-        },
-        "you.mcp.serve.binding.project-root": {
-          "id": "you.mcp.serve.binding.project-root",
-          "inputId": "you.mcp.serve.flag.project-root"
-        },
-        "you.mcp.serve.binding.runtime": {
-          "id": "you.mcp.serve.binding.runtime",
-          "inputId": "you.mcp.serve.flag.runtime"
-        }
-      },
-      "id": "you.mcp.serve",
-      "lifecycle": {
-        "formatVersion": "1.0.0",
-        "itemId": "you.mcp.serve",
-        "since": "1.0.0",
-        "state": "active"
-      },
-      "name": "serve",
-      "outputs": {
-        "you.mcp.serve.output.diagnostic": {
-          "channel": "stderr",
-          "format": "text",
-          "id": "you.mcp.serve.output.diagnostic"
-        },
-        "you.mcp.serve.output.protocol": {
-          "channel": "stdout",
-          "format": "json",
-          "id": "you.mcp.serve.output.protocol"
-        }
-      },
-      "path": "you mcp serve",
-      "precedence": {
-        "order": [
-          "cli",
-          "stdin",
-          "environment",
-          "operator-config",
-          "manifest-default",
-          "factory-signature-default"
-        ],
-        "withinTier": {
-          "scalar": "last",
-          "repeated": "append"
-        },
-        "acrossTiers": "replace",
-        "multipleBindings": "reject"
-      },
-      "relationships": {
-        "you.mcp.serve.relationship.runtime-source": {
-          "id": "you.mcp.serve.relationship.runtime-source",
-          "kind": "mutually-exclusive",
-          "participants": [
-            {
-              "type": "flag",
-              "id": "you.mcp.serve.flag.runtime"
-            },
-            {
-              "type": "flag",
-              "id": "you.mcp.serve.flag.fixture-catalog"
-            }
-          ]
-        }
-      },
-      "runnable": true,
-      "placement": "local-only",
-      "sideEffects": {
-        "you.mcp.serve.side-effect.filesystem": {
-          "id": "you.mcp.serve.side-effect.filesystem",
-          "kind": "filesystem"
-        },
-        "you.mcp.serve.side-effect.network": {
-          "id": "you.mcp.serve.side-effect.network",
-          "kind": "network"
-        },
-        "you.mcp.serve.side-effect.process": {
-          "id": "you.mcp.serve.side-effect.process",
-          "kind": "process"
-        }
-      },
-      "usage": {
-        "example": "  # Typical MCP host child-process launch.\n  you mcp serve\n\n  # Explicit fixture catalog for offline smoke outside the repository root.\n  you mcp serve --fixture-catalog ./pkg/transports/http/testdata/durable-session-contract-fixtures.json\n\n  # Runtime-backed serve against live durable JavaScript execution.\n  you mcp serve --runtime",
-        "line": "serve"
-      },
-      "visibility": "visible"
-    },
+
+
     "you.models": {
       "id": "you.models",
       "name": "models",
@@ -16184,12 +15609,14 @@
           },
           "description": {
             "id": "you.server.description",
-            "canonicalEnglish": "Validate and serve the exact Current Factory from ./factory/factory.json. This command is local-only and rejects --remote. The listener remains loopback-only; use --listen host:port for an exact local bind, or omit it for the default local bind. An explicit --server local URI remains a warned compatibility path. The command opens the embedded dashboard once after readiness and runs until cancellation."
+            "canonicalEnglish": "Validate and serve the exact Current Factory from ./factory/factory.json. This command is local-only and rejects --remote. The listener remains loopback-only; use --listen host:port for an exact local bind, or omit it for the default local bind. An explicit --server local URI remains a warned compatibility path. The command opens the embedded dashboard once after readiness and runs until cancellation. Use `you server acp` for the ACP stdio host or `you server mcp` for the MCP stdio host."
           }
         },
         "examples": [
           "you server",
           "you server --listen 127.0.0.1:7437",
+          "you server acp",
+          "you server mcp",
           "# Legacy local binding; emits a deprecation warning.\nyou --server http://127.0.0.1:7437 server"
         ],
         "visibility": "public",
@@ -17174,203 +16601,7 @@
         "operationId": "upsertWorkRequestBySessionId"
       }
     },
-    "you.serve": {
-      "aliases": [],
-      "completeness": "authoritative",
-      "documentation": {
-        "documentation": {
-          "description": {
-            "canonicalEnglish": "Host You as a protocol server for an external client. See `you serve acp --help` for the ACP stdio agent surface.",
-            "id": "you.serve.description"
-          },
-          "title": {
-            "canonicalEnglish": "Host You as a protocol server",
-            "id": "you.serve.title"
-          }
-        },
-        "examples": [
-          "you serve acp"
-        ],
-        "formatVersion": "1.0.0",
-        "itemId": "you.serve",
-        "sourceHash": "b63f9b99d9afe98d39c79dd1cf6f06527cf7af5f60195c56e2ef7297b5c7dd59",
-        "visibility": "public"
-      },
-      "id": "you.serve",
-      "lifecycle": {
-        "formatVersion": "1.0.0",
-        "itemId": "you.serve",
-        "since": "1.0.0",
-        "state": "active"
-      },
-      "name": "serve",
-      "path": "you serve",
-      "flags": {
-        "you.serve.flag.debug": {
-          "id": "you.serve.flag.debug",
-          "long": "debug",
-          "shorthand": "d",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.debug",
-          "valueType": "bool",
-          "required": false,
-          "default": "false",
-          "changedDefault": false,
-          "noOptionDefault": "true",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.serve.flag.debug",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.serve.flag.json": {
-          "id": "you.serve.flag.json",
-          "long": "json",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.json",
-          "valueType": "bool",
-          "required": false,
-          "default": "false",
-          "changedDefault": false,
-          "noOptionDefault": "true",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.serve.flag.json",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.serve.flag.remote": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "false",
-          "id": "you.serve.flag.remote",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.serve.flag.remote",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "remote",
-          "noOptionDefault": "true",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.remote",
-          "shorthand": "",
-          "valueType": "bool",
-          "visibility": "visible"
-        },
-        "you.serve.flag.server": {
-          "id": "you.serve.flag.server",
-          "long": "server",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.server",
-          "valueType": "string",
-          "required": false,
-          "default": "http://localhost:7437",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.serve.flag.server",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.serve.flag.verbose": {
-          "id": "you.serve.flag.verbose",
-          "long": "verbose",
-          "shorthand": "v",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.verbose",
-          "valueType": "bool",
-          "required": false,
-          "default": "false",
-          "changedDefault": false,
-          "noOptionDefault": "true",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.serve.flag.verbose",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        }
-      },
-      "runnable": false,
-      "usage": {
-        "line": "serve"
-      },
-      "visibility": "visible",
-      "channels": {
-        "input": [
-          "cli",
-          "env",
-          "config"
-        ],
-        "output": [
-          "stdout",
-          "stderr"
-        ]
-      },
-      "constraints": {
-        "platforms": [
-          "linux",
-          "darwin",
-          "windows"
-        ],
-        "runtime": [
-          "local"
-        ]
-      },
-      "precedence": {
-        "order": [
-          "cli",
-          "stdin",
-          "environment",
-          "operator-config",
-          "manifest-default",
-          "factory-signature-default"
-        ],
-        "withinTier": {
-          "scalar": "last",
-          "repeated": "append"
-        },
-        "acrossTiers": "replace",
-        "multipleBindings": "reject"
-      }
-    },
-    "you.serve.acp": {
+    "you.server.acp": {
       "aliases": [],
       "channels": {
         "input": [
@@ -17396,47 +16627,47 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Host You as an Agent Client Protocol (ACP) agent over stdio.\n\nACP clients (editors and IDEs) launch this command as a child process and exchange newline-delimited JSON-RPC on stdin and stdout. Diagnostics and sanitized startup or serve failures are written to stderr; stdout carries only complete ACP protocol frames.\n\nCleanly closing stdin (EOF) ends the connection successfully. This command hosts the same production ACP server the process composes through root.BuildProcess; it constructs no second service graph, Chat Sessions service, Factory Sessions service, or transport graph, and it does not start the HTTP or dashboard server.\n\nThis is distinct from `you workers acp add|delete`, which configures You's own use of external ACP-speaking provider agents, and from `you mcp serve`, which hosts the unrelated Model Context Protocol tool server.",
-            "id": "you.serve.acp.description"
+            "canonicalEnglish": "Host You as an Agent Client Protocol (ACP) agent over stdio.\n\nACP clients (editors and IDEs) launch this command as a child process and exchange newline-delimited JSON-RPC on stdin and stdout. Diagnostics and sanitized startup or serve failures are written to stderr; stdout carries only complete ACP protocol frames.\n\nCleanly closing stdin (EOF) ends the connection successfully. This command hosts the same production ACP server the process composes through root.BuildProcess; it constructs no second service graph, Chat Sessions service, Factory Sessions service, or transport graph, and it does not start the HTTP or dashboard server.\n\nThis is distinct from `you workers acp add|delete`, which configures You's own use of external ACP-speaking provider agents, and from `you server mcp`, which hosts the unrelated Model Context Protocol tool server.",
+            "id": "you.server.acp.description"
           },
           "title": {
             "canonicalEnglish": "Host You as an ACP agent over stdio",
-            "id": "you.serve.acp.title"
+            "id": "you.server.acp.title"
           }
         },
         "examples": [
-          "you serve acp"
+          "you server acp"
         ],
         "formatVersion": "1.0.0",
-        "itemId": "you.serve.acp",
+        "itemId": "you.server.acp",
         "sourceHash": "91a1458f9a0afe2f99c71237b17ae21e4cec1d52f213f235e16eceb79f2cb2ea",
         "visibility": "public"
       },
       "exits": {
-        "you.serve.acp.exit.cancel": {
+        "you.server.acp.exit.cancel": {
           "code": 1,
-          "id": "you.serve.acp.exit.cancel",
+          "id": "you.server.acp.exit.cancel",
           "kind": "cancel"
         },
-        "you.serve.acp.exit.failure": {
+        "you.server.acp.exit.failure": {
           "code": 1,
-          "id": "you.serve.acp.exit.failure",
+          "id": "you.server.acp.exit.failure",
           "kind": "failure"
         },
-        "you.serve.acp.exit.success": {
+        "you.server.acp.exit.success": {
           "code": 0,
-          "id": "you.serve.acp.exit.success",
+          "id": "you.server.acp.exit.success",
           "kind": "success"
         },
-        "you.serve.acp.exit.usage": {
+        "you.server.acp.exit.usage": {
           "code": 1,
-          "id": "you.serve.acp.exit.usage",
+          "id": "you.server.acp.exit.usage",
           "kind": "usage"
         }
       },
       "flags": {
-        "you.serve.acp.flag.debug": {
-          "id": "you.serve.acp.flag.debug",
+        "you.server.acp.flag.debug": {
+          "id": "you.server.acp.flag.debug",
           "long": "debug",
           "shorthand": "d",
           "aliases": [],
@@ -17454,13 +16685,13 @@
           "visibility": "visible",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.serve.acp.flag.debug",
+            "itemId": "you.server.acp.flag.debug",
             "state": "active",
             "since": "1.0.0"
           }
         },
-        "you.serve.acp.flag.verbose": {
-          "id": "you.serve.acp.flag.verbose",
+        "you.server.acp.flag.verbose": {
+          "id": "you.server.acp.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
           "aliases": [],
@@ -17478,46 +16709,46 @@
           "visibility": "visible",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "you.serve.acp.flag.verbose",
+            "itemId": "you.server.acp.flag.verbose",
             "state": "active",
             "since": "1.0.0"
           }
         }
       },
       "handler": {
-        "id": "you.serve.acp.handler"
+        "id": "you.server.acp.handler"
       },
-      "id": "you.serve.acp",
+      "id": "you.server.acp",
       "lifecycle": {
         "formatVersion": "1.0.0",
-        "itemId": "you.serve.acp",
+        "itemId": "you.server.acp",
         "since": "1.0.0",
         "state": "active"
       },
       "name": "acp",
       "outputs": {
-        "you.serve.acp.output.diagnostic": {
+        "you.server.acp.output.diagnostic": {
           "channel": "stderr",
           "format": "text",
-          "id": "you.serve.acp.output.diagnostic"
+          "id": "you.server.acp.output.diagnostic"
         },
-        "you.serve.acp.output.protocol": {
+        "you.server.acp.output.protocol": {
           "channel": "stdout",
           "format": "json",
-          "id": "you.serve.acp.output.protocol"
+          "id": "you.server.acp.output.protocol"
         }
       },
-      "path": "you serve acp",
+      "path": "you server acp",
       "runnable": true,
       "placement": "local-only",
       "sideEffects": {
-        "you.serve.acp.side-effect.process": {
-          "id": "you.serve.acp.side-effect.process",
+        "you.server.acp.side-effect.process": {
+          "id": "you.server.acp.side-effect.process",
           "kind": "process"
         }
       },
       "usage": {
-        "example": "  # Typical ACP host child-process launch.\n  you serve acp",
+        "example": "  # Typical ACP host child-process launch.\n  you server acp",
         "line": "acp"
       },
       "visibility": "visible",
@@ -17537,6 +16768,387 @@
         "acrossTiers": "replace",
         "multipleBindings": "reject"
       }
+    },
+    "you.server.mcp": {
+      "aliases": [],
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "completeness": "authoritative",
+      "constraints": {
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ],
+        "runtime": [
+          "local"
+        ]
+      },
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Start the dynamic workflow Factory Session MCP server over stdio.\n\nHosts launch this command as a child process and communicate through newline-delimited JSON-RPC on stdin and stdout. The default backing service is the deterministic durable session fixture catalog used by workflow CLI commands.\n\nUse --runtime to select the shared durable JavaScript runtime execution service instead of the fixture catalog. Runtime mode requires workflow sources to resolve from the MCP host working directory or an explicit --project-root.\n\nSet the MCP host working directory to the project root where workflow sources and the fixture catalog resolve. See `you docs mcp` for host configuration, serve modes, smoke, and troubleshooting.",
+            "id": "you.server.mcp.description"
+          },
+          "title": {
+            "canonicalEnglish": "Start the Factory Session MCP stdio server",
+            "id": "you.server.mcp.title"
+          }
+        },
+        "examples": [
+          "you server mcp",
+          "you server mcp --fixture-catalog ./pkg/transports/http/testdata/durable-session-contract-fixtures.json",
+          "you server mcp --runtime"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.server.mcp",
+        "sourceHash": "88976e1033d956915b9954b5cc6aebd0fe3788f03858869e685640a415133b57",
+        "visibility": "public"
+      },
+      "exits": {
+        "you.server.mcp.exit.cancel": {
+          "code": 1,
+          "id": "you.server.mcp.exit.cancel",
+          "kind": "cancel"
+        },
+        "you.server.mcp.exit.failure": {
+          "code": 1,
+          "id": "you.server.mcp.exit.failure",
+          "kind": "failure"
+        },
+        "you.server.mcp.exit.success": {
+          "code": 0,
+          "id": "you.server.mcp.exit.success",
+          "kind": "success"
+        },
+        "you.server.mcp.exit.usage": {
+          "code": 1,
+          "id": "you.server.mcp.exit.usage",
+          "kind": "usage"
+        }
+      },
+      "flags": {
+        "you.server.mcp.flag.debug": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.server.mcp.flag.debug",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.server.mcp.flag.debug",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "debug",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
+          "shorthand": "d",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.server.mcp.flag.fixture-catalog": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.server.mcp.binding.fixture-catalog",
+          "id": "you.server.mcp.flag.fixture-catalog",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.server.mcp.flag.fixture-catalog",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "fixture-catalog",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "trim",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "optional path to durable-session contract fixtures; defaults to the catalog discovered from the current working directory",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.server.mcp.flag.json": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.server.mcp.flag.json",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.server.mcp.flag.json",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "json",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.server.mcp.flag.project-root": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "string": ""
+          },
+          "handlerBindingId": "you.server.mcp.binding.project-root",
+          "id": "you.server.mcp.flag.project-root",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.server.mcp.flag.project-root",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "project-root",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "normalization": "trim",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "project root for workflow source resolution in --runtime mode; defaults to the current working directory",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.server.mcp.flag.runtime": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "boolean": false
+          },
+          "handlerBindingId": "you.server.mcp.binding.runtime",
+          "id": "you.server.mcp.flag.runtime",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.server.mcp.flag.runtime",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "runtime",
+          "maxCardinality": 1,
+          "minCardinality": 0,
+          "noOptionDefaultValue": {
+            "boolean": true
+          },
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "sensitivity": "public",
+          "shorthand": "",
+          "usage": "select the shared durable JavaScript runtime execution service instead of the fixture catalog",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.server.mcp.flag.remote": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.server.mcp.flag.remote",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.server.mcp.flag.remote",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "remote",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.server.mcp.flag.server": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "http://localhost:7437",
+          "id": "you.server.mcp.flag.server",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.server.mcp.flag.server",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "server",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.server.mcp.flag.verbose": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.server.mcp.flag.verbose",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.server.mcp.flag.verbose",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "verbose",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
+          "shorthand": "v",
+          "valueType": "bool",
+          "visibility": "visible"
+        }
+      },
+      "handler": {
+        "id": "you.server.mcp.handler"
+      },
+      "handlerBindings": {
+        "you.server.mcp.binding.fixture-catalog": {
+          "id": "you.server.mcp.binding.fixture-catalog",
+          "inputId": "you.server.mcp.flag.fixture-catalog"
+        },
+        "you.server.mcp.binding.project-root": {
+          "id": "you.server.mcp.binding.project-root",
+          "inputId": "you.server.mcp.flag.project-root"
+        },
+        "you.server.mcp.binding.runtime": {
+          "id": "you.server.mcp.binding.runtime",
+          "inputId": "you.server.mcp.flag.runtime"
+        }
+      },
+      "id": "you.server.mcp",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.server.mcp",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "mcp",
+      "outputs": {
+        "you.server.mcp.output.diagnostic": {
+          "channel": "stderr",
+          "format": "text",
+          "id": "you.server.mcp.output.diagnostic"
+        },
+        "you.server.mcp.output.protocol": {
+          "channel": "stdout",
+          "format": "json",
+          "id": "you.server.mcp.output.protocol"
+        }
+      },
+      "path": "you server mcp",
+      "precedence": {
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
+      "relationships": {
+        "you.server.mcp.relationship.runtime-source": {
+          "id": "you.server.mcp.relationship.runtime-source",
+          "kind": "mutually-exclusive",
+          "participants": [
+            {
+              "type": "flag",
+              "id": "you.server.mcp.flag.runtime"
+            },
+            {
+              "type": "flag",
+              "id": "you.server.mcp.flag.fixture-catalog"
+            }
+          ]
+        }
+      },
+      "runnable": true,
+      "placement": "local-only",
+      "sideEffects": {
+        "you.server.mcp.side-effect.filesystem": {
+          "id": "you.server.mcp.side-effect.filesystem",
+          "kind": "filesystem"
+        },
+        "you.server.mcp.side-effect.network": {
+          "id": "you.server.mcp.side-effect.network",
+          "kind": "network"
+        },
+        "you.server.mcp.side-effect.process": {
+          "id": "you.server.mcp.side-effect.process",
+          "kind": "process"
+        }
+      },
+      "usage": {
+        "example": "  # Typical MCP host child-process launch.\n  you server mcp\n\n  # Explicit fixture catalog for offline smoke outside the repository root.\n  you server mcp --fixture-catalog ./pkg/transports/http/testdata/durable-session-contract-fixtures.json\n\n  # Runtime-backed serve against live durable JavaScript execution.\n  you server mcp --runtime",
+        "line": "mcp"
+      },
+      "visibility": "visible"
     }
   },
   "formatVersion": "1.0.0",

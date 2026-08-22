@@ -171,7 +171,7 @@ The current canonical operator story is intentionally bounded:
 ## Related Topics
 
 - `you docs javascript-workflows` — select or author source, validate, start, inspect, and recover JavaScript workflows
-- `you docs mcp` — `you mcp serve` host setup, backing modes, smoke, and troubleshooting
+- `you docs mcp` — `you server mcp` host setup, backing modes, smoke, and troubleshooting
 - `you docs sessions` — session list, show, factory show, status API, and routing
 - `you docs config` — `factory.json` topology and portability
 - `you docs work` — submitted work and verification commands

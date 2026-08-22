@@ -75,15 +75,15 @@ func TestCLIManifestDiagnosticsAcceptPartialLegacyCommandWithoutPrecedence(t *te
 func TestCLIManifestDiagnosticsRejectUnknownRelationshipParticipant(t *testing.T) {
 	document := map[string]any{
 		"commands": map[string]any{
-			"you.mcp.serve": map[string]any{
+			"you.server.mcp": map[string]any{
 				"flags": map[string]any{
-					"you.mcp.serve.flag.runtime": map[string]any{"id": "you.mcp.serve.flag.runtime"},
+					"you.server.mcp.flag.runtime": map[string]any{"id": "you.server.mcp.flag.runtime"},
 				},
 				"relationships": map[string]any{
-					"you.mcp.serve.relationship.runtime-source": map[string]any{
+					"you.server.mcp.relationship.runtime-source": map[string]any{
 						"participants": []any{
-							map[string]any{"type": "flag", "id": "you.mcp.serve.flag.runtime"},
-							map[string]any{"type": "flag", "id": "you.mcp.serve.flag.fixture-catalog"},
+							map[string]any{"type": "flag", "id": "you.server.mcp.flag.runtime"},
+							map[string]any{"type": "flag", "id": "you.server.mcp.flag.fixture-catalog"},
 						},
 					},
 				},
@@ -98,7 +98,7 @@ func TestCLIManifestDiagnosticsRejectUnknownRelationshipParticipant(t *testing.T
 	if got := diagnostics[0].Code; got != "cli.relationship.unknown-participant" {
 		t.Fatalf("diagnostic code = %q, want cli.relationship.unknown-participant", got)
 	}
-	wantPath := "/commands/you.mcp.serve/relationships/you.mcp.serve.relationship.runtime-source/participants/1/id"
+	wantPath := "/commands/you.server.mcp/relationships/you.server.mcp.relationship.runtime-source/participants/1/id"
 	if got := diagnostics[0].Path; got != wantPath {
 		t.Fatalf("diagnostic path = %q, want %q", got, wantPath)
 	}

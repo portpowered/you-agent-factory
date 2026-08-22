@@ -224,8 +224,8 @@ sync response or fetched later; running sessions can report a not-ready final
 result while their status, partial result, dispatches, artifacts, and events
 remain inspectable.
 
-`you mcp serve` is fixture-backed by default for deterministic offline contract
-scenarios. Use `you mcp serve --runtime` for live JavaScript execution. Both
+`you server mcp` is fixture-backed by default for deterministic offline contract
+scenarios. Use `you server mcp --runtime` for live JavaScript execution. Both
 modes expose the same `you.factory_session.*` tool envelopes, but fixture-backed
 calls return catalog scenarios while runtime-backed calls execute resolved
 source.

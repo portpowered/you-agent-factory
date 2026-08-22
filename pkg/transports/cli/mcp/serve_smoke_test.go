@@ -121,7 +121,14 @@ func executeGeneratedMCPServe(
 		return err
 	}
 	manifest.Commands[rootRecord.ID] = rootRecord
-	serveRecord, err := manifest.CommandByID("you.mcp.serve")
+	serverRecord, err := manifest.CommandByID("you.server")
+	if err != nil {
+		return err
+	}
+	serverRecord.Runnable = false
+	serverRecord.Handler = nil
+	manifest.Commands[serverRecord.ID] = serverRecord
+	serveRecord, err := manifest.CommandByID("you.server.mcp")
 	if err != nil {
 		return err
 	}
@@ -141,7 +148,7 @@ func executeGeneratedMCPServe(
 	root.SetIn(stdin)
 	root.SetOut(stdout)
 	root.SetErr(io.Discard)
-	args := []string{"mcp", "serve"}
+	args := []string{"server", "mcp"}
 	if wantRuntime {
 		args = append(args, "--runtime")
 		if wantProjectRoot != "" {

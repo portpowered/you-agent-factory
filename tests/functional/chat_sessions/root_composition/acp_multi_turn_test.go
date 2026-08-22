@@ -38,7 +38,7 @@ import (
 // it too (proving the result reached the customer).
 func TestACPSessionAnswersEachTurnWithThatTurnsOwnResult(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test driving root.BuildProcess through the you serve acp CLI command")
+		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
 	home := t.TempDir()
@@ -149,7 +149,7 @@ func driveIdentifiedSessionPrompt(
 		raw := readServeACPLine(t, stdout)
 		var decoded serveACPLine
 		if err := json.Unmarshal(raw, &decoded); err != nil {
-			t.Fatalf("unmarshal serve acp line %q: %v", raw, err)
+			t.Fatalf("unmarshal you server acp line %q: %v", raw, err)
 		}
 		if decoded.Method == "session/update" {
 			notifications = append(notifications, decoded.Params)
@@ -158,7 +158,7 @@ func driveIdentifiedSessionPrompt(
 		if strings.Trim(string(decoded.ID), `"`) == requestID {
 			return decoded, notifications
 		}
-		t.Fatalf("unexpected serve acp line before the session/prompt response: %s", raw)
+		t.Fatalf("unexpected you server acp line before the session/prompt response: %s", raw)
 	}
 }
 

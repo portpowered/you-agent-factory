@@ -382,10 +382,10 @@ func TestMCPCommandIsDetachedAndManifestPresented(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mcp.Name() != "mcp" || mcp.Parent() != nil {
-		t.Fatalf("MCP command = name %q parent %v, want detached mcp", mcp.Name(), mcp.Parent())
+	if mcp.Name() != "server" || mcp.Parent() != nil {
+		t.Fatalf("MCP command = name %q parent %v, want detached server", mcp.Name(), mcp.Parent())
 	}
-	serve, _, err := mcp.Find([]string{"serve"})
+	serve, _, err := mcp.Find([]string{"mcp"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -413,13 +413,13 @@ func TestMCPCommandResolvesNormalizedInputsAndProvenance(t *testing.T) {
 			return nil
 		},
 	)
-	root.SetArgs([]string{"mcp", "serve", "--fixture-catalog", "  fixtures.json  ", "--project-root", "  project  "})
+	root.SetArgs([]string{"server", "mcp", "--fixture-catalog", "  fixtures.json  ", "--project-root", "  project  "})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
 	for inputID, want := range map[string]string{
-		"you.mcp.serve.flag.fixture-catalog": "fixtures.json",
-		"you.mcp.serve.flag.project-root":    "project",
+		"you.server.mcp.flag.fixture-catalog": "fixtures.json",
+		"you.server.mcp.flag.project-root":    "project",
 	} {
 		got, valueErr := local.String(inputID)
 		if valueErr != nil || got != want {
@@ -429,11 +429,11 @@ func TestMCPCommandResolvesNormalizedInputsAndProvenance(t *testing.T) {
 			Provenance: resolvedinput.SourceCLIFlag, Changed: true,
 		})
 	}
-	runtimeBacked, err := local.Bool("you.mcp.serve.flag.runtime")
+	runtimeBacked, err := local.Bool("you.server.mcp.flag.runtime")
 	if err != nil || runtimeBacked {
 		t.Fatalf("resolved runtime = %t, %v; want false", runtimeBacked, err)
 	}
-	assertMCPResolvedState(t, local, "you.mcp.serve.flag.runtime", resolvedinput.State{
+	assertMCPResolvedState(t, local, "you.server.mcp.flag.runtime", resolvedinput.State{
 		Provenance: resolvedinput.SourceManifestDefault, Default: true,
 	})
 }
@@ -456,7 +456,14 @@ func newMCPRoot(
 		t.Fatal(err)
 	}
 	manifest.Commands[rootRecord.ID] = rootRecord
-	serveRecord, err := manifest.CommandByID("you.mcp.serve")
+	serverRecord, err := manifest.CommandByID("you.server")
+	if err != nil {
+		t.Fatal(err)
+	}
+	serverRecord.Runnable = false
+	serverRecord.Handler = nil
+	manifest.Commands[serverRecord.ID] = serverRecord
+	serveRecord, err := manifest.CommandByID("you.server.mcp")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -485,7 +492,7 @@ func TestMCPManifestRelationshipRejectsConflictingSourcesBeforeHandler(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	mcp.SetArgs([]string{"serve", "--runtime", "--fixture-catalog", "fixtures.json"})
+	mcp.SetArgs([]string{"mcp", "--runtime", "--fixture-catalog", "fixtures.json"})
 	err = mcp.Execute()
 	if err == nil || err.Error() != "cannot combine --runtime with --fixture-catalog" {
 		t.Fatalf("execute error = %v, want manifest relationship rejection", err)

@@ -25,10 +25,10 @@ import (
 // canonical application graph"). Unlike acp_prompt_delegation_test.go and
 // acp_server_composition_test.go -- which both call process.ACPServer().Serve
 // directly, bypassing the CLI command tree -- this cell drives the real
-// customer-facing "you serve acp" Cobra command (pkg/transports/cli/root_serve.go)
+// customer-facing "you server acp" Cobra command (pkg/transports/cli/root_serve.go)
 // through Process.Execute, exactly the entrypoint the published you binary
 // runs, exercising strictly more of the production graph: Cobra command
-// construction -> the manifest-bound "you.serve.acp" handler ->
+// construction -> the manifest-bound "you.server.acp" handler ->
 // Process.ACPServer()'s same singular acp.Server -> the real Chat Sessions,
 // Events, and Factory Sessions authorities root.BuildProcess composes. It
 // supplies the one external provider effect through
@@ -103,7 +103,7 @@ import (
 // iteration picks up Factory Sessions work.
 func TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test driving root.BuildProcess through the you serve acp CLI command")
+		t.Skip("integration test driving root.BuildProcess through the you server acp CLI command")
 	}
 
 	home := t.TempDir()
@@ -117,7 +117,7 @@ func TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText(
 	seedInstalledPackagedFactory(t, home, "@you/goal")
 	support.SeedACPAgentProfile(t, home, "factory:@you/goal", []string{"factory:@you/goal"})
 
-	const wantPrimaryResultText = "goal genuinely completed through you serve acp"
+	const wantPrimaryResultText = "goal genuinely completed through you server acp"
 	rawEnvelopeStdout := fmt.Appendf(nil, `{"decision":"accepted","feedback":"","output":%q}`, wantPrimaryResultText)
 	runner := support.NewShapedProviderCommandRunner(process.CommandResult{
 		Stdout: rawEnvelopeStdout,
@@ -151,7 +151,7 @@ func TestACPServeCommandStreamsThroughRootBuildProcessWithoutDuplicateFinalText(
 // either a decision-envelope ProviderCommandRunner fixture or an ACP-execution
 // PlatformProcessCommandFactory/ProvidersExecutableLocator pair, see
 // acp_streaming_usage_composition_test.go's usage-update sibling cell), then
-// drives the real "you serve acp" Cobra command through Process.Execute over a
+// drives the real "you server acp" Cobra command through Process.Execute over a
 // pair of OS pipes, in a background goroutine, exactly the entrypoint the
 // published you binary runs. It registers cleanup that cancels the
 // invocation's context and closes stdin, then waits (bounded by a fixed
@@ -189,7 +189,7 @@ func startServeACPHarness(t *testing.T, home, cwd string, edges serviceedges.Edg
 	var stderr bytes.Buffer
 	go func() {
 		serveErr <- buildProcess.Execute(root.Input{
-			Args:             []string{"you", "serve", "acp"},
+			Args:             []string{"you", "server", "acp"},
 			Env:              env,
 			Stdin:            stdinRead,
 			Stdout:           stdoutWrite,
@@ -206,10 +206,10 @@ func startServeACPHarness(t *testing.T, home, cwd string, edges serviceedges.Edg
 			select {
 			case err := <-serveErr:
 				if err != nil && err != context.Canceled {
-					t.Errorf("serve acp Execute() error = %v, want context.Canceled or nil on shutdown", err)
+					t.Errorf("you server acp Execute() error = %v, want context.Canceled or nil on shutdown", err)
 				}
 			case <-time.After(5 * time.Second):
-				t.Error("serve acp did not shut down after stdin closed")
+				t.Error("you server acp did not shut down after stdin closed")
 			}
 		})
 	})
@@ -273,8 +273,8 @@ func assertServeACPStreamingNotifications(t *testing.T, notifications []acpsdk.S
 	}
 }
 
-// serveACPLine is the minimal shape shared by every JSON-RPC line "you serve
-// acp" writes to stdout: a response carries "result"/"error" and echoes the
+// serveACPLine is the minimal shape shared by every JSON-RPC line `you server
+// acp` writes to stdout: a response carries "result"/"error" and echoes the
 // request "id"; a notification carries "method" and no "id".
 type serveACPLine struct {
 	ID     json.RawMessage            `json:"id"`
@@ -285,8 +285,8 @@ type serveACPLine struct {
 }
 
 // driveServeACPSessionNew writes one "session/new" request to stdin and reads
-// stdout lines until it observes that request's own response (a real "you
-// serve acp" connection can interleave request/response and asynchronous
+// stdout lines until it observes that request's own response (a real `you server
+// acp` connection can interleave request/response and asynchronous
 // "session/update" notifications on the same stdout stream, though none are
 // possible before any session is admitted).
 func driveServeACPSessionNew(t *testing.T, stdin *os.File, stdout *bufio.Reader, cwd string) string {
@@ -337,7 +337,7 @@ func driveServeACPSessionPrompt(t *testing.T, stdin *os.File, stdout *bufio.Read
 		raw := readServeACPLine(t, stdout)
 		var decoded serveACPLine
 		if err := json.Unmarshal(raw, &decoded); err != nil {
-			t.Fatalf("unmarshal serve acp line %q: %v", raw, err)
+			t.Fatalf("unmarshal you server acp line %q: %v", raw, err)
 		}
 		if decoded.Method == "session/update" {
 			notifications = append(notifications, decoded.Params)
@@ -346,7 +346,7 @@ func driveServeACPSessionPrompt(t *testing.T, stdin *os.File, stdout *bufio.Read
 		if string(decoded.ID) == `2` {
 			return decoded, notifications
 		}
-		t.Fatalf("unexpected serve acp line before the session/prompt response: %s", raw)
+		t.Fatalf("unexpected you server acp line before the session/prompt response: %s", raw)
 	}
 }
 
@@ -360,7 +360,7 @@ func readServeACPResponse(t *testing.T, stdout *bufio.Reader, wantID string) ser
 		raw := readServeACPLine(t, stdout)
 		var decoded serveACPLine
 		if err := json.Unmarshal(raw, &decoded); err != nil {
-			t.Fatalf("unmarshal serve acp line %q: %v", raw, err)
+			t.Fatalf("unmarshal you server acp line %q: %v", raw, err)
 		}
 		if decoded.Method == "session/update" {
 			continue
@@ -368,7 +368,7 @@ func readServeACPResponse(t *testing.T, stdout *bufio.Reader, wantID string) ser
 		if string(decoded.ID) == wantID {
 			return decoded
 		}
-		t.Fatalf("unexpected serve acp line while waiting for response id %s: %s", wantID, raw)
+		t.Fatalf("unexpected you server acp line while waiting for response id %s: %s", wantID, raw)
 	}
 }
 
@@ -376,7 +376,7 @@ func readServeACPLine(t *testing.T, stdout *bufio.Reader) []byte {
 	t.Helper()
 	line, err := stdout.ReadBytes('\n')
 	if err != nil {
-		t.Fatalf("read serve acp stdout line: %v", err)
+		t.Fatalf("read you server acp stdout line: %v", err)
 	}
 	return bytes.TrimSpace(line)
 }

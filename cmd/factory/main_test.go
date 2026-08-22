@@ -103,15 +103,21 @@ var processExitCodeTests = []struct {
 		want: 130,
 	},
 	{
-		name:       "other command cancellation",
+		name:       "MCP child cancellation uses its declared lifecycle code",
 		contextErr: context.Canceled,
-		args:       []string{"you", "mcp", "serve"},
+		args:       []string{"you", "server", "mcp"},
 		want:       exitFailure,
 	},
 	{
-		name: "other command wrapped cancellation",
+		name:       "ACP child cancellation uses its declared lifecycle code",
+		contextErr: context.Canceled,
+		args:       []string{"you", "server", "acp"},
+		want:       exitFailure,
+	},
+	{
+		name: "wrapped MCP child cancellation uses its declared lifecycle code",
 		err:  fmt.Errorf("stop MCP server: %w", context.Canceled),
-		args: []string{"you", "mcp", "serve"},
+		args: []string{"you", "server", "mcp"},
 		want: exitFailure,
 	},
 	{

@@ -10,7 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const runtimeSmokeSimpleFinalWorkflowSource = `// Runtime-backed MCP serve smoke fixture: terminal async completion.
+const runtimeSmokeSimpleFinalWorkflowSource = `// Runtime-backed MCP server smoke fixture: terminal async completion.
 // runtimeSmokeProjectRoot removes persisted factory state before t.TempDir cleanup.
 return {
   label: meta.name,
@@ -221,7 +221,7 @@ func runtimeSmokeInlineAsyncRequest() factoryapi.FactorySessionExecutionRequest 
 	dialect := "you-workflow-v1"
 	metadata := factoryapi.StringMap{
 		"name":        "runtime-mcp-serve-smoke",
-		"description": "runtime-backed MCP serve smoke fixture",
+		"description": "runtime-backed MCP server smoke fixture",
 	}
 	args := map[string]any{
 		"subject": "workflows",

@@ -2,9 +2,22 @@
 
 ## Status
 
-Proposed. This is a breaking public CLI contract migration. The repository is
-currently its own primary consumer, so the plan deliberately prefers one
-coherent command tree over compatibility aliases.
+In progress. The server-family slice is delivered; the broader breaking public
+CLI contract migration remains open for later resource-family lanes. The
+repository is currently its own primary consumer, so the plan deliberately
+prefers one coherent command tree over compatibility aliases.
+
+## Delivery ledger
+
+| Slice | Status | Ownership |
+| --- | --- | --- |
+| Server family: bare `you server`, `you server acp`, and `you server mcp` (Story 2 plus the server-owned portion of Story 9) | Delivered 2026-08-21 | `cli-server-family-consolidation` |
+| Resource-family singularization: `worker-sessions`, `workers`, `providers`, and `models` | Pending | Later CLI standardization lanes; Stories 6 and 7 |
+| Remaining command-family migrations and whole-tree Story 9 closeout | Pending | Later CLI standardization lanes |
+
+The delivered server-family slice includes active guidance, generated CLI
+metadata, retirement protection, and the server-owned documentation smoke
+coverage. It does not close the resource-family work or the broader plan.
 
 All old command literals in this plan are historical migration records. They
 describe the source side of an intentional cutover; they are not active
@@ -329,7 +342,7 @@ path-specific correction.
 - The evaluator checks authored behavior and metadata, not repository file
   topology.
 
-### Story 2: Customers find every host under one server family
+### Story 2: Customers find every host under one server family — Delivered
 
 #### Observable behavior
 
@@ -352,6 +365,14 @@ any one host's help.
 - HTTP host functional coverage uses `root.BuildProcess` and
   `Process.Execute`; no second application graph is introduced.
 - Owned reference topics and generated CLI artifacts use only target paths.
+
+#### Delivery status
+
+Delivered 2026-08-21. Bare `you server` retains the HTTP/dashboard host, ACP
+and MCP are runnable siblings at `you server acp` and `you server mcp`, and the
+old paths are rejected without aliases. Active packaged guidance, baseline
+diagnostics, behavior-oriented tests, and retirement checks use the target
+paths. The old literals retained in this plan are migration records only.
 
 ### Story 3: Customers retain initialization and use factory show
 

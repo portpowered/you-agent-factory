@@ -15,6 +15,7 @@ import (
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	acpwire "github.com/portpowered/infinite-you/pkg/transports/acp/wire"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
@@ -46,43 +47,76 @@ func (f *fakeACPServer) Serve(ctx context.Context, in io.Reader, out io.Writer) 
 	return f.serveErr
 }
 
-func TestServeFamily_VisibleInRootHelpAndDistinctFromWorkersAcpAndMcpServe(t *testing.T) {
+func TestServerFamily_VisibleInRootHelpAndDistinctFromWorkersAcpAndMCP(t *testing.T) {
 	root := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI}).NewCommand(nil, nil, nil)
 
-	if _, _, err := root.Find([]string{"serve"}); err != nil {
-		t.Fatalf("find %q: %v", "you serve", err)
-	}
-	acpCmd, _, err := root.Find([]string{"serve", "acp"})
-	if err != nil {
-		t.Fatalf("find %q: %v", "you serve acp", err)
-	}
-	if !acpCmd.Runnable() {
-		t.Fatal("you serve acp must be runnable")
+	requireRunnableCommand(t, root, "you server", "server")
+	acpCmd := requireRunnableCommand(t, root, "you server acp", "server", "acp")
+	mcpCmd := requireRunnableCommand(t, root, "you server mcp", "server", "mcp")
+	if mcpCmd == acpCmd {
+		t.Fatal("you server mcp must remain distinct from you server acp")
 	}
 
-	if found, _, _ := root.Find([]string{"acp", "serve"}); found == acpCmd || (found != root && found.Name() == "acp") {
-		t.Fatal("you acp serve must not be a recognized alias")
+	assertRetiredServerPathsAbsent(t, root)
+	assertRetiredServerFamiliesAbsent(t, root)
+
+	workersACP := requireCommand(t, root, "you workers acp", "workers", "acp")
+	if workersACP == acpCmd {
+		t.Fatal("you workers acp must remain a distinct command from you server acp")
 	}
-	for _, sub := range root.Commands() {
-		if sub.Name() == "acp" {
-			t.Fatal("you acp must not be a top-level command; ACP serving is only reachable as you serve acp")
+
+	assertServerHelpListsChildren(t, root)
+}
+
+func requireCommand(t *testing.T, root *cobra.Command, display string, path ...string) *cobra.Command {
+	t.Helper()
+	cmd, _, err := root.Find(path)
+	if err != nil {
+		t.Fatalf("find %q: %v", display, err)
+	}
+	return cmd
+}
+
+func requireRunnableCommand(t *testing.T, root *cobra.Command, display string, path ...string) *cobra.Command {
+	t.Helper()
+	cmd := requireCommand(t, root, display, path...)
+	if !cmd.Runnable() {
+		t.Fatalf("%s must be runnable", display)
+	}
+	return cmd
+}
+
+func assertRetiredServerPathsAbsent(t *testing.T, root *cobra.Command) {
+	t.Helper()
+	for _, retired := range [][]string{{"serve", "acp"}, {"mcp", "serve"}, {"acp", "serve"}} {
+		if found, _, findErr := root.Find(retired); findErr == nil && found != root {
+			t.Fatalf("retired command path %q must not remain reachable", strings.Join(retired, " "))
 		}
 	}
+}
 
-	workersACP, _, err := root.Find([]string{"workers", "acp"})
-	if err != nil {
-		t.Fatalf("find %q: %v", "you workers acp", err)
+func assertRetiredServerFamiliesAbsent(t *testing.T, root *cobra.Command) {
+	t.Helper()
+	for _, sub := range root.Commands() {
+		if sub.Name() == "mcp" || sub.Name() == "serve" {
+			t.Fatalf("retired top-level command %q must not remain registered", sub.Name())
+		}
 	}
-	if workersACP == acpCmd {
-		t.Fatal("you workers acp must remain a distinct command from you serve acp")
-	}
+}
 
-	mcpServe, _, err := root.Find([]string{"mcp", "serve"})
-	if err != nil {
-		t.Fatalf("find %q: %v", "you mcp serve", err)
+func assertServerHelpListsChildren(t *testing.T, root *cobra.Command) {
+	t.Helper()
+	var help bytes.Buffer
+	root.SetOut(&help)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"server", "--help"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute you server --help: %v", err)
 	}
-	if mcpServe == acpCmd {
-		t.Fatal("you mcp serve must remain a distinct command from you serve acp")
+	for _, child := range []string{"acp", "mcp"} {
+		if !strings.Contains(help.String(), child) {
+			t.Fatalf("you server --help missing %q child:\n%s", child, help.String())
+		}
 	}
 }
 
@@ -92,10 +126,10 @@ func TestServeFamily_VisibleInRootHelpAndDistinctFromWorkersAcpAndMcpServe(t *te
 // example a missing Examples section, the way a hand-built cobra.Command
 // that only copies Use/Short/Long would silently produce -- fails this test.
 //
-// you.serve.acp declares no local manifest inputs of its own, so its only
+// you.server.acp declares no local manifest inputs of its own, so its only
 // visible local flag is Cobra's built-in --help. It inherits the root's
 // you.flag.{debug,verbose} persistent records like every other command
-// family, but --json, --remote, and --server are deliberately suppressed (see
+// family, but --json, --listen, --remote, and --server are deliberately suppressed (see
 // suppressUnrelatedServeACPFlags in root_serve.go): --json would promise
 // structured output on stdout, already reserved for ACP protocol frames,
 // --remote selects a running server this command never contacts, and --server
@@ -109,65 +143,65 @@ func TestServeACPCommand_HelpRendersManifestExamplesAndNoLocalFlags(t *testing.T
 	root := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI}).NewCommand(nil, nil, nil)
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"serve", "acp", "--help"})
+	root.SetArgs([]string{"server", "acp", "--help"})
 
 	if err := root.Execute(); err != nil {
-		t.Fatalf("execute serve acp --help: %v", err)
+		t.Fatalf("execute server acp --help: %v", err)
 	}
 
 	got := stdout.String()
 	for _, want := range []string{
 		"stdin", "stdout", "stderr", "JSON-RPC",
 		"Examples:",
-		"you serve acp",
+		"you server acp",
 	} {
 		if !strings.Contains(got, want) {
-			t.Fatalf("you serve acp --help missing %q:\n%s", want, got)
+			t.Fatalf("you server acp --help missing %q:\n%s", want, got)
 		}
 	}
-	for _, unwanted := range []string{"--json", "--remote", "--server"} {
+	for _, unwanted := range []string{"--json", "--listen", "--remote", "--server"} {
 		if strings.Contains(got, unwanted) {
-			t.Fatalf("you serve acp --help must not advertise unrelated flag %q:\n%s", unwanted, got)
+			t.Fatalf("you server acp --help must not advertise unrelated flag %q:\n%s", unwanted, got)
 		}
 	}
 
-	acpCmd, _, err := root.Find([]string{"serve", "acp"})
+	acpCmd, _, err := root.Find([]string{"server", "acp"})
 	if err != nil {
-		t.Fatalf("find %q: %v", "you serve acp", err)
+		t.Fatalf("find %q: %v", "you server acp", err)
 	}
 	wantVisibleLocal := map[string]bool{"help": false}
 	acpCmd.LocalFlags().VisitAll(func(flag *pflag.Flag) {
-		if flag.Name == "json" || flag.Name == "remote" || flag.Name == "server" {
+		if flag.Name == "json" || flag.Name == "listen" || flag.Name == "remote" || flag.Name == "server" {
 			if !flag.Hidden {
-				t.Fatalf("you serve acp local flag %q must be hidden", flag.Name)
+				t.Fatalf("you server acp local flag %q must be hidden", flag.Name)
 			}
 			return
 		}
 		if _, ok := wantVisibleLocal[flag.Name]; !ok {
-			t.Fatalf("you serve acp declares no manifest inputs but has local flag %q", flag.Name)
+			t.Fatalf("you server acp declares no manifest inputs but has local flag %q", flag.Name)
 		}
 		wantVisibleLocal[flag.Name] = true
 	})
 	for name, seen := range wantVisibleLocal {
 		if !seen {
-			t.Fatalf("you serve acp is missing the standard local flag %q", name)
+			t.Fatalf("you server acp is missing the standard local flag %q", name)
 		}
 	}
 
 	wantInherited := map[string]bool{"debug": false, "verbose": false}
 	acpCmd.InheritedFlags().VisitAll(func(flag *pflag.Flag) {
 		if _, ok := wantInherited[flag.Name]; !ok {
-			t.Fatalf("you serve acp advertises unrelated inherited flag %q", flag.Name)
+			t.Fatalf("you server acp advertises unrelated inherited flag %q", flag.Name)
 		}
 		wantInherited[flag.Name] = true
 	})
 	for name, seen := range wantInherited {
 		if !seen {
-			t.Fatalf("you serve acp is missing the standard inherited flag %q", name)
+			t.Fatalf("you server acp is missing the standard inherited flag %q", name)
 		}
 	}
 	if !strings.Contains(got, "Global Flags:") {
-		t.Fatalf("you serve acp --help missing rendered Global Flags section:\n%s", got)
+		t.Fatalf("you server acp --help missing rendered Global Flags section:\n%s", got)
 	}
 }
 
@@ -176,9 +210,9 @@ func TestServeACPCommand_HelpRendersManifestExamplesAndNoLocalFlags(t *testing.T
 // with a clear diagnostic before any ACP server is dispatched.
 func TestServeACPCommand_RejectsUnrelatedGlobalFlags(t *testing.T) {
 	for _, args := range [][]string{
-		{"serve", "acp", "--json"},
-		{"serve", "acp", "--remote"},
-		{"serve", "acp", "--server", "http://localhost:9999"},
+		{"server", "acp", "--json"},
+		{"server", "acp", "--remote"},
+		{"server", "acp", "--server", "http://localhost:9999"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			fake := &fakeACPServer{}
@@ -220,7 +254,7 @@ func TestServeACPCommand_DispatchesToInjectedACPServerWithExactStreamsAndContext
 	type ctxKey struct{}
 	ctx := context.WithValue(context.Background(), ctxKey{}, "marker")
 	root.SetContext(ctx)
-	root.SetArgs([]string{"serve", "acp"})
+	root.SetArgs([]string{"server", "acp"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
@@ -254,7 +288,7 @@ func TestServeACPCommandInitializesSystemBeforeServing(t *testing.T) {
 	root.SetIn(strings.NewReader(""))
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"serve", "acp"})
+	root.SetArgs([]string{"server", "acp"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
@@ -277,7 +311,7 @@ func TestServeACPCommand_CleanEOFSucceeds(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
-	root.SetArgs([]string{"serve", "acp"})
+	root.SetArgs([]string{"server", "acp"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v, want nil on clean EOF", err)
@@ -303,7 +337,7 @@ func TestServeACPCommand_CancellationPropagatesFromProcessContext(t *testing.T) 
 
 	ctx, cancel := context.WithCancel(context.Background())
 	root.SetContext(ctx)
-	root.SetArgs([]string{"serve", "acp"})
+	root.SetArgs([]string{"server", "acp"})
 	cancel()
 
 	if err := root.Execute(); !errors.Is(err, context.Canceled) {
@@ -415,7 +449,7 @@ func TestServeACPCommand_CancellationClosesStdinToUnblockRealServerMidRead(t *te
 
 	ctx, cancel := context.WithCancel(context.Background())
 	root.SetContext(ctx)
-	root.SetArgs([]string{"serve", "acp"})
+	root.SetArgs([]string{"server", "acp"})
 
 	done := make(chan error, 1)
 	go func() { done <- root.Execute() }()
@@ -451,7 +485,7 @@ func TestServeACPCommand_MissingACPServerFailsWithoutPanicking(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
-	root.SetArgs([]string{"serve", "acp"})
+	root.SetArgs([]string{"server", "acp"})
 
 	if err := root.Execute(); err == nil {
 		t.Fatal("Execute() error = nil, want a failure when no ACP server is injected")
@@ -490,7 +524,7 @@ func TestServeACPCommand_ServeFailuresAreSanitizedOnStderr(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			root.SetOut(&stdout)
 			root.SetErr(&stderr)
-			root.SetArgs([]string{"serve", "acp"})
+			root.SetArgs([]string{"server", "acp"})
 
 			err := root.Execute()
 			if err == nil {

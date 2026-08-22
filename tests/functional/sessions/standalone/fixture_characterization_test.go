@@ -430,7 +430,7 @@ func startStandaloneFixtureServer(t *testing.T, fixtureCatalog string) *standalo
 	serveErr := make(chan error, 1)
 	go func() {
 		serveErr <- process.Execute(root.Input{
-			Args:             []string{"you", "mcp", "serve", "--fixture-catalog", fixtureCatalog},
+			Args:             []string{"you", "server", "mcp", "--fixture-catalog", fixtureCatalog},
 			Env:              os.Environ(),
 			Stdin:            stdinRead,
 			Stdout:           stdoutWrite,
@@ -455,7 +455,7 @@ func (server *standaloneMCPServer) close(t *testing.T) {
 		_ = server.stdinWrite.Close()
 		err := <-server.serveErr
 		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) && !strings.Contains(err.Error(), "file already closed") {
-			t.Errorf("fixture-backed MCP serve shutdown: %v", err)
+			t.Errorf("fixture-backed MCP server shutdown: %v", err)
 		}
 	})
 }

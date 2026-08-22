@@ -12,11 +12,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// productionServeCommand builds the you serve family, whose acp leaf hosts
+// productionServeCommand builds the shared server family snapshot whose acp leaf hosts
 // the process-composed ACP server over caller-owned stdio. It is bound
-// through the manifest's stable you.serve.acp handler ID via the same
+// through the manifest's stable you.server.acp handler ID via the same
 // generic manifest constructor every other resolved command family uses
-// (see you mcp serve's climanifestcobra.NewMCPCommand), so its projected
+// (see the MCP child constructor), so its projected
 // help, usage, and examples always match the authoritative manifest.
 func productionServeCommand(options CommandFactory) *cobra.Command {
 	serve, err := climanifestcobra.NewServeCommand(resolvedServeACPHandler(options))
@@ -29,15 +29,15 @@ func productionServeCommand(options CommandFactory) *cobra.Command {
 	return serve
 }
 
-// serveACPUnrelatedFlagNames are inherited root persistent flags with no
+// serveACPUnrelatedFlagNames are inherited root or server-parent flags with no
 // ACP-stdio meaning: --json promises structured command output on stdout,
-// which is already reserved for ACP protocol frames, and --server configures
-// an HTTP API endpoint this command never contacts (it starts no HTTP or
+// which is already reserved for ACP protocol frames, while --listen and
+// --server configure an HTTP API endpoint this command never contacts (it starts no HTTP or
 // dashboard listener).
-var serveACPUnrelatedFlagNames = []string{"json", "remote", "server"}
+var serveACPUnrelatedFlagNames = []string{"json", "listen", "remote", "server"}
 
-// suppressUnrelatedServeACPFlags hides you serve acp's inherited --json and
-// --server flags from its rendered help and rejects them if explicitly
+// suppressUnrelatedServeACPFlags hides the shared server family's unrelated
+// flags from its rendered help and rejects them if explicitly
 // supplied.
 //
 // Cobra flag inheritance is pointer-shared: (*cobra.Command).PersistentFlags
@@ -57,9 +57,11 @@ func suppressUnrelatedServeACPFlags(serve *cobra.Command) error {
 		return fmt.Errorf("find acp leaf: %w", err)
 	}
 	var jsonShadow bool
+	var listenShadow string
 	var remoteShadow bool
 	var serverShadow string
 	acpCmd.Flags().BoolVar(&jsonShadow, "json", false, "")
+	acpCmd.Flags().StringVar(&listenShadow, "listen", "", "")
 	acpCmd.Flags().BoolVar(&remoteShadow, "remote", false, "")
 	acpCmd.Flags().StringVar(&serverShadow, "server", "", "")
 	for _, name := range serveACPUnrelatedFlagNames {
@@ -72,13 +74,13 @@ func suppressUnrelatedServeACPFlags(serve *cobra.Command) error {
 }
 
 // rejectServeACPUnrelatedFlags fails the invocation if a caller explicitly
-// passes --json or --server, rather than silently accepting and ignoring
+// passes an unrelated HTTP/server flag, rather than silently accepting and ignoring
 // them.
 func rejectServeACPUnrelatedFlags(cmd *cobra.Command, _ []string) error {
 	for _, name := range serveACPUnrelatedFlagNames {
 		if cmd.Flags().Changed(name) {
 			return fmt.Errorf(
-				"serve acp: --%s is not supported; ACP stdio reserves stdout for protocol frames and starts no HTTP server",
+				"server acp: --%s is not supported; ACP stdio reserves stdout for protocol frames and starts no HTTP server",
 				name,
 			)
 		}
@@ -87,7 +89,7 @@ func rejectServeACPUnrelatedFlags(cmd *cobra.Command, _ []string) error {
 }
 
 // resolvedServeACPHandler adapts the injected ACP server into the generic
-// manifest constructor's ResolvedCobraHandler shape. you.serve.acp declares
+// manifest constructor's ResolvedCobraHandler shape. you.server.acp declares
 // no local inputs, so both resolved-input snapshots are unused.
 func resolvedServeACPHandler(options CommandFactory) climanifestcobra.ResolvedCobraHandler {
 	return func(cmd *cobra.Command, _ resolvedinput.Inputs, _ resolvedinput.Inputs) error {
@@ -111,7 +113,7 @@ func resolvedServeACPHandler(options CommandFactory) climanifestcobra.ResolvedCo
 // exactly the responsibility that test assigns to the caller.
 func runServeACP(cmd *cobra.Command, server acp.Server) error {
 	if server == nil {
-		return errors.New("serve acp: ACP server is required")
+		return errors.New("server acp: ACP server is required")
 	}
 	ctx := cmd.Context()
 	in := cmd.InOrStdin()
@@ -139,6 +141,33 @@ func sanitizeServeACPError(err error) error {
 	case errors.Is(err, context.DeadlineExceeded):
 		return context.DeadlineExceeded
 	default:
-		return errors.New("serve acp: connection ended with an error")
+		return errors.New("server acp: connection ended with an error")
 	}
+}
+
+// suppressUnrelatedServerProtocolListener hides the HTTP-only listener flag
+// after a protocol child is attached to the production server command. The
+// detached protocol constructors intentionally omit the runnable server
+// handler, but Cobra still inherits the actual parent's local --listen flag
+// when the child is composed into the final tree.
+func suppressUnrelatedServerProtocolListener(command *cobra.Command, label string) error {
+	if command == nil {
+		return fmt.Errorf("suppress %s listener: command is required", label)
+	}
+	var listen string
+	command.Flags().StringVar(&listen, "listen", "", "")
+	if err := command.Flags().MarkHidden("listen"); err != nil {
+		return fmt.Errorf("suppress %s listener: %w", label, err)
+	}
+	previous := command.PreRunE
+	command.PreRunE = func(cmd *cobra.Command, args []string) error {
+		if cmd.Flags().Changed("listen") {
+			return fmt.Errorf("server %s: --listen is not supported; protocol stdio does not start an HTTP listener", label)
+		}
+		if previous != nil {
+			return previous(cmd, args)
+		}
+		return nil
+	}
+	return nil
 }

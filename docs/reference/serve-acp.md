@@ -6,7 +6,7 @@ doc-id: agent-factory/guides/serve-acp
 
 # Host You As An ACP Agent
 
-Use this guide to launch `you serve acp`, the exact child-process command an
+Use this guide to launch `you server acp`, the exact child-process command an
 Agent Client Protocol (ACP) client uses to host You as an ACP agent. `you docs
 serve-acp` is the packaged topic for this surface.
 
@@ -15,7 +15,7 @@ serve-acp` is the packaged topic for this surface.
 An ACP client must launch `you` as a child process:
 
 ```bash
-you serve acp
+you server acp
 ```
 
 The command hosts the same production ACP server the process composes through
@@ -38,7 +38,7 @@ mid-session uses `session/set_config_option` with `configId: "target"`, or the
 `/factory <target>` prompt command.
 
 By default every installed Factory is selectable, and `factory:@you/factory-builder`
-starts as the current target. On a home where `you serve acp` has run at least
+starts as the current target. On a home where `you server acp` has run at least
 once, that means all packaged `@you/*` Factories appear in the picker.
 
 To restrict the list, author `workers.acp.agentProfile` in the operator config:
@@ -71,7 +71,7 @@ rejected.
 
 ## Read The ACP Wire Log
 
-Every `you serve acp` connection records its JSON-RPC traffic, in both
+Every `you server acp` connection records its JSON-RPC traffic, in both
 directions, to a file. Recording is on by default so that a customer who hits a
 problem already has the evidence, rather than needing to know to enable
 something before reproducing it.
@@ -136,14 +136,14 @@ Configure these two host fields explicitly:
 | Field | Value |
 |-------|-------|
 | Executable | `you` on the host `PATH`, or an absolute path to the installed binary |
-| Arguments | `serve`, `acp` |
+| Arguments | `server`, `acp` |
 
 A generic client configuration:
 
 ```json
 {
   "command": "/absolute/path/to/you",
-  "args": ["serve", "acp"]
+  "args": ["server", "acp"]
 }
 ```
 
@@ -180,7 +180,7 @@ agent form required by acpx on Windows and supported on every host:
 {
   "agents": {
     "you-real-client": {
-      "argv": ["<disposable-you-binary>", "serve", "acp"]
+      "argv": ["<disposable-you-binary>", "server", "acp"]
     }
   }
 }
@@ -222,16 +222,16 @@ semantic correctness of a Factory Builder authoring outcome.
 
 ## Distinguish This From Related ACP And MCP Surfaces
 
-`you serve acp` is the only command that hosts You as an ACP agent for an
+`you server acp` is the only command that hosts You as an ACP agent for an
 external client. It is a distinct direction from these related commands:
 
 - `you workers acp add` and `you workers acp delete` manage You's own use of
   external ACP-speaking provider agents -- the opposite integration
   direction. See [Providers and ACP agents](providers.md).
-- `you mcp serve` hosts the unrelated Model Context Protocol tool server. See
+- `you server mcp` hosts the unrelated Model Context Protocol tool server. See
   [MCP host setup](mcp.md).
 
-Neither command is an alias for `you serve acp`, and `you acp serve` is not a recognized command.
+`you server mcp` is not an alias for `you server acp`, and `you acp serve` is not a recognized command.
 
 ## Know What Is Proven
 
@@ -240,7 +240,7 @@ on:
 
 | Check | Automated proof |
 |-------|-----------------|
-| Discovery, help, and command-tree contracts for `you serve` and `you serve acp` | `pkg/transports/cli/root_serve_test.go` |
+| Discovery, help, and command-tree contracts for `you server` and `you server acp` | `pkg/transports/cli/root_serve_test.go` |
 | Exact stdin/stdout/context forwarding, clean EOF, cancellation, and sanitized stderr-only failure diagnostics | `pkg/transports/cli/root_serve_test.go` |
 | One real Factory prompt through `root.BuildProcess`: `initialize` -> `session/new` -> `session/prompt`, with protocol-only stdout | `tests/functional/cli/serve_acp/serve_acp_prompt_test.go` |
 | Pinned independent-client startup and one sanitized default-Factory prompt with one deterministic provider invocation | `tests/functional/transport/acp/realclient/pinned_acpx_test.go` |
@@ -259,5 +259,5 @@ go test ./tests/functional/cli/serve_acp/...
 
 - `you docs providers` -- ACP presets, custom integrations, and provider
   lifecycle for You's own outbound ACP usage
-- `you docs mcp` -- the unrelated `you mcp serve` MCP host setup
+- `you docs mcp` -- the unrelated `you server mcp` MCP host setup
 - `you docs sessions` -- inspect live Factory Sessions from the CLI

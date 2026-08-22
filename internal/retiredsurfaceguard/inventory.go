@@ -27,6 +27,8 @@ var settledRetiredCLIPaths = []string{
 	"you factory query",
 	"you work visualize",
 	"you session dispatches",
+	"you serve acp",
+	"you mcp serve",
 }
 
 var settledRetiredDocsTopics = []string{

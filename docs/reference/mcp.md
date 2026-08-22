@@ -15,7 +15,7 @@ topic.
 An MCP host must launch `you` as a child process:
 
 ```bash
-you mcp serve
+you server mcp
 ```
 
 The server speaks MCP JSON-RPC over stdin and stdout. Keep stdout reserved for
@@ -28,7 +28,7 @@ Configure these three host fields explicitly:
 | Field | Value |
 |-------|-------|
 | Executable | `you` on the host `PATH`, or an absolute path to the installed binary |
-| Arguments | `mcp`, `serve` |
+| Arguments | `server`, `mcp` |
 | Working directory | Absolute project root used to find workflow sources or the fixture catalog |
 
 No extra environment variables are required. A generic host configuration is:
@@ -38,7 +38,7 @@ No extra environment variables are required. A generic host configuration is:
   "mcpServers": {
     "you-agent-factory": {
       "command": "/absolute/path/to/you",
-      "args": ["mcp", "serve"],
+      "args": ["server", "mcp"],
       "cwd": "/absolute/path/to/project"
     }
   }
@@ -58,13 +58,13 @@ only in how Factory Sessions execute.
 
 | Mode | Host arguments | Use it for |
 |------|----------------|------------|
-| Fixture-backed (default) | `["mcp", "serve"]` | Deterministic install smoke and offline fixture scenarios |
-| Runtime-backed | `["mcp", "serve", "--runtime"]` | Live durable JavaScript workflow execution |
+| Fixture-backed (default) | `["server", "mcp"]` | Deterministic install smoke and offline fixture scenarios |
+| Runtime-backed | `["server", "mcp", "--runtime"]` | Live durable JavaScript workflow execution |
 
 The equivalent runtime-backed child-process command is:
 
 ```bash
-you mcp serve --runtime
+you server mcp --runtime
 ```
 
 Fixture-backed mode searches upward from the working directory for
@@ -72,7 +72,7 @@ Fixture-backed mode searches upward from the working directory for
 When the catalog is elsewhere, pass its path explicitly:
 
 ```json
-"args": ["mcp", "serve", "--fixture-catalog", "/absolute/path/to/durable-session-contract-fixtures.json"]
+"args": ["server", "mcp", "--fixture-catalog", "/absolute/path/to/durable-session-contract-fixtures.json"]
 ```
 
 Runtime-backed mode resolves workflow sources from `cwd`. To use a different
@@ -81,7 +81,7 @@ source root, add `--project-root`:
 ```json
 {
   "command": "/absolute/path/to/you",
-  "args": ["mcp", "serve", "--runtime", "--project-root", "/absolute/path/to/project"],
+  "args": ["server", "mcp", "--runtime", "--project-root", "/absolute/path/to/project"],
   "cwd": "/absolute/path/to/project"
 }
 ```
@@ -118,7 +118,7 @@ Work.
 
 After saving the host configuration:
 
-1. Reload the host and confirm it starts `you mcp serve` as a child process.
+1. Reload the host and confirm it starts `you server mcp` as a child process.
 2. Discover tools and confirm the canonical `you.factory_session.*` catalog.
 3. Call `you.factory_session.validate_source` for a known source under the
    configured project root.

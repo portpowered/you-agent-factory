@@ -44,7 +44,7 @@ func TestACPServeCancellationPreservesContextCanceledIdentityThroughProcess(t *t
 	done := make(chan error, 1)
 	go func() {
 		done <- process.Execute(root.Input{
-			Args:             []string{"you", "serve", "acp"},
+			Args:             []string{"you", "server", "acp"},
 			Env:              append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir),
 			Stdin:            readStarted,
 			Stdout:           &stdout,

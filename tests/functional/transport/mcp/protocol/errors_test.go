@@ -160,7 +160,7 @@ func startFixtureBackedMCPServer(t *testing.T) *fixtureBackedMCPServer {
 	var stderr bytes.Buffer
 	go func() {
 		serveErr <- process.Execute(root.Input{
-			Args:             []string{"you", "mcp", "serve", "--fixture-catalog", fixturePath},
+			Args:             []string{"you", "server", "mcp", "--fixture-catalog", fixturePath},
 			Env:              os.Environ(),
 			Stdin:            stdinRead,
 			Stdout:           stdoutWrite,
@@ -172,7 +172,7 @@ func startFixtureBackedMCPServer(t *testing.T) *fixtureBackedMCPServer {
 
 	select {
 	case err := <-serveErr:
-		t.Fatalf("start fixture-backed MCP serve: %v; stderr=%s", err, stderr.String())
+		t.Fatalf("start fixture-backed MCP server: %v; stderr=%s", err, stderr.String())
 	case <-time.After(100 * time.Millisecond):
 	}
 
@@ -223,10 +223,10 @@ func (s *fixtureBackedMCPServer) shutdown() {
 	select {
 	case err := <-s.serveErr:
 		if err != nil && err != io.EOF && !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "file already closed") {
-			s.t.Fatalf("fixture-backed MCP serve: %v", err)
+			s.t.Fatalf("fixture-backed MCP server: %v", err)
 		}
 	case <-time.After(5 * time.Second):
-		s.t.Fatal("fixture-backed MCP serve did not shut down after stdin closed")
+		s.t.Fatal("fixture-backed MCP server did not shut down after stdin closed")
 	}
 }
 
@@ -241,10 +241,10 @@ func assertFixtureBackedMCPServerShutdownClean(t *testing.T, server *fixtureBack
 	select {
 	case serveErr := <-server.serveErr:
 		if serveErr != nil && serveErr != io.EOF && !errors.Is(serveErr, context.Canceled) && !strings.Contains(serveErr.Error(), "file already closed") {
-			t.Fatalf("fixture-backed MCP serve shutdown: %v", serveErr)
+			t.Fatalf("fixture-backed MCP server shutdown: %v", serveErr)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("fixture-backed MCP serve did not shut down after cancel and stdin close")
+		t.Fatal("fixture-backed MCP server did not shut down after cancel and stdin close")
 	}
 
 	_ = server.stdoutWrite.Close()

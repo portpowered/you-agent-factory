@@ -26,7 +26,7 @@ import (
 )
 
 // TestServeACPWritesAWireTranscriptByDefault proves the customer-facing
-// promise of the ACP wire log: after running `you serve acp`, the traffic in
+// promise of the ACP wire log: after running `you server acp`, the traffic in
 // both directions is on disk without anyone having enabled anything, and the
 // transcript reproduces exactly what crossed the wire.
 //
@@ -40,7 +40,7 @@ import (
 // itself remains the production wiretranscript.Opener and rolling writer.
 func TestServeACPWritesAWireTranscriptByDefault(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test driving you serve acp through root.BuildProcess")
+		t.Skip("integration test driving you server acp through root.BuildProcess")
 	}
 
 	home := t.TempDir()
@@ -68,7 +68,7 @@ func TestServeACPWritesAWireTranscriptByDefault(t *testing.T) {
 
 	var stderr bytes.Buffer
 	command := support.StartProcessCommand(t, process, root.Input{
-		Args:             []string{"you", "serve", "acp"},
+		Args:             []string{"you", "server", "acp"},
 		Env:              environment,
 		Stdin:            stdinRead,
 		Stdout:           stdoutWrite,
@@ -196,7 +196,7 @@ func finishTranscriptConversation(
 	}
 	<-command.Done()
 	if err := command.Err(); err != nil {
-		t.Fatalf("Process.Execute(serve acp) error = %v", err)
+		t.Fatalf("Process.Execute(you server acp) error = %v", err)
 	}
 	if err := stdoutWrite.Close(); err != nil {
 		t.Fatalf("close stdout: %v", err)
@@ -464,7 +464,7 @@ func normalizeJSONLine(line string) string {
 
 func TestServeACPDoesNotRecordFailedOutboundFrame(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test driving you serve acp through root.BuildProcess")
+		t.Skip("integration test driving you server acp through root.BuildProcess")
 	}
 
 	home := t.TempDir()
@@ -484,7 +484,7 @@ func TestServeACPDoesNotRecordFailedOutboundFrame(t *testing.T) {
 	stdoutErr := errors.New("stdout failed")
 	var stderr bytes.Buffer
 	err = process.Execute(root.Input{
-		Args:             []string{"you", "serve", "acp"},
+		Args:             []string{"you", "server", "acp"},
 		Env:              environment,
 		Stdin:            strings.NewReader(fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":%s}`, fixtureInitializeParams) + "\n"),
 		Stdout:           failingWriter{err: stdoutErr},
@@ -493,7 +493,7 @@ func TestServeACPDoesNotRecordFailedOutboundFrame(t *testing.T) {
 		WorkingDirectory: cwd,
 	})
 	if err == nil || !strings.Contains(err.Error(), "connection ended with an error") {
-		t.Fatalf("serve acp Execute() error = %v, want the public connection-error diagnostic", err)
+		t.Fatalf("you server acp Execute() error = %v, want the public connection-error diagnostic", err)
 	}
 
 	records := readWireTranscript(t, home)
@@ -517,7 +517,7 @@ func (w failingWriter) Write([]byte) (int, error) { return 0, w.err }
 // so a customer who never opted in still gets one of these per connection.
 func TestServeACPWireTranscriptIsOwnerReadableOnly(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test driving you serve acp through root.BuildProcess")
+		t.Skip("integration test driving you server acp through root.BuildProcess")
 	}
 
 	home := t.TempDir()
@@ -533,7 +533,7 @@ func TestServeACPWireTranscriptIsOwnerReadableOnly(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	if err := process.Execute(root.Input{
-		Args:             []string{"you", "serve", "acp"},
+		Args:             []string{"you", "server", "acp"},
 		Env:              environment,
 		Stdin:            strings.NewReader(fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":%s}`, fixtureInitializeParams) + "\n"),
 		Stdout:           &stdout,
@@ -541,7 +541,7 @@ func TestServeACPWireTranscriptIsOwnerReadableOnly(t *testing.T) {
 		Context:          t.Context(),
 		WorkingDirectory: cwd,
 	}); err != nil {
-		t.Fatalf("serve acp Execute() error = %v", err)
+		t.Fatalf("you server acp Execute() error = %v", err)
 	}
 
 	transcripts := wireTranscriptFiles(t, filepath.Join(home, ".you-agent-factory", "acp-wire"))

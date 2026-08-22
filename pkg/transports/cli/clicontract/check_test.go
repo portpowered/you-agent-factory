@@ -214,8 +214,8 @@ func TestValidateRejectsMigratedInputSetAndMetadataDriftIndependently(t *testing
 				input.ProductionInputs.Relationships = nil
 			},
 			kind:     KindMissingInput,
-			stableID: "you.mcp.serve.relationship.runtime-source",
-			path:     "you mcp serve",
+			stableID: "you.server.mcp.relationship.runtime-source",
+			path:     "you server mcp",
 			field:    "relationship",
 		},
 	}

@@ -96,6 +96,9 @@ func validateMigratedFlags(
 		}
 		want, ok := expected[got.IDCandidate]
 		if !ok {
+			if isConstructedProtocolCompatibilityInput(got.IDCandidate) {
+				continue
+			}
 			findings = append(findings, newFinding(
 				KindUncontractedInput, got.IDCandidate, got.CommandPath, "flag",
 				"constructed flag is absent from the authored manifest",
@@ -119,6 +122,15 @@ func validateMigratedFlags(
 		}
 	}
 	return findings
+}
+
+// isConstructedProtocolCompatibilityInput identifies a hidden collision guard
+// added only when the protocol leaves are attached beneath the runnable HTTP
+// server. It is deliberately absent from the authored MCP leaf contract: the
+// flag exists to reject the parent's HTTP-only listener input, not to widen
+// the protocol command's public input surface.
+func isConstructedProtocolCompatibilityInput(id string) bool {
+	return id == "you.server.mcp.flag.listen"
 }
 
 func firstArgumentMismatch(want climanifest.Argument, got cliinputs.ArgumentRecord) string {
@@ -277,7 +289,7 @@ func migratedCommandPaths(canonical climanifest.Manifest) map[string]bool {
 func migratedCommandID(id string) bool {
 	return id == "you.docs" ||
 		id == "you.models" || strings.HasPrefix(id, "you.models.") ||
-		id == "you.mcp" || strings.HasPrefix(id, "you.mcp.")
+		id == "you.server.mcp" || strings.HasPrefix(id, "you.server.mcp.")
 }
 
 func commandPathForInput(canonical climanifest.Manifest, inputID string) string {

@@ -237,8 +237,8 @@ func MCPArtifact(store generatedartifacts.SourceStore, repositoryRoot string) ([
 	return contractjoiner.MarshalCanonicalJSON(family)
 }
 
-// ServeArtifact returns canonical serve family metadata for you serve and
-// you serve acp.
+// ServeArtifact returns canonical server-family metadata for you server and
+// its ACP child.
 func ServeArtifact(store generatedartifacts.SourceStore, repositoryRoot string) ([]byte, error) {
 	production, err := climanifest.LoadProduction(store, filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath)))
 	if err != nil {

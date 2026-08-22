@@ -327,7 +327,7 @@ func startRootRuntimeMCPServer(
 	var stderr bytes.Buffer
 	go func() {
 		serveErr <- process.Execute(root.Input{
-			Args:             []string{"you", "mcp", "serve", "--runtime", "--project-root", projectRoot},
+			Args:             []string{"you", "server", "mcp", "--runtime", "--project-root", projectRoot},
 			Env:              env,
 			Stdin:            stdinRead,
 			Stdout:           stdoutWrite,
