@@ -239,17 +239,15 @@ func assertCanonicalUnknownPair(t *testing.T, pair costs.UnpricedPair) {
 func TestQueryUnpricedUsageRetainsCorrelationAndCountsRepeatedRows(t *testing.T) {
 	t.Parallel()
 
-	settings := &settingsReader{document: operatorsettings.Document{PriceTable: operatorsettings.PriceTable{
-		Currency: operatorsettings.PriceTableCurrencyUSD,
-		Models: []operatorsettings.PriceTableModel{{
-			Provider: "codex", Model: "known", InputPerMillionTokens: "1", OutputPerMillionTokens: "1",
-		}},
-	}}}
+	pricing := &priceReader{table: providers.PriceTable{
+		Currency: providers.PriceTableCurrencyUSD,
+		Models:   []providers.PriceTableModel{testPriceModel("known", "1", "1", nil, nil)},
+	}}
 	rows := []factoryvisualization.RuntimeMetricsUsageRow{
 		usageRow("session", "work-unknown-a", "dispatch-unknown-a", "worker-unknown-a", "codex", "missing", 10, 20, nil, nil),
 		usageRow("session", "work-unknown-b", "dispatch-unknown-b", "worker-unknown-b", "codex", "missing", 30, 40, nil, nil),
 	}
-	query, err := New(settings, metricsQueryStub(rows, nil), logging.NoopLogger{})
+	query, err := New(pricing, metricsQueryStub(rows, nil), logging.NoopLogger{})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
