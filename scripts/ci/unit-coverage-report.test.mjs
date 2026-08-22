@@ -48,6 +48,7 @@ function timingArtifact() {
 		version: 1,
 		complete: true,
 		wallSeconds: 184.25,
+		packageElapsedSecondsSum: 52.875,
 		packageCount: 2,
 		expectedPackageCount: 2,
 		testCount: 3,
@@ -179,6 +180,47 @@ test("renders the slowest unit tests with real durations, ordered descending", (
 	assert.ok(body.includes("| `TestSlow` | `pkg/alpha` | 40.125 | fail |"));
 	assert.ok(body.includes("| `TestQuick` | `pkg/alpha` | 0.250 | pass |"));
 	assert.ok(body.includes("- Wall-clock duration: 184.250s across 2/2 package(s)"));
+});
+
+test("renders effective concurrency from the canonical timing values", () => {
+	const summary = summarizeUnitCoverage(coverageArtifact(), {
+		...timingArtifact(),
+		wallSeconds: 257.2,
+		packageElapsedSecondsSum: 272.1,
+	});
+
+	assert.equal(summary.timing.effectiveConcurrency, 272.1 / 257.2);
+	const expected =
+		"- Effective concurrency: 1.06x (packageElapsedSecondsSum=272.100s / wallSeconds=257.200s)";
+	assert.ok(renderUnitCoverageComment(summary).includes(expected));
+	assert.ok(renderUnitCoverageJobSummary(summary).includes(expected));
+});
+
+test("reports effective concurrency as unavailable for invalid timing inputs", () => {
+	const base = timingArtifact();
+	const without = (field) => {
+		const timing = { ...base };
+		delete timing[field];
+		return timing;
+	};
+	const cases = [
+		without("wallSeconds"),
+		without("packageElapsedSecondsSum"),
+		{ ...base, wallSeconds: "257.2" },
+		{ ...base, packageElapsedSecondsSum: "272.1" },
+		{ ...base, wallSeconds: Number.NaN },
+		{ ...base, packageElapsedSecondsSum: Number.POSITIVE_INFINITY },
+		{ ...base, wallSeconds: 0 },
+		{ ...base, wallSeconds: -1 },
+		{ ...base, packageElapsedSecondsSum: -1 },
+	];
+
+	for (const timing of cases) {
+		const summary = summarizeUnitCoverage(coverageArtifact(), timing);
+		assert.equal(summary.timing.effectiveConcurrency, null);
+		const body = renderUnitCoverageComment(summary);
+		assert.ok(body.includes("- Effective concurrency: unavailable"), body);
+	}
 });
 
 test("states the omitted counts for every capped table instead of truncating silently", () => {

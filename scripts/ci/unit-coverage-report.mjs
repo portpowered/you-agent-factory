@@ -46,6 +46,7 @@ const UNIT_COVERAGE_RENDER_OPTIONS = {
 	coverageArtifactName: "coverage-summary.json",
 	timingArtifactName: "unit-timing-summary.json",
 	slowestHeading: "Slowest unit tests",
+	includeEffectiveConcurrency: true,
 };
 
 /**
