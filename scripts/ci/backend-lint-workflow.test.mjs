@@ -3,15 +3,17 @@ import test from "node:test";
 
 import { evaluateVerificationPolicy } from "../verification-policy.mjs";
 import {
-	selectBackendLint,
-	upsertBackendLintComment,
-} from "./backend-lint-workflow.mjs";
-import { resolveRunnerParallelism } from "./runner-parallelism.mjs";
-import {
 	BACKEND_LINT_COMMENT_MARKER,
 	renderBackendLintComment,
 	summarizeBackendLintReport,
 } from "./backend-lint-report.mjs";
+import {
+	BACKEND_LINT_FALLBACK_JOBS,
+	resolveBackendLintParallelism,
+	selectBackendLint,
+	upsertBackendLintComment,
+} from "./backend-lint-workflow.mjs";
+import { resolveRunnerParallelism } from "./runner-parallelism.mjs";
 
 test("selects pull requests and pushes to main at the tested head", () => {
 	assert.deepEqual(
@@ -51,6 +53,33 @@ test("uses the safe minimum when logical CPU discovery is invalid or unavailable
 		);
 	}
 	assert.deepEqual(resolveRunnerParallelism("1"), { logicalCPUs: 1, jobs: 2 });
+});
+
+test("uses the healthy runner-parallelism selection when the helper loads", async () => {
+	assert.deepEqual(await resolveBackendLintParallelism("8"), {
+		logicalCPUs: 8,
+		jobs: 8,
+		warning: "",
+	});
+});
+
+test("exports a positive fallback and warning when the helper cannot load", async () => {
+	const result = await resolveBackendLintParallelism("8", async () => {
+		throw new Error("ERR_MODULE_NOT_FOUND: runner-parallelism.mjs");
+	});
+
+	assert.equal(result.logicalCPUs, 0);
+	assert.equal(result.jobs, BACKEND_LINT_FALLBACK_JOBS);
+	assert.ok(result.jobs > 0);
+	assert.match(
+		result.warning,
+		/runner parallelism helper or calculation failed/,
+	);
+	assert.match(result.warning, /ERR_MODULE_NOT_FOUND: runner-parallelism\.mjs/);
+	assert.match(
+		result.warning,
+		new RegExp(`fallback jobs=${BACKEND_LINT_FALLBACK_JOBS}`),
+	);
 });
 
 test("publishes a complete report by creating or updating the marked bot comment", () => {
