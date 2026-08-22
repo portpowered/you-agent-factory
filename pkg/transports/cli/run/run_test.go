@@ -89,6 +89,12 @@ func (s stubFactoryService) Run(ctx context.Context) error {
 	return s.run(ctx)
 }
 
+func (stubFactoryService) ControlWaitToComplete(runtimehost.WaitToCompleteRequest) runtimehost.WaitToCompleteResult {
+	done := make(chan struct{})
+	close(done)
+	return runtimehost.WaitToCompleteResult{Done: done}
+}
+
 func (s stubFactoryService) RuntimeLogDiagnostics() runtimehost.RuntimeLogDiagnostics {
 	return s.runtimeLogDiagnostics
 }
@@ -98,6 +104,33 @@ func (s stubFactoryService) GetEngineStateSnapshot(ctx context.Context) (*interf
 		return nil, errors.New("snapshot unavailable")
 	}
 	return s.snapshot(ctx)
+}
+
+func (s stubFactoryService) CleanInvocationSnapshot(ctx context.Context) (runtimehost.CleanInvocationSnapshot, error) {
+	snapshot, err := s.GetEngineStateSnapshot(ctx)
+	if err != nil {
+		return runtimehost.CleanInvocationSnapshot{}, err
+	}
+	if snapshot == nil {
+		return runtimehost.CleanInvocationSnapshot{}, nil
+	}
+	projected := runtimehost.CleanInvocationSnapshot{}
+	for _, token := range snapshot.Marking.Tokens {
+		if token == nil {
+			continue
+		}
+		workTypeID, stateValue := runtimehost.SplitPlaceID(token.PlaceID)
+		category := runtimehost.StateCategoryProcessing
+		if snapshot.Topology != nil {
+			category = runtimehost.CategoryForState(snapshot.Topology.WorkTypes, workTypeID, stateValue)
+		}
+		projected.Work = append(projected.Work, runtimehost.CleanInvocationWork{
+			WorkID: token.Color.WorkID, Name: token.Color.Name, WorkTypeID: workTypeID,
+			State: stateValue, StateCategory: string(category), Output: string(token.Color.Payload),
+			TraceID: token.Color.TraceID, DataType: string(token.Color.DataType),
+		})
+	}
+	return projected, nil
 }
 
 func (s stubFactoryService) RuntimeObservation(ctx context.Context) (factoryvisualization.RuntimeObservation, error) {

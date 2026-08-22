@@ -260,6 +260,16 @@ func (runner testRuntimeHostRunner) RuntimeLogDiagnostics() runtimeartifact.Diag
 	return runtimeLogDiagnosticsForRunner(runner.LocalRuntimeRunner)
 }
 
+func (runner testRuntimeHostRunner) CleanInvocationSnapshot(ctx context.Context) (factoryruntime.CleanInvocationSnapshot, error) {
+	provider, ok := runner.LocalRuntimeRunner.(interface {
+		CleanInvocationSnapshot(context.Context) (factoryruntime.CleanInvocationSnapshot, error)
+	})
+	if !ok {
+		return factoryruntime.CleanInvocationSnapshot{}, factoryruntime.ErrNotRunning
+	}
+	return provider.CleanInvocationSnapshot(ctx)
+}
+
 type testDashboardRenderingRunner struct {
 	initializer.LocalRuntimeRunner
 	sink  factoryvisualization.Sink
@@ -277,6 +287,16 @@ func (r testDashboardRenderingRunner) Run(ctx context.Context) error {
 	r.input.ObservedAt = time.Now()
 	r.sink.PresentFactoryView(r.input)
 	return nil
+}
+
+func (r testDashboardRenderingRunner) CleanInvocationSnapshot(ctx context.Context) (factoryruntime.CleanInvocationSnapshot, error) {
+	provider, ok := r.LocalRuntimeRunner.(interface {
+		CleanInvocationSnapshot(context.Context) (factoryruntime.CleanInvocationSnapshot, error)
+	})
+	if !ok {
+		return factoryruntime.CleanInvocationSnapshot{}, factoryruntime.ErrNotRunning
+	}
+	return provider.CleanInvocationSnapshot(ctx)
 }
 
 func (f testRunnerOpeners) Invocation() InvocationOperation {

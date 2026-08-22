@@ -316,6 +316,7 @@ type Operation struct {
 	cfg                    RunConfig
 	logger                 *zap.Logger
 	runner                 RuntimeRunner
+	batchReportProvider    batchReportProvider
 	invocationRequest      *factoryapi.InvocationRequest
 	invocationTarget       factorysessions.InvocationTarget
 	invocation             InvocationOperation
@@ -496,6 +497,7 @@ func (operation *Operation) Run(ctx context.Context) error {
 		operation.cfg,
 		operation.runner,
 		operation.recordPath,
+		operation.batchReportProvider,
 	); err != nil {
 		return err
 	}
@@ -745,8 +747,16 @@ func runFactoryServiceAndEmitResult(
 	cfg RunConfig,
 	factorySvc factoryServiceRunner,
 	recordPath resolvedRunRecordPath,
+	batchProvider batchReportProvider,
 ) error {
-	err := factorySvc.Run(ctx)
+	var snapshot state.CleanInvocationSnapshot
+	var snapshotReady bool
+	var err error
+	if shouldReportBatchResult(cfg) {
+		err = runFactoryService(ctx, factorySvc, batchProvider, &snapshot, &snapshotReady)
+	} else {
+		err = factorySvc.Run(ctx)
+	}
 	logRunServiceOutcome(ctx, cfg, err)
 	if err == nil {
 		reportRecordingPathOnShutdown(cfg.StartupOutput, recordPath, cfg.RecordingsCLI)
@@ -754,7 +764,65 @@ func runFactoryServiceAndEmitResult(
 	if err != nil {
 		return err
 	}
-	return nil
+	if !shouldReportBatchResult(cfg) {
+		return nil
+	}
+	if batchProvider == nil {
+		return fmt.Errorf("report batch result: clean invocation snapshot provider is required")
+	}
+	if !snapshotReady {
+		var snapshotErr error
+		snapshot, snapshotErr = batchProvider.CleanInvocationSnapshot(ctx)
+		if snapshotErr != nil {
+			return fmt.Errorf("read batch result: %w", snapshotErr)
+		}
+	}
+	return reportBatchResult(cfg, snapshot)
+}
+
+func shouldReportBatchResult(cfg RunConfig) bool {
+	return strings.TrimSpace(cfg.WorkFile) != "" && !cfg.CleanInvocation && !cfg.Continuously
+}
+
+func runFactoryService(
+	ctx context.Context,
+	factorySvc factoryServiceRunner,
+	batchProvider batchReportProvider,
+	snapshot *state.CleanInvocationSnapshot,
+	snapshotReady *bool,
+) error {
+	if batchProvider == nil {
+		return factorySvc.Run(ctx)
+	}
+	managed, supportsCompletion := factorySvc.(initializer.CompletionRuntimeRunner)
+	if !supportsCompletion {
+		return factorySvc.Run(ctx)
+	}
+	return managed.RunWithCompletion(ctx, func(completionCtx context.Context) error {
+		if waiter, ok := batchProvider.(interface {
+			ControlWaitToComplete(state.WaitToCompleteRequest) state.WaitToCompleteResult
+		}); ok {
+			waitResult := waiter.ControlWaitToComplete(state.WaitToCompleteRequest{})
+			if waitResult.Done != nil {
+				select {
+				case <-waitResult.Done:
+				case <-completionCtx.Done():
+					return completionCtx.Err()
+				}
+			}
+		}
+		captured, err := batchProvider.CleanInvocationSnapshot(completionCtx)
+		if err != nil {
+			return fmt.Errorf("read batch result: %w", err)
+		}
+		if snapshot != nil {
+			*snapshot = captured
+		}
+		if snapshotReady != nil {
+			*snapshotReady = true
+		}
+		return nil
+	})
 }
 
 func emitVerboseStartupDiagnostics(cfg RunConfig, recordPath resolvedRunRecordPath, requestedPort int) {

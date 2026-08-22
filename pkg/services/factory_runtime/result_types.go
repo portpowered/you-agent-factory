@@ -87,7 +87,9 @@ type SessionResultProjectionOperation interface {
 // these customer-facing facts.
 type CleanInvocationWork struct {
 	WorkID        string
+	Name          string
 	WorkTypeID    string
+	State         string
 	StateCategory string
 	Output        string
 	TraceID       string

@@ -239,9 +239,15 @@ func cleanInvocationWorkFromToken(topology *state.Net, token *factorytoken.Token
 	if topology != nil {
 		category = topology.StateCategoryForPlace(token.PlaceID)
 	}
+	workTypeID, stateValue := state.SplitPlaceID(token.PlaceID)
+	if strings.TrimSpace(token.Color.WorkTypeID) != "" {
+		workTypeID = token.Color.WorkTypeID
+	}
 	return factory.CleanInvocationWork{
 		WorkID:        token.Color.WorkID,
-		WorkTypeID:    token.Color.WorkTypeID,
+		Name:          token.Color.Name,
+		WorkTypeID:    workTypeID,
+		State:         stateValue,
 		StateCategory: string(category),
 		Output:        string(token.Color.Payload),
 		TraceID:       token.Color.TraceID,

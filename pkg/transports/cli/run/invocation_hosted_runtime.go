@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/initializer/runtimeapplication"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
@@ -90,6 +91,30 @@ func (runner historicalReplayRunner) HostedInvocation() HostedInvocationOperatio
 		return nil
 	}
 	return provider.HostedInvocation()
+}
+
+func (runner historicalReplayRunner) CleanInvocationSnapshot(
+	ctx context.Context,
+) (factoryruntime.CleanInvocationSnapshot, error) {
+	provider, ok := runner.runner.(batchReportProvider)
+	if !ok {
+		return factoryruntime.CleanInvocationSnapshot{}, factoryruntime.ErrNotRunning
+	}
+	return provider.CleanInvocationSnapshot(ctx)
+}
+
+func (runner historicalReplayRunner) ControlWaitToComplete(
+	req factoryruntime.WaitToCompleteRequest,
+) factoryruntime.WaitToCompleteResult {
+	provider, ok := runner.runner.(interface {
+		ControlWaitToComplete(factoryruntime.WaitToCompleteRequest) factoryruntime.WaitToCompleteResult
+	})
+	if !ok {
+		done := make(chan struct{})
+		close(done)
+		return factoryruntime.WaitToCompleteResult{Done: done}
+	}
+	return provider.ControlWaitToComplete(req)
 }
 
 // WithHistoricalReplay keeps the detached replay read model beside the
@@ -241,14 +266,100 @@ func WithHostedInvocation(
 	return hostedInvocationRunner{runner: runner, invocation: invocation}
 }
 
-// WithCleanInvocationSnapshot remains a source-compatible Wire seam while
-// terminal classification is owned by Factory Sessions results. The Runtime
-// projection is intentionally not attached to the CLI runner anymore.
+type cleanInvocationSnapshotRunner struct {
+	runner   initializer.LocalRuntimeRunner
+	provider batchReportProvider
+}
+
+func (runner cleanInvocationSnapshotRunner) Run(ctx context.Context) error {
+	return runner.runner.Run(ctx)
+}
+
+func (runner cleanInvocationSnapshotRunner) RunWithCompletion(
+	ctx context.Context,
+	completion initializer.CompletionOperation,
+) error {
+	managed, ok := runner.runner.(initializer.CompletionRuntimeRunner)
+	if !ok {
+		return runner.runner.Run(ctx)
+	}
+	return managed.RunWithCompletion(ctx, completion)
+}
+
+func (runner cleanInvocationSnapshotRunner) CleanInvocationSnapshot(
+	ctx context.Context,
+) (factoryruntime.CleanInvocationSnapshot, error) {
+	if runner.provider == nil {
+		return factoryruntime.CleanInvocationSnapshot{}, factoryruntime.ErrNotRunning
+	}
+	return runner.provider.CleanInvocationSnapshot(ctx)
+}
+
+func (runner cleanInvocationSnapshotRunner) ControlWaitToComplete(
+	req factoryruntime.WaitToCompleteRequest,
+) factoryruntime.WaitToCompleteResult {
+	provider, ok := runner.provider.(interface {
+		ControlWaitToComplete(factoryruntime.WaitToCompleteRequest) factoryruntime.WaitToCompleteResult
+	})
+	if !ok {
+		done := make(chan struct{})
+		close(done)
+		return factoryruntime.WaitToCompleteResult{Done: done}
+	}
+	return provider.ControlWaitToComplete(req)
+}
+
+func (runner cleanInvocationSnapshotRunner) RuntimeHostBinding(ctx context.Context) (initializer.RuntimeHostBinding, error) {
+	reader, ok := runner.runner.(interface {
+		RuntimeHostBinding(context.Context) (initializer.RuntimeHostBinding, error)
+	})
+	if !ok {
+		return initializer.RuntimeHostBinding{}, initializer.ErrRuntimeHostReadinessUnavailable
+	}
+	return reader.RuntimeHostBinding(ctx)
+}
+
+func (runner cleanInvocationSnapshotRunner) RuntimeHostReadinessConfigured() bool {
+	provider, ok := runner.runner.(interface{ RuntimeHostReadinessConfigured() bool })
+	return ok && provider.RuntimeHostReadinessConfigured()
+}
+
+func (runner cleanInvocationSnapshotRunner) RuntimeLogDiagnostics() runtimeartifact.Diagnostics {
+	return runtimeLogDiagnosticsForRunner(runner.runner)
+}
+
+func (runner cleanInvocationSnapshotRunner) HostedInvocation() HostedInvocationOperation {
+	provider, ok := runner.runner.(interface {
+		HostedInvocation() HostedInvocationOperation
+	})
+	if !ok {
+		return nil
+	}
+	return provider.HostedInvocation()
+}
+
+func (runner cleanInvocationSnapshotRunner) HistoricalReplay() *factorysessions.HistoricalReplayInspection {
+	provider, ok := runner.runner.(interface {
+		HistoricalReplay() *factorysessions.HistoricalReplayInspection
+	})
+	if !ok {
+		return nil
+	}
+	return provider.HistoricalReplay()
+}
+
+// WithCleanInvocationSnapshot keeps the Runtime-owned terminal projection
+// beside the neutral lifecycle runner for finite --work batch reporting.
 func WithCleanInvocationSnapshot(
 	runner initializer.LocalRuntimeRunner,
-	_ interface{},
+	provider interface {
+		CleanInvocationSnapshot(context.Context) (factoryruntime.CleanInvocationSnapshot, error)
+	},
 ) initializer.LocalRuntimeRunner {
-	return runner
+	if runner == nil || provider == nil {
+		return runner
+	}
+	return cleanInvocationSnapshotRunner{runner: runner, provider: provider}
 }
 
 func openHostedRuntime(
@@ -313,11 +424,13 @@ func openHostedRuntime(
 	}
 	replayMetadataWarnings := replayMetadataWarningsForRunner(factorySvc)
 	historicalReplay, hostedInvocation := hostedRuntimeCapabilities(factorySvc)
+	batchProvider := batchReportProviderFromRunner(factorySvc)
 	if !cfg.CleanInvocation && (cfg.WithServer || cfg.WithSite || cfg.Port > 0) {
 		factorySvc = runtimeapplication.WithRuntimeHostObserver(factorySvc, onBound)
 	}
 	if operation != nil {
 		operation.runner = factorySvc
+		operation.batchReportProvider = batchProvider
 		operation.hostedInvocation = hostedInvocation
 		operation.historicalReplay = historicalReplay
 		operation.replayMetadataWarnings = replayMetadataWarnings
@@ -330,12 +443,18 @@ func openHostedRuntime(
 
 	return &Operation{
 		cfg: cfg, logger: logger, runner: factorySvc, recordPath: recordPath,
-		startupPrepared:  true,
-		hostedInvocation: hostedInvocation, historicalReplay: historicalReplay,
+		startupPrepared:     true,
+		batchReportProvider: batchProvider,
+		hostedInvocation:    hostedInvocation, historicalReplay: historicalReplay,
 		replayMetadataWarnings: replayMetadataWarnings,
 		openingPresentations:   presentations, visualizations: visualizations,
 		visualizationSinkID: visualizationSinkID,
 	}, nil
+}
+
+func batchReportProviderFromRunner(runner initializer.LocalRuntimeRunner) batchReportProvider {
+	provider, _ := runner.(batchReportProvider)
+	return provider
 }
 
 func registerRuntimeVisualizationSink(
