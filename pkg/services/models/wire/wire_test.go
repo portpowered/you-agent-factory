@@ -724,7 +724,7 @@ func validConstructionEdges() constructionEdges {
 }
 
 func (edges constructionEdges) newService() (models.Service, error) {
-	return NewService(
+	return NewServiceWithBackendArtifactResolver(
 		edges.assetPlatform,
 		edges.assetHTTP,
 		edges.assetEndpoints,
@@ -753,6 +753,7 @@ func (edges constructionEdges) newService() (models.Service, error) {
 		nil,
 		nil,
 		modelseffects.LocalRuntimeHooks{},
+		nil,
 		nil,
 		nil,
 		nil,

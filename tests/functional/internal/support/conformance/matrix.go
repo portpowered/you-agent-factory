@@ -130,15 +130,6 @@ type Matrix struct {
 	Rows []Row
 }
 
-// Clone returns a detached matrix.
-func (matrix Matrix) Clone() Matrix {
-	cloned := Matrix{Rows: make([]Row, len(matrix.Rows))}
-	for index, row := range matrix.Rows {
-		cloned.Rows[index] = row.Clone()
-	}
-	return cloned
-}
-
 // Build expands every operation returned by catalog. The canonical four
 // operations produce seven rows: four OMNI variants plus EMBED text, TTS text,
 // and ASR audio. Any other declared operation produces a named default row
