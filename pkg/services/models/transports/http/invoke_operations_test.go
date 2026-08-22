@@ -381,6 +381,85 @@ func TestGenericInvocationRequestMappingRejectsInvalidArtifactAsTypedFailure(t *
 	}
 }
 
+func TestHandler_InvokeGenericModelUsesModelsRootAndPreservesNamedOutputs(t *testing.T) {
+	t.Parallel()
+
+	var captured models.InvokeModelRequest
+	root := &rootFake{
+		invokeGeneric: func(_ context.Context, request models.InvokeModelRequest) (models.InvokeModelResult, error) {
+			captured = request
+			return models.InvokeModelResult{Outputs: []models.InferenceOutput{
+				{Name: "transcript", Modality: models.ModalityText, ContentType: "TEXT", Content: "hello"},
+				{Name: "segments", Modality: models.ModalityJSON, ContentType: "JSON", Content: `[{"start":0}]`},
+			}}, nil
+		},
+	}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	body := `{"scope":"factory-session:http-test","holder":"operator","model":{"nameOrUri":"asr"},"operation":"ASR","inputs":[{"name":"audio","modality":"AUDIO","content":"bytes"}]}`
+
+	handler.InvokeGenericModel(
+		recorder,
+		httptest.NewRequest(http.MethodPost, "/models/invocations", strings.NewReader(body)),
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s, want 200", recorder.Code, recorder.Body.String())
+	}
+	if captured.Model.NameOrURI != "asr" || captured.Operation != "ASR" || captured.Holder != "operator" || len(captured.Inputs) != 1 {
+		t.Fatalf("root request = %#v, want mapped generic request", captured)
+	}
+	var response factoryapi.GenericModelInvocationResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode generic response: %v", err)
+	}
+	if len(response.Outputs) != 2 || response.Outputs[0].Name != "transcript" || response.Outputs[1].Name != "segments" {
+		t.Fatalf("outputs = %#v, want ordered named outputs", response.Outputs)
+	}
+}
+
+func TestHandler_InvokeGenericModelRejectsInvalidRequestBeforeRoot(t *testing.T) {
+	t.Parallel()
+
+	root := &rootFake{
+		invokeGeneric: func(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error) {
+			t.Fatal("generic root must not run for an invalid request")
+			return models.InvokeModelResult{}, nil
+		},
+	}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.InvokeGenericModel(
+		recorder,
+		httptest.NewRequest(http.MethodPost, "/models/invocations", strings.NewReader(`{"scope":"factory-session:http-test","holder":"operator","model":{"nameOrUri":"asr"},"operation":"ASR","unexpected":true}`)),
+	)
+
+	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), "invalid request payload") {
+		t.Fatalf("response = %d %s, want strict generic payload error", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestHandler_InvokeGenericModelMapsTypedRootFailure(t *testing.T) {
+	t.Parallel()
+
+	root := &rootFake{
+		invokeGeneric: func(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error) {
+			return models.InvokeModelResult{}, &models.InvocationFailure{
+				Class:   models.InvocationFailureClassBackendReadiness,
+				Message: "model backend is not ready",
+			}
+		},
+	}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.InvokeGenericModel(
+		recorder,
+		httptest.NewRequest(http.MethodPost, "/models/invocations", strings.NewReader(`{"scope":"factory-session:http-test","holder":"operator","model":{"nameOrUri":"asr"},"operation":"ASR"}`)),
+	)
+
+	assertCatalogHTTPError(t, recorder, http.StatusServiceUnavailable, "MODEL_BACKEND_NOT_READY", "model backend is not ready")
+}
+
 func TestGeneratedClientGenericContractsPreserveOrderedValuesAndModelConfig(t *testing.T) {
 	t.Parallel()
 	assertGeneratedClientRequestRoundTrip(t)

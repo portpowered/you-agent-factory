@@ -21,6 +21,13 @@ type runtimeScopePeerService struct {
 	closed map[models.RuntimeScopeRef]struct{}
 }
 
+func (s *runtimeScopePeerService) ResolveModelReference(
+	context.Context,
+	models.ResolveModelReferenceRequest,
+) (models.ResolveModelReferenceResult, error) {
+	return models.ResolveModelReferenceResult{}, models.ErrUnsupportedOperation
+}
+
 func newRuntimeScopePeerService(owner string) *runtimeScopePeerService {
 	return &runtimeScopePeerService{
 		owner:  owner,
@@ -136,6 +143,13 @@ func (*runtimeScopePeerService) InvokeLocal(context.Context, models.LocalInvocat
 }
 
 func (*runtimeScopePeerService) InvokeModelWithLease(
+	context.Context,
+	models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
+	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
+}
+
+func (*runtimeScopePeerService) InvokeModel(
 	context.Context,
 	models.InvokeModelRequest,
 ) (models.InvokeModelResult, error) {
@@ -287,6 +301,13 @@ func TestRuntimeScope_ReferenceCarriesAcrossScopeBoundRequests(t *testing.T) {
 }
 
 type unsupportedRuntimeScopePeer struct{}
+
+func (unsupportedRuntimeScopePeer) ResolveModelReference(
+	context.Context,
+	models.ResolveModelReferenceRequest,
+) (models.ResolveModelReferenceResult, error) {
+	return models.ResolveModelReferenceResult{}, models.ErrUnsupportedOperation
+}
 
 func (unsupportedRuntimeScopePeer) PullModelForScope(
 	context.Context,

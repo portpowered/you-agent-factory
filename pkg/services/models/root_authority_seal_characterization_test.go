@@ -44,6 +44,10 @@ func (peerModelsService) InvokeLocal(context.Context, models.LocalInvocationRequ
 	return models.LocalInvocationResult{Handled: false}, nil
 }
 
+func (peerModelsService) InvokeModel(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error) {
+	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
+}
+
 func TestRootServiceAuthority_FakePeerGetModelNotFound(t *testing.T) {
 	t.Parallel()
 

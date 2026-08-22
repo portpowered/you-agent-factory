@@ -14,13 +14,16 @@ type compositionService struct {
 func bindCompositionService(
 	httpProtocol clihttp.Protocol,
 	invocation InvocationOperation,
+	outputFileSystem OutputFileSystem,
 	providers ...CompositionScopeProvider,
 ) Service {
 	if httpProtocol == nil || invocation == nil {
 		return nil
 	}
 	legacy := &httpService{http: httpProtocol, invocation: invocation}
-	owned := NewService(ConfigFromComposition(httpProtocol, invocation, providers...))
+	cfg := ConfigFromComposition(httpProtocol, invocation, providers...)
+	cfg.OutputFileSystem = outputFileSystem
+	owned := NewService(cfg)
 	if owned == nil {
 		return legacy
 	}
@@ -59,10 +62,10 @@ func (service *compositionService) canInvokeThroughOwned(cfg InvokeConfig) bool 
 	if strings.TrimSpace(cfg.Server) != "" {
 		return false
 	}
-	// Owned invoke currently supports JSON metadata only. Audio export still
-	// routes through the bootstrap-owned factory invocation path until the
-	// scoped inference runtime streams artifacts for AUDIO_STREAM.
-	if !cfg.JSON {
+	// Preserve the bootstrap-owned audio export contract. The joined Models
+	// path owns inline generic output and JSON projection; legacy audio export
+	// still needs the bootstrap stream-file response and artifact exporter.
+	if !cfg.JSON && strings.TrimSpace(cfg.OutputPath) != "" {
 		return false
 	}
 	root, ok := service.owned.(*rootService)

@@ -24,6 +24,7 @@ func NewService(
 	hostClock modelseffects.HostClock,
 	hostLogger modelseffects.HostDiagnosticLogger,
 	hostMetrics modelseffects.HostMetricsRecorder,
+	options ...runtimehost.Options,
 ) (runtimehost.Service, error) {
 	if scopes == nil {
 		return nil, fmt.Errorf("%w: Models Runtime Scopes service is required", models.ErrInvalidHostDependencies)
@@ -48,6 +49,7 @@ func NewService(
 		hostClock,
 		hostLogger,
 		hostMetrics,
+		options...,
 	)
 }
 

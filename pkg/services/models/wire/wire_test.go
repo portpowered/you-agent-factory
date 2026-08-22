@@ -334,6 +334,9 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		nil,
 		nil,
 		modelseffects.LocalRuntimeHooks{},
+		nil,
+		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -341,11 +344,6 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	if service == nil {
 		t.Fatal("NewService() returned nil service")
 	}
-	var peer models.Service = service
-	if peer == nil {
-		t.Fatal("constructed value is not assignable to models.Service")
-	}
-
 	assertInertConstruction(t, "asset HTTP", assetHTTP.calls)
 	assertInertConstruction(t, "host HTTP", hostHTTP.calls)
 	assertInertConstruction(t, "runtime HTTP", runtimeHTTP.calls)
@@ -472,6 +470,9 @@ func (edges constructionEdges) newService() (models.Service, error) {
 		nil,
 		nil,
 		modelseffects.LocalRuntimeHooks{},
+		nil,
+		nil,
+		nil,
 	)
 }
 

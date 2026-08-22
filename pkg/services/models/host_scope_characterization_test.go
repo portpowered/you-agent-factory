@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -494,5 +495,107 @@ func assertHostFailureIsOnly(t *testing.T, label string, err, want error) {
 		if other != want && errors.Is(err, other) {
 			t.Fatalf("%s must keep %v distinct from %v: %v", label, want, other, err)
 		}
+	}
+}
+
+func TestHostContractValidationAndOpaqueErrors(t *testing.T) {
+	t.Parallel()
+
+	scope, err := (models.RuntimeScopeRef{}).Parse("host-contract:1")
+	if err != nil {
+		t.Fatalf("parse scope: %v", err)
+	}
+	lease, err := (models.ModelLeaseRef{}).Parse(" host-contract:lease ")
+	if err != nil || lease.String() != "host-contract:lease" || lease.IsZero() {
+		t.Fatalf("lease reference = %q, %v", lease.String(), err)
+	}
+	if _, err := (models.ModelLeaseRef{}).Parse(" "); !errors.Is(err, models.ErrHostLeaseNotFound) {
+		t.Fatalf("empty lease parse = %v, want ErrHostLeaseNotFound", err)
+	}
+
+	assertHostReadinessContract(t)
+	assertHostRequestContracts(t, scope, lease)
+	assertHostLegacyRequestContracts(t)
+}
+
+func assertHostReadinessContract(t *testing.T) {
+	t.Helper()
+	cause := errors.New("private host cause")
+	readiness := &models.HostReadinessError{
+		Snapshot: models.HostReadinessSnapshot{
+			Identity:       models.HostIdentity{Name: "model"},
+			ReadinessState: models.ReadinessStateFailed,
+			LifecycleState: models.LifecycleStateLoaded,
+			FailureClass:   models.HostFailureClassProtocol,
+		},
+		Cause: cause,
+	}
+	if !errors.Is(readiness, cause) || readiness.ManagedRuntimeReadinessState() != models.ReadinessStateFailed || !strings.Contains(readiness.Error(), "protocol_incompatible") {
+		t.Fatalf("host readiness error = %v, want safe typed facts", readiness)
+	}
+	var nilReadiness *models.HostReadinessError
+	if nilReadiness.Error() != "" || nilReadiness.Unwrap() != nil || nilReadiness.ManagedRuntimeReadinessState() != "" {
+		t.Fatal("nil HostReadinessError methods should be safe")
+	}
+
+	hostSnapshot := models.ModelHostSnapshot{Diagnostics: map[string]string{"state": "ready"}}
+	hostClone := hostSnapshot.Clone()
+	hostSnapshot.Diagnostics["state"] = "changed"
+	if hostClone.Diagnostics["state"] != "ready" {
+		t.Fatalf("ModelHostSnapshot.Clone() retained diagnostics map: %#v", hostClone)
+	}
+}
+
+func assertHostRequestContracts(t *testing.T, scope models.RuntimeScopeRef, lease models.ModelLeaseRef) {
+	t.Helper()
+	validHost := models.EnsureModelHostRequest{Scope: scope, Name: "model"}
+	if err := validHost.Validate(); err != nil {
+		t.Fatalf("valid EnsureModelHostRequest.Validate() = %v", err)
+	}
+	for _, request := range []interface{ Validate() error }{
+		models.EnsureModelHostRequest{Name: "model"},
+		models.InspectModelHostRequest{Scope: scope},
+		models.StopModelHostRequest{Scope: scope},
+		models.AcquireModelLeaseRequest{Scope: scope, Name: "model"},
+		models.GetModelLeaseRequest{Scope: scope},
+		models.ReleaseModelLeaseRequest{Scope: scope},
+	} {
+		if err := request.Validate(); err == nil {
+			t.Fatalf("invalid host contract request %#v returned nil", request)
+		}
+	}
+	if err := (models.AcquireModelLeaseRequest{Scope: scope, Name: "model", Holder: "holder"}).Validate(); err != nil {
+		t.Fatalf("valid AcquireModelLeaseRequest.Validate() = %v", err)
+	}
+	if err := (models.GetModelLeaseRequest{Scope: scope, Lease: lease}).Validate(); err != nil {
+		t.Fatalf("valid GetModelLeaseRequest.Validate() = %v", err)
+	}
+	if err := (models.ReleaseModelLeaseRequest{Scope: scope, Lease: lease}).Validate(); err != nil {
+		t.Fatalf("valid ReleaseModelLeaseRequest.Validate() = %v", err)
+	}
+	if err := (models.AcquireModelLeaseRequest{Scope: scope, Name: "model"}).Validate(); !errors.Is(err, models.ErrHostInvalidHolder) {
+		t.Fatalf("missing holder error = %v, want ErrHostInvalidHolder", err)
+	}
+}
+
+func assertHostLegacyRequestContracts(t *testing.T) {
+	t.Helper()
+	if err := models.ValidateInspectRuntimeRequest(models.InspectRuntimeRequest{Name: "model"}); err != nil {
+		t.Fatalf("valid InspectRuntimeRequest = %v", err)
+	}
+	if err := models.ValidateAcquireLeaseRequest(models.AcquireLeaseRequest{ModelName: "model"}); err != nil {
+		t.Fatalf("valid AcquireLeaseRequest = %v", err)
+	}
+	if err := models.ValidateReleaseLeaseRequest(models.ReleaseLeaseRequest{LeaseID: "lease"}); err != nil {
+		t.Fatalf("valid ReleaseLeaseRequest = %v", err)
+	}
+	if err := models.ValidateInspectRuntimeRequest(models.InspectRuntimeRequest{}); err == nil {
+		t.Fatal("empty InspectRuntimeRequest returned nil")
+	}
+	if err := models.ValidateAcquireLeaseRequest(models.AcquireLeaseRequest{}); err == nil {
+		t.Fatal("empty AcquireLeaseRequest returned nil")
+	}
+	if err := models.ValidateReleaseLeaseRequest(models.ReleaseLeaseRequest{}); err == nil {
+		t.Fatal("empty ReleaseLeaseRequest returned nil")
 	}
 }

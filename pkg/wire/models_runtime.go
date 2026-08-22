@@ -38,8 +38,16 @@ const (
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
+	processClock := edges.Clock
+	if processClock == nil {
+		processClock = platformclock.Real{}
+	}
 	assetPlatform := provideModelAssetHostPlatform(edges)
 	assetEndpoints := edges.ModelAssetEndpoints
+	assetEnvironment := edges.ModelAssetResolveEnvironment
+	if assetEnvironment == nil {
+		assetEnvironment = os.Getenv
+	}
 
 	assetHTTP := edges.ModelAssetHTTPClient
 	if assetHTTP == nil {
@@ -96,7 +104,22 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 	}
 	hostClock := edges.ModelHostClock
 	if hostClock == nil {
-		hostClock = modelsClock{}
+		hostClock = modelsClock{source: processClock}
+	}
+	protocolNegotiator := adaptModelHostProtocolNegotiator(edges.ModelHostProtocolNegotiator)
+	if protocolNegotiator == nil && !isNilModelEdgeDependency(edges.ModelHostGRPCDialer) {
+		protocolNegotiator = modelswire.PinnedGRPCNegotiator{
+			Dialer: modelHostGRPCDialerAdapter{next: edges.ModelHostGRPCDialer},
+		}
+	}
+	compatibilityChecker := adaptModelHostCompatibilityChecker(edges.ModelHostCompatibilityChecker)
+	backendArtifactResolver := adaptModelBackendArtifactResolver(edges.ModelResolveBackendArtifact)
+	if backendArtifactResolver == nil {
+		var resolverErr error
+		backendArtifactResolver, resolverErr = modelswire.NewDefaultBackendArtifactResolver()
+		if resolverErr != nil {
+			return nil, fmt.Errorf("construct Models backend artifact selector: %w", resolverErr)
+		}
 	}
 	runtimeRunner := edges.ModelRuntimeCommandRunner
 	if runtimeRunner == nil {
@@ -128,7 +151,7 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		}
 	}
 
-	return modelswire.NewService(
+	return modelswire.NewServiceWithBackendArtifactResolver(
 		assetPlatform,
 		assetHTTP,
 		assetEndpoints,
@@ -151,13 +174,170 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		modelswire.RuntimeTempDirectory(runtimeTempDir),
 		adaptModelRuntimeTempFile(runtimeTempFile),
 		zap.NewNop(),
-		time.Now,
+		processClock.Now,
 		platformrandom.CryptoSource{},
 		adaptModelsPullMetricsRecorder(edges.ModelPullMetricsRecorder),
 		modelswire.HostDiagnosticLogger(factorysessionwire.ModelHostDiagnosticLogger(zap.NewNop())),
 		modelswire.HostMetricsRecorder(factorysessionwire.ModelHostDiagnosticMetrics(edges.InvocationMetricsRecorder)),
 		modelLocalRuntimeHooks(workerswire.LocalRuntimeHooks()),
+		assetEnvironment,
+		protocolNegotiator,
+		compatibilityChecker,
+		backendArtifactResolver,
+		edges.ModelResolveHuggingFaceRevision,
 	)
+}
+
+func adaptModelBackendArtifactResolver(
+	next serviceedges.ModelResolveBackendArtifact,
+) modelswire.BackendArtifactResolver {
+	if next == nil {
+		return nil
+	}
+	return func(
+		ctx context.Context,
+		request modelswire.BackendArtifactSelectionRequest,
+	) (modelswire.BackendArtifactSelection, error) {
+		selection, err := next(ctx, serviceedges.ModelBackendArtifactSelectionRequest{
+			Backend:         request.Backend,
+			Platform:        request.Platform,
+			ProtocolVersion: request.ProtocolVersion,
+		})
+		return modelswire.BackendArtifactSelection{
+			Name:     selection.Name,
+			Location: selection.Location,
+			Bytes:    selection.Bytes,
+			SHA256:   selection.SHA256,
+		}, err
+	}
+}
+
+type modelHostProtocolNegotiatorAdapter struct {
+	next modelHostProtocolEdge
+}
+
+func (adapter modelHostProtocolNegotiatorAdapter) Negotiate(
+	ctx context.Context,
+	endpoint string,
+	request modelswire.HostProtocolNegotiationRequest,
+) (modelswire.HostProtocolNegotiationResult, error) {
+	result, err := adapter.next.Negotiate(ctx, endpoint, serviceedges.ModelHostProtocolNegotiationRequest{
+		ProtocolVersion: request.ProtocolVersion,
+		Backend:         request.Backend,
+		ModelName:       request.ModelName,
+		Revision:        request.Revision,
+		Platform:        request.Platform,
+	})
+	return modelswire.HostProtocolNegotiationResult{
+		ProtocolVersion: result.ProtocolVersion,
+		Backend:         result.Backend,
+		Ready:           result.Ready,
+	}, err
+}
+
+type modelHostGRPCDialerAdapter struct {
+	next modelHostGRPCDialerEdge
+}
+
+func (adapter modelHostGRPCDialerAdapter) Dial(
+	ctx context.Context,
+	endpoint string,
+) (modelswire.HostGRPCConnection, error) {
+	connection, err := adapter.next.Dial(ctx, endpoint)
+	if err != nil || connection == nil {
+		return nil, err
+	}
+	return modelHostGRPCConnectionAdapter{next: connection}, nil
+}
+
+type modelHostGRPCConnectionAdapter struct {
+	next modelHostGRPCConnectionEdge
+}
+
+func (adapter modelHostGRPCConnectionAdapter) Negotiate(
+	ctx context.Context,
+	request modelswire.HostProtocolNegotiationRequest,
+) (modelswire.HostProtocolNegotiationResult, error) {
+	result, err := adapter.next.Negotiate(ctx, serviceedges.ModelHostProtocolNegotiationRequest{
+		ProtocolVersion: request.ProtocolVersion,
+		Backend:         request.Backend,
+		ModelName:       request.ModelName,
+		Revision:        request.Revision,
+		Platform:        request.Platform,
+	})
+	return modelswire.HostProtocolNegotiationResult{
+		ProtocolVersion: result.ProtocolVersion,
+		Backend:         result.Backend,
+		Ready:           result.Ready,
+	}, err
+}
+
+func (adapter modelHostGRPCConnectionAdapter) Close() error {
+	return adapter.next.Close()
+}
+
+type modelHostCompatibilityCheckerAdapter struct {
+	next modelHostCompatibilityEdge
+}
+
+func (adapter modelHostCompatibilityCheckerAdapter) Check(
+	ctx context.Context,
+	request modelswire.HostCompatibilityRequest,
+) error {
+	return adapter.next.Check(ctx, serviceedges.ModelHostCompatibilityRequest{
+		Backend:   request.Backend,
+		ModelName: request.ModelName,
+		Revision:  request.Revision,
+		Platform:  request.Platform,
+	})
+}
+
+func adaptModelHostProtocolNegotiator(
+	negotiator modelHostProtocolEdge,
+) modelswire.HostProtocolNegotiator {
+	if isNilModelEdgeDependency(negotiator) {
+		return nil
+	}
+	return modelHostProtocolNegotiatorAdapter{next: negotiator}
+}
+
+func adaptModelHostCompatibilityChecker(
+	checker modelHostCompatibilityEdge,
+) modelswire.HostCompatibilityChecker {
+	if isNilModelEdgeDependency(checker) {
+		return nil
+	}
+	return modelHostCompatibilityCheckerAdapter{next: checker}
+}
+
+type modelHostProtocolEdge interface {
+	Negotiate(
+		context.Context,
+		string,
+		serviceedges.ModelHostProtocolNegotiationRequest,
+	) (serviceedges.ModelHostProtocolNegotiationResult, error)
+}
+
+type modelHostGRPCDialerEdge interface {
+	Dial(context.Context, string) (interface {
+		Negotiate(
+			context.Context,
+			serviceedges.ModelHostProtocolNegotiationRequest,
+		) (serviceedges.ModelHostProtocolNegotiationResult, error)
+		Close() error
+	}, error)
+}
+
+type modelHostGRPCConnectionEdge interface {
+	Negotiate(
+		context.Context,
+		serviceedges.ModelHostProtocolNegotiationRequest,
+	) (serviceedges.ModelHostProtocolNegotiationResult, error)
+	Close() error
+}
+
+type modelHostCompatibilityEdge interface {
+	Check(context.Context, serviceedges.ModelHostCompatibilityRequest) error
 }
 
 func providePlatformProcessCommandRunner(edges serviceedges.Edges) (platformprocess.CommandRunner, error) {
@@ -203,9 +383,14 @@ func provideModelAssetHostPlatform(edges serviceedges.Edges) models.AssetHostPla
 	return platform
 }
 
-type modelsClock struct{}
+type modelsClock struct{ source platformclock.Source }
 
-func (modelsClock) Now() time.Time { return time.Now() }
+func (clock modelsClock) Now() time.Time {
+	if clock.source != nil {
+		return clock.source.Now()
+	}
+	return time.Time{}
+}
 
 func (modelsClock) NewTimer(duration time.Duration) interface {
 	C() <-chan time.Time

@@ -144,6 +144,9 @@ type LoadPolicy string
 const (
 	// LoadPolicyOnDemand keeps the model unloaded until an invocation needs it.
 	LoadPolicyOnDemand LoadPolicy = "ON_DEMAND"
+	// LoadPolicyKeepWarm retains a ready backend after its last lease until
+	// explicit stop or resource pressure requires eviction.
+	LoadPolicyKeepWarm LoadPolicy = "KEEP_WARM"
 )
 
 const (
@@ -155,9 +158,9 @@ const (
 
 const (
 	builtInLLMSource   = "hf://unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf@bfc15c382204943c3a8fff0c750b94ae2364d7a3"
-	builtInASRSource   = "hf://ggerganov/whisper.cpp/ggml-base.en.bin"
-	builtInTTSSource   = "hf://vibevoice/VibeVoice-7B"
-	builtInEmbedSource = "hf://Qwen/Qwen3-Embedding-0.6B"
+	builtInASRSource   = "hf://ggerganov/whisper.cpp/ggml-base.en.bin@5359861c739e955e79d9a303bcbc70fb988958b1"
+	builtInTTSSource   = "hf://vibevoice/VibeVoice-7B@505114ae6ad17be74df98e6939707434ec49c187"
+	builtInEmbedSource = "hf://Qwen/Qwen3-Embedding-0.6B@97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
 )
 
 // ModelDefinition describes one configured model name without resolving its

@@ -660,6 +660,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/models/invocations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Invoke a model through the generic contract
+     * @description Invokes a configured model or supported source reference through the provider-neutral Models contract. Ordered inputs and named outputs remain detached from backend and cache details.
+     */
+    post: operations["invokeGenericModel"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/models/{model_name}": {
     parameters: {
       query?: never;
@@ -8917,6 +8937,33 @@ export interface operations {
           "application/json": components["schemas"]["ListModelsResponse"];
         };
       };
+      500: components["responses"]["InternalError"];
+    };
+  };
+  invokeGenericModel: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["GenericModelInvocationRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful generic model invocation result. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GenericModelInvocationResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
     };
   };

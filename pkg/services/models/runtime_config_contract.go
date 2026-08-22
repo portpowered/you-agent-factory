@@ -56,6 +56,9 @@ func (ref RuntimeScopeRef) IsZero() bool {
 type RuntimeScopeConfig struct {
 	CacheDirectory string
 	Runtime        RuntimeConfig
+	// OperatorModels is a detached, scope-local snapshot of optional model
+	// overlays. Models applies it over built-ins during reference resolution.
+	OperatorModels map[string]ModelOverlay
 }
 
 // Clone returns a detached copy safe for a Models implementation to retain.
@@ -66,6 +69,12 @@ func (config RuntimeScopeConfig) Clone() RuntimeScopeConfig {
 		cloned.Runtime.Workers[i] = config.Runtime.Workers[i].Clone()
 	}
 	cloned.Runtime.Resources = append([]RuntimeResource(nil), config.Runtime.Resources...)
+	if config.OperatorModels != nil {
+		cloned.OperatorModels = make(map[string]ModelOverlay, len(config.OperatorModels))
+		for name, overlay := range config.OperatorModels {
+			cloned.OperatorModels[name] = overlay.Clone()
+		}
+	}
 	return cloned
 }
 

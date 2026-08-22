@@ -1649,6 +1649,16 @@
     },
     {
       "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/local_execution_contract.go",
+      "target": "PrepareGenericInvocation"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/managed_runtime_contract.go",
+      "target": "NormalizeGenericInvocationOutputs"
+    },
+    {
+      "rule": "service-root-exported-function",
       "filePath": "pkg/services/operator_settings/acp_agent_profile.go",
       "target": "DefaultACPAgentProfile"
     },

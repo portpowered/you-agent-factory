@@ -483,6 +483,9 @@ func newProductionTestServiceWithAssetEdges(
 		nil,
 		nil,
 		modelseffects.LocalRuntimeHooks{},
+		nil,
+		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)

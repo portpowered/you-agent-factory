@@ -643,3 +643,15 @@ type timeoutTestError struct{}
 func (timeoutTestError) Error() string   { return "timeout" }
 func (timeoutTestError) Timeout() bool   { return true }
 func (timeoutTestError) Temporary() bool { return true }
+
+func TestPrepareGenericAssetsFetchesManifestWhenRequirementsAreOmitted(t *testing.T) {
+	t.Parallel()
+	body := []byte("manifest-discovered model")
+	scopes := newScopes(t, "generic-manifest-discovery")
+	scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
+	service := newGenericService(t, scopes, genericManifestClient("weights.bin", body, func() []byte { return body }), func(string) string { return "" })
+	result, err := service.PrepareModelAssets(context.Background(), models.PrepareModelAssetsRequest{Scope: scope, Reference: models.ModelReference{NameOrURI: "hf://owner/repo@" + genericTestRevision}})
+	if err != nil || result.Outcome != models.AssetPreparationPrepared || len(result.Asset.Artifacts) != 1 || result.Asset.Artifacts[0].Name != "weights.bin" || result.Asset.Artifacts[0].SHA256 != sha256Hex(body) {
+		t.Fatalf("manifest-discovered result = %#v", result)
+	}
+}

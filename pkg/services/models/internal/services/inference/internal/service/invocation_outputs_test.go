@@ -31,6 +31,26 @@ func TestInputEchoInvocationRuntimeReturnsDetachedContent(t *testing.T) {
 	}
 }
 
+func TestInputEchoInvocationRuntimePreservesOrderedInputs(t *testing.T) {
+	t.Parallel()
+
+	result, err := inference.InputEchoInvocationRuntime{}.Invoke(
+		context.Background(),
+		inference.InvocationRuntimeRequest{Request: models.InvokeModelRequest{
+			Inputs: []models.InferenceInput{
+				{Name: "image", Modality: models.ModalityImage, Content: "first"},
+				{Name: "image", Modality: models.ModalityImage, Content: "second"},
+			},
+		}},
+	)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if len(result.Content) != 1 || result.Content[0].Content != "first\nsecond" {
+		t.Fatalf("ordered echoed content = %#v, want first/second order", result.Content)
+	}
+}
+
 func TestInvokeModelWithLeaseReusesWarmHostSlotForConsecutiveInvokes(t *testing.T) {
 	t.Parallel()
 

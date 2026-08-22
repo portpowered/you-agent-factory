@@ -718,6 +718,10 @@ func (compositionModelsRootForFactoryTest) GetModelReadiness(context.Context, mo
 	return modelinference.GetModelReadinessResult{}, modelinference.ErrUnsupportedOperation
 }
 
+func (compositionModelsRootForFactoryTest) ResolveModelReference(context.Context, modelinference.ResolveModelReferenceRequest) (modelinference.ResolveModelReferenceResult, error) {
+	return modelinference.ResolveModelReferenceResult{}, modelinference.ErrUnsupportedOperation
+}
+
 func (compositionModelsRootForFactoryTest) PullModelForScope(context.Context, modelinference.PullModelRequest) (modelinference.PullResult, error) {
 	return modelinference.PullResult{}, modelinference.ErrUnsupportedOperation
 }
@@ -759,6 +763,10 @@ func (compositionModelsRootForFactoryTest) ReleaseModelLease(context.Context, mo
 }
 
 func (compositionModelsRootForFactoryTest) InvokeModelWithLease(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (compositionModelsRootForFactoryTest) InvokeModel(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
 	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
 }
 

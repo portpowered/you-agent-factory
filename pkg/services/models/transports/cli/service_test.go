@@ -18,6 +18,7 @@ type stubModelsRoot struct {
 	getCatalogModel      func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error)
 	acquireModelLease    func(context.Context, modelinference.AcquireModelLeaseRequest) (modelinference.AcquireModelLeaseResult, error)
 	invokeModelWithLease func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error)
+	invokeModel          func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error)
 }
 
 func (stub stubModelsRoot) OpenRuntimeScope(context.Context, modelinference.OpenRuntimeScopeRequest) (modelinference.OpenRuntimeScopeResult, error) {
@@ -55,6 +56,10 @@ func (stub stubModelsRoot) GetCatalogModel(ctx context.Context, request modelinf
 
 func (stub stubModelsRoot) GetModelReadiness(context.Context, modelinference.GetModelReadinessRequest) (modelinference.GetModelReadinessResult, error) {
 	return modelinference.GetModelReadinessResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (stub stubModelsRoot) ResolveModelReference(context.Context, modelinference.ResolveModelReferenceRequest) (modelinference.ResolveModelReferenceResult, error) {
+	return modelinference.ResolveModelReferenceResult{}, modelinference.ErrUnsupportedOperation
 }
 
 func (stub stubModelsRoot) PullModelForScope(ctx context.Context, request modelinference.PullModelRequest) (modelinference.PullResult, error) {
@@ -106,6 +111,13 @@ func (stub stubModelsRoot) ReleaseModelLease(context.Context, modelinference.Rel
 func (stub stubModelsRoot) InvokeModelWithLease(ctx context.Context, request modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
 	if stub.invokeModelWithLease != nil {
 		return stub.invokeModelWithLease(ctx, request)
+	}
+	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (stub stubModelsRoot) InvokeModel(ctx context.Context, request modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+	if stub.invokeModel != nil {
+		return stub.invokeModel(ctx, request)
 	}
 	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
 }

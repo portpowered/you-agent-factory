@@ -54,6 +54,7 @@ type InvocationFailureClass string
 
 const (
 	InvocationFailureClassInvalidModelReference InvocationFailureClass = "INVALID_MODEL_REFERENCE"
+	InvocationFailureClassRevisionResolution    InvocationFailureClass = "REVISION_RESOLUTION"
 	InvocationFailureClassInvalidOperation      InvocationFailureClass = "INVALID_OPERATION"
 	InvocationFailureClassInvalidSlot           InvocationFailureClass = "INVALID_SLOT"
 	InvocationFailureClassSlotArity             InvocationFailureClass = "SLOT_ARITY"
@@ -73,6 +74,7 @@ const (
 // make the taxonomy discoverable beside InvocationFailureClass.
 const (
 	InvocationFailureInvalidModelReference = InvocationFailureClassInvalidModelReference
+	InvocationFailureRevisionResolution    = InvocationFailureClassRevisionResolution
 	InvocationFailureInvalidOperation      = InvocationFailureClassInvalidOperation
 	InvocationFailureInvalidSlot           = InvocationFailureClassInvalidSlot
 	InvocationFailureSlotArity             = InvocationFailureClassSlotArity
@@ -94,14 +96,15 @@ const (
 // backend addresses, credentials, and concrete protocol errors are excluded
 // from Error().
 type InvocationFailure struct {
-	Class     InvocationFailureClass
-	Message   string
-	Model     ModelReference
-	Operation string
-	Slot      string
-	Parameter string
-	Field     string
-	Cause     error
+	Class      InvocationFailureClass
+	Message    string
+	Model      ModelReference
+	Operation  string
+	Slot       string
+	Parameter  string
+	Field      string
+	ValidNames []string
+	Cause      error
 }
 
 func newInvocationFailure(class InvocationFailureClass, message string) *InvocationFailure {

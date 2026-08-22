@@ -73,6 +73,13 @@ func (fake *recordingModelsService) GetModelReadiness(
 	return models.GetModelReadinessResult{}, models.ErrUnsupportedOperation
 }
 
+func (fake *recordingModelsService) ResolveModelReference(
+	context.Context,
+	models.ResolveModelReferenceRequest,
+) (models.ResolveModelReferenceResult, error) {
+	return models.ResolveModelReferenceResult{}, models.ErrUnsupportedOperation
+}
+
 func (fake *recordingModelsService) PrepareModelAssets(
 	context.Context,
 	models.PrepareModelAssetsRequest,
@@ -137,6 +144,13 @@ func (fake *recordingModelsService) ReleaseModelLease(
 }
 
 func (fake *recordingModelsService) InvokeModelWithLease(
+	context.Context,
+	models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
+	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
+}
+
+func (fake *recordingModelsService) InvokeModel(
 	context.Context,
 	models.InvokeModelRequest,
 ) (models.InvokeModelResult, error) {

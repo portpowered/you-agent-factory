@@ -98,11 +98,12 @@ func (s *service) InvokeModelWithLease(
 		return models.InvokeModelResult{}, err
 	}
 
-	if _, err := s.catalog.GetCatalogModel(validationCtx, models.GetModelRequest{
+	catalogResult, err := s.catalog.GetCatalogModel(validationCtx, models.GetModelRequest{
 		Scope:     request.Scope,
 		Name:      request.ModelName,
 		Operation: request.Operation,
-	}); err != nil {
+	})
+	if err != nil {
 		return models.InvokeModelResult{}, catalogInvokeError(err)
 	}
 
@@ -135,8 +136,9 @@ func (s *service) InvokeModelWithLease(
 	defer cancelDeadline()
 
 	runtimeResult, err := s.runtime.Invoke(invokeCtx, inference.InvocationRuntimeRequest{
-		Request:  request,
-		HostSlot: hostSlot,
+		Request:   request,
+		Operation: catalogOperation(catalogResult.Model, request.Operation),
+		HostSlot:  hostSlot,
 	})
 	if isInvocationInFlight(err) {
 		return accepted.Clone(), nil
@@ -145,7 +147,13 @@ func (s *service) InvokeModelWithLease(
 		return s.finishFailedInvocation(invokeCtx, request, invocation, err)
 	}
 
-	return s.finishCompletedInvocation(ctx, request, invocation, runtimeResult)
+	return s.finishCompletedInvocation(
+		ctx,
+		request,
+		invocation,
+		runtimeResult,
+		catalogOperation(catalogResult.Model, request.Operation),
+	)
 }
 
 func (s *service) ensureModelAssetsAvailable(
@@ -172,7 +180,8 @@ func (s *service) releaseInvocationLease(
 	ctx context.Context,
 	request models.InvokeModelRequest,
 ) {
-	_, _ = s.runtimeHost.ReleaseModelLease(ctx, models.ReleaseModelLeaseRequest{
+	releaseContext := context.WithoutCancel(ctx)
+	_, _ = s.runtimeHost.ReleaseModelLease(releaseContext, models.ReleaseModelLeaseRequest{
 		Scope: request.Scope,
 		Lease: request.Lease,
 	})

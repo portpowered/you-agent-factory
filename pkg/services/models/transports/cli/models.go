@@ -53,6 +53,7 @@ type InvokeConfig struct {
 	Operation        string
 	Text             string
 	OutputPath       string
+	OutputMappings   []string
 	Server           string
 	FactoryDir       string
 	HomeDir          string
@@ -98,7 +99,19 @@ func New(
 	invocation InvocationOperation,
 	providers ...CompositionScopeProvider,
 ) Service {
-	return bindCompositionService(httpProtocol, invocation, providers...)
+	return NewWithOutputFileSystem(httpProtocol, invocation, nil, providers...)
+}
+
+// NewWithOutputFileSystem constructs the composition-stable Models CLI
+// service with the exact filesystem effect used by explicit generic output
+// mappings.
+func NewWithOutputFileSystem(
+	httpProtocol clihttp.Protocol,
+	invocation InvocationOperation,
+	outputFileSystem OutputFileSystem,
+	providers ...CompositionScopeProvider,
+) Service {
+	return bindCompositionService(httpProtocol, invocation, outputFileSystem, providers...)
 }
 
 func (service *httpService) List(cfg ListConfig) error {
@@ -166,6 +179,9 @@ func (service *httpService) Invoke(cfg InvokeConfig) error {
 	text := strings.TrimSpace(cfg.Text)
 	if text == "" {
 		return fmt.Errorf("--text is required")
+	}
+	if len(cfg.OutputMappings) > 0 {
+		return fmt.Errorf("explicit output mappings require the local Models composition")
 	}
 
 	if cfg.JSON {

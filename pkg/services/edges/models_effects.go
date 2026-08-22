@@ -1,8 +1,11 @@
 package edges
 
 import (
+	"context"
 	"io"
 	"os"
+
+	"github.com/portpowered/infinite-you/pkg/services/models"
 )
 
 // PullMetric is the process-edge representation of one managed-model pull
@@ -23,6 +26,39 @@ type AssetReadDirectory func(string) ([]os.DirEntry, error)
 type AssetCreateFile func(string) (io.WriteCloser, error)
 type AssetOpenFile func(string) (io.ReadCloser, error)
 
+// ModelCLIOutputCreateTempFile is the host effect used by the Models CLI
+// output publisher. The caller selects the directory, naming pattern, and
+// publication lifecycle; the edge supplies only the writable handle.
+type ModelCLIOutputCreateTempFile func(string, string) (interface {
+	io.Writer
+	io.Closer
+	Name() string
+}, error)
+
+// ModelBackendArtifactSelectionRequest contains the safe host facts needed by
+// the pinned backend publication selector. The edge owns manifest lookup;
+// Models receives only the selected immutable archive facts.
+type ModelBackendArtifactSelectionRequest struct {
+	Backend         string
+	Platform        models.AssetHostPlatform
+	ProtocolVersion string
+}
+
+// ModelBackendArtifactSelection is the detached archive identity passed into
+// Models asset preparation. Location is consumed only inside the composition
+// graph and is never returned by the Models service.
+type ModelBackendArtifactSelection struct {
+	Name     string
+	Location string
+	Bytes    int64
+	SHA256   string
+}
+
+type ModelResolveBackendArtifact func(
+	context.Context,
+	ModelBackendArtifactSelectionRequest,
+) (ModelBackendArtifactSelection, error)
+
 type HostProcessStartSpec struct {
 	Command                 string
 	Args, Env               []string
@@ -35,3 +71,24 @@ type RuntimeCreateTempFile func(string, string) (interface {
 	Close() error
 	Name() string
 }, error)
+
+type ModelHostProtocolNegotiationRequest struct {
+	ProtocolVersion string
+	Backend         string
+	ModelName       string
+	Revision        string
+	Platform        models.AssetHostPlatform
+}
+
+type ModelHostProtocolNegotiationResult struct {
+	ProtocolVersion string
+	Backend         string
+	Ready           bool
+}
+
+type ModelHostCompatibilityRequest struct {
+	Backend   string
+	ModelName string
+	Revision  string
+	Platform  models.AssetHostPlatform
+}

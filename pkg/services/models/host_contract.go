@@ -45,6 +45,12 @@ var (
 	// runtime. Distinct from missing-assets, loading-timeout, capacity, and
 	// lease-not-found outcomes on the host/lease root slice.
 	ErrHostRuntimeNotReady = errors.New("model host runtime not ready")
+	// ErrHostProtocolIncompatible reports that a managed backend did not
+	// negotiate the pinned provider-neutral protocol revision.
+	ErrHostProtocolIncompatible = errors.New("model host protocol incompatible")
+	// ErrHostUnsupportedPlatform reports that the selected backend cannot run
+	// on the injected host platform or accelerator policy.
+	ErrHostUnsupportedPlatform = errors.New("model host platform unsupported")
 )
 
 // HostIdentity resolves one managed runtime identity for host operations.
@@ -110,13 +116,15 @@ func (e *HostReadinessError) ManagedRuntimeReadinessState() ReadinessState {
 type HostFailureClass string
 
 const (
-	HostFailureClassNone               HostFailureClass = ""
-	HostFailureClassMissingAssets      HostFailureClass = "missing_assets"
-	HostFailureClassLoadingTimeout     HostFailureClass = "loading_timeout"
-	HostFailureClassProcessCrash       HostFailureClass = "process_crash"
-	HostFailureClassUnsupportedRuntime HostFailureClass = "unsupported_runtime"
-	HostFailureClassCancelled          HostFailureClass = "cancelled"
-	HostFailureClassCapacityExhausted  HostFailureClass = "capacity_exhausted"
+	HostFailureClassNone                HostFailureClass = ""
+	HostFailureClassMissingAssets       HostFailureClass = "missing_assets"
+	HostFailureClassLoadingTimeout      HostFailureClass = "loading_timeout"
+	HostFailureClassProcessCrash        HostFailureClass = "process_crash"
+	HostFailureClassUnsupportedRuntime  HostFailureClass = "unsupported_runtime"
+	HostFailureClassCancelled           HostFailureClass = "cancelled"
+	HostFailureClassCapacityExhausted   HostFailureClass = "capacity_exhausted"
+	HostFailureClassProtocol            HostFailureClass = "protocol_incompatible"
+	HostFailureClassUnsupportedPlatform HostFailureClass = "unsupported_platform"
 )
 
 // ModelHostSnapshot contains detached peer-required host readiness facts.

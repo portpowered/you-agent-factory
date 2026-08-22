@@ -12,12 +12,13 @@ import (
 type rootFake struct {
 	models.Service
 
-	list         func(context.Context) (models.List, error)
-	get          func(context.Context, string) (models.Detail, error)
-	pull         func(context.Context, string) (models.PullResult, error)
-	listCatalog  func(context.Context, models.ListModelsRequest) (models.ListModelsResult, error)
-	getCatalog   func(context.Context, models.GetModelRequest) (models.GetModelResult, error)
-	pullForScope func(context.Context, models.PullModelRequest) (models.PullResult, error)
+	list          func(context.Context) (models.List, error)
+	get           func(context.Context, string) (models.Detail, error)
+	pull          func(context.Context, string) (models.PullResult, error)
+	listCatalog   func(context.Context, models.ListModelsRequest) (models.ListModelsResult, error)
+	getCatalog    func(context.Context, models.GetModelRequest) (models.GetModelResult, error)
+	pullForScope  func(context.Context, models.PullModelRequest) (models.PullResult, error)
+	invokeGeneric func(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error)
 }
 
 var _ models.Service = (*rootFake)(nil)
@@ -180,6 +181,16 @@ func (fake *rootFake) InvokeModelWithLease(
 	context.Context,
 	models.InvokeModelRequest,
 ) (models.InvokeModelResult, error) {
+	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
+}
+
+func (fake *rootFake) InvokeModel(
+	ctx context.Context,
+	request models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
+	if fake.invokeGeneric != nil {
+		return fake.invokeGeneric(ctx, request)
+	}
 	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
 }
 

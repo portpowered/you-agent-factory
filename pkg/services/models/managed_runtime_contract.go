@@ -271,6 +271,242 @@ func (runtime Runtime) Clone() Runtime {
 	return runtime
 }
 
+const genericInvocationOutputLimitBytes int64 = 16 << 20
+
+// NormalizeGenericInvocationOutputs validates and detaches named outputs from
+// one generic runtime response. It orders outputs by the declared operation
+// contract, merges inline content with matching artifact metadata, rejects
+// malformed or oversized responses, and never returns a partial output slice.
+func NormalizeGenericInvocationOutputs(
+	operation Operation,
+	content []InferenceContent,
+	artifacts []InferenceArtifact,
+) ([]InferenceOutput, error) {
+	declared, order, err := declaredOutputSlots(operation.Outputs)
+	if err != nil {
+		return nil, err
+	}
+	if len(content) == 0 && len(artifacts) == 0 {
+		return emptyGenericOutputs(operation.Outputs)
+	}
+
+	outputs := make(map[string]*InferenceOutput, len(content)+len(artifacts))
+	if err := collectGenericContentOutputs(outputs, operation.Outputs, declared, content, len(artifacts) == 0); err != nil {
+		return nil, err
+	}
+	if err := collectGenericArtifactOutputs(outputs, operation.Outputs, declared, artifacts, len(content) == 0); err != nil {
+		return nil, err
+	}
+	if err := validateRequiredGenericOutputs(operation.Outputs, outputs); err != nil {
+		return nil, err
+	}
+	return orderedGenericOutputs(order, outputs), nil
+}
+
+func declaredOutputSlots(slots []OperationSlot) (map[string]OperationSlot, []string, error) {
+	declared := make(map[string]OperationSlot, len(slots))
+	order := make([]string, 0, len(slots))
+	for _, slot := range slots {
+		name := strings.TrimSpace(slot.Name)
+		if name == "" {
+			return nil, nil, malformedInvocationOutputFailure("operation declares an unnamed output slot", "")
+		}
+		if _, exists := declared[name]; exists {
+			return nil, nil, malformedInvocationOutputFailure("operation declares a duplicate output slot", name)
+		}
+		declared[name] = slot
+		order = append(order, name)
+	}
+	return declared, order, nil
+}
+
+func emptyGenericOutputs(slots []OperationSlot) ([]InferenceOutput, error) {
+	for _, slot := range slots {
+		if slot.Required != nil && *slot.Required {
+			return nil, malformedInvocationOutputFailure("required output is missing", slot.Name)
+		}
+	}
+	return nil, nil
+}
+
+func collectGenericContentOutputs(
+	outputs map[string]*InferenceOutput,
+	declaredSlots []OperationSlot,
+	declared map[string]OperationSlot,
+	content []InferenceContent,
+	single bool,
+) error {
+	for index, item := range content {
+		name, slot, err := outputSlot(item.Name, declaredSlots, declared, single && len(content) == 1)
+		if err != nil {
+			return err
+		}
+		if err := validateOutputContent(item, name, slot, index); err != nil {
+			return err
+		}
+		output := InferenceOutput{
+			Name: name, Modality: outputModality(item.Modality, slot),
+			ContentType: item.ContentType, MediaType: item.MediaType, Content: item.Content,
+		}
+		if err := appendGenericOutput(outputs, name, slot, output); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func collectGenericArtifactOutputs(
+	outputs map[string]*InferenceOutput,
+	declaredSlots []OperationSlot,
+	declared map[string]OperationSlot,
+	artifacts []InferenceArtifact,
+	single bool,
+) error {
+	for _, artifact := range artifacts {
+		name, slot, err := outputSlot(artifact.Name, declaredSlots, declared, single && len(artifacts) == 1)
+		if err != nil {
+			return err
+		}
+		if err := validateOutputArtifact(artifact, name, slot); err != nil {
+			return err
+		}
+		cloned := artifact.Clone()
+		if existing := outputs[name]; existing != nil {
+			if existing.Artifact != nil {
+				return malformedInvocationOutputFailure("output slot has duplicate artifact metadata", name)
+			}
+			if slot.Repeatable {
+				return malformedInvocationOutputFailure("repeatable output slots require ordered runtime output support", name)
+			}
+			existing.Artifact = &cloned
+			continue
+		}
+		if err := appendGenericOutput(outputs, name, slot, InferenceOutput{
+			Name: name, Modality: outputModality("", slot),
+			MediaType: cloned.MediaType, Artifact: &cloned,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func appendGenericOutput(
+	outputs map[string]*InferenceOutput,
+	name string,
+	slot OperationSlot,
+	output InferenceOutput,
+) error {
+	if existing := outputs[name]; existing != nil {
+		if slot.Repeatable {
+			return malformedInvocationOutputFailure("repeatable output slots require ordered runtime output support", name)
+		}
+		return malformedInvocationOutputFailure("output slot was returned more than once", name)
+	}
+	outputs[name] = &output
+	return nil
+}
+
+func validateRequiredGenericOutputs(
+	slots []OperationSlot,
+	outputs map[string]*InferenceOutput,
+) error {
+	for _, slot := range slots {
+		if slot.Required != nil && *slot.Required {
+			if _, exists := outputs[slot.Name]; !exists {
+				return malformedInvocationOutputFailure("required output is missing", slot.Name)
+			}
+		}
+	}
+	return nil
+}
+
+func orderedGenericOutputs(order []string, outputs map[string]*InferenceOutput) []InferenceOutput {
+	result := make([]InferenceOutput, 0, len(outputs))
+	for _, name := range order {
+		if output := outputs[name]; output != nil {
+			result = append(result, output.Clone())
+		}
+	}
+	return result
+}
+
+func outputSlot(
+	name string,
+	outputs []OperationSlot,
+	declared map[string]OperationSlot,
+	single bool,
+) (string, OperationSlot, error) {
+	name = strings.TrimSpace(name)
+	if name == "" && single && len(outputs) == 1 {
+		name = outputs[0].Name
+	}
+	slot, ok := declared[name]
+	if !ok {
+		return "", OperationSlot{}, malformedInvocationOutputFailure(
+			fmt.Sprintf("runtime returned unknown output slot %q", name), name,
+		)
+	}
+	return name, slot, nil
+}
+
+func validateOutputContent(
+	content InferenceContent,
+	name string,
+	slot OperationSlot,
+	index int,
+) error {
+	if int64(len([]byte(content.Content))) > genericInvocationOutputLimitBytes {
+		return malformedInvocationOutputFailure(
+			fmt.Sprintf("output %q exceeds the response size limit", name), name,
+		)
+	}
+	if content.Modality != "" && content.Modality != slot.Modality {
+		return malformedInvocationOutputFailure(
+			fmt.Sprintf("output %d for slot %q has unsupported modality %q", index, name, content.Modality), name,
+		)
+	}
+	if media := strings.TrimSpace(content.MediaType); media != "" && !matchesMediaType(media, slot.MediaTypes) {
+		return malformedInvocationOutputFailure(
+			fmt.Sprintf("output slot %q returned unsupported media type", name), name,
+		)
+	}
+	return nil
+}
+
+func validateOutputArtifact(artifact InferenceArtifact, name string, slot OperationSlot) error {
+	if artifact.Artifact.IsZero() {
+		return malformedInvocationOutputFailure("runtime returned an invalid artifact reference", name)
+	}
+	if artifact.SizeBytes < 0 || artifact.SizeBytes > genericInvocationOutputLimitBytes {
+		return malformedInvocationOutputFailure(
+			fmt.Sprintf("output %q exceeds the response size limit", name), name,
+		)
+	}
+	if media := strings.TrimSpace(artifact.MediaType); media != "" && !matchesMediaType(media, slot.MediaTypes) {
+		return malformedInvocationOutputFailure(
+			fmt.Sprintf("output slot %q returned unsupported artifact media type", name), name,
+		)
+	}
+	return nil
+}
+
+func outputModality(modality Modality, slot OperationSlot) Modality {
+	if modality != "" {
+		return modality
+	}
+	return slot.Modality
+}
+
+func malformedInvocationOutputFailure(message, slot string) error {
+	return &InvocationFailure{
+		Class:   InvocationFailureClassMalformedResponse,
+		Message: message,
+		Slot:    slot,
+		Cause:   ErrInferenceFailed,
+	}
+}
+
 // InvocationError carries managed-runtime readiness context without exposing a
 // transport-specific projection or error type.
 type InvocationError struct {

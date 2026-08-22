@@ -126,6 +126,7 @@ var servicesSet = wire.NewSet(
 	provideModelInvocationTimeout,
 	provideModelInvocationOperation,
 	provideModelsCLIComposition,
+	provideModelsCLIOutputFileSystem,
 	provideWorkService,
 	provideWorkRequestIDGenerator,
 	provideWorkSubmittedFileReader,

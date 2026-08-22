@@ -9765,6 +9765,9 @@ type MoveWorkBySessionIdJSONRequestBody = MoveWorkRequest
 // ValidateFactoryJSONRequestBody defines body for ValidateFactory for application/json ContentType.
 type ValidateFactoryJSONRequestBody = Factory
 
+// InvokeGenericModelJSONRequestBody defines body for InvokeGenericModel for application/json ContentType.
+type InvokeGenericModelJSONRequestBody = GenericModelInvocationRequest
+
 // InvokeModelJSONRequestBody defines body for InvokeModel for application/json ContentType.
 type InvokeModelJSONRequestBody = ModelInvocationRequest
 
@@ -18470,6 +18473,9 @@ type ServerInterface interface {
 	// List managed runtimes
 	// (GET /models)
 	ListModels(w http.ResponseWriter, r *http.Request)
+	// Invoke a model through the generic contract
+	// (POST /models/invocations)
+	InvokeGenericModel(w http.ResponseWriter, r *http.Request)
 	// Inspect one managed runtime
 	// (GET /models/{model_name})
 	GetModel(w http.ResponseWriter, r *http.Request, modelName string)
@@ -20288,6 +20294,20 @@ func (siw *ServerInterfaceWrapper) ListModels(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// InvokeGenericModel operation middleware
+func (siw *ServerInterfaceWrapper) InvokeGenericModel(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.InvokeGenericModel(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetModel operation middleware
 func (siw *ServerInterfaceWrapper) GetModel(w http.ResponseWriter, r *http.Request) {
 
@@ -20976,6 +20996,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/metrics/costs", wrapper.GetMetricsCosts).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/models", wrapper.ListModels).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/models/invocations", wrapper.InvokeGenericModel).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/models/{model_name}", wrapper.GetModel).Methods("GET")
 

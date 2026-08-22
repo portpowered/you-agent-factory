@@ -70,19 +70,25 @@ type Edges struct {
 	ModelAssetHTTPClient             interface {
 		Do(*http.Request) (*http.Response, error)
 	}
-	ModelAssetEndpoints            models.RuntimeAssetEndpoints
-	ModelAssetHostPlatform         models.AssetHostPlatform
-	ModelAssetMakeDirectories      AssetMakeDirectories
-	ModelAssetInspectPath          AssetInspectPath
-	ModelAssetResolveHomeDirectory AssetResolveHomeDirectory
-	ModelAssetWriteFile            AssetWriteFile
-	ModelAssetRenamePath           AssetRenamePath
-	ModelAssetRemovePath           AssetRemovePath
-	ModelAssetReadFile             AssetReadFile
-	ModelAssetReadDirectory        AssetReadDirectory
-	ModelAssetCreateFile           AssetCreateFile
-	ModelAssetOpenFile             AssetOpenFile
-	ModelHostProcessLauncher       interface {
+	ModelAssetEndpoints             models.RuntimeAssetEndpoints
+	ModelAssetHostPlatform          models.AssetHostPlatform
+	ModelResolveHuggingFaceRevision func(context.Context, string) (string, error)
+	ModelAssetResolveEnvironment    func(string) string
+	ModelAssetMakeDirectories       AssetMakeDirectories
+	ModelAssetInspectPath           AssetInspectPath
+	ModelAssetResolveHomeDirectory  AssetResolveHomeDirectory
+	ModelAssetWriteFile             AssetWriteFile
+	ModelAssetRenamePath            AssetRenamePath
+	ModelAssetRemovePath            AssetRemovePath
+	ModelAssetReadFile              AssetReadFile
+	ModelAssetReadDirectory         AssetReadDirectory
+	ModelAssetCreateFile            AssetCreateFile
+	ModelAssetOpenFile              AssetOpenFile
+	ModelCLIOutputCreateTempFile    ModelCLIOutputCreateTempFile
+	ModelCLIOutputInspectPath       AssetInspectPath
+	ModelCLIOutputRemovePath        AssetRemovePath
+	ModelCLIOutputRenamePath        AssetRenamePath
+	ModelHostProcessLauncher        interface {
 		Start(context.Context, HostProcessStartSpec) (interface {
 			HealthEndpoint() string
 			Wait() error
@@ -99,8 +105,21 @@ type Edges struct {
 			Stop() bool
 		}
 	}
-	ModelRuntimeCommandRunner platformprocess.CommandRunner
-	ModelRuntimeHTTPClient    interface {
+	ModelHostProtocolNegotiator interface {
+		Negotiate(context.Context, string, ModelHostProtocolNegotiationRequest) (ModelHostProtocolNegotiationResult, error)
+	}
+	ModelHostGRPCDialer interface {
+		Dial(context.Context, string) (interface {
+			Negotiate(context.Context, ModelHostProtocolNegotiationRequest) (ModelHostProtocolNegotiationResult, error)
+			Close() error
+		}, error)
+	}
+	ModelHostCompatibilityChecker interface {
+		Check(context.Context, ModelHostCompatibilityRequest) error
+	}
+	ModelResolveBackendArtifact ModelResolveBackendArtifact
+	ModelRuntimeCommandRunner   platformprocess.CommandRunner
+	ModelRuntimeHTTPClient      interface {
 		Do(*http.Request) (*http.Response, error)
 	}
 	ModelRuntimeInspectFile           RuntimeInspectFile
@@ -307,6 +326,12 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	if replacements.ModelAssetHostPlatform.Architecture != "" {
 		defaults.ModelAssetHostPlatform.Architecture = replacements.ModelAssetHostPlatform.Architecture
 	}
+	if replacements.ModelResolveHuggingFaceRevision != nil {
+		defaults.ModelResolveHuggingFaceRevision = replacements.ModelResolveHuggingFaceRevision
+	}
+	if replacements.ModelAssetResolveEnvironment != nil {
+		defaults.ModelAssetResolveEnvironment = replacements.ModelAssetResolveEnvironment
+	}
 	if replacements.ModelAssetMakeDirectories != nil {
 		defaults.ModelAssetMakeDirectories = replacements.ModelAssetMakeDirectories
 	}
@@ -337,6 +362,18 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	if replacements.ModelAssetOpenFile != nil {
 		defaults.ModelAssetOpenFile = replacements.ModelAssetOpenFile
 	}
+	if replacements.ModelCLIOutputCreateTempFile != nil {
+		defaults.ModelCLIOutputCreateTempFile = replacements.ModelCLIOutputCreateTempFile
+	}
+	if replacements.ModelCLIOutputInspectPath != nil {
+		defaults.ModelCLIOutputInspectPath = replacements.ModelCLIOutputInspectPath
+	}
+	if replacements.ModelCLIOutputRemovePath != nil {
+		defaults.ModelCLIOutputRemovePath = replacements.ModelCLIOutputRemovePath
+	}
+	if replacements.ModelCLIOutputRenamePath != nil {
+		defaults.ModelCLIOutputRenamePath = replacements.ModelCLIOutputRenamePath
+	}
 	if replacements.ModelHostProcessLauncher != nil {
 		defaults.ModelHostProcessLauncher = replacements.ModelHostProcessLauncher
 	}
@@ -345,6 +382,18 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.ModelHostClock != nil {
 		defaults.ModelHostClock = replacements.ModelHostClock
+	}
+	if replacements.ModelHostProtocolNegotiator != nil {
+		defaults.ModelHostProtocolNegotiator = replacements.ModelHostProtocolNegotiator
+	}
+	if replacements.ModelHostGRPCDialer != nil {
+		defaults.ModelHostGRPCDialer = replacements.ModelHostGRPCDialer
+	}
+	if replacements.ModelHostCompatibilityChecker != nil {
+		defaults.ModelHostCompatibilityChecker = replacements.ModelHostCompatibilityChecker
+	}
+	if replacements.ModelResolveBackendArtifact != nil {
+		defaults.ModelResolveBackendArtifact = replacements.ModelResolveBackendArtifact
 	}
 	if replacements.ModelRuntimeCommandRunner != nil {
 		defaults.ModelRuntimeCommandRunner = replacements.ModelRuntimeCommandRunner
