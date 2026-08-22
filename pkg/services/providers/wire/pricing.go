@@ -5,20 +5,14 @@ import providers "github.com/portpowered/infinite-you/pkg/services/providers"
 // NewPriceTableReader constructs the immutable Providers-owned pricing facts
 // used by valuation. The returned reader exposes detached values and validates
 // every authored row before it enters the process graph.
-func NewPriceTableReader() (providers.PriceTableReader, error) {
+func NewPriceTableReader() (providers.PriceTableReaderFunc, error) {
 	table, err := defaultPriceTable().Normalize()
 	if err != nil {
 		return nil, err
 	}
-	return staticPriceTableReader{table: table}, nil
-}
-
-type staticPriceTableReader struct {
-	table providers.PriceTable
-}
-
-func (reader staticPriceTableReader) ReadPriceTable() (providers.PriceTable, error) {
-	return reader.table.Clone(), nil
+	return func() (providers.PriceTable, error) {
+		return table.Clone(), nil
+	}, nil
 }
 
 // defaultPriceTable is the only shipped pricing data source. The observed

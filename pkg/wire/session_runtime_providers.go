@@ -632,14 +632,14 @@ func provideRuntimeMetricsQueryCapability(
 
 // provideProviderPriceTableReader exposes the immutable pricing facts owned by
 // Providers. It is separate from the configurable Operator Settings document.
-func provideProviderPriceTableReader() (providers.PriceTableReader, error) {
+func provideProviderPriceTableReader() (providers.PriceTableReaderFunc, error) {
 	return providerswire.NewPriceTableReader()
 }
 
 // provideCostsQuery composes valuation over canonical metrics and the narrow
 // Providers pricing reader. Costs reads no artifacts or operator files.
 func provideCostsQuery(
-	pricing providers.PriceTableReader,
+	pricing costs.PriceTableReader,
 	metrics factoryvisualization.RuntimeMetricsQuery,
 	logger logging.Logger,
 ) (costs.CostsQuery, error) {

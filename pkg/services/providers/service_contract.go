@@ -142,16 +142,12 @@ type PriceTableModel struct {
 	EqualRateClasses                []PriceClass
 }
 
-// PriceTableReader is the narrow Providers-owned capability required by
-// consumers such as Costs. Implementations must return detached values.
-type PriceTableReader interface {
-	ReadPriceTable() (PriceTable, error)
-}
-
-// PriceTableReaderFunc adapts a pure reader function to PriceTableReader.
+// PriceTableReaderFunc adapts a pure Providers-owned price-table read to the
+// narrow consumer capability used by Costs. The function form keeps pricing
+// out of the singular Providers service root while retaining detached reads.
 type PriceTableReaderFunc func() (PriceTable, error)
 
-// ReadPriceTable implements PriceTableReader.
+// ReadPriceTable implements the narrow price-table consumer capability.
 func (reader PriceTableReaderFunc) ReadPriceTable() (PriceTable, error) {
 	if reader == nil {
 		return PriceTable{}, fmt.Errorf("read provider price table: reader is required")

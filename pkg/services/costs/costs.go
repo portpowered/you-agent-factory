@@ -14,7 +14,7 @@ import (
 // facts; this consumer port keeps Costs independent of the provider service's
 // broader identity and execution operations.
 type PriceTableReader interface {
-	providers.PriceTableReader
+	ReadPriceTable() (providers.PriceTable, error)
 }
 
 // CostsQuery is the stateless operation over canonical runtime usage rows.
