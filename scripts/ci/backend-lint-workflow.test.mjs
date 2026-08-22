@@ -15,28 +15,44 @@ import {
 } from "./backend-lint-workflow.mjs";
 import { resolveRunnerParallelism } from "./runner-parallelism.mjs";
 
-test("selects pull requests and pushes to main at the tested head", () => {
+const SHA = (character) => character.repeat(40);
+
+test("selects pull requests at the merge result and pushes to main at the tested commit", () => {
 	assert.deepEqual(
 		selectBackendLint({
 			eventName: "pull_request",
 			ref: "refs/pull/42/merge",
-			pullRequestHeadSha: "pr-head",
-			sha: "merge-sha",
+			pullRequestHeadSha: SHA("b"),
+			sha: SHA("a"),
 		}),
-		{ selected: true, headSha: "pr-head", checkoutRef: "pr-head" },
+		{ selected: true, testedSha: SHA("a"), checkoutRef: SHA("a"), error: "" },
 	);
 	assert.deepEqual(
 		selectBackendLint({
 			eventName: "push",
 			ref: "refs/heads/main",
-			sha: "main-head",
+			sha: SHA("b"),
 		}),
-		{ selected: true, headSha: "main-head", checkoutRef: "main-head" },
+		{ selected: true, testedSha: SHA("b"), checkoutRef: SHA("b"), error: "" },
 	);
-	assert.equal(
-		selectBackendLint({ eventName: "push", ref: "refs/heads/feature", sha: "feature-head" }).selected,
-		false,
+	assert.deepEqual(
+		selectBackendLint({ eventName: "push", ref: "refs/heads/feature", sha: SHA("c") }),
+		{ selected: false, testedSha: "", checkoutRef: "", error: "" },
 	);
+});
+
+test("fails selected events when the required tested identity is missing or invalid", () => {
+	for (const sha of ["", "not-a-commit-sha", "0".repeat(39)]) {
+		const selection = selectBackendLint({
+			eventName: "pull_request",
+			ref: "refs/pull/42/merge",
+			sha,
+		});
+		assert.equal(selection.selected, true);
+		assert.equal(selection.testedSha, "");
+		assert.equal(selection.checkoutRef, "");
+		assert.match(selection.error, /requires github\.sha/);
+	}
 });
 
 test("uses all valid logical CPUs for the exclusive CI runner", () => {

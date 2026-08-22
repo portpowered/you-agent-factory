@@ -68,7 +68,7 @@ function unallowlistedTarget(name, output) {
 	};
 }
 
-function runReporterCli(t, reportValue) {
+function runReporterCli(t, reportValue, environment = {}) {
 	const directory = mkdtempSync(join(tmpdir(), "backend-lint-report-test-"));
 	t.after(() => rmSync(directory, { recursive: true, force: true }));
 	const reportPath = join(directory, "report.json");
@@ -86,11 +86,16 @@ function runReporterCli(t, reportValue) {
 			"--comment",
 			commentPath,
 		],
-		{ cwd: process.cwd(), encoding: "utf8" },
+		{
+			cwd: process.cwd(),
+			encoding: "utf8",
+			env: { ...process.env, ...environment },
+		},
 	);
 	return {
 		...result,
 		summary: readFileSync(summaryPath, "utf8"),
+		comment: readFileSync(commentPath, "utf8"),
 	};
 }
 
@@ -459,13 +464,21 @@ test("a structurally valid report with zero checkers is a harness failure", () =
 
 test("PR publication includes a stable marker and hosted identity", () => {
 	const comment = renderBackendLintComment(summarizeBackendLintReport(report()), {
-		headSha: "abc123",
+		testedSha: "abc123",
 		runUrl: "https://github.com/example/repo/actions/runs/42",
 	});
 
 	assert.match(comment, new RegExp(BACKEND_LINT_COMMENT_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-	assert.match(comment, /Hosted head: `abc123`/);
+	assert.match(comment, /Hosted tested SHA: `abc123`/);
 	assert.match(comment, /actions\/runs\/42/);
+});
+
+test("reporter CLI publishes the explicitly supplied tested SHA", (t) => {
+	const result = runReporterCli(t, report(), {
+		BACKEND_LINT_TESTED_SHA: "a".repeat(40),
+	});
+
+	assert.match(result.comment, /Hosted tested SHA: `a{40}`/);
 });
 
 test("a no-allowance target is gated from its first failing run", () => {
