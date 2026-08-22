@@ -26,6 +26,15 @@ func prepareUnitCoverageImportFile(testPackages []string, listings []coveragePac
 	for _, importPath := range testPackages {
 		selected[importPath] = struct{}{}
 	}
+	selectedDependencies := make(map[string]struct{})
+	for _, listing := range listings {
+		if _, isTestPackage := selected[listing.importPath]; !isTestPackage {
+			continue
+		}
+		for _, dependency := range listing.deps {
+			selectedDependencies[dependency] = struct{}{}
+		}
+	}
 
 	toImport := make([]coveragePackageListing, 0)
 	carriers := make([]unitCoverageImportCarrier, 0)
@@ -36,6 +45,9 @@ func prepareUnitCoverageImportFile(testPackages []string, listings []coveragePac
 		}
 		if _, isTestPackage := selected[listing.importPath]; isTestPackage {
 			carriers = append(carriers, unitCoverageImportCarrier{listing: listing})
+			continue
+		}
+		if _, alreadyImported := selectedDependencies[listing.importPath]; alreadyImported {
 			continue
 		}
 		toImport = append(toImport, listing)

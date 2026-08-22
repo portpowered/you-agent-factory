@@ -23,6 +23,7 @@ func TestPrepareUnitCoverageImportFilePreservesTestFreeCoveragePackages(t *testi
 			packageName: "testful",
 			goFiles:     1,
 			testGoFiles: []string{"testful_test.go"},
+			deps:        []string{modulePath + "/pkg/coverageimports/generated"},
 		},
 		{
 			importPath:  modulePath + "/pkg/coverageimports/testless",
@@ -51,10 +52,10 @@ func TestPrepareUnitCoverageImportFilePreservesTestFreeCoveragePackages(t *testi
 	if !strings.HasPrefix(text, "package testful\n\nimport (\n") {
 		t.Fatalf("temporary coverage import file = %q, want target package declaration", text)
 	}
-	for _, importPath := range []string{
-		modulePath + "/pkg/coverageimports/generated",
-		modulePath + "/pkg/coverageimports/testless",
-	} {
+	if strings.Contains(text, modulePath+"/pkg/coverageimports/generated") {
+		t.Fatalf("temporary coverage import file = %q, redundantly imported selected test dependency", text)
+	}
+	for _, importPath := range []string{modulePath + "/pkg/coverageimports/testless"} {
 		if !strings.Contains(text, "_ \""+importPath+"\"") {
 			t.Fatalf("temporary coverage import file = %q, missing %s", text, importPath)
 		}
@@ -68,6 +69,32 @@ func TestPrepareUnitCoverageImportFilePreservesTestFreeCoveragePackages(t *testi
 	}
 	if _, err := os.Stat(files[0]); !os.IsNotExist(err) {
 		t.Fatalf("temporary coverage import file stat error after cleanup = %v, want not-exist", err)
+	}
+}
+
+func TestPrepareUnitCoverageImportFileSkipsSelectedTestDependencies(t *testing.T) {
+	packageDir := t.TempDir()
+	testPackage := modulePath + "/pkg/coverageimports/testful"
+	dependency := modulePath + "/pkg/coverageimports/already-imported"
+	cleanup, err := prepareUnitCoverageImportFile(
+		[]string{testPackage},
+		[]coveragePackageListing{
+			{importPath: testPackage, directory: packageDir, packageName: "testful", goFiles: 1, testGoFiles: []string{"testful_test.go"}, deps: []string{dependency}},
+			{importPath: dependency, goFiles: 1},
+		},
+	)
+	if err != nil {
+		t.Fatalf("prepareUnitCoverageImportFile() error = %v", err)
+	}
+	if err := cleanup(); err != nil {
+		t.Fatalf("temporary coverage import cleanup: %v", err)
+	}
+	files, err := filepath.Glob(filepath.Join(packageDir, "gocoveragecheck_coverage_imports_*_test.go"))
+	if err != nil {
+		t.Fatalf("find temporary coverage import file: %v", err)
+	}
+	if len(files) != 0 {
+		t.Fatalf("temporary coverage import files = %v, want none for an already-imported package", files)
 	}
 }
 
