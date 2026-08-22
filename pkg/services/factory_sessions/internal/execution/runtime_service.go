@@ -221,6 +221,7 @@ type JavaScriptRuntimeService struct {
 	directChildExecution        childExecuteService
 	persistence                 runtimepersist.Store
 	persistedFailureLogCapacity int
+	persistedSnapshotMaxBytes   int
 	clock                       factory.Clock
 	syncWaits                   SyncWaitScheduler
 	checkpointSummaries         factory.JavaScriptCheckpointSummaries
@@ -303,6 +304,7 @@ func NewJavaScriptRuntimeService(
 		liveChangeCoordinator:       liveChangeCoordinator,
 		persistence:                 persistence,
 		persistedFailureLogCapacity: defaultPersistedTokenFailureLogCapacity,
+		persistedSnapshotMaxBytes:   defaultPersistedSnapshotMaxBytes,
 		sessions:                    make(map[string]*runtimeSessionState),
 		startReplay:                 make(map[string]startReplayRecord),
 		startInflight:               make(map[string]*startInflightFlight),

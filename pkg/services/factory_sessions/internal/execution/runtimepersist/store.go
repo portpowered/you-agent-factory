@@ -21,6 +21,12 @@ type Store interface {
 	Load(sessionID string) ([]byte, error)
 }
 
+// SnapshotPathResolver is an optional diagnostic capability implemented by
+// filesystem-backed stores that can report their exact target path.
+type SnapshotPathResolver interface {
+	SnapshotPath(sessionID string) string
+}
+
 // FileSystem is the exact host-filesystem capability consumed by this private
 // persistence implementation. The canonical Wire-selected implementation
 // delegates WriteFile to platform/replay's atomic storage capability.
@@ -77,6 +83,13 @@ func (s DirectoryStore) Save(sessionID string, encoded []byte) error {
 	return SaveBytes(s.Dir, sessionID, encoded, s.files)
 }
 
+// SnapshotPath returns the target path for one durable session snapshot.
+// Callers use this representation only for diagnostics; Save and Load still
+// validate the session identifier before touching the filesystem.
+func (s DirectoryStore) SnapshotPath(sessionID string) string {
+	return SnapshotPath(s.Dir, sessionID)
+}
+
 // Load reads a snapshot from the configured directory.
 func (s DirectoryStore) Load(sessionID string) ([]byte, error) {
 	return LoadBytes(s.Dir, sessionID, s.files)
@@ -87,6 +100,18 @@ var durableSessionIDPattern = regexp.MustCompile(`^(dur-sess-[a-f0-9]{32}|~defau
 // DirForProjectRoot returns the project-local durable session persistence directory.
 func DirForProjectRoot(projectRoot string) string {
 	return filepath.Join(strings.TrimSpace(projectRoot), durableSessionsHomeDir, durableSessionsSubdir)
+}
+
+// SnapshotPath returns the target path for one durable session snapshot under
+// an explicit persistence directory.
+func SnapshotPath(dir, sessionID string) string {
+	return filepath.Join(strings.TrimSpace(dir), strings.TrimSpace(sessionID)+".json")
+}
+
+// SnapshotPathForProjectRoot returns the target path used by the project-local
+// durable session persistence store.
+func SnapshotPathForProjectRoot(projectRoot, sessionID string) string {
+	return SnapshotPath(DirForProjectRoot(projectRoot), sessionID)
 }
 
 // SaveBytes writes one terminal runtime session snapshot payload for later CLI inspection.
@@ -108,7 +133,7 @@ func SaveBytes(
 	if err := files.MkdirAll(trimmedDir, 0o700); err != nil {
 		return fmt.Errorf("create durable session persistence directory: %w", err)
 	}
-	path := filepath.Join(trimmedDir, sessionID+".json")
+	path := SnapshotPath(trimmedDir, sessionID)
 	if err := files.WriteFile(path, encoded, 0o600); err != nil {
 		return fmt.Errorf("write durable session snapshot: %w", err)
 	}
@@ -130,7 +155,7 @@ func LoadBytes(
 	if files == nil {
 		return nil, errors.New("durable session persistence filesystem is required")
 	}
-	path := filepath.Join(trimmedDir, sessionID+".json")
+	path := SnapshotPath(trimmedDir, sessionID)
 	encoded, err := files.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"os"
 	"strings"
 	"time"
@@ -993,10 +994,30 @@ func (s *JavaScriptRuntimeService) persistSessionSnapshot(state runtimeSessionSt
 	if err != nil {
 		return fmt.Errorf("marshal durable session snapshot: %w", err)
 	}
+	maxBytes := s.persistedSnapshotMaxBytes
+	if maxBytes <= 0 {
+		maxBytes = defaultPersistedSnapshotMaxBytes
+	}
+	if len(encoded) > maxBytes {
+		return &SnapshotSizeLimitError{
+			Path:        persistedSnapshotPath(s.persistence, s.projectRoot, sessionID),
+			ActualBytes: len(encoded),
+			MaxBytes:    maxBytes,
+		}
+	}
 	if err := s.persistence.Save(sessionID, encoded); err != nil {
 		return fmt.Errorf("persist durable session snapshot: %w", err)
 	}
 	return nil
+}
+
+func persistedSnapshotPath(store runtimepersist.Store, projectRoot, sessionID string) string {
+	if resolver, ok := store.(runtimepersist.SnapshotPathResolver); ok {
+		if path := strings.TrimSpace(resolver.SnapshotPath(sessionID)); path != "" {
+			return path
+		}
+	}
+	return runtimepersist.SnapshotPathForProjectRoot(projectRoot, sessionID)
 }
 
 func shouldPersistSessionSnapshot(state runtimeSessionState) bool {

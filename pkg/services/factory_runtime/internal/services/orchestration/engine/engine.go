@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -683,10 +684,25 @@ func (e *FactoryEngine) recordCompletedPetriMutations(completed []interfaces.Com
 			continue
 		}
 		if err := e.recordPetriMutations(completed[i].OutputMutations); err != nil {
+			if isNonFatalPetriMutationPersistenceError(err) {
+				e.logger.Error(
+					"engine: durable Petri mutation snapshot rejected; continuing runtime loop",
+					"dispatch_id", completed[i].DispatchID,
+					"error", err,
+				)
+				continue
+			}
 			return fmt.Errorf("record completed dispatch %q Petri mutations: %w", completed[i].DispatchID, err)
 		}
 	}
 	return nil
+}
+
+func isNonFatalPetriMutationPersistenceError(err error) bool {
+	var marker interface {
+		NonFatalPetriMutationPersistenceError()
+	}
+	return errors.As(err, &marker)
 }
 
 func (e *FactoryEngine) beginTick(ctx context.Context) (interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], bool, bool, error) {

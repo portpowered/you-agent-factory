@@ -174,6 +174,42 @@ func TestPetriMutationRecorderFailureStopsRuntimeWithDispatchContext(t *testing.
 	}
 }
 
+func TestPetriMutationRecorderSizeRejectionKeepsRuntimeLoopAvailable(t *testing.T) {
+	f, err := newTestFactory(
+		withNet(buildSimpleNet()),
+		withInlineDispatch(),
+		withWorkerExecutor("mock", &passExecutor{}),
+		withLogger(logging.NoopLogger{}),
+		withPetriMutationRecorder(func(string, []interfaces.TokenMutationRecord) error {
+			return nonFatalPetriMutationPersistenceError{}
+		}),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-recording-size-rejection"}}); err != nil {
+		t.Fatalf("SubmitWorkRequest: %v", err)
+	}
+	if err := f.Run(context.Background()); err != nil {
+		t.Fatalf("Run = %v, want size rejection logged without fatal engine error", err)
+	}
+	snapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if snapshot.FactoryState != string(interfaces.FactoryStateCompleted) {
+		t.Fatalf("factory state = %q, want completed after non-fatal size rejection", snapshot.FactoryState)
+	}
+}
+
+type nonFatalPetriMutationPersistenceError struct{}
+
+func (nonFatalPetriMutationPersistenceError) Error() string {
+	return "durable session snapshot exceeds configured byte bound"
+}
+
+func (nonFatalPetriMutationPersistenceError) NonFatalPetriMutationPersistenceError() {}
+
 func TestNew_ServiceModeWithoutInitialWork_WaitsForCancellation(t *testing.T) {
 	f, err := newTestFactory(
 		withNet(buildSimpleNet()),

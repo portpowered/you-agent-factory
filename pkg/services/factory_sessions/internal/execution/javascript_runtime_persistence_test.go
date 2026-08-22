@@ -528,6 +528,128 @@ func (s *blockingRuntimePersistenceStore) release() {
 	s.releaseOnce.Do(func() { close(s.releaseSave) })
 }
 
+func TestJavaScriptRuntimeService_SnapshotSizeLimitHonorsExactBoundAndRejectsBeforeSave(t *testing.T) {
+	t.Parallel()
+	projectRoot := t.TempDir()
+	store := &runtimeRecordingStore{}
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
+		Persistence: store,
+	})
+	if service.persistedSnapshotMaxBytes <= 0 {
+		t.Fatalf("default persisted snapshot maximum = %d, want positive bound", service.persistedSnapshotMaxBytes)
+	}
+
+	const sessionID = "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	state := runtimeSessionState{session: SessionReadResult{
+		SessionID: sessionID,
+		Status:    LifecycleStatusSucceeded,
+	}}
+	snapshot := persistedSnapshotFromRuntimeState(state)
+	exact, err := json.MarshalIndent(snapshot, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal exact snapshot: %v", err)
+	}
+
+	service.persistedSnapshotMaxBytes = len(exact)
+	if err := service.persistSessionSnapshot(state); err != nil {
+		t.Fatalf("persist snapshot at exact bound: %v", err)
+	}
+	store.mu.Lock()
+	saveCalls := store.saveCalls
+	stored := append([]byte(nil), store.payload...)
+	store.mu.Unlock()
+	if saveCalls != 1 || string(stored) != string(exact) {
+		t.Fatalf("exact-bound save = calls %d payload %d bytes, want calls 1 payload %d bytes", saveCalls, len(stored), len(exact))
+	}
+
+	previous := []byte(`{"status":"RUNNING","sequence":7}`)
+	store.mu.Lock()
+	store.saveCalls = 0
+	store.payload = append([]byte(nil), previous...)
+	store.mu.Unlock()
+	service.persistedSnapshotMaxBytes = len(exact) - 1
+	err = service.persistSessionSnapshot(state)
+	var sizeErr *SnapshotSizeLimitError
+	if !errors.As(err, &sizeErr) {
+		t.Fatalf("one-byte-over persistence error = %v, want SnapshotSizeLimitError", err)
+	}
+	wantPath := runtimepersist.SnapshotPathForProjectRoot(projectRoot, sessionID)
+	if sizeErr.Path != wantPath || sizeErr.ActualBytes != len(exact) || sizeErr.MaxBytes != len(exact)-1 {
+		t.Fatalf("size diagnostic = %#v, want path %q actual %d bound %d", sizeErr, wantPath, len(exact), len(exact)-1)
+	}
+	if strings.Contains(err.Error(), "RUNNING") || strings.Contains(err.Error(), "sequence") {
+		t.Fatalf("size diagnostic leaked snapshot content: %v", err)
+	}
+	store.mu.Lock()
+	saveCalls = store.saveCalls
+	stored = append([]byte(nil), store.payload...)
+	store.mu.Unlock()
+	if saveCalls != 0 {
+		t.Fatalf("one-byte-over save calls = %d, want writer not invoked", saveCalls)
+	}
+	if string(stored) != string(previous) {
+		t.Fatalf("one-byte-over snapshot = %s, want prior %s", stored, previous)
+	}
+}
+
+func TestJavaScriptRuntimeService_OversizedPetriSnapshotKeepsPriorSessionAvailable(t *testing.T) {
+	t.Parallel()
+	projectRoot := t.TempDir()
+	store := &runtimeRecordingStore{}
+	seed := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
+		Persistence: store,
+	})
+	const sessionID = "dur-sess-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	prior := runtimeSessionState{session: SessionReadResult{
+		SessionID: sessionID,
+		Status:    LifecycleStatusSucceeded,
+	}}
+	if err := seed.persistSessionSnapshot(prior); err != nil {
+		t.Fatalf("seed prior session: %v", err)
+	}
+	store.mu.Lock()
+	priorBytes := len(store.payload)
+	saveCalls := store.saveCalls
+	store.mu.Unlock()
+
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
+		Persistence: store,
+	})
+	service.persistedSnapshotMaxBytes = priorBytes
+	err := service.RecordPetriTokenMutations(sessionID, []interfaces.TokenMutationRecord{{
+		DispatchID:   "dispatch-oversized",
+		TransitionID: "retry",
+		Outcome:      workers.OutcomeFailed,
+		Type:         interfaces.MutationMove,
+		TokenID:      "token-oversized",
+		ToPlace:      "task:failed",
+		Reason:       strings.Repeat("diagnostic payload ", 32),
+	}})
+	var sizeErr *SnapshotSizeLimitError
+	if !errors.As(err, &sizeErr) {
+		t.Fatalf("oversized Petri mutation error = %v, want SnapshotSizeLimitError", err)
+	}
+	if sizeErr.ActualBytes <= sizeErr.MaxBytes || sizeErr.Path == "" {
+		t.Fatalf("oversized diagnostic = %#v, want actual > bound and path", sizeErr)
+	}
+
+	read, err := service.GetSession(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("GetSession after rejected snapshot: %v", err)
+	}
+	if read.Status != LifecycleStatusSucceeded {
+		t.Fatalf("session after rejected snapshot = %#v, want prior succeeded session", read)
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.saveCalls != saveCalls {
+		t.Fatalf("save calls after rejected snapshot = %d, want unchanged %d", store.saveCalls, saveCalls)
+	}
+}
+
 type runtimeRecordingStore struct {
 	mu        sync.Mutex
 	saveCalls int
