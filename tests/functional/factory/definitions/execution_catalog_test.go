@@ -383,12 +383,13 @@ func functionalExecutionCatalogReferences() factorydefinitions.ExecutionCatalogR
 
 func newFunctionalDefinitionsService(t *testing.T) factorydefinitions.Service {
 	t.Helper()
+	loader := functionalDefinitionsLoader(t)
 	service, err := factorydefinitionswire.NewService(
 		functionalSessionHost{},
 		functionalActivationGateway{},
 		functionalValidator{},
 		functionalPersistence{},
-		&factorydefinitionswire.Loader{},
+		loader,
 		func(string, *factorydefinitions.FactoryConfig, bool, bool) error { return nil },
 		func(string, *factorydefinitions.FactoryConfig) error { return nil },
 		functionalNamedPaths{},
@@ -423,6 +424,24 @@ func newFunctionalDefinitionsService(t *testing.T) factorydefinitions.Service {
 		t.Fatal("public Definitions service is nil")
 	}
 	return service
+}
+
+func functionalDefinitionsLoader(t *testing.T) *factorydefinitionswire.Loader {
+	t.Helper()
+	fileSystem := platformfilesystem.Local{}
+	return factorydefinitionswire.NewLoader(
+		func(string, *factorydefinitions.FactoryConfig, bool, bool) error { return nil },
+		func(string, *factorydefinitions.FactoryConfig) error { return nil },
+		func(string, *factorydefinitions.FactoryConfig) ([]factorydefinitions.PortableBundledFileReplacement, error) {
+			return nil, nil
+		},
+		fileSystem,
+		functionalNamedPaths{},
+		fileSystem,
+		func(string, factorydefinitions.BundledFileConfig) (string, bool) { return "", false },
+		fileSystem,
+		functionalRequiredToolChecker{},
+	)
 }
 
 // These inert adapters keep this test focused on the public Definitions root.
