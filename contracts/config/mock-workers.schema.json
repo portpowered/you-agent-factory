@@ -87,6 +87,9 @@
         "scriptConfig": {
           "$ref": "#/$defs/scriptConfig"
         },
+        "usage": {
+          "$ref": "#/$defs/usage"
+        },
         "workInputs": {
           "items": {
             "$ref": "#/$defs/workInput"
@@ -125,6 +128,47 @@
           "type": "string"
         }
       },
+      "type": "object"
+    },
+    "usage": {
+      "additionalProperties": true,
+      "description": "Optional canonical provider usage emitted once for a matched mock dispatch.",
+      "properties": {
+        "cachedInputTokens": {
+          "description": "Optional non-negative cached-input token count; when set it must not exceed inputTokens.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "inputTokens": {
+          "description": "Optional non-negative input token count; explicit zero remains declared.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model": {
+          "description": "Required non-empty model identity when usage is present.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "outputTokens": {
+          "description": "Optional non-negative output token count; explicit zero remains declared.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "provider": {
+          "description": "Required non-empty provider identity when usage is present.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "reasoningOutputTokens": {
+          "description": "Optional non-negative reasoning-output token count; when set it must not exceed outputTokens.",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "provider",
+        "model"
+      ],
       "type": "object"
     },
     "scriptConfig": {
@@ -964,6 +1008,236 @@
           "state": "active"
         },
         "validationOwner": "decode"
+      },
+      "mockWorkers[].usage": {
+        "defaultEmptyBehavior": "omitted usage emits no token usage observation; when present provider and model are required",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional canonical provider usage emitted for a matched mock dispatch. Provider and model are required when present.",
+              "id": "config.mock-workers.usage.description"
+            },
+            "title": {
+              "canonicalEnglish": "Mock usage declaration",
+              "id": "config.mock-workers.usage.title"
+            }
+          },
+          "examples": [
+            {
+              "cachedInputTokens": 400000,
+              "inputTokens": 1000000,
+              "model": "gpt-5-codex",
+              "outputTokens": 500000,
+              "provider": "codex",
+              "reasoningOutputTokens": 100000
+            }
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.usage",
+          "sourceHash": "0000000000000000000000000000000000000000000000000000000000000001",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].usage",
+        "jsonPath": "mockWorkers[].usage",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.usage",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "validate"
+      },
+      "mockWorkers[].usage.cachedInputTokens": {
+        "defaultEmptyBehavior": "omitted cached-input token class is absent; when set it must not exceed inputTokens",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional non-negative cached-input token count. When set, it cannot exceed inputTokens.",
+              "id": "config.mock-workers.usage.cached-input-tokens.description"
+            },
+            "title": {
+              "canonicalEnglish": "Cached input token usage",
+              "id": "config.mock-workers.usage.cached-input-tokens.title"
+            }
+          },
+          "examples": [
+            400000,
+            0
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.usage.cached-input-tokens",
+          "sourceHash": "0000000000000000000000000000000000000000000000000000000000000002",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].usage.cachedInputTokens",
+        "jsonPath": "mockWorkers[].usage.cachedInputTokens",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.usage.cached-input-tokens",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "validate"
+      },
+      "mockWorkers[].usage.inputTokens": {
+        "defaultEmptyBehavior": "omitted input token class is absent from diagnostics and usage payload; explicit zero is retained",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional non-negative input token count. An explicit zero is retained as a declared token class.",
+              "id": "config.mock-workers.usage.input-tokens.description"
+            },
+            "title": {
+              "canonicalEnglish": "Input token usage",
+              "id": "config.mock-workers.usage.input-tokens.title"
+            }
+          },
+          "examples": [
+            1000000,
+            0
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.usage.input-tokens",
+          "sourceHash": "0000000000000000000000000000000000000000000000000000000000000003",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].usage.inputTokens",
+        "jsonPath": "mockWorkers[].usage.inputTokens",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.usage.input-tokens",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "validate"
+      },
+      "mockWorkers[].usage.model": {
+        "defaultEmptyBehavior": "missing or blank model fails usage validation",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Required non-empty model identity for the canonical usage observation.",
+              "id": "config.mock-workers.usage.model.description"
+            },
+            "title": {
+              "canonicalEnglish": "Usage model",
+              "id": "config.mock-workers.usage.model.title"
+            }
+          },
+          "examples": [
+            "gpt-5-codex",
+            "claude-sonnet-4"
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.usage.model",
+          "sourceHash": "0000000000000000000000000000000000000000000000000000000000000004",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].usage.model",
+        "jsonPath": "mockWorkers[].usage.model",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.usage.model",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "validate"
+      },
+      "mockWorkers[].usage.outputTokens": {
+        "defaultEmptyBehavior": "omitted output token class is absent from diagnostics and usage payload; explicit zero is retained",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional non-negative output token count. An explicit zero is retained as a declared token class.",
+              "id": "config.mock-workers.usage.output-tokens.description"
+            },
+            "title": {
+              "canonicalEnglish": "Output token usage",
+              "id": "config.mock-workers.usage.output-tokens.title"
+            }
+          },
+          "examples": [
+            500000,
+            0
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.usage.output-tokens",
+          "sourceHash": "0000000000000000000000000000000000000000000000000000000000000005",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].usage.outputTokens",
+        "jsonPath": "mockWorkers[].usage.outputTokens",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.usage.output-tokens",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "validate"
+      },
+      "mockWorkers[].usage.provider": {
+        "defaultEmptyBehavior": "missing or blank provider fails usage validation",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Required non-empty provider identity for the canonical usage observation.",
+              "id": "config.mock-workers.usage.provider.description"
+            },
+            "title": {
+              "canonicalEnglish": "Usage provider",
+              "id": "config.mock-workers.usage.provider.title"
+            }
+          },
+          "examples": [
+            "codex",
+            "claude"
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.usage.provider",
+          "sourceHash": "0000000000000000000000000000000000000000000000000000000000000006",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].usage.provider",
+        "jsonPath": "mockWorkers[].usage.provider",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.usage.provider",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "validate"
+      },
+      "mockWorkers[].usage.reasoningOutputTokens": {
+        "defaultEmptyBehavior": "omitted reasoning-output token class is absent; when set it must not exceed outputTokens",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional non-negative reasoning-output token count. When set, it cannot exceed outputTokens.",
+              "id": "config.mock-workers.usage.reasoning-output-tokens.description"
+            },
+            "title": {
+              "canonicalEnglish": "Reasoning output token usage",
+              "id": "config.mock-workers.usage.reasoning-output-tokens.title"
+            }
+          },
+          "examples": [
+            100000,
+            0
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.usage.reasoning-output-tokens",
+          "sourceHash": "0000000000000000000000000000000000000000000000000000000000000007",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].usage.reasoningOutputTokens",
+        "jsonPath": "mockWorkers[].usage.reasoningOutputTokens",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.usage.reasoning-output-tokens",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "validate"
       },
       "mockWorkers[].workstationName": {
         "defaultEmptyBehavior": "omitted workstationName does not constrain workstation matching",

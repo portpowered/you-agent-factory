@@ -2,6 +2,7 @@ package workerexecution
 
 import (
 	"context"
+	"sync"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -23,6 +24,56 @@ type mockWorkerOutputPolicyKey struct{}
 type progressPublisherKey struct{}
 type scriptEventRecorderKey struct{}
 type commandRunnerOverrideKey struct{}
+type mockWorkerUsageCaptureKey struct{}
+
+// MockWorkerUsageCapture is a request-scoped hand-off from the contextual
+// mock command runner to the Workers execution boundary. It records only the
+// first matched declaration so one dispatch cannot publish duplicate usage
+// when an underlying command path is retried or wrapped.
+type MockWorkerUsageCapture struct {
+	mu    sync.Mutex
+	usage *workers.MockWorkerUsageConfig
+}
+
+// Record snapshots one matched mock usage declaration.
+func (capture *MockWorkerUsageCapture) Record(usage *workers.MockWorkerUsageConfig) {
+	if capture == nil || usage == nil {
+		return
+	}
+	capture.mu.Lock()
+	defer capture.mu.Unlock()
+	if capture.usage == nil {
+		capture.usage = usage.Clone()
+	}
+}
+
+// Usage returns a detached declaration, if a matched mock recorded one.
+func (capture *MockWorkerUsageCapture) Usage() *workers.MockWorkerUsageConfig {
+	if capture == nil {
+		return nil
+	}
+	capture.mu.Lock()
+	defer capture.mu.Unlock()
+	return capture.usage.Clone()
+}
+
+// WithMockWorkerUsageCapture attaches the request-scoped usage hand-off.
+func WithMockWorkerUsageCapture(ctx context.Context, capture *MockWorkerUsageCapture) context.Context {
+	if ctx == nil || capture == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, mockWorkerUsageCaptureKey{}, capture)
+}
+
+// MockWorkerUsageCaptureFromContext resolves the request-scoped usage
+// hand-off, if one was installed by Workers execution.
+func MockWorkerUsageCaptureFromContext(ctx context.Context) *MockWorkerUsageCapture {
+	if ctx == nil {
+		return nil
+	}
+	capture, _ := ctx.Value(mockWorkerUsageCaptureKey{}).(*MockWorkerUsageCapture)
+	return capture
+}
 
 // WithMockWorkersConfig attaches a cloned, request-scoped mock override to a
 // detached Workers execution. The process-scoped Workers service retains no

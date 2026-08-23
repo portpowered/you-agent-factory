@@ -13,7 +13,7 @@
     "values": [
       {
         "value": "accept",
-        "nestedConfigPolicy": "no nested config required; scriptConfig and rejectConfig are ignored when present"
+        "nestedConfigPolicy": "no nested config required; scriptConfig, rejectConfig, and usage are optional"
       },
       {
         "value": "script",
@@ -23,7 +23,7 @@
       {
         "value": "reject",
         "nestedConfig": "rejectConfig",
-        "nestedConfigPolicy": "rejectConfig is optional; rejectConfig.exitCode when set must be between 1 and 255"
+        "nestedConfigPolicy": "rejectConfig is optional; rejectConfig.exitCode when set must be between 1 and 255; usage is optional"
       }
     ]
   },
@@ -72,6 +72,26 @@
       "condition": "rejectConfig.exitCode outside 1-255 when set",
       "owner": "validate",
       "errorPattern": "rejectConfig.exitCode must be between 1 and 255"
+    },
+    {
+      "condition": "usage provider or model is blank",
+      "owner": "validate",
+      "errorPattern": "usage: provider is required"
+    },
+    {
+      "condition": "usage token count is negative",
+      "owner": "validate",
+      "errorPattern": "usage: inputTokens must be non-negative"
+    },
+    {
+      "condition": "usage cached input exceeds input",
+      "owner": "validate",
+      "errorPattern": "usage: cachedInputTokens must not exceed inputTokens"
+    },
+    {
+      "condition": "usage reasoning output exceeds output",
+      "owner": "validate",
+      "errorPattern": "usage: reasoningOutputTokens must not exceed outputTokens"
     }
   ],
   "notAcceptedCapabilities": [
@@ -182,6 +202,16 @@
       "parentField": "mockWorkers[]",
       "required": "optional",
       "defaultEmptyBehavior": "omitted rejectConfig is allowed when runType is reject",
+      "validationOwner": "validate"
+    },
+    {
+      "id": "mockWorkers[].usage",
+      "jsonPath": "mockWorkers[].usage",
+      "jsonName": "usage",
+      "valueType": "object",
+      "parentField": "mockWorkers[]",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted usage emits no token usage observation; when present provider and model are required",
       "validationOwner": "validate"
     },
     {
@@ -343,6 +373,66 @@
       "parentField": "mockWorkers[].rejectConfig",
       "required": "optional",
       "defaultEmptyBehavior": "omitted exitCode leaves rejected exit code unset; when set must be between 1 and 255",
+      "validationOwner": "validate"
+    },
+    {
+      "id": "mockWorkers[].usage.provider",
+      "jsonPath": "mockWorkers[].usage.provider",
+      "jsonName": "provider",
+      "valueType": "string",
+      "parentField": "mockWorkers[].usage",
+      "required": "required when usage is present",
+      "defaultEmptyBehavior": "missing or blank provider fails usage validation",
+      "validationOwner": "validate"
+    },
+    {
+      "id": "mockWorkers[].usage.model",
+      "jsonPath": "mockWorkers[].usage.model",
+      "jsonName": "model",
+      "valueType": "string",
+      "parentField": "mockWorkers[].usage",
+      "required": "required when usage is present",
+      "defaultEmptyBehavior": "missing or blank model fails usage validation",
+      "validationOwner": "validate"
+    },
+    {
+      "id": "mockWorkers[].usage.inputTokens",
+      "jsonPath": "mockWorkers[].usage.inputTokens",
+      "jsonName": "inputTokens",
+      "valueType": "integer",
+      "parentField": "mockWorkers[].usage",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted input token class is absent from diagnostics and usage payload; explicit zero is retained",
+      "validationOwner": "validate"
+    },
+    {
+      "id": "mockWorkers[].usage.outputTokens",
+      "jsonPath": "mockWorkers[].usage.outputTokens",
+      "jsonName": "outputTokens",
+      "valueType": "integer",
+      "parentField": "mockWorkers[].usage",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted output token class is absent from diagnostics and usage payload; explicit zero is retained",
+      "validationOwner": "validate"
+    },
+    {
+      "id": "mockWorkers[].usage.cachedInputTokens",
+      "jsonPath": "mockWorkers[].usage.cachedInputTokens",
+      "jsonName": "cachedInputTokens",
+      "valueType": "integer",
+      "parentField": "mockWorkers[].usage",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted cached-input token class is absent; when set it must not exceed inputTokens",
+      "validationOwner": "validate"
+    },
+    {
+      "id": "mockWorkers[].usage.reasoningOutputTokens",
+      "jsonPath": "mockWorkers[].usage.reasoningOutputTokens",
+      "jsonName": "reasoningOutputTokens",
+      "valueType": "integer",
+      "parentField": "mockWorkers[].usage",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted reasoning-output token class is absent; when set it must not exceed outputTokens",
       "validationOwner": "validate"
     }
   ]

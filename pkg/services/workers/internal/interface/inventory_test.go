@@ -60,6 +60,7 @@ func TestProjectTopologyInventory_RecordsRequiredFieldsAndSelectors(t *testing.T
 		"mockWorkers[].runType",
 		"mockWorkers[].scriptConfig",
 		"mockWorkers[].rejectConfig",
+		"mockWorkers[].usage",
 		"mockWorkers[].workInputs[].workId",
 		"mockWorkers[].workInputs[].workType",
 		"mockWorkers[].workInputs[].state",
@@ -76,6 +77,12 @@ func TestProjectTopologyInventory_RecordsRequiredFieldsAndSelectors(t *testing.T
 		"mockWorkers[].rejectConfig.stdout",
 		"mockWorkers[].rejectConfig.stderr",
 		"mockWorkers[].rejectConfig.exitCode",
+		"mockWorkers[].usage.provider",
+		"mockWorkers[].usage.model",
+		"mockWorkers[].usage.inputTokens",
+		"mockWorkers[].usage.outputTokens",
+		"mockWorkers[].usage.cachedInputTokens",
+		"mockWorkers[].usage.reasoningOutputTokens",
 	}
 	for _, id := range required {
 		if _, ok := byID[id]; !ok {
@@ -99,6 +106,21 @@ func TestProjectTopologyInventory_RecordsRequiredFieldsAndSelectors(t *testing.T
 	exitCode := byID["mockWorkers[].rejectConfig.exitCode"]
 	if exitCode.ValidationOwner != "validate" {
 		t.Fatalf("exitCode validation owner = %q, want validate", exitCode.ValidationOwner)
+	}
+
+	usage := byID["mockWorkers[].usage"]
+	if usage.ValidationOwner != "validate" || usage.Required != "optional" {
+		t.Fatalf("usage field = %#v, want optional validate-owned declaration", usage)
+	}
+	for _, fieldID := range []string{
+		"mockWorkers[].usage.inputTokens",
+		"mockWorkers[].usage.outputTokens",
+		"mockWorkers[].usage.cachedInputTokens",
+		"mockWorkers[].usage.reasoningOutputTokens",
+	} {
+		if field := byID[fieldID]; field.ValueType != "integer" || field.ValidationOwner != "validate" {
+			t.Fatalf("usage token field %q = %#v, want validate-owned integer", fieldID, field)
+		}
 	}
 
 	if len(inventory.UnmatchedDispatchPolicies) < 3 {

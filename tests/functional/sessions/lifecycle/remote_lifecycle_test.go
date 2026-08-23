@@ -93,6 +93,14 @@ func TestCLILocalAndRemoteRunCancellationParityThroughRootProcess(t *testing.T) 
 		`while (true) {}`,
 	)
 	server := startRemotePlacementServer(t, serverHomeDir, serverFactoryDir)
+	// Finish the server lifecycle before testing.T begins removing the isolated
+	// home. Service-mode initialization owns packaged-Factory files under this
+	// directory, so letting TempDir cleanup race that final unwind can leave the
+	// factories root non-empty on a loaded runner.
+	defer func() {
+		server.Stop(t)
+		server.Close(t)
+	}()
 
 	local := executePlacementRunWithContext(t.Context(), t, clientHomeDir, clientFactoryDir, "session-parity-cancel", "", false)
 	remote := executePlacementRunWithContext(t.Context(), t, clientHomeDir, clientFactoryDir, "session-parity-cancel", server.URL(), true)

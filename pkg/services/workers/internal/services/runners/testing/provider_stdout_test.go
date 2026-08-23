@@ -21,6 +21,30 @@ func TestMockAcceptStdout_CodexEmitsJSONL(t *testing.T) {
 	}
 }
 
+func TestMockAcceptStdout_CodexUsageAddsSessionWithoutNativeUsageRecord(t *testing.T) {
+	zero := int64(0)
+	stdout := mockAcceptStdout("codex", "mock worker accepted", &MockWorkerUsageConfig{
+		Provider: "codex", Model: "gpt-5", InputTokens: &zero,
+	})
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("line count = %d, want session and message records", len(lines))
+	}
+	var session, message map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &session); err != nil {
+		t.Fatalf("session line is not valid JSON: %v", err)
+	}
+	if err := json.Unmarshal([]byte(lines[1]), &message); err != nil {
+		t.Fatalf("message line is not valid JSON: %v", err)
+	}
+	if session["type"] != "thread.started" || session["thread_id"] != "mock-codex-session" {
+		t.Fatalf("session record = %#v, want mock Codex session", session)
+	}
+	if message["type"] != "item.completed" {
+		t.Fatalf("message record = %#v, want item.completed", message)
+	}
+}
+
 func TestMockAcceptStdout_ClaudeEmitsStreamJSON(t *testing.T) {
 	stdout := mockAcceptStdout("claude", "mock worker accepted")
 	lines := strings.Split(strings.TrimSpace(stdout), "\n")
@@ -50,6 +74,24 @@ func TestMockRejectStdout_CodexEmitsTurnFailedJSONL(t *testing.T) {
 	}
 	if payload["type"] != "turn.failed" {
 		t.Fatalf("type = %v, want turn.failed", payload["type"])
+	}
+}
+
+func TestMockRejectStdout_CodexUsageAddsSessionWithoutNativeUsageRecord(t *testing.T) {
+	stdout := mockCodexRejectStdoutWithSession(true)
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("line count = %d, want session and failure records", len(lines))
+	}
+	var session, failure map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &session); err != nil {
+		t.Fatalf("session line is not valid JSON: %v", err)
+	}
+	if err := json.Unmarshal([]byte(lines[1]), &failure); err != nil {
+		t.Fatalf("failure line is not valid JSON: %v", err)
+	}
+	if session["type"] != "thread.started" || failure["type"] != "turn.failed" {
+		t.Fatalf("records = %#v / %#v, want thread.started / turn.failed", session, failure)
 	}
 }
 

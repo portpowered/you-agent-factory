@@ -13,6 +13,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
@@ -40,14 +41,27 @@ func (r *MockWorkerCommandRunner) Run(ctx context.Context, req workerprocess.Com
 		if r.Config.UnmatchedDispatchPolicy.PassthroughUnmatched() {
 			return r.runNext(ctx, req)
 		}
-		return r.acceptResult(req), nil
+		return r.acceptResult(req, nil), nil
+	}
+	if capture := workerexecution.MockWorkerUsageCaptureFromContext(ctx); capture != nil {
+		capture.Record(entry.Usage)
+	} else {
+		// A provider command runner can be composed outside the detached
+		// Workers attempt boundary (for example, the durable mock provider).
+		// Preserve the same public usage observation even when the attempt-level
+		// capture hand-off is unavailable.
+		workerexecution.PublishMockWorkerUsage(ctx, workers.ExecutionCorrelation{
+			DispatchID: req.DispatchID,
+			RequestID:  req.Execution.RequestID,
+			TraceID:    req.Execution.TraceID,
+		}, entry.Usage)
 	}
 
 	switch entry.RunType {
 	case MockWorkerRunTypeAccept:
-		return r.acceptResult(req), nil
+		return r.acceptResult(req, entry.Usage), nil
 	case MockWorkerRunTypeReject:
-		result := mockRejectResult(req.Command, entry.RejectConfig)
+		result := mockRejectResult(req.Command, entry.RejectConfig, entry.Usage)
 		// Codex reports a structured turn.failed event on stdout. Keep the
 		// subprocess result successful so the provider adapter can interpret
 		// that event; CommandResultForLogging restores a configured mock exit
@@ -59,7 +73,7 @@ func (r *MockWorkerCommandRunner) Run(ctx context.Context, req workerprocess.Com
 	case MockWorkerRunTypeScript:
 		return r.runScript(ctx, req, entry.ScriptConfig)
 	default:
-		return r.acceptResult(req), nil
+		return r.acceptResult(req, entry.Usage), nil
 	}
 }
 
@@ -137,7 +151,7 @@ func (r *MockWorkerCommandRunner) runNext(ctx context.Context, req workerprocess
 	return next.Run(ctx, req)
 }
 
-func (r *MockWorkerCommandRunner) acceptResult(req workerprocess.CommandRequest) workerprocess.CommandResult {
+func (r *MockWorkerCommandRunner) acceptResult(req workerprocess.CommandRequest, usage *MockWorkerUsageConfig) workerprocess.CommandResult {
 	output := defaultMockWorkerAcceptedOutput
 	if r.OutputPolicy.GoalRoutingDecisionEnvelope {
 		output = `{"decision":"accepted","output":"` + defaultMockWorkerAcceptedOutput + `"}`
@@ -150,7 +164,7 @@ func (r *MockWorkerCommandRunner) acceptResult(req workerprocess.CommandRequest)
 		if def, ok := r.RuntimeConfig.Workstation(req.WorkstationName); ok &&
 			def != nil && def.OutcomeFormat == interfaces.WorkstationOutcomeFormatDecisionEnvelope {
 			output = `{"decision":"ACCEPTED","output":"` + defaultMockWorkerAcceptedOutput + `"}`
-			return workerprocess.CommandResult{Stdout: []byte(mockAcceptStdout(req.Command, output))}
+			return workerprocess.CommandResult{Stdout: []byte(mockAcceptStdout(req.Command, output, usage))}
 		}
 	}
 	if r.RuntimeConfig != nil && req.WorkerType != "" {
@@ -158,7 +172,7 @@ func (r *MockWorkerCommandRunner) acceptResult(req workerprocess.CommandRequest)
 			output += "\n" + def.StopToken
 		}
 	}
-	return workerprocess.CommandResult{Stdout: []byte(mockAcceptStdout(req.Command, output))}
+	return workerprocess.CommandResult{Stdout: []byte(mockAcceptStdout(req.Command, output, usage))}
 }
 
 func rejectResult(cfg *MockWorkerRejectConfig) workerprocess.CommandResult {

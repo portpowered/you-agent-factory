@@ -43,6 +43,7 @@ type MockWorkerConfig struct {
 	RunType         MockWorkerRunType       `json:"runType"`
 	ScriptConfig    *MockWorkerScriptConfig `json:"scriptConfig,omitempty"`
 	RejectConfig    *MockWorkerRejectConfig `json:"rejectConfig,omitempty"`
+	Usage           *MockWorkerUsageConfig  `json:"usage,omitempty"`
 }
 
 type MockWorkInputSelector struct {
@@ -68,6 +69,18 @@ type MockWorkerRejectConfig struct {
 	Stdout   string `json:"stdout,omitempty"`
 	Stderr   string `json:"stderr,omitempty"`
 	ExitCode *int   `json:"exitCode,omitempty"`
+}
+
+// MockWorkerUsageConfig declares provider-neutral usage for one matched mock
+// dispatch. Pointer token fields preserve the distinction between an omitted
+// token class and an explicitly declared zero.
+type MockWorkerUsageConfig struct {
+	Provider              string `json:"provider"`
+	Model                 string `json:"model"`
+	InputTokens           *int64 `json:"inputTokens,omitempty"`
+	OutputTokens          *int64 `json:"outputTokens,omitempty"`
+	CachedInputTokens     *int64 `json:"cachedInputTokens,omitempty"`
+	ReasoningOutputTokens *int64 `json:"reasoningOutputTokens,omitempty"`
 }
 
 func NewEmptyMockWorkersConfig() *MockWorkersConfig {
@@ -105,8 +118,30 @@ func (config *MockWorkersConfig) Clone() *MockWorkersConfig {
 			}
 			clone.MockWorkers[index].RejectConfig = &reject
 		}
+		clone.MockWorkers[index].Usage = worker.Usage.Clone()
 	}
 	return clone
+}
+
+// Clone returns a detached usage declaration.
+func (usage *MockWorkerUsageConfig) Clone() *MockWorkerUsageConfig {
+	if usage == nil {
+		return nil
+	}
+	clone := *usage
+	clone.InputTokens = cloneInt64Pointer(usage.InputTokens)
+	clone.OutputTokens = cloneInt64Pointer(usage.OutputTokens)
+	clone.CachedInputTokens = cloneInt64Pointer(usage.CachedInputTokens)
+	clone.ReasoningOutputTokens = cloneInt64Pointer(usage.ReasoningOutputTokens)
+	return &clone
+}
+
+func cloneInt64Pointer(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
 }
 
 type MockWorkersConfigFileSystem interface{ ReadFile(string) ([]byte, error) }
@@ -371,6 +406,11 @@ func (config *MockWorkersConfig) Validate() error {
 }
 
 func (config MockWorkerConfig) Validate() error {
+	if config.Usage != nil {
+		if err := config.Usage.Validate(); err != nil {
+			return fmt.Errorf("usage: %w", err)
+		}
+	}
 	switch config.RunType {
 	case MockWorkerRunTypeAccept:
 		return nil
@@ -393,4 +433,56 @@ func (config MockWorkerConfig) Validate() error {
 	default:
 		return fmt.Errorf("runType must be one of %q, %q, or %q; got %q", MockWorkerRunTypeAccept, MockWorkerRunTypeScript, MockWorkerRunTypeReject, config.RunType)
 	}
+}
+
+func (usage MockWorkerUsageConfig) Validate() error {
+	if strings.TrimSpace(usage.Provider) == "" {
+		return fmt.Errorf("provider is required")
+	}
+	if strings.TrimSpace(usage.Model) == "" {
+		return fmt.Errorf("model is required")
+	}
+	return validateMockWorkerUsageTokenCounts(usage)
+}
+
+func validateMockWorkerUsageTokenCounts(usage MockWorkerUsageConfig) error {
+	for _, token := range []struct {
+		name  string
+		value *int64
+	}{
+		{name: "inputTokens", value: usage.InputTokens},
+		{name: "outputTokens", value: usage.OutputTokens},
+		{name: "cachedInputTokens", value: usage.CachedInputTokens},
+		{name: "reasoningOutputTokens", value: usage.ReasoningOutputTokens},
+	} {
+		if token.value != nil && *token.value < 0 {
+			return fmt.Errorf("%s must be non-negative", token.name)
+		}
+	}
+	if err := validateMockWorkerUsageSubset(
+		"cachedInputTokens", usage.CachedInputTokens, "inputTokens", usage.InputTokens,
+	); err != nil {
+		return err
+	}
+	return validateMockWorkerUsageSubset(
+		"reasoningOutputTokens", usage.ReasoningOutputTokens, "outputTokens", usage.OutputTokens,
+	)
+}
+
+func validateMockWorkerUsageSubset(
+	name string,
+	value *int64,
+	parentName string,
+	parent *int64,
+) error {
+	if value == nil {
+		return nil
+	}
+	if parent == nil {
+		return fmt.Errorf("%s is required when %s is set", parentName, name)
+	}
+	if *value > *parent {
+		return fmt.Errorf("%s must not exceed %s", name, parentName)
+	}
+	return nil
 }

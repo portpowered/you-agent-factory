@@ -10,6 +10,7 @@ type (
 	MockWorkInputSelector             = workers.MockWorkInputSelector
 	MockWorkerScriptConfig            = workers.MockWorkerScriptConfig
 	MockWorkerRejectConfig            = workers.MockWorkerRejectConfig
+	MockWorkerUsageConfig             = workers.MockWorkerUsageConfig
 	MockWorkersConfigFileSystem       = workers.MockWorkersConfigFileSystem
 	MockWorkersConfigLoader           = workers.MockWorkersConfigLoader
 )

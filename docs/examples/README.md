@@ -21,6 +21,8 @@ so the published primitive usage stays aligned with the shipped host API.
 - [`mock-workers-mixed.json`](mock-workers-mixed.json) keeps the reviewer
   rejection mock and sets `unmatchedDispatchPolicy: "passthrough"` so unmatched
   dispatches execute through the normal worker path.
+- [`mock-workers-usage.json`](mock-workers-usage.json) declares priceable usage
+  for the `executor` mock in `examples/simple-tasks` without a live provider.
 - [`packaged-classify-mock-workers.json`](packaged-classify-mock-workers.json)
   returns the protocol-valid `small` label for the packaged
   `@you/classify` classifier while leaving its selected executor on the default

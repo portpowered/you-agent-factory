@@ -236,6 +236,16 @@ func activationMockWorkers(input *factoryruntime.RuntimeActivationMockWorkersCon
 			}
 			converted.RejectConfig = reject
 		}
+		if worker.Usage != nil {
+			converted.Usage = &workers.MockWorkerUsageConfig{
+				Provider:              worker.Usage.Provider,
+				Model:                 worker.Usage.Model,
+				InputTokens:           cloneInt64Pointer(worker.Usage.InputTokens),
+				OutputTokens:          cloneInt64Pointer(worker.Usage.OutputTokens),
+				CachedInputTokens:     cloneInt64Pointer(worker.Usage.CachedInputTokens),
+				ReasoningOutputTokens: cloneInt64Pointer(worker.Usage.ReasoningOutputTokens),
+			}
+		}
 		config.MockWorkers[index] = converted
 	}
 	return config
@@ -858,6 +868,16 @@ func runtimeActivationMockWorkers(input *workers.MockWorkersConfig) *factoryrunt
 				converted.RejectConfig.ExitCode = &value
 			}
 		}
+		if worker.Usage != nil {
+			converted.Usage = &factoryruntime.RuntimeActivationMockUsage{
+				Provider:              worker.Usage.Provider,
+				Model:                 worker.Usage.Model,
+				InputTokens:           cloneInt64Pointer(worker.Usage.InputTokens),
+				OutputTokens:          cloneInt64Pointer(worker.Usage.OutputTokens),
+				CachedInputTokens:     cloneInt64Pointer(worker.Usage.CachedInputTokens),
+				ReasoningOutputTokens: cloneInt64Pointer(worker.Usage.ReasoningOutputTokens),
+			}
+		}
 		output.MockWorkers[index] = converted
 	}
 	return output
@@ -872,4 +892,12 @@ func cloneStringMap(input map[string]string) map[string]string {
 		output[key] = value
 	}
 	return output
+}
+
+func cloneInt64Pointer(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
 }
