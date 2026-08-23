@@ -32,6 +32,71 @@ func TestCheckpointPortableReplayWiresPublicDurableExecutionHandoff(t *testing.T
 	t.Run("checkpoint summary without restorable state stays historical", testPortableReplayWithoutRestorableState)
 }
 
+func TestCheckpointPortableReplayApplicationCleanupClosesOwnerBeforeArtifacts(t *testing.T) {
+	events := []string{}
+	owner := &portableReplayRuntimeOwner{
+		restorable: true,
+		events:     &events,
+		resumeResult: factorysessions.LifecycleControlResult{
+			SessionID: "session-js-checkpoint-001",
+			Outcome:   "RESUMED",
+		},
+	}
+	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
+	products, err := factory.openForRequest(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
+	if err != nil {
+		t.Fatalf("openForRequest() error = %v", err)
+	}
+
+	if _, err := products.execution.Execution.Resume(
+		t.Context(),
+		"session-js-checkpoint-001",
+		factorysessions.ControlRequest{RequestID: "resume-application-cleanup"},
+	); err != nil {
+		t.Fatalf("checkpoint Resume() error = %v", err)
+	}
+	if err := products.application.Resources.Close(); err != nil {
+		t.Fatalf("application cleanup error = %v", err)
+	}
+	if err := products.application.Resources.Close(); err != nil {
+		t.Fatalf("repeated application cleanup error = %v", err)
+	}
+
+	wantEvents := []string{"durable-owner-close", "runtime-artifacts-close"}
+	if !reflect.DeepEqual(events, wantEvents) {
+		t.Fatalf("checkpoint application cleanup events = %v, want %v", events, wantEvents)
+	}
+}
+
+func TestPortableReplayRuntimeCleanupJoinsOwnerAndArtifactErrors(t *testing.T) {
+	ownerErr := errors.New("durable owner close failed")
+	artifactErr := errors.New("replay artifacts close failed")
+	events := []string{}
+	owner := &portableReplayRuntimeOwner{events: &events, closeErr: ownerErr}
+	cleanup := newPortableReplayRuntimeCleanup()
+	cleanup.SetOwner(owner)
+	cleanup.Set(&portableReplayRuntimeRecord{
+		closeArtifacts: func() error {
+			events = append(events, "runtime-artifacts-close")
+			return artifactErr
+		},
+	})
+
+	err := cleanup.Close()
+	if !errors.Is(err, ownerErr) || !errors.Is(err, artifactErr) {
+		t.Fatalf("cleanup error = %v, want both owner and artifact errors", err)
+	}
+	if !reflect.DeepEqual(events, []string{"durable-owner-close", "runtime-artifacts-close"}) {
+		t.Fatalf("cleanup ordering events = %v, want owner before artifacts", events)
+	}
+	if err := cleanup.Close(); !errors.Is(err, ownerErr) || !errors.Is(err, artifactErr) {
+		t.Fatalf("repeated cleanup error = %v, want the joined errors", err)
+	}
+	if !reflect.DeepEqual(events, []string{"durable-owner-close", "runtime-artifacts-close"}) {
+		t.Fatalf("repeated cleanup ordering events = %v, want no duplicate closes", events)
+	}
+}
+
 func testPortableReplayResumeInterruptedSession(t *testing.T) {
 	owner := &portableReplayRuntimeOwner{
 		restorable: true,
@@ -324,6 +389,12 @@ func newPortableCheckpointRuntimeOpeningFactory(t *testing.T, owner *portableRep
 		service:    &portableReplayRuntimeService{},
 		generation: "portable-replay-generation",
 		progress:   func(workers.ProgressFragment) {},
+		closeArtifacts: func() error {
+			if owner.events != nil {
+				*owner.events = append(*owner.events, "runtime-artifacts-close")
+			}
+			return nil
+		},
 	}
 	dependencies.FactoryRuntime.FactoryRuntimeAssembler = portableReplayRuntimeAssemblerStub{runtime: runtimeRecord}
 	dependencies.FactorySessions.GenerateRuntimeInstanceID = func() string {
@@ -376,6 +447,8 @@ type portableReplayRuntimeOwner struct {
 	childCompleted      bool
 	attemptStarted      bool
 	attemptCompleted    bool
+	events              *[]string
+	closeErr            error
 
 	probeCalls             int
 	resumeInterruptedCalls int
@@ -388,6 +461,13 @@ type portableReplayRuntimeOwner struct {
 func (owner *portableReplayRuntimeOwner) HasRestorableState(context.Context, string) (bool, error) {
 	owner.probeCalls++
 	return owner.restorable, owner.probeErr
+}
+
+func (owner *portableReplayRuntimeOwner) Close() error {
+	if owner.events != nil {
+		*owner.events = append(*owner.events, "durable-owner-close")
+	}
+	return owner.closeErr
 }
 
 func (owner *portableReplayRuntimeOwner) ResumeInterruptedSession(
@@ -521,9 +601,10 @@ type portableReplayRuntimeService struct {
 
 type portableReplayRuntimeRecord struct {
 	inertHostedInstance
-	service    factoryruntime.Service
-	generation string
-	progress   workers.ProgressPublisher
+	service        factoryruntime.Service
+	generation     string
+	progress       workers.ProgressPublisher
+	closeArtifacts func() error
 }
 
 func (record *portableReplayRuntimeRecord) RuntimeService() factoryruntime.Service {
@@ -536,6 +617,13 @@ func (record *portableReplayRuntimeRecord) StreamGeneration() string {
 
 func (record *portableReplayRuntimeRecord) RuntimeProgressPublisher() workers.ProgressPublisher {
 	return record.progress
+}
+
+func (record *portableReplayRuntimeRecord) CloseArtifacts() error {
+	if record.closeArtifacts == nil {
+		return nil
+	}
+	return record.closeArtifacts()
 }
 
 func (*portableReplayRuntimeRecord) BeginWorkerAttempt(

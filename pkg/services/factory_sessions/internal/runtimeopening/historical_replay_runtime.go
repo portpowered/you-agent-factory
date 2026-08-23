@@ -91,8 +91,24 @@ func (owner *portableReplayDurableOwner) SubscribeResponseEvents(
 	return subscriber.SubscribeResponseEvents(ctx, sessionID, request)
 }
 
+// Close forwards the optional execution-owner shutdown boundary through the
+// replay handoff. The durable execution service contract remains focused on
+// customer operations; only implementations that own asynchronous work need
+// to expose this private lifecycle capability.
+func (owner *portableReplayDurableOwner) Close() error {
+	if owner == nil || owner.Service == nil {
+		return nil
+	}
+	closer, ok := owner.Service.(interface{ Close() error })
+	if !ok {
+		return nil
+	}
+	return closer.Close()
+}
+
 type portableReplayRuntimeCleanup struct {
 	mu       sync.Mutex
+	owner    interface{ Close() error }
 	runtime  runtimeports.RuntimeInstance
 	closed   bool
 	closeErr error
@@ -102,6 +118,19 @@ func newPortableReplayRuntimeCleanup() *portableReplayRuntimeCleanup {
 	return &portableReplayRuntimeCleanup{}
 }
 
+func (cleanup *portableReplayRuntimeCleanup) SetOwner(owner interface{ Close() error }) {
+	if cleanup == nil || owner == nil {
+		return
+	}
+	cleanup.mu.Lock()
+	defer cleanup.mu.Unlock()
+	if cleanup.closed {
+		cleanup.closeErr = errors.Join(cleanup.closeErr, owner.Close())
+		return
+	}
+	cleanup.owner = owner
+}
+
 func (cleanup *portableReplayRuntimeCleanup) Set(runtime runtimeports.RuntimeInstance) {
 	if cleanup == nil || runtime == nil {
 		return
@@ -109,9 +138,7 @@ func (cleanup *portableReplayRuntimeCleanup) Set(runtime runtimeports.RuntimeIns
 	cleanup.mu.Lock()
 	defer cleanup.mu.Unlock()
 	if cleanup.closed {
-		if cleanup.closeErr == nil {
-			cleanup.closeErr = runtime.CloseArtifacts()
-		}
+		cleanup.closeErr = errors.Join(cleanup.closeErr, runtime.CloseArtifacts())
 		return
 	}
 	cleanup.runtime = runtime
@@ -127,8 +154,12 @@ func (cleanup *portableReplayRuntimeCleanup) Close() error {
 		return cleanup.closeErr
 	}
 	cleanup.closed = true
+	if cleanup.owner != nil {
+		cleanup.closeErr = errors.Join(cleanup.closeErr, cleanup.owner.Close())
+		cleanup.owner = nil
+	}
 	if cleanup.runtime != nil {
-		cleanup.closeErr = cleanup.runtime.CloseArtifacts()
+		cleanup.closeErr = errors.Join(cleanup.closeErr, cleanup.runtime.CloseArtifacts())
 		cleanup.runtime = nil
 	}
 	return cleanup.closeErr
@@ -218,6 +249,7 @@ func openPortableReplayDurableOwner(
 			return nil
 		},
 	}
+	cleanup.SetOwner(owner)
 	return owner, cleanup.Close, nil
 }
 
