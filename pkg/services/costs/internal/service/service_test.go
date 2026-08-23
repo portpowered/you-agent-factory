@@ -95,6 +95,11 @@ func assertExactLineItems(t *testing.T, lines []costs.LineItem) {
 	assertLine(t, lines, "unknown", costs.StatusUnpriced, "", "no configured price")
 	assertLine(t, lines, "gpt-no-cache", costs.StatusUnpriced, "", "cached-input rate is not configured")
 	assertLine(t, lines, "", costs.StatusUnpriced, "", "model identity is unavailable")
+	assertLineSource(t, lines, "gpt-5", costs.StatusPriced, costs.PriceSourceBuiltIn)
+	assertLineSource(t, lines, "gpt-zero", costs.StatusPriced, costs.PriceSourceBuiltIn)
+	assertLineSource(t, lines, "unknown", costs.StatusUnpriced, "")
+	assertLineSource(t, lines, "gpt-no-cache", costs.StatusUnpriced, "")
+	assertLineSource(t, lines, "", costs.StatusUnpriced, "")
 }
 
 func assertExactRollups(t *testing.T, report costs.Report) {
@@ -422,6 +427,10 @@ func TestQueryOperatorPriceTableSupplementsOverridesAndDoesNotMixRates(t *testin
 	assertLineAmount(t, first.LineItems, "gpt-5", "50", "")
 	assertLineAmount(t, first.LineItems, "fallback", "3", "")
 	assertLineAmount(t, first.LineItems, "gpt-5", "", "cached-input rate is not configured")
+	assertLineSource(t, first.LineItems, "claude-sonnet", costs.StatusPriced, costs.PriceSourceOperatorSupplied)
+	assertLineSource(t, first.LineItems, "gpt-5", costs.StatusPriced, costs.PriceSourceOperatorSupplied)
+	assertLineSource(t, first.LineItems, "fallback", costs.StatusPriced, costs.PriceSourceBuiltIn)
+	assertLineSource(t, first.LineItems, "gpt-5", costs.StatusUnpriced, "")
 	if len(settings.paths) != 1 || settings.paths[0] != "explicit-settings.json" {
 		t.Fatalf("settings paths = %#v, want the explicit request path", settings.paths)
 	}
@@ -668,6 +677,20 @@ func assertLine(t *testing.T, lines []costs.LineItem, model string, status costs
 		return
 	}
 	t.Fatalf("line for model %q not found in %#v", model, lines)
+}
+
+func assertLineSource(t *testing.T, lines []costs.LineItem, model string, status costs.Status, want costs.PriceSource) {
+	t.Helper()
+	for _, line := range lines {
+		if line.Model != model || line.Status != status {
+			continue
+		}
+		if line.PriceSource != want {
+			t.Fatalf("line %q status %q source = %q, want %q", model, status, line.PriceSource, want)
+		}
+		return
+	}
+	t.Fatalf("line for model %q with status %q not found in %#v", model, status, lines)
 }
 
 func assertLineAmount(t *testing.T, lines []costs.LineItem, model, amount, reason string) {

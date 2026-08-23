@@ -93,6 +93,17 @@ func assertCostsReportSchema(t *testing.T, schemas map[string]any) {
 			t.Fatalf("CostsLineItem.%s = %#v, want integer", field, lineProperties[field])
 		}
 	}
+	priceSource, ok := lineProperties["price_source"].(map[string]any)
+	if !ok {
+		t.Fatalf("CostsLineItem.price_source = %#v, want optional enum", lineProperties["price_source"])
+	}
+	assertEnumValues(t, priceSource, "CostsLineItem.price_source", []string{"BUILT_IN", "OPERATOR_SUPPLIED"})
+	if description, ok := priceSource["description"].(string); !ok || description == "" {
+		t.Fatalf("CostsLineItem.price_source description = %#v, want documented presence rules", priceSource["description"])
+	}
+	if required, ok := lineItem["required"].([]any); ok && containsString(required, "price_source") {
+		t.Fatalf("CostsLineItem.price_source must be optional for UNPRICED rows")
+	}
 	status, ok := reportProperties["status"].(map[string]any)
 	if !ok {
 		t.Fatalf("CostsReport.status = %#v", reportProperties["status"])

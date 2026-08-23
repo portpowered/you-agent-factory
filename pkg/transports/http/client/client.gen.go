@@ -46,6 +46,12 @@ const (
 	UNKNOWN      CheckpointResumabilityStatus = "UNKNOWN"
 )
 
+// Defines values for CostsLineItemPriceSource.
+const (
+	BUILTIN          CostsLineItemPriceSource = "BUILT_IN"
+	OPERATORSUPPLIED CostsLineItemPriceSource = "OPERATOR_SUPPLIED"
+)
+
 // Defines values for CostsLineItemStatus.
 const (
 	CostsLineItemStatusPRICED   CostsLineItemStatus = "PRICED"
@@ -1705,6 +1711,9 @@ type CostsLineItem struct {
 	Model             *string `json:"model,omitempty"`
 	OutputTokens      *int64  `json:"output_tokens,omitempty"`
 
+	// PriceSource Pricing authority for the complete row used for a PRICED line item; omitted for UNPRICED rows.
+	PriceSource *CostsLineItemPriceSource `json:"price_source,omitempty"`
+
 	// PricedAmount Exact USD decimal amount; absent for UNPRICED rows and present as "0" for explicitly free usage.
 	PricedAmount *string `json:"priced_amount,omitempty"`
 	Provider     *string `json:"provider,omitempty"`
@@ -1718,6 +1727,9 @@ type CostsLineItem struct {
 	WorkId          *string             `json:"work_id,omitempty"`
 	WorkerSessionId *string             `json:"worker_session_id,omitempty"`
 }
+
+// CostsLineItemPriceSource Pricing authority for the complete row used for a PRICED line item; omitted for UNPRICED rows.
+type CostsLineItemPriceSource string
 
 // CostsLineItemStatus PRICED means every measured token class has a configured rate; UNPRICED means the row is retained with its tokens but cannot be fully valued.
 type CostsLineItemStatus string

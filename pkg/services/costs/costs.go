@@ -88,6 +88,15 @@ const (
 	StatusNoUsage  Status = "NO_USAGE"
 )
 
+// PriceSource identifies the complete pricing row used for a priced line
+// item. An empty value is reserved for unpriced rows.
+type PriceSource string
+
+const (
+	PriceSourceBuiltIn          PriceSource = "BUILT_IN"
+	PriceSourceOperatorSupplied PriceSource = "OPERATOR_SUPPLIED"
+)
+
 // Coverage counts encountered and fully priced usage rows and distinct
 // provider/model identities. A provider/model pair is priced only when every
 // encountered row for that pair is priced in the same scope.
@@ -141,9 +150,10 @@ type LineItem struct {
 	Provider         string `json:"provider,omitempty"`
 	Model            string `json:"model,omitempty"`
 	TokenCounts
-	Status       Status  `json:"status"`
-	PricedAmount *string `json:"priced_amount,omitempty"`
-	Reason       string  `json:"reason,omitempty"`
+	Status       Status      `json:"status"`
+	PriceSource  PriceSource `json:"price_source,omitempty"`
+	PricedAmount *string     `json:"priced_amount,omitempty"`
+	Reason       string      `json:"reason,omitempty"`
 }
 
 // Rollup is a monetary and usage summary for one Work item, Worker Session,

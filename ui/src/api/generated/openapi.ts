@@ -1947,6 +1947,11 @@ export interface components {
        * @enum {string}
        */
       status: CostsLineItemStatus;
+      /**
+       * @description Pricing authority for the complete row used for a PRICED line item; omitted for UNPRICED rows.
+       * @enum {string}
+       */
+      price_source?: CostsLineItemPrice_source;
       /** @description Exact USD decimal amount; absent for UNPRICED rows and present as "0" for explicitly free usage. */
       priced_amount?: string;
       /** @description Actionable reason when status is UNPRICED. */
@@ -10422,6 +10427,12 @@ export const CostsLineItemStatus = {
 } as const;
 export type CostsLineItemStatus =
   (typeof CostsLineItemStatus)[keyof typeof CostsLineItemStatus];
+export const CostsLineItemPrice_source = {
+  BUILT_IN: "BUILT_IN",
+  OPERATOR_SUPPLIED: "OPERATOR_SUPPLIED",
+} as const;
+export type CostsLineItemPrice_source =
+  (typeof CostsLineItemPrice_source)[keyof typeof CostsLineItemPrice_source];
 export const CostsRollupCurrency = {
   USD: "USD",
 } as const;

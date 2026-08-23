@@ -19,6 +19,7 @@ type normalizedPrice struct {
 	output    *big.Rat
 	cached    *big.Rat
 	reasoning *big.Rat
+	source    costs.PriceSource
 }
 
 type priceIndex map[string]normalizedPrice
@@ -30,6 +31,7 @@ type priceEntry struct {
 	output    string
 	cached    *string
 	reasoning *string
+	source    costs.PriceSource
 }
 
 type summary struct {
@@ -103,9 +105,10 @@ func calculateReport(
 			return costs.Report{}, err
 		}
 		line := runtimeUsageFromMetrics(row)
-		amount, reason := valueLine(line, prices)
+		amount, source, reason := valueLine(line, prices)
 		if reason == "" {
 			line.Status = costs.StatusPriced
+			line.PriceSource = source
 			line.PricedAmount, err = exactAmountString(amount)
 			if err != nil {
 				return costs.Report{}, err
@@ -165,6 +168,7 @@ func buildPriceIndex(table providers.PriceTable) (priceIndex, error) {
 			output:    model.OutputPerMillionTokens,
 			cached:    model.CachedInputPerMillionTokens,
 			reasoning: model.ReasoningOutputPerMillionTokens,
+			source:    costs.PriceSourceBuiltIn,
 		})
 	}
 	return buildPriceIndexFromEntries(entries)
@@ -180,6 +184,7 @@ func buildOperatorPriceIndex(table operatorsettings.PriceTable) (priceIndex, err
 			output:    model.OutputPerMillionTokens,
 			cached:    model.CachedInputPerMillionTokens,
 			reasoning: model.ReasoningOutputPerMillionTokens,
+			source:    costs.PriceSourceOperatorSupplied,
 		})
 	}
 	return buildPriceIndexFromEntries(entries)
@@ -196,7 +201,7 @@ func buildPriceIndexFromEntries(entries []priceEntry) (priceIndex, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parse output rate for %q/%q: %w", entry.provider, entry.model, err)
 		}
-		price := normalizedPrice{input: input, output: output}
+		price := normalizedPrice{input: input, output: output, source: entry.source}
 		if entry.cached != nil {
 			price.cached, err = parseDecimal(*entry.cached)
 			if err != nil {
@@ -214,20 +219,20 @@ func buildPriceIndexFromEntries(entries []priceEntry) (priceIndex, error) {
 	return index, nil
 }
 
-func valueLine(line costs.LineItem, prices priceIndex) (*big.Rat, string) {
+func valueLine(line costs.LineItem, prices priceIndex) (*big.Rat, costs.PriceSource, string) {
 	provider := canonicalProvider(line.Provider)
 	model := strings.TrimSpace(line.Model)
 	price, reason := validateLine(line, prices, provider, model)
 	if reason != "" {
-		return nil, reason
+		return nil, "", reason
 	}
 	cached, reason := validateSubset("cached-input", "input", line.CachedInputTokens, line.InputTokens, price.cached, provider, model)
 	if reason != "" {
-		return nil, reason
+		return nil, "", reason
 	}
 	reasoning, reason := validateSubset("reasoning-output", "output", line.ReasoningOutputTokens, line.OutputTokens, price.reasoning, provider, model)
 	if reason != "" {
-		return nil, reason
+		return nil, "", reason
 	}
 
 	uncachedInput := *line.InputTokens - cached
@@ -236,7 +241,7 @@ func valueLine(line costs.LineItem, prices priceIndex) (*big.Rat, string) {
 	amount.Add(amount, new(big.Rat).Mul(big.NewRat(cached, 1), price.cachedOrZero()))
 	amount.Add(amount, new(big.Rat).Mul(big.NewRat(nonReasoningOutput, 1), price.output))
 	amount.Add(amount, new(big.Rat).Mul(big.NewRat(reasoning, 1), price.reasoningOrZero()))
-	return amount.Quo(amount, big.NewRat(millionTokenCount, 1)), ""
+	return amount.Quo(amount, big.NewRat(millionTokenCount, 1)), price.source, ""
 }
 
 func validateLine(
