@@ -67,10 +67,6 @@ func discoverFunctionalTestInventoryWithPatternsAndJobs(listPatterns, packages [
 	return discoverFunctionalTestInventoryFromListedPackagesWithJobs(requestedPackages, listedPackages, jobs)
 }
 
-func discoverFunctionalTestInventoryFromListedPackages(requestedPackages []string, listedPackages []functionalGoListPackage) (functionalTestInventory, error) {
-	return discoverFunctionalTestInventoryFromListedPackagesWithJobs(requestedPackages, listedPackages, defaultCoverageJobs)
-}
-
 func discoverFunctionalTestInventoryFromListedPackagesWithJobs(requestedPackages []string, listedPackages []functionalGoListPackage, jobs int) (functionalTestInventory, error) {
 	requestedPackages = sortedUniqueStrings(requestedPackages)
 	if len(requestedPackages) == 0 {
@@ -498,10 +494,6 @@ type functionalGoListBatchResult struct {
 	requested []string
 }
 
-func functionalDiscoveryListBatches(listPatterns, requestedPackages []string, jobs int) [][]string {
-	return functionalDiscoveryListBatchesWithMaxJobs(listPatterns, requestedPackages, jobs, functionalDiscoveryMaxJobs)
-}
-
 func functionalDiscoveryListBatchesWithMaxJobs(listPatterns, requestedPackages []string, jobs, maxJobs int) [][]string {
 	if len(requestedPackages) < functionalDiscoveryParallelThreshold || !slices.Equal(listPatterns, requestedPackages) {
 		return [][]string{listPatterns}
@@ -571,17 +563,6 @@ func listFunctionalTestPackageBatchWithFieldsAndFlagsAllowingBuildConstraintErro
 	}
 
 	return decodeFunctionalGoListPackagesAllowingBuildConstraintErrors(stdout, packages)
-}
-
-func decodeFunctionalGoListPackages(stdout string) ([]functionalGoListPackage, error) {
-	result, err := decodeFunctionalGoListPackagesAllowingBuildConstraintErrors(stdout, nil)
-	if err != nil {
-		return nil, err
-	}
-	if len(result.buildConstraintExcluded) != 0 {
-		return nil, fmt.Errorf("discover functional tests: go list reported build-constraint package errors for %q", strings.Join(result.buildConstraintExcluded, ", "))
-	}
-	return result.packages, nil
 }
 
 func decodeFunctionalGoListPackagesAllowingBuildConstraintErrors(stdout string, candidatePaths []string) (functionalGoListPackageMetadataResult, error) {

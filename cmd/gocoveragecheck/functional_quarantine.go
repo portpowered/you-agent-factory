@@ -74,14 +74,6 @@ type goTestListEvent struct {
 	Test    string `json:"Test"`
 }
 
-func resolveFunctionalCoverageSelection(path string, listPatterns, packages []string, timeout time.Duration, short bool, jobs int, repoRoot string) (functionalCoverageSelection, functionalQuarantine, error) {
-	return resolveFunctionalCoverageSelectionWithMetadataAndVerification(path, listPatterns, packages, timeout, short, jobs, repoRoot, nil, nil)
-}
-
-func resolveFunctionalCoverageSelectionWithMetadata(path string, listPatterns, packages []string, timeout time.Duration, short bool, jobs int, repoRoot string, listedPackages []functionalGoListPackage) (functionalCoverageSelection, functionalQuarantine, error) {
-	return resolveFunctionalCoverageSelectionWithMetadataAndVerification(path, listPatterns, packages, timeout, short, jobs, repoRoot, listedPackages, nil)
-}
-
 func resolveFunctionalCoverageSelectionWithMetadataAndVerification(path string, listPatterns, packages []string, timeout time.Duration, short bool, jobs int, repoRoot string, listedPackages []functionalGoListPackage, selectorVerification *functionalQuarantineSelectorVerification) (functionalCoverageSelection, functionalQuarantine, error) {
 	manifest, err := readFunctionalQuarantineFile(path)
 	if err != nil {
@@ -402,14 +394,6 @@ func runFunctionalQuarantineRatchetWithWriter(manifest functionalQuarantine, tim
 	}
 	fmt.Fprintf(output, "Functional quarantine ratchet: selectors=%d observed-pass=%d observed-fail=%d observed-skip=%d execution-errors=%d\n", len(manifest.Entries), passCount, failCount, skipCount, len(manifest.Entries)-len(results))
 	return errors.Join(failures...)
-}
-
-func runFunctionalQuarantineSelector(entry functionalQuarantineEntry, timeout time.Duration, short bool, repoRoot string) (functionalQuarantineOutcomeResult, error) {
-	measurement, err := functionalQuarantineMeasurement(entry)
-	if err != nil {
-		return functionalQuarantineOutcomeResult{}, err
-	}
-	return runFunctionalQuarantineSelectorWithMeasurementSpec(entry, measurement, timeout, short, repoRoot)
 }
 
 type functionalQuarantineMeasurementSpec struct {

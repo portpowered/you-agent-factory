@@ -331,15 +331,6 @@ func runGoTestCoverageLane(cfg config, commonArgs []string, testPackages []strin
 	return executeCoverageInvocationPlan(cfg, plan, testPackages, profilePath, repoRoot, coverPackages, failurePrefix, nil)
 }
 
-func runGoTestCoverageLaneWithSelection(cfg config, commonArgs []string, testPackages []string, profilePath string, repoRoot string, coverPackages []string, targetOS string, failurePrefix string, selection functionalCoverageSelection) error {
-	plan, err := planGoTestCoverageLaneWithSelection(commonArgs, profilePath, cfg, targetOS, selection)
-	if err != nil {
-		return err
-	}
-	expectedInventory := selectedFunctionalTestInventory(selection)
-	return executeCoverageInvocationPlan(cfg, plan, testPackages, profilePath, repoRoot, coverPackages, failurePrefix, &expectedInventory)
-}
-
 func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, testPackages []string, profilePath string, repoRoot string, coverPackages []string, failurePrefix string, expectedFunctionalInventory *functionalTestInventory) error {
 	started := time.Now()
 	snapshotter := configureFunctionalTimingSnapshot(&plan, cfg, testPackages, started, profilePath, repoRoot, coverPackages)
