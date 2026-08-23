@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -151,7 +152,18 @@ func assertMetricsTimeoutCommand(
 	if stdout != "" {
 		t.Fatalf("stdout for %v = %q, want empty failure output", args, stdout)
 	}
-	assertSingleMetricsDiagnostic(t, stderr, costscli.CostsRequestTimeoutCode, "INTERNAL_SERVER_ERROR", wantMessage)
+	if slices.Contains(args, "--debug") {
+		lines := strings.Split(strings.TrimSpace(stderr), "\n")
+		if len(lines) < 2 {
+			t.Fatalf("debug timeout diagnostic = %q, want structured diagnostic plus wrapped cause", stderr)
+		}
+		assertSingleMetricsDiagnostic(t, lines[0]+"\n", costscli.CostsRequestTimeoutCode, "INTERNAL_SERVER_ERROR", wantMessage)
+		if !strings.Contains(strings.Join(lines[1:], "\n"), "debug: cause[0]=") {
+			t.Fatalf("debug timeout diagnostic = %q, want wrapped cause context", stderr)
+		}
+	} else {
+		assertSingleMetricsDiagnostic(t, stderr, costscli.CostsRequestTimeoutCode, "INTERNAL_SERVER_ERROR", wantMessage)
+	}
 	if strings.Contains(stderr, "CLI_COMMAND_FAILED") || strings.Contains(stderr, "INTERNAL_SERVER_ERROR: command failed") {
 		t.Fatalf("timeout diagnostic for %v collapsed to a generic failure: %q", args, stderr)
 	}
