@@ -1,0 +1,95 @@
+name: Temporary Installed-Binary Evidence
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  evidence:
+    name: Installed-Binary Evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 6a264d1e4922481676f7d17e84eab8f99cf4cd8b
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Prove source-tree reads fail closed
+        shell: bash
+        run: |
+          set -uo pipefail
+          probe=cmd/factory/integration_evidence_source_read_probe.go
+          source_path="$(realpath "$GITHUB_WORKSPACE/README.md")"
+          cleanup() { rm -f "$probe"; }
+          trap cleanup EXIT
+          cat > "$probe" <<'EOF'
+          package main
+
+          import "os"
+
+          func init() {
+            path := os.Getenv("YOU_INTEGRATION_SOURCE_TREE_PROBE")
+            if path == "" {
+              return
+            }
+            _, _ = os.ReadFile(path)
+          }
+          EOF
+          echo "YOU_INTEGRATION_SOURCE_TREE_PROBE=$source_path" >> "$GITHUB_ENV"
+          set +e
+          go test -v ./tests/integration -run '^TestI8FactoryConfigValidation$' -count=1 2>&1 | tee "$RUNNER_TEMP/source-tree-read.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo "source-tree probe unexpectedly passed"
+            exit 1
+          fi
+          grep -F "source-tree read detected at $source_path" "$RUNNER_TEMP/source-tree-read.log"
+          echo "SOURCE_TREE_READ_PROBE=failed as expected"
+          echo "SOURCE_TREE_READ_PATH=$source_path"
+
+      - name: Prove a broken valid Factory makes I8 fail
+        shell: bash
+        run: |
+          set -uo pipefail
+          fixture=tests/integration/testdata/i8/valid/minimal.json
+          backup="$RUNNER_TEMP/i8-minimal.json"
+          cp "$fixture" "$backup"
+          restore() { cp "$backup" "$fixture"; }
+          trap restore EXIT
+          printf '{\n' > "$fixture"
+          set +e
+          go test -v ./tests/integration -run '^TestI8FactoryConfigValidation$' -count=1 2>&1 | tee "$RUNNER_TEMP/broken-i8.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo "broken valid Factory unexpectedly passed I8"
+            exit 1
+          fi
+          grep -F "validation verdict = false, want true" "$RUNNER_TEMP/broken-i8.log"
+          echo "BROKEN_VALID_FACTORY_PROBE=failed as expected"
+
+      - name: Run restored installed-binary tier and measure it
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "HOSTED_CPUS=$(nproc)"
+          start_ns=$(date +%s%N)
+          go test -short ./tests/integration -count=1 -timeout 5m
+          go test -short ./tests/integration/harness -count=1 -timeout 5m
+          end_ns=$(date +%s%N)
+          elapsed_ms=$(( (end_ns - start_ns) / 1000000 ))
+          echo "RESTORED_TIER_ELAPSED_MS=$elapsed_ms"
+          if [ "$elapsed_ms" -ge 120000 ]; then
+            echo "restored installed-binary tier exceeded two minutes"
+            exit 1
+          fi
