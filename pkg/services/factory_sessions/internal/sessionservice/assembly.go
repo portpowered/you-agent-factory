@@ -54,8 +54,13 @@ type Assembly struct {
 	detachedGateways             map[string]factorysessions.Service
 	workAdmissionsMu             sync.Mutex
 	workAdmissions               map[string][]*workAdmissionProjection
-	workReadMetricsRecorder      roles.InvocationMetricsRecorder
-	detachedGatewayOrder         []string
+	// beforeWorkAdmissionProjectionRegistration is only populated by the
+	// same-package replacement-window regression. It makes the otherwise
+	// scheduler-dependent capture/registration gap deterministic without
+	// changing the production dependency graph.
+	beforeWorkAdmissionProjectionRegistration func()
+	workReadMetricsRecorder                   roles.InvocationMetricsRecorder
+	detachedGatewayOrder                      []string
 }
 
 type streamManager interface {
@@ -133,24 +138,86 @@ func (a *Assembly) Resolve(sessionID string) *livesession.LiveSession {
 // ResolveWorkRuntime adapts the Factory Sessions registry to Work's
 // consumer-owned runtime port.
 func (a *Assembly) ResolveWorkRuntime(sessionID string) (work.Runtime, error) {
+	// Replacement publishes the new session generation before retiring the old
+	// generation's projection. Revalidate after registration so a resolver that
+	// captured the old generation in that window releases it and retries rather
+	// than recreating stale state after retirement.
+	for {
+		session := a.Resolve(sessionID)
+		if session == nil || runtimebinding.ServiceForSession(session) == nil {
+			a.releaseWorkAdmissionProjection(sessionID)
+			return nil, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, sessionID)
+		}
+		runtime := session.Runtime
+		ingress, _ := runtimebinding.WorkAndEventIngressForLiveRuntime(runtime)
+		var ledger recordings.Ledger
+		if bundle := runtimebinding.BundleFromSession(session); bundle != nil {
+			ledger = bundle.RecordingLedger()
+		}
+		if a.beforeWorkAdmissionProjectionRegistration != nil {
+			a.beforeWorkAdmissionProjectionRegistration()
+		}
+		projection := a.workAdmissionProjection(sessionID, runtime, ledger)
+		if a.workRuntimeGenerationIsCurrent(sessionID, runtime, ledger) {
+			return workRuntimeAdapter{
+				sessionID:   sessionID,
+				clock:       runtime.Clock,
+				runtime:     runtimebinding.ServiceForSession(session),
+				ingress:     ingress,
+				admissions:  projection,
+				readMetrics: a.workReadMetricsRecorder,
+			}, nil
+		}
+		a.discardWorkAdmissionProjection(sessionID, projection)
+	}
+}
+
+func (a *Assembly) workRuntimeGenerationIsCurrent(
+	sessionID string,
+	runtime *factorysessions.LiveRuntime,
+	ledger recordings.Ledger,
+) bool {
+	if a == nil || runtime == nil {
+		return false
+	}
 	session := a.Resolve(sessionID)
-	if session == nil || runtimebinding.ServiceForSession(session) == nil {
-		a.releaseWorkAdmissionProjection(sessionID)
-		return nil, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, sessionID)
+	if session == nil || session.Runtime != runtime {
+		return false
 	}
-	ingress, _ := runtimebinding.WorkAndEventIngressForLiveRuntime(session.Runtime)
-	var ledger recordings.Ledger
+	var currentLedger recordings.Ledger
 	if bundle := runtimebinding.BundleFromSession(session); bundle != nil {
-		ledger = bundle.RecordingLedger()
+		currentLedger = bundle.RecordingLedger()
 	}
-	return workRuntimeAdapter{
-		sessionID:   sessionID,
-		clock:       session.Runtime.Clock,
-		runtime:     runtimebinding.ServiceForSession(session),
-		ingress:     ingress,
-		admissions:  a.workAdmissionProjection(sessionID, session.Runtime, ledger),
-		readMetrics: a.workReadMetricsRecorder,
-	}, nil
+	return sameLedger(currentLedger, ledger)
+}
+
+func (a *Assembly) discardWorkAdmissionProjection(
+	sessionID string,
+	target *workAdmissionProjection,
+) {
+	if a == nil || target == nil {
+		return
+	}
+	a.workAdmissionsMu.Lock()
+	projections := a.workAdmissions[sessionID]
+	remaining := make([]*workAdmissionProjection, 0, len(projections))
+	removed := false
+	for _, projection := range projections {
+		if projection == target {
+			removed = true
+			continue
+		}
+		remaining = append(remaining, projection)
+	}
+	if len(remaining) == 0 {
+		delete(a.workAdmissions, sessionID)
+	} else {
+		a.workAdmissions[sessionID] = remaining
+	}
+	a.workAdmissionsMu.Unlock()
+	if removed {
+		target.Release()
+	}
 }
 
 func (a *Assembly) workAdmissionProjection(

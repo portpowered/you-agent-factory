@@ -100,6 +100,79 @@ func TestResolveWorkRuntimeReleasesProjectionAfterSessionDisappears(t *testing.T
 	}
 }
 
+func TestResolveWorkRuntimeDiscardsProjectionFromReplacedGeneration(t *testing.T) {
+	t.Parallel()
+
+	oldLedger := &admissionProjectionLedger{}
+	oldLedger.AppendRecordedEvent(admissionProjectionEvent(
+		t, "old-admission", "session-1", 1,
+		work.WorkRequestEventWork{Name: "old", WorkID: "old-work"},
+	))
+	oldRuntime := &registeredWorkRuntime{}
+	oldRecord := &generationRuntimeRecord{service: oldRuntime, ledger: oldLedger}
+	state := newWorkResolverSessionState()
+	registerGenerationSession(state, "session-1", oldRecord, oldRuntime)
+	oldLiveRuntime := state.Resolve("session-1").Runtime
+
+	allowProjectionRegistration := make(chan struct{})
+	capturedOldGeneration := make(chan struct{})
+	var captureOnce sync.Once
+	assembly := &Assembly{
+		state:          state,
+		workAdmissions: make(map[string][]*workAdmissionProjection),
+		beforeWorkAdmissionProjectionRegistration: func() {
+			captureOnce.Do(func() {
+				close(capturedOldGeneration)
+				<-allowProjectionRegistration
+			})
+		},
+	}
+
+	type resolution struct {
+		runtime work.Runtime
+		err     error
+	}
+	resolved := make(chan resolution, 1)
+	go func() {
+		runtime, err := assembly.ResolveWorkRuntime("session-1")
+		resolved <- resolution{runtime: runtime, err: err}
+	}()
+	<-capturedOldGeneration
+
+	newLedger := &admissionProjectionLedger{}
+	newLedger.AppendRecordedEvent(admissionProjectionEvent(
+		t, "new-admission", "session-1", 1,
+		work.WorkRequestEventWork{Name: "new", WorkID: "new-work"},
+	))
+	newRuntime := &registeredWorkRuntime{}
+	newRecord := &generationRuntimeRecord{service: newRuntime, ledger: newLedger}
+	registerGenerationSession(state, "session-1", newRecord, newRuntime)
+	assembly.retireWorkAdmissionProjection("session-1", oldLiveRuntime, oldRecord)
+	close(allowProjectionRegistration)
+
+	result := <-resolved
+	if result.err != nil {
+		t.Fatalf("ResolveWorkRuntime() error = %v", result.err)
+	}
+	adapter, ok := result.runtime.(workRuntimeAdapter)
+	if !ok || adapter.runtime != newRuntime {
+		t.Fatalf("resolved Work runtime = %#v, want replacement runtime %p", result.runtime, newRuntime)
+	}
+
+	assembly.workAdmissionsMu.Lock()
+	retained := append([]*workAdmissionProjection(nil), assembly.workAdmissions["session-1"]...)
+	assembly.workAdmissionsMu.Unlock()
+	if len(retained) != 1 || !retained[0].matchesGeneration(state.Resolve("session-1").Runtime, newLedger) {
+		t.Fatalf("retained Work projections = %#v, want only replacement generation", retained)
+	}
+	beforeStale := retained[0].Snapshot()
+	oldLedger.AppendRecordedEvent(admissionProjectionEvent(
+		t, "stale-old-admission", "session-1", 2,
+		work.WorkRequestEventWork{Name: "stale", WorkID: "stale-work"},
+	))
+	assertAdmissions(t, retained[0].Snapshot(), beforeStale)
+}
+
 func TestWorkReadKeepsRuntimeGenerationDuringConcurrentReplacement(t *testing.T) {
 	t.Parallel()
 
