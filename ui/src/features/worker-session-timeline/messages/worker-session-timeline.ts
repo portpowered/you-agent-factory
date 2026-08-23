@@ -32,6 +32,7 @@ export interface WorkerSessionTimelineMessages {
   continuationLabel: string;
   detailsLabel: (expanded: boolean) => string;
   dispatchLabel: string;
+  durabilityConfirmationLabel: string;
   earlierEventsAction: string;
   emptyState: string;
   eventListLabel: string;
@@ -129,6 +130,7 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
       continuationLabel: "Continuation",
       detailsLabel: (expanded) => (expanded ? "Hide details" : "Show details"),
       dispatchLabel: "Dispatch",
+      durabilityConfirmationLabel: "Durability confirmation",
       earlierEventsAction: "Earlier events",
       emptyState: "No canonical Worker Session records were retained.",
       eventListLabel: "Canonical Worker Session events",
@@ -271,6 +273,7 @@ const workerSessionTimelineMessagesByLocale: LocalizedMessageCatalog<WorkerSessi
       continuationLabel: "继续关系",
       detailsLabel: (expanded) => (expanded ? "隐藏详情" : "显示详情"),
       dispatchLabel: "分派",
+      durabilityConfirmationLabel: "持久化确认",
       earlierEventsAction: "更早的事件",
       emptyState: "没有保留的规范 Worker 会话记录。",
       eventListLabel: "规范 Worker 会话事件",

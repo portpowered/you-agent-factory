@@ -215,7 +215,7 @@ func observationJSON(session factoryapi.WorkerSessionObservation) listJSONObserv
 		EndedAt: session.EndedAt, FactorySessionID: session.FactorySessionId, Failure: session.Failure, Model: session.Model, Parse: session.Parse,
 		ProviderSession: session.ProviderSession, ProviderSessionAvailable: session.ProviderSessionAvailable,
 		ReasoningEffort: session.ReasoningEffort, RecordingHealth: session.RecordingHealth, RecordingHealthReason: session.RecordingHealthReason,
-		StartedAt: session.StartedAt, State: session.State, TokenUsage: tokenUsage,
+		StartedAt: session.StartedAt, State: session.State, ConfirmationState: workerSessionConfirmationState(session), TokenUsage: tokenUsage,
 		TurnUsage:  turnUsageJSON(session.TurnUsage),
 		Transcript: session.Transcript, TurnID: session.TurnId, WorkID: session.WorkId, WorkIDs: session.WorkIds, WorkName: session.WorkName,
 		WorkerSessionID: session.WorkerSessionId,
@@ -256,7 +256,7 @@ func writeShowFields(output io.Writer, session factoryapi.WorkerSessionObservati
 		{"Worker Session ID", session.WorkerSessionId}, {"Direct", fmt.Sprintf("%t", session.Direct)}, {"Provider", provider}, {"Kind", kind}, {"Provider Session ID", id},
 		{"Model", stringOrDash(session.Model)}, {"Reasoning Effort", stringOrDash(session.ReasoningEffort)},
 		{"Work IDs", joinOrDash(session.WorkIds)}, {"Turn ID", stringOrDash(session.TurnId)}, {"Attempt ID", session.AttemptId},
-		{"State", stringOrDashPtr(string(session.State))}, {"Started", formatTime(session.StartedAt)}, {"Ended", formatTime(session.EndedAt)},
+		{"State", stringOrDashPtr(string(session.State))}, {"Confirmation state", string(workerSessionConfirmationState(session))}, {"Started", formatTime(session.StartedAt)}, {"Ended", formatTime(session.EndedAt)},
 		{"Duration", formatDuration(session.DurationMillis)}, {"Duration basis", stringOrDashPtr(string(session.DurationBasis))},
 		{"Transcript", stringOrDashPtr(string(session.Transcript))},
 	}

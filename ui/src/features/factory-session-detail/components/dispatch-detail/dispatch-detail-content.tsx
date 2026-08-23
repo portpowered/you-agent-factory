@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { DescriptionList } from "@you-agent-factory/components/data-display";
 import { ButtonLink, Label, Text } from "@you-agent-factory/components/primitives";
 import { DashboardStatusPill } from "../../../../components/ui/dashboard-status-pill";
+import { DurabilityConfirmationState } from "../../../../components/ui/durability-confirmation-state";
 import type { FactorySessionDispatchDrilldownModel } from "../../lib/factory-session-dispatch-detail";
 import { getFactorySessionDetailMessages } from "../../messages/factory-session-detail";
 import { resolveFactoryDispatchStatusTone } from "../../messages/factory-session-runtime-display";
@@ -74,6 +75,10 @@ function DispatchSummaryMetrics({
         >
           {data.status}
         </DashboardStatusPill>
+        <DurabilityConfirmationState
+          label={messages.durabilityConfirmationLabel}
+          state={data.confirmationState}
+        />
       </div>
       {data.label ? (
         <Metric label={messages.dispatchLabelField} value={data.label} />

@@ -216,6 +216,7 @@ type listJSONObservation struct {
 	RecordingHealthReason    *string                                             `json:"recordingHealthReason"`
 	StartedAt                *time.Time                                          `json:"startedAt"`
 	State                    factoryapi.WorkerSessionObservationState            `json:"state"`
+	ConfirmationState        factoryapi.ConfirmationState                        `json:"confirmationState"`
 	TokenUsage               *listJSONTokenUsage                                 `json:"tokenUsage"`
 	TurnUsage                *listJSONTurnUsage                                  `json:"turnUsage,omitempty"`
 	Transcript               factoryapi.WorkerSessionObservationTranscript       `json:"transcript"`
@@ -423,7 +424,7 @@ func renderList(output io.Writer, result factoryapi.ListWorkerSessionsResponse) 
 		return err
 	}
 	table := tabwriter.NewWriter(output, 0, 4, 2, ' ', 0)
-	if _, err := fmt.Fprintln(table, "WORK NAME\tWORK ID\tWORKER SESSION ID\tPROVIDER\tKIND\tPROVIDER SESSION ID\tSTATE\tSTARTED\tDURATION\tEXIT/FAILURE KIND"); err != nil {
+	if _, err := fmt.Fprintln(table, "WORK NAME\tWORK ID\tWORKER SESSION ID\tPROVIDER\tKIND\tPROVIDER SESSION ID\tSTATE\tCONFIRMATION STATE\tSTARTED\tDURATION\tEXIT/FAILURE KIND"); err != nil {
 		return err
 	}
 	for _, session := range result.Sessions {
@@ -439,7 +440,7 @@ func renderList(output io.Writer, result factoryapi.ListWorkerSessionsResponse) 
 		}
 		if _, err := fmt.Fprintf(
 			table,
-			"%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			"%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			stringOrDash(session.WorkName),
 			workID,
 			stringOrDashPtr(session.WorkerSessionId),
@@ -447,6 +448,7 @@ func renderList(output io.Writer, result factoryapi.ListWorkerSessionsResponse) 
 			kind,
 			providerSessionID,
 			stringOrDashPtr(string(session.State)),
+			workerSessionConfirmationState(session),
 			formatTime(session.StartedAt),
 			formatDuration(session.DurationMillis),
 			listFailureKind(session.Failure),

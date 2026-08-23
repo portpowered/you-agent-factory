@@ -4,6 +4,7 @@ import {
 } from "../../../../../components/ui/formatters";
 import { WorkContentReadOnlyList } from "../../../../work-content/components/work-content-read-only-list";
 import { getWorkContentInspectMessages } from "../../../../work-content/messages/work-content";
+import { DurabilityConfirmationState } from "../../../../../components/ui/durability-confirmation-state";
 import { SelectedWorkDispatchHistorySection } from "../../../dispatch-selection/components/dispatch-history/selected-work-dispatch-history";
 import { CurrentSelectionDescriptionList } from "../../../base/components/detail/current-selection-description-list";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
@@ -87,6 +88,12 @@ export function WorkItemDetailCard({
               <dd>{displayedOperationCount}</dd>
             </div>
           </CurrentSelectionDescriptionList>
+          <div className="mt-3">
+            <DurabilityConfirmationState
+              label={messages.durabilityConfirmationLabel}
+              state={selection.workItem.confirmationState}
+            />
+          </div>
         </CurrentSelectionExpandableSection>
         <CurrentSelectionExpandableSection
           contentId={`${widgetId}-work-item-content-content`}

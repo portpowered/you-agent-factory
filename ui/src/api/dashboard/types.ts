@@ -99,6 +99,7 @@ export interface DashboardWorkItemRef {
   payloadUnavailableReason?: string;
   payload_status?: string;
   payload_unavailable_reason?: string;
+  confirmationState?: components["schemas"]["ConfirmationState"];
   state?: string;
   work_id: string;
   work_type_id?: string;

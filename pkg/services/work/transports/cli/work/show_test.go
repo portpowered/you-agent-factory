@@ -64,6 +64,7 @@ func TestShow_HumanOutputIncludesWorkSummary(t *testing.T) {
 		"Work type:\tstory\n" +
 		"State name:\treview\n" +
 		"State type:\tPROCESSING\n" +
+		"Confirmation state:\tUNCONFIRMED\n" +
 		"Trace:\ttrace-chain-1\n" +
 		"Relations:\tnone\n" +
 		"Stop summary:\tkind=BLOCKED session=session-beta state=story:blocked\n" +
@@ -233,6 +234,7 @@ func TestShow_HumanOutputIncludesInterruptedStopSummary(t *testing.T) {
 		"Work type:\tgoal\n" +
 		"State name:\treview\n" +
 		"State type:\tPROCESSING\n" +
+		"Confirmation state:\tUNCONFIRMED\n" +
 		"Trace:\ttrace-review-1\n" +
 		"Relations:\tnone\n" +
 		"Stop summary:\tkind=INTERRUPTED session=session-beta state=goal:review\n" +
@@ -290,6 +292,7 @@ func TestShow_HumanOutputIncludesPausedLifecycleStopSummary(t *testing.T) {
 		"Work type:\tgoal\n" +
 		"State name:\treview\n" +
 		"State type:\tPROCESSING\n" +
+		"Confirmation state:\tUNCONFIRMED\n" +
 		"Trace:\ttrace-review-1\n" +
 		"Relations:\tnone\n" +
 		"Stop summary:\tkind=PAUSED session=session-paused state=goal:review lifecycle=PAUSED\n"

@@ -151,6 +151,7 @@ func TestConstructedService_ShowHumanOutputPreservesAcceptedSummary(t *testing.T
 		"Work type:\tstory\n" +
 		"State name:\treview\n" +
 		"State type:\tPROCESSING\n" +
+		"Confirmation state:\tUNCONFIRMED\n" +
 		"Trace:\ttrace-chain-1\n" +
 		"Relations:\tnone\n"
 	if got := out.String(); got != want {

@@ -82,6 +82,9 @@ func assertStableSessionDocument(t *testing.T, sessions []map[string]json.RawMes
 			t.Fatalf("session 2 %s = %s, want explicit null", key, got)
 		}
 	}
+	if got := string(sessions[1]["confirmationState"]); got != `"UNCONFIRMED"` {
+		t.Fatalf("session 2 confirmationState = %s, want UNCONFIRMED", got)
+	}
 	if _, ok := sessions[1]["turnUsage"]; ok {
 		t.Fatalf("session 2 turnUsage = %s, want field omitted without supported evidence", sessions[1]["turnUsage"])
 	}

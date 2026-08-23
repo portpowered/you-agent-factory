@@ -118,6 +118,7 @@ func (service *service) Show(cfg ShowConfig) error {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work show response endpointPath=%s status=%d durationMillis=%d error=decode", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		return fmt.Errorf("decode work response: %w", err)
 	}
+	normalizeWorkConfirmationState(&work)
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
@@ -174,6 +175,7 @@ func renderShowResult(output io.Writer, work factoryapi.Work) error {
 		{label: "Work type", value: stringValue(work.WorkTypeName)},
 		{label: "State name", value: stateName},
 		{label: "State type", value: stateType},
+		{label: "Confirmation state", value: workConfirmationState(work)},
 		{label: "Trace", value: primaryWorkTrace(work)},
 		{label: "Relations", value: formatWorkRelations(work.Relations)},
 	}

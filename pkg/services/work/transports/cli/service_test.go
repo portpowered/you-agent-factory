@@ -167,7 +167,7 @@ func TestConstructedService_ListSuccessPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
-	if got := out.String(); got != "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tSTRUCTURED RESULT\tRELATIONS\nwork-1\tReview PRD\tstory\treview\tPROCESSING\t\tnone\n" {
+	if got := out.String(); got != "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tCONFIRMATION STATE\tSTRUCTURED RESULT\tRELATIONS\nwork-1\tReview PRD\tstory\treview\tPROCESSING\tUNCONFIRMED\t\tnone\n" {
 		t.Fatalf("output = %q", got)
 	}
 }
