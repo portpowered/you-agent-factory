@@ -13,6 +13,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -99,6 +100,86 @@ func WithHistoricalReplay(
 		return runner
 	}
 	return historicalReplayRunner{runner: runner, replay: replay}
+}
+
+type replayMetadataWarningRunner struct {
+	runner   initializer.LocalRuntimeRunner
+	warnings []recordings.MetadataMismatchWarning
+}
+
+func (runner replayMetadataWarningRunner) Run(ctx context.Context) error {
+	return runner.runner.Run(ctx)
+}
+
+func (runner replayMetadataWarningRunner) RunWithCompletion(
+	ctx context.Context,
+	completion initializer.CompletionOperation,
+) error {
+	managed, ok := runner.runner.(initializer.CompletionRuntimeRunner)
+	if !ok {
+		return runner.runner.Run(ctx)
+	}
+	return managed.RunWithCompletion(ctx, completion)
+}
+
+func (runner replayMetadataWarningRunner) RuntimeHostBinding(ctx context.Context) (initializer.RuntimeHostBinding, error) {
+	reader, ok := runner.runner.(interface {
+		RuntimeHostBinding(context.Context) (initializer.RuntimeHostBinding, error)
+	})
+	if !ok {
+		return initializer.RuntimeHostBinding{}, initializer.ErrRuntimeHostReadinessUnavailable
+	}
+	return reader.RuntimeHostBinding(ctx)
+}
+
+func (runner replayMetadataWarningRunner) RuntimeHostReadinessConfigured() bool {
+	provider, ok := runner.runner.(interface{ RuntimeHostReadinessConfigured() bool })
+	return ok && provider.RuntimeHostReadinessConfigured()
+}
+
+func (runner replayMetadataWarningRunner) RuntimeLogDiagnostics() runtimeartifact.Diagnostics {
+	return runtimeLogDiagnosticsForRunner(runner.runner)
+}
+
+func (runner replayMetadataWarningRunner) HostedInvocation() HostedInvocationOperation {
+	provider, ok := runner.runner.(interface {
+		HostedInvocation() HostedInvocationOperation
+	})
+	if !ok {
+		return nil
+	}
+	return provider.HostedInvocation()
+}
+
+func (runner replayMetadataWarningRunner) ReplayMetadataWarnings() []recordings.MetadataMismatchWarning {
+	return append([]recordings.MetadataMismatchWarning(nil), runner.warnings...)
+}
+
+// WithReplayMetadataWarnings retains replay drift details at the CLI edge
+// without adding replay-specific state to the neutral initializer contract.
+func WithReplayMetadataWarnings(
+	runner initializer.LocalRuntimeRunner,
+	warnings []recordings.MetadataMismatchWarning,
+) initializer.LocalRuntimeRunner {
+	if runner == nil || len(warnings) == 0 {
+		return runner
+	}
+	return replayMetadataWarningRunner{
+		runner:   runner,
+		warnings: append([]recordings.MetadataMismatchWarning(nil), warnings...),
+	}
+}
+
+func replayMetadataWarningsForRunner(
+	runner initializer.LocalRuntimeRunner,
+) []recordings.MetadataMismatchWarning {
+	provider, ok := runner.(interface {
+		ReplayMetadataWarnings() []recordings.MetadataMismatchWarning
+	})
+	if !ok {
+		return nil
+	}
+	return append([]recordings.MetadataMismatchWarning(nil), provider.ReplayMetadataWarnings()...)
 }
 
 type hostedInvocationRunner struct {
@@ -219,6 +300,7 @@ func openHostedRuntime(
 		closeRuntimeVisualizationSink(visualizations, visualizationSinkID)
 		return nil, fmt.Errorf("construct local runtime: builder returned nil runner")
 	}
+	replayMetadataWarnings := replayMetadataWarningsForRunner(factorySvc)
 	historicalReplay, hostedInvocation := hostedRuntimeCapabilities(factorySvc)
 	if !cfg.CleanInvocation && (cfg.WithServer || cfg.WithSite || cfg.Port > 0) {
 		factorySvc = runtimeapplication.WithRuntimeHostObserver(factorySvc, onBound)
@@ -227,6 +309,7 @@ func openHostedRuntime(
 		operation.runner = factorySvc
 		operation.hostedInvocation = hostedInvocation
 		operation.historicalReplay = historicalReplay
+		operation.replayMetadataWarnings = replayMetadataWarnings
 		operation.openingPresentations = presentations
 		operation.visualizations = visualizations
 		operation.visualizationSinkID = visualizationSinkID
@@ -236,7 +319,8 @@ func openHostedRuntime(
 	return &Operation{
 		cfg: cfg, logger: logger, runner: factorySvc, recordPath: recordPath,
 		hostedInvocation: hostedInvocation, historicalReplay: historicalReplay,
-		openingPresentations: presentations, visualizations: visualizations,
+		replayMetadataWarnings: replayMetadataWarnings,
+		openingPresentations:   presentations, visualizations: visualizations,
 		visualizationSinkID: visualizationSinkID,
 	}, nil
 }

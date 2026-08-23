@@ -77,18 +77,20 @@ type OpenedApplicationRuntime struct {
 	// OperatorSettingsPath is the resolved document used by the opened
 	// runtime. Transport adapters receive it as data and never resolve or read
 	// configuration themselves.
-	OperatorSettingsPath string
-	Logger               *zap.Logger
-	Visualization        RuntimeVisualizationServices
-	Resources            RuntimeResources
-	HistoricalReplay     *factorysessions.HistoricalReplayInspection
+	OperatorSettingsPath   string
+	Logger                 *zap.Logger
+	Visualization          RuntimeVisualizationServices
+	Resources              RuntimeResources
+	HistoricalReplay       *factorysessions.HistoricalReplayInspection
+	ReplayMetadataWarnings []recordings.MetadataMismatchWarning
 }
 
 type OpenedProcessApplication struct {
-	Plan            lifecycle.Plan
-	Diagnostics     factoryruntime.RuntimeLogDiagnostics
-	Ready           <-chan initializer.RuntimeHostBinding
-	CleanInvocation factoryruntime.Service
+	Plan                   lifecycle.Plan
+	Diagnostics            factoryruntime.RuntimeLogDiagnostics
+	Ready                  <-chan initializer.RuntimeHostBinding
+	CleanInvocation        factoryruntime.Service
+	ReplayMetadataWarnings []recordings.MetadataMismatchWarning
 	// HostedInvocation is a narrow operation result for the hosted CLI path;
 	// it is not the opened runtime's HTTP service table.
 	HostedInvocation HostedInvocationOperation

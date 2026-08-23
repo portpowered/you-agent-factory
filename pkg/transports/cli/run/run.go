@@ -30,6 +30,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionscli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -302,20 +303,21 @@ type resolvedRunRecordPath struct {
 // Operation is one invocation-local run selected by the customer command.
 // Its runtime state is opened through injected service operations.
 type Operation struct {
-	cfg                  RunConfig
-	logger               *zap.Logger
-	runner               RuntimeRunner
-	invocationRequest    *factoryapi.InvocationRequest
-	invocationTarget     factorysessions.InvocationTarget
-	invocation           InvocationOperation
-	presentation         factoryvisualization.ResponsePresentation
-	invocationMode       bool
-	recordPath           resolvedRunRecordPath
-	hostedInvocation     HostedInvocationOperation
-	historicalReplay     *factorysessions.HistoricalReplayInspection
-	openingPresentations factorysessions.OpeningPresentationOwner
-	visualizations       factoryvisualization.RuntimeSinkOwner
-	visualizationSinkID  factoryvisualization.RuntimeSinkID
+	cfg                    RunConfig
+	logger                 *zap.Logger
+	runner                 RuntimeRunner
+	invocationRequest      *factoryapi.InvocationRequest
+	invocationTarget       factorysessions.InvocationTarget
+	invocation             InvocationOperation
+	presentation           factoryvisualization.ResponsePresentation
+	invocationMode         bool
+	recordPath             resolvedRunRecordPath
+	hostedInvocation       HostedInvocationOperation
+	historicalReplay       *factorysessions.HistoricalReplayInspection
+	replayMetadataWarnings []recordings.MetadataMismatchWarning
+	openingPresentations   factorysessions.OpeningPresentationOwner
+	visualizations         factoryvisualization.RuntimeSinkOwner
+	visualizationSinkID    factoryvisualization.RuntimeSinkID
 }
 
 // Open resolves run inputs and opens invocation-local runtime state without
@@ -487,12 +489,18 @@ func (operation *Operation) Run(ctx context.Context) error {
 		emitStartupMessages(operation.cfg, runtimeLogDiagnosticsForRunner(operation.runner))
 	}
 
-	return runFactoryServiceAndEmitResult(
+	if err := runFactoryServiceAndEmitResult(
 		ctx,
 		operation.cfg,
 		operation.runner,
 		operation.recordPath,
-	)
+	); err != nil {
+		return err
+	}
+	if operation.cfg.JSONOutput {
+		return nil
+	}
+	return emitReplayMetadataWarnings(replayMetadataOutput(operation.cfg), operation.replayMetadataWarnings)
 }
 
 func emitHistoricalReplayInspection(
