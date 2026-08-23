@@ -195,6 +195,21 @@ func TestBoardPersistenceCLIRestartWithCorruptBoardRecordingFails(t *testing.T) 
 			t.Fatalf("corrupt recording startup output = %q, want fragment %q", output, fragment)
 		}
 	}
+	var diagnostic factoryapi.ErrorResponse
+	for _, line := range strings.Split(output, "\n") {
+		var candidate factoryapi.ErrorResponse
+		if err := json.Unmarshal([]byte(line), &candidate); err == nil && candidate.Code == factoryapi.ErrorResponseCode("CURRENT_BOARD_RECORDING_CORRUPT") {
+			diagnostic = candidate
+			break
+		}
+	}
+	if diagnostic.Code != factoryapi.ErrorResponseCode("CURRENT_BOARD_RECORDING_CORRUPT") {
+		t.Fatalf("corrupt recording startup output = %q, want structured corruption diagnostic", output)
+	}
+	expectedRecordPath := strconv.Quote(filepath.Clean(scenario.recordPath))
+	if !strings.Contains(diagnostic.Message, expectedRecordPath) {
+		t.Fatalf("corrupt recording diagnostic message = %q, want exact resolved path %q", diagnostic.Message, expectedRecordPath)
+	}
 	if strings.Contains(output, "board contents were lost") || strings.Contains(output, "empty board was initialized") {
 		t.Fatalf("corrupt recording was reported as recoverable absence: %q", output)
 	}
@@ -716,6 +731,10 @@ func dumpBoardPersistenceDiagnostics(t *testing.T, daemon *boardPersistenceDaemo
 
 func waitForBoardPersistenceSnapshot(t *testing.T, path, wantSessionID string, timeout time.Duration) []byte {
 	t.Helper()
+	// The durable snapshot is committed by the isolated daemon child, and the
+	// parent has no synchronization channel for that filesystem write. Polling
+	// the file is the only deterministic observation of the commit boundary;
+	// the bounded timeout turns a failed child write into a useful test failure.
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
 	ticker := time.NewTicker(25 * time.Millisecond)
@@ -751,6 +770,10 @@ func waitForBoardPersistenceLogMessage(
 	timeout time.Duration,
 ) {
 	t.Helper()
+	// The recovery warning is appended by the isolated child process after boot,
+	// with no test-owned logging edge back to the parent. Polling the runtime log
+	// is therefore the required process-boundary observation; the timeout keeps
+	// a missing warning actionable without using a fixed sleep.
 	deadline := time.NewTimer(timeout)
 	defer deadline.Stop()
 	ticker := time.NewTicker(25 * time.Millisecond)
