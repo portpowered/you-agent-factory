@@ -178,26 +178,64 @@ workflow. Global `--server` selects the Factory API; global `--json` emits the
 API-shaped report. A route failure returns an error without a partial success
 document.
 
-### Provider-Owned Price Facts
+### Provider-Owned And Operator Price Facts
 
-Costs uses the immutable, Providers-owned price table shipped with the
-application. It is not operator configuration, and editing
-`~/.you-agent-factory/config.json` does not change cost valuation. Maintainers
-add a row only for a provider/model pair observed in live metrics after finding
-an authoritative vendor price. Every row records USD-per-million-token rates,
-the source URL, and an ISO-8601 as-of date. The current shipped row is
-`codex/gpt-5-codex`; its source is the
+Costs uses two pricing authorities. Providers owns the immutable built-in table
+shipped with the application. Operator Settings owns the optional `priceTable`
+in `~/.you-agent-factory/config.json`.
+
+The effective table uses the exact normalized provider/model pair as its key.
+An operator row supplements a missing built-in pair. A matching operator row
+replaces the complete built-in row. Costs never combines fields from both rows.
+
+An operator row must include `inputPerMillionTokens` and
+`outputPerMillionTokens`. `cachedInputPerMillionTokens` and
+`reasoningOutputPerMillionTokens` are optional. If an operator omits one of
+these optional rates, that measured class remains `UNPRICED`.
+
+The Operator Settings decoder trims provider and model values. It canonicalizes
+supported provider aliases and does not guess or alias model identifiers.
+Missing provider/model identity or a missing effective row remains `UNPRICED`.
+Cached input is deducted from total input. Reasoning output is deducted from
+total output before the corresponding rates are applied.
+
+To configure Claude pricing, add a complete `priceTable` object to the operator
+settings document:
+
+```json
+{
+  "priceTable": {
+    "currency": "USD",
+    "models": [
+      {
+        "provider": "claude",
+        "model": "claude-sonnet-4-6",
+        "inputPerMillionTokens": "3",
+        "outputPerMillionTokens": "15",
+        "cachedInputPerMillionTokens": "0.30",
+        "reasoningOutputPerMillionTokens": "15"
+      }
+    ]
+  }
+}
+```
+
+The required rates value uncached input and non-reasoning output tokens. The
+optional rates value cached input and reasoning output tokens. Rates are exact
+non-negative USD decimals per one million tokens.
+
+The example values are operator-authored valuation facts. They are not live
+vendor prices, billing records, or billing limits. Costs does not fetch vendor
+pricing or query provider billing.
+
+To remove an override, remove its model from `priceTable.models`. Use an empty
+`models` array when no operator rows remain. The next costs query falls back to
+the built-in row when one exists. A pair without either row becomes `UNPRICED`.
+
+The built-in table records a source URL and an ISO-8601 as-of date for each
+shipped row. The current shipped row is `codex/gpt-5-codex`; its source is the
 [OpenAI GPT-5-Codex pricing page](https://developers.openai.com/api/docs/models/gpt-5-codex),
 dated 2026-08-21.
-
-Input and output rates are required for every row. Cached-input and
-reasoning-output rates are optional; a measured class with no explicit rate is
-`UNPRICED`. When a subclass intentionally uses the standard input or output
-rate, the provider data declares that equality explicitly. An omitted token
-measurement is distinct from an explicit zero, and an explicit zero rate is
-valid. Missing provider/model identity or an absent price row remains
-`UNPRICED`. Cached input is deducted from total input, and reasoning output is
-deducted from total output before the corresponding rates are applied.
 
 ### Cost Report Fields And Status
 
@@ -219,6 +257,19 @@ canonical usage rows were found. Each `line_items` row retains provider/model
 identity and all observed input, cached-input, output, and reasoning-output
 counts, plus an actionable `reason` when it is unpriced. Rollups cover all four
 dimensions: Work, Worker Session, provider/model, and Factory Session.
+
+Each `PRICED` `line_items` row includes `price_source`. The value is exactly
+`BUILT_IN` or `OPERATOR_SUPPLIED`, and identifies the complete row used for
+valuation. An `UNPRICED` row omits `price_source` and `priced_amount`. It keeps
+its provider/model identity, observed token counts, and actionable `reason`.
+
+Human output repeats this provenance beside each priced line item:
+
+```text
+  PRICED provider=CLAUDE model=claude-sonnet-4-6
+    Priced amount (USD): 0.0081
+    Price source: OPERATOR_SUPPLIED
+```
 
 Human output makes coverage explicit: fully priced usage shows the exact
 rounded USD amount and token totals, unpriced usage shows `?? unknown` and
