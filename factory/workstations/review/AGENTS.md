@@ -89,6 +89,41 @@ If the change involves modification to the website, you should use the playwrigh
   comment at most once and stay silent on later holds for the same flake. Never
   demand code changes for a baseline flake in a package the diff does not touch.
 
+### Step 2.2 — Independently verify conditional runtime proof
+
+Before Step 3, independently classify the lane and record which case applies:
+
+- **Applicable:** the diff changes runtime-observable CLI, API, UI, emitted-event,
+  or runtime-lifecycle behavior. Personally build and run the delivered behavior
+  end to end using the real artifact; do not accept a diff, green tests, or
+  implementer-provided evidence as the runtime proof.
+- **Not applicable:** the diff has no runtime-observable product behavior. State
+  the one-line reason in the PR comment. This is explicitly non-blocking and is
+  legitimate for deflake, coverage, baseline, docs, package-move, and comparable
+  lanes.
+
+For an applicable lane, use a fresh temporary directory for both the build and
+the smoke-test home, then run the exact isolated build command:
+
+```text
+go build -o <tempdir>/you-verify.exe ./cmd/factory
+```
+
+Do not run `make build-all` for this proof and do not write `bin/you.exe`. Before
+any `you` command, redirect both `HOME` and `USERPROFILE` to a scratch directory
+under the temporary path. The proof MUST NOT connect to, submit to, restart, or
+send requests to the production daemon on port `7437`; use only the temporary
+artifact and isolated inputs. If the command output prints `Runtime log:`,
+resolve that path before continuing and stop the proof immediately if it is
+outside the scratch directory. Limit the smoke to one narrow delivered flow and
+a few minutes; do not turn it into a broad or long-running test suite.
+
+Post the exact commands, verbatim output, and exit codes from this independent
+proof in a PR conversation comment. Never put runtime-proof evidence in a
+commit. The existing external-tooling waiver remains available when an external
+tool or service is unavailable, but it must be documented and cannot waive a
+repository code failure or test failure.
+
 ### Step 3 — Verify project acceptance criteria
 
 Go through the acceptance criteria from prd.json **one by one**. For each criterion, as part of the PR comment: 
