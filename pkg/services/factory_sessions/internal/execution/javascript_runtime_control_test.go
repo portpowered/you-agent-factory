@@ -171,6 +171,43 @@ func TestChildWorkerExecutor_TimeoutReleasesCapacityAndSuppressesLateSuccess(t *
 	}
 }
 
+func TestChildWorkerExecutor_PreparationErrorCompletesReturnedAttempt(t *testing.T) {
+	beginErr := errors.New("worker attempt preparation failed")
+	invoker := &recordingWorkerExecution{}
+	executor := newTestChildWorkerExecutor(invoker, newChildRecordSink(), nil)
+
+	var completed workers.ExecuteResult
+	var completeErr error
+	completeCalls := 0
+	executor.attemptStarter = func(_ context.Context, _ workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error) {
+		return func(_ context.Context, result workers.ExecuteResult, err error) error {
+			completeCalls++
+			completed = result
+			completeErr = err
+			return nil
+		}, beginErr
+	}
+
+	result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{
+		Prompt:           "fail before worker admission",
+		ExecutorProvider: "SCRIPT_WRAP",
+		ModelProvider:    "codex",
+		Model:            "codex-model",
+	})
+	if err == nil || !strings.Contains(err.Error(), beginErr.Error()) {
+		t.Fatalf("Execute() error = %v, want preparation failure", err)
+	}
+	if result.Status != factory.JavaScriptChildDispatchStatusFailed {
+		t.Fatalf("child status = %q, want FAILED", result.Status)
+	}
+	if invoker.request.Correlation.DispatchID != "" {
+		t.Fatal("Workers Execute called after preparation failed")
+	}
+	if completeCalls != 1 || completeErr == nil || completed.Failure == nil || completed.Failure.Message != beginErr.Error() {
+		t.Fatalf("completed attempt = calls:%d result:%#v error:%v, want one failed terminal", completeCalls, completed, completeErr)
+	}
+}
+
 func timeoutChildRequest() factory.JavaScriptChildExecutionRequest {
 	return factory.JavaScriptChildExecutionRequest{
 		Prompt:           "wait for Antigravity",

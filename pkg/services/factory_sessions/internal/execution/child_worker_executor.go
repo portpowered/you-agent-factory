@@ -376,6 +376,13 @@ func (e *childWorkerExecutor) beginChildWorkerAttempt(
 		return complete, workers.ExecuteResult{}, nil
 	}
 	result := failedChildWorkerExecuteResult(request, err)
+	// A producer may have opened its lifecycle window before discovering a
+	// preparation failure. If it returned a completion handle alongside that
+	// error, close the window before returning the child error; dropping the
+	// handle recreates the response-bridge wait with no terminal record.
+	if complete != nil {
+		_ = complete(context.Background(), result, err)
+	}
 	if progress != nil {
 		progress.publishTerminal(result, err)
 	}
