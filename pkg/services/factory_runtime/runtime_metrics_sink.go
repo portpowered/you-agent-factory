@@ -86,8 +86,8 @@ type RuntimeMetricsScopeRequest struct {
 }
 
 // RuntimeMetricsOwner is the process-scoped observability root for runtime
-// metrics. Open returns one operation-private sink; the owner itself is not
-// closed when a session finishes.
+// metrics. Open returns one operation-private sink; the owner remains alive
+// across session finishes and is closed with the owning application process.
 type RuntimeMetricsOwner interface {
 	Open(RuntimeMetricsScopeRequest) (RuntimeMetricsSink, error)
 }

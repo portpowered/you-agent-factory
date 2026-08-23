@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -111,68 +112,107 @@ func (retention *RuntimeMetricsRetention) Sweep(
 	if err := ctx.Err(); err != nil {
 		return report, fmt.Errorf("sweep runtime metrics: %w", err)
 	}
-	root := filepath.Clean(strings.TrimSpace(request.RootDirectory))
-	if root == "." || strings.TrimSpace(request.RootDirectory) == "" {
-		return report, errors.New("sweep runtime metrics: root is required")
-	}
-	rootInfo, err := retention.filesystem.Lstat(root)
-	if err != nil {
-		return report, fmt.Errorf("sweep runtime metrics root %q: %w", root, err)
-	}
-	if rootInfo.Mode()&fs.ModeSymlink != 0 || !rootInfo.IsDir() {
-		return report, fmt.Errorf("sweep runtime metrics root %q: not a directory", root)
-	}
-	now := retention.now().UTC()
-	if now.IsZero() {
-		return report, errors.New("sweep runtime metrics: clock returned zero time")
-	}
-	report.RootDirectory = root
-	rootLock, err := retention.coordination.TryLockRoot(root)
-	if errors.Is(err, ErrRuntimeMetricsRootBusy) {
-		report.Skipped = true
-		return report, nil
-	}
-	if err != nil {
-		return report, fmt.Errorf("coordinate runtime metrics sweep: %w", err)
-	}
-	defer func() {
-		if closeErr := rootLock.Close(); closeErr != nil {
-			returnErr = errors.Join(returnErr, fmt.Errorf("release runtime metrics sweep coordination: %w", closeErr))
-		}
-	}()
-	config := normalizeRuntimeMetricsConfig(request.Config)
-
-	initial, err := retention.inventory(ctx, root)
+	preparation, err := retention.prepareSweep(ctx, request)
 	if err != nil {
 		return report, err
 	}
+	report.RootDirectory = preparation.root
+	if preparation.skipped {
+		report.Skipped = true
+		return report, nil
+	}
+	defer func() {
+		if closeErr := preparation.rootLock.Close(); closeErr != nil {
+			returnErr = errors.Join(returnErr, fmt.Errorf("release runtime metrics sweep coordination: %w", closeErr))
+		}
+	}()
+	if err := retention.sweepLocked(ctx, request, preparation, &report); err != nil {
+		return report, err
+	}
+	return report, nil
+}
+
+func (retention *RuntimeMetricsRetention) sweepLocked(
+	ctx context.Context,
+	request RuntimeMetricsRetentionRequest,
+	preparation retentionSweepPreparation,
+	report *RuntimeMetricsRetentionReport,
+) error {
+	config := normalizeRuntimeMetricsConfig(request.Config)
+	initial, err := retention.inventory(ctx, preparation.root)
+	if err != nil {
+		return err
+	}
 	report.Before = retentionTotals(initial.artifacts)
 	report.Scanned = report.Before
-	state := newRetentionSweepState(root, initial.artifacts, &report)
+	state := newRetentionSweepState(preparation.root, initial.artifacts, report)
 	state.addInventoryOutcomes(initial)
-
-	if config.MaxAge > 0 {
-		cutoff := now.Add(-time.Duration(config.MaxAge) * 24 * time.Hour)
-		if err := retention.prune(ctx, state, func(artifact retentionArtifact) bool {
-			return artifact.hasTimestamp && artifact.timestamp.Before(cutoff)
-		}, false, 0); err != nil {
-			return report, err
-		}
+	if err := retention.pruneAge(ctx, state, preparation.now, config.MaxAge); err != nil {
+		return err
 	}
-
 	maxBytes := int64(config.MaxSize) * 1024 * 1024
 	if err := retention.prune(ctx, state, func(artifact retentionArtifact) bool {
 		return artifact.hasTimestamp
 	}, true, maxBytes); err != nil {
-		return report, err
+		return err
 	}
-
-	after, err := retention.inventory(ctx, root)
+	after, err := retention.inventory(ctx, preparation.root)
 	if err != nil {
-		return report, err
+		return err
 	}
 	report.After = retentionTotals(after.artifacts)
-	return report, nil
+	return nil
+}
+
+func (retention *RuntimeMetricsRetention) pruneAge(
+	ctx context.Context,
+	state *retentionSweepState,
+	now time.Time,
+	maxAge int,
+) error {
+	if maxAge <= 0 {
+		return nil
+	}
+	cutoff := now.Add(-time.Duration(maxAge) * 24 * time.Hour)
+	return retention.prune(ctx, state, func(artifact retentionArtifact) bool {
+		return artifact.hasTimestamp && artifact.timestamp.Before(cutoff)
+	}, false, 0)
+}
+
+type retentionSweepPreparation struct {
+	root     string
+	now      time.Time
+	rootLock io.Closer
+	skipped  bool
+}
+
+func (retention *RuntimeMetricsRetention) prepareSweep(
+	ctx context.Context,
+	request RuntimeMetricsRetentionRequest,
+) (retentionSweepPreparation, error) {
+	root := filepath.Clean(strings.TrimSpace(request.RootDirectory))
+	if root == "." || strings.TrimSpace(request.RootDirectory) == "" {
+		return retentionSweepPreparation{}, errors.New("sweep runtime metrics: root is required")
+	}
+	rootInfo, err := retention.filesystem.Lstat(root)
+	if err != nil {
+		return retentionSweepPreparation{}, fmt.Errorf("sweep runtime metrics root %q: %w", root, err)
+	}
+	if rootInfo.Mode()&fs.ModeSymlink != 0 || !rootInfo.IsDir() {
+		return retentionSweepPreparation{}, fmt.Errorf("sweep runtime metrics root %q: not a directory", root)
+	}
+	now := retention.now().UTC()
+	if now.IsZero() {
+		return retentionSweepPreparation{}, errors.New("sweep runtime metrics: clock returned zero time")
+	}
+	rootLock, err := retention.coordination.TryLockRoot(root)
+	if errors.Is(err, ErrRuntimeMetricsRootBusy) {
+		return retentionSweepPreparation{root: root, now: now, skipped: true}, nil
+	}
+	if err != nil {
+		return retentionSweepPreparation{}, fmt.Errorf("coordinate runtime metrics sweep: %w", err)
+	}
+	return retentionSweepPreparation{root: root, now: now, rootLock: rootLock}, nil
 }
 
 type retentionArtifact struct {
@@ -465,24 +505,41 @@ func (retention *RuntimeMetricsRetention) completeEligibleDateDirectory(
 	}
 	seen := make(map[string]struct{}, len(entries))
 	for _, entry := range entries {
-		if entry.IsDir() || entry.Type()&fs.ModeSymlink != 0 || !isRuntimeMetricsArtifact(entry.Name()) {
-			return false
-		}
-		path := filepath.Join(group.directory, entry.Name())
-		if !pathWithinRoot(state.root, path) {
-			return false
-		}
-		artifact, ok := state.remaining[path]
-		if !ok || !eligible(artifact) {
-			return false
-		}
-		info, err := retention.filesystem.Lstat(path)
-		if err != nil || info.Mode()&fs.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		path, ok := retention.completeDateEntry(state, group, eligible, entry)
+		if !ok {
 			return false
 		}
 		seen[path] = struct{}{}
 	}
 	return len(seen) == len(group.artifacts)
+}
+
+func (retention *RuntimeMetricsRetention) completeDateEntry(
+	state *retentionSweepState,
+	group struct {
+		directory string
+		artifacts []retentionArtifact
+		oldest    time.Time
+	},
+	eligible func(retentionArtifact) bool,
+	entry fs.DirEntry,
+) (string, bool) {
+	if entry.IsDir() || entry.Type()&fs.ModeSymlink != 0 || !isRuntimeMetricsArtifact(entry.Name()) {
+		return "", false
+	}
+	path := filepath.Join(group.directory, entry.Name())
+	if !pathWithinRoot(state.root, path) {
+		return "", false
+	}
+	artifact, ok := state.remaining[path]
+	if !ok || !eligible(artifact) {
+		return "", false
+	}
+	info, err := retention.filesystem.Lstat(path)
+	if err != nil || info.Mode()&fs.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return "", false
+	}
+	return path, true
 }
 
 func allDateArtifactsRemoved(state *retentionSweepState, group []retentionArtifact) bool {
@@ -528,66 +585,106 @@ func (retention *RuntimeMetricsRetention) tryRemove(
 	state *retentionSweepState,
 	artifact retentionArtifact,
 ) {
-	if _, blocked := state.blocked[artifact.path]; blocked {
+	initialSize, ok := retention.inspectRemovalCandidate(state, artifact)
+	if !ok {
 		return
+	}
+	claim, currentInfo, ok := retention.claimRemovalCandidate(state, artifact, initialSize)
+	if !ok {
+		return
+	}
+	defer func() { _ = claim.Close() }()
+	if currentInfo.Size() != artifact.size {
+		retention.protectChangedRemovalCandidate(state, artifact, currentInfo.Size())
+		return
+	}
+	retention.removeCandidate(state, artifact)
+}
+
+func (retention *RuntimeMetricsRetention) inspectRemovalCandidate(
+	state *retentionSweepState,
+	artifact retentionArtifact,
+) (int64, bool) {
+	if _, blocked := state.blocked[artifact.path]; blocked {
+		return 0, false
 	}
 	if !pathWithinRoot(state.root, artifact.path) {
 		state.addProtected(artifact.path, artifact.size)
 		state.blocked[artifact.path] = struct{}{}
-		return
+		return 0, false
 	}
 	info, err := retention.filesystem.Lstat(artifact.path)
 	if errors.Is(err, fs.ErrNotExist) {
 		state.markRemoved(artifact)
-		return
+		return 0, false
 	}
 	if err != nil {
 		state.addFailed(artifact.path, artifact.size, err)
 		state.blocked[artifact.path] = struct{}{}
-		return
+		return 0, false
 	}
 	if info.Mode()&fs.ModeSymlink != 0 || !info.Mode().IsRegular() {
 		state.addProtected(artifact.path, info.Size())
 		state.blocked[artifact.path] = struct{}{}
-		return
+		return 0, false
 	}
+	return info.Size(), true
+}
+
+func (retention *RuntimeMetricsRetention) claimRemovalCandidate(
+	state *retentionSweepState,
+	artifact retentionArtifact,
+	initialSize int64,
+) (io.Closer, fs.FileInfo, bool) {
 	claim, err := retention.coordination.TryClaim(artifact.path)
 	if errors.Is(err, ErrRuntimeMetricsArtifactBusy) {
-		state.addProtected(artifact.path, info.Size())
+		state.addProtected(artifact.path, initialSize)
 		state.blocked[artifact.path] = struct{}{}
-		return
+		return nil, nil, false
 	}
 	if err != nil {
-		state.addFailed(artifact.path, info.Size(), err)
+		state.addFailed(artifact.path, initialSize, err)
 		state.blocked[artifact.path] = struct{}{}
-		return
+		return nil, nil, false
 	}
-	defer func() { _ = claim.Close() }()
-
 	currentInfo, err := retention.filesystem.Lstat(artifact.path)
 	if errors.Is(err, fs.ErrNotExist) {
+		_ = claim.Close()
 		state.markRemoved(artifact)
-		return
+		return nil, nil, false
 	}
 	if err != nil {
-		state.addFailed(artifact.path, artifact.size, err)
+		_ = claim.Close()
+		state.addFailed(artifact.path, initialSize, err)
 		state.blocked[artifact.path] = struct{}{}
-		return
+		return nil, nil, false
 	}
 	if currentInfo.Mode()&fs.ModeSymlink != 0 || !currentInfo.Mode().IsRegular() {
+		_ = claim.Close()
 		state.addProtected(artifact.path, currentInfo.Size())
 		state.blocked[artifact.path] = struct{}{}
-		return
+		return nil, nil, false
 	}
-	if currentInfo.Size() != artifact.size {
-		state.addProtected(artifact.path, currentInfo.Size())
-		state.blocked[artifact.path] = struct{}{}
-		state.remaining[artifact.path] = retentionArtifact{
-			path: artifact.path, size: currentInfo.Size(), timestamp: artifact.timestamp,
-			dateDirectory: artifact.dateDirectory, hasTimestamp: artifact.hasTimestamp,
-		}
-		return
+	return claim, currentInfo, true
+}
+
+func (retention *RuntimeMetricsRetention) protectChangedRemovalCandidate(
+	state *retentionSweepState,
+	artifact retentionArtifact,
+	currentSize int64,
+) {
+	state.addProtected(artifact.path, currentSize)
+	state.blocked[artifact.path] = struct{}{}
+	state.remaining[artifact.path] = retentionArtifact{
+		path: artifact.path, size: currentSize, timestamp: artifact.timestamp,
+		dateDirectory: artifact.dateDirectory, hasTimestamp: artifact.hasTimestamp,
 	}
+}
+
+func (retention *RuntimeMetricsRetention) removeCandidate(
+	state *retentionSweepState,
+	artifact retentionArtifact,
+) {
 	if err := retention.filesystem.Remove(artifact.path); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			state.markRemoved(artifact)

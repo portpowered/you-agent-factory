@@ -725,6 +725,7 @@ func newRuntimeObservabilityTestOwners(t *testing.T) runtimeObservabilityTestOwn
 		t.Fatalf("provideRuntimeMetricsCoordination(): %v", err)
 	}
 	owners.metricsOwner, err = provideRuntimeMetricsOwner(
+		zap.NewNop(),
 		func() time.Time { return at },
 		func() string { return "metric-" + strconv.Itoa(int(metricCollision.Add(1))) }, reserver,
 		metricsCoordination,

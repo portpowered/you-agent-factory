@@ -19,16 +19,10 @@ func TestRuntimeMetricsRootRetentionProtectsOpenWriterAcrossFactoryIdentities(t 
 	if err != nil {
 		t.Fatalf("NewReserver(): %v", err)
 	}
-	firstOpener, err := NewRuntimeMetricsOpener(paths)
-	if err != nil {
-		t.Fatalf("NewRuntimeMetricsOpener(first): %v", err)
-	}
-	secondOpener, err := NewRuntimeMetricsOpener(paths)
-	if err != nil {
-		t.Fatalf("NewRuntimeMetricsOpener(second): %v", err)
-	}
+	firstOpener := newRetentionTestOpener(t, paths)
+	secondOpener := newRetentionTestOpener(t, paths)
 	started := time.Date(2026, 7, 1, 1, 0, 0, 0, time.UTC)
-	live, err := firstOpener.Open(RuntimeMetricsOpeningRequest{
+	live := openRetentionTestSink(t, firstOpener, RuntimeMetricsOpeningRequest{
 		SessionID:         "factory-one-session",
 		RuntimeInstanceID: "factory-one-runtime",
 		RootDirectory:     root,
@@ -36,17 +30,10 @@ func TestRuntimeMetricsRootRetentionProtectsOpenWriterAcrossFactoryIdentities(t 
 		CollisionID:       "live",
 		Config:            RuntimeMetricsConfig{MaxSize: 1, MaxAge: 1},
 	})
-	if err != nil {
-		t.Fatalf("open live metrics sink: %v", err)
-	}
 	defer live.Close()
-	if err := live.WriteMetric(context.Background(), map[string]any{"metric_name": "live.before_sweep"}); err != nil {
-		t.Fatalf("write before sweep: %v", err)
-	}
+	writeRetentionMetric(t, live, "live.before_sweep")
 	claimPath := runtimeMetricsClaimPath(live.Path())
-	if _, err := os.Stat(claimPath); err != nil {
-		t.Fatalf("active claim %q is unavailable before sweep: %v", claimPath, err)
-	}
+	assertRetentionPathExists(t, claimPath, "active claim before sweep")
 
 	retention, err := NewRuntimeMetricsRetention(
 		platformfilesystem.Local{},
@@ -57,7 +44,7 @@ func TestRuntimeMetricsRootRetentionProtectsOpenWriterAcrossFactoryIdentities(t 
 	}
 	// The second opener models another factory/process sharing the user-global
 	// root; the sweep must respect the first opener's OS-held claim.
-	other, err := secondOpener.Open(RuntimeMetricsOpeningRequest{
+	other := openRetentionTestSink(t, secondOpener, RuntimeMetricsOpeningRequest{
 		SessionID:         "factory-two-session",
 		RuntimeInstanceID: "factory-two-runtime",
 		RootDirectory:     root,
@@ -65,50 +52,97 @@ func TestRuntimeMetricsRootRetentionProtectsOpenWriterAcrossFactoryIdentities(t 
 		CollisionID:       "other",
 		Config:            RuntimeMetricsConfig{MaxSize: 1, MaxAge: 1},
 	})
-	if err != nil {
-		t.Fatalf("open second factory metrics sink: %v", err)
-	}
 	defer other.Close()
-	if err := other.WriteMetric(context.Background(), map[string]any{"metric_name": "other.factory"}); err != nil {
-		t.Fatalf("write second factory metric: %v", err)
-	}
+	writeRetentionMetric(t, other, "other.factory")
 	report, err := retention.Sweep(context.Background(), RuntimeMetricsRetentionRequest{
 		RootDirectory: root,
 		Config:        RuntimeMetricsConfig{MaxSize: 1, MaxAge: 1},
 	})
+	assertOpenWriterSweep(t, report, err, live.Path())
+	writeRetentionMetric(t, live, "live.after_sweep")
+	assertRetentionRecordCount(t, live.Path(), 2)
+
+	if err := live.Close(); err != nil {
+		t.Fatalf("close live metrics sink: %v", err)
+	}
+	assertRetentionPathAbsent(t, claimPath, "active claim after close")
+	report, err = retention.Sweep(context.Background(), RuntimeMetricsRetentionRequest{
+		RootDirectory: root,
+		Config:        RuntimeMetricsConfig{MaxSize: 1, MaxAge: 1},
+	})
+	assertClosedRetentionSweep(t, report, err, live.Path())
+}
+
+func newRetentionTestOpener(t *testing.T, paths platformartifact.Reserver) *RuntimeMetricsOpener {
+	t.Helper()
+	opener, err := NewRuntimeMetricsOpener(paths)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsOpener(): %v", err)
+	}
+	return opener
+}
+
+func openRetentionTestSink(
+	t *testing.T,
+	opener *RuntimeMetricsOpener,
+	request RuntimeMetricsOpeningRequest,
+) *RuntimeMetricsSink {
+	t.Helper()
+	sink, err := opener.Open(request)
+	if err != nil {
+		t.Fatalf("open runtime metrics sink: %v", err)
+	}
+	return sink
+}
+
+func writeRetentionMetric(t *testing.T, sink *RuntimeMetricsSink, name string) {
+	t.Helper()
+	if err := sink.WriteMetric(context.Background(), map[string]any{"metric_name": name}); err != nil {
+		t.Fatalf("write metric %q: %v", name, err)
+	}
+}
+
+func assertRetentionPathExists(t *testing.T, path, description string) {
+	t.Helper()
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("%s %q unavailable: %v", description, path, err)
+	}
+}
+
+func assertRetentionPathAbsent(t *testing.T, path, description string) {
+	t.Helper()
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("%s %q remains, stat error = %v", description, path, err)
+	}
+}
+
+func assertRetentionRecordCount(t *testing.T, path string, want int) {
+	t.Helper()
+	if got := len(readRuntimeMetricsRecords(t, path)); got != want {
+		t.Fatalf("metrics record count = %d, want %d", got, want)
+	}
+}
+
+func assertOpenWriterSweep(t *testing.T, report RuntimeMetricsRetentionReport, err error, livePath string) {
+	t.Helper()
 	if err != nil {
 		t.Fatalf("Sweep(open writer): %v", err)
 	}
 	if report.Protected.Files != 1 {
 		t.Fatalf("Protected.Files = %d, want one active writer", report.Protected.Files)
 	}
-	if _, err := os.Stat(live.Path()); err != nil {
-		t.Fatalf("live metrics path was removed during sweep: %v", err)
-	}
-	if err := live.WriteMetric(context.Background(), map[string]any{"metric_name": "live.after_sweep"}); err != nil {
-		t.Fatalf("write after sweep: %v", err)
-	}
-	records := readRuntimeMetricsRecords(t, live.Path())
-	if len(records) != 2 {
-		t.Fatalf("live metrics record count = %d, want continued writes after sweep", len(records))
-	}
+	assertRetentionPathExists(t, livePath, "live metrics path during sweep")
+}
 
-	if err := live.Close(); err != nil {
-		t.Fatalf("close live metrics sink: %v", err)
-	}
-	if _, err := os.Stat(claimPath); !os.IsNotExist(err) {
-		t.Fatalf("active claim remains after close, stat error = %v", err)
-	}
-	report, err = retention.Sweep(context.Background(), RuntimeMetricsRetentionRequest{
-		RootDirectory: root,
-		Config:        RuntimeMetricsConfig{MaxSize: 1, MaxAge: 1},
-	})
+func assertClosedRetentionSweep(t *testing.T, report RuntimeMetricsRetentionReport, err error, livePath string) {
+	t.Helper()
 	if err != nil {
 		t.Fatalf("Sweep(after close): %v", err)
 	}
-	if _, err := os.Stat(live.Path()); !os.IsNotExist(err) {
-		t.Fatalf("closed expired metrics path remains after retry, stat error = %v", err)
+	if report.Removed.Files == 0 {
+		t.Fatalf("Sweep(after close) = %#v, want closed artifact removal", report)
 	}
+	assertRetentionPathAbsent(t, livePath, "closed expired metrics path")
 }
 
 func TestRuntimeMetricsRootRetentionYieldsWhenRootSweepIsAlreadyClaimed(t *testing.T) {

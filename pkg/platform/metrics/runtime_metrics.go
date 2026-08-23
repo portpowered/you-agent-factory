@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	internalartifact "github.com/portpowered/infinite-you/pkg/platform/internal/runtimeartifact"
 	platformrollingfile "github.com/portpowered/infinite-you/pkg/platform/rollingfile"
 	platformartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
@@ -37,15 +38,16 @@ type RuntimeMetricsConfig struct {
 // RuntimeMetricsSink owns the file-backed JSONL metrics emitter and rolling
 // writer for one live runtime/session bundle.
 type RuntimeMetricsSink struct {
-	mu           sync.Mutex
-	writer       io.Closer
-	encoder      *json.Encoder
-	path         string
-	rootDir      string
-	startTimeUTC time.Time
-	config       RuntimeMetricsConfig
-	claim        io.Closer
-	closed       bool
+	mu             sync.Mutex
+	writer         io.Closer
+	encoder        *json.Encoder
+	path           string
+	rootDir        string
+	startTimeUTC   time.Time
+	config         RuntimeMetricsConfig
+	claim          io.Closer
+	retentionLease io.Closer
+	closed         bool
 }
 
 var errRuntimeMetricsSinkClosed = errors.New("runtime metrics sink closed")
@@ -72,8 +74,9 @@ type RuntimeMetricsOpeningRequest struct {
 }
 
 type RuntimeMetricsOpener struct {
-	paths        platformartifact.Reserver
-	coordination RuntimeMetricsCoordination
+	paths              platformartifact.Reserver
+	coordination       RuntimeMetricsCoordination
+	retentionLifecycle RuntimeMetricsRetentionLifecycle
 }
 
 func NewRuntimeMetricsOpener(
@@ -87,12 +90,54 @@ func NewRuntimeMetricsOpener(
 	if err != nil {
 		return nil, err
 	}
-	return &RuntimeMetricsOpener{paths: paths, coordination: selectedCoordination}, nil
+	retention, err := NewRuntimeMetricsRetention(
+		platformfilesystem.Local{}, time.Now, selectedCoordination,
+	)
+	if err != nil {
+		return nil, err
+	}
+	scheduler, err := NewRuntimeMetricsRetentionScheduler(retention, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	return newRuntimeMetricsOpener(paths, selectedCoordination, scheduler), nil
+}
+
+// NewRuntimeMetricsOpenerWithRetention composes an opener with the
+// process-scoped retention lifecycle selected by the composition root. The
+// compatibility constructor above supplies the local production defaults for
+// callers that do not need custom clocks, tickers, or reporting.
+func NewRuntimeMetricsOpenerWithRetention(
+	paths platformartifact.Reserver,
+	retentionLifecycle RuntimeMetricsRetentionLifecycle,
+	coordination ...RuntimeMetricsCoordination,
+) (*RuntimeMetricsOpener, error) {
+	if paths == nil {
+		return nil, fmt.Errorf("runtime metrics path reserver is required")
+	}
+	if retentionLifecycle == nil {
+		return nil, fmt.Errorf("runtime metrics retention lifecycle is required")
+	}
+	selectedCoordination, err := selectRuntimeMetricsCoordination(coordination)
+	if err != nil {
+		return nil, err
+	}
+	return newRuntimeMetricsOpener(paths, selectedCoordination, retentionLifecycle), nil
+}
+
+func newRuntimeMetricsOpener(
+	paths platformartifact.Reserver,
+	coordination RuntimeMetricsCoordination,
+	retentionLifecycle RuntimeMetricsRetentionLifecycle,
+) *RuntimeMetricsOpener {
+	return &RuntimeMetricsOpener{
+		paths: paths, coordination: coordination, retentionLifecycle: retentionLifecycle,
+	}
 }
 
 // Open creates a rolling metrics writer from fully selected inputs.
 func (opener *RuntimeMetricsOpener) Open(request RuntimeMetricsOpeningRequest) (*RuntimeMetricsSink, error) {
-	if opener == nil || opener.paths == nil || opener.coordination == nil {
+	if opener == nil || opener.paths == nil || opener.coordination == nil || opener.retentionLifecycle == nil {
 		return nil, fmt.Errorf("runtime metrics opener is required")
 	}
 	if request.RuntimeInstanceID == "" {
@@ -108,9 +153,22 @@ func (opener *RuntimeMetricsOpener) Open(request RuntimeMetricsOpeningRequest) (
 		return nil, fmt.Errorf("runtime metrics collision ID is required")
 	}
 
+	retentionLease, err := opener.retentionLifecycle.Start(context.Background(), RuntimeMetricsRetentionRequest{
+		RootDirectory: request.RootDirectory,
+		Config:        request.Config,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("start runtime metrics retention: %w", err)
+	}
+	if retentionLease == nil {
+		return nil, fmt.Errorf("start runtime metrics retention: lifecycle returned nil lease")
+	}
 	rootLock, err := opener.coordination.LockRoot(context.Background(), request.RootDirectory)
 	if err != nil {
-		return nil, fmt.Errorf("coordinate runtime metrics startup: %w", err)
+		return nil, errors.Join(
+			fmt.Errorf("coordinate runtime metrics startup: %w", err),
+			retentionLease.Close(),
+		)
 	}
 	startTimeUTC := request.StartTimeUTC.UTC()
 	path, err := opener.paths.Reserve(
@@ -120,19 +178,21 @@ func (opener *RuntimeMetricsOpener) Open(request RuntimeMetricsOpeningRequest) (
 		internalartifact.RuntimeArtifactPathComponents(request.SessionID, request.RuntimeInstanceID, request.CollisionID),
 	)
 	if err != nil {
-		return nil, errors.Join(err, rootLock.Close())
+		return nil, errors.Join(err, rootLock.Close(), retentionLease.Close())
 	}
 	claim, err := opener.coordination.Claim(path)
 	if err != nil {
 		return nil, errors.Join(
 			fmt.Errorf("claim runtime metrics path %q: %w", path, err),
 			rootLock.Close(),
+			retentionLease.Close(),
 		)
 	}
 	if err := rootLock.Close(); err != nil {
 		return nil, errors.Join(
 			fmt.Errorf("release runtime metrics startup coordination: %w", err),
 			claim.Close(),
+			retentionLease.Close(),
 		)
 	}
 
@@ -146,14 +206,24 @@ func (opener *RuntimeMetricsOpener) Open(request RuntimeMetricsOpeningRequest) (
 	})
 
 	return &RuntimeMetricsSink{
-		writer:       writer,
-		encoder:      json.NewEncoder(writer),
-		path:         path,
-		rootDir:      request.RootDirectory,
-		startTimeUTC: startTimeUTC,
-		config:       metricsConfig,
-		claim:        claim,
+		writer:         writer,
+		encoder:        json.NewEncoder(writer),
+		path:           path,
+		rootDir:        request.RootDirectory,
+		startTimeUTC:   startTimeUTC,
+		config:         metricsConfig,
+		claim:          claim,
+		retentionLease: retentionLease,
 	}, nil
+}
+
+// Close stops all process-scoped periodic retention loops. Live sink claims
+// remain owned by their sinks and are released when those sinks close.
+func (opener *RuntimeMetricsOpener) Close(ctx context.Context) error {
+	if opener == nil || opener.retentionLifecycle == nil {
+		return nil
+	}
+	return opener.retentionLifecycle.Close(ctx)
 }
 
 // Path returns the active runtime metrics path.
@@ -209,7 +279,12 @@ func (s *RuntimeMetricsSink) Close() error {
 		claimErr = s.claim.Close()
 		s.claim = nil
 	}
-	return errors.Join(writerErr, claimErr)
+	var retentionErr error
+	if s.retentionLease != nil {
+		retentionErr = s.retentionLease.Close()
+		s.retentionLease = nil
+	}
+	return errors.Join(writerErr, claimErr, retentionErr)
 }
 
 // WriteMetric serializes one owner-projected record as a JSONL entry.

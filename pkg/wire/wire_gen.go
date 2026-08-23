@@ -186,7 +186,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	factoryRuntimeMetricsOwner, err := provideRuntimeMetricsOwner(wireRuntimeArtifactClock, wireRuntimeArtifactIDGenerator, reserver, runtimeMetricsCoordination)
+	factoryRuntimeMetricsOwner, err := provideRuntimeMetricsOwner(logger, wireRuntimeArtifactClock, wireRuntimeArtifactIDGenerator, reserver, runtimeMetricsCoordination)
 	if err != nil {
 		return nil, err
 	}
@@ -724,7 +724,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	processLifecycle, err := provideApplicationProcessLifecycle(service, eventsService, v90, wireLocalWorkerSessionsBoundary)
+	processLifecycle, err := provideApplicationProcessLifecycle(service, eventsService, v90, wireLocalWorkerSessionsBoundary, factoryRuntimeMetricsOwner)
 	if err != nil {
 		return nil, err
 	}

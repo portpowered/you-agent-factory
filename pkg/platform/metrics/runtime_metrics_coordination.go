@@ -82,6 +82,26 @@ func acquireRuntimeMetricsLock(
 	resourcePath, lockPath string,
 	wait, removeOnClose bool,
 ) (io.Closer, error) {
+	ctx, err := validateRuntimeMetricsCoordinationContext(ctx, resourcePath)
+	if err != nil {
+		return nil, err
+	}
+	if !removeOnClose {
+		if err := prepareRuntimeMetricsCoordinationRoot(resourcePath); err != nil {
+			return nil, err
+		}
+	}
+	file, err := openRuntimeMetricsLockFile(lockPath)
+	if err != nil {
+		return nil, err
+	}
+	return acquireRuntimeMetricsFile(ctx, file, lockPath, wait, removeOnClose)
+}
+
+func validateRuntimeMetricsCoordinationContext(
+	ctx context.Context,
+	resourcePath string,
+) (context.Context, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -91,22 +111,29 @@ func acquireRuntimeMetricsLock(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if !removeOnClose {
-		if err := os.MkdirAll(resourcePath, 0o755); err != nil {
-			return nil, fmt.Errorf("create runtime metrics coordination root %q: %w", resourcePath, err)
-		}
-		info, err := os.Lstat(resourcePath)
-		if err != nil {
-			return nil, fmt.Errorf("inspect runtime metrics coordination root %q: %w", resourcePath, err)
-		}
-		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-			return nil, fmt.Errorf("runtime metrics coordination root %q is not a directory", resourcePath)
-		}
+	return ctx, nil
+}
+
+func prepareRuntimeMetricsCoordinationRoot(resourcePath string) error {
+	if err := os.MkdirAll(resourcePath, 0o755); err != nil {
+		return fmt.Errorf("create runtime metrics coordination root %q: %w", resourcePath, err)
 	}
-	file, err := openRuntimeMetricsLockFile(lockPath)
+	info, err := os.Lstat(resourcePath)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("inspect runtime metrics coordination root %q: %w", resourcePath, err)
 	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return fmt.Errorf("runtime metrics coordination root %q is not a directory", resourcePath)
+	}
+	return nil
+}
+
+func acquireRuntimeMetricsFile(
+	ctx context.Context,
+	file *os.File,
+	lockPath string,
+	wait, removeOnClose bool,
+) (io.Closer, error) {
 
 	for {
 		locked, lockErr := tryLockRuntimeMetricsFile(file)
