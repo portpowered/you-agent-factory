@@ -4,8 +4,33 @@ import type { FactoryGraphVisualState } from "./visual-state.js";
 
 export type FactoryGraphWorkerIconKind = Extract<
   GraphSemanticIconKind,
-  "worker" | "script" | "codex" | "claude" | "antigravity"
+  "worker" | "script" | "codex" | "claude" | "gemini" | "antigravity"
 >;
+
+export type FactoryGraphWorkerProviderKind = Exclude<
+  FactoryGraphWorkerIconKind,
+  "worker" | "script"
+>;
+
+const FACTORY_GRAPH_WORKER_PROVIDER_ALIASES: Readonly<
+  Record<string, FactoryGraphWorkerProviderKind>
+> = {
+  AGY: "antigravity",
+  ANTHROPIC: "claude",
+  ANTIGRAVITY: "antigravity",
+  CLAUDE: "claude",
+  "CLAUDE CLI": "claude",
+  CLAUDE_CLI: "claude",
+  "CLAUDE-CLI": "claude",
+  CODEX: "codex",
+  GEMINI: "gemini",
+  "LOCAL CLAUDE": "claude",
+  LOCAL_CLAUDE: "claude",
+  "LOCAL-CLAUDE": "claude",
+  OPENAI: "codex",
+  OPENAI_CODEX: "codex",
+  "OPENAI-CODEX": "codex",
+};
 
 export const FACTORY_GRAPH_WORKER_TYPES = [
   "INFERENCE_WORKER",
@@ -34,15 +59,30 @@ export function factoryGraphWorkerIconKind(
     return "worker";
   }
 
-  switch (normalize(runnerId)) {
-    case "CODEX":
-      return "codex";
-    case "CLAUDE":
-      return "claude";
-    case "ANTIGRAVITY":
-      return "antigravity";
+  return factoryGraphWorkerProviderKind(runnerId) ?? "worker";
+}
+
+/** Resolves only the explicitly supported provider spellings, never substrings. */
+export function factoryGraphWorkerProviderKind(
+  providerId: string | null | undefined,
+): FactoryGraphWorkerProviderKind | undefined {
+  return FACTORY_GRAPH_WORKER_PROVIDER_ALIASES[normalize(providerId)];
+}
+
+export function factoryGraphWorkerProviderLabel(
+  providerKind: FactoryGraphWorkerProviderKind | undefined,
+): string | undefined {
+  switch (providerKind) {
+    case "antigravity":
+      return "Antigravity";
+    case "claude":
+      return "Claude/Anthropic";
+    case "codex":
+      return "Codex/OpenAI";
+    case "gemini":
+      return "Gemini";
     default:
-      return "worker";
+      return undefined;
   }
 }
 

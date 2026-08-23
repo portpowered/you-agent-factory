@@ -3,6 +3,7 @@ import {
   type FactoryGraphNodeDimensions,
   type FactoryGraphNodeFamily,
   type FactoryGraphNodeResizeControlsProps,
+  factoryGraphWorkerProviderKind,
   resolveFactoryGraphNodeDimensions,
   resolveFactoryGraphWorkstationSemantics,
 } from "@you-agent-factory/factory-graph";
@@ -533,13 +534,70 @@ function workerPresentationMetadata(
   );
   const runnerSelection =
     runnerIds.size === 1 ? runnerSelections[0] : undefined;
+  const fallbackRunnerId =
+    runnerSelection?.source === "default"
+      ? fallbackWorkerPresentationRunnerId(factory, worker, workerWorkstations)
+      : undefined;
 
   return {
     ...(worker.type ? { workerType: worker.type } : {}),
     ...(runnerSelection && runnerSelection.source !== "default"
       ? { runnerId: runnerSelection.runnerId }
-      : {}),
+      : fallbackRunnerId
+        ? { runnerId: fallbackRunnerId }
+        : {}),
   };
+}
+
+function fallbackWorkerPresentationRunnerId(
+  factory: DashboardSnapshot["factory"],
+  worker: { modelProvider?: string | null },
+  workerWorkstations: ReadonlyArray<{ runner?: string | null }>,
+): string | undefined {
+  const candidates =
+    workerWorkstations.length > 0
+      ? workerWorkstations.map((workstation) =>
+          firstNonBlank(
+            workstation.runner,
+            factory?.runner,
+            worker.modelProvider,
+          ),
+        )
+      : [firstNonBlank(factory?.runner, worker.modelProvider)];
+  const normalizedCandidates = candidates.map(normalizeWorkerProviderIdentity);
+
+  if (
+    normalizedCandidates.some((candidate) => candidate === "") ||
+    new Set(normalizedCandidates).size !== 1
+  ) {
+    return undefined;
+  }
+
+  const providerId = candidates[0];
+  return typeof providerId === "string" && providerId.trim().length > 0
+    ? providerId
+    : undefined;
+}
+
+function firstNonBlank(
+  ...values: Array<string | null | undefined>
+): string | undefined {
+  const found = values.find(
+    (value): value is string =>
+      typeof value === "string" && value.trim().length > 0,
+  );
+  return found;
+}
+
+function normalizeWorkerProviderIdentity(
+  providerId: string | null | undefined,
+): string {
+  const trimmed = typeof providerId === "string" ? providerId.trim() : "";
+  if (!trimmed) {
+    return "";
+  }
+
+  return factoryGraphWorkerProviderKind(trimmed) ?? trimmed.toUpperCase();
 }
 
 function buildPlaceNodeShell(positionedNode: PositionedPlaceNode) {

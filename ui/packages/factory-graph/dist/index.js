@@ -18,5 +18,5 @@ export { createFactoryGraphSource, isFactoryGraphSource, } from "./source.js";
 export { factoryGraphVisualNestedAccentRole, resolveFactoryGraphVisualState, } from "./visual-state.js";
 export { FACTORY_GRAPH_WORK_ITEM_MODE_MAXIMUM, factoryGraphWorkProgressMode, } from "./work-progress-presentation.js";
 export { FACTORY_GRAPH_WORK_STATE_TYPES, factoryGraphUnknownWorkStateType, isFactoryGraphKnownWorkStateType, WORK_STATE_PHASE_LEGEND_ORDER, workStatePhaseSemanticIconClassName, workStatePhaseSemanticIconKind, workStatePhaseSurfaceClassName, workStatePhaseSwatchClassName, } from "./work-state-presentation.js";
-export { FACTORY_GRAPH_WORKER_TYPES, factoryGraphUnknownWorkerType, factoryGraphWorkerIconClassName, factoryGraphWorkerIconKind, isFactoryGraphKnownWorkerType, } from "./worker-icon.js";
+export { FACTORY_GRAPH_WORKER_TYPES, factoryGraphUnknownWorkerType, factoryGraphWorkerIconClassName, factoryGraphWorkerIconKind, factoryGraphWorkerProviderKind, factoryGraphWorkerProviderLabel, isFactoryGraphKnownWorkerType, } from "./worker-icon.js";
 export { factoryGraphWorkstationRuntimeRole, projectFactoryGraphWorkstationSemantics, resolveFactoryGraphWorkstationRuntimeType, resolveFactoryGraphWorkstationSchedulingBehavior, resolveFactoryGraphWorkstationSemantics, UNKNOWN_FACTORY_GRAPH_WORKSTATION_SEMANTICS, } from "./workstation-semantics.js";

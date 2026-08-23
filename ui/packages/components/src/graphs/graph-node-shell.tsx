@@ -15,6 +15,7 @@ export interface GraphNodeShellProps
   extends Omit<HTMLAttributes<HTMLElement>, "children"> {
   children: ReactNode;
   className?: string;
+  contentInset?: GraphNodeContentInset;
   handles: GraphNodeHandle[];
   nodeKind?: string;
   showStateIndicator?: boolean;
@@ -22,9 +23,12 @@ export interface GraphNodeShellProps
   stateLabel?: string;
 }
 
+export type GraphNodeContentInset = "compact" | "default";
+
 export function GraphNodeShell({
   children,
   className = "",
+  contentInset = "default",
   handles,
   nodeKind,
   showStateIndicator = true,
@@ -52,13 +56,14 @@ export function GraphNodeShell({
         className={cn(
           "flex h-full min-w-0 w-full flex-col gap-1 py-3",
           showStateIndicator && GRAPH_NODE_CONTENT_MIN_HEIGHT_CLASS,
-          leftHandles.length > 0 ? "pl-6 pr-3" : "px-3",
-          rightHandles.length > 0 && leftHandles.length > 0
-            ? "pr-6"
-            : rightHandles.length > 0
-              ? "pl-3 pr-6"
-              : null,
+          graphNodeContentInsetClassName(
+            contentInset,
+            leftHandles.length > 0,
+            rightHandles.length > 0,
+          ),
         )}
+        data-graph-node-content
+        data-graph-node-content-inset={contentInset}
       >
         {showStateIndicator ? (
           <GraphNodeStateIndicator state={state} stateLabel={stateLabel} />
@@ -67,6 +72,24 @@ export function GraphNodeShell({
       </div>
     </article>
   );
+}
+
+function graphNodeContentInsetClassName(
+  contentInset: GraphNodeContentInset,
+  hasLeftRail: boolean,
+  hasRightRail: boolean,
+): string {
+  if (contentInset === "compact") {
+    if (hasLeftRail && hasRightRail) return "pl-5 pr-5";
+    if (hasLeftRail) return "pl-5 pr-2";
+    if (hasRightRail) return "pl-2 pr-5";
+    return "px-2";
+  }
+
+  if (hasLeftRail && hasRightRail) return "pl-6 pr-6";
+  if (hasLeftRail) return "pl-6 pr-3";
+  if (hasRightRail) return "pl-3 pr-6";
+  return "px-3";
 }
 
 function NodeHandleRail({
