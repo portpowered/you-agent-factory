@@ -191,7 +191,9 @@ func TestAdapter_BuiltInPullSurfacesThroughHTTP(t *testing.T) {
 			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 				t.Fatalf("decode response: %v", err)
 			}
-			if response.ModelName != name || response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY {
+			if response.ModelName != name || response.Outcome != factoryapi.ModelPullOutcomePULLED ||
+				response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY ||
+				response.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
 				t.Fatalf("response = %#v, want successful built-in pull", response)
 			}
 		})
