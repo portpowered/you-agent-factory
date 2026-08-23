@@ -92,7 +92,13 @@ func (g *runtimeGlobals) denyChildSlots(count int) error {
 }
 
 func (g *runtimeGlobals) denyChildRequest(req ChildExecutionRequest) error {
-	return workflowpolicy.ValidateChildRequest(g.policy, childPolicyRequest(req))
+	return workflowpolicy.ValidateChildRequest(g.policy, g.childPolicyRequest(req))
+}
+
+func (g *runtimeGlobals) childPolicyRequest(req ChildExecutionRequest) workflowpolicy.ChildRequest {
+	request := childPolicyRequest(req)
+	request.FactoryName = g.factoryName
+	return request
 }
 
 func (g *runtimeGlobals) denyArtifactSize(sizeBytes int64) error {

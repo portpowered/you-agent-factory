@@ -3,8 +3,10 @@ package orchestratorcontract
 import "encoding/json"
 
 const (
-	ModeReadOnly        = "READ_ONLY"
-	OutputAuditModeAuto = "AUTO"
+	ModeReadOnly                  = "READ_ONLY"
+	OutputAuditModeAuto           = "AUTO"
+	PermissionModeDefault         = "DEFAULT"
+	PermissionModeSkipPermissions = "SKIP_PERMISSIONS"
 )
 
 // Issue is one workflow policy validation diagnostic.
@@ -44,6 +46,7 @@ type EffectivePolicy struct {
 	AllowDangerFullAccess   bool     `json:"allowDangerFullAccess"`
 	WritableRoots           []string `json:"writableRoots"`
 	OutputAuditMode         string   `json:"outputAuditMode"`
+	AllowedPermissions      []string `json:"allowedPermissions,omitempty"`
 	AllowedRunners          []string `json:"allowedRunners,omitempty"`
 	AllowedModels           []string `json:"allowedModels,omitempty"`
 	AllowedReasoningEfforts []string `json:"allowedReasoningEfforts,omitempty"`

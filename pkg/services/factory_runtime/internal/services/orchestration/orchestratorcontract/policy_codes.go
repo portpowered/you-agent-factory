@@ -12,6 +12,7 @@ const (
 	CodeUnsupportedRouteProfile   = "workflow.policy.unsupportedRouteProfile"
 	CodeUnsupportedCommand        = "workflow.policy.unsupportedCommand"
 	CodeUnsupportedSandboxMode    = "workflow.policy.unsupportedSandboxMode"
+	CodeUnsupportedPermission     = "workflow.policy.unsupportedPermission"
 	CodeDeniedCapability          = "workflow.policy.deniedCapability"
 	CodeInvalidPolicyDocument     = "workflow.policy.invalidDocument"
 	CodeUnsupportedPolicyMode     = "workflow.policy.unsupportedMode"

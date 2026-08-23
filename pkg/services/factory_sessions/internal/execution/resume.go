@@ -434,14 +434,15 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntimeWithResume(
 		return workflowresult.JavaScriptRuntimeOutcome{}, err
 	}
 	return s.orchestration.RunJavaScript(ctx, workflowresult.JavaScriptRuntimeRequest{
-		Source:     sourceContent,
-		SourceRef:  resolved.SourceRef,
-		SessionID:  sessionID,
-		Args:       argsJSON,
-		ArgsSchema: resolved.ArgsSchema,
-		Metadata:   workflowMetadataFromResolved(resolved, normalized),
-		Policy:     policyResolution.Policy,
-		Resume:     resume,
+		Source:      sourceContent,
+		SourceRef:   resolved.SourceRef,
+		SessionID:   sessionID,
+		Args:        argsJSON,
+		ArgsSchema:  resolved.ArgsSchema,
+		Metadata:    workflowMetadataFromResolved(resolved, normalized),
+		FactoryName: factoryNameFromStart(normalized, resolved),
+		Policy:      policyResolution.Policy,
+		Resume:      resume,
 	}, s.childExecutorHooks(resolveChildExecutorMode(s.childExecutorMode, normalized), sessionID))
 }
 

@@ -3,6 +3,7 @@ package factory_test
 import (
 	"encoding/json"
 	"reflect"
+	"slices"
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -35,6 +36,80 @@ func TestDefaultEffectivePolicy_MatchesReadOnlyMVPDefaults(t *testing.T) {
 	if policy.OutputAuditMode != factory.JavaScriptPolicyOutputAuditModeAuto {
 		t.Fatalf("outputAuditMode = %q, want AUTO", policy.OutputAuditMode)
 	}
+	if len(policy.AllowedPermissions) != 0 {
+		t.Fatalf("allowedPermissions = %#v, want omitted by default", policy.AllowedPermissions)
+	}
+}
+
+func TestResolve_AllowedPermissionsAcceptsCanonicalValues(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		raw  string
+		want []string
+	}{
+		{
+			name: "default",
+			raw:  `{"allowedPermissions":["DEFAULT"]}`,
+			want: []string{factory.JavaScriptPolicyPermissionDefault},
+		},
+		{
+			name: "skip permissions",
+			raw:  `{"allowedPermissions":["SKIP_PERMISSIONS"]}`,
+			want: []string{factory.JavaScriptPolicyPermissionSkipPermissions},
+		},
+		{
+			name: "both",
+			raw:  `{"allowedPermissions":["DEFAULT","SKIP_PERMISSIONS"]}`,
+			want: []string{
+				factory.JavaScriptPolicyPermissionDefault,
+				factory.JavaScriptPolicyPermissionSkipPermissions,
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resolution := factory.ResolveJavaScriptFactoryDefaultPolicy(json.RawMessage(tc.raw))
+			if len(resolution.Issues) != 0 {
+				t.Fatalf("policy issues = %#v, want none", resolution.Issues)
+			}
+			if got := resolution.Policy.AllowedPermissions; !slices.Equal(got, tc.want) {
+				t.Fatalf("allowedPermissions = %#v, want %#v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestResolve_RejectsUnsupportedAllowedPermissionAtIndexedPolicyPath(t *testing.T) {
+	t.Parallel()
+	resolution := factory.ResolveJavaScriptPolicy(factory.JavaScriptPolicyRequest{
+		Requested: map[string]any{
+			"allowedPermissions": []any{
+				factory.JavaScriptPolicyPermissionDefault,
+				"WRITE",
+			},
+		},
+	})
+
+	for _, issue := range resolution.Issues {
+		if issue.Code == factory.JavaScriptPolicyCodeUnsupportedPermission && issue.Path == "policy.allowedPermissions[1]" {
+			return
+		}
+	}
+	t.Fatalf("policy issues = %#v, want unsupported permission at policy.allowedPermissions[1]", resolution.Issues)
+}
+
+func TestResolve_RejectsMalformedAllowedPermissionEntryAtIndexedPolicyPath(t *testing.T) {
+	t.Parallel()
+	resolution := factory.ResolveJavaScriptFactoryDefaultPolicy(json.RawMessage(`{"allowedPermissions":["DEFAULT",7]}`))
+
+	for _, issue := range resolution.Issues {
+		if issue.Code == factory.JavaScriptPolicyCodeUnsupportedPermission && issue.Path == "policy.allowedPermissions[1]" {
+			return
+		}
+	}
+	t.Fatalf("policy issues = %#v, want malformed permission at policy.allowedPermissions[1]", resolution.Issues)
 }
 
 func TestHash_StableAcrossMapOrdering(t *testing.T) {
@@ -289,4 +364,30 @@ func TestOrchestratorTargets_RejectsInvalidDefaultPolicy(t *testing.T) {
 	if !found {
 		t.Fatalf("targets = %#v, want excessiveMaxAgents from orchestrator policy validation", targets)
 	}
+}
+
+func TestOrchestratorTargets_MapsAllowedPermissionIssueToDefaultPolicyPath(t *testing.T) {
+	t.Parallel()
+	cfg := &interfaces.FactoryConfig{
+		Orchestrator: &interfaces.FactoryOrchestratorConfig{
+			Kind: interfaces.OrchestratorKindJavaScript,
+			JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{
+				SourceRef:     "factory/workflows/review.js",
+				DefaultPolicy: json.RawMessage(`{"allowedPermissions":["DEFAULT","WRITE"]}`),
+			},
+		},
+	}
+	targets := factoryruntimewire.NewOrchestratorDefinitionValidator(testJavaScriptWorkflows()).
+		ValidateJavaScriptFactoryDefinition(
+			t.Context(),
+			cfg.Orchestrator.JavaScript,
+			nil,
+		)
+	for _, target := range targets {
+		if target.Code == factory.JavaScriptPolicyCodeUnsupportedPermission &&
+			target.Path == "factory.orchestrator.javascript.defaultPolicy.allowedPermissions[1]" {
+			return
+		}
+	}
+	t.Fatalf("targets = %#v, want unsupported permission at defaultPolicy.allowedPermissions[1]", targets)
 }

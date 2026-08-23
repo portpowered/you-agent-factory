@@ -427,7 +427,7 @@ func javaScriptWorkflowSource(
 		source.Kind = factoryruntime.WorkflowSourceKindInlineWorkflow
 		source.InlineWorkflow = &factorysessions.InlineWorkflowSource{
 			Dialect: js.Dialect, InlineSource: js.InlineSource.Inline, Entrypoint: js.Entrypoint,
-			Metadata: cloneStringMap(js.Metadata), Agents: cloneJavaScriptAgents(js.Agents),
+			Metadata: javaScriptFactoryMetadata(js, projection), Agents: cloneJavaScriptAgents(js.Agents),
 			ArgsSchema:    append(json.RawMessage(nil), js.ArgsSchema...),
 			DefaultPolicy: append(json.RawMessage(nil), js.DefaultPolicy...),
 		}
@@ -445,14 +445,33 @@ func javaScriptWorkflowSource(
 		}
 		source.WorkflowFile = filepath.Join(factoryDir, source.WorkflowFile)
 	}
-	if len(js.DefaultPolicy) > 0 || len(js.ArgsSchema) > 0 || len(js.Agents) > 0 {
+	metadata := javaScriptFactoryMetadata(js, projection)
+	if len(js.DefaultPolicy) > 0 || len(js.ArgsSchema) > 0 || len(js.Agents) > 0 || len(metadata) > 0 {
 		source.InlineWorkflow = &factorysessions.InlineWorkflowSource{
+			Metadata:      metadata,
 			Agents:        cloneJavaScriptAgents(js.Agents),
 			ArgsSchema:    append(json.RawMessage(nil), js.ArgsSchema...),
 			DefaultPolicy: append(json.RawMessage(nil), js.DefaultPolicy...),
 		}
 	}
 	return source, nil
+}
+
+func javaScriptFactoryMetadata(
+	js *factorydefinitions.FactoryOrchestratorJavaScriptConfig,
+	projection factorysessions.ProjectionContext,
+) map[string]string {
+	metadata := cloneStringMap(js.Metadata)
+	if projection.FactoryCfg == nil {
+		return metadata
+	}
+	if factoryName := strings.TrimSpace(projection.FactoryCfg.Name); factoryName != "" {
+		if metadata == nil {
+			metadata = make(map[string]string)
+		}
+		metadata["factoryName"] = factoryName
+	}
+	return metadata
 }
 
 func factoryDefaultPolicyMap(raw json.RawMessage) map[string]any {

@@ -17,6 +17,7 @@ import (
 type runtimeGlobals struct {
 	vm                    *goja.Runtime
 	policy                workflowpolicy.EffectivePolicy
+	factoryName           string
 	sessionID             string
 	ctx                   context.Context
 	records               *recordCollector

@@ -177,11 +177,48 @@ func TestResolve_FactoryID_ResolvesJavaScriptFactory(t *testing.T) {
 	if resolution.SourceRef != "factory:review-flow:workflows/review.js" {
 		t.Fatalf("source ref = %q", resolution.SourceRef)
 	}
+	if resolution.FactoryName != "review-flow" {
+		t.Fatalf("factory name = %q, want review-flow", resolution.FactoryName)
+	}
 	if !bytes.Contains(resolution.ArgsSchema, []byte(`"topic"`)) {
 		t.Fatalf("args schema = %s, want authored factory schema", resolution.ArgsSchema)
 	}
 	if !bytes.Contains(resolution.DefaultPolicy, []byte(`"maxAgents":2`)) {
 		t.Fatalf("default policy = %s, want authored factory policy", resolution.DefaultPolicy)
+	}
+}
+
+func TestResolve_WorkflowName_PreservesOwningFactoryNameWhenSourceNameDiffers(t *testing.T) {
+	t.Parallel()
+	projectRoot := t.TempDir()
+	factoryRoot := filepath.Join(projectRoot, interfaces.FactoryDir)
+	factoryDir := writeJavaScriptFactorySourceFixture(
+		t,
+		factoryRoot,
+		"named-factory",
+		"workflows/review.js",
+	)
+	workflowDir := filepath.Join(factoryDir, "workflows")
+	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
+		t.Fatalf("mkdir workflows: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDir, "review.js"), []byte(sourceValidWorkflowSource), 0o600); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+
+	resolution := factoryWorkflowDefinitions.ResolveSource(factory.WorkflowSourceRequest{
+		Kind:  factory.WorkflowSourceKindWorkflowName,
+		Value: "review",
+	}, testContext(t, projectRoot))
+
+	if !resolution.Found {
+		t.Fatalf("resolution = %#v, want found named Factory workflow", resolution)
+	}
+	if resolution.SourceRef != "factory:named-factory:workflows/review.js" {
+		t.Fatalf("source ref = %q, want named Factory source ref", resolution.SourceRef)
+	}
+	if resolution.FactoryName != "named-factory" {
+		t.Fatalf("factory name = %q, want named-factory", resolution.FactoryName)
 	}
 }
 
@@ -222,6 +259,26 @@ func TestResolve_InlineWorkflow_ComputesStableHash(t *testing.T) {
 
 	if !first.Found || first.SourceHash == "" || first.SourceHash != second.SourceHash {
 		t.Fatalf("hashes = (%q, %q), want stable non-empty hash", first.SourceHash, second.SourceHash)
+	}
+}
+
+func TestResolve_FactoryInline_PreservesDeclaredFactoryName(t *testing.T) {
+	t.Parallel()
+	projectRoot := t.TempDir()
+	factoryDir := filepath.Join(projectRoot, interfaces.FactoryDir)
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("mkdir factory root: %v", err)
+	}
+	resolution := factoryWorkflowDefinitions.ResolveSource(factory.WorkflowSourceRequest{
+		Kind:  factory.WorkflowSourceKindFactoryInline,
+		Value: javascriptFactoryPayload("named-factory", "workflows/review.js"),
+	}, testContext(t, projectRoot))
+
+	if !resolution.Found {
+		t.Fatalf("resolution = %#v, want found Factory inline source", resolution)
+	}
+	if resolution.FactoryName != "named-factory" {
+		t.Fatalf("factory name = %q, want named-factory", resolution.FactoryName)
 	}
 }
 

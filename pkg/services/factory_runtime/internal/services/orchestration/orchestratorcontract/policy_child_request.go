@@ -7,6 +7,7 @@ import (
 
 // ChildRequest is the policy-relevant subset of one child-agent host request.
 type ChildRequest struct {
+	FactoryName     string
 	Label           string
 	Model           string
 	ReasoningEffort string
@@ -25,6 +26,9 @@ type ChildRequest struct {
 // before runtime side effects. It returns a stable diagnostic naming the denied
 // policy field or capability and including safe request context.
 func ValidateChildRequest(policy EffectivePolicy, req ChildRequest) error {
+	if err := validateChildPermission(policy, req); err != nil {
+		return err
+	}
 	if err := validateChildModel(policy, req); err != nil {
 		return err
 	}
@@ -47,6 +51,28 @@ func ValidateChildRequest(policy EffectivePolicy, req ChildRequest) error {
 		return err
 	}
 	return nil
+}
+
+func validateChildPermission(policy EffectivePolicy, req ChildRequest) error {
+	if len(policy.AllowedPermissions) == 0 {
+		return nil
+	}
+
+	requested := PermissionModeDefault
+	if req.SkipPermissions {
+		requested = PermissionModeSkipPermissions
+	}
+	for _, allowed := range policy.AllowedPermissions {
+		if strings.TrimSpace(allowed) == requested {
+			return nil
+		}
+	}
+	return fmt.Errorf(
+		"policy denied: Factory %q child %q requested permission %q not listed in allowedPermissions",
+		safeFactoryName(req.FactoryName),
+		safeChildLabel(req.Label),
+		requested,
+	)
 }
 
 func validateChildModel(policy EffectivePolicy, req ChildRequest) error {
@@ -203,4 +229,8 @@ func safeChildLabel(label string) string {
 		return "-"
 	}
 	return label
+}
+
+func safeFactoryName(name string) string {
+	return safeChildLabel(name)
 }
