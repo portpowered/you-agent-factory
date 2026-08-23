@@ -83,6 +83,74 @@ func TestNewReplayRecordingSnapshotWriterNilWriteReturnsNil(t *testing.T) {
 	}
 }
 
+const replayV1GoldenJSON = `{
+  "schemaVersion": "agent-factory.replay.v1",
+  "recordedAt": "2026-02-03T18:45:12Z",
+  "events": [
+    {
+      "context": {
+        "eventTime": "2026-02-03T18:45:12Z",
+        "sequence": 0,
+        "sessionId": "~default",
+        "tick": 0
+      },
+      "id": "factory-event/run-started",
+      "payload": {
+        "diagnostics": {},
+        "factory": {
+          "id": "factory-1",
+          "metadata": {
+            "factory_hash": "sha256:factory",
+            "runtime_config_hash": "sha256:runtime",
+            "workers_hash": "sha256:workers",
+            "workstations_hash": "sha256:workstations"
+          }
+        },
+        "recordedAt": "2026-02-03T18:45:12Z",
+        "wallClock": {
+          "startedAt": "2026-02-03T18:45:12Z"
+        }
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "RUN_REQUEST"
+    },
+    {
+      "context": {
+        "eventTime": "2026-02-03T18:46:12Z",
+        "sequence": 1,
+        "sessionId": "~default",
+        "tick": 3
+      },
+      "id": "work-request-1",
+      "payload": {
+        "workId": "work-1",
+        "contentHash": "sha256:work"
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "WORK_REQUEST"
+    },
+    {
+      "context": {
+        "eventTime": "2026-02-03T18:47:12Z",
+        "sequence": 2,
+        "sessionId": "~default",
+        "tick": 0
+      },
+      "id": "factory-event/run-finished",
+      "payload": {
+        "state": "COMPLETED",
+        "wallClock": {
+          "finishedAt": "2026-02-03T18:47:12Z",
+          "startedAt": "2026-02-03T18:45:12Z"
+        }
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "RUN_RESPONSE"
+    }
+  ]
+}
+`
+
 func TestNewReplayRecordingSnapshotWriterPinsReplayV1JSONBytes(t *testing.T) {
 	t.Parallel()
 
@@ -150,73 +218,7 @@ func TestNewReplayRecordingSnapshotWriterPinsReplayV1JSONBytes(t *testing.T) {
 		t.Fatalf("write replay snapshot: %v", err)
 	}
 
-	want := []byte(`{
-  "schemaVersion": "agent-factory.replay.v1",
-  "recordedAt": "2026-02-03T18:45:12Z",
-  "events": [
-    {
-      "context": {
-        "eventTime": "2026-02-03T18:45:12Z",
-        "sequence": 0,
-        "sessionId": "~default",
-        "tick": 0
-      },
-      "id": "factory-event/run-started",
-      "payload": {
-        "diagnostics": {},
-        "factory": {
-          "id": "factory-1",
-          "metadata": {
-            "factory_hash": "sha256:factory",
-            "runtime_config_hash": "sha256:runtime",
-            "workers_hash": "sha256:workers",
-            "workstations_hash": "sha256:workstations"
-          }
-        },
-        "recordedAt": "2026-02-03T18:45:12Z",
-        "wallClock": {
-          "startedAt": "2026-02-03T18:45:12Z"
-        }
-      },
-      "schemaVersion": "agent-factory.event.v1",
-      "type": "RUN_REQUEST"
-    },
-    {
-      "context": {
-        "eventTime": "2026-02-03T18:46:12Z",
-        "sequence": 1,
-        "sessionId": "~default",
-        "tick": 3
-      },
-      "id": "work-request-1",
-      "payload": {
-        "workId": "work-1",
-        "contentHash": "sha256:work"
-      },
-      "schemaVersion": "agent-factory.event.v1",
-      "type": "WORK_REQUEST"
-    },
-    {
-      "context": {
-        "eventTime": "2026-02-03T18:47:12Z",
-        "sequence": 2,
-        "sessionId": "~default",
-        "tick": 0
-      },
-      "id": "factory-event/run-finished",
-      "payload": {
-        "state": "COMPLETED",
-        "wallClock": {
-          "finishedAt": "2026-02-03T18:47:12Z",
-          "startedAt": "2026-02-03T18:45:12Z"
-        }
-      },
-      "schemaVersion": "agent-factory.event.v1",
-      "type": "RUN_RESPONSE"
-    }
-  ]
-}
-`)
+	want := []byte(replayV1GoldenJSON)
 	if !bytes.Equal(writtenPayload, want) {
 		t.Fatalf("replay v1 bytes =\n%s\nwant =\n%s", writtenPayload, want)
 	}
