@@ -28,6 +28,7 @@ import (
 // engine into Work's consumer-owned runtime port. Engine identities end here.
 type workRuntimeAdapter struct {
 	sessionID string
+	clock     factoryruntime.Clock
 	runtime   factoryruntime.Service
 	// ingress is the Work-submission boundary declared when Factory Sessions
 	// bound the runtime. It retires with factoryruntime.APIFactory.
@@ -108,7 +109,10 @@ func translateMoveWorkFailure(err error) error {
 }
 
 func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnapshot, error) {
-	snapshotStarted := time.Now()
+	if a.clock == nil {
+		return work.ReadSnapshot{}, fmt.Errorf("Factory Session Work read clock is required")
+	}
+	snapshotStarted := a.clock.Now()
 	legacyObservation, err := runtimebinding.LegacyObservationForService(a.runtime)
 	if err != nil {
 		return work.ReadSnapshot{}, err
@@ -120,8 +124,8 @@ func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnap
 	if snapshot == nil {
 		return work.ReadSnapshot{}, nil
 	}
-	snapshotDuration := time.Since(snapshotStarted)
-	mappingStarted := time.Now()
+	snapshotDuration := a.clock.Now().Sub(snapshotStarted)
+	mappingStarted := a.clock.Now()
 	materialized := factoryruntime.CollectPublicWorkTokens(snapshot.Marking.Tokens, snapshot.Dispatches)
 	names := runtimeWorkNames(materialized.Tokens)
 	sessionSummary := sessionprojection.ProjectFactorySessionStopSummary(a.sessionID, snapshot, nil)
@@ -135,8 +139,8 @@ func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnap
 		item.StopSummary = runtimeWorkStopSummary(sessionprojection.ProjectWorkStopSummary(a.sessionID, snapshot, token, sessionSummary))
 		result.Items = append(result.Items, item)
 	}
-	mappingDuration := time.Since(mappingStarted)
-	admissionStarted := time.Now()
+	mappingDuration := a.clock.Now().Sub(mappingStarted)
+	admissionStarted := a.clock.Now()
 	admissionStats := workAdmissionReadStats{}
 	if a.admissions != nil {
 		result.Admissions, admissionStats.projectionEventsVisited, admissionStats.projectionLockWait, admissionStats.projectionCatchup = a.admissions.SnapshotWithStats()
@@ -153,7 +157,7 @@ func (a workRuntimeAdapter) ReadWorkSnapshot(ctx context.Context) (work.ReadSnap
 		snapshotRows:            len(materialized.Tokens),
 		mappingDuration:         mappingDuration,
 		workRowsProjected:       len(result.Items),
-		admissionDuration:       time.Since(admissionStarted),
+		admissionDuration:       a.clock.Now().Sub(admissionStarted),
 		admissionRows:           len(result.Admissions),
 		eventSubscriptions:      admissionStats.eventSubscriptions,
 		eventRecordsVisited:     admissionStats.eventRecordsVisited,
@@ -204,6 +208,7 @@ func workRuntimeSnapshot(
 // or mapping Work rows.
 type workAdmissionProjection struct {
 	sessionID string
+	clock     factoryruntime.Clock
 
 	mu                sync.RWMutex
 	admissions        []work.WorkAdmission
@@ -223,9 +228,10 @@ type workAdmissionProjectionBinding struct {
 	catchup       time.Duration
 }
 
-func newWorkAdmissionProjection(sessionID string) *workAdmissionProjection {
+func newWorkAdmissionProjection(sessionID string, clock factoryruntime.Clock) *workAdmissionProjection {
 	return &workAdmissionProjection{
 		sessionID:  strings.TrimSpace(sessionID),
+		clock:      clock,
 		seenEvents: make(map[string]struct{}),
 	}
 }
@@ -234,8 +240,9 @@ func newWorkAdmissionProjectionForGeneration(
 	sessionID string,
 	runtime *factorysessions.LiveRuntime,
 	ledger recordings.Ledger,
+	clock factoryruntime.Clock,
 ) *workAdmissionProjection {
-	projection := newWorkAdmissionProjection(sessionID)
+	projection := newWorkAdmissionProjection(sessionID, clock)
 	projection.generationRuntime = runtime
 	projection.generationLedger = ledger
 	projection.generationSet = true
@@ -286,11 +293,11 @@ func (p *workAdmissionProjection) Bind(ledger recordings.Ledger) {
 		p.seenEvents = make(map[string]struct{})
 		p.mu.Unlock()
 
-		startedAt := time.Now()
+		startedAt := p.clock.Now()
 		ledger.AddEventRecorder(func(event factorydefinitions.FactoryEvent) {
 			p.applyEvent(binding, event)
 		})
-		binding.catchup = time.Since(startedAt)
+		binding.catchup = p.clock.Now().Sub(startedAt)
 		binding.readyOnce.Do(func() { close(binding.ready) })
 		return
 	}
@@ -309,9 +316,9 @@ func (p *workAdmissionProjection) SnapshotWithStats() ([]work.WorkAdmission, int
 	}
 	var lockWait time.Duration
 	for {
-		lockStarted := time.Now()
+		lockStarted := p.clock.Now()
 		p.mu.RLock()
-		lockWait += time.Since(lockStarted)
+		lockWait += p.clock.Now().Sub(lockStarted)
 		binding := p.binding
 		if binding == nil {
 			admissions := append([]work.WorkAdmission(nil), p.admissions...)
@@ -322,9 +329,9 @@ func (p *workAdmissionProjection) SnapshotWithStats() ([]work.WorkAdmission, int
 		p.mu.RUnlock()
 		<-ready
 
-		lockStarted = time.Now()
+		lockStarted = p.clock.Now()
 		p.mu.RLock()
-		lockWait += time.Since(lockStarted)
+		lockWait += p.clock.Now().Sub(lockStarted)
 		if p.binding != binding {
 			p.mu.RUnlock()
 			continue

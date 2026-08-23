@@ -145,6 +145,7 @@ func (a *Assembly) ResolveWorkRuntime(sessionID string) (work.Runtime, error) {
 	}
 	return workRuntimeAdapter{
 		sessionID:   sessionID,
+		clock:       session.Runtime.Clock,
 		runtime:     runtimebinding.ServiceForSession(session),
 		ingress:     ingress,
 		admissions:  a.workAdmissionProjection(sessionID, session.Runtime, ledger),
@@ -172,7 +173,7 @@ func (a *Assembly) workAdmissionProjection(
 		}
 	}
 	if projection == nil {
-		projection = newWorkAdmissionProjectionForGeneration(sessionID, runtime, ledger)
+		projection = newWorkAdmissionProjectionForGeneration(sessionID, runtime, ledger, runtime.Clock)
 		a.workAdmissions[sessionID] = append(a.workAdmissions[sessionID], projection)
 	}
 	a.workAdmissionsMu.Unlock()
