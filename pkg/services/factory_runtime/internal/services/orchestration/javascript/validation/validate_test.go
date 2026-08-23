@@ -1,6 +1,9 @@
 package workflowvalidation
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValidateAcceptsTopLevelReturnLikeRuntimeExecution(t *testing.T) {
 	t.Parallel()
@@ -32,6 +35,40 @@ func TestValidateAgentRunSkipPermissionsBooleanShape(t *testing.T) {
 	})
 	if !rejected.HasIssues() {
 		t.Fatal("Validate(string) issues = nil, want boolean shape error")
+	}
+}
+
+func TestValidateAgentRunPermissionsEnumShape(t *testing.T) {
+	t.Parallel()
+
+	for _, permissions := range []string{"DEFAULT", "SKIP_PERMISSIONS"} {
+		accepted := Validate(Request{
+			Source:    `return agent.run({ prompt: "review", permissions: "` + permissions + `" });`,
+			SourceRef: "workflow.js",
+		})
+		if accepted.HasIssues() {
+			t.Fatalf("Validate(%q) issues = %#v, want none", permissions, accepted.Issues)
+		}
+	}
+	singleQuoted := Validate(Request{
+		Source:    `return agent.run({ prompt: 'review', permissions: 'DEFAULT' });`,
+		SourceRef: "workflow.js",
+	})
+	if singleQuoted.HasIssues() {
+		t.Fatalf("Validate(single-quoted permissions) issues = %#v, want none", singleQuoted.Issues)
+	}
+
+	for _, source := range []string{
+		`return agent.run({ prompt: "review", permissions: "READ_ONLY" });`,
+		`return agent.run({ prompt: "review", permissions: true });`,
+	} {
+		rejected := Validate(Request{Source: source, SourceRef: "workflow.js"})
+		if !rejected.HasIssues() {
+			t.Fatalf("Validate(%q) issues = nil, want permissions diagnostic", source)
+		}
+		if rejected.Issues[0].Message == "" || !strings.Contains(rejected.Issues[0].Message, "permissions") {
+			t.Fatalf("Validate(%q) issue = %#v, want field-specific permissions diagnostic", source, rejected.Issues[0])
+		}
 	}
 }
 

@@ -762,6 +762,104 @@ func TestRun_AgentRunRejectsNonBooleanSkipPermissionsBeforeDispatch(t *testing.T
 	}
 }
 
+func TestRun_AgentRunPermissionsResolveCanonicalAndLegacyPrecedence(t *testing.T) {
+	tests := []struct {
+		name       string
+		source     string
+		wantBypass bool
+		wantLegacy bool
+	}{
+		{
+			name:       "static default",
+			source:     `return agent.run({ prompt: "review", permissions: "DEFAULT" });`,
+			wantBypass: false,
+		},
+		{
+			name:       "dynamic skip",
+			source:     `const child = { prompt: "review", permissions: "SKIP_PERMISSIONS" }; return agent.run(child);`,
+			wantBypass: true,
+		},
+		{
+			name:       "legacy true",
+			source:     `return agent.run({ prompt: "review", skipPermissions: true });`,
+			wantBypass: true,
+			wantLegacy: true,
+		},
+		{
+			name:       "legacy false",
+			source:     `return agent.run({ prompt: "review", skipPermissions: false });`,
+			wantBypass: false,
+			wantLegacy: true,
+		},
+		{
+			name:       "default wins over legacy true",
+			source:     `return agent.run({ prompt: "review", permissions: "DEFAULT", skipPermissions: true });`,
+			wantBypass: false,
+			wantLegacy: true,
+		},
+		{
+			name:       "skip wins over legacy false",
+			source:     `return agent.run({ prompt: "review", permissions: "SKIP_PERMISSIONS", skipPermissions: false });`,
+			wantBypass: true,
+			wantLegacy: true,
+		},
+		{
+			name:       "omitted",
+			source:     `return agent.run({ prompt: "review" });`,
+			wantBypass: false,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			stub := &stubChildExecutor{mode: stubChildExecutionMode}
+			outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+				Source: test.source, SourceRef: "inline", SessionID: "permissions-resolution-" + test.name,
+				Policy: workflowpolicy.DefaultEffectivePolicy(),
+			}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+				return stub
+			}})
+			if err != nil || !outcome.OK {
+				t.Fatalf("Run() outcome = %#v, error = %v", outcome, err)
+			}
+			requests := stub.executionRequests()
+			if len(requests) != 1 {
+				t.Fatalf("executor request count = %d, want 1", len(requests))
+			}
+			request := requests[0]
+			if request.SkipPermissions != test.wantBypass || request.LegacySkipPermissionsPresent != test.wantLegacy {
+				t.Fatalf("executor request = %#v, want bypass=%v legacyFieldSeen=%v", request, test.wantBypass, test.wantLegacy)
+			}
+		})
+	}
+}
+
+func TestRun_AgentRunRejectsInvalidPermissionsBeforeDispatch(t *testing.T) {
+	for _, source := range []string{
+		`return agent.run({ prompt: "review", permissions: "READ_ONLY" });`,
+		`return agent.run({ prompt: "review", permissions: true });`,
+		`const child = { prompt: "review" }; child.permissions = "READ_ONLY"; return agent.run(child);`,
+	} {
+		t.Run(source, func(t *testing.T) {
+			stub := &stubChildExecutor{mode: stubChildExecutionMode}
+			outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+				Source: source, SourceRef: "inline", SessionID: "invalid-permissions",
+				Policy: workflowpolicy.DefaultEffectivePolicy(),
+			}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+				return stub
+			}})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if outcome.OK || !strings.Contains(outcome.Failure.Message, `"permissions"`) {
+				t.Fatalf("Run() outcome = %#v, want field-specific permissions failure", outcome)
+			}
+			if len(stub.executionRequests()) != 0 {
+				t.Fatalf("executor requests = %#v, want none", stub.executionRequests())
+			}
+		})
+	}
+}
+
 func TestRun_AgentRunDynamicObjectRejectsUnsupportedFieldsBeforeDispatch(t *testing.T) {
 	unsupported := []string{
 		"writableRoots", "allowNetwork", "network", "allowDangerFullAccess", "dangerFullAccess",

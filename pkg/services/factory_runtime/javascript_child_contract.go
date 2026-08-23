@@ -10,9 +10,19 @@ const (
 	FieldModel           = orchestratorcontract.FieldModel
 	FieldReasoningEffort = orchestratorcontract.FieldReasoningEffort
 	FieldResourceID      = orchestratorcontract.FieldResourceID
+	FieldPermissions     = orchestratorcontract.FieldPermissions
+	FieldSkipPermissions = orchestratorcontract.FieldSkipPermissions
 )
 
-type JavaScriptChildSpec = orchestratorcontract.JavaScriptChildSpec
+type (
+	JavaScriptChildPermission = orchestratorcontract.JavaScriptChildPermission
+	JavaScriptChildSpec       = orchestratorcontract.JavaScriptChildSpec
+)
+
+const (
+	JavaScriptChildPermissionDefault         = orchestratorcontract.JavaScriptChildPermissionDefault
+	JavaScriptChildPermissionSkipPermissions = orchestratorcontract.JavaScriptChildPermissionSkipPermissions
+)
 
 var (
 	JavaScriptChildSupportedFields  = orchestratorcontract.JavaScriptChildSupportedFields

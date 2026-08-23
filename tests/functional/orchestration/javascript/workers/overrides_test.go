@@ -270,6 +270,101 @@ func TestJavaScriptChildUsesProviderCommandEdgeThroughRootProcess(t *testing.T) 
 		dispatch.Model == nil || *dispatch.Model != "live-child-model" {
 		t.Fatalf("live provider dispatch = %#v, want completed codex/live-child-model dispatch", dispatch)
 	}
+
+	exerciseJavaScriptChildPermissionsResolveToExistingProviderCommandFlag(t)
+	exerciseJavaScriptChildInvalidPermissionsFailsBeforeProviderCommand(t)
+}
+
+func exerciseJavaScriptChildPermissionsResolveToExistingProviderCommandFlag(t *testing.T) {
+	tests := []struct {
+		name       string
+		fields     string
+		dynamic    bool
+		wantBypass bool
+	}{
+		{name: "permissions default", fields: `permissions: "DEFAULT"`, dynamic: true, wantBypass: false},
+		{name: "permissions skip", fields: `permissions: "SKIP_PERMISSIONS"`, dynamic: true, wantBypass: true},
+		{name: "legacy true", fields: `skipPermissions: true`, wantBypass: true},
+		{name: "legacy false", fields: `skipPermissions: false`, wantBypass: false},
+		{name: "both default wins", fields: `permissions: "DEFAULT", skipPermissions: true`, wantBypass: false},
+		{name: "both skip wins", fields: `permissions: "SKIP_PERMISSIONS", skipPermissions: false`, wantBypass: true},
+		{name: "neither", fields: "", wantBypass: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dir := support.ScaffoldFactory(t, overridesFactoryConfig())
+			runner := support.NewRecordingCommandRunner("permissions provider output")
+			server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+				FactoryDir:                dir,
+				WaitForServiceModeRuntime: true,
+				Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+			})
+			t.Cleanup(func() { server.Stop(t) })
+
+			child := `{
+    prompt: "prove the provider permission mapping",
+    label: "permissions-child",
+    modelProvider: "codex",
+    model: "permissions-child-model"`
+			if test.fields != "" {
+				child += ",\n    " + test.fields
+			}
+			child += "\n  }"
+			workflow := `return (async function () {
+  `
+			if test.dynamic {
+				workflow += "const child = " + child + ";\n  return await agent.run(child);\n"
+			} else {
+				workflow += "return await agent.run(" + child + ");\n"
+			}
+			workflow += "})();"
+
+			started := startOverridesWorkflow(t, server.URL(), "javascript-permissions-"+strings.ReplaceAll(test.name, " ", "-"), workflow)
+			if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+				t.Fatalf("session status = %q, want SUCCEEDED; result=%#v", started.Status, started.Result)
+			}
+			if runner.CallCount() != 1 {
+				t.Fatalf("provider command calls = %d, want one child invocation", runner.CallCount())
+			}
+			request := runner.LastRequest()
+			if request.Command != "codex" {
+				t.Fatalf("provider command = %q, want codex", request.Command)
+			}
+			gotBypass := containsArg(request.Args, "--dangerously-bypass-approvals-and-sandbox")
+			if gotBypass != test.wantBypass {
+				t.Fatalf("provider argv = %#v, want bypass flag present=%v", request.Args, test.wantBypass)
+			}
+		})
+	}
+}
+
+func exerciseJavaScriptChildInvalidPermissionsFailsBeforeProviderCommand(t *testing.T) {
+	for _, source := range []string{
+		`return (async function () { const child = { prompt: "invalid permissions", modelProvider: "codex" }; child.permissions = "READ_ONLY"; return await agent.run(child); })();`,
+		`return (async function () { const child = { prompt: "invalid permissions", modelProvider: "codex" }; child.permissions = true; return await agent.run(child); })();`,
+	} {
+		t.Run(source, func(t *testing.T) {
+			dir := support.ScaffoldFactory(t, overridesFactoryConfig())
+			runner := support.NewRecordingCommandRunner("unexpected provider execution")
+			server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+				FactoryDir:                dir,
+				WaitForServiceModeRuntime: true,
+				Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+			})
+			t.Cleanup(func() { server.Stop(t) })
+
+			started := startOverridesWorkflow(t, server.URL(), "javascript-invalid-permissions", source)
+			if started.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+				t.Fatalf("session status = %q, want FAILED; result=%#v", started.Status, started.Result)
+			}
+			if runner.CallCount() != 0 {
+				t.Fatalf("provider command calls = %d, want zero for invalid permissions", runner.CallCount())
+			}
+			if started.Result == nil || started.Result.ResultStatus != factoryapi.FactorySessionResultStatusUnavailable {
+				t.Fatalf("session result = %#v, want unavailable invalid-request result", started.Result)
+			}
+		})
+	}
 }
 
 // TestJavaScriptChildrenSelectDifferentProvidersAndModels proves a JavaScript

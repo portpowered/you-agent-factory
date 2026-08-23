@@ -16,7 +16,17 @@ const (
 	FieldModel            = "model"
 	FieldReasoningEffort  = "reasoningEffort"
 	FieldResourceID       = "resourceId"
+	FieldPermissions      = "permissions"
 	FieldSkipPermissions  = "skipPermissions"
+)
+
+// JavaScriptChildPermission is the provider permission behavior requested by
+// one JavaScript agent.run child.
+type JavaScriptChildPermission string
+
+const (
+	JavaScriptChildPermissionDefault         JavaScriptChildPermission = "DEFAULT"
+	JavaScriptChildPermissionSkipPermissions JavaScriptChildPermission = "SKIP_PERMISSIONS"
 )
 
 var supportedFields = []string{
@@ -28,6 +38,7 @@ var supportedFields = []string{
 	FieldModel,
 	FieldReasoningEffort,
 	FieldResourceID,
+	FieldPermissions,
 	FieldSkipPermissions,
 }
 
@@ -41,15 +52,17 @@ var supportedFieldSet = func() map[string]struct{} {
 
 // Spec is the normalized supported argument set for one agent.run call.
 type JavaScriptChildSpec struct {
-	Prompt           string
-	Label            string
-	Preset           string
-	ExecutorProvider string
-	ModelProvider    string
-	Model            string
-	ReasoningEffort  string
-	ResourceID       string
-	SkipPermissions  bool
+	Prompt                       string
+	Label                        string
+	Preset                       string
+	ExecutorProvider             string
+	ModelProvider                string
+	Model                        string
+	ReasoningEffort              string
+	ResourceID                   string
+	Permissions                  JavaScriptChildPermission
+	SkipPermissions              bool
+	LegacySkipPermissionsPresent bool
 }
 
 // SupportedFields returns the canonical beta agent.run field names.
@@ -80,40 +93,74 @@ func NormalizeJavaScriptChild(value map[string]any) (JavaScriptChildSpec, error)
 	if err != nil {
 		return JavaScriptChildSpec{}, err
 	}
-	optional := make(map[string]string, len(supportedFields)-2)
-	for _, field := range supportedFields[1 : len(supportedFields)-1] {
-		optional[field], err = optionalString(value, field)
-		if err != nil {
-			return JavaScriptChildSpec{}, err
+	optional := make(map[string]string, len(supportedFields)-3)
+	for _, field := range supportedFields {
+		switch field {
+		case FieldPrompt, FieldPermissions, FieldSkipPermissions:
+			continue
+		default:
+			optional[field], err = optionalString(value, field)
+			if err != nil {
+				return JavaScriptChildSpec{}, err
+			}
 		}
 	}
-	skipPermissions, err := optionalBool(value, FieldSkipPermissions)
+	permissions, permissionsPresent, err := optionalPermission(value, FieldPermissions)
 	if err != nil {
 		return JavaScriptChildSpec{}, err
 	}
+	skipPermissions, skipPermissionsPresent, err := optionalBoolWithPresence(value, FieldSkipPermissions)
+	if err != nil {
+		return JavaScriptChildSpec{}, err
+	}
+	if permissionsPresent {
+		skipPermissions = permissions == JavaScriptChildPermissionSkipPermissions
+	} else if skipPermissions {
+		permissions = JavaScriptChildPermissionSkipPermissions
+	}
 	return JavaScriptChildSpec{
-		Prompt:           prompt,
-		Label:            optional[FieldLabel],
-		Preset:           optional[FieldPreset],
-		ExecutorProvider: optional[FieldExecutorProvider],
-		ModelProvider:    optional[FieldModelProvider],
-		Model:            optional[FieldModel],
-		ReasoningEffort:  optional[FieldReasoningEffort],
-		ResourceID:       optional[FieldResourceID],
-		SkipPermissions:  skipPermissions,
+		Prompt:                       prompt,
+		Label:                        optional[FieldLabel],
+		Preset:                       optional[FieldPreset],
+		ExecutorProvider:             optional[FieldExecutorProvider],
+		ModelProvider:                optional[FieldModelProvider],
+		Model:                        optional[FieldModel],
+		ReasoningEffort:              optional[FieldReasoningEffort],
+		ResourceID:                   optional[FieldResourceID],
+		Permissions:                  permissions,
+		SkipPermissions:              skipPermissions,
+		LegacySkipPermissionsPresent: skipPermissionsPresent,
 	}, nil
 }
 
-func optionalBool(value map[string]any, field string) (bool, error) {
+func optionalBoolWithPresence(value map[string]any, field string) (bool, bool, error) {
 	raw, found := value[field]
 	if !found {
-		return false, nil
+		return false, false, nil
 	}
 	normalized, ok := raw.(bool)
 	if !ok {
-		return false, fmt.Errorf(`agent.run() requires %q to be a boolean`, field)
+		return false, true, fmt.Errorf(`agent.run() requires %q to be a boolean`, field)
 	}
-	return normalized, nil
+	return normalized, true, nil
+}
+
+func optionalPermission(value map[string]any, field string) (JavaScriptChildPermission, bool, error) {
+	raw, found := value[field]
+	if !found {
+		return JavaScriptChildPermissionDefault, false, nil
+	}
+	text, ok := raw.(string)
+	if !ok {
+		return "", true, fmt.Errorf(`agent.run() requires %q to be a string`, field)
+	}
+	permission := JavaScriptChildPermission(text)
+	switch permission {
+	case JavaScriptChildPermissionDefault, JavaScriptChildPermissionSkipPermissions:
+		return permission, true, nil
+	default:
+		return "", true, fmt.Errorf(`agent.run() requires %q to be DEFAULT or SKIP_PERMISSIONS`, field)
+	}
 }
 
 func requiredString(value map[string]any, field string) (string, error) {
