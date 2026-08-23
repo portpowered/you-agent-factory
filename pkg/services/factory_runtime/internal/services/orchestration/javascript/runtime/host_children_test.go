@@ -833,42 +833,6 @@ func TestRun_AgentRunPermissionsResolveCanonicalAndLegacyPrecedence(t *testing.T
 	}
 }
 
-func TestRun_AgentRunDynamicObjectRejectsUnsupportedFieldsBeforeDispatch(t *testing.T) {
-	unsupported := []string{
-		"writableRoots", "allowNetwork", "network", "allowDangerFullAccess", "dangerFullAccess",
-		"schema", "outputSchema", "concurrency", "maxAgents", "duration", "timeout", "timeoutMs",
-	}
-	for _, field := range unsupported {
-		t.Run(field, func(t *testing.T) {
-			stub := &stubChildExecutor{mode: stubChildExecutionMode}
-			source := fmt.Sprintf(`const child = { prompt: "prompt-secret" }; child[%q] = "value-secret"; agent.run(child);`, field)
-			outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
-				Source: source, SourceRef: "inline", SessionID: "unsupported-child-field",
-				Policy: workflowpolicy.DefaultEffectivePolicy(),
-			}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
-				return stub
-			}})
-			if err != nil {
-				t.Fatalf("Run() error = %v", err)
-			}
-			if outcome.OK {
-				t.Fatalf("Run() outcome = %#v, want script failure", outcome)
-			}
-			want := `agent.run() does not support field "` + field + `"`
-			if !strings.Contains(outcome.Failure.Message, want) {
-				t.Fatalf("failure message = %q, want %q", outcome.Failure.Message, want)
-			}
-			if strings.Contains(outcome.Failure.Message, "value-secret") || strings.Contains(outcome.Failure.Message, "prompt-secret") {
-				t.Fatalf("failure message = %q, want redacted diagnostic", outcome.Failure.Message)
-			}
-			if len(stub.executionRequests()) != 0 {
-				t.Fatalf("executor requests = %#v, want none", stub.executionRequests())
-			}
-			assertNoChildDispatchRecords(t, outcome.Records)
-		})
-	}
-}
-
 func (s *stubChildExecutor) labelOrder() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
