@@ -244,6 +244,13 @@ Read batch JSON from stdin explicitly:
 you submit batch - < batch.json
 ```
 
+The CLI reads at most 16,777,216 bytes (16 MiB) from an intentional batch
+stdin source, inclusive. This applies to implicit piped stdin, the explicit
+`-` argument, and `--file -`. Exactly 16,777,216 bytes is accepted; a larger
+stream is rejected before batch preparation or the HTTP request. Use a batch
+file for larger input. This is a CLI aggregate stdin bound; each Work's
+independent 65,536-byte `payload` admission limit remains unchanged.
+
 Inline JSON positional (convenient for small batches; shell argument length limits apply):
 
 ```bash

@@ -317,6 +317,21 @@ Use the same `--server` base URI and `--session` target as `you work list` and
 `you work show` when verifying work in a non-default factory session. See
 `you docs sessions` for session list, routing tables, and run-mode guidance.
 
+To supply a payload through process stdin, pass `--payload -`:
+
+```bash
+cat request.md | you submit \
+  --name driver-incident-review \
+  --work-type-name task \
+  --payload -
+```
+
+The CLI accepts at most 65,536 bytes from this stdin source, inclusive, for
+both JSON and text payloads. Exactly 65,536 bytes is accepted; a larger stream
+is rejected before the HTTP request is made. Use a payload file when more
+input is required. This stdin bound does not change the Work admission or
+HTTP contract.
+
 ### Human success output
 
 Human-mode stdout (default) includes accepted work metadata and a one-line verify

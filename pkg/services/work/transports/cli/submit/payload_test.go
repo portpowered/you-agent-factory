@@ -3,6 +3,7 @@ package submit
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -16,6 +17,17 @@ import (
 type errReader struct{ err error }
 
 func (r errReader) Read([]byte) (int, error) { return 0, r.err }
+
+type countingStdinReader struct {
+	reader    io.Reader
+	bytesRead int
+}
+
+func (r *countingStdinReader) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	r.bytesRead += n
+	return n, err
+}
 
 func TestSubmitBatch_LocalPayloadSizeErrorPreservesCLIDiagnostic(t *testing.T) {
 	var out bytes.Buffer
@@ -169,6 +181,59 @@ func TestReadSubmitStdinPayload_PropagatesReadError(t *testing.T) {
 	}
 	if !errors.Is(err, readErr) {
 		t.Fatalf("readSubmitStdinPayload(read error) = %v, want wrapped %v", err, readErr)
+	}
+}
+
+func TestReadSubmitStdinPayloadAcceptsInclusiveByteLimit(t *testing.T) {
+	t.Parallel()
+
+	const emptyJSONPayload = `{"text":""}`
+	rawJSON := `{"text":"` + strings.Repeat("x", maxSubmitPayloadStdinBytes-len(emptyJSONPayload)) + `"}`
+	reader := &countingStdinReader{
+		reader: bytes.NewReader([]byte(rawJSON)),
+	}
+	_, data, payloadType, err := readSubmitPayload(
+		func(string) ([]byte, error) { t.Fatal("file reader called for stdin"); return nil, nil },
+		"-",
+		reader,
+	)
+	if err != nil {
+		t.Fatalf("readSubmitPayload(exact limit): %v", err)
+	}
+	if payloadType != "json" {
+		t.Fatalf("payload type = %q, want json", payloadType)
+	}
+	if len(data) != maxSubmitPayloadStdinBytes || !json.Valid(data) {
+		t.Fatalf("payload bytes = %d, want %d", len(data), maxSubmitPayloadStdinBytes)
+	}
+	if reader.bytesRead > maxSubmitPayloadStdinBytes+1 {
+		t.Fatalf("bytes read = %d, want <= %d", reader.bytesRead, maxSubmitPayloadStdinBytes+1)
+	}
+}
+
+func TestReadSubmitStdinPayloadRejectsOverflowAfterOneSentinelByte(t *testing.T) {
+	t.Parallel()
+
+	reader := &countingStdinReader{
+		reader: bytes.NewReader(bytes.Repeat([]byte("x"), maxSubmitPayloadStdinBytes+1)),
+	}
+	data, err := readSubmitStdinPayload(reader)
+	if err == nil {
+		t.Fatal("readSubmitStdinPayload(overflow): want limit error")
+	}
+	if data != nil {
+		t.Fatalf("overflow data retained = %d bytes, want nil", len(data))
+	}
+	for _, want := range []string{
+		fmt.Sprintf("payload stdin exceeds the %d-byte limit", maxSubmitPayloadStdinBytes),
+		"use a payload file for larger input",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want %q", err, want)
+		}
+	}
+	if reader.bytesRead != maxSubmitPayloadStdinBytes+1 {
+		t.Fatalf("bytes read = %d, want exactly %d", reader.bytesRead, maxSubmitPayloadStdinBytes+1)
 	}
 }
 

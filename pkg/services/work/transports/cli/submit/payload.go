@@ -11,6 +11,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 )
 
+// maxSubmitPayloadStdinBytes matches Work's inclusive per-payload JSON byte
+// limit for the raw payload document deliberately supplied through stdin.
+const maxSubmitPayloadStdinBytes = workdomain.MaxWorkPayloadBytes
+
 func readSubmitPayload(
 	read workdomain.PayloadFileReader,
 	payloadPath string,
@@ -52,12 +56,14 @@ func readSubmitPayload(
 }
 
 func readSubmitStdinPayload(stdin io.Reader) ([]byte, error) {
-	if stdin == nil {
-		return nil, fmt.Errorf("read payload stdin: process stdin reader is required")
-	}
-	data, err := io.ReadAll(stdin)
+	data, err := readBoundedStdin(
+		stdin,
+		maxSubmitPayloadStdinBytes,
+		"payload stdin",
+		"use a payload file for larger input",
+	)
 	if err != nil {
-		return nil, fmt.Errorf("read payload stdin: %w", err)
+		return nil, err
 	}
 	if len(bytes.TrimSpace(data)) == 0 {
 		return nil, fmt.Errorf("payload stdin input is empty")
