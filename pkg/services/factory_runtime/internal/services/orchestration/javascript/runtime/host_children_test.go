@@ -833,6 +833,128 @@ func TestRun_AgentRunPermissionsResolveCanonicalAndLegacyPrecedence(t *testing.T
 	}
 }
 
+func TestRun_AgentRunLegacySkipPermissionsEmitsSafeNonFatalDiagnostic(t *testing.T) {
+	tests := []struct {
+		name       string
+		source     string
+		wantLegacy bool
+	}{
+		{
+			name:       "legacy true",
+			source:     `return agent.run({ prompt: "prompt-secret", skipPermissions: true });`,
+			wantLegacy: true,
+		},
+		{
+			name:       "legacy false",
+			source:     `return agent.run({ prompt: "prompt-secret", skipPermissions: false });`,
+			wantLegacy: true,
+		},
+		{
+			name:       "permissions default wins",
+			source:     `return agent.run({ prompt: "prompt-secret", permissions: "DEFAULT", skipPermissions: true });`,
+			wantLegacy: true,
+		},
+		{
+			name:       "permissions skip wins",
+			source:     `return agent.run({ prompt: "prompt-secret", permissions: "SKIP_PERMISSIONS", skipPermissions: false });`,
+			wantLegacy: true,
+		},
+		{
+			name:   "permissions only",
+			source: `return agent.run({ prompt: "prompt-secret", permissions: "DEFAULT" });`,
+		},
+	}
+
+	var wantMessage string
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			const sessionID = "legacy-skip-permissions-diagnostic"
+			outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+				Source: test.source, SourceRef: "inline", SessionID: sessionID,
+				Policy: workflowpolicy.DefaultEffectivePolicy(),
+			}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+				return childExecutorFunc(func(_ context.Context, req factory.JavaScriptChildExecutionRequest) (factory.JavaScriptChildExecutionResult, error) {
+					return factory.JavaScriptChildExecutionResult{
+						Status:        factory.JavaScriptChildDispatchStatusCompleted,
+						ExecutionMode: factory.JavaScriptChildExecutionModeFake,
+						Output:        map[string]any{"text": "stable-child-output"},
+						Request:       req,
+					}, nil
+				})
+			}})
+			if err != nil || !outcome.OK {
+				t.Fatalf("Run() outcome = %#v, error = %v", outcome, err)
+			}
+
+			var logs []factory.JavaScriptRuntimeRecord
+			for _, record := range outcome.Records {
+				if record.Kind == factory.JavaScriptRecordKindLog {
+					logs = append(logs, record)
+				}
+			}
+			if test.wantLegacy {
+				if len(logs) != 1 || logs[0].Log == nil {
+					t.Fatalf("legacy diagnostic records = %#v, want one log record", logs)
+				}
+				message := logs[0].Log.Message
+				if !strings.Contains(message, "skipPermissions") || !strings.Contains(message, "permissions") {
+					t.Fatalf("legacy diagnostic = %q, want both field names", message)
+				}
+				for _, secret := range []string{"prompt-secret", "credential-secret", "codex --danger"} {
+					if strings.Contains(message, secret) {
+						t.Fatalf("legacy diagnostic = %q, must not expose %q", message, secret)
+					}
+				}
+				if wantMessage == "" {
+					wantMessage = message
+				} else if message != wantMessage {
+					t.Fatalf("legacy diagnostic = %q, want stable message %q", message, wantMessage)
+				}
+			} else if len(logs) != 0 {
+				t.Fatalf("permissions-only diagnostic records = %#v, want none", logs)
+			}
+
+			projected := projectPrimaryJSON(t, sessionID, outcome.Value)
+			if _, present := projected["diagnostic"]; present {
+				t.Fatalf("child result = %#v, want warning outside the child result", projected)
+			}
+		})
+	}
+}
+
+func TestRun_ParallelLegacySkipPermissionsEmitsDiagnostic(t *testing.T) {
+	outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+		Source: `return parallel([
+  { prompt: "parallel-prompt-secret", skipPermissions: false },
+  { prompt: "parallel-canonical", permissions: "DEFAULT" },
+]);`,
+		SourceRef: "inline", SessionID: "parallel-legacy-skip-permissions-diagnostic",
+		Policy: workflowpolicy.DefaultEffectivePolicy(),
+	}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+		return childExecutorFunc(func(_ context.Context, req factory.JavaScriptChildExecutionRequest) (factory.JavaScriptChildExecutionResult, error) {
+			return factory.JavaScriptChildExecutionResult{
+				Status:        factory.JavaScriptChildDispatchStatusCompleted,
+				ExecutionMode: factory.JavaScriptChildExecutionModeFake,
+				Output:        map[string]any{"text": "stable-parallel-output"},
+				Request:       req,
+			}, nil
+		})
+	}})
+	if err != nil || !outcome.OK {
+		t.Fatalf("Run() outcome = %#v, error = %v", outcome, err)
+	}
+
+	var logs []factory.JavaScriptRuntimeRecord
+	for _, record := range outcome.Records {
+		if record.Kind == factory.JavaScriptRecordKindLog {
+			logs = append(logs, record)
+		}
+	}
+	if len(logs) != 1 || logs[0].Log == nil || !strings.Contains(logs[0].Log.Message, "skipPermissions") || !strings.Contains(logs[0].Log.Message, "permissions") {
+		t.Fatalf("parallel legacy diagnostic records = %#v, want one safe migration log", logs)
+	}
+}
+
 func TestRun_AgentRunRejectsInvalidPermissionsBeforeDispatch(t *testing.T) {
 	for _, source := range []string{
 		`return agent.run({ prompt: "review", permissions: "READ_ONLY" });`,

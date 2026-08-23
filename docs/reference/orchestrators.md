@@ -139,6 +139,10 @@ normal behavior in place, while `SKIP_PERMISSIONS` requests the selected
 provider's existing bypass flag. The legacy boolean `skipPermissions` remains
 supported during migration and maps to the same two values. The selected
 provider must advertise permission-bypass support when bypass is requested.
+Explicit use of the legacy field appends a non-fatal diagnostic naming
+`permissions`; requests that use only `permissions` do not append that
+diagnostic. When both fields are present, `permissions` still controls the
+provider flag.
 Unsupported routes fail before execution with a safe capability diagnostic. The
 field does not disable routing, model or reasoning allowlists, fanout,
 concurrency, duration, token, output, artifact, network, connector, or other
