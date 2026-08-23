@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -203,25 +202,6 @@ type compatibilityInventoryRecord struct {
 	} `json:"removalGates"`
 }
 
-type mcpBaselineAliasesDocument struct {
-	Aliases []mcpBaselineAlias `json:"aliases"`
-}
-
-type mcpBaselineAlias struct {
-	Name              string `json:"name"`
-	CanonicalName     string `json:"canonicalName"`
-	CompatibilityOnly bool   `json:"compatibilityOnly"`
-}
-
-type cliCommandIdentityBaselineDocument struct {
-	Commands []cliCommandIdentityRecord `json:"commands"`
-}
-
-type cliCommandIdentityRecord struct {
-	Path        string `json:"path"`
-	IDCandidate string `json:"idCandidate"`
-}
-
 type apiCompatibilitySurfacesBaselineDocument struct {
 	Surfaces []apiCompatibilitySurfaceRecord `json:"surfaces"`
 }
@@ -238,38 +218,9 @@ func readCompatibilityInventoryDocument(t *testing.T, path string) compatibility
 	return decodeContractJSON[compatibilityInventoryDocument](t, path)
 }
 
-func readMCPBaselineAliases(t *testing.T) mcpBaselineAliasesDocument {
-	t.Helper()
-	return decodeContractJSON[mcpBaselineAliasesDocument](t, filepath.Join("testdata", "baseline", "mcp-aliases.json"))
-}
-
-func readCLICommandIdentityBaseline(t *testing.T) cliCommandIdentityBaselineDocument {
-	t.Helper()
-	return decodeContractJSON[cliCommandIdentityBaselineDocument](t, filepath.Join("testdata", "baseline", "cli-commands.json"))
-}
-
 func readAPICompatibilitySurfacesBaseline(t *testing.T) apiCompatibilitySurfacesBaselineDocument {
 	t.Helper()
 	return decodeContractJSON[apiCompatibilitySurfacesBaselineDocument](t, filepath.Join("testdata", "baseline", "api-compatibility-surfaces.json"))
-}
-
-func baselineCompatibilityCommands(baseline cliCommandIdentityBaselineDocument) []cliCommandIdentityRecord {
-	var commands []cliCommandIdentityRecord
-	for _, command := range baseline.Commands {
-		if !isCLICompatibilityCommandIDCandidate(command.IDCandidate) {
-			continue
-		}
-		commands = append(commands, command)
-	}
-	return commands
-}
-
-func isCLICompatibilityCommandIDCandidate(idCandidate string) bool {
-	return strings.HasPrefix(idCandidate, "you.workflow.") && idCandidate != "you.workflow"
-}
-
-func cliCompatibilityRecordKey(idCandidate string) string {
-	return "cli.command." + strings.TrimPrefix(idCandidate, "you.")
 }
 
 func decodeContractJSON[T any](t *testing.T, path string) T {

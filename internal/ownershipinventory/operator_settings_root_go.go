@@ -105,12 +105,6 @@ func OperatorSettingsRootGoFoldTargets(inventory OperatorSettingsRootGoInventory
 	return targets
 }
 
-// OperatorSettingsRootContractFoldCondition names the CLN packet that performs
-// the fold for one inventoried excess cluster.
-func OperatorSettingsRootContractFoldCondition(cluster string) string {
-	return "CLN-SET-CONTRACT-ROOTS cutover: fold excess " + cluster + " root contract cluster into private subservice"
-}
-
 // VerifyOperatorSettingsRootGoInventory proves the live filesystem matches the
 // committed Operator Settings root .go inventory rows.
 func VerifyOperatorSettingsRootGoInventory(root string) error {

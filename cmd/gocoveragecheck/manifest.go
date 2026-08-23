@@ -156,10 +156,6 @@ func readCoverageManifest(data []byte, expectedLane string, measuredPackages []s
 	return readCoverageManifestAt(data, expectedLane, measuredPackages, time.Now().UTC())
 }
 
-func readCoverageManifestWithTotals(data []byte, expectedLane string, measuredPackages []string, measuredTotals map[string]packageCoverageTotals) (coverageManifest, error) {
-	return readCoverageManifestAtModeWithTotals(data, expectedLane, measuredPackages, time.Now().UTC(), true, measuredTotals)
-}
-
 func readCoverageManifestAt(data []byte, expectedLane string, measuredPackages []string, now time.Time) (coverageManifest, error) {
 	return readCoverageManifestAtMode(data, expectedLane, measuredPackages, now, true)
 }
@@ -270,14 +266,6 @@ func validateCoverageManifestAtModeWithTotals(manifest coverageManifest, expecte
 func dateOnlyUTC(value time.Time) time.Time {
 	year, month, day := value.UTC().Date()
 	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
-}
-
-func readCoverageManifestFile(filename string, lane string, measuredPackages []string) (coverageManifest, error) {
-	return readCoverageManifestFileWithTotals(filename, lane, measuredPackages, nil)
-}
-
-func readCoverageManifestFileWithTotals(filename string, lane string, measuredPackages []string, measuredTotals map[string]packageCoverageTotals) (coverageManifest, error) {
-	return readCoverageManifestFileWithTotalsAtMode(filename, lane, measuredPackages, measuredTotals, true)
 }
 
 func readCoverageManifestFileWithTotalsAtMode(filename string, lane string, measuredPackages []string, measuredTotals map[string]packageCoverageTotals, requireComplete bool) (coverageManifest, error) {

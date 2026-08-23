@@ -15,22 +15,6 @@ type preparedCoverageRun struct {
 	expectedFunctionalInventory *functionalTestInventory
 }
 
-func prepareCoverageRun(cfg config, targetOS string, logicalCPUs int, profilePath string, coverPackages []string, testPackages []string, packageUniverse []string) (preparedCoverageRun, error) {
-	return prepareCoverageRunWithFunctionalMetadata(
-		cfg,
-		targetOS,
-		logicalCPUs,
-		profilePath,
-		coverPackages,
-		testPackages,
-		packageUniverse,
-		nil,
-		time.Time{},
-		nil,
-		nil,
-	)
-}
-
 func prepareCoverageRunWithFunctionalMetadata(
 	cfg config,
 	targetOS string,
