@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -30,7 +31,7 @@ type childWorkerExecutionBinding struct {
 	generationID          string
 	providerOverride      providers.Service
 	mockWorkers           *workers.MockWorkersConfig
-	commandRunnerOverride workers.CommandRunner
+	commandRunnerOverride platformprocess.CommandRunner
 	progressPublisher     workers.ProgressPublisher
 	publish               childWorkerProgressPublisher
 }
@@ -82,7 +83,7 @@ func (s *JavaScriptRuntimeService) SetWorkerExecution(
 	generationID string,
 	providerOverride providers.Service,
 	mockWorkers *workers.MockWorkersConfig,
-	commandRunnerOverride workers.CommandRunner,
+	commandRunnerOverride platformprocess.CommandRunner,
 ) {
 	if s == nil {
 		return
@@ -230,7 +231,7 @@ type childWorkerExecutor struct {
 	generationID          string
 	providerOverride      providers.Service
 	mockWorkers           *workers.MockWorkersConfig
-	commandRunnerOverride workers.CommandRunner
+	commandRunnerOverride platformprocess.CommandRunner
 	attemptStarter        childWorkerAttemptStarter
 	maxAttempts           int
 	resourceLeaseAcquirer childResourceLeaseAcquirer

@@ -2,6 +2,7 @@ package runtimeopening
 
 import (
 	"fmt"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -11,13 +12,13 @@ import (
 
 // ProviderFromCommandRunnerFactory constructs one provider-backed worker from a
 // Workers command runner using the same production edges as direct invocation.
-type ProviderFromCommandRunnerFactory func(workers.CommandRunner) (providers.Service, error)
+type ProviderFromCommandRunnerFactory func(platformprocess.CommandRunner) (providers.Service, error)
 
 func resolveDurableExecutionProvider(
 	providerOverride providers.Service,
 	mockWorkers *workers.MockWorkersConfig,
 	runtimeCfg interfaces.RuntimeDefinitionLookup,
-	platformRunner workers.CommandRunner,
+	platformRunner platformprocess.CommandRunner,
 	mockRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	buildProvider ProviderFromCommandRunnerFactory,
 ) (providers.Service, error) {

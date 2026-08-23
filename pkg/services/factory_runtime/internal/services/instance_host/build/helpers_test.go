@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -13,19 +14,19 @@ import (
 )
 
 type recordingCommandRunner struct {
-	requests []workers.CommandRequest
+	requests []platformprocess.CommandRequest
 }
 
 type commandEdges struct {
-	Provider workers.CommandRunner
-	Script   workers.CommandRunner
+	Provider platformprocess.CommandRunner
+	Script   platformprocess.CommandRunner
 }
 
 func newMockCommandRunner(
 	config *workers.MockWorkersConfig,
 	runtimeConfig interfaces.RuntimeDefinitionLookup,
-	next workers.CommandRunner,
-) workers.CommandRunner {
+	next platformprocess.CommandRunner,
+) platformprocess.CommandRunner {
 	return &recordingMockCommandRunner{
 		config:        config,
 		runtimeConfig: runtimeConfig,
@@ -36,21 +37,21 @@ func newMockCommandRunner(
 type recordingMockCommandRunner struct {
 	config        *workers.MockWorkersConfig
 	runtimeConfig interfaces.RuntimeDefinitionLookup
-	next          workers.CommandRunner
+	next          platformprocess.CommandRunner
 }
 
-func (*recordingMockCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{}, nil
+func (*recordingMockCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, nil
 }
 
-func configWithCommandEdges(t *testing.T, provider, script workers.CommandRunner) commandEdges {
+func configWithCommandEdges(t *testing.T, provider, script platformprocess.CommandRunner) commandEdges {
 	t.Helper()
 	return commandEdges{Provider: provider, Script: script}
 }
 
-func (r *recordingCommandRunner) Run(_ context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
+func (r *recordingCommandRunner) Run(_ context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	r.requests = append(r.requests, req)
-	return workers.CommandResult{Stdout: []byte("service-harness-passthrough")}, nil
+	return platformprocess.CommandResult{Stdout: []byte("service-harness-passthrough")}, nil
 }
 
 func TestCommandRunnerOverrideForMode_UnmatchedPassthroughDelegatesToNextRunner(t *testing.T) {
@@ -163,9 +164,9 @@ func (*scriptedReplaySideEffects) Execute(
 
 func (*scriptedReplaySideEffects) Run(
 	context.Context,
-	workers.CommandRequest,
-) (workers.CommandResult, error) {
-	return workers.CommandResult{}, nil
+	platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, nil
 }
 
 func TestNewSessionLogger_AnnotatesSessionFields(t *testing.T) {

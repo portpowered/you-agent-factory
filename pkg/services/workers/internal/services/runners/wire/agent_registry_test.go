@@ -372,8 +372,12 @@ func assertAgentProviderRequest(t *testing.T, request providers.ExecuteRequest) 
 	request.SessionObserver = nil
 	request.ProgressObserver = nil
 	want := providers.ExecuteRequest{
-		Provider:        providers.IDCodex,
-		AttemptID:       "dispatch-agent-1",
+		Provider:  providers.IDCodex,
+		AttemptID: "dispatch-agent-1",
+		Correlation: providers.ExecuteCorrelation{
+			DispatchID: "dispatch-agent-1",
+			AttemptID:  "dispatch-agent-1",
+		},
 		WorkerType:      "goal-executor",
 		WorkstationName: "execute-goal",
 		SystemPrompt:    "system fixture",

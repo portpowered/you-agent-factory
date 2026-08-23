@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -464,7 +464,7 @@ func TestServiceDefaultEdgesRemainSafeForNilAndMissingCommandRunner(t *testing.T
 	if nilService.logger() == nil || nilService.commandRunner() == nil || nilService.supervisorClock() == nil {
 		t.Fatal("nil service default collaborators were not supplied")
 	}
-	if _, err := (unavailableCommandRunner{}).Run(context.Background(), workers.CommandRequest{}); err == nil || err.Error() != "automation command runner is required" {
+	if _, err := (unavailableCommandRunner{}).Run(context.Background(), platformprocess.CommandRequest{}); err == nil || err.Error() != "automation command runner is required" {
 		t.Fatalf("unavailable command runner error = %v", err)
 	}
 }

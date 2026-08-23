@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
 	platformlogging "github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -357,17 +358,17 @@ type runnerCompositionCommandRunner struct{}
 
 func (runnerCompositionCommandRunner) Run(
 	context.Context,
-	workers.CommandRequest,
-) (workers.CommandResult, error) {
-	return workers.CommandResult{}, nil
+	platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, nil
 }
 
 func (runnerCompositionCommandRunner) RunStreaming(
 	context.Context,
-	workers.CommandRequest,
-	workers.OutputChunkObserver,
-) (workers.CommandResult, error) {
-	return workers.CommandResult{}, nil
+	platformprocess.CommandRequest,
+	platformprocess.OutputChunkObserver,
+) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, nil
 }
 
 type runnerCompositionModels struct{}

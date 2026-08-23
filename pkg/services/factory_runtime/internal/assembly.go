@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -65,8 +66,8 @@ func (a *Assembly) Assemble(
 	workstationLoader factorydefinitions.WorkstationLoader,
 	loadFactory factoryruntime.LoadedFactoryLoader,
 	providerOverride providers.Service,
-	providerCommandRunner workers.CommandRunner,
-	scriptCommandRunner workers.CommandRunner,
+	providerCommandRunner platformprocess.CommandRunner,
+	scriptCommandRunner platformprocess.CommandRunner,
 	mockWorkersConfig *workers.MockWorkersConfig,
 	runtimeMode factorydefinitions.RuntimeMode,
 	runtimeScheduler factoryruntime.Scheduler,
@@ -171,12 +172,16 @@ func (a *Assembly) Assemble(
 			"Recordings runtime opening is required",
 		)
 	}
-	replayProvider, replayCommandRunner, replayHooks, completionPlanner, err := recordingsRuntime.ReplayExecution(
+	replayProvider, replayProcessRunner, replayHooks, completionPlanner, err := recordingsRuntime.ReplayExecution(
 		replayArtifact,
 	)
 	if err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err
 	}
+	// Recordings owns replay as a platform process effect. Factory Runtime keeps
+	// that low-level effect at the composition boundary and Workers adapts it
+	// privately when Execute receives the runtime-scoped override.
+	replayCommandRunner := replayProcessRunner
 	spec, err := builder.BuildSpec(
 		ctx,
 		dir,

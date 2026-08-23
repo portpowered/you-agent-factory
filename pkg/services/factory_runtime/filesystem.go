@@ -11,14 +11,6 @@ type RuntimeDirectoryFileSystem interface {
 	Stat(string) (fs.FileInfo, error)
 }
 
-// InputFileSystem reads the directory tree consumed by the Factory Runtime
-// input watcher.
-type InputFileSystem interface {
-	ReadDir(string) ([]fs.DirEntry, error)
-	ReadFile(string) ([]byte, error)
-	Stat(string) (fs.FileInfo, error)
-}
-
 // InputDirectoryWalker traverses the runtime input tree selected by Factory
 // Runtime. Wire supplies the production implementation; owner tests may inject
 // a deterministic traversal.

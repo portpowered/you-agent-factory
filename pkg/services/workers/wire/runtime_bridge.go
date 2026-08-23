@@ -1,6 +1,7 @@
 package wire
 
 import (
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -8,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
 	modelrecording "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution/recording"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 	runnermockworker "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing"
 )
 
@@ -15,13 +17,13 @@ import (
 func NewMockCommandRunner(
 	config *workers.MockWorkersConfig,
 	runtimeConfig factorydefinitions.RuntimeDefinitionLookup,
-	next workers.CommandRunner,
-) workers.CommandRunner {
-	return &runnermockworker.MockWorkerCommandRunner{
+	next platformprocess.CommandRunner,
+) platformprocess.CommandRunner {
+	return workerprocess.ProjectPlatformCommandRunner(&runnermockworker.MockWorkerCommandRunner{
 		Config:        config,
 		RuntimeConfig: runtimeConfig,
-		Next:          next,
-	}
+		Next:          workerprocess.AdaptPlatformCommandRunner(next),
+	})
 }
 
 // LocalRuntimeHooks returns Workers-owned recording hooks for the Models runtime.
@@ -39,9 +41,9 @@ func LocalRuntimeHooks() workers.LocalRuntimeHooks {
 // workers.Service.Execute, which is the named successor boundary.
 func NewConductorInvocationWithProgress(
 	providersService providers.Service,
-	commandRunner workers.CommandRunner,
-	commandClock workers.Clock,
-	allocator workers.PTYAllocator,
+	commandRunner platformprocess.CommandRunner,
+	commandClock platformclock.Source,
+	allocator any,
 	resolveSymlinks workers.ResolveExecutableSymlinks,
 	executableLocator platformprocess.ExecutableLocator,
 	executableInspector platformfilesystem.PathInspector,
@@ -54,7 +56,7 @@ func NewConductorInvocationWithProgress(
 		providersService,
 		commandRunner,
 		commandClock,
-		allocator,
+		adaptPTYAllocator(allocator),
 		resolveSymlinks,
 		executableLocator,
 		executableInspector,
@@ -68,9 +70,8 @@ func NewConductorInvocationWithProgress(
 // NewProviderFromCommandRunner constructs one provider-backed worker from a command runner.
 func NewProviderFromCommandRunner(
 	providersService providers.Service,
-	commandRunner workers.CommandRunner,
-	commandClock workers.Clock,
-	allocator workers.PTYAllocator,
+	commandRunner platformprocess.CommandRunner,
+	commandClock platformclock.Source,
 	resolveSymlinks workers.ResolveExecutableSymlinks,
 	executableLocator platformprocess.ExecutableLocator,
 	executableInspector platformfilesystem.PathInspector,

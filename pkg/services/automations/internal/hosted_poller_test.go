@@ -11,10 +11,10 @@ import (
 
 	factorydefinitioncomposition "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // TestStartHostedLinearPoller_SubmitsIssuesThroughWorkersService verifies the
@@ -134,7 +134,7 @@ func TestStartPollersForRuntime_StartsScriptAndHostedPollers(t *testing.T) {
 		"works":[{"name":"issue-script","workTypeName":"task","payload":{"id":"SCRIPT-1"}}]
 	}`)
 	runner := &pollerSequenceCommandRunner{
-		outcomes: []pollerRunOutcome{{result: workers.CommandResult{Stdout: workRequestJSON}}},
+		outcomes: []pollerRunOutcome{{result: platformprocess.CommandResult{Stdout: workRequestJSON}}},
 	}
 	submitted := &recordingSubmitter{}
 

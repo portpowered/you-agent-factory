@@ -4,12 +4,12 @@ import (
 	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 	historicalquery "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // NewServiceWithLifecycleEffectsAndHistoricalQueryAndLoggerAndReplaySource
@@ -56,7 +56,7 @@ func NewReplayExecution(
 	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 ) (
 	providers.Service,
-	workers.CommandRunner,
+	platformprocess.CommandRunner,
 	[]recordings.ReplayHook,
 	recordings.CompletionDeliveryPlanner,
 	error,

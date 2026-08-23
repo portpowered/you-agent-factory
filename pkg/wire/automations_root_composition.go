@@ -5,22 +5,31 @@ import (
 	"fmt"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	"go.uber.org/zap"
 )
 
 type noopAutomationCommandRunner struct{}
 
+func provideAutomationsCommandRunner(
+	edges serviceedges.Edges,
+) (platformprocess.CommandRunner, error) {
+	if edges.ScriptCommandRunner != nil {
+		return edges.ScriptCommandRunner, nil
+	}
+	return providePlatformProcessCommandRunner(edges)
+}
+
 func (noopAutomationCommandRunner) Run(
 	context.Context,
-	workers.CommandRequest,
-) (workers.CommandResult, error) {
-	return workers.CommandResult{}, nil
+	platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, nil
 }
 
 // AutomationsRootFromEdges constructs the published Automations Root through
@@ -35,9 +44,9 @@ func AutomationsRootFromEdges(
 		return automations.Root{}, fmt.Errorf("compose Automations root: %w", err)
 	}
 
-	commandRunner := workers.CommandRunner(noopAutomationCommandRunner{})
+	commandRunner := platformprocess.CommandRunner(noopAutomationCommandRunner{})
 	if edges.ScriptCommandRunner != nil {
-		commandRunner = workers.AdaptCommandRunner(edges.ScriptCommandRunner)
+		commandRunner = edges.ScriptCommandRunner
 	}
 
 	ports, err := factorydefinitionswire.InvocationPolicyPortsFromNestedOwner()

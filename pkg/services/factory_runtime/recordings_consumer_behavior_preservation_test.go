@@ -7,6 +7,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
@@ -14,7 +15,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -106,7 +106,7 @@ func testReplayExecutionHandoffConsumesRecordingsRootVocabulary(t *testing.T) {
 		artifact *recordings.ReplayArtifact,
 	) (
 		providers.Service,
-		workers.CommandRunner,
+		platformprocess.CommandRunner,
 		[]recordings.ReplayHook,
 		recordings.CompletionDeliveryPlanner,
 		error,

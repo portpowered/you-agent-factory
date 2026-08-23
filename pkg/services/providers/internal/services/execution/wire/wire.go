@@ -158,6 +158,7 @@ func (runner platformCommandRunner) Run(
 		Stdin:                    request.Stdin,
 		Env:                      request.Env,
 		WorkDir:                  request.WorkDir,
+		ExecutionLogger:          request.ExecutionLogger,
 		ProcessLifecycleObserver: request.ProcessLifecycleObserver,
 	})
 	return providerservice.CommandResult{
@@ -178,6 +179,7 @@ func (runner platformCommandRunner) RunStreaming(
 		Stdin:                    request.Stdin,
 		Env:                      request.Env,
 		WorkDir:                  request.WorkDir,
+		ExecutionLogger:          request.ExecutionLogger,
 		ProcessLifecycleObserver: request.ProcessLifecycleObserver,
 	}
 	streaming, ok := runner.runner.(interface {

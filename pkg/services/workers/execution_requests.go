@@ -292,8 +292,6 @@ type ProviderInferenceRequest struct {
 type RunnerExecutionRequest = ProviderInferenceRequest
 type RunnerExecutionResult = InferenceResponse
 
-type SubprocessExecutionRequest = CommandRequest
-
 func CloneWorkstationExecutionRequest(request WorkstationExecutionRequest) WorkstationExecutionRequest {
 	clone := request
 	clone.Dispatch = work.CloneWorkDispatch(request.Dispatch)
@@ -336,24 +334,6 @@ func cloneContinuation(reference *ProviderContinuationRef) *ProviderContinuation
 	}
 	cloned := reference.Clone()
 	return &cloned
-}
-
-func CloneSubprocessExecutionRequest(request SubprocessExecutionRequest) SubprocessExecutionRequest {
-	clone := request
-	clone.Args = append([]string(nil), request.Args...)
-	clone.Stdin = append([]byte(nil), request.Stdin...)
-	clone.Env = append([]string(nil), request.Env...)
-	clone.PreviousChainingTraceIDs = append([]string(nil), request.PreviousChainingTraceIDs...)
-	clone.Execution = work.CloneExecutionMetadata(request.Execution)
-	if len(request.Inputs) > 0 {
-		clone.Inputs = make([]WorkInput, len(request.Inputs))
-		for index, input := range request.Inputs {
-			clone.Inputs[index] = input.Clone()
-		}
-	} else {
-		clone.Inputs = nil
-	}
-	return clone
 }
 
 func CloneResolvedModelOperationBindings(values []ResolvedModelOperationBinding) []ResolvedModelOperationBinding {
@@ -595,8 +575,8 @@ type ExecutionInput struct {
 	// ProviderOverride and CommandRunnerOverride carry runtime-scoped effect
 	// ports for detached execution, such as Recordings replay. They are never
 	// serialized or retained by the process-scoped Workers service.
-	ProviderOverride      providers.Service `json:"-"`
-	CommandRunnerOverride CommandRunner     `json:"-"`
+	ProviderOverride      providers.Service             `json:"-"`
+	CommandRunnerOverride platformprocess.CommandRunner `json:"-"`
 	// PreparedRequestObserver receives the detached request after Workers has
 	// prepared request-scoped resources and before the runner starts. Runtime
 	// uses it to record the effective execution target without moving resource

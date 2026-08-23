@@ -110,8 +110,8 @@ func TestProvideConductorInvocationWithProgressFactory_AcceptsDefaultProvidersSe
 		t.Fatalf("provideAgyPTYAllocator() error = %v", err)
 	}
 	adaptRunner := provideWorkerCommandRunnerAdapter()
-	factory := provideConductorInvocationWithProgressFactory(providersService, edges)
-	executor, err := factory(nil, adaptRunner(edges.ProviderCommandRunner), allocator, nil)
+	factory := provideConductorInvocationWithProgressFactory(providersService, edges, allocator)
+	executor, err := factory(nil, adaptRunner(edges.ProviderCommandRunner), nil)
 	if err != nil {
 		t.Fatalf("factory() error = %v", err)
 	}
@@ -131,8 +131,8 @@ func TestProvideConductorInvocationWithProgressFactory_ExecutesCodexThroughInjec
 	if err != nil {
 		t.Fatalf("provideAgyPTYAllocator() error = %v", err)
 	}
-	executor, err := provideConductorInvocationWithProgressFactory(providersService, edges)(
-		nil, provideWorkerCommandRunnerAdapter()(runner), allocator, nil,
+	executor, err := provideConductorInvocationWithProgressFactory(providersService, edges, allocator)(
+		nil, provideWorkerCommandRunnerAdapter()(runner), nil,
 	)
 	if err != nil {
 		t.Fatalf("construct invocation executor: %v", err)
@@ -164,8 +164,8 @@ func TestProvideConductorInvocationWithProgressFactory_AcceptsSelectedProvidersS
 		t.Fatalf("provideAgyPTYAllocator() error = %v", err)
 	}
 	adaptRunner := provideWorkerCommandRunnerAdapter()
-	factory := provideConductorInvocationWithProgressFactory(providersService, edges)
-	if _, err = factory(providersService, adaptRunner(edges.ProviderCommandRunner), allocator, nil); err != nil {
+	factory := provideConductorInvocationWithProgressFactory(providersService, edges, allocator)
+	if _, err = factory(providersService, adaptRunner(edges.ProviderCommandRunner), nil); err != nil {
 		t.Fatalf("factory() error = %v", err)
 	}
 }
@@ -740,19 +740,19 @@ type statelessBlockingCommandRunner struct {
 	once    sync.Once
 }
 
-func (runner *statelessBlockingCommandRunner) Run(ctx context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
+func (runner *statelessBlockingCommandRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	runner.once.Do(func() { close(runner.started) })
 	<-ctx.Done()
-	return workers.CommandResult{}, ctx.Err()
+	return platformprocess.CommandResult{}, ctx.Err()
 }
 
 type statelessCompositionCommandRunner struct{}
 
 func (statelessCompositionCommandRunner) Run(
 	context.Context,
-	workers.CommandRequest,
-) (workers.CommandResult, error) {
-	return workers.CommandResult{Stdout: []byte("canonical-output")}, nil
+	platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{Stdout: []byte("canonical-output")}, nil
 }
 
 type statelessProcessCommandRunner struct{}

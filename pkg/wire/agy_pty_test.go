@@ -13,7 +13,7 @@ import (
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
 
 type recordingAgyPTYHost struct{ allocated bool }
@@ -62,9 +62,9 @@ func TestProvideAgyPTYAllocatorPreservesInjectedNativeHost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	session, err := allocator.Allocate(context.Background(), workers.PTYProcessLaunch{
+	session, err := allocator.Allocate(context.Background(), providerswire.PTYProcessLaunch{
 		Executable: "agy", Argv: []string{"agy"},
-	}, workers.DefaultPTYSessionConfig())
+	}, providerswire.DefaultPTYSessionConfig())
 	if err != nil {
 		t.Fatalf("Allocate() error = %v", err)
 	}

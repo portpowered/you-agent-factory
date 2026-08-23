@@ -1,6 +1,7 @@
 package workerexecution
 
 import workers "github.com/portpowered/infinite-you/pkg/services/workers"
+import workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 
 type RunnerToolExecutionMode = workers.RunnerToolExecutionMode
 type RunnerBaselineCapability = workers.RunnerBaselineCapability
@@ -17,7 +18,7 @@ type WorkstationExecutionRequest = workers.WorkstationExecutionRequest
 type ProviderInferenceRequest = workers.ProviderInferenceRequest
 type RunnerExecutionRequest = workers.RunnerExecutionRequest
 type RunnerExecutionResult = workers.RunnerExecutionResult
-type SubprocessExecutionRequest = workers.SubprocessExecutionRequest
+type SubprocessExecutionRequest = workerprocess.CommandRequest
 
 const (
 	RunnerToolExecutionModeRequired = workers.RunnerToolExecutionModeRequired
@@ -51,5 +52,5 @@ const (
 
 var CloneWorkstationExecutionRequest = workers.CloneWorkstationExecutionRequest
 var CloneProviderInferenceRequest = workers.CloneProviderInferenceRequest
-var CloneSubprocessExecutionRequest = workers.CloneSubprocessExecutionRequest
+var CloneSubprocessExecutionRequest = workerprocess.CloneCommandRequest
 var CloneResolvedModelOperationBindings = workers.CloneResolvedModelOperationBindings

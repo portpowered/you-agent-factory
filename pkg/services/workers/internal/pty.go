@@ -1,4 +1,4 @@
-package workers
+package internal
 
 import (
 	"context"
@@ -22,19 +22,12 @@ var (
 	ErrPTYHostRequired        = errors.New("agypty: native PTY host is required")
 )
 
-// PTYSessionConfig carries bounded capture and timeout policy for one session.
+// PTYSessionConfig carries bounded capture and timeout policy for one Worker
+// invocation session.
 type PTYSessionConfig struct {
 	MaxCaptureBytes int
 	IdleTimeout     time.Duration
 	HardTimeout     time.Duration
-}
-
-func DefaultPTYSessionConfig() PTYSessionConfig {
-	return PTYSessionConfig{
-		MaxCaptureBytes: DefaultPTYMaxCaptureBytes,
-		IdleTimeout:     DefaultPTYIdleTimeout,
-		HardTimeout:     DefaultPTYHardTimeout,
-	}
 }
 
 // PTYProcessLaunch is the typed subprocess description for one PTY-backed run.
@@ -62,18 +55,21 @@ const (
 	PTYKindConPTY
 )
 
-// PTYAllocator opens a platform PTY for one supervised child process.
+// PTYAllocator is the Workers-private seam for one direct invocation's PTY.
 type PTYAllocator interface {
 	Allocate(context.Context, PTYProcessLaunch, PTYSessionConfig) (PTYSession, error)
 }
 
-// PTYSession is the seam for bounded capture, timeout signaling, and cleanup.
+// PTYSession is the Workers-private seam for bounded capture, timeout
+// signaling, and cleanup.
 type PTYSession interface {
 	Run(context.Context) (PTYSessionResult, error)
 	Close() error
 }
 
-// MockPTYAllocator is a hermetic root-contract implementation for peer tests.
+// MockPTYAllocator is a hermetic owner-internal PTY implementation used by
+// direct invocation and construction tests. It is inaccessible to peer
+// service roots because it lives below the Workers internal boundary.
 type MockPTYAllocator struct {
 	Sessions []*MockPTYSession
 	Result   PTYSessionResult

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -16,15 +17,15 @@ func scriptPollerCommandRequest(
 	workerDef *factorydefinitions.FactoryWorkerConfig,
 	resolveTemplates workers.TemplateFieldResolver,
 	resume ResumeCursor,
-) (workers.CommandRequest, error) {
+) (platformprocess.CommandRequest, error) {
 	if runtimeCfg == nil {
-		return workers.CommandRequest{}, fmt.Errorf("runtime config is required")
+		return platformprocess.CommandRequest{}, fmt.Errorf("runtime config is required")
 	}
 	if workerDef == nil {
-		return workers.CommandRequest{}, fmt.Errorf("script poller worker is required")
+		return platformprocess.CommandRequest{}, fmt.Errorf("script poller worker is required")
 	}
 	if strings.TrimSpace(workerDef.Command) == "" {
-		return workers.CommandRequest{}, fmt.Errorf("script poller worker %q is missing command", workerDef.Name)
+		return platformprocess.CommandRequest{}, fmt.Errorf("script poller worker %q is missing command", workerDef.Name)
 	}
 
 	requestContext := &workerexecution.Context{}
@@ -36,7 +37,7 @@ func scriptPollerCommandRequest(
 		requestContext,
 		workstation.Worktree,
 	); err != nil {
-		return workers.CommandRequest{}, fmt.Errorf("resolve poller workstation fields: %w", err)
+		return platformprocess.CommandRequest{}, fmt.Errorf("resolve poller workstation fields: %w", err)
 	} else if resolved != nil {
 		requestContext.WorkDirectory = resolved.WorkingDirectory
 		requestContext.EnvVars = resolved.Env
@@ -59,13 +60,11 @@ func scriptPollerCommandRequest(
 		workDir = pollerRuntimeWorkingDirectory(runtimeCfg)
 	}
 
-	req := workers.CommandRequest{
-		Command:         resolvePortableFactoryScriptReference(runtimeCfg.FactoryDir(), workerDef.Command),
-		Args:            resolvePortableFactoryScriptReferences(runtimeCfg.FactoryDir(), workerDef.Args),
-		Env:             commandEnvWithResolvedVars(requestContext.EnvVars, resume),
-		WorkDir:         workDir,
-		WorkerType:      workerDef.Name,
-		WorkstationName: workstation.Name,
+	req := platformprocess.CommandRequest{
+		Command: resolvePortableFactoryScriptReference(runtimeCfg.FactoryDir(), workerDef.Command),
+		Args:    resolvePortableFactoryScriptReferences(runtimeCfg.FactoryDir(), workerDef.Args),
+		Env:     commandEnvWithResolvedVars(requestContext.EnvVars, resume),
+		WorkDir: workDir,
 	}
 	return req, nil
 }

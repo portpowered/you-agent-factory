@@ -10,11 +10,11 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -30,7 +30,7 @@ func TestRunScriptPoller_TimesOutWithoutSubmit(t *testing.T) {
 	runner := &sequenceCommandRunner{
 		outcomes: []runOutcome{{
 			waitForCancel: true,
-			result:        workers.CommandResult{Stdout: workRequestJSON},
+			result:        platformprocess.CommandResult{Stdout: workRequestJSON},
 		}},
 	}
 	submitted := &recordingSubmitter{}
@@ -87,7 +87,7 @@ func TestStartScriptPoller_RestartsOnMalformedOutputWithBackoff(t *testing.T) {
 	fakeClock := clockwork.NewFakeClock()
 	runner := &sequenceCommandRunner{
 		outcomes: []runOutcome{
-			{result: workers.CommandResult{Stdout: []byte("not-json\n")}},
+			{result: platformprocess.CommandResult{Stdout: []byte("not-json\n")}},
 			{waitForCancel: true},
 		},
 	}
@@ -137,7 +137,7 @@ func TestStartScriptPoller_RestartsAfterNonZeroExit(t *testing.T) {
 	fakeClock := clockwork.NewFakeClock()
 	runner := &sequenceCommandRunner{
 		outcomes: []runOutcome{
-			{result: workers.CommandResult{ExitCode: 2}},
+			{result: platformprocess.CommandResult{ExitCode: 2}},
 			{waitForCancel: true},
 		},
 	}
@@ -278,7 +278,7 @@ func TestStartScriptPoller_StopsDuringBackoffWithoutAnotherRun(t *testing.T) {
 	fakeClock := clockwork.NewFakeClock()
 	runner := &sequenceCommandRunner{
 		outcomes: []runOutcome{
-			{result: workers.CommandResult{ExitCode: 1}},
+			{result: platformprocess.CommandResult{ExitCode: 1}},
 		},
 	}
 	svc := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{
@@ -312,7 +312,7 @@ func TestStartScriptPoller_StopsDuringBackoffWithoutAnotherRun(t *testing.T) {
 }
 
 type scriptPollersServiceOptions struct {
-	runner          workers.CommandRunner
+	runner          platformprocess.CommandRunner
 	clock           clockwork.Clock
 	logger          *zap.Logger
 	executionPolicy factorydefinitionfixtures.WorkstationExecutionPolicy
@@ -336,7 +336,7 @@ func newScriptPollersServiceWithOptions(options scriptPollersServiceOptions) scr
 		Logger: func(workstationName, workerName string) *zap.Logger {
 			return logger
 		},
-		CommandRunner: func() workers.CommandRunner {
+		CommandRunner: func() platformprocess.CommandRunner {
 			return options.runner
 		},
 		ExecutionPolicy: executionPolicy,

@@ -1,6 +1,8 @@
 package wire
 
 import (
+	"io/fs"
+
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimeinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
@@ -17,6 +19,14 @@ type RuntimeFactory = factoryruntimeinternal.RuntimeFactory
 // session-owned Factory Runtime.
 type Assembly = factoryruntimeinternal.Assembly
 
+// InputFileSystem is the Factory Runtime construction seam for its selected
+// input tree. The service root does not publish this host-effect port.
+type InputFileSystem interface {
+	ReadDir(string) ([]fs.DirEntry, error)
+	ReadFile(string) ([]byte, error)
+	Stat(string) (fs.FileInfo, error)
+}
+
 // NewRuntimeFactory constructs a hosted runtime bundle factory.
 func NewRuntimeFactory(
 	quorumPolicy factorydefinitions.QuorumPolicyService,
@@ -32,7 +42,7 @@ func NewRuntimeFactory(
 	newID factoryruntime.IDGenerator,
 	workRequestIDs work.RequestIDGenerator,
 	runtimeDirs factoryruntime.RuntimeDirectoryFileSystem,
-	inputFiles factoryruntime.InputFileSystem,
+	inputFiles InputFileSystem,
 	inputDirectoryWalker factoryruntime.InputDirectoryWalker,
 	orchestrationCompilation factoryruntime.OrchestrationCompilation,
 	providerSessions providersessions.Service,
