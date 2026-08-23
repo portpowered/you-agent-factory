@@ -124,6 +124,10 @@ const (
 const (
 	ErrorResponseCodeADMITTEDAPPLICATIONFAILURE                     ErrorResponseCode = "ADMITTED_APPLICATION_FAILURE"
 	ErrorResponseCodeBADREQUEST                                     ErrorResponseCode = "BAD_REQUEST"
+	ErrorResponseCodeCOSTSINVALIDREQUEST                            ErrorResponseCode = "COSTS_INVALID_REQUEST"
+	ErrorResponseCodeCOSTSQUERYCANCELED                             ErrorResponseCode = "COSTS_QUERY_CANCELED"
+	ErrorResponseCodeCOSTSQUERYFAILED                               ErrorResponseCode = "COSTS_QUERY_FAILED"
+	ErrorResponseCodeCOSTSQUERYTIMEOUT                              ErrorResponseCode = "COSTS_QUERY_TIMEOUT"
 	ErrorResponseCodeEXECUTIONREQUESTIDCONFLICT                     ErrorResponseCode = "EXECUTION_REQUEST_ID_CONFLICT"
 	ErrorResponseCodeFACTORYALREADYEXISTS                           ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
 	ErrorResponseCodeFACTORYNOTIDLE                                 ErrorResponseCode = "FACTORY_NOT_IDLE"
@@ -9519,6 +9523,9 @@ type FactorySessionResourceCapacityConflict struct {
 	union json.RawMessage
 }
 
+// GatewayTimeout defines model for GatewayTimeout.
+type GatewayTimeout = ErrorResponse
+
 // InternalError defines model for InternalError.
 type InternalError = ErrorResponse
 
@@ -9530,6 +9537,9 @@ type MoveWorkConflict = ErrorResponse
 
 // NotFound defines model for NotFound.
 type NotFound = ErrorResponse
+
+// RequestTimeout defines model for RequestTimeout.
+type RequestTimeout = ErrorResponse
 
 // ResponseEventBadRequest defines model for ResponseEventBadRequest.
 type ResponseEventBadRequest = ErrorResponse
@@ -19005,7 +19015,9 @@ type GetMetricsCostsClientResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *CostsReport
 	JSON400      *BadRequest
+	JSON408      *RequestTimeout
 	JSON500      *InternalError
+	JSON504      *GatewayTimeout
 }
 
 // Status returns HTTPResponse.Status
@@ -19389,12 +19401,26 @@ func ParseGetMetricsCostsClientResponse(rsp *http.Response) (*GetMetricsCostsCli
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 408:
+		var dest RequestTimeout
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON408 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest InternalError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
+		var dest GatewayTimeout
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON504 = &dest
 
 	}
 

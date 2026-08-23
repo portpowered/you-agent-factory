@@ -611,7 +611,6 @@ func TestExecuteCommandUsageFailuresUseCentralCobraRenderer(t *testing.T) {
 		})
 	}
 }
-
 func runProductionMetricsFailureCase(t *testing.T, test productionMetricsFailureCase) {
 	t.Helper()
 	queryCalls := 0

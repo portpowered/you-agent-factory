@@ -1,0 +1,5 @@
+description: The metrics cost query exceeded the server-side completion bound.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'

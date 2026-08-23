@@ -68,9 +68,10 @@ func (service *Service) QueryCosts(
 
 	sessionID := strings.TrimSpace(request.FactorySessionID)
 	runtimeID := strings.TrimSpace(request.RuntimeInstanceID)
+	scope := scopeForRequest(request)
 	service.logger.Info(
 		"runtime costs query started",
-		"scope_kind", scopeForRequest(request).Kind,
+		"scope_kind", scope.Kind,
 		"factory_session_id", sessionID,
 		"runtime_instance_id", runtimeID,
 	)
@@ -79,7 +80,7 @@ func (service *Service) QueryCosts(
 	if err != nil {
 		service.logger.Error(
 			"runtime costs query failed",
-			"scope_kind", scopeForRequest(request).Kind,
+			"scope_kind", scope.Kind,
 			"factory_session_id", sessionID,
 			"status", "PRICING_ERROR",
 			"error_kind", queryErrorKind(err),
@@ -99,7 +100,7 @@ func (service *Service) QueryCosts(
 		}
 		service.logger.Error(
 			"runtime costs query failed",
-			"scope_kind", scopeForRequest(request).Kind,
+			"scope_kind", scope.Kind,
 			"factory_session_id", sessionID,
 			"status", "METRICS_ERROR",
 			"error_kind", queryErrorKind(wrapped),
@@ -110,7 +111,7 @@ func (service *Service) QueryCosts(
 		return costs.Report{}, err
 	}
 
-	report, err := calculateReport(ctx, table, metrics.UsageRows, scopeForRequest(request))
+	report, err := calculateReport(ctx, table, metrics.UsageRows, scope)
 	if err != nil {
 		wrapped := &costs.QueryError{
 			Kind:    costs.QueryErrorInvalidUsage,
@@ -119,7 +120,7 @@ func (service *Service) QueryCosts(
 		}
 		service.logger.Error(
 			"runtime costs query failed",
-			"scope_kind", scopeForRequest(request).Kind,
+			"scope_kind", scope.Kind,
 			"factory_session_id", sessionID,
 			"status", "VALUATION_ERROR",
 			"error_kind", queryErrorKind(wrapped),

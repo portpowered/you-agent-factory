@@ -4,9 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	costscli "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
@@ -169,9 +173,175 @@ func TestCostsCommandRouteFailureWritesNoPartialOutput(t *testing.T) {
 	}
 }
 
+func TestCostsCommandTimeoutNamesEndpointAndConfiguredDuration(t *testing.T) {
+	t.Parallel()
+
+	const requestTimeout = 25 * time.Millisecond
+	started := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		close(started)
+		<-request.Context().Done()
+	}))
+	defer server.Close()
+
+	command := costscli.NewCostsCommand(costscli.CostsCommandConfig{
+		Operation: costscli.NewOperation(func(serverURL string) (costscli.Client, error) {
+			return generatedclient.NewClientWithResponses(
+				serverURL,
+				generatedclient.WithHTTPClient(&http.Client{}),
+			)
+		}),
+		Server:         func() string { return server.URL },
+		RequestTimeout: requestTimeout,
+	})
+	var output bytes.Buffer
+	command.SetOut(&output)
+	command.SetErr(io.Discard)
+	err := command.ExecuteContext(context.Background())
+	if err == nil {
+		t.Fatal("execute costs command returned nil error")
+	}
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("delayed costs server did not receive the request")
+	}
+	var costsErr *costscli.CostsError
+	if !errors.As(err, &costsErr) {
+		t.Fatalf("error = %T (%v), want typed CostsError", err, err)
+	}
+	if costsErr.CLIErrorCode() != costscli.CostsRequestTimeoutCode {
+		t.Fatalf("costs error code = %q, want %q", costsErr.CLIErrorCode(), costscli.CostsRequestTimeoutCode)
+	}
+	for _, want := range []string{
+		"GET /metrics/costs",
+		server.URL,
+		requestTimeout.String(),
+		"retry",
+		"--session",
+	} {
+		if !strings.Contains(costsErr.CLIErrorMessage(), want) {
+			t.Fatalf("timeout diagnostic = %q, want %q", costsErr.CLIErrorMessage(), want)
+		}
+	}
+	if output.Len() != 0 {
+		t.Fatalf("timeout wrote partial output %q", output.String())
+	}
+}
+
+func TestCostsCommandTypedHTTPFailurePreservesCodeAndSafeMessage(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		writer.WriteHeader(http.StatusGatewayTimeout)
+		_, _ = io.WriteString(writer, `{"code":"COSTS_QUERY_TIMEOUT","family":"INTERNAL_SERVER_ERROR","message":"metrics costs query exceeded the server timeout; narrow the session scope or retry"}`)
+	}))
+	defer server.Close()
+
+	command := costscli.NewCostsCommand(costscli.CostsCommandConfig{
+		Operation: costscli.NewOperation(func(serverURL string) (costscli.Client, error) {
+			return generatedclient.NewClientWithResponses(
+				serverURL,
+				generatedclient.WithHTTPClient(&http.Client{}),
+			)
+		}),
+		Server: func() string { return server.URL },
+	})
+	var output bytes.Buffer
+	command.SetOut(&output)
+	command.SetErr(io.Discard)
+	err := command.ExecuteContext(context.Background())
+	if err == nil {
+		t.Fatal("execute costs command returned nil error")
+	}
+	var costsErr *costscli.CostsError
+	if !errors.As(err, &costsErr) {
+		t.Fatalf("error = %T (%v), want typed CostsError", err, err)
+	}
+	if costsErr.CLIErrorCode() != "COSTS_QUERY_TIMEOUT" {
+		t.Fatalf("costs error code = %q, want COSTS_QUERY_TIMEOUT", costsErr.CLIErrorCode())
+	}
+	for _, want := range []string{
+		"GET /metrics/costs",
+		server.URL,
+		"metrics costs query exceeded the server timeout",
+	} {
+		if !strings.Contains(costsErr.CLIErrorMessage(), want) {
+			t.Fatalf("typed HTTP diagnostic = %q, want %q", costsErr.CLIErrorMessage(), want)
+		}
+	}
+	if output.Len() != 0 {
+		t.Fatalf("typed HTTP failure wrote partial output %q", output.String())
+	}
+}
+
+func TestCostsCommandDistinguishesCanceledAndNetworkFailures(t *testing.T) {
+	t.Parallel()
+
+	privateServer := "https://operator:secret@example.test/api?token=secret"
+	cases := []struct {
+		name       string
+		cause      error
+		wantCode   string
+		wantPhrase string
+	}{
+		{
+			name:       "canceled",
+			cause:      context.Canceled,
+			wantCode:   costscli.CostsRequestCanceledCode,
+			wantPhrase: "was canceled",
+		},
+		{
+			name:       "network failure",
+			cause:      errors.New("dial tcp 203.0.113.10:7437: connect: permission denied"),
+			wantCode:   costscli.CostsNetworkFailureCode,
+			wantPhrase: "failed before a response",
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			command := costscli.NewCostsCommand(costscli.CostsCommandConfig{
+				Operation: costscli.NewOperation(func(string) (costscli.Client, error) {
+					return &costsClientStub{err: test.cause}, nil
+				}),
+				Server: func() string { return privateServer },
+			})
+			var output bytes.Buffer
+			command.SetOut(&output)
+			command.SetErr(io.Discard)
+			err := command.ExecuteContext(context.Background())
+			if err == nil {
+				t.Fatal("execute costs command returned nil error")
+			}
+			var costsErr *costscli.CostsError
+			if !errors.As(err, &costsErr) {
+				t.Fatalf("error = %T (%v), want typed CostsError", err, err)
+			}
+			if costsErr.CLIErrorCode() != test.wantCode {
+				t.Fatalf("costs error code = %q, want %q", costsErr.CLIErrorCode(), test.wantCode)
+			}
+			if !strings.Contains(costsErr.CLIErrorMessage(), test.wantPhrase) ||
+				!strings.Contains(costsErr.CLIErrorMessage(), "https://example.test/api") {
+				t.Fatalf("costs error message = %q, want %q and sanitized endpoint", costsErr.CLIErrorMessage(), test.wantPhrase)
+			}
+			if strings.Contains(costsErr.Error(), "operator") || strings.Contains(costsErr.Error(), "secret") || strings.Contains(costsErr.Error(), "token") {
+				t.Fatalf("costs diagnostic leaked endpoint credentials/query: %q", costsErr.Error())
+			}
+			if !errors.Is(err, test.cause) {
+				t.Fatalf("error = %v, want to preserve cause %v", err, test.cause)
+			}
+			if output.Len() != 0 {
+				t.Fatalf("failure wrote partial output %q", output.String())
+			}
+		})
+	}
+}
+
 type costsClientStub struct {
 	response *generatedclient.GetMetricsCostsClientResponse
 	params   *generatedclient.GetMetricsCostsParams
+	err      error
 }
 
 func (stub *costsClientStub) GetMetricsCostsWithResponse(
@@ -180,7 +350,7 @@ func (stub *costsClientStub) GetMetricsCostsWithResponse(
 	_ ...generatedclient.RequestEditorFn,
 ) (*generatedclient.GetMetricsCostsClientResponse, error) {
 	stub.params = params
-	return stub.response, nil
+	return stub.response, stub.err
 }
 
 func costsReportForCLI() generatedclient.CostsReport {

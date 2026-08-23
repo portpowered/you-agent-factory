@@ -31,6 +31,14 @@ type Reserver interface {
 	ReserveNamed(string, time.Time, string, string) (string, error)
 }
 
+// RuntimeArtifactPathComponents returns the sanitized, platform-independent
+// suffix used by runtime artifact filenames. Callers that build artifact
+// selectors can share the writer's exact component rules without acquiring a
+// filesystem or artifact-owner policy.
+func RuntimeArtifactPathComponents(components ...string) string {
+	return internalartifact.RuntimeArtifactPathComponents(components...)
+}
+
 type reserver struct{ filesystem FileSystem }
 
 func NewReserver(filesystem FileSystem) (Reserver, error) {
