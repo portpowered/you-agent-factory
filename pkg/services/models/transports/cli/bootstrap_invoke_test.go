@@ -13,7 +13,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/metrics"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
@@ -83,6 +82,10 @@ func TestInvoke_RoutesThroughSharedBootstrapWithoutHTTPEndpoint(t *testing.T) {
 	}()
 
 	homeDir := t.TempDir()
+	streamFile := filepath.Join(t.TempDir(), "stream.wav")
+	if err := os.WriteFile(streamFile, []byte("RIFF....WAVE"), 0o644); err != nil {
+		t.Fatalf("write stream file: %v", err)
+	}
 	var capturedModel string
 	var capturedRequest factoryapi.ModelInvocationRequest
 	openTestModelRunner = func(_ context.Context, cfg *testModelRuntimeSelections) (testModelRunner, error) {
@@ -105,10 +108,7 @@ func TestInvoke_RoutesThroughSharedBootstrapWithoutHTTPEndpoint(t *testing.T) {
 					Worker:           "tts-worker",
 					Operation:        request.Operation,
 					ProviderLocality: string(factoryapi.WorkerModelLocalityLocal),
-					Content: []work.WorkContentPart{{
-						Type: work.WorkContentPartTypeText,
-						Text: "hello",
-					}},
+					StreamFile:       streamFile,
 				}, nil
 			},
 		}, nil
@@ -121,7 +121,7 @@ func TestInvoke_RoutesThroughSharedBootstrapWithoutHTTPEndpoint(t *testing.T) {
 		FactoryDir: t.TempDir(),
 		HomeDir:    homeDir,
 		Server:     failureBaselineUnreachableServer,
-		JSON:       true,
+		OutputPath: filepath.Join(t.TempDir(), "speech.wav"),
 		Logger:     zap.NewNop(),
 		Output:     io.Discard,
 	}); err != nil {
@@ -141,14 +141,19 @@ func TestInvoke_UnreachableServerDoesNotFailWithTransportUnreachableMessage(t *t
 		openTestModelRunner = originalBuilder
 	}()
 
+	streamFile := filepath.Join(t.TempDir(), "stream.wav")
+	if err := os.WriteFile(streamFile, []byte("RIFF....WAVE"), 0o644); err != nil {
+		t.Fatalf("write stream file: %v", err)
+	}
 	openTestModelRunner = func(_ context.Context, _ *testModelRuntimeSelections) (testModelRunner, error) {
 		return &stubModelBootstrapRunner{
 			sessionReady: true,
 			invokeModel: func(_ context.Context, modelName string, request factoryapi.ModelInvocationRequest) (modelinference.Result, error) {
 				return modelinference.Result{
-					ModelName: modelName,
-					Worker:    "tts-worker",
-					Operation: request.Operation,
+					ModelName:  modelName,
+					Worker:     "tts-worker",
+					Operation:  request.Operation,
+					StreamFile: streamFile,
 				}, nil
 			},
 		}, nil
@@ -160,7 +165,7 @@ func TestInvoke_UnreachableServerDoesNotFailWithTransportUnreachableMessage(t *t
 		Text:       "hello world",
 		FactoryDir: t.TempDir(),
 		Server:     failureBaselineUnreachableServer,
-		JSON:       true,
+		OutputPath: filepath.Join(t.TempDir(), "speech.wav"),
 		Output:     io.Discard,
 		Logger:     zap.NewNop(),
 	}); err != nil {

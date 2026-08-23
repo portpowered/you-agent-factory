@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -90,7 +91,7 @@ func TestInvoke_NonReadyManagedOutcomes_StubBootstrapPreservesReadinessFailureCl
 				Text:       "hello world",
 				FactoryDir: t.TempDir(),
 				Server:     failureBaselineUnreachableServer,
-				JSON:       true,
+				OutputPath: filepath.Join(t.TempDir(), "speech.wav"),
 				Logger:     zap.NewNop(),
 				Output:     io.Discard,
 			})
@@ -176,7 +177,7 @@ func TestInvoke_NonReadyManagedOutcomes_StubBootstrapPreservesManagedRuntimeVoca
 				Text:       "hello world",
 				FactoryDir: t.TempDir(),
 				Server:     failureBaselineUnreachableServer,
-				JSON:       true,
+				OutputPath: filepath.Join(t.TempDir(), "speech.wav"),
 				Logger:     zap.NewNop(),
 				Output:     io.Discard,
 			})

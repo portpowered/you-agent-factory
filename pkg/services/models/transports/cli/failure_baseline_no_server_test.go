@@ -16,16 +16,18 @@ import (
 
 const failureBaselineUnreachableServer = "http://127.0.0.1:1"
 
-func TestFailureBaseline_NoServer_ModelsInvokeJSONUsesBootstrapInsteadOfUnreachableEndpoint(t *testing.T) {
+func TestFailureBaseline_NoServer_ModelsInvokeJSONIsValidationOnly(t *testing.T) {
 	originalBuilder := openTestModelRunner
 	defer func() {
 		openTestModelRunner = originalBuilder
 	}()
 
+	invoked := false
 	openTestModelRunner = func(_ context.Context, _ *testModelRuntimeSelections) (testModelRunner, error) {
 		return &stubModelBootstrapRunner{
 			sessionReady: true,
 			invokeModel: func(_ context.Context, modelName string, request factoryapi.ModelInvocationRequest) (modelinference.Result, error) {
+				invoked = true
 				return modelinference.Result{
 					ModelName: modelName,
 					Worker:    "tts-worker",
@@ -48,7 +50,15 @@ func TestFailureBaseline_NoServer_ModelsInvokeJSONUsesBootstrapInsteadOfUnreacha
 		t.Fatalf("Invoke: %v", err)
 	}
 	if out.Len() == 0 {
-		t.Fatal("expected JSON invoke output from bootstrap path")
+		t.Fatal("expected JSON validation output")
+	}
+	for _, want := range []string{`"mode":"VALIDATION_ONLY"`, `"validationOnly":true`, `"inferenceExecuted":false`} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("validation output = %q, want %q", out.String(), want)
+		}
+	}
+	if invoked {
+		t.Fatal("validation-only invocation called the inference runner")
 	}
 }
 

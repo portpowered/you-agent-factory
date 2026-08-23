@@ -181,10 +181,14 @@ The transcript file uses `text/plain`. The segments file uses
 `application/json`. Both files are published atomically after all outputs are
 validated.
 
-Use JSON mode when a script needs named output metadata and artifact references:
+Use explicit output mappings with JSON when a script needs named output metadata
+and artifact references:
 
 ```bash
-you --json models invoke asr --operation ASR --input audio=@meeting.wav
+you --json models invoke asr --operation ASR \
+  --input audio=@meeting.wav \
+  --output transcript=meeting.txt \
+  --output segments=meeting.json
 ```
 
 The JSON response includes both named outputs, their media types, sizes, and
@@ -215,7 +219,9 @@ the named file. It is a file-output alias, not a named output mapping.
 Use JSON mode when a script needs output metadata instead of audio bytes:
 
 ```bash
-you --json models invoke tts --operation TTS --input text="Read the release summary."
+you --json models invoke tts --operation TTS \
+  --input text="Read the release summary." \
+  --output audio=speech.wav
 ```
 
 ### Input and output failures
@@ -227,6 +233,12 @@ or backend activation. A missing `audio` input fails before ASR execution.
 Use `--output slot=path` once for each output slot. Do not reuse a destination
 path. The command rejects incomplete, duplicate, or unknown output mappings
 before it writes a partial file.
+
+Metadata mode returns request identity and explicit execution state when JSON is
+requested without an output path or explicit output mappings, for example
+`{"modelName":"OMNIVOICE_Q4_K_M","operation":"TTS","mode":"VALIDATION_ONLY","validationOnly":true,"inferenceExecuted":false}`.
+It validates the request but does not execute inference or return model output.
+An output path or explicit output mapping selects execution behavior.
 
 Invocation is readiness-gated. For `MISSING`, pull the model. For `LOADING`,
 wait and inspect again. For `FAILED`, use the inspect diagnostics and service

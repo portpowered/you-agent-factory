@@ -87,6 +87,9 @@ func (service *rootService) invokeInScope(
 	if err != nil {
 		return err
 	}
+	if validationOnlyModelInvoke(cfg) {
+		return writeValidationOnlyModelInvokeResponse(cfg.Output, modelName, operation)
+	}
 	handled, err := service.tryJoinedInvocation(cfg, scope, modelName, operation, text, inputs, catalog)
 	if err != nil {
 		return err
@@ -665,7 +668,7 @@ func (service *rootService) invokePreparedLease(
 			Content:     text,
 		},
 	}
-	if !cfg.JSON {
+	if strings.TrimSpace(cfg.OutputPath) != "" {
 		mode := modelinference.ResponseModeAudioStream
 		request.ResponseMode = mode
 	}
@@ -673,7 +676,7 @@ func (service *rootService) invokePreparedLease(
 	if err != nil {
 		return mapModelsClientError(err)
 	}
-	if cfg.JSON {
+	if strings.TrimSpace(cfg.OutputPath) == "" {
 		response := modelInvocationResponseFromInferenceResult(result, catalog, text)
 		return json.NewEncoder(cfg.Output).Encode(response)
 	}

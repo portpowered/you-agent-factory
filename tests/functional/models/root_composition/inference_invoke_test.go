@@ -97,24 +97,30 @@ func TestModelsInferenceInvokeActivatesThroughRootBuildProcess(t *testing.T) {
 		t.Fatalf("Process.Execute(models invoke --json) error = %v", err)
 	}
 
-	var response factoryapi.ModelInvocationResponse
+	var response struct {
+		ModelName         string `json:"modelName"`
+		Operation         string `json:"operation"`
+		Mode              string `json:"mode"`
+		ValidationOnly    bool   `json:"validationOnly"`
+		InferenceExecuted bool   `json:"inferenceExecuted"`
+	}
 	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
 		t.Fatalf("decode models invoke output: %v\n%s", err, output.String())
 	}
 	if response.ModelName != "OMNIVOICE_Q4_K_M" || response.Operation != "TTS" {
 		t.Fatalf("models invoke identity = %#v, want OMNIVOICE_Q4_K_M/TTS", response)
 	}
-	if response.Worker != "tts-worker" || len(response.Content) == 0 {
-		t.Fatalf("models invoke response = %#v, want tts-worker content", response)
+	if response.Mode != "VALIDATION_ONLY" || !response.ValidationOnly || response.InferenceExecuted {
+		t.Fatalf("models invoke response = %#v, want validation-only metadata", response)
 	}
 	if rejectingNetwork.Calls() != 0 {
 		t.Fatalf("asset network calls = %d during invoke, want 0 via edges", rejectingNetwork.Calls())
 	}
-	if hostLauncher.Calls() == 0 {
-		t.Fatal("host process launcher calls = 0 after invoke, want host activation through edges")
+	if hostLauncher.Calls() != 0 {
+		t.Fatalf("host process launcher calls = %d after validation-only invoke, want 0", hostLauncher.Calls())
 	}
-	if hostHTTP.Calls() == 0 {
-		t.Fatal("host HTTP client calls = 0 after invoke, want inference activation through edges")
+	if hostHTTP.Calls() != 0 {
+		t.Fatalf("host HTTP client calls = %d after validation-only invoke, want 0", hostHTTP.Calls())
 	}
 
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
@@ -226,6 +232,106 @@ func TestModelsJoinedBuiltinInvokeWithoutFactoryDeclaration(t *testing.T) {
 	}
 	if err := closer.Close(context.Background()); err != nil {
 		t.Fatalf("close joined root process: %v", err)
+	}
+}
+
+// TestModelsJSONInvokeValidatesWithoutStartingJoinedRuntime proves metadata
+// mode validates a configured generic model without starting its backend or
+// consuming a content-addressed cache.
+func TestModelsJSONInvokeValidatesWithoutStartingJoinedRuntime(t *testing.T) {
+	t.Parallel()
+
+	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/health":
+			writer.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	t.Cleanup(modelServer.Close)
+
+	home := t.TempDir()
+	writeGenericBuiltinTTSCache(t, home)
+	writeGenericBuiltinTTSBackendCache(t, home)
+	rejectingNetwork := &rejectingModelAssetHTTP{}
+	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
+	protocol := &joinedProtocolNegotiator{}
+	compatibility := &joinedCompatibilityChecker{}
+	assetFiles := functionalModelAssetFileSystem{home: home}
+	config := localModelReadinessAssetsHostFactoryConfig(modelServer.URL)
+	resources := config["resources"].([]map[string]any)
+	resources[0]["model"] = "tts"
+	resources[0]["backend"] = "localai-vibevoice"
+	workers := config["workers"].([]map[string]any)
+	workers[0]["name"] = "tts-worker"
+	workers[0]["model"] = "tts"
+	workers[0]["args"] = []string{"--grpc-endpoint", modelServer.URL}
+
+	dir := support.ScaffoldFactory(t, config)
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ModelAssetHTTPClient:           rejectingNetwork,
+		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
+		ModelAssetInspectPath:          assetFiles.Stat,
+		ModelAssetResolveHomeDirectory: assetFiles.UserHomeDir,
+		ModelAssetResolveEnvironment:   func(string) string { return "" },
+		ModelAssetWriteFile:            assetFiles.WriteFile,
+		ModelAssetRenamePath:           assetFiles.Rename,
+		ModelAssetRemovePath:           assetFiles.Remove,
+		ModelAssetReadFile:             assetFiles.ReadFile,
+		ModelAssetReadDirectory:        assetFiles.ReadDir,
+		ModelAssetCreateFile:           assetFiles.Create,
+		ModelAssetOpenFile:             assetFiles.Open,
+		ModelHostProcessLauncher:       hostLauncher,
+		ModelHostProtocolNegotiator:    protocol,
+		ModelHostCompatibilityChecker:  compatibility,
+		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		ModelHostHTTPClient:            modelServer.Client(),
+		ModelRuntimeHTTPClient:         modelServer.Client(),
+	})
+
+	var output bytes.Buffer
+	jsonInvoke := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "models", "invoke", "tts", "--operation", "TTS", "--text", "joined cache input",
+	})
+	jsonInvoke.Input.Env = functionalHomeEnvironment(home)
+	jsonInvoke.Input.WorkingDirectory = dir
+	jsonInvoke.Input.Stdout = &output
+	jsonInvoke.Input.Stderr = io.Discard
+	if err := process.Execute(jsonInvoke.Input); err != nil {
+		t.Fatalf("Process.Execute(joined built-in invoke) error = %v", err)
+	}
+
+	var response struct {
+		ModelName         string `json:"modelName"`
+		Operation         string `json:"operation"`
+		Mode              string `json:"mode"`
+		ValidationOnly    bool   `json:"validationOnly"`
+		InferenceExecuted bool   `json:"inferenceExecuted"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("decode joined models invoke output: %v\n%s", err, output.String())
+	}
+	if response.ModelName != "tts" || response.Operation != "TTS" ||
+		response.Mode != "VALIDATION_ONLY" || !response.ValidationOnly || response.InferenceExecuted {
+		t.Fatalf("joined models invoke response = %#v, want validation-only metadata", response)
+	}
+	if rejectingNetwork.Calls() != 0 {
+		t.Fatalf("joined asset network calls = %d, want 0 from content-addressed cache", rejectingNetwork.Calls())
+	}
+	if hostLauncher.Calls() != 0 {
+		t.Fatalf("joined host starts = %d, want 0 for validation-only metadata", hostLauncher.Calls())
+	}
+
+	closer, ok := process.(interface{ Close(context.Context) error })
+	if !ok {
+		t.Fatal("root process does not expose lifecycle close")
+	}
+	if err := closer.Close(context.Background()); err != nil {
+		t.Fatalf("close joined root process: %v", err)
+	}
+	if protocol.Calls() != 0 || compatibility.Calls() != 0 {
+		t.Fatalf("validation-only joined effects = protocol %d compatibility %d, want 0/0", protocol.Calls(), compatibility.Calls())
 	}
 }
 
@@ -557,12 +663,19 @@ func TestModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t *testing.T) 
 	if err := executeRootModelsCLI(t, process, dir, environment, &output, jsonInvoke.Input.Args); err != nil {
 		t.Fatalf("Process.Execute(multi-output --json) error = %v", err)
 	}
-	var jsonResponse factoryapi.GenericModelInvocationResponse
+	var jsonResponse struct {
+		ModelName         string `json:"modelName"`
+		Operation         string `json:"operation"`
+		Mode              string `json:"mode"`
+		ValidationOnly    bool   `json:"validationOnly"`
+		InferenceExecuted bool   `json:"inferenceExecuted"`
+	}
 	if err := json.Unmarshal(output.Bytes(), &jsonResponse); err != nil {
 		t.Fatalf("decode multi-output JSON = %v\n%s", err, output.String())
 	}
-	if len(jsonResponse.Outputs) != 2 || jsonResponse.Outputs[0].Name != "text" || jsonResponse.Outputs[1].Name != "usage" {
-		t.Fatalf("multi-output JSON = %#v, want text and usage", jsonResponse.Outputs)
+	if jsonResponse.ModelName != "llm" || jsonResponse.Operation != "OMNI" ||
+		jsonResponse.Mode != "VALIDATION_ONLY" || !jsonResponse.ValidationOnly || jsonResponse.InferenceExecuted {
+		t.Fatalf("multi-output JSON = %#v, want validation-only metadata", jsonResponse)
 	}
 
 	textPath := filepath.Join(t.TempDir(), "text.out")
@@ -584,8 +697,8 @@ func TestModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t *testing.T) 
 		}
 	}
 	assertMappedGenericCLIResponse(t, &output)
-	if hostLauncher.Calls() != 2 {
-		t.Fatalf("mapped output response/effects = %q, starts %d; want metadata and one start per invocation", output.String(), hostLauncher.Calls())
+	if hostLauncher.Calls() != 1 {
+		t.Fatalf("mapped output response/effects = %q, starts %d; want one start for mapped execution", output.String(), hostLauncher.Calls())
 	}
 	closeRootProcess(t, process, "close multi-output root process")
 }
@@ -733,8 +846,10 @@ func TestModelsJoinedInvokeRejectsPinnedBackendBeforeProcessStartThroughRootBuil
 		ModelRuntimeHTTPClient:         modelServer.Client(),
 	})
 
+	outputPath := filepath.Join(t.TempDir(), "audio.out")
 	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "models", "invoke", "tts", "--operation", "TTS", "--text", "must fail preflight",
+		"you", "models", "invoke", "tts", "--operation", "TTS", "--text", "must fail preflight",
+		"--output-map", "audio=" + outputPath,
 	})
 	inputs.Input.Env = functionalHomeEnvironment(home)
 	inputs.Input.WorkingDirectory = dir

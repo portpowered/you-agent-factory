@@ -371,8 +371,8 @@ func TestOwnedAdapter_CompositionFacadeRoutesOwnedListThroughModelsRoot(t *testi
 	}
 }
 
-// TestOwnedAdapter_InvokeResolvesThroughModelsRoot proves invoke
-// catalog->lease->inference ordering through the owned adapter.
+// TestOwnedAdapter_InvokeValidationResolvesThroughModelsRoot proves validation
+// mode reaches the owned adapter's catalog boundary without acquiring a lease.
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestOwnedAdapter_InvokeResolvesThroughModelsRoot(t *testing.T) {
 	t.Parallel()
@@ -432,10 +432,17 @@ func TestOwnedAdapter_InvokeResolvesThroughModelsRoot(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Invoke() error = %v", err)
 	}
-	if !gotCatalog || !gotAcquire || !gotInvoke {
-		t.Fatalf("invoke path calls: catalog=%v acquire=%v invoke=%v", gotCatalog, gotAcquire, gotInvoke)
+	if !gotCatalog || gotAcquire || gotInvoke {
+		t.Fatalf("validation path calls: catalog=%v acquire=%v invoke=%v", gotCatalog, gotAcquire, gotInvoke)
 	}
-	if !strings.Contains(out.String(), "OMNIVOICE_Q4_K_M") {
-		t.Fatalf("Invoke() JSON missing model name:\n%s", out.String())
+	for _, want := range []string{
+		"OMNIVOICE_Q4_K_M",
+		`"mode":"VALIDATION_ONLY"`,
+		`"validationOnly":true`,
+		`"inferenceExecuted":false`,
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("Invoke() JSON missing %q:\n%s", want, out.String())
+		}
 	}
 }

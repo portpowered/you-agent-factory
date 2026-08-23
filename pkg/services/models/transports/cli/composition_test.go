@@ -556,8 +556,14 @@ func TestNewInvokesThroughCompositionProviderOwnedPath(t *testing.T) {
 	if !openedScope {
 		t.Fatal("Invoke() did not open presentation scope through owned adapter path")
 	}
-	if !strings.Contains(out.String(), "owned") {
-		t.Fatalf("Invoke() output = %q, want owned inference content", out.String())
+	for _, want := range []string{
+		`"mode":"VALIDATION_ONLY"`,
+		`"validationOnly":true`,
+		`"inferenceExecuted":false`,
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("Invoke() output = %q, want %q", out.String(), want)
+		}
 	}
 }
 
@@ -631,7 +637,7 @@ func TestRootAdapter_InvokeGenericMultipleOutputsRejectsBeforeRoot(t *testing.T)
 	}
 }
 
-func TestRootAdapter_InvokeGenericJSONPreservesAllNamedOutputs(t *testing.T) {
+func TestRootAdapter_InvokeGenericJSONIsValidationOnly(t *testing.T) {
 	t.Parallel()
 
 	scope := testRuntimeScope(t)
@@ -664,15 +670,19 @@ func TestRootAdapter_InvokeGenericJSONPreservesAllNamedOutputs(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Invoke() error = %v", err)
 	}
-	var response factoryapi.GenericModelInvocationResponse
+	var response struct {
+		ModelName         string `json:"modelName"`
+		Operation         string `json:"operation"`
+		Mode              string `json:"mode"`
+		ValidationOnly    bool   `json:"validationOnly"`
+		InferenceExecuted bool   `json:"inferenceExecuted"`
+	}
 	if err := json.Unmarshal(out.Bytes(), &response); err != nil {
-		t.Fatalf("decode generic JSON: %v\n%s", err, out.String())
+		t.Fatalf("decode validation JSON: %v\n%s", err, out.String())
 	}
-	if len(response.Outputs) != 2 || response.Outputs[0].Name != "text" || response.Outputs[1].Name != "usage" {
-		t.Fatalf("generic outputs = %#v, want all named outputs", response.Outputs)
-	}
-	if response.Outputs[1].Artifact == nil || response.Outputs[1].Artifact.ArtifactRef != "artifact:usage" || response.Outputs[1].Artifact.SizeBytes == nil || *response.Outputs[1].Artifact.SizeBytes != 7 {
-		t.Fatalf("generic artifact = %#v, want preserved metadata", response.Outputs[1].Artifact)
+	if response.ModelName != "omni" || response.Operation != modelinference.OperationOMNI ||
+		response.Mode != "VALIDATION_ONLY" || !response.ValidationOnly || response.InferenceExecuted {
+		t.Fatalf("validation response = %#v, want validation-only metadata", response)
 	}
 }
 

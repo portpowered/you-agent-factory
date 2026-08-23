@@ -17,7 +17,6 @@ import (
 	root "github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -105,15 +104,24 @@ func TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges(t *testing.T
 		t.Fatalf("Process.Execute(models invoke) error = %v", err)
 	}
 
-	var response factoryapi.ModelInvocationResponse
+	var response struct {
+		ModelName         string `json:"modelName"`
+		Operation         string `json:"operation"`
+		Mode              string `json:"mode"`
+		ValidationOnly    bool   `json:"validationOnly"`
+		InferenceExecuted bool   `json:"inferenceExecuted"`
+	}
 	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
 		t.Fatalf("decode models invoke output: %v\n%s", err, output.String())
 	}
 	if response.ModelName != "OMNIVOICE_Q4_K_M" || response.Operation != "TTS" {
 		t.Fatalf("response identity = %#v, want OMNIVOICE_Q4_K_M/TTS", response)
 	}
-	if response.Worker != "voice-local" || len(response.Content) == 0 {
-		t.Fatalf("response = %#v, want voice-local content", response)
+	if response.Mode != "VALIDATION_ONLY" || !response.ValidationOnly || response.InferenceExecuted {
+		t.Fatalf("response = %#v, want validation-only metadata", response)
+	}
+	if backendPayload.Operation != "" {
+		t.Fatalf("validation-only invoke reached backend with payload %#v", backendPayload)
 	}
 	if diagnostics.Len() != 0 {
 		t.Fatalf("models invoke JSON stderr = %q, want empty", diagnostics.String())

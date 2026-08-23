@@ -75,6 +75,33 @@ type InvokeConfig struct {
 	Diagnostics      io.Writer
 }
 
+const modelInvocationValidationOnlyMode = "VALIDATION_ONLY"
+
+// modelInvocationValidationResponse is deliberately not the inference result
+// envelope. Metadata mode validates the request and reports that no inference
+// was attempted, so callers cannot mistake a successful preflight for output.
+type modelInvocationValidationResponse struct {
+	ModelName         string `json:"modelName"`
+	Operation         string `json:"operation"`
+	Mode              string `json:"mode"`
+	ValidationOnly    bool   `json:"validationOnly"`
+	InferenceExecuted bool   `json:"inferenceExecuted"`
+}
+
+func validationOnlyModelInvoke(cfg InvokeConfig) bool {
+	return cfg.JSON && strings.TrimSpace(cfg.OutputPath) == "" && len(cfg.OutputMappings) == 0
+}
+
+func writeValidationOnlyModelInvokeResponse(output io.Writer, modelName, operation string) error {
+	return json.NewEncoder(output).Encode(modelInvocationValidationResponse{
+		ModelName:         modelName,
+		Operation:         operation,
+		Mode:              modelInvocationValidationOnlyMode,
+		ValidationOnly:    true,
+		InferenceExecuted: false,
+	})
+}
+
 type PullConfig struct {
 	Context     context.Context
 	ModelName   string
@@ -260,26 +287,8 @@ func (service *httpService) Invoke(cfg InvokeConfig) error {
 		return fmt.Errorf("explicit output mappings require the local Models composition")
 	}
 
-	if cfg.JSON {
-		response, err := invokeModelMetadata(invokeOptions{
-			Context:          cfg.Context,
-			Server:           cfg.Server,
-			ModelName:        modelName,
-			Operation:        operation,
-			Text:             text,
-			FactoryDir:       cfg.FactoryDir,
-			WorkingDirectory: cfg.WorkingDirectory,
-			HomeDir:          cfg.HomeDir,
-			OperatorDefaults: cfg.OperatorDefaults,
-			Logger:           cfg.Logger,
-			Verbose:          cfg.Verbose,
-			Diagnostics:      cfg.Diagnostics,
-			Invocation:       service.invocation,
-		})
-		if err != nil {
-			return err
-		}
-		return json.NewEncoder(cfg.Output).Encode(response)
+	if validationOnlyModelInvoke(cfg) {
+		return writeValidationOnlyModelInvokeResponse(cfg.Output, modelName, operation)
 	}
 
 	outputPath := strings.TrimSpace(cfg.OutputPath)
@@ -444,16 +453,6 @@ type invokeOptions struct {
 	Verbose          bool
 	Diagnostics      io.Writer
 	Invocation       InvocationOperation
-}
-
-func invokeModelMetadata(cfg invokeOptions) (factoryapi.ModelInvocationResponse, error) {
-	result, err := invokeModelThroughBootstrap(cfg, nil)
-	if err != nil {
-		return factoryapi.ModelInvocationResponse{}, err
-	}
-	response := modelInvocationResponseFromResult(result)
-	logBootstrapInvokeResponse(cfg, fmt.Sprintf("worker=%s contentParts=%d", response.Worker, len(response.Content)))
-	return response, nil
 }
 
 // invokeModelAudio copies streamed audio from the bootstrap-owned invocation

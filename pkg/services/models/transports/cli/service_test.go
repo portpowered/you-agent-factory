@@ -508,7 +508,7 @@ func TestModelsCLICharacterizationInvokeAudioProjectionAndLeaseRelease(t *testin
 	assertCharacterizationLeaseReleased(t, root)
 }
 
-func TestModelsCLICharacterizationInvokeJSONProjection(t *testing.T) {
+func TestModelsCLICharacterizationInvokeJSONIsValidationOnly(t *testing.T) {
 	t.Parallel()
 
 	root := newCharacterizationLeaseModelsRoot(t, modelinference.InvokeModelResult{
@@ -524,8 +524,10 @@ func TestModelsCLICharacterizationInvokeJSONProjection(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Invoke() JSON error = %v", err)
 	}
-	assertCharacterizationJSON(t, out.String(), `{"bindings":[{"content":[{"text":"hello world","type":"text"}],"slot":"text","source":"INPUT"}],"content":[{"contentType":"audio/wav","file":"characterized-speech.wav","slot":"audio","type":"AUDIO","url":""}],"modelName":"OMNIVOICE_Q4_K_M","operation":"TTS","providerLocality":"LOCAL","worker":"tts-executor"}`)
-	assertCharacterizationLeaseReleased(t, root)
+	assertCharacterizationJSON(t, out.String(), `{"modelName":"OMNIVOICE_Q4_K_M","operation":"TTS","mode":"VALIDATION_ONLY","validationOnly":true,"inferenceExecuted":false}`)
+	if root.releaseCalls != 0 {
+		t.Fatalf("validation-only release calls = %d, want 0", root.releaseCalls)
+	}
 }
 
 // TestModelsCLICharacterizationInvokeFailureReleasesLease pins the current
@@ -542,7 +544,7 @@ func TestModelsCLICharacterizationInvokeFailureReleasesLease(t *testing.T) {
 	var out bytes.Buffer
 	err := service.Invoke(modelscli.InvokeConfig{
 		Context: context.Background(), ModelName: "OMNIVOICE_Q4_K_M", Operation: "TTS",
-		Text: "hello world", JSON: true, Output: &out,
+		Text: "hello world", OutputPath: "speech.wav", Output: &out,
 	})
 	if err == nil || err.Error() != "characterized inference failure" {
 		t.Fatalf("Invoke() failure = %v, want exact characterized inference failure", err)
