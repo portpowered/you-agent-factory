@@ -306,6 +306,13 @@ func TestQueryModel_NotFoundUsesFriendlyError(t *testing.T) {
 	if !errors.Is(err, ErrModelNotFound) {
 		t.Fatalf("error = %v, want ErrModelNotFound", err)
 	}
+	var apiErr *clihttp.APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("error = %T, want decoded APIError", err)
+	}
+	if apiErr.CLIErrorCode() != "NOT_FOUND" || apiErr.CLIErrorFamily() != factoryapi.ErrorFamilyNotFound || apiErr.CLIErrorMessage() != "model not found" {
+		t.Fatalf("APIError fields = code %q family %q message %q", apiErr.CLIErrorCode(), apiErr.CLIErrorFamily(), apiErr.CLIErrorMessage())
+	}
 }
 
 func TestInvoke_JSONWritesMetadataResponse(t *testing.T) {

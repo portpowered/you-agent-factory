@@ -80,14 +80,24 @@ func Show(cfg ShowConfig) error {
 	if resp.StatusCode == http.StatusNotFound {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session show response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
-			return fmt.Errorf("factory session %q not found: %s", resolvedSessionID(cfg.SessionID), errResp.Message)
+			return clihttp.NewAPIError(
+				resp.StatusCode,
+				errResp,
+				fmt.Sprintf("factory session %q not found: %s", resolvedSessionID(cfg.SessionID), errResp.Message),
+				nil,
+			)
 		}
 		return fmt.Errorf("factory session %q not found", resolvedSessionID(cfg.SessionID))
 	}
 	if resp.StatusCode != http.StatusOK {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session show response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
-			return fmt.Errorf("get factory session failed (%d): %s", resp.StatusCode, errResp.Message)
+			return clihttp.NewAPIError(
+				resp.StatusCode,
+				errResp,
+				fmt.Sprintf("get factory session failed (%d): %s", resp.StatusCode, errResp.Message),
+				nil,
+			)
 		}
 		return fmt.Errorf("get factory session failed (%d)", resp.StatusCode)
 	}
@@ -510,14 +520,24 @@ func showDurableSession(cfg ShowConfig) error {
 	if resp.StatusCode == http.StatusNotFound {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session show durable response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
-			return fmt.Errorf("factory session %q not found: %s", resolvedSessionID(cfg.SessionID), errResp.Message)
+			return clihttp.NewAPIError(
+				resp.StatusCode,
+				errResp,
+				fmt.Sprintf("factory session %q not found: %s", resolvedSessionID(cfg.SessionID), errResp.Message),
+				nil,
+			)
 		}
 		return fmt.Errorf("factory session %q not found", resolvedSessionID(cfg.SessionID))
 	}
 	if resp.StatusCode != http.StatusOK {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session show durable response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
-			return fmt.Errorf("get factory session failed (%d): %s", resp.StatusCode, errResp.Message)
+			return clihttp.NewAPIError(
+				resp.StatusCode,
+				errResp,
+				fmt.Sprintf("get factory session failed (%d): %s", resp.StatusCode, errResp.Message),
+				nil,
+			)
 		}
 		return fmt.Errorf("get factory session failed (%d)", resp.StatusCode)
 	}

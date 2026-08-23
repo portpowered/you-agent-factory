@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -794,6 +796,102 @@ func TestProcessUsageFailuresPreserveCobraDetailsAndHelpHints(t *testing.T) {
 				t.Fatalf("stdout = %q, want empty usage failure output", stdout.String())
 			}
 		})
+	}
+}
+
+func TestProcessRemoteSessionShowPreservesStructuredNotFound(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/factory-sessions/missing" {
+			t.Fatalf("request path = %q, want /factory-sessions/missing", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = io.WriteString(w, `{"code":"NOT_FOUND","family":"NOT_FOUND","message":"factory session not found"}`)
+	}))
+	defer server.Close()
+
+	process, err := BuildProcess(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+	err = process.Execute(Input{
+		Args:             []string{"you", "--server", server.URL, "--json", "session", "show", "missing"},
+		Env:              homeEnvironment(t.TempDir()),
+		Stdout:           &stdout,
+		Stderr:           &stderr,
+		Context:          context.Background(),
+		WorkingDirectory: t.TempDir(),
+	})
+	if err == nil {
+		t.Fatal("Process.Execute(session show) error = nil, want structured 404 failure")
+	}
+	var response struct {
+		Code    string `json:"code"`
+		Family  string `json:"family"`
+		Message string `json:"message"`
+	}
+	if decodeErr := json.Unmarshal(stderr.Bytes(), &response); decodeErr != nil {
+		t.Fatalf("stderr is not one JSON error response: %v\n%s", decodeErr, stderr.String())
+	}
+	if response.Code != "NOT_FOUND" || response.Family != "NOT_FOUND" || response.Message != "factory session not found" {
+		t.Fatalf("structured response = %#v, want server-provided 404 details", response)
+	}
+	if strings.Contains(stderr.String(), "CLI_COMMAND_FAILED") || strings.Contains(stderr.String(), "INTERNAL_SERVER_ERROR") {
+		t.Fatalf("stderr collapsed structured 404: %q", stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty failure output", stdout.String())
+	}
+}
+
+func TestProcessRemoteWorkShowPreservesStructuredNotFound(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/factory-sessions/~default/work/missing" {
+			t.Fatalf("request path = %q, want /factory-sessions/~default/work/missing", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = io.WriteString(w, `{"code":"NOT_FOUND","family":"NOT_FOUND","message":"work not found"}`)
+	}))
+	defer server.Close()
+
+	process, err := BuildProcess(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	var stdout, stderr bytes.Buffer
+	err = process.Execute(Input{
+		Args:             []string{"you", "--server", server.URL, "--json", "work", "show", "missing"},
+		Env:              homeEnvironment(t.TempDir()),
+		Stdout:           &stdout,
+		Stderr:           &stderr,
+		Context:          context.Background(),
+		WorkingDirectory: t.TempDir(),
+	})
+	if err == nil {
+		t.Fatal("Process.Execute(work show) error = nil, want structured 404 failure")
+	}
+	var response struct {
+		Code    string `json:"code"`
+		Family  string `json:"family"`
+		Message string `json:"message"`
+	}
+	if decodeErr := json.Unmarshal(stderr.Bytes(), &response); decodeErr != nil {
+		t.Fatalf("stderr is not one JSON error response: %v\n%s", decodeErr, stderr.String())
+	}
+	if response.Code != "NOT_FOUND" || response.Family != "NOT_FOUND" || response.Message != "work not found" {
+		t.Fatalf("structured response = %#v, want server-provided 404 details", response)
+	}
+	if strings.Contains(stderr.String(), "CLI_COMMAND_FAILED") || strings.Contains(stderr.String(), "INTERNAL_SERVER_ERROR") {
+		t.Fatalf("stderr collapsed structured 404: %q", stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty failure output", stdout.String())
 	}
 }
 

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 type doerFunc func(*http.Request) (*http.Response, error)
@@ -150,5 +152,29 @@ func TestDecodeAPIError(t *testing.T) {
 	decoded, ok := DecodeAPIError(response)
 	if !ok || decoded.Message != "invalid session" {
 		t.Fatalf("decoded = %#v, ok = %t", decoded, ok)
+	}
+}
+
+func TestAPIErrorPreservesServerFieldsAndCause(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New("request context")
+	response := factoryapi.ErrorResponse{
+		Code:    factoryapi.ErrorResponseCodeNOTFOUND,
+		Family:  factoryapi.ErrorFamilyNotFound,
+		Message: "server says missing",
+	}
+	err := NewAPIError(http.StatusNotFound, response, "work \"missing\" not found: server says missing", cause)
+	if got := err.Error(); got != "work \"missing\" not found: server says missing" {
+		t.Fatalf("APIError.Error() = %q", got)
+	}
+	if !errors.Is(err, cause) {
+		t.Fatal("APIError did not preserve its cause")
+	}
+	if err.CLIErrorCode() != "NOT_FOUND" || err.CLIErrorFamily() != factoryapi.ErrorFamilyNotFound || err.CLIErrorMessage() != "server says missing" {
+		t.Fatalf("CLI fields = code %q family %q message %q", err.CLIErrorCode(), err.CLIErrorFamily(), err.CLIErrorMessage())
+	}
+	if got := err.CLIErrorResponse(); got != response {
+		t.Fatalf("CLI response = %#v, want %#v", got, response)
 	}
 }

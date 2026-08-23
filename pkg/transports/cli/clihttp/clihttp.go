@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -26,6 +27,93 @@ type Clock interface {
 type Response struct {
 	HTTP     *http.Response
 	Duration time.Duration
+}
+
+// APIError preserves one decoded server ErrorResponse across the CLI command
+// boundary. DisplayMessage keeps the command's existing contextual error text
+// for direct callers, while the CLI diagnostic contract renders the original
+// server message and response family/code.
+type APIError struct {
+	StatusCode     int
+	Response       factoryapi.ErrorResponse
+	DisplayMessage string
+	Cause          error
+}
+
+// NewAPIError constructs a safe typed failure from one decoded server
+// response. The caller supplies any operation-specific context and optional
+// sentinel cause separately from the server-owned diagnostic fields.
+func NewAPIError(
+	statusCode int,
+	response factoryapi.ErrorResponse,
+	displayMessage string,
+	cause error,
+) *APIError {
+	return &APIError{
+		StatusCode:     statusCode,
+		Response:       response,
+		DisplayMessage: strings.TrimSpace(displayMessage),
+		Cause:          cause,
+	}
+}
+
+func (err *APIError) Error() string {
+	if err == nil {
+		return ""
+	}
+	if message := strings.TrimSpace(err.DisplayMessage); message != "" {
+		return message
+	}
+	if message := strings.TrimSpace(err.Response.Message); message != "" {
+		return message
+	}
+	if err.StatusCode != 0 {
+		return fmt.Sprintf("HTTP request failed (%d)", err.StatusCode)
+	}
+	return "HTTP request failed"
+}
+
+func (err *APIError) Unwrap() error {
+	if err == nil {
+		return nil
+	}
+	return err.Cause
+}
+
+// CLIErrorCode, CLIErrorFamily, and CLIErrorMessage form the shared central
+// diagnostic contract without coupling command-specific packages to the
+// renderer's concrete implementation.
+func (err *APIError) CLIErrorCode() string {
+	if err == nil {
+		return ""
+	}
+	return strings.TrimSpace(string(err.Response.Code))
+}
+
+func (err *APIError) CLIErrorFamily() factoryapi.ErrorFamily {
+	if err == nil {
+		return ""
+	}
+	return err.Response.Family
+}
+
+func (err *APIError) CLIErrorMessage() string {
+	if err == nil {
+		return ""
+	}
+	if message := strings.TrimSpace(err.Response.Message); message != "" {
+		return message
+	}
+	return strings.TrimSpace(err.DisplayMessage)
+}
+
+// CLIErrorResponse exposes the complete already-decoded public response so
+// optional server-provided diagnostic details survive the CLI boundary too.
+func (err *APIError) CLIErrorResponse() factoryapi.ErrorResponse {
+	if err == nil {
+		return factoryapi.ErrorResponse{}
+	}
+	return err.Response
 }
 
 // Protocol is the single HTTP adapter consumed by handwritten CLI transports.

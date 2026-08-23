@@ -86,6 +86,35 @@ func (err testInvocationCodedError) InvocationErrorCode() string { return err.co
 
 func (err testInvocationCodedError) InvocationErrorMessage() string { return err.message }
 
+type testResponseCodedError struct {
+	response factoryapi.ErrorResponse
+}
+
+func (err testResponseCodedError) Error() string { return err.response.Message }
+
+func (err testResponseCodedError) CLIErrorResponse() factoryapi.ErrorResponse { return err.response }
+
+func TestWriteFailurePreservesDecodedServerResponse(t *testing.T) {
+	t.Parallel()
+
+	authored := testResponseCodedError{response: factoryapi.ErrorResponse{
+		Code:    factoryapi.ErrorResponseCodeNOTFOUND,
+		Family:  factoryapi.ErrorFamilyNotFound,
+		Message: "server supplied message",
+	}}
+	var output bytes.Buffer
+	if !WriteFailure(&output, authored) {
+		t.Fatal("WriteFailure did not recognize response-coded failure")
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("decode response-coded diagnostic: %v", err)
+	}
+	if response.Code != factoryapi.ErrorResponseCodeNOTFOUND || response.Family != factoryapi.ErrorFamilyNotFound || response.Message != "server supplied message" {
+		t.Fatalf("response = %#v, want decoded server fields", response)
+	}
+}
+
 func TestFailureNilAndDefaultEdges(t *testing.T) {
 	t.Parallel()
 

@@ -765,9 +765,9 @@ func modelsRequestError(statusCode int, body []byte) error {
 	var errResp factoryapi.ErrorResponse
 	if json.Unmarshal(body, &errResp) == nil && errResp.Message != "" {
 		if statusCode == http.StatusNotFound && errResp.Code == factoryapi.ErrorResponseCodeNOTFOUND {
-			return fmt.Errorf("%w: %s", ErrModelNotFound, errResp.Message)
+			return clihttp.NewAPIError(statusCode, errResp, fmt.Sprintf("%s: %s", ErrModelNotFound, errResp.Message), ErrModelNotFound)
 		}
-		return fmt.Errorf("models request failed (%d): %s", statusCode, errResp.Message)
+		return clihttp.NewAPIError(statusCode, errResp, fmt.Sprintf("models request failed (%d): %s", statusCode, errResp.Message), nil)
 	}
 	preview := strings.TrimSpace(string(body))
 	if len(preview) > modelsErrorBodyPreviewSize {

@@ -40,6 +40,14 @@ type FamilyCodedError interface {
 	CLIErrorFamily() factoryapi.ErrorFamily
 }
 
+// ResponseCodedError exposes the complete public ErrorResponse that crossed
+// the CLI transport boundary. It is intentionally structural so the central
+// renderer does not depend on a concrete HTTP client or command package.
+type ResponseCodedError interface {
+	error
+	CLIErrorResponse() factoryapi.ErrorResponse
+}
+
 // InvocationCodedError supports the existing invocation error vocabulary
 // without forcing older command packages to rename their methods.
 type InvocationCodedError interface {
@@ -232,14 +240,27 @@ func Normalize(err error) error {
 }
 
 type fields struct {
-	code    string
-	message string
-	family  factoryapi.ErrorFamily
+	code        string
+	message     string
+	family      factoryapi.ErrorFamily
+	response    factoryapi.ErrorResponse
+	hasResponse bool
 }
 
 func diagnosticFields(err error) (fields, bool) {
 	if err == nil {
 		return fields{}, false
+	}
+	var responseCoded ResponseCodedError
+	if errors.As(err, &responseCoded) {
+		response := responseCoded.CLIErrorResponse()
+		return fields{
+			code:        strings.TrimSpace(string(response.Code)),
+			message:     strings.TrimSpace(response.Message),
+			family:      response.Family,
+			response:    response,
+			hasResponse: true,
+		}, true
 	}
 	var familyCoded FamilyCodedError
 	if errors.As(err, &familyCoded) {
@@ -276,10 +297,17 @@ func WriteFailure(output io.Writer, err error) bool {
 	if strings.TrimSpace(values.message) == "" {
 		values.message = defaultFailureMessage
 	}
-	payload := factoryapi.ErrorResponse{
-		Code:    factoryapi.ErrorResponseCode(values.code),
-		Family:  values.family,
-		Message: values.message,
+	payload := values.response
+	if !values.hasResponse {
+		payload = factoryapi.ErrorResponse{
+			Code:    factoryapi.ErrorResponseCode(values.code),
+			Family:  values.family,
+			Message: values.message,
+		}
+	} else {
+		payload.Code = factoryapi.ErrorResponseCode(values.code)
+		payload.Family = values.family
+		payload.Message = values.message
 	}
 	if payload.Family == "" {
 		payload.Family = factoryapi.ErrorFamilyInternalServerError
