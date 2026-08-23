@@ -64,6 +64,7 @@ export function FactoryGraphNodeResizeControls({
   if (!resizePosition) {
     return null;
   }
+  const resizeDirection = resizeControlDirection(allowedAxes);
 
   return (
     <NodeResizeControl
@@ -76,6 +77,7 @@ export function FactoryGraphNodeResizeControls({
       onResize={handleResize}
       onResizeEnd={handleResizeEnd}
       position={resizePosition}
+      resizeDirection={resizeDirection}
       style={RESIZE_GRIP_STYLE}
       variant={ResizeControlVariant.Handle}
       shouldResize={(_event, dimensions) =>
@@ -150,6 +152,18 @@ function resizeControlPosition(
   allowedAxes: FactoryGraphNodeResizeAxes,
 ): ResizeGripPosition | null {
   return allowedAxes.width || allowedAxes.height ? "bottom-right" : null;
+}
+
+function resizeControlDirection(
+  allowedAxes: FactoryGraphNodeResizeAxes,
+): "horizontal" | "vertical" | undefined {
+  if (allowedAxes.width && !allowedAxes.height) {
+    return "horizontal";
+  }
+  if (allowedAxes.height && !allowedAxes.width) {
+    return "vertical";
+  }
+  return undefined;
 }
 
 function isFiniteBoundedDimensions(

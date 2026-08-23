@@ -24,23 +24,25 @@ vi.mock("@xyflow/react", async (importOriginal) => {
         dimensions: { height: number; width: number },
       ) => void;
       position: string;
+      resizeDirection?: "horizontal" | "vertical";
       style?: Record<string, string>;
       variant?: string;
     }) => (
       <button
         className={props.className}
         data-testid={`resize-${props.position}`}
+        data-resize-direction={props.resizeDirection}
         data-variant={props.variant}
         onClick={() =>
           props.onResizeEnd?.(new MouseEvent("mouseup"), {
-            height: 240,
-            width: 280,
+            height: props.resizeDirection === "horizontal" ? 240 : 280,
+            width: props.resizeDirection === "vertical" ? 200 : 280,
           })
         }
         onPointerMove={() =>
           props.onResize?.(new MouseEvent("mousemove"), {
-            height: 210,
-            width: 250,
+            height: props.resizeDirection === "horizontal" ? 210 : 250,
+            width: props.resizeDirection === "vertical" ? 200 : 250,
           })
         }
         style={props.style}
@@ -127,6 +129,21 @@ describe("Factory graph node resize controls", () => {
         "data-variant",
         "handle",
       );
+      const resizeDirection = allowedAxes.width
+        ? allowedAxes.height
+          ? undefined
+          : "horizontal"
+        : "vertical";
+      if (resizeDirection) {
+        expect(screen.getByTestId("resize-bottom-right")).toHaveAttribute(
+          "data-resize-direction",
+          resizeDirection,
+        );
+      } else {
+        expect(screen.getByTestId("resize-bottom-right")).not.toHaveAttribute(
+          "data-resize-direction",
+        );
+      }
       expect(screen.queryByTestId("resize-right")).toBeNull();
       expect(screen.queryByTestId("resize-bottom")).toBeNull();
     },
@@ -236,8 +253,27 @@ describe("Factory graph node live resize", () => {
 
     fireEvent.pointerMove(screen.getByTestId("resize-bottom-right"));
 
-    expect(onResize).toHaveBeenCalledWith({ height: 210, width: 250 });
+    expect(onResize).toHaveBeenCalledWith({ height: 250, width: 250 });
     expect(onResizeEnd).not.toHaveBeenCalled();
+  });
+
+  it("keeps a width-only node height fixed during a bottom-right drag", () => {
+    const onResize = vi.fn();
+    render(
+      <FactoryGraphNodeResizeControls
+        {...resizeProps({
+          allowedAxes: { height: false, width: true },
+          onResize,
+        })}
+      />,
+    );
+
+    const control = screen.getByTestId("resize-bottom-right");
+    expect(control).toHaveAttribute("data-resize-direction", "horizontal");
+
+    fireEvent.pointerMove(control);
+
+    expect(onResize).toHaveBeenCalledWith({ height: 210, width: 250 });
   });
 
   it("leaves node internals alone until the drag settles", () => {
