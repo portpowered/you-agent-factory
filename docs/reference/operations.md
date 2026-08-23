@@ -566,9 +566,13 @@ Verify recovery with the same session target used for submission:
 
 1. Run `you work list` and `you work show <work-id>` to confirm Work identity,
    state, payload, and relations.
-2. Run `you session dispatches <session-id>` or inspect the Factory Session
-   dispatch API to confirm the prior dispatch is interrupted, not running.
-3. Read the Factory Session events or Worker Session observation when the
+2. Run `you worker-sessions list --work-id <work-id>` to inspect the Worker
+   Session attempts attributed to that Work.
+3. Inspect `GET /factory-sessions/<session-id>/dispatches` for exact
+   session-level dispatch records, or call `you.factory_session.list_dispatches`
+   through MCP. The Work-scoped Worker Session list does not replace these
+   Factory Session dispatch reads.
+4. Read the Factory Session events or Worker Session observation when the
    interruption reason and original attempt identity are needed.
 
 If no current-board Recording was configured, the live Factory Session queue
