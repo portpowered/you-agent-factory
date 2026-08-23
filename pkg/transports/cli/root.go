@@ -361,7 +361,7 @@ func (factory CommandFactory) ExecuteCommand(input startupcli.CommandInvocation)
 	factory.homeDir = input.HomeDir
 	factory.lookupEnv = input.LookupEnv
 	factory.initializer = input.Initializer
-	diagnostics := clidiag.NewDiagnosticWriter(input.Stderr)
+	diagnostics := clidiag.NewDiagnosticWriter(input.Stderr, clidiag.DebugFlagEnabled(input.Arguments))
 	root := newRootCommandWithFactory(factory)
 	if root == nil {
 		return executeCommandFailure(diagnostics, fmt.Errorf("execute CLI command: command is required"))
@@ -483,20 +483,31 @@ func executeCommandFailure(diagnostics io.Writer, err error) error {
 			_, _ = fmt.Fprintln(diagnostics, "Error: context canceled")
 			clidiag.MarkDiagnosticRendered(diagnostics)
 		}
+		writeDebugFailure(diagnostics, err)
 		return context.Canceled
 	}
 	if clidiag.DiagnosticRendered(diagnostics) {
+		writeDebugFailure(diagnostics, err)
 		return err
 	}
 	if clidiag.WriteUsageError(diagnostics, err) {
+		writeDebugFailure(diagnostics, err)
 		return err
 	}
 	normalized := clidiag.Normalize(err)
 	if clidiag.DiagnosticRendered(diagnostics) {
+		writeDebugFailure(diagnostics, err)
 		return err
 	}
 	clidiag.WriteFailure(diagnostics, normalized)
+	writeDebugFailure(diagnostics, err)
 	return normalized
+}
+
+func writeDebugFailure(diagnostics io.Writer, err error) {
+	if clidiag.DebugEnabled(diagnostics) {
+		clidiag.WriteDebugFailure(diagnostics, err)
+	}
 }
 
 func buildWorkflowExecutionService(

@@ -7,7 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -52,6 +55,16 @@ type FamilyCodedError interface {
 type ResponseCodedError interface {
 	error
 	CLIErrorResponse() factoryapi.ErrorResponse
+}
+
+// HTTPDiagnostic exposes request metadata that is safe to render only from
+// the explicit debug channel. The contract is structural so the central CLI
+// renderer does not depend on the concrete HTTP adapter.
+type HTTPDiagnostic interface {
+	error
+	CLIHTTPMethod() string
+	CLIHTTPURL() string
+	CLIHTTPStatus() int
 }
 
 // InvocationCodedError supports the existing invocation error vocabulary
@@ -240,6 +253,7 @@ func WriteUsageError(output io.Writer, err error) bool {
 type DiagnosticWriter struct {
 	output   io.Writer
 	rendered bool
+	debug    bool
 }
 
 type centralDiagnosticsContextKey struct{}
@@ -262,8 +276,9 @@ func CentralDiagnosticsEnabled(ctx context.Context) bool {
 	return enabled
 }
 
-func NewDiagnosticWriter(output io.Writer) *DiagnosticWriter {
-	return &DiagnosticWriter{output: output}
+func NewDiagnosticWriter(output io.Writer, debug ...bool) *DiagnosticWriter {
+	debugEnabled := len(debug) > 0 && debug[0]
+	return &DiagnosticWriter{output: output, debug: debugEnabled}
 }
 
 func (writer *DiagnosticWriter) Write(payload []byte) (int, error) {
@@ -281,6 +296,13 @@ func (writer *DiagnosticWriter) MarkDiagnosticRendered() {
 
 func (writer *DiagnosticWriter) DiagnosticRendered() bool {
 	return writer != nil && writer.rendered
+}
+
+// DebugEnabled reports whether this invocation explicitly selected --debug.
+// It is kept on the process-local writer so command handlers can continue to
+// use the ordinary io.Writer boundary without receiving a second mode object.
+func (writer *DiagnosticWriter) DebugEnabled() bool {
+	return writer != nil && writer.debug
 }
 
 // MarkDiagnosticRendered marks a writer supplied by the process boundary when
@@ -403,6 +425,129 @@ func WriteFailure(output io.Writer, err error) bool {
 	}
 	MarkDiagnosticRendered(output)
 	return true
+}
+
+// WriteDebugFailure appends safe, line-oriented diagnostics for one failure.
+// The normal ErrorResponse remains unchanged; callers opt into this renderer
+// only after the explicit --debug flag has been resolved. Cause text is
+// bounded and redacted, and HTTP query strings, credentials, and fragments
+// are never emitted.
+func WriteDebugFailure(output io.Writer, err error) bool {
+	if output == nil || err == nil {
+		return false
+	}
+	causes := debugCauseChain(err)
+	for index, cause := range causes {
+		_, _ = fmt.Fprintf(output, "debug: cause[%d]=%s\n", index, cause)
+	}
+
+	var httpFailure HTTPDiagnostic
+	if !errors.As(err, &httpFailure) {
+		return len(causes) > 0
+	}
+	method := strings.TrimSpace(httpFailure.CLIHTTPMethod())
+	if method == "" {
+		method = "<unknown>"
+	}
+	status := "<unavailable>"
+	if code := httpFailure.CLIHTTPStatus(); code != 0 {
+		status = strconv.Itoa(code)
+	}
+	_, _ = fmt.Fprintf(
+		output,
+		"debug: http method=%s url=%s status=%s\n",
+		method,
+		sanitizeURL(httpFailure.CLIHTTPURL()),
+		status,
+	)
+	return true
+}
+
+const maxDebugCauseDepth = 16
+
+func debugCauseChain(err error) []string {
+	causes := make([]string, 0, 2)
+	previous := ""
+	for depth := 0; err != nil && depth < maxDebugCauseDepth; depth++ {
+		message := sanitizeDebugMessage(err.Error())
+		if message != previous {
+			causes = append(causes, message)
+			previous = message
+		}
+		err = errors.Unwrap(err)
+	}
+	if err != nil {
+		causes = append(causes, "<cause chain truncated>")
+	}
+	return causes
+}
+
+var (
+	debugURLPattern                 = regexp.MustCompile(`(?i)https?://[^\s]+`)
+	debugSensitiveAssignmentPattern = regexp.MustCompile(
+		`(?i)(\b(?:authorization|cookie|set-cookie|password|passwd|secret|token|credential|api[-_]?key|access[-_]?token|refresh[-_]?token|payload|body|query|environment|env|home|userprofile|homedrive|homepath)\b\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+(?:\s+[^\s,;]+)?)`,
+	)
+)
+
+func sanitizeDebugMessage(message string) string {
+	message = debugURLPattern.ReplaceAllStringFunc(message, sanitizeDebugURLMatch)
+	message = debugSensitiveAssignmentPattern.ReplaceAllString(message, `${1}<redacted>`)
+	message = strings.NewReplacer("\r", `\r`, "\n", `\n`).Replace(message)
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return "<empty>"
+	}
+	if len(message) > 512 {
+		return message[:512] + "..."
+	}
+	return message
+}
+
+func sanitizeDebugURLMatch(raw string) string {
+	suffix := ""
+	for len(raw) > 0 && strings.ContainsRune(".,;:)]}", rune(raw[len(raw)-1])) {
+		suffix = string(raw[len(raw)-1]) + suffix
+		raw = raw[:len(raw)-1]
+	}
+	return sanitizeURL(raw) + suffix
+}
+
+func sanitizeURL(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "<unavailable>"
+	}
+	parsed.User = nil
+	parsed.RawQuery = ""
+	parsed.ForceQuery = false
+	parsed.Fragment = ""
+	return parsed.String()
+}
+
+// DebugFlagEnabled resolves the explicit CLI --debug switch from raw argv.
+// This is intentionally limited to CLI input; environment and config values
+// must not silently turn on disclosure of cause or HTTP metadata.
+func DebugFlagEnabled(args []string) bool {
+	enabled := false
+	for _, arg := range args {
+		if arg == "--" {
+			break
+		}
+		switch {
+		case arg == "--debug" || arg == "-d" || arg == "--debug=true" || arg == "-d=true":
+			enabled = true
+		case arg == "--debug=false" || arg == "-d=false":
+			enabled = false
+		}
+	}
+	return enabled
+}
+
+// DebugEnabled reports whether output is the process boundary's explicit
+// debug writer.
+func DebugEnabled(output io.Writer) bool {
+	debugWriter, ok := output.(interface{ DebugEnabled() bool })
+	return ok && debugWriter.DebugEnabled()
 }
 
 // Printf writes one verbose diagnostic line when diagnostics are enabled.

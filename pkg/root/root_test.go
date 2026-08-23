@@ -883,6 +883,121 @@ func TestProcessLocalRunFailuresPreserveSubmittedInputs(t *testing.T) {
 	}
 }
 
+func TestProcessFailureDisclosurePolicySeparatesDefaultVerboseAndDebug(t *testing.T) {
+	t.Parallel()
+
+	process, err := BuildProcess(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	t.Cleanup(func() { _ = process.Close(context.Background()) })
+
+	t.Run("local failure", func(t *testing.T) {
+		t.Parallel()
+		missingPath := "./debug-missing-replay.json"
+		outputs := make(map[string]string)
+		for _, test := range []struct {
+			name  string
+			flags []string
+		}{
+			{name: "default"},
+			{name: "verbose", flags: []string{"--verbose"}},
+			{name: "debug", flags: []string{"--debug"}},
+		} {
+			args := append([]string{"you"}, test.flags...)
+			args = append(args, "run", "--replay", missingPath)
+			var stdout, stderr bytes.Buffer
+			home := t.TempDir()
+			if err := process.Execute(Input{
+				Args:             args,
+				Env:              homeEnvironment(home),
+				Stdin:            strings.NewReader(""),
+				Stdout:           &stdout,
+				Stderr:           &stderr,
+				Context:          context.Background(),
+				WorkingDirectory: home,
+			}); err == nil {
+				t.Fatalf("Process.Execute(%s) error = nil, want local failure", test.name)
+			}
+			outputs[test.name] = stderr.String()
+			if !strings.Contains(stderr.String(), clidiag.LocalInputFailureCode) ||
+				!strings.Contains(stderr.String(), missingPath) {
+				t.Fatalf("%s stderr = %q, want local path diagnostic", test.name, stderr.String())
+			}
+			if test.name != "debug" && strings.Contains(stderr.String(), "no such file") {
+				t.Fatalf("%s stderr leaked filesystem cause: %q", test.name, stderr.String())
+			}
+		}
+		if strings.Contains(outputs["default"], "debug:") || strings.Contains(outputs["verbose"], "debug:") {
+			t.Fatalf("non-debug output unexpectedly included debug diagnostics: default=%q verbose=%q", outputs["default"], outputs["verbose"])
+		}
+		if !strings.Contains(outputs["debug"], "debug: cause[0]=") {
+			t.Fatalf("debug local output = %q, want ordered cause detail", outputs["debug"])
+		}
+	})
+
+	t.Run("HTTP failure", func(t *testing.T) {
+		t.Parallel()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet || r.URL.Path != "/factory-sessions/missing" {
+				t.Fatalf("request = %s %s, want GET /factory-sessions/missing", r.Method, r.URL.Path)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(w, `{"code":"NOT_FOUND","family":"NOT_FOUND","message":"factory session not found"}`)
+		}))
+		defer server.Close()
+
+		outputs := make(map[string]string)
+		for _, test := range []struct {
+			name  string
+			flags []string
+		}{
+			{name: "default"},
+			{name: "verbose", flags: []string{"--verbose"}},
+			{name: "debug", flags: []string{"--debug"}},
+		} {
+			args := append([]string{"you"}, test.flags...)
+			args = append(args, "--server", server.URL, "--json", "session", "show", "missing")
+			var stdout, stderr bytes.Buffer
+			home := t.TempDir()
+			if err := process.Execute(Input{
+				Args:             args,
+				Env:              homeEnvironment(home),
+				Stdout:           &stdout,
+				Stderr:           &stderr,
+				Context:          context.Background(),
+				WorkingDirectory: home,
+			}); err == nil {
+				t.Fatalf("Process.Execute(%s) error = nil, want HTTP failure", test.name)
+			}
+			outputs[test.name] = stderr.String()
+			if !strings.Contains(stderr.String(), `"family":"NOT_FOUND"`) {
+				t.Fatalf("%s stderr = %q, want structured server family", test.name, stderr.String())
+			}
+		}
+		for _, name := range []string{"default", "verbose"} {
+			if strings.Contains(outputs[name], "debug:") || strings.Contains(outputs[name], "method=GET") {
+				t.Fatalf("%s HTTP output unexpectedly included debug metadata: %q", name, outputs[name])
+			}
+		}
+		debugOutput := outputs["debug"]
+		for _, want := range []string{
+			"debug: cause[0]=",
+			"debug: http method=GET",
+			"url=" + server.URL + "/factory-sessions/missing",
+			"status=404",
+		} {
+			if !strings.Contains(debugOutput, want) {
+				t.Fatalf("debug HTTP output = %q, want %q", debugOutput, want)
+			}
+		}
+		if strings.Contains(debugOutput, "?") || strings.Contains(debugOutput, "Authorization") {
+			t.Fatalf("debug HTTP output exposed unsanitized request detail: %q", debugOutput)
+		}
+	})
+}
+
 func TestProcessRemoteSessionShowPreservesStructuredNotFound(t *testing.T) {
 	t.Parallel()
 

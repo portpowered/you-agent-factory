@@ -178,3 +178,54 @@ func TestAPIErrorPreservesServerFieldsAndCause(t *testing.T) {
 		t.Fatalf("CLI response = %#v, want %#v", got, response)
 	}
 }
+
+func TestAPIErrorFromResponsePreservesHTTPDebugMetadata(t *testing.T) {
+	t.Parallel()
+
+	request, err := http.NewRequest(http.MethodGet, "https://factory.test/factory-sessions/missing?token=secret", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	response := &http.Response{StatusCode: http.StatusNotFound, Request: request}
+	apiError := NewAPIErrorFromResponse(
+		response,
+		factoryapi.ErrorResponse{Code: factoryapi.ErrorResponseCodeNOTFOUND, Family: factoryapi.ErrorFamilyNotFound, Message: "missing"},
+		"session missing",
+		nil,
+	)
+	if apiError.CLIHTTPMethod() != http.MethodGet ||
+		apiError.CLIHTTPURL() != request.URL.String() ||
+		apiError.CLIHTTPStatus() != http.StatusNotFound {
+		t.Fatalf("HTTP metadata = (%q, %q, %d), want request metadata", apiError.CLIHTTPMethod(), apiError.CLIHTTPURL(), apiError.CLIHTTPStatus())
+	}
+}
+
+func TestProtocolTransportFailurePreservesHTTPDebugMetadata(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New("connection refused")
+	clock := &clockSequence{values: []time.Time{time.Unix(1, 0), time.Unix(1, 1)}}
+	protocol, err := NewProtocol(doerFunc(func(*http.Request) (*http.Response, error) {
+		return nil, cause
+	}), clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, gotErr := protocol.GetJSON(context.Background(), "https://factory.test/factory-sessions?token=secret", nil)
+	if !errors.Is(gotErr, cause) {
+		t.Fatalf("transport error = %v, want cause %v", gotErr, cause)
+	}
+	var metadata interface {
+		CLIHTTPMethod() string
+		CLIHTTPURL() string
+		CLIHTTPStatus() int
+	}
+	if !errors.As(gotErr, &metadata) {
+		t.Fatalf("transport error = %T, want HTTP metadata", gotErr)
+	}
+	if metadata.CLIHTTPMethod() != http.MethodGet ||
+		metadata.CLIHTTPURL() != "https://factory.test/factory-sessions?token=secret" ||
+		metadata.CLIHTTPStatus() != 0 {
+		t.Fatalf("transport HTTP metadata = (%q, %q, %d)", metadata.CLIHTTPMethod(), metadata.CLIHTTPURL(), metadata.CLIHTTPStatus())
+	}
+}

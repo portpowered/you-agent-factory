@@ -343,3 +343,84 @@ func TestNewUsageErrorRetainsExistingMetadata(t *testing.T) {
 		t.Fatalf("usage command path = %q, want original path", usage.CommandPath)
 	}
 }
+
+type testHTTPDiagnosticError struct {
+	method string
+	url    string
+	status int
+	cause  error
+}
+
+func (err *testHTTPDiagnosticError) Error() string {
+	if err == nil || err.cause == nil {
+		return "HTTP request failed"
+	}
+	return err.cause.Error()
+}
+
+func (err *testHTTPDiagnosticError) Unwrap() error {
+	if err == nil {
+		return nil
+	}
+	return err.cause
+}
+
+func (err *testHTTPDiagnosticError) CLIHTTPMethod() string { return err.method }
+func (err *testHTTPDiagnosticError) CLIHTTPURL() string    { return err.url }
+func (err *testHTTPDiagnosticError) CLIHTTPStatus() int    { return err.status }
+
+func TestWriteDebugFailureRedactsCauseAndHTTPSecrets(t *testing.T) {
+	t.Parallel()
+
+	err := &testHTTPDiagnosticError{
+		method: "POST",
+		url:    "https://user:password@example.test/factory?token=query-secret#private",
+		status: 422,
+		cause: fmt.Errorf(
+			"send request: %w",
+			errors.New("authorization=Bearer header-secret payload=body-secret"),
+		),
+	}
+	var output bytes.Buffer
+	if !WriteDebugFailure(&output, err) {
+		t.Fatal("WriteDebugFailure returned false")
+	}
+	text := output.String()
+	for _, want := range []string{
+		"debug: cause[0]=send request:",
+		"debug: cause[1]=authorization=<redacted> payload=<redacted>",
+		"debug: http method=POST",
+		"url=https://example.test/factory",
+		"status=422",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("debug output = %q, want %q", text, want)
+		}
+	}
+	for _, forbidden := range []string{"password", "query-secret", "header-secret", "body-secret", "#private"} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("debug output leaked %q: %q", forbidden, text)
+		}
+	}
+}
+
+func TestDebugFlagEnabledHonorsExplicitCLIValuesAndArgumentBoundary(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "long flag", args: []string{"session", "show", "--debug"}, want: true},
+		{name: "short flag", args: []string{"-d", "session", "show"}, want: true},
+		{name: "explicit false", args: []string{"--debug", "--debug=false"}, want: false},
+		{name: "after separator is positional", args: []string{"run", "--", "--debug"}, want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := DebugFlagEnabled(test.args); got != test.want {
+				t.Fatalf("DebugFlagEnabled(%v) = %t, want %t", test.args, got, test.want)
+			}
+		})
+	}
+}
