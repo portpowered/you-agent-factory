@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"testing"
 	"time"
@@ -128,6 +129,35 @@ func TestBeginWorkerAttemptRecordsAssociationAndCompletesTerminal(t *testing.T) 
 	}
 }
 
+func TestBeginWorkerAttemptPreparationFailureLeavesAssociationWithoutTerminalCallback(t *testing.T) {
+	beginErr := errors.New("worker attempt preparation failed")
+	ledger := &recordingfixtures.ScriptedRuntimeLedger{}
+	sessions := &beginRuntimeAttemptService{
+		Service:  &fakeWorkerSessionsService{},
+		beginErr: beginErr,
+	}
+	f := &factoryImpl{
+		cfg:          &runtimeConfig{workerSessions: sessions, clock: platformclock.Real{}},
+		eventHistory: ledger,
+	}
+	request := detachedTargetRequest()
+
+	terminal, err := f.BeginWorkerAttempt(nil, request)
+	if !errors.Is(err, beginErr) {
+		t.Fatalf("BeginWorkerAttempt() error = %v, want %v", err, beginErr)
+	}
+	if terminal != nil {
+		t.Fatal("BeginWorkerAttempt() returned a terminal callback after preparation failed")
+	}
+	associations := ledger.DispatchWorkerSessionAssociationsSnapshot()
+	if len(associations) != 1 || associations[0].DispatchID != "dispatch-begin" || associations[0].WorkerSessionID != "dispatch-begin" {
+		t.Fatalf("recorded associations = %#v, want the pre-preparation dispatch association", associations)
+	}
+	if sessions.completed != nil {
+		t.Fatalf("Worker Session terminal result = %#v, want no callback after BeginRuntimeAttempt failed", sessions.completed)
+	}
+}
+
 func TestBeginWorkerAttemptReopensTerminalSessionWithPhysicalAttemptIdentity(t *testing.T) {
 	ledger := &recordingfixtures.ScriptedRuntimeLedger{}
 	sessions := &beginRuntimeAttemptService{
@@ -202,6 +232,7 @@ type beginRuntimeAttemptService struct {
 	request     workersessions.RuntimeAttemptRequest
 	completed   *workers.WorkstationDispatchResult
 	completeErr error
+	beginErr    error
 	existing    workersessions.Session
 	getErr      error
 }
@@ -218,6 +249,9 @@ func (service *beginRuntimeAttemptService) BeginRuntimeAttempt(
 	request workersessions.RuntimeAttemptRequest,
 ) (workersessions.RuntimeAttempt, error) {
 	service.request = request
+	if service.beginErr != nil {
+		return nil, service.beginErr
+	}
 	return workersessions.RuntimeAttempt(func(
 		_ context.Context,
 		result workers.WorkstationDispatchResult,
