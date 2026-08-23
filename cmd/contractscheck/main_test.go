@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -12,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/contractstaging"
+	"github.com/portpowered/infinite-you/internal/javascriptcontract"
 )
 
 func TestRunPassesCleanStagingWithoutWriting(t *testing.T) {
@@ -118,6 +120,35 @@ func TestRunReportsPackagedFactorySchemaDriftWithRegenerationRemedy(t *testing.T
 	}
 }
 
+func TestRunReportsMissingJavaScriptFieldWithFieldSpecificRemedyWithoutWriting(t *testing.T) {
+	root := commandFixture(t)
+	path := filepath.Join(root, filepath.FromSlash(javascriptcontract.RuntimeCatalogPath))
+	removeRuntimeCatalogField(t, path, "resourceId")
+	before := commandTree(t, root)
+
+	for runIndex := 0; runIndex < 2; runIndex++ {
+		stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+		if status := run(root, stdout, stderr); status != 1 {
+			t.Fatalf("run %d status = %d, want 1", runIndex, status)
+		}
+		if stdout.Len() != 0 {
+			t.Fatalf("run %d stdout = %q, want empty", runIndex, stdout.String())
+		}
+		output := stderr.String()
+		for _, want := range []string{
+			javascriptcontract.RuntimeCatalogPath,
+			`field "resourceId"`,
+			"javascript.agent_run.field.missing",
+			"make contracts-generate",
+		} {
+			if !strings.Contains(output, want) {
+				t.Fatalf("run %d stderr = %q, want %q", runIndex, output, want)
+			}
+		}
+	}
+	assertCommandTreeUnchanged(t, "run() changed repository bytes on JavaScript field drift", before, commandTree(t, root))
+}
+
 func mutatePackagedSchema(t *testing.T, path, category string) {
 	t.Helper()
 	if category == "missing" {
@@ -151,12 +182,41 @@ func commandFixture(t *testing.T) string {
 		}
 		writeCommandFixture(t, root, artifact.Source, contents)
 	}
+	writeCommandFixture(t, root, javascriptcontract.JavaScriptWorkflowReferencePath, "# JavaScript Workflows\n\n"+javascriptcontract.AgentRunFieldsStartMarker+"\nold generated fields\n"+javascriptcontract.AgentRunFieldsEndMarker+"\n")
 	writeCommandFixture(t, root, "unrelated.txt", "unrelated")
 	initCommandGitRepo(t, root)
 	if err := contractstaging.Generate(root); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
+	if err := javascriptcontract.GenerateJavaScriptWorkflowReference(root); err != nil {
+		t.Fatalf("GenerateJavaScriptWorkflowReference() error = %v", err)
+	}
 	return root
+}
+
+func removeRuntimeCatalogField(t *testing.T, path, field string) {
+	t.Helper()
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read runtime catalog: %v", err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(payload, &document); err != nil {
+		t.Fatalf("decode runtime catalog: %v", err)
+	}
+	sharedSchemas := document["sharedSchemas"].(map[string]any)
+	agentRun := sharedSchemas["javascript.schema.agent_run_spec"].(map[string]any)
+	schema := agentRun["schema"].(map[string]any)
+	properties := schema["properties"].(map[string]any)
+	delete(properties, field)
+	updated, err := json.MarshalIndent(document, "", "  ")
+	if err != nil {
+		t.Fatalf("encode runtime catalog: %v", err)
+	}
+	updated = append(updated, '\n')
+	if err := os.WriteFile(path, updated, 0o644); err != nil {
+		t.Fatalf("write runtime catalog: %v", err)
+	}
 }
 
 func commandTree(t *testing.T, root string) commandTreeSnapshot {
