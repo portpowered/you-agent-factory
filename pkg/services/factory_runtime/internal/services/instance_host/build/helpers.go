@@ -1,6 +1,7 @@
 package runtimebuild
 
 import (
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -13,8 +14,8 @@ import (
 type MockCommandRunnerFactory func(
 	*workers.MockWorkersConfig,
 	interfaces.RuntimeDefinitionLookup,
-	workers.CommandRunner,
-) workers.CommandRunner
+	platformprocess.CommandRunner,
+) platformprocess.CommandRunner
 
 // NewSessionLogger annotates runtime logs with session and directory metadata.
 func NewSessionLogger(base *zap.Logger, sessionID string, folderPath string, factoryDir string) *zap.Logger {
@@ -39,11 +40,11 @@ func providerOverrideForMode(provider providers.Service, replayProvider provider
 
 func commandRunnerOverrideForMode(
 	mockWorkersConfig *workers.MockWorkersConfig,
-	scriptCommandRunner workers.CommandRunner,
+	scriptCommandRunner platformprocess.CommandRunner,
 	runtimeCfg interfaces.RuntimeConfigLookup,
-	replayCommandRunner workers.CommandRunner,
+	replayCommandRunner platformprocess.CommandRunner,
 	newMockCommandRunner MockCommandRunnerFactory,
-) workers.CommandRunner {
+) platformprocess.CommandRunner {
 	next := scriptCommandRunner
 	if replayCommandRunner != nil && scriptCommandRunner == nil {
 		next = replayCommandRunner
@@ -56,10 +57,10 @@ func commandRunnerOverrideForMode(
 
 func providerCommandRunnerForMode(
 	mockWorkersConfig *workers.MockWorkersConfig,
-	providerCommandRunner workers.CommandRunner,
+	providerCommandRunner platformprocess.CommandRunner,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	newMockCommandRunner MockCommandRunnerFactory,
-) workers.CommandRunner {
+) platformprocess.CommandRunner {
 	if mockWorkersConfig == nil || newMockCommandRunner == nil {
 		return nil
 	}

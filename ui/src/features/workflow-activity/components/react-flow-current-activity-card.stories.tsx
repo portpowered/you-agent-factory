@@ -244,6 +244,42 @@ function snapshotWithFutureCanonicalValues(): DashboardSnapshot {
   return snapshot;
 }
 
+function snapshotWithProviderSpecificWorkers(): DashboardSnapshot {
+  const snapshot = structuredClone(mixedFactorySemanticsDashboardSnapshot);
+  const providerByWorkerName: Record<string, string> = {
+    agent: " OPENAI-CODEX ",
+    classifier: "Claude CLI",
+    inference: "GEMINI",
+    poller: "AGY",
+    script: "CODEX",
+  };
+
+  for (const worker of snapshot.factory?.workers ?? []) {
+    const provider = providerByWorkerName[worker.name];
+    if (provider) {
+      worker.modelProvider = provider;
+    }
+  }
+
+  snapshot.factory?.workers?.push({
+    model: "gpt-5-mini",
+    modelProvider: "future.provider",
+    name: "unknown",
+    type: "MODEL_WORKER",
+  });
+  snapshot.factory?.workstations?.push({
+    behavior: "STANDARD",
+    id: "unknown-provider",
+    inputs: [{ state: "init", workType: "story" }],
+    name: "Unknown provider",
+    outputs: [{ state: "planned", workType: "story" }],
+    type: "INFERENCE_RUN",
+    worker: "unknown",
+  });
+
+  return snapshot;
+}
+
 function createFactoryImportValue(): FactoryPngImportValue {
   return {
     factory: {
@@ -476,6 +512,70 @@ function expectNoPageHorizontalOverflow(canvasElement: HTMLElement): void {
   ).toBe(true);
 }
 
+const PROVIDER_SPECIFIC_WORKER_EXPECTATIONS = [
+  {
+    accessibleProviderLabel: "Codex/OpenAI",
+    iconKind: "codex",
+    iconLabel: "Worker (Codex/OpenAI)",
+    name: "agent",
+  },
+  {
+    accessibleProviderLabel: "Claude/Anthropic",
+    iconKind: "claude",
+    iconLabel: "Worker (Claude/Anthropic)",
+    name: "classifier",
+  },
+  {
+    accessibleProviderLabel: "Gemini",
+    iconKind: "gemini",
+    iconLabel: "Worker (Gemini)",
+    name: "inference",
+  },
+  {
+    accessibleProviderLabel: "Antigravity",
+    iconKind: "antigravity",
+    iconLabel: "Worker (Antigravity)",
+    name: "poller",
+  },
+  {
+    accessibleProviderLabel: "Codex/OpenAI",
+    iconKind: "script",
+    iconLabel: "Worker (Codex/OpenAI)",
+    name: "script",
+  },
+  {
+    accessibleProviderLabel: "future.provider",
+    iconKind: "worker",
+    iconLabel: "Worker",
+    name: "unknown",
+  },
+] as const;
+
+async function expectProviderSpecificWorkers(
+  canvasElement: HTMLElement,
+): Promise<void> {
+  const canvas = within(canvasElement);
+
+  for (const {
+    accessibleProviderLabel,
+    iconKind,
+    iconLabel,
+    name,
+  } of PROVIDER_SPECIFIC_WORKER_EXPECTATIONS) {
+    const button = await canvas.findByRole("button", {
+      name: `Select ${name} (${accessibleProviderLabel}) worker`,
+    });
+    await expect(button).toBeVisible();
+    const icon = within(button).getByRole("img", { name: iconLabel });
+    await expect(icon).toBeVisible();
+    await expect(icon).toHaveAttribute("data-graph-semantic-icon", iconKind);
+  }
+
+  expect(canvasElement.querySelector("img")).not.toBeInTheDocument();
+  await expectGraphBrowserSmoke(canvasElement);
+  expectNoPageHorizontalOverflow(canvasElement);
+}
+
 function CurrentActivityStory({
   initialSelection = null,
   locale,
@@ -635,6 +735,28 @@ export const SemanticWorkflow = {
     await expect(
       (await canvas.findAllByRole("button", { name: /Active Story/ }))[0],
     ).toHaveAttribute("aria-pressed", "true");
+  },
+};
+
+export const ProviderSpecificWorkers = {
+  render: () => (
+    <CurrentActivityStory snapshot={snapshotWithProviderSpecificWorkers()} />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectProviderSpecificWorkers(canvasElement);
+  },
+};
+
+export const ProviderSpecificWorkersNarrow = {
+  render: () => (
+    <div style={{ maxWidth: "100%", width: "360px" }}>
+      <CurrentActivityStory snapshot={snapshotWithProviderSpecificWorkers()} />
+    </div>
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await expectProviderSpecificWorkers(canvasElement);
+    const frame = canvasElement.firstElementChild;
+    expect(frame?.getBoundingClientRect().width ?? 0).toBeLessThanOrEqual(360);
   },
 };
 

@@ -15,12 +15,12 @@ import (
 	factorydefinitioncomposition "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	hostedsourceswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire"
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -109,7 +109,7 @@ func TestWireFoldPreservesSchedulerSidecarSupervision(t *testing.T) {
 		"works":[{"name":"issue-script","workTypeName":"task","payload":{"id":"SCRIPT-FOLD"}}]
 	}`)
 	runner := &foldPollerCommandRunner{
-		outcomes: []foldPollerOutcome{{result: workers.CommandResult{Stdout: workRequestJSON}}},
+		outcomes: []foldPollerOutcome{{result: platformprocess.CommandResult{Stdout: workRequestJSON}}},
 	}
 	submitted := &foldRecordingSubmitter{}
 
@@ -419,7 +419,7 @@ func (p foldProgrammableHostedPollers) ValidateLinearPoller(
 }
 
 type foldPollerOutcome struct {
-	result workers.CommandResult
+	result platformprocess.CommandResult
 	err    error
 }
 
@@ -429,7 +429,7 @@ type foldPollerCommandRunner struct {
 	outcomes []foldPollerOutcome
 }
 
-func (r *foldPollerCommandRunner) Run(ctx context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
+func (r *foldPollerCommandRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	r.mu.Lock()
 	index := r.calls
 	r.calls++

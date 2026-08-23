@@ -1,8 +1,6 @@
 package workers
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"reflect"
 	"strings"
@@ -51,45 +49,6 @@ func TestParseMockWorkersConfigWithDiagnosticsRemainsStrictForKnownAndTrailingIn
 				t.Fatal("ParseWithDiagnostics() error = nil, want reject")
 			}
 		})
-	}
-}
-
-func TestMockWorkerCommandRunnerUsesGoalRoutingEnvelopePolicy(t *testing.T) {
-	t.Parallel()
-
-	runner := &MockWorkerCommandRunner{
-		Config: &MockWorkersConfig{MockWorkers: []MockWorkerConfig{{
-			WorkerName: "goal-executor", WorkstationName: "execute-goal", RunType: MockWorkerRunTypeAccept,
-		}}},
-		OutputPolicy: OutputPolicy{Format: "decision-envelope", DecisionEnvelope: true, GoalRoutingDecisionEnvelope: true},
-	}
-	result, err := runner.Run(nil, CommandRequest{Command: "codex", WorkerType: "goal-executor", WorkstationName: "execute-goal"})
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
-	var decision struct {
-		Decision string `json:"decision"`
-		Output   string `json:"output"`
-	}
-	for _, line := range strings.Split(strings.TrimSpace(string(result.Stdout)), "\n") {
-		var event struct {
-			Type string `json:"type"`
-			Item struct {
-				Text string `json:"text"`
-			} `json:"item"`
-		}
-		if err := json.Unmarshal([]byte(line), &event); err != nil {
-			t.Fatalf("mock provider event %q is invalid JSON: %v", line, err)
-		}
-		if event.Type == "item.completed" {
-			if err := json.Unmarshal([]byte(event.Item.Text), &decision); err != nil {
-				t.Fatalf("mock agent message %q is not a decision envelope: %v", event.Item.Text, err)
-			}
-			break
-		}
-	}
-	if decision.Decision != "accepted" || decision.Output != defaultMockWorkerAcceptedOutput {
-		t.Fatalf("mock decision envelope = %#v, want lower-case accepted routing label", decision)
 	}
 }
 
@@ -158,133 +117,9 @@ func assertMockWorkersConfigLoaderResults(t *testing.T, loader MockWorkersConfig
 	}
 }
 
-func TestMockWorkerCommandRunnerExecutesScriptAndRejectRoutes(t *testing.T) {
-	t.Parallel()
-
-	var scriptRequest CommandRequest
-	next := mockCommandRunnerFunc(func(ctx context.Context, request CommandRequest) (CommandResult, error) {
-		scriptRequest = request
-		if err := ctx.Err(); err != nil {
-			return CommandResult{}, err
-		}
-		return CommandResult{Stdout: []byte("script output")}, nil
-	})
-	runner := &MockWorkerCommandRunner{Next: next, Config: &MockWorkersConfig{
-		MockWorkers: []MockWorkerConfig{{
-			RunType: MockWorkerRunTypeScript,
-			ScriptConfig: &MockWorkerScriptConfig{
-				Command:          "script-command",
-				Args:             []string{"--flag"},
-				Env:              map[string]string{"MOCK": "yes"},
-				WorkingDirectory: "workdir",
-				Stdin:            "stdin",
-			},
-		}},
-	}}
-	result, err := runner.Run(context.Background(), CommandRequest{
-		Command: "original", Args: []string{"arg"}, Env: []string{"BASE=1"}, WorkerType: "worker",
-	})
-	if err != nil || string(result.Stdout) != "script output" || scriptRequest.Command != "script-command" {
-		t.Fatalf("script result/request = %#v, %v / %#v", result, err, scriptRequest)
-	}
-	if scriptRequest.WorkDir != "workdir" || string(scriptRequest.Stdin) != "stdin" || !strings.Contains(strings.Join(scriptRequest.Env, "\n"), "YOU_MOCK_WORKER_COMMAND=original") {
-		t.Fatalf("script request = %#v, want transformed working directory, stdin, and command metadata", scriptRequest)
-	}
-	assertMockWorkerRejectRoutes(t)
-}
-
-func assertMockWorkerRejectRoutes(t *testing.T) {
-	t.Helper()
-	reject := &MockWorkerCommandRunner{Config: &MockWorkersConfig{
-		MockWorkers: []MockWorkerConfig{{
-			RunType:      MockWorkerRunTypeReject,
-			RejectConfig: &MockWorkerRejectConfig{Stdout: "rejected", ExitCode: func() *int { value := 7; return &value }()},
-		}},
-	}}
-	if result, err := reject.Run(context.Background(), CommandRequest{Command: "other"}); err != nil || result.ExitCode != 7 || string(result.Stdout) != "rejected" {
-		t.Fatalf("reject result = %#v, %v", result, err)
-	}
-	if result, err := reject.Run(context.Background(), CommandRequest{Command: "codex"}); err != nil || result.ExitCode != 0 || !strings.Contains(string(result.Stdout), "turn.failed") {
-		t.Fatalf("codex reject result = %#v, %v", result, err)
-	}
-}
-
-func TestMockWorkerCommandRunnerUsesUnmatchedPoliciesAndOutputFormats(t *testing.T) {
-	t.Parallel()
-
-	next := mockCommandRunnerFunc(func(_ context.Context, request CommandRequest) (CommandResult, error) {
-		return CommandResult{Stdout: []byte("next:" + request.Command)}, nil
-	})
-	passthrough := &MockWorkerCommandRunner{
-		Next: next,
-		Config: &MockWorkersConfig{
-			UnmatchedDispatchPolicy: MockWorkerUnmatchedDispatchPolicyPassthrough,
-			MockWorkers:             []MockWorkerConfig{{WorkerName: "other", RunType: MockWorkerRunTypeAccept}},
-		},
-	}
-	result, err := passthrough.Run(context.Background(), CommandRequest{Command: "other-command", WorkerType: "worker"})
-	if err != nil || string(result.Stdout) != "next:other-command" {
-		t.Fatalf("passthrough unmatched result = %#v, %v", result, err)
-	}
-	if _, err := (&MockWorkerCommandRunner{}).Run(context.Background(), CommandRequest{}); err == nil {
-		t.Fatal("nil next runner error = nil")
-	}
-
-	for _, test := range []struct {
-		name   string
-		policy OutputPolicy
-		cmd    string
-		want   string
-	}{
-		{name: "generic decision envelope", policy: OutputPolicy{Format: "decision-envelope"}, cmd: "claude", want: "ACCEPTED"},
-		{name: "stop token", policy: OutputPolicy{StopToken: "<DONE>"}, cmd: "codex", want: "DONE"},
-		{name: "default output", policy: OutputPolicy{}, cmd: "other", want: defaultMockWorkerAcceptedOutput},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			runner := &MockWorkerCommandRunner{
-				Config:       &MockWorkersConfig{MockWorkers: []MockWorkerConfig{{RunType: MockWorkerRunTypeAccept}}},
-				OutputPolicy: test.policy,
-			}
-			result, err := runner.Run(context.Background(), CommandRequest{Command: test.cmd})
-			if err != nil || !strings.Contains(string(result.Stdout), test.want) {
-				t.Fatalf("Run() = %#v, %v, want %q", result, err, test.want)
-			}
-		})
-	}
-}
-
-func TestMockWorkerCommandRunnerRejectsInvalidScriptConfiguration(t *testing.T) {
-	t.Parallel()
-
-	runner := &MockWorkerCommandRunner{Next: mockCommandRunnerFunc(func(context.Context, CommandRequest) (CommandResult, error) {
-		return CommandResult{Stdout: []byte("unexpected")}, nil
-	})}
-	for _, test := range []struct {
-		name   string
-		config *MockWorkerScriptConfig
-		want   string
-	}{
-		{name: "missing config", want: "scriptConfig is required"},
-		{name: "invalid timeout", config: &MockWorkerScriptConfig{Command: "script", Timeout: "not-a-duration"}, want: "invalid mock script timeout"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			result, err := runner.runScript(context.Background(), CommandRequest{}, test.config)
-			if err != nil || result.ExitCode != 1 || !strings.Contains(string(result.Stderr), test.want) {
-				t.Fatalf("runScript() = %#v, %v, want failure %q", result, err, test.want)
-			}
-		})
-	}
-}
-
 type mockWorkersConfigReader func(string) ([]byte, error)
 
 func (reader mockWorkersConfigReader) ReadFile(path string) ([]byte, error) { return reader(path) }
-
-type mockCommandRunnerFunc func(context.Context, CommandRequest) (CommandResult, error)
-
-func (runner mockCommandRunnerFunc) Run(ctx context.Context, request CommandRequest) (CommandResult, error) {
-	return runner(ctx, request)
-}
 
 func TestContainsStopToken_CompleteMarkerMustBeFinalNonEmptyLine(t *testing.T) {
 	t.Parallel()

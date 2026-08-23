@@ -23,9 +23,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// WorkerCommandRunnerAdapter projects a replaceable low-level process effect
-// into the Workers-owned command port.
-type WorkerCommandRunnerAdapter func(platformprocess.CommandRunner) workers.CommandRunner
+// WorkerCommandRunnerAdapter is a composition-only identity adapter for the
+// shared platform process effect. Workers performs its richer adaptation
+// privately at its own service boundary.
+type WorkerCommandRunnerAdapter func(platformprocess.CommandRunner) platformprocess.CommandRunner
 
 // ApplicationRuntimeOpening opens the application view of one Factory Sessions
 // runtime. Consumers receive this narrow operation rather than the
@@ -161,15 +162,14 @@ type WorkersPorts struct {
 }
 
 // ProviderCommandRunner and ScriptCommandRunner are distinct Wire keys for
-// the two Workers-owned command ports. They expose the same narrow Workers
-// command contract without allowing Wire to bind one selected runner to both
-// effect owners.
+// the two platform process effects. They remain separate so composition
+// cannot accidentally bind one selected runner to both effect owners.
 type ProviderCommandRunner interface {
-	workers.CommandRunner
+	platformprocess.CommandRunner
 }
 
 type ScriptCommandRunner interface {
-	workers.CommandRunner
+	platformprocess.CommandRunner
 }
 
 // OperatorSettingsPorts contains the Operator Settings capability used
@@ -224,8 +224,8 @@ type Factory struct {
 	clock                            factoryruntime.Clock
 	providerOverride                 providers.Service
 	invocationMetricsRecorder        roles.InvocationMetricsRecorder
-	providerCommandRunner            workers.CommandRunner
-	scriptCommandRunner              workers.CommandRunner
+	providerCommandRunner            platformprocess.CommandRunner
+	scriptCommandRunner              platformprocess.CommandRunner
 	submissionRecorder               recordings.SubmissionRecorder
 	dispatchRecorder                 recordings.DispatchRecorder
 }

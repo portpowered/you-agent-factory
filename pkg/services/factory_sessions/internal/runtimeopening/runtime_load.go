@@ -18,11 +18,12 @@ import (
 // RuntimeLoad contains the immutable Factory Runtime inputs selected while
 // opening a Factory Session.
 type RuntimeLoad struct {
-	LoadedFactoryCfg  factorydefinitions.MutableLoadedFactorySource
-	ReplayArtifact    *factorydefinitions.ReplayArtifact
-	PortableRecording *recording.PortableRecording
-	HistoricalReplay  *recordingreplay.RecordingReplayProjection
-	SessionLogger     *zap.Logger
+	LoadedFactoryCfg       factorydefinitions.MutableLoadedFactorySource
+	ReplayArtifact         *factorydefinitions.ReplayArtifact
+	PortableRecording      *recording.PortableRecording
+	HistoricalReplay       *recordingreplay.RecordingReplayProjection
+	ReplayMetadataWarnings []recording.MetadataMismatchWarning
+	SessionLogger          *zap.Logger
 }
 
 type runtimeReplayLoad struct {
@@ -146,7 +147,7 @@ func loadRuntime(
 			}
 		}
 	}
-	reportRuntimeReplayMetadata(
+	replayMetadataWarnings := reportRuntimeReplayMetadata(
 		dir,
 		replayPath,
 		workstationLoader,
@@ -154,11 +155,13 @@ func loadRuntime(
 		logger,
 		loadFactory,
 		captureLoadedFactorySnapshot,
+		operatorDefaults,
 	)
 	return RuntimeLoad{
-		LoadedFactoryCfg: loaded,
-		ReplayArtifact:   artifact,
-		SessionLogger:    logger,
+		LoadedFactoryCfg:       loaded,
+		ReplayArtifact:         artifact,
+		ReplayMetadataWarnings: replayMetadataWarnings,
+		SessionLogger:          logger,
 	}, nil
 }
 
@@ -208,8 +211,9 @@ func reportRuntimeReplayMetadata(
 	logger *zap.Logger,
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
-) {
-	warnReplayMetadataMismatches(
+	operatorDefaults operatorconfig.ResolvedDefaults,
+) []recording.MetadataMismatchWarning {
+	return warnReplayMetadataMismatches(
 		dir,
 		replayPath,
 		workstationLoader,
@@ -217,6 +221,7 @@ func reportRuntimeReplayMetadata(
 		logger,
 		loadFactory,
 		captureLoadedFactorySnapshot,
+		operatorDefaults,
 	)
 }
 
@@ -426,17 +431,21 @@ func warnReplayMetadataMismatches(
 	logger *zap.Logger,
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
-) {
+	operatorDefaults operatorconfig.ResolvedDefaults,
+) []recording.MetadataMismatchWarning {
 	if artifact == nil ||
 		dir == "" ||
 		replayPath == "" ||
 		loadFactory == nil ||
 		captureLoadedFactorySnapshot == nil {
-		return
+		return nil
 	}
 	current, err := loadFactory(dir, workstationLoader)
 	if err != nil {
-		return
+		return nil
+	}
+	if err := applyOperatorDefaults(current, operatorDefaults); err != nil {
+		return nil
 	}
 	currentSnapshot, err := captureLoadedFactorySnapshot(
 		current,
@@ -444,9 +453,10 @@ func warnReplayMetadataMismatches(
 		nil,
 	)
 	if err != nil {
-		return
+		return nil
 	}
-	for _, warning := range recording.FactoryMetadataWarnings(artifact.Factory, currentSnapshot) {
+	warnings := recording.FactoryMetadataWarnings(artifact.Factory, currentSnapshot)
+	for _, warning := range warnings {
 		logger.Warn(
 			"replay artifact metadata differs from current checkout",
 			zap.String("category", recording.DivergenceCategoryConfigMismatch),
@@ -455,4 +465,5 @@ func warnReplayMetadataMismatches(
 			zap.String("current", warning.Current),
 		)
 	}
+	return warnings
 }

@@ -82,7 +82,7 @@ describe("future canonical graph values", () => {
       name: /Select story:queued state.*QUEUED/,
     });
     const workerButton = screen.getByRole("button", {
-      name: /Select writer \(script_worker\) worker/,
+      name: /Select writer \(script_worker\) \(Codex\/OpenAI\) worker/,
     });
 
     expect(stateButton).toBeTruthy();

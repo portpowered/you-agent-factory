@@ -102,6 +102,56 @@ func TestRecordReplayEndToEnd_CLIRecordReplayAndRegressionHarnessSucceed(t *test
 	})
 }
 
+func TestReplayDriftDisclosureOnStdoutForChangedWorkerDefinition(t *testing.T) {
+	support.SkipLongFunctional(t, "slow replay drift disclosure CLI end-to-end smoke")
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+	helperPath := writeRecordReplayScriptHelper(t)
+	writeRecordReplayScriptWorker(t, dir, helperPath)
+
+	workFile := filepath.Join(t.TempDir(), "initial-work.json")
+	writeRecordReplayWorkFile(t, workFile)
+	artifactPath := filepath.Join(t.TempDir(), "cli-recording.replay.json")
+
+	t.Setenv(recordReplayLiveScriptEnv, "1")
+	t.Setenv(recordReplayScriptSecretEnv, recordReplayScriptSecretValue)
+	if _, err := runRecordReplayCLIWithCapturedStdout(t, dir, "--work", workFile, "--record", artifactPath); err != nil {
+		t.Fatalf("record run failed: %v", err)
+	}
+	t.Setenv(recordReplayLiveScriptEnv, "")
+	t.Setenv(recordReplayScriptSecretEnv, "")
+
+	unchanged, err := runReplayCLIWithCapturedStreams(t, dir, artifactPath)
+	if err != nil {
+		t.Fatalf("unchanged replay failed: %v", err)
+	}
+	if unchanged.Stdout() != "" {
+		t.Fatalf("unchanged replay stdout = %q, want no drift warning", unchanged.Stdout())
+	}
+
+	agentsPath := filepath.Join(dir, "workers", "script-worker", "AGENTS.md")
+	agents, err := os.ReadFile(agentsPath)
+	if err != nil {
+		t.Fatalf("read worker AGENTS.md: %v", err)
+	}
+	agents = append(agents, []byte("worker prompt drift\n")...)
+	if err := os.WriteFile(agentsPath, agents, 0o644); err != nil {
+		t.Fatalf("edit worker AGENTS.md: %v", err)
+	}
+
+	drifted, err := runReplayCLIWithCapturedStreams(t, dir, artifactPath)
+	if err != nil {
+		t.Fatalf("drifted replay failed: %v", err)
+	}
+	if drifted.Stdout() == unchanged.Stdout() {
+		t.Fatalf("drifted replay stdout = %q, want output different from unchanged replay", drifted.Stdout())
+	}
+	wantDriftedStdout := "Replay warning: current Factory Definition differs from the recording; affected components: Factory Definition, runtime configuration, workers. Replay continues with recorded inputs.\n"
+	if drifted.Stdout() != wantDriftedStdout {
+		t.Fatalf("drifted replay stdout = %q, want %q", drifted.Stdout(), wantDriftedStdout)
+	}
+}
+
 func TestRecordReplayEndToEnd_DefaultLiveRecordingPathReplaysThroughExistingFlow(t *testing.T) {
 	support.SkipLongFunctional(t, "slow default record/replay CLI end-to-end smoke")
 
@@ -523,6 +573,26 @@ func runRecordReplayCLIWithCapturedStdout(
 	inputs.WorkingDirectory = workingDirectory
 	runErr := process.Execute(inputs.Input)
 	return inputs.Stdout(), runErr
+}
+
+func runReplayCLIWithCapturedStreams(
+	t *testing.T,
+	workingDirectory string,
+	artifactPath string,
+) (*support.CapturedInputs, error) {
+	t.Helper()
+
+	api := support.NewProcessAPIServer()
+	process := support.BuildProcess(t, serviceedges.Edges{
+		APIServerStarter: api.Start,
+	})
+	args := []string{
+		"you", "run", "--dir", workingDirectory, "--server", "http://127.0.0.1:1",
+		"--quiet", "--replay", artifactPath, "--no-record",
+	}
+	inputs := support.FakeInputs(context.Background(), args)
+	inputs.WorkingDirectory = workingDirectory
+	return inputs, process.Execute(inputs.Input)
 }
 
 func singleRecordedArtifactPath(t *testing.T, root string) string {

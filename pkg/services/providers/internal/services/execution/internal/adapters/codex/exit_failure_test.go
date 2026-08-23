@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	codex "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestCodexCommandEffectClassifiesStderrExitFailures(t *testing.T) {
@@ -51,7 +51,7 @@ func TestCodexCommandEffectClassifiesStderrExitFailures(t *testing.T) {
 			t.Parallel()
 
 			effect := codex.NewCommandEffect(codexCommandRunnerStub{
-				result: workers.CommandResult{
+				result: platformprocess.CommandResult{
 					ExitCode: 1,
 					Stderr:   []byte(test.stderr),
 				},
@@ -73,7 +73,7 @@ func TestCodexCommandEffectClassifiesUntrustedWorkingDirectoryAsTerminalWithSafe
 
 	workingDirectory := `C:\isolated\factory\with spaces`
 	effect := codex.NewCommandEffect(codexCommandRunnerStub{
-		result: workers.CommandResult{
+		result: platformprocess.CommandResult{
 			ExitCode: 1,
 			Stderr:   []byte("Not inside a trusted directory and --skip-git-repo-check was not specified."),
 		},
@@ -111,7 +111,7 @@ func TestCodexCommandEffectMarksUnknownTurnFailedFromExitOutput(t *testing.T) {
 
 	const providerDetail = "future turn failure credential=secret"
 	effect := codex.NewCommandEffect(codexCommandRunnerStub{
-		result: workers.CommandResult{
+		result: platformprocess.CommandResult{
 			ExitCode: 1,
 			Stderr:   []byte(`{"type":"turn.failed","error":{"message":"` + providerDetail + `"}}`),
 		},
@@ -135,9 +135,9 @@ func TestCodexCommandEffectMarksUnknownTurnFailedFromExitOutput(t *testing.T) {
 }
 
 type codexCommandRunnerStub struct {
-	result workers.CommandResult
+	result platformprocess.CommandResult
 }
 
-func (stub codexCommandRunnerStub) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
+func (stub codexCommandRunnerStub) Run(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	return stub.result, nil
 }

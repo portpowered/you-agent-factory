@@ -7,19 +7,19 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
-// TestNewReplayExecutionConstructsProvidersRootPorts proves Recordings replay
-// execution construction returns Providers and Workers root ports
-// without nested Workers package imports in this boundary test.
-func TestNewReplayExecutionConstructsWorkersRootPorts(t *testing.T) {
+// TestNewReplayExecutionConstructsProvidersAndPlatformProcessPorts proves
+// Recordings replay construction returns Providers and platform process ports
+// without a nested Workers command-port import in this boundary test.
+func TestNewReplayExecutionConstructsProvidersAndPlatformProcessPorts(t *testing.T) {
 	t.Parallel()
 
 	fixturePath := filepath.Join("replay", "testdata", "inference-events.replay.json")
@@ -48,9 +48,9 @@ func TestNewReplayExecutionConstructsWorkersRootPorts(t *testing.T) {
 	}
 
 	var rootProvider providers.Service = provider
-	var rootRunner workers.CommandRunner = runner
+	var rootRunner platformprocess.CommandRunner = runner
 	if rootProvider == nil || rootRunner == nil {
-		t.Fatal("NewReplayExecution ports must satisfy Providers and Workers root contracts")
+		t.Fatal("NewReplayExecution ports must satisfy Providers and platform process contracts")
 	}
 }
 

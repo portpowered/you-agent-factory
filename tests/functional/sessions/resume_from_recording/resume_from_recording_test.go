@@ -65,6 +65,100 @@ func TestKilledFactorySessionResumesOriginalDispatchesAfterRestart(t *testing.T)
 	scenario.resumeAndFinish(t, second.URL(), boundary)
 }
 
+func TestSuccessorRecordingReplaysAgainstUnchangedCheckout(t *testing.T) {
+	t.Parallel()
+
+	scenario := newResumeFromRecordingScenario(t)
+	t.Cleanup(scenario.runner.ReleaseRemainingDispatch)
+	first := scenario.startFirstProcess(t)
+	firstURL := first.waitForReady(t)
+	submitted := support.SubmitDefaultSessionWork(t, firstURL, factoryapi.SubmitWorkRequest{
+		Name:         stringPointer("resume-from-recording-replay-work"),
+		Payload:      map[string]any{"subject": "resume-from-recording-replay"},
+		WorkTypeName: "task",
+	})
+	if submitted.WorkId == nil || *submitted.WorkId == "" {
+		t.Fatalf("public Work submission = %#v, want one accepted Work identity", submitted)
+	}
+	scenario.workID = *submitted.WorkId
+	first.waitFor(t, "first-returned")
+	first.waitFor(t, "second-entered")
+	boundary := scenario.captureAtKillBoundary(t, firstURL)
+	first.waitForRecordingCheckpoint(t)
+	first.killAndJoin(t)
+
+	second := scenario.startSuccessorProcess(t)
+	scenario.assertRestored(t, second.URL(), boundary)
+	scenario.resumeAndFinish(t, second.URL(), boundary)
+	second.Stop(t)
+	assertSuccessorRecordingPreservesRunMetadata(t, scenario.recordingPath, scenario.successorPath)
+
+	api := support.NewProcessAPIServer()
+	process := support.BuildProcess(t, serviceedges.Edges{APIServerStarter: api.Start})
+	support.CleanupProcess(t, process)
+	inputs := support.FakeInputs(context.Background(), []string{
+		"you", "run", "--dir", scenario.projectRoot, "--server", "http://127.0.0.1:1",
+		"--quiet", "--replay", scenario.successorPath, "--no-record",
+	})
+	inputs.Env = append([]string(nil), scenario.env...)
+	inputs.WorkingDirectory = scenario.projectRoot
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("successor replay failed: %v; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
+	}
+	if got := inputs.Stdout(); got != "" {
+		t.Fatalf("successor replay stdout = %q, want no drift warning", got)
+	}
+}
+
+func assertSuccessorRecordingPreservesRunMetadata(t *testing.T, sourcePath, successorPath string) {
+	t.Helper()
+	sourceMetadata := runRequestMetadata(t, sourcePath)
+	successorMetadata := runRequestMetadata(t, successorPath)
+	for _, key := range []string{
+		"factory_hash",
+		"runtime_config_hash",
+		"workers_hash",
+		"workstations_hash",
+	} {
+		if sourceMetadata[key] != successorMetadata[key] {
+			t.Fatalf("successor RUN_REQUEST metadata[%q] = %q, want source value %q", key, successorMetadata[key], sourceMetadata[key])
+		}
+	}
+}
+
+func runRequestMetadata(t *testing.T, path string) map[string]string {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read recording %q: %v", path, err)
+	}
+	var artifact struct {
+		Events []struct {
+			Type    string          `json:"type"`
+			Payload json.RawMessage `json:"payload"`
+		} `json:"events"`
+	}
+	if err := json.Unmarshal(raw, &artifact); err != nil {
+		t.Fatalf("decode recording %q: %v", path, err)
+	}
+	for _, event := range artifact.Events {
+		if event.Type != string(factoryapi.FactoryEventTypeRunRequest) {
+			continue
+		}
+		var payload struct {
+			Factory struct {
+				Metadata map[string]string `json:"metadata"`
+			} `json:"factory"`
+		}
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			t.Fatalf("decode RUN_REQUEST metadata in %q: %v", path, err)
+		}
+		return payload.Factory.Metadata
+	}
+	t.Fatalf("recording %q contains no RUN_REQUEST metadata", path)
+	return nil
+}
+
 // TestResumeFromRecordingChildProcess hosts the predecessor in a separate OS
 // process so the parent can exercise an actual abrupt process boundary. The
 // parent test is the only caller; a normal package run skips this helper.

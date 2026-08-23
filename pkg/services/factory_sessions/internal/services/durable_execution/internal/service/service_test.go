@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -358,7 +359,7 @@ func (s *executionCapabilitiesStub) SetWorkerExecution(
 	string,
 	providers.Service,
 	*workers.MockWorkersConfig,
-	workers.CommandRunner,
+	platformprocess.CommandRunner,
 ) {
 	s.setExecutionCalls++
 }

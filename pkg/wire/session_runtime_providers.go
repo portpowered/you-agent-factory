@@ -141,7 +141,7 @@ func provideProvidersService(edges serviceedges.Edges) (providers.Service, error
 func provideConfiguredProvidersService(
 	edges serviceedges.Edges,
 	integrations []operatorsettings.ACPIntegration,
-	workersRunner workers.CommandRunner,
+	workersRunner platformprocess.CommandRunner,
 ) (providers.Service, error) {
 	agyPTYPlatform, err := provideProvidersAgyPTYPlatform(edges)
 	if err != nil {
@@ -159,43 +159,45 @@ func provideConfiguredProvidersService(
 	if workersRunner != nil {
 		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(workersRunner)
 		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
-		options = append(options, providerswire.WithWorkersCommandRunner(loggedRunner))
+		options = append(options, providerswire.WithWorkersCommandRunner(
+			workerswire.NewProviderCommandRunner(loggedRunner),
+		))
 		return newConfiguredProvidersService(options, loggedRunner)
 	}
 	if edges.ProviderCommandRunner != nil {
-		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(
-			workers.AdaptCommandRunner(edges.ProviderCommandRunner),
-		)
+		contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(edges.ProviderCommandRunner)
 		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
 		options = append(options, providerswire.WithCommandRunner(edges.ProviderCommandRunner))
-		options = append(options, providerswire.WithWorkersCommandRunner(loggedRunner))
+		options = append(options, providerswire.WithWorkersCommandRunner(
+			workerswire.NewProviderCommandRunner(loggedRunner),
+		))
 		return newConfiguredProvidersService(options, loggedRunner)
 	}
 	commandRunner, err := providePlatformProcessCommandRunner(edges)
 	if err != nil {
 		return nil, err
 	}
-	contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(
-		workers.AdaptCommandRunner(commandRunner),
-	)
+	contextualRunner := workerswire.NewContextualMockWorkerCommandRunner(commandRunner)
 	loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
 	options = append(options, providerswire.WithCommandRunner(commandRunner))
-	options = append(options, providerswire.WithWorkersCommandRunner(loggedRunner))
+	options = append(options, providerswire.WithWorkersCommandRunner(
+		workerswire.NewProviderCommandRunner(loggedRunner),
+	))
 	return newConfiguredProvidersService(options, loggedRunner)
 }
 
 func providerCommandRunnerWithLogging(
 	edges serviceedges.Edges,
-	runner workers.CommandRunner,
-) workers.CommandRunner {
-	return workers.LoggingCommandRunner{
-		Runner: runner,
-		Logger: logging.NoopLogger{},
-		Clock:  effectiveProviderCommandClock(edges),
-	}
+	runner platformprocess.CommandRunner,
+) platformprocess.CommandRunner {
+	return workerswire.NewLoggingCommandRunner(
+		runner,
+		logging.NoopLogger{},
+		effectiveProviderCommandClock(edges).Now,
+	)
 }
 
-func effectiveProviderCommandClock(edges serviceedges.Edges) workers.Clock {
+func effectiveProviderCommandClock(edges serviceedges.Edges) platformclock.Source {
 	if edges.Clock != nil {
 		return edges.Clock
 	}
@@ -263,15 +265,15 @@ func resolveWorkersOperatingSystem(edges serviceedges.Edges) workers.OperatingSy
 // used by native executors and by migrated catalog Integrations on the
 // conductor path. Injected edges win; otherwise the platform process runner is
 // adapted once for both ownership boundaries.
-func provideWorkersProviderCommandRunner(edges serviceedges.Edges) (workers.CommandRunner, error) {
+func provideWorkersProviderCommandRunner(edges serviceedges.Edges) (platformprocess.CommandRunner, error) {
 	if edges.ProviderCommandRunner != nil {
-		return workers.AdaptCommandRunner(edges.ProviderCommandRunner), nil
+		return edges.ProviderCommandRunner, nil
 	}
 	defaultCommandRunner, err := providePlatformProcessCommandRunner(edges)
 	if err != nil {
 		return nil, err
 	}
-	return workers.AdaptCommandRunner(defaultCommandRunner), nil
+	return defaultCommandRunner, nil
 }
 
 func provideFactorySessionProviderIdentityResolver(
@@ -351,7 +353,7 @@ func provideFactoryRuntimeDirectories(edges serviceedges.Edges) factoryruntime.R
 	return platformfilesystem.Local{}
 }
 
-func provideFactoryRuntimeInputs(edges serviceedges.Edges) factoryruntime.InputFileSystem {
+func provideFactoryRuntimeInputs(edges serviceedges.Edges) factoryruntimewire.InputFileSystem {
 	if edges.FactoryRuntimeInputs != nil {
 		return edges.FactoryRuntimeInputs
 	}
@@ -550,7 +552,7 @@ func provideAutomationsRoot(
 	hostedSourceInputs automationswire.HostedSourceInputs,
 	logger *zap.Logger,
 	clock factoryruntime.Clock,
-	commandRunner factorysessionwire.ScriptCommandRunner,
+	commandRunner platformprocess.CommandRunner,
 	workstationExecution factorydefinitions.WorkstationExecutionPolicyService,
 ) (automations.Root, error) {
 	return automationswire.NewRoot(
@@ -761,7 +763,7 @@ func provideFactorySessionExecutionFactory(
 	sessionIDs factorysessions.SessionIDGenerator,
 	responseEventIDs factorysessions.ResponseEventIDGenerator,
 	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
-	allocator workers.PTYAllocator,
+	allocator providerswire.PTYAllocator,
 	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
 	providerOverride providerOverrideService,
 	eventsService events.Service,
@@ -1036,12 +1038,7 @@ func provideStatelessWorkersServiceWithMock(
 	if err != nil {
 		return nil, fmt.Errorf("construct stateless Workers: %w", err)
 	}
-	scriptRunnerWithMocks := workerswire.NewContextualMockWorkerCommandRunner(scriptCommandRunner)
-	scriptRunner := workers.LoggingCommandRunner{
-		Runner: scriptRunnerWithMocks,
-		Logger: logging.NoopLogger{},
-		Clock:  workers.ClockFunc(clock.Now),
-	}
+	scriptRunner := scriptCommandRunner
 	agentDependencies := workerswire.AgentDependencies{
 		Providers: providersService,
 		Publish:   func(workers.ProgressFragment) {},
@@ -1123,6 +1120,8 @@ func provideWorkersProviderTemporaryFileSystem(edges serviceedges.Edges) platfor
 	return platformfilesystem.Local{}
 }
 
+// provideProvidersAgyPTYPlatform projects the Providers-owned PTY effect into
+// the Workers-private invocation seam at the canonical composition boundary.
 func provideProvidersAgyPTYPlatform(edges serviceedges.Edges) (providerswire.AgyPTYPlatformDependencies, error) {
 	allocator, err := provideProvidersAgyPTYAllocator(edges)
 	if err != nil {
@@ -1172,6 +1171,7 @@ func provideWorkersMockCommandRunnerFactory() factoryruntime.WorkersMockCommandR
 func provideConductorInvocationWithProgressFactory(
 	providersService providers.Service,
 	edges serviceedges.Edges,
+	allocator providerswire.PTYAllocator,
 ) factorysessionwire.ConductorInvocationWithProgressFactory {
 	commandClock := edges.Clock
 	if commandClock == nil {
@@ -1197,8 +1197,7 @@ func provideConductorInvocationWithProgressFactory(
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
 	return func(
 		selectedProviders providers.Service,
-		runner workers.CommandRunner,
-		allocator workers.PTYAllocator,
+		runner platformprocess.CommandRunner,
 		publisher workers.ProgressPublisher,
 	) (workers.InvocationExecutor, error) {
 		if selectedProviders == nil {
@@ -1223,7 +1222,6 @@ func provideConductorInvocationWithProgressFactory(
 func provideProviderFromCommandRunnerFactory(
 	providersService providers.Service,
 	edges serviceedges.Edges,
-	allocator workers.PTYAllocator,
 ) factorysessionwire.ProviderFromCommandRunnerFactory {
 	commandClock := edges.Clock
 	if commandClock == nil {
@@ -1247,9 +1245,9 @@ func provideProviderFromCommandRunnerFactory(
 	}
 	operatingSystem := resolveWorkersOperatingSystem(edges)
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
-	return func(runner workers.CommandRunner) (providers.Service, error) {
+	return func(runner platformprocess.CommandRunner) (providers.Service, error) {
 		return workerswire.NewProviderFromCommandRunner(
-			providersService, runner, commandClock, allocator, resolveSymlinks,
+			providersService, runner, commandClock, resolveSymlinks,
 			executableLocator, executableInspector, executableFiles, operatingSystem, temporaryFiles,
 		)
 	}

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -14,9 +15,9 @@ import (
 )
 
 // TestReplaySideEffectsSatisfyProvidersRootPorts proves replay side effects
-// satisfy the Providers root and the Workers command effect at the
-// Recordings/Workers boundary.
-func TestReplaySideEffectsSatisfyProvidersRootPorts(t *testing.T) {
+// satisfy the Providers root and the platform process effect at the
+// Recordings/platform boundary.
+func TestReplaySideEffectsSatisfyProvidersAndPlatformProcessPorts(t *testing.T) {
 	t.Parallel()
 
 	sideEffects, err := NewSideEffects(
@@ -29,9 +30,9 @@ func TestReplaySideEffectsSatisfyProvidersRootPorts(t *testing.T) {
 	}
 
 	var provider providers.Service = sideEffects
-	var runner workers.CommandRunner = sideEffects
+	var runner platformprocess.CommandRunner = sideEffects
 	if provider == nil || runner == nil {
-		t.Fatal("replay side effects must satisfy workers root ports")
+		t.Fatal("replay side effects must satisfy Providers and platform process ports")
 	}
 
 	providerRequest := providers.ExecuteRequest{
@@ -57,18 +58,13 @@ func TestReplaySideEffectsSatisfyProvidersRootPorts(t *testing.T) {
 		t.Fatalf("provider content = %q, want recorded provider output", resp.Content)
 	}
 
-	commandRequest := workers.CommandRequest{
+	commandRequest := platformprocess.CommandRequest{
 		Command: "echo",
 		Args:    []string{"ok"},
-		Execution: work.ExecutionMetadata{
-			ReplayKey: "process/trace-2/work-2",
-			TraceID:   "trace-2",
-			WorkIDs:   []string{"work-2"},
-		},
 	}
 	result, err := runner.Run(context.Background(), commandRequest)
 	if err != nil {
-		t.Fatalf("Run through workers.CommandRunner: %v", err)
+		t.Fatalf("Run through platform/process.CommandRunner: %v", err)
 	}
 	if string(result.Stdout) != "recorded script output\n" {
 		t.Fatalf("stdout = %q, want recorded script output", result.Stdout)
@@ -336,7 +332,7 @@ func TestReplaySideEffectsCommandBoundaryPreservesFallbackAndTimeout(t *testing.
 		completion:    &replayCompletion{result: workers.WorkResult{Outcome: workers.OutcomeFailed, Output: "stdout", Error: "stderr"}},
 		hasCompletion: true,
 	}}}
-	result, err := fallback.Run(context.Background(), workers.CommandRequest{Command: "echo", Execution: work.ExecutionMetadata{ReplayKey: "command-fallback"}})
+	result, err := fallback.Run(context.Background(), platformprocess.CommandRequest{Command: "echo"})
 	if err != nil || string(result.Stdout) != "stdout" || string(result.Stderr) != "stderr" || result.ExitCode != 1 {
 		t.Fatalf("Run(fallback) = %#v, %v; want output, error, and failed exit code", result, err)
 	}
@@ -346,7 +342,7 @@ func TestReplaySideEffectsCommandBoundaryPreservesFallbackAndTimeout(t *testing.
 		completion:    &replayCompletion{result: workers.WorkResult{Outcome: workers.OutcomeAccepted}, diagnostics: &workers.WorkDiagnostics{Command: &workers.CommandDiagnostic{TimedOut: true}}},
 		hasCompletion: true,
 	}}}
-	_, err = timedOut.Run(context.Background(), workers.CommandRequest{Command: "echo", Execution: work.ExecutionMetadata{ReplayKey: "command-timeout"}})
+	_, err = timedOut.Run(context.Background(), platformprocess.CommandRequest{Command: "echo"})
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Run(timeout) = %v, want context deadline exceeded", err)
 	}
@@ -354,7 +350,7 @@ func TestReplaySideEffectsCommandBoundaryPreservesFallbackAndTimeout(t *testing.
 	missing := &SideEffects{records: []sideEffectRecord{{
 		dispatch: replayDispatch{dispatchID: "dispatch-command-missing", dispatch: work.WorkDispatch{TransitionID: "process", Execution: work.ExecutionMetadata{ReplayKey: "command-missing"}}},
 	}}}
-	if _, err := missing.Run(context.Background(), workers.CommandRequest{Command: "echo", Execution: work.ExecutionMetadata{ReplayKey: "command-missing"}}); err == nil || !strings.Contains(err.Error(), "has no completion") {
+	if _, err := missing.Run(context.Background(), platformprocess.CommandRequest{Command: "echo"}); err == nil || !strings.Contains(err.Error(), "has no completion") {
 		t.Fatalf("Run(missing completion) = %v, want explicit missing-completion error", err)
 	}
 

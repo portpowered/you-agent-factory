@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
@@ -30,7 +31,7 @@ func TestAdaptPreservesRecordingsReplayContracts(t *testing.T) {
 		artifact *recordings.ReplayArtifact,
 	) (
 		providers.Service,
-		workers.CommandRunner,
+		platformprocess.CommandRunner,
 		[]recordings.ReplayHook,
 		recordings.CompletionDeliveryPlanner,
 		error,

@@ -9,29 +9,17 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	codex "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func TestCommandEffectRoutesDispatchContextThroughMockWorkerRunner(t *testing.T) {
+func TestCommandEffectPreservesDispatchContextForProviderRunner(t *testing.T) {
 	t.Parallel()
 
-	platformRunner := testutil.NewProviderCommandRunner(
-		platformprocess.CommandResult{Stdout: []byte("live provider should not run")},
-	)
-	effect := codex.NewCommandEffect(&workers.MockWorkerCommandRunner{
-		Config: &workers.MockWorkersConfig{
-			MockWorkers: []workers.MockWorkerConfig{{
-				WorkerName:      "mocked-worker",
-				WorkstationName: "mock-process",
-				RunType:         workers.MockWorkerRunTypeAccept,
-			}},
-		},
-		Next: workers.AdaptCommandRunner(platformRunner),
-	}, platformclock.Real{})
+	runner := &recordingProviderCommandRunner{}
+	effect := codex.NewCommandEffect(runner, platformclock.Real{})
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -42,20 +30,45 @@ func TestCommandEffectRoutesDispatchContextThroughMockWorkerRunner(t *testing.T)
 		UserMessage:     "perform work",
 		WorkerType:      "mocked-worker",
 		WorkstationName: "mock-process",
+		Correlation: providers.ExecuteCorrelation{
+			RequestID: "request-1",
+			TraceID:   "trace-1",
+		},
 	}}, func([]byte) error { return nil })
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if platformRunner.CallCount() != 0 {
-		t.Fatalf("platform runner calls = %d, want mock intercept", platformRunner.CallCount())
+	if runner.calls != 1 {
+		t.Fatalf("provider runner calls = %d, want 1", runner.calls)
 	}
+	if runner.request.AttemptID != "mock-dispatch" ||
+		runner.request.WorkerType != "mocked-worker" ||
+		runner.request.WorkstationName != "mock-process" ||
+		runner.request.Execution.RequestID != "request-1" ||
+		runner.request.Execution.TraceID != "trace-1" {
+		t.Fatalf("provider request metadata = %#v", runner.request)
+	}
+}
+
+type recordingProviderCommandRunner struct {
+	request providerservice.CommandRequest
+	calls   int
+}
+
+func (runner *recordingProviderCommandRunner) Run(
+	_ context.Context,
+	request providerservice.CommandRequest,
+) (providerservice.CommandResult, error) {
+	runner.request = request
+	runner.calls++
+	return providerservice.CommandResult{}, nil
 }
 
 func TestCommandEffectRejectsUnsupportedReasoningEffortBeforeDispatch(t *testing.T) {
 	t.Parallel()
 
 	platformRunner := testutil.NewProviderCommandRunner()
-	effect := codex.NewCommandEffect(workers.AdaptCommandRunner(platformRunner), platformclock.Real{})
+	effect := codex.NewCommandEffect(platformRunner, platformclock.Real{})
 	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 		Provider:        providers.IDCodex,
 		AttemptID:       "invalid-effort-dispatch",
@@ -77,7 +90,7 @@ func TestCommandEffectRendersResumeSessionBeforeFreshSessionFlags(t *testing.T) 
 	t.Parallel()
 
 	platformRunner := testutil.NewProviderCommandRunner()
-	effect := codex.NewCommandEffect(workers.AdaptCommandRunner(platformRunner), platformclock.Real{})
+	effect := codex.NewCommandEffect(platformRunner, platformclock.Real{})
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -117,7 +130,7 @@ func TestCommandEffectRendersLunaXHighReasoningEffort(t *testing.T) {
 	t.Parallel()
 
 	platformRunner := testutil.NewProviderCommandRunner()
-	effect := codex.NewCommandEffect(workers.AdaptCommandRunner(platformRunner), platformclock.Real{})
+	effect := codex.NewCommandEffect(platformRunner, platformclock.Real{})
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}

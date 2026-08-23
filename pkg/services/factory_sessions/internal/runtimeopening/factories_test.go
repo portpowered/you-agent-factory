@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -536,8 +537,8 @@ type workersConstructionStub struct{ workers.Service }
 
 type workersRootBindingProbeRunner struct{ tag string }
 
-func (workersRootBindingProbeRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{}, nil
+func (workersRootBindingProbeRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, nil
 }
 
 type constructionMaterializer struct{ calls *int }

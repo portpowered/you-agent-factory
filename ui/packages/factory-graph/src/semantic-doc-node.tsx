@@ -135,7 +135,7 @@ function FactoryGraphDocNodeContent({
   visualState: FactoryGraphVisualState;
 }) {
   return (
-    <div className="grid min-w-0 gap-1 px-2 py-1">
+    <div className="grid min-w-0 gap-1 py-1">
       <div className="flex min-w-0 items-center gap-1.5">
         <span data-factory-entity-semantic-icon>
           <GraphSemanticIcon

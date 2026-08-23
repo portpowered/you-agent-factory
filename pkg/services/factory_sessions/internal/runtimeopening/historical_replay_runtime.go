@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -143,8 +144,8 @@ func openPortableReplayDurableOwner(
 	logger *zap.Logger,
 	clockEdge factoryruntime.Clock,
 	providerOverride providers.Service,
-	providerCommandRunner workers.CommandRunner,
-	scriptCommandRunner workers.CommandRunner,
+	providerCommandRunner platformprocess.CommandRunner,
+	scriptCommandRunner platformprocess.CommandRunner,
 	workerService workers.Service,
 	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory,
@@ -231,8 +232,8 @@ func preparePortableReplayRuntime(
 	workerService workers.Service,
 	providerForDurable providers.Service,
 	providerOverride providers.Service,
-	providerCommandRunner workers.CommandRunner,
-	scriptCommandRunner workers.CommandRunner,
+	providerCommandRunner platformprocess.CommandRunner,
+	scriptCommandRunner platformprocess.CommandRunner,
 	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
@@ -293,7 +294,7 @@ func constructPortableReplayDurableOwner(
 	root RuntimeRoot,
 	clock factoryruntime.Clock,
 	providerOverride providers.Service,
-	providerCommandRunner workers.CommandRunner,
+	providerCommandRunner platformprocess.CommandRunner,
 	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory,
 	durableExecutionFactory DurableExecutionFactory,
@@ -337,8 +338,8 @@ func assemblePortableReplayRuntime(
 	factoryRuntimeAssembler FactoryRuntimeAssembler,
 	durableOwner durableexecution.Service,
 	providerOverride providers.Service,
-	providerCommandRunner workers.CommandRunner,
-	scriptCommandRunner workers.CommandRunner,
+	providerCommandRunner platformprocess.CommandRunner,
+	scriptCommandRunner platformprocess.CommandRunner,
 	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
@@ -434,7 +435,7 @@ func bindDurableExecutionCapabilities(
 	generationID string,
 	providerOverride providers.Service,
 	mockWorkers *workers.MockWorkersConfig,
-	commandRunner workers.CommandRunner,
+	commandRunner platformprocess.CommandRunner,
 	progressPublisher workers.ProgressPublisher,
 	attemptStarter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error),
 ) error {

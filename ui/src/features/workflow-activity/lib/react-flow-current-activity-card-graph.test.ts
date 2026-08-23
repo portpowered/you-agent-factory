@@ -251,6 +251,68 @@ describe("current activity graph editor handles", () => {
     }
   });
 
+  it.each([
+    ["OPENAI", "OPENAI"],
+    ["anthropic", "anthropic"],
+    ["CLAUDE CLI", "CLAUDE CLI"],
+    ["gemini", "gemini"],
+    ["future.provider", "future.provider"],
+  ])(
+    "keeps the raw worker provider %s on the graph presentation",
+    async (modelProvider, expectedRunnerId) => {
+      const factory = {
+        ...baseFactoryDefinition,
+        workers: [
+          {
+            ...baseFactoryDefinition.workers?.[0],
+            modelProvider,
+            name: "writer",
+            type: "AGENT_WORKER",
+          },
+        ],
+        workstations: [
+          {
+            ...baseFactoryDefinition.workstations?.[0],
+            runner: undefined,
+            worker: "writer",
+          },
+        ],
+      } satisfies CanonicalFactoryDefinition;
+      const snapshot = buildSampleFactorySnapshot(factory);
+      const graphLayout =
+        await buildCurrentActivityGraphLayoutFromFactory(factory);
+      const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+      const nodes = buildCurrentActivityNodes({
+        activeExecutionsByWorkstationNodeID: {},
+        activeGraphHighlights: buildActiveGraphHighlights(
+          [],
+          visibleGraphEdges,
+          graphLayout.nodes,
+        ),
+        activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+        graphLayout,
+        now: Date.parse("2026-05-24T00:00:00Z"),
+        onSelectDoc: vi.fn(),
+        onSelectResource: vi.fn(),
+        onSelectStateNode: vi.fn(),
+        onSelectWorkID: vi.fn(),
+        onSelectWorker: vi.fn(),
+        onSelectWorkType: vi.fn(),
+        onSelectWorkstation: vi.fn(),
+        selection: null,
+        snapshot,
+      });
+
+      expect(
+        nodes.find((node) => node.id === "worker:writer")?.data,
+      ).toMatchObject({
+        kind: "worker",
+        runnerId: expectedRunnerId,
+        workerType: "AGENT_WORKER",
+      });
+    },
+  );
+
   it("marks factory-derived workstation nodes active from runtime execution ids", async () => {
     const factory = baseFactoryDefinition;
     const graphLayout =

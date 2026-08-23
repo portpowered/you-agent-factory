@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 const Identity = "mock"
@@ -21,12 +22,12 @@ type Config struct {
 // Dependencies are optional effects for mock script passthrough. Production
 // Workers construction must leave this registry unregistered.
 type Dependencies struct {
-	Next workers.CommandRunner
+	Next workerprocess.CommandRunner
 }
 
 type runner struct {
 	config *workers.MockWorkersConfig
-	next   workers.CommandRunner
+	next   workerprocess.CommandRunner
 }
 
 var _ workers.Runner = (*runner)(nil)
@@ -96,7 +97,7 @@ func (r *runner) Execute(
 			)
 		}
 		script := entry.ScriptConfig
-		result, err := r.next.Run(ctx, workers.CommandRequest{
+		result, err := r.next.Run(ctx, workerprocess.CommandRequest{
 			Command:         script.Command,
 			Args:            append([]string(nil), script.Args...),
 			WorkerType:      request.WorkerType,

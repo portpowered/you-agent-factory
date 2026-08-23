@@ -89,12 +89,12 @@ func CaptureLoaded(
 		sourceDirectory = source.FactoryDir()
 	}
 
-	workers := snapshotRuntimeWorkers(factoryConfig, source)
-	workstations := snapshotRuntimeWorkstations(factoryConfig, source)
 	factoryWithRuntime, err := runtimeconfig.Merge(factoryConfig, source)
 	if err != nil {
 		return nil, fmt.Errorf("inline runtime factory config: %w", err)
 	}
+	workers := snapshotEffectiveWorkers(factoryWithRuntime)
+	workstations := snapshotEffectiveWorkstations(factoryWithRuntime)
 	object, err := mapSnapshotObject(factoryWithRuntime)
 	if err != nil {
 		return nil, fmt.Errorf("encode factory snapshot: %w", err)
@@ -146,83 +146,38 @@ func (s explicitFactorySnapshotSource) Workstation(
 	return s.runtimeConfig.Workstation(name)
 }
 
-func snapshotRuntimeWorkers(
+func snapshotEffectiveWorkers(
 	factoryConfig *factorydefinitions.FactoryConfig,
-	runtimeConfig factorydefinitions.RuntimeDefinitionLookup,
 ) map[string]workerconfig.Config {
-	workers := make(map[string]workerconfig.Config)
+	if factoryConfig == nil || len(factoryConfig.Workers) == 0 {
+		return nil
+	}
+	// Hash the effective definitions rather than the runtime lookup. A loaded
+	// source and an explicit source can carry the same effective definition in
+	// different lookup shapes.
+	workers := make(map[string]workerconfig.Config, len(factoryConfig.Workers))
 	for _, workerConfig := range factoryConfig.Workers {
-		if definition, ok := runtimeConfig.Worker(workerConfig.Name); ok && definition != nil {
-			workers[workerConfig.Name] = cloneSnapshotValue(*definition)
-		}
+		workers[workerConfig.Name] = cloneSnapshotValue(workerConfig)
 	}
 	return workers
 }
 
-func snapshotRuntimeWorkstations(
+func snapshotEffectiveWorkstations(
 	factoryConfig *factorydefinitions.FactoryConfig,
-	runtimeConfig factorydefinitions.RuntimeDefinitionLookup,
 ) map[string]factorydefinitions.FactoryWorkstationConfig {
+	if factoryConfig == nil || len(factoryConfig.Workstations) == 0 {
+		return nil
+	}
+	// Keep this component input derived from the same merged Factory value as
+	// the public snapshot and factory_hash metadata.
 	workstations := make(
 		map[string]factorydefinitions.FactoryWorkstationConfig,
 		len(factoryConfig.Workstations),
 	)
 	for _, workstationConfig := range factoryConfig.Workstations {
-		definition, ok := runtimeConfig.Workstation(workstationConfig.Name)
-		if !ok || definition == nil {
-			workstations[workstationConfig.Name] = cloneSnapshotValue(workstationConfig)
-			continue
-		}
-		workstations[workstationConfig.Name] = mergeSnapshotRuntimeWorkstation(
-			workstationConfig,
-			*definition,
-		)
+		workstations[workstationConfig.Name] = cloneSnapshotValue(workstationConfig)
 	}
 	return workstations
-}
-
-func mergeSnapshotRuntimeWorkstation(
-	base factorydefinitions.FactoryWorkstationConfig,
-	runtime factorydefinitions.FactoryWorkstationConfig,
-) factorydefinitions.FactoryWorkstationConfig {
-	merged := cloneSnapshotValue(runtime)
-	if merged.Name == "" {
-		merged.Name = base.Name
-	}
-	if merged.ID == "" {
-		merged.ID = base.ID
-	}
-	if merged.Type == "" {
-		merged.Type = base.Type
-	}
-	if merged.WorkerTypeName == "" {
-		merged.WorkerTypeName = base.WorkerTypeName
-	}
-	if merged.Cron == nil {
-		merged.Cron = cloneSnapshotPointer(base.Cron)
-	}
-	if len(merged.Inputs) == 0 {
-		merged.Inputs = cloneSnapshotValue(base.Inputs)
-	}
-	if len(merged.Outputs) == 0 {
-		merged.Outputs = cloneSnapshotValue(base.Outputs)
-	}
-	if merged.OnContinue == nil {
-		merged.OnContinue = cloneSnapshotValue(base.OnContinue)
-	}
-	if merged.OnRejection == nil {
-		merged.OnRejection = cloneSnapshotValue(base.OnRejection)
-	}
-	if merged.OnFailure == nil {
-		merged.OnFailure = cloneSnapshotValue(base.OnFailure)
-	}
-	if len(merged.Resources) == 0 {
-		merged.Resources = cloneSnapshotValue(base.Resources)
-	}
-	if len(merged.Guards) == 0 {
-		merged.Guards = cloneSnapshotValue(base.Guards)
-	}
-	return cloneSnapshotValue(merged)
 }
 
 func factorySnapshotMetadata(
@@ -266,14 +221,6 @@ func cloneSnapshotValue[T any](value T) T {
 		return value
 	}
 	return clone
-}
-
-func cloneSnapshotPointer[T any](value *T) *T {
-	if value == nil {
-		return nil
-	}
-	cloned := cloneSnapshotValue(*value)
-	return &cloned
 }
 
 func cloneSnapshotStringMap(input map[string]string) map[string]string {

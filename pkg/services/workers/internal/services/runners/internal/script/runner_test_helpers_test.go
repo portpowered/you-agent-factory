@@ -10,6 +10,7 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 func emptyDocs(string) (map[string]string, error) {
@@ -17,7 +18,7 @@ func emptyDocs(string) (map[string]string, error) {
 }
 
 func testDependencies(
-	commandRunner workers.CommandRunner,
+	commandRunner workerprocess.CommandRunner,
 	factoryDocs workers.FactoryDocsLoader,
 ) Dependencies {
 	return Dependencies{
@@ -37,26 +38,26 @@ type outputChunk struct {
 type streamingCommandEdge struct {
 	mu           sync.Mutex
 	observations *observationLog
-	request      workers.CommandRequest
+	request      workerprocess.CommandRequest
 	chunks       []outputChunk
-	result       workers.CommandResult
+	result       workerprocess.CommandResult
 	err          error
 }
 
 func (edge *streamingCommandEdge) Run(
 	ctx context.Context,
-	request workers.CommandRequest,
-) (workers.CommandResult, error) {
+	request workerprocess.CommandRequest,
+) (workerprocess.CommandResult, error) {
 	return edge.RunStreaming(ctx, request, nil)
 }
 
 func (edge *streamingCommandEdge) RunStreaming(
 	_ context.Context,
-	request workers.CommandRequest,
+	request workerprocess.CommandRequest,
 	observer platformprocess.OutputChunkObserver,
-) (workers.CommandResult, error) {
+) (workerprocess.CommandResult, error) {
 	edge.mu.Lock()
-	edge.request = workers.CloneSubprocessExecutionRequest(request)
+	edge.request = workerprocess.CloneCommandRequest(request)
 	edge.mu.Unlock()
 	if edge.observations != nil {
 		edge.observations.Append("command")
@@ -66,17 +67,17 @@ func (edge *streamingCommandEdge) RunStreaming(
 			observer(chunk.stream, []byte(chunk.payload))
 		}
 	}
-	return workers.CommandResult{
+	return workerprocess.CommandResult{
 		Stdout:   append([]byte(nil), edge.result.Stdout...),
 		Stderr:   append([]byte(nil), edge.result.Stderr...),
 		ExitCode: edge.result.ExitCode,
 	}, edge.err
 }
 
-func (edge *streamingCommandEdge) Request() workers.CommandRequest {
+func (edge *streamingCommandEdge) Request() workerprocess.CommandRequest {
 	edge.mu.Lock()
 	defer edge.mu.Unlock()
-	return workers.CloneSubprocessExecutionRequest(edge.request)
+	return workerprocess.CloneCommandRequest(edge.request)
 }
 
 type observationLog struct {
@@ -135,47 +136,47 @@ func (clock *sequenceClock) Now() time.Time {
 }
 
 type nonStreamingCommandRunner struct {
-	result workers.CommandResult
+	result workerprocess.CommandResult
 	err    error
 }
 
 func (runner nonStreamingCommandRunner) Run(
 	context.Context,
-	workers.CommandRequest,
-) (workers.CommandResult, error) {
+	workerprocess.CommandRequest,
+) (workerprocess.CommandResult, error) {
 	return runner.result, runner.err
 }
 
 type captureCommandRunner struct {
 	mu      sync.Mutex
-	request workers.CommandRequest
-	result  workers.CommandResult
+	request workerprocess.CommandRequest
+	result  workerprocess.CommandResult
 	calls   int
 }
 
 func (runner *captureCommandRunner) Run(
 	ctx context.Context,
-	request workers.CommandRequest,
-) (workers.CommandResult, error) {
+	request workerprocess.CommandRequest,
+) (workerprocess.CommandResult, error) {
 	return runner.RunStreaming(ctx, request, nil)
 }
 
 func (runner *captureCommandRunner) RunStreaming(
 	_ context.Context,
-	request workers.CommandRequest,
+	request workerprocess.CommandRequest,
 	_ platformprocess.OutputChunkObserver,
-) (workers.CommandResult, error) {
+) (workerprocess.CommandResult, error) {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	runner.calls++
-	runner.request = workers.CloneSubprocessExecutionRequest(request)
+	runner.request = workerprocess.CloneCommandRequest(request)
 	return runner.result, nil
 }
 
-func (runner *captureCommandRunner) Request() workers.CommandRequest {
+func (runner *captureCommandRunner) Request() workerprocess.CommandRequest {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
-	return workers.CloneSubprocessExecutionRequest(runner.request)
+	return workerprocess.CloneCommandRequest(runner.request)
 }
 
 func (runner *captureCommandRunner) Calls() int {

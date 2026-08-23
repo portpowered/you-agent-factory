@@ -3,32 +3,147 @@ package wire
 import (
 	"context"
 	"errors"
+	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
+	runnermockworker "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing"
 )
 
 // NewContextualMockWorkerCommandRunner decorates a process command edge with
 // request-scoped mock behavior. The override is read from the detached
 // execution context, so concurrent Factory Sessions never share mutable mock
 // configuration.
-func NewContextualMockWorkerCommandRunner(next workers.CommandRunner) workers.CommandRunner {
-	return contextualMockWorkerCommandRunner{next: next}
+func NewContextualMockWorkerCommandRunner(next platformprocess.CommandRunner) platformprocess.CommandRunner {
+	return workerprocess.ProjectPlatformCommandRunner(
+		newContextualMockWorkerCommandRunner(workerprocess.AdaptPlatformCommandRunner(next)),
+	)
+}
+
+// NewLoggingCommandRunner keeps command diagnostics inside the Workers-owned
+// private runner boundary while exposing only the platform process effect to
+// composition callers.
+func NewLoggingCommandRunner(
+	next platformprocess.CommandRunner,
+	logger logging.Logger,
+	clock func() time.Time,
+) platformprocess.CommandRunner {
+	private := workerprocess.AdaptPlatformCommandRunner(next)
+	if private == nil || clock == nil {
+		return next
+	}
+	return workerprocess.ProjectPlatformCommandRunner(
+		workerprocess.CommandRunnerWithLogging(private, logger, workerprocess.ClockFunc(clock)),
+	)
+}
+
+// NewProviderCommandRunner projects the Workers-private command request onto
+// the Providers-owned effect shape at the composition boundary. The returned
+// value intentionally has an opaque structural shape: Providers adapts it
+// without importing Workers' private command types, while the request-scoped
+// mock configuration continues to flow through context unchanged.
+func NewProviderCommandRunner(next platformprocess.CommandRunner) any {
+	return providerCommandRunner{
+		runner: workerprocess.AdaptPlatformCommandRunner(next),
+	}
+}
+
+type providerCommandRunner struct {
+	runner workerprocess.CommandRunner
+}
+
+type providerCommandRequest struct {
+	Command                  string
+	Args                     []string
+	Stdin                    []byte
+	Env                      []string
+	WorkDir                  string
+	DispatchID               string
+	AttemptID                string
+	TransitionID             string
+	WorkerType               string
+	WorkstationName          string
+	ProjectID                string
+	InputTokens              []any
+	InputBindings            map[string][]string
+	Execution                work.ExecutionMetadata
+	ExecutionLogger          logging.Logger
+	ProcessLifecycleObserver platformprocess.ProcessLifecycleObserver
+}
+
+func (runner providerCommandRunner) Run(
+	ctx context.Context,
+	request providerCommandRequest,
+) (workerprocess.CommandResult, error) {
+	if runner.runner == nil {
+		return workerprocess.CommandResult{}, errors.New("provider command runner is required")
+	}
+	return runner.runner.Run(ctx, workerCommandRequest(request))
+}
+
+func (runner providerCommandRunner) RunStreaming(
+	ctx context.Context,
+	request providerCommandRequest,
+	observer platformprocess.OutputChunkObserver,
+) (workerprocess.CommandResult, error) {
+	if runner.runner == nil {
+		return workerprocess.CommandResult{}, errors.New("provider command runner is required")
+	}
+	if streaming, ok := runner.runner.(interface {
+		RunStreaming(context.Context, workerprocess.CommandRequest, platformprocess.OutputChunkObserver) (workerprocess.CommandResult, error)
+	}); ok {
+		return streaming.RunStreaming(ctx, workerCommandRequest(request), observer)
+	}
+	result, err := runner.Run(ctx, request)
+	publishCompleteCommandOutput(observer, result.Stdout, result.Stderr)
+	return result, err
+}
+
+func workerCommandRequest(request providerCommandRequest) workerprocess.CommandRequest {
+	dispatchID := request.DispatchID
+	if dispatchID == "" {
+		dispatchID = request.AttemptID
+	}
+	private := workerprocess.SubprocessRequestBase(work.WorkDispatch{
+		DispatchID:      dispatchID,
+		TransitionID:    request.TransitionID,
+		WorkerType:      request.WorkerType,
+		WorkstationName: request.WorkstationName,
+		ProjectID:       request.ProjectID,
+		InputTokens:     request.InputTokens,
+		InputBindings:   request.InputBindings,
+		Execution:       request.Execution,
+	})
+	private.Command = request.Command
+	private.Args = request.Args
+	private.Stdin = request.Stdin
+	private.Env = request.Env
+	private.WorkDir = request.WorkDir
+	private.ExecutionLogger = request.ExecutionLogger
+	private.ProcessLifecycleObserver = request.ProcessLifecycleObserver
+	return private
 }
 
 type contextualMockWorkerCommandRunner struct {
-	next workers.CommandRunner
+	next workerprocess.CommandRunner
+}
+
+func newContextualMockWorkerCommandRunner(next workerprocess.CommandRunner) workerprocess.CommandRunner {
+	return contextualMockWorkerCommandRunner{next: next}
 }
 
 func (runner contextualMockWorkerCommandRunner) Run(
 	ctx context.Context,
-	request workers.CommandRequest,
-) (workers.CommandResult, error) {
+	request workerprocess.CommandRequest,
+) (workerprocess.CommandResult, error) {
 	config := workerexecution.MockWorkersConfigFromContext(ctx)
 	if config == nil {
 		return runner.runNext(ctx, request)
 	}
-	return (&workers.MockWorkerCommandRunner{
+	return (&runnermockworker.MockWorkerCommandRunner{
 		Config: config, Next: runner.next,
 		OutputPolicy: workerexecution.MockWorkerOutputPolicyFromContext(ctx),
 	}).Run(ctx, request)
@@ -36,13 +151,13 @@ func (runner contextualMockWorkerCommandRunner) Run(
 
 func (runner contextualMockWorkerCommandRunner) RunStreaming(
 	ctx context.Context,
-	request workers.CommandRequest,
-	observer workers.OutputChunkObserver,
-) (workers.CommandResult, error) {
+	request workerprocess.CommandRequest,
+	observer workerprocess.OutputChunkObserver,
+) (workerprocess.CommandResult, error) {
 	config := workerexecution.MockWorkersConfigFromContext(ctx)
 	if config == nil {
 		if streaming, ok := runner.next.(interface {
-			RunStreaming(context.Context, workers.CommandRequest, workers.OutputChunkObserver) (workers.CommandResult, error)
+			RunStreaming(context.Context, workerprocess.CommandRequest, workerprocess.OutputChunkObserver) (workerprocess.CommandResult, error)
 		}); ok {
 			return streaming.RunStreaming(ctx, request, observer)
 		}
@@ -50,7 +165,7 @@ func (runner contextualMockWorkerCommandRunner) RunStreaming(
 		publishCompleteCommandOutput(observer, result.Stdout, result.Stderr)
 		return result, err
 	}
-	result, err := (&workers.MockWorkerCommandRunner{
+	result, err := (&runnermockworker.MockWorkerCommandRunner{
 		Config: config, Next: runner.next,
 		OutputPolicy: workerexecution.MockWorkerOutputPolicyFromContext(ctx),
 	}).Run(ctx, request)
@@ -60,34 +175,37 @@ func (runner contextualMockWorkerCommandRunner) RunStreaming(
 
 func (runner contextualMockWorkerCommandRunner) CommandResultForLogging(
 	ctx context.Context,
-	request workers.CommandRequest,
-	result workers.CommandResult,
-) workers.CommandResult {
+	request workerprocess.CommandRequest,
+	result workerprocess.CommandResult,
+) workerprocess.CommandResult {
 	config := workerexecution.MockWorkersConfigFromContext(ctx)
 	if config == nil {
 		return result
 	}
-	return (&workers.MockWorkerCommandRunner{Config: config}).CommandResultForLogging(ctx, request, result)
+	return (&runnermockworker.MockWorkerCommandRunner{
+		Config:       config,
+		OutputPolicy: workerexecution.MockWorkerOutputPolicyFromContext(ctx),
+	}).CommandResultForLogging(ctx, request, result)
 }
 
 func (runner contextualMockWorkerCommandRunner) runNext(
 	ctx context.Context,
-	request workers.CommandRequest,
-) (workers.CommandResult, error) {
+	request workerprocess.CommandRequest,
+) (workerprocess.CommandResult, error) {
 	if runner.next == nil {
-		return workers.CommandResult{}, errors.New("contextual mock worker next command runner is required")
+		return workerprocess.CommandResult{}, errors.New("contextual mock worker next command runner is required")
 	}
 	return runner.next.Run(ctx, request)
 }
 
-func publishCompleteCommandOutput(observer workers.OutputChunkObserver, stdout, stderr []byte) {
+func publishCompleteCommandOutput(observer workerprocess.OutputChunkObserver, stdout, stderr []byte) {
 	if observer == nil {
 		return
 	}
 	if len(stdout) > 0 {
-		observer(workers.OutputStreamStdout, append([]byte(nil), stdout...))
+		observer(workerprocess.OutputStreamStdout, append([]byte(nil), stdout...))
 	}
 	if len(stderr) > 0 {
-		observer(workers.OutputStreamStderr, append([]byte(nil), stderr...))
+		observer(workerprocess.OutputStreamStderr, append([]byte(nil), stderr...))
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
@@ -453,7 +454,7 @@ func (*testRuntimeOpeningStub) ReplayClock(*recordings.ReplayArtifact) recording
 
 func (*testRuntimeOpeningStub) ReplayExecution(
 	*recordings.ReplayArtifact,
-) (providers.Service, workers.CommandRunner, []recordings.ReplayHook, recordings.CompletionDeliveryPlanner, error) {
+) (providers.Service, platformprocess.CommandRunner, []recordings.ReplayHook, recordings.CompletionDeliveryPlanner, error) {
 	return nil, nil, nil, nil, nil
 }
 

@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	claude "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestClaudeCommandEffectClassifiesStderrExitFailures(t *testing.T) {
@@ -51,7 +51,7 @@ func TestClaudeCommandEffectClassifiesStderrExitFailures(t *testing.T) {
 			t.Parallel()
 
 			effect := claude.NewCommandEffect(claudeCommandRunnerStub{
-				result: workers.CommandResult{
+				result: platformprocess.CommandResult{
 					ExitCode: 1,
 					Stderr:   []byte(test.stderr),
 				},
@@ -69,9 +69,9 @@ func TestClaudeCommandEffectClassifiesStderrExitFailures(t *testing.T) {
 }
 
 type claudeCommandRunnerStub struct {
-	result workers.CommandResult
+	result platformprocess.CommandResult
 }
 
-func (stub claudeCommandRunnerStub) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
+func (stub claudeCommandRunnerStub) Run(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	return stub.result, nil
 }

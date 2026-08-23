@@ -92,18 +92,21 @@ type Config struct {
 	JSON                          bool
 	CleanInvocationInputSource    InvocationInputSource
 	Output                        io.Writer
-	ProgressOutput                io.Writer
-	OpenDashboard                 bool
-	StartupOutput                 io.Writer
-	Diagnostics                   io.Writer
-	Stdin                         io.Reader
-	StdinIsTTY                    func() bool
-	OutputIsTTY                   bool
-	ProgressIsTTY                 bool
-	JSONOutput                    bool
-	InvocationOutputMode          string
-	InvocationOutputExplicit      bool
-	InvocationMetricsRecorder     InvocationMetricsRecorder
+	// ReplayMetadataOutput is the raw human stdout sink used for non-fatal
+	// replay drift disclosure even when quiet mode suppresses normal output.
+	ReplayMetadataOutput      io.Writer
+	ProgressOutput            io.Writer
+	OpenDashboard             bool
+	StartupOutput             io.Writer
+	Diagnostics               io.Writer
+	Stdin                     io.Reader
+	StdinIsTTY                func() bool
+	OutputIsTTY               bool
+	ProgressIsTTY             bool
+	JSONOutput                bool
+	InvocationOutputMode      string
+	InvocationOutputExplicit  bool
+	InvocationMetricsRecorder InvocationMetricsRecorder
 
 	InvocationSkipPermissionsOverride *bool
 	Logger                            *zap.Logger

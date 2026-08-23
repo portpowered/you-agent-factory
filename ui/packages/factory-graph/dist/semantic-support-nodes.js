@@ -4,14 +4,22 @@ import { GraphSemanticIcon } from "./semantic-icon.js";
 import { FactoryGraphNodeExpandedContent, FactoryGraphNodeShell, } from "./semantic-node-shell.js";
 import { factoryGraphNodeHoverClassName, factoryGraphNodeSurfaceClassName, factoryGraphNodeVisualIconClassName, factoryGraphNodeWrappedTextClassName, } from "./semantic-node-style.js";
 import { resolveFactoryGraphVisualState } from "./visual-state.js";
-import { factoryGraphUnknownWorkerType, factoryGraphWorkerIconClassName, factoryGraphWorkerIconKind, } from "./worker-icon.js";
+import { factoryGraphUnknownWorkerType, factoryGraphWorkerIconClassName, factoryGraphWorkerIconKind, factoryGraphWorkerProviderKind, factoryGraphWorkerProviderLabel, } from "./worker-icon.js";
 /** Original Factory worker node, with host-owned worker selection. */
 export function FactoryGraphWorkerNodeView({ data, selected: reactFlowSelected, }) {
     const workerName = resolveWorkerName(data);
     const unknownWorkerType = factoryGraphUnknownWorkerType(data.workerType);
-    const label = unknownWorkerType
-        ? `worker:${workerName} (${unknownWorkerType})`
-        : `worker:${workerName}`;
+    const providerKind = factoryGraphWorkerProviderKind(data.runnerId);
+    const providerLabel = factoryGraphWorkerProviderLabel(providerKind);
+    const rawProviderLabel = normalizedRawProviderLabel(data.runnerId);
+    const providerAccessibleLabel = providerLabel ?? rawProviderLabel;
+    const providerSuffix = providerAccessibleLabel
+        ? ` (${providerAccessibleLabel})`
+        : "";
+    const accessibleWorkerName = unknownWorkerType
+        ? `${workerName} (${unknownWorkerType})${providerSuffix}`
+        : `${workerName}${providerSuffix}`;
+    const label = `worker:${accessibleWorkerName}`;
     const workerLabel = semanticLabel("worker", data.locale);
     const workerKindLabel = unknownWorkerType ?? workerLabel;
     const workerIconKind = factoryGraphWorkerIconKind(data.workerType, data.runnerId);
@@ -25,7 +33,7 @@ export function FactoryGraphWorkerNodeView({ data, selected: reactFlowSelected, 
         selected,
         validation: data.validationError,
     });
-    const content = (_jsxs(_Fragment, { children: [_jsxs("span", { "aria-label": label, className: "flex h-full min-h-0 min-w-0 items-center gap-1.5 overflow-hidden", "data-factory-entity-semantic-icon": true, "data-worker-label-zone": true, role: "img", title: label, children: [_jsx("span", { className: "sr-only", children: label }), _jsx(GraphSemanticIcon, { className: classNames("h-3.5 w-3.5 shrink-0", factoryGraphWorkerIconClassName(visualState, unknownWorkerType ? "text-on-surface-variant" : "text-info")), kind: workerIconKind, label: workerLabel }), _jsxs("span", { className: "grid min-w-0 gap-px overflow-hidden", children: [_jsx("span", { className: factoryGraphNodeWrappedTextClassName(classNames("block overflow-hidden text-[0.62rem] font-bold uppercase leading-none", unknownWorkerType ? "text-on-surface-variant" : "text-info")), "data-worker-kind-label": true, children: workerKindLabel }), _jsx("strong", { className: factoryGraphNodeWrappedTextClassName("block font-mono text-[0.8rem] font-bold leading-tight text-on-surface"), "data-factory-entity-title": true, title: workerName, children: workerName })] })] }), data.expanded === true ? (_jsxs(FactoryGraphNodeExpandedContent, { family: "worker", children: [_jsx("span", { "data-factory-graph-expanded-field": "worker-type", children: data.workerType ?? workerLabel }), data.runnerId ? (_jsx("span", { "data-factory-graph-expanded-field": "runner", children: data.runnerId })) : null] })) : null] }));
+    const content = (_jsx(FactoryGraphWorkerNodeContent, { data: data, label: label, unknownWorkerType: unknownWorkerType, providerLabel: providerLabel, visualState: visualState, workerIconKind: workerIconKind, workerKindLabel: workerKindLabel, workerLabel: workerLabel, workerName: workerName }));
     return (_jsx(FactoryGraphNodeShell, { className: classNames(factoryGraphNodeSurfaceClassName(unknownWorkerType ? "neutral" : "info"), "justify-center text-left text-on-surface", factoryGraphNodeHoverClassName({
             activeFlow: data.activeFlow,
             muted: data.muted,
@@ -36,12 +44,13 @@ export function FactoryGraphWorkerNodeView({ data, selected: reactFlowSelected, 
             muted: data.muted,
             selected,
             validation: data.validationError,
-        }, children: selectable ? (_jsx(GraphNodeButton, { "aria-label": selectLabel("worker", unknownWorkerType
-                ? `${workerName} (${unknownWorkerType})`
-                : workerName, data.locale), "aria-pressed": selected, className: "grid h-full min-h-0 min-w-0 place-content-center gap-0.5 overflow-hidden", "data-selected-worker": selected ? "true" : undefined, onClick: (event) => {
+        }, children: selectable ? (_jsx(GraphNodeButton, { "aria-label": selectLabel("worker", accessibleWorkerName, data.locale), "aria-pressed": selected, className: "grid h-full min-h-0 min-w-0 place-content-center gap-0.5 overflow-hidden", "data-selected-worker": selected ? "true" : undefined, onClick: (event) => {
                 event.stopPropagation();
                 data.onSelectWorker?.(workerName);
             }, children: content })) : (content) }));
+}
+function FactoryGraphWorkerNodeContent({ data, label, providerLabel, unknownWorkerType, visualState, workerIconKind, workerKindLabel, workerLabel, workerName, }) {
+    return (_jsxs(_Fragment, { children: [_jsxs("span", { "aria-label": label, className: "flex h-full min-h-0 min-w-0 items-center gap-1.5 overflow-hidden", "data-factory-entity-semantic-icon": true, "data-worker-label-zone": true, role: "img", title: label, children: [_jsx("span", { className: "sr-only", children: label }), _jsx(GraphSemanticIcon, { className: classNames("h-3.5 w-3.5 shrink-0", factoryGraphWorkerIconClassName(visualState, unknownWorkerType ? "text-on-surface-variant" : "text-info")), kind: workerIconKind, label: providerLabel ? `${workerLabel} (${providerLabel})` : workerLabel }), _jsxs("span", { className: "grid min-w-0 gap-px overflow-hidden", children: [_jsx("span", { className: factoryGraphNodeWrappedTextClassName(classNames("block overflow-hidden text-[0.62rem] font-bold uppercase leading-none", unknownWorkerType ? "text-on-surface-variant" : "text-info")), "data-worker-kind-label": true, children: workerKindLabel }), _jsx("strong", { className: factoryGraphNodeWrappedTextClassName("block font-mono text-[0.8rem] font-bold leading-tight text-on-surface"), "data-factory-entity-title": true, title: workerName, children: workerName })] })] }), data.expanded === true ? (_jsxs(FactoryGraphNodeExpandedContent, { family: "worker", children: [_jsx("span", { "data-factory-graph-expanded-field": "worker-type", children: data.workerType ?? workerLabel }), data.runnerId ? (_jsx("span", { "data-factory-graph-expanded-field": "runner", children: data.runnerId })) : null] })) : null] }));
 }
 /** Original Factory work-type node, with host-owned selection and validation. */
 export function FactoryGraphWorkTypeNodeView({ data, selected: reactFlowSelected, }) {
@@ -126,6 +135,10 @@ function resolveWorkerName(data) {
     return (data.place.state_value ??
         data.factoryGraphNodeId?.replace(/^worker:/, "") ??
         data.place.place_id.replace(/^place:worker:/, "").replace(/^worker:/, ""));
+}
+function normalizedRawProviderLabel(providerId) {
+    const trimmed = typeof providerId === "string" ? providerId.trim() : "";
+    return trimmed.length > 0 ? trimmed : undefined;
 }
 function workTypeName(place) {
     return typeof place.state_value === "string" &&

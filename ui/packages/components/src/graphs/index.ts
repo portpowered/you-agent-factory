@@ -24,7 +24,11 @@ export {
   GraphNodeHandleBadge,
   type GraphNodeHandleBadgeProps,
 } from "./graph-node-handle-badge";
-export { GraphNodeShell, type GraphNodeShellProps } from "./graph-node-shell";
+export {
+  type GraphNodeContentInset,
+  GraphNodeShell,
+  type GraphNodeShellProps,
+} from "./graph-node-shell";
 export {
   defaultGraphNodeStateLabel,
   GRAPH_NODE_CONTENT_MIN_HEIGHT_CLASS,
