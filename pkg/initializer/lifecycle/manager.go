@@ -47,15 +47,6 @@ type Manager struct{}
 
 func NewManager() *Manager { return &Manager{} }
 
-// Close releases one owned resource and preserves the construction or runtime
-// failure that caused cleanup. All initializer cleanup paths use this function
-// so reverse-order closing and error annotation have one implementation.
-func Close(name string, resource io.Closer, cause error) error {
-	return closeResources([]NamedResource{{
-		Name: name, Resource: resource,
-	}}, cause)
-}
-
 // CloseResources releases an ordered resource set in reverse order while
 // preserving the failure that caused cleanup.
 func CloseResources(resources []NamedResource, cause error) error {

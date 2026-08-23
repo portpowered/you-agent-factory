@@ -58,14 +58,6 @@ func inferenceFactoryEventPayload(event workerexecution.InferenceEvent) (interfa
 	return "", nil
 }
 
-func splitPlaceID(placeID string) (string, string) {
-	before, after, ok := strings.Cut(placeID, ":")
-	if !ok {
-		return placeID, ""
-	}
-	return before, after
-}
-
 func dispatchConsumedWorkRefsFromTokens(tokens []workerexecution.Token) []interfaces.DispatchConsumedWorkRef {
 	out := make([]interfaces.DispatchConsumedWorkRef, 0, len(tokens))
 	for _, token := range tokens {

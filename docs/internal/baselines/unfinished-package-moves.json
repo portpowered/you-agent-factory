@@ -65,12 +65,6 @@
       "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/internal/service",
-      "destination": "factory_runtime/internal",
-      "successor": "pkg/services/factory_runtime/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
-    },
-    {
       "packagePath": "pkg/services/factory_sessions/internal/runtimeopening",
       "destination": "factory_sessions/internal/services/runtime_opening",
       "successor": "pkg/services/factory_sessions/internal/services/runtime_opening"
