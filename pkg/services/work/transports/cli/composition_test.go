@@ -117,15 +117,26 @@ func TestBindListDelegatesThroughAdapterService(t *testing.T) {
 	}
 }
 
+func testHTTPErrorServer(t *testing.T) string {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "test list failure", http.StatusInternalServerError)
+	}))
+	t.Cleanup(server.Close)
+	return server.URL
+}
+
 func TestBindListMatchesFreeFunctionFacade(t *testing.T) {
 	t.Parallel()
 
 	prepare := workdomain.NewListRequestPreparation()
 	transport := testHTTPProtocol(t)
 	operation := workcli.BindList(transport, prepare)
+	server := testHTTPErrorServer(t)
 
 	cfg := workcli.ListConfig{
 		Context: context.Background(),
+		Server:  server,
 		Output:  &bytes.Buffer{},
 		HTTP:    transport,
 	}
@@ -146,12 +157,14 @@ func TestBindListMatchesTransportCompositionFacade(t *testing.T) {
 	transport := testHTTPProtocol(t)
 	bound := workcli.BindList(transport, prepare)
 	facade := transportworkcli.NewList(transport, prepare)
+	server := testHTTPErrorServer(t)
 	if bound == nil || facade == nil {
 		t.Fatal("BindList and transport facade must return operations")
 	}
 
 	cfg := workcli.ListConfig{
 		Context: context.Background(),
+		Server:  server,
 		Output:  &bytes.Buffer{},
 		HTTP:    transport,
 	}
@@ -334,8 +347,10 @@ func TestBindShowMatchesFreeFunctionFacade(t *testing.T) {
 
 	transport := testHTTPProtocol(t)
 	operation := workcli.BindShow(transport)
+	server := testHTTPErrorServer(t)
 	cfg := workcli.ShowConfig{
 		Context: context.Background(),
+		Server:  server,
 		Output:  &bytes.Buffer{},
 		HTTP:    transport,
 		WorkID:  "work-1",
