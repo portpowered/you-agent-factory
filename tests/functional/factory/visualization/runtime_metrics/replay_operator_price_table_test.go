@@ -24,7 +24,7 @@ func writeReplayOperatorPriceTable(
 	if err != nil {
 		t.Fatalf("encode replay operator price table: %v", err)
 	}
-	configPath := operatorsettings.DefaultConfigPath(homeDir)
+	configPath := filepath.Join(homeDir, ".you-agent-factory", "config.json")
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
 		t.Fatalf("create replay operator settings directory: %v", err)
 	}
