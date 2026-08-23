@@ -28,6 +28,7 @@ type DirectJavaScriptRunOperation interface {
 	Open(
 		context.Context,
 		factorysessions.DirectJavaScriptRunRequest,
+		initializer.InvocationCancellation,
 	) (factorysessions.DirectJavaScriptApplication, error)
 }
 
@@ -125,7 +126,7 @@ func (s *selection) Open(
 			request.ScopeID = scopeID
 		}
 		runner, err := s.buildApplication(ctx, func(openCtx context.Context) (initializer.OpenedApplication, error) {
-			opened, err := s.directJavaScript.Open(openCtx, request)
+			opened, err := s.directJavaScript.Open(openCtx, request, cfg.Cancellation)
 			if err != nil && s.presentations != nil {
 				s.presentations.Close(scopeID)
 			}
@@ -164,6 +165,7 @@ func (application closeOnRun) Run(ctx context.Context) error {
 }
 
 func applyRunIntent(cfg RunConfig, intent processcontract.RunIntent) (RunConfig, error) {
+	cfg.Cancellation = intent.Cancellation
 	if intent.DashboardEnabled && !intent.APIEnabled {
 		return RunConfig{}, fmt.Errorf("dashboard sidecar requires API transport")
 	}

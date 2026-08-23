@@ -291,7 +291,7 @@ func openHostedRuntime(
 	if err != nil {
 		return nil, err
 	}
-	factorySvc, err = buildRunner(ctx, openingRequest, factorysessions.VisualizationSinkID(visualizationSinkID))
+	factorySvc, err = buildRunner(ctx, openingRequest, cfg.Cancellation, factorysessions.VisualizationSinkID(visualizationSinkID))
 	if err != nil {
 		closeRuntimeVisualizationSink(visualizations, visualizationSinkID)
 		return nil, err

@@ -7,6 +7,7 @@ package generated
 var RunSubmitFamilyCommandIDs = []string{
 	"you.run",
 	"you.server",
+	"you.server.stop",
 	"you.submit",
 	"you.submit.batch",
 }

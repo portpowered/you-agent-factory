@@ -32,6 +32,7 @@ func TestOpenHostedRuntimeUsesOpenedHostedInvocationCapability(t *testing.T) {
 		func(
 			_ context.Context,
 			_ *factorysessions.RuntimeOpeningRequest,
+			_ initializer.InvocationCancellation,
 			_ factorysessions.VisualizationSinkID,
 		) (initializer.LocalRuntimeRunner, error) {
 			return WithHostedInvocation(hostedInvocationCompletionRunner{}, sessions), nil

@@ -243,6 +243,7 @@ type RuntimeRunner = factoryServiceRunner
 type RuntimeRunnerBuilder func(
 	context.Context,
 	*factorysessions.RuntimeOpeningRequest,
+	initializer.InvocationCancellation,
 	factorysessions.VisualizationSinkID,
 ) (initializer.LocalRuntimeRunner, error)
 

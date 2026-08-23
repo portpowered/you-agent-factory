@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -564,10 +565,11 @@ func provideDirectJavaScriptHostAdapter(
 	return func(
 		execution factorysessionwire.OwnedExecutionService,
 		host factorysessions.RuntimeHostRequest,
+		cancellation initializer.InvocationCancellation,
 		observer factorysessions.RuntimeHostObserver,
 	) (lifecycle.Component, error) {
 		handler, err := newDurableExecutionHTTPHandler(
-			execution, validation, invocationWorkType, sessionRequests, logger,
+			execution, validation, invocationWorkType, sessionRequests, logger, cancellation,
 		)
 		if err != nil {
 			return nil, err
@@ -594,6 +596,7 @@ func newDurableExecutionHTTPHandler(
 	invocationWorkType factorydefinitions.InvocationWorkTypeService,
 	sessionRequests factorysessionshttp.RequestPreparation,
 	logger *zap.Logger,
+	cancellation initializer.InvocationCancellation,
 ) (http.Handler, error) {
 	if execution == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || logger == nil {
 		return nil, errors.New("construct durable execution HTTP handler: execution, policies, request preparation, and logger are required")
@@ -605,12 +608,16 @@ func newDurableExecutionHTTPHandler(
 		DurableLister: execution, FactoryValidation: validation,
 		InvocationWorkType: invocationWorkType, SessionRequests: sessionRequests,
 	}, logger)
-	return transporthttp.NewServerWithRecordings(
+	var shutdown transporthttp.ShutdownOperation
+	if cancellation != nil {
+		shutdown = cancellation.Cancel
+	}
+	return transporthttp.NewServerWithRecordingsAndShutdown(
 		recordingshttp.NewLegacyAdapter(
 			factorysessionmapping.NewDurableHistoryBridge(durable),
 			factorysessionshttp.NewDurableRequestPreparation(sessionRequests),
 		),
-		sessionsHandler, nil, nil, nil, nil, logger,
+		sessionsHandler, nil, nil, nil, nil, logger, shutdown,
 	).Handler(), nil
 }
 

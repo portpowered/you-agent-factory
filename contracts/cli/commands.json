@@ -16223,6 +16223,147 @@
         "id": "you.server.handler"
       }
     },
+    "you.server.stop": {
+      "id": "you.server.stop",
+      "name": "stop",
+      "path": "you server stop",
+      "aliases": [],
+      "completeness": "authoritative",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.server.stop",
+        "documentation": {
+          "title": {
+            "id": "you.server.stop.title",
+            "canonicalEnglish": "Gracefully stop a local Factory API server"
+          },
+          "description": {
+            "id": "you.server.stop.description",
+            "canonicalEnglish": "Request graceful shutdown of the selected loopback Factory API server through its administrative control. The command waits for the selected listener to stop and never falls back to local process termination. Use --server to select the loopback server URI."
+          }
+        },
+        "examples": [
+          "you --server http://127.0.0.1:7437 server stop",
+          "you --server http://localhost:7437 server stop --json"
+        ],
+        "visibility": "public",
+        "sourceHash": "6b32edebf7ea06619c958a4723cb96eb5f7c10aa2fcc112c273bf3f809c6424c"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.server.stop",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "placement": "local-only",
+      "usage": {
+        "line": "stop",
+        "example": "  you --server http://127.0.0.1:7437 server stop"
+      },
+      "flags": {},
+      "precedence": {
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
+      "channels": {
+        "input": [
+          "cli"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "outputs": {
+        "you.server.stop.output.human": {
+          "id": "you.server.stop.output.human",
+          "channel": "stdout",
+          "format": "text"
+        },
+        "you.server.stop.output.json": {
+          "id": "you.server.stop.output.json",
+          "channel": "stdout",
+          "format": "json"
+        }
+      },
+      "errors": {
+        "you.server.stop.error.invalid-target": {
+          "id": "you.server.stop.error.invalid-target",
+          "code": "SERVER_STOP_INVALID_TARGET"
+        },
+        "you.server.stop.error.unreachable": {
+          "id": "you.server.stop.error.unreachable",
+          "code": "SERVER_STOP_UNREACHABLE"
+        },
+        "you.server.stop.error.rejected": {
+          "id": "you.server.stop.error.rejected",
+          "code": "SHUTDOWN_CONTROL_REJECTED"
+        },
+        "you.server.stop.error.unavailable": {
+          "id": "you.server.stop.error.unavailable",
+          "code": "SHUTDOWN_CONTROL_UNAVAILABLE"
+        },
+        "you.server.stop.error.request-timeout": {
+          "id": "you.server.stop.error.request-timeout",
+          "code": "SERVER_STOP_REQUEST_TIMEOUT"
+        },
+        "you.server.stop.error.observation-timeout": {
+          "id": "you.server.stop.error.observation-timeout",
+          "code": "SERVER_STOP_OBSERVATION_TIMEOUT"
+        }
+      },
+      "exits": {
+        "you.server.stop.exit.success": {
+          "id": "you.server.stop.exit.success",
+          "code": 0,
+          "kind": "success"
+        },
+        "you.server.stop.exit.failure": {
+          "id": "you.server.stop.exit.failure",
+          "code": 1,
+          "kind": "failure"
+        },
+        "you.server.stop.exit.usage": {
+          "id": "you.server.stop.exit.usage",
+          "code": 1,
+          "kind": "usage"
+        }
+      },
+      "sideEffects": {
+        "you.server.stop.side-effect.network": {
+          "id": "you.server.stop.side-effect.network",
+          "kind": "network"
+        }
+      },
+      "constraints": {
+        "runtime": [
+          "local"
+        ],
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ]
+      },
+      "handler": {
+        "id": "you.server.stop.handler",
+        "operationId": "shutdownServer"
+      }
+    },
     "you.submit": {
       "id": "you.submit",
       "name": "submit",

@@ -155,6 +155,8 @@ const (
 	ErrorResponseCodeRESPONSEEVENTSTREAMEXPIRED                     ErrorResponseCode = "RESPONSE_EVENT_STREAM_EXPIRED"
 	ErrorResponseCodeREVISIONCONFLICT                               ErrorResponseCode = "REVISION_CONFLICT"
 	ErrorResponseCodeSESSIONKINDUNSUPPORTED                         ErrorResponseCode = "SESSION_KIND_UNSUPPORTED"
+	ErrorResponseCodeSHUTDOWNCONTROLREJECTED                        ErrorResponseCode = "SHUTDOWN_CONTROL_REJECTED"
+	ErrorResponseCodeSHUTDOWNCONTROLUNAVAILABLE                     ErrorResponseCode = "SHUTDOWN_CONTROL_UNAVAILABLE"
 	ErrorResponseCodeSTALEFACTORYVERSION                            ErrorResponseCode = "STALE_FACTORY_VERSION"
 	ErrorResponseCodeWORKERSESSIONADMISSIONFAILED                   ErrorResponseCode = "WORKER_SESSION_ADMISSION_FAILED"
 	ErrorResponseCodeWORKERSESSIONCONTINUATIONADMISSIONFAILED       ErrorResponseCode = "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED"
@@ -1273,6 +1275,11 @@ const (
 const (
 	ScriptFailureTypeProcessError ScriptFailureType = "PROCESS_ERROR"
 	ScriptFailureTypeTimeout      ScriptFailureType = "TIMEOUT"
+)
+
+// Defines values for ShutdownAcceptedResponseStatus.
+const (
+	Accepted ShutdownAcceptedResponseStatus = "accepted"
 )
 
 // Defines values for SubmitWorkItemType.
@@ -7825,6 +7832,16 @@ type SessionStartedEventPayload struct {
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
+// ShutdownAcceptedResponse defines model for ShutdownAcceptedResponse.
+type ShutdownAcceptedResponse struct {
+	// Message Human-readable acknowledgment that graceful shutdown was accepted.
+	Message string                         `json:"message"`
+	Status  ShutdownAcceptedResponseStatus `json:"status"`
+}
+
+// ShutdownAcceptedResponseStatus defines model for ShutdownAcceptedResponse.Status.
+type ShutdownAcceptedResponseStatus string
+
 // StageSubmitWorkFileRequest defines model for StageSubmitWorkFileRequest.
 type StageSubmitWorkFileRequest struct {
 	// ContentBase64 Base64-encoded file payload to stage behind a backend-owned reference.
@@ -9552,6 +9569,12 @@ type SaveCurrentFactoryBadRequest = ErrorResponse
 
 // SaveCurrentFactoryConflict defines model for SaveCurrentFactoryConflict.
 type SaveCurrentFactoryConflict = ErrorResponse
+
+// ShutdownControlRejected defines model for ShutdownControlRejected.
+type ShutdownControlRejected = ErrorResponse
+
+// ShutdownControlUnavailable defines model for ShutdownControlUnavailable.
+type ShutdownControlUnavailable = ErrorResponse
 
 // WorkerSessionContinuationConflict defines model for WorkerSessionContinuationConflict.
 type WorkerSessionContinuationConflict = ErrorResponse
@@ -18269,6 +18292,9 @@ type ClientInterface interface {
 	// GetMetricsCosts request
 	GetMetricsCosts(ctx context.Context, params *GetMetricsCostsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ShutdownServer request
+	ShutdownServer(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetStatus request
 	GetStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -18329,6 +18355,18 @@ func (c *Client) GetMetrics(ctx context.Context, params *GetMetricsParams, reqEd
 
 func (c *Client) GetMetricsCosts(ctx context.Context, params *GetMetricsCostsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetMetricsCostsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ShutdownServer(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewShutdownServerRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -18744,6 +18782,33 @@ func NewGetMetricsCostsRequest(server string, params *GetMetricsCostsParams) (*h
 	return req, nil
 }
 
+// NewShutdownServerRequest generates requests for ShutdownServer
+func NewShutdownServerRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/shutdown")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetStatusRequest generates requests for GetStatus
 func NewGetStatusRequest(server string) (*http.Request, error) {
 	var err error
@@ -18897,6 +18962,9 @@ type ClientWithResponsesInterface interface {
 	// GetMetricsCostsWithResponse request
 	GetMetricsCostsWithResponse(ctx context.Context, params *GetMetricsCostsParams, reqEditors ...RequestEditorFn) (*GetMetricsCostsClientResponse, error)
 
+	// ShutdownServerWithResponse request
+	ShutdownServerWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ShutdownServerClientResponse, error)
+
 	// GetStatusWithResponse request
 	GetStatusWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetStatusClientResponse, error)
 
@@ -19033,6 +19101,31 @@ func (r GetMetricsCostsClientResponse) StatusCode() int {
 	return 0
 }
 
+type ShutdownServerClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *ShutdownAcceptedResponse
+	JSON403      *ShutdownControlRejected
+	JSON500      *InternalError
+	JSON503      *ShutdownControlUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r ShutdownServerClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ShutdownServerClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetStatusClientResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -19150,6 +19243,15 @@ func (c *ClientWithResponses) GetMetricsCostsWithResponse(ctx context.Context, p
 		return nil, err
 	}
 	return ParseGetMetricsCostsClientResponse(rsp)
+}
+
+// ShutdownServerWithResponse request returning *ShutdownServerClientResponse
+func (c *ClientWithResponses) ShutdownServerWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ShutdownServerClientResponse, error) {
+	rsp, err := c.ShutdownServer(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseShutdownServerClientResponse(rsp)
 }
 
 // GetStatusWithResponse request returning *GetStatusClientResponse
@@ -19418,6 +19520,53 @@ func ParseGetMetricsCostsClientResponse(rsp *http.Response) (*GetMetricsCostsCli
 			return nil, err
 		}
 		response.JSON504 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseShutdownServerClientResponse parses an HTTP response from a ShutdownServerWithResponse call
+func ParseShutdownServerClientResponse(rsp *http.Response) (*ShutdownServerClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ShutdownServerClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest ShutdownAcceptedResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ShutdownControlRejected
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest InternalError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest ShutdownControlUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 

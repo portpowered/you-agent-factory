@@ -13,6 +13,7 @@ output-options:
     strict: false
   include-operation-ids:
     - getStatus
+    - shutdownServer
     - getMetrics
     - getMetricsCosts
     - getEventsBySessionId

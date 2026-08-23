@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
@@ -75,6 +76,28 @@ func (service *Service) OpenApplication(
 	request *factorysessions.RuntimeOpeningRequest,
 	sinkID factorysessions.VisualizationSinkID,
 ) (roles.OpenedProcessApplication, error) {
+	return service.openApplication(ctx, request, nil, sinkID)
+}
+
+// OpenApplicationWithCancellation opens one application with the explicit
+// invocation-local authority used by hosted administrative controls. The
+// authority is an operation input rather than part of the immutable runtime
+// opening request.
+func (service *Service) OpenApplicationWithCancellation(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+	cancellation initializer.InvocationCancellation,
+	sinkID factorysessions.VisualizationSinkID,
+) (roles.OpenedProcessApplication, error) {
+	return service.openApplication(ctx, request, cancellation, sinkID)
+}
+
+func (service *Service) openApplication(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+	cancellation initializer.InvocationCancellation,
+	sinkID factorysessions.VisualizationSinkID,
+) (roles.OpenedProcessApplication, error) {
 	if service == nil || service.resolveInputs == nil || service.openRuntime == nil || service.adaptRuntime == nil || service.planLifecycle == nil {
 		return roles.OpenedProcessApplication{}, errors.New("open Factory Session application: service is required")
 	}
@@ -82,6 +105,7 @@ func (service *Service) OpenApplication(
 	if err != nil {
 		return roles.OpenedProcessApplication{}, fmt.Errorf("open Factory Session application runtime: %w", err)
 	}
+	opened.Cancellation = cancellation
 	if opened.HistoricalReplay != nil {
 		return service.openHistoricalReplayApplication(opened)
 	}

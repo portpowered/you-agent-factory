@@ -907,6 +907,7 @@ func mustRunServerRegistry(t *testing.T) *commandregistry.Registry {
 	registry, err := commandregistry.NewRunServerRegistry(commandregistry.RunServerHandlers{
 		Run:    commandregistry.CommandHandlers{PreRunE: preRun, RunE: noopRunE},
 		Server: commandregistry.CommandHandlers{PreRunE: preRun, RunE: noopRunE},
+		Stop:   commandregistry.CommandHandlers{PreRunE: preRun, RunE: noopRunE},
 	})
 	if err != nil {
 		t.Fatalf("NewRunServerRegistry() error = %v", err)

@@ -97,6 +97,32 @@ func TestOpenApplicationUsesValueRequestAndForwardsTheSinkSelection(t *testing.T
 	}
 }
 
+func TestOpenApplicationWithCancellationPublishesInvocationAuthority(t *testing.T) {
+	resolve, open, _, plan := validApplicationOpeningDependencies()
+	want := &applicationOpeningCancellationStub{}
+	var got initializer.InvocationCancellation
+	adapt := RuntimeAdapter(func(opened roles.OpenedApplicationRuntime, _ factorysessions.VisualizationSinkID) (factorysessions.BoundProcessComponents, error) {
+		got = opened.Cancellation
+		return factorysessions.BoundProcessComponents{}, nil
+	})
+	service, err := New(resolve, open, adapt, plan)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if _, err := service.OpenApplicationWithCancellation(
+		context.Background(), &factorysessions.RuntimeOpeningRequest{}, want, "",
+	); err != nil {
+		t.Fatalf("OpenApplicationWithCancellation: %v", err)
+	}
+	if got != want {
+		t.Fatalf("opened cancellation = %p, want %p", got, want)
+	}
+}
+
+type applicationOpeningCancellationStub struct{}
+
+func (*applicationOpeningCancellationStub) Cancel() {}
+
 func TestOpenApplicationReturnsDetachedHistoricalReplay(t *testing.T) {
 	inspection := &factorysessions.HistoricalReplayInspection{
 		Session: factorysessions.SessionReadResult{SessionID: "recorded-session"},

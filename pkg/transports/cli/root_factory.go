@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	serverstopcli "github.com/portpowered/infinite-you/pkg/transports/cli/serverstop"
 	"github.com/spf13/cobra"
 )
 
@@ -145,6 +146,25 @@ func executeServerCommand(
 	mapped = runcli.MapCurrentFactoryFailure(factoryload.MaybeFormatOperatorError(mapped, cfg.Dir))
 	_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), mapped, globals.json)
 	return mapped
+}
+
+func executeServerStopCommand(
+	cmd *cobra.Command,
+	globals *cliGlobalOptions,
+	rootOptions CommandFactory,
+) error {
+	if rootOptions.serverStopCLI == nil {
+		return fmt.Errorf("server stop operation is required")
+	}
+	server := ""
+	jsonOutput := false
+	if globals != nil {
+		server = globals.server
+		jsonOutput = globals.json
+	}
+	return rootOptions.serverStopCLI(cmd.Context(), serverstopcli.Config{
+		Server: server, JSON: jsonOutput, Output: cmd.OutOrStdout(),
+	})
 }
 
 type factoryConfigInitProductionCommands struct {

@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 )
@@ -36,6 +37,22 @@ type Process struct {
 	runtimeMetrics processcontract.RuntimeMetricsQueryCapability
 	executionOpen  processcontract.ExecutionRuntimeOpeningCapability
 	runtimeCosts   processcontract.RuntimeCostsQueryCapability
+}
+
+// invocationCancellation is owned by one Process.Execute call. It is kept
+// behind the neutral initializer contract so a hosted control can request
+// cancellation without receiving a context callback or a package-global
+// function.
+type invocationCancellation struct {
+	once   sync.Once
+	cancel context.CancelFunc
+}
+
+func (c *invocationCancellation) Cancel() {
+	if c == nil || c.cancel == nil {
+		return
+	}
+	c.once.Do(c.cancel)
 }
 
 func NewProcess(
@@ -187,11 +204,14 @@ func (p *Process) Execute(input Input) error {
 	if p == nil || p.initializer == nil {
 		return fmt.Errorf("execute application process: initializer is required")
 	}
-	ctx, stop := p.initializer.ProcessContext(normalized.context)
-	if ctx == nil || stop == nil {
+	processCtx, stop := p.initializer.ProcessContext(normalized.context)
+	if processCtx == nil || stop == nil {
 		return fmt.Errorf("execute application process: initializer returned an invalid process context")
 	}
 	defer stop()
+	ctx, cancel := context.WithCancel(processCtx)
+	defer cancel()
+	cancellation := &invocationCancellation{cancel: cancel}
 	if p.commandFactory == nil {
 		return fmt.Errorf("execute application process: command factory is required")
 	}
@@ -202,7 +222,8 @@ func (p *Process) Execute(input Input) error {
 	return p.commandFactory.ExecuteCommand(processcontract.CommandInvocation{
 		Arguments: normalized.argumentsCopy(), Stdin: normalized.stdin,
 		Stdout: normalized.stdout, Stderr: normalized.stderr, Context: ctx,
-		HomeDir:   func() (string, error) { return homeDir(normalized) },
-		LookupEnv: normalized.lookupEnv, Initializer: p.initializer,
+		Cancellation: cancellation,
+		HomeDir:      func() (string, error) { return homeDir(normalized) },
+		LookupEnv:    normalized.lookupEnv, Initializer: p.initializer,
 	})
 }

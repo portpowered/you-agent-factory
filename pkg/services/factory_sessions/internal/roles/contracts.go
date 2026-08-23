@@ -59,7 +59,10 @@ type RuntimeVisualizationServices struct {
 }
 
 type OpenedApplicationRuntime struct {
-	Process            ProcessRuntime
+	Process ProcessRuntime
+	// Cancellation is the explicit invocation-local stop authority published
+	// into the opened HTTP view by the application-opening operation.
+	Cancellation       initializer.InvocationCancellation
 	FactoryRuntime     factoryruntime.Service
 	FactoryDefinitions factorydefinitions.Service
 	WorkflowPreview    factoryruntime.WorkflowPreviewOperation
@@ -192,12 +195,14 @@ type DirectJavaScriptRunOperation interface {
 	Open(
 		context.Context,
 		factorysessions.DirectJavaScriptRunRequest,
+		initializer.InvocationCancellation,
 	) (factorysessions.DirectJavaScriptApplication, error)
 }
 
 type DirectJavaScriptHostAdapter func(
 	OwnedExecutionService,
 	factorysessions.RuntimeHostRequest,
+	initializer.InvocationCancellation,
 	factorysessions.RuntimeHostObserver,
 ) (lifecycle.Component, error)
 
