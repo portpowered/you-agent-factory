@@ -1910,27 +1910,12 @@
     {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/work/lineage_contract.go",
-      "target": "DeriveFromWorkRequest"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/lineage_contract.go",
       "target": "NewVisualizationOperation"
     },
     {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/work/lineage_contract.go",
       "target": "PreviousChainingTraceIDsFromWorkItems"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/lineage_contract.go",
-      "target": "RenderMarkdownMermaid"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/lineage_contract.go",
-      "target": "RenderMermaidFlowchart"
     },
     {
       "rule": "service-root-exported-function",
@@ -1941,11 +1926,6 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/work/read_contract.go",
       "target": "NormalizeList"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/read_contract.go",
-      "target": "ValidWorkStateType"
     },
     {
       "rule": "service-root-exported-function",

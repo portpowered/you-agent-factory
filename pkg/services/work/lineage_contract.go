@@ -154,22 +154,6 @@ type Edge = lineagegraph.Edge
 // Graph is a deterministic projection of work items and declared relationships.
 type Graph = lineagegraph.Graph
 
-// DeriveFromWorkRequest projects a parsed batch request into a dependency graph.
-func DeriveFromWorkRequest(req WorkRequest) (Graph, error) {
-	return lineagegraph.DeriveFromBatchRequest(toLineageBatchRequest(req))
-}
-
-// RenderMermaidFlowchart renders a deterministic Mermaid flowchart diagram.
-func RenderMermaidFlowchart(g Graph) string {
-	return lineagegraph.RenderMermaidFlowchart(g)
-}
-
-// RenderMarkdownMermaid renders a Markdown document with a title, short summary,
-// and one fenced Mermaid flowchart.
-func RenderMarkdownMermaid(g Graph) string {
-	return lineagegraph.RenderMarkdownMermaid(g)
-}
-
 type VisualizationFileSystem interface {
 	ReadFile(string) ([]byte, error)
 }

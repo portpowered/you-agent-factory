@@ -12,7 +12,3 @@ type MoveSuccessResult = workcli.MoveSuccessResult
 func NewMove(transport clihttp.Protocol) func(MoveConfig) error {
 	return workcli.BindMove(transport)
 }
-
-func Move(cfg MoveConfig) error {
-	return workcli.Move(cfg)
-}

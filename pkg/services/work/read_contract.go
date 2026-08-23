@@ -576,11 +576,6 @@ func (q ListQuery) Options() ListOptions {
 	}
 }
 
-// FilterSummary returns the active filter and sort keys in canonical order.
-func (q ListQuery) FilterSummary() string {
-	return q.query.FilterSummary()
-}
-
 // NewListRequestPreparation constructs the pure Work list preparation role.
 // Wire supplies this role to transport adapters; transports never select it.
 func NewListRequestPreparation() ListRequestPreparation {
@@ -614,12 +609,6 @@ func NormalizeList(options ListOptions) (ListQuery, error) {
 		return ListQuery{}, mapQueryValidationError(err)
 	}
 	return ListQuery{query: query}, nil
-}
-
-// ValidWorkStateType reports whether stateType is an allowed Work-list state
-// type filter.
-func ValidWorkStateType(stateType string) bool {
-	return stateaccessquery.ValidWorkStateType(stateType)
 }
 
 func listOptionsToQuery(options ListOptions) stateaccessquery.ListOptions {

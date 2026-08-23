@@ -15,7 +15,3 @@ func NewList(
 ) func(ListConfig) error {
 	return workcli.BindList(transport, prepare)
 }
-
-func List(prepare workdomain.ListRequestPreparation, cfg ListConfig) error {
-	return workcli.List(prepare, cfg)
-}

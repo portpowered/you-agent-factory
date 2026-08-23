@@ -12,10 +12,6 @@ func NewShow(transport clihttp.Protocol) func(ShowConfig) error {
 	return workcli.BindShow(transport)
 }
 
-func Show(cfg ShowConfig) error {
-	return workcli.Show(cfg)
-}
-
 type ListHumanApprovalsConfig = workcli.ListHumanApprovalsConfig
 type ShowHumanApprovalConfig = workcli.ShowHumanApprovalConfig
 

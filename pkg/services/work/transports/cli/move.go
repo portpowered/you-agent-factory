@@ -50,11 +50,6 @@ type MoveSuccessResult struct {
 	EndpointPath  string `json:"endpointPath"`
 }
 
-// Move relocates one work item to another authored state via HTTP.
-func Move(cfg MoveConfig) error {
-	return New(Config{}).Move(cfg)
-}
-
 func (service *service) Move(cfg MoveConfig) error {
 	if cfg.Context == nil {
 		return fmt.Errorf("context is required")
