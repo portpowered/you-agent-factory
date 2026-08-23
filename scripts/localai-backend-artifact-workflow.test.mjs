@@ -266,6 +266,7 @@ test("the build harness selects the Windows and Unix strategies at runtime", (t)
 		strategy: "windows-llamacpp-grpc",
 		binary: "llama-cpp-cpu-all",
 		cxx_standard: "17",
+		cmake_generator: "mingw-makefiles",
 	});
 	assert.deepEqual(buildPlan({ backend: "localai-llamacpp", target: "darwin-arm64", buildType: "metal" }), {
 		backend: "localai-llamacpp",

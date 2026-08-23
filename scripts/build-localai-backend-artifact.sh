@@ -162,8 +162,15 @@ case "$TARGET_ID:$BACKEND_ID" in
 esac
 
 # The pinned gRPC CMake project otherwise lets the Windows generator select
-# C++14, which Abseil rejects before any backend target can compile.
+# C++14, which Abseil rejects before any backend target can compile. The
+# declared vcpkg triplet is MinGW; without an explicit generator, hosted
+# Windows runners select Visual Studio and mix MSVC with MinGW dependencies.
 windows_cxx_standard=17
+windows_cmake_generator="MinGW Makefiles"
+
+if [[ "$TARGET_ID" == "windows-amd64" ]]; then
+	export CMAKE_GENERATOR="$windows_cmake_generator"
+fi
 
 if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
 	plan_git=""
@@ -171,11 +178,13 @@ if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
 		plan_git=" git=$(command -v git || true)"
 	fi
 	plan_cxx_standard=""
+	plan_cmake_generator=""
 	if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 		plan_cxx_standard=" cxx_standard=$windows_cxx_standard"
+		plan_cmake_generator=" cmake_generator=mingw-makefiles"
 	fi
-	printf 'LOCALAI_BACKEND_BUILD_PLAN backend=%s target=%s shell=%s strategy=%s binary=%s%s%s\n' \
-		"$BACKEND_ID" "$TARGET_ID" "$build_shell" "$build_strategy" "$binary" "$plan_git" "$plan_cxx_standard"
+	printf 'LOCALAI_BACKEND_BUILD_PLAN backend=%s target=%s shell=%s strategy=%s binary=%s%s%s%s\n' \
+		"$BACKEND_ID" "$TARGET_ID" "$build_shell" "$build_strategy" "$binary" "$plan_git" "$plan_cxx_standard" "$plan_cmake_generator"
 	exit 0
 fi
 
