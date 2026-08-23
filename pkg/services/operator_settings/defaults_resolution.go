@@ -33,14 +33,6 @@ func DeriveProviderBackendScopeID(provider, kind, boundary string) string {
 	)
 }
 
-// LoadFileDefaults is a stateless compatibility helper for callers that still
-// own explicit filesystem and decoder ports. Production composition should use
-// Service.LoadFileConfig or Service.ResolveFromHomeWithEnvironment.
-func LoadFileDefaults(files FileSystem, decode ConfigDecoder, path string) (Defaults, error) {
-	config, err := LoadFileConfig(files, decode, path)
-	return config.Defaults, err
-}
-
 // LoadFileConfig loads one operator configuration without consulting any
 // process-global registration. A missing file returns runtime defaults.
 func LoadFileConfig(files FileSystem, decode ConfigDecoder, path string) (Config, error) {

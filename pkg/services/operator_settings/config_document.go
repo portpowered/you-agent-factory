@@ -375,7 +375,3 @@ func documentFromConfig(config Config) Document {
 	}
 	return document
 }
-
-func emptyConfigDocument() ConfigDocument {
-	return ConfigDocument{config: Config{PriceTable: defaultPriceTable(), Runtime: defaultRuntimeSettings()}}
-}
