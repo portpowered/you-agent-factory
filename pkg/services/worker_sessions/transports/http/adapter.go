@@ -29,6 +29,13 @@ type observationService interface {
 	StreamObservationsByWorkerSessionID(context.Context, workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error)
 }
 
+// topLevelObservationService is the capability consumed by the process-wide
+// list adapter. The fleet implementation is composed in Worker Sessions wire
+// and does not need to implement the full runtime-bound Service contract.
+type topLevelObservationService interface {
+	ListWorkerSessionObservations(context.Context, workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error)
+}
+
 type startService interface {
 	Start(context.Context, workersessions.StartRequest) (workersessions.StartResult, error)
 }
@@ -76,7 +83,7 @@ type workerSessionScope struct {
 
 type Adapter struct {
 	observations observationService
-	topLevel     workersessions.TopLevelObservationService
+	topLevel     topLevelObservationService
 	starter      startService
 	continuer    continuationService
 	interrupter  interruptService
@@ -505,7 +512,7 @@ func NewAdapterWithStartAndContinueAndInterruptAndControl(
 // use the supplied process-level view. Work-scoped reads and lifecycle
 // controls continue to use the runtime-bound service already held by the
 // adapter.
-func (a *Adapter) WithTopLevelObservationService(service workersessions.TopLevelObservationService) *Adapter {
+func (a *Adapter) WithTopLevelObservationService(service topLevelObservationService) *Adapter {
 	if a == nil || service == nil {
 		return a
 	}

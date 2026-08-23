@@ -28,6 +28,7 @@ import (
 	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionshttp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http"
+	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
 	generatedhttpclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -233,7 +234,7 @@ func newHTTPWorkerSessionsHandler(
 	if adapter == nil {
 		return nil
 	}
-	fleet := workersessions.NewFleetObservationService(func(ctx context.Context) ([]workersessions.ObservationService, error) {
+	fleet := workersessionswire.NewFleetObservationService(func(ctx context.Context) ([]workersessions.Service, error) {
 		return workerSessionObservationSources(ctx, opened)
 	})
 	return workersessionshttp.NewHandler(adapter.WithTopLevelObservationService(fleet), opened.Logger)
@@ -242,8 +243,8 @@ func newHTTPWorkerSessionsHandler(
 func workerSessionObservationSources(
 	ctx context.Context,
 	opened factorysessionwire.OpenedApplicationRuntime,
-) ([]workersessions.ObservationService, error) {
-	sources := make([]workersessions.ObservationService, 0, 1)
+) ([]workersessions.Service, error) {
+	sources := make([]workersessions.Service, 0, 1)
 	if opened.WorkerSessions != nil {
 		sources = append(sources, opened.WorkerSessions)
 	}
@@ -255,7 +256,7 @@ func workerSessionObservationSources(
 		return nil, err
 	}
 	provider, ok := opened.FactorySessions.(interface {
-		WorkerSessionsObservationForSession(string) workersessions.ObservationService
+		WorkerSessionsObservationForSession(string) workersessions.Service
 	})
 	if !ok {
 		return sources, nil

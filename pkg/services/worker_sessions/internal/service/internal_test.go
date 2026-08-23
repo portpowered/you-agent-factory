@@ -4153,6 +4153,30 @@ func TestContinuationObservationQueriesMapCanceledAndUnavailableProjections(t *t
 	}
 }
 
+func TestListWorkerSessionObservationsPreservesBasePageOnOptionalProjectionFailure(t *testing.T) {
+	registry := newObservationRegistry(nil, nil)
+	registry.sessions["worker-base"] = observationSession("worker-base", workersessions.StateFailed)
+	registry.observations["worker-base"] = observationMetadata()
+
+	result, err := registry.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{})
+	if !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
+		t.Fatalf("ListWorkerSessionObservations() error = %v, want optional projection error", err)
+	}
+	if len(result.Observations) != 1 {
+		t.Fatalf("ListWorkerSessionObservations() observations = %#v, want one base observation", result.Observations)
+	}
+	observation := result.Observations[0]
+	if observation.WorkerSessionID != "worker-base" || observation.State != workersessions.StateFailed {
+		t.Fatalf("base observation = %#v, want worker-base FAILED", observation)
+	}
+	if !observation.ProviderSessionAvailable {
+		t.Fatal("base observation lost its authoritative Provider Session association")
+	}
+	if observation.Transcript != workersessions.TranscriptAvailabilityUnavailable {
+		t.Fatalf("base transcript availability = %q, want UNAVAILABLE", observation.Transcript)
+	}
+}
+
 func TestReplayObservationSubscriptionCancellationCloses(t *testing.T) {
 	topic := workersessions.Topic("worker-1")
 	initial := replayProgressResult(topic, 2, 1)
