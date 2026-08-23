@@ -23,6 +23,10 @@ if [[ "$TARGET_ID" == "windows-amd64" ]] && command -v cygpath >/dev/null 2>&1; 
 		node_bin_dir="$(cygpath -u "$WINDOWS_NODE_DIR")"
 		export PATH="$node_bin_dir:$PATH"
 	fi
+	if [[ -n "${WINDOWS_GIT_DIR:-}" ]]; then
+		git_bin_dir="$(cygpath -u "$WINDOWS_GIT_DIR")"
+		export PATH="$git_bin_dir:$PATH"
+	fi
 	if [[ -n "${WINDOWS_GO_DIR:-}" ]]; then
 		go_bin_dir="$(cygpath -u "$WINDOWS_GO_DIR")"
 		export PATH="$go_bin_dir:$PATH"
@@ -158,8 +162,12 @@ case "$TARGET_ID:$BACKEND_ID" in
 esac
 
 if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
-	printf 'LOCALAI_BACKEND_BUILD_PLAN backend=%s target=%s shell=%s strategy=%s binary=%s\n' \
-		"$BACKEND_ID" "$TARGET_ID" "$build_shell" "$build_strategy" "$binary"
+	plan_git=""
+	if [[ "$TARGET_ID" == "windows-amd64" && -n "${WINDOWS_GIT_DIR:-}" ]]; then
+		plan_git=" git=$(command -v git || true)"
+	fi
+	printf 'LOCALAI_BACKEND_BUILD_PLAN backend=%s target=%s shell=%s strategy=%s binary=%s%s\n' \
+		"$BACKEND_ID" "$TARGET_ID" "$build_shell" "$build_strategy" "$binary" "$plan_git"
 	exit 0
 fi
 

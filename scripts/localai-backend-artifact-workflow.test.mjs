@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -226,7 +226,7 @@ test("the join rejects missing and unexpected matrix results", async (t) => {
 	);
 });
 
-function buildPlan({ backend, target, buildType }) {
+function buildPlan({ backend, target, buildType, environment = {} }) {
 	const script = "scripts/build-localai-backend-artifact.sh";
 	const exports = [
 		["LOCALAI_ROOT", "/tmp/localai-plan-fixture"],
@@ -242,6 +242,7 @@ function buildPlan({ backend, target, buildType }) {
 	const command = `export ${exports.map(([name, value]) => `${name}=${value}`).join(" ")}; bash ${script}`;
 	const result = spawnSync("bash", ["-c", command], {
 		encoding: "utf8",
+		env: { ...process.env, ...environment },
 		windowsHide: true,
 	});
 	if (result.error?.code === "ENOENT") return null;
@@ -262,7 +263,7 @@ test("the build harness selects the Windows and Unix strategies at runtime", (t)
 		backend: "localai-llamacpp",
 		target: "windows-amd64",
 		shell: "msys2",
-			strategy: "windows-llamacpp-grpc",
+		strategy: "windows-llamacpp-grpc",
 		binary: "llama-cpp-cpu-all",
 	});
 	assert.deepEqual(buildPlan({ backend: "localai-llamacpp", target: "darwin-arm64", buildType: "metal" }), {
@@ -279,6 +280,29 @@ test("the build harness selects the Windows and Unix strategies at runtime", (t)
 		strategy: "linux-go-build",
 		binary: "whisper",
 	});
+});
+
+test("the Windows build plan resolves Git from the runner path bridge", async (t) => {
+	const root = await mkdtemp(join(tmpdir(), "localai-backend-windows-tools-"));
+	t.after(() => rm(root, { recursive: true, force: true }));
+	const fakeCygpath = join(root, "cygpath");
+	const fakeGitDirectory = join(root, "git-bin");
+	const fakeGit = join(fakeGitDirectory, "git");
+	await mkdir(fakeGitDirectory);
+	await writeFile(fakeCygpath, "#!/usr/bin/env bash\nprintf '%s\\n' \"$2\"\n");
+	await writeFile(fakeGit, "#!/usr/bin/env bash\nexit 0\n");
+	await chmod(fakeCygpath, 0o755);
+	await chmod(fakeGit, 0o755);
+	const plan = buildPlan({
+		backend: "localai-whisper",
+		target: "windows-amd64",
+		buildType: "cpu",
+		environment: {
+			PATH: `${root}${process.platform === "win32" ? ";" : ":"}${process.env.PATH ?? ""}`,
+			WINDOWS_GIT_DIR: fakeGitDirectory,
+		},
+	});
+	assert.match(plan.git.replaceAll("\\", "/"), /\/git-bin\/git$/);
 });
 
 test("manifest verification rejects bytes tampered after manifest creation", async (t) => {
