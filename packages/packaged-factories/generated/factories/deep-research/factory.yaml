@@ -100,17 +100,14 @@ orchestrator:
                 - topic
             type: object
         defaultPolicy:
-            allowConnectors: false
-            allowDangerFullAccess: false
-            allowNetwork: false
+            allowedPermissions:
+                - SKIP_PERMISSIONS
             allowedReasoningEfforts:
                 - medium
             concurrency: 2
             maxAgents: 5
             maxDepth: 1
             maxRetries: 0
-            mode: READ_ONLY
-            writableRoots: []
         inlineSource:
             encoding: utf-8
             inline: |
@@ -273,15 +270,13 @@ orchestrator:
                     "additionalProperties": false
                   },
                   "defaultPolicy": {
-                    "mode": "READ_ONLY",
                     "maxAgents": 5,
                     "concurrency": 2,
                     "maxDepth": 1,
                     "maxRetries": 0,
-                    "allowNetwork": false,
-                    "allowConnectors": false,
-                    "allowDangerFullAccess": false,
-                    "writableRoots": [],
+                    "allowedPermissions": [
+                      "SKIP_PERMISSIONS"
+                    ],
                     "allowedReasoningEfforts": [
                       "medium"
                     ]
@@ -322,7 +317,7 @@ orchestrator:
                         modelProvider: modelProvider || "",
                         model: model || "",
                         reasoningEffort: reasoningEffort,
-                        skipPermissions: true,
+                        permissions: "SKIP_PERMISSIONS",
                       },
                       {
                         label: "research-specialist-tradeoffs",
@@ -330,7 +325,7 @@ orchestrator:
                         modelProvider: modelProvider || "",
                         model: model || "",
                         reasoningEffort: reasoningEffort,
-                        skipPermissions: true,
+                        permissions: "SKIP_PERMISSIONS",
                       },
                     ].slice(0, maxSubagents);
                     specialistFindings = await parallel(specialistRequests);
@@ -343,7 +338,7 @@ orchestrator:
                           modelProvider: retryRequest.modelProvider,
                           model: retryRequest.model,
                           reasoningEffort: retryRequest.reasoningEffort,
-                          skipPermissions: true,
+                          permissions: "SKIP_PERMISSIONS",
                         });
                       }
                     }
@@ -373,7 +368,7 @@ orchestrator:
                     modelProvider: modelProvider || "",
                     model: model || "",
                     reasoningEffort: reasoningEffort,
-                    skipPermissions: true,
+                    permissions: "SKIP_PERMISSIONS",
                   });
                   if (leadSynthesis.status !== "COMPLETED") {
                     throw "lead research synthesis failed";

@@ -158,15 +158,13 @@
     "additionalProperties": false
   },
   "defaultPolicy": {
-    "mode": "READ_ONLY",
     "maxAgents": 15,
     "concurrency": 8,
     "maxDepth": 1,
     "maxRetries": 0,
-    "allowNetwork": false,
-    "allowConnectors": false,
-    "allowDangerFullAccess": false,
-    "writableRoots": []
+    "allowedPermissions": [
+      "SKIP_PERMISSIONS"
+    ]
   }
 }
 */
