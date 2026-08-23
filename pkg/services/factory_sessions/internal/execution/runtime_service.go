@@ -48,6 +48,7 @@ type runtimeSessionState struct {
 	sourceContent             string
 	events                    []json.RawMessage
 	runCancel                 context.CancelFunc
+	runDone                   chan struct{} // closed under mu after the async run and terminal persistence return
 	eventConsumer             FactoryEventConsumer
 	presentedEventIDs         map[string]struct{}
 	responseEvents            *responseeventstore.SessionResponseEventStore
@@ -422,22 +423,28 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 		startedAt,
 	)
 	runCtx, runCancel := workflowRunContext(context.Background(), policyResolution.Policy)
+	runDone := make(chan struct{})
 	s.mu.Lock()
 	reserved.state.session = running.session
 	reserved.state.result = running.result
 	reserved.state.events = running.events
 	reserved.state.runCancel = runCancel
+	reserved.state.runDone = runDone
 	reserved.state.startRequest = cloneStartRequest(normalized)
 	reserved.state.resolvedSource = resolved
 	reserved.state.sourceContent = sourceContent
 	s.mu.Unlock()
 	if err := s.ensureSessionResponseEventsIfNeeded(reserved.state); err != nil {
+		s.mu.Lock()
+		reserved.state.runCancel = nil
+		close(runDone)
+		s.mu.Unlock()
 		return AsyncStartResult{}, err
 	}
 	s.mu.RLock()
 	startState := cloneRuntimeSessionState(reserved.state)
 	s.mu.RUnlock()
-	go s.runAsyncSession(runCtx, reserved.state.session.SessionID, normalized, resolved, sourceContent, policyResolution, startedAt)
+	go s.runAsyncSession(runCtx, reserved.state.session.SessionID, normalized, resolved, sourceContent, policyResolution, startedAt, runDone)
 
 	result := s.asyncStartFromState(startState)
 	s.recordAsyncStartReplay(normalized.RequestID, result)
@@ -732,12 +739,14 @@ func (s *JavaScriptRuntimeService) runAsyncSession(
 	sourceContent string,
 	policyResolution factory.JavaScriptPolicyResolution,
 	startedAt time.Time,
+	runDone chan struct{},
 ) {
 	defer func() {
 		s.mu.Lock()
 		if state, ok := s.sessions[sessionID]; ok {
 			state.runCancel = nil
 		}
+		close(runDone)
 		s.mu.Unlock()
 	}()
 
@@ -903,6 +912,7 @@ func cloneRuntimeSessionState(state *runtimeSessionState) runtimeSessionState {
 		startRequest:              cloneStartRequestPtr(state.startRequest),
 		resolvedSource:            state.resolvedSource,
 		sourceContent:             state.sourceContent,
+		runDone:                   state.runDone,
 		responseEvents:            state.responseEvents,
 	}
 	if len(state.events) > 0 {
