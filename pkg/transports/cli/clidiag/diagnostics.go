@@ -96,6 +96,60 @@ func (failure *Failure) CLIErrorMessage() string {
 	return strings.TrimSpace(failure.Message)
 }
 
+// UsageError preserves a Cobra parsing or argument-validation failure while
+// carrying the command path whose help can correct the invocation. It is
+// deliberately not a coded ErrorResponse: usage mistakes are client input
+// failures, not command failures or server failures.
+type UsageError struct {
+	CommandPath string
+	Cause       error
+}
+
+func (failure *UsageError) Error() string {
+	if failure == nil || failure.Cause == nil {
+		return ""
+	}
+	return failure.Cause.Error()
+}
+
+func (failure *UsageError) Unwrap() error {
+	if failure == nil {
+		return nil
+	}
+	return failure.Cause
+}
+
+// NewUsageError adds the command path needed for the concise help hint. An
+// existing usage error is retained so nested boundaries do not duplicate it.
+func NewUsageError(commandPath string, cause error) error {
+	if cause == nil {
+		return nil
+	}
+	var usage *UsageError
+	if errors.As(cause, &usage) {
+		return cause
+	}
+	return &UsageError{CommandPath: strings.TrimSpace(commandPath), Cause: cause}
+}
+
+// WriteUsageError renders the standard Cobra-style usage diagnostic and
+// reports whether err carries usage metadata.
+func WriteUsageError(output io.Writer, err error) bool {
+	var usage *UsageError
+	if !errors.As(err, &usage) {
+		return false
+	}
+	commandPath := strings.TrimSpace(usage.CommandPath)
+	if commandPath == "" {
+		commandPath = "you"
+	}
+	if output != nil {
+		_, _ = fmt.Fprintf(output, "Error: %s\nRun '%s --help' for usage.\n", usage.Error(), commandPath)
+	}
+	MarkDiagnosticRendered(output)
+	return true
+}
+
 // DiagnosticWriter records whether a command has already rendered its
 // structured failure. The writer remains transparent to command handlers, so
 // existing command-specific sanitization and response formats are preserved.

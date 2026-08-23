@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -215,5 +216,46 @@ func TestNormalizeAndWriteFailureCoverInvocationAndInvalidContracts(t *testing.T
 	}
 	if WriteFailure(&output, errors.New("untyped")) {
 		t.Fatal("WriteFailure recognized an untyped error")
+	}
+}
+
+func TestWriteUsageErrorPreservesCobraTextAndHelpPath(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New(`unknown flag: --not-a-real-flag`)
+	usage := NewUsageError("you session show", cause)
+	if usage == nil || !errors.Is(usage, cause) {
+		t.Fatalf("NewUsageError() = %v, want wrapped Cobra cause", usage)
+	}
+	var output bytes.Buffer
+	if !WriteUsageError(&output, usage) {
+		t.Fatal("WriteUsageError returned false for a usage error")
+	}
+	if got, want := output.String(), "Error: unknown flag: --not-a-real-flag\nRun 'you session show --help' for usage.\n"; got != want {
+		t.Fatalf("usage diagnostic = %q, want %q", got, want)
+	}
+	if DiagnosticRendered(&output) {
+		t.Fatal("plain output unexpectedly exposed diagnostic marker")
+	}
+	writer := NewDiagnosticWriter(&output)
+	if WriteUsageError(writer, usage) == false || !writer.DiagnosticRendered() {
+		t.Fatal("usage diagnostic writer was not marked rendered")
+	}
+	if WriteFailure(&output, usage) {
+		t.Fatal("usage error was incorrectly rendered as a JSON failure")
+	}
+}
+
+func TestNewUsageErrorRetainsExistingMetadata(t *testing.T) {
+	t.Parallel()
+
+	original := NewUsageError("you work show", errors.New("requires at least 1 arg(s), only received 0"))
+	wrapped := NewUsageError("you", fmt.Errorf("outer: %w", original))
+	var usage *UsageError
+	if !errors.As(wrapped, &usage) {
+		t.Fatalf("wrapped usage error = %v, want UsageError", wrapped)
+	}
+	if usage.CommandPath != "you work show" {
+		t.Fatalf("usage command path = %q, want original path", usage.CommandPath)
 	}
 }

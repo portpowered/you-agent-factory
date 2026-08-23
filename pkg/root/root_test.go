@@ -723,6 +723,80 @@ func TestProcessInvalidArgumentsReturnsDiagnostic(t *testing.T) {
 	}
 }
 
+func TestProcessUsageFailuresPreserveCobraDetailsAndHelpHints(t *testing.T) {
+	t.Parallel()
+
+	process, buildErr := BuildProcess(context.Background(), serviceedges.Edges{})
+	if buildErr != nil {
+		t.Fatalf("BuildProcess() error = %v", buildErr)
+	}
+	tests := []struct {
+		name         string
+		args         []string
+		wantError    string
+		wantHelpPath string
+	}{
+		{
+			name:         "unknown top-level flag",
+			args:         []string{"you", "--definitely-unknown"},
+			wantError:    "unknown flag: --definitely-unknown",
+			wantHelpPath: "you --help",
+		},
+		{
+			name:         "unknown subcommand",
+			args:         []string{"you", "definitely-not-a-command"},
+			wantError:    `unknown command "definitely-not-a-command" for "you"`,
+			wantHelpPath: "you --help",
+		},
+		{
+			name:         "bad subcommand flag",
+			args:         []string{"you", "session", "show", "--definitely-unknown"},
+			wantError:    "unknown flag: --definitely-unknown",
+			wantHelpPath: "you session show --help",
+		},
+		{
+			name:         "missing required argument",
+			args:         []string{"you", "work", "show"},
+			wantError:    "requires at least 1 arg(s), only received 0",
+			wantHelpPath: "you work show --help",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			home := t.TempDir()
+			var stdout, stderr bytes.Buffer
+			err := process.Execute(Input{
+				Args:             test.args,
+				Env:              homeEnvironment(home),
+				Stdin:            strings.NewReader(""),
+				Stdout:           &stdout,
+				Stderr:           &stderr,
+				Context:          context.Background(),
+				WorkingDirectory: home,
+			})
+			if err == nil {
+				t.Fatal("Process.Execute() error = nil, want usage failure")
+			}
+			if !strings.Contains(err.Error(), test.wantError) {
+				t.Fatalf("Process.Execute() error = %q, want %q", err, test.wantError)
+			}
+			if !strings.Contains(stderr.String(), "Error: "+test.wantError) {
+				t.Fatalf("stderr = %q, want Cobra error %q", stderr.String(), test.wantError)
+			}
+			if !strings.Contains(stderr.String(), "Run '"+test.wantHelpPath+"' for usage.") {
+				t.Fatalf("stderr = %q, want help hint for %q", stderr.String(), test.wantHelpPath)
+			}
+			if strings.Contains(stderr.String(), "CLI_COMMAND_FAILED") ||
+				strings.Contains(stderr.String(), "INTERNAL_SERVER_ERROR") {
+				t.Fatalf("stderr mislabeled usage failure: %q", stderr.String())
+			}
+			if stdout.Len() != 0 {
+				t.Fatalf("stdout = %q, want empty usage failure output", stdout.String())
+			}
+		})
+	}
+}
+
 func TestProcessSequentialHomesKeepEffectiveListingReadOnly(t *testing.T) {
 	ambientHome := t.TempDir()
 	t.Setenv("HOME", ambientHome)

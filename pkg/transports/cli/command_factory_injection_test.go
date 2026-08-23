@@ -565,6 +565,53 @@ func TestProductionMetricsCommandExecuteCommandPreservesCodedFailures(t *testing
 	}
 }
 
+func TestExecuteCommandUsageFailuresUseCentralCobraRenderer(t *testing.T) {
+	t.Parallel()
+
+	factory := NewCommandFactory(CommandOperations{})
+	for _, test := range []struct {
+		name         string
+		args         []string
+		wantError    string
+		wantHelpPath string
+	}{
+		{
+			name:         "unknown top-level flag",
+			args:         []string{"--definitely-unknown"},
+			wantError:    "unknown flag: --definitely-unknown",
+			wantHelpPath: "you --help",
+		},
+		{
+			name:         "missing required argument",
+			args:         []string{"work", "show"},
+			wantError:    "requires at least 1 arg(s), only received 0",
+			wantHelpPath: "you work show --help",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			err := factory.ExecuteCommand(startupcli.CommandInvocation{
+				Arguments: test.args,
+				Stdin:     strings.NewReader(""),
+				Stdout:    &stdout,
+				Stderr:    &stderr,
+				Context:   context.Background(),
+			})
+			if err == nil {
+				t.Fatal("ExecuteCommand() error = nil, want usage failure")
+			}
+			if !strings.Contains(stderr.String(), "Error: "+test.wantError) ||
+				!strings.Contains(stderr.String(), "Run '"+test.wantHelpPath+"' for usage.") {
+				t.Fatalf("stderr = %q, want Cobra error and help hint", stderr.String())
+			}
+			if strings.Contains(stderr.String(), "CLI_COMMAND_FAILED") ||
+				strings.Contains(stderr.String(), "INTERNAL_SERVER_ERROR") {
+				t.Fatalf("stderr mislabeled usage failure: %q", stderr.String())
+			}
+		})
+	}
+}
+
 func runProductionMetricsFailureCase(t *testing.T, test productionMetricsFailureCase) {
 	t.Helper()
 	queryCalls := 0

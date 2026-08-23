@@ -65,6 +65,10 @@ type cliOperatorDefaultsOptions struct {
 	modelOverride    string
 }
 
+type commandExecutionState struct {
+	persistentPreRunReached bool
+}
+
 type SubmitWorkOperation func(submitcli.SubmitConfig) error
 type SubmitBatchOperation func(submitcli.BatchConfig) error
 
@@ -369,8 +373,14 @@ func (factory CommandFactory) ExecuteCommand(input startupcli.CommandInvocation)
 	root.SilenceErrors = true
 	root.SilenceUsage = true
 	root.SetContext(clidiag.WithCentralDiagnostics(input.Context, true))
+	state := &commandExecutionState{}
+	installCobraUsageBoundary(root, state)
 	if factory.observeCLI == nil {
-		return executeCommandResult(diagnostics, cobracompletion.ExecuteWithPowerShellFilesystemDelegation(root))
+		if err := cobracompletion.RegisterPowerShellFilesystemDelegation(root); err != nil {
+			return executeCommandFailure(diagnostics, err)
+		}
+		command, err := root.ExecuteC()
+		return executeCommandResult(diagnostics, classifyCobraExecutionFailure(root, command, state, err))
 	}
 	snapshot, err := cliobservation.CaptureSnapshot(root)
 	if err != nil {
@@ -395,7 +405,57 @@ func (factory CommandFactory) ExecuteCommand(input startupcli.CommandInvocation)
 	if err := factory.observeCLI(edgeObservation); err != nil {
 		return executeCommandFailure(diagnostics, fmt.Errorf("observe CLI command: %w", err))
 	}
+	parseErr = clidiag.NewUsageError(usageCommandPath(command, root), parseErr)
 	return executeCommandResult(diagnostics, parseErr)
+}
+
+func installCobraUsageBoundary(root *cobra.Command, state *commandExecutionState) {
+	if root == nil {
+		return
+	}
+	previousPersistentPreRun := root.PersistentPreRunE
+	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if state != nil {
+			state.persistentPreRunReached = true
+		}
+		if previousPersistentPreRun == nil {
+			return nil
+		}
+		return previousPersistentPreRun(cmd, args)
+	}
+	previousFlagError := root.FlagErrorFunc()
+	root.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
+		if previousFlagError != nil {
+			err = previousFlagError(cmd, err)
+		}
+		return clidiag.NewUsageError(usageCommandPath(cmd, root), err)
+	})
+}
+
+func classifyCobraExecutionFailure(
+	root *cobra.Command,
+	command *cobra.Command,
+	state *commandExecutionState,
+	err error,
+) error {
+	if err == nil || (state != nil && state.persistentPreRunReached) {
+		return err
+	}
+	return clidiag.NewUsageError(usageCommandPath(command, root), err)
+}
+
+func usageCommandPath(command, root *cobra.Command) string {
+	if command != nil {
+		if path := strings.TrimSpace(command.CommandPath()); path != "" {
+			return path
+		}
+	}
+	if root != nil {
+		if path := strings.TrimSpace(root.CommandPath()); path != "" {
+			return path
+		}
+	}
+	return cliBinaryName
 }
 
 func executeCommandResult(diagnostics *clidiag.DiagnosticWriter, err error) error {
@@ -424,6 +484,12 @@ func executeCommandFailure(diagnostics io.Writer, err error) error {
 			clidiag.MarkDiagnosticRendered(diagnostics)
 		}
 		return context.Canceled
+	}
+	if clidiag.DiagnosticRendered(diagnostics) {
+		return err
+	}
+	if clidiag.WriteUsageError(diagnostics, err) {
+		return err
 	}
 	normalized := clidiag.Normalize(err)
 	if clidiag.DiagnosticRendered(diagnostics) {
