@@ -9204,14 +9204,15 @@
         "documentation": {
           "title": {
             "id": "you.worker-sessions.title",
-            "canonicalEnglish": "Inspect Worker Sessions for Work"
+            "canonicalEnglish": "Inspect Worker Sessions"
           },
           "description": {
             "id": "you.worker-sessions.description",
-            "canonicalEnglish": "Inspect authoritative Worker Session attempts correlated with one Work item. The current list route requires --work-id. Fleet-wide listing is not currently available."
+            "canonicalEnglish": "Inspect authoritative Worker Session attempts by fleet-wide scope or one Work item. Omit --work-id for the fleet-wide view."
           }
         },
         "examples": [
+          "you worker-sessions list",
           "you worker-sessions list --work-id work-123",
           "you worker-sessions list --work-id work-123 --output json",
           "you worker-sessions stream --provider codex --kind session_id --id session-123"
@@ -9229,7 +9230,7 @@
       "runnable": false,
       "usage": {
         "line": "worker-sessions",
-        "example": "  you worker-sessions list --work-id work-123"
+        "example": "  you worker-sessions list"
       }
     },
     "you.worker-sessions.list": {
@@ -9243,14 +9244,17 @@
         "documentation": {
           "title": {
             "id": "you.worker-sessions.list.title",
-            "canonicalEnglish": "List Work-scoped Worker Sessions"
+          "canonicalEnglish": "List fleet-wide or Work-scoped Worker Sessions"
           },
           "description": {
             "id": "you.worker-sessions.list.description",
-          "canonicalEnglish": "List authoritative Worker Session observations for one Work item. The current list route requires --work-id. Fleet-wide listing is not currently available. Use --output json for stable machine-readable facts."
+          "canonicalEnglish": "List authoritative Worker Session observations by stable identity. Omit --work-id to inspect the fleet-wide top-level identity surface, or provide --work-id for one Work. Repeat --state values to combine lifecycle states with OR semantics. Use --limit as a positive fleet-wide result bound after filtering. The legacy --max-results and --next-token options are also fleet-wide only. Work-scoped listing does not accept those filters and returns a typed error when they are supplied. The human table shows Work name and ID, Worker Session ID, provider and kind, state, start time, duration, and exit or failure kind. Provider-session identity remains distinct from Worker Session identity. Use --output json for stable machine-readable facts."
           }
         },
         "examples": [
+          "you worker-sessions list",
+          "you worker-sessions list --state RUNNING --state FAILED --limit 25",
+          "you worker-sessions list --scope direct --state COMPLETED",
           "you worker-sessions list --work-id work-123",
           "you worker-sessions list --work-id work-123 --output json"
         ],
@@ -9268,13 +9272,13 @@
       "placement": "remote-only",
       "usage": {
         "line": "list",
-        "example": "  you worker-sessions list --work-id work-123 --output json"
+        "example": "  you worker-sessions list --output json\n\n  # Work-scoped:\n  you worker-sessions list --work-id work-123 --output json"
       },
       "flags": {
         "you.worker-sessions.list.flag.work-id": {
           "id": "you.worker-sessions.list.flag.work-id",
           "long": "work-id",
-          "usage": "required Work identity for the current Work-scoped list route",
+          "usage": "Work identity whose Worker Session attempts should be listed",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -9298,7 +9302,7 @@
         "you.worker-sessions.list.flag.scope": {
           "id": "you.worker-sessions.list.flag.scope",
           "long": "scope",
-          "usage": "reserved fleet-wide observation scope. Fleet-wide listing is not currently available",
+          "usage": "top-level observation scope: omit for fleet-wide, or use direct, factory, or all",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -9327,7 +9331,7 @@
         "you.worker-sessions.list.flag.state": {
           "id": "you.worker-sessions.list.flag.state",
           "long": "state",
-          "usage": "reserved fleet-wide lifecycle filter. Work-scoped listing does not support this option",
+          "usage": "repeatable fleet-wide Worker Session lifecycle state filter. Work-scoped listing does not support this option",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -9361,7 +9365,7 @@
         "you.worker-sessions.list.flag.limit": {
           "id": "you.worker-sessions.list.flag.limit",
           "long": "limit",
-          "usage": "reserved fleet-wide result bound. Work-scoped listing does not support this option",
+          "usage": "positive fleet-wide maximum Worker Session observations after scope and state filters",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -9385,7 +9389,7 @@
         "you.worker-sessions.list.flag.max-results": {
           "id": "you.worker-sessions.list.flag.max-results",
           "long": "max-results",
-          "usage": "reserved fleet-wide page bound. Work-scoped listing does not support this option",
+          "usage": "legacy fleet-wide maximum Worker Session observations per page. Prefer --limit",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -9409,7 +9413,7 @@
         "you.worker-sessions.list.flag.next-token": {
           "id": "you.worker-sessions.list.flag.next-token",
           "long": "next-token",
-          "usage": "reserved fleet-wide cursor. Work-scoped listing does not support this option",
+          "usage": "opaque cursor returned by a previous fleet-wide Worker Session list",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
