@@ -613,7 +613,6 @@ func (r *registry) PublishRecord(ctx context.Context, req workersessions.Publish
 	if req.SourceSequence > pub.lastSequence[key] {
 		pub.lastSequence[key] = req.SourceSequence
 	}
-
 	outcome := workersessions.PublishOutcomeAccepted
 	if appendResult.Outcome == events.AppendOutcomeDuplicate {
 		outcome = workersessions.PublishOutcomeDuplicate

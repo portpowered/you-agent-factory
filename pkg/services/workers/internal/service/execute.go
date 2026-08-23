@@ -225,29 +225,7 @@ func (s *Service) runRunner(
 			)
 		}
 	}()
-	if request.Input.MockWorkers != nil {
-		ctx = workerexecution.WithMockWorkersConfig(ctx, request.Input.MockWorkers)
-		ctx = workerexecution.WithMockWorkerOutputPolicy(ctx, request.Target.Output)
-		usageCapture = &workerexecution.MockWorkerUsageCapture{}
-		ctx = workerexecution.WithMockWorkerUsageCapture(ctx, usageCapture)
-	}
-	if request.Input.ProgressPublisher != nil {
-		ctx = workerexecution.WithProgressPublisher(ctx, request.Input.ProgressPublisher)
-	}
-	if request.Input.ScriptEventRecorder != nil {
-		ctx = workerexecution.WithScriptEventRecorder(ctx, request.Input.ScriptEventRecorder)
-	}
-	if request.Input.CommandRunnerOverride != nil {
-		commandRunner := workerprocess.AdaptPlatformCommandRunner(request.Input.CommandRunnerOverride)
-		if commandRunner != nil && request.Input.ExecutionLogger != nil {
-			commandRunner = workerprocess.CommandRunnerWithLogging(
-				commandRunner,
-				request.Input.ExecutionLogger,
-				workerprocess.ClockFunc(s.clock),
-			)
-		}
-		ctx = workerexecution.WithWorkerCommandRunnerOverride(ctx, commandRunner)
-	}
+	ctx, usageCapture = s.configureRunnerContext(ctx, request)
 	runnerRequest := adaptRunnerRequest(request, identity, temporaryFiles)
 	if request.Target.Tools.AgentLoop {
 		return s.runAgentLoop(ctx, request, identity, runnerRequest, providerOverride)
@@ -285,6 +263,52 @@ func (s *Service) runRunner(
 			Attempt: attempt,
 		})
 	})
+}
+
+func (s *Service) configureRunnerContext(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+) (context.Context, *workerexecution.MockWorkerUsageCapture) {
+	var usageCapture *workerexecution.MockWorkerUsageCapture
+	if request.Input.MockWorkers != nil {
+		ctx = workerexecution.WithMockWorkersConfig(ctx, request.Input.MockWorkers)
+		ctx = workerexecution.WithMockWorkerOutputPolicy(ctx, request.Target.Output)
+		usageCapture = &workerexecution.MockWorkerUsageCapture{}
+		ctx = workerexecution.WithMockWorkerUsageCapture(ctx, usageCapture)
+	}
+	if request.Input.ProgressPublisher != nil {
+		ctx = workerexecution.WithProgressPublisher(ctx, request.Input.ProgressPublisher)
+	}
+	if request.Input.ScriptEventRecorder != nil {
+		ctx = workerexecution.WithScriptEventRecorder(ctx, request.Input.ScriptEventRecorder)
+	}
+	if request.Input.CommandRunnerOverride != nil {
+		commandRunner := workerprocess.AdaptPlatformCommandRunner(request.Input.CommandRunnerOverride)
+		if commandRunner != nil && request.Input.ExecutionLogger != nil {
+			commandRunner = workerprocess.CommandRunnerWithLogging(
+				commandRunner,
+				request.Input.ExecutionLogger,
+				workerprocess.ClockFunc(s.clock),
+			)
+		}
+		ctx = workerexecution.WithWorkerCommandRunnerOverride(ctx, commandRunner)
+	}
+	return ctx, usageCapture
+}
+
+func applyMockWorkerUsageDiagnostics(
+	result workers.RunnerExecutionResult,
+	usage *workers.MockWorkerUsageConfig,
+) workers.RunnerExecutionResult {
+	return workerexecution.ApplyMockWorkerUsageDiagnostics(result, usage)
+}
+
+func publishMockWorkerUsage(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+	usage *workers.MockWorkerUsageConfig,
+) {
+	workerexecution.PublishMockWorkerUsage(ctx, request.Correlation, usage)
 }
 
 // executeProviderWithRetry preserves the provider-attempt policy at the

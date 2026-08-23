@@ -52,10 +52,10 @@ func TestMockWorkerUsageIsVisibleAndPriceableThroughPublicCLI(t *testing.T) {
 	support.CleanupProcess(t, process)
 	showOutput := executeMockUsageCLI(t, process, environment, factoryDir,
 		"--server", server.URL(), "worker-sessions", "show", "--worker-session-id", workerSessionID)
-	assertMockUsageShowOutput(t, showOutput)
 
 	costOutput := executeMockUsageCLI(t, process, environment, factoryDir,
 		"--server", server.URL(), "metrics", "costs")
+	assertMockUsageShowOutput(t, showOutput)
 	assertMockUsageCostOutput(t, costOutput)
 
 	costJSON := executeMockUsageCLI(t, process, environment, factoryDir,
@@ -98,25 +98,34 @@ func usageWorkerSessionID(t testing.TB, baseURL string, workItem factoryapi.Work
 	if workItem.WorkId == nil || strings.TrimSpace(*workItem.WorkId) == "" {
 		t.Fatalf("mock usage Work has no Work ID: %#v", workItem)
 	}
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		sessions := support.ListDefaultSessionWorkerSessions(t, baseURL, *workItem.WorkId)
-		var usageSessionID string
-		usageCount := 0
-		for _, session := range sessions.Sessions {
-			if session.TokenUsage == nil {
-				continue
-			}
-			usageSessionID = session.WorkerSessionId
-			usageCount++
-		}
-		if usageCount == 1 && usageSessionID != "" {
-			return usageSessionID
-		}
-		time.Sleep(25 * time.Millisecond)
+	sessions, err := support.WaitForObservation(
+		2*time.Second,
+		func() (factoryapi.ListWorkerSessionsResponse, error) {
+			return support.ListDefaultSessionWorkerSessions(t, baseURL, *workItem.WorkId), nil
+		},
+		func(value factoryapi.ListWorkerSessionsResponse) bool {
+			return usageWorkerSessionIDFromResponse(value) != ""
+		},
+	)
+	if err != nil {
+		t.Fatalf("waiting for usage-bearing Worker Session: %v", err)
 	}
-	sessions := support.ListDefaultSessionWorkerSessions(t, baseURL, *workItem.WorkId)
-	t.Fatalf("mock usage Worker Sessions = %#v, want exactly one usage-bearing session", sessions.Sessions)
+	return usageWorkerSessionIDFromResponse(sessions)
+}
+
+func usageWorkerSessionIDFromResponse(sessions factoryapi.ListWorkerSessionsResponse) string {
+	var usageSessionID string
+	usageCount := 0
+	for _, session := range sessions.Sessions {
+		if session.TokenUsage == nil {
+			continue
+		}
+		usageSessionID = session.WorkerSessionId
+		usageCount++
+	}
+	if usageCount == 1 {
+		return usageSessionID
+	}
 	return ""
 }
 

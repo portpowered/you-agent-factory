@@ -442,6 +442,10 @@ func (usage MockWorkerUsageConfig) Validate() error {
 	if strings.TrimSpace(usage.Model) == "" {
 		return fmt.Errorf("model is required")
 	}
+	return validateMockWorkerUsageTokenCounts(usage)
+}
+
+func validateMockWorkerUsageTokenCounts(usage MockWorkerUsageConfig) error {
 	for _, token := range []struct {
 		name  string
 		value *int64
@@ -455,19 +459,30 @@ func (usage MockWorkerUsageConfig) Validate() error {
 			return fmt.Errorf("%s must be non-negative", token.name)
 		}
 	}
-	if usage.CachedInputTokens != nil && usage.InputTokens == nil {
-		return fmt.Errorf("inputTokens is required when cachedInputTokens is set")
+	if err := validateMockWorkerUsageSubset(
+		"cachedInputTokens", usage.CachedInputTokens, "inputTokens", usage.InputTokens,
+	); err != nil {
+		return err
 	}
-	if usage.CachedInputTokens != nil && usage.InputTokens != nil &&
-		*usage.CachedInputTokens > *usage.InputTokens {
-		return fmt.Errorf("cachedInputTokens must not exceed inputTokens")
+	return validateMockWorkerUsageSubset(
+		"reasoningOutputTokens", usage.ReasoningOutputTokens, "outputTokens", usage.OutputTokens,
+	)
+}
+
+func validateMockWorkerUsageSubset(
+	name string,
+	value *int64,
+	parentName string,
+	parent *int64,
+) error {
+	if value == nil {
+		return nil
 	}
-	if usage.ReasoningOutputTokens != nil && usage.OutputTokens == nil {
-		return fmt.Errorf("outputTokens is required when reasoningOutputTokens is set")
+	if parent == nil {
+		return fmt.Errorf("%s is required when %s is set", parentName, name)
 	}
-	if usage.ReasoningOutputTokens != nil && usage.OutputTokens != nil &&
-		*usage.ReasoningOutputTokens > *usage.OutputTokens {
-		return fmt.Errorf("reasoningOutputTokens must not exceed outputTokens")
+	if *value > *parent {
+		return fmt.Errorf("%s must not exceed %s", name, parentName)
 	}
 	return nil
 }

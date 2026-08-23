@@ -75,14 +75,16 @@ func (r *runner) Execute(
 		}
 		return acceptResult(), nil
 	}
-	workerexecution.PublishMockWorkerUsage(ctx, request.Correlation, entry.Usage)
+	recordMockWorkerUsage(ctx, request.Correlation, entry.Usage)
 	switch entry.RunType {
 	case workers.MockWorkerRunTypeReject:
-		return workers.RunnerExecutionResult{}, workers.NewProviderError(
-			workers.WorkFailureTypeInternalServerError,
-			"mock worker rejected the dispatch",
-			nil,
-		)
+		return workerexecution.ApplyMockWorkerUsageDiagnostics(
+				workers.RunnerExecutionResult{}, entry.Usage,
+			), workers.NewProviderError(
+				workers.WorkFailureTypeInternalServerError,
+				"mock worker rejected the dispatch",
+				nil,
+			)
 	case workers.MockWorkerRunTypeScript:
 		if entry.ScriptConfig == nil {
 			return workers.RunnerExecutionResult{}, workers.NewProviderError(
@@ -135,6 +137,18 @@ func (r *runner) Execute(
 	default:
 		return workerexecution.ApplyMockWorkerUsageDiagnostics(acceptResult(), entry.Usage), nil
 	}
+}
+
+func recordMockWorkerUsage(
+	ctx context.Context,
+	correlation workers.ExecutionCorrelation,
+	usage *workers.MockWorkerUsageConfig,
+) {
+	if capture := workerexecution.MockWorkerUsageCaptureFromContext(ctx); capture != nil {
+		capture.Record(usage)
+		return
+	}
+	workerexecution.PublishMockWorkerUsage(ctx, correlation, usage)
 }
 
 func (r *runner) match(
