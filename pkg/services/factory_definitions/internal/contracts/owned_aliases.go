@@ -27,11 +27,3 @@ const (
 )
 
 var CloneWorkerConfig = workerconfig.Clone
-
-func NormalizeAgentToolPolicy(policy string) string {
-	return workerconfig.NormalizeAgentToolPolicy(policy)
-}
-
-func IsKnownAgentToolPolicy(policy string) bool {
-	return workerconfig.IsKnownAgentToolPolicy(policy)
-}

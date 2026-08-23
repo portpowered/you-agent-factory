@@ -17,9 +17,3 @@ func (localTestFileSystem) RemoveAll(path string) error                { return 
 func (localTestFileSystem) WriteFile(path string, data []byte, mode fs.FileMode) error {
 	return os.WriteFile(path, data, mode)
 }
-
-type testInboxEnsurer struct{ fileSystem localTestFileSystem }
-
-func (e testInboxEnsurer) EnsureInputInboxGitkeep(targetDir, relativePath string) error {
-	return e.fileSystem.WriteFile(targetDir+string(os.PathSeparator)+relativePath, nil, 0o644)
-}

@@ -170,30 +170,6 @@ func NewWithValidation(
 	return service
 }
 
-// NewWithCatalogPackagesValidationAndInstallation constructs the complete
-// Definitions root collaborator with catalog, validation, and packaged
-// installation ownership routed through Distribution.
-func NewWithCatalogPackagesValidationAndInstallation(
-	host Host,
-	activationGateway factoryroot.DefinitionActivationGateway,
-	catalogService catalog.Service,
-	validationService validationservice.Service,
-	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
-	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
-	versionFileSystems ...factoryroot.VersionFileSystem,
-) *Service {
-	return NewWithCatalogPackagesValidationInstallationAndAuthoring(
-		host,
-		activationGateway,
-		catalogService,
-		validationService,
-		nil,
-		packagedCatalog,
-		packagedInstaller,
-		versionFileSystems...,
-	)
-}
-
 // NewWithCatalogPackagesValidationInstallationAndAuthoring constructs the
 // complete Definitions root collaborator with catalog, validation, packaged
 // installation, and private authoring_layout ownership.
@@ -493,24 +469,6 @@ func (s *Service) GetCurrentFactoryForSession(_ context.Context, sessionID strin
 		return EditableFactory{}, err
 	}
 	return EditableFactory{Name: factoryName, Snapshot: snapshot, Version: &version}, nil
-}
-
-// CurrentFactorySnapshotForSession reads one editable session definition
-// without requiring a Definition service to refer back to itself through its
-// host adapter.
-func CurrentFactorySnapshotForSession(
-	ctx context.Context,
-	host Host,
-	sessionID string,
-) (*factoryroot.FactorySnapshot, error) {
-	current, err := New(host, StubActivationGateway()).GetCurrentFactoryForSession(ctx, sessionID)
-	if err != nil {
-		return nil, err
-	}
-	if current.Snapshot == nil {
-		return nil, fmt.Errorf("current factory snapshot is unavailable")
-	}
-	return current.Snapshot, nil
 }
 
 // CurrentFactoryDefinitionVersionAtRoot returns optimistic-concurrency metadata.

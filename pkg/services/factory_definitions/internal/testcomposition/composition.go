@@ -199,14 +199,6 @@ func (c Composition) LoadedFactoryLoader(factoryDir string, loader factorydefini
 	return c.LoadDirectory(factoryDir, loader)
 }
 
-func (c Composition) LoadedCurrentFactory(factoryRoot string, loader factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-	return c.LoadCurrent(factoryRoot, loader)
-}
-
-func (c Composition) LoadedFactoryFromCanonicalJSON(payload []byte, loader factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-	return c.LoadCanonicalJSON(payload, loader)
-}
-
 func (c Composition) Persistence(
 	validator factorydefinitions.Validator,
 	mapInput factorydefinitions.FactoryLayoutPayloadMapper,
@@ -395,23 +387,6 @@ func (c Composition) FactoryDefinitionPersistenceWithValidator(validator factory
 
 func (c Composition) PersistNamedFactory(rootDir, name string, payload []byte, validator factorydefinitions.Validator) (string, error) {
 	persistence := c.FactoryDefinitionPersistenceWithValidator(validator)
-	prepared, err := persistence.PrepareFactoryLayout(context.Background(), name, payload)
-	if err != nil {
-		return "", err
-	}
-	return persistence.CreateNamedFactory(rootDir, name, prepared)
-}
-
-func (c Composition) PersistNamedFactoryUnchecked(rootDir, name string, payload []byte, validator factorydefinitions.Validator) (string, error) {
-	persistence := c.Persistence(
-		validator,
-		func([]byte) (factorydefinitions.DefinitionValidationRequest, error) {
-			return factorydefinitions.DefinitionValidationRequest{
-				Profile: factorydefinitions.ValidationProfileTopology,
-				Config:  &factorydefinitions.FactoryConfig{},
-			}, nil
-		},
-	)
 	prepared, err := persistence.PrepareFactoryLayout(context.Background(), name, payload)
 	if err != nil {
 		return "", err

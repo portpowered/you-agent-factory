@@ -6,7 +6,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionsinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
-	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	snapshotsportabilitycapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture"
 	snapshotsportabilityeditable "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/editable"
 	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
@@ -52,21 +51,6 @@ func CaptureInitialSnapshot(
 		preparePortableFactoryConfig,
 		captureFactorySnapshot,
 	)
-}
-
-// FactorySnapshotDirectoryLoader composes authored Factory loading and
-// snapshot capture for Recordings import paths.
-func FactorySnapshotDirectoryLoader(
-	loader *compilationloading.Loader,
-) contracts.FactorySnapshotDirectoryLoader {
-	captureLoaded := LoadedFactorySnapshotCapturer()
-	return func(factoryDir string) (*contracts.FactorySnapshot, error) {
-		loaded, err := loader.LoadSourceFromFactoryDir(factoryDir, nil)
-		if err != nil {
-			return nil, err
-		}
-		return captureLoaded(loaded, loaded.FactoryDir(), nil)
-	}
 }
 
 // PortableFactoryConfigPreparer binds the canonical Factory Definition
