@@ -86,10 +86,11 @@ type workerChild struct {
 
 // startWorkerChildren attaches to canonical Factory Events before invocation
 // starts, processes its retained prefix, then watches its live continuation.
-// W4 commits an association before calling Worker Sessions Start, so this
-// establishes membership before the corresponding Worker topic can publish an
-// opening record. A nil Events collaborator intentionally leaves the existing
-// generic response bridge unchanged for narrow, pre-W5 constructions.
+// The association is the membership edge: the direct child route can publish
+// its Worker opening before that edge is recorded, so the per-child
+// subscription always starts at the topic cursor and replays the retained
+// prefix. A nil Events collaborator intentionally leaves the existing generic
+// response bridge unchanged for narrow, pre-W5 constructions.
 func (s *Service) startWorkerChildren(
 	liveCtx, deliveryCtx context.Context,
 	chatSessionID, factorySessionID string,
