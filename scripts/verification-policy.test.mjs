@@ -12,6 +12,7 @@ const laneNames = [
 	"Frontend",
 	"Backend",
 	"Backend Test Stability",
+	"Backend Conformance",
 	"Backend Lint",
 	"Workflow Lint",
 	"UI Backend Integration",
@@ -157,6 +158,26 @@ test("required Workflow Lint fails the policy when its hosted job is skipped or 
 		assert.equal(evaluation.ok, false, `${result} must fail the required workflow lint lane`);
 		assert.ok(evaluation.failures.some((failure) => /Workflow Lint was selected/.test(failure)));
 	}
+});
+
+test("selected Backend Conformance fails the policy when the offline guard fails", () => {
+	const evaluation = evaluateVerificationPolicy(
+		policy({
+			lanes: [
+				...laneNames
+					.filter((name) => name !== "Backend Conformance")
+					.map((name) => lane(name)),
+				lane("Backend Conformance", true, "failure", {
+					reason: "The affected backend surface requires the offline guard.",
+				}),
+			],
+		}),
+	);
+
+	assert.equal(evaluation.ok, false);
+	assert.ok(
+		evaluation.failures.some((failure) => /Backend Conformance was selected/.test(failure)),
+	);
 });
 
 test("classifier failure fails policy even when every product lane succeeds", () => {
