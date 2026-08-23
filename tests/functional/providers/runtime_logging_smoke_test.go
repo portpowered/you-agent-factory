@@ -139,7 +139,23 @@ func assertExplicitRuntimeTelemetryArtifacts(t *testing.T, rollingConfig logging
 		t.Fatalf("runtime log config = %#v, want %#v", got, rollingConfig)
 	}
 	metricsConfig := platformmetrics.RuntimeMetricsConfig{MaxSize: 1, MaxBackups: 2, MaxAge: 3, Compress: true}
-	metricsOpener, err := platformmetrics.NewRuntimeMetricsOpener(artifactPaths)
+	coordination, err := platformmetrics.NewRuntimeMetricsCoordination()
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsCoordination() error = %v", err)
+	}
+	retention, err := platformmetrics.NewRuntimeMetricsRetention(
+		platformfilesystem.Local{},
+		func() time.Time { return at },
+		coordination,
+	)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsRetention() error = %v", err)
+	}
+	retentionScheduler, err := platformmetrics.NewRuntimeMetricsRetentionScheduler(retention, nil, nil)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsRetentionScheduler() error = %v", err)
+	}
+	metricsOpener, err := platformmetrics.NewRuntimeMetricsOpener(artifactPaths, retentionScheduler, coordination)
 	if err != nil {
 		t.Fatalf("NewRuntimeMetricsOpener() error = %v", err)
 	}
@@ -166,6 +182,9 @@ func assertExplicitRuntimeTelemetryArtifacts(t *testing.T, rollingConfig logging
 	}
 	if err := metricsWriter.Close(); err != nil {
 		t.Fatalf("close runtime metrics a second time: %v", err)
+	}
+	if err := metricsOpener.Close(t.Context()); err != nil {
+		t.Fatalf("close runtime metrics opener: %v", err)
 	}
 	if err := logSink.Close(); err != nil {
 		t.Fatalf("close runtime log: %v", err)

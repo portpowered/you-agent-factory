@@ -25,7 +25,19 @@ func BuildRuntimeMetricsSink(
 	if err != nil {
 		return nil, err
 	}
-	opener, err := NewRuntimeMetricsOpener(paths)
+	coordination, err := NewRuntimeMetricsCoordination()
+	if err != nil {
+		return nil, err
+	}
+	retention, err := NewRuntimeMetricsRetention(platformfilesystem.Local{}, time.Now, coordination)
+	if err != nil {
+		return nil, err
+	}
+	scheduler, err := NewRuntimeMetricsRetentionScheduler(retention, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	opener, err := NewRuntimeMetricsOpener(paths, scheduler, coordination)
 	if err != nil {
 		return nil, err
 	}

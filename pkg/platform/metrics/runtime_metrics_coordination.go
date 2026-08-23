@@ -2,6 +2,8 @@ package metrics
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -13,9 +15,10 @@ import (
 )
 
 const (
-	runtimeMetricsRootLockName = ".runtime-metrics-retention.lock"
-	runtimeMetricsClaimSuffix  = ".active"
-	runtimeMetricsLockRetry    = 10 * time.Millisecond
+	runtimeMetricsRootLockName    = ".runtime-metrics-retention.lock"
+	runtimeMetricsClaimsDirectory = ".runtime-metrics-retention-claims"
+	runtimeMetricsClaimSuffix     = ".active"
+	runtimeMetricsLockRetry       = 10 * time.Millisecond
 )
 
 // ErrRuntimeMetricsRootBusy means another process is currently sweeping the
@@ -80,22 +83,20 @@ func (runtimeMetricsCoordination) TryClaim(path string) (io.Closer, error) {
 func acquireRuntimeMetricsLock(
 	ctx context.Context,
 	resourcePath, lockPath string,
-	wait, removeOnClose bool,
+	wait, artifactClaim bool,
 ) (io.Closer, error) {
 	ctx, err := validateRuntimeMetricsCoordinationContext(ctx, resourcePath)
 	if err != nil {
 		return nil, err
 	}
-	if !removeOnClose {
-		if err := prepareRuntimeMetricsCoordinationRoot(resourcePath); err != nil {
-			return nil, err
-		}
+	if err := prepareRuntimeMetricsCoordinationRoot(filepath.Dir(lockPath)); err != nil {
+		return nil, err
 	}
 	file, err := openRuntimeMetricsLockFile(lockPath)
 	if err != nil {
 		return nil, err
 	}
-	return acquireRuntimeMetricsFile(ctx, file, lockPath, wait, removeOnClose)
+	return acquireRuntimeMetricsFile(ctx, file, lockPath, wait, artifactClaim)
 }
 
 func validateRuntimeMetricsCoordinationContext(
@@ -132,7 +133,7 @@ func acquireRuntimeMetricsFile(
 	ctx context.Context,
 	file *os.File,
 	lockPath string,
-	wait, removeOnClose bool,
+	wait, artifactClaim bool,
 ) (io.Closer, error) {
 
 	for {
@@ -142,11 +143,11 @@ func acquireRuntimeMetricsFile(
 			return nil, fmt.Errorf("lock runtime metrics coordination file %q: %w", lockPath, lockErr)
 		}
 		if locked {
-			return &runtimeMetricsLock{file: file, path: lockPath, remove: removeOnClose}, nil
+			return &runtimeMetricsLock{file: file}, nil
 		}
 		if !wait {
 			_ = file.Close()
-			if removeOnClose {
+			if artifactClaim {
 				return nil, ErrRuntimeMetricsArtifactBusy
 			}
 			return nil, ErrRuntimeMetricsRootBusy
@@ -180,11 +181,9 @@ func openRuntimeMetricsLockFile(path string) (*os.File, error) {
 }
 
 type runtimeMetricsLock struct {
-	file   *os.File
-	path   string
-	remove bool
-	once   sync.Once
-	err    error
+	file *os.File
+	once sync.Once
+	err  error
 }
 
 func (lock *runtimeMetricsLock) Close() error {
@@ -194,14 +193,7 @@ func (lock *runtimeMetricsLock) Close() error {
 	lock.once.Do(func() {
 		unlockErr := unlockRuntimeMetricsFile(lock.file)
 		closeErr := lock.file.Close()
-		var removeErr error
-		if lock.remove {
-			removeErr = os.Remove(lock.path)
-			if errors.Is(removeErr, os.ErrNotExist) {
-				removeErr = nil
-			}
-		}
-		lock.err = errors.Join(unlockErr, closeErr, removeErr)
+		lock.err = errors.Join(unlockErr, closeErr)
 	})
 	return lock.err
 }
@@ -211,5 +203,12 @@ func rootLockPath(root string) string {
 }
 
 func runtimeMetricsClaimPath(path string) string {
-	return path + runtimeMetricsClaimSuffix
+	cleanPath := filepath.Clean(path)
+	root := filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(cleanPath))))
+	digest := sha256.Sum256([]byte(cleanPath))
+	return filepath.Join(
+		root,
+		runtimeMetricsClaimsDirectory,
+		hex.EncodeToString(digest[:])+runtimeMetricsClaimSuffix,
+	)
 }

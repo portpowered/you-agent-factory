@@ -3,9 +3,12 @@ package metrics
 import (
 	"bytes"
 	"context"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
 
@@ -65,7 +68,7 @@ func TestRuntimeMetricsRootRetentionProtectsOpenWriterAcrossFactoryIdentities(t 
 	if err := live.Close(); err != nil {
 		t.Fatalf("close live metrics sink: %v", err)
 	}
-	assertRetentionPathAbsent(t, claimPath, "active claim after close")
+	assertRetentionPathExists(t, claimPath, "stable claim marker after close")
 	report, err = retention.Sweep(context.Background(), RuntimeMetricsRetentionRequest{
 		RootDirectory: root,
 		Config:        RuntimeMetricsConfig{MaxSize: 1, MaxAge: 1},
@@ -75,7 +78,19 @@ func TestRuntimeMetricsRootRetentionProtectsOpenWriterAcrossFactoryIdentities(t 
 
 func newRetentionTestOpener(t *testing.T, paths platformartifact.Reserver) *RuntimeMetricsOpener {
 	t.Helper()
-	opener, err := NewRuntimeMetricsOpener(paths)
+	coordination, err := NewRuntimeMetricsCoordination()
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsCoordination(): %v", err)
+	}
+	retention, err := NewRuntimeMetricsRetention(platformfilesystem.Local{}, time.Now, coordination)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsRetention(): %v", err)
+	}
+	scheduler, err := NewRuntimeMetricsRetentionScheduler(retention, nil, nil)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsRetentionScheduler(): %v", err)
+	}
+	opener, err := NewRuntimeMetricsOpener(paths, scheduler, coordination)
 	if err != nil {
 		t.Fatalf("NewRuntimeMetricsOpener(): %v", err)
 	}
@@ -181,6 +196,9 @@ func TestRuntimeMetricsRootRetentionReclaimsReleasedStaleClaim(t *testing.T) {
 	root := t.TempDir()
 	artifact := writeRetentionArtifact(t, root, "2026/07/01", "010000.000000000", "stale-claim-runtime-stale-collision", 9)
 	claimPath := runtimeMetricsClaimPath(artifact)
+	if err := os.MkdirAll(filepath.Dir(claimPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(claim directory): %v", err)
+	}
 	if err := os.WriteFile(claimPath, nil, 0o600); err != nil {
 		t.Fatalf("WriteFile(stale claim): %v", err)
 	}
@@ -195,9 +213,58 @@ func TestRuntimeMetricsRootRetentionReclaimsReleasedStaleClaim(t *testing.T) {
 	if _, err := os.Stat(artifact); !os.IsNotExist(err) {
 		t.Fatalf("artifact protected by released stale claim, stat error = %v", err)
 	}
-	if _, err := os.Stat(claimPath); !os.IsNotExist(err) {
-		t.Fatalf("stale claim was not cleaned, stat error = %v", err)
+	if _, err := os.Stat(claimPath); err != nil {
+		t.Fatalf("stable stale claim marker was not reusable, stat error = %v", err)
 	}
+}
+
+func TestRuntimeMetricsCoordinationClaimClosePreservesConcurrentReplacement(t *testing.T) {
+	root := t.TempDir()
+	artifact := filepath.Join(root, "2026", "08", "22", "010000.000000000-runtime-metrics-session-runtime-collision.log")
+	coordination, err := NewRuntimeMetricsCoordination()
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsCoordination(): %v", err)
+	}
+	initial, err := coordination.Claim(artifact)
+	if err != nil {
+		t.Fatalf("Claim(initial): %v", err)
+	}
+	claimPath := runtimeMetricsClaimPath(artifact)
+	assertRetentionPathExists(t, claimPath, "initial stable claim marker")
+
+	replacementReady := make(chan io.Closer, 1)
+	replacementErr := make(chan error, 1)
+	startReplacement := make(chan struct{})
+	go func() {
+		<-startReplacement
+		for {
+			replacement, claimErr := coordination.TryClaim(artifact)
+			if claimErr == nil {
+				replacementReady <- replacement
+				return
+			}
+			if !errors.Is(claimErr, ErrRuntimeMetricsArtifactBusy) {
+				replacementErr <- claimErr
+				return
+			}
+			runtime.Gosched()
+		}
+	}()
+	close(startReplacement)
+	if err := initial.Close(); err != nil {
+		t.Fatalf("Close(initial claim): %v", err)
+	}
+
+	var replacement io.Closer
+	select {
+	case err := <-replacementErr:
+		t.Fatalf("TryClaim(replacement): %v", err)
+	case replacement = <-replacementReady:
+	}
+	if err := replacement.Close(); err != nil {
+		t.Fatalf("Close(replacement claim): %v", err)
+	}
+	assertRetentionPathExists(t, claimPath, "replacement stable claim marker")
 }
 
 func TestRuntimeMetricsRootRetentionPrunesDifferentCurrentFilenamesAcrossDates(t *testing.T) {
@@ -344,7 +411,11 @@ func TestRuntimeMetricsRootRetentionDoesNotFollowRecognizedSymlink(t *testing.T)
 	if _, err := os.Stat(target); err != nil {
 		t.Fatalf("symlink target was changed by root sweep: %v", err)
 	}
-	if report.Protected.Files != 1 || report.Protected.Bytes != 5 {
+	linkInfo, err := os.Lstat(link)
+	if err != nil {
+		t.Fatalf("Lstat(recognized symlink): %v", err)
+	}
+	if report.Protected.Files != 1 || report.Protected.Bytes != linkInfo.Size() {
 		t.Fatalf("Protected = %#v, want recognized symlink counted as protected", report.Protected)
 	}
 }

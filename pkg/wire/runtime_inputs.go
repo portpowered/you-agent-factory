@@ -86,6 +86,10 @@ func provideRuntimeMetricsCoordination() (platformmetrics.RuntimeMetricsCoordina
 	return platformmetrics.NewRuntimeMetricsCoordination()
 }
 
+func provideRuntimeMetricsRetentionFileSystem() platformmetrics.RuntimeMetricsRetentionFileSystem {
+	return platformfilesystem.Local{}
+}
+
 func provideRuntimeLogOwner(
 	baseLogger *zap.Logger,
 	clock runtimeArtifactClock,
@@ -152,10 +156,11 @@ func provideRuntimeMetricsOwner(
 	clock runtimeArtifactClock,
 	newID runtimeArtifactIDGenerator,
 	paths platformruntimeartifact.Reserver,
+	retentionFileSystem platformmetrics.RuntimeMetricsRetentionFileSystem,
 	coordination platformmetrics.RuntimeMetricsCoordination,
 ) (factoryruntime.RuntimeMetricsOwner, error) {
 	retention, err := platformmetrics.NewRuntimeMetricsRetention(
-		platformfilesystem.Local{}, clock, coordination,
+		retentionFileSystem, clock, coordination,
 	)
 	if err != nil {
 		return nil, err

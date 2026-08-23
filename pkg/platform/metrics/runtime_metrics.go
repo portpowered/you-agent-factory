@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	internalartifact "github.com/portpowered/infinite-you/pkg/platform/internal/runtimeartifact"
 	platformrollingfile "github.com/portpowered/infinite-you/pkg/platform/rollingfile"
 	platformartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
@@ -81,34 +80,6 @@ type RuntimeMetricsOpener struct {
 
 func NewRuntimeMetricsOpener(
 	paths platformartifact.Reserver,
-	coordination ...RuntimeMetricsCoordination,
-) (*RuntimeMetricsOpener, error) {
-	if paths == nil {
-		return nil, fmt.Errorf("runtime metrics path reserver is required")
-	}
-	selectedCoordination, err := selectRuntimeMetricsCoordination(coordination)
-	if err != nil {
-		return nil, err
-	}
-	retention, err := NewRuntimeMetricsRetention(
-		platformfilesystem.Local{}, time.Now, selectedCoordination,
-	)
-	if err != nil {
-		return nil, err
-	}
-	scheduler, err := NewRuntimeMetricsRetentionScheduler(retention, nil, nil)
-	if err != nil {
-		return nil, err
-	}
-	return newRuntimeMetricsOpener(paths, selectedCoordination, scheduler), nil
-}
-
-// NewRuntimeMetricsOpenerWithRetention composes an opener with the
-// process-scoped retention lifecycle selected by the composition root. The
-// compatibility constructor above supplies the local production defaults for
-// callers that do not need custom clocks, tickers, or reporting.
-func NewRuntimeMetricsOpenerWithRetention(
-	paths platformartifact.Reserver,
 	retentionLifecycle RuntimeMetricsRetentionLifecycle,
 	coordination ...RuntimeMetricsCoordination,
 ) (*RuntimeMetricsOpener, error) {
@@ -123,6 +94,16 @@ func NewRuntimeMetricsOpenerWithRetention(
 		return nil, err
 	}
 	return newRuntimeMetricsOpener(paths, selectedCoordination, retentionLifecycle), nil
+}
+
+// NewRuntimeMetricsOpenerWithRetention composes an opener with the
+// process-scoped retention lifecycle selected by the composition root.
+func NewRuntimeMetricsOpenerWithRetention(
+	paths platformartifact.Reserver,
+	retentionLifecycle RuntimeMetricsRetentionLifecycle,
+	coordination ...RuntimeMetricsCoordination,
+) (*RuntimeMetricsOpener, error) {
+	return NewRuntimeMetricsOpener(paths, retentionLifecycle, coordination...)
 }
 
 func newRuntimeMetricsOpener(
