@@ -120,6 +120,7 @@ func TestRuntimeCacheCompatibilityFactsComeFromScopedAssetsService(t *testing.T)
 	if !inspection.Supported ||
 		!inspection.Installed ||
 		inspection.Revision != "rev-test" ||
+		inspection.CachePath != filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M", "rev-test") ||
 		inspection.InstalledFileCount != 2 ||
 		inspection.CacheBytes != 4 ||
 		len(inspection.MissingAssets) != 0 {
@@ -166,6 +167,36 @@ func TestInspectRuntimeCacheCountsNestedRegularFilesAndSkipsSymlinks(t *testing.
 	}
 	if inspection.CacheBytes != 15 {
 		t.Fatalf("CacheBytes = %d, want 15 bytes from required plus nested regular files", inspection.CacheBytes)
+	}
+}
+
+func TestInspectRuntimeCacheRejectsRevisionEscapingManagedCacheRoot(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	modelDirectory := filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M")
+	if err := os.MkdirAll(modelDirectory, 0o755); err != nil {
+		t.Fatalf("create model cache directory: %v", err)
+	}
+	body, err := json.Marshal(cacheMetadata{
+		ModelName: "OMNIVOICE_Q4_K_M",
+		Revision:  "../outside",
+	})
+	if err != nil {
+		t.Fatalf("marshal malicious cache metadata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(modelDirectory, metadataFileName), body, 0o644); err != nil {
+		t.Fatalf("write malicious cache metadata: %v", err)
+	}
+
+	scopes := newScopes(t, "runtime-cache-path-validation")
+	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
+	service := newTestService(scopes, nil)
+	if _, err := service.InspectRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
+		Scope: ref,
+		Name:  "OMNIVOICE_Q4_K_M",
+	}); err == nil {
+		t.Fatal("InspectRuntimeCache succeeded for a revision outside the managed cache root")
 	}
 }
 

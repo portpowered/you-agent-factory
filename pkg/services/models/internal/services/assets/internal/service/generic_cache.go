@@ -439,16 +439,23 @@ func genericSnapshotPath(paths []string) string {
 
 func genericSnapshotPathFor(path string) string {
 	clean := filepath.Clean(path)
-	parts := strings.Split(clean, string(filepath.Separator))
-	for index, part := range parts {
-		if part != assetContentDirectory || index+2 >= len(parts) {
-			continue
-		}
-		return filepath.Join(append([]string(nil), parts[:index+3]...)...)
-	}
-	for index, part := range parts {
-		if strings.EqualFold(part, "snapshots") && index+1 < len(parts) {
-			return filepath.Join(append([]string(nil), parts[:index+2]...)...)
+	for _, marker := range []string{assetContentDirectory, "snapshots"} {
+		for current := clean; ; current = filepath.Dir(current) {
+			if filepath.Base(current) == marker {
+				relative, err := filepath.Rel(current, clean)
+				if err != nil {
+					break
+				}
+				parts := strings.Split(relative, string(filepath.Separator))
+				if len(parts) >= 2 && parts[0] != "" && parts[1] != "" {
+					return filepath.Join(current, parts[0], parts[1])
+				}
+				break
+			}
+			parent := filepath.Dir(current)
+			if parent == current {
+				break
+			}
 		}
 	}
 	return filepath.Dir(clean)

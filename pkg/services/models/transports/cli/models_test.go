@@ -254,13 +254,16 @@ func TestRenderList_WritesDiscoveredModelsTable(t *testing.T) {
 
 func TestManagedRuntimeMappingPreservesCacheFacts(t *testing.T) {
 	revision := "rev-1"
+	cachePath := "/tmp/models/OMNIVOICE_Q4_K_M/rev-1"
 	cacheBytes := int64(1234)
 	got := managedRuntimeToGenerated(modelinference.Runtime{
 		Identity: "OMNIVOICE_Q4_K_M",
-		Revision: &revision, CacheBytes: &cacheBytes,
+		Revision: &revision, CachePath: &cachePath, CacheBytes: &cacheBytes,
 	})
-	if got.Revision == nil || *got.Revision != revision || got.CacheBytes == nil || *got.CacheBytes != cacheBytes {
-		t.Fatalf("managed runtime cache facts = revision=%v bytes=%v, want rev-1/1234", got.Revision, got.CacheBytes)
+	if got.Revision == nil || *got.Revision != revision ||
+		got.CachePath == nil || *got.CachePath != cachePath ||
+		got.CacheBytes == nil || *got.CacheBytes != cacheBytes {
+		t.Fatalf("managed runtime cache facts = revision=%v path=%v bytes=%v, want rev-1/path/1234", got.Revision, got.CachePath, got.CacheBytes)
 	}
 }
 
@@ -298,7 +301,11 @@ func TestRenderModel_WritesManagedRuntimeInspectFields(t *testing.T) {
 		t.Fatalf("RenderModel: %v", err)
 	}
 	got := out.String()
-	for _, want := range []string{"Readiness:\tMISSING", "Lifecycle:\tNOT_INSTALLED", "missingAssets=weights.bin"} {
+	for _, want := range []string{
+		"Readiness:\tMISSING", "Lifecycle:\tNOT_INSTALLED",
+		"Revision:\tNOT_INSTALLED", "Cache Size:\tNOT_INSTALLED", "Cache Path:\tNOT_INSTALLED",
+		"missingAssets=weights.bin",
+	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("rendered inspect output missing %q:\n%s", want, got)
 		}

@@ -273,6 +273,10 @@ type Runtime struct {
 	// available. It remains nil for cloud runtimes and models without an
 	// installed managed cache.
 	Revision *string
+	// CachePath is the resolved managed-cache revision directory when cache
+	// facts are available. It remains nil for cloud runtimes and models without
+	// an installed managed cache.
+	CachePath *string
 	// CacheBytes is the exact recursive byte count of regular files in the
 	// installed managed-cache revision. It remains nil when no installed cache
 	// was observed.
@@ -284,6 +288,7 @@ type Runtime struct {
 // Clone returns detached readiness facts safe for a peer to retain or mutate.
 func (runtime Runtime) Clone() Runtime {
 	runtime.Revision = cloneStringPointer(runtime.Revision)
+	runtime.CachePath = cloneStringPointer(runtime.CachePath)
 	runtime.CacheBytes = cloneInt64Pointer(runtime.CacheBytes)
 	runtime.SupportedOperations = cloneOperations(runtime.SupportedOperations)
 	runtime.Diagnostics = cloneStringMap(runtime.Diagnostics)

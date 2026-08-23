@@ -2191,6 +2191,8 @@ export interface components {
     ManagedRuntime: {
       /** @description Stable managed runtime identity shared by discovery, inspect, pull or install, and factory dependency surfaces. */
       identity: string;
+      /** @description Resolved managed-cache revision directory when a local cache is installed. */
+      cachePath?: string;
       /** @description Installed managed-cache revision when a local cache is present. */
       revision?: string;
       /**

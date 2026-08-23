@@ -317,7 +317,7 @@ func TestModelsCLICharacterizationSuccessProjections(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("Inspect() human error = %v", err)
 		}
-		if got, want := human.String(), "Name:\tOMNIVOICE_Q4_K_M\nReadiness:\tREADY\nLifecycle:\tINSTALLED\nLocality:\tLOCAL\nOperations:\tTTS\nModalities:\tAUDIO,TEXT\nResources:\t1\nCapabilities:\n- tts-executor\tLOCAL\tTTS\nDiagnostics:\n- cache=omnivoice-cache\n"; got != want {
+		if got, want := human.String(), "Name:\tOMNIVOICE_Q4_K_M\nReadiness:\tREADY\nLifecycle:\tINSTALLED\nLocality:\tLOCAL\nRevision:\tNOT_INSTALLED\nCache Size:\tNOT_INSTALLED\nCache Path:\tNOT_INSTALLED\nOperations:\tTTS\nModalities:\tAUDIO,TEXT\nResources:\t1\nCapabilities:\n- tts-executor\tLOCAL\tTTS\nDiagnostics:\n- cache=omnivoice-cache\n"; got != want {
 			t.Fatalf("Inspect() human = %q, want %q", got, want)
 		}
 

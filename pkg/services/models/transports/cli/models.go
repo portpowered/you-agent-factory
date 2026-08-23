@@ -613,6 +613,20 @@ func managedRuntimeCacheSize(runtime factoryapi.ManagedRuntime) string {
 	return fmt.Sprintf("%s (%d bytes)", humanByteSize(*runtime.CacheBytes), *runtime.CacheBytes)
 }
 
+func managedRuntimeRevision(runtime factoryapi.ManagedRuntime) string {
+	if runtime.Revision == nil || strings.TrimSpace(*runtime.Revision) == "" {
+		return "NOT_INSTALLED"
+	}
+	return *runtime.Revision
+}
+
+func managedRuntimeCachePath(runtime factoryapi.ManagedRuntime) string {
+	if runtime.CachePath == nil || strings.TrimSpace(*runtime.CachePath) == "" {
+		return "NOT_INSTALLED"
+	}
+	return *runtime.CachePath
+}
+
 func humanByteSize(bytes int64) string {
 	if bytes < 1024 {
 		return fmt.Sprintf("%d B", bytes)
@@ -667,6 +681,9 @@ func renderModel(model factoryapi.ModelDetail, output io.Writer) error {
 		{label: "Readiness", value: managedRuntimeReadiness(model.ManagedRuntime)},
 		{label: "Lifecycle", value: managedRuntimeLifecycle(model.ManagedRuntime)},
 		{label: "Locality", value: string(model.ProviderLocality)},
+		{label: "Revision", value: managedRuntimeRevision(model.ManagedRuntime)},
+		{label: "Cache Size", value: managedRuntimeCacheSize(model.ManagedRuntime)},
+		{label: "Cache Path", value: managedRuntimeCachePath(model.ManagedRuntime)},
 		{label: "Operations", value: modelOperationNames(model.Operations)},
 		{label: "Modalities", value: modelModalities(model.Modalities)},
 	} {

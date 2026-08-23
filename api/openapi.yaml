@@ -4698,6 +4698,9 @@ components:
           type: string
           description: |
             Stable managed runtime identity shared by discovery, inspect, pull or install, and factory dependency surfaces.
+        cachePath:
+          type: string
+          description: Resolved managed-cache revision directory when a local cache is installed.
         revision:
           type: string
           description: Installed managed-cache revision when a local cache is present.

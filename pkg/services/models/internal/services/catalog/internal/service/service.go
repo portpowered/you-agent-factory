@@ -78,6 +78,9 @@ func overlayCacheFacts(base, current models.Runtime) models.Runtime {
 	if current.Revision != nil {
 		projected.Revision = current.Revision
 	}
+	if current.CachePath != nil {
+		projected.CachePath = current.CachePath
+	}
 	if current.CacheBytes != nil {
 		projected.CacheBytes = current.CacheBytes
 	}
@@ -98,6 +101,24 @@ func (s *service) GetCatalogModel(
 	}
 	if err := ctx.Err(); err != nil {
 		return models.GetModelResult{}, err
+	}
+	if s.readiness != nil {
+		current, readinessErr := s.readiness(
+			ctx,
+			request.Scope,
+			scopeConfig.Clone(),
+			detail.Clone(),
+		)
+		if readinessErr != nil {
+			if contextError := ctx.Err(); contextError != nil {
+				return models.GetModelResult{}, contextError
+			}
+			if errors.Is(readinessErr, context.Canceled) || errors.Is(readinessErr, context.DeadlineExceeded) {
+				return models.GetModelResult{}, readinessErr
+			}
+			return models.GetModelResult{}, models.ErrUnavailable
+		}
+		detail.Summary.ManagedRuntime = overlayCacheFacts(detail.Summary.ManagedRuntime, current)
 	}
 	return models.GetModelResult{Model: detail}, nil
 }

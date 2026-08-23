@@ -5935,7 +5935,10 @@ type LogicalRoundTrip struct {
 // ManagedRuntime defines model for ManagedRuntime.
 type ManagedRuntime struct {
 	// CacheBytes Exact recursive byte count of regular files in the installed managed-cache revision.
-	CacheBytes  *int64     `json:"cacheBytes,omitempty"`
+	CacheBytes *int64 `json:"cacheBytes,omitempty"`
+
+	// CachePath Resolved managed-cache revision directory when a local cache is installed.
+	CachePath   *string    `json:"cachePath,omitempty"`
 	Diagnostics *StringMap `json:"diagnostics,omitempty"`
 
 	// Identity Stable managed runtime identity shared by discovery, inspect, pull or install, and factory dependency surfaces.

@@ -147,6 +147,7 @@ func TestListCatalogOverlaysCacheFactsWithoutChangingCatalogStates(t *testing.T)
 	t.Parallel()
 
 	revision := "rev-installed"
+	cachePath := "/tmp/models/cache-model/rev-installed"
 	cacheBytes := int64(1234)
 	scopes := newRuntimeScopes(t, "catalog-cache-facts")
 	service, err := catalogwire.NewService(
@@ -156,6 +157,7 @@ func TestListCatalogOverlaysCacheFactsWithoutChangingCatalogStates(t *testing.T)
 				ReadinessState: models.ReadinessStateFailed,
 				LifecycleState: models.LifecycleStateInstalling,
 				Revision:       &revision,
+				CachePath:      &cachePath,
 				CacheBytes:     &cacheBytes,
 			}, nil
 		},
@@ -177,8 +179,24 @@ func TestListCatalogOverlaysCacheFactsWithoutChangingCatalogStates(t *testing.T)
 		t.Fatalf("catalog states = (%s, %s), want MISSING/NOT_INSTALLED", runtime.ReadinessState, runtime.LifecycleState)
 	}
 	if runtime.Revision == nil || *runtime.Revision != revision ||
+		runtime.CachePath == nil || *runtime.CachePath != cachePath ||
 		runtime.CacheBytes == nil || *runtime.CacheBytes != cacheBytes {
-		t.Fatalf("catalog cache facts = revision=%v bytes=%v, want rev-installed/1234", runtime.Revision, runtime.CacheBytes)
+		t.Fatalf("catalog cache facts = revision=%v path=%v bytes=%v, want rev-installed/path/1234", runtime.Revision, runtime.CachePath, runtime.CacheBytes)
+	}
+
+	detail, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{
+		Scope: scope, Name: "cache-model",
+	})
+	if err != nil {
+		t.Fatalf("GetCatalogModel: %v", err)
+	}
+	inspectRuntime := detail.Model.ManagedRuntime
+	if inspectRuntime.ReadinessState != models.ReadinessStateMissing ||
+		inspectRuntime.LifecycleState != models.LifecycleStateNotInstalled ||
+		inspectRuntime.CachePath == nil || *inspectRuntime.CachePath != cachePath ||
+		inspectRuntime.Revision == nil || *inspectRuntime.Revision != revision ||
+		inspectRuntime.CacheBytes == nil || *inspectRuntime.CacheBytes != cacheBytes {
+		t.Fatalf("inspect runtime = %#v, want preserved states and cache facts", inspectRuntime)
 	}
 }
 

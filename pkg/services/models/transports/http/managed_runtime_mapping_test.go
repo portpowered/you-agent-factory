@@ -14,11 +14,12 @@ import (
 func TestManagedRuntimeToGeneratedPreservesModelVocabulary(t *testing.T) {
 	required := true
 	revision := "rev-1"
+	cachePath := "/tmp/models/OMNIVOICE_Q4_K_M/rev-1"
 	cacheBytes := int64(1234)
 	result := managedRuntimeToGenerated(models.Runtime{
 		Identity: "OMNIVOICE_Q4_K_M", ReadinessState: models.ReadinessStateReady,
 		LifecycleState: models.LifecycleStateInstalled, Locality: models.LocalityLocal,
-		Revision: &revision, CacheBytes: &cacheBytes,
+		Revision: &revision, CachePath: &cachePath, CacheBytes: &cacheBytes,
 		SupportedOperations: []models.Operation{{Name: "TTS", Inputs: []models.OperationSlot{{
 			Name: "text", ContentTypes: []string{"TEXT"}, Required: &required,
 		}}}},
@@ -28,6 +29,7 @@ func TestManagedRuntimeToGeneratedPreservesModelVocabulary(t *testing.T) {
 		result.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLED ||
 		result.Locality != factoryapi.WorkerModelLocalityLocal ||
 		result.Revision == nil || *result.Revision != revision ||
+		result.CachePath == nil || *result.CachePath != cachePath ||
 		result.CacheBytes == nil || *result.CacheBytes != cacheBytes {
 		t.Fatalf("managed runtime = %#v, want READY/INSTALLED/LOCAL", result)
 	}
