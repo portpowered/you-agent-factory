@@ -1,5 +1,3 @@
-internal/ownershipinventory/operator_settings_root_go.go: unreachable func: OperatorSettingsRootContractFoldCondition
-internal/ownershipinventory/recordings_root_contract.go: unreachable func: RecordingsRootContractFoldCondition
 internal/testutil/checkpointfixtures/checkpoint_summaries.go: unreachable func: ReplayFirstChildCheckpointSummaryResult
 internal/testutil/factory_events.go: unreachable func: FactoryEvent
 internal/testutil/factory_events.go: unreachable func: FactoryEvents
