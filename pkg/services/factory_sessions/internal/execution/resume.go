@@ -440,7 +440,7 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntimeWithResume(
 		Args:        argsJSON,
 		ArgsSchema:  resolved.ArgsSchema,
 		Metadata:    workflowMetadataFromResolved(resolved, normalized),
-		FactoryName: factoryNameFromStart(normalized),
+		FactoryName: factoryNameFromStart(normalized, resolved),
 		Policy:      policyResolution.Policy,
 		Resume:      resume,
 	}, s.childExecutorHooks(resolveChildExecutorMode(s.childExecutorMode, normalized), sessionID))

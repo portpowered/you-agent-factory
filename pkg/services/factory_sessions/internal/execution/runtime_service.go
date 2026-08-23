@@ -794,7 +794,7 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntime(
 		Args:           argsJSON,
 		ArgsSchema:     resolved.ArgsSchema,
 		Metadata:       workflowMetadataFromResolved(resolved, normalized),
-		FactoryName:    factoryNameFromStart(normalized),
+		FactoryName:    factoryNameFromStart(normalized, resolved),
 		Policy:         policyResolution.Policy,
 		Agents:         resolved.Agents,
 		WorkerSettings: s.workerSettings,

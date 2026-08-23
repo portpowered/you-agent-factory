@@ -83,7 +83,11 @@ func normalizeSource(source Source) (Source, error) {
 		if workflowFile == "" {
 			return Source{}, NewValidationError("source.workflowFile", "workflowFile is required when source.kind is WORKFLOW_FILE")
 		}
-		return Source{Kind: source.Kind, WorkflowFile: workflowFile}, nil
+		return Source{
+			Kind:           source.Kind,
+			WorkflowFile:   workflowFile,
+			InlineWorkflow: cloneInlineWorkflowSource(source.InlineWorkflow),
+		}, nil
 	case workflowsource.WorkflowSourceKindWorkflowName:
 		workflowName := strings.TrimSpace(source.WorkflowName)
 		if workflowName == "" {
@@ -124,6 +128,18 @@ func cloneJavaScriptAgents(agents map[string]interfaces.FactoryOrchestratorJavaS
 		cloned[name] = agent
 	}
 	return cloned
+}
+
+func cloneInlineWorkflowSource(source *InlineWorkflowSource) *InlineWorkflowSource {
+	if source == nil {
+		return nil
+	}
+	cloned := *source
+	cloned.Metadata = cloneStringMap(source.Metadata)
+	cloned.Agents = cloneJavaScriptAgents(source.Agents)
+	cloned.ArgsSchema = append(json.RawMessage(nil), source.ArgsSchema...)
+	cloned.DefaultPolicy = append(json.RawMessage(nil), source.DefaultPolicy...)
+	return &cloned
 }
 
 func cloneArgs(args map[string]any) map[string]any {
@@ -237,7 +253,10 @@ func isKnownWorkflowSourceKind(kind workflowsource.WorkflowSourceKind) bool {
 	}
 }
 
-func factoryNameFromStart(req StartRequest) string {
+func factoryNameFromStart(req StartRequest, resolved ResolvedSource) string {
+	if name := strings.TrimSpace(resolved.Metadata["factoryName"]); name != "" {
+		return name
+	}
 	switch req.Source.Kind {
 	case workflowsource.WorkflowSourceKindFactoryID:
 		return strings.TrimSpace(req.Source.FactoryID)

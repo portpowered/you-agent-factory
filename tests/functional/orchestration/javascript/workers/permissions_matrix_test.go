@@ -1,13 +1,27 @@
 package workers_test
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+const stableDisallowedPermissionDiagnostic = `policy denied: Factory "named-factory" child "skip-child" requested permission "SKIP_PERMISSIONS" not listed in allowedPermissions`
+
+const disallowedPermissionWorkflow = `return (async function () {
+  return await agent.run({
+    prompt: "permission denial child",
+    label: "skip-child",
+    modelProvider: "codex",
+    skipPermissions: true
+  });
+})();`
 
 func TestJavaScriptAgentRunCodexCommandCharacterization(t *testing.T) {
 	tests := []struct {
@@ -85,6 +99,50 @@ func TestJavaScriptAgentRunCodexCommandCharacterization(t *testing.T) {
 	}
 }
 
+func TestJavaScriptAgentRunDisallowedPermissionFailsThroughPublicCLI(t *testing.T) {
+	t.Parallel()
+
+	dir := support.ScaffoldFactory(t, disallowedPermissionFactoryConfig())
+	workflowDir := filepath.Join(dir, "workflows")
+	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
+		t.Fatalf("create workflow directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDir, "review.js"), []byte(disallowedPermissionWorkflow), 0o600); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+	runner := support.NewRecordingCommandRunner("unexpected provider execution")
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run",
+		"--factory", filepath.Join(dir, "factory.json"),
+		"--output", "primary",
+		"--no-record",
+		"permission denial prompt",
+	})
+	inputs.Input.WorkingDirectory = dir
+	homeDir := t.TempDir()
+	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
+
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	})
+	if err != nil {
+		t.Fatalf("root.BuildProcess() error = %v", err)
+	}
+	support.CleanupProcess(t, process)
+
+	err = process.Execute(inputs.Input)
+	if err == nil {
+		t.Fatalf("Process.Execute() error = nil; stdout:\n%s\nstderr:\n%s", inputs.Stdout(), inputs.Stderr())
+	}
+	output := strings.Join([]string{inputs.Stdout(), inputs.Stderr(), err.Error()}, "\n")
+	if !strings.Contains(output, stableDisallowedPermissionDiagnostic) {
+		t.Fatalf("public denial diagnostic = %q, want %q", output, stableDisallowedPermissionDiagnostic)
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner call count = %d, want 0 before denied child dispatch", runner.CallCount())
+	}
+}
+
 func permissionMatrixFactoryConfig(mode, source string) map[string]any {
 	defaultPolicy := map[string]any{}
 	if mode != "" {
@@ -112,6 +170,19 @@ func permissionMatrixFactoryConfig(mode, source string) map[string]any {
 			},
 			"defaultPolicy": defaultPolicy,
 		},
+	}
+	return config
+}
+
+func disallowedPermissionFactoryConfig() map[string]any {
+	config := permissionMatrixFactoryConfig("", disallowedPermissionWorkflow)
+	config["name"] = "named-factory"
+	orchestrator := config["orchestrator"].(map[string]any)
+	javascript := orchestrator["javascript"].(map[string]any)
+	javascript["sourceRef"] = "workflows/review.js"
+	delete(javascript, "inlineSource")
+	javascript["defaultPolicy"] = map[string]any{
+		"allowedPermissions": []any{"DEFAULT"},
 	}
 	return config
 }
