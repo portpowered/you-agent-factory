@@ -229,7 +229,7 @@ jobs:
       # so adding a package does not require a manifest edit.
       #
       # Do not reintroduce an advisory override here.
-    strategy:
+      strategy:
       fail-fast: false
       matrix:
         include:

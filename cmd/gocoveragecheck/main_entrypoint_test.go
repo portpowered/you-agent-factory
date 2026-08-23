@@ -255,6 +255,29 @@ func TestMainPackageFloorPolicyAdvisoryReportsRegressionAndBlockingRestoresEnfor
 	}
 }
 
+func TestMainDefaultPackageFloorPolicyBlocksRegression(t *testing.T) {
+	configPackage := modulePath + "/pkg/config"
+	manifestPath := writePackageMinimumManifest(t, "unit", configPackage, "80.00")
+	stdout, stderr, exitCode := runMainForTest(t, []string{
+		"-min=0",
+		"-suite=unit",
+		"-package-manifest=" + manifestPath,
+		"-coverpkg=" + configPackage,
+		"-packages=./pkg/config",
+	}, fakeGoCoverageCommandWithMeasuredZeroConfig)
+
+	if exitCode != 1 {
+		t.Fatalf("main() default policy exit code = %d, want 1; stdout=%q stderr=%q", exitCode, stdout, stderr)
+	}
+	if strings.Contains(stderr, "COVERAGE FLOOR POLICY: advisory") || strings.Contains(stderr, "report-only") {
+		t.Fatalf("main() default policy emitted advisory guidance: %q", stderr)
+	}
+	want := "package coverage regression: package=" + configPackage + " lane=unit expected-minimum=80.00% actual=0.0000% delta=-80.0000 percentage-points"
+	if !strings.Contains(stderr, want) {
+		t.Fatalf("main() default policy stderr = %q, want %q", stderr, want)
+	}
+}
+
 func TestMainPackageFloorPolicyAdvisoryReportsMissingManifestEntryAndBlockingRestoresEnforcement(t *testing.T) {
 	rootObservationPackage := modulePath + "/pkg/services/factory_runtime/internal/rootobservation"
 	manifestPath := writePackageMinimumManifest(t, "unit", rootObservationPackage, "0.00")

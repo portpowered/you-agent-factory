@@ -241,6 +241,52 @@ func TestExecuteJSONReportsPackageFloorsFromManifest(t *testing.T) {
 	}
 }
 
+func TestExecuteJSONReportsHeldFloorWithoutDisablingBlockingPolicy(t *testing.T) {
+	_, stderr := stubCoverageExecute(t, fakeGoCoverageCommandWithMeasuredZeroConfig)
+
+	configPackage := modulePath + "/pkg/config"
+	manifestPath := writePackageMinimumManifestWithEntries(t, "unit", []manifestPackageSpec{
+		{
+			importPath: configPackage,
+			minimum:    "80.00",
+			floorHold: &coverageManifestFloorHold{
+				Justification: "The current-main baseline is below the existing unit floor while matching-lane tests are restored.",
+				Owner:         "coverage-remediation",
+				Deadline:      "2027-07-15",
+				RemovalGate:   "Matching unit coverage reaches the existing floor and this hold is removed.",
+			},
+		},
+	})
+	jsonPath := filepath.Join(t.TempDir(), "coverage-summary.json")
+
+	err := execute(config{
+		suite:           "unit",
+		min:             0,
+		coverpkg:        configPackage,
+		packages:        "./pkg/config",
+		packageManifest: manifestPath,
+		jsonOutput:      jsonPath,
+	})
+	if err != nil {
+		t.Fatalf("execute() error = %v, want the staged hold to keep the blocking lane green", err)
+	}
+	if strings.Contains(stderr.String(), "COVERAGE FLOOR POLICY: advisory") || strings.Contains(stderr.String(), "report-only") {
+		t.Fatalf("held blocking run emitted advisory policy guidance: %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "package coverage hold: package="+configPackage) ||
+		!strings.Contains(stderr.String(), "expected-minimum=80.00% actual=0.0000% delta=-80.0000 percentage-points") {
+		t.Fatalf("held blocking run lost the complete remediation diagnostic: %q", stderr.String())
+	}
+
+	summary := readCoverageSummaryJSONFile(t, jsonPath)
+	if summary.PackageFloorPolicy != coverageFloorPolicyBlocking {
+		t.Fatalf("packageFloorPolicy = %q, want blocking", summary.PackageFloorPolicy)
+	}
+	if len(summary.Packages) != 1 || !summary.Packages[0].PackageFloorHeld {
+		t.Fatalf("package floor hold = %+v, want one held package", summary.Packages)
+	}
+}
+
 func TestExecuteJSONReportsMeasurementExceptionFromManifest(t *testing.T) {
 	_, stderr := stubCoverageExecute(t, fakeGoCoverageCommandPassing)
 
@@ -611,6 +657,7 @@ type manifestPackageSpec struct {
 	importPath string
 	minimum    string
 	exception  *coverageManifestException
+	floorHold  *coverageManifestFloorHold
 }
 
 func stubCoverageExecute(t *testing.T, runner commandRunnerFunc) (stdout *bytes.Buffer, stderr *bytes.Buffer) {
@@ -675,7 +722,17 @@ func writePackageMinimumManifestWithEntries(t *testing.T, lane string, entries [
 	t.Helper()
 	manifestPath := filepath.Join(t.TempDir(), lane+"-minimums.json")
 	var packageBlocks []string
+	var floorHoldBlocks []string
 	for _, entry := range entries {
+		if entry.floorHold != nil {
+			floorHoldBlocks = append(floorHoldBlocks, fmt.Sprintf(`    {
+      "package": %q,
+      "justification": %q,
+      "owner": %q,
+      "deadline": %q,
+      "removalGate": %q
+    }`, entry.importPath, entry.floorHold.Justification, entry.floorHold.Owner, entry.floorHold.Deadline, entry.floorHold.RemovalGate))
+		}
 		if entry.exception != nil {
 			packageBlocks = append(packageBlocks, fmt.Sprintf(`    {
       "package": %q,
@@ -694,7 +751,11 @@ func writePackageMinimumManifestWithEntries(t *testing.T, lane string, entries [
       "minimum": %s
     }`, entry.importPath, entry.minimum))
 	}
-	data := fmt.Sprintf("{\n  \"version\": 1,\n  \"lane\": %q,\n  \"packages\": [\n%s\n  ]\n}\n", lane, strings.Join(packageBlocks, ",\n"))
+	floorHolds := ""
+	if len(floorHoldBlocks) > 0 {
+		floorHolds = fmt.Sprintf("\n  \"floorHolds\": [\n%s\n  ],", strings.Join(floorHoldBlocks, ",\n"))
+	}
+	data := fmt.Sprintf("{\n  \"version\": 1,\n  \"lane\": %q,%s\n  \"packages\": [\n%s\n  ]\n}\n", lane, floorHolds, strings.Join(packageBlocks, ",\n"))
 	if err := os.WriteFile(manifestPath, []byte(data), 0o600); err != nil {
 		t.Fatalf("write package minimum manifest: %v", err)
 	}

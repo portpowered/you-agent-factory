@@ -83,9 +83,10 @@ func TestFunctionalCoverageCommandSmoke_ReportsExplicitTierSelection(t *testing.
 	}
 }
 
-// TestCoverageTargetsSmoke_ForwardOneFloorPolicy proves unit and functional
-// coverage invoke the checker with the same explicit reversible policy.
-func TestCoverageTargetsSmoke_ForwardOneFloorPolicy(t *testing.T) {
+// TestCoverageTargetsSmoke_UseBlockingFloorPolicy proves unit and functional
+// coverage inherit the checker default used by required CI. Any staged
+// exceptions are scoped to manifest floor holds, not an advisory invocation.
+func TestCoverageTargetsSmoke_UseBlockingFloorPolicy(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	goStub := writeMakeEchoScript(t, "stub-go-coverage-policy")
 
@@ -98,14 +99,13 @@ func TestCoverageTargetsSmoke_ForwardOneFloorPolicy(t *testing.T) {
 				repoRoot,
 				makefilePath,
 				fmt.Sprintf("GO=%s", goStub),
-				"GO_COVERAGE_FLOOR_POLICY=advisory",
 				target,
 			)
 			if err != nil {
 				t.Fatalf("run %s: %v\n%s", target, err, output)
 			}
-			if !strings.Contains(output, "-package-floor-policy advisory") {
-				t.Fatalf("%s did not forward the advisory policy to gocoveragecheck:\n%s", target, output)
+			if !strings.Contains(output, "-package-floor-policy blocking") {
+				t.Fatalf("%s did not forward the blocking policy to gocoveragecheck:\n%s", target, output)
 			}
 		})
 	}

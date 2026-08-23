@@ -151,7 +151,7 @@ func TestReadCoverageManifestValidatesContract(t *testing.T) {
 
 	configPackage := modulePath + "/pkg/config"
 	servicePackage := modulePath + "/pkg/service"
-	valid := `{"version":1,"lane":"unit","packages":[{"package":"` + configPackage + `","minimum":80.00},{"package":"` + servicePackage + `","exception":{"kind":"measurement","justification":"coverage profile omits generated bridge statements","owner":"backend-quality","deadline":"2026-12-31","removalGate":"profile records bridge statements"}}]}`
+	valid := `{"version":1,"lane":"unit","floorHolds":[{"package":"` + configPackage + `","justification":"current-main baseline is being restored","owner":"coverage-remediation","deadline":"2027-07-15","removalGate":"matching unit tests restore the existing floor"}],"packages":[{"package":"` + configPackage + `","minimum":80.00},{"package":"` + servicePackage + `","exception":{"kind":"measurement","justification":"coverage profile omits generated bridge statements","owner":"backend-quality","deadline":"2026-12-31","removalGate":"profile records bridge statements"}}]}`
 	if _, err := readCoverageManifest([]byte(valid), "unit", []string{configPackage, servicePackage}); err != nil {
 		t.Fatalf("readCoverageManifest() error = %v", err)
 	}
@@ -324,6 +324,53 @@ func TestCheckCoverageManifestReportsOrderedPackageUncoveredBlocks(t *testing.T)
 	}
 	if !strings.Contains(failure, "restore coverage before running `go run ./cmd/gocoveragecheck") {
 		t.Fatalf("failure = %q, want existing remediation wording", failure)
+	}
+}
+
+func TestCheckCoverageManifestKeepsHeldRegressionOutOfBlockingFailures(t *testing.T) {
+	t.Parallel()
+
+	importPath := modulePath + "/pkg/config"
+	manifest := coverageManifest{
+		Version: coverageManifestVersion,
+		Lane:    "unit",
+		FloorHolds: []coverageManifestFloorHold{{
+			Package:       importPath,
+			Justification: "current-main baseline is being restored",
+			Owner:         "coverage-remediation",
+			Deadline:      "2027-07-15",
+			RemovalGate:   "matching unit tests restore the existing floor",
+		}},
+		Packages: []coverageManifestEntry{{Package: importPath, Minimum: json.RawMessage("80.00")}},
+	}
+
+	failures, warnings := checkCoverageManifestWithEpsilon(
+		manifest,
+		map[string]packageCoverageTotals{importPath: {coveredStatements: 40, totalStatements: 100}},
+		"minimums.json",
+		0,
+	)
+	if len(failures) != 0 {
+		t.Fatalf("held regression failures = %v, want none", failures)
+	}
+	if len(warnings) != 1 {
+		t.Fatalf("held regression warnings = %v, want one", warnings)
+	}
+	for _, want := range []string{
+		"package coverage hold: package=" + importPath,
+		"lane=unit",
+		"expected-minimum=80.00%",
+		"actual=40.0000%",
+		"delta=-40.0000 percentage-points",
+		"staged blocking hold",
+		"matching-unit-lane coverage",
+	} {
+		if !strings.Contains(warnings[0], want) {
+			t.Fatalf("held regression warning = %q, want %q", warnings[0], want)
+		}
+	}
+	if strings.Contains(warnings[0], "package coverage regression") || strings.Contains(warnings[0], "report-only") {
+		t.Fatalf("held regression warning used the wrong policy classification: %q", warnings[0])
 	}
 }
 

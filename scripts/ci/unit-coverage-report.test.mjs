@@ -75,6 +75,33 @@ test("orders gated packages by headroom ascending with violations first", () => 
 	assert.equal(summary.coverage.violationCount, 1);
 });
 
+test("keeps staged floor holds out of active violation counts", () => {
+	const heldPackage = {
+		package: "pkg/held",
+		coveragePercent: 40,
+		packageFloor: 70,
+		packageFloorHeld: true,
+	};
+	const artifact = {
+		...coverageArtifact(),
+		packageFloorPolicy: "blocking",
+		packageFloorFindings: [
+			"package coverage hold: package=pkg/held lane=unit expected-minimum=70.00% actual=40.0000% delta=-30.0000 percentage-points",
+		],
+		packages: [...coverageArtifact().packages, heldPackage],
+	};
+	const summary = summarizeUnitCoverage(artifact, timingArtifact());
+	assert.equal(summary.coverage.violationCount, 1);
+	assert.equal(summary.coverage.floorHoldCount, 1);
+	assert.deepEqual(
+		summary.coverage.violations.map((entry) => entry.package),
+		["pkg/regressed"],
+	);
+	const body = renderUnitCoverageJobSummary(summary);
+	assert.match(body, /- Remediation holds: 1/);
+	assert.match(body, /package coverage hold: package=pkg\/held/);
+});
+
 // Regression: the first real CI run of this report accused 33 passing packages
 // of breaking their floor. The producer rounds coveragePercent to one decimal
 // but authors floors in basis points, so a package measured at 73.3333% against

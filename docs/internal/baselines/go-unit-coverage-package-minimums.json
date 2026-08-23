@@ -2,6 +2,113 @@
   "version": 1,
   "lane": "unit",
   "defaultFloorPercent": 50.00,
+  "floorHolds": [
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/filesystem",
+      "justification": "Complete current-main unit coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/httpserver",
+      "justification": "Complete current-main unit coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/platform/metrics",
+      "justification": "Complete current-main unit coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/costs/transports/http",
+      "justification": "Complete current-main unit coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/edges",
+      "justification": "Complete current-main unit coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/runtime_snapshot/internal",
+      "justification": "Complete current-main unit coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build",
+      "justification": "Complete current-main unit coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/service",
+      "justification": "Complete current-main unit coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/internal/service",
+      "justification": "Complete current-main unit coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/internal/service",
+      "justification": "Complete current-main unit coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/transports/cli",
+      "justification": "Complete current-main unit coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions",
+      "justification": "Complete current-main unit coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/internal/service",
+      "justification": "Complete current-main unit coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/wire",
+      "justification": "Complete current-main unit coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/cli/clihttp",
+      "justification": "Complete current-main unit coverage measured below the existing floor; hold until matching-lane tests restore it.",
+      "owner": "coverage-remediation",
+      "deadline": "2027-07-15",
+      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
+    }
+  ],
   "packages": [
     {
       "package": "github.com/portpowered/infinite-you/pkg/initializer",

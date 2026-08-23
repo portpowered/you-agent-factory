@@ -23,21 +23,24 @@ type coverageSummaryJSON struct {
 }
 
 // packageCoverageJSON reports one measured production package, including the
-// package-gate floor or measurement exception used for that run.
+// package-gate floor, staged hold, or measurement exception used for that run.
 type packageCoverageJSON struct {
 	Package              string                     `json:"package"`
 	CoveredStatements    int                        `json:"coveredStatements"`
 	MeasurableStatements int                        `json:"measurableStatements"`
 	CoveragePercent      float64                    `json:"coveragePercent"`
 	PackageFloor         *float64                   `json:"packageFloor"`
+	PackageFloorHeld     bool                       `json:"packageFloorHeld,omitempty"`
 	MeasurementException *coverageManifestException `json:"measurementException"`
 }
 
 // packageCoverageGate is the package-local floor or exception policy applied
 // during a coverage run. Exactly one of Floor or Exception is set when a gate
-// applies; both remain nil when the package is ungated for that run.
+// applies; FloorHold optionally scopes enforcement for a measured baseline
+// finding. Both Floor and Exception remain nil when the package is ungated.
 type packageCoverageGate struct {
 	Floor     *float64
+	FloorHold *coverageManifestFloorHold
 	Exception *coverageManifestException
 }
 
@@ -86,6 +89,7 @@ func buildPackageCoverageJSON(result coverageResult) []packageCoverageJSON {
 			MeasurableStatements: totals.totalStatements,
 			CoveragePercent:      roundCoveragePercent(summary.coverage),
 			PackageFloor:         gate.Floor,
+			PackageFloorHeld:     gate.FloorHold != nil,
 			MeasurementException: cloneCoverageManifestException(gate.Exception),
 		}
 		packages = append(packages, entry)
@@ -114,8 +118,17 @@ func cloneCoverageManifestException(exception *coverageManifestException) *cover
 	return &cloned
 }
 
+func cloneCoverageManifestFloorHold(hold *coverageManifestFloorHold) *coverageManifestFloorHold {
+	if hold == nil {
+		return nil
+	}
+	cloned := *hold
+	return &cloned
+}
+
 func packageGatesFromManifest(manifest coverageManifest) map[string]packageCoverageGate {
 	gates := make(map[string]packageCoverageGate, len(manifest.Packages))
+	holds := coverageManifestFloorHoldMap(manifest)
 	for _, entry := range manifest.Packages {
 		if entry.Exception != nil {
 			gates[entry.Package] = packageCoverageGate{
@@ -129,7 +142,11 @@ func packageGatesFromManifest(manifest coverageManifest) map[string]packageCover
 			continue
 		}
 		percent := float64(floor) / 100
-		gates[entry.Package] = packageCoverageGate{Floor: &percent}
+		gate := packageCoverageGate{Floor: &percent}
+		if hold, held := holds[entry.Package]; held {
+			gate.FloorHold = cloneCoverageManifestFloorHold(&hold)
+		}
+		gates[entry.Package] = gate
 	}
 	return gates
 }
