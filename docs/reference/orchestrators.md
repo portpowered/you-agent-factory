@@ -111,6 +111,7 @@ argument contract is intentionally small:
 | `model` | Optional string |
 | `reasoningEffort` | Optional string |
 | `resourceId` | Optional stable Factory Runtime resource ID whose capacity admission governs the child |
+| `schema` | Optional valid JSON Schema object; the runtime validates and detaches it before dispatch |
 | `permissions` | Optional `DEFAULT` or `SKIP_PERMISSIONS`; controls whether the selected provider receives its existing bypass flag |
 | `skipPermissions` | Optional boolean; set `true` only when the child is intentionally autonomous |
 
@@ -126,12 +127,17 @@ const child = await agent.run({
   model: "gpt-example",
   reasoningEffort: "high",
   resourceId: "reviewers",
+  schema: {
+    type: "object",
+    properties: { decision: { type: "string" } },
+    required: ["decision"],
+  },
   permissions: "DEFAULT",
 });
 ```
 
 All other per-child properties are rejected before dispatch. In particular,
-host-access fields, output schemas, per-child concurrency or agent caps, and
+host-access fields, `outputSchema`, per-child concurrency or agent caps, and
 duration controls are unsupported. Configure global budgets on an applicable
 factory or Factory Session policy surface when one exists. The canonical
 per-child permission control is `permissions`: `DEFAULT` leaves the provider's

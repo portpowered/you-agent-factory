@@ -742,6 +742,131 @@ func TestRun_AgentRunStaticAndDynamicObjectsCarryCanonicalFieldsToExecutor(t *te
 	}
 }
 
+func TestRun_AgentRunSchemaReachesExecutorAsDetachedValidatedObject(t *testing.T) {
+	stub := &stubChildExecutor{mode: stubChildExecutionMode}
+	outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+		Source: `const schema = { type: "object", properties: { answer: { type: "string" } }, required: ["answer"] };
+const child = agent.run({ prompt: "review", schema });
+schema.properties.answer.type = "number";
+return child;`,
+		SourceRef: "inline", SessionID: "schema-detached",
+		Policy: workflowpolicy.DefaultEffectivePolicy(),
+	}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+		return stub
+	}})
+	if err != nil || !outcome.OK {
+		t.Fatalf("Run() = outcome %#v, error %v", outcome, err)
+	}
+	requests := stub.executionRequests()
+	if len(requests) != 1 {
+		t.Fatalf("executor requests = %#v, want one request", requests)
+	}
+	want := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"answer": map[string]any{"type": "string"},
+		},
+		"required": []any{"answer"},
+	}
+	if !reflect.DeepEqual(requests[0].OutputSchema, want) {
+		t.Fatalf("executor schema = %#v, want %#v", requests[0].OutputSchema, want)
+	}
+	if workflowruntime.SchemaDigest(requests[0].OutputSchema) == "" {
+		t.Fatal("executor schema digest = empty, want deterministic digest input")
+	}
+}
+
+func TestRun_ParallelSchemasAreValidatedAndDetachedPerChild(t *testing.T) {
+	stub := &stubChildExecutor{mode: stubChildExecutionMode}
+	outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+		Source: `const schema = { type: "object", properties: { answer: { type: "string" } } };
+return parallel([
+  { prompt: "first", label: "first", schema },
+  { prompt: "second", label: "second", schema },
+]);`,
+		SourceRef: "inline", SessionID: "parallel-schema-detached",
+		Policy: workflowpolicy.DefaultEffectivePolicy(),
+	}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+		return stub
+	}})
+	if err != nil || !outcome.OK {
+		t.Fatalf("Run() = outcome %#v, error %v", outcome, err)
+	}
+	requests := stub.executionRequests()
+	if len(requests) != 2 {
+		t.Fatalf("executor requests = %#v, want two requests", requests)
+	}
+	for _, request := range requests {
+		properties, ok := request.OutputSchema["properties"].(map[string]any)
+		if !ok || properties["answer"].(map[string]any)["type"] != "string" {
+			t.Fatalf("executor request %q schema = %#v, want validated object schema", request.Label, request.OutputSchema)
+		}
+	}
+	requests[0].OutputSchema["properties"].(map[string]any)["answer"].(map[string]any)["type"] = "number"
+	if requests[1].OutputSchema["properties"].(map[string]any)["answer"].(map[string]any)["type"] != "string" {
+		t.Fatal("parallel child schemas share mutable nested state")
+	}
+}
+
+func TestRun_AgentRunRejectsInvalidSchemaBeforeChildDispatch(t *testing.T) {
+	cases := []struct {
+		name   string
+		source string
+	}{
+		{
+			name:   "non-object",
+			source: `agent.run({ prompt: "prompt-secret", schema: "schema-secret" });`,
+		},
+		{
+			name:   "invalid-json-schema",
+			source: `agent.run({ prompt: "prompt-secret", schema: { type: "not-a-schema-type" } });`,
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			stub := &stubChildExecutor{mode: stubChildExecutionMode}
+			outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+				Source: test.source, SourceRef: "inline", SessionID: "invalid-child-schema-" + test.name,
+				Policy: workflowpolicy.DefaultEffectivePolicy(),
+			}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+				return stub
+			}})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if outcome.OK || !strings.Contains(outcome.Failure.Message, `"schema"`) {
+				t.Fatalf("Run() outcome = %#v, want schema failure", outcome)
+			}
+			for _, secret := range []string{"prompt-secret", "schema-secret"} {
+				if strings.Contains(outcome.Failure.Message, secret) {
+					t.Fatalf("failure message = %q, must not expose %q", outcome.Failure.Message, secret)
+				}
+			}
+			if len(stub.executionRequests()) != 0 {
+				t.Fatalf("executor requests = %#v, want none", stub.executionRequests())
+			}
+			assertNoChildDispatchRecords(t, outcome.Records)
+		})
+	}
+}
+
+func TestSchemaDigest_IsDeterministicForEquivalentSchemas(t *testing.T) {
+	t.Parallel()
+	left := map[string]any{
+		"required":   []any{"answer"},
+		"properties": map[string]any{"answer": map[string]any{"type": "string"}},
+		"type":       "object",
+	}
+	right := map[string]any{
+		"type":       "object",
+		"properties": map[string]any{"answer": map[string]any{"type": "string"}},
+		"required":   []any{"answer"},
+	}
+	if got, want := workflowruntime.SchemaDigest(left), workflowruntime.SchemaDigest(right); got == "" || got != want {
+		t.Fatalf("SchemaDigest(left) = %q, right = %q, want equal non-empty digests", got, want)
+	}
+}
+
 func TestRun_AgentRunRejectsNonBooleanSkipPermissionsBeforeDispatch(t *testing.T) {
 	stub := &stubChildExecutor{mode: stubChildExecutionMode}
 	outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{

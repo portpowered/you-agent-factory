@@ -771,6 +771,8 @@ func agentRunErrorSource(condition string) string {
 		return `return agent.run({ prompt: "review", reasoningEffort: "not-an-effort" });`
 	case "non-boolean-skip-permissions":
 		return `return agent.run({ prompt: "review", skipPermissions: "true" });`
+	case "non-object-schema":
+		return `return agent.run({ prompt: "review", schema: "schema-secret" });`
 	default:
 		return ""
 	}

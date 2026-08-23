@@ -283,6 +283,7 @@ func childExecutionRequestFromSpec(spec map[string]any, workflowName, argsSubjec
 		Model:                        normalized.Model,
 		ReasoningEffort:              normalized.ReasoningEffort,
 		ResourceID:                   normalized.ResourceID,
+		OutputSchema:                 normalized.Schema,
 		SkipPermissions:              normalized.SkipPermissions,
 		LegacySkipPermissionsPresent: normalized.LegacySkipPermissionsPresent,
 		WorkflowName:                 workflowName,

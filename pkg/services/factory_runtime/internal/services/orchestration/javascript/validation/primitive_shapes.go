@@ -146,11 +146,23 @@ func (a *sourceAnalyzer) validateAgentRunField(call *js.CallExpr, field string, 
 		} else if found && !isAgentRunPermissionValue(value) {
 			a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be DEFAULT or SKIP_PERMISSIONS`, field), call)
 		}
+	case orchestratorcontract.FieldSchema:
+		if found && !isAgentRunSchemaValue(value) {
+			a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be an object value`, field), call)
+		}
 	default:
 		if found && !isAgentRunStringValue(value) {
 			a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be a string value`, field), call)
 		}
 	}
+}
+
+func isAgentRunSchemaValue(value js.IExpr) bool {
+	if !isLiteralExpr(value) {
+		return true
+	}
+	_, ok := isObjectLiteral(value)
+	return ok
 }
 
 func isAgentRunPermissionValue(value js.IExpr) bool {
