@@ -130,6 +130,7 @@ test("the validation CLI emits a matrix output suitable for GitHub Actions", asy
 	assert.match(outputText, /localai_commit=b224c96db6f4b87306a33a808650bfce63b12588/);
 	assert.match(outputText, /protobuf_version=24\.3/);
 	assert.match(outputText, /windows_msys_packages=make=4\.4\.1-3/);
+	assert.match(outputText, /mingw-w64-x86_64-make=4\.4\.1-5/);
 	assert.match(outputText, /windows_vcpkg_triplet=x64-mingw-static-release/);
 	assert.match(result.stdout, /LOCALAI_BACKEND_ARTIFACT_INPUTS_OK combinations=9/);
 });
@@ -267,6 +268,7 @@ test("the build harness selects the Windows and Unix strategies at runtime", (t)
 		binary: "llama-cpp-cpu-all",
 		cxx_standard: "17",
 		cmake_generator: "mingw-makefiles",
+		cmake_make_program: "mingw32-make",
 	});
 	assert.deepEqual(buildPlan({ backend: "localai-llamacpp", target: "darwin-arm64", buildType: "metal" }), {
 		backend: "localai-llamacpp",

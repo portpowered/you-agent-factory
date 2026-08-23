@@ -97,6 +97,7 @@ verify_host_toolchain() {
 		windows-amd64)
 			assert_tool_version "GCC" "$(config_value hostToolchain windows msysPackages | sed 's/.*gcc=//' | cut -d- -f1)" gcc --version
 			assert_tool_version "GNU Make" "$(config_value hostToolchain windows msysPackages | sed -n 's/^.*make=\([^ ]*\).*$/\1/p' | cut -d- -f1)" "$make_command" --version
+			assert_tool_version "MinGW Make" "$(config_value hostToolchain windows msysPackages | sed -n 's/^.*mingw-w64-x86_64-make=\([^ ]*\).*$/\1/p' | cut -d- -f1)" mingw32-make --version
 			assert_tool_version "Ninja" "$(config_value hostToolchain windows msysPackages | sed -n 's/.*ninja=\([^ ]*\)$/\1/p' | cut -d- -f1)" ninja --version
 			;;
 		*)
@@ -179,12 +180,14 @@ if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
 	fi
 	plan_cxx_standard=""
 	plan_cmake_generator=""
+	plan_cmake_make_program=""
 	if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 		plan_cxx_standard=" cxx_standard=$windows_cxx_standard"
 		plan_cmake_generator=" cmake_generator=mingw-makefiles"
+		plan_cmake_make_program=" cmake_make_program=mingw32-make"
 	fi
 	printf 'LOCALAI_BACKEND_BUILD_PLAN backend=%s target=%s shell=%s strategy=%s binary=%s%s%s%s\n' \
-		"$BACKEND_ID" "$TARGET_ID" "$build_shell" "$build_strategy" "$binary" "$plan_git" "$plan_cxx_standard" "$plan_cmake_generator"
+		"$BACKEND_ID" "$TARGET_ID" "$build_shell" "$build_strategy" "$binary" "$plan_git" "$plan_cxx_standard" "$plan_cmake_generator$plan_cmake_make_program"
 	exit 0
 fi
 
@@ -214,6 +217,9 @@ if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 		"-DCMAKE_TOOLCHAIN_FILE=${toolchain}"
 		"-DVCPKG_TARGET_TRIPLET=${triplet}"
 		"-DVCPKG_OVERLAY_TRIPLETS=${overlay_triplets}"
+		"-DCMAKE_MAKE_PROGRAM=mingw32-make"
+		"-DCMAKE_C_COMPILER=gcc"
+		"-DCMAKE_CXX_COMPILER=g++"
 		"-DCMAKE_BUILD_TYPE=Release"
 		"-DBUILD_SHARED_LIBS=OFF"
 		"-DCMAKE_CXX_STANDARD=${windows_cxx_standard}"
@@ -486,7 +492,7 @@ case "$build_strategy" in
 	windows-whisper)
 	mkdir -p "${backend_path}/package"
 	"$make_command" -C "$backend_path" sources/whisper.cpp
-	cmake -S "$backend_path" -B "${backend_path}/build-windows" -G "MinGW Makefiles" "${cmake_args[@]}" -DGGML_NATIVE=OFF
+	cmake -S "$backend_path" -B "${backend_path}/build-windows" -G "$windows_cmake_generator" "${cmake_args[@]}" -DGGML_NATIVE=OFF
 	cmake --build "${backend_path}/build-windows" --config Release --target gowhisper
 	go build -C "$backend_path" -o "${backend_path}/package/${binary}.exe" ./
 	find "${backend_path}/build-windows" -type f -name 'libgowhisper*.dll' -size +0c -exec cp {} "${backend_path}/package/" \;
@@ -495,7 +501,7 @@ case "$build_strategy" in
 	windows-vibevoice)
 	mkdir -p "${backend_path}/package"
 	"$make_command" -C "$backend_path" sources/vibevoice.cpp
-	cmake -S "$backend_path" -B "${backend_path}/build-windows" -G "MinGW Makefiles" "${cmake_args[@]}" -DGGML_NATIVE=OFF -DVIBEVOICE_BUILD_TESTS=OFF -DVIBEVOICE_BUILD_EXAMPLES=OFF
+	cmake -S "$backend_path" -B "${backend_path}/build-windows" -G "$windows_cmake_generator" "${cmake_args[@]}" -DGGML_NATIVE=OFF -DVIBEVOICE_BUILD_TESTS=OFF -DVIBEVOICE_BUILD_EXAMPLES=OFF
 	cmake --build "${backend_path}/build-windows" --config Release --target govibevoicecpp
 	go build -C "$backend_path" -o "${backend_path}/package/${binary}.exe" ./
 	find "${backend_path}/build-windows" -type f -name 'libgovibevoicecpp*.dll' -size +0c -exec cp {} "${backend_path}/package/" \;

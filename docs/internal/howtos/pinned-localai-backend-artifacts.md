@@ -73,7 +73,10 @@ static library triplet, so the runtime closure is still staged and verified.
    Do not replace the exact Linux, macOS, or MSYS2 host versions with floating
    package installs. The workflow verifies the Linux runner image, installs
    the macOS GNU Make formula from its pinned Homebrew commit, and requests
-   the exact MSYS2 package versions from the manifest.
+   the exact MSYS2 package versions from the manifest. Windows intentionally
+   pins both MSYS `make` (for the LocalAI recursive Makefiles) and
+   `mingw-w64-x86_64-make` (which provides `mingw32-make` for the MinGW CMake
+   generator); neither tool may be replaced with an unpinned fallback.
 
 6. Run the schema-aware workflow lint gate before dispatching:
 

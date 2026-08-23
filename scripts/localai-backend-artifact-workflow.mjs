@@ -25,6 +25,7 @@ const expectedWorkflowPins = {
 };
 const expectedWindowsMsysPackages = [
 	"make=4.4.1-3",
+	"mingw-w64-x86_64-make=4.4.1-5",
 	"mingw-w64-x86_64-binutils=2.47-3",
 	"mingw-w64-x86_64-gcc=16.2.0-3",
 	"mingw-w64-x86_64-ninja=1.13.2-1",
