@@ -615,7 +615,7 @@ func writeRunCommandHelp(cmd *cobra.Command, cfg *runcli.RunConfig, rootOptions 
 	cfg.ResolveFactoryConfigRoot = rootOptions.resolveFactoryConfigRoot
 	cfg.LoadFactoryConfigFile = rootOptions.loadFactoryConfigFile
 	cfg.WorkRequestFileLoader = rootOptions.workRequestFileLoader
-	homeDir, err := resolveProcessHomeDir(rootOptions)
+	homeDir, err := resolveProcessHomeDirForCommand(cmd, rootOptions)
 	if err != nil {
 		return err
 	}

@@ -18,9 +18,108 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
+
+func TestLocalRunDisclosesResolvedHomeBeforeSystemInitialization(t *testing.T) {
+	originalRunCLI := runCLI
+	t.Cleanup(func() { runCLI = originalRunCLI })
+
+	home := t.TempDir()
+	workingFactory := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	resolverCalls := 0
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		if cfg.StartupOutput == nil {
+			t.Fatal("startup output is nil for a human local run")
+		}
+		_, err := fmt.Fprintln(cfg.StartupOutput, "Factory initiated: test")
+		return err
+	}
+
+	factory := withTestInjectedPlatformRoles(CommandFactory{})
+	root := factory.NewCommand(func() (string, error) {
+		resolverCalls++
+		return home, nil
+	}, func(string) (string, bool) { return "", false }, startupcli.Functions{
+		InitializeSystemFunc: func(_ context.Context, initializedHome string) error {
+			if initializedHome != home {
+				t.Fatalf("initialized home = %q, want %q", initializedHome, home)
+			}
+			wantPrefix := "Home directory: " + home + "\n"
+			if got := stdout.String(); got != wantPrefix {
+				t.Fatalf("startup output before system initialization = %q, want %q", got, wantPrefix)
+			}
+			return nil
+		},
+		RunFunc: func(ctx context.Context, _ startupcli.RunIntent, selection startupcli.RunSelection) error {
+			return runCLI(ctx, testRunConfig(selection))
+		},
+	})
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"run", "--dir", workingFactory, "--no-record"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute local run: %v", err)
+	}
+	if resolverCalls != 1 {
+		t.Fatalf("home resolver calls = %d, want one invocation-local resolution", resolverCalls)
+	}
+	if got, want := stdout.String(), "Home directory: "+home+"\nFactory initiated: test\n"; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty human startup diagnostics", stderr.String())
+	}
+}
+
+func TestLocalRunHomeDisclosureKeepsJSONStdoutParseable(t *testing.T) {
+	originalRunCLI := runCLI
+	t.Cleanup(func() { runCLI = originalRunCLI })
+
+	home := t.TempDir()
+	workingFactory := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		output := cfg.Output
+		if output == nil {
+			output = cfg.StartupOutput
+		}
+		if output == nil {
+			t.Fatal("JSON run output and startup output are nil")
+		}
+		_, err := fmt.Fprintln(output, `{"status":"started"}`)
+		return err
+	}
+
+	factory := withTestInjectedPlatformRoles(CommandFactory{})
+	root := factory.NewCommand(func() (string, error) { return home, nil }, func(string) (string, bool) { return "", false }, startupcli.Functions{
+		InitializeSystemFunc: func(context.Context, string) error { return nil },
+		RunFunc: func(ctx context.Context, _ startupcli.RunIntent, selection startupcli.RunSelection) error {
+			return runCLI(ctx, testRunConfig(selection))
+		},
+	})
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"--json", "run", "--dir", workingFactory, "--with-server", "--no-record"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute JSON local run: %v", err)
+	}
+	var result map[string]string
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("stdout is not parseable JSON: %v\n%s", err, stdout.String())
+	}
+	if result["status"] != "started" {
+		t.Fatalf("JSON result = %#v, want started status", result)
+	}
+	if got, want := stderr.String(), "Home directory: "+home+"\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
 
 func TestProductionMCPServeGeneratedMetadataDelegatesStdioInitializer(t *testing.T) {
 	var got startupcli.MCPIntent

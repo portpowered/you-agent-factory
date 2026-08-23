@@ -617,7 +617,7 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 		}
 		warnLegacyListenerBinding(cmd, cfg, defaultInvocation, persistentInputWasCLI(cmd, "you.flag.server", "server"))
 	}
-	homeDir, err := resolveProcessHomeDir(rootOptions)
+	homeDir, err := resolveProcessHomeDirForCommand(cmd, rootOptions)
 	if err != nil {
 		return err
 	}
