@@ -346,6 +346,7 @@ func agentRunRecord() CallBehaviorRecord {
 					idProperty("modelProvider", false, "string"),
 					idProperty("model", false, "string"),
 					idProperty("reasoningEffort", false, "string"),
+					idProperty("schema", false, "object"),
 					idProperty("skipPermissions", false, "boolean"),
 				},
 			},
@@ -400,6 +401,11 @@ func agentRunRecord() CallBehaviorRecord {
 				Condition: "non-boolean-skip-permissions",
 				Type:      "TypeError",
 				Message:   `agent.run() requires "skipPermissions" to be a boolean`,
+			},
+			{
+				Condition: "non-object-schema",
+				Type:      "TypeError",
+				Message:   `agent.run() requires "schema" to be an object`,
 			},
 		},
 	}

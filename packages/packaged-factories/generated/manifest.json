@@ -96,11 +96,11 @@
       "slug": "deep-research",
       "json": {
         "locator": "generated/factories/deep-research/factory.json",
-        "sha256": "41f5ed140dfb3f61b6d4b951a7468adea640277c2e16ea8da309ad83f97d260b"
+        "sha256": "b0cd92f470c046ce440aa63c140bcae5d0d962fdadfeece3cd11857eef6dd3e0"
       },
       "yaml": {
         "locator": "generated/factories/deep-research/factory.yaml",
-        "sha256": "40c909db90fa7641932ba871cccba606f6dd2437cb188f033baa6320921eaaf3"
+        "sha256": "6d5d450899cd6171ff77b64f53b8a4c9659463ce536bb75afaf9b527b4a5cb80"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -501,11 +501,11 @@
       "slug": "spawn",
       "json": {
         "locator": "generated/factories/spawn/factory.json",
-        "sha256": "23825eb44eebe7b0d07f7357874907d235a88b7bfe398b8a8fbc344f9872a681"
+        "sha256": "e335e30705e566a1ea82e9e3ddf517f4097ff275de83993635615431164ad2c8"
       },
       "yaml": {
         "locator": "generated/factories/spawn/factory.yaml",
-        "sha256": "a755018ed500dd7bb32663f2a4313c54c74695ea3f9a58b24fc205be7a332bdd"
+        "sha256": "d963c9e7cf49f9c59130103a88db5f626a76d20b6180e3c5bbede81ac6b8c01e"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",

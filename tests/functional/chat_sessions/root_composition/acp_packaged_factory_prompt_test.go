@@ -308,12 +308,16 @@ func (runner *spawnACPRunner) Run(
 	switch {
 	case strings.Contains(prompt, "You are a task planner"):
 		return process.CommandResult{Stdout: support.CodexSuccessStdout(
-			`["first independent task","second independent task","third independent task"]`,
+			`{"tasks":["first independent task","second independent task","third independent task"]}`,
 		)}, nil
 	case strings.Contains(prompt, "You are the final merger"):
-		return process.CommandResult{Stdout: support.CodexSuccessStdout("merged spawn result over ACP")}, nil
+		return process.CommandResult{Stdout: support.CodexSuccessStdout(
+			`{"answer":"merged spawn result over ACP"}`,
+		)}, nil
 	default:
-		return process.CommandResult{Stdout: support.CodexSuccessStdout("independent task finding")}, nil
+		return process.CommandResult{Stdout: support.CodexSuccessStdout(
+			`{"result":"independent task finding"}`,
+		)}, nil
 	}
 }
 
@@ -405,12 +409,20 @@ type deepResearchACPRunner struct {
 
 func (runner *deepResearchACPRunner) Run(
 	_ context.Context,
-	_ process.CommandRequest,
+	request process.CommandRequest,
 ) (process.CommandResult, error) {
 	runner.mu.Lock()
 	runner.calls++
 	runner.mu.Unlock()
-	return process.CommandResult{Stdout: support.CodexSuccessStdout("deep research finding over ACP")}, nil
+	prompt := string(request.Stdin)
+	if strings.Contains(prompt, "in its evidence field") {
+		return process.CommandResult{Stdout: support.CodexSuccessStdout(
+			`{"evidence":"deep research finding over ACP"}`,
+		)}, nil
+	}
+	return process.CommandResult{Stdout: support.CodexSuccessStdout(
+		`{"answer":"deep research finding over ACP"}`,
+	)}, nil
 }
 
 func (runner *deepResearchACPRunner) callCount() int {

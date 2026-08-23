@@ -130,6 +130,35 @@
 */
 
 return (async function () {
+  const taskPlanSchema = {
+    type: "object",
+    properties: {
+      tasks: {
+        type: "array",
+        minItems: args.count,
+        maxItems: args.count,
+        items: { type: "string", minLength: 1 },
+      },
+    },
+    required: ["tasks"],
+    additionalProperties: false,
+  };
+  const taskResultSchema = {
+    type: "object",
+    properties: {
+      result: { type: "string", minLength: 1 },
+    },
+    required: ["result"],
+    additionalProperties: false,
+  };
+  const mergerResultSchema = {
+    type: "object",
+    properties: {
+      answer: { type: "string", minLength: 1 },
+    },
+    required: ["answer"],
+    additionalProperties: false,
+  };
   const requiredCalls = args.count + 2;
   const budget = workflow.budget();
   if (requiredCalls > budget.maxAgents) {
@@ -138,28 +167,18 @@ return (async function () {
   phase("task-planning");
   const plan = await agent.run({
     label: "spawn-planner",
-    prompt: "You are a task planner with zero prior context. Read the complete request below and decompose it into exactly " + args.count + " distinct, non-empty tasks that can be executed independently. Each task string must be a standalone specification for a fresh agent: include its objective, necessary request context, boundaries, expected output, and success criteria. Avoid overlaps and hidden dependencies. Return only a JSON array of strings with exactly that length.\n\nRequest:\n" + args.request,
+    prompt: "You are a task planner with zero prior context. Read the complete request below and decompose it into exactly " + args.count + " distinct, non-empty tasks that can be executed independently. Each task string must be a standalone specification for a fresh agent: include its objective, necessary request context, boundaries, expected output, and success criteria. Avoid overlaps and hidden dependencies. Return only a JSON object with a tasks array of strings with exactly that length.\n\nRequest:\n" + args.request,
     executorProvider: args.executorProvider || "",
     modelProvider: args.modelProvider || "",
     model: args.model || "",
     skipPermissions: true,
+    schema: taskPlanSchema,
   });
-  if (plan.status !== "COMPLETED") {
+  if (plan.status !== "COMPLETED" || !plan.schemaValidated) {
     throw "spawn planner failed";
   }
 
-  let tasks;
-  try {
-    const planText = plan.output.text.trim();
-    const planStart = planText.indexOf("[");
-    const planEnd = planText.lastIndexOf("]");
-    if (planStart < 0 || planEnd < planStart) {
-      throw "missing task array";
-    }
-    tasks = JSON.parse(planText.slice(planStart, planEnd + 1));
-  } catch (_) {
-    throw "spawn planner returned invalid JSON";
-  }
+  const tasks = plan.output && Array.isArray(plan.output.tasks) ? plan.output.tasks.slice() : [];
   if (!Array.isArray(tasks) || tasks.length !== args.count) {
     throw "spawn planner must return exactly " + args.count + " tasks";
   }
@@ -187,18 +206,23 @@ return (async function () {
       modelProvider: args.modelProvider || "",
       model: args.model || "",
       skipPermissions: true,
+      schema: taskResultSchema,
     });
   }
   const results = await parallel(specs);
   const findings = [];
   for (let index = 0; index < results.length; index += 1) {
-    if (results[index].status !== "COMPLETED") {
+    if (results[index].status !== "COMPLETED" || !results[index].schemaValidated) {
       throw "spawn task " + (index + 1) + " failed";
+    }
+    const result = results[index].output.result;
+    if (typeof result !== "string" || result.trim() === "") {
+      throw "spawn task " + (index + 1) + " returned an empty result";
     }
     findings.push({
       index: index + 1,
       task: tasks[index],
-      result: results[index].output.text,
+      result: result.trim(),
     });
   }
 
@@ -211,12 +235,13 @@ return (async function () {
     modelProvider: args.modelProvider || "",
     model: args.model || "",
     skipPermissions: true,
+    schema: mergerResultSchema,
   });
-  if (merged.status !== "COMPLETED") {
+  if (merged.status !== "COMPLETED" || !merged.schemaValidated) {
     throw "spawn merger failed";
   }
 
-  const mergedText = merged.output.text.trim();
+  const mergedText = merged.output.answer.trim();
   if (!mergedText) {
     throw "spawn merger returned an empty result";
   }

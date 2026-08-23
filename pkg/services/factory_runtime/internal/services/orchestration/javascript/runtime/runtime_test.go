@@ -994,6 +994,8 @@ func TestCompletedChildResultsFromRecords_RestoresStoredLiveProviderOutput(t *te
 				ReasoningEffort: "xhigh",
 				SkipPermissions: true,
 				ExecutionMode:   factory.JavaScriptChildExecutionModeLive,
+				SchemaValidated: true,
+				SchemaDigest:    "schema-digest",
 				Output:          storedOutput,
 			},
 		},
@@ -1009,6 +1011,9 @@ func TestCompletedChildResultsFromRecords_RestoresStoredLiveProviderOutput(t *te
 	}
 	if result.ExecutionMode != factory.JavaScriptChildExecutionModeLive {
 		t.Fatalf("executionMode = %q, want live-provider", result.ExecutionMode)
+	}
+	if !result.SchemaValidated || result.SchemaDigest != "schema-digest" {
+		t.Fatalf("restored schema metadata = validated:%v digest:%q, want true/schema-digest", result.SchemaValidated, result.SchemaDigest)
 	}
 	if result.Request.Preset != "careful" ||
 		result.Request.ModelProvider != "codex" ||
