@@ -376,7 +376,7 @@ func (p *protocol) doJSON(
 	if dst != nil {
 		if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
 			_ = resp.Body.Close()
-			return result, fmt.Errorf("parse response: %w", err)
+			return result, WithHTTPResponse(resp, fmt.Errorf("parse response: %w", err))
 		}
 	}
 	return result, nil

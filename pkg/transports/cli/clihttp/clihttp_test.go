@@ -229,3 +229,40 @@ func TestProtocolTransportFailurePreservesHTTPDebugMetadata(t *testing.T) {
 		t.Fatalf("transport HTTP metadata = (%q, %q, %d)", metadata.CLIHTTPMethod(), metadata.CLIHTTPURL(), metadata.CLIHTTPStatus())
 	}
 }
+
+func TestProtocolDecodeFailurePreservesHTTPDebugMetadata(t *testing.T) {
+	t.Parallel()
+
+	request, err := http.NewRequest(http.MethodGet, "https://factory.test/factory-sessions?token=secret", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	clock := &clockSequence{values: []time.Time{time.Unix(1, 0), time.Unix(1, 1)}}
+	protocol, err := NewProtocol(doerFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Request:    request,
+			Body:       io.NopCloser(strings.NewReader("{")),
+		}, nil
+	}), clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, gotErr := protocol.GetJSON(context.Background(), request.URL.String(), &struct{}{})
+	if gotErr == nil {
+		t.Fatal("decode failure = nil, want error")
+	}
+	var metadata interface {
+		CLIHTTPMethod() string
+		CLIHTTPURL() string
+		CLIHTTPStatus() int
+	}
+	if !errors.As(gotErr, &metadata) {
+		t.Fatalf("decode failure = %T, want HTTP metadata", gotErr)
+	}
+	if metadata.CLIHTTPMethod() != http.MethodGet ||
+		metadata.CLIHTTPURL() != request.URL.String() ||
+		metadata.CLIHTTPStatus() != http.StatusOK {
+		t.Fatalf("decode HTTP metadata = (%q, %q, %d)", metadata.CLIHTTPMethod(), metadata.CLIHTTPURL(), metadata.CLIHTTPStatus())
+	}
+}
