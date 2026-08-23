@@ -1695,11 +1695,6 @@
     {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/operator_settings/defaults_resolution.go",
-      "target": "LoadFileDefaults"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/defaults_resolution.go",
       "target": "Resolve"
     },
     {
@@ -1750,36 +1745,6 @@
     {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/work/admission_contract.go",
-      "target": "ResolveWorkRequestCurrentChainingTraceID"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/admission_contract.go",
-      "target": "SubmitResultFromNormalized"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/admission_contract.go",
-      "target": "SubmitWorkName"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/admission_contract.go",
-      "target": "ValidateCanonicalWorkRequestJSON"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/admission_contract.go",
-      "target": "ValidateWorkRequestTraceFieldAliases"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/admission_contract.go",
-      "target": "ValidateWorkRequestTraceFields"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/admission_contract.go",
       "target": "WorkRequestFromSubmitRequests"
     },
     {
@@ -1801,11 +1766,6 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/work/content_contract.go",
       "target": "FilesystemPathToContentURL"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/content_contract.go",
-      "target": "NormalizeFileBackedContent"
     },
     {
       "rule": "service-root-exported-function",

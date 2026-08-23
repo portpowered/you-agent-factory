@@ -118,19 +118,3 @@ func NormalizeFileBackedContentPart(part WorkContentPart) (WorkContentPart, erro
 	part.File = ""
 	return part, nil
 }
-
-// NormalizeFileBackedContent normalizes every content part in order.
-func NormalizeFileBackedContent(content []WorkContentPart) ([]WorkContentPart, error) {
-	if len(content) == 0 {
-		return content, nil
-	}
-	normalized := make([]WorkContentPart, len(content))
-	for i, part := range content {
-		var err error
-		normalized[i], err = NormalizeFileBackedContentPart(part)
-		if err != nil {
-			return nil, fmt.Errorf("content[%d]: %w", i, err)
-		}
-	}
-	return normalized, nil
-}

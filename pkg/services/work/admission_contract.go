@@ -229,30 +229,6 @@ func ParseCanonicalWorkRequestJSON(data []byte) (WorkRequest, error) {
 	return workRequestFromAdmission(request), nil
 }
 
-// ValidateCanonicalWorkRequestJSON validates public Work request field names
-// and trace aliases without constructing runtime state.
-func ValidateCanonicalWorkRequestJSON(data []byte) error {
-	return requestadmission.ValidateCanonicalWorkRequestJSON(data)
-}
-
-// ResolveWorkRequestCurrentChainingTraceID returns the effective chaining
-// trace, preferring the current field while preserving traceId fallback.
-func ResolveWorkRequestCurrentChainingTraceID(current, legacy string) string {
-	return requestadmission.ResolveWorkRequestCurrentChainingTraceID(current, legacy)
-}
-
-// ValidateWorkRequestTraceFields rejects conflicting current and legacy trace
-// values when both are populated.
-func ValidateWorkRequestTraceFields(current, legacy string) error {
-	return requestadmission.ValidateWorkRequestTraceFields(current, legacy)
-}
-
-// ValidateWorkRequestTraceFieldAliases validates the public and retired JSON
-// spellings before the request is decoded.
-func ValidateWorkRequestTraceFieldAliases(currentRaw, legacyCurrentRaw, traceRaw, legacyTraceRaw json.RawMessage) error {
-	return requestadmission.ValidateWorkRequestTraceFieldAliases(currentRaw, legacyCurrentRaw, traceRaw, legacyTraceRaw)
-}
-
 // WorkRequestFromSubmitRequests projects normalized submissions into the
 // canonical FACTORY_REQUEST_BATCH contract.
 func WorkRequestFromSubmitRequests(requests []SubmitRequest) WorkRequest {
@@ -274,11 +250,6 @@ func NormalizeWorkRequest(req WorkRequest, opts WorkRequestNormalizeOptions) ([]
 	return submitRequestsFromAdmission(normalized), nil
 }
 
-// SubmitResultFromNormalized builds accepted batch metadata from normalized submit requests.
-func SubmitResultFromNormalized(requestID string, normalized []SubmitRequest) WorkRequestSubmitResult {
-	return WorkRequestSubmitResultFromNormalized(requestID, normalized, true)
-}
-
 // NormalizeGeneratedSubmissionBatch validates the canonical generated request
 // and merges optional runtime submission fields onto the matching work items.
 func NormalizeGeneratedSubmissionBatch(batch GeneratedSubmissionBatch, opts WorkRequestNormalizeOptions) ([]SubmitRequest, error) {
@@ -297,11 +268,6 @@ func NormalizeGeneratedSubmissionBatch(batch GeneratedSubmissionBatch, opts Work
 func WorkRequestRecordFromSubmitRequests(requestID string, source string, requests []SubmitRequest) WorkRequestRecord {
 	record := requestadmission.WorkRequestRecordFromSubmitRequests(requestID, source, submitRequestsToAdmission(requests))
 	return workRequestRecordFromAdmission(record)
-}
-
-// SubmitWorkName returns the canonical display name for a submit request.
-func SubmitWorkName(req SubmitRequest) string {
-	return requestadmission.SubmitWorkName(submitRequestToAdmission(req))
 }
 
 type fileSourceAdapter struct {
