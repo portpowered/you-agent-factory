@@ -43,6 +43,7 @@ const (
 	modelsInvokeOutputID     = "you.models.invoke.flag.output"
 	modelsInvokeOutputMapID  = "you.models.invoke.flag.output-map"
 	modelsPullNameInputID    = "you.models.pull.arg.0"
+	modelsRemoveNameInputID  = "you.models.remove.arg.0"
 	serverInputID            = "you.flag.server"
 	jsonInputID              = "you.flag.json"
 	verboseInputID           = "you.flag.verbose"
@@ -216,4 +217,25 @@ func (h *CommandHandler) Pull(
 		return fmt.Errorf("resolve models pull inputs: %w", err)
 	}
 	return h.models.Pull(cfg)
+}
+
+func (h *CommandHandler) Remove(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) error {
+	if h == nil || h.models == nil {
+		return fmt.Errorf("models remove service is required")
+	}
+	modelName, err := inputs.String(modelsRemoveNameInputID)
+	if err != nil {
+		return fmt.Errorf("read models remove model name: %w", err)
+	}
+	cfg := RemoveConfig{
+		Context: cmd.Context(), ModelName: modelName, Output: cmd.OutOrStdout(),
+	}
+	if err := h.applyResolvedCommon(cmd, inherited, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics); err != nil {
+		return fmt.Errorf("resolve models remove inputs: %w", err)
+	}
+	return h.models.Remove(cfg)
 }

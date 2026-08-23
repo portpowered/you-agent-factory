@@ -14,6 +14,7 @@ type modelsHTTPOperation int
 const (
 	modelsHTTPOperationCatalog modelsHTTPOperation = iota
 	modelsHTTPOperationPull
+	modelsHTTPOperationRemove
 	modelsHTTPOperationInvoke
 	modelsHTTPOperationGenericInvoke
 )
@@ -23,6 +24,7 @@ const (
 	catalogListFailedMessage          = "failed to list models"
 	catalogGetFailedMessage           = "failed to load model"
 	pullFailedMessage                 = "failed to pull model"
+	removeFailedMessage               = "failed to remove model cache"
 	invokeFailedMessage               = "model invocation failed"
 	catalogErrorCodeModelNotAvailable = "MODEL_NOT_AVAILABLE"
 )
@@ -67,6 +69,20 @@ func genericSentinelErrorResponse(err error) (int, factoryapi.ErrorResponse, boo
 
 func commonSentinelErrorResponse(err error, operation modelsHTTPOperation) (int, factoryapi.ErrorResponse, bool) {
 	switch {
+	case errors.Is(err, models.ErrModelCacheNotFound) && operation == modelsHTTPOperationRemove:
+		return http.StatusNotFound, factoryapi.ErrorResponse{
+			Message: strings.TrimSpace(err.Error()),
+			Family:  factoryapi.ErrorFamilyNotFound,
+			Code:    factoryapi.ErrorResponseCode("MODEL_CACHE_NOT_FOUND"),
+		}, true
+	case errors.Is(err, models.ErrModelCacheInUse) && operation == modelsHTTPOperationRemove:
+		return http.StatusConflict, factoryapi.ErrorResponse{
+			Message: strings.TrimSpace(err.Error()),
+			Family:  factoryapi.ErrorFamilyConflict,
+			Code:    factoryapi.ErrorResponseCode("MODEL_CACHE_IN_USE"),
+		}, true
+	case errors.Is(err, models.ErrModelCacheUnsafe) && operation == modelsHTTPOperationRemove:
+		return badRequestErrorResponse(strings.TrimSpace(err.Error()))
 	case errors.Is(err, models.ErrNotFound):
 		return notFoundErrorResponse(catalogNotFoundMessage)
 	case errors.Is(err, models.ErrUnavailable) && operation == modelsHTTPOperationCatalog:

@@ -13091,6 +13091,283 @@
         "operationId": "invokeModel"
       }
     },
+    "you.models.remove": {
+      "id": "you.models.remove",
+      "name": "remove",
+      "path": "you models remove",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.models.remove",
+        "documentation": {
+          "title": {
+            "id": "you.models.remove.title",
+            "canonicalEnglish": "Remove one installed model cache revision"
+          },
+          "description": {
+            "id": "you.models.remove.description",
+            "canonicalEnglish": "Explicitly remove one installed managed model cache revision through DELETE /models/{model_name}. The operation reports the selected revision, validated cache path, outcome, and measured bytes removed; it refuses active model hosts or invocation leases and never follows links outside the managed cache root. Use global --json for API-shaped output and global --server to target a non-default factory API base URI."
+          }
+        },
+        "examples": [
+          "you models remove OMNIVOICE_Q4_K_M",
+          "you --json models remove OMNIVOICE_Q4_K_M"
+        ],
+        "visibility": "public",
+        "sourceHash": "cb8ee2af65b102201dab00c728a3430b160a8b0daa1e96409aeba318c187dbc1"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.models.remove",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "placement": "dual",
+      "usage": {
+        "line": "remove <model-name>",
+        "example": "  # Remove one installed managed cache revision.\n  you models remove OMNIVOICE_Q4_K_M\n\n  # Emit deterministic JSON for automation.\n  you --json models remove OMNIVOICE_Q4_K_M"
+      },
+      "arguments": {
+        "you.models.remove.arg.0": {
+          "id": "you.models.remove.arg.0",
+          "name": "model-name",
+          "position": 0,
+          "kind": "positional",
+          "valueType": "string",
+          "scope": "local",
+          "required": true,
+          "minCardinality": 1,
+          "maxCardinality": 1,
+          "variadic": false,
+          "enum": [],
+          "pattern": "",
+          "completion": "none",
+          "acceptedSources": [
+            "cli"
+          ],
+          "handlerBindingId": "you.models.remove.binding.model-name",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.remove.arg.0",
+            "state": "active",
+            "since": "1.0.0"
+          },
+          "doubleDash": "terminates-flags"
+        }
+      },
+      "flags": {
+        "you.models.remove.flag.debug": {
+          "id": "you.models.remove.flag.debug",
+          "long": "debug",
+          "shorthand": "d",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.remove.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.models.remove.flag.json": {
+          "id": "you.models.remove.flag.json",
+          "long": "json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.remove.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.models.remove.flag.remote": {
+          "id": "you.models.remove.flag.remote",
+          "long": "remote",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.remote",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.remove.flag.remote",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.models.remove.flag.server": {
+          "id": "you.models.remove.flag.server",
+          "long": "server",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
+          "valueType": "string",
+          "required": false,
+          "default": "http://localhost:7437",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.remove.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.models.remove.flag.verbose": {
+          "id": "you.models.remove.flag.verbose",
+          "long": "verbose",
+          "shorthand": "v",
+          "aliases": [],
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.remove.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "precedence": {
+        "order": [
+          "cli",
+          "stdin",
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "handlerBindings": {
+        "you.models.remove.binding.model-name": {
+          "id": "you.models.remove.binding.model-name",
+          "inputId": "you.models.remove.arg.0"
+        }
+      },
+      "outputs": {
+        "you.models.remove.output.human": {
+          "id": "you.models.remove.output.human",
+          "channel": "stdout",
+          "format": "text"
+        },
+        "you.models.remove.output.json": {
+          "id": "you.models.remove.output.json",
+          "channel": "stdout",
+          "format": "json"
+        }
+      },
+      "exits": {
+        "you.models.remove.exit.success": {
+          "id": "you.models.remove.exit.success",
+          "code": 0,
+          "kind": "success"
+        },
+        "you.models.remove.exit.failure": {
+          "id": "you.models.remove.exit.failure",
+          "code": 1,
+          "kind": "failure"
+        },
+        "you.models.remove.exit.usage": {
+          "id": "you.models.remove.exit.usage",
+          "code": 1,
+          "kind": "usage"
+        }
+      },
+      "sideEffects": {
+        "you.models.remove.side-effect.network": {
+          "id": "you.models.remove.side-effect.network",
+          "kind": "network"
+        },
+        "you.models.remove.side-effect.filesystem": {
+          "id": "you.models.remove.side-effect.filesystem",
+          "kind": "filesystem"
+        }
+      },
+      "constraints": {
+        "runtime": [
+          "local"
+        ],
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ]
+      },
+      "handler": {
+        "id": "you.models.remove.handler",
+        "operationId": "removeModel"
+      }
+    },
     "you.models.pull": {
       "id": "you.models.pull",
       "name": "pull",

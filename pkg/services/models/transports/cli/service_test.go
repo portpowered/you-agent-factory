@@ -3,18 +3,21 @@ package cli_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 type stubModelsRoot struct {
 	listModels           func(context.Context) (modelinference.List, error)
 	getModel             func(context.Context, string) (modelinference.Detail, error)
 	pullModel            func(context.Context, string) (modelinference.PullResult, error)
+	removeModel          func(context.Context, modelinference.RemoveModelAssetsRequest) (modelinference.RemoveModelAssetsResult, error)
 	getCatalogModel      func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error)
 	acquireModelLease    func(context.Context, modelinference.AcquireModelLeaseRequest) (modelinference.AcquireModelLeaseResult, error)
 	invokeModelWithLease func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error)
@@ -77,7 +80,10 @@ func (stub stubModelsRoot) InspectModelAssets(context.Context, modelinference.In
 	return modelinference.InspectModelAssetsResult{}, modelinference.ErrUnsupportedOperation
 }
 
-func (stub stubModelsRoot) RemoveModelAssets(context.Context, modelinference.RemoveModelAssetsRequest) (modelinference.RemoveModelAssetsResult, error) {
+func (stub stubModelsRoot) RemoveModelAssets(ctx context.Context, request modelinference.RemoveModelAssetsRequest) (modelinference.RemoveModelAssetsResult, error) {
+	if stub.removeModel != nil {
+		return stub.removeModel(ctx, request)
+	}
 	return modelinference.RemoveModelAssetsResult{}, modelinference.ErrUnsupportedOperation
 }
 
@@ -362,6 +368,43 @@ func TestModelsCLICharacterizationSuccessProjections(t *testing.T) {
 			t.Fatalf("Pull() JSON error = %v", err)
 		}
 		assertCharacterizationJSON(t, structured.String(), `{"cachePath":"/models/OMNIVOICE_Q4_K_M/rev-2026","downloadedFiles":[{"bytes":42,"path":"weights.gguf","sha256":"abc123"},{"bytes":7,"path":"config.json"}],"managedRuntimePull":{"cachePath":"/models/OMNIVOICE_Q4_K_M/rev-2026","downloadedFiles":[{"bytes":42,"path":"weights.gguf","sha256":"abc123"},{"bytes":7,"path":"config.json"}],"identity":"OMNIVOICE_Q4_K_M","pullOutcome":"INSTALLED_SUCCESSFULLY","readinessState":"READY","revision":"rev-2026"},"modelName":"OMNIVOICE_Q4_K_M","outcome":"PULLED","providerLocality":"LOCAL","revision":"rev-2026"}`)
+	})
+
+	t.Run("remove", func(t *testing.T) {
+		service := characterizationModelsCLIService(t, stubModelsRoot{
+			removeModel: func(_ context.Context, request modelinference.RemoveModelAssetsRequest) (modelinference.RemoveModelAssetsResult, error) {
+				return modelinference.RemoveModelAssetsResult{
+					ModelName: request.Name, Revision: "rev-2026",
+					CachePath: "/models/OMNIVOICE_Q4_K_M/rev-2026", BytesRemoved: 42,
+					Readiness: modelinference.AssetReadinessMissing,
+					Outcome:   modelinference.AssetRemovalRemoved,
+				}, nil
+			},
+		})
+
+		var human bytes.Buffer
+		if err := service.Remove(modelscli.RemoveConfig{
+			Context: context.Background(), ModelName: "OMNIVOICE_Q4_K_M", Output: &human,
+		}); err != nil {
+			t.Fatalf("Remove() human error = %v", err)
+		}
+		if got, want := human.String(), "MODEL\tREMOVE OUTCOME\tREVISION\tCACHE PATH\tBYTES REMOVED\nOMNIVOICE_Q4_K_M\tREMOVED\trev-2026\t/models/OMNIVOICE_Q4_K_M/rev-2026\t42 B (42 bytes)\n"; got != want {
+			t.Fatalf("Remove() human = %q, want %q", got, want)
+		}
+
+		var structured bytes.Buffer
+		if err := service.Remove(modelscli.RemoveConfig{
+			Context: context.Background(), ModelName: "OMNIVOICE_Q4_K_M", JSON: true, Output: &structured,
+		}); err != nil {
+			t.Fatalf("Remove() JSON error = %v", err)
+		}
+		var response factoryapi.ModelRemoveResponse
+		if err := json.Unmarshal(structured.Bytes(), &response); err != nil {
+			t.Fatalf("Remove() JSON decode error = %v", err)
+		}
+		if response.ModelName != "OMNIVOICE_Q4_K_M" || response.Revision != "rev-2026" || response.BytesRemoved != 42 {
+			t.Fatalf("Remove() response = %#v", response)
+		}
 	})
 }
 

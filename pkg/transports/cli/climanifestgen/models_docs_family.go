@@ -14,6 +14,7 @@ var ModelsDocsFamilyCommandIDs = []string{
 	"you.models.inspect",
 	"you.models.invoke",
 	"you.models.pull",
+	"you.models.remove",
 }
 
 // IsModelsDocsFamilyCommandID reports whether id belongs to the models/docs family.

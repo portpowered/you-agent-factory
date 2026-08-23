@@ -19,6 +19,7 @@ type rootFake struct {
 	getCatalog    func(context.Context, models.GetModelRequest) (models.GetModelResult, error)
 	readiness     func(context.Context, models.GetModelReadinessRequest) (models.GetModelReadinessResult, error)
 	pullForScope  func(context.Context, models.PullModelRequest) (models.PullResult, error)
+	remove        func(context.Context, models.RemoveModelAssetsRequest) (models.RemoveModelAssetsResult, error)
 	invokeGeneric func(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error)
 }
 
@@ -149,9 +150,12 @@ func (fake *rootFake) InspectModelAssets(
 }
 
 func (fake *rootFake) RemoveModelAssets(
-	context.Context,
-	models.RemoveModelAssetsRequest,
+	ctx context.Context,
+	request models.RemoveModelAssetsRequest,
 ) (models.RemoveModelAssetsResult, error) {
+	if fake.remove != nil {
+		return fake.remove(ctx, request)
+	}
 	return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
 }
 

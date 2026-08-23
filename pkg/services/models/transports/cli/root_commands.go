@@ -92,6 +92,36 @@ func (service *rootService) Pull(cfg PullConfig) error {
 	})
 }
 
+func (service *rootService) Remove(cfg RemoveConfig) error {
+	if cfg.Context == nil {
+		return fmt.Errorf("context is required")
+	}
+	if cfg.Output == nil {
+		return fmt.Errorf("output writer is required")
+	}
+	modelName := strings.TrimSpace(cfg.ModelName)
+	if modelName == "" {
+		return fmt.Errorf("model name is required")
+	}
+	if strings.TrimSpace(cfg.Server) != "" {
+		return service.removeRemote(cfg)
+	}
+	return service.withCatalogScope(cfg.Context, func(scope modelinference.RuntimeScopeRef) error {
+		result, err := service.models.RemoveModelAssets(cfg.Context, modelinference.RemoveModelAssetsRequest{
+			Scope: scope,
+			Name:  modelName,
+		})
+		if err != nil {
+			return mapModelsRootError(err)
+		}
+		response := removeResultToGenerated(result)
+		if cfg.JSON {
+			return json.NewEncoder(cfg.Output).Encode(response)
+		}
+		return renderRemove(response, cfg.Output)
+	})
+}
+
 func (service *rootService) withCatalogScope(
 	ctx context.Context,
 	run func(modelinference.RuntimeScopeRef) error,
@@ -181,4 +211,21 @@ func (service *rootService) pullRemote(cfg PullConfig) error {
 		return nil
 	}
 	return renderPull(response, cfg.Output)
+}
+
+func (service *rootService) removeRemote(cfg RemoveConfig) error {
+	if service.http == nil {
+		return fmt.Errorf("CLI HTTP protocol is required for remote models remove")
+	}
+	response, err := removeModel(removeOptions{
+		Context: cfg.Context, Server: cfg.Server, ModelName: cfg.ModelName,
+		Verbose: cfg.Verbose, Diagnostics: cfg.Diagnostics, HTTP: service.http,
+	})
+	if err != nil {
+		return err
+	}
+	if cfg.JSON {
+		return json.NewEncoder(cfg.Output).Encode(response)
+	}
+	return renderRemove(response, cfg.Output)
 }

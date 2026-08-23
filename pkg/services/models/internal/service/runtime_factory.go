@@ -306,10 +306,52 @@ func (o *Root) InspectModelAssets(
 }
 
 func (o *Root) RemoveModelAssets(
-	context.Context,
-	models.RemoveModelAssetsRequest,
+	ctx context.Context,
+	request models.RemoveModelAssetsRequest,
 ) (models.RemoveModelAssetsResult, error) {
-	return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.assets == nil {
+		return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
+	}
+	if err := request.Validate(); err != nil {
+		return models.RemoveModelAssetsResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return models.RemoveModelAssetsResult{}, err
+	}
+	// Runtime Host owns the live process and lease state. Stop it before the
+	// Assets service mutates the selected cache, while preserving the Assets
+	// service's no-cache classification for absent or unsupported models.
+	if o.runtimeHost != nil {
+		inspection, inspectErr := o.assets.InspectRuntimeCache(ctx, models.InspectModelAssetsRequest{
+			Scope: request.Scope,
+			Name:  request.Name,
+		})
+		if inspectErr != nil && !isRemovableCacheAbsence(inspectErr) {
+			return models.RemoveModelAssetsResult{}, inspectErr
+		}
+		if inspectErr == nil && inspection.Installed {
+			if _, stopErr := o.runtimeHost.StopModelHost(ctx, models.StopModelHostRequest{
+				Scope: request.Scope,
+				Name:  request.Name,
+			}); stopErr != nil {
+				if errors.Is(stopErr, models.ErrHostCapacityExhausted) {
+					return models.RemoveModelAssetsResult{}, fmt.Errorf(
+						"%w: %s", models.ErrModelCacheInUse, strings.TrimSpace(request.Name),
+					)
+				}
+				return models.RemoveModelAssetsResult{}, stopErr
+			}
+		}
+	}
+	return o.assets.RemoveModelAssets(ctx, request)
+}
+
+func isRemovableCacheAbsence(err error) bool {
+	return errors.Is(err, models.ErrModelCacheNotFound) ||
+		errors.Is(err, models.ErrAssetSourceMissing) ||
+		errors.Is(err, models.ErrAssetSourceUnsupported) ||
+		errors.Is(err, models.ErrAssetUnavailable) ||
+		errors.Is(err, models.ErrNotAvailable)
 }
 
 func (o *Root) EnsureModelHost(

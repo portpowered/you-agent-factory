@@ -26,6 +26,10 @@ func (s *Server) PullModel(w http.ResponseWriter, r *http.Request, modelName str
 	s.modelsHTTP.PullModel(w, r, modelName)
 }
 
+func (s *Server) RemoveModel(w http.ResponseWriter, r *http.Request, modelName string) {
+	s.modelsHTTP.RemoveModel(w, r, modelName)
+}
+
 // ListPackagedFactories forwards the generated operation to the Factory
 // Definitions service-owned adapter. Publication-package access stays behind
 // the service boundary.

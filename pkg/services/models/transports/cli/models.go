@@ -22,7 +22,14 @@ import (
 	"go.uber.org/zap"
 )
 
-var ErrModelNotFound = errors.New("model not found")
+const modelsErrorBodyPreviewSize = 200
+
+var (
+	ErrModelNotFound      = errors.New("model not found")
+	ErrModelCacheNotFound = errors.New("model cache not found")
+	ErrModelCacheInUse    = errors.New("model cache is in use")
+	ErrModelCacheUnsafe   = errors.New("model cache path is unsafe")
+)
 
 const managedRuntimePullFailureCode = "CLI_MODEL_PULL_FAILED"
 
@@ -77,12 +84,24 @@ type PullConfig struct {
 	Diagnostics io.Writer
 }
 
+type RemoveConfig struct {
+	Context     context.Context
+	ModelName   string
+	Server      string
+	JSON        bool
+	Verbose     bool
+	Debug       bool
+	Output      io.Writer
+	Diagnostics io.Writer
+}
+
 // Service exposes the Models CLI command operations to Cobra composition.
 type Service interface {
 	List(ListConfig) error
 	Inspect(InspectConfig) error
 	Invoke(InvokeConfig) error
 	Pull(PullConfig) error
+	Remove(RemoveConfig) error
 }
 
 type httpService struct {
@@ -835,6 +854,12 @@ func modelsRequestError(statusCode int, body []byte, response ...*http.Response)
 	}
 	var errResp factoryapi.ErrorResponse
 	if json.Unmarshal(body, &errResp) == nil && errResp.Message != "" {
+		switch errResp.Code {
+		case factoryapi.ErrorResponseCodeMODELCACHENOTFOUND:
+			return fmt.Errorf("%w: %s", ErrModelCacheNotFound, errResp.Message)
+		case factoryapi.ErrorResponseCodeMODELCACHEINUSE:
+			return fmt.Errorf("%w: %s", ErrModelCacheInUse, errResp.Message)
+		}
 		if statusCode == http.StatusNotFound && errResp.Code == factoryapi.ErrorResponseCodeNOTFOUND {
 			if httpResponse != nil {
 				return clihttp.NewAPIErrorFromResponse(httpResponse, errResp, fmt.Sprintf("%s: %s", ErrModelNotFound, errResp.Message), ErrModelNotFound)

@@ -32,6 +32,7 @@ type commandServiceFake struct {
 	inspect func(InspectConfig) error
 	invoke  func(InvokeConfig) error
 	pull    func(PullConfig) error
+	remove  func(RemoveConfig) error
 }
 
 type modelsPullDoer func(*http.Request) (*http.Response, error)
@@ -50,6 +51,12 @@ func (fake commandServiceFake) List(cfg ListConfig) error       { return fake.li
 func (fake commandServiceFake) Inspect(cfg InspectConfig) error { return fake.inspect(cfg) }
 func (fake commandServiceFake) Invoke(cfg InvokeConfig) error   { return fake.invoke(cfg) }
 func (fake commandServiceFake) Pull(cfg PullConfig) error       { return fake.pull(cfg) }
+func (fake commandServiceFake) Remove(cfg RemoveConfig) error {
+	if fake.remove != nil {
+		return fake.remove(cfg)
+	}
+	return nil
+}
 
 func TestCommandHandlerTransformsInvokeCommandState(t *testing.T) {
 	server := "http://127.0.0.1:7437"

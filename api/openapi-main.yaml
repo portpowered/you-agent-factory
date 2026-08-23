@@ -1322,6 +1322,38 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+    delete:
+      tags:
+        - Models
+      operationId: removeModel
+      summary: Remove one managed model cache revision
+      description: Explicitly removes the selected managed cache revision for one model. The operation never follows links outside the managed cache root, refuses caches held by an active host or invocation, and reports the validated cache path and measured bytes removed.
+      parameters:
+        - name: model_name
+          in: path
+          required: true
+          description: Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The selected managed model cache revision was removed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelRemoveResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The managed model cache is held by an active host or invocation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /models/{model_name}/invocations:
     post:
       tags:
@@ -2694,6 +2726,10 @@ components:
       $ref: './components/schemas/api/ModelPullOutcome.yaml'
     ModelPullResponse:
       $ref: './components/schemas/api/ModelPullResponse.yaml'
+    ModelRemoveOutcome:
+      $ref: './components/schemas/api/ModelRemoveOutcome.yaml'
+    ModelRemoveResponse:
+      $ref: './components/schemas/api/ModelRemoveResponse.yaml'
     ResolvedModelOperationBinding:
       $ref: './components/schemas/api/ResolvedModelOperationBinding.yaml'
     ResolvedModelOperationBindingSource:

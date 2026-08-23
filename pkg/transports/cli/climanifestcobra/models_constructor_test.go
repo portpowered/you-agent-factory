@@ -29,6 +29,9 @@ func (modelsHandlerStub) Invoke(*cobra.Command, resolvedinput.Inputs, resolvedin
 func (modelsHandlerStub) Pull(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
 	return nil
 }
+func (modelsHandlerStub) Remove(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
+	return nil
+}
 
 func TestDocsAndModelsCommandsAreConstructedIndependently(t *testing.T) {
 	docs, err := climanifestcobra.NewDocsCommand(

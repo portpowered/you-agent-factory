@@ -786,7 +786,9 @@ func (s *service) inspectRevision(
 	}
 	revisionPath, err := managedCacheChildPath(root, revision, "revision")
 	if err != nil {
-		return unavailableSnapshot(spec.modelName, source, revision, nil), false, err
+		return unavailableSnapshot(spec.modelName, source, revision, nil), false, fmt.Errorf(
+			"%w: %v", models.ErrModelCacheUnsafe, err,
+		)
 	}
 	artifacts := make([]models.AssetArtifact, 0, len(spec.requiredArtifacts))
 	for _, name := range spec.requiredArtifacts {
@@ -899,7 +901,7 @@ func (s *service) discoverRevision(
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		if entry == nil || entry.Type()&os.ModeSymlink != 0 || !entry.IsDir() {
 			continue
 		}
 		metadata := cacheMetadata{Revision: entry.Name()}

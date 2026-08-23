@@ -232,6 +232,16 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
+      "stableId": "cli/you.models.remove",
+      "name": "you models remove",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
       "stableId": "cli/you.providers",
       "name": "you providers",
       "interface": "cli",
@@ -1490,6 +1500,16 @@
           "boundary": "rest"
         }
       ]
+    },
+    {
+      "stableId": "rest/removeModel",
+      "name": "removeModel",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
       "stableId": "rest/resumeFactorySession",

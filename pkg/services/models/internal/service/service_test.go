@@ -404,6 +404,13 @@ func (*preparationAssetService) InspectModelAssets(
 	return models.InspectModelAssetsResult{}, nil
 }
 
+func (*preparationAssetService) RemoveModelAssets(
+	context.Context,
+	models.RemoveModelAssetsRequest,
+) (models.RemoveModelAssetsResult, error) {
+	return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
 func (*preparationAssetService) ResolveRuntimeCache(
 	context.Context,
 	models.InspectModelAssetsRequest,

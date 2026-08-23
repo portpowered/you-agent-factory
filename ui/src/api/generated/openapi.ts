@@ -694,7 +694,11 @@ export interface paths {
     get: operations["getModel"];
     put?: never;
     post?: never;
-    delete?: never;
+    /**
+     * Remove one managed model cache revision
+     * @description Explicitly removes the selected managed cache revision for one model. The operation never follows links outside the managed cache root, refuses caches held by an active host or invocation, and reports the validated cache path and measured bytes removed.
+     */
+    delete: operations["removeModel"];
     options?: never;
     head?: never;
     patch?: never;
@@ -2470,6 +2474,25 @@ export interface components {
       revision: string;
       /** @description Files that were downloaded or verified as already present for the managed cache entry. */
       downloadedFiles: components["schemas"]["ModelPullDownloadedFile"][];
+    };
+    /**
+     * @description Outcome of removing the selected managed model cache revision.
+     * @enum {string}
+     */
+    ModelRemoveOutcome: ModelRemoveOutcome;
+    ModelRemoveResponse: {
+      /** @description Stable managed runtime identity whose cache revision was removed. */
+      modelName: string;
+      /** @description Exact managed cache revision removed by the operation. */
+      revision: string;
+      /** @description Validated absolute path of the removed managed cache revision. */
+      cachePath: string;
+      outcome: components["schemas"]["ModelRemoveOutcome"];
+      /**
+       * Format: int64
+       * @description Total size of regular files measured immediately before removal.
+       */
+      bytesRemoved: number;
     };
     ResolvedModelOperationBinding: {
       /** @description Stable input slot name declared by the worker capability. */
@@ -9084,6 +9107,41 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  removeModel: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. */
+        model_name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The selected managed model cache revision was removed. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ModelRemoveResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      /** @description The managed model cache is held by an active host or invocation. */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      500: components["responses"]["InternalError"];
+    };
+  };
   invokeModel: {
     parameters: {
       query?: never;
@@ -10414,6 +10472,11 @@ export const ModelPullOutcome = {
 } as const;
 export type ModelPullOutcome =
   (typeof ModelPullOutcome)[keyof typeof ModelPullOutcome];
+export const ModelRemoveOutcome = {
+  REMOVED: "REMOVED",
+} as const;
+export type ModelRemoveOutcome =
+  (typeof ModelRemoveOutcome)[keyof typeof ModelRemoveOutcome];
 export const ResolvedModelOperationBindingSource = {
   INPUT: "INPUT",
   CONFIG: "CONFIG",
@@ -10562,11 +10625,15 @@ export const ErrorResponseCode = {
   // The live Factory Session was discoverable, but no retained metrics scope was available.
   WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE:
     "WORKER_SESSION_TRANSCRIPT_PROJECTION_UNAVAILABLE",
-  // The requested resource does not exist.
+  // The selected managed model cache revision does not exist.
   METRICS_INVALID_REQUEST: "METRICS_INVALID_REQUEST",
-  // The server failed while handling an otherwise valid request.
+  // The selected managed model cache revision is held by an active model host or invocation.
   METRICS_SESSION_NOT_FOUND: "METRICS_SESSION_NOT_FOUND",
+  // The requested resource does not exist.
   METRICS_SESSION_SCOPE_UNAVAILABLE: "METRICS_SESSION_SCOPE_UNAVAILABLE",
+  // The server failed while handling an otherwise valid request.
+  MODEL_CACHE_NOT_FOUND: "MODEL_CACHE_NOT_FOUND",
+  MODEL_CACHE_IN_USE: "MODEL_CACHE_IN_USE",
   NOT_FOUND: "NOT_FOUND",
   INTERNAL_ERROR: "INTERNAL_ERROR",
 } as const;
