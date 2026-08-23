@@ -237,6 +237,26 @@ func isKnownWorkflowSourceKind(kind workflowsource.WorkflowSourceKind) bool {
 	}
 }
 
+func factoryNameFromStart(req StartRequest) string {
+	switch req.Source.Kind {
+	case workflowsource.WorkflowSourceKindFactoryID:
+		return strings.TrimSpace(req.Source.FactoryID)
+	case workflowsource.WorkflowSourceKindFactoryInline:
+		var declaration struct {
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(req.Source.FactoryInline, &declaration); err == nil {
+			return strings.TrimSpace(declaration.Name)
+		}
+	}
+	if req.Source.InlineWorkflow != nil {
+		if name := strings.TrimSpace(req.Source.InlineWorkflow.Metadata["factoryName"]); name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
 func validateTimeRange(field string, after, before *time.Time) error {
 	if after != nil && before != nil && after.After(*before) {
 		return NewValidationError(field, "after must be before or equal to before")
