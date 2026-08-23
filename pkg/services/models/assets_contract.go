@@ -57,6 +57,95 @@ var (
 	ErrModelCacheRemovalFailed = errors.New("managed model cache removal failed")
 )
 
+// PullStage identifies the stage at which a managed local-model pull stopped.
+// It is intentionally narrower than the legacy PULLED/FAILED outcome so a
+// caller can distinguish a source problem from a failure after bytes arrived.
+type PullStage string
+
+const (
+	PullStageSourceResolution      PullStage = "SOURCE_RESOLUTION"
+	PullStageSourceFetch           PullStage = "SOURCE_FETCH"
+	PullStageIntegrityVerification PullStage = "INTEGRITY_VERIFICATION"
+	PullStageAssembly              PullStage = "ASSEMBLY"
+	PullStageCacheInstallation     PullStage = "CACHE_INSTALLATION"
+	PullStageReadinessEvaluation   PullStage = "READINESS_EVALUATION"
+)
+
+// PullStageError preserves the failed stage and the original cause across the
+// Models boundary. Operation and artifact are logical labels; implementations
+// must not put credentials, URLs, or private cache paths in them.
+type PullStageError struct {
+	Stage     PullStage
+	ModelName string
+	Operation string
+	Artifact  string
+	Cause     error
+}
+
+func (failure *PullStageError) Error() string {
+	if failure == nil {
+		return ""
+	}
+	message := fmt.Sprintf("managed runtime pull failed during %s", strings.ToLower(string(failure.Stage)))
+	if operation := strings.TrimSpace(failure.Operation); operation != "" {
+		message += ": " + operation
+	}
+	if artifact := strings.TrimSpace(failure.Artifact); artifact != "" {
+		message += fmt.Sprintf(" for asset %q", artifact)
+	}
+	return message
+}
+
+func (failure *PullStageError) Unwrap() error {
+	if failure == nil {
+		return nil
+	}
+	return failure.Cause
+}
+
+// WrapPullStage attaches a stage without replacing a more specific stage
+// already present in the error chain.
+func WrapPullStage(stage PullStage, modelName, operation, artifact string, cause error) error {
+	if cause == nil {
+		return nil
+	}
+	var existing *PullStageError
+	if errors.As(cause, &existing) {
+		return cause
+	}
+	return &PullStageError{
+		Stage: stage, ModelName: strings.TrimSpace(modelName),
+		Operation: strings.TrimSpace(operation), Artifact: strings.TrimSpace(artifact),
+		Cause: cause,
+	}
+}
+
+// PullStageForError returns the most specific stage encoded by a pull error,
+// or infers one from the stable asset sentinels.
+func PullStageForError(err error) PullStage {
+	if err == nil {
+		return ""
+	}
+	var stageError *PullStageError
+	if errors.As(err, &stageError) && stageError != nil {
+		return stageError.Stage
+	}
+	switch {
+	case errors.Is(err, ErrSourceFetchFailed):
+		return PullStageSourceFetch
+	case errors.Is(err, ErrAssetIntegrityFailed):
+		return PullStageIntegrityVerification
+	case errors.Is(err, ErrAssetSourceMissing),
+		errors.Is(err, ErrAssetSourceUnsupported),
+		errors.Is(err, ErrAssetOffline):
+		return PullStageSourceResolution
+	case errors.Is(err, ErrAssetPreparationInterrupted):
+		return PullStageAssembly
+	default:
+		return ""
+	}
+}
+
 // AssetArtifactKind separates model payloads from backend runtime artifacts.
 // The distinction is part of the cache identity so one kind can never satisfy
 // a request for the other kind.
@@ -357,6 +446,7 @@ type PullResult struct {
 	SourceKind         string
 	SourceID           string
 	ResolverNotes      string
+	FailureStage       PullStage
 }
 
 // PullError preserves a classified pull result while retaining its cause.

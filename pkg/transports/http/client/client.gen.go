@@ -897,13 +897,20 @@ const (
 
 // Defines values for ManagedRuntimePullOutcome.
 const (
-	ManagedRuntimePullOutcomeALREADYPRESENT        ManagedRuntimePullOutcome = "ALREADY_PRESENT"
-	ManagedRuntimePullOutcomeALREADYREADY          ManagedRuntimePullOutcome = "ALREADY_READY"
-	ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY ManagedRuntimePullOutcome = "INSTALLED_SUCCESSFULLY"
-	ManagedRuntimePullOutcomeSOURCEFETCHFAILED     ManagedRuntimePullOutcome = "SOURCE_FETCH_FAILED"
-	ManagedRuntimePullOutcomeSTILLLOADING          ManagedRuntimePullOutcome = "STILL_LOADING"
-	ManagedRuntimePullOutcomeTIMEDOUT              ManagedRuntimePullOutcome = "TIMED_OUT"
-	ManagedRuntimePullOutcomeUNSUPPORTEDRUNTIME    ManagedRuntimePullOutcome = "UNSUPPORTED_RUNTIME"
+	ManagedRuntimePullOutcomeALREADYPRESENT              ManagedRuntimePullOutcome = "ALREADY_PRESENT"
+	ManagedRuntimePullOutcomeALREADYREADY                ManagedRuntimePullOutcome = "ALREADY_READY"
+	ManagedRuntimePullOutcomeASSEMBLYFAILED              ManagedRuntimePullOutcome = "ASSEMBLY_FAILED"
+	ManagedRuntimePullOutcomeASSETPREPARATIONFAILED      ManagedRuntimePullOutcome = "ASSET_PREPARATION_FAILED"
+	ManagedRuntimePullOutcomeCACHEINSTALLATIONFAILED     ManagedRuntimePullOutcome = "CACHE_INSTALLATION_FAILED"
+	ManagedRuntimePullOutcomeCANCELLED                   ManagedRuntimePullOutcome = "CANCELLED"
+	ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY       ManagedRuntimePullOutcome = "INSTALLED_SUCCESSFULLY"
+	ManagedRuntimePullOutcomeINTEGRITYVERIFICATIONFAILED ManagedRuntimePullOutcome = "INTEGRITY_VERIFICATION_FAILED"
+	ManagedRuntimePullOutcomeREADINESSEVALUATIONFAILED   ManagedRuntimePullOutcome = "READINESS_EVALUATION_FAILED"
+	ManagedRuntimePullOutcomeSOURCEFETCHFAILED           ManagedRuntimePullOutcome = "SOURCE_FETCH_FAILED"
+	ManagedRuntimePullOutcomeSOURCERESOLUTIONFAILED      ManagedRuntimePullOutcome = "SOURCE_RESOLUTION_FAILED"
+	ManagedRuntimePullOutcomeSTILLLOADING                ManagedRuntimePullOutcome = "STILL_LOADING"
+	ManagedRuntimePullOutcomeTIMEDOUT                    ManagedRuntimePullOutcome = "TIMED_OUT"
+	ManagedRuntimePullOutcomeUNSUPPORTEDRUNTIME          ManagedRuntimePullOutcome = "UNSUPPORTED_RUNTIME"
 )
 
 // Defines values for ManagedRuntimeReadinessState.
@@ -5994,7 +6001,7 @@ type ManagedRuntime struct {
 // ManagedRuntimeLifecycleState Customer-facing lifecycle position for one managed runtime. Lifecycle state tracks install, cache, and load progression independently from short-lived readiness used by invocation surfaces.
 type ManagedRuntimeLifecycleState string
 
-// ManagedRuntimePullOutcome Source-agnostic outcome for one managed runtime pull or install request. Outcomes classify whether the runtime is already ready, newly installed, still preparing, timed out, failed to fetch required assets, or unsupported.
+// ManagedRuntimePullOutcome Source-agnostic outcome for one managed runtime pull or install request. Outcomes classify whether the runtime is already ready, newly installed, still preparing, timed out, cancelled, failed during source resolution, source fetch, integrity verification, assembly, cache installation, or readiness evaluation, or unsupported.
 type ManagedRuntimePullOutcome string
 
 // ManagedRuntimePullResult defines model for ManagedRuntimePullResult.
@@ -6008,7 +6015,7 @@ type ManagedRuntimePullResult struct {
 	// Identity Stable managed runtime identity targeted by the pull or install request.
 	Identity string `json:"identity"`
 
-	// PullOutcome Source-agnostic outcome for one managed runtime pull or install request. Outcomes classify whether the runtime is already ready, newly installed, still preparing, timed out, failed to fetch required assets, or unsupported.
+	// PullOutcome Source-agnostic outcome for one managed runtime pull or install request. Outcomes classify whether the runtime is already ready, newly installed, still preparing, timed out, cancelled, failed during source resolution, source fetch, integrity verification, assembly, cache installation, or readiness evaluation, or unsupported.
 	PullOutcome ManagedRuntimePullOutcome `json:"pullOutcome"`
 
 	// ReadinessState Customer-facing readiness for one managed runtime. Readiness describes whether the runtime can be invoked now or what action is required next, without naming upstream repository or provider-specific cache semantics.
@@ -6371,7 +6378,7 @@ type ModelPullDownloadedFile struct {
 	Sha256 *string `json:"sha256,omitempty"`
 }
 
-// ModelPullOutcome Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcomes `ALREADY_PRESENT` and `ALREADY_READY`; and `FAILED` maps to `STILL_LOADING`, `TIMED_OUT`, `SOURCE_FETCH_FAILED`, and `UNSUPPORTED_RUNTIME`. Unknown managed pull outcomes also map to `FAILED` so an unrecognized value cannot be projected as a successful pull.
+// ModelPullOutcome Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcomes `ALREADY_PRESENT` and `ALREADY_READY`; and `FAILED` maps to every non-success managed pull outcome, including `STILL_LOADING`, `TIMED_OUT`, `CANCELLED`, `SOURCE_FETCH_FAILED`, `SOURCE_RESOLUTION_FAILED`, `INTEGRITY_VERIFICATION_FAILED`, `ASSEMBLY_FAILED`, `CACHE_INSTALLATION_FAILED`, `READINESS_EVALUATION_FAILED`, `ASSET_PREPARATION_FAILED`, and `UNSUPPORTED_RUNTIME`. Unknown managed pull outcomes also map to `FAILED` so an unrecognized value cannot be projected as a successful pull.
 type ModelPullOutcome string
 
 // ModelPullResponse defines model for ModelPullResponse.
@@ -6386,7 +6393,7 @@ type ModelPullResponse struct {
 	// ModelName Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntimePull.identity` for compatibility with earlier pull fields.
 	ModelName string `json:"modelName"`
 
-	// Outcome Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcomes `ALREADY_PRESENT` and `ALREADY_READY`; and `FAILED` maps to `STILL_LOADING`, `TIMED_OUT`, `SOURCE_FETCH_FAILED`, and `UNSUPPORTED_RUNTIME`. Unknown managed pull outcomes also map to `FAILED` so an unrecognized value cannot be projected as a successful pull.
+	// Outcome Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcomes `ALREADY_PRESENT` and `ALREADY_READY`; and `FAILED` maps to every non-success managed pull outcome, including `STILL_LOADING`, `TIMED_OUT`, `CANCELLED`, `SOURCE_FETCH_FAILED`, `SOURCE_RESOLUTION_FAILED`, `INTEGRITY_VERIFICATION_FAILED`, `ASSEMBLY_FAILED`, `CACHE_INSTALLATION_FAILED`, `READINESS_EVALUATION_FAILED`, `ASSET_PREPARATION_FAILED`, and `UNSUPPORTED_RUNTIME`. Unknown managed pull outcomes also map to `FAILED` so an unrecognized value cannot be projected as a successful pull.
 	Outcome ModelPullOutcome `json:"outcome"`
 
 	// ProviderLocality Provider locality for a model worker capability declaration.

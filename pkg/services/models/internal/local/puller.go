@@ -73,7 +73,10 @@ func (p *assetPuller) PullModel(ctx context.Context, _ *models.RuntimeConfig, mo
 		Name:  modelName,
 	})
 	if layoutErr != nil {
-		return projected, layoutErr
+		return projected, models.WrapPullStage(
+			models.PullStageCacheInstallation, modelName,
+			"resolve managed runtime cache", "", layoutErr,
+		)
 	}
 	projected.CachePath = layout.CachePath
 	return projected, nil

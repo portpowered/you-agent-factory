@@ -145,10 +145,47 @@ func TestPullModelWithOptions_ReportsVerificationFailure(t *testing.T) {
 		t.Fatalf("PullModelWithOptions error = %v, want verification failure", err)
 	}
 	var pullErr *apisurface.PullError
-	if !errors.As(err, &pullErr) || result.ManagedPullOutcome != managedPullOutcomeSourceFetchFailed ||
+	if !errors.As(err, &pullErr) || result.ManagedPullOutcome != managedPullOutcomeIntegrityVerificationFailed ||
 		result.Outcome != legacyPullOutcomeFailed || result.ReadinessState != managedReadinessFailed ||
-		result.LifecycleState != managedLifecycleNotInstalled {
+		result.LifecycleState != managedLifecycleNotInstalled ||
+		result.FailureStage != apisurface.PullStageIntegrityVerification {
 		t.Fatalf("pull result = %#v, error = %v, want classified terminal verification failure", result, err)
+	}
+}
+
+func TestPullModelWithOptions_ClassifiesPostDownloadCacheFailure(t *testing.T) {
+	t.Parallel()
+	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	postDownloadErr := apisurface.WrapPullStage(
+		apisurface.PullStageCacheInstallation,
+		"OMNIVOICE_Q4_K_M",
+		"resolve managed runtime cache",
+		"",
+		apisurface.ErrNotAvailable,
+	)
+	result, err := PullModelWithOptions(
+		&managedPullTestAssetPuller{
+			result: apisurface.PullResult{
+				ModelName: "OMNIVOICE_Q4_K_M", Outcome: legacyPullOutcomePulled,
+				DownloadedFiles: []apisurface.DownloadedFile{{
+					Path: "model.gguf", Bytes: 4, SHA256: "deadbeef",
+				}},
+			},
+			err: postDownloadErr,
+		},
+		context.Background(), loaded, "OMNIVOICE_Q4_K_M", PullOptions{},
+	)
+	if !errors.Is(err, apisurface.ErrNotAvailable) {
+		t.Fatalf("PullModelWithOptions error = %v, want post-download cache failure", err)
+	}
+	var pullErr *apisurface.PullError
+	var stageErr *apisurface.PullStageError
+	if !errors.As(err, &pullErr) || !errors.As(err, &stageErr) ||
+		result.ManagedPullOutcome != managedPullOutcomeCacheInstallationFailed ||
+		result.ManagedPullOutcome == managedPullOutcomeSourceFetchFailed ||
+		result.FailureStage != apisurface.PullStageCacheInstallation || stageErr.Cause == nil ||
+		len(result.DownloadedFiles) != 1 {
+		t.Fatalf("pull result = %#v, error = %v, want cache-installation failure with downloaded file facts", result, err)
 	}
 }
 
@@ -170,7 +207,8 @@ func TestPullModelWithOptions_ReportsSourceFetchFailureWithoutSuccessProjection(
 	var pullErr *apisurface.PullError
 	if !errors.As(err, &pullErr) || result.Outcome != legacyPullOutcomeFailed ||
 		result.ManagedPullOutcome != managedPullOutcomeSourceFetchFailed ||
-		result.ReadinessState != managedReadinessFailed || result.LifecycleState != managedLifecycleNotInstalled {
+		result.ReadinessState != managedReadinessFailed || result.LifecycleState != managedLifecycleNotInstalled ||
+		result.FailureStage != apisurface.PullStageSourceFetch {
 		t.Fatalf("pull result = %#v, error = %v, want FAILED/SOURCE_FETCH_FAILED/FAILED/NOT_INSTALLED", result, err)
 	}
 }

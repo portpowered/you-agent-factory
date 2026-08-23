@@ -764,7 +764,13 @@ func inspectPullCache(
 	}
 	inspection, err := inspector.InspectRuntimeCache(ctx, runtimeCfg, modelName)
 	if err != nil {
-		return RuntimeCacheInspection{}, err
+		stage := models.PullStageForError(err)
+		if stage == "" {
+			stage = models.PullStageReadinessEvaluation
+		}
+		return RuntimeCacheInspection{}, models.WrapPullStage(
+			stage, modelName, "inspect managed runtime cache", "", err,
+		)
 	}
 	if err := pullContextError(ctx); err != nil {
 		return RuntimeCacheInspection{}, err
@@ -794,6 +800,12 @@ func classifiedPullFailure(
 	result.SourceKind = strings.TrimSpace(resolution.SourceKind)
 	result.SourceID = strings.TrimSpace(resolution.SourceID)
 	result.ResolverNotes = strings.TrimSpace(resolution.ResolverNotes)
+	result.FailureStage = models.PullStageForError(cause)
+	if result.FailureStage == "" &&
+		pullOutcome == managedPullOutcomeAssetPreparationFailed &&
+		!errors.Is(cause, context.Canceled) && !errors.Is(cause, context.DeadlineExceeded) {
+		result.FailureStage = models.PullStageAssembly
+	}
 	return result, &models.PullError{Result: result, Cause: cause}
 }
 
@@ -861,13 +873,20 @@ const (
 	legacyPullOutcomeAlreadyPresent = "ALREADY_PRESENT"
 	legacyPullOutcomeFailed         = "FAILED"
 
-	managedPullOutcomeAlreadyReady          = "ALREADY_READY"
-	managedPullOutcomeInstalledSuccessfully = "INSTALLED_SUCCESSFULLY"
-	managedPullOutcomeAlreadyPresent        = "ALREADY_PRESENT"
-	managedPullOutcomeStillLoading          = "STILL_LOADING"
-	managedPullOutcomeTimedOut              = "TIMED_OUT"
-	managedPullOutcomeSourceFetchFailed     = "SOURCE_FETCH_FAILED"
-	managedPullOutcomeUnsupportedRuntime    = "UNSUPPORTED_RUNTIME"
+	managedPullOutcomeAlreadyReady                = "ALREADY_READY"
+	managedPullOutcomeInstalledSuccessfully       = "INSTALLED_SUCCESSFULLY"
+	managedPullOutcomeAlreadyPresent              = "ALREADY_PRESENT"
+	managedPullOutcomeStillLoading                = "STILL_LOADING"
+	managedPullOutcomeTimedOut                    = "TIMED_OUT"
+	managedPullOutcomeCancelled                   = "CANCELLED"
+	managedPullOutcomeSourceFetchFailed           = "SOURCE_FETCH_FAILED"
+	managedPullOutcomeUnsupportedRuntime          = "UNSUPPORTED_RUNTIME"
+	managedPullOutcomeSourceResolutionFailed      = "SOURCE_RESOLUTION_FAILED"
+	managedPullOutcomeIntegrityVerificationFailed = "INTEGRITY_VERIFICATION_FAILED"
+	managedPullOutcomeAssemblyFailed              = "ASSEMBLY_FAILED"
+	managedPullOutcomeCacheInstallationFailed     = "CACHE_INSTALLATION_FAILED"
+	managedPullOutcomeReadinessEvaluationFailed   = "READINESS_EVALUATION_FAILED"
+	managedPullOutcomeAssetPreparationFailed      = "ASSET_PREPARATION_FAILED"
 
 	managedReadinessReady       = "READY"
 	managedReadinessMissing     = "MISSING"
@@ -891,6 +910,9 @@ func EnrichPullResult(
 	result.ManagedPullOutcome = outcome
 	result.ReadinessState = readiness
 	result.LifecycleState = lifecycle
+	if readiness == managedReadinessFailed && result.FailureStage == "" {
+		result.FailureStage = pullStageForManagedOutcome(outcome)
+	}
 	result.SourceKind = strings.TrimSpace(resolution.SourceKind)
 	result.SourceID = strings.TrimSpace(resolution.SourceID)
 	result.ResolverNotes = strings.TrimSpace(resolution.ResolverNotes)
@@ -906,15 +928,32 @@ func ClassifyPullFailure(err error) (pullOutcome string, readiness string) {
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
 		return managedPullOutcomeTimedOut, managedReadinessFailed
+	case errors.Is(err, context.Canceled), errors.Is(err, models.ErrAssetCancelled):
+		return managedPullOutcomeCancelled, managedReadinessFailed
 	case errors.Is(err, models.ErrPullUnsupported):
 		return managedPullOutcomeUnsupportedRuntime, managedReadinessUnsupported
-	case errors.Is(err, models.ErrSourceFetchFailed):
+	}
+	switch models.PullStageForError(err) {
+	case models.PullStageSourceResolution:
+		return managedPullOutcomeSourceResolutionFailed, managedReadinessFailed
+	case models.PullStageSourceFetch:
 		return managedPullOutcomeSourceFetchFailed, managedReadinessFailed
-	case isSourceFetchFailureMessage(err.Error()):
-		return managedPullOutcomeSourceFetchFailed, managedReadinessFailed
-	default:
+	case models.PullStageIntegrityVerification:
+		return managedPullOutcomeIntegrityVerificationFailed, managedReadinessFailed
+	case models.PullStageAssembly:
+		return managedPullOutcomeAssemblyFailed, managedReadinessFailed
+	case models.PullStageCacheInstallation:
+		return managedPullOutcomeCacheInstallationFailed, managedReadinessFailed
+	case models.PullStageReadinessEvaluation:
+		return managedPullOutcomeReadinessEvaluationFailed, managedReadinessFailed
+	}
+	if isIntegrityFailureMessage(err.Error()) {
+		return managedPullOutcomeIntegrityVerificationFailed, managedReadinessFailed
+	}
+	if isSourceFetchFailureMessage(err.Error()) {
 		return managedPullOutcomeSourceFetchFailed, managedReadinessFailed
 	}
+	return managedPullOutcomeAssetPreparationFailed, managedReadinessFailed
 }
 
 func classifySuccessfulPull(result models.PullResult, inspection RuntimeCacheInspection) (pullOutcome, readiness, lifecycle string) {
@@ -943,7 +982,7 @@ func classifySuccessfulPull(result models.PullResult, inspection RuntimeCacheIns
 		case managedruntime.ReadinessStateLoading:
 			pullOutcome = managedPullOutcomeStillLoading
 		case managedruntime.ReadinessStateFailed:
-			pullOutcome = managedPullOutcomeSourceFetchFailed
+			pullOutcome = pullOutcomeForFailedInspection(inspection)
 		case managedruntime.ReadinessStateMissing:
 			if pullOutcome == managedPullOutcomeInstalledSuccessfully {
 				readiness = managedReadinessLoading
@@ -962,6 +1001,47 @@ func classifySuccessfulPull(result models.PullResult, inspection RuntimeCacheIns
 	return pullOutcome, readiness, lifecycle
 }
 
+func pullOutcomeForFailedInspection(inspection RuntimeCacheInspection) string {
+	reason := strings.ToLower(strings.TrimSpace(inspection.FailureReason))
+	if strings.Contains(reason, "integrity") || strings.Contains(reason, "checksum") ||
+		strings.Contains(reason, "unexpected size") {
+		return managedPullOutcomeIntegrityVerificationFailed
+	}
+	return managedPullOutcomeReadinessEvaluationFailed
+}
+
+func pullStageForManagedOutcome(outcome string) models.PullStage {
+	switch outcome {
+	case managedPullOutcomeSourceResolutionFailed:
+		return models.PullStageSourceResolution
+	case managedPullOutcomeSourceFetchFailed:
+		return models.PullStageSourceFetch
+	case managedPullOutcomeIntegrityVerificationFailed:
+		return models.PullStageIntegrityVerification
+	case managedPullOutcomeAssemblyFailed:
+		return models.PullStageAssembly
+	case managedPullOutcomeCacheInstallationFailed:
+		return models.PullStageCacheInstallation
+	case managedPullOutcomeReadinessEvaluationFailed:
+		return models.PullStageReadinessEvaluation
+	default:
+		return ""
+	}
+}
+
+func isIntegrityFailureMessage(message string) bool {
+	trimmed := strings.ToLower(strings.TrimSpace(message))
+	if trimmed == "" {
+		return false
+	}
+	for _, fragment := range []string{"integrity", "checksum", "unexpected size"} {
+		if strings.Contains(trimmed, fragment) {
+			return true
+		}
+	}
+	return false
+}
+
 func isSourceFetchFailureMessage(message string) bool {
 	trimmed := strings.ToLower(strings.TrimSpace(message))
 	if trimmed == "" {
@@ -971,7 +1051,6 @@ func isSourceFetchFailureMessage(message string) bool {
 		"pull model manifest",
 		"download model asset",
 		"model asset request failed",
-		"checksum verification",
 	} {
 		if strings.Contains(trimmed, fragment) {
 			return true

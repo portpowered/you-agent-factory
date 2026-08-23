@@ -386,6 +386,11 @@ func TestPrepareModelAssetsDoesNotPublishFailedVerification(t *testing.T) {
 	if !errors.Is(err, models.ErrAssetIntegrityFailed) {
 		t.Fatalf("PrepareModelAssets error = %v, want ErrAssetIntegrityFailed", err)
 	}
+	var stageErr *models.PullStageError
+	if !errors.As(err, &stageErr) || stageErr.Stage != models.PullStageIntegrityVerification ||
+		stageErr.Cause == nil {
+		t.Fatalf("PrepareModelAssets stage error = %#v, want integrity stage with cause", stageErr)
+	}
 	if result.Asset.Readiness != models.AssetReadinessFailed {
 		t.Fatalf("failed pull result = %#v", result)
 	}
@@ -503,6 +508,11 @@ func TestPrepareModelAssetsClassifiesManifestFailures(t *testing.T) {
 			)
 			if !errors.Is(err, models.ErrSourceFetchFailed) {
 				t.Fatalf("PrepareModelAssets error = %v, want ErrSourceFetchFailed", err)
+			}
+			var stageErr *models.PullStageError
+			if !errors.As(err, &stageErr) || stageErr.Stage != models.PullStageSourceFetch ||
+				stageErr.Cause == nil {
+				t.Fatalf("PrepareModelAssets stage error = %#v, want source-fetch stage with cause", stageErr)
 			}
 		})
 	}

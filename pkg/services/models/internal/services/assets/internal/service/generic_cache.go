@@ -247,23 +247,26 @@ func (s *service) publishGenericCache(
 	}
 	backupPath, hadExisting, err := s.moveExistingGenericSnapshot(finalPath)
 	if err != nil {
-		return cacheResultFromPaths(artifactKind, artifacts, published), interruptedAssetError(
-			"replace asset snapshot", err,
+		return cacheResultFromPaths(artifactKind, artifacts, published), models.WrapPullStage(
+			models.PullStageCacheInstallation, "", "replace asset snapshot", "",
+			interruptedAssetError("replace asset snapshot", err),
 		)
 	}
 	if err := s.renamePath(stagePath, finalPath); err != nil {
 		if hadExisting {
 			_ = s.renamePath(backupPath, finalPath)
 		}
-		return cacheResultFromPaths(artifactKind, artifacts, published), interruptedAssetError(
-			"publish asset snapshot", err,
+		return cacheResultFromPaths(artifactKind, artifacts, published), models.WrapPullStage(
+			models.PullStageCacheInstallation, "", "publish asset snapshot", "",
+			interruptedAssetError("publish asset snapshot", err),
 		)
 	}
 	committed = true
 	if hadExisting {
 		if err := s.removeTree(backupPath); err != nil {
-			return cacheResultFromPaths(artifactKind, artifacts, published), interruptedAssetError(
-				"clean replaced asset snapshot", err,
+			return cacheResultFromPaths(artifactKind, artifacts, published), models.WrapPullStage(
+				models.PullStageCacheInstallation, "", "clean replaced asset snapshot", "",
+				interruptedAssetError("clean replaced asset snapshot", err),
 			)
 		}
 	}

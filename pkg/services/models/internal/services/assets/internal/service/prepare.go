@@ -62,7 +62,18 @@ func (s *service) PrepareModelAssets(
 	defer func() {
 		s.finishActivePull(request.Scope, request.Name, resultErr)
 	}()
-	return s.prepareModelAssets(ctx, request)
+	result, resultErr = s.prepareModelAssets(ctx, request)
+	if resultErr != nil && !errors.Is(resultErr, context.Canceled) &&
+		!errors.Is(resultErr, context.DeadlineExceeded) {
+		stage := models.PullStageForError(resultErr)
+		if stage == "" {
+			stage = models.PullStageAssembly
+		}
+		resultErr = models.WrapPullStage(
+			stage, request.Name, "prepare model assets", "", resultErr,
+		)
+	}
+	return result, resultErr
 }
 
 func (s *service) prepareModelAssets(
@@ -456,13 +467,19 @@ func (s *service) promoteAttempt(
 	metadataPath string,
 ) (bool, error) {
 	if err := s.renamePath(stagePath, finalPath); err != nil {
-		return false, interruptedAssetError("publish verified asset revision", err)
+		return false, models.WrapPullStage(
+			models.PullStageCacheInstallation, "", "publish verified asset revision", "",
+			interruptedAssetError("publish verified asset revision", err),
+		)
 	}
 	if err := assetContextError(ctx); err != nil {
 		return true, err
 	}
 	if err := s.renamePath(metadataStagePath, metadataPath); err != nil {
-		return true, interruptedAssetError("publish verified asset metadata", err)
+		return true, models.WrapPullStage(
+			models.PullStageCacheInstallation, "", "publish verified asset metadata", "",
+			interruptedAssetError("publish verified asset metadata", err),
+		)
 	}
 	return true, nil
 }
