@@ -9,6 +9,8 @@ import (
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
 )
 
+const legacySkipPermissionsDiagnostic = `agent.run() field "skipPermissions" is deprecated; use "permissions" instead`
+
 func (g *runtimeGlobals) bindAgentAPI() error {
 	agent := g.vm.NewObject()
 	if err := agent.Set("run", g.hostAgentRun); err != nil {
@@ -26,6 +28,7 @@ func (g *runtimeGlobals) hostAgentRun(call goja.FunctionCall) goja.Value {
 	if err != nil {
 		panic(g.vm.NewTypeError(err.Error()))
 	}
+	g.emitLegacySkipPermissionsDiagnostic(req)
 	req, err = ResolveChildWorkerSettings(req, g.agents, g.workerSettings)
 	if err != nil {
 		panic(g.vm.NewTypeError(err.Error()))
@@ -226,10 +229,21 @@ func (g *runtimeGlobals) normalizeParallelAgentSpecs(items []parallelItem) int {
 			g.agents,
 		)
 		if items[index].requestValidation == nil {
+			g.emitLegacySkipPermissionsDiagnostic(items[index].request)
 			dispatchableCount++
 		}
 	}
 	return dispatchableCount
+}
+
+func (g *runtimeGlobals) emitLegacySkipPermissionsDiagnostic(req ChildExecutionRequest) {
+	if !req.LegacySkipPermissionsPresent {
+		return
+	}
+	g.records.append(RuntimeRecord{
+		Kind: RecordKindLog,
+		Log:  &LogRecord{Message: legacySkipPermissionsDiagnostic},
+	})
 }
 
 func (g *runtimeGlobals) executeParallel(items []parallelItem) ([]any, error) {

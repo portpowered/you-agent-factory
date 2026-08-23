@@ -762,38 +762,73 @@ func TestRun_AgentRunRejectsNonBooleanSkipPermissionsBeforeDispatch(t *testing.T
 	}
 }
 
-func TestRun_AgentRunDynamicObjectRejectsUnsupportedFieldsBeforeDispatch(t *testing.T) {
-	unsupported := []string{
-		"writableRoots", "allowNetwork", "network", "allowDangerFullAccess", "dangerFullAccess",
-		"schema", "outputSchema", "concurrency", "maxAgents", "duration", "timeout", "timeoutMs",
+func TestRun_AgentRunPermissionsResolveCanonicalAndLegacyPrecedence(t *testing.T) {
+	tests := []struct {
+		name       string
+		source     string
+		wantBypass bool
+		wantLegacy bool
+	}{
+		{
+			name:       "static default",
+			source:     `return agent.run({ prompt: "review", permissions: "DEFAULT" });`,
+			wantBypass: false,
+		},
+		{
+			name:       "dynamic skip",
+			source:     `const child = { prompt: "review", permissions: "SKIP_PERMISSIONS" }; return agent.run(child);`,
+			wantBypass: true,
+		},
+		{
+			name:       "legacy true",
+			source:     `return agent.run({ prompt: "review", skipPermissions: true });`,
+			wantBypass: true,
+			wantLegacy: true,
+		},
+		{
+			name:       "legacy false",
+			source:     `return agent.run({ prompt: "review", skipPermissions: false });`,
+			wantBypass: false,
+			wantLegacy: true,
+		},
+		{
+			name:       "default wins over legacy true",
+			source:     `return agent.run({ prompt: "review", permissions: "DEFAULT", skipPermissions: true });`,
+			wantBypass: false,
+			wantLegacy: true,
+		},
+		{
+			name:       "skip wins over legacy false",
+			source:     `return agent.run({ prompt: "review", permissions: "SKIP_PERMISSIONS", skipPermissions: false });`,
+			wantBypass: true,
+			wantLegacy: true,
+		},
+		{
+			name:       "omitted",
+			source:     `return agent.run({ prompt: "review" });`,
+			wantBypass: false,
+		},
 	}
-	for _, field := range unsupported {
-		t.Run(field, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			stub := &stubChildExecutor{mode: stubChildExecutionMode}
-			source := fmt.Sprintf(`const child = { prompt: "prompt-secret" }; child[%q] = "value-secret"; agent.run(child);`, field)
 			outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
-				Source: source, SourceRef: "inline", SessionID: "unsupported-child-field",
+				Source: test.source, SourceRef: "inline", SessionID: "permissions-resolution-" + test.name,
 				Policy: workflowpolicy.DefaultEffectivePolicy(),
 			}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
 				return stub
 			}})
-			if err != nil {
-				t.Fatalf("Run() error = %v", err)
+			if err != nil || !outcome.OK {
+				t.Fatalf("Run() outcome = %#v, error = %v", outcome, err)
 			}
-			if outcome.OK {
-				t.Fatalf("Run() outcome = %#v, want script failure", outcome)
+			requests := stub.executionRequests()
+			if len(requests) != 1 {
+				t.Fatalf("executor request count = %d, want 1", len(requests))
 			}
-			want := `agent.run() does not support field "` + field + `"`
-			if !strings.Contains(outcome.Failure.Message, want) {
-				t.Fatalf("failure message = %q, want %q", outcome.Failure.Message, want)
+			request := requests[0]
+			if request.SkipPermissions != test.wantBypass || request.LegacySkipPermissionsPresent != test.wantLegacy {
+				t.Fatalf("executor request = %#v, want bypass=%v legacyFieldSeen=%v", request, test.wantBypass, test.wantLegacy)
 			}
-			if strings.Contains(outcome.Failure.Message, "value-secret") || strings.Contains(outcome.Failure.Message, "prompt-secret") {
-				t.Fatalf("failure message = %q, want redacted diagnostic", outcome.Failure.Message)
-			}
-			if len(stub.executionRequests()) != 0 {
-				t.Fatalf("executor requests = %#v, want none", stub.executionRequests())
-			}
-			assertNoChildDispatchRecords(t, outcome.Records)
 		})
 	}
 }

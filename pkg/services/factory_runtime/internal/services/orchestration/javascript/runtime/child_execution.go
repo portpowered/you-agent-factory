@@ -15,26 +15,27 @@ import (
 // ChildExecutionRequest is the typed child-agent request shared by host primitives
 // and future dispatch bridges.
 type ChildExecutionRequest struct {
-	Prompt           string
-	Label            string
-	AgentID          string
-	Preset           string
-	ExecutorProvider string
-	ModelProvider    string
-	Model            string
-	ReasoningEffort  string
-	ResourceID       string
-	FactoryRevision  int
-	SkipPermissions  bool
-	Command          string
-	Sandbox          string
-	WritableRoots    []string
-	AllowNetwork     bool
-	Concurrency      int
-	OutputSchema     map[string]any
-	WorkflowName     string
-	ArgsSubject      string
-	ReservedIdentity *ChildDispatchIdentity
+	Prompt                       string
+	Label                        string
+	AgentID                      string
+	Preset                       string
+	ExecutorProvider             string
+	ModelProvider                string
+	Model                        string
+	ReasoningEffort              string
+	ResourceID                   string
+	FactoryRevision              int
+	SkipPermissions              bool
+	LegacySkipPermissionsPresent bool
+	Command                      string
+	Sandbox                      string
+	WritableRoots                []string
+	AllowNetwork                 bool
+	Concurrency                  int
+	OutputSchema                 map[string]any
+	WorkflowName                 string
+	ArgsSubject                  string
+	ReservedIdentity             *ChildDispatchIdentity
 }
 
 // ChildDispatchIdentity reserves stable dispatch metadata before concurrent execution.
@@ -274,17 +275,18 @@ func childExecutionRequestFromSpec(spec map[string]any, workflowName, argsSubjec
 		return ChildExecutionRequest{}, err
 	}
 	return ChildExecutionRequest{
-		Prompt:           normalized.Prompt,
-		Label:            normalized.Label,
-		Preset:           normalized.Preset,
-		ExecutorProvider: normalized.ExecutorProvider,
-		ModelProvider:    normalized.ModelProvider,
-		Model:            normalized.Model,
-		ReasoningEffort:  normalized.ReasoningEffort,
-		ResourceID:       normalized.ResourceID,
-		SkipPermissions:  normalized.SkipPermissions,
-		WorkflowName:     workflowName,
-		ArgsSubject:      argsSubject,
+		Prompt:                       normalized.Prompt,
+		Label:                        normalized.Label,
+		Preset:                       normalized.Preset,
+		ExecutorProvider:             normalized.ExecutorProvider,
+		ModelProvider:                normalized.ModelProvider,
+		Model:                        normalized.Model,
+		ReasoningEffort:              normalized.ReasoningEffort,
+		ResourceID:                   normalized.ResourceID,
+		SkipPermissions:              normalized.SkipPermissions,
+		LegacySkipPermissionsPresent: normalized.LegacySkipPermissionsPresent,
+		WorkflowName:                 workflowName,
+		ArgsSubject:                  argsSubject,
 	}, nil
 }
 

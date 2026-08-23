@@ -132,9 +132,91 @@ func TestNormalize_AcceptsAndTrimsCanonicalFields(t *testing.T) {
 	want := factory.JavaScriptChildSpec{
 		Prompt: "review this", Label: "reviewer", Preset: "careful", ExecutorProvider: "cursor-acp",
 		ModelProvider: "codex", Model: "gpt-test", ReasoningEffort: "high", ResourceID: "reviewers",
+		Permissions: factory.JavaScriptChildPermissionDefault,
 	}
 	if got != want {
 		t.Fatalf("Normalize() = %#v, want %#v", got, want)
+	}
+}
+
+func TestNormalize_ResolvesCanonicalPermissionsWithLegacyPrecedence(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                string
+		value               map[string]any
+		wantPermission      factory.JavaScriptChildPermission
+		wantSkipPermissions bool
+		wantLegacyFieldSeen bool
+	}{
+		{
+			name:                "permissions default",
+			value:               map[string]any{"prompt": "review", "permissions": "DEFAULT"},
+			wantPermission:      factory.JavaScriptChildPermissionDefault,
+			wantSkipPermissions: false,
+		},
+		{
+			name:                "permissions skip",
+			value:               map[string]any{"prompt": "review", "permissions": "SKIP_PERMISSIONS"},
+			wantPermission:      factory.JavaScriptChildPermissionSkipPermissions,
+			wantSkipPermissions: true,
+		},
+		{
+			name:                "legacy true",
+			value:               map[string]any{"prompt": "review", "skipPermissions": true},
+			wantPermission:      factory.JavaScriptChildPermissionSkipPermissions,
+			wantSkipPermissions: true,
+			wantLegacyFieldSeen: true,
+		},
+		{
+			name:                "legacy false",
+			value:               map[string]any{"prompt": "review", "skipPermissions": false},
+			wantPermission:      factory.JavaScriptChildPermissionDefault,
+			wantSkipPermissions: false,
+			wantLegacyFieldSeen: true,
+		},
+		{
+			name:                "permissions default wins over legacy true",
+			value:               map[string]any{"prompt": "review", "permissions": "DEFAULT", "skipPermissions": true},
+			wantPermission:      factory.JavaScriptChildPermissionDefault,
+			wantSkipPermissions: false,
+			wantLegacyFieldSeen: true,
+		},
+		{
+			name:                "permissions skip wins over legacy false",
+			value:               map[string]any{"prompt": "review", "permissions": "SKIP_PERMISSIONS", "skipPermissions": false},
+			wantPermission:      factory.JavaScriptChildPermissionSkipPermissions,
+			wantSkipPermissions: true,
+			wantLegacyFieldSeen: true,
+		},
+		{
+			name:                "omitted permissions defaults",
+			value:               map[string]any{"prompt": "review"},
+			wantPermission:      factory.JavaScriptChildPermissionDefault,
+			wantSkipPermissions: false,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := factory.NormalizeJavaScriptChild(test.value)
+			if err != nil {
+				t.Fatalf("Normalize() error = %v", err)
+			}
+			if got.Permissions != test.wantPermission || got.SkipPermissions != test.wantSkipPermissions || got.LegacySkipPermissionsPresent != test.wantLegacyFieldSeen {
+				t.Fatalf("Normalize() = %#v, want permission=%q skipPermissions=%v legacyFieldSeen=%v", got, test.wantPermission, test.wantSkipPermissions, test.wantLegacyFieldSeen)
+			}
+		})
+	}
+}
+
+func TestNormalize_RejectsInvalidPermissionsValues(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []any{"READ_ONLY", true, 42} {
+		_, err := factory.NormalizeJavaScriptChild(map[string]any{"prompt": "review", "permissions": value})
+		if err == nil || !strings.Contains(err.Error(), `"permissions"`) {
+			t.Fatalf("Normalize(%#v) error = %v, want field-specific permissions diagnostic", value, err)
+		}
 	}
 }
 

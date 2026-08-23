@@ -106,6 +106,11 @@ func (a *sourceAnalyzer) validateAgentRunCall(call *js.CallExpr) {
 	if !ok || obj == nil {
 		return
 	}
+	a.validateAgentRunSupportedProperties(call, obj)
+	a.validateAgentRunFields(call, obj)
+}
+
+func (a *sourceAnalyzer) validateAgentRunSupportedProperties(call *js.CallExpr, obj *js.ObjectExpr) {
 	for _, property := range obj.List {
 		field, visible := staticPropertyName(property)
 		if visible && !orchestratorcontract.IsJavaScriptChildSupportedField(field) {
@@ -116,22 +121,48 @@ func (a *sourceAnalyzer) validateAgentRunCall(call *js.CallExpr) {
 			)
 		}
 	}
+}
+
+func (a *sourceAnalyzer) validateAgentRunFields(call *js.CallExpr, obj *js.ObjectExpr) {
 	for _, field := range orchestratorcontract.JavaScriptChildSupportedFields() {
 		value, found := objectProperty(obj, field)
 		if field == orchestratorcontract.FieldPrompt && !found {
 			a.addIssue(shapeIssueCode("agent.run"), `agent.run() requires an object argument with a string "prompt" property`, call)
 			continue
 		}
-		if field == orchestratorcontract.FieldSkipPermissions {
-			if found && !isAgentRunBooleanValue(value) {
-				a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be a boolean value`, field), call)
-			}
-			continue
+		a.validateAgentRunField(call, field, value, found)
+	}
+}
+
+func (a *sourceAnalyzer) validateAgentRunField(call *js.CallExpr, field string, value js.IExpr, found bool) {
+	switch field {
+	case orchestratorcontract.FieldSkipPermissions:
+		if found && !isAgentRunBooleanValue(value) {
+			a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be a boolean value`, field), call)
 		}
+	case orchestratorcontract.FieldPermissions:
+		if found && isLiteralExpr(value) && !isStringLiteral(value) {
+			a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be a string value`, field), call)
+		} else if found && !isAgentRunPermissionValue(value) {
+			a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be DEFAULT or SKIP_PERMISSIONS`, field), call)
+		}
+	default:
 		if found && !isAgentRunStringValue(value) {
 			a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be a string value`, field), call)
 		}
 	}
+}
+
+func isAgentRunPermissionValue(value js.IExpr) bool {
+	if !isLiteralExpr(value) {
+		return true
+	}
+	text, ok := agentRunStringLiteral(value)
+	if !ok {
+		return false
+	}
+	return text == string(orchestratorcontract.JavaScriptChildPermissionDefault) ||
+		text == string(orchestratorcontract.JavaScriptChildPermissionSkipPermissions)
 }
 
 func isAgentRunBooleanValue(value js.IExpr) bool {
@@ -292,6 +323,31 @@ func isStringLiteral(expr js.IExpr) bool {
 	default:
 		return false
 	}
+}
+
+func agentRunStringLiteral(expr js.IExpr) (string, bool) {
+	switch node := expr.(type) {
+	case js.LiteralExpr:
+		if node.TokenType != js.StringToken {
+			return "", false
+		}
+		return unquoteAgentRunString(string(node.Data))
+	case *js.LiteralExpr:
+		if node.TokenType != js.StringToken {
+			return "", false
+		}
+		return unquoteAgentRunString(string(node.Data))
+	default:
+		return "", false
+	}
+}
+
+func unquoteAgentRunString(raw string) (string, bool) {
+	if len(raw) >= 2 && raw[0] == '\'' && raw[len(raw)-1] == '\'' {
+		return raw[1 : len(raw)-1], true
+	}
+	text, err := strconv.Unquote(raw)
+	return text, err == nil
 }
 
 func isNumberLiteral(expr js.IExpr) bool {
