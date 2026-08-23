@@ -23,7 +23,7 @@ func TestRun_AgentRunAcceptsAndNormalizesAllSupportedFields(t *testing.T) {
   model: "  gpt-test  ",
   reasoningEffort: "  high  ",
   resourceId: "  reviewers  ",
-  skipPermissions: true
+  permissions: "SKIP_PERMISSIONS"
 }); return { ok: true };`,
 		SourceRef: "agent-run-closed-contract",
 		SessionID: "agent-run-closed-contract-valid",
@@ -96,13 +96,13 @@ func TestRun_AgentRunRejectsInvalidOptionalValuesBeforeDispatch(t *testing.T) {
 	}
 }
 
-func TestRun_AgentRunNormalizesOmittedAndFalseSkipPermissions(t *testing.T) {
+func TestRun_AgentRunNormalizesOmittedAndDefaultPermission(t *testing.T) {
 	for _, test := range []struct {
 		name   string
 		source string
 	}{
 		{name: "omitted", source: `agent.run({ prompt: "review" }); return { ok: true };`},
-		{name: "explicit false", source: `agent.run({ prompt: "review", skipPermissions: false }); return { ok: true };`},
+		{name: "explicit default", source: `agent.run({ prompt: "review", permissions: "DEFAULT" }); return { ok: true };`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			outcome, stub := runAgentRunWithStub(t, test.source, factory.JavaScriptWorkerSettings{})
@@ -114,7 +114,7 @@ func TestRun_AgentRunNormalizesOmittedAndFalseSkipPermissions(t *testing.T) {
 				t.Fatalf("child executor request count = %d, want 1", len(requests))
 			}
 			if requests[0].SkipPermissions {
-				t.Fatalf("child executor request = %#v, want skipPermissions=false", requests[0])
+				t.Fatalf("child executor request = %#v, want default permission", requests[0])
 			}
 		})
 	}

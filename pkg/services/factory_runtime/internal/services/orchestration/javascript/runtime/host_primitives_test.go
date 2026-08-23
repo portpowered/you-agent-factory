@@ -19,7 +19,7 @@ func TestRun_AgentRunDisallowedPermissionFailsBeforeDispatch(t *testing.T) {
 	policy.AllowedPermissions = []string{workflowpolicy.PermissionModeDefault}
 	calls := 0
 	outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
-		Source:      `agent.run({ prompt: "review", label: "skip-child", skipPermissions: true }); return { ok: true };`,
+		Source:      `agent.run({ prompt: "review", label: "skip-child", permissions: "SKIP_PERMISSIONS" }); return { ok: true };`,
 		SourceRef:   "inline",
 		SessionID:   "session-disallowed-permission",
 		FactoryName: "named-factory",
@@ -44,25 +44,25 @@ func TestRun_AgentRunDisallowedPermissionFailsBeforeDispatch(t *testing.T) {
 
 func TestRun_AgentRunAllowedAndOmittedPermissionPoliciesPreserveExecution(t *testing.T) {
 	tests := []struct {
-		name     string
-		allowed  []string
-		skip     bool
-		wantSkip bool
+		name       string
+		allowed    []string
+		permission string
+		wantSkip   bool
 	}{
 		{
 			name:    "allowed default",
 			allowed: []string{workflowpolicy.PermissionModeDefault},
 		},
 		{
-			name:     "allowed skip permissions",
-			allowed:  []string{workflowpolicy.PermissionModeSkipPermissions},
-			skip:     true,
-			wantSkip: true,
+			name:       "allowed skip permissions",
+			allowed:    []string{workflowpolicy.PermissionModeSkipPermissions},
+			permission: workflowpolicy.PermissionModeSkipPermissions,
+			wantSkip:   true,
 		},
 		{
-			name:     "omitted allowlist",
-			skip:     true,
-			wantSkip: true,
+			name:       "omitted allowlist",
+			permission: workflowpolicy.PermissionModeSkipPermissions,
+			wantSkip:   true,
 		},
 	}
 
@@ -74,7 +74,12 @@ func TestRun_AgentRunAllowedAndOmittedPermissionPoliciesPreserveExecution(t *tes
 			calls := 0
 			var captured factory.JavaScriptChildExecutionRequest
 			outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
-				Source: fmt.Sprintf(`return agent.run({ prompt: "review", label: %q, skipPermissions: %t });`, test.name, test.skip),
+				Source: func() string {
+					if test.permission == "" {
+						return fmt.Sprintf(`return agent.run({ prompt: "review", label: %q, permissions: "DEFAULT" });`, test.name)
+					}
+					return fmt.Sprintf(`return agent.run({ prompt: "review", label: %q, permissions: %q });`, test.name, test.permission)
+				}(),
 				Policy: policy,
 			}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
 				return childExecutorFunc(func(_ context.Context, req factory.JavaScriptChildExecutionRequest) (factory.JavaScriptChildExecutionResult, error) {
@@ -87,7 +92,7 @@ func TestRun_AgentRunAllowedAndOmittedPermissionPoliciesPreserveExecution(t *tes
 				t.Fatalf("Run() outcome=%#v err=%v", outcome, err)
 			}
 			if calls != 1 || captured.SkipPermissions != test.wantSkip {
-				t.Fatalf("child executor calls=%d request=%#v, want one call with skipPermissions=%t", calls, captured, test.wantSkip)
+				t.Fatalf("child executor calls=%d request=%#v, want one call with provider bypass=%t", calls, captured, test.wantSkip)
 			}
 		})
 	}

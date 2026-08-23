@@ -367,7 +367,7 @@ func (e *packagedWorkflowChildExecutor) Execute(_ context.Context, request facto
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if !request.SkipPermissions {
-		return factory.JavaScriptChildExecutionResult{}, fmt.Errorf("packaged child %q did not default skipPermissions", request.Label)
+		return factory.JavaScriptChildExecutionResult{}, fmt.Errorf("packaged child %q did not request SKIP_PERMISSIONS", request.Label)
 	}
 	e.calls++
 	e.called = append(e.called, request.Label)
