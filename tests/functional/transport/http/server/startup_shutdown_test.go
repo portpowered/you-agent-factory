@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/pprof/profile"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -102,6 +104,47 @@ func TestAPIServerPprofIsOptInThroughThePublicRunPath(t *testing.T) {
 	}
 	if heap.StatusCode != http.StatusOK || len(heapBody) == 0 {
 		t.Fatalf("enabled pprof heap = (%d, body length %d), want non-empty HTTP 200 response", heap.StatusCode, len(heapBody))
+	}
+	heapProfile, err := profile.Parse(bytes.NewReader(heapBody))
+	if err != nil {
+		t.Fatalf("parse enabled live heap profile: %v", err)
+	}
+	if len(heapProfile.SampleType) == 0 || len(heapProfile.Sample) == 0 {
+		t.Fatalf("enabled live heap profile = %+v, want sample types and samples", heapProfile)
+	}
+
+	for _, path := range []string{"/debug/pprof/allocs", "/debug/pprof/goroutine"} {
+		response, err := http.Get(enabledServer.URL() + path)
+		if err != nil {
+			t.Fatalf("enabled GET %s: %v", path, err)
+		}
+		body, err := io.ReadAll(response.Body)
+		_ = response.Body.Close()
+		if err != nil {
+			t.Fatalf("read enabled GET %s: %v", path, err)
+		}
+		if response.StatusCode != http.StatusOK || len(body) == 0 {
+			t.Fatalf("enabled GET %s = (%d, body length %d), want non-empty HTTP 200 response", path, response.StatusCode, len(body))
+		}
+	}
+	cpu, err := http.Get(enabledServer.URL() + "/debug/pprof/profile?seconds=1")
+	if err != nil {
+		t.Fatalf("enabled GET CPU profile: %v", err)
+	}
+	cpuBody, err := io.ReadAll(cpu.Body)
+	_ = cpu.Body.Close()
+	if err != nil {
+		t.Fatalf("read enabled CPU profile: %v", err)
+	}
+	if cpu.StatusCode != http.StatusOK || len(cpuBody) == 0 {
+		t.Fatalf("enabled CPU profile = (%d, body length %d), want non-empty HTTP 200 response", cpu.StatusCode, len(cpuBody))
+	}
+	cpuProfile, err := profile.Parse(bytes.NewReader(cpuBody))
+	if err != nil {
+		t.Fatalf("parse enabled live CPU profile: %v", err)
+	}
+	if len(cpuProfile.SampleType) == 0 {
+		t.Fatalf("enabled live CPU profile = %+v, want sample types", cpuProfile)
 	}
 }
 

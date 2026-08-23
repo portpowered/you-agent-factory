@@ -52,7 +52,7 @@ func TestNewStarterBindsServesAndJoinsOnCancellation(t *testing.T) {
 		t.Fatalf("response = %q, want ready", got)
 	}
 	pprofResponse := getPprofTestResponse(t, "http://"+listener.Addr().String()+"/debug/pprof/heap")
-	if pprofResponse.StatusCode != http.StatusOK || pprofResponse.Body == "" {
+	if pprofResponse.StatusCode != http.StatusOK || len(pprofResponse.Body) == 0 {
 		t.Fatalf("NewStarter pprof heap = (%d, %q), want non-empty HTTP 200 response", pprofResponse.StatusCode, pprofResponse.Body)
 	}
 
