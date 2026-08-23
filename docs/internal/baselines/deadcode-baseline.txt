@@ -89,7 +89,6 @@ pkg/services/factory_runtime/internal/services/orchestration/subsystems/noop_dis
 pkg/services/factory_runtime/internal/testkit/runtime.go: unreachable func: NewPetriMarking
 pkg/services/factory_runtime/resource_capacity.go: unreachable func: normalizeResourceCapacityRequest
 pkg/services/factory_runtime/transports/mcp/client.go: unreachable func: BindRuntime
-pkg/services/factory_sessions/transports/http/handler_invocation.go: unreachable func: decodeInvocationRequestBody
 pkg/services/factory_sessions/transports/http/handler_test.go: unreachable func: factoryStatusRuntimeRole.Observe
 pkg/services/factory_sessions/transports/http/handlers_common.go: unreachable func: Adapter.writeLifecycleControlSuccess
 pkg/services/factory_sessions/transports/http/handlers_common.go: unreachable func: decodeOptionalApproveRequest
@@ -104,16 +103,6 @@ pkg/services/factory_sessions/transports/http/handlers_common.go: unreachable fu
 pkg/services/factory_sessions/transports/http/handlers_common.go: unreachable func: stringPtrIfNotEmpty
 pkg/services/factory_sessions/transports/http/handlers_common.go: unreachable func: stringSlicePtrCopy
 pkg/services/factory_sessions/transports/http/handlers_common.go: unreachable func: stringSliceValue
-pkg/services/factory_sessions/transports/http/handlers_factory.go: unreachable func: decodeNamedFactoryBody
-pkg/services/factory_sessions/transports/http/handlers_factory.go: unreachable func: decodeOpenFactorySessionBody
-pkg/services/factory_sessions/transports/http/handlers_factory_current.go: unreachable func: decodePromptTemplateValidationRequestBody
-pkg/services/factory_sessions/transports/http/handlers_factory_current.go: unreachable func: decodeSaveCurrentFactoryBody
-pkg/services/factory_sessions/transports/http/session_control.go: unreachable func: decodeApproveFactorySessionRequest
-pkg/services/factory_sessions/transports/http/session_control.go: unreachable func: decodeInterruptDispatchRequest
-pkg/services/factory_sessions/transports/http/session_control.go: unreachable func: decodeLifecycleControlRequest
-pkg/services/factory_sessions/transports/http/session_control.go: unreachable func: decodeOpenFactorySessionRequest
-pkg/services/factory_sessions/transports/http/session_control.go: unreachable func: decodeRetryDispatchRequest
-pkg/services/factory_sessions/transports/http/session_control.go: unreachable func: decodeStartFactorySessionRequest
 pkg/services/factory_sessions/transports/mcp/inspection.go: unreachable func: ListDispatches
 pkg/services/factory_sessions/transports/mcp/inventory_boundary.go: unreachable func: VerifyProjectedMCPBoundaryInventories
 pkg/services/factory_sessions/transports/mcp/registry_test.go: unreachable func: writeWorkflow
