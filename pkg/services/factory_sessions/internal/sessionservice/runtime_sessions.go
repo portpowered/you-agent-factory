@@ -218,7 +218,11 @@ func (fs *SessionRuntime) stopFactorySession(sessionID string) error {
 	if fs == nil {
 		return fmt.Errorf("factory service is required")
 	}
-	return runtimebinding.StopSession(fs.sessionState, &fs.runtimeState, sessionID, fs.StopLiveRuntime)
+	err := runtimebinding.StopSession(fs.sessionState, &fs.runtimeState, sessionID, fs.StopLiveRuntime)
+	if err == nil && fs.releaseWorkAdmissionProjection != nil {
+		fs.releaseWorkAdmissionProjection(sessionID)
+	}
+	return err
 }
 
 func (fs *SessionRuntime) runSessionID() string {
@@ -278,6 +282,11 @@ func (fs *SessionRuntime) ReplaceSessionRuntime(
 				sessionID = session.ID
 			}
 			fs.logger.Warn("session runtime replacement warning", zap.Error(err), zap.String("session_id", sessionID))
+		},
+		func(sessionID string, runtime *factorysessions.LiveRuntime, record factory.RuntimeRecord) {
+			if fs.retireWorkAdmissionProjection != nil {
+				fs.retireWorkAdmissionProjection(sessionID, runtime, record)
+			}
 		},
 	)
 	if err != nil {

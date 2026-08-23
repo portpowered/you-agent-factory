@@ -23,6 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 )
@@ -51,7 +52,15 @@ type Assembly struct {
 	responseStreams              responsestreamservice.Service
 	detachedMu                   sync.RWMutex
 	detachedGateways             map[string]factorysessions.Service
-	detachedGatewayOrder         []string
+	workAdmissionsMu             sync.Mutex
+	workAdmissions               map[string][]*workAdmissionProjection
+	// beforeWorkAdmissionProjectionRegistration is only populated by the
+	// same-package replacement-window regression. It makes the otherwise
+	// scheduler-dependent capture/registration gap deterministic without
+	// changing the production dependency graph.
+	beforeWorkAdmissionProjectionRegistration func()
+	workReadMetricsRecorder                   roles.InvocationMetricsRecorder
+	detachedGatewayOrder                      []string
 }
 
 type streamManager interface {
@@ -108,6 +117,7 @@ func NewAssembly(
 		identity:                     identityService,
 		responseStreams:              responseStreamService,
 		detachedGateways:             make(map[string]factorysessions.Service),
+		workAdmissions:               make(map[string][]*workAdmissionProjection),
 	}
 }
 
@@ -128,16 +138,166 @@ func (a *Assembly) Resolve(sessionID string) *livesession.LiveSession {
 // ResolveWorkRuntime adapts the Factory Sessions registry to Work's
 // consumer-owned runtime port.
 func (a *Assembly) ResolveWorkRuntime(sessionID string) (work.Runtime, error) {
-	session := a.Resolve(sessionID)
-	if session == nil || runtimebinding.ServiceForSession(session) == nil {
-		return nil, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, sessionID)
+	// Replacement publishes the new session generation before retiring the old
+	// generation's projection. Revalidate after registration so a resolver that
+	// captured the old generation in that window releases it and retries rather
+	// than recreating stale state after retirement.
+	for {
+		session := a.Resolve(sessionID)
+		if session == nil || runtimebinding.ServiceForSession(session) == nil {
+			a.releaseWorkAdmissionProjection(sessionID)
+			return nil, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, sessionID)
+		}
+		runtime := session.Runtime
+		ingress, _ := runtimebinding.WorkAndEventIngressForLiveRuntime(runtime)
+		var ledger recordings.Ledger
+		if bundle := runtimebinding.BundleFromSession(session); bundle != nil {
+			ledger = bundle.RecordingLedger()
+		}
+		if a.beforeWorkAdmissionProjectionRegistration != nil {
+			a.beforeWorkAdmissionProjectionRegistration()
+		}
+		projection := a.workAdmissionProjection(sessionID, runtime, ledger)
+		if a.workRuntimeGenerationIsCurrent(sessionID, runtime, ledger) {
+			return workRuntimeAdapter{
+				sessionID:   sessionID,
+				clock:       runtime.Clock,
+				runtime:     runtimebinding.ServiceForSession(session),
+				ingress:     ingress,
+				admissions:  projection,
+				readMetrics: a.workReadMetricsRecorder,
+			}, nil
+		}
+		a.discardWorkAdmissionProjection(sessionID, projection)
 	}
-	ingress, _ := runtimebinding.WorkAndEventIngressForLiveRuntime(session.Runtime)
-	return workRuntimeAdapter{
-		sessionID: sessionID,
-		runtime:   runtimebinding.ServiceForSession(session),
-		ingress:   ingress,
-	}, nil
+}
+
+func (a *Assembly) workRuntimeGenerationIsCurrent(
+	sessionID string,
+	runtime *factorysessions.LiveRuntime,
+	ledger recordings.Ledger,
+) bool {
+	if a == nil || runtime == nil {
+		return false
+	}
+	session := a.Resolve(sessionID)
+	if session == nil || session.Runtime != runtime {
+		return false
+	}
+	var currentLedger recordings.Ledger
+	if bundle := runtimebinding.BundleFromSession(session); bundle != nil {
+		currentLedger = bundle.RecordingLedger()
+	}
+	return sameLedger(currentLedger, ledger)
+}
+
+func (a *Assembly) discardWorkAdmissionProjection(
+	sessionID string,
+	target *workAdmissionProjection,
+) {
+	if a == nil || target == nil {
+		return
+	}
+	a.workAdmissionsMu.Lock()
+	projections := a.workAdmissions[sessionID]
+	remaining := make([]*workAdmissionProjection, 0, len(projections))
+	removed := false
+	for _, projection := range projections {
+		if projection == target {
+			removed = true
+			continue
+		}
+		remaining = append(remaining, projection)
+	}
+	if len(remaining) == 0 {
+		delete(a.workAdmissions, sessionID)
+	} else {
+		a.workAdmissions[sessionID] = remaining
+	}
+	a.workAdmissionsMu.Unlock()
+	if removed {
+		target.Release()
+	}
+}
+
+func (a *Assembly) workAdmissionProjection(
+	sessionID string,
+	runtime *factorysessions.LiveRuntime,
+	ledger recordings.Ledger,
+) *workAdmissionProjection {
+	if a == nil {
+		return nil
+	}
+	a.workAdmissionsMu.Lock()
+	if a.workAdmissions == nil {
+		a.workAdmissions = make(map[string][]*workAdmissionProjection)
+	}
+	var projection *workAdmissionProjection
+	for _, candidate := range a.workAdmissions[sessionID] {
+		if candidate.matchesGeneration(runtime, ledger) {
+			projection = candidate
+			break
+		}
+	}
+	if projection == nil {
+		projection = newWorkAdmissionProjectionForGeneration(sessionID, runtime, ledger, runtime.Clock)
+		a.workAdmissions[sessionID] = append(a.workAdmissions[sessionID], projection)
+	}
+	a.workAdmissionsMu.Unlock()
+	projection.Bind(ledger)
+	return projection
+}
+
+func (a *Assembly) releaseWorkAdmissionProjection(sessionID string) {
+	if a == nil {
+		return
+	}
+	a.workAdmissionsMu.Lock()
+	projections := a.workAdmissions[sessionID]
+	delete(a.workAdmissions, sessionID)
+	a.workAdmissionsMu.Unlock()
+	for _, projection := range projections {
+		projection.Release()
+	}
+}
+
+// retireWorkAdmissionProjection releases only the projection owned by a
+// runtime generation that has completed replacement. An in-flight adapter may
+// still hold the old projection, so Release preserves its detached admissions
+// while retiring the ledger callback and generation identity.
+func (a *Assembly) retireWorkAdmissionProjection(
+	sessionID string,
+	runtime *factorysessions.LiveRuntime,
+	record factoryruntime.RuntimeRecord,
+) {
+	if a == nil || runtime == nil || record == nil {
+		return
+	}
+	ledger := record.RecordingLedger()
+	a.workAdmissionsMu.Lock()
+	projections := a.workAdmissions[sessionID]
+	if len(projections) == 0 {
+		a.workAdmissionsMu.Unlock()
+		return
+	}
+	remaining := make([]*workAdmissionProjection, 0, len(projections))
+	retired := make([]*workAdmissionProjection, 0, 1)
+	for _, projection := range projections {
+		if projection.matchesGeneration(runtime, ledger) {
+			retired = append(retired, projection)
+			continue
+		}
+		remaining = append(remaining, projection)
+	}
+	if len(remaining) == 0 {
+		delete(a.workAdmissions, sessionID)
+	} else {
+		a.workAdmissions[sessionID] = remaining
+	}
+	a.workAdmissionsMu.Unlock()
+	for _, projection := range retired {
+		projection.Release()
+	}
 }
 
 func (a *Assembly) WithRuntimeRead(read func(*factorysessions.LiveRuntime) error) error {
@@ -201,6 +361,7 @@ func (a *Assembly) Complete(
 	if a == nil || a.state == nil || a.registry == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Sessions assembly is required")
 	}
+	a.workReadMetricsRecorder = invocationMetricsRecorder
 	if startupRuntime == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("default Factory Runtime is required")
 	}
@@ -294,6 +455,8 @@ func (a *Assembly) Complete(
 	if runtime == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Sessions runtime is required")
 	}
+	runtime.releaseWorkAdmissionProjection = a.releaseWorkAdmissionProjection
+	runtime.retireWorkAdmissionProjection = a.retireWorkAdmissionProjection
 	gateway := NewWithLiveChangeCoordinator(
 		SessionServiceHost(runtime),
 		a.state,

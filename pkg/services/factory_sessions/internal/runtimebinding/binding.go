@@ -68,6 +68,7 @@ func StartDefault(
 	lifecycle RuntimeLifecycle,
 	startSidecars func(context.Context, RuntimeHandle) error,
 	stop func(RuntimeHandle) error,
+	onSessionRemoved func(string),
 ) (RuntimeHandle, error) {
 	if bundle == nil {
 		return nil, fmt.Errorf("runtime bundle is required")
@@ -88,6 +89,7 @@ func StartDefault(
 	})
 	if strings.TrimSpace(registeredSessionID) == "" ||
 		state.Resolve(factorysessions.DefaultSessionID) == nil {
+		unregisterSession(state, factorysessions.DefaultSessionID, onSessionRemoved)
 		if stop != nil {
 			_ = stop(handle)
 		}
@@ -98,16 +100,17 @@ func StartDefault(
 	if err := lifecycle.WaitForStart(readinessContext, handle); err != nil {
 		return nil, HandleStartFailure(
 			readinessContext, state, runtimeState,
-			factorysessions.DefaultSessionID, handle, stop, err, runtimeMode,
+			factorysessions.DefaultSessionID, handle, stop, err, runtimeMode, onSessionRemoved,
 		)
 	}
 	if serviceMode && startSidecars != nil {
 		if err := startSidecars(runContext, handle); err != nil {
 			if DefaultSessionClosedDuringStartup(state, runtimeMode) {
+				unregisterSession(state, factorysessions.DefaultSessionID, onSessionRemoved)
 				return nil, nil
 			}
 			runtimeState.ClearActive()
-			state.Unregister(factorysessions.DefaultSessionID)
+			unregisterSession(state, factorysessions.DefaultSessionID, onSessionRemoved)
 			if stop != nil {
 				_ = stop(handle)
 			}
@@ -120,7 +123,8 @@ func StartDefault(
 // Replace starts a replacement runtime, transfers the session registry entry
 // and active selection, and then stops the previous runtime. The request
 // context bounds readiness while the existing service context owns the new
-// runtime after the request returns.
+// runtime after the request returns. The retirement callback runs only after
+// the previous runtime has been stopped and its binding deactivated.
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func Replace(
 	readinessContext context.Context,
@@ -133,6 +137,7 @@ func Replace(
 	startSidecars func(context.Context, RuntimeHandle) error,
 	stop func(RuntimeHandle) error,
 	report func(error),
+	onPreviousRuntimeRetired func(string, *factorysessions.LiveRuntime, factory.RuntimeRecord),
 ) (*livesession.LiveSession, error) {
 	if session == nil {
 		return nil, fmt.Errorf("%w: session handle is unavailable", factorysessions.ErrSessionNotFound)
@@ -141,6 +146,8 @@ func Replace(
 	if current == nil {
 		return nil, fmt.Errorf("%w: session handle is unavailable", factorysessions.ErrSessionNotFound)
 	}
+	previousRuntime := session.Runtime
+	previousRecord := current.RuntimeInstance()
 	preparedSpec := PreparedSpecFromSession(session)
 	if state == nil || runtimeState == nil {
 		return nil, fmt.Errorf("Factory Session runtime state is required")
@@ -179,6 +186,34 @@ func Replace(
 	}
 	restoreSidecars = false
 
+	updated := registerReplacementSession(
+		state, runtimeState, session, replacement, replacementHandle,
+		preparedSpec, serviceCtx, isActive,
+	)
+	if stop != nil {
+		if err := stop(current); err != nil && !errors.Is(err, context.Canceled) && report != nil {
+			report(fmt.Errorf("stop prior session runtime: %w", err))
+		}
+	}
+	if err := deactivateRuntimeBinding(BindingForSession(session)); err != nil && report != nil {
+		report(fmt.Errorf("deactivate prior Factory Runtime binding: %w", err))
+	}
+	if onPreviousRuntimeRetired != nil {
+		onPreviousRuntimeRetired(session.ID, previousRuntime, previousRecord)
+	}
+	return updated, nil
+}
+
+func registerReplacementSession(
+	state *sessionruntime.Service,
+	runtimeState *State,
+	session *livesession.LiveSession,
+	replacement RuntimeInstance,
+	replacementHandle RuntimeHandle,
+	preparedSpec any,
+	serviceCtx context.Context,
+	isActive bool,
+) *livesession.LiveSession {
 	executionBaseDir := strings.TrimSpace(session.ExecutionBaseDir)
 	if replacement != nil && replacement.LoadedRuntimeConfig() != nil {
 		if runtimeBaseDir := strings.TrimSpace(replacement.LoadedRuntimeConfig().RuntimeBaseDir()); runtimeBaseDir != "" {
@@ -212,15 +247,7 @@ func Replace(
 	if isActive {
 		runtimeState.SetActive(serviceCtx, session.ID, replacementHandle)
 	}
-	if stop != nil {
-		if err := stop(current); err != nil && !errors.Is(err, context.Canceled) && report != nil {
-			report(fmt.Errorf("stop prior session runtime: %w", err))
-		}
-	}
-	if err := deactivateRuntimeBinding(BindingForSession(session)); err != nil && report != nil {
-		report(fmt.Errorf("deactivate prior Factory Runtime binding: %w", err))
-	}
-	return updated, nil
+	return updated
 }
 
 // Start launches a Factory Runtime, waits for readiness, starts service-mode
@@ -691,18 +718,18 @@ func HandleStartFailure(
 	stop func(RuntimeHandle) error,
 	startErr error,
 	mode interfaces.RuntimeMode,
+	onSessionRemoved func(string),
 ) error {
 	if DefaultSessionClosedDuringStartup(state, mode) {
 		runtimeState.ClearActive()
+		unregisterSession(state, sessionID, onSessionRemoved)
 		if stop != nil {
 			_ = stop(handle)
 		}
 		return nil
 	}
 	runtimeState.ClearActive()
-	if state != nil {
-		state.Unregister(sessionID)
-	}
+	unregisterSession(state, sessionID, onSessionRemoved)
 	var stopErr error
 	if stop != nil {
 		stopErr = stop(handle)
@@ -720,6 +747,19 @@ func HandleStartFailure(
 		return errors.Join(wrapped, stopErr)
 	}
 	return wrapped
+}
+
+func unregisterSession(
+	state *sessionruntime.Service,
+	sessionID string,
+	onSessionRemoved func(string),
+) {
+	if state != nil {
+		state.Unregister(sessionID)
+	}
+	if onSessionRemoved != nil {
+		onSessionRemoved(sessionID)
+	}
 }
 
 // ShutdownOtherLiveSessions stops and unregisters every session except the

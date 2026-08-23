@@ -67,33 +67,35 @@ type SessionRuntime struct {
 	runtimeSidecars  RuntimeSidecars
 	factoryRootDir   string
 	// startupBundle holds the built default runtime before Run registers ~default.
-	dir                          string
-	executionBaseDir             string
-	runtimeMode                  interfaces.RuntimeMode
-	backendScopeID               string
-	workFile                     string
-	workflowID                   string
-	workstationLoader            interfaces.WorkstationLoader
-	loadFactory                  interfaces.LoadedFactoryLoader
-	factoryScaffoldInitializer   factorysessions.FactoryScaffoldInitializer
-	editableFactoryValidator     factorysessions.EditableFactoryValidator
-	reconnectCursorValidator     factorysessions.ReconnectCursorValidator
-	worldStateProjector          factory.WorldStateProjector
-	invocationMetricsRecorder    roles.InvocationMetricsRecorder
-	baseLogger                   *zap.Logger
-	logger                       *zap.Logger
-	startTime                    time.Time
-	clock                        factory.Clock
-	definitions                  interfaces.Service
-	durableExecution             durableexecution.Service
-	newJavaScriptCheckpointStore factory.JavaScriptCheckpointStoreFactory
-	sessionResultProjection      factory.SessionResultProjectionOperation
-	directoryInspection          roles.DirectoryInspection
-	sessionIDs                   factorysessions.SessionIDGenerator
-	resolveHome                  factorysessions.HomeDirectoryResolver
-	namedPaths                   interfaces.NamedPathResolver
-	initialWorkFiles             fileeffects.InitialWorkReader
-	identity                     identity.Service
+	dir                            string
+	executionBaseDir               string
+	runtimeMode                    interfaces.RuntimeMode
+	backendScopeID                 string
+	workFile                       string
+	workflowID                     string
+	workstationLoader              interfaces.WorkstationLoader
+	loadFactory                    interfaces.LoadedFactoryLoader
+	factoryScaffoldInitializer     factorysessions.FactoryScaffoldInitializer
+	editableFactoryValidator       factorysessions.EditableFactoryValidator
+	reconnectCursorValidator       factorysessions.ReconnectCursorValidator
+	worldStateProjector            factory.WorldStateProjector
+	invocationMetricsRecorder      roles.InvocationMetricsRecorder
+	baseLogger                     *zap.Logger
+	logger                         *zap.Logger
+	startTime                      time.Time
+	clock                          factory.Clock
+	definitions                    interfaces.Service
+	durableExecution               durableexecution.Service
+	newJavaScriptCheckpointStore   factory.JavaScriptCheckpointStoreFactory
+	sessionResultProjection        factory.SessionResultProjectionOperation
+	directoryInspection            roles.DirectoryInspection
+	sessionIDs                     factorysessions.SessionIDGenerator
+	resolveHome                    factorysessions.HomeDirectoryResolver
+	namedPaths                     interfaces.NamedPathResolver
+	initialWorkFiles               fileeffects.InitialWorkReader
+	identity                       identity.Service
+	releaseWorkAdmissionProjection func(string)
+	retireWorkAdmissionProjection  func(string, *factorysessions.LiveRuntime, factory.RuntimeRecord)
 }
 
 // ActivateNamedFactory builds a replacement runtime from a persisted named
@@ -177,6 +179,7 @@ func (fs *SessionRuntime) StartDefaultRuntime(
 		fs.runtimeLifecycle,
 		fs.StartLiveRuntimeSidecars,
 		fs.StopLiveRuntime,
+		fs.releaseWorkAdmissionProjection,
 	)
 }
 
@@ -247,5 +250,17 @@ func (fs *SessionRuntime) ShutdownOtherLiveSessions(except liveRuntimeHandle) er
 	if fs == nil {
 		return nil
 	}
-	return runtimebinding.ShutdownOtherLiveSessions(fs.sessionState, except, fs.StopLiveRuntime)
+	var sessionIDs []string
+	if fs.sessionState != nil && fs.sessionState.Registry() != nil {
+		sessionIDs = fs.sessionState.Registry().IDs()
+	}
+	err := runtimebinding.ShutdownOtherLiveSessions(fs.sessionState, except, fs.StopLiveRuntime)
+	if fs.releaseWorkAdmissionProjection != nil {
+		for _, sessionID := range sessionIDs {
+			if fs.sessionState.Resolve(sessionID) == nil {
+				fs.releaseWorkAdmissionProjection(sessionID)
+			}
+		}
+	}
+	return err
 }
