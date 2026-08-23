@@ -16,18 +16,17 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const packagedSubagentMockWorkerAcceptedSummary = "mock worker accepted"
 
-func TestLocalModelInvoke_MissingReadiness_FailsWithDocumentedBootstrapGuidance(t *testing.T) {
+func TestLocalModelInvoke_JSONWithoutOutputReportsValidationOnly(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow built-CLI local model invoke readiness acceptance")
 	}
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
-	session := harness.NewSession(t).WithNoExternalServer(t)
+	session := harness.NewSession(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -40,33 +39,44 @@ func TestLocalModelInvoke_MissingReadiness_FailsWithDocumentedBootstrapGuidance(
 		factorydefinitions.PackagedTTSFactoryName,
 	)
 	ttsProjectDir := filepath.Join(t.TempDir(), "installed-tts-project")
+	factoryProjectDir := filepath.Join(ttsProjectDir, factorydefinitions.FactoryDir)
+	if mkdirErr := os.MkdirAll(factoryProjectDir, 0o755); mkdirErr != nil {
+		t.Fatalf("create documented Factory project directory: %v", mkdirErr)
+	}
 	if copyErr := os.CopyFS(
-		ttsProjectDir,
+		factoryProjectDir,
 		os.DirFS(installedTTSDir),
 	); copyErr != nil {
-		t.Fatalf("copy installed @you/tts into project Factory root: %v", copyErr)
+		t.Fatalf("copy installed @you/tts into documented Factory directory: %v", copyErr)
 	}
 	session.WorkDir = ttsProjectDir
 
-	args := append([]string{"--json"}, session.ServerFlags()...)
-	args = append(args,
+	args := []string{"--json",
 		"models", "invoke", factorydefinitions.DefaultTTSModelName,
 		"--operation", "TTS",
 		"--text", "acceptance-local-model-missing-readiness",
-	)
+	}
 
 	result, err := session.Run(ctx, args...)
-	if err == nil {
-		t.Fatalf("expected missing-readiness local model invoke failure, got result=%#v", result)
+	if err != nil {
+		t.Fatalf("validation-only local model invoke error = %v; stdout=%q stderr=%q", err, result.Stdout, result.Stderr)
 	}
-	if result.ExitCode == 0 {
-		t.Fatalf("exit code = 0, want non-zero for missing managed-runtime readiness")
+	if result.ExitCode != 0 {
+		t.Fatalf("exit code = %d, want 0 for validation-only metadata", result.ExitCode)
 	}
-
-	combined := result.Stdout + result.Stderr
-	support.RequireSafeCLIDiagnostic(t, result.Stderr)
-	if strings.Contains(combined, "models endpoint not reachable") {
-		t.Fatalf("output = %q, want bootstrap readiness failure instead of HTTP transport failure", combined)
+	var response struct {
+		ModelName         string `json:"modelName"`
+		Operation         string `json:"operation"`
+		Mode              string `json:"mode"`
+		ValidationOnly    bool   `json:"validationOnly"`
+		InferenceExecuted bool   `json:"inferenceExecuted"`
+	}
+	if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(result.Stdout)), &response); decodeErr != nil {
+		t.Fatalf("decode validation-only response: %v\nstdout=%q", decodeErr, result.Stdout)
+	}
+	if response.ModelName != factorydefinitions.DefaultTTSModelName || response.Operation != "TTS" ||
+		response.Mode != "VALIDATION_ONLY" || !response.ValidationOnly || response.InferenceExecuted {
+		t.Fatalf("validation-only response = %#v, want explicit non-executed metadata", response)
 	}
 }
 

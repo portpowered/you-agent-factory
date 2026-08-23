@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -564,6 +565,44 @@ func TestNewInvokesThroughCompositionProviderOwnedPath(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("Invoke() output = %q, want %q", out.String(), want)
 		}
+	}
+}
+
+func TestNew_ServerValidationUsesHTTPFallbackWhenCompositionRootExists(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/models/known" {
+			http.NotFound(writer, request)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(writer, `{"name":"known","operations":[{"name":"TTS"}]}`)
+	}))
+	t.Cleanup(server.Close)
+
+	localCalled := false
+	invocation := factorySessionPresentationInvocation{
+		root: compositionModelsRoot{
+			getModel: func(context.Context, string) (modelinference.Detail, error) {
+				localCalled = true
+				return modelinference.Detail{}, nil
+			},
+		},
+	}
+	service := modelscli.New(compositionHTTPProtocol(t), invocation)
+	var out bytes.Buffer
+	if err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: "known", Operation: "TTS", Text: "hello",
+		Server: server.URL, JSON: true, Output: &out,
+	}); err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	if localCalled {
+		t.Fatal("server-bound validation opened the locally composed Models catalog")
+	}
+	if !strings.Contains(out.String(), `"mode":"VALIDATION_ONLY"`) {
+		t.Fatalf("Invoke() output = %q, want validation-only metadata", out.String())
 	}
 }
 

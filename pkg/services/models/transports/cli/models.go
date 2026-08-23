@@ -134,10 +134,13 @@ type Service interface {
 }
 
 type httpService struct {
-	http       clihttp.Protocol
-	pullHTTP   clihttp.Protocol
-	invocation InvocationOperation
-	now        func() time.Time
+	http             clihttp.Protocol
+	pullHTTP         clihttp.Protocol
+	invocation       InvocationOperation
+	now              func() time.Time
+	models           modelinference.Service
+	openCatalogScope func(context.Context) (InvokeRuntimeScope, error)
+	openInvokeScope  func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
 }
 
 // New constructs the composition-stable Models CLI service injected into Cobra
@@ -288,6 +291,9 @@ func (service *httpService) Invoke(cfg InvokeConfig) error {
 	}
 
 	if validationOnlyModelInvoke(cfg) {
+		if err := service.validateModelInvoke(cfg, modelName, operation); err != nil {
+			return err
+		}
 		return writeValidationOnlyModelInvokeResponse(cfg.Output, modelName, operation)
 	}
 

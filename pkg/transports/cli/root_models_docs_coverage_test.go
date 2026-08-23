@@ -1065,14 +1065,18 @@ func TestProductionModelsCLICharacterizationJSONBypassesOutputRequirement(t *tes
 	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
 		t.Fatalf("decode JSON response %q: %v", stdout.String(), err)
 	}
-	if operation.calls != 1 {
-		t.Fatalf("model operation calls = %d, want 1", operation.calls)
+	if operation.calls != 0 {
+		t.Fatalf("model operation calls = %d, want 0 for validation-only metadata", operation.calls)
 	}
-	if operation.request.Operation != "TTS" {
-		t.Fatalf("default operation = %q, want TTS", operation.request.Operation)
-	}
-	if response["operation"] != "TTS" {
-		t.Fatalf("JSON operation = %#v, want TTS", response["operation"])
+	for key, want := range map[string]any{
+		"operation":         "TTS",
+		"mode":              "VALIDATION_ONLY",
+		"validationOnly":    true,
+		"inferenceExecuted": false,
+	} {
+		if response[key] != want {
+			t.Fatalf("JSON %s = %#v, want %#v", key, response[key], want)
+		}
 	}
 }
 

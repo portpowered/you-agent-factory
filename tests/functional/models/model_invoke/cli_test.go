@@ -65,7 +65,11 @@ func TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges(t *testing.T
 
 	home := t.TempDir()
 	writeReadyOmniVoiceCache(t, home)
-	factoryDir := t.TempDir()
+	projectDir := t.TempDir()
+	factoryDir := filepath.Join(projectDir, factorydefinitions.FactoryDir)
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("create documented Factory directory: %v", err)
+	}
 	factoryfixtures.WriteFactoryJSON(t, factoryDir, processLocalModelFactory(modelServer.URL))
 	assetFiles := processModelAssetFileSystem{home: home}
 
@@ -99,7 +103,7 @@ func TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges(t *testing.T
 		Stdout:           &output,
 		Stderr:           &diagnostics,
 		Context:          context.Background(),
-		WorkingDirectory: factoryDir,
+		WorkingDirectory: projectDir,
 	}); err != nil {
 		t.Fatalf("Process.Execute(models invoke) error = %v", err)
 	}
@@ -140,7 +144,7 @@ func TestProcessModelsInvokeUsesCanonicalGraphAndExactExternalEdges(t *testing.T
 		Stdout:           &output,
 		Stderr:           &diagnostics,
 		Context:          context.Background(),
-		WorkingDirectory: factoryDir,
+		WorkingDirectory: projectDir,
 	}); err != nil {
 		t.Fatalf("Process.Execute(models invoke --output) error = %v", err)
 	}

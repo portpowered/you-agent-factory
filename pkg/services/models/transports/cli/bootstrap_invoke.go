@@ -143,17 +143,6 @@ func runBootstrapModelInvocation(
 	return result, nil
 }
 
-func modelInvocationResponseFromResult(result modelinference.Result) factoryapi.ModelInvocationResponse {
-	return factoryapi.ModelInvocationResponse{
-		ModelName:        result.ModelName,
-		Worker:           result.Worker,
-		Operation:        result.Operation,
-		ProviderLocality: factoryapi.WorkerModelLocality(result.ProviderLocality),
-		Content:          derefGeneratedWorkContent(contentcontract.GeneratedPtrFromParts(result.Content)),
-		Bindings:         generatedResolvedModelInvocationBindings(result.Bindings),
-	}
-}
-
 func derefGeneratedWorkContent(content *factoryapi.WorkContent) factoryapi.WorkContent {
 	if content == nil {
 		return nil

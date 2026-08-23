@@ -29,7 +29,6 @@ import (
 // constructed only through root.BuildProcess executes public Models invoke and
 // returns observable inference output while host, runtime, and asset external
 // effects are replaced exclusively through published edges.Edges fields.
-// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestModelsInferenceInvokeActivatesThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
 
@@ -84,19 +83,27 @@ func TestModelsInferenceInvokeActivatesThroughRootBuildProcess(t *testing.T) {
 		ModelRuntimeHTTPClient:         modelServer.Client(),
 	})
 
+	assertRootModelsValidationOnly(t, process, environment, dir, rejectingNetwork, hostLauncher, hostHTTP)
+	assertRootModelsAudioOutput(t, process, environment, dir, audio)
+}
+
+func assertRootModelsValidationOnly(
+	t testing.TB,
+	process support.Process,
+	environment []string,
+	directory string,
+	rejectingNetwork *rejectingModelAssetHTTP,
+	hostLauncher *recordingModelHostLauncher,
+	hostHTTP *recordingModelHTTPClient,
+) {
+	t.Helper()
 	var output bytes.Buffer
-	jsonInvoke := support.FakeInputs(t.Context(), []string{
+	if err := executeRootModelsCLI(t, process, directory, environment, &output, []string{
 		"you", "--json", "models", "invoke", "OMNIVOICE_Q4_K_M",
 		"--operation", "TTS", "--text", "hello from root composition invoke",
-	})
-	jsonInvoke.Input.Env = environment
-	jsonInvoke.Input.WorkingDirectory = dir
-	jsonInvoke.Input.Stdout = &output
-	jsonInvoke.Input.Stderr = io.Discard
-	if err := process.Execute(jsonInvoke.Input); err != nil {
+	}); err != nil {
 		t.Fatalf("Process.Execute(models invoke --json) error = %v", err)
 	}
-
 	var response struct {
 		ModelName         string `json:"modelName"`
 		Operation         string `json:"operation"`
@@ -107,42 +114,39 @@ func TestModelsInferenceInvokeActivatesThroughRootBuildProcess(t *testing.T) {
 	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
 		t.Fatalf("decode models invoke output: %v\n%s", err, output.String())
 	}
-	if response.ModelName != "OMNIVOICE_Q4_K_M" || response.Operation != "TTS" {
-		t.Fatalf("models invoke identity = %#v, want OMNIVOICE_Q4_K_M/TTS", response)
-	}
-	if response.Mode != "VALIDATION_ONLY" || !response.ValidationOnly || response.InferenceExecuted {
+	if response.ModelName != "OMNIVOICE_Q4_K_M" || response.Operation != "TTS" ||
+		response.Mode != "VALIDATION_ONLY" || !response.ValidationOnly || response.InferenceExecuted {
 		t.Fatalf("models invoke response = %#v, want validation-only metadata", response)
 	}
-	if rejectingNetwork.Calls() != 0 {
-		t.Fatalf("asset network calls = %d during invoke, want 0 via edges", rejectingNetwork.Calls())
+	if rejectingNetwork.Calls() != 0 || hostLauncher.Calls() != 0 || hostHTTP.Calls() != 0 {
+		t.Fatalf("validation-only effects = assets %d, host starts %d, host HTTP %d; want 0/0/0",
+			rejectingNetwork.Calls(), hostLauncher.Calls(), hostHTTP.Calls())
 	}
-	if hostLauncher.Calls() != 0 {
-		t.Fatalf("host process launcher calls = %d after validation-only invoke, want 0", hostLauncher.Calls())
-	}
-	if hostHTTP.Calls() != 0 {
-		t.Fatalf("host HTTP client calls = %d after validation-only invoke, want 0", hostHTTP.Calls())
-	}
+}
 
+func assertRootModelsAudioOutput(
+	t testing.TB,
+	process support.Process,
+	environment []string,
+	directory string,
+	wantAudio []byte,
+) {
+	t.Helper()
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
-	output.Reset()
-	audioInvoke := support.FakeInputs(t.Context(), []string{
+	var output bytes.Buffer
+	if err := executeRootModelsCLI(t, process, directory, environment, &output, []string{
 		"you", "models", "invoke", "OMNIVOICE_Q4_K_M",
 		"--operation", "TTS", "--text", "write audio from root composition invoke",
 		"--output", audioPath,
-	})
-	audioInvoke.Input.Env = environment
-	audioInvoke.Input.WorkingDirectory = dir
-	audioInvoke.Input.Stdout = &output
-	audioInvoke.Input.Stderr = io.Discard
-	if err := process.Execute(audioInvoke.Input); err != nil {
+	}); err != nil {
 		t.Fatalf("Process.Execute(models invoke --output) error = %v", err)
 	}
 	written, err := os.ReadFile(audioPath)
 	if err != nil {
 		t.Fatalf("read models invoke audio: %v", err)
 	}
-	if !bytes.Equal(written, audio) {
-		t.Fatalf("models invoke audio = %q, want %q", written, audio)
+	if !bytes.Equal(written, wantAudio) {
+		t.Fatalf("models invoke audio = %q, want %q", written, wantAudio)
 	}
 }
 
@@ -663,20 +667,7 @@ func TestModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t *testing.T) 
 	if err := executeRootModelsCLI(t, process, dir, environment, &output, jsonInvoke.Input.Args); err != nil {
 		t.Fatalf("Process.Execute(multi-output --json) error = %v", err)
 	}
-	var jsonResponse struct {
-		ModelName         string `json:"modelName"`
-		Operation         string `json:"operation"`
-		Mode              string `json:"mode"`
-		ValidationOnly    bool   `json:"validationOnly"`
-		InferenceExecuted bool   `json:"inferenceExecuted"`
-	}
-	if err := json.Unmarshal(output.Bytes(), &jsonResponse); err != nil {
-		t.Fatalf("decode multi-output JSON = %v\n%s", err, output.String())
-	}
-	if jsonResponse.ModelName != "llm" || jsonResponse.Operation != "OMNI" ||
-		jsonResponse.Mode != "VALIDATION_ONLY" || !jsonResponse.ValidationOnly || jsonResponse.InferenceExecuted {
-		t.Fatalf("multi-output JSON = %#v, want validation-only metadata", jsonResponse)
-	}
+	assertGenericCLIValidationOnly(t, &output)
 
 	textPath := filepath.Join(t.TempDir(), "text.out")
 	usagePath := filepath.Join(t.TempDir(), "usage.out")
@@ -701,6 +692,24 @@ func TestModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t *testing.T) 
 		t.Fatalf("mapped output response/effects = %q, starts %d; want one start for mapped execution", output.String(), hostLauncher.Calls())
 	}
 	closeRootProcess(t, process, "close multi-output root process")
+}
+
+func assertGenericCLIValidationOnly(t testing.TB, output *bytes.Buffer) {
+	t.Helper()
+	var response struct {
+		ModelName         string `json:"modelName"`
+		Operation         string `json:"operation"`
+		Mode              string `json:"mode"`
+		ValidationOnly    bool   `json:"validationOnly"`
+		InferenceExecuted bool   `json:"inferenceExecuted"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("decode multi-output JSON = %v\n%s", err, output.String())
+	}
+	if response.ModelName != "llm" || response.Operation != "OMNI" ||
+		response.Mode != "VALIDATION_ONLY" || !response.ValidationOnly || response.InferenceExecuted {
+		t.Fatalf("multi-output JSON = %#v, want validation-only metadata", response)
+	}
 }
 
 func assertMappedGenericCLIResponse(t testing.TB, output *bytes.Buffer) {

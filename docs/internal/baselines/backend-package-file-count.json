@@ -369,7 +369,7 @@
     },
     {
       "packagePath": "pkg/wire",
-      "fileCount": 46,
+      "fileCount": 47,
       "owner": "composition-maintainers",
       "removalReason": "Split composition tests and providers by durable process graph boundary."
     }
