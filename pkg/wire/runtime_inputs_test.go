@@ -720,9 +720,14 @@ func newRuntimeObservabilityTestOwners(t *testing.T) runtimeObservabilityTestOwn
 		t.Fatalf("provideRuntimeLogOwner(): %v", err)
 	}
 	var metricCollision atomic.Int32
+	metricsCoordination, err := provideRuntimeMetricsCoordination()
+	if err != nil {
+		t.Fatalf("provideRuntimeMetricsCoordination(): %v", err)
+	}
 	owners.metricsOwner, err = provideRuntimeMetricsOwner(
 		func() time.Time { return at },
 		func() string { return "metric-" + strconv.Itoa(int(metricCollision.Add(1))) }, reserver,
+		metricsCoordination,
 	)
 	if err != nil {
 		t.Fatalf("provideRuntimeMetricsOwner(): %v", err)

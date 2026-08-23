@@ -54,6 +54,7 @@ type RuntimeMetricsRetentionFailure struct {
 // are deliberately absent from every total.
 type RuntimeMetricsRetentionReport struct {
 	RootDirectory string
+	Skipped       bool
 	Before        RuntimeMetricsRetentionTotals
 	After         RuntimeMetricsRetentionTotals
 	Scanned       RuntimeMetricsRetentionTotals
@@ -66,8 +67,9 @@ type RuntimeMetricsRetentionReport struct {
 // RuntimeMetricsRetention owns root-level metrics cleanup. Its clock and
 // filesystem are injected so age and ordering remain deterministic in tests.
 type RuntimeMetricsRetention struct {
-	filesystem RuntimeMetricsRetentionFileSystem
-	now        func() time.Time
+	filesystem   RuntimeMetricsRetentionFileSystem
+	now          func() time.Time
+	coordination RuntimeMetricsCoordination
 }
 
 // NewRuntimeMetricsRetention constructs the root-level metrics retention
@@ -75,6 +77,7 @@ type RuntimeMetricsRetention struct {
 func NewRuntimeMetricsRetention(
 	filesystem RuntimeMetricsRetentionFileSystem,
 	now func() time.Time,
+	coordination ...RuntimeMetricsCoordination,
 ) (*RuntimeMetricsRetention, error) {
 	if filesystem == nil {
 		return nil, errors.New("construct runtime metrics retention: filesystem is required")
@@ -82,7 +85,13 @@ func NewRuntimeMetricsRetention(
 	if now == nil {
 		return nil, errors.New("construct runtime metrics retention: clock is required")
 	}
-	return &RuntimeMetricsRetention{filesystem: filesystem, now: now}, nil
+	selectedCoordination, err := selectRuntimeMetricsCoordination(coordination)
+	if err != nil {
+		return nil, fmt.Errorf("construct runtime metrics retention: %w", err)
+	}
+	return &RuntimeMetricsRetention{
+		filesystem: filesystem, now: now, coordination: selectedCoordination,
+	}, nil
 }
 
 // Sweep removes safe, recognized metrics artifacts beneath the selected root.
@@ -92,9 +101,8 @@ func NewRuntimeMetricsRetention(
 func (retention *RuntimeMetricsRetention) Sweep(
 	ctx context.Context,
 	request RuntimeMetricsRetentionRequest,
-) (RuntimeMetricsRetentionReport, error) {
-	var report RuntimeMetricsRetentionReport
-	if retention == nil || retention.filesystem == nil || retention.now == nil {
+) (report RuntimeMetricsRetentionReport, returnErr error) {
+	if retention == nil || retention.filesystem == nil || retention.now == nil || retention.coordination == nil {
 		return report, errors.New("sweep runtime metrics: retention is not configured")
 	}
 	if ctx == nil {
@@ -119,6 +127,19 @@ func (retention *RuntimeMetricsRetention) Sweep(
 		return report, errors.New("sweep runtime metrics: clock returned zero time")
 	}
 	report.RootDirectory = root
+	rootLock, err := retention.coordination.TryLockRoot(root)
+	if errors.Is(err, ErrRuntimeMetricsRootBusy) {
+		report.Skipped = true
+		return report, nil
+	}
+	if err != nil {
+		return report, fmt.Errorf("coordinate runtime metrics sweep: %w", err)
+	}
+	defer func() {
+		if closeErr := rootLock.Close(); closeErr != nil {
+			returnErr = errors.Join(returnErr, fmt.Errorf("release runtime metrics sweep coordination: %w", closeErr))
+		}
+	}()
 	config := normalizeRuntimeMetricsConfig(request.Config)
 
 	initial, err := retention.inventory(ctx, root)
@@ -530,11 +551,39 @@ func (retention *RuntimeMetricsRetention) tryRemove(
 		state.blocked[artifact.path] = struct{}{}
 		return
 	}
-	if info.Size() != artifact.size {
+	claim, err := retention.coordination.TryClaim(artifact.path)
+	if errors.Is(err, ErrRuntimeMetricsArtifactBusy) {
 		state.addProtected(artifact.path, info.Size())
 		state.blocked[artifact.path] = struct{}{}
+		return
+	}
+	if err != nil {
+		state.addFailed(artifact.path, info.Size(), err)
+		state.blocked[artifact.path] = struct{}{}
+		return
+	}
+	defer func() { _ = claim.Close() }()
+
+	currentInfo, err := retention.filesystem.Lstat(artifact.path)
+	if errors.Is(err, fs.ErrNotExist) {
+		state.markRemoved(artifact)
+		return
+	}
+	if err != nil {
+		state.addFailed(artifact.path, artifact.size, err)
+		state.blocked[artifact.path] = struct{}{}
+		return
+	}
+	if currentInfo.Mode()&fs.ModeSymlink != 0 || !currentInfo.Mode().IsRegular() {
+		state.addProtected(artifact.path, currentInfo.Size())
+		state.blocked[artifact.path] = struct{}{}
+		return
+	}
+	if currentInfo.Size() != artifact.size {
+		state.addProtected(artifact.path, currentInfo.Size())
+		state.blocked[artifact.path] = struct{}{}
 		state.remaining[artifact.path] = retentionArtifact{
-			path: artifact.path, size: info.Size(), timestamp: artifact.timestamp,
+			path: artifact.path, size: currentInfo.Size(), timestamp: artifact.timestamp,
 			dateDirectory: artifact.dateDirectory, hasTimestamp: artifact.hasTimestamp,
 		}
 		return

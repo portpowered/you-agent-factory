@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -9,7 +10,161 @@ import (
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 )
+
+func TestRuntimeMetricsRootRetentionProtectsOpenWriterAcrossFactoryIdentities(t *testing.T) {
+	root := t.TempDir()
+	paths, err := platformartifact.NewReserver(platformfilesystem.Local{})
+	if err != nil {
+		t.Fatalf("NewReserver(): %v", err)
+	}
+	firstOpener, err := NewRuntimeMetricsOpener(paths)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsOpener(first): %v", err)
+	}
+	secondOpener, err := NewRuntimeMetricsOpener(paths)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsOpener(second): %v", err)
+	}
+	started := time.Date(2026, 7, 1, 1, 0, 0, 0, time.UTC)
+	live, err := firstOpener.Open(RuntimeMetricsOpeningRequest{
+		SessionID:         "factory-one-session",
+		RuntimeInstanceID: "factory-one-runtime",
+		RootDirectory:     root,
+		StartTimeUTC:      started,
+		CollisionID:       "live",
+		Config:            RuntimeMetricsConfig{MaxSize: 1, MaxAge: 1},
+	})
+	if err != nil {
+		t.Fatalf("open live metrics sink: %v", err)
+	}
+	defer live.Close()
+	if err := live.WriteMetric(context.Background(), map[string]any{"metric_name": "live.before_sweep"}); err != nil {
+		t.Fatalf("write before sweep: %v", err)
+	}
+	claimPath := runtimeMetricsClaimPath(live.Path())
+	if _, err := os.Stat(claimPath); err != nil {
+		t.Fatalf("active claim %q is unavailable before sweep: %v", claimPath, err)
+	}
+
+	retention, err := NewRuntimeMetricsRetention(
+		platformfilesystem.Local{},
+		func() time.Time { return time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC) },
+	)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsRetention(): %v", err)
+	}
+	// The second opener models another factory/process sharing the user-global
+	// root; the sweep must respect the first opener's OS-held claim.
+	other, err := secondOpener.Open(RuntimeMetricsOpeningRequest{
+		SessionID:         "factory-two-session",
+		RuntimeInstanceID: "factory-two-runtime",
+		RootDirectory:     root,
+		StartTimeUTC:      time.Date(2026, 8, 22, 2, 0, 0, 0, time.UTC),
+		CollisionID:       "other",
+		Config:            RuntimeMetricsConfig{MaxSize: 1, MaxAge: 1},
+	})
+	if err != nil {
+		t.Fatalf("open second factory metrics sink: %v", err)
+	}
+	defer other.Close()
+	if err := other.WriteMetric(context.Background(), map[string]any{"metric_name": "other.factory"}); err != nil {
+		t.Fatalf("write second factory metric: %v", err)
+	}
+	report, err := retention.Sweep(context.Background(), RuntimeMetricsRetentionRequest{
+		RootDirectory: root,
+		Config:        RuntimeMetricsConfig{MaxSize: 1, MaxAge: 1},
+	})
+	if err != nil {
+		t.Fatalf("Sweep(open writer): %v", err)
+	}
+	if report.Protected.Files != 1 {
+		t.Fatalf("Protected.Files = %d, want one active writer", report.Protected.Files)
+	}
+	if _, err := os.Stat(live.Path()); err != nil {
+		t.Fatalf("live metrics path was removed during sweep: %v", err)
+	}
+	if err := live.WriteMetric(context.Background(), map[string]any{"metric_name": "live.after_sweep"}); err != nil {
+		t.Fatalf("write after sweep: %v", err)
+	}
+	records := readRuntimeMetricsRecords(t, live.Path())
+	if len(records) != 2 {
+		t.Fatalf("live metrics record count = %d, want continued writes after sweep", len(records))
+	}
+
+	if err := live.Close(); err != nil {
+		t.Fatalf("close live metrics sink: %v", err)
+	}
+	if _, err := os.Stat(claimPath); !os.IsNotExist(err) {
+		t.Fatalf("active claim remains after close, stat error = %v", err)
+	}
+	report, err = retention.Sweep(context.Background(), RuntimeMetricsRetentionRequest{
+		RootDirectory: root,
+		Config:        RuntimeMetricsConfig{MaxSize: 1, MaxAge: 1},
+	})
+	if err != nil {
+		t.Fatalf("Sweep(after close): %v", err)
+	}
+	if _, err := os.Stat(live.Path()); !os.IsNotExist(err) {
+		t.Fatalf("closed expired metrics path remains after retry, stat error = %v", err)
+	}
+}
+
+func TestRuntimeMetricsRootRetentionYieldsWhenRootSweepIsAlreadyClaimed(t *testing.T) {
+	root := t.TempDir()
+	coordination, err := NewRuntimeMetricsCoordination()
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsCoordination(): %v", err)
+	}
+	rootLock, err := coordination.LockRoot(context.Background(), root)
+	if err != nil {
+		t.Fatalf("LockRoot(): %v", err)
+	}
+	defer rootLock.Close()
+
+	retention, err := NewRuntimeMetricsRetention(
+		platformfilesystem.Local{},
+		func() time.Time { return time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC) },
+		coordination,
+	)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsRetention(): %v", err)
+	}
+	report, err := retention.Sweep(context.Background(), RuntimeMetricsRetentionRequest{
+		RootDirectory: root,
+		Config:        RuntimeMetricsConfig{MaxSize: 1, MaxAge: 1},
+	})
+	if err != nil {
+		t.Fatalf("Sweep(held root): %v", err)
+	}
+	if !report.Skipped {
+		t.Fatal("Sweep(held root) skipped = false, want safe yield")
+	}
+}
+
+func TestRuntimeMetricsRootRetentionReclaimsReleasedStaleClaim(t *testing.T) {
+	root := t.TempDir()
+	artifact := writeRetentionArtifact(t, root, "2026/07/01", "010000.000000000", "stale-claim-runtime-stale-collision", 9)
+	claimPath := runtimeMetricsClaimPath(artifact)
+	if err := os.WriteFile(claimPath, nil, 0o600); err != nil {
+		t.Fatalf("WriteFile(stale claim): %v", err)
+	}
+
+	retention := newTestRuntimeMetricsRetention(t, time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC))
+	if _, err := retention.Sweep(context.Background(), RuntimeMetricsRetentionRequest{
+		RootDirectory: root,
+		Config:        RuntimeMetricsConfig{MaxSize: 1, MaxAge: 1},
+	}); err != nil {
+		t.Fatalf("Sweep(stale claim): %v", err)
+	}
+	if _, err := os.Stat(artifact); !os.IsNotExist(err) {
+		t.Fatalf("artifact protected by released stale claim, stat error = %v", err)
+	}
+	if _, err := os.Stat(claimPath); !os.IsNotExist(err) {
+		t.Fatalf("stale claim was not cleaned, stat error = %v", err)
+	}
+}
 
 func TestRuntimeMetricsRootRetentionPrunesDifferentCurrentFilenamesAcrossDates(t *testing.T) {
 	root := t.TempDir()

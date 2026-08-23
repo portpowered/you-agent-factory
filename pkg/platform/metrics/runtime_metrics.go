@@ -44,6 +44,7 @@ type RuntimeMetricsSink struct {
 	rootDir      string
 	startTimeUTC time.Time
 	config       RuntimeMetricsConfig
+	claim        io.Closer
 	closed       bool
 }
 
@@ -70,18 +71,28 @@ type RuntimeMetricsOpeningRequest struct {
 	Config            RuntimeMetricsConfig
 }
 
-type RuntimeMetricsOpener struct{ paths platformartifact.Reserver }
+type RuntimeMetricsOpener struct {
+	paths        platformartifact.Reserver
+	coordination RuntimeMetricsCoordination
+}
 
-func NewRuntimeMetricsOpener(paths platformartifact.Reserver) (*RuntimeMetricsOpener, error) {
+func NewRuntimeMetricsOpener(
+	paths platformartifact.Reserver,
+	coordination ...RuntimeMetricsCoordination,
+) (*RuntimeMetricsOpener, error) {
 	if paths == nil {
 		return nil, fmt.Errorf("runtime metrics path reserver is required")
 	}
-	return &RuntimeMetricsOpener{paths: paths}, nil
+	selectedCoordination, err := selectRuntimeMetricsCoordination(coordination)
+	if err != nil {
+		return nil, err
+	}
+	return &RuntimeMetricsOpener{paths: paths, coordination: selectedCoordination}, nil
 }
 
 // Open creates a rolling metrics writer from fully selected inputs.
 func (opener *RuntimeMetricsOpener) Open(request RuntimeMetricsOpeningRequest) (*RuntimeMetricsSink, error) {
-	if opener == nil || opener.paths == nil {
+	if opener == nil || opener.paths == nil || opener.coordination == nil {
 		return nil, fmt.Errorf("runtime metrics opener is required")
 	}
 	if request.RuntimeInstanceID == "" {
@@ -97,6 +108,10 @@ func (opener *RuntimeMetricsOpener) Open(request RuntimeMetricsOpeningRequest) (
 		return nil, fmt.Errorf("runtime metrics collision ID is required")
 	}
 
+	rootLock, err := opener.coordination.LockRoot(context.Background(), request.RootDirectory)
+	if err != nil {
+		return nil, fmt.Errorf("coordinate runtime metrics startup: %w", err)
+	}
 	startTimeUTC := request.StartTimeUTC.UTC()
 	path, err := opener.paths.Reserve(
 		request.RootDirectory,
@@ -105,7 +120,20 @@ func (opener *RuntimeMetricsOpener) Open(request RuntimeMetricsOpeningRequest) (
 		internalartifact.RuntimeArtifactPathComponents(request.SessionID, request.RuntimeInstanceID, request.CollisionID),
 	)
 	if err != nil {
-		return nil, err
+		return nil, errors.Join(err, rootLock.Close())
+	}
+	claim, err := opener.coordination.Claim(path)
+	if err != nil {
+		return nil, errors.Join(
+			fmt.Errorf("claim runtime metrics path %q: %w", path, err),
+			rootLock.Close(),
+		)
+	}
+	if err := rootLock.Close(); err != nil {
+		return nil, errors.Join(
+			fmt.Errorf("release runtime metrics startup coordination: %w", err),
+			claim.Close(),
+		)
 	}
 
 	metricsConfig := normalizeRuntimeMetricsConfig(request.Config)
@@ -124,6 +152,7 @@ func (opener *RuntimeMetricsOpener) Open(request RuntimeMetricsOpeningRequest) (
 		rootDir:      request.RootDirectory,
 		startTimeUTC: startTimeUTC,
 		config:       metricsConfig,
+		claim:        claim,
 	}, nil
 }
 
@@ -162,7 +191,7 @@ func (s *RuntimeMetricsSink) Config() RuntimeMetricsConfig {
 
 // Close releases the runtime metrics writer.
 func (s *RuntimeMetricsSink) Close() error {
-	if s == nil || s.writer == nil {
+	if s == nil {
 		return nil
 	}
 	s.mu.Lock()
@@ -171,7 +200,16 @@ func (s *RuntimeMetricsSink) Close() error {
 		return nil
 	}
 	s.closed = true
-	return s.writer.Close()
+	var writerErr error
+	if s.writer != nil {
+		writerErr = s.writer.Close()
+	}
+	var claimErr error
+	if s.claim != nil {
+		claimErr = s.claim.Close()
+		s.claim = nil
+	}
+	return errors.Join(writerErr, claimErr)
 }
 
 // WriteMetric serializes one owner-projected record as a JSONL entry.

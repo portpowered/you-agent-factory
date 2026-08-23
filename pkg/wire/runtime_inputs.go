@@ -82,6 +82,10 @@ func provideRuntimeArtifactPathReserver() (platformruntimeartifact.Reserver, err
 	return platformruntimeartifact.NewReserver(platformfilesystem.Local{})
 }
 
+func provideRuntimeMetricsCoordination() (platformmetrics.RuntimeMetricsCoordination, error) {
+	return platformmetrics.NewRuntimeMetricsCoordination()
+}
+
 func provideRuntimeLogOwner(
 	baseLogger *zap.Logger,
 	clock runtimeArtifactClock,
@@ -147,8 +151,9 @@ func provideRuntimeMetricsOwner(
 	clock runtimeArtifactClock,
 	newID runtimeArtifactIDGenerator,
 	paths platformruntimeartifact.Reserver,
+	coordination platformmetrics.RuntimeMetricsCoordination,
 ) (factoryruntime.RuntimeMetricsOwner, error) {
-	opener, err := platformmetrics.NewRuntimeMetricsOpener(paths)
+	opener, err := platformmetrics.NewRuntimeMetricsOpener(paths, coordination)
 	if err != nil {
 		return nil, err
 	}
