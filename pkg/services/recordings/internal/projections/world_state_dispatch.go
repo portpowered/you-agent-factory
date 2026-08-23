@@ -401,6 +401,7 @@ func (r *factoryWorldReducer) dispatchCompletionFromResponse(
 		DurationMillis:          int64Value(payload.DurationMillis),
 		Result: interfaces.WorkstationResult{
 			Outcome:                     string(payload.Outcome),
+			Cancellation:                payload.Cancellation.Clone(),
 			Output:                      stringValue(payload.Output),
 			StructuredResult:            jsonvalue.Clone(payload.StructuredResult),
 			StructuredResultPresent:     jsonvalue.Present(payload.StructuredResult, payload.StructuredResultPresent),

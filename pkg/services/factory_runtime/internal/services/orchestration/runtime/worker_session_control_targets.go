@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -406,6 +407,217 @@ func wrapRuntimePromptRenderError(err error) error {
 		return err
 	}
 	return &runtimePromptRenderError{cause: err}
+}
+
+func workstationDispatchResultFromExecute(
+	request workers.WorkstationDispatchRequest,
+	result workers.ExecuteResult,
+	executeErr error,
+) (workers.WorkstationDispatchResult, error) {
+	dispatch := request.Execution.Dispatch
+	workResult := workstationWorkResultFromExecute(request, result)
+	terminal, reconciliationReason := classifyWorkstationDispatchResult(result, executeErr, &workResult)
+	proposedOutput := result.Output.Clone()
+	if terminal == workers.WorkstationDispatchTerminalOutcomeCanceled {
+		clearWorkstationCanceledResult(&workResult, &proposedOutput)
+	}
+	reconciliationReason = processGoneDispatchResult(&workResult, &terminal, executeErr)
+	return workers.WorkstationDispatchResult{
+		DispatchID:           dispatch.DispatchID,
+		WorkstationName:      request.WorkstationName,
+		TerminalOutcome:      terminal,
+		ReconciliationReason: reconciliationReason,
+		Cancellation:         workResult.Cancellation.Clone(),
+		Result:               workResult,
+		ProposedOutput:       &proposedOutput,
+	}, executeErr
+}
+
+func workstationWorkResultFromExecute(
+	request workers.WorkstationDispatchRequest,
+	result workers.ExecuteResult,
+) workers.WorkResult {
+	dispatch := request.Execution.Dispatch
+	workResult := workers.WorkResult{
+		DispatchID:                  dispatch.DispatchID,
+		TransitionID:                dispatch.TransitionID,
+		Outcome:                     workers.OutcomeAccepted,
+		Cancellation:                result.Cancellation.Clone(),
+		Output:                      primaryOutputText(result.Output.Primary),
+		StructuredResult:            jsonvalue.Clone(result.StructuredResult),
+		StructuredResultPresent:     jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent),
+		ArtifactVerification:        result.ArtifactVerification.Clone(),
+		Feedback:                    result.Output.Feedback,
+		SelectedClassificationLabel: result.Output.Classification,
+		Metrics: workers.WorkMetrics{
+			Duration:   result.Metrics.Duration,
+			Cost:       result.Metrics.Cost,
+			RetryCount: result.Metrics.RetryCount,
+		},
+		Continuation: result.Continuation,
+		Diagnostics:  result.Diagnostics.ToWorkDiagnostics(),
+	}
+	switch result.Outcome {
+	case workers.ExecutionOutcomeContinue:
+		workResult.Outcome = workers.OutcomeContinue
+	case workers.ExecutionOutcomeRejected:
+		workResult.Outcome = workers.OutcomeRejected
+	case workers.ExecutionOutcomeFailed:
+		workResult.Outcome = workers.OutcomeFailed
+	case workers.ExecutionOutcomeCanceled:
+		workResult.Outcome = workers.OutcomeCanceled
+		if workResult.Cancellation == nil {
+			workResult.Cancellation = &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled}
+		}
+	default:
+		if result.Outcome != workers.ExecutionOutcomeAccepted {
+			workResult.Outcome = workers.OutcomeFailed
+		}
+	}
+	if result.Failure == nil {
+		return workResult
+	}
+	workResult.Error = strings.TrimSpace(result.Failure.Message)
+	workResult.FailureDetail = workFailureDetail(result.Failure, workResult.Error)
+	if shouldPropagateFailureMetadata(request, result.Failure) {
+		workResult.FailureMetadata = &workers.WorkFailureMetadata{
+			Family: result.Failure.Family,
+			Type:   result.Failure.Type,
+		}
+	}
+	return workResult
+}
+
+func classifyWorkstationDispatchResult(
+	result workers.ExecuteResult,
+	executeErr error,
+	workResult *workers.WorkResult,
+) (workers.WorkstationDispatchTerminalOutcome, workers.WorkstationDispatchReconciliationReason) {
+	terminal := workers.WorkstationDispatchTerminalOutcomeCompleted
+	if result.Outcome == workers.ExecutionOutcomeFailed {
+		terminal = workers.WorkstationDispatchTerminalOutcomeFailed
+	}
+	if result.Outcome != "" && !isKnownExecutionOutcome(result.Outcome) {
+		terminal = workers.WorkstationDispatchTerminalOutcomeFailed
+	}
+	if workResult.Cancellation != nil {
+		workResult.Outcome = workers.OutcomeCanceled
+		terminal = workers.WorkstationDispatchTerminalOutcomeCanceled
+	}
+	if errors.Is(executeErr, workers.ErrWorkstationDispatchCanceled) {
+		workResult.Outcome = workers.OutcomeCanceled
+		terminal = workers.WorkstationDispatchTerminalOutcomeCanceled
+		if workResult.Cancellation == nil {
+			workResult.Cancellation = &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled}
+		}
+	}
+	if executeErr != nil && terminal != workers.WorkstationDispatchTerminalOutcomeCanceled {
+		workResult.Outcome = workers.OutcomeFailed
+		terminal = workers.WorkstationDispatchTerminalOutcomeFailed
+		if strings.TrimSpace(workResult.Error) == "" {
+			workResult.Error = executeErr.Error()
+		}
+	}
+	if terminal == workers.WorkstationDispatchTerminalOutcomeCanceled &&
+		strings.TrimSpace(workResult.Error) == "" {
+		workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
+	}
+	return terminal, ""
+}
+
+func isKnownExecutionOutcome(outcome workers.ExecutionOutcome) bool {
+	switch outcome {
+	case workers.ExecutionOutcomeAccepted, workers.ExecutionOutcomeContinue,
+		workers.ExecutionOutcomeRejected, workers.ExecutionOutcomeFailed,
+		workers.ExecutionOutcomeCanceled:
+		return true
+	default:
+		return false
+	}
+}
+
+func clearWorkstationCanceledResult(
+	workResult *workers.WorkResult,
+	proposedOutput *workers.ProposedOutput,
+) {
+	workResult.Outcome = workers.OutcomeCanceled
+	workResult.Output = ""
+	workResult.StructuredResult = nil
+	workResult.StructuredResultPresent = false
+	workResult.Continuation = nil
+	workResult.FailureDetail = nil
+	workResult.FailureMetadata = nil
+	*proposedOutput = workers.ProposedOutput{}
+}
+
+func normalizeAttemptCorrelation(
+	request workers.ExecuteRequest,
+	result workers.ExecuteResult,
+) (workers.ExecuteResult, bool) {
+	if result.Correlation.DispatchID == "" {
+		result.Correlation = request.Correlation
+		return result, false
+	}
+	if result.Correlation.AttemptID == "" {
+		result.Correlation.AttemptID = request.Correlation.AttemptID
+	}
+	if result.Correlation.FactorySessionID == "" {
+		result.Correlation.FactorySessionID = request.Correlation.FactorySessionID
+	}
+	if result.Correlation.RuntimeID == "" {
+		result.Correlation.RuntimeID = request.Correlation.RuntimeID
+	}
+	if result.Correlation.GenerationID == "" {
+		result.Correlation.GenerationID = request.Correlation.GenerationID
+	}
+	if result.Correlation.RequestID == "" {
+		result.Correlation.RequestID = request.Correlation.RequestID
+	}
+	if result.Correlation.TraceID == "" {
+		result.Correlation.TraceID = request.Correlation.TraceID
+	}
+	return result, result.Correlation.DispatchID != request.Correlation.DispatchID ||
+		result.Correlation.AttemptID != request.Correlation.AttemptID ||
+		correlationValueConflicts(result.Correlation.FactorySessionID, request.Correlation.FactorySessionID) ||
+		correlationValueConflicts(result.Correlation.RuntimeID, request.Correlation.RuntimeID) ||
+		correlationValueConflicts(result.Correlation.GenerationID, request.Correlation.GenerationID) ||
+		correlationValueConflicts(result.Correlation.RequestID, request.Correlation.RequestID) ||
+		correlationValueConflicts(result.Correlation.TraceID, request.Correlation.TraceID)
+}
+
+func conflictingAttemptResult(request workers.ExecuteRequest) workers.ExecuteResult {
+	return workers.ExecuteResult{
+		Correlation: request.Correlation,
+		Outcome:     workers.ExecutionOutcomeFailed,
+		Failure: &workers.ExecutionFailure{
+			Type:    workers.WorkFailureTypeUnknown,
+			Family:  workers.WorkFailureFamilyTerminal,
+			Message: "worker execution returned conflicting correlation",
+		},
+	}
+}
+
+func dispatchCancellationReasonFromCancelRequest(
+	reasons ...workers.WorkstationDispatchCancelReason,
+) workers.DispatchCancellationReason {
+	if len(reasons) > 0 && reasons[0] == workers.WorkstationDispatchCancelReasonSuperseded {
+		return workers.DispatchCancellationReasonSuperseded
+	}
+	return workers.DispatchCancellationReasonCanceled
+}
+
+func dispatchCancellationReasonFromContext(ctx context.Context) workers.DispatchCancellationReason {
+	if platformprocess.CancellationReasonFromContext(ctx) == platformprocess.CancellationReasonSuperseded {
+		return workers.DispatchCancellationReasonSuperseded
+	}
+	return workers.DispatchCancellationReasonCanceled
+}
+
+func platformCancellationReason(reason workers.DispatchCancellationReason) platformprocess.CancellationReason {
+	if reason == workers.DispatchCancellationReasonSuperseded {
+		return platformprocess.CancellationReasonSuperseded
+	}
+	return platformprocess.CancellationReasonCanceled
 }
 
 func (executor workstationRequestExecutor) Execute(

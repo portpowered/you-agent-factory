@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/rootobservation"
@@ -52,12 +53,14 @@ type executeCapability interface {
 }
 
 type activeAttempt struct {
-	dispatchID  string
-	attemptID   string
-	cancel      context.CancelFunc
-	done        chan struct{}
-	canceled    bool
-	processGone bool
+	dispatchID   string
+	attemptID    string
+	ctx          context.Context
+	cancel       context.CancelCauseFunc
+	cancelReason workers.DispatchCancellationReason
+	done         chan struct{}
+	canceled     bool
+	processGone  bool
 }
 
 // attemptLifecycle is the Runtime-owned lifecycle boundary for stateless
@@ -141,16 +144,17 @@ func (l *attemptLifecycle) startWithPreparation(
 	if err != nil {
 		return err
 	}
-	execCtx, cancel := context.WithCancel(ctx)
+	execCtx, cancel := context.WithCancelCause(ctx)
 	attempt := &activeAttempt{
 		dispatchID: request.Correlation.DispatchID,
 		attemptID:  request.Correlation.AttemptID,
+		ctx:        execCtx,
 		cancel:     cancel,
 		done:       make(chan struct{}),
 	}
 	admitted, err := l.admitAttempt(attempt, allowRetry)
 	if err != nil || !admitted {
-		cancel()
+		cancel(platformprocess.NewCancellationCause(platformprocess.CancellationReasonCanceled))
 		return err
 	}
 	request = attachAttemptProcessObserver(request, l, attempt)
@@ -159,7 +163,7 @@ func (l *attemptLifecycle) startWithPreparation(
 		preparedTerminal, err = prepare(context.WithoutCancel(execCtx), &request)
 		if err != nil {
 			l.finish(attempt)
-			cancel()
+			cancel(platformprocess.NewCancellationCause(platformprocess.CancellationReasonCanceled))
 			close(attempt.done)
 			return err
 		}
@@ -177,7 +181,7 @@ func (l *attemptLifecycle) startWithPreparation(
 			result = processGoneAttemptResult(request, result)
 			err = workers.ErrWorkstationDispatchProcessGone
 		} else if canceled {
-			result = canceledAttemptResult(request, result)
+			result = canceledAttemptResult(request, result, attempt.cancelReason)
 			err = nil
 		}
 		if preparedTerminal != nil {
@@ -270,7 +274,7 @@ func (l *attemptLifecycle) executeSafely(
 			// Keep panic detail out of the detached customer-facing result.
 			err = nil
 		}
-		result = normalizeAttemptResult(request, result, err)
+		result = normalizeAttemptResult(request, result, err, platformprocess.CancellationReasonFromContext(ctx))
 		if result.Outcome == workers.ExecutionOutcomeCanceled {
 			err = nil
 		}
@@ -283,70 +287,41 @@ func normalizeAttemptResult(
 	request workers.ExecuteRequest,
 	result workers.ExecuteResult,
 	executeErr error,
+	cancellationReason platformprocess.CancellationReason,
 ) workers.ExecuteResult {
 	result, conflicts := normalizeAttemptCorrelation(request, result)
 	if conflicts {
 		return conflictingAttemptResult(request)
 	}
-	return normalizeAttemptOutcome(request, result, executeErr)
-}
-
-func normalizeAttemptCorrelation(
-	request workers.ExecuteRequest,
-	result workers.ExecuteResult,
-) (workers.ExecuteResult, bool) {
-	if result.Correlation.DispatchID == "" {
-		result.Correlation = request.Correlation
-		return result, false
-	}
-	if result.Correlation.AttemptID == "" {
-		result.Correlation.AttemptID = request.Correlation.AttemptID
-	}
-	if result.Correlation.FactorySessionID == "" {
-		result.Correlation.FactorySessionID = request.Correlation.FactorySessionID
-	}
-	if result.Correlation.RuntimeID == "" {
-		result.Correlation.RuntimeID = request.Correlation.RuntimeID
-	}
-	if result.Correlation.GenerationID == "" {
-		result.Correlation.GenerationID = request.Correlation.GenerationID
-	}
-	if result.Correlation.RequestID == "" {
-		result.Correlation.RequestID = request.Correlation.RequestID
-	}
-	if result.Correlation.TraceID == "" {
-		result.Correlation.TraceID = request.Correlation.TraceID
-	}
-	return result, result.Correlation.DispatchID != request.Correlation.DispatchID ||
-		result.Correlation.AttemptID != request.Correlation.AttemptID ||
-		correlationValueConflicts(result.Correlation.FactorySessionID, request.Correlation.FactorySessionID) ||
-		correlationValueConflicts(result.Correlation.RuntimeID, request.Correlation.RuntimeID) ||
-		correlationValueConflicts(result.Correlation.GenerationID, request.Correlation.GenerationID) ||
-		correlationValueConflicts(result.Correlation.RequestID, request.Correlation.RequestID) ||
-		correlationValueConflicts(result.Correlation.TraceID, request.Correlation.TraceID)
-}
-
-func conflictingAttemptResult(request workers.ExecuteRequest) workers.ExecuteResult {
-	return workers.ExecuteResult{
-		Correlation: request.Correlation,
-		Outcome:     workers.ExecutionOutcomeFailed,
-		Failure: &workers.ExecutionFailure{
-			Type:    workers.WorkFailureTypeUnknown,
-			Family:  workers.WorkFailureFamilyTerminal,
-			Message: "worker execution returned conflicting correlation",
-		},
-	}
+	return normalizeAttemptOutcome(request, result, executeErr, cancellationReason)
 }
 
 func normalizeAttemptOutcome(
 	request workers.ExecuteRequest,
 	result workers.ExecuteResult,
 	executeErr error,
+	cancellationReason platformprocess.CancellationReason,
 ) workers.ExecuteResult {
+	if result.Cancellation != nil {
+		result.Correlation = request.Correlation
+		result.Outcome = workers.ExecutionOutcomeCanceled
+		result.Output = workers.ProposedOutput{}
+		result.StructuredResult = nil
+		result.StructuredResultPresent = false
+		result.Continuation = nil
+		if result.Failure == nil {
+			result.Failure = &workers.ExecutionFailure{
+				Type:    workers.WorkFailureTypeUnknown,
+				Family:  workers.WorkFailureFamilyTerminal,
+				Message: "execution canceled",
+			}
+		}
+		return result
+	}
 	if executeErr == nil && result.Outcome != "" {
 		return result
 	}
-	if errors.Is(executeErr, context.Canceled) ||
+	if cancellationReason != "" ||
 		errors.Is(executeErr, workers.ErrWorkstationDispatchCanceled) ||
 		result.Outcome == workers.ExecutionOutcomeCanceled {
 		result.Correlation = request.Correlation
@@ -354,6 +329,9 @@ func normalizeAttemptOutcome(
 		result.Output = workers.ProposedOutput{}
 		result.StructuredResult = nil
 		result.StructuredResultPresent = false
+		if result.Cancellation == nil {
+			result.Cancellation = &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled}
+		}
 		if result.Failure == nil {
 			result.Failure = &workers.ExecutionFailure{
 				Type:    workers.WorkFailureTypeUnknown,
@@ -382,9 +360,14 @@ func normalizeAttemptOutcome(
 func canceledAttemptResult(
 	request workers.ExecuteRequest,
 	result workers.ExecuteResult,
+	reason workers.DispatchCancellationReason,
 ) workers.ExecuteResult {
 	result.Correlation = request.Correlation
 	result.Outcome = workers.ExecutionOutcomeCanceled
+	if reason != workers.DispatchCancellationReasonSuperseded {
+		reason = workers.DispatchCancellationReasonCanceled
+	}
+	result.Cancellation = &workers.DispatchCancellation{Reason: reason}
 	// A provider may have returned output just as Runtime cancellation won the
 	// terminal race. That output is not an eligible proposal and must not reach
 	// Work materialization or downstream Runtime routing.
@@ -431,15 +414,26 @@ func (l *attemptLifecycle) reconcileProcessGone(attempt *activeAttempt) {
 		return
 	}
 	attempt.canceled = true
-	attempt.processGone = true
+	processGone := true
+	if attempt.ctx == nil || attempt.ctx.Err() != context.Canceled {
+		attempt.processGone = true
+	} else {
+		processGone = false
+		attempt.cancelReason = dispatchCancellationReasonFromContext(attempt.ctx)
+	}
 	cancel := attempt.cancel
 	l.mu.Unlock()
-	cancel()
+	if processGone {
+		cancel(platformprocess.NewCancellationCause(platformprocess.CancellationReasonProcessGone))
+		return
+	}
+	cancel(platformprocess.NewCancellationCause(platformCancellationReason(attempt.cancelReason)))
 }
 
 func (l *attemptLifecycle) cancel(
 	ctx context.Context,
 	dispatchID string,
+	reasons ...workers.WorkstationDispatchCancelReason,
 ) (workers.WorkstationDispatchCancelOutcome, error) {
 	if l == nil {
 		return "", ErrAttemptLifecycleUnavailable
@@ -460,6 +454,7 @@ func (l *attemptLifecycle) cancel(
 			return workers.WorkstationDispatchCancelOutcomeAlreadyCanceled, nil
 		}
 		attempt.canceled = true
+		attempt.cancelReason = dispatchCancellationReasonFromCancelRequest(reasons...)
 	}
 	l.mu.Unlock()
 	if attempt == nil {
@@ -468,7 +463,7 @@ func (l *attemptLifecycle) cancel(
 		}
 		return "", fmt.Errorf("cancel worker attempt %q: dispatch is unknown", dispatchID)
 	}
-	attempt.cancel()
+	attempt.cancel(platformprocess.NewCancellationCause(platformCancellationReason(attempt.cancelReason)))
 	return workers.WorkstationDispatchCancelOutcomeCanceled, nil
 }
 
@@ -483,11 +478,12 @@ func (l *attemptLifecycle) stop(ctx context.Context) error {
 	attempts := make([]*activeAttempt, 0, len(l.active))
 	for _, attempt := range l.active {
 		attempt.canceled = true
+		attempt.cancelReason = workers.DispatchCancellationReasonCanceled
 		attempts = append(attempts, attempt)
 	}
 	l.mu.Unlock()
 	for _, attempt := range attempts {
-		attempt.cancel()
+		attempt.cancel(platformprocess.NewCancellationCause(platformprocess.CancellationReasonCanceled))
 	}
 	for _, attempt := range attempts {
 		select {

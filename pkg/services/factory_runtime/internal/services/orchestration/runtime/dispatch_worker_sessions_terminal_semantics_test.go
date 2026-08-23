@@ -184,7 +184,7 @@ func TestFactoryImpl_DirectAndChildDispatchPreserveIdenticalTerminalOutcomeMappi
 			if directOutcome != tc.wantOutcome {
 				t.Fatalf("direct dispatch terminal outcome = %q, want %q", directOutcome, tc.wantOutcome)
 			}
-			childOutcome := childDispatchTerminalOutcome(t, tc.deliver)
+			childOutcome := childDispatchTerminalOutcome(t, tc.deliver, tc.wantOutcome == dispatchplanning.TerminalResultOutcomeCancelled)
 			if childOutcome != tc.wantOutcome {
 				t.Fatalf("child dispatch terminal outcome = %q, want %q", childOutcome, tc.wantOutcome)
 			}
@@ -220,7 +220,6 @@ func directDispatchTerminalOutcome(
 		t.Fatalf("factory type = %T, want *factoryImpl", runtime)
 	}
 	impl.state = interfaces.FactoryStateRunning
-
 	plan := factory.PlanDispatchRequest{
 		DispatchID:      "terminal-semantics-direct-" + t.Name(),
 		CorrelationID:   "terminal-semantics-direct-corr-" + t.Name(),
@@ -235,11 +234,9 @@ func directDispatchTerminalOutcome(
 		_, planErr := impl.PlanDispatch(t.Context(), plan)
 		planErrCh <- planErr
 	}()
-
 	request := awaitCanonicalWorkersRequest(t, boundary.requests)
 	boundary.results <- deliver(request)
 	requireNoRootErr(t, <-planErrCh, "PlanDispatch")
-
 	return recordedTerminalOutcome(t, impl, plan.DispatchID)
 }
 
@@ -250,6 +247,7 @@ func directDispatchTerminalOutcome(
 func childDispatchTerminalOutcome(
 	t *testing.T,
 	deliver func(workers.WorkstationDispatchRequest) workers.WorkstationDispatchResult,
+	stopAfterResult bool,
 ) dispatchplanning.TerminalResultOutcome {
 	t.Helper()
 	boundary := newControlledWorkstationBoundary()
@@ -269,18 +267,39 @@ func childDispatchTerminalOutcome(
 	}}); err != nil {
 		t.Fatalf("SubmitWorkRequest: %v", err)
 	}
-
+	runContext, cancelRun := context.WithCancel(t.Context())
+	defer cancelRun()
 	runDone := make(chan error, 1)
-	go func() { runDone <- runtime.Run(t.Context()) }()
-
+	go func() { runDone <- runtime.Run(runContext) }()
 	request := awaitCanonicalWorkersRequest(t, boundary.requests)
 	boundary.results <- deliver(request)
-
-	if err := <-runDone; err != nil {
+	if stopAfterResult {
+		waitForChildDispatchResult(t, impl, request.Execution.Dispatch.DispatchID)
+		cancelRun()
+	}
+	if err := <-runDone; err != nil && !(stopAfterResult && errors.Is(err, context.Canceled)) {
 		t.Fatalf("Run: %v", err)
 	}
-
 	return recordedTerminalOutcome(t, impl, request.Execution.Dispatch.DispatchID)
+}
+
+func waitForChildDispatchResult(t *testing.T, impl *factoryImpl, dispatchID string) {
+	t.Helper()
+	deadline := time.NewTimer(time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if intent, ok := impl.dispatchPlan.Intent(dispatchID); ok && intent.Result != nil {
+			return
+		}
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatalf("timed out waiting for dispatch %q terminal result", dispatchID)
+			return
+		}
+	}
 }
 
 // preHandoffFailedWorkerSessionsService is a stub worker_sessions.Service

@@ -405,6 +405,7 @@ func (r *runner) resolveCommandRequest(
 		Env:                      mergedEnvironment(request.ProcessEnvironment, envVars),
 		WorkDir:                  workDir,
 		DispatchID:               dispatch.DispatchID,
+		TransitionID:             dispatch.TransitionID,
 		WorkerType:               firstNonEmpty(request.WorkerType, dispatch.WorkerType),
 		WorkstationName:          firstNonEmpty(request.WorkstationType, dispatch.WorkstationName),
 		ProjectID:                firstNonEmpty(projectID, dispatch.ProjectID),

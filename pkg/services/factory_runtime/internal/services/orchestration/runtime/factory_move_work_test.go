@@ -12,6 +12,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -163,6 +164,37 @@ type terminalOnReleaseExecutor struct {
 	cause       error
 }
 
+// oneShotScheduler keeps this terminal-outcome regression focused on the
+// dispatch being retired. Once cancellation restores an initial Work token,
+// the normal runtime scheduler is allowed to retry the still-eligible
+// transition; that retry would race the MoveWork assertion instead of testing
+// the release contract.
+type oneShotScheduler struct {
+	delegate scheduler.Scheduler
+	mu       sync.Mutex
+	selected bool
+}
+
+func (s *oneShotScheduler) Select(
+	enabled []interfaces.EnabledTransition,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+) []interfaces.FiringDecision {
+	if len(enabled) == 0 {
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.selected {
+		return nil
+	}
+	decisions := s.delegate.Select(enabled, snapshot)
+	if len(decisions) > 0 {
+		s.selected = true
+	}
+	return decisions
+}
+
 // releaseOnce ends the held dispatch and is safe to call more than once, so a
 // failed assertion can unwind the harness through the same path the happy case
 // uses.
@@ -223,6 +255,7 @@ func assertTerminalWorkerOutcomeReleasesDispatch(t *testing.T, workID string, ca
 	harness := startServiceModeRunHarness(t,
 		withNet(buildSimpleNetWithFailureArc()),
 		withServiceMode(),
+		withScheduler(&oneShotScheduler{delegate: scheduler.NewFIFOScheduler()}),
 		withWorkerExecutor("mock", executor),
 		withLogger(logging.NoopLogger{}),
 	)
@@ -272,8 +305,14 @@ func assertTerminalWorkerOutcomeReleasesDispatch(t *testing.T, workID string, ca
 		harness.Factory,
 		dispatchReleaseObservationBudget,
 		func(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
-			return snapshot.InFlightCount == 0 &&
-				markingContainsWorkAtPlace(&snapshot.Marking, workID, "task:failed")
+			if snapshot.InFlightCount != 0 {
+				return false
+			}
+			if errors.Is(cause, workers.ErrWorkstationDispatchCanceled) {
+				return markingContainsWorkAtPlace(&snapshot.Marking, workID, "task:init") &&
+					!markingContainsWorkAtPlace(&snapshot.Marking, workID, "task:failed")
+			}
+			return markingContainsWorkAtPlace(&snapshot.Marking, workID, "task:failed")
 		},
 	)
 
@@ -281,8 +320,12 @@ func assertTerminalWorkerOutcomeReleasesDispatch(t *testing.T, workID string, ca
 	if err != nil {
 		t.Fatalf("MoveWork after the attempt reached %v: %v", cause, err)
 	}
-	if result.FromState != "failed" || result.ToState != "done" {
-		t.Fatalf("move result = %#v, want failed -> done", result)
+	wantFromState := "failed"
+	if errors.Is(cause, workers.ErrWorkstationDispatchCanceled) {
+		wantFromState = "init"
+	}
+	if result.FromState != wantFromState || result.ToState != "done" {
+		t.Fatalf("move result = %#v, want %s -> done", result, wantFromState)
 	}
 
 	snapshot, err := harness.Factory.GetEngineStateSnapshot(ctx)

@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -33,6 +34,7 @@ type CommandRequest struct {
 	Env                      []string
 	WorkDir                  string
 	DispatchID               string
+	TransitionID             string
 	WorkerType               string
 	WorkstationName          string
 	ProjectID                string
@@ -263,9 +265,13 @@ func (runner LoggingCommandRunner) Run(ctx context.Context, request CommandReque
 	result, err := runner.Runner.Run(ctx, request)
 	duration := runner.Clock.Now().Sub(started)
 	loggedResult := commandResultForLogging(runner.Runner, ctx, request, result)
-	logger.Info("command runner: request completed", commandCompletionLogFields(
-		request, loggedResult, duration, commandResultStatus(ctx, loggedResult, err), err,
-	)...)
+	status := commandResultStatus(ctx, loggedResult, err)
+	completionFields := commandCompletionLogFields(request, loggedResult, duration, status, err)
+	if commandStatusIsFailure(status) {
+		logger.Error("command runner: request failed", completionFields...)
+	} else {
+		logger.Info("command runner: request completed", completionFields...)
+	}
 	logger.Verbose("command runner: verbose output details", commandOutputDetailsLogFields(request, loggedResult, duration)...)
 	return result, err
 }
@@ -295,9 +301,13 @@ func (runner LoggingCommandRunner) RunStreaming(
 	}
 	duration := runner.Clock.Now().Sub(started)
 	loggedResult := commandResultForLogging(runner.Runner, ctx, request, result)
-	logger.Info("command runner: request completed", commandCompletionLogFields(
-		request, loggedResult, duration, commandResultStatus(ctx, loggedResult, err), err,
-	)...)
+	status := commandResultStatus(ctx, loggedResult, err)
+	completionFields := commandCompletionLogFields(request, loggedResult, duration, status, err)
+	if commandStatusIsFailure(status) {
+		logger.Error("command runner: request failed", completionFields...)
+	} else {
+		logger.Info("command runner: request completed", completionFields...)
+	}
 	logger.Verbose("command runner: verbose output details", commandOutputDetailsLogFields(request, loggedResult, duration)...)
 	return result, err
 }
@@ -305,7 +315,7 @@ func (runner LoggingCommandRunner) RunStreaming(
 func SubprocessRequestBase(dispatch work.WorkDispatch) CommandRequest {
 	cloned := work.CloneWorkDispatch(dispatch)
 	return CommandRequest{
-		DispatchID: cloned.DispatchID,
+		DispatchID: cloned.DispatchID, TransitionID: cloned.TransitionID,
 		WorkerType: cloned.WorkerType, WorkstationName: cloned.WorkstationName,
 		ProjectID: cloned.ProjectID, CurrentChainingTraceID: cloned.CurrentChainingTraceID,
 		PreviousChainingTraceIDs: cloned.PreviousChainingTraceIDs,
@@ -405,7 +415,7 @@ func workLogFields(metadata work.ExecutionMetadata, values ...any) []any {
 }
 
 func commandRequestLogFields(request CommandRequest) []any {
-	return workLogFields(request.Execution, "event_name", "command_runner.requested", "status", "requested",
+	return commandRequestCorrelationFields(request, "event_name", "command_runner.requested", "status", "requested",
 		"command", request.Command, "args_count", len(request.Args), "working_dir", request.WorkDir,
 		"stdin_bytes", len(request.Stdin))
 }
@@ -423,22 +433,63 @@ func commandOutputDetailsLogFields(
 	result CommandResult,
 	duration time.Duration,
 ) []any {
-	return workLogFields(request.Execution, "event_name", "command_runner.output_details", "status", "verbose",
+	return commandRequestCorrelationFields(request, "event_name", "command_runner.output_details", "status", "verbose",
 		"command", request.Command, "exit_code", result.ExitCode, "duration_ms", duration.Milliseconds(),
 		"stdout_bytes", len(result.Stdout), "stderr_bytes", len(result.Stderr))
 }
 
 func commandResultStatus(ctx context.Context, result CommandResult, err error) string {
+	reason := result.CancellationReason
+	if reason == "" {
+		reason = platformprocess.CancellationReasonFromContext(ctx)
+	}
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || ctx.Err() == context.DeadlineExceeded {
 			return "timed_out"
 		}
+		if reason == platformprocess.CancellationReasonProcessGone {
+			return "error"
+		}
+		if reason != "" {
+			return "canceled"
+		}
+		if errors.Is(err, context.Canceled) {
+			return "canceled"
+		}
 		return "error"
+	}
+	if reason == platformprocess.CancellationReasonProcessGone {
+		return "error"
+	}
+	if reason != "" {
+		return "canceled"
 	}
 	if result.ExitCode != 0 {
 		return "failed"
 	}
 	return "succeeded"
+}
+
+func commandStatusIsFailure(status string) bool {
+	switch status {
+	case "failed", "timed_out", "error":
+		return true
+	default:
+		return false
+	}
+}
+
+func commandFailureReason(status string) string {
+	switch status {
+	case "failed":
+		return "non_zero_exit"
+	case "timed_out":
+		return "timeout"
+	case "error":
+		return "execution_error"
+	default:
+		return ""
+	}
 }
 
 func commandCompletionLogFields(
@@ -448,10 +499,16 @@ func commandCompletionLogFields(
 	status string,
 	err error,
 ) []any {
-	fields := workLogFields(request.Execution, "event_name", "command_runner.completed", "status", status,
+	fields := commandRequestCorrelationFields(request, "event_name", "command_runner.completed", "status", status, "outcome", status,
 		"command", request.Command, "args_count", len(request.Args), "working_dir", request.WorkDir,
 		"exit_code", result.ExitCode, "duration_ms", duration.Milliseconds())
-	if err != nil {
+	if reason := commandFailureReason(status); reason != "" {
+		fields = append(fields, "failure_reason", reason)
+	}
+	if result.CancellationReason != "" {
+		fields = append(fields, "cancellation_reason", string(result.CancellationReason))
+	}
+	if err != nil && status != "canceled" {
 		fields = append(fields, "has_error", true)
 	}
 	return fields
@@ -489,7 +546,11 @@ func commandResultForLogging(
 }
 
 func commandContextLogger(logger logging.Logger, request CommandRequest) logging.Logger {
-	fields := workLogFields(request.Execution, "dispatch_id", request.DispatchID)
+	fields := workLogFields(request.Execution,
+		"dispatch_id", request.DispatchID,
+		"transition_id", request.TransitionID,
+		"work_name", primaryWorkName(request.Inputs),
+	)
 	if request.WorkerType != "" {
 		fields = append(fields, "worker_type", request.WorkerType)
 	}
@@ -497,6 +558,28 @@ func commandContextLogger(logger logging.Logger, request CommandRequest) logging
 		fields = append(fields, "workstation_name", request.WorkstationName)
 	}
 	return contextualLogger{logger: logging.EnsureLogger(logger), fields: fields}
+}
+
+func commandRequestCorrelationFields(request CommandRequest, keysAndValues ...any) []any {
+	fields := workLogFields(request.Execution,
+		"dispatch_id", request.DispatchID,
+		"transition_id", request.TransitionID,
+		"workstation_name", request.WorkstationName,
+		"work_name", primaryWorkName(request.Inputs),
+	)
+	return append(fields, keysAndValues...)
+}
+
+func primaryWorkName(inputs []workers.WorkInput) string {
+	for _, input := range inputs {
+		if strings.TrimSpace(input.WorkID) == "" {
+			continue
+		}
+		if name := strings.TrimSpace(input.Name); name != "" {
+			return name
+		}
+	}
+	return ""
 }
 
 type contextualLogger struct {

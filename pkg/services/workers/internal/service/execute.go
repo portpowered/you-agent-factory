@@ -179,7 +179,14 @@ func (s *Service) executeStarted(
 		runErr = errors.Join(runErr, cleanupFailure(cleanupErr))
 	}
 	finishedAt := s.clock()
-	result := s.normalizeResult(correlation, request, runnerResult, runErr, finishedAt.Sub(startedAt))
+	result := s.normalizeResult(
+		correlation,
+		request,
+		runnerResult,
+		runErr,
+		finishedAt.Sub(startedAt),
+		execCtx.Err() == context.Canceled,
+	)
 	s.emitTerminal(observationContext, &sequence, result, finishedAt)
 	s.logger.Info(
 		"workers execute finished",

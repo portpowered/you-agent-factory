@@ -18,6 +18,7 @@ func (s *Service) normalizeResult(
 	runnerResult workers.RunnerExecutionResult,
 	runErr error,
 	duration time.Duration,
+	executionCanceled bool,
 ) workers.ExecuteResult {
 	result := baseExecuteResult(correlation, request, runnerResult, duration)
 	if runErr == nil {
@@ -26,7 +27,7 @@ func (s *Service) normalizeResult(
 	if runErr == nil {
 		return result
 	}
-	return normalizeFailedResult(result, request, runnerResult, runErr)
+	return normalizeFailedResult(result, request, runnerResult, runErr, executionCanceled)
 }
 
 func baseExecuteResult(
@@ -114,9 +115,10 @@ func normalizeFailedResult(
 	request workers.ExecuteRequest,
 	runnerResult workers.RunnerExecutionResult,
 	runErr error,
+	executionCanceled bool,
 ) workers.ExecuteResult {
 	switch {
-	case errors.Is(runErr, context.Canceled):
+	case executionCanceled:
 		return canceledResult(result, request, runErr)
 	case errors.Is(runErr, context.DeadlineExceeded):
 		return timeoutResult(result, runErr)
@@ -215,6 +217,14 @@ func genericFailureResult(
 	runErr error,
 ) workers.ExecuteResult {
 	result.Outcome = workers.ExecutionOutcomeFailed
+	if request.Target.RunnerID == runners.ScriptIdentity && errors.Is(runErr, context.Canceled) {
+		result.Failure = &workers.ExecutionFailure{
+			Type:    workers.WorkFailureTypeUnknown,
+			Family:  workers.WorkFailureFamilyTerminal,
+			Message: "execution cancelled: context canceled",
+		}
+		return result
+	}
 	result.Failure = failureFromError(runErr)
 	var providerErr *workers.ProviderError
 	if errors.As(runErr, &providerErr) && providerErr != nil {

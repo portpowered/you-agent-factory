@@ -210,6 +210,23 @@
       },
       "type": "object"
     },
+    "DispatchCancellation": {
+      "additionalProperties": false,
+      "description": "Explicit dispatch lifecycle intent. A canceled or superseded dispatch is not a business execution failure and must not route its Work through failure arcs.",
+      "properties": {
+        "reason": {
+          "enum": [
+            "CANCELED",
+            "SUPERSEDED"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "type": "object"
+    },
     "DispatchConsumedWorkRef": {
       "additionalProperties": false,
       "description": "Ordered reference to one consumed work item on a dispatch boundary. Dispatch-request payloads keep only the consumed work identity here; work type, trace, display, and other work facts must be derived from prior WORK_REQUEST events plus FactoryEvent.context.",
@@ -457,6 +474,9 @@
       "properties": {
         "artifactVerification": {
           "$ref": "#/$defs/ExpectedArtifactVerification"
+        },
+        "cancellation": {
+          "$ref": "#/$defs/DispatchCancellation"
         },
         "completionId": {
           "type": "string"
@@ -5528,7 +5548,8 @@
         "ACCEPTED",
         "CONTINUE",
         "REJECTED",
-        "FAILED"
+        "FAILED",
+        "CANCELED"
       ],
       "type": "string"
     },

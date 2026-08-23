@@ -218,6 +218,7 @@ func (e *FactoryEngine) retireCompletedDispatches(results []workerexecution.Work
 					TransitionID:         entry.TransitionID,
 					WorkstationName:      entry.WorkstationName,
 					Outcome:              r.Outcome,
+					Cancellation:         r.Cancellation.Clone(),
 					Reason:               completedDispatchReasonFromResult(r),
 					ArtifactVerification: r.ArtifactVerification.Clone(),
 					FailureDetail:        workerexecution.CloneFailureDetail(r.FailureDetail),
@@ -238,36 +239,6 @@ func (e *FactoryEngine) retireCompletedDispatches(results []workerexecution.Work
 			}
 		}
 	}
-}
-
-func completedDispatchReasonFromResult(result workerexecution.WorkResult) string {
-	switch result.Outcome {
-	case workerexecution.OutcomeFailed:
-		return result.Error
-	case workerexecution.OutcomeContinue:
-		return result.Feedback
-	case workerexecution.OutcomeRejected:
-		return result.Feedback
-	default:
-		return ""
-	}
-}
-
-func workResultForCompletedDispatch(result workerexecution.WorkResult, completed interfaces.CompletedDispatch) workerexecution.WorkResult {
-	result.Outcome = completed.Outcome
-	result.SelectedClassificationLabel = completed.SelectedClassificationLabel
-	if completed.FailureDetail != nil {
-		result.FailureDetail = workerexecution.CloneFailureDetail(completed.FailureDetail)
-	}
-	switch completed.Outcome {
-	case workerexecution.OutcomeFailed:
-		result.Error = completed.Reason
-	case workerexecution.OutcomeContinue:
-		result.Feedback = completed.Reason
-	case workerexecution.OutcomeRejected:
-		result.Feedback = completed.Reason
-	}
-	return result
 }
 
 // NotifyResult wakes the engine after a WorkResult is enqueued so the engine

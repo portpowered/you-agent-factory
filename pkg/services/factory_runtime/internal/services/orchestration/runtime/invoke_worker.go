@@ -252,7 +252,7 @@ func cancelStatelessAttempt(
 	if cfg == nil || cfg.attempts == nil {
 		return workers.WorkstationDispatchCancelResult{}, ErrAttemptLifecycleUnavailable
 	}
-	outcome, err := cfg.attempts.cancel(ctx, request.DispatchID)
+	outcome, err := cfg.attempts.cancel(ctx, request.DispatchID, request.Reason)
 	if err != nil {
 		return workers.WorkstationDispatchCancelResult{}, err
 	}
