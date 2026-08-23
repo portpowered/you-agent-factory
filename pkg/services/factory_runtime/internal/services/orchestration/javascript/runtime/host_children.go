@@ -18,7 +18,7 @@ func (g *runtimeGlobals) bindAgentAPI() error {
 }
 
 func (g *runtimeGlobals) hostAgentRun(call goja.FunctionCall) goja.Value {
-	return g.hostAgentRunWithContext(nil, call)
+	return g.hostAgentRunWithContext(g.currentPipelineExecution(), call)
 }
 
 func (g *runtimeGlobals) hostAgentRunWithContext(execution *pipelineExecutionContext, call goja.FunctionCall) goja.Value {
@@ -60,12 +60,11 @@ func (g *runtimeGlobals) executeChild(execution *pipelineExecutionContext, req C
 		return g.executeBoundedChild(req)
 	}
 
-	execution.vmCallMu.Unlock()
-	result, err := g.executeBoundedChild(req)
-	execution.vmCallMu.Lock()
-	if bindErr := g.setPipelineExecution(execution); err == nil && bindErr != nil {
-		err = bindErr
+	if !execution.gate.release(execution) {
+		return g.executeBoundedChild(req)
 	}
+	result, err := g.executeBoundedChild(req)
+	execution.gate.reacquire(execution)
 	return result, err
 }
 
@@ -177,7 +176,7 @@ func (g *runtimeGlobals) bindParallelAPI() error {
 }
 
 func (g *runtimeGlobals) hostParallel(call goja.FunctionCall) goja.Value {
-	return g.hostParallelWithContext(nil, call)
+	return g.hostParallelWithContext(g.currentPipelineExecution(), call)
 }
 
 func (g *runtimeGlobals) hostParallelWithContext(execution *pipelineExecutionContext, call goja.FunctionCall) goja.Value {
@@ -324,10 +323,11 @@ func (g *runtimeGlobals) executeParallelAgentSpecsOutsideVM(execution *pipelineE
 	// Agent specs only use resolved Go values while they are executing. Release
 	// the VM mutex for the whole blocking fanout so another pipeline item can
 	// enter its stage while these children are in flight.
-	execution.vmCallMu.Unlock()
+	if !execution.gate.release(execution) {
+		return g.executeParallelAgentSpecs(items, results)
+	}
 	defer func() {
-		execution.vmCallMu.Lock()
-		_ = g.setPipelineExecution(execution)
+		execution.gate.reacquire(execution)
 	}()
 	return g.executeParallelAgentSpecs(items, results)
 }
@@ -437,7 +437,7 @@ func (g *runtimeGlobals) bindPipelineAPI() error {
 }
 
 func (g *runtimeGlobals) hostPipeline(call goja.FunctionCall) goja.Value {
-	return g.hostPipelineWithContext(nil, call)
+	return g.hostPipelineWithContext(g.currentPipelineExecution(), call)
 }
 
 func (g *runtimeGlobals) hostPipelineWithContext(parent *pipelineExecutionContext, call goja.FunctionCall) goja.Value {
@@ -450,7 +450,7 @@ func (g *runtimeGlobals) hostPipelineWithContext(parent *pipelineExecutionContex
 		panic(g.vm.NewTypeError(err.Error()))
 	}
 
-	execution := newPipelineExecutionContext(parent)
+	execution := newPipelineExecutionContext(parent, g.pipelineGate)
 	results, err := g.executeNestedPipeline(parent, execution, items, stages)
 	if err != nil {
 		panic(g.vm.NewGoError(err))
@@ -471,10 +471,11 @@ func (g *runtimeGlobals) executeNestedPipeline(parent, execution *pipelineExecut
 	// A nested pipeline is still Goja work, so it uses the same immutable VM
 	// mutex as its parent. Let sibling outer items compete for that mutex while
 	// the nested invocation is running instead of holding the parent stage.
-	parent.vmCallMu.Unlock()
+	if !parent.gate.release(parent) {
+		return g.executePipeline(execution, items, stages)
+	}
 	defer func() {
-		parent.vmCallMu.Lock()
-		_ = g.setPipelineExecution(parent)
+		parent.gate.reacquire(parent)
 	}()
 	return g.executePipeline(execution, items, stages)
 }
@@ -608,12 +609,8 @@ func pipelineFailedChildError(result any) error {
 }
 
 func (g *runtimeGlobals) callPipelineStage(execution *pipelineExecutionContext, stage goja.Callable, stageIndex int, prior any, item any, index int, entered chan<- struct{}) (any, error) {
-	execution.vmCallMu.Lock()
-	defer execution.vmCallMu.Unlock()
-	if err := g.setPipelineExecution(execution); err != nil {
-		return nil, err
-	}
-	defer g.resetPipelineExecution()
+	execution.gate.lock(execution)
+	defer execution.gate.unlock()
 	if entered != nil {
 		close(entered)
 	}
@@ -633,54 +630,11 @@ func (g *runtimeGlobals) callPipelineStage(execution *pipelineExecutionContext, 
 	return g.awaitParallelValue(value)
 }
 
-func (g *runtimeGlobals) setPipelineExecution(execution *pipelineExecutionContext) error {
-	agentValue := g.vm.Get("agent")
-	if agentValue == nil {
-		return fmt.Errorf("pipeline() could not bind agent.run")
+func (g *runtimeGlobals) currentPipelineExecution() *pipelineExecutionContext {
+	if g.pipelineGate == nil {
+		return nil
 	}
-	agent := agentValue.ToObject(g.vm)
-	if agent == nil {
-		return fmt.Errorf("pipeline() could not bind agent.run")
-	}
-	if err := agent.Set("run", g.agentRunFor(execution)); err != nil {
-		return fmt.Errorf("pipeline() bind agent.run: %w", err)
-	}
-	if err := g.vm.Set("parallel", g.parallelFor(execution)); err != nil {
-		return fmt.Errorf("pipeline() bind parallel: %w", err)
-	}
-	if err := g.vm.Set("pipeline", g.pipelineFor(execution)); err != nil {
-		return fmt.Errorf("pipeline() bind pipeline: %w", err)
-	}
-	return nil
-}
-
-func (g *runtimeGlobals) resetPipelineExecution() {
-	agentValue := g.vm.Get("agent")
-	if agentValue != nil {
-		if agent := agentValue.ToObject(g.vm); agent != nil {
-			_ = agent.Set("run", g.hostAgentRun)
-		}
-	}
-	_ = g.vm.Set("parallel", g.hostParallel)
-	_ = g.vm.Set("pipeline", g.hostPipeline)
-}
-
-func (g *runtimeGlobals) agentRunFor(execution *pipelineExecutionContext) func(goja.FunctionCall) goja.Value {
-	return func(call goja.FunctionCall) goja.Value {
-		return g.hostAgentRunWithContext(execution, call)
-	}
-}
-
-func (g *runtimeGlobals) parallelFor(execution *pipelineExecutionContext) func(goja.FunctionCall) goja.Value {
-	return func(call goja.FunctionCall) goja.Value {
-		return g.hostParallelWithContext(execution, call)
-	}
-}
-
-func (g *runtimeGlobals) pipelineFor(execution *pipelineExecutionContext) func(goja.FunctionCall) goja.Value {
-	return func(call goja.FunctionCall) goja.Value {
-		return g.hostPipelineWithContext(execution, call)
-	}
+	return g.pipelineGate.current()
 }
 
 func pipelineStageValue(stageIndex int, result any, err error) map[string]any {

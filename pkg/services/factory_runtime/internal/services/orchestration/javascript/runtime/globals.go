@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/dop251/goja"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -24,6 +25,7 @@ type runtimeGlobals struct {
 	records               *recordCollector
 	childExecutor         ChildExecutor
 	parallelGate          chan struct{}
+	pipelineGate          *pipelineExecutionGate
 	agents                map[string]interfaces.FactoryOrchestratorJavaScriptAgent
 	workerSettings        WorkerSettingsConfig
 	onArtifact            func(kind string, content json.RawMessage) error
@@ -34,19 +36,65 @@ type runtimeGlobals struct {
 	returnedSet           bool
 }
 
-// pipelineExecutionContext is captured by one pipeline invocation and passed
-// through every stage and host primitive it calls. Nested pipelines receive a
-// distinct context value that shares the VM mutex, so all Goja access remains
-// serialized without storing invocation state on runtimeGlobals.
-type pipelineExecutionContext struct {
-	vmCallMu *sync.Mutex
+// pipelineExecutionGate serializes Goja access and records the context that
+// currently owns the gate. The active pointer is atomic because stable host
+// bindings can be retained by JavaScript and invoked after a stage or pipeline
+// ends; calls outside a stage must observe that no pipeline context is active.
+type pipelineExecutionGate struct {
+	mu     sync.Mutex
+	active atomic.Pointer[pipelineExecutionContext]
 }
 
-func newPipelineExecutionContext(parent *pipelineExecutionContext) *pipelineExecutionContext {
-	if parent != nil {
-		return &pipelineExecutionContext{vmCallMu: parent.vmCallMu}
+func newPipelineExecutionGate() *pipelineExecutionGate {
+	return &pipelineExecutionGate{}
+}
+
+func (g *pipelineExecutionGate) lock(execution *pipelineExecutionContext) {
+	g.mu.Lock()
+	g.active.Store(execution)
+}
+
+func (g *pipelineExecutionGate) unlock() {
+	// Only the goroutine that just called lock uses this method, so ownership
+	// of the mutex is established by the call path rather than by a retained
+	// JavaScript function.
+	g.active.Store(nil)
+	g.mu.Unlock()
+}
+
+func (g *pipelineExecutionGate) release(execution *pipelineExecutionContext) bool {
+	if !g.active.CompareAndSwap(execution, nil) {
+		return false
 	}
-	return &pipelineExecutionContext{vmCallMu: &sync.Mutex{}}
+	g.mu.Unlock()
+	return true
+}
+
+func (g *pipelineExecutionGate) reacquire(execution *pipelineExecutionContext) {
+	g.mu.Lock()
+	g.active.Store(execution)
+}
+
+func (g *pipelineExecutionGate) current() *pipelineExecutionContext {
+	return g.active.Load()
+}
+
+// pipelineExecutionContext is immutable state captured by one pipeline
+// invocation. Nested pipelines receive a distinct context value that shares
+// the runtime gate, while stable host bindings resolve the active context at
+// invocation time instead of retaining this transient pointer.
+type pipelineExecutionContext struct {
+	gate *pipelineExecutionGate
+}
+
+func newPipelineExecutionContext(parent *pipelineExecutionContext, gate *pipelineExecutionGate) *pipelineExecutionContext {
+	if parent != nil {
+		return &pipelineExecutionContext{gate: parent.gate}
+	}
+	if gate == nil {
+		gate = newPipelineExecutionGate()
+	}
+	return &pipelineExecutionContext{gate: gate}
 }
 
 func newParallelGate(policy workflowpolicy.EffectivePolicy) chan struct{} {

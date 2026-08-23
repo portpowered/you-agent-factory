@@ -39,6 +39,69 @@ func TestPipelineNestedInvocationKeepsEachExecutionContextSafe(t *testing.T) {
 	assertCompletedPipelineResults(t, pipelineJSON(t, completed.outcome)["results"], 2, 2)
 }
 
+func TestPipelineRetainedPrimitiveAliasesRemainSafeAfterPipeline(t *testing.T) {
+	source := `return (async function () {
+	const baseRun = agent.run;
+	const baseParallel = parallel;
+	const basePipeline = pipeline;
+	let escapedRun;
+	let escapedParallel;
+	let escapedPipeline;
+	const outer = await pipeline(["outer"], function (item) {
+		escapedRun = agent.run;
+		escapedParallel = parallel;
+		escapedPipeline = pipeline;
+		return item;
+	});
+	const escapedRunResult = await escapedRun({ prompt: "escaped-run", label: "escaped-run" });
+	const escapedParallelResult = await escapedParallel([
+		{ prompt: "escaped-parallel", label: "escaped-parallel" },
+	]);
+	const escapedPipelineResult = await escapedPipeline(["escaped-pipeline"], function (item) {
+		return baseRun({ prompt: item, label: "escaped-pipeline" });
+	});
+	const baseRunResult = await baseRun({ prompt: "base-run", label: "base-run" });
+	const baseParallelResult = await baseParallel([
+		{ prompt: "base-parallel", label: "base-parallel" },
+	]);
+	const basePipelineResult = await basePipeline(["base-pipeline"], function (item) {
+		return baseRun({ prompt: item, label: "base-pipeline" });
+	});
+  return {
+    outer,
+    escapedRunResult,
+    escapedParallelResult,
+    escapedPipelineResult,
+    baseRunResult,
+    baseParallelResult,
+    basePipelineResult,
+  };
+})();`
+	executor := &retainedPrimitiveChildExecutor{}
+	outcome := runPipelineWorkflow(t, "pipeline-retained-primitive-aliases", source, workflowpolicy.DefaultEffectivePolicy(), executor)
+	if !outcome.OK {
+		t.Fatalf("retained primitive alias outcome = %#v", outcome)
+	}
+
+	labels := executor.labelsSnapshot()
+	wantLabels := map[string]bool{
+		"escaped-run": true, "escaped-parallel": true, "escaped-pipeline": true,
+		"base-run": true, "base-parallel": true, "base-pipeline": true,
+	}
+	if len(labels) != len(wantLabels) {
+		t.Fatalf("retained primitive child labels = %#v, want one dispatch for each alias", labels)
+	}
+	for _, label := range labels {
+		if !wantLabels[label] {
+			t.Fatalf("retained primitive child labels = %#v, unexpected label %q", labels, label)
+		}
+		delete(wantLabels, label)
+	}
+	if len(wantLabels) != 0 {
+		t.Fatalf("retained primitive child labels = %#v, missing labels", labels)
+	}
+}
+
 func TestPipelineParallelStageReleasesVMForSiblingItems(t *testing.T) {
 	source := `return (async function () {
   const results = await pipeline(["alpha", "beta"], function (item, index) {
@@ -169,6 +232,28 @@ type controlledPipelineChildExecutor struct {
 	durations  map[string]time.Duration
 	active     int
 	peak       int
+}
+
+type retainedPrimitiveChildExecutor struct {
+	mu     sync.Mutex
+	labels []string
+}
+
+func (e *retainedPrimitiveChildExecutor) Execute(_ context.Context, req factory.JavaScriptChildExecutionRequest) (factory.JavaScriptChildExecutionResult, error) {
+	e.mu.Lock()
+	e.labels = append(e.labels, req.Label)
+	e.mu.Unlock()
+	return factory.JavaScriptChildExecutionResult{
+		Status:  factory.JavaScriptChildDispatchStatusCompleted,
+		Output:  map[string]any{"label": req.Label},
+		Request: req,
+	}, nil
+}
+
+func (e *retainedPrimitiveChildExecutor) labelsSnapshot() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return append([]string(nil), e.labels...)
 }
 
 type pipelineTiming struct {

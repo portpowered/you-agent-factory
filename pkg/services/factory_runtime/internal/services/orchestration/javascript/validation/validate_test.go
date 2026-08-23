@@ -85,6 +85,25 @@ func TestValidatePipelineAcceptsVariadicStages(t *testing.T) {
 	}
 }
 
+func TestValidatePipelineAllowsRetainedPrimitiveAliases(t *testing.T) {
+	t.Parallel()
+
+	result := Validate(Request{
+		Source: `return (async function () {
+  let savedRun;
+  await pipeline(["item"], function (item) {
+    savedRun = agent.run;
+    return item;
+  });
+  return await savedRun({ prompt: "after", label: "after" });
+})();`,
+		SourceRef: "workflow.js",
+	})
+	if result.HasIssues() {
+		t.Fatalf("Validate() issues = %#v, want no issues for a retained local primitive alias", result.Issues)
+	}
+}
+
 func TestValidateRemapsSyntaxErrorsToAuthoredLineNumbers(t *testing.T) {
 	t.Parallel()
 
