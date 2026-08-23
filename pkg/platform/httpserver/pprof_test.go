@@ -75,6 +75,13 @@ func assertEnabledPprofIndexAndRoutes(t *testing.T, server *httptest.Server) {
 
 func assertEnabledPprofProfiles(t *testing.T, server *httptest.Server) {
 	t.Helper()
+	assertEnabledPprofHeap(t, server)
+	assertEnabledPprofNamedProfiles(t, server)
+	assertEnabledPprofHeapDelta(t, server)
+}
+
+func assertEnabledPprofHeap(t *testing.T, server *httptest.Server) {
+	t.Helper()
 	heap := getPprofTestResponse(t, server.URL+"/debug/pprof/heap")
 	if heap.StatusCode != http.StatusOK || len(heap.Body) == 0 {
 		t.Fatalf("enabled pprof heap = (%d, body length %d), want non-empty HTTP 200 response", heap.StatusCode, len(heap.Body))
@@ -84,7 +91,10 @@ func assertEnabledPprofProfiles(t *testing.T, server *httptest.Server) {
 		t.Fatalf("parse enabled pprof heap profile: %v", err)
 	}
 	assertParsedPprofProfile(t, "heap", heapProfile)
+}
 
+func assertEnabledPprofNamedProfiles(t *testing.T, server *httptest.Server) {
+	t.Helper()
 	for _, test := range []struct {
 		path string
 		name string
@@ -109,6 +119,10 @@ func assertEnabledPprofProfiles(t *testing.T, server *httptest.Server) {
 			assertParsedPprofProfile(t, test.name, parsed)
 		}
 	}
+}
+
+func assertEnabledPprofHeapDelta(t *testing.T, server *httptest.Server) {
+	t.Helper()
 	delta := getPprofTestResponse(t, server.URL+"/debug/pprof/heap?seconds=1")
 	if delta.StatusCode != http.StatusOK || len(delta.Body) == 0 {
 		t.Fatalf("enabled heap delta = (%d, body length %d), want non-empty HTTP 200 response", delta.StatusCode, len(delta.Body))
