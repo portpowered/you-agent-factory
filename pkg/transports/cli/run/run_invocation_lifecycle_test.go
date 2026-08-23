@@ -76,6 +76,7 @@ func TestInvocationTargetCarriesOnlyBoundedRuntimeSelection(t *testing.T) {
 	target := invocationTarget(RunConfig{
 		Dir:                   "/tmp/factory",
 		FactoryConfigPath:     "/tmp/factory/factory.yaml",
+		CanonicalSessionID:    "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba",
 		Worktree:              "feature-login",
 		Port:                  7437,
 		WorkerReasoningEffort: "xhigh",
@@ -94,6 +95,9 @@ func TestInvocationTargetCarriesOnlyBoundedRuntimeSelection(t *testing.T) {
 	}
 	if target.WorkerReasoningEffort != "xhigh" {
 		t.Fatalf("WorkerReasoningEffort = %q, want xhigh", target.WorkerReasoningEffort)
+	}
+	if target.CanonicalSessionID != "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba" {
+		t.Fatalf("CanonicalSessionID = %q, want preallocated UUID", target.CanonicalSessionID)
 	}
 }
 
