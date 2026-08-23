@@ -219,6 +219,32 @@ func TestModelTransportSmoke_NamedBuiltinRouteUsesEffectiveDefinitionWithoutWork
 			t.Fatalf("POST /models/%s/invocations retained a worker-lookup failure: %#v", modelName, failure)
 		}
 	}
+	unknownBody, err := json.Marshal(factoryapi.ModelInvocationRequest{Operation: modelprovider.OperationTTS})
+	if err != nil {
+		t.Fatalf("marshal unknown model invocation: %v", err)
+	}
+	unknownResponse, err := http.Post(
+		server.URL()+"/models/unknown-discovered-model/invocations",
+		"application/json", bytes.NewReader(unknownBody),
+	)
+	if err != nil {
+		t.Fatalf("POST /models/unknown-discovered-model/invocations: %v", err)
+	}
+	var unknownFailure factoryapi.ErrorResponse
+	decodeUnknownErr := json.NewDecoder(unknownResponse.Body).Decode(&unknownFailure)
+	unknownResponse.Body.Close()
+	if decodeUnknownErr != nil {
+		t.Fatalf("decode unknown model invocation failure: %v", decodeUnknownErr)
+	}
+	if unknownResponse.StatusCode != http.StatusNotFound ||
+		string(unknownFailure.Code) != "MODEL_NOT_AVAILABLE" ||
+		unknownFailure.Family != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("POST /models/unknown-discovered-model/invocations = status %d, failure %#v; want actionable model-not-available 404", unknownResponse.StatusCode, unknownFailure)
+	}
+	if strings.Contains(string(unknownFailure.Code), "MODEL_INFERENCE_RUNTIME_FAILURE") ||
+		unknownFailure.Family == factoryapi.ErrorFamilyInternalServerError {
+		t.Fatalf("unknown model invocation retained an internal failure classification: %#v", unknownFailure)
+	}
 	if runner.CallCount() != 0 {
 		t.Fatalf("provider command runner calls = %d, want readiness to reject unavailable built-ins before execution", runner.CallCount())
 	}

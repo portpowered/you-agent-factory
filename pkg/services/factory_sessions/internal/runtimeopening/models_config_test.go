@@ -705,8 +705,13 @@ func assertRuntimeModelInvokerLookupFailures(
 
 	configWithoutModel := &factorydefinitions.FactoryConfig{}
 	missingWorkerSessions := &runtimeInvokerSessionsStub{projection: factorysessions.SessionProjection{Context: factorysessions.ProjectionContext{FactoryCfg: configWithoutModel}}}
-	if _, err := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{Models: readyModels, Scope: scope, Sessions: missingWorkerSessions}).InvokeModel(context.Background(), "missing-model", request); err == nil || !strings.Contains(err.Error(), "model not found") {
-		t.Fatalf("missing worker error = %v, want model-not-found classification", err)
+	missingWorkerErr := func() error {
+		_, err := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{Models: readyModels, Scope: scope, Sessions: missingWorkerSessions}).InvokeModel(context.Background(), "missing-model", request)
+		return err
+	}()
+	var missingModelFailure *models.InvocationFailure
+	if missingWorkerErr == nil || !errors.As(missingWorkerErr, &missingModelFailure) || missingModelFailure.Class != models.InvocationFailureClassInvalidModelReference {
+		t.Fatalf("missing worker error = %v, want invalid-model-reference classification", missingWorkerErr)
 	}
 
 	readinessErrorModels := &runtimeInvokerModelsStub{readinessErr: errors.New("readiness lookup failed")}

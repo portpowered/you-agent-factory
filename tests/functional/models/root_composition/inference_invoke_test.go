@@ -304,6 +304,93 @@ func TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess(t *testing.T
 	functionalevidence.Covers(t, "rest/invokeGenericModel")
 }
 
+// TestModelsNamedAndGenericHTTPInvocationShareBuiltinResolution proves both
+// public invocation routes use the same effective built-in definition when no
+// Factory worker is declared. The generic route keeps its slot-named output
+// contract; the named route keeps its legacy worker/content response shape.
+func TestModelsNamedAndGenericHTTPInvocationShareBuiltinResolution(t *testing.T) {
+	t.Parallel()
+
+	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/health" {
+			writer.WriteHeader(http.StatusOK)
+			return
+		}
+		http.NotFound(writer, request)
+	}))
+	t.Cleanup(modelServer.Close)
+
+	home := t.TempDir()
+	writeGenericBuiltinTTSCache(t, home)
+	writeGenericBuiltinTTSBackendCache(t, home)
+	rejectingNetwork := &rejectingModelAssetHTTP{}
+	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
+	protocol := &joinedProtocolNegotiator{}
+	compatibility := &joinedCompatibilityChecker{}
+	assetFiles := functionalModelAssetFileSystem{home: home}
+	dir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Env:                       functionalHomeEnvironment(home),
+		Edges:                     genericHTTPInvocationEdges(rejectingNetwork, assetFiles, hostLauncher, protocol, compatibility, modelServer),
+	})
+
+	text := "builtin parity input"
+	inputs := []factoryapi.ModelInvocationInput{{
+		Name: "text", Modality: factoryapi.ModelInvocationContentTypeText,
+		Content: &text,
+	}}
+	genericResponse := postFunctionalJSON[factoryapi.GenericModelInvocationResponse](
+		t,
+		server.URL()+"/models/invocations",
+		factoryapi.GenericModelInvocationRequest{
+			Scope: "factory-session:parity-generic", Holder: "functional-parity",
+			Model: factoryapi.ModelReference{NameOrUri: "tts"}, Operation: "TTS", Inputs: &inputs,
+		},
+		"POST /models/invocations built-in parity",
+	)
+	if len(genericResponse.Outputs) != 1 || genericResponse.Outputs[0].Name != "audio" ||
+		genericResponse.Outputs[0].Modality != factoryapi.ModelInvocationContentTypeAudio ||
+		genericResponse.Outputs[0].Content == nil || *genericResponse.Outputs[0].Content != text {
+		t.Fatalf("generic built-in parity response = %#v, want one audio output containing input", genericResponse)
+	}
+
+	namedContent := factoryapi.WorkContent{mustFunctionalTextPart(t, text)}
+	namedRequest := factoryapi.ModelInvocationRequest{
+		Operation: "TTS", Bindings: localModelReadinessAssetsHostBindings(), Content: &namedContent,
+	}
+	namedBody, err := json.Marshal(namedRequest)
+	if err != nil {
+		t.Fatalf("marshal named built-in parity request: %v", err)
+	}
+	namedHTTPResponse, err := http.Post(
+		server.URL()+"/models/tts/invocations", "application/json", bytes.NewReader(namedBody),
+	)
+	if err != nil {
+		t.Fatalf("POST /models/{model_name}/invocations built-in parity: %v", err)
+	}
+	var namedFailure factoryapi.ErrorResponse
+	if err := json.NewDecoder(namedHTTPResponse.Body).Decode(&namedFailure); err != nil {
+		namedHTTPResponse.Body.Close()
+		t.Fatalf("decode named built-in parity response: %v", err)
+	}
+	namedHTTPResponse.Body.Close()
+	if namedHTTPResponse.StatusCode != http.StatusNotFound ||
+		string(namedFailure.Code) != "MODEL_NOT_AVAILABLE" ||
+		namedFailure.Family != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("named built-in parity response = status %d, %#v; want effective-definition readiness 404", namedHTTPResponse.StatusCode, namedFailure)
+	}
+	if strings.Contains(strings.ToLower(namedFailure.Message), "model not found") ||
+		strings.Contains(string(namedFailure.Code), "MODEL_INFERENCE_RUNTIME_FAILURE") ||
+		namedFailure.Family == factoryapi.ErrorFamilyInternalServerError {
+		t.Fatalf("named built-in parity retained a worker-lookup failure: %#v", namedFailure)
+	}
+	if rejectingNetwork.Calls() != 0 || hostLauncher.Calls() != 0 || protocol.Calls() != 0 || compatibility.Calls() != 0 {
+		t.Fatalf("built-in parity effects = network %d, starts %d, protocol %d, compatibility %d; want no external effects for the cache-backed generic attempt or named readiness rejection", rejectingNetwork.Calls(), hostLauncher.Calls(), protocol.Calls(), compatibility.Calls())
+	}
+}
+
 func TestModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t *testing.T) {
 	t.Parallel()
 
