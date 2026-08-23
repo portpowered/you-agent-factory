@@ -293,10 +293,6 @@ func replayDiagnosticsFromRunRequestEnvelope(envelope *runRequestDiagnosticsEnve
 	return diagnostics, nil
 }
 
-func runStartedFactorySnapshotFromEvent(event interfaces.FactoryEvent) (*interfaces.FactorySnapshot, error) {
-	return runStartedFactorySnapshotFromEventWithDecoder(event, factorySnapshotFromJSON)
-}
-
 func runStartedFactorySnapshotFromEventWithDecoder(
 	event interfaces.FactoryEvent,
 	decode func([]byte) (*interfaces.FactorySnapshot, error),

@@ -336,8 +336,3 @@ func TestSubmitDueCronTickWithFacts_EquivalentClockAdvanceMatchesAfterRestart(t 
 		t.Fatalf("committed facts = %+v, want %+v", restartedFacts, directFacts)
 	}
 }
-
-func timePtr(value time.Time) *time.Time {
-	value = value.UTC()
-	return &value
-}

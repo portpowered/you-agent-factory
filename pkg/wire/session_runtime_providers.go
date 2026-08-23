@@ -232,13 +232,6 @@ func provideProviderRegistry(
 	return providerIdentityProjection{service: providersService}, nil
 }
 
-func buildProviderRegistry(
-	_ serviceedges.Edges,
-	providersService providers.Service,
-) (initializerapplication.ProviderRegistry, error) {
-	return provideProviderRegistry(serviceedges.Edges{}, providersService)
-}
-
 type providerIdentityProjection struct {
 	service providers.Service
 }
