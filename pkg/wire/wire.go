@@ -97,6 +97,8 @@ var servicesSet = wire.NewSet(
 	provideRuntimeArtifactClock,
 	provideRuntimeArtifactIDGenerator,
 	provideRuntimeArtifactPathReserver,
+	provideRuntimeMetricsCoordination,
+	provideRuntimeMetricsRetentionFileSystem,
 	provideRuntimeArtifactRootResolver,
 	provideRuntimeLoggerFactory,
 	provideRuntimeLogOwner,

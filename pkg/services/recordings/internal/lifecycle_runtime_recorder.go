@@ -589,7 +589,22 @@ func (service *combinedService) newLifecycleRuntimeRecorder(
 	if !ok || lifecycleRecorder == nil {
 		return nil, fmt.Errorf("Recordings runtime recorder has unsupported implementation")
 	}
+	if initialEvent, ok := resumeRunRequestEvent(request.ReplayEvents); ok {
+		// A successor recording must retain the source RUN_REQUEST payload.
+		// Re-capturing the rehydrated RuntimeSnapshot is not hash-idempotent
+		// and would disclose drift for an unchanged checkout.
+		lifecycleRecorder.initialEvent = initialEvent
+	}
 	return lifecycleRecorder, nil
+}
+
+func resumeRunRequestEvent(events []factorydefinitions.FactoryEvent) (recordings.FactoryEvent, bool) {
+	for _, event := range events {
+		if event.Type == factorydefinitions.FactoryEventTypeRunRequest {
+			return event.Clone(), true
+		}
+	}
+	return recordings.FactoryEvent{}, false
 }
 
 func (service *combinedService) bindRuntimeRecorder(

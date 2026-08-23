@@ -92,16 +92,26 @@ func (service *service) Show(cfg ShowConfig) error {
 	if resp.StatusCode == http.StatusNotFound {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work show response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
-			return fmt.Errorf("work %q not found: %s", cfg.WorkID, errResp.Message)
+			return clihttp.NewAPIErrorFromResponse(
+				resp,
+				errResp,
+				fmt.Sprintf("work %q not found: %s", cfg.WorkID, errResp.Message),
+				nil,
+			)
 		}
-		return fmt.Errorf("work %q not found", cfg.WorkID)
+		return clihttp.WithHTTPResponse(resp, fmt.Errorf("work %q not found", cfg.WorkID))
 	}
 	if resp.StatusCode != http.StatusOK {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work show response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
-			return fmt.Errorf("get work failed (%d): %s", resp.StatusCode, errResp.Message)
+			return clihttp.NewAPIErrorFromResponse(
+				resp,
+				errResp,
+				fmt.Sprintf("get work failed (%d): %s", resp.StatusCode, errResp.Message),
+				nil,
+			)
 		}
-		return fmt.Errorf("get work failed (%d)", resp.StatusCode)
+		return clihttp.WithHTTPResponse(resp, fmt.Errorf("get work failed (%d)", resp.StatusCode))
 	}
 	work, err := decodeWorkResponse(responsePayload)
 	if err != nil {

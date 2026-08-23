@@ -306,6 +306,13 @@ func TestQueryModel_NotFoundUsesFriendlyError(t *testing.T) {
 	if !errors.Is(err, ErrModelNotFound) {
 		t.Fatalf("error = %v, want ErrModelNotFound", err)
 	}
+	var apiErr *clihttp.APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("error = %T, want decoded APIError", err)
+	}
+	if apiErr.CLIErrorCode() != "NOT_FOUND" || apiErr.CLIErrorFamily() != factoryapi.ErrorFamilyNotFound || apiErr.CLIErrorMessage() != "model not found" {
+		t.Fatalf("APIError fields = code %q family %q message %q", apiErr.CLIErrorCode(), apiErr.CLIErrorFamily(), apiErr.CLIErrorMessage())
+	}
 }
 
 func TestInvoke_JSONWritesMetadataResponse(t *testing.T) {
@@ -829,11 +836,11 @@ func TestModelsVerboseLogsInspectInvokeAndPullMetadataWithoutInputText(t *testin
 	}
 }
 
-func TestModelsVerboseFailureUsesBoundedNonJSONErrorPreview(t *testing.T) {
-	longFailureBody := strings.Repeat("x", modelsErrorBodyPreviewSize+30)
+func TestModelsFailureOmitsNonJSONResponseBody(t *testing.T) {
+	responseBody := "opaque-secret-response-marker"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
-		_, _ = io.WriteString(w, longFailureBody)
+		_, _ = io.WriteString(w, responseBody)
 	}))
 	defer server.Close()
 
@@ -850,22 +857,50 @@ func TestModelsVerboseFailureUsesBoundedNonJSONErrorPreview(t *testing.T) {
 		t.Fatal("expected queryModel to fail")
 	}
 	gotErr := err.Error()
-	wantPreview := longFailureBody[:modelsErrorBodyPreviewSize] + "..."
-	if !strings.Contains(gotErr, wantPreview) {
-		t.Fatalf("error = %q, want bounded preview %q", gotErr, wantPreview)
+	if !strings.Contains(gotErr, "models request failed (502): response body was not a structured API error") {
+		t.Fatalf("error = %q, want safe non-JSON response summary", gotErr)
 	}
-	if strings.Contains(gotErr, longFailureBody) {
-		t.Fatalf("error included full response body")
+	if strings.Contains(gotErr, responseBody) {
+		t.Fatalf("error included raw response body")
 	}
 	diag := diagnostics.String()
 	assertDiagnosticsContains(t, diag, []string{
 		"models inspect response",
 		"endpointPath=/models/broken",
 		"status=502",
-		"responseBytes=230",
+		"responseBytes=29",
 	})
-	if strings.Contains(diag, longFailureBody[:40]) {
+	if strings.Contains(diag, responseBody) {
 		t.Fatalf("diagnostics leaked model input or response content:\n%s", diag)
+	}
+}
+
+func TestManagedRuntimePullResponseErrorPreservesOutcomeDetails(t *testing.T) {
+	err := managedRuntimePullResponseError(http.StatusUnprocessableEntity, []byte(`{
+		"managedRuntimePull": {
+			"identity": "OMNIVOICE_Q4_K_M",
+			"pullOutcome": "SOURCE_FETCH_FAILED",
+			"readinessState": "FAILED"
+		}
+	}`))
+	if err == nil {
+		t.Fatal("managedRuntimePullResponseError() = nil, want classified failure")
+	}
+	if got, want := err.Error(), "managed runtime pull failed (pullOutcome=SOURCE_FETCH_FAILED readinessState=FAILED)"; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
+	}
+	var coded interface {
+		CLIErrorCode() string
+		CLIErrorFamily() factoryapi.ErrorFamily
+		CLIErrorMessage() string
+	}
+	if !errors.As(err, &coded) {
+		t.Fatalf("error = %T, want coded model pull failure", err)
+	}
+	if coded.CLIErrorCode() != managedRuntimePullFailureCode ||
+		coded.CLIErrorFamily() != factoryapi.ErrorFamilyBadRequest ||
+		coded.CLIErrorMessage() != err.Error() {
+		t.Fatalf("coded failure = (%q, %q, %q), want safe outcome diagnostic", coded.CLIErrorCode(), coded.CLIErrorFamily(), coded.CLIErrorMessage())
 	}
 }
 

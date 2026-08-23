@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 type doerFunc func(*http.Request) (*http.Response, error)
@@ -150,5 +152,117 @@ func TestDecodeAPIError(t *testing.T) {
 	decoded, ok := DecodeAPIError(response)
 	if !ok || decoded.Message != "invalid session" {
 		t.Fatalf("decoded = %#v, ok = %t", decoded, ok)
+	}
+}
+
+func TestAPIErrorPreservesServerFieldsAndCause(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New("request context")
+	response := factoryapi.ErrorResponse{
+		Code:    factoryapi.ErrorResponseCodeNOTFOUND,
+		Family:  factoryapi.ErrorFamilyNotFound,
+		Message: "server says missing",
+	}
+	err := NewAPIError(http.StatusNotFound, response, "work \"missing\" not found: server says missing", cause)
+	if got := err.Error(); got != "work \"missing\" not found: server says missing" {
+		t.Fatalf("APIError.Error() = %q", got)
+	}
+	if !errors.Is(err, cause) {
+		t.Fatal("APIError did not preserve its cause")
+	}
+	if err.CLIErrorCode() != "NOT_FOUND" || err.CLIErrorFamily() != factoryapi.ErrorFamilyNotFound || err.CLIErrorMessage() != "server says missing" {
+		t.Fatalf("CLI fields = code %q family %q message %q", err.CLIErrorCode(), err.CLIErrorFamily(), err.CLIErrorMessage())
+	}
+	if got := err.CLIErrorResponse(); got != response {
+		t.Fatalf("CLI response = %#v, want %#v", got, response)
+	}
+}
+
+func TestAPIErrorFromResponsePreservesHTTPDebugMetadata(t *testing.T) {
+	t.Parallel()
+
+	request, err := http.NewRequest(http.MethodGet, "https://factory.test/factory-sessions/missing?token=secret", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	response := &http.Response{StatusCode: http.StatusNotFound, Request: request}
+	apiError := NewAPIErrorFromResponse(
+		response,
+		factoryapi.ErrorResponse{Code: factoryapi.ErrorResponseCodeNOTFOUND, Family: factoryapi.ErrorFamilyNotFound, Message: "missing"},
+		"session missing",
+		nil,
+	)
+	if apiError.CLIHTTPMethod() != http.MethodGet ||
+		apiError.CLIHTTPURL() != request.URL.String() ||
+		apiError.CLIHTTPStatus() != http.StatusNotFound {
+		t.Fatalf("HTTP metadata = (%q, %q, %d), want request metadata", apiError.CLIHTTPMethod(), apiError.CLIHTTPURL(), apiError.CLIHTTPStatus())
+	}
+}
+
+func TestProtocolTransportFailurePreservesHTTPDebugMetadata(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New("connection refused")
+	clock := &clockSequence{values: []time.Time{time.Unix(1, 0), time.Unix(1, 1)}}
+	protocol, err := NewProtocol(doerFunc(func(*http.Request) (*http.Response, error) {
+		return nil, cause
+	}), clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, gotErr := protocol.GetJSON(context.Background(), "https://factory.test/factory-sessions?token=secret", nil)
+	if !errors.Is(gotErr, cause) {
+		t.Fatalf("transport error = %v, want cause %v", gotErr, cause)
+	}
+	var metadata interface {
+		CLIHTTPMethod() string
+		CLIHTTPURL() string
+		CLIHTTPStatus() int
+	}
+	if !errors.As(gotErr, &metadata) {
+		t.Fatalf("transport error = %T, want HTTP metadata", gotErr)
+	}
+	if metadata.CLIHTTPMethod() != http.MethodGet ||
+		metadata.CLIHTTPURL() != "https://factory.test/factory-sessions?token=secret" ||
+		metadata.CLIHTTPStatus() != 0 {
+		t.Fatalf("transport HTTP metadata = (%q, %q, %d)", metadata.CLIHTTPMethod(), metadata.CLIHTTPURL(), metadata.CLIHTTPStatus())
+	}
+}
+
+func TestProtocolDecodeFailurePreservesHTTPDebugMetadata(t *testing.T) {
+	t.Parallel()
+
+	request, err := http.NewRequest(http.MethodGet, "https://factory.test/factory-sessions?token=secret", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	clock := &clockSequence{values: []time.Time{time.Unix(1, 0), time.Unix(1, 1)}}
+	protocol, err := NewProtocol(doerFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Request:    request,
+			Body:       io.NopCloser(strings.NewReader("{")),
+		}, nil
+	}), clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, gotErr := protocol.GetJSON(context.Background(), request.URL.String(), &struct{}{})
+	if gotErr == nil {
+		t.Fatal("decode failure = nil, want error")
+	}
+	var metadata interface {
+		CLIHTTPMethod() string
+		CLIHTTPURL() string
+		CLIHTTPStatus() int
+	}
+	if !errors.As(gotErr, &metadata) {
+		t.Fatalf("decode failure = %T, want HTTP metadata", gotErr)
+	}
+	if metadata.CLIHTTPMethod() != http.MethodGet ||
+		metadata.CLIHTTPURL() != request.URL.String() ||
+		metadata.CLIHTTPStatus() != http.StatusOK {
+		t.Fatalf("decode HTTP metadata = (%q, %q, %d)", metadata.CLIHTTPMethod(), metadata.CLIHTTPURL(), metadata.CLIHTTPStatus())
 	}
 }

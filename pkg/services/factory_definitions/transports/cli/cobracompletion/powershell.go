@@ -47,15 +47,6 @@ const powerShellFilesystemDelegationBlock = `    if (($Directive -eq 0) -and ($V
 
 `
 
-// ExecuteWithPowerShellFilesystemDelegation installs the generated-script
-// compatibility wrapper before executing the canonical command tree.
-func ExecuteWithPowerShellFilesystemDelegation(root *cobra.Command) error {
-	if err := RegisterPowerShellFilesystemDelegation(root); err != nil {
-		return err
-	}
-	return root.Execute()
-}
-
 // RegisterPowerShellFilesystemDelegation replaces Cobra's generated
 // PowerShell writer with a compatibility wrapper for default file completion.
 func RegisterPowerShellFilesystemDelegation(root *cobra.Command) error {

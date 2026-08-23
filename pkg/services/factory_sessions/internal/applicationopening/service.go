@@ -11,6 +11,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 // RuntimeInputs are the resolved invocation values selected by the canonical
@@ -121,10 +122,14 @@ func (service *Service) bindLiveApplication(
 		return roles.OpenedProcessApplication{}, fmt.Errorf("plan Factory Session application lifecycle: %w", err)
 	}
 	return roles.OpenedProcessApplication{
-		Plan:             plan,
-		Diagnostics:      opened.Resources.Diagnostics,
-		Ready:            runtimeReady(opened.Process),
-		CleanInvocation:  opened.FactoryRuntime,
+		Plan:            plan,
+		Diagnostics:     opened.Resources.Diagnostics,
+		Ready:           runtimeReady(opened.Process),
+		CleanInvocation: opened.FactoryRuntime,
+		ReplayMetadataWarnings: append(
+			[]recordings.MetadataMismatchWarning(nil),
+			opened.ReplayMetadataWarnings...,
+		),
 		HostedInvocation: hostedInvocation(opened.FactorySessions),
 	}, nil
 }
@@ -147,6 +152,10 @@ func (service *Service) openHistoricalReplayApplication(
 		Plan:             plan,
 		Diagnostics:      opened.Resources.Diagnostics,
 		HistoricalReplay: opened.HistoricalReplay,
+		ReplayMetadataWarnings: append(
+			[]recordings.MetadataMismatchWarning(nil),
+			opened.ReplayMetadataWarnings...,
+		),
 	}, nil
 }
 

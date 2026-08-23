@@ -322,15 +322,42 @@ func reconstructRestoredWorldState(
 	if opening == nil {
 		return nil, fmt.Errorf("Recordings runtime opening is required to reconstruct restored world state")
 	}
-	selectedTick := 0
-	for _, event := range events {
-		if event.Context.Tick > selectedTick {
-			selectedTick = event.Context.Tick
-		}
-	}
+	selectedTick := restoredWorldStateTick(events)
 	worldState, err := opening.ReconstructCanonicalFactoryWorldState(events, selectedTick)
 	if err != nil {
 		return nil, fmt.Errorf("reconstruct restored Factory world state: %w", err)
 	}
 	return &worldState, nil
+}
+
+func restoredWorldStateTick(events []factorydefinitions.FactoryEvent) int {
+	latestTick := events[0].Context.Tick
+	for _, event := range events[1:] {
+		if event.Context.Tick > latestTick {
+			latestTick = event.Context.Tick
+		}
+	}
+	if successorRecordingRestartsLogicalClock(events) {
+		// A resumed runtime starts its logical tick counter again. The
+		// predecessor prefix can therefore contain a larger tick than the
+		// successor's final event; use event order after the interruption so
+		// projection does not restore the stale predecessor state.
+		return events[len(events)-1].Context.Tick
+	}
+	return latestTick
+}
+
+func successorRecordingRestartsLogicalClock(events []factorydefinitions.FactoryEvent) bool {
+	interruptionSeen := false
+	previousTick := events[0].Context.Tick
+	for _, event := range events {
+		if event.Type == factorydefinitions.FactoryEventTypeDispatchInterrupted {
+			interruptionSeen = true
+		}
+		if interruptionSeen && event.Context.Tick < previousTick {
+			return true
+		}
+		previousTick = event.Context.Tick
+	}
+	return false
 }

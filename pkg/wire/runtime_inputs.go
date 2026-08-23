@@ -83,6 +83,14 @@ func provideRuntimeArtifactPathReserver() (platformruntimeartifact.Reserver, err
 	return platformruntimeartifact.NewReserver(platformfilesystem.Local{})
 }
 
+func provideRuntimeMetricsCoordination() (platformmetrics.RuntimeMetricsCoordination, error) {
+	return platformmetrics.NewRuntimeMetricsCoordination()
+}
+
+func provideRuntimeMetricsRetentionFileSystem() platformmetrics.RuntimeMetricsRetentionFileSystem {
+	return platformfilesystem.Local{}
+}
+
 func provideRuntimeLogOwner(
 	baseLogger *zap.Logger,
 	clock runtimeArtifactClock,
@@ -145,21 +153,80 @@ func (adapter runtimeLogSinkAdapter) Artifact() factoryruntime.RuntimeLogArtifac
 }
 
 func provideRuntimeMetricsOwner(
+	baseLogger *zap.Logger,
 	clock runtimeArtifactClock,
 	newID runtimeArtifactIDGenerator,
 	paths platformruntimeartifact.Reserver,
+	retentionFileSystem platformmetrics.RuntimeMetricsRetentionFileSystem,
+	coordination platformmetrics.RuntimeMetricsCoordination,
 ) (factoryruntime.RuntimeMetricsOwner, error) {
-	opener, err := platformmetrics.NewRuntimeMetricsOpener(paths)
+	retention, err := platformmetrics.NewRuntimeMetricsRetention(
+		retentionFileSystem, clock, coordination,
+	)
+	if err != nil {
+		return nil, err
+	}
+	scheduler, err := platformmetrics.NewRuntimeMetricsRetentionScheduler(
+		retention, nil, runtimeMetricsRetentionReporter(baseLogger),
+	)
+	if err != nil {
+		return nil, err
+	}
+	opener, err := platformmetrics.NewRuntimeMetricsOpenerWithRetention(
+		paths, scheduler, coordination,
+	)
 	if err != nil {
 		return nil, err
 	}
 	return runtimeMetricsOwner{opener: opener, clock: clock, newID: newID}, nil
 }
 
+func runtimeMetricsRetentionReporter(
+	baseLogger *zap.Logger,
+) platformmetrics.RuntimeMetricsRetentionReporter {
+	return func(report platformmetrics.RuntimeMetricsRetentionReport, sweepErr error) {
+		if baseLogger == nil {
+			return
+		}
+		fields := []zap.Field{
+			zap.String("root", report.RootDirectory),
+			zap.Bool("skipped", report.Skipped),
+			zap.Int("scanned_files", report.Scanned.Files),
+			zap.Int64("scanned_bytes", report.Scanned.Bytes),
+			zap.Int("before_files", report.Before.Files),
+			zap.Int64("before_bytes", report.Before.Bytes),
+			zap.Int("after_files", report.After.Files),
+			zap.Int64("after_bytes", report.After.Bytes),
+			zap.Int("removed_files", report.Removed.Files),
+			zap.Int64("removed_bytes", report.Removed.Bytes),
+			zap.Int("protected_files", report.Protected.Files),
+			zap.Int64("protected_bytes", report.Protected.Bytes),
+			zap.Int("failed_files", report.Failed.Files),
+			zap.Int64("failed_bytes", report.Failed.Bytes),
+		}
+		if sweepErr != nil {
+			baseLogger.Warn("runtime metrics retention sweep failed", append(fields, zap.Error(sweepErr))...)
+			return
+		}
+		if report.Failed.Files > 0 {
+			baseLogger.Warn("runtime metrics retention sweep completed with failures", fields...)
+			return
+		}
+		baseLogger.Debug("runtime metrics retention sweep completed", fields...)
+	}
+}
+
 type runtimeMetricsOwner struct {
 	opener *platformmetrics.RuntimeMetricsOpener
 	clock  runtimeArtifactClock
 	newID  runtimeArtifactIDGenerator
+}
+
+func (owner runtimeMetricsOwner) Close(ctx context.Context) error {
+	if owner.opener == nil {
+		return nil
+	}
+	return owner.opener.Close(ctx)
 }
 
 func (owner runtimeMetricsOwner) Open(request factoryruntime.RuntimeMetricsScopeRequest) (factoryruntime.RuntimeMetricsSink, error) {

@@ -111,15 +111,25 @@ func renderDeleteSuccess(cfg DeleteConfig, sessionID string) error {
 func deleteNotFoundError(sessionID string, resp *http.Response) error {
 	var errResp factoryapi.ErrorResponse
 	if json.NewDecoder(resp.Body).Decode(&errResp) == nil && errResp.Message != "" {
-		return fmt.Errorf("factory session not found (%s): %s", sessionID, errResp.Message)
+		return clihttp.NewAPIErrorFromResponse(
+			resp,
+			errResp,
+			fmt.Sprintf("factory session not found (%s): %s", sessionID, errResp.Message),
+			nil,
+		)
 	}
-	return fmt.Errorf("factory session not found: %s", sessionID)
+	return clihttp.WithHTTPResponse(resp, fmt.Errorf("factory session not found: %s", sessionID))
 }
 
 func deleteStatusError(resp *http.Response) error {
 	var errResp factoryapi.ErrorResponse
 	if json.NewDecoder(resp.Body).Decode(&errResp) == nil && errResp.Message != "" {
-		return fmt.Errorf("close factory session failed (%d): %s", resp.StatusCode, errResp.Message)
+		return clihttp.NewAPIErrorFromResponse(
+			resp,
+			errResp,
+			fmt.Sprintf("close factory session failed (%d): %s", resp.StatusCode, errResp.Message),
+			nil,
+		)
 	}
-	return fmt.Errorf("close factory session failed (%d)", resp.StatusCode)
+	return clihttp.WithHTTPResponse(resp, fmt.Errorf("close factory session failed (%d)", resp.StatusCode))
 }

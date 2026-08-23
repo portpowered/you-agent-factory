@@ -298,7 +298,7 @@ func TestQueryCurrent_ReturnsInspectableNotFoundError(t *testing.T) {
 	}
 }
 
-func TestQueryCurrent_PreservesUnexpectedResponseBody(t *testing.T) {
+func TestQueryCurrent_UsesSafeSummaryForUnexpectedResponseBody(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/factory-sessions/~default/factory" {
 			t.Fatalf("path = %q, want /factory-sessions/~default/factory", r.URL.Path)
@@ -311,8 +311,19 @@ func TestQueryCurrent_PreservesUnexpectedResponseBody(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unexpected server error")
 	}
-	if got := err.Error(); got != "query current factory failed (500): backend exploded" {
-		t.Fatalf("error = %q", got)
+	if got := err.Error(); got != "query current factory failed (500)" {
+		t.Fatalf("error = %q, want body-free status summary", got)
+	}
+	var httpFailure interface {
+		CLIHTTPMethod() string
+		CLIHTTPURL() string
+		CLIHTTPStatus() int
+	}
+	if !errors.As(err, &httpFailure) {
+		t.Fatalf("error = %T, want HTTP diagnostic metadata", err)
+	}
+	if httpFailure.CLIHTTPMethod() != http.MethodGet || httpFailure.CLIHTTPStatus() != http.StatusInternalServerError {
+		t.Fatalf("HTTP metadata = %s %d, want GET %d", httpFailure.CLIHTTPMethod(), httpFailure.CLIHTTPStatus(), http.StatusInternalServerError)
 	}
 }
 

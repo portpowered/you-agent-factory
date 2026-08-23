@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -42,6 +43,61 @@ func TestNormalizeUnclassifiedFailureUsesSafeDiagnosticAndPreservesCause(t *test
 	}
 	if strings.Contains(output.String(), "secret-token") {
 		t.Fatalf("diagnostic leaked cause: %q", output.String())
+	}
+}
+
+func TestLocalFailuresPreserveActionableContextWithoutFilesystemCause(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New(`open ./missing.json: credential=secret-token: no such file or directory`)
+	local := NewLocalInputFailure("--replay", "./missing.json", cause)
+	if got, want := local.Error(), `failed to load --replay input "./missing.json"`; got != want {
+		t.Fatalf("local error = %q, want %q", got, want)
+	}
+	if !errors.Is(local, cause) {
+		t.Fatal("local failure did not preserve its cause")
+	}
+	if !HasCodedDiagnostic(local) {
+		t.Fatal("local failure did not expose a coded diagnostic")
+	}
+
+	var output bytes.Buffer
+	if !WriteFailure(&output, local) {
+		t.Fatal("WriteFailure returned false for local failure")
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("local diagnostic is not one ErrorResponse: %v; output=%q", err, output.String())
+	}
+	if response.Code != factoryapi.ErrorResponseCode(LocalInputFailureCode) ||
+		response.Family != factoryapi.ErrorFamilyBadRequest ||
+		response.Message != `failed to load --replay input "./missing.json"` {
+		t.Fatalf("local response = %#v, want actionable bad-request fields", response)
+	}
+	if strings.Contains(output.String(), "secret-token") || strings.Contains(output.String(), "no such file") {
+		t.Fatalf("local diagnostic leaked filesystem cause: %q", output.String())
+	}
+}
+
+func TestFlagConflictFailureNamesBothFlagsAndUsesBadRequestFamily(t *testing.T) {
+	t.Parallel()
+
+	local := NewFlagConflictFailure("--resume", "--no-record", nil)
+	if got, want := local.Error(), "--resume cannot be used with --no-record"; got != want {
+		t.Fatalf("flag conflict = %q, want %q", got, want)
+	}
+	var output bytes.Buffer
+	if !WriteFailure(&output, local) {
+		t.Fatal("WriteFailure returned false for flag conflict")
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("flag conflict diagnostic is not one ErrorResponse: %v; output=%q", err, output.String())
+	}
+	if response.Code != factoryapi.ErrorResponseCode(FlagConflictFailureCode) ||
+		response.Family != factoryapi.ErrorFamilyBadRequest ||
+		response.Message != "--resume cannot be used with --no-record" {
+		t.Fatalf("flag conflict response = %#v, want named bad-request fields", response)
 	}
 }
 
@@ -84,6 +140,35 @@ func (err testInvocationCodedError) Error() string { return "invocation: " + err
 func (err testInvocationCodedError) InvocationErrorCode() string { return err.code }
 
 func (err testInvocationCodedError) InvocationErrorMessage() string { return err.message }
+
+type testResponseCodedError struct {
+	response factoryapi.ErrorResponse
+}
+
+func (err testResponseCodedError) Error() string { return err.response.Message }
+
+func (err testResponseCodedError) CLIErrorResponse() factoryapi.ErrorResponse { return err.response }
+
+func TestWriteFailurePreservesDecodedServerResponse(t *testing.T) {
+	t.Parallel()
+
+	authored := testResponseCodedError{response: factoryapi.ErrorResponse{
+		Code:    factoryapi.ErrorResponseCodeNOTFOUND,
+		Family:  factoryapi.ErrorFamilyNotFound,
+		Message: "server supplied message",
+	}}
+	var output bytes.Buffer
+	if !WriteFailure(&output, authored) {
+		t.Fatal("WriteFailure did not recognize response-coded failure")
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("decode response-coded diagnostic: %v", err)
+	}
+	if response.Code != factoryapi.ErrorResponseCodeNOTFOUND || response.Family != factoryapi.ErrorFamilyNotFound || response.Message != "server supplied message" {
+		t.Fatalf("response = %#v, want decoded server fields", response)
+	}
+}
 
 func TestFailureNilAndDefaultEdges(t *testing.T) {
 	t.Parallel()
@@ -215,5 +300,127 @@ func TestNormalizeAndWriteFailureCoverInvocationAndInvalidContracts(t *testing.T
 	}
 	if WriteFailure(&output, errors.New("untyped")) {
 		t.Fatal("WriteFailure recognized an untyped error")
+	}
+}
+
+func TestWriteUsageErrorPreservesCobraTextAndHelpPath(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New(`unknown flag: --not-a-real-flag`)
+	usage := NewUsageError("you session show", cause)
+	if usage == nil || !errors.Is(usage, cause) {
+		t.Fatalf("NewUsageError() = %v, want wrapped Cobra cause", usage)
+	}
+	var output bytes.Buffer
+	if !WriteUsageError(&output, usage) {
+		t.Fatal("WriteUsageError returned false for a usage error")
+	}
+	if got, want := output.String(), "Error: unknown flag: --not-a-real-flag\nRun 'you session show --help' for usage.\n"; got != want {
+		t.Fatalf("usage diagnostic = %q, want %q", got, want)
+	}
+	if DiagnosticRendered(&output) {
+		t.Fatal("plain output unexpectedly exposed diagnostic marker")
+	}
+	writer := NewDiagnosticWriter(&output)
+	if WriteUsageError(writer, usage) == false || !writer.DiagnosticRendered() {
+		t.Fatal("usage diagnostic writer was not marked rendered")
+	}
+	if WriteFailure(&output, usage) {
+		t.Fatal("usage error was incorrectly rendered as a JSON failure")
+	}
+}
+
+func TestNewUsageErrorRetainsExistingMetadata(t *testing.T) {
+	t.Parallel()
+
+	original := NewUsageError("you work show", errors.New("requires at least 1 arg(s), only received 0"))
+	wrapped := NewUsageError("you", fmt.Errorf("outer: %w", original))
+	var usage *UsageError
+	if !errors.As(wrapped, &usage) {
+		t.Fatalf("wrapped usage error = %v, want UsageError", wrapped)
+	}
+	if usage.CommandPath != "you work show" {
+		t.Fatalf("usage command path = %q, want original path", usage.CommandPath)
+	}
+}
+
+type testHTTPDiagnosticError struct {
+	method string
+	url    string
+	status int
+	cause  error
+}
+
+func (err *testHTTPDiagnosticError) Error() string {
+	if err == nil || err.cause == nil {
+		return "HTTP request failed"
+	}
+	return err.cause.Error()
+}
+
+func (err *testHTTPDiagnosticError) Unwrap() error {
+	if err == nil {
+		return nil
+	}
+	return err.cause
+}
+
+func (err *testHTTPDiagnosticError) CLIHTTPMethod() string { return err.method }
+func (err *testHTTPDiagnosticError) CLIHTTPURL() string    { return err.url }
+func (err *testHTTPDiagnosticError) CLIHTTPStatus() int    { return err.status }
+
+func TestWriteDebugFailureRedactsCauseAndHTTPSecrets(t *testing.T) {
+	t.Parallel()
+
+	err := &testHTTPDiagnosticError{
+		method: "POST",
+		url:    "https://user:password@example.test/factory?token=query-secret#private",
+		status: 422,
+		cause: fmt.Errorf(
+			"send request: %w",
+			errors.New("authorization=Bearer header-secret payload=body-secret"),
+		),
+	}
+	var output bytes.Buffer
+	if !WriteDebugFailure(&output, err) {
+		t.Fatal("WriteDebugFailure returned false")
+	}
+	text := output.String()
+	for _, want := range []string{
+		"debug: cause[0]=send request:",
+		"debug: cause[1]=authorization=<redacted> payload=<redacted>",
+		"debug: http method=POST",
+		"url=https://example.test/factory",
+		"status=422",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("debug output = %q, want %q", text, want)
+		}
+	}
+	for _, forbidden := range []string{"password", "query-secret", "header-secret", "body-secret", "#private"} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("debug output leaked %q: %q", forbidden, text)
+		}
+	}
+}
+
+func TestDebugFlagEnabledHonorsExplicitCLIValuesAndArgumentBoundary(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "long flag", args: []string{"session", "show", "--debug"}, want: true},
+		{name: "short flag", args: []string{"-d", "session", "show"}, want: true},
+		{name: "explicit false", args: []string{"--debug", "--debug=false"}, want: false},
+		{name: "after separator is positional", args: []string{"run", "--", "--debug"}, want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := DebugFlagEnabled(test.args); got != test.want {
+				t.Fatalf("DebugFlagEnabled(%v) = %t, want %t", test.args, got, test.want)
+			}
+		})
 	}
 }

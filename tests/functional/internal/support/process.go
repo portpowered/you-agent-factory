@@ -70,6 +70,22 @@ func RequireSafeCLIDiagnostic(t testing.TB, stderr string) factoryapi.ErrorRespo
 	return response
 }
 
+// RequireNotFoundCLIDiagnostic verifies the server-owned not-found response
+// preserved by the public CLI boundary.
+func RequireNotFoundCLIDiagnostic(t testing.TB, stderr string) factoryapi.ErrorResponse {
+	t.Helper()
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stderr)), &response); err != nil {
+		t.Fatalf("decode CLI not-found diagnostic: %v\nstderr=%q", err, stderr)
+	}
+	if response.Code != factoryapi.ErrorResponseCodeNOTFOUND ||
+		response.Family != factoryapi.ErrorFamilyNotFound ||
+		strings.TrimSpace(response.Message) == "" {
+		t.Fatalf("CLI not-found diagnostic = %#v, want NOT_FOUND code/family and a message", response)
+	}
+	return response
+}
+
 // CleanupProcess closes a caller-owned reusable process after its sequential
 // public invocations finish. Process wiring is immutable, but lifecycle-owned
 // resources may be retained by commands until the process is closed.

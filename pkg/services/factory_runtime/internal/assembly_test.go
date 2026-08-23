@@ -101,6 +101,27 @@ func TestReconstructRestoredWorldStateUsesLatestReplayTick(t *testing.T) {
 	}
 }
 
+func TestReconstructRestoredWorldStateUsesSuccessorTickAfterDispatchInterruption(t *testing.T) {
+	events := []interfaces.FactoryEvent{
+		{Context: interfaces.FactoryEventContext{Tick: 5}},
+		{Type: interfaces.FactoryEventTypeDispatchInterrupted, Context: interfaces.FactoryEventContext{Tick: 5}},
+		{Type: interfaces.FactoryEventTypeDispatchRequest, Context: interfaces.FactoryEventContext{Tick: 1}},
+		{Type: interfaces.FactoryEventTypeRunResponse, Context: interfaces.FactoryEventContext{Tick: 4}},
+	}
+	opening := &assemblyWorldStateOpening{state: interfaces.FactoryWorldState{Tick: 4}}
+
+	state, err := reconstructRestoredWorldState(opening, events)
+	if err != nil {
+		t.Fatalf("reconstructRestoredWorldState: %v", err)
+	}
+	if state == nil || state.Tick != 4 {
+		t.Fatalf("restored state = %#v, want successor tick 4", state)
+	}
+	if opening.tick != 4 {
+		t.Fatalf("selected reconstruction tick = %d, want successor tick 4", opening.tick)
+	}
+}
+
 func TestResumeInputSelectsRecordedEventsForRestoredWorldState(t *testing.T) {
 	resumeEvents := []interfaces.FactoryEvent{
 		{Id: "resume-event", Context: interfaces.FactoryEventContext{Tick: 9}},

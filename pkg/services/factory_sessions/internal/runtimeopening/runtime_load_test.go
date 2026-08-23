@@ -42,6 +42,10 @@ type runtimeLoadReplayInputs struct {
 	loadLegacy recordings.ReplayArtifactLoader
 }
 
+func runtimeLoadedFactorySnapshotCapturer() factorydefinitions.LoadedFactorySnapshotCapturer {
+	return factorydefinitionswire.LoadedFactorySnapshotCapturer()
+}
+
 func newRuntimeLoadReplayInputs(
 	readFile func(string) ([]byte, error),
 	loadLegacy recordings.ReplayArtifactLoader,
