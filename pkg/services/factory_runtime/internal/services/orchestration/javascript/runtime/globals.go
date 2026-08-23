@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/dop251/goja"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -15,14 +16,18 @@ import (
 // network, and shell globals are not injected; forbidden host access is rejected
 // before execution.
 type runtimeGlobals struct {
-	vm                    *goja.Runtime
-	policy                workflowpolicy.EffectivePolicy
-	factoryName           string
-	sessionID             string
-	ctx                   context.Context
-	records               *recordCollector
-	childExecutor         ChildExecutor
-	parallelGate          chan struct{}
+	vm            *goja.Runtime
+	policy        workflowpolicy.EffectivePolicy
+	factoryName   string
+	sessionID     string
+	ctx           context.Context
+	records       *recordCollector
+	childExecutor ChildExecutor
+	parallelGate  chan struct{}
+	// pipelineVMCallMu serializes Goja access while allowing a pipeline child
+	// executor to run without holding the VM gate. Goja is not goroutine-safe,
+	// while child execution is explicitly allowed to overlap.
+	pipelineVMCallMu      *sync.Mutex
 	agents                map[string]interfaces.FactoryOrchestratorJavaScriptAgent
 	workerSettings        WorkerSettingsConfig
 	onArtifact            func(kind string, content json.RawMessage) error

@@ -36,7 +36,7 @@ func (g *runtimeGlobals) hostAgentRun(call goja.FunctionCall) goja.Value {
 	if err := g.denyChildRequest(req); err != nil {
 		panic(g.vm.NewTypeError(err.Error()))
 	}
-	result, err := g.childExecutor.Execute(g.ctx, req)
+	result, err := g.executeChild(req)
 	if err != nil {
 		panic(g.vm.NewGoError(err))
 	}
@@ -45,6 +45,21 @@ func (g *runtimeGlobals) hostAgentRun(call goja.FunctionCall) goja.Value {
 		panic(g.vm.NewGoError(fmt.Errorf("resolve agent.run promise: %w", err)))
 	}
 	return g.vm.ToValue(promise)
+}
+
+// executeChild keeps JavaScript callback execution serialized while allowing
+// a pipeline child to spend its waiting time outside the non-thread-safe Goja
+// VM. The next pipeline item can acquire the gate and dispatch its own child
+// during that interval.
+func (g *runtimeGlobals) executeChild(req ChildExecutionRequest) (ChildExecutionResult, error) {
+	if g.pipelineVMCallMu == nil {
+		return g.childExecutor.Execute(g.ctx, req)
+	}
+
+	g.pipelineVMCallMu.Unlock()
+	result, err := g.childExecutor.Execute(g.ctx, req)
+	g.pipelineVMCallMu.Lock()
+	return result, err
 }
 
 func (g *runtimeGlobals) workflowName() string {
@@ -392,6 +407,12 @@ func (g *runtimeGlobals) hostPipeline(call goja.FunctionCall) goja.Value {
 		panic(g.vm.NewTypeError(err.Error()))
 	}
 
+	previousPipelineVMCallMu := g.pipelineVMCallMu
+	g.pipelineVMCallMu = &sync.Mutex{}
+	defer func() {
+		g.pipelineVMCallMu = previousPipelineVMCallMu
+	}()
+
 	results, err := g.executePipeline(items, stages)
 	if err != nil {
 		panic(g.vm.NewGoError(err))
@@ -471,29 +492,58 @@ func pipelineStageFunctionError(argumentIndex int) error {
 
 func (g *runtimeGlobals) executePipeline(items []any, stages []goja.Callable) ([]any, error) {
 	results := make([]any, len(items))
+	var wg sync.WaitGroup
+	start := make([]chan struct{}, len(items))
+	entered := make([]chan struct{}, len(items))
 	for index, item := range items {
-		stageResults := make([]any, 0, len(stages))
-		var previousResult any
-		failed := false
-		for stageIndex, stage := range stages {
-			stageResult, stageErr := g.callPipelineStage(stage, stageIndex, previousResult, item, index)
-			stageResults = append(stageResults, pipelineStageValue(stageIndex, stageResult, stageErr))
-			if stageErr != nil {
-				failed = true
-				break
-			}
-			previousResult = stageResult
-		}
-		status := ChildDispatchStatusCompleted
-		if failed {
-			status = ChildDispatchStatusFailed
-		}
-		results[index] = pipelineItemResult(index, item, stageResults, status)
+		start[index] = make(chan struct{})
+		entered[index] = make(chan struct{})
+		wg.Add(1)
+		go func(index int, item any, allow <-chan struct{}, stageEntered chan<- struct{}) {
+			defer wg.Done()
+			<-allow
+			results[index] = g.executePipelineItem(item, index, stages, stageEntered)
+		}(index, item, start[index], entered[index])
 	}
+	for index := range items {
+		close(start[index])
+		<-entered[index]
+	}
+	wg.Wait()
 	return results, nil
 }
 
-func (g *runtimeGlobals) callPipelineStage(stage goja.Callable, stageIndex int, prior any, item any, index int) (any, error) {
+func (g *runtimeGlobals) executePipelineItem(item any, index int, stages []goja.Callable, firstStageEntered chan<- struct{}) map[string]any {
+	stageResults := make([]any, 0, len(stages))
+	var previousResult any
+	status := ChildDispatchStatusCompleted
+
+	for stageIndex, stage := range stages {
+		stageEntered := firstStageEntered
+		if stageIndex > 0 {
+			stageEntered = nil
+		}
+		stageResult, stageErr := g.callPipelineStage(stage, stageIndex, previousResult, item, index, stageEntered)
+		stageResults = append(stageResults, pipelineStageValue(stageIndex, stageResult, stageErr))
+		if stageErr != nil {
+			status = ChildDispatchStatusFailed
+			break
+		}
+		previousResult = stageResult
+	}
+
+	return pipelineItemResult(index, item, stageResults, status)
+}
+
+func (g *runtimeGlobals) callPipelineStage(stage goja.Callable, stageIndex int, prior any, item any, index int, entered chan<- struct{}) (any, error) {
+	if g.pipelineVMCallMu != nil {
+		g.pipelineVMCallMu.Lock()
+		defer g.pipelineVMCallMu.Unlock()
+	}
+	if entered != nil {
+		close(entered)
+	}
+
 	var (
 		value goja.Value
 		err   error

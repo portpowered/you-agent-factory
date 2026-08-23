@@ -2,10 +2,13 @@ package workflowruntime_test
 
 import (
 	"context"
+	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -143,6 +146,284 @@ func TestRun_PipelineThreeStages_PassesPreviousResultOriginalItemAndIndex(t *tes
 	}
 }
 
+func TestRun_PipelineThreeStages_AdvancesChainsWithoutStageBarrier(t *testing.T) {
+	labels := []string{
+		"stage1-0", "stage1-1",
+		"stage2-0", "stage2-1",
+		"stage3-0", "stage3-1",
+	}
+	children := newTimedPipelineChildExecutor(labels)
+	t.Cleanup(children.releaseAll)
+
+	source := `return (async function () {
+  const results = await pipeline(
+    ["fast-chain", "slow-chain"],
+    function (item, index) {
+      return agent.run({ prompt: "stage one " + item, label: "stage1-" + index });
+    },
+    function (previous, item, index) {
+      return agent.run({ prompt: "stage two " + previous.label, label: "stage2-" + index });
+    },
+    function (previous, item, index) {
+      return agent.run({ prompt: "stage three " + previous.label, label: "stage3-" + index });
+    }
+  );
+  return { results: results };
+})();`
+	req := factory.JavaScriptRuntimeRequest{
+		Source:    source,
+		SourceRef: "pipeline-three-stage-overlap.workflow.js",
+		SessionID: "session-pipeline-three-stage-overlap",
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}
+
+	type runResult struct {
+		outcome factory.JavaScriptRuntimeOutcome
+		err     error
+	}
+	runDone := make(chan runResult, 1)
+	go func() {
+		outcome, err := runtimeWorkflows.Run(context.Background(), req, factory.JavaScriptRuntimeHooks{
+			NewChildExecutor: func(_ string, sink factory.JavaScriptChildRecordSink, _ workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+				children.sink = sink
+				return children
+			},
+		})
+		runDone <- runResult{outcome: outcome, err: err}
+	}()
+
+	children.waitForStarted(t, "stage1-0", "stage1-1")
+	children.releaseLabel("stage1-0")
+	children.waitForStarted(t, "stage2-0")
+	children.releaseLabel("stage2-0")
+	children.waitForStarted(t, "stage3-0")
+	if children.hasEnded("stage1-1") {
+		t.Fatal("stage1-1 completed before stage3-0 started; item chains were separated by a barrier")
+	}
+	children.releaseLabel("stage3-0")
+	children.releaseLabel("stage1-1")
+	children.waitForStarted(t, "stage2-1")
+	children.releaseLabel("stage2-1")
+	children.waitForStarted(t, "stage3-1")
+	children.releaseLabel("stage3-1")
+
+	completed := <-runDone
+	if completed.err != nil {
+		t.Fatalf("Run() error = %v", completed.err)
+	}
+	if !completed.outcome.OK {
+		t.Fatalf("Run() failure = %#v", completed.outcome.Failure)
+	}
+
+	projected := projectPrimaryJSON(t, req.SessionID, completed.outcome.Value)
+	results, ok := projected["results"].([]any)
+	if !ok || len(results) != 2 {
+		t.Fatalf("projected results = %#v, want two ordered items", projected["results"])
+	}
+	for itemIndex, result := range results {
+		item, ok := result.(map[string]any)
+		if !ok || item["index"] != float64(itemIndex) || item["status"] != factory.JavaScriptChildDispatchStatusCompleted {
+			t.Fatalf("results[%d] = %#v, want ordered completed item", itemIndex, result)
+		}
+		stages, ok := item["stages"].([]any)
+		if !ok || len(stages) != 3 {
+			t.Fatalf("results[%d].stages = %#v, want three stages", itemIndex, item["stages"])
+		}
+		for stageIndex, rawStage := range stages {
+			stage, ok := rawStage.(map[string]any)
+			if !ok || stage["index"] != float64(stageIndex) || stage["status"] != factory.JavaScriptChildDispatchStatusCompleted {
+				t.Fatalf("results[%d].stages[%d] = %#v, want ordered completed stage", itemIndex, stageIndex, rawStage)
+			}
+		}
+	}
+
+	times := children.snapshot()
+	if times["stage3-0"].start >= times["stage1-1"].end {
+		t.Fatalf("stage3-0 start = %s, stage1-1 end = %s; want cross-stage overlap", times["stage3-0"].start, times["stage1-1"].end)
+	}
+
+	stageMaxima := make(map[int]time.Duration)
+	chainDurations := make(map[int]time.Duration)
+	var firstDispatchStart, lastDispatchEnd time.Duration
+	firstDispatchSeen := false
+	for label, timing := range times {
+		parts := strings.Split(label, "-")
+		stageIndex, err := strconv.Atoi(strings.TrimPrefix(parts[0], "stage"))
+		if err != nil {
+			t.Fatalf("parse stage label %q: %v", label, err)
+		}
+		itemIndex, err := strconv.Atoi(parts[1])
+		if err != nil {
+			t.Fatalf("parse item label %q: %v", label, err)
+		}
+		duration := timing.end - timing.start
+		if !firstDispatchSeen || timing.start < firstDispatchStart {
+			firstDispatchStart = timing.start
+			firstDispatchSeen = true
+		}
+		if timing.end > lastDispatchEnd {
+			lastDispatchEnd = timing.end
+		}
+		if duration > stageMaxima[stageIndex] {
+			stageMaxima[stageIndex] = duration
+		}
+		chainDurations[itemIndex] += duration
+	}
+	barrierDuration := time.Duration(0)
+	for _, duration := range stageMaxima {
+		barrierDuration += duration
+	}
+	slowestChain := time.Duration(0)
+	for _, duration := range chainDurations {
+		if duration > slowestChain {
+			slowestChain = duration
+		}
+	}
+	observedDuration := lastDispatchEnd - firstDispatchStart
+	t.Logf("pipeline timing evidence: observed=%s slowest-chain=%s barrier-sum-of-stage-maxima=%s", observedDuration, slowestChain, barrierDuration)
+	if observedDuration >= barrierDuration {
+		t.Fatalf("observed pipeline duration = %s, want less than barrier comparison = %s", observedDuration, barrierDuration)
+	}
+	const timingTolerance = 100 * time.Millisecond
+	if observedDuration > slowestChain+timingTolerance {
+		t.Fatalf("observed pipeline duration = %s, slowest chain = %s, tolerance = %s", observedDuration, slowestChain, timingTolerance)
+	}
+}
+
+type timedPipelineChildExecutor struct {
+	sink       factory.JavaScriptChildRecordSink
+	started    chan string
+	mu         sync.Mutex
+	release    map[string]chan struct{}
+	released   map[string]bool
+	timestamps map[string]pipelineChildTiming
+	planned    map[string]time.Duration
+}
+
+type pipelineChildTiming struct {
+	start     time.Duration
+	end       time.Duration
+	completed bool
+}
+
+func newTimedPipelineChildExecutor(labels []string) *timedPipelineChildExecutor {
+	release := make(map[string]chan struct{}, len(labels))
+	for _, label := range labels {
+		release[label] = make(chan struct{})
+	}
+	return &timedPipelineChildExecutor{
+		started:    make(chan string, len(labels)),
+		release:    release,
+		released:   make(map[string]bool, len(labels)),
+		timestamps: make(map[string]pipelineChildTiming, len(labels)),
+		planned: map[string]time.Duration{
+			"stage1-0": 80 * time.Millisecond,
+			"stage1-1": 100 * time.Millisecond,
+			"stage2-0": 10 * time.Millisecond,
+			"stage2-1": 80 * time.Millisecond,
+			"stage3-0": 80 * time.Millisecond,
+			"stage3-1": 10 * time.Millisecond,
+		},
+	}
+}
+
+func (e *timedPipelineChildExecutor) Execute(ctx context.Context, req factory.JavaScriptChildExecutionRequest) (factory.JavaScriptChildExecutionResult, error) {
+	dispatchID, childIndex := e.sink.NextChildDispatchIdentity()
+	base := factory.JavaScriptChildDispatchRecord{
+		DispatchID:    dispatchID,
+		ChildIndex:    childIndex,
+		Label:         req.Label,
+		ExecutionMode: factory.JavaScriptChildExecutionModeFake,
+	}
+	e.sink.AppendChildDispatch(base, factory.JavaScriptChildDispatchStatusQueued)
+	e.sink.AppendChildDispatch(base, factory.JavaScriptChildDispatchStatusRunning)
+	parts := strings.Split(req.Label, "-")
+	stageIndex, _ := strconv.Atoi(strings.TrimPrefix(parts[0], "stage"))
+	itemIndex, _ := strconv.Atoi(parts[1])
+	e.mu.Lock()
+	start := time.Duration(0)
+	if stageIndex > 1 {
+		start = e.timestamps[fmt.Sprintf("stage%d-%d", stageIndex-1, itemIndex)].end
+	}
+	e.timestamps[req.Label] = pipelineChildTiming{
+		start: start,
+		end:   start + e.planned[req.Label],
+	}
+	e.mu.Unlock()
+	e.started <- req.Label
+
+	select {
+	case <-e.release[req.Label]:
+	case <-ctx.Done():
+		return factory.JavaScriptChildExecutionResult{}, ctx.Err()
+	}
+
+	e.mu.Lock()
+	timing := e.timestamps[req.Label]
+	timing.completed = true
+	e.timestamps[req.Label] = timing
+	e.mu.Unlock()
+	completed := base
+	completed.Status = factory.JavaScriptChildDispatchStatusCompleted
+	completed.Output = map[string]any{"label": req.Label}
+	e.sink.Append(factory.JavaScriptRuntimeRecord{Kind: factory.JavaScriptRecordKindChildDispatch, ChildDispatch: &completed})
+	return factory.JavaScriptChildExecutionResult{
+		DispatchID:    dispatchID,
+		ChildIndex:    childIndex,
+		Status:        factory.JavaScriptChildDispatchStatusCompleted,
+		ExecutionMode: factory.JavaScriptChildExecutionModeFake,
+		Output:        completed.Output,
+		Request:       req,
+	}, nil
+}
+
+func (e *timedPipelineChildExecutor) waitForStarted(t *testing.T, want ...string) {
+	t.Helper()
+	wanted := make(map[string]bool, len(want))
+	for _, label := range want {
+		wanted[label] = true
+	}
+	for len(wanted) > 0 {
+		label := <-e.started
+		if !wanted[label] {
+			t.Fatalf("unexpected child start %q while waiting for %#v", label, wanted)
+		}
+		delete(wanted, label)
+	}
+}
+
+func (e *timedPipelineChildExecutor) releaseLabel(label string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.released[label] {
+		return
+	}
+	e.released[label] = true
+	close(e.release[label])
+}
+
+func (e *timedPipelineChildExecutor) releaseAll() {
+	for label := range e.release {
+		e.releaseLabel(label)
+	}
+}
+
+func (e *timedPipelineChildExecutor) hasEnded(label string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.timestamps[label].completed
+}
+
+func (e *timedPipelineChildExecutor) snapshot() map[string]pipelineChildTiming {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	copyOf := make(map[string]pipelineChildTiming, len(e.timestamps))
+	for label, timing := range e.timestamps {
+		copyOf[label] = timing
+	}
+	return copyOf
+}
+
 func TestRun_PipelineStagedFakeChildren_PreservesItemStageOrder(t *testing.T) {
 	source := readFixture(t, "pipeline-staged-fake-children.workflow.js")
 	policy := workflowpolicy.DefaultEffectivePolicy()
@@ -166,8 +447,33 @@ func TestRun_PipelineStagedFakeChildren_PreservesItemStageOrder(t *testing.T) {
 	assertPipelineStageTransitions(t, first, 3, 2)
 	assertPipelineReviewUsesEditOutput(t, first)
 
-	if string(first.Value.JSON) != string(second.Value.JSON) {
-		t.Fatalf("value drift across runs: first=%s second=%s", first.Value.JSON, second.Value.JSON)
+	firstProjected := projectPrimaryJSON(t, "session-pipeline-staged-fake-children", first.Value)
+	secondProjected := projectPrimaryJSON(t, "session-pipeline-staged-fake-children", second.Value)
+	if !reflect.DeepEqual(normalizePipelineDispatchIdentity(firstProjected), normalizePipelineDispatchIdentity(secondProjected)) {
+		t.Fatalf("pipeline value drift beyond dispatch identity: first=%s second=%s", first.Value.JSON, second.Value.JSON)
+	}
+}
+
+func normalizePipelineDispatchIdentity(value any) any {
+	switch typed := value.(type) {
+	case []any:
+		normalized := make([]any, len(typed))
+		for index, entry := range typed {
+			normalized[index] = normalizePipelineDispatchIdentity(entry)
+		}
+		return normalized
+	case map[string]any:
+		normalized := make(map[string]any, len(typed))
+		for key, entry := range typed {
+			switch key {
+			case "artifactRef", "childIndex", "dispatchId", "providerSessionRef":
+				continue
+			}
+			normalized[key] = normalizePipelineDispatchIdentity(entry)
+		}
+		return normalized
+	default:
+		return value
 	}
 }
 
@@ -248,17 +554,55 @@ func assertPipelineStageTransitions(t *testing.T, outcome factory.JavaScriptRunt
 		t.Fatalf("child_dispatch record count = %d, want %d transitions", len(childRecords), wantChildCount*3)
 	}
 
-	labels := completedChildLabels(childRecords)
-	wantLabels := make([]string, 0, wantChildCount)
+	completedLabels := make(map[string]int, wantChildCount)
+	completedDispatches := make(map[string]string, wantChildCount)
+	for _, label := range completedChildLabels(childRecords) {
+		completedLabels[label]++
+	}
+	for _, record := range childRecords {
+		if record.ChildDispatch == nil || record.ChildDispatch.Status != factory.JavaScriptChildDispatchStatusCompleted {
+			continue
+		}
+		completedDispatches[record.ChildDispatch.DispatchID] = record.ChildDispatch.Label
+	}
+	if len(completedLabels) != wantChildCount {
+		t.Fatalf("completed child labels = %#v, want one completion for each of %d stages", completedLabels, wantChildCount)
+	}
 	for i := 0; i < wantItems; i++ {
-		wantLabels = append(wantLabels, "edit-"+itoa(i), "review-"+itoa(i))
+		for _, wantLabel := range []string{"edit-" + itoa(i), "review-" + itoa(i)} {
+			if completedLabels[wantLabel] != 1 {
+				t.Fatalf("completed child label %q count = %d, want exactly one", wantLabel, completedLabels[wantLabel])
+			}
+		}
 	}
-	if len(labels) != len(wantLabels) {
-		t.Fatalf("completed child labels = %#v, want %#v", labels, wantLabels)
+
+	projected := projectPrimaryJSON(t, "session-pipeline-staged-fake-children", outcome.Value)
+	results, ok := projected["results"].([]any)
+	if !ok || len(results) != wantItems {
+		t.Fatalf("projected results = %#v, want %d ordered items", projected["results"], wantItems)
 	}
-	for i, wantLabel := range wantLabels {
-		if labels[i] != wantLabel {
-			t.Fatalf("completed child labels[%d] = %q, want %q", i, labels[i], wantLabel)
+	for itemIndex, rawItem := range results {
+		item, ok := rawItem.(map[string]any)
+		if !ok {
+			t.Fatalf("results[%d] = %#v, want item result", itemIndex, rawItem)
+		}
+		stages, ok := item["stages"].([]any)
+		if !ok || len(stages) != wantStages {
+			t.Fatalf("results[%d].stages = %#v, want %d ordered stages", itemIndex, item["stages"], wantStages)
+		}
+		for stageIndex, rawStage := range stages {
+			stage, ok := rawStage.(map[string]any)
+			if !ok || stage["index"] != float64(stageIndex) || stage["status"] != factory.JavaScriptChildDispatchStatusCompleted {
+				t.Fatalf("results[%d].stages[%d] = %#v, want completed stage in item order", itemIndex, stageIndex, rawStage)
+			}
+			stageResult, ok := stage["result"].(map[string]any)
+			if !ok {
+				t.Fatalf("results[%d].stages[%d].result = %#v, want child result", itemIndex, stageIndex, stage["result"])
+			}
+			dispatchID, _ := stageResult["dispatchId"].(string)
+			if completedDispatches[dispatchID] != stageResult["label"] {
+				t.Fatalf("results[%d].stages[%d] dispatch association = %#v, want completed record label %q", itemIndex, stageIndex, stageResult, completedDispatches[dispatchID])
+			}
 		}
 	}
 }
