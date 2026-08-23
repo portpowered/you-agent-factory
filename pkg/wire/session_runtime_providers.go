@@ -1138,8 +1138,8 @@ func provideStatelessWorkersServiceWithMockAndContentMaterializer(
 	}
 	scriptRunner := scriptCommandRunner
 	agentDependencies := workerswire.AgentDependencies{
-		Providers:           providersService,
-		Publish:             func(workers.ProgressFragment) {},
+		Providers: providersService,
+		Publish:   func(workers.ProgressFragment) {},
 		// Decision-envelope interpretation belongs to Factory Definitions.
 		// The detached Execute path routes envelope output through this
 		// injected owner instead of re-implementing the contract.
