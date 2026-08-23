@@ -18,6 +18,10 @@ func (g *runtimeGlobals) bindAgentAPI() error {
 }
 
 func (g *runtimeGlobals) hostAgentRun(call goja.FunctionCall) goja.Value {
+	return g.hostAgentRunWithContext(nil, call)
+}
+
+func (g *runtimeGlobals) hostAgentRunWithContext(execution *pipelineExecutionContext, call goja.FunctionCall) goja.Value {
 	spec, ok := g.requiredObjectArg(call, 0, "agent.run")
 	if !ok {
 		panic(g.vm.NewTypeError("agent.run() requires an object argument"))
@@ -36,7 +40,7 @@ func (g *runtimeGlobals) hostAgentRun(call goja.FunctionCall) goja.Value {
 	if err := g.denyChildRequest(req); err != nil {
 		panic(g.vm.NewTypeError(err.Error()))
 	}
-	result, err := g.executeChild(req)
+	result, err := g.executeChild(execution, req)
 	if err != nil {
 		panic(g.vm.NewGoError(err))
 	}
@@ -51,15 +55,28 @@ func (g *runtimeGlobals) hostAgentRun(call goja.FunctionCall) goja.Value {
 // a pipeline child to spend its waiting time outside the non-thread-safe Goja
 // VM. The next pipeline item can acquire the gate and dispatch its own child
 // during that interval.
-func (g *runtimeGlobals) executeChild(req ChildExecutionRequest) (ChildExecutionResult, error) {
-	if g.pipelineVMCallMu == nil {
-		return g.childExecutor.Execute(g.ctx, req)
+func (g *runtimeGlobals) executeChild(execution *pipelineExecutionContext, req ChildExecutionRequest) (ChildExecutionResult, error) {
+	if execution == nil {
+		return g.executeBoundedChild(req)
 	}
 
-	g.pipelineVMCallMu.Unlock()
-	result, err := g.childExecutor.Execute(g.ctx, req)
-	g.pipelineVMCallMu.Lock()
+	execution.vmCallMu.Unlock()
+	result, err := g.executeBoundedChild(req)
+	execution.vmCallMu.Lock()
+	if bindErr := g.setPipelineExecution(execution); err == nil && bindErr != nil {
+		err = bindErr
+	}
 	return result, err
+}
+
+func (g *runtimeGlobals) executeBoundedChild(req ChildExecutionRequest) (ChildExecutionResult, error) {
+	select {
+	case g.parallelGate <- struct{}{}:
+		defer func() { <-g.parallelGate }()
+	case <-g.ctx.Done():
+		return ChildExecutionResult{}, g.ctx.Err()
+	}
+	return g.childExecutor.Execute(g.ctx, req)
 }
 
 func (g *runtimeGlobals) workflowName() string {
@@ -160,6 +177,10 @@ func (g *runtimeGlobals) bindParallelAPI() error {
 }
 
 func (g *runtimeGlobals) hostParallel(call goja.FunctionCall) goja.Value {
+	return g.hostParallelWithContext(nil, call)
+}
+
+func (g *runtimeGlobals) hostParallelWithContext(execution *pipelineExecutionContext, call goja.FunctionCall) goja.Value {
 	items, err := g.parallelItemsFromCall(call)
 	if err != nil {
 		panic(g.vm.NewTypeError(err.Error()))
@@ -169,7 +190,7 @@ func (g *runtimeGlobals) hostParallel(call goja.FunctionCall) goja.Value {
 		panic(g.vm.NewTypeError(err.Error()))
 	}
 
-	results, err := g.executeParallel(items)
+	results, err := g.executeParallel(execution, items)
 	if err != nil {
 		panic(g.vm.NewGoError(err))
 	}
@@ -251,7 +272,17 @@ func (g *runtimeGlobals) normalizeParallelAgentSpecs(items []parallelItem) int {
 	return dispatchableCount
 }
 
-func (g *runtimeGlobals) executeParallel(items []parallelItem) ([]any, error) {
+func (g *runtimeGlobals) emitLegacySkipPermissionsDiagnostic(req ChildExecutionRequest) {
+	if !req.LegacySkipPermissionsPresent {
+		return
+	}
+	g.records.append(RuntimeRecord{
+		Kind: RecordKindLog,
+		Log:  &LogRecord{Message: legacySkipPermissionsDiagnostic},
+	})
+}
+
+func (g *runtimeGlobals) executeParallel(execution *pipelineExecutionContext, items []parallelItem) ([]any, error) {
 	results := make([]any, len(items))
 	if len(items) == 0 {
 		return results, nil
@@ -278,11 +309,27 @@ func (g *runtimeGlobals) executeParallel(items []parallelItem) ([]any, error) {
 		}
 	}
 	if len(specItems) > 0 {
-		if err := g.executeParallelAgentSpecs(specItems, results); err != nil {
+		if err := g.executeParallelAgentSpecsOutsideVM(execution, specItems, results); err != nil {
 			return nil, err
 		}
 	}
 	return results, nil
+}
+
+func (g *runtimeGlobals) executeParallelAgentSpecsOutsideVM(execution *pipelineExecutionContext, items []parallelItem, results []any) error {
+	if execution == nil {
+		return g.executeParallelAgentSpecs(items, results)
+	}
+
+	// Agent specs only use resolved Go values while they are executing. Release
+	// the VM mutex for the whole blocking fanout so another pipeline item can
+	// enter its stage while these children are in flight.
+	execution.vmCallMu.Unlock()
+	defer func() {
+		execution.vmCallMu.Lock()
+		_ = g.setPipelineExecution(execution)
+	}()
+	return g.executeParallelAgentSpecs(items, results)
 }
 
 func (g *runtimeGlobals) executeParallelAgentSpecs(items []parallelItem, results []any) error {
@@ -301,14 +348,6 @@ func (g *runtimeGlobals) executeParallelAgentSpecs(items []parallelItem, results
 		wg.Add(1)
 		go func(item parallelItem) {
 			defer wg.Done()
-			select {
-			case g.parallelGate <- struct{}{}:
-				defer func() { <-g.parallelGate }()
-			case <-g.ctx.Done():
-				results[item.index] = failedChildResultValue("", "", g.ctx.Err())
-				return
-			}
-
 			if err := g.ctx.Err(); err != nil {
 				results[item.index] = failedChildResultValue("", "", err)
 				return
@@ -324,7 +363,7 @@ func (g *runtimeGlobals) executeParallelAgentSpecs(items []parallelItem, results
 				return
 			}
 			req.ReservedIdentity = identityByIndex[item.index]
-			result, err := g.childExecutor.Execute(g.ctx, req)
+			result, err := g.executeBoundedChild(req)
 			if err != nil {
 				results[item.index] = failedChildResultValue(req.Label, result.ExecutionMode, err)
 				return
@@ -398,6 +437,10 @@ func (g *runtimeGlobals) bindPipelineAPI() error {
 }
 
 func (g *runtimeGlobals) hostPipeline(call goja.FunctionCall) goja.Value {
+	return g.hostPipelineWithContext(nil, call)
+}
+
+func (g *runtimeGlobals) hostPipelineWithContext(parent *pipelineExecutionContext, call goja.FunctionCall) goja.Value {
 	items, err := g.pipelineItemsFromCall(call)
 	if err != nil {
 		panic(g.vm.NewTypeError(err.Error()))
@@ -407,13 +450,8 @@ func (g *runtimeGlobals) hostPipeline(call goja.FunctionCall) goja.Value {
 		panic(g.vm.NewTypeError(err.Error()))
 	}
 
-	previousPipelineVMCallMu := g.pipelineVMCallMu
-	g.pipelineVMCallMu = &sync.Mutex{}
-	defer func() {
-		g.pipelineVMCallMu = previousPipelineVMCallMu
-	}()
-
-	results, err := g.executePipeline(items, stages)
+	execution := newPipelineExecutionContext(parent)
+	results, err := g.executeNestedPipeline(parent, execution, items, stages)
 	if err != nil {
 		panic(g.vm.NewGoError(err))
 	}
@@ -423,6 +461,22 @@ func (g *runtimeGlobals) hostPipeline(call goja.FunctionCall) goja.Value {
 		panic(g.vm.NewGoError(fmt.Errorf("resolve pipeline promise: %w", err)))
 	}
 	return g.vm.ToValue(promise)
+}
+
+func (g *runtimeGlobals) executeNestedPipeline(parent, execution *pipelineExecutionContext, items []any, stages []goja.Callable) ([]any, error) {
+	if parent == nil {
+		return g.executePipeline(execution, items, stages)
+	}
+
+	// A nested pipeline is still Goja work, so it uses the same immutable VM
+	// mutex as its parent. Let sibling outer items compete for that mutex while
+	// the nested invocation is running instead of holding the parent stage.
+	parent.vmCallMu.Unlock()
+	defer func() {
+		parent.vmCallMu.Lock()
+		_ = g.setPipelineExecution(parent)
+	}()
+	return g.executePipeline(execution, items, stages)
 }
 
 func (g *runtimeGlobals) pipelineItemsFromCall(call goja.FunctionCall) ([]any, error) {
@@ -490,7 +544,7 @@ func pipelineStageFunctionError(argumentIndex int) error {
 	}
 }
 
-func (g *runtimeGlobals) executePipeline(items []any, stages []goja.Callable) ([]any, error) {
+func (g *runtimeGlobals) executePipeline(execution *pipelineExecutionContext, items []any, stages []goja.Callable) ([]any, error) {
 	results := make([]any, len(items))
 	var wg sync.WaitGroup
 	start := make([]chan struct{}, len(items))
@@ -502,7 +556,7 @@ func (g *runtimeGlobals) executePipeline(items []any, stages []goja.Callable) ([
 		go func(index int, item any, allow <-chan struct{}, stageEntered chan<- struct{}) {
 			defer wg.Done()
 			<-allow
-			results[index] = g.executePipelineItem(item, index, stages, stageEntered)
+			results[index] = g.executePipelineItem(execution, item, index, stages, stageEntered)
 		}(index, item, start[index], entered[index])
 	}
 	for index := range items {
@@ -513,7 +567,7 @@ func (g *runtimeGlobals) executePipeline(items []any, stages []goja.Callable) ([
 	return results, nil
 }
 
-func (g *runtimeGlobals) executePipelineItem(item any, index int, stages []goja.Callable, firstStageEntered chan<- struct{}) map[string]any {
+func (g *runtimeGlobals) executePipelineItem(execution *pipelineExecutionContext, item any, index int, stages []goja.Callable, firstStageEntered chan<- struct{}) map[string]any {
 	stageResults := make([]any, 0, len(stages))
 	var previousResult any
 	status := ChildDispatchStatusCompleted
@@ -523,7 +577,7 @@ func (g *runtimeGlobals) executePipelineItem(item any, index int, stages []goja.
 		if stageIndex > 0 {
 			stageEntered = nil
 		}
-		stageResult, stageErr := g.callPipelineStage(stage, stageIndex, previousResult, item, index, stageEntered)
+		stageResult, stageErr := g.callPipelineStage(execution, stage, stageIndex, previousResult, item, index, stageEntered)
 		// Some child execution paths resolve to a structured FAILED result
 		// instead of returning a Go error. Treat that result like any other
 		// stage failure so this item does not enter a later stage.
@@ -553,28 +607,80 @@ func pipelineFailedChildError(result any) error {
 	return fmt.Errorf("%s", diagnostic)
 }
 
-func (g *runtimeGlobals) callPipelineStage(stage goja.Callable, stageIndex int, prior any, item any, index int, entered chan<- struct{}) (any, error) {
-	if g.pipelineVMCallMu != nil {
-		g.pipelineVMCallMu.Lock()
-		defer g.pipelineVMCallMu.Unlock()
+func (g *runtimeGlobals) callPipelineStage(execution *pipelineExecutionContext, stage goja.Callable, stageIndex int, prior any, item any, index int, entered chan<- struct{}) (any, error) {
+	execution.vmCallMu.Lock()
+	defer execution.vmCallMu.Unlock()
+	if err := g.setPipelineExecution(execution); err != nil {
+		return nil, err
 	}
+	defer g.resetPipelineExecution()
 	if entered != nil {
 		close(entered)
 	}
 
 	var (
-		value goja.Value
-		err   error
+		value   goja.Value
+		callErr error
 	)
 	if stageIndex == 0 {
-		value, err = stage(goja.Undefined(), g.vm.ToValue(item), g.vm.ToValue(index))
+		value, callErr = stage(goja.Undefined(), g.vm.ToValue(item), g.vm.ToValue(index))
 	} else {
-		value, err = stage(goja.Undefined(), g.vm.ToValue(prior), g.vm.ToValue(item), g.vm.ToValue(index))
+		value, callErr = stage(goja.Undefined(), g.vm.ToValue(prior), g.vm.ToValue(item), g.vm.ToValue(index))
 	}
-	if err != nil {
-		return nil, err
+	if callErr != nil {
+		return nil, callErr
 	}
 	return g.awaitParallelValue(value)
+}
+
+func (g *runtimeGlobals) setPipelineExecution(execution *pipelineExecutionContext) error {
+	agentValue := g.vm.Get("agent")
+	if agentValue == nil {
+		return fmt.Errorf("pipeline() could not bind agent.run")
+	}
+	agent := agentValue.ToObject(g.vm)
+	if agent == nil {
+		return fmt.Errorf("pipeline() could not bind agent.run")
+	}
+	if err := agent.Set("run", g.agentRunFor(execution)); err != nil {
+		return fmt.Errorf("pipeline() bind agent.run: %w", err)
+	}
+	if err := g.vm.Set("parallel", g.parallelFor(execution)); err != nil {
+		return fmt.Errorf("pipeline() bind parallel: %w", err)
+	}
+	if err := g.vm.Set("pipeline", g.pipelineFor(execution)); err != nil {
+		return fmt.Errorf("pipeline() bind pipeline: %w", err)
+	}
+	return nil
+}
+
+func (g *runtimeGlobals) resetPipelineExecution() {
+	agentValue := g.vm.Get("agent")
+	if agentValue != nil {
+		if agent := agentValue.ToObject(g.vm); agent != nil {
+			_ = agent.Set("run", g.hostAgentRun)
+		}
+	}
+	_ = g.vm.Set("parallel", g.hostParallel)
+	_ = g.vm.Set("pipeline", g.hostPipeline)
+}
+
+func (g *runtimeGlobals) agentRunFor(execution *pipelineExecutionContext) func(goja.FunctionCall) goja.Value {
+	return func(call goja.FunctionCall) goja.Value {
+		return g.hostAgentRunWithContext(execution, call)
+	}
+}
+
+func (g *runtimeGlobals) parallelFor(execution *pipelineExecutionContext) func(goja.FunctionCall) goja.Value {
+	return func(call goja.FunctionCall) goja.Value {
+		return g.hostParallelWithContext(execution, call)
+	}
+}
+
+func (g *runtimeGlobals) pipelineFor(execution *pipelineExecutionContext) func(goja.FunctionCall) goja.Value {
+	return func(call goja.FunctionCall) goja.Value {
+		return g.hostPipelineWithContext(execution, call)
+	}
 }
 
 func pipelineStageValue(stageIndex int, result any, err error) map[string]any {

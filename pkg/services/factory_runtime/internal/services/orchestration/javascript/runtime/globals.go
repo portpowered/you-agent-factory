@@ -16,18 +16,14 @@ import (
 // network, and shell globals are not injected; forbidden host access is rejected
 // before execution.
 type runtimeGlobals struct {
-	vm            *goja.Runtime
-	policy        workflowpolicy.EffectivePolicy
-	factoryName   string
-	sessionID     string
-	ctx           context.Context
-	records       *recordCollector
-	childExecutor ChildExecutor
-	parallelGate  chan struct{}
-	// pipelineVMCallMu serializes Goja access while allowing a pipeline child
-	// executor to run without holding the VM gate. Goja is not goroutine-safe,
-	// while child execution is explicitly allowed to overlap.
-	pipelineVMCallMu      *sync.Mutex
+	vm                    *goja.Runtime
+	policy                workflowpolicy.EffectivePolicy
+	factoryName           string
+	sessionID             string
+	ctx                   context.Context
+	records               *recordCollector
+	childExecutor         ChildExecutor
+	parallelGate          chan struct{}
 	agents                map[string]interfaces.FactoryOrchestratorJavaScriptAgent
 	workerSettings        WorkerSettingsConfig
 	onArtifact            func(kind string, content json.RawMessage) error
@@ -36,6 +32,21 @@ type runtimeGlobals struct {
 	finalSet              bool
 	returned              goja.Value
 	returnedSet           bool
+}
+
+// pipelineExecutionContext is captured by one pipeline invocation and passed
+// through every stage and host primitive it calls. Nested pipelines receive a
+// distinct context value that shares the VM mutex, so all Goja access remains
+// serialized without storing invocation state on runtimeGlobals.
+type pipelineExecutionContext struct {
+	vmCallMu *sync.Mutex
+}
+
+func newPipelineExecutionContext(parent *pipelineExecutionContext) *pipelineExecutionContext {
+	if parent != nil {
+		return &pipelineExecutionContext{vmCallMu: parent.vmCallMu}
+	}
+	return &pipelineExecutionContext{vmCallMu: &sync.Mutex{}}
 }
 
 func newParallelGate(policy workflowpolicy.EffectivePolicy) chan struct{} {
