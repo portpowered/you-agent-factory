@@ -2,40 +2,12 @@ package workers_test
 
 import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/prompting"
 )
-
-func canonicalWorkerTestPath(value string) string {
-	if value == "" {
-		return ""
-	}
-
-	cleaned := filepath.Clean(value)
-	current := cleaned
-	var suffix []string
-	for {
-		if _, err := os.Stat(current); err == nil {
-			if resolved, err := filepath.EvalSymlinks(current); err == nil && resolved != "" {
-				parts := append([]string{resolved}, suffix...)
-				return filepath.Join(parts...)
-			}
-			break
-		}
-		parent := filepath.Dir(current)
-		if parent == current {
-			break
-		}
-		suffix = append([]string{filepath.Base(current)}, suffix...)
-		current = parent
-	}
-	return cleaned
-}
 
 func TestResolveTemplateFields_WorkingDirectory(t *testing.T) {
 	tokens := []workers.Token{

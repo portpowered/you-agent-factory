@@ -29,10 +29,6 @@ type MockWorkersConfigLoader = workers.MockWorkersConfigLoader
 type MockWorkersConfigDecodeDiagnostics = workers.MockWorkersConfigDecodeDiagnostics
 type MockWorkersConfigDiagnosticsLoader = workers.MockWorkersConfigDiagnosticsLoader
 
-func NewEmptyMockWorkersConfig() *MockWorkersConfig {
-	return workers.NewEmptyMockWorkersConfig()
-}
-
 func NewMockWorkersConfigLoader(
 	fileSystem MockWorkersConfigFileSystem,
 ) (MockWorkersConfigLoader, error) {
