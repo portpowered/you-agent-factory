@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/services/work/internal/contenturl"
+	contentmaterialization "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization"
 )
 
 // ContentHostPlatform identifies the operating-system path convention used
@@ -68,25 +68,25 @@ func (f ContentMaterializeFunc) MaterializeContentURL(
 // ValidateContentURL reports whether rawURL is a non-empty supported Work
 // content URL. Implementation lives in the content_materialization subservice.
 func ValidateContentURL(rawURL string) error {
-	return contenturl.Validate(rawURL)
+	return contentmaterialization.ValidateContentURL(rawURL)
 }
 
 // ContentURLAndFileConflictError reports use of both canonical URL and legacy
 // file fields on one content part.
 func ContentURLAndFileConflictError() error {
-	return contenturl.URLAndFileConflictError()
+	return contentmaterialization.ContentURLAndFileConflictError()
 }
 
 // FilesystemPathToContentURL maps a host filesystem path to a canonical file
 // content URL.
 func FilesystemPathToContentURL(path string) (string, error) {
-	return contenturl.FilesystemPathToURL(path)
+	return contentmaterialization.FilesystemPathToContentURL(path)
 }
 
 // ResolveDispatchContentURL resolves relative file content URLs against a
 // dispatch working directory.
 func ResolveDispatchContentURL(workingDirectory, rawURL string) (string, error) {
-	return contenturl.ResolveDispatchURL(workingDirectory, rawURL)
+	return contentmaterialization.ResolveDispatchContentURL(workingDirectory, rawURL)
 }
 
 // NormalizeFileBackedContentPart maps legacy file-only content onto its
