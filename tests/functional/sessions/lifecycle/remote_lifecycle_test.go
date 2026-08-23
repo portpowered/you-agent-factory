@@ -239,17 +239,20 @@ func executeLocalPlacementRunWithReadiness(
 	command := support.StartProcessCommand(t, process, inputs.Input)
 	select {
 	case <-readinessOutput.started:
-		cancel()
+		// Stop uses the support command's existing bounded cancellation
+		// lifecycle, so a cancellation-controlled invocation cannot strand the
+		// test while it waits for Process.Execute to return.
+		command.Stop(t)
+	case <-command.Done():
+		// Preserve a pre-readiness bootstrap or invocation failure for the
+		// parity assertions instead of waiting for an outer test timeout.
+		command.AcceptError()
+		return placementObservation(command, readinessOutput)
 	case <-parentContext.Done():
 		command.Stop(t)
 		t.Fatalf("local run did not reach invocation readiness: %v\noutput:\n%s", parentContext.Err(), readinessOutput.String())
 	}
-	<-command.Done()
-	return placementRunObservation{
-		err:    command.Err(),
-		stdout: readinessOutput.String(),
-		stderr: readinessOutput.String(),
-	}
+	return placementObservation(command, readinessOutput)
 }
 
 func executeRemotePlacementRunWithReadiness(
@@ -282,7 +285,15 @@ func executeRemotePlacementRunWithReadiness(
 	command := support.StartProcessCommand(t, process, inputs.Input)
 	select {
 	case <-admissionOutput.started:
-		cancel()
+		// Stop uses the support command's existing bounded cancellation
+		// lifecycle, so a cancellation-controlled invocation cannot strand the
+		// test while it waits for Process.Execute to return.
+		command.Stop(t)
+	case <-command.Done():
+		// Preserve a pre-readiness bootstrap or invocation failure for the
+		// parity assertions instead of waiting for an outer test timeout.
+		command.AcceptError()
+		return placementObservation(command, admissionOutput)
 	case <-parentContext.Done():
 		command.Stop(t)
 		t.Fatalf("remote run did not reach durable-admission readiness: %v\noutput:\n%s", parentContext.Err(), admissionOutput.String())
@@ -293,11 +304,18 @@ func executeRemotePlacementRunWithReadiness(
 			t.Errorf("terminate cancellation parity durable session %s: %v", sessionID, err)
 		}
 	}()
-	<-command.Done()
+	return placementObservation(command, admissionOutput)
+}
+
+type placementOutput interface {
+	String() string
+}
+
+func placementObservation(command *support.ProcessCommand, output placementOutput) placementRunObservation {
 	return placementRunObservation{
 		err:    command.Err(),
-		stdout: admissionOutput.String(),
-		stderr: admissionOutput.String(),
+		stdout: output.String(),
+		stderr: output.String(),
 	}
 }
 
