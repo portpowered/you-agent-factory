@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/contractstaging"
+	"github.com/portpowered/infinite-you/internal/javascriptcontract"
 )
 
 func TestRunGeneratesApprovedArtifactsReproduciblyWithoutChangingOtherFiles(t *testing.T) {
@@ -115,11 +116,15 @@ func writeRawArtifactSources(t *testing.T, root string) {
 	t.Helper()
 	for _, artifact := range contractstaging.RawArtifacts() {
 		contents := "canonical:" + artifact.Source
-		if artifact.Source == "api/openapi.yaml" {
+		switch artifact.Source {
+		case "contracts/javascript/runtime-api.json":
+			contents = `{"sharedSchemas":{"javascript.schema.agent_run_spec":{"schema":{"type":"object","additionalProperties":false,"properties":{"prompt":{"type":"string"}},"required":["prompt"]}}}}`
+		case "api/openapi.yaml":
 			contents = "components:\n  schemas:\n    Factory:\n      type: object\n      properties:\n        child:\n          $ref: '#/components/schemas/Child'\n    Child:\n      type: string\n    FactoryEvent:\n      type: object\n      required: [schemaVersion, id, type, context, payload]\n      properties:\n        schemaVersion:\n          type: string\n        id:\n          type: string\n        type:\n          type: string\n        context:\n          type: object\n        payload:\n          $ref: '#/components/schemas/Child'\n      discriminator:\n        propertyName: type\n        mapping:\n          TEST: '#/components/schemas/Child'\n    FactoryRecording:\n      type: object\n      required: [schemaVersion, sessionId, events]\n      properties:\n        schemaVersion:\n          type: string\n        sessionId:\n          type: string\n        events:\n          type: array\n          items:\n            $ref: '#/components/schemas/FactoryEvent'\n"
 		}
 		writeFixture(t, root, artifact.Source, contents)
 	}
+	writeFixture(t, root, javascriptcontract.JavaScriptWorkflowReferencePath, "# JavaScript Workflows\n\n<!-- BEGIN GENERATED: javascript.agent.run.fields -->\nold generated fields\n<!-- END GENERATED: javascript.agent.run.fields -->\n")
 }
 
 func fileDigests(t *testing.T, root string, paths []string) map[string][sha256.Size]byte {

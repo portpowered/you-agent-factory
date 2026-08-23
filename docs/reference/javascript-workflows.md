@@ -127,6 +127,23 @@ to the facts that remain inspectable.
 | `workflow.artifact` | `workflow.artifact({kind: string, label: string, content?: JSON, visibility?: string}): string` | Creates a session-owned `FactoryArtifact` and returns its stable `you-artifact://` reference. |
 | `workflow.final` | `workflow.final(value: JSON): void` | Selects the final result and takes precedence over a top-level return. |
 
+<!-- BEGIN GENERATED: javascript.agent.run.fields -->
+### `agent.run` request fields
+
+| Field | JSON type | Requiredness |
+|-------|-----------|--------------|
+| `prompt` | `string` | required |
+| `label` | `string` | optional |
+| `preset` | `string` | optional |
+| `executorProvider` | `string` | optional |
+| `modelProvider` | `string` | optional |
+| `model` | `string` | optional |
+| `reasoningEffort` | `string` | optional |
+| `resourceId` | `string` | optional |
+| `schema` | `object` | optional |
+| `permissions` | `string` | optional |
+<!-- END GENERATED: javascript.agent.run.fields -->
+
 Promises returned by `agent.run`, `parallel`, and `pipeline` must be awaited or
 otherwise resolved before the workflow completes.
 
