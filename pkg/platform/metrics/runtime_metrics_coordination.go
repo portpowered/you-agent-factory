@@ -97,7 +97,7 @@ func acquireRuntimeMetricsLock(
 	if err := prepareRuntimeMetricsCoordinationRoot(filepath.Dir(lockPath)); err != nil {
 		return nil, err
 	}
-	file, err := openRuntimeMetricsLockFile(lockPath)
+	file, err := openRuntimeMetricsLockFile(lockPath, true)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +109,7 @@ func acquireExistingRuntimeMetricsLock(path string) (io.Closer, error) {
 	if err != nil {
 		return nil, err
 	}
-	file, err := openExistingRuntimeMetricsLockFile(path)
+	file, err := openRuntimeMetricsLockFile(path, false)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +182,7 @@ func acquireRuntimeMetricsFile(
 	}
 }
 
-func openRuntimeMetricsLockFile(path string) (*os.File, error) {
+func openRuntimeMetricsLockFile(path string, create bool) (*os.File, error) {
 	if info, err := os.Lstat(path); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
 			return nil, fmt.Errorf("runtime metrics coordination file %q is a symlink", path)
@@ -190,22 +190,11 @@ func openRuntimeMetricsLockFile(path string) (*os.File, error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("inspect runtime metrics coordination file %q: %w", path, err)
 	}
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		return nil, fmt.Errorf("open runtime metrics coordination file %q: %w", path, err)
+	flags := os.O_RDWR
+	if create {
+		flags |= os.O_CREATE
 	}
-	return file, nil
-}
-
-func openExistingRuntimeMetricsLockFile(path string) (*os.File, error) {
-	info, err := os.Lstat(path)
-	if err != nil {
-		return nil, fmt.Errorf("inspect runtime metrics coordination file %q: %w", path, err)
-	}
-	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-		return nil, fmt.Errorf("runtime metrics coordination file %q is not a regular file", path)
-	}
-	file, err := os.OpenFile(path, os.O_RDWR, 0)
+	file, err := os.OpenFile(path, flags, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("open runtime metrics coordination file %q: %w", path, err)
 	}
