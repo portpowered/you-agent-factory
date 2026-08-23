@@ -88,7 +88,6 @@ func TestProcessUsageFailuresPreserveCobraDetailsAndHelpHints(t *testing.T) {
 		})
 	}
 }
-
 func TestProcessLocalRunFailuresPreserveSubmittedInputs(t *testing.T) {
 	t.Parallel()
 
@@ -393,4 +392,3 @@ func TestProcessRemoteWorkShowPreservesStructuredNotFound(t *testing.T) {
 		t.Fatalf("stdout = %q, want empty failure output", stdout.String())
 	}
 }
-
