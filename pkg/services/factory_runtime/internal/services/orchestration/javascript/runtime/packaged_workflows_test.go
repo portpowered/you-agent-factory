@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -196,8 +198,8 @@ func TestPackagedSpawnWorkflowRunsExactCountAndMerge(t *testing.T) {
 	}
 }
 
-func TestPackagedSpawnWorkflowAcceptsFencedPlannerJSON(t *testing.T) {
-	executor := &packagedWorkflowChildExecutor{plannerText: "```json\n[\"task one\",\"task two\"]\n```"}
+func TestPackagedSpawnWorkflowAcceptsStructuredPlannerObject(t *testing.T) {
+	executor := &packagedWorkflowChildExecutor{plannerTasks: []string{"task one", "task two"}}
 	outcome := runPackagedWorkflow(t, "spawn", "spawn.workflow.js", map[string]any{
 		"request": "research travel", "count": 2,
 	}, executor)
@@ -308,6 +310,324 @@ func TestPackagedSpawnWorkflowStopsBeforeMergeWhenChildFails(t *testing.T) {
 	}
 }
 
+func TestRun_AgentRunSchemaReachesExecutorAsDetachedValidatedObject(t *testing.T) {
+	stub := &stubChildExecutor{mode: stubChildExecutionMode}
+	outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+		Source: `const schema = { type: "object", properties: { answer: { type: "string" } }, required: ["answer"] };
+const child = agent.run({ prompt: "review", schema });
+schema.properties.answer.type = "number";
+return child;`,
+		SourceRef: "inline", SessionID: "schema-detached",
+		Policy: workflowpolicy.DefaultEffectivePolicy(),
+	}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+		return stub
+	}})
+	if err != nil || !outcome.OK {
+		t.Fatalf("Run() = outcome %#v, error %v", outcome, err)
+	}
+	requests := stub.executionRequests()
+	if len(requests) != 1 {
+		t.Fatalf("executor requests = %#v, want one request", requests)
+	}
+	want := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"answer": map[string]any{"type": "string"},
+		},
+		"required": []any{"answer"},
+	}
+	if !reflect.DeepEqual(requests[0].OutputSchema, want) {
+		t.Fatalf("executor schema = %#v, want %#v", requests[0].OutputSchema, want)
+	}
+	if workflowruntime.SchemaDigest(requests[0].OutputSchema) == "" {
+		t.Fatal("executor schema digest = empty, want deterministic digest input")
+	}
+}
+
+func TestRun_ParallelSchemasAreValidatedAndDetachedPerChild(t *testing.T) {
+	stub := &stubChildExecutor{mode: stubChildExecutionMode}
+	outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+		Source: `const schema = { type: "object", properties: { answer: { type: "string" } } };
+return parallel([
+  { prompt: "first", label: "first", schema },
+  { prompt: "second", label: "second", schema },
+]);`,
+		SourceRef: "inline", SessionID: "parallel-schema-detached",
+		Policy: workflowpolicy.DefaultEffectivePolicy(),
+	}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+		return stub
+	}})
+	if err != nil || !outcome.OK {
+		t.Fatalf("Run() = outcome %#v, error %v", outcome, err)
+	}
+	requests := stub.executionRequests()
+	if len(requests) != 2 {
+		t.Fatalf("executor requests = %#v, want two requests", requests)
+	}
+	for _, request := range requests {
+		properties, ok := request.OutputSchema["properties"].(map[string]any)
+		if !ok || properties["answer"].(map[string]any)["type"] != "string" {
+			t.Fatalf("executor request %q schema = %#v, want validated object schema", request.Label, request.OutputSchema)
+		}
+	}
+	requests[0].OutputSchema["properties"].(map[string]any)["answer"].(map[string]any)["type"] = "number"
+	if requests[1].OutputSchema["properties"].(map[string]any)["answer"].(map[string]any)["type"] != "string" {
+		t.Fatal("parallel child schemas share mutable nested state")
+	}
+}
+
+func TestRun_StructuredChildResultsStayNativeAndMetadataCollisionSafe(t *testing.T) {
+	executor := &structuredChildExecutor{}
+	outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+		Source: `const schema = { type: "object", properties: { answer: { type: "string" } }, required: ["answer"] };
+return (async function () {
+const single = await agent.run({ prompt: "single", label: "single", schema });
+const many = await parallel([
+  { prompt: "first", label: "first", schema },
+  { prompt: "second", label: "second", schema },
+]);
+return { single, many };
+})();`,
+		SourceRef: "inline",
+		SessionID: "structured-native-results",
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}, factory.JavaScriptRuntimeHooks{
+		NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+			return executor
+		},
+	})
+	if err != nil || !outcome.OK {
+		t.Fatalf("Run() = outcome %#v, error %v", outcome, err)
+	}
+	projected := projectPrimaryJSON(t, "structured-native-results", outcome.Value)
+	assertStructuredProjectedChild(t, projected["single"], "single")
+	many, ok := projected["many"].([]any)
+	if !ok || len(many) != 2 {
+		t.Fatalf("projected parallel children = %#v, want two children", projected["many"])
+	}
+	assertStructuredProjectedChild(t, many[0], "first")
+	assertStructuredProjectedChild(t, many[1], "second")
+	if executor.requestCount() != 3 {
+		t.Fatalf("structured child requests = %d, want one direct and two parallel requests", executor.requestCount())
+	}
+}
+
+func assertStructuredProjectedChild(t *testing.T, value any, wantLabel string) {
+	t.Helper()
+	child, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("structured child = %#v, want object", value)
+	}
+	if child["label"] != wantLabel || child["schemaValidated"] != true {
+		t.Fatalf("structured child metadata = %#v, want label %q and schemaValidated true", child, wantLabel)
+	}
+	if child["schemaDigest"] == "" {
+		t.Fatalf("structured child schemaDigest = %#v, want non-empty digest", child["schemaDigest"])
+	}
+	output, ok := child["output"].(map[string]any)
+	if !ok {
+		t.Fatalf("structured child output = %#v, want native object", child["output"])
+	}
+	if output["answer"] != "native:"+wantLabel {
+		t.Fatalf("structured child answer = %#v, want native answer", output["answer"])
+	}
+	if output["schemaValidated"] != "customer-output" {
+		t.Fatalf("customer schemaValidated field = %#v, want preserved customer value", output["schemaValidated"])
+	}
+}
+
+func TestRun_AgentRunRejectsInvalidSchemaBeforeChildDispatch(t *testing.T) {
+	cases := []struct {
+		name   string
+		source string
+	}{
+		{
+			name:   "non-object",
+			source: `agent.run({ prompt: "prompt-secret", schema: "schema-secret" });`,
+		},
+		{
+			name:   "invalid-json-schema",
+			source: `agent.run({ prompt: "prompt-secret", schema: { type: "not-a-schema-type" } });`,
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			stub := &stubChildExecutor{mode: stubChildExecutionMode}
+			outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+				Source: test.source, SourceRef: "inline", SessionID: "invalid-child-schema-" + test.name,
+				Policy: workflowpolicy.DefaultEffectivePolicy(),
+			}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+				return stub
+			}})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if outcome.OK || !strings.Contains(outcome.Failure.Message, `"schema"`) {
+				t.Fatalf("Run() outcome = %#v, want schema failure", outcome)
+			}
+			for _, secret := range []string{"prompt-secret", "schema-secret"} {
+				if strings.Contains(outcome.Failure.Message, secret) {
+					t.Fatalf("failure message = %q, must not expose %q", outcome.Failure.Message, secret)
+				}
+			}
+			if len(stub.executionRequests()) != 0 {
+				t.Fatalf("executor requests = %#v, want none", stub.executionRequests())
+			}
+			assertNoChildDispatchRecords(t, outcome.Records)
+		})
+	}
+}
+
+func TestSchemaDigest_IsDeterministicForEquivalentSchemas(t *testing.T) {
+	t.Parallel()
+	left := map[string]any{
+		"required":   []any{"answer"},
+		"properties": map[string]any{"answer": map[string]any{"type": "string"}},
+		"type":       "object",
+	}
+	right := map[string]any{
+		"type":       "object",
+		"properties": map[string]any{"answer": map[string]any{"type": "string"}},
+		"required":   []any{"answer"},
+	}
+	if got, want := workflowruntime.SchemaDigest(left), workflowruntime.SchemaDigest(right); got == "" || got != want {
+		t.Fatalf("SchemaDigest(left) = %q, right = %q, want equal non-empty digests", got, want)
+	}
+}
+
+func TestRun_ChildExecutionBoundary_RoutesAgentRunParallelAndPipelineThroughHooks(t *testing.T) {
+	source := readFixture(t, "child-execution-boundary.workflow.js")
+	stub := &stubChildExecutor{mode: stubChildExecutionMode}
+	req := factory.JavaScriptRuntimeRequest{
+		Source:    source,
+		SourceRef: "child-execution-boundary.workflow.js",
+		SessionID: "session-child-execution-boundary",
+		Args:      marshalArgs(t, map[string]any{"subject": "workflows"}),
+		Metadata: map[string]string{
+			"name": "child-execution-boundary",
+		},
+		Policy: workflowpolicy.DefaultEffectivePolicy(),
+	}
+	hooks := factory.JavaScriptRuntimeHooks{
+		NewChildExecutor: func(_ string, _ factory.JavaScriptChildRecordSink, _ workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+			return stub
+		},
+	}
+
+	outcome, err := runtimeWorkflows.Run(context.Background(), req, hooks)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !outcome.OK {
+		t.Fatalf("Run() failure = %#v", outcome.Failure)
+	}
+
+	assertStubChildExecutorLabelOrder(t, stub.labelOrder())
+	assertChildExecutionBoundaryProjection(t, projectPrimaryJSON(t, req.SessionID, outcome.Value))
+}
+
+func assertStubChildExecutorLabelOrder(t *testing.T, gotLabels []string) {
+	t.Helper()
+	if len(gotLabels) != 5 {
+		t.Fatalf("child executor call count = %d, want 5", len(gotLabels))
+	}
+	if gotLabels[0] != "agent-run-boundary" {
+		t.Fatalf("first child label = %q, want agent-run-boundary", gotLabels[0])
+	}
+	parallelLabels := append([]string(nil), gotLabels[1], gotLabels[2])
+	sort.Strings(parallelLabels)
+	if fmt.Sprint(parallelLabels) != fmt.Sprint([]string{"parallel-boundary-a", "parallel-boundary-b"}) {
+		t.Fatalf("parallel child labels = %#v, want [parallel-boundary-a parallel-boundary-b]", parallelLabels)
+	}
+	if gotLabels[3] != "pipeline-edit-boundary" || gotLabels[4] != "pipeline-review-boundary" {
+		t.Fatalf("pipeline child labels = %#v, want [pipeline-edit-boundary pipeline-review-boundary]", gotLabels[3:])
+	}
+}
+
+func assertChildExecutionBoundaryProjection(t *testing.T, projected map[string]any) {
+	t.Helper()
+	if projected["label"] != "child-execution-boundary" {
+		t.Fatalf("projected label = %#v", projected["label"])
+	}
+
+	single, ok := projected["single"].(map[string]any)
+	if !ok {
+		t.Fatalf("projected single = %#v, want object", projected["single"])
+	}
+	assertStubChildResult(t, single, "agent-run-boundary", "stub-dispatch-1")
+
+	parallel, ok := projected["parallel"].([]any)
+	if !ok || len(parallel) != 2 {
+		t.Fatalf("projected parallel = %#v, want 2 entries", projected["parallel"])
+	}
+	assertStubChildResultByLabel(t, parallel[0], "parallel-boundary-a")
+	assertStubChildResultByLabel(t, parallel[1], "parallel-boundary-b")
+
+	pipeline, ok := projected["pipeline"].([]any)
+	if !ok || len(pipeline) != 1 {
+		t.Fatalf("projected pipeline = %#v, want 1 item", projected["pipeline"])
+	}
+	item, ok := pipeline[0].(map[string]any)
+	if !ok || item["status"] != factory.JavaScriptChildDispatchStatusCompleted {
+		t.Fatalf("pipeline item = %#v, want completed status", pipeline[0])
+	}
+	stages, ok := item["stages"].([]any)
+	if !ok || len(stages) != 2 {
+		t.Fatalf("pipeline stages = %#v, want 2 stages", item["stages"])
+	}
+	editStage, ok := stages[0].(map[string]any)
+	if !ok || editStage["status"] != factory.JavaScriptChildDispatchStatusCompleted {
+		t.Fatalf("pipeline edit stage = %#v", stages[0])
+	}
+	assertStubChildResult(t, editStage["result"], "pipeline-edit-boundary", "stub-dispatch-4")
+
+	reviewStage, ok := stages[1].(map[string]any)
+	if !ok || reviewStage["status"] != factory.JavaScriptChildDispatchStatusCompleted {
+		t.Fatalf("pipeline review stage = %#v", stages[1])
+	}
+	assertStubChildResult(t, reviewStage["result"], "pipeline-review-boundary", "stub-dispatch-5")
+}
+
+func assertStubChildResultByLabel(t *testing.T, value any, wantLabel string) {
+	t.Helper()
+	child, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("child result = %#v, want object", value)
+	}
+	if child["label"] != wantLabel {
+		t.Fatalf("child label = %#v, want %q", child["label"], wantLabel)
+	}
+	assertStubChildResult(t, value, wantLabel, "")
+}
+
+func assertStubChildResult(t *testing.T, value any, wantLabel, wantDispatchID string) {
+	t.Helper()
+	child, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("child result = %#v, want object", value)
+	}
+	if child["status"] != factory.JavaScriptChildDispatchStatusCompleted {
+		t.Fatalf("child status = %#v, want %q", child["status"], factory.JavaScriptChildDispatchStatusCompleted)
+	}
+	if child["executionMode"] != stubChildExecutionMode {
+		t.Fatalf("child executionMode = %#v, want %q", child["executionMode"], stubChildExecutionMode)
+	}
+	if child["label"] != wantLabel {
+		t.Fatalf("child label = %#v, want %q", child["label"], wantLabel)
+	}
+	if wantDispatchID != "" && child["dispatchId"] != wantDispatchID {
+		t.Fatalf("child dispatchId = %#v, want %q", child["dispatchId"], wantDispatchID)
+	}
+	output, ok := child["output"].(map[string]any)
+	if !ok {
+		t.Fatalf("child output = %#v, want object", child["output"])
+	}
+	wantText := fmt.Sprintf("stub:%s", wantLabel)
+	if output["text"] != wantText {
+		t.Fatalf("child output text = %#v, want %q", output["text"], wantText)
+	}
+}
+
 func runPackagedWorkflow(t *testing.T, slug, script string, args map[string]any, executor factory.JavaScriptChildExecutor) factory.JavaScriptRuntimeOutcome {
 	t.Helper()
 	policy := workflowpolicy.DefaultEffectivePolicy()
@@ -358,7 +678,6 @@ type packagedWorkflowChildExecutor struct {
 	calls        int
 	called       []string
 	plannerTasks []string
-	plannerText  string
 	failLabel    string
 	judgeText    string
 }
@@ -379,33 +698,40 @@ func (e *packagedWorkflowChildExecutor) Execute(_ context.Context, request facto
 		}, nil
 	}
 	text := "result for " + request.Label
+	var output map[string]any
 	switch request.Label {
 	case "spawn-planner":
-		text = e.plannerText
-		if text == "" {
-			tasks := e.plannerTasks
-			if tasks == nil {
-				tasks = []string{"task one", "task two"}
-			}
-			encoded, _ := json.Marshal(tasks)
-			text = string(encoded)
+		tasks := e.plannerTasks
+		if tasks == nil {
+			tasks = []string{"task one", "task two"}
 		}
+		output = map[string]any{"tasks": tasks}
 	case "spawn-merger":
-		text = "merged spawn result"
+		output = map[string]any{"answer": "merged spawn result"}
 	default:
 		if strings.HasPrefix(request.Label, "tournament-judge-") {
 			text = e.judgeText
 			if text == "" {
 				text = `{"winner":"B","rationale":"candidate B wins"}`
 			}
+		} else if strings.HasPrefix(request.Label, "research-specialist-") {
+			output = map[string]any{"evidence": text}
+		} else if strings.HasPrefix(request.Label, "spawn-task-") {
+			output = map[string]any{"result": text}
+		} else if request.Label == "lead-research-synthesis" {
+			output = map[string]any{"answer": text}
 		}
 	}
+	if output == nil {
+		output = map[string]any{"text": text}
+	}
 	return factory.JavaScriptChildExecutionResult{
-		DispatchID:    fmt.Sprintf("dispatch-%d", e.calls),
-		ChildIndex:    e.calls - 1,
-		Status:        factory.JavaScriptChildDispatchStatusCompleted,
-		ExecutionMode: factory.JavaScriptChildExecutionModeFake,
-		Output:        map[string]any{"text": text},
+		DispatchID:      fmt.Sprintf("dispatch-%d", e.calls),
+		ChildIndex:      e.calls - 1,
+		Status:          factory.JavaScriptChildDispatchStatusCompleted,
+		ExecutionMode:   factory.JavaScriptChildExecutionModeFake,
+		Output:          output,
+		SchemaValidated: len(request.OutputSchema) > 0,
 	}, nil
 }
 

@@ -51,6 +51,7 @@ func TestRun_AgentRunAcceptsAndNormalizesAllSupportedFields(t *testing.T) {
 		Model:            "gpt-test",
 		ReasoningEffort:  "high",
 		ResourceID:       "reviewers",
+		Permissions:      workflowpolicy.JavaScriptChildPermissionSkipPermissions,
 		SkipPermissions:  true,
 	}
 	got := requests[0]
@@ -62,6 +63,7 @@ func TestRun_AgentRunAcceptsAndNormalizesAllSupportedFields(t *testing.T) {
 		got.Model != want.Model ||
 		got.ReasoningEffort != want.ReasoningEffort ||
 		got.ResourceID != want.ResourceID ||
+		got.Permissions != want.Permissions ||
 		got.SkipPermissions != want.SkipPermissions {
 		t.Fatalf("child executor request = %#v, want %#v", requests[0], want)
 	}
@@ -386,12 +388,17 @@ func assertAgentRunParameterInventory(t *testing.T, record callbehavior.CallBeha
 	if len(record.Parameters) != 1 || !record.Parameters[0].Required || record.Parameters[0].Type != "object" {
 		t.Fatalf("agent.run parameters = %#v, want one required object", record.Parameters)
 	}
-	var permissions callbehavior.ObjectProperty
+	var schema, permissions callbehavior.ObjectProperty
 	for _, property := range record.Parameters[0].ObjectProperties {
-		if property.Name == "permissions" {
+		switch property.Name {
+		case "schema":
+			schema = property
+		case "permissions":
 			permissions = property
-			break
 		}
+	}
+	if schema.Type != "object" {
+		t.Fatalf("agent.run schema property = %#v, want optional object", schema)
 	}
 	if permissions.Type != "string" || len(permissions.Enum) != 2 || permissions.Enum[0] != "DEFAULT" || permissions.Enum[1] != "SKIP_PERMISSIONS" {
 		t.Fatalf("agent.run permissions property = %#v, want DEFAULT/SKIP_PERMISSIONS string enum", permissions)
@@ -799,6 +806,8 @@ func agentRunErrorSource(condition string) string {
 	case "retired-permissions-field":
 		retiredField := "skip" + "Permissions"
 		return `const child = { prompt: "review" }; child["` + retiredField + `"] = true; return agent.run(child);`
+	case "non-object-schema":
+		return `return agent.run({ prompt: "review", schema: "schema-secret" });`
 	default:
 		return ""
 	}

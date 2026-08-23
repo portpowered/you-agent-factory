@@ -3,6 +3,7 @@ package factory_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -125,6 +126,12 @@ func TestNormalize_AcceptsAndTrimsCanonicalFields(t *testing.T) {
 		"model":            "  gpt-test  ",
 		"reasoningEffort":  "  high  ",
 		"resourceId":       "  reviewers  ",
+		"schema": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"answer": map[string]any{"type": "string"},
+			},
+		},
 	})
 	if err != nil {
 		t.Fatalf("Normalize() error = %v", err)
@@ -132,10 +139,75 @@ func TestNormalize_AcceptsAndTrimsCanonicalFields(t *testing.T) {
 	want := factory.JavaScriptChildSpec{
 		Prompt: "review this", Label: "reviewer", Preset: "careful", ExecutorProvider: "cursor-acp",
 		ModelProvider: "codex", Model: "gpt-test", ReasoningEffort: "high", ResourceID: "reviewers",
+		Schema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"answer": map[string]any{"type": "string"},
+			},
+		},
 		Permissions: factory.JavaScriptChildPermissionDefault,
 	}
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Normalize() = %#v, want %#v", got, want)
+	}
+}
+
+func TestNormalize_ClonesValidSchemaWithoutSharingNestedState(t *testing.T) {
+	t.Parallel()
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"answer": map[string]any{"type": "string"},
+		},
+	}
+	got, err := factory.NormalizeJavaScriptChild(map[string]any{
+		"prompt": "review",
+		"schema": schema,
+	})
+	if err != nil {
+		t.Fatalf("Normalize() error = %v", err)
+	}
+	if !reflect.DeepEqual(got.Schema, schema) {
+		t.Fatalf("Normalize() schema = %#v, want %#v", got.Schema, schema)
+	}
+
+	gotProperties := got.Schema["properties"].(map[string]any)
+	gotProperties["answer"].(map[string]any)["type"] = "number"
+	if schema["properties"].(map[string]any)["answer"].(map[string]any)["type"] != "string" {
+		t.Fatal("normalized schema mutation changed caller-owned schema")
+	}
+	schema["properties"].(map[string]any)["answer"].(map[string]any)["type"] = "boolean"
+	if gotProperties["answer"].(map[string]any)["type"] != "number" {
+		t.Fatal("caller schema mutation changed normalized schema")
+	}
+}
+
+func TestNormalize_RejectsInvalidSchemasWithSafeDiagnostics(t *testing.T) {
+	t.Parallel()
+	const promptSecret = "prompt-secret"
+	const schemaSecret = "schema-secret"
+	cases := []struct {
+		name  string
+		value any
+		want  string
+	}{
+		{name: "non-object", value: schemaSecret, want: `agent.run() requires "schema" to be an object`},
+		{name: "malformed-json-value", value: map[string]any{"type": func() {}}, want: `agent.run() requires "schema" to be a valid JSON Schema object`},
+		{name: "invalid-schema-keyword", value: map[string]any{"type": "not-a-schema-type"}, want: `agent.run() requires "schema" to be a valid JSON Schema object`},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := factory.NormalizeJavaScriptChild(map[string]any{
+				"prompt": promptSecret,
+				"schema": test.value,
+			})
+			if err == nil || err.Error() != test.want {
+				t.Fatalf("Normalize() error = %v, want %q", err, test.want)
+			}
+			if strings.Contains(err.Error(), promptSecret) || strings.Contains(err.Error(), schemaSecret) {
+				t.Fatalf("Normalize() error = %q, want safe schema diagnostic", err)
+			}
+		})
 	}
 }
 
@@ -183,6 +255,17 @@ func TestNormalize_RejectsRetiredPermissionFieldWithReplacement(t *testing.T) {
 	}
 }
 
+func TestNormalize_RejectsInvalidPermissionsValues(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []any{"READ_ONLY", true, 42} {
+		_, err := factory.NormalizeJavaScriptChild(map[string]any{"prompt": "review", "permissions": value})
+		if err == nil || !strings.Contains(err.Error(), `"permissions"`) {
+			t.Fatalf("Normalize(%#v) error = %v, want field-specific permissions diagnostic", value, err)
+		}
+	}
+}
+
 func TestNormalize_RejectsInvalidSupportedFieldValues(t *testing.T) {
 	t.Parallel()
 	for _, field := range factory.JavaScriptChildSupportedFields() {
@@ -209,7 +292,7 @@ func TestNormalize_RejectsUnsupportedFieldsWithoutExposingValues(t *testing.T) {
 	t.Parallel()
 	unsupported := []string{
 		"writableRoots", "allowNetwork", "network", "allowDangerFullAccess", "dangerFullAccess",
-		"schema", "outputSchema", "concurrency", "maxAgents", "duration", "timeout", "timeoutMs",
+		"outputSchema", "concurrency", "maxAgents", "duration", "timeout", "timeoutMs",
 	}
 	const secret = "secret-value-that-must-not-appear"
 	for _, field := range unsupported {

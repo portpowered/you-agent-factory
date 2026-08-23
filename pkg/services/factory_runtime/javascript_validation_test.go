@@ -244,11 +244,26 @@ func TestValidate_AcceptsEverySupportedAgentRunField(t *testing.T) {
   modelProvider: "codex",
   model: "gpt-test",
   reasoningEffort: "high",
+  schema: { type: "object", properties: { answer: { type: "string" } } },
 });`,
 		SourceRef: "inline",
 	})
 	if result.HasIssues() {
 		t.Fatalf("validation issues = %#v, want canonical agent.run fields accepted", result.Issues)
+	}
+}
+
+func TestValidate_RejectsNonObjectAgentRunSchema(t *testing.T) {
+	t.Parallel()
+	result := validationWorkflows.Validate(factory.WorkflowValidationRequest{
+		Source:    `agent.run({ prompt: "review", schema: "schema-secret" });`,
+		SourceRef: "inline",
+	})
+	if len(result.Issues) != 1 || !strings.Contains(result.Issues[0].Message, `"schema"`) {
+		t.Fatalf("validation issues = %#v, want schema-specific object diagnostic", result.Issues)
+	}
+	if strings.Contains(result.Issues[0].Message, "schema-secret") {
+		t.Fatalf("validation message = %q, want redacted schema diagnostic", result.Issues[0].Message)
 	}
 }
 
@@ -286,7 +301,7 @@ func TestValidate_RejectsUnsupportedAgentRunFieldsWithoutExposingValues(t *testi
 	t.Parallel()
 	unsupported := []string{
 		"writableRoots", "allowNetwork", "network", "allowDangerFullAccess", "dangerFullAccess",
-		"schema", "outputSchema", "concurrency", "maxAgents", "duration", "timeout", "timeoutMs",
+		"outputSchema", "concurrency", "maxAgents", "duration", "timeout", "timeoutMs",
 	}
 	for _, field := range unsupported {
 		t.Run(field, func(t *testing.T) {

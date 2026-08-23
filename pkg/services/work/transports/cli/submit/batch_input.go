@@ -13,6 +13,13 @@ const (
 	batchSourceFile   = "file"
 	batchSourceStdin  = "stdin"
 	batchSourceInline = "inline"
+
+	// maxSubmitBatchStdinBytes is the inclusive aggregate bound for batch JSON
+	// deliberately supplied through process stdin. It leaves room for
+	// multiple Work payloads while keeping a continuous producer bounded at
+	// this CLI boundary; the Work-owned per-payload admission limit remains
+	// the authoritative batch contract.
+	maxSubmitBatchStdinBytes = 16 * 1024 * 1024
 )
 
 type batchResolvedInput struct {
@@ -98,16 +105,38 @@ func resolveBatchFileFlag(cfg BatchConfig, path string) (batchResolvedInput, err
 }
 
 func readBatchStdin(cfg BatchConfig) ([]byte, error) {
-	stdin := cfg.Stdin
-	if stdin == nil {
-		return nil, fmt.Errorf("read batch stdin: process stdin reader is required")
-	}
-	data, err := io.ReadAll(stdin)
+	data, err := readBoundedStdin(
+		cfg.Stdin,
+		maxSubmitBatchStdinBytes,
+		"batch stdin",
+		"use a batch file for larger input",
+	)
 	if err != nil {
-		return nil, fmt.Errorf("read batch stdin: %w", err)
+		return nil, err
 	}
 	if isEmptyBatchInput(data) {
 		return nil, fmt.Errorf("batch stdin input is empty")
+	}
+	return data, nil
+}
+
+// readBoundedStdin reads at most limit plus one byte. The extra byte is an
+// overflow sentinel and is discarded when the inclusive limit is exceeded.
+func readBoundedStdin(stdin io.Reader, limit int, label, overflowGuidance string) ([]byte, error) {
+	if stdin == nil {
+		return nil, fmt.Errorf("read %s: process stdin reader is required", label)
+	}
+	data, err := io.ReadAll(io.LimitReader(stdin, int64(limit)+1))
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", label, err)
+	}
+	if len(data) > limit {
+		return nil, fmt.Errorf(
+			"%s exceeds the %d-byte limit; %s",
+			label,
+			limit,
+			overflowGuidance,
+		)
 	}
 	return data, nil
 }

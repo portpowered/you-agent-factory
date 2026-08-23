@@ -25,10 +25,11 @@ import (
 // built -- childWorkerExecutor where a runtime exists, this where none does --
 // so a child can never take a second route out of the converged one.
 //
-// It performs exactly one detached Execute operation; Workers owns any
-// provider retry within that operation. Retry and the dispatch/Worker-Session
-// association do not become a private Sessions implementation in a
-// composition with no Worker Sessions.
+// It performs bounded detached Execute operations; Workers owns provider retry
+// within each operation, while the JavaScript child policy owns the outer
+// schema-mismatch retry allowance. Retry and the dispatch/Worker-Session
+// association do not become a private Sessions implementation in a composition
+// with no Worker Sessions.
 // It does still write the queued/running/terminal dispatch records itself,
 // because nothing else here can. Children run through this executor are
 // invisible to a client: there is no Factory whose tool call they could be
@@ -39,6 +40,7 @@ type directChildExecutor struct {
 	records           factory.JavaScriptChildRecordSink
 	childValues       factory.JavaScriptChildValues
 	workingDir        string
+	maxAttempts       int
 	maxWorkerDuration time.Duration
 }
 
@@ -120,13 +122,19 @@ func newDirectChildExecutor(
 	records factory.JavaScriptChildRecordSink,
 	childValues factory.JavaScriptChildValues,
 	workingDir string,
+	maxRetries int,
 ) *directChildExecutor {
+	attempts := maxRetries + 1
+	if attempts < 1 {
+		attempts = 1
+	}
 	return &directChildExecutor{
 		sessionID:   sessionID,
 		execute:     execution,
 		records:     records,
 		childValues: childValues,
 		workingDir:  strings.TrimSpace(workingDir),
+		maxAttempts: attempts,
 	}
 }
 
@@ -205,34 +213,44 @@ func (e *directChildExecutor) Execute(
 	e.records.AppendChildDispatch(base, factory.JavaScriptChildDispatchStatusQueued)
 	e.records.AppendChildDispatch(base, factory.JavaScriptChildDispatchStatusRunning)
 
-	executeRequest := e.executeRequest(req, base, dispatchID, runnerID)
-	result, err := executeChildAttempt(ctx, e.execute, executeRequest)
-	if err != nil || !childExecutionSucceeded(result.Outcome) {
-		return e.failedChild(base, req, dispatchID, childIndex, result, err)
-	}
+	for attemptNumber := 1; attemptNumber <= e.maxAttempts; attemptNumber++ {
+		executeRequest := e.executeRequest(req, base, dispatchID, runnerID, attemptNumber)
+		base.Attempt = executeRequest.Attempt.Number
+		result, err := executeChildAttempt(ctx, e.execute, executeRequest)
+		result = normalizeChildStructuredResult(req, result)
+		if childExecutionShouldRetry(ctx, result, err, attemptNumber, e.maxAttempts) {
+			continue
+		}
+		if err != nil || !childExecutionSucceeded(result.Outcome) {
+			return e.failedChild(base, req, dispatchID, childIndex, result, err)
+		}
 
-	base.Attempt = executeRequest.Attempt.Number
-	providerName, providerSessionRef := childProviderSession(result)
-	output := childWorkerOutputFromExecute(req, result)
-	completed := base
-	completed.Status = factory.JavaScriptChildDispatchStatusCompleted
-	completed.Provider = providerName
-	completed.ProviderSessionRef = providerSessionRef
-	completed.Output = e.childValues.CloneOutputMap(output)
-	e.records.Append(factory.JavaScriptRuntimeRecord{
-		Kind:          factory.JavaScriptRecordKindChildDispatch,
-		ChildDispatch: &completed,
-	})
-	return factory.JavaScriptChildExecutionResult{
-		DispatchID:         dispatchID,
-		ChildIndex:         childIndex,
-		Status:             factory.JavaScriptChildDispatchStatusCompleted,
-		ExecutionMode:      factory.JavaScriptChildExecutionModeLive,
-		Output:             output,
-		ArtifactRef:        artifactRef,
-		ProviderSessionRef: providerSessionRef,
-		Request:            req,
-	}, nil
+		providerName, providerSessionRef := childProviderSession(result)
+		output, schemaValidated := childWorkerOutputFromExecute(req, result)
+		completed := base
+		completed.Status = factory.JavaScriptChildDispatchStatusCompleted
+		completed.Provider = providerName
+		completed.ProviderSessionRef = providerSessionRef
+		completed.Output = e.childValues.CloneOutputMap(output)
+		completed.SchemaValidated = schemaValidated
+		e.records.Append(factory.JavaScriptRuntimeRecord{
+			Kind:          factory.JavaScriptRecordKindChildDispatch,
+			ChildDispatch: &completed,
+		})
+		return factory.JavaScriptChildExecutionResult{
+			DispatchID:         dispatchID,
+			ChildIndex:         childIndex,
+			Status:             factory.JavaScriptChildDispatchStatusCompleted,
+			ExecutionMode:      factory.JavaScriptChildExecutionModeLive,
+			Output:             output,
+			SchemaValidated:    schemaValidated,
+			SchemaDigest:       base.SchemaDigest,
+			ArtifactRef:        artifactRef,
+			ProviderSessionRef: providerSessionRef,
+			Request:            req,
+		}, nil
+	}
+	return factory.JavaScriptChildExecutionResult{}, fmt.Errorf("javascript child execution exhausted its attempt budget")
 }
 
 func (e *directChildExecutor) executeRequest(
@@ -240,6 +258,7 @@ func (e *directChildExecutor) executeRequest(
 	base factory.JavaScriptChildDispatchRecord,
 	dispatchID string,
 	runnerID string,
+	attemptNumber int,
 ) workers.ExecuteRequest {
 	requestID := firstNonBlank(strings.TrimSpace(e.sessionID), "standalone-child")
 	traceID := dispatchID
@@ -249,7 +268,7 @@ func (e *directChildExecutor) executeRequest(
 			RuntimeID:        "standalone-runtime-" + requestID,
 			GenerationID:     "standalone-generation-" + requestID,
 			DispatchID:       dispatchID,
-			AttemptID:        dispatchID + "/attempt/1",
+			AttemptID:        fmt.Sprintf("%s/attempt/%d", dispatchID, attemptNumber),
 			RequestID:        requestID,
 			TraceID:          traceID,
 		},
@@ -301,7 +320,7 @@ func (e *directChildExecutor) executeRequest(
 				SessionID:        requestID,
 			},
 		},
-		Attempt: workers.AttemptContext{Number: 1},
+		Attempt: workers.AttemptContext{Number: attemptNumber},
 	}
 }
 
@@ -435,6 +454,7 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) fa
 				records,
 				s.childValues,
 				s.projectRoot,
+				policy.MaxRetries,
 			)
 			executor.maxWorkerDuration = childWorkerDurationFromPolicy(policy)
 			return executor
@@ -451,6 +471,7 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) fa
 			records,
 			s.childValues,
 			s.projectRoot,
+			policy.MaxRetries,
 		)
 		executor.maxWorkerDuration = childWorkerDurationFromPolicy(policy)
 		return executor

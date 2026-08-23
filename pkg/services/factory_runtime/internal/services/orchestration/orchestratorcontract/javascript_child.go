@@ -2,9 +2,12 @@
 package orchestratorcontract
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 const (
@@ -16,11 +19,12 @@ const (
 	FieldModel            = "model"
 	FieldReasoningEffort  = "reasoningEffort"
 	FieldResourceID       = "resourceId"
+	FieldSchema           = "schema"
 	FieldPermissions      = "permissions"
 )
 
-// JavaScriptChildPermission selects the provider permission behavior for one
-// JavaScript agent.run child.
+// JavaScriptChildPermission is the provider permission behavior requested by
+// one JavaScript agent.run child.
 type JavaScriptChildPermission string
 
 const (
@@ -37,6 +41,7 @@ var supportedFields = []string{
 	FieldModel,
 	FieldReasoningEffort,
 	FieldResourceID,
+	FieldSchema,
 	FieldPermissions,
 }
 
@@ -58,6 +63,7 @@ type JavaScriptChildSpec struct {
 	Model            string
 	ReasoningEffort  string
 	ResourceID       string
+	Schema           map[string]any
 	Permissions      JavaScriptChildPermission
 }
 
@@ -89,12 +95,21 @@ func NormalizeJavaScriptChild(value map[string]any) (JavaScriptChildSpec, error)
 	if err != nil {
 		return JavaScriptChildSpec{}, err
 	}
-	optional := make(map[string]string, len(supportedFields)-2)
-	for _, field := range supportedFields[1 : len(supportedFields)-1] {
-		optional[field], err = optionalString(value, field)
-		if err != nil {
-			return JavaScriptChildSpec{}, err
+	optional := make(map[string]string, len(supportedFields)-3)
+	for _, field := range supportedFields {
+		switch field {
+		case FieldPrompt, FieldSchema, FieldPermissions:
+			continue
+		default:
+			optional[field], err = optionalString(value, field)
+			if err != nil {
+				return JavaScriptChildSpec{}, err
+			}
 		}
+	}
+	schema, err := optionalSchema(value, FieldSchema)
+	if err != nil {
+		return JavaScriptChildSpec{}, err
 	}
 	permissions, err := optionalPermission(value, FieldPermissions)
 	if err != nil {
@@ -109,8 +124,49 @@ func NormalizeJavaScriptChild(value map[string]any) (JavaScriptChildSpec, error)
 		Model:            optional[FieldModel],
 		ReasoningEffort:  optional[FieldReasoningEffort],
 		ResourceID:       optional[FieldResourceID],
+		Schema:           schema,
 		Permissions:      permissions,
 	}, nil
+}
+
+const childOutputSchemaURL = "https://schemas.portpowered.com/you/runtime/child-output-schema.json"
+
+func optionalSchema(value map[string]any, field string) (map[string]any, error) {
+	raw, found := value[field]
+	if !found {
+		return nil, nil
+	}
+	schema, ok := raw.(map[string]any)
+	if !ok || schema == nil {
+		return nil, fmt.Errorf(`agent.run() requires %q to be an object`, field)
+	}
+
+	cloned, err := cloneAndValidateSchema(schema)
+	if err != nil {
+		return nil, fmt.Errorf(`agent.run() requires %q to be a valid JSON Schema object`, field)
+	}
+	return cloned, nil
+}
+
+func cloneAndValidateSchema(schema map[string]any) (map[string]any, error) {
+	raw, err := json.Marshal(schema)
+	if err != nil {
+		return nil, err
+	}
+	var cloned map[string]any
+	if err := json.Unmarshal(raw, &cloned); err != nil {
+		return nil, err
+	}
+
+	compiler := jsonschema.NewCompiler()
+	compiler.DefaultDraft(jsonschema.Draft2020)
+	if err := compiler.AddResource(childOutputSchemaURL, cloned); err != nil {
+		return nil, err
+	}
+	if _, err := compiler.Compile(childOutputSchemaURL); err != nil {
+		return nil, err
+	}
+	return cloned, nil
 }
 
 func optionalPermission(value map[string]any, field string) (JavaScriptChildPermission, error) {

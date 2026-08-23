@@ -393,7 +393,7 @@ func TestRun_AgentRunRejectsInvalidPermissionsBeforeDispatch(t *testing.T) {
 func TestRun_AgentRunDynamicObjectRejectsUnsupportedFieldsBeforeDispatch(t *testing.T) {
 	unsupported := []string{
 		"writableRoots", "allowNetwork", "network", "allowDangerFullAccess", "dangerFullAccess",
-		"schema", "outputSchema", "concurrency", "maxAgents", "duration", "timeout", "timeoutMs",
+		"outputSchema", "concurrency", "maxAgents", "duration", "timeout", "timeoutMs",
 	}
 	for _, field := range unsupported {
 		t.Run(field, func(t *testing.T) {

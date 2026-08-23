@@ -32,6 +32,8 @@ type ChildExecutionRequest struct {
 	SkipPermissions  bool
 	Command          string
 	Sandbox          string
+	WritableRoots    []string
+	AllowNetwork     bool
 	Concurrency      int
 	OutputSchema     map[string]any
 	WorkflowName     string
@@ -47,12 +49,18 @@ type ChildDispatchIdentity struct {
 
 // ChildExecutionResult is the typed child-agent result returned to host primitives.
 type ChildExecutionResult struct {
-	DispatchID         string
-	ChildIndex         int
-	Status             string
-	ExecutionMode      string
-	Diagnostic         string
-	Output             map[string]any
+	DispatchID    string
+	ChildIndex    int
+	Status        string
+	ExecutionMode string
+	Diagnostic    string
+	Output        map[string]any
+	// SchemaValidated is kept outside Output so a customer's structured object
+	// may safely contain a property with the same name.
+	SchemaValidated bool
+	// SchemaDigest remains available when a result is replayed without the raw
+	// request schema.
+	SchemaDigest       string
 	ArtifactRef        string
 	ProviderSessionRef string
 	Request            ChildExecutionRequest
@@ -169,10 +177,11 @@ func (e *FakeChildExecutor) Execute(ctx context.Context, req ChildExecutionReque
 		ReasoningEffort:    req.ReasoningEffort,
 		ResourceID:         req.ResourceID,
 		FactoryRevision:    req.FactoryRevision,
-		SkipPermissions:    childSkipPermissions(req),
+		SkipPermissions:    req.SkipPermissions,
 		Command:            req.Command,
 		Sandbox:            req.Sandbox,
 		SchemaDigest:       schemaDigest(req.OutputSchema),
+		SchemaValidated:    false,
 		ExecutionMode:      ChildExecutionModeFake,
 		ProviderSessionRef: providerSessionRef,
 		ArtifactRef:        artifactRef,
@@ -194,6 +203,8 @@ func (e *FakeChildExecutor) Execute(ctx context.Context, req ChildExecutionReque
 		Status:             ChildDispatchStatusCompleted,
 		ExecutionMode:      ChildExecutionModeFake,
 		Output:             output,
+		SchemaValidated:    false,
+		SchemaDigest:       base.SchemaDigest,
 		ArtifactRef:        artifactRef,
 		ProviderSessionRef: providerSessionRef,
 		Request:            req,
@@ -216,7 +227,7 @@ func (e *FakeChildExecutor) executeFailed(ctx context.Context, req ChildExecutio
 		ReasoningEffort: req.ReasoningEffort,
 		ResourceID:      req.ResourceID,
 		FactoryRevision: req.FactoryRevision,
-		SkipPermissions: childSkipPermissions(req),
+		SkipPermissions: req.SkipPermissions,
 		Command:         req.Command,
 		Sandbox:         req.Sandbox,
 		SchemaDigest:    schemaDigest(req.OutputSchema),
@@ -261,9 +272,8 @@ func fakeChildOutput(req ChildExecutionRequest, dispatchID, providerSessionRef, 
 		req.ArgsSubject,
 	)
 	return map[string]any{
-		"text":            text,
-		"subject":         req.ArgsSubject,
-		"schemaValidated": req.OutputSchema != nil,
+		"text":    text,
+		"subject": req.ArgsSubject,
 	}
 }
 
@@ -284,6 +294,7 @@ func childExecutionRequestFromSpec(spec map[string]any, workflowName, argsSubjec
 		Model:            normalized.Model,
 		ReasoningEffort:  normalized.ReasoningEffort,
 		ResourceID:       normalized.ResourceID,
+		OutputSchema:     normalized.Schema,
 		Permissions:      normalized.Permissions,
 		SkipPermissions:  normalized.Permissions == orchestratorcontract.JavaScriptChildPermissionSkipPermissions,
 		WorkflowName:     workflowName,
@@ -345,6 +356,7 @@ func childResultValueMap(result ChildExecutionResult) map[string]any {
 		"providerSessionRef": result.ProviderSessionRef,
 		"promptDigest":       textDigest(req.Prompt),
 		"output":             result.Output,
+		"schemaValidated":    result.SchemaValidated,
 	}
 	if result.Diagnostic != "" {
 		value["diagnostic"] = result.Diagnostic
@@ -371,7 +383,11 @@ func childResultValueMap(result ChildExecutionResult) map[string]any {
 	if req.Sandbox != "" {
 		value["sandbox"] = req.Sandbox
 	}
-	if digest := schemaDigest(req.OutputSchema); digest != "" {
+	digest := result.SchemaDigest
+	if digest == "" {
+		digest = schemaDigest(req.OutputSchema)
+	}
+	if digest != "" {
 		value["schemaDigest"] = digest
 	}
 	if result.ArtifactRef != "" {
@@ -500,6 +516,8 @@ func childExecutionResultFromRecord(child ChildDispatchRecord) ChildExecutionRes
 		ChildIndex:         child.ChildIndex,
 		Status:             child.Status,
 		ExecutionMode:      executionMode,
+		SchemaValidated:    child.SchemaValidated,
+		SchemaDigest:       child.SchemaDigest,
 		ArtifactRef:        child.ArtifactRef,
 		ProviderSessionRef: child.ProviderSessionRef,
 		Output:             output,
@@ -515,6 +533,8 @@ func childExecutionResultFromRecord(child ChildDispatchRecord) ChildExecutionRes
 			SkipPermissions: child.SkipPermissions,
 			Command:         child.Command,
 			Sandbox:         child.Sandbox,
+			// The raw schema is intentionally not reconstructed from its digest;
+			// replay uses the recorded validation result and object directly.
 		},
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
@@ -177,6 +179,79 @@ func TestSubmit_MissingPayload(t *testing.T) {
 	}
 	if err.Error() != "--payload is required" {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestSubmit_OversizedStdinFailsBeforeHTTP(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		calls.Add(1)
+	}))
+	defer srv.Close()
+
+	reader := &countingStdinReader{
+		reader: bytes.NewReader(bytes.Repeat([]byte("x"), maxSubmitPayloadStdinBytes+1)),
+	}
+	var out bytes.Buffer
+	err := Submit(t, SubmitConfig{
+		Context:      context.Background(),
+		Name:         "oversized-stdin",
+		WorkTypeName: "task",
+		Payload:      "-",
+		Stdin:        reader,
+		Server:       mustServerBase(t, srv.URL),
+		Output:       &out,
+	})
+	if err == nil {
+		t.Fatal("Submit(oversized stdin) succeeded, want limit error")
+	}
+	if !strings.Contains(err.Error(), fmt.Sprintf("payload stdin exceeds the %d-byte limit", maxSubmitPayloadStdinBytes)) {
+		t.Fatalf("error = %q, want actionable payload limit", err)
+	}
+	if calls.Load() != 0 {
+		t.Fatalf("HTTP calls = %d, want 0 before overflow rejection", calls.Load())
+	}
+	if reader.bytesRead != maxSubmitPayloadStdinBytes+1 {
+		t.Fatalf("bytes read = %d, want exactly %d", reader.bytesRead, maxSubmitPayloadStdinBytes+1)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty on overflow", out.String())
+	}
+}
+
+func TestSubmit_EscapedTextOverLimitFailsBeforeHTTP(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		calls.Add(1)
+	}))
+	defer srv.Close()
+
+	rawText := strings.Repeat("\"", maxSubmitPayloadStdinBytes/2)
+	reader := &countingStdinReader{reader: strings.NewReader(rawText)}
+	var out bytes.Buffer
+	err := Submit(t, SubmitConfig{
+		Context:      context.Background(),
+		Name:         "escaped-over-limit",
+		WorkTypeName: "task",
+		Payload:      "-",
+		Stdin:        reader,
+		Server:       mustServerBase(t, srv.URL),
+		Output:       &out,
+	})
+	if err == nil {
+		t.Fatal("Submit(escaped text over encoded limit) succeeded")
+	}
+	if !strings.Contains(err.Error(), "payload stdin compact JSON exceeds the 65536-byte Work payload limit") {
+		t.Fatalf("error = %q, want actionable compact payload limit", err)
+	}
+	if calls.Load() != 0 {
+		t.Fatalf("HTTP calls = %d, want 0 before encoded-overflow rejection", calls.Load())
+	}
+	if reader.bytesRead != len(rawText) {
+		t.Fatalf("bytes read = %d, want %d source bytes", reader.bytesRead, len(rawText))
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty on overflow", out.String())
 	}
 }
 

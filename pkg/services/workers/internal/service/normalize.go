@@ -67,7 +67,7 @@ func (s *Service) normalizeSuccessfulResult(
 			structured, err := workerexecutor.ParseOutputAgainstSchema(runnerResult.Content, schema)
 			if err != nil {
 				return result, workers.NewProviderError(
-					workers.WorkFailureTypePermanentBadRequest,
+					workers.WorkFailureTypeStructuredOutputSchemaViolation,
 					"structured output schema violation: "+err.Error(),
 					nil,
 				)

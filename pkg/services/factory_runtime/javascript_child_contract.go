@@ -10,6 +10,7 @@ const (
 	FieldModel           = orchestratorcontract.FieldModel
 	FieldReasoningEffort = orchestratorcontract.FieldReasoningEffort
 	FieldResourceID      = orchestratorcontract.FieldResourceID
+	FieldSchema          = orchestratorcontract.FieldSchema
 	FieldPermissions     = orchestratorcontract.FieldPermissions
 
 	JavaScriptChildPermissionDefault         = orchestratorcontract.JavaScriptChildPermissionDefault

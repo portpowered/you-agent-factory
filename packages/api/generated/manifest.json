@@ -61,7 +61,7 @@
       "path": "generated/cli/commands.json"
     },
     "generated.javascript.runtime-api": {
-      "artifactHash": "60b7775b4c24aefea2178f9de9fcfdd6128fa4ea82ab02d59ba339f4fe4a7018",
+      "artifactHash": "32de58ddd1e50e60330c6f8317b6a54633a6ba419ceaf28af49a389a545accab",
       "documentation": {
         "documentation": {
           "description": {
@@ -78,7 +78,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.javascript.runtime-api",
-        "sourceHash": "60b7775b4c24aefea2178f9de9fcfdd6128fa4ea82ab02d59ba339f4fe4a7018",
+        "sourceHash": "32de58ddd1e50e60330c6f8317b6a54633a6ba419ceaf28af49a389a545accab",
         "visibility": "public"
       },
       "family": "javascript",

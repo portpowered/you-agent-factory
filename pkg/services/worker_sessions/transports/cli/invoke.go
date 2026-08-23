@@ -334,9 +334,14 @@ func resolveInvokeMessage(config InvokeConfig) (string, error) {
 	if config.StdinIsTTY || config.Stdin == nil {
 		return "", nil
 	}
-	data, err := io.ReadAll(config.Stdin)
+	data, err := readBoundedWorkerSessionStdin(
+		config.Stdin,
+		maxWorkerSessionMessageStdinBytes,
+		"direct Worker input stdin",
+		"use --user-message or --execution FILE for larger input",
+	)
 	if err != nil {
-		return "", newCLIError("WORKER_SESSION_INPUT_FAILED", "failed to read direct Worker input from stdin", err)
+		return "", newCLIError("WORKER_SESSION_INPUT_FAILED", fmt.Sprintf("failed to read direct Worker input from stdin: %v", err), err)
 	}
 	return strings.TrimSpace(string(data)), nil
 }

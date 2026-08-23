@@ -875,7 +875,7 @@ func TestDirectChildExecutor_MapsWorkersCanceledAndTimeoutToOneTerminalChild(t *
 				},
 			}}
 			sink := newChildRecordSink()
-			executor := newDirectChildExecutor("direct-session", invoker, sink, childTestValues{}, "/project")
+			executor := newDirectChildExecutor("direct-session", invoker, sink, childTestValues{}, "/project", 0)
 
 			result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{Prompt: "run"})
 			if err == nil {

@@ -285,6 +285,22 @@ orchestrator:
                 */
 
                 return (async function () {
+                  const specialistResultSchema = {
+                    type: "object",
+                    properties: {
+                      evidence: { type: "string", minLength: 1 },
+                    },
+                    required: ["evidence"],
+                    additionalProperties: false,
+                  };
+                  const synthesisResultSchema = {
+                    type: "object",
+                    properties: {
+                      answer: { type: "string", minLength: 1 },
+                    },
+                    required: ["answer"],
+                    additionalProperties: false,
+                  };
                   phase("lead-research");
 
                   const topic = args.topic;
@@ -313,19 +329,21 @@ orchestrator:
                     const specialistRequests = [
                       {
                         label: "research-specialist-technical",
-                        prompt: "You are an independent technical research specialist with zero prior context. Investigate the mechanisms, terminology, primary evidence, implementation constraints, and disputed claims for the complete topic below at breadth level " + researchDepth + ". Distinguish verified facts from inference, explain source quality, and return a standalone evidence summary for a lead researcher.\n\nTopic:\n" + topic,
+                        prompt: "You are an independent technical research specialist with zero prior context. Investigate the mechanisms, terminology, primary evidence, implementation constraints, and disputed claims for the complete topic below at breadth level " + researchDepth + ". Distinguish verified facts from inference, explain source quality, and return only a JSON object with the standalone evidence summary in its evidence field for a lead researcher.\n\nTopic:\n" + topic,
                         modelProvider: modelProvider || "",
                         model: model || "",
                         reasoningEffort: reasoningEffort,
                         permissions: "SKIP_PERMISSIONS",
+                        schema: specialistResultSchema,
                       },
                       {
                         label: "research-specialist-tradeoffs",
-                        prompt: "You are an independent practical research specialist with zero prior context. Investigate real-world trade-offs, alternatives, risks, failure modes, counterarguments, and decision criteria for the complete topic below at breadth level " + researchDepth + ". Distinguish verified facts from inference and return a standalone evidence summary for a lead researcher.\n\nTopic:\n" + topic,
+                        prompt: "You are an independent practical research specialist with zero prior context. Investigate real-world trade-offs, alternatives, risks, failure modes, counterarguments, and decision criteria for the complete topic below at breadth level " + researchDepth + ". Distinguish verified facts from inference and return only a JSON object with the standalone evidence summary in its evidence field for a lead researcher.\n\nTopic:\n" + topic,
                         modelProvider: modelProvider || "",
                         model: model || "",
                         reasoningEffort: reasoningEffort,
                         permissions: "SKIP_PERMISSIONS",
+                        schema: specialistResultSchema,
                       },
                     ].slice(0, maxSubagents);
                     specialistFindings = await parallel(specialistRequests);
@@ -334,12 +352,18 @@ orchestrator:
                         const retryRequest = specialistRequests[index];
                         specialistFindings[index] = await agent.run({
                           label: retryRequest.label + "-retry",
-                          prompt: retryRequest.prompt + "\n\nThis is a bounded retry after the first provider attempt failed. Return the standalone evidence summary directly.",
+                          prompt: retryRequest.prompt + "\n\nThis is a bounded retry after the first provider attempt failed. Return the JSON object with the standalone evidence summary in its evidence field directly.",
                           modelProvider: retryRequest.modelProvider,
                           model: retryRequest.model,
                           reasoningEffort: retryRequest.reasoningEffort,
                           permissions: "SKIP_PERMISSIONS",
+                          schema: specialistResultSchema,
                         });
+                      }
+                    }
+                    for (let index = 0; index < specialistFindings.length; index += 1) {
+                      if (specialistFindings[index].status === "COMPLETED" && !specialistFindings[index].schemaValidated) {
+                        throw "research specialist " + (index + 1) + " returned an unvalidated result";
                       }
                     }
                   }
@@ -357,20 +381,25 @@ orchestrator:
                     : specialistFindings.map(function (finding, index) {
                         const role = index === 0 ? "technical" : "tradeoffs";
                         if (finding.status === "COMPLETED") {
-                          return "[" + role + " specialist]\n" + finding.output.text;
+                          const evidence = finding.output.evidence;
+                          if (typeof evidence !== "string" || evidence.trim() === "") {
+                            return "[" + role + " specialist unavailable]\nempty validated specialist evidence";
+                          }
+                          return "[" + role + " specialist]\n" + evidence.trim();
                         }
                         return "[" + role + " specialist unavailable]\n" + (finding.diagnostic || "provider execution failed after bounded retry");
                       }).join("\n\n");
                   const leadSynthesis = await agent.run({
                     label: "lead-research-synthesis",
-                    prompt: "You are the lead researcher with no shared conversation. Produce a complete answer to the topic below at breadth level " + researchDepth + ". Independently check the question's scope and terminology, integrate every relevant specialist finding, resolve or clearly preserve disagreements, distinguish evidence from inference, identify meaningful limitations, and make the response useful without access to these intermediate notes.\n\nTopic:\n" + topic +
+                    prompt: "You are the lead researcher with no shared conversation. Produce a complete answer to the topic below at breadth level " + researchDepth + ". Independently check the question's scope and terminology, integrate every relevant specialist finding, resolve or clearly preserve disagreements, distinguish evidence from inference, identify meaningful limitations, and make the response useful without access to these intermediate notes. Return only a JSON object with the complete answer in its answer field.\n\nTopic:\n" + topic +
                       "\n\nCompleted specialist evidence:\n" + specialistEvidence,
                     modelProvider: modelProvider || "",
                     model: model || "",
                     reasoningEffort: reasoningEffort,
                     permissions: "SKIP_PERMISSIONS",
+                    schema: synthesisResultSchema,
                   });
-                  if (leadSynthesis.status !== "COMPLETED") {
+                  if (leadSynthesis.status !== "COMPLETED" || !leadSynthesis.schemaValidated) {
                     throw "lead research synthesis failed";
                   }
 
@@ -385,7 +414,7 @@ orchestrator:
                       reasoningEffort: reasoningEffort,
                     },
                     synthesis: {
-                      leadResult: leadSynthesis.output,
+                      leadResult: { text: leadSynthesis.output.answer.trim() },
                       specialistStatuses: specialistStatuses,
                     },
                   };

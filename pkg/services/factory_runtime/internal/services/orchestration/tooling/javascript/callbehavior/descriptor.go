@@ -346,6 +346,7 @@ func agentRunRecord() CallBehaviorRecord {
 					idProperty("modelProvider", false, "string"),
 					idProperty("model", false, "string"),
 					idProperty("reasoningEffort", false, "string"),
+					idProperty("schema", false, "object"),
 					{
 						IDCandidate: "permissions",
 						Name:        "permissions",
@@ -400,6 +401,11 @@ func agentRunRecord() CallBehaviorRecord {
 				Condition: "unsupported-reasoning-effort",
 				Type:      "TypeError",
 				Message:   "agent.run() has unsupported effective reasoningEffort",
+			},
+			{
+				Condition: "non-object-schema",
+				Type:      "TypeError",
+				Message:   `agent.run() requires "schema" to be an object`,
 			},
 			{
 				Condition: "invalid-permissions",
