@@ -303,7 +303,7 @@ func doModelsDELETE(
 	}
 	if resp.StatusCode != http.StatusOK {
 		logModelsResponse(diagnostics, endpoint, resp.StatusCode, response.Duration, fmt.Sprintf("responseBytes=%d", len(body)))
-		return modelsRequestError(resp.StatusCode, body)
+		return modelsRequestError(resp.StatusCode, body, resp)
 	}
 	if out != nil && len(body) > 0 {
 		if err := json.Unmarshal(body, out); err != nil {
