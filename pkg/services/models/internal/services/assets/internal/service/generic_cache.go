@@ -41,6 +41,9 @@ func (s *service) acquireGenericCache(
 	if call, ok := s.inflight[key]; ok {
 		done := call.done
 		s.cacheMu.Unlock()
+		if s.cacheJoinObserver != nil {
+			s.cacheJoinObserver()
+		}
 		select {
 		case <-ctx.Done():
 			return genericCacheResult{}, ctx.Err()
