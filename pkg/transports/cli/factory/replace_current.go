@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
@@ -147,10 +146,10 @@ func replaceCurrentFactory(cfg replaceCurrentOptions) (factoryapi.Factory, error
 	if resp.StatusCode != http.StatusOK {
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return factoryapi.Factory{}, fmt.Errorf("read %s response: %w", labels.failureLabel, err)
+			return factoryapi.Factory{}, clihttp.WithHTTPResponse(resp, fmt.Errorf("read %s response: %w", labels.failureLabel, err))
 		}
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "%s response endpointPath=%s status=%d durationMillis=%d responseBytes=%d", labels.logLabel, endpoint.Path, resp.StatusCode, response.Duration.Milliseconds(), len(body))
-		return factoryapi.Factory{}, replaceCurrentHTTPError(labels.failureLabel, resp.StatusCode, body)
+		return factoryapi.Factory{}, clihttp.WithHTTPResponse(resp, replaceCurrentHTTPError(labels.failureLabel, resp.StatusCode, body))
 	}
 
 	responseBytes, err := currentFactoryResponseBytes(saved)
@@ -191,7 +190,7 @@ func renderReplaceCurrentError(err error) error {
 func replaceCurrentHTTPError(failureLabel string, statusCode int, body []byte) error {
 	var errResp factoryapi.ErrorResponse
 	if json.Unmarshal(body, &errResp) != nil || errResp.Message == "" {
-		return unexpectedReplaceCurrentHTTPError(failureLabel, statusCode, body)
+		return unexpectedReplaceCurrentHTTPError(failureLabel, statusCode)
 	}
 	return fmt.Errorf("%s failed (%d): %s", failureLabel, statusCode, errResp.Message)
 }
@@ -216,13 +215,6 @@ func advanceFactoryVersionForReplace(current *factoryapi.HybridLogicalTimestamp)
 	return &advanced
 }
 
-func unexpectedReplaceCurrentHTTPError(failureLabel string, statusCode int, body []byte) error {
-	preview := strings.TrimSpace(string(body))
-	if preview == "" {
-		return fmt.Errorf("%s failed (%d)", failureLabel, statusCode)
-	}
-	if len(preview) > queryCurrentErrorBodyPreviewLimit {
-		preview = preview[:queryCurrentErrorBodyPreviewLimit] + "..."
-	}
-	return fmt.Errorf("%s failed (%d): %s", failureLabel, statusCode, preview)
+func unexpectedReplaceCurrentHTTPError(failureLabel string, statusCode int) error {
+	return fmt.Errorf("%s failed (%d)", failureLabel, statusCode)
 }

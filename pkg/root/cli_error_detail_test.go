@@ -337,6 +337,96 @@ func TestProcessDebugHTTPFailureOmitsOpaqueResponseBody(t *testing.T) {
 	}
 }
 
+func TestProcessDebugFactoryFailureOmitsOpaqueResponseBody(t *testing.T) {
+	t.Parallel()
+
+	const responseMarker = "opaque-current-factory-response-marker"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/factory-sessions/~default/factory" {
+			t.Fatalf("request = %s %s, want GET /factory-sessions/~default/factory", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = io.WriteString(w, responseMarker)
+	}))
+	defer server.Close()
+
+	process, err := BuildProcess(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	t.Cleanup(func() { _ = process.Close(context.Background()) })
+
+	for _, mode := range cliDisclosureModes() {
+		args := append([]string{"you"}, mode.flags...)
+		args = append(args, "--server", server.URL, "factory", "show")
+		output := executeDisclosureFailure(t, process, args)
+		if strings.Contains(output, responseMarker) {
+			t.Fatalf("%s output leaked opaque HTTP response body: %q", mode.name, output)
+		}
+		if mode.name == "debug" {
+			for _, want := range []string{
+				"debug: http method=GET",
+				"url=" + server.URL + "/factory-sessions/~default/factory",
+				"status=502",
+			} {
+				if !strings.Contains(output, want) {
+					t.Fatalf("debug output = %q, want %q", output, want)
+				}
+			}
+		}
+	}
+}
+
+func TestProcessDebugReplaceCurrentFailureOmitsOpaqueResponseBody(t *testing.T) {
+	t.Parallel()
+
+	const responseMarker = "opaque-replace-current-response-marker"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/factory-sessions/~default/factory" {
+			t.Fatalf("request path = %q, want /factory-sessions/~default/factory", r.URL.Path)
+		}
+		switch r.Method {
+		case http.MethodGet:
+			w.Header().Set("Content-Type", "application/json")
+			if err := json.NewEncoder(w).Encode(map[string]string{"name": "beta"}); err != nil {
+				t.Fatalf("encode current factory: %v", err)
+			}
+		case http.MethodPut:
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = io.WriteString(w, responseMarker)
+		default:
+			t.Fatalf("request method = %s, want GET or PUT", r.Method)
+		}
+	}))
+	defer server.Close()
+
+	process, err := BuildProcess(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	t.Cleanup(func() { _ = process.Close(context.Background()) })
+
+	for _, mode := range cliDisclosureModes() {
+		args := append([]string{"you"}, mode.flags...)
+		args = append(args, "--server", server.URL, "factory", "replace-current")
+		output := executeDisclosureFailure(t, process, args)
+		if strings.Contains(output, responseMarker) {
+			t.Fatalf("%s output leaked opaque HTTP response body: %q", mode.name, output)
+		}
+		if mode.name == "debug" {
+			for _, want := range []string{
+				"debug: http method=PUT",
+				"url=" + server.URL + "/factory-sessions/~default/factory",
+				"status=502",
+			} {
+				if !strings.Contains(output, want) {
+					t.Fatalf("debug output = %q, want %q", output, want)
+				}
+			}
+		}
+	}
+}
+
 func TestProcessRemoteModelPullPreservesFailureOutcome(t *testing.T) {
 	t.Parallel()
 
