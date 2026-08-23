@@ -3,9 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
-	"strings"
 
-	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/factoryload"
@@ -15,7 +13,6 @@ import (
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	serverstopcli "github.com/portpowered/infinite-you/pkg/transports/cli/serverstop"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 )
 
 func newRootCommandWithFactory(options CommandFactory) *cobra.Command {
@@ -37,7 +34,6 @@ func newRootCommandWithFactory(options CommandFactory) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			writeHomeDirectoryDisclosure(cmd, args, homeDir)
 			if err := options.initializer.InitializeSystem(cmd.Context(), homeDir); err != nil {
 				wrapped := fmt.Errorf("initialize system: %w", err)
 				if errors.Is(err, factorydefinitions.ErrFactoryInstallationContention) {
@@ -56,146 +52,6 @@ func newRootCommandWithFactory(options CommandFactory) *cobra.Command {
 		return nil
 	}
 	return root
-}
-
-func writeHomeDirectoryDisclosure(cmd *cobra.Command, args []string, homeDir string) {
-	if !shouldDiscloseHomeDirectory(cmd, args) {
-		return
-	}
-	output := cmd.OutOrStdout()
-	if homeDirectoryDisclosureUsesDiagnostics(cmd, args) {
-		output = cmd.ErrOrStderr()
-	}
-	if output == nil {
-		return
-	}
-	_, _ = fmt.Fprintf(output, "Home directory: %s\n", homeDir)
-}
-
-func shouldDiscloseHomeDirectory(cmd *cobra.Command, args []string) bool {
-	if cmd == nil || commandHelpRequested(cmd, args) {
-		return false
-	}
-	// JSON and NDJSON invocations reserve stdout for their machine-readable
-	// result and stderr for the single structured error response on failure.
-	// A human startup line cannot be emitted on either stream without changing
-	// those public contracts.
-	if commandInputEnabled(cmd, args, "you.flag.json", "json") {
-		return false
-	}
-	switch cmd.CommandPath() {
-	case "you server", "you server acp", "you server mcp":
-		return true
-	case "you run":
-		if commandInputEnabled(cmd, args, "you.flag.remote", "remote") ||
-			commandInputEnabled(cmd, args, "you.run.flag.quiet", "quiet") {
-			return false
-		}
-		return !runInvocationOutputIsClean(cmd, args)
-	default:
-		return false
-	}
-}
-
-func homeDirectoryDisclosureUsesDiagnostics(cmd *cobra.Command, args []string) bool {
-	if cmd == nil {
-		return true
-	}
-	switch cmd.CommandPath() {
-	case "you server acp", "you server mcp":
-		return true
-	case "you server":
-		return commandInputEnabled(cmd, args, "you.flag.json", "json") ||
-			commandInputEnabled(cmd, args, "you.flag.verbose", "verbose") ||
-			commandInputEnabled(cmd, args, "you.flag.debug", "debug")
-	case "you run":
-		if commandInputEnabled(cmd, args, "you.flag.json", "json") ||
-			commandInputEnabled(cmd, args, "you.flag.verbose", "verbose") ||
-			commandInputEnabled(cmd, args, "you.flag.debug", "debug") ||
-			rawFlagSupplied(args, "output") || commandInputChanged(cmd, "you.run.flag.output", "output") {
-			return true
-		}
-	}
-	return false
-}
-
-func commandHelpRequested(cmd *cobra.Command, args []string) bool {
-	if rawFlagEnabled(args, "help") {
-		return true
-	}
-	flag := cmd.Flag("help")
-	return flag != nil && flag.Changed
-}
-
-func commandFlagChanged(cmd *cobra.Command, name string) bool {
-	if cmd == nil {
-		return false
-	}
-	for _, flagSet := range []*pflag.FlagSet{
-		cmd.Flags(), cmd.InheritedFlags(), cmd.PersistentFlags(), cmd.Root().PersistentFlags(),
-	} {
-		if flag := flagSet.Lookup(name); flag != nil && flag.Changed {
-			return true
-		}
-	}
-	return false
-}
-
-func commandInputChanged(cmd *cobra.Command, inputID, fallbackFlagName string) bool {
-	changed, err := climanifestcobra.InputChanged(cmd, inputID)
-	if err == nil && changed {
-		return changed
-	}
-	return commandFlagChanged(cmd, fallbackFlagName)
-}
-
-func commandInputEnabled(cmd *cobra.Command, args []string, inputID, fallbackFlagName string) bool {
-	return rawFlagEnabled(args, fallbackFlagName) || commandInputChanged(cmd, inputID, fallbackFlagName)
-}
-
-func runInvocationOutputIsClean(cmd *cobra.Command, args []string) bool {
-	if rawFlagSupplied(args, "output") || commandInputChanged(cmd, "you.run.flag.output", "output") {
-		return true
-	}
-	selected := rawFlagSupplied(args, "factory") || rawFlagSupplied(args, "named") ||
-		commandInputChanged(cmd, "you.run.flag.factory", "factory") || commandInputChanged(cmd, "you.run.flag.named", "named")
-	if !selected {
-		return false
-	}
-	return len(cmd.Flags().Args()) > 0 || !startupcli.StdinIsTTY(cmd.Context()) ||
-		rawFlagSupplied(args, "to-file") || rawFlagSupplied(args, "work") || commandInputChanged(cmd, "you.run.flag.work", "work")
-}
-
-func rawFlagSupplied(args []string, name string) bool {
-	prefix := "--" + name
-	for _, arg := range args {
-		if arg == "--" {
-			return false
-		}
-		if arg == prefix || strings.HasPrefix(arg, prefix+"=") {
-			return true
-		}
-	}
-	return false
-}
-
-func rawFlagEnabled(args []string, name string) bool {
-	enabled := false
-	prefix := "--" + name
-	for _, arg := range args {
-		if arg == "--" {
-			break
-		}
-		switch arg {
-		case prefix:
-			enabled = true
-		case prefix + "=true":
-			enabled = true
-		case prefix + "=false":
-			enabled = false
-		}
-	}
-	return enabled
 }
 
 func validateRunRemoteHostingBeforeInitialization(cmd *cobra.Command, args []string) error {

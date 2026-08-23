@@ -456,6 +456,9 @@ func (operation *Operation) Run(ctx context.Context) error {
 		if err := operation.runner.Run(ctx); err != nil {
 			return err
 		}
+		if operation.cfg.Port <= 0 {
+			emitHomeDirectoryDisclosure(operation.cfg)
+		}
 		return emitHistoricalReplayInspection(operation.cfg.Output, *operation.historicalReplay)
 	}
 	if operation.invocationMode {
@@ -873,6 +876,7 @@ func emitStartupMessages(
 		return false
 	}
 
+	emitHomeDirectoryDisclosure(cfg)
 	fmt.Fprintf(cfg.StartupOutput, "Factory initiated: %s\n", cfg.Dir)
 	if cfg.Bootstrap {
 		fmt.Fprintf(cfg.StartupOutput, "Factory directory ready: %s\n", cfg.Dir)
@@ -900,6 +904,16 @@ func emitStartupMessages(
 		return false
 	}
 	return true
+}
+
+func emitHomeDirectoryDisclosure(cfg RunConfig) {
+	if cfg.StartupOutput == nil ||
+		strings.TrimSpace(cfg.HomeDir) == "" ||
+		cfg.JSON || cfg.JSONOutput || cfg.CleanInvocation ||
+		cfg.SuppressDashboardRendering || cfg.InvocationOutputExplicit {
+		return
+	}
+	_, _ = fmt.Fprintf(cfg.StartupOutput, "Home directory: %s\n", cfg.HomeDir)
 }
 
 func shouldOpenDashboard(cfg RunConfig) bool {

@@ -344,8 +344,8 @@ func TestServeACPCommandInitializesSystemBeforeServing(t *testing.T) {
 	if fake.calls != 1 {
 		t.Fatalf("Serve call count = %d, want 1 after system initialization", fake.calls)
 	}
-	if got, want := stderr.String(), "Home directory: operator-home\n"; got != want {
-		t.Fatalf("server startup diagnostics = %q, want %q", got, want)
+	if got := stderr.String(); got != "" {
+		t.Fatalf("server ACP diagnostics = %q, want clean protocol diagnostics", got)
 	}
 }
 

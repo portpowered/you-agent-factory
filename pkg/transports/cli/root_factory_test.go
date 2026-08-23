@@ -23,7 +23,7 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
-func TestLocalRunDisclosesResolvedHomeBeforeSystemInitialization(t *testing.T) {
+func TestLocalRunResolvesHomeOnceBeforeSystemInitialization(t *testing.T) {
 	originalRunCLI := runCLI
 	t.Cleanup(func() { runCLI = originalRunCLI })
 
@@ -32,6 +32,9 @@ func TestLocalRunDisclosesResolvedHomeBeforeSystemInitialization(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	resolverCalls := 0
 	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		if cfg.HomeDir != home {
+			t.Fatalf("run home = %q, want %q", cfg.HomeDir, home)
+		}
 		if cfg.StartupOutput == nil {
 			t.Fatal("startup output is nil for a human local run")
 		}
@@ -48,9 +51,8 @@ func TestLocalRunDisclosesResolvedHomeBeforeSystemInitialization(t *testing.T) {
 			if initializedHome != home {
 				t.Fatalf("initialized home = %q, want %q", initializedHome, home)
 			}
-			wantPrefix := "Home directory: " + home + "\n"
-			if got := stdout.String(); got != wantPrefix {
-				t.Fatalf("startup output before system initialization = %q, want %q", got, wantPrefix)
+			if got := stdout.String(); got != "" {
+				t.Fatalf("startup output before system initialization = %q, want empty preflight output", got)
 			}
 			return nil
 		},
@@ -68,7 +70,7 @@ func TestLocalRunDisclosesResolvedHomeBeforeSystemInitialization(t *testing.T) {
 	if resolverCalls != 1 {
 		t.Fatalf("home resolver calls = %d, want one invocation-local resolution", resolverCalls)
 	}
-	if got, want := stdout.String(), "Home directory: "+home+"\nFactory initiated: test\n"; got != want {
+	if got, want := stdout.String(), "Factory initiated: test\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if stderr.Len() != 0 {
@@ -121,7 +123,7 @@ func TestLocalRunHomeDisclosureKeepsJSONStdoutParseable(t *testing.T) {
 	}
 }
 
-func TestLocalServerDisclosesResolvedHomeBeforeSystemInitialization(t *testing.T) {
+func TestLocalServerResolvesHomeOnceBeforeSystemInitialization(t *testing.T) {
 	originalRunCLI := runCLI
 	t.Cleanup(func() { runCLI = originalRunCLI })
 
@@ -129,6 +131,9 @@ func TestLocalServerDisclosesResolvedHomeBeforeSystemInitialization(t *testing.T
 	workingDirectory := t.TempDir()
 	var stdout, stderr bytes.Buffer
 	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		if cfg.HomeDir != home {
+			t.Fatalf("server run home = %q, want %q", cfg.HomeDir, home)
+		}
 		if cfg.StartupOutput == nil {
 			t.Fatal("startup output is nil for a human local server")
 		}
@@ -142,9 +147,8 @@ func TestLocalServerDisclosesResolvedHomeBeforeSystemInitialization(t *testing.T
 			if initializedHome != home {
 				t.Fatalf("initialized home = %q, want %q", initializedHome, home)
 			}
-			wantPrefix := "Home directory: " + home + "\n"
-			if got := stdout.String(); got != wantPrefix {
-				t.Fatalf("startup output before server system initialization = %q, want %q", got, wantPrefix)
+			if got := stdout.String(); got != "" {
+				t.Fatalf("startup output before server system initialization = %q, want empty preflight output", got)
 			}
 			return nil
 		},
@@ -160,7 +164,7 @@ func TestLocalServerDisclosesResolvedHomeBeforeSystemInitialization(t *testing.T
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute local server: %v", err)
 	}
-	if got, want := stdout.String(), "Home directory: "+home+"\nFactory initiated: test\n"; got != want {
+	if got, want := stdout.String(), "Factory initiated: test\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if stderr.Len() != 0 {

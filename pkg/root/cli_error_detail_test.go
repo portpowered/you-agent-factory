@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -165,9 +164,8 @@ func TestProcessLocalRunFailuresPreserveSubmittedInputs(t *testing.T) {
 				strings.Contains(stderr.String(), "no such file") {
 				t.Fatalf("local failure lost context or leaked fallback/cause: %q", stderr.String())
 			}
-			wantHome := fmt.Sprintf("Home directory: %s\n", home)
-			if stdout.String() != wantHome {
-				t.Fatalf("stdout = %q, want %q", stdout.String(), wantHome)
+			if stdout.Len() != 0 {
+				t.Fatalf("stdout = %q, want empty local failure output", stdout.String())
 			}
 		})
 	}
@@ -198,7 +196,6 @@ func cliDisclosureModes() []cliDisclosureMode {
 }
 
 type cliFailureOutput struct {
-	home   string
 	stdout string
 	stderr string
 }
@@ -219,7 +216,7 @@ func executeDisclosureFailure(t *testing.T, process *initializerapplication.Proc
 	}); err == nil {
 		t.Fatalf("Process.Execute(%v) error = nil, want command failure", args)
 	}
-	return cliFailureOutput{home: home, stdout: stdout.String(), stderr: stderr.String()}
+	return cliFailureOutput{stdout: stdout.String(), stderr: stderr.String()}
 }
 
 func testProcessLocalFailureDisclosure(t *testing.T) {
@@ -238,19 +235,8 @@ func testProcessLocalFailureDisclosure(t *testing.T) {
 		args = append(args, "run", "--replay", missingPath)
 		result := executeDisclosureFailure(t, process, args)
 		outputs[mode.name] = result.stderr
-		if mode.name == "default" {
-			want := fmt.Sprintf("Home directory: %s\n", result.home)
-			if result.stdout != want {
-				t.Fatalf("%s stdout = %q, want %q", mode.name, result.stdout, want)
-			}
-		} else if result.stdout != "" {
+		if result.stdout != "" {
 			t.Fatalf("%s stdout = %q, want empty structured failure output", mode.name, result.stdout)
-		}
-		if mode.name != "default" {
-			wantPrefix := fmt.Sprintf("Home directory: %s\n", result.home)
-			if !strings.HasPrefix(result.stderr, wantPrefix) {
-				t.Fatalf("%s stderr = %q, want home disclosure prefix %q", mode.name, result.stderr, wantPrefix)
-			}
 		}
 		if !strings.Contains(outputs[mode.name], clidiag.LocalInputFailureCode) ||
 			!strings.Contains(outputs[mode.name], missingPath) {

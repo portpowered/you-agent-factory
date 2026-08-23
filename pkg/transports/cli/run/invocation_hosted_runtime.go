@@ -417,8 +417,8 @@ func newRuntimeHostObserver(
 			resolved.BindHost = binding.Host
 		}
 		resolved.Port = binding.Port
-		emitVerboseStartupDiagnostics(resolved, recordPath, requestedPort)
 		emitStartupMessages(resolved, diagnostics())
+		emitVerboseStartupDiagnostics(resolved, recordPath, requestedPort)
 		if shouldOpenDashboard(resolved) {
 			openDashboardAtBoundEndpoint(ctx, resolved, cfg.BrowserOpener)
 		}
