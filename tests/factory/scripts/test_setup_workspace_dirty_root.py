@@ -420,6 +420,47 @@ class SetupWorkspaceDirtyRootTest(unittest.TestCase):
             ),
         )
 
+    def test_subprocess_dirty_root_refusal_survives_fetch_failure_without_main_refs(
+        self,
+    ):
+        operator_path, _upstream_path = create_remote_operator(self.repo_path)
+        prd_name = "dirty-root-fetch-failure-prd"
+        write_prd(operator_path, prd_name)
+
+        git(["checkout", "--detach", "HEAD"], operator_path)
+        git(["update-ref", "-d", "refs/heads/main"], operator_path)
+        git(["update-ref", "-d", "refs/remotes/origin/main"], operator_path)
+        git(
+            ["remote", "set-url", "origin", str(self.repo_path / "missing.git")],
+            operator_path,
+        )
+        (operator_path / "README.md").write_text(
+            "operator tracked edit\n", encoding="utf-8",
+        )
+        untracked_path = operator_path / "operator-untracked.txt"
+        untracked_path.write_text("operator untracked\n", encoding="utf-8")
+
+        entries = self.module.repository_status_entries(operator_path)
+        expected_core = self.module.dirty_root_diagnostic(operator_path, entries)
+        result = run_setup_workspace(operator_path, prd_name)
+
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertEqual(result.stdout, "")
+        expected_lines = expected_core.splitlines()
+        self.assertEqual(
+            result.stderr.splitlines(),
+            [
+                "Root cleanliness check failed: "
+                + expected_lines[0],
+                *expected_lines[1:],
+            ],
+        )
+        self.assertIn("repository root is dirty", result.stderr)
+        self.assertNotIn(
+            "fetch failed and refs/heads/main is missing",
+            result.stderr,
+        )
+
     def test_residual_refusal_attributes_matching_sibling_without_changing_core_text(self):
         operator_path = create_residual_refusal_repository(self.repo_path)
         prd_name = "residual-attribution-prd"

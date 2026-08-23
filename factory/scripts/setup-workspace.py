@@ -492,13 +492,6 @@ def dirty_root_diagnostic(repo_path, entries):
     return "\n".join(lines)
 
 
-def ensure_clean_repository_root(repo_root):
-    """Refuse setup before any root synchronization or workspace mutation."""
-    entries = repository_status_entries(repo_root)
-    if entries:
-        raise DirtyRootError(dirty_root_diagnostic(repo_root, entries))
-
-
 def root_status_for_setup(repo_root):
     """Inspect root dirt after fetch while preserving the preflight failure stage."""
     try:
@@ -1120,6 +1113,9 @@ def _sync_main(repo_root):
                 f"{command_failure_details(fetch_result)})"
             )
         if not origin_main_ref_exists(repo_root):
+            entries = root_status_for_setup(repo_root)
+            if entries:
+                raise DirtyRootError(dirty_root_diagnostic(repo_root, entries))
             raise RuntimeError(
                 "fetch failed and refs/heads/main is missing: "
                 f"{command_failure_details(fetch_result)}"
