@@ -143,7 +143,7 @@ func TestGetCatalogModelReturnsStableDetachedDetail(t *testing.T) {
 	assertCatalogDetail(t, afterMutation.Model)
 }
 
-func TestListCatalogOverlaysCacheFactsWithoutChangingCatalogStates(t *testing.T) {
+func TestCatalogReadsOverlayResolvedRuntimeStateAndCacheFacts(t *testing.T) {
 	t.Parallel()
 
 	revision := "rev-installed"
@@ -168,9 +168,9 @@ func TestListCatalogOverlaysCacheFactsWithoutChangingCatalogStates(t *testing.T)
 	scope := publicScope(t, openCatalogScope(t, scopes, "cache-model", "generate"))
 	listCatalogCacheFacts(t, service, scope, revision, cachePath, cacheBytes)
 	detail := inspectCatalogCacheFacts(t, service, scope, revision, cachePath, cacheBytes)
-	if detail.Model.ManagedRuntime.ReadinessState != models.ReadinessStateMissing ||
-		detail.Model.ManagedRuntime.LifecycleState != models.LifecycleStateNotInstalled {
-		t.Fatalf("inspect runtime states = (%s, %s), want MISSING/NOT_INSTALLED", detail.Model.ManagedRuntime.ReadinessState, detail.Model.ManagedRuntime.LifecycleState)
+	if detail.Model.ManagedRuntime.ReadinessState != models.ReadinessStateFailed ||
+		detail.Model.ManagedRuntime.LifecycleState != models.LifecycleStateInstalling {
+		t.Fatalf("inspect runtime states = (%s, %s), want FAILED/INSTALLING", detail.Model.ManagedRuntime.ReadinessState, detail.Model.ManagedRuntime.LifecycleState)
 	}
 }
 
@@ -190,14 +190,18 @@ func listCatalogCacheFacts(
 		t.Fatalf("models = %#v, want one model", result.Models)
 	}
 	runtime := result.Models[0].ManagedRuntime
-	if runtime.ReadinessState != models.ReadinessStateMissing ||
-		runtime.LifecycleState != models.LifecycleStateNotInstalled {
-		t.Fatalf("catalog states = (%s, %s), want MISSING/NOT_INSTALLED", runtime.ReadinessState, runtime.LifecycleState)
+	if runtime.ReadinessState != models.ReadinessStateFailed ||
+		runtime.LifecycleState != models.LifecycleStateInstalling {
+		t.Fatalf("catalog states = (%s, %s), want FAILED/INSTALLING", runtime.ReadinessState, runtime.LifecycleState)
 	}
 	if runtime.Revision == nil || *runtime.Revision != revision ||
 		runtime.CachePath == nil || *runtime.CachePath != cachePath ||
 		runtime.CacheBytes == nil || *runtime.CacheBytes != cacheBytes {
 		t.Fatalf("catalog cache facts = revision=%v path=%v bytes=%v, want rev-installed/path/1234", runtime.Revision, runtime.CachePath, runtime.CacheBytes)
+	}
+	if runtime.Diagnostics["readinessState"] != string(models.ReadinessStateFailed) ||
+		runtime.Diagnostics["lifecycleState"] != string(models.LifecycleStateInstalling) {
+		t.Fatalf("catalog diagnostics state = %#v, want FAILED/INSTALLING", runtime.Diagnostics)
 	}
 }
 
@@ -216,12 +220,12 @@ func inspectCatalogCacheFacts(
 		t.Fatalf("GetCatalogModel: %v", err)
 	}
 	inspectRuntime := detail.Model.ManagedRuntime
-	if inspectRuntime.ReadinessState != models.ReadinessStateMissing ||
-		inspectRuntime.LifecycleState != models.LifecycleStateNotInstalled ||
+	if inspectRuntime.ReadinessState != models.ReadinessStateFailed ||
+		inspectRuntime.LifecycleState != models.LifecycleStateInstalling ||
 		inspectRuntime.CachePath == nil || *inspectRuntime.CachePath != cachePath ||
 		inspectRuntime.Revision == nil || *inspectRuntime.Revision != revision ||
 		inspectRuntime.CacheBytes == nil || *inspectRuntime.CacheBytes != cacheBytes {
-		t.Fatalf("inspect runtime = %#v, want preserved states and cache facts", inspectRuntime)
+		t.Fatalf("inspect runtime = %#v, want resolved states and cache facts", inspectRuntime)
 	}
 	return detail
 }

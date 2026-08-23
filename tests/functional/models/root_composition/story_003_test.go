@@ -67,6 +67,9 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 	inspectProcess := support.BuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, inspectProcess)
 
+	beforeList := executeStory003List(t, inspectProcess, server.URL(), "before pull")
+	assertStory003StatePair(t, beforeList.ManagedRuntime.ReadinessState, beforeList.ManagedRuntime.LifecycleState,
+		factoryapi.ManagedRuntimeReadinessStateMISSING, factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED)
 	before := executeStory003Inspect(t, inspectProcess, server.URL(), cacheDirectory, "before pull")
 	assertStory003State(t, before, factoryapi.ManagedRuntimeReadinessStateMISSING, factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED)
 
@@ -81,6 +84,9 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 	waitStory003Signal(t, source.firstDownloadStarted, "first asset download")
 	during := executeStory003Inspect(t, inspectProcess, server.URL(), cacheDirectory, "during pull")
 	assertStory003State(t, during, factoryapi.ManagedRuntimeReadinessStateLOADING, factoryapi.ManagedRuntimeLifecycleStateINSTALLING)
+	duringList := executeStory003List(t, inspectProcess, server.URL(), "during pull")
+	assertStory003StatePair(t, duringList.ManagedRuntime.ReadinessState, duringList.ManagedRuntime.LifecycleState,
+		factoryapi.ManagedRuntimeReadinessStateLOADING, factoryapi.ManagedRuntimeLifecycleStateINSTALLING)
 
 	close(source.releaseFirstDownload)
 	select {
@@ -108,7 +114,7 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 		story003TokenizerAsset: tokenizerBody,
 	})
 
-	assertStory003ListAfterPull(t, inspectProcess, server.URL(), cacheDirectory)
+	afterList := assertStory003ListAfterPull(t, inspectProcess, server.URL(), cacheDirectory)
 
 	after := executeStory003Inspect(t, inspectProcess, server.URL(), cacheDirectory, "after pull")
 	if after.Detail.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
@@ -118,6 +124,7 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 		after.Detail.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateLOADED {
 		t.Fatalf("after-pull lifecycle = %s, want INSTALLED or LOADED", after.Detail.ManagedRuntime.LifecycleState)
 	}
+	assertStory003ReadyParity(t, inspectProcess, server.URL(), afterList, after)
 	if before.state() == during.state() || during.state() == after.state() || before.state() == after.state() {
 		t.Fatalf("inspect state pairs were not all distinct: before=%s during=%s after=%s", before.state(), during.state(), after.state())
 	}
@@ -128,34 +135,66 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 	t.Run("controlled source failure", testStory003ControlledSourceFailure)
 }
 
+func assertStory003ReadyParity(
+	t *testing.T,
+	process support.Process,
+	serverURL string,
+	listed factoryapi.ModelSummary,
+	inspected story003InspectCapture,
+) {
+	t.Helper()
+	assertStory003StatePair(t, listed.ManagedRuntime.ReadinessState, listed.ManagedRuntime.LifecycleState,
+		factoryapi.ManagedRuntimeReadinessStateREADY, factoryapi.ManagedRuntimeLifecycleStateINSTALLED)
+	if listed.ManagedRuntime.ReadinessState != inspected.Detail.ManagedRuntime.ReadinessState ||
+		listed.ManagedRuntime.LifecycleState != inspected.Detail.ManagedRuntime.LifecycleState ||
+		listed.ManagedRuntime.Revision == nil || inspected.Detail.ManagedRuntime.Revision == nil ||
+		*listed.ManagedRuntime.Revision != *inspected.Detail.ManagedRuntime.Revision ||
+		listed.ManagedRuntime.CacheBytes == nil || inspected.Detail.ManagedRuntime.CacheBytes == nil ||
+		*listed.ManagedRuntime.CacheBytes != *inspected.Detail.ManagedRuntime.CacheBytes {
+		t.Fatalf("list/inspect managed runtime diverged: list=%#v inspect=%#v", listed.ManagedRuntime, inspected.Detail.ManagedRuntime)
+	}
+	httpList := support.GetJSON[factoryapi.ListModelsResponse](t, serverURL+"/models")
+	httpDetail := support.GetJSON[factoryapi.ModelDetail](t, serverURL+"/models/"+story003ModelName)
+	if len(httpList.Results) != 1 {
+		t.Fatalf("HTTP list result count = %d, want 1", len(httpList.Results))
+	}
+	assertStory003StatePair(t, httpList.Results[0].ManagedRuntime.ReadinessState, httpList.Results[0].ManagedRuntime.LifecycleState,
+		factoryapi.ManagedRuntimeReadinessStateREADY, factoryapi.ManagedRuntimeLifecycleStateINSTALLED)
+	if httpDetail.ManagedRuntime.ReadinessState != httpList.Results[0].ManagedRuntime.ReadinessState ||
+		httpDetail.ManagedRuntime.LifecycleState != httpList.Results[0].ManagedRuntime.LifecycleState {
+		t.Fatalf("HTTP list/detail managed runtime diverged: list=%#v detail=%#v", httpList.Results[0].ManagedRuntime, httpDetail.ManagedRuntime)
+	}
+	assertStory003HumanOutput(t, process, "models list", story003ModelsHumanListArgs(serverURL), "READY", "INSTALLED")
+	assertStory003HumanOutput(t, process, "models inspect", story003ModelsHumanInspectArgs(serverURL), "READY", "INSTALLED")
+}
+
 func assertStory003ListAfterPull(
 	t *testing.T,
 	process support.Process,
 	serverURL string,
 	cacheDirectory string,
-) {
+) factoryapi.ModelSummary {
 	t.Helper()
-	listOutput := executeStory003ListOutput(t, process, serverURL, "after pull")
-	var listed factoryapi.ListModelsResponse
-	if err := json.Unmarshal([]byte(listOutput), &listed); err != nil {
-		t.Fatalf("decode models list after pull output: %v\nstdout=%s", err, listOutput)
-	}
-	if len(listed.Results) != 1 || listed.Results[0].ManagedRuntime.CacheBytes == nil {
-		t.Fatalf("models list after pull = %#v, want one cached model with exact bytes", listed)
+	listedModel := executeStory003List(t, process, serverURL, "after pull")
+	if listedModel.ManagedRuntime.CacheBytes == nil {
+		t.Fatalf("models list after pull = %#v, want one cached model with exact bytes", listedModel)
 	}
 	independentRevisionBytes := story003RegularFileBytes(
 		t, filepath.Join(cacheDirectory, story003ModelName, story003Revision),
 	)
-	if got := *listed.Results[0].ManagedRuntime.CacheBytes; got != independentRevisionBytes {
+	if got := *listedModel.ManagedRuntime.CacheBytes; got != independentRevisionBytes {
 		t.Fatalf("models list cacheBytes = %d, independent revision sum = %d", got, independentRevisionBytes)
 	}
+	assertStory003StatePair(t, listedModel.ManagedRuntime.ReadinessState, listedModel.ManagedRuntime.LifecycleState,
+		factoryapi.ManagedRuntimeReadinessStateREADY, factoryapi.ManagedRuntimeLifecycleStateINSTALLED)
 	t.Logf(
 		"models list after pull stdout=%s independentRevisionBytes=%d cacheBytes=%d revisionPath=%s",
-		strings.TrimSpace(listOutput),
+		strings.TrimSpace(mustStory003ModelJSON(t, listedModel)),
 		independentRevisionBytes,
-		*listed.Results[0].ManagedRuntime.CacheBytes,
+		*listedModel.ManagedRuntime.CacheBytes,
 		filepath.Join(cacheDirectory, story003ModelName, story003Revision),
 	)
+	return listedModel
 }
 
 func TestModelsPublicRemoveWorkflowProvesReclamationAndInUseRefusal(t *testing.T) {
@@ -359,13 +398,63 @@ func executeStory003Inspect(
 	return capture
 }
 
-func executeStory003ListOutput(t *testing.T, process support.Process, serverURL, phase string) string {
+func executeStory003List(t *testing.T, process support.Process, serverURL, phase string) factoryapi.ModelSummary {
 	t.Helper()
 	inputs := support.FakeInputs(t.Context(), story003ModelsListArgs(serverURL))
 	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(models list %s) error = %v\nstdout=%s\nstderr=%s", phase, err, inputs.Stdout(), inputs.Stderr())
 	}
-	return inputs.Stdout()
+	var listed factoryapi.ListModelsResponse
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &listed); err != nil {
+		t.Fatalf("decode models list %s output: %v\nstdout=%s", phase, err, inputs.Stdout())
+	}
+	if len(listed.Results) != 1 {
+		t.Fatalf("models list %s result count = %d, want 1", phase, len(listed.Results))
+	}
+	t.Logf("models list %s stdout=%s", phase, strings.TrimSpace(inputs.Stdout()))
+	return listed.Results[0]
+}
+
+func assertStory003StatePair(
+	t *testing.T,
+	readiness factoryapi.ManagedRuntimeReadinessState,
+	lifecycle factoryapi.ManagedRuntimeLifecycleState,
+	wantReadiness factoryapi.ManagedRuntimeReadinessState,
+	wantLifecycle factoryapi.ManagedRuntimeLifecycleState,
+) {
+	t.Helper()
+	if readiness != wantReadiness || lifecycle != wantLifecycle {
+		t.Fatalf("managed runtime state = %s/%s, want %s/%s", readiness, lifecycle, wantReadiness, wantLifecycle)
+	}
+}
+
+func mustStory003ModelJSON(t *testing.T, model factoryapi.ModelSummary) string {
+	t.Helper()
+	body, err := json.Marshal(model)
+	if err != nil {
+		t.Fatalf("marshal models list model: %v", err)
+	}
+	return string(body)
+}
+
+func assertStory003HumanOutput(
+	t *testing.T,
+	process support.Process,
+	phase string,
+	args []string,
+	wants ...string,
+) {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), args)
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(%s) error = %v\nstdout=%s\nstderr=%s", phase, err, inputs.Stdout(), inputs.Stderr())
+	}
+	for _, want := range wants {
+		if !strings.Contains(inputs.Stdout(), want) {
+			t.Fatalf("%s output missing %q:\n%s", phase, want, inputs.Stdout())
+		}
+	}
+	t.Logf("%s human output=%s", phase, strings.TrimSpace(inputs.Stdout()))
 }
 
 func assertStory003State(
@@ -467,6 +556,19 @@ func story003ModelsInspectArgs(serverURL string) []string {
 func story003ModelsListArgs(serverURL string) []string {
 	return []string{
 		"you", "--json", "--server", strings.TrimSuffix(serverURL, "/"), "models", "list",
+	}
+}
+
+func story003ModelsHumanListArgs(serverURL string) []string {
+	return []string{
+		"you", "--server", strings.TrimSuffix(serverURL, "/"), "models", "list",
+	}
+}
+
+func story003ModelsHumanInspectArgs(serverURL string) []string {
+	return []string{
+		"you", "--server", strings.TrimSuffix(serverURL, "/"),
+		"models", "inspect", story003ModelName,
 	}
 }
 

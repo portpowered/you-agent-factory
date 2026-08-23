@@ -390,7 +390,7 @@ func TestGetModel_ReturnsDiscoveredModelDetail(t *testing.T) {
 					ManagedRuntime: modelinference.Runtime{
 						Identity:       "OMNIVOICE_Q4_K_M",
 						ReadinessState: modelinference.ReadinessStateReady,
-						LifecycleState: modelinference.LifecycleStateNotInstalled,
+						LifecycleState: modelinference.LifecycleStateInstalled,
 						Locality:       modelinference.LocalityLocal,
 						SupportedOperations: []modelinference.Operation{{
 							Name: "TTS",
@@ -410,14 +410,6 @@ func TestGetModel_ReturnsDiscoveredModelDetail(t *testing.T) {
 					ResourceNames:    []string{"omnivoice-cache"},
 				}},
 				Diagnostics: map[string]string{"workerCount": "1"},
-			}, nil
-		},
-		readiness: func(_ context.Context, name string) (modelinference.Runtime, error) {
-			return modelinference.Runtime{
-				Identity:       name,
-				ReadinessState: modelinference.ReadinessStateReady,
-				LifecycleState: modelinference.LifecycleStateInstalled,
-				Locality:       modelinference.LocalityLocal,
 			}, nil
 		},
 	})
