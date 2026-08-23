@@ -646,6 +646,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/shutdown": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Request graceful shutdown of the local server
+     * @description Accepts a loopback-only administrative shutdown request for the invocation that owns this listener. The server acknowledges the request before it invokes the invocation-local cancellation authority; the caller remains responsible for observing that the selected listener has stopped.
+     */
+    post: operations["shutdownServer"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/models": {
     parameters: {
       query?: never;
@@ -1933,6 +1953,11 @@ export interface components {
        * @enum {string}
        */
       status: CostsLineItemStatus;
+      /**
+       * @description Pricing authority for the complete row used for a PRICED line item; omitted for UNPRICED rows.
+       * @enum {string}
+       */
+      price_source?: CostsLineItemPrice_source;
       /** @description Exact USD decimal amount; absent for UNPRICED rows and present as "0" for explicitly free usage. */
       priced_amount?: string;
       /** @description Actionable reason when status is UNPRICED. */
@@ -2564,6 +2589,12 @@ export interface components {
       targets?: components["schemas"]["FactoryValidationTarget"][];
       /** @description Resource accounting for a rejected capacity reduction. */
       resourceCapacity?: components["schemas"]["FactorySessionResourceCapacityErrorDetails"];
+    };
+    ShutdownAcceptedResponse: {
+      /** @enum {string} */
+      status: ShutdownAcceptedResponseStatus;
+      /** @description Human-readable acknowledgment that graceful shutdown was accepted. */
+      message: string;
     };
     ErrorTarget: {
       /** @description Client-visible target category such as form, node, edge, field, or save. */
@@ -7874,6 +7905,24 @@ export interface components {
         "application/json": components["schemas"]["ErrorResponse"];
       };
     };
+    /** @description The shutdown control is restricted to a loopback peer on this local server. */
+    ShutdownControlRejected: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The server cannot expose its invocation-local shutdown control. */
+    ShutdownControlUnavailable: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
     /** @description Response-event cursor or filter parameters were invalid. */
     ResponseEventBadRequest: {
       headers: {
@@ -9056,6 +9105,29 @@ export interface operations {
         };
       };
       500: components["responses"]["InternalError"];
+    };
+  };
+  shutdownServer: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The invocation-local shutdown request was accepted. */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ShutdownAcceptedResponse"];
+        };
+      };
+      403: components["responses"]["ShutdownControlRejected"];
+      500: components["responses"]["InternalError"];
+      503: components["responses"]["ShutdownControlUnavailable"];
     };
   };
   listModels: {
@@ -10361,6 +10433,12 @@ export const CostsLineItemStatus = {
 } as const;
 export type CostsLineItemStatus =
   (typeof CostsLineItemStatus)[keyof typeof CostsLineItemStatus];
+export const CostsLineItemPrice_source = {
+  BUILT_IN: "BUILT_IN",
+  OPERATOR_SUPPLIED: "OPERATOR_SUPPLIED",
+} as const;
+export type CostsLineItemPrice_source =
+  (typeof CostsLineItemPrice_source)[keyof typeof CostsLineItemPrice_source];
 export const CostsRollupCurrency = {
   USD: "USD",
 } as const;
@@ -10665,12 +10743,21 @@ export const ErrorResponseCode = {
   INTERNAL_ERROR: "INTERNAL_ERROR",
   // The metrics costs query exceeded its server-side completion bound.
   COSTS_INVALID_REQUEST: "COSTS_INVALID_REQUEST",
+  // The shutdown control request came from a non-loopback peer.
   COSTS_QUERY_CANCELED: "COSTS_QUERY_CANCELED",
+  // The invocation-local shutdown control is unavailable.
   COSTS_QUERY_FAILED: "COSTS_QUERY_FAILED",
   COSTS_QUERY_TIMEOUT: "COSTS_QUERY_TIMEOUT",
+  SHUTDOWN_CONTROL_REJECTED: "SHUTDOWN_CONTROL_REJECTED",
+  SHUTDOWN_CONTROL_UNAVAILABLE: "SHUTDOWN_CONTROL_UNAVAILABLE",
 } as const;
 export type ErrorResponseCode =
   (typeof ErrorResponseCode)[keyof typeof ErrorResponseCode];
+export const ShutdownAcceptedResponseStatus = {
+  accepted: "accepted",
+} as const;
+export type ShutdownAcceptedResponseStatus =
+  (typeof ShutdownAcceptedResponseStatus)[keyof typeof ShutdownAcceptedResponseStatus];
 export const FactorySessionTargetRefKind = {
   default: "default",
   named: "named",

@@ -13,6 +13,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -62,6 +63,8 @@ func TestReplayPricedUsageReachesPublicCosts(t *testing.T) {
 	wantCost := expectedPricedReplayCost()
 	if !strings.Contains(humanOutput, "Status: PRICED") ||
 		!strings.Contains(humanOutput, "Cost (USD): $"+wantCost) ||
+		!strings.Contains(humanOutput, "Priced amount (USD): "+wantCost) ||
+		!strings.Contains(humanOutput, "Price source: BUILT_IN") ||
 		!strings.Contains(humanOutput, "Total tokens: 3000000") {
 		t.Fatalf("human replay costs output = %q, want PRICED/$%s/3000000", humanOutput, wantCost)
 	}
@@ -77,6 +80,30 @@ func TestReplayPricedUsageReachesPublicCosts(t *testing.T) {
 	assertPricedReplayCostsReport(t, apiReport)
 	if got, want := apiReport, cliReport; !reportsHaveSameReplayCostFacts(got, want) {
 		t.Fatalf("HTTP and CLI replay cost reports differ:\nHTTP=%#v\nCLI=%#v", got, want)
+	}
+
+	cachedRate, reasoningRate := "0.5", "30"
+	writeReplayOperatorPriceTable(t, homeDir, operatorsettings.PriceTableModel{
+		Provider:                        "codex",
+		Model:                           "gpt-5-codex",
+		InputPerMillionTokens:           "2",
+		OutputPerMillionTokens:          "20",
+		CachedInputPerMillionTokens:     &cachedRate,
+		ReasoningOutputPerMillionTokens: &reasoningRate,
+	})
+	overrideHuman := executeReplayCostsCLI(t, process, environment, server.URL(), false)
+	if !strings.Contains(overrideHuman, "Status: PRICED") ||
+		!strings.Contains(overrideHuman, "Cost (USD): $42.00") ||
+		!strings.Contains(overrideHuman, "Priced amount (USD): 42") ||
+		!strings.Contains(overrideHuman, "Price source: OPERATOR_SUPPLIED") {
+		t.Fatalf("human replay costs output for Codex override = %q, want complete operator override", overrideHuman)
+	}
+	overrideCLIReport := decodeReplayCostsCLI(t, process, environment, server.URL())
+	assertOperatorCodexOverrideReplayCostsReport(t, overrideCLIReport)
+	overrideAPIReport := getReplayCostsHTTP(t, server.URL())
+	assertOperatorCodexOverrideReplayCostsReport(t, overrideAPIReport)
+	if got, want := overrideAPIReport, overrideCLIReport; !reportsHaveSameReplayCostFacts(got, want) {
+		t.Fatalf("HTTP and CLI Codex override reports differ:\nHTTP=%#v\nCLI=%#v", got, want)
 	}
 
 	if providerRunner.CallCount() != 0 || scriptRunner.CallCount() != 0 {
@@ -148,7 +175,8 @@ func assertPricedReplayCostsReport(t *testing.T, report generatedclient.CostsRep
 	}
 	item := report.LineItems[0]
 	if item.Status != generatedclient.CostsLineItemStatus("PRICED") || item.Provider == nil || *item.Provider != "CODEX" || item.Model == nil || *item.Model != "gpt-5-codex" ||
-		item.WorkerSessionId == nil || *item.WorkerSessionId != "cost-replay-priced-worker-session" || item.PricedAmount == nil || *item.PricedAmount != wantCost {
+		item.WorkerSessionId == nil || *item.WorkerSessionId != "cost-replay-priced-worker-session" || item.PricedAmount == nil || *item.PricedAmount != wantCost ||
+		item.PriceSource == nil || *item.PriceSource != generatedclient.CostsLineItemPriceSource("BUILT_IN") {
 		t.Fatalf("replay priced line item = %#v, want Codex identity, Worker Session lineage, and %s", item, wantCost)
 	}
 	rollup := report.ProviderModels[0]
@@ -157,6 +185,25 @@ func assertPricedReplayCostsReport(t *testing.T, report generatedclient.CostsRep
 	}
 	if report.WorkerSessions[0].Key != "cost-replay-priced-worker-session" {
 		t.Fatalf("replay Worker Session rollup key = %q, want recorded Worker Session lineage", report.WorkerSessions[0].Key)
+	}
+}
+
+func assertOperatorCodexOverrideReplayCostsReport(t *testing.T, report generatedclient.CostsReport) {
+	t.Helper()
+	const wantAmount = "42"
+	if report.Status != generatedclient.CostsReportStatus("PRICED") || report.KnownCost == nil || *report.KnownCost != wantAmount ||
+		report.PricedSubtotal == nil || *report.PricedSubtotal != wantAmount {
+		t.Fatalf("Codex override amounts/status = %q/%v/%v, want PRICED and %s", report.Status, report.KnownCost, report.PricedSubtotal, wantAmount)
+	}
+	assertReplayTokenTotals(t, report.TokenTotals, replayPricedInputTokens, replayPricedOutputTokens, replayPricedTotalTokens)
+	if len(report.LineItems) != 1 {
+		t.Fatalf("Codex override line items = %d, want one", len(report.LineItems))
+	}
+	item := report.LineItems[0]
+	if item.Status != generatedclient.CostsLineItemStatus("PRICED") || item.Provider == nil || *item.Provider != "CODEX" ||
+		item.Model == nil || *item.Model != "gpt-5-codex" || item.PricedAmount == nil || *item.PricedAmount != wantAmount ||
+		item.PriceSource == nil || *item.PriceSource != generatedclient.CostsLineItemPriceSource("OPERATOR_SUPPLIED") {
+		t.Fatalf("Codex override line item = %#v, want complete operator-priced row at %s", item, wantAmount)
 	}
 }
 

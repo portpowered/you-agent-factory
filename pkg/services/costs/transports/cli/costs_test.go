@@ -136,6 +136,12 @@ func assertJSONReportDimensions(t *testing.T, decoded generatedclient.CostsRepor
 	if decoded.Coverage.PricedRows != 1 || len(decoded.LineItems) != 2 || len(decoded.WorkItems) != 1 || len(decoded.WorkerSessions) != 1 {
 		t.Fatalf("decoded report dimensions = %#v, want complete API report", decoded)
 	}
+	if decoded.LineItems[1].PriceSource == nil || *decoded.LineItems[1].PriceSource != generatedclient.CostsLineItemPriceSource("BUILT_IN") {
+		t.Fatalf("decoded priced line source = %#v, want BUILT_IN", decoded.LineItems[1].PriceSource)
+	}
+	if decoded.LineItems[0].PriceSource != nil {
+		t.Fatalf("decoded unpriced line source = %#v, want omitted", decoded.LineItems[0].PriceSource)
+	}
 	if len(decoded.ProviderModels) != 1 || decoded.ProviderModels[0].Key != "openai/mystery" || len(decoded.FactorySessions) != 1 {
 		t.Fatalf("decoded provider/session rollups = %#v, want complete API report", decoded)
 	}
@@ -359,6 +365,9 @@ func costsReportForCLI() generatedclient.CostsReport {
 	provider := "openai"
 	model := "mystery"
 	reason := "no configured price"
+	pricedProvider := "CODEX"
+	pricedModel := "gpt-5-codex"
+	builtInSource := generatedclient.CostsLineItemPriceSource("BUILT_IN")
 	input, cached, output, reasoning := int64(7), int64(2), int64(3), int64(4)
 	coverage := generatedclient.CostsCoverage{
 		EncounteredRows: 2, PricedRows: 1, UnpricedRows: 1,
@@ -389,7 +398,8 @@ func costsReportForCLI() generatedclient.CostsReport {
 		LineItems: []generatedclient.CostsLineItem{
 			{Provider: &provider, Model: &model, Status: generatedclient.CostsLineItemStatus("UNPRICED"), Reason: &reason,
 				InputTokens: &input, CachedInputTokens: &cached, OutputTokens: &output, ReasoningOutputTokens: &reasoning},
-			{Status: generatedclient.CostsLineItemStatus("PRICED"), PricedAmount: &amount},
+			{Provider: &pricedProvider, Model: &pricedModel, Status: generatedclient.CostsLineItemStatus("PRICED"), PriceSource: &builtInSource,
+				PricedAmount: &amount, InputTokens: &input, CachedInputTokens: &cached, OutputTokens: &output, ReasoningOutputTokens: &reasoning},
 		},
 		WorkItems:       []generatedclient.CostsRollup{rollup},
 		WorkerSessions:  []generatedclient.CostsRollup{{Key: "worker-a", Currency: generatedclient.CostsRollupCurrency("USD"), Status: generatedclient.CostsRollupStatus("PRICED"), TokenTotals: tokenTotals, UnpricedPairs: []generatedclient.CostsUnpricedPair{}, Coverage: coverage}},

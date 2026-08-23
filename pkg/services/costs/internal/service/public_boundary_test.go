@@ -37,6 +37,7 @@ func TestPublicCostsBoundaryCoversPricingCases(t *testing.T) {
 
 			query, err := New(
 				&priceReader{table: testCase.table},
+				operatorSettingsStub(),
 				metricsQueryStub(testCase.rows, nil),
 				logging.NoopLogger{},
 			)
@@ -158,6 +159,7 @@ func TestPublicCostsTokenTotalsIgnorePriceCoverage(t *testing.T) {
 			t.Parallel()
 			query, err := New(
 				&priceReader{table: testCase.table},
+				operatorSettingsStub(),
 				metricsQueryStub(rows, nil),
 				logging.NoopLogger{},
 			)

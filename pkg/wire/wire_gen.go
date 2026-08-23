@@ -560,7 +560,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	costsQuery, err := provideCostsQuery(priceTableReader, runtimeMetricsQuery, loggingLogger)
+	costsQuery, err := provideCostsQuery(priceTableReader, operatorsettingsService, runtimeMetricsQuery, loggingLogger)
 	if err != nil {
 		return nil, err
 	}

@@ -4162,6 +4162,12 @@ components:
             - PRICED
             - UNPRICED
           description: PRICED means every measured token class has a configured rate; UNPRICED means the row is retained with its tokens but cannot be fully valued.
+        price_source:
+          type: string
+          enum:
+            - BUILT_IN
+            - OPERATOR_SUPPLIED
+          description: Pricing authority for the complete row used for a PRICED line item; omitted for UNPRICED rows.
         priced_amount:
           type: string
           description: Exact USD decimal amount; absent for UNPRICED rows and present as "0" for explicitly free usage.

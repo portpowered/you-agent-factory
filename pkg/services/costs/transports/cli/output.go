@@ -37,7 +37,7 @@ func renderHumanCosts(report generatedclient.CostsReport) string {
 	renderRollupDimension(&output, "Worker Sessions", rollupViews(report.WorkerSessions))
 	renderRollupDimension(&output, "Provider/models", providerModelViews(report.ProviderModels))
 	renderRollupDimension(&output, "Factory Sessions", rollupViews(report.FactorySessions))
-	renderUnpricedItems(&output, report.LineItems)
+	renderLineItems(&output, report.LineItems)
 	return output.String()
 }
 
@@ -138,14 +138,38 @@ func renderRollupDimension(output *strings.Builder, name string, rollups []human
 	}
 }
 
-func renderUnpricedItems(output *strings.Builder, items []generatedclient.CostsLineItem) {
-	count := 0
+func renderLineItems(output *strings.Builder, items []generatedclient.CostsLineItem) {
+	pricedCount := 0
 	for _, item := range items {
-		if string(item.Status) == "UNPRICED" {
-			count++
+		if string(item.Status) == "PRICED" {
+			pricedCount++
 		}
 	}
-	fmt.Fprintf(output, "Unpriced usage: %d rows\n", count)
+	fmt.Fprintf(output, "Priced usage: %d rows\n", pricedCount)
+	for _, item := range items {
+		if string(item.Status) != "PRICED" {
+			continue
+		}
+		fmt.Fprintf(output, "  PRICED provider=%s model=%s\n",
+			displayPointer(item.Provider), displayPointer(item.Model))
+		renderPricedAmount(output, "    Priced amount", item.PricedAmount)
+		fmt.Fprintf(output, "    Price source: %s\n", displayPriceSource(item.PriceSource))
+		renderTokenCounts(output, "    ", generatedclient.CostsTokenTotals{
+			TotalTokens:           sumTokenClasses(item.InputTokens, item.OutputTokens),
+			InputTokens:           item.InputTokens,
+			CachedInputTokens:     item.CachedInputTokens,
+			OutputTokens:          item.OutputTokens,
+			ReasoningOutputTokens: item.ReasoningOutputTokens,
+		})
+	}
+
+	unpricedCount := 0
+	for _, item := range items {
+		if string(item.Status) == "UNPRICED" {
+			unpricedCount++
+		}
+	}
+	fmt.Fprintf(output, "Unpriced usage: %d rows\n", unpricedCount)
 	for _, item := range items {
 		if string(item.Status) != "UNPRICED" {
 			continue
@@ -163,6 +187,13 @@ func renderUnpricedItems(output *strings.Builder, items []generatedclient.CostsL
 			ReasoningOutputTokens: item.ReasoningOutputTokens,
 		})
 	}
+}
+
+func displayPriceSource(source *generatedclient.CostsLineItemPriceSource) string {
+	if source == nil || strings.TrimSpace(string(*source)) == "" {
+		return "<unknown>"
+	}
+	return string(*source)
 }
 
 func renderUnpricedCoverage(output *strings.Builder, dispatchCount int, pairs []generatedclient.CostsUnpricedPair) {

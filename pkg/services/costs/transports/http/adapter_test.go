@@ -55,6 +55,66 @@ func TestAdapterMapsExactReportAndRuntimeInputs(t *testing.T) {
 	assertMappedReport(t, got, inputTokens, outputTokens)
 }
 
+func TestAdapterMapsBothPriceSourcesAndOmitsSourceForUnpricedRows(t *testing.T) {
+	t.Parallel()
+
+	builtInAmount := "1.25"
+	operatorAmount := "2.50"
+	query := costs.CostsQuery(func(context.Context, costs.QueryRequest) (costs.Report, error) {
+		return costs.Report{
+			Currency: "USD",
+			Status:   costs.StatusPartial,
+			LineItems: []costs.LineItem{
+				{Provider: "CODEX", Model: "built-in", Status: costs.StatusPriced, PriceSource: costs.PriceSourceBuiltIn, PricedAmount: &builtInAmount},
+				{Provider: "CLAUDE", Model: "operator", Status: costs.StatusPriced, PriceSource: costs.PriceSourceOperatorSupplied, PricedAmount: &operatorAmount},
+				{Provider: "CLAUDE", Model: "unknown", Status: costs.StatusUnpriced, Reason: "no configured price"},
+			},
+		}, nil
+	})
+
+	got, err := NewAdapter(query, "metrics", "settings").GetMetricsCosts(context.Background(), "")
+	if err != nil {
+		t.Fatalf("GetMetricsCosts() error = %v", err)
+	}
+	if len(got.LineItems) != 3 {
+		t.Fatalf("mapped line items = %#v, want three rows", got.LineItems)
+	}
+	assertMappedPriceSource(t, got.LineItems[0].PriceSource, "BUILT_IN")
+	assertMappedPriceSource(t, got.LineItems[1].PriceSource, "OPERATOR_SUPPLIED")
+	if got.LineItems[2].PriceSource != nil {
+		t.Fatalf("unpriced mapped source = %q, want omitted", *got.LineItems[2].PriceSource)
+	}
+
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("marshal mapped report: %v", err)
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &payload); err != nil {
+		t.Fatalf("decode mapped report JSON: %v", err)
+	}
+	var lineItems []map[string]json.RawMessage
+	if err := json.Unmarshal(payload["line_items"], &lineItems); err != nil {
+		t.Fatalf("decode mapped line items JSON: %v", err)
+	}
+	if _, ok := lineItems[0]["price_source"]; !ok {
+		t.Fatalf("built-in JSON line item = %s, want price_source", encoded)
+	}
+	if _, ok := lineItems[1]["price_source"]; !ok {
+		t.Fatalf("operator JSON line item = %s, want price_source", encoded)
+	}
+	if _, ok := lineItems[2]["price_source"]; ok {
+		t.Fatalf("unpriced JSON line item = %s, want source-less row", encoded)
+	}
+}
+
+func assertMappedPriceSource(t *testing.T, source *factoryapi.CostsLineItemPriceSource, want string) {
+	t.Helper()
+	if source == nil || string(*source) != want {
+		t.Fatalf("mapped price source = %v, want %q", source, want)
+	}
+}
+
 func assertMappedReport(t *testing.T, got factoryapi.CostsReport, inputTokens, outputTokens int64) {
 	t.Helper()
 	assertMappedReportHeader(t, got)
