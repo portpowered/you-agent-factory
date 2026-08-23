@@ -2,6 +2,8 @@ package model_list_test
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -105,6 +107,36 @@ func TestProcessModelsInvokeJSON_RoutesThroughCompositionProviderWithoutServer(t
 	stderr := inputs.Stderr()
 	if strings.Contains(stderr, "localhost:7437") || strings.Contains(stderr, "connection refused") {
 		t.Fatalf("stderr = %q, want owned Models-root path rather than remote HTTP bootstrap", stderr)
+	}
+}
+
+func TestProcessModelsInvokeMissingFactoryLayoutReportsSearchedRoot(t *testing.T) {
+	t.Parallel()
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	workingDirectory, getwdErr := os.Getwd()
+	if getwdErr != nil {
+		t.Fatalf("get working directory: %v", getwdErr)
+	}
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "models", "invoke", "OMNIVOICE_Q4_K_M",
+		"--operation", "TTS", "--text", "missing layout",
+	})
+	inputs.Input.WorkingDirectory = workingDirectory
+	err := process.Execute(inputs.Input)
+	if err == nil {
+		t.Fatal("Process.Execute(models invoke) error = nil, want missing-layout failure")
+	}
+
+	var response factoryapi.ErrorResponse
+	if decodeErr := json.Unmarshal([]byte(inputs.Stderr()), &response); decodeErr != nil {
+		t.Fatalf("decode missing-layout diagnostic: %v\nstderr=%s", decodeErr, inputs.Stderr())
+	}
+	wantRoot := filepath.Join(workingDirectory, "factory")
+	if response.Code != factoryapi.ErrorResponseCode("CURRENT_FACTORY_NOT_FOUND") ||
+		response.Family != factoryapi.ErrorFamilyNotFound ||
+		!strings.Contains(response.Message, wantRoot) {
+		t.Fatalf("missing-layout response = %#v, want CURRENT_FACTORY_NOT_FOUND/NOT_FOUND with searched root %q", response, wantRoot)
 	}
 }
 

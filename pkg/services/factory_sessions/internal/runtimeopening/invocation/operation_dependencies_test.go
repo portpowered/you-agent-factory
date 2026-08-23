@@ -108,6 +108,27 @@ func TestResolveModelsInvokeFactoryDir_PreservesExplicitDirectory(t *testing.T) 
 	}
 }
 
+func TestResolveModelsInvokeFactoryDir_PreservesSearchedRootOnMissingLayout(t *testing.T) {
+	t.Parallel()
+
+	workingDirectory := filepath.Join("workspace", "project")
+	operation := &operation{
+		workingDirectory: workingDirectoryStub{dir: workingDirectory},
+		resolveCurrentDir: func(string) (string, error) {
+			return "", factorydefinitions.ErrFactoryLayoutNotFound
+		},
+	}
+
+	_, err := operation.ResolveModelInvocationFactoryDir("")
+	wantRoot := filepath.Join(workingDirectory, factorydefinitions.FactoryDir)
+	if err == nil || !strings.Contains(err.Error(), wantRoot) {
+		t.Fatalf("error = %v, want searched Factory root %q", err, wantRoot)
+	}
+	if !errors.Is(err, factorydefinitions.ErrFactoryLayoutNotFound) {
+		t.Fatalf("error = %v, want ErrFactoryLayoutNotFound", err)
+	}
+}
+
 func TestResolveModelsInvokeFactoryDir_ReportsWorkingDirectoryFailure(t *testing.T) {
 	t.Parallel()
 

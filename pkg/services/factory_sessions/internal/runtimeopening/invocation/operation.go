@@ -140,7 +140,12 @@ func (o *operation) ResolveModelInvocationFactoryDir(explicit string) (string, e
 	if err != nil {
 		return "", fmt.Errorf("resolve models invoke factory root: %w", err)
 	}
-	return o.resolveCurrentDir(filepath.Join(cwd, factorydefinitions.FactoryDir))
+	factoryRoot := filepath.Join(cwd, factorydefinitions.FactoryDir)
+	resolved, err := o.resolveCurrentDir(factoryRoot)
+	if err != nil {
+		return "", fmt.Errorf("resolve models invoke factory root %s: %w", factoryRoot, err)
+	}
+	return resolved, nil
 }
 
 func (o *operation) ExportModelInvocationArtifact(sourcePath, destinationPath string) error {
