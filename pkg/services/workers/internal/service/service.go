@@ -71,41 +71,6 @@ func New(
 	)
 }
 
-// NewWithProviderOverride constructs an inert Execute capability with the
-// optional process edge provider used by root composition. The override is
-// immutable process configuration; request identity and cancellation remain
-// owned by each Execute call.
-func NewWithProviderOverride(
-	runnerService runners.Service,
-	providersService providers.Service,
-	observe workers.ObservationSink,
-	logger logging.Logger,
-	clock func() time.Time,
-	worktree workers.FactoryWorktreePreparer,
-	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
-	temporaryFiles workers.TemporaryFileSystem,
-	providerOverride providers.Service,
-	agentRunHarness agentrun.HarnessAdapter,
-	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
-	factoryDocs ...workers.FactoryDocsLoader,
-) (*Service, error) {
-	return newService(
-		runnerService,
-		providersService,
-		observe,
-		logger,
-		clock,
-		worktree,
-		worktreeRelease,
-		temporaryFiles,
-		nil,
-		providerOverride,
-		agentRunHarness,
-		decisionEnvelopes,
-		factoryDocs...,
-	)
-}
-
 // NewWithProviderOverrideAndContentMaterializer constructs an inert Execute
 // capability with the Work-owned content materialization edge used by
 // request-scoped Worker dispatch. The materializer remains a peer capability;
