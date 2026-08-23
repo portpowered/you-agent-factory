@@ -292,36 +292,24 @@ func exerciseJavaScriptChildPermissionsResolveToExistingProviderCommandFlag(t *t
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			dir := support.ScaffoldFactory(t, overridesFactoryConfig())
+			workflow := permissionsOverrideWorkflow(test.fields, test.dynamic)
+			dir := support.ScaffoldFactory(t, permissionsOverrideFactoryConfig(workflow))
 			runner := support.NewRecordingCommandRunner("permissions provider output")
-			server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-				FactoryDir:                dir,
-				WaitForServiceModeRuntime: true,
-				Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+			inputs := support.FakeInputs(t.Context(), []string{
+				"you", "--json", "run",
+				"--factory", filepath.Join(dir, "factory.json"),
+				"--output", "primary",
+				"--no-record",
+				"permissions matrix prompt",
 			})
-			t.Cleanup(func() { server.Stop(t) })
+			inputs.Input.WorkingDirectory = dir
+			homeDir := t.TempDir()
+			inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
 
-			child := `{
-    prompt: "prove the provider permission mapping",
-    label: "permissions-child",
-    modelProvider: "codex",
-    model: "permissions-child-model"`
-			if test.fields != "" {
-				child += ",\n    " + test.fields
-			}
-			child += "\n  }"
-			workflow := `return (async function () {
-  `
-			if test.dynamic {
-				workflow += "const child = " + child + ";\n  return await agent.run(child);\n"
-			} else {
-				workflow += "return await agent.run(" + child + ");\n"
-			}
-			workflow += "})();"
-
-			started := startOverridesWorkflow(t, server.URL(), "javascript-permissions-"+strings.ReplaceAll(test.name, " ", "-"), workflow)
-			if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
-				t.Fatalf("session status = %q, want SUCCEEDED; result=%#v", started.Status, started.Result)
+			if err := support.BuildProcess(t, serviceedges.Edges{
+				ProviderCommandRunner: runner,
+			}).Execute(inputs.Input); err != nil {
+				t.Fatalf("Process.Execute() error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 			}
 			if runner.CallCount() != 1 {
 				t.Fatalf("provider command calls = %d, want one child invocation", runner.CallCount())
@@ -344,24 +332,31 @@ func exerciseJavaScriptChildInvalidPermissionsFailsBeforeProviderCommand(t *test
 		`return (async function () { const child = { prompt: "invalid permissions", modelProvider: "codex" }; child.permissions = true; return await agent.run(child); })();`,
 	} {
 		t.Run(source, func(t *testing.T) {
-			dir := support.ScaffoldFactory(t, overridesFactoryConfig())
+			dir := support.ScaffoldFactory(t, permissionsOverrideFactoryConfig(source))
 			runner := support.NewRecordingCommandRunner("unexpected provider execution")
-			server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-				FactoryDir:                dir,
-				WaitForServiceModeRuntime: true,
-				Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+			inputs := support.FakeInputs(t.Context(), []string{
+				"you", "--json", "run",
+				"--factory", filepath.Join(dir, "factory.json"),
+				"--output", "primary",
+				"--no-record",
+				"invalid permissions prompt",
 			})
-			t.Cleanup(func() { server.Stop(t) })
+			inputs.Input.WorkingDirectory = dir
+			homeDir := t.TempDir()
+			inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
 
-			started := startOverridesWorkflow(t, server.URL(), "javascript-invalid-permissions", source)
-			if started.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
-				t.Fatalf("session status = %q, want FAILED; result=%#v", started.Status, started.Result)
+			err := support.BuildProcess(t, serviceedges.Edges{
+				ProviderCommandRunner: runner,
+			}).Execute(inputs.Input)
+			if err == nil {
+				t.Fatal("Process.Execute() error = nil, want invalid permissions failure")
+			}
+			diagnostic := strings.ToLower(err.Error() + "\n" + inputs.Stderr())
+			if !strings.Contains(diagnostic, "permissions") {
+				t.Fatalf("invalid permissions diagnostic = %q, want field-specific permissions detail", diagnostic)
 			}
 			if runner.CallCount() != 0 {
 				t.Fatalf("provider command calls = %d, want zero for invalid permissions", runner.CallCount())
-			}
-			if started.Result == nil || started.Result.ResultStatus != factoryapi.FactorySessionResultStatusUnavailable {
-				t.Fatalf("session result = %#v, want unavailable invalid-request result", started.Result)
 			}
 		})
 	}
@@ -766,6 +761,54 @@ func overridesFactoryConfig() map[string]any {
 			},
 		},
 	}
+}
+
+func permissionsOverrideFactoryConfig(source string) map[string]any {
+	config := map[string]any{
+		"name": "javascript-permissions",
+	}
+	config["invocationSignature"] = map[string]any{
+		"parameters": []any{map[string]any{
+			"name": "prompt", "required": false,
+			"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}},
+		}},
+	}
+	config["orchestrator"] = map[string]any{
+		"kind": "JAVASCRIPT",
+		"javascript": map[string]any{
+			"inlineSource": map[string]any{
+				"encoding": "utf-8",
+				"inline":   source,
+			},
+			"argsSchema": map[string]any{
+				"type":                 "object",
+				"properties":           map[string]any{"prompt": map[string]any{"type": "string"}},
+				"additionalProperties": false,
+			},
+		},
+	}
+	return config
+}
+
+func permissionsOverrideWorkflow(fields string, dynamic bool) string {
+	child := `{
+    prompt: "prove the provider permission mapping",
+    label: "permissions-child",
+    modelProvider: "codex",
+    model: "permissions-child-model"`
+	if fields != "" {
+		child += ",\n    " + fields
+	}
+	child += "\n  }"
+
+	workflow := `return (async function () {
+  `
+	if dynamic {
+		workflow += "const child = " + child + ";\n  return await agent.run(child);\n"
+	} else {
+		workflow += "return await agent.run(" + child + ");\n"
+	}
+	return workflow + "})();"
 }
 
 func startOverridesWorkflow(
