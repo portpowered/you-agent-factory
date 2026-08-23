@@ -196,8 +196,8 @@ func TestPackagedSpawnWorkflowRunsExactCountAndMerge(t *testing.T) {
 	}
 }
 
-func TestPackagedSpawnWorkflowAcceptsFencedPlannerJSON(t *testing.T) {
-	executor := &packagedWorkflowChildExecutor{plannerText: "```json\n[\"task one\",\"task two\"]\n```"}
+func TestPackagedSpawnWorkflowAcceptsStructuredPlannerObject(t *testing.T) {
+	executor := &packagedWorkflowChildExecutor{plannerTasks: []string{"task one", "task two"}}
 	outcome := runPackagedWorkflow(t, "spawn", "spawn.workflow.js", map[string]any{
 		"request": "research travel", "count": 2,
 	}, executor)
@@ -358,7 +358,6 @@ type packagedWorkflowChildExecutor struct {
 	calls        int
 	called       []string
 	plannerTasks []string
-	plannerText  string
 	failLabel    string
 	judgeText    string
 }
@@ -379,33 +378,40 @@ func (e *packagedWorkflowChildExecutor) Execute(_ context.Context, request facto
 		}, nil
 	}
 	text := "result for " + request.Label
+	var output map[string]any
 	switch request.Label {
 	case "spawn-planner":
-		text = e.plannerText
-		if text == "" {
-			tasks := e.plannerTasks
-			if tasks == nil {
-				tasks = []string{"task one", "task two"}
-			}
-			encoded, _ := json.Marshal(tasks)
-			text = string(encoded)
+		tasks := e.plannerTasks
+		if tasks == nil {
+			tasks = []string{"task one", "task two"}
 		}
+		output = map[string]any{"tasks": tasks}
 	case "spawn-merger":
-		text = "merged spawn result"
+		output = map[string]any{"answer": "merged spawn result"}
 	default:
 		if strings.HasPrefix(request.Label, "tournament-judge-") {
 			text = e.judgeText
 			if text == "" {
 				text = `{"winner":"B","rationale":"candidate B wins"}`
 			}
+		} else if strings.HasPrefix(request.Label, "research-specialist-") {
+			output = map[string]any{"evidence": text}
+		} else if strings.HasPrefix(request.Label, "spawn-task-") {
+			output = map[string]any{"result": text}
+		} else if request.Label == "lead-research-synthesis" {
+			output = map[string]any{"answer": text}
 		}
 	}
+	if output == nil {
+		output = map[string]any{"text": text}
+	}
 	return factory.JavaScriptChildExecutionResult{
-		DispatchID:    fmt.Sprintf("dispatch-%d", e.calls),
-		ChildIndex:    e.calls - 1,
-		Status:        factory.JavaScriptChildDispatchStatusCompleted,
-		ExecutionMode: factory.JavaScriptChildExecutionModeFake,
-		Output:        map[string]any{"text": text},
+		DispatchID:      fmt.Sprintf("dispatch-%d", e.calls),
+		ChildIndex:      e.calls - 1,
+		Status:          factory.JavaScriptChildDispatchStatusCompleted,
+		ExecutionMode:   factory.JavaScriptChildExecutionModeFake,
+		Output:          output,
+		SchemaValidated: len(request.OutputSchema) > 0,
 	}, nil
 }
 

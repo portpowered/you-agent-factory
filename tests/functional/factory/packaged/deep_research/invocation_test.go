@@ -137,7 +137,7 @@ func prepareStaleDeepResearchFixture(t *testing.T) staleDeepResearchFixture {
 	homeDir := t.TempDir()
 	workingDirectory := t.TempDir()
 	providerResult := platformprocess.CommandResult{
-		Stdout: support.CodexSuccessStdout("deep research provider reached"),
+		Stdout: support.CodexSuccessStdout(`{"answer":"deep research provider reached"}`),
 	}
 	provider := testutil.NewProviderCommandRunner(providerResult, providerResult)
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
@@ -231,7 +231,7 @@ func assertDeepResearchExternalNamesAbsent(t testing.TB, payload []byte, names .
 
 // TestPackagedDeepResearchRequiredInputCompletes proves that invoking the
 // packaged @you/deep-research Factory with only the required research topic
-// completes under mock workers, runs the expected specialist-and-lead dispatch
+// completes through structured provider responses, runs the expected specialist-and-lead dispatch
 // sequence for a delegating topic shape, and returns a primary synthesis that
 // reflects the submitted topic.
 func TestPackagedDeepResearchRequiredInputCompletes(t *testing.T) {
@@ -245,11 +245,18 @@ func TestPackagedDeepResearchRequiredInputCompletes(t *testing.T) {
 		t.TempDir(),
 		factorydefinitions.PackagedDeepResearchFactoryName,
 	)
+	runner := testutil.NewProviderCommandRunner(
+		providerResult(support.CodexSuccessStdout(`{"evidence":"technical specialist evidence"}`)),
+		providerResult(support.CodexSuccessStdout(`{"evidence":"tradeoff specialist evidence"}`)),
+		providerResult(support.CodexSuccessStdout(`{"answer":"lead-research-synthesis: synthesized specialist evidence"}`)),
+	)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
 		Args:                      []string{"--provider", "CODEX", "--model", "gpt-5"},
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: runner,
+		},
 	})
 
 	args := map[string]any{"topic": topic}
@@ -285,7 +292,8 @@ func TestPackagedDeepResearchRequiredInputCompletes(t *testing.T) {
 		`"researchDepth":2`,
 		`"maxSubagents":2`,
 		"lead-research-synthesis",
-		"research-specialist-technical",
+		`"role":"technical"`,
+		`"role":"tradeoffs"`,
 	} {
 		if !strings.Contains(primaryText, want) {
 			t.Fatalf("primary result = %s, want substring %q", primaryText, want)
@@ -317,11 +325,21 @@ func TestPackagedDeepResearchRequiredInputCompletes(t *testing.T) {
 			t.Fatalf("dispatch labels = %#v, want %q", labels, want)
 		}
 	}
+	requests := runner.Requests()
+	if len(requests) != 3 {
+		t.Fatalf("provider calls = %d, want two specialists and one lead synthesis", len(requests))
+	}
+	leadInput := string(requests[2].Stdin) + " " + strings.Join(requests[2].Args, " ")
+	for _, evidence := range []string{"technical specialist evidence", "tradeoff specialist evidence"} {
+		if !strings.Contains(leadInput, evidence) {
+			t.Fatalf("lead request does not contain validated specialist evidence %q: %s", evidence, leadInput)
+		}
+	}
 }
 
 // TestPackagedDeepResearchOptionalInputsReachWorkers proves that optional
 // deep-research overrides such as research depth, specialist cap, and approved
-// model execution selection reach mock workers and are observable on dispatch
+// model execution selection reach structured provider workers and are observable on dispatch
 // execution selection and the primary synthesis result.
 func TestPackagedDeepResearchOptionalInputsReachWorkers(t *testing.T) {
 	topic := fmt.Sprintf(
@@ -334,11 +352,17 @@ func TestPackagedDeepResearchOptionalInputsReachWorkers(t *testing.T) {
 		t.TempDir(),
 		factorydefinitions.PackagedDeepResearchFactoryName,
 	)
+	runner := testutil.NewProviderCommandRunner(
+		providerResult(support.CodexSuccessStdout(`{"evidence":"optional specialist evidence"}`)),
+		providerResult(support.CodexSuccessStdout(`{"answer":"lead-research-synthesis: optional synthesized evidence"}`)),
+	)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
 		Args:                      []string{"--provider", "CODEX", "--model", "gpt-5"},
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: runner,
+		},
 	})
 
 	args := map[string]any{
@@ -378,7 +402,7 @@ func TestPackagedDeepResearchOptionalInputsReachWorkers(t *testing.T) {
 		`"modelProvider":"CODEX"`,
 		`"model":"gpt-5"`,
 		`"reasoningEffort":"medium"`,
-		"research-specialist-technical",
+		"lead-research-synthesis",
 	} {
 		if !strings.Contains(primaryText, want) {
 			t.Fatalf("primary result = %s, want substring %q", primaryText, want)
@@ -419,6 +443,90 @@ func TestPackagedDeepResearchOptionalInputsReachWorkers(t *testing.T) {
 	}
 	if labels["research-specialist-tradeoffs"] {
 		t.Fatalf("dispatch labels = %#v, want tradeoffs specialist omitted when maxSubagents is 1", labels)
+	}
+	requests := runner.Requests()
+	if len(requests) != 2 {
+		t.Fatalf("provider calls = %d, want one specialist and one lead synthesis", len(requests))
+	}
+	leadInput := string(requests[1].Stdin) + " " + strings.Join(requests[1].Args, " ")
+	if !strings.Contains(leadInput, "optional specialist evidence") {
+		t.Fatalf("lead request does not contain validated specialist evidence: %s", leadInput)
+	}
+}
+
+// TestPackagedDeepResearchRetriesSchemaMismatchBeforeSynthesis proves that a
+// completed provider response with the wrong structured shape is retried once
+// before its validated evidence is passed to lead synthesis.
+func TestPackagedDeepResearchRetriesSchemaMismatchBeforeSynthesis(t *testing.T) {
+	topic := fmt.Sprintf(
+		"functional packaged deep research schema retry %d with enough breadth for specialist delegation",
+		time.Now().UnixNano(),
+	)
+
+	factoryDir := support.InstallPackagedFactory(
+		t,
+		t.TempDir(),
+		factorydefinitions.PackagedDeepResearchFactoryName,
+	)
+	runner := testutil.NewProviderCommandRunner(
+		providerResult(support.CodexSuccessStdout(`{"wrong":"not evidence"}`)),
+		providerResult(support.CodexSuccessStdout(`{"evidence":"recovered specialist evidence"}`)),
+		providerResult(support.CodexSuccessStdout(`{"answer":"recovered evidence synthesis"}`)),
+	)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		WaitForServiceModeRuntime: true,
+		Args:                      []string{"--provider", "CODEX", "--model", "gpt-5"},
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: runner,
+		},
+	})
+
+	response := startPackagedDeepResearchInvocation(
+		t,
+		server,
+		factoryDir,
+		"packaged-deep-research-schema-retry",
+		map[string]any{"topic": topic, "maxSubagents": 1},
+	)
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		resultJSON, _ := json.Marshal(response.Result)
+		t.Fatalf("session status = %q, want SUCCEEDED; result = %s; response = %#v", response.Status, resultJSON, response)
+	}
+	primary, err := json.Marshal((*response.Result.PrimaryResult)[0])
+	if err != nil {
+		t.Fatalf("marshal primary result: %v", err)
+	}
+	if !strings.Contains(string(primary), "recovered evidence synthesis") {
+		t.Fatalf("primary result = %s, want recovered evidence synthesis", primary)
+	}
+	if runner.CallCount() != 3 {
+		t.Fatalf("provider calls = %d, want failed specialist, one bounded retry, and lead synthesis", runner.CallCount())
+	}
+	requests := runner.Requests()
+	leadInput := string(requests[2].Stdin) + " " + strings.Join(requests[2].Args, " ")
+	if !strings.Contains(leadInput, "recovered specialist evidence") || strings.Contains(leadInput, "not evidence") {
+		t.Fatalf("lead request evidence = %s, want only the recovered validated evidence", leadInput)
+	}
+
+	dispatches := listFactorySessionDispatches(t, server.URL(), response.SessionId)
+	if len(dispatches.Dispatches) != 3 {
+		t.Fatalf("dispatch count = %d, want initial specialist, bounded retry, and lead synthesis", len(dispatches.Dispatches))
+	}
+	statuses := make(map[string]factoryapi.FactoryDispatchStatus)
+	for _, dispatch := range dispatches.Dispatches {
+		if dispatch.Label != nil {
+			statuses[*dispatch.Label] = dispatch.Status
+		}
+	}
+	for label, wantStatus := range map[string]factoryapi.FactoryDispatchStatus{
+		"research-specialist-technical":       factoryapi.FactoryDispatchStatusFAILED,
+		"research-specialist-technical-retry": factoryapi.FactoryDispatchStatusCOMPLETED,
+		"lead-research-synthesis":             factoryapi.FactoryDispatchStatusCOMPLETED,
+	} {
+		if statuses[label] != wantStatus {
+			t.Fatalf("dispatch statuses = %#v, want %q=%q", statuses, label, wantStatus)
+		}
 	}
 }
 
@@ -542,6 +650,10 @@ func startPackagedDeepResearchInvocation(
 		},
 		"start packaged deep-research invocation",
 	)
+}
+
+func providerResult(stdout []byte) platformprocess.CommandResult {
+	return platformprocess.CommandResult{Stdout: stdout}
 }
 
 func postJSON[T any](t *testing.T, endpoint string, request any, failurePrefix string) T {
