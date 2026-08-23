@@ -43,7 +43,7 @@ func TestMockWorkersSchema_AllConfigObjectsAllowUnknownFields(t *testing.T) {
 	if !ok {
 		t.Fatal("$defs missing or not an object")
 	}
-	for _, name := range []string{"mockWorker", "rejectConfig", "scriptConfig", "workInput"} {
+	for _, name := range []string{"mockWorker", "rejectConfig", "scriptConfig", "usage", "workInput"} {
 		def, ok := defs[name]
 		if !ok {
 			t.Fatalf("$defs[%q] missing", name)
@@ -73,6 +73,7 @@ func TestMockWorkersSchema_ExpressesB03TopologyFields(t *testing.T) {
 		"runType",
 		"scriptConfig",
 		"rejectConfig",
+		"usage",
 	}, "/$defs/mockWorker")
 
 	workInput := defSchema(t, schema, "workInput")
@@ -102,6 +103,16 @@ func TestMockWorkersSchema_ExpressesB03TopologyFields(t *testing.T) {
 		"stderr",
 		"exitCode",
 	}, "/$defs/rejectConfig")
+
+	usage := defSchema(t, schema, "usage")
+	assertPropertyNames(t, objectProperties(t, usage, "/$defs/usage"), []string{
+		"provider",
+		"model",
+		"inputTokens",
+		"outputTokens",
+		"cachedInputTokens",
+		"reasoningOutputTokens",
+	}, "/$defs/usage")
 
 	inventory := mockworkers.ProjectTopologyInventory()
 	for _, field := range inventory.Fields {
@@ -161,6 +172,20 @@ func TestMockWorkersSchema_EnforcesRejectExitCodeBounds(t *testing.T) {
 	}
 	if got, _ := exitCode["maximum"].(float64); got != 255 {
 		t.Fatalf("rejectConfig.exitCode.maximum = %v, want 255", exitCode["maximum"])
+	}
+}
+
+func TestMockWorkersSchema_EnforcesMockUsageTokenBounds(t *testing.T) {
+	t.Parallel()
+
+	schema := loadAuthoredMockWorkersSchema(t)
+	usage := defSchema(t, schema, "usage")
+	properties := objectProperties(t, usage, "/$defs/usage")
+	for _, name := range []string{"inputTokens", "outputTokens", "cachedInputTokens", "reasoningOutputTokens"} {
+		property := properties[name].(map[string]any)
+		if got, _ := property["minimum"].(float64); got != 0 {
+			t.Fatalf("usage.%s.minimum = %v, want 0", name, property["minimum"])
+		}
 	}
 }
 

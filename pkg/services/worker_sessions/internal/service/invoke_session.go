@@ -403,6 +403,8 @@ type observation struct {
 	factorySessionID string
 	startedAt        time.Time
 	endedAt          *time.Time
+	tokenUsage       *workersessions.TokenUsage
+	usageModel       string
 }
 
 func (r *registry) ensureObservation(id, attemptID, turnID string, workIDs []string, direct ...bool) time.Time {

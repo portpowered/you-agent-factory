@@ -608,6 +608,7 @@ func (r *registry) PublishRecord(ctx context.Context, req workersessions.Publish
 		r.logger.Info("worker session publish record rejected", "sessionID", req.SessionID, "outcome", "append_failed")
 		return workersessions.PublishRecordResult{}, err
 	}
+	r.updateUsageProjection(req.SessionID, req.Draft)
 	pub.accepted[identity] = struct{}{}
 	if req.SourceSequence > pub.lastSequence[key] {
 		pub.lastSequence[key] = req.SourceSequence

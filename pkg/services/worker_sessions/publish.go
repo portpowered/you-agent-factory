@@ -801,6 +801,9 @@ func progressDraftPayload(
 	case workers.KindPlan:
 		return planDraftPayload(detail, metadata), true
 	case workers.KindUsage:
+		if payload, ok := canonicalUsageDraftPayload(detail); ok {
+			return payload, true
+		}
 		total, err := strconv.ParseInt(strings.TrimSpace(metadata["used_tokens"]), 10, 64)
 		if err != nil {
 			return nil, false
@@ -826,6 +829,35 @@ func progressDraftPayload(
 		}
 		return workers.ProgressPayload{Label: label, Message: detail}, true
 	}
+}
+
+// canonicalUsageDraftPayload preserves token-class presence while accepting
+// the camel-case canonical payload emitted by mock workers. Provider-native
+// usage details remain on their existing adapter path and continue to use the
+// ACP used_tokens fallback above.
+type canonicalUsagePayload struct {
+	InputTokens           *int64 `json:"inputTokens,omitempty"`
+	CachedInputTokens     *int64 `json:"cachedInputTokens,omitempty"`
+	OutputTokens          *int64 `json:"outputTokens,omitempty"`
+	ReasoningOutputTokens *int64 `json:"reasoningOutputTokens,omitempty"`
+	TotalTokens           int64  `json:"totalTokens"`
+	Model                 string `json:"model,omitempty"`
+}
+
+func canonicalUsageDraftPayload(detail string) (canonicalUsagePayload, bool) {
+	if strings.TrimSpace(detail) == "" {
+		return canonicalUsagePayload{}, false
+	}
+	var payload canonicalUsagePayload
+	if err := json.Unmarshal([]byte(detail), &payload); err != nil {
+		return canonicalUsagePayload{}, false
+	}
+	if strings.TrimSpace(payload.Model) == "" &&
+		payload.InputTokens == nil && payload.CachedInputTokens == nil &&
+		payload.OutputTokens == nil && payload.ReasoningOutputTokens == nil {
+		return canonicalUsagePayload{}, false
+	}
+	return payload, true
 }
 
 func toolDraftPayload(phase workers.Phase, detail string, metadata map[string]string) (any, bool) {

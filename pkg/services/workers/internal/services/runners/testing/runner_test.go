@@ -12,6 +12,7 @@ import (
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	work "github.com/portpowered/infinite-you/pkg/services/work"
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
@@ -179,6 +180,69 @@ func TestMockWorkerCommandRunner_UnmatchedDispatchDefaultAcceptSkipsNextRunner(t
 	}
 	if string(result.Stdout) != defaultMockWorkerAcceptedOutput {
 		t.Fatalf("Stdout = %q, want default accepted output", result.Stdout)
+	}
+}
+
+func TestMockWorkerCommandRunner_RecordsUsageOnceForMatchedRunTypes(t *testing.T) {
+	inputTokens, outputTokens := int64(10), int64(5)
+	usage := &workers.MockWorkerUsageConfig{
+		Provider:     "codex",
+		Model:        "gpt-5-codex",
+		InputTokens:  &inputTokens,
+		OutputTokens: &outputTokens,
+	}
+	for _, runType := range []workers.MockWorkerRunType{
+		workers.MockWorkerRunTypeAccept,
+		workers.MockWorkerRunTypeReject,
+		workers.MockWorkerRunTypeScript,
+	} {
+		t.Run(string(runType), func(t *testing.T) {
+			capture := &workerexecution.MockWorkerUsageCapture{}
+			ctx := workerexecution.WithMockWorkerUsageCapture(context.Background(), capture)
+			entry := workers.MockWorkerConfig{WorkerName: "worker", RunType: runType, Usage: usage}
+			if runType == workers.MockWorkerRunTypeScript {
+				entry.ScriptConfig = &workers.MockWorkerScriptConfig{Command: "mock-script"}
+			}
+			runner := &MockWorkerCommandRunner{
+				Config: &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{entry}},
+				Next:   &recordingCommandRunner{},
+			}
+			if _, err := runner.Run(ctx, workerprocess.CommandRequest{WorkerType: "worker"}); err != nil {
+				t.Fatalf("Run returned error: %v", err)
+			}
+			got := capture.Usage()
+			if got == nil || got.Provider != usage.Provider || got.Model != usage.Model ||
+				got.InputTokens == nil || *got.InputTokens != *usage.InputTokens ||
+				got.OutputTokens == nil || *got.OutputTokens != *usage.OutputTokens {
+				t.Fatalf("captured usage = %#v, want %#v", got, usage)
+			}
+			*got.InputTokens = 999
+			if *capture.Usage().InputTokens != *usage.InputTokens {
+				t.Fatal("Usage returned a mutable capture-owned declaration")
+			}
+		})
+	}
+}
+
+func TestMockWorkerCommandRunner_UnmatchedDispatchDoesNotRecordUsage(t *testing.T) {
+	inputTokens := int64(10)
+	capture := &workerexecution.MockWorkerUsageCapture{}
+	runner := &MockWorkerCommandRunner{
+		Config: &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{
+			WorkerName: "matched-worker",
+			RunType:    workers.MockWorkerRunTypeAccept,
+			Usage: &workers.MockWorkerUsageConfig{
+				Provider: "codex", Model: "gpt-5", InputTokens: &inputTokens,
+			},
+		}}},
+		Next: failCommandRunner{t: t},
+	}
+	ctx := workerexecution.WithMockWorkerUsageCapture(context.Background(), capture)
+	if _, err := runner.Run(ctx, workerprocess.CommandRequest{WorkerType: "other-worker"}); err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if capture.Usage() != nil {
+		t.Fatalf("captured usage = %#v, want nil for unmatched dispatch", capture.Usage())
 	}
 }
 

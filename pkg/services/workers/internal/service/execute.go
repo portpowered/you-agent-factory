@@ -211,7 +211,12 @@ func (s *Service) runRunner(
 	if providerOverride == nil {
 		providerOverride = s.providerOverride
 	}
+	var usageCapture *workerexecution.MockWorkerUsageCapture
 	defer func() {
+		if usage := usageCapture.Usage(); usage != nil {
+			runnerResult = applyMockWorkerUsageDiagnostics(runnerResult, usage)
+			publishMockWorkerUsage(ctx, request, usage)
+		}
 		if recovered := recover(); recovered != nil {
 			runErr = panicFailure(
 				recovered,
@@ -223,6 +228,8 @@ func (s *Service) runRunner(
 	if request.Input.MockWorkers != nil {
 		ctx = workerexecution.WithMockWorkersConfig(ctx, request.Input.MockWorkers)
 		ctx = workerexecution.WithMockWorkerOutputPolicy(ctx, request.Target.Output)
+		usageCapture = &workerexecution.MockWorkerUsageCapture{}
+		ctx = workerexecution.WithMockWorkerUsageCapture(ctx, usageCapture)
 	}
 	if request.Input.ProgressPublisher != nil {
 		ctx = workerexecution.WithProgressPublisher(ctx, request.Input.ProgressPublisher)
