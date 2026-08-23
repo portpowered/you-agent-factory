@@ -347,6 +347,7 @@ func (e *childWorkerExecutor) Execute(
 			}
 		}
 		invoked, err := executeChildAttempt(ctx, e.execute, request)
+		invoked = normalizeChildStructuredResult(req, invoked)
 		if childExecutionShouldRetry(ctx, invoked, err, attemptNumber, e.maxAttempts) {
 			if progress != nil {
 				progress.resetAttempt()
@@ -545,7 +546,16 @@ func childExecutionShouldRetry(
 	if attemptNumber >= maxAttempts || ctx.Err() != nil || executeErr != nil {
 		return false
 	}
-	return result.Outcome == workers.ExecutionOutcomeFailed && result.Failure != nil && result.Failure.RetryHint
+	if result.Outcome != workers.ExecutionOutcomeFailed || result.Failure == nil {
+		return false
+	}
+	// A schema mismatch is a child-contract failure, not a provider outage.
+	// It must consume only the JavaScript child's existing attempt allowance;
+	// it must not opt into the unrelated Workers provider retry budget.
+	if result.Failure.Type == workers.WorkFailureTypeStructuredOutputSchemaViolation {
+		return true
+	}
+	return result.Failure.RetryHint
 }
 
 func (e *childWorkerExecutor) completedChild(
@@ -560,8 +570,9 @@ func (e *childWorkerExecutor) completedChild(
 	completed.Status = factory.JavaScriptChildDispatchStatusCompleted
 	completed.Provider = provider
 	completed.ProviderSessionRef = providerSessionRef
-	output := childWorkerOutputFromExecute(req, result)
+	output, schemaValidated := childWorkerOutputFromExecute(req, result)
 	completed.Output = e.childValues.CloneOutputMap(output)
+	completed.SchemaValidated = schemaValidated
 	e.records.Append(factory.JavaScriptRuntimeRecord{
 		Kind:          factory.JavaScriptRecordKindChildDispatch,
 		ChildDispatch: &completed,
@@ -573,6 +584,8 @@ func (e *childWorkerExecutor) completedChild(
 		Status:             factory.JavaScriptChildDispatchStatusCompleted,
 		ExecutionMode:      factory.JavaScriptChildExecutionModeLive,
 		Output:             output,
+		SchemaValidated:    schemaValidated,
+		SchemaDigest:       base.SchemaDigest,
 		ArtifactRef:        base.ArtifactRef,
 		ProviderSessionRef: providerSessionRef,
 		Request:            req,
@@ -675,13 +688,42 @@ func childProviderSession(result workers.ExecuteResult) (string, string) {
 	return provider, strings.TrimSpace(session.ID)
 }
 
+func normalizeChildStructuredResult(
+	req factory.JavaScriptChildExecutionRequest,
+	result workers.ExecuteResult,
+) workers.ExecuteResult {
+	if req.OutputSchema == nil || !childExecutionSucceeded(result.Outcome) {
+		return result
+	}
+	if result.StructuredResultPresent {
+		if _, ok := result.StructuredResult.(map[string]any); ok {
+			return result
+		}
+		return childStructuredOutputFailure(result, "structured output schema violation: instance $; expected a validated JSON object")
+	}
+	return childStructuredOutputFailure(result, "structured output schema violation: instance $; validated JSON object is missing")
+}
+
+func childStructuredOutputFailure(result workers.ExecuteResult, message string) workers.ExecuteResult {
+	result.Outcome = workers.ExecutionOutcomeFailed
+	result.StructuredResult = nil
+	result.StructuredResultPresent = false
+	result.Failure = &workers.ExecutionFailure{
+		Type:    workers.WorkFailureTypeStructuredOutputSchemaViolation,
+		Family:  workers.WorkFailureFamilyTerminal,
+		Message: message,
+		Detail:  &workers.FailureDetail{Reason: workers.WorkFailureTypeStructuredOutputSchemaViolation, Message: message},
+	}
+	return result
+}
+
 func childWorkerOutputFromExecute(
 	req factory.JavaScriptChildExecutionRequest,
 	result workers.ExecuteResult,
-) map[string]any {
+) (map[string]any, bool) {
 	if result.StructuredResultPresent {
 		if structured, ok := result.StructuredResult.(map[string]any); ok {
-			return structured
+			return structured, req.OutputSchema != nil
 		}
 	}
 	var text strings.Builder
@@ -690,7 +732,7 @@ func childWorkerOutputFromExecute(
 			text.WriteString(part.Text)
 		}
 	}
-	return childWorkerOutput(req, text.String())
+	return childWorkerOutput(req, text.String()), false
 }
 
 func (e *childWorkerExecutor) acquireResourceLease(
@@ -855,16 +897,9 @@ func childOutputSchemaJSON(schema map[string]any) string {
 
 func childWorkerOutput(req factory.JavaScriptChildExecutionRequest, content string) map[string]any {
 	trimmed := strings.TrimSpace(content)
-	if req.OutputSchema != nil && trimmed != "" {
-		var decoded map[string]any
-		if err := json.Unmarshal([]byte(trimmed), &decoded); err == nil {
-			return decoded
-		}
-	}
 	return map[string]any{
-		"text":            trimmed,
-		"subject":         req.ArgsSubject,
-		"schemaValidated": req.OutputSchema != nil,
+		"text":    trimmed,
+		"subject": req.ArgsSubject,
 	}
 }
 

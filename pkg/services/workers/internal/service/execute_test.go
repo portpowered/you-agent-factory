@@ -45,6 +45,57 @@ func TestExecuteHappyPathPreservesCorrelationAndEmitsTerminalObservation(t *test
 	assertSafeCompletedObservations(t, observations)
 }
 
+func TestExecuteStructuredOutputReturnsValidatedNativeValue(t *testing.T) {
+	service := mustExecuteService(t, &stubRunner{
+		content: `{"answer":"ok","schemaValidated":"customer-value"}`,
+	}, nil)
+	request := validExecuteRequest("dispatch-structured", "attempt-structured")
+	request.Target.Prompt.OutputSchema = `{"type":"object","required":["answer"],"properties":{"answer":{"type":"string"}}}`
+
+	result, err := service.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workers.ExecutionOutcomeAccepted || !result.StructuredResultPresent {
+		t.Fatalf("result = %#v, want accepted validated structured result", result)
+	}
+	structured, ok := result.StructuredResult.(map[string]any)
+	if !ok || structured["answer"] != "ok" || structured["schemaValidated"] != "customer-value" {
+		t.Fatalf("structured result = %#v, want native customer object", result.StructuredResult)
+	}
+}
+
+func TestExecuteStructuredOutputMismatchUsesSafeSchemaViolation(t *testing.T) {
+	service := mustExecuteService(t, &stubRunner{
+		content: `{"answer":1,"rejected":"sensitive-rejected-value"}`,
+	}, nil)
+	request := validExecuteRequest("dispatch-structured-invalid", "attempt-structured-invalid")
+	request.Target.Prompt.OutputSchema = `{"type":"object","required":["answer"],"properties":{"answer":{"type":"string"}}}`
+	request.Target.Prompt.UserMessage = "sensitive prompt content"
+
+	result, err := service.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v, want normalized failed result", err)
+	}
+	if result.Outcome != workers.ExecutionOutcomeFailed || result.Failure == nil {
+		t.Fatalf("result = %#v, want failed result", result)
+	}
+	if result.Failure.Type != workers.WorkFailureTypeStructuredOutputSchemaViolation || result.Failure.RetryHint {
+		t.Fatalf("failure = %#v, want terminal structured schema violation", result.Failure)
+	}
+	if result.Failure.Detail == nil || !strings.Contains(result.Failure.Detail.Message, "/answer") {
+		t.Fatalf("failure detail = %#v, want instance path", result.Failure.Detail)
+	}
+	for _, secret := range []string{"sensitive-rejected-value", "sensitive prompt content"} {
+		if strings.Contains(result.Failure.Detail.Message, secret) {
+			t.Fatalf("failure detail = %q, must not expose %q", result.Failure.Detail.Message, secret)
+		}
+	}
+	if result.StructuredResultPresent || result.StructuredResult != nil {
+		t.Fatalf("structured result = %#v present=%v, want no invalid result", result.StructuredResult, result.StructuredResultPresent)
+	}
+}
+
 func TestExecuteNoopAcceptsWithoutRunnerOrObservations(t *testing.T) {
 	t.Parallel()
 

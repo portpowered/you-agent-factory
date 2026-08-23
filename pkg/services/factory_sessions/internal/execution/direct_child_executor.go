@@ -206,18 +206,20 @@ func (e *directChildExecutor) Execute(
 
 	executeRequest := e.executeRequest(req, base, dispatchID, runnerID)
 	result, err := executeChildAttempt(ctx, e.execute, executeRequest)
+	result = normalizeChildStructuredResult(req, result)
 	if err != nil || !childExecutionSucceeded(result.Outcome) {
 		return e.failedChild(base, req, dispatchID, childIndex, result, err)
 	}
 
 	base.Attempt = executeRequest.Attempt.Number
 	providerName, providerSessionRef := childProviderSession(result)
-	output := childWorkerOutputFromExecute(req, result)
+	output, schemaValidated := childWorkerOutputFromExecute(req, result)
 	completed := base
 	completed.Status = factory.JavaScriptChildDispatchStatusCompleted
 	completed.Provider = providerName
 	completed.ProviderSessionRef = providerSessionRef
 	completed.Output = e.childValues.CloneOutputMap(output)
+	completed.SchemaValidated = schemaValidated
 	e.records.Append(factory.JavaScriptRuntimeRecord{
 		Kind:          factory.JavaScriptRecordKindChildDispatch,
 		ChildDispatch: &completed,
@@ -228,6 +230,8 @@ func (e *directChildExecutor) Execute(
 		Status:             factory.JavaScriptChildDispatchStatusCompleted,
 		ExecutionMode:      factory.JavaScriptChildExecutionModeLive,
 		Output:             output,
+		SchemaValidated:    schemaValidated,
+		SchemaDigest:       base.SchemaDigest,
 		ArtifactRef:        artifactRef,
 		ProviderSessionRef: providerSessionRef,
 		Request:            req,

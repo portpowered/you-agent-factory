@@ -525,6 +525,10 @@ func TestChildWorkerExecutor_CompletedChildRecordsItsWorkerAndOutput(t *testing.
 		}
 		invoker.result = workers.ExecuteResult{
 			Outcome: workers.ExecutionOutcomeAccepted,
+			StructuredResult: map[string]any{
+				"text": "child finished",
+			},
+			StructuredResultPresent: true,
 			Output: workers.ProposedOutput{Primary: []work.WorkContentPart{{
 				Type: work.WorkContentPartTypeText,
 				Text: `{"text":"child finished"}`,
@@ -553,6 +557,9 @@ func TestChildWorkerExecutor_CompletedChildRecordsItsWorkerAndOutput(t *testing.
 	if got := result.Output["text"]; got != "child finished" {
 		t.Fatalf("child output text = %v, want the provider's decoded content", got)
 	}
+	if !result.SchemaValidated {
+		t.Fatal("child schemaValidated = false, want true for the accepted schema-declared result")
+	}
 
 	terminal := sink.terminalChildDispatch(t)
 	if terminal.Provider != "codex" || terminal.ProviderSessionRef != "codex-session-1" {
@@ -562,10 +569,141 @@ func TestChildWorkerExecutor_CompletedChildRecordsItsWorkerAndOutput(t *testing.
 	if attempts != 2 || terminal.Attempt != 2 {
 		t.Fatalf("attempts = %d, terminal record attempt = %d, want two attempts and terminal attempt 2", attempts, terminal.Attempt)
 	}
+	if !terminal.SchemaValidated {
+		t.Fatal("terminal schemaValidated = false, want true")
+	}
 	if len(sink.statuses) != 2 ||
 		sink.statuses[0] != factory.JavaScriptChildDispatchStatusQueued ||
 		sink.statuses[1] != factory.JavaScriptChildDispatchStatusRunning {
 		t.Fatalf("dispatch statuses = %v, want QUEUED then RUNNING before the terminal record", sink.statuses)
+	}
+}
+
+func TestChildWorkerExecutor_StructuredSchemaMismatchConsumesChildRetryAllowance(t *testing.T) {
+	attempts := 0
+	invoker := &recordingWorkerExecution{
+		result: workers.ExecuteResult{
+			Outcome: workers.ExecutionOutcomeFailed,
+			Failure: &workers.ExecutionFailure{
+				Type:    workers.WorkFailureTypeStructuredOutputSchemaViolation,
+				Family:  workers.WorkFailureFamilyTerminal,
+				Message: "structured output schema violation: instance /answer; expected string",
+				Detail: &workers.FailureDetail{
+					Reason:  workers.WorkFailureTypeStructuredOutputSchemaViolation,
+					Message: "structured output schema violation: instance /answer; expected string",
+				},
+			},
+		},
+	}
+	invokerOnExecute := func(_ workers.ExecuteRequest) {
+		attempts++
+		if attempts == 2 {
+			invoker.result = workers.ExecuteResult{
+				Outcome: workers.ExecutionOutcomeAccepted,
+				StructuredResult: map[string]any{
+					"answer":          "validated answer",
+					"schemaValidated": "customer-owned value",
+				},
+				StructuredResultPresent: true,
+				// The raw provider text is deliberately different: the child
+				// must return Workers' validated native result, not reparse it.
+				Output: workers.ProposedOutput{Primary: []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeText,
+					Text: `{"answer":"rejected raw text"}`,
+				}}},
+			}
+		}
+	}
+	invoker.onExecute = invokerOnExecute
+	sink := newChildRecordSink()
+	executor := newChildWorkerExecutor("dur-sess-structured-retry", invoker, sink, childTestValues{}, nil, "/project", 1)
+
+	result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{
+		Prompt:        "return a structured answer",
+		Label:         "structured-retry",
+		ModelProvider: "codex",
+		OutputSchema:  map[string]any{"type": "object"},
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if attempts != 2 {
+		t.Fatalf("Workers attempts = %d, want initial attempt plus one child retry", attempts)
+	}
+	if result.Status != factory.JavaScriptChildDispatchStatusCompleted || !result.SchemaValidated {
+		t.Fatalf("child result = %#v, want completed schema-validated result", result)
+	}
+	if result.Output["answer"] != "validated answer" {
+		t.Fatalf("child answer = %#v, want native structured answer", result.Output["answer"])
+	}
+	if result.Output["schemaValidated"] != "customer-owned value" {
+		t.Fatalf("customer schemaValidated field = %#v, want preserved customer value", result.Output["schemaValidated"])
+	}
+	terminal := sink.terminalChildDispatch(t)
+	if terminal.Attempt != 2 || !terminal.SchemaValidated {
+		t.Fatalf("terminal record = %#v, want attempt 2 and schemaValidated true", terminal)
+	}
+	if terminal.Output["schemaValidated"] != "customer-owned value" {
+		t.Fatalf("recorded customer schemaValidated field = %#v, want preserved customer value", terminal.Output["schemaValidated"])
+	}
+	if invoker.request.Target.Prompt.OutputSchema == "" {
+		t.Fatal("Workers request output schema = empty, want schema-declared child contract")
+	}
+}
+
+func TestChildWorkerExecutor_ExhaustedStructuredSchemaMismatchFailsSafely(t *testing.T) {
+	const diagnostic = "structured output schema violation: instance /answer; expected string"
+	attempts := 0
+	invoker := &recordingWorkerExecution{
+		result: workers.ExecuteResult{
+			Outcome: workers.ExecutionOutcomeFailed,
+			Output: workers.ProposedOutput{Primary: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
+				Text: `{"answer":"rejected-value"}`,
+			}}},
+			Failure: &workers.ExecutionFailure{
+				Type:      workers.WorkFailureTypeStructuredOutputSchemaViolation,
+				Family:    workers.WorkFailureFamilyTerminal,
+				Message:   diagnostic,
+				RetryHint: false,
+				Detail: &workers.FailureDetail{
+					Reason:  workers.WorkFailureTypeStructuredOutputSchemaViolation,
+					Message: diagnostic,
+				},
+			},
+		},
+	}
+	invoker.onExecute = func(_ workers.ExecuteRequest) { attempts++ }
+	sink := newChildRecordSink()
+	executor := newChildWorkerExecutor("dur-sess-structured-exhausted", invoker, sink, childTestValues{}, nil, "/project", 2)
+
+	result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{
+		Prompt:        "do not expose rejected output",
+		Label:         "structured-exhausted",
+		ModelProvider: "codex",
+		OutputSchema:  map[string]any{"type": "object"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "/answer") {
+		t.Fatalf("Execute error = %v, want schema path diagnostic", err)
+	}
+	if strings.Contains(err.Error(), "rejected-value") || strings.Contains(err.Error(), "do not expose rejected output") {
+		t.Fatalf("Execute error = %q, must not expose rejected output or prompt", err)
+	}
+	if attempts != 3 {
+		t.Fatalf("Workers attempts = %d, want initial attempt plus two child retries", attempts)
+	}
+	if result.Status != factory.JavaScriptChildDispatchStatusFailed || len(result.Output) != 0 || result.SchemaValidated {
+		t.Fatalf("failed child result = %#v, want failed with no output and false schema metadata", result)
+	}
+	terminal := sink.terminalChildDispatch(t)
+	if terminal.Attempt != 3 || terminal.Output != nil || terminal.SchemaValidated {
+		t.Fatalf("failed terminal record = %#v, want attempt 3 with no output and false schema metadata", terminal)
+	}
+	if terminal.FailureClassification != workers.WorkFailureTypeStructuredOutputSchemaViolation {
+		t.Fatalf("failure classification = %q, want structured schema violation", terminal.FailureClassification)
+	}
+	if terminal.Retryable == nil || *terminal.Retryable {
+		t.Fatalf("retryable = %#v, want false after exhausted child allowance", terminal.Retryable)
 	}
 }
 
@@ -597,13 +735,22 @@ func TestChildWorkerExecutor_PassesDetachedCorrelationAndOneProgressPublisher(t 
 		})
 	}
 
-	_, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{
+	result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{
 		Prompt:        "summarize",
 		Preset:        "child-worker",
 		ModelProvider: "codex",
 	})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
+	}
+	if result.SchemaValidated {
+		t.Fatal("schema-less child schemaValidated = true, want false")
+	}
+	if result.Output["text"] != `{"text":"done"}` {
+		t.Fatalf("schema-less child output = %#v, want prose-compatible text", result.Output)
+	}
+	if _, exists := result.Output["schemaValidated"]; exists {
+		t.Fatalf("schema-less child output = %#v, want metadata outside customer output", result.Output)
 	}
 	request := invoker.request
 	if request.Correlation.FactorySessionID != "dur-sess-1" ||

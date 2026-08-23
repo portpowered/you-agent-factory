@@ -392,11 +392,11 @@ func TestBTRCP0DirectJavaScriptSuccessCharacterization(t *testing.T) {
 			"artifactRef":        factory.FormatArtifactURI(sessionID, "child-artifact-1"),
 			"promptDigest":       workflowruntime.TextDigest("summarize direct JavaScript"),
 			"output": map[string]any{
-				"text":            "fake:btrc-direct-javascript:direct-child:summarize direct JavaScript:characterization",
-				"subject":         "characterization",
-				"schemaValidated": false,
+				"text":    "fake:btrc-direct-javascript:direct-child:summarize direct JavaScript:characterization",
+				"subject": "characterization",
 			},
-			"label": "direct-child",
+			"schemaValidated": false,
+			"label":           "direct-child",
 		},
 	}
 	if !reflect.DeepEqual(projected, want) {
@@ -652,6 +652,9 @@ func assertFakeChildProjectedMetadata(t *testing.T, child map[string]any, sessio
 
 func assertFakeChildProjectedOutput(t *testing.T, child map[string]any) {
 	t.Helper()
+	if child["schemaValidated"] != false {
+		t.Fatalf("child schemaValidated = %#v", child["schemaValidated"])
+	}
 	output, ok := child["output"].(map[string]any)
 	if !ok {
 		t.Fatalf("child output = %#v, want object", child["output"])
@@ -662,8 +665,8 @@ func assertFakeChildProjectedOutput(t *testing.T, child map[string]any) {
 	if output["subject"] != "workflows" {
 		t.Fatalf("child output subject = %#v", output["subject"])
 	}
-	if output["schemaValidated"] != false {
-		t.Fatalf("child output schemaValidated = %#v", output["schemaValidated"])
+	if _, exists := output["schemaValidated"]; exists {
+		t.Fatalf("child output schemaValidated = %#v, want metadata outside customer output", output["schemaValidated"])
 	}
 }
 
@@ -694,6 +697,37 @@ func (s *stubChildExecutor) Execute(_ context.Context, req factory.JavaScriptChi
 		},
 		Request: req,
 	}, nil
+}
+
+type structuredChildExecutor struct {
+	mu       sync.Mutex
+	requests []factory.JavaScriptChildExecutionRequest
+}
+
+func (s *structuredChildExecutor) Execute(_ context.Context, req factory.JavaScriptChildExecutionRequest) (factory.JavaScriptChildExecutionResult, error) {
+	s.mu.Lock()
+	s.requests = append(s.requests, req)
+	index := len(s.requests)
+	s.mu.Unlock()
+	return factory.JavaScriptChildExecutionResult{
+		DispatchID:    fmt.Sprintf("structured-dispatch-%d", index),
+		ChildIndex:    index,
+		Status:        factory.JavaScriptChildDispatchStatusCompleted,
+		ExecutionMode: factory.JavaScriptChildExecutionModeLive,
+		Output: map[string]any{
+			"answer":          "native:" + req.Label,
+			"schemaValidated": "customer-output",
+		},
+		SchemaValidated: true,
+		SchemaDigest:    workflowruntime.SchemaDigest(req.OutputSchema),
+		Request:         req,
+	}, nil
+}
+
+func (s *structuredChildExecutor) requestCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.requests)
 }
 
 func (s *stubChildExecutor) executionRequests() []factory.JavaScriptChildExecutionRequest {
@@ -805,6 +839,66 @@ return parallel([
 	requests[0].OutputSchema["properties"].(map[string]any)["answer"].(map[string]any)["type"] = "number"
 	if requests[1].OutputSchema["properties"].(map[string]any)["answer"].(map[string]any)["type"] != "string" {
 		t.Fatal("parallel child schemas share mutable nested state")
+	}
+}
+
+func TestRun_StructuredChildResultsStayNativeAndMetadataCollisionSafe(t *testing.T) {
+	executor := &structuredChildExecutor{}
+	outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+		Source: `const schema = { type: "object", properties: { answer: { type: "string" } }, required: ["answer"] };
+return (async function () {
+const single = await agent.run({ prompt: "single", label: "single", schema });
+const many = await parallel([
+  { prompt: "first", label: "first", schema },
+  { prompt: "second", label: "second", schema },
+]);
+return { single, many };
+})();`,
+		SourceRef: "inline",
+		SessionID: "structured-native-results",
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}, factory.JavaScriptRuntimeHooks{
+		NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+			return executor
+		},
+	})
+	if err != nil || !outcome.OK {
+		t.Fatalf("Run() = outcome %#v, error %v", outcome, err)
+	}
+	projected := projectPrimaryJSON(t, "structured-native-results", outcome.Value)
+	assertStructuredProjectedChild(t, projected["single"], "single")
+	many, ok := projected["many"].([]any)
+	if !ok || len(many) != 2 {
+		t.Fatalf("projected parallel children = %#v, want two children", projected["many"])
+	}
+	assertStructuredProjectedChild(t, many[0], "first")
+	assertStructuredProjectedChild(t, many[1], "second")
+	if executor.requestCount() != 3 {
+		t.Fatalf("structured child requests = %d, want one direct and two parallel requests", executor.requestCount())
+	}
+}
+
+func assertStructuredProjectedChild(t *testing.T, value any, wantLabel string) {
+	t.Helper()
+	child, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("structured child = %#v, want object", value)
+	}
+	if child["label"] != wantLabel || child["schemaValidated"] != true {
+		t.Fatalf("structured child metadata = %#v, want label %q and schemaValidated true", child, wantLabel)
+	}
+	if child["schemaDigest"] == "" {
+		t.Fatalf("structured child schemaDigest = %#v, want non-empty digest", child["schemaDigest"])
+	}
+	output, ok := child["output"].(map[string]any)
+	if !ok {
+		t.Fatalf("structured child output = %#v, want native object", child["output"])
+	}
+	if output["answer"] != "native:"+wantLabel {
+		t.Fatalf("structured child answer = %#v, want native answer", output["answer"])
+	}
+	if output["schemaValidated"] != "customer-output" {
+		t.Fatalf("customer schemaValidated field = %#v, want preserved customer value", output["schemaValidated"])
 	}
 }
 
