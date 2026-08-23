@@ -122,6 +122,31 @@ func TestInstallPackagedFactory_LogsStructuredScopeAndSuccess(t *testing.T) {
 	}
 }
 
+func TestManagedInstallationFailureUsesErrorDiagnostic(t *testing.T) {
+	t.Parallel()
+
+	logger := &packagedInstallationLogger{}
+	service := New(
+		packagedInstallationTestPersistence(),
+		platformfilesystem.Local{},
+		os.Mkdir,
+		logger,
+	)
+	service.logInstallationOutcome(
+		"managed-failure-scope",
+		factorydefinitions.PackagedFactoryInstallResult{
+			Name:    "@you/goal",
+			Outcome: factorydefinitions.PackagedFactoryInstallFailed,
+		},
+		&stagingLease{path: "managed-lease", owner: ownerRecord{PID: 42}},
+	)
+
+	entries := logger.snapshot()
+	if len(entries) == 0 || entries[len(entries)-1].level != "error" {
+		t.Fatalf("managed failure diagnostics = %#v, want final error entry", entries)
+	}
+}
+
 func TestInstallPackagedFactory_ReclaimsOnlyRevalidatedOrphan(t *testing.T) {
 	root := t.TempDir()
 	name := "@test/orphan-recovery"

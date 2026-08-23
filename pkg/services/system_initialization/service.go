@@ -31,8 +31,12 @@ const (
 type PackagedFactoryOutcome string
 
 const (
-	PackagedFactoryCreated PackagedFactoryOutcome = "created"
-	PackagedFactorySkipped PackagedFactoryOutcome = "skipped"
+	PackagedFactoryCreated          PackagedFactoryOutcome = "created"
+	PackagedFactorySkipped          PackagedFactoryOutcome = "skipped"
+	PackagedFactoryCurrent          PackagedFactoryOutcome = "current"
+	PackagedFactoryRefreshed        PackagedFactoryOutcome = "refreshed"
+	PackagedFactoryCustomerModified PackagedFactoryOutcome = "customer-modified"
+	PackagedFactoryFailed           PackagedFactoryOutcome = "failed"
 )
 
 // PackagedFactoryResult summarizes one packaged Factory installation.
@@ -40,6 +44,7 @@ type PackagedFactoryResult struct {
 	Name       string
 	FactoryDir string
 	Outcome    PackagedFactoryOutcome
+	BackupDir  string
 }
 
 // Request contains the caller-controlled inputs for one initialization.

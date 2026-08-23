@@ -38,6 +38,7 @@ type InitializePackagedFactory struct {
 	Name       string `json:"name"`
 	FactoryDir string `json:"factoryDir"`
 	Outcome    string `json:"outcome"`
+	BackupDir  string `json:"backupDir,omitempty"`
 }
 
 // Initialize delegates home-directory intent to the Bootstrap root and surfaces
@@ -145,6 +146,25 @@ func renderInitializeSuccess(
 			); err != nil {
 				return err
 			}
+		case string(systeminitialization.PackagedFactoryCurrent):
+			if _, err := fmt.Fprintf(
+				cfg.Output,
+				"Packaged factory %s is current at %s\n",
+				factory.Name,
+				factory.FactoryDir,
+			); err != nil {
+				return err
+			}
+		case string(systeminitialization.PackagedFactoryRefreshed), string(systeminitialization.PackagedFactoryCustomerModified):
+			if _, err := fmt.Fprintf(
+				cfg.Output,
+				"Refreshed packaged factory %s\nDirectory: %s\nPrevious content backup: %s\n",
+				factory.Name,
+				factory.FactoryDir,
+				factory.BackupDir,
+			); err != nil {
+				return err
+			}
 		default:
 			if _, err := fmt.Fprintf(
 				cfg.Output,
@@ -182,6 +202,7 @@ func initializeResultPayload(result systeminitialization.Result) InitializeResul
 			Name:       factory.Name,
 			FactoryDir: factory.FactoryDir,
 			Outcome:    string(factory.Outcome),
+			BackupDir:  factory.BackupDir,
 		})
 	}
 	return InitializeResult{
