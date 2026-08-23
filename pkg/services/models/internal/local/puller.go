@@ -51,23 +51,6 @@ func NewScopedAssetPuller(inner assets.Service, scope models.RuntimeScopeRef) (A
 	}, nil
 }
 
-// NewDeferredScopedAssetPuller creates a compatibility adapter whose immutable
-// runtime scope is opened on first use. Factory Session assembly can therefore
-// retain its existing deferred runtime-config lookup without snapshotting it
-// before the runtime exists.
-func NewDeferredScopedAssetPuller(
-	inner assets.Service,
-	resolveScope func() (models.RuntimeScopeRef, error),
-) (AssetPuller, error) {
-	if inner == nil {
-		return nil, fmt.Errorf("construct local model asset adapter: Models Assets service is required")
-	}
-	if resolveScope == nil {
-		return nil, fmt.Errorf("construct local model asset adapter: runtime scope resolver is required")
-	}
-	return &assetPuller{inner: inner, resolveScope: resolveScope}, nil
-}
-
 func (p *assetPuller) PullModel(ctx context.Context, _ *models.RuntimeConfig, modelName string) (models.PullResult, error) {
 	scope, err := p.currentScope()
 	if err != nil {

@@ -133,55 +133,6 @@ func NewWithLeasesFacts(
 	return s
 }
 
-// NewWithLeasesFactsAndSupervisorConfig constructs the wired host used by
-// focused supervision tests when lease revocation and injected backend
-// effects must be observed together.
-func NewWithLeasesFactsAndSupervisorConfig(
-	scopes runtimescopes.Service,
-	assets scopedassets.Service,
-	processLauncher modelseffects.HostProcessLauncher,
-	hostHTTP modelseffects.HostHTTPDoer,
-	hostClock modelseffects.HostClock,
-	hostLogger modelseffects.HostDiagnosticLogger,
-	hostMetrics modelseffects.HostMetricsRecorder,
-	slotFacts modelseffects.SlotFactsProvider,
-	supervisorCfg SupervisorTestConfig,
-	policyCfg HostPolicyTestConfig,
-	options ...runtimehost.Options,
-) runtimehost.Service {
-	leases, err := leaseswire.NewService(hostClock, slotFacts)
-	if err != nil {
-		panic(err)
-	}
-	s := New(
-		scopes,
-		assets,
-		leases,
-		processLauncher,
-		hostHTTP,
-		hostClock,
-		hostLogger,
-		hostMetrics,
-		options...,
-	).(*service)
-	if supervisorCfg.ReadinessTimeout > 0 {
-		s.supervisor.ReadinessTimeout = supervisorCfg.ReadinessTimeout
-	}
-	if supervisorCfg.HealthCheckInterval > 0 {
-		s.supervisor.HealthCheckInterval = supervisorCfg.HealthCheckInterval
-	}
-	if supervisorCfg.HealthChecker != nil {
-		s.supervisor.HealthChecker = supervisorCfg.HealthChecker
-	}
-	s.supervisor.afterLoadStateObservation = supervisorCfg.AfterLoadStateObservation
-	s.supervisor.onProcessFailure = supervisorCfg.OnProcessFailure
-	s.idleUnloadAfter, s.maxLoadedRuntimes = normalizeHostPolicy(
-		policyCfg.IdleUnloadAfter,
-		policyCfg.MaxLoadedRuntimes,
-	)
-	return s
-}
-
 // NewWiredWithSupervisorConfig constructs the host-backed lease adapter with
 // deterministic supervisor overrides for focused integration tests.
 func NewWiredWithSupervisorConfig(

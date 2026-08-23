@@ -49,13 +49,6 @@ pkg/services/factory_visualization/transports/http/handlers_common.go: unreachab
 pkg/services/factory_visualization/transports/http/handlers_common.go: unreachable func: decodeStrictJSON
 pkg/services/factory_visualization/transports/http/presentation_handlers.go: unreachable func: Adapter.HandleFinalizePresentation
 pkg/services/factory_visualization/transports/http/request_context.go: unreachable func: Adapter.writeVisualizationRequestContextOutcome
-pkg/services/models/internal/artifacts/selection.go: unreachable func: Manifest.Clone
-pkg/services/models/internal/artifacts/selection.go: unreachable func: Manifest.SelectArtifact
-pkg/services/models/internal/artifacts/selection.go: unreachable func: SelectArtifact
-pkg/services/models/internal/local/puller.go: unreachable func: NewDeferredScopedAssetPuller
-pkg/services/models/internal/services/assets/internal/service/generic.go: unreachable func: service.discoverCachedRequirements
-pkg/services/models/internal/services/runtime_host/internal/service/export_test.go: unreachable func: NewWithLeasesFactsAndSupervisorConfig
-pkg/services/models/internal/services/runtime_host/internal/service/wired.go: unreachable func: LeasesOwner
 pkg/services/operator_settings/config_document.go: unreachable func: emptyConfigDocument
 pkg/services/operator_settings/defaults_resolution.go: unreachable func: LoadFileDefaults
 pkg/services/operator_settings/internal/dependencies_test.go: unreachable func: decodeTestConfig

@@ -418,27 +418,6 @@ func genericCandidatePaths(root, kind string, source genericSource, identity, na
 	return paths
 }
 
-func (s *service) discoverCachedRequirements(
-	kind string,
-	source genericSource,
-	roots []string,
-) []models.AssetRequirement {
-	for _, root := range roots {
-		if requirements := s.discoverContentAddressedRequirements(root, kind, source); len(requirements) > 0 {
-			return requirements
-		}
-		if source.kind != genericSourceHF {
-			continue
-		}
-		snapshot := filepath.Join(root, "models--"+source.owner+"--"+source.repository,
-			"snapshots", source.revision)
-		if requirements := s.discoverSnapshotRequirements(snapshot); len(requirements) > 0 {
-			return requirements
-		}
-	}
-	return nil
-}
-
 func (s *service) discoverContentAddressedRequirements(
 	root, kind string,
 	source genericSource,
