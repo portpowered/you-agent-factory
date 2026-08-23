@@ -1,6 +1,10 @@
-import type { ReactNode } from "react";
 import { DescriptionList } from "@you-agent-factory/components/data-display";
-import { ButtonLink, Label, Text } from "@you-agent-factory/components/primitives";
+import {
+  ButtonLink,
+  Label,
+  Text,
+} from "@you-agent-factory/components/primitives";
+import type { ReactNode } from "react";
 import { DashboardStatusPill } from "../../../../components/ui/dashboard-status-pill";
 import { DurabilityConfirmationState } from "../../../../components/ui/durability-confirmation-state";
 import type { FactorySessionDispatchDrilldownModel } from "../../lib/factory-session-dispatch-detail";

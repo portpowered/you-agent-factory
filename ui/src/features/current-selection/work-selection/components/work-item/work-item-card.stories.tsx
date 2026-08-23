@@ -149,6 +149,9 @@ export const DispatchHistoryStandardActions = {
     const card = await canvas.findByRole("article", {
       name: "Current selection",
     });
+    await expect(
+      await within(card).findByText("Durability confirmation: UNCONFIRMED"),
+    ).toBeVisible();
     const operationHistory = await within(card).findByRole("region", {
       name: "Work operations",
     });

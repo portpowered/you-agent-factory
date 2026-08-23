@@ -1,16 +1,16 @@
+import { DurabilityConfirmationState } from "../../../../../components/ui/durability-confirmation-state";
 import {
   formatList,
   formatWorkItemLabel,
 } from "../../../../../components/ui/formatters";
 import { WorkContentReadOnlyList } from "../../../../work-content/components/work-content-read-only-list";
 import { getWorkContentInspectMessages } from "../../../../work-content/messages/work-content";
-import { DurabilityConfirmationState } from "../../../../../components/ui/durability-confirmation-state";
-import { SelectedWorkDispatchHistorySection } from "../../../dispatch-selection/components/dispatch-history/selected-work-dispatch-history";
 import { CurrentSelectionDescriptionList } from "../../../base/components/detail/current-selection-description-list";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
 import { CurrentSelectionBodyLayout } from "../../../base/components/layout/current-selection-body-layout";
 import { SelectionDetailLayout } from "../../../base/components/layout/current-selection-detail-layout";
 import { useCurrentSelectionDispatchHistoryMessages } from "../../../base/components/presentation/current-selection-locale";
+import { SelectedWorkDispatchHistorySection } from "../../../dispatch-selection/components/dispatch-history/selected-work-dispatch-history";
 import type { WorkItemDetailCardProps } from "../../lib/detail-card-types";
 import { WorkRelationshipsSection } from "./work-item-relationship-graph";
 

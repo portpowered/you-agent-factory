@@ -120,13 +120,7 @@ export function WorkerSessionTimelineTarget({
   );
 }
 
-function TargetDetail({
-  label,
-  value,
-}: {
-  label: string;
-  value: ReactNode;
-}) {
+function TargetDetail({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="grid min-w-0 gap-1">
       <Label as="dt">{label}</Label>

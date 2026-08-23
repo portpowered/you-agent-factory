@@ -62,6 +62,9 @@ export const MultipleObservations: Story = {
         "work-terminal-story",
       ),
     });
+    await expect(
+      await canvas.findByText("Durability confirmation: UNCONFIRMED"),
+    ).toBeVisible();
 
     await userEvent.click(secondTarget);
     await expect(secondTarget).toHaveAttribute("aria-pressed", "true");
