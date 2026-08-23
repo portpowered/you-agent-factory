@@ -224,6 +224,8 @@ type workAdmissionProjectionBinding struct {
 	ledger        recordings.Ledger
 	ready         chan struct{}
 	readyOnce     sync.Once
+	callbackMu    sync.RWMutex
+	projection    *workAdmissionProjection
 	eventsVisited int
 	catchup       time.Duration
 }
@@ -287,19 +289,36 @@ func (p *workAdmissionProjection) Bind(ledger recordings.Ledger) {
 			<-ready
 			return
 		}
-		binding := &workAdmissionProjectionBinding{ledger: ledger, ready: make(chan struct{})}
+		binding := &workAdmissionProjectionBinding{
+			ledger: ledger, ready: make(chan struct{}), projection: p,
+		}
 		p.binding = binding
 		p.admissions = nil
 		p.seenEvents = make(map[string]struct{})
 		p.mu.Unlock()
 
 		startedAt := p.clock.Now()
-		ledger.AddEventRecorder(func(event factorydefinitions.FactoryEvent) {
-			p.applyEvent(binding, event)
-		})
+		ledger.AddEventRecorder(binding.applyEvent)
+		binding.callbackMu.Lock()
 		binding.catchup = p.clock.Now().Sub(startedAt)
+		binding.callbackMu.Unlock()
 		binding.readyOnce.Do(func() { close(binding.ready) })
 		return
+	}
+}
+
+// applyEvent is registered on the ledger as a binding-owned method value. The
+// callback therefore retains only the binding after Release severs its
+// projection pointer, instead of retaining the projection and its ledger.
+func (binding *workAdmissionProjectionBinding) applyEvent(event factorydefinitions.FactoryEvent) {
+	if binding == nil {
+		return
+	}
+	binding.callbackMu.RLock()
+	projection := binding.projection
+	binding.callbackMu.RUnlock()
+	if projection != nil {
+		projection.applyEvent(binding, event)
 	}
 }
 
@@ -338,7 +357,9 @@ func (p *workAdmissionProjection) SnapshotWithStats() ([]work.WorkAdmission, int
 		}
 		admissions := append([]work.WorkAdmission(nil), p.admissions...)
 		eventsVisited := binding.eventsVisited
+		binding.callbackMu.RLock()
 		catchup := binding.catchup
+		binding.callbackMu.RUnlock()
 		p.mu.RUnlock()
 		return admissions, eventsVisited, lockWait, catchup
 	}
@@ -356,8 +377,15 @@ func (p *workAdmissionProjection) Release() {
 	p.closed = true
 	binding := p.binding
 	p.binding = nil
+	p.generationRuntime = nil
+	p.generationLedger = nil
+	p.seenEvents = nil
 	p.mu.Unlock()
 	if binding != nil {
+		binding.callbackMu.Lock()
+		binding.projection = nil
+		binding.ledger = nil
+		binding.callbackMu.Unlock()
 		binding.readyOnce.Do(func() { close(binding.ready) })
 	}
 }

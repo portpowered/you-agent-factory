@@ -283,6 +283,11 @@ func (fs *SessionRuntime) ReplaceSessionRuntime(
 			}
 			fs.logger.Warn("session runtime replacement warning", zap.Error(err), zap.String("session_id", sessionID))
 		},
+		func(sessionID string, runtime *factorysessions.LiveRuntime, record factory.RuntimeRecord) {
+			if fs.retireWorkAdmissionProjection != nil {
+				fs.retireWorkAdmissionProjection(sessionID, runtime, record)
+			}
+		},
 	)
 	if err != nil {
 		return err

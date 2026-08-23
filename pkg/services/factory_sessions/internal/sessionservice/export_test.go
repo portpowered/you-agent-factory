@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -106,7 +108,7 @@ func TestWorkReadKeepsRuntimeGenerationDuringConcurrentReplacement(t *testing.T)
 		work.WorkRequestEventWork{Name: "old", WorkID: "old-work"},
 	))
 	oldRuntime := &generationWorkRuntime{
-		snapshot: snapshotWithWork("old-work"),
+		snapshot: snapshotWithWork(t, "old-work"),
 		entered:  make(chan struct{}),
 		allow:    make(chan struct{}),
 	}
@@ -132,7 +134,7 @@ func TestWorkReadKeepsRuntimeGenerationDuringConcurrentReplacement(t *testing.T)
 	newLedger.AppendRecordedEvent(admissionProjectionEvent(t, "new-admission", "session-1", 1,
 		work.WorkRequestEventWork{Name: "new", WorkID: "new-work"},
 	))
-	newRuntime := &generationWorkRuntime{snapshot: snapshotWithWork("new-work")}
+	newRuntime := &generationWorkRuntime{snapshot: snapshotWithWork(t, "new-work")}
 	newRecord := &generationRuntimeRecord{service: newRuntime, ledger: newLedger}
 	registerGenerationSession(state, "session-1", newRecord, newRuntime)
 	newWorkRuntime, err := assembly.ResolveWorkRuntime("session-1")
@@ -153,6 +155,74 @@ func TestWorkReadKeepsRuntimeGenerationDuringConcurrentReplacement(t *testing.T)
 	assertGenerationWorkSnapshot(t, oldSnapshot, "old-work", "old")
 }
 
+func TestRetireWorkAdmissionProjectionAfterRepeatedReplacement(t *testing.T) {
+	t.Parallel()
+
+	type generation struct {
+		runtime    *factorysessions.LiveRuntime
+		record     factory.RuntimeRecord
+		ledger     *admissionProjectionLedger
+		projection *workAdmissionProjection
+	}
+	assembly := &Assembly{workAdmissions: make(map[string][]*workAdmissionProjection)}
+	var current generation
+	var retired []generation
+
+	for index := 0; index < 3; index++ {
+		runtime := &factorysessions.LiveRuntime{}
+		ledger := &admissionProjectionLedger{}
+		projection := newWorkAdmissionProjectionForGeneration(
+			"session-1", runtime, ledger, platformclock.Real{},
+		)
+		projection.Bind(ledger)
+		ledger.AppendRecordedEvent(admissionProjectionEvent(
+			t, "generation-"+strconv.Itoa(index), "session-1", index+1,
+			work.WorkRequestEventWork{Name: "generation", WorkID: "work-" + strconv.Itoa(index)},
+		))
+		replacement := generation{
+			runtime: runtime, record: &generationRuntimeRecord{ledger: ledger},
+			ledger: ledger, projection: projection,
+		}
+		assembly.workAdmissionsMu.Lock()
+		assembly.workAdmissions["session-1"] = append(
+			assembly.workAdmissions["session-1"], projection,
+		)
+		assembly.workAdmissionsMu.Unlock()
+
+		if current.projection != nil {
+			assembly.retireWorkAdmissionProjection("session-1", current.runtime, current.record)
+			retired = append(retired, current)
+		}
+		current = replacement
+	}
+
+	assembly.workAdmissionsMu.Lock()
+	retained := assembly.workAdmissions["session-1"]
+	assembly.workAdmissionsMu.Unlock()
+	if len(retained) != 1 || retained[0] != current.projection {
+		t.Fatalf("retained projections = %#v, want only current generation", retained)
+	}
+
+	for index, old := range retired {
+		before := old.projection.Snapshot()
+		old.ledger.AppendRecordedEvent(admissionProjectionEvent(
+			t, "stale-"+strconv.Itoa(index), "session-1", index+10,
+			work.WorkRequestEventWork{Name: "stale", WorkID: "stale-" + strconv.Itoa(index)},
+		))
+		assertAdmissions(t, old.projection.Snapshot(), before)
+
+		old.projection.mu.RLock()
+		closed := old.projection.closed
+		binding := old.projection.binding
+		generationRuntime := old.projection.generationRuntime
+		generationLedger := old.projection.generationLedger
+		old.projection.mu.RUnlock()
+		if !closed || binding != nil || generationRuntime != nil || generationLedger != nil {
+			t.Fatalf("retired projection %d retained generation state: closed=%v binding=%p runtime=%p ledger=%p", index, closed, binding, generationRuntime, generationLedger)
+		}
+	}
+}
+
 func registerGenerationSession(
 	state *sessionruntime.Service,
 	sessionID string,
@@ -167,19 +237,31 @@ func registerGenerationSession(
 	})
 }
 
-func snapshotWithWork(workID string) *legacysnapshot.Snapshot {
+func snapshotWithWork(t testing.TB, workID string) *legacysnapshot.Snapshot {
+	t.Helper()
 	tokenID := "token-" + workID
-	return &legacysnapshot.Snapshot{
-		Marking: factory.PetriMarkingSnapshot{Tokens: map[string]*factory.RuntimeToken{
-			tokenID: {
-				ID: tokenID, PlaceID: "task:todo",
-				Color: factory.RuntimeTokenColor{
-					DataType: factory.RuntimeTokenDataTypeWork, WorkID: workID,
-					WorkTypeID: "task", Name: workID,
+	payload := map[string]any{
+		"marking": map[string]any{
+			"tokens": map[string]any{
+				tokenID: map[string]any{
+					"id": tokenID, "place_id": "task:todo",
+					"color": map[string]string{
+						"data_type": "work", "work_id": workID,
+						"work_type_id": "task", "name": workID,
+					},
 				},
 			},
-		}},
+		},
 	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal opaque Work snapshot fixture: %v", err)
+	}
+	var snapshot legacysnapshot.Snapshot
+	if err := json.Unmarshal(encoded, &snapshot); err != nil {
+		t.Fatalf("unmarshal opaque Work snapshot fixture: %v", err)
+	}
+	return &snapshot
 }
 
 func assertGenerationWorkSnapshot(t testing.TB, snapshot work.ReadSnapshot, wantWorkID, wantName string) {

@@ -95,6 +95,7 @@ type SessionRuntime struct {
 	initialWorkFiles               fileeffects.InitialWorkReader
 	identity                       identity.Service
 	releaseWorkAdmissionProjection func(string)
+	retireWorkAdmissionProjection  func(string, *factorysessions.LiveRuntime, factory.RuntimeRecord)
 }
 
 // ActivateNamedFactory builds a replacement runtime from a persisted named

@@ -194,6 +194,45 @@ func (a *Assembly) releaseWorkAdmissionProjection(sessionID string) {
 	}
 }
 
+// retireWorkAdmissionProjection releases only the projection owned by a
+// runtime generation that has completed replacement. An in-flight adapter may
+// still hold the old projection, so Release preserves its detached admissions
+// while retiring the ledger callback and generation identity.
+func (a *Assembly) retireWorkAdmissionProjection(
+	sessionID string,
+	runtime *factorysessions.LiveRuntime,
+	record factoryruntime.RuntimeRecord,
+) {
+	if a == nil || runtime == nil || record == nil {
+		return
+	}
+	ledger := record.RecordingLedger()
+	a.workAdmissionsMu.Lock()
+	projections := a.workAdmissions[sessionID]
+	if len(projections) == 0 {
+		a.workAdmissionsMu.Unlock()
+		return
+	}
+	remaining := make([]*workAdmissionProjection, 0, len(projections))
+	retired := make([]*workAdmissionProjection, 0, 1)
+	for _, projection := range projections {
+		if projection.matchesGeneration(runtime, ledger) {
+			retired = append(retired, projection)
+			continue
+		}
+		remaining = append(remaining, projection)
+	}
+	if len(remaining) == 0 {
+		delete(a.workAdmissions, sessionID)
+	} else {
+		a.workAdmissions[sessionID] = remaining
+	}
+	a.workAdmissionsMu.Unlock()
+	for _, projection := range retired {
+		projection.Release()
+	}
+}
+
 func (a *Assembly) WithRuntimeRead(read func(*factorysessions.LiveRuntime) error) error {
 	if a == nil || a.state == nil {
 		return factorysessions.ErrRuntimeNotAvailable
@@ -350,6 +389,7 @@ func (a *Assembly) Complete(
 		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Sessions runtime is required")
 	}
 	runtime.releaseWorkAdmissionProjection = a.releaseWorkAdmissionProjection
+	runtime.retireWorkAdmissionProjection = a.retireWorkAdmissionProjection
 	gateway := NewWithLiveChangeCoordinator(
 		SessionServiceHost(runtime),
 		a.state,

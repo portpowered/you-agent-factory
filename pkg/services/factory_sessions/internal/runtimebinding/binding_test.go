@@ -316,6 +316,9 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 		dir: "/new", service: replacementFactory{}, backendScope: "backend-new",
 	}
 	var stopped factory.RuntimeRun
+	var retiredSessionID string
+	var retiredRecord factory.RuntimeRecord
+	var retiredAfterStop bool
 
 	updated, err := runtimebinding.Replace(
 		context.Background(),
@@ -331,12 +334,23 @@ func TestReplaceTransfersLiveSessionAndActiveRuntimeOwnership(t *testing.T) {
 			return nil
 		},
 		nil,
+		func(sessionID string, _ *factorysessions.LiveRuntime, record factory.RuntimeRecord) {
+			retiredSessionID = sessionID
+			retiredRecord = record
+			retiredAfterStop = stopped == oldHandle
+		},
 	)
 	if err != nil {
 		t.Fatalf("Replace: %v", err)
 	}
 	if stopped != oldHandle {
 		t.Fatal("Replace did not stop the previous runtime")
+	}
+	if retiredSessionID != original.ID || retiredRecord != oldInstance {
+		t.Fatalf("retired runtime = (%q, %T), want (%q, %T)", retiredSessionID, retiredRecord, original.ID, oldInstance)
+	}
+	if !retiredAfterStop {
+		t.Fatal("runtime retirement callback ran before the previous runtime stopped")
 	}
 	newHandle := runtimebinding.HandleFromSession(updated)
 	assertReplacementSession(t, original, updated, oldHandle, newHandle, preparedSpec)
