@@ -41,6 +41,9 @@ type service struct {
 
 	cacheMu  sync.Mutex
 	inflight map[string]*assetCacheCall
+	// cacheJoinObserver is an optional concurrency observer used by tests to
+	// coordinate followers at the shared-cache boundary.
+	cacheJoinObserver func()
 
 	pullStateMu sync.RWMutex
 	activePulls map[string]activePullState
