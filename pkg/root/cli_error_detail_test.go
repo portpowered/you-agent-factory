@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -164,8 +165,9 @@ func TestProcessLocalRunFailuresPreserveSubmittedInputs(t *testing.T) {
 				strings.Contains(stderr.String(), "no such file") {
 				t.Fatalf("local failure lost context or leaked fallback/cause: %q", stderr.String())
 			}
-			if stdout.Len() != 0 {
-				t.Fatalf("stdout = %q, want empty local failure output", stdout.String())
+			wantHome := fmt.Sprintf("Home directory: %s\n", home)
+			if stdout.String() != wantHome {
+				t.Fatalf("stdout = %q, want %q", stdout.String(), wantHome)
 			}
 		})
 	}
@@ -195,7 +197,13 @@ func cliDisclosureModes() []cliDisclosureMode {
 	}
 }
 
-func executeDisclosureFailure(t *testing.T, process *initializerapplication.Process, args []string) string {
+type cliFailureOutput struct {
+	home   string
+	stdout string
+	stderr string
+}
+
+func executeDisclosureFailure(t *testing.T, process *initializerapplication.Process, args []string) cliFailureOutput {
 	t.Helper()
 
 	var stdout, stderr bytes.Buffer
@@ -211,10 +219,7 @@ func executeDisclosureFailure(t *testing.T, process *initializerapplication.Proc
 	}); err == nil {
 		t.Fatalf("Process.Execute(%v) error = nil, want command failure", args)
 	}
-	if stdout.Len() != 0 {
-		t.Fatalf("stdout = %q, want empty failure output", stdout.String())
-	}
-	return stderr.String()
+	return cliFailureOutput{home: home, stdout: stdout.String(), stderr: stderr.String()}
 }
 
 func testProcessLocalFailureDisclosure(t *testing.T) {
@@ -231,7 +236,22 @@ func testProcessLocalFailureDisclosure(t *testing.T) {
 	for _, mode := range cliDisclosureModes() {
 		args := append([]string{"you"}, mode.flags...)
 		args = append(args, "run", "--replay", missingPath)
-		outputs[mode.name] = executeDisclosureFailure(t, process, args)
+		result := executeDisclosureFailure(t, process, args)
+		outputs[mode.name] = result.stderr
+		if mode.name == "default" {
+			want := fmt.Sprintf("Home directory: %s\n", result.home)
+			if result.stdout != want {
+				t.Fatalf("%s stdout = %q, want %q", mode.name, result.stdout, want)
+			}
+		} else if result.stdout != "" {
+			t.Fatalf("%s stdout = %q, want empty structured failure output", mode.name, result.stdout)
+		}
+		if mode.name != "default" {
+			wantPrefix := fmt.Sprintf("Home directory: %s\n", result.home)
+			if !strings.HasPrefix(result.stderr, wantPrefix) {
+				t.Fatalf("%s stderr = %q, want home disclosure prefix %q", mode.name, result.stderr, wantPrefix)
+			}
+		}
 		if !strings.Contains(outputs[mode.name], clidiag.LocalInputFailureCode) ||
 			!strings.Contains(outputs[mode.name], missingPath) {
 			t.Fatalf("%s stderr = %q, want local path diagnostic", mode.name, outputs[mode.name])
@@ -271,7 +291,11 @@ func testProcessHTTPFailureDisclosure(t *testing.T) {
 	for _, mode := range cliDisclosureModes() {
 		args := append([]string{"you"}, mode.flags...)
 		args = append(args, "--server", server.URL, "--json", "session", "show", "missing")
-		outputs[mode.name] = executeDisclosureFailure(t, process, args)
+		result := executeDisclosureFailure(t, process, args)
+		if result.stdout != "" {
+			t.Fatalf("%s stdout = %q, want empty remote failure output", mode.name, result.stdout)
+		}
+		outputs[mode.name] = result.stderr
 		if !strings.Contains(outputs[mode.name], `"family":"NOT_FOUND"`) {
 			t.Fatalf("%s stderr = %q, want structured server family", mode.name, outputs[mode.name])
 		}
@@ -319,7 +343,11 @@ func TestProcessDebugHTTPFailureOmitsOpaqueResponseBody(t *testing.T) {
 	for _, mode := range cliDisclosureModes() {
 		args := append([]string{"you"}, mode.flags...)
 		args = append(args, "--server", server.URL, "models", "pull", "OMNIVOICE_Q4_K_M")
-		output := executeDisclosureFailure(t, process, args)
+		result := executeDisclosureFailure(t, process, args)
+		if result.stdout != "" {
+			t.Fatalf("%s stdout = %q, want empty remote failure output", mode.name, result.stdout)
+		}
+		output := result.stderr
 		if strings.Contains(output, responseMarker) {
 			t.Fatalf("%s output leaked opaque HTTP response body: %q", mode.name, output)
 		}
@@ -359,7 +387,11 @@ func TestProcessDebugFactoryFailureOmitsOpaqueResponseBody(t *testing.T) {
 	for _, mode := range cliDisclosureModes() {
 		args := append([]string{"you"}, mode.flags...)
 		args = append(args, "--server", server.URL, "factory", "show")
-		output := executeDisclosureFailure(t, process, args)
+		result := executeDisclosureFailure(t, process, args)
+		if result.stdout != "" {
+			t.Fatalf("%s stdout = %q, want empty remote failure output", mode.name, result.stdout)
+		}
+		output := result.stderr
 		if strings.Contains(output, responseMarker) {
 			t.Fatalf("%s output leaked opaque HTTP response body: %q", mode.name, output)
 		}
@@ -409,7 +441,11 @@ func TestProcessDebugReplaceCurrentFailureOmitsOpaqueResponseBody(t *testing.T) 
 	for _, mode := range cliDisclosureModes() {
 		args := append([]string{"you"}, mode.flags...)
 		args = append(args, "--server", server.URL, "factory", "replace-current")
-		output := executeDisclosureFailure(t, process, args)
+		result := executeDisclosureFailure(t, process, args)
+		if result.stdout != "" {
+			t.Fatalf("%s stdout = %q, want empty remote failure output", mode.name, result.stdout)
+		}
+		output := result.stderr
 		if strings.Contains(output, responseMarker) {
 			t.Fatalf("%s output leaked opaque HTTP response body: %q", mode.name, output)
 		}
