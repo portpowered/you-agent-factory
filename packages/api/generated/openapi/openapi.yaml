@@ -3724,6 +3724,7 @@ components:
         - turnId
         - attemptId
         - state
+        - confirmationState
         - startedAt
         - endedAt
         - durationMillis
@@ -3792,6 +3793,9 @@ components:
             - WorkerSessionObservationStateFailed
             - WorkerSessionObservationStateCanceled
             - WorkerSessionObservationStateTerminated
+        confirmationState:
+          $ref: '#/components/schemas/ConfirmationState'
+          description: Whether the reported Worker Session state or terminal outcome is covered by completed recording storage.
         startedAt:
           type: string
           format: date-time

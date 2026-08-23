@@ -8,6 +8,7 @@ required:
   - turnId
   - attemptId
   - state
+  - confirmationState
   - startedAt
   - endedAt
   - durationMillis
@@ -78,6 +79,9 @@ properties:
       - WorkerSessionObservationStateFailed
       - WorkerSessionObservationStateCanceled
       - WorkerSessionObservationStateTerminated
+  confirmationState:
+    $ref: '../data-models/ConfirmationState.yaml'
+    description: Whether the reported Worker Session state or terminal outcome is covered by completed recording storage.
   startedAt:
     type: string
     format: date-time

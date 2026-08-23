@@ -8961,6 +8961,9 @@ type WorkerSessionObservation struct {
 	// AttemptId Stable attempt or dispatch identity.
 	AttemptId string `json:"attemptId"`
 
+	// ConfirmationState Whether the reported state or outcome is covered by completed recording storage.
+	ConfirmationState ConfirmationState `json:"confirmationState"`
+
 	// Direct Whether this observation was admitted through the direct top-level Worker Session surface.
 	Direct        bool                                  `json:"direct"`
 	DurationBasis WorkerSessionObservationDurationBasis `json:"durationBasis"`

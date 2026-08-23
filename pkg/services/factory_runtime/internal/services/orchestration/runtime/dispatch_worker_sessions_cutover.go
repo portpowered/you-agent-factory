@@ -243,6 +243,7 @@ func (f *factoryImpl) WorkerSessionsObservationForSession(factorySessionID strin
 type recordedWorkerSessionObservation struct {
 	workersessions.Service
 	ledger           recordings.RuntimeLedger
+	durability       recordings.CompletedFlushWatermarkReader
 	projector        factory.WorldStateProjector
 	clock            factory.Clock
 	providerSessions providersessions.Service
@@ -278,7 +279,7 @@ func (s *recordedWorkerSessionObservation) projectRecorded(
 	completed := recordedDispatchStateMaps(world)
 	result := make([]workersessions.Observation, 0, len(associations))
 	for dispatchID, association := range associations {
-		fact := recordedDispatchFact(dispatchID, association, requests, completed, world.ProviderSessions, world.ActiveDispatches, ordered)
+		fact := s.annotateRecordedFact(recordedDispatchFact(dispatchID, association, requests, completed, world.ProviderSessions, world.ActiveDispatches, ordered))
 		if !containsRecordedWorkID(fact.workIDs, workID) {
 			continue
 		}
@@ -449,7 +450,11 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 		return workersessions.ListObservationsResult{}, err
 	}
 	if s == nil || s.ledger == nil || s.projector == nil {
-		return s.listLive(ctx, req)
+		result, err := s.listLive(ctx, req)
+		if err == nil {
+			s.applyConfirmation(result.Observations)
+		}
+		return result, err
 	}
 
 	events := s.canonicalEvents()
@@ -468,6 +473,8 @@ func (s *recordedWorkerSessionObservation) ListObservations(
 	if err := s.applyRecordingHealth(ctx, recorded); err != nil {
 		return workersessions.ListObservationsResult{}, err
 	}
+	s.applyConfirmation(recorded)
+	s.applyConfirmation(live.Observations)
 	return recordedObservationListResult(recorded, knownWork, live, liveErr)
 }
 
@@ -504,6 +511,24 @@ func (s *recordedWorkerSessionObservation) listLive(
 	return s.Service.ListObservations(ctx, req)
 }
 
+// ListWorkerSessionObservations decorates the process-local top-level list so
+// direct Worker Session reads use the same explicit default as session-scoped
+// and replay-backed observations.
+func (s *recordedWorkerSessionObservation) ListWorkerSessionObservations(
+	ctx context.Context,
+	req workersessions.ListWorkerSessionObservationsRequest,
+) (workersessions.ListWorkerSessionObservationsResult, error) {
+	if s == nil || s.Service == nil {
+		return workersessions.ListWorkerSessionObservationsResult{}, workersessions.ErrObservationProjectionUnavailable
+	}
+	result, err := s.Service.ListWorkerSessionObservations(ctx, req)
+	if err == nil {
+		s.applyConfirmation(result.Observations)
+	}
+	return result, err
+}
+
+// Start carries the runtime-owned recording identity into direct admission.
 func (s *recordedWorkerSessionObservation) Start(
 	ctx context.Context,
 	req workersessions.StartRequest,
@@ -681,7 +706,11 @@ func (s *recordedWorkerSessionObservation) GetObservation(
 			if enrichErr != nil {
 				return workersessions.Observation{}, enrichErr
 			}
-			return s.withRecordingHealth(ctx, observation)
+			observation, healthErr := s.withRecordingHealth(ctx, observation)
+			if healthErr != nil {
+				return workersessions.Observation{}, healthErr
+			}
+			return s.confirmedObservation(observation), nil
 		}
 		if s.Service == nil {
 			return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
@@ -694,7 +723,11 @@ func (s *recordedWorkerSessionObservation) GetObservation(
 	if err != nil {
 		return workersessions.Observation{}, err
 	}
-	return s.withRecordingHealth(ctx, observation)
+	observation, err = s.withRecordingHealth(ctx, observation)
+	if err != nil {
+		return workersessions.Observation{}, err
+	}
+	return s.confirmedObservation(observation), nil
 }
 
 // GetObservationByWorkerSessionID resolves the Worker Session against this
@@ -717,14 +750,18 @@ func (s *recordedWorkerSessionObservation) GetObservationByWorkerSessionID(
 		}
 		if found {
 			observation := recordedObservationFromFact(fact, s.clock)
-			if fact.provider == nil {
-				return s.withRecordingHealth(ctx, observation)
+			if fact.provider != nil {
+				var enrichErr error
+				observation, enrichErr = s.enrichRecordedObservation(ctx, observation, providerSessionRef(*fact.provider))
+				if enrichErr != nil {
+					return workersessions.Observation{}, enrichErr
+				}
 			}
-			observation, enrichErr := s.enrichRecordedObservation(ctx, observation, providerSessionRef(*fact.provider))
-			if enrichErr != nil {
-				return workersessions.Observation{}, enrichErr
+			observation, healthErr := s.withRecordingHealth(ctx, observation)
+			if healthErr != nil {
+				return workersessions.Observation{}, healthErr
 			}
-			return s.withRecordingHealth(ctx, observation)
+			return s.confirmedObservation(observation), nil
 		}
 		if s.Service == nil {
 			return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
@@ -737,7 +774,11 @@ func (s *recordedWorkerSessionObservation) GetObservationByWorkerSessionID(
 	if err != nil {
 		return workersessions.Observation{}, err
 	}
-	return s.withRecordingHealth(ctx, observation)
+	observation, err = s.withRecordingHealth(ctx, observation)
+	if err != nil {
+		return workersessions.Observation{}, err
+	}
+	return s.confirmedObservation(observation), nil
 }
 
 func (s *recordedWorkerSessionObservation) ReadTranscript(
@@ -914,6 +955,7 @@ func newRecordedWorkerSessionObservationWithRecording(
 	}
 	return &recordedWorkerSessionObservation{
 		Service: live, ledger: ledger, projector: projector, clock: clock,
+		durability:       completedFlushWatermarkReader(ledger),
 		providerSessions: providerSessions, replayEvents: cloneAndSortFactoryEvents(replayEvents), recordingID: strings.TrimSpace(recordingID),
 		recordingReader: recordingReader, factorySessionID: factorySessionID,
 	}

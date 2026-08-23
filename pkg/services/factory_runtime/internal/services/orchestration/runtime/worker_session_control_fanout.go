@@ -541,10 +541,10 @@ func (s *recordedWorkerSessionObservation) recordedObservationFacts(
 	sort.Strings(dispatchIDs)
 	facts := make([]recordedDispatchObservation, 0, len(dispatchIDs))
 	for _, dispatchID := range dispatchIDs {
-		facts = append(facts, recordedDispatchFact(
+		facts = append(facts, s.annotateRecordedFact(recordedDispatchFact(
 			dispatchID, associations[dispatchID], requests, completed,
 			world.ProviderSessions, world.ActiveDispatches, ordered,
-		))
+		)))
 	}
 	return facts, nil
 }
@@ -953,18 +953,21 @@ func cloneRecordedTime(value *time.Time) *time.Time {
 }
 
 type recordedDispatchObservation struct {
-	workerSessionID string
-	dispatchID      string
-	turnID          string
-	workIDs         []string
-	model           *string
-	reasoningEffort *string
-	startedAt       time.Time
-	endedAt         *time.Time
-	state           workersessions.State
-	failure         *workersessions.FailureCause
-	provider        *providers.SessionMetadata
-	tokenUsage      *workersessions.TokenUsage
+	workerSessionID    string
+	dispatchID         string
+	streamGenerationID string
+	stateSequence      int64
+	stateSequenceKnown bool
+	turnID             string
+	workIDs            []string
+	model              *string
+	reasoningEffort    *string
+	startedAt          time.Time
+	endedAt            *time.Time
+	state              workersessions.State
+	failure            *workersessions.FailureCause
+	provider           *providers.SessionMetadata
+	tokenUsage         *workersessions.TokenUsage
 }
 
 type recordedDispatchAssociation struct {

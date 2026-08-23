@@ -1757,6 +1757,8 @@ export interface components {
       attemptId: string;
       /** @enum {string} */
       state: WorkerSessionObservationState;
+      /** @description Whether the reported Worker Session state or terminal outcome is covered by completed recording storage. */
+      confirmationState: components["schemas"]["ConfirmationState"];
       /** Format: date-time */
       startedAt: string | null;
       /** Format: date-time */

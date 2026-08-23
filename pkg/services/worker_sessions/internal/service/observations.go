@@ -527,6 +527,7 @@ func baseObservation(id string, session workersessions.Session, metadata *observ
 		TurnID:                     metadata.turnID,
 		AttemptID:                  metadata.attemptID,
 		State:                      session.State,
+		ConfirmationState:          workersessions.ConfirmationStateUnconfirmed,
 		DurationBasis:              workersessions.DurationBasisUnavailable,
 		Transcript:                 workersessions.TranscriptAvailabilityUnavailable,
 	}

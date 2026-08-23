@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -74,6 +75,73 @@ func TestListWorkerSessionsReturnsTopLevelEmptyCollection(t *testing.T) {
 	}
 	if response.Sessions == nil || len(response.Sessions) != 0 {
 		t.Fatalf("sessions = %#v, want non-nil empty collection", response.Sessions)
+	}
+}
+
+func TestWorkerSessionObservationHTTPExposesConfirmationAlongsideRecordingHealth(t *testing.T) {
+	service := &fakeObservationService{
+		topLevelResult: workersessions.ListWorkerSessionObservationsResult{Observations: []workersessions.Observation{
+			{
+				WorkerSessionID:   "worker-unconfirmed",
+				AttemptID:         "attempt-unconfirmed",
+				State:             workersessions.StateRunning,
+				ConfirmationState: workersessions.ConfirmationStateUnconfirmed,
+			},
+			{
+				WorkerSessionID:       "worker-confirmed",
+				AttemptID:             "attempt-confirmed",
+				State:                 workersessions.StateCompleted,
+				ConfirmationState:     workersessions.ConfirmationStateConfirmed,
+				RecordingHealth:       recordings.WorkerRecordingStatusDegraded,
+				RecordingHealthReason: "PERSISTENCE_FAILED",
+			},
+		}},
+		getByWorkerResult: workersessions.Observation{
+			WorkerSessionID:       "worker-confirmed",
+			AttemptID:             "attempt-confirmed",
+			State:                 workersessions.StateCompleted,
+			ConfirmationState:     workersessions.ConfirmationStateConfirmed,
+			RecordingHealth:       recordings.WorkerRecordingStatusIncomplete,
+			RecordingHealthReason: "PROCESS_INTERRUPTED",
+		},
+	}
+	handler := NewHandler(NewAdapter(service, workServiceStub{}), zap.NewNop())
+
+	listRecorder := httptest.NewRecorder()
+	handler.ListWorkerSessions(
+		listRecorder,
+		httptest.NewRequest(http.MethodGet, "/worker-sessions", nil),
+		factoryapi.ListWorkerSessionsParams{},
+	)
+	if listRecorder.Code != http.StatusOK {
+		t.Fatalf("list status = %d, want 200; body=%s", listRecorder.Code, listRecorder.Body.String())
+	}
+	var listResponse factoryapi.ListWorkerSessionsResponse
+	if err := json.Unmarshal(listRecorder.Body.Bytes(), &listResponse); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(listResponse.Sessions) != 2 || listResponse.Sessions[0].ConfirmationState != factoryapi.UNCONFIRMED || listResponse.Sessions[1].ConfirmationState != factoryapi.CONFIRMED {
+		t.Fatalf("list confirmation states = %#v, want UNCONFIRMED/CONFIRMED", listResponse.Sessions)
+	}
+	if listResponse.Sessions[1].RecordingHealth == nil || *listResponse.Sessions[1].RecordingHealth != factoryapi.WorkerSessionObservationRecordingHealthDegraded {
+		t.Fatalf("list recording health = %#v, want independent DEGRADED health", listResponse.Sessions[1].RecordingHealth)
+	}
+
+	showRecorder := httptest.NewRecorder()
+	handler.GetWorkerSessionObservationByWorkerSessionId(
+		showRecorder,
+		httptest.NewRequest(http.MethodGet, "/worker-sessions/worker-confirmed", nil),
+		factoryapi.WorkerSessionID("worker-confirmed"),
+	)
+	if showRecorder.Code != http.StatusOK {
+		t.Fatalf("show status = %d, want 200; body=%s", showRecorder.Code, showRecorder.Body.String())
+	}
+	var showResponse factoryapi.WorkerSessionObservation
+	if err := json.Unmarshal(showRecorder.Body.Bytes(), &showResponse); err != nil {
+		t.Fatalf("decode show response: %v", err)
+	}
+	if showResponse.ConfirmationState != factoryapi.CONFIRMED || showResponse.RecordingHealth == nil || *showResponse.RecordingHealth != factoryapi.WorkerSessionObservationRecordingHealthIncomplete {
+		t.Fatalf("show confirmation/health = %q/%#v, want CONFIRMED/INCOMPLETE", showResponse.ConfirmationState, showResponse.RecordingHealth)
 	}
 }
 

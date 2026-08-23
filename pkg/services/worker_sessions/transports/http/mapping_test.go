@@ -5,7 +5,33 @@ import (
 	"testing"
 
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+func TestWorkerSessionObservationToAPIMapsDurabilityConfirmation(t *testing.T) {
+	defaulted := WorkerSessionObservationToAPI(workersessions.Observation{
+		WorkerSessionID: "worker-unconfirmed",
+		AttemptID:       "attempt-unconfirmed",
+		State:           workersessions.StateRunning,
+		DurationBasis:   workersessions.DurationBasisActiveClock,
+		Transcript:      workersessions.TranscriptAvailabilityUnavailable,
+	})
+	if defaulted.ConfirmationState != factoryapi.UNCONFIRMED {
+		t.Fatalf("default confirmationState = %q, want UNCONFIRMED", defaulted.ConfirmationState)
+	}
+
+	confirmed := WorkerSessionObservationToAPI(workersessions.Observation{
+		WorkerSessionID:   "worker-confirmed",
+		AttemptID:         "attempt-confirmed",
+		State:             workersessions.StateCompleted,
+		ConfirmationState: workersessions.ConfirmationStateConfirmed,
+		DurationBasis:     workersessions.DurationBasisRecordedTimestamps,
+		Transcript:        workersessions.TranscriptAvailabilityUnavailable,
+	})
+	if confirmed.ConfirmationState != factoryapi.CONFIRMED {
+		t.Fatalf("mapped confirmationState = %q, want CONFIRMED", confirmed.ConfirmationState)
+	}
+}
 
 func TestWorkerSessionObservationToAPIPreservesOptionalTurnUsage(t *testing.T) {
 	populated := WorkerSessionObservationToAPI(workersessions.Observation{
