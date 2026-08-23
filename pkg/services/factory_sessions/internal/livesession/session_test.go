@@ -67,6 +67,35 @@ func TestCanonicalIDPrefersRuntimeIdentityForDefaultAlias(t *testing.T) {
 	}
 }
 
+func TestNewWithRuntimeIDPreservesPreallocatedCanonicalIdentity(t *testing.T) {
+	t.Parallel()
+
+	want := "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba"
+	session := livesession.NewWithRuntimeID(
+		factorysessions.DefaultSessionID,
+		"/factories/default",
+		"/workspace",
+		"/workspace",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		nil,
+		true,
+		"default",
+		platformclock.Real{},
+		func() string { return "unexpected-minted-id" },
+		responseEventID,
+		want,
+	)
+	if session == nil {
+		t.Fatal("NewWithRuntimeID returned nil")
+	}
+	if got := livesession.CanonicalID(session); got != want {
+		t.Fatalf("canonical session ID = %q, want %q", got, want)
+	}
+	if got := session.ResponseEvents.FactorySessionID(); got != want {
+		t.Fatalf("response event store session ID = %q, want %q", got, want)
+	}
+}
+
 func TestEnsureRuntimeIDAssignsUUIDAndIsIdempotent(t *testing.T) {
 	t.Parallel()
 	session := &livesession.LiveSession{ID: factorysessions.DefaultSessionID, IsDefault: true}

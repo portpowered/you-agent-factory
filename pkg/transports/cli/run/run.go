@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
@@ -656,6 +657,10 @@ func prepareRunConfig(
 			return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
 		}
 	}
+	cfg, err := prepareCanonicalSessionIDForRun(cfg)
+	if err != nil {
+		return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
+	}
 
 	cfg, err := prepareCanonicalSessionIDForRun(cfg)
 	if err != nil {
@@ -692,6 +697,36 @@ func classifyRunInputFailure(cfg RunConfig, err error) error {
 		return clidiag.NewLocalInputFailure("--resume", path, err)
 	}
 	return err
+}
+
+func prepareCanonicalSessionIDForRun(cfg RunConfig) (RunConfig, error) {
+	if !usesAutomaticRecording(cfg) || strings.TrimSpace(cfg.CanonicalSessionID) != "" {
+		return cfg, nil
+	}
+	generator := cfg.CanonicalSessionIDGenerator
+	if generator == nil {
+		generator = uuid.NewString
+	}
+	canonicalID := strings.TrimSpace(generator())
+	if canonicalID == "" {
+		return RunConfig{}, fmt.Errorf("canonical Factory Session ID generator returned an empty identity")
+	}
+	cfg.CanonicalSessionID = canonicalID
+	return cfg, nil
+}
+
+func usesAutomaticRecording(cfg RunConfig) bool {
+	return strings.TrimSpace(cfg.RecordPath) == "" &&
+		!cfg.DisableDefaultRecording &&
+		strings.TrimSpace(cfg.ReplayPath) == ""
+}
+
+func loadSelectedMockWorkersConfig(
+	cfg RunConfig,
+	load workers.MockWorkersConfigLoader,
+) (*workers.MockWorkersConfig, error) {
+	config, _, err := loadSelectedMockWorkersConfigWithDiagnostics(cfg, load, nil)
+	return config, err
 }
 
 func loadSelectedMockWorkersConfigWithDiagnostics(

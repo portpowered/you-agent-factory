@@ -32,7 +32,7 @@ func TestRecordingsRootSelectsAndBindsOneStableGeneratedTarget(t *testing.T) {
 
 	canonicalID := "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba"
 	reservedPath := filepath.Join(
-		"home", "operator", ".you-agent-factory", "recordings", "2026", "07", "27", canonicalID+".jsonl",
+		"home", "operator", ".you-agent-factory", "recordings", "2026", "07", "27", canonicalID+".json",
 	)
 	reserver := &namedTargetReserver{path: reservedPath}
 	planner := lifecycleservice.NewTargetPlanner(

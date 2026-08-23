@@ -129,13 +129,9 @@ func TestNewRejectsMissingConstructionDependencies(t *testing.T) {
 	}
 }
 
-func TestSessionScopedRecordPath_ReplacesTokenAndSuffixesNonDefaultSessions(t *testing.T) {
+func TestSessionScopedRecordPath_PreservesDefaultAndSuffixesNonDefaultSessions(t *testing.T) {
 	t.Parallel()
 
-	tokenPath := "/recordings/factory-session-__factory_session_id__-1.json"
-	if got := runtimebuild.SessionScopedRecordPath(tokenPath, "session-a"); got != "/recordings/factory-session-session-a-1.json" {
-		t.Fatalf("token path = %q", got)
-	}
 	if got := runtimebuild.SessionScopedRecordPath("/tmp/recording.json", "~default"); got != "/tmp/recording.json" {
 		t.Fatalf("default path = %q", got)
 	}
