@@ -186,16 +186,6 @@ func (h *Harness) NewInvocation() (*Invocation, error) {
 	}, nil
 }
 
-// Run is a convenience for invocations that do not need to seed files first.
-func (h *Harness) Run(ctx context.Context, args ...string) (Result, error) {
-	invocation, err := h.NewInvocation()
-	if err != nil {
-		return Result{}, err
-	}
-	defer invocation.Close()
-	return invocation.Run(ctx, args...)
-}
-
 func (h *Harness) requireExternalPath(path string) error {
 	canonical, err := canonicalPath(path, "")
 	if err != nil {
