@@ -8,14 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/root"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	operatorsettingshttp "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/http"
 	mcpoperatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/mcp"
-	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -34,9 +31,13 @@ func TestHTTPSettingsTransportActivatesThroughRootBuildProcessAfterLifecycle(t *
 	t.Parallel()
 
 	homeDir := writeOperatorConfigForActivation(t, transportActivationProviderAlias, transportActivationModel)
-	configPath := operatorsettings.DefaultConfigPath(homeDir)
 	recorder := newOperatorSettingsActivationRecorder()
 	process := support.BuildProcess(t, recorder.edges())
+	settingsRoot := root.OperatorSettingsFromProcess(process)
+	if settingsRoot == nil {
+		t.Fatal("root process does not expose the composed Operator Settings service")
+	}
+	configPath := settingsRoot.DefaultConfigPath(homeDir)
 
 	if got := recorder.fileSystemCalls(); got != 0 {
 		t.Fatalf("operator-config filesystem effect calls = %d during BuildProcess, want 0", got)
@@ -45,22 +46,8 @@ func TestHTTPSettingsTransportActivatesThroughRootBuildProcessAfterLifecycle(t *
 	runOperatorSettingsLifecycleInitialization(t, process, homeDir)
 
 	beforeTransport := recorder.readFileCalls()
-	providersRoot, err := providerswire.NewService()
-	if err != nil {
-		t.Fatalf("providerswire.NewService() error = %v", err)
-	}
-	root, err := settingswire.NewServiceFromHomePorts(
-		&operatorSettingsActivationFileSystem{recorder: recorder},
-		globalconfigmapping.Decode,
-		providersRoot,
-		func() string { return "00000000-0000-4000-8000-000000000001" },
-		logging.NoopLogger{},
-	)
-	if err != nil {
-		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
-	}
 
-	adapter := operatorsettingshttp.NewAdapterFromRoot(operatorsettingshttp.RootBinding{Settings: root})
+	adapter := operatorsettingshttp.NewAdapterFromRoot(operatorsettingshttp.RootBinding{Settings: settingsRoot})
 	response, err := adapter.LoadDocument(t.Context(), operatorsettingshttp.LoadDocumentInput{
 		Path:            configPath,
 		RequireExisting: true,
@@ -91,9 +78,13 @@ func TestMCPSettingsTransportActivatesThroughRootBuildProcessAfterLifecycle(t *t
 	t.Parallel()
 
 	homeDir := writeOperatorConfigForActivation(t, transportActivationProviderAlias, transportActivationModel)
-	configPath := operatorsettings.DefaultConfigPath(homeDir)
 	recorder := newOperatorSettingsActivationRecorder()
 	process := support.BuildProcess(t, recorder.edges())
+	settingsRoot := root.OperatorSettingsFromProcess(process)
+	if settingsRoot == nil {
+		t.Fatal("root process does not expose the composed Operator Settings service")
+	}
+	configPath := settingsRoot.DefaultConfigPath(homeDir)
 
 	if got := recorder.fileSystemCalls(); got != 0 {
 		t.Fatalf("operator-config filesystem effect calls = %d during BuildProcess, want 0", got)
@@ -102,22 +93,8 @@ func TestMCPSettingsTransportActivatesThroughRootBuildProcessAfterLifecycle(t *t
 	runOperatorSettingsLifecycleInitialization(t, process, homeDir)
 
 	beforeTransport := recorder.readFileCalls()
-	providersRoot, err := providerswire.NewService()
-	if err != nil {
-		t.Fatalf("providerswire.NewService() error = %v", err)
-	}
-	root, err := settingswire.NewServiceFromHomePorts(
-		&operatorSettingsActivationFileSystem{recorder: recorder},
-		globalconfigmapping.Decode,
-		providersRoot,
-		func() string { return "00000000-0000-4000-8000-000000000001" },
-		logging.NoopLogger{},
-	)
-	if err != nil {
-		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
-	}
 
-	operation := mcpoperatorsettings.Bind(mcpoperatorsettings.RootDependencies{Settings: root})
+	operation := mcpoperatorsettings.Bind(mcpoperatorsettings.RootDependencies{Settings: settingsRoot})
 	raw, err := operation(
 		t.Context(),
 		mcpoperatorsettings.ToolLoadDocument,
@@ -157,12 +134,15 @@ func TestMCPSettingsTransportManagesDocumentAndEffectiveSelectionAfterLifecycle(
 	t.Parallel()
 
 	homeDir := writeScopedOperatorConfigForMCP(t)
-	configPath := operatorsettings.DefaultConfigPath(homeDir)
 	recorder := newOperatorSettingsActivationRecorder()
 	process := support.BuildProcess(t, recorder.edges())
+	settingsRoot := root.OperatorSettingsFromProcess(process)
+	if settingsRoot == nil {
+		t.Fatal("root process does not expose the composed Operator Settings service")
+	}
+	configPath := settingsRoot.DefaultConfigPath(homeDir)
 	runOperatorSettingsLifecycleInitialization(t, process, homeDir)
 
-	settingsRoot := newFullOperatorSettingsRoot(t, recorder)
 	operation := mcpoperatorsettings.Bind(mcpoperatorsettings.RootDependencies{Settings: settingsRoot})
 
 	loaded := loadMCPDocument(t, operation, configPath)
@@ -349,42 +329,6 @@ func assertMCPBoundaryFailures(
 		t.Fatalf("MCP canceled load request transport error = %v", err)
 	}
 	assertMCPError(t, canceledRaw, "operator_settings.request.canceled", "operator settings request was canceled", false, "")
-}
-
-func newFullOperatorSettingsRoot(t *testing.T, recorder *operatorSettingsActivationRecorder) operatorsettings.Service {
-	t.Helper()
-
-	providersRoot, err := providerswire.NewService()
-	if err != nil {
-		t.Fatalf("providerswire.NewService() error = %v", err)
-	}
-	providerCatalog := func(value string) (string, bool) {
-		resolved, resolveErr := providersRoot.ResolveIdentity(
-			context.Background(),
-			providers.ResolveIdentityRequest{Identity: value},
-		)
-		if resolveErr != nil {
-			return "", false
-		}
-		return resolved.ID.String(), true
-	}
-	root, err := settingswire.NewServiceFromConfigDocument(
-		operatorsettings.ConfigDocumentService{
-			Files:                 &operatorSettingsActivationFileSystem{recorder: recorder},
-			CreateTemp:            recorder.createTemporaryFile,
-			Providers:             providerCatalog,
-			Decoder:               globalconfigmapping.Decode,
-			Encoder:               globalconfigmapping.Encode,
-			PreserveUnknownFields: globalconfigmapping.PreserveUnknownFields,
-		},
-		providersRoot,
-		func() string { return "00000000-0000-4000-8000-000000000001" },
-		logging.NoopLogger{},
-	)
-	if err != nil {
-		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
-	}
-	return root
 }
 
 func callMCPTool(t *testing.T, operation mcpoperatorsettings.ToolOperation, name string, input any) json.RawMessage {

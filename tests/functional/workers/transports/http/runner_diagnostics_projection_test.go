@@ -8,10 +8,10 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -32,7 +32,7 @@ func TestRunnerSelectionAndSafeDiagnosticsThroughHTTPProjection(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"request":"inspect selected runner"}`))
 	runner := support.NewRecordingCommandRunner("safe agent result COMPLETE")
 
-	session, _, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+	session, _, events, projection := support.RunFactoryToCompletionWithEdgesAndObservationsAndProjection(
 		t,
 		dir,
 		serviceedges.Edges{ProviderCommandRunner: runner},
@@ -61,11 +61,11 @@ func TestRunnerSelectionAndSafeDiagnosticsThroughHTTPProjection(t *testing.T) {
 		t.Fatalf("provider command input = %q, want the authored prompt sentinel at the external edge", externalPrompt)
 	}
 
-	projection := generatedWorkstationProjectionFromHTTPEvents(t, events)
-	if projection.WorkstationRequestsByDispatchId == nil || len(*projection.WorkstationRequestsByDispatchId) != 1 {
-		t.Fatalf("workstation projection = %#v, want one dispatch keyed view", projection)
+	workstationProjection := generatedWorkstationProjectionFromHTTPEvents(t, projection, events)
+	if workstationProjection.WorkstationRequestsByDispatchId == nil || len(*workstationProjection.WorkstationRequestsByDispatchId) != 1 {
+		t.Fatalf("workstation projection = %#v, want one dispatch keyed view", workstationProjection)
 	}
-	for dispatchID, view := range *projection.WorkstationRequestsByDispatchId {
+	for dispatchID, view := range *workstationProjection.WorkstationRequestsByDispatchId {
 		if view.Request.Runner == nil || view.Response == nil || view.Response.Runner == nil {
 			t.Fatalf("workstation projection[%q] = %#v, want request and response runner views", dispatchID, view)
 		}
@@ -95,7 +95,7 @@ func TestRunnerDiagnosticsHTTPProjectionIncludesFailureClassification(t *testing
 		Stderr:   []byte("temporary provider failure credential=DIAGNOSTIC_CREDENTIAL_SENTINEL_91f3"),
 	})
 
-	session, _, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+	session, _, events, projection := support.RunFactoryToCompletionWithEdgesAndObservationsAndProjection(
 		t,
 		dir,
 		serviceedges.Edges{ProviderCommandRunner: runner},
@@ -108,11 +108,11 @@ func TestRunnerDiagnosticsHTTPProjectionIncludesFailureClassification(t *testing
 		)
 	}
 
-	projection := generatedWorkstationProjectionFromHTTPEvents(t, events)
-	if projection.WorkstationRequestsByDispatchId == nil || len(*projection.WorkstationRequestsByDispatchId) != 1 {
-		t.Fatalf("workstation projection = %#v, want one dispatch keyed view", projection)
+	workstationProjection := generatedWorkstationProjectionFromHTTPEvents(t, projection, events)
+	if workstationProjection.WorkstationRequestsByDispatchId == nil || len(*workstationProjection.WorkstationRequestsByDispatchId) != 1 {
+		t.Fatalf("workstation projection = %#v, want one dispatch keyed view", workstationProjection)
 	}
-	for dispatchID, view := range *projection.WorkstationRequestsByDispatchId {
+	for dispatchID, view := range *workstationProjection.WorkstationRequestsByDispatchId {
 		if view.Response == nil || view.Response.AgentRunInspection == nil {
 			t.Fatalf("workstation projection[%q] = %#v, want agent-run inspection", dispatchID, view)
 		}
@@ -197,6 +197,7 @@ func TestGeneratedRunnerProjectionPreservesOptionalAgentRunCollections(t *testin
 
 func generatedWorkstationProjectionFromHTTPEvents(
 	t *testing.T,
+	projection root.RecordingsProjection,
 	events []factoryapi.FactoryEvent,
 ) factoryapi.FactoryWorldWorkstationRequestProjectionSlice {
 	t.Helper()
@@ -210,16 +211,15 @@ func generatedWorkstationProjectionFromHTTPEvents(
 		}
 	}
 
-	projectionService := recordingswire.NewProjectionService()
 	world, err := recordingshttp.ReconstructFactoryWorldState(
-		projectionService.ReconstructFactoryWorldState,
+		projection.ReconstructFactoryWorldState,
 		events,
 		selectedTick,
 	)
 	if err != nil {
-		t.Fatalf("reconstruct Factory World from HTTP events: %v", err)
+		t.Fatalf("reconstruct Factory World from composed Recordings projection: %v", err)
 	}
-	return recordingshttp.Generated(projectionService.ProjectWorkstationRequests(world))
+	return recordingshttp.Generated(projection.ProjectWorkstationRequests(world))
 }
 
 func assertSelectedClaudeRunner(

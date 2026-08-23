@@ -55,14 +55,6 @@ type ContentMaterializer interface {
 	MaterializeContentURL(context.Context, string) (string, ContentCleanup, error)
 }
 
-// ContentURLSafetyValidator is the optional Work-owned safety role used when
-// a provider can consume a remote resource URL without local materialization.
-// It rejects unsafe targets while allowing the provider to own retrieval and
-// availability of an otherwise valid public URL.
-type ContentURLSafetyValidator interface {
-	ValidateContentURLSafety(context.Context, string) error
-}
-
 // ContentMaterializeFunc adapts a function to ContentMaterializer.
 type ContentMaterializeFunc func(context.Context, string) (string, ContentCleanup, error)
 

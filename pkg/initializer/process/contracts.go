@@ -152,6 +152,21 @@ type RuntimeCostsQueryCapability interface {
 	RuntimeCostsQuery() any
 }
 
+// RecordingsProjectionCapability is the neutral process handoff for the
+// already-composed Recordings projection root. The initializer keeps this
+// value opaque; pkg/root reifies the narrow public projection contract for
+// callers that need an operator-facing read.
+type RecordingsProjectionCapability interface {
+	RecordingsProjection() any
+}
+
+// OperatorSettingsCapability is the neutral process handoff for the
+// already-composed Operator Settings root. The initializer keeps this value
+// opaque; pkg/root reifies the service-owned contract for public transports.
+type OperatorSettingsCapability interface {
+	OperatorSettings() any
+}
+
 // ACPServer is the neutral application-process capability for serving the ACP
 // protocol. The transport package supplies the concrete implementation at the
 // composition root; the initializer only retains the protocol operation.

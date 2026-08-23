@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -157,6 +158,49 @@ func RunFactoryToCompletionWithEdgesAndObservations(
 	timeout time.Duration,
 ) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
 	session, work, events, _ := runFactoryToCompletion(t, dir, overrides, timeout, false)
+	return session, work, events
+}
+
+// RunFactoryToCompletionWithEdgesAndObservationsAndProjection also returns
+// the Recordings projection composed into the same root process that produced
+// the public event history.
+func RunFactoryToCompletionWithEdgesAndObservationsAndProjection(
+	t testing.TB,
+	dir string,
+	overrides serviceedges.Edges,
+	timeout time.Duration,
+) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent, root.RecordingsProjection) {
+	session, work, events, _, projection := runFactoryToCompletionWithHomeAndProjection(
+		t,
+		dir,
+		overrides,
+		timeout,
+		false,
+		nil,
+		terminalObservationCorrelated,
+		nil,
+		nil,
+	)
+	return session, work, events, projection
+}
+
+// RunFactoryToCompletionWithEdgesAndObservationsStable is the retained
+// watcher/repeater fallback for scenarios whose Work set can grow after a
+// transient idle projection.
+func RunFactoryToCompletionWithEdgesAndObservationsStable(
+	t testing.TB,
+	dir string,
+	overrides serviceedges.Edges,
+	timeout time.Duration,
+) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
+	session, work, events, _ := runFactoryToCompletionWithMode(
+		t,
+		dir,
+		overrides,
+		timeout,
+		false,
+		terminalObservationStableWindow,
+	)
 	return session, work, events
 }
 
@@ -341,11 +385,46 @@ func runFactoryToCompletionWithHome(
 	[]factoryapi.FactoryEvent,
 	[]factoryapi.FactoryResponseEvent,
 ) {
+	session, work, events, responseEvents, _ := runFactoryToCompletionWithHomeAndProjection(
+		t,
+		dir,
+		overrides,
+		timeout,
+		captureResponseEvents,
+		configure,
+		observationMode,
+		captureWorkerSessionEvents,
+		beforeClose,
+	)
+	return session, work, events, responseEvents
+}
+
+func runFactoryToCompletionWithHomeAndProjection(
+	t testing.TB,
+	dir string,
+	overrides serviceedges.Edges,
+	timeout time.Duration,
+	captureResponseEvents bool,
+	configure func(string),
+	observationMode terminalObservationMode,
+	captureWorkerSessionEvents func(string, factoryapi.ListWorkResponse),
+	beforeClose func(),
+) (
+	factoryapi.FactorySession,
+	factoryapi.ListWorkResponse,
+	[]factoryapi.FactoryEvent,
+	[]factoryapi.FactoryResponseEvent,
+	root.RecordingsProjection,
+) {
 	t.Helper()
 
 	server := NewProcessAPIServer()
 	overrides.APIServerStarter = server.Start
 	process := BuildProcess(t, overrides)
+	projection := root.RecordingsProjectionFromProcess(process)
+	if projection == nil {
+		t.Fatal("root process does not expose the composed Recordings projection")
+	}
 	inputs := FakeInputs(t.Context(), []string{
 		"you", "run",
 		"--dir", dir,
@@ -458,7 +537,7 @@ func runFactoryToCompletionWithHome(
 			t.Fatalf("close application process: %v", err)
 		}
 	}
-	return session, work, events, responseEvents
+	return session, work, events, responseEvents, projection
 }
 
 type responseEventCaptureResult struct {

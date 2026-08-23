@@ -27,16 +27,18 @@ type ProcessLifecycle interface {
 // service graphs, or edge bundles; the lazy Initializer owns runtime
 // construction after CLI parsing.
 type Process struct {
-	commandFactory processcontract.CommandFactory
-	initializer    processcontract.Initializer
-	providers      ProviderRegistry
-	lifecycle      ProcessLifecycle
-	acpServer      processcontract.ACPServer
-	workerReader   processcontract.WorkerRecordingReader
-	detachedOps    processcontract.DetachedOperationsCapability
-	runtimeMetrics processcontract.RuntimeMetricsQueryCapability
-	executionOpen  processcontract.ExecutionRuntimeOpeningCapability
-	runtimeCosts   processcontract.RuntimeCostsQueryCapability
+	commandFactory   processcontract.CommandFactory
+	initializer      processcontract.Initializer
+	providers        ProviderRegistry
+	lifecycle        ProcessLifecycle
+	acpServer        processcontract.ACPServer
+	workerReader     processcontract.WorkerRecordingReader
+	detachedOps      processcontract.DetachedOperationsCapability
+	runtimeMetrics   processcontract.RuntimeMetricsQueryCapability
+	executionOpen    processcontract.ExecutionRuntimeOpeningCapability
+	runtimeCosts     processcontract.RuntimeCostsQueryCapability
+	recordings       processcontract.RecordingsProjectionCapability
+	operatorSettings processcontract.OperatorSettingsCapability
 }
 
 // invocationCancellation is owned by one Process.Execute call. It is kept
@@ -66,7 +68,7 @@ func NewProcess(
 	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
 	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
 ) (*Process, error) {
-	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, nil)
+	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, nil, nil, nil)
 }
 
 // NewProcessWithRuntimeCostsAndExecution constructs the canonical process
@@ -83,7 +85,28 @@ func NewProcessWithRuntimeCostsAndExecution(
 	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
 	runtimeCosts processcontract.RuntimeCostsQueryCapability,
 ) (*Process, error) {
-	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, runtimeCosts)
+	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, runtimeCosts, nil, nil)
+}
+
+// NewProcessWithRuntimeCostsAndExecutionAndCapabilities constructs the
+// canonical process with narrow read capabilities already composed by Wire.
+// The capabilities cross the initializer boundary opaquely; this constructor
+// does not build a second service graph.
+func NewProcessWithRuntimeCostsAndExecutionAndCapabilities(
+	commandFactory processcontract.CommandFactory,
+	initializer processcontract.Initializer,
+	providers ProviderRegistry,
+	lifecycle ProcessLifecycle,
+	acpServer processcontract.ACPServer,
+	workerReader processcontract.WorkerRecordingReader,
+	detachedOps processcontract.DetachedOperationsCapability,
+	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
+	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
+	runtimeCosts processcontract.RuntimeCostsQueryCapability,
+	recordings processcontract.RecordingsProjectionCapability,
+	operatorSettings processcontract.OperatorSettingsCapability,
+) (*Process, error) {
+	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, runtimeCosts, recordings, operatorSettings)
 }
 
 func newProcess(
@@ -97,6 +120,8 @@ func newProcess(
 	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
 	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
 	runtimeCosts processcontract.RuntimeCostsQueryCapability,
+	recordings processcontract.RecordingsProjectionCapability,
+	operatorSettings processcontract.OperatorSettingsCapability,
 ) (*Process, error) {
 	if providers == nil {
 		return nil, fmt.Errorf("construct application process: provider registry is required")
@@ -105,16 +130,18 @@ func newProcess(
 		return nil, fmt.Errorf("construct application process: lifecycle is required")
 	}
 	return &Process{
-		commandFactory: commandFactory,
-		initializer:    initializer,
-		providers:      providers,
-		lifecycle:      lifecycle,
-		acpServer:      acpServer,
-		workerReader:   workerReader,
-		detachedOps:    detachedOps,
-		runtimeMetrics: runtimeMetrics,
-		executionOpen:  executionOpen,
-		runtimeCosts:   runtimeCosts,
+		commandFactory:   commandFactory,
+		initializer:      initializer,
+		providers:        providers,
+		lifecycle:        lifecycle,
+		acpServer:        acpServer,
+		workerReader:     workerReader,
+		detachedOps:      detachedOps,
+		runtimeMetrics:   runtimeMetrics,
+		executionOpen:    executionOpen,
+		runtimeCosts:     runtimeCosts,
+		recordings:       recordings,
+		operatorSettings: operatorSettings,
 	}, nil
 }
 
@@ -192,6 +219,25 @@ func (p *Process) RuntimeCostsQuery() processcontract.RuntimeCostsQueryCapabilit
 		return nil
 	}
 	return p.runtimeCosts
+}
+
+// RecordingsProjection returns the composed Recordings projection capability.
+// The application process exposes only the neutral capability wrapper; pkg/root
+// owns the typed caller-facing projection boundary.
+func (p *Process) RecordingsProjection() processcontract.RecordingsProjectionCapability {
+	if p == nil {
+		return nil
+	}
+	return p.recordings
+}
+
+// OperatorSettings returns the composed Operator Settings capability. The
+// application process keeps the service root opaque to this package.
+func (p *Process) OperatorSettings() processcontract.OperatorSettingsCapability {
+	if p == nil {
+		return nil
+	}
+	return p.operatorSettings
 }
 
 // Execute constructs and runs one fresh command tree using invocation-local

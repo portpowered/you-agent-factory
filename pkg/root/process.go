@@ -9,6 +9,8 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/wire"
 )
@@ -79,6 +81,47 @@ func CostsQueryFromProcess(process any) costs.CostsQuery {
 	}
 	query, _ := capability.RuntimeCostsQuery().(costs.CostsQuery)
 	return query
+}
+
+// RecordingsProjection is the narrow Recordings read capability exposed by a
+// canonical process. It keeps process callers independent of the full
+// application service graph while supporting public HTTP representation tests.
+type RecordingsProjection interface {
+	ReconstructWorldState(recordings.ReconstructWorldStateRequest) (recordings.ReconstructWorldStateResult, error)
+	QueryWorkstationRequests(recordings.WorkstationRequestsQueryRequest) (recordings.WorkstationRequestsQueryResult, error)
+	ReconstructFactoryWorldState([]recordings.FactoryEvent, int) (recordings.FactoryWorldState, error)
+	ProjectWorkstationRequests(recordings.FactoryWorldState) recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice
+}
+
+// RecordingsProjectionFromProcess returns the already-composed Recordings
+// projection capability carried by a canonical process.
+func RecordingsProjectionFromProcess(process any) RecordingsProjection {
+	applicationProcess, ok := process.(*initializerapplication.Process)
+	if !ok || applicationProcess == nil {
+		return nil
+	}
+	capability := applicationProcess.RecordingsProjection()
+	if capability == nil {
+		return nil
+	}
+	projection, _ := capability.RecordingsProjection().(RecordingsProjection)
+	return projection
+}
+
+// OperatorSettingsFromProcess returns the already-composed Operator Settings
+// root carried by a canonical process. No service is constructed at this
+// boundary.
+func OperatorSettingsFromProcess(process any) operatorsettings.Service {
+	applicationProcess, ok := process.(*initializerapplication.Process)
+	if !ok || applicationProcess == nil {
+		return nil
+	}
+	capability := applicationProcess.OperatorSettings()
+	if capability == nil {
+		return nil
+	}
+	settings, _ := capability.OperatorSettings().(operatorsettings.Service)
+	return settings
 }
 
 // ExecutionRuntimeOpening is the root-owned, narrow durable-execution opening

@@ -44,6 +44,8 @@ var servicesSet = wire.NewSet(
 	provideWorkerRecordingWriter,
 	provideWorkerSessionRecorder,
 	provideWorkerRecordingReader,
+	provideRecordingsProjectionCapability,
+	provideOperatorSettingsCapability,
 	provideWorkerSessionsFactoryWithRecorder,
 	provideApplicationProcessLifecycle,
 	provideProviderRegistry,
@@ -456,7 +458,7 @@ var BundleSet = wire.NewSet(
 	provideRunInvocationOperation,
 	provideModelsCLIInvocationOperation,
 	provideCLICommandFactory,
-	initializerapplication.NewProcessWithRuntimeCostsAndExecution,
+	initializerapplication.NewProcessWithRuntimeCostsAndExecutionAndCapabilities,
 	wire.Bind(new(processcontract.Initializer), new(*initializerapplication.Initializer)),
 	wire.Bind(new(processcontract.CommandFactory), new(cli.CommandFactory)),
 )
