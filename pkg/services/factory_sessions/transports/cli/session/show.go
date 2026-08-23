@@ -75,27 +75,11 @@ func Show(cfg ShowConfig) error {
 
 	if resp.StatusCode == http.StatusNotFound {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session show response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
-		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
-			return clihttp.NewAPIErrorFromResponse(
-				resp,
-				errResp,
-				fmt.Sprintf("factory session %q not found: %s", resolvedSessionID(cfg.SessionID), errResp.Message),
-				nil,
-			)
-		}
-		return clihttp.WithHTTPResponse(resp, fmt.Errorf("factory session %q not found", resolvedSessionID(cfg.SessionID)))
+		return showResponseError(resp, cfg.SessionID)
 	}
 	if resp.StatusCode != http.StatusOK {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session show response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
-		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
-			return clihttp.NewAPIErrorFromResponse(
-				resp,
-				errResp,
-				fmt.Sprintf("get factory session failed (%d): %s", resp.StatusCode, errResp.Message),
-				nil,
-			)
-		}
-		return clihttp.WithHTTPResponse(resp, fmt.Errorf("get factory session failed (%d)", resp.StatusCode))
+		return showResponseError(resp, cfg.SessionID)
 	}
 	kind, result, durable, err := decodeSessionShowResponse(raw)
 	if err != nil {
@@ -136,6 +120,29 @@ func Show(cfg ShowConfig) error {
 		return err
 	}
 	return renderShowResult(cfg.Output, result, partialResult, liveResult)
+}
+
+func showResponseError(resp *http.Response, sessionID string) error {
+	if resp.StatusCode == http.StatusNotFound {
+		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
+			return clihttp.NewAPIErrorFromResponse(
+				resp,
+				errResp,
+				fmt.Sprintf("factory session %q not found: %s", resolvedSessionID(sessionID), errResp.Message),
+				nil,
+			)
+		}
+		return clihttp.WithHTTPResponse(resp, fmt.Errorf("factory session %q not found", resolvedSessionID(sessionID)))
+	}
+	if errResp, ok := clihttp.DecodeAPIError(resp); ok {
+		return clihttp.NewAPIErrorFromResponse(
+			resp,
+			errResp,
+			fmt.Sprintf("get factory session failed (%d): %s", resp.StatusCode, errResp.Message),
+			nil,
+		)
+	}
+	return clihttp.WithHTTPResponse(resp, fmt.Errorf("get factory session failed (%d)", resp.StatusCode))
 }
 
 type sessionShowResponseKind string
