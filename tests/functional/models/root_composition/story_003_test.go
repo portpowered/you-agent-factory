@@ -356,8 +356,14 @@ func testStory003ControlledSourceFailure(t *testing.T) {
 		t.Fatalf("failed pull diagnostic leaked generic fallback or source body: %q", failureInputs.Stderr())
 	}
 
+	assertStory003ControlledSourceHTTPFailure(t, failureServer.URL())
+	t.Logf("controlled source failure CLI exitStatus=non-zero error=%q stdout=%s stderr=%s", cliErr, strings.TrimSpace(failureInputs.Stdout()), strings.TrimSpace(failureInputs.Stderr()))
+}
+
+func assertStory003ControlledSourceHTTPFailure(t *testing.T, serverURL string) {
+	t.Helper()
 	httpFailure, err := http.Post(
-		failureServer.URL()+"/models/"+story003ModelName+"/pull",
+		serverURL+"/models/"+story003ModelName+"/pull",
 		"application/json",
 		strings.NewReader("{}"),
 	)
@@ -385,7 +391,6 @@ func testStory003ControlledSourceFailure(t *testing.T) {
 		httpFailureResponse.Outcome == factoryapi.ModelPullOutcomeALREADYPRESENT {
 		t.Fatalf("POST /models/%s/pull retained a success compatibility outcome: %#v", story003ModelName, httpFailureResponse)
 	}
-	t.Logf("controlled source failure CLI exitStatus=non-zero error=%q stdout=%s stderr=%s", cliErr, strings.TrimSpace(failureInputs.Stdout()), strings.TrimSpace(failureInputs.Stderr()))
 	t.Logf("controlled source failure HTTP status=%d body=%s", httpFailure.StatusCode, strings.TrimSpace(string(httpFailureBody)))
 }
 
