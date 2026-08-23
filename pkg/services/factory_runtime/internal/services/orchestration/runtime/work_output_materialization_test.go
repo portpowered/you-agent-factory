@@ -915,6 +915,12 @@ func TestRecordDetachedAgentRunResponsePreservesSafeDiagnosticsAndTranscript(t *
 	recordDetachedAgentRunResponse(cfg, request, result, nil)
 
 	event := ledger.event
+	assertRecordedAgentRunEvent(t, event)
+	assertRecordedAgentRunDiagnostics(t, event)
+}
+
+func assertRecordedAgentRunEvent(t *testing.T, event workers.AgentRunResponseEvent) {
+	t.Helper()
 	if event.ID != "factory-event/agent-run-response/dispatch-1" ||
 		event.DispatchID != "dispatch-1" ||
 		event.Tick != 9 ||
@@ -923,6 +929,10 @@ func TestRecordDetachedAgentRunResponsePreservesSafeDiagnosticsAndTranscript(t *
 		event.Payload.DurationMillis != 1250 {
 		t.Fatalf("recorded event = %#v, want detached agent-run identity and duration", event)
 	}
+}
+
+func assertRecordedAgentRunDiagnostics(t *testing.T, event workers.AgentRunResponseEvent) {
+	t.Helper()
 	diagnostics, err := workers.SafeWorkDiagnosticsFromEventPayload(event.Payload.Diagnostics)
 	if err != nil {
 		t.Fatalf("decode diagnostics: %v", err)

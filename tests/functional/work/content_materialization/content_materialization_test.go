@@ -23,6 +23,49 @@ import (
 // edge reads both local and inline content after Work admission has resolved
 // them, while the second Work proves an unsafe URL fails before that edge.
 func TestSubmittedWorkContentReachesWorkerAsMaterializedFiles(t *testing.T) {
+	factoryDir, localURL, inlineURL, localBytes, inlineBytes := prepareContentMaterializationFixture(t)
+
+	runner := &contentCommandRunner{
+		want: map[string][]byte{
+			"part0": localBytes,
+			"part1": inlineBytes,
+		},
+	}
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{
+			ScriptCommandRunner: runner,
+		},
+	})
+	defer server.Stop(t)
+
+	requestPath := writeContentMaterializationRequest(t, localURL, inlineURL)
+	submitContentMaterializationRequest(t, server, factoryDir, requestPath)
+
+	support.WaitForTerminalStatus(t, server.URL(), 15*time.Second)
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	if got := support.CountWorkAtCustomerState(listed, "task:complete"); got != 1 {
+		t.Fatalf("completed work = %d, want 1; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed work = %d, want 1; listed=%#v", got, listed)
+	}
+	if runner.CallCount() != 1 {
+		t.Fatalf("script command calls = %d, want one successful Work invocation", runner.CallCount())
+	}
+	runner.AssertObserved(t)
+
+	if _, err := os.Stat(runner.path("part0")); err != nil {
+		t.Fatalf("local materialized path = %q, want retained source file: %v", runner.path("part0"), err)
+	}
+	if _, err := os.Stat(runner.path("part1")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("inline materialized path = %q, stat error = %v, want cleanup removal", runner.path("part1"), err)
+	}
+}
+
+func prepareContentMaterializationFixture(t *testing.T) (string, string, string, []byte, []byte) {
+	t.Helper()
 	factoryDir := support.ScaffoldFactory(t, contentMaterializationFactoryConfig())
 	support.WriteAgentConfig(t, factoryDir, "content-worker", `---
 type: SCRIPT_WORKER
@@ -41,7 +84,6 @@ args:
 ---
 Read the submitted binary content.
 `)
-
 	localBytes := []byte("local-content-bytes")
 	localPath := filepath.Join(t.TempDir(), "local-content.bin")
 	if err := os.WriteFile(localPath, localBytes, 0o600); err != nil {
@@ -53,22 +95,11 @@ Read the submitted binary content.
 	}
 	inlineBytes := []byte("inline-content-bytes")
 	inlineURL := "data:application/octet-stream;base64," + base64.StdEncoding.EncodeToString(inlineBytes)
+	return factoryDir, localURL, inlineURL, localBytes, inlineBytes
+}
 
-	runner := &contentCommandRunner{
-		want: map[string][]byte{
-			"part0": localBytes,
-			"part1": inlineBytes,
-		},
-	}
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		WaitForServiceModeRuntime: true,
-		Edges: serviceedges.Edges{
-			ScriptCommandRunner: runner,
-		},
-	})
-	defer server.Stop(t)
-
+func writeContentMaterializationRequest(t *testing.T, localURL, inlineURL string) string {
+	t.Helper()
 	requestPath := filepath.Join(t.TempDir(), "content-request.json")
 	request := map[string]any{
 		"requestId": "functional-content-materialization",
@@ -112,7 +143,15 @@ Read the submitted binary content.
 	if err := os.WriteFile(requestPath, payload, 0o600); err != nil {
 		t.Fatalf("write content request: %v", err)
 	}
+	return requestPath
+}
 
+func submitContentMaterializationRequest(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	factoryDir, requestPath string,
+) {
+	t.Helper()
 	// This is the ordinary customer-facing batch transport. The host process
 	// was built by StartFunctionalAPIServer through the same root composition;
 	// this separate client process enters the public CLI through Process.Execute.
@@ -133,26 +172,6 @@ Read the submitted binary content.
 	inputs.Input.Stdin = strings.NewReader("")
 	if err := client.Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(submit batch) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
-	}
-
-	support.WaitForTerminalStatus(t, server.URL(), 15*time.Second)
-	listed := support.ListDefaultSessionWork(t, server.URL())
-	if got := support.CountWorkAtCustomerState(listed, "task:complete"); got != 1 {
-		t.Fatalf("completed work = %d, want 1; listed=%#v", got, listed)
-	}
-	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
-		t.Fatalf("failed work = %d, want 1; listed=%#v", got, listed)
-	}
-	if runner.CallCount() != 1 {
-		t.Fatalf("script command calls = %d, want one successful Work invocation", runner.CallCount())
-	}
-	runner.AssertObserved(t)
-
-	if _, err := os.Stat(runner.path("part0")); err != nil {
-		t.Fatalf("local materialized path = %q, want retained source file: %v", runner.path("part0"), err)
-	}
-	if _, err := os.Stat(runner.path("part1")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("inline materialized path = %q, stat error = %v, want cleanup removal", runner.path("part1"), err)
 	}
 }
 

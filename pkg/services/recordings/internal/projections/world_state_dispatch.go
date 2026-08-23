@@ -91,20 +91,6 @@ func (r *factoryWorldReducer) applyDispatchCreated(event interfaces.FactoryEvent
 	}
 }
 
-func runnerIDFromDispatchMetadata(metadata *interfaces.DispatchRequestEventMetadata) string {
-	if metadata == nil {
-		return ""
-	}
-	return stringValue(metadata.RunnerID)
-}
-
-func runnerSelectionSource(metadata *interfaces.DispatchRequestEventMetadata) workerexecution.RunnerSelectionSource {
-	if metadata == nil || metadata.RunnerSelectionSource == nil {
-		return ""
-	}
-	return *metadata.RunnerSelectionSource
-}
-
 func (r *factoryWorldReducer) applyWorkerExecutionEvent(event interfaces.FactoryEvent) error {
 	switch event.Type {
 	case interfaces.FactoryEventTypeInferenceRequest:

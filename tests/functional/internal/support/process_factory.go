@@ -170,7 +170,7 @@ func RunFactoryToCompletionWithEdgesAndObservationsAndProjection(
 	overrides serviceedges.Edges,
 	timeout time.Duration,
 ) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent, root.RecordingsProjection) {
-	session, work, events, _, projection := runFactoryToCompletionWithHomeAndProjection(
+	session, work, events, _, projection := runFactoryToCompletionWithHome(
 		t,
 		dir,
 		overrides,
@@ -216,7 +216,7 @@ func RunFactoryToCompletionWithEdgesAndObservationsStableBeforeClose(
 	beforeClose func(),
 ) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
 	t.Helper()
-	session, work, events, _ := runFactoryToCompletionWithHome(
+	session, work, events, _, _ := runFactoryToCompletionWithHome(
 		t,
 		dir,
 		overrides,
@@ -240,7 +240,7 @@ func RunFactoryToCompletionWithConfiguredHome(
 	timeout time.Duration,
 	configure func(string),
 ) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
-	session, work, events, _ := runFactoryToCompletionWithHome(
+	session, work, events, _, _ := runFactoryToCompletionWithHome(
 		t,
 		dir,
 		overrides,
@@ -287,7 +287,7 @@ func RunFactoryToCompletionWithEdgesAndResponseEventsAndWorkerSessionEvents(
 	[]factoryapi.WorkerSessionEvent,
 ) {
 	var workerEvents []factoryapi.WorkerSessionEvent
-	session, work, events, responseEvents := runFactoryToCompletionWithHome(
+	session, work, events, responseEvents, _ := runFactoryToCompletionWithHome(
 		t,
 		dir,
 		overrides,
@@ -355,7 +355,7 @@ func runFactoryToCompletionWithMode(
 	[]factoryapi.FactoryEvent,
 	[]factoryapi.FactoryResponseEvent,
 ) {
-	return runFactoryToCompletionWithHome(
+	session, work, events, responseEvents, _ := runFactoryToCompletionWithHome(
 		t,
 		dir,
 		overrides,
@@ -365,41 +365,12 @@ func runFactoryToCompletionWithMode(
 		observationMode,
 		nil,
 		nil,
-	)
-}
-
-// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
-func runFactoryToCompletionWithHome(
-	t testing.TB,
-	dir string,
-	overrides serviceedges.Edges,
-	timeout time.Duration,
-	captureResponseEvents bool,
-	configure func(string),
-	observationMode terminalObservationMode,
-	captureWorkerSessionEvents func(string, factoryapi.ListWorkResponse),
-	beforeClose func(),
-) (
-	factoryapi.FactorySession,
-	factoryapi.ListWorkResponse,
-	[]factoryapi.FactoryEvent,
-	[]factoryapi.FactoryResponseEvent,
-) {
-	session, work, events, responseEvents, _ := runFactoryToCompletionWithHomeAndProjection(
-		t,
-		dir,
-		overrides,
-		timeout,
-		captureResponseEvents,
-		configure,
-		observationMode,
-		captureWorkerSessionEvents,
-		beforeClose,
 	)
 	return session, work, events, responseEvents
 }
 
-func runFactoryToCompletionWithHomeAndProjection(
+// backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
+func runFactoryToCompletionWithHome(
 	t testing.TB,
 	dir string,
 	overrides serviceedges.Edges,
