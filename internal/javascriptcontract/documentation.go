@@ -54,6 +54,11 @@ func ProjectJavaScriptWorkflowReference(document []byte, fields []factoryruntime
 		if strings.ContainsAny(field.Name, "|`\r\n") {
 			return nil, fmt.Errorf("%s cannot render runtime descriptor field %q in the generated Markdown table", JavaScriptWorkflowReferencePath, field.Name)
 		}
+		for _, allowed := range field.Enum {
+			if strings.ContainsAny(allowed, "|`\r\n") {
+				return nil, fmt.Errorf("%s cannot render enum value %q for runtime descriptor field %q in the generated Markdown table", JavaScriptWorkflowReferencePath, allowed, field.Name)
+			}
+		}
 	}
 	payload := renderAgentRunFields(fields)
 	return replaceGeneratedAgentRunRegion(document, payload)
@@ -62,14 +67,18 @@ func ProjectJavaScriptWorkflowReference(document []byte, fields []factoryruntime
 func renderAgentRunFields(fields []factoryruntime.JavaScriptChildFieldDescriptor) []byte {
 	var table strings.Builder
 	table.WriteString("### `agent.run` request fields\n\n")
-	table.WriteString("| Field | JSON type | Requiredness |\n")
-	table.WriteString("|-------|-----------|--------------|\n")
+	table.WriteString("| Field | JSON type | Requiredness | Allowed values |\n")
+	table.WriteString("|-------|-----------|--------------|----------------|\n")
 	for _, field := range fields {
 		requiredness := "optional"
 		if field.Required {
 			requiredness = "required"
 		}
-		fmt.Fprintf(&table, "| `%s` | `%s` | %s |\n", field.Name, field.JSONType, requiredness)
+		allowed := "—"
+		if len(field.Enum) > 0 {
+			allowed = strings.Join(field.Enum, ", ")
+		}
+		fmt.Fprintf(&table, "| `%s` | `%s` | %s | %s |\n", field.Name, field.JSONType, requiredness, allowed)
 	}
 	return []byte(strings.TrimSuffix(table.String(), "\n"))
 }

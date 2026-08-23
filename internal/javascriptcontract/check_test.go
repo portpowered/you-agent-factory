@@ -85,7 +85,7 @@ func TestCheckGeneratedOutputsReportsStaleDocumentationFieldWithoutWriting(t *te
 	if err != nil {
 		t.Fatalf("read documentation: %v", err)
 	}
-	updated := bytes.Replace(payload, []byte("| `resourceId` | `string` | optional |\n"), nil, 1)
+	updated := bytes.Replace(payload, []byte("| `resourceId` | `string` | optional | — |\n"), nil, 1)
 	if bytes.Equal(payload, updated) {
 		t.Fatal("documentation fixture did not contain resourceId row")
 	}
@@ -111,7 +111,7 @@ func TestCheckGeneratedOutputsRejectsInvalidDocumentationProjection(t *testing.T
 	if err != nil {
 		t.Fatalf("read documentation: %v", err)
 	}
-	updated := bytes.Replace(payload, []byte("| `resourceId` | `string` | optional |\n"), []byte("| resourceId | `string` | optional |\n"), 1)
+	updated := bytes.Replace(payload, []byte("| `resourceId` | `string` | optional | — |\n"), []byte("| resourceId | `string` | optional | — |\n"), 1)
 	if err := os.WriteFile(path, updated, 0o644); err != nil {
 		t.Fatalf("write documentation: %v", err)
 	}

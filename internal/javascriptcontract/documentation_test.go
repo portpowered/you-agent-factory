@@ -18,10 +18,10 @@ func TestProjectJavaScriptWorkflowReferenceProjectsRuntimeFields(t *testing.T) {
 	}
 	text := string(projected)
 	for _, want := range []string{
-		"| `prompt` | `string` | required |",
-		"| `executorProvider` | `string` | optional |",
-		"| `resourceId` | `string` | optional |",
-		"| `skipPermissions` | `boolean` | optional |",
+		"| `prompt` | `string` | required | — |",
+		"| `executorProvider` | `string` | optional | — |",
+		"| `resourceId` | `string` | optional | — |",
+		"| `permissions` | `string` | optional | DEFAULT, SKIP_PERMISSIONS |",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("projected reference does not contain %q:\n%s", want, text)
@@ -52,7 +52,7 @@ func TestProjectRuntimeAndDocumentationOutputsSupportForwardFieldEvolution(t *te
 	if err != nil {
 		t.Fatalf("ProjectJavaScriptWorkflowReference() error = %v", err)
 	}
-	if !strings.Contains(string(documentation), "| `futureField` | `string` | optional |") {
+	if !strings.Contains(string(documentation), "| `futureField` | `string` | optional | — |") {
 		t.Fatalf("projected documentation omitted forward-evolved futureField:\n%s", documentation)
 	}
 }
@@ -136,7 +136,7 @@ func TestGenerateJavaScriptWorkflowReferenceWritesOnlyProjectedRegion(t *testing
 	if string(first) != string(second) {
 		t.Fatal("repeated file generation changed bytes")
 	}
-	if !strings.Contains(string(first), "| `resourceId` | `string` | optional |") {
+	if !strings.Contains(string(first), "| `resourceId` | `string` | optional | — |") {
 		t.Fatal("file generation did not project the runtime resourceId field")
 	}
 }

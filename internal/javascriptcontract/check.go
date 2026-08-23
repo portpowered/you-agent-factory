@@ -33,6 +33,7 @@ type Diagnostic struct {
 type fieldShape struct {
 	JSONType string
 	Required bool
+	Enum     []string
 }
 
 // CheckGeneratedOutputs computes the canonical catalog and documentation
@@ -176,6 +177,10 @@ func compareFieldShapes(path, surface string, expected, actual map[string]fieldS
 				detail := fmt.Sprintf("got %s, expected %s", gotRequiredness, wantRequiredness)
 				diagnostics = append(diagnostics, fieldDiagnostic(path, surface, name, "requiredness", detail))
 			}
+			if !equalStrings(want.Enum, got.Enum) {
+				detail := fmt.Sprintf("got %v, expected %v", got.Enum, want.Enum)
+				diagnostics = append(diagnostics, fieldDiagnostic(path, surface, name, "enum", detail))
+			}
 		}
 	}
 	return diagnostics
@@ -193,6 +198,8 @@ func fieldDiagnostic(path, surface, field, issue, detail string) Diagnostic {
 		message += " with a mismatched JSON type"
 	case "requiredness":
 		message += " with mismatched requiredness"
+	case "enum":
+		message += " with mismatched allowed values"
 	}
 	if detail != "" {
 		message += " (" + detail + ")"
@@ -244,7 +251,11 @@ func parseRuntimeCatalogFields(payload []byte) (map[string]fieldShape, error) {
 		if !ok || jsonType == "" {
 			return nil, fmt.Errorf("%s field %q has no JSON type", RuntimeCatalogPath, name)
 		}
-		fields[name] = fieldShape{JSONType: jsonType, Required: required[name]}
+		enum, err := parseJSONEnum(property["enum"])
+		if err != nil {
+			return nil, fmt.Errorf("%s field %q has invalid enum: %w", RuntimeCatalogPath, name, err)
+		}
+		fields[name] = fieldShape{JSONType: jsonType, Required: required[name], Enum: enum}
 	}
 	for name := range required {
 		if _, ok := fields[name]; !ok {
@@ -262,7 +273,7 @@ func parseDocumentationFields(document []byte) (map[string]fieldShape, error) {
 	fields := make(map[string]fieldShape)
 	for _, line := range strings.Split(strings.ReplaceAll(string(region), "\r\n", "\n"), "\n") {
 		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "### ") || trimmed == "| Field | JSON type | Requiredness |" || trimmed == "|-------|-----------|--------------|" {
+		if trimmed == "" || strings.HasPrefix(trimmed, "### ") || trimmed == "| Field | JSON type | Requiredness | Allowed values |" || trimmed == "|-------|-----------|--------------|----------------|" {
 			continue
 		}
 		if !strings.HasPrefix(trimmed, "|") {
@@ -300,8 +311,8 @@ func generatedDocumentationRegion(document []byte) ([]byte, error) {
 
 func parseDocumentationRow(line string) (string, fieldShape, error) {
 	parts := strings.Split(line, "|")
-	if len(parts) != 5 {
-		return "", fieldShape{}, fmt.Errorf("expected three cells")
+	if len(parts) != 6 {
+		return "", fieldShape{}, fmt.Errorf("expected four cells")
 	}
 	name, err := parseDocumentationCodeCell(parts[1])
 	if err != nil {
@@ -315,7 +326,49 @@ func parseDocumentationRow(line string) (string, fieldShape, error) {
 	if requiredness != "required" && requiredness != "optional" {
 		return "", fieldShape{}, fmt.Errorf("requiredness %q is invalid", requiredness)
 	}
-	return name, fieldShape{JSONType: jsonType, Required: requiredness == "required"}, nil
+	allowed := strings.TrimSpace(parts[4])
+	var enum []string
+	if allowed != "—" {
+		for _, value := range strings.Split(allowed, ",") {
+			value = strings.TrimSpace(value)
+			if value == "" {
+				return "", fieldShape{}, fmt.Errorf("allowed values contain an empty value")
+			}
+			enum = append(enum, value)
+		}
+	}
+	return name, fieldShape{JSONType: jsonType, Required: requiredness == "required", Enum: enum}, nil
+}
+
+func parseJSONEnum(value any) ([]string, error) {
+	if value == nil {
+		return nil, nil
+	}
+	values, ok := value.([]any)
+	if !ok {
+		return nil, fmt.Errorf("enum is not an array")
+	}
+	enum := make([]string, 0, len(values))
+	for _, value := range values {
+		text, ok := value.(string)
+		if !ok || text == "" {
+			return nil, fmt.Errorf("enum contains a non-empty string requirement")
+		}
+		enum = append(enum, text)
+	}
+	return enum, nil
+}
+
+func equalStrings(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func parseDocumentationCodeCell(cell string) (string, error) {

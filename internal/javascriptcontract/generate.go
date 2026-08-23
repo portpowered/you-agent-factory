@@ -116,6 +116,19 @@ func validateFields(fields []factoryruntime.JavaScriptChildFieldDescriptor) erro
 		default:
 			return fmt.Errorf("agent.run runtime descriptor field %q has unsupported JSON type %q", field.Name, field.JSONType)
 		}
+		seenEnums := make(map[string]struct{}, len(field.Enum))
+		for _, allowed := range field.Enum {
+			if allowed == "" {
+				return fmt.Errorf("agent.run runtime descriptor field %q contains an empty enum value", field.Name)
+			}
+			if _, exists := seenEnums[allowed]; exists {
+				return fmt.Errorf("agent.run runtime descriptor field %q contains duplicate enum value %q", field.Name, allowed)
+			}
+			seenEnums[allowed] = struct{}{}
+		}
+		if len(field.Enum) > 0 && field.JSONType != "string" {
+			return fmt.Errorf("agent.run runtime descriptor field %q cannot declare enum values for JSON type %q", field.Name, field.JSONType)
+		}
 	}
 	return nil
 }
@@ -317,6 +330,22 @@ func marshalProperties(fields []factoryruntime.JavaScriptChildFieldDescriptor) (
 			return nil, fmt.Errorf("encode JSON type for %q: %w", field.Name, err)
 		}
 		result.Write(typeName)
+		if len(field.Enum) > 0 {
+			result.WriteString(",\n    \"enum\": [")
+			for enumIndex, allowed := range field.Enum {
+				encoded, err := json.Marshal(allowed)
+				if err != nil {
+					return nil, fmt.Errorf("encode enum value for %q: %w", field.Name, err)
+				}
+				if enumIndex == 0 {
+					result.WriteString("\n      ")
+				} else {
+					result.WriteString(",\n      ")
+				}
+				result.Write(encoded)
+			}
+			result.WriteString("\n    ]")
+		}
 		result.WriteString("\n  }")
 	}
 	if len(fields) > 0 {

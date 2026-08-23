@@ -28,6 +28,15 @@ func TestGenerateRuntimeCatalogProjectsEveryRuntimeField(t *testing.T) {
 		if projected["type"] != descriptor.JSONType {
 			t.Errorf("projected field %q type = %#v, want %q", descriptor.Name, projected["type"], descriptor.JSONType)
 		}
+		if len(descriptor.Enum) > 0 {
+			wantEnum := make([]any, len(descriptor.Enum))
+			for index, allowed := range descriptor.Enum {
+				wantEnum[index] = allowed
+			}
+			if !reflect.DeepEqual(projected["enum"], wantEnum) {
+				t.Errorf("projected field %q enum = %#v, want %#v", descriptor.Name, projected["enum"], wantEnum)
+			}
+		}
 	}
 	required := projectedRequired(t, payload)
 	if !reflect.DeepEqual(required, []any{"prompt"}) {
