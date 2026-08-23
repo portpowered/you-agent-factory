@@ -100,19 +100,6 @@ func attachResolvedPlacement(cmd *cobra.Command, placement climanifest.Execution
 	cmd.SetContext(context.WithValue(cmd.Context(), resolvedPlacementContextKey{}, placement))
 }
 
-// ResolvedPlacementFromContext returns the placement resolved for the current
-// command invocation by the generic CLI constructor.
-func ResolvedPlacementFromContext(ctx context.Context) (climanifest.ExecutionPlacement, error) {
-	if ctx == nil {
-		return "", fmt.Errorf("read resolved placement: context is required")
-	}
-	placement, ok := ctx.Value(resolvedPlacementContextKey{}).(climanifest.ExecutionPlacement)
-	if !ok {
-		return "", fmt.Errorf("read resolved placement: invocation has not resolved command placement")
-	}
-	return placement, nil
-}
-
 // GenericBindings supplies executable transport bindings used while projecting
 // a generic manifest. Additional stable-ID registries can be added here without
 // coupling manifest records to public command or input spellings.

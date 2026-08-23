@@ -350,17 +350,6 @@ func invocationRequestFromNormalizedArguments(normalized work.NormalizedArgument
 	return &factoryapi.InvocationRequest{Args: &args}
 }
 
-func wrapInvocationInputError(err error) error {
-	inputErr, ok := err.(*work.InputError)
-	if !ok {
-		return err
-	}
-	return invocationCLIError{
-		Code:    string(inputErr.Code),
-		Message: inputErr.Message,
-	}
-}
-
 // hostedInvocationOperation keeps the already-opened application runtime at
 // the CLI composition edge. InvocationTarget remains detached configuration;
 // the hosted capability itself is an operation-valued result from application
