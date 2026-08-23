@@ -2,10 +2,12 @@ package host
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -70,6 +72,43 @@ func TestObserveRuntimeMetricsStopsMemorySamplingWithRunLifecycle(t *testing.T) 
 	sampleCount := len(sink.samples)
 	if got := len(sink.samples); got != sampleCount {
 		t.Fatalf("memory samples after observer stop = %d, want %d", got, sampleCount)
+	}
+}
+
+func TestFinalizeArtifactsWaitsForCompleteMemorySnapshot(t *testing.T) {
+	sink := &runtimeMemorySnapshotBarrierSink{
+		seventhStarted: make(chan struct{}),
+		releaseSeventh: make(chan struct{}),
+	}
+	bundle := &Bundle{MetricsSink: sink}
+	emissionDone := make(chan error, 1)
+	go func() { emissionDone <- bundle.EmitRuntimeMemoryMetrics() }()
+	<-sink.seventhStarted
+
+	if bundle.metricsMu.TryLock() {
+		bundle.metricsMu.Unlock()
+		close(sink.releaseSeventh)
+		t.Fatal("memory snapshot did not hold the metrics gate")
+	}
+
+	finalizeDone := make(chan error, 1)
+	go func() { finalizeDone <- FinalizeArtifacts(bundle, clockwork.NewFakeClock()) }()
+	close(sink.releaseSeventh)
+
+	if err := <-emissionDone; err != nil {
+		t.Fatalf("EmitRuntimeMemoryMetrics: %v", err)
+	}
+	if err := <-finalizeDone; err != nil {
+		t.Fatalf("FinalizeArtifacts: %v", err)
+	}
+
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	if len(sink.names) != 7 {
+		t.Fatalf("memory snapshot records = %d, want 7; names = %#v", len(sink.names), sink.names)
+	}
+	if !sink.closed {
+		t.Fatal("FinalizeArtifacts did not close the metrics sink")
 	}
 }
 
@@ -160,3 +199,53 @@ func (*runtimeMetricsTestEngine) Run(context.Context) error { return nil }
 
 var _ Engine = (*runtimeMetricsTestEngine)(nil)
 var _ factoryruntime.RuntimeMetricsSink = (*runtimeMemoryTestSink)(nil)
+
+type runtimeMemorySnapshotBarrierSink struct {
+	mu             sync.Mutex
+	names          []string
+	closed         bool
+	seventhStarted chan struct{}
+	releaseSeventh chan struct{}
+}
+
+func (*runtimeMemorySnapshotBarrierSink) Counter(context.Context, string, float64, factoryruntime.Fields) error {
+	return nil
+}
+
+func (*runtimeMemorySnapshotBarrierSink) Gauge(context.Context, string, float64, factoryruntime.Fields) error {
+	return nil
+}
+
+func (sink *runtimeMemorySnapshotBarrierSink) Sample(
+	_ context.Context,
+	name string,
+	_ float64,
+	_ string,
+	_ factoryruntime.Fields,
+) error {
+	if name == factoryruntime.RuntimeMemoryProcessCommitAvailable {
+		close(sink.seventhStarted)
+		<-sink.releaseSeventh
+	}
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	if sink.closed {
+		return errors.New("runtime metrics sink closed before snapshot completed")
+	}
+	sink.names = append(sink.names, name)
+	return nil
+}
+
+func (sink *runtimeMemorySnapshotBarrierSink) Close() error {
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	sink.closed = true
+	return nil
+}
+
+func (*runtimeMemorySnapshotBarrierSink) Path() string { return "memory://runtime-metrics" }
+func (*runtimeMemorySnapshotBarrierSink) Artifact() factoryruntime.RuntimeMetricsArtifact {
+	return factoryruntime.RuntimeMetricsArtifact{Path: "memory://runtime-metrics"}
+}
+
+var _ factoryruntime.RuntimeMetricsSink = (*runtimeMemorySnapshotBarrierSink)(nil)

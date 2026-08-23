@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"sync"
@@ -47,6 +48,9 @@ type Bundle struct {
 	RecordPath           string
 	dispatchMetricFields sync.Map
 	dispatchCompleted    func(string)
+	metricsMu            sync.Mutex
+	metricsErrMu         sync.Mutex
+	metricsErr           error
 }
 
 // NewBundle constructs one inert runtime host from direct collaborators.
@@ -248,5 +252,14 @@ func (r *Bundle) CloseArtifacts() error {
 	if r == nil {
 		return nil
 	}
-	return CloseBundleSinks(r.LogSink, r.MetricsSink)
+	var errs []error
+	if r.LogSink != nil {
+		if err := r.LogSink.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if err := r.closeMetricsSink(); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
 }

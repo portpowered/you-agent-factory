@@ -239,11 +239,20 @@ func FinalizeArtifacts(bundle *Bundle, clock factory.Clock) error {
 		}
 	}
 	if bundle.MetricsSink != nil {
-		if err := bundle.MetricsSink.Close(); err != nil {
+		if err := bundle.closeMetricsSink(); err != nil {
 			errs = append(errs, err)
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func (bundle *Bundle) closeMetricsSink() error {
+	if bundle == nil || bundle.MetricsSink == nil {
+		return nil
+	}
+	bundle.metricsMu.Lock()
+	defer bundle.metricsMu.Unlock()
+	return errors.Join(bundle.metricsError(), bundle.MetricsSink.Close())
 }
 
 // CloseBundleSinks closes runtime log and metrics sinks created during bundle build.

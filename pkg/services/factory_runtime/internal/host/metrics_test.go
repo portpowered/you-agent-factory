@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -101,15 +103,25 @@ func assertRuntimeMemoryValues(t *testing.T, values map[string]float64) {
 	}
 }
 
-func TestEmitRuntimeMemoryMetricsKeepsExistingSinkFailurePolicy(t *testing.T) {
+func TestEmitRuntimeMemoryMetricsSurfacesSinkFailureAfterCompleteAttempt(t *testing.T) {
 	t.Parallel()
 
-	sink := &hostMetricsSinkFake{sampleErr: errors.New("sink unavailable")}
+	sampleErr := errors.New("sink unavailable")
+	sink := &hostMetricsSinkFake{
+		sampleErr:     sampleErr,
+		sampleErrName: factoryruntime.RuntimeMemoryProcessCommitAvailable,
+	}
 	bundle := &factoryhost.Bundle{MetricsSink: sink}
-	bundle.EmitRuntimeMemoryMetrics()
+	err := bundle.EmitRuntimeMemoryMetrics()
 
 	if sink.sampleCalls != 7 {
 		t.Fatalf("runtime memory sample attempts = %d, want 7 despite sink errors", sink.sampleCalls)
+	}
+	if !errors.Is(err, sampleErr) || !strings.Contains(err.Error(), factoryruntime.RuntimeMemoryProcessCommitAvailable) {
+		t.Fatalf("EmitRuntimeMemoryMetrics error = %v, want process-commit availability sample failure", err)
+	}
+	if finalizeErr := factoryhost.FinalizeArtifacts(bundle, clockwork.NewFakeClock()); !errors.Is(finalizeErr, sampleErr) || !strings.Contains(finalizeErr.Error(), factoryruntime.RuntimeMemoryProcessCommitAvailable) {
+		t.Fatalf("FinalizeArtifacts error = %v, want retained sample failure", finalizeErr)
 	}
 }
 
@@ -248,13 +260,14 @@ func TestRecordCompletionMetricsDoesNotPersistUnresolvedProvider(t *testing.T) {
 }
 
 type hostMetricsSinkFake struct {
-	names       []string
-	kinds       []string
-	values      []float64
-	units       []string
-	fields      []factoryruntime.Fields
-	sampleErr   error
-	sampleCalls int
+	names         []string
+	kinds         []string
+	values        []float64
+	units         []string
+	fields        []factoryruntime.Fields
+	sampleErr     error
+	sampleErrName string
+	sampleCalls   int
 }
 
 func (sink *hostMetricsSinkFake) Counter(_ context.Context, name string, value float64, fields factoryruntime.Fields) error {
@@ -282,7 +295,10 @@ func (sink *hostMetricsSinkFake) Sample(_ context.Context, name string, value fl
 	sink.values = append(sink.values, value)
 	sink.units = append(sink.units, unit)
 	sink.fields = append(sink.fields, fields)
-	return sink.sampleErr
+	if sink.sampleErrName == "" || sink.sampleErrName == name {
+		return sink.sampleErr
+	}
+	return nil
 }
 
 func (sink *hostMetricsSinkFake) Close() error { return nil }

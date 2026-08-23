@@ -171,11 +171,13 @@ func assertRuntimeMemoryMetrics(t *testing.T, root string) {
 	}
 	values := make(map[string]float64, 7)
 	units := make(map[string]string, 7)
+	memoryNames := make([]string, 0, 7)
 	for _, record := range records {
 		name, _ := record["metric_name"].(string)
 		if !isRuntimeMemoryMetric(name) {
 			continue
 		}
+		memoryNames = append(memoryNames, name)
 		value, ok := record["value"].(float64)
 		if !ok {
 			t.Fatalf("runtime memory metric %q value = %#v, want JSON number", name, record["value"])
@@ -186,6 +188,7 @@ func assertRuntimeMemoryMetrics(t *testing.T, root string) {
 			t.Fatalf("runtime memory metric %q type = %q, want sample", name, metricType)
 		}
 	}
+	assertCompleteRuntimeMemoryObservations(t, memoryNames)
 	heapAlloc, allocOK := values["runtime.memory.heap_alloc"]
 	heapInuse, inuseOK := values["runtime.memory.heap_inuse"]
 	sys, sysOK := values["runtime.memory.sys"]
@@ -213,6 +216,40 @@ func assertRuntimeMemoryMetrics(t *testing.T, root string) {
 	}
 	if processCommitAvailable == 1 && processCommit <= 0 {
 		t.Fatalf("runtime memory process commit = %v, want positive when available", processCommit)
+	}
+}
+
+func assertCompleteRuntimeMemoryObservations(t *testing.T, names []string) {
+	t.Helper()
+	want := runtimeMemoryMetricNames()
+	if len(names) == 0 || len(names)%len(want) != 0 {
+		t.Fatalf("runtime memory observation count = %d, want a positive multiple of %d; names = %#v", len(names), len(want), names)
+	}
+	for start := 0; start < len(names); start += len(want) {
+		seen := make(map[string]struct{}, len(want))
+		for _, name := range names[start : start+len(want)] {
+			if _, duplicate := seen[name]; duplicate {
+				t.Fatalf("runtime memory observation contains duplicate %q: names = %#v", name, names[start:start+len(want)])
+			}
+			seen[name] = struct{}{}
+		}
+		for _, name := range want {
+			if _, ok := seen[name]; !ok {
+				t.Fatalf("runtime memory observation is incomplete: names = %#v", names[start:start+len(want)])
+			}
+		}
+	}
+}
+
+func runtimeMemoryMetricNames() []string {
+	return []string{
+		"runtime.memory.heap_alloc",
+		"runtime.memory.heap_inuse",
+		"runtime.memory.sys",
+		"runtime.memory.num_gc",
+		"runtime.memory.goroutines",
+		"runtime.memory.process_commit",
+		"runtime.memory.process_commit_available",
 	}
 }
 
