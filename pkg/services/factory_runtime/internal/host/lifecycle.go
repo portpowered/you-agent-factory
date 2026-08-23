@@ -141,13 +141,22 @@ func (h *Handle) LifecycleMetricsOnce() *sync.Once {
 	return &h.lifecycleMetricsOnce
 }
 
-const runtimeMetricsObserverPollInterval = 5 * time.Millisecond
+const (
+	runtimeMetricsObserverPollInterval = 5 * time.Millisecond
+	runtimeMemoryObservationInterval   = 10 * time.Second
+)
 
 type runtimeMetricsObservation struct {
 	runtimeStatus interfaces.RuntimeStatus
 	factoryState  interfaces.FactoryState
 	inFlightCount int
 	initialized   bool
+}
+
+type runtimeMetricsObserver struct {
+	last           runtimeMetricsObservation
+	lastMemoryAt   time.Time
+	memoryObserved bool
 }
 
 // WaitForStart blocks until the hosted runtime reports running readiness or fails early.
@@ -255,33 +264,75 @@ func CloseBundleSinks(logSink factory.RuntimeLogSink, metricsSink factory.Runtim
 // ObserveRuntimeMetrics polls engine snapshots and emits runtime state gauges until the
 // hosted run loop completes or observerCtx is canceled.
 func ObserveRuntimeMetrics(observerCtx context.Context, handle *Handle) {
+	ticker := time.NewTicker(runtimeMetricsObserverPollInterval)
+	defer ticker.Stop()
+	observeRuntimeMetrics(observerCtx, handle, ticker.C, time.Now)
+}
+
+func observeRuntimeMetrics(
+	observerCtx context.Context,
+	handle *Handle,
+	ticks <-chan time.Time,
+	now func() time.Time,
+) {
 	if handle == nil || handle.Bundle == nil || handle.Bundle.Factory == nil {
 		return
 	}
-	ticker := time.NewTicker(runtimeMetricsObserverPollInterval)
-	defer ticker.Stop()
-	var last runtimeMetricsObservation
+	if now == nil {
+		now = time.Now
+	}
+	observer := runtimeMetricsObserver{}
+	observer.observe(handle, now())
 	for {
-		snapshot, err := handle.Bundle.Factory.GetEngineStateSnapshot(context.Background())
-		if err == nil {
-			current := metricsObservationFromSnapshot(snapshot)
-			if current.changedFrom(last) {
-				handle.Bundle.EmitRuntimeStateMetrics(snapshot)
-				last = current
-			}
-		}
 		select {
 		case <-handle.RunDone:
-			finalizeRuntimeLifecycleMetrics(handle, last)
+			finalizeRuntimeLifecycleMetrics(handle, observer.last)
 			return
 		case <-observerCtx.Done():
 			// Temporary sidecar shutdown (for example during session runtime replacement)
 			// must not block on runDone or emit lifecycle stop metrics; Stop finalizes
 			// lifecycle telemetry after the runtime actually exits.
 			return
-		case <-ticker.C:
+		case observedAt, ok := <-ticks:
+			if !ok {
+				return
+			}
+			select {
+			case <-handle.RunDone:
+				finalizeRuntimeLifecycleMetrics(handle, observer.last)
+				return
+			default:
+			}
+			observer.observe(handle, observedAt)
 		}
 	}
+}
+
+func (o *runtimeMetricsObserver) observe(handle *Handle, observedAt time.Time) {
+	if o == nil || handle == nil || handle.Bundle == nil || handle.Bundle.Factory == nil {
+		return
+	}
+	snapshot, err := handle.Bundle.Factory.GetEngineStateSnapshot(context.Background())
+	if err == nil {
+		current := metricsObservationFromSnapshot(snapshot)
+		if current.changedFrom(o.last) {
+			handle.Bundle.EmitRuntimeStateMetrics(snapshot)
+			o.last = current
+		}
+	}
+	o.observeMemory(handle.Bundle, observedAt)
+}
+
+func (o *runtimeMetricsObserver) observeMemory(bundle *Bundle, observedAt time.Time) {
+	if o == nil || bundle == nil {
+		return
+	}
+	if o.memoryObserved && observedAt.Before(o.lastMemoryAt.Add(runtimeMemoryObservationInterval)) {
+		return
+	}
+	bundle.EmitRuntimeMemoryMetrics()
+	o.lastMemoryAt = observedAt
+	o.memoryObserved = true
 }
 
 // RuntimeStopOutcome derives lifecycle-stop labels from the terminal engine snapshot and run error.

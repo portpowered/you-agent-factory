@@ -3,10 +3,13 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"runtime"
 	"strconv"
 	"strings"
 
+	platformprocessmemory "github.com/portpowered/infinite-you/pkg/platform/processmemory"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/metrics"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -42,6 +45,9 @@ const (
 	runtimeMetricScriptDuration             = "script.duration"
 	runtimeMetricScriptTimedOut             = "script.timed_out"
 	runtimeMetricScriptFailed               = "script.failed"
+	runtimeMemoryUnitBytes                  = "bytes"
+	runtimeMemoryUnitCount                  = "count"
+	runtimeMemoryUnitBoolean                = "boolean"
 )
 
 func (r *Bundle) RecordSubmissionMetric(record work.FactorySubmissionRecord) {
@@ -401,4 +407,54 @@ func (r *Bundle) EmitRuntimeStateMetrics(snapshot *interfaces.EngineStateSnapsho
 	r.emitMetricGauge(runtimeMetricStatePaused, boolMetricValue(snapshot.FactoryState == string(interfaces.FactoryStatePaused)), metrics.Fields{})
 	r.emitMetricGauge(runtimeMetricStateFailed, boolMetricValue(snapshot.FactoryState == string(interfaces.FactoryStateFailed)), metrics.Fields{})
 	r.emitMetricGauge(runtimeMetricQueueInFlight, float64(snapshot.InFlightCount), metrics.Fields{})
+}
+
+// EmitRuntimeMemoryMetrics records one point-in-time runtime observation on
+// the bundle's existing runtime metrics sink. The Go memory fields and the
+// process-commit result are collected before any record is emitted, so all
+// fields describe one observer pass.
+func (r *Bundle) EmitRuntimeMemoryMetrics() {
+	if r == nil {
+		return
+	}
+	var stats runtime.MemStats
+	runtime.ReadMemStats(&stats)
+	commitBytes, commitErr := platformprocessmemory.CurrentCommit()
+	r.emitRuntimeMemoryStats(runtimeMemoryStats{
+		heapAlloc:              stats.HeapAlloc,
+		heapInuse:              stats.HeapInuse,
+		sys:                    stats.Sys,
+		numGC:                  stats.NumGC,
+		goroutines:             runtime.NumGoroutine(),
+		processCommit:          commitBytes,
+		processCommitAvailable: commitErr == nil && commitBytes > 0,
+	})
+}
+
+type runtimeMemoryStats struct {
+	heapAlloc              uint64
+	heapInuse              uint64
+	sys                    uint64
+	numGC                  uint32
+	goroutines             int
+	processCommit          uint64
+	processCommitAvailable bool
+}
+
+func (r *Bundle) emitRuntimeMemoryStats(stats runtimeMemoryStats) {
+	if r == nil {
+		return
+	}
+	fields := metrics.Fields{}
+	r.emitMetricSample(factoryruntime.RuntimeMemoryHeapAlloc, float64(stats.heapAlloc), runtimeMemoryUnitBytes, fields)
+	r.emitMetricSample(factoryruntime.RuntimeMemoryHeapInuse, float64(stats.heapInuse), runtimeMemoryUnitBytes, fields)
+	r.emitMetricSample(factoryruntime.RuntimeMemorySys, float64(stats.sys), runtimeMemoryUnitBytes, fields)
+	r.emitMetricSample(factoryruntime.RuntimeMemoryNumGC, float64(stats.numGC), runtimeMemoryUnitCount, fields)
+	r.emitMetricSample(factoryruntime.RuntimeMemoryGoroutines, float64(stats.goroutines), runtimeMemoryUnitCount, fields)
+	r.emitMetricSample(factoryruntime.RuntimeMemoryProcessCommit, float64(stats.processCommit), runtimeMemoryUnitBytes, fields)
+	commitAvailable := 0.0
+	if stats.processCommitAvailable {
+		commitAvailable = 1
+	}
+	r.emitMetricSample(factoryruntime.RuntimeMemoryProcessCommitAvailable, commitAvailable, runtimeMemoryUnitBoolean, fields)
 }

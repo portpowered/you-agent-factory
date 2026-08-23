@@ -23,20 +23,37 @@ func TestHandlerWithPprofIsOptInAndUsesStandardRoutes(t *testing.T) {
 
 	disabled := httptest.NewServer(HandlerWithPprof(handler, false))
 	defer disabled.Close()
+	assertDisabledPprofRoutes(t, disabled)
+
+	enabled := httptest.NewServer(HandlerWithPprof(handler, true))
+	defer enabled.Close()
+	assertEnabledPprofRoutes(t, enabled)
+}
+
+func assertDisabledPprofRoutes(t *testing.T, server *httptest.Server) {
+	t.Helper()
 	for _, path := range []string{
 		"/debug/pprof/", "/debug/pprof/heap", "/debug/pprof/allocs", "/debug/pprof/profile",
 		"/debug/pprof/trace", "/debug/pprof/goroutine", "/debug/pprof/cmdline",
 		"/debug/pprof/symbol",
 	} {
-		response := getPprofTestResponse(t, disabled.URL+path)
+		response := getPprofTestResponse(t, server.URL+path)
 		if response.StatusCode != http.StatusNotFound {
 			t.Fatalf("disabled GET %s status = %d, want %d", path, response.StatusCode, http.StatusNotFound)
 		}
 	}
+}
 
-	enabled := httptest.NewServer(HandlerWithPprof(handler, true))
-	defer enabled.Close()
-	index := getPprofTestResponse(t, enabled.URL+"/debug/pprof/")
+func assertEnabledPprofRoutes(t *testing.T, server *httptest.Server) {
+	t.Helper()
+	assertEnabledPprofIndexAndRoutes(t, server)
+	assertEnabledPprofProfiles(t, server)
+	assertEnabledPprofTrace(t, server)
+}
+
+func assertEnabledPprofIndexAndRoutes(t *testing.T, server *httptest.Server) {
+	t.Helper()
+	index := getPprofTestResponse(t, server.URL+"/debug/pprof/")
 	if index.StatusCode != http.StatusOK || !strings.Contains(string(index.Body), "heap") {
 		t.Fatalf("enabled pprof index = (%d, %q), want HTTP 200 with heap profile", index.StatusCode, index.Body)
 	}
@@ -45,13 +62,16 @@ func TestHandlerWithPprofIsOptInAndUsesStandardRoutes(t *testing.T) {
 		"/debug/pprof/allocs", "/debug/pprof/goroutine", "/debug/pprof/cmdline",
 		"/debug/pprof/symbol",
 	} {
-		response := getPprofTestResponse(t, enabled.URL+path)
+		response := getPprofTestResponse(t, server.URL+path)
 		if response.StatusCode != http.StatusOK || len(response.Body) == 0 {
 			t.Fatalf("enabled GET %s = (%d, %q), want non-empty HTTP 200 response", path, response.StatusCode, response.Body)
 		}
 	}
+}
 
-	heap := getPprofTestResponse(t, enabled.URL+"/debug/pprof/heap")
+func assertEnabledPprofProfiles(t *testing.T, server *httptest.Server) {
+	t.Helper()
+	heap := getPprofTestResponse(t, server.URL+"/debug/pprof/heap")
 	if heap.StatusCode != http.StatusOK || len(heap.Body) == 0 {
 		t.Fatalf("enabled pprof heap = (%d, body length %d), want non-empty HTTP 200 response", heap.StatusCode, len(heap.Body))
 	}
@@ -69,7 +89,7 @@ func TestHandlerWithPprofIsOptInAndUsesStandardRoutes(t *testing.T) {
 		{path: "/debug/pprof/allocs", name: "allocs"},
 		{path: "/debug/pprof/profile?seconds=1", name: "CPU"},
 	} {
-		response := getPprofTestResponse(t, enabled.URL+test.path)
+		response := getPprofTestResponse(t, server.URL+test.path)
 		if response.StatusCode != http.StatusOK || len(response.Body) == 0 {
 			t.Fatalf("enabled GET %s = (%d, body length %d), want non-empty HTTP 200 response", test.path, response.StatusCode, len(response.Body))
 		}
@@ -85,9 +105,12 @@ func TestHandlerWithPprofIsOptInAndUsesStandardRoutes(t *testing.T) {
 			assertParsedPprofProfile(t, test.name, parsed)
 		}
 	}
+}
 
+func assertEnabledPprofTrace(t *testing.T, server *httptest.Server) {
+	t.Helper()
 	for _, path := range []string{"/debug/pprof/trace?seconds=1"} {
-		response := getPprofTestResponse(t, enabled.URL+path)
+		response := getPprofTestResponse(t, server.URL+path)
 		if response.StatusCode != http.StatusOK || len(response.Body) == 0 {
 			t.Fatalf("enabled GET %s = (%d, body length %d), want non-empty HTTP 200 response", path, response.StatusCode, len(response.Body))
 		}

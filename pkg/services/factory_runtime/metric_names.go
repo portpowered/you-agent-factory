@@ -2,13 +2,24 @@ package factory
 
 // Canonical Factory Runtime metric names.
 const (
-	RuntimeLifecycleStarted     = "runtime.lifecycle.started"
-	RuntimeLifecycleStopped     = "runtime.lifecycle.stopped"
-	RuntimeStateActive          = "runtime.state.active"
-	RuntimeStateIdle            = "runtime.state.idle"
-	RuntimeStatePaused          = "runtime.state.paused"
-	RuntimeStateFailed          = "runtime.state.failed"
-	RuntimeQueueInFlight        = "runtime.queue.in_flight"
+	RuntimeLifecycleStarted             = "runtime.lifecycle.started"
+	RuntimeLifecycleStopped             = "runtime.lifecycle.stopped"
+	RuntimeStateActive                  = "runtime.state.active"
+	RuntimeStateIdle                    = "runtime.state.idle"
+	RuntimeStatePaused                  = "runtime.state.paused"
+	RuntimeStateFailed                  = "runtime.state.failed"
+	RuntimeQueueInFlight                = "runtime.queue.in_flight"
+	RuntimeMemoryHeapAlloc              = "runtime.memory.heap_alloc"
+	RuntimeMemoryHeapInuse              = "runtime.memory.heap_inuse"
+	RuntimeMemorySys                    = "runtime.memory.sys"
+	RuntimeMemoryNumGC                  = "runtime.memory.num_gc"
+	RuntimeMemoryGoroutines             = "runtime.memory.goroutines"
+	RuntimeMemoryProcessCommit          = "runtime.memory.process_commit"
+	RuntimeMemoryProcessCommitAvailable = "runtime.memory.process_commit_available"
+	// RuntimeMemoryHeapSys is retained as a source-compatible name for callers
+	// that used the initial HeapSys wording. The runtime snapshot's
+	// corresponding field is the Go MemStats Sys value.
+	RuntimeMemoryHeapSys        = RuntimeMemorySys
 	RuntimeQueueSubmissionCount = "queue.submission_count"
 	RuntimeDispatchStarted      = "dispatch.started"
 	RuntimeDispatchComplete     = "dispatch.completed"
