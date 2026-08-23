@@ -150,19 +150,6 @@ func namedArgumentInputsToInternal(inputs []NamedArgumentInput) []invocationretu
 	return converted
 }
 
-func normalizeArgumentsInputToInternal(input NormalizeArgumentsInput) invocationreturnpolicy.NormalizeArgumentsInput {
-	return invocationreturnpolicy.NormalizeArgumentsInput{
-		Signature:            invocationSignatureToInternal(input.Signature),
-		PositionalArgs:       cloneStringSlice(input.PositionalArgs),
-		NamedArgs:            namedArgumentInputsToInternal(input.NamedArgs),
-		DirectArgs:           namedArgumentInputsToInternal(input.DirectArgs),
-		StdinText:            input.StdinText,
-		FileText:             input.FileText,
-		CompatibilityText:    input.CompatibilityText,
-		CompatibilityContent: contentPartsToInternal(input.CompatibilityContent),
-	}
-}
-
 func normalizedArgumentsFromInternal(input invocationreturnpolicy.NormalizedArguments) NormalizedArguments {
 	outer := NormalizedArguments{
 		Arguments:        make(map[string]NormalizedArgument, len(input.Arguments)),

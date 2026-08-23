@@ -1839,26 +1839,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/internal/services/content_materialization/url.go",
-      "target": "ContentURLAndFileConflictError"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/internal/services/content_materialization/url.go",
-      "target": "FilesystemPathToContentURL"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/internal/services/content_materialization/url.go",
-      "target": "ResolveDispatchContentURL"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/internal/services/content_materialization/url.go",
-      "target": "ValidateContentURL"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/work/invocation_return_policy_contract.go",
       "target": "ClassifyFailedInvocation"
     },
@@ -1896,11 +1876,6 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/work/invocation_return_policy_contract.go",
       "target": "NewInvocationPolicyService"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/invocation_return_policy_contract.go",
-      "target": "NormalizeArguments"
     },
     {
       "rule": "service-root-exported-function",

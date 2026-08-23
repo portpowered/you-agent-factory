@@ -41,21 +41,6 @@ type Selection struct {
 	options SelectionOptions
 }
 
-// NewSelection validates options before any Work values are selected.
-func NewSelection(
-	stateName *string,
-	stateType *string,
-	name *string,
-	workTypeName *string,
-	traceID *string,
-	sortBy string,
-) (Selection, error) {
-	return NewSelectionWithOptions(SelectionOptions{
-		StateName: stateName, StateType: stateType, Name: name,
-		WorkTypeName: workTypeName, TraceID: traceID, SortBy: sortBy,
-	})
-}
-
 // NewSelectionWithOptions constructs the canonical selection policy,
 // including terminality filters that cannot be expressed by one state type.
 func NewSelectionWithOptions(options SelectionOptions) (Selection, error) {

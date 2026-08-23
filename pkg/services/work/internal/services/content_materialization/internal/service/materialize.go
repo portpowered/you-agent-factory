@@ -111,20 +111,6 @@ func (o *Options) maxBytes() int64 {
 	return o.MaxBytes
 }
 
-func (o *Options) timeout() time.Duration {
-	if o == nil || o.Timeout <= 0 {
-		return DefaultHTTPTimeout
-	}
-	return o.Timeout
-}
-
-func (o *Options) maxRedirects() int {
-	if o == nil || o.MaxRedirects <= 0 {
-		return defaultMaxRedirects
-	}
-	return o.MaxRedirects
-}
-
 func (o *Options) allowPrivateURLs() bool {
 	return o != nil && o.AllowPrivateURLs
 }

@@ -252,14 +252,6 @@ func QualifyInvocationArgumentError(err error, factoryName string) error {
 	)
 }
 
-func NormalizeArguments(input NormalizeArgumentsInput) (NormalizedArguments, error) {
-	result, err := invocationreturnpolicy.NormalizeArguments(normalizeArgumentsInputToInternal(input))
-	if err != nil {
-		return NormalizedArguments{}, mapInvocationReturnPolicyError(err)
-	}
-	return normalizedArgumentsFromInternal(result), nil
-}
-
 func ResolvePrimaryResult(input PrimaryResultSelectionInput) (PrimaryResultSelection, error) {
 	selection, err := invocationreturnpolicy.ResolvePrimaryResult(primaryResultSelectionInputToInternal(input))
 	if err != nil {
