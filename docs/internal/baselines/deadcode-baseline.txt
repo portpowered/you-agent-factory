@@ -1,4 +1,3 @@
-cmd/unitlane/main.go: unreachable func: commandError
 contracts/compatibility_inventory_coverage_test.go: unreachable func: baselineCompatibilityCommands
 contracts/compatibility_inventory_coverage_test.go: unreachable func: cliCompatibilityRecordKey
 contracts/compatibility_inventory_coverage_test.go: unreachable func: isCLICompatibilityCommandIDCandidate
