@@ -1,10 +1,6 @@
 package stress_test
 
-import (
-	"testing"
-
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-)
+import interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 
 func guardedLoopBreakerWorkstation(name, watchedWorkstation string, maxVisits int, source, target interfaces.IOConfig) interfaces.FactoryWorkstationConfig {
 	return interfaces.FactoryWorkstationConfig{
@@ -18,31 +14,4 @@ func guardedLoopBreakerWorkstation(name, watchedWorkstation string, maxVisits in
 			MaxVisits:   maxVisits,
 		}},
 	}
-}
-
-func assertDispatchHistoryContainsWorkstationRoute(
-	t *testing.T,
-	history []interfaces.CompletedDispatch,
-	workstationName string,
-	terminalPlace string,
-) {
-	t.Helper()
-
-	for _, dispatch := range history {
-		if dispatch.WorkstationName != workstationName {
-			continue
-		}
-		for _, mutation := range dispatch.OutputMutations {
-			if mutation.ToPlace == terminalPlace {
-				return
-			}
-		}
-	}
-
-	t.Fatalf(
-		"dispatch history missing %q route to %q: %#v",
-		workstationName,
-		terminalPlace,
-		history,
-	)
 }

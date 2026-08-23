@@ -385,23 +385,6 @@ func workerToolCallIDs(t *testing.T, updates []rpcFrame) []string {
 	return ids
 }
 
-func agentMessageItemIDs(t *testing.T, updates []rpcFrame) []string {
-	t.Helper()
-	ids := make([]string, 0, len(updates))
-	for _, frame := range updates {
-		var notification acpsdk.SessionNotification
-		if err := json.Unmarshal(frame.Params, &notification); err != nil {
-			t.Fatalf("unmarshal session/update notification: %v", err)
-		}
-		chunk := notification.Update.AgentMessageChunk
-		if chunk == nil || chunk.MessageId == nil {
-			continue
-		}
-		ids = append(ids, *chunk.MessageId)
-	}
-	return ids
-}
-
 func userMessageItemIDs(t *testing.T, updates []rpcFrame) []string {
 	t.Helper()
 	ids := make([]string, 0, len(updates))
