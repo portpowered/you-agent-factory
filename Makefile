@@ -651,7 +651,7 @@ test-backend-verification:
 	$(MAKE) test-functional-coverage
 
 test-backend-conformance:
-	$(GO) test ./pkg/services/models/internal/backendconformance -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test -tags=backendconformance ./pkg/services/models/internal/backendconformance -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test-backend-conformance-live:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./pkg/services/models/internal/backendconformance -run '^TestPublishedBackendArtifactLocations$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
