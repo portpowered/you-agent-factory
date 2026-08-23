@@ -26,6 +26,8 @@ Special cases:
   - No PR yet: successful lookups that return no matching PR may race a
     processor push; retry for ~2 minutes, then exit 1 with a clear stderr
     message.
+  - GitHub lookup unavailable: retry a bounded infrastructure budget with
+    backoff, then exit 0 for the review hold-and-requeue path.
   - PR already MERGED (and no open PR for the branch): exit 0 immediately;
     the review workstation's merged-PR short-circuit handles the rest.
   - Only CLOSED PRs: exit 0 immediately; the reviewer decides what a closed,
@@ -40,16 +42,38 @@ import json
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
+from enum import Enum
 
 POLL_INTERVAL_SECONDS = 120
 DEADLINE_SECONDS = 100 * 60  # one-shot budget, well below the 2h hard timeout
 GH_CALL_TIMEOUT_SECONDS = 120
 PR_LOOKUP_ATTEMPTS = 5
 PR_LOOKUP_INTERVAL_SECONDS = 30  # ~2 minutes of retries for a just-pushed PR
+PR_LOOKUP_INFRASTRUCTURE_ATTEMPTS = 3
+PR_LOOKUP_INFRASTRUCTURE_BACKOFF_SECONDS = 5
+PR_LOOKUP_INFRASTRUCTURE_MAX_BACKOFF_SECONDS = 60
 NO_CHECKS_GRACE_SECONDS = 10 * 60
 
 NON_TERMINAL_BUCKETS = {"pending"}
 NON_TERMINAL_STATES = {"PENDING", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED", "EXPECTED"}
+PR_STATE_PREFERENCE = ("OPEN", "MERGED", "CLOSED")
+
+
+class PRLookupStatus(Enum):
+    """Classification of a GitHub PR lookup response."""
+
+    FOUND = "found"
+    NOT_FOUND = "not-found"
+    INFRASTRUCTURE_FAILURE = "infrastructure-failure"
+
+
+@dataclass(frozen=True)
+class PRLookupResult:
+    """A typed result that keeps an empty response distinct from a failure."""
+
+    status: PRLookupStatus
+    prs: tuple = ()
 
 
 def log(message):
@@ -68,68 +92,159 @@ def run_gh(*args):
 
 
 def list_prs_for_head(branch):
-    """Return the PR list for a head branch, or None when gh fails."""
-    result = run_gh(
-        "pr", "list",
-        "--head", branch,
-        "--state", "all",
-        "--json", "number,state",
-        "--limit", "20",
-    )
-    if result.returncode != 0:
-        log(f"gh pr list failed (exit {result.returncode}): {result.stderr.strip()}")
-        return None
+    """Return a typed result for the lane's GitHub PR lookup."""
     try:
-        return json.loads(result.stdout or "[]")
-    except json.JSONDecodeError as error:
-        log(f"gh pr list returned unparseable JSON: {error}")
-        return None
+        result = run_gh(
+            "pr", "list",
+            "--head", branch,
+            "--state", "all",
+            "--json", "number,state",
+            "--limit", "20",
+        )
+    except subprocess.TimeoutExpired:
+        log("gh pr list timed out; treating lookup as an infrastructure failure")
+        return PRLookupResult(PRLookupStatus.INFRASTRUCTURE_FAILURE)
+    except OSError:
+        log("gh pr list could not be executed; treating lookup as an infrastructure failure")
+        return PRLookupResult(PRLookupStatus.INFRASTRUCTURE_FAILURE)
+
+    if result.returncode != 0:
+        log(
+            f"gh pr list failed (exit {result.returncode}); "
+            "treating lookup as an infrastructure failure"
+        )
+        return PRLookupResult(PRLookupStatus.INFRASTRUCTURE_FAILURE)
+
+    stdout = (result.stdout or "").strip()
+    if not stdout:
+        log(
+            "gh pr list returned no output; treating lookup as an infrastructure "
+            "failure"
+        )
+        return PRLookupResult(PRLookupStatus.INFRASTRUCTURE_FAILURE)
+
+    try:
+        prs = json.loads(stdout)
+    except (TypeError, json.JSONDecodeError):
+        log(
+            "gh pr list returned unparseable JSON; treating lookup as an "
+            "infrastructure failure"
+        )
+        return PRLookupResult(PRLookupStatus.INFRASTRUCTURE_FAILURE)
+
+    if not isinstance(prs, list) or any(
+        not isinstance(pr, dict)
+        or not isinstance(pr.get("number"), int)
+        or pr.get("state") not in PR_STATE_PREFERENCE
+        for pr in prs
+    ):
+        log(
+            "gh pr list returned unusable JSON; treating lookup as an infrastructure "
+            "failure"
+        )
+        return PRLookupResult(PRLookupStatus.INFRASTRUCTURE_FAILURE)
+
+    status = PRLookupStatus.FOUND if prs else PRLookupStatus.NOT_FOUND
+    return PRLookupResult(status, tuple(prs))
+
+
+def infrastructure_backoff_seconds(attempt):
+    """Return bounded exponential backoff for an infrastructure retry."""
+    return min(
+        PR_LOOKUP_INFRASTRUCTURE_BACKOFF_SECONDS * (2 ** (attempt - 1)),
+        PR_LOOKUP_INFRASTRUCTURE_MAX_BACKOFF_SECONDS,
+    )
+
+
+def release_for_infrastructure_requeue(branch, attempts):
+    """Emit the successful result that routes dependency failure to review."""
+    log(
+        f"ci-wait: GitHub PR lookup infrastructure retry budget exhausted "
+        f"for head branch {branch!r} after {attempts} failures; releasing to "
+        "review for hold-and-requeue"
+    )
+    emit_result(
+        branch=branch,
+        reason="pr-lookup-infrastructure-requeue",
+        lookup=PRLookupStatus.INFRASTRUCTURE_FAILURE.value,
+        infrastructureAttempts=attempts,
+    )
 
 
 def resolve_pr(branch):
-    """Resolve the lane's PR, retrying briefly because pushes race this gate.
+    """Resolve the lane's PR with separate absence and infrastructure budgets.
 
     Returns a dict {number, state} for the PR to gate on, preferring an OPEN
-    PR, then MERGED, then CLOSED. Exits 1 when no PR exists after retries.
+    PR, then MERGED, then CLOSED. Exits 1 when successful empty lookups exhaust
+    the missing-PR budget. Returns None after an infrastructure budget is
+    exhausted, having emitted the exit-0 requeue result.
     """
     successful_empty_lookups = 0
-    for attempt in range(1, PR_LOOKUP_ATTEMPTS + 1):
-        prs = list_prs_for_head(branch)
-        if prs is not None:
-            if not prs:
-                successful_empty_lookups += 1
-                log(
-                    f"successful PR lookup found no matching PR for head branch "
-                    f"{branch!r} (attempt {attempt}/{PR_LOOKUP_ATTEMPTS})"
-                )
-            for state in ("OPEN", "MERGED", "CLOSED"):
-                matches = [pr for pr in prs if pr.get("state") == state]
-                if matches:
-                    return matches[0]
-        if attempt < PR_LOOKUP_ATTEMPTS:
-            log(
-                f"no PR found for head branch {branch!r} "
-                f"(attempt {attempt}/{PR_LOOKUP_ATTEMPTS}); retrying in "
-                f"{PR_LOOKUP_INTERVAL_SECONDS}s"
-            )
-            time.sleep(PR_LOOKUP_INTERVAL_SECONDS)
+    infrastructure_failures = 0
+    while successful_empty_lookups < PR_LOOKUP_ATTEMPTS:
+        lookup = list_prs_for_head(branch)
+        if lookup.status == PRLookupStatus.INFRASTRUCTURE_FAILURE:
+            infrastructure_failures += 1
+            if infrastructure_failures >= PR_LOOKUP_INFRASTRUCTURE_ATTEMPTS:
+                release_for_infrastructure_requeue(branch, infrastructure_failures)
+                return None
 
-    if successful_empty_lookups == PR_LOOKUP_ATTEMPTS:
-        print(
-            f"ci-wait: successful PR lookups found no PR for head branch "
-            f"{branch!r} after {PR_LOOKUP_ATTEMPTS} lookups over ~2 minutes. "
-            "The process workstation must open a PR named after the lane "
-            "before the task can enter review.",
-            file=sys.stderr,
+            backoff = infrastructure_backoff_seconds(infrastructure_failures)
+            log(
+                f"ci-wait: GitHub PR lookup infrastructure failure for head branch "
+                f"{branch!r} (attempt {infrastructure_failures}/"
+                f"{PR_LOOKUP_INFRASTRUCTURE_ATTEMPTS}); retrying in {backoff}s"
+            )
+            time.sleep(backoff)
+            continue
+
+        # A successful response means the dependency recovered. Do not let
+        # earlier transport failures consume the separate infrastructure
+        # budget or change the meaning of this response.
+        infrastructure_failures = 0
+
+        if lookup.status == PRLookupStatus.NOT_FOUND:
+            successful_empty_lookups += 1
+            log(
+                f"successful PR lookup found no matching PR for head branch "
+                f"{branch!r} (successful empty lookup "
+                f"{successful_empty_lookups}/{PR_LOOKUP_ATTEMPTS})"
+            )
+            if successful_empty_lookups < PR_LOOKUP_ATTEMPTS:
+                log(
+                    f"ci-wait: retrying successful empty PR lookup for head branch "
+                    f"{branch!r} in {PR_LOOKUP_INTERVAL_SECONDS}s"
+                )
+                time.sleep(PR_LOOKUP_INTERVAL_SECONDS)
+            continue
+
+        for state in PR_STATE_PREFERENCE:
+            matches = [pr for pr in lookup.prs if pr.get("state") == state]
+            if matches:
+                return matches[0]
+
+        # Valid gh output currently has only OPEN, MERGED, or CLOSED states,
+        # so reaching this point would indicate a future response shape that
+        # cannot be selected safely. Treat it like an infrastructure failure
+        # without spending a successful-not-found attempt.
+        infrastructure_failures += 1
+        log(
+            f"ci-wait: GitHub PR lookup returned no selectable PR for head branch "
+            f"{branch!r}; treating response as an infrastructure failure"
         )
-    else:
-        print(
-            f"ci-wait: no PR exists with head branch {branch!r} after "
-            f"{PR_LOOKUP_ATTEMPTS} lookups over ~2 minutes. The process "
-            "workstation must open a PR named after the lane before the task "
-            "can enter review.",
-            file=sys.stderr,
-        )
+        if infrastructure_failures >= PR_LOOKUP_INFRASTRUCTURE_ATTEMPTS:
+            release_for_infrastructure_requeue(branch, infrastructure_failures)
+            return None
+        backoff = infrastructure_backoff_seconds(infrastructure_failures)
+        time.sleep(backoff)
+
+    print(
+        f"ci-wait: successful PR lookups found no PR for head branch "
+        f"{branch!r} after {successful_empty_lookups} successful lookups. "
+        "The process workstation must open a PR named after the lane before "
+        "the task can enter review.",
+        file=sys.stderr,
+    )
     sys.exit(1)
 
 
@@ -183,6 +298,8 @@ def main():
 
     branch = sys.argv[1]
     pr = resolve_pr(branch)
+    if pr is None:
+        return
     pr_number = pr.get("number")
     pr_state = pr.get("state")
 
