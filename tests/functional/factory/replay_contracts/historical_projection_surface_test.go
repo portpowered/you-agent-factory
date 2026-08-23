@@ -45,7 +45,6 @@ func TestRecordedDurableHistoryUsesThePublicProjectionSurface(t *testing.T) {
 		FactoryDir:                dir,
 		Args:                      []string{"--record", artifactPath},
 		WaitForServiceModeRuntime: true,
-		UseMockWorkers:            true,
 	})
 	t.Cleanup(func() { server.Stop(t) })
 

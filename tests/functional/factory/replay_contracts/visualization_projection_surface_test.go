@@ -29,7 +29,6 @@ func TestComposedVisualizationObserveUsesRecordingsProjection(t *testing.T) {
 	dir := support.ScaffoldFactory(t, replayContractFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
 		Edges:                     edges,
 	})
