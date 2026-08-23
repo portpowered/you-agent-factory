@@ -33,7 +33,7 @@ export interface paths {
     };
     /**
      * Get exact runtime cost rollups
-     * @description Values canonical Factory Runtime usage with the operator's explicit price table. The default scope covers all Factory Sessions. Supplying an unknown-but-valid Factory Session ID returns a successful no-usage report for that scope rather than unrelated usage. Missing prices are returned as UNPRICED rows and are never treated as zero.
+     * @description Values canonical Factory Runtime usage with the operator's explicit price table. The default scope covers all Factory Sessions. Supplying an unknown-but-valid Factory Session ID returns a successful no-usage report for that scope rather than unrelated usage. Missing prices are returned as UNPRICED rows and are never treated as zero. The server bounds one cost query at eight seconds and returns a typed timeout response when the canonical read does not complete in that window.
      */
     get: operations["getMetricsCosts"];
     put?: never;
@@ -7906,6 +7906,24 @@ export interface components {
         "application/json": components["schemas"]["ErrorResponse"];
       };
     };
+    /** @description The metrics cost query was canceled before it completed. */
+    RequestTimeout: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The metrics cost query exceeded the server-side completion bound. */
+    GatewayTimeout: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
   };
   parameters: {
     /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
@@ -8033,7 +8051,9 @@ export interface operations {
         };
       };
       400: components["responses"]["BadRequest"];
+      408: components["responses"]["RequestTimeout"];
       500: components["responses"]["InternalError"];
+      504: components["responses"]["GatewayTimeout"];
     };
   };
   listWorkerSessions: {
@@ -10633,9 +10653,17 @@ export const ErrorResponseCode = {
   METRICS_SESSION_SCOPE_UNAVAILABLE: "METRICS_SESSION_SCOPE_UNAVAILABLE",
   // The server failed while handling an otherwise valid request.
   MODEL_CACHE_NOT_FOUND: "MODEL_CACHE_NOT_FOUND",
+  // The metrics costs request contained invalid configuration or selection input.
   MODEL_CACHE_IN_USE: "MODEL_CACHE_IN_USE",
+  // The metrics costs request was canceled before the report completed.
   NOT_FOUND: "NOT_FOUND",
+  // The metrics costs query failed while reading or valuing runtime usage.
   INTERNAL_ERROR: "INTERNAL_ERROR",
+  // The metrics costs query exceeded its server-side completion bound.
+  COSTS_INVALID_REQUEST: "COSTS_INVALID_REQUEST",
+  COSTS_QUERY_CANCELED: "COSTS_QUERY_CANCELED",
+  COSTS_QUERY_FAILED: "COSTS_QUERY_FAILED",
+  COSTS_QUERY_TIMEOUT: "COSTS_QUERY_TIMEOUT",
 } as const;
 export type ErrorResponseCode =
   (typeof ErrorResponseCode)[keyof typeof ErrorResponseCode];
