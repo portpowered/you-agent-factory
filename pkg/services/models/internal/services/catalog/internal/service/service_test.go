@@ -166,6 +166,22 @@ func TestListCatalogOverlaysCacheFactsWithoutChangingCatalogStates(t *testing.T)
 		t.Fatalf("construct Catalog: %v", err)
 	}
 	scope := publicScope(t, openCatalogScope(t, scopes, "cache-model", "generate"))
+	listCatalogCacheFacts(t, service, scope, revision, cachePath, cacheBytes)
+	detail := inspectCatalogCacheFacts(t, service, scope, revision, cachePath, cacheBytes)
+	if detail.Model.ManagedRuntime.ReadinessState != models.ReadinessStateMissing ||
+		detail.Model.ManagedRuntime.LifecycleState != models.LifecycleStateNotInstalled {
+		t.Fatalf("inspect runtime states = (%s, %s), want MISSING/NOT_INSTALLED", detail.Model.ManagedRuntime.ReadinessState, detail.Model.ManagedRuntime.LifecycleState)
+	}
+}
+
+func listCatalogCacheFacts(
+	t *testing.T,
+	service catalog.Service,
+	scope models.RuntimeScopeRef,
+	revision string,
+	cachePath string,
+	cacheBytes int64,
+) {
 	result, err := service.ListCatalog(context.Background(), models.ListModelsRequest{Scope: scope})
 	if err != nil {
 		t.Fatalf("ListCatalog: %v", err)
@@ -183,7 +199,16 @@ func TestListCatalogOverlaysCacheFactsWithoutChangingCatalogStates(t *testing.T)
 		runtime.CacheBytes == nil || *runtime.CacheBytes != cacheBytes {
 		t.Fatalf("catalog cache facts = revision=%v path=%v bytes=%v, want rev-installed/path/1234", runtime.Revision, runtime.CachePath, runtime.CacheBytes)
 	}
+}
 
+func inspectCatalogCacheFacts(
+	t *testing.T,
+	service catalog.Service,
+	scope models.RuntimeScopeRef,
+	revision string,
+	cachePath string,
+	cacheBytes int64,
+) models.GetModelResult {
 	detail, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{
 		Scope: scope, Name: "cache-model",
 	})
@@ -198,6 +223,7 @@ func TestListCatalogOverlaysCacheFactsWithoutChangingCatalogStates(t *testing.T)
 		inspectRuntime.CacheBytes == nil || *inspectRuntime.CacheBytes != cacheBytes {
 		t.Fatalf("inspect runtime = %#v, want preserved states and cache facts", inspectRuntime)
 	}
+	return detail
 }
 
 func TestGetCatalogModelClassifiesLookupAndOperationFailures(t *testing.T) {

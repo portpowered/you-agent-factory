@@ -39,7 +39,8 @@ func TestAPIRoutesEveryOpenAPIOperationToNon404Handler(t *testing.T) {
 			defer response.Body.Close()
 
 			if response.StatusCode == http.StatusNotFound {
-				if operation.OperationID == "getHumanApprovalBySessionId" {
+				switch operation.OperationID {
+				case "getHumanApprovalBySessionId":
 					body, readErr := io.ReadAll(response.Body)
 					if readErr != nil {
 						t.Fatalf("read expected human-approval not-found response: %v", readErr)
@@ -47,6 +48,9 @@ func TestAPIRoutesEveryOpenAPIOperationToNon404Handler(t *testing.T) {
 					if !strings.Contains(string(body), "human approval not found") {
 						t.Fatalf("%s %s (%s) returned an unrelated 404 response: %s", operation.Method, request.URL.String(), operation.OperationID, strings.TrimSpace(string(body)))
 					}
+					return
+				case "removeModel":
+					assertModelCacheNotFoundResponse(t, response)
 					return
 				}
 				t.Fatalf(
@@ -62,6 +66,20 @@ func TestAPIRoutesEveryOpenAPIOperationToNon404Handler(t *testing.T) {
 
 	if len(inventory.Operations) == 0 {
 		t.Fatal("OpenAPI operation inventory is empty")
+	}
+}
+
+func assertModelCacheNotFoundResponse(t *testing.T, response *http.Response) {
+	t.Helper()
+	if !strings.Contains(response.Header.Get("Content-Type"), "application/json") {
+		t.Fatalf("removeModel 404 Content-Type = %q, want JSON", response.Header.Get("Content-Type"))
+	}
+	var body factoryapi.ErrorResponse
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode removeModel 404 response: %v", err)
+	}
+	if body.Family != factoryapi.ErrorFamilyNotFound || string(body.Code) != "MODEL_CACHE_NOT_FOUND" {
+		t.Fatalf("removeModel 404 response = %#v, want MODEL_CACHE_NOT_FOUND not-found error", body)
 	}
 }
 

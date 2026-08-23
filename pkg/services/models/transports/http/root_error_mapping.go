@@ -68,21 +68,10 @@ func genericSentinelErrorResponse(err error) (int, factoryapi.ErrorResponse, boo
 }
 
 func commonSentinelErrorResponse(err error, operation modelsHTTPOperation) (int, factoryapi.ErrorResponse, bool) {
+	if status, response, ok := removeSentinelErrorResponse(err, operation); ok {
+		return status, response, true
+	}
 	switch {
-	case errors.Is(err, models.ErrModelCacheNotFound) && operation == modelsHTTPOperationRemove:
-		return http.StatusNotFound, factoryapi.ErrorResponse{
-			Message: strings.TrimSpace(err.Error()),
-			Family:  factoryapi.ErrorFamilyNotFound,
-			Code:    factoryapi.ErrorResponseCode("MODEL_CACHE_NOT_FOUND"),
-		}, true
-	case errors.Is(err, models.ErrModelCacheInUse) && operation == modelsHTTPOperationRemove:
-		return http.StatusConflict, factoryapi.ErrorResponse{
-			Message: strings.TrimSpace(err.Error()),
-			Family:  factoryapi.ErrorFamilyConflict,
-			Code:    factoryapi.ErrorResponseCode("MODEL_CACHE_IN_USE"),
-		}, true
-	case errors.Is(err, models.ErrModelCacheUnsafe) && operation == modelsHTTPOperationRemove:
-		return badRequestErrorResponse(strings.TrimSpace(err.Error()))
 	case errors.Is(err, models.ErrNotFound):
 		return notFoundErrorResponse(catalogNotFoundMessage)
 	case errors.Is(err, models.ErrUnavailable) && operation == modelsHTTPOperationCatalog:
@@ -98,6 +87,30 @@ func commonSentinelErrorResponse(err error, operation modelsHTTPOperation) (int,
 	case errors.Is(err, models.ErrUnsupportedOperation), errors.Is(err, models.ErrUnsupportedResponseMode):
 		return badRequestErrorResponse(strings.TrimSpace(err.Error()))
 	case errors.Is(err, models.ErrPullUnsupported) && operation == modelsHTTPOperationPull:
+		return badRequestErrorResponse(strings.TrimSpace(err.Error()))
+	default:
+		return 0, factoryapi.ErrorResponse{}, false
+	}
+}
+
+func removeSentinelErrorResponse(err error, operation modelsHTTPOperation) (int, factoryapi.ErrorResponse, bool) {
+	if operation != modelsHTTPOperationRemove {
+		return 0, factoryapi.ErrorResponse{}, false
+	}
+	switch {
+	case errors.Is(err, models.ErrModelCacheNotFound):
+		return http.StatusNotFound, factoryapi.ErrorResponse{
+			Message: strings.TrimSpace(err.Error()),
+			Family:  factoryapi.ErrorFamilyNotFound,
+			Code:    factoryapi.ErrorResponseCode("MODEL_CACHE_NOT_FOUND"),
+		}, true
+	case errors.Is(err, models.ErrModelCacheInUse):
+		return http.StatusConflict, factoryapi.ErrorResponse{
+			Message: strings.TrimSpace(err.Error()),
+			Family:  factoryapi.ErrorFamilyConflict,
+			Code:    factoryapi.ErrorResponseCode("MODEL_CACHE_IN_USE"),
+		}, true
+	case errors.Is(err, models.ErrModelCacheUnsafe):
 		return badRequestErrorResponse(strings.TrimSpace(err.Error()))
 	default:
 		return 0, factoryapi.ErrorResponse{}, false

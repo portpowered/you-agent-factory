@@ -305,6 +305,30 @@ func (service *httpService) Pull(cfg PullConfig) error {
 	return renderPull(response, cfg.Output)
 }
 
+func (service *httpService) Remove(cfg RemoveConfig) error {
+	if cfg.Context == nil {
+		return fmt.Errorf("context is required")
+	}
+	if cfg.Output == nil {
+		return fmt.Errorf("output writer is required")
+	}
+	modelName := strings.TrimSpace(cfg.ModelName)
+	if modelName == "" {
+		return fmt.Errorf("model name is required")
+	}
+	response, err := removeModel(removeOptions{
+		Context: cfg.Context, Server: cfg.Server, ModelName: modelName,
+		Verbose: cfg.Verbose, Diagnostics: cfg.Diagnostics, HTTP: service.http,
+	})
+	if err != nil {
+		return err
+	}
+	if cfg.JSON {
+		return json.NewEncoder(cfg.Output).Encode(response)
+	}
+	return renderRemove(response, cfg.Output)
+}
+
 type queryOptions struct {
 	Context     context.Context
 	Server      string

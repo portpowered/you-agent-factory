@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +16,7 @@ import (
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelservice "github.com/portpowered/infinite-you/pkg/services/models"
+	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -106,6 +108,8 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 		story003TokenizerAsset: tokenizerBody,
 	})
 
+	assertStory003ListAfterPull(t, inspectProcess, server.URL(), cacheDirectory)
+
 	after := executeStory003Inspect(t, inspectProcess, server.URL(), cacheDirectory, "after pull")
 	if after.Detail.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
 		t.Fatalf("after-pull readiness = %s, want READY", after.Detail.ManagedRuntime.ReadinessState)
@@ -122,6 +126,118 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 	}
 
 	t.Run("controlled source failure", testStory003ControlledSourceFailure)
+}
+
+func assertStory003ListAfterPull(
+	t *testing.T,
+	process support.Process,
+	serverURL string,
+	cacheDirectory string,
+) {
+	t.Helper()
+	listOutput := executeStory003ListOutput(t, process, serverURL, "after pull")
+	var listed factoryapi.ListModelsResponse
+	if err := json.Unmarshal([]byte(listOutput), &listed); err != nil {
+		t.Fatalf("decode models list after pull output: %v\nstdout=%s", err, listOutput)
+	}
+	if len(listed.Results) != 1 || listed.Results[0].ManagedRuntime.CacheBytes == nil {
+		t.Fatalf("models list after pull = %#v, want one cached model with exact bytes", listed)
+	}
+	independentRevisionBytes := story003RegularFileBytes(
+		t, filepath.Join(cacheDirectory, story003ModelName, story003Revision),
+	)
+	if got := *listed.Results[0].ManagedRuntime.CacheBytes; got != independentRevisionBytes {
+		t.Fatalf("models list cacheBytes = %d, independent revision sum = %d", got, independentRevisionBytes)
+	}
+	t.Logf(
+		"models list after pull stdout=%s independentRevisionBytes=%d cacheBytes=%d revisionPath=%s",
+		strings.TrimSpace(listOutput),
+		independentRevisionBytes,
+		*listed.Results[0].ManagedRuntime.CacheBytes,
+		filepath.Join(cacheDirectory, story003ModelName, story003Revision),
+	)
+}
+
+func TestModelsPublicRemoveWorkflowProvesReclamationAndInUseRefusal(t *testing.T) {
+	cacheDirectory := t.TempDir()
+	writeCachedOmniVoiceAssets(t, cacheDirectory)
+	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	environment := append(
+		functionalHomeEnvironment(cacheDirectory),
+		runcli.ModelCacheDirEnvironment+"="+cacheDirectory,
+	)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: factoryDir, WaitForServiceModeRuntime: true, Env: environment,
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	revisionPath := filepath.Join(cacheDirectory, story003ModelName, "cached-revision")
+	beforeBytes := story003RegularFileBytes(t, revisionPath)
+	removeInputs := support.FakeInputs(t.Context(), story003ModelsRemoveArgs(server.URL()))
+	removeInputs.Input.WorkingDirectory = factoryDir
+	if err := process.Execute(removeInputs.Input); err != nil {
+		t.Fatalf("Process.Execute(models remove) error = %v\nstdout=%s\nstderr=%s", err, removeInputs.Stdout(), removeInputs.Stderr())
+	}
+	var removed factoryapi.ModelRemoveResponse
+	if err := json.Unmarshal([]byte(removeInputs.Stdout()), &removed); err != nil {
+		t.Fatalf("decode models remove output: %v\nstdout=%s", err, removeInputs.Stdout())
+	}
+	if removed.ModelName != story003ModelName || removed.Revision != "cached-revision" ||
+		removed.BytesRemoved != beforeBytes || removed.Outcome != factoryapi.REMOVED {
+		t.Fatalf("models remove response = %#v, want selected revision and %d removed bytes", removed, beforeBytes)
+	}
+	if _, err := os.Stat(revisionPath); !os.IsNotExist(err) {
+		t.Fatalf("removed revision stat error = %v, want not-exist", err)
+	}
+	afterBytes := story003RegularFileBytesIfPresent(t, revisionPath)
+	if afterBytes != 0 {
+		t.Fatalf("removed revision bytes = %d, want 0 after removal", afterBytes)
+	}
+	t.Logf(
+		"models remove beforeRevisionBytes=%d afterRevisionBytes=%d remainingModelCacheBytes=%d response=%s cachePath=%s",
+		beforeBytes,
+		afterBytes,
+		story003RegularFileBytes(t, filepath.Join(cacheDirectory, story003ModelName)),
+		strings.TrimSpace(removeInputs.Stdout()),
+		removed.CachePath,
+	)
+
+	missingInputs := support.FakeInputs(t.Context(), story003ModelsRemoveArgs(server.URL()))
+	missingInputs.Input.WorkingDirectory = factoryDir
+	missingErr := process.Execute(missingInputs.Input)
+	if missingErr == nil || !errors.Is(missingErr, modelscli.ErrModelCacheNotFound) {
+		t.Fatalf("missing models remove = err %v stdout=%q stderr=%q, want ErrModelCacheNotFound", missingErr, missingInputs.Stdout(), missingInputs.Stderr())
+	}
+
+	t.Run("in-use response", testModelsPublicRemoveRefusesInUseCache)
+}
+
+func testModelsPublicRemoveRefusesInUseCache(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodDelete || request.URL.Path != "/models/"+story003ModelName {
+			http.NotFound(writer, request)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		writer.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(writer).Encode(factoryapi.ErrorResponse{
+			Message: "managed model cache is in use",
+			Family:  factoryapi.ErrorFamilyConflict,
+			Code:    factoryapi.ErrorResponseCode("MODEL_CACHE_IN_USE"),
+		})
+	}))
+	t.Cleanup(server.Close)
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	inputs := support.FakeInputs(t.Context(), story003ModelsRemoveArgs(server.URL))
+	err := process.Execute(inputs.Input)
+	if err == nil || !errors.Is(err, modelscli.ErrModelCacheInUse) {
+		t.Fatalf("in-use models remove = err %v stdout=%q stderr=%q, want ErrModelCacheInUse", err, inputs.Stdout(), inputs.Stderr())
+	}
+	t.Logf("models remove in-use classification error=%v stderr=%s", err, strings.TrimSpace(inputs.Stderr()))
 }
 
 func testStory003ControlledSourceFailure(t *testing.T) {
@@ -243,6 +359,15 @@ func executeStory003Inspect(
 	return capture
 }
 
+func executeStory003ListOutput(t *testing.T, process support.Process, serverURL, phase string) string {
+	t.Helper()
+	inputs := support.FakeInputs(t.Context(), story003ModelsListArgs(serverURL))
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(models list %s) error = %v\nstdout=%s\nstderr=%s", phase, err, inputs.Stdout(), inputs.Stderr())
+	}
+	return inputs.Stdout()
+}
+
 func assertStory003State(
 	t *testing.T,
 	capture story003InspectCapture,
@@ -306,14 +431,16 @@ func story003RegularFileBytes(t *testing.T, directory string) int64 {
 		if err != nil {
 			return err
 		}
-		if entry.IsDir() {
+		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
 			return nil
 		}
 		info, err := entry.Info()
 		if err != nil {
 			return err
 		}
-		total += info.Size()
+		if info.Mode().IsRegular() {
+			total += info.Size()
+		}
 		return nil
 	})
 	if err != nil {
@@ -322,10 +449,31 @@ func story003RegularFileBytes(t *testing.T, directory string) int64 {
 	return total
 }
 
+func story003RegularFileBytesIfPresent(t *testing.T, directory string) int64 {
+	t.Helper()
+	if _, err := os.Stat(directory); os.IsNotExist(err) {
+		return 0
+	}
+	return story003RegularFileBytes(t, directory)
+}
+
 func story003ModelsInspectArgs(serverURL string) []string {
 	return []string{
 		"you", "--json", "--server", strings.TrimSuffix(serverURL, "/"),
 		"models", "inspect", story003ModelName,
+	}
+}
+
+func story003ModelsListArgs(serverURL string) []string {
+	return []string{
+		"you", "--json", "--server", strings.TrimSuffix(serverURL, "/"), "models", "list",
+	}
+}
+
+func story003ModelsRemoveArgs(serverURL string) []string {
+	return []string{
+		"you", "--json", "--server", strings.TrimSuffix(serverURL, "/"),
+		"models", "remove", story003ModelName,
 	}
 }
 

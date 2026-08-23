@@ -285,3 +285,65 @@ func cloneMetricLabels(labels map[string]string) map[string]string {
 	}
 	return cloned
 }
+
+func removeModelCacheStartLog(o *Root, request models.RemoveModelAssetsRequest) {
+	if o == nil || o.process.Logger == nil {
+		return
+	}
+	o.process.Logger.Info(
+		"models cache removal started",
+		zap.String("model_name", strings.TrimSpace(request.Name)),
+		zap.String("scope", request.Scope.String()),
+	)
+}
+
+func removeModelCacheTerminalLog(
+	o *Root,
+	request models.RemoveModelAssetsRequest,
+	result models.RemoveModelAssetsResult,
+	err error,
+	elapsed time.Duration,
+) {
+	if o == nil || o.process.Logger == nil {
+		return
+	}
+	outcome := string(result.Outcome)
+	if err != nil {
+		outcome = "FAILED"
+	}
+	fields := []zap.Field{
+		zap.String("model_name", strings.TrimSpace(request.Name)),
+		zap.String("scope", request.Scope.String()),
+		zap.String("revision", result.Revision),
+		zap.String("cache_path", result.CachePath),
+		zap.Int64("bytes_removed", result.BytesRemoved),
+		zap.String("outcome", outcome),
+		zap.Duration("duration", elapsed),
+	}
+	if err != nil {
+		fields = append(fields,
+			zap.String("failure_class", removeModelCacheFailureClass(err)),
+			zap.Error(err),
+		)
+		o.process.Logger.Warn("models cache removal completed", fields...)
+		return
+	}
+	o.process.Logger.Info("models cache removal completed", fields...)
+}
+
+func removeModelCacheFailureClass(err error) string {
+	switch {
+	case errors.Is(err, models.ErrModelCacheInUse):
+		return "CACHE_IN_USE"
+	case errors.Is(err, models.ErrModelCacheNotFound):
+		return "CACHE_NOT_FOUND"
+	case errors.Is(err, models.ErrModelCacheUnsafe):
+		return "CACHE_UNSAFE"
+	case errors.Is(err, models.ErrModelCacheRemovalFailed):
+		return "REMOVAL_FAILED"
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return "CANCELLED"
+	default:
+		return "INTERNAL"
+	}
+}

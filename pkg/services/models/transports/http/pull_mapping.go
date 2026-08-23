@@ -31,3 +31,13 @@ func modelPullResponseFromService(result models.PullResult) factoryapi.ModelPull
 	response.ManagedRuntimePull = managedRuntimePullResultToGenerated(result, files)
 	return response
 }
+
+func modelRemoveResponseFromService(result models.RemoveModelAssetsResult) factoryapi.ModelRemoveResponse {
+	return factoryapi.ModelRemoveResponse{
+		ModelName:    result.ModelName,
+		Revision:     result.Revision,
+		CachePath:    result.CachePath,
+		Outcome:      factoryapi.ModelRemoveOutcome(result.Outcome),
+		BytesRemoved: result.BytesRemoved,
+	}
+}

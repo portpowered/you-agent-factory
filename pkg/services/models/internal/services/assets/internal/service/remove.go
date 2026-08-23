@@ -29,18 +29,37 @@ func (s *service) RemoveModelAssets(
 	if err != nil {
 		return result, err
 	}
-	spec, source, err := s.resolveSource(scope.Runtime, request.Name)
+	spec, source, err := s.resolveRemovalSource(scope.Runtime, request.Name)
 	if err != nil {
-		if errors.Is(err, models.ErrAssetSourceMissing) ||
-			errors.Is(err, models.ErrAssetSourceUnsupported) {
-			return result, modelCacheNotFound(request.Name)
-		}
 		return result, err
 	}
 	result.ModelName = spec.modelName
 	if err := assetContextError(ctx); err != nil {
 		return result, err
 	}
+	return s.removeResolvedModelAssets(ctx, request, result, scope, spec, source)
+}
+
+func (s *service) resolveRemovalSource(
+	runtime models.RuntimeConfig,
+	modelName string,
+) (assetSpec, models.SourceMetadata, error) {
+	spec, source, err := s.resolveSource(runtime, modelName)
+	if errors.Is(err, models.ErrAssetSourceMissing) ||
+		errors.Is(err, models.ErrAssetSourceUnsupported) {
+		return assetSpec{}, models.SourceMetadata{}, modelCacheNotFound(modelName)
+	}
+	return spec, source, err
+}
+
+func (s *service) removeResolvedModelAssets(
+	ctx context.Context,
+	request models.RemoveModelAssetsRequest,
+	result models.RemoveModelAssetsResult,
+	scope models.RuntimeScopeConfig,
+	spec assetSpec,
+	source models.SourceMetadata,
+) (models.RemoveModelAssetsResult, error) {
 
 	modelRoot, err := s.modelCacheRoot(scope.CacheDirectory, spec.modelName)
 	if err != nil {
@@ -102,6 +121,79 @@ func modelCacheNotFound(name string) error {
 	return fmt.Errorf("%w: %s", models.ErrModelCacheNotFound, canonicalModelName(name))
 }
 
+func (s *service) measureRevisionBytes(ctx context.Context, revisionPath string) (int64, error) {
+	if err := assetContextError(ctx); err != nil {
+		return 0, err
+	}
+	if strings.TrimSpace(revisionPath) == "" {
+		return 0, fmt.Errorf("managed cache revision path is empty")
+	}
+	return s.measureDirectoryBytes(ctx, revisionPath)
+}
+
+func (s *service) measureDirectoryBytes(ctx context.Context, directory string) (int64, error) {
+	if err := assetContextError(ctx); err != nil {
+		return 0, err
+	}
+	entries, err := s.readDirectory(directory)
+	if err != nil {
+		return 0, fmt.Errorf("read managed cache revision %q: %w", directory, err)
+	}
+	var total int64
+	for _, entry := range entries {
+		bytes, entryErr := s.measureDirectoryEntryBytes(ctx, directory, entry)
+		if entryErr != nil {
+			return 0, entryErr
+		}
+		total, entryErr = addManagedCacheBytes(total, bytes)
+		if entryErr != nil {
+			return 0, entryErr
+		}
+	}
+	return total, nil
+}
+
+func (s *service) measureDirectoryEntryBytes(
+	ctx context.Context,
+	directory string,
+	entry os.DirEntry,
+) (int64, error) {
+	if err := assetContextError(ctx); err != nil {
+		return 0, err
+	}
+	if entry == nil || entry.Type()&os.ModeSymlink != 0 {
+		return 0, nil
+	}
+	name := entry.Name()
+	if name == "" || name == "." || name == ".." || filepath.Base(name) != name {
+		return 0, fmt.Errorf("invalid managed cache entry %q", name)
+	}
+	info, err := entry.Info()
+	if err != nil {
+		return 0, fmt.Errorf("inspect managed cache entry %q: %w", filepath.Join(directory, name), err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return 0, nil
+	}
+	if info.IsDir() {
+		return s.measureDirectoryBytes(ctx, filepath.Join(directory, name))
+	}
+	if !info.Mode().IsRegular() {
+		return 0, nil
+	}
+	if info.Size() < 0 {
+		return 0, fmt.Errorf("managed cache entry %q has a negative size", filepath.Join(directory, name))
+	}
+	return info.Size(), nil
+}
+
+func addManagedCacheBytes(total, next int64) (int64, error) {
+	if next < 0 || total > maxManagedCacheBytes-next {
+		return 0, fmt.Errorf("managed cache byte count exceeds int64 range")
+	}
+	return total + next, nil
+}
+
 // requireManagedDirectoryChild verifies a direct directory child without
 // resolving links. The configured cache root itself is an accepted location;
 // model and revision children must be real directories owned by that root.
@@ -126,25 +218,32 @@ func (s *service) requireManagedDirectoryChild(
 		return fmt.Errorf("inspect managed cache %s: %w", kind, err)
 	}
 	for _, entry := range entries {
-		if entry == nil || entry.Name() != child {
-			continue
+		if entry != nil && entry.Name() == child {
+			return s.validateManagedDirectoryChild(entry, child, kind)
 		}
-		if entry.Type()&os.ModeSymlink != 0 {
-			return fmt.Errorf("%w: managed cache %s is a symlink", models.ErrModelCacheUnsafe, kind)
-		}
-		info, infoErr := entry.Info()
-		if errors.Is(infoErr, os.ErrNotExist) {
-			return modelCacheNotFound(child)
-		}
-		if infoErr != nil {
-			return fmt.Errorf("inspect managed cache %s: %w", kind, infoErr)
-		}
-		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-			return fmt.Errorf("%w: managed cache %s is not a directory", models.ErrModelCacheUnsafe, kind)
-		}
-		return nil
 	}
 	return modelCacheNotFound(child)
+}
+
+func (s *service) validateManagedDirectoryChild(
+	entry os.DirEntry,
+	child string,
+	kind string,
+) error {
+	if entry.Type()&os.ModeSymlink != 0 {
+		return fmt.Errorf("%w: managed cache %s is a symlink", models.ErrModelCacheUnsafe, kind)
+	}
+	info, err := entry.Info()
+	if errors.Is(err, os.ErrNotExist) {
+		return modelCacheNotFound(child)
+	}
+	if err != nil {
+		return fmt.Errorf("inspect managed cache %s: %w", kind, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return fmt.Errorf("%w: managed cache %s is not a directory", models.ErrModelCacheUnsafe, kind)
+	}
+	return nil
 }
 
 func (s *service) removeManagedTree(ctx context.Context, directory string) error {
@@ -162,47 +261,45 @@ func (s *service) removeManagedTree(ctx context.Context, directory string) error
 		if err := assetContextError(ctx); err != nil {
 			return err
 		}
-		if entry == nil {
-			continue
-		}
-		name := entry.Name()
-		if name == "" || name == "." || name == ".." || filepath.Base(name) != name {
-			return fmt.Errorf("%w: invalid managed cache entry %q", models.ErrModelCacheUnsafe, name)
-		}
-		child := filepath.Join(directory, name)
-		if entry.Type()&os.ModeSymlink != 0 {
-			if err := s.removeManagedPath(child); err != nil {
+		if entry != nil {
+			if err := s.removeManagedEntry(ctx, directory, entry); err != nil {
 				return err
 			}
-			continue
-		}
-		info, infoErr := entry.Info()
-		if errors.Is(infoErr, os.ErrNotExist) {
-			continue
-		}
-		if infoErr != nil {
-			return fmt.Errorf("%w: inspect managed cache entry: %v", models.ErrModelCacheRemovalFailed, infoErr)
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			if err := s.removeManagedPath(child); err != nil {
-				return err
-			}
-			continue
-		}
-		if info.IsDir() {
-			if err := s.removeManagedTree(ctx, child); err != nil {
-				return err
-			}
-			continue
-		}
-		if err := s.removeManagedPath(child); err != nil {
-			return err
 		}
 	}
 	if err := assetContextError(ctx); err != nil {
 		return err
 	}
 	return s.removeManagedPath(directory)
+}
+
+func (s *service) removeManagedEntry(
+	ctx context.Context,
+	directory string,
+	entry os.DirEntry,
+) error {
+	name := entry.Name()
+	if name == "" || name == "." || name == ".." || filepath.Base(name) != name {
+		return fmt.Errorf("%w: invalid managed cache entry %q", models.ErrModelCacheUnsafe, name)
+	}
+	child := filepath.Join(directory, name)
+	if entry.Type()&os.ModeSymlink != 0 {
+		return s.removeManagedPath(child)
+	}
+	info, err := entry.Info()
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("%w: inspect managed cache entry: %v", models.ErrModelCacheRemovalFailed, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return s.removeManagedPath(child)
+	}
+	if info.IsDir() {
+		return s.removeManagedTree(ctx, child)
+	}
+	return s.removeManagedPath(child)
 }
 
 func (s *service) removeManagedPath(path string) error {
