@@ -159,19 +159,6 @@ func failureFromError(reference Reference, err error) Failure {
 	return failure
 }
 
-// RequiredTargets returns the closed target matrix in stable order.
-func RequiredTargets() []string {
-	return requiredTargets()
-}
-
 func requiredTargets() []string {
 	return []string{TargetDarwinArm64, TargetLinuxAmd64, TargetWindowsAmd64}
-}
-
-// SortFailures is useful to callers that aggregate diagnostics from multiple
-// repository adapters without changing the validator's deterministic order.
-func SortFailures(failures []Failure) []Failure {
-	cloned := append([]Failure(nil), failures...)
-	sortFailures(cloned)
-	return cloned
 }
