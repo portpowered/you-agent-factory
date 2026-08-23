@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 
@@ -172,96 +171,6 @@ func TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned(t
 	}
 
 	assertUnsupportedModelInvocationRejected(t, server.URL())
-}
-
-func TestModelTransportSmoke_NamedBuiltinRouteUsesEffectiveDefinitionWithoutWorker(t *testing.T) {
-	dir := support.ScaffoldFactory(t, builtInNamedModelTransportSmokeConfig())
-	runner := support.NewRecordingCommandRunner("provider should not run before managed readiness")
-	server := startFunctionalServer(t, dir, false, withWorkerCommands(runner, nil))
-
-	listed := getGeneratedJSON[factoryapi.ListModelsResponse](t, server.URL()+"/models")
-	if _, ok := findModelSummary(listed.Results, modelprovider.BuiltInModelNameTTS); !ok {
-		t.Fatalf("GET /models did not expose effective built-in %q; results=%#v", modelprovider.BuiltInModelNameTTS, listed.Results)
-	}
-	inspected := getGeneratedJSON[factoryapi.ModelDetail](t, server.URL()+"/models/"+modelprovider.BuiltInModelNameTTS)
-	if inspected.Name != modelprovider.BuiltInModelNameTTS || len(inspected.Operations) != 1 || inspected.Operations[0].Name != modelprovider.OperationTTS {
-		t.Fatalf("GET /models/%s = %#v, want effective TTS definition", modelprovider.BuiltInModelNameTTS, inspected)
-	}
-
-	for _, modelName := range []string{modelprovider.BuiltInModelNameTTS, modelprovider.BuiltInModelNameASR} {
-		request := factoryapi.ModelInvocationRequest{Operation: modelprovider.OperationTTS}
-		if modelName == modelprovider.BuiltInModelNameASR {
-			request.Operation = modelprovider.OperationASR
-		}
-		body, err := json.Marshal(request)
-		if err != nil {
-			t.Fatalf("marshal %s invocation: %v", modelName, err)
-		}
-		response, err := http.Post(
-			server.URL()+"/models/"+modelName+"/invocations",
-			"application/json", bytes.NewReader(body),
-		)
-		if err != nil {
-			t.Fatalf("POST /models/%s/invocations: %v", modelName, err)
-		}
-		var failure factoryapi.ErrorResponse
-		decodeErr := json.NewDecoder(response.Body).Decode(&failure)
-		response.Body.Close()
-		if decodeErr != nil {
-			t.Fatalf("decode %s invocation failure: %v", modelName, decodeErr)
-		}
-		if response.StatusCode != http.StatusNotFound || string(failure.Code) != "MODEL_NOT_AVAILABLE" {
-			t.Fatalf("POST /models/%s/invocations = status %d, failure %#v; want effective-definition readiness failure", modelName, response.StatusCode, failure)
-		}
-		if strings.Contains(strings.ToLower(failure.Message), "model not found") ||
-			strings.Contains(string(failure.Code), "MODEL_INFERENCE_RUNTIME_FAILURE") ||
-			failure.Family == factoryapi.ErrorFamilyInternalServerError {
-			t.Fatalf("POST /models/%s/invocations retained a worker-lookup failure: %#v", modelName, failure)
-		}
-	}
-	unknownBody, err := json.Marshal(factoryapi.ModelInvocationRequest{Operation: modelprovider.OperationTTS})
-	if err != nil {
-		t.Fatalf("marshal unknown model invocation: %v", err)
-	}
-	unknownResponse, err := http.Post(
-		server.URL()+"/models/unknown-discovered-model/invocations",
-		"application/json", bytes.NewReader(unknownBody),
-	)
-	if err != nil {
-		t.Fatalf("POST /models/unknown-discovered-model/invocations: %v", err)
-	}
-	var unknownFailure factoryapi.ErrorResponse
-	decodeUnknownErr := json.NewDecoder(unknownResponse.Body).Decode(&unknownFailure)
-	unknownResponse.Body.Close()
-	if decodeUnknownErr != nil {
-		t.Fatalf("decode unknown model invocation failure: %v", decodeUnknownErr)
-	}
-	if unknownResponse.StatusCode != http.StatusNotFound ||
-		string(unknownFailure.Code) != "MODEL_NOT_AVAILABLE" ||
-		unknownFailure.Family != factoryapi.ErrorFamilyNotFound {
-		t.Fatalf("POST /models/unknown-discovered-model/invocations = status %d, failure %#v; want actionable model-not-available 404", unknownResponse.StatusCode, unknownFailure)
-	}
-	if strings.Contains(string(unknownFailure.Code), "MODEL_INFERENCE_RUNTIME_FAILURE") ||
-		unknownFailure.Family == factoryapi.ErrorFamilyInternalServerError {
-		t.Fatalf("unknown model invocation retained an internal failure classification: %#v", unknownFailure)
-	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner calls = %d, want readiness to reject unavailable built-ins before execution", runner.CallCount())
-	}
-}
-
-func builtInNamedModelTransportSmokeConfig() map[string]any {
-	return map[string]any{
-		"name": "built-in-named-model-transport",
-		"workTypes": []map[string]any{{
-			"name": "task",
-			"states": []map[string]string{
-				{"name": "init", "type": "INITIAL"},
-				{"name": "complete", "type": "TERMINAL"},
-				{"name": "failed", "type": "FAILED"},
-			},
-		}},
-	}
 }
 
 func findModelSummary(results []factoryapi.ModelSummary, name string) (factoryapi.ModelSummary, bool) {

@@ -243,6 +243,15 @@ func builtInOnlyModelFactoryConfig() map[string]any {
 	}
 }
 
+func findModelSummary(results []factoryapi.ModelSummary, name string) (factoryapi.ModelSummary, bool) {
+	for _, result := range results {
+		if result.Name == name {
+			return result, true
+		}
+	}
+	return factoryapi.ModelSummary{}, false
+}
+
 // TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess proves the
 // registered generic HTTP route uses the live Models scope and returns named
 // output from the joined root rather than the legacy model-invocation envelope.
@@ -388,6 +397,97 @@ func TestModelsNamedAndGenericHTTPInvocationShareBuiltinResolution(t *testing.T)
 	}
 	if rejectingNetwork.Calls() != 0 || hostLauncher.Calls() != 0 || protocol.Calls() != 0 || compatibility.Calls() != 0 {
 		t.Fatalf("built-in parity effects = network %d, starts %d, protocol %d, compatibility %d; want no external effects for the cache-backed generic attempt or named readiness rejection", rejectingNetwork.Calls(), hostLauncher.Calls(), protocol.Calls(), compatibility.Calls())
+	}
+}
+
+// TestModelsNamedBuiltinRouteUsesEffectiveDefinitionWithoutWorker proves the
+// named route uses the discovered built-in definition even when the Factory
+// declares no matching inference worker, and preserves actionable readiness
+// and unknown-reference failures.
+func TestModelsNamedBuiltinRouteUsesEffectiveDefinitionWithoutWorker(t *testing.T) {
+	t.Parallel()
+
+	dir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	runner := support.NewRecordingCommandRunner("provider should not run before managed readiness")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+	})
+
+	assertEffectiveBuiltinDiscovery(t, server.URL())
+	assertEffectiveBuiltinReadinessFailures(t, server.URL())
+	assertUnknownBuiltinFailure(t, server.URL())
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner calls = %d, want readiness to reject unavailable built-ins before execution", runner.CallCount())
+	}
+}
+
+func assertEffectiveBuiltinDiscovery(t *testing.T, serverURL string) {
+	t.Helper()
+	listed := support.GetJSON[factoryapi.ListModelsResponse](t, serverURL+"/models")
+	if _, ok := findModelSummary(listed.Results, models.BuiltInModelNameTTS); !ok {
+		t.Fatalf("GET /models did not expose effective built-in %q; results=%#v", models.BuiltInModelNameTTS, listed.Results)
+	}
+	inspected := support.GetJSON[factoryapi.ModelDetail](t, serverURL+"/models/"+models.BuiltInModelNameTTS)
+	if inspected.Name != models.BuiltInModelNameTTS || len(inspected.Operations) != 1 || inspected.Operations[0].Name != models.OperationTTS {
+		t.Fatalf("GET /models/%s = %#v, want effective TTS definition", models.BuiltInModelNameTTS, inspected)
+	}
+}
+
+func assertEffectiveBuiltinReadinessFailures(t *testing.T, serverURL string) {
+	t.Helper()
+	for _, modelName := range []string{models.BuiltInModelNameTTS, models.BuiltInModelNameASR} {
+		operation := models.OperationTTS
+		if modelName == models.BuiltInModelNameASR {
+			operation = models.OperationASR
+		}
+		failure := postNamedBuiltinFailure(t, serverURL, modelName, operation)
+		if failure.StatusCode != http.StatusNotFound || string(failure.Body.Code) != "MODEL_NOT_AVAILABLE" {
+			t.Fatalf("POST /models/%s/invocations = status %d, failure %#v; want effective-definition readiness failure", modelName, failure.StatusCode, failure.Body)
+		}
+		if strings.Contains(strings.ToLower(failure.Body.Message), "model not found") ||
+			strings.Contains(string(failure.Body.Code), "MODEL_INFERENCE_RUNTIME_FAILURE") ||
+			failure.Body.Family == factoryapi.ErrorFamilyInternalServerError {
+			t.Fatalf("POST /models/%s/invocations retained a worker-lookup failure: %#v", modelName, failure.Body)
+		}
+	}
+}
+
+type namedBuiltinFailure struct {
+	StatusCode int
+	Body       factoryapi.ErrorResponse
+}
+
+func postNamedBuiltinFailure(t *testing.T, serverURL, modelName, operation string) namedBuiltinFailure {
+	t.Helper()
+	body, err := json.Marshal(factoryapi.ModelInvocationRequest{Operation: operation})
+	if err != nil {
+		t.Fatalf("marshal %s invocation: %v", modelName, err)
+	}
+	response, err := http.Post(serverURL+"/models/"+modelName+"/invocations", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /models/%s/invocations: %v", modelName, err)
+	}
+	defer response.Body.Close()
+	var failure factoryapi.ErrorResponse
+	if err := json.NewDecoder(response.Body).Decode(&failure); err != nil {
+		t.Fatalf("decode %s invocation failure: %v", modelName, err)
+	}
+	return namedBuiltinFailure{StatusCode: response.StatusCode, Body: failure}
+}
+
+func assertUnknownBuiltinFailure(t *testing.T, serverURL string) {
+	t.Helper()
+	failure := postNamedBuiltinFailure(t, serverURL, "unknown-discovered-model", models.OperationTTS)
+	if failure.StatusCode != http.StatusNotFound ||
+		string(failure.Body.Code) != "MODEL_NOT_AVAILABLE" ||
+		failure.Body.Family != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("POST /models/unknown-discovered-model/invocations = status %d, failure %#v; want actionable model-not-available 404", failure.StatusCode, failure.Body)
+	}
+	if strings.Contains(string(failure.Body.Code), "MODEL_INFERENCE_RUNTIME_FAILURE") ||
+		failure.Body.Family == factoryapi.ErrorFamilyInternalServerError {
+		t.Fatalf("unknown model invocation retained an internal failure classification: %#v", failure.Body)
 	}
 }
 

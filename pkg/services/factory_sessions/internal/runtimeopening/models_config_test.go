@@ -405,11 +405,24 @@ func TestRuntimeModelInvokerUsesEffectiveBuiltinWithoutDeclaredWorker(t *testing
 	t.Parallel()
 
 	scope := mustRuntimeModelScope(t, "factory-session:models:effective-builtin")
+	modelsService := newEffectiveBuiltinModelsStub(t)
+	workersService := effectiveBuiltinWorkersStub()
+	invoker := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{
+		Models: modelsService, Scope: scope, Sessions: sessionsWithConfig(&factorydefinitions.FactoryConfig{}),
+		Workers: workersService,
+	})
+	result, err := invoker.InvokeModel(context.Background(), models.BuiltInModelNameTTS, effectiveBuiltinRequest())
+
+	assertEffectiveBuiltinInvocation(t, scope, modelsService, workersService, result, err)
+}
+
+func newEffectiveBuiltinModelsStub(t *testing.T) *runtimeInvokerModelsStub {
+	t.Helper()
 	definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameTTS)
 	if !ok {
 		t.Fatal("built-in TTS definition is unavailable")
 	}
-	modelsService := &runtimeInvokerModelsStub{
+	return &runtimeInvokerModelsStub{
 		resolution: models.ResolveModelReferenceResult{
 			Resolved: models.ResolvedModelReference{Definition: definition},
 		},
@@ -418,22 +431,42 @@ func TestRuntimeModelInvokerUsesEffectiveBuiltinWithoutDeclaredWorker(t *testing
 			Readiness: models.Runtime{ReadinessState: models.ReadinessStateReady},
 		},
 	}
-	workersService := &runtimeInvokerWorkersStub{result: workers.ExecuteResult{
+}
+
+func effectiveBuiltinWorkersStub() *runtimeInvokerWorkersStub {
+	return &runtimeInvokerWorkersStub{result: workers.ExecuteResult{
 		Outcome: workers.ExecutionOutcomeAccepted,
 		Output: workers.ProposedOutput{Primary: []work.WorkContentPart{{
 			Type: work.WorkContentPartTypeAudio, File: "/tmp/tts.wav", ContentType: "audio/wav",
 		}}},
 	}}
-	invoker := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{
-		Models: modelsService, Scope: scope, Sessions: sessionsWithConfig(&factorydefinitions.FactoryConfig{}),
-		Workers: workersService,
-	})
-	result, err := invoker.InvokeModel(context.Background(), models.BuiltInModelNameTTS, models.Request{
+}
+
+func effectiveBuiltinRequest() models.Request {
+	return models.Request{
 		Operation: models.OperationTTS,
 		Content: []work.WorkContentPart{{
 			Slot: "text", Type: work.WorkContentPartTypeText, Text: "hello",
 		}},
-	})
+	}
+}
+
+func assertEffectiveBuiltinInvocation(
+	t *testing.T,
+	scope models.RuntimeScopeRef,
+	modelsService *runtimeInvokerModelsStub,
+	workersService *runtimeInvokerWorkersStub,
+	result models.Result,
+	err error,
+) {
+	t.Helper()
+	assertEffectiveBuiltinResult(t, result, err)
+	assertEffectiveBuiltinResolution(t, scope, modelsService)
+	assertEffectiveBuiltinExecution(t, workersService)
+}
+
+func assertEffectiveBuiltinResult(t *testing.T, result models.Result, err error) {
+	t.Helper()
 	if err != nil {
 		t.Fatalf("InvokeModel(effective built-in) error = %v, want nil", err)
 	}
@@ -444,6 +477,10 @@ func TestRuntimeModelInvokerUsesEffectiveBuiltinWithoutDeclaredWorker(t *testing
 	if len(result.Content) != 1 || result.Content[0].Type != work.WorkContentPartTypeAudio {
 		t.Fatalf("effective built-in content = %#v, want one audio part", result.Content)
 	}
+}
+
+func assertEffectiveBuiltinResolution(t *testing.T, scope models.RuntimeScopeRef, modelsService *runtimeInvokerModelsStub) {
+	t.Helper()
 	if len(modelsService.resolutionRequests) != 1 {
 		t.Fatalf("resolution requests = %#v, want one effective-definition lookup", modelsService.resolutionRequests)
 	}
@@ -455,6 +492,10 @@ func TestRuntimeModelInvokerUsesEffectiveBuiltinWithoutDeclaredWorker(t *testing
 		modelsService.readinessRequests[0].Operation != models.OperationTTS {
 		t.Fatalf("readiness requests = %#v, want effective tts operation", modelsService.readinessRequests)
 	}
+}
+
+func assertEffectiveBuiltinExecution(t *testing.T, workersService *runtimeInvokerWorkersStub) {
+	t.Helper()
 	if len(workersService.requests) != 1 {
 		t.Fatalf("Workers Execute requests = %d, want one", len(workersService.requests))
 	}
