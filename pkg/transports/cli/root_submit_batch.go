@@ -42,7 +42,7 @@ func newRunServerFlagBindings() climanifestcobra.RunServerFlagBindings {
 	boolInputs := []string{
 		"you.run.flag.continuously", "you.run.flag.no-record",
 		"you.run.flag.runtime-log-compress", "you.run.flag.runtime-metrics-compress",
-		"you.run.flag.with-server", "you.run.flag.with-site", "you.run.flag.quiet",
+		"you.run.flag.with-server", "you.run.flag.with-site", "you.run.flag.pprof", "you.server.flag.pprof", "you.run.flag.quiet",
 		"you.run.flag.skip-permissions",
 	}
 	intInputs := []string{
@@ -95,6 +95,7 @@ func applyRunResolvedInputs(cfg runcli.RunConfig, values map[string]any) (runcli
 		{"you.run.flag.runtime-metrics-compress", &cfg.RuntimeMetricsConfig.Compress},
 		{"you.run.flag.with-server", &cfg.WithServer},
 		{"you.run.flag.with-site", &cfg.WithSite},
+		{"you.run.flag.pprof", &cfg.Pprof},
 		{"you.run.flag.quiet", &cfg.SuppressDashboardRendering},
 	}
 	intFields := []struct {

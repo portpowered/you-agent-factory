@@ -386,6 +386,97 @@ func TestRunCommand_DefaultServerEnablesAutoPortAndLocalBind(t *testing.T) {
 	}
 }
 
+func TestRunCommand_PprofRequiresLocalServerMode(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() { runCLI = originalRunCLI }()
+	runCalled := false
+	runCLI = func(context.Context, runcli.RunConfig) error {
+		runCalled = true
+		return nil
+	}
+
+	root := newLegacyTestRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--pprof"})
+
+	err := root.Execute()
+	if err == nil || !strings.Contains(err.Error(), "--pprof") ||
+		!strings.Contains(err.Error(), "--with-server") || !strings.Contains(err.Error(), "--with-site") {
+		t.Fatalf("error = %v, want actionable local-server guidance", err)
+	}
+	if runCalled {
+		t.Fatal("run handler must not execute for serverless --pprof")
+	}
+}
+
+func TestRunCommand_PprofMapsToRunConfigWhenServerEnabled(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() { runCLI = originalRunCLI }()
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := newLegacyTestRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--pprof", "--with-server"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --pprof --with-server: %v", err)
+	}
+	if !got.Pprof {
+		t.Fatalf("run config Pprof = false, want true")
+	}
+}
+
+func TestServerCommand_PprofMapsToRunConfig(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() { runCLI = originalRunCLI }()
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := newLegacyTestRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"server", "--pprof"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute server --pprof: %v", err)
+	}
+	if !got.Pprof {
+		t.Fatalf("server config Pprof = false, want true")
+	}
+}
+
+func TestRunCommand_PprofPreservesLoopbackListenerEnforcement(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() { runCLI = originalRunCLI }()
+	runCalled := false
+	runCLI = func(context.Context, runcli.RunConfig) error {
+		runCalled = true
+		return nil
+	}
+
+	root := newLegacyTestRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--pprof", "--with-server", "--listen", "0.0.0.0:9091"})
+
+	err := root.Execute()
+	if err == nil || !strings.Contains(err.Error(), "not a local bind target") {
+		t.Fatalf("error = %v, want loopback bind rejection", err)
+	}
+	if runCalled {
+		t.Fatal("run handler must not execute after non-loopback bind rejection")
+	}
+}
+
 func TestRunCommand_ExplicitServerDerivesLoopbackBindAndEnablesFallback(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {

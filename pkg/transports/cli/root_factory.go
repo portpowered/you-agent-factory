@@ -121,6 +121,10 @@ func executeServerCommand(
 	if err != nil {
 		return err
 	}
+	cfg.Pprof, err = commandInputValue[bool](values, serverPprofInputID)
+	if err != nil {
+		return err
+	}
 	cfg.ListenExplicit, err = climanifestcobra.InputChanged(cmd, serverListenInputID)
 	if err != nil {
 		return err

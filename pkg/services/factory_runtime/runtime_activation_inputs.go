@@ -45,6 +45,7 @@ type RuntimeActivationHostInputs struct {
 	Host        string
 	Port        int
 	AutoPort    bool
+	Pprof       bool
 }
 
 type RuntimeActivationWorkerInputs struct {

@@ -140,6 +140,7 @@ func runtimeOpeningRequestFromActivation(
 				Host:        request.Inputs.Session.Host.Host,
 				Port:        request.Inputs.Session.Host.Port,
 				AutoPort:    request.Inputs.Session.Host.AutoPort,
+				Pprof:       request.Inputs.Session.Host.Pprof,
 			},
 		},
 		Workers: workers.RuntimeOpeningRequest{
@@ -790,6 +791,7 @@ func runtimeActivationInputs(
 				Host:        request.FactorySession.Host.Host,
 				Port:        request.FactorySession.Host.Port,
 				AutoPort:    request.FactorySession.Host.AutoPort,
+				Pprof:       request.FactorySession.Host.Pprof,
 			},
 		},
 		Workers: factoryruntime.RuntimeActivationWorkerInputs{

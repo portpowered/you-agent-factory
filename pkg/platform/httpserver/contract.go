@@ -26,6 +26,7 @@ type StartRequest struct {
 	Host     string
 	Port     int
 	AutoPort bool
+	Pprof    bool
 	Logger   *zap.Logger
 	OnBound  BoundObserver
 }

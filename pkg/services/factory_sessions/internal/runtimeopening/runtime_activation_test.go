@@ -435,8 +435,9 @@ func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {
 		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
 			BackendScopeID: "scope",
 			Host: factorysessions.RuntimeHostRequest{
-				Host: "127.0.0.1",
-				Port: 8080,
+				Host:  "127.0.0.1",
+				Port:  8080,
+				Pprof: true,
 			},
 		},
 		Workers: workers.RuntimeOpeningRequest{
@@ -460,6 +461,9 @@ func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {
 	}
 	if activation.Inputs.Workers.InvocationSkipPermissionsOverride == nil || !*activation.Inputs.Workers.InvocationSkipPermissionsOverride {
 		t.Fatal("activation inputs lost worker permission override")
+	}
+	if !activation.Inputs.Session.Host.Pprof {
+		t.Fatal("activation inputs lost pprof setting")
 	}
 }
 

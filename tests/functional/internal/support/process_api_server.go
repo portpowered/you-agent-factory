@@ -74,7 +74,7 @@ func (server *ProcessAPIServer) Start(
 	}
 	server.started = true
 	close(server.startedSignal)
-	httpServer := httptest.NewServer(request.Handler)
+	httpServer := httptest.NewServer(platformhttpserver.HandlerWithPprof(request.Handler, request.Pprof))
 	server.url = httpServer.URL
 	if request.OnBound != nil {
 		boundPort := request.Port

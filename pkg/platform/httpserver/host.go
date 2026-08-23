@@ -63,7 +63,7 @@ func NewStarter(listen ListenerFactory) (Starter, error) {
 		if request.OnBound != nil {
 			request.OnBound(Binding{Host: host, Port: port})
 		}
-		return Serve(ctx, request.Handler, listener, request.Logger)
+		return Serve(ctx, HandlerWithPprof(request.Handler, request.Pprof), listener, request.Logger)
 	}, nil
 }
 

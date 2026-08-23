@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -20,6 +21,65 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// TestAPIServerPprofIsOptInThroughThePublicRunPath proves the diagnostics
+// routes are absent by default and that --pprof exposes a live heap profile on
+// the same loopback API server built through root.BuildProcess.
+func TestAPIServerPprofIsOptInThroughThePublicRunPath(t *testing.T) {
+	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
+	defaultServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+	for _, path := range []string{
+		"/debug/pprof/", "/debug/pprof/heap", "/debug/pprof/profile",
+		"/debug/pprof/trace", "/debug/pprof/goroutine", "/debug/pprof/cmdline",
+		"/debug/pprof/symbol",
+	} {
+		response, err := http.Get(defaultServer.URL() + path)
+		if err != nil {
+			t.Fatalf("default GET %s: %v", path, err)
+		}
+		_ = response.Body.Close()
+		if response.StatusCode != http.StatusNotFound {
+			t.Fatalf("default GET %s status = %d, want %d", path, response.StatusCode, http.StatusNotFound)
+		}
+	}
+	defaultServer.Close(t)
+
+	enabledServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+		Args:                      []string{"--pprof"},
+	})
+	index, err := http.Get(enabledServer.URL() + "/debug/pprof/")
+	if err != nil {
+		t.Fatalf("enabled GET pprof index: %v", err)
+	}
+	indexBody, err := io.ReadAll(index.Body)
+	_ = index.Body.Close()
+	if err != nil {
+		t.Fatalf("read enabled pprof index: %v", err)
+	}
+	if index.StatusCode != http.StatusOK || !strings.Contains(string(indexBody), "heap") {
+		t.Fatalf("enabled pprof index = (%d, %q), want HTTP 200 with heap profile", index.StatusCode, indexBody)
+	}
+
+	heap, err := http.Get(enabledServer.URL() + "/debug/pprof/heap")
+	if err != nil {
+		t.Fatalf("enabled GET pprof heap: %v", err)
+	}
+	heapBody, err := io.ReadAll(heap.Body)
+	_ = heap.Body.Close()
+	if err != nil {
+		t.Fatalf("read enabled pprof heap: %v", err)
+	}
+	if heap.StatusCode != http.StatusOK || len(heapBody) == 0 {
+		t.Fatalf("enabled pprof heap = (%d, body length %d), want non-empty HTTP 200 response", heap.StatusCode, len(heapBody))
+	}
+}
 
 // TestAPIServerStartsOnConfiguredListenerAndServesStatus proves the public API
 // server becomes reachable on its configured loopback listener and serves a

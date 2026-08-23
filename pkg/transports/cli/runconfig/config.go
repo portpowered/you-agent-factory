@@ -67,6 +67,7 @@ type Config struct {
 	BindHost                      string
 	ListenAddress                 string
 	ListenExplicit                bool
+	Pprof                         bool
 	Port                          int
 	AutoPort                      bool
 	RecordPath                    string

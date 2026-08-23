@@ -14538,6 +14538,30 @@
             "state": "active"
           }
         },
+        "you.run.flag.pprof": {
+          "id": "you.run.flag.pprof",
+          "long": "pprof",
+          "usage": "enable loopback-only Go pprof HTTP diagnostics for this local server; requires --with-server or --with-site",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.run.flag.pprof",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
         "you.run.flag.provider": {
           "id": "you.run.flag.provider",
           "long": "provider",
@@ -15394,6 +15418,20 @@
             }
           ]
         },
+        "you.run.rel.pprof-server": {
+          "id": "you.run.rel.pprof-server",
+          "kind": "dependency",
+          "when": {
+            "type": "flag",
+            "id": "you.run.flag.pprof"
+          },
+          "participants": [
+            {
+              "type": "flag",
+              "id": "you.run.flag.with-server"
+            }
+          ]
+        },
         "you.run.rel.remote-with-server": {
           "id": "you.run.rel.remote-with-server",
           "kind": "conflict",
@@ -15706,6 +15744,30 @@
             "itemId": "you.server.flag.listen",
             "since": "1.0.0",
             "state": "active"
+          }
+        },
+        "you.server.flag.pprof": {
+          "id": "you.server.flag.pprof",
+          "long": "pprof",
+          "usage": "enable loopback-only Go pprof HTTP diagnostics for this local server; never available on ACP or MCP stdio",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.server.flag.pprof",
+            "state": "active",
+            "since": "1.0.0"
           }
         },
         "you.server.flag.remote": {

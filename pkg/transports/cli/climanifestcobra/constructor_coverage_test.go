@@ -846,7 +846,7 @@ func TestNewRunServerFamilyComponentsRegistersLocalFlags(t *testing.T) {
 		"runtime-log-max-age-days", "runtime-log-compress", "runtime-metrics-dir",
 		"runtime-metrics-max-size-mb", "runtime-metrics-max-backups",
 		"runtime-metrics-max-age-days", "runtime-metrics-compress", "with-mock-workers",
-		"with-server", "with-site", "quiet", "output", "skip-permissions", "port", "listen",
+		"with-server", "with-site", "pprof", "quiet", "output", "skip-permissions", "port", "listen",
 		"provider", "model", "worktree", "to-file",
 	} {
 		if components.Run.Flags().Lookup(flagName) == nil {
@@ -855,6 +855,9 @@ func TestNewRunServerFamilyComponentsRegistersLocalFlags(t *testing.T) {
 	}
 	if flag := components.Run.Flags().Lookup("with-mock-workers"); flag == nil || flag.NoOptDefVal == "" {
 		t.Fatalf("with-mock-workers no-option contract = %#v", flag)
+	}
+	if flag := components.Server.Flags().Lookup("pprof"); flag == nil || flag.NoOptDefVal == "" {
+		t.Fatalf("server pprof no-option contract = %#v", flag)
 	}
 }
 
@@ -928,7 +931,7 @@ func testRunServerBindings() RunServerFlagBindings {
 	for _, inputID := range []string{
 		"you.run.flag.continuously", "you.run.flag.no-record",
 		"you.run.flag.runtime-log-compress", "you.run.flag.runtime-metrics-compress",
-		"you.run.flag.with-server", "you.run.flag.with-site", "you.run.flag.quiet",
+		"you.run.flag.with-server", "you.run.flag.with-site", "you.run.flag.pprof", "you.server.flag.pprof", "you.run.flag.quiet",
 		"you.run.flag.skip-permissions",
 	} {
 		targets[inputID] = testScalarTarget(false)

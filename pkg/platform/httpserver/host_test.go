@@ -34,7 +34,7 @@ func TestNewStarterBindsServesAndJoinsOnCancellation(t *testing.T) {
 			Handler: http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 				_, _ = io.WriteString(writer, "ready")
 			}),
-			Port: 8123, Logger: zap.NewNop(),
+			Port: 8123, Pprof: true, Logger: zap.NewNop(),
 		})
 	}()
 
@@ -50,6 +50,10 @@ func TestNewStarterBindsServesAndJoinsOnCancellation(t *testing.T) {
 	}
 	if got := string(payload); got != "ready" {
 		t.Fatalf("response = %q, want ready", got)
+	}
+	pprofResponse := getPprofTestResponse(t, "http://"+listener.Addr().String()+"/debug/pprof/heap")
+	if pprofResponse.StatusCode != http.StatusOK || pprofResponse.Body == "" {
+		t.Fatalf("NewStarter pprof heap = (%d, %q), want non-empty HTTP 200 response", pprofResponse.StatusCode, pprofResponse.Body)
 	}
 
 	cancel()
@@ -146,7 +150,7 @@ func TestNewStarterRejectsNonLoopbackHostBeforeListenerEffect(t *testing.T) {
 		t.Fatalf("NewStarter: %v", err)
 	}
 	err = starter(t.Context(), StartRequest{
-		Handler: http.NotFoundHandler(), Host: "0.0.0.0", Port: 8123,
+		Handler: http.NotFoundHandler(), Host: "0.0.0.0", Port: 8123, Pprof: true,
 		Logger: zap.NewNop(),
 	})
 	if !IsBindError(err) {

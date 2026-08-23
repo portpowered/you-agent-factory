@@ -476,7 +476,7 @@ func openRuntime(
 			Directory: configured.Definition.Directory, RuntimeMode: configured.Runtime.Mode,
 			WorkFile: configured.Session.WorkFile, MockWorkers: configured.Workers.MockWorkers != nil,
 			Host: configured.Session.Host.Host, Port: configured.Session.Host.Port,
-			AutoPort: configured.Session.Host.AutoPort,
+			AutoPort: configured.Session.Host.AutoPort, Pprof: configured.Session.Host.Pprof,
 		},
 		nil,
 		startupRuntime.RuntimeLogger(),

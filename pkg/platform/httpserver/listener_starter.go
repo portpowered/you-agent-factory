@@ -32,6 +32,6 @@ func StarterWithListener(listener net.Listener) Starter {
 			}
 			request.OnBound(Binding{Host: host, Port: port})
 		}
-		return Serve(ctx, request.Handler, listener, request.Logger)
+		return Serve(ctx, HandlerWithPprof(request.Handler, request.Pprof), listener, request.Logger)
 	}
 }

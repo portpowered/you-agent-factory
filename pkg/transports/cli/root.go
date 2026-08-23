@@ -49,6 +49,8 @@ const (
 	defaultMockWorkersConfigPathSentinel = "__agent_factory_default_mock_workers_config__"
 	runListenInputID                     = "you.run.flag.listen"
 	serverListenInputID                  = "you.server.flag.listen"
+	runPprofInputID                      = "you.run.flag.pprof"
+	serverPprofInputID                   = "you.server.flag.pprof"
 )
 
 const cliBinaryName = "you"
@@ -507,6 +509,9 @@ func newMCPCommand(options CommandFactory) (*cobra.Command, error) {
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, operatorDefaults *cliOperatorDefaultsOptions, policy terminalpolicy.Policy, rootOptions CommandFactory, defaultInvocation bool) error {
 	cfg = applyRunScopedServerMode(cfg)
+	if cfg.Pprof && !defaultInvocation && !cfg.WithServer && !cfg.WithSite {
+		return fmt.Errorf("input relationship %q: --pprof requires --with-server or --with-site", "you.run.rel.pprof-server")
+	}
 	if cfg.ListenExplicit || strings.TrimSpace(cfg.ListenAddress) != "" {
 		cfg.ListenExplicit = true
 		if !defaultInvocation && !cfg.WithServer && !cfg.WithSite {

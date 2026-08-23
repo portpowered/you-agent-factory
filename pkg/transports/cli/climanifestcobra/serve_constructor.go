@@ -97,7 +97,7 @@ func protocolServerParentRecord(record climanifest.Command) climanifest.Command 
 	record.Handler = nil
 	flags := make(map[string]climanifest.Flag, len(record.Flags))
 	for id, flag := range record.Flags {
-		if id == "you.server.flag.listen" {
+		if id == "you.server.flag.listen" || id == "you.server.flag.pprof" {
 			continue
 		}
 		flags[id] = flag

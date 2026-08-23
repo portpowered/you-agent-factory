@@ -84,7 +84,7 @@ func TestServiceRunHostsAPICompletesStartupAndWaitsForRuntime(t *testing.T) {
 		request platformhttpserver.StartRequest,
 	) error {
 		if request.Handler == nil || request.Host != "127.0.0.1" || request.Port != 8123 ||
-			!request.AutoPort || request.Logger == nil || request.OnBound == nil {
+			!request.AutoPort || !request.Pprof || request.Logger == nil || request.OnBound == nil {
 			return errors.New("unexpected API host input")
 		}
 		close(started)
@@ -106,6 +106,7 @@ func TestServiceRunHostsAPICompletesStartupAndWaitsForRuntime(t *testing.T) {
 			Host:        "127.0.0.1",
 			Port:        8123,
 			AutoPort:    true,
+			Pprof:       true,
 		},
 		func(binding factorysessions.RuntimeHostBinding) {
 			runtime.record("observe")

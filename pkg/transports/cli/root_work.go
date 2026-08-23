@@ -292,7 +292,8 @@ func attachServerProtocolChild(server, family *cobra.Command, childName string) 
 		return fmt.Errorf("attach server %s child: command is required", childName)
 	}
 	family.RemoveCommand(child)
-	if child.LocalNonPersistentFlags().Lookup("listen") == nil {
+	if child.LocalNonPersistentFlags().Lookup("listen") == nil ||
+		child.LocalNonPersistentFlags().Lookup("pprof") == nil {
 		if err := suppressUnrelatedServerProtocolListener(child, childName); err != nil {
 			return err
 		}
@@ -660,6 +661,9 @@ func newRunServerHandlerRegistry(
 				if err := validateRunListenPlacement(cmd); err != nil {
 					return err
 				}
+				if err := validateRunPprofPlacement(cmd); err != nil {
+					return err
+				}
 				return rejectDeprecatedPortFlag(cmd, args)
 			},
 			RunE: func(cmd *cobra.Command, args []string) error {
@@ -724,6 +728,35 @@ func validateRunListenPlacement(cmd *cobra.Command) error {
 		return nil
 	}
 	return fmt.Errorf("input relationship %q: --listen requires --with-server or --with-site", "you.run.rel.listen-server")
+}
+
+func validateRunPprofPlacement(cmd *cobra.Command) error {
+	if cmd == nil {
+		return nil
+	}
+	values, err := generatedCommandInputs(cmd)
+	if err != nil {
+		return err
+	}
+	enabled, err := commandInputValue[bool](values, runPprofInputID)
+	if err != nil {
+		return err
+	}
+	if !enabled {
+		return nil
+	}
+	withServer, err := climanifestcobra.InputChanged(cmd, "you.run.flag.with-server")
+	if err != nil {
+		return err
+	}
+	withSite, err := climanifestcobra.InputChanged(cmd, "you.run.flag.with-site")
+	if err != nil {
+		return err
+	}
+	if withServer || withSite {
+		return nil
+	}
+	return fmt.Errorf("input relationship %q: --pprof requires --with-server or --with-site", "you.run.rel.pprof-server")
 }
 
 func validateRunRemoteHostingConflict(cmd *cobra.Command, globals *cliGlobalOptions) error {
