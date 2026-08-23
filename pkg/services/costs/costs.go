@@ -39,9 +39,9 @@ func (query CostsQuery) QueryCosts(ctx context.Context, request QueryRequest) (R
 // Query is the short compatibility name for the Costs operation type.
 type Query = CostsQuery
 
-// QueryRequest identifies the canonical metrics input and optional scope
-// filters. OperatorSettingsPath is retained as an ignored compatibility field
-// for existing CLI/API callers; pricing is now read only from Providers.
+// QueryRequest identifies the canonical metrics input, the explicit operator
+// settings document, and optional scope filters. The settings path is read on
+// every query so changes take effect without rebuilding the process.
 // FactorySessionID and RuntimeInstanceID are optional independent filters;
 // both are passed to the canonical Factory Visualization query.
 type QueryRequest struct {

@@ -8,34 +8,40 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	costs "github.com/portpowered/infinite-you/pkg/services/costs"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 // Service owns valuation policy while retaining no report or request state.
-// Provider pricing and canonical metrics remain behind two injected owner
-// contracts.
+// Provider pricing, Operator Settings, and canonical metrics remain behind
+// injected owner contracts.
 type Service struct {
-	pricing costs.PriceTableReader
-	metrics factoryvisualization.RuntimeMetricsQuery
-	logger  logging.Logger
+	pricing  costs.PriceTableReader
+	settings operatorsettings.Service
+	metrics  factoryvisualization.RuntimeMetricsQuery
+	logger   logging.Logger
 }
 
 // New constructs the stateless Costs operation.
 func New(
 	pricing costs.PriceTableReader,
+	settings operatorsettings.Service,
 	metrics factoryvisualization.RuntimeMetricsQuery,
 	logger logging.Logger,
 ) (costs.CostsQuery, error) {
 	switch {
 	case pricing == nil:
 		return nil, errors.New("construct Costs query: price-table reader is required")
+	case settings == nil:
+		return nil, errors.New("construct Costs query: Operator Settings reader is required")
 	case metrics == nil:
 		return nil, errors.New("construct Costs query: runtime metrics query is required")
 	}
 	service := &Service{
-		pricing: pricing,
-		metrics: metrics,
-		logger:  logging.EnsureLogger(logger),
+		pricing:  pricing,
+		settings: settings,
+		metrics:  metrics,
+		logger:   logging.EnsureLogger(logger),
 	}
 	return service.QueryCosts, nil
 }
@@ -46,7 +52,7 @@ func (service *Service) QueryCosts(
 	ctx context.Context,
 	request costs.QueryRequest,
 ) (costs.Report, error) {
-	if service == nil || service.pricing == nil || service.metrics == nil {
+	if service == nil || service.pricing == nil || service.settings == nil || service.metrics == nil {
 		return costs.Report{}, &costs.QueryError{
 			Kind:    costs.QueryErrorInvalidInput,
 			Message: "query runtime costs: dependencies are required",
@@ -76,7 +82,7 @@ func (service *Service) QueryCosts(
 		"runtime_instance_id", runtimeID,
 	)
 
-	table, err := service.readPriceTable()
+	builtInTable, operatorTable, err := service.readPriceTables(request.OperatorSettingsPath)
 	if err != nil {
 		service.logger.Error(
 			"runtime costs query failed",
@@ -111,7 +117,7 @@ func (service *Service) QueryCosts(
 		return costs.Report{}, err
 	}
 
-	report, err := calculateReport(ctx, table, metrics.UsageRows, scope)
+	report, err := calculateReport(ctx, builtInTable, operatorTable, metrics.UsageRows, scope)
 	if err != nil {
 		wrapped := &costs.QueryError{
 			Kind:    costs.QueryErrorInvalidUsage,
@@ -143,24 +149,40 @@ func (service *Service) QueryCosts(
 	return report, nil
 }
 
-func (service *Service) readPriceTable() (providers.PriceTable, error) {
-	table, err := service.pricing.ReadPriceTable()
+func (service *Service) readPriceTables(path string) (providers.PriceTable, operatorsettings.PriceTable, error) {
+	builtInTable, err := service.pricing.ReadPriceTable()
 	if err != nil {
-		return providers.PriceTable{}, &costs.QueryError{
+		return providers.PriceTable{}, operatorsettings.PriceTable{}, &costs.QueryError{
 			Kind:    costs.QueryErrorSettingsReadFailed,
 			Message: "query runtime costs: read provider price table",
 			Cause:   err,
 		}
 	}
-	table, err = table.Normalize()
+	builtInTable, err = builtInTable.Normalize()
 	if err != nil {
-		return providers.PriceTable{}, &costs.QueryError{
+		return providers.PriceTable{}, operatorsettings.PriceTable{}, &costs.QueryError{
 			Kind:    costs.QueryErrorInvalidPriceTable,
 			Message: "query runtime costs: validate provider price table",
 			Cause:   err,
 		}
 	}
-	return table, nil
+	config, err := service.settings.LoadFileConfig(strings.TrimSpace(path))
+	if err != nil {
+		return providers.PriceTable{}, operatorsettings.PriceTable{}, &costs.QueryError{
+			Kind:    costs.QueryErrorSettingsReadFailed,
+			Message: "query runtime costs: read operator settings price table",
+			Cause:   err,
+		}
+	}
+	operatorTable, err := config.PriceTable.Normalize()
+	if err != nil {
+		return providers.PriceTable{}, operatorsettings.PriceTable{}, &costs.QueryError{
+			Kind:    costs.QueryErrorInvalidPriceTable,
+			Message: "query runtime costs: validate operator price table",
+			Cause:   err,
+		}
+	}
+	return builtInTable, operatorTable, nil
 }
 
 func scopeForRequest(request costs.QueryRequest) costs.Scope {

@@ -10,6 +10,7 @@ import (
 	costs "github.com/portpowered/infinite-you/pkg/services/costs"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
@@ -21,6 +22,15 @@ type normalizedPrice struct {
 }
 
 type priceIndex map[string]normalizedPrice
+
+type priceEntry struct {
+	provider  string
+	model     string
+	input     string
+	output    string
+	cached    *string
+	reasoning *string
+}
 
 type summary struct {
 	amount                 *big.Rat
@@ -54,17 +64,27 @@ type tokenAccumulator struct {
 
 func calculateReport(
 	ctx context.Context,
-	table providers.PriceTable,
+	builtInTable providers.PriceTable,
+	operatorTable operatorsettings.PriceTable,
 	rows []factoryvisualization.RuntimeMetricsUsageRow,
 	scope costs.Scope,
 ) (costs.Report, error) {
-	prices, err := buildPriceIndex(table)
+	prices, err := buildPriceIndex(builtInTable)
 	if err != nil {
 		return costs.Report{}, err
 	}
+	operatorPrices, err := buildOperatorPriceIndex(operatorTable)
+	if err != nil {
+		return costs.Report{}, err
+	}
+	for key, price := range operatorPrices {
+		// Operator rows are complete replacements. In particular, an omitted
+		// optional subclass must not inherit a rate from the built-in row.
+		prices[key] = price
+	}
 	report := costs.Report{
 		Scope:           scope,
-		Currency:        table.Currency,
+		Currency:        builtInTable.Currency,
 		UnpricedPairs:   []costs.UnpricedPair{},
 		LineItems:       []costs.LineItem{},
 		WorkItems:       []costs.Rollup{},
@@ -116,19 +136,19 @@ func calculateReport(
 	report.TokenTotals = overall.tokens.totals()
 	report.UnpricedDispatchCount = overall.unpricedDispatchCount()
 	report.UnpricedPairs = overall.unpricedPairsValue()
-	report.WorkItems, err = rollups(work, table.Currency)
+	report.WorkItems, err = rollups(work, builtInTable.Currency)
 	if err != nil {
 		return costs.Report{}, err
 	}
-	report.WorkerSessions, err = rollups(workerSessions, table.Currency)
+	report.WorkerSessions, err = rollups(workerSessions, builtInTable.Currency)
 	if err != nil {
 		return costs.Report{}, err
 	}
-	report.FactorySessions, err = rollups(factorySessions, table.Currency)
+	report.FactorySessions, err = rollups(factorySessions, builtInTable.Currency)
 	if err != nil {
 		return costs.Report{}, err
 	}
-	report.ProviderModels, err = providerRollups(providerModels, table.Currency)
+	report.ProviderModels, err = providerRollups(providerModels, builtInTable.Currency)
 	if err != nil {
 		return costs.Report{}, err
 	}
@@ -136,30 +156,60 @@ func calculateReport(
 }
 
 func buildPriceIndex(table providers.PriceTable) (priceIndex, error) {
-	index := make(priceIndex, len(table.Models))
+	entries := make([]priceEntry, 0, len(table.Models))
 	for _, model := range table.Models {
-		input, err := parseDecimal(model.InputPerMillionTokens)
+		entries = append(entries, priceEntry{
+			provider:  model.Provider.String(),
+			model:     model.Model,
+			input:     model.InputPerMillionTokens,
+			output:    model.OutputPerMillionTokens,
+			cached:    model.CachedInputPerMillionTokens,
+			reasoning: model.ReasoningOutputPerMillionTokens,
+		})
+	}
+	return buildPriceIndexFromEntries(entries)
+}
+
+func buildOperatorPriceIndex(table operatorsettings.PriceTable) (priceIndex, error) {
+	entries := make([]priceEntry, 0, len(table.Models))
+	for _, model := range table.Models {
+		entries = append(entries, priceEntry{
+			provider:  model.Provider,
+			model:     model.Model,
+			input:     model.InputPerMillionTokens,
+			output:    model.OutputPerMillionTokens,
+			cached:    model.CachedInputPerMillionTokens,
+			reasoning: model.ReasoningOutputPerMillionTokens,
+		})
+	}
+	return buildPriceIndexFromEntries(entries)
+}
+
+func buildPriceIndexFromEntries(entries []priceEntry) (priceIndex, error) {
+	index := make(priceIndex, len(entries))
+	for _, entry := range entries {
+		input, err := parseDecimal(entry.input)
 		if err != nil {
-			return nil, fmt.Errorf("parse input rate for %q/%q: %w", model.Provider, model.Model, err)
+			return nil, fmt.Errorf("parse input rate for %q/%q: %w", entry.provider, entry.model, err)
 		}
-		output, err := parseDecimal(model.OutputPerMillionTokens)
+		output, err := parseDecimal(entry.output)
 		if err != nil {
-			return nil, fmt.Errorf("parse output rate for %q/%q: %w", model.Provider, model.Model, err)
+			return nil, fmt.Errorf("parse output rate for %q/%q: %w", entry.provider, entry.model, err)
 		}
 		price := normalizedPrice{input: input, output: output}
-		if model.CachedInputPerMillionTokens != nil {
-			price.cached, err = parseDecimal(*model.CachedInputPerMillionTokens)
+		if entry.cached != nil {
+			price.cached, err = parseDecimal(*entry.cached)
 			if err != nil {
-				return nil, fmt.Errorf("parse cached-input rate for %q/%q: %w", model.Provider, model.Model, err)
+				return nil, fmt.Errorf("parse cached-input rate for %q/%q: %w", entry.provider, entry.model, err)
 			}
 		}
-		if model.ReasoningOutputPerMillionTokens != nil {
-			price.reasoning, err = parseDecimal(*model.ReasoningOutputPerMillionTokens)
+		if entry.reasoning != nil {
+			price.reasoning, err = parseDecimal(*entry.reasoning)
 			if err != nil {
-				return nil, fmt.Errorf("parse reasoning-output rate for %q/%q: %w", model.Provider, model.Model, err)
+				return nil, fmt.Errorf("parse reasoning-output rate for %q/%q: %w", entry.provider, entry.model, err)
 			}
 		}
-		index[providerModelKey(model.Provider.String(), model.Model)] = price
+		index[providerModelKey(entry.provider, entry.model)] = price
 	}
 	return index, nil
 }

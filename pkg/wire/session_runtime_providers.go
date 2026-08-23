@@ -643,14 +643,16 @@ func provideProviderPriceTableReader() (costs.PriceTableReader, error) {
 	return providerswire.NewPriceTableReader()
 }
 
-// provideCostsQuery composes valuation over canonical metrics and the narrow
-// Providers pricing reader. Costs reads no artifacts or operator files.
+// provideCostsQuery composes valuation over canonical metrics, immutable
+// Providers pricing facts, and the singular Operator Settings root. Costs
+// receives the explicit settings path per request and does not read files.
 func provideCostsQuery(
 	pricing costs.PriceTableReader,
+	settings operatorsettings.Service,
 	metrics factoryvisualization.RuntimeMetricsQuery,
 	logger logging.Logger,
 ) (costs.CostsQuery, error) {
-	return costswire.NewCostsQuery(pricing, metrics, logger)
+	return costswire.NewCostsQuery(pricing, settings, metrics, logger)
 }
 
 func provideCostsQueryCapability(
