@@ -3,6 +3,8 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { forbiddenFoundationTokenNames } from "./semantic-color-foundation-policy";
+
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultUiDir = path.resolve(scriptDir, "..");
 const sourceDir = process.env.AGENT_FACTORY_UI_SRC_DIR
@@ -20,18 +22,6 @@ const skippedPathFragments = [
 ];
 const semanticColorExceptionMarker =
   "semantic-color-exception: system-integration";
-const forbiddenFoundationTokenNames = [
-  "af-bg",
-  "af-bg-start",
-  "af-bg-mid",
-  "af-canvas",
-  "af-ink",
-  "af-danger-bright",
-  "af-danger-ink",
-  "af-info-ink",
-  "af-success-ink",
-  "af-warning-ink",
-] as const;
 const forbiddenFoundationTokenPattern = forbiddenFoundationTokenNames.join("|");
 const colorUtilityWithAlphaPattern =
   /(?:^|[\s"'`])((?:[a-z-]+:)*(?:bg|text|border|fill|stroke|decoration|outline|ring|ring-offset)-[^\s"'`]+\/\d{1,3}\b)/g;
@@ -40,12 +30,13 @@ const opacityUtilityPattern =
 const brightnessUtilityPattern =
   /(?:^|[\s"'`])((?:[a-z-]+:)*brightness-(\d{1,3})\b)/g;
 const rgbFromVarAlphaPattern = /rgb\(from[^\n]*?\/[^\n]*?\)/g;
+const foundationTokenBoundary = "(?![a-z0-9-])";
 const forbiddenFoundationUtilityPattern = new RegExp(
-  `(?:^|[\\s"'\\\`])((?:[a-z-]+:)*(?:bg|text|border|fill|stroke|decoration|outline|ring|ring-offset)-(?:${forbiddenFoundationTokenPattern})\\b)`,
+  `(?:^|[\\s"'\\\`])((?:[a-z-]+:)*(?:bg|text|border|fill|stroke|decoration|outline|ring|ring-offset)-(?:${forbiddenFoundationTokenPattern})${foundationTokenBoundary})`,
   "g",
 );
 const forbiddenFoundationVarPattern = new RegExp(
-  String.raw`var\(--color-(?:${forbiddenFoundationTokenPattern})\b[^)]*\)`,
+  String.raw`var\(--color-(?:${forbiddenFoundationTokenPattern})${foundationTokenBoundary}[^)]*\)`,
   "g",
 );
 

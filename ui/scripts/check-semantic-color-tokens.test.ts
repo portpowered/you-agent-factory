@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -10,6 +11,7 @@ import {
   scanSemanticColorTokens,
   scanSemanticColorTokensInRoots,
 } from "./check-semantic-color-tokens";
+import { forbiddenFoundationTokenNames } from "./semantic-color-foundation-policy";
 
 const tempRoots: string[] = [];
 const execFileAsync = promisify(execFile);
@@ -17,6 +19,21 @@ const scriptPath = path.resolve(
   process.cwd(),
   "scripts/check-semantic-color-tokens.ts",
 );
+const packagePaletteCssPath = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "packages/components/src/styles/color-palette-presets.css",
+);
+
+function declaredFoundationTokenNames(source: string) {
+  return [
+    ...new Set(
+      [...source.matchAll(/^\s*(--color-af-foundation-[a-z0-9-]+)\s*:/gm)].map(
+        (match) => match[1],
+      ),
+    ),
+  ].sort();
+}
 
 async function writeSourceFile(
   rootDir: string,
@@ -156,6 +173,93 @@ describe("semantic color source roots", () => {
           token: "bg-red-500/50",
         },
       ]),
+    );
+  });
+});
+
+describe("foundation token policy", () => {
+  it("keeps every canonical package foundation key represented by the forbidden policy", async () => {
+    const packagePaletteCss = await readFile(packagePaletteCssPath, "utf8");
+    const declaredTokens = declaredFoundationTokenNames(packagePaletteCss);
+    const policyTokens = forbiddenFoundationTokenNames
+      .filter((token) => token.startsWith("af-foundation-"))
+      .map((token) => `--color-${token}`)
+      .sort();
+
+    expect(
+      declaredTokens.filter((token) => !policyTokens.includes(token)),
+    ).toEqual([]);
+    expect(declaredTokens).toHaveLength(28);
+  });
+
+  it("rejects direct utility and variable consumption of package foundation keys with positions", async () => {
+    const rootDir = await mkdtemp(
+      path.join(os.tmpdir(), "semantic-color-foundation-guard-"),
+    );
+    tempRoots.push(rootDir);
+    const packagePaletteCss = await readFile(packagePaletteCssPath, "utf8");
+    const foundationTokens = declaredFoundationTokenNames(
+      packagePaletteCss,
+    ).map((token) => token.replace("--color-", ""));
+    const source = foundationTokens
+      .flatMap((token) => [
+        `export const utility = "bg-${token}";`,
+        `export const variable = "var(--color-${token})";`,
+      ])
+      .join("\n");
+    await writeSourceFile(rootDir, "components/foundation.tsx", source);
+
+    const violations = await scanSemanticColorTokens(rootDir);
+
+    expect(violations).toHaveLength(foundationTokens.length * 2);
+    expect(
+      violations.every(
+        (violation) => violation.kind === "foundation-color-token",
+      ),
+    ).toBe(true);
+    expect(violations.map((violation) => violation.token)).toEqual(
+      expect.arrayContaining([
+        "bg-af-foundation-accent",
+        "var(--color-af-foundation-accent)",
+        "bg-af-foundation-worker-ink",
+        "var(--color-af-foundation-worker-ink)",
+      ]),
+    );
+
+    const firstUtility = violations.find(
+      (violation) => violation.token === "bg-af-foundation-accent",
+    );
+    expect(firstUtility).toMatchObject({
+      filePath: path.join(rootDir, "components/foundation.tsx"),
+      position: {
+        line: 1,
+        column: source.indexOf("bg-af-foundation-accent") + 1,
+      },
+    });
+  });
+
+  it("continues rejecting every legacy foundation alias", async () => {
+    const rootDir = await mkdtemp(
+      path.join(os.tmpdir(), "semantic-color-legacy-guard-"),
+    );
+    tempRoots.push(rootDir);
+    const legacyTokens = forbiddenFoundationTokenNames.filter(
+      (token) => !token.startsWith("af-foundation-"),
+    );
+    const source = legacyTokens
+      .flatMap((token) => [
+        `export const utility = "bg-${token}";`,
+        `export const variable = "var(--color-${token})";`,
+      ])
+      .join("\n");
+    await writeSourceFile(rootDir, "components/legacy.tsx", source);
+
+    const violations = await scanSemanticColorTokens(rootDir);
+
+    expect(legacyTokens).toHaveLength(10);
+    expect(violations).toHaveLength(legacyTokens.length * 2);
+    expect(new Set(violations.map((violation) => violation.kind))).toEqual(
+      new Set(["foundation-color-token"]),
     );
   });
 });
