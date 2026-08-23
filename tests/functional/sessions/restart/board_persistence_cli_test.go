@@ -13,7 +13,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,6 +21,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -82,6 +82,144 @@ func TestBoardPersistenceCLIRestartRoundTrip(t *testing.T) {
 	runBoardPersistenceInitialGeneration(t, scenario)
 	runBoardPersistenceRecoveryGeneration(t, scenario)
 	runBoardPersistenceSecondRestart(t, scenario)
+}
+
+// TestBoardPersistenceCLIRestartAfterHardKillWithMissingBoardRecording proves
+// that a valid durable snapshot survives an ungraceful daemon stop even when
+// the current-board recording is absent at the next opening boundary. The
+// process boundary is intentional: BuildProcess covers composition, while
+// only a real child process can prove kill-and-reopen behavior.
+func TestBoardPersistenceCLIRestartAfterHardKillWithMissingBoardRecording(t *testing.T) {
+	cliContext, cancel := context.WithTimeout(t.Context(), 45*time.Second)
+	defer cancel()
+	scenario := newBoardPersistenceScenario(t, cliContext)
+	first := startBoardPersistenceDaemon(t, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, scenario.recordPath, scenario.releasePath)
+	batchJSON := boardPersistenceBatchJSON(t, boardPersistenceRequestID, []boardPersistenceBatchWork{
+		{Name: "board-init", WorkID: boardPersistenceInitialWorkID, State: "init", TraceID: "trace-board-init", Content: "durable init content"},
+		{Name: "board-processing", WorkID: boardPersistenceProcessingWorkID, State: "processing", TraceID: "trace-board-processing", Content: "durable processing content"},
+		{Name: "board-awaiting-ci", WorkID: boardPersistenceAwaitingWorkID, State: "awaiting-ci", TraceID: "trace-board-awaiting-ci", Content: "durable awaiting-ci content"},
+	})
+	submitBatchThroughCLI(t, cliContext, first, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, batchJSON, boardPersistenceRequestID, 3)
+	waitForBoardStates(t, first.baseURL, map[string]string{
+		boardPersistenceInitialWorkID:    "init",
+		boardPersistenceProcessingWorkID: "processing",
+		boardPersistenceAwaitingWorkID:   "awaiting-ci",
+	}, 30*time.Second)
+	if err := os.WriteFile(scenario.releasePath, []byte("release\n"), 0o600); err != nil {
+		t.Fatalf("release worker helper before durable snapshot probe: %v", err)
+	}
+	waitForBoardStates(t, first.baseURL, map[string]string{
+		boardPersistenceInitialWorkID:    "init",
+		boardPersistenceProcessingWorkID: "complete",
+		boardPersistenceAwaitingWorkID:   "awaiting-ci",
+	}, 30*time.Second)
+
+	snapshotPath := filepath.Join(
+		scenario.factoryDir,
+		".you-agent-factory",
+		"durable-sessions",
+		factorysessions.DefaultSessionID+".json",
+	)
+	if strings.TrimSpace(first.sessionID) == "" {
+		t.Fatal("hard-kill scenario session ID is empty")
+	}
+	snapshotBefore := waitForBoardPersistenceSnapshot(t, snapshotPath, factorysessions.DefaultSessionID, 30*time.Second)
+
+	// Remove the selected board artifact immediately before the forceful stop so
+	// the next process observes the same interrupted-write boundary as the
+	// outage: durable state is already present, but board history is absent.
+	if err := os.Remove(scenario.recordPath); err != nil {
+		t.Fatalf("remove current-board recording before hard kill: %v", err)
+	}
+	first.kill(t)
+	if _, err := os.Stat(scenario.recordPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("current-board recording after hard kill = %v, want absent", err)
+	}
+
+	second := startBoardPersistenceDaemon(t, scenario.binaryPath, scenario.factoryDir, scenario.homeDir, scenario.recordPath, scenario.releasePath)
+	defer second.kill(t)
+	restarted := waitForBoardStates(t, second.baseURL, map[string]string{}, 30*time.Second)
+	if len(restarted.Results) != 0 {
+		t.Fatalf("restarted board = %#v, want empty after unreconstructable board history", restarted.Results)
+	}
+	snapshotAfter, err := os.ReadFile(snapshotPath)
+	if err != nil {
+		t.Fatalf("read durable snapshot after recovery: %v", err)
+	}
+	if !bytes.Equal(snapshotAfter, snapshotBefore) {
+		t.Fatalf("durable snapshot changed during missing-board recovery")
+	}
+	waitForBoardPersistenceLogMessage(t, second, []string{
+		"board contents were lost",
+		"empty board was initialized",
+		"preserved durable state was not deleted",
+		filepath.Base(scenario.recordPath),
+	}, 30*time.Second)
+}
+
+// TestBoardPersistenceCLIRestartWithCorruptBoardRecordingFails proves that a
+// present-but-invalid current-board artifact is not treated as an interrupted
+// write. The child process is intentional so the assertion covers the actual
+// operator-facing startup diagnostic emitted by the real CLI.
+func TestBoardPersistenceCLIRestartWithCorruptBoardRecordingFails(t *testing.T) {
+	cliContext, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	scenario := newBoardPersistenceScenario(t, cliContext)
+	corruptPayload := []byte(`{"schemaVersion":"recordings.portable-artifact.v1","summary":{}}`)
+	if err := os.WriteFile(scenario.recordPath, corruptPayload, 0o600); err != nil {
+		t.Fatalf("write corrupt current-board recording: %v", err)
+	}
+
+	daemon := startBoardPersistenceDaemonProcess(
+		t,
+		scenario.binaryPath,
+		scenario.factoryDir,
+		scenario.homeDir,
+		scenario.recordPath,
+		scenario.releasePath,
+	)
+	defer daemon.cleanup()
+	waitForBoardPersistenceDaemonExit(t, daemon, 20*time.Second)
+	if daemon.waitError() == nil {
+		t.Fatal("corrupt current-board recording process exited successfully")
+	}
+	output := daemon.stdout.String() + daemon.stderr.String()
+	for _, fragment := range []string{
+		"CURRENT_BOARD_RECORDING_CORRUPT",
+		"CORRUPT_HISTORY",
+		filepath.Base(scenario.recordPath),
+		"preserve the artifact",
+		"replace it from a trusted backup",
+	} {
+		if !strings.Contains(output, fragment) {
+			t.Fatalf("corrupt recording startup output = %q, want fragment %q", output, fragment)
+		}
+	}
+	var diagnostic factoryapi.ErrorResponse
+	for _, line := range strings.Split(output, "\n") {
+		var candidate factoryapi.ErrorResponse
+		if err := json.Unmarshal([]byte(line), &candidate); err == nil && candidate.Code == factoryapi.ErrorResponseCode("CURRENT_BOARD_RECORDING_CORRUPT") {
+			diagnostic = candidate
+			break
+		}
+	}
+	if diagnostic.Code != factoryapi.ErrorResponseCode("CURRENT_BOARD_RECORDING_CORRUPT") {
+		t.Fatalf("corrupt recording startup output = %q, want structured corruption diagnostic", output)
+	}
+	expectedRecordPath := strconv.Quote(filepath.Clean(scenario.recordPath))
+	if !strings.Contains(diagnostic.Message, expectedRecordPath) {
+		t.Fatalf("corrupt recording diagnostic message = %q, want exact resolved path %q", diagnostic.Message, expectedRecordPath)
+	}
+	if strings.Contains(output, "board contents were lost") || strings.Contains(output, "empty board was initialized") {
+		t.Fatalf("corrupt recording was reported as recoverable absence: %q", output)
+	}
+	contents, err := os.ReadFile(scenario.recordPath)
+	if err != nil {
+		t.Fatalf("read corrupt current-board recording after failed startup: %v", err)
+	}
+	if !bytes.Equal(contents, corruptPayload) {
+		t.Fatal("failed startup changed the corrupt recording; artifact must remain available for investigation")
+	}
 }
 
 type boardPersistenceScenario struct {
@@ -356,6 +494,7 @@ type boardPersistenceDaemon struct {
 	sessionID  string
 	factoryDir string
 	homeDir    string
+	logDir     string
 	recordPath string
 	stdout     *bytes.Buffer
 	stderr     *bytes.Buffer
@@ -382,6 +521,18 @@ func buildBoardPersistenceBinary(t *testing.T) string {
 }
 
 func startBoardPersistenceDaemon(
+	t *testing.T,
+	binaryPath, factoryDir, homeDir, recordPath, releasePath string,
+) *boardPersistenceDaemon {
+	t.Helper()
+	daemon := startBoardPersistenceDaemonProcess(t, binaryPath, factoryDir, homeDir, recordPath, releasePath)
+	waitForBoardDaemonReady(t, daemon, 45*time.Second)
+	daemon.sessionID = waitForBoardSessionID(t, daemon.baseURL, 30*time.Second)
+	t.Logf("isolated daemon live session ID: %q", daemon.sessionID)
+	return daemon
+}
+
+func startBoardPersistenceDaemonProcess(
 	t *testing.T,
 	binaryPath, factoryDir, homeDir, recordPath, releasePath string,
 ) *boardPersistenceDaemon {
@@ -414,6 +565,7 @@ func startBoardPersistenceDaemon(
 		stdout:     &stdout,
 		stderr:     &stderr,
 		done:       make(chan struct{}),
+		logDir:     filepath.Join(homeDir, ".you-agent-factory", "logs"),
 	}
 	if err := command.Start(); err != nil {
 		t.Fatalf("start isolated you daemon: %v", err)
@@ -426,10 +578,46 @@ func startBoardPersistenceDaemon(
 		close(daemon.done)
 	}()
 	t.Cleanup(daemon.cleanup)
-	waitForBoardDaemonReady(t, daemon, 45*time.Second)
-	daemon.sessionID = waitForBoardSessionID(t, daemon.baseURL, 30*time.Second)
-	t.Logf("isolated daemon live session ID: %q", daemon.sessionID)
 	return daemon
+}
+
+func waitForBoardPersistenceDaemonExit(t *testing.T, daemon *boardPersistenceDaemon, timeout time.Duration) {
+	t.Helper()
+	// A startup failure is observed through the real child-process exit rather
+	// than a fixed sleep; this is the process-boundary behavior under test.
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-daemon.done:
+	case <-timer.C:
+		t.Fatalf("corrupt-recording daemon did not exit within %s\nstdout=%s\nstderr=%s", timeout, daemon.stdout.String(), daemon.stderr.String())
+	}
+}
+
+func (daemon *boardPersistenceDaemon) kill(t *testing.T) {
+	t.Helper()
+	if daemon == nil {
+		return
+	}
+	daemon.mu.Lock()
+	if daemon.stopped {
+		daemon.mu.Unlock()
+		return
+	}
+	daemon.mu.Unlock()
+	if err := daemon.cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		t.Fatalf("hard-kill isolated you daemon: %v", err)
+	}
+	timer := time.NewTimer(20 * time.Second)
+	defer timer.Stop()
+	select {
+	case <-daemon.done:
+		daemon.mu.Lock()
+		daemon.stopped = true
+		daemon.mu.Unlock()
+	case <-timer.C:
+		t.Fatalf("hard-killed isolated you daemon did not exit within 20s\nstdout=%s\nstderr=%s", daemon.stdout.String(), daemon.stderr.String())
+	}
 }
 
 func (daemon *boardPersistenceDaemon) cleanup() {
@@ -539,6 +727,84 @@ func dumpBoardPersistenceDiagnostics(t *testing.T, daemon *boardPersistenceDaemo
 		t.Logf("daemon runtime log tail %q (%d bytes): %s", path, len(contents), contents)
 		return nil
 	})
+}
+
+func waitForBoardPersistenceSnapshot(t *testing.T, path, wantSessionID string, timeout time.Duration) []byte {
+	t.Helper()
+	// The durable snapshot is committed by the isolated daemon child, and the
+	// parent has no synchronization channel for that filesystem write. Polling
+	// the file is the only deterministic observation of the commit boundary;
+	// the bounded timeout turns a failed child write into a useful test failure.
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	var lastErr error
+	for {
+		contents, err := os.ReadFile(path)
+		if err == nil && len(contents) > 0 {
+			var snapshot struct {
+				Session struct {
+					SessionID string `json:"sessionId"`
+				} `json:"session"`
+			}
+			if err := json.Unmarshal(contents, &snapshot); err == nil && snapshot.Session.SessionID == wantSessionID {
+				return contents
+			}
+			lastErr = fmt.Errorf("durable snapshot was empty or session identity was not %q", wantSessionID)
+		} else {
+			lastErr = err
+		}
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatalf("timed out waiting for valid durable snapshot %q: %v", path, lastErr)
+		}
+	}
+}
+
+func waitForBoardPersistenceLogMessage(
+	t *testing.T,
+	daemon *boardPersistenceDaemon,
+	fragments []string,
+	timeout time.Duration,
+) {
+	t.Helper()
+	// The recovery warning is appended by the isolated child process after boot,
+	// with no test-owned logging edge back to the parent. Polling the runtime log
+	// is therefore the required process-boundary observation; the timeout keeps
+	// a missing warning actionable without using a fixed sleep.
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		found := false
+		_ = filepath.WalkDir(daemon.logDir, func(path string, entry os.DirEntry, err error) error {
+			if err != nil || entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".log") {
+				return nil
+			}
+			contents, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return nil
+			}
+			for _, fragment := range fragments {
+				if !strings.Contains(string(contents), fragment) {
+					return nil
+				}
+			}
+			found = true
+			return filepath.SkipAll
+		})
+		if found {
+			return
+		}
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatalf("timed out waiting for recovery warning in runtime logs under %q", daemon.logDir)
+		}
+	}
 }
 
 func reserveBoardPersistenceAddress(t *testing.T) string {
@@ -713,284 +979,4 @@ func assertBoardCLIListAndShows(
 		}
 		assertBoardWork(t, shown, want)
 	}
-}
-
-func assertBoardWork(t *testing.T, item factoryapi.Work, want boardPersistenceExpectedWork) {
-	t.Helper()
-	if item.Name != want.Name || support.StringPointerValue(item.WorkId) != want.WorkID || support.StringPointerValue(item.RequestId) != want.RequestID {
-		t.Fatalf("Work identity = %#v, want name=%q workId=%q requestId=%q", item, want.Name, want.WorkID, want.RequestID)
-	}
-	if item.State == nil || item.State.Name != want.State || string(item.State.Type) != want.StateType {
-		t.Fatalf("Work %q state = %#v, want %s/%s", want.WorkID, item.State, want.State, want.StateType)
-	}
-	if support.StringPointerValue(item.TraceId) != want.TraceID || support.StringPointerValue(item.CurrentChainingTraceId) != want.CurrentTraceID {
-		t.Fatalf("Work %q lineage = trace=%q current=%q, want %q/%q", want.WorkID, support.StringPointerValue(item.TraceId), support.StringPointerValue(item.CurrentChainingTraceId), want.TraceID, want.CurrentTraceID)
-	}
-	if item.Content == nil || len(*item.Content) != 1 {
-		t.Fatalf("Work %q content = %#v, want one text part", want.WorkID, item.Content)
-	}
-	part, err := (*item.Content)[0].AsWorkTextContentPart()
-	if err != nil {
-		t.Fatalf("Work %q content part = %#v, decode error=%v, want %q", want.WorkID, part, err, want.Content)
-	}
-	if want.WorkerOutput {
-		assertBoardPersistenceWorkerOutput(t, part.Text, want.Content)
-	} else if part.Text != want.Content {
-		t.Fatalf("Work %q content part = %#v, want %q", want.WorkID, part, want.Content)
-	}
-	if want.RelationTarget == "" {
-		if item.Relations != nil && len(*item.Relations) != 0 {
-			t.Fatalf("Work %q relations = %#v, want none", want.WorkID, item.Relations)
-		}
-		return
-	}
-	if item.Relations == nil || len(*item.Relations) != 1 {
-		t.Fatalf("Work %q relations = %#v, want one PARENT_CHILD relation", want.WorkID, item.Relations)
-	}
-	relation := (*item.Relations)[0]
-	if relation.Type != factoryapi.RelationTypeParentChild || relation.SourceWorkName != want.Name || relation.TargetWorkId == nil || *relation.TargetWorkId != want.RelationTarget {
-		t.Fatalf("Work %q relation = %#v, want source=%q target=%q PARENT_CHILD", want.WorkID, relation, want.Name, want.RelationTarget)
-	}
-}
-
-func assertBoardPersistenceWorkerOutput(t *testing.T, got, sentinel string) {
-	t.Helper()
-	lines := strings.Split(got, "\n")
-	if len(lines) < 2 || lines[0] != sentinel || lines[1] != "PASS" {
-		t.Fatalf("worker output = %q, want exactly the sentinel and PASS worker lines", got)
-	}
-
-	suffix := lines[2:]
-	if len(suffix) == 0 {
-		return
-	}
-	if len(suffix) == 1 && suffix[0] == "coverage: [no statements]" {
-		return
-	}
-
-	const coveragePrefix = "coverage: 0.0% of statements"
-	if !strings.HasPrefix(suffix[0], coveragePrefix) {
-		t.Fatalf("worker output = %q, want the sentinel/PASS lines plus a recognized Go coverage suffix", got)
-	}
-	coverageDetail := strings.TrimPrefix(suffix[0], coveragePrefix)
-	if coverageDetail != "" && !strings.HasPrefix(coverageDetail, " in ") {
-		t.Fatalf("worker output = %q, want Go coverage detail to use the standard ' in <package list>' form", got)
-	}
-	if strings.TrimSpace(coverageDetail) == "in" {
-		t.Fatalf("worker output = %q, want a non-empty Go coverage package list", got)
-	}
-	for _, packageLine := range suffix[1:] {
-		if !strings.Contains(packageLine, "github.com/portpowered/infinite-you/") {
-			t.Fatalf("worker output = %q, want only the Go harness package-list suffix after coverage", got)
-		}
-	}
-}
-
-type boardPersistenceDispatchState struct {
-	ID                 string
-	WorkIDs            map[string]struct{}
-	RequestEvents      int
-	ResponseEvents     int
-	InterruptedEvents  int
-	ReconciledStatuses []factoryapi.FactoryDispatchStatus
-	WorkerSessionIDs   []string
-}
-
-func waitForBoardActiveDispatch(t *testing.T, baseURL, workID string, timeout time.Duration) string {
-	t.Helper()
-	deadline := time.NewTimer(timeout)
-	defer deadline.Stop()
-	ticker := time.NewTicker(25 * time.Millisecond)
-	defer ticker.Stop()
-	var last map[string]boardPersistenceDispatchState
-	var lastErr error
-	for {
-		states, err := readBoardDispatchStates(t.Context(), baseURL)
-		if err == nil {
-			last = states
-			active := activeBoardDispatches(states, workID)
-			if len(active) == 1 {
-				return active[0].ID
-			}
-		} else {
-			lastErr = err
-		}
-		select {
-		case <-ticker.C:
-		case <-deadline.C:
-			t.Fatalf("timed out waiting for one active dispatch for Work %q; last=%#v, error=%v", workID, last, lastErr)
-		}
-	}
-}
-
-func waitForBoardRearmedDispatch(t *testing.T, baseURL, workID, oldDispatchID string, timeout time.Duration) string {
-	t.Helper()
-	deadline := time.NewTimer(timeout)
-	defer deadline.Stop()
-	ticker := time.NewTicker(25 * time.Millisecond)
-	defer ticker.Stop()
-	var last map[string]boardPersistenceDispatchState
-	var lastErr error
-	for {
-		states, err := readBoardDispatchStates(t.Context(), baseURL)
-		if err == nil {
-			last = states
-			old, oldFound := states[oldDispatchID]
-			active := activeBoardDispatches(states, workID)
-			if oldFound && old.InterruptedEvents == 1 && len(active) == 1 && active[0].ID != oldDispatchID {
-				if active[0].RequestEvents != 1 {
-					t.Fatalf("re-armed dispatch %q request events = %d, want exactly one", active[0].ID, active[0].RequestEvents)
-				}
-				return active[0].ID
-			}
-			if oldFound && old.InterruptedEvents > 1 {
-				t.Fatalf("original dispatch %q interruption events = %d, want exactly one", oldDispatchID, old.InterruptedEvents)
-			}
-		} else {
-			lastErr = err
-		}
-		select {
-		case <-ticker.C:
-		case <-deadline.C:
-			t.Fatalf("timed out waiting for dispatch %q interruption and one re-armed dispatch for Work %q; last=%#v, error=%v", oldDispatchID, workID, last, lastErr)
-		}
-	}
-}
-
-func waitForBoardDispatchResponse(t *testing.T, baseURL, workID, dispatchID string, timeout time.Duration) {
-	t.Helper()
-	deadline := time.NewTimer(timeout)
-	defer deadline.Stop()
-	ticker := time.NewTicker(25 * time.Millisecond)
-	defer ticker.Stop()
-	var last map[string]boardPersistenceDispatchState
-	var lastErr error
-	for {
-		states, err := readBoardDispatchStates(t.Context(), baseURL)
-		if err == nil {
-			last = states
-			if state, ok := states[dispatchID]; ok && state.ResponseEvents == 1 && len(activeBoardDispatches(states, workID)) == 0 {
-				return
-			}
-		} else {
-			lastErr = err
-		}
-		select {
-		case <-ticker.C:
-		case <-deadline.C:
-			t.Fatalf("timed out waiting for dispatch %q response for Work %q; last=%#v, error=%v", dispatchID, workID, last, lastErr)
-		}
-	}
-}
-
-func waitForBoardDispatchStates(t *testing.T, baseURL string, timeout time.Duration) map[string]boardPersistenceDispatchState {
-	t.Helper()
-	deadline := time.NewTimer(timeout)
-	defer deadline.Stop()
-	ticker := time.NewTicker(25 * time.Millisecond)
-	defer ticker.Stop()
-	var last map[string]boardPersistenceDispatchState
-	var lastErr error
-	for {
-		states, err := readBoardDispatchStates(t.Context(), baseURL)
-		if err == nil {
-			last = states
-			return states
-		}
-		lastErr = err
-		select {
-		case <-ticker.C:
-		case <-deadline.C:
-			t.Fatalf("timed out reading public Factory Event dispatch history; last=%#v, error=%v", last, lastErr)
-		}
-	}
-}
-
-func readBoardDispatchStates(ctx context.Context, baseURL string) (map[string]boardPersistenceDispatchState, error) {
-	events, err := readBoardEvents(ctx, baseURL)
-	if err != nil {
-		return nil, err
-	}
-	states := make(map[string]boardPersistenceDispatchState)
-	for _, event := range events {
-		if event.Context.DispatchId == nil || strings.TrimSpace(*event.Context.DispatchId) == "" {
-			continue
-		}
-		dispatchID := strings.TrimSpace(*event.Context.DispatchId)
-		state := states[dispatchID]
-		state.ID = dispatchID
-		if event.Context.WorkIds != nil {
-			if state.WorkIDs == nil {
-				state.WorkIDs = make(map[string]struct{})
-			}
-			for _, workID := range *event.Context.WorkIds {
-				if workID != "" {
-					state.WorkIDs[workID] = struct{}{}
-				}
-			}
-		}
-		switch event.Type {
-		case factoryapi.FactoryEventTypeDispatchRequest:
-			payload, decodeErr := event.Payload.AsDispatchRequestEventPayload()
-			if decodeErr != nil {
-				return nil, fmt.Errorf("decode public dispatch request %q: %w", dispatchID, decodeErr)
-			}
-			state.RequestEvents++
-			if state.WorkIDs == nil {
-				state.WorkIDs = make(map[string]struct{})
-			}
-			for _, input := range payload.Inputs {
-				if input.WorkId != "" {
-					state.WorkIDs[input.WorkId] = struct{}{}
-				}
-			}
-		case factoryapi.FactoryEventTypeDispatchResponse:
-			if _, decodeErr := event.Payload.AsDispatchResponseEventPayload(); decodeErr != nil {
-				return nil, fmt.Errorf("decode public dispatch response %q: %w", dispatchID, decodeErr)
-			}
-			state.ResponseEvents++
-		case factoryapi.FactoryEventTypeDispatchInterrupted:
-			if _, decodeErr := event.Payload.AsDispatchInterruptedEventPayload(); decodeErr != nil {
-				return nil, fmt.Errorf("decode public dispatch interruption %q: %w", dispatchID, decodeErr)
-			}
-			state.InterruptedEvents++
-		case factoryapi.FactoryEventTypeDispatchReconciled:
-			payload, decodeErr := event.Payload.AsDispatchReconciledEventPayload()
-			if decodeErr != nil {
-				return nil, fmt.Errorf("decode public dispatch reconciliation %q: %w", dispatchID, decodeErr)
-			}
-			state.ReconciledStatuses = append(state.ReconciledStatuses, payload.ReconciledStatus)
-		case factoryapi.FactoryEventTypeDispatchWorkerSessionAssociation:
-			payload, decodeErr := event.Payload.AsDispatchWorkerSessionAssociationEventPayload()
-			if decodeErr != nil {
-				return nil, fmt.Errorf("decode public Worker Session association %q: %w", dispatchID, decodeErr)
-			}
-			if payload.WorkerSessionId != "" {
-				state.WorkerSessionIDs = append(state.WorkerSessionIDs, payload.WorkerSessionId)
-			}
-		}
-		states[dispatchID] = state
-	}
-	return states, nil
-}
-
-func activeBoardDispatches(states map[string]boardPersistenceDispatchState, workID string) []boardPersistenceDispatchState {
-	ids := make([]string, 0, len(states))
-	for dispatchID, state := range states {
-		if state.RequestEvents == 0 || !boardPersistenceDispatchIncludesWork(state, workID) || state.ResponseEvents > 0 || state.InterruptedEvents > 0 || len(state.ReconciledStatuses) > 0 {
-			continue
-		}
-		ids = append(ids, dispatchID)
-	}
-	sort.Strings(ids)
-	active := make([]boardPersistenceDispatchState, 0, len(ids))
-	for _, dispatchID := range ids {
-		active = append(active, states[dispatchID])
-	}
-	return active
-}
-
-func boardPersistenceDispatchIncludesWork(state boardPersistenceDispatchState, workID string) bool {
-	_, ok := state.WorkIDs[workID]
-	return ok
 }

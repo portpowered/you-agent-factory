@@ -2,7 +2,6 @@ package runtimeopening
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -277,14 +276,14 @@ func openRuntime(
 		resumeInput = &input
 	}
 	var restoredWorldState *factorydefinitions.FactoryWorldState
+	var boardHistoryOpening currentBoardHistoryOpening
 	// A portable resume input owns its selected-history reconstruction. Only a
 	// direct live opening should restore the current board recording; applying
 	// that restart-only probe to an explicit resume artifact would reject valid
 	// replay fixtures that intentionally have no current-board recording.
 	if load.ReplayArtifact == nil && resumeInput == nil {
-		allowMissingBoardHistory := false
 		if strings.TrimSpace(configured.Recordings.RecordPath) != "" {
-			allowMissingBoardHistory, err = currentBoardHistoryMayBeUninitialized(
+			boardHistoryOpening, err = inspectCurrentBoardHistory(
 				ctx,
 				durableExecution.Service,
 				sessionID,
@@ -297,9 +296,15 @@ func openRuntime(
 			recordingsService,
 			configured.Recordings.RecordPath,
 			sessionID,
-			allowMissingBoardHistory,
+			boardHistoryOpening.allowMissingHistory,
 		)
 		if err != nil {
+			logCurrentBoardHistoryFailure(
+				logger,
+				sessionID,
+				factoryruntime.RecordingPath(configured.Recordings.RecordPath).ForSession(sessionID),
+				err,
+			)
 			return runtimeProducts{}, err
 		}
 	}
@@ -360,6 +365,19 @@ func openRuntime(
 		)
 	if err != nil {
 		return runtimeProducts{}, err
+	}
+	if boardHistoryOpening.hasDurableState && restoredWorldState == nil {
+		if runtimeLogger := startupRuntime.RuntimeLogger(); runtimeLogger != nil {
+			runtimeLogger.Warn(
+				"current Factory Session board recording is absent after durable state was preserved; board contents were lost, an empty board was initialized, and preserved durable state was not deleted",
+				zap.String("session_id", sessionID),
+				zap.String(
+					"recording_path",
+					factoryruntime.RecordingPath(configured.Recordings.RecordPath).ForSession(sessionID),
+				),
+				zap.String("recovery", "missing_board_recording_after_durable_state"),
+			)
+		}
 	}
 	cleanup.Add(func() error {
 		var finalizationErr error
@@ -783,95 +801,4 @@ func setWorkerAttemptStarter(
 
 type historicalRecordingReader interface {
 	QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error)
-}
-
-type durableSessionStateReader interface {
-	HasDurableState(context.Context, string) (bool, error)
-}
-
-// currentBoardHistoryMayBeUninitialized makes the missing-history escape hatch
-// explicit. A missing recording is only an acceptable first open when this
-// factory has no persisted durable session state; once durable state exists, a
-// missing board recording is a data-loss condition and must fail closed.
-func currentBoardHistoryMayBeUninitialized(
-	ctx context.Context,
-	service any,
-	sessionID string,
-) (bool, error) {
-	if service == nil {
-		return false, fmt.Errorf("inspect current Factory Session board history: durable session state probe is unavailable")
-	}
-	probe, ok := service.(durableSessionStateReader)
-	if !ok {
-		return false, fmt.Errorf("inspect current Factory Session board history: durable session state probe is unavailable")
-	}
-	hasDurableState, err := probe.HasDurableState(ctx, sessionID)
-	if err != nil {
-		return false, fmt.Errorf("inspect current Factory Session board history initialization: %w", err)
-	}
-	return !hasDurableState, nil
-}
-
-// restoreCurrentBoardState loads a detached Factory world state through the
-// public Recordings history contract for callers that explicitly request a
-// current-board read.
-func restoreCurrentBoardState(
-	service historicalRecordingReader,
-	recordPath string,
-	sessionID string,
-	allowMissingHistory bool,
-) (*factorydefinitions.FactoryWorldState, error) {
-	recordPath = strings.TrimSpace(recordPath)
-	if recordPath == "" {
-		return nil, nil
-	}
-	if service == nil {
-		return nil, fmt.Errorf("restore current Factory Session board: Recordings history is unavailable")
-	}
-	scope := recordings.CanonicalEventScope{FactorySessionID: strings.TrimSpace(sessionID)}
-	result, err := service.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{
-		Recording: recordings.HistoricalRecordingIdentity{
-			RecordingID: recordings.RecordingID("current-board/" + scope.FactorySessionID),
-			Artifact:    recordings.RecordingArtifactReference(recordPath),
-			Scope:       scope,
-		},
-	})
-	if err != nil {
-		var queryErr *recordings.HistoricalRecordingQueryError
-		if errors.As(err, &queryErr) && queryErr.Kind == recordings.HistoricalRecordingQueryErrorMissingHistory {
-			if allowMissingHistory {
-				return nil, nil
-			}
-			return nil, fmt.Errorf(
-				"restore current Factory Session board from %q: durable state exists but recording history is missing: %w",
-				recordPath,
-				err,
-			)
-		}
-		return nil, fmt.Errorf("restore current Factory Session board from %q: %w", recordPath, err)
-	}
-	view := result.WorldState
-	if view.SchemaVersion != recordings.WorldStateViewSchemaV1 || strings.TrimSpace(view.Payload) == "" {
-		return nil, fmt.Errorf(
-			"restore current Factory Session board from %q: Recordings returned an incompatible world-state view",
-			recordPath,
-		)
-	}
-	if view.Scope != scope {
-		return nil, fmt.Errorf(
-			"restore current Factory Session board from %q: world-state scope %#v does not match %#v",
-			recordPath,
-			view.Scope,
-			scope,
-		)
-	}
-	var state factorydefinitions.FactoryWorldState
-	if err := json.Unmarshal([]byte(view.Payload), &state); err != nil {
-		return nil, fmt.Errorf(
-			"restore current Factory Session board from %q: decode world state: %w",
-			recordPath,
-			err,
-		)
-	}
-	return &state, nil
 }

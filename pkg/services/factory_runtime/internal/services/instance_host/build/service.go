@@ -5,7 +5,6 @@ package runtimebuild
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -213,16 +212,5 @@ func (s *Service) BuildReplacement(
 
 // SessionScopedRecordPath substitutes per-session recording tokens in record paths.
 func SessionScopedRecordPath(basePath string, sessionID string) string {
-	if strings.TrimSpace(basePath) == "" {
-		return basePath
-	}
-	if strings.Contains(basePath, "__factory_session_id__") {
-		return strings.ReplaceAll(basePath, "__factory_session_id__", sessionID)
-	}
-	if sessionID == "~default" {
-		return basePath
-	}
-	ext := filepath.Ext(basePath)
-	base := strings.TrimSuffix(basePath, ext)
-	return base + "." + sessionID + ext
+	return factory.RecordingPath(basePath).ForSession(sessionID)
 }

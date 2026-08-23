@@ -105,39 +105,36 @@ func TestRestoreCurrentBoardStatePreservesDetachedMixedWorkProjection(t *testing
 	}
 }
 
-func TestRestoreCurrentBoardStateFailsClosedForCorruptHistory(t *testing.T) {
+func TestRestoreCurrentBoardStateScopesArtifactReferenceToFactorySession(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		name string
-		stub historicalBoardReaderStub
-		want string
+	const basePath = "/recordings/factory-session-__factory_session_id__-1.json"
+	for _, tc := range []struct {
+		name      string
+		sessionID string
+		wantPath  string
 	}{
-		{
-			name: "query failure",
-			stub: historicalBoardReaderStub{err: errors.New("corrupt canonical history")},
-			want: "restore current Factory Session board from \"board.json\"",
-		},
-		{
-			name: "incompatible view",
-			stub: historicalBoardReaderStub{result: recordings.HistoricalRecordingQueryResult{
-				WorldState: recordings.WorldStateView{SchemaVersion: "unknown", Scope: recordings.CanonicalEventScope{FactorySessionID: "~default"}, Payload: "{}"},
-			}},
-			want: "incompatible world-state view",
-		},
-		{
-			name: "invalid payload",
-			stub: historicalBoardReaderStub{result: recordings.HistoricalRecordingQueryResult{
-				WorldState: recordings.WorldStateView{SchemaVersion: recordings.WorldStateViewSchemaV1, Scope: recordings.CanonicalEventScope{FactorySessionID: "~default"}, Payload: "not-json"},
-			}},
-			want: "decode world state",
-		},
-	}
-	for _, tc := range cases {
+		{name: "default session", sessionID: "~default", wantPath: "/recordings/factory-session-~default-1.json"},
+		{name: "named session", sessionID: "session-a", wantPath: "/recordings/factory-session-session-a-1.json"},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := restoreCurrentBoardState(&tc.stub, "board.json", "~default", false)
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("restore error = %v, want substring %q", err, tc.want)
+			t.Parallel()
+			reader := &historicalBoardReaderStub{result: recordings.HistoricalRecordingQueryResult{
+				WorldState: recordings.WorldStateView{
+					SchemaVersion: recordings.WorldStateViewSchemaV1,
+					Scope:         recordings.CanonicalEventScope{FactorySessionID: tc.sessionID},
+					Payload:       "{}",
+				},
+			}}
+			if _, err := restoreCurrentBoardState(reader, basePath, tc.sessionID, false); err != nil {
+				t.Fatalf("restore current board: %v", err)
+			}
+			artifact := string(reader.request.Recording.Artifact)
+			if artifact != tc.wantPath {
+				t.Fatalf("artifact reference = %q, want %q", artifact, tc.wantPath)
+			}
+			if strings.Contains(artifact, "__") {
+				t.Fatalf("artifact reference contains unresolved session token: %q", artifact)
 			}
 		})
 	}
@@ -157,10 +154,10 @@ func TestRestoreCurrentBoardStateTreatsMissingArtifactAsInitialOpen(t *testing.T
 	}
 }
 
-func TestRestoreCurrentBoardStateRejectsMissingArtifactAfterDurableState(t *testing.T) {
+func TestRestoreCurrentBoardStateAllowsMissingArtifactAfterDurableState(t *testing.T) {
 	t.Parallel()
 
-	allowMissing, err := currentBoardHistoryMayBeUninitialized(
+	opening, err := inspectCurrentBoardHistory(
 		context.Background(),
 		&durableSessionStateStub{hasDurableState: true},
 		"~default",
@@ -168,14 +165,17 @@ func TestRestoreCurrentBoardStateRejectsMissingArtifactAfterDurableState(t *test
 	if err != nil {
 		t.Fatalf("inspect durable session state: %v", err)
 	}
-	if allowMissing {
-		t.Fatal("durable session state marked prior state as uninitialized")
+	if !opening.hasDurableState || !opening.allowMissingHistory {
+		t.Fatalf("durable opening = %#v, want durable state with missing-history recovery enabled", opening)
 	}
-	_, err = restoreCurrentBoardState(&historicalBoardReaderStub{err: &recordings.HistoricalRecordingQueryError{
+	state, err := restoreCurrentBoardState(&historicalBoardReaderStub{err: &recordings.HistoricalRecordingQueryError{
 		Kind: recordings.HistoricalRecordingQueryErrorMissingHistory,
-	}}, "board.json", "~default", allowMissing)
-	if err == nil || !strings.Contains(err.Error(), "durable state exists but recording history is missing") {
-		t.Fatalf("missing history after durable state error = %v, want fail-closed diagnostic", err)
+	}}, "board.json", "~default", opening.allowMissingHistory)
+	if err != nil {
+		t.Fatalf("missing history after durable state error = %v, want recoverable absence", err)
+	}
+	if state != nil {
+		t.Fatalf("missing history state = %#v, want empty-board signal", state)
 	}
 }
 
@@ -193,12 +193,12 @@ func TestCurrentBoardHistoryMayBeUninitializedUsesPersistenceBackedStateProbe(t 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			stub := durableSessionStateStub{hasDurableState: tc.hasDurableState}
-			got, err := currentBoardHistoryMayBeUninitialized(context.Background(), &stub, "~default")
+			got, err := inspectCurrentBoardHistory(context.Background(), &stub, "~default")
 			if err != nil {
-				t.Fatalf("currentBoardHistoryMayBeUninitialized: %v", err)
+				t.Fatalf("inspectCurrentBoardHistory: %v", err)
 			}
-			if got != tc.wantUninitialized {
-				t.Fatalf("uninitialized = %t, want %t", got, tc.wantUninitialized)
+			if got.allowMissingHistory != true || got.hasDurableState == tc.wantUninitialized {
+				t.Fatalf("opening = %#v, want allowMissingHistory=true and hasDurableState=%t", got, !tc.wantUninitialized)
 			}
 		})
 	}
@@ -223,7 +223,7 @@ func TestCurrentBoardHistoryMayBeUninitializedUsesFreshPersistentOwnerBeforeMiss
 	// The fresh owner has no in-memory session state. The missing board reader
 	// must therefore be evaluated against the snapshot left by the first owner.
 	freshOwner := newRuntimeOpeningPersistentOwner(projectRoot, store)
-	allowMissing, err := currentBoardHistoryMayBeUninitialized(
+	opening, err := inspectCurrentBoardHistory(
 		context.Background(),
 		freshOwner,
 		sessionID,
@@ -231,14 +231,17 @@ func TestCurrentBoardHistoryMayBeUninitializedUsesFreshPersistentOwnerBeforeMiss
 	if err != nil {
 		t.Fatalf("inspect fresh persistent owner: %v", err)
 	}
-	if allowMissing {
-		t.Fatal("missing board history after a prior owner was accepted as initial open")
+	if !opening.hasDurableState || !opening.allowMissingHistory {
+		t.Fatalf("fresh owner opening = %#v, want durable state with missing-history recovery enabled", opening)
 	}
-	_, err = restoreCurrentBoardState(&historicalBoardReaderStub{err: &recordings.HistoricalRecordingQueryError{
+	state, err := restoreCurrentBoardState(&historicalBoardReaderStub{err: &recordings.HistoricalRecordingQueryError{
 		Kind: recordings.HistoricalRecordingQueryErrorMissingHistory,
-	}}, "missing-board.json", sessionID, allowMissing)
-	if err == nil || !strings.Contains(err.Error(), "durable state exists but recording history is missing") {
-		t.Fatalf("missing board history error = %v, want fail-closed diagnostic", err)
+	}}, "missing-board.json", sessionID, opening.allowMissingHistory)
+	if err != nil {
+		t.Fatalf("missing board history error = %v, want recoverable absence", err)
+	}
+	if state != nil {
+		t.Fatalf("missing board history state = %#v, want empty-board signal", state)
 	}
 }
 
