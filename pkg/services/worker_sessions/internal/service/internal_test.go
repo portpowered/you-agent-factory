@@ -3785,8 +3785,8 @@ func TestAwaitContinueReplayReturnsCompletedReplayAfterCallerCancellation(t *tes
 	ctxDone := make(chan struct{})
 	ctx := signaledCancellationContext{done: ctxDone}
 	go func() {
-		ctxDone <- struct{}{}
 		close(replay.done)
+		ctxDone <- struct{}{}
 	}()
 
 	result, err := awaitContinueReplay(ctx, replay)
