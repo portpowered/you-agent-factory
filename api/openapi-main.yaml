@@ -1022,7 +1022,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Work'
+                $ref: '#/components/schemas/WorkRead'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -1052,7 +1052,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Work'
+                $ref: '#/components/schemas/WorkRead'
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
@@ -3574,6 +3574,10 @@ components:
       $ref: './components/schemas/api/WorkRequestType.yaml'
     Work:
       $ref: './components/schemas/data-models/Work.yaml'
+    ConfirmationState:
+      $ref: './components/schemas/data-models/ConfirmationState.yaml'
+    WorkRead:
+      $ref: './components/schemas/api/WorkRead.yaml'
     WorkContent:
       $ref: './components/schemas/data-models/WorkContent.yaml'
     WorkContentPart:

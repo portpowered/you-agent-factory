@@ -552,8 +552,34 @@ func provideWorkService(
 	inspectPath work.SubmittedFilePathInspector,
 	contentStaging work.ContentStagingService,
 	contentMaterializer work.ContentMaterializer,
+	durability work.CompletedFlushSequenceReader,
 ) work.Service {
-	return workwire.NewRuntimeService(runtimes, readFile, inspectPath, contentStaging, contentMaterializer)
+	return workwire.NewRuntimeService(runtimes, readFile, inspectPath, contentStaging, contentMaterializer, durability)
+}
+
+// provideWorkDurabilityReader adapts the narrow Recordings lifecycle
+// capability to Work's sequence-only consumer contract. The root graph still
+// injects one capability; Work never receives the broad Recordings service.
+func provideWorkDurabilityReader(service recordings.Service) work.CompletedFlushSequenceReader {
+	reader, ok := service.(recordings.CompletedFlushWatermarkReader)
+	if !ok || reader == nil {
+		return nil
+	}
+	return recordingsWorkDurabilityReader{reader: reader}
+}
+
+type recordingsWorkDurabilityReader struct {
+	reader recordings.CompletedFlushWatermarkReader
+}
+
+func (reader recordingsWorkDurabilityReader) CompletedFlushSequence(
+	streamGenerationID string,
+) (int64, bool) {
+	if reader.reader == nil {
+		return 0, false
+	}
+	cursor, ok := reader.reader.CompletedFlushWatermark(streamGenerationID)
+	return int64(cursor.Sequence), ok
 }
 
 func provideDirectJavaScriptHostAdapter(

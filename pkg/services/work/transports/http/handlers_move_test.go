@@ -64,11 +64,12 @@ func TestMoveWorkBySessionId_EncodesFakeRootPostMoveReadModel(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d %s, want 200", recorder.Code, recorder.Body.String())
 	}
-	var response factoryapi.Work
+	var response factoryapi.WorkRead
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
-	if response.Name != "Review PRD" || response.State == nil || response.State.Name != "complete" {
+	if response.Name != "Review PRD" || response.State == nil || response.State.Name != "complete" ||
+		response.ConfirmationState != factoryapi.UNCONFIRMED {
 		t.Fatalf("response = %#v, want encoded post-move work read model", response)
 	}
 }

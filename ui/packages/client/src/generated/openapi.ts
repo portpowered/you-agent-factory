@@ -1518,7 +1518,7 @@ export interface components {
       requestId?: string;
     };
     ListWorkResponse: {
-      results: components["schemas"]["Work"][];
+      results: components["schemas"]["WorkRead"][];
       paginationContext?: components["schemas"]["PaginationContext"];
       counts?: components["schemas"]["ListWorkCountSummary"];
     };
@@ -7194,6 +7194,8 @@ export interface components {
     Work: {
       /** @description A human readable name for the work, not unique */
       name: string;
+      /** @description Whether the reported Work state or outcome is covered by completed recording storage. */
+      confirmationState?: components["schemas"]["ConfirmationState"];
       /** @description Unique identifier for the work */
       workId?: string;
       /** @description Identifier for the original request that created this work, if applicable */
@@ -7231,6 +7233,17 @@ export interface components {
       /** @description Most recent bounded failure detail when this Work item is currently in a failed state. */
       failureDetail?: components["schemas"]["FailureDetail"];
     };
+    /**
+     * @description Whether the reported state or outcome is covered by completed recording storage.
+     * @enum {string}
+     */
+    ConfirmationState: ConfirmationState;
+    /** @description Work returned by a read API. The confirmation state describes only whether the reported Work state or outcome is covered by completed recording storage. */
+    WorkRead: {
+      confirmationState: components["schemas"]["ConfirmationState"];
+    } & (WithRequired<components["schemas"]["Work"], "confirmationState"> & {
+      confirmationState: components["schemas"]["ConfirmationState"];
+    });
     /** @description Ordered canonical content parts for one work item. */
     WorkContent: components["schemas"]["WorkContentPart"][];
     /** @description One ordered canonical content part on a work item. */
@@ -8962,7 +8975,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["Work"];
+          "application/json": components["schemas"]["WorkRead"];
         };
       };
       404: components["responses"]["NotFound"];
@@ -8993,7 +9006,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["Work"];
+          "application/json": components["schemas"]["WorkRead"];
         };
       };
       400: components["responses"]["BadRequest"];
@@ -12045,6 +12058,15 @@ export const WorkRequestType = {
 } as const;
 export type WorkRequestType =
   (typeof WorkRequestType)[keyof typeof WorkRequestType];
+export const ConfirmationState = {
+  CONFIRMED: "CONFIRMED",
+  UNCONFIRMED: "UNCONFIRMED",
+} as const;
+export type ConfirmationState =
+  (typeof ConfirmationState)[keyof typeof ConfirmationState];
+type WithRequired<T, K extends keyof T> = T & {
+  [P in K]-?: T[P];
+};
 export const WorkContentPartType = {
   text: "text",
   image: "image",

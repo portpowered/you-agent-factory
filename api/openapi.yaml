@@ -892,7 +892,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Work'
+                $ref: '#/components/schemas/WorkRead'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -919,7 +919,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Work'
+                $ref: '#/components/schemas/WorkRead'
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
@@ -3176,7 +3176,7 @@ components:
         results:
           type: array
           items:
-            $ref: '#/components/schemas/Work'
+            $ref: '#/components/schemas/WorkRead'
         paginationContext:
           $ref: '#/components/schemas/PaginationContext'
         counts:
@@ -14647,6 +14647,10 @@ components:
         name:
           type: string
           description: A human readable name for the work, not unique
+        confirmationState:
+          $ref: '#/components/schemas/ConfirmationState'
+          x-go-type-skip-optional-pointer: true
+          description: Whether the reported Work state or outcome is covered by completed recording storage.
         workId:
           type: string
           description: Unique identifier for the work
@@ -14706,6 +14710,28 @@ components:
         failureDetail:
           $ref: '#/components/schemas/FailureDetail'
           description: Most recent bounded failure detail when this Work item is currently in a failed state.
+    ConfirmationState:
+      type: string
+      description: Whether the reported state or outcome is covered by completed recording storage.
+      enum:
+        - CONFIRMED
+        - UNCONFIRMED
+    WorkRead:
+      type: object
+      required:
+        - confirmationState
+      properties:
+        confirmationState:
+          $ref: '#/components/schemas/ConfirmationState'
+      allOf:
+        - $ref: '#/components/schemas/Work'
+        - type: object
+          required:
+            - confirmationState
+          properties:
+            confirmationState:
+              $ref: '#/components/schemas/ConfirmationState'
+      description: Work returned by a read API. The confirmation state describes only whether the reported Work state or outcome is covered by completed recording storage.
     WorkContent:
       type: array
       description: Ordered canonical content parts for one work item.

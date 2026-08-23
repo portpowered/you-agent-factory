@@ -130,6 +130,7 @@ func TestWorkReadModelToAPI_EncodesDetachedReadModel(t *testing.T) {
 		Name:                     "Review PRD",
 		WorkTypeName:             "prd",
 		State:                    &work.State{Name: "init", Type: work.StateTypeInitial},
+		ConfirmationState:        work.ConfirmationStateConfirmed,
 		ChainingTraceDepth:       4,
 		CurrentChainingTraceID:   "chain-1",
 		PreviousChainingTraceIDs: []string{"chain-a", "chain-b"},
@@ -163,6 +164,9 @@ func TestWorkReadModelToAPI_EncodesDetachedReadModel(t *testing.T) {
 			Verification: work.ExpectedArtifactVerificationSatisfied,
 		}},
 	})
+	if got.ConfirmationState == nil || *got.ConfirmationState != factoryapi.CONFIRMED {
+		t.Fatalf("confirmationState = %v, want CONFIRMED", got.ConfirmationState)
+	}
 	assertDetachedWorkFields(t, got)
 	assertDetachedWorkCollections(t, got)
 	if got.HumanApproval == nil || got.HumanApproval.ApprovalId != "approval-dispatch-1" ||

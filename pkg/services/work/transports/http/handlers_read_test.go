@@ -67,7 +67,9 @@ func TestListWorkBySessionId_EncodesFakeRootListResults(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
-	if len(response.Results) != 1 || response.Results[0].Name != "Review PRD" {
+	if len(response.Results) != 1 || response.Results[0].Name != "Review PRD" ||
+		response.Results[0].ConfirmationState == nil ||
+		*response.Results[0].ConfirmationState != factoryapi.UNCONFIRMED {
 		t.Fatalf("response = %#v, want one encoded work item", response)
 	}
 }
@@ -160,11 +162,12 @@ func TestGetWorkBySessionId_EncodesFakeRootReadModel(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d %s, want 200", recorder.Code, recorder.Body.String())
 	}
-	var response factoryapi.Work
+	var response factoryapi.WorkRead
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
-	if response.Name != "Review PRD" || response.WorkId == nil || *response.WorkId != "work-1" {
+	if response.Name != "Review PRD" || response.WorkId == nil || *response.WorkId != "work-1" ||
+		response.ConfirmationState != factoryapi.UNCONFIRMED {
 		t.Fatalf("response = %#v, want encoded work read model", response)
 	}
 }

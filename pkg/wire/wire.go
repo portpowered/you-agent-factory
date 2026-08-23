@@ -131,6 +131,7 @@ var servicesSet = wire.NewSet(
 	provideModelsCLIInputFileReader,
 	provideModelsCLIOutputFileSystem,
 	provideWorkService,
+	provideWorkDurabilityReader,
 	provideWorkRequestIDGenerator,
 	provideWorkSubmittedFileReader,
 	provideWorkSubmittedFilePathInspector,

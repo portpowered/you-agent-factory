@@ -107,6 +107,7 @@ func NewRuntimeService(
 	inspectSubmittedFile work.SubmittedFilePathInspector,
 	contentStaging work.ContentStagingService,
 	contentMaterializer work.ContentMaterializer,
+	durability ...work.CompletedFlushSequenceReader,
 ) work.Service {
 	return internalservice.NewService(
 		runtimes,
@@ -114,6 +115,7 @@ func NewRuntimeService(
 		inspectSubmittedFile,
 		contentStaging,
 		contentMaterializer,
+		durability...,
 	)
 }
 

@@ -1,0 +1,18 @@
+type: object
+required:
+  - confirmationState
+properties:
+  confirmationState:
+    $ref: '../data-models/ConfirmationState.yaml'
+allOf:
+  - $ref: '../data-models/Work.yaml'
+  - type: object
+    required:
+      - confirmationState
+    properties:
+      confirmationState:
+        $ref: '../data-models/ConfirmationState.yaml'
+description: >-
+  Work returned by a read API. The confirmation state describes only whether
+  the reported Work state or outcome is covered by completed recording
+  storage.

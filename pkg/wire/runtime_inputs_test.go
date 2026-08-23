@@ -250,7 +250,7 @@ func TestProvideWorkServiceConstructsThroughWorkWireBridge(t *testing.T) {
 	readFile := provideWorkSubmittedFileReader(serviceedges.Edges{})
 	inspectPath := provideWorkSubmittedFilePathInspector(serviceedges.Edges{})
 
-	service := provideWorkService(nil, readFile, inspectPath, staging, materializer)
+	service := provideWorkService(nil, readFile, inspectPath, staging, materializer, nil)
 	if service == nil {
 		t.Fatal("provideWorkService() returned nil service")
 	}

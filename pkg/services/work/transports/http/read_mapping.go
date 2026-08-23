@@ -78,8 +78,14 @@ func ListWorkResponseToAPI(result work.ListResult) factoryapi.ListWorkResponse {
 // WorkReadModelToAPI maps one detached Work read model into the generated HTTP
 // representation.
 func WorkReadModelToAPI(item work.ReadModel) factoryapi.Work {
+	confirmationState := item.ConfirmationState
+	if confirmationState == "" {
+		confirmationState = work.ConfirmationStateUnconfirmed
+	}
+	encodedConfirmationState := factoryapi.ConfirmationState(confirmationState)
 	result := factoryapi.Work{
 		Name:                     item.Name,
+		ConfirmationState:        &encodedConfirmationState,
 		WorkId:                   optional.NonEmptyStringPtr(item.WorkID),
 		RequestId:                optional.NonEmptyStringPtr(item.RequestID),
 		WorkTypeName:             optional.NonEmptyStringPtr(item.WorkTypeName),

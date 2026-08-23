@@ -192,6 +192,14 @@
       ],
       "type": "object"
     },
+    "ConfirmationState": {
+      "description": "Whether the reported state or outcome is covered by completed recording storage.",
+      "enum": [
+        "CONFIRMED",
+        "UNCONFIRMED"
+      ],
+      "type": "string"
+    },
     "Diagnostics": {
       "additionalProperties": false,
       "properties": {
@@ -5166,6 +5174,9 @@
           "description": "Current chaining depth for this work item when the runtime already knows its upstream lineage.",
           "minimum": 1,
           "type": "integer"
+        },
+        "confirmationState": {
+          "$ref": "#/$defs/ConfirmationState"
         },
         "content": {
           "$ref": "#/$defs/WorkContent"

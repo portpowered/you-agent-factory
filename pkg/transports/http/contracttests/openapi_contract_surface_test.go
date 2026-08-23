@@ -329,7 +329,8 @@ func TestOpenAPIContract_ListWorkReturnsStructuredWorkResults(t *testing.T) {
 
 	listWorkResponse := schemaObject(t, schemas, "ListWorkResponse")
 	listWorkProperties := schemaProperties(t, listWorkResponse, "ListWorkResponse")
-	assertArrayItemRef(t, listWorkProperties, "results", "#/components/schemas/Work")
+	assertArrayItemRef(t, listWorkProperties, "results", "#/components/schemas/WorkRead")
+	assertRequiredFields(t, schemaObject(t, schemas, "WorkRead"), "confirmationState")
 	if _, ok := listWorkProperties["paginationContext"].(map[string]any); !ok {
 		t.Fatal("ListWorkResponse.properties.paginationContext is missing")
 	}
@@ -856,9 +857,13 @@ func assertFactoryOperationResponses(t *testing.T, paths map[string]any) {
 	assertResponseRef(t, invokeModel, "400", "#/components/responses/BadRequest")
 	assertResponseRef(t, invokeModel, "404", "#/components/responses/NotFound")
 
+	getWorkBySession := pathOperation(t, paths, "/factory-sessions/{session_id}/work/{id}", "get")
+	assertResponseSchemaRef(t, getWorkBySession, "200", "#/components/schemas/WorkRead")
+	assertResponseRef(t, getWorkBySession, "404", "#/components/responses/NotFound")
+
 	moveWorkBySession := pathOperation(t, paths, "/factory-sessions/{session_id}/work/{id}/move", "post")
 	assertRequestSchemaRef(t, moveWorkBySession, "#/components/schemas/MoveWorkRequest")
-	assertResponseSchemaRef(t, moveWorkBySession, "200", "#/components/schemas/Work")
+	assertResponseSchemaRef(t, moveWorkBySession, "200", "#/components/schemas/WorkRead")
 	assertResponseRef(t, moveWorkBySession, "400", "#/components/responses/BadRequest")
 	assertResponseRef(t, moveWorkBySession, "404", "#/components/responses/NotFound")
 	assertResponseRef(t, moveWorkBySession, "409", "#/components/responses/MoveWorkConflict")
