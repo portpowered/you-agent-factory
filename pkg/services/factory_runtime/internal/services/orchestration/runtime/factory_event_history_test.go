@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -12,10 +14,16 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -600,3 +608,297 @@ func TestRecordedTranscriptOptionalValuesAndSourceClassification(t *testing.T) {
 		t.Fatal("recordedTranscriptSourceUnavailable(other) = true")
 	}
 }
+
+// TestRuntimeSupersededCommandHelperProcess is the child process used by the
+// Runtime/Workers/process integration test below. The winner exits normally;
+// the loser stays alive until Runtime propagates SUPERSEDED to the command
+// context and the process cleanup boundary force-kills it.
+func TestRuntimeSupersededCommandHelperProcess(t *testing.T) {
+	if os.Getenv("GO_WANT_RUNTIME_COMMAND_HELPER") != "1" {
+		return
+	}
+	if len(os.Args) == 0 {
+		os.Exit(2)
+	}
+	switch os.Args[len(os.Args)-1] {
+	case "winner":
+		os.Exit(0)
+	case "loser":
+		time.Sleep(10 * time.Second)
+		os.Exit(0)
+	default:
+		os.Exit(2)
+	}
+}
+
+func TestEngine_SameTickSupersededLoserRestoresResourcesWhileWinnerCompletes(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real child-process integration")
+	}
+	workersService, workerSessions := newRuntimeSupersededServices(t)
+	logger := &recordingLogger{}
+	harness := startServiceModeRunHarness(t,
+		withNet(runtimeSameWorkObserveConsumeNet()),
+		withServiceMode(),
+		withScheduler(scheduler.NewWorkInQueueScheduler(2, nil)),
+		withWorkerService(workersService),
+		withWorkerSessions(workerSessions),
+		withLogger(logger),
+	)
+	t.Cleanup(harness.stop)
+
+	workID := "runtime-superseded-work"
+	if _, err := submitWorkRequests(t.Context(), harness.Factory, []work.SubmitRequest{{
+		WorkID:     workID,
+		WorkTypeID: "task",
+		TraceID:    "trace-" + workID,
+	}}); err != nil {
+		t.Fatalf("SubmitWorkRequest: %v", err)
+	}
+	started := waitForRuntimeSupersededProcesses(t, workersService)
+	winner, winnerOK := started["consume-work"]
+	loser, loserOK := started["observe-work"]
+	if !winnerOK || !loserOK {
+		t.Fatalf("started transitions = %#v, want consume-work and observe-work", started)
+	}
+	cancelOutcome, err := harness.Factory.(*factoryImpl).cfg.attempts.cancel(
+		context.Background(), loser.DispatchID, workerexecution.WorkstationDispatchCancelReasonSuperseded,
+	)
+	if err != nil {
+		t.Fatalf("supersede losing attempt: %v", err)
+	}
+	if cancelOutcome != workerexecution.WorkstationDispatchCancelOutcomeCanceled {
+		t.Fatalf("supersede outcome = %q, want CANCELED", cancelOutcome)
+	}
+	results := waitForRuntimeSupersededResults(t, workersService)
+	assertRuntimeSupersededCommandResults(t, results)
+	snapshot := waitForAggregateSnapshotWithTimeout(t, harness.Factory, 5*time.Second, func(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
+		return snapshot.InFlightCount == 0 && markingContainsWorkAtPlace(&snapshot.Marking, workID, "task:done")
+	})
+	assertRuntimeSupersededOutcome(t, snapshot, workID, winner, loser, workerSessions, logger)
+}
+
+func newRuntimeSupersededServices(t *testing.T) (*runtimeSupersededProcessWorkers, *runtimeWorkerSessionsService) {
+	t.Helper()
+	runner, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, logging.NoopLogger{}, nil)
+	if err != nil {
+		t.Fatalf("NewExecCommandRunner: %v", err)
+	}
+	workersService := &runtimeSupersededProcessWorkers{
+		runner:  runner,
+		started: make(chan runtimeProcessStarted, 2),
+		results: make(chan runtimeProcessResult, 2),
+	}
+	workerSessions := newRuntimeWorkerSessionsService(workersService)
+	return workersService, workerSessions
+}
+
+func waitForRuntimeSupersededProcesses(t *testing.T, service *runtimeSupersededProcessWorkers) map[string]runtimeProcessStarted {
+	t.Helper()
+	started := make(map[string]runtimeProcessStarted, 2)
+	for range 2 {
+		select {
+		case process := <-service.started:
+			started[process.TransitionID] = process
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out waiting for same-tick processes; started=%#v", started)
+		}
+	}
+	return started
+}
+
+func waitForRuntimeSupersededResults(t *testing.T, service *runtimeSupersededProcessWorkers) map[string]runtimeProcessResult {
+	t.Helper()
+	results := make(map[string]runtimeProcessResult, 2)
+	for range 2 {
+		select {
+		case result := <-service.results:
+			results[result.TransitionID] = result
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out waiting for command results; results=%#v", results)
+		}
+	}
+	return results
+}
+
+func assertRuntimeSupersededCommandResults(t *testing.T, results map[string]runtimeProcessResult) {
+	t.Helper()
+	winner, ok := results["consume-work"]
+	if !ok || winner.err != nil || winner.command.ExitCode != 0 || winner.command.CancellationReason != "" {
+		t.Fatalf("winner command result = %#v, want normal zero-exit result", winner)
+	}
+	loser, ok := results["observe-work"]
+	if !ok || !errors.Is(loser.err, context.Canceled) || loser.command.ExitCode != 0 ||
+		loser.command.CancellationReason != platformprocess.CancellationReasonSuperseded {
+		t.Fatalf("loser command result = %#v, want zero-exit SUPERSEDED cancellation", loser)
+	}
+}
+
+func assertRuntimeSupersededOutcome(
+	t *testing.T,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	workID string,
+	winner runtimeProcessStarted,
+	loser runtimeProcessStarted,
+	workerSessions workersessions.Service,
+	logger *recordingLogger,
+) {
+	t.Helper()
+	if len(snapshot.Marking.PlaceTokens["task:failed"]) != 0 ||
+		len(snapshot.Marking.PlaceTokens["slot:available"]) != 1 {
+		t.Fatalf("final marking = %#v, want no failed Work and one restored slot", snapshot.Marking.PlaceTokens)
+	}
+	if !markingContainsWorkAtPlace(&snapshot.Marking, workID, "task:done") {
+		t.Fatalf("final marking = %#v, want winning Work at task:done", snapshot.Marking.PlaceTokens)
+	}
+	history := make(map[string]interfaces.CompletedDispatch, len(snapshot.DispatchHistory))
+	for _, completed := range snapshot.DispatchHistory {
+		history[completed.TransitionID] = completed
+	}
+	if completed := history["consume-work"]; completed.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("winner dispatch history = %#v, want accepted completion", history)
+	}
+	completed, ok := history["observe-work"]
+	if !ok || completed.Outcome != workerexecution.OutcomeCanceled || completed.Cancellation == nil ||
+		completed.Cancellation.Reason != workerexecution.DispatchCancellationReasonSuperseded {
+		t.Fatalf("loser dispatch history = %#v, want SUPERSEDED cancellation", history)
+	}
+	assertRuntimeSupersededSessions(t, workerSessions, winner.DispatchID, loser.DispatchID)
+	for _, entry := range logger.entries {
+		if entry.message == "transitioner: result failed" {
+			t.Fatalf("superseded cancellation logged as transition failure: %#v", entry)
+		}
+	}
+}
+
+func assertRuntimeSupersededSessions(t *testing.T, service workersessions.Service, winnerID, loserID string) {
+	t.Helper()
+	loser, err := service.Get(context.Background(), workersessions.GetRequest{ID: loserID})
+	if err != nil {
+		t.Fatalf("Get losing Worker Session: %v", err)
+	}
+	if loser.State != workersessions.StateCanceled {
+		t.Fatalf("losing Worker Session = %#v, want CANCELED", loser)
+	}
+	if loser.Result != nil && loser.Result.Cause != nil && loser.Result.Cause.Kind == workersessions.FailureCauseWorkersExecutionFailure {
+		t.Fatalf("losing Worker Session classified SUPERSEDED as execution failure: %#v", loser)
+	}
+	winner, err := service.Get(context.Background(), workersessions.GetRequest{ID: winnerID})
+	if err != nil {
+		t.Fatalf("Get winning Worker Session: %v", err)
+	}
+	if winner.State != workersessions.StateCompleted || winner.Result == nil || winner.Result.Outcome != workersessions.TerminalOutcomeCompleted {
+		t.Fatalf("winning Worker Session = %#v, want COMPLETED", winner)
+	}
+}
+
+type runtimeProcessStarted struct {
+	DispatchID   string
+	TransitionID string
+}
+
+type runtimeProcessResult struct {
+	DispatchID   string
+	TransitionID string
+	command      platformprocess.CommandResult
+	err          error
+}
+
+type runtimeSupersededProcessWorkers struct {
+	runner  platformprocess.CommandRunner
+	started chan runtimeProcessStarted
+	results chan runtimeProcessResult
+}
+
+func (service *runtimeSupersededProcessWorkers) Execute(ctx context.Context, request workerexecution.ExecuteRequest) (workerexecution.ExecuteResult, error) {
+	mode := "winner"
+	if request.Input.Dispatch.TransitionID == "observe-work" {
+		mode = "loser"
+	}
+	observer := &runtimeProcessObserver{
+		delegate:     request.Input.ProcessLifecycleObserver,
+		dispatchID:   request.Correlation.DispatchID,
+		transitionID: request.Input.Dispatch.TransitionID,
+		started:      service.started,
+	}
+	command, err := service.runner.Run(ctx, platformprocess.CommandRequest{
+		Command: os.Args[0],
+		Args:    []string{"-test.run=TestRuntimeSupersededCommandHelperProcess", "--", mode},
+		Env:     append(os.Environ(), "GO_WANT_RUNTIME_COMMAND_HELPER=1"), ProcessLifecycleObserver: observer,
+	})
+	service.results <- runtimeProcessResult{
+		DispatchID: request.Correlation.DispatchID, TransitionID: request.Input.Dispatch.TransitionID,
+		command: command, err: err,
+	}
+	if command.CancellationReason == platformprocess.CancellationReasonSuperseded {
+		return workerexecution.ExecuteResult{
+			Correlation: request.Correlation, Outcome: workerexecution.ExecutionOutcomeCanceled,
+			Cancellation: &workerexecution.DispatchCancellation{Reason: workerexecution.DispatchCancellationReasonSuperseded},
+		}, err
+	}
+	if err != nil {
+		return workerexecution.ExecuteResult{Correlation: request.Correlation, Outcome: workerexecution.ExecutionOutcomeFailed}, err
+	}
+	return workerexecution.ExecuteResult{Correlation: request.Correlation, Outcome: workerexecution.ExecutionOutcomeAccepted}, nil
+}
+
+func (*runtimeSupersededProcessWorkers) InvokeModel(context.Context, string, modelinference.Request) (modelinference.Result, error) {
+	return modelinference.Result{}, errors.New("runtime process test Workers service does not support model invocation")
+}
+
+type runtimeProcessObserver struct {
+	delegate     platformprocess.ProcessLifecycleObserver
+	dispatchID   string
+	transitionID string
+	started      chan<- runtimeProcessStarted
+}
+
+func (observer *runtimeProcessObserver) ProcessStarted(info platformprocess.ProcessInfo) {
+	observer.started <- runtimeProcessStarted{DispatchID: observer.dispatchID, TransitionID: observer.transitionID}
+	if observer.delegate != nil {
+		observer.delegate.ProcessStarted(info)
+	}
+}
+
+func (observer *runtimeProcessObserver) ProcessExited(info platformprocess.ProcessInfo) {
+	if observer.delegate != nil {
+		observer.delegate.ProcessExited(info)
+	}
+}
+
+func runtimeSameWorkObserveConsumeNet() *state.Net {
+	net := buildSimpleNet()
+	delete(net.Transitions, "t-process")
+	resource := &state.ResourceDef{ID: "slot", Name: "Slot", Capacity: 1}
+	resourcePlace, _ := state.GenerateResourcePlaces(resource, time.Time{})
+	net.Resources[resource.ID] = resource
+	net.Places[resourcePlace.ID] = resourcePlace
+	net.Transitions["consume-work"] = &petri.Transition{
+		ID: "consume-work", Name: "Consume Work", WorkerType: "worker-a",
+		InputArcs: []petri.Arc{{
+			ID: "consume-work-input", Name: "work", PlaceID: "task:init", Direction: petri.ArcInput,
+			Mode: interfaces.ArcModeConsume, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+		}},
+		OutputArcs: []petri.Arc{{
+			ID: "consume-work-output", Name: "done", PlaceID: "task:done", Direction: petri.ArcOutput,
+			Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+		}},
+	}
+	net.Transitions["observe-work"] = &petri.Transition{
+		ID: "observe-work", Name: "Observe Work", WorkerType: "worker-b",
+		InputArcs: []petri.Arc{
+			{
+				ID: "observe-work-input", Name: "work", PlaceID: "task:init", Direction: petri.ArcInput,
+				Mode: interfaces.ArcModeObserve, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+			},
+			{
+				ID: "consume-slot-input", Name: "slot", PlaceID: resourcePlace.ID, Direction: petri.ArcInput,
+				Mode: interfaces.ArcModeConsume, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+			},
+		},
+	}
+	return net
+}
+
+var _ workerexecution.Service = (*runtimeSupersededProcessWorkers)(nil)
+var _ platformprocess.ProcessLifecycleObserver = (*runtimeProcessObserver)(nil)

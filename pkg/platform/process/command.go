@@ -354,13 +354,18 @@ func (r ExecCommandRunner) run(
 	select {
 	case runErr = <-waitCh:
 	case <-ctx.Done():
+		// The context cause is not necessarily installed when the command
+		// process is started. Read it at the cancellation edge so cleanup
+		// telemetry carries the same lifecycle reason as CommandResult.
+		cancellationReason = CancellationReasonFromContext(ctx)
+		cancelCleanup.cancellationReason = cancellationReason
 		_ = terminateCommandProcessTree(cmd, tree, r.Clock, cancelCleanup)
 		waitForCommandCancellation(waitCh, r.Clock, cleanupLogger, req)
 		closeCommandProcessTree(cmd, tree, r.Clock, postRunCleanup)
 		return CommandResult{
 			Stdout:             stdout.Bytes(),
 			Stderr:             stderr.Bytes(),
-			CancellationReason: firstCancellationReason(cancellationReason, CancellationReasonFromContext(ctx)),
+			CancellationReason: cancellationReason,
 		}, ctx.Err()
 	}
 	closeCommandProcessTree(cmd, tree, r.Clock, postRunCleanup)

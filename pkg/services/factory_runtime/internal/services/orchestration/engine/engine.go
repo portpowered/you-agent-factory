@@ -218,6 +218,7 @@ func (e *FactoryEngine) retireCompletedDispatches(results []workerexecution.Work
 					TransitionID:         entry.TransitionID,
 					WorkstationName:      entry.WorkstationName,
 					Outcome:              r.Outcome,
+					Cancellation:         r.Cancellation.Clone(),
 					Reason:               completedDispatchReasonFromResult(r),
 					ArtifactVerification: r.ArtifactVerification.Clone(),
 					FailureDetail:        workerexecution.CloneFailureDetail(r.FailureDetail),

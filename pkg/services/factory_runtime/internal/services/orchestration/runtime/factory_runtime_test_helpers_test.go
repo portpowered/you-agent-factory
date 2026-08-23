@@ -1996,6 +1996,46 @@ func (service *runtimeWorkerSessionsService) Get(
 	return session.Clone(), nil
 }
 
+func (service *runtimeWorkerSessionsService) BeginRuntimeAttempt(
+	ctx context.Context,
+	request workersessions.RuntimeAttemptRequest,
+) (workersessions.RuntimeAttempt, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	service.mu.Lock()
+	service.sessions[request.ID] = workersessions.Session{ID: request.ID, State: workersessions.StateRunning}
+	service.mu.Unlock()
+	return workersessions.RuntimeAttempt(func(
+		_ context.Context,
+		result workers.WorkstationDispatchResult,
+		_ error,
+	) error {
+		service.mu.Lock()
+		defer service.mu.Unlock()
+		session := service.sessions[request.ID]
+		switch result.TerminalOutcome {
+		case workers.WorkstationDispatchTerminalOutcomeCompleted:
+			session.State = workersessions.StateCompleted
+			session.Result = &workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted}
+		case workers.WorkstationDispatchTerminalOutcomeCanceled:
+			session.State = workersessions.StateCanceled
+			session.Result = nil
+		default:
+			session.State = workersessions.StateFailed
+			session.Result = &workersessions.TerminalResult{
+				Outcome: workersessions.TerminalOutcomeFailed,
+				Cause: &workersessions.FailureCause{
+					Kind:   workersessions.FailureCauseWorkersExecutionFailure,
+					Detail: "runtime Worker Sessions test execution failed",
+				},
+			}
+		}
+		service.sessions[request.ID] = session
+		return nil
+	}), nil
+}
+
 func (service *runtimeWorkerSessionsService) Cancel(
 	ctx context.Context,
 	request workersessions.ControlRequest,

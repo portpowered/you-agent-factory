@@ -79,7 +79,7 @@ func TestEngine_SameWorkObserveAndConsumeDispatchesInOneTick(t *testing.T) {
 	assertHeldMutationTokens(t, recordedByTransition, running, "observe-work", "slot-token")
 }
 
-func TestEngine_SameTickSupersededLoserRestoresResourcesWhileWinnerCompletes(t *testing.T) {
+func TestEngine_SameTickCancellationResultRestoresResources(t *testing.T) {
 	net := sameWorkObserveConsumeNet()
 	marking := petri.NewMarking("test-wf")
 	now := time.Date(2026, time.August, 22, 12, 0, 0, 0, time.UTC)
