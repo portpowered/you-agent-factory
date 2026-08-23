@@ -28,6 +28,7 @@ import (
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 type runtimeLoadPortableFailureCase struct {
@@ -40,6 +41,60 @@ type runtimeLoadPortableFailureCase struct {
 type runtimeLoadReplayInputs struct {
 	readFile   func(string) ([]byte, error)
 	loadLegacy recordings.ReplayArtifactLoader
+}
+
+func TestWarnReplayMetadataMismatchesResolvesCurrentOperatorDefaults(t *testing.T) {
+	t.Parallel()
+
+	defaults := operatorconfig.ResolvedDefaults{
+		WorkerModelProvider: "CODEX",
+		WorkerModel:         "replay-model",
+	}
+	factoryConfig := &factorydefinitions.FactoryConfig{
+		Name: "factory",
+		Workers: []factorydefinitions.FactoryWorkerConfig{{
+			Name: "worker",
+			Type: factorydefinitions.WorkerTypeModel,
+		}},
+	}
+	factoryDir := t.TempDir()
+	recorded, err := factorydefinitionfixtures.NewLoadedSource(
+		factoryDir, factoryConfig, nil, nil,
+	)
+	if err != nil {
+		t.Fatalf("construct recorded source: %v", err)
+	}
+	if err := applyOperatorDefaults(recorded, defaults); err != nil {
+		t.Fatalf("apply recorded operator defaults: %v", err)
+	}
+	capture := factorydefinitionswire.LoadedFactorySnapshotCapturer()
+	artifactFactory, err := capture(recorded, factoryDir, nil)
+	if err != nil {
+		t.Fatalf("capture recorded source: %v", err)
+	}
+
+	current, err := factorydefinitionfixtures.NewLoadedSource(
+		factoryDir, factoryConfig, nil, nil,
+	)
+	if err != nil {
+		t.Fatalf("construct current source: %v", err)
+	}
+	core, logs := observer.New(zapcore.WarnLevel)
+	warnReplayMetadataMismatches(
+		factoryDir,
+		"recording.replay.json",
+		nil,
+		&factorydefinitions.ReplayArtifact{Factory: artifactFactory},
+		zap.New(core),
+		func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			return current, nil
+		},
+		capture,
+		defaults,
+	)
+	if logs.Len() != 0 {
+		t.Fatalf("equivalent effective config emitted replay metadata warnings: %v", logs.All())
+	}
 }
 
 func newRuntimeLoadReplayInputs(

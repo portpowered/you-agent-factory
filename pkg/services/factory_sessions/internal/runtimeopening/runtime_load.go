@@ -154,6 +154,7 @@ func loadRuntime(
 		logger,
 		loadFactory,
 		captureLoadedFactorySnapshot,
+		operatorDefaults,
 	)
 	return RuntimeLoad{
 		LoadedFactoryCfg: loaded,
@@ -208,6 +209,7 @@ func reportRuntimeReplayMetadata(
 	logger *zap.Logger,
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	operatorDefaults operatorconfig.ResolvedDefaults,
 ) {
 	warnReplayMetadataMismatches(
 		dir,
@@ -217,6 +219,7 @@ func reportRuntimeReplayMetadata(
 		logger,
 		loadFactory,
 		captureLoadedFactorySnapshot,
+		operatorDefaults,
 	)
 }
 
@@ -426,6 +429,7 @@ func warnReplayMetadataMismatches(
 	logger *zap.Logger,
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	operatorDefaults operatorconfig.ResolvedDefaults,
 ) {
 	if artifact == nil ||
 		dir == "" ||
@@ -436,6 +440,9 @@ func warnReplayMetadataMismatches(
 	}
 	current, err := loadFactory(dir, workstationLoader)
 	if err != nil {
+		return
+	}
+	if err := applyOperatorDefaults(current, operatorDefaults); err != nil {
 		return
 	}
 	currentSnapshot, err := captureLoadedFactorySnapshot(
