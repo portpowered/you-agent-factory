@@ -1,0 +1,295 @@
+{
+  "events": [
+    {
+      "context": {
+        "eventTime": "2026-08-20T12:00:00Z",
+        "sequence": 0,
+        "sessionId": "cost-replay-priced-session",
+        "tick": 0
+      },
+      "id": "factory-event/run-started/cost-replay-priced-session",
+      "payload": {
+        "factory": {
+          "name": "cost-pipeline-priced",
+          "factoryDirectory": "fixtures/cost-pipeline/priced",
+          "resources": [],
+          "workTypes": [
+            {
+              "name": "task",
+              "states": [
+                {
+                  "name": "init",
+                  "type": "INITIAL"
+                },
+                {
+                  "name": "complete",
+                  "type": "TERMINAL"
+                },
+                {
+                  "name": "failed",
+                  "type": "FAILED"
+                }
+              ]
+            }
+          ],
+          "workers": [
+            {
+              "modelProvider": "CODEX",
+              "model": "gpt-5-codex",
+              "name": "priced-worker",
+              "type": "MODEL_WORKER",
+              "body": "Process the recorded cost fixture."
+            }
+          ],
+          "workstations": [
+            {
+              "id": "process",
+              "inputs": [
+                {
+                  "state": "init",
+                  "workType": "task"
+                }
+              ],
+              "name": "process",
+              "outputs": [
+                {
+                  "state": "complete",
+                  "workType": "task"
+                }
+              ],
+              "body": "Process {{ .WorkID }}.",
+              "type": "MODEL_WORKSTATION",
+              "worker": "priced-worker"
+            }
+          ]
+        },
+        "recordedAt": "2026-08-20T12:00:00Z",
+        "wallClock": {
+          "startedAt": "2026-08-20T12:00:00Z"
+        }
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "RUN_REQUEST"
+    },
+    {
+      "context": {
+        "eventTime": "2026-08-20T12:00:01Z",
+        "requestId": "cost-replay-priced-request",
+        "sequence": 1,
+        "sessionId": "cost-replay-priced-session",
+        "source": "api",
+        "tick": 1,
+        "traceIds": [
+          "cost-replay-priced-trace"
+        ],
+        "workIds": [
+          "cost-replay-priced-work"
+        ]
+      },
+      "id": "factory-event/work-request/cost-replay-priced-request",
+      "payload": {
+        "source": "api",
+        "type": "FACTORY_REQUEST_BATCH",
+        "works": [
+          {
+            "name": "Priced replay usage",
+            "payload": {
+              "title": "priced replay usage"
+            },
+            "requestId": "cost-replay-priced-request",
+            "traceId": "cost-replay-priced-trace",
+            "workId": "cost-replay-priced-work",
+            "workTypeName": "task"
+          }
+        ]
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "WORK_REQUEST"
+    },
+    {
+      "context": {
+        "currentChainingTraceId": "cost-replay-priced-trace",
+        "dispatchId": "cost-replay-priced-dispatch",
+        "eventTime": "2026-08-20T12:00:02Z",
+        "previousChainingTraceIds": [
+          "cost-replay-priced-trace"
+        ],
+        "requestId": "cost-replay-priced-request",
+        "sequence": 2,
+        "sessionId": "cost-replay-priced-session",
+        "tick": 2,
+        "traceIds": [
+          "cost-replay-priced-trace"
+        ],
+        "workIds": [
+          "cost-replay-priced-work"
+        ]
+      },
+      "id": "factory-event/dispatch-created/cost-replay-priced-dispatch",
+      "payload": {
+        "inputs": [
+          {
+            "workId": "cost-replay-priced-work"
+          }
+        ],
+        "metadata": {
+            "replayKey": "process/cost-replay-priced-trace/cost-replay-priced-work",
+          "runnerId": "codex",
+          "runnerSelectionSource": "legacy_provider"
+        },
+        "transitionId": "process"
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "DISPATCH_REQUEST"
+    },
+    {
+      "context": {
+        "dispatchId": "cost-replay-priced-dispatch",
+        "eventTime": "2026-08-20T12:00:02Z",
+        "requestId": "cost-replay-priced-request",
+        "sequence": 3,
+        "sessionId": "cost-replay-priced-session",
+        "tick": 2
+      },
+      "id": "factory-event/dispatch-worker-session-association/cost-replay-priced-worker-session",
+      "payload": {
+        "workerSessionId": "cost-replay-priced-worker-session"
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "DISPATCH_WORKER_SESSION_ASSOCIATION"
+    },
+    {
+      "context": {
+        "dispatchId": "cost-replay-priced-dispatch",
+        "eventTime": "2026-08-20T12:00:02Z",
+        "requestId": "cost-replay-priced-request",
+        "sequence": 4,
+        "sessionId": "cost-replay-priced-session",
+        "tick": 2,
+        "traceIds": [
+          "cost-replay-priced-trace"
+        ],
+        "workIds": [
+          "cost-replay-priced-work"
+        ]
+      },
+      "id": "factory-event/inference-request/cost-replay-priced-inference-request",
+      "payload": {
+        "attempt": 1,
+        "inferenceRequestId": "cost-replay-priced-inference-request",
+        "prompt": "Process cost-replay-priced-work.",
+        "workingDirectory": "/workspace/cost-pipeline",
+        "worktree": "/workspace/cost-pipeline/.worktrees/priced"
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "INFERENCE_REQUEST"
+    },
+    {
+      "context": {
+        "dispatchId": "cost-replay-priced-dispatch",
+        "eventTime": "2026-08-20T12:00:03Z",
+        "requestId": "cost-replay-priced-request",
+        "sequence": 5,
+        "sessionId": "cost-replay-priced-session",
+        "tick": 2,
+        "traceIds": [
+          "cost-replay-priced-trace"
+        ],
+        "workIds": [
+          "cost-replay-priced-work"
+        ]
+      },
+      "id": "factory-event/inference-response/cost-replay-priced-inference-request",
+      "payload": {
+        "attempt": 1,
+        "diagnostics": {
+          "provider": {
+            "provider": "codex",
+            "model": "gpt-5-codex",
+            "responseMetadata": {
+              "input_tokens": "1000000",
+              "output_tokens": "2000000"
+            }
+          }
+        },
+        "durationMillis": 125,
+        "inferenceRequestId": "cost-replay-priced-inference-request",
+        "outcome": "SUCCEEDED",
+        "response": "priced replay usage COMPLETE"
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "INFERENCE_RESPONSE"
+    },
+    {
+      "context": {
+        "currentChainingTraceId": "cost-replay-priced-trace",
+        "dispatchId": "cost-replay-priced-dispatch",
+        "eventTime": "2026-08-20T12:00:04Z",
+        "previousChainingTraceIds": [
+          "cost-replay-priced-trace"
+        ],
+        "requestId": "cost-replay-priced-request",
+        "sequence": 6,
+        "sessionId": "cost-replay-priced-session",
+        "tick": 3,
+        "traceIds": [
+          "cost-replay-priced-trace"
+        ],
+        "workIds": [
+          "cost-replay-priced-work"
+        ]
+      },
+      "id": "factory-event/dispatch-completed/cost-replay-priced-dispatch",
+      "payload": {
+        "completionId": "cost-replay-priced-completion",
+        "outcome": "ACCEPTED",
+        "output": "priced replay usage COMPLETE",
+        "outputWork": [
+          {
+            "name": "Priced replay usage",
+            "payload": {
+              "title": "priced replay usage"
+            },
+            "requestId": "cost-replay-priced-request",
+            "state": {
+              "name": "complete",
+              "type": "TERMINAL"
+            },
+            "traceId": "cost-replay-priced-trace",
+            "workId": "cost-replay-priced-work",
+            "workTypeName": "task"
+          }
+        ],
+        "transitionId": "process",
+        "usage": {
+          "durationMillis": 125,
+          "inputTokens": 1000000,
+          "outputTokens": 2000000,
+          "totalTokens": 3000000
+        }
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "DISPATCH_RESPONSE"
+    },
+    {
+      "context": {
+        "eventTime": "2026-08-20T12:00:05Z",
+        "sequence": 7,
+        "sessionId": "cost-replay-priced-session",
+        "tick": 3
+      },
+      "id": "factory-event/run-finished/cost-replay-priced-session",
+      "payload": {
+        "state": "COMPLETED",
+        "wallClock": {
+          "finishedAt": "2026-08-20T12:00:05Z",
+          "startedAt": "2026-08-20T12:00:00Z"
+        }
+      },
+      "schemaVersion": "agent-factory.event.v1",
+      "type": "RUN_RESPONSE"
+    }
+  ],
+  "recordedAt": "2026-08-20T12:00:00Z",
+  "schemaVersion": "agent-factory.replay.v1"
+}
