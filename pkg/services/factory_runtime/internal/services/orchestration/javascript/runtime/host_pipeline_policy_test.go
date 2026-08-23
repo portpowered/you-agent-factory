@@ -882,3 +882,51 @@ func TestRun_ParallelFakeChildren_RepresentsFailedChildExplicitly(t *testing.T) 
 		t.Fatal("failed child should not emit COMPLETED child_dispatch record")
 	}
 }
+
+func TestRun_AgentRunPermissionsResolveCanonicalValues(t *testing.T) {
+	tests := []struct {
+		name       string
+		source     string
+		wantBypass bool
+		permission factory.JavaScriptChildPermission
+	}{
+		{
+			name:       "static default",
+			source:     `return agent.run({ prompt: "review", permissions: "DEFAULT" });`,
+			permission: factory.JavaScriptChildPermissionDefault,
+		},
+		{
+			name:       "dynamic skip",
+			source:     `const child = { prompt: "review", permissions: "SKIP_PERMISSIONS" }; return agent.run(child);`,
+			wantBypass: true,
+			permission: factory.JavaScriptChildPermissionSkipPermissions,
+		},
+		{
+			name:       "omitted",
+			source:     `return agent.run({ prompt: "review" });`,
+			permission: factory.JavaScriptChildPermissionDefault,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			stub := &stubChildExecutor{mode: stubChildExecutionMode}
+			outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+				Source: test.source, SourceRef: "inline", SessionID: "permissions-resolution-" + test.name,
+				Policy: workflowpolicy.DefaultEffectivePolicy(),
+			}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+				return stub
+			}})
+			if err != nil || !outcome.OK {
+				t.Fatalf("Run() outcome = %#v, error = %v", outcome, err)
+			}
+			requests := stub.executionRequests()
+			if len(requests) != 1 {
+				t.Fatalf("executor request count = %d, want 1", len(requests))
+			}
+			request := requests[0]
+			if request.SkipPermissions != test.wantBypass || request.Permissions != test.permission {
+				t.Fatalf("executor request = %#v, want permission=%q bypass=%v", request, test.permission, test.wantBypass)
+			}
+		})
+	}
+}
