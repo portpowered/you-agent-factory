@@ -540,8 +540,14 @@ func TestScopedCatalogPreservesCompatibilityBehavior(t *testing.T) {
 		context.Background(),
 		models.ListModelsRequest{Scope: opened.Scope},
 	)
-	if err != nil || !reflect.DeepEqual(legacyList.Results, scopedList.Models) {
-		t.Fatalf("catalog list parity = (legacy %#v, scoped %#v, %v)", legacyList.Results, scopedList.Models, err)
+	var scopedCompatibility []models.Summary
+	for _, model := range scopedList.Models {
+		if model.Name == "compatibility-model" {
+			scopedCompatibility = append(scopedCompatibility, model)
+		}
+	}
+	if err != nil || !reflect.DeepEqual(legacyList.Results, scopedCompatibility) {
+		t.Fatalf("catalog list parity = (legacy %#v, scoped %#v, %v)", legacyList.Results, scopedCompatibility, err)
 	}
 
 	legacyDetail, err := compatibility.GetModel(context.Background(), "compatibility-model")
@@ -769,10 +775,18 @@ func scopedCatalogResource(name, model, provider string) models.RuntimeResource 
 
 func assertScopedCatalog(t *testing.T, result models.ListModelsResult) {
 	t.Helper()
-	if len(result.Models) != 2 {
-		t.Fatalf("ListCatalog models = %#v, want two canonical identities", result.Models)
+	var alpha, zeta *models.Summary
+	for index := range result.Models {
+		switch localmodels.CanonicalModelName(result.Models[index].Name) {
+		case "ALPHA-MODEL":
+			alpha = &result.Models[index]
+		case "ZETA-MODEL":
+			zeta = &result.Models[index]
+		}
 	}
-	alpha := result.Models[0]
+	if alpha == nil || zeta == nil {
+		t.Fatalf("ListCatalog models = %#v, want Factory alpha/zeta identities", result.Models)
+	}
 	if localmodels.CanonicalModelName(alpha.Name) != "ALPHA-MODEL" {
 		t.Fatalf("first model = %q, want canonical ALPHA-MODEL identity", alpha.Name)
 	}
@@ -795,18 +809,24 @@ func assertScopedCatalog(t *testing.T, result models.ListModelsResult) {
 		alpha.ManagedRuntime.Diagnostics["sourceKind"] != localmodels.ManagedRuntimeSourceKindManagedMirror {
 		t.Fatalf("alpha status/runtime = %#v, want ready managed-mirror projection", alpha)
 	}
-	if localmodels.CanonicalModelName(result.Models[1].Name) != "ZETA-MODEL" {
-		t.Fatalf("second model = %q, want ZETA-MODEL", result.Models[1].Name)
+	if localmodels.CanonicalModelName(zeta.Name) != "ZETA-MODEL" {
+		t.Fatalf("zeta model = %q, want ZETA-MODEL", zeta.Name)
 	}
 }
 
 func mutateScopedCatalogResult(result models.ListModelsResult) {
-	result.Models[0].Name = "mutated"
-	result.Models[0].Operations[0].Name = "mutated"
-	result.Models[0].Operations[0].Inputs[0].ContentTypes[0] = "mutated"
-	*result.Models[0].Resources[0].Model = "mutated"
-	result.Models[0].ManagedRuntime.SupportedOperations[0].Name = "mutated"
-	result.Models[0].ManagedRuntime.Diagnostics["sourceKind"] = "mutated"
+	for index := range result.Models {
+		if localmodels.CanonicalModelName(result.Models[index].Name) != "ALPHA-MODEL" {
+			continue
+		}
+		result.Models[index].Name = "mutated"
+		result.Models[index].Operations[0].Name = "mutated"
+		result.Models[index].Operations[0].Inputs[0].ContentTypes[0] = "mutated"
+		*result.Models[index].Resources[0].Model = "mutated"
+		result.Models[index].ManagedRuntime.SupportedOperations[0].Name = "mutated"
+		result.Models[index].ManagedRuntime.Diagnostics["sourceKind"] = "mutated"
+		return
+	}
 }
 
 func assertContractOnlyUnsupported(t *testing.T, operation string, err error) {

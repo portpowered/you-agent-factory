@@ -54,6 +54,155 @@ func TestListCatalogClassifiesScopeBeforeProjection(t *testing.T) {
 	}
 }
 
+func TestCatalogDiscoversBuiltInsWithoutFactoryDeclarations(t *testing.T) {
+	t.Parallel()
+
+	scopes := newRuntimeScopes(t, "catalog-built-in-discovery")
+	privateRef, err := scopes.Open(models.RuntimeBinding{
+		RuntimeConfig: func() *models.RuntimeConfig {
+			return &models.RuntimeConfig{}
+		},
+	})
+	if err != nil {
+		t.Fatalf("open scope: %v", err)
+	}
+	scope := publicScope(t, privateRef)
+	service := newCatalogService(t, scopes)
+
+	listed, err := service.ListCatalog(context.Background(), models.ListModelsRequest{Scope: scope})
+	if err != nil {
+		t.Fatalf("ListCatalog: %v", err)
+	}
+	counts := make(map[string]int, len(listed.Models))
+	for _, model := range listed.Models {
+		counts[model.Name]++
+	}
+	for _, name := range []string{
+		models.BuiltInModelNameASR,
+		models.BuiltInModelNameEmbed,
+		models.BuiltInModelNameLLM,
+		models.BuiltInModelNameTTS,
+	} {
+		if counts[name] != 1 {
+			t.Fatalf("listed %q count = %d, want one; models = %#v", name, counts[name], listed.Models)
+		}
+	}
+
+	inspected, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{
+		Scope: scope, Name: " ASR ", Operation: models.OperationASR,
+	})
+	if err != nil {
+		t.Fatalf("GetCatalogModel(asr): %v", err)
+	}
+	if inspected.Model.Name != models.BuiltInModelNameASR ||
+		len(inspected.Model.Operations) != 1 ||
+		inspected.Model.Operations[0].Name != models.OperationASR {
+		t.Fatalf("asr detail = %#v, want effective ASR definition", inspected.Model)
+	}
+	if inspected.Model.ManagedRuntime.ReadinessState != models.ReadinessStateMissing ||
+		inspected.Model.ManagedRuntime.LifecycleState != models.LifecycleStateNotInstalled {
+		t.Fatalf("asr runtime = %#v, want missing/not-installed baseline", inspected.Model.ManagedRuntime)
+	}
+	if len(inspected.Model.Sources) != 1 || inspected.Model.Sources[0].Provider != string(models.ModelReferenceSourceHuggingFace) {
+		t.Fatalf("asr sources = %#v, want built-in source metadata", inspected.Model.Sources)
+	}
+
+	if _, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{
+		Scope: scope, Name: "unregistered-model",
+	}); !errors.Is(err, models.ErrNotFound) {
+		t.Fatalf("unknown model error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestCatalogPreservesFactoryAndOperatorPrecedenceOverBuiltIns(t *testing.T) {
+	t.Parallel()
+
+	operatorSource := "hf://operator/tts/model@0123456789012345678901234567890123456789"
+	operatorBackend := "localai-test"
+	operatorLoadPolicy := models.LoadPolicyKeepWarm
+	customSource := "hf://operator/custom/model@0123456789012345678901234567890123456789"
+	customBackend := "localai-custom"
+	customLoadPolicy := models.LoadPolicyOnDemand
+	scopes := newRuntimeScopes(t, "catalog-precedence")
+	privateRef, err := scopes.Open(models.RuntimeBinding{
+		RuntimeConfig: func() *models.RuntimeConfig {
+			return &models.RuntimeConfig{
+				Workers: []models.RuntimeWorker{
+					catalogWorker("factory-asr", models.BuiltInModelNameASR, "factory-operation"),
+				},
+			}
+		},
+		OperatorModels: map[string]models.ModelOverlay{
+			models.BuiltInModelNameASR: {
+				Operations: []string{models.OperationTTS},
+			},
+			" TTS ": {
+				Source: &operatorSource, Backend: &operatorBackend,
+				LoadPolicy: &operatorLoadPolicy, Operations: []string{models.OperationOMNI},
+			},
+			"custom": {
+				Source: &customSource, Backend: &customBackend,
+				LoadPolicy: &customLoadPolicy, Operations: []string{models.OperationASR},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("open scope: %v", err)
+	}
+	scope := publicScope(t, privateRef)
+	service := newCatalogService(t, scopes)
+
+	listed, err := service.ListCatalog(context.Background(), models.ListModelsRequest{Scope: scope})
+	if err != nil {
+		t.Fatalf("ListCatalog: %v", err)
+	}
+	countByName := make(map[string]int, len(listed.Models))
+	for _, model := range listed.Models {
+		countByName[model.Name]++
+	}
+	if countByName[models.BuiltInModelNameASR] != 1 {
+		t.Fatalf("asr count = %d, want one effective Factory entry", countByName[models.BuiltInModelNameASR])
+	}
+
+	factory, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{
+		Scope: scope, Name: models.BuiltInModelNameASR, Operation: "factory-operation",
+	})
+	if err != nil {
+		t.Fatalf("GetCatalogModel(factory asr): %v", err)
+	}
+	if len(factory.Model.Operations) != 1 || factory.Model.Operations[0].Name != "factory-operation" {
+		t.Fatalf("factory asr operations = %#v, want Factory operation", factory.Model.Operations)
+	}
+	if _, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{
+		Scope: scope, Name: models.BuiltInModelNameASR, Operation: models.OperationTTS,
+	}); !errors.Is(err, models.ErrUnsupportedOperation) {
+		t.Fatalf("Factory precedence operation error = %v, want ErrUnsupportedOperation", err)
+	}
+
+	operator, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{
+		Scope: scope, Name: models.BuiltInModelNameTTS, Operation: models.OperationOMNI,
+	})
+	if err != nil {
+		t.Fatalf("GetCatalogModel(operator tts): %v", err)
+	}
+	if len(operator.Model.Operations) != 1 || operator.Model.Operations[0].Name != models.OperationOMNI {
+		t.Fatalf("operator tts operations = %#v, want overlaid OMNI", operator.Model.Operations)
+	}
+	if len(operator.Model.Sources) != 1 || operator.Model.Sources[0].Reference != operatorSource {
+		t.Fatalf("operator tts sources = %#v, want overlay source", operator.Model.Sources)
+	}
+
+	custom, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{
+		Scope: scope, Name: "CUSTOM", Operation: models.OperationASR,
+	})
+	if err != nil {
+		t.Fatalf("GetCatalogModel(operator custom): %v", err)
+	}
+	if custom.Model.Name != "custom" || len(custom.Model.Operations) != 1 || custom.Model.Operations[0].Name != models.OperationASR {
+		t.Fatalf("custom detail = %#v, want operator definition", custom.Model)
+	}
+}
+
 func TestListCatalogRejectsUnavailableScopedConfiguration(t *testing.T) {
 	t.Parallel()
 
@@ -186,10 +335,17 @@ func listCatalogCacheFacts(
 	if err != nil {
 		t.Fatalf("ListCatalog: %v", err)
 	}
-	if len(result.Models) != 1 {
-		t.Fatalf("models = %#v, want one model", result.Models)
+	var model *models.Summary
+	for index := range result.Models {
+		if result.Models[index].Name == "cache-model" {
+			model = &result.Models[index]
+			break
+		}
 	}
-	runtime := result.Models[0].ManagedRuntime
+	if model == nil {
+		t.Fatalf("models = %#v, want cache-model", result.Models)
+	}
+	runtime := model.ManagedRuntime
 	if runtime.ReadinessState != models.ReadinessStateFailed ||
 		runtime.LifecycleState != models.LifecycleStateInstalling {
 		t.Fatalf("catalog states = (%s, %s), want FAILED/INSTALLING", runtime.ReadinessState, runtime.LifecycleState)

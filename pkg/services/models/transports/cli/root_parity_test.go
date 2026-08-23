@@ -214,6 +214,42 @@ func TestRootAdapter_ListJSONPreservesAcceptedOutput(t *testing.T) {
 	}
 }
 
+func TestRootAdapter_BuiltInCatalogModelSurfacesThroughCLI(t *testing.T) {
+	t.Parallel()
+
+	service := parityRootService(t, stubModelsRoot{
+		listModels: func(context.Context) (modelinference.List, error) {
+			return modelinference.List{Results: []modelinference.Summary{{
+				Name:       modelinference.BuiltInModelNameASR,
+				Operations: []modelinference.Operation{{Name: modelinference.OperationASR}},
+			}}}, nil
+		},
+		getCatalogModel: func(_ context.Context, request modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+			return modelinference.GetModelResult{Model: modelinference.Detail{Summary: modelinference.Summary{
+				Name: request.Name, Operations: []modelinference.Operation{{Name: modelinference.OperationASR}},
+			}}}, nil
+		},
+	})
+
+	var listOutput bytes.Buffer
+	if err := service.List(modelscli.ListConfig{Context: context.Background(), Output: &listOutput}); err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if !strings.Contains(listOutput.String(), modelinference.BuiltInModelNameASR) {
+		t.Fatalf("List() output = %q, want built-in asr", listOutput.String())
+	}
+
+	var inspectOutput bytes.Buffer
+	if err := service.Inspect(modelscli.InspectConfig{
+		Context: context.Background(), ModelName: modelinference.BuiltInModelNameASR, Output: &inspectOutput,
+	}); err != nil {
+		t.Fatalf("Inspect() error = %v", err)
+	}
+	if !strings.Contains(inspectOutput.String(), "Name:\tasr") || !strings.Contains(inspectOutput.String(), "ASR") {
+		t.Fatalf("Inspect() output = %q, want built-in asr detail", inspectOutput.String())
+	}
+}
+
 func TestRootAdapter_InspectSuccessPreservesHumanOutput(t *testing.T) {
 	t.Parallel()
 
