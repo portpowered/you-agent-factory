@@ -75,6 +75,8 @@ properties:
       - COSTS_QUERY_CANCELED
       - COSTS_QUERY_FAILED
       - COSTS_QUERY_TIMEOUT
+      - SHUTDOWN_CONTROL_REJECTED
+      - SHUTDOWN_CONTROL_UNAVAILABLE
     x-enum-descriptions:
       - Request payload or parameter validation failed.
       - Factory session discovery found a readable factory target whose config could not be loaded.
@@ -135,6 +137,8 @@ properties:
       - The metrics costs request was canceled before the report completed.
       - The metrics costs query failed while reading or valuing runtime usage.
       - The metrics costs query exceeded its server-side completion bound.
+      - The shutdown control request came from a non-loopback peer.
+      - The invocation-local shutdown control is unavailable.
   targets:
     type: array
     description: Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields.

@@ -685,6 +685,14 @@ func newRunServerHandlerRegistry(
 				)
 			},
 		},
+		Stop: commandregistry.CommandHandlers{
+			PreRunE: func(cmd *cobra.Command, _ []string) error {
+				return validateRunServerPlacement(globals, "you.server.stop")
+			},
+			RunE: func(cmd *cobra.Command, _ []string) error {
+				return executeServerStopCommand(cmd, globals, rootOptions)
+			},
+		},
 	})
 	if err != nil {
 		return nil, climanifestcobra.RunServerFlagBindings{}, err

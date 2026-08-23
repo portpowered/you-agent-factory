@@ -16,6 +16,7 @@ import (
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	costscli "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli"
+	serverstopcli "github.com/portpowered/infinite-you/pkg/transports/cli/serverstop"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	"github.com/spf13/cobra"
 )
@@ -85,6 +86,38 @@ func TestProductionRunSubmitFamilyCutoverEnabled(t *testing.T) {
 		t.Fatalf("find submit: %v", err)
 	}
 	assertDirectCommandCount(t, submitCmd, "batch", 1)
+}
+
+func TestProductionServerStopDispatchesOnlyInjectedOperation(t *testing.T) {
+	var calls int
+	var selected string
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		serverStopCLI: func(_ context.Context, config serverstopcli.Config) error {
+			calls++
+			selected = config.Server
+			_, _ = config.Output.Write([]byte("stopped\n"))
+			return nil
+		},
+	})
+	var stdout, stderr bytes.Buffer
+	err := factory.ExecuteCommand(startupcli.CommandInvocation{
+		Arguments: []string{"--server", "http://127.0.0.1:7437", "server", "stop"},
+		Stdin:     strings.NewReader(""),
+		Stdout:    &stdout,
+		Stderr:    &stderr,
+		Context:   context.Background(),
+		HomeDir:   func() (string, error) { return "operator-home", nil },
+		LookupEnv: func(string) (string, bool) { return "", false },
+	})
+	if err != nil {
+		t.Fatalf("server stop error = %v; stderr=%s", err, stderr.String())
+	}
+	if calls != 1 || selected != "http://127.0.0.1:7437" {
+		t.Fatalf("injected stop calls=%d selected=%q", calls, selected)
+	}
+	if stdout.String() != "stopped\n" {
+		t.Fatalf("stdout = %q, want injected operation output", stdout.String())
+	}
 }
 
 func TestProductionMetricsCostsTimeoutDiagnosticPreservesEndpointAcrossModes(t *testing.T) {

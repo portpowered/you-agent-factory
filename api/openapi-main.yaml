@@ -1261,6 +1261,31 @@ paths:
                 $ref: '#/components/schemas/StatusResponse'
         '500':
           $ref: '#/components/responses/InternalError'
+  /shutdown:
+    post:
+      tags:
+        - Runtime
+      operationId: shutdownServer
+      summary: Request graceful shutdown of the local server
+      description: >-
+        Accepts a loopback-only administrative shutdown request for the
+        invocation that owns this listener. The server acknowledges the
+        request before it invokes the invocation-local cancellation authority;
+        the caller remains responsible for observing that the selected
+        listener has stopped.
+      responses:
+        '202':
+          description: The invocation-local shutdown request was accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShutdownAcceptedResponse'
+        '403':
+          $ref: '#/components/responses/ShutdownControlRejected'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ShutdownControlUnavailable'
   /models:
     get:
       tags:
@@ -2525,6 +2550,10 @@ components:
       $ref: './components/responses/FactorySessionResourceCapacityConflict.yaml'
     InternalError:
       $ref: './components/responses/InternalError.yaml'
+    ShutdownControlRejected:
+      $ref: './components/responses/ShutdownControlRejected.yaml'
+    ShutdownControlUnavailable:
+      $ref: './components/responses/ShutdownControlUnavailable.yaml'
     ResponseEventBadRequest:
       $ref: './components/responses/ResponseEventBadRequest.yaml'
     ResponseEventSessionNotFound:
@@ -2752,6 +2781,8 @@ components:
       $ref: './components/schemas/api/ErrorFamily.yaml'
     ErrorResponse:
       $ref: './components/schemas/api/ErrorResponse.yaml'
+    ShutdownAcceptedResponse:
+      $ref: './components/schemas/api/ShutdownAcceptedResponse.yaml'
     ErrorTarget:
       $ref: './components/schemas/api/ErrorTarget.yaml'
     HybridLogicalTimestamp:

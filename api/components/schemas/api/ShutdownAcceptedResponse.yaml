@@ -1,0 +1,13 @@
+type: object
+additionalProperties: false
+required:
+  - status
+  - message
+properties:
+  status:
+    type: string
+    enum:
+      - accepted
+  message:
+    type: string
+    description: Human-readable acknowledgment that graceful shutdown was accepted.

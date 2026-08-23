@@ -1,0 +1,5 @@
+description: The shutdown control is restricted to a loopback peer on this local server.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'

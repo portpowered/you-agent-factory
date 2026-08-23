@@ -27,6 +27,7 @@ you run	run	you
 you server	server	you
 you server acp	acp	you server
 you server mcp	mcp	you server
+you server stop	stop	you server
 you session	session	you
 you session cancel	cancel [session-id]	you session
 you session create	create [arg0...]	you session

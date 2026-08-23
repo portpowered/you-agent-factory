@@ -53,6 +53,7 @@ import (
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	serverstopcli "github.com/portpowered/infinite-you/pkg/transports/cli/serverstop"
 	generatedhttpclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
@@ -117,6 +118,15 @@ func provideMetricsCLI() visualizationcli.Operation {
 		return generatedhttpclient.NewClientWithResponses(
 			server,
 			generatedhttpclient.WithHTTPClient(&http.Client{Timeout: metricsCLIHTTPTimeout}),
+		)
+	})
+}
+
+func provideServerStopCLI() serverstopcli.Operation {
+	return serverstopcli.NewOperation(func(server string) (serverstopcli.Client, error) {
+		return generatedhttpclient.NewClientWithResponses(
+			server,
+			generatedhttpclient.WithHTTPClient(&http.Client{Timeout: serverstopcli.DefaultRequestTimeout}),
 		)
 	})
 }

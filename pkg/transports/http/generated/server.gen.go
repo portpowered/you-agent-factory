@@ -152,6 +152,8 @@ const (
 	ErrorResponseCodeRESPONSEEVENTSTREAMEXPIRED                     ErrorResponseCode = "RESPONSE_EVENT_STREAM_EXPIRED"
 	ErrorResponseCodeREVISIONCONFLICT                               ErrorResponseCode = "REVISION_CONFLICT"
 	ErrorResponseCodeSESSIONKINDUNSUPPORTED                         ErrorResponseCode = "SESSION_KIND_UNSUPPORTED"
+	ErrorResponseCodeSHUTDOWNCONTROLREJECTED                        ErrorResponseCode = "SHUTDOWN_CONTROL_REJECTED"
+	ErrorResponseCodeSHUTDOWNCONTROLUNAVAILABLE                     ErrorResponseCode = "SHUTDOWN_CONTROL_UNAVAILABLE"
 	ErrorResponseCodeSTALEFACTORYVERSION                            ErrorResponseCode = "STALE_FACTORY_VERSION"
 	ErrorResponseCodeWORKERSESSIONADMISSIONFAILED                   ErrorResponseCode = "WORKER_SESSION_ADMISSION_FAILED"
 	ErrorResponseCodeWORKERSESSIONCONTINUATIONADMISSIONFAILED       ErrorResponseCode = "WORKER_SESSION_CONTINUATION_ADMISSION_FAILED"
@@ -1270,6 +1272,11 @@ const (
 const (
 	ScriptFailureTypeProcessError ScriptFailureType = "PROCESS_ERROR"
 	ScriptFailureTypeTimeout      ScriptFailureType = "TIMEOUT"
+)
+
+// Defines values for ShutdownAcceptedResponseStatus.
+const (
+	Accepted ShutdownAcceptedResponseStatus = "accepted"
 )
 
 // Defines values for SubmitWorkItemType.
@@ -7851,6 +7858,16 @@ type SessionStartedEventPayload struct {
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
+// ShutdownAcceptedResponse defines model for ShutdownAcceptedResponse.
+type ShutdownAcceptedResponse struct {
+	// Message Human-readable acknowledgment that graceful shutdown was accepted.
+	Message string                         `json:"message"`
+	Status  ShutdownAcceptedResponseStatus `json:"status"`
+}
+
+// ShutdownAcceptedResponseStatus defines model for ShutdownAcceptedResponse.Status.
+type ShutdownAcceptedResponseStatus string
+
 // StageSubmitWorkFileRequest defines model for StageSubmitWorkFileRequest.
 type StageSubmitWorkFileRequest struct {
 	// ContentBase64 Base64-encoded file payload to stage behind a backend-owned reference.
@@ -9578,6 +9595,12 @@ type SaveCurrentFactoryBadRequest = ErrorResponse
 
 // SaveCurrentFactoryConflict defines model for SaveCurrentFactoryConflict.
 type SaveCurrentFactoryConflict = ErrorResponse
+
+// ShutdownControlRejected defines model for ShutdownControlRejected.
+type ShutdownControlRejected = ErrorResponse
+
+// ShutdownControlUnavailable defines model for ShutdownControlUnavailable.
+type ShutdownControlUnavailable = ErrorResponse
 
 // WorkerSessionContinuationConflict defines model for WorkerSessionContinuationConflict.
 type WorkerSessionContinuationConflict = ErrorResponse
@@ -18641,6 +18664,9 @@ type ServerInterface interface {
 	// Get provider session details
 	// (GET /provider-sessions/detail)
 	GetProviderSessionDetails(w http.ResponseWriter, r *http.Request, params GetProviderSessionDetailsParams)
+	// Request graceful shutdown of the local server
+	// (POST /shutdown)
+	ShutdownServer(w http.ResponseWriter, r *http.Request)
 	// Get runtime status
 	// (GET /status)
 	GetStatus(w http.ResponseWriter, r *http.Request)
@@ -20636,6 +20662,20 @@ func (siw *ServerInterfaceWrapper) GetProviderSessionDetails(w http.ResponseWrit
 	handler.ServeHTTP(w, r)
 }
 
+// ShutdownServer operation middleware
+func (siw *ServerInterfaceWrapper) ShutdownServer(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ShutdownServer(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetStatus operation middleware
 func (siw *ServerInterfaceWrapper) GetStatus(w http.ResponseWriter, r *http.Request) {
 
@@ -21185,6 +21225,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/packaged-factories", wrapper.ListPackagedFactories).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/provider-sessions/detail", wrapper.GetProviderSessionDetails).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/shutdown", wrapper.ShutdownServer).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/status", wrapper.GetStatus).Methods("GET")
 

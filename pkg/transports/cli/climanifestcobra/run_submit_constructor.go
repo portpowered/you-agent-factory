@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var runServerCommandIDs = []string{"you.run", "you.server"}
+var runServerCommandIDs = []string{"you.run", "you.server", "you.server.stop"}
 
 // RunServerFamilyComponents holds detached run and server commands ready for
 // root fan-in.
@@ -61,7 +61,7 @@ func NewRunServerFamilyComponentsFromManifest(
 		return RunServerFamilyComponents{}, fmt.Errorf("build run/server family command: %w", err)
 	}
 
-	runRecord, serverRecord, err := runServerManifestRecords(manifest)
+	runRecord, serverRecord, stopRecord, err := runServerManifestRecords(manifest)
 	if err != nil {
 		return RunServerFamilyComponents{}, err
 	}
@@ -76,6 +76,12 @@ func NewRunServerFamilyComponentsFromManifest(
 		return RunServerFamilyComponents{}, err
 	}
 	server.SilenceErrors = true
+	stop, err := buildRunnableRunServerCommand(stopRecord, registry, bindings)
+	if err != nil {
+		return RunServerFamilyComponents{}, err
+	}
+	stop.SilenceErrors = true
+	server.AddCommand(stop)
 	return RunServerFamilyComponents{Run: run, Server: server}, nil
 }
 
@@ -184,16 +190,20 @@ func registerRunServerLocalFlags(
 
 func runServerManifestRecords(
 	manifest climanifest.Manifest,
-) (run, server climanifest.Command, err error) {
+) (run, server, stop climanifest.Command, err error) {
 	run, err = manifest.CommandByID("you.run")
 	if err != nil {
-		return run, server, fmt.Errorf("build run/server family command: %w", err)
+		return run, server, stop, fmt.Errorf("build run/server family command: %w", err)
 	}
 	server, err = manifest.CommandByID("you.server")
 	if err != nil {
-		return run, server, fmt.Errorf("build run/server family command: %w", err)
+		return run, server, stop, fmt.Errorf("build run/server family command: %w", err)
 	}
-	return run, server, nil
+	stop, err = manifest.CommandByID("you.server.stop")
+	if err != nil {
+		return run, server, stop, fmt.Errorf("build run/server family command: %w", err)
+	}
+	return run, server, stop, nil
 }
 
 func validateRunServerManifest(manifest climanifest.Manifest) error {
@@ -205,7 +215,7 @@ func validateRunServerManifest(manifest climanifest.Manifest) error {
 		)
 	}
 	for commandID := range manifest.Commands {
-		if commandID != "you.run" && commandID != "you.server" {
+		if commandID != "you.run" && commandID != "you.server" && commandID != "you.server.stop" {
 			return fmt.Errorf("manifest contains non-run/server command %q", commandID)
 		}
 	}

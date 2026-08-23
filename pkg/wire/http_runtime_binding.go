@@ -238,9 +238,13 @@ func newHTTPRuntimeServer(
 		opened.Resources.Diagnostics.MetricsRootDir,
 	)
 	metricsHandler := factoryvisualizationhttp.NewMetricsHandler(metricsAdapter, opened.Logger)
-	return transporthttp.NewServerWithRecordingsAndMetricsAndCosts(
+	var shutdown transporthttp.ShutdownOperation
+	if opened.Cancellation != nil {
+		shutdown = opened.Cancellation.Cancel
+	}
+	return transporthttp.NewServerWithRecordingsAndMetricsAndCostsAndShutdown(
 		recordingsAdapter, sessionsHandler, workHandler, modelsHandler, providerSessionsHTTP,
-		factoryDefinitionsHandler, opened.Logger, metricsHandler, costsHandler, workerSessionsHandler,
+		factoryDefinitionsHandler, opened.Logger, metricsHandler, costsHandler, shutdown, workerSessionsHandler,
 	).Handler()
 }
 

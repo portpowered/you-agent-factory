@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -41,6 +42,8 @@ type Server struct {
 	workerSessionsHTTP     *workersessionshttp.Handler
 	metricsHTTP            *factoryvisualizationhttp.MetricsHandler
 	costsHTTP              *costshttp.Handler
+	shutdown               ShutdownOperation
+	shutdownOnce           sync.Once
 	logger                 *zap.Logger
 	router                 *mux.Router
 }
@@ -60,7 +63,7 @@ func NewServer(
 	logger *zap.Logger,
 	workerSessions ...*workersessionshttp.Handler,
 ) *Server {
-	return newServer(nil, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, nil, nil, workerSessions...)
+	return newServer(nil, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, nil, nil, nil, workerSessions...)
 }
 
 // NewServerWithRecordings composes the generated route shell with the
@@ -76,7 +79,7 @@ func NewServerWithRecordings(
 	logger *zap.Logger,
 	workerSessions ...*workersessionshttp.Handler,
 ) *Server {
-	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, nil, nil, workerSessions...)
+	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, nil, nil, nil, workerSessions...)
 }
 
 // NewServerWithRecordingsAndCosts composes the generated route shell with the
@@ -94,7 +97,23 @@ func NewServerWithRecordingsAndCosts(
 	costsHTTP *costshttp.Handler,
 	workerSessions ...*workersessionshttp.Handler,
 ) *Server {
-	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, nil, costsHTTP, workerSessions...)
+	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, nil, costsHTTP, nil, workerSessions...)
+}
+
+// NewServerWithRecordingsAndShutdown composes the durable HTTP surface with
+// the invocation-local administrative shutdown control.
+func NewServerWithRecordingsAndShutdown(
+	recordingsHTTP *recordingshttp.Adapter,
+	factorySessionsHTTP *factorysessionshttp.Handler,
+	workHTTP *workhttp.Adapter,
+	modelsHTTP *modelshttp.Handler,
+	providerSessionsHTTP *providersessionshttp.Handler,
+	factoryDefinitionsHTTP *factorydefinitionshttp.Handler,
+	logger *zap.Logger,
+	shutdown ShutdownOperation,
+	workerSessions ...*workersessionshttp.Handler,
+) *Server {
+	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, nil, nil, shutdown, workerSessions...)
 }
 
 // NewServerWithRecordingsAndMetricsAndCosts composes the generated route shell
@@ -113,7 +132,25 @@ func NewServerWithRecordingsAndMetricsAndCosts(
 	costsHTTP *costshttp.Handler,
 	workerSessions ...*workersessionshttp.Handler,
 ) *Server {
-	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, metricsHTTP, costsHTTP, workerSessions...)
+	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, metricsHTTP, costsHTTP, nil, workerSessions...)
+}
+
+// NewServerWithRecordingsAndMetricsAndCostsAndShutdown composes the live
+// runtime HTTP surface with metrics, costs, and invocation-local shutdown.
+func NewServerWithRecordingsAndMetricsAndCostsAndShutdown(
+	recordingsHTTP *recordingshttp.Adapter,
+	factorySessionsHTTP *factorysessionshttp.Handler,
+	workHTTP *workhttp.Adapter,
+	modelsHTTP *modelshttp.Handler,
+	providerSessionsHTTP *providersessionshttp.Handler,
+	factoryDefinitionsHTTP *factorydefinitionshttp.Handler,
+	logger *zap.Logger,
+	metricsHTTP *factoryvisualizationhttp.MetricsHandler,
+	costsHTTP *costshttp.Handler,
+	shutdown ShutdownOperation,
+	workerSessions ...*workersessionshttp.Handler,
+) *Server {
+	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, metricsHTTP, costsHTTP, shutdown, workerSessions...)
 }
 
 func newServer(
@@ -126,6 +163,7 @@ func newServer(
 	logger *zap.Logger,
 	metricsHTTP *factoryvisualizationhttp.MetricsHandler,
 	costsHTTP *costshttp.Handler,
+	shutdown ShutdownOperation,
 	workerSessions ...*workersessionshttp.Handler,
 ) *Server {
 	if logger == nil {
@@ -142,6 +180,7 @@ func newServer(
 		modelsHTTP:             modelsHTTP, providerSessionsHTTP: providerSessionsHTTP, logger: logger,
 		metricsHTTP: metricsHTTP,
 		costsHTTP:   costsHTTP,
+		shutdown:    shutdown,
 	}
 	if len(workerSessions) > 0 {
 		srv.workerSessionsHTTP = workerSessions[0]

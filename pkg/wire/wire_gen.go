@@ -626,6 +626,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	server := provideACPServer(loggingLogger, chatsessionsService, factoryTargetCatalogService, targetExecutionService, eventsService, wireAcpServerResolveHomeDir, responseBridge, v93)
 	operation := provideMetricsCLI()
 	cliOperation := provideCostsCLI()
+	serverstopOperation := provideServerStopCLI()
 	commandOperations := cli.CommandOperations{
 		ObserveCLI:                        cliObserver,
 		NamedFactoryCatalog:               v,
@@ -694,6 +695,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		RuntimeMetricsQuery:               runtimeMetricsQuery,
 		MetricsCLI:                        operation,
 		CostsCLI:                          cliOperation,
+		ServerStopCLI:                     serverstopOperation,
 	}
 	commandFactory := provideCLICommandFactory(commandOperations)
 	stdioRunnerBuilder, err := application.NewStdioRunnerBuilder(managedRunnerFactory)
@@ -1121,6 +1123,7 @@ var cliCommandOperationsSet = wire5.NewSet(
 	provideModelsPullCLIHTTPProtocol,
 	provideMetricsCLI,
 	provideCostsCLI,
+	provideServerStopCLI,
 	provideRemoteInvocationOperation,
 	provideExtendedCLIHTTPProtocol,
 	provideWatchCLIHTTPProtocol,

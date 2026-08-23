@@ -42,6 +42,7 @@ import (
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	serverstopcli "github.com/portpowered/infinite-you/pkg/transports/cli/serverstop"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	"github.com/spf13/cobra"
 )
@@ -193,6 +194,7 @@ type CommandOperations struct {
 	RuntimeMetricsQuery               factoryvisualization.RuntimeMetricsQuery
 	MetricsCLI                        factoryvisualizationcli.Operation
 	CostsCLI                          costscli.Operation
+	ServerStopCLI                     serverstopcli.Operation
 }
 
 // CommandFactory constructs a fresh Cobra tree for each invocation from
@@ -270,6 +272,7 @@ type CommandFactory struct {
 	runtimeMetricsQuery        factoryvisualization.RuntimeMetricsQuery
 	metricsCLI                 factoryvisualizationcli.Operation
 	costsCLI                   costscli.Operation
+	serverStopCLI              serverstopcli.Operation
 }
 
 // NewCommandFactory copies the Wire-built graph without installing defaults.
@@ -342,6 +345,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		runtimeMetricsQuery:               operations.RuntimeMetricsQuery,
 		metricsCLI:                        operations.MetricsCLI,
 		costsCLI:                          operations.CostsCLI,
+		serverStopCLI:                     operations.ServerStopCLI,
 	}
 }
 

@@ -1055,6 +1055,26 @@ paths:
                 $ref: '#/components/schemas/StatusResponse'
         '500':
           $ref: '#/components/responses/InternalError'
+  /shutdown:
+    post:
+      tags:
+        - Runtime
+      operationId: shutdownServer
+      summary: Request graceful shutdown of the local server
+      description: Accepts a loopback-only administrative shutdown request for the invocation that owns this listener. The server acknowledges the request before it invokes the invocation-local cancellation authority; the caller remains responsible for observing that the selected listener has stopped.
+      responses:
+        '202':
+          description: The invocation-local shutdown request was accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShutdownAcceptedResponse'
+        '403':
+          $ref: '#/components/responses/ShutdownControlRejected'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ShutdownControlUnavailable'
   /models:
     get:
       tags:
@@ -2636,6 +2656,18 @@ components:
               - $ref: '#/components/schemas/ErrorResponse'
     InternalError:
       description: Server failed while reading or building runtime state.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ShutdownControlRejected:
+      description: The shutdown control is restricted to a loopback peer on this local server.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ShutdownControlUnavailable:
+      description: The server cannot expose its invocation-local shutdown control.
       content:
         application/json:
           schema:
@@ -5570,6 +5602,8 @@ components:
             - COSTS_QUERY_CANCELED
             - COSTS_QUERY_FAILED
             - COSTS_QUERY_TIMEOUT
+            - SHUTDOWN_CONTROL_REJECTED
+            - SHUTDOWN_CONTROL_UNAVAILABLE
           x-enum-descriptions:
             - Request payload or parameter validation failed.
             - Factory session discovery found a readable factory target whose config could not be loaded.
@@ -5630,6 +5664,8 @@ components:
             - The metrics costs request was canceled before the report completed.
             - The metrics costs query failed while reading or valuing runtime usage.
             - The metrics costs query exceeded its server-side completion bound.
+            - The shutdown control request came from a non-loopback peer.
+            - The invocation-local shutdown control is unavailable.
         targets:
           type: array
           description: Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields.
@@ -5638,6 +5674,20 @@ components:
         resourceCapacity:
           $ref: '#/components/schemas/FactorySessionResourceCapacityErrorDetails'
           description: Resource accounting for a rejected capacity reduction.
+    ShutdownAcceptedResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - message
+      properties:
+        status:
+          type: string
+          enum:
+            - accepted
+        message:
+          type: string
+          description: Human-readable acknowledgment that graceful shutdown was accepted.
     ErrorTarget:
       type: object
       additionalProperties: false
