@@ -106,6 +106,11 @@ func TestProcessModelsPull_UsesServerFlagAndReturnsPullJSON(t *testing.T) {
 	if response.ModelName != "OMNIVOICE_Q4_K_M" {
 		t.Fatalf("pull response = %#v, want OMNIVOICE_Q4_K_M", response)
 	}
+	if response.Outcome != factoryapi.ModelPullOutcomePULLED ||
+		response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY ||
+		response.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+		t.Fatalf("pull response = %#v, want PULLED/INSTALLED_SUCCESSFULLY/READY", response)
+	}
 }
 
 // TestProcessModelsList_ReturnsHumanReadableCatalog proves list human presentation.

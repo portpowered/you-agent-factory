@@ -93,6 +93,71 @@ func TestAdapter_PullModelEncodesPullErrorOutcome(t *testing.T) {
 	}
 }
 
+func TestAdapter_PullModelProjectsSourceFetchFailureAsFailed(t *testing.T) {
+	t.Parallel()
+
+	failure := models.PullResult{
+		ModelName:          "voice",
+		ProviderLocality:   string(models.LocalityLocal),
+		Outcome:            "PULLED",
+		ManagedPullOutcome: "SOURCE_FETCH_FAILED",
+		ReadinessState:     "FAILED",
+		LifecycleState:     "NOT_INSTALLED",
+	}
+	root := &rootFake{
+		pull: func(context.Context, string) (models.PullResult, error) {
+			return models.PullResult{}, &models.PullError{Result: failure, Cause: models.ErrSourceFetchFailed}
+		},
+	}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	recorder := httptest.NewRecorder()
+
+	handler.PullModel(recorder, httptest.NewRequest(http.MethodPost, "/models/voice/pull", nil), "voice")
+
+	if recorder.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422 body = %s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.ModelPullResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if string(response.Outcome) != "FAILED" {
+		t.Fatalf("response = %s, want top-level outcome FAILED", recorder.Body.String())
+	}
+	if response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED ||
+		response.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateFAILED {
+		t.Fatalf("managed runtime pull = %#v, want SOURCE_FETCH_FAILED/FAILED", response.ManagedRuntimePull)
+	}
+}
+
+func TestModelPullCompatibilityOutcomeProjectsManagedOutcomeTotally(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name    string
+		managed factoryapi.ManagedRuntimePullOutcome
+		want    factoryapi.ModelPullOutcome
+	}{
+		{name: "installed", managed: factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY, want: factoryapi.ModelPullOutcomePULLED},
+		{name: "already present", managed: factoryapi.ManagedRuntimePullOutcomeALREADYPRESENT, want: factoryapi.ModelPullOutcomeALREADYPRESENT},
+		{name: "already ready", managed: factoryapi.ManagedRuntimePullOutcomeALREADYREADY, want: factoryapi.ModelPullOutcomeALREADYPRESENT},
+		{name: "still loading", managed: factoryapi.ManagedRuntimePullOutcomeSTILLLOADING, want: factoryapi.ModelPullOutcomeFAILED},
+		{name: "timed out", managed: factoryapi.ManagedRuntimePullOutcomeTIMEDOUT, want: factoryapi.ModelPullOutcomeFAILED},
+		{name: "source fetch failed", managed: factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED, want: factoryapi.ModelPullOutcomeFAILED},
+		{name: "unsupported", managed: factoryapi.ManagedRuntimePullOutcomeUNSUPPORTEDRUNTIME, want: factoryapi.ModelPullOutcomeFAILED},
+		{name: "future outcome", managed: factoryapi.ManagedRuntimePullOutcome("FUTURE_OUTCOME"), want: factoryapi.ModelPullOutcomeFAILED},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := modelPullResponseFromService(models.PullResult{
+				ModelName: "voice", Outcome: "PULLED", ManagedPullOutcome: string(tc.managed),
+			})
+			if result.Outcome != tc.want {
+				t.Fatalf("managed outcome %q projected as %q, want %q", tc.managed, result.Outcome, tc.want)
+			}
+		})
+	}
+}
+
 func TestAdapter_BuiltInPullSurfacesThroughHTTP(t *testing.T) {
 	t.Parallel()
 
@@ -126,7 +191,9 @@ func TestAdapter_BuiltInPullSurfacesThroughHTTP(t *testing.T) {
 			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 				t.Fatalf("decode response: %v", err)
 			}
-			if response.ModelName != name || response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY {
+			if response.ModelName != name || response.Outcome != factoryapi.ModelPullOutcomePULLED ||
+				response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY ||
+				response.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
 				t.Fatalf("response = %#v, want successful built-in pull", response)
 			}
 		})

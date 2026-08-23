@@ -2489,7 +2489,7 @@ export interface components {
       sha256?: string;
     };
     /**
-     * @description Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcome `ALREADY_PRESENT`.
+     * @description Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcomes `ALREADY_PRESENT` and `ALREADY_READY`; and `FAILED` maps to `STILL_LOADING`, `TIMED_OUT`, `SOURCE_FETCH_FAILED`, and `UNSUPPORTED_RUNTIME`. Unknown managed pull outcomes also map to `FAILED` so an unrecognized value cannot be projected as a successful pull.
      * @enum {string}
      */
     ModelPullOutcome: ModelPullOutcome;
@@ -10571,6 +10571,7 @@ export type ModelInvocationResponseMode =
 export const ModelPullOutcome = {
   PULLED: "PULLED",
   ALREADY_PRESENT: "ALREADY_PRESENT",
+  FAILED: "FAILED",
 } as const;
 export type ModelPullOutcome =
   (typeof ModelPullOutcome)[keyof typeof ModelPullOutcome];

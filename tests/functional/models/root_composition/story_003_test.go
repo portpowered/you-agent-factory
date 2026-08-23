@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -313,12 +314,12 @@ func testStory003ControlledSourceFailure(t *testing.T) {
 	support.CleanupProcess(t, failureProcess)
 	failureInputs := support.FakeInputs(t.Context(), story003ModelsPullArgs(failureServer.URL()))
 	failureInputs.Input.WorkingDirectory = failureFactoryDir
-	err := failureProcess.Execute(failureInputs.Input)
-	if err == nil {
+	cliErr := failureProcess.Execute(failureInputs.Input)
+	if cliErr == nil {
 		t.Fatalf("Process.Execute(failed models pull) error = nil, want non-zero exit\nstdout:\n%s", failureInputs.Stdout())
 	}
-	if !strings.Contains(err.Error(), string(factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED)) {
-		t.Fatalf("failed pull error = %v, want SOURCE_FETCH_FAILED classification", err)
+	if !strings.Contains(cliErr.Error(), string(factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED)) {
+		t.Fatalf("failed pull error = %v, want SOURCE_FETCH_FAILED classification", cliErr)
 	}
 
 	var failureResponse factoryapi.ModelPullResponse
@@ -326,8 +327,13 @@ func testStory003ControlledSourceFailure(t *testing.T) {
 		t.Fatalf("decode failed models pull response: %v\nstdout:\n%s\nstderr:\n%s", decodeErr, failureInputs.Stdout(), failureInputs.Stderr())
 	}
 	if failureResponse.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED ||
-		failureResponse.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateFAILED {
+		failureResponse.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateFAILED ||
+		failureResponse.Outcome != factoryapi.ModelPullOutcomeFAILED {
 		t.Fatalf("failed pull response = %#v, want SOURCE_FETCH_FAILED/FAILED", failureResponse)
+	}
+	if failureResponse.Outcome == factoryapi.ModelPullOutcomePULLED ||
+		failureResponse.Outcome == factoryapi.ModelPullOutcomeALREADYPRESENT {
+		t.Fatalf("failed pull retained a success compatibility outcome: %#v", failureResponse)
 	}
 	if strings.TrimSpace(failureInputs.Stderr()) == "" {
 		t.Fatal("failed pull stderr was empty, want the typed CLI diagnostic envelope")
@@ -349,6 +355,43 @@ func testStory003ControlledSourceFailure(t *testing.T) {
 		strings.Contains(failureInputs.Stderr(), "controlled source failure") {
 		t.Fatalf("failed pull diagnostic leaked generic fallback or source body: %q", failureInputs.Stderr())
 	}
+
+	assertStory003ControlledSourceHTTPFailure(t, failureServer.URL())
+	t.Logf("controlled source failure CLI exitStatus=non-zero error=%q stdout=%s stderr=%s", cliErr, strings.TrimSpace(failureInputs.Stdout()), strings.TrimSpace(failureInputs.Stderr()))
+}
+
+func assertStory003ControlledSourceHTTPFailure(t *testing.T, serverURL string) {
+	t.Helper()
+	httpFailure, err := http.Post(
+		serverURL+"/models/"+story003ModelName+"/pull",
+		"application/json",
+		strings.NewReader("{}"),
+	)
+	if err != nil {
+		t.Fatalf("POST /models/%s/pull: %v", story003ModelName, err)
+	}
+	defer httpFailure.Body.Close()
+	httpFailureBody, err := io.ReadAll(httpFailure.Body)
+	if err != nil {
+		t.Fatalf("read POST /models/%s/pull response: %v", story003ModelName, err)
+	}
+	if httpFailure.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("POST /models/%s/pull status = %d body = %s, want 422", story003ModelName, httpFailure.StatusCode, httpFailureBody)
+	}
+	var httpFailureResponse factoryapi.ModelPullResponse
+	if err := json.Unmarshal(httpFailureBody, &httpFailureResponse); err != nil {
+		t.Fatalf("decode POST /models/%s/pull response: %v\nbody=%s", story003ModelName, err, httpFailureBody)
+	}
+	if httpFailureResponse.Outcome != factoryapi.ModelPullOutcomeFAILED ||
+		httpFailureResponse.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED ||
+		httpFailureResponse.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateFAILED {
+		t.Fatalf("POST /models/%s/pull response = %#v, want FAILED/SOURCE_FETCH_FAILED/FAILED", story003ModelName, httpFailureResponse)
+	}
+	if httpFailureResponse.Outcome == factoryapi.ModelPullOutcomePULLED ||
+		httpFailureResponse.Outcome == factoryapi.ModelPullOutcomeALREADYPRESENT {
+		t.Fatalf("POST /models/%s/pull retained a success compatibility outcome: %#v", story003ModelName, httpFailureResponse)
+	}
+	t.Logf("controlled source failure HTTP status=%d body=%s", httpFailure.StatusCode, strings.TrimSpace(string(httpFailureBody)))
 }
 
 type story003InspectCapture struct {
