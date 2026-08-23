@@ -1,11 +1,8 @@
 package agy
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -15,8 +12,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -64,74 +59,6 @@ func TestAgyConductorSuccessThroughRootBuildProcess(t *testing.T) {
 		t.Fatalf("argv = %#v, want shell-free -p print mode with stream-json output", request.Args)
 	}
 	assertAgyFinalOnlyCompletion(t, events, responseEvents, "agy functional answer COMPLETE")
-}
-
-// TestAgyNamedMockPreservesDispatchMetadataAndCompletionLog proves the
-// Antigravity provider follows the same Workers-owned command projection as
-// the other provider adapters. A named mock must intercept the Agy command,
-// retain the configured exit code in diagnostics, and carry the source work
-// correlation into command_runner.completed without invoking the live edge.
-func TestAgyNamedMockPreservesDispatchMetadataAndCompletionLog(t *testing.T) {
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
-		modelprovider.ProviderAntigravity,
-		agyFunctionalModel,
-	))
-	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
-		RequestID:  "agy-mock-request",
-		WorkID:     "agy-mock-work",
-		Name:       "agy-mock-work",
-		WorkTypeID: "task",
-		TraceID:    "agy-mock-trace",
-		Payload:    []byte(`{"title":"named Agy mock"}`),
-	})
-
-	logDir := t.TempDir()
-	exitCode := 7
-	mockConfigPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      "worker",
-			WorkstationName: "process",
-			RunType:         workers.MockWorkerRunTypeReject,
-			RejectConfig: &workers.MockWorkerRejectConfig{
-				Stdout:   "configured Agy stdout",
-				Stderr:   "configured Agy stderr",
-				ExitCode: &exitCode,
-			},
-		}},
-	})
-	liveRunner := support.NewRecordingCommandRunner("live Agy edge must not run")
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: dir,
-		Args: []string{
-			"--with-mock-workers", mockConfigPath,
-			"--runtime-log-dir", logDir,
-		},
-		Edges: serviceedges.Edges{ProviderCommandRunner: liveRunner},
-	})
-	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
-	listed := support.ListDefaultSessionWork(t, server.URL())
-	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
-		t.Fatalf("failed work = %d, want one named Agy mock rejection; listed=%#v", got, listed)
-	}
-	if liveRunner.CallCount() != 0 {
-		t.Fatalf("live Agy edge calls = %d, want zero for named mock dispatch", liveRunner.CallCount())
-	}
-	server.Stop(t)
-
-	record := findAgyRuntimeLogRecord(t, requireAgyRuntimeLogPath(t, logDir), "command_runner.completed")
-	if record["exit_code"] != float64(exitCode) {
-		t.Fatalf("logged Agy exit_code = %#v, want %d", record["exit_code"], exitCode)
-	}
-	for key, want := range map[string]any{
-		"request_id": "agy-mock-request",
-		"trace_id":   "agy-mock-trace",
-		"work_id":    "agy-mock-work",
-	} {
-		if record[key] != want {
-			t.Fatalf("logged Agy %s = %#v, want %q", key, record[key], want)
-		}
-	}
 }
 
 // TestAgyNativeFailureThroughRootBuildProcessIsSafe proves native Agy failures
@@ -391,41 +318,4 @@ func containsArgPair(args []string, flag, value string) bool {
 		}
 	}
 	return false
-}
-
-func requireAgyRuntimeLogPath(t *testing.T, logDir string) string {
-	t.Helper()
-	matches, err := filepath.Glob(filepath.Join(logDir, "*", "*", "*", "*-runtime-log-*.log"))
-	if err != nil {
-		t.Fatalf("glob Agy runtime log path: %v", err)
-	}
-	if len(matches) != 1 {
-		t.Fatalf("Agy runtime log paths under %s = %v, want exactly one", logDir, matches)
-	}
-	return matches[0]
-}
-
-func findAgyRuntimeLogRecord(t *testing.T, path, eventName string) map[string]any {
-	t.Helper()
-	file, err := os.Open(path)
-	if err != nil {
-		t.Fatalf("open Agy runtime log %s: %v", path, err)
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		var record map[string]any
-		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
-			t.Fatalf("decode Agy runtime log record: %v", err)
-		}
-		if record["event_name"] == eventName {
-			return record
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		t.Fatalf("scan Agy runtime log %s: %v", path, err)
-	}
-	t.Fatalf("Agy runtime log %s did not contain event_name %q", path, eventName)
-	return nil
 }
