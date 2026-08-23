@@ -10,6 +10,7 @@ import (
 )
 
 const (
+	modelsRootModelNotFoundCode  = "NOT_FOUND"
 	modelsRootCacheNotFoundCode  = "MODEL_CACHE_NOT_FOUND"
 	modelsRootCacheInUseCode     = "MODEL_CACHE_IN_USE"
 	modelsRootCacheUnsafeCode    = "BAD_REQUEST"
@@ -113,7 +114,13 @@ func mapModelsRootError(err error) error {
 			err,
 		)
 	case errors.Is(err, modelinference.ErrNotFound):
-		return fmt.Errorf("%w: %s", ErrModelNotFound, err.Error())
+		return newModelsRootError(
+			modelsRootModelNotFoundCode,
+			factoryapi.ErrorFamilyNotFound,
+			modelNotFoundMessage(err),
+			ErrModelNotFound,
+			err,
+		)
 	case errors.Is(err, modelinference.ErrMissing),
 		errors.Is(err, modelinference.ErrLoading),
 		errors.Is(err, modelinference.ErrFailed),
@@ -143,6 +150,14 @@ func modelCacheNotFoundMessage(err error) string {
 		return modelsRootMissingCachePrefix + " <model> first"
 	}
 	return fmt.Sprintf("%s %s first", modelsRootMissingCachePrefix, modelName)
+}
+
+func modelNotFoundMessage(err error) string {
+	modelName := modelNameFromError(err, modelinference.ErrNotFound.Error())
+	if modelName == "" {
+		return modelinference.ErrNotFound.Error()
+	}
+	return fmt.Sprintf("%s: %s", modelinference.ErrNotFound, modelName)
 }
 
 func modelNameFromError(err error, marker string) string {

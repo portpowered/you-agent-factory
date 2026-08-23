@@ -17,6 +17,7 @@ import (
 )
 
 const codedDiagnosticModelName = "OMNIVOICE_Q4_K_M"
+const codedDiagnosticUnknownModelName = "missing-model"
 
 func TestModelsLocalRemoveMissingCacheRendersCodedDiagnostic(t *testing.T) {
 	for _, test := range []struct {
@@ -102,6 +103,93 @@ func TestModelsLocalRemoveMissingCacheMatchesHTTPDiagnostic(t *testing.T) {
 	}
 }
 
+func TestModelsLocalInspectUnknownRendersCodedDiagnostic(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		flags []string
+		debug bool
+	}{
+		{name: "normal"},
+		{name: "json", flags: []string{"--json"}},
+		{name: "debug", flags: []string{"--debug"}, debug: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			inputs, err := executeLocalUnknownModel(t, test.flags)
+			if err == nil {
+				t.Fatal("Process.Execute(models inspect) error = nil, want not-found failure")
+			}
+			if inputs.Stdout() != "" {
+				t.Fatalf("models inspect failure stdout = %q, want empty", inputs.Stdout())
+			}
+
+			response := decodeFirstDiagnostic(t, inputs.Stderr())
+			wantMessage := "model not found: " + codedDiagnosticUnknownModelName
+			if response.Code != factoryapi.ErrorResponseCodeNOTFOUND ||
+				response.Family != factoryapi.ErrorFamilyNotFound || response.Message != wantMessage {
+				t.Fatalf("models inspect diagnostic = %#v, want code/family/message %q/%q/%q; stdout=%q stderr=%q", response, factoryapi.ErrorResponseCodeNOTFOUND, factoryapi.ErrorFamilyNotFound, wantMessage, inputs.Stdout(), inputs.Stderr())
+			}
+			for _, fallback := range []string{"CLI_COMMAND_FAILED", "INTERNAL_SERVER_ERROR", "command failed"} {
+				if strings.Contains(inputs.Stderr(), fallback) {
+					t.Fatalf("models inspect diagnostic contains fallback %q: %q", fallback, inputs.Stderr())
+				}
+			}
+			if !errors.Is(err, modelscli.ErrModelNotFound) {
+				t.Fatalf("Process.Execute(models inspect) error = %v, want ErrModelNotFound; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
+			}
+			if !errors.Is(err, modelservice.ErrNotFound) {
+				t.Fatalf("Process.Execute(models inspect) error = %v, want underlying Models not-found cause; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
+			}
+			if test.debug && !strings.Contains(inputs.Stderr(), "debug: cause[1]=model not found: "+codedDiagnosticUnknownModelName) {
+				t.Fatalf("debug models inspect diagnostic = %q, want underlying not-found cause", inputs.Stderr())
+			}
+		})
+	}
+}
+
+func TestModelsLocalInspectUnknownMatchesHTTPDiagnostic(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet || request.URL.Path != "/models/"+codedDiagnosticUnknownModelName {
+			http.NotFound(writer, request)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		writer.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(writer).Encode(factoryapi.ErrorResponse{
+			Code:    factoryapi.ErrorResponseCodeNOTFOUND,
+			Family:  factoryapi.ErrorFamilyNotFound,
+			Message: "model not found",
+		})
+	}))
+	t.Cleanup(server.Close)
+
+	localInputs, localErr := executeLocalUnknownModel(t, nil)
+	if localErr == nil {
+		t.Fatal("local Process.Execute(models inspect) error = nil, want not-found failure")
+	}
+	localResponse := decodeFirstDiagnostic(t, localInputs.Stderr())
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	remoteInputs := support.FakeInputs(t.Context(), []string{
+		"you", "--server", server.URL, "models", "inspect", codedDiagnosticUnknownModelName,
+	})
+	remoteInputs.Input.WorkingDirectory = t.TempDir()
+	remoteErr := process.Execute(remoteInputs.Input)
+	if remoteErr == nil || !errors.Is(remoteErr, modelscli.ErrModelNotFound) {
+		t.Fatalf("remote Process.Execute(models inspect) error = %v, want ErrModelNotFound", remoteErr)
+	}
+	remoteResponse := decodeFirstDiagnostic(t, remoteInputs.Stderr())
+	if localResponse.Code != remoteResponse.Code || localResponse.Family != remoteResponse.Family {
+		t.Fatalf("local diagnostic = %#v, remote diagnostic = %#v, want code/family parity", localResponse, remoteResponse)
+	}
+	if localResponse.Code != factoryapi.ErrorResponseCodeNOTFOUND || localResponse.Family != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("local diagnostic = %#v, want NOT_FOUND/NOT_FOUND", localResponse)
+	}
+	if !strings.Contains(localResponse.Message, codedDiagnosticUnknownModelName) {
+		t.Fatalf("local diagnostic message = %q, want requested model name", localResponse.Message)
+	}
+}
+
 func executeLocalMissingCache(t *testing.T, flags []string) (*support.CapturedInputs, error) {
 	t.Helper()
 	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
@@ -113,6 +201,20 @@ func executeLocalMissingCache(t *testing.T, flags []string) (*support.CapturedIn
 		functionalHomeEnvironment(t.TempDir()),
 		runcli.ModelCacheDirEnvironment+"="+cacheDirectory,
 	)
+	inputs.Input.WorkingDirectory = factoryDir
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	return inputs, process.Execute(inputs.Input)
+}
+
+func executeLocalUnknownModel(t *testing.T, flags []string) (*support.CapturedInputs, error) {
+	t.Helper()
+	factoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+	inputsArgs := append([]string{"you"}, flags...)
+	inputsArgs = append(inputsArgs, "models", "inspect", codedDiagnosticUnknownModelName)
+	inputs := support.FakeInputs(t.Context(), inputsArgs)
+	inputs.Input.Env = functionalHomeEnvironment(t.TempDir())
 	inputs.Input.WorkingDirectory = factoryDir
 
 	process := support.BuildProcess(t, serviceedges.Edges{})
