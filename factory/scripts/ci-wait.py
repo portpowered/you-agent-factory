@@ -23,8 +23,9 @@ hold, which routes the task back through this gate — a cheap, bounded
 re-queue rather than a lane-killing failure.
 
 Special cases:
-  - No PR yet: the processor may have just pushed; retry for ~2 minutes,
-    then exit 1 with a clear stderr message.
+  - No PR yet: successful lookups that return no matching PR may race a
+    processor push; retry for ~2 minutes, then exit 1 with a clear stderr
+    message.
   - PR already MERGED (and no open PR for the branch): exit 0 immediately;
     the review workstation's merged-PR short-circuit handles the rest.
   - Only CLOSED PRs: exit 0 immediately; the reviewer decides what a closed,
@@ -91,9 +92,16 @@ def resolve_pr(branch):
     Returns a dict {number, state} for the PR to gate on, preferring an OPEN
     PR, then MERGED, then CLOSED. Exits 1 when no PR exists after retries.
     """
+    successful_empty_lookups = 0
     for attempt in range(1, PR_LOOKUP_ATTEMPTS + 1):
         prs = list_prs_for_head(branch)
-        if prs:
+        if prs is not None:
+            if not prs:
+                successful_empty_lookups += 1
+                log(
+                    f"successful PR lookup found no matching PR for head branch "
+                    f"{branch!r} (attempt {attempt}/{PR_LOOKUP_ATTEMPTS})"
+                )
             for state in ("OPEN", "MERGED", "CLOSED"):
                 matches = [pr for pr in prs if pr.get("state") == state]
                 if matches:
@@ -106,13 +114,22 @@ def resolve_pr(branch):
             )
             time.sleep(PR_LOOKUP_INTERVAL_SECONDS)
 
-    print(
-        f"ci-wait: no PR exists with head branch {branch!r} after "
-        f"{PR_LOOKUP_ATTEMPTS} lookups over ~2 minutes. The process "
-        "workstation must open a PR named after the lane before the task can "
-        "enter review.",
-        file=sys.stderr,
-    )
+    if successful_empty_lookups == PR_LOOKUP_ATTEMPTS:
+        print(
+            f"ci-wait: successful PR lookups found no PR for head branch "
+            f"{branch!r} after {PR_LOOKUP_ATTEMPTS} lookups over ~2 minutes. "
+            "The process workstation must open a PR named after the lane "
+            "before the task can enter review.",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"ci-wait: no PR exists with head branch {branch!r} after "
+            f"{PR_LOOKUP_ATTEMPTS} lookups over ~2 minutes. The process "
+            "workstation must open a PR named after the lane before the task "
+            "can enter review.",
+            file=sys.stderr,
+        )
     sys.exit(1)
 
 
