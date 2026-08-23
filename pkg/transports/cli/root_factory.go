@@ -4,15 +4,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
+	"path/filepath"
+	"strings"
 
+	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/factoryload"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
+	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	serverstopcli "github.com/portpowered/infinite-you/pkg/transports/cli/serverstop"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	"github.com/spf13/cobra"
 )
 
@@ -33,6 +40,430 @@ func homeDisclosureCompleted(ctx context.Context) bool {
 	}
 	completed, _ := ctx.Value(homeDisclosureContextKey{}).(bool)
 	return completed
+}
+
+func prepareRunFactoryConfig(
+	cmd *cobra.Command,
+	cfg runcli.RunConfig,
+	promptArgs []string,
+	globals *cliGlobalOptions,
+	operatorDefaults *cliOperatorDefaultsOptions,
+	policy terminalpolicy.Policy,
+	rootOptions CommandFactory,
+	defaultInvocation bool,
+) (runcli.RunConfig, error) {
+	cfg = applyRunScopedServerMode(cfg)
+	if err := validateRunFactoryOptions(&cfg, defaultInvocation); err != nil {
+		return runcli.RunConfig{}, err
+	}
+	logger, err := policy.BuildLogger(rootOptions.buildTerminalLogger)
+	if err != nil {
+		return runcli.RunConfig{}, err
+	}
+	cfg.Logger = logger
+	cfg.Verbose = policy.VerboseEnabled()
+	cfg.TerminalPolicy = policy
+	cfg.ExecutionBaseDir = startupcli.WorkingDirectory(cmd.Context())
+	remote := remotePlacementSelected(globals)
+	if !remote {
+		if err := resolveRunBindFromServer(cmd, globals.server, &cfg); err != nil {
+			return runcli.RunConfig{}, err
+		}
+		warnLegacyListenerBinding(cmd, cfg, defaultInvocation, persistentInputWasCLI(cmd, "you.flag.server", "server"))
+	}
+	homeDir, err := resolveProcessHomeDirForCommand(cmd, rootOptions)
+	if err != nil {
+		return runcli.RunConfig{}, err
+	}
+	cfg.HomeDir = homeDir
+	cfg.JSON = globals.json
+	cfg.JSONOutput = globals.json
+	cfg.CleanInvocation = preliminaryRunInvocationOutputIsClean(cmd, cfg, promptArgs)
+	if defaultInvocation {
+		// The default server invocation is a hosted human run even when Cobra
+		// receives non-TTY streams. Keep the preliminary gate from classifying
+		// its selected factory as a clean one-shot invocation.
+		cfg.CleanInvocation = false
+	}
+	if !remote {
+		if !cfg.CleanInvocation && !cfg.InvocationOutputExplicit {
+			cfg.StartupOutput = policy.HumanTerminalWriter(cmd.OutOrStdout())
+		}
+		if err := prepareRunStartup(cmd, &cfg, rootOptions); err != nil {
+			return runcli.RunConfig{}, err
+		}
+	}
+	if err := configureRunEnvironment(cmd, &cfg, rootOptions, homeDir); err != nil {
+		return runcli.RunConfig{}, err
+	}
+	if err := resolveRunFactorySelection(
+		cmd,
+		&cfg,
+		homeDir,
+		rootOptions.namedFactoryCatalog,
+		rootOptions.resolveNamedFactoryRoots,
+		rootOptions.resolveNamedFactoryCandidatePaths,
+	); err != nil {
+		return runcli.RunConfig{}, err
+	}
+
+	runOperatorDefaults := *operatorDefaults
+	runOperatorDefaults.providerOverride = cfg.ProviderOverride
+	runOperatorDefaults.modelOverride = cfg.ModelOverride
+	resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, &runOperatorDefaults, rootOptions, homeDir)
+	if err != nil {
+		return runcli.RunConfig{}, err
+	}
+	cfg.OperatorDefaults = resolvedOperatorDefaults
+	cfg.Stdin = cmd.InOrStdin()
+	cfg.StdinIsTTY = func() bool { return startupcli.StdinIsTTY(cmd.Context()) }
+	cfg.OutputIsTTY = startupcli.StdoutIsTTY(cmd.Context())
+	if err := resolveRunFactoryPrompt(cmd, &cfg, promptArgs, rootOptions.prepareInvocationInput); err != nil {
+		runcli.ObserveInvocationRejection(logger, err)
+		return runcli.RunConfig{}, err
+	}
+	configureRunFactoryOutput(cmd, &cfg, promptArgs, globals, policy)
+	return cfg, nil
+}
+
+func validateRunFactoryOptions(cfg *runcli.RunConfig, defaultInvocation bool) error {
+	if cfg == nil {
+		return fmt.Errorf("run configuration is required")
+	}
+	if cfg.Pprof && !defaultInvocation && !cfg.WithServer && !cfg.WithSite {
+		return fmt.Errorf("input relationship %q: --pprof requires --with-server or --with-site", "you.run.rel.pprof-server")
+	}
+	if cfg.ListenExplicit || strings.TrimSpace(cfg.ListenAddress) != "" {
+		cfg.ListenExplicit = true
+		if !defaultInvocation && !cfg.WithServer && !cfg.WithSite {
+			return fmt.Errorf("--listen requires --with-server or --with-site on you run")
+		}
+	}
+	return nil
+}
+
+func configureRunFactoryOutput(
+	cmd *cobra.Command,
+	cfg *runcli.RunConfig,
+	promptArgs []string,
+	globals *cliGlobalOptions,
+	basePolicy terminalpolicy.Policy,
+) {
+	cleanInvocation, textInvocation := runInvocationModes(cmd, *cfg)
+	configureDefaultRunInvocationOutput(cmd, cfg, promptArgs, textInvocation)
+	cfg.CleanInvocation = cleanInvocation
+	cfg.JSON = globals.json
+	runPolicy := resolveEffectiveRunPolicy(cmd, *cfg, basePolicy)
+	cfg.TerminalPolicy = runPolicy
+	cfg.Verbose = runPolicy.VerboseEnabled()
+	cfg.SuppressDashboardRendering = runPolicy.Mode() == terminalpolicy.ModeQuiet
+	configureRunProgressOutput(cmd, cfg, basePolicy)
+	configureRunFactoryStreams(cmd, cfg, cleanInvocation, textInvocation, runPolicy)
+	cfg.Diagnostics = runPolicy.DiagnosticsWriter(cmd.ErrOrStderr())
+	cfg.ReplayMetadataOutput = cmd.OutOrStdout()
+	cfg.JSONOutput = globals.json
+}
+
+func configureDefaultRunInvocationOutput(cmd *cobra.Command, cfg *runcli.RunConfig, promptArgs []string, textInvocation bool) {
+	invocationFactorySelected := cmd.Flags().Changed("factory") || cmd.Flags().Changed("named") || cfg.InvocationFileExplicit
+	defaultResponseStream := !cfg.SuppressDashboardRendering &&
+		(textInvocation || (invocationFactorySelected && !cfg.Continuously && !cmd.Flags().Changed("work") && len(promptArgs) > 0))
+	if defaultResponseStream && strings.TrimSpace(cfg.InvocationOutputMode) == "" && !cfg.InvocationOutputExplicit {
+		cfg.InvocationOutputMode = runcli.InvocationOutputResponseStream
+	}
+}
+
+func configureRunFactoryStreams(cmd *cobra.Command, cfg *runcli.RunConfig, cleanInvocation bool, textInvocation bool, policy terminalpolicy.Policy) {
+	humanTerminal := policy.HumanTerminalWriter(cmd.OutOrStdout())
+	if cleanInvocation || textInvocation {
+		cfg.Output = cmd.OutOrStdout()
+		cfg.StartupOutput = nil
+		return
+	}
+	if strings.TrimSpace(cfg.FactoryConfigPath) != "" ||
+		(strings.TrimSpace(cfg.ReplayPath) != "" && !cfg.SuppressDashboardRendering) {
+		cfg.Output = cmd.OutOrStdout()
+	}
+	cfg.StartupOutput = humanTerminal
+}
+
+func writeRunCommandInvocationError(cmd *cobra.Command, globals *cliGlobalOptions, err error) error {
+	_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
+	return err
+}
+
+func validateRunCommandInputs(cmd *cobra.Command, cfg *runcli.RunConfig, globals *cliGlobalOptions) (error, bool) {
+	if err := validateRunRemoteHostingConflict(cmd, globals); err != nil {
+		return err, true
+	}
+	if err := applyRunCommandInvocationOutputMode(cmd, cfg); err != nil {
+		return err, true
+	}
+	outputExplicit, err := climanifestcobra.InputChanged(cmd, "you.run.flag.output")
+	if err != nil {
+		return err, false
+	}
+	if err := runcli.ValidateInvocationOutputSelection(
+		cfg.SuppressDashboardRendering,
+		globals.json,
+		outputExplicit,
+	); err != nil {
+		return err, true
+	}
+	return nil, false
+}
+
+func executeResolvedRunCommand(
+	cmd *cobra.Command,
+	promptArgs []string,
+	resolvedConfig runcli.RunConfig,
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	operatorDefaults *cliOperatorDefaultsOptions,
+	rootOptions CommandFactory,
+) error {
+	if helpRequested(cmd) {
+		return executeRunCommandHelp(cmd, &resolvedConfig, globals, rootOptions)
+	}
+	if runCommandUsesNamedFactory(cmd, resolvedConfig) {
+		namedPolicy := diagnostics.resolvePolicy(resolvedConfig.SuppressDashboardRendering)
+		if err := prepareNamedRunSystemInitialization(
+			cmd, &resolvedConfig, promptArgs, globals, namedPolicy, rootOptions,
+		); err != nil {
+			return writeRunCommandInvocationError(cmd, globals, err)
+		}
+	}
+	currentFactorySelected := runUsesCurrentFactory(cmd)
+	if currentFactorySelected {
+		if err := selectCurrentFactoryFromWorkingDirectory(cmd, &resolvedConfig); err != nil {
+			mapped := runcli.MapCurrentFactoryFailure(err)
+			return writeRunCommandInvocationError(cmd, globals, mapped)
+		}
+	}
+	basePolicy := diagnostics.resolvePolicy(resolvedConfig.SuppressDashboardRendering)
+	err := runFactoryWithOptions(cmd, resolvedConfig, promptArgs, globals, operatorDefaults, basePolicy, rootOptions, false)
+	if err == nil {
+		return nil
+	}
+	return handleRunExecutionError(cmd, resolvedConfig, promptArgs, globals, basePolicy, err, currentFactorySelected)
+}
+
+func executeRunCommandHelp(cmd *cobra.Command, cfg *runcli.RunConfig, globals *cliGlobalOptions, rootOptions CommandFactory) error {
+	if runCommandUsesNamedFactory(cmd, *cfg) {
+		if err := prepareNamedFactoryHelpInitialization(cmd, cfg, globals, rootOptions); err != nil {
+			return writeRunCommandInvocationError(cmd, globals, err)
+		}
+	}
+	return writeRunCommandHelp(cmd, cfg, rootOptions)
+}
+
+func runCommandUsesNamedFactory(cmd *cobra.Command, cfg runcli.RunConfig) bool {
+	return strings.TrimSpace(cfg.NamedFactoryName) != "" &&
+		!cmd.Flags().Changed("factory") && !cmd.Flags().Changed("dir")
+}
+
+func prepareRunStartup(cmd *cobra.Command, cfg *runcli.RunConfig, options CommandFactory) error {
+	startupAllowed, err := prepareRunSystemInitialization(cmd, cfg, options)
+	if err != nil {
+		return err
+	}
+	if startupAllowed {
+		if err := initializeSystemAtStartupBoundary(cmd, *cfg, options, runStartupDisclosureEnabled(*cfg)); err != nil {
+			return err
+		}
+	}
+	installRunStartupPreparation(cmd, cfg, options, startupAllowed)
+	return nil
+}
+
+func installRunStartupPreparation(cmd *cobra.Command, cfg *runcli.RunConfig, options CommandFactory, startupAllowed bool) {
+	if cfg == nil || cfg.StartupPreparation != nil {
+		return
+	}
+	if !startupAllowed {
+		cfg.StartupPreparation = func(context.Context, bool) error { return nil }
+		return
+	}
+	homeDir := cfg.HomeDir
+	initializedBeforeRun := systemInitializationCompleted(cmd.Context())
+	homeDisclosedBeforeRun := homeDisclosureCompleted(cmd.Context())
+	cfg.StartupPreparation = func(ctx context.Context, discloseHome bool) error {
+		if discloseHome && !homeDisclosedBeforeRun {
+			runcli.DiscloseHomeDirectory(*cfg)
+		}
+		if initializedBeforeRun {
+			return nil
+		}
+		if options.initializer == nil {
+			return errors.New("run service initializer is required")
+		}
+		return options.initializer.InitializeSystem(ctx, homeDir)
+	}
+}
+
+func prepareRunSystemInitialization(cmd *cobra.Command, cfg *runcli.RunConfig, options CommandFactory) (bool, error) {
+	if cmd == nil || cfg == nil {
+		return false, fmt.Errorf("prepare run system initialization: command and config are required")
+	}
+	if runcli.ValidateRecordingInvocationFlags(*cfg) != nil {
+		// Recordings flag conflicts remain visible to the run transport's
+		// deterministic validator. They must not activate the system while the
+		// invalid invocation is waiting to be rejected.
+		return false, nil
+	}
+	if systemInitializationCompleted(cmd.Context()) {
+		return true, nil
+	}
+	if options.initializer == nil {
+		return false, fmt.Errorf("system initializer is required")
+	}
+	configPath := runFactoryConfigPath(cmd, *cfg)
+	if strings.TrimSpace(configPath) == "" || runFactorySourceUsesJavaScript(configPath) {
+		return true, nil
+	}
+	return inspectRunFactoryActivation(cmd, *cfg, options, configPath), nil
+}
+
+func inspectRunFactoryActivation(cmd *cobra.Command, cfg runcli.RunConfig, options CommandFactory, configPath string) bool {
+	if options.runInputPathInspector == nil {
+		return true
+	}
+	resolvedPath := resolveRunPath(cmd, configPath)
+	info, statErr := options.runInputPathInspector.Stat(resolvedPath)
+	if statErr != nil {
+		return allowRunFactoryActivationAfterStatError(cmd, cfg, statErr)
+	}
+	if info == nil || !info.Mode().IsRegular() {
+		return false
+	}
+	if options.ValidateFactory != nil {
+		if err := options.ValidateFactory(factorycli.ValidateConfig{
+			Context: cmd.Context(), Path: resolvedPath, JSON: true, Output: io.Discard,
+		}); err != nil {
+			// Leave the authoritative runtime opening to report its existing
+			// operator-facing validation error; this is only an activation gate.
+			return false
+		}
+	}
+	return true
+}
+
+func allowRunFactoryActivationAfterStatError(cmd *cobra.Command, cfg runcli.RunConfig, statErr error) bool {
+	if errors.Is(statErr, fs.ErrNotExist) && runUsesCurrentFactory(cmd) && strings.TrimSpace(cfg.FactoryConfigPath) != "" {
+		// Current Factory discovery owns this clean failure. Do not create
+		// global state while the selected local asset is absent.
+		return false
+	}
+	// Explicit missing factory paths still run system initialization. The
+	// bootstrap probe relies on that call to materialize packaged roots,
+	// but its eventual missing-input failure remains output-clean.
+	return true
+}
+
+func runStartupDisclosureEnabled(cfg runcli.RunConfig) bool {
+	return cfg.StartupOutput != nil && !cfg.JSON && !cfg.JSONOutput &&
+		!cfg.CleanInvocation && !cfg.SuppressDashboardRendering && !cfg.InvocationOutputExplicit
+}
+
+func runFactoryConfigPath(cmd *cobra.Command, cfg runcli.RunConfig) string {
+	if strings.TrimSpace(cfg.FactoryConfigPath) != "" {
+		return cfg.FactoryConfigPath
+	}
+	if strings.TrimSpace(cfg.Dir) == "" || strings.TrimSpace(cfg.ReplayPath) != "" {
+		return ""
+	}
+	return filepath.Join(cfg.Dir, factorydefinitions.FactoryConfigFile)
+}
+
+func resolveRunPath(cmd *cobra.Command, path string) string {
+	if filepath.IsAbs(path) || cmd == nil {
+		return path
+	}
+	workingDirectory := startupcli.WorkingDirectory(cmd.Context())
+	if strings.TrimSpace(workingDirectory) == "" {
+		return path
+	}
+	return filepath.Join(workingDirectory, path)
+}
+
+func initializeSystemAtStartupBoundary(cmd *cobra.Command, cfg runcli.RunConfig, options CommandFactory, discloseHome bool) error {
+	if cmd == nil || options.initializer == nil {
+		return fmt.Errorf("system initializer is required")
+	}
+	if discloseHome && !homeDisclosureCompleted(cmd.Context()) {
+		runcli.DiscloseHomeDirectory(cfg)
+		cmd.SetContext(context.WithValue(cmd.Context(), homeDisclosureContextKey{}, true))
+	}
+	if systemInitializationCompleted(cmd.Context()) {
+		return nil
+	}
+	if err := options.initializer.InitializeSystem(cmd.Context(), cfg.HomeDir); err != nil {
+		wrapped := fmt.Errorf("initialize system: %w", err)
+		if errors.Is(err, factorydefinitions.ErrFactoryInstallationContention) {
+			diagnostic := wrapped
+			if cause := errors.Unwrap(err); cause != nil {
+				diagnostic = fmt.Errorf("%s: %v", wrapped, cause)
+			}
+			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), diagnostic)
+		}
+		return wrapped
+	}
+	cmd.SetContext(context.WithValue(cmd.Context(), systemInitializationContextKey{}, true))
+	return nil
+}
+
+func preliminaryRunInvocationOutputIsClean(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string) bool {
+	if cfg.InvocationOutputExplicit || cfg.SuppressDashboardRendering || cfg.InvocationFileExplicit ||
+		cfg.WorkFile != "" || len(promptArgs) > 0 {
+		return true
+	}
+	if cmd == nil || startupcli.StdinIsTTY(cmd.Context()) {
+		return false
+	}
+	return strings.TrimSpace(cfg.NamedFactoryName) != "" ||
+		strings.TrimSpace(cfg.FactoryConfigPath) != ""
+}
+
+func prepareNamedRunSystemInitialization(
+	cmd *cobra.Command,
+	cfg *runcli.RunConfig,
+	promptArgs []string,
+	globals *cliGlobalOptions,
+	policy terminalpolicy.Policy,
+	options CommandFactory,
+) error {
+	if cmd == nil || cfg == nil || globals == nil || remotePlacementSelected(globals) {
+		return nil
+	}
+	homeDir, err := resolveProcessHomeDirForCommand(cmd, options)
+	if err != nil {
+		return err
+	}
+	cfg.HomeDir = homeDir
+	cfg.JSON = globals.json
+	cfg.JSONOutput = globals.json
+	cfg.CleanInvocation = preliminaryRunInvocationOutputIsClean(cmd, *cfg, promptArgs)
+	if !cfg.CleanInvocation && !cfg.InvocationOutputExplicit {
+		cfg.StartupOutput = policy.HumanTerminalWriter(cmd.OutOrStdout())
+	}
+	return initializeSystemAtStartupBoundary(cmd, *cfg, options, runStartupDisclosureEnabled(*cfg))
+}
+
+func prepareNamedFactoryHelpInitialization(
+	cmd *cobra.Command,
+	cfg *runcli.RunConfig,
+	globals *cliGlobalOptions,
+	options CommandFactory,
+) error {
+	if cmd == nil || cfg == nil || globals == nil || remotePlacementSelected(globals) {
+		return nil
+	}
+	homeDir, err := resolveProcessHomeDirForCommand(cmd, options)
+	if err != nil {
+		return err
+	}
+	cfg.HomeDir = homeDir
+	return initializeSystemAtStartupBoundary(cmd, *cfg, options, false)
 }
 
 func newRootCommandWithFactory(options CommandFactory) *cobra.Command {

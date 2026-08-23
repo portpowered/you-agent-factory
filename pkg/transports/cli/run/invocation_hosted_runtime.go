@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/timedisplay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
@@ -271,6 +272,9 @@ func openHostedRuntime(
 	if buildRuntimeRequest == nil {
 		return nil, errors.New("construct local runtime: runtime opening request factory is required")
 	}
+	if err := prepareStartupBeforeRuntime(ctx, cfg); err != nil {
+		return nil, err
+	}
 	operation, runtimeCfg, err := prepareHostedInvocation(
 		ctx, cfg, logger, invocationRequest, recordPath, invocation,
 		presentation, mockWorkersConfig, invocationMode,
@@ -313,11 +317,13 @@ func openHostedRuntime(
 		operation.openingPresentations = presentations
 		operation.visualizations = visualizations
 		operation.visualizationSinkID = visualizationSinkID
+		operation.startupPrepared = true
 		return operation, nil
 	}
 
 	return &Operation{
 		cfg: cfg, logger: logger, runner: factorySvc, recordPath: recordPath,
+		startupPrepared:  true,
 		hostedInvocation: hostedInvocation, historicalReplay: historicalReplay,
 		replayMetadataWarnings: replayMetadataWarnings,
 		openingPresentations:   presentations, visualizations: visualizations,
@@ -417,21 +423,82 @@ func newRuntimeHostObserver(
 			resolved.BindHost = binding.Host
 		}
 		resolved.Port = binding.Port
-		if resolved.StartupPreparation != nil {
-			// A successful listener binding is the server startup boundary. The
-			// disclosure and process initialization therefore happen here, after
-			// bind failures have already returned and before the remaining human
-			// startup diagnostics are presented.
-			_ = resolved.StartupPreparation(ctx, true)
-		} else {
-			emitHomeDirectoryDisclosure(resolved)
-		}
 		emitStartupDetails(resolved, diagnostics())
 		emitVerboseStartupDiagnostics(resolved, recordPath, requestedPort)
 		if shouldOpenDashboard(resolved) {
 			openDashboardAtBoundEndpoint(ctx, resolved, cfg.BrowserOpener)
 		}
 	}
+}
+
+// prepareStartupBeforeRuntime is the one-way process boundary for hosted
+// runs. Runtime opening owns log/metrics creation and listener setup, so the
+// process-owned preparation gate must complete before either effect occurs.
+func prepareStartupBeforeRuntime(ctx context.Context, cfg RunConfig) error {
+	if cfg.StartupPreparation != nil {
+		return cfg.StartupPreparation(ctx, true)
+	}
+	emitHomeDirectoryDisclosure(cfg)
+	return nil
+}
+
+func emitStartupMessages(cfg RunConfig, runtimeLog runtimeartifact.Diagnostics) bool {
+	if cfg.StartupOutput == nil {
+		return false
+	}
+
+	emitHomeDirectoryDisclosure(cfg)
+	return emitStartupDetails(cfg, runtimeLog)
+}
+
+func emitStartupDetails(cfg RunConfig, runtimeLog runtimeartifact.Diagnostics) bool {
+	if cfg.StartupOutput == nil {
+		return false
+	}
+
+	fmt.Fprintf(cfg.StartupOutput, "Factory initiated: %s\n", cfg.Dir)
+	if cfg.Bootstrap {
+		fmt.Fprintf(cfg.StartupOutput, "Factory directory ready: %s\n", cfg.Dir)
+	}
+	if cfg.Continuously {
+		fmt.Fprintln(cfg.StartupOutput, "Runtime mode: continuous")
+	}
+	if strings.TrimSpace(runtimeLog.Path) != "" {
+		fmt.Fprintf(cfg.StartupOutput, "Runtime log: %s\n", runtimeLog.Path)
+		fmt.Fprintf(cfg.StartupOutput, "Runtime log start (UTC): %s\n", timedisplay.Timestamp(runtimeLog.StartTimeUTC))
+	}
+	if strings.TrimSpace(runtimeLog.MetricsPath) != "" {
+		fmt.Fprintf(cfg.StartupOutput, "Runtime metrics: %s\n", runtimeLog.MetricsPath)
+		fmt.Fprintf(cfg.StartupOutput, "Runtime metrics start (UTC): %s\n", timedisplay.Timestamp(runtimeLog.MetricsStartTimeUTC))
+	}
+	if cfg.Port <= 0 {
+		fmt.Fprintln(cfg.StartupOutput, "Dashboard server disabled")
+		return false
+	}
+
+	url := DashboardURL(bindDashboardHost(cfg), cfg.Port)
+	fmt.Fprintf(cfg.StartupOutput, "Dashboard URL: %s\n", url)
+	if !cfg.OpenDashboard {
+		fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open disabled; open %s\n", url)
+		return false
+	}
+	return true
+}
+
+func emitHomeDirectoryDisclosure(cfg RunConfig) {
+	if cfg.StartupOutput == nil ||
+		strings.TrimSpace(cfg.HomeDir) == "" ||
+		cfg.JSON || cfg.JSONOutput || cfg.CleanInvocation ||
+		cfg.SuppressDashboardRendering || cfg.InvocationOutputExplicit {
+		return
+	}
+	_, _ = fmt.Fprintf(cfg.StartupOutput, "Home directory: %s\n", cfg.HomeDir)
+}
+
+// DiscloseHomeDirectory writes the human startup home line using the same
+// output policy as the run transport at the process startup boundary.
+func DiscloseHomeDirectory(cfg RunConfig) {
+	emitHomeDirectoryDisclosure(cfg)
 }
 
 func visualizationCLIService(

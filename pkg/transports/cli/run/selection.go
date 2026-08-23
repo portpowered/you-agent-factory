@@ -100,6 +100,9 @@ func (s *selection) Open(
 		return nil, err
 	}
 	if s.directJavaScript.Supports(cfg.FactoryConfigPath) {
+		if err := prepareStartupBeforeRuntime(ctx, cfg); err != nil {
+			return nil, err
+		}
 		request := factorysessions.DirectJavaScriptRunRequest{
 			SourcePath: cfg.FactoryConfigPath, MockWorkersEnabled: cfg.MockWorkersEnabled,
 			JSONOutput: cfg.JSONOutput,

@@ -467,63 +467,17 @@ func executeRunCommand(cmd *cobra.Command, args []string, globals *cliGlobalOpti
 		cmd, args, defaultcmd.ExplicitRunConfig(rootOptions.runDefaults),
 	)
 	if err != nil {
-		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
-		return err
+		return writeRunCommandInvocationError(cmd, globals, err)
 	}
-	if err := validateRunRemoteHostingConflict(cmd, globals); err != nil {
-		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
-		return err
-	}
-	if err := applyRunCommandInvocationOutputMode(cmd, &resolvedConfig); err != nil {
-		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
-		return err
-	}
-	outputExplicit, changedErr := climanifestcobra.InputChanged(cmd, "you.run.flag.output")
-	if changedErr != nil {
-		return changedErr
-	}
-	if err := runcli.ValidateInvocationOutputSelection(
-		resolvedConfig.SuppressDashboardRendering,
-		globals.json,
-		outputExplicit,
-	); err != nil {
-		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
-		return err
-	}
-	if helpRequested(cmd) {
-		if strings.TrimSpace(resolvedConfig.NamedFactoryName) != "" &&
-			!cmd.Flags().Changed("factory") && !cmd.Flags().Changed("dir") {
-			if err := prepareNamedFactoryHelpInitialization(cmd, &resolvedConfig, globals, rootOptions); err != nil {
-				_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
-				return err
-			}
+	if validationErr, writeError := validateRunCommandInputs(cmd, &resolvedConfig, globals); validationErr != nil {
+		if !writeError {
+			return validationErr
 		}
-		return writeRunCommandHelp(cmd, &resolvedConfig, rootOptions)
+		return writeRunCommandInvocationError(cmd, globals, validationErr)
 	}
-	if strings.TrimSpace(resolvedConfig.NamedFactoryName) != "" &&
-		!cmd.Flags().Changed("factory") && !cmd.Flags().Changed("dir") {
-		namedPolicy := diagnostics.resolvePolicy(resolvedConfig.SuppressDashboardRendering)
-		if err := prepareNamedRunSystemInitialization(
-			cmd, &resolvedConfig, promptArgs, globals, namedPolicy, rootOptions,
-		); err != nil {
-			_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
-			return err
-		}
-	}
-	currentFactorySelected := runUsesCurrentFactory(cmd)
-	if currentFactorySelected {
-		if err := selectCurrentFactoryFromWorkingDirectory(cmd, &resolvedConfig); err != nil {
-			mapped := runcli.MapCurrentFactoryFailure(err)
-			_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), mapped, globals.json)
-			return mapped
-		}
-	}
-	basePolicy := diagnostics.resolvePolicy(resolvedConfig.SuppressDashboardRendering)
-	err = runFactoryWithOptions(cmd, resolvedConfig, promptArgs, globals, operatorDefaults, basePolicy, rootOptions, false)
-	if err != nil {
-		return handleRunExecutionError(cmd, resolvedConfig, promptArgs, globals, basePolicy, err, currentFactorySelected)
-	}
-	return err
+	return executeResolvedRunCommand(
+		cmd, promptArgs, resolvedConfig, globals, diagnostics, operatorDefaults, rootOptions,
+	)
 }
 
 func applyRunScopedServerMode(cfg runcli.RunConfig) runcli.RunConfig {

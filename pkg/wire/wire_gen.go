@@ -89,6 +89,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	adapter := provideRecordingsCLIAdapter()
 	v6 := provideCLIRunDefaults(v5, adapter)
 	batchInputFileSystem := provideBatchInputFileSystem()
+	pathInspector := provideRunInputPathInspector()
 	directoryCreator := provideRunDirectoryCreator()
 	opener := provideBrowserOpener(edges2)
 	fileSystem := provideOperatorSettingsFileSystem(edges2)
@@ -644,6 +645,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		BuildTerminalLogger:               loggerBuilder,
 		RunDefaults:                       v6,
 		BatchInputFileSystem:              batchInputFileSystem,
+		RunInputPathInspector:             pathInspector,
 		RunDirectoryCreator:               directoryCreator,
 		BrowserOpener:                     opener,
 		ResolveOperatorDefaults:           defaultsResolver,
@@ -1107,6 +1109,7 @@ var cliCommandOperationsSet = wire5.NewSet(
 	provideNamedFactoryRootsResolver,
 	provideNamedFactoryCandidatePathsResolver,
 	provideBatchInputFileSystem,
+	provideRunInputPathInspector,
 	provideRunDirectoryCreator,
 	provideBrowserOpener,
 	provideCurrentFactoryDirectoryResolver,

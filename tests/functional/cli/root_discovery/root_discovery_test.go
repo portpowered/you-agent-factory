@@ -532,6 +532,18 @@ func TestLocalRunDisclosesHomeBeforeSystemInitializationAccess(t *testing.T) {
 	if got, want := stdout.String(), "Home directory: "+homeDir+"\n"; !strings.HasPrefix(got, want) {
 		t.Fatalf("stdout = %q, want prefix %q", got, want)
 	}
+	for _, label := range []string{"Runtime log: ", "Runtime metrics: "} {
+		path := startupOutputValue(stdout.String(), label)
+		if path == "" {
+			t.Fatalf("stdout = %q, want %s startup artifact", stdout.String(), label)
+		}
+		if !pathUnderDirectory(path, homeDir) {
+			t.Fatalf("%s path = %q, want beneath resolved home %q", label, path, homeDir)
+		}
+		if _, statErr := os.Stat(path); statErr != nil {
+			t.Fatalf("stat %s artifact %q: %v", label, path, statErr)
+		}
+	}
 }
 
 type orderedStartupOutput struct {

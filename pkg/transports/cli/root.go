@@ -7,8 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -145,6 +143,7 @@ type CommandOperations struct {
 	BuildTerminalLogger               terminalpolicy.LoggerBuilder
 	RunDefaults                       runcli.RunConfig
 	BatchInputFileSystem              submitcli.BatchInputFileSystem
+	RunInputPathInspector             platformfilesystem.PathInspector
 	RunDirectoryCreator               platformfilesystem.DirectoryCreator
 	BrowserOpener                     platformbrowser.Opener
 	ResolveOperatorDefaults           operatorconfig.DefaultsResolver
@@ -221,6 +220,7 @@ type CommandFactory struct {
 	buildTerminalLogger               terminalpolicy.LoggerBuilder
 	runDefaults                       runcli.RunConfig
 	batchInputFileSystem              submitcli.BatchInputFileSystem
+	runInputPathInspector             platformfilesystem.PathInspector
 	runDirectoryCreator               platformfilesystem.DirectoryCreator
 	browserOpener                     platformbrowser.Opener
 	resolveOperatorDefaults           operatorconfig.DefaultsResolver
@@ -296,6 +296,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		buildTerminalLogger:               operations.BuildTerminalLogger,
 		runDefaults:                       operations.RunDefaults,
 		batchInputFileSystem:              operations.BatchInputFileSystem,
+		runInputPathInspector:             operations.RunInputPathInspector,
 		runDirectoryCreator:               operations.RunDirectoryCreator,
 		browserOpener:                     operations.BrowserOpener,
 		resolveOperatorDefaults:           operations.ResolveOperatorDefaults,
@@ -592,106 +593,14 @@ func newMCPCommand(options CommandFactory) (*cobra.Command, error) {
 	}))
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, operatorDefaults *cliOperatorDefaultsOptions, policy terminalpolicy.Policy, rootOptions CommandFactory, defaultInvocation bool) error {
-	cfg = applyRunScopedServerMode(cfg)
-	if cfg.Pprof && !defaultInvocation && !cfg.WithServer && !cfg.WithSite {
-		return fmt.Errorf("input relationship %q: --pprof requires --with-server or --with-site", "you.run.rel.pprof-server")
-	}
-	if cfg.ListenExplicit || strings.TrimSpace(cfg.ListenAddress) != "" {
-		cfg.ListenExplicit = true
-		if !defaultInvocation && !cfg.WithServer && !cfg.WithSite {
-			return fmt.Errorf("--listen requires --with-server or --with-site on you run")
-		}
-	}
-	logger, err := policy.BuildLogger(rootOptions.buildTerminalLogger)
+	preparedCfg, err := prepareRunFactoryConfig(
+		cmd, cfg, promptArgs, globals, operatorDefaults, policy, rootOptions, defaultInvocation,
+	)
 	if err != nil {
 		return err
 	}
-	cfg.Logger = logger
-	cfg.Verbose = policy.VerboseEnabled()
-	cfg.TerminalPolicy = policy
-	cfg.ExecutionBaseDir = startupcli.WorkingDirectory(cmd.Context())
-
-	if !remotePlacementSelected(globals) {
-		if err := resolveRunBindFromServer(cmd, globals.server, &cfg); err != nil {
-			return err
-		}
-		warnLegacyListenerBinding(cmd, cfg, defaultInvocation, persistentInputWasCLI(cmd, "you.flag.server", "server"))
-	}
-	homeDir, err := resolveProcessHomeDirForCommand(cmd, rootOptions)
-	if err != nil {
-		return err
-	}
-	cfg.HomeDir = homeDir
-	cfg.JSON = globals.json
-	cfg.JSONOutput = globals.json
-	cfg.CleanInvocation = preliminaryRunInvocationOutputIsClean(cmd, cfg, promptArgs)
-	if !remotePlacementSelected(globals) && !deferRunSystemInitialization(cmd, cfg, defaultInvocation) {
-		if !cfg.CleanInvocation && !cfg.InvocationOutputExplicit {
-			cfg.StartupOutput = policy.HumanTerminalWriter(cmd.OutOrStdout())
-		}
-		if err := prepareRunSystemInitialization(cmd, &cfg, rootOptions); err != nil {
-			return err
-		}
-	}
-	if err := configureRunEnvironment(cmd, &cfg, rootOptions, homeDir); err != nil {
-		return err
-	}
-	if err := resolveRunFactorySelection(
-		cmd,
-		&cfg,
-		homeDir,
-		rootOptions.namedFactoryCatalog,
-		rootOptions.resolveNamedFactoryRoots,
-		rootOptions.resolveNamedFactoryCandidatePaths,
-	); err != nil {
-		return err
-	}
-
-	runOperatorDefaults := *operatorDefaults
-	runOperatorDefaults.providerOverride = cfg.ProviderOverride
-	runOperatorDefaults.modelOverride = cfg.ModelOverride
-	resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, &runOperatorDefaults, rootOptions, homeDir)
-	if err != nil {
-		return err
-	}
-	cfg.OperatorDefaults = resolvedOperatorDefaults
-	cfg.Stdin = cmd.InOrStdin()
-	cfg.StdinIsTTY = func() bool { return startupcli.StdinIsTTY(cmd.Context()) }
-	cfg.OutputIsTTY = startupcli.StdoutIsTTY(cmd.Context())
-	if err := resolveRunFactoryPrompt(cmd, &cfg, promptArgs, rootOptions.prepareInvocationInput); err != nil {
-		runcli.ObserveInvocationRejection(logger, err)
-		return err
-	}
-	cleanInvocation, textInvocation := runInvocationModes(cmd, cfg)
-	invocationFactorySelected := cmd.Flags().Changed("factory") || cmd.Flags().Changed("named") || cfg.InvocationFileExplicit
-	defaultResponseStream := !cfg.SuppressDashboardRendering &&
-		(textInvocation || (invocationFactorySelected && !cfg.Continuously && !cmd.Flags().Changed("work") && len(promptArgs) > 0))
-	if defaultResponseStream && strings.TrimSpace(cfg.InvocationOutputMode) == "" && !cfg.InvocationOutputExplicit {
-		cfg.InvocationOutputMode = runcli.InvocationOutputResponseStream
-	}
-	cfg.CleanInvocation = cleanInvocation
-	cfg.JSON = globals.json
-	runPolicy := resolveEffectiveRunPolicy(cmd, cfg, policy)
-	cfg.TerminalPolicy = runPolicy
-	cfg.Verbose = runPolicy.VerboseEnabled()
-	cfg.SuppressDashboardRendering = runPolicy.Mode() == terminalpolicy.ModeQuiet
-	configureRunProgressOutput(cmd, &cfg, policy)
-	humanTerminal := runPolicy.HumanTerminalWriter(cmd.OutOrStdout())
-	if cleanInvocation || textInvocation {
-		cfg.Output = cmd.OutOrStdout()
-		cfg.StartupOutput = nil
-	} else if strings.TrimSpace(cfg.FactoryConfigPath) != "" ||
-		(strings.TrimSpace(cfg.ReplayPath) != "" && !cfg.SuppressDashboardRendering) {
-		cfg.Output = cmd.OutOrStdout()
-		cfg.StartupOutput = humanTerminal
-	} else {
-		cfg.StartupOutput = humanTerminal
-	}
-	cfg.Diagnostics = runPolicy.DiagnosticsWriter(cmd.ErrOrStderr())
-	cfg.ReplayMetadataOutput = cmd.OutOrStdout()
-	cfg.JSONOutput = globals.json
+	cfg = preparedCfg
 	if remotePlacementSelected(globals) {
 		return runcli.RunRemoteInvocationWithWorkTarget(
 			cmd.Context(), cfg, globals.server, rootOptions.remoteInvocation,
@@ -701,209 +610,7 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 	if rootOptions.initializer == nil {
 		return errors.New("run service initializer is required")
 	}
-	if cfg.StartupPreparation == nil {
-		homeDir := cfg.HomeDir
-		initializedBeforeRun := systemInitializationCompleted(cmd.Context())
-		homeDisclosedBeforeRun := homeDisclosureCompleted(cmd.Context())
-		cfg.StartupPreparation = func(ctx context.Context, discloseHome bool) error {
-			if discloseHome && !homeDisclosedBeforeRun {
-				runcli.DiscloseHomeDirectory(cfg)
-			}
-			if initializedBeforeRun {
-				return nil
-			}
-			if rootOptions.initializer == nil {
-				return errors.New("run service initializer is required")
-			}
-			return rootOptions.initializer.InitializeSystem(ctx, homeDir)
-		}
-	}
 	return delegateRunInitialization(cmd.Context(), cfg, defaultInvocation, rootOptions)
-}
-
-func deferRunSystemInitialization(cmd *cobra.Command, cfg runcli.RunConfig, defaultInvocation bool) bool {
-	if cmd != nil && cmd.CommandPath() == "you server" {
-		return true
-	}
-	return defaultInvocation || cfg.WithServer || cfg.WithSite
-}
-
-func preliminaryRunInvocationOutputIsClean(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string) bool {
-	if cfg.InvocationOutputExplicit || cfg.SuppressDashboardRendering || cfg.InvocationFileExplicit ||
-		cfg.WorkFile != "" || len(promptArgs) > 0 {
-		return true
-	}
-	if cmd == nil || startupcli.StdinIsTTY(cmd.Context()) {
-		return false
-	}
-	return strings.TrimSpace(cfg.NamedFactoryName) != "" ||
-		strings.TrimSpace(cfg.FactoryConfigPath) != ""
-}
-
-func prepareRunSystemInitialization(cmd *cobra.Command, cfg *runcli.RunConfig, options CommandFactory) error {
-	if cmd == nil || cfg == nil {
-		return fmt.Errorf("prepare run system initialization: command and config are required")
-	}
-	if systemInitializationCompleted(cmd.Context()) {
-		return nil
-	}
-	if options.initializer == nil {
-		return fmt.Errorf("system initializer is required")
-	}
-	if strings.TrimSpace(cfg.ResumePath) != "" {
-		if cfg.DisableDefaultRecording {
-			// The invocation shape validator owns the --resume/--no-record
-			// conflict; do not disclose or initialize before it reports the
-			// clean usage failure.
-			return nil
-		}
-		if _, err := os.Stat(resolveRunPath(cmd, cfg.ResumePath)); err != nil {
-			// Missing resume inputs are reported by the run transport after
-			// the complete invocation shape has been resolved. Keep this
-			// preflight boundary side-effect and output free.
-			return nil
-		}
-	}
-
-	configPath := runFactoryConfigPath(cmd, *cfg)
-	if strings.TrimSpace(configPath) != "" && !runFactorySourceUsesJavaScript(configPath) {
-		resolvedPath := resolveRunPath(cmd, configPath)
-		info, statErr := os.Stat(resolvedPath)
-		if statErr != nil {
-			if os.IsNotExist(statErr) && runUsesCurrentFactory(cmd) && strings.TrimSpace(cfg.FactoryConfigPath) != "" {
-				// Current-factory discovery owns this clean failure. Do not create
-				// global state while the selected local asset is absent.
-				return nil
-			}
-			// Explicit missing factory paths still run system initialization. The
-			// bootstrap probe relies on that call to materialize packaged roots,
-			// but its eventual missing-input failure remains output-clean. A
-			// directory-selected run has the ordinary human startup boundary.
-			return initializeSystemAtStartupBoundary(
-				cmd, *cfg, options,
-				strings.TrimSpace(cfg.FactoryConfigPath) == "" && runStartupDisclosureEnabled(*cfg),
-			)
-		}
-		if !info.Mode().IsRegular() {
-			return nil
-		}
-		if options.ValidateFactory != nil {
-			err := options.ValidateFactory(factorycli.ValidateConfig{
-				Context: cmd.Context(), Path: resolvedPath, JSON: true, Output: io.Discard,
-			})
-			if err != nil {
-				// Leave the authoritative runtime opening to report its existing
-				// operator-facing validation error; only use this preflight as a
-				// side-effect-free activation gate.
-				return nil
-			}
-		}
-	}
-	if strings.TrimSpace(cfg.ReplayPath) != "" {
-		if _, err := os.Stat(resolveRunPath(cmd, cfg.ReplayPath)); err != nil {
-			return nil
-		}
-	}
-
-	return initializeSystemAtStartupBoundary(cmd, *cfg, options, runStartupDisclosureEnabled(*cfg))
-}
-
-func runStartupDisclosureEnabled(cfg runcli.RunConfig) bool {
-	return cfg.StartupOutput != nil && !cfg.JSON && !cfg.JSONOutput &&
-		!cfg.CleanInvocation && !cfg.SuppressDashboardRendering && !cfg.InvocationOutputExplicit
-}
-
-func runFactoryConfigPath(cmd *cobra.Command, cfg runcli.RunConfig) string {
-	if strings.TrimSpace(cfg.FactoryConfigPath) != "" {
-		return cfg.FactoryConfigPath
-	}
-	if strings.TrimSpace(cfg.Dir) == "" || strings.TrimSpace(cfg.ReplayPath) != "" {
-		return ""
-	}
-	return filepath.Join(cfg.Dir, interfaces.FactoryConfigFile)
-}
-
-func resolveRunPath(cmd *cobra.Command, path string) string {
-	if filepath.IsAbs(path) || cmd == nil {
-		return path
-	}
-	workingDirectory := startupcli.WorkingDirectory(cmd.Context())
-	if strings.TrimSpace(workingDirectory) == "" {
-		return path
-	}
-	return filepath.Join(workingDirectory, path)
-}
-
-func initializeSystemAtStartupBoundary(cmd *cobra.Command, cfg runcli.RunConfig, options CommandFactory, discloseHome bool) error {
-	if cmd == nil || options.initializer == nil {
-		return fmt.Errorf("system initializer is required")
-	}
-	if discloseHome {
-		runcli.DiscloseHomeDirectory(cfg)
-		cmd.SetContext(context.WithValue(cmd.Context(), homeDisclosureContextKey{}, true))
-	}
-	if systemInitializationCompleted(cmd.Context()) {
-		return nil
-	}
-	if err := options.initializer.InitializeSystem(cmd.Context(), cfg.HomeDir); err != nil {
-		wrapped := fmt.Errorf("initialize system: %w", err)
-		if errors.Is(err, interfaces.ErrFactoryInstallationContention) {
-			diagnostic := wrapped
-			if cause := errors.Unwrap(err); cause != nil {
-				diagnostic = fmt.Errorf("%s: %v", wrapped, cause)
-			}
-			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), diagnostic)
-		}
-		return wrapped
-	}
-	cmd.SetContext(context.WithValue(cmd.Context(), systemInitializationContextKey{}, true))
-	return nil
-}
-
-func prepareNamedRunSystemInitialization(
-	cmd *cobra.Command,
-	cfg *runcli.RunConfig,
-	promptArgs []string,
-	globals *cliGlobalOptions,
-	policy terminalpolicy.Policy,
-	options CommandFactory,
-) error {
-	if cmd == nil || cfg == nil || globals == nil || remotePlacementSelected(globals) {
-		return nil
-	}
-	homeDir, err := resolveProcessHomeDirForCommand(cmd, options)
-	if err != nil {
-		return err
-	}
-	cfg.HomeDir = homeDir
-	cfg.JSON = globals.json
-	cfg.JSONOutput = globals.json
-	cfg.CleanInvocation = preliminaryRunInvocationOutputIsClean(cmd, *cfg, promptArgs)
-	if !deferRunSystemInitialization(cmd, *cfg, false) &&
-		!cfg.CleanInvocation && !cfg.InvocationOutputExplicit {
-		cfg.StartupOutput = policy.HumanTerminalWriter(cmd.OutOrStdout())
-	}
-	discloseHome := cfg.StartupOutput != nil && !cfg.JSON && !cfg.JSONOutput &&
-		!cfg.CleanInvocation && !cfg.SuppressDashboardRendering && !cfg.InvocationOutputExplicit &&
-		!deferRunSystemInitialization(cmd, *cfg, false)
-	return initializeSystemAtStartupBoundary(cmd, *cfg, options, discloseHome)
-}
-
-func prepareNamedFactoryHelpInitialization(
-	cmd *cobra.Command,
-	cfg *runcli.RunConfig,
-	globals *cliGlobalOptions,
-	options CommandFactory,
-) error {
-	if cmd == nil || cfg == nil || globals == nil || remotePlacementSelected(globals) {
-		return nil
-	}
-	homeDir, err := resolveProcessHomeDirForCommand(cmd, options)
-	if err != nil {
-		return err
-	}
-	cfg.HomeDir = homeDir
-	return initializeSystemAtStartupBoundary(cmd, *cfg, options, false)
 }
 
 func configureRunProgressOutput(cmd *cobra.Command, cfg *runcli.RunConfig, policy terminalpolicy.Policy) {

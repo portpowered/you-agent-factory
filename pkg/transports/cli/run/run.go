@@ -18,12 +18,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/runconfig"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/timedisplay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimecli "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli"
@@ -38,6 +36,17 @@ import (
 )
 
 type RunConfig = runconfig.Config
+
+// ValidateRecordingInvocationFlags exposes the pure Recordings input-shape
+// check to the process startup boundary before any local activation effects.
+func ValidateRecordingInvocationFlags(cfg RunConfig) error {
+	return recordingscli.ValidateInvocationFlags(recordingscli.InvocationRequest{
+		RecordPath:              cfg.RecordPath,
+		ReplayPath:              cfg.ReplayPath,
+		ResumePath:              cfg.ResumePath,
+		DisableDefaultRecording: cfg.DisableDefaultRecording,
+	})
+}
 
 // ModelCacheDirEnvironment selects the managed local-model cache root at the
 // customer process boundary.
@@ -312,6 +321,7 @@ type Operation struct {
 	invocation             InvocationOperation
 	presentation           factoryvisualization.ResponsePresentation
 	invocationMode         bool
+	startupPrepared        bool
 	recordPath             resolvedRunRecordPath
 	hostedInvocation       HostedInvocationOperation
 	historicalReplay       *factorysessions.HistoricalReplayInspection
@@ -499,12 +509,20 @@ func (operation *Operation) prepareStartup(ctx context.Context, discloseHome boo
 	if operation == nil {
 		return fmt.Errorf("prepare local startup: operation is required")
 	}
+	if operation.startupPrepared {
+		return nil
+	}
 	if operation.cfg.StartupPreparation != nil {
-		return operation.cfg.StartupPreparation(ctx, discloseHome)
+		if err := operation.cfg.StartupPreparation(ctx, discloseHome); err != nil {
+			return err
+		}
+		operation.startupPrepared = true
+		return nil
 	}
 	if discloseHome {
 		emitHomeDirectoryDisclosure(operation.cfg)
 	}
+	operation.startupPrepared = true
 	return nil
 }
 
@@ -885,72 +903,6 @@ func DashboardURL(host string, port int) string {
 	}
 	authority := net.JoinHostPort(host, strconv.Itoa(port))
 	return "http://" + authority + "/dashboard/ui"
-}
-
-func emitStartupMessages(
-	cfg RunConfig,
-	runtimeLog runtimeartifact.Diagnostics,
-) bool {
-	if cfg.StartupOutput == nil {
-		return false
-	}
-
-	emitHomeDirectoryDisclosure(cfg)
-	return emitStartupDetails(cfg, runtimeLog)
-}
-
-func emitStartupDetails(
-	cfg RunConfig,
-	runtimeLog runtimeartifact.Diagnostics,
-) bool {
-	if cfg.StartupOutput == nil {
-		return false
-	}
-
-	fmt.Fprintf(cfg.StartupOutput, "Factory initiated: %s\n", cfg.Dir)
-	if cfg.Bootstrap {
-		fmt.Fprintf(cfg.StartupOutput, "Factory directory ready: %s\n", cfg.Dir)
-	}
-	if cfg.Continuously {
-		fmt.Fprintln(cfg.StartupOutput, "Runtime mode: continuous")
-	}
-	if strings.TrimSpace(runtimeLog.Path) != "" {
-		fmt.Fprintf(cfg.StartupOutput, "Runtime log: %s\n", runtimeLog.Path)
-		fmt.Fprintf(cfg.StartupOutput, "Runtime log start (UTC): %s\n", timedisplay.Timestamp(runtimeLog.StartTimeUTC))
-	}
-	if strings.TrimSpace(runtimeLog.MetricsPath) != "" {
-		fmt.Fprintf(cfg.StartupOutput, "Runtime metrics: %s\n", runtimeLog.MetricsPath)
-		fmt.Fprintf(cfg.StartupOutput, "Runtime metrics start (UTC): %s\n", timedisplay.Timestamp(runtimeLog.MetricsStartTimeUTC))
-	}
-	if cfg.Port <= 0 {
-		fmt.Fprintln(cfg.StartupOutput, "Dashboard server disabled")
-		return false
-	}
-
-	url := DashboardURL(bindDashboardHost(cfg), cfg.Port)
-	fmt.Fprintf(cfg.StartupOutput, "Dashboard URL: %s\n", url)
-	if !cfg.OpenDashboard {
-		fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open disabled; open %s\n", url)
-		return false
-	}
-	return true
-}
-
-func emitHomeDirectoryDisclosure(cfg RunConfig) {
-	if cfg.StartupOutput == nil ||
-		strings.TrimSpace(cfg.HomeDir) == "" ||
-		cfg.JSON || cfg.JSONOutput || cfg.CleanInvocation ||
-		cfg.SuppressDashboardRendering || cfg.InvocationOutputExplicit {
-		return
-	}
-	_, _ = fmt.Fprintf(cfg.StartupOutput, "Home directory: %s\n", cfg.HomeDir)
-}
-
-// DiscloseHomeDirectory writes the human startup home line using the same
-// output policy as the run transport. The CLI root uses this at the server
-// readiness boundary, where it cannot access the Operation's private helper.
-func DiscloseHomeDirectory(cfg RunConfig) {
-	emitHomeDirectoryDisclosure(cfg)
 }
 
 func shouldOpenDashboard(cfg RunConfig) bool {

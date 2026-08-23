@@ -328,6 +328,7 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideNamedFactoryRootsResolver,
 	provideNamedFactoryCandidatePathsResolver,
 	provideBatchInputFileSystem,
+	provideRunInputPathInspector,
 	provideRunDirectoryCreator,
 	provideBrowserOpener,
 	provideCurrentFactoryDirectoryResolver,

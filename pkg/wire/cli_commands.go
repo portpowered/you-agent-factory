@@ -187,6 +187,10 @@ func provideBatchInputFileSystem() submitcli.BatchInputFileSystem {
 	return platformfilesystem.Local{}
 }
 
+func provideRunInputPathInspector() platformfilesystem.PathInspector {
+	return platformfilesystem.Local{}
+}
+
 func provideNamedFactoryRootsResolver() cli.NamedFactoryRootsResolver {
 	return factorydefinitions.ResolveNamedFactoryRoots
 }
