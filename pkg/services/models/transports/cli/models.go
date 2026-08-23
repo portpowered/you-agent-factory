@@ -22,9 +22,9 @@ import (
 	"go.uber.org/zap"
 )
 
-const modelsErrorBodyPreviewSize = 200
-
 var ErrModelNotFound = errors.New("model not found")
+
+const managedRuntimePullFailureCode = "CLI_MODEL_PULL_FAILED"
 
 type ListConfig struct {
 	Context     context.Context
@@ -751,14 +751,41 @@ func managedRuntimePullResponseError(statusCode int, body []byte) error {
 	case factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED,
 		factoryapi.ManagedRuntimePullOutcomeTIMEDOUT,
 		factoryapi.ManagedRuntimePullOutcomeSTILLLOADING:
-		return fmt.Errorf(
-			"managed runtime pull failed (%s readiness %s)",
-			response.ManagedRuntimePull.PullOutcome,
-			response.ManagedRuntimePull.ReadinessState,
-		)
+		return &managedRuntimePullFailure{
+			Outcome:   response.ManagedRuntimePull.PullOutcome,
+			Readiness: response.ManagedRuntimePull.ReadinessState,
+		}
 	default:
 		return nil
 	}
+}
+
+type managedRuntimePullFailure struct {
+	Outcome   factoryapi.ManagedRuntimePullOutcome
+	Readiness factoryapi.ManagedRuntimeReadinessState
+}
+
+func (failure *managedRuntimePullFailure) Error() string {
+	if failure == nil {
+		return ""
+	}
+	return fmt.Sprintf(
+		"managed runtime pull failed (pullOutcome=%s readinessState=%s)",
+		failure.Outcome,
+		failure.Readiness,
+	)
+}
+
+func (failure *managedRuntimePullFailure) CLIErrorCode() string {
+	return managedRuntimePullFailureCode
+}
+
+func (failure *managedRuntimePullFailure) CLIErrorFamily() factoryapi.ErrorFamily {
+	return factoryapi.ErrorFamilyBadRequest
+}
+
+func (failure *managedRuntimePullFailure) CLIErrorMessage() string {
+	return failure.Error()
 }
 
 func modelsRequestError(statusCode int, body []byte, response ...*http.Response) error {
@@ -779,14 +806,10 @@ func modelsRequestError(statusCode int, body []byte, response ...*http.Response)
 		}
 		return clihttp.NewAPIError(statusCode, errResp, fmt.Sprintf("models request failed (%d): %s", statusCode, errResp.Message), nil)
 	}
-	preview := strings.TrimSpace(string(body))
-	if len(preview) > modelsErrorBodyPreviewSize {
-		preview = preview[:modelsErrorBodyPreviewSize] + "..."
-	}
-	if preview == "" {
-		return clihttp.WithHTTPResponse(httpResponse, fmt.Errorf("models request failed (%d)", statusCode))
-	}
-	return clihttp.WithHTTPResponse(httpResponse, fmt.Errorf("models request failed (%d): %s", statusCode, preview))
+	return clihttp.WithHTTPResponse(
+		httpResponse,
+		fmt.Errorf("models request failed (%d): response body was not a structured API error", statusCode),
+	)
 }
 
 func modelsEndpoint(server, path string) (url.URL, error) {

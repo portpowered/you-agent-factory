@@ -297,6 +297,97 @@ func testProcessHTTPFailureDisclosure(t *testing.T) {
 	}
 }
 
+func TestProcessDebugHTTPFailureOmitsOpaqueResponseBody(t *testing.T) {
+	t.Parallel()
+
+	const responseMarker = "opaque-secret-response-marker"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/models/OMNIVOICE_Q4_K_M/pull" {
+			t.Fatalf("request = %s %s, want POST /models/OMNIVOICE_Q4_K_M/pull", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = io.WriteString(w, responseMarker)
+	}))
+	defer server.Close()
+
+	process, err := BuildProcess(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	t.Cleanup(func() { _ = process.Close(context.Background()) })
+
+	for _, mode := range cliDisclosureModes() {
+		args := append([]string{"you"}, mode.flags...)
+		args = append(args, "--server", server.URL, "models", "pull", "OMNIVOICE_Q4_K_M")
+		output := executeDisclosureFailure(t, process, args)
+		if strings.Contains(output, responseMarker) {
+			t.Fatalf("%s output leaked opaque HTTP response body: %q", mode.name, output)
+		}
+		if mode.name == "debug" {
+			for _, want := range []string{
+				"debug: http method=POST",
+				"url=" + server.URL + "/models/OMNIVOICE_Q4_K_M/pull",
+				"status=502",
+			} {
+				if !strings.Contains(output, want) {
+					t.Fatalf("debug output = %q, want %q", output, want)
+				}
+			}
+		}
+	}
+}
+
+func TestProcessRemoteModelPullPreservesFailureOutcome(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/models/OMNIVOICE_Q4_K_M/pull" {
+			t.Fatalf("request = %s %s, want POST /models/OMNIVOICE_Q4_K_M/pull", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","managedRuntimePull":{"identity":"OMNIVOICE_Q4_K_M","pullOutcome":"SOURCE_FETCH_FAILED","readinessState":"FAILED"}}`)
+	}))
+	defer server.Close()
+
+	process, err := BuildProcess(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	t.Cleanup(func() { _ = process.Close(context.Background()) })
+
+	var stdout, stderr bytes.Buffer
+	err = process.Execute(Input{
+		Args:             []string{"you", "--server", server.URL, "models", "pull", "OMNIVOICE_Q4_K_M"},
+		Env:              homeEnvironment(t.TempDir()),
+		Stdout:           &stdout,
+		Stderr:           &stderr,
+		Context:          context.Background(),
+		WorkingDirectory: t.TempDir(),
+	})
+	if err == nil {
+		t.Fatal("Process.Execute(models pull) error = nil, want 422 failure")
+	}
+	var response struct {
+		Code    string `json:"code"`
+		Family  string `json:"family"`
+		Message string `json:"message"`
+	}
+	if decodeErr := json.Unmarshal(stderr.Bytes(), &response); decodeErr != nil {
+		t.Fatalf("stderr is not one model pull diagnostic: %v\n%s", decodeErr, stderr.String())
+	}
+	if response.Code != "CLI_MODEL_PULL_FAILED" || response.Family != "BAD_REQUEST" {
+		t.Fatalf("model pull response = %#v, want typed BAD_REQUEST failure", response)
+	}
+	for _, want := range []string{"pullOutcome=SOURCE_FETCH_FAILED", "readinessState=FAILED"} {
+		if !strings.Contains(response.Message, want) {
+			t.Fatalf("model pull message = %q, want %q", response.Message, want)
+		}
+	}
+	if strings.Contains(stderr.String(), "CLI_COMMAND_FAILED") || stdout.Len() != 0 {
+		t.Fatalf("model pull failure lost classification or wrote stdout: stderr=%q stdout=%q", stderr.String(), stdout.String())
+	}
+}
+
 func TestProcessRemoteSessionShowPreservesStructuredNotFound(t *testing.T) {
 	t.Parallel()
 
