@@ -199,20 +199,7 @@ func TestWorkListPublicCLITraversesThreeRESTPages(t *testing.T) {
 	controlIDs := workIDsFromPages([]factoryapi.ListWorkResponse{control})
 
 	cappedPages := walkWorkListFiltersCounts(t, process, home, server.URL(), "--counts", "--max-results", "1000")
-	if len(cappedPages) != 2 || len(cappedPages[0].Results) != 50 || len(cappedPages[1].Results) != 1 {
-		t.Fatalf("capped CLI pages = sizes %d and %d, want 50 and 1: %#v", len(cappedPages[0].Results), len(cappedPages[1].Results), cappedPages)
-	}
-	for index, page := range cappedPages {
-		if page.PaginationContext == nil || page.PaginationContext.MaxResults != 50 {
-			t.Fatalf("capped CLI page %d pagination = %#v, want maxResults=50", index+1, page.PaginationContext)
-		}
-	}
-	if cappedPages[0].PaginationContext.NextToken == nil || strings.TrimSpace(*cappedPages[0].PaginationContext.NextToken) == "" {
-		t.Fatal("capped CLI first page did not return a continuation token")
-	}
-	if cappedIDs := workIDsFromPages(cappedPages); !equalWorkIDs(cappedIDs, controlIDs) {
-		t.Fatalf("capped CLI IDs = %#v, want census IDs %#v", cappedIDs, controlIDs)
-	}
+	assertCappedWorkListPages(t, cappedPages, controlIDs)
 
 	cliPages := walkWorkListFiltersCounts(t, process, home, server.URL(), "--counts", "--max-results", "17")
 	if len(cliPages) != 3 {
@@ -689,6 +676,36 @@ func assertWorkListFiltersCountsPages(
 			t.Fatalf("Work list page %d next token present = %t, want %t: %#v", index+1, hasNextToken, index < len(pages)-1, page.PaginationContext)
 		}
 	}
+}
+
+func assertCappedWorkListPages(
+	t *testing.T,
+	pages []factoryapi.ListWorkResponse,
+	wantIDs []string,
+) {
+	t.Helper()
+	if len(pages) != 2 || len(pages[0].Results) != 50 || len(pages[1].Results) != 1 {
+		t.Fatalf("capped CLI page sizes = %#v, want 50 and 1", pageResultCounts(pages))
+	}
+	for index, page := range pages {
+		if page.PaginationContext == nil || page.PaginationContext.MaxResults != 50 {
+			t.Fatalf("capped CLI page %d pagination = %#v, want maxResults=50", index+1, page.PaginationContext)
+		}
+	}
+	if pages[0].PaginationContext.NextToken == nil || strings.TrimSpace(*pages[0].PaginationContext.NextToken) == "" {
+		t.Fatal("capped CLI first page did not return a continuation token")
+	}
+	if gotIDs := workIDsFromPages(pages); !equalWorkIDs(gotIDs, wantIDs) {
+		t.Fatalf("capped CLI IDs = %#v, want census IDs %#v", gotIDs, wantIDs)
+	}
+}
+
+func pageResultCounts(pages []factoryapi.ListWorkResponse) []int {
+	counts := make([]int, 0, len(pages))
+	for _, page := range pages {
+		counts = append(counts, len(page.Results))
+	}
+	return counts
 }
 
 func assertWorkListFiltersCountsAcrossPages(
