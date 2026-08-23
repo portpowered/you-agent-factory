@@ -106,10 +106,6 @@ pkg/services/factory_sessions/internal/runtimeopening/models_bind_test.go: unrea
 pkg/services/factory_sessions/internal/runtimeopening/models_bind_test.go: unreachable func: openingCoordinatorResolveClock
 pkg/services/factory_sessions/internal/runtimeopening/models_bind_test.go: unreachable func: openingCoordinatorSessionLogger
 pkg/services/factory_sessions/internal/runtimeopening/models_bind_test.go: unreachable func: openingCoordinatorValidateEditable
-pkg/services/factory_sessions/internal/sessionservice/runtime.go: unreachable func: SessionRuntime.waitForActiveRuntime
-pkg/services/factory_sessions/internal/sessionservice/runtime_gateway.go: unreachable func: SessionRuntime.inferenceProgressPublisher
-pkg/services/factory_sessions/internal/sessionservice/runtime_sessions.go: unreachable func: SessionRuntime.openFactorySession
-pkg/services/factory_sessions/internal/sessionservice/runtime_sessions.go: unreachable func: SessionRuntime.startBackgroundSession
 pkg/services/factory_sessions/transports/cli/session/lifecycle_control.go: unreachable func: NewCancel
 pkg/services/factory_sessions/transports/cli/session/lifecycle_control.go: unreachable func: NewTerminate
 pkg/services/factory_sessions/transports/cli/sessionexecution/run.go: unreachable func: writeResultAvailabilityHuman

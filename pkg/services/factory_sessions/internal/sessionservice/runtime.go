@@ -249,30 +249,3 @@ func (fs *SessionRuntime) ShutdownOtherLiveSessions(except liveRuntimeHandle) er
 	}
 	return runtimebinding.ShutdownOtherLiveSessions(fs.sessionState, except, fs.StopLiveRuntime)
 }
-
-func (fs *SessionRuntime) waitForActiveRuntime(ctx context.Context) error {
-	for {
-		handle := fs.runtimeState.ActiveHandle()
-		if handle == nil {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(25 * time.Millisecond):
-				continue
-			}
-		}
-		select {
-		case <-ctx.Done():
-			_ = handle.Wait()
-		case <-handle.RunDoneCh():
-		}
-		if fs.runtimeState.ActiveHandle() != handle {
-			continue
-		}
-		if runtimeModeOrDefault(fs.runtimeMode) == interfaces.RuntimeModeService &&
-			fs.sessionState.Registry() != nil && fs.sessionState.Registry().Count() == 0 {
-			continue
-		}
-		return handle.Result()
-	}
-}
