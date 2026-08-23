@@ -39,15 +39,30 @@ func TestAPIServerPprofIsOptInThroughThePublicRunPath(t *testing.T) {
 	for _, path := range []string{
 		"/debug/pprof/", "/debug/pprof/heap", "/debug/pprof/profile",
 		"/debug/pprof/trace", "/debug/pprof/goroutine", "/debug/pprof/cmdline",
-		"/debug/pprof/symbol",
+		"/debug/pprof/symbol", "/debug/vars",
 	} {
 		response, err := http.Get(defaultServer.URL() + path)
 		if err != nil {
 			t.Fatalf("default GET %s: %v", path, err)
 		}
+		body, err := io.ReadAll(response.Body)
 		_ = response.Body.Close()
+		if err != nil {
+			t.Fatalf("read default GET %s: %v", path, err)
+		}
 		if response.StatusCode != http.StatusNotFound {
 			t.Fatalf("default GET %s status = %d, want %d", path, response.StatusCode, http.StatusNotFound)
+		}
+		if path != "/debug/pprof/heap" {
+			continue
+		}
+		var notFound factoryapi.ErrorResponse
+		if err := json.Unmarshal(body, &notFound); err != nil {
+			t.Fatalf("decode default GET %s error response: %v; body=%q", path, err, body)
+		}
+		if notFound.Code != factoryapi.ErrorResponseCode("NOT_FOUND") ||
+			notFound.Family != factoryapi.ErrorFamily("NOT_FOUND") {
+			t.Fatalf("default GET %s error response = %+v, want NOT_FOUND JSON", path, notFound)
 		}
 	}
 	runtimeSnapshot := support.GetJSON[platformhttpserver.RuntimeSnapshot](t, defaultServer.URL()+"/debug/runtime")
