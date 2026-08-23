@@ -49,6 +49,40 @@ func TestAdapter_ListModelsInvokesFakeRootAndEncodesSuccess(t *testing.T) {
 	}
 }
 
+func TestAdapter_BuiltInCatalogModelSurfacesThroughHTTP(t *testing.T) {
+	t.Parallel()
+
+	scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:http-built-in")
+	if err != nil {
+		t.Fatalf("parse Models scope: %v", err)
+	}
+	root := &rootFake{
+		listCatalog: func(context.Context, models.ListModelsRequest) (models.ListModelsResult, error) {
+			return models.ListModelsResult{Models: []models.Summary{{
+				Name: models.BuiltInModelNameASR, Operations: []models.Operation{{Name: models.OperationASR}},
+			}}}, nil
+		},
+		getCatalog: func(_ context.Context, request models.GetModelRequest) (models.GetModelResult, error) {
+			return models.GetModelResult{Model: models.Detail{Summary: models.Summary{
+				Name: request.Name, Operations: []models.Operation{{Name: models.OperationASR}},
+			}}}, nil
+		},
+	}
+	handler := NewHandlerFromRoot(RootBinding{Models: root, Scope: scope}, zap.NewNop())
+
+	listRecorder := httptest.NewRecorder()
+	handler.ListModels(listRecorder, httptest.NewRequest(http.MethodGet, "/models", nil))
+	if listRecorder.Code != http.StatusOK || !strings.Contains(listRecorder.Body.String(), `"name":"asr"`) {
+		t.Fatalf("list response = %d %s, want built-in asr", listRecorder.Code, listRecorder.Body.String())
+	}
+
+	getRecorder := httptest.NewRecorder()
+	handler.GetModel(getRecorder, httptest.NewRequest(http.MethodGet, "/models/asr", nil), "asr")
+	if getRecorder.Code != http.StatusOK || !strings.Contains(getRecorder.Body.String(), `"name":"asr"`) {
+		t.Fatalf("inspect response = %d %s, want built-in asr", getRecorder.Code, getRecorder.Body.String())
+	}
+}
+
 func TestAdapter_GetModelInvokesFakeRootWithDecodedName(t *testing.T) {
 	t.Parallel()
 

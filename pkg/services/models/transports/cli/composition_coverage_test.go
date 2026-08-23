@@ -19,6 +19,79 @@ import (
 
 const compositionCoverageUnreachableServer = "http://127.0.0.1:1"
 
+func TestRootAdapter_BuiltInCatalogModelSurfacesThroughCLI(t *testing.T) {
+	t.Parallel()
+
+	service := parityRootService(t, stubModelsRoot{
+		listModels: func(context.Context) (modelinference.List, error) {
+			return modelinference.List{Results: []modelinference.Summary{{
+				Name:       modelinference.BuiltInModelNameASR,
+				Operations: []modelinference.Operation{{Name: modelinference.OperationASR}},
+			}}}, nil
+		},
+		getCatalogModel: func(_ context.Context, request modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+			return modelinference.GetModelResult{Model: modelinference.Detail{Summary: modelinference.Summary{
+				Name: request.Name, Operations: []modelinference.Operation{{Name: modelinference.OperationASR}},
+			}}}, nil
+		},
+	})
+
+	var listOutput bytes.Buffer
+	if err := service.List(modelscli.ListConfig{Context: context.Background(), Output: &listOutput}); err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if !strings.Contains(listOutput.String(), modelinference.BuiltInModelNameASR) {
+		t.Fatalf("List() output = %q, want built-in asr", listOutput.String())
+	}
+
+	var inspectOutput bytes.Buffer
+	if err := service.Inspect(modelscli.InspectConfig{
+		Context: context.Background(), ModelName: modelinference.BuiltInModelNameASR, Output: &inspectOutput,
+	}); err != nil {
+		t.Fatalf("Inspect() error = %v", err)
+	}
+	if !strings.Contains(inspectOutput.String(), "Name:\tasr") || !strings.Contains(inspectOutput.String(), "ASR") {
+		t.Fatalf("Inspect() output = %q, want built-in asr detail", inspectOutput.String())
+	}
+}
+
+func TestRootAdapter_BuiltInPullSurfacesThroughCLI(t *testing.T) {
+	t.Parallel()
+
+	root := stubModelsRoot{
+		pullModel: func(_ context.Context, name string) (modelinference.PullResult, error) {
+			return modelinference.PullResult{
+				ModelName:          name,
+				ProviderLocality:   string(modelinference.LocalityLocal),
+				Outcome:            "PULLED",
+				ManagedPullOutcome: "INSTALLED_SUCCESSFULLY",
+				ReadinessState:     "READY",
+				LifecycleState:     "INSTALLED",
+			}, nil
+		},
+	}
+	service := parityRootService(t, root)
+
+	for _, name := range []string{
+		modelinference.BuiltInModelNameASR,
+		modelinference.BuiltInModelNameTTS,
+	} {
+		var output bytes.Buffer
+		if err := service.Pull(modelscli.PullConfig{
+			Context: context.Background(), ModelName: name, JSON: true, Output: &output,
+		}); err != nil {
+			t.Fatalf("Pull(%q): %v", name, err)
+		}
+		var response factoryapi.ModelPullResponse
+		if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+			t.Fatalf("Pull(%q) JSON: %v\n%s", name, err, output.String())
+		}
+		if response.ModelName != name || response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY {
+			t.Fatalf("Pull(%q) response = %#v, want successful built-in pull", name, response)
+		}
+	}
+}
+
 func TestNewCompositionFacadeDelegatesListAndPullThroughOwnedRoot(t *testing.T) {
 	t.Parallel()
 

@@ -11,6 +11,7 @@ import (
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
+	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -37,6 +38,133 @@ func TestRuntimeServicePullModelForScopeValidatesAndDelegates(t *testing.T) {
 	if _, err := runtime.PullModelForScope(context.Background(), models.PullModelRequest{Name: "voice"}); err == nil {
 		t.Fatal("delegated pull error = nil, want unavailable runtime failure")
 	}
+}
+
+func TestRootPullModelForScopeFallsBackToCanonicalBuiltInResolution(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{
+		models.BuiltInModelNameASR,
+		models.BuiltInModelNameTTS,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			root, scope, assets := newPullFallbackRoot(t, name)
+			result, err := root.PullModelForScope(context.Background(), models.PullModelRequest{
+				Scope: scope,
+				Name:  name,
+			})
+			if err != nil {
+				t.Fatalf("PullModelForScope(%q): %v", name, err)
+			}
+			if result.ModelName != name || result.ManagedPullOutcome != "INSTALLED_SUCCESSFULLY" ||
+				result.ReadinessState != "READY" {
+				t.Fatalf("pull result = %#v, want successful managed-runtime result", result)
+			}
+			if assets.request.Scope != scope || assets.request.Name != name {
+				t.Fatalf("asset preparation request = %#v, want scope %s and model %q", assets.request, scope.String(), name)
+			}
+		})
+	}
+}
+
+func TestRootPullModelForScopePreservesUnknownCatalogMiss(t *testing.T) {
+	t.Parallel()
+
+	root, _, assets := newPullFallbackRoot(t, "")
+	scope := firstPullFallbackScope(t, root)
+	_, err := root.PullModelForScope(context.Background(), models.PullModelRequest{
+		Scope: scope,
+		Name:  "unknown-model",
+	})
+	if !errors.Is(err, models.ErrNotFound) {
+		t.Fatalf("unknown PullModelForScope error = %v, want ErrNotFound", err)
+	}
+	if assets.request.Name != "" {
+		t.Fatalf("unknown asset preparation request = %#v, want no preparation", assets.request)
+	}
+}
+
+func TestRootPullModelForScopeKeepsExistingFactoryPullResult(t *testing.T) {
+	t.Parallel()
+
+	root, scope, assets := newPullFallbackRoot(t, "")
+	runtime := root.runtimeByScope[scope].(*pullCatalogMissRuntime)
+	runtime.result = models.PullResult{
+		ModelName:          "factory-model",
+		ProviderLocality:   string(models.LocalityLocal),
+		Outcome:            "ALREADY_PRESENT",
+		ManagedPullOutcome: "ALREADY_READY",
+		ReadinessState:     "READY",
+		LifecycleState:     "INSTALLED",
+	}
+	runtime.err = nil
+
+	result, err := root.PullModelForScope(context.Background(), models.PullModelRequest{
+		Scope: scope,
+		Name:  "factory-model",
+	})
+	if err != nil {
+		t.Fatalf("Factory PullModelForScope: %v", err)
+	}
+	if result.ModelName != "factory-model" || result.Outcome != "ALREADY_PRESENT" {
+		t.Fatalf("Factory pull result = %#v, want existing result", result)
+	}
+	if assets.request.Name != "" {
+		t.Fatalf("Factory fallback asset preparation request = %#v, want none", assets.request)
+	}
+}
+
+func newPullFallbackRoot(t *testing.T, modelName string) (*Root, models.RuntimeScopeRef, *preparationAssetService) {
+	t.Helper()
+	scopes, err := runtimescopeswire.NewService(func() string { return "pull-fallback-test" })
+	if err != nil {
+		t.Fatalf("construct runtime scopes: %v", err)
+	}
+	ref, err := scopes.Open(models.RuntimeBinding{
+		RuntimeConfig: func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
+	})
+	if err != nil {
+		t.Fatalf("open runtime scope: %v", err)
+	}
+	scope, err := (models.RuntimeScopeRef{}).Parse(string(ref))
+	if err != nil {
+		t.Fatalf("parse runtime scope: %v", err)
+	}
+	assets := &preparationAssetService{result: models.PrepareModelAssetsResult{
+		Outcome: models.AssetPreparationPrepared,
+		Asset: models.AssetSnapshot{
+			ModelName: modelName,
+			Readiness: models.AssetReadinessAvailable,
+		},
+	}}
+	root := &Root{
+		runtimeScopes: scopes,
+		assets:        assets,
+		runtimeByScope: map[models.RuntimeScopeRef]models.Service{
+			scope: &pullCatalogMissRuntime{err: models.ErrNotFound},
+		},
+	}
+	return root, scope, assets
+}
+
+func firstPullFallbackScope(t *testing.T, root *Root) models.RuntimeScopeRef {
+	t.Helper()
+	for scope := range root.runtimeByScope {
+		return scope
+	}
+	t.Fatal("pull fallback root has no runtime scope")
+	return models.RuntimeScopeRef{}
+}
+
+type pullCatalogMissRuntime struct {
+	models.Service
+	result models.PullResult
+	err    error
+}
+
+func (runtime *pullCatalogMissRuntime) PullModel(context.Context, string) (models.PullResult, error) {
+	return runtime.result, runtime.err
 }
 
 func TestRootCloseRuntimeScopePreventsConcurrentLazyRuntimeReinsertion(t *testing.T) {

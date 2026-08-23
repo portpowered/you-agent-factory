@@ -297,7 +297,11 @@ func (o *Root) PullModelForScope(
 	if !ok {
 		return models.PullResult{}, models.ErrUnsupportedOperation
 	}
-	return puller.PullModel(ctx, request.Name)
+	result, err := puller.PullModel(ctx, request.Name)
+	if err == nil || !errors.Is(err, models.ErrNotFound) {
+		return result, err
+	}
+	return o.pullResolvedModelAfterCatalogMiss(ctx, request, err)
 }
 
 func (o *Root) InspectModelAssets(

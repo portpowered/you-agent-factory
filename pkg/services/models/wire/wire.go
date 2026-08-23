@@ -10,6 +10,7 @@ package wire
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"reflect"
 	"time"
@@ -431,13 +432,18 @@ func newCatalogReadinessQuery(assetService scopedassets.Service) catalog.Readine
 		if err != nil {
 			return models.Runtime{}, err
 		}
-		return localmodels.ManagedRuntimeReadinessForFactoryContext(
+		readiness, readinessErr := localmodels.ManagedRuntimeReadinessForFactoryContext(
 			ctx,
 			&scope.Runtime,
 			detail.Name,
 			puller,
 			localmodels.DefaultManagedRuntimeSourceResolver(),
 		)
+		if readinessErr != nil && errors.Is(readinessErr, models.ErrNotFound) &&
+			detail.Diagnostics["catalogSource"] == "EFFECTIVE_DEFINITION" {
+			return detail.ManagedRuntime.Clone(), nil
+		}
+		return readiness, readinessErr
 	}
 }
 

@@ -487,6 +487,23 @@ func TestRootCatalogMatchesDirectPrivateCatalogFailures(t *testing.T) {
 func TestScopedCatalogPreservesCompatibilityBehavior(t *testing.T) {
 	t.Parallel()
 
+	fixture := newCompatibilityParityFixture(t)
+	assertCompatibilityListParity(t, fixture)
+	assertCompatibilityDetailParity(t, fixture)
+	fixture.markReady()
+	assertCompatibilityReadinessParity(t, fixture)
+}
+
+type compatibilityParityFixture struct {
+	compatibility    *Service
+	root             *Root
+	opened           models.OpenRuntimeScopeResult
+	currentReadiness *models.Runtime
+	host             *compatibilityParityHost
+}
+
+func newCompatibilityParityFixture(t *testing.T) compatibilityParityFixture {
+	t.Helper()
 	runtimeConfig := models.RuntimeConfig{
 		Workers: []models.RuntimeWorker{
 			scopedCatalogWorker("compatibility-worker", "compatibility-model", "generate"),
@@ -531,25 +548,47 @@ func TestScopedCatalogPreservesCompatibilityBehavior(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenRuntimeScope: %v", err)
 	}
+	return compatibilityParityFixture{
+		compatibility:    compatibility,
+		root:             root,
+		opened:           opened,
+		currentReadiness: &currentReadiness,
+		host:             host,
+	}
+}
 
-	legacyList, err := compatibility.ListModels(context.Background())
+func assertCompatibilityListParity(t *testing.T, fixture compatibilityParityFixture) {
+	t.Helper()
+	legacyList, err := fixture.compatibility.ListModels(context.Background())
 	if err != nil {
 		t.Fatalf("compatibility ListModels: %v", err)
 	}
-	scopedList, err := root.ListCatalog(
+	scopedList, err := fixture.root.ListCatalog(
 		context.Background(),
-		models.ListModelsRequest{Scope: opened.Scope},
+		models.ListModelsRequest{Scope: fixture.opened.Scope},
 	)
-	if err != nil || !reflect.DeepEqual(legacyList.Results, scopedList.Models) {
-		t.Fatalf("catalog list parity = (legacy %#v, scoped %#v, %v)", legacyList.Results, scopedList.Models, err)
+	if err != nil {
+		t.Fatalf("ListCatalog: %v", err)
 	}
+	var scopedCompatibility []models.Summary
+	for _, model := range scopedList.Models {
+		if model.Name == "compatibility-model" {
+			scopedCompatibility = append(scopedCompatibility, model)
+		}
+	}
+	if !reflect.DeepEqual(legacyList.Results, scopedCompatibility) {
+		t.Fatalf("catalog list parity = (legacy %#v, scoped %#v)", legacyList.Results, scopedCompatibility)
+	}
+}
 
-	legacyDetail, err := compatibility.GetModel(context.Background(), "compatibility-model")
+func assertCompatibilityDetailParity(t *testing.T, fixture compatibilityParityFixture) {
+	t.Helper()
+	legacyDetail, err := fixture.compatibility.GetModel(context.Background(), "compatibility-model")
 	if err != nil {
 		t.Fatalf("compatibility GetModel: %v", err)
 	}
-	scopedDetail, err := root.GetCatalogModel(context.Background(), models.GetModelRequest{
-		Scope: opened.Scope, Name: "compatibility-model", Operation: "generate",
+	scopedDetail, err := fixture.root.GetCatalogModel(context.Background(), models.GetModelRequest{
+		Scope: fixture.opened.Scope, Name: "compatibility-model", Operation: "generate",
 	})
 	if err != nil {
 		t.Fatalf("GetCatalogModel: %v", err)
@@ -559,25 +598,33 @@ func TestScopedCatalogPreservesCompatibilityBehavior(t *testing.T) {
 	if !reflect.DeepEqual(legacyDetail, scopedCompatibilityFields) {
 		t.Fatalf("catalog get parity = (legacy %#v, scoped %#v)", legacyDetail, scopedCompatibilityFields)
 	}
+}
 
-	currentReadiness.ReadinessState = models.ReadinessStateReady
-	currentReadiness.LifecycleState = models.LifecycleStateInstalled
-	currentReadiness.Diagnostics["readinessState"] = string(models.ReadinessStateReady)
-	currentReadiness.Diagnostics["lifecycleState"] = string(models.LifecycleStateInstalled)
-	host.snapshot = readinessSnapshot(currentReadiness)
-	legacyReadiness, err := compatibility.InspectRuntime(context.Background(), "compatibility-model")
+func (fixture *compatibilityParityFixture) markReady() {
+	fixture.currentReadiness.ReadinessState = models.ReadinessStateReady
+	fixture.currentReadiness.LifecycleState = models.LifecycleStateInstalled
+	fixture.currentReadiness.Diagnostics["readinessState"] = string(models.ReadinessStateReady)
+	fixture.currentReadiness.Diagnostics["lifecycleState"] = string(models.LifecycleStateInstalled)
+	fixture.host.snapshot = readinessSnapshot(*fixture.currentReadiness)
+}
+
+func assertCompatibilityReadinessParity(t *testing.T, fixture compatibilityParityFixture) {
+	t.Helper()
+	legacyReadiness, err := fixture.compatibility.InspectRuntime(context.Background(), "compatibility-model")
 	if err != nil {
 		t.Fatalf("compatibility InspectRuntime: %v", err)
 	}
-	scopedReadiness, err := root.GetModelReadiness(context.Background(), models.GetModelReadinessRequest{
-		Scope: opened.Scope, Name: "compatibility-model", Operation: "generate",
+	scopedReadiness, err := fixture.root.GetModelReadiness(context.Background(), models.GetModelReadinessRequest{
+		Scope: fixture.opened.Scope, Name: "compatibility-model", Operation: "generate",
 	})
-	if err != nil || !reflect.DeepEqual(legacyReadiness, scopedReadiness.Readiness) {
+	if err != nil {
+		t.Fatalf("GetModelReadiness: %v", err)
+	}
+	if !reflect.DeepEqual(legacyReadiness, scopedReadiness.Readiness) {
 		t.Fatalf(
-			"readiness parity = (legacy %#v, scoped %#v, %v)",
+			"readiness parity = (legacy %#v, scoped %#v)",
 			legacyReadiness,
 			scopedReadiness.Readiness,
-			err,
 		)
 	}
 }
@@ -769,13 +816,40 @@ func scopedCatalogResource(name, model, provider string) models.RuntimeResource 
 
 func assertScopedCatalog(t *testing.T, result models.ListModelsResult) {
 	t.Helper()
-	if len(result.Models) != 2 {
-		t.Fatalf("ListCatalog models = %#v, want two canonical identities", result.Models)
+	alpha, zeta := findScopedCatalogModels(result)
+	if alpha == nil || zeta == nil {
+		t.Fatalf("ListCatalog models = %#v, want Factory alpha/zeta identities", result.Models)
 	}
-	alpha := result.Models[0]
+	assertScopedCatalogIdentity(t, alpha, zeta)
+	assertScopedCatalogOperations(t, alpha)
+	assertScopedCatalogResource(t, alpha)
+	assertScopedCatalogRuntime(t, alpha)
+}
+
+func findScopedCatalogModels(result models.ListModelsResult) (alpha, zeta *models.Summary) {
+	for index := range result.Models {
+		switch localmodels.CanonicalModelName(result.Models[index].Name) {
+		case "ALPHA-MODEL":
+			alpha = &result.Models[index]
+		case "ZETA-MODEL":
+			zeta = &result.Models[index]
+		}
+	}
+	return alpha, zeta
+}
+
+func assertScopedCatalogIdentity(t *testing.T, alpha, zeta *models.Summary) {
+	t.Helper()
 	if localmodels.CanonicalModelName(alpha.Name) != "ALPHA-MODEL" {
-		t.Fatalf("first model = %q, want canonical ALPHA-MODEL identity", alpha.Name)
+		t.Fatalf("alpha model = %q, want canonical ALPHA-MODEL identity", alpha.Name)
 	}
+	if localmodels.CanonicalModelName(zeta.Name) != "ZETA-MODEL" {
+		t.Fatalf("zeta model = %q, want ZETA-MODEL", zeta.Name)
+	}
+}
+
+func assertScopedCatalogOperations(t *testing.T, alpha *models.Summary) {
+	t.Helper()
 	if len(alpha.Operations) != 2 ||
 		alpha.Operations[0].Name != "embed" ||
 		alpha.Operations[1].Name != "generate" {
@@ -787,26 +861,37 @@ func assertScopedCatalog(t *testing.T, result models.ListModelsResult) {
 	) {
 		t.Fatalf("alpha content types = %#v, want deterministic AUDIO/TEXT order", got)
 	}
+}
+
+func assertScopedCatalogResource(t *testing.T, alpha *models.Summary) {
+	t.Helper()
 	if len(alpha.Resources) != 1 || alpha.Resources[0].Model == nil ||
 		*alpha.Resources[0].Model != "ALPHA-MODEL" {
 		t.Fatalf("alpha resources = %#v, want detached model resource", alpha.Resources)
 	}
+}
+
+func assertScopedCatalogRuntime(t *testing.T, alpha *models.Summary) {
+	t.Helper()
 	if alpha.Status != models.StatusReady ||
 		alpha.ManagedRuntime.Diagnostics["sourceKind"] != localmodels.ManagedRuntimeSourceKindManagedMirror {
 		t.Fatalf("alpha status/runtime = %#v, want ready managed-mirror projection", alpha)
 	}
-	if localmodels.CanonicalModelName(result.Models[1].Name) != "ZETA-MODEL" {
-		t.Fatalf("second model = %q, want ZETA-MODEL", result.Models[1].Name)
-	}
 }
 
 func mutateScopedCatalogResult(result models.ListModelsResult) {
-	result.Models[0].Name = "mutated"
-	result.Models[0].Operations[0].Name = "mutated"
-	result.Models[0].Operations[0].Inputs[0].ContentTypes[0] = "mutated"
-	*result.Models[0].Resources[0].Model = "mutated"
-	result.Models[0].ManagedRuntime.SupportedOperations[0].Name = "mutated"
-	result.Models[0].ManagedRuntime.Diagnostics["sourceKind"] = "mutated"
+	for index := range result.Models {
+		if localmodels.CanonicalModelName(result.Models[index].Name) != "ALPHA-MODEL" {
+			continue
+		}
+		result.Models[index].Name = "mutated"
+		result.Models[index].Operations[0].Name = "mutated"
+		result.Models[index].Operations[0].Inputs[0].ContentTypes[0] = "mutated"
+		*result.Models[index].Resources[0].Model = "mutated"
+		result.Models[index].ManagedRuntime.SupportedOperations[0].Name = "mutated"
+		result.Models[index].ManagedRuntime.Diagnostics["sourceKind"] = "mutated"
+		return
+	}
 }
 
 func assertContractOnlyUnsupported(t *testing.T, operation string, err error) {

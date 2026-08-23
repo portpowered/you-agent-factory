@@ -155,14 +155,12 @@ func assertStory003ReadyParity(
 	}
 	httpList := support.GetJSON[factoryapi.ListModelsResponse](t, serverURL+"/models")
 	httpDetail := support.GetJSON[factoryapi.ModelDetail](t, serverURL+"/models/"+story003ModelName)
-	if len(httpList.Results) != 1 {
-		t.Fatalf("HTTP list result count = %d, want 1", len(httpList.Results))
-	}
-	assertStory003StatePair(t, httpList.Results[0].ManagedRuntime.ReadinessState, httpList.Results[0].ManagedRuntime.LifecycleState,
+	listedModel := findStory003Model(t, httpList.Results, "HTTP list")
+	assertStory003StatePair(t, listedModel.ManagedRuntime.ReadinessState, listedModel.ManagedRuntime.LifecycleState,
 		factoryapi.ManagedRuntimeReadinessStateREADY, factoryapi.ManagedRuntimeLifecycleStateINSTALLED)
-	if httpDetail.ManagedRuntime.ReadinessState != httpList.Results[0].ManagedRuntime.ReadinessState ||
-		httpDetail.ManagedRuntime.LifecycleState != httpList.Results[0].ManagedRuntime.LifecycleState {
-		t.Fatalf("HTTP list/detail managed runtime diverged: list=%#v detail=%#v", httpList.Results[0].ManagedRuntime, httpDetail.ManagedRuntime)
+	if httpDetail.ManagedRuntime.ReadinessState != listedModel.ManagedRuntime.ReadinessState ||
+		httpDetail.ManagedRuntime.LifecycleState != listedModel.ManagedRuntime.LifecycleState {
+		t.Fatalf("HTTP list/detail managed runtime diverged: list=%#v detail=%#v", listedModel.ManagedRuntime, httpDetail.ManagedRuntime)
 	}
 	assertStory003HumanOutput(t, process, "models list", story003ModelsHumanListArgs(serverURL), "READY", "INSTALLED")
 	assertStory003HumanOutput(t, process, "models inspect", story003ModelsHumanInspectArgs(serverURL), "READY", "INSTALLED")
@@ -408,11 +406,19 @@ func executeStory003List(t *testing.T, process support.Process, serverURL, phase
 	if err := json.Unmarshal([]byte(inputs.Stdout()), &listed); err != nil {
 		t.Fatalf("decode models list %s output: %v\nstdout=%s", phase, err, inputs.Stdout())
 	}
-	if len(listed.Results) != 1 {
-		t.Fatalf("models list %s result count = %d, want 1", phase, len(listed.Results))
-	}
 	t.Logf("models list %s stdout=%s", phase, strings.TrimSpace(inputs.Stdout()))
-	return listed.Results[0]
+	return findStory003Model(t, listed.Results, "models list "+phase)
+}
+
+func findStory003Model(t *testing.T, results []factoryapi.ModelSummary, surface string) factoryapi.ModelSummary {
+	t.Helper()
+	for _, result := range results {
+		if result.Name == story003ModelName {
+			return result
+		}
+	}
+	t.Fatalf("%s did not include declared model %q; results=%#v", surface, story003ModelName, results)
+	return factoryapi.ModelSummary{}
 }
 
 func assertStory003StatePair(

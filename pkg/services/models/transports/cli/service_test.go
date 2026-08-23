@@ -169,6 +169,58 @@ func (stub stubModelsRoot) InvokeLocal(context.Context, modelinference.LocalInvo
 	return modelinference.LocalInvocationResult{}, modelinference.ErrUnsupportedOperation
 }
 
+func TestRootAdapter_InvokeGenericUsesRequiredTextInputWhenOptionalSlotsSortFirst(t *testing.T) {
+	t.Parallel()
+
+	scope := testRuntimeScope(t)
+	optional := false
+	required := true
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(_ context.Context, request modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return modelinference.GetModelResult{Model: modelinference.Detail{
+					Summary: modelinference.Summary{
+						Name: request.Name,
+						Operations: []modelinference.Operation{{
+							Name: modelinference.OperationTTS,
+							Inputs: []modelinference.OperationSlot{
+								{Name: "parameters", Modality: modelinference.ModalityJSON, Required: &optional, MediaTypes: []string{"application/json"}},
+								{Name: "text", Modality: modelinference.ModalityText, Required: &required, MediaTypes: []string{"text/plain"}},
+							},
+							Outputs: []modelinference.OperationSlot{{Name: "audio", Modality: modelinference.ModalityAudio}},
+						}},
+					},
+				},
+				}, nil
+			},
+			invokeModel: func(_ context.Context, request modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				if len(request.Inputs) != 1 || request.Inputs[0].Name != "text" || request.Inputs[0].Modality != modelinference.ModalityText {
+					t.Fatalf("joined generic request inputs = %#v, want required text input", request.Inputs)
+				}
+				return modelinference.InvokeModelResult{
+					ModelName: request.Model.NameOrURI,
+					Operation: request.Operation,
+					Content:   []modelinference.InferenceContent{{ContentType: "audio/wav", Content: "synthesized"}},
+				}, nil
+			},
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
+	})
+
+	var output bytes.Buffer
+	if err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: modelinference.BuiltInModelNameTTS,
+		Operation: modelinference.OperationTTS, Text: "hello", JSON: true, Output: &output,
+	}); err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	if !strings.Contains(output.String(), "synthesized") {
+		t.Fatalf("Invoke() output = %q, want synthesized content", output.String())
+	}
+}
+
 func TestNewServiceRequiresModelsRoot(t *testing.T) {
 	t.Parallel()
 	if service := modelscli.NewService(modelscli.Config{}); service != nil {

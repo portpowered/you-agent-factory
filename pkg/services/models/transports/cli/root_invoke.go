@@ -610,13 +610,21 @@ func joinedCLIInvocationRequest(
 	inputName := "input"
 	modality := modelinference.ModalityText
 	contentType := "text/plain"
-	if selected, ok := catalogOperationForName(catalog, operation); ok && len(selected.Inputs) > 0 {
-		inputName = selected.Inputs[0].Name
-		if selected.Inputs[0].Modality != "" {
-			modality = selected.Inputs[0].Modality
+	if selected, ok := catalogOperationForName(catalog, operation); ok {
+		// Catalog projections sort slots by name; bind --text to the required
+		// text slot instead of assuming the first slot is the CLI input.
+		input := joinedCLITextInput(selected.Inputs)
+		if input == nil && len(selected.Inputs) > 0 {
+			input = &selected.Inputs[0]
 		}
-		if len(selected.Inputs[0].MediaTypes) > 0 {
-			contentType = selected.Inputs[0].MediaTypes[0]
+		if input != nil {
+			inputName = input.Name
+			if input.Modality != "" {
+				modality = input.Modality
+			}
+			if len(input.MediaTypes) > 0 {
+				contentType = input.MediaTypes[0]
+			}
 		}
 	}
 	return modelinference.InvokeModelRequest{
@@ -626,6 +634,23 @@ func joinedCLIInvocationRequest(
 			Name: inputName, Modality: modality, ContentType: contentType, Content: text,
 		}},
 	}
+}
+
+func joinedCLITextInput(inputs []modelinference.OperationSlot) *modelinference.OperationSlot {
+	var optionalText *modelinference.OperationSlot
+	for index := range inputs {
+		input := &inputs[index]
+		if input.Modality != modelinference.ModalityText {
+			continue
+		}
+		if input.Required != nil && *input.Required {
+			return input
+		}
+		if optionalText == nil {
+			optionalText = input
+		}
+	}
+	return optionalText
 }
 
 func modelInvocationResponseFromInferenceResult(
