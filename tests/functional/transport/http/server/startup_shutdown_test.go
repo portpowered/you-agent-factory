@@ -18,6 +18,7 @@ import (
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -27,10 +28,13 @@ import (
 // the same loopback API server built through root.BuildProcess.
 func TestAPIServerPprofIsOptInThroughThePublicRunPath(t *testing.T) {
 	dir := support.ScaffoldFactory(t, startupShutdownTestFactoryConfig())
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	edges := serviceedges.Edges{}
+	support.ConfigureWorkerCommands(t, &edges, support.NewStaticSuccessCommandRunner("pprof diagnostics"), nil)
 	defaultServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
+		Edges:                     edges,
 	})
 	for _, path := range []string{
 		"/debug/pprof/", "/debug/pprof/heap", "/debug/pprof/profile",
@@ -55,8 +59,8 @@ func TestAPIServerPprofIsOptInThroughThePublicRunPath(t *testing.T) {
 
 	enabledServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
+		Edges:                     edges,
 		Args:                      []string{"--pprof"},
 	})
 	index, err := http.Get(enabledServer.URL() + "/debug/pprof/")
