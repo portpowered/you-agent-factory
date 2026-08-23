@@ -62,7 +62,7 @@ func (o *operation) OpenModelsPresentationScope(
 	if o == nil {
 		return models.PresentationScope{}, errors.New("invocation operation is required")
 	}
-	factoryDir, err := o.ResolveModelInvocationFactoryDir(request.FactoryDir)
+	factoryDir, err := o.resolveModelInvocationFactoryDir(request.FactoryDir, request.WorkingDirectory)
 	if err != nil {
 		return models.PresentationScope{}, err
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -105,6 +106,39 @@ func TestResolveModelsInvokeFactoryDir_PreservesExplicitDirectory(t *testing.T) 
 	}
 	if resolverCalled {
 		t.Fatal("current-directory resolver was called for an explicit factory directory")
+	}
+}
+
+func TestResolveModelsInvokeFactoryDir_FallsBackToLegacyRootLayout(t *testing.T) {
+	t.Parallel()
+
+	workingDirectory := filepath.Join("workspace", "project")
+	legacyDirectory := filepath.Join(workingDirectory, "legacy-factory")
+	var searched []string
+	operation := &operation{
+		workingDirectory: workingDirectoryStub{dir: workingDirectory},
+		resolveCurrentDir: func(root string) (string, error) {
+			searched = append(searched, root)
+			if root == filepath.Join(workingDirectory, factorydefinitions.FactoryDir) {
+				return "", factorydefinitions.ErrFactoryLayoutNotFound
+			}
+			if root == workingDirectory {
+				return legacyDirectory, nil
+			}
+			return "", factorydefinitions.ErrFactoryLayoutNotFound
+		},
+	}
+
+	resolved, err := operation.ResolveModelInvocationFactoryDir("")
+	if err != nil {
+		t.Fatalf("ResolveModelInvocationFactoryDir: %v", err)
+	}
+	if resolved != legacyDirectory {
+		t.Fatalf("resolved directory = %q, want legacy %q", resolved, legacyDirectory)
+	}
+	wantSearched := []string{filepath.Join(workingDirectory, factorydefinitions.FactoryDir), workingDirectory}
+	if !reflect.DeepEqual(searched, wantSearched) {
+		t.Fatalf("searched roots = %#v, want %#v", searched, wantSearched)
 	}
 }
 

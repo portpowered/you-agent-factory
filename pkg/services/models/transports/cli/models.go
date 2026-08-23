@@ -64,6 +64,7 @@ type InvokeConfig struct {
 	OutputMappings   []string
 	Server           string
 	FactoryDir       string
+	WorkingDirectory string
 	HomeDir          string
 	OperatorDefaults operatorconfig.ResolvedDefaults
 	Logger           *zap.Logger
@@ -267,6 +268,7 @@ func (service *httpService) Invoke(cfg InvokeConfig) error {
 			Operation:        operation,
 			Text:             text,
 			FactoryDir:       cfg.FactoryDir,
+			WorkingDirectory: cfg.WorkingDirectory,
 			HomeDir:          cfg.HomeDir,
 			OperatorDefaults: cfg.OperatorDefaults,
 			Logger:           cfg.Logger,
@@ -292,6 +294,7 @@ func (service *httpService) Invoke(cfg InvokeConfig) error {
 		Text:             text,
 		OutputPath:       outputPath,
 		FactoryDir:       cfg.FactoryDir,
+		WorkingDirectory: cfg.WorkingDirectory,
 		HomeDir:          cfg.HomeDir,
 		OperatorDefaults: cfg.OperatorDefaults,
 		Logger:           cfg.Logger,
@@ -434,6 +437,7 @@ type invokeOptions struct {
 	Text             string
 	OutputPath       string
 	FactoryDir       string
+	WorkingDirectory string
 	HomeDir          string
 	OperatorDefaults operatorconfig.ResolvedDefaults
 	Logger           *zap.Logger

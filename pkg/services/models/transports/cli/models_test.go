@@ -62,7 +62,18 @@ func TestCommandHandlerTransformsInvokeCommandState(t *testing.T) {
 	var diagnostics bytes.Buffer
 
 	handler := NewCommandHandler(
-		commandServiceFake{invoke: assertTransformedInvokeConfig(t, server, logger, &diagnostics)},
+		commandServiceFake{invoke: func(cfg InvokeConfig) error {
+			if cfg.ModelName != "OMNIVOICE_Q4_K_M" || cfg.Operation != "TTS" || cfg.Text != "hello" || cfg.OutputPath != "speech.wav" {
+				t.Fatalf("InvokeConfig command values = %#v", cfg)
+			}
+			if cfg.Server != server || !cfg.JSON || !cfg.Verbose || !cfg.Debug {
+				t.Fatalf("InvokeConfig global values = %#v", cfg)
+			}
+			if cfg.FactoryDir != "" || cfg.WorkingDirectory != "/factory" || cfg.HomeDir != "/home/tester" || cfg.Logger != logger || cfg.Diagnostics != &diagnostics {
+				t.Fatalf("InvokeConfig dependencies = %#v", cfg)
+			}
+			return nil
+		}},
 		func(*cobra.Command) io.Writer { return &diagnostics },
 		func() (string, error) { return "/home/tester", nil },
 		func(_ *cobra.Command, homeDir string) (operatorconfig.ResolvedDefaults, error) {

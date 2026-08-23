@@ -625,8 +625,9 @@ func (composition modelsCLIComposition) CompositionOpenInvokeScope(
 	cfg modelscli.InvokeConfig,
 ) (modelscli.InvokeRuntimeScope, error) {
 	opened, err := composition.source.OpenModelsPresentationScope(ctx, modelservice.PresentationScopeRequest{
-		FactoryDir: cfg.FactoryDir,
-		HomeDir:    cfg.HomeDir,
+		FactoryDir:       cfg.FactoryDir,
+		WorkingDirectory: cfg.WorkingDirectory,
+		HomeDir:          cfg.HomeDir,
 		OperatorDefaults: modelservice.PresentationOperatorDefaults{
 			WorkerModelProvider: cfg.OperatorDefaults.WorkerModelProvider,
 			WorkerModel:         cfg.OperatorDefaults.WorkerModel,

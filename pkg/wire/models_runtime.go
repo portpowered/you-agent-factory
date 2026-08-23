@@ -692,6 +692,19 @@ func (o modelsCLIInvocationOperation) ResolveModelInvocationFactoryDir(
 	return o.invocation.ResolveModelInvocationFactoryDir(factoryDir)
 }
 
+func (o modelsCLIInvocationOperation) ResolveModelInvocationFactoryDirForWorkingDirectory(
+	factoryDir string,
+	workingDirectory string,
+) (string, error) {
+	resolver, ok := o.invocation.(interface {
+		ResolveModelInvocationFactoryDirForWorkingDirectory(string, string) (string, error)
+	})
+	if !ok {
+		return o.invocation.ResolveModelInvocationFactoryDir(factoryDir)
+	}
+	return resolver.ResolveModelInvocationFactoryDirForWorkingDirectory(factoryDir, workingDirectory)
+}
+
 func (o modelsCLIInvocationOperation) ExportModelInvocationArtifact(
 	source string,
 	destination string,

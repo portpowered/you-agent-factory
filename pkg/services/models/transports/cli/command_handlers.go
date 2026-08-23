@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 
+	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
@@ -155,7 +156,7 @@ func (h *CommandHandler) Invoke(
 		// Leave FactoryDir empty so the Factory Session invocation boundary owns
 		// the documented default-layout discovery. A non-empty value is reserved
 		// for an explicit directory supplied by a caller of the Models service.
-		HomeDir:          homeDir,
+		WorkingDirectory: startupcli.WorkingDirectory(cmd.Context()), HomeDir: homeDir,
 		OperatorDefaults: defaults, Logger: logger,
 	}
 	if err := h.applyResolvedCommon(cmd, inherited, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics); err != nil {
