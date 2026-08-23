@@ -309,6 +309,53 @@ actionable deprecation warning directing scripts to `--listen`. `--server` is
 not a local listener selector for ordinary `you run`; ordinary runs remain
 serverless, and `--listen` requires `--with-server` or `--with-site`.
 
+## Capture local runtime memory diagnostics
+
+`--pprof` is off by default. Enable it only for local diagnostics, and keep
+the listener on a loopback host.
+
+1. Start the local server:
+
+   ```bash
+   you server --pprof --listen 127.0.0.1:7437
+   ```
+
+   The server accepts local requests at `127.0.0.1:7437`. The pprof routes
+   remain unavailable when `--pprof` is omitted.
+
+2. Inspect the current runtime snapshot:
+
+   ```bash
+   curl -sS http://127.0.0.1:7437/debug/runtime
+   ```
+
+   The JSON includes `heapAllocBytes`, `heapInuseBytes`, `sysBytes`, `numGC`,
+   `goroutines`, `processCommitBytes`, and `processCommitAvailable`.
+
+3. Save a heap profile while the server is running:
+
+   ```bash
+   curl -sS http://127.0.0.1:7437/debug/pprof/heap -o heap.pprof
+   ```
+
+   The command creates a non-empty `heap.pprof` file.
+
+4. Inspect the live heap profile with the Go tool:
+
+   ```bash
+   go tool pprof -top http://127.0.0.1:7437/debug/pprof/heap
+   ```
+
+   The command prints a table with allocation columns, including `flat` and
+   `cum`. Use `go tool pprof -top heap.pprof` to inspect the saved copy.
+
+On Windows, the working set can be trimmed without reducing committed process
+memory. Compare `processCommitBytes` from `GET /debug/runtime` over time. Do
+not use RSS or working set as the process-commit signal.
+
+Use pprof only for local diagnostics. Never enable it on a non-loopback
+listener. In PowerShell, use `curl.exe` when the `curl` alias is unavailable.
+
 ## Remote placement and local hosting
 
 Use `--remote` when the operation should go through an already-running You
