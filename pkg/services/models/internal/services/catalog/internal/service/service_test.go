@@ -356,6 +356,10 @@ func TestCatalogReadsOverlayResolvedRuntimeStateAndCacheFacts(t *testing.T) {
 		detail.Model.ManagedRuntime.LifecycleState != models.LifecycleStateInstalling {
 		t.Fatalf("inspect runtime states = (%s, %s), want FAILED/INSTALLING", detail.Model.ManagedRuntime.ReadinessState, detail.Model.ManagedRuntime.LifecycleState)
 	}
+	if detail.Model.Diagnostics["readinessState"] != string(detail.Model.ManagedRuntime.ReadinessState) ||
+		detail.Model.Diagnostics["lifecycleState"] != string(detail.Model.ManagedRuntime.LifecycleState) {
+		t.Fatalf("detail diagnostics state = %#v, want the resolved managed runtime state", detail.Model.Diagnostics)
+	}
 }
 
 func listCatalogCacheFacts(
