@@ -1,6 +1,8 @@
 package workflowruntime_test
 
 import (
+	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -8,6 +10,160 @@ import (
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/callbehavior"
 )
+
+func TestRun_AgentRunAcceptsAndNormalizesAllSupportedFields(t *testing.T) {
+	stub := &stubChildExecutor{mode: stubChildExecutionMode}
+	outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+		Source: `agent.run({
+  prompt: "  review  ",
+  label: "  reviewer  ",
+  preset: "  careful  ",
+  executorProvider: "  cursor-acp  ",
+  modelProvider: "  codex  ",
+  model: "  gpt-test  ",
+  reasoningEffort: "  high  ",
+  resourceId: "  reviewers  ",
+  skipPermissions: true
+}); return { ok: true };`,
+		SourceRef: "agent-run-closed-contract",
+		SessionID: "agent-run-closed-contract-valid",
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+		WorkerSettings: factory.JavaScriptWorkerSettings{Presets: map[string]factory.JavaScriptWorkerPreset{
+			"careful": {},
+		}},
+	}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+		return stub
+	}})
+	if err != nil || !outcome.OK {
+		t.Fatalf("Run() = outcome %#v, error %v", outcome, err)
+	}
+
+	requests := stub.executionRequests()
+	if len(requests) != 1 {
+		t.Fatalf("child executor request count = %d, want 1", len(requests))
+	}
+	want := factory.JavaScriptChildExecutionRequest{
+		Prompt:           "review",
+		Label:            "reviewer",
+		Preset:           "careful",
+		ExecutorProvider: "cursor-acp",
+		ModelProvider:    "codex",
+		Model:            "gpt-test",
+		ReasoningEffort:  "high",
+		ResourceID:       "reviewers",
+		SkipPermissions:  true,
+	}
+	got := requests[0]
+	if got.Prompt != want.Prompt ||
+		got.Label != want.Label ||
+		got.Preset != want.Preset ||
+		got.ExecutorProvider != want.ExecutorProvider ||
+		got.ModelProvider != want.ModelProvider ||
+		got.Model != want.Model ||
+		got.ReasoningEffort != want.ReasoningEffort ||
+		got.ResourceID != want.ResourceID ||
+		got.SkipPermissions != want.SkipPermissions {
+		t.Fatalf("child executor request = %#v, want %#v", requests[0], want)
+	}
+}
+
+func TestRun_AgentRunRejectsInvalidArgumentShapesBeforeDispatch(t *testing.T) {
+	cases := []struct {
+		name      string
+		source    string
+		wantError string
+	}{
+		{name: "non-object argument", source: `agent.run("review");`, wantError: "agent.run() requires an object argument"},
+		{name: "missing prompt", source: `agent.run({ label: "reviewer" });`, wantError: `agent.run() requires an object argument with a string "prompt" property`},
+		{name: "empty prompt", source: `agent.run({ prompt: "   " });`, wantError: `agent.run() requires a non-empty string "prompt" property`},
+		{name: "non-string prompt", source: `agent.run({ prompt: 42 });`, wantError: `agent.run() requires "prompt" to be a string`},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			assertAgentRunContractFailure(t, test.source, test.wantError)
+		})
+	}
+}
+
+func TestRun_AgentRunRejectsInvalidOptionalValuesBeforeDispatch(t *testing.T) {
+	fields := []string{"label", "preset", "executorProvider", "modelProvider", "model", "reasoningEffort", "resourceId"}
+	for _, field := range fields {
+		t.Run(field, func(t *testing.T) {
+			source := fmt.Sprintf(`agent.run({ prompt: "review", %q: 42 });`, field)
+			wantError := `agent.run() requires "` + field + `" to be a string`
+			assertAgentRunContractFailure(t, source, wantError)
+		})
+	}
+}
+
+func TestRun_AgentRunNormalizesOmittedAndFalseSkipPermissions(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		source string
+	}{
+		{name: "omitted", source: `agent.run({ prompt: "review" }); return { ok: true };`},
+		{name: "explicit false", source: `agent.run({ prompt: "review", skipPermissions: false }); return { ok: true };`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			outcome, stub := runAgentRunWithStub(t, test.source, factory.JavaScriptWorkerSettings{})
+			if !outcome.OK {
+				t.Fatalf("Run() failure = %#v", outcome.Failure)
+			}
+			requests := stub.executionRequests()
+			if len(requests) != 1 {
+				t.Fatalf("child executor request count = %d, want 1", len(requests))
+			}
+			if requests[0].SkipPermissions {
+				t.Fatalf("child executor request = %#v, want skipPermissions=false", requests[0])
+			}
+		})
+	}
+}
+
+func TestRun_AgentRunRejectsUnsupportedPropertyBeforeDispatch(t *testing.T) {
+	outcome, stub := runAgentRunWithStub(t, `const child = { prompt: "review" }; child.unexpected = "value-secret"; agent.run(child);`, factory.JavaScriptWorkerSettings{})
+	const wantError = `agent.run() does not support field "unexpected"`
+	if outcome.OK || !strings.Contains(outcome.Failure.Message, wantError) {
+		t.Fatalf("Run() outcome = %#v, want failure containing %q", outcome, wantError)
+	}
+	if strings.Contains(outcome.Failure.Message, "value-secret") {
+		t.Fatalf("Run() failure = %q, want unsupported-field diagnostic without value", outcome.Failure.Message)
+	}
+	if len(stub.executionRequests()) != 0 {
+		t.Fatalf("child executor requests = %#v, want none", stub.executionRequests())
+	}
+	assertNoChildDispatchRecords(t, outcome.Records)
+}
+
+func assertAgentRunContractFailure(t *testing.T, source, wantError string) {
+	t.Helper()
+	outcome, stub := runAgentRunWithStub(t, source, factory.JavaScriptWorkerSettings{})
+	if outcome.OK || !strings.Contains(outcome.Failure.Message, wantError) {
+		t.Fatalf("Run() outcome = %#v, want failure containing %q", outcome, wantError)
+	}
+	if len(stub.executionRequests()) != 0 {
+		t.Fatalf("child executor requests = %#v, want none", stub.executionRequests())
+	}
+	assertNoChildDispatchRecords(t, outcome.Records)
+}
+
+func runAgentRunWithStub(t *testing.T, source string, settings factory.JavaScriptWorkerSettings) (factory.JavaScriptRuntimeOutcome, *stubChildExecutor) {
+	t.Helper()
+	stub := &stubChildExecutor{mode: stubChildExecutionMode}
+	outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+		Source:         source,
+		SourceRef:      "agent-run-closed-contract",
+		SessionID:      "agent-run-closed-contract-case",
+		Policy:         workflowpolicy.DefaultEffectivePolicy(),
+		WorkerSettings: settings,
+	}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+		return stub
+	}})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	return outcome, stub
+}
 
 func TestCallBehavior_WorkflowFinalInventoryMatchesExecution(t *testing.T) {
 	record := callBehaviorRecord(t, "workflow.final")

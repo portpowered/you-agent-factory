@@ -2,6 +2,7 @@ package factory_test
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -171,6 +172,60 @@ func TestValidateCapability_ReadOnlyDeniesHostCapabilitiesBeforeRuntime(t *testi
 		if diagnostic := factory.ValidateJavaScriptPolicyCapability(policy, capability); diagnostic == nil {
 			t.Fatalf("capability %q should be denied for read-only policy", capability)
 		}
+	}
+}
+
+func TestDeniedJavaScriptPolicyCapabilities_CharacterizesCurrentDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	wantDefault := []factory.JavaScriptPolicyDiagnostic{
+		{Code: factory.JavaScriptPolicyCodeDeniedCapability, Message: "workspace-write workers are denied when policy.mode is READ_ONLY (workspace-write)"},
+		{Code: factory.JavaScriptPolicyCodeDeniedCapability, Message: "direct workflow filesystem writes are denied when policy.mode is READ_ONLY (filesystem-write)"},
+		{Code: factory.JavaScriptPolicyCodeDeniedCapability, Message: "direct shell/process access is denied when policy.mode is READ_ONLY (shell-process)"},
+		{Code: factory.JavaScriptPolicyCodeDeniedCapability, Message: "direct network access is denied when policy.mode is READ_ONLY (network)"},
+		{Code: factory.JavaScriptPolicyCodeDeniedCapability, Message: "connectors are denied when policy.mode is READ_ONLY (connectors)"},
+		{Code: factory.JavaScriptPolicyCodeDeniedCapability, Message: "danger-full-access is denied when policy.mode is READ_ONLY (danger-full-access)"},
+	}
+
+	tests := []struct {
+		name   string
+		policy factory.JavaScriptPolicy
+		want   []factory.JavaScriptPolicyDiagnostic
+	}{
+		{
+			name:   "read-only defaults",
+			policy: factory.DefaultJavaScriptPolicy(),
+			want:   wantDefault,
+		},
+		{
+			name: "read-only allow flags omit only their capabilities",
+			policy: func() factory.JavaScriptPolicy {
+				policy := factory.DefaultJavaScriptPolicy()
+				policy.AllowNetwork = true
+				policy.AllowConnectors = true
+				policy.AllowDangerFullAccess = true
+				return policy
+			}(),
+			want: wantDefault[:3],
+		},
+		{
+			name: "non-read-only mode",
+			policy: func() factory.JavaScriptPolicy {
+				policy := factory.DefaultJavaScriptPolicy()
+				policy.Mode = "WRITE"
+				return policy
+			}(),
+			want: nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := factory.DeniedJavaScriptPolicyCapabilities(test.policy)
+			if !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("DeniedJavaScriptPolicyCapabilities() = %#v, want %#v", got, test.want)
+			}
+		})
 	}
 }
 
