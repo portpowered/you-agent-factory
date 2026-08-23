@@ -479,7 +479,7 @@ func canceledBeforeAdmissionResult(request workers.WorkstationDispatchRequest) w
 			DispatchID:   request.Execution.Dispatch.DispatchID,
 			TransitionID: request.Execution.Dispatch.TransitionID,
 			Outcome:      workers.OutcomeCanceled,
-			Cancellation: workers.NewDispatchCancellation(workers.DispatchCancellationReasonCanceled),
+			Cancellation: &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled},
 			Error:        workers.ErrWorkstationDispatchCanceled.Error(),
 		},
 	}
@@ -717,13 +717,6 @@ func (s *supervision) admissionAllowed() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.preAdmissionAction == "" && s.requestedAction == "" && s.controlAction == ""
-}
-
-func (s *supervision) cancellationRequested() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.preAdmissionAction != "" || s.requestedAction != "" ||
-		s.controlAction != "" || s.controlActive
 }
 
 func (s *supervision) isAccepted() bool {

@@ -3,6 +3,7 @@ package subsystems
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -180,4 +181,20 @@ func firstNonResourceInput(inputs []factorytoken.Color) *factorytoken.Color {
 		}
 	}
 	return nil
+}
+
+func cloneHistoryForIntermittentFailureRequeue(
+	history factorytoken.History,
+	result resolvedWorkResult,
+	now time.Time,
+) factorytoken.History {
+	cloned := factorytoken.CloneHistory(history)
+	cloned.LastError = result.err
+	cloned.FailureLog = append(cloned.FailureLog, factorytoken.Failure{
+		TransitionID: result.transitionID,
+		Timestamp:    now,
+		Error:        result.err,
+		Attempt:      history.TotalVisits[result.transitionID],
+	})
+	return cloned
 }

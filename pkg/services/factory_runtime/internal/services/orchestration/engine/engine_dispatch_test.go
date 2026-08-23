@@ -115,6 +115,20 @@ func TestEngine_SameTickSupersededLoserRestoresResourcesWhileWinnerCompletes(t *
 		t.Fatalf("same-tick dispatches = %d, want winner and loser", len(forwarded))
 	}
 
+	deliverSameWorkTerminalResults(t, hook, forwarded)
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatalf("result Tick() error: %v", err)
+	}
+	assertSameWorkTerminalMarking(t, engine.GetMarking())
+	assertSameWorkDispatchHistory(t, engine.runtimeState.DispatchHistory)
+}
+
+func deliverSameWorkTerminalResults(
+	t *testing.T,
+	hook *testDispatchResultHook,
+	forwarded []work.WorkDispatch,
+) {
+	t.Helper()
 	for _, dispatch := range forwarded {
 		result := workerexecution.WorkResult{
 			DispatchID:   dispatch.DispatchID,
@@ -124,32 +138,30 @@ func TestEngine_SameTickSupersededLoserRestoresResourcesWhileWinnerCompletes(t *
 		case "consume-work":
 			result.Outcome = workerexecution.OutcomeAccepted
 		case "observe-work":
-			// This is the command-cleanup result after the compatible loser is
-			// force-killed. The explicit marker is what keeps exit-code/process
-			// cleanup facts from being interpreted as a Work failure.
 			result.Outcome = workerexecution.OutcomeCanceled
-			result.Cancellation = workerexecution.NewDispatchCancellation(workerexecution.DispatchCancellationReasonSuperseded)
+			result.Cancellation = &workerexecution.DispatchCancellation{Reason: workerexecution.DispatchCancellationReasonSuperseded}
 		default:
 			t.Fatalf("unexpected transition %q", dispatch.TransitionID)
 		}
 		hook.results = append(hook.results, result)
 	}
+}
 
-	if err := engine.Tick(context.Background()); err != nil {
-		t.Fatalf("result Tick() error: %v", err)
-	}
-	markingSnapshot := engine.GetMarking()
-	if got := len(markingSnapshot.TokensInPlace("task:failed")); got != 0 {
+func assertSameWorkTerminalMarking(t *testing.T, marking petri.MarkingSnapshot) {
+	t.Helper()
+	if got := len(marking.TokensInPlace("task:failed")); got != 0 {
 		t.Fatalf("failed Work tokens = %d, want none after superseded loser cleanup", got)
 	}
-	if got := len(markingSnapshot.TokensInPlace("task:complete")); got != 1 {
+	if got := len(marking.TokensInPlace("task:complete")); got != 1 {
 		t.Fatalf("completed Work tokens = %d, want winner completion", got)
 	}
-	if got := len(markingSnapshot.TokensInPlace("slot:available")); got != 1 {
+	if got := len(marking.TokensInPlace("slot:available")); got != 1 {
 		t.Fatalf("restored resource tokens = %d, want canceled loser resource claim restored", got)
 	}
+}
 
-	history := engine.runtimeState.DispatchHistory
+func assertSameWorkDispatchHistory(t *testing.T, history []interfaces.CompletedDispatch) {
+	t.Helper()
 	if len(history) != 2 {
 		t.Fatalf("dispatch history = %#v, want winner and superseded loser", history)
 	}

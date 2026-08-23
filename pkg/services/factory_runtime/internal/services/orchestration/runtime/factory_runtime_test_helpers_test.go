@@ -382,11 +382,11 @@ func testDispatchResultFromExecute(
 		}
 	}
 	if executeErr != nil {
-		if errors.Is(executeErr, context.Canceled) || errors.Is(executeErr, workers.ErrWorkstationDispatchCanceled) || result.Outcome == workers.ExecutionOutcomeCanceled {
+		if errors.Is(executeErr, workers.ErrWorkstationDispatchCanceled) || result.Outcome == workers.ExecutionOutcomeCanceled {
 			terminal = workers.WorkstationDispatchTerminalOutcomeCanceled
 			workResult.Outcome = workers.OutcomeCanceled
 			if workResult.Cancellation == nil {
-				workResult.Cancellation = workers.NewDispatchCancellation(workers.DispatchCancellationReasonCanceled)
+				workResult.Cancellation = &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled}
 			}
 			workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
 		} else {
@@ -410,7 +410,7 @@ func testDispatchResultFromExecute(
 		workResult.Outcome = workers.OutcomeCanceled
 		terminal = workers.WorkstationDispatchTerminalOutcomeCanceled
 		if workResult.Cancellation == nil {
-			workResult.Cancellation = workers.NewDispatchCancellation(workers.DispatchCancellationReasonCanceled)
+			workResult.Cancellation = &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled}
 		}
 		if workResult.Error == "" {
 			workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()

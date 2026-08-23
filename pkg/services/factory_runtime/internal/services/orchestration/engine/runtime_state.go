@@ -29,6 +29,47 @@ type RuntimeState struct {
 	TickCount            int                                              `json:"tick_count"`
 }
 
+func completedDispatchReasonFromResult(result workerexecution.WorkResult) string {
+	switch result.Outcome {
+	case workerexecution.OutcomeCanceled:
+		if result.Cancellation != nil {
+			return string(result.Cancellation.Reason)
+		}
+		return string(workerexecution.DispatchCancellationReasonCanceled)
+	case workerexecution.OutcomeFailed:
+		return result.Error
+	case workerexecution.OutcomeContinue, workerexecution.OutcomeRejected:
+		return result.Feedback
+	default:
+		return ""
+	}
+}
+
+func workResultForCompletedDispatch(result workerexecution.WorkResult, completed interfaces.CompletedDispatch) workerexecution.WorkResult {
+	result.Outcome = completed.Outcome
+	result.Cancellation = completed.Cancellation.Clone()
+	if completed.Outcome == workerexecution.OutcomeCanceled {
+		result.Error = completed.Reason
+		result.FailureDetail = nil
+		result.FailureMetadata = nil
+		result.RecordedOutputWork = nil
+		result.Output = ""
+		result.StructuredResult = nil
+		result.StructuredResultPresent = false
+	}
+	result.SelectedClassificationLabel = completed.SelectedClassificationLabel
+	if completed.FailureDetail != nil {
+		result.FailureDetail = workerexecution.CloneFailureDetail(completed.FailureDetail)
+	}
+	switch completed.Outcome {
+	case workerexecution.OutcomeFailed:
+		result.Error = completed.Reason
+	case workerexecution.OutcomeContinue, workerexecution.OutcomeRejected:
+		result.Feedback = completed.Reason
+	}
+	return result
+}
+
 // Snapshot produces an immutable deep copy of the RuntimeState.
 func (rs *RuntimeState) Snapshot() interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
 	snap := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{

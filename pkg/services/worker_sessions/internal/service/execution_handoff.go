@@ -156,12 +156,23 @@ func executeWithService(
 	if supervision.processGoneObserved() {
 		executeResult = processGoneExecuteResult(executeRequest, executeResult)
 		executeErr = workers.ErrWorkstationDispatchProcessGone
+	} else if ctx.Err() == context.Canceled && executeErr != nil {
+		executeResult.Outcome = workers.ExecutionOutcomeCanceled
+		executeResult.Cancellation = &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled}
+		executeErr = errors.Join(workers.ErrWorkstationDispatchCanceled, executeErr)
 	}
 	return dispatchResultFromExecute(request, executeResult, executeErr)
 }
 
 type processLifecycleObserver struct {
 	supervision *supervision
+}
+
+func (s *supervision) cancellationRequested() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.preAdmissionAction != "" || s.requestedAction != "" ||
+		s.controlAction != "" || s.controlActive
 }
 
 func (observer processLifecycleObserver) ProcessStarted(platformprocess.ProcessInfo) {}
@@ -282,6 +293,27 @@ func dispatchResultFromExecute(
 	result workers.ExecuteResult,
 	executeErr error,
 ) (workers.WorkstationDispatchResult, error) {
+	workResult := workResultFromExecute(request, result)
+	terminal, reconciliationReason, dispatchErr := classifyExecuteResult(result, executeErr, &workResult)
+	if terminal == workers.WorkstationDispatchTerminalOutcomeCanceled {
+		clearCanceledDispatchResult(&workResult)
+	}
+	output := result.Output.Clone()
+	return workers.WorkstationDispatchResult{
+		DispatchID:           request.Execution.Dispatch.DispatchID,
+		WorkstationName:      request.WorkstationName,
+		TerminalOutcome:      terminal,
+		ReconciliationReason: reconciliationReason,
+		Cancellation:         workResult.Cancellation.Clone(),
+		Result:               workResult,
+		ProposedOutput:       &output,
+	}, dispatchErr
+}
+
+func workResultFromExecute(
+	request workers.WorkstationDispatchRequest,
+	result workers.ExecuteResult,
+) workers.WorkResult {
 	workResult := workers.WorkResult{
 		DispatchID:                  request.Execution.Dispatch.DispatchID,
 		TransitionID:                request.Execution.Dispatch.TransitionID,
@@ -301,40 +333,30 @@ func dispatchResultFromExecute(
 		},
 		Diagnostics: result.Diagnostics.ToWorkDiagnostics(),
 	}
-	if workResult.Cancellation == nil {
-		workResult.Cancellation = result.Cancellation.Clone()
+	if result.Failure == nil {
+		return workResult
 	}
-	terminal := workers.WorkstationDispatchTerminalOutcomeCompleted
-	reconciliationReason := workers.WorkstationDispatchReconciliationReason("")
-	if result.Failure != nil {
-		workResult.Error = result.Failure.Message
-		workResult.FailureMetadata = &workers.WorkFailureMetadata{
-			Family: result.Failure.Family,
-			Type:   result.Failure.Type,
-		}
-		workResult.ProviderFailureKind = result.Failure.ProviderFailureKind
-		workResult.ProviderContinuationFailureKind = result.Failure.ProviderContinuationFailureKind
-		workResult.ProviderContinuationOutcome = result.Failure.ProviderContinuationOutcome
+	workResult.Error = result.Failure.Message
+	workResult.FailureMetadata = &workers.WorkFailureMetadata{
+		Family: result.Failure.Family,
+		Type:   result.Failure.Type,
 	}
-	if executeErr != nil {
-		if errors.Is(executeErr, context.Canceled) || result.Outcome == workers.ExecutionOutcomeCanceled {
-			terminal = workers.WorkstationDispatchTerminalOutcomeCanceled
-			workResult.Outcome = workers.OutcomeCanceled
-			if workResult.Cancellation == nil {
-				workResult.Cancellation = workers.NewDispatchCancellation(workers.DispatchCancellationReasonCanceled)
-			}
-			workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
-			executeErr = errors.Join(workers.ErrWorkstationDispatchCanceled, executeErr)
-		} else {
-			terminal = workers.WorkstationDispatchTerminalOutcomeFailed
-			if workResult.Error == "" {
-				workResult.Error = executeErr.Error()
-			}
-			if errors.Is(executeErr, workers.ErrWorkstationDispatchProcessGone) {
-				reconciliationReason = workers.WorkstationDispatchReconciliationReasonProcessGone
-			}
-		}
-	}
+	workResult.ProviderFailureKind = result.Failure.ProviderFailureKind
+	workResult.ProviderContinuationFailureKind = result.Failure.ProviderContinuationFailureKind
+	workResult.ProviderContinuationOutcome = result.Failure.ProviderContinuationOutcome
+	return workResult
+}
+
+func classifyExecuteResult(
+	result workers.ExecuteResult,
+	executeErr error,
+	workResult *workers.WorkResult,
+) (
+	workers.WorkstationDispatchTerminalOutcome,
+	workers.WorkstationDispatchReconciliationReason,
+	error,
+) {
+	terminal, reconciliationReason, dispatchErr := classifyExecuteError(executeErr, result, workResult)
 	if workResult.Cancellation != nil {
 		workResult.Outcome = workers.OutcomeCanceled
 		terminal = workers.WorkstationDispatchTerminalOutcomeCanceled
@@ -342,6 +364,51 @@ func dispatchResultFromExecute(
 			workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
 		}
 	}
+	terminal = applyExecuteOutcome(result, workResult, terminal)
+	return terminal, reconciliationReason, dispatchErr
+}
+
+func classifyExecuteError(
+	executeErr error,
+	result workers.ExecuteResult,
+	workResult *workers.WorkResult,
+) (
+	workers.WorkstationDispatchTerminalOutcome,
+	workers.WorkstationDispatchReconciliationReason,
+	error,
+) {
+	terminal := workers.WorkstationDispatchTerminalOutcomeCompleted
+	reconciliationReason := workers.WorkstationDispatchReconciliationReason("")
+	if executeErr == nil {
+		return terminal, reconciliationReason, nil
+	}
+	if errors.Is(executeErr, workers.ErrWorkstationDispatchCanceled) ||
+		result.Outcome == workers.ExecutionOutcomeCanceled {
+		terminal = workers.WorkstationDispatchTerminalOutcomeCanceled
+		workResult.Outcome = workers.OutcomeCanceled
+		if workResult.Cancellation == nil {
+			workResult.Cancellation = &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled}
+		}
+		workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
+		return terminal, reconciliationReason, errors.Join(workers.ErrWorkstationDispatchCanceled, executeErr)
+	}
+	terminal = workers.WorkstationDispatchTerminalOutcomeFailed
+	if workResult.Error == "" {
+		workResult.Error = executeErr.Error()
+	}
+	if errors.Is(executeErr, workers.ErrWorkstationDispatchProcessGone) {
+		reconciliationReason = workers.WorkstationDispatchReconciliationReasonProcessGone
+	} else {
+		workResult.Outcome = workers.OutcomeFailed
+	}
+	return terminal, reconciliationReason, executeErr
+}
+
+func applyExecuteOutcome(
+	result workers.ExecuteResult,
+	workResult *workers.WorkResult,
+	terminal workers.WorkstationDispatchTerminalOutcome,
+) workers.WorkstationDispatchTerminalOutcome {
 	switch result.Outcome {
 	case workers.ExecutionOutcomeContinue:
 		workResult.Outcome = workers.OutcomeContinue
@@ -356,31 +423,23 @@ func dispatchResultFromExecute(
 		workResult.Outcome = workers.OutcomeCanceled
 		terminal = workers.WorkstationDispatchTerminalOutcomeCanceled
 		if workResult.Cancellation == nil {
-			workResult.Cancellation = workers.NewDispatchCancellation(workers.DispatchCancellationReasonCanceled)
+			workResult.Cancellation = &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled}
 		}
 		if workResult.Error == "" {
 			workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
 		}
 	}
-	if terminal == workers.WorkstationDispatchTerminalOutcomeCanceled {
-		workResult.Outcome = workers.OutcomeCanceled
-		workResult.Output = ""
-		workResult.StructuredResult = nil
-		workResult.StructuredResultPresent = false
-		workResult.Continuation = nil
-		workResult.FailureDetail = nil
-		workResult.FailureMetadata = nil
-	}
-	output := result.Output.Clone()
-	return workers.WorkstationDispatchResult{
-		DispatchID:           request.Execution.Dispatch.DispatchID,
-		WorkstationName:      request.WorkstationName,
-		TerminalOutcome:      terminal,
-		ReconciliationReason: reconciliationReason,
-		Cancellation:         workResult.Cancellation.Clone(),
-		Result:               workResult,
-		ProposedOutput:       &output,
-	}, executeErr
+	return terminal
+}
+
+func clearCanceledDispatchResult(result *workers.WorkResult) {
+	result.Outcome = workers.OutcomeCanceled
+	result.Output = ""
+	result.StructuredResult = nil
+	result.StructuredResultPresent = false
+	result.Continuation = nil
+	result.FailureDetail = nil
+	result.FailureMetadata = nil
 }
 
 func failedDispatchResult(request workers.WorkstationDispatchRequest, cause error) (workers.WorkstationDispatchResult, error) {
@@ -409,7 +468,7 @@ func canceledDispatchResult(request workers.WorkstationDispatchRequest) (workers
 			DispatchID:   request.Execution.Dispatch.DispatchID,
 			TransitionID: request.Execution.Dispatch.TransitionID,
 			Outcome:      workers.OutcomeCanceled,
-			Cancellation: workers.NewDispatchCancellation(workers.DispatchCancellationReasonCanceled),
+			Cancellation: &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled},
 			Error:        workers.ErrWorkstationDispatchCanceled.Error(),
 		},
 	}, workers.ErrWorkstationDispatchCanceled

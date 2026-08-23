@@ -274,7 +274,7 @@ func (l *attemptLifecycle) executeSafely(
 			// Keep panic detail out of the detached customer-facing result.
 			err = nil
 		}
-		result = normalizeAttemptResult(request, result, err)
+		result = normalizeAttemptResult(request, result, err, platformprocess.CancellationReasonFromContext(ctx))
 		if result.Outcome == workers.ExecutionOutcomeCanceled {
 			err = nil
 		}
@@ -287,65 +287,20 @@ func normalizeAttemptResult(
 	request workers.ExecuteRequest,
 	result workers.ExecuteResult,
 	executeErr error,
+	cancellationReason platformprocess.CancellationReason,
 ) workers.ExecuteResult {
 	result, conflicts := normalizeAttemptCorrelation(request, result)
 	if conflicts {
 		return conflictingAttemptResult(request)
 	}
-	return normalizeAttemptOutcome(request, result, executeErr)
-}
-
-func normalizeAttemptCorrelation(
-	request workers.ExecuteRequest,
-	result workers.ExecuteResult,
-) (workers.ExecuteResult, bool) {
-	if result.Correlation.DispatchID == "" {
-		result.Correlation = request.Correlation
-		return result, false
-	}
-	if result.Correlation.AttemptID == "" {
-		result.Correlation.AttemptID = request.Correlation.AttemptID
-	}
-	if result.Correlation.FactorySessionID == "" {
-		result.Correlation.FactorySessionID = request.Correlation.FactorySessionID
-	}
-	if result.Correlation.RuntimeID == "" {
-		result.Correlation.RuntimeID = request.Correlation.RuntimeID
-	}
-	if result.Correlation.GenerationID == "" {
-		result.Correlation.GenerationID = request.Correlation.GenerationID
-	}
-	if result.Correlation.RequestID == "" {
-		result.Correlation.RequestID = request.Correlation.RequestID
-	}
-	if result.Correlation.TraceID == "" {
-		result.Correlation.TraceID = request.Correlation.TraceID
-	}
-	return result, result.Correlation.DispatchID != request.Correlation.DispatchID ||
-		result.Correlation.AttemptID != request.Correlation.AttemptID ||
-		correlationValueConflicts(result.Correlation.FactorySessionID, request.Correlation.FactorySessionID) ||
-		correlationValueConflicts(result.Correlation.RuntimeID, request.Correlation.RuntimeID) ||
-		correlationValueConflicts(result.Correlation.GenerationID, request.Correlation.GenerationID) ||
-		correlationValueConflicts(result.Correlation.RequestID, request.Correlation.RequestID) ||
-		correlationValueConflicts(result.Correlation.TraceID, request.Correlation.TraceID)
-}
-
-func conflictingAttemptResult(request workers.ExecuteRequest) workers.ExecuteResult {
-	return workers.ExecuteResult{
-		Correlation: request.Correlation,
-		Outcome:     workers.ExecutionOutcomeFailed,
-		Failure: &workers.ExecutionFailure{
-			Type:    workers.WorkFailureTypeUnknown,
-			Family:  workers.WorkFailureFamilyTerminal,
-			Message: "worker execution returned conflicting correlation",
-		},
-	}
+	return normalizeAttemptOutcome(request, result, executeErr, cancellationReason)
 }
 
 func normalizeAttemptOutcome(
 	request workers.ExecuteRequest,
 	result workers.ExecuteResult,
 	executeErr error,
+	cancellationReason platformprocess.CancellationReason,
 ) workers.ExecuteResult {
 	if result.Cancellation != nil {
 		result.Correlation = request.Correlation
@@ -366,7 +321,7 @@ func normalizeAttemptOutcome(
 	if executeErr == nil && result.Outcome != "" {
 		return result
 	}
-	if errors.Is(executeErr, context.Canceled) ||
+	if cancellationReason != "" ||
 		errors.Is(executeErr, workers.ErrWorkstationDispatchCanceled) ||
 		result.Outcome == workers.ExecutionOutcomeCanceled {
 		result.Correlation = request.Correlation
@@ -375,7 +330,7 @@ func normalizeAttemptOutcome(
 		result.StructuredResult = nil
 		result.StructuredResultPresent = false
 		if result.Cancellation == nil {
-			result.Cancellation = workers.NewDispatchCancellation(workers.DispatchCancellationReasonCanceled)
+			result.Cancellation = &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled}
 		}
 		if result.Failure == nil {
 			result.Failure = &workers.ExecutionFailure{
@@ -409,7 +364,10 @@ func canceledAttemptResult(
 ) workers.ExecuteResult {
 	result.Correlation = request.Correlation
 	result.Outcome = workers.ExecutionOutcomeCanceled
-	result.Cancellation = workers.NewDispatchCancellation(reason)
+	if reason != workers.DispatchCancellationReasonSuperseded {
+		reason = workers.DispatchCancellationReasonCanceled
+	}
+	result.Cancellation = &workers.DispatchCancellation{Reason: reason}
 	// A provider may have returned output just as Runtime cancellation won the
 	// terminal race. That output is not an eligible proposal and must not reach
 	// Work materialization or downstream Runtime routing.
@@ -538,29 +496,6 @@ func (l *attemptLifecycle) stop(ctx context.Context) error {
 		return stopper.Stop(ctx)
 	}
 	return nil
-}
-
-func dispatchCancellationReasonFromCancelRequest(
-	reasons ...workers.WorkstationDispatchCancelReason,
-) workers.DispatchCancellationReason {
-	if len(reasons) > 0 && reasons[0] == workers.WorkstationDispatchCancelReasonSuperseded {
-		return workers.DispatchCancellationReasonSuperseded
-	}
-	return workers.DispatchCancellationReasonCanceled
-}
-
-func dispatchCancellationReasonFromContext(ctx context.Context) workers.DispatchCancellationReason {
-	if platformprocess.CancellationReasonFromContext(ctx) == platformprocess.CancellationReasonSuperseded {
-		return workers.DispatchCancellationReasonSuperseded
-	}
-	return workers.DispatchCancellationReasonCanceled
-}
-
-func platformCancellationReason(reason workers.DispatchCancellationReason) platformprocess.CancellationReason {
-	if reason == workers.DispatchCancellationReasonSuperseded {
-		return platformprocess.CancellationReasonSuperseded
-	}
-	return platformprocess.CancellationReasonCanceled
 }
 
 func (l *attemptLifecycle) activeCount() int {

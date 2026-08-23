@@ -363,7 +363,7 @@ func canonicalWorkResult(
 		workResult.Cancellation != nil || workResult.Outcome == workerexecution.OutcomeCanceled {
 		workResult.Outcome = workerexecution.OutcomeCanceled
 		if workResult.Cancellation == nil {
-			workResult.Cancellation = workerexecution.NewDispatchCancellation(workerexecution.DispatchCancellationReasonCanceled)
+			workResult.Cancellation = &workerexecution.DispatchCancellation{Reason: workerexecution.DispatchCancellationReasonCanceled}
 		}
 		if workResult.Error == "" {
 			workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
@@ -423,7 +423,7 @@ func (h *dispatchPlanningResultHook) acceptRootResult(
 		workResult.Error = "Workers dispatch failed"
 	case dispatchplanning.TerminalResultOutcomeCancelled:
 		workResult.Outcome = workerexecution.OutcomeCanceled
-		workResult.Cancellation = workerexecution.NewDispatchCancellation(workerexecution.DispatchCancellationReasonCanceled)
+		workResult.Cancellation = &workerexecution.DispatchCancellation{Reason: workerexecution.DispatchCancellationReasonCanceled}
 		workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
 	}
 	state := h.acceptanceState(req.DispatchID)
