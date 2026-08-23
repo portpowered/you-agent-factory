@@ -423,7 +423,6 @@ func (service *activationServiceFake) SubscribeFactoryEvents(
 
 func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {
 	t.Parallel()
-
 	skipPermissions := true
 	request := &factorysessions.RuntimeOpeningRequest{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{
@@ -435,8 +434,9 @@ func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {
 		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
 			BackendScopeID: "scope",
 			Host: factorysessions.RuntimeHostRequest{
-				Host: "127.0.0.1",
-				Port: 8080,
+				Host:  "127.0.0.1",
+				Port:  8080,
+				Pprof: true,
 			},
 		},
 		Workers: workers.RuntimeOpeningRequest{
@@ -460,6 +460,9 @@ func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {
 	}
 	if activation.Inputs.Workers.InvocationSkipPermissionsOverride == nil || !*activation.Inputs.Workers.InvocationSkipPermissionsOverride {
 		t.Fatal("activation inputs lost worker permission override")
+	}
+	if !activation.Inputs.Session.Host.Pprof {
+		t.Fatal("activation inputs lost pprof setting")
 	}
 }
 
@@ -910,90 +913,3 @@ func (stub *legacyReplayInputsStub) LoadReplayInput(
 // retained hosted-instance, replacement-builder, lifecycle, or sidecar handle.
 // All three role cleanup edges must resolve to the single Runtime-owned closer,
 // so draining them cannot deactivate the Runtime more than once.
-func TestOpenActivatedRuntimeRoutesRoleCleanupThroughRuntimeDeactivation(t *testing.T) {
-	t.Parallel()
-
-	root := &cleanupRoutingRoot{}
-	factory := &Factory{
-		runtimeRoot:               root,
-		generateRuntimeInstanceID: func() string { return "runtime-1" },
-		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
-	}
-
-	products, err := factory.openActivatedRuntime(context.Background(), &factorysessions.RuntimeOpeningRequest{
-		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
-	})
-	if err != nil {
-		t.Fatalf("openActivatedRuntime() error = %v", err)
-	}
-	if root.activations != 1 {
-		t.Fatalf("Runtime root activations = %d, want exactly one", root.activations)
-	}
-
-	roleCleanups := []struct {
-		name  string
-		close func() error
-	}{
-		{name: "application", close: products.application.Resources.Close},
-		{name: "invocation", close: products.invocation.CloseArtifacts},
-		{name: "execution", close: products.execution.Resources.Close},
-	}
-	for _, role := range roleCleanups {
-		if role.close == nil {
-			t.Fatalf("%s cleanup edge = nil, want the Runtime deactivation operation", role.name)
-		}
-	}
-	if root.deactivations != 0 {
-		t.Fatalf("Runtime deactivations before cleanup = %d, want zero", root.deactivations)
-	}
-
-	for _, role := range roleCleanups {
-		if err := role.close(); err != nil {
-			t.Fatalf("%s cleanup error = %v", role.name, err)
-		}
-	}
-	if root.deactivations != 1 {
-		t.Fatalf(
-			"Runtime deactivations after draining every role cleanup = %d, want exactly one Runtime-routed deactivation",
-			root.deactivations,
-		)
-	}
-
-	// Opening publishes the Runtime root itself; it does not hand callers a
-	// Sessions-retained runtime handle recovered from the opening products.
-	if products.application.FactoryRuntime != factoryruntime.Service(root) {
-		t.Fatalf(
-			"opened application FactoryRuntime = %T, want the Runtime root %T",
-			products.application.FactoryRuntime,
-			root,
-		)
-	}
-}
-
-type cleanupRoutingRoot struct {
-	factoryruntime.Service
-	activations   int
-	deactivations int
-}
-
-func (root *cleanupRoutingRoot) Activate(
-	context.Context,
-	factoryruntime.RuntimeActivationRequest,
-) (factoryruntime.RuntimeActivationResult, error) {
-	root.activations++
-	return factoryruntime.RuntimeActivationResult{
-		RuntimeID: "runtime-1",
-		Runtime: factoryruntime.RuntimeActivationView{
-			RuntimeID: "runtime-1",
-			Service:   &activatedRuntimeService{products: runtimeProducts{}},
-		},
-	}, nil
-}
-
-func (root *cleanupRoutingRoot) Deactivate(
-	context.Context,
-	factoryruntime.RuntimeDeactivationRequest,
-) (factoryruntime.RuntimeDeactivationResult, error) {
-	root.deactivations++
-	return factoryruntime.RuntimeDeactivationResult{}, nil
-}

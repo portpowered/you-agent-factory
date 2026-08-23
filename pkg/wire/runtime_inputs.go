@@ -328,6 +328,7 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 					Host:        cfg.BindHost,
 					Port:        cfg.Port,
 					AutoPort:    cfg.AutoPort,
+					Pprof:       cfg.Pprof,
 				},
 			},
 			Workers: workers.RuntimeOpeningRequest{
@@ -574,7 +575,7 @@ func provideDirectJavaScriptHostAdapter(
 		return newRunner(func(ctx context.Context) error {
 			return start(ctx, platformhttpserver.StartRequest{
 				Handler: handler, Host: host.Host, Port: host.Port,
-				AutoPort: host.AutoPort, Logger: logger,
+				AutoPort: host.AutoPort, Pprof: host.Pprof, Logger: logger,
 				OnBound: func(binding platformhttpserver.Binding) {
 					if observer != nil {
 						observer(factorysessions.RuntimeHostBinding{

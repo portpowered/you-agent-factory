@@ -1,6 +1,7 @@
 package runtimeopening
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -125,6 +128,94 @@ func TestResolveDefinitionPathResolvesCurrentFactoryAndErrors(t *testing.T) {
 	); !errors.Is(err, want) {
 		t.Fatalf("source home resolver error = %v, want %v", err, want)
 	}
+}
+
+func TestOpenActivatedRuntimeRoutesRoleCleanupThroughRuntimeDeactivation(t *testing.T) {
+	t.Parallel()
+
+	root := &cleanupRoutingRoot{}
+	factory := &Factory{
+		runtimeRoot:               root,
+		generateRuntimeInstanceID: func() string { return "runtime-1" },
+		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
+	}
+
+	products, err := factory.openActivatedRuntime(context.Background(), &factorysessions.RuntimeOpeningRequest{
+		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
+	})
+	if err != nil {
+		t.Fatalf("openActivatedRuntime() error = %v", err)
+	}
+	if root.activations != 1 {
+		t.Fatalf("Runtime root activations = %d, want exactly one", root.activations)
+	}
+
+	roleCleanups := []struct {
+		name  string
+		close func() error
+	}{
+		{name: "application", close: products.application.Resources.Close},
+		{name: "invocation", close: products.invocation.CloseArtifacts},
+		{name: "execution", close: products.execution.Resources.Close},
+	}
+	for _, role := range roleCleanups {
+		if role.close == nil {
+			t.Fatalf("%s cleanup edge = nil, want the Runtime deactivation operation", role.name)
+		}
+	}
+	if root.deactivations != 0 {
+		t.Fatalf("Runtime deactivations before cleanup = %d, want zero", root.deactivations)
+	}
+
+	for _, role := range roleCleanups {
+		if err := role.close(); err != nil {
+			t.Fatalf("%s cleanup error = %v", role.name, err)
+		}
+	}
+	if root.deactivations != 1 {
+		t.Fatalf(
+			"Runtime deactivations after draining every role cleanup = %d, want exactly one Runtime-routed deactivation",
+			root.deactivations,
+		)
+	}
+
+	// Opening publishes the Runtime root itself; it does not hand callers a
+	// Sessions-retained runtime handle recovered from the opening products.
+	if products.application.FactoryRuntime != factoryruntime.Service(root) {
+		t.Fatalf(
+			"opened application FactoryRuntime = %T, want the Runtime root %T",
+			products.application.FactoryRuntime,
+			root,
+		)
+	}
+}
+
+type cleanupRoutingRoot struct {
+	factoryruntime.Service
+	activations   int
+	deactivations int
+}
+
+func (root *cleanupRoutingRoot) Activate(
+	context.Context,
+	factoryruntime.RuntimeActivationRequest,
+) (factoryruntime.RuntimeActivationResult, error) {
+	root.activations++
+	return factoryruntime.RuntimeActivationResult{
+		RuntimeID: "runtime-1",
+		Runtime: factoryruntime.RuntimeActivationView{
+			RuntimeID: "runtime-1",
+			Service:   &activatedRuntimeService{products: runtimeProducts{}},
+		},
+	}, nil
+}
+
+func (root *cleanupRoutingRoot) Deactivate(
+	context.Context,
+	factoryruntime.RuntimeDeactivationRequest,
+) (factoryruntime.RuntimeDeactivationResult, error) {
+	root.deactivations++
+	return factoryruntime.RuntimeDeactivationResult{}, nil
 }
 
 func TestWarnReplayMetadataMismatchesResolvesCurrentOperatorDefaults(t *testing.T) {

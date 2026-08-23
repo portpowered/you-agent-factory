@@ -10,6 +10,7 @@ import (
 	"time"
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	platformprocessmemory "github.com/portpowered/infinite-you/pkg/platform/processmemory"
 )
 
 // Process construction can legitimately take longer on Windows when the
@@ -74,7 +75,9 @@ func (server *ProcessAPIServer) Start(
 	}
 	server.started = true
 	close(server.startedSignal)
-	httpServer := httptest.NewServer(request.Handler)
+	httpServer := httptest.NewServer(platformhttpserver.HandlerWithDiagnostics(
+		request.Handler, request.Pprof, platformprocessmemory.CurrentCommit,
+	))
 	server.url = httpServer.URL
 	if request.OnBound != nil {
 		boundPort := request.Port
