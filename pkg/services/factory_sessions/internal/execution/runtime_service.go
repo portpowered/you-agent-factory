@@ -794,10 +794,31 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntime(
 		Args:           argsJSON,
 		ArgsSchema:     resolved.ArgsSchema,
 		Metadata:       workflowMetadataFromResolved(resolved, normalized),
+		FactoryName:    factoryNameFromStart(normalized),
 		Policy:         policyResolution.Policy,
 		Agents:         resolved.Agents,
 		WorkerSettings: s.workerSettings,
 	}, s.childExecutorHooks(resolveChildExecutorMode(s.childExecutorMode, normalized), sessionID))
+}
+
+func factoryNameFromStart(req StartRequest) string {
+	switch req.Source.Kind {
+	case factory.WorkflowSourceKindFactoryID:
+		return strings.TrimSpace(req.Source.FactoryID)
+	case factory.WorkflowSourceKindFactoryInline:
+		var declaration struct {
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(req.Source.FactoryInline, &declaration); err == nil {
+			return strings.TrimSpace(declaration.Name)
+		}
+	}
+	if req.Source.InlineWorkflow != nil {
+		if name := strings.TrimSpace(req.Source.InlineWorkflow.Metadata["factoryName"]); name != "" {
+			return name
+		}
+	}
+	return ""
 }
 
 func workflowRunContext(parent context.Context, policy factory.JavaScriptPolicy) (context.Context, context.CancelFunc) {

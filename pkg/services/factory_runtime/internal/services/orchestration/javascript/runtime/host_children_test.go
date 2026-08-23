@@ -833,6 +833,89 @@ func TestRun_AgentRunPermissionsResolveCanonicalAndLegacyPrecedence(t *testing.T
 	}
 }
 
+func TestRun_AgentRunDisallowedPermissionFailsBeforeDispatch(t *testing.T) {
+	const want = `policy denied: Factory "named-factory" child "skip-child" requested permission "SKIP_PERMISSIONS" not listed in allowedPermissions`
+
+	policy := workflowpolicy.DefaultEffectivePolicy()
+	policy.AllowedPermissions = []string{workflowpolicy.PermissionModeDefault}
+	calls := 0
+	outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+		Source:      `agent.run({ prompt: "review", label: "skip-child", skipPermissions: true }); return { ok: true };`,
+		SourceRef:   "inline",
+		SessionID:   "session-disallowed-permission",
+		FactoryName: "named-factory",
+		Policy:      policy,
+	}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+		return childExecutorFunc(func(_ context.Context, _ factory.JavaScriptChildExecutionRequest) (factory.JavaScriptChildExecutionResult, error) {
+			calls++
+			return factory.JavaScriptChildExecutionResult{}, nil
+		})
+	}})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if outcome.OK || outcome.Failure.Message != want {
+		t.Fatalf("Run() outcome = %#v, want exact diagnostic %q", outcome, want)
+	}
+	if calls != 0 {
+		t.Fatalf("child executor calls = %d, want zero before dispatch admission", calls)
+	}
+	if len(outcome.Records) != 0 {
+		t.Fatalf("runtime records = %#v, want no Dispatch record before denial", outcome.Records)
+	}
+}
+
+func TestRun_AgentRunAllowedAndOmittedPermissionPoliciesPreserveExecution(t *testing.T) {
+	tests := []struct {
+		name     string
+		allowed  []string
+		skip     bool
+		wantSkip bool
+	}{
+		{
+			name:    "allowed default",
+			allowed: []string{workflowpolicy.PermissionModeDefault},
+		},
+		{
+			name:     "allowed skip permissions",
+			allowed:  []string{workflowpolicy.PermissionModeSkipPermissions},
+			skip:     true,
+			wantSkip: true,
+		},
+		{
+			name:     "omitted allowlist",
+			skip:     true,
+			wantSkip: true,
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			policy := workflowpolicy.DefaultEffectivePolicy()
+			policy.AllowedPermissions = test.allowed
+			calls := 0
+			var captured factory.JavaScriptChildExecutionRequest
+			outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+				Source: fmt.Sprintf(`return agent.run({ prompt: "review", label: %q, skipPermissions: %t });`, test.name, test.skip),
+				Policy: policy,
+			}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+				return childExecutorFunc(func(_ context.Context, req factory.JavaScriptChildExecutionRequest) (factory.JavaScriptChildExecutionResult, error) {
+					calls++
+					captured = req
+					return factory.JavaScriptChildExecutionResult{Status: factory.JavaScriptChildDispatchStatusCompleted, Request: req}, nil
+				})
+			}})
+			if err != nil || !outcome.OK {
+				t.Fatalf("Run() outcome=%#v err=%v", outcome, err)
+			}
+			if calls != 1 || captured.SkipPermissions != test.wantSkip {
+				t.Fatalf("child executor calls=%d request=%#v, want one call with skipPermissions=%t", calls, captured, test.wantSkip)
+			}
+		})
+	}
+}
+
 func (s *stubChildExecutor) labelOrder() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
