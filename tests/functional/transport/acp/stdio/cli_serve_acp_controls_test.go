@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -21,6 +22,43 @@ import (
 )
 
 const controlHarnessProviderResult = "control fixture result COMPLETE"
+
+// TestServeACP_RootBuildProcessProviderFailureTerminalizesPrompt proves that
+// a provider-side failure still closes the accepted ACP turn. The provider
+// command edge reports its return through a channel, the public ACP response
+// supplies the terminal client outcome, and a second prompt proves the failed
+// turn released the Chat Session instead of leaving it busy behind a live
+// Worker drain.
+func TestServeACP_RootBuildProcessProviderFailureTerminalizesPrompt(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test driving you server acp provider failure through root.BuildProcess")
+	}
+
+	harness := newServeACPControlHarness(t, newControlProviderFailureCommandRunner())
+	sessionID := harness.openSession(t)
+
+	harness.sendPrompt(t, 3, sessionID, "fail this provider invocation")
+	harness.runner.waitForCompletion(t, 1)
+	response := harness.response(t, 3)
+	if response.Error == nil {
+		t.Fatalf("failed session/prompt response error = nil, want a bounded ACP JSON-RPC failure; result=%s", response.Result)
+	}
+	if response.Error.Code != -32603 {
+		t.Fatalf("failed session/prompt error code = %d, want JSON-RPC internal error -32603", response.Error.Code)
+	}
+
+	// The first terminal failure must release the same Chat Session for a later
+	// turn. The runner succeeds on its default second result, so this proves a
+	// fresh dispatch rather than a stranded busy-session rejection.
+	harness.sendPrompt(t, 4, sessionID, "complete after provider failure")
+	harness.runner.waitForCompletion(t, 2)
+	secondResponse := harness.response(t, 4)
+	assertPromptStopReason(t, secondResponse, acpsdk.StopReasonEndTurn)
+	if got := harness.runner.CallCount(); got != 2 {
+		t.Fatalf("provider command calls = %d, want two independently terminalized prompts", got)
+	}
+	harness.finish(t)
+}
 
 // TestServeACP_RootBuildProcessCancelTerminalizesOnlyCapturedPrompt proves the
 // public CLI and ACP path cancels an in-flight prompt, leaves the notification
@@ -404,9 +442,11 @@ func userMessageItemIDs(t *testing.T, updates []rpcFrame) []string {
 
 type controlProviderCommandRunner struct {
 	blocks    map[int]struct{}
+	failures  map[int]error
 	calls     atomic.Int32
 	started   chan int
 	cancelled chan int
+	completed chan int
 }
 
 func newControlProviderCommandRunner(blockCalls ...int) *controlProviderCommandRunner {
@@ -418,6 +458,14 @@ func newControlProviderCommandRunner(blockCalls ...int) *controlProviderCommandR
 		blocks:    blocks,
 		started:   make(chan int, len(blockCalls)),
 		cancelled: make(chan int, len(blockCalls)),
+		completed: make(chan int, 64),
+	}
+}
+
+func newControlProviderFailureCommandRunner() *controlProviderCommandRunner {
+	return &controlProviderCommandRunner{
+		failures:  map[int]error{1: errors.New("controlled provider failure")},
+		completed: make(chan int, 64),
 	}
 }
 
@@ -427,9 +475,16 @@ func (r *controlProviderCommandRunner) Run(ctx context.Context, _ platformproces
 		r.started <- call
 		<-ctx.Done()
 		r.cancelled <- call
+		r.completed <- call
 		return platformprocess.CommandResult{}, ctx.Err()
 	}
-	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(controlHarnessProviderResult)}, nil
+	if err, failed := r.failures[call]; failed {
+		r.completed <- call
+		return platformprocess.CommandResult{Stderr: []byte("controlled provider failure")}, err
+	}
+	result := platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(controlHarnessProviderResult)}
+	r.completed <- call
+	return result, nil
 }
 
 func (r *controlProviderCommandRunner) CallCount() int {
@@ -457,6 +512,21 @@ func (r *controlProviderCommandRunner) waitForCancellation(t *testing.T, want in
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatalf("provider command call %d did not observe cancellation", want)
+	}
+}
+
+func (r *controlProviderCommandRunner) waitForCompletion(t *testing.T, want int) {
+	t.Helper()
+	// The channel is the synchronization mechanism. This bounded branch is
+	// only a diagnostic guard for a regression that drops the provider return;
+	// it does not pace or otherwise make the test pass.
+	select {
+	case got := <-r.completed:
+		if got != want {
+			t.Fatalf("provider command completion = %d, want %d", got, want)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("provider command call %d did not return", want)
 	}
 }
 
