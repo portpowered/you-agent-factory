@@ -336,16 +336,6 @@ func resolveSupportedSourcePath(
 	}
 }
 
-// MergeDiscoveredFiles applies manifest-authoritative document rules while
-// merging discovered authored files.
-func MergeDiscoveredFiles(
-	existing []factorydefinitions.BundledFileConfig,
-	collected []factorydefinitions.BundledFileConfig,
-	discoverUnlistedDocs bool,
-) []factorydefinitions.BundledFileConfig {
-	return mergeDiscoveredFiles(existing, collected, discoverUnlistedDocs)
-}
-
 func supportedSubdirPath(
 	factoryDir string,
 	targetPath string,

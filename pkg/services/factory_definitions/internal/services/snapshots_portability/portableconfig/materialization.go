@@ -57,16 +57,6 @@ func ValidateWrites(
 	return snapshotsportabilitymaterialize.ValidateWrites(fileSystem, targetDir, factoryConfig)
 }
 
-// CloneReplacements returns a caller-owned replacement list.
-func CloneReplacements(
-	replacements []factorydefinitions.PortableBundledFileReplacement,
-) []factorydefinitions.PortableBundledFileReplacement {
-	return append(
-		[]factorydefinitions.PortableBundledFileReplacement(nil),
-		replacements...,
-	)
-}
-
 // PruneRemovedDocs removes authored documentation files no longer declared by
 // the Factory Definition manifest.
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.

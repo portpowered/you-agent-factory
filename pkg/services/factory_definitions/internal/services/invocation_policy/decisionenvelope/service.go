@@ -126,16 +126,6 @@ func NormalizeGoalRoutingDecision(decision string) (string, error) {
 	}
 }
 
-// SupportedDecisions returns the accepted decision vocabulary in stable order.
-func SupportedDecisions() []string {
-	return []string{
-		DecisionAccepted,
-		DecisionContinue,
-		DecisionRejected,
-		DecisionFailed,
-	}
-}
-
 // OutcomeFromDecision maps an envelope decision value to a WorkOutcome.
 func OutcomeFromDecision(decision string) (workerexecution.WorkOutcome, error) {
 	trimmed := strings.TrimSpace(decision)
@@ -180,15 +170,6 @@ func WorkResultFromDecisionEnvelope(dispatchID, transitionID string, envelope De
 		Output:             envelope.Output,
 		RecordedOutputWork: envelope.RecordedOutputWork,
 	}, nil
-}
-
-// WorkResultFromDecisionEnvelopeJSON parses reviewer/checker output and maps it to WorkResult.
-func WorkResultFromDecisionEnvelopeJSON(dispatchID, transitionID, raw string) (workerexecution.WorkResult, error) {
-	envelope, err := ParseDecisionEnvelopeJSON(raw)
-	if err != nil {
-		return workerexecution.WorkResult{}, err
-	}
-	return WorkResultFromDecisionEnvelope(dispatchID, transitionID, envelope)
 }
 
 // FailedWorkResultFromDecisionEnvelopeError maps malformed-envelope failures onto WorkResult
@@ -265,16 +246,6 @@ func WorkResultFromGoalRoutingDecisionEnvelope(dispatchID, transitionID string, 
 		Output:                      envelope.Output,
 		RecordedOutputWork:          envelope.RecordedOutputWork,
 	}, nil
-}
-
-// WorkResultFromGoalRoutingDecisionEnvelopeJSON parses reviewer/checker output and maps it
-// to the packaged goal routing WorkResult contract.
-func WorkResultFromGoalRoutingDecisionEnvelopeJSON(dispatchID, transitionID, raw string) (workerexecution.WorkResult, error) {
-	envelope, err := ParseDecisionEnvelopeJSON(raw)
-	if err != nil {
-		return workerexecution.WorkResult{}, err
-	}
-	return WorkResultFromGoalRoutingDecisionEnvelope(dispatchID, transitionID, envelope)
 }
 
 // WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed parses reviewer/checker output for

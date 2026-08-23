@@ -257,20 +257,3 @@ func factoryWithResourceSlotRoutes() factoryapi.Factory {
 		}},
 	}
 }
-
-func assertValidationTarget(
-	t *testing.T,
-	targets []factoryapi.FactoryValidationTarget,
-	want factoryapi.FactoryValidationTarget,
-) {
-	t.Helper()
-	for _, target := range targets {
-		if target.Code == want.Code &&
-			target.Message == want.Message &&
-			target.Subject == want.Subject &&
-			target.Severity == want.Severity {
-			return
-		}
-	}
-	t.Fatalf("validation targets = %#v, want %#v", targets, want)
-}

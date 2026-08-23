@@ -5,26 +5,9 @@ import (
 	"io"
 )
 
-type FactoryConfigFlattenConfig struct {
-	Path   string
-	Output io.Writer
-}
-
 type FactoryConfigExpandConfig struct {
 	Path   string
 	Output io.Writer
-}
-
-func FlattenFactoryConfig(cfg FactoryConfigFlattenConfig) error {
-	formatted, err := factorydefinitioncomposition.FlattenFactoryConfig(cfg.Path)
-	if err != nil {
-		return err
-	}
-	if cfg.Output == nil {
-		return nil
-	}
-	_, err = cfg.Output.Write(formatted)
-	return err
 }
 
 func ExpandFactoryConfig(cfg FactoryConfigExpandConfig) error {

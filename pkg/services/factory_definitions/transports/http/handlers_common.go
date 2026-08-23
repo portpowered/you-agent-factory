@@ -64,11 +64,6 @@ func requestFieldValidationMessage(err error) (string, bool) {
 	return "", false
 }
 
-func decodeStrictJSON[T any](body io.Reader) (T, error) {
-	result, err := decodeJSONWithDiagnostics[T](body)
-	return result.Value, err
-}
-
 func decodeJSONWithDiagnostics[T any](body io.Reader) (httpcompat.DecodeResult[T], error) {
 	return httpcompat.Decode[T](body)
 }
