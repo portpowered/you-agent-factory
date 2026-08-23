@@ -128,7 +128,11 @@ func mutateFirstDispatchCreatedEvent(t *testing.T, artifact *interfaces.ReplayAr
 			t.Fatalf("encode dispatch created event: %v", err)
 		}
 		event.Payload = union
-		artifact.Events[i] = testutil.FactoryEvent(t, event)
+		converted, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			t.Fatalf("convert generated FactoryEvent fixture: %v", err)
+		}
+		artifact.Events[i] = converted
 		return event.Id, event.Context.Tick
 	}
 	t.Fatal("artifact has no DISPATCH_CREATED event")

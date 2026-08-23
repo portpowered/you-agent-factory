@@ -147,23 +147,6 @@ func mergeNativeMetadata(base, overlay map[string]string) map[string]string {
 	return base
 }
 
-func authoritativeTestResponse(response workerexecution.InferenceResponse) workerexecution.InferenceResponse {
-	if response.Content == "" || response.Diagnostics != nil &&
-		(response.Diagnostics.Metadata[workerexecution.ProviderResponseMetadataCompletionEvidence] != "" ||
-			response.Diagnostics.Provider != nil && response.Diagnostics.Provider.ResponseMetadata[workerexecution.ProviderResponseMetadataCompletionEvidence] != "") {
-		return response
-	}
-	response.Diagnostics = workerexecution.CloneWorkDiagnostics(response.Diagnostics)
-	if response.Diagnostics == nil {
-		response.Diagnostics = &workerexecution.WorkDiagnostics{}
-	}
-	if response.Diagnostics.Metadata == nil {
-		response.Diagnostics.Metadata = make(map[string]string, 1)
-	}
-	response.Diagnostics.Metadata[workerexecution.ProviderResponseMetadataCompletionEvidence] = "provider_response"
-	return response
-}
-
 // Calls returns all InferenceRequests received by this provider, in order.
 func (m *MockProvider) Calls() []workerexecution.ProviderInferenceRequest {
 	m.mu.Lock()
