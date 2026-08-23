@@ -52,16 +52,16 @@ func IsBindError(err error) bool {
 
 // NewStarter constructs an inert HTTP host operation. Listener binding and
 // concrete server lifecycle occur only when the returned operation is called.
-func NewStarter(listen ListenerFactory, readers ...platformprocessmemory.CommitReader) (Starter, error) {
+func NewStarter(
+	listen ListenerFactory,
+	commitReader platformprocessmemory.CommitReader,
+	commandLineReader CommandLineReader,
+) (Starter, error) {
 	if listen == nil {
 		return nil, errors.New("construct HTTP starter: listener factory is required")
 	}
-	commitReader := platformprocessmemory.CommitReader(platformprocessmemory.CurrentCommit)
-	if len(readers) > 1 {
-		return nil, errors.New("construct HTTP starter: at most one process commit reader is allowed")
-	}
-	if len(readers) == 1 && readers[0] != nil {
-		commitReader = readers[0]
+	if commitReader == nil {
+		commitReader = platformprocessmemory.CurrentCommit
 	}
 	return func(ctx context.Context, request StartRequest) error {
 		listener, host, port, err := bind(listen, request.Host, request.Port, request.AutoPort)
@@ -71,7 +71,7 @@ func NewStarter(listen ListenerFactory, readers ...platformprocessmemory.CommitR
 		if request.OnBound != nil {
 			request.OnBound(Binding{Host: host, Port: port})
 		}
-		return Serve(ctx, HandlerWithDiagnostics(request.Handler, request.Pprof, commitReader), listener, request.Logger)
+		return Serve(ctx, HandlerWithDiagnostics(request.Handler, request.Pprof, commitReader, commandLineReader), listener, request.Logger)
 	}, nil
 }
 

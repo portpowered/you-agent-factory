@@ -3,6 +3,7 @@ package host_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -12,6 +13,105 @@ import (
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestEmitRuntimeMemoryMetricsRecordsOneCoherentRuntimeSnapshot(t *testing.T) {
+	t.Parallel()
+
+	sink := &hostMetricsSinkFake{}
+	bundle := &factoryhost.Bundle{MetricsSink: sink}
+	bundle.EmitRuntimeMemoryMetrics()
+
+	values, units := runtimeMemorySinkRecords(t, sink)
+	assertRuntimeMemoryUnits(t, units)
+	assertRuntimeMemoryValues(t, values)
+}
+
+func runtimeMemorySinkRecords(t *testing.T, sink *hostMetricsSinkFake) (map[string]float64, map[string]string) {
+	t.Helper()
+	if len(sink.names) != 7 {
+		t.Fatalf("runtime memory metric count = %d, want 7; names = %#v", len(sink.names), sink.names)
+	}
+	values := make(map[string]float64, len(sink.names))
+	units := make(map[string]string, len(sink.names))
+	for index, name := range sink.names {
+		if sink.kinds[index] != factoryruntime.RuntimeMetricTypeSample {
+			t.Fatalf("metric %s type = %q, want sample", name, sink.kinds[index])
+		}
+		values[name] = sink.values[index]
+		units[name] = sink.units[index]
+	}
+	for _, name := range runtimeMemoryMetricNames() {
+		if _, ok := values[name]; !ok {
+			t.Fatalf("runtime memory metric %q was not emitted; values = %#v", name, values)
+		}
+	}
+	return values, units
+}
+
+func runtimeMemoryMetricNames() []string {
+	return []string{
+		factoryruntime.RuntimeMemoryHeapAlloc,
+		factoryruntime.RuntimeMemoryHeapInuse,
+		factoryruntime.RuntimeMemorySys,
+		factoryruntime.RuntimeMemoryNumGC,
+		factoryruntime.RuntimeMemoryGoroutines,
+		factoryruntime.RuntimeMemoryProcessCommit,
+		factoryruntime.RuntimeMemoryProcessCommitAvailable,
+	}
+}
+
+func assertRuntimeMemoryUnits(t *testing.T, units map[string]string) {
+	t.Helper()
+	want := map[string]string{
+		factoryruntime.RuntimeMemoryHeapAlloc:              "bytes",
+		factoryruntime.RuntimeMemoryHeapInuse:              "bytes",
+		factoryruntime.RuntimeMemorySys:                    "bytes",
+		factoryruntime.RuntimeMemoryNumGC:                  "count",
+		factoryruntime.RuntimeMemoryGoroutines:             "count",
+		factoryruntime.RuntimeMemoryProcessCommit:          "bytes",
+		factoryruntime.RuntimeMemoryProcessCommitAvailable: "boolean",
+	}
+	for name, unit := range want {
+		if units[name] != unit {
+			t.Fatalf("runtime memory unit for %s = %q, want %q", name, units[name], unit)
+		}
+	}
+}
+
+func assertRuntimeMemoryValues(t *testing.T, values map[string]float64) {
+	t.Helper()
+	heapAlloc := values[factoryruntime.RuntimeMemoryHeapAlloc]
+	heapInuse := values[factoryruntime.RuntimeMemoryHeapInuse]
+	sys := values[factoryruntime.RuntimeMemorySys]
+	if heapAlloc <= 0 || heapInuse < heapAlloc || sys < heapInuse {
+		t.Fatalf("runtime memory heap values = alloc:%v inuse:%v sys:%v, want positive and ordered", heapAlloc, heapInuse, sys)
+	}
+	if values[factoryruntime.RuntimeMemoryNumGC] < 0 {
+		t.Fatalf("NumGC metric = %v, want a non-negative value", values[factoryruntime.RuntimeMemoryNumGC])
+	}
+	if values[factoryruntime.RuntimeMemoryGoroutines] <= 0 {
+		t.Fatalf("Goroutines metric = %v, want a positive value", values[factoryruntime.RuntimeMemoryGoroutines])
+	}
+	commitAvailable := values[factoryruntime.RuntimeMemoryProcessCommitAvailable]
+	if commitAvailable != 0 && commitAvailable != 1 {
+		t.Fatalf("ProcessCommitAvailable metric = %v, want 0 or 1", commitAvailable)
+	}
+	if commitAvailable == 1 && values[factoryruntime.RuntimeMemoryProcessCommit] <= 0 {
+		t.Fatalf("ProcessCommit metric = %v, want positive when available", values[factoryruntime.RuntimeMemoryProcessCommit])
+	}
+}
+
+func TestEmitRuntimeMemoryMetricsKeepsExistingSinkFailurePolicy(t *testing.T) {
+	t.Parallel()
+
+	sink := &hostMetricsSinkFake{sampleErr: errors.New("sink unavailable")}
+	bundle := &factoryhost.Bundle{MetricsSink: sink}
+	bundle.EmitRuntimeMemoryMetrics()
+
+	if sink.sampleCalls != 7 {
+		t.Fatalf("runtime memory sample attempts = %d, want 7 despite sink errors", sink.sampleCalls)
+	}
+}
 
 func TestScriptMetricHelpers_PreferFailureMetadataAndDiagnostics(t *testing.T) {
 	t.Parallel()
@@ -148,26 +248,41 @@ func TestRecordCompletionMetricsDoesNotPersistUnresolvedProvider(t *testing.T) {
 }
 
 type hostMetricsSinkFake struct {
-	names  []string
-	fields []factoryruntime.Fields
+	names       []string
+	kinds       []string
+	values      []float64
+	units       []string
+	fields      []factoryruntime.Fields
+	sampleErr   error
+	sampleCalls int
 }
 
-func (sink *hostMetricsSinkFake) Counter(_ context.Context, name string, _ float64, fields factoryruntime.Fields) error {
+func (sink *hostMetricsSinkFake) Counter(_ context.Context, name string, value float64, fields factoryruntime.Fields) error {
 	sink.names = append(sink.names, name)
+	sink.kinds = append(sink.kinds, factoryruntime.RuntimeMetricTypeCounter)
+	sink.values = append(sink.values, value)
+	sink.units = append(sink.units, "")
 	sink.fields = append(sink.fields, fields)
 	return nil
 }
 
-func (sink *hostMetricsSinkFake) Gauge(_ context.Context, name string, _ float64, fields factoryruntime.Fields) error {
+func (sink *hostMetricsSinkFake) Gauge(_ context.Context, name string, value float64, fields factoryruntime.Fields) error {
 	sink.names = append(sink.names, name)
+	sink.kinds = append(sink.kinds, factoryruntime.RuntimeMetricTypeGauge)
+	sink.values = append(sink.values, value)
+	sink.units = append(sink.units, "")
 	sink.fields = append(sink.fields, fields)
 	return nil
 }
 
-func (sink *hostMetricsSinkFake) Sample(_ context.Context, name string, _ float64, _ string, fields factoryruntime.Fields) error {
+func (sink *hostMetricsSinkFake) Sample(_ context.Context, name string, value float64, unit string, fields factoryruntime.Fields) error {
+	sink.sampleCalls++
 	sink.names = append(sink.names, name)
+	sink.kinds = append(sink.kinds, factoryruntime.RuntimeMetricTypeSample)
+	sink.values = append(sink.values, value)
+	sink.units = append(sink.units, unit)
 	sink.fields = append(sink.fields, fields)
-	return nil
+	return sink.sampleErr
 }
 
 func (sink *hostMetricsSinkFake) Close() error { return nil }

@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,7 +16,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/pprof/profile"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
@@ -31,23 +35,40 @@ func TestAPIServerPprofIsOptInThroughThePublicRunPath(t *testing.T) {
 	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 	edges := serviceedges.Edges{}
 	support.ConfigureWorkerCommands(t, &edges, support.NewStaticSuccessCommandRunner("pprof diagnostics"), nil)
+	metricsDir := t.TempDir()
 	defaultServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
 		Edges:                     edges,
+		Args:                      []string{"--runtime-metrics-dir", metricsDir},
 	})
 	for _, path := range []string{
 		"/debug/pprof/", "/debug/pprof/heap", "/debug/pprof/profile",
 		"/debug/pprof/trace", "/debug/pprof/goroutine", "/debug/pprof/cmdline",
-		"/debug/pprof/symbol",
+		"/debug/pprof/symbol", "/debug/vars",
 	} {
 		response, err := http.Get(defaultServer.URL() + path)
 		if err != nil {
 			t.Fatalf("default GET %s: %v", path, err)
 		}
+		body, err := io.ReadAll(response.Body)
 		_ = response.Body.Close()
+		if err != nil {
+			t.Fatalf("read default GET %s: %v", path, err)
+		}
 		if response.StatusCode != http.StatusNotFound {
 			t.Fatalf("default GET %s status = %d, want %d", path, response.StatusCode, http.StatusNotFound)
+		}
+		if path != "/debug/pprof/heap" {
+			continue
+		}
+		var notFound factoryapi.ErrorResponse
+		if err := json.Unmarshal(body, &notFound); err != nil {
+			t.Fatalf("decode default GET %s error response: %v; body=%q", path, err, body)
+		}
+		if notFound.Code != factoryapi.ErrorResponseCode("NOT_FOUND") ||
+			notFound.Family != factoryapi.ErrorFamily("NOT_FOUND") {
+			t.Fatalf("default GET %s error response = %+v, want NOT_FOUND JSON", path, notFound)
 		}
 	}
 	runtimeSnapshot := support.GetJSON[platformhttpserver.RuntimeSnapshot](t, defaultServer.URL()+"/debug/runtime")
@@ -56,6 +77,7 @@ func TestAPIServerPprofIsOptInThroughThePublicRunPath(t *testing.T) {
 		t.Fatalf("default runtime snapshot = %+v, want plausible live runtime values", runtimeSnapshot)
 	}
 	defaultServer.Close(t)
+	assertRuntimeMemoryMetrics(t, metricsDir)
 
 	enabledServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
@@ -63,6 +85,11 @@ func TestAPIServerPprofIsOptInThroughThePublicRunPath(t *testing.T) {
 		Edges:                     edges,
 		Args:                      []string{"--pprof"},
 	})
+	assertEnabledPprofServer(t, enabledServer)
+}
+
+func assertEnabledPprofServer(t *testing.T, enabledServer *support.FunctionalAPIServer) {
+	t.Helper()
 	index, err := http.Get(enabledServer.URL() + "/debug/pprof/")
 	if err != nil {
 		t.Fatalf("enabled GET pprof index: %v", err)
@@ -87,6 +114,120 @@ func TestAPIServerPprofIsOptInThroughThePublicRunPath(t *testing.T) {
 	}
 	if heap.StatusCode != http.StatusOK || len(heapBody) == 0 {
 		t.Fatalf("enabled pprof heap = (%d, body length %d), want non-empty HTTP 200 response", heap.StatusCode, len(heapBody))
+	}
+	heapProfile, err := profile.Parse(bytes.NewReader(heapBody))
+	if err != nil {
+		t.Fatalf("parse enabled live heap profile: %v", err)
+	}
+	if len(heapProfile.SampleType) == 0 || len(heapProfile.Sample) == 0 {
+		t.Fatalf("enabled live heap profile = %+v, want sample types and samples", heapProfile)
+	}
+
+	for _, path := range []string{"/debug/pprof/allocs", "/debug/pprof/goroutine"} {
+		response, err := http.Get(enabledServer.URL() + path)
+		if err != nil {
+			t.Fatalf("enabled GET %s: %v", path, err)
+		}
+		body, err := io.ReadAll(response.Body)
+		_ = response.Body.Close()
+		if err != nil {
+			t.Fatalf("read enabled GET %s: %v", path, err)
+		}
+		if response.StatusCode != http.StatusOK || len(body) == 0 {
+			t.Fatalf("enabled GET %s = (%d, body length %d), want non-empty HTTP 200 response", path, response.StatusCode, len(body))
+		}
+	}
+	cpu, err := http.Get(enabledServer.URL() + "/debug/pprof/profile?seconds=1")
+	if err != nil {
+		t.Fatalf("enabled GET CPU profile: %v", err)
+	}
+	cpuBody, err := io.ReadAll(cpu.Body)
+	_ = cpu.Body.Close()
+	if err != nil {
+		t.Fatalf("read enabled CPU profile: %v", err)
+	}
+	if cpu.StatusCode != http.StatusOK || len(cpuBody) == 0 {
+		t.Fatalf("enabled CPU profile = (%d, body length %d), want non-empty HTTP 200 response", cpu.StatusCode, len(cpuBody))
+	}
+	cpuProfile, err := profile.Parse(bytes.NewReader(cpuBody))
+	if err != nil {
+		t.Fatalf("parse enabled live CPU profile: %v", err)
+	}
+	if len(cpuProfile.SampleType) == 0 {
+		t.Fatalf("enabled live CPU profile = %+v, want sample types", cpuProfile)
+	}
+}
+
+func assertRuntimeMemoryMetrics(t *testing.T, root string) {
+	t.Helper()
+
+	reader, err := platformmetrics.NewRuntimeMetricsReader(platformfilesystem.Local{})
+	if err != nil {
+		t.Fatalf("construct runtime metrics reader: %v", err)
+	}
+	records, err := reader.Read(t.Context(), root)
+	if err != nil {
+		t.Fatalf("read runtime metrics: %v", err)
+	}
+	values := make(map[string]float64, 7)
+	units := make(map[string]string, 7)
+	for _, record := range records {
+		name, _ := record["metric_name"].(string)
+		if !isRuntimeMemoryMetric(name) {
+			continue
+		}
+		value, ok := record["value"].(float64)
+		if !ok {
+			t.Fatalf("runtime memory metric %q value = %#v, want JSON number", name, record["value"])
+		}
+		values[name] = value
+		units[name], _ = record["unit"].(string)
+		if metricType, _ := record["metric_type"].(string); metricType != "sample" {
+			t.Fatalf("runtime memory metric %q type = %q, want sample", name, metricType)
+		}
+	}
+	heapAlloc, allocOK := values["runtime.memory.heap_alloc"]
+	heapInuse, inuseOK := values["runtime.memory.heap_inuse"]
+	sys, sysOK := values["runtime.memory.sys"]
+	numGC, gcOK := values["runtime.memory.num_gc"]
+	goroutines, goroutinesOK := values["runtime.memory.goroutines"]
+	processCommit, commitOK := values["runtime.memory.process_commit"]
+	processCommitAvailable, commitAvailableOK := values["runtime.memory.process_commit_available"]
+	if !allocOK || !inuseOK || !sysOK || !gcOK || !goroutinesOK || !commitOK || !commitAvailableOK {
+		t.Fatalf("runtime memory records = %#v, want the complete runtime snapshot metric set", values)
+	}
+	if units["runtime.memory.heap_alloc"] != "bytes" ||
+		units["runtime.memory.heap_inuse"] != "bytes" ||
+		units["runtime.memory.sys"] != "bytes" ||
+		units["runtime.memory.num_gc"] != "count" ||
+		units["runtime.memory.goroutines"] != "count" ||
+		units["runtime.memory.process_commit"] != "bytes" ||
+		units["runtime.memory.process_commit_available"] != "boolean" {
+		t.Fatalf("runtime memory units = %#v, want bytes/count/boolean fields", units)
+	}
+	if heapAlloc <= 0 || heapInuse < heapAlloc || sys < heapInuse || numGC < 0 || goroutines <= 0 {
+		t.Fatalf("runtime memory values = heap_alloc:%v heap_inuse:%v sys:%v num_gc:%v goroutines:%v, want plausible values", heapAlloc, heapInuse, sys, numGC, goroutines)
+	}
+	if processCommitAvailable != 0 && processCommitAvailable != 1 {
+		t.Fatalf("runtime memory process commit availability = %v, want 0 or 1", processCommitAvailable)
+	}
+	if processCommitAvailable == 1 && processCommit <= 0 {
+		t.Fatalf("runtime memory process commit = %v, want positive when available", processCommit)
+	}
+}
+
+func isRuntimeMemoryMetric(name string) bool {
+	switch name {
+	case "runtime.memory.heap_alloc",
+		"runtime.memory.heap_inuse",
+		"runtime.memory.sys",
+		"runtime.memory.num_gc",
+		"runtime.memory.goroutines",
+		"runtime.memory.process_commit",
+		"runtime.memory.process_commit_available":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -190,7 +331,7 @@ func TestAPIServerBindFailureUnwindsStartedLifecycleRoles(t *testing.T) {
 	starter, err := platformhttpserver.NewStarter(func(_ string, address string) (net.Listener, error) {
 		attempts = append(attempts, address)
 		return nil, errors.New("address unavailable")
-	})
+	}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewStarter() error = %v", err)
 	}

@@ -11,12 +11,15 @@ import (
 
 // StarterWithListener binds a server starter to one process-owned listener.
 // The listener is consumed at most once.
-func StarterWithListener(listener net.Listener, readers ...platformprocessmemory.CommitReader) Starter {
+func StarterWithListener(
+	listener net.Listener,
+	commitReader platformprocessmemory.CommitReader,
+	commandLineReader CommandLineReader,
+) Starter {
 	var mu sync.Mutex
 	used := false
-	commitReader := platformprocessmemory.CommitReader(platformprocessmemory.CurrentCommit)
-	if len(readers) > 0 && readers[0] != nil {
-		commitReader = readers[0]
+	if commitReader == nil {
+		commitReader = platformprocessmemory.CurrentCommit
 	}
 	return func(ctx context.Context, request StartRequest) error {
 		mu.Lock()
@@ -38,6 +41,6 @@ func StarterWithListener(listener net.Listener, readers ...platformprocessmemory
 			}
 			request.OnBound(Binding{Host: host, Port: port})
 		}
-		return Serve(ctx, HandlerWithDiagnostics(request.Handler, request.Pprof, commitReader), listener, request.Logger)
+		return Serve(ctx, HandlerWithDiagnostics(request.Handler, request.Pprof, commitReader, commandLineReader), listener, request.Logger)
 	}
 }

@@ -355,7 +355,7 @@ func TestServerBindExhaustionWritesDeclaredErrorWithoutResidualEffects(t *testin
 	starter, err := platformhttpserver.NewStarter(func(_ string, address string) (net.Listener, error) {
 		attempts = append(attempts, address)
 		return nil, errors.New("address unavailable")
-	})
+	}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewStarter() error = %v", err)
 	}

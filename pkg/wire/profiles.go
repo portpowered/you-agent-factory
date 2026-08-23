@@ -449,15 +449,31 @@ func provideFactoryRuntimeClockResolver() factoryruntime.ClockResolver {
 	}
 }
 
+func provideFactoryRuntimeMetricsClock(edges serviceedges.Edges) platformclock.TimerSource {
+	if clock, ok := edges.Clock.(platformclock.TimerSource); ok {
+		return clock
+	}
+	return platformclock.Real{}
+}
+
+func providePprofCommandLineReader() platformhttpserver.CommandLineReader {
+	return func() []string {
+		return append([]string(nil), os.Args...)
+	}
+}
+
 func provideFactoryRuntimeSessionLoggerFactory() factoryruntime.SessionLoggerFactory {
 	return factoryruntime.NewSessionLogger
 }
 
-func provideAPIServerStarter(edges serviceedges.Edges) (platformhttpserver.Starter, error) {
+func provideAPIServerStarter(
+	edges serviceedges.Edges,
+	commandLineReader platformhttpserver.CommandLineReader,
+) (platformhttpserver.Starter, error) {
 	if edges.APIServerStarter != nil {
 		return edges.APIServerStarter, nil
 	}
-	return platformhttpserver.NewStarter(net.Listen, platformprocessmemory.CurrentCommit)
+	return platformhttpserver.NewStarter(net.Listen, platformprocessmemory.CurrentCommit, commandLineReader)
 }
 
 func provideRuntimeHostOperation(
