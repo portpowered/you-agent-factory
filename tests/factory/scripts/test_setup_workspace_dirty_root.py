@@ -95,6 +95,50 @@ def create_remote_operator(base_path):
     return operator_path, upstream_path
 
 
+def create_residual_refusal_repository(base_path):
+    """Create a root with stale origin/main but no safe local or remote main."""
+    remote_path = base_path / "residual-remote.git"
+    remote_path.mkdir()
+    git(["init", "--bare", "-b", "main"], remote_path)
+
+    upstream_path = base_path / "residual-upstream"
+    upstream_path.mkdir()
+    init_repository(upstream_path)
+    git(["remote", "add", "origin", str(remote_path)], upstream_path)
+    git(["push", "-u", "origin", "main"], upstream_path)
+
+    operator_path = base_path / "residual-operator"
+    git(["clone", str(remote_path), operator_path.name], base_path)
+    (operator_path / ".git" / "info" / "exclude").write_text(
+        "tasks/todo/\n.claude/\n",
+        encoding="utf-8",
+    )
+
+    git(["checkout", "--detach", "HEAD"], operator_path)
+    git(["update-ref", "-d", "refs/heads/main"], operator_path)
+    git(["update-ref", "-d", "refs/heads/main"], remote_path)
+    # A normal fetch retains the stale remote-tracking ref without --prune.
+    git(["fetch", "origin"], operator_path)
+    return operator_path
+
+
+def add_sibling_worktree(repo_path, name):
+    worktree_path = repo_path / ".claude" / "worktrees" / name
+    worktree_path.parent.mkdir(parents=True, exist_ok=True)
+    git(
+        [
+            "worktree",
+            "add",
+            "-b",
+            f"{name}-branch",
+            str(worktree_path),
+            "refs/remotes/origin/main",
+        ],
+        repo_path,
+    )
+    return worktree_path
+
+
 def run_setup_workspace(repo_path, prd_name, env=None):
     environment = os.environ.copy()
     if env:
@@ -375,6 +419,189 @@ class SetupWorkspaceDirtyRootTest(unittest.TestCase):
                 for command in child_commands
             ),
         )
+
+    def test_residual_refusal_attributes_matching_sibling_without_changing_core_text(self):
+        operator_path = create_residual_refusal_repository(self.repo_path)
+        prd_name = "residual-attribution-prd"
+        write_prd(operator_path, prd_name)
+        sibling_path = add_sibling_worktree(operator_path, "matching-sibling")
+
+        (operator_path / "README.md").write_text(
+            "same operator edit\n", encoding="utf-8",
+        )
+        (sibling_path / "README.md").write_text(
+            "same operator edit\n", encoding="utf-8",
+        )
+        unusual_name = "operator [path] café.txt"
+        (operator_path / unusual_name).write_text(
+            "same untracked edit\n", encoding="utf-8",
+        )
+        (sibling_path / unusual_name).write_text(
+            "same untracked edit\n", encoding="utf-8",
+        )
+
+        entries = self.module.repository_status_entries(operator_path)
+        with mock.patch.object(
+            self.module,
+            "dirty_root_sibling_attribution",
+            return_value=[],
+        ):
+            expected_core = self.module.dirty_root_diagnostic(
+                operator_path,
+                entries,
+            )
+
+        trace_path = self.repo_path / "residual-attribution-trace.json"
+        result = run_setup_workspace(
+            operator_path,
+            prd_name,
+            env={"GIT_TRACE2_EVENT": str(trace_path)},
+        )
+
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(
+            result.stderr.splitlines()[: len(expected_core.splitlines())],
+            [
+                "Root cleanliness check failed: "
+                + expected_core.splitlines()[0],
+                *expected_core.splitlines()[1:],
+            ],
+        )
+        self.assertIn(
+            'likely sibling worktree matches (same changes relative to origin/main):',
+            result.stderr,
+        )
+        self.assertIn(
+            'sibling worktree "matching-sibling" matches path(s): "README.md", '
+            '"operator [path] caf\\u00e9.txt"',
+            result.stderr,
+        )
+        self.assertIn("repository root is dirty", result.stderr)
+        self.assertIn("Inspect the repository root manually", result.stderr)
+
+        trace_events = [
+            json.loads(line)
+            for line in trace_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        child_commands = [
+            event.get("child_argv", [])
+            for event in trace_events
+            if event.get("event") == "child_start"
+        ]
+        self.assertFalse(
+            any(
+                command[:1] == ["stash"]
+                or command[:2] == ["git", "stash"]
+                for command in child_commands
+            ),
+        )
+
+    def test_residual_refusal_omits_attribution_for_nonmatching_sibling(self):
+        operator_path = create_residual_refusal_repository(self.repo_path)
+        prd_name = "residual-negative-prd"
+        write_prd(operator_path, prd_name)
+        sibling_path = add_sibling_worktree(operator_path, "different-sibling")
+
+        (operator_path / "README.md").write_text(
+            "operator edit\n", encoding="utf-8",
+        )
+        (sibling_path / "README.md").write_text(
+            "different edit\n", encoding="utf-8",
+        )
+
+        result = run_setup_workspace(operator_path, prd_name)
+
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("Root cleanliness check failed", result.stderr)
+        self.assertIn("repository root is dirty", result.stderr)
+        self.assertNotIn("likely sibling worktree matches", result.stderr)
+        self.assertNotIn("different-sibling", result.stderr)
+
+    def test_residual_attribution_caps_paths_and_sibling_candidates(self):
+        operator_path = create_residual_refusal_repository(self.repo_path)
+        worktrees_dir = operator_path / ".claude" / "worktrees"
+        worktrees_dir.mkdir(parents=True, exist_ok=True)
+        for index in range(
+            self.module.MAX_DIRTY_ROOT_ATTRIBUTION_WORKTREES + 5
+        ):
+            (worktrees_dir / f"candidate-{index:02d}").mkdir()
+
+        for index in range(self.module.MAX_DIRTY_ROOT_ATTRIBUTION_PATHS + 5):
+            (operator_path / f"operator-{index:02d}.txt").write_text(
+                f"operator-{index}\n", encoding="utf-8",
+            )
+        entries = self.module.repository_status_entries(operator_path)
+
+        recorded = []
+        original_run_git = self.module.run_git
+
+        def recording_run_git(*args, **kwargs):
+            recorded.append((args, kwargs.get("cwd")))
+            return original_run_git(*args, **kwargs)
+
+        self.module.run_git = recording_run_git
+        try:
+            attribution = self.module.dirty_root_sibling_attribution(
+                operator_path,
+                entries,
+            )
+        finally:
+            self.module.run_git = original_run_git
+
+        self.assertEqual(attribution, [])
+        baseline_commands = [
+            args for args, _cwd in recorded if args[:1] == ("show",)
+        ]
+        candidate_commands = [
+            args
+            for args, cwd in recorded
+            if args[:2] == ("rev-parse", "--show-toplevel")
+            and Path(cwd).parent == worktrees_dir
+        ]
+        self.assertLessEqual(
+            len(baseline_commands),
+            self.module.MAX_DIRTY_ROOT_ATTRIBUTION_PATHS,
+        )
+        self.assertLessEqual(
+            len(candidate_commands),
+            self.module.MAX_DIRTY_ROOT_ATTRIBUTION_WORKTREES,
+        )
+
+    def test_residual_refusal_survives_missing_unusual_and_stale_paths(self):
+        operator_path = create_residual_refusal_repository(self.repo_path)
+        prd_name = "residual-malformed-prd"
+        write_prd(operator_path, prd_name)
+        (operator_path / "README.md").unlink()
+        unusual_name = "operator [path] café.txt"
+        (operator_path / unusual_name).write_text(
+            "operator data\n", encoding="utf-8",
+        )
+
+        worktrees_dir = operator_path / ".claude" / "worktrees"
+        invalid_path = worktrees_dir / "invalid-directory"
+        invalid_path.mkdir(parents=True)
+        stale_path = worktrees_dir / "stale-worktree"
+        stale_path.mkdir()
+        (stale_path / ".git").write_text(
+            "gitdir: missing-worktree-metadata\n",
+            encoding="utf-8",
+        )
+
+        result = run_setup_workspace(operator_path, prd_name)
+
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("Root cleanliness check failed", result.stderr)
+        self.assertIn("repository root is dirty", result.stderr)
+        self.assertIn("README.md", result.stderr)
+        self.assertIn(
+            json.dumps(unusual_name, ensure_ascii=True),
+            result.stderr,
+        )
+        self.assertNotIn("likely sibling worktree matches", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
 
 
 if __name__ == "__main__":

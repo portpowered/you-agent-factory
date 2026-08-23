@@ -11,6 +11,7 @@ Exit 0 on success (stdout = JSON blob), exit 1 on failure (stderr = stage-specif
 """
 
 import contextlib
+import hashlib
 import json
 import os
 import re
@@ -28,9 +29,12 @@ SNAPSHOT_REF_PREFIX = "refs/factory-snapshots/"
 ROOT_SYNC_LOCK_FILENAME = "setup-workspace-root-sync.lock"
 MAX_ANCESTOR_RESIDUE_PATHS = 20
 MAX_DIRTY_ROOT_SAMPLE_ENTRIES = 12
+MAX_DIRTY_ROOT_ATTRIBUTION_PATHS = 5
+MAX_DIRTY_ROOT_ATTRIBUTION_WORKTREES = 20
 MAX_STATUS_FAILURE_DETAILS = 512
 MAX_FAILURE_DETAILS = 1024
 MAX_DISPLAYED_STATUS_PATH_LENGTH = 240
+FILE_DIGEST_CHUNK_SIZE = 1024 * 1024
 WINDOWS_RESERVED_PATH_COMPONENT = re.compile(
     r"(?<![a-z0-9])(?:nul|con|prn|aux|com[1-9]|lpt[1-9])"
     r"(?:\.[^\\/:*?\"<>|\r\n]*)?(?![a-z0-9])",
@@ -38,6 +42,8 @@ WINDOWS_RESERVED_PATH_COMPONENT = re.compile(
 )
 _ROOT_SYNC_THREAD_LOCKS = {}
 _ROOT_SYNC_THREAD_LOCKS_GUARD = threading.Lock()
+_MISSING_PATH = object()
+_UNAVAILABLE_PATH = object()
 
 
 class DirtyRootError(RuntimeError):
@@ -291,6 +297,156 @@ def dirty_root_sample(entries):
     return sample
 
 
+def path_content_digest(path):
+    """Return a bounded-memory digest for a file, or a path-state sentinel."""
+    try:
+        if not path.exists():
+            return _MISSING_PATH
+        if not path.is_file():
+            return _UNAVAILABLE_PATH
+
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            for chunk in iter(
+                lambda: stream.read(FILE_DIGEST_CHUNK_SIZE),
+                b"",
+            ):
+                digest.update(chunk)
+        return digest.digest()
+    except (OSError, ValueError):
+        return _UNAVAILABLE_PATH
+
+
+def git_revision_path_digest(repo_path, revision, relative_path):
+    """Return a digest for a revision path without mutating the repository."""
+    try:
+        result = run_git(
+            "show",
+            f"{revision}:{relative_path}",
+            cwd=repo_path,
+            check=False,
+        )
+    except Exception:  # noqa: BLE001 - attribution must never replace refusal
+        return _UNAVAILABLE_PATH
+
+    if result.returncode != 0:
+        return _MISSING_PATH
+    try:
+        contents = result.stdout.encode("utf-8", "surrogateescape")
+    except (AttributeError, UnicodeEncodeError):
+        return _UNAVAILABLE_PATH
+    return hashlib.sha256(contents).digest()
+
+
+def dirty_root_attribution_fingerprints(repo_path, entries):
+    """Capture at most five root changes relative to the fetched baseline."""
+    try:
+        if not origin_main_ref_exists(repo_path):
+            return []
+
+        fingerprints = []
+        for entry in dirty_root_sample(entries)[:MAX_DIRTY_ROOT_ATTRIBUTION_PATHS]:
+            paths = entry.get("paths", ())
+            if not paths:
+                continue
+            relative_path = paths[0]
+            baseline = git_revision_path_digest(
+                repo_path,
+                "refs/remotes/origin/main",
+                relative_path,
+            )
+            if baseline is _UNAVAILABLE_PATH:
+                continue
+
+            current = path_content_digest(repo_path / relative_path)
+            if current is _UNAVAILABLE_PATH or current == baseline:
+                continue
+            fingerprints.append((relative_path, baseline, current))
+        return fingerprints
+    except Exception:  # noqa: BLE001 - attribution is best effort only
+        return []
+
+
+def sibling_worktree_candidates(repo_path):
+    """Return a deterministic, bounded list of sibling directories."""
+    worktrees_dir = repo_path / ".claude" / "worktrees"
+    try:
+        children = sorted(
+            worktrees_dir.iterdir(),
+            key=lambda path: os.fsencode(path.name),
+        )
+    except (OSError, UnicodeError, ValueError):
+        return []
+
+    candidates = []
+    for candidate in children:
+        try:
+            if not candidate.is_dir():
+                continue
+        except OSError:
+            continue
+        candidates.append(candidate)
+        if len(candidates) >= MAX_DIRTY_ROOT_ATTRIBUTION_WORKTREES:
+            break
+    return candidates
+
+
+def is_valid_sibling_worktree(candidate):
+    """Check one sibling independently so stale entries cannot abort refusal."""
+    try:
+        result = run_git(
+            "rev-parse",
+            "--show-toplevel",
+            cwd=candidate,
+            check=False,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return False
+        return Path(result.stdout.strip()).resolve() == candidate.resolve()
+    except Exception:  # noqa: BLE001 - one broken candidate is non-fatal
+        return False
+
+
+def dirty_root_sibling_attribution(repo_path, entries):
+    """Find bounded sibling worktrees carrying the same sampled root changes."""
+    fingerprints = dirty_root_attribution_fingerprints(repo_path, entries)
+    if not fingerprints:
+        return []
+
+    matches = []
+    for candidate in sibling_worktree_candidates(repo_path):
+        if not is_valid_sibling_worktree(candidate):
+            continue
+
+        matching_paths = []
+        for relative_path, baseline, current in fingerprints:
+            sibling_current = path_content_digest(candidate / relative_path)
+            if sibling_current is _UNAVAILABLE_PATH:
+                continue
+            if sibling_current == current and sibling_current != baseline:
+                matching_paths.append(relative_path)
+        if matching_paths:
+            matches.append((candidate.name, matching_paths))
+
+    if not matches:
+        return []
+
+    lines = [
+        "likely sibling worktree matches (same changes relative to origin/main):",
+    ]
+    for candidate_name, matching_paths in matches:
+        rendered_paths = ", ".join(
+            json.dumps(path, ensure_ascii=True)
+            for path in matching_paths
+        )
+        lines.append(
+            "  sibling worktree "
+            f"{json.dumps(candidate_name, ensure_ascii=True)} "
+            f"matches path(s): {rendered_paths}"
+        )
+    return lines
+
+
 def dirty_root_diagnostic(repo_path, entries):
     """Describe dirty-root evidence and safe manual recovery guidance."""
     tracked_count = sum(
@@ -332,6 +488,7 @@ def dirty_root_diagnostic(repo_path, entries):
         "Inspect the repository root manually, then commit the changes or "
         "back them up and restore them manually before retrying."
     )
+    lines.extend(dirty_root_sibling_attribution(repo_path, entries))
     return "\n".join(lines)
 
 
