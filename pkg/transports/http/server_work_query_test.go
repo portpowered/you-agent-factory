@@ -371,6 +371,17 @@ func TestListWork_NextTokenContinuesPublicRoutePagination(t *testing.T) {
 	serveProgrammedList(t, "?maxResults=2&nextToken=opaque", work.ListOptions{MaxResults: 2, NextToken: "opaque"}, work.ListResult{MaxResults: 2}, nil)
 }
 
+func TestListWork_RejectsUnsupportedContinuationParameter(t *testing.T) {
+	srv := newWorkReadProtocolServer(strictWorkAPIFake{list: func(context.Context, string, work.ListOptions) (work.ListResult, error) {
+		t.Fatal("Work root must not be called for an unsupported continuation parameter")
+		return work.ListResult{}, nil
+	}})
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/work?pageToken=opaque", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "pageToken is not supported; use nextToken for Work pagination")
+}
+
 func TestUpsertWorkRequest_NormalizesLegacyStringPayloadIntoCanonicalContent(t *testing.T) {
 	assertUpsertAccepted(t, `{"requestId":"request-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"prd","payload":"legacy text"}]}`)
 }

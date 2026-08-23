@@ -257,7 +257,7 @@ export interface paths {
     };
     /**
      * List work for one session
-     * @description Lists current work tokens from the engine state snapshot owned by the explicitly selected live factory session.
+     * @description Lists current work tokens from the engine state snapshot owned by the explicitly selected live factory session. The effective maxResults page size is capped at 50, and nextToken is the exact opaque continuation value returned by the preceding page.
      */
     get: operations["listWorkBySessionId"];
     put?: never;

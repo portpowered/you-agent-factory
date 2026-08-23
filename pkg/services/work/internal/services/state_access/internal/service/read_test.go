@@ -64,6 +64,42 @@ func TestListWorkHonorsPaginationNextToken(t *testing.T) {
 	}
 }
 
+func TestListWorkCapsRequestedPageSizeAtServiceMaximum(t *testing.T) {
+	t.Parallel()
+
+	items := make([]work.ReadModel, 0, work.DefaultListMaxResults+1)
+	for index := 1; index <= work.DefaultListMaxResults+1; index++ {
+		items = append(items, work.ReadModel{
+			CursorID: fmt.Sprintf("cursor-%02d", index),
+			WorkID:   fmt.Sprintf("work-%02d", index),
+			Name:     fmt.Sprintf("Work %02d", index),
+			State:    &work.State{Name: "review", Type: work.StateTypeProcessing},
+		})
+	}
+	svc := internalservice.New(stubSessionResolver{adapter: &recordingSessionAdapter{
+		snapshot: work.ReadSnapshot{Items: items},
+	}}, nil)
+
+	first, err := svc.ListWork(context.Background(), "session-1", work.ListOptions{MaxResults: 1000})
+	if err != nil {
+		t.Fatalf("first ListWork: %v", err)
+	}
+	if first.MaxResults != work.DefaultListMaxResults || len(first.Results) != work.DefaultListMaxResults || first.NextToken == "" {
+		t.Fatalf("first page = maxResults %d results %d nextToken %q, want capped 50-row page with continuation", first.MaxResults, len(first.Results), first.NextToken)
+	}
+
+	second, err := svc.ListWork(context.Background(), "session-1", work.ListOptions{
+		MaxResults: 1000,
+		NextToken:  first.NextToken,
+	})
+	if err != nil {
+		t.Fatalf("second ListWork: %v", err)
+	}
+	if second.MaxResults != work.DefaultListMaxResults || len(second.Results) != 1 || second.NextToken != "" {
+		t.Fatalf("second page = maxResults %d results %d nextToken %q, want capped final row", second.MaxResults, len(second.Results), second.NextToken)
+	}
+}
+
 func TestListWorkWalksFilteredSnapshotWithoutMissingOrDuplicateRows(t *testing.T) {
 	t.Parallel()
 

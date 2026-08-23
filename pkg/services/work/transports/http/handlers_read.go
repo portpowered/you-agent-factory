@@ -3,6 +3,7 @@ package http
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -26,6 +27,10 @@ func (a *Adapter) ListWorkBySessionId(
 ) {
 	if strings.TrimSpace(string(sessionID)) == "" {
 		a.writeError(w, http.StatusBadRequest, "session id is required", "BAD_REQUEST")
+		return
+	}
+	if err := validateWorkListQuery(r.URL.Query()); err != nil {
+		a.writeListDecodeError(w, err)
 		return
 	}
 
@@ -53,6 +58,21 @@ func (a *Adapter) ListWorkBySessionId(
 		return
 	}
 	a.writeJSON(w, http.StatusOK, ListWorkResponseToAPI(result))
+}
+
+func validateWorkListQuery(query url.Values) error {
+	for parameter := range query {
+		switch parameter {
+		case "maxResults", "nextToken", "state.name", "state.type", "sortBy", "name", "workTypeName", "traceId", "terminal", "nonTerminal", "counts", "includeSuperseded":
+			continue
+		default:
+			return &work.ValidationError{
+				Field:   parameter,
+				Message: parameter + " is not supported; use nextToken for Work pagination",
+			}
+		}
+	}
+	return nil
 }
 
 // GetWorkBySessionId decodes one session-scoped get-work request, invokes the

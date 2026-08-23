@@ -34,10 +34,7 @@ func (s *Service) ListWork(
 		return work.ListResult{}, mapQueryValidationError(err)
 	}
 	ordered := orderedReadModels(snapshot, selection)
-	maxResults := normalized.MaxResults
-	if maxResults <= 0 {
-		maxResults = work.DefaultListMaxResults
-	}
+	maxResults := effectiveListPageSize(normalized.MaxResults)
 	start := 0
 	if normalized.NextToken != "" {
 		decoded, _ := base64.StdEncoding.DecodeString(normalized.NextToken)
@@ -55,6 +52,13 @@ func (s *Service) ListWork(
 		result.NextToken = base64.StdEncoding.EncodeToString([]byte(ordered[end-1].CursorID))
 	}
 	return result, nil
+}
+
+func effectiveListPageSize(requested int) int {
+	if requested <= 0 || requested > work.DefaultListMaxResults {
+		return work.DefaultListMaxResults
+	}
+	return requested
 }
 
 func (s *Service) GetWork(

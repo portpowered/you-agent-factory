@@ -198,6 +198,22 @@ func TestWorkListPublicCLITraversesThreeRESTPages(t *testing.T) {
 	}
 	controlIDs := workIDsFromPages([]factoryapi.ListWorkResponse{control})
 
+	cappedPages := walkWorkListFiltersCounts(t, process, home, server.URL(), "--counts", "--max-results", "1000")
+	if len(cappedPages) != 2 || len(cappedPages[0].Results) != 50 || len(cappedPages[1].Results) != 1 {
+		t.Fatalf("capped CLI pages = sizes %d and %d, want 50 and 1: %#v", len(cappedPages[0].Results), len(cappedPages[1].Results), cappedPages)
+	}
+	for index, page := range cappedPages {
+		if page.PaginationContext == nil || page.PaginationContext.MaxResults != 50 {
+			t.Fatalf("capped CLI page %d pagination = %#v, want maxResults=50", index+1, page.PaginationContext)
+		}
+	}
+	if cappedPages[0].PaginationContext.NextToken == nil || strings.TrimSpace(*cappedPages[0].PaginationContext.NextToken) == "" {
+		t.Fatal("capped CLI first page did not return a continuation token")
+	}
+	if cappedIDs := workIDsFromPages(cappedPages); !equalWorkIDs(cappedIDs, controlIDs) {
+		t.Fatalf("capped CLI IDs = %#v, want census IDs %#v", cappedIDs, controlIDs)
+	}
+
 	cliPages := walkWorkListFiltersCounts(t, process, home, server.URL(), "--counts", "--max-results", "17")
 	if len(cliPages) != 3 {
 		t.Fatalf("CLI page count = %d, want three", len(cliPages))
@@ -559,12 +575,19 @@ func manualWorkListRESTWalk(
 
 func unpaginatedWorkListRESTCensus(t *testing.T, serverURL string) factoryapi.ListWorkResponse {
 	t.Helper()
-	query := url.Values{
-		"counts":     []string{"true"},
-		"maxResults": []string{"1000"},
+	pages := manualWorkListRESTWalk(t, serverURL, 50)
+	if len(pages) == 0 {
+		t.Fatal("REST census returned no pages")
 	}
-	endpoint := support.DefaultSessionWorkURL(serverURL, "/work") + "?" + query.Encode()
-	return support.GetJSON[factoryapi.ListWorkResponse](t, endpoint)
+	census := pages[0]
+	census.Results = append([]factoryapi.Work(nil), census.Results...)
+	for _, page := range pages[1:] {
+		census.Results = append(census.Results, page.Results...)
+	}
+	if census.PaginationContext != nil {
+		census.PaginationContext.NextToken = nil
+	}
+	return census
 }
 
 func equalWorkIDs(left, right []string) bool {

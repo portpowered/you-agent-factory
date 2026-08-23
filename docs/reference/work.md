@@ -431,7 +431,10 @@ again:
    `--work-type-name <type>` to narrow the listing to the submitted work type.
 
 `you work list` also supports `--state-name`, `--state-type`, `--sort-by`,
-`--max-results`, and `--session` for broader inspection. Human-mode list output
+`--max-results`, `--next-token`, and `--session` for broader inspection. Each
+request returns one server page; the effective page size is capped at 50, and
+`--next-token` continues from the exact opaque cursor returned in JSON.
+Human-mode list output
 is tabular (`WORK ID`, `NAME`, `WORK TYPE`, `STATE NAME`, `STATE TYPE`,
 `STRUCTURED RESULT`, `RELATIONS`). The structured-result column contains one
 deterministic compact JSON value when a workstation validated one, including
