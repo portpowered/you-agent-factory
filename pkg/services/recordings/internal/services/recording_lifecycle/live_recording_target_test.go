@@ -128,6 +128,46 @@ func TestLiveRecordingTargetPlannerRejectsCanonicalReuseWithoutCollisionArtifact
 	}
 }
 
+func TestLiveRecordingTargetPlannerRejectsCanonicalReuseWithoutCollisionArtifact(t *testing.T) {
+	t.Parallel()
+
+	clock := platformclock.NewDeterministic(time.Date(2026, 8, 23, 18, 45, 12, 0, time.UTC), time.Second)
+	home := t.TempDir()
+	recordingsRoot := filepath.Join(home, ".you-agent-factory", "recordings")
+	canonicalPath := filepath.Join(
+		recordingsRoot, "2026", "08", "23", canonicalRecordingSessionID+".json",
+	)
+	if err := os.MkdirAll(filepath.Dir(canonicalPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	const existingContent = "existing recording"
+	if err := os.WriteFile(canonicalPath, []byte(existingContent), 0o600); err != nil {
+		t.Fatalf("WriteFile canonical recording: %v", err)
+	}
+	reserver, err := platformruntimeartifact.NewReserver(platformfilesystem.Local{})
+	if err != nil {
+		t.Fatalf("NewReserver: %v", err)
+	}
+
+	_, err = newPlanner(clock, reserver).PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest{
+		HomeDir:            home,
+		CanonicalSessionID: canonicalRecordingSessionID,
+	})
+	if err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("canonical reuse error = %v, want named reservation failure", err)
+	}
+	collisionPath := filepath.Join(
+		recordingsRoot, "2026", "08", "23", canonicalRecordingSessionID+"-2.json",
+	)
+	if _, statErr := os.Stat(collisionPath); !os.IsNotExist(statErr) {
+		t.Fatalf("collision artifact stat error = %v, want no %q", statErr, collisionPath)
+	}
+	content, readErr := os.ReadFile(canonicalPath)
+	if readErr != nil || string(content) != existingContent {
+		t.Fatalf("canonical artifact after reuse = %q, %v; want unchanged content", content, readErr)
+	}
+}
+
 func TestLiveRecordingTargetPlannerRequiresCanonicalUUIDAndExactReservation(t *testing.T) {
 	t.Parallel()
 
