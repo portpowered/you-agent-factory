@@ -54,7 +54,6 @@ type controlledBoundary struct {
 	admittedOnce       sync.Once
 	request            workers.WorkstationDispatchRequest
 	publishCalls       int
-	publishError       func(int, workers.WorkstationDispatchRequest) error
 	dispatches         map[string]*controlledDispatch
 	dispatchesChanged  chan struct{}
 	cancelled          []workers.WorkstationDispatchCancelRequest
@@ -168,17 +167,10 @@ func (b *controlledBoundary) prepare(request workers.WorkstationDispatchRequest)
 	}
 	b.request = request
 	b.publishCalls++
-	publishCall := b.publishCalls
-	publishError := b.publishError
 	dispatch.request = request
 	b.startedOnce.Do(func() { close(b.started) })
 	dispatch.preparedOnce.Do(func() { close(dispatch.prepared) })
 	b.mu.Unlock()
-	if publishError != nil {
-		if err := publishError(publishCall, request); err != nil {
-			return dispatch, err
-		}
-	}
 	return dispatch, nil
 }
 
@@ -289,12 +281,6 @@ func (b *controlledBoundary) currentRequest() workers.WorkstationDispatchRequest
 		WorkstationName: b.request.WorkstationName,
 		Execution:       workers.CloneWorkstationExecutionRequest(b.request.Execution),
 	}
-}
-
-func (b *controlledBoundary) setPublishError(fn func(int, workers.WorkstationDispatchRequest) error) {
-	b.mu.Lock()
-	b.publishError = fn
-	b.mu.Unlock()
 }
 
 func newControlledRegistry(t *testing.T, execution any) workersessions.Service {

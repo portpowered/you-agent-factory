@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"reflect"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -366,25 +365,6 @@ func TestMockWorkerCommandRunner_RunNextFailsClosedWhenNextMissing(t *testing.T)
 	if err == nil || !strings.Contains(err.Error(), "next command runner is required") {
 		t.Fatalf("runNext error = %v, want required injected runner", err)
 	}
-}
-
-func shellCommandForTest(scriptPath string) string {
-	if runtime.GOOS == "windows" {
-		return "powershell.exe"
-	}
-	return scriptPath
-}
-
-func shellArgsForTest(scriptPath string) []string {
-	if runtime.GOOS == "windows" {
-		return []string{
-			"-NoProfile",
-			"-NonInteractive",
-			"-Command",
-			`$value = [Console]::In.ReadToEnd(); [Console]::Out.Write("cwd:{0} stdin:{1} env:{2}", (Get-Location).Path, $value, $env:GREETING)`,
-		}
-	}
-	return nil
 }
 
 func TestRejectResultNilConfigDefaultsToExitCodeOne(t *testing.T) {

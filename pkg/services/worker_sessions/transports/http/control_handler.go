@@ -114,21 +114,6 @@ func (h *Handler) controlWorkerSession(
 	h.writeJSON(w, http.StatusOK, response)
 }
 
-func decodeWorkerSessionStartRequest(body io.Reader) (factoryapi.WorkerSessionStartRequest, error) {
-	result, err := decodeWorkerSessionStartRequestWithDiagnostics(body)
-	return result.Value, err
-}
-
-func decodeWorkerSessionContinueRequest(body io.Reader) (factoryapi.WorkerSessionContinueRequest, error) {
-	result, err := decodeWorkerSessionContinueRequestWithDiagnostics(body)
-	return result.Value, err
-}
-
-func decodeWorkerSessionInterruptRequest(body io.Reader) (factoryapi.WorkerSessionInterruptRequest, error) {
-	result, err := decodeWorkerSessionInterruptRequestWithDiagnostics(body)
-	return result.Value, err
-}
-
 func decodeWorkerSessionStartRequestWithDiagnostics(body io.Reader) (httpcompat.DecodeResult[factoryapi.WorkerSessionStartRequest], error) {
 	return httpcompat.Decode[factoryapi.WorkerSessionStartRequest](body)
 }

@@ -4,7 +4,6 @@ package workersessions
 
 import (
 	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 )
 
 type ListConfig = workersessionscli.ListConfig
@@ -32,68 +31,4 @@ const StreamModeConflictCode = workersessionscli.StreamModeConflictCode
 
 func NewStreamModeConflictError() *CLIError {
 	return workersessionscli.NewStreamModeConflictError()
-}
-
-func NewList(transport clihttp.Protocol) ListOperation {
-	return workersessionscli.NewList(transport)
-}
-
-func BindList(transport clihttp.Protocol) ListOperation {
-	return workersessionscli.BindList(transport)
-}
-
-func NewShow(transport clihttp.Protocol) ShowOperation {
-	return workersessionscli.NewShow(transport)
-}
-
-func BindShow(transport clihttp.Protocol) ShowOperation {
-	return workersessionscli.BindShow(transport)
-}
-
-func NewRead(transport clihttp.Protocol) ReadOperation {
-	return workersessionscli.NewRead(transport)
-}
-
-func BindRead(transport clihttp.Protocol) ReadOperation {
-	return workersessionscli.BindRead(transport)
-}
-
-func NewStream(transport clihttp.Protocol) StreamOperation {
-	return workersessionscli.NewStream(transport)
-}
-
-func BindStream(transport clihttp.Protocol) StreamOperation {
-	return workersessionscli.BindStream(transport)
-}
-
-func NewInvoke(transport clihttp.Protocol, local LocalInvokeBoundary) InvokeOperation {
-	return workersessionscli.NewInvoke(transport, local)
-}
-
-func BindInvoke(transport clihttp.Protocol, local LocalInvokeBoundary) InvokeOperation {
-	return workersessionscli.BindInvoke(transport, local)
-}
-
-func NewContinue(transport clihttp.Protocol, local LocalInvokeBoundary) ContinueOperation {
-	return workersessionscli.NewContinue(transport, local)
-}
-
-func BindContinue(transport clihttp.Protocol, local LocalInvokeBoundary) ContinueOperation {
-	return workersessionscli.BindContinue(transport, local)
-}
-
-func NewInterrupt(transport clihttp.Protocol, local LocalInterruptBoundary) InterruptOperation {
-	return workersessionscli.NewInterrupt(transport, local)
-}
-
-func BindInterrupt(transport clihttp.Protocol, local LocalInterruptBoundary) InterruptOperation {
-	return workersessionscli.BindInterrupt(transport, local)
-}
-
-func NewControl(transport clihttp.Protocol, local LocalControlBoundary) ControlOperation {
-	return workersessionscli.NewControl(transport, local)
-}
-
-func BindControl(transport clihttp.Protocol, local LocalControlBoundary) ControlOperation {
-	return workersessionscli.BindControl(transport, local)
 }

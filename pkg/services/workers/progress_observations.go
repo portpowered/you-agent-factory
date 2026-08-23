@@ -55,13 +55,3 @@ type ProgressFragment struct {
 
 // ProgressPublisher receives transient Worker observations.
 type ProgressPublisher func(ProgressFragment)
-
-// CloneProviderSessionReference returns a detached compatibility copy of the
-// exact provider-session reference carried by a legacy progress fragment.
-func CloneProviderSessionReference(reference *providers.SessionRef) *providers.SessionRef {
-	if reference == nil {
-		return nil
-	}
-	cloned := reference.Clone()
-	return &cloned
-}

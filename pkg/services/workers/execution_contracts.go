@@ -411,11 +411,6 @@ func CanonicalProviderSessionProvider(provider string) string {
 	return providers.ID(provider).CanonicalSessionProvider()
 }
 
-// CloneProviderSessionMetadata returns a detached compatibility projection.
-func CloneProviderSessionMetadata(session *ProviderSessionMetadata) *ProviderSessionMetadata {
-	return (session).Clone()
-}
-
 // WorkResult is returned by a worker after processing.
 // The Outcome determines which arc set is used to route the resulting tokens.
 type WorkResult struct {
