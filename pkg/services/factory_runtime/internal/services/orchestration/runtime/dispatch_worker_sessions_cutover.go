@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -109,6 +110,16 @@ func runtimeAttemptPreparation(
 			return nil, err
 		}
 		return func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
+			// Direct JavaScript children enter Runtime through this preparation
+			// seam instead of attemptLifecycle.executeSafely. Normalize the
+			// detached result here so empty, canceled, and contradictory provider
+			// returns still reach Worker Sessions as one terminal outcome.
+			result = normalizeAttemptResult(
+				executeRequest,
+				result,
+				executeErr,
+				platformprocess.CancellationReasonFromError(executeErr),
+			)
 			result = normalizeDetachedExecutionResult(cfg, executeRequest, result)
 			dispatchResult, dispatchErr := workstationDispatchResultFromExecute(
 				workstationDispatchRequestForResult(request, executeRequest),
