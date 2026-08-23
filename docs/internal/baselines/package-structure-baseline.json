@@ -2065,11 +2065,6 @@
     {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/workers/execution_contracts.go",
-      "target": "CloneProviderSessionMetadata"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/execution_contracts.go",
       "target": "CloneWorkDiagnostics"
     },
     {
@@ -2160,11 +2155,6 @@
     {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/workers/failure.go",
-      "target": "WorkFailureDecisionFromMetadata"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/failure.go",
       "target": "WorkFailureDecisionFromProviderError"
     },
     {
@@ -2201,11 +2191,6 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/workers/progress_observations.go",
       "target": "CanonicalDraftFragment"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/progress_observations.go",
-      "target": "CloneProviderSessionReference"
     },
     {
       "rule": "service-root-exported-function",
