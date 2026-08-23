@@ -675,8 +675,17 @@ func (f *factoryImpl) Observe(ctx context.Context, req factory.ObserveRequest) (
 	if !validObservationScope(req.Scope) {
 		return factory.ObserveResult{}, factory.ErrInvalidObservationScope
 	}
+	if f == nil {
+		return factory.ObserveResult{}, factory.ErrNotRunning
+	}
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return factory.ObserveResult{}, err
+		}
+	}
 	f.mu.RLock()
 	state := f.state
+	startedAt := f.startedAt
 	f.mu.RUnlock()
 	switch state {
 	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle,
@@ -684,11 +693,27 @@ func (f *factoryImpl) Observe(ctx context.Context, req factory.ObserveRequest) (
 	default:
 		return factory.ObserveResult{}, factory.ErrNotRunning
 	}
-	snapshot, err := f.GetEngineStateSnapshot(ctx)
-	if err != nil {
-		return factory.ObserveResult{}, err
+	if f.engine == nil {
+		return factory.ObserveResult{}, factory.ErrNotRunning
 	}
-	return factory.ObserveResult{Observation: rootobservation.Project(snapshot, req.Scope)}, nil
+
+	// Runtime observation deliberately reads only the engine-owned detached
+	// boundary. GetEngineStateSnapshot also reconstructs canonical world state
+	// and evaluates enablement for migration-only callers; neither operation is
+	// part of a live status read.
+	snapshot := f.engine.GetRuntimeStateSnapshot()
+	snapshot.FactoryState = string(state)
+	snapshot.Topology = f.topology
+	snapshot.RuntimeStatus = f.deriveRuntimeStatus(state, snapshot)
+	snapshot.LifecycleControlStatus = string(durableLifecycleStatus(state))
+	snapshot.StreamGenerationID = ""
+	if f.eventHistory != nil {
+		snapshot.StreamGenerationID = f.eventHistory.StreamGenerationID()
+	}
+	if !startedAt.IsZero() && f.clock != nil {
+		snapshot.Uptime = f.clock.Now().Sub(startedAt)
+	}
+	return factory.ObserveResult{Observation: rootobservation.Project(&snapshot, req.Scope)}, nil
 }
 
 func (f *factoryImpl) PlanDispatch(

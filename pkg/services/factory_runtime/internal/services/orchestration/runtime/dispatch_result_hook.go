@@ -958,7 +958,7 @@ func (f *factoryImpl) currentWorldState(tick int) *interfaces.FactoryWorldState 
 	return &state
 }
 
-func (f *factoryImpl) deriveRuntimeStatus(currentState interfaces.FactoryState, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], worldState *interfaces.FactoryWorldState) interfaces.RuntimeStatus {
+func (f *factoryImpl) deriveRuntimeStatus(currentState interfaces.FactoryState, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) interfaces.RuntimeStatus {
 	if currentState == interfaces.FactoryStateCompleted || currentState == interfaces.FactoryStateFailed {
 		return interfaces.RuntimeStatusFinished
 	}

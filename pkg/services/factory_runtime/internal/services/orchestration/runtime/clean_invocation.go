@@ -37,7 +37,7 @@ func (f *factoryImpl) GetEngineStateSnapshot(ctx context.Context) (*interfaces.E
 	worldStateStartedAt := f.clock.Now()
 	worldState := f.currentWorldState(runtimeSnap.TickCount)
 	worldStateDuration := f.clock.Now().Sub(worldStateStartedAt)
-	runtimeSnap.RuntimeStatus = f.deriveRuntimeStatus(currentState, runtimeSnap, worldState)
+	runtimeSnap.RuntimeStatus = f.deriveRuntimeStatus(currentState, runtimeSnap)
 	uptime := time.Duration(0)
 	if !startedAt.IsZero() {
 		uptime = now.Sub(startedAt)
