@@ -186,6 +186,10 @@ type runtimeMetricsLock struct {
 	err  error
 }
 
+// Close releases the OS lock but deliberately keeps the marker file. A stable
+// marker makes close/reacquire ownership handoff safe on every supported host:
+// a closing owner can never unlink a replacement owner's pathname. The next
+// claimant reuses the marker after observing that its OS lock is available.
 func (lock *runtimeMetricsLock) Close() error {
 	if lock == nil {
 		return nil
@@ -206,6 +210,8 @@ func runtimeMetricsClaimPath(path string) string {
 	cleanPath := filepath.Clean(path)
 	root := filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(cleanPath))))
 	digest := sha256.Sum256([]byte(cleanPath))
+	// Keep coordination markers outside date directories so a stale marker does
+	// not prevent safe whole-directory retention pruning.
 	return filepath.Join(
 		root,
 		runtimeMetricsClaimsDirectory,
