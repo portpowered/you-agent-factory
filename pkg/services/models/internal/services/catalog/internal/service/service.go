@@ -61,7 +61,7 @@ func (s *service) ListCatalog(
 				}
 				return models.ListModelsResult{}, models.ErrUnavailable
 			}
-			summary.ManagedRuntime = overlayCacheFacts(summary.ManagedRuntime, current)
+			summary.ManagedRuntime = overlayResolvedRuntime(summary.ManagedRuntime, current)
 		}
 		result.Models = append(result.Models, summary)
 	}
@@ -72,9 +72,29 @@ func (s *service) ListCatalog(
 	return result, nil
 }
 
-func overlayCacheFacts(base, current models.Runtime) models.Runtime {
+// overlayResolvedRuntime applies the Models-owned readiness observation to a
+// catalog projection while retaining the stable catalog identity and shape.
+// Collection and detail callers must consume the same resolved state; copying
+// only cache facts would leave the collection projection at its static
+// MISSING/NOT_INSTALLED baseline.
+func overlayResolvedRuntime(base, current models.Runtime) models.Runtime {
 	projected := base.Clone()
 	current = current.Clone()
+	if current.Identity != "" {
+		projected.Identity = current.Identity
+	}
+	if current.Locality != "" {
+		projected.Locality = current.Locality
+	}
+	if current.ReadinessState != "" {
+		projected.ReadinessState = current.ReadinessState
+	}
+	if current.LifecycleState != "" {
+		projected.LifecycleState = current.LifecycleState
+	}
+	if current.SupportedOperations != nil {
+		projected.SupportedOperations = current.SupportedOperations
+	}
 	if current.Revision != nil {
 		projected.Revision = current.Revision
 	}
@@ -83,6 +103,16 @@ func overlayCacheFacts(base, current models.Runtime) models.Runtime {
 	}
 	if current.CacheBytes != nil {
 		projected.CacheBytes = current.CacheBytes
+	}
+	projected.Diagnostics = mergeDiagnostics(projected.Diagnostics, current.Diagnostics)
+	if projected.Diagnostics == nil {
+		projected.Diagnostics = map[string]string{}
+	}
+	if projected.ReadinessState != "" {
+		projected.Diagnostics["readinessState"] = string(projected.ReadinessState)
+	}
+	if projected.LifecycleState != "" {
+		projected.Diagnostics["lifecycleState"] = string(projected.LifecycleState)
 	}
 	return projected
 }
@@ -118,7 +148,7 @@ func (s *service) GetCatalogModel(
 			}
 			return models.GetModelResult{}, models.ErrUnavailable
 		}
-		detail.Summary.ManagedRuntime = overlayCacheFacts(detail.Summary.ManagedRuntime, current)
+		detail.Summary.ManagedRuntime = overlayResolvedRuntime(detail.Summary.ManagedRuntime, current)
 	}
 	return models.GetModelResult{Model: detail}, nil
 }
