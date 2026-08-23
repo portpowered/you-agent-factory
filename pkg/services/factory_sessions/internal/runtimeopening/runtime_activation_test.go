@@ -423,7 +423,6 @@ func (service *activationServiceFake) SubscribeFactoryEvents(
 
 func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {
 	t.Parallel()
-
 	skipPermissions := true
 	request := &factorysessions.RuntimeOpeningRequest{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{

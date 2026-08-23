@@ -83,8 +83,7 @@ func TestServiceRunHostsAPICompletesStartupAndWaitsForRuntime(t *testing.T) {
 		ctx context.Context,
 		request platformhttpserver.StartRequest,
 	) error {
-		if request.Handler == nil || request.Host != "127.0.0.1" || request.Port != 8123 ||
-			!request.AutoPort || !request.Pprof || request.Logger == nil || request.OnBound == nil {
+		if !validAPIStartRequest(request) {
 			return errors.New("unexpected API host input")
 		}
 		close(started)
@@ -132,6 +131,11 @@ func TestServiceRunHostsAPICompletesStartupAndWaitsForRuntime(t *testing.T) {
 	if got := <-observedBinding; got.Host != "127.0.0.1" || got.Port != 8123 {
 		t.Fatalf("observed binding = %+v, want 127.0.0.1:8123", got)
 	}
+}
+
+func validAPIStartRequest(request platformhttpserver.StartRequest) bool {
+	return request.Handler != nil && request.Host == "127.0.0.1" && request.Port == 8123 &&
+		request.AutoPort && request.Pprof && request.Logger != nil && request.OnBound != nil
 }
 
 func TestServiceRunDoesNotReportReadinessWhenRuntimeStartupFails(t *testing.T) {
