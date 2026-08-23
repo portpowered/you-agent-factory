@@ -24,6 +24,7 @@ import (
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
+	platformprocessmemory "github.com/portpowered/infinite-you/pkg/platform/processmemory"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -456,7 +457,7 @@ func provideAPIServerStarter(edges serviceedges.Edges) (platformhttpserver.Start
 	if edges.APIServerStarter != nil {
 		return edges.APIServerStarter, nil
 	}
-	return platformhttpserver.NewStarter(net.Listen)
+	return platformhttpserver.NewStarter(net.Listen, platformprocessmemory.CurrentCommit)
 }
 
 func provideRuntimeHostOperation(

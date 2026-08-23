@@ -46,6 +46,11 @@ func TestAPIServerPprofIsOptInThroughThePublicRunPath(t *testing.T) {
 			t.Fatalf("default GET %s status = %d, want %d", path, response.StatusCode, http.StatusNotFound)
 		}
 	}
+	runtimeSnapshot := support.GetJSON[platformhttpserver.RuntimeSnapshot](t, defaultServer.URL()+"/debug/runtime")
+	if runtimeSnapshot.HeapAllocBytes == 0 || runtimeSnapshot.HeapInuseBytes < runtimeSnapshot.HeapAllocBytes ||
+		runtimeSnapshot.SysBytes < runtimeSnapshot.HeapInuseBytes || runtimeSnapshot.Goroutines <= 0 {
+		t.Fatalf("default runtime snapshot = %+v, want plausible live runtime values", runtimeSnapshot)
+	}
 	defaultServer.Close(t)
 
 	enabledServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
