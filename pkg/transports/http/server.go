@@ -6,10 +6,10 @@ package http
 import (
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
 	"path"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -29,6 +29,10 @@ import (
 
 const dashboardUIIndexFile = "index.html"
 
+// ShutdownOperation is the narrow invocation-local cancellation capability
+// exposed to the administrative HTTP route by runtime composition.
+type ShutdownOperation func()
+
 var _ factoryapi.ServerInterface = (*Server)(nil)
 
 // Server is the REST API server for the agent-factory.
@@ -43,13 +47,66 @@ type Server struct {
 	metricsHTTP            *factoryvisualizationhttp.MetricsHandler
 	costsHTTP              *costshttp.Handler
 	shutdown               ShutdownOperation
-	shutdownOnce           sync.Once
 	logger                 *zap.Logger
 	router                 *mux.Router
 }
 
 type factorySessionsAdapter struct{ *factorysessionshttp.Adapter }
 type workAdapter struct{ *workhttp.Adapter }
+
+// ShutdownServer acknowledges a loopback administrative request before
+// invoking the cancellation authority. Forwarded headers are deliberately not
+// consulted; authorization uses the actual peer and listener addresses.
+func (s *Server) ShutdownServer(w http.ResponseWriter, r *http.Request) {
+	if s == nil {
+		return
+	}
+	if !isLoopbackShutdownRequest(r) {
+		s.writeError(w, http.StatusForbidden, "shutdown control requires a loopback peer", "SHUTDOWN_CONTROL_REJECTED")
+		return
+	}
+	if s.shutdown == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "shutdown control is unavailable", "SHUTDOWN_CONTROL_UNAVAILABLE")
+		return
+	}
+
+	s.writeJSON(w, http.StatusAccepted, factoryapi.ShutdownAcceptedResponse{
+		Status:  factoryapi.Accepted,
+		Message: "graceful shutdown accepted",
+	})
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	s.shutdown()
+}
+
+func isLoopbackShutdownRequest(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	remoteIP := ipFromNetworkAddress(r.RemoteAddr)
+	if remoteIP == nil || !remoteIP.IsLoopback() {
+		return false
+	}
+	localAddr, ok := r.Context().Value(http.LocalAddrContextKey).(net.Addr)
+	if !ok || localAddr == nil {
+		return false
+	}
+	localIP := ipFromNetworkAddress(localAddr.String())
+	return localIP != nil && localIP.IsLoopback()
+}
+
+func ipFromNetworkAddress(address string) net.IP {
+	trimmed := strings.TrimSpace(address)
+	if host, _, err := net.SplitHostPort(trimmed); err == nil {
+		trimmed = host
+	}
+	trimmed = strings.Trim(strings.TrimSpace(trimmed), "[]")
+	if zone := strings.LastIndex(trimmed, "%"); zone >= 0 {
+		trimmed = trimmed[:zone]
+	}
+	return net.ParseIP(trimmed)
+}
 
 // NewServer composes an immutable generated HTTP server from dependencies
 // selected by Wire and the opened Factory Session. It performs no dependency
@@ -121,23 +178,6 @@ func NewServerWithRecordingsAndShutdown(
 // live runtime. The older constructors remain available for focused
 // transport fixtures that do not need these routes.
 func NewServerWithRecordingsAndMetricsAndCosts(
-	recordingsHTTP *recordingshttp.Adapter,
-	factorySessionsHTTP *factorysessionshttp.Handler,
-	workHTTP *workhttp.Adapter,
-	modelsHTTP *modelshttp.Handler,
-	providerSessionsHTTP *providersessionshttp.Handler,
-	factoryDefinitionsHTTP *factorydefinitionshttp.Handler,
-	logger *zap.Logger,
-	metricsHTTP *factoryvisualizationhttp.MetricsHandler,
-	costsHTTP *costshttp.Handler,
-	workerSessions ...*workersessionshttp.Handler,
-) *Server {
-	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, metricsHTTP, costsHTTP, nil, workerSessions...)
-}
-
-// NewServerWithRecordingsAndMetricsAndCostsAndShutdown composes the live
-// runtime HTTP surface with metrics, costs, and invocation-local shutdown.
-func NewServerWithRecordingsAndMetricsAndCostsAndShutdown(
 	recordingsHTTP *recordingshttp.Adapter,
 	factorySessionsHTTP *factorysessionshttp.Handler,
 	workHTTP *workhttp.Adapter,

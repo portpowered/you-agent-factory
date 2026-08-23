@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -13,11 +14,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
-	costscli "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -29,7 +30,6 @@ import (
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
-	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
 	modelservice "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -61,7 +61,6 @@ import (
 const (
 	standardCLIHTTPTimeout = 10 * time.Second
 	extendedCLIHTTPTimeout = 15 * time.Second
-	metricsCLIHTTPTimeout  = 5 * time.Minute
 )
 
 type standardCLIHTTPProtocol struct {
@@ -104,31 +103,17 @@ func provideModelsPullCLIHTTPProtocol() (modelsPullCLIHTTPProtocol, error) {
 	return modelsPullCLIHTTPProtocol{Protocol: protocol}, nil
 }
 
-func provideCostsCLI() costscli.Operation {
-	return costscli.NewOperation(func(server string) (costscli.Client, error) {
-		return generatedhttpclient.NewClientWithResponses(
-			server,
-			generatedhttpclient.WithHTTPClient(&http.Client{Timeout: costscli.DefaultRequestTimeout}),
-		)
-	})
-}
-
-func provideMetricsCLI() visualizationcli.Operation {
-	return visualizationcli.NewOperation(func(server string) (visualizationcli.Client, error) {
-		return generatedhttpclient.NewClientWithResponses(
-			server,
-			generatedhttpclient.WithHTTPClient(&http.Client{Timeout: metricsCLIHTTPTimeout}),
-		)
-	})
-}
-
 func provideServerStopCLI() serverstopcli.Operation {
+	observer := platformhttpserver.NewListenerStopObserver(
+		(&net.Dialer{}).DialContext,
+		platformhttpserver.DefaultListenerStopObservationInterval,
+	)
 	return serverstopcli.NewOperation(func(server string) (serverstopcli.Client, error) {
 		return generatedhttpclient.NewClientWithResponses(
 			server,
 			generatedhttpclient.WithHTTPClient(&http.Client{Timeout: serverstopcli.DefaultRequestTimeout}),
 		)
-	})
+	}, observer)
 }
 
 func provideRemoteInvocationOperation(

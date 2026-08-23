@@ -16247,7 +16247,7 @@
           "you --server http://localhost:7437 server stop --json"
         ],
         "visibility": "public",
-        "sourceHash": "windows-graceful-shutdown-path"
+        "sourceHash": "6b32edebf7ea06619c958a4723cb96eb5f7c10aa2fcc112c273bf3f809c6424c"
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
@@ -16262,14 +16262,15 @@
         "line": "stop",
         "example": "  you --server http://127.0.0.1:7437 server stop"
       },
-      "flags": null,
+      "flags": {},
       "precedence": {
         "order": [
           "cli",
           "stdin",
           "environment",
           "operator-config",
-          "manifest-default"
+          "manifest-default",
+          "factory-signature-default"
         ],
         "withinTier": {
           "scalar": "last",

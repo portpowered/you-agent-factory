@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"net"
 	"net/http"
 	"strings"
 	"testing"
@@ -21,9 +20,9 @@ func TestOperationSendsOneTypedRequestAndConfirmsStoppedListener(t *testing.T) {
 			selectedServer = server
 			return client, nil
 		},
-		func(context.Context, string, string) (net.Conn, error) {
-			return nil, errors.New("connection refused")
-		},
+		StopObserverFunc(func(context.Context, string, time.Duration) error {
+			return nil
+		}),
 		time.Second,
 		time.Second,
 	)
@@ -53,9 +52,9 @@ func TestOperationRejectsNonLoopbackBeforeRequest(t *testing.T) {
 			called = true
 			return &fakeClient{}, nil
 		},
-		func(context.Context, string, string) (net.Conn, error) {
-			return nil, errors.New("must not dial")
-		},
+		StopObserverFunc(func(context.Context, string, time.Duration) error {
+			return errors.New("must not dial")
+		}),
 		time.Second,
 		time.Second,
 	)
@@ -80,9 +79,9 @@ func TestOperationMapsRejectedResponse(t *testing.T) {
 	}}
 	op := NewOperationWithDependencies(
 		func(string) (Client, error) { return client, nil },
-		func(context.Context, string, string) (net.Conn, error) {
-			return nil, errors.New("must not observe rejected request")
-		},
+		StopObserverFunc(func(context.Context, string, time.Duration) error {
+			return errors.New("must not observe rejected request")
+		}),
 		time.Second,
 		time.Second,
 	)
@@ -106,9 +105,9 @@ func TestOperationMapsUnreachableAndRequestTimeout(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			op := NewOperationWithDependencies(
 				func(string) (Client, error) { return &fakeClient{err: test.err}, nil },
-				func(context.Context, string, string) (net.Conn, error) {
-					return nil, errors.New("must not observe failed request")
-				},
+				StopObserverFunc(func(context.Context, string, time.Duration) error {
+					return errors.New("must not observe failed request")
+				}),
 				time.Millisecond,
 				time.Second,
 			)
@@ -123,11 +122,9 @@ func TestOperationMapsUnreachableAndRequestTimeout(t *testing.T) {
 func TestOperationReturnsObservationTimeoutWhenListenerStaysOpen(t *testing.T) {
 	op := NewOperationWithDependencies(
 		func(string) (Client, error) { return &fakeClient{response: acceptedShutdownResponse()}, nil },
-		func(context.Context, string, string) (net.Conn, error) {
-			left, right := net.Pipe()
-			_ = right.Close()
-			return left, nil
-		},
+		StopObserverFunc(func(context.Context, string, time.Duration) error {
+			return context.DeadlineExceeded
+		}),
 		time.Second,
 		10*time.Millisecond,
 	)

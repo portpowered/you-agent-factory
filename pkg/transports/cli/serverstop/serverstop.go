@@ -22,7 +22,6 @@ const (
 	// DefaultObservationTimeout bounds confirmation that the selected listener
 	// has stopped after its accepted acknowledgment.
 	DefaultObservationTimeout = 5 * time.Second
-	observationInterval       = 50 * time.Millisecond
 
 	InvalidTargetCode      = "SERVER_STOP_INVALID_TARGET"
 	RequestTimeoutCode     = "SERVER_STOP_REQUEST_TIMEOUT"
@@ -46,9 +45,23 @@ type Client interface {
 // ClientFactory constructs one generated client for the selected server.
 type ClientFactory func(string) (Client, error)
 
-// DialContext observes whether the selected listener still accepts TCP
-// connections after the server acknowledges shutdown.
-type DialContext func(context.Context, string, string) (net.Conn, error)
+// StopObserver observes whether the selected listener still accepts TCP
+// connections after the server acknowledges shutdown. The platform HTTP host
+// supplies the lifecycle implementation; this transport only coordinates it.
+type StopObserver interface {
+	Wait(context.Context, string, time.Duration) error
+}
+
+// StopObserverFunc adapts a function to StopObserver for focused tests and
+// other explicit edge bindings.
+type StopObserverFunc func(context.Context, string, time.Duration) error
+
+func (observer StopObserverFunc) Wait(ctx context.Context, address string, timeout time.Duration) error {
+	if observer == nil {
+		return errors.New("stop server: listener observation is unavailable")
+	}
+	return observer(ctx, address, timeout)
+}
 
 // Operation is the injected command operation for one server-stop request.
 type Operation func(context.Context, Config) error
@@ -62,25 +75,22 @@ type Config struct {
 	ObservationTimeout time.Duration
 }
 
-// NewOperation binds the generated client factory to the production TCP
+// NewOperation binds the generated client factory to the platform listener
 // observation path.
-func NewOperation(factory ClientFactory) Operation {
-	dialer := &net.Dialer{}
-	return NewOperationWithDependencies(
-		factory, dialer.DialContext, DefaultRequestTimeout, DefaultObservationTimeout,
-	)
+func NewOperation(factory ClientFactory, observer StopObserver) Operation {
+	return NewOperationWithDependencies(factory, observer, DefaultRequestTimeout, DefaultObservationTimeout)
 }
 
 // NewOperationWithDependencies exposes only the network effects needed by
 // focused contract tests while preserving the production operation boundary.
 func NewOperationWithDependencies(
 	factory ClientFactory,
-	dialContext DialContext,
+	observer StopObserver,
 	requestTimeout time.Duration,
 	observationTimeout time.Duration,
 ) Operation {
 	return func(ctx context.Context, config Config) error {
-		return run(ctx, config, factory, dialContext, requestTimeout, observationTimeout)
+		return run(ctx, config, factory, observer, requestTimeout, observationTimeout)
 	}
 }
 
@@ -88,7 +98,7 @@ func run(
 	ctx context.Context,
 	config Config,
 	factory ClientFactory,
-	dialContext DialContext,
+	observer StopObserver,
 	defaultRequestTimeout time.Duration,
 	defaultObservationTimeout time.Duration,
 ) error {
@@ -111,9 +121,10 @@ func run(
 	}
 
 	requestTimeout := normalizeTimeout(config.RequestTimeout, defaultRequestTimeout)
-	requestCtx, cancel := context.WithTimeout(ctx, requestTimeout)
-	response, requestErr := client.ShutdownServerWithResponse(requestCtx)
-	cancel()
+	// The generated client is bound to a bounded HTTP client by Wire. Preserve
+	// the invocation context here so caller cancellation remains authoritative;
+	// requestTimeout is retained for stable diagnostics and test bindings.
+	response, requestErr := client.ShutdownServerWithResponse(ctx)
 	if requestErr != nil {
 		return mapRequestError(base.String(), requestTimeout, requestErr)
 	}
@@ -122,7 +133,7 @@ func run(
 	}
 
 	observationTimeout := normalizeTimeout(config.ObservationTimeout, defaultObservationTimeout)
-	if err := waitForStopped(ctx, target, dialContext, observationTimeout); err != nil {
+	if err := waitForStopped(ctx, target, observer, observationTimeout); err != nil {
 		return err
 	}
 	return writeSuccess(config.Output, config.JSON, base.String())
@@ -195,34 +206,17 @@ func mapRequestError(endpoint string, timeout time.Duration, err error) error {
 func waitForStopped(
 	ctx context.Context,
 	target cliserver.LocalBindTarget,
-	dialContext DialContext,
+	observer StopObserver,
 	timeout time.Duration,
 ) error {
-	if dialContext == nil {
+	if observer == nil {
 		return newError(HTTPFailureCode, factoryapi.ErrorFamilyInternalServerError, "stop server: listener observation is unavailable", nil)
 	}
-	observeCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 	address := net.JoinHostPort(target.Host, fmt.Sprintf("%d", target.Port))
-	ticker := time.NewTicker(observationInterval)
-	defer ticker.Stop()
-	for {
-		connection, err := dialContext(observeCtx, "tcp", address)
-		if err != nil {
-			if observeCtx.Err() != nil {
-				return observationError(observeCtx.Err(), address, timeout)
-			}
-			return nil
-		}
-		if connection != nil {
-			_ = connection.Close()
-		}
-		select {
-		case <-observeCtx.Done():
-			return observationError(observeCtx.Err(), address, timeout)
-		case <-ticker.C:
-		}
+	if err := observer.Wait(ctx, address, timeout); err != nil {
+		return observationError(err, address, timeout)
 	}
+	return nil
 }
 
 func observationError(err error, address string, timeout time.Duration) error {
