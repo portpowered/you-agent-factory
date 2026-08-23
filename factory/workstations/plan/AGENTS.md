@@ -68,6 +68,26 @@ unless that structure is itself the product behavior under test. Prefer
 behavioral requirements that describe observable runtime, API, CLI, UI, or
 emitted-event outcomes from a user or maintainer perspective.
 
+## Conditional runtime-proof planning contract
+
+Every plan MUST emit a runtime-proof criterion at both the project acceptance
+level and on the final user story. The criterion MUST first classify whether the
+lane changes runtime-observable behavior in a CLI, API, UI, emitted event, or
+runtime lifecycle.
+
+- For an applicable lane, the criterion MUST require building the real delivered
+  artifact, exercising the delivered behavior end to end, and recording the
+  verbatim command and output. Green tests, an inspected diff, or implementer
+  evidence alone do not satisfy this proof.
+- For a lane with no runtime-observable behavior, the criterion MUST explicitly
+  say that runtime proof is not applicable and give a one-line reason. This is a
+  first-class non-blocking outcome, not an omitted criterion.
+
+The final user story MUST repeat the same conditional runtime-proof requirement
+so the last implementation iteration owns the proof or the explicit
+not-applicable reason. Do not weaken, defer, or replace this final-story
+criterion with a structural check such as file presence, typecheck, or tests.
+
 
 The markdown PRD should include, when relevant:
 - context with customer ask, concrete problem, and high-level solution
