@@ -4,6 +4,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 )
 
 // newConfiguredProvidersService always installs the shell-free Antigravity
@@ -16,6 +17,8 @@ func newConfiguredProvidersService(
 	options []providerswire.Option,
 	agyRunner platformprocess.CommandRunner,
 ) (providers.Service, error) {
-	options = append(options, providerswire.WithAgyCommandRunner(agyRunner))
+	options = append(options, providerswire.WithAgyCommandRunner(
+		workerswire.NewProviderCommandRunner(agyRunner),
+	))
 	return providerswire.NewService(options...)
 }

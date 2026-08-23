@@ -685,26 +685,68 @@ func invalidContinuationReference(reference providers.SessionRef) providers.Cont
 
 func providerRequest(request workers.RunnerExecutionRequest) providers.ExecuteRequest {
 	providerID := providerIDForRequest(request)
+	dispatchID := strings.TrimSpace(request.Correlation.DispatchID)
+	if dispatchID == "" {
+		dispatchID = strings.TrimSpace(request.Dispatch.DispatchID)
+	}
+	attemptID := strings.TrimSpace(request.Correlation.AttemptID)
+	if attemptID == "" {
+		attemptID = dispatchID
+	}
+	requestID := strings.TrimSpace(request.Correlation.RequestID)
+	if requestID == "" {
+		requestID = strings.TrimSpace(request.Dispatch.Execution.RequestID)
+	}
+	traceID := strings.TrimSpace(request.Correlation.TraceID)
+	if traceID == "" {
+		traceID = strings.TrimSpace(request.Dispatch.Execution.TraceID)
+	}
 	result := providers.ExecuteRequest{
-		Provider:           providerID,
-		AttemptID:          request.Dispatch.DispatchID,
-		WorkerType:         request.WorkerType,
-		WorkstationName:    request.WorkstationType,
-		Model:              request.Model,
-		ReasoningEffort:    request.ReasoningEffort,
-		SkipPermissions:    request.SkipPermissions,
-		PrintTimeout:       request.PrintTimeout,
-		SystemPrompt:       request.SystemPrompt,
-		UserMessage:        request.UserMessage,
-		InputTokens:        cloneInputTokens(request.InputTokens),
-		OutputSchema:       request.OutputSchema,
-		WorkingDirectory:   request.WorkingDirectory,
-		Worktree:           request.Worktree,
-		EnvVars:            cloneMetadata(request.EnvVars),
-		ProcessEnvironment: append([]string(nil), request.ProcessEnvironment...),
-		ExecutionLogger:    request.ExecutionLogger,
+		Provider:  providerID,
+		AttemptID: attemptID,
+		Correlation: providers.ExecuteCorrelation{
+			FactorySessionID: request.Correlation.FactorySessionID,
+			RuntimeID:        request.Correlation.RuntimeID,
+			GenerationID:     request.Correlation.GenerationID,
+			DispatchID:       dispatchID,
+			AttemptID:        attemptID,
+			RequestID:        requestID,
+			TraceID:          traceID,
+			ReplayKey:        request.Dispatch.Execution.ReplayKey,
+			WorkIDs:          append([]string(nil), request.Dispatch.Execution.WorkIDs...),
+		},
+		WorkerType:               request.WorkerType,
+		WorkstationName:          request.WorkstationType,
+		ProjectID:                request.ProjectID,
+		TransitionID:             request.Dispatch.TransitionID,
+		InputBindings:            cloneProviderInputBindings(request.Dispatch.InputBindings),
+		Model:                    request.Model,
+		ReasoningEffort:          request.ReasoningEffort,
+		SkipPermissions:          request.SkipPermissions,
+		PrintTimeout:             request.PrintTimeout,
+		SystemPrompt:             request.SystemPrompt,
+		UserMessage:              request.UserMessage,
+		InputTokens:              cloneInputTokens(request.InputTokens),
+		OutputSchema:             request.OutputSchema,
+		WorkingDirectory:         request.WorkingDirectory,
+		Worktree:                 request.Worktree,
+		EnvVars:                  cloneMetadata(request.EnvVars),
+		ProcessEnvironment:       append([]string(nil), request.ProcessEnvironment...),
+		ExecutionLogger:          request.ExecutionLogger,
+		ProcessLifecycleObserver: request.ProcessLifecycleObserver,
 	}
 	return result
+}
+
+func cloneProviderInputBindings(values map[string][]string) map[string][]string {
+	if len(values) == 0 {
+		return nil
+	}
+	cloned := make(map[string][]string, len(values))
+	for key, items := range values {
+		cloned[key] = append([]string(nil), items...)
+	}
+	return cloned
 }
 
 // providerIDForRunner translates stable Workers runner identities at the
