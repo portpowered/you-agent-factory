@@ -387,16 +387,12 @@ func (g *runtimeGlobals) hostPipeline(call goja.FunctionCall) goja.Value {
 	if err != nil {
 		panic(g.vm.NewTypeError(err.Error()))
 	}
-	worker, err := g.pipelineStageFromCall(call, 1, "worker")
-	if err != nil {
-		panic(g.vm.NewTypeError(err.Error()))
-	}
-	nextStage, hasNext, err := g.optionalPipelineStageFromCall(call, 2, "next")
+	stages, err := g.pipelineStagesFromCall(call)
 	if err != nil {
 		panic(g.vm.NewTypeError(err.Error()))
 	}
 
-	results, err := g.executePipeline(items, worker, nextStage, hasNext)
+	results, err := g.executePipeline(items, stages)
 	if err != nil {
 		panic(g.vm.NewGoError(err))
 	}
@@ -436,49 +432,60 @@ func (g *runtimeGlobals) pipelineItemsFromCall(call goja.FunctionCall) ([]any, e
 	return items, nil
 }
 
-func (g *runtimeGlobals) pipelineStageFromCall(call goja.FunctionCall, index int, role string) (goja.Callable, error) {
-	if len(call.Arguments) <= index || goja.IsUndefined(call.Arguments[index]) {
-		return nil, fmt.Errorf("pipeline() requires a %s function argument", role)
+func (g *runtimeGlobals) pipelineStagesFromCall(call goja.FunctionCall) ([]goja.Callable, error) {
+	if len(call.Arguments) < 2 {
+		return nil, fmt.Errorf("pipeline() requires items and worker arguments")
 	}
-	callable, ok := goja.AssertFunction(call.Arguments[index])
-	if !ok {
-		return nil, fmt.Errorf("pipeline() requires a %s function argument", role)
+
+	stages := make([]goja.Callable, 0, len(call.Arguments)-1)
+	for argumentIndex := 1; argumentIndex < len(call.Arguments); argumentIndex++ {
+		argument := call.Arguments[argumentIndex]
+		// Keep the established one-stage compatibility behavior for an explicit
+		// undefined optional next argument. Undefined is invalid once another
+		// variadic stage follows it.
+		if argumentIndex == 2 && len(call.Arguments) == 3 && goja.IsUndefined(argument) {
+			continue
+		}
+		if goja.IsUndefined(argument) {
+			return nil, pipelineStageFunctionError(argumentIndex)
+		}
+		callable, ok := goja.AssertFunction(argument)
+		if !ok {
+			return nil, pipelineStageFunctionError(argumentIndex)
+		}
+		stages = append(stages, callable)
 	}
-	return callable, nil
+	return stages, nil
 }
 
-func (g *runtimeGlobals) optionalPipelineStageFromCall(call goja.FunctionCall, index int, role string) (goja.Callable, bool, error) {
-	if len(call.Arguments) <= index || goja.IsUndefined(call.Arguments[index]) {
-		return nil, false, nil
+func pipelineStageFunctionError(argumentIndex int) error {
+	switch argumentIndex {
+	case 1:
+		return fmt.Errorf("pipeline() requires a worker function argument")
+	case 2:
+		return fmt.Errorf("pipeline() next argument must be a function when provided")
+	default:
+		return fmt.Errorf("pipeline() stage %d argument must be a function", argumentIndex)
 	}
-	callable, ok := goja.AssertFunction(call.Arguments[index])
-	if !ok {
-		return nil, false, fmt.Errorf("pipeline() %s argument must be a function when provided", role)
-	}
-	return callable, true, nil
 }
 
-func (g *runtimeGlobals) executePipeline(items []any, worker goja.Callable, nextStage goja.Callable, hasNext bool) ([]any, error) {
+func (g *runtimeGlobals) executePipeline(items []any, stages []goja.Callable) ([]any, error) {
 	results := make([]any, len(items))
 	for index, item := range items {
-		stageResults := make([]any, 0, 2)
-
-		workerResult, workerErr := g.callPipelineWorker(worker, item, index)
-		stageResults = append(stageResults, pipelineStageValue(0, workerResult, workerErr))
-		if workerErr != nil {
-			results[index] = pipelineItemResult(index, item, stageResults, ChildDispatchStatusFailed)
-			continue
+		stageResults := make([]any, 0, len(stages))
+		var previousResult any
+		failed := false
+		for stageIndex, stage := range stages {
+			stageResult, stageErr := g.callPipelineStage(stage, stageIndex, previousResult, item, index)
+			stageResults = append(stageResults, pipelineStageValue(stageIndex, stageResult, stageErr))
+			if stageErr != nil {
+				failed = true
+				break
+			}
+			previousResult = stageResult
 		}
-
-		if !hasNext {
-			results[index] = pipelineItemResult(index, item, stageResults, ChildDispatchStatusCompleted)
-			continue
-		}
-
-		nextResult, nextErr := g.callPipelineNext(nextStage, workerResult, item, index)
-		stageResults = append(stageResults, pipelineStageValue(1, nextResult, nextErr))
 		status := ChildDispatchStatusCompleted
-		if nextErr != nil {
+		if failed {
 			status = ChildDispatchStatusFailed
 		}
 		results[index] = pipelineItemResult(index, item, stageResults, status)
@@ -486,16 +493,16 @@ func (g *runtimeGlobals) executePipeline(items []any, worker goja.Callable, next
 	return results, nil
 }
 
-func (g *runtimeGlobals) callPipelineWorker(worker goja.Callable, item any, index int) (any, error) {
-	value, err := worker(goja.Undefined(), g.vm.ToValue(item), g.vm.ToValue(index))
-	if err != nil {
-		return nil, err
+func (g *runtimeGlobals) callPipelineStage(stage goja.Callable, stageIndex int, prior any, item any, index int) (any, error) {
+	var (
+		value goja.Value
+		err   error
+	)
+	if stageIndex == 0 {
+		value, err = stage(goja.Undefined(), g.vm.ToValue(item), g.vm.ToValue(index))
+	} else {
+		value, err = stage(goja.Undefined(), g.vm.ToValue(prior), g.vm.ToValue(item), g.vm.ToValue(index))
 	}
-	return g.awaitParallelValue(value)
-}
-
-func (g *runtimeGlobals) callPipelineNext(nextStage goja.Callable, prior any, item any, index int) (any, error) {
-	value, err := nextStage(goja.Undefined(), g.vm.ToValue(prior), g.vm.ToValue(item), g.vm.ToValue(index))
 	if err != nil {
 		return nil, err
 	}

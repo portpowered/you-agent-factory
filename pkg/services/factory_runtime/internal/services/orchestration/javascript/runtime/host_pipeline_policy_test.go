@@ -66,6 +66,83 @@ func completedForLabel(records []factory.JavaScriptRuntimeRecord, label string) 
 	return false
 }
 
+func TestRun_PipelineThreeStages_PassesPreviousResultOriginalItemAndIndex(t *testing.T) {
+	source := `return (async function () {
+  const results = await pipeline(
+    ["alpha", "beta"],
+    async function (item, index) {
+      return { stage: "one", item: item, index: index };
+    },
+    async function (previous, item, index) {
+      return {
+        stage: "two",
+        previousStage: previous.stage,
+        previousItem: previous.item,
+        item: item,
+        index: index,
+      };
+    },
+    async function (previous, item, index) {
+      return {
+        stage: "three",
+        previousStage: previous.stage,
+        previousItem: previous.previousItem,
+        item: item,
+        index: index,
+      };
+    }
+  );
+  return { results: results };
+})();`
+	outcome := runInlineWorkflow(t, "pipeline-three-stage-callback-contract", source)
+	projected := projectPrimaryJSON(t, "session-pipeline-three-stage-callback-contract", outcome.Value)
+	results, ok := projected["results"].([]any)
+	if !ok || len(results) != 2 {
+		t.Fatalf("projected results = %#v, want two ordered items", projected["results"])
+	}
+
+	for index, wantItem := range []string{"alpha", "beta"} {
+		itemResult, ok := results[index].(map[string]any)
+		if !ok {
+			t.Fatalf("results[%d] = %#v, want pipeline item result", index, results[index])
+		}
+		if itemResult["index"] != float64(index) || itemResult["item"] != wantItem || itemResult["status"] != factory.JavaScriptChildDispatchStatusCompleted {
+			t.Fatalf("results[%d] identity/status = %#v, want index=%d item=%q completed", index, itemResult, index, wantItem)
+		}
+		stages, ok := itemResult["stages"].([]any)
+		if !ok || len(stages) != 3 {
+			t.Fatalf("results[%d].stages = %#v, want three ordered stages", index, itemResult["stages"])
+		}
+		for stageIndex, entry := range stages {
+			stage, ok := entry.(map[string]any)
+			if !ok || stage["index"] != float64(stageIndex) || stage["status"] != factory.JavaScriptChildDispatchStatusCompleted {
+				t.Fatalf("results[%d].stages[%d] = %#v, want indexed completed stage", index, stageIndex, entry)
+			}
+		}
+
+		first, ok := stages[0].(map[string]any)
+		if !ok {
+			t.Fatalf("results[%d].stages[0] = %#v, want object", index, stages[0])
+		}
+		firstResult := first["result"].(map[string]any)
+		if firstResult["stage"] != "one" || firstResult["item"] != wantItem || firstResult["index"] != float64(index) {
+			t.Fatalf("results[%d].stages[0].result = %#v, want stage-one callback arguments", index, firstResult)
+		}
+
+		second := stages[1].(map[string]any)
+		secondResult := second["result"].(map[string]any)
+		if secondResult["stage"] != "two" || secondResult["previousStage"] != "one" || secondResult["previousItem"] != wantItem || secondResult["item"] != wantItem || secondResult["index"] != float64(index) {
+			t.Fatalf("results[%d].stages[1].result = %#v, want prior result and original callback arguments", index, secondResult)
+		}
+
+		third := stages[2].(map[string]any)
+		thirdResult := third["result"].(map[string]any)
+		if thirdResult["stage"] != "three" || thirdResult["previousStage"] != "two" || thirdResult["previousItem"] != wantItem || thirdResult["item"] != wantItem || thirdResult["index"] != float64(index) {
+			t.Fatalf("results[%d].stages[2].result = %#v, want prior result and original callback arguments", index, thirdResult)
+		}
+	}
+}
+
 func TestRun_PipelineStagedFakeChildren_PreservesItemStageOrder(t *testing.T) {
 	source := readFixture(t, "pipeline-staged-fake-children.workflow.js")
 	policy := workflowpolicy.DefaultEffectivePolicy()

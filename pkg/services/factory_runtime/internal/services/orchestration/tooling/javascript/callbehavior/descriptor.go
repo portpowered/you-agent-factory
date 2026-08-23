@@ -494,32 +494,33 @@ func pipelineRecord() CallBehaviorRecord {
 				Type:        "array",
 			},
 			{
-				IDCandidate: "worker",
-				Name:        "worker",
+				IDCandidate: "stage1",
+				Name:        "stage1",
 				Required:    true,
 				Type:        "function",
 			},
 			{
-				IDCandidate: "next",
-				Name:        "next",
+				IDCandidate: "stages",
+				Name:        "stages",
 				Required:    false,
+				Rest:        true,
 				Type:        "function",
 			},
 		},
 		Callback: &CallbackShape{
-			Role: "worker",
+			Role: "stage",
 			Parameters: []Parameter{
 				{IDCandidate: "this", Name: "this", Type: "undefined", Default: "undefined"},
 				{IDCandidate: "item", Name: "item", Required: true, Type: "any"},
 				{IDCandidate: "index", Name: "index", Required: true, Type: "number"},
 			},
-			Notes: "optional next stage receives (priorResult, item, index)",
+			Notes: "stage 1 receives (item, index); every later stage receives (previousResult, item, index)",
 		},
 		Return: &ReturnBehavior{
 			Async:       true,
 			PromiseType: "pipeline-result-array",
 		},
-		Determinism: "stages run sequentially per item; worker and next may return values or Promises",
+		Determinism: "each item advances through stages in order; stages may return values or Promises and results remain input-ordered",
 		Errors: []ErrorCase{
 			{
 				Condition: "missing-items-or-worker",
@@ -540,6 +541,11 @@ func pipelineRecord() CallBehaviorRecord {
 				Condition: "invalid-next-function",
 				Type:      "TypeError",
 				Message:   "pipeline() next argument must be a function when provided",
+			},
+			{
+				Condition: "invalid-stage-function",
+				Type:      "TypeError",
+				Message:   "pipeline() stage 3 argument must be a function",
 			},
 			{
 				Condition: "null-or-undefined-item",

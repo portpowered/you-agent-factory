@@ -598,10 +598,16 @@ func TestCallBehavior_PipelineInventoryMatchesExecution(t *testing.T) {
 func assertPipelineInventoryRecord(t *testing.T, record callbehavior.CallBehaviorRecord) {
 	t.Helper()
 	if len(record.Parameters) != 3 {
-		t.Fatalf("pipeline parameters = %#v, want items, worker, optional next", record.Parameters)
+		t.Fatalf("pipeline parameters = %#v, want items, required stage1, variadic stages", record.Parameters)
 	}
-	if record.Callback == nil || record.Callback.Role != "worker" || len(record.Callback.Parameters) < 3 {
-		t.Fatalf("pipeline callback = %#v, want worker callback with item and index", record.Callback)
+	if record.Parameters[1].Name != "stage1" || !record.Parameters[1].Required || record.Parameters[1].Rest {
+		t.Fatalf("pipeline first stage parameter = %#v, want required non-rest stage1", record.Parameters[1])
+	}
+	if record.Parameters[2].Name != "stages" || record.Parameters[2].Required || !record.Parameters[2].Rest {
+		t.Fatalf("pipeline variadic stages parameter = %#v, want optional rest stages", record.Parameters[2])
+	}
+	if record.Callback == nil || record.Callback.Role != "stage" || len(record.Callback.Parameters) < 3 {
+		t.Fatalf("pipeline callback = %#v, want stage callback with item and index", record.Callback)
 	}
 	if record.Return == nil || !record.Return.Async || record.Return.PromiseType != "pipeline-result-array" {
 		t.Fatalf("pipeline return = %#v, want async pipeline-result-array promise", record.Return)
@@ -836,6 +842,8 @@ func pipelineErrorSource(condition string) string {
 		return `return pipeline([], 1);`
 	case "invalid-next-function":
 		return `return pipeline([], function () {}, 1);`
+	case "invalid-stage-function":
+		return `return pipeline([], function () {}, function () {}, 1);`
 	case "null-or-undefined-item":
 		return `return pipeline([null], function () { return { ok: true }; });`
 	default:

@@ -73,6 +73,18 @@ func TestValidateAgentRunPermissionsEnumShape(t *testing.T) {
 	}
 }
 
+func TestValidatePipelineAcceptsVariadicStages(t *testing.T) {
+	t.Parallel()
+
+	result := Validate(Request{
+		Source:    `return pipeline([1, 2], async (item, index) => ({ item, index }), async (previous, item, index) => ({ previous, item, index }), (previous, item, index) => ({ previous, item, index }));`,
+		SourceRef: "workflow.js",
+	})
+	if result.HasIssues() {
+		t.Fatalf("Validate() issues = %#v, want no issues for three variadic stages", result.Issues)
+	}
+}
+
 func TestValidateRemapsSyntaxErrorsToAuthoredLineNumbers(t *testing.T) {
 	t.Parallel()
 
