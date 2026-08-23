@@ -54,7 +54,11 @@ jobs:
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
-    timeout-minutes: 180
+    # A Windows leg spends more than two hours compiling the pinned static
+    # gRPC dependency graph before the backend build starts. GitHub's maximum
+    # job timeout leaves enough room for that first-run dependency build and
+    # the backend/package verification that follows it.
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.validate-inputs.outputs.matrix) }}
