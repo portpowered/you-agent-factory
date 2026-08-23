@@ -3,6 +3,7 @@
 package runconfig
 
 import (
+	"context"
 	"io"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
@@ -115,6 +116,11 @@ type Config struct {
 
 	InvocationSkipPermissionsOverride *bool
 	Logger                            *zap.Logger
+	// StartupPreparation is the process-owned gate for local activation. The
+	// CLI installs it after resolving invocation inputs; the run transport
+	// invokes it at the applicable startup boundary so human disclosure can
+	// precede system initialization without contaminating machine output.
+	StartupPreparation func(context.Context, bool) error
 }
 
 // InvocationMetricsRecorder is the observability role consumed by run config.

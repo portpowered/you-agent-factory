@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -15,6 +16,25 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type systemInitializationContextKey struct{}
+type homeDisclosureContextKey struct{}
+
+func systemInitializationCompleted(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	completed, _ := ctx.Value(systemInitializationContextKey{}).(bool)
+	return completed
+}
+
+func homeDisclosureCompleted(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	completed, _ := ctx.Value(homeDisclosureContextKey{}).(bool)
+	return completed
+}
+
 func newRootCommandWithFactory(options CommandFactory) *cobra.Command {
 	root := newRootCommandWithGeneratedRepresentativeFamily(options)
 	if root == nil {
@@ -26,7 +46,7 @@ func newRootCommandWithFactory(options CommandFactory) *cobra.Command {
 			_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, false)
 			return err
 		}
-		if requiresSystemInitialization(cmd.CommandPath(), args) {
+		if requiresSystemInitialization(cmd, args) {
 			if options.initializer == nil {
 				return fmt.Errorf("system initializer is required")
 			}
@@ -45,6 +65,7 @@ func newRootCommandWithFactory(options CommandFactory) *cobra.Command {
 				}
 				return wrapped
 			}
+			cmd.SetContext(context.WithValue(cmd.Context(), systemInitializationContextKey{}, true))
 		}
 		if previous != nil {
 			return previous(cmd, args)
@@ -95,11 +116,13 @@ func rawRunFlagEnabled(args []string, name string) bool {
 	return enabled
 }
 
-func requiresSystemInitialization(commandPath string, args []string) bool {
+func requiresSystemInitialization(cmd *cobra.Command, args []string) bool {
+	commandPath := ""
+	if cmd != nil {
+		commandPath = cmd.CommandPath()
+	}
 	switch commandPath {
-	case "you":
-		return len(args) > 0
-	case "you server", "you server acp", "you server mcp", "you run":
+	case "you server acp", "you server mcp":
 		return true
 	default:
 		return false

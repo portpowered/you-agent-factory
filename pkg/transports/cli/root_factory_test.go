@@ -51,8 +51,9 @@ func TestLocalRunResolvesHomeOnceBeforeSystemInitialization(t *testing.T) {
 			if initializedHome != home {
 				t.Fatalf("initialized home = %q, want %q", initializedHome, home)
 			}
-			if got := stdout.String(); got != "" {
-				t.Fatalf("startup output before system initialization = %q, want empty preflight output", got)
+			wantPrefix := "Home directory: " + home + "\n"
+			if got := stdout.String(); got != wantPrefix {
+				t.Fatalf("startup output before system initialization = %q, want %q", got, wantPrefix)
 			}
 			return nil
 		},
@@ -70,7 +71,7 @@ func TestLocalRunResolvesHomeOnceBeforeSystemInitialization(t *testing.T) {
 	if resolverCalls != 1 {
 		t.Fatalf("home resolver calls = %d, want one invocation-local resolution", resolverCalls)
 	}
-	if got, want := stdout.String(), "Factory initiated: test\n"; got != want {
+	if got, want := stdout.String(), "Home directory: "+home+"\nFactory initiated: test\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if stderr.Len() != 0 {
@@ -147,13 +148,21 @@ func TestLocalServerResolvesHomeOnceBeforeSystemInitialization(t *testing.T) {
 			if initializedHome != home {
 				t.Fatalf("initialized home = %q, want %q", initializedHome, home)
 			}
-			if got := stdout.String(); got != "" {
-				t.Fatalf("startup output before server system initialization = %q, want empty preflight output", got)
+			wantPrefix := "Home directory: " + home + "\n"
+			if got := stdout.String(); got != wantPrefix {
+				t.Fatalf("startup output before server system initialization = %q, want %q", got, wantPrefix)
 			}
 			return nil
 		},
 		RunFunc: func(ctx context.Context, _ startupcli.RunIntent, selection startupcli.RunSelection) error {
-			return runCLI(ctx, testRunConfig(selection))
+			cfg := testRunConfig(selection)
+			if cfg.StartupPreparation == nil {
+				return fmt.Errorf("server startup preparation is nil")
+			}
+			if err := cfg.StartupPreparation(ctx, true); err != nil {
+				return err
+			}
+			return runCLI(ctx, cfg)
 		},
 	})
 	root.SetContext(startupcli.WithWorkingDirectory(context.Background(), workingDirectory))
@@ -164,7 +173,7 @@ func TestLocalServerResolvesHomeOnceBeforeSystemInitialization(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute local server: %v", err)
 	}
-	if got, want := stdout.String(), "Factory initiated: test\n"; got != want {
+	if got, want := stdout.String(), "Home directory: "+home+"\nFactory initiated: test\n"; got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}
 	if stderr.Len() != 0 {

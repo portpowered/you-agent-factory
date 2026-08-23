@@ -491,7 +491,24 @@ func executeRunCommand(cmd *cobra.Command, args []string, globals *cliGlobalOpti
 		return err
 	}
 	if helpRequested(cmd) {
+		if strings.TrimSpace(resolvedConfig.NamedFactoryName) != "" &&
+			!cmd.Flags().Changed("factory") && !cmd.Flags().Changed("dir") {
+			if err := prepareNamedFactoryHelpInitialization(cmd, &resolvedConfig, globals, rootOptions); err != nil {
+				_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
+				return err
+			}
+		}
 		return writeRunCommandHelp(cmd, &resolvedConfig, rootOptions)
+	}
+	if strings.TrimSpace(resolvedConfig.NamedFactoryName) != "" &&
+		!cmd.Flags().Changed("factory") && !cmd.Flags().Changed("dir") {
+		namedPolicy := diagnostics.resolvePolicy(resolvedConfig.SuppressDashboardRendering)
+		if err := prepareNamedRunSystemInitialization(
+			cmd, &resolvedConfig, promptArgs, globals, namedPolicy, rootOptions,
+		); err != nil {
+			_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
+			return err
+		}
 	}
 	currentFactorySelected := runUsesCurrentFactory(cmd)
 	if currentFactorySelected {

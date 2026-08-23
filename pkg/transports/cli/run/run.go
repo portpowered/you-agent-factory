@@ -453,15 +453,18 @@ func (operation *Operation) Run(ctx context.Context) error {
 		if operation.runner == nil {
 			return fmt.Errorf("run historical replay: runtime runner is required")
 		}
-		if err := operation.runner.Run(ctx); err != nil {
+		if err := operation.prepareStartup(ctx, true); err != nil {
 			return err
 		}
-		if operation.cfg.Port <= 0 {
-			emitHomeDirectoryDisclosure(operation.cfg)
+		if err := operation.runner.Run(ctx); err != nil {
+			return err
 		}
 		return emitHistoricalReplayInspection(operation.cfg.Output, *operation.historicalReplay)
 	}
 	if operation.invocationMode {
+		if err := operation.prepareStartup(ctx, false); err != nil {
+			return err
+		}
 		if operation.runner != nil {
 			if runner, ok := operation.runner.(initializer.CompletionRuntimeRunner); ok {
 				return runner.RunWithCompletion(ctx, operation.runInvocation)
@@ -472,7 +475,10 @@ func (operation *Operation) Run(ctx context.Context) error {
 	}
 
 	if operation.cfg.Port <= 0 {
-		emitStartupMessages(operation.cfg, runtimeLogDiagnosticsForRunner(operation.runner))
+		if err := operation.prepareStartup(ctx, true); err != nil {
+			return err
+		}
+		emitStartupDetails(operation.cfg, runtimeLogDiagnosticsForRunner(operation.runner))
 	}
 
 	if err := runFactoryServiceAndEmitResult(
@@ -487,6 +493,19 @@ func (operation *Operation) Run(ctx context.Context) error {
 		return nil
 	}
 	return emitReplayMetadataWarnings(replayMetadataOutput(operation.cfg), operation.replayMetadataWarnings)
+}
+
+func (operation *Operation) prepareStartup(ctx context.Context, discloseHome bool) error {
+	if operation == nil {
+		return fmt.Errorf("prepare local startup: operation is required")
+	}
+	if operation.cfg.StartupPreparation != nil {
+		return operation.cfg.StartupPreparation(ctx, discloseHome)
+	}
+	if discloseHome {
+		emitHomeDirectoryDisclosure(operation.cfg)
+	}
+	return nil
 }
 
 func emitHistoricalReplayInspection(
@@ -877,6 +896,17 @@ func emitStartupMessages(
 	}
 
 	emitHomeDirectoryDisclosure(cfg)
+	return emitStartupDetails(cfg, runtimeLog)
+}
+
+func emitStartupDetails(
+	cfg RunConfig,
+	runtimeLog runtimeartifact.Diagnostics,
+) bool {
+	if cfg.StartupOutput == nil {
+		return false
+	}
+
 	fmt.Fprintf(cfg.StartupOutput, "Factory initiated: %s\n", cfg.Dir)
 	if cfg.Bootstrap {
 		fmt.Fprintf(cfg.StartupOutput, "Factory directory ready: %s\n", cfg.Dir)
@@ -914,6 +944,13 @@ func emitHomeDirectoryDisclosure(cfg RunConfig) {
 		return
 	}
 	_, _ = fmt.Fprintf(cfg.StartupOutput, "Home directory: %s\n", cfg.HomeDir)
+}
+
+// DiscloseHomeDirectory writes the human startup home line using the same
+// output policy as the run transport. The CLI root uses this at the server
+// readiness boundary, where it cannot access the Operation's private helper.
+func DiscloseHomeDirectory(cfg RunConfig) {
+	emitHomeDirectoryDisclosure(cfg)
 }
 
 func shouldOpenDashboard(cfg RunConfig) bool {

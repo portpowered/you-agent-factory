@@ -417,7 +417,16 @@ func newRuntimeHostObserver(
 			resolved.BindHost = binding.Host
 		}
 		resolved.Port = binding.Port
-		emitStartupMessages(resolved, diagnostics())
+		if resolved.StartupPreparation != nil {
+			// A successful listener binding is the server startup boundary. The
+			// disclosure and process initialization therefore happen here, after
+			// bind failures have already returned and before the remaining human
+			// startup diagnostics are presented.
+			_ = resolved.StartupPreparation(ctx, true)
+		} else {
+			emitHomeDirectoryDisclosure(resolved)
+		}
+		emitStartupDetails(resolved, diagnostics())
 		emitVerboseStartupDiagnostics(resolved, recordPath, requestedPort)
 		if shouldOpenDashboard(resolved) {
 			openDashboardAtBoundEndpoint(ctx, resolved, cfg.BrowserOpener)
