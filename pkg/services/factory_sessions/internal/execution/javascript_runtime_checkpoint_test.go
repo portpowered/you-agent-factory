@@ -5,9 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -21,9 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/testing/eventsstub"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestValidateCheckpointSummaryForResume_RejectsInvalidMetadata(t *testing.T) {
@@ -481,105 +476,6 @@ func completeResumeCoverage(
 	}
 }
 
-type resumeCoverageBlockingProvider struct {
-	mu              sync.Mutex
-	callCount       int
-	blockedOnce     bool
-	contextCanceled int
-}
-
-func newResumeCoverageBlockingProvider() *resumeCoverageBlockingProvider {
-	return &resumeCoverageBlockingProvider{}
-}
-
-func (p *resumeCoverageBlockingProvider) Execute(
-	ctx context.Context,
-	input workerexecution.InvocationInput,
-) (workerexecution.InvocationResult, error) {
-	p.mu.Lock()
-	p.callCount++
-	call := p.callCount
-	alreadyBlocked := p.blockedOnce
-	p.mu.Unlock()
-
-	if call == 1 {
-		session := &providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-1"}
-		continuation := (session).ContinuationRef()
-		response := workerexecution.InferenceResponse{
-			Content:      `{"text":"live:resumable-two-step-fake-children:step-one:step-one:workflows","label":"step-one"}`,
-			Continuation: continuation,
-		}
-		return workerexecution.InvocationResult{
-			Response: response, Attempt: input.Attempt,
-			Continuation: (response.Continuation).ClonePtr(),
-		}, nil
-	}
-
-	if !alreadyBlocked {
-		p.mu.Lock()
-		p.blockedOnce = true
-		p.mu.Unlock()
-
-		<-ctx.Done()
-		p.mu.Lock()
-		p.contextCanceled++
-		p.mu.Unlock()
-		return workerexecution.InvocationResult{Attempt: input.Attempt}, ctx.Err()
-	}
-
-	session := &providers.SessionMetadata{Provider: "mock", Kind: providers.SessionIDKind, ID: "live-provider-session-2"}
-	continuation := (session).ContinuationRef()
-	response := workerexecution.InferenceResponse{
-		Content:      `{"text":"live:resumable-two-step-fake-children:step-two:step-two:workflows","label":"step-two"}`,
-		Continuation: continuation,
-	}
-	return workerexecution.InvocationResult{
-		Response: response, Attempt: input.Attempt,
-		Continuation: (response.Continuation).ClonePtr(),
-	}, nil
-}
-
-func (p *resumeCoverageBlockingProvider) resumeCoverageCallCount() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.callCount
-}
-
-var _ workerexecution.InvocationExecutor = (*resumeCoverageBlockingProvider)(nil)
-
-func (p *resumeCoverageBlockingProvider) waitForCanceledResumeCoverageInfer(t *testing.T, timeout time.Duration) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		p.mu.Lock()
-		canceled := p.contextCanceled > 0
-		p.mu.Unlock()
-		if canceled {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("timed out waiting for blocked provider infer cancellation")
-}
-
-func setupResumeCoverageWorkflowFixture(t *testing.T) string {
-	t.Helper()
-	projectRoot := t.TempDir()
-	workflowDir := filepath.Join(projectRoot, factory.WorkflowSourceProjectClaudeWorkflowsDir)
-	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
-		t.Fatalf("mkdir workflows: %v", err)
-	}
-	path := filepath.Join("..", "..", "..", "..", "..", "tests", "fixtures", "javascript_runtime", "resumable-two-step-fake-children.workflow.js")
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read workflow fixture: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(workflowDir, "resumable-two-step-fake-children.js"), raw, 0o600); err != nil {
-		t.Fatalf("write workflow: %v", err)
-	}
-	return projectRoot
-}
-
 func waitForResumeCoverageSessionStatus(
 	t *testing.T,
 	service *JavaScriptRuntimeService,
@@ -603,25 +499,6 @@ func waitForResumeCoverageSessionStatus(
 	return SessionReadResult{}
 }
 
-func waitForResumeCoverageDispatchStatus(
-	t *testing.T,
-	service Service,
-	sessionID, dispatchID string,
-	want DispatchStatus,
-	timeout time.Duration,
-) {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		dispatch, err := service.GetDispatch(context.Background(), sessionID, dispatchID)
-		if err == nil && dispatch.Status == want {
-			return
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
-	t.Fatalf("dispatch %s did not reach status %s within %s", dispatchID, want, timeout)
-}
-
 func newDurableResponseEventsService(t *testing.T) *JavaScriptRuntimeService {
 	t.Helper()
 
@@ -640,14 +517,6 @@ func newDurableResponseEventsService(t *testing.T) *JavaScriptRuntimeService {
 		return fmt.Sprintf("response-event-%d", next.Add(1))
 	}
 	return service
-}
-
-type progressCapturingChildExecutor struct {
-	publisher workers.ProgressPublisher
-}
-
-func (e *progressCapturingChildExecutor) Execute(context.Context, workers.InvocationInput) (workers.InvocationResult, error) {
-	return workers.InvocationResult{}, nil
 }
 
 func seedResponseEventSession(t *testing.T, service *JavaScriptRuntimeService, sessionID string) *runtimeSessionState {
