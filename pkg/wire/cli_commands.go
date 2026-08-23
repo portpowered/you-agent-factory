@@ -137,6 +137,7 @@ func provideRunRuntimeRunnerBuilder(
 	return func(
 		ctx context.Context,
 		request *factorysessions.RuntimeOpeningRequest,
+		cancellation initializer.InvocationCancellation,
 		sinkID factorysessions.VisualizationSinkID,
 	) (initializer.LocalRuntimeRunner, error) {
 		var replay *factorysessions.HistoricalReplayInspection
@@ -144,7 +145,7 @@ func provideRunRuntimeRunnerBuilder(
 		var hostedInvocation runcli.HostedInvocationOperation
 		var cleanInvocation factoryruntime.Service
 		runner, err := build(ctx, func(openCtx context.Context) (initializer.OpenedApplication, error) {
-			opened, err := open.OpenApplication(openCtx, request, sinkID)
+			opened, err := open.OpenApplicationWithCancellation(openCtx, request, cancellation, sinkID)
 			if err != nil {
 				return initializer.OpenedApplication{}, err
 			}

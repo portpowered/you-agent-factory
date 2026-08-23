@@ -193,6 +193,7 @@ type testRunnerOpeners struct {
 func (f testRunnerOpeners) BuildRunner(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
+	_ initializer.InvocationCancellation,
 	_ factorysessions.VisualizationSinkID,
 ) (initializer.LocalRuntimeRunner, error) {
 	if f.runtime == nil {

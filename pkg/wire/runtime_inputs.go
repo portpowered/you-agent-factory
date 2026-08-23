@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -564,6 +565,7 @@ func provideDirectJavaScriptHostAdapter(
 	return func(
 		execution factorysessionwire.OwnedExecutionService,
 		host factorysessions.RuntimeHostRequest,
+		_ initializer.InvocationCancellation,
 		observer factorysessions.RuntimeHostObserver,
 	) (lifecycle.Component, error) {
 		handler, err := newDurableExecutionHTTPHandler(

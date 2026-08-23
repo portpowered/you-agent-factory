@@ -5,6 +5,7 @@ package runconfig
 import (
 	"io"
 
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -33,6 +34,9 @@ const (
 type Config struct {
 	Workflow     string
 	Continuously bool
+	// Cancellation is the invocation-local authority supplied by the
+	// application process for hosted administrative stop requests.
+	Cancellation initializer.InvocationCancellation
 	WorkFile     string
 	Dir          string
 	HomeDir      string

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -265,6 +266,7 @@ type CommandFactory struct {
 	responsePresentation       factoryvisualization.ResponsePresentation
 	acp                        acpcli.Operations
 	acpServer                  acp.Server
+	cancellation               initializer.InvocationCancellation
 	runtimeMetricsQuery        factoryvisualization.RuntimeMetricsQuery
 	metricsCLI                 factoryvisualizationcli.Operation
 	costsCLI                   costscli.Operation
@@ -363,6 +365,7 @@ func (factory CommandFactory) ExecuteCommand(input startupcli.CommandInvocation)
 	factory.homeDir = input.HomeDir
 	factory.lookupEnv = input.LookupEnv
 	factory.initializer = input.Initializer
+	factory.cancellation = input.Cancellation
 	diagnostics := clidiag.NewDiagnosticWriter(input.Stderr, clidiag.DebugFlagEnabled(input.Arguments))
 	root := newRootCommandWithFactory(factory)
 	if root == nil {
@@ -782,6 +785,7 @@ func delegateRunInitialization(ctx context.Context, cfg runcli.RunConfig, defaul
 		APIEnabled:            (defaultInvocation || cfg.WithServer) && cfg.Port > 0,
 		DashboardEnabled:      (defaultInvocation || cfg.WithSite) && cfg.Port > 0,
 		WorkerSidecarsEnabled: true,
+		Cancellation:          options.cancellation,
 	}
 	if options.openRunSelection == nil {
 		return fmt.Errorf("run selection operation is required")
