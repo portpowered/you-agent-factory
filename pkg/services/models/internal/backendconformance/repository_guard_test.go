@@ -1,3 +1,5 @@
+//go:build backendconformance
+
 package backendconformance
 
 import (
