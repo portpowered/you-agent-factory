@@ -189,17 +189,6 @@ func withFunctionalEnvironment(environment []string, name, value string) []strin
 	return append(out, prefix+value)
 }
 
-// StartFunctionalAPIServiceModeServer starts the standard customer-facing
-// service process.
-func StartFunctionalAPIServiceModeServer(t *testing.T, factoryDir string, useMockWorkers bool) *FunctionalAPIServer {
-	t.Helper()
-	return StartFunctionalAPIServer(t, FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		UseMockWorkers:            useMockWorkers,
-		WaitForServiceModeRuntime: true,
-	})
-}
-
 func functionalRunArgs(t *testing.T, cfg FunctionalAPIServerConfig) []string {
 	t.Helper()
 	args := []string{
@@ -271,24 +260,6 @@ func (fs *FunctionalAPIServer) Stop(t *testing.T) {
 	t.Helper()
 	if fs != nil && fs.process != nil {
 		fs.process.Stop(t)
-	}
-}
-
-// WaitForExitError observes an expected terminal process failure through the
-// canonical root invocation without having cleanup report it a second time.
-func (fs *FunctionalAPIServer) WaitForExitError(t testing.TB, timeout time.Duration) error {
-	t.Helper()
-	if fs == nil || fs.process == nil {
-		t.Fatal("WaitForExitError requires a running process")
-	}
-	select {
-	case <-fs.process.Done():
-		err := fs.process.Err()
-		fs.process.AcceptError()
-		return err
-	case <-time.After(timeout):
-		t.Fatalf("timed out waiting for process failure")
-		return nil
 	}
 }
 

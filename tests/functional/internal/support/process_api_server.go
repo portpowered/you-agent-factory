@@ -114,16 +114,6 @@ func (server *ProcessAPIServer) BaseURL() (string, bool) {
 	return server.url, true
 }
 
-// Ready is closed after the httptest server is accepting requests.
-func (server *ProcessAPIServer) Ready() <-chan struct{} {
-	if server == nil {
-		closed := make(chan struct{})
-		close(closed)
-		return closed
-	}
-	return server.ready
-}
-
 // WaitForURL waits for the injected transport to start and returns its dynamic
 // httptest URL.
 func (server *ProcessAPIServer) WaitForURL(t testing.TB) string {

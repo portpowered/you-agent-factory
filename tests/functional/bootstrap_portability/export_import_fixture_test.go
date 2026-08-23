@@ -237,10 +237,6 @@ func (fixture exportImportFixture) namedFactory(name string) factoryapi.Factory 
 	return namedFactory
 }
 
-func (fixture exportImportFixture) persistAs(t *testing.T, rootDir, name string) string {
-	return fixture.persistAtCustomerBoundary(t, rootDir, name, false)
-}
-
 func (fixture exportImportFixture) persistAndActivateAs(t *testing.T, rootDir, name string) string {
 	return fixture.persistAtCustomerBoundary(t, rootDir, name, true)
 }
