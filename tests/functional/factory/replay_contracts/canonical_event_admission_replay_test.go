@@ -198,12 +198,12 @@ func (runner *rejectingReplayRunner) Run(context.Context, platformprocess.Comman
 
 var _ platformprocess.CommandRunner = (*rejectingReplayRunner)(nil)
 
-// TestRootComposedCanonicalAppendRejectsContractOnlyKinds exercises the
-// public Recordings append capability in the same root-built process as the
-// functional test. The CLI/API daemon scenarios above intentionally remain
-// process-boundary tests, so this narrower public-root seam is needed to
-// observe the canonical admission result without importing owner internals.
-func TestRootComposedCanonicalAppendRejectsContractOnlyKinds(t *testing.T) {
+// TestRootComposedCanonicalAppendRejectsNonEmittableKinds exercises the public
+// Recordings append capability in the same root-built process as the functional
+// test. The CLI/API daemon scenarios above intentionally remain process-boundary
+// tests, so this narrower public-root seam is needed to observe the canonical
+// admission result without importing owner internals.
+func TestRootComposedCanonicalAppendRejectsNonEmittableKinds(t *testing.T) {
 	var recordingsRoot recordings.Service
 	process := support.BuildProcess(t, serviceedges.Edges{
 		RecordingsRootObserver: func(root recordings.Service) {
@@ -224,11 +224,17 @@ func TestRootComposedCanonicalAppendRejectsContractOnlyKinds(t *testing.T) {
 		t.Fatalf("first accepted canonical event = %#v, want id %q at sequence 0", acceptedFirst.Event, first.ID)
 	}
 
-	invalid := first
-	invalid.ID = "functional-canonical-contract-only"
-	invalid.Kind = recordings.CanonicalEventKind(recordings.FactoryEventTypeJavaScriptCheckpointRef)
-	if _, err := recordingsRoot.Append(recordings.AppendRecordedEventRequest{Event: invalid}); !errors.Is(err, recordings.ErrInvalidAppendEvent) {
-		t.Fatalf("public Recordings Append(contract-only kind) error = %v, want %v", err, recordings.ErrInvalidAppendEvent)
+	for index, kind := range []recordings.CanonicalEventKind{
+		recordings.CanonicalEventKind(recordings.FactoryEventTypeJavaScriptCheckpointRef),
+		"RUN_STARTED",
+		"NOT_A_CANONICAL_FACTORY_EVENT",
+	} {
+		invalid := first
+		invalid.ID = recordings.CanonicalEventID(fmt.Sprintf("functional-canonical-rejected-%d", index))
+		invalid.Kind = kind
+		if _, err := recordingsRoot.Append(recordings.AppendRecordedEventRequest{Event: invalid}); !errors.Is(err, recordings.ErrInvalidAppendEvent) {
+			t.Fatalf("public Recordings Append(%q) error = %v, want %v", kind, err, recordings.ErrInvalidAppendEvent)
+		}
 	}
 
 	second := canonicalAppendEvent("functional-canonical-second")
