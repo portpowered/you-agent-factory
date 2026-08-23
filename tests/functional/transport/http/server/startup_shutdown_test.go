@@ -21,7 +21,6 @@ import (
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -183,27 +182,27 @@ func assertRuntimeMemoryMetrics(t *testing.T, root string) {
 		}
 		values[name] = value
 		units[name], _ = record["unit"].(string)
-		if metricType, _ := record["metric_type"].(string); metricType != factoryruntime.RuntimeMetricTypeSample {
+		if metricType, _ := record["metric_type"].(string); metricType != "sample" {
 			t.Fatalf("runtime memory metric %q type = %q, want sample", name, metricType)
 		}
 	}
-	heapAlloc, allocOK := values[factoryruntime.RuntimeMemoryHeapAlloc]
-	heapInuse, inuseOK := values[factoryruntime.RuntimeMemoryHeapInuse]
-	sys, sysOK := values[factoryruntime.RuntimeMemorySys]
-	numGC, gcOK := values[factoryruntime.RuntimeMemoryNumGC]
-	goroutines, goroutinesOK := values[factoryruntime.RuntimeMemoryGoroutines]
-	processCommit, commitOK := values[factoryruntime.RuntimeMemoryProcessCommit]
-	processCommitAvailable, commitAvailableOK := values[factoryruntime.RuntimeMemoryProcessCommitAvailable]
+	heapAlloc, allocOK := values["runtime.memory.heap_alloc"]
+	heapInuse, inuseOK := values["runtime.memory.heap_inuse"]
+	sys, sysOK := values["runtime.memory.sys"]
+	numGC, gcOK := values["runtime.memory.num_gc"]
+	goroutines, goroutinesOK := values["runtime.memory.goroutines"]
+	processCommit, commitOK := values["runtime.memory.process_commit"]
+	processCommitAvailable, commitAvailableOK := values["runtime.memory.process_commit_available"]
 	if !allocOK || !inuseOK || !sysOK || !gcOK || !goroutinesOK || !commitOK || !commitAvailableOK {
 		t.Fatalf("runtime memory records = %#v, want the complete runtime snapshot metric set", values)
 	}
-	if units[factoryruntime.RuntimeMemoryHeapAlloc] != "bytes" ||
-		units[factoryruntime.RuntimeMemoryHeapInuse] != "bytes" ||
-		units[factoryruntime.RuntimeMemorySys] != "bytes" ||
-		units[factoryruntime.RuntimeMemoryNumGC] != "count" ||
-		units[factoryruntime.RuntimeMemoryGoroutines] != "count" ||
-		units[factoryruntime.RuntimeMemoryProcessCommit] != "bytes" ||
-		units[factoryruntime.RuntimeMemoryProcessCommitAvailable] != "boolean" {
+	if units["runtime.memory.heap_alloc"] != "bytes" ||
+		units["runtime.memory.heap_inuse"] != "bytes" ||
+		units["runtime.memory.sys"] != "bytes" ||
+		units["runtime.memory.num_gc"] != "count" ||
+		units["runtime.memory.goroutines"] != "count" ||
+		units["runtime.memory.process_commit"] != "bytes" ||
+		units["runtime.memory.process_commit_available"] != "boolean" {
 		t.Fatalf("runtime memory units = %#v, want bytes/count/boolean fields", units)
 	}
 	if heapAlloc <= 0 || heapInuse < heapAlloc || sys < heapInuse || numGC < 0 || goroutines <= 0 {
@@ -219,13 +218,13 @@ func assertRuntimeMemoryMetrics(t *testing.T, root string) {
 
 func isRuntimeMemoryMetric(name string) bool {
 	switch name {
-	case factoryruntime.RuntimeMemoryHeapAlloc,
-		factoryruntime.RuntimeMemoryHeapInuse,
-		factoryruntime.RuntimeMemorySys,
-		factoryruntime.RuntimeMemoryNumGC,
-		factoryruntime.RuntimeMemoryGoroutines,
-		factoryruntime.RuntimeMemoryProcessCommit,
-		factoryruntime.RuntimeMemoryProcessCommitAvailable:
+	case "runtime.memory.heap_alloc",
+		"runtime.memory.heap_inuse",
+		"runtime.memory.sys",
+		"runtime.memory.num_gc",
+		"runtime.memory.goroutines",
+		"runtime.memory.process_commit",
+		"runtime.memory.process_commit_available":
 		return true
 	default:
 		return false
@@ -332,7 +331,7 @@ func TestAPIServerBindFailureUnwindsStartedLifecycleRoles(t *testing.T) {
 	starter, err := platformhttpserver.NewStarter(func(_ string, address string) (net.Listener, error) {
 		attempts = append(attempts, address)
 		return nil, errors.New("address unavailable")
-	})
+	}, nil, nil)
 	if err != nil {
 		t.Fatalf("NewStarter() error = %v", err)
 	}

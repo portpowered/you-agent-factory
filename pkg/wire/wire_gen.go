@@ -228,7 +228,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	v20, err := wire2.NewAssembly(v14, workerSessionsFactory, workersService)
+	timerSource := provideFactoryRuntimeMetricsClock(edges2)
+	v20, err := wire2.NewAssembly(v14, workerSessionsFactory, workersService, timerSource)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +342,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	factoryScaffoldInitializer := provideFactoryScaffoldInitializer(v47)
 	v48 := provideDefinitionValidationOperation(validationOperations)
 	editableFactoryValidator := provideEditableFactoryValidator(v48, v29)
-	starter, err := provideAPIServerStarter(edges2)
+	commandLineReader := providePprofCommandLineReader()
+	starter, err := provideAPIServerStarter(edges2, commandLineReader)
 	if err != nil {
 		return nil, err
 	}
@@ -999,6 +1001,8 @@ var servicesSet = wire5.NewSet(
 	provideFactoryDefinitionLoader,
 	provideFactoryRuntimeClockResolver,
 	provideFactoryRuntimeClock,
+	provideFactoryRuntimeMetricsClock,
+	providePprofCommandLineReader,
 	provideFactoryRuntimeProviderOverride,
 	provideFactoryRuntimeSubmissionRecorder,
 	provideFactoryRuntimeDispatchRecorder,

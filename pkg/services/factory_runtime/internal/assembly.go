@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -24,6 +25,7 @@ type Assembly struct {
 	runtimeFactory        *RuntimeFactory
 	workerSessionsFactory factoryruntime.WorkerSessionsFactory
 	workerService         workers.Service
+	metricsClock          platformclock.TimerSource
 }
 
 // NewAssembly constructs the inert Factory Runtime assembly service selected
@@ -35,6 +37,7 @@ func NewAssembly(
 	runtimeFactory *RuntimeFactory,
 	workerSessionsFactory factoryruntime.WorkerSessionsFactory,
 	workerService workers.Service,
+	metricsClock platformclock.TimerSource,
 ) (*Assembly, error) {
 	if runtimeFactory == nil {
 		return nil, fmt.Errorf("Factory Runtime factory is required")
@@ -47,7 +50,7 @@ func NewAssembly(
 	}
 	return &Assembly{
 		runtimeFactory: runtimeFactory, workerSessionsFactory: workerSessionsFactory,
-		workerService: workerService,
+		workerService: workerService, metricsClock: metricsClock,
 	}, nil
 }
 
@@ -227,7 +230,7 @@ func (a *Assembly) Assemble(
 		instance,
 		spec,
 		lifecycle,
-		NewRuntimeSidecars(automationService, serviceMode),
+		NewRuntimeSidecars(automationService, serviceMode, a.metricsClock),
 		nil
 }
 

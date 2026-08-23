@@ -3,12 +3,12 @@ package httpserver
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"html"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"runtime"
 	runtimepprof "runtime/pprof"
 	runtimetrace "runtime/trace"
@@ -16,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	pprofprofile "github.com/google/pprof/profile"
 )
 
 const pprofPath = "/debug/pprof/"
@@ -28,14 +30,14 @@ const pprofPath = "/debug/pprof/"
 // initialization registers routes on http.DefaultServeMux. These adapters use
 // the same standard runtime profile and trace implementations while keeping
 // every HTTP route scoped to this server's mux.
-func HandlerWithPprof(handler http.Handler, enabled bool) http.Handler {
+func HandlerWithPprof(handler http.Handler, enabled bool, commandLineReader CommandLineReader) http.Handler {
 	if !enabled || handler == nil {
 		return handler
 	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(pprofPath, pprofIndex)
-	mux.HandleFunc(pprofPath+"cmdline", pprofCmdline)
+	mux.HandleFunc(pprofPath+"cmdline", pprofCmdline(commandLineReader))
 	mux.HandleFunc(pprofPath+"profile", pprofCPU)
 	mux.HandleFunc(pprofPath+"symbol", pprofSymbol)
 	mux.HandleFunc(pprofPath+"trace", pprofTrace)
@@ -169,6 +171,10 @@ func pprofNamed(name string) http.Handler {
 			pprofError(writer, http.StatusNotFound, "Unknown profile")
 			return
 		}
+		if seconds := request.FormValue("seconds"); seconds != "" {
+			servePprofDeltaProfile(writer, request, name, profile, seconds)
+			return
+		}
 
 		if name == "heap" {
 			gc, _ := strconv.Atoi(request.FormValue("gc"))
@@ -187,10 +193,94 @@ func pprofNamed(name string) http.Handler {
 	})
 }
 
-func pprofCmdline(writer http.ResponseWriter, _ *http.Request) {
-	writer.Header().Set("X-Content-Type-Options", "nosniff")
-	writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	_, _ = fmt.Fprint(writer, strings.Join(os.Args, "\x00"))
+func servePprofDeltaProfile(
+	writer http.ResponseWriter,
+	request *http.Request,
+	name string,
+	profile *runtimepprof.Profile,
+	secondsValue string,
+) {
+	seconds, err := strconv.ParseInt(secondsValue, 10, 64)
+	if err != nil || seconds <= 0 {
+		pprofError(writer, http.StatusBadRequest, `invalid value for "seconds" - must be a positive integer`)
+		return
+	}
+	if !pprofDeltaProfiles[name] {
+		pprofError(writer, http.StatusBadRequest, `"seconds" parameter is not supported for this profile type`)
+		return
+	}
+	debug, _ := strconv.Atoi(request.FormValue("debug"))
+	if debug != 0 {
+		pprofError(writer, http.StatusBadRequest, "seconds and debug params are incompatible")
+		return
+	}
+
+	before, err := collectPprofProfile(profile)
+	if err != nil {
+		pprofError(writer, http.StatusInternalServerError, "failed to collect profile")
+		return
+	}
+
+	timer := time.NewTimer(time.Duration(seconds) * time.Second)
+	defer timer.Stop()
+	select {
+	case <-request.Context().Done():
+		if request.Context().Err() == context.DeadlineExceeded {
+			pprofError(writer, http.StatusRequestTimeout, request.Context().Err().Error())
+		} else {
+			pprofError(writer, http.StatusInternalServerError, request.Context().Err().Error())
+		}
+		return
+	case <-timer.C:
+	}
+
+	after, err := collectPprofProfile(profile)
+	if err != nil {
+		pprofError(writer, http.StatusInternalServerError, "failed to collect profile")
+		return
+	}
+	before.Scale(-1)
+	delta, err := pprofprofile.Merge([]*pprofprofile.Profile{before, after})
+	if err != nil {
+		pprofError(writer, http.StatusInternalServerError, "failed to compute delta")
+		return
+	}
+	delta.DurationNanos = int64(seconds) * time.Second.Nanoseconds()
+
+	writer.Header().Set("Content-Type", "application/octet-stream")
+	writer.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-delta"`, name))
+	if err := delta.Write(writer); err != nil {
+		return
+	}
+}
+
+var pprofDeltaProfiles = map[string]bool{
+	"allocs":       true,
+	"block":        true,
+	"goroutine":    true,
+	"heap":         true,
+	"mutex":        true,
+	"threadcreate": true,
+}
+
+func collectPprofProfile(profile *runtimepprof.Profile) (*pprofprofile.Profile, error) {
+	var body bytes.Buffer
+	if err := profile.WriteTo(&body, 0); err != nil {
+		return nil, err
+	}
+	return pprofprofile.Parse(&body)
+}
+
+func pprofCmdline(commandLineReader CommandLineReader) http.HandlerFunc {
+	return func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("X-Content-Type-Options", "nosniff")
+		writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		var args []string
+		if commandLineReader != nil {
+			args = commandLineReader()
+		}
+		_, _ = fmt.Fprint(writer, strings.Join(args, "\x00"))
+	}
 }
 
 func pprofCPU(writer http.ResponseWriter, request *http.Request) {

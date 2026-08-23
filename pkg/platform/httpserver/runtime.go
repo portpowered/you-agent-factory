@@ -46,8 +46,9 @@ func HandlerWithDiagnostics(
 	handler http.Handler,
 	pprofEnabled bool,
 	commitReader platformprocessmemory.CommitReader,
+	commandLineReader CommandLineReader,
 ) http.Handler {
-	return HandlerWithRuntime(HandlerWithPprof(handler, pprofEnabled), commitReader)
+	return HandlerWithRuntime(HandlerWithPprof(handler, pprofEnabled, commandLineReader), commitReader)
 }
 
 func runtimeSnapshotHandler(commitReader platformprocessmemory.CommitReader) http.HandlerFunc {

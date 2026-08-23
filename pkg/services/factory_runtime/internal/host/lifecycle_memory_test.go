@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -47,13 +48,11 @@ func TestObserveRuntimeMetricsStopsMemorySamplingWithRunLifecycle(t *testing.T) 
 		Bundle:  &Bundle{Factory: engine, MetricsSink: sink},
 		RunDone: make(chan struct{}),
 	}
-	ticks := make(chan time.Time, 1)
+	clock := platformclock.NewDeterministic(time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC), time.Millisecond)
 	observerDone := make(chan struct{})
 	go func() {
 		defer close(observerDone)
-		observeRuntimeMetrics(context.Background(), handle, ticks, func() time.Time {
-			return time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
-		})
+		observeRuntimeMetrics(context.Background(), handle, clock)
 	}()
 
 	select {
@@ -69,7 +68,6 @@ func TestObserveRuntimeMetricsStopsMemorySamplingWithRunLifecycle(t *testing.T) 
 	}
 
 	sampleCount := len(sink.samples)
-	ticks <- time.Date(2026, 8, 23, 12, 0, 1, 0, time.UTC)
 	if got := len(sink.samples); got != sampleCount {
 		t.Fatalf("memory samples after observer stop = %d, want %d", got, sampleCount)
 	}

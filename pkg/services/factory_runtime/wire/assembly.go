@@ -3,6 +3,7 @@ package wire
 import (
 	"io/fs"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimeinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
@@ -74,8 +75,9 @@ func NewAssembly(
 	runtimeFactory *RuntimeFactory,
 	workerSessionsFactory factoryruntime.WorkerSessionsFactory,
 	workerService workers.Service,
+	metricsClock platformclock.TimerSource,
 ) (*Assembly, error) {
-	return factoryruntimeinternal.NewAssembly(runtimeFactory, workerSessionsFactory, workerService)
+	return factoryruntimeinternal.NewAssembly(runtimeFactory, workerSessionsFactory, workerService, metricsClock)
 }
 
 // NewOrchestratorDefinitionValidator returns the runtime-owned orchestrator

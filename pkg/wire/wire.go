@@ -206,6 +206,8 @@ var servicesSet = wire.NewSet(
 	provideFactoryDefinitionLoader,
 	provideFactoryRuntimeClockResolver,
 	provideFactoryRuntimeClock,
+	provideFactoryRuntimeMetricsClock,
+	providePprofCommandLineReader,
 	provideFactoryRuntimeProviderOverride,
 	provideFactoryRuntimeSubmissionRecorder,
 	provideFactoryRuntimeDispatchRecorder,

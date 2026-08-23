@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
@@ -263,40 +264,38 @@ func CloseBundleSinks(logSink factory.RuntimeLogSink, metricsSink factory.Runtim
 
 // ObserveRuntimeMetrics polls engine snapshots and emits runtime state gauges until the
 // hosted run loop completes or observerCtx is canceled.
-func ObserveRuntimeMetrics(observerCtx context.Context, handle *Handle) {
-	ticker := time.NewTicker(runtimeMetricsObserverPollInterval)
-	defer ticker.Stop()
-	observeRuntimeMetrics(observerCtx, handle, ticker.C, time.Now)
+func ObserveRuntimeMetrics(
+	observerCtx context.Context,
+	handle *Handle,
+	clock platformclock.TimerSource,
+) {
+	observeRuntimeMetrics(observerCtx, handle, clock)
 }
 
 func observeRuntimeMetrics(
 	observerCtx context.Context,
 	handle *Handle,
-	ticks <-chan time.Time,
-	now func() time.Time,
+	clock platformclock.TimerSource,
 ) {
-	if handle == nil || handle.Bundle == nil || handle.Bundle.Factory == nil {
+	if handle == nil || handle.Bundle == nil || handle.Bundle.Factory == nil || clock == nil {
 		return
 	}
-	if now == nil {
-		now = time.Now
-	}
 	observer := runtimeMetricsObserver{}
-	observer.observe(handle, now())
+	observer.observe(handle, clock.Now())
 	for {
+		timer := clock.NewTimer(runtimeMetricsObserverPollInterval)
 		select {
 		case <-handle.RunDone:
+			timer.Stop()
 			finalizeRuntimeLifecycleMetrics(handle, observer.last)
 			return
 		case <-observerCtx.Done():
+			timer.Stop()
 			// Temporary sidecar shutdown (for example during session runtime replacement)
 			// must not block on runDone or emit lifecycle stop metrics; Stop finalizes
 			// lifecycle telemetry after the runtime actually exits.
 			return
-		case observedAt, ok := <-ticks:
-			if !ok {
-				return
-			}
+		case observedAt := <-timer.C():
 			select {
 			case <-handle.RunDone:
 				finalizeRuntimeLifecycleMetrics(handle, observer.last)

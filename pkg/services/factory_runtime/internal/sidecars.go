@@ -8,6 +8,7 @@ import (
 	"sort"
 	"sync"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -21,8 +22,9 @@ import (
 // automation. Initializer decides when to start it; Factory Runtime owns what
 // starting it means.
 type RuntimeSidecars struct {
-	automation automations.Service
-	enabled    bool
+	automation   automations.Service
+	enabled      bool
+	metricsClock platformclock.TimerSource
 }
 
 // runtimeAutomationService is the optional runtime-owned capability set
@@ -76,8 +78,14 @@ func PreseedRuntimeInputs(ctx context.Context, automation automations.Service, b
 	return nil
 }
 
-func NewRuntimeSidecars(automation automations.Service, enabled bool) *RuntimeSidecars {
-	return &RuntimeSidecars{automation: automation, enabled: enabled}
+func NewRuntimeSidecars(
+	automation automations.Service,
+	enabled bool,
+	metricsClock platformclock.TimerSource,
+) *RuntimeSidecars {
+	return &RuntimeSidecars{
+		automation: automation, enabled: enabled, metricsClock: metricsClock,
+	}
 }
 
 func (s *RuntimeSidecars) Preseed(ctx context.Context, instance factory.RuntimeRecord) error {
@@ -187,7 +195,7 @@ func (s *RuntimeSidecars) Start(ctx context.Context, hosted factory.RuntimeRun) 
 	handle.Sidecars.Add(1)
 	go func() {
 		defer handle.Sidecars.Done()
-		factoryhost.ObserveRuntimeMetrics(sidecarCtx, handle)
+		factoryhost.ObserveRuntimeMetrics(sidecarCtx, handle, s.metricsClock)
 	}()
 	return nil
 }

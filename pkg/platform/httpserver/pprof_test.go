@@ -20,12 +20,13 @@ func TestHandlerWithPprofIsOptInAndUsesStandardRoutes(t *testing.T) {
 		writer.WriteHeader(http.StatusNotFound)
 		_, _ = io.WriteString(writer, notFoundBody)
 	})
+	commandLineReader := CommandLineReader(func() []string { return []string{"you", "test"} })
 
-	disabled := httptest.NewServer(HandlerWithPprof(handler, false))
+	disabled := httptest.NewServer(HandlerWithPprof(handler, false, commandLineReader))
 	defer disabled.Close()
 	assertDisabledPprofRoutes(t, disabled)
 
-	enabled := httptest.NewServer(HandlerWithPprof(handler, true))
+	enabled := httptest.NewServer(HandlerWithPprof(handler, true, commandLineReader))
 	defer enabled.Close()
 	assertEnabledPprofRoutes(t, enabled)
 }
@@ -66,6 +67,9 @@ func assertEnabledPprofIndexAndRoutes(t *testing.T, server *httptest.Server) {
 		if response.StatusCode != http.StatusOK || len(response.Body) == 0 {
 			t.Fatalf("enabled GET %s = (%d, %q), want non-empty HTTP 200 response", path, response.StatusCode, response.Body)
 		}
+		if path == "/debug/pprof/cmdline" && string(response.Body) != "you\x00test" {
+			t.Fatalf("enabled cmdline = %q, want injected command line", response.Body)
+		}
 	}
 }
 
@@ -105,6 +109,18 @@ func assertEnabledPprofProfiles(t *testing.T, server *httptest.Server) {
 			assertParsedPprofProfile(t, test.name, parsed)
 		}
 	}
+	delta := getPprofTestResponse(t, server.URL+"/debug/pprof/heap?seconds=1")
+	if delta.StatusCode != http.StatusOK || len(delta.Body) == 0 {
+		t.Fatalf("enabled heap delta = (%d, body length %d), want non-empty HTTP 200 response", delta.StatusCode, len(delta.Body))
+	}
+	if !strings.Contains(delta.ContentDisposition, "heap-delta") {
+		t.Fatalf("enabled heap delta Content-Disposition = %q, want heap-delta filename", delta.ContentDisposition)
+	}
+	parsedDelta, err := profile.Parse(bytes.NewReader(delta.Body))
+	if err != nil {
+		t.Fatalf("parse enabled heap delta profile: %v", err)
+	}
+	assertParsedPprofProfile(t, "heap delta", parsedDelta)
 }
 
 func assertEnabledPprofTrace(t *testing.T, server *httptest.Server) {
@@ -132,7 +148,8 @@ func TestStarterWithListenerServesPprofOnlyWhenRequested(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	starter := StarterWithListener(listener)
+	commandLineReader := CommandLineReader(func() []string { return []string{"you", "test"} })
+	starter := StarterWithListener(listener, nil, commandLineReader)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	exit := make(chan error, 1)
@@ -169,8 +186,9 @@ func TestStarterWithListenerServesPprofOnlyWhenRequested(t *testing.T) {
 }
 
 func getPprofTestResponse(t *testing.T, url string) struct {
-	StatusCode int
-	Body       []byte
+	StatusCode         int
+	Body               []byte
+	ContentDisposition string
 } {
 	t.Helper()
 	response, err := http.Get(url)
@@ -183,9 +201,10 @@ func getPprofTestResponse(t *testing.T, url string) struct {
 		t.Fatalf("read GET %s: %v", url, err)
 	}
 	return struct {
-		StatusCode int
-		Body       []byte
-	}{StatusCode: response.StatusCode, Body: body}
+		StatusCode         int
+		Body               []byte
+		ContentDisposition string
+	}{StatusCode: response.StatusCode, Body: body, ContentDisposition: response.Header.Get("Content-Disposition")}
 }
 
 func assertParsedPprofProfile(t *testing.T, name string, parsed *profile.Profile) {
