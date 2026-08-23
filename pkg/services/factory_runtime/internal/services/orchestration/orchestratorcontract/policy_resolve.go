@@ -24,8 +24,11 @@ func Resolve(request Request) Resolution {
 		return Resolution{Policy: policy, Hash: Hash(policy), Issues: issues}
 	}
 
+	cap := deploymentCap(request)
+	policyIssues := validatePolicyMap(merged, cap)
 	policy, err = policyFromMap(merged)
 	if err != nil {
+		issues = append(issues, policyIssues...)
 		issues = append(issues, Issue{
 			Code:    CodeInvalidPolicyDocument,
 			Message: fmt.Sprintf("invalid effective policy: %v", err),
@@ -34,8 +37,7 @@ func Resolve(request Request) Resolution {
 		return Resolution{Policy: policy, Hash: Hash(policy), Issues: issues}
 	}
 
-	cap := deploymentCap(request)
-	issues = append(issues, validatePolicyMap(merged, cap)...)
+	issues = append(issues, policyIssues...)
 	issues = append(issues, Validate(policy, cap)...)
 	return Resolution{
 		Policy: policy,

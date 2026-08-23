@@ -19,6 +19,10 @@ var (
 		"read-only":       {},
 		"workspace-write": {},
 	}
+	knownPermissionModes = map[string]struct{}{
+		PermissionModeDefault:         {},
+		PermissionModeSkipPermissions: {},
+	}
 )
 
 func validatePolicyMap(document map[string]any, deploymentCap int) []Issue {
@@ -28,7 +32,52 @@ func validatePolicyMap(document map[string]any, deploymentCap int) []Issue {
 	issues = append(issues, validatePolicyWritableRootOverride(document)...)
 	issues = append(issues, validatePolicyConcurrencyOverride(document)...)
 	issues = append(issues, validatePolicyMaxAgentsOverride(document, deploymentCap)...)
+	issues = append(issues, validatePolicyAllowedPermissionsShape(document)...)
 	return issues
+}
+
+func validatePolicyAllowedPermissionsShape(document map[string]any) []Issue {
+	value, ok := document["allowedPermissions"]
+	if !ok {
+		return nil
+	}
+
+	values, ok := policyAllowlistValues(value)
+	if !ok {
+		return []Issue{{
+			Code:    CodeUnsupportedPermission,
+			Message: fmt.Sprintf("allowedPermissions must be an array containing only %q or %q", PermissionModeDefault, PermissionModeSkipPermissions),
+			Path:    "policy.allowedPermissions",
+		}}
+	}
+
+	var issues []Issue
+	for index, value := range values {
+		if _, ok := value.(string); ok {
+			continue
+		}
+		issues = append(issues, Issue{
+			Code:    CodeUnsupportedPermission,
+			Message: fmt.Sprintf("allowedPermissions[%d] must be a string containing %q or %q", index, PermissionModeDefault, PermissionModeSkipPermissions),
+			Path:    fmt.Sprintf("policy.allowedPermissions[%d]", index),
+		})
+	}
+	return issues
+}
+
+func policyAllowlistValues(value any) ([]any, bool) {
+	switch typed := value.(type) {
+	case []any:
+		return typed, true
+	case []string:
+		values := make([]any, len(typed))
+		for index, value := range typed {
+			values[index] = value
+		}
+		return values, true
+	default:
+		return nil, false
+	}
 }
 
 func validatePolicyModeOverride(document map[string]any) []Issue {
@@ -184,6 +233,7 @@ func Validate(policy EffectivePolicy, deploymentCap int) []Issue {
 	issues = append(issues, validateStringAllowlist("allowedReasoningEfforts", policy.AllowedReasoningEfforts, validateReasoningEffort)...)
 	issues = append(issues, validateStringAllowlist("allowedRouteProfiles", policy.AllowedRouteProfiles, validateRouteProfile)...)
 	issues = append(issues, validateStringAllowlist("allowedCommands", policy.AllowedCommands, validateCommand)...)
+	issues = append(issues, validateStringAllowlist("allowedPermissions", policy.AllowedPermissions, validatePermission)...)
 	if sandbox := strings.TrimSpace(policy.SandboxMode); sandbox != "" {
 		if _, ok := knownSandboxModes[sandbox]; !ok {
 			issues = append(issues, Issue{
@@ -271,4 +321,14 @@ func validateCommand(value string) *Issue {
 		}
 	}
 	return nil
+}
+
+func validatePermission(value string) *Issue {
+	if _, ok := knownPermissionModes[value]; ok {
+		return nil
+	}
+	return &Issue{
+		Code:    CodeUnsupportedPermission,
+		Message: fmt.Sprintf("unsupported permission %q; allowedPermissions accepts only %q or %q", value, PermissionModeDefault, PermissionModeSkipPermissions),
+	}
 }

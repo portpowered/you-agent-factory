@@ -3,8 +3,10 @@ package factory
 import orchestratorcontract "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
 
 const (
-	JavaScriptPolicyModeReadOnly        = orchestratorcontract.ModeReadOnly
-	JavaScriptPolicyOutputAuditModeAuto = orchestratorcontract.OutputAuditModeAuto
+	JavaScriptPolicyModeReadOnly              = orchestratorcontract.ModeReadOnly
+	JavaScriptPolicyOutputAuditModeAuto       = orchestratorcontract.OutputAuditModeAuto
+	JavaScriptPolicyPermissionDefault         = orchestratorcontract.PermissionModeDefault
+	JavaScriptPolicyPermissionSkipPermissions = orchestratorcontract.PermissionModeSkipPermissions
 
 	JavaScriptPolicyCapabilityWorkspaceWrite   = orchestratorcontract.CapabilityWorkspaceWrite
 	JavaScriptPolicyCapabilityFilesystemWrite  = orchestratorcontract.CapabilityFilesystemWrite
@@ -24,6 +26,7 @@ const (
 	JavaScriptPolicyCodeUnsupportedRouteProfile   = orchestratorcontract.CodeUnsupportedRouteProfile
 	JavaScriptPolicyCodeUnsupportedCommand        = orchestratorcontract.CodeUnsupportedCommand
 	JavaScriptPolicyCodeUnsupportedSandboxMode    = orchestratorcontract.CodeUnsupportedSandboxMode
+	JavaScriptPolicyCodeUnsupportedPermission     = orchestratorcontract.CodeUnsupportedPermission
 	JavaScriptPolicyCodeDeniedCapability          = orchestratorcontract.CodeDeniedCapability
 	JavaScriptPolicyCodeInvalidPolicyDocument     = orchestratorcontract.CodeInvalidPolicyDocument
 	JavaScriptPolicyCodeUnsupportedPolicyMode     = orchestratorcontract.CodeUnsupportedPolicyMode
