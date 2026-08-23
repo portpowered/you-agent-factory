@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -686,3 +687,288 @@ func (stub *invokeProtocolStub) PutJSONCreated(context.Context, string, io.Reade
 
 var _ LocalInvokeBoundary = (*invokeLocalFake)(nil)
 var _ clihttp.Protocol = (*invokeProtocolStub)(nil)
+
+func TestWorkerSessionStdinReadersAcceptExactInclusiveLimit(t *testing.T) {
+	t.Run("execution document", func(t *testing.T) {
+		document := exactWorkerSessionExecutionDocument(t, maxWorkerSessionExecutionStdinBytes)
+		reader := &workerSessionCountedReader{reader: bytes.NewReader(document)}
+		request, err := readInvokeRequest(InvokeConfig{ExecutionJSON: "-", Stdin: reader})
+		if err != nil {
+			t.Fatalf("read exact-limit execution document: %v", err)
+		}
+		if reader.bytesRead != maxWorkerSessionExecutionStdinBytes {
+			t.Fatalf("execution document bytes read = %d, want %d", reader.bytesRead, maxWorkerSessionExecutionStdinBytes)
+		}
+		if request.RequestId != "request" || request.WorkerSessionId != "session" {
+			t.Fatalf("execution document identity = (%q, %q), want request/session", request.RequestId, request.WorkerSessionId)
+		}
+	})
+
+	for _, test := range []struct {
+		name string
+		read func(io.Reader) (string, error)
+	}{
+		{
+			name: "invoke message",
+			read: func(reader io.Reader) (string, error) {
+				return resolveInvokeMessage(InvokeConfig{Stdin: reader})
+			},
+		},
+		{
+			name: "continue follow-up",
+			read: func(reader io.Reader) (string, error) {
+				return resolveContinueInput(ContinueConfig{Stdin: reader})
+			},
+		},
+		{
+			name: "interrupt replacement",
+			read: func(reader io.Reader) (string, error) {
+				return resolveInterruptInput(InterruptConfig{Stdin: reader})
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			input := strings.Repeat("x", maxWorkerSessionMessageStdinBytes)
+			reader := &workerSessionCountedReader{reader: strings.NewReader(input)}
+			got, err := test.read(reader)
+			if err != nil {
+				t.Fatalf("read exact-limit input: %v", err)
+			}
+			if len(got) != len(input) || strings.Trim(got, "x") != "" {
+				t.Fatalf("exact-limit input length/content = (%d, %q), want %d x bytes", len(got), got[:minWorkerSessionTestPreview(len(got))], len(input))
+			}
+			if reader.bytesRead != maxWorkerSessionMessageStdinBytes {
+				t.Fatalf("message bytes read = %d, want %d", reader.bytesRead, maxWorkerSessionMessageStdinBytes)
+			}
+		})
+	}
+}
+
+func TestWorkerSessionStdinOverflowReadsOnlySentinel(t *testing.T) {
+	tests := []struct {
+		name  string
+		limit int
+	}{
+		{name: "execution document", limit: maxWorkerSessionExecutionStdinBytes},
+		{name: "worker message", limit: maxWorkerSessionMessageStdinBytes},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			reader := &workerSessionCountedReader{reader: bytes.NewReader(bytes.Repeat([]byte("x"), test.limit+32))}
+			_, err := readBoundedWorkerSessionStdin(reader, test.limit, test.name, "use a file for larger input")
+			if err == nil || !strings.Contains(err.Error(), "exceeds the "+strconv.Itoa(test.limit)+"-byte limit") {
+				t.Fatalf("overflow error = %v, want actionable byte-limit error", err)
+			}
+			if reader.bytesRead != test.limit+1 {
+				t.Fatalf("overflow bytes read = %d, want exactly %d", reader.bytesRead, test.limit+1)
+			}
+		})
+	}
+}
+
+func TestWorkerSessionExecutionStdinOverflowFailsBeforeDispatch(t *testing.T) {
+	local := &invokeLocalFake{}
+	reader := workerSessionOverflowReader(maxWorkerSessionExecutionStdinBytes)
+	var output bytes.Buffer
+	err := NewInvoke(nil, local)(InvokeConfig{
+		Context: context.Background(), Output: &output, OutputFormat: "json", Async: true,
+		ExecutionJSON: "-", Stdin: reader,
+	})
+	if err == nil || !strings.Contains(err.Error(), "direct Worker execution stdin exceeds") {
+		t.Fatalf("oversized execution stdin error = %v, want input-limit failure", err)
+	}
+	if reader.bytesRead != maxWorkerSessionExecutionStdinBytes+1 {
+		t.Fatalf("execution overflow bytes read = %d, want exactly %d", reader.bytesRead, maxWorkerSessionExecutionStdinBytes+1)
+	}
+	if len(local.startRequests) != 0 {
+		t.Fatalf("oversized execution stdin dispatched %d request(s), want none", len(local.startRequests))
+	}
+}
+
+func TestWorkerSessionInvokeMessageOverflowFailsBeforeDispatch(t *testing.T) {
+	local := &invokeLocalFake{}
+	reader := workerSessionOverflowReader(maxWorkerSessionMessageStdinBytes)
+	var output bytes.Buffer
+	err := NewInvoke(nil, local)(InvokeConfig{
+		Context: context.Background(), Output: &output, OutputFormat: "json", Async: true,
+		RequestID: "request", WorkerSessionID: "session", DispatchID: "dispatch",
+		WorkstationName: "coding", Stdin: reader,
+	})
+	if err == nil || !strings.Contains(err.Error(), "direct Worker input stdin exceeds") {
+		t.Fatalf("oversized invoke stdin error = %v, want input-limit failure", err)
+	}
+	if reader.bytesRead != maxWorkerSessionMessageStdinBytes+1 {
+		t.Fatalf("invoke overflow bytes read = %d, want exactly %d", reader.bytesRead, maxWorkerSessionMessageStdinBytes+1)
+	}
+	if len(local.startRequests) != 0 {
+		t.Fatalf("oversized invoke stdin dispatched %d request(s), want none", len(local.startRequests))
+	}
+}
+
+func TestWorkerSessionContinueAndInterruptOverflowFailBeforeDispatch(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(*invokeLocalFake, io.Reader, *bytes.Buffer) error
+		seen func(*invokeLocalFake) int
+	}{
+		{
+			name: "continue",
+			run: func(local *invokeLocalFake, reader io.Reader, output *bytes.Buffer) error {
+				return NewContinue(nil, local)(ContinueConfig{
+					Context: context.Background(), Output: output, OutputFormat: "json", Async: true,
+					RequestID: "request", SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor",
+					Stdin: reader,
+				})
+			},
+			seen: func(local *invokeLocalFake) int { return len(local.continueRequests) },
+		},
+		{
+			name: "interrupt",
+			run: func(local *invokeLocalFake, reader io.Reader, output *bytes.Buffer) error {
+				return NewInterrupt(nil, local)(InterruptConfig{
+					Context: context.Background(), Output: output, OutputFormat: "json", Async: true,
+					RequestID: "request", SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor",
+					Stdin: reader,
+				})
+			},
+			seen: func(local *invokeLocalFake) int { return len(local.interruptRequests) },
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			local := &invokeLocalFake{}
+			reader := workerSessionOverflowReader(maxWorkerSessionMessageStdinBytes)
+			var output bytes.Buffer
+			err := test.run(local, reader, &output)
+			if err == nil || !strings.Contains(err.Error(), "exceeds the "+strconv.Itoa(maxWorkerSessionMessageStdinBytes)+"-byte limit") {
+				t.Fatalf("oversized %s stdin error = %v, want input-limit failure", test.name, err)
+			}
+			if reader.bytesRead != maxWorkerSessionMessageStdinBytes+1 {
+				t.Fatalf("%s overflow bytes read = %d, want exactly %d", test.name, reader.bytesRead, maxWorkerSessionMessageStdinBytes+1)
+			}
+			if dispatched := test.seen(local); dispatched != 0 {
+				t.Fatalf("oversized %s stdin dispatched %d request(s), want none", test.name, dispatched)
+			}
+		})
+	}
+}
+
+func TestWorkerSessionExplicitInputsDoNotReadUnrelatedStdin(t *testing.T) {
+	messageReader := &workerSessionCountedReader{reader: strings.NewReader("unrelated")}
+	request := factoryapi.WorkerSessionStartRequest{}
+	if err := applyInvokeMessageOverride(&request, InvokeConfig{UserMessage: "flag message", Stdin: messageReader}); err != nil {
+		t.Fatalf("invoke explicit message error = %v", err)
+	}
+	if messageReader.bytesRead != 0 {
+		t.Fatalf("invoke explicit message read %d stdin bytes, want 0", messageReader.bytesRead)
+	}
+	if request.Execution.UserMessage == nil || *request.Execution.UserMessage != "flag message" {
+		t.Fatalf("invoke explicit message = %#v, want flag message", request.Execution.UserMessage)
+	}
+
+	continueReader := &workerSessionCountedReader{reader: strings.NewReader("unrelated")}
+	got, err := resolveContinueInput(ContinueConfig{FollowUpInput: "flag follow-up", Stdin: continueReader})
+	if err != nil || got != "flag follow-up" {
+		t.Fatalf("continue explicit message = (%q, %v), want flag follow-up", got, err)
+	}
+	if continueReader.bytesRead != 0 {
+		t.Fatalf("continue explicit message read %d stdin bytes, want 0", continueReader.bytesRead)
+	}
+
+	interruptReader := &workerSessionCountedReader{reader: strings.NewReader("unrelated")}
+	got, err = resolveInterruptInput(InterruptConfig{ReplacementMessage: "flag replacement", Stdin: interruptReader})
+	if err != nil || got != "flag replacement" {
+		t.Fatalf("interrupt explicit message = (%q, %v), want flag replacement", got, err)
+	}
+	if interruptReader.bytesRead != 0 {
+		t.Fatalf("interrupt explicit message read %d stdin bytes, want 0", interruptReader.bytesRead)
+	}
+}
+
+func TestWorkerSessionTTYAndFileInputsDoNotReadUnrelatedStdin(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		read func(io.Reader) (string, error)
+	}{
+		{
+			name: "invoke TTY",
+			read: func(reader io.Reader) (string, error) {
+				return resolveInvokeMessage(InvokeConfig{Stdin: reader, StdinIsTTY: true})
+			},
+		},
+		{
+			name: "continue TTY",
+			read: func(reader io.Reader) (string, error) {
+				return resolveContinueInput(ContinueConfig{Stdin: reader, StdinIsTTY: true})
+			},
+		},
+		{
+			name: "interrupt TTY",
+			read: func(reader io.Reader) (string, error) {
+				return resolveInterruptInput(InterruptConfig{Stdin: reader, StdinIsTTY: true})
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			reader := &workerSessionCountedReader{reader: strings.NewReader("unrelated")}
+			got, err := test.read(reader)
+			if err != nil || got != "" {
+				t.Fatalf("TTY input resolution = (%q, %v), want empty input", got, err)
+			}
+			if reader.bytesRead != 0 {
+				t.Fatalf("TTY input read %d stdin bytes, want 0", reader.bytesRead)
+			}
+		})
+	}
+
+	fileReader := &workerSessionCountedReader{reader: strings.NewReader("unrelated")}
+	if _, err := readInvokeRequest(InvokeConfig{
+		ExecutionJSON: "request.json", Stdin: fileReader,
+		ReadFile: func(string) ([]byte, error) {
+			return []byte(`{"requestId":"request","workerSessionId":"session"}`), nil
+		},
+	}); err != nil {
+		t.Fatalf("file execution input error = %v", err)
+	}
+	if fileReader.bytesRead != 0 {
+		t.Fatalf("file execution input read %d unrelated stdin bytes, want 0", fileReader.bytesRead)
+	}
+}
+
+func exactWorkerSessionExecutionDocument(t *testing.T, size int) []byte {
+	t.Helper()
+	prefix := `{"requestId":"request","workerSessionId":"session","execution":{"workstationName":"coding","dispatch":{"dispatchId":"dispatch","workstationName":"coding"},"userMessage":"`
+	suffix := `"}}`
+	if padding := size - len(prefix) - len(suffix); padding < 1 {
+		t.Fatalf("execution document fixture size %d is too small", size)
+	} else {
+		document := []byte(prefix + strings.Repeat("x", padding) + suffix)
+		if len(document) != size || !json.Valid(document) {
+			t.Fatalf("execution document fixture length/validity = (%d, %t), want (%d, true)", len(document), json.Valid(document), size)
+		}
+		return document
+	}
+	return nil
+}
+
+func workerSessionOverflowReader(limit int) *workerSessionCountedReader {
+	return &workerSessionCountedReader{reader: bytes.NewReader(bytes.Repeat([]byte("x"), limit+32))}
+}
+
+type workerSessionCountedReader struct {
+	reader    io.Reader
+	bytesRead int
+}
+
+func (reader *workerSessionCountedReader) Read(p []byte) (int, error) {
+	n, err := reader.reader.Read(p)
+	reader.bytesRead += n
+	return n, err
+}
+
+func minWorkerSessionTestPreview(length int) int {
+	if length < 32 {
+		return length
+	}
+	return 32
+}
