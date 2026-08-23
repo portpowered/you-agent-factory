@@ -696,7 +696,11 @@ func resolveLegacyRunFactoryPrompt(cmd *cobra.Command, promptArgs []string, prep
 			return fmt.Errorf("unknown flag: %s", arg)
 		}
 	}
-	if len(promptArgs) == 0 && runCommandInputIsTTY(cmd.Context()) {
+	// Directory-selected runs do not have a documented implicit stdin
+	// invocation. Only an explicit positional argument or a `-` token asks
+	// this compatibility path to inspect process stdin; otherwise a quiet pipe
+	// must not delay Factory startup.
+	if len(promptArgs) == 0 {
 		return nil
 	}
 	input, err := prepareRunInvocationInputWithFile(cmd, promptArgs, nil, nil, preparation)
@@ -900,10 +904,6 @@ func assignCompatibilityInvocationInput(cfg *runcli.RunConfig, input work.Prepar
 		cfg.InvocationStdinText = &payload
 	}
 	cfg.CleanInvocationInputSource = source
-}
-
-func runCommandInputIsTTY(ctx context.Context) bool {
-	return startupcli.StdinIsTTY(ctx)
 }
 
 func mapRunInvocationInputError(err error, factoryName string) error {

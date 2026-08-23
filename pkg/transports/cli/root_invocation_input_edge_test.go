@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -80,6 +81,30 @@ func TestResolveFactoryInvocationInput_RequiresProcessStdinForExplicitDash(t *te
 	}
 }
 
+func TestResolveRunFactoryPromptDirectorySelectionDoesNotReadUnrequestedStdin(t *testing.T) {
+	t.Parallel()
+
+	reader := &countingInvocationReader{}
+	cmd := &cobra.Command{Use: "run"}
+	cmd.SetContext(context.Background())
+	cmd.SetIn(reader)
+	preparation := rootInvocationInputScript{prepare: func(
+		context.Context,
+		work.InvocationInputPreparationRequest,
+	) (work.PreparedInvocationInput, error) {
+		t.Fatal("directory-selected run must not prepare unrequested stdin")
+		return work.PreparedInvocationInput{}, nil
+	}}
+	cfg := runcli.RunConfig{Dir: t.TempDir()}
+
+	if err := resolveRunFactoryPrompt(cmd, &cfg, nil, preparation); err != nil {
+		t.Fatalf("resolve directory-selected run: %v", err)
+	}
+	if reader.reads != 0 {
+		t.Fatalf("directory-selected run stdin reads = %d, want 0", reader.reads)
+	}
+}
+
 func TestResolveRunFactoryPromptToFileRejectsNonPromptRunShapes(t *testing.T) {
 	t.Parallel()
 
@@ -145,6 +170,13 @@ func TestCollectRunInvocationStdinPreservesReaderFailure(t *testing.T) {
 type failingInvocationReader struct{ err error }
 
 func (reader failingInvocationReader) Read([]byte) (int, error) { return 0, reader.err }
+
+type countingInvocationReader struct{ reads int }
+
+func (reader *countingInvocationReader) Read([]byte) (int, error) {
+	reader.reads++
+	return 0, io.EOF
+}
 
 func TestResolveRunFactoryPromptNoSignatureSelectionsPreserveCompatibilityInput(t *testing.T) {
 	t.Parallel()
