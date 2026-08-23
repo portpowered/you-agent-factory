@@ -31,30 +31,6 @@ func (v testFactoryDefinitionValidator) ValidateSubmittedDefinition(
 	return result, nil
 }
 
-func testPersistableFactoryDefinitionValidator(
-	blockingLoadResult factorydefinitions.ValidationResult,
-) factorydefinitions.Validator {
-	return testFactoryDefinitionValidator{
-		validate: func() factorydefinitions.ValidationResult {
-			return factorydefinitions.ValidationResult{}
-		},
-		validateBlockingLoad: func() factorydefinitions.ValidationResult {
-			return blockingLoadResult
-		},
-		pruneLayout: func() factorydefinitions.ValidationResult {
-			return factorydefinitions.ValidationResult{}
-		},
-	}
-}
-
-// testValidPersistableFactoryDefinitionValidator scripts the validation edge
-// for CLI tests whose subject is persistence policy, filesystem effects, or
-// output rendering. Structural acceptance is covered by the owner-local
-// Factory Definitions validation suites.
-func testValidPersistableFactoryDefinitionValidator() factorydefinitions.Validator {
-	return testPersistableFactoryDefinitionValidator(factorydefinitions.ValidationResult{})
-}
-
 func (v testFactoryDefinitionValidator) Validate(
 	context.Context,
 	*factorydefinitions.FactoryConfig,

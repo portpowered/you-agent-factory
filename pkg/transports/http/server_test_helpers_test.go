@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -629,17 +628,6 @@ func namedFactoryPayloadJSON(project, workType string) string {
 	}`, project, project, workType, workType, workType)
 }
 
-func listedWorkByID(t *testing.T, works []factoryapi.Work, workID string) factoryapi.Work {
-	t.Helper()
-	for _, work := range works {
-		if stringValue(work.WorkId) == workID {
-			return work
-		}
-	}
-	t.Fatalf("listed work %q not found in %#v", workID, works)
-	return factoryapi.Work{}
-}
-
 func submitWorkRequest(t *testing.T, srv *Server, body string) *httptest.ResponseRecorder {
 	t.Helper()
 
@@ -685,10 +673,6 @@ func decodeJSONResponse[T any](t *testing.T, rec *httptest.ResponseRecorder) T {
 	return out
 }
 
-func encodeNextToken(token string) string {
-	return base64.StdEncoding.EncodeToString([]byte(token))
-}
-
 func decodeListWorkPage(t *testing.T, srv *Server, path string) factoryapi.ListWorkResponse {
 	t.Helper()
 
@@ -699,55 +683,6 @@ func decodeListWorkPage(t *testing.T, srv *Server, path string) factoryapi.ListW
 		t.Fatalf("%s status = %d, want 200: %s", path, rec.Code, rec.Body.String())
 	}
 	return decodeJSONResponse[factoryapi.ListWorkResponse](t, rec)
-}
-
-func assertListedWorkIDs(t *testing.T, works []factoryapi.Work, want []string) {
-	t.Helper()
-	if len(works) != len(want) {
-		t.Fatalf("results = %d, want %d: %#v", len(works), len(want), works)
-	}
-	for i, wantWorkID := range want {
-		if got := stringValue(works[i].WorkId); got != wantWorkID {
-			t.Fatalf("result[%d].workId = %q, want %q: %#v", i, got, wantWorkID, works)
-		}
-	}
-}
-
-type upsertValidationFailureCase struct {
-	name                 string
-	path                 string
-	body                 string
-	submitError          string
-	workPreparationError string
-	wantMsg              string
-}
-
-func runUpsertValidationFailureCases(t *testing.T, cases []upsertValidationFailureCase) {
-	t.Helper()
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			observed, workRole := newRecordingWorkRole()
-			if tc.submitError != "" {
-				workRole.submit = func(context.Context, string, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
-					return work.WorkRequestSubmitResult{}, errors.New(tc.submitError)
-				}
-			}
-			sessions := strictLiveSessionAPIFake{get: func(_ context.Context, sessionID string) (factoryapi.FactorySession, error) {
-				return factoryapi.FactorySession{Id: sessionID}, nil
-			}}
-			srv := newFactorySessionRolesTestServer(sessions, workRole, factoryReadFake(factoryapi.Factory{Name: "test-factory"}, nil), nil)
-			if tc.workPreparationError != "" {
-				setWorkRequestPreparationError(srv, tc.workPreparationError)
-			}
-
-			rec := upsertWorkRequest(t, srv, tc.path, tc.body)
-			assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", tc.wantMsg)
-			if len(observed.WorkRequests) != 0 {
-				t.Fatalf("Work request count = %d, want 0", len(observed.WorkRequests))
-			}
-		})
-	}
 }
 
 type strictJSONTestPayload struct {

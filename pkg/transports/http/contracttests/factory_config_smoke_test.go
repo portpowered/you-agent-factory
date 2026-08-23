@@ -425,43 +425,6 @@ func assertFactorySchemaAcceptsJSON(t *testing.T, schema *openapi3.Schema, data 
 	}
 }
 
-func assertRepresentativeFactoryConfigJSONUsesCanonicalPublicKeys(t *testing.T, data []byte) {
-	t.Helper()
-
-	assertFactoryConfigJSONUsesRequiredAndForbiddenKeys(t, data, []string{
-		`"workTypes"`,
-		`"workType"`,
-		`"onFailure"`,
-		`"stopToken"`,
-	}, []string{
-		`"work_types"`,
-		`"work_type"`,
-		`"on_failure"`,
-		`"kind":"standard"`,
-		`"kind":"cron"`,
-		`"kind":"repeater"`,
-		`"stop_token"`,
-		`"prompt_template"`,
-		`"runtime_type"`,
-	})
-}
-
-func assertFactoryConfigJSONUsesRequiredAndForbiddenKeys(t *testing.T, data []byte, requiredKeys, forbiddenKeys []string) {
-	t.Helper()
-
-	text := string(data)
-	for _, key := range requiredKeys {
-		if !strings.Contains(text, key) {
-			t.Fatalf("factory payload is missing canonical key %s: %s", key, text)
-		}
-	}
-	for _, key := range forbiddenKeys {
-		if strings.Contains(text, key) {
-			t.Fatalf("factory payload must not advertise legacy key %s: %s", key, text)
-		}
-	}
-}
-
 func decodeGeneratedFactoryForSmoke(t *testing.T, data []byte) factoryapi.Factory {
 	t.Helper()
 

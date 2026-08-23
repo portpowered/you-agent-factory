@@ -341,25 +341,6 @@ func Open(
 		loadMockWorkers, nil, buildRuntimeRequest, presentationOwner, nil)
 }
 
-// OpenWithVisualizationOwner is the canonical CLI composition entrypoint.
-// Visualization sink state is retained by its own owner and represented in
-// the application-opening request by an opaque value ID.
-func OpenWithVisualizationOwner(
-	ctx context.Context,
-	cfg RunConfig,
-	buildRunner RuntimeRunnerBuilder,
-	invocation InvocationOperation,
-	presentation factoryvisualization.ResponsePresentation,
-	prepareWorkTarget work.SingleWorkTargetPreparation,
-	loadMockWorkers workers.MockWorkersConfigLoader,
-	buildRuntimeRequest RuntimeOpeningRequestFactory,
-	presentations factorysessions.OpeningPresentationOwner,
-	visualizations factoryvisualization.RuntimeSinkOwner,
-) (*Operation, error) {
-	return open(ctx, cfg, buildRunner, invocation, presentation, prepareWorkTarget,
-		loadMockWorkers, nil, buildRuntimeRequest, presentations, visualizations)
-}
-
 // OpenWithVisualizationOwnerAndDiagnostics is the canonical composition entry
 // point when the mock-worker loader also reports ignored forward-compatible
 // fields. The older Open functions remain available for callers that provide
@@ -667,14 +648,6 @@ func classifyRunInputFailure(cfg RunConfig, err error) error {
 		return clidiag.NewLocalInputFailure("--resume", path, err)
 	}
 	return err
-}
-
-func loadSelectedMockWorkersConfig(
-	cfg RunConfig,
-	load workers.MockWorkersConfigLoader,
-) (*workers.MockWorkersConfig, error) {
-	config, _, err := loadSelectedMockWorkersConfigWithDiagnostics(cfg, load, nil)
-	return config, err
 }
 
 func loadSelectedMockWorkersConfigWithDiagnostics(

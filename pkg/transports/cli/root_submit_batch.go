@@ -347,13 +347,6 @@ func lookupProcessEnvironment(
 	return value, ok, nil
 }
 
-func persistentFlagValueIfChanged(cmd *cobra.Command, name, value string) string {
-	if cmd.Root().PersistentFlags().Changed(name) {
-		return value
-	}
-	return ""
-}
-
 func persistentInputWasCLI(cmd *cobra.Command, inputID, legacyName string) bool {
 	if cmd == nil {
 		return false
@@ -366,27 +359,6 @@ func persistentInputWasCLI(cmd *cobra.Command, inputID, legacyName string) bool 
 		}
 	}
 	return cmd.Root().PersistentFlags().Changed(legacyName)
-}
-
-func resolvedPersistentStringIfCLI(
-	cmd *cobra.Command,
-	inputID string,
-	legacyName string,
-	legacyValue string,
-) string {
-	inputs, err := climanifestcobra.ResolvedPersistentInputs(cmd)
-	if err == nil {
-		state, found := inputs.State(inputID)
-		if !found || state.Provenance != resolvedinput.SourceCLIFlag {
-			return ""
-		}
-		value, valueErr := inputs.String(inputID)
-		if valueErr == nil {
-			return value
-		}
-		return ""
-	}
-	return persistentFlagValueIfChanged(cmd, legacyName, legacyValue)
 }
 
 func representativeSourceValues(options CommandFactory) climanifestcobra.SourceCandidateProvider {
