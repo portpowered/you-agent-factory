@@ -28,22 +28,52 @@ function renderNode(ui: ReactElement) {
 function renderShell(state: GraphNodeState, label = "Example node") {
   return renderNode(
     <GraphNodeShell handles={genericHandles} nodeKind="example" state={state}>
-      <GraphNodeButton>{label}</GraphNodeButton>
+      <GraphNodeButton graphState={state} stateLabel={label}>
+        {label}
+      </GraphNodeButton>
     </GraphNodeShell>,
   );
 }
 
-describe("graph node states", () => {
+describe("graph node base roles", () => {
+  it("keeps the default shell and button on their neutral semantic roles", () => {
+    renderShell("default", "Default node");
+
+    const shell = document.querySelector('[data-graph-node-kind="example"]');
+    const button = screen.getByRole("button", { name: "Default node" });
+
+    expect(shell).toHaveClass(
+      "border-outline",
+      "bg-surface",
+      "text-on-surface",
+    );
+    expect(shell).not.toHaveAttribute("data-graph-node-state");
+    expect(button).not.toHaveClass(
+      "ring-af-graph-selected-ring",
+      "ring-af-graph-error-ring",
+      "cursor-not-allowed",
+    );
+    expect(button).not.toBeDisabled();
+  });
+
   it("renders selected shell state with non-color-only emphasis and aria-selected", () => {
     renderShell("selected", "Selected node");
 
     const shell = document.querySelector('[data-graph-node-kind="example"]');
     expect(shell).toHaveAttribute("data-graph-node-state", "selected");
     expect(shell).toHaveAttribute("aria-selected", "true");
-    expect(shell?.className).toContain("border-primary");
-    expect(shell?.className).toContain("shadow-[");
-  });
+    expect(shell).toHaveClass(
+      "border-primary",
+      "bg-primary-container",
+      "shadow-af-graph-selected",
+    );
 
+    const button = screen.getByRole("button", { name: "Selected node" });
+    expect(button).toHaveClass("ring-2", "ring-af-graph-selected-ring");
+  });
+});
+
+describe("graph node status roles", () => {
   it("renders error shell state with dashed border, alert text, and aria-invalid", () => {
     renderNode(
       <GraphNodeShell
@@ -51,14 +81,19 @@ describe("graph node states", () => {
         state="error"
         stateLabel="Connection failed"
       >
-        <GraphNodeButton>Error node</GraphNodeButton>
+        <GraphNodeButton graphState="error">Error node</GraphNodeButton>
       </GraphNodeShell>,
     );
 
     const shell = document.querySelector('[data-graph-node-state="error"]');
     expect(shell).toHaveAttribute("aria-invalid", "true");
-    expect(shell?.className).toContain("border-dashed");
+    expect(shell).toHaveClass("border-dashed", "shadow-af-graph-error");
     expect(screen.getByRole("alert")).toHaveTextContent("Connection failed");
+
+    expect(screen.getByRole("button", { name: "Error node" })).toHaveClass(
+      "ring-2",
+      "ring-af-graph-error-ring",
+    );
   });
 
   it("renders loading shell state with spinner, aria-busy, and stable content height", () => {
@@ -112,8 +147,14 @@ describe("graph node states", () => {
 
     const shell = document.querySelector('[data-graph-node-state="disabled"]');
     expect(shell).toHaveAttribute("aria-disabled", "true");
+    expect(shell).toHaveClass("border-outline-variant", "bg-surface-container");
+    expect(screen.getByRole("button", { name: "Example node" })).toHaveClass(
+      "cursor-not-allowed",
+    );
   });
+});
 
+describe("graph node button interactions", () => {
   it("prevents disabled graph node button activation while keeping label readable", async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();
