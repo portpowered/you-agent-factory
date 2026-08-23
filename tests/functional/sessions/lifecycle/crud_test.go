@@ -144,7 +144,7 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 		t.Fatalf("you session show after delete unexpectedly succeeded:\n%s", showAfterDeleteOut)
 	}
 	showAfterDelete := string(showAfterDeleteOut)
-	support.RequireSafeCLIDiagnostic(t, showAfterDelete)
+	support.RequireNotFoundCLIDiagnostic(t, showAfterDelete)
 	if strings.Contains(showAfterDelete, sessionID) && strings.Contains(showAfterDelete, `"id"`) {
 		t.Fatalf("session show after delete must not emit a success session payload:\n%s", showAfterDelete)
 	}
@@ -825,7 +825,7 @@ func assertCLISessionNotFoundFailure(
 	}
 
 	text := string(output)
-	support.RequireSafeCLIDiagnostic(t, text)
+	support.RequireNotFoundCLIDiagnostic(t, text)
 	if strings.Contains(text, sessionID) {
 		t.Fatalf("session %s leaked session id %q in safe diagnostic:\n%s", operation, sessionID, text)
 	}

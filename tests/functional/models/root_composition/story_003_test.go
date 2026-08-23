@@ -177,9 +177,25 @@ func testStory003ControlledSourceFailure(t *testing.T) {
 		t.Fatalf("failed pull response = %#v, want SOURCE_FETCH_FAILED/FAILED", failureResponse)
 	}
 	if strings.TrimSpace(failureInputs.Stderr()) == "" {
-		t.Fatal("failed pull stderr was empty, want the generic CLI diagnostic envelope")
+		t.Fatal("failed pull stderr was empty, want the typed CLI diagnostic envelope")
 	}
-	support.RequireSafeCLIDiagnostic(t, failureInputs.Stderr())
+	var failureDiagnostic factoryapi.ErrorResponse
+	if decodeErr := json.Unmarshal([]byte(failureInputs.Stderr()), &failureDiagnostic); decodeErr != nil {
+		t.Fatalf("decode failed models pull diagnostic: %v\nstderr:\n%s", decodeErr, failureInputs.Stderr())
+	}
+	if failureDiagnostic.Code != factoryapi.ErrorResponseCode("CLI_MODEL_PULL_FAILED") ||
+		failureDiagnostic.Family != factoryapi.ErrorFamilyBadRequest {
+		t.Fatalf("failed pull diagnostic = %#v, want CLI_MODEL_PULL_FAILED/BAD_REQUEST", failureDiagnostic)
+	}
+	for _, want := range []string{"pullOutcome=SOURCE_FETCH_FAILED", "readinessState=FAILED"} {
+		if !strings.Contains(failureDiagnostic.Message, want) {
+			t.Fatalf("failed pull diagnostic message = %q, want %q", failureDiagnostic.Message, want)
+		}
+	}
+	if strings.Contains(failureInputs.Stderr(), "CLI_COMMAND_FAILED") ||
+		strings.Contains(failureInputs.Stderr(), "controlled source failure") {
+		t.Fatalf("failed pull diagnostic leaked generic fallback or source body: %q", failureInputs.Stderr())
+	}
 }
 
 type story003InspectCapture struct {

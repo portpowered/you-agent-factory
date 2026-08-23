@@ -441,11 +441,12 @@ func open(
 		)
 	}
 
-	return openHostedRuntime(
+	operation, err := openHostedRuntime(
 		ctx, cfg, logger, invocationRequest, recordPath, invocation, presentation,
 		prepareWorkTarget, mockWorkersConfig, invocationMode, requestedPort,
 		buildRunner, buildRuntimeRequest, presentationOwner, visualizations,
 	)
+	return operation, classifyRunInputFailure(cfg, err)
 }
 
 // NormalizeWorkerReasoningEffort validates and canonicalizes the run-scoped
@@ -649,6 +650,23 @@ func prepareRunConfig(
 		return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
 	}
 	return cfg, invocationRequest, invocationMode, recordPath, nil
+}
+
+// classifyRunInputFailure keeps a submitted replay/resume path actionable
+// when runtime opening fails before the command can produce a richer coded
+// diagnostic. The underlying error remains available to callers, but the
+// default CLI renderer receives only the safe flag/path context.
+func classifyRunInputFailure(cfg RunConfig, err error) error {
+	if err == nil || clidiag.HasCodedDiagnostic(err) || errors.Is(err, context.Canceled) {
+		return err
+	}
+	if path := strings.TrimSpace(cfg.ReplayPath); path != "" {
+		return clidiag.NewLocalInputFailure("--replay", path, err)
+	}
+	if path := strings.TrimSpace(cfg.ResumePath); path != "" {
+		return clidiag.NewLocalInputFailure("--resume", path, err)
+	}
+	return err
 }
 
 func loadSelectedMockWorkersConfig(
