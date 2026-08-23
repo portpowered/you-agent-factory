@@ -36,15 +36,6 @@ func (o Observer) Record(diagnostic InvalidationDiagnostic) {
 	}
 }
 
-func RecordPreflight(observer Observer, result PreflightResult) bool {
-	diagnostic, ok := InvalidationFromPreflight(result)
-	if !ok {
-		return false
-	}
-	observer.Record(diagnostic)
-	return true
-}
-
 type zapLogger struct {
 	logger *zap.Logger
 }

@@ -2,7 +2,6 @@ package http
 
 import (
 	"errors"
-	"io"
 	"net/http"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -227,14 +226,6 @@ func (s *Server) writeCurrentFactoryError(
 		s.writeError(w, http.StatusInternalServerError, "failed to save current factory", "INTERNAL_ERROR")
 		return
 	}
-}
-
-func decodeSaveCurrentFactoryBody(body io.Reader) (factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody, error) {
-	return decodeStrictJSON[factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody](body)
-}
-
-func decodePromptTemplateValidationRequestBody(body io.Reader) (factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody, error) {
-	return decodeStrictJSON[factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody](body)
 }
 
 func currentFactoryBundledDocTargetPaths(factory factoryapi.Factory) []string {

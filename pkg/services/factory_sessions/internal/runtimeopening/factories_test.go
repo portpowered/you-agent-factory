@@ -24,12 +24,6 @@ import (
 	"go.uber.org/zap"
 )
 
-type materializerStub struct{}
-
-func (materializerStub) MaterializeContentURL(_ context.Context, rawURL string) (string, work.ContentCleanup, error) {
-	return "/tmp/runtimeopening.png", func() {}, nil
-}
-
 type factoryDefinitionsConstructionStub struct {
 	factorydefinitions.Service
 }

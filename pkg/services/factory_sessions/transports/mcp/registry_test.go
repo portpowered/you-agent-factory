@@ -3,14 +3,12 @@ package factorysession_test
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -528,17 +526,6 @@ func TestMockClientDiscovery_RoundTripsJSON(t *testing.T) {
 	}
 	if decoded[0].Name != mcpfactorysession.ToolListSessions {
 		t.Fatalf("first tool = %q, want %q", decoded[0].Name, mcpfactorysession.ToolListSessions)
-	}
-}
-
-func writeWorkflow(t *testing.T, projectRoot, name, content string) {
-	t.Helper()
-	workflowDir := filepath.Join(projectRoot, factory.WorkflowSourceProjectClaudeWorkflowsDir)
-	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
-		t.Fatalf("mkdir workflows: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(workflowDir, name), []byte(content), 0o600); err != nil {
-		t.Fatalf("write workflow: %v", err)
 	}
 }
 

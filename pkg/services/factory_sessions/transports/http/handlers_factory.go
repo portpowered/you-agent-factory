@@ -3,7 +3,6 @@ package http
 import (
 	"context"
 	"errors"
-	"io"
 	"net/http"
 	"strings"
 
@@ -80,11 +79,6 @@ func (s *Server) PreviewFactory(w http.ResponseWriter, r *http.Request) {
 	result := apisurface.FactoryPreviewResultFromPreview(preview)
 	s.writeCompatibilityWarning(w, "preview_factory", decoded.Diagnostics.Paths())
 	s.writeJSON(w, http.StatusOK, result)
-}
-
-func decodeNamedFactoryBody(body io.Reader) (factoryapi.Factory, error) {
-	result, err := decodeJSONWithDiagnostics[factoryapi.Factory](body)
-	return result.Value, err
 }
 
 func (s *Server) requireSessionRuntime(w http.ResponseWriter) (apisurface.LiveSessionAPI, bool) {
@@ -340,11 +334,6 @@ func (s *Server) CloseFactorySession(w http.ResponseWriter, r *http.Request, ses
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func decodeOpenFactorySessionBody(body io.Reader) (factoryapi.OpenFactorySessionJSONRequestBody, error) {
-	result, err := decodeJSONWithDiagnostics[factoryapi.OpenFactorySessionJSONRequestBody](body)
-	return result.Value, err
 }
 
 func (s *Server) requireDurableExecutionAPI(w http.ResponseWriter) (apisurface.DurableSessionExecutionAPI, bool) {

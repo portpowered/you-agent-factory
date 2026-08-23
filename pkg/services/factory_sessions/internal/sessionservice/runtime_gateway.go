@@ -130,20 +130,6 @@ func (s *Service) ProbeDurableFactorySessionEvents(
 	return err
 }
 
-func (fs *SessionRuntime) inferenceProgressPublisher(
-	sessionID string,
-	logger *zap.Logger,
-) factorysessions.ProgressPublisher {
-	if fs == nil {
-		return nil
-	}
-	factory := fs.requireSessionGateway().InferenceProgressPublisherFactory(logger)
-	if factory == nil {
-		return nil
-	}
-	return factory(sessionID)
-}
-
 func (fs *SessionRuntime) durableExecutionService() durableexecution.Service {
 	if fs == nil {
 		return nil

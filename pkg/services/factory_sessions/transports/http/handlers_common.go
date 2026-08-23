@@ -119,33 +119,6 @@ func stringValue(value *string) string {
 	return optional.StringValue(value)
 }
 
-func intValue(value *int) int {
-	return optional.IntValue(value)
-}
-
-func stringSliceValue(values *[]string) []string {
-	return optional.StringsValue(values)
-}
-
-func stringSlicePtrCopy(values []string) *[]string {
-	return optional.CopiedStringsPtr(values)
-}
-
-func stringPtrIfNotEmpty(value string) *string {
-	return optional.NonEmptyStringPtr(value)
-}
-
-func stringMapPtr(values map[string]string) *factoryapi.StringMap {
-	return optional.CopiedStringMapPtr(values)
-}
-
-func intPtrIfPositive(value int) *int {
-	return optional.PositiveIntPtr(value)
-}
-
-func generatedStringMap(values *factoryapi.StringMap) map[string]string {
-	return optional.StringMapValue(values)
-}
 func (s *Server) requireDurableSessionLifecycleAPI(w http.ResponseWriter) (apisurface.DurableSessionLifecycleAPI, bool) {
 	if s.durableLifecycle == nil {
 		s.writeError(w, http.StatusInternalServerError, "durable factory session lifecycle control is unavailable", "INTERNAL_ERROR")
@@ -160,13 +133,6 @@ func (s *Server) writeDurableLifecycleControlError(w http.ResponseWriter, sessio
 		return true
 	}
 	return false
-}
-
-func (s *Server) writeLifecycleControlSuccess(
-	w http.ResponseWriter,
-	response factoryapi.FactorySessionLifecycleControlResponse,
-) {
-	s.writeLifecycleControlSuccessWithDiagnostics(w, response, nil)
 }
 
 func (s *Server) writeLifecycleControlSuccessWithDiagnostics(
@@ -270,20 +236,10 @@ func (s *Server) handleLiveLifecycleControl(
 	s.writeLifecycleControlSuccessWithDiagnostics(w, response, diagnostics.Paths())
 }
 
-func decodeOptionalLifecycleControlRequest(body io.Reader) (factoryapi.FactorySessionLifecycleControlRequest, error) {
-	result, err := decodeOptionalLifecycleControlRequestWithDiagnostics(body)
-	return result.Value, err
-}
-
 func decodeOptionalLifecycleControlRequestWithDiagnostics(body io.Reader) (httpcompat.DecodeResult[factoryapi.FactorySessionLifecycleControlRequest], error) {
 	return decodeOptionalJSONWithDiagnostics(body, func() factoryapi.FactorySessionLifecycleControlRequest {
 		return factoryapi.FactorySessionLifecycleControlRequest{}
 	})
-}
-
-func decodeOptionalApproveRequest(body io.Reader) (factoryapi.FactorySessionApproveRequest, error) {
-	result, err := decodeOptionalApproveRequestWithDiagnostics(body)
-	return result.Value, err
 }
 
 func decodeOptionalApproveRequestWithDiagnostics(body io.Reader) (httpcompat.DecodeResult[factoryapi.FactorySessionApproveRequest], error) {
@@ -292,31 +248,16 @@ func decodeOptionalApproveRequestWithDiagnostics(body io.Reader) (httpcompat.Dec
 	})
 }
 
-func decodeOptionalRetryDispatchRequest(body io.Reader) (factoryapi.FactorySessionRetryDispatchRequest, error) {
-	result, err := decodeOptionalRetryDispatchRequestWithDiagnostics(body)
-	return result.Value, err
-}
-
 func decodeOptionalRetryDispatchRequestWithDiagnostics(body io.Reader) (httpcompat.DecodeResult[factoryapi.FactorySessionRetryDispatchRequest], error) {
 	return decodeOptionalJSONWithDiagnostics(body, func() factoryapi.FactorySessionRetryDispatchRequest {
 		return factoryapi.FactorySessionRetryDispatchRequest{}
 	})
 }
 
-func decodeOptionalInterruptDispatchRequest(body io.Reader) (factoryapi.FactorySessionInterruptDispatchRequest, error) {
-	result, err := decodeOptionalInterruptDispatchRequestWithDiagnostics(body)
-	return result.Value, err
-}
-
 func decodeOptionalInterruptDispatchRequestWithDiagnostics(body io.Reader) (httpcompat.DecodeResult[factoryapi.FactorySessionInterruptDispatchRequest], error) {
 	return decodeOptionalJSONWithDiagnostics(body, func() factoryapi.FactorySessionInterruptDispatchRequest {
 		return factoryapi.FactorySessionInterruptDispatchRequest{}
 	})
-}
-
-func decodeOptionalJSONRequest[T any](body io.Reader, zero func() T) (T, error) {
-	result, err := decodeOptionalJSONWithDiagnostics(body, zero)
-	return result.Value, err
 }
 
 func decodeOptionalJSONWithDiagnostics[T any](body io.Reader, zero func() T) (httpcompat.DecodeResult[T], error) {
