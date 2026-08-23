@@ -17,6 +17,38 @@ import (
 func TestList_ExplicitMaxResultsRendersOneBoundedServerPage(t *testing.T) {
 	const pageSize = 5
 	nextToken := encodeCursor("work-5")
+	srv, requestCount := newExplicitMaxResultsServer(t, pageSize, nextToken)
+	defer srv.Close()
+
+	var output bytes.Buffer
+	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{
+		Context:    context.Background(),
+		Server:     serverBase(t, srv),
+		MaxResults: pageSize,
+		JSON:       true,
+		Output:     &output,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	var response factoryapi.ListWorkResponse
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("JSON output is invalid: %v\n%s", err, output.String())
+	}
+	if *requestCount != 1 {
+		t.Fatalf("HTTP request count = %d, want one server page", *requestCount)
+	}
+	if len(response.Results) != pageSize {
+		t.Fatalf("results = %d, want %d rows from one bounded page", len(response.Results), pageSize)
+	}
+	if response.PaginationContext == nil || response.PaginationContext.MaxResults != pageSize || response.PaginationContext.NextToken == nil || *response.PaginationContext.NextToken != nextToken {
+		t.Fatalf("paginationContext = %#v, want maxResults=%d and usable nextToken", response.PaginationContext, pageSize)
+	}
+}
+
+func newExplicitMaxResultsServer(t *testing.T, pageSize int, nextToken string) (*httptest.Server, *int) {
+	t.Helper()
 	requestCount := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount++
@@ -54,33 +86,7 @@ func TestList_ExplicitMaxResultsRendersOneBoundedServerPage(t *testing.T) {
 			t.Fatalf("unexpected request count %d", requestCount)
 		}
 	}))
-	defer srv.Close()
-
-	var output bytes.Buffer
-	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{
-		Context:    context.Background(),
-		Server:     serverBase(t, srv),
-		MaxResults: pageSize,
-		JSON:       true,
-		Output:     &output,
-	})
-	if err != nil {
-		t.Fatalf("List: %v", err)
-	}
-
-	var response factoryapi.ListWorkResponse
-	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
-		t.Fatalf("JSON output is invalid: %v\n%s", err, output.String())
-	}
-	if requestCount != 1 {
-		t.Fatalf("HTTP request count = %d, want one server page", requestCount)
-	}
-	if len(response.Results) != pageSize {
-		t.Fatalf("results = %d, want %d rows from one bounded page", len(response.Results), pageSize)
-	}
-	if response.PaginationContext == nil || response.PaginationContext.MaxResults != pageSize || response.PaginationContext.NextToken == nil || *response.PaginationContext.NextToken != nextToken {
-		t.Fatalf("paginationContext = %#v, want maxResults=%d and usable nextToken", response.PaginationContext, pageSize)
-	}
+	return srv, &requestCount
 }
 
 func newVisibleWorkPaginationServer(t *testing.T) *httptest.Server {

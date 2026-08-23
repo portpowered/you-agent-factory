@@ -120,63 +120,106 @@ func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request, par
 }
 
 func (s *Server) GetFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	durableLookupMiss := false
-	if s.sessionsRoot != nil {
-		if s.guardSessionsRequestContext(w, r) {
-			return
-		}
-		response, err := s.sessionsRoot.GetSession(r.Context(), string(sessionID))
-		if err == nil {
-			s.writeJSON(w, http.StatusOK, factorysession.SessionReadResponseToAPI(response))
-			return
-		}
-		if !isSessionLookupMiss(err) && !errors.Is(err, factorysessionexecution.ErrExecutionServiceNotConfigured) {
-			if s.writeSessionsRootError(w, string(sessionID), err) {
-				return
-			}
-			s.logger.Error("get durable factory session failed", zap.Error(err), zap.String("session_id", string(sessionID)))
-			s.writeError(w, http.StatusInternalServerError, "failed to get factory session", "INTERNAL_ERROR")
-			return
-		}
-		durableLookupMiss = isSessionLookupMiss(err)
-	} else if s.durableLifecycle != nil {
-		getter, ok := s.requireDurableSessionGetter(w)
-		if !ok {
-			return
-		}
-		response, err := getter.GetDurableFactorySession(r.Context(), string(sessionID))
-		if err == nil {
-			s.writeJSON(w, http.StatusOK, response)
-			return
-		}
-		if !isSessionLookupMiss(err) && !errors.Is(err, factorysessionexecution.ErrExecutionServiceNotConfigured) {
-			if s.writeDurableSessionReadError(w, err) {
-				return
-			}
-			s.logger.Error("get durable factory session failed", zap.Error(err))
-			s.writeError(w, http.StatusInternalServerError, "failed to get factory session", "INTERNAL_ERROR")
-			return
-		}
-		durableLookupMiss = isSessionLookupMiss(err)
-	}
-
-	if s.liveControl != nil {
-		if s.guardSessionsRequestContext(w, r) {
-			return
-		}
-		projection, err := s.liveControl.GetFactorySession(r.Context(), decodeGetFactorySessionRequest(sessionID))
-		if err != nil {
-			if s.writeSessionsRootError(w, string(sessionID), err) {
-				return
-			}
-			s.logger.Error("get factory session failed", zap.Error(err))
-			s.writeSessionsRootErrorOrInternal(w, string(sessionID), err, "failed to get factory session")
-			return
-		}
-		s.writeJSON(w, http.StatusOK, factorysession.SessionResponseToAPI(projection))
+	durableLookupMiss, handled := s.readDurableFactorySession(w, r, string(sessionID))
+	if handled {
 		return
 	}
+	if s.liveControl != nil {
+		s.readLiveFactorySession(w, r, sessionID)
+		return
+	}
+	s.readRuntimeFactorySession(w, r, sessionID, durableLookupMiss)
+}
 
+func (s *Server) readDurableFactorySession(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID string,
+) (lookupMiss, handled bool) {
+	if s.sessionsRoot != nil {
+		return s.readFactorySessionFromRoot(w, r, sessionID)
+	}
+	if s.durableLifecycle != nil {
+		return s.readFactorySessionFromDurableLifecycle(w, r, sessionID)
+	}
+	return false, false
+}
+
+func (s *Server) readFactorySessionFromRoot(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID string,
+) (lookupMiss, handled bool) {
+	if s.guardSessionsRequestContext(w, r) {
+		return false, true
+	}
+	response, err := s.sessionsRoot.GetSession(r.Context(), sessionID)
+	if err == nil {
+		s.writeJSON(w, http.StatusOK, factorysession.SessionReadResponseToAPI(response))
+		return false, true
+	}
+	if !isSessionLookupMiss(err) && !errors.Is(err, factorysessionexecution.ErrExecutionServiceNotConfigured) {
+		if s.writeSessionsRootError(w, sessionID, err) {
+			return false, true
+		}
+		s.logger.Error("get durable factory session failed", zap.Error(err), zap.String("session_id", sessionID))
+		s.writeError(w, http.StatusInternalServerError, "failed to get factory session", "INTERNAL_ERROR")
+		return false, true
+	}
+	return isSessionLookupMiss(err), false
+}
+
+func (s *Server) readFactorySessionFromDurableLifecycle(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID string,
+) (lookupMiss, handled bool) {
+	getter, ok := s.requireDurableSessionGetter(w)
+	if !ok {
+		return false, true
+	}
+	response, err := getter.GetDurableFactorySession(r.Context(), sessionID)
+	if err == nil {
+		s.writeJSON(w, http.StatusOK, response)
+		return false, true
+	}
+	if !isSessionLookupMiss(err) && !errors.Is(err, factorysessionexecution.ErrExecutionServiceNotConfigured) {
+		if s.writeDurableSessionReadError(w, err) {
+			return false, true
+		}
+		s.logger.Error("get durable factory session failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to get factory session", "INTERNAL_ERROR")
+		return false, true
+	}
+	return isSessionLookupMiss(err), false
+}
+
+func (s *Server) readLiveFactorySession(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+) {
+	if s.guardSessionsRequestContext(w, r) {
+		return
+	}
+	projection, err := s.liveControl.GetFactorySession(r.Context(), decodeGetFactorySessionRequest(sessionID))
+	if err != nil {
+		if s.writeSessionsRootError(w, string(sessionID), err) {
+			return
+		}
+		s.logger.Error("get factory session failed", zap.Error(err))
+		s.writeSessionsRootErrorOrInternal(w, string(sessionID), err, "failed to get factory session")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, factorysession.SessionResponseToAPI(projection))
+}
+
+func (s *Server) readRuntimeFactorySession(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	durableLookupMiss bool,
+) {
 	if durableLookupMiss && s.sessions == nil {
 		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
 		return

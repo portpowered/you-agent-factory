@@ -67,6 +67,19 @@ func TestListWorkHonorsPaginationNextToken(t *testing.T) {
 func TestListWorkWalksFilteredSnapshotWithoutMissingOrDuplicateRows(t *testing.T) {
 	t.Parallel()
 
+	svc := newTerminalWorkService()
+	wantIDs := terminalWorkControlIDs(t, svc)
+	gotIDs := walkTerminalWorkPages(t, svc, work.ListOptions{
+		StateType:  work.StateTypeTerminal,
+		Counts:     true,
+		MaxResults: 2,
+	}, len(wantIDs))
+	if !reflect.DeepEqual(gotIDs, wantIDs) {
+		t.Fatalf("paged IDs = %v, want control IDs %v", gotIDs, wantIDs)
+	}
+}
+
+func newTerminalWorkService() *internalservice.Service {
 	items := make([]work.ReadModel, 0, 7)
 	for index := 1; index <= 6; index++ {
 		items = append(items, work.ReadModel{
@@ -84,11 +97,13 @@ func TestListWorkWalksFilteredSnapshotWithoutMissingOrDuplicateRows(t *testing.T
 		WorkTypeName: "story",
 		State:        &work.State{Name: "review", Type: work.StateTypeProcessing},
 	})
-	svc := internalservice.New(stubSessionResolver{adapter: &recordingSessionAdapter{
+	return internalservice.New(stubSessionResolver{adapter: &recordingSessionAdapter{
 		snapshot: work.ReadSnapshot{Items: items},
 	}}, nil)
-	options := work.ListOptions{StateType: work.StateTypeTerminal, Counts: true, MaxResults: 2}
+}
 
+func terminalWorkControlIDs(t *testing.T, svc *internalservice.Service) []string {
+	t.Helper()
 	control, err := svc.ListWork(context.Background(), "session-1", work.ListOptions{
 		StateType:  work.StateTypeTerminal,
 		Counts:     true,
@@ -100,12 +115,21 @@ func TestListWorkWalksFilteredSnapshotWithoutMissingOrDuplicateRows(t *testing.T
 	if control.Counts == nil || control.Counts.Total != 6 || len(control.Results) != 6 {
 		t.Fatalf("control = %#v, want six terminal rows and total", control)
 	}
-
-	wantIDs := make([]string, 0, len(control.Results))
+	ids := make([]string, 0, len(control.Results))
 	for _, item := range control.Results {
-		wantIDs = append(wantIDs, item.WorkID)
+		ids = append(ids, item.WorkID)
 	}
-	gotIDs := make([]string, 0, len(wantIDs))
+	return ids
+}
+
+func walkTerminalWorkPages(
+	t *testing.T,
+	svc *internalservice.Service,
+	options work.ListOptions,
+	wantTotal int,
+) []string {
+	t.Helper()
+	gotIDs := make([]string, 0, wantTotal)
 	seenTokens := make(map[string]struct{})
 	nextToken := ""
 	for {
@@ -114,20 +138,12 @@ func TestListWorkWalksFilteredSnapshotWithoutMissingOrDuplicateRows(t *testing.T
 		if err != nil {
 			t.Fatalf("paged ListWork(nextToken=%q): %v", nextToken, err)
 		}
-		if page.MaxResults != options.MaxResults {
-			t.Fatalf("page maxResults = %d, want %d", page.MaxResults, options.MaxResults)
-		}
-		if page.Counts == nil || page.Counts.Total != len(wantIDs) {
-			t.Fatalf("page counts = %#v, want total %d", page.Counts, len(wantIDs))
-		}
+		assertTerminalWorkPage(t, page, options.MaxResults, wantTotal)
 		for _, item := range page.Results {
-			if item.State == nil || item.State.Type != work.StateTypeTerminal {
-				t.Fatalf("paged item = %#v, want TERMINAL state", item)
-			}
 			gotIDs = append(gotIDs, item.WorkID)
 		}
 		if page.NextToken == "" {
-			break
+			return gotIDs
 		}
 		if _, repeated := seenTokens[page.NextToken]; repeated {
 			t.Fatalf("repeated continuation token %q", page.NextToken)
@@ -135,8 +151,20 @@ func TestListWorkWalksFilteredSnapshotWithoutMissingOrDuplicateRows(t *testing.T
 		seenTokens[page.NextToken] = struct{}{}
 		nextToken = page.NextToken
 	}
-	if !reflect.DeepEqual(gotIDs, wantIDs) {
-		t.Fatalf("paged IDs = %v, want control IDs %v", gotIDs, wantIDs)
+}
+
+func assertTerminalWorkPage(t *testing.T, page work.ListResult, maxResults, wantTotal int) {
+	t.Helper()
+	if page.MaxResults != maxResults {
+		t.Fatalf("page maxResults = %d, want %d", page.MaxResults, maxResults)
+	}
+	if page.Counts == nil || page.Counts.Total != wantTotal {
+		t.Fatalf("page counts = %#v, want total %d", page.Counts, wantTotal)
+	}
+	for _, item := range page.Results {
+		if item.State == nil || item.State.Type != work.StateTypeTerminal {
+			t.Fatalf("paged item = %#v, want TERMINAL state", item)
+		}
 	}
 }
 
