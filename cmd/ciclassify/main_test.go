@@ -21,7 +21,12 @@ func TestClassifierValidationMatrixEmitsExactLaneSets(t *testing.T) {
 		{"docs README", []string{"docs/README.md"}, "documentation-reference", []string{laneDocsReference}},
 		{"root README", []string{"README.md"}, "readme", []string{laneReadme}},
 		{"frontend", []string{"ui/src/App.tsx"}, "frontend", []string{laneFrontend}},
-		{"backend or CLI", []string{"cmd/factory/main.go"}, "backend", []string{laneBackend, laneUIBackendIntegration}},
+		{"backend or CLI", []string{"cmd/factory/main.go"}, "backend", []string{laneBackend, laneBackendConformance, laneUIBackendIntegration}},
+		{"generated packaged Factory", []string{"packages/packaged-factories/generated/factories/tts/factory.json"}, "packaged-factories-package", []string{laneBackend, laneBackendConformance, lanePackagedFactoriesPackage}},
+		{"built-in Models catalog", []string{"pkg/services/models/catalog_contract.go"}, "backend", []string{laneBackend, laneBackendConformance, laneUIBackendIntegration}},
+		{"backend registry", []string{"pkg/services/models/internal/backendregistry/registry.go"}, "backend", []string{laneBackend, laneBackendConformance, laneUIBackendIntegration}},
+		{"default backend manifest", []string{"pkg/services/models/internal/artifacts/default-manifest.json"}, "backend", []string{laneBackend, laneBackendConformance, laneUIBackendIntegration}},
+		{"release-built command wiring", []string{"cmd/omnivoice-llamacpp/main.go"}, "backend", []string{laneBackend, laneBackendConformance, laneUIBackendIntegration}},
 		{"API contract", []string{"api/openapi-main.yaml"}, "api-contract", []string{laneFrontend, laneBackend, laneUIBackendIntegration, laneAPIPackage}},
 		{"contracts check", []string{"cmd/contractscheck/repository_mutation_test.go"}, "api-contract", []string{laneFrontend, laneBackend, laneUIBackendIntegration, laneAPIPackage}},
 		{"API package", []string{"packages/api/package.json"}, "api-package", []string{laneFrontend, laneBackend, laneUIBackendIntegration, laneAPIPackage}},
@@ -118,13 +123,40 @@ func TestClassifierOwnershipBoundaries(t *testing.T) {
 		{name: "generated client contract is API-owned", path: "ui/packages/client/src/generated/openapi.ts", lanes: []string{laneFrontend, laneBackend, laneUIBackendIntegration, laneAPIPackage}},
 		{name: "UI inference is frontend-owned", path: "ui/src/features/timeline/state/timeline/replayWorldStateInference.test.ts", lanes: []string{laneFrontend}},
 		{name: "provider inference is backend-owned", path: "tests/functional/workers/inference/selection_test.go", lanes: []string{laneBackend, laneUIBackendIntegration}},
-		{name: "release script is backend-owned", path: "scripts/release/smoke-install.sh", lanes: []string{laneBackend, laneUIBackendIntegration}},
+		{name: "release script is backend-owned", path: "scripts/release/smoke-install.sh", lanes: []string{laneBackend, laneBackendConformance, laneUIBackendIntegration}},
 	}
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			assertLaneSet(t, classifyPaths([]string{tc.path}), tc.lanes...)
+		})
+	}
+}
+
+func TestBackendConformanceSelectionCoversNamedSurfaces(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		path string
+		want bool
+	}{
+		{name: "generated packaged Factory", path: "packages/packaged-factories/generated/factories/tts/factory.json", want: true},
+		{name: "built-in Models catalog", path: "pkg/services/models/catalog_contract.go", want: true},
+		{name: "backend registry", path: "pkg/services/models/internal/backendregistry/registry.go", want: true},
+		{name: "default manifest", path: "pkg/services/models/internal/artifacts/default-manifest.json", want: true},
+		{name: "Makefile", path: "Makefile", want: true},
+		{name: "release command wiring", path: "cmd/omnivoice-llamacpp/main.go", want: true},
+		{name: "unrelated documentation", path: "docs/architecture/architecture.md", want: false},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			result := classifyPaths([]string{tc.path})
+			if got := result.Lanes[laneBackendConformance].ShouldRun; got != tc.want {
+				t.Fatalf("Backend Conformance selected = %t, want %t for %s", got, tc.want, tc.path)
+			}
 		})
 	}
 }
@@ -179,6 +211,8 @@ func TestRunWritesNamedLaneOutputs(t *testing.T) {
 		"frontend_command=make frontend-verification",
 		"run_backend=true",
 		"backend_command=make backend-verification",
+		"run_backend_conformance=false",
+		"backend_conformance_command=make test-backend-conformance",
 		"run_ui_backend_integration=true",
 		"ui_backend_integration_command=make ui-backend-integration",
 		"api_package_command=make api-package-verify",

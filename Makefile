@@ -238,7 +238,7 @@ endef
 .PHONY: test-functional test-functional-fresh test-functional-long test-functional-long-compile test-backend-functional functional-boundary-check functional-test-viz
 .PHONY: test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
 .PHONY: test-unit-coverage test-functional-coverage coverage-help test-backend-coverage test-coverage-go test-race
-.PHONY: test-backend-verification test-root-process-acceptance long-tests long-tests-managed-runtime
+.PHONY: test-backend-verification test-backend-conformance test-root-process-acceptance long-tests long-tests-managed-runtime
 .PHONY: frontend-verification backend-verification ui-backend-integration
 
 .PHONY: verify-fast verify-pr verify-extended verify-build verify-lint verify-api
@@ -648,6 +648,9 @@ test-backend-coverage:
 test-backend-verification:
 	$(MAKE) test-unit-coverage
 	$(MAKE) test-functional-coverage
+
+test-backend-conformance:
+	$(GO) test ./pkg/services/models/internal/backendconformance -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test-backend-functional:
 	$(MAKE) test-functional-coverage
