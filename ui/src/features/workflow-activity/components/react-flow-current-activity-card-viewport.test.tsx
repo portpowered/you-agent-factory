@@ -10,6 +10,7 @@ const setViewport = vi.fn().mockResolvedValue(true);
 const graphStore = { nodeLookup: new Map() };
 const mockUpdateNodeInternals = vi.fn();
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: the React Flow mock keeps callback wiring in one observable test surface.
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual("@xyflow/react");
 
@@ -35,8 +36,8 @@ vi.mock("@xyflow/react", async () => {
       onPointerDownCapture,
       onPointerMoveCapture,
       onPointerUpCapture,
-      onPaneClick: _onPaneClick,
-      onSelectionChange: _onSelectionChange,
+      onPaneClick,
+      onSelectionChange,
       onSelectionStart: _onSelectionStart,
       panOnDrag,
       panOnScroll,
@@ -107,7 +108,10 @@ vi.mock("@xyflow/react", async () => {
           {(nodes ?? []).map((node) => (
             <button
               key={node.id}
-              onClick={() => onNodeClick?.(null, { id: node.id })}
+              onClick={() => {
+                onSelectionChange?.({ edges: [], nodes: [node] });
+                onNodeClick?.(null, node);
+              }}
               type="button"
             >
               {node.id}
@@ -116,12 +120,31 @@ vi.mock("@xyflow/react", async () => {
           {(edges ?? []).map((edge) => (
             <button
               key={edge.id}
-              onClick={() => onEdgeClick?.(null, edge)}
+              onClick={() => {
+                onSelectionChange?.({ edges: [edge], nodes: [] });
+                onEdgeClick?.(null, edge);
+              }}
               type="button"
             >
               {edge.id}
             </button>
           ))}
+          <button
+            data-testid="mock-react-flow-multi-selection"
+            onClick={() =>
+              onSelectionChange?.({ edges: edges ?? [], nodes: nodes ?? [] })
+            }
+            type="button"
+          >
+            Trigger multi-selection
+          </button>
+          <button
+            data-testid="mock-react-flow-pane-action"
+            onClick={onPaneClick}
+            type="button"
+          >
+            Trigger pane click
+          </button>
           {children}
         </div>
       );
@@ -443,10 +466,12 @@ describe("CurrentActivityGraphViewport", () => {
 
   it("uses selection-first React Flow gesture defaults and clears selection on Escape", async () => {
     const clearGraphSelection = vi.fn();
+    const clearSelectedVisualGroup = vi.fn();
     const handleGraphSelectionChange = vi.fn();
 
     renderViewport({
       clearGraphSelection,
+      clearSelectedVisualGroup,
       handleGraphSelectionChange,
     });
 
@@ -461,6 +486,85 @@ describe("CurrentActivityGraphViewport", () => {
       screen.getByRole("region", { name: "Work graph viewport" }),
       { key: "Escape" },
     );
+    expect(clearGraphSelection).toHaveBeenCalledTimes(1);
+    expect(clearSelectedVisualGroup).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears group focus when a node or edge selection is established", async () => {
+    const clearSelectedVisualGroup = vi.fn();
+    const handleGraphSelectionChange = vi.fn();
+    const node: Node = {
+      id: "workstation:review",
+      position: { x: 0, y: 0 },
+    };
+    const edge: Edge = {
+      id: "edge-review-done",
+      source: node.id,
+      target: "work-state:story:done",
+    };
+
+    renderViewport({
+      clearSelectedVisualGroup,
+      edges: [edge],
+      handleGraphSelectionChange,
+      nodes: [node],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: node.id }));
+    expect(clearSelectedVisualGroup).toHaveBeenCalledTimes(1);
+    expect(handleGraphSelectionChange).toHaveBeenLastCalledWith({
+      edges: [],
+      nodes: [node],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: edge.id }));
+    expect(clearSelectedVisualGroup).toHaveBeenCalledTimes(2);
+    expect(handleGraphSelectionChange).toHaveBeenLastCalledWith({
+      edges: [edge],
+      nodes: [],
+    });
+  });
+
+  it("clears group focus for multi-selection and empty canvas activation", async () => {
+    const clearGraphSelection = vi.fn();
+    const clearSelectedVisualGroup = vi.fn();
+    const handleGraphSelectionChange = vi.fn();
+
+    renderViewport({
+      clearGraphSelection,
+      clearSelectedVisualGroup,
+      edges: [
+        {
+          id: "edge-review-done",
+          source: "workstation:review",
+          target: "work-state:story:done",
+        },
+      ],
+      handleGraphSelectionChange,
+      nodes: [
+        { id: "workstation:review", position: { x: 0, y: 0 } },
+        { id: "work-state:story:done", position: { x: 240, y: 0 } },
+      ],
+    });
+
+    fireEvent.click(screen.getByTestId("mock-react-flow-multi-selection"));
+    expect(clearSelectedVisualGroup).toHaveBeenCalledTimes(1);
+    expect(handleGraphSelectionChange).toHaveBeenLastCalledWith({
+      edges: [
+        {
+          id: "edge-review-done",
+          source: "workstation:review",
+          target: "work-state:story:done",
+        },
+      ],
+      nodes: [
+        { id: "workstation:review", position: { x: 0, y: 0 } },
+        { id: "work-state:story:done", position: { x: 240, y: 0 } },
+      ],
+    });
+
+    fireEvent.click(screen.getByTestId("mock-react-flow-pane-action"));
+    expect(clearSelectedVisualGroup).toHaveBeenCalledTimes(2);
     expect(clearGraphSelection).toHaveBeenCalledTimes(1);
   });
 
@@ -533,6 +637,7 @@ function renderViewport({
   activeTool = null,
   canDeleteGraphSelection = false,
   clearGraphSelection = vi.fn(),
+  clearSelectedVisualGroup = vi.fn(),
   deleteGraphSelection = vi.fn(),
   edges = [],
   editorMode = false,
@@ -544,6 +649,7 @@ function renderViewport({
   activeTool?: "add" | "connect" | "delete" | null;
   canDeleteGraphSelection?: boolean;
   clearGraphSelection?: () => void;
+  clearSelectedVisualGroup?: () => void;
   deleteGraphSelection?: () => void;
   edges?: Edge[];
   editorMode?: boolean;
@@ -562,6 +668,7 @@ function renderViewport({
       addControls={{}}
       canDeleteGraphSelection={canDeleteGraphSelection}
       clearGraphSelection={clearGraphSelection}
+      clearSelectedVisualGroup={clearSelectedVisualGroup}
       deleteGraphSelection={deleteGraphSelection}
       editorControls={{
         activeTool,
