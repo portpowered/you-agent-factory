@@ -93,6 +93,62 @@ func TestAdapter_PullModelEncodesPullErrorOutcome(t *testing.T) {
 	}
 }
 
+func TestAdapter_BuiltInPullSurfacesThroughHTTP(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{
+		models.BuiltInModelNameASR,
+		models.BuiltInModelNameTTS,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			root := &rootFake{
+				pull: func(_ context.Context, requested string) (models.PullResult, error) {
+					return models.PullResult{
+						ModelName:          requested,
+						ProviderLocality:   string(models.LocalityLocal),
+						Outcome:            "PULLED",
+						ManagedPullOutcome: "INSTALLED_SUCCESSFULLY",
+						ReadinessState:     "READY",
+						LifecycleState:     "INSTALLED",
+					}, nil
+				},
+			}
+			handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+			recorder := httptest.NewRecorder()
+
+			handler.PullModel(recorder, httptest.NewRequest(http.MethodPost, "/models/"+name+"/pull", nil), name)
+
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
+			}
+			var response factoryapi.ModelPullResponse
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if response.ModelName != name || response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY {
+				t.Fatalf("response = %#v, want successful built-in pull", response)
+			}
+		})
+	}
+}
+
+func TestAdapter_UnknownPullRemainsNotFound(t *testing.T) {
+	t.Parallel()
+
+	root := &rootFake{
+		pull: func(context.Context, string) (models.PullResult, error) {
+			return models.PullResult{}, models.ErrNotFound
+		},
+	}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	recorder := httptest.NewRecorder()
+
+	handler.PullModel(recorder, httptest.NewRequest(http.MethodPost, "/models/unknown-model/pull", nil), "unknown-model")
+
+	assertCatalogHTTPError(t, recorder, http.StatusNotFound, "NOT_FOUND", "model not found")
+}
+
 func TestRemoveModelHandlerMapsDetachedResultAndScope(t *testing.T) {
 	t.Parallel()
 

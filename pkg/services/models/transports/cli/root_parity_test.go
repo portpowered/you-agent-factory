@@ -327,6 +327,43 @@ func TestRootAdapter_PullSuccessPreservesHumanAndJSONOutput(t *testing.T) {
 	}
 }
 
+func TestRootAdapter_BuiltInPullSurfacesThroughCLI(t *testing.T) {
+	t.Parallel()
+
+	root := stubModelsRoot{
+		pullModel: func(_ context.Context, name string) (modelinference.PullResult, error) {
+			return modelinference.PullResult{
+				ModelName:          name,
+				ProviderLocality:   string(modelinference.LocalityLocal),
+				Outcome:            "PULLED",
+				ManagedPullOutcome: "INSTALLED_SUCCESSFULLY",
+				ReadinessState:     "READY",
+				LifecycleState:     "INSTALLED",
+			}, nil
+		},
+	}
+	service := parityRootService(t, root)
+
+	for _, name := range []string{
+		modelinference.BuiltInModelNameASR,
+		modelinference.BuiltInModelNameTTS,
+	} {
+		var output bytes.Buffer
+		if err := service.Pull(modelscli.PullConfig{
+			Context: context.Background(), ModelName: name, JSON: true, Output: &output,
+		}); err != nil {
+			t.Fatalf("Pull(%q): %v", name, err)
+		}
+		var response factoryapi.ModelPullResponse
+		if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+			t.Fatalf("Pull(%q) JSON: %v\n%s", name, err, output.String())
+		}
+		if response.ModelName != name || response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY {
+			t.Fatalf("Pull(%q) response = %#v, want successful built-in pull", name, response)
+		}
+	}
+}
+
 func TestRootAdapter_PullClosesCatalogScopeAfterSuccess(t *testing.T) {
 	t.Parallel()
 

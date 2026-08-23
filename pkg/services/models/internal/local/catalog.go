@@ -617,6 +617,11 @@ func CanonicalModelName(model string) string {
 type PullOptions struct {
 	RuntimeCacheInspector RuntimeCacheInspector
 	SourceResolver        ManagedRuntimeSourceResolver
+	// ResolvedReference is supplied only by the Models root after its
+	// canonical resolver has accepted a name that is absent from the
+	// Factory-scoped catalog. It lets the existing pull projection continue
+	// without turning the lower-level Factory catalog into a second resolver.
+	ResolvedReference *models.ResolvedModelReference
 }
 
 // PullModel validates catalog locality and delegates asset pull to the injected puller.
@@ -638,7 +643,7 @@ func PullModelWithOptions(
 	modelName string,
 	opts PullOptions,
 ) (models.PullResult, error) {
-	entry, err := pullCatalogEntry(puller, runtimeCfg, modelName)
+	entry, err := pullCatalogEntry(puller, runtimeCfg, modelName, opts.ResolvedReference)
 	if err != nil {
 		return models.PullResult{}, err
 	}
@@ -647,6 +652,12 @@ func PullModelWithOptions(
 		return models.PullResult{}, err
 	}
 	result, err := puller.PullModel(ctx, runtimeCfg, modelName)
+	if opts.ResolvedReference != nil && strings.TrimSpace(entry.Summary.Name) != "" {
+		// Generic asset preparation reports the source identity for a named
+		// reference (for example, its Hugging Face repository). Pull's public
+		// identity remains the resolved model name.
+		result.ModelName = entry.Summary.Name
+	}
 	if err != nil {
 		if errors.Is(err, managedruntime.ErrNotFound) || errors.Is(err, models.ErrPullUnsupported) {
 			return models.PullResult{}, err
@@ -674,6 +685,7 @@ func pullCatalogEntry(
 	puller AssetPuller,
 	runtimeCfg *models.RuntimeConfig,
 	modelName string,
+	resolved *models.ResolvedModelReference,
 ) (CatalogEntry, error) {
 	if runtimeCfg == nil {
 		return CatalogEntry{}, fmt.Errorf("factory service runtime is not available")
@@ -687,6 +699,9 @@ func pullCatalogEntry(
 	}
 	entry, ok := BuildCatalog(runtimeCfg)[key]
 	if !ok {
+		if fallback := resolvedPullCatalogEntry(key, modelName, resolved); fallback != nil {
+			return *fallback, nil
+		}
 		return CatalogEntry{}, fmt.Errorf("%w: %s", managedruntime.ErrNotFound, modelName)
 	}
 	if entry.Summary.ProviderLocality != managedruntime.LocalityLocal {
@@ -695,6 +710,28 @@ func pullCatalogEntry(
 		)
 	}
 	return entry, nil
+}
+
+func resolvedPullCatalogEntry(
+	key string,
+	modelName string,
+	resolved *models.ResolvedModelReference,
+) *CatalogEntry {
+	if resolved == nil {
+		return nil
+	}
+	definition := resolved.Definition
+	name := strings.TrimSpace(definition.Name)
+	if name == "" {
+		name = strings.TrimSpace(modelName)
+	}
+	if CanonicalModelName(name) != key {
+		return nil
+	}
+	return &CatalogEntry{Summary: modelcatalog.Summary{
+		Name:             name,
+		ProviderLocality: managedruntime.LocalityLocal,
+	}}
 }
 
 func resolvePullSource(

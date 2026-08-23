@@ -67,6 +67,67 @@ func TestPullModelWithOptions_ClassifiesUnsupportedLocalModel(t *testing.T) {
 	}
 }
 
+func TestPullModelWithOptions_UsesCanonicalResolvedFallback(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{
+		apisurface.BuiltInModelNameASR,
+		apisurface.BuiltInModelNameTTS,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			definition, ok := (apisurface.BuiltInCatalog{}).ModelDefinitionFor(name)
+			if !ok {
+				t.Fatalf("built-in definition %q is missing", name)
+			}
+			puller := &managedPullTestAssetPuller{result: apisurface.PullResult{
+				ModelName: name,
+				Outcome:   legacyPullOutcomePulled,
+			}}
+			resolved := &apisurface.ResolvedModelReference{
+				Definition: definition,
+			}
+
+			result, err := PullModelWithOptions(
+				puller,
+				context.Background(),
+				&apisurface.RuntimeConfig{},
+				name,
+				PullOptions{ResolvedReference: resolved},
+			)
+			if err != nil {
+				t.Fatalf("PullModelWithOptions(%q): %v", name, err)
+			}
+			if result.ManagedPullOutcome != managedPullOutcomeInstalledSuccessfully ||
+				result.ReadinessState != managedReadinessReady {
+				t.Fatalf("pull result = %#v, want successful managed-runtime projection", result)
+			}
+			if len(puller.calls) != 1 || puller.calls[0] != name {
+				t.Fatalf("pull calls = %#v, want one call for %q", puller.calls, name)
+			}
+		})
+	}
+}
+
+func TestPullModelWithOptions_UnknownModelStillReturnsCatalogMiss(t *testing.T) {
+	t.Parallel()
+
+	puller := &managedPullTestAssetPuller{}
+	_, err := PullModelWithOptions(
+		puller,
+		context.Background(),
+		&apisurface.RuntimeConfig{},
+		"unknown-model",
+		PullOptions{},
+	)
+	if !errors.Is(err, apisurface.ErrNotFound) {
+		t.Fatalf("unknown pull error = %v, want ErrNotFound", err)
+	}
+	if len(puller.calls) != 0 {
+		t.Fatalf("unknown pull calls = %#v, want none", puller.calls)
+	}
+}
+
 func TestPullModelWithOptions_ReportsVerificationFailure(t *testing.T) {
 	t.Parallel()
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
@@ -120,9 +181,11 @@ func TestPullModelWithOptions_DoesNotSucceedAfterCallerCancellation(t *testing.T
 type managedPullTestAssetPuller struct {
 	result apisurface.PullResult
 	err    error
+	calls  []string
 }
 
-func (p *managedPullTestAssetPuller) PullModel(context.Context, *modelRuntimeConfig, string) (apisurface.PullResult, error) {
+func (p *managedPullTestAssetPuller) PullModel(_ context.Context, _ *modelRuntimeConfig, name string) (apisurface.PullResult, error) {
+	p.calls = append(p.calls, name)
 	return p.result, p.err
 }
 

@@ -437,6 +437,51 @@ func TestProductionRuntimeCompatibilityPullUsesScopedAssetsService(t *testing.T)
 	}
 }
 
+func TestProductionCompositionPullsBuiltInsAfterScopedCatalogMiss(t *testing.T) {
+	t.Parallel()
+
+	var sourceRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		sourceRequests.Add(1)
+		http.Error(writer, "managed source is intentionally unavailable", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(server.Close)
+
+	service := newProductionTestServiceWithAssetSource(
+		t,
+		server.Client(),
+		models.RuntimeAssetEndpoints{BaseURL: server.URL, APIBaseURL: server.URL},
+	)
+	opened, err := service.OpenRuntimeScope(context.Background(), models.OpenRuntimeScopeRequest{
+		Config: models.RuntimeScopeConfig{CacheDirectory: t.TempDir()},
+	})
+	if err != nil {
+		t.Fatalf("OpenRuntimeScope: %v", err)
+	}
+
+	for _, name := range []string{models.BuiltInModelNameASR, models.BuiltInModelNameTTS} {
+		result, pullErr := service.PullModelForScope(context.Background(), models.PullModelRequest{
+			Scope: opened.Scope,
+			Name:  name,
+		})
+		if pullErr == nil {
+			t.Fatalf("PullModelForScope(%q) error = nil, want managed source failure", name)
+		}
+		if errors.Is(pullErr, models.ErrNotFound) {
+			t.Fatalf("PullModelForScope(%q) error = %v, must pass the catalog miss", name, pullErr)
+		}
+		if !errors.Is(pullErr, models.ErrSourceFetchFailed) {
+			t.Fatalf("PullModelForScope(%q) error = %v, want source-fetch failure", name, pullErr)
+		}
+		if result.ModelName != name || result.ManagedPullOutcome == "" || result.ReadinessState == "" {
+			t.Fatalf("PullModelForScope(%q) result = %#v, want classified managed-runtime outcome", name, result)
+		}
+	}
+	if sourceRequests.Load() == 0 {
+		t.Fatal("built-in pull made no managed source request")
+	}
+}
+
 func newProductionTestService(t *testing.T) models.Service {
 	t.Helper()
 	return newProductionTestServiceWithDependencies(t, time.Now, platformrandom.CryptoSource{})
