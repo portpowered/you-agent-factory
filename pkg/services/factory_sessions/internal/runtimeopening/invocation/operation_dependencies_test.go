@@ -83,6 +83,31 @@ func TestResolveModelsInvokeFactoryDir_DelegatesDefaultLayoutToInjectedResolver(
 	}
 }
 
+func TestResolveModelsInvokeFactoryDir_PreservesExplicitDirectory(t *testing.T) {
+	t.Parallel()
+
+	resolverCalled := false
+	operation := &operation{
+		workingDirectory: workingDirectoryStub{dir: filepath.Join("workspace", "project")},
+		resolveCurrentDir: func(string) (string, error) {
+			resolverCalled = true
+			return "unexpected", nil
+		},
+	}
+
+	explicit := filepath.Join("workspace", "another-project", "factory")
+	resolved, err := operation.ResolveModelInvocationFactoryDir(explicit)
+	if err != nil {
+		t.Fatalf("ResolveModelInvocationFactoryDir: %v", err)
+	}
+	if resolved != explicit {
+		t.Fatalf("resolved directory = %q, want explicit %q", resolved, explicit)
+	}
+	if resolverCalled {
+		t.Fatal("current-directory resolver was called for an explicit factory directory")
+	}
+}
+
 func TestResolveModelsInvokeFactoryDir_ReportsWorkingDirectoryFailure(t *testing.T) {
 	t.Parallel()
 
