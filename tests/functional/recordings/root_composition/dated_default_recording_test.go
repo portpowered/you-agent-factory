@@ -1,0 +1,196 @@
+package root_composition_test
+
+import (
+	"bytes"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+)
+
+// TestDefaultRecordingUsesDistinctDatedUUIDArtifactsAndReplaysThroughRootProcess
+// proves two completed default-session runs reserve separate canonical files in
+// one UTC date directory. It also keeps the customer-visible whole-file JSON
+// contract and the public replay path observable through root.BuildProcess.
+func TestDefaultRecordingUsesDistinctDatedUUIDArtifactsAndReplaysThroughRootProcess(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	factoryDir := support.ScaffoldSingleStepFactory(t, "rec-3-default-recording")
+	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	wantDate := time.Now().UTC().Format("2006/01/02")
+
+	firstReportedPath := executeDefaultRecordingRun(t, factoryDir, env)
+	secondReportedPath := executeDefaultRecordingRun(t, factoryDir, env)
+
+	recordingRoot := filepath.Join(homeDir, ".you-agent-factory", "recordings")
+	paths := listRecordingArtifacts(t, recordingRoot)
+	if len(paths) != 2 {
+		t.Fatalf("default recording artifacts = %#v, want exactly two", paths)
+	}
+
+	for _, path := range paths {
+		assertDatedUUIDRecordingPath(t, recordingRoot, path, wantDate)
+		assertWholeFileReplayArtifact(t, path, strings.TrimSuffix(filepath.Base(path), ".json"))
+	}
+	t.Logf("REC-3 default recording paths: %s and %s", paths[0], paths[1])
+	if filepath.Dir(paths[0]) != filepath.Dir(paths[1]) {
+		t.Fatalf("default recording directories = %q and %q, want one shared UTC date directory", filepath.Dir(paths[0]), filepath.Dir(paths[1]))
+	}
+	if paths[0] == paths[1] {
+		t.Fatalf("default recording paths collided at %q", paths[0])
+	}
+	if firstReportedPath != paths[0] && firstReportedPath != paths[1] {
+		t.Fatalf("first shutdown-reported path = %q, want one of actual artifacts %#v", firstReportedPath, paths)
+	}
+	if secondReportedPath != paths[0] && secondReportedPath != paths[1] {
+		t.Fatalf("second shutdown-reported path = %q, want one of actual artifacts %#v", secondReportedPath, paths)
+	}
+	if firstReportedPath == secondReportedPath {
+		t.Fatalf("shutdown-reported paths collided at %q", firstReportedPath)
+	}
+
+	firstReplayOutput, firstReplayError := replayRecordingThroughRoot(t, paths[0])
+	secondReplayOutput, secondReplayError := replayRecordingThroughRoot(t, paths[1])
+	if firstReplayError != nil || secondReplayError != nil {
+		t.Fatalf("replay errors = %v, %v; outputs = %q, %q", firstReplayError, secondReplayError, firstReplayOutput, secondReplayOutput)
+	}
+	if firstReplayOutput != secondReplayOutput {
+		t.Fatalf("replay outputs differ: first=%q second=%q", firstReplayOutput, secondReplayOutput)
+	}
+	pathsAfterReplay := listRecordingArtifacts(t, recordingRoot)
+	if strings.Join(pathsAfterReplay, "\n") != strings.Join(paths, "\n") {
+		t.Fatalf("replay changed live recording artifacts: before=%#v after=%#v", paths, pathsAfterReplay)
+	}
+}
+
+func executeDefaultRecordingRun(t *testing.T, factoryDir string, env []string) string {
+	t.Helper()
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", factoryDir})
+	inputs.Input.Env = append([]string(nil), env...)
+	inputs.Input.WorkingDirectory = factoryDir
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(default recording run) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+
+	for _, line := range strings.Split(inputs.Stdout(), "\n") {
+		if path, ok := strings.CutPrefix(line, "Recording saved: "); ok && strings.TrimSpace(path) != "" {
+			return filepath.Clean(strings.TrimSpace(path))
+		}
+	}
+	t.Fatalf("default recording run output = %q, want shutdown-reported recording path", inputs.Stdout())
+	return ""
+}
+
+func listRecordingArtifacts(t *testing.T, recordingRoot string) []string {
+	t.Helper()
+
+	var paths []string
+	if err := filepath.WalkDir(recordingRoot, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".json" {
+			paths = append(paths, filepath.Clean(path))
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("walk default recording root %q: %v", recordingRoot, err)
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+func assertDatedUUIDRecordingPath(t *testing.T, recordingRoot, path, wantDate string) {
+	t.Helper()
+
+	relative, err := filepath.Rel(recordingRoot, path)
+	if err != nil {
+		t.Fatalf("relative recording path %q from %q: %v", path, recordingRoot, err)
+	}
+	parts := strings.Split(relative, string(os.PathSeparator))
+	if len(parts) != 4 || filepath.Join(parts[0], parts[1], parts[2]) != filepath.FromSlash(wantDate) {
+		t.Fatalf("recording path = %q, want %s/<uuid>.json under %q", path, wantDate, recordingRoot)
+	}
+	if filepath.Ext(parts[3]) != ".json" {
+		t.Fatalf("recording filename = %q, want .json", parts[3])
+	}
+	stem := strings.TrimSuffix(parts[3], ".json")
+	parsed, err := uuid.Parse(stem)
+	if err != nil || parsed.String() != stem {
+		t.Fatalf("recording filename stem = %q, want canonical UUID", stem)
+	}
+	if strings.Contains(path, "__factory_session_id__") || len(stem) != 36 {
+		t.Fatalf("recording path = %q, contains a placeholder or collision suffix", path)
+	}
+}
+
+func assertWholeFileReplayArtifact(t *testing.T, path, canonicalSessionID string) {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read recording %q: %v", path, err)
+	}
+	if !json.Valid(bytes.TrimSpace(data)) {
+		t.Fatalf("recording %q is not one valid JSON document", path)
+	}
+	if !bytes.HasSuffix(data, []byte("\n")) {
+		t.Fatalf("recording %q lost the existing whole-file trailing newline", path)
+	}
+	artifact := testutil.LoadReplayArtifact(t, path)
+	if artifact.SchemaVersion == "" || artifact.RecordedAt.IsZero() {
+		t.Fatalf("recording %q missing whole-file envelope metadata: %#v", path, artifact)
+	}
+	if len(artifact.Events) == 0 {
+		t.Fatalf("recording %q has no Factory Events", path)
+	}
+	seenSessionID := false
+	for index, event := range artifact.Events {
+		if event.Context.Sequence != index {
+			t.Fatalf("recording %q event[%d] sequence = %d, want %d", path, index, event.Context.Sequence, index)
+		}
+		if event.Id == "" || event.Type == "" {
+			t.Fatalf("recording %q event[%d] = %#v, want existing event identity and type", path, index, event)
+		}
+		if event.Context.SessionID != nil && *event.Context.SessionID != "" {
+			seenSessionID = true
+			if *event.Context.SessionID != canonicalSessionID {
+				t.Fatalf("recording %q event[%d] session ID = %q, want canonical filename ID %q", path, index, *event.Context.SessionID, canonicalSessionID)
+			}
+		}
+	}
+	if !seenSessionID {
+		t.Fatalf("recording %q has no canonical Factory Session ID in its events", path)
+	}
+}
+
+func replayRecordingThroughRoot(t *testing.T, path string) (string, error) {
+	t.Helper()
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	workingDirectory := t.TempDir()
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--dir", workingDirectory, "--replay", path, "--no-record", "--quiet",
+	})
+	inputs.Input.Env = append(
+		os.Environ(),
+		"HOME="+t.TempDir(),
+		"USERPROFILE="+t.TempDir(),
+	)
+	inputs.Input.WorkingDirectory = workingDirectory
+	err := process.Execute(inputs.Input)
+	return inputs.Stdout() + "\nSTDERR:\n" + inputs.Stderr(), err
+}
