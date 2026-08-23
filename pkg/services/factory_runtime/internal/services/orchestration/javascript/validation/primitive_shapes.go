@@ -137,23 +137,44 @@ func (a *sourceAnalyzer) validateAgentRunFields(call *js.CallExpr, obj *js.Objec
 func (a *sourceAnalyzer) validateAgentRunField(call *js.CallExpr, field string, value js.IExpr, found bool) {
 	switch field {
 	case orchestratorcontract.FieldSkipPermissions:
-		if found && !isAgentRunBooleanValue(value) {
-			a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be a boolean value`, field), call)
-		}
+		a.validateAgentRunBooleanField(call, field, value, found)
 	case orchestratorcontract.FieldPermissions:
-		if found && isLiteralExpr(value) && !isStringLiteral(value) {
-			a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be a string value`, field), call)
-		} else if found && !isAgentRunPermissionValue(value) {
-			a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be DEFAULT or SKIP_PERMISSIONS`, field), call)
-		}
+		a.validateAgentRunPermissionField(call, field, value, found)
 	case orchestratorcontract.FieldSchema:
-		if found && !isAgentRunSchemaValue(value) {
-			a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be an object value`, field), call)
-		}
+		a.validateAgentRunSchemaField(call, field, value, found)
 	default:
-		if found && !isAgentRunStringValue(value) {
-			a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be a string value`, field), call)
-		}
+		a.validateAgentRunStringField(call, field, value, found)
+	}
+}
+
+func (a *sourceAnalyzer) validateAgentRunBooleanField(call *js.CallExpr, field string, value js.IExpr, found bool) {
+	if found && !isAgentRunBooleanValue(value) {
+		a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be a boolean value`, field), call)
+	}
+}
+
+func (a *sourceAnalyzer) validateAgentRunPermissionField(call *js.CallExpr, field string, value js.IExpr, found bool) {
+	if !found {
+		return
+	}
+	if isLiteralExpr(value) && !isStringLiteral(value) {
+		a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be a string value`, field), call)
+		return
+	}
+	if !isAgentRunPermissionValue(value) {
+		a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be DEFAULT or SKIP_PERMISSIONS`, field), call)
+	}
+}
+
+func (a *sourceAnalyzer) validateAgentRunSchemaField(call *js.CallExpr, field string, value js.IExpr, found bool) {
+	if found && !isAgentRunSchemaValue(value) {
+		a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be an object value`, field), call)
+	}
+}
+
+func (a *sourceAnalyzer) validateAgentRunStringField(call *js.CallExpr, field string, value js.IExpr, found bool) {
+	if found && !isAgentRunStringValue(value) {
+		a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be a string value`, field), call)
 	}
 }
 

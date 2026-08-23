@@ -267,11 +267,22 @@ func TestPackagedDeepResearchRequiredInputCompletes(t *testing.T) {
 		"packaged-deep-research-required-input",
 		args,
 	)
+	assertRequiredDeepResearchOutcome(t, server.URL(), response, runner, topic)
+}
+
+func assertRequiredDeepResearchOutcome(
+	t *testing.T,
+	serverURL string,
+	response factoryapi.FactorySessionSyncExecutionResponse,
+	runner *testutil.ProviderCommandRunner,
+	topic string,
+) {
+	t.Helper()
 	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		resultJSON, _ := json.Marshal(response.Result)
-		session := support.GetJSON[map[string]any](t, server.URL()+"/factory-sessions/"+response.SessionId)
+		session := support.GetJSON[map[string]any](t, serverURL+"/factory-sessions/"+response.SessionId)
 		sessionJSON, _ := json.Marshal(session)
-		dispatches := listFactorySessionDispatches(t, server.URL(), response.SessionId)
+		dispatches := listFactorySessionDispatches(t, serverURL, response.SessionId)
 		dispatchJSON, _ := json.Marshal(dispatches)
 		t.Fatalf("session status = %q, want SUCCEEDED; result = %s; session = %s; dispatches = %s; response = %#v", response.Status, resultJSON, sessionJSON, dispatchJSON, response)
 	}
@@ -281,12 +292,16 @@ func TestPackagedDeepResearchRequiredInputCompletes(t *testing.T) {
 	if strings.TrimSpace(response.SessionId) == "" {
 		t.Fatal("sessionId is empty, want durable JavaScript session ID")
 	}
-
 	primary, err := json.Marshal((*response.Result.PrimaryResult)[0])
 	if err != nil {
 		t.Fatalf("marshal primary result: %v", err)
 	}
-	primaryText := string(primary)
+	assertRequiredPrimaryResult(t, string(primary), topic)
+	assertRequiredDeepResearchDispatches(t, serverURL, response.SessionId, runner)
+}
+
+func assertRequiredPrimaryResult(t *testing.T, primaryText, topic string) {
+	t.Helper()
 	for _, want := range []string{
 		topic,
 		`"researchDepth":2`,
@@ -299,13 +314,13 @@ func TestPackagedDeepResearchRequiredInputCompletes(t *testing.T) {
 			t.Fatalf("primary result = %s, want substring %q", primaryText, want)
 		}
 	}
+}
 
-	dispatches := listFactorySessionDispatches(t, server.URL(), response.SessionId)
+func assertRequiredDeepResearchDispatches(t *testing.T, serverURL, sessionID string, runner *testutil.ProviderCommandRunner) {
+	t.Helper()
+	dispatches := listFactorySessionDispatches(t, serverURL, sessionID)
 	if len(dispatches.Dispatches) != 3 {
-		t.Fatalf(
-			"dispatch count = %d, want two bounded specialist dispatches and one lead synthesis",
-			len(dispatches.Dispatches),
-		)
+		t.Fatalf("dispatch count = %d, want two bounded specialist dispatches and one lead synthesis", len(dispatches.Dispatches))
 	}
 	labels := make(map[string]bool)
 	for _, dispatch := range dispatches.Dispatches {
@@ -316,11 +331,7 @@ func TestPackagedDeepResearchRequiredInputCompletes(t *testing.T) {
 			t.Fatalf("dispatch status = %q, want COMPLETED", dispatch.Status)
 		}
 	}
-	for _, want := range []string{
-		"research-specialist-technical",
-		"research-specialist-tradeoffs",
-		"lead-research-synthesis",
-	} {
+	for _, want := range []string{"research-specialist-technical", "research-specialist-tradeoffs", "lead-research-synthesis"} {
 		if !labels[want] {
 			t.Fatalf("dispatch labels = %#v, want %q", labels, want)
 		}
@@ -380,6 +391,17 @@ func TestPackagedDeepResearchOptionalInputsReachWorkers(t *testing.T) {
 		"packaged-deep-research-optional-inputs",
 		args,
 	)
+	assertOptionalDeepResearchOutcome(t, server.URL(), response, runner, topic)
+}
+
+func assertOptionalDeepResearchOutcome(
+	t *testing.T,
+	serverURL string,
+	response factoryapi.FactorySessionSyncExecutionResponse,
+	runner *testutil.ProviderCommandRunner,
+	topic string,
+) {
+	t.Helper()
 	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED; response = %#v", response.Status, response)
 	}
@@ -389,12 +411,16 @@ func TestPackagedDeepResearchOptionalInputsReachWorkers(t *testing.T) {
 	if strings.TrimSpace(response.SessionId) == "" {
 		t.Fatal("sessionId is empty, want durable JavaScript session ID")
 	}
-
 	primary, err := json.Marshal((*response.Result.PrimaryResult)[0])
 	if err != nil {
 		t.Fatalf("marshal primary result: %v", err)
 	}
-	primaryText := string(primary)
+	assertOptionalPrimaryResult(t, string(primary), topic)
+	assertOptionalDeepResearchDispatches(t, serverURL, response.SessionId, runner)
+}
+
+func assertOptionalPrimaryResult(t *testing.T, primaryText, topic string) {
+	t.Helper()
 	for _, want := range []string{
 		topic,
 		`"researchDepth":3`,
@@ -408,13 +434,13 @@ func TestPackagedDeepResearchOptionalInputsReachWorkers(t *testing.T) {
 			t.Fatalf("primary result = %s, want substring %q", primaryText, want)
 		}
 	}
+}
 
-	dispatches := listFactorySessionDispatches(t, server.URL(), response.SessionId)
+func assertOptionalDeepResearchDispatches(t *testing.T, serverURL, sessionID string, runner *testutil.ProviderCommandRunner) {
+	t.Helper()
+	dispatches := listFactorySessionDispatches(t, serverURL, sessionID)
 	if len(dispatches.Dispatches) != 2 {
-		t.Fatalf(
-			"dispatch count = %d, want one bounded specialist dispatch and one lead synthesis",
-			len(dispatches.Dispatches),
-		)
+		t.Fatalf("dispatch count = %d, want one bounded specialist dispatch and one lead synthesis", len(dispatches.Dispatches))
 	}
 	labels := make(map[string]bool)
 	for _, dispatch := range dispatches.Dispatches {
@@ -427,19 +453,11 @@ func TestPackagedDeepResearchOptionalInputsReachWorkers(t *testing.T) {
 		if dispatch.ModelProvider == nil || !strings.EqualFold(*dispatch.ModelProvider, "CODEX") ||
 			dispatch.Model == nil || *dispatch.Model != "gpt-5" ||
 			dispatch.ReasoningEffort == nil || *dispatch.ReasoningEffort != "medium" {
-			t.Fatalf(
-				"dispatch execution selection = provider=%#v model=%#v reasoning=%#v, want approved overrides",
-				dispatch.ModelProvider,
-				dispatch.Model,
-				dispatch.ReasoningEffort,
-			)
+			t.Fatalf("dispatch execution selection = provider=%#v model=%#v reasoning=%#v, want approved overrides", dispatch.ModelProvider, dispatch.Model, dispatch.ReasoningEffort)
 		}
 	}
 	if !labels["research-specialist-technical"] || !labels["lead-research-synthesis"] {
-		t.Fatalf(
-			"dispatch labels = %#v, want technical specialist and lead synthesis",
-			labels,
-		)
+		t.Fatalf("dispatch labels = %#v, want technical specialist and lead synthesis", labels)
 	}
 	if labels["research-specialist-tradeoffs"] {
 		t.Fatalf("dispatch labels = %#v, want tradeoffs specialist omitted when maxSubagents is 1", labels)

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -18,8 +19,207 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/testing/eventsstub"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestChildWorkerExecutor_PassesDetachedCorrelationAndOneProgressPublisher(t *testing.T) {
+	invoker := &recordingWorkerExecution{result: workers.ExecuteResult{
+		Outcome: workers.ExecutionOutcomeAccepted,
+		Output: workers.ProposedOutput{Primary: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
+			Text: `{"text":"done"}`,
+		}}},
+	}}
+	var progress []workers.ProgressFragment
+	executor := newTestChildWorkerExecutor(invoker, newChildRecordSink(), nil)
+	executor.runtimeID = "runtime-child"
+	executor.generationID = "generation-child"
+	executor.publish = func(dispatchID string, fragment workers.ProgressFragment) {
+		if fragment.DispatchID != dispatchID {
+			t.Fatalf("progress dispatch = %q, want %q", fragment.DispatchID, dispatchID)
+		}
+		progress = append(progress, fragment)
+	}
+	invoker.onExecute = func(request workers.ExecuteRequest) {
+		if request.Input.ProgressPublisher == nil {
+			t.Fatal("Workers Execute request has no request-scoped progress publisher")
+		}
+		request.Input.ProgressPublisher(workers.ProgressFragment{
+			Kind:    workers.CompletedFragmentKind,
+			Payload: "terminal",
+		})
+	}
+
+	result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{
+		Prompt:        "summarize",
+		Preset:        "child-worker",
+		ModelProvider: "codex",
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	assertSchemaLessChildResult(t, result)
+	assertDetachedChildRequest(t, invoker.request)
+	if len(progress) != 1 || progress[0].Kind != workers.CompletedFragmentKind {
+		t.Fatalf("progress observations = %#v, want one terminal fragment", progress)
+	}
+}
+
+func assertSchemaLessChildResult(t *testing.T, result factory.JavaScriptChildExecutionResult) {
+	t.Helper()
+	if result.SchemaValidated {
+		t.Fatal("schema-less child schemaValidated = true, want false")
+	}
+	if result.Output["text"] != `{"text":"done"}` {
+		t.Fatalf("schema-less child output = %#v, want prose-compatible text", result.Output)
+	}
+	if _, exists := result.Output["schemaValidated"]; exists {
+		t.Fatalf("schema-less child output = %#v, want metadata outside customer output", result.Output)
+	}
+}
+
+func assertDetachedChildRequest(t *testing.T, request workers.ExecuteRequest) {
+	t.Helper()
+	assertChildCorrelation(t, request)
+	if request.Input.Dispatch.DispatchID != request.Correlation.DispatchID {
+		t.Fatalf("child dispatch input = %#v, want correlation dispatch ID", request.Input.Dispatch)
+	}
+	if request.Target.WorkstationName != workers.ProviderInvocationRoute || request.Target.WorkerName != "child-worker" {
+		t.Fatalf("child detached routing = %#v, want provider-invocation route and preset", request.Target)
+	}
+}
+
+func assertChildCorrelation(t *testing.T, request workers.ExecuteRequest) {
+	t.Helper()
+	correlation := request.Correlation
+	if correlation.FactorySessionID != "dur-sess-1" || correlation.RuntimeID != "runtime-child" {
+		t.Fatalf("child correlation session/runtime = %#v, want session/runtime identity", correlation)
+	}
+	if correlation.GenerationID != "generation-child" || correlation.DispatchID != "dur-sess-1/dispatch-1" {
+		t.Fatalf("child correlation generation/dispatch = %#v, want generation/dispatch identity", correlation)
+	}
+}
+
+func TestDirectChildExecutor_StructuredMismatchRetriesWithinPolicy(t *testing.T) {
+	const diagnostic = "structured output schema violation: instance /answer; expected string"
+	attempts := 0
+	var requests []workers.ExecuteRequest
+	involver := &recordingWorkerExecution{
+		result: workers.ExecuteResult{
+			Outcome: workers.ExecutionOutcomeFailed,
+			Failure: &workers.ExecutionFailure{
+				Type:    workers.WorkFailureTypeStructuredOutputSchemaViolation,
+				Family:  workers.WorkFailureFamilyTerminal,
+				Message: diagnostic,
+				Detail: &workers.FailureDetail{
+					Reason:  workers.WorkFailureTypeStructuredOutputSchemaViolation,
+					Message: diagnostic,
+				},
+			},
+		},
+	}
+	involver.onExecute = func(request workers.ExecuteRequest) {
+		attempts++
+		requests = append(requests, request)
+		if attempts == 2 {
+			involver.result = workers.ExecuteResult{
+				Outcome: workers.ExecutionOutcomeAccepted,
+				StructuredResult: map[string]any{
+					"answer": "validated answer",
+				},
+				StructuredResultPresent: true,
+			}
+		}
+	}
+	sink := newChildRecordSink()
+	service := &JavaScriptRuntimeService{
+		projectRoot: "/project",
+		childValues: childTestValues{},
+	}
+	service.SetDirectWorkerExecution(involver)
+	policy := factory.DefaultJavaScriptPolicy()
+	policy.MaxRetries = 1
+	hooks := service.childExecutorHooks(ChildExecutorModeLive, "direct-structured-retry")
+	executor := hooks.NewChildExecutor("direct-structured-retry", sink, policy)
+
+	result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{
+		Prompt:        "return a structured answer",
+		ModelProvider: "codex",
+		OutputSchema:  map[string]any{"type": "object"},
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if attempts != 2 || len(requests) != 2 {
+		t.Fatalf("attempts = %d, requests = %d, want two", attempts, len(requests))
+	}
+	if requests[0].Attempt.Number != 1 || requests[1].Attempt.Number != 2 || requests[0].Correlation.AttemptID != "dispatch-1/attempt/1" || requests[1].Correlation.AttemptID != "dispatch-1/attempt/2" {
+		t.Fatalf("attempt requests = %#v, want numbered detached attempts", requests)
+	}
+	if result.Status != factory.JavaScriptChildDispatchStatusCompleted || !result.SchemaValidated {
+		t.Fatalf("child result = %#v, want completed schema-validated result", result)
+	}
+	if result.Output["answer"] != "validated answer" {
+		t.Fatalf("child answer = %#v, want validated native output", result.Output["answer"])
+	}
+	terminal := sink.terminalChildDispatch(t)
+	if terminal.Attempt != 2 || !terminal.SchemaValidated {
+		t.Fatalf("terminal record = %#v, want final attempt 2 and validated metadata", terminal)
+	}
+	if len(sink.statuses) != 2 {
+		t.Fatalf("dispatch statuses = %v, want one queued and one running record", sink.statuses)
+	}
+}
+
+func TestDirectChildExecutor_ExhaustedStructuredMismatchFailsWithoutOutput(t *testing.T) {
+	const diagnostic = "structured output schema violation: instance /answer; expected string"
+	attempts := 0
+	involver := &recordingWorkerExecution{result: workers.ExecuteResult{
+		Outcome: workers.ExecutionOutcomeFailed,
+		Failure: &workers.ExecutionFailure{
+			Type:    workers.WorkFailureTypeStructuredOutputSchemaViolation,
+			Family:  workers.WorkFailureFamilyTerminal,
+			Message: diagnostic,
+			Detail: &workers.FailureDetail{
+				Reason:  workers.WorkFailureTypeStructuredOutputSchemaViolation,
+				Message: diagnostic,
+			},
+		},
+	}}
+	involver.onExecute = func(_ workers.ExecuteRequest) { attempts++ }
+	sink := newChildRecordSink()
+	executor := newDirectChildExecutor(
+		"direct-structured-exhausted",
+		involver,
+		sink,
+		childTestValues{},
+		"/project",
+		2,
+	)
+
+	result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{
+		Prompt:        "do not expose invalid output",
+		ModelProvider: "codex",
+		OutputSchema:  map[string]any{"type": "object"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "/answer") {
+		t.Fatalf("Execute error = %v, want the safe schema path diagnostic", err)
+	}
+	if attempts != 3 {
+		t.Fatalf("attempts = %d, want initial attempt plus two retries", attempts)
+	}
+	if result.Status != factory.JavaScriptChildDispatchStatusFailed || len(result.Output) != 0 || result.SchemaValidated {
+		t.Fatalf("child result = %#v, want failed with no output or validation metadata", result)
+	}
+	if strings.Contains(err.Error(), "do not expose invalid output") {
+		t.Fatalf("Execute error = %q, must not expose the prompt", err)
+	}
+	terminal := sink.terminalChildDispatch(t)
+	if terminal.Attempt != 3 || terminal.Output != nil || terminal.SchemaValidated {
+		t.Fatalf("terminal record = %#v, want final failed attempt without output", terminal)
+	}
+}
 
 func TestValidateCheckpointSummaryForResume_RejectsInvalidMetadata(t *testing.T) {
 	t.Parallel()
