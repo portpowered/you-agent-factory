@@ -1,11 +1,12 @@
 //go:build windows
 
-package process_test
+package recordingsprocess_test
 
 import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -20,7 +21,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -40,7 +40,7 @@ func TestWindowsRecordingFlushBeforeGracefulStopReturns(t *testing.T) {
 	defer cancelBuild()
 	binaryPath := buildYouBinary(t, buildCtx, harness.RepoRoot)
 	run := startWindowsRecordingRun(t, harness, binaryPath)
-	submitRecordingShutdownWork(t, run.target.server)
+	submitWindowsRecordingShutdownWork(t, binaryPath, run.target)
 	waitForRecordingWorkerReady(t, run.readyPath, run.target)
 
 	before, err := waitForStandaloneRecordingEvent(run.recordingPath, "DISPATCH_REQUEST", recordingShutdownObservationTimeout)
@@ -51,6 +51,7 @@ func TestWindowsRecordingFlushBeforeGracefulStopReturns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat Windows recording before graceful stop: %v", err)
 	}
+	beforeBytes := beforeInfo.Size()
 
 	stopArgs := []string{"--server", run.target.server, "server", "stop"}
 	stop := exec.Command(binaryPath, stopArgs...)
@@ -88,14 +89,19 @@ func TestWindowsRecordingFlushBeforeGracefulStopReturns(t *testing.T) {
 	if !afterInfo.ModTime().After(beforeInfo.ModTime()) {
 		t.Fatalf("Windows graceful-stop recording mtime = %s, want later than baseline %s", afterInfo.ModTime(), beforeInfo.ModTime())
 	}
+	if afterInfo.Size() <= beforeBytes {
+		t.Fatalf("Windows graceful-stop recording bytes = %d, want > baseline %d", afterInfo.Size(), beforeBytes)
+	}
 
 	t.Logf(
-		"Windows orderly recording durability stop_command=%q before_mtime=%s after_mtime=%s before_events=%d after_events=%d failure_events=%v stdout=%q stderr=%q",
+		"Windows orderly recording durability stop_command=%q before_mtime=%s after_mtime=%s before_events=%d after_events=%d before_bytes=%d after_bytes=%d failure_events=%v stdout=%q stderr=%q",
 		"you "+strings.Join(stopArgs, " "),
 		beforeInfo.ModTime().UTC().Format(time.RFC3339Nano),
 		afterInfo.ModTime().UTC().Format(time.RFC3339Nano),
 		len(before.Events),
 		len(after.Events),
+		beforeBytes,
+		afterInfo.Size(),
 		failed,
 		stopStdout.String(),
 		stopStderr.String(),
@@ -115,11 +121,15 @@ func TestWindowsRecordingTaskkillLeavesPartialValidSnapshot(t *testing.T) {
 	defer cancelBuild()
 	binaryPath := buildYouBinary(t, buildCtx, harness.RepoRoot)
 	run := startWindowsRecordingRun(t, harness, binaryPath)
-	submitRecordingShutdownWork(t, run.target.server)
+	submitWindowsRecordingShutdownWork(t, binaryPath, run.target)
 	waitForRecordingWorkerReady(t, run.readyPath, run.target)
 	before, err := waitForStandaloneRecordingEvent(run.recordingPath, "DISPATCH_REQUEST", recordingShutdownObservationTimeout)
 	if err != nil {
 		t.Fatalf("wait for durable Windows DISPATCH_REQUEST before taskkill: %v", err)
+	}
+	beforeInfo, err := os.Stat(run.recordingPath)
+	if err != nil {
+		t.Fatalf("stat Windows recording before taskkill: %v", err)
 	}
 	dispatchID := standaloneDispatchRequestID(before)
 	if dispatchID == "" {
@@ -151,6 +161,10 @@ func TestWindowsRecordingTaskkillLeavesPartialValidSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("standalone parse after taskkill: %v", err)
 	}
+	afterInfo, err := os.Stat(run.recordingPath)
+	if err != nil {
+		t.Fatalf("stat Windows recording after taskkill: %v", err)
+	}
 	if len(after.Events) == 0 {
 		t.Fatalf("standalone recording after taskkill has no events")
 	}
@@ -162,11 +176,15 @@ func TestWindowsRecordingTaskkillLeavesPartialValidSnapshot(t *testing.T) {
 	}
 
 	t.Logf(
-		"Windows taskkill recording fallback command=%q pid=%d baseline_events=%d after_events=%d dispatch_id=%q taskkill_output=%q tasklist_before=%q tasklist_after=%q",
+		"Windows taskkill recording fallback command=%q pid=%d baseline_mtime=%s after_mtime=%s baseline_events=%d after_events=%d baseline_bytes=%d after_bytes=%d dispatch_id=%q taskkill_output=%q tasklist_before=%q tasklist_after=%q",
 		"taskkill "+strings.Join(killArgs, " "),
 		pid,
+		beforeInfo.ModTime().UTC().Format(time.RFC3339Nano),
+		afterInfo.ModTime().UTC().Format(time.RFC3339Nano),
 		len(before.Events),
 		len(after.Events),
+		beforeInfo.Size(),
+		afterInfo.Size(),
 		dispatchID,
 		string(killOutput),
 		tasklistBefore,
@@ -254,28 +272,48 @@ while ($true) { Start-Sleep -Seconds 60 }
 	if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
 		t.Fatalf("write blocking Windows worker script: %v", err)
 	}
-	return support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
-		MockWorkers: []workers.MockWorkerConfig{{
-			RunType: workers.MockWorkerRunTypeScript,
-			ScriptConfig: &workers.MockWorkerScriptConfig{
-				Command: "powershell.exe",
-				Args: []string{
-					"-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-					"-File", scriptPath, "-ReadyPath", readyPath,
-				},
-			},
-		}},
-	})
+
+	// Functional-test construction exception: this test invokes a separately
+	// built `you.exe` to prove Windows process, pipe, signal, and taskkill
+	// behavior. ProviderCommandRunner is an edges.Edges dependency in the
+	// parent test process and cannot cross that executable boundary, so this
+	// narrowly scoped serialized mock-worker fixture is the child-process seam.
+	// The reusable in-process scenario above uses ProviderCommandRunner instead.
+	payload := fmt.Sprintf(`{"mockWorkers":[{"runType":"script","scriptConfig":{"command":"powershell.exe","args":["-NoLogo","-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-File",%q,"-ReadyPath",%q]}}]}`, scriptPath, readyPath)
+	mockWorkersPath := filepath.Join(t.TempDir(), "blocking-mock-workers.json")
+	if err := os.WriteFile(mockWorkersPath, []byte(payload), 0o600); err != nil {
+		t.Fatalf("write blocking Windows mock-workers fixture: %v", err)
+	}
+	return mockWorkersPath
 }
 
-func submitRecordingShutdownWork(t testing.TB, baseURL string) {
+func submitWindowsRecordingShutdownWork(t testing.TB, binaryPath string, target *windowsGracefulStopTarget) {
 	t.Helper()
 	name := "windows-recording-shutdown-work"
-	support.SubmitDefaultSessionWork(t, baseURL, factoryapi.SubmitWorkRequest{
-		Name:         &name,
-		WorkTypeName: "task",
-		Payload:      map[string]string{"title": "hold the Windows dispatch"},
-	})
+	payloadPath := filepath.Join(t.TempDir(), "recording-shutdown-work.json")
+	if err := os.WriteFile(payloadPath, []byte(`{"title":"hold the Windows dispatch"}`), 0o600); err != nil {
+		t.Fatalf("write Windows recording Work payload: %v", err)
+	}
+	args := []string{
+		"--server", target.server, "--json", "submit",
+		"--name", name, "--work-type-name", "task", "--payload", payloadPath,
+	}
+	command := exec.Command(binaryPath, args...)
+	command.Dir = target.command.Dir
+	command.Env = target.command.Env
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Windows CLI submit %q failed: %v; output=%q", strings.Join(args, " "), err, string(output))
+	}
+	var response struct {
+		WorkID *string `json:"workId"`
+	}
+	if err := json.Unmarshal(output, &response); err != nil {
+		t.Fatalf("decode Windows CLI submit response: %v; output=%q", err, string(output))
+	}
+	if response.WorkID == nil || strings.TrimSpace(*response.WorkID) == "" {
+		t.Fatalf("Windows CLI submit response missing workId: %q", string(output))
+	}
 }
 
 func waitForRecordingWorkerReady(t testing.TB, path string, target *windowsGracefulStopTarget) {
@@ -326,4 +364,12 @@ func standaloneHasDispatchResponse(recording standaloneRecording, dispatchID str
 		}
 	}
 	return false
+}
+
+func standaloneRecordingEventTypes(recording standaloneRecording) []string {
+	types := make([]string, 0, len(recording.Events))
+	for _, event := range recording.Events {
+		types = append(types, event.Type)
+	}
+	return types
 }

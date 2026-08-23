@@ -1218,31 +1218,6 @@
       "target": "operator_settings"
     },
     {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/recordings/root_composition/build_process_inert_test.go",
-      "target": "recordings"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/recordings/root_composition/event_artifact_projection_activation_test.go",
-      "target": "recordings"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/recordings/root_composition/portable_replay_execution_test.go",
-      "target": "recordings"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/recordings/root_composition/portable_transport_activation_test.go",
-      "target": "recordings"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/recordings/root_composition/record_replay_lifecycle_activation_test.go",
-      "target": "recordings"
-    },
-    {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/automations/internal/services/hosted_sources/service.go",
       "target": "NewCheckpointStore"

@@ -67,6 +67,7 @@ var allowedFunctionalDomains = map[string]struct{}{
 	"providers":         {},
 	"provider_sessions": {},
 	"events":            {},
+	"recordings":        {},
 	"models":            {},
 	"guards":            {},
 	"resources":         {},

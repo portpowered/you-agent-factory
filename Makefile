@@ -110,7 +110,7 @@ CONFIG_CONTRACT_SMOKE_TIMEOUT ?= 120s
 JAVASCRIPT_RUNTIME_REGRESSION_TESTS ?= ^(TestCallBehavior_WorkflowFinalInventoryMatchesExecution|TestCallBehavior_AgentRunInventoryMatchesExecution|TestRun_ProgressPrimitives_EmitsOrderedRuntimeRecords|TestRun_PolicyDeniedChildOperations_ReturnStableDiagnostics|TestCallBehavior_WorkflowResumeStateInventoryMatchesExecution)$$
 RESPONSE_STREAM_STRESS_SMOKE_TEST := TestSessionResponseEventStore_Backpressure
 RESPONSE_STREAM_STRESS_SMOKE_TIMEOUT ?= 120s
-ROOT_PROCESS_ACCEPTANCE_PACKAGES := ./tests/functional/acceptance ./tests/functional/transport/cli/process
+ROOT_PROCESS_ACCEPTANCE_PACKAGES := ./tests/functional/acceptance ./tests/functional/transport/cli/process ./tests/functional/recordings/process
 ROOT_PROCESS_ACCEPTANCE_TIMEOUT ?= 300s
 
 ifeq ($(OS),Windows_NT)

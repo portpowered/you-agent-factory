@@ -62,6 +62,7 @@ type FunctionalAPIServerConfig struct {
 // FunctionalAPIServer owns one daemon invocation on a reusable root Process.
 type FunctionalAPIServer struct {
 	process         *ProcessCommand
+	processRoot     Process
 	api             *ProcessAPIServer
 	url             string
 	closeProcess    func(context.Context) error
@@ -120,6 +121,7 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	}
 	server := &FunctionalAPIServer{
 		api:             api,
+		processRoot:     process,
 		closeProcess:    closeProcess,
 		recordingReader: recordingReader,
 	}
@@ -261,6 +263,18 @@ func (fs *FunctionalAPIServer) Stop(t *testing.T) {
 	if fs != nil && fs.process != nil {
 		fs.process.Stop(t)
 	}
+}
+
+// Execute runs a public CLI operation through the same root-built process
+// that owns the live server. This keeps ordinary customer flows on the CLI
+// boundary without constructing a second application graph or reaching for
+// the server's HTTP implementation from a domain-owned functional test.
+func (fs *FunctionalAPIServer) Execute(t testing.TB, input root.Input) error {
+	t.Helper()
+	if fs == nil || fs.processRoot == nil {
+		return fmt.Errorf("functional server process is unavailable")
+	}
+	return fs.processRoot.Execute(input)
 }
 
 // GetFactoryEvents reads the canonical public session event stream's committed
