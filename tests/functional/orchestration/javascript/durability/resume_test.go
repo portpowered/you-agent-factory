@@ -357,37 +357,6 @@ func assertAcceptedJavaScriptResume(
 	}
 }
 
-func resumeJavaScriptSessionExpectingInvalidState(
-	t *testing.T,
-	baseURL string,
-	sessionID string,
-) factoryapi.FactorySessionLifecycleControlResponse {
-	t.Helper()
-
-	payload, err := json.Marshal(factoryapi.FactorySessionLifecycleControlRequest{})
-	if err != nil {
-		t.Fatalf("marshal resume request: %v", err)
-	}
-	endpoint := baseURL + "/factory-sessions/" + sessionID + "/resume"
-	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("POST %s: %v", endpoint, err)
-	}
-	defer response.Body.Close()
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatalf("read POST %s response: %v", endpoint, err)
-	}
-	if response.StatusCode != http.StatusConflict {
-		t.Fatalf("POST %s status = %d, want 409\n%s", endpoint, response.StatusCode, body)
-	}
-	var decoded factoryapi.FactorySessionLifecycleControlResponse
-	if err := json.Unmarshal(body, &decoded); err != nil {
-		t.Fatalf("decode POST %s response: %v\n%s", endpoint, err, body)
-	}
-	return decoded
-}
-
 func javaScriptDurableSessionPersistencePath(projectRoot, sessionID string) string {
 	return filepath.Join(projectRoot, ".you-agent-factory", "durable-sessions", sessionID+".json")
 }

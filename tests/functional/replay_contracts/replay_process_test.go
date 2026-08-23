@@ -1,3 +1,5 @@
+//go:build functionallong
+
 package replay_contracts
 
 import (

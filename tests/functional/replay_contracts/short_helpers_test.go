@@ -1,44 +1,8 @@
 package replay_contracts
 
-import (
-	"os"
-	"strings"
-	"testing"
-
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-)
-
-func assertReplayArtifactDoesNotContainRawValue(t *testing.T, artifactPath, rawValue string) {
-	t.Helper()
-
-	data, err := os.ReadFile(artifactPath)
-	if err != nil {
-		t.Fatalf("read replay artifact %s: %v", artifactPath, err)
-	}
-	if strings.Contains(string(data), rawValue) {
-		t.Fatalf("replay artifact %s leaked raw environment value %q", artifactPath, rawValue)
-	}
-}
-
-func replayEventCount(artifact *interfaces.ReplayArtifact, eventType factoryapi.FactoryEventType) int {
-	count := 0
-	for _, event := range artifact.Events {
-		if string(event.Type) == string(eventType) {
-			count++
-		}
-	}
-	return count
-}
+import factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 func factoryWorksValue(value *[]factoryapi.Work) []factoryapi.Work {
-	if value == nil {
-		return nil
-	}
-	return *value
-}
-
-func factoryRelationsValue(value *[]factoryapi.Relation) []factoryapi.Relation {
 	if value == nil {
 		return nil
 	}
@@ -50,10 +14,6 @@ func stringPointerValue[T ~string](value *T) string {
 		return ""
 	}
 	return string(*value)
-}
-
-func strPtr(value string) *string {
-	return &value
 }
 
 func stringSlicePointerValue(value *[]string) []string {
