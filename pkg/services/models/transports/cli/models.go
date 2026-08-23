@@ -880,9 +880,17 @@ func modelsRequestError(statusCode int, body []byte, response ...*http.Response)
 	if json.Unmarshal(body, &errResp) == nil && errResp.Message != "" {
 		switch errResp.Code {
 		case factoryapi.ErrorResponseCodeMODELCACHENOTFOUND:
-			return fmt.Errorf("%w: %s", ErrModelCacheNotFound, errResp.Message)
+			displayMessage := fmt.Sprintf("%s: %s", ErrModelCacheNotFound, errResp.Message)
+			if httpResponse != nil {
+				return clihttp.NewAPIErrorFromResponse(httpResponse, errResp, displayMessage, ErrModelCacheNotFound)
+			}
+			return clihttp.NewAPIError(statusCode, errResp, displayMessage, ErrModelCacheNotFound)
 		case factoryapi.ErrorResponseCodeMODELCACHEINUSE:
-			return fmt.Errorf("%w: %s", ErrModelCacheInUse, errResp.Message)
+			displayMessage := fmt.Sprintf("%s: %s", ErrModelCacheInUse, errResp.Message)
+			if httpResponse != nil {
+				return clihttp.NewAPIErrorFromResponse(httpResponse, errResp, displayMessage, ErrModelCacheInUse)
+			}
+			return clihttp.NewAPIError(statusCode, errResp, displayMessage, ErrModelCacheInUse)
 		}
 		if statusCode == http.StatusNotFound && errResp.Code == factoryapi.ErrorResponseCodeNOTFOUND {
 			if httpResponse != nil {
