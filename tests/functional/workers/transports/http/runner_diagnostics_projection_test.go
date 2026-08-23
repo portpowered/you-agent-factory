@@ -7,9 +7,12 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -78,6 +81,118 @@ func TestRunnerSelectionAndSafeDiagnosticsThroughHTTPProjection(t *testing.T) {
 	}
 
 	assertSafeEventDiagnostics(t, events)
+}
+
+// TestRunnerDiagnosticsHTTPProjectionIncludesFailureClassification exercises
+// the same generated workstation projection for a failed provider turn. The
+// public response preserves the bounded agent-run classification while still
+// omitting provider command output and other sensitive execution inputs.
+func TestRunnerDiagnosticsHTTPProjectionIncludesFailureClassification(t *testing.T) {
+	dir := support.ScaffoldFactory(t, runnerDiagnosticsCodexFactoryConfig())
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"request":"inspect failed runner diagnostics"}`))
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		ExitCode: 1,
+		Stderr:   []byte("temporary provider failure credential=DIAGNOSTIC_CREDENTIAL_SENTINEL_91f3"),
+	})
+
+	session, _, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		60*time.Second,
+	)
+	if session.Runtime.Progress.Categories.Terminal != 0 || session.Runtime.Progress.Categories.Failed != 1 {
+		t.Fatalf(
+			"session progress = %+v, want zero terminal and one failed Work item",
+			session.Runtime.Progress.Categories,
+		)
+	}
+
+	projection := generatedWorkstationProjectionFromHTTPEvents(t, events)
+	if projection.WorkstationRequestsByDispatchId == nil || len(*projection.WorkstationRequestsByDispatchId) != 1 {
+		t.Fatalf("workstation projection = %#v, want one dispatch keyed view", projection)
+	}
+	for dispatchID, view := range *projection.WorkstationRequestsByDispatchId {
+		if view.Response == nil || view.Response.AgentRunInspection == nil {
+			t.Fatalf("workstation projection[%q] = %#v, want agent-run inspection", dispatchID, view)
+		}
+		inspection := view.Response.AgentRunInspection
+		if inspection.FailureClass == nil || *inspection.FailureClass == "" {
+			t.Fatalf("agent-run failure class = %#v, want bounded provider classification", inspection.FailureClass)
+		}
+		if inspection.ToolPolicy == nil || *inspection.ToolPolicy != "ENABLED" {
+			t.Fatalf("agent-run tool policy = %#v, want ENABLED", inspection.ToolPolicy)
+		}
+		encoded, err := json.Marshal(view.Response)
+		if err != nil {
+			t.Fatalf("marshal generated workstation response: %v", err)
+		}
+		assertSafeDiagnosticPayload(t, string(encoded))
+	}
+}
+
+func runnerDiagnosticsCodexFactoryConfig() map[string]any {
+	config := runnerDiagnosticsFactoryConfig()
+	config["runner"] = "codex"
+	config["workers"].([]map[string]any)[0]["executorProvider"] = "codex"
+	config["workstations"].([]any)[0].(map[string]any)["runner"] = "codex"
+	return config
+}
+
+// TestGeneratedRunnerProjectionPreservesOptionalAgentRunCollections exercises
+// the public Recordings HTTP adapter with the optional agent-run fields that an
+// operator uses when a provider reports tool lifecycle facts. The adapter is
+// the same generated projection boundary used by the HTTP read scenario above;
+// this keeps collection and empty-value behavior observable without importing
+// the representation mapper directly.
+func TestGeneratedRunnerProjectionPreservesOptionalAgentRunCollections(t *testing.T) {
+	toolName, phase, detail := "read_file", "success", "bytes=12"
+	projection := recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice{
+		WorkstationRequestsByDispatchId: &map[string]recordings.WorkstationFactoryWorldWorkstationRequestView{
+			"dispatch-with-tools": {
+				Response: &recordings.WorkstationFactoryWorldWorkstationRequestResponseView{
+					AgentRunInspection: &workerexecution.SafeAgentRunDiagnostic{
+						ExecutionBehavior: workerexecution.AgentRunExecutionBehavior,
+						FailureClass:      workerexecution.AgentRunFailureClassProvider,
+						RecoveryAction:    "retry the agent run after the provider recovers",
+						ToolPolicy:        "ENABLED",
+						ToolCallCount:     1,
+						ToolDiagnostics: []workerexecution.AgentRunToolDiagnostic{{
+							ToolName: toolName,
+							Phase:    phase,
+							Detail:   detail,
+						}},
+					},
+				},
+			},
+			"dispatch-without-agent-run": {
+				Response: &recordings.WorkstationFactoryWorldWorkstationRequestResponseView{},
+			},
+		},
+	}
+
+	generated := recordingshttp.Generated(projection)
+	if generated.WorkstationRequestsByDispatchId == nil {
+		t.Fatal("generated workstation projection is nil")
+	}
+	withTools := (*generated.WorkstationRequestsByDispatchId)["dispatch-with-tools"]
+	if withTools.Response == nil || withTools.Response.AgentRunInspection == nil {
+		t.Fatalf("generated tool projection = %#v, want agent-run inspection", withTools.Response)
+	}
+	inspection := withTools.Response.AgentRunInspection
+	if inspection.ToolCallCount == nil || *inspection.ToolCallCount != 1 ||
+		inspection.ToolDiagnostics == nil || len(*inspection.ToolDiagnostics) != 1 {
+		t.Fatalf("generated agent-run collections = %#v, want one tool fact", inspection)
+	}
+	entry := (*inspection.ToolDiagnostics)[0]
+	if entry.ToolName == nil || *entry.ToolName != toolName || entry.Phase == nil || *entry.Phase != phase ||
+		entry.Detail == nil || *entry.Detail != detail {
+		t.Fatalf("generated tool diagnostic = %#v, want bounded lifecycle fields", entry)
+	}
+	withoutAgentRun := (*generated.WorkstationRequestsByDispatchId)["dispatch-without-agent-run"]
+	if withoutAgentRun.Response == nil || withoutAgentRun.Response.AgentRunInspection != nil {
+		t.Fatalf("generated empty agent-run projection = %#v, want omitted inspection", withoutAgentRun.Response)
+	}
 }
 
 func generatedWorkstationProjectionFromHTTPEvents(

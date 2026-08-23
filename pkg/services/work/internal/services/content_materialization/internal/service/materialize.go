@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/work/internal/contenturl"
 	contentmaterialization "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization"
 )
 
@@ -108,7 +107,7 @@ func (s *Service) MaterializeContentURL(ctx context.Context, rawURL string) (str
 // failures remain Work-owned and blocking.
 func (s *Service) ValidateContentURLSafety(ctx context.Context, rawURL string) error {
 	trimmed := strings.TrimSpace(rawURL)
-	if err := contenturl.Validate(trimmed); err != nil {
+	if err := contentmaterialization.ValidateContentURL(trimmed); err != nil {
 		return err
 	}
 	parsed, err := url.Parse(trimmed)
@@ -165,7 +164,7 @@ func (o *Options) allowPrivateURLs() bool {
 // For http(s) and data URLs a bounded temp file is created; callers must invoke cleanup when done.
 func MaterializeContentURL(ctx context.Context, rawURL string, opts *Options) (localPath string, cleanup CleanupFunc, err error) {
 	trimmed := strings.TrimSpace(rawURL)
-	if err := contenturl.Validate(trimmed); err != nil {
+	if err := contentmaterialization.ValidateContentURL(trimmed); err != nil {
 		return "", noopCleanup, fmt.Errorf("scheme not supported: %s", trimmed)
 	}
 

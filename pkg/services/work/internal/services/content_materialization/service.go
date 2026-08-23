@@ -4,13 +4,9 @@
 // this package is the parent-private nested owner for the materialization effect.
 package content_materialization
 
-import (
-	"context"
-
-	"github.com/portpowered/infinite-you/pkg/services/work"
-)
+import "context"
 
 // Service is the singular content_materialization subservice contract.
 type Service interface {
-	MaterializeContentURL(context.Context, string) (string, work.ContentCleanup, error)
+	MaterializeContentURL(context.Context, string) (string, func(), error)
 }

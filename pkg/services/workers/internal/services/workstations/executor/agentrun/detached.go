@@ -68,8 +68,14 @@ func ExecuteDetached(
 	} else {
 		finalContent = result.Content
 	}
+	metadata := toolDiagnosticsMetadata(request.ToolPolicy, recorder)
+	if err != nil {
+		for key, value := range agentRunFailureDiagnostics(err) {
+			metadata[key] = value
+		}
+	}
 	result.Diagnostics = mergeAgentRunDiagnostics(
-		agentRunDiagnostics(toolDiagnosticsMetadata(request.ToolPolicy, recorder)),
+		agentRunDiagnostics(metadata),
 		result.Diagnostics,
 	)
 	if err != nil {

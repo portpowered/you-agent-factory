@@ -15,6 +15,7 @@ import (
 	workerrecording "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution/recording"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
+	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 )
 
@@ -92,6 +93,13 @@ func (s *Service) prepareAttempt(
 	}
 	identity := resolveRunnerIdentity(request.Target)
 	request.Target.Tools.RequiredOptionalCapabilities = requiredOptionalCapabilities(*request, identity)
+	if status, ok := workerrunner.BuiltInRunnerStatus(request.Target.RunnerID); ok && !status.Available {
+		reason := strings.TrimSpace(status.UnavailableReason)
+		if reason == "" {
+			reason = "runner is unavailable"
+		}
+		return "", fmt.Errorf("%w: %s", workers.ErrInvalidExecuteRequest, reason)
+	}
 	if err := s.authorizeProviderTarget(ctx, request, identity); err != nil {
 		return "", err
 	}
