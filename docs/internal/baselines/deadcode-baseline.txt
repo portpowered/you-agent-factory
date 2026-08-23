@@ -89,10 +89,6 @@ pkg/services/factory_runtime/internal/services/orchestration/subsystems/noop_dis
 pkg/services/factory_runtime/internal/testkit/runtime.go: unreachable func: NewPetriMarking
 pkg/services/factory_runtime/resource_capacity.go: unreachable func: normalizeResourceCapacityRequest
 pkg/services/factory_runtime/transports/mcp/client.go: unreachable func: BindRuntime
-pkg/services/factory_sessions/transports/http/handler_test.go: unreachable func: factoryStatusRuntimeRole.Observe
-pkg/services/factory_sessions/transports/mcp/inspection.go: unreachable func: ListDispatches
-pkg/services/factory_sessions/transports/mcp/inventory_boundary.go: unreachable func: VerifyProjectedMCPBoundaryInventories
-pkg/services/factory_sessions/transports/mcp/registry_test.go: unreachable func: writeWorkflow
 pkg/services/factory_visualization/transports/cli/factory_event_support.go: unreachable func: formatColorHumanFactoryEvent
 pkg/services/factory_visualization/transports/cli/factory_event_support.go: unreachable func: formatHumanFactoryEvent
 pkg/services/factory_visualization/transports/cli/factory_event_support.go: unreachable func: formatHumanWorkerAssociated

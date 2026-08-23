@@ -517,8 +517,3 @@ type jsonRPCErrorInventory struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 }
-
-// VerifyProjectedMCPBoundaryInventories verifies the result-policy inventory.
-func VerifyProjectedMCPBoundaryInventories() error {
-	return VerifyProjectedResultPolicyInventory()
-}
