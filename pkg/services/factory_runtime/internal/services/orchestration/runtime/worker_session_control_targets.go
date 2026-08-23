@@ -22,13 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// BeginWorkerAttempt opens the Worker Session observation window around a
-// detached Execute request. Factory Runtime remains the admission and
-// execution owner; the returned callback only commits the durable Worker
-// Session terminal observation after the caller's Execute operation returns.
-// This optional capability is used by the direct JavaScript child route, whose
-// request is already fully resolved and therefore does not go through the
-// Runtime stateless attempt driver.
+// BeginWorkerAttempt prepares a direct-child Worker Session terminal callback.
 func (f *factoryImpl) BeginWorkerAttempt(
 	ctx context.Context,
 	executeRequest workers.ExecuteRequest,
@@ -55,10 +49,8 @@ func (f *factoryImpl) BeginWorkerAttempt(
 	if err != nil {
 		return nil, err
 	}
-	// The association makes the Chat Sessions response bridge subscribe to a
-	// Worker topic. Publish it only after preparation returned a terminal
-	// callback; failed preparation has no Worker lifecycle producer and must
-	// not leave an orphan live drain waiting for a record that cannot arrive.
+	// Publish the association only after setup returns a terminal callback;
+	// failed setup must not strand a response bridge on a Worker topic.
 	recordDispatchWorkerSessionAssociation(
 		f.eventHistory,
 		f.currentTick(),
