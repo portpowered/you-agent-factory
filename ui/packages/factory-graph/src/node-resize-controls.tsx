@@ -64,6 +64,7 @@ export function FactoryGraphNodeResizeControls({
   if (!resizePosition) {
     return null;
   }
+  const resizeDirection = resizeControlDirection(allowedAxes);
 
   return (
     <NodeResizeControl
@@ -76,7 +77,8 @@ export function FactoryGraphNodeResizeControls({
       onResize={handleResize}
       onResizeEnd={handleResizeEnd}
       position={resizePosition}
-      style={RESIZE_GRIP_STYLE_BY_POSITION[resizePosition]}
+      resizeDirection={resizeDirection}
+      style={RESIZE_GRIP_STYLE}
       variant={ResizeControlVariant.Handle}
       shouldResize={(_event, dimensions) =>
         isFiniteBoundedDimensions(dimensions, bounds)
@@ -84,7 +86,7 @@ export function FactoryGraphNodeResizeControls({
     >
       <span
         aria-hidden="true"
-        className={RESIZE_GRIP_MARK_CLASS_NAME[resizePosition]}
+        className={RESIZE_GRIP_MARK_CLASS_NAME}
         data-factory-graph-node-resize-grip={resizePosition}
       />
     </NodeResizeControl>
@@ -112,16 +114,9 @@ const RESIZE_GRIP_CONTROL_CLASS_NAME = [
 const RESIZE_GRIP_MARK_BASE_CLASS_NAME =
   "pointer-events-none block h-full w-full border-af-text-subtle";
 
-const RESIZE_GRIP_MARK_CLASS_NAME: Record<ResizeGripPosition, string> = {
-  bottom: `${RESIZE_GRIP_MARK_BASE_CLASS_NAME} border-b-2`,
-  "bottom-right": `${RESIZE_GRIP_MARK_BASE_CLASS_NAME} rounded-br-sm border-b-2 border-r-2`,
-  right: `${RESIZE_GRIP_MARK_BASE_CLASS_NAME} border-r-2`,
-};
+const RESIZE_GRIP_MARK_CLASS_NAME = `${RESIZE_GRIP_MARK_BASE_CLASS_NAME} rounded-br-sm border-b-2 border-r-2`;
 
-type ResizeGripPosition = Extract<
-  ControlPosition,
-  "bottom" | "bottom-right" | "right"
->;
+type ResizeGripPosition = Extract<ControlPosition, "bottom-right">;
 
 /**
  * Small enough to read as a hint rather than a divider, and inset from the
@@ -147,30 +142,28 @@ function resizeGripStyle(
   };
 }
 
-const RESIZE_GRIP_STYLE_BY_POSITION: Record<ResizeGripPosition, CSSProperties> =
-  {
-    bottom: resizeGripStyle("50%", "100%", `-50% ${RESIZE_GRIP_INSET}`),
-    "bottom-right": resizeGripStyle(
-      "100%",
-      "100%",
-      `${RESIZE_GRIP_INSET} ${RESIZE_GRIP_INSET}`,
-    ),
-    right: resizeGripStyle("100%", "50%", `${RESIZE_GRIP_INSET} -50%`),
-  };
+const RESIZE_GRIP_STYLE: CSSProperties = resizeGripStyle(
+  "100%",
+  "100%",
+  `${RESIZE_GRIP_INSET} ${RESIZE_GRIP_INSET}`,
+);
 
 function resizeControlPosition(
   allowedAxes: FactoryGraphNodeResizeAxes,
 ): ResizeGripPosition | null {
-  if (allowedAxes.width && allowedAxes.height) {
-    return "bottom-right";
+  return allowedAxes.width || allowedAxes.height ? "bottom-right" : null;
+}
+
+function resizeControlDirection(
+  allowedAxes: FactoryGraphNodeResizeAxes,
+): "horizontal" | "vertical" | undefined {
+  if (allowedAxes.width && !allowedAxes.height) {
+    return "horizontal";
   }
-  if (allowedAxes.width) {
-    return "right";
+  if (allowedAxes.height && !allowedAxes.width) {
+    return "vertical";
   }
-  if (allowedAxes.height) {
-    return "bottom";
-  }
-  return null;
+  return undefined;
 }
 
 function isFiniteBoundedDimensions(
