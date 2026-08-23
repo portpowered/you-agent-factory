@@ -81,25 +81,6 @@ func scaffoldInvocationFactory(t *testing.T, overrides map[string]any) string {
 	return dir
 }
 
-func textInvocationRequest(t *testing.T, text string, timeoutMillis *int64) factoryapi.InvocationRequest {
-	t.Helper()
-
-	var part factoryapi.WorkContentPart
-	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
-		Type: factoryapi.WorkContentPartTypeText,
-		Text: text,
-	}); err != nil {
-		t.Fatalf("build invocation text content: %v", err)
-	}
-	sourceKind := factoryapi.InvocationInputSourceKindText
-	content := factoryapi.WorkContent{part}
-	return factoryapi.InvocationRequest{
-		SourceKind:    &sourceKind,
-		Content:       &content,
-		TimeoutMillis: timeoutMillis,
-	}
-}
-
 func postInvocation(t *testing.T, serverURL string, request factoryapi.InvocationRequest) factoryapi.InvocationResponse {
 	t.Helper()
 
