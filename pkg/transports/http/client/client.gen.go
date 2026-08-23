@@ -2431,6 +2431,9 @@ type FactoryDispatch struct {
 	// Attempt One-based attempt number for retried dispatches.
 	Attempt *int32 `json:"attempt,omitempty"`
 
+	// ConfirmationState Whether the reported state or outcome is covered by completed recording storage.
+	ConfirmationState ConfirmationState `json:"confirmationState"`
+
 	// DispatchKind Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.
 	DispatchKind FactoryDispatchKind `json:"dispatchKind"`
 
@@ -3827,6 +3830,9 @@ type FactorySessionCheckpointRef struct {
 type FactorySessionDispatchSummary struct {
 	// Attempt One-based attempt number for retried dispatches.
 	Attempt *int32 `json:"attempt,omitempty"`
+
+	// ConfirmationState Whether the reported state or outcome is covered by completed recording storage.
+	ConfirmationState ConfirmationState `json:"confirmationState"`
 
 	// DispatchKind Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.
 	DispatchKind FactoryDispatchKind `json:"dispatchKind"`

@@ -201,6 +201,40 @@ func TestFakeService_InterruptDispatch_RecordsDispatchInterruptedEvent(t *testin
 	}
 }
 
+func TestFakeServiceDispatchListAndDetailDefaultToUnconfirmedTogether(t *testing.T) {
+	t.Parallel()
+	service := newContractFakeService(t)
+	started := startAsyncByRequestID(t, service, "req-js-run-n-001")
+
+	list, err := service.ListDispatches(context.Background(), started.SessionID)
+	if err != nil {
+		t.Fatalf("ListDispatches: %v", err)
+	}
+	var listed DispatchSummary
+	found := false
+	for _, dispatch := range list.Dispatches {
+		if dispatch.ID == "disp-js-002" {
+			listed = dispatch
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("dispatch list = %#v, want disp-js-002", list.Dispatches)
+	}
+	if listed.ConfirmationState != ConfirmationStateUnconfirmed {
+		t.Fatalf("listed dispatch confirmation = %#v, want UNCONFIRMED", listed)
+	}
+
+	detail, err := service.GetDispatch(context.Background(), started.SessionID, listed.ID)
+	if err != nil {
+		t.Fatalf("GetDispatch: %v", err)
+	}
+	if detail.ConfirmationState != ConfirmationStateUnconfirmed || detail.StateSequence != listed.StateSequence || detail.StateSequenceKnown != listed.StateSequenceKnown {
+		t.Fatalf("dispatch detail = %#v, want same unconfirmed cursor as list %#v", detail, listed)
+	}
+}
+
 func TestRestoreInterruptedDispatchResultSuppression_LateCompletionDoesNotReactivateRouting(t *testing.T) {
 	t.Parallel()
 	observedAt := time.Date(2026, 6, 20, 15, 0, 0, 0, time.UTC)

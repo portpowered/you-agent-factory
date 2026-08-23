@@ -198,9 +198,10 @@ func ResultReadResultFromAPI(response factoryapi.FactorySessionResult) factoryse
 // DispatchSummaryFromAPI maps one public dispatch summary into the shared service contract.
 func DispatchSummaryFromAPI(response factoryapi.FactorySessionDispatchSummary) factorysessionexecution.DispatchSummary {
 	summary := factorysessionexecution.DispatchSummary{
-		ID:           response.Id,
-		Status:       factorysessionexecution.DispatchStatus(response.Status),
-		DispatchKind: string(response.DispatchKind),
+		ID:                response.Id,
+		Status:            factorysessionexecution.DispatchStatus(response.Status),
+		DispatchKind:      string(response.DispatchKind),
+		ConfirmationState: confirmationStateFromAPI(response.ConfirmationState),
 	}
 	if response.Phase != nil {
 		summary.Phase = strings.TrimSpace(*response.Phase)
@@ -253,9 +254,10 @@ func DispatchSummaryFromAPI(response factoryapi.FactorySessionDispatchSummary) f
 // pkgmaintcheck:ignore-cyclomatic-complexity this inverse mapper keeps dispatch detail fields together for API round-trip coverage.
 func DispatchDetailFromAPI(response factoryapi.FactoryDispatch) factorysessionexecution.DispatchDetail {
 	summary := factorysessionexecution.DispatchSummary{
-		ID:           response.Id,
-		Status:       factorysessionexecution.DispatchStatus(response.Status),
-		DispatchKind: string(response.DispatchKind),
+		ID:                response.Id,
+		Status:            factorysessionexecution.DispatchStatus(response.Status),
+		DispatchKind:      string(response.DispatchKind),
+		ConfirmationState: confirmationStateFromAPI(response.ConfirmationState),
 	}
 	if response.Phase != nil {
 		summary.Phase = strings.TrimSpace(*response.Phase)
@@ -335,6 +337,13 @@ func DispatchDetailFromAPI(response factoryapi.FactoryDispatch) factorysessionex
 		}
 	}
 	return detail
+}
+
+func confirmationStateFromAPI(value factoryapi.ConfirmationState) factorysessionexecution.ConfirmationState {
+	if value == factoryapi.CONFIRMED {
+		return factorysessionexecution.ConfirmationStateConfirmed
+	}
+	return factorysessionexecution.ConfirmationStateUnconfirmed
 }
 
 // ArtifactSummaryFromAPI maps one public artifact summary into the shared service contract.

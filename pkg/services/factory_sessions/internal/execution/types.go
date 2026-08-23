@@ -328,6 +328,7 @@ type (
 	CheckpointRef                = factorysessions.CheckpointRef
 	ControlError                 = factorysessions.ControlError
 	ControlRequest               = factorysessions.ControlRequest
+	ConfirmationState            = factorysessions.ConfirmationState
 	DispatchDetail               = factorysessions.DispatchDetail
 	DispatchFailureDetail        = factorysessions.DispatchFailureDetail
 	DispatchFilters              = factorysessions.DispatchFilters
@@ -395,6 +396,8 @@ type (
 const (
 	ChildExecutorModeFake                  = factorysessions.ChildExecutorModeFake
 	ChildExecutorModeLive                  = factorysessions.ChildExecutorModeLive
+	ConfirmationStateConfirmed             = factorysessions.ConfirmationStateConfirmed
+	ConfirmationStateUnconfirmed           = factorysessions.ConfirmationStateUnconfirmed
 	DefaultSessionListScope                = factorysessions.DefaultSessionListScope
 	ExecutionProviderFake                  = factorysessions.ExecutionProviderFake
 	ExecutionProviderJavaScriptRuntime     = factorysessions.ExecutionProviderJavaScriptRuntime

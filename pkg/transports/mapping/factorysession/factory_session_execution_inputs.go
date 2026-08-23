@@ -243,9 +243,10 @@ func (bridge *DurableInspectionBridge) QueryDispatches(
 	dispatches := make([]HistoricalDispatchInput, 0, len(result.Dispatches))
 	for _, dispatch := range result.Dispatches {
 		dispatches = append(dispatches, HistoricalDispatchInput{
-			ID:           dispatch.ID,
-			Status:       string(dispatch.Status),
-			DispatchKind: dispatch.DispatchKind,
+			ID:                dispatch.ID,
+			Status:            string(dispatch.Status),
+			DispatchKind:      dispatch.DispatchKind,
+			ConfirmationState: string(dispatch.ConfirmationState),
 		})
 	}
 	return dispatches, nil

@@ -561,7 +561,7 @@ func (s *JavaScriptRuntimeService) ListDispatches(ctx context.Context, sessionID
 	}
 	return ListDispatchesResult{
 		SessionID:  id,
-		Dispatches: cloneDispatchSummaries(state.dispatches),
+		Dispatches: dispatchesForRead(state.dispatches, state.events),
 	}, nil
 }
 
@@ -581,7 +581,7 @@ func (s *JavaScriptRuntimeService) GetDispatch(ctx context.Context, sessionID, d
 	if err != nil {
 		return DispatchDetail{}, err
 	}
-	for _, summary := range state.dispatches {
+	for _, summary := range dispatchesForRead(state.dispatches, state.events) {
 		if summary.ID == dispatchID {
 			detail := DispatchDetail{
 				DispatchSummary:  summary,

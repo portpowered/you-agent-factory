@@ -244,7 +244,7 @@ func (s *FakeService) ListDispatches(ctx context.Context, sessionID string) (Lis
 	}
 	return ListDispatchesResult{
 		SessionID:  id,
-		Dispatches: cloneDispatchSummaries(state.dispatches),
+		Dispatches: dispatchesForRead(state.dispatches, state.events),
 	}, nil
 }
 
@@ -265,9 +265,12 @@ func (s *FakeService) GetDispatch(ctx context.Context, sessionID, dispatchID str
 		return DispatchDetail{}, err
 	}
 	if detail, ok := state.dispatchDetails[dispatchID]; ok {
+		dispatches := []DispatchSummary{detail.DispatchSummary}
+		dispatches = dispatchesForRead(dispatches, state.events)
+		detail.DispatchSummary = dispatches[0]
 		return detail, nil
 	}
-	for _, summary := range state.dispatches {
+	for _, summary := range dispatchesForRead(state.dispatches, state.events) {
 		if summary.ID == dispatchID {
 			return DispatchDetail{
 				DispatchSummary:  summary,

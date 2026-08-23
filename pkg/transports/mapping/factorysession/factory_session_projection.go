@@ -101,10 +101,11 @@ func ListDispatchesResponseToAPI(result factorysessionexecution.ListDispatchesRe
 // transport that reconstructs dispatch history from its own ledger instead of
 // the live Factory Sessions projection.
 type HistoricalDispatchInput struct {
-	ID           string
-	Status       string
-	DispatchKind string
-	Usage        *recordings.FactoryDispatchUsage
+	ID                string
+	Status            string
+	DispatchKind      string
+	ConfirmationState string
+	Usage             *recordings.FactoryDispatchUsage
 }
 
 // HistoricalDispatchListToAPI maps detached historical dispatch facts to the
@@ -146,10 +147,18 @@ func HistoricalDispatchDetailToAPI(
 
 func historicalDispatchSummary(dispatch HistoricalDispatchInput) factorysessionexecution.DispatchSummary {
 	return factorysessionexecution.DispatchSummary{
-		ID:           dispatch.ID,
-		Status:       factorysessionexecution.DispatchStatus(dispatch.Status),
-		DispatchKind: dispatch.DispatchKind,
+		ID:                dispatch.ID,
+		Status:            factorysessionexecution.DispatchStatus(dispatch.Status),
+		DispatchKind:      dispatch.DispatchKind,
+		ConfirmationState: historicalDispatchConfirmationState(dispatch.ConfirmationState),
 	}
+}
+
+func historicalDispatchConfirmationState(value string) factorysessionexecution.ConfirmationState {
+	if strings.EqualFold(strings.TrimSpace(value), string(factorysessionexecution.ConfirmationStateConfirmed)) {
+		return factorysessionexecution.ConfirmationStateConfirmed
+	}
+	return factorysessionexecution.ConfirmationStateUnconfirmed
 }
 
 func historicalDispatchSummaryToAPI(dispatch HistoricalDispatchInput) factoryapi.FactorySessionDispatchSummary {
@@ -228,11 +237,12 @@ func HistoricalResultToAPI(input HistoricalResultInput) factoryapi.FactorySessio
 // DispatchDetailResponseToAPI maps one durable dispatch projection to the public response shape.
 func DispatchDetailResponseToAPI(result factorysessionexecution.DispatchDetail) factoryapi.FactoryDispatch {
 	response := factoryapi.FactoryDispatch{
-		Id:               result.ID,
-		SessionId:        result.SessionID,
-		OrchestratorKind: factoryapi.FactoryOrchestratorKind(interfaces.StrictPublicFactoryOrchestratorKind(result.OrchestratorKind)),
-		DispatchKind:     factoryapi.FactoryDispatchKind(result.DispatchKind),
-		Status:           factoryapi.FactoryDispatchStatus(result.Status),
+		Id:                result.ID,
+		SessionId:         result.SessionID,
+		OrchestratorKind:  factoryapi.FactoryOrchestratorKind(interfaces.StrictPublicFactoryOrchestratorKind(result.OrchestratorKind)),
+		DispatchKind:      factoryapi.FactoryDispatchKind(result.DispatchKind),
+		Status:            factoryapi.FactoryDispatchStatus(result.Status),
+		ConfirmationState: dispatchConfirmationStateToAPI(result.ConfirmationState),
 	}
 	if phase := strings.TrimSpace(result.Phase); phase != "" {
 		response.Phase = &phase
@@ -369,9 +379,10 @@ func EventReadResponseToAPI(result factorysessionexecution.EventReadResult) []fa
 
 func dispatchSummaryToAPI(dispatch factorysessionexecution.DispatchSummary) factoryapi.FactorySessionDispatchSummary {
 	response := factoryapi.FactorySessionDispatchSummary{
-		Id:           dispatch.ID,
-		Status:       factoryapi.FactoryDispatchStatus(dispatch.Status),
-		DispatchKind: factoryapi.FactoryDispatchKind(dispatch.DispatchKind),
+		Id:                dispatch.ID,
+		Status:            factoryapi.FactoryDispatchStatus(dispatch.Status),
+		DispatchKind:      factoryapi.FactoryDispatchKind(dispatch.DispatchKind),
+		ConfirmationState: dispatchConfirmationStateToAPI(dispatch.ConfirmationState),
 	}
 	if phase := strings.TrimSpace(dispatch.Phase); phase != "" {
 		response.Phase = &phase
@@ -415,6 +426,13 @@ func dispatchSummaryToAPI(dispatch factorysessionexecution.DispatchSummary) fact
 		response.Javascript = javascript
 	}
 	return response
+}
+
+func dispatchConfirmationStateToAPI(value factorysessionexecution.ConfirmationState) factoryapi.ConfirmationState {
+	if value == factorysessionexecution.ConfirmationStateConfirmed {
+		return factoryapi.CONFIRMED
+	}
+	return factoryapi.UNCONFIRMED
 }
 
 type resolvedWorkerSelectionAPI struct {

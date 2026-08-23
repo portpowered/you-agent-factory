@@ -6,6 +6,7 @@ required:
   - orchestratorKind
   - dispatchKind
   - status
+  - confirmationState
 properties:
   id:
     type: string
@@ -22,6 +23,9 @@ properties:
     description: JavaScript workflow phase when the dispatch was created or observed.
   status:
     $ref: './FactoryDispatchStatus.yaml'
+  confirmationState:
+    $ref: './ConfirmationState.yaml'
+    description: Whether the event that produced the reported dispatch status is covered by completed recording storage.
   label:
     type: string
     description: Customer-visible dispatch label.

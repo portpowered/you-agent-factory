@@ -6498,6 +6498,7 @@ components:
         - id
         - status
         - dispatchKind
+        - confirmationState
       description: Durable factory-session dispatch summary for list responses. Exposes shared dispatch fields plus bounded orchestrator-specific inspection data when available.
       properties:
         id:
@@ -6505,6 +6506,9 @@ components:
           description: Stable dispatch identifier.
         status:
           $ref: '#/components/schemas/FactoryDispatchStatus'
+        confirmationState:
+          $ref: '#/components/schemas/ConfirmationState'
+          description: Whether the event that produced the reported dispatch status is covered by completed recording storage.
         dispatchKind:
           $ref: '#/components/schemas/FactoryDispatchKind'
         phase:
@@ -6729,6 +6733,7 @@ components:
         - orchestratorKind
         - dispatchKind
         - status
+        - confirmationState
       properties:
         id:
           type: string
@@ -6745,6 +6750,9 @@ components:
           description: JavaScript workflow phase when the dispatch was created or observed.
         status:
           $ref: '#/components/schemas/FactoryDispatchStatus'
+        confirmationState:
+          $ref: '#/components/schemas/ConfirmationState'
+          description: Whether the event that produced the reported dispatch status is covered by completed recording storage.
         label:
           type: string
           description: Customer-visible dispatch label.

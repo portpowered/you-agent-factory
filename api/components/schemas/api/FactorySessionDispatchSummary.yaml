@@ -4,6 +4,7 @@ required:
   - id
   - status
   - dispatchKind
+  - confirmationState
 description: >-
   Durable factory-session dispatch summary for list responses. Exposes shared
   dispatch fields plus bounded orchestrator-specific inspection data when
@@ -14,6 +15,9 @@ properties:
     description: Stable dispatch identifier.
   status:
     $ref: '../data-models/FactoryDispatchStatus.yaml'
+  confirmationState:
+    $ref: '../data-models/ConfirmationState.yaml'
+    description: Whether the event that produced the reported dispatch status is covered by completed recording storage.
   dispatchKind:
     $ref: '../data-models/FactoryDispatchKind.yaml'
   phase:

@@ -2990,6 +2990,8 @@ export interface components {
       /** @description Stable dispatch identifier. */
       id: string;
       status: components["schemas"]["FactoryDispatchStatus"];
+      /** @description Whether the event that produced the reported dispatch status is covered by completed recording storage. */
+      confirmationState: components["schemas"]["ConfirmationState"];
       dispatchKind: components["schemas"]["FactoryDispatchKind"];
       /** @description Workflow phase when the dispatch was created or observed. */
       phase?: string;
@@ -3128,6 +3130,8 @@ export interface components {
       /** @description JavaScript workflow phase when the dispatch was created or observed. */
       phase?: string;
       status: components["schemas"]["FactoryDispatchStatus"];
+      /** @description Whether the event that produced the reported dispatch status is covered by completed recording storage. */
+      confirmationState: components["schemas"]["ConfirmationState"];
       /** @description Customer-visible dispatch label. */
       label?: string;
       /**
