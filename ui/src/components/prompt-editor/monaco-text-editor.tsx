@@ -2,10 +2,11 @@ import Editor from "@monaco-editor/react";
 import type { RefObject } from "react";
 import { useEffect, useMemo, useRef } from "react";
 import "monaco-editor/esm/vs/editor/editor.all.js";
+import { Text } from "@you-agent-factory/components/primitives";
 import type { editor as MonacoEditorAPI } from "monaco-editor";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
 import { cn } from "../../lib/cn";
-import { Text } from "@you-agent-factory/components/primitives";
+import { resolveColorPaletteId } from "../../theme/color-palette";
 import { Textarea } from "../ui/textarea";
 import {
   applyWorkstationPromptTheme,
@@ -208,7 +209,10 @@ function createTextEditorMountHandler({
 
 function createTextEditorThemeObserver(root: HTMLElement) {
   const applyTheme = () => {
-    applyWorkstationPromptTheme(monaco, root);
+    applyWorkstationPromptTheme(
+      monaco,
+      resolveColorPaletteId(root.getAttribute("data-color-palette")),
+    );
   };
 
   applyTheme();
