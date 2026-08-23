@@ -525,6 +525,171 @@ func TestRun_PipelineStagedFakeChildren_RepresentsStageFailureExplicitly(t *test
 	}
 }
 
+func TestRun_PipelineStageFailuresIsolateEachItem(t *testing.T) {
+	source := `return (async function () {
+  const results = await pipeline(
+    ["sync-fail", "promise-fail", "healthy"],
+    function (item, index) {
+      return { stage: 0, item: item, index: index };
+    },
+    function (previous, item, index) {
+      if (item === "sync-fail") {
+        throw new Error("sync stage failure");
+      }
+      return { stage: 1, previousStage: previous.stage, item: item, index: index };
+    },
+    async function (previous, item, index) {
+      if (item === "promise-fail") {
+        throw new Error("promise stage failure");
+      }
+      return { stage: 2, previousStage: previous.stage, item: item, index: index };
+    }
+  );
+  return { results: results };
+})();`
+
+	outcome := runInlineWorkflow(t, "pipeline-stage-failure-isolation", source)
+	projected := projectPrimaryJSON(t, "session-pipeline-stage-failure-isolation", outcome.Value)
+	results, ok := projected["results"].([]any)
+	if !ok || len(results) != 3 {
+		t.Fatalf("projected results = %#v, want three ordered items", projected["results"])
+	}
+
+	assertPipelineFailedItem(t, results[0], "sync-fail", 0, 2, "sync stage failure")
+	assertPipelineFailedItem(t, results[1], "promise-fail", 1, 3, "promise stage failure")
+	assertPipelineCompletedItem(t, results[2], "healthy", 2, 3)
+}
+
+func TestRun_PipelineFailedChildResultStopsOnlyThatItem(t *testing.T) {
+	source := `return (async function () {
+  const results = await pipeline(
+    ["bad", "good"],
+    function (item, index) {
+      return agent.run({ label: "stage1-" + item, prompt: "stage1-" + item });
+    },
+    function (previous, item, index) {
+      return agent.run({ label: "stage2-" + item, prompt: "stage2-" + item });
+    },
+    function (previous, item, index) {
+      return agent.run({ label: "stage3-" + item, prompt: "stage3-" + item });
+    }
+  );
+  return { results: results };
+})();`
+
+	var (
+		mu     sync.Mutex
+		labels []string
+	)
+	outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+		Source:    source,
+		SourceRef: "pipeline-failed-child-result.workflow.js",
+		SessionID: "session-pipeline-failed-child-result",
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}, factory.JavaScriptRuntimeHooks{
+		NewChildExecutor: func(_ string, _ factory.JavaScriptChildRecordSink, _ workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+			return childExecutorFunc(func(_ context.Context, request factory.JavaScriptChildExecutionRequest) (factory.JavaScriptChildExecutionResult, error) {
+				mu.Lock()
+				labels = append(labels, request.Label)
+				childIndex := len(labels)
+				mu.Unlock()
+				result := factory.JavaScriptChildExecutionResult{
+					DispatchID:    fmt.Sprintf("pipeline-dispatch-%d", childIndex),
+					ChildIndex:    childIndex,
+					Status:        factory.JavaScriptChildDispatchStatusCompleted,
+					ExecutionMode: "pipeline-test",
+					Output:        map[string]any{"label": request.Label},
+					Request:       request,
+				}
+				if request.Label == "stage2-bad" {
+					result.Status = factory.JavaScriptChildDispatchStatusFailed
+					result.Diagnostic = "stage 2 child rejected"
+				}
+				return result, nil
+			})
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !outcome.OK {
+		t.Fatalf("Run() failure = %#v", outcome.Failure)
+	}
+
+	projected := projectPrimaryJSON(t, "session-pipeline-failed-child-result", outcome.Value)
+	results, ok := projected["results"].([]any)
+	if !ok || len(results) != 2 {
+		t.Fatalf("projected results = %#v, want two ordered items", projected["results"])
+	}
+	assertPipelineFailedItem(t, results[0], "bad", 0, 2, "stage 2 child rejected")
+	assertPipelineCompletedItem(t, results[1], "good", 1, 3)
+
+	mu.Lock()
+	gotLabels := append([]string(nil), labels...)
+	mu.Unlock()
+	seen := make(map[string]bool, len(gotLabels))
+	for _, label := range gotLabels {
+		seen[label] = true
+	}
+	for _, wantLabel := range []string{"stage1-bad", "stage1-good", "stage2-bad", "stage2-good", "stage3-good"} {
+		if !seen[wantLabel] {
+			t.Fatalf("child labels = %#v, want %q to be dispatched", gotLabels, wantLabel)
+		}
+	}
+	if seen["stage3-bad"] {
+		t.Fatalf("child labels = %#v, failed item's later stage was dispatched", gotLabels)
+	}
+}
+
+func assertPipelineFailedItem(t *testing.T, raw any, wantItem string, wantIndex, wantStageCount int, wantDiagnostic string) {
+	t.Helper()
+	item, ok := raw.(map[string]any)
+	if !ok {
+		t.Fatalf("pipeline item = %#v, want object", raw)
+	}
+	if item["index"] != float64(wantIndex) || item["item"] != wantItem || item["status"] != factory.JavaScriptChildDispatchStatusFailed {
+		t.Fatalf("pipeline item = %#v, want index=%d item=%q FAILED", item, wantIndex, wantItem)
+	}
+	stages, ok := item["stages"].([]any)
+	if !ok || len(stages) != wantStageCount {
+		t.Fatalf("pipeline item stages = %#v, want %d entries", item["stages"], wantStageCount)
+	}
+	for stageIndex, rawStage := range stages[:wantStageCount-1] {
+		stage, ok := rawStage.(map[string]any)
+		if !ok || stage["index"] != float64(stageIndex) || stage["status"] != factory.JavaScriptChildDispatchStatusCompleted {
+			t.Fatalf("pipeline item stages[%d] = %#v, want completed stage", stageIndex, rawStage)
+		}
+	}
+	failedStage, ok := stages[wantStageCount-1].(map[string]any)
+	if !ok || failedStage["index"] != float64(wantStageCount-1) || failedStage["status"] != factory.JavaScriptChildDispatchStatusFailed {
+		t.Fatalf("pipeline failed stage = %#v, want failed stage index %d", stages[wantStageCount-1], wantStageCount-1)
+	}
+	if !strings.Contains(failedStage["diagnostic"].(string), wantDiagnostic) {
+		t.Fatalf("pipeline failed stage diagnostic = %#v, want %q", failedStage["diagnostic"], wantDiagnostic)
+	}
+	if _, exists := failedStage["result"]; exists {
+		t.Fatalf("pipeline failed stage = %#v, want no result after failure", failedStage)
+	}
+}
+
+func assertPipelineCompletedItem(t *testing.T, raw any, wantItem string, wantIndex, wantStageCount int) {
+	t.Helper()
+	item, ok := raw.(map[string]any)
+	if !ok || item["index"] != float64(wantIndex) || item["item"] != wantItem || item["status"] != factory.JavaScriptChildDispatchStatusCompleted {
+		t.Fatalf("pipeline item = %#v, want index=%d item=%q COMPLETED", raw, wantIndex, wantItem)
+	}
+	stages, ok := item["stages"].([]any)
+	if !ok || len(stages) != wantStageCount {
+		t.Fatalf("pipeline completed stages = %#v, want %d entries", item["stages"], wantStageCount)
+	}
+	for stageIndex, rawStage := range stages {
+		stage, ok := rawStage.(map[string]any)
+		if !ok || stage["index"] != float64(stageIndex) || stage["status"] != factory.JavaScriptChildDispatchStatusCompleted {
+			t.Fatalf("pipeline completed stages[%d] = %#v, want completed stage", stageIndex, rawStage)
+		}
+	}
+}
+
 func assertPipelineItemOrder(t *testing.T, outcome factory.JavaScriptRuntimeOutcome, wantItems []string) {
 	t.Helper()
 	projected := projectPrimaryJSON(t, "session-pipeline-staged-fake-children", outcome.Value)

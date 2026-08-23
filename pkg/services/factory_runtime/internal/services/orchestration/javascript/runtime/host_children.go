@@ -524,6 +524,12 @@ func (g *runtimeGlobals) executePipelineItem(item any, index int, stages []goja.
 			stageEntered = nil
 		}
 		stageResult, stageErr := g.callPipelineStage(stage, stageIndex, previousResult, item, index, stageEntered)
+		// Some child execution paths resolve to a structured FAILED result
+		// instead of returning a Go error. Treat that result like any other
+		// stage failure so this item does not enter a later stage.
+		if stageErr == nil {
+			stageErr = pipelineFailedChildError(stageResult)
+		}
 		stageResults = append(stageResults, pipelineStageValue(stageIndex, stageResult, stageErr))
 		if stageErr != nil {
 			status = ChildDispatchStatusFailed
@@ -533,6 +539,18 @@ func (g *runtimeGlobals) executePipelineItem(item any, index int, stages []goja.
 	}
 
 	return pipelineItemResult(index, item, stageResults, status)
+}
+
+func pipelineFailedChildError(result any) error {
+	childResult, ok := result.(map[string]any)
+	if !ok || childResult["status"] != ChildDispatchStatusFailed {
+		return nil
+	}
+	diagnostic, _ := childResult["diagnostic"].(string)
+	if diagnostic == "" {
+		diagnostic = "child execution failed"
+	}
+	return fmt.Errorf("%s", diagnostic)
 }
 
 func (g *runtimeGlobals) callPipelineStage(stage goja.Callable, stageIndex int, prior any, item any, index int, entered chan<- struct{}) (any, error) {
