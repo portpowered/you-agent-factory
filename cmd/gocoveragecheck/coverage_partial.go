@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func writePartialCoverageSnapshot(path, profilePath, repoRoot string, coverPackages []string, reason string) error {
+func writePartialCoverageSnapshot(path, profilePath, repoRoot string, coverPackages []string, packageFloorPolicy string, reason string) error {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return nil
@@ -18,6 +18,7 @@ func writePartialCoverageSnapshot(path, profilePath, repoRoot string, coverPacka
 		// inventory name this coverage item as unavailable instead.
 		return nil
 	}
+	result.packageFloorPolicy = packageFloorPolicy
 	return writeCoverageSummaryJSONWithStatus(path, result, false, reason)
 }
 

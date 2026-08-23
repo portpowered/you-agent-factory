@@ -530,6 +530,78 @@ func TestExecuteWritesIncompleteJSONWhenMeasurementFailsWithProfile(t *testing.T
 	}
 }
 
+func TestExecuteFailedTestsDoNotEvaluatePackageFloors(t *testing.T) {
+	stdout, stderr := stubCoverageExecute(t, fakeGoCoverageCommandTestFailsWithObservedFailures)
+	configPackage := modulePath + "/pkg/config"
+	manifestPath := writePackageMinimumManifest(t, "unit", configPackage, "80.00")
+	outputDir := t.TempDir()
+	jsonPath := filepath.Join(outputDir, "coverage-summary.json")
+
+	err := execute(config{
+		suite:              "unit",
+		min:                0,
+		packageFloorPolicy: coverageFloorPolicyBlocking,
+		packageManifest:    manifestPath,
+		coverpkg:           configPackage,
+		packages:           "./pkg/config",
+		profile:            filepath.Join(outputDir, "coverage.out"),
+		jsonOutput:         jsonPath,
+	})
+	if err == nil {
+		t.Fatal("execute() unexpectedly succeeded for failed coverage tests")
+	}
+	if strings.Contains(err.Error(), "package coverage regression") {
+		t.Fatalf("execute() reclassified failed tests as a floor regression: %v", err)
+	}
+	wantDiagnostic := "coverage not evaluated: 2 failed tests observed; package floors were NOT checked because the coverage test run failed"
+	if got := stderr.String(); !strings.Contains(got, wantDiagnostic) {
+		t.Fatalf("execute() stderr = %q, want failed-test diagnostic containing %q", got, wantDiagnostic)
+	}
+	if strings.Contains(stdout.String(), "meets minimum") {
+		t.Fatalf("execute() stdout = %q, did not expect aggregate success", stdout.String())
+	}
+
+	summary := readCoverageSummaryJSONFile(t, jsonPath)
+	if summary.Complete {
+		t.Fatal("failed-test coverage summary marked complete")
+	}
+	if summary.PackageFloorPolicy != coverageFloorPolicyBlocking {
+		t.Fatalf("packageFloorPolicy = %q, want active blocking policy", summary.PackageFloorPolicy)
+	}
+	if len(summary.PackageFloorFindings) != 0 {
+		t.Fatalf("packageFloorFindings = %v, want floors not evaluated", summary.PackageFloorFindings)
+	}
+	if len(summary.ManifestDiagnostics) != 0 {
+		t.Fatalf("manifestDiagnostics = %v, want no manifest findings from an incomplete run", summary.ManifestDiagnostics)
+	}
+}
+
+func TestExecuteIncompleteJSONRetainsAdvisoryPolicy(t *testing.T) {
+	stubCoverageExecute(t, fakeGoCoverageCommandTestFailsWithoutDetail)
+	outputDir := t.TempDir()
+	jsonPath := filepath.Join(outputDir, "coverage-summary.json")
+
+	err := execute(config{
+		suite:              "unit",
+		packageFloorPolicy: coverageFloorPolicyAdvisory,
+		coverpkg:           modulePath + "/pkg/config",
+		packages:           "./pkg/config",
+		profile:            filepath.Join(outputDir, "coverage.out"),
+		jsonOutput:         jsonPath,
+	})
+	if err == nil {
+		t.Fatal("execute() unexpectedly succeeded for failed coverage tests")
+	}
+
+	summary := readCoverageSummaryJSONFile(t, jsonPath)
+	if summary.PackageFloorPolicy != coverageFloorPolicyAdvisory {
+		t.Fatalf("packageFloorPolicy = %q, want active advisory policy", summary.PackageFloorPolicy)
+	}
+	if len(summary.PackageFloorFindings) != 0 {
+		t.Fatalf("packageFloorFindings = %v, want floors not evaluated", summary.PackageFloorFindings)
+	}
+}
+
 func TestExecuteFloorFailureWithoutJSONOptionKeepsHumanDiagnostics(t *testing.T) {
 	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
