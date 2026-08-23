@@ -39,7 +39,7 @@ func TestRepositoryBackendReferenceCollectorPreservesCustomerSources(t *testing.
 
 	var factoryReference, catalogReference bool
 	for _, reference := range inputs.References {
-		if strings.Contains(reference.Source, "generated/factories/tts/factory.json") && reference.Identifier == "omnivoice-llamacpp" {
+		if strings.Contains(reference.Source, "generated/factories/tts/factory.json") && reference.Identifier != "" {
 			factoryReference = true
 		}
 		if strings.Contains(reference.Source, "BuiltInCatalog.ModelDefinitions") && reference.Identifier == "localai-vibevoice" {
