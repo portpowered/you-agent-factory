@@ -102,6 +102,52 @@ func TestWorkerSessionHTTPShutdownJoinsAdmittedWorker(t *testing.T) {
 	}
 }
 
+func TestWorkerSessionHTTPFleetListWithoutWorkIDReturnsEmptyAndDirectSessions(t *testing.T) {
+	gate := make(chan struct{})
+	runner := newFunctionalWorkerGate(gate)
+	server := startDirectWorkerSessionServer(t, runner)
+
+	listFleetWorkerSessions := func() factoryapi.ListWorkerSessionsResponse {
+		request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL()+"/worker-sessions", nil)
+		if err != nil {
+			t.Fatalf("construct fleet Worker Session list request: %v", err)
+		}
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatalf("GET /worker-sessions: %v", err)
+		}
+		defer response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(response.Body)
+			t.Fatalf("GET /worker-sessions status = %d, want 200; body=%s", response.StatusCode, strings.TrimSpace(string(body)))
+		}
+		var listed factoryapi.ListWorkerSessionsResponse
+		if err := json.NewDecoder(response.Body).Decode(&listed); err != nil {
+			t.Fatalf("decode fleet Worker Session list: %v", err)
+		}
+		return listed
+	}
+
+	empty := listFleetWorkerSessions()
+	if empty.Sessions == nil || len(empty.Sessions) != 0 {
+		t.Fatalf("empty fleet Worker Session list = %#v, want non-nil empty collection", empty)
+	}
+
+	start := postDirectWorkerSession(t, context.Background(), server.URL(), "fleet-list-request", "fleet-list-direct", "fleet-list-dispatch")
+	start.Body.Close()
+	if start.StatusCode != http.StatusAccepted {
+		t.Fatalf("POST /worker-sessions status = %d, want 202", start.StatusCode)
+	}
+	runner.waitStarted(t)
+	close(gate)
+	runner.waitCompleted(t)
+
+	listed := listFleetWorkerSessions()
+	if len(listed.Sessions) != 1 || listed.Sessions[0].WorkerSessionId != "fleet-list-direct" {
+		t.Fatalf("fleet Worker Session list = %#v, want direct session without Work ID", listed)
+	}
+}
+
 func TestWorkerSessionHTTPInterruptRejectsUnassociatedActiveSource(t *testing.T) {
 	gate := make(chan struct{})
 	runner := newFunctionalWorkerGate(gate)

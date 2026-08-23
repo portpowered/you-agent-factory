@@ -88,10 +88,10 @@ type Service interface {
 	GetObservationByWorkerSessionID(ctx context.Context, req GetObservationByWorkerSessionIDRequest) (Observation, error)
 
 	// ListWorkerSessionObservations returns detached observations through the
-	// top-level Worker Session identity surface. The zero Scope selects direct
-	// sessions; callers must explicitly select All to include Factory-originated
-	// sessions. Results are sorted by Worker Session ID and use a bounded opaque
-	// cursor.
+	// top-level Worker Session identity surface. The zero Scope is normalized to
+	// the fleet-wide view; a runtime-local Service may still contain only its
+	// own registry. Results are sorted by Worker Session ID and use a bounded
+	// opaque cursor.
 	ListWorkerSessionObservations(ctx context.Context, req ListWorkerSessionObservationsRequest) (ListWorkerSessionObservationsResult, error)
 
 	// ReadTranscript returns the normalized Provider Sessions transcript for one

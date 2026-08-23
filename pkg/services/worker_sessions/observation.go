@@ -18,6 +18,14 @@ import (
 // not need a second service locator or a type assertion to inspect a session.
 type ObservationService = Service
 
+// TopLevelObservationService is the narrow Worker Sessions capability used
+// by the fleet-wide identity list. A fleet view may combine several
+// runtime-owned Service instances while keeping the query contract owned by
+// Worker Sessions.
+type TopLevelObservationService interface {
+	ListWorkerSessionObservations(context.Context, ListWorkerSessionObservationsRequest) (ListWorkerSessionObservationsResult, error)
+}
+
 // ListObservationsRequest narrows observations to one Work identity.
 type ListObservationsRequest struct {
 	WorkID string
