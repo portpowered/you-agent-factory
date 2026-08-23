@@ -252,6 +252,36 @@ func TestRootComposedCanonicalAppendRejectsContractOnlyKinds(t *testing.T) {
 	}
 }
 
+// TestRootComposedRecordingsValidatesOpenAPIEventKindParity exercises the
+// existing parity guard through the composed public root. The guard is a
+// Recordings-owned contract check, so this functional scenario keeps the
+// coverage on the same root seam used by the application.
+func TestRootComposedRecordingsValidatesOpenAPIEventKindParity(t *testing.T) {
+	var recordingsRoot recordings.Service
+	process := support.BuildProcess(t, serviceedges.Edges{
+		RecordingsRootObserver: func(root recordings.Service) {
+			recordingsRoot = root
+		},
+	})
+	support.CleanupProcess(t, process)
+	if recordingsRoot == nil {
+		t.Fatal("RecordingsRootObserver was not invoked")
+	}
+	validator, ok := recordingsRoot.(interface {
+		ValidateFactoryEventKindParity([]byte) error
+	})
+	if !ok {
+		t.Fatal("composed Recordings root does not expose event-kind parity validation")
+	}
+	openAPIYAML, err := os.ReadFile(testutil.MustRepoPath(t, "api/openapi.yaml"))
+	if err != nil {
+		t.Fatalf("read bundled OpenAPI contract: %v", err)
+	}
+	if err := validator.ValidateFactoryEventKindParity(openAPIYAML); err != nil {
+		t.Fatalf("ValidateFactoryEventKindParity: %v", err)
+	}
+}
+
 func canonicalAppendEvent(id string) recordings.CanonicalEvent {
 	return recordings.CanonicalEvent{
 		ID:         recordings.CanonicalEventID(id),

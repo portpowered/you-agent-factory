@@ -61,6 +61,9 @@ func provideRecordingsRoot(
 	if edges.RecordingsRootObserver != nil {
 		edges.RecordingsRootObserver(service)
 	}
+	if edges.RecordingsWorkSnapshotReaderObserver != nil {
+		edges.RecordingsWorkSnapshotReaderObserver(recordingswire.NewWorkSnapshotReader(service))
+	}
 	return service, nil
 }
 

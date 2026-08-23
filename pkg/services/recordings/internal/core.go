@@ -10,6 +10,7 @@ import (
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
 	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events"
+	factoryeventkinds "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events/kinds"
 	artifactsexport "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export"
 	artifactsexportwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/wire"
 	canonicalledger "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger"
@@ -79,6 +80,10 @@ func (service *combinedService) Append(
 	request recordings.AppendRecordedEventRequest,
 ) (recordings.AppendRecordedEventResult, error) {
 	return service.canonicalLedger.Append(request)
+}
+
+func (service *combinedService) ValidateFactoryEventKindParity(openAPIYAML []byte) error {
+	return factoryeventkinds.ValidateBundledFactoryEventKindParity(openAPIYAML)
 }
 
 func (service *combinedService) SubscribeFrom(

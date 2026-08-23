@@ -219,7 +219,10 @@ type Edges struct {
 	// RecordingsRootObserver is a construction-time observation seam for
 	// functional callers that need to exercise the public Recordings root
 	// directly. It does not replace or mutate any Recordings dependency.
-	RecordingsRootObserver           func(recordings.Service)
+	RecordingsRootObserver               func(recordings.Service)
+	RecordingsWorkSnapshotReaderObserver func(interface {
+		ReadWorkSnapshot(context.Context, string) (work.ReadSnapshot, error)
+	})
 	Clock                            platformclock.Source
 	ACPWireRecorder                  wiretranscript.WireRecorder
 	SubmissionRecorder               recordings.SubmissionRecorder
@@ -662,6 +665,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.RecordingsRootObserver != nil {
 		defaults.RecordingsRootObserver = replacements.RecordingsRootObserver
+	}
+	if replacements.RecordingsWorkSnapshotReaderObserver != nil {
+		defaults.RecordingsWorkSnapshotReaderObserver = replacements.RecordingsWorkSnapshotReaderObserver
 	}
 	if replacements.APIServerStarter != nil {
 		defaults.APIServerStarter = replacements.APIServerStarter
