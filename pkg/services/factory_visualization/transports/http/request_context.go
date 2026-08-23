@@ -29,18 +29,6 @@ func visualizationRequestContextErrorResponse(err error) (status int, response a
 	}
 }
 
-func (a *Adapter) writeVisualizationRequestContextOutcome(w http.ResponseWriter, err error) bool {
-	status, response, ok := visualizationRequestContextErrorResponse(err)
-	if !ok {
-		return false
-	}
-	if response == nil {
-		return true
-	}
-	a.writeJSON(w, status, response)
-	return true
-}
-
 func visualizationContextBeforeRoot(ctx context.Context) error {
 	return ctx.Err()
 }

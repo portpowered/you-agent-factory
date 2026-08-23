@@ -119,17 +119,6 @@ func (a *Adapter) HandlePresentProgress(w http.ResponseWriter, r *http.Request) 
 	a.writeJSON(w, http.StatusOK, response)
 }
 
-// HandleFinalizePresentation serves POST /factory-visualization/presentation/finalize.
-func (a *Adapter) HandleFinalizePresentation(w http.ResponseWriter, r *http.Request) {
-	response, err := a.FinalizePresentationHTTP(r.Context(), r.Body)
-	if err != nil {
-		a.writePresentationRequestError(w, err)
-		return
-	}
-	a.writeCompatibilityWarning(w, "finalize_presentation", response.ignoredJSONPaths)
-	a.writeJSON(w, http.StatusOK, response)
-}
-
 // HandleClosePresentation serves POST /factory-visualization/presentation/close.
 func (a *Adapter) HandleClosePresentation(w http.ResponseWriter, r *http.Request) {
 	response, err := a.ClosePresentationHTTP(r.Context(), r.Body)
