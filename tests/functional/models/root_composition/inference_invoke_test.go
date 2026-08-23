@@ -140,11 +140,10 @@ func TestModelsInferenceInvokeActivatesThroughRootBuildProcess(t *testing.T) {
 	}
 }
 
-// TestModelsJoinedInvokeConsumesGenericCacheThroughRootBuildProcess proves
-// the generic joined path can use a prepared content-addressed model snapshot
-// through the real root composition, without a legacy managed-cache fixture or
-// a model-weight download.
-func TestModelsJoinedInvokeConsumesGenericCacheThroughRootBuildProcess(t *testing.T) {
+// TestModelsJoinedBuiltinInvokeWithoutFactoryDeclaration proves the built-in
+// tts definition reaches the joined kernel through root.BuildProcess and
+// Process.Execute without a redundant Factory resource or worker declaration.
+func TestModelsJoinedBuiltinInvokeWithoutFactoryDeclaration(t *testing.T) {
 	t.Parallel()
 
 	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -164,17 +163,9 @@ func TestModelsJoinedInvokeConsumesGenericCacheThroughRootBuildProcess(t *testin
 	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
 	protocol := &joinedProtocolNegotiator{}
 	compatibility := &joinedCompatibilityChecker{}
+	backendResolverCalls := 0
 	assetFiles := functionalModelAssetFileSystem{home: home}
-	config := localModelReadinessAssetsHostFactoryConfig(modelServer.URL)
-	resources := config["resources"].([]map[string]any)
-	resources[0]["model"] = "tts"
-	resources[0]["backend"] = "localai-vibevoice"
-	workers := config["workers"].([]map[string]any)
-	workers[0]["name"] = "tts-worker"
-	workers[0]["model"] = "tts"
-	workers[0]["args"] = []string{"--grpc-endpoint", modelServer.URL}
-
-	dir := support.ScaffoldFactory(t, config)
+	dir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ModelAssetHTTPClient:           rejectingNetwork,
 		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
@@ -191,9 +182,16 @@ func TestModelsJoinedInvokeConsumesGenericCacheThroughRootBuildProcess(t *testin
 		ModelHostProcessLauncher:       hostLauncher,
 		ModelHostProtocolNegotiator:    protocol,
 		ModelHostCompatibilityChecker:  compatibility,
-		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
-		ModelHostHTTPClient:            modelServer.Client(),
-		ModelRuntimeHTTPClient:         modelServer.Client(),
+		ModelResolveBackendArtifact: func(
+			context.Context,
+			serviceedges.ModelBackendArtifactSelectionRequest,
+		) (serviceedges.ModelBackendArtifactSelection, error) {
+			backendResolverCalls++
+			return pinnedTTSBackendSelection(), nil
+		},
+		ModelAssetHostPlatform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		ModelHostHTTPClient:    modelServer.Client(),
+		ModelRuntimeHTTPClient: modelServer.Client(),
 	})
 
 	var output bytes.Buffer
@@ -218,8 +216,8 @@ func TestModelsJoinedInvokeConsumesGenericCacheThroughRootBuildProcess(t *testin
 	if rejectingNetwork.Calls() != 0 {
 		t.Fatalf("joined asset network calls = %d, want 0 from content-addressed cache", rejectingNetwork.Calls())
 	}
-	if hostLauncher.Calls() != 1 {
-		t.Fatalf("joined host starts = %d, want exactly 1", hostLauncher.Calls())
+	if backendResolverCalls != 1 {
+		t.Fatalf("joined backend resolver calls = %d, want exactly one built-in managed-backend attempt", backendResolverCalls)
 	}
 
 	closer, ok := process.(interface{ Close(context.Context) error })
@@ -229,11 +227,19 @@ func TestModelsJoinedInvokeConsumesGenericCacheThroughRootBuildProcess(t *testin
 	if err := closer.Close(context.Background()); err != nil {
 		t.Fatalf("close joined root process: %v", err)
 	}
-	if protocol.Calls() == 0 {
-		t.Fatalf("joined protocol negotiations = %d, want at least 1", protocol.Calls())
-	}
-	if compatibility.Calls() == 0 {
-		t.Fatalf("joined compatibility checks = %d, want at least 1", compatibility.Calls())
+}
+
+func builtInOnlyModelFactoryConfig() map[string]any {
+	return map[string]any{
+		"name": "models-built-in-only",
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
 	}
 }
 

@@ -117,6 +117,21 @@ func TestCatalogDiscoversBuiltInsWithoutFactoryDeclarations(t *testing.T) {
 func TestCatalogPreservesFactoryAndOperatorPrecedenceOverBuiltIns(t *testing.T) {
 	t.Parallel()
 
+	fixture := newCatalogPrecedenceFixture(t)
+	assertCatalogPrecedenceList(t, fixture)
+	assertFactoryCatalogPrecedence(t, fixture)
+	assertOperatorCatalogPrecedence(t, fixture)
+	assertCustomCatalogPrecedence(t, fixture)
+}
+
+type catalogPrecedenceFixture struct {
+	service        catalog.Service
+	scope          models.RuntimeScopeRef
+	operatorSource string
+}
+
+func newCatalogPrecedenceFixture(t *testing.T) catalogPrecedenceFixture {
+	t.Helper()
 	operatorSource := "hf://operator/tts/model@0123456789012345678901234567890123456789"
 	operatorBackend := "localai-test"
 	operatorLoadPolicy := models.LoadPolicyKeepWarm
@@ -150,9 +165,16 @@ func TestCatalogPreservesFactoryAndOperatorPrecedenceOverBuiltIns(t *testing.T) 
 		t.Fatalf("open scope: %v", err)
 	}
 	scope := publicScope(t, privateRef)
-	service := newCatalogService(t, scopes)
+	return catalogPrecedenceFixture{
+		service:        newCatalogService(t, scopes),
+		scope:          scope,
+		operatorSource: operatorSource,
+	}
+}
 
-	listed, err := service.ListCatalog(context.Background(), models.ListModelsRequest{Scope: scope})
+func assertCatalogPrecedenceList(t *testing.T, fixture catalogPrecedenceFixture) {
+	t.Helper()
+	listed, err := fixture.service.ListCatalog(context.Background(), models.ListModelsRequest{Scope: fixture.scope})
 	if err != nil {
 		t.Fatalf("ListCatalog: %v", err)
 	}
@@ -163,44 +185,57 @@ func TestCatalogPreservesFactoryAndOperatorPrecedenceOverBuiltIns(t *testing.T) 
 	if countByName[models.BuiltInModelNameASR] != 1 {
 		t.Fatalf("asr count = %d, want one effective Factory entry", countByName[models.BuiltInModelNameASR])
 	}
+}
 
-	factory, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{
-		Scope: scope, Name: models.BuiltInModelNameASR, Operation: "factory-operation",
+func assertFactoryCatalogPrecedence(t *testing.T, fixture catalogPrecedenceFixture) {
+	t.Helper()
+	factory := getCatalogPrecedenceModel(t, fixture, models.GetModelRequest{
+		Scope: fixture.scope, Name: models.BuiltInModelNameASR, Operation: "factory-operation",
 	})
-	if err != nil {
-		t.Fatalf("GetCatalogModel(factory asr): %v", err)
-	}
 	if len(factory.Model.Operations) != 1 || factory.Model.Operations[0].Name != "factory-operation" {
 		t.Fatalf("factory asr operations = %#v, want Factory operation", factory.Model.Operations)
 	}
-	if _, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{
-		Scope: scope, Name: models.BuiltInModelNameASR, Operation: models.OperationTTS,
+	if _, err := fixture.service.GetCatalogModel(context.Background(), models.GetModelRequest{
+		Scope: fixture.scope, Name: models.BuiltInModelNameASR, Operation: models.OperationTTS,
 	}); !errors.Is(err, models.ErrUnsupportedOperation) {
 		t.Fatalf("Factory precedence operation error = %v, want ErrUnsupportedOperation", err)
 	}
+}
 
-	operator, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{
-		Scope: scope, Name: models.BuiltInModelNameTTS, Operation: models.OperationOMNI,
+func assertOperatorCatalogPrecedence(t *testing.T, fixture catalogPrecedenceFixture) {
+	t.Helper()
+	operator := getCatalogPrecedenceModel(t, fixture, models.GetModelRequest{
+		Scope: fixture.scope, Name: models.BuiltInModelNameTTS, Operation: models.OperationOMNI,
 	})
-	if err != nil {
-		t.Fatalf("GetCatalogModel(operator tts): %v", err)
-	}
 	if len(operator.Model.Operations) != 1 || operator.Model.Operations[0].Name != models.OperationOMNI {
 		t.Fatalf("operator tts operations = %#v, want overlaid OMNI", operator.Model.Operations)
 	}
-	if len(operator.Model.Sources) != 1 || operator.Model.Sources[0].Reference != operatorSource {
+	if len(operator.Model.Sources) != 1 || operator.Model.Sources[0].Reference != fixture.operatorSource {
 		t.Fatalf("operator tts sources = %#v, want overlay source", operator.Model.Sources)
 	}
+}
 
-	custom, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{
-		Scope: scope, Name: "CUSTOM", Operation: models.OperationASR,
+func assertCustomCatalogPrecedence(t *testing.T, fixture catalogPrecedenceFixture) {
+	t.Helper()
+	custom := getCatalogPrecedenceModel(t, fixture, models.GetModelRequest{
+		Scope: fixture.scope, Name: "CUSTOM", Operation: models.OperationASR,
 	})
-	if err != nil {
-		t.Fatalf("GetCatalogModel(operator custom): %v", err)
-	}
 	if custom.Model.Name != "custom" || len(custom.Model.Operations) != 1 || custom.Model.Operations[0].Name != models.OperationASR {
 		t.Fatalf("custom detail = %#v, want operator definition", custom.Model)
 	}
+}
+
+func getCatalogPrecedenceModel(
+	t *testing.T,
+	fixture catalogPrecedenceFixture,
+	request models.GetModelRequest,
+) models.GetModelResult {
+	t.Helper()
+	result, err := fixture.service.GetCatalogModel(context.Background(), request)
+	if err != nil {
+		t.Fatalf("GetCatalogModel(%s): %v", request.Name, err)
+	}
+	return result
 }
 
 func TestListCatalogRejectsUnavailableScopedConfiguration(t *testing.T) {

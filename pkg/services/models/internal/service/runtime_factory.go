@@ -304,59 +304,6 @@ func (o *Root) PullModelForScope(
 	return o.pullResolvedModelAfterCatalogMiss(ctx, request, err)
 }
 
-func (o *Root) pullResolvedModelAfterCatalogMiss(
-	ctx context.Context,
-	request models.PullModelRequest,
-	catalogErr error,
-) (models.PullResult, error) {
-	resolution, err := o.ResolveModelReference(ctx, models.ResolveModelReferenceRequest{
-		Scope: request.Scope,
-		Reference: models.ModelReference{
-			NameOrURI: request.Name,
-		},
-	})
-	if err != nil {
-		// The scoped catalog miss remains the established pull error when the
-		// canonical resolver also reports a genuine unknown name. Other
-		// resolver failures are meaningful configuration or reference errors
-		// and must not be hidden behind the earlier catalog miss.
-		if errors.Is(err, models.ErrModelReferenceUnknown) {
-			return models.PullResult{}, catalogErr
-		}
-		return models.PullResult{}, err
-	}
-	if o == nil || o.assets == nil || o.runtimeScopes == nil {
-		return models.PullResult{}, catalogErr
-	}
-	binding, err := o.runtimeScopes.Resolve(runtimescopes.Reference(request.Scope.String()))
-	if err != nil {
-		return models.PullResult{}, runtimeScopeError(err)
-	}
-	if binding.RuntimeConfig == nil {
-		return models.PullResult{}, models.ErrUnavailable
-	}
-	runtimeConfig := binding.RuntimeConfig()
-	if runtimeConfig == nil {
-		return models.PullResult{}, models.ErrUnavailable
-	}
-	puller, err := localmodels.NewScopedAssetPuller(o.assets, request.Scope)
-	if err != nil {
-		return models.PullResult{}, err
-	}
-	resolved := resolution.Resolved.Clone()
-	return localmodels.PullModelWithOptions(
-		puller,
-		ctx,
-		runtimeConfig,
-		request.Name,
-		localmodels.PullOptions{
-			RuntimeCacheInspector: puller,
-			SourceResolver:        localmodels.DefaultManagedRuntimeSourceResolver(),
-			ResolvedReference:     &resolved,
-		},
-	)
-}
-
 func (o *Root) InspectModelAssets(
 	ctx context.Context,
 	request models.InspectModelAssetsRequest,
