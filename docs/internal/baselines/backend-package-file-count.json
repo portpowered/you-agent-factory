@@ -321,7 +321,7 @@
     },
     {
       "packagePath": "pkg/transports/cli/baseline",
-      "fileCount": 20,
+      "fileCount": 18,
       "owner": "cli-maintainers",
       "removalReason": "Consolidate baseline command fixtures and split durable behaviors."
     },
