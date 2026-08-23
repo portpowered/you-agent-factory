@@ -73,20 +73,6 @@ func waitForRuntimeConfigAlignmentServerCompletion(
 	t.Fatalf("timed out waiting %s for runtime completion; status=%s marking=%#v", timeout, status.RuntimeStatus, session.Runtime.Petri)
 }
 
-func assertRuntimeConfigAlignmentResourceManifest(t *testing.T, manifest *interfaces.PortableResourceManifestConfig) {
-	t.Helper()
-
-	if manifest == nil {
-		t.Fatal("resource manifest is nil")
-	}
-	if len(manifest.RequiredTools) != 1 || manifest.RequiredTools[0].Name != "go" {
-		t.Fatalf("resource manifest requiredTools = %#v, want go", manifest.RequiredTools)
-	}
-	if len(manifest.BundledFiles) != 2 {
-		t.Fatalf("resource manifest bundledFiles = %#v, want bootstrap script and usage doc", manifest.BundledFiles)
-	}
-}
-
 func assertRuntimeConfigAlignmentGeneratedResourceManifest(t *testing.T, manifest *factoryapi.ResourceManifest) {
 	t.Helper()
 

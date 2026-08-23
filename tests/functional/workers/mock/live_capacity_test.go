@@ -562,12 +562,6 @@ func newLiveCapacityBarrierRunner(blockedCalls int) *liveCapacityBarrierRunner {
 	}
 }
 
-func (r *liveCapacityBarrierRunner) callCount() int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.calls
-}
-
 func (r *liveCapacityBarrierRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	r.mu.Lock()
 	r.calls++

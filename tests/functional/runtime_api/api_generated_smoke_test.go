@@ -2,12 +2,10 @@ package runtime_api
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 	"testing"
 	"time"
 
@@ -62,42 +60,6 @@ func submitGeneratedWork(t *testing.T, baseURL string, req factoryapi.SubmitWork
 
 func stringPtr(value string) *string {
 	return &value
-}
-
-func stageGeneratedSubmitWorkFile(
-	t *testing.T,
-	baseURL string,
-	itemType string,
-	fileName string,
-	mediaType string,
-	content []byte,
-) (stagedFileRef string, contentURL string) {
-	t.Helper()
-
-	req := map[string]string{
-		"itemType":      itemType,
-		"fileName":      fileName,
-		"mediaType":     mediaType,
-		"contentBase64": base64.StdEncoding.EncodeToString(content),
-	}
-	body, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("marshal stage submit-work request: %v", err)
-	}
-	resp, err := http.Post(support.DefaultSessionWorkURL(baseURL, "/work/staged-files"), "application/json", bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("POST /work/staged-files: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		payload, _ := io.ReadAll(resp.Body)
-		t.Fatalf("POST /work/staged-files status = %d, want 201: %s", resp.StatusCode, string(payload))
-	}
-	var out factoryapi.StageSubmitWorkFileResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("decode staged-file response: %v", err)
-	}
-	return out.StagedFileRef, string(out.Url)
 }
 
 func putGeneratedWorkRequest(t *testing.T, baseURL string, requestID string, req factoryapi.WorkRequest) factoryapi.UpsertWorkRequestResponse {
@@ -167,23 +129,6 @@ func waitForGeneratedWorkAtPlace(t *testing.T, baseURL string, traceID string, p
 	return factoryapi.ListWorkResponse{}
 }
 
-func waitForGeneratedWorkTypeComplete(t *testing.T, baseURL string, workType string, timeout time.Duration) factoryapi.Work {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
-		for _, item := range work.Results {
-			if stringPointerValue(item.WorkTypeName) == workType && generatedWorkStateName(item.State) == "complete" {
-				return item
-			}
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
-	t.Fatalf("timed out waiting for completed work type %q; last work response: %#v", workType, work)
-	return factoryapi.Work{}
-}
-
 func waitForGeneratedWorkIDsComplete(t *testing.T, baseURL string, workIDs []string, timeout time.Duration) []factoryapi.Work {
 	t.Helper()
 	want := make(map[string]bool, len(workIDs))
@@ -214,63 +159,11 @@ func waitForGeneratedWorkIDsComplete(t *testing.T, baseURL string, workIDs []str
 	return nil
 }
 
-func requireGeneratedWorkByTrace(t *testing.T, work factoryapi.ListWorkResponse, traceID string) factoryapi.Work {
-	t.Helper()
-	for _, item := range work.Results {
-		if stringPointerValue(item.TraceId) == traceID {
-			return item
-		}
-	}
-	t.Fatalf("trace %q missing from generated work response: %#v", traceID, work)
-	return factoryapi.Work{}
-}
-
 func generatedWorkPlaceID(work factoryapi.Work) string {
 	if work.State == nil {
 		return stringPointerValue(work.WorkTypeName) + ":"
 	}
 	return stringPointerValue(work.WorkTypeName) + ":" + work.State.Name
-}
-
-func mustSubmitWorkTextItem(t *testing.T, text string) factoryapi.SubmitWorkItem {
-	t.Helper()
-
-	var item factoryapi.SubmitWorkItem
-	if err := item.FromSubmitWorkTextItem(factoryapi.SubmitWorkTextItem{
-		Type: factoryapi.SubmitWorkItemTypeText,
-		Text: text,
-	}); err != nil {
-		t.Fatalf("encode submit-work text item: %v", err)
-	}
-	return item
-}
-
-func mustSubmitWorkImageItem(t *testing.T, stagedFileRef string, contentURL string, fileName string, mediaType string) factoryapi.SubmitWorkItem {
-	t.Helper()
-
-	var item factoryapi.SubmitWorkItem
-	if err := item.FromSubmitWorkImageItem(factoryapi.SubmitWorkImageItem{
-		Type:          factoryapi.SubmitWorkItemTypeImage,
-		StagedFileRef: stagedFileRef,
-		Url:           factoryapi.SubmitWorkContentURLProperty(contentURL),
-		FileName:      fileName,
-		MediaType:     mediaType,
-	}); err != nil {
-		t.Fatalf("encode submit-work image item: %v", err)
-	}
-	return item
-}
-
-func functionalServerBase(t *testing.T, rawURL string) string {
-	t.Helper()
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		t.Fatalf("parse functional server URL %q: %v", rawURL, err)
-	}
-	if parsed.Scheme == "" || parsed.Host == "" {
-		t.Fatalf("functional server URL %q missing scheme or host", rawURL)
-	}
-	return strings.TrimSuffix(rawURL, "/")
 }
 
 func assertFunctionalEventsUseCanonicalVocabulary(t *testing.T, events []factoryapi.FactoryEvent, required ...factoryapi.FactoryEventType) {
