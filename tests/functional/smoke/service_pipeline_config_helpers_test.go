@@ -1,3 +1,5 @@
+//go:build functionallong
+
 package smoke
 
 func simpleServicePipelineConfig() map[string]any {

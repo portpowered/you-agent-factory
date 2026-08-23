@@ -283,34 +283,6 @@ func readRPCResponse(t *testing.T, r *bufio.Reader) rpcFrame {
 	}
 }
 
-func readRPCNotification(t *testing.T, r *bufio.Reader) rpcFrame {
-	t.Helper()
-	frame := readRPCFrame(t, r)
-	if frame.Method == "" {
-		t.Fatalf("expected a notification frame, got response %+v", frame)
-	}
-	return frame
-}
-
-func agentMessageChunkText(t *testing.T, frame rpcFrame) string {
-	t.Helper()
-	if frame.Method != string(acpsdk.ClientMethodSessionUpdate) {
-		t.Fatalf("notification method = %q, want %q", frame.Method, acpsdk.ClientMethodSessionUpdate)
-	}
-	var notification acpsdk.SessionNotification
-	if err := json.Unmarshal(frame.Params, &notification); err != nil {
-		t.Fatalf("unmarshal session/update params: %v", err)
-	}
-	if notification.Update.AgentMessageChunk == nil {
-		t.Fatalf("session/update update = %+v, want an agent_message_chunk update", notification.Update)
-	}
-	text := notification.Update.AgentMessageChunk.Content.Text
-	if text == nil {
-		t.Fatalf("agent_message_chunk content = %+v, want a text content block", notification.Update.AgentMessageChunk.Content)
-	}
-	return text.Text
-}
-
 // seedFixtureFactory installs a minimal single-worker Factory project-locally
 // under the given working root (the same cwd this test later supplies as
 // session/new's cwd param), at the exact

@@ -944,11 +944,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/helpers_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/packaged_goal_public_contract_test.go",
       "target": "smoke"
     },

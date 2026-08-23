@@ -306,14 +306,6 @@ func (recorder *sessionActivationRecorder) totalLifecycle() int32 {
 		recorder.runtimeHost.Load()
 }
 
-func (recorder *sessionActivationRecorder) totalRuntimeOpening() int32 {
-	return recorder.workingDirectory.Load() +
-		recorder.executionGetwd.Load() +
-		recorder.executionStat.Load() +
-		recorder.contractFixture.Load() +
-		recorder.replayRecording.Load()
-}
-
 type sessionActivationWorkingDirectory struct {
 	recorder *sessionActivationRecorder
 }

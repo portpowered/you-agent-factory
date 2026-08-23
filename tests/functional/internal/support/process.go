@@ -239,35 +239,6 @@ func CreateNamedFactoryWithProcess(
 	)
 }
 
-// CreateAndActivateNamedFactoryWithProcess executes the public named Factory
-// create flow with --set-current on a caller-owned reusable process.
-func CreateAndActivateNamedFactoryWithProcess(
-	t testing.TB,
-	process Process,
-	homeDir string,
-	workingDirectory string,
-	name string,
-	factoryConfigPath string,
-) string {
-	t.Helper()
-	env := append(
-		os.Environ(),
-		"HOME="+homeDir,
-		"USERPROFILE="+homeDir,
-	)
-	namedFactoriesRoot := InitializeCustomerHomeWithProcess(t, process, env, workingDirectory)
-	return createNamedFactoryAtRootWithProcess(
-		t,
-		process,
-		env,
-		workingDirectory,
-		namedFactoriesRoot,
-		name,
-		factoryConfigPath,
-		true,
-	)
-}
-
 // CreateNamedFactoryAtRoot executes the public create command against an
 // explicitly supplied named-Factories root. Functional server fixtures use
 // this customer boundary before starting a server over that root.
@@ -360,26 +331,6 @@ func CreateAndActivateNamedFactoryAtRootWithProcess(
 		name,
 		factoryConfigPath,
 		true,
-	)
-}
-
-func createNamedFactoryAtRoot(
-	t testing.TB,
-	env []string,
-	workingDirectory string,
-	namedFactoriesRoot string,
-	name string,
-	factoryConfigPath string,
-) string {
-	return createNamedFactoryAtRootWithProcess(
-		t,
-		BuildProcess(t, serviceedges.Edges{}),
-		env,
-		workingDirectory,
-		namedFactoriesRoot,
-		name,
-		factoryConfigPath,
-		false,
 	)
 }
 

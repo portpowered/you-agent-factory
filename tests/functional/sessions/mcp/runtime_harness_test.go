@@ -3,7 +3,6 @@ package mcp_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -650,69 +649,4 @@ func startFunctionalAPIServerForMCPControls(
 		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
 	})
-}
-
-func readAPIFactorySessionDurableReadModel(
-	t *testing.T,
-	baseURL string,
-	sessionID string,
-) factoryapi.FactorySessionDurableReadModel {
-	t.Helper()
-	read := support.GetJSON[factoryapi.FactorySessionDurableReadModel](
-		t,
-		baseURL+"/factory-sessions/"+sessionID,
-	)
-	assertCanonicalSessionID(t, read.SessionId, sessionID, "api read")
-	return read
-}
-
-func waitForAPIFactorySessionStatus(
-	t *testing.T,
-	baseURL string,
-	sessionID string,
-	want factoryapi.FactorySessionDurableLifecycleStatus,
-	timeout time.Duration,
-) factoryapi.FactorySessionDurableReadModel {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		read := readAPIFactorySessionDurableReadModel(t, baseURL, sessionID)
-		if read.Status == want {
-			return read
-		}
-		time.Sleep(15 * time.Millisecond)
-	}
-	read := readAPIFactorySessionDurableReadModel(t, baseURL, sessionID)
-	t.Fatalf("api session %s status = %q, want %q within %s", sessionID, read.Status, want, timeout)
-	return read
-}
-
-func assertFactorySessionOutputExcludesForbiddenVocabulary(t *testing.T, text string) {
-	t.Helper()
-	lower := strings.ToLower(text)
-	for _, term := range []string{"DynamicWorkflowRun", "workflow run"} {
-		if strings.Contains(lower, strings.ToLower(term)) {
-			t.Fatalf("output introduced forbidden vocabulary %q:\n%s", term, text)
-		}
-	}
-}
-
-func assertAPIReadMatchesMCPSharedFactorySessionVocabulary(
-	t *testing.T,
-	mcpRead factoryapi.FactorySessionDurableReadModel,
-	apiRead factoryapi.FactorySessionDurableReadModel,
-) {
-	t.Helper()
-	if mcpRead.Status != apiRead.Status {
-		t.Fatalf("mcp status = %q, api status = %q, want matching shared status", mcpRead.Status, apiRead.Status)
-	}
-	if apiRead.OrchestratorKind != factoryapi.JAVASCRIPT {
-		t.Fatalf("api orchestratorKind = %q, want %q", apiRead.OrchestratorKind, factoryapi.JAVASCRIPT)
-	}
-	encoded, err := json.Marshal(apiRead)
-	if err != nil {
-		t.Fatalf("marshal api durable read model: %v", err)
-	}
-	assertFactorySessionOutputExcludesForbiddenVocabulary(t, string(encoded))
 }
