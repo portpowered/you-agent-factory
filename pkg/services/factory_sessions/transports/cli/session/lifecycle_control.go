@@ -547,16 +547,26 @@ func writeLifecycleControlResponse(
 func lifecycleControlNotFoundError(sessionID string, resp *http.Response) error {
 	label := resolvedLifecycleControlSessionID(sessionID)
 	if errResp, ok := decodeLifecycleControlAPIError(resp); ok {
-		return fmt.Errorf("factory session %q not found: %s", label, errResp.Message)
+		return clihttp.NewAPIErrorFromResponse(
+			resp,
+			errResp,
+			fmt.Sprintf("factory session %q not found: %s", label, errResp.Message),
+			nil,
+		)
 	}
-	return fmt.Errorf("factory session %q not found", label)
+	return clihttp.WithHTTPResponse(resp, fmt.Errorf("factory session %q not found", label))
 }
 
 func lifecycleControlStatusError(operationLabel string, resp *http.Response) error {
 	if errResp, ok := decodeLifecycleControlAPIError(resp); ok {
-		return fmt.Errorf("factory session %s failed (%d): %s", operationLabel, resp.StatusCode, errResp.Message)
+		return clihttp.NewAPIErrorFromResponse(
+			resp,
+			errResp,
+			fmt.Sprintf("factory session %s failed (%d): %s", operationLabel, resp.StatusCode, errResp.Message),
+			nil,
+		)
 	}
-	return fmt.Errorf("factory session %s failed (%d)", operationLabel, resp.StatusCode)
+	return clihttp.WithHTTPResponse(resp, fmt.Errorf("factory session %s failed (%d)", operationLabel, resp.StatusCode))
 }
 
 func decodeLifecycleControlAPIError(resp *http.Response) (factoryapi.ErrorResponse, bool) {
