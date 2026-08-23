@@ -57,7 +57,7 @@
                   "workType": "task"
                 }
               ],
-              "body": "Process {{ .WorkID }}.",
+              "body": "Process the recorded cost fixture.",
               "type": "MODEL_WORKSTATION",
               "worker": "priced-worker"
             }
