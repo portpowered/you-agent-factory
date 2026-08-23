@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
@@ -21,13 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// BeginWorkerAttempt opens the Worker Session observation window around a
-// detached Execute request. Factory Runtime remains the admission and
-// execution owner; the returned callback only commits the durable Worker
-// Session terminal observation after the caller's Execute operation returns.
-// This optional capability is used by the direct JavaScript child route, whose
-// request is already fully resolved and therefore does not go through the
-// Runtime stateless attempt driver.
+// BeginWorkerAttempt prepares a direct-child Worker Session terminal callback.
 func (f *factoryImpl) BeginWorkerAttempt(
 	ctx context.Context,
 	executeRequest workers.ExecuteRequest,
@@ -43,6 +38,19 @@ func (f *factoryImpl) BeginWorkerAttempt(
 	initialSessionID := runtimeWorkerSessionID(f.cfg, request, executeRequest, false)
 	allowRetry := terminalWorkerSessionRequiresRetry(ctx, f.cfg.workerSessions, initialSessionID)
 	sessionID := runtimeWorkerSessionID(f.cfg, request, executeRequest, allowRetry)
+	prepare := runtimeAttemptPreparation(f.cfg, request, executeRequest, allowRetry)
+	if prepare == nil {
+		return nil, factory.ErrNotRunning
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	terminal, err := prepare(context.WithoutCancel(ctx), &executeRequest)
+	if err != nil {
+		return nil, err
+	}
+	// Publish the association only after setup returns a terminal callback;
+	// failed setup must not strand a response bridge on a Worker topic.
 	recordDispatchWorkerSessionAssociation(
 		f.eventHistory,
 		f.currentTick(),
@@ -55,28 +63,20 @@ func (f *factoryImpl) BeginWorkerAttempt(
 		},
 		f.cfg.clock.Now(),
 	)
-	prepare := runtimeAttemptPreparation(f.cfg, request, executeRequest, allowRetry)
-	if prepare == nil {
-		return nil, factory.ErrNotRunning
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	terminal, err := prepare(context.WithoutCancel(ctx), &executeRequest)
-	if err != nil {
-		return nil, err
-	}
+	var completeOnce sync.Once
 	return func(
 		callbackCtx context.Context,
 		result workers.ExecuteResult,
 		executeErr error,
 	) error {
-		if callbackCtx == nil {
-			callbackCtx = context.Background()
-		}
-		if terminal != nil {
-			terminal(callbackCtx, executeRequest, result, executeErr)
-		}
+		completeOnce.Do(func() {
+			if callbackCtx == nil {
+				callbackCtx = context.Background()
+			}
+			if terminal != nil {
+				terminal(callbackCtx, executeRequest, result, executeErr)
+			}
+		})
 		return nil
 	}, nil
 }

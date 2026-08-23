@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -19,9 +20,7 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// startThroughWorkerSessions reserves a stable Worker Session identity, records
-// the association before lifecycle publication, and preserves the pre-cutover
-// dispatch result shape.
+// startThroughWorkerSessions reserves identity and preserves the dispatch shape.
 func startThroughWorkerSessions(
 	ctx context.Context,
 	cfg *runtimeConfig,
@@ -109,6 +108,12 @@ func runtimeAttemptPreparation(
 			return nil, err
 		}
 		return func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
+			result = normalizeAttemptResult(
+				executeRequest,
+				result,
+				executeErr,
+				platformprocess.CancellationReasonFromError(executeErr),
+			)
 			result = normalizeDetachedExecutionResult(cfg, executeRequest, result)
 			dispatchResult, dispatchErr := workstationDispatchResultFromExecute(
 				workstationDispatchRequestForResult(request, executeRequest),
@@ -149,8 +154,7 @@ func runtimeWorkerSessionID(
 	return sessionID
 }
 
-// workerSessionDispatchOutcome preserves handed-off dispatch results and
-// synthesizes a failure for requests rejected before Workers admission.
+// workerSessionDispatchOutcome preserves handoff results and rejects admission failures.
 func workerSessionDispatchOutcome(
 	request workers.WorkstationDispatchRequest,
 	startResult workersessions.InvokeSessionResult,
@@ -191,8 +195,7 @@ func workerSessionDispatchOutcome(
 	}, nil
 }
 
-// handedOffToWorkers reports whether Start reached DispatchWorkstation; only a
-// pre-handoff Events publication failure is treated as not handed off.
+// handedOffToWorkers reports whether Start reached DispatchWorkstation.
 func handedOffToWorkers(startResult workersessions.InvokeSessionResult) bool {
 	result := startResult.Session.Result
 	if result == nil || result.Cause == nil {
@@ -209,8 +212,7 @@ func (f *factoryImpl) WorkerSessionsObservation() workersessions.ObservationServ
 	return f.WorkerSessionsObservationForSession(sessionIDFromFactoryConfig(f.cfg))
 }
 
-// WorkerSessionsObservationForSession binds detached reads to the effective
-// Factory Session identity exposed by the live registry.
+// WorkerSessionsObservationForSession binds reads to the effective Factory Session.
 func (f *factoryImpl) WorkerSessionsObservationForSession(factorySessionID string) workersessions.ObservationService {
 	if f == nil || f.cfg == nil {
 		return nil
@@ -581,7 +583,6 @@ func (s *recordedWorkerSessionObservation) listLive(
 	return s.Service.ListObservations(ctx, req)
 }
 
-// Start carries the runtime-owned recording identity into direct admission.
 func (s *recordedWorkerSessionObservation) Start(
 	ctx context.Context,
 	req workersessions.StartRequest,
