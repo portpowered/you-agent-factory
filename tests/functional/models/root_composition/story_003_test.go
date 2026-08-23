@@ -72,6 +72,7 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 	support.CleanupProcess(t, pullProcess)
 	pullInputs := support.FakeInputs(t.Context(), story003ModelsPullArgs(server.URL()))
 	pullInputs.Input.WorkingDirectory = factoryDir
+	pullStartedAt := time.Now().UTC()
 	pullCommand := support.StartProcessCommand(t, pullProcess, pullInputs.Input)
 
 	waitStory003Signal(t, source.manifestServed, "manifest request")
@@ -85,6 +86,8 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 	case <-time.After(story003WorkflowTimeout):
 		t.Fatal("timed out waiting for synchronous model pull to finish")
 	}
+	pullFinishedAt := time.Now().UTC()
+	t.Logf("models pull command=%q start=%s finish=%s exitCode=0", strings.Join(story003ModelsPullArgs(server.URL()), " "), pullStartedAt.Format(time.RFC3339Nano), pullFinishedAt.Format(time.RFC3339Nano))
 	if err := pullCommand.Err(); err != nil {
 		t.Fatalf("Process.Execute(models pull) error = %v\nstdout:\n%s\nstderr:\n%s", err, pullInputs.Stdout(), pullInputs.Stderr())
 	}
