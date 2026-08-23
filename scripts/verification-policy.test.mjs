@@ -12,6 +12,7 @@ const laneNames = [
 	"Frontend",
 	"Backend",
 	"Backend Test Stability",
+	"Backend Integration",
 	"Backend Lint",
 	"Workflow Lint",
 	"UI Backend Integration",
@@ -156,6 +157,28 @@ test("required Workflow Lint fails the policy when its hosted job is skipped or 
 
 		assert.equal(evaluation.ok, false, `${result} must fail the required workflow lint lane`);
 		assert.ok(evaluation.failures.some((failure) => /Workflow Lint was selected/.test(failure)));
+	}
+});
+
+test("required Backend Integration fails the policy when its hosted job fails or is canceled", () => {
+	for (const result of ["skipped", "cancelled", "timed_out", "failure"]) {
+		const evaluation = evaluateVerificationPolicy(
+			policy({
+				lanes: [
+					...laneNames
+						.filter((name) => name !== "Backend Integration")
+						.map((name) => lane(name)),
+					lane("Backend Integration", true, result, {
+						reason: "The installed-binary validation tier is required on pull requests.",
+					}),
+				],
+			}),
+		);
+
+		assert.equal(evaluation.ok, false, `${result} must fail the required policy lane`);
+		assert.ok(
+			evaluation.failures.some((failure) => /Backend Integration was selected/.test(failure)),
+		);
 	}
 });
 
