@@ -7,7 +7,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 )
 
-func TestValidateChildRequest_AllowlistAndCapabilityDenials(t *testing.T) {
+func TestValidateChildRequest_AllowlistAndBudgetDenials(t *testing.T) {
 	t.Parallel()
 	base := factory.DefaultJavaScriptPolicy()
 	base.AllowedModels = []string{"gpt-allowed"}
@@ -47,33 +47,6 @@ func TestValidateChildRequest_AllowlistAndCapabilityDenials(t *testing.T) {
 				Command: "deploy",
 			},
 			want: "policy denied: command \"deploy\" is not listed in allowedCommands",
-		},
-		{
-			name:   "sandbox",
-			policy: base,
-			request: factory.JavaScriptPolicyChildRequest{
-				Label:   "child-a",
-				Sandbox: "workspace-write",
-			},
-			want: "policy denied: sandbox \"workspace-write\" is not allowed when policy.mode is READ_ONLY",
-		},
-		{
-			name:   "writableRoots",
-			policy: base,
-			request: factory.JavaScriptPolicyChildRequest{
-				Label:         "child-a",
-				WritableRoots: []string{"/tmp/out"},
-			},
-			want: "policy denied: writableRoots are not allowed by effective policy",
-		},
-		{
-			name:   "network",
-			policy: base,
-			request: factory.JavaScriptPolicyChildRequest{
-				Label:        "child-a",
-				AllowNetwork: true,
-			},
-			want: "policy denied: network access is not allowed by effective policy",
 		},
 		{
 			name:   "concurrency",
@@ -151,7 +124,7 @@ func TestValidateChildRequest_AllowsPermittedRequest(t *testing.T) {
 	}
 }
 
-func TestValidateChildRequest_SkipPermissionsOnlyOverridesSandboxRestrictions(t *testing.T) {
+func TestValidateChildRequest_SkipPermissionsDoesNotBypassRuntimeAllowlists(t *testing.T) {
 	t.Parallel()
 	policy := factory.DefaultJavaScriptPolicy()
 	policy.AllowedModels = []string{"gpt-allowed"}
@@ -170,14 +143,6 @@ func TestValidateChildRequest_SkipPermissionsOnlyOverridesSandboxRestrictions(t 
 				Label:           "autonomous-child",
 				SkipPermissions: true,
 				Sandbox:         "workspace-write",
-			},
-		},
-		{
-			name: "writable roots",
-			request: factory.JavaScriptPolicyChildRequest{
-				Label:           "autonomous-child",
-				SkipPermissions: true,
-				WritableRoots:   []string{"/tmp/output"},
 			},
 		},
 		{
@@ -208,15 +173,6 @@ func TestValidateChildRequest_SkipPermissionsOnlyOverridesSandboxRestrictions(t 
 			wantErr: `policy denied: command "deploy" is not listed in allowedCommands`,
 		},
 		{
-			name: "network capability remains enforced",
-			request: factory.JavaScriptPolicyChildRequest{
-				Label:           "autonomous-child",
-				AllowNetwork:    true,
-				SkipPermissions: true,
-			},
-			wantErr: "policy denied: network access is not allowed by effective policy",
-		},
-		{
 			name: "concurrency budget remains enforced",
 			request: factory.JavaScriptPolicyChildRequest{
 				Label:           "autonomous-child",
@@ -241,5 +197,33 @@ func TestValidateChildRequest_SkipPermissionsOnlyOverridesSandboxRestrictions(t 
 				t.Fatalf("ValidateChildRequest() error = %v, want substring %q", err, test.wantErr)
 			}
 		})
+	}
+}
+
+func TestValidateChildRequest_AllowedPermissionsNamesFactoryChildAndRequestedValue(t *testing.T) {
+	t.Parallel()
+	policy := factory.DefaultJavaScriptPolicy()
+	policy.AllowedPermissions = []string{factory.JavaScriptPolicyPermissionDefault}
+	request := factory.JavaScriptPolicyChildRequest{
+		FactoryName:     "named-factory",
+		Label:           "skip-child",
+		SkipPermissions: true,
+	}
+
+	err := factory.ValidateJavaScriptPolicyChildRequest(policy, request)
+	const want = `policy denied: Factory "named-factory" child "skip-child" requested permission "SKIP_PERMISSIONS" not listed in allowedPermissions`
+	if err == nil || err.Error() != want {
+		t.Fatalf("ValidateChildRequest() error = %v, want exact diagnostic %q", err, want)
+	}
+
+	request.SkipPermissions = false
+	if err := factory.ValidateJavaScriptPolicyChildRequest(policy, request); err != nil {
+		t.Fatalf("ValidateChildRequest() default permission error = %v, want nil", err)
+	}
+
+	policy.AllowedPermissions = []string{factory.JavaScriptPolicyPermissionSkipPermissions}
+	request.SkipPermissions = true
+	if err := factory.ValidateJavaScriptPolicyChildRequest(policy, request); err != nil {
+		t.Fatalf("ValidateChildRequest() skip permission error = %v, want nil", err)
 	}
 }

@@ -27,12 +27,27 @@ var (
 
 func validatePolicyMap(document map[string]any, deploymentCap int) []Issue {
 	var issues []Issue
-	issues = append(issues, validatePolicyModeOverride(document)...)
-	issues = append(issues, validatePolicyDeniedFlagOverrides(document)...)
-	issues = append(issues, validatePolicyWritableRootOverride(document)...)
+	issues = append(issues, validateRetiredPolicyFields(document)...)
 	issues = append(issues, validatePolicyConcurrencyOverride(document)...)
 	issues = append(issues, validatePolicyMaxAgentsOverride(document, deploymentCap)...)
 	issues = append(issues, validatePolicyAllowedPermissionsShape(document)...)
+	return issues
+}
+
+func validateRetiredPolicyFields(document map[string]any) []Issue {
+	const replacement = "allowedPermissions"
+	fields := []string{"mode", "allowNetwork", "allowConnectors", "allowDangerFullAccess", "writableRoots"}
+	var issues []Issue
+	for _, field := range fields {
+		if _, ok := document[field]; !ok {
+			continue
+		}
+		issues = append(issues, Issue{
+			Code:    CodeUnsupportedPolicyField,
+			Message: fmt.Sprintf("policy.%s is no longer supported; use policy.%s to authorize DEFAULT or SKIP_PERMISSIONS", field, replacement),
+			Path:    "policy." + field,
+		})
+	}
 	return issues
 }
 
@@ -78,57 +93,6 @@ func policyAllowlistValues(value any) ([]any, bool) {
 	default:
 		return nil, false
 	}
-}
-
-func validatePolicyModeOverride(document map[string]any) []Issue {
-	value, ok := document["mode"]
-	if !ok {
-		return nil
-	}
-	mode, ok := value.(string)
-	if ok && strings.TrimSpace(mode) == ModeReadOnly {
-		return nil
-	}
-	return []Issue{{
-		Code:    CodeUnsupportedPolicyMode,
-		Message: fmt.Sprintf("policy.mode must be %q for the read-only MVP default", ModeReadOnly),
-		Path:    "policy.mode",
-	}}
-}
-
-func validatePolicyDeniedFlagOverrides(document map[string]any) []Issue {
-	var issues []Issue
-	for field, capability := range map[string]string{
-		"allowNetwork":          "network access",
-		"allowConnectors":       "connectors",
-		"allowDangerFullAccess": "danger-full-access",
-	} {
-		value, ok := document[field]
-		if !ok {
-			continue
-		}
-		allowed, ok := value.(bool)
-		if ok && allowed {
-			issues = append(issues, validateDeniedFlag(field, capability))
-		}
-	}
-	return issues
-}
-
-func validatePolicyWritableRootOverride(document map[string]any) []Issue {
-	value, ok := document["writableRoots"]
-	if !ok {
-		return nil
-	}
-	roots, ok := value.([]any)
-	if !ok || len(roots) == 0 {
-		return nil
-	}
-	return []Issue{{
-		Code:    CodeWritableRootsReadOnly,
-		Message: "writableRoots are not allowed when policy.mode is READ_ONLY",
-		Path:    "policy.writableRoots",
-	}}
 }
 
 func validatePolicyConcurrencyOverride(document map[string]any) []Issue {
@@ -202,38 +166,12 @@ func Validate(policy EffectivePolicy, deploymentCap int) []Issue {
 		})
 	}
 
-	if policy.Mode == ModeReadOnly {
-		if len(policy.WritableRoots) > 0 {
-			issues = append(issues, Issue{
-				Code:    CodeWritableRootsReadOnly,
-				Message: "writableRoots are not allowed when policy.mode is READ_ONLY",
-				Path:    "policy.writableRoots",
-			})
-		}
-		if policy.AllowNetwork {
-			issues = append(issues, validateDeniedFlag("allowNetwork", "network access"))
-		}
-		if policy.AllowConnectors {
-			issues = append(issues, validateDeniedFlag("allowConnectors", "connectors"))
-		}
-		if policy.AllowDangerFullAccess {
-			issues = append(issues, validateDeniedFlag("allowDangerFullAccess", "danger-full-access"))
-		}
-		if sandbox := strings.TrimSpace(policy.SandboxMode); sandbox == "workspace-write" {
-			issues = append(issues, Issue{
-				Code:    CodeUnsupportedSandboxMode,
-				Message: `sandboxMode "workspace-write" is not allowed when policy.mode is READ_ONLY`,
-				Path:    "policy.sandboxMode",
-			})
-		}
-	}
-
+	issues = append(issues, validateStringAllowlist("allowedPermissions", policy.AllowedPermissions, validatePermission)...)
 	issues = append(issues, validateStringAllowlist("allowedRunners", policy.AllowedRunners, validateRunner)...)
 	issues = append(issues, validateStringAllowlist("allowedModels", policy.AllowedModels, validateModel)...)
 	issues = append(issues, validateStringAllowlist("allowedReasoningEfforts", policy.AllowedReasoningEfforts, validateReasoningEffort)...)
 	issues = append(issues, validateStringAllowlist("allowedRouteProfiles", policy.AllowedRouteProfiles, validateRouteProfile)...)
 	issues = append(issues, validateStringAllowlist("allowedCommands", policy.AllowedCommands, validateCommand)...)
-	issues = append(issues, validateStringAllowlist("allowedPermissions", policy.AllowedPermissions, validatePermission)...)
 	if sandbox := strings.TrimSpace(policy.SandboxMode); sandbox != "" {
 		if _, ok := knownSandboxModes[sandbox]; !ok {
 			issues = append(issues, Issue{
@@ -245,14 +183,6 @@ func Validate(policy EffectivePolicy, deploymentCap int) []Issue {
 	}
 
 	return issues
-}
-
-func validateDeniedFlag(field, capability string) Issue {
-	return Issue{
-		Code:    CodeDeniedCapability,
-		Message: fmt.Sprintf("%s is denied for policy.mode READ_ONLY (%s)", field, capability),
-		Path:    "policy." + field,
-	}
 }
 
 type allowlistValidator func(string) *Issue

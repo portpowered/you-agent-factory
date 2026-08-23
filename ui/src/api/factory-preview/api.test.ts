@@ -24,7 +24,6 @@ describe("previewFactory", () => {
             policyHash: "sha256:policy",
             maxChildCount: 16,
             maxConcurrency: 4,
-            deniedCapabilities: [],
             validationIssues: [],
           },
           resultConstraints: {
@@ -174,7 +173,6 @@ describe("previewFactory", () => {
             policyHash: "sha256:policy",
             maxChildCount: 16,
             maxConcurrency: 4,
-            deniedCapabilities: [],
             validationIssues: [],
           },
           resultConstraints: {

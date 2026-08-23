@@ -32,8 +32,6 @@ type ChildExecutionRequest struct {
 	SkipPermissions  bool
 	Command          string
 	Sandbox          string
-	WritableRoots    []string
-	AllowNetwork     bool
 	Concurrency      int
 	OutputSchema     map[string]any
 	WorkflowName     string

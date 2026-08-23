@@ -6833,8 +6833,6 @@ export interface components {
       maxChildCount: number;
       /** @description Maximum concurrent child dispatches allowed by effective policy. */
       maxConcurrency: number;
-      /** @description Capabilities denied by the effective policy before runtime execution. */
-      deniedCapabilities: components["schemas"]["WorkflowDiagnostic"][];
       /** @description Policy validation issues for the requested or factory default policy. */
       validationIssues: components["schemas"]["WorkflowDiagnostic"][];
       /** @description Optional runner allowlist decision for preview surfaces. */

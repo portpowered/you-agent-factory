@@ -15,10 +15,8 @@ type ChildRequest struct {
 	Sandbox         string
 	// SkipPermissions is a child-scoped provider permission override. It may
 	// bypass provider sandbox restrictions for this child, but it does not
-	// weaken routing, capability, or resource policy.
+	// weaken routing, permission, or resource policy.
 	SkipPermissions bool
-	WritableRoots   []string
-	AllowNetwork    bool
 	Concurrency     int
 }
 
@@ -39,12 +37,6 @@ func ValidateChildRequest(policy EffectivePolicy, req ChildRequest) error {
 		return err
 	}
 	if err := validateChildSandbox(policy, req); err != nil {
-		return err
-	}
-	if err := validateChildWritableRoots(policy, req); err != nil {
-		return err
-	}
-	if err := validateChildNetwork(policy, req); err != nil {
 		return err
 	}
 	if err := validateChildConcurrency(policy, req); err != nil {
@@ -141,13 +133,6 @@ func validateChildSandbox(policy EffectivePolicy, req ChildRequest) error {
 	if req.SkipPermissions {
 		return nil
 	}
-	if sandbox == "workspace-write" && policy.Mode == ModeReadOnly {
-		return fmt.Errorf(
-			"policy denied: sandbox %q is not allowed when policy.mode is READ_ONLY (label=%q)",
-			sandbox,
-			safeChildLabel(req.Label),
-		)
-	}
 	if policySandbox := strings.TrimSpace(policy.SandboxMode); policySandbox != "" && sandbox != policySandbox {
 		return fmt.Errorf(
 			"policy denied: sandbox %q does not match effective sandboxMode %q (label=%q)",
@@ -157,46 +142,6 @@ func validateChildSandbox(policy EffectivePolicy, req ChildRequest) error {
 		)
 	}
 	return nil
-}
-
-func validateChildWritableRoots(policy EffectivePolicy, req ChildRequest) error {
-	if len(req.WritableRoots) == 0 {
-		return nil
-	}
-	if req.SkipPermissions {
-		return nil
-	}
-	if policy.Mode == ModeReadOnly || len(policy.WritableRoots) == 0 {
-		return fmt.Errorf(
-			"policy denied: writableRoots are not allowed by effective policy (label=%q roots=%v)",
-			safeChildLabel(req.Label),
-			req.WritableRoots,
-		)
-	}
-	for _, root := range req.WritableRoots {
-		root = strings.TrimSpace(root)
-		if root == "" {
-			continue
-		}
-		if !writableRootAllowed(policy.WritableRoots, root) {
-			return fmt.Errorf(
-				"policy denied: writableRoot %q is not listed in policy.writableRoots (label=%q)",
-				root,
-				safeChildLabel(req.Label),
-			)
-		}
-	}
-	return nil
-}
-
-func validateChildNetwork(policy EffectivePolicy, req ChildRequest) error {
-	if !req.AllowNetwork || policy.AllowNetwork {
-		return nil
-	}
-	return fmt.Errorf(
-		"policy denied: network access is not allowed by effective policy (label=%q)",
-		safeChildLabel(req.Label),
-	)
 }
 
 func validateChildConcurrency(policy EffectivePolicy, req ChildRequest) error {
@@ -212,15 +157,6 @@ func validateChildConcurrency(policy EffectivePolicy, req ChildRequest) error {
 		policy.Concurrency,
 		safeChildLabel(req.Label),
 	)
-}
-
-func writableRootAllowed(allowed []string, root string) bool {
-	for _, candidate := range allowed {
-		if strings.TrimSpace(candidate) == root {
-			return true
-		}
-	}
-	return false
 }
 
 func safeChildLabel(label string) string {

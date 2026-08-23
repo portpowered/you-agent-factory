@@ -5,7 +5,6 @@ const (
 	CodeConcurrencyAboveMaxAgents = "workflow.policy.concurrencyAboveMaxAgents"
 	CodeExcessiveMaxAgents        = "workflow.policy.excessiveMaxAgents"
 	CodeInvalidMaxAgents          = "workflow.policy.invalidMaxAgents"
-	CodeWritableRootsReadOnly     = "workflow.policy.writableRootsReadOnly"
 	CodeUnsupportedRunner         = "workflow.policy.unsupportedRunner"
 	CodeUnsupportedModel          = "workflow.policy.unsupportedModel"
 	CodeUnsupportedReasoning      = "workflow.policy.unsupportedReasoningEffort"
@@ -13,7 +12,6 @@ const (
 	CodeUnsupportedCommand        = "workflow.policy.unsupportedCommand"
 	CodeUnsupportedSandboxMode    = "workflow.policy.unsupportedSandboxMode"
 	CodeUnsupportedPermission     = "workflow.policy.unsupportedPermission"
-	CodeDeniedCapability          = "workflow.policy.deniedCapability"
+	CodeUnsupportedPolicyField    = "workflow.policy.unsupportedField"
 	CodeInvalidPolicyDocument     = "workflow.policy.invalidDocument"
-	CodeUnsupportedPolicyMode     = "workflow.policy.unsupportedMode"
 )

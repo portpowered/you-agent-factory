@@ -10,12 +10,11 @@ import (
 func BuildPreview(input PreviewInput) Preview {
 	resolution := Resolve(input.Request)
 	preview := Preview{
-		EffectivePolicy:    resolution.Policy,
-		PolicyHash:         resolution.Hash,
-		MaxChildCount:      resolution.Policy.MaxAgents,
-		MaxConcurrency:     resolution.Policy.Concurrency,
-		ValidationIssues:   resolution.Issues,
-		DeniedCapabilities: DeniedCapabilitiesForReadOnly(resolution.Policy),
+		EffectivePolicy:  resolution.Policy,
+		PolicyHash:       resolution.Hash,
+		MaxChildCount:    resolution.Policy.MaxAgents,
+		MaxConcurrency:   resolution.Policy.Concurrency,
+		ValidationIssues: resolution.Issues,
 		BudgetDecisions: BudgetDecisions{
 			MaxChildCount:  resolution.Policy.MaxAgents,
 			MaxConcurrency: resolution.Policy.Concurrency,

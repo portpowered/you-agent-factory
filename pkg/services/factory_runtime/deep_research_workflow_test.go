@@ -29,15 +29,10 @@ var deepResearchArgsSchema = json.RawMessage(`{
 }`)
 
 var deepResearchDefaultPolicy = json.RawMessage(`{
-  "mode":"READ_ONLY",
   "maxAgents":3,
   "concurrency":2,
   "maxDepth":1,
   "maxRetries":0,
-  "allowNetwork":false,
-  "allowConnectors":false,
-  "allowDangerFullAccess":false,
-  "writableRoots":[],
   "allowedModels":["gpt-5"],
   "allowedReasoningEfforts":["medium"]
 }`)

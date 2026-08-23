@@ -9099,9 +9099,6 @@ type WorkflowPolicyPreview struct {
 	// BudgetDecisions Child and concurrency budget decisions for preview surfaces.
 	BudgetDecisions *map[string]interface{} `json:"budgetDecisions,omitempty"`
 
-	// DeniedCapabilities Capabilities denied by the effective policy before runtime execution.
-	DeniedCapabilities []WorkflowDiagnostic `json:"deniedCapabilities"`
-
 	// EffectivePolicy Effective bounded workflow policy for preview or session start.
 	EffectivePolicy map[string]interface{} `json:"effectivePolicy"`
 

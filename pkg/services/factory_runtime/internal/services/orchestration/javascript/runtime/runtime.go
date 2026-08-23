@@ -23,7 +23,7 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 		return *outcome, nil
 	}
 	policy := req.Policy
-	if policy.Mode == "" {
+	if policy.MaxAgents == 0 {
 		policy = workflowpolicy.DefaultEffectivePolicy()
 	}
 

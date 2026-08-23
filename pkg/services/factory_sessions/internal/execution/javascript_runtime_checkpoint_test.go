@@ -274,14 +274,14 @@ func TestResumeHelperFunctions_CoverMergeCloneAndPolicyPaths(t *testing.T) {
 
 	policy := workflowPolicyFromSessionPolicy(PolicyProjection{})
 	defaultPolicy := factory.DefaultJavaScriptPolicy()
-	if policy.Mode != defaultPolicy.Mode {
-		t.Fatalf("policy mode = %q, want default %q", policy.Mode, defaultPolicy.Mode)
+	if policy.MaxAgents != defaultPolicy.MaxAgents || policy.Concurrency != defaultPolicy.Concurrency {
+		t.Fatalf("policy budgets = %d/%d, want default %d/%d", policy.MaxAgents, policy.Concurrency, defaultPolicy.MaxAgents, defaultPolicy.Concurrency)
 	}
 	customPolicy := workflowPolicyFromSessionPolicy(PolicyProjection{
-		Effective: map[string]any{"mode": factory.JavaScriptPolicyModeReadOnly},
+		Effective: map[string]any{"allowedPermissions": []any{factory.JavaScriptPolicyPermissionDefault}},
 	})
-	if customPolicy.Mode != factory.JavaScriptPolicyModeReadOnly {
-		t.Fatalf("policy mode = %q, want %q", customPolicy.Mode, factory.JavaScriptPolicyModeReadOnly)
+	if len(customPolicy.AllowedPermissions) != 1 || customPolicy.AllowedPermissions[0] != factory.JavaScriptPolicyPermissionDefault {
+		t.Fatalf("allowedPermissions = %#v, want DEFAULT", customPolicy.AllowedPermissions)
 	}
 
 	summary := &factory.JavaScriptCheckpointSummary{

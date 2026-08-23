@@ -169,12 +169,11 @@ func workflowPolicyPreviewFromPreview(preview factory.JavaScriptPolicyPreview) f
 		_ = json.Unmarshal(encoded, &effectivePolicy)
 	}
 	out := factoryapi.WorkflowPolicyPreview{
-		EffectivePolicy:    effectivePolicy,
-		PolicyHash:         preview.PolicyHash,
-		MaxChildCount:      preview.MaxChildCount,
-		MaxConcurrency:     preview.MaxConcurrency,
-		DeniedCapabilities: workflowDiagnosticsFromPolicy(preview.DeniedCapabilities),
-		ValidationIssues:   workflowDiagnosticsFromPolicyIssues(preview.ValidationIssues),
+		EffectivePolicy:  effectivePolicy,
+		PolicyHash:       preview.PolicyHash,
+		MaxChildCount:    preview.MaxChildCount,
+		MaxConcurrency:   preview.MaxConcurrency,
+		ValidationIssues: workflowDiagnosticsFromPolicyIssues(preview.ValidationIssues),
 	}
 	if preview.RunnerDecision != nil {
 		decision := workflowDecisionMap(preview.RunnerDecision)

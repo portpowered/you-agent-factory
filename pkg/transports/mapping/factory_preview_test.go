@@ -213,7 +213,7 @@ func TestFactoryWorkflowValidationResultFromPreview_BlockingDiagnostics(t *testi
 			wantCode: factory.WorkflowValidationCodeInvalidArgsSchema,
 		},
 		{
-			name: "policy denied host access",
+			name: "retired policy field",
 			request: factory.WorkflowPreviewRequest{
 				Source: factory.WorkflowSourceRequest{
 					Kind:  factory.WorkflowSourceKindWorkflowName,
@@ -222,7 +222,7 @@ func TestFactoryWorkflowValidationResultFromPreview_BlockingDiagnostics(t *testi
 				Context:         ctx,
 				RequestedPolicy: map[string]any{"allowNetwork": true},
 			},
-			wantCode: factory.JavaScriptPolicyCodeDeniedCapability,
+			wantCode: factory.JavaScriptPolicyCodeUnsupportedPolicyField,
 		},
 	}
 
@@ -307,8 +307,8 @@ func scriptedMappingPreview(request factory.WorkflowPreviewRequest) factory.Work
 	if request.RequestedPolicy != nil {
 		preview.Valid = false
 		preview.PolicyPreview.ValidationIssues = []factory.JavaScriptPolicyIssue{{
-			Code:    factory.JavaScriptPolicyCodeDeniedCapability,
-			Message: "capability denied by scripted Factory Runtime result",
+			Code:    factory.JavaScriptPolicyCodeUnsupportedPolicyField,
+			Message: "retired policy field rejected by scripted Factory Runtime result",
 		}}
 		return preview
 	}
