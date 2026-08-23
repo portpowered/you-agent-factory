@@ -959,6 +959,7 @@ func recordedObservationFromFact(fact recordedDispatchObservation, clock factory
 		WorkerSessionID:          fact.workerSessionID,
 		Model:                    cloneRecordedString(fact.model),
 		ReasoningEffort:          cloneRecordedString(fact.reasoningEffort),
+		TokenUsage:               cloneRecordedTokenUsage(fact.tokenUsage),
 		ProviderSessionAvailable: fact.provider != nil && fact.provider.ID != "",
 		WorkIDs:                  append([]string(nil), fact.workIDs...),
 		TurnID:                   fact.turnID,
@@ -996,4 +997,12 @@ func recordedObservationFromFact(fact recordedDispatchObservation, clock factory
 		observation.Failure = &failure
 	}
 	return observation
+}
+
+func cloneRecordedTokenUsage(usage *workersessions.TokenUsage) *workersessions.TokenUsage {
+	if usage == nil {
+		return nil
+	}
+	clone := usage.Clone()
+	return &clone
 }

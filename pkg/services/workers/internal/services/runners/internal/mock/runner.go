@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
@@ -74,6 +75,7 @@ func (r *runner) Execute(
 		}
 		return acceptResult(), nil
 	}
+	workerexecution.PublishMockWorkerUsage(ctx, request.Correlation, entry.Usage)
 	switch entry.RunType {
 	case workers.MockWorkerRunTypeReject:
 		return workers.RunnerExecutionResult{}, workers.NewProviderError(
@@ -97,7 +99,7 @@ func (r *runner) Execute(
 			)
 		}
 		script := entry.ScriptConfig
-		result, err := r.next.Run(ctx, workerprocess.CommandRequest{
+		commandResult, err := r.next.Run(ctx, workerprocess.CommandRequest{
 			Command:         script.Command,
 			Args:            append([]string(nil), script.Args...),
 			WorkerType:      request.WorkerType,
@@ -107,30 +109,31 @@ func (r *runner) Execute(
 		if err != nil {
 			return workers.RunnerExecutionResult{}, err
 		}
-		if result.ExitCode != 0 {
+		if commandResult.ExitCode != 0 {
 			return workers.RunnerExecutionResult{}, workers.NewProviderError(
 				workers.WorkFailureTypeInternalServerError,
 				"mock script command failed",
 				nil,
 			)
 		}
-		return workers.RunnerExecutionResult{
-			Content: strings.TrimSpace(string(result.Stdout)),
+		runnerResult := workers.RunnerExecutionResult{
+			Content: strings.TrimSpace(string(commandResult.Stdout)),
 			Diagnostics: &workers.WorkDiagnostics{
 				Command: &workers.CommandDiagnostic{
 					Command:  script.Command,
 					Args:     append([]string(nil), script.Args...),
-					Stdout:   string(result.Stdout),
-					Stderr:   string(result.Stderr),
-					ExitCode: result.ExitCode,
+					Stdout:   string(commandResult.Stdout),
+					Stderr:   string(commandResult.Stderr),
+					ExitCode: commandResult.ExitCode,
 				},
 				Metadata: map[string]string{
 					workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
 				},
 			},
-		}, nil
+		}
+		return workerexecution.ApplyMockWorkerUsageDiagnostics(runnerResult, entry.Usage), nil
 	default:
-		return acceptResult(), nil
+		return workerexecution.ApplyMockWorkerUsageDiagnostics(acceptResult(), entry.Usage), nil
 	}
 }
 

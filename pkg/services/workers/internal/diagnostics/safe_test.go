@@ -86,6 +86,7 @@ func TestSafeWorkDiagnosticsPreservesProviderUsageCounters(t *testing.T) {
 	safe := SafeWorkDiagnosticsFromWorkDiagnostics(&WorkDiagnostics{
 		Provider: &ProviderDiagnostic{ResponseMetadata: map[string]string{
 			"input_tokens":            "89393",
+			"cached_input_tokens":     "252517",
 			"output_tokens":           "4622",
 			"thinking_tokens":         "2312",
 			"cache_read_tokens":       "252517",
@@ -101,6 +102,7 @@ func TestSafeWorkDiagnosticsPreservesProviderUsageCounters(t *testing.T) {
 	}
 	for key, want := range map[string]string{
 		"input_tokens":            "89393",
+		"cached_input_tokens":     "252517",
 		"output_tokens":           "4622",
 		"thinking_tokens":         "2312",
 		"cache_read_tokens":       "252517",

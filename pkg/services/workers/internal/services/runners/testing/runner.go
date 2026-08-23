@@ -45,6 +45,16 @@ func (r *MockWorkerCommandRunner) Run(ctx context.Context, req workerprocess.Com
 	}
 	if capture := workerexecution.MockWorkerUsageCaptureFromContext(ctx); capture != nil {
 		capture.Record(entry.Usage)
+	} else {
+		// A provider command runner can be composed outside the detached
+		// Workers attempt boundary (for example, the durable mock provider).
+		// Preserve the same public usage observation even when the attempt-level
+		// capture hand-off is unavailable.
+		workerexecution.PublishMockWorkerUsage(ctx, workers.ExecutionCorrelation{
+			DispatchID: req.DispatchID,
+			RequestID:  req.Execution.RequestID,
+			TraceID:    req.Execution.TraceID,
+		}, entry.Usage)
 	}
 
 	switch entry.RunType {

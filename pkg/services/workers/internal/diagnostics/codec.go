@@ -365,6 +365,7 @@ func isHostSpecificDiagnosticPath(value string) bool {
 func isSafeProviderMetadataKey(key string) bool {
 	switch strings.ToLower(key) {
 	case "content_bytes",
+		"cached_input_tokens",
 		"completion_evidence",
 		"dispatch_id",
 		"failure_classification",

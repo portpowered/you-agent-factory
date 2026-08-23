@@ -70,6 +70,16 @@ type RuntimeActivationMockWorker struct {
 	RunType         string
 	ScriptConfig    *RuntimeActivationMockScript
 	RejectConfig    *RuntimeActivationMockReject
+	Usage           *RuntimeActivationMockUsage
+}
+
+type RuntimeActivationMockUsage struct {
+	Provider              string
+	Model                 string
+	InputTokens           *int64
+	OutputTokens          *int64
+	CachedInputTokens     *int64
+	ReasoningOutputTokens *int64
 }
 
 type RuntimeActivationMockWorkInput struct {
@@ -146,8 +156,24 @@ func (inputs RuntimeActivationInputs) Clone() RuntimeActivationInputs {
 			}
 			clonedWorker.RejectConfig = &reject
 		}
+		if worker.Usage != nil {
+			usage := *worker.Usage
+			usage.InputTokens = cloneRuntimeActivationInt64Pointer(worker.Usage.InputTokens)
+			usage.OutputTokens = cloneRuntimeActivationInt64Pointer(worker.Usage.OutputTokens)
+			usage.CachedInputTokens = cloneRuntimeActivationInt64Pointer(worker.Usage.CachedInputTokens)
+			usage.ReasoningOutputTokens = cloneRuntimeActivationInt64Pointer(worker.Usage.ReasoningOutputTokens)
+			clonedWorker.Usage = &usage
+		}
 		mock.MockWorkers[index] = clonedWorker
 	}
 	cloned.Workers.MockWorkers = mock
 	return cloned
+}
+
+func cloneRuntimeActivationInt64Pointer(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
 }

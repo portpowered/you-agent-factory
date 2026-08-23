@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -369,6 +370,7 @@ func recordedDispatchFact(
 			fact.state,
 			dispatch.Diagnostics,
 		)
+		fact.tokenUsage = recordedTokenUsageFromDiagnostics(dispatch.Diagnostics)
 		fact.provider = cloneProviderMetadata(dispatch.ProviderSession)
 	}
 	for _, provider := range providerSessions {
@@ -384,6 +386,9 @@ func recordedDispatchFact(
 			fact.state,
 			provider.Diagnostics,
 		))
+		if fact.tokenUsage == nil {
+			fact.tokenUsage = recordedTokenUsageFromDiagnostics(provider.Diagnostics)
+		}
 		break
 	}
 	if interruption, ok := recordedDispatchInterruption(events, dispatchID); ok && !fact.state.Terminal() {
@@ -407,6 +412,49 @@ func recordedDispatchFact(
 		}
 	}
 	return fact
+}
+
+// recordedTokenUsageFromDiagnostics preserves provider usage in the
+// event-first Worker Session projection. Provider-session transcript storage
+// is optional, but normalized response metadata is already part of the
+// replay-safe dispatch diagnostics and must remain observable when that
+// provider source is unavailable.
+func recordedTokenUsageFromDiagnostics(diagnostics *workers.SafeWorkDiagnostics) *workersessions.TokenUsage {
+	if diagnostics == nil || diagnostics.Provider == nil {
+		return nil
+	}
+	metadata := diagnostics.Provider.ResponseMetadata
+	input := recordedOptionalInt(metadata, workers.ProviderResponseMetadataInputTokens)
+	cachedInput := recordedOptionalInt(metadata, workers.ProviderResponseMetadataCachedInputTokens)
+	output := recordedOptionalInt(metadata, workers.ProviderResponseMetadataOutputTokens)
+	reasoningOutput := recordedOptionalInt(metadata, workers.ProviderResponseMetadataReasoningOutputTokens)
+	if input == nil && cachedInput == nil && output == nil && reasoningOutput == nil {
+		return nil
+	}
+	var total *int
+	if input != nil && output != nil && *input <= int(^uint(0)>>1)-*output {
+		value := *input + *output
+		total = &value
+	}
+	return &workersessions.TokenUsage{
+		InputTokens:           input,
+		CachedInputTokens:     cachedInput,
+		OutputTokens:          output,
+		ReasoningOutputTokens: reasoningOutput,
+		TotalTokens:           total,
+	}
+}
+
+func recordedOptionalInt(metadata map[string]string, key string) *int {
+	value, ok := metadata[key]
+	if !ok {
+		return nil
+	}
+	parsed, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || parsed < 0 {
+		return nil
+	}
+	return &parsed
 }
 
 func recordedDispatchEnd(
