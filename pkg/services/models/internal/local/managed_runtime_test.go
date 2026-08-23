@@ -128,6 +128,7 @@ func TestBuildManagedRuntimeProjection_ReportsInstalledCacheState(t *testing.T) 
 		Supported:          true,
 		Installed:          true,
 		Revision:           "rev1",
+		CachePath:          "/tmp/models/OMNIVOICE_Q4_K_M/rev1",
 		InstalledFileCount: 2,
 	}
 	managed := buildManagedRuntimeProjection(managedRuntimeProjection{
@@ -141,6 +142,9 @@ func TestBuildManagedRuntimeProjection_ReportsInstalledCacheState(t *testing.T) 
 	}
 	if managed.Diagnostics["revision"] != "rev1" {
 		t.Fatalf("diagnostics = %#v, want revision detail", managed.Diagnostics)
+	}
+	if managed.CachePath == nil || *managed.CachePath != inspection.CachePath {
+		t.Fatalf("cache path = %v, want %q", managed.CachePath, inspection.CachePath)
 	}
 }
 

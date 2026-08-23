@@ -688,6 +688,7 @@ func (service injectedModelsCLIService) List(cfg modelscli.ListConfig) error {
 func (injectedModelsCLIService) Inspect(modelscli.InspectConfig) error { return nil }
 func (injectedModelsCLIService) Invoke(modelscli.InvokeConfig) error   { return nil }
 func (injectedModelsCLIService) Pull(modelscli.PullConfig) error       { return nil }
+func (injectedModelsCLIService) Remove(modelscli.RemoveConfig) error   { return nil }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func TestNewCommandFactoryDoesNotInstallTransportDefaults(t *testing.T) {

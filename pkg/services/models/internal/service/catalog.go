@@ -59,6 +59,11 @@ func (s *Service) ListModels(ctx context.Context) (modelcatalog.List, error) {
 			return modelcatalog.List{}, err
 		}
 		summary.ManagedRuntime = overlayCatalogManagedRuntime(summary.ManagedRuntime, snapshot)
+		inspection, err := s.modelAssetPuller().InspectRuntimeCache(ctx, runtimeCfg, entry.Summary.Name)
+		if err != nil {
+			return modelcatalog.List{}, err
+		}
+		summary.ManagedRuntime = overlayCatalogCacheFacts(summary.ManagedRuntime, inspection)
 		results = append(results, summary)
 	}
 	sort.Slice(results, func(i, j int) bool {
@@ -100,6 +105,11 @@ func (s *Service) GetModel(ctx context.Context, modelName string) (modelcatalog.
 	}
 	detail := entry.Detail
 	detail.ManagedRuntime = overlayCatalogManagedRuntime(detail.ManagedRuntime, snapshot)
+	inspection, err := s.modelAssetPuller().InspectRuntimeCache(ctx, runtimeCfg, entry.Summary.Name)
+	if err != nil {
+		return modelcatalog.Detail{}, err
+	}
+	detail.ManagedRuntime = overlayCatalogCacheFacts(detail.ManagedRuntime, inspection)
 	detail.Diagnostics = mergeCatalogDiagnostics(detail.Diagnostics, detail.ManagedRuntime.Diagnostics)
 	return detail, nil
 }
@@ -114,6 +124,25 @@ func overlayCatalogManagedRuntime(
 	}
 	if projected.Locality == "" {
 		projected.Locality = base.Locality
+	}
+	return projected
+}
+
+func overlayCatalogCacheFacts(
+	base managedruntime.Runtime,
+	inspection localmodels.RuntimeCacheInspection,
+) managedruntime.Runtime {
+	if !inspection.Supported || !inspection.Installed {
+		return base
+	}
+	projected := base.Clone()
+	if inspection.Revision != "" {
+		revision := inspection.Revision
+		projected.Revision = &revision
+	}
+	if inspection.CacheBytes >= 0 {
+		cacheBytes := inspection.CacheBytes
+		projected.CacheBytes = &cacheBytes
 	}
 	return projected
 }

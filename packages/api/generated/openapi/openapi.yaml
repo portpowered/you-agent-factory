@@ -1118,6 +1118,38 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+    delete:
+      tags:
+        - Models
+      operationId: removeModel
+      summary: Remove one managed model cache revision
+      description: Explicitly removes the selected managed cache revision for one model. The operation never follows links outside the managed cache root, refuses caches held by an active host or invocation, and reports the validated cache path and measured bytes removed.
+      parameters:
+        - name: model_name
+          in: path
+          required: true
+          description: Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The selected managed model cache revision was removed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelRemoveResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The managed model cache is held by an active host or invocation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /models/{model_name}/invocations:
     post:
       tags:
@@ -4698,6 +4730,17 @@ components:
           type: string
           description: |
             Stable managed runtime identity shared by discovery, inspect, pull or install, and factory dependency surfaces.
+        cachePath:
+          type: string
+          description: Resolved managed-cache revision directory when a local cache is installed.
+        revision:
+          type: string
+          description: Installed managed-cache revision when a local cache is present.
+        cacheBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Exact recursive byte count of regular files in the installed managed-cache revision.
         readinessState:
           $ref: '#/components/schemas/ManagedRuntimeReadinessState'
         lifecycleState:
@@ -5291,6 +5334,36 @@ components:
           description: Files that were downloaded or verified as already present for the managed cache entry.
           items:
             $ref: '#/components/schemas/ModelPullDownloadedFile'
+    ModelRemoveOutcome:
+      type: string
+      description: Outcome of removing the selected managed model cache revision.
+      enum:
+        - REMOVED
+    ModelRemoveResponse:
+      type: object
+      required:
+        - modelName
+        - revision
+        - cachePath
+        - outcome
+        - bytesRemoved
+      properties:
+        modelName:
+          type: string
+          description: Stable managed runtime identity whose cache revision was removed.
+        revision:
+          type: string
+          description: Exact managed cache revision removed by the operation.
+        cachePath:
+          type: string
+          description: Validated absolute path of the removed managed cache revision.
+        outcome:
+          $ref: '#/components/schemas/ModelRemoveOutcome'
+        bytesRemoved:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Total size of regular files measured immediately before removal.
     ResolvedModelOperationBinding:
       type: object
       additionalProperties: false
@@ -5473,6 +5546,8 @@ components:
             - METRICS_INVALID_REQUEST
             - METRICS_SESSION_NOT_FOUND
             - METRICS_SESSION_SCOPE_UNAVAILABLE
+            - MODEL_CACHE_NOT_FOUND
+            - MODEL_CACHE_IN_USE
             - NOT_FOUND
             - INTERNAL_ERROR
           x-enum-descriptions:
@@ -5527,6 +5602,8 @@ components:
             - The metrics request could not be interpreted by the canonical metrics route.
             - The requested live Factory Session identity was not discoverable.
             - The live Factory Session was discoverable, but no retained metrics scope was available.
+            - The selected managed model cache revision does not exist.
+            - The selected managed model cache revision is held by an active model host or invocation.
             - The requested resource does not exist.
             - The server failed while handling an otherwise valid request.
         targets:

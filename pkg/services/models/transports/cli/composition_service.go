@@ -58,6 +58,13 @@ func (service *compositionService) Pull(cfg PullConfig) error {
 	return service.legacy.Pull(cfg)
 }
 
+func (service *compositionService) Remove(cfg RemoveConfig) error {
+	if service.owned != nil {
+		return service.owned.Remove(cfg)
+	}
+	return service.legacy.Remove(cfg)
+}
+
 func (service *compositionService) Invoke(cfg InvokeConfig) error {
 	if service.owned != nil && service.canInvokeThroughOwned(cfg) {
 		return service.owned.Invoke(cfg)

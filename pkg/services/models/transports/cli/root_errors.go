@@ -12,6 +12,12 @@ func mapModelsRootError(err error) error {
 		return nil
 	}
 	switch {
+	case errors.Is(err, modelinference.ErrModelCacheNotFound):
+		return fmt.Errorf("%w: %s", ErrModelCacheNotFound, err.Error())
+	case errors.Is(err, modelinference.ErrModelCacheInUse):
+		return fmt.Errorf("%w: %s", ErrModelCacheInUse, err.Error())
+	case errors.Is(err, modelinference.ErrModelCacheUnsafe):
+		return fmt.Errorf("%w: %s", ErrModelCacheUnsafe, err.Error())
 	case errors.Is(err, modelinference.ErrNotFound):
 		return fmt.Errorf("%w: %s", ErrModelNotFound, err.Error())
 	case errors.Is(err, modelinference.ErrMissing),

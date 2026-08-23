@@ -123,6 +123,10 @@ func NewModelsCommandFromManifest(
 	if err != nil {
 		return nil, fmt.Errorf("build models command: %w", err)
 	}
+	removeRecord, err := manifest.CommandByID("you.models.remove")
+	if err != nil {
+		return nil, fmt.Errorf("build models command: %w", err)
+	}
 	invokeRecord, err := manifest.CommandByID("you.models.invoke")
 	if err != nil {
 		return nil, fmt.Errorf("build models command: %w", err)
@@ -134,6 +138,7 @@ func NewModelsCommandFromManifest(
 		listRecord,
 		inspectRecord,
 		pullRecord,
+		removeRecord,
 		invokeRecord,
 		handler,
 	)
@@ -150,6 +155,7 @@ func buildResolvedModelsParent(
 	listRecord climanifest.Command,
 	inspectRecord climanifest.Command,
 	pullRecord climanifest.Command,
+	removeRecord climanifest.Command,
 	invokeRecord climanifest.Command,
 	handler commandregistry.ModelsHandler,
 ) (*cobra.Command, error) {
@@ -159,6 +165,7 @@ func buildResolvedModelsParent(
 		listRecord.ID:    listRecord,
 		inspectRecord.ID: inspectRecord,
 		pullRecord.ID:    pullRecord,
+		removeRecord.ID:  removeRecord,
 		invokeRecord.ID:  invokeRecord,
 	}
 	root, err := NewCommandTree(manifest, GenericBindings{
@@ -169,6 +176,7 @@ func buildResolvedModelsParent(
 			listRecord.Handler.ID:    handler.List,
 			inspectRecord.Handler.ID: handler.Inspect,
 			pullRecord.Handler.ID:    handler.Pull,
+			removeRecord.Handler.ID:  handler.Remove,
 			invokeRecord.Handler.ID:  handler.Invoke,
 		},
 	})
@@ -180,7 +188,7 @@ func buildResolvedModelsParent(
 		return nil, fmt.Errorf("build models command: find projected command: %w", err)
 	}
 	root.RemoveCommand(parent)
-	for _, id := range []string{listRecord.ID, inspectRecord.ID, pullRecord.ID, invokeRecord.ID} {
+	for _, id := range []string{listRecord.ID, inspectRecord.ID, pullRecord.ID, removeRecord.ID, invokeRecord.ID} {
 		command, _, findErr := parent.Find([]string{strings.TrimPrefix(id, parentRecord.ID+".")})
 		if findErr != nil {
 			return nil, fmt.Errorf("build models command: find %q: %w", id, findErr)

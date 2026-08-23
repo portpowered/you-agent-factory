@@ -43,26 +43,50 @@ func TestListAndInspect_ShareStableManagedRuntimeContract(t *testing.T) {
 			Installed:          true,
 			Revision:           "rev-installed",
 			CachePath:          "/tmp/models/OMNIVOICE_Q4_K_M/rev-installed",
+			CacheBytes:         1234,
 			InstalledFileCount: 2,
 		},
 	}}
 	resolver := DefaultManagedRuntimeSourceResolver()
+	listRuntime := assertStableManagedRuntimeList(t, loaded, inspector, resolver)
+	assertStableManagedRuntimeInspect(t, loaded, inspector, resolver, listRuntime)
+}
 
-	models, err := ListModelsWithRuntime(loaded, inspector, resolver)
+func assertStableManagedRuntimeList(
+	t *testing.T,
+	loaded *modelRuntimeConfig,
+	inspector stubRuntimeCacheInspector,
+	resolver ManagedRuntimeSourceResolver,
+) models.Runtime {
+	listed, err := ListModelsWithRuntime(loaded, inspector, resolver)
 	if err != nil {
 		t.Fatalf("ListModelsWithOptions: %v", err)
 	}
-	if len(models.Results) != 1 {
-		t.Fatalf("models count = %d, want 1", len(models.Results))
+	if len(listed.Results) != 1 {
+		t.Fatalf("models count = %d, want 1", len(listed.Results))
 	}
-	listRuntime := models.Results[0].ManagedRuntime
+	listRuntime := listed.Results[0].ManagedRuntime
 	if listRuntime.ReadinessState != managedruntime.ReadinessStateReady {
 		t.Fatalf("list readiness = %s, want READY", listRuntime.ReadinessState)
 	}
 	if listRuntime.LifecycleState != managedruntime.LifecycleStateInstalled {
 		t.Fatalf("list lifecycle = %s, want INSTALLED", listRuntime.LifecycleState)
 	}
+	if listRuntime.Revision == nil || *listRuntime.Revision != "rev-installed" ||
+		listRuntime.CachePath == nil || *listRuntime.CachePath != "/tmp/models/OMNIVOICE_Q4_K_M/rev-installed" ||
+		listRuntime.CacheBytes == nil || *listRuntime.CacheBytes != 1234 {
+		t.Fatalf("list cache facts = revision=%v path=%v bytes=%v, want rev-installed/path/1234", listRuntime.Revision, listRuntime.CachePath, listRuntime.CacheBytes)
+	}
+	return listRuntime
+}
 
+func assertStableManagedRuntimeInspect(
+	t *testing.T,
+	loaded *modelRuntimeConfig,
+	inspector stubRuntimeCacheInspector,
+	resolver ManagedRuntimeSourceResolver,
+	listRuntime models.Runtime,
+) {
 	detail, err := GetModelWithRuntime(loaded, "OMNIVOICE_Q4_K_M", inspector, resolver)
 	if err != nil {
 		t.Fatalf("GetModelWithOptions: %v", err)
@@ -71,7 +95,10 @@ func TestListAndInspect_ShareStableManagedRuntimeContract(t *testing.T) {
 	if inspectRuntime.Identity != listRuntime.Identity ||
 		inspectRuntime.ReadinessState != listRuntime.ReadinessState ||
 		inspectRuntime.LifecycleState != listRuntime.LifecycleState ||
-		inspectRuntime.Locality != listRuntime.Locality {
+		inspectRuntime.Locality != listRuntime.Locality ||
+		inspectRuntime.Revision == nil || *inspectRuntime.Revision != "rev-installed" ||
+		inspectRuntime.CachePath == nil || *inspectRuntime.CachePath != "/tmp/models/OMNIVOICE_Q4_K_M/rev-installed" ||
+		inspectRuntime.CacheBytes == nil || *inspectRuntime.CacheBytes != 1234 {
 		t.Fatalf("inspect runtime = %#v, want list parity %#v", inspectRuntime, listRuntime)
 	}
 	if detail.Diagnostics["revision"] != "rev-installed" {

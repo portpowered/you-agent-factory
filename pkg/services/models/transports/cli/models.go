@@ -22,7 +22,14 @@ import (
 	"go.uber.org/zap"
 )
 
-var ErrModelNotFound = errors.New("model not found")
+const modelsErrorBodyPreviewSize = 200
+
+var (
+	ErrModelNotFound      = errors.New("model not found")
+	ErrModelCacheNotFound = errors.New("model cache not found")
+	ErrModelCacheInUse    = errors.New("model cache is in use")
+	ErrModelCacheUnsafe   = errors.New("model cache path is unsafe")
+)
 
 const managedRuntimePullFailureCode = "CLI_MODEL_PULL_FAILED"
 
@@ -77,12 +84,24 @@ type PullConfig struct {
 	Diagnostics io.Writer
 }
 
+type RemoveConfig struct {
+	Context     context.Context
+	ModelName   string
+	Server      string
+	JSON        bool
+	Verbose     bool
+	Debug       bool
+	Output      io.Writer
+	Diagnostics io.Writer
+}
+
 // Service exposes the Models CLI command operations to Cobra composition.
 type Service interface {
 	List(ListConfig) error
 	Inspect(InspectConfig) error
 	Invoke(InvokeConfig) error
 	Pull(PullConfig) error
+	Remove(RemoveConfig) error
 }
 
 type httpService struct {
@@ -284,6 +303,30 @@ func (service *httpService) Pull(cfg PullConfig) error {
 		return nil
 	}
 	return renderPull(response, cfg.Output)
+}
+
+func (service *httpService) Remove(cfg RemoveConfig) error {
+	if cfg.Context == nil {
+		return fmt.Errorf("context is required")
+	}
+	if cfg.Output == nil {
+		return fmt.Errorf("output writer is required")
+	}
+	modelName := strings.TrimSpace(cfg.ModelName)
+	if modelName == "" {
+		return fmt.Errorf("model name is required")
+	}
+	response, err := removeModel(removeOptions{
+		Context: cfg.Context, Server: cfg.Server, ModelName: modelName,
+		Verbose: cfg.Verbose, Diagnostics: cfg.Diagnostics, HTTP: service.http,
+	})
+	if err != nil {
+		return err
+	}
+	if cfg.JSON {
+		return json.NewEncoder(cfg.Output).Encode(response)
+	}
+	return renderRemove(response, cfg.Output)
 }
 
 type queryOptions struct {
@@ -580,7 +623,7 @@ func logModelsResponse(diagnostics requestDiagnostics, endpoint url.URL, statusC
 }
 
 func renderList(response factoryapi.ListModelsResponse, output io.Writer) error {
-	if _, err := fmt.Fprintln(output, "NAME\tREADINESS\tLIFECYCLE\tLOCALITY\tOPERATIONS\tMODALITIES\tRESOURCES"); err != nil {
+	if _, err := fmt.Fprintln(output, "NAME\tREADINESS\tLIFECYCLE\tLOCALITY\tOPERATIONS\tMODALITIES\tRESOURCES\tCACHE SIZE"); err != nil {
 		return err
 	}
 	results := append([]factoryapi.ModelSummary(nil), response.Results...)
@@ -590,7 +633,7 @@ func renderList(response factoryapi.ListModelsResponse, output io.Writer) error 
 	for _, model := range results {
 		if _, err := fmt.Fprintf(
 			output,
-			"%s\t%s\t%s\t%s\t%s\t%s\t%d\n",
+			"%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\n",
 			model.Name,
 			managedRuntimeReadiness(model.ManagedRuntime),
 			managedRuntimeLifecycle(model.ManagedRuntime),
@@ -598,11 +641,48 @@ func renderList(response factoryapi.ListModelsResponse, output io.Writer) error 
 			modelOperationNames(model.Operations),
 			modelModalities(model.Modalities),
 			len(model.Resources),
+			managedRuntimeCacheSize(model.ManagedRuntime),
 		); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func managedRuntimeCacheSize(runtime factoryapi.ManagedRuntime) string {
+	if runtime.CacheBytes == nil || *runtime.CacheBytes < 0 {
+		return "NOT_INSTALLED"
+	}
+	return fmt.Sprintf("%s (%d bytes)", humanByteSize(*runtime.CacheBytes), *runtime.CacheBytes)
+}
+
+func managedRuntimeRevision(runtime factoryapi.ManagedRuntime) string {
+	if runtime.Revision == nil || strings.TrimSpace(*runtime.Revision) == "" {
+		return "NOT_INSTALLED"
+	}
+	return *runtime.Revision
+}
+
+func managedRuntimeCachePath(runtime factoryapi.ManagedRuntime) string {
+	if runtime.CachePath == nil || strings.TrimSpace(*runtime.CachePath) == "" {
+		return "NOT_INSTALLED"
+	}
+	return *runtime.CachePath
+}
+
+func humanByteSize(bytes int64) string {
+	if bytes < 1024 {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	value := float64(bytes)
+	units := []string{"KiB", "MiB", "GiB", "TiB", "PiB", "EiB"}
+	for _, unit := range units {
+		value /= 1024
+		if value < 1024 || unit == units[len(units)-1] {
+			return fmt.Sprintf("%.2f %s", value, unit)
+		}
+	}
+	return fmt.Sprintf("%d B", bytes)
 }
 
 func renderPull(response factoryapi.ModelPullResponse, output io.Writer) error {
@@ -644,6 +724,9 @@ func renderModel(model factoryapi.ModelDetail, output io.Writer) error {
 		{label: "Readiness", value: managedRuntimeReadiness(model.ManagedRuntime)},
 		{label: "Lifecycle", value: managedRuntimeLifecycle(model.ManagedRuntime)},
 		{label: "Locality", value: string(model.ProviderLocality)},
+		{label: "Revision", value: managedRuntimeRevision(model.ManagedRuntime)},
+		{label: "Cache Size", value: managedRuntimeCacheSize(model.ManagedRuntime)},
+		{label: "Cache Path", value: managedRuntimeCachePath(model.ManagedRuntime)},
 		{label: "Operations", value: modelOperationNames(model.Operations)},
 		{label: "Modalities", value: modelModalities(model.Modalities)},
 	} {
@@ -795,6 +878,12 @@ func modelsRequestError(statusCode int, body []byte, response ...*http.Response)
 	}
 	var errResp factoryapi.ErrorResponse
 	if json.Unmarshal(body, &errResp) == nil && errResp.Message != "" {
+		switch errResp.Code {
+		case factoryapi.ErrorResponseCodeMODELCACHENOTFOUND:
+			return fmt.Errorf("%w: %s", ErrModelCacheNotFound, errResp.Message)
+		case factoryapi.ErrorResponseCodeMODELCACHEINUSE:
+			return fmt.Errorf("%w: %s", ErrModelCacheInUse, errResp.Message)
+		}
 		if statusCode == http.StatusNotFound && errResp.Code == factoryapi.ErrorResponseCodeNOTFOUND {
 			if httpResponse != nil {
 				return clihttp.NewAPIErrorFromResponse(httpResponse, errResp, fmt.Sprintf("%s: %s", ErrModelNotFound, errResp.Message), ErrModelNotFound)

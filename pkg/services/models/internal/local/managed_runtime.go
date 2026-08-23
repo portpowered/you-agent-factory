@@ -43,11 +43,29 @@ func buildManagedRuntimeProjection(input managedRuntimeProjection) managedruntim
 			managedDiagnostics[key] = value
 		}
 	}
+	var revision *string
+	var cachePath *string
+	var cacheBytes *int64
+	if input.cacheInspection != nil && input.cacheInspection.Supported && input.cacheInspection.Installed {
+		if value := strings.TrimSpace(input.cacheInspection.Revision); value != "" {
+			revision = &value
+		}
+		if value := strings.TrimSpace(input.cacheInspection.CachePath); value != "" {
+			cachePath = &value
+		}
+		if input.cacheInspection.CacheBytes >= 0 {
+			value := input.cacheInspection.CacheBytes
+			cacheBytes = &value
+		}
+	}
 	return managedruntime.Runtime{
 		Identity:            input.summary.name,
 		ReadinessState:      readiness,
 		LifecycleState:      lifecycle,
 		Locality:            input.summary.locality,
+		Revision:            revision,
+		CachePath:           cachePath,
+		CacheBytes:          cacheBytes,
 		SupportedOperations: input.summary.operations,
 		Diagnostics:         managedDiagnostics,
 	}

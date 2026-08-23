@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-07-13
+last-modified: 2026-08-22
 doc-id: agent-factory/models
 ---
 
@@ -81,6 +81,66 @@ If pull fails, use the returned outcome and diagnostics rather than editing the
 managed cache. Check network and source credentials for `SOURCE_FETCH_FAILED`,
 retry a timed-out pull, and verify the configured backend command and health
 endpoint when installed assets enter `FAILED`.
+
+## Inspect And Remove The Managed Model Cache
+
+The managed model cache stores installed local-model files by model and revision.
+When no cache directory is configured, Models resolves the root from the current
+user's home directory:
+
+| Platform | Default managed cache layout |
+| --- | --- |
+| macOS or Linux | `$HOME/.agent-factory/models/<MODEL>/<revision>/` |
+| Windows | `C:\Users\<USER>\.agent-factory\models\<MODEL>\<revision>\` |
+
+`INFINITE_YOU_OMNIVOICE_CACHE_DIR` selects a different managed cache root for the
+process. The selected root is the parent of each model and revision directory.
+
+Use discovery and inspection to account for installed files:
+
+```bash
+you models list
+you models inspect OMNIVOICE_Q4_K_M
+you --json models list
+you --json models inspect OMNIVOICE_Q4_K_M
+```
+
+`models list` reports the installed revision, exact `cacheBytes`, and a readable
+cache size. `models inspect` also reports the resolved `cachePath`. Missing cache
+facts are explicit, while `readinessState` and `lifecycleState` keep their normal
+managed-runtime meanings.
+
+The byte count sums regular files recursively within the selected revision. It
+does not follow symbolic links, and it does not count data outside that revision.
+
+Remove one installed revision only when you no longer need its local files:
+
+```bash
+you models remove OMNIVOICE_Q4_K_M
+you --json models remove OMNIVOICE_Q4_K_M
+```
+
+Removal names the model, revision, and validated `cachePath`. It measures regular
+files before deletion, removes only that revision, verifies that the path is gone,
+and reports `bytesRemoved`. `MODEL_CACHE_NOT_FOUND` means no installed cache exists.
+`MODEL_CACHE_IN_USE` means an active host or invocation still holds the cache.
+
+Removal is always customer-initiated. The managed disk cache has no automatic
+eviction, time-to-live policy, or background cleanup. Runtime host unloading does
+not remove the managed files.
+
+### Managed Model Storage Finding
+
+The managed model cache remains under `.agent-factory/models`. Operator Settings
+uses `~/.you-agent-factory/config.json`, Factory Definitions uses
+`~/.you-agent-factory/factories`, and Recordings uses
+`~/.you-agent-factory/recordings`.
+
+This separation matches the service ownership boundaries in the repository, but
+the repository does not explain the different directory names.
+
+The placement is therefore not proven intentional. This change keeps the existing
+cache root and does not move data. Track the storage decision in [issue #2201](https://github.com/portpowered/you-agent-factory/issues/2201).
 
 ## Invoke A Model Directly
 

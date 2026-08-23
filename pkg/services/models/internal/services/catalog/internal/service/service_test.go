@@ -143,6 +143,89 @@ func TestGetCatalogModelReturnsStableDetachedDetail(t *testing.T) {
 	assertCatalogDetail(t, afterMutation.Model)
 }
 
+func TestListCatalogOverlaysCacheFactsWithoutChangingCatalogStates(t *testing.T) {
+	t.Parallel()
+
+	revision := "rev-installed"
+	cachePath := "/tmp/models/cache-model/rev-installed"
+	cacheBytes := int64(1234)
+	scopes := newRuntimeScopes(t, "catalog-cache-facts")
+	service, err := catalogwire.NewService(
+		scopes,
+		func(context.Context, models.RuntimeScopeRef, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
+			return models.Runtime{
+				ReadinessState: models.ReadinessStateFailed,
+				LifecycleState: models.LifecycleStateInstalling,
+				Revision:       &revision,
+				CachePath:      &cachePath,
+				CacheBytes:     &cacheBytes,
+			}, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("construct Catalog: %v", err)
+	}
+	scope := publicScope(t, openCatalogScope(t, scopes, "cache-model", "generate"))
+	listCatalogCacheFacts(t, service, scope, revision, cachePath, cacheBytes)
+	detail := inspectCatalogCacheFacts(t, service, scope, revision, cachePath, cacheBytes)
+	if detail.Model.ManagedRuntime.ReadinessState != models.ReadinessStateMissing ||
+		detail.Model.ManagedRuntime.LifecycleState != models.LifecycleStateNotInstalled {
+		t.Fatalf("inspect runtime states = (%s, %s), want MISSING/NOT_INSTALLED", detail.Model.ManagedRuntime.ReadinessState, detail.Model.ManagedRuntime.LifecycleState)
+	}
+}
+
+func listCatalogCacheFacts(
+	t *testing.T,
+	service catalog.Service,
+	scope models.RuntimeScopeRef,
+	revision string,
+	cachePath string,
+	cacheBytes int64,
+) {
+	result, err := service.ListCatalog(context.Background(), models.ListModelsRequest{Scope: scope})
+	if err != nil {
+		t.Fatalf("ListCatalog: %v", err)
+	}
+	if len(result.Models) != 1 {
+		t.Fatalf("models = %#v, want one model", result.Models)
+	}
+	runtime := result.Models[0].ManagedRuntime
+	if runtime.ReadinessState != models.ReadinessStateMissing ||
+		runtime.LifecycleState != models.LifecycleStateNotInstalled {
+		t.Fatalf("catalog states = (%s, %s), want MISSING/NOT_INSTALLED", runtime.ReadinessState, runtime.LifecycleState)
+	}
+	if runtime.Revision == nil || *runtime.Revision != revision ||
+		runtime.CachePath == nil || *runtime.CachePath != cachePath ||
+		runtime.CacheBytes == nil || *runtime.CacheBytes != cacheBytes {
+		t.Fatalf("catalog cache facts = revision=%v path=%v bytes=%v, want rev-installed/path/1234", runtime.Revision, runtime.CachePath, runtime.CacheBytes)
+	}
+}
+
+func inspectCatalogCacheFacts(
+	t *testing.T,
+	service catalog.Service,
+	scope models.RuntimeScopeRef,
+	revision string,
+	cachePath string,
+	cacheBytes int64,
+) models.GetModelResult {
+	detail, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{
+		Scope: scope, Name: "cache-model",
+	})
+	if err != nil {
+		t.Fatalf("GetCatalogModel: %v", err)
+	}
+	inspectRuntime := detail.Model.ManagedRuntime
+	if inspectRuntime.ReadinessState != models.ReadinessStateMissing ||
+		inspectRuntime.LifecycleState != models.LifecycleStateNotInstalled ||
+		inspectRuntime.CachePath == nil || *inspectRuntime.CachePath != cachePath ||
+		inspectRuntime.Revision == nil || *inspectRuntime.Revision != revision ||
+		inspectRuntime.CacheBytes == nil || *inspectRuntime.CacheBytes != cacheBytes {
+		t.Fatalf("inspect runtime = %#v, want preserved states and cache facts", inspectRuntime)
+	}
+	return detail
+}
+
 func TestGetCatalogModelClassifiesLookupAndOperationFailures(t *testing.T) {
 	t.Parallel()
 

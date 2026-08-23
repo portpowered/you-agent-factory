@@ -1,0 +1,4 @@
+type: string
+description: Outcome of removing the selected managed model cache revision.
+enum:
+  - REMOVED

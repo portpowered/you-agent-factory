@@ -265,16 +265,31 @@ func cloneOperationSlots(slots []OperationSlot) []OperationSlot {
 // Runtime is the model-owned readiness projection consumed by service and
 // transport adapters.
 type Runtime struct {
-	Identity            string
-	ReadinessState      ReadinessState
-	LifecycleState      LifecycleState
-	Locality            Locality
+	Identity       string
+	ReadinessState ReadinessState
+	LifecycleState LifecycleState
+	Locality       Locality
+	// Revision is the installed managed-cache revision when cache facts are
+	// available. It remains nil for cloud runtimes and models without an
+	// installed managed cache.
+	Revision *string
+	// CachePath is the resolved managed-cache revision directory when cache
+	// facts are available. It remains nil for cloud runtimes and models without
+	// an installed managed cache.
+	CachePath *string
+	// CacheBytes is the exact recursive byte count of regular files in the
+	// installed managed-cache revision. It remains nil when no installed cache
+	// was observed.
+	CacheBytes          *int64
 	SupportedOperations []Operation
 	Diagnostics         map[string]string
 }
 
 // Clone returns detached readiness facts safe for a peer to retain or mutate.
 func (runtime Runtime) Clone() Runtime {
+	runtime.Revision = cloneStringPointer(runtime.Revision)
+	runtime.CachePath = cloneStringPointer(runtime.CachePath)
+	runtime.CacheBytes = cloneInt64Pointer(runtime.CacheBytes)
 	runtime.SupportedOperations = cloneOperations(runtime.SupportedOperations)
 	runtime.Diagnostics = cloneStringMap(runtime.Diagnostics)
 	return runtime
@@ -316,6 +331,14 @@ type ManagedRuntimeStateProjection struct {
 	ReadinessState ReadinessState
 	LifecycleState LifecycleState
 	FailureReason  string
+}
+
+func cloneInt64Pointer(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
 }
 
 const genericInvocationOutputLimitBytes int64 = 16 << 20

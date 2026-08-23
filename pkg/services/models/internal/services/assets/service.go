@@ -28,6 +28,10 @@ type Service interface {
 		context.Context,
 		models.InspectModelAssetsRequest,
 	) (models.InspectModelAssetsResult, error)
+	RemoveModelAssets(
+		context.Context,
+		models.RemoveModelAssetsRequest,
+	) (models.RemoveModelAssetsResult, error)
 	// ResolveRuntimeCache returns the Models-private filesystem layout required
 	// by the existing local runtime. Peers outside Models receive only detached
 	// root-contract asset facts.
@@ -62,6 +66,7 @@ type RuntimeCacheInspection struct {
 	Installed             bool
 	Revision              string
 	CachePath             string
+	CacheBytes            int64
 	InstalledFileCount    int
 	MissingAssets         []string
 	PartialArtifacts      bool

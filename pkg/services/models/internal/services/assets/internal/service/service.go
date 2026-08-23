@@ -19,6 +19,8 @@ import (
 
 const metadataFileName = ".managed-cache.json"
 
+const maxManagedCacheBytes = int64(1<<63 - 1)
+
 type service struct {
 	scopes             runtimescopes.Service
 	platform           models.AssetHostPlatform
@@ -197,7 +199,10 @@ func (s *service) ResolveRuntimeCache(
 	if err != nil {
 		return assets.RuntimeCacheLayout{}, err
 	}
-	cachePath := filepath.Join(root, snapshot.Revision)
+	cachePath, err := managedCacheChildPath(root, snapshot.Revision, "revision")
+	if err != nil {
+		return assets.RuntimeCacheLayout{}, err
+	}
 	files := make([]string, 0, len(snapshot.Artifacts))
 	for _, artifact := range snapshot.Artifacts {
 		files = append(files, filepath.Join(cachePath, filepath.FromSlash(artifact.Name)))
@@ -223,7 +228,15 @@ func (s *service) InspectRuntimeCache(
 	}
 	active, isActive, pullFailure := s.activePullStateFor(request.Scope, request.Name)
 	if inspection, ok := s.preparedRuntimeInspection(request.Scope, request.Name); ok {
-		return s.applyActivePullFacts(inspection, active, isActive, pullFailure), nil
+		inspection = s.applyActivePullFacts(inspection, active, isActive, pullFailure)
+		if inspection.Installed && strings.TrimSpace(inspection.CachePath) != "" {
+			cacheBytes, measureErr := s.measureRevisionBytes(ctx, inspection.CachePath)
+			if measureErr != nil {
+				return assets.RuntimeCacheInspection{}, measureErr
+			}
+			inspection.CacheBytes = cacheBytes
+		}
+		return inspection, nil
 	}
 	spec, source, supported, err := s.resolveRuntimeCacheSource(scope.Runtime, request.Name)
 	if err != nil {
@@ -316,10 +329,20 @@ func (s *service) inspectRuntimeCacheFiles(
 		FailureReason:     cacheInspectionFailureReason(expected, snapshot.Artifacts, manifestValid),
 	}
 	if snapshot.Revision != "" {
-		result.CachePath = filepath.Join(cacheRoot, snapshot.Revision)
+		cachePath, pathErr := managedCacheChildPath(cacheRoot, snapshot.Revision, "revision")
+		if pathErr != nil {
+			return assets.RuntimeCacheInspection{}, pathErr
+		}
+		result.CachePath = cachePath
 	}
 	if available {
 		result.InstalledFileCount = len(snapshot.Artifacts)
+		result.MissingAssets = nil
+		cacheBytes, measureErr := s.measureRevisionBytes(ctx, result.CachePath)
+		if measureErr != nil {
+			return assets.RuntimeCacheInspection{}, measureErr
+		}
+		result.CacheBytes = cacheBytes
 	}
 	return s.verifyRuntimeCacheIntegrity(ctx, cacheDirectory, spec, source, expected, result), nil
 }
@@ -698,7 +721,27 @@ func (s *service) modelCacheRoot(cacheDirectory string, modelName string) (strin
 		}
 		root = filepath.Join(home, ".agent-factory", "models")
 	}
-	return filepath.Join(root, modelName), nil
+	return managedCacheChildPath(root, modelName, "model")
+}
+
+func managedCacheChildPath(root, child, kind string) (string, error) {
+	child = strings.TrimSpace(child)
+	if child == "" || child == "." || child == ".." ||
+		filepath.Base(child) != child || filepath.IsAbs(child) ||
+		filepath.VolumeName(child) != "" || strings.ContainsAny(child, `/\\`) {
+		return "", fmt.Errorf("managed cache %s path is invalid", kind)
+	}
+	root, err := filepath.Abs(filepath.Clean(strings.TrimSpace(root)))
+	if err != nil {
+		return "", fmt.Errorf("resolve managed cache root: %w", err)
+	}
+	resolved := filepath.Join(root, child)
+	relative, err := filepath.Rel(root, resolved)
+	if err != nil || relative == "." || relative == ".." ||
+		strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("managed cache %s path escapes its root", kind)
+	}
+	return resolved, nil
 }
 
 func (s *service) readMetadata(
@@ -741,12 +784,18 @@ func (s *service) inspectRevision(
 	for _, file := range metadata.Files {
 		metadataByName[filepath.ToSlash(strings.TrimSpace(file.Path))] = file
 	}
+	revisionPath, err := managedCacheChildPath(root, revision, "revision")
+	if err != nil {
+		return unavailableSnapshot(spec.modelName, source, revision, nil), false, fmt.Errorf(
+			"%w: %v", models.ErrModelCacheUnsafe, err,
+		)
+	}
 	artifacts := make([]models.AssetArtifact, 0, len(spec.requiredArtifacts))
 	for _, name := range spec.requiredArtifacts {
 		if err := assetContextError(ctx); err != nil {
 			return missingSnapshot(spec.modelName, source), false, err
 		}
-		info, err := s.inspectPath(filepath.Join(root, revision, filepath.FromSlash(name)))
+		info, err := s.inspectPath(filepath.Join(revisionPath, filepath.FromSlash(name)))
 		if errors.Is(err, os.ErrNotExist) || (err == nil && info.IsDir()) {
 			return unavailableSnapshot(spec.modelName, source, revision, artifacts), false, nil
 		}
@@ -785,7 +834,7 @@ func (s *service) discoverRevision(
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		if entry == nil || entry.Type()&os.ModeSymlink != 0 || !entry.IsDir() {
 			continue
 		}
 		metadata := cacheMetadata{Revision: entry.Name()}

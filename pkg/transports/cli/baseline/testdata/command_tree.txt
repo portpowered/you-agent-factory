@@ -20,6 +20,7 @@ you models inspect	inspect <model-name>	you models
 you models invoke	invoke <model-name>	you models
 you models list	list	you models
 you models pull	pull <model-name>	you models
+you models remove	remove <model-name>	you models
 you providers	providers	you
 you providers list	list	you providers
 you run	run	you

@@ -139,6 +139,8 @@ const (
 	ErrorResponseCodeMETRICSINVALIDREQUEST                          ErrorResponseCode = "METRICS_INVALID_REQUEST"
 	ErrorResponseCodeMETRICSSESSIONNOTFOUND                         ErrorResponseCode = "METRICS_SESSION_NOT_FOUND"
 	ErrorResponseCodeMETRICSSESSIONSCOPEUNAVAILABLE                 ErrorResponseCode = "METRICS_SESSION_SCOPE_UNAVAILABLE"
+	ErrorResponseCodeMODELCACHEINUSE                                ErrorResponseCode = "MODEL_CACHE_IN_USE"
+	ErrorResponseCodeMODELCACHENOTFOUND                             ErrorResponseCode = "MODEL_CACHE_NOT_FOUND"
 	ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED                  ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
 	ErrorResponseCodeNOTFOUND                                       ErrorResponseCode = "NOT_FOUND"
 	ErrorResponseCodePROJECTIONUNAVAILABLE                          ErrorResponseCode = "PROJECTION_UNAVAILABLE"
@@ -962,6 +964,11 @@ const (
 const (
 	ModelPullOutcomeALREADYPRESENT ModelPullOutcome = "ALREADY_PRESENT"
 	ModelPullOutcomePULLED         ModelPullOutcome = "PULLED"
+)
+
+// Defines values for ModelRemoveOutcome.
+const (
+	REMOVED ModelRemoveOutcome = "REMOVED"
 )
 
 // Defines values for ModelStatus.
@@ -5934,6 +5941,11 @@ type LogicalRoundTrip struct {
 
 // ManagedRuntime defines model for ManagedRuntime.
 type ManagedRuntime struct {
+	// CacheBytes Exact recursive byte count of regular files in the installed managed-cache revision.
+	CacheBytes *int64 `json:"cacheBytes,omitempty"`
+
+	// CachePath Resolved managed-cache revision directory when a local cache is installed.
+	CachePath   *string    `json:"cachePath,omitempty"`
 	Diagnostics *StringMap `json:"diagnostics,omitempty"`
 
 	// Identity Stable managed runtime identity shared by discovery, inspect, pull or install, and factory dependency surfaces.
@@ -5947,6 +5959,9 @@ type ManagedRuntime struct {
 
 	// ReadinessState Customer-facing readiness for one managed runtime. Readiness describes whether the runtime can be invoked now or what action is required next, without naming upstream repository or provider-specific cache semantics.
 	ReadinessState ManagedRuntimeReadinessState `json:"readinessState"`
+
+	// Revision Installed managed-cache revision when a local cache is present.
+	Revision *string `json:"revision,omitempty"`
 
 	// SupportedOperations Provider-agnostic operations supported by this managed runtime.
 	SupportedOperations []ModelInvocationOperation `json:"supportedOperations"`
@@ -6361,6 +6376,27 @@ type ModelPullResponse struct {
 type ModelReference struct {
 	// NameOrUri Configured model name or source URI. Resolution is owned by Models.
 	NameOrUri string `json:"nameOrUri"`
+}
+
+// ModelRemoveOutcome Outcome of removing the selected managed model cache revision.
+type ModelRemoveOutcome string
+
+// ModelRemoveResponse defines model for ModelRemoveResponse.
+type ModelRemoveResponse struct {
+	// BytesRemoved Total size of regular files measured immediately before removal.
+	BytesRemoved int64 `json:"bytesRemoved"`
+
+	// CachePath Validated absolute path of the removed managed cache revision.
+	CachePath string `json:"cachePath"`
+
+	// ModelName Stable managed runtime identity whose cache revision was removed.
+	ModelName string `json:"modelName"`
+
+	// Outcome Outcome of removing the selected managed model cache revision.
+	Outcome ModelRemoveOutcome `json:"outcome"`
+
+	// Revision Exact managed cache revision removed by the operation.
+	Revision string `json:"revision"`
 }
 
 // ModelRequestEventPayload Request details captured immediately before a model-backed worker invocation enters resource, load, and execution boundaries. FactoryEvent.context owns dispatch, request, trace, and work identity, and the matching dispatch-request event owns the transition identifier.

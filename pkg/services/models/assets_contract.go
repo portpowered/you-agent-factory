@@ -44,6 +44,17 @@ var (
 	// ErrAssetOffline reports that an offline preparation request could not
 	// satisfy every requested artifact from the ordered local caches.
 	ErrAssetOffline = errors.New("model assets are missing while offline")
+	// ErrModelCacheNotFound reports that the selected model has no managed
+	// cache revision that can be removed.
+	ErrModelCacheNotFound = errors.New("managed model cache not found")
+	// ErrModelCacheInUse reports that a live model host or invocation lease
+	// still holds the selected managed cache.
+	ErrModelCacheInUse = errors.New("managed model cache is in use")
+	// ErrModelCacheUnsafe reports that a managed cache path contains a link or
+	// path shape that cannot be removed without following it outside the cache.
+	ErrModelCacheUnsafe = errors.New("managed model cache path is unsafe")
+	// ErrModelCacheRemovalFailed reports that removal could not be verified.
+	ErrModelCacheRemovalFailed = errors.New("managed model cache removal failed")
 )
 
 // AssetArtifactKind separates model payloads from backend runtime artifacts.
@@ -291,9 +302,12 @@ func (request RemoveModelAssetsRequest) Validate() error {
 // RemoveModelAssetsResult reports the resulting readiness and whether assets
 // were removed or were already absent.
 type RemoveModelAssetsResult struct {
-	ModelName string
-	Readiness AssetReadinessState
-	Outcome   AssetRemovalOutcome
+	ModelName    string
+	Revision     string
+	CachePath    string
+	BytesRemoved int64
+	Readiness    AssetReadinessState
+	Outcome      AssetRemovalOutcome
 }
 
 func validateAssetModelName(name string) error {

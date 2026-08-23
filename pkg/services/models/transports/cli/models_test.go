@@ -32,6 +32,7 @@ type commandServiceFake struct {
 	inspect func(InspectConfig) error
 	invoke  func(InvokeConfig) error
 	pull    func(PullConfig) error
+	remove  func(RemoveConfig) error
 }
 
 type modelsPullDoer func(*http.Request) (*http.Response, error)
@@ -50,6 +51,12 @@ func (fake commandServiceFake) List(cfg ListConfig) error       { return fake.li
 func (fake commandServiceFake) Inspect(cfg InspectConfig) error { return fake.inspect(cfg) }
 func (fake commandServiceFake) Invoke(cfg InvokeConfig) error   { return fake.invoke(cfg) }
 func (fake commandServiceFake) Pull(cfg PullConfig) error       { return fake.pull(cfg) }
+func (fake commandServiceFake) Remove(cfg RemoveConfig) error {
+	if fake.remove != nil {
+		return fake.remove(cfg)
+	}
+	return nil
+}
 
 func TestCommandHandlerTransformsInvokeCommandState(t *testing.T) {
 	server := "http://127.0.0.1:7437"
@@ -221,6 +228,7 @@ func resolvedModelsHandlerInputs(
 }
 
 func TestRenderList_WritesDiscoveredModelsTable(t *testing.T) {
+	cacheBytes := int64(1234)
 	var out bytes.Buffer
 	err := renderList(factoryapi.ListModelsResponse{
 		Results: []factoryapi.ModelSummary{{
@@ -233,6 +241,7 @@ func TestRenderList_WritesDiscoveredModelsTable(t *testing.T) {
 				ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
 				LifecycleState: factoryapi.ManagedRuntimeLifecycleStateINSTALLED,
 				Locality:       factoryapi.WorkerModelLocalityLocal,
+				CacheBytes:     &cacheBytes,
 			},
 			Operations: []factoryapi.ModelInvocationOperation{{Name: "TTS"}},
 			Modalities: []factoryapi.ModelInvocationContentType{factoryapi.ModelInvocationContentTypeAudio, factoryapi.ModelInvocationContentTypeText},
@@ -243,10 +252,25 @@ func TestRenderList_WritesDiscoveredModelsTable(t *testing.T) {
 		t.Fatalf("RenderList: %v", err)
 	}
 	got := out.String()
-	for _, want := range []string{"NAME", "READINESS", "LIFECYCLE", "OMNIVOICE_Q4_K_M", "LOCAL", "READY", "INSTALLED", "TTS", "AUDIO,TEXT"} {
+	for _, want := range []string{"NAME", "READINESS", "LIFECYCLE", "CACHE SIZE", "OMNIVOICE_Q4_K_M", "LOCAL", "READY", "INSTALLED", "TTS", "AUDIO,TEXT", "1.21 KiB (1234 bytes)"} {
 		if !bytes.Contains([]byte(got), []byte(want)) {
 			t.Fatalf("rendered table missing %q:\n%s", want, got)
 		}
+	}
+}
+
+func TestManagedRuntimeMappingPreservesCacheFacts(t *testing.T) {
+	revision := "rev-1"
+	cachePath := "/tmp/models/OMNIVOICE_Q4_K_M/rev-1"
+	cacheBytes := int64(1234)
+	got := managedRuntimeToGenerated(modelinference.Runtime{
+		Identity: "OMNIVOICE_Q4_K_M",
+		Revision: &revision, CachePath: &cachePath, CacheBytes: &cacheBytes,
+	})
+	if got.Revision == nil || *got.Revision != revision ||
+		got.CachePath == nil || *got.CachePath != cachePath ||
+		got.CacheBytes == nil || *got.CacheBytes != cacheBytes {
+		t.Fatalf("managed runtime cache facts = revision=%v path=%v bytes=%v, want rev-1/path/1234", got.Revision, got.CachePath, got.CacheBytes)
 	}
 }
 
@@ -284,7 +308,11 @@ func TestRenderModel_WritesManagedRuntimeInspectFields(t *testing.T) {
 		t.Fatalf("RenderModel: %v", err)
 	}
 	got := out.String()
-	for _, want := range []string{"Readiness:\tMISSING", "Lifecycle:\tNOT_INSTALLED", "missingAssets=weights.bin"} {
+	for _, want := range []string{
+		"Readiness:\tMISSING", "Lifecycle:\tNOT_INSTALLED",
+		"Revision:\tNOT_INSTALLED", "Cache Size:\tNOT_INSTALLED", "Cache Path:\tNOT_INSTALLED",
+		"missingAssets=weights.bin",
+	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("rendered inspect output missing %q:\n%s", want, got)
 		}
