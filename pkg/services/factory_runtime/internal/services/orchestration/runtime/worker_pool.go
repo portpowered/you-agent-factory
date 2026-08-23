@@ -868,8 +868,6 @@ func cloneSessionCapabilities(value *workers.Capabilities) *workers.Capabilities
 	return &clone
 }
 
-const detachedAgentRunTranscriptSummaryLimit = 160
-
 func recordDetachedAgentRunResponse(
 	cfg *runtimeConfig,
 	request workers.ExecuteRequest,
@@ -940,22 +938,4 @@ func runtimeRequestUsesAgentRun(cfg *runtimeConfig, request workers.ExecuteReque
 	}
 	workstation, found := lookup.Workstation(strings.TrimSpace(request.Target.WorkstationName))
 	return found && workstation != nil && interfaces.IsAgentRunWorkstationType(workstation.Type)
-}
-
-func appendTranscriptEntry(
-	transcript *[]workers.AgentRunTranscriptEntry,
-	role string,
-	content string,
-) {
-	content = strings.TrimSpace(content)
-	if content == "" {
-		return
-	}
-	if len(content) > detachedAgentRunTranscriptSummaryLimit {
-		content = content[:detachedAgentRunTranscriptSummaryLimit] + "..."
-	}
-	*transcript = append(*transcript, workers.AgentRunTranscriptEntry{
-		Role:    role,
-		Summary: content,
-	})
 }

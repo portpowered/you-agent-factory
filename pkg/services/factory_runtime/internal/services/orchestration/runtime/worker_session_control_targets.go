@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -726,24 +725,6 @@ func finalizeRuntimeWorkspaceSelection(
 	selection.workingDirectory = resolveRuntimePath(baseDirectory, selection.workingDirectory, fileSystem)
 }
 
-func runtimeWorkflowContext(cfg *runtimeConfig, sessionID string, supplied *workers.Context) *workers.Context {
-	if context := supplied.Clone(); context != nil {
-		if strings.TrimSpace(context.SessionID) == "" {
-			context.SessionID = strings.TrimSpace(sessionID)
-		}
-		return context
-	}
-	if cfg != nil {
-		if context := cfg.workflowContext.Clone(); context != nil {
-			if strings.TrimSpace(context.SessionID) == "" {
-				context.SessionID = strings.TrimSpace(sessionID)
-			}
-			return context
-		}
-	}
-	return &workers.Context{SessionID: strings.TrimSpace(sessionID)}
-}
-
 const classifierFailureRawOutputLimit = 160
 
 func normalizeScriptClassifierResult(
@@ -1018,37 +999,4 @@ func recordedObservationFromFact(fact recordedDispatchObservation, clock factory
 		observation.Failure = &failure
 	}
 	return observation
-}
-
-func appendPromptTranscriptEntry(
-	transcript *[]workers.AgentRunTranscriptEntry,
-	role string,
-	content string,
-) {
-	content = strings.TrimSpace(content)
-	if content == "" {
-		return
-	}
-	hash := sha256.Sum256([]byte(content))
-	summary := fmt.Sprintf("sha256:%x", hash)
-	if effort := safeReasoningEffortClassification(content); effort != "" {
-		// Keep the bounded, non-prompt configuration fact that operators use to
-		// explain runner behavior without re-exposing the authored prompt.
-		summary += " (Reasoning effort: " + effort + ")"
-	}
-	appendTranscriptEntry(transcript, role, summary)
-}
-
-func safeReasoningEffortClassification(content string) string {
-	for _, line := range strings.Split(content, "\n") {
-		key, value, found := strings.Cut(line, ":")
-		if !found || !strings.EqualFold(strings.TrimSpace(key), "reasoning effort") {
-			continue
-		}
-		switch value = strings.ToLower(strings.TrimSpace(value)); value {
-		case "none", "minimal", "low", "medium", "high", "max":
-			return value
-		}
-	}
-	return ""
 }
