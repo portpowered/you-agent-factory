@@ -25,6 +25,7 @@ func (value *DispatchCancellation) Clone() *DispatchCancellation {
 	clone := *value
 	return &clone
 }
+
 const (
 	RedactedCommandEnvValue              = workerniagnostics.RedactedCommandEnvValue
 	MetadataOnlyCommandEnvValue          = workerniagnostics.MetadataOnlyCommandEnvValue
