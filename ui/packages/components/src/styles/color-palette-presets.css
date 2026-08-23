@@ -5,6 +5,54 @@
  * Role tokens in color-role-tokens.css and aliases cascade from these keys.
  */
 
+/*
+ * Register the shared foundation vocabulary for Tailwind utilities without
+ * creating a second literal-value owner. The palette declarations below are
+ * the runtime source for these variables.
+ */
+@theme static {
+  --color-af-foundation-background: var(--color-af-foundation-background);
+  --color-af-foundation-background-start: var(
+    --color-af-foundation-background-start
+  );
+  --color-af-foundation-background-mid: var(
+    --color-af-foundation-background-mid
+  );
+  --color-af-foundation-canvas: var(--color-af-foundation-canvas);
+  --color-af-foundation-surface: var(--color-af-foundation-surface);
+  --color-af-foundation-ink: var(--color-af-foundation-ink);
+  --color-af-foundation-code-ink: var(--color-af-foundation-code-ink);
+  --color-af-foundation-overlay: var(--color-af-foundation-overlay);
+  --color-af-foundation-accent: var(--color-af-foundation-accent);
+  --color-af-foundation-accent-strong: var(--color-af-foundation-accent-strong);
+  --color-af-foundation-accent-ink: var(--color-af-foundation-accent-ink);
+  --color-af-foundation-info: var(--color-af-foundation-info);
+  --color-af-foundation-info-strong: var(--color-af-foundation-info-strong);
+  --color-af-foundation-info-bright: var(--color-af-foundation-info-bright);
+  --color-af-foundation-info-ink: var(--color-af-foundation-info-ink);
+  --color-af-foundation-secondary-accent: var(
+    --color-af-foundation-secondary-accent
+  );
+  --color-af-foundation-secondary-accent-ink: var(
+    --color-af-foundation-secondary-accent-ink
+  );
+  --color-af-foundation-tertiary-accent: var(
+    --color-af-foundation-tertiary-accent
+  );
+  --color-af-foundation-tertiary-accent-ink: var(
+    --color-af-foundation-tertiary-accent-ink
+  );
+  --color-af-foundation-success: var(--color-af-foundation-success);
+  --color-af-foundation-success-ink: var(--color-af-foundation-success-ink);
+  --color-af-foundation-warning: var(--color-af-foundation-warning);
+  --color-af-foundation-warning-ink: var(--color-af-foundation-warning-ink);
+  --color-af-foundation-danger: var(--color-af-foundation-danger);
+  --color-af-foundation-danger-bright: var(--color-af-foundation-danger-bright);
+  --color-af-foundation-danger-ink: var(--color-af-foundation-danger-ink);
+  --color-af-foundation-worker: var(--color-af-foundation-worker);
+  --color-af-foundation-worker-ink: var(--color-af-foundation-worker-ink);
+}
+
 :root,
 [data-color-palette="factory-dark"] {
   --color-af-foundation-background: #050b10;
