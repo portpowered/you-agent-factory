@@ -15,6 +15,7 @@ import (
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	serverstopcli "github.com/portpowered/infinite-you/pkg/transports/cli/serverstop"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 func newRootCommandWithFactory(options CommandFactory) *cobra.Command {
@@ -75,6 +76,13 @@ func shouldDiscloseHomeDirectory(cmd *cobra.Command, args []string) bool {
 	if cmd == nil || commandHelpRequested(cmd, args) {
 		return false
 	}
+	// JSON and NDJSON invocations reserve stdout for their machine-readable
+	// result and stderr for the single structured error response on failure.
+	// A human startup line cannot be emitted on either stream without changing
+	// those public contracts.
+	if commandInputEnabled(cmd, args, "you.flag.json", "json") {
+		return false
+	}
 	switch cmd.CommandPath() {
 	case "you server", "you server acp", "you server mcp":
 		return true
@@ -120,13 +128,22 @@ func commandHelpRequested(cmd *cobra.Command, args []string) bool {
 }
 
 func commandFlagChanged(cmd *cobra.Command, name string) bool {
-	flag := cmd.Flag(name)
-	return flag != nil && flag.Changed
+	if cmd == nil {
+		return false
+	}
+	for _, flagSet := range []*pflag.FlagSet{
+		cmd.Flags(), cmd.InheritedFlags(), cmd.PersistentFlags(), cmd.Root().PersistentFlags(),
+	} {
+		if flag := flagSet.Lookup(name); flag != nil && flag.Changed {
+			return true
+		}
+	}
+	return false
 }
 
 func commandInputChanged(cmd *cobra.Command, inputID, fallbackFlagName string) bool {
 	changed, err := climanifestcobra.InputChanged(cmd, inputID)
-	if err == nil {
+	if err == nil && changed {
 		return changed
 	}
 	return commandFlagChanged(cmd, fallbackFlagName)
@@ -137,6 +154,9 @@ func commandInputEnabled(cmd *cobra.Command, args []string, inputID, fallbackFla
 }
 
 func runInvocationOutputIsClean(cmd *cobra.Command, args []string) bool {
+	if rawFlagSupplied(args, "output") || commandInputChanged(cmd, "you.run.flag.output", "output") {
+		return true
+	}
 	selected := rawFlagSupplied(args, "factory") || rawFlagSupplied(args, "named") ||
 		commandInputChanged(cmd, "you.run.flag.factory", "factory") || commandInputChanged(cmd, "you.run.flag.named", "named")
 	if !selected {
@@ -223,7 +243,7 @@ func requiresSystemInitialization(commandPath string, args []string) bool {
 	switch commandPath {
 	case "you":
 		return len(args) > 0
-	case "you server acp", "you server mcp", "you run":
+	case "you server", "you server acp", "you server mcp", "you run":
 		return true
 	default:
 		return false

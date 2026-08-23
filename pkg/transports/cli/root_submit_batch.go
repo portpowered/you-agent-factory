@@ -364,7 +364,7 @@ func resolveProcessHomeDirForCommand(cmd *cobra.Command, options CommandFactory)
 	if cmd != nil {
 		ctx := cmd.Context()
 		if ctx == nil {
-			ctx = context.Background()
+			return "", fmt.Errorf("resolve process home directory: command context is required")
 		}
 		cmd.SetContext(context.WithValue(ctx, resolvedProcessHomeDirectoryContextKey{}, resolvedProcessHomeDirectory{path: homeDir}))
 	}
