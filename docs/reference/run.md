@@ -301,6 +301,15 @@ you server
 you server --listen 127.0.0.1:7437
 ```
 
+`you server` is continuous, non-resumable hosting. For restart-surviving
+hosting with an explicit recording, use:
+
+```bash
+you run --with-server --continuously --record <path>
+```
+
+Continue that recording after a stop with `you run --resume <recording>`.
+
 Use `--listen <host:port>` when the listener must bind one exact local address.
 The host must be `localhost` or a loopback IP, and the port must be a non-zero
 TCP port. `--listen` takes precedence when both listener controls are present;
