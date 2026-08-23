@@ -355,14 +355,6 @@ func (f *Factory) activationRequest(
 	return f.activationRequestWithInputs(ctx, request, nil, nil)
 }
 
-func (f *Factory) activationRequestWithReplayInput(
-	ctx context.Context,
-	request *factorysessions.RuntimeOpeningRequest,
-	preloadedReplayInput *recordings.LoadReplayInputResult,
-) (factoryruntime.RuntimeActivationRequest, error) {
-	return f.activationRequestWithInputs(ctx, request, preloadedReplayInput, nil)
-}
-
 func (f *Factory) activationRequestWithInputs(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,

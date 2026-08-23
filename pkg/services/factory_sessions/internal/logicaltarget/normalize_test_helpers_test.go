@@ -27,10 +27,6 @@ func NormalizeProviderTarget(
 	return NormalizeProviderTargetWithEffects(filepath.EvalSymlinks, os.UserHomeDir, backendScopeID, folderPath, boundary)
 }
 
-func NormalizeProviderBoundary(boundary ProviderBoundary) (ProviderBoundary, error) {
-	return NormalizeProviderBoundaryValue(boundary)
-}
-
 func NormalizeTargetRef(
 	backendScopeID string,
 	folderPath string,

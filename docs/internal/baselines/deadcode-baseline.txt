@@ -89,7 +89,6 @@ pkg/services/factory_runtime/internal/services/orchestration/subsystems/noop_dis
 pkg/services/factory_runtime/internal/testkit/runtime.go: unreachable func: NewPetriMarking
 pkg/services/factory_runtime/resource_capacity.go: unreachable func: normalizeResourceCapacityRequest
 pkg/services/factory_runtime/transports/mcp/client.go: unreachable func: BindRuntime
-pkg/services/factory_sessions/internal/cursors/observer.go: unreachable func: RecordPreflight
 pkg/services/factory_sessions/internal/execution/javascript_runtime_checkpoint_test.go: unreachable func: newResumeCoverageBlockingProvider
 pkg/services/factory_sessions/internal/execution/javascript_runtime_checkpoint_test.go: unreachable func: progressCapturingChildExecutor.Execute
 pkg/services/factory_sessions/internal/execution/javascript_runtime_checkpoint_test.go: unreachable func: resumeCoverageBlockingProvider.Execute
@@ -97,8 +96,6 @@ pkg/services/factory_sessions/internal/execution/javascript_runtime_checkpoint_t
 pkg/services/factory_sessions/internal/execution/javascript_runtime_checkpoint_test.go: unreachable func: resumeCoverageBlockingProvider.waitForCanceledResumeCoverageInfer
 pkg/services/factory_sessions/internal/execution/javascript_runtime_checkpoint_test.go: unreachable func: setupResumeCoverageWorkflowFixture
 pkg/services/factory_sessions/internal/execution/javascript_runtime_checkpoint_test.go: unreachable func: waitForResumeCoverageDispatchStatus
-pkg/services/factory_sessions/internal/logicaltarget/normalize_test_helpers_test.go: unreachable func: NormalizeProviderBoundary
-pkg/services/factory_sessions/internal/runtimeopening/factories_test.go: unreachable func: materializerStub.MaterializeContentURL
 pkg/services/factory_sessions/internal/runtimeopening/models_bind_test.go: unreachable func: newOpeningCoordinatorFactory
 pkg/services/factory_sessions/internal/runtimeopening/models_bind_test.go: unreachable func: openingCoordinatorBoundSessions.CurrentRuntime
 pkg/services/factory_sessions/internal/runtimeopening/models_bind_test.go: unreachable func: openingCoordinatorBoundSessions.InferenceProgressPublisherFactory
@@ -109,8 +106,6 @@ pkg/services/factory_sessions/internal/runtimeopening/models_bind_test.go: unrea
 pkg/services/factory_sessions/internal/runtimeopening/models_bind_test.go: unreachable func: openingCoordinatorResolveClock
 pkg/services/factory_sessions/internal/runtimeopening/models_bind_test.go: unreachable func: openingCoordinatorSessionLogger
 pkg/services/factory_sessions/internal/runtimeopening/models_bind_test.go: unreachable func: openingCoordinatorValidateEditable
-pkg/services/factory_sessions/internal/runtimeopening/operatordefaults/operator_defaults_runtime_test.go: unreachable func: writeOperatorDefaultsFactoryJSON
-pkg/services/factory_sessions/internal/runtimeopening/runtime_activation.go: unreachable func: Factory.activationRequestWithReplayInput
 pkg/services/factory_sessions/internal/sessionservice/runtime.go: unreachable func: SessionRuntime.waitForActiveRuntime
 pkg/services/factory_sessions/internal/sessionservice/runtime_gateway.go: unreachable func: SessionRuntime.inferenceProgressPublisher
 pkg/services/factory_sessions/internal/sessionservice/runtime_sessions.go: unreachable func: SessionRuntime.openFactorySession
