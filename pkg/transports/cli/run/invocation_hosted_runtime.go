@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/initializer/runtimeapplication"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
@@ -33,7 +32,7 @@ func prepareCanonicalSessionIDForRun(cfg RunConfig) (RunConfig, error) {
 	}
 	generator := cfg.CanonicalSessionIDGenerator
 	if generator == nil {
-		generator = uuid.NewString
+		return RunConfig{}, errors.New("prepare automatic recording: canonical Factory Session ID generator is required")
 	}
 	canonicalID := strings.TrimSpace(generator())
 	if canonicalID == "" {

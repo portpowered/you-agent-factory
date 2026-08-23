@@ -698,14 +698,6 @@ func classifyRunInputFailure(cfg RunConfig, err error) error {
 	return err
 }
 
-func loadSelectedMockWorkersConfig(
-	cfg RunConfig,
-	load workers.MockWorkersConfigLoader,
-) (*workers.MockWorkersConfig, error) {
-	config, _, err := loadSelectedMockWorkersConfigWithDiagnostics(cfg, load, nil)
-	return config, err
-}
-
 func loadSelectedMockWorkersConfigWithDiagnostics(
 	cfg RunConfig,
 	load workers.MockWorkersConfigLoader,
