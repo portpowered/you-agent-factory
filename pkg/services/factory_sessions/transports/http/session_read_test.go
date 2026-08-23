@@ -148,3 +148,73 @@ func TestHandlerFromRoot_GetFactorySessionNotFoundReturnsTypedErrorResponse(t *t
 		t.Fatalf("message = %q, want stable not-found text", errResp.Message)
 	}
 }
+
+func TestHandlerFromRoot_ListedPersistedSessionResolvesThroughCanonicalDetail(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "persisted-failed-partial-001"
+	root := &httpSessionsRootFake{
+		listSessions: func(_ context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+			if request.Scope != factorysessions.SessionListScopeAll {
+				t.Fatalf("durable inventory scope = %q, want all", request.Scope)
+			}
+			return factorysessions.ListSessionsResult{
+				Scope: factorysessions.SessionListScopeAll,
+				DurableSessions: []factorysessions.DurableSessionListSummary{{
+					SessionID: sessionID,
+					Status:    factorysessions.LifecycleStatusFailed,
+				}},
+			}, nil
+		},
+		getDurableSession: func(_ context.Context, gotID string) (factorysessions.SessionReadResult, error) {
+			if gotID != sessionID {
+				return factorysessions.SessionReadResult{}, factorysessions.ErrDurableSessionNotFound
+			}
+			return factorysessions.SessionReadResult{
+				SessionID:        sessionID,
+				Status:           factorysessions.LifecycleStatusFailed,
+				OrchestratorKind: "JAVASCRIPT",
+				Failure: &factorysessions.FailureSummary{
+					Message:                "workflow failed after producing a partial result",
+					PartialResultAvailable: true,
+				},
+			}, nil
+		},
+	}
+	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+
+	listRecorder := httptest.NewRecorder()
+	persistedScope := factoryapi.FactorySessionListScopePersisted
+	handler.ListFactorySessions(
+		listRecorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions?scope=persisted", nil),
+		factoryapi.ListFactorySessionsParams{Scope: &persistedScope},
+	)
+	if listRecorder.Code != http.StatusOK {
+		t.Fatalf("list status = %d, want 200: %s", listRecorder.Code, listRecorder.Body.String())
+	}
+	var listed factoryapi.ListFactorySessionsResponse
+	if err := json.Unmarshal(listRecorder.Body.Bytes(), &listed); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if listed.DurableSessions == nil || len(*listed.DurableSessions) != 1 || (*listed.DurableSessions)[0].SessionId != sessionID {
+		t.Fatalf("listed durable sessions = %#v, want %q", listed.DurableSessions, sessionID)
+	}
+
+	detailRecorder := httptest.NewRecorder()
+	handler.GetFactorySession(
+		detailRecorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID, nil),
+		factoryapi.SessionID(sessionID),
+	)
+	if detailRecorder.Code != http.StatusOK {
+		t.Fatalf("detail status = %d, want 200: %s", detailRecorder.Code, detailRecorder.Body.String())
+	}
+	var detail factoryapi.FactorySessionDurableReadModel
+	if err := json.Unmarshal(detailRecorder.Body.Bytes(), &detail); err != nil {
+		t.Fatalf("decode detail response: %v", err)
+	}
+	if detail.SessionId != sessionID || detail.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("detail = %#v, want failed durable session %q", detail, sessionID)
+	}
+}

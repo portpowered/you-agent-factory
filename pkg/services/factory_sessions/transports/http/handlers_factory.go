@@ -120,13 +120,36 @@ func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request, par
 }
 
 func (s *Server) GetFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	if isDurableExecutionSessionID(string(sessionID)) {
+	durableLookupMiss := false
+	if s.sessionsRoot != nil {
+		if s.guardSessionsRequestContext(w, r) {
+			return
+		}
+		response, err := s.sessionsRoot.GetSession(r.Context(), string(sessionID))
+		if err == nil {
+			s.writeJSON(w, http.StatusOK, factorysession.SessionReadResponseToAPI(response))
+			return
+		}
+		if !isSessionLookupMiss(err) && !errors.Is(err, factorysessionexecution.ErrExecutionServiceNotConfigured) {
+			if s.writeSessionsRootError(w, string(sessionID), err) {
+				return
+			}
+			s.logger.Error("get durable factory session failed", zap.Error(err), zap.String("session_id", string(sessionID)))
+			s.writeError(w, http.StatusInternalServerError, "failed to get factory session", "INTERNAL_ERROR")
+			return
+		}
+		durableLookupMiss = isSessionLookupMiss(err)
+	} else if s.durableLifecycle != nil {
 		getter, ok := s.requireDurableSessionGetter(w)
 		if !ok {
 			return
 		}
 		response, err := getter.GetDurableFactorySession(r.Context(), string(sessionID))
-		if err != nil {
+		if err == nil {
+			s.writeJSON(w, http.StatusOK, response)
+			return
+		}
+		if !isSessionLookupMiss(err) && !errors.Is(err, factorysessionexecution.ErrExecutionServiceNotConfigured) {
 			if s.writeDurableSessionReadError(w, err) {
 				return
 			}
@@ -134,8 +157,7 @@ func (s *Server) GetFactorySession(w http.ResponseWriter, r *http.Request, sessi
 			s.writeError(w, http.StatusInternalServerError, "failed to get factory session", "INTERNAL_ERROR")
 			return
 		}
-		s.writeJSON(w, http.StatusOK, response)
-		return
+		durableLookupMiss = isSessionLookupMiss(err)
 	}
 
 	if s.liveControl != nil {
@@ -155,6 +177,10 @@ func (s *Server) GetFactorySession(w http.ResponseWriter, r *http.Request, sessi
 		return
 	}
 
+	if durableLookupMiss && s.sessions == nil {
+		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+		return
+	}
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {
 		return
@@ -474,6 +500,14 @@ type DurableExecutionSessionLister interface {
 	) (factorysessionexecution.ListSessionsResult, error)
 }
 
+// isDurableExecutionSessionID remains the compatibility discriminator for
+// session-scoped durable control and result routes. Detail reads use the
+// Factory Sessions-owned lookup contract instead, so a listed durable ID does
+// not need this implementation-specific prefix.
+func isDurableExecutionSessionID(sessionID string) bool {
+	return strings.HasPrefix(strings.TrimSpace(sessionID), "dur-sess-")
+}
+
 func (s *Server) requireDurableSessionGetter(w http.ResponseWriter) (durableSessionGetter, bool) {
 	if s.durableLifecycle == nil {
 		s.writeError(w, http.StatusInternalServerError, "durable factory session read is unavailable", "INTERNAL_ERROR")
@@ -490,8 +524,10 @@ func (s *Server) requireDurableSessionResponseEventsReader(w http.ResponseWriter
 	return s.durableResponseEvents, true
 }
 
-func isDurableExecutionSessionID(sessionID string) bool {
-	return strings.HasPrefix(strings.TrimSpace(sessionID), "dur-sess-")
+func isSessionLookupMiss(err error) bool {
+	return errors.Is(err, factorysessionexecution.ErrSessionNotFound) ||
+		errors.Is(err, factorysessionexecution.ErrDurableSessionNotFound) ||
+		errors.Is(err, apisurface.ErrFactorySessionNotFound)
 }
 
 func (s *Server) mergeScopedFactorySessionList(

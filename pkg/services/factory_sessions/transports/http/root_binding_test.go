@@ -147,6 +147,7 @@ func TestHandlerFromRoot_HumanApprovalReadUsesSessionProjection(t *testing.T) {
 type httpSessionsRootFake struct {
 	sessions          map[string]factorysessions.SessionProjection
 	getSession        func(context.Context, string) (factorysessions.SessionProjection, error)
+	getDurableSession func(context.Context, string) (factorysessions.SessionReadResult, error)
 	listReads         func(context.Context) ([]factorysessions.ReadProjection, error)
 	listSessions      func(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
 	onOpen            func(context.Context, factorysessions.OpenRequest) (*factorysessions.OpenResult, error)
@@ -333,7 +334,10 @@ func (fake *httpSessionsRootFake) ResumeInterruptedSession(context.Context, stri
 	return factorysessions.AsyncStartResult{}, factorysessions.ErrDurableSessionNotFound
 }
 
-func (fake *httpSessionsRootFake) GetSession(context.Context, string) (factorysessions.SessionReadResult, error) {
+func (fake *httpSessionsRootFake) GetSession(ctx context.Context, sessionID string) (factorysessions.SessionReadResult, error) {
+	if fake.getDurableSession != nil {
+		return fake.getDurableSession(ctx, sessionID)
+	}
 	return factorysessions.SessionReadResult{}, factorysessions.ErrDurableSessionNotFound
 }
 

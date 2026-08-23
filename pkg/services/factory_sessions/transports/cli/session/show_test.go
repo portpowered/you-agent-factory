@@ -345,6 +345,45 @@ func TestShow_DurableSessionJSONUsesDurableReadModel(t *testing.T) {
 	}
 }
 
+func TestShow_ListedPersistedIdentityUsesCanonicalDetailResponse(t *testing.T) {
+	const sessionID = "persisted-failed-partial-001"
+	partialAvailable := true
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got, want := r.URL.Path, "/factory-sessions/"+sessionID; got != want {
+			t.Fatalf("path = %q, want %q", got, want)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.FactorySessionDurableReadModel{
+			SessionId:              sessionID,
+			Status:                 factoryapi.FactorySessionDurableLifecycleStatusFailed,
+			OrchestratorKind:       factoryapi.JAVASCRIPT,
+			PartialResultAvailable: &partialAvailable,
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	if err := NewShow(testHTTPProtocol(t))(ShowConfig{
+		Context:   context.Background(),
+		Server:    srv.URL,
+		SessionID: sessionID,
+		JSON:      true,
+		Output:    &out,
+	}); err != nil {
+		t.Fatalf("Show listed persisted identity: %v", err)
+	}
+
+	var shown factoryapi.FactorySessionDurableReadModel
+	if err := json.Unmarshal(out.Bytes(), &shown); err != nil {
+		t.Fatalf("decode durable response: %v\n%s", err, out.String())
+	}
+	if shown.SessionId != sessionID || shown.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("shown = %#v, want failed durable session %q", shown, sessionID)
+	}
+}
+
 func TestShow_DurableSessionHumanOutputRendersLifecycleContinuity(t *testing.T) {
 	startedAt := time.Date(2026, 6, 30, 11, 55, 0, 0, time.UTC)
 	finishedAt := time.Date(2026, 6, 30, 12, 10, 0, 0, time.UTC)

@@ -1,14 +1,15 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-08-21
+last-modified: 2026-08-22
 doc-id: agent-factory/guides/sessions
 ---
 
 # Sessions and Runtime
 
-Use this guide when you need to discover live factory sessions, confirm a
-service is listening, inspect the active factory on a running host, read session
-status from the API, or route submit and work commands to a non-default session.
+Use this guide when you need to discover live or persisted factory sessions,
+confirm a service is listening, inspect the active factory on a running host,
+read session status from the API, or route submit and work commands to a
+non-default session.
 For the end-to-end JavaScript workflow task—select or author source, validate,
 start, inspect, and recover—use `you docs javascript-workflows`. This page owns
 general Factory Session discovery, lifecycle controls, routing, and runtime
@@ -144,9 +145,10 @@ identity for the UI.
   you need a source or policy check without creating a session.
 - Use the exact `/factory-sessions/{session_id}` reads in the canonical surface
   map for JavaScript execution inspection.
-- Use `you session show`, `GET /factory-sessions/{session_id}`, and the
-  dashboard Factory Session detail surface when the session is also available
-  through the running host's live session projection.
+- Use the exact `sessionId` returned by `you session list --scope persisted` with
+  `you session show` or `GET /factory-sessions/{session_id}`. Persisted rows,
+  including failed sessions with partial results, use the same canonical detail
+  route even when they are not present in the running host's live projection.
 - Treat `Dispatch`, `FactoryArtifact`, and `FactoryEvent` as the shared
   inspection nouns across CLI, API, dashboard, and MCP surfaces. Do not
   introduce a separate workflow-run object model when comparing outputs.
@@ -251,8 +253,9 @@ you use this proof for closeout review.
 
 ## Session list
 
-`you session list` is the primary liveness check. It calls
-`GET /factory-sessions` on the running host.
+`you session list` is the primary liveness check for live sessions. It calls
+`GET /factory-sessions` on the running host; use `--scope persisted` to inspect
+eligible durable Factory Sessions from the same service-owned inventory.
 
 ### Copy-paste examples
 
@@ -266,6 +269,12 @@ you session list --json
 # Non-default port for list and create.
 you session list --port 9090
 you session create --dir /workspace/fleet --port 9090
+
+# List eligible persisted sessions, including terminal and failed-with-partial rows.
+you session list --scope persisted
+
+# Include live and persisted rows in API-shaped output.
+you session list --scope all --json
 
 # Delete through the selected server. The legacy --port flag is rejected.
 you --server http://localhost:9090 session delete session-beta
@@ -283,14 +292,16 @@ SESSION ID    PROJECT    FOLDER PATH    FACTORY DIR    DEFAULT    ORCHESTRATOR K
 a runtime projection. Empty cells mean the host did not include runtime metadata
 for that summary row.
 
-When no sessions are open:
+When no live sessions are open:
 
 ```text
 No live factory sessions were found.
 ```
 
-An empty table means the **service responded** but no live sessions are registered
-yet — start or attach a factory before submitting work.
+An empty live table means the **service responded** but no live sessions are
+registered yet — start or attach a factory before submitting work. It does not
+say that the persisted inventory is empty; query `--scope persisted` when you
+need durable history.
 
 ### Unreachable host
 
@@ -301,7 +312,7 @@ retrying.
 
 ### Discover session ids
 
-The `SESSION ID` column contains the routable id for each list row. On
+The `SESSION ID` column contains the routable id for each live list row. On
 single-session local hosts that id can remain the accepted `~default` selector,
 not the session's canonical identity. In JSON output, use
 `runtime.streamIdentity.factorySessionId` when that runtime projection is
@@ -309,11 +320,17 @@ present. A session read, sync preflight, or stream handshake can also return the
 resolved `factorySessionId` UUID. Retain the resolved UUID for subsequent reads,
 dashboard persistence, and event connections.
 
+For `--scope persisted`, use each row's `sessionId` exactly as returned. That
+value is the canonical durable identity for `GET /factory-sessions/{session_id}`
+and `you session show`, including a failed session that retained a partial
+result. Do not infer durable routing from an ID prefix.
+
 ## Session show
 
-`you session show` reads `GET /factory-sessions/{session_id}` for one live
-`FactorySession` projection, including orchestrator kind and kind-specific runtime
-fields.
+`you session show` reads `GET /factory-sessions/{session_id}` for one live or
+persisted Factory Session. The Factory Sessions service classifies the exact
+identity returned by list; durable rows use the durable read model, including
+failed sessions with partial results.
 
 ### Copy-paste examples
 
@@ -324,15 +341,20 @@ you session show
 # Named live session.
 you session show session-beta
 
+# Inspect a persisted row using its exact sessionId.
+you session list --scope persisted
+you session show <sessionId-from-persisted-list>
+
 # API-shaped JSON.
 you --json session show session-beta
 ```
 
-Human output uses `FactorySession` as the canonical runtime noun. Petri sessions
-show marking token counts and enabled transitions. JavaScript sessions show
-phase, checkpoint refs, child dispatch counts, and dynamic workflow shorthand
-only as JavaScript terminology. See `you docs orchestrators` for the accepted
-alias rules.
+Human output uses `FactorySession` as the canonical live runtime noun. Petri
+sessions show marking token counts and enabled transitions. JavaScript sessions
+show phase, checkpoint refs, child dispatch counts, and dynamic workflow
+shorthand only as JavaScript terminology. Persisted sessions show lifecycle
+status, source identity, progress, action availability, artifact refs, and
+result availability. See `you docs orchestrators` for the accepted alias rules.
 
 ## Stopped goal inspect and recovery
 

@@ -170,6 +170,8 @@ type detachedRouterOwnerFake struct {
 	name             string
 	invokedSessionID string
 	pausedSessionID  string
+	durableSession   factorysessions.SessionReadResult
+	durableSessions  []factorysessions.DurableSessionListSummary
 }
 
 func (fake *detachedRouterOwnerFake) InvokeFactorySession(_ context.Context, sessionID string, _ factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
@@ -180,6 +182,20 @@ func (fake *detachedRouterOwnerFake) InvokeFactorySession(_ context.Context, ses
 func (fake *detachedRouterOwnerFake) GetFactorySession(_ context.Context, sessionID string) (factorysessions.SessionProjection, error) {
 	return factorysessions.SessionProjection{
 		Context: factorysessions.ProjectionContext{FactorySessionID: sessionID},
+	}, nil
+}
+
+func (fake *detachedRouterOwnerFake) GetSession(context.Context, string) (factorysessions.SessionReadResult, error) {
+	if fake.durableSession.SessionID == "" {
+		return factorysessions.SessionReadResult{}, factorysessions.ErrDurableSessionNotFound
+	}
+	return fake.durableSession, nil
+}
+
+func (fake *detachedRouterOwnerFake) ListSessions(_ context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+	return factorysessions.ListSessionsResult{
+		Scope:           request.Scope,
+		DurableSessions: append([]factorysessions.DurableSessionListSummary(nil), fake.durableSessions...),
 	}, nil
 }
 
@@ -311,6 +327,31 @@ func TestDetachedRouterKeepsConcurrentSessionsIsolated(t *testing.T) {
 	}
 	if first.invokedSessionID != "session-first" || second.invokedSessionID != "session-second" {
 		t.Fatalf("concurrent routing = first %q, second %q", first.invokedSessionID, second.invokedSessionID)
+	}
+}
+
+func TestAssemblyGetSessionRoutesThroughPersistedListIdentity(t *testing.T) {
+	const sessionID = "persisted-failed-partial-001"
+	owner := &detachedRouterOwnerFake{
+		durableSession: factorysessions.SessionReadResult{
+			SessionID:        sessionID,
+			Status:           factorysessions.LifecycleStatusFailed,
+			OrchestratorKind: "JAVASCRIPT",
+		},
+		durableSessions: []factorysessions.DurableSessionListSummary{{
+			SessionID: sessionID,
+			Status:    factorysessions.LifecycleStatusFailed,
+		}},
+	}
+	assembly := &Assembly{}
+	assembly.registerDetachedGateway("live-owner", owner)
+
+	read, err := assembly.GetSession(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if read.SessionID != sessionID || read.Status != factorysessions.LifecycleStatusFailed {
+		t.Fatalf("read = %#v, want failed persisted session %q", read, sessionID)
 	}
 }
 

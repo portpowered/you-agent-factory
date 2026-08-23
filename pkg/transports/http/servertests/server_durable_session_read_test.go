@@ -78,6 +78,54 @@ func TestListFactorySessions_RuntimeBackedIncludesLiveAndPersistedScopes(t *test
 	}
 }
 
+func TestListThenGetFactorySession_RuntimeBackedUsesListedIdentity(t *testing.T) {
+	const sessionID = "persisted-failed-partial-001"
+	service := apiExecutionScript{
+		listSessions: func(_ context.Context, request factorysessionexecution.ListSessionsRequest) (factorysessionexecution.ListSessionsResult, error) {
+			if request.Scope != factorysessionexecution.SessionListScopeAll {
+				t.Fatalf("service scope = %q, want all aggregation read", request.Scope)
+			}
+			return factorysessionexecution.ListSessionsResult{
+				Scope: factorysessionexecution.SessionListScopeAll,
+				DurableSessions: []factorysessionexecution.DurableSessionListSummary{{
+					SessionID: sessionID,
+					Status:    factorysessionexecution.LifecycleStatusFailed,
+				}},
+			}, nil
+		},
+		getSession: func(_ context.Context, gotID string) (factorysessionexecution.SessionReadResult, error) {
+			if gotID != sessionID {
+				return factorysessionexecution.SessionReadResult{}, factorysessionexecution.ErrDurableSessionNotFound
+			}
+			return factorysessionexecution.SessionReadResult{
+				SessionID:        sessionID,
+				Status:           factorysessionexecution.LifecycleStatusFailed,
+				OrchestratorKind: "JAVASCRIPT",
+				Failure: &factorysessionexecution.FailureSummary{
+					Reason:                 "INTERNAL_SERVER_ERROR",
+					Message:                "workflow failed after producing a partial result",
+					PartialResultAvailable: true,
+				},
+			}, nil
+		},
+	}
+	server := httptest.NewServer(newDurableAPITestServer(service).Handler())
+	defer server.Close()
+
+	persisted := getFactorySessionList(t, server.URL, "persisted")
+	if !containsDurableSessionID(persisted, sessionID) {
+		t.Fatalf("persisted durableSessions = %#v, want %q", persisted.DurableSessions, sessionID)
+	}
+
+	read := getDurableFactorySession(t, server.URL, sessionID)
+	if read.SessionId != sessionID || read.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("read = %#v, want failed durable session %q", read, sessionID)
+	}
+	if read.FailureDetail == nil || read.FailureDetail.Message != "workflow failed after producing a partial result" {
+		t.Fatalf("failure detail = %#v, want partial failure message", read.FailureDetail)
+	}
+}
+
 func TestGetFactorySession_RuntimeBackedReturnsTerminalReadModel(t *testing.T) {
 	const sessionID = "dur-sess-api-get-001"
 	service := apiExecutionScript{

@@ -35,7 +35,7 @@ func NewShow(transport clihttp.Protocol) func(ShowConfig) error {
 	return func(cfg ShowConfig) error { cfg.HTTP = transport; return Show(cfg) }
 }
 
-// Show requests one live factory session projection from a running host via HTTP.
+// Show requests one live or persisted Factory Session from a running host via HTTP.
 func Show(cfg ShowConfig) error {
 	if cfg.Context == nil {
 		return fmt.Errorf("context is required")
@@ -46,10 +46,6 @@ func Show(cfg ShowConfig) error {
 	if cfg.HTTP == nil {
 		return fmt.Errorf("CLI HTTP protocol is required")
 	}
-	if isDurableExecutionSessionID(cfg.SessionID) {
-		return showDurableSession(cfg)
-	}
-
 	endpoint, err := showEndpoint(cfg)
 	if err != nil {
 		return err
@@ -64,11 +60,11 @@ func Show(cfg ShowConfig) error {
 		clidiag.SessionLabel(cfg.SessionID),
 	)
 
-	var result factoryapi.FactorySession
+	var raw json.RawMessage
 	response, err := cfg.HTTP.GetJSON(
 		cfg.Context,
 		endpoint.String(),
-		&result,
+		&raw,
 	)
 	if err != nil {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session show response endpointPath=%s error=unreachable durationMillis=%d", endpoint.Path, response.Duration.Milliseconds())
@@ -101,6 +97,26 @@ func Show(cfg ShowConfig) error {
 		}
 		return clihttp.WithHTTPResponse(resp, fmt.Errorf("get factory session failed (%d)", resp.StatusCode))
 	}
+	kind, result, durable, err := decodeSessionShowResponse(raw)
+	if err != nil {
+		return err
+	}
+	if kind == sessionShowResponseDurable {
+		clidiag.Printf(
+			cfg.Diagnostics,
+			cfg.Verbose,
+			"session show response endpointPath=%s status=%d durationMillis=%d sessionId=%s durable=true",
+			endpoint.Path,
+			resp.StatusCode,
+			response.Duration.Milliseconds(),
+			durable.SessionId,
+		)
+		if cfg.JSON {
+			encoder := json.NewEncoder(cfg.Output)
+			return encoder.Encode(durable)
+		}
+		return renderDurableShowResult(cfg.Output, durable)
+	}
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
@@ -120,6 +136,40 @@ func Show(cfg ShowConfig) error {
 		return err
 	}
 	return renderShowResult(cfg.Output, result, partialResult, liveResult)
+}
+
+type sessionShowResponseKind string
+
+const (
+	sessionShowResponseLive    sessionShowResponseKind = "live"
+	sessionShowResponseDurable sessionShowResponseKind = "durable"
+)
+
+type sessionShowResponseIdentity struct {
+	ID        string `json:"id"`
+	SessionID string `json:"sessionId"`
+}
+
+func decodeSessionShowResponse(raw json.RawMessage) (sessionShowResponseKind, factoryapi.FactorySession, factoryapi.FactorySessionDurableReadModel, error) {
+	var identity sessionShowResponseIdentity
+	if err := json.Unmarshal(raw, &identity); err != nil {
+		return "", factoryapi.FactorySession{}, factoryapi.FactorySessionDurableReadModel{}, fmt.Errorf("parse factory session response: %w", err)
+	}
+	if strings.TrimSpace(identity.SessionID) != "" {
+		var durable factoryapi.FactorySessionDurableReadModel
+		if err := json.Unmarshal(raw, &durable); err != nil {
+			return "", factoryapi.FactorySession{}, factoryapi.FactorySessionDurableReadModel{}, fmt.Errorf("parse durable factory session response: %w", err)
+		}
+		return sessionShowResponseDurable, factoryapi.FactorySession{}, durable, nil
+	}
+	if strings.TrimSpace(identity.ID) != "" {
+		var live factoryapi.FactorySession
+		if err := json.Unmarshal(raw, &live); err != nil {
+			return "", factoryapi.FactorySession{}, factoryapi.FactorySessionDurableReadModel{}, fmt.Errorf("parse live factory session response: %w", err)
+		}
+		return sessionShowResponseLive, live, factoryapi.FactorySessionDurableReadModel{}, nil
+	}
+	return "", factoryapi.FactorySession{}, factoryapi.FactorySessionDurableReadModel{}, fmt.Errorf("parse factory session response: missing id or sessionId")
 }
 
 func showEndpoint(cfg ShowConfig) (url.URL, error) {
@@ -492,74 +542,6 @@ func resolvedSessionID(sessionID string) string {
 		return sessionpath.DefaultFactorySessionID
 	}
 	return strings.TrimSpace(sessionID)
-}
-
-func isDurableExecutionSessionID(sessionID string) bool {
-	return strings.HasPrefix(strings.TrimSpace(sessionID), "dur-sess-")
-}
-
-func showDurableSession(cfg ShowConfig) error {
-	endpoint, err := durableShowEndpoint(cfg)
-	if err != nil {
-		return err
-	}
-
-	var durable factoryapi.FactorySessionDurableReadModel
-	response, err := cfg.HTTP.GetJSON(
-		cfg.Context,
-		endpoint.String(),
-		&durable,
-	)
-	if err != nil {
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session show durable response endpointPath=%s error=unreachable durationMillis=%d", endpoint.Path, response.Duration.Milliseconds())
-		return fmt.Errorf("factory sessions endpoint not reachable at %s: %w", endpoint.String(), err)
-	}
-	resp := response.HTTP
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session show durable response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
-		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
-			return clihttp.NewAPIErrorFromResponse(
-				resp,
-				errResp,
-				fmt.Sprintf("factory session %q not found: %s", resolvedSessionID(cfg.SessionID), errResp.Message),
-				nil,
-			)
-		}
-		return clihttp.WithHTTPResponse(resp, fmt.Errorf("factory session %q not found", resolvedSessionID(cfg.SessionID)))
-	}
-	if resp.StatusCode != http.StatusOK {
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session show durable response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
-		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
-			return clihttp.NewAPIErrorFromResponse(
-				resp,
-				errResp,
-				fmt.Sprintf("get factory session failed (%d): %s", resp.StatusCode, errResp.Message),
-				nil,
-			)
-		}
-		return clihttp.WithHTTPResponse(resp, fmt.Errorf("get factory session failed (%d)", resp.StatusCode))
-	}
-
-	if cfg.JSON {
-		encoder := json.NewEncoder(cfg.Output)
-		return encoder.Encode(durable)
-	}
-	return renderDurableShowResult(cfg.Output, durable)
-}
-
-func durableShowEndpoint(cfg ShowConfig) (url.URL, error) {
-	endpointPath := sessionpath.ScopedPath("", cfg.SessionID)
-	endpointURL, err := cliserver.RequestURL(cfg.Server, endpointPath)
-	if err != nil {
-		return url.URL{}, err
-	}
-	endpoint, err := url.Parse(endpointURL)
-	if err != nil {
-		return url.URL{}, fmt.Errorf("parse durable session show endpoint: %w", err)
-	}
-	return *endpoint, nil
 }
 
 func renderDurableShowResult(output io.Writer, session factoryapi.FactorySessionDurableReadModel) error {
