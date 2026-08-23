@@ -1,4 +1,4 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -8,7 +8,6 @@ const defaultUiDir = path.resolve(scriptDir, "..");
 const sourceDir = process.env.AGENT_FACTORY_UI_SRC_DIR
   ? path.resolve(process.env.AGENT_FACTORY_UI_SRC_DIR)
   : path.join(defaultUiDir, "src");
-const uiDir = path.dirname(sourceDir);
 const sourceExtensions = new Set([".ts", ".tsx"]);
 const skippedFileSuffixes = [".test.ts", ".test.tsx", ".stories.tsx"];
 const skippedDirectoryNames = new Set(["generated"]);
@@ -64,6 +63,75 @@ export interface SemanticColorTokenViolation {
     line: number;
   };
   token: string;
+}
+
+export interface SemanticColorSourceRoot {
+  reportDirectory: string;
+  sourceDirectory: string;
+}
+
+export type RootedSemanticColorTokenViolation = SemanticColorTokenViolation & {
+  rootDirectory: string;
+};
+
+async function isDirectory(directory: string) {
+  try {
+    return (await stat(directory)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+export async function discoverSemanticColorSourceRoots(
+  focusedSourceDirectory: string | null | undefined = process.env
+    .AGENT_FACTORY_UI_SRC_DIR,
+  uiDirectory = defaultUiDir,
+): Promise<SemanticColorSourceRoot[]> {
+  const resolvedUiDirectory = path.resolve(uiDirectory);
+  if (focusedSourceDirectory) {
+    const sourceDirectory = path.resolve(focusedSourceDirectory);
+    return [
+      {
+        reportDirectory: path.dirname(sourceDirectory),
+        sourceDirectory,
+      },
+    ];
+  }
+
+  const sourceRoots: SemanticColorSourceRoot[] = [
+    {
+      reportDirectory: resolvedUiDirectory,
+      sourceDirectory: path.join(resolvedUiDirectory, "src"),
+    },
+  ];
+  const packagesDirectory = path.join(resolvedUiDirectory, "packages");
+
+  if (!(await isDirectory(packagesDirectory))) {
+    return sourceRoots;
+  }
+
+  const packageEntries = await readdir(packagesDirectory, {
+    withFileTypes: true,
+  });
+  for (const packageEntry of packageEntries
+    .filter((entry) => entry.isDirectory())
+    .sort((left, right) => left.name.localeCompare(right.name))) {
+    const sourceDirectory = path.join(
+      packagesDirectory,
+      packageEntry.name,
+      "src",
+    );
+    if (!(await isDirectory(sourceDirectory))) {
+      continue;
+    }
+
+    sourceRoots.push({
+      reportDirectory: resolvedUiDirectory,
+      sourceDirectory,
+    });
+  }
+
+  return sourceRoots;
 }
 
 function shouldSkipFile(filePath: string) {
@@ -317,11 +385,42 @@ export async function scanSemanticColorTokens(rootDirectory = sourceDir) {
   });
 }
 
+export async function scanSemanticColorTokensInRoots(
+  sourceRoots: readonly SemanticColorSourceRoot[],
+): Promise<RootedSemanticColorTokenViolation[]> {
+  const violations: RootedSemanticColorTokenViolation[] = [];
+
+  for (const sourceRoot of sourceRoots) {
+    const rootViolations = await scanSemanticColorTokens(
+      sourceRoot.sourceDirectory,
+    );
+    violations.push(
+      ...rootViolations.map((violation) => ({
+        ...violation,
+        rootDirectory: sourceRoot.sourceDirectory,
+      })),
+    );
+  }
+
+  return violations.sort((left, right) => {
+    if (left.filePath !== right.filePath) {
+      return left.filePath.localeCompare(right.filePath);
+    }
+    if (left.position.line !== right.position.line) {
+      return left.position.line - right.position.line;
+    }
+    return left.position.column - right.position.column;
+  });
+}
+
 function formatViolation(
-  rootDirectory: string,
+  reportDirectory: string,
   violation: SemanticColorTokenViolation,
 ) {
-  const relativeFilePath = path.relative(rootDirectory, violation.filePath);
+  const relativeFilePath = path
+    .relative(reportDirectory, violation.filePath)
+    .split(path.sep)
+    .join("/");
   return [
     `${relativeFilePath}:${violation.position.line}:${violation.position.column}`,
     `  ${violation.token}`,
@@ -330,18 +429,52 @@ function formatViolation(
 }
 
 async function main() {
-  const violations = await scanSemanticColorTokens(sourceDir);
+  const sourceRoots = await discoverSemanticColorSourceRoots();
+  const violations = await scanSemanticColorTokensInRoots(sourceRoots);
 
   if (violations.length === 0) {
+    const rootLabels = sourceRoots
+      .map((sourceRoot) =>
+        path
+          .relative(
+            sourceRoots[0]?.reportDirectory ?? defaultUiDir,
+            sourceRoot.sourceDirectory,
+          )
+          .split(path.sep)
+          .join("/"),
+      )
+      .join(", ");
+    console.log(
+      `Semantic color token guard passed: ${rootLabels} (0 violations).`,
+    );
     return;
   }
 
   const report = violations
-    .map((violation) => formatViolation(uiDir, violation))
+    .map((violation) => {
+      const sourceRoot = sourceRoots.find(
+        (candidate) => candidate.sourceDirectory === violation.rootDirectory,
+      );
+      return formatViolation(
+        sourceRoot?.reportDirectory ?? path.dirname(violation.rootDirectory),
+        violation,
+      );
+    })
     .join("\n\n");
   console.error(
     [
       "Semantic color token guard failed.",
+      `Checked source roots: ${sourceRoots
+        .map((sourceRoot) =>
+          path
+            .relative(
+              sourceRoots[0]?.reportDirectory ?? defaultUiDir,
+              sourceRoot.sourceDirectory,
+            )
+            .split(path.sep)
+            .join("/"),
+        )
+        .join(", ")}`,
       "Use semantic color tokens in component-facing ui/src code and keep local alpha math inside the shared token owner when a new integration token is needed.",
       `Document rare integration-only exceptions with \`${semanticColorExceptionMarker}\` immediately above the usage.`,
       report,
