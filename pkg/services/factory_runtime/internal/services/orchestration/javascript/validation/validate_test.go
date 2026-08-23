@@ -50,20 +50,7 @@ func TestValidateAgentRunPermissionsEnumShape(t *testing.T) {
 	if !legacy.HasIssues() || !strings.Contains(legacy.Issues[0].Message, `use "permissions"`) {
 		t.Fatalf("Validate(retired field) issues = %#v, want permissions replacement", legacy.Issues)
 	}
-}
 
-func TestValidateAgentRunPermissionsEnumShape(t *testing.T) {
-	t.Parallel()
-
-	for _, permissions := range []string{"DEFAULT", "SKIP_PERMISSIONS"} {
-		accepted := Validate(Request{
-			Source:    `return agent.run({ prompt: "review", permissions: "` + permissions + `" });`,
-			SourceRef: "workflow.js",
-		})
-		if accepted.HasIssues() {
-			t.Fatalf("Validate(%q) issues = %#v, want none", permissions, accepted.Issues)
-		}
-	}
 	singleQuoted := Validate(Request{
 		Source:    `return agent.run({ prompt: 'review', permissions: 'DEFAULT' });`,
 		SourceRef: "workflow.js",

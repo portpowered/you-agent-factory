@@ -101,6 +101,11 @@ func TestValidateChildRequest_AllowedPermissionsNamesFactoryChildAndRequestedVal
 	if err := factory.ValidateJavaScriptPolicyChildRequest(policy, request); err != nil {
 		t.Fatalf("ValidateChildRequest() omitted allowlist error = %v, want nil", err)
 	}
+
+	policy.AllowedPermissions = []string{factory.JavaScriptPolicyPermissionSkipPermissions}
+	if err := factory.ValidateJavaScriptPolicyChildRequest(policy, request); err != nil {
+		t.Fatalf("ValidateChildRequest() skip permission error = %v, want nil", err)
+	}
 }
 
 func TestValidateChildRequest_AllowsPermittedRequest(t *testing.T) {
@@ -197,33 +202,5 @@ func TestValidateChildRequest_SkipPermissionsDoesNotBypassRuntimeAllowlists(t *t
 				t.Fatalf("ValidateChildRequest() error = %v, want substring %q", err, test.wantErr)
 			}
 		})
-	}
-}
-
-func TestValidateChildRequest_AllowedPermissionsNamesFactoryChildAndRequestedValue(t *testing.T) {
-	t.Parallel()
-	policy := factory.DefaultJavaScriptPolicy()
-	policy.AllowedPermissions = []string{factory.JavaScriptPolicyPermissionDefault}
-	request := factory.JavaScriptPolicyChildRequest{
-		FactoryName:     "named-factory",
-		Label:           "skip-child",
-		SkipPermissions: true,
-	}
-
-	err := factory.ValidateJavaScriptPolicyChildRequest(policy, request)
-	const want = `policy denied: Factory "named-factory" child "skip-child" requested permission "SKIP_PERMISSIONS" not listed in allowedPermissions`
-	if err == nil || err.Error() != want {
-		t.Fatalf("ValidateChildRequest() error = %v, want exact diagnostic %q", err, want)
-	}
-
-	request.SkipPermissions = false
-	if err := factory.ValidateJavaScriptPolicyChildRequest(policy, request); err != nil {
-		t.Fatalf("ValidateChildRequest() default permission error = %v, want nil", err)
-	}
-
-	policy.AllowedPermissions = []string{factory.JavaScriptPolicyPermissionSkipPermissions}
-	request.SkipPermissions = true
-	if err := factory.ValidateJavaScriptPolicyChildRequest(policy, request); err != nil {
-		t.Fatalf("ValidateChildRequest() skip permission error = %v, want nil", err)
 	}
 }
