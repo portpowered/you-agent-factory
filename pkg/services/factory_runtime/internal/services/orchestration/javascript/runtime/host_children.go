@@ -271,16 +271,6 @@ func (g *runtimeGlobals) normalizeParallelAgentSpecs(items []parallelItem) int {
 	return dispatchableCount
 }
 
-func (g *runtimeGlobals) emitLegacySkipPermissionsDiagnostic(req ChildExecutionRequest) {
-	if !req.LegacySkipPermissionsPresent {
-		return
-	}
-	g.records.append(RuntimeRecord{
-		Kind: RecordKindLog,
-		Log:  &LogRecord{Message: legacySkipPermissionsDiagnostic},
-	})
-}
-
 func (g *runtimeGlobals) executeParallel(execution *pipelineExecutionContext, items []parallelItem) ([]any, error) {
 	results := make([]any, len(items))
 	if len(items) == 0 {
