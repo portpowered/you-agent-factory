@@ -93,6 +93,7 @@ func provideApplicationProcessLifecycle(
 	eventsService events.Service,
 	factoryTarget *factorysessionwire.OnDemandFactoryTargetService,
 	localWorkerSessions *localWorkerSessionsBoundary,
+	metricsOwner factoryruntime.RuntimeMetricsOwner,
 ) (initializerapplication.ProcessLifecycle, error) {
 	lifecycle, ok := service.(interface {
 		Close(context.Context) error
@@ -103,6 +104,16 @@ func provideApplicationProcessLifecycle(
 	eventsLifecycleValue, ok := eventsService.(eventsLifecycle)
 	if !ok {
 		return nil, fmt.Errorf("construct application process: Events lifecycle is required")
+	}
+	var closeMetrics func(context.Context) error
+	if metricsOwner != nil {
+		metricsLifecycle, lifecycleOK := metricsOwner.(interface {
+			Close(context.Context) error
+		})
+		if !lifecycleOK {
+			return nil, fmt.Errorf("construct application process: Runtime Metrics lifecycle is required")
+		}
+		closeMetrics = metricsLifecycle.Close
 	}
 	return compositeProcessLifecycle{closers: []func(context.Context) error{
 		func(ctx context.Context) error {
@@ -119,6 +130,7 @@ func provideApplicationProcessLifecycle(
 			}
 			return factoryTarget.Close()
 		},
+		closeMetrics,
 	}}, nil
 }
 

@@ -182,7 +182,12 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	factoryRuntimeMetricsOwner, err := provideRuntimeMetricsOwner(wireRuntimeArtifactClock, wireRuntimeArtifactIDGenerator, reserver)
+	runtimeMetricsRetentionFileSystem := provideRuntimeMetricsRetentionFileSystem()
+	runtimeMetricsCoordination, err := provideRuntimeMetricsCoordination()
+	if err != nil {
+		return nil, err
+	}
+	factoryRuntimeMetricsOwner, err := provideRuntimeMetricsOwner(logger, wireRuntimeArtifactClock, wireRuntimeArtifactIDGenerator, reserver, runtimeMetricsRetentionFileSystem, runtimeMetricsCoordination)
 	if err != nil {
 		return nil, err
 	}
@@ -724,7 +729,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	processLifecycle, err := provideApplicationProcessLifecycle(service, eventsService, v91, wireLocalWorkerSessionsBoundary)
+	processLifecycle, err := provideApplicationProcessLifecycle(service, eventsService, v91, wireLocalWorkerSessionsBoundary, factoryRuntimeMetricsOwner)
 	if err != nil {
 		return nil, err
 	}
@@ -887,6 +892,8 @@ var servicesSet = wire5.NewSet(
 	provideRuntimeArtifactClock,
 	provideRuntimeArtifactIDGenerator,
 	provideRuntimeArtifactPathReserver,
+	provideRuntimeMetricsCoordination,
+	provideRuntimeMetricsRetentionFileSystem,
 	provideRuntimeArtifactRootResolver,
 	provideRuntimeLoggerFactory,
 	provideRuntimeLogOwner,
