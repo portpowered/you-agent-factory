@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -99,6 +100,36 @@ func (s *Service) MaterializeContentURL(ctx context.Context, rawURL string) (str
 	}
 	path, cleanup, err := MaterializeContentURL(ctx, rawURL, options)
 	return path, work.ContentCleanup(cleanup), err
+}
+
+// ValidateContentURLSafety checks the SSRF policy without fetching a remote
+// resource. An ACP provider may own retrieval of a valid remote URL, so DNS
+// or availability failures are left to that provider; explicit unsafe-target
+// failures remain Work-owned and blocking.
+func (s *Service) ValidateContentURLSafety(ctx context.Context, rawURL string) error {
+	trimmed := strings.TrimSpace(rawURL)
+	if err := contenturl.Validate(trimmed); err != nil {
+		return err
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return err
+	}
+	if parsed.Hostname() == "" && (strings.EqualFold(parsed.Scheme, "http") || strings.EqualFold(parsed.Scheme, "https")) {
+		return fmt.Errorf("remote content URL host is required")
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return nil
+	}
+	allowPrivate := false
+	if s != nil {
+		allowPrivate = s.options.allowPrivateURLs()
+	}
+	if err := validateRemoteTarget(ctx, trimmed, parsed, allowPrivate); err != nil &&
+		!errors.Is(err, work.ErrContentURLInaccessible) {
+		return err
+	}
+	return nil
 }
 
 var _ work.ContentMaterializer = (*Service)(nil)

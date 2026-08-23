@@ -132,6 +132,111 @@ func TestExecuteRejectsUnsafeWorkContentBeforeRunner(t *testing.T) {
 	}
 }
 
+func TestExecutePreservesRemoteACPResourceURLs(t *testing.T) {
+	t.Parallel()
+
+	var materializerCalls atomic.Int32
+	service := mustExecuteServiceWithContentMaterializer(
+		t,
+		&stubRunner{execute: func(
+			_ context.Context,
+			request workers.RunnerExecutionRequest,
+		) (workers.RunnerExecutionResult, error) {
+			if len(request.InputTokens) != 1 {
+				t.Fatalf("input token count = %d, want 1", len(request.InputTokens))
+			}
+			token, ok := request.InputTokens[0].(workers.Token)
+			if !ok || len(token.Color.Content) != 1 {
+				t.Fatalf("runner input token = %#v, want one content part", request.InputTokens[0])
+			}
+			part := token.Color.Content[0]
+			if part.URL != "https://example.test/fixture.png" || part.File != "" {
+				t.Fatalf("runner ACP resource = %#v, want canonical remote URL", part)
+			}
+			return workers.RunnerExecutionResult{Content: "resource accepted"}, nil
+		}},
+		work.ContentMaterializeFunc(func(
+			context.Context,
+			string,
+		) (string, work.ContentCleanup, error) {
+			materializerCalls.Add(1)
+			return "", nil, fmt.Errorf("remote ACP resource should not be materialized")
+		}),
+	)
+
+	request := validExecuteRequest("dispatch-acp-resource", "attempt-acp-resource")
+	request.Target.ExecutorProvider = workers.ExecutorProviderACP
+	request.Input.Work = []workers.WorkInput{{
+		Name: "remote-image",
+		Content: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeImage,
+			URL:  "https://example.test/fixture.png",
+		}},
+	}}
+
+	result, err := service.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workers.ExecutionOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", result.Outcome)
+	}
+	if materializerCalls.Load() != 0 {
+		t.Fatalf("materializer calls = %d, want zero for ACP resource URL", materializerCalls.Load())
+	}
+}
+
+func TestExecuteRejectsUnsafeACPResourceURLsBeforeRunner(t *testing.T) {
+	t.Parallel()
+
+	var runnerCalls atomic.Int32
+	service := mustExecuteServiceWithContentMaterializer(
+		t,
+		&stubRunner{execute: func(
+			context.Context,
+			workers.RunnerExecutionRequest,
+		) (workers.RunnerExecutionResult, error) {
+			runnerCalls.Add(1)
+			return workers.RunnerExecutionResult{Content: "unexpected"}, nil
+		}},
+		&unsafeRemoteContentMaterializer{},
+	)
+
+	request := validExecuteRequest("dispatch-acp-unsafe-resource", "attempt-acp-unsafe-resource")
+	request.Target.ExecutorProvider = workers.ExecutorProviderACP
+	request.Input.Work = []workers.WorkInput{{
+		Name: "private-image",
+		Content: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeImage,
+			URL:  "http://127.0.0.1/secret.png",
+		}},
+	}}
+
+	_, err := service.Execute(context.Background(), request)
+	if err == nil || !errors.Is(err, work.ErrUnsafeContentURL) {
+		t.Fatalf("Execute() error = %v, want errors.Is(..., ErrUnsafeContentURL)", err)
+	}
+	if runnerCalls.Load() != 0 {
+		t.Fatalf("runner calls = %d, want zero for unsafe ACP resource", runnerCalls.Load())
+	}
+}
+
+type unsafeRemoteContentMaterializer struct{}
+
+func (*unsafeRemoteContentMaterializer) MaterializeContentURL(
+	context.Context,
+	string,
+) (string, work.ContentCleanup, error) {
+	return "", nil, fmt.Errorf("materialization should not be reached")
+}
+
+func (*unsafeRemoteContentMaterializer) ValidateContentURLSafety(
+	context.Context,
+	string,
+) error {
+	return fmt.Errorf("reject private target: %w", work.ErrUnsafeContentURL)
+}
+
 func TestExecuteHappyPathPreservesCorrelationAndEmitsTerminalObservation(t *testing.T) {
 	t.Parallel()
 

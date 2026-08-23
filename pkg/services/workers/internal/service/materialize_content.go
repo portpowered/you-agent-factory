@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -35,6 +36,7 @@ func (s *Service) materializeWorkContent(
 		if err := s.materializeContentParts(
 			ctx,
 			workingDirectory,
+			request.Target.ExecutorProvider,
 			request.Input.Work[inputIndex].Content,
 			cleanup,
 			fmt.Sprintf("Work input %d", inputIndex),
@@ -47,6 +49,7 @@ func (s *Service) materializeWorkContent(
 		if err := s.materializeContentParts(
 			ctx,
 			workingDirectory,
+			request.Target.ExecutorProvider,
 			request.Input.ModelBindings[bindingIndex].Content,
 			cleanup,
 			fmt.Sprintf("model binding %d", bindingIndex),
@@ -61,6 +64,7 @@ func (s *Service) materializeWorkContent(
 func (s *Service) materializeContentParts(
 	ctx context.Context,
 	workingDirectory string,
+	executorProvider string,
 	parts []work.WorkContentPart,
 	cleanup *cleanupRegistry,
 	owner string,
@@ -103,6 +107,14 @@ func (s *Service) materializeContentParts(
 		if err != nil {
 			return fmt.Errorf("%s content part %d: resolve URL: %w", owner, partIndex, err)
 		}
+		if preserveACPRemoteResourceURL(executorProvider, resolvedURL) {
+			if validator, ok := s.contentMaterializer.(work.ContentURLSafetyValidator); ok {
+				if err := validator.ValidateContentURLSafety(ctx, resolvedURL); err != nil {
+					return fmt.Errorf("%s content part %d: validate URL safety: %w", owner, partIndex, err)
+				}
+			}
+			continue
+		}
 		path, release, err := s.contentMaterializer.MaterializeContentURL(ctx, resolvedURL)
 		if release != nil {
 			cleanup.add(func() error {
@@ -126,4 +138,23 @@ func (s *Service) materializeContentParts(
 		(*materialized)[partIndex] = part
 	}
 	return nil
+}
+
+func preserveACPRemoteResourceURL(executorProvider, rawURL string) bool {
+	if !strings.EqualFold(strings.TrimSpace(executorProvider), workers.ExecutorProviderACP) {
+		return false
+	}
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return false
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "http", "https":
+		// ACP receives the canonical URL as a resource_link. The ACP daemon,
+		// rather than the local Workers process, owns retrieval of this remote
+		// resource; file and data URLs still follow normal materialization.
+		return true
+	default:
+		return false
+	}
 }

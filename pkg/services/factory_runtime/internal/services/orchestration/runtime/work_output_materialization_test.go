@@ -938,8 +938,9 @@ func TestRecordDetachedAgentRunResponsePreservesSafeDiagnosticsAndTranscript(t *
 	}
 	if diagnostics.AgentRun.Transcript[0].Role != "system" ||
 		!strings.HasPrefix(diagnostics.AgentRun.Transcript[0].Summary, "sha256:") ||
+		!strings.Contains(diagnostics.AgentRun.Transcript[0].Summary, "(Reasoning effort: low)") ||
 		diagnostics.AgentRun.Transcript[2].Summary != "completed" {
-		t.Fatalf("transcript = %#v, want hashed prompt metadata and output", diagnostics.AgentRun.Transcript)
+		t.Fatalf("transcript = %#v, want hashed prompt metadata, safe effort classification, and output", diagnostics.AgentRun.Transcript)
 	}
 }
 
