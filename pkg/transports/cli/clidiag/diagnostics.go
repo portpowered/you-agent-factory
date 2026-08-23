@@ -20,6 +20,12 @@ const (
 	// error that does not carry a CLI diagnostic contract.
 	DefaultFailureCode    = "CLI_COMMAND_FAILED"
 	defaultFailureMessage = "command failed"
+
+	// LocalInputFailureCode identifies a safe diagnostic for a user-supplied
+	// local file that could not be prepared before runtime execution.
+	LocalInputFailureCode = "CLI_LOCAL_INPUT_FAILED"
+	// FlagConflictFailureCode identifies an incompatible local flag selection.
+	FlagConflictFailureCode = "CLI_FLAG_CONFLICT"
 )
 
 // CodedError is the small presentation contract shared by command-owned
@@ -102,6 +108,76 @@ func (failure *Failure) CLIErrorMessage() string {
 		return defaultFailureMessage
 	}
 	return strings.TrimSpace(failure.Message)
+}
+
+// LocalFailure preserves a safe, actionable diagnostic for a client-side
+// pre-flight failure. Its message is authored from the submitted input, while
+// Cause remains available to callers without being rendered in the default
+// diagnostic envelope.
+type LocalFailure struct {
+	Code    string
+	Message string
+	Cause   error
+}
+
+func (failure *LocalFailure) Error() string {
+	if failure == nil {
+		return ""
+	}
+	return strings.TrimSpace(failure.Message)
+}
+
+func (failure *LocalFailure) Unwrap() error {
+	if failure == nil {
+		return nil
+	}
+	return failure.Cause
+}
+
+func (failure *LocalFailure) CLIErrorCode() string {
+	if failure == nil || strings.TrimSpace(failure.Code) == "" {
+		return LocalInputFailureCode
+	}
+	return strings.TrimSpace(failure.Code)
+}
+
+func (failure *LocalFailure) CLIErrorFamily() factoryapi.ErrorFamily {
+	return factoryapi.ErrorFamilyBadRequest
+}
+
+func (failure *LocalFailure) CLIErrorMessage() string {
+	if failure == nil || strings.TrimSpace(failure.Message) == "" {
+		return "local command input could not be prepared"
+	}
+	return strings.TrimSpace(failure.Message)
+}
+
+// NewLocalInputFailure constructs the shared safe presentation for a failed
+// local file input. Only the flag and submitted path cross into the default
+// output; filesystem and wrapped implementation details remain a cause.
+func NewLocalInputFailure(flag, path string, cause error) error {
+	flag = strings.TrimSpace(flag)
+	path = strings.TrimSpace(path)
+	if flag == "" {
+		flag = "local"
+	}
+	return &LocalFailure{
+		Code:    LocalInputFailureCode,
+		Message: fmt.Sprintf("failed to load %s input %q", flag, path),
+		Cause:   cause,
+	}
+}
+
+// NewFlagConflictFailure constructs a shared safe presentation for two
+// incompatible local flags while retaining the original error as a cause.
+func NewFlagConflictFailure(first, second string, cause error) error {
+	first = strings.TrimSpace(first)
+	second = strings.TrimSpace(second)
+	return &LocalFailure{
+		Code:    FlagConflictFailureCode,
+		Message: fmt.Sprintf("%s cannot be used with %s", first, second),
+		Cause:   cause,
+	}
 }
 
 // UsageError preserves a Cobra parsing or argument-validation failure while
@@ -237,6 +313,14 @@ func Normalize(err error) error {
 		Message: defaultFailureMessage,
 		Cause:   err,
 	}
+}
+
+// HasCodedDiagnostic reports whether an error already carries an authored
+// presentation contract. Callers that add a more specific local context can
+// use it to avoid replacing an existing command or transport diagnostic.
+func HasCodedDiagnostic(err error) bool {
+	values, ok := diagnosticFields(err)
+	return ok && strings.TrimSpace(values.code) != ""
 }
 
 type fields struct {

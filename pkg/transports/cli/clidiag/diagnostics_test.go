@@ -46,6 +46,61 @@ func TestNormalizeUnclassifiedFailureUsesSafeDiagnosticAndPreservesCause(t *test
 	}
 }
 
+func TestLocalFailuresPreserveActionableContextWithoutFilesystemCause(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New(`open ./missing.json: credential=secret-token: no such file or directory`)
+	local := NewLocalInputFailure("--replay", "./missing.json", cause)
+	if got, want := local.Error(), `failed to load --replay input "./missing.json"`; got != want {
+		t.Fatalf("local error = %q, want %q", got, want)
+	}
+	if !errors.Is(local, cause) {
+		t.Fatal("local failure did not preserve its cause")
+	}
+	if !HasCodedDiagnostic(local) {
+		t.Fatal("local failure did not expose a coded diagnostic")
+	}
+
+	var output bytes.Buffer
+	if !WriteFailure(&output, local) {
+		t.Fatal("WriteFailure returned false for local failure")
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("local diagnostic is not one ErrorResponse: %v; output=%q", err, output.String())
+	}
+	if response.Code != factoryapi.ErrorResponseCode(LocalInputFailureCode) ||
+		response.Family != factoryapi.ErrorFamilyBadRequest ||
+		response.Message != `failed to load --replay input "./missing.json"` {
+		t.Fatalf("local response = %#v, want actionable bad-request fields", response)
+	}
+	if strings.Contains(output.String(), "secret-token") || strings.Contains(output.String(), "no such file") {
+		t.Fatalf("local diagnostic leaked filesystem cause: %q", output.String())
+	}
+}
+
+func TestFlagConflictFailureNamesBothFlagsAndUsesBadRequestFamily(t *testing.T) {
+	t.Parallel()
+
+	local := NewFlagConflictFailure("--resume", "--no-record", nil)
+	if got, want := local.Error(), "--resume cannot be used with --no-record"; got != want {
+		t.Fatalf("flag conflict = %q, want %q", got, want)
+	}
+	var output bytes.Buffer
+	if !WriteFailure(&output, local) {
+		t.Fatal("WriteFailure returned false for flag conflict")
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("flag conflict diagnostic is not one ErrorResponse: %v; output=%q", err, output.String())
+	}
+	if response.Code != factoryapi.ErrorResponseCode(FlagConflictFailureCode) ||
+		response.Family != factoryapi.ErrorFamilyBadRequest ||
+		response.Message != "--resume cannot be used with --no-record" {
+		t.Fatalf("flag conflict response = %#v, want named bad-request fields", response)
+	}
+}
+
 type testCodedError struct {
 	cause error
 }

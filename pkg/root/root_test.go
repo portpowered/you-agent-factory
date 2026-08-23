@@ -29,6 +29,7 @@ import (
 	inference "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 )
 
 func TestMain(m *testing.M) {
@@ -794,6 +795,89 @@ func TestProcessUsageFailuresPreserveCobraDetailsAndHelpHints(t *testing.T) {
 			}
 			if stdout.Len() != 0 {
 				t.Fatalf("stdout = %q, want empty usage failure output", stdout.String())
+			}
+		})
+	}
+}
+
+func TestProcessLocalRunFailuresPreserveSubmittedInputs(t *testing.T) {
+	t.Parallel()
+
+	process, buildErr := BuildProcess(context.Background(), serviceedges.Edges{})
+	if buildErr != nil {
+		t.Fatalf("BuildProcess() error = %v", buildErr)
+	}
+	t.Cleanup(func() { _ = process.Close(context.Background()) })
+
+	tests := []struct {
+		name        string
+		args        []string
+		wantCode    string
+		wantMessage []string
+	}{
+		{
+			name:        "missing replay path",
+			args:        []string{"you", "run", "--replay", "./does-not-exist.json"},
+			wantCode:    clidiag.LocalInputFailureCode,
+			wantMessage: []string{"--replay", "./does-not-exist.json"},
+		},
+		{
+			name:        "missing resume path",
+			args:        []string{"you", "run", "--resume", "./does-not-exist.recording.json"},
+			wantCode:    clidiag.LocalInputFailureCode,
+			wantMessage: []string{"--resume", "./does-not-exist.recording.json"},
+		},
+		{
+			name:        "resume replay conflict",
+			args:        []string{"you", "run", "--resume", "X", "--replay", "X"},
+			wantCode:    clidiag.FlagConflictFailureCode,
+			wantMessage: []string{"--resume", "--replay"},
+		},
+		{
+			name:        "resume no-record conflict",
+			args:        []string{"you", "run", "--resume", "X", "--no-record"},
+			wantCode:    clidiag.FlagConflictFailureCode,
+			wantMessage: []string{"--resume", "--no-record"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			home := t.TempDir()
+			var stdout, stderr bytes.Buffer
+			err := process.Execute(Input{
+				Args:             test.args,
+				Env:              homeEnvironment(home),
+				Stdout:           &stdout,
+				Stderr:           &stderr,
+				Context:          context.Background(),
+				WorkingDirectory: home,
+			})
+			if err == nil {
+				t.Fatal("Process.Execute() error = nil, want local pre-flight failure")
+			}
+			var response struct {
+				Code    string `json:"code"`
+				Family  string `json:"family"`
+				Message string `json:"message"`
+			}
+			if decodeErr := json.Unmarshal(stderr.Bytes(), &response); decodeErr != nil {
+				t.Fatalf("stderr is not one local ErrorResponse: %v\n%s", decodeErr, stderr.String())
+			}
+			if response.Code != test.wantCode || response.Family != "BAD_REQUEST" {
+				t.Fatalf("local response = %#v, want code %q and BAD_REQUEST family", response, test.wantCode)
+			}
+			for _, marker := range test.wantMessage {
+				if !strings.Contains(response.Message, marker) {
+					t.Fatalf("local response message = %q, want marker %q", response.Message, marker)
+				}
+			}
+			if strings.Contains(stderr.String(), "CLI_COMMAND_FAILED") ||
+				strings.Contains(stderr.String(), "INTERNAL_SERVER_ERROR") ||
+				strings.Contains(stderr.String(), "no such file") {
+				t.Fatalf("local failure lost context or leaked fallback/cause: %q", stderr.String())
+			}
+			if stdout.Len() != 0 {
+				t.Fatalf("stdout = %q, want empty local failure output", stdout.String())
 			}
 		})
 	}
