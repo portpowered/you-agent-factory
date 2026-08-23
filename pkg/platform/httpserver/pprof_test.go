@@ -120,7 +120,9 @@ func assertEnabledPprofProfiles(t *testing.T, server *httptest.Server) {
 	if err != nil {
 		t.Fatalf("parse enabled heap delta profile: %v", err)
 	}
-	assertParsedPprofProfile(t, "heap delta", parsedDelta)
+	if parsedDelta == nil || len(parsedDelta.SampleType) == 0 {
+		t.Fatalf("heap delta profile = %+v, want a valid profile with sample types", parsedDelta)
+	}
 }
 
 func assertEnabledPprofTrace(t *testing.T, server *httptest.Server) {
