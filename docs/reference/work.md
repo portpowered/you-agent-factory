@@ -326,11 +326,13 @@ cat request.md | you submit \
   --payload -
 ```
 
-The CLI accepts at most 65,536 bytes from this stdin source, inclusive, for
-both JSON and text payloads. Exactly 65,536 bytes is accepted; a larger stream
-is rejected before the HTTP request is made. Use a payload file when more
-input is required. This stdin bound does not change the Work admission or
-HTTP contract.
+The CLI reads at most 65,536 source bytes from this stdin source, inclusive,
+and reads one additional sentinel byte only to detect overflow. It then applies
+the same 65,536-byte inclusive boundary to the compact JSON payload that Work
+admission measures. Exactly 65,536 compact JSON bytes is accepted; text that
+expands through JSON escaping past that boundary is rejected before the HTTP
+request is made. Use a payload file when more input is required. This stdin
+bound does not change the Work admission or HTTP contract.
 
 ### Human success output
 

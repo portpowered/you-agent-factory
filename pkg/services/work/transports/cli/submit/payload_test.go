@@ -211,6 +211,62 @@ func TestReadSubmitStdinPayloadAcceptsInclusiveByteLimit(t *testing.T) {
 	}
 }
 
+func TestReadSubmitPayload_StdinTextAcceptsExactCompactPayloadLimit(t *testing.T) {
+	t.Parallel()
+
+	// json.Marshal escapes the newline, so this source is smaller than the
+	// source cap while its compact JSON representation is exactly the Work
+	// admission limit.
+	rawText := strings.Repeat("x", maxSubmitPayloadStdinBytes-4) + "\n"
+	reader := &countingStdinReader{reader: strings.NewReader(rawText)}
+	payload, raw, payloadType, err := readSubmitPayload(
+		func(string) ([]byte, error) { t.Fatal("file reader called for stdin"); return nil, nil },
+		"-",
+		reader,
+	)
+	if err != nil {
+		t.Fatalf("readSubmitPayload(exact encoded text limit): %v", err)
+	}
+	if payloadType != "markdown" {
+		t.Fatalf("payload type = %q, want markdown", payloadType)
+	}
+	if string(raw) != rawText {
+		t.Fatalf("raw payload changed: got %q", raw)
+	}
+	if len(payload) != maxSubmitPayloadStdinBytes || !json.Valid(payload) {
+		t.Fatalf("encoded payload bytes = %d, want valid JSON at %d bytes", len(payload), maxSubmitPayloadStdinBytes)
+	}
+	if reader.bytesRead != len(rawText) {
+		t.Fatalf("bytes read = %d, want %d", reader.bytesRead, len(rawText))
+	}
+}
+
+func TestReadSubmitPayload_StdinTextRejectsEscapedOverLimitPayload(t *testing.T) {
+	t.Parallel()
+
+	rawText := strings.Repeat("\"", maxSubmitPayloadStdinBytes/2)
+	reader := &countingStdinReader{reader: strings.NewReader(rawText)}
+	_, _, _, err := readSubmitPayload(
+		func(string) ([]byte, error) { t.Fatal("file reader called for stdin"); return nil, nil },
+		"-",
+		reader,
+	)
+	if err == nil {
+		t.Fatal("readSubmitPayload(escaped over-limit text) succeeded")
+	}
+	for _, want := range []string{
+		"payload stdin compact JSON exceeds the 65536-byte Work payload limit",
+		"use a payload file for larger input",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want %q", err, want)
+		}
+	}
+	if reader.bytesRead != len(rawText) {
+		t.Fatalf("bytes read = %d, want %d source bytes", reader.bytesRead, len(rawText))
+	}
+}
+
 func TestReadSubmitStdinPayloadRejectsOverflowAfterOneSentinelByte(t *testing.T) {
 	t.Parallel()
 
