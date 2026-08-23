@@ -54,4 +54,25 @@ describe("@you-agent-factory/components token styles entrypoint", () => {
     expect(factoryLightBackground.toLowerCase()).toBe("#f4f1e8");
     expect(factoryLightBackground).not.toBe(factoryDarkBackground);
   });
+
+  it("defines the dialog scrim role from the active palette background", () => {
+    documentRoot.dataset.colorPalette = "factory-dark";
+    const factoryDarkScrim = readDocumentCssVariable(
+      documentRoot,
+      "--color-scrim",
+    );
+    documentRoot.dataset.colorPalette = "factory-light";
+    const factoryLightScrim = readDocumentCssVariable(
+      documentRoot,
+      "--color-scrim",
+    );
+
+    expect(factoryDarkScrim.replace(/\s+/g, " ")).toBe(
+      "rgb( from #050b10 r g b / 0.7 )",
+    );
+    expect(factoryLightScrim.replace(/\s+/g, " ")).toBe(
+      "rgb( from #f4f1e8 r g b / 0.7 )",
+    );
+    expect(factoryLightScrim).not.toBe(factoryDarkScrim);
+  });
 });
