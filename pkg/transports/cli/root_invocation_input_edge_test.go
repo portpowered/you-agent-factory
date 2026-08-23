@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -167,9 +169,93 @@ func TestCollectRunInvocationStdinPreservesReaderFailure(t *testing.T) {
 	}
 }
 
+func TestCollectRunInvocationStdinAcceptsInclusiveByteLimit(t *testing.T) {
+	t.Parallel()
+
+	payload := bytes.Repeat([]byte("x"), maxRunInvocationStdinBytes)
+	reader := &countingBytesInvocationReader{reader: bytes.NewReader(payload)}
+	got, err := collectRunInvocationStdin(nil, reader, func() bool { return false })
+	if err != nil {
+		t.Fatalf("collect exact-limit stdin: %v", err)
+	}
+	if got == nil || len(*got) != maxRunInvocationStdinBytes {
+		t.Fatalf("collected stdin length = %d, want %d", lenOrZero(got), maxRunInvocationStdinBytes)
+	}
+	if reader.bytesRead > maxRunInvocationStdinBytes+1 {
+		t.Fatalf("exact-limit stdin bytes read = %d, want <= %d", reader.bytesRead, maxRunInvocationStdinBytes+1)
+	}
+}
+
+func TestCollectRunInvocationStdinRejectsOverflowAfterOneSentinelByte(t *testing.T) {
+	t.Parallel()
+
+	payload := bytes.Repeat([]byte("x"), maxRunInvocationStdinBytes+1024)
+	reader := &countingBytesInvocationReader{reader: bytes.NewReader(payload)}
+	_, err := collectRunInvocationStdin(nil, reader, func() bool { return false })
+	if err == nil {
+		t.Fatal("collect oversized stdin: want limit error")
+	}
+	for _, want := range []string{
+		fmt.Sprintf("invocation stdin exceeds the %d-byte limit", maxRunInvocationStdinBytes),
+		"use --to-file for larger input",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want %q", err, want)
+		}
+	}
+	if reader.bytesRead != maxRunInvocationStdinBytes+1 {
+		t.Fatalf("oversized stdin bytes read = %d, want exactly %d", reader.bytesRead, maxRunInvocationStdinBytes+1)
+	}
+}
+
+func TestResolveCompatibilityRunFactoryPromptRejectsOversizedStdinBeforePreparation(t *testing.T) {
+	t.Parallel()
+
+	reader := &countingBytesInvocationReader{
+		reader: bytes.NewReader(bytes.Repeat([]byte("x"), maxRunInvocationStdinBytes+1)),
+	}
+	cmd := &cobra.Command{Use: "run"}
+	cmd.SetContext(context.Background())
+	cmd.SetIn(reader)
+	preparation := rootInvocationInputScript{prepare: func(
+		context.Context,
+		work.InvocationInputPreparationRequest,
+	) (work.PreparedInvocationInput, error) {
+		t.Fatal("oversized invocation stdin must fail before Work preparation")
+		return work.PreparedInvocationInput{}, nil
+	}}
+	cfg := runcli.RunConfig{NamedFactoryName: "team-review"}
+
+	err := resolveCompatibilityRunFactoryPrompt(cmd, &cfg, nil, false, preparation)
+	if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("invocation stdin exceeds the %d-byte limit", maxRunInvocationStdinBytes)) {
+		t.Fatalf("resolve oversized invocation stdin error = %v", err)
+	}
+	if reader.bytesRead != maxRunInvocationStdinBytes+1 {
+		t.Fatalf("resolved oversized stdin bytes read = %d, want exactly %d", reader.bytesRead, maxRunInvocationStdinBytes+1)
+	}
+}
+
 type failingInvocationReader struct{ err error }
 
 func (reader failingInvocationReader) Read([]byte) (int, error) { return 0, reader.err }
+
+type countingBytesInvocationReader struct {
+	reader    io.Reader
+	bytesRead int
+}
+
+func (reader *countingBytesInvocationReader) Read(p []byte) (int, error) {
+	n, err := reader.reader.Read(p)
+	reader.bytesRead += n
+	return n, err
+}
+
+func lenOrZero(value *string) int {
+	if value == nil {
+		return 0
+	}
+	return len(*value)
+}
 
 type countingInvocationReader struct{ reads int }
 

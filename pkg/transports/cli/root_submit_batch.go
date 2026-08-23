@@ -24,6 +24,12 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// maxRunInvocationStdinBytes is the inclusive byte limit for intentional
+// Factory invocation stdin. The extra byte read by collectRunInvocationStdin
+// is only an overflow sentinel and is never passed to Work or retained after
+// rejection.
+const maxRunInvocationStdinBytes = 1 << 20
+
 func scalarTarget[T bool | string | int](value T) *T {
 	return &value
 }
@@ -883,9 +889,15 @@ func collectRunInvocationStdin(
 	if stdin == nil {
 		return nil, fmt.Errorf("read invocation stdin: process stdin is required")
 	}
-	data, err := io.ReadAll(stdin)
+	data, err := io.ReadAll(io.LimitReader(stdin, maxRunInvocationStdinBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("read invocation stdin: %w", err)
+	}
+	if len(data) > maxRunInvocationStdinBytes {
+		return nil, fmt.Errorf(
+			"invocation stdin exceeds the %d-byte limit; use --to-file for larger input",
+			maxRunInvocationStdinBytes,
+		)
 	}
 	if len(data) == 0 && !explicitStdin {
 		return nil, nil

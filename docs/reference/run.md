@@ -81,6 +81,12 @@ Non-interactive stdin is the alternative input source:
 printf '%s\n' 'Review the release notes' | you run --factory ./factory.json
 ```
 
+Intentional declarative-Factory invocation stdin for `--factory` and `--named`
+is limited to 1,048,576 bytes (1 MiB), inclusive. Exactly 1,048,576 bytes is
+accepted. A larger stream fails before Factory execution starts; use
+`--to-file` when a prompt needs more space. This limit applies to the stdin
+source only and does not change the Factory, HTTP, or replay contracts.
+
 Do not supply positional text and stdin together. Factories with an
 `invocationSignature` may instead define named, file-path, repeated, or
 defaulted arguments. Inspect their exact input boundary with
