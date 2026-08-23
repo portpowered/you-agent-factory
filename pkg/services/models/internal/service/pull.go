@@ -163,6 +163,7 @@ func (s *Service) pullWithModelHost(
 	if strings.TrimSpace(result.ModelName) == "" {
 		result.ModelName = strings.TrimSpace(modelName)
 	}
+	result.Outcome = "FAILED"
 	if strings.TrimSpace(result.ManagedPullOutcome) == "" {
 		result.ManagedPullOutcome = pullOutcome
 	}

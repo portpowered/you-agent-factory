@@ -62,6 +62,7 @@ func (p *assetPuller) PullModel(ctx context.Context, _ *models.RuntimeConfig, mo
 	})
 	projected := pullResultFromAssets(result)
 	if err != nil {
+		projected.Outcome = legacyPullOutcomeFailed
 		projected.ManagedPullOutcome = ""
 		projected.ReadinessState = "FAILED"
 		projected.LifecycleState = "NOT_INSTALLED"

@@ -787,6 +787,7 @@ func classifiedPullFailure(
 	if strings.TrimSpace(result.ProviderLocality) == "" {
 		result.ProviderLocality = string(providerLocality)
 	}
+	result.Outcome = legacyPullOutcomeFailed
 	result.ManagedPullOutcome = pullOutcome
 	result.ReadinessState = readiness
 	result.LifecycleState = managedLifecycleNotInstalled
@@ -858,6 +859,7 @@ func SelectInvocationWorker(
 const (
 	legacyPullOutcomePulled         = "PULLED"
 	legacyPullOutcomeAlreadyPresent = "ALREADY_PRESENT"
+	legacyPullOutcomeFailed         = "FAILED"
 
 	managedPullOutcomeAlreadyReady          = "ALREADY_READY"
 	managedPullOutcomeInstalledSuccessfully = "INSTALLED_SUCCESSFULLY"

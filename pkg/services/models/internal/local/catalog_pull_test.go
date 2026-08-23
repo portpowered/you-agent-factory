@@ -146,7 +146,8 @@ func TestPullModelWithOptions_ReportsVerificationFailure(t *testing.T) {
 	}
 	var pullErr *apisurface.PullError
 	if !errors.As(err, &pullErr) || result.ManagedPullOutcome != managedPullOutcomeSourceFetchFailed ||
-		result.ReadinessState != managedReadinessFailed || result.LifecycleState != managedLifecycleNotInstalled {
+		result.Outcome != legacyPullOutcomeFailed || result.ReadinessState != managedReadinessFailed ||
+		result.LifecycleState != managedLifecycleNotInstalled {
 		t.Fatalf("pull result = %#v, error = %v, want classified terminal verification failure", result, err)
 	}
 }

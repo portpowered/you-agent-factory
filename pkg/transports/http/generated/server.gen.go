@@ -972,6 +972,7 @@ const (
 // Defines values for ModelPullOutcome.
 const (
 	ModelPullOutcomeALREADYPRESENT ModelPullOutcome = "ALREADY_PRESENT"
+	ModelPullOutcomeFAILED         ModelPullOutcome = "FAILED"
 	ModelPullOutcomePULLED         ModelPullOutcome = "PULLED"
 )
 
@@ -6396,7 +6397,7 @@ type ModelPullDownloadedFile struct {
 	Sha256 *string `json:"sha256,omitempty"`
 }
 
-// ModelPullOutcome Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcome `ALREADY_PRESENT`.
+// ModelPullOutcome Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcomes `ALREADY_PRESENT` and `ALREADY_READY`; and `FAILED` maps to `STILL_LOADING`, `TIMED_OUT`, `SOURCE_FETCH_FAILED`, and `UNSUPPORTED_RUNTIME`. Unknown managed pull outcomes also map to `FAILED` so an unrecognized value cannot be projected as a successful pull.
 type ModelPullOutcome string
 
 // ModelPullResponse defines model for ModelPullResponse.
@@ -6411,7 +6412,7 @@ type ModelPullResponse struct {
 	// ModelName Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntimePull.identity` for compatibility with earlier pull fields.
 	ModelName string `json:"modelName"`
 
-	// Outcome Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcome `ALREADY_PRESENT`.
+	// Outcome Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcomes `ALREADY_PRESENT` and `ALREADY_READY`; and `FAILED` maps to `STILL_LOADING`, `TIMED_OUT`, `SOURCE_FETCH_FAILED`, and `UNSUPPORTED_RUNTIME`. Unknown managed pull outcomes also map to `FAILED` so an unrecognized value cannot be projected as a successful pull.
 	Outcome ModelPullOutcome `json:"outcome"`
 
 	// ProviderLocality Provider locality for a model worker capability declaration.

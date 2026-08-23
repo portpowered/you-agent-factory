@@ -443,7 +443,7 @@ type pullOptions struct {
 func pullModel(cfg pullOptions) (factoryapi.ModelPullResponse, error) {
 	var response factoryapi.ModelPullResponse
 	path := "/models/" + url.PathEscape(strings.TrimSpace(cfg.ModelName)) + "/pull"
-	if err := doModelsPOST(cfg.Context, cfg.HTTP, cfg.Server, path, map[string]any{}, &response, requestDiagnostics{
+	err := doModelsPOST(cfg.Context, cfg.HTTP, cfg.Server, path, map[string]any{}, &response, requestDiagnostics{
 		Enabled:   cfg.Verbose,
 		Output:    cfg.Diagnostics,
 		Command:   "models pull",
@@ -457,10 +457,19 @@ func pullModel(cfg pullOptions) (factoryapi.ModelPullResponse, error) {
 				len(response.DownloadedFiles),
 			)
 		},
-	}); err != nil {
+	})
+	projectPullResponseOutcome(&response)
+	if err != nil {
 		return response, err
 	}
 	return response, nil
+}
+
+func projectPullResponseOutcome(response *factoryapi.ModelPullResponse) {
+	if response == nil || strings.TrimSpace(string(response.ManagedRuntimePull.PullOutcome)) == "" {
+		return
+	}
+	response.Outcome = modelPullOutcomeFromManagedRuntime(response.ManagedRuntimePull.PullOutcome)
 }
 
 type requestDiagnostics struct {
