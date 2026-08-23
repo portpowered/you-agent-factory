@@ -75,7 +75,7 @@ func TestReplayPricedUsageReachesPublicCosts(t *testing.T) {
 
 	apiReport := getReplayCostsHTTP(t, server.URL())
 	assertPricedReplayCostsReport(t, apiReport)
-	if got, want := apiReport, cliReport; !reportsHaveSamePricedCostFacts(got, want) {
+	if got, want := apiReport, cliReport; !reportsHaveSameReplayCostFacts(got, want) {
 		t.Fatalf("HTTP and CLI replay cost reports differ:\nHTTP=%#v\nCLI=%#v", got, want)
 	}
 
@@ -175,6 +175,6 @@ func assertReplayTokenTotals(t *testing.T, totals generatedclient.CostsTokenTota
 	}
 }
 
-func reportsHaveSamePricedCostFacts(left, right generatedclient.CostsReport) bool {
+func reportsHaveSameReplayCostFacts(left, right generatedclient.CostsReport) bool {
 	return reflect.DeepEqual(left, right)
 }
