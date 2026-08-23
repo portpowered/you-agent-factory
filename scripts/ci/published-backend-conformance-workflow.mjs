@@ -1,3 +1,6 @@
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+
 const liveEvents = new Set(["schedule", "workflow_dispatch"]);
 
 export function selectPublishedBackendConformance({ eventName } = {}) {
@@ -13,7 +16,8 @@ export function selectPublishedBackendConformance({ eventName } = {}) {
 	};
 }
 
-if (process.env.GITHUB_EVENT_NAME) {
+const invokedPath = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : "";
+if (invokedPath === import.meta.url && process.env.GITHUB_EVENT_NAME) {
 	const selection = selectPublishedBackendConformance({
 		eventName: process.env.GITHUB_EVENT_NAME,
 	});
