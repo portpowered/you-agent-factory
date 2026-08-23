@@ -3782,7 +3782,7 @@ func TestAwaitContinueReplayReturnsCompletedReplayAfterCallerCancellation(t *tes
 		result: workersessions.ContinueResult{RequestID: "replayed"},
 		err:    replayErr,
 	}
-	ctxDone := make(chan struct{})
+	ctxDone := make(chan struct{}, 1)
 	ctx := signaledCancellationContext{done: ctxDone}
 	go func() {
 		close(replay.done)
