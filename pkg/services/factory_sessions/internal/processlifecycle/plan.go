@@ -65,7 +65,10 @@ func BuildLifecyclePlan(request roles.LifecyclePlanRequest) (lifecycle.Plan, err
 		Name: transportComponentName, Component: transport, Primary: true,
 	})
 
-	plan := lifecycle.Plan{Components: components}
+	plan := lifecycle.Plan{
+		Components:  components,
+		OrderlyStop: request.OrderlyStop,
+	}
 	if request.Close != nil {
 		plan.Resources = []lifecycle.NamedResource{{
 			Name: runtimeResourceName, Resource: lifecycle.CloserFunc(request.Close),

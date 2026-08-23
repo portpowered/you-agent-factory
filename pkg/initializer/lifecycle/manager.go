@@ -35,11 +35,19 @@ type NamedResource struct {
 	Resource io.Closer
 }
 
+// OrderlyStopOperation is invoked after all activated components have stopped
+// when cancellation initiated the lifecycle unwind. It is intentionally a
+// narrow, already-injected boundary for work that must complete before
+// orderly shutdown can report success.
+type OrderlyStopOperation func(context.Context) error
+
 // Plan declares one process activation. Components start in declaration order,
-// stop in reverse order, and resources close after all components stop.
+// stop in reverse order, the orderly-stop operation runs after components
+// stop, and resources close last.
 type Plan struct {
-	Components []NamedComponent
-	Resources  []NamedResource
+	Components  []NamedComponent
+	Resources   []NamedResource
+	OrderlyStop OrderlyStopOperation
 }
 
 // Manager executes lifecycle plans. It contains no service-selection policy.
@@ -92,7 +100,7 @@ func run(ctx context.Context, plan Plan, ready func()) error {
 	for _, candidate := range plan.Components {
 		if err := candidate.Component.Start(runCtx); err != nil {
 			startErr := fmt.Errorf("start %s: %w", candidate.Name, err)
-			return finish(runCtx, started, plan.Resources, startErr)
+			return finish(runCtx, started, plan, startErr, false)
 		}
 		started = append(started, candidate)
 	}
@@ -101,8 +109,9 @@ func run(ctx context.Context, plan Plan, ready func()) error {
 	}
 
 	waitErr := primary.Component.(Waiter).Wait(runCtx)
+	orderlyStop := errors.Is(waitErr, context.Canceled) || errors.Is(runCtx.Err(), context.Canceled)
 	cancel()
-	return finish(context.Background(), started, plan.Resources, waitErr)
+	return finish(context.Background(), started, plan, waitErr, orderlyStop)
 }
 
 func validate(plan Plan) (NamedComponent, error) {
@@ -129,8 +138,14 @@ func validate(plan Plan) (NamedComponent, error) {
 	return primary, nil
 }
 
-func finish(ctx context.Context, started []NamedComponent, resources []NamedResource, cause error) error {
-	errs := make([]error, 0, len(started)+len(resources)+1)
+func finish(
+	ctx context.Context,
+	started []NamedComponent,
+	plan Plan,
+	cause error,
+	orderlyStop bool,
+) error {
+	errs := make([]error, 0, len(started)+len(plan.Resources)+1)
 	if cause != nil && !errors.Is(cause, context.Canceled) {
 		errs = append(errs, cause)
 	}
@@ -140,7 +155,12 @@ func finish(ctx context.Context, started []NamedComponent, resources []NamedReso
 			errs = append(errs, fmt.Errorf("stop %s: %w", candidate.Name, err))
 		}
 	}
-	if err := closeResources(resources, nil); err != nil {
+	if orderlyStop && plan.OrderlyStop != nil {
+		if err := plan.OrderlyStop(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("orderly stop: %w", err))
+		}
+	}
+	if err := closeResources(plan.Resources, nil); err != nil {
 		errs = append(errs, err)
 	}
 	return errors.Join(errs...)

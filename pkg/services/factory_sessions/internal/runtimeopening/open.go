@@ -538,6 +538,11 @@ func openRuntime(
 	opened.engine = startupRuntime.RuntimeService()
 	opened.application.Resources.Clock = clock
 	opened.application.Recordings = recordingsService
+	opened.application.OrderlyStop = newOrderlyRecordingFlush(
+		recordingsService,
+		opened.application.Resources.RuntimeInstanceID,
+		configured.Recordings.RecordPath,
+	)
 	opened.application.OperatorSettingsPath = operatorSettingsPath
 	opened.application.ReplayMetadataWarnings = append(
 		[]recordings.MetadataMismatchWarning(nil),

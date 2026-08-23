@@ -272,6 +272,95 @@ func TestRuntimeLifecycleDrainsWorkerAcquisitionBeforeRuntimeShutdown(t *testing
 	}
 }
 
+func TestRuntimeLifecycleFlushesRecordingAfterProducerShutdown(t *testing.T) {
+	runtime := &planRuntime{}
+	transport := &blockingPlanComponent{
+		started: make(chan struct{}),
+		stopped: make(chan struct{}),
+	}
+	flushEntered := make(chan struct{})
+	releaseFlush := make(chan struct{})
+	plan, err := BuildLifecyclePlan(roles.LifecyclePlanRequest{
+		Runtime: runtime,
+		Components: factorysessions.BoundProcessComponents{
+			Transport: transport,
+		},
+		OrderlyStop: func(context.Context) error {
+			close(flushEntered)
+			<-releaseFlush
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildLifecyclePlan: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- lifecycle.NewManager().Run(ctx, plan) }()
+	awaitLifecycleSignal(t, transport.started)
+	cancel()
+	awaitLifecycleSignal(t, flushEntered)
+	if want := []string{"runtime:start", "workers:start", "workers:stop", "runtime:stop"}; !reflect.DeepEqual(runtime.events, want) {
+		t.Fatalf("producer shutdown events = %v, want %v before flush returns", runtime.events, want)
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("lifecycle returned before recording flush completed: %v", err)
+	default:
+	}
+	close(releaseFlush)
+	if err := <-done; err != nil {
+		t.Fatalf("lifecycle run: %v", err)
+	}
+}
+
+func TestRuntimeLifecyclePropagatesOrderlyRecordingFlushFailure(t *testing.T) {
+	flushErr := errors.New("recording flush failed")
+	runtime := &planRuntime{}
+	transport := &blockingPlanComponent{
+		started: make(chan struct{}),
+		stopped: make(chan struct{}),
+	}
+	plan, err := BuildLifecyclePlan(roles.LifecyclePlanRequest{
+		Runtime: runtime,
+		Components: factorysessions.BoundProcessComponents{
+			Transport: transport,
+		},
+		OrderlyStop: func(context.Context) error { return flushErr },
+	})
+	if err != nil {
+		t.Fatalf("BuildLifecyclePlan: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- lifecycle.NewManager().Run(ctx, plan) }()
+	awaitLifecycleSignal(t, transport.started)
+	cancel()
+	if err := <-done; !errors.Is(err, flushErr) {
+		t.Fatalf("lifecycle error = %v, want recording flush failure", err)
+	}
+}
+
+func TestRuntimeLifecycleLeavesOrderlyFlushUnsetWhenRecordingIsDisabled(t *testing.T) {
+	runtime := &planRuntime{}
+	transport := &blockingPlanComponent{
+		started: make(chan struct{}),
+		stopped: make(chan struct{}),
+	}
+	plan := requiredPlanWithTransport(t, runtime, transport)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- lifecycle.NewManager().Run(ctx, plan) }()
+	awaitLifecycleSignal(t, transport.started)
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("lifecycle without recording flush: %v", err)
+	}
+}
+
 func awaitLifecycleSignal(t *testing.T, signal <-chan struct{}) {
 	t.Helper()
 	timer := time.NewTimer(time.Second)
@@ -504,6 +593,24 @@ func TestIsNilHandlesNonNilValue(t *testing.T) {
 
 func requiredPlan(t *testing.T, runtime *planRuntime) lifecycle.Plan {
 	return requiredPlanWithEvents(t, runtime, &runtime.events)
+}
+
+func requiredPlanWithTransport(
+	t *testing.T,
+	runtime *planRuntime,
+	transport lifecycle.Component,
+) lifecycle.Plan {
+	t.Helper()
+	plan, err := BuildLifecyclePlan(roles.LifecyclePlanRequest{
+		Runtime: runtime,
+		Components: factorysessions.BoundProcessComponents{
+			Transport: transport,
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildLifecyclePlan: %v", err)
+	}
+	return plan
 }
 
 func requiredPlanWithEvents(t *testing.T, runtime roles.ProcessRuntime, events *[]string) lifecycle.Plan {

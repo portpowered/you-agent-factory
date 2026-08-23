@@ -62,7 +62,11 @@ type OpenedApplicationRuntime struct {
 	Process ProcessRuntime
 	// Cancellation is the explicit invocation-local stop authority published
 	// into the opened HTTP view by the application-opening operation.
-	Cancellation       initializer.InvocationCancellation
+	Cancellation initializer.InvocationCancellation
+	// OrderlyStop is an already-bound process lifecycle operation. Factory
+	// Sessions supplies the Recordings-owned implementation when a live
+	// recording exists; Initializer only orders and awaits it.
+	OrderlyStop        lifecycle.OrderlyStopOperation
 	FactoryRuntime     factoryruntime.Service
 	FactoryDefinitions factorydefinitions.Service
 	WorkflowPreview    factoryruntime.WorkflowPreviewOperation
@@ -272,9 +276,10 @@ type RuntimeHostOperation interface {
 }
 
 type LifecyclePlanRequest struct {
-	Runtime    ProcessRuntime
-	Components factorysessions.BoundProcessComponents
-	Close      func() error
+	Runtime     ProcessRuntime
+	Components  factorysessions.BoundProcessComponents
+	Close       func() error
+	OrderlyStop lifecycle.OrderlyStopOperation
 }
 
 type LifecyclePlanOperation func(LifecyclePlanRequest) (lifecycle.Plan, error)
