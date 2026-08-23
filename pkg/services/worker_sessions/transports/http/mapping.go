@@ -538,22 +538,6 @@ func cloneStringSliceMap(value map[string][]string) map[string][]string {
 	return clone
 }
 
-// ListWorkerSessionsResponseToAPI maps a detached Worker Sessions result to
-// the generated API representation while preserving absent optional values.
-func ListWorkerSessionsResponseToAPI(result workersessions.ListObservationsResult) factoryapi.ListWorkerSessionsResponse {
-	sessions := make([]factoryapi.WorkerSessionObservation, 0, len(result.Observations))
-	for _, observation := range result.Observations {
-		sessions = append(sessions, WorkerSessionObservationToAPI(observation))
-	}
-	return factoryapi.ListWorkerSessionsResponse{Sessions: sessions}
-}
-
-// ListWorkerSessionObservationsResponseToAPI maps the bounded top-level
-// identity query, including its opaque pagination context.
-func ListWorkerSessionObservationsResponseToAPI(result workersessions.ListWorkerSessionObservationsResult) factoryapi.ListWorkerSessionsResponse {
-	return listWorkerSessionObservationsResponseToAPI(result, nil)
-}
-
 type workerSessionWorkAttribution struct {
 	WorkID   string
 	WorkName string

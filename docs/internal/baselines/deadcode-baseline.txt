@@ -213,12 +213,6 @@ pkg/services/work/transports/cli/work/list.go: unreachable func: List
 pkg/services/work/transports/cli/work/move.go: unreachable func: Move
 pkg/services/work/transports/cli/work/show.go: unreachable func: Show
 pkg/services/work/transports/cli/work/watch.go: unreachable func: RenderWatchTransition
-pkg/services/worker_sessions/internal/service/control_test.go: unreachable func: controlledBoundary.setPublishError
-pkg/services/worker_sessions/transports/http/control_handler.go: unreachable func: decodeWorkerSessionContinueRequest
-pkg/services/worker_sessions/transports/http/control_handler.go: unreachable func: decodeWorkerSessionInterruptRequest
-pkg/services/worker_sessions/transports/http/control_handler.go: unreachable func: decodeWorkerSessionStartRequest
-pkg/services/worker_sessions/transports/http/mapping.go: unreachable func: ListWorkerSessionObservationsResponseToAPI
-pkg/services/worker_sessions/transports/http/mapping.go: unreachable func: ListWorkerSessionsResponseToAPI
 pkg/services/workers/execution_contracts.go: unreachable func: CloneProviderSessionMetadata
 pkg/services/workers/failure.go: unreachable func: WorkFailureDecisionFromMetadata
 pkg/services/workers/internal/execution/token_lineage_impl.go: unreachable func: ChainingTraceDepthFromColors
