@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -42,8 +43,9 @@ type RuntimeMetricsRetentionTotals struct {
 	Bytes int64
 }
 
-// RuntimeMetricsRetentionFailure identifies one artifact that could not be
-// safely inspected or removed. The path is always beneath the selected root.
+// RuntimeMetricsRetentionFailure identifies one artifact or claim marker that
+// could not be safely inspected or removed. The path is always beneath the
+// selected root.
 type RuntimeMetricsRetentionFailure struct {
 	Path  string
 	Error error
@@ -52,7 +54,8 @@ type RuntimeMetricsRetentionFailure struct {
 // RuntimeMetricsRetentionReport describes one deterministic root sweep.
 // Before and After count recognized regular metrics artifacts only. Protected
 // and Failed count artifacts that were not safe to remove; unrecognized files
-// are deliberately absent from every total.
+// are deliberately absent from every total. Failures can also describe claim
+// marker cleanup without changing those artifact totals.
 type RuntimeMetricsRetentionReport struct {
 	RootDirectory string
 	Skipped       bool
@@ -161,7 +164,7 @@ func (retention *RuntimeMetricsRetention) sweepLocked(
 		return err
 	}
 	report.After = retentionTotals(after.artifacts)
-	return nil
+	return retention.reapOrphanedMarkers(ctx, preparation.root, after, report)
 }
 
 func (retention *RuntimeMetricsRetention) pruneAge(
@@ -230,16 +233,21 @@ type retentionOutcome struct {
 }
 
 type retentionInventory struct {
-	artifacts map[string]retentionArtifact
-	protected []retentionOutcome
-	failed    []retentionOutcome
+	artifacts  map[string]retentionArtifact
+	recognized map[string]struct{}
+	protected  []retentionOutcome
+	failed     []retentionOutcome
+	incomplete bool
 }
 
 func (retention *RuntimeMetricsRetention) inventory(
 	ctx context.Context,
 	root string,
 ) (retentionInventory, error) {
-	inventory := retentionInventory{artifacts: make(map[string]retentionArtifact)}
+	inventory := retentionInventory{
+		artifacts:  make(map[string]retentionArtifact),
+		recognized: make(map[string]struct{}),
+	}
 	err := retention.filesystem.WalkDir(root, func(
 		path string,
 		entry fs.DirEntry,
@@ -249,6 +257,7 @@ func (retention *RuntimeMetricsRetention) inventory(
 			return err
 		}
 		if walkErr != nil {
+			inventory.incomplete = true
 			if entry != nil && isRuntimeMetricsArtifact(entry.Name()) {
 				inventory.failed = append(inventory.failed, retentionOutcome{path: path, err: walkErr})
 			}
@@ -257,8 +266,10 @@ func (retention *RuntimeMetricsRetention) inventory(
 		if entry == nil || entry.IsDir() || !isRuntimeMetricsArtifact(entry.Name()) {
 			return nil
 		}
+		inventory.recognized[path] = struct{}{}
 		info, err := retention.filesystem.Lstat(path)
 		if err != nil {
+			inventory.incomplete = true
 			inventory.failed = append(inventory.failed, retentionOutcome{path: path, err: err})
 			return nil
 		}
@@ -283,6 +294,145 @@ func (retention *RuntimeMetricsRetention) inventory(
 		return inventory, fmt.Errorf("inventory runtime metrics under %q: %w", root, err)
 	}
 	return inventory, nil
+}
+
+func (retention *RuntimeMetricsRetention) reapOrphanedMarkers(
+	ctx context.Context,
+	root string,
+	inventory retentionInventory,
+	report *RuntimeMetricsRetentionReport,
+) error {
+	if inventory.incomplete {
+		appendRetentionFailure(
+			report,
+			filepath.Join(root, runtimeMetricsClaimsDirectory),
+			errors.New("runtime metrics artifact inventory is incomplete; claim marker cleanup skipped"),
+		)
+		return nil
+	}
+	claimsDirectory := filepath.Join(root, runtimeMetricsClaimsDirectory)
+	info, err := retention.filesystem.Lstat(claimsDirectory)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		appendRetentionFailure(report, claimsDirectory, fmt.Errorf("inspect claim marker directory: %w", err))
+		return nil
+	}
+	if info.Mode()&fs.ModeSymlink != 0 || !info.IsDir() {
+		appendRetentionFailure(report, claimsDirectory, errors.New("claim marker path is not a directory"))
+		return nil
+	}
+	entries, err := retention.filesystem.ReadDir(claimsDirectory)
+	if err != nil {
+		appendRetentionFailure(report, claimsDirectory, fmt.Errorf("read claim marker directory: %w", err))
+		return nil
+	}
+	if len(entries) == 0 {
+		return nil
+	}
+	markerNames := make(map[string]struct{}, len(inventory.recognized))
+	for artifactPath := range inventory.recognized {
+		markerNames[filepath.Base(runtimeMetricsClaimPath(artifactPath))] = struct{}{}
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("reap runtime metrics claim markers: %w", err)
+		}
+		if entry == nil {
+			appendRetentionFailure(report, claimsDirectory, errors.New("claim marker directory returned an empty entry"))
+			continue
+		}
+		markerPath, valid := runtimeMetricsClaimMarkerPath(claimsDirectory, entry.Name())
+		if !valid {
+			appendRetentionFailure(report, filepath.Join(claimsDirectory, entry.Name()), errors.New("unexpected claim marker entry"))
+			continue
+		}
+		if _, live := markerNames[entry.Name()]; live {
+			continue
+		}
+		if err := retention.reapOrphanedMarker(report, markerPath); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func runtimeMetricsClaimMarkerPath(claimsDirectory, name string) (string, bool) {
+	if len(name) != sha256HexLength+len(runtimeMetricsClaimSuffix) ||
+		!strings.HasSuffix(name, runtimeMetricsClaimSuffix) {
+		return "", false
+	}
+	digest := strings.TrimSuffix(name, runtimeMetricsClaimSuffix)
+	if !isLowerHexDigest(digest) {
+		return "", false
+	}
+	path := filepath.Join(filepath.Clean(claimsDirectory), name)
+	if !pathWithinRoot(claimsDirectory, path) {
+		return "", false
+	}
+	return path, true
+}
+
+func isLowerHexDigest(value string) bool {
+	if len(value) != sha256HexLength {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	if err != nil {
+		return false
+	}
+	return value == strings.ToLower(value)
+}
+
+func (retention *RuntimeMetricsRetention) reapOrphanedMarker(
+	report *RuntimeMetricsRetentionReport,
+	markerPath string,
+) error {
+	info, err := retention.filesystem.Lstat(markerPath)
+	if err != nil {
+		appendRetentionFailure(report, markerPath, fmt.Errorf("inspect orphaned claim marker: %w", err))
+		return nil
+	}
+	if info.Mode()&fs.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Size() != 0 {
+		appendRetentionFailure(report, markerPath, errors.New("claim marker is not a zero-byte regular file"))
+		return nil
+	}
+	claim, err := retention.coordination.TryClaimMarker(markerPath)
+	if errors.Is(err, ErrRuntimeMetricsArtifactBusy) {
+		return nil
+	}
+	if err != nil {
+		appendRetentionFailure(report, markerPath, fmt.Errorf("claim orphaned marker: %w", err))
+		return nil
+	}
+	if claim == nil {
+		appendRetentionFailure(report, markerPath, errors.New("claim orphaned marker returned a nil lock"))
+		return nil
+	}
+	closeErr := claim.Close()
+	if closeErr != nil {
+		appendRetentionFailure(report, markerPath, fmt.Errorf("release orphaned claim marker: %w", closeErr))
+		return nil
+	}
+	// The root lock prevents normal openers from acquiring this marker between
+	// the nonblocking proof above and removal. Release before Remove because
+	// Windows refuses to unlink an open coordination handle.
+	if err := retention.filesystem.Remove(markerPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		appendRetentionFailure(report, markerPath, fmt.Errorf("remove orphaned claim marker: %w", err))
+	}
+	return nil
+}
+
+const sha256HexLength = 64
+
+func appendRetentionFailure(
+	report *RuntimeMetricsRetentionReport,
+	path string,
+	err error,
+) {
+	report.Failures = append(report.Failures, RuntimeMetricsRetentionFailure{Path: path, Error: err})
 }
 
 func runtimeMetricsArtifactTimestamp(root, path string) (time.Time, string, bool) {

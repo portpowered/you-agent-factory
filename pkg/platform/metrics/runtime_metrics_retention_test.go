@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -192,7 +194,7 @@ func TestRuntimeMetricsRootRetentionYieldsWhenRootSweepIsAlreadyClaimed(t *testi
 	}
 }
 
-func TestRuntimeMetricsRootRetentionReclaimsReleasedStaleClaim(t *testing.T) {
+func TestRuntimeMetricsRootRetentionReclaimsReleasedStaleClaimAndMarker(t *testing.T) {
 	root := t.TempDir()
 	artifact := writeRetentionArtifact(t, root, "2026/07/01", "010000.000000000", "stale-claim-runtime-stale-collision", 9)
 	claimPath := runtimeMetricsClaimPath(artifact)
@@ -213,9 +215,200 @@ func TestRuntimeMetricsRootRetentionReclaimsReleasedStaleClaim(t *testing.T) {
 	if _, err := os.Stat(artifact); !os.IsNotExist(err) {
 		t.Fatalf("artifact protected by released stale claim, stat error = %v", err)
 	}
-	if _, err := os.Stat(claimPath); err != nil {
-		t.Fatalf("stable stale claim marker was not reusable, stat error = %v", err)
+	if _, err := os.Stat(claimPath); !os.IsNotExist(err) {
+		t.Fatalf("released stale claim marker remains after cleanup, stat error = %v", err)
 	}
+}
+
+func TestRuntimeMetricsRootRetentionPreservesLiveClaimMarkerAfterArtifactMissing(t *testing.T) {
+	root := t.TempDir()
+	artifact := writeRetentionArtifact(t, root, "2026/07/01", "010000.000000000", "live-missing-runtime-live-collision", 9)
+	coordination, err := NewRuntimeMetricsCoordination()
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsCoordination(): %v", err)
+	}
+	claim, err := coordination.Claim(artifact)
+	if err != nil {
+		t.Fatalf("Claim(): %v", err)
+	}
+	claimPath := runtimeMetricsClaimPath(artifact)
+	if err := os.Remove(artifact); err != nil {
+		t.Fatalf("Remove(artifact): %v", err)
+	}
+
+	retention := newTestRuntimeMetricsRetention(t, time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC))
+	if _, err := retention.Sweep(t.Context(), RuntimeMetricsRetentionRequest{
+		RootDirectory: root,
+		Config:        RuntimeMetricsConfig{MaxSize: 1, MaxAge: 1},
+	}); err != nil {
+		t.Fatalf("Sweep(live missing artifact): %v", err)
+	}
+	assertRetentionPathExists(t, claimPath, "live claim marker after missing-artifact sweep")
+
+	if err := claim.Close(); err != nil {
+		t.Fatalf("Close(live claim): %v", err)
+	}
+	if _, err := retention.Sweep(t.Context(), RuntimeMetricsRetentionRequest{
+		RootDirectory: root,
+		Config:        RuntimeMetricsConfig{MaxSize: 1, MaxAge: 1},
+	}); err != nil {
+		t.Fatalf("Sweep(released missing artifact): %v", err)
+	}
+	assertRetentionPathAbsent(t, claimPath, "released claim marker after missing-artifact sweep")
+}
+
+func TestRuntimeMetricsRootRetentionBoundsClaimMarkersAcrossEightCycles(t *testing.T) {
+	root := t.TempDir()
+	coordination, err := NewRuntimeMetricsCoordination()
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsCoordination(): %v", err)
+	}
+	retention := newTestRuntimeMetricsRetention(t, time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC))
+	for cycle := 0; cycle < 8; cycle++ {
+		artifact := writeRetentionArtifact(
+			t, root, "2026/07/01", fmt.Sprintf("%06d.000000000", cycle+1),
+			fmt.Sprintf("session-%d-runtime-cycle-collision", cycle), 9,
+		)
+		claim, err := coordination.Claim(artifact)
+		if err != nil {
+			t.Fatalf("Claim(cycle %d): %v", cycle+1, err)
+		}
+		if err := claim.Close(); err != nil {
+			t.Fatalf("Close(cycle %d): %v", cycle+1, err)
+		}
+		report, err := retention.Sweep(t.Context(), RuntimeMetricsRetentionRequest{
+			RootDirectory: root,
+			Config:        RuntimeMetricsConfig{MaxSize: 1, MaxAge: 1},
+		})
+		if err != nil {
+			t.Fatalf("Sweep(cycle %d): %v", cycle+1, err)
+		}
+		if report.Removed.Files != 1 || report.After.Files != 0 {
+			t.Fatalf("cycle %d report = %#v, want one removed artifact and no remaining artifacts", cycle+1, report)
+		}
+		if got := countRuntimeMetricsClaimMarkers(t, root); got != 0 {
+			t.Fatalf("cycle %d claim marker count = %d, want zero", cycle+1, got)
+		}
+	}
+}
+
+func TestRuntimeMetricsRootRetentionPreservesMalformedClaimEntries(t *testing.T) {
+	root := t.TempDir()
+	artifact := writeRetentionArtifact(t, root, "2026/07/01", "010000.000000000", "malformed-runtime-malformed-collision", 9)
+	coordination, err := NewRuntimeMetricsCoordination()
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsCoordination(): %v", err)
+	}
+	claim, err := coordination.Claim(artifact)
+	if err != nil {
+		t.Fatalf("Claim(): %v", err)
+	}
+	if err := claim.Close(); err != nil {
+		t.Fatalf("Close(): %v", err)
+	}
+	claimsDirectory := filepath.Join(root, runtimeMetricsClaimsDirectory)
+	malformed := filepath.Join(claimsDirectory, strings.Repeat("a", sha256HexLength)+runtimeMetricsClaimSuffix)
+	if err := os.WriteFile(malformed, []byte("not empty"), 0o600); err != nil {
+		t.Fatalf("WriteFile(malformed): %v", err)
+	}
+	unexpected := filepath.Join(claimsDirectory, "operator-note.txt")
+	if err := os.WriteFile(unexpected, []byte("preserve"), 0o600); err != nil {
+		t.Fatalf("WriteFile(unexpected): %v", err)
+	}
+
+	retention := newTestRuntimeMetricsRetention(t, time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC))
+	report, err := retention.Sweep(t.Context(), RuntimeMetricsRetentionRequest{
+		RootDirectory: root,
+		Config:        RuntimeMetricsConfig{MaxSize: 1, MaxAge: 1},
+	})
+	if err != nil {
+		t.Fatalf("Sweep(): %v", err)
+	}
+	if len(report.Failures) != 2 {
+		t.Fatalf("Failures = %#v, want malformed and unexpected claim entries", report.Failures)
+	}
+	assertRetentionPathAbsent(t, runtimeMetricsClaimPath(artifact), "well-formed orphan claim marker")
+	assertRetentionPathExists(t, malformed, "malformed claim marker")
+	assertRetentionPathExists(t, unexpected, "unexpected claim entry")
+}
+
+func TestRuntimeMetricsRootRetentionRetriesFailedClaimMarkerRemoval(t *testing.T) {
+	root := t.TempDir()
+	artifact := writeRetentionArtifact(t, root, "2026/07/01", "010000.000000000", "retry-marker-runtime-retry-collision", 9)
+	coordination, err := NewRuntimeMetricsCoordination()
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsCoordination(): %v", err)
+	}
+	claim, err := coordination.Claim(artifact)
+	if err != nil {
+		t.Fatalf("Claim(): %v", err)
+	}
+	if err := claim.Close(); err != nil {
+		t.Fatalf("Close(): %v", err)
+	}
+	claimPath := runtimeMetricsClaimPath(artifact)
+	filesystem := &failRuntimeMetricsClaimMarkerRemoveFileSystem{
+		Local:    platformfilesystem.Local{},
+		failPath: claimPath,
+	}
+	retention, err := NewRuntimeMetricsRetention(
+		filesystem,
+		func() time.Time { return time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC) },
+		coordination,
+	)
+	if err != nil {
+		t.Fatalf("NewRuntimeMetricsRetention(): %v", err)
+	}
+	report, err := retention.Sweep(t.Context(), RuntimeMetricsRetentionRequest{
+		RootDirectory: root,
+		Config:        RuntimeMetricsConfig{MaxSize: 1, MaxAge: 1},
+	})
+	if err != nil {
+		t.Fatalf("Sweep(first): %v", err)
+	}
+	if len(report.Failures) != 1 {
+		t.Fatalf("first sweep failures = %#v, want marker removal failure", report.Failures)
+	}
+	assertRetentionPathExists(t, claimPath, "claim marker after failed removal")
+
+	filesystem.failPath = ""
+	if _, err := retention.Sweep(t.Context(), RuntimeMetricsRetentionRequest{
+		RootDirectory: root,
+		Config:        RuntimeMetricsConfig{MaxSize: 1, MaxAge: 1},
+	}); err != nil {
+		t.Fatalf("Sweep(retry): %v", err)
+	}
+	assertRetentionPathAbsent(t, claimPath, "claim marker after successful retry")
+}
+
+func countRuntimeMetricsClaimMarkers(t *testing.T, root string) int {
+	t.Helper()
+	entries, err := os.ReadDir(filepath.Join(root, runtimeMetricsClaimsDirectory))
+	if errors.Is(err, os.ErrNotExist) {
+		return 0
+	}
+	if err != nil {
+		t.Fatalf("ReadDir(claim markers): %v", err)
+	}
+	count := 0
+	for _, entry := range entries {
+		if _, valid := runtimeMetricsClaimMarkerPath(filepath.Join(root, runtimeMetricsClaimsDirectory), entry.Name()); valid {
+			count++
+		}
+	}
+	return count
+}
+
+type failRuntimeMetricsClaimMarkerRemoveFileSystem struct {
+	platformfilesystem.Local
+	failPath string
+}
+
+func (filesystem *failRuntimeMetricsClaimMarkerRemoveFileSystem) Remove(path string) error {
+	if path == filesystem.failPath {
+		return errors.New("claim marker removal failed")
+	}
+	return filesystem.Local.Remove(path)
 }
 
 func TestRuntimeMetricsCoordinationClaimClosePreservesConcurrentReplacement(t *testing.T) {
