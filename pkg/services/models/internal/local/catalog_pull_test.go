@@ -152,6 +152,29 @@ func TestPullModelWithOptions_ReportsVerificationFailure(t *testing.T) {
 	}
 }
 
+func TestPullModelWithOptions_ReportsSourceFetchFailureWithoutSuccessProjection(t *testing.T) {
+	t.Parallel()
+	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	result, err := PullModelWithOptions(
+		&managedPullTestAssetPuller{
+			result: apisurface.PullResult{
+				ModelName: "OMNIVOICE_Q4_K_M", Outcome: legacyPullOutcomePulled,
+			},
+			err: apisurface.ErrSourceFetchFailed,
+		},
+		context.Background(), loaded, "OMNIVOICE_Q4_K_M", PullOptions{},
+	)
+	if !errors.Is(err, apisurface.ErrSourceFetchFailed) {
+		t.Fatalf("PullModelWithOptions error = %v, want source-fetch failure", err)
+	}
+	var pullErr *apisurface.PullError
+	if !errors.As(err, &pullErr) || result.Outcome != legacyPullOutcomeFailed ||
+		result.ManagedPullOutcome != managedPullOutcomeSourceFetchFailed ||
+		result.ReadinessState != managedReadinessFailed || result.LifecycleState != managedLifecycleNotInstalled {
+		t.Fatalf("pull result = %#v, error = %v, want FAILED/SOURCE_FETCH_FAILED/FAILED/NOT_INSTALLED", result, err)
+	}
+}
+
 func TestPullModelWithOptions_DoesNotSucceedAfterCallerCancellation(t *testing.T) {
 	t.Parallel()
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
