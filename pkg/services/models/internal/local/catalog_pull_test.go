@@ -67,6 +67,56 @@ func TestPullModelWithOptions_ClassifiesUnsupportedLocalModel(t *testing.T) {
 	}
 }
 
+func TestPullModelWithOptions_ReportsVerificationFailure(t *testing.T) {
+	t.Parallel()
+	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	verificationErr := apisurface.ErrAssetIntegrityFailed
+	result, err := PullModelWithOptions(
+		&managedPullTestAssetPuller{result: apisurface.PullResult{
+			ModelName: "OMNIVOICE_Q4_K_M", Outcome: legacyPullOutcomePulled,
+		}},
+		context.Background(), loaded, "OMNIVOICE_Q4_K_M",
+		PullOptions{
+			RuntimeCacheInspector: stubRuntimeCacheInspector{err: verificationErr},
+		},
+	)
+	if !errors.Is(err, verificationErr) {
+		t.Fatalf("PullModelWithOptions error = %v, want verification failure", err)
+	}
+	var pullErr *apisurface.PullError
+	if !errors.As(err, &pullErr) || result.ManagedPullOutcome != managedPullOutcomeSourceFetchFailed ||
+		result.ReadinessState != managedReadinessFailed || result.LifecycleState != managedLifecycleNotInstalled {
+		t.Fatalf("pull result = %#v, error = %v, want classified terminal verification failure", result, err)
+	}
+}
+
+func TestPullModelWithOptions_DoesNotSucceedAfterCallerCancellation(t *testing.T) {
+	t.Parallel()
+	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	ctx, cancel := context.WithCancel(context.Background())
+	result, err := PullModelWithOptions(
+		&managedPullTestAssetPuller{result: apisurface.PullResult{
+			ModelName: "OMNIVOICE_Q4_K_M", Outcome: legacyPullOutcomePulled,
+		}},
+		ctx, loaded, "OMNIVOICE_Q4_K_M",
+		PullOptions{
+			RuntimeCacheInspector: stubRuntimeCacheInspector{
+				byModel: map[string]RuntimeCacheInspection{
+					"OMNIVOICE_Q4_K_M": {Supported: true, Installed: true},
+				},
+				cancel: cancel,
+			},
+		},
+	)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("PullModelWithOptions error = %v, want caller cancellation", err)
+	}
+	var pullErr *apisurface.PullError
+	if !errors.As(err, &pullErr) || result.ReadinessState != managedReadinessFailed {
+		t.Fatalf("pull result = %#v, error = %v, want classified cancellation failure", result, err)
+	}
+}
+
 type managedPullTestAssetPuller struct {
 	result apisurface.PullResult
 	err    error

@@ -31,6 +31,20 @@ func TestCLIHTTPProfilesPreserveCommandTimeouts(t *testing.T) {
 	}
 }
 
+func TestModelsPullCLIHTTPProfileHasNoFixedClientTimeout(t *testing.T) {
+	t.Parallel()
+	pull, err := provideModelsPullCLIHTTPProtocol()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pull.Protocol == nil {
+		t.Fatal("Models pull protocol is nil")
+	}
+	if pull.timeout != 0 {
+		t.Fatalf("Models pull timeout = %s, want no fixed client timeout", pull.timeout)
+	}
+}
+
 func TestMetricsCLICompletesReportAfterStandardCLITimeout(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {

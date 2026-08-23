@@ -13,6 +13,7 @@ type compositionService struct {
 
 func bindCompositionService(
 	httpProtocol clihttp.Protocol,
+	pullHTTPProtocol clihttp.Protocol,
 	invocation InvocationOperation,
 	outputFileSystem OutputFileSystem,
 	providers ...CompositionScopeProvider,
@@ -20,8 +21,14 @@ func bindCompositionService(
 	if httpProtocol == nil || invocation == nil {
 		return nil
 	}
-	legacy := &httpService{http: httpProtocol, invocation: invocation}
+	if pullHTTPProtocol == nil {
+		pullHTTPProtocol = httpProtocol
+	}
+	legacy := &httpService{
+		http: httpProtocol, pullHTTP: pullHTTPProtocol, invocation: invocation,
+	}
 	cfg := ConfigFromComposition(httpProtocol, invocation, providers...)
+	cfg.PullHTTP = pullHTTPProtocol
 	cfg.OutputFileSystem = outputFileSystem
 	owned := NewService(cfg)
 	if owned == nil {

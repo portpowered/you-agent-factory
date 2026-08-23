@@ -67,6 +67,10 @@ type standardCLIHTTPProtocol struct {
 	clihttp.Protocol
 	timeout time.Duration
 }
+type modelsPullCLIHTTPProtocol struct {
+	clihttp.Protocol
+	timeout time.Duration
+}
 type extendedCLIHTTPProtocol struct {
 	clihttp.Protocol
 	timeout time.Duration
@@ -85,6 +89,18 @@ func provideStandardCLIHTTPProtocol() (standardCLIHTTPProtocol, error) {
 		return standardCLIHTTPProtocol{}, fmt.Errorf("build standard CLI HTTP protocol: %w", err)
 	}
 	return standardCLIHTTPProtocol{Protocol: protocol, timeout: standardCLIHTTPTimeout}, nil
+}
+
+// provideModelsPullCLIHTTPProtocol gives the synchronous managed-model pull
+// its own request lifetime. The HTTP client has no fixed timeout; the request
+// context still carries explicit caller cancellation, while the Models asset
+// service retains its bounded dependency timeout and retry policy.
+func provideModelsPullCLIHTTPProtocol() (modelsPullCLIHTTPProtocol, error) {
+	protocol, err := clihttp.NewProtocol(&http.Client{}, platformclock.Real{})
+	if err != nil {
+		return modelsPullCLIHTTPProtocol{}, fmt.Errorf("build Models pull CLI HTTP protocol: %w", err)
+	}
+	return modelsPullCLIHTTPProtocol{Protocol: protocol}, nil
 }
 
 func provideCostsCLI() costscli.Operation {
@@ -458,11 +474,14 @@ func provideLocalSessionsCLIService(
 }
 func provideModelsCLIService(
 	transport standardCLIHTTPProtocol,
+	pullTransport modelsPullCLIHTTPProtocol,
 	invocation modelscli.InvocationOperation,
 	composition modelscli.CompositionScopeProvider,
 	outputFileSystem modelscli.OutputFileSystem,
 ) modelscli.Service {
-	return modelscli.NewWithOutputFileSystem(transport.Protocol, invocation, outputFileSystem, composition)
+	return modelscli.NewWithOutputFileSystemAndPullProtocol(
+		transport.Protocol, pullTransport.Protocol, invocation, outputFileSystem, composition,
+	)
 }
 
 func provideModelsCLIOutputFileSystem(edges serviceedges.Edges) modelscli.OutputFileSystem {

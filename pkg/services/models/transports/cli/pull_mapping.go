@@ -41,6 +41,9 @@ func managedRuntimePullResultToGenerated(result models.PullResult, files []facto
 		copied := append([]factoryapi.ModelPullDownloadedFile(nil), files...)
 		pull.DownloadedFiles = &copied
 	}
+	if diagnostics := managedRuntimePullSourceDiagnostics(result); diagnostics != nil {
+		pull.SourceDiagnostics = diagnostics
+	}
 	return pull
 }
 
@@ -63,4 +66,24 @@ func managedRuntimePullReadiness(result models.PullResult) factoryapi.ManagedRun
 		return factoryapi.ManagedRuntimeReadinessState(readiness)
 	}
 	return factoryapi.ManagedRuntimeReadinessStateREADY
+}
+
+func managedRuntimePullSourceDiagnostics(result models.PullResult) *factoryapi.ManagedRuntimeSourceDiagnostics {
+	sourceKind := strings.TrimSpace(result.SourceKind)
+	sourceID := strings.TrimSpace(result.SourceID)
+	resolverNotes := strings.TrimSpace(result.ResolverNotes)
+	if sourceKind == "" && sourceID == "" && resolverNotes == "" {
+		return nil
+	}
+	diagnostics := factoryapi.ManagedRuntimeSourceDiagnostics{}
+	if sourceKind != "" {
+		diagnostics.SourceKind = &sourceKind
+	}
+	if sourceID != "" {
+		diagnostics.SourceId = &sourceID
+	}
+	if resolverNotes != "" {
+		diagnostics.ResolverNotes = &resolverNotes
+	}
+	return &diagnostics
 }

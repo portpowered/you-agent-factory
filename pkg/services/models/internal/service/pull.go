@@ -54,6 +54,12 @@ func (s *Service) PullModel(ctx context.Context, modelName string) (models.PullR
 		return models.PullResult{}, err
 	}
 	started := s.now()
+	if logger := s.logger(); logger != nil {
+		logger.Info(
+			"managed runtime pull started",
+			zap.String("model_name", strings.TrimSpace(modelName)),
+		)
+	}
 	host := s.modelHost()
 	if host == nil {
 		puller := s.modelAssetPuller()
@@ -164,12 +170,24 @@ func (s *Service) recordManagedRuntimePull(modelName string, result models.PullR
 	s.recordModelPullMetric(modelPullMetricAttempts, labels)
 	if err != nil {
 		pullOutcome, readiness := localmodels.ClassifyPullFailure(err)
+		if strings.TrimSpace(result.ManagedPullOutcome) != "" {
+			pullOutcome = strings.TrimSpace(result.ManagedPullOutcome)
+		}
+		if strings.TrimSpace(result.ReadinessState) != "" {
+			readiness = strings.TrimSpace(result.ReadinessState)
+		}
+		lifecycle := strings.TrimSpace(result.LifecycleState)
+		if lifecycle == "" {
+			lifecycle = string(managedruntime.LifecycleStateNotInstalled)
+		}
 		failureLabels := mergeMetricLabels(labels, map[string]string{
 			"pull_outcome":    pullOutcome,
 			"readiness_state": readiness,
+			"lifecycle_state": lifecycle,
 		})
 		s.recordModelPullMetric(modelPullMetricFailure, failureLabels)
-		if errors.Is(err, models.ErrSourceFetchFailed) || pullOutcome == "SOURCE_FETCH_FAILED" {
+		if !errors.Is(err, context.Canceled) &&
+			(errors.Is(err, models.ErrSourceFetchFailed) || pullOutcome == "SOURCE_FETCH_FAILED") {
 			s.recordModelPullMetric(modelPullMetricSourceFailure, failureLabels)
 		}
 		if logger := s.logger(); logger != nil {
@@ -178,6 +196,10 @@ func (s *Service) recordManagedRuntimePull(modelName string, result models.PullR
 				zap.String("model_name", modelName),
 				zap.String("pull_outcome", pullOutcome),
 				zap.String("readiness_state", readiness),
+				zap.String("lifecycle_state", lifecycle),
+				zap.String("failure_reason", managedRuntimePullFailureReason(err)),
+				zap.String("source_kind", strings.TrimSpace(result.SourceKind)),
+				zap.String("source_id", strings.TrimSpace(result.SourceID)),
 				zap.Duration("duration", elapsed),
 				zap.Error(err),
 			)
@@ -202,6 +224,27 @@ func (s *Service) recordManagedRuntimePull(modelName string, result models.PullR
 			zap.String("source_id", result.SourceID),
 			zap.Duration("duration", elapsed),
 		)
+	}
+}
+
+func managedRuntimePullFailureReason(err error) string {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return "caller_canceled"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timed_out"
+	case errors.Is(err, models.ErrAssetIntegrityFailed):
+		return "integrity_failed"
+	case errors.Is(err, models.ErrAssetPreparationInterrupted):
+		return "asset_preparation_interrupted"
+	case errors.Is(err, models.ErrAssetSourceMissing):
+		return "source_missing"
+	case errors.Is(err, models.ErrAssetSourceUnsupported):
+		return "source_unsupported"
+	case errors.Is(err, models.ErrSourceFetchFailed):
+		return "source_fetch_failed"
+	default:
+		return "pull_failed"
 	}
 }
 

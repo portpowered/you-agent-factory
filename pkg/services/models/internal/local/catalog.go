@@ -661,36 +661,72 @@ func PullModelWithOptions(
 	if resource := modelScopedResource(runtimeCfg, modelName); resource != nil && opts.SourceResolver != nil {
 		resolution = opts.SourceResolver.Resolve(modelName, resource)
 	}
-
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return models.PullResult{}, err
+		}
+	}
 	result, err := puller.PullModel(ctx, runtimeCfg, modelName)
 	if err != nil {
 		switch {
 		case errors.Is(err, managedruntime.ErrNotFound), errors.Is(err, models.ErrPullUnsupported):
 			return models.PullResult{}, err
 		default:
-			pullOutcome, readiness := ClassifyPullFailure(err)
-			failureResult := models.PullResult{
-				ModelName:          strings.TrimSpace(entry.Summary.Name),
-				ProviderLocality:   string(entry.Summary.ProviderLocality),
-				ManagedPullOutcome: pullOutcome,
-				ReadinessState:     readiness,
-				LifecycleState:     managedLifecycleNotInstalled,
-				SourceKind:         strings.TrimSpace(resolution.SourceKind),
-				SourceID:           strings.TrimSpace(resolution.SourceID),
-				ResolverNotes:      strings.TrimSpace(resolution.ResolverNotes),
-			}
-			return failureResult, &models.PullError{Result: failureResult, Cause: err}
+			return classifiedPullFailure(
+				entry.Summary.Name, entry.Summary.ProviderLocality, resolution, result, err,
+			)
+		}
+	}
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return classifiedPullFailure(
+				entry.Summary.Name, entry.Summary.ProviderLocality, resolution, result, err,
+			)
 		}
 	}
 
 	inspection := RuntimeCacheInspection{}
 	if opts.RuntimeCacheInspector != nil {
 		inspected, inspectErr := opts.RuntimeCacheInspector.InspectRuntimeCache(ctx, runtimeCfg, modelName)
-		if inspectErr == nil {
-			inspection = inspected
+		if inspectErr != nil {
+			return classifiedPullFailure(
+				entry.Summary.Name, entry.Summary.ProviderLocality, resolution, result, inspectErr,
+			)
+		}
+		inspection = inspected
+		if ctx != nil {
+			if err := ctx.Err(); err != nil {
+				return classifiedPullFailure(
+					entry.Summary.Name, entry.Summary.ProviderLocality, resolution, result, err,
+				)
+			}
 		}
 	}
 	return EnrichPullResult(result, inspection, resolution), nil
+}
+
+func classifiedPullFailure(
+	modelName string,
+	providerLocality managedruntime.Locality,
+	resolution ManagedRuntimeSourceResolution,
+	base models.PullResult,
+	cause error,
+) (models.PullResult, error) {
+	pullOutcome, readiness := ClassifyPullFailure(cause)
+	result := base
+	if strings.TrimSpace(result.ModelName) == "" {
+		result.ModelName = strings.TrimSpace(modelName)
+	}
+	if strings.TrimSpace(result.ProviderLocality) == "" {
+		result.ProviderLocality = string(providerLocality)
+	}
+	result.ManagedPullOutcome = pullOutcome
+	result.ReadinessState = readiness
+	result.LifecycleState = managedLifecycleNotInstalled
+	result.SourceKind = strings.TrimSpace(resolution.SourceKind)
+	result.SourceID = strings.TrimSpace(resolution.SourceID)
+	result.ResolverNotes = strings.TrimSpace(resolution.ResolverNotes)
+	return result, &models.PullError{Result: result, Cause: cause}
 }
 
 func modelScopedResource(factoryCfg *models.RuntimeConfig, modelName string) *models.RuntimeResource {

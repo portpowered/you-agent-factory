@@ -13,9 +13,17 @@ import (
 
 type stubRuntimeCacheInspector struct {
 	byModel map[string]RuntimeCacheInspection
+	err     error
+	cancel  context.CancelFunc
 }
 
 func (s stubRuntimeCacheInspector) InspectRuntimeCache(_ context.Context, _ *modelRuntimeConfig, modelName string) (RuntimeCacheInspection, error) {
+	if s.cancel != nil {
+		s.cancel()
+	}
+	if s.err != nil {
+		return RuntimeCacheInspection{}, s.err
+	}
 	if s.byModel == nil {
 		return RuntimeCacheInspection{}, nil
 	}
