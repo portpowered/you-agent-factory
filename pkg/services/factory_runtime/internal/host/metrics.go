@@ -338,8 +338,6 @@ type synchronizedMetricsEmitter struct {
 }
 
 func (emitter synchronizedMetricsEmitter) emit(
-	kind string,
-	name string,
 	emit func(metrics.MetricsEmitter) error,
 ) error {
 	if emitter.bundle == nil {
@@ -347,17 +345,17 @@ func (emitter synchronizedMetricsEmitter) emit(
 	}
 	emitter.bundle.metricsMu.Lock()
 	defer emitter.bundle.metricsMu.Unlock()
-	err := emit(emitter.bundle.rawMetricsEmitter())
-	if err != nil {
-		emitter.bundle.reportMetricFailure(kind, name, err)
+	if emitter.bundle.metricsClosed {
+		return nil
 	}
+	err := emit(emitter.bundle.rawMetricsEmitter())
 	return err
 }
 
 func (emitter synchronizedMetricsEmitter) Counter(
 	ctx context.Context, name string, value float64, fields metrics.Fields,
 ) error {
-	return emitter.emit("counter", name, func(sink metrics.MetricsEmitter) error {
+	return emitter.emit(func(sink metrics.MetricsEmitter) error {
 		return sink.Counter(ctx, name, value, fields)
 	})
 }
@@ -365,7 +363,7 @@ func (emitter synchronizedMetricsEmitter) Counter(
 func (emitter synchronizedMetricsEmitter) Gauge(
 	ctx context.Context, name string, value float64, fields metrics.Fields,
 ) error {
-	return emitter.emit("gauge", name, func(sink metrics.MetricsEmitter) error {
+	return emitter.emit(func(sink metrics.MetricsEmitter) error {
 		return sink.Gauge(ctx, name, value, fields)
 	})
 }
@@ -373,7 +371,7 @@ func (emitter synchronizedMetricsEmitter) Gauge(
 func (emitter synchronizedMetricsEmitter) Sample(
 	ctx context.Context, name string, value float64, unit string, fields metrics.Fields,
 ) error {
-	return emitter.emit("sample", name, func(sink metrics.MetricsEmitter) error {
+	return emitter.emit(func(sink metrics.MetricsEmitter) error {
 		return sink.Sample(ctx, name, value, unit, fields)
 	})
 }
@@ -402,21 +400,27 @@ func (r *Bundle) emitMetricCounter(name string, value float64, fields metrics.Fi
 	if r == nil {
 		return
 	}
-	_ = r.metricsEmitter().Counter(context.Background(), name, value, fields)
+	if err := r.metricsEmitter().Counter(context.Background(), name, value, fields); err != nil {
+		r.RuntimeLogger().Warn("runtime metrics counter emission failed", zap.String("metric_name", name), zap.Error(err))
+	}
 }
 
 func (r *Bundle) emitMetricGauge(name string, value float64, fields metrics.Fields) {
 	if r == nil {
 		return
 	}
-	_ = r.metricsEmitter().Gauge(context.Background(), name, value, fields)
+	if err := r.metricsEmitter().Gauge(context.Background(), name, value, fields); err != nil {
+		r.RuntimeLogger().Warn("runtime metrics gauge emission failed", zap.String("metric_name", name), zap.Error(err))
+	}
 }
 
 func (r *Bundle) emitMetricSample(name string, value float64, unit string, fields metrics.Fields) {
 	if r == nil {
 		return
 	}
-	_ = r.metricsEmitter().Sample(context.Background(), name, value, unit, fields)
+	if err := r.metricsEmitter().Sample(context.Background(), name, value, unit, fields); err != nil {
+		r.RuntimeLogger().Warn("runtime metrics sample emission failed", zap.String("metric_name", name), zap.Error(err))
+	}
 }
 
 func (r *Bundle) reportMetricFailure(kind, name string, err error) {
@@ -521,6 +525,9 @@ func (r *Bundle) emitRuntimeMemoryStats(stats runtimeMemoryStats) error {
 	}
 	r.metricsMu.Lock()
 	defer r.metricsMu.Unlock()
+	if r.metricsClosed {
+		return nil
+	}
 
 	fields := metrics.Fields{}
 	var errs []error

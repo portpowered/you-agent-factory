@@ -252,6 +252,7 @@ func (bundle *Bundle) closeMetricsSink() error {
 	}
 	bundle.metricsMu.Lock()
 	defer bundle.metricsMu.Unlock()
+	bundle.metricsClosed = true
 	return errors.Join(bundle.metricsError(), bundle.MetricsSink.Close())
 }
 

@@ -49,6 +49,7 @@ type Bundle struct {
 	dispatchMetricFields sync.Map
 	dispatchCompleted    func(string)
 	metricsMu            sync.Mutex
+	metricsClosed        bool
 	metricsErrMu         sync.Mutex
 	metricsErr           error
 }

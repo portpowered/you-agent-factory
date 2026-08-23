@@ -112,6 +112,42 @@ func TestFinalizeArtifactsWaitsForCompleteMemorySnapshot(t *testing.T) {
 	}
 }
 
+func TestLateMetricEmissionDoesNotReachClosedSink(t *testing.T) {
+	sink := &lateMetricEmissionSink{
+		closeStarted: make(chan struct{}),
+		releaseClose: make(chan struct{}),
+	}
+	bundle := &Bundle{MetricsSink: sink}
+
+	finalizeDone := make(chan error, 1)
+	go func() { finalizeDone <- FinalizeArtifacts(bundle, clockwork.NewFakeClock()) }()
+	<-sink.closeStarted
+
+	emissionDone := make(chan error, 1)
+	go func() {
+		emissionDone <- bundle.MetricsEmitter().Counter(
+			context.Background(), "late.metric", 1, factoryruntime.Fields{},
+		)
+	}()
+	close(sink.releaseClose)
+
+	if err := <-emissionDone; err != nil {
+		t.Fatalf("late metric emission: %v", err)
+	}
+	if err := <-finalizeDone; err != nil {
+		t.Fatalf("FinalizeArtifacts: %v", err)
+	}
+
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	if sink.counterCalls != 0 {
+		t.Fatalf("late metric counter calls = %d, want 0", sink.counterCalls)
+	}
+	if !sink.closed {
+		t.Fatal("metrics sink was not closed")
+	}
+}
+
 type runtimeMemoryTestSink struct {
 	mu           sync.Mutex
 	samples      []string
@@ -249,3 +285,45 @@ func (*runtimeMemorySnapshotBarrierSink) Artifact() factoryruntime.RuntimeMetric
 }
 
 var _ factoryruntime.RuntimeMetricsSink = (*runtimeMemorySnapshotBarrierSink)(nil)
+
+type lateMetricEmissionSink struct {
+	mu           sync.Mutex
+	closed       bool
+	counterCalls int
+	closeStarted chan struct{}
+	releaseClose chan struct{}
+}
+
+func (sink *lateMetricEmissionSink) Counter(context.Context, string, float64, factoryruntime.Fields) error {
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	sink.counterCalls++
+	if sink.closed {
+		return errors.New("late metric reached closed sink")
+	}
+	return nil
+}
+
+func (*lateMetricEmissionSink) Gauge(context.Context, string, float64, factoryruntime.Fields) error {
+	return nil
+}
+
+func (*lateMetricEmissionSink) Sample(context.Context, string, float64, string, factoryruntime.Fields) error {
+	return nil
+}
+
+func (sink *lateMetricEmissionSink) Close() error {
+	close(sink.closeStarted)
+	<-sink.releaseClose
+	sink.mu.Lock()
+	sink.closed = true
+	sink.mu.Unlock()
+	return nil
+}
+
+func (*lateMetricEmissionSink) Path() string { return "memory://late-metrics" }
+func (*lateMetricEmissionSink) Artifact() factoryruntime.RuntimeMetricsArtifact {
+	return factoryruntime.RuntimeMetricsArtifact{Path: "memory://late-metrics"}
+}
+
+var _ factoryruntime.RuntimeMetricsSink = (*lateMetricEmissionSink)(nil)
