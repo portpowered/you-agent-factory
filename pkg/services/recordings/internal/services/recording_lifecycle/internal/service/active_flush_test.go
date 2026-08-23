@@ -203,6 +203,143 @@ func TestFlushRecordingWaitsForDurableWriterCompletion(t *testing.T) {
 	}
 }
 
+func TestCompletedFlushWatermarkAdvancesOnlyAfterSuccessfulWriterCompletion(t *testing.T) {
+	t.Parallel()
+
+	writeStarted := make(chan struct{})
+	releaseWrite := make(chan struct{})
+	writeErr := errors.New("storage unavailable")
+	var writes atomic.Int32
+	root := newActiveFlushRoot(
+		func(string, recordings.RecordingSnapshot) error {
+			switch writes.Add(1) {
+			case 1:
+				close(writeStarted)
+				<-releaseWrite
+			case 2:
+				return writeErr
+			}
+			return nil
+		},
+		func(time.Duration) recordings.RecordingFlushTicker {
+			return manualTickerHandle(newManualFlushTicker())
+		},
+	)
+	recordingID := startActiveRecording(t, root, "recording-watermark", time.Second)
+	t.Cleanup(func() { stopRecording(t, root, recordingID) })
+	first := activeFlushEvent(1)
+	recordEvent(t, root, recordingID, first)
+
+	flushed := make(chan error, 1)
+	go func() {
+		_, err := root.FlushRecording(recordings.FlushRecordingRequest{
+			RecordingID: recordingID,
+		})
+		flushed <- err
+	}()
+	<-writeStarted
+	assertCompletedFlushWatermark(t, root, recordings.CanonicalEventCursor{}, false)
+
+	// The injected writer represents the complete persistence boundary,
+	// including fsync. The watermark must remain unchanged while that boundary
+	// is incomplete.
+	close(releaseWrite)
+	if err := <-flushed; err != nil {
+		t.Fatalf("first FlushRecording: %v", err)
+	}
+	assertCompletedFlushWatermark(t, root, first.Cursor, true)
+
+	second := activeFlushEvent(2)
+	recordEvent(t, root, recordingID, second)
+	if _, err := root.FlushRecording(recordings.FlushRecordingRequest{
+		RecordingID: recordingID,
+	}); !errors.Is(err, writeErr) {
+		t.Fatalf("failed second FlushRecording error = %v, want storage error", err)
+	}
+	assertCompletedFlushWatermark(t, root, first.Cursor, true)
+
+	if _, err := root.FlushRecording(recordings.FlushRecordingRequest{
+		RecordingID: recordingID,
+	}); err != nil {
+		t.Fatalf("retried second FlushRecording: %v", err)
+	}
+	assertCompletedFlushWatermark(t, root, second.Cursor, true)
+}
+
+func TestCompletedFlushWatermarkDoesNotTreatMissingWriterAsDurable(t *testing.T) {
+	t.Parallel()
+
+	root := newActiveFlushRoot(nil, nil)
+	recordingID := startActiveRecording(t, root, "recording-watermark-no-writer", 0)
+	t.Cleanup(func() { stopRecording(t, root, recordingID) })
+	event := activeFlushEvent(1)
+	recordEvent(t, root, recordingID, event)
+	if _, err := root.FlushRecording(recordings.FlushRecordingRequest{
+		RecordingID: recordingID,
+	}); err != nil {
+		t.Fatalf("FlushRecording without writer: %v", err)
+	}
+	assertCompletedFlushWatermark(t, root, recordings.CanonicalEventCursor{}, false)
+}
+
+func TestCompletedFlushWatermarkIsMonotonicAcrossConcurrentRecordings(t *testing.T) {
+	t.Parallel()
+
+	firstWriteStarted := make(chan struct{})
+	releaseFirstWrite := make(chan struct{})
+	var writes atomic.Int32
+	root := newActiveFlushRoot(
+		func(string, recordings.RecordingSnapshot) error {
+			switch writes.Add(1) {
+			case 1:
+				close(firstWriteStarted)
+				<-releaseFirstWrite
+			}
+			return nil
+		},
+		func(time.Duration) recordings.RecordingFlushTicker {
+			return manualTickerHandle(newManualFlushTicker())
+		},
+	)
+	firstRecording := startActiveRecording(t, root, "recording-watermark-first", time.Second)
+	secondRecording := startActiveRecording(t, root, "recording-watermark-second", time.Second)
+	t.Cleanup(func() {
+		stopRecording(t, root, firstRecording)
+		stopRecording(t, root, secondRecording)
+	})
+	first := activeFlushEvent(1)
+	second := activeFlushEvent(2)
+	recordEvent(t, root, firstRecording, first)
+	recordEvent(t, root, secondRecording, second)
+
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := root.FlushRecording(recordings.FlushRecordingRequest{
+			RecordingID: firstRecording,
+		})
+		firstDone <- err
+	}()
+	<-firstWriteStarted
+
+	secondDone := make(chan error, 1)
+	go func() {
+		_, err := root.FlushRecording(recordings.FlushRecordingRequest{
+			RecordingID: secondRecording,
+		})
+		secondDone <- err
+	}()
+	if err := <-secondDone; err != nil {
+		t.Fatalf("second FlushRecording: %v", err)
+	}
+	assertCompletedFlushWatermark(t, root, second.Cursor, true)
+
+	close(releaseFirstWrite)
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first FlushRecording: %v", err)
+	}
+	assertCompletedFlushWatermark(t, root, second.Cursor, true)
+}
+
 func TestStopRecordingJoinsPeriodicWriteAndPreventsLaterWrites(t *testing.T) {
 	t.Parallel()
 
@@ -379,6 +516,26 @@ func recordingStatus(
 		t.Fatalf("QueryRecordingStatus: %v", err)
 	}
 	return result.Status
+}
+
+func assertCompletedFlushWatermark(
+	t *testing.T,
+	root recordings.Service,
+	want recordings.CanonicalEventCursor,
+	wantAvailable bool,
+) {
+	t.Helper()
+	reader, ok := root.(recordings.CompletedFlushWatermarkReader)
+	if !ok {
+		t.Fatal("Recordings root does not expose CompletedFlushWatermark")
+	}
+	got, available := reader.CompletedFlushWatermark("generation-active")
+	if available != wantAvailable {
+		t.Fatalf("CompletedFlushWatermark availability = %t, want %t", available, wantAvailable)
+	}
+	if available && got != want {
+		t.Fatalf("CompletedFlushWatermark = %#v, want %#v", got, want)
+	}
 }
 
 func waitFor(t *testing.T, ready func() bool) {

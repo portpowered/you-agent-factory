@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -125,9 +126,30 @@ func (service *Service) flush(
 	if session.flushedVersion < version {
 		session.flushedVersion = version
 		session.flushedThrough = through
+		if service.writer != nil {
+			service.advanceDurableThroughLocked(through)
+		}
 	}
 	service.mu.Unlock()
 	return nil
+}
+
+func (service *Service) advanceDurableThroughLocked(
+	through *recordings.CanonicalEventCursor,
+) {
+	if through == nil || strings.TrimSpace(through.StreamGenerationID) == "" || through.Sequence < 0 {
+		return
+	}
+	if service.durableThrough == nil {
+		service.durableThrough = make(map[string]recordings.CanonicalEventCursor)
+	}
+	generationID := strings.TrimSpace(through.StreamGenerationID)
+	current, exists := service.durableThrough[generationID]
+	if !exists || through.Sequence > current.Sequence {
+		cursor := *through
+		cursor.StreamGenerationID = generationID
+		service.durableThrough[generationID] = cursor
+	}
 }
 
 func flushFailureCode(kind flushKind, err error) string {

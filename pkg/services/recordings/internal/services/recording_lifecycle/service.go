@@ -27,3 +27,10 @@ type Service interface {
 	QueryRecordingStatus(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error)
 	Snapshot(recordings.RecordingID) (Snapshot, error)
 }
+
+// CompletedFlushWatermarkReader is the optional lifecycle-owner seam used by
+// the Recordings root to publish completed durable positions without widening
+// the private lifecycle contract used by existing callers and fakes.
+type CompletedFlushWatermarkReader interface {
+	CompletedFlushWatermark(streamGenerationID string) (recordings.CanonicalEventCursor, bool)
+}

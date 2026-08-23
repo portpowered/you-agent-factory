@@ -57,6 +57,23 @@ type combinedService struct {
 }
 
 var _ recordings.Service = (*combinedService)(nil)
+var _ recordings.CompletedFlushWatermarkReader = (*combinedService)(nil)
+
+// CompletedFlushWatermark publishes the lifecycle owner's completed durable
+// position through the Recordings root without exposing that owner or its
+// mutable state to peers.
+func (service *combinedService) CompletedFlushWatermark(
+	streamGenerationID string,
+) (recordings.CanonicalEventCursor, bool) {
+	if service == nil || service.Service == nil {
+		return recordings.CanonicalEventCursor{}, false
+	}
+	reader, ok := service.Service.(recordinglifecycle.CompletedFlushWatermarkReader)
+	if !ok {
+		return recordings.CanonicalEventCursor{}, false
+	}
+	return reader.CompletedFlushWatermark(streamGenerationID)
+}
 
 func (service *combinedService) Append(
 	request recordings.AppendRecordedEventRequest,

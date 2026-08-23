@@ -1317,7 +1317,10 @@ type RecordingSnapshot struct {
 }
 
 // RecordingSnapshotWriter persists one consistent lifecycle snapshot at the
-// Recordings-private service target.
+// Recordings-private service target. A nil error is the completed durability
+// boundary: implementations must return only after the snapshot's write and
+// fsync have succeeded. The completed-flush watermark is advanced after this
+// function returns nil.
 type RecordingSnapshotWriter func(string, RecordingSnapshot) error
 
 // RecordingFlushTicker is the exact scheduling handle owned by one active
