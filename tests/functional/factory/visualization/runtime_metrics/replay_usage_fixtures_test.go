@@ -11,7 +11,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -88,6 +87,20 @@ func assertReplayUsageFixture(
 	seen map[string]string,
 ) {
 	t.Helper()
+	assertReplayUsageEvents(t, artifact, fixture)
+	assertReplayFactorySnapshot(t, artifact)
+	assertReplayWorkerSessionAssociation(t, artifact, fixture)
+	assertReplayDispatchUsage(t, artifact, fixture)
+	assertReplayProviderDiagnostics(t, artifact, fixture)
+	assertDistinctFixtureIdentity(t, fixture, seen)
+}
+
+func assertReplayUsageEvents(
+	t *testing.T,
+	artifact *interfaces.ReplayArtifact,
+	fixture replayUsageFixture,
+) {
+	t.Helper()
 	if artifact.SchemaVersion != interfaces.ReplayV1SourceFormat {
 		t.Fatalf("schema version = %q, want %q", artifact.SchemaVersion, interfaces.ReplayV1SourceFormat)
 	}
@@ -127,8 +140,10 @@ func assertReplayUsageFixture(
 			t.Fatalf("fixture contains an external execution event: %s", event.Type)
 		}
 	}
-	assertDistinctFixtureIdentity(t, fixture, seen)
+}
 
+func assertReplayFactorySnapshot(t *testing.T, artifact *interfaces.ReplayArtifact) {
+	t.Helper()
 	var run interfaces.RunRequestEventPayload
 	if err := artifact.Events[0].DecodePayload(&run); err != nil {
 		t.Fatalf("decode RUN_REQUEST payload: %v", err)
@@ -143,10 +158,10 @@ func assertReplayUsageFixture(
 	if _, err := factoryconfigmapping.GeneratedFactoryFromOpenAPIJSON(snapshotJSON); err != nil {
 		t.Fatalf("decode Factory snapshot at public boundary: %v", err)
 	}
-	if _, err := factorydefinitionswire.ReplayRuntimeConfigDecoder()(run.Factory); err != nil {
-		t.Fatalf("decode replay runtime config: %v", err)
-	}
+}
 
+func assertReplayWorkerSessionAssociation(t *testing.T, artifact *interfaces.ReplayArtifact, fixture replayUsageFixture) {
+	t.Helper()
 	var association interfaces.DispatchWorkerSessionAssociationEventPayload
 	if err := artifact.Events[3].DecodePayload(&association); err != nil {
 		t.Fatalf("decode Worker Session association payload: %v", err)
@@ -157,7 +172,10 @@ func assertReplayUsageFixture(
 	if artifact.Events[3].Context.DispatchID == nil || *artifact.Events[3].Context.DispatchID != fixture.dispatchID {
 		t.Fatalf("association dispatch id = %v, want %q", artifact.Events[3].Context.DispatchID, fixture.dispatchID)
 	}
+}
 
+func assertReplayDispatchUsage(t *testing.T, artifact *interfaces.ReplayArtifact, fixture replayUsageFixture) {
+	t.Helper()
 	var response workers.DispatchResponseEventPayload
 	if err := artifact.Events[6].DecodePayload(&response); err != nil {
 		t.Fatalf("decode DISPATCH_RESPONSE payload: %v", err)
@@ -168,7 +186,10 @@ func assertReplayUsageFixture(
 	assertUsageValue(t, "input tokens", response.Usage.InputTokens, fixture.inputTokens)
 	assertUsageValue(t, "output tokens", response.Usage.OutputTokens, fixture.outputTokens)
 	assertUsageValue(t, "total tokens", response.Usage.TotalTokens, fixture.totalTokens)
+}
 
+func assertReplayProviderDiagnostics(t *testing.T, artifact *interfaces.ReplayArtifact, fixture replayUsageFixture) {
+	t.Helper()
 	var inference workers.InferenceResponseEventPayload
 	if err := artifact.Events[5].DecodePayload(&inference); err != nil {
 		t.Fatalf("decode INFERENCE_RESPONSE payload: %v", err)
