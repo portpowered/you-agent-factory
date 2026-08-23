@@ -69,6 +69,153 @@ func completedForLabel(records []factory.JavaScriptRuntimeRecord, label string) 
 	return false
 }
 
+func TestRun_PipelineLegacyOneAndTwoStageShapesRemainCompatible(t *testing.T) {
+	source := `return (async function () {
+  let callbackCalls = 0;
+  const oneStage = await pipeline(
+    ["alpha", "beta"],
+    async function (item, index, unexpected) {
+      callbackCalls = callbackCalls + 1;
+      return {
+        stage: "one",
+        item: item,
+        index: index,
+        noUnexpectedArgument: unexpected === undefined,
+      };
+    }
+  );
+  const twoStage = await pipeline(
+    ["gamma", "delta"],
+    function (item, index, unexpected) {
+      callbackCalls = callbackCalls + 1;
+      return {
+        stage: "one",
+        item: item,
+        index: index,
+        noUnexpectedArgument: unexpected === undefined,
+      };
+    },
+    async function (previous, item, index, unexpected) {
+      callbackCalls = callbackCalls + 1;
+      return {
+        stage: "two",
+        previousStage: previous.stage,
+        previousItem: previous.item,
+        item: item,
+        index: index,
+        noUnexpectedArgument: unexpected === undefined,
+      };
+    }
+  );
+  const explicitUndefinedNext = await pipeline(
+    ["legacy"],
+    function (item, index, unexpected) {
+      callbackCalls = callbackCalls + 1;
+      return {
+        stage: "one",
+        item: item,
+        index: index,
+        noUnexpectedArgument: unexpected === undefined,
+      };
+    },
+    undefined
+  );
+  const empty = await pipeline([], function () {
+    callbackCalls = callbackCalls + 1;
+    return { shouldNotRun: true };
+  });
+  return {
+    callbackCalls: callbackCalls,
+    oneStage: oneStage,
+    twoStage: twoStage,
+    explicitUndefinedNext: explicitUndefinedNext,
+    empty: empty,
+  };
+})();`
+	outcome := runInlineWorkflow(t, "pipeline-legacy-shapes", source)
+	projected := projectPrimaryJSON(t, "session-pipeline-legacy-shapes", outcome.Value)
+
+	if projected["callbackCalls"] != float64(7) {
+		t.Fatalf("callbackCalls = %#v, want 7 callbacks across one-/two-stage calls and explicit undefined next", projected["callbackCalls"])
+	}
+	assertLegacyOneStageResults(t, projected["oneStage"], []string{"alpha", "beta"})
+	assertLegacyTwoStageResults(t, projected["twoStage"], []string{"gamma", "delta"})
+	assertLegacyOneStageResults(t, projected["explicitUndefinedNext"], []string{"legacy"})
+	empty, ok := projected["empty"].([]any)
+	if !ok || len(empty) != 0 {
+		t.Fatalf("empty pipeline result = %#v, want empty ordered result", projected["empty"])
+	}
+	if hasChildDispatchStatus(outcome.Records, factory.JavaScriptChildDispatchStatusQueued) {
+		t.Fatalf("records = %#v, pure compatibility callbacks should not create child dispatches", outcome.Records)
+	}
+}
+
+func assertLegacyOneStageResults(t *testing.T, raw any, wantItems []string) {
+	t.Helper()
+	results, ok := raw.([]any)
+	if !ok || len(results) != len(wantItems) {
+		t.Fatalf("one-stage results = %#v, want %d ordered items", raw, len(wantItems))
+	}
+	for index, wantItem := range wantItems {
+		itemResult, ok := results[index].(map[string]any)
+		if !ok || itemResult["index"] != float64(index) || itemResult["item"] != wantItem || itemResult["status"] != factory.JavaScriptChildDispatchStatusCompleted {
+			t.Fatalf("one-stage results[%d] = %#v, want ordered completed item %q", index, results[index], wantItem)
+		}
+		stages, ok := itemResult["stages"].([]any)
+		if !ok || len(stages) != 1 {
+			t.Fatalf("one-stage results[%d].stages = %#v, want one stage", index, itemResult["stages"])
+		}
+		stage, ok := stages[0].(map[string]any)
+		if !ok || stage["index"] != float64(0) || stage["status"] != factory.JavaScriptChildDispatchStatusCompleted {
+			t.Fatalf("one-stage results[%d].stages[0] = %#v, want indexed completed stage", index, stages[0])
+		}
+		result, ok := stage["result"].(map[string]any)
+		if !ok || result["stage"] != "one" || result["item"] != wantItem || result["index"] != float64(index) || result["noUnexpectedArgument"] != true {
+			t.Fatalf("one-stage results[%d].stages[0].result = %#v, want legacy two-argument callback result", index, stage["result"])
+		}
+	}
+}
+
+func assertLegacyTwoStageResults(t *testing.T, raw any, wantItems []string) {
+	t.Helper()
+	results, ok := raw.([]any)
+	if !ok || len(results) != len(wantItems) {
+		t.Fatalf("two-stage results = %#v, want %d ordered items", raw, len(wantItems))
+	}
+	for index, wantItem := range wantItems {
+		itemResult, ok := results[index].(map[string]any)
+		if !ok || itemResult["index"] != float64(index) || itemResult["item"] != wantItem || itemResult["status"] != factory.JavaScriptChildDispatchStatusCompleted {
+			t.Fatalf("two-stage results[%d] = %#v, want ordered completed item %q", index, results[index], wantItem)
+		}
+		stages, ok := itemResult["stages"].([]any)
+		if !ok || len(stages) != 2 {
+			t.Fatalf("two-stage results[%d].stages = %#v, want two stages", index, itemResult["stages"])
+		}
+		for stageIndex, rawStage := range stages {
+			stage, ok := rawStage.(map[string]any)
+			if !ok || stage["index"] != float64(stageIndex) || stage["status"] != factory.JavaScriptChildDispatchStatusCompleted {
+				t.Fatalf("two-stage results[%d].stages[%d] = %#v, want indexed completed stage", index, stageIndex, rawStage)
+			}
+		}
+		firstResult, ok := stages[0].(map[string]any)
+		if !ok {
+			t.Fatalf("two-stage results[%d].stages[0] = %#v, want stage result", index, stages[0])
+		}
+		firstValue, ok := firstResult["result"].(map[string]any)
+		if !ok || firstValue["noUnexpectedArgument"] != true {
+			t.Fatalf("two-stage results[%d].stages[0].result = %#v, want two first-stage arguments", index, firstResult["result"])
+		}
+		secondResult, ok := stages[1].(map[string]any)
+		if !ok {
+			t.Fatalf("two-stage results[%d].stages[1] = %#v, want stage result", index, stages[1])
+		}
+		secondValue, ok := secondResult["result"].(map[string]any)
+		if !ok || secondValue["stage"] != "two" || secondValue["previousStage"] != "one" || secondValue["previousItem"] != wantItem || secondValue["item"] != wantItem || secondValue["index"] != float64(index) || secondValue["noUnexpectedArgument"] != true {
+			t.Fatalf("two-stage results[%d].stages[1].result = %#v, want prior result and legacy three-argument callback result", index, secondResult["result"])
+		}
+	}
+}
+
 func TestRun_PipelineThreeStages_PassesPreviousResultOriginalItemAndIndex(t *testing.T) {
 	source := `return (async function () {
   const results = await pipeline(
