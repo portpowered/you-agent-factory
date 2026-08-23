@@ -143,6 +143,9 @@ func commandFixture(t *testing.T) string {
 	writeCommandFixture(t, root, "contracts/manifest.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/manifest.schema.json","properties":{"packageId":{"$ref":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"}}}`)
 	for _, artifact := range contractstaging.RawArtifacts() {
 		contents := "canonical:" + artifact.Source
+		if artifact.Source == "contracts/javascript/runtime-api.json" {
+			contents = `{"sharedSchemas":{"javascript.schema.agent_run_spec":{"schema":{"type":"object","additionalProperties":false,"properties":{"prompt":{"type":"string"}},"required":["prompt"]}}}}`
+		}
 		if artifact.Source == "api/openapi.yaml" {
 			contents = "components:\n  schemas:\n    Factory:\n      type: object\n      properties:\n        child:\n          $ref: '#/components/schemas/Child'\n    Child:\n      type: string\n    FactoryEvent:\n      type: object\n      required: [schemaVersion, id, type, context, payload]\n      properties:\n        schemaVersion:\n          type: string\n        id:\n          type: string\n        type:\n          type: string\n          enum: [TEST]\n        context:\n          type: object\n        payload:\n          $ref: '#/components/schemas/Child'\n      discriminator:\n        propertyName: type\n        mapping:\n          TEST: '#/components/schemas/Child'\n    FactoryRecording:\n      type: object\n      required: [schemaVersion, sessionId, events]\n      properties:\n        schemaVersion:\n          type: string\n        sessionId:\n          type: string\n        events:\n          type: array\n          items:\n            $ref: '#/components/schemas/FactoryEvent'\n"
 		}
