@@ -4,7 +4,10 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  # Publishing creates an immutable tag and GitHub release. Keep that
+  # capability available at the workflow ceiling, then narrow every
+  # non-publishing job back to read-only below.
+  contents: write
 
 concurrency:
   group: localai-backend-artifacts-${{ github.ref }}
@@ -14,6 +17,8 @@ jobs:
   validate-inputs:
     name: Validate pinned backend inputs
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     outputs:
       matrix: ${{ steps.validate.outputs.matrix }}
       node_version: ${{ steps.validate.outputs.node_version }}
@@ -47,6 +52,8 @@ jobs:
     name: Build ${{ matrix.backend }} (${{ matrix.target }})
     needs: validate-inputs
     runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
     timeout-minutes: 180
     strategy:
       fail-fast: false
@@ -251,6 +258,8 @@ jobs:
       - build
     if: ${{ always() && needs.validate-inputs.result == 'success' && needs.build.result == 'success' }}
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     outputs:
       release_tag: ${{ steps.join.outputs.release_tag }}
       pin_fingerprint: ${{ steps.join.outputs.pin_fingerprint }}
