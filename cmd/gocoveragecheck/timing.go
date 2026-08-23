@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"slices"
 	"strings"
@@ -18,6 +19,8 @@ const (
 	timingOutcomeFail = "fail"
 	timingOutcomeSkip = "skip"
 )
+
+const functionalTimingReportHeader = "tests/ functional-package timing:"
 
 const (
 	functionalPackageStateCompleted  = "completed"
@@ -261,4 +264,72 @@ func writeFunctionalTimingSummaryJSON(path string, summary functionalTimingSumma
 		return fmt.Errorf("write go functional timing summary json: %w", err)
 	}
 	return nil
+}
+
+// renderFunctionalTimingReport renders the terminal package timing section
+// from the same summary that is written to the timing artifact. The input is
+// copied into a path-ordered, duplicate-free list so concurrent package
+// completion order never changes the human report.
+func renderFunctionalTimingReport(summary functionalTimingSummaryJSON) string {
+	packages := stableFunctionalPackageTimings(summary.Packages)
+	var report strings.Builder
+	report.WriteString(functionalTimingReportHeader)
+	report.WriteByte('\n')
+	for _, pkg := range packages {
+		fmt.Fprintf(
+			&report,
+			"  package=%s elapsed=%.3fs outcome=%s",
+			pkg.Package,
+			pkg.Seconds,
+			pkg.Outcome,
+		)
+		if pkg.Reason != "" {
+			fmt.Fprintf(&report, " reason=%s", strings.Join(strings.Fields(pkg.Reason), " "))
+		}
+		report.WriteByte('\n')
+	}
+	if len(packages) == 0 {
+		report.WriteString("  no functional-test package timings observed\n")
+	}
+	return report.String()
+}
+
+func writeFunctionalTimingReport(summary functionalTimingSummaryJSON) error {
+	_, err := io.WriteString(stdoutWriter, renderFunctionalTimingReport(summary))
+	return err
+}
+
+func stableFunctionalPackageTimings(packages []functionalPackageTimingJSON) []functionalPackageTimingJSON {
+	byPackage := make(map[string]functionalPackageTimingJSON, len(packages))
+	for _, pkg := range packages {
+		if strings.TrimSpace(pkg.Package) == "" {
+			continue
+		}
+		current, exists := byPackage[pkg.Package]
+		if !exists || compareFunctionalPackageTimings(pkg, current) < 0 {
+			byPackage[pkg.Package] = pkg
+		}
+	}
+	ordered := make([]functionalPackageTimingJSON, 0, len(byPackage))
+	for _, pkg := range byPackage {
+		ordered = append(ordered, pkg)
+	}
+	slices.SortFunc(ordered, compareFunctionalPackageTimings)
+	return ordered
+}
+
+func compareFunctionalPackageTimings(left, right functionalPackageTimingJSON) int {
+	if result := strings.Compare(left.Package, right.Package); result != 0 {
+		return result
+	}
+	if left.Seconds < right.Seconds {
+		return -1
+	}
+	if left.Seconds > right.Seconds {
+		return 1
+	}
+	if result := strings.Compare(left.Outcome, right.Outcome); result != 0 {
+		return result
+	}
+	return strings.Compare(left.Reason, right.Reason)
 }

@@ -122,7 +122,9 @@ test("extracts only the compact verdict contract without verbose diagnostics", (
 		rawLine,
 		"Functional suite inventory: discovered-packages=3 observed-packages=3 (pass=1 fail=0 skip=0) top-level-tests=1 (pass=1 fail=0 skip=0) deferred-short-tests=0 wall=1.000s complete=true",
 		"total: (statements) 70.0%",
-		"Functional package coverage verdict:",
+		"pkg/ functional coverage:",
+		"tests/ functional-package timing:",
+		"  package=github.com/portpowered/infinite-you/tests/functional/alpha elapsed=1.000s outcome=pass",
 		"  floor violation: package=github.com/portpowered/infinite-you/pkg/alpha floor=75.0000% actual=70.0000% delta=-5.0000 percentage-points covered=7/10 statements uncovered-blocks=3",
 		"    pkg/alpha/file.go:41 (2 statements)",
 		"  package=github.com/portpowered/infinite-you/pkg/alpha coverage=70.0% floor=75.0% delta=-5.0pp gate=fail lane=functional",
@@ -144,6 +146,8 @@ test("extracts only the compact verdict contract without verbose diagnostics", (
 	assert.equal(extracted.text.includes("make: ***"), false);
 	assert.doesNotMatch(extracted.text, /floor violation|package coverage regression|coverage manifest missing|coverage not evaluated|uncovered blocks|file\.go:/);
 	assert.match(extracted.text, /Functional suite inventory:/);
+	assert.match(extracted.text, /pkg\/ functional coverage:/);
+	assert.match(extracted.text, /tests\/ functional-package timing:/);
 	assert.match(extracted.text, /  tally:/);
 });
 

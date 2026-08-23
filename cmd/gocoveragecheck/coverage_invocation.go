@@ -444,7 +444,7 @@ func configureFunctionalTimingSnapshot(plan *coverageInvocationPlan, cfg config,
 
 func finalizeFunctionalTiming(cfg config, snapshotter *functionalTimingSnapshotter, stdout string, testPackages []string, wallSeconds float64, laneErr error, expectedFunctionalInventory *functionalTestInventory) error {
 	runtimeInventoryGate := expectedFunctionalInventory != nil
-	if strings.TrimSpace(cfg.timingOutput) == "" && !runtimeInventoryGate {
+	if strings.TrimSpace(cfg.timingOutput) == "" && !runtimeInventoryGate && cfg.suite != functionalCoverageSuite {
 		if snapshotter != nil {
 			snapshotter.stopAndWait()
 		}
@@ -472,8 +472,13 @@ func finalizeFunctionalTiming(cfg config, snapshotter *functionalTimingSnapshott
 	} else {
 		err = writeFunctionalTimingSummaryJSON(cfg.timingOutput, summary)
 	}
-	if err == nil && cfg.suite == "functional" {
+	if err == nil && cfg.suite == functionalCoverageSuite {
 		writeFunctionalTimingInventorySummary(summary, cfg.short)
+		if summary.Complete {
+			if reportErr := writeFunctionalTimingReport(summary); reportErr != nil {
+				err = errors.Join(err, reportErr)
+			}
+		}
 	}
 	return errors.Join(err, inventoryErr)
 }

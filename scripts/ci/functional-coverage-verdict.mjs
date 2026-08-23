@@ -31,6 +31,8 @@ function isCompactVerdictLine(line) {
 	return (
 		line.startsWith(inventoryPrefix) ||
 		line.startsWith("total: (statements)") ||
+		line.startsWith("pkg/ functional coverage:") ||
+		line.startsWith("tests/ functional-package timing:") ||
 		line.startsWith("Functional package coverage verdict:") ||
 		line.startsWith("  package=") ||
 		line.startsWith("  tally:") ||

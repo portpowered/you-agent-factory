@@ -356,6 +356,12 @@ func TestRunWritesFunctionalTimingSummaryOnSuccess(t *testing.T) {
 		!strings.Contains(stdout.String(), "top-level-tests=1 (pass=1 fail=0 skip=0) deferred-short-tests=0") {
 		t.Fatalf("stdout = %q, want full functional inventory summary", stdout.String())
 	}
+	if got := strings.Count(stdout.String(), "tests/ functional-package timing:\n"); got != 1 {
+		t.Fatalf("stdout timing section count = %d, want one:\n%s", got, stdout.String())
+	}
+	if got := strings.Count(stdout.String(), "  package="+modulePath+"/pkg/config elapsed=0.500s outcome=pass\n"); got != 1 {
+		t.Fatalf("stdout timing row count = %d, want one:\n%s", got, stdout.String())
+	}
 }
 
 func TestWriteFunctionalTimingInventorySummaryReportsShortDeferredTests(t *testing.T) {
@@ -539,6 +545,38 @@ func TestRenderFunctionalTimingSummaryJSONIsDeterministic(t *testing.T) {
 	}
 	if !bytes.Equal(first, second) {
 		t.Fatalf("timing summary json was not deterministic:\nfirst=%s\nsecond=%s", first, second)
+	}
+}
+
+func TestRenderFunctionalTimingReportIsSortedAndDeduplicated(t *testing.T) {
+	t.Parallel()
+
+	alpha := modulePath + "/tests/functional/alpha"
+	beta := modulePath + "/tests/functional/beta"
+	summary := functionalTimingSummaryJSON{
+		Complete: true,
+		Packages: []functionalPackageTimingJSON{
+			{Package: beta, Seconds: 2.0, Outcome: timingOutcomePass},
+			{Package: alpha, Seconds: 1.0, Outcome: timingOutcomePass},
+			{Package: alpha, Seconds: 1.0, Outcome: timingOutcomePass},
+		},
+	}
+
+	first := renderFunctionalTimingReport(summary)
+	second := renderFunctionalTimingReport(summary)
+	if first != second {
+		t.Fatalf("functional timing report was not deterministic:\nfirst=%s\nsecond=%s", first, second)
+	}
+	if !strings.HasPrefix(first, functionalTimingReportHeader+"\n") {
+		t.Fatalf("functional timing report missing labeled section:\n%s", first)
+	}
+	alphaRow := "  package=" + alpha + " elapsed=1.000s outcome=pass\n"
+	betaRow := "  package=" + beta + " elapsed=2.000s outcome=pass\n"
+	if strings.Count(first, alphaRow) != 1 || strings.Count(first, betaRow) != 1 {
+		t.Fatalf("functional timing rows = %q, want one row per package:\n%s", []string{alphaRow, betaRow}, first)
+	}
+	if strings.Index(first, alphaRow) >= strings.Index(first, betaRow) {
+		t.Fatalf("functional timing rows are not path ordered:\n%s", first)
 	}
 }
 
