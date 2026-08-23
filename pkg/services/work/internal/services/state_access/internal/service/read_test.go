@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -60,6 +61,82 @@ func TestListWorkHonorsPaginationNextToken(t *testing.T) {
 	second, err := svc.ListWork(ctx, "session-1", work.ListOptions{Name: "alpha", MaxResults: 1, NextToken: first.NextToken})
 	if err != nil || len(second.Results) != 1 || second.Results[0].WorkID != "work-active-2" {
 		t.Fatalf("second ListWork = %#v, %v", second, err)
+	}
+}
+
+func TestListWorkWalksFilteredSnapshotWithoutMissingOrDuplicateRows(t *testing.T) {
+	t.Parallel()
+
+	items := make([]work.ReadModel, 0, 7)
+	for index := 1; index <= 6; index++ {
+		items = append(items, work.ReadModel{
+			CursorID:     fmt.Sprintf("terminal-cursor-%d", index),
+			WorkID:       fmt.Sprintf("terminal-work-%d", index),
+			Name:         fmt.Sprintf("Terminal work %d", index),
+			WorkTypeName: "story",
+			State:        &work.State{Name: "complete", Type: work.StateTypeTerminal},
+		})
+	}
+	items = append(items, work.ReadModel{
+		CursorID:     "processing-cursor",
+		WorkID:       "processing-work",
+		Name:         "Processing work",
+		WorkTypeName: "story",
+		State:        &work.State{Name: "review", Type: work.StateTypeProcessing},
+	})
+	svc := internalservice.New(stubSessionResolver{adapter: &recordingSessionAdapter{
+		snapshot: work.ReadSnapshot{Items: items},
+	}}, nil)
+	options := work.ListOptions{StateType: work.StateTypeTerminal, Counts: true, MaxResults: 2}
+
+	control, err := svc.ListWork(context.Background(), "session-1", work.ListOptions{
+		StateType:  work.StateTypeTerminal,
+		Counts:     true,
+		MaxResults: 100,
+	})
+	if err != nil {
+		t.Fatalf("control ListWork: %v", err)
+	}
+	if control.Counts == nil || control.Counts.Total != 6 || len(control.Results) != 6 {
+		t.Fatalf("control = %#v, want six terminal rows and total", control)
+	}
+
+	wantIDs := make([]string, 0, len(control.Results))
+	for _, item := range control.Results {
+		wantIDs = append(wantIDs, item.WorkID)
+	}
+	gotIDs := make([]string, 0, len(wantIDs))
+	seenTokens := make(map[string]struct{})
+	nextToken := ""
+	for {
+		options.NextToken = nextToken
+		page, err := svc.ListWork(context.Background(), "session-1", options)
+		if err != nil {
+			t.Fatalf("paged ListWork(nextToken=%q): %v", nextToken, err)
+		}
+		if page.MaxResults != options.MaxResults {
+			t.Fatalf("page maxResults = %d, want %d", page.MaxResults, options.MaxResults)
+		}
+		if page.Counts == nil || page.Counts.Total != len(wantIDs) {
+			t.Fatalf("page counts = %#v, want total %d", page.Counts, len(wantIDs))
+		}
+		for _, item := range page.Results {
+			if item.State == nil || item.State.Type != work.StateTypeTerminal {
+				t.Fatalf("paged item = %#v, want TERMINAL state", item)
+			}
+			gotIDs = append(gotIDs, item.WorkID)
+		}
+		if page.NextToken == "" {
+			break
+		}
+		if _, repeated := seenTokens[page.NextToken]; repeated {
+			t.Fatalf("repeated continuation token %q", page.NextToken)
+		}
+		seenTokens[page.NextToken] = struct{}{}
+		nextToken = page.NextToken
+	}
+	if !reflect.DeepEqual(gotIDs, wantIDs) {
+		t.Fatalf("paged IDs = %v, want control IDs %v", gotIDs, wantIDs)
 	}
 }
 

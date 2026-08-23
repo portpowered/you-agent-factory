@@ -83,7 +83,7 @@ func (service *service) List(cfg ListConfig) error {
 	if err != nil {
 		return listConfigError(err)
 	}
-	result, err := fetchAllListPages(cfg, prepared)
+	result, err := fetchListPage(cfg, prepared, prepared.Options, 1)
 	if err != nil {
 		return err
 	}
@@ -108,58 +108,6 @@ func validateListConfig(cfg ListConfig, service *service) error {
 		return fmt.Errorf("Work list request preparation is required")
 	}
 	return nil
-}
-
-func fetchAllListPages(
-	cfg ListConfig,
-	prepared workdomain.PreparedListRequest,
-) (factoryapi.ListWorkResponse, error) {
-	options := prepared.Options
-	seenTokens := make(map[string]struct{})
-	if options.NextToken != "" {
-		seenTokens[options.NextToken] = struct{}{}
-	}
-
-	var aggregate factoryapi.ListWorkResponse
-	for pageNumber := 1; ; pageNumber++ {
-		if err := cfg.Context.Err(); err != nil {
-			return factoryapi.ListWorkResponse{}, err
-		}
-
-		page, err := fetchListPage(cfg, prepared, options, pageNumber)
-		if err != nil {
-			return factoryapi.ListWorkResponse{}, err
-		}
-		if pageNumber == 1 {
-			aggregate = page
-		} else {
-			aggregate.Results = append(aggregate.Results, page.Results...)
-			if aggregate.Counts == nil {
-				aggregate.Counts = page.Counts
-			}
-			aggregate.PaginationContext = page.PaginationContext
-		}
-
-		nextToken := listPageNextToken(page)
-		if nextToken == "" {
-			return aggregate, nil
-		}
-		if err := validateListPageContinuation(nextToken); err != nil {
-			return factoryapi.ListWorkResponse{}, fmt.Errorf(
-				"work list pagination failed after page %d: %w",
-				pageNumber,
-				err,
-			)
-		}
-		if _, repeated := seenTokens[nextToken]; repeated {
-			return factoryapi.ListWorkResponse{}, fmt.Errorf(
-				"work list pagination did not advance after page %d: repeated continuation token",
-				pageNumber,
-			)
-		}
-		seenTokens[nextToken] = struct{}{}
-		options.NextToken = nextToken
-	}
 }
 
 func fetchListPage(
@@ -323,13 +271,6 @@ func listPageNextToken(result factoryapi.ListWorkResponse) string {
 		return ""
 	}
 	return *result.PaginationContext.NextToken
-}
-
-func validateListPageContinuation(token string) error {
-	if token != "" && strings.TrimSpace(token) == "" {
-		return fmt.Errorf("continuation token was blank")
-	}
-	return nil
 }
 
 func closeListResponse(response clihttp.Response) {

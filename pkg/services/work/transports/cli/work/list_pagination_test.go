@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,30 +14,88 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
+func TestList_ExplicitMaxResultsRendersOneBoundedServerPage(t *testing.T) {
+	const pageSize = 5
+	nextToken := encodeCursor("work-5")
+	requestCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		if got := r.URL.Query().Get("maxResults"); got != "5" {
+			t.Fatalf("maxResults query = %q, want 5", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch requestCount {
+		case 1:
+			results := make([]factoryapi.Work, 0, pageSize)
+			for index := 1; index <= pageSize; index++ {
+				workID := fmt.Sprintf("work-%d", index)
+				results = append(results, factoryapi.Work{Name: workID, WorkId: stringPtr(workID)})
+			}
+			if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
+				Results: results,
+				PaginationContext: &factoryapi.PaginationContext{
+					MaxResults: pageSize,
+					NextToken:  &nextToken,
+				},
+			}); err != nil {
+				t.Fatalf("encode first page: %v", err)
+			}
+		case 2:
+			if got := r.URL.Query().Get("nextToken"); got != nextToken {
+				t.Fatalf("unexpected automatic continuation token %q, want no second request", got)
+			}
+			if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
+				Results:           []factoryapi.Work{{Name: "work-6", WorkId: stringPtr("work-6")}},
+				PaginationContext: &factoryapi.PaginationContext{MaxResults: pageSize},
+			}); err != nil {
+				t.Fatalf("encode second page: %v", err)
+			}
+		default:
+			t.Fatalf("unexpected request count %d", requestCount)
+		}
+	}))
+	defer srv.Close()
+
+	var output bytes.Buffer
+	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{
+		Context:    context.Background(),
+		Server:     serverBase(t, srv),
+		MaxResults: pageSize,
+		JSON:       true,
+		Output:     &output,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	var response factoryapi.ListWorkResponse
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("JSON output is invalid: %v\n%s", err, output.String())
+	}
+	if requestCount != 1 {
+		t.Fatalf("HTTP request count = %d, want one server page", requestCount)
+	}
+	if len(response.Results) != pageSize {
+		t.Fatalf("results = %d, want %d rows from one bounded page", len(response.Results), pageSize)
+	}
+	if response.PaginationContext == nil || response.PaginationContext.MaxResults != pageSize || response.PaginationContext.NextToken == nil || *response.PaginationContext.NextToken != nextToken {
+		t.Fatalf("paginationContext = %#v, want maxResults=%d and usable nextToken", response.PaginationContext, pageSize)
+	}
+}
+
 func newVisibleWorkPaginationServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	secondToken := encodeCursor("cursor-2")
-	thirdToken := encodeCursor("cursor-3")
 	requestCount := 0
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		requestCount++
-		switch requestCount {
-		case 1:
-			assertListPageRequest(t, r, "1", "")
-			assertListQueryPreserved(t, r, "review", "PROCESSING", "Plan", "story", "trace-1")
-			encodeListPageResponse(t, w, "Plan feature", "work-1", "init", factoryapi.WorkStateTypeINITIAL, &secondToken, "first", 3)
-		case 2:
-			assertListPageRequest(t, r, "1", secondToken)
-			assertListQueryPreserved(t, r, "review", "PROCESSING", "Plan", "story", "trace-1")
-			encodeListPageResponse(t, w, "Review PRD", "work-2", "review", factoryapi.WorkStateTypePROCESSING, &thirdToken, "second", 3)
-		case 3:
-			assertListPageRequest(t, r, "1", thirdToken)
-			assertListQueryPreserved(t, r, "review", "PROCESSING", "Plan", "story", "trace-1")
-			encodeListPageResponse(t, w, "Ship Release", "work-3", "done", factoryapi.WorkStateTypeTERMINAL, nil, "third", 3)
-		default:
+		if requestCount != 1 {
 			t.Fatalf("unexpected request count %d", requestCount)
 		}
+		assertListPageRequest(t, r, "1", "")
+		assertListQueryPreserved(t, r, "review", "PROCESSING", "Plan", "story", "trace-1")
+		encodeListPageResponse(t, w, "Plan feature", "work-1", "init", factoryapi.WorkStateTypeINITIAL, &secondToken, "first", 3)
 	}))
 }
 
@@ -116,190 +175,49 @@ func TestList_JSONOutputLeavesRelationsOmittedWhenAPIResponseDoesNotIncludeThem(
 	}
 }
 
-func TestList_RepeatedContinuationFailsWithoutPartialOutputOrOpaqueDiagnostics(t *testing.T) {
-	const token = "opaque-continuation"
+func TestList_ContinuationTokenIsReturnedForExplicitFollowUp(t *testing.T) {
+	token := encodeCursor("cursor-2")
 	requestCount := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount++
+		if got := r.URL.Query().Get("nextToken"); got != "" {
+			t.Fatalf("first request nextToken = %q, want omitted", got)
+		}
 		w.Header().Set("Content-Type", "application/json")
-		repeatedToken := token
-		encodeListPageResponse(t, w, "Repeated page", "work-repeated", "init", factoryapi.WorkStateTypeINITIAL, &repeatedToken, "repeated", 0)
+		nextToken := token
+		encodeListPageResponse(t, w, "First page", "work-first", "init", factoryapi.WorkStateTypeINITIAL, &nextToken, "first", 2)
 	}))
 	defer srv.Close()
 
 	var output bytes.Buffer
-	var diagnostics bytes.Buffer
 	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{
-		Context: context.Background(), Server: serverBase(t, srv), MaxResults: 1,
-		Verbose: true, Output: &output, Diagnostics: &diagnostics,
+		Context: context.Background(), Server: serverBase(t, srv), MaxResults: 1, JSON: true, Output: &output,
 	})
-	if err == nil || !strings.Contains(err.Error(), "work list pagination did not advance after page 2") {
-		t.Fatalf("List() error = %v, want repeated continuation error", err)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
 	}
-	if strings.Contains(err.Error(), token) || strings.Contains(diagnostics.String(), token) {
-		t.Fatalf("opaque continuation token leaked in failure: error=%q diagnostics=%q", err, diagnostics.String())
+	var response factoryapi.ListWorkResponse
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("JSON output is invalid: %v\n%s", err, output.String())
 	}
-	if requestCount != 2 {
-		t.Fatalf("HTTP request count = %d, want two before stopping", requestCount)
+	if requestCount != 1 || len(response.Results) != 1 {
+		t.Fatalf("request count/results = %d/%d, want one bounded page", requestCount, len(response.Results))
 	}
-	if output.Len() != 0 {
-		t.Fatalf("stdout = %q, want empty after incomplete traversal", output.String())
-	}
-	for _, want := range []string{"work list response", "page=2", "nextTokenPresent=true"} {
-		if !strings.Contains(diagnostics.String(), want) {
-			t.Fatalf("diagnostics missing %q:\n%s", want, diagnostics.String())
-		}
+	if response.PaginationContext == nil || response.PaginationContext.NextToken == nil || *response.PaginationContext.NextToken != token {
+		t.Fatalf("paginationContext = %#v, want returned continuation token", response.PaginationContext)
 	}
 }
 
-func TestList_LaterPageTransportFailureDoesNotRenderAccumulatedOutput(t *testing.T) {
-	const token = "opaque-transport-continuation"
-	requestCount := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		requestCount++
-		if requestCount == 1 {
-			w.Header().Set("Content-Type", "application/json")
-			nextToken := token
-			encodeListPageResponse(t, w, "First page", "work-first", "init", factoryapi.WorkStateTypeINITIAL, &nextToken, "first", 0)
-			return
-		}
-		hijacker, ok := w.(http.Hijacker)
-		if !ok {
-			t.Fatal("test server does not support connection hijacking")
-		}
-		connection, _, err := hijacker.Hijack()
-		if err != nil {
-			t.Fatalf("hijack page two connection: %v", err)
-		}
-		_ = connection.Close()
-	}))
-	defer srv.Close()
-
-	var output bytes.Buffer
-	var diagnostics bytes.Buffer
-	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{
-		Context: context.Background(), Server: serverBase(t, srv), MaxResults: 1,
-		Verbose: true, Output: &output, Diagnostics: &diagnostics,
-	})
-	if err == nil || !strings.Contains(err.Error(), "work list page 2") {
-		t.Fatalf("List() error = %v, want page-two transport error", err)
-	}
-	if strings.Contains(err.Error(), token) || strings.Contains(diagnostics.String(), token) {
-		t.Fatalf("opaque continuation token leaked in failure: error=%q diagnostics=%q", err, diagnostics.String())
-	}
-	if requestCount < 2 {
-		t.Fatalf("HTTP request count = %d, want the failing second page to be attempted", requestCount)
-	}
-	if output.Len() != 0 {
-		t.Fatalf("stdout = %q, want empty after incomplete traversal", output.String())
-	}
-	for _, want := range []string{"work list response", "page=2", "error=unreachable"} {
-		if !strings.Contains(diagnostics.String(), want) {
-			t.Fatalf("diagnostics missing %q:\n%s", want, diagnostics.String())
-		}
-	}
-}
-
-func TestList_LaterPageStatusFailureDoesNotRenderAccumulatedOutput(t *testing.T) {
-	const token = "opaque-status-continuation"
-	requestCount := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		requestCount++
-		w.Header().Set("Content-Type", "application/json")
-		if requestCount == 1 {
-			nextToken := token
-			encodeListPageResponse(t, w, "First page", "work-first", "init", factoryapi.WorkStateTypeINITIAL, &nextToken, "first", 0)
-			return
-		}
-		w.WriteHeader(http.StatusBadGateway)
-		_ = json.NewEncoder(w).Encode(factoryapi.ErrorResponse{Message: "temporary backend failure"})
-	}))
-	defer srv.Close()
-
-	var output bytes.Buffer
-	var diagnostics bytes.Buffer
-	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{
-		Context: context.Background(), Server: serverBase(t, srv), MaxResults: 1,
-		Verbose: true, Output: &output, Diagnostics: &diagnostics,
-	})
-	if err == nil || !strings.Contains(err.Error(), "work list page 2 failed (502): temporary backend failure") {
-		t.Fatalf("List() error = %v, want page-two status error", err)
-	}
-	if strings.Contains(err.Error(), token) || strings.Contains(diagnostics.String(), token) {
-		t.Fatalf("opaque continuation token leaked in failure: error=%q diagnostics=%q", err, diagnostics.String())
-	}
-	if output.Len() != 0 {
-		t.Fatalf("stdout = %q, want empty after incomplete traversal", output.String())
-	}
-	for _, want := range []string{"work list response", "page=2", "status=502"} {
-		if !strings.Contains(diagnostics.String(), want) {
-			t.Fatalf("diagnostics missing %q:\n%s", want, diagnostics.String())
-		}
-	}
-}
-
-func TestList_LaterPageDecodeFailureDoesNotRenderAccumulatedOutput(t *testing.T) {
-	const token = "opaque-decode-continuation"
-	requestCount := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		requestCount++
-		w.Header().Set("Content-Type", "application/json")
-		if requestCount == 1 {
-			nextToken := token
-			encodeListPageResponse(t, w, "First page", "work-first", "init", factoryapi.WorkStateTypeINITIAL, &nextToken, "first", 0)
-			return
-		}
-		_, _ = w.Write([]byte(`{"results":[`))
-	}))
-	defer srv.Close()
-
-	var output bytes.Buffer
-	var diagnostics bytes.Buffer
-	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{
-		Context: context.Background(), Server: serverBase(t, srv), MaxResults: 1,
-		Verbose: true, Output: &output, Diagnostics: &diagnostics,
-	})
-	if err == nil || !strings.Contains(err.Error(), "work list page 2 response decode") {
-		t.Fatalf("List() error = %v, want page-two decode error", err)
-	}
-	if strings.Contains(err.Error(), "factory not reachable") {
-		t.Fatalf("decode failure was misclassified as unreachable: %v", err)
-	}
-	if strings.Contains(err.Error(), token) || strings.Contains(diagnostics.String(), token) {
-		t.Fatalf("opaque continuation token leaked in failure: error=%q diagnostics=%q", err, diagnostics.String())
-	}
-	if output.Len() != 0 {
-		t.Fatalf("stdout = %q, want empty after incomplete traversal", output.String())
-	}
-	for _, want := range []string{"work list response", "page=2", "error=decode"} {
-		if !strings.Contains(diagnostics.String(), want) {
-			t.Fatalf("diagnostics missing %q:\n%s", want, diagnostics.String())
-		}
-	}
-}
-
-func TestList_CancellationAfterPageStopsFurtherRequestsAndOutput(t *testing.T) {
+func TestList_CanceledContextDoesNotWriteOutput(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	requestCount := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		requestCount++
-		w.Header().Set("Content-Type", "application/json")
-		nextToken := "cancel-continuation"
-		encodeListPageResponse(t, w, "First page", "work-first", "init", factoryapi.WorkStateTypeINITIAL, &nextToken, "first", 0)
-		cancel()
-	}))
-	defer srv.Close()
+	cancel()
 
 	var output bytes.Buffer
 	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{
-		Context: ctx, Server: serverBase(t, srv), MaxResults: 1, Output: &output,
+		Context: ctx, Server: "http://127.0.0.1:1", Output: &output,
 	})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("List() error = %v, want context.Canceled", err)
-	}
-	if requestCount != 1 {
-		t.Fatalf("HTTP request count = %d, want no request after cancellation", requestCount)
 	}
 	if output.Len() != 0 {
 		t.Fatalf("stdout = %q, want empty after cancellation", output.String())

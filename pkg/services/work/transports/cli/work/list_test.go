@@ -588,7 +588,7 @@ func TestList_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *testing.T
 	}
 }
 
-func TestList_JSONOutputOmitsResourcesAndPreservesPaginationAcrossVisibleWorkPages(t *testing.T) {
+func TestList_JSONOutputOmitsResourcesAndPreservesVisibleWorkPage(t *testing.T) {
 	srv := newVisibleWorkPaginationServer(t)
 	defer srv.Close()
 
@@ -616,36 +616,29 @@ func TestList_JSONOutputOmitsResourcesAndPreservesPaginationAcrossVisibleWorkPag
 	}
 	var response factoryapi.ListWorkResponse
 	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
-		t.Fatalf("aggregate JSON is invalid: %v\n%s", err, output.String())
+		t.Fatalf("page JSON is invalid: %v\n%s", err, output.String())
 	}
-	if len(response.Results) != 3 || stringValue(response.Results[0].WorkId) != "work-1" || stringValue(response.Results[1].WorkId) != "work-2" || stringValue(response.Results[2].WorkId) != "work-3" {
-		t.Fatalf("aggregate results = %#v, want work-1, work-2, work-3 in server order", response.Results)
+	if len(response.Results) != 1 || stringValue(response.Results[0].WorkId) != "work-1" {
+		t.Fatalf("page results = %#v, want only work-1 from the server page", response.Results)
 	}
-	if response.PaginationContext == nil || response.PaginationContext.NextToken != nil {
-		t.Fatalf("aggregate pagination = %#v, want exhausted continuation", response.PaginationContext)
+	if response.PaginationContext == nil || response.PaginationContext.NextToken == nil {
+		t.Fatalf("page pagination = %#v, want the server continuation token", response.PaginationContext)
 	}
 	if response.Counts == nil || response.Counts.Total != 3 {
-		t.Fatalf("aggregate counts = %#v, want total 3", response.Counts)
+		t.Fatalf("page counts = %#v, want the server total 3", response.Counts)
 	}
 }
 
-func TestList_HumanOutputAggregatesThreePagesWithOneHeader(t *testing.T) {
+func TestList_HumanOutputRendersOneServerPageWithOneHeader(t *testing.T) {
 	secondToken := encodeCursor("human-page-2")
-	thirdToken := encodeCursor("human-page-3")
 	requestCount := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount++
-		w.Header().Set("Content-Type", "application/json")
-		switch requestCount {
-		case 1:
-			encodeListPageResponse(t, w, "Plan feature", "work-1", "init", factoryapi.WorkStateTypeINITIAL, &secondToken, "first", 0)
-		case 2:
-			encodeListPageResponse(t, w, "Review PRD", "work-2", "review", factoryapi.WorkStateTypePROCESSING, &thirdToken, "second", 0)
-		case 3:
-			encodeListPageResponse(t, w, "Ship Release", "work-3", "done", factoryapi.WorkStateTypeTERMINAL, nil, "third", 0)
-		default:
+		if requestCount != 1 {
 			t.Fatalf("unexpected request count %d", requestCount)
 		}
+		w.Header().Set("Content-Type", "application/json")
+		encodeListPageResponse(t, w, "Plan feature", "work-1", "init", factoryapi.WorkStateTypeINITIAL, &secondToken, "first", 0)
 	}))
 	defer srv.Close()
 
@@ -657,11 +650,12 @@ func TestList_HumanOutputAggregatesThreePagesWithOneHeader(t *testing.T) {
 		t.Fatalf("List: %v", err)
 	}
 	want := "WORK ID\tNAME\tWORK TYPE\tSTATE NAME\tSTATE TYPE\tSTRUCTURED RESULT\tRELATIONS\n" +
-		"work-1\tPlan feature\tstory\tinit\tINITIAL\t\tnone\n" +
-		"work-2\tReview PRD\tstory\treview\tPROCESSING\t\tnone\n" +
-		"work-3\tShip Release\tstory\tdone\tTERMINAL\t\tnone\n"
+		"work-1\tPlan feature\tstory\tinit\tINITIAL\t\tnone\n"
 	if output.String() != want {
 		t.Fatalf("human output = %q, want %q", output.String(), want)
+	}
+	if requestCount != 1 {
+		t.Fatalf("HTTP request count = %d, want one server page", requestCount)
 	}
 	if strings.Count(output.String(), "WORK ID\tNAME\tWORK TYPE") != 1 {
 		t.Fatalf("human output header count = %d, want one", strings.Count(output.String(), "WORK ID\tNAME\tWORK TYPE"))
