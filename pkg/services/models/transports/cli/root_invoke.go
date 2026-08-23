@@ -61,41 +61,112 @@ func (service *rootService) invokeInScope(
 	operation string,
 	text string,
 ) error {
-	catalogResult, err := service.models.GetCatalogModel(cfg.Context, modelinference.GetModelRequest{
-		Scope: scope, Name: modelName, Operation: operation,
-	})
+	catalog, err := service.catalogForInvoke(cfg, scope, modelName, operation)
 	if err != nil {
-		if !cfg.JSON && strings.TrimSpace(cfg.OutputPath) == "" && errors.Is(err, modelinference.ErrUnsupportedOperation) {
-			return fmt.Errorf("--output is required unless --json is set")
-		}
-		return mapModelsRootError(err)
-	}
-	if err := validateCLIOutputShape(cfg, catalogResult.Model, operation); err != nil {
 		return err
 	}
-	if cfg.JSON || len(cfg.OutputMappings) > 0 || genericCLIInlineOutput(cfg, catalogResult.Model, operation) {
-		joinedResult, joinedErr := service.models.InvokeModel(cfg.Context, joinedCLIInvocationRequest(
-			scope, modelName, operation, text, catalogResult.Model,
-		))
-		if joinedErr == nil {
-			if len(cfg.OutputMappings) > 0 {
-				return service.writeGenericCLIOutputMappings(cfg, joinedResult)
-			}
-			if genericCLIJSONResult(cfg, catalogResult.Model, operation, joinedResult) {
-				return json.NewEncoder(cfg.Output).Encode(genericInvocationResponseFromInferenceResult(joinedResult))
-			}
-			if genericCLIInlineOutput(cfg, catalogResult.Model, operation) {
-				return writeGenericCLIOutput(cfg.Output, joinedResult)
-			}
-			response := modelInvocationResponseFromInferenceResult(joinedResult, catalogResult.Model, text)
-			return json.NewEncoder(cfg.Output).Encode(response)
-		}
-		if !errors.Is(joinedErr, modelinference.ErrUnsupportedOperation) &&
-			!errors.Is(joinedErr, modelinference.ErrModelReferenceUnknown) {
-			return mapModelsRootError(joinedErr)
-		}
+	// Catalog identity is static; readiness is an observed runtime fact. Use
+	// the current scoped projection before the invoke preflight so a local
+	// cache is not reported as missing merely because the catalog detail was
+	// assembled without filesystem observations. Keep the unsupported fallback
+	// for lightweight embedded Models roots that predate this capability.
+	catalog, err = service.refreshInvokeReadiness(cfg, scope, modelName, operation, catalog)
+	if err != nil {
+		return err
 	}
-	return service.invokePreparedLease(cfg, scope, modelName, operation, text, catalogResult.Model)
+	if err := validateCLIOutputShape(cfg, catalog, operation); err != nil {
+		return err
+	}
+	handled, err := service.tryJoinedInvocation(cfg, scope, modelName, operation, text, catalog)
+	if err != nil {
+		return err
+	}
+	if handled {
+		return nil
+	}
+	return service.invokePreparedLease(cfg, scope, modelName, operation, text, catalog)
+}
+
+func (service *rootService) catalogForInvoke(
+	cfg InvokeConfig,
+	scope modelinference.RuntimeScopeRef,
+	modelName string,
+	operation string,
+) (modelinference.Detail, error) {
+	result, err := service.models.GetCatalogModel(cfg.Context, modelinference.GetModelRequest{
+		Scope: scope, Name: modelName, Operation: operation,
+	})
+	if err == nil {
+		return result.Model, nil
+	}
+	if !cfg.JSON && strings.TrimSpace(cfg.OutputPath) == "" && errors.Is(err, modelinference.ErrUnsupportedOperation) {
+		return modelinference.Detail{}, fmt.Errorf("--output is required unless --json is set")
+	}
+	return modelinference.Detail{}, mapModelsRootError(err)
+}
+
+func (service *rootService) refreshInvokeReadiness(
+	cfg InvokeConfig,
+	scope modelinference.RuntimeScopeRef,
+	modelName string,
+	operation string,
+	catalog modelinference.Detail,
+) (modelinference.Detail, error) {
+	readiness, err := service.models.GetModelReadiness(cfg.Context, modelinference.GetModelReadinessRequest{
+		Scope: scope, Name: modelName, Operation: operation,
+	})
+	if err == nil {
+		catalog.ManagedRuntime = readiness.Readiness.Clone()
+		return catalog, nil
+	}
+	if errors.Is(err, modelinference.ErrUnsupportedOperation) {
+		return catalog, nil
+	}
+	return modelinference.Detail{}, mapModelsRootError(err)
+}
+
+func (service *rootService) tryJoinedInvocation(
+	cfg InvokeConfig,
+	scope modelinference.RuntimeScopeRef,
+	modelName string,
+	operation string,
+	text string,
+	catalog modelinference.Detail,
+) (bool, error) {
+	if !cfg.JSON && len(cfg.OutputMappings) == 0 && !genericCLIInlineOutput(cfg, catalog, operation) {
+		return false, nil
+	}
+	joinedResult, err := service.models.InvokeModel(cfg.Context, joinedCLIInvocationRequest(
+		scope, modelName, operation, text, catalog,
+	))
+	if err != nil {
+		if errors.Is(err, modelinference.ErrUnsupportedOperation) ||
+			errors.Is(err, modelinference.ErrModelReferenceUnknown) {
+			return false, nil
+		}
+		return false, mapModelsRootError(err)
+	}
+	return true, service.writeJoinedInvocation(cfg, catalog, operation, joinedResult, text)
+}
+
+func (service *rootService) writeJoinedInvocation(
+	cfg InvokeConfig,
+	catalog modelinference.Detail,
+	operation string,
+	result modelinference.InvokeModelResult,
+	text string,
+) error {
+	if len(cfg.OutputMappings) > 0 {
+		return service.writeGenericCLIOutputMappings(cfg, result)
+	}
+	if genericCLIJSONResult(cfg, catalog, operation, result) {
+		return json.NewEncoder(cfg.Output).Encode(genericInvocationResponseFromInferenceResult(result))
+	}
+	if genericCLIInlineOutput(cfg, catalog, operation) {
+		return writeGenericCLIOutput(cfg.Output, result)
+	}
+	response := modelInvocationResponseFromInferenceResult(result, catalog, text)
+	return json.NewEncoder(cfg.Output).Encode(response)
 }
 
 func validateCLIOutputShape(

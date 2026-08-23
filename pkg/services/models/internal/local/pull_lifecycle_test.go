@@ -37,6 +37,21 @@ func TestClassifySuccessfulPull_MapsLegacyOutcomesToManagedContract(t *testing.T
 			t.Fatalf("classified = (%s, %s, %s), want still loading LOADING INSTALLING", outcome, readiness, lifecycle)
 		}
 	})
+
+	t.Run("installed flag cannot hide a failed cache projection", func(t *testing.T) {
+		outcome, readiness, lifecycle := classifySuccessfulPull(apisurface.PullResult{
+			Outcome: legacyPullOutcomePulled,
+		}, RuntimeCacheInspection{
+			Supported: true, Installed: true,
+			ManifestPresent: true, ManifestValid: true,
+			ExpectedArtifacts: []apisurface.AssetRequirement{{Name: "model.gguf", Bytes: 4}},
+			ObservedArtifacts: []apisurface.AssetArtifact{{Name: "model.gguf", Bytes: 3}},
+			FailureReason:     "managed cache artifact \"model.gguf\" has unexpected size",
+		})
+		if outcome != managedPullOutcomeSourceFetchFailed || readiness != managedReadinessFailed || lifecycle != managedLifecycleNotInstalled {
+			t.Fatalf("classified = (%s, %s, %s), want source failure FAILED NOT_INSTALLED", outcome, readiness, lifecycle)
+		}
+	})
 }
 
 func TestClassifyPullFailure_MapsErrorsToManagedOutcomes(t *testing.T) {

@@ -14,11 +14,13 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/spf13/cobra"
@@ -30,6 +32,18 @@ type commandServiceFake struct {
 	inspect func(InspectConfig) error
 	invoke  func(InvokeConfig) error
 	pull    func(PullConfig) error
+}
+
+type modelsPullDoer func(*http.Request) (*http.Response, error)
+
+func (doer modelsPullDoer) Do(request *http.Request) (*http.Response, error) {
+	return doer(request)
+}
+
+type modelsPullRoundTripper func(*http.Request) (*http.Response, error)
+
+func (roundTripper modelsPullRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	return roundTripper(request)
 }
 
 func (fake commandServiceFake) List(cfg ListConfig) error       { return fake.list(cfg) }
@@ -516,6 +530,161 @@ func TestPull_ClassifiedFailureReturnsManagedRuntimeOutcome(t *testing.T) {
 	}
 	if response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED {
 		t.Fatalf("pull outcome = %s, want SOURCE_FETCH_FAILED", response.ManagedRuntimePull.PullOutcome)
+	}
+}
+
+func TestModelsPullUsesDedicatedProtocolAndPreservesCallerCancellation(t *testing.T) {
+	t.Parallel()
+	var standardCalls atomic.Int32
+	standard, err := clihttp.NewProtocol(modelsPullDoer(func(*http.Request) (*http.Response, error) {
+		standardCalls.Add(1)
+		return nil, errors.New("ordinary CLI protocol was used for pull")
+	}), testHTTPClock{})
+	if err != nil {
+		t.Fatalf("standard protocol: %v", err)
+	}
+	pullStarted := make(chan struct{})
+	var startOnce atomic.Bool
+	pull, err := clihttp.NewProtocol(modelsPullDoer(func(request *http.Request) (*http.Response, error) {
+		if _, ok := request.Context().Deadline(); ok {
+			return nil, errors.New("pull request inherited a fixed client deadline")
+		}
+		if startOnce.CompareAndSwap(false, true) {
+			close(pullStarted)
+		}
+		<-request.Context().Done()
+		return nil, request.Context().Err()
+	}), testHTTPClock{})
+	if err != nil {
+		t.Fatalf("pull protocol: %v", err)
+	}
+	service := NewWithOutputFileSystemAndPullProtocol(
+		standard, pull, testModelInvocationBuilder, nil,
+	)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- service.Pull(PullConfig{
+			Context: ctx, ModelName: "OMNIVOICE_Q4_K_M", Server: "http://factory.test",
+			Output: io.Discard,
+		})
+	}()
+	select {
+	case <-pullStarted:
+	case <-time.After(time.Second):
+		t.Fatal("dedicated pull protocol was not invoked")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("pull error = %v, want caller cancellation", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("pull did not terminate after caller cancellation")
+	}
+	if standardCalls.Load() != 0 {
+		t.Fatalf("ordinary protocol calls = %d, want 0", standardCalls.Load())
+	}
+}
+
+func TestModelsPullWaitsForDedicatedProtocolTerminalResponse(t *testing.T) {
+	t.Parallel()
+	standard, err := clihttp.NewProtocol(modelsPullDoer(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("ordinary CLI protocol was used for pull")
+	}), testHTTPClock{})
+	if err != nil {
+		t.Fatalf("standard protocol: %v", err)
+	}
+	started := make(chan struct{})
+	release := make(chan struct{})
+	pull, err := clihttp.NewProtocol(modelsPullDoer(func(request *http.Request) (*http.Response, error) {
+		if _, ok := request.Context().Deadline(); ok {
+			return nil, errors.New("pull request inherited a fixed client deadline")
+		}
+		close(started)
+		<-release
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body: io.NopCloser(strings.NewReader(
+				`{"modelName":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","outcome":"PULLED","managedRuntimePull":{"identity":"OMNIVOICE_Q4_K_M","pullOutcome":"INSTALLED_SUCCESSFULLY","readinessState":"READY"}}`,
+			)),
+		}, nil
+	}), testHTTPClock{})
+	if err != nil {
+		t.Fatalf("pull protocol: %v", err)
+	}
+	service := NewWithOutputFileSystemAndPullProtocol(
+		standard, pull, testModelInvocationBuilder, nil,
+	)
+	var output bytes.Buffer
+	done := make(chan error, 1)
+	go func() {
+		done <- service.Pull(PullConfig{
+			Context: context.Background(), ModelName: "OMNIVOICE_Q4_K_M",
+			Server: "http://factory.test", JSON: true, Output: &output,
+		})
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("dedicated pull protocol was not invoked")
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("pull completed before terminal response: %v", err)
+	default:
+	}
+	close(release)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("pull after terminal response: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("pull did not finish after terminal response")
+	}
+	if !strings.Contains(output.String(), `"outcome":"PULLED"`) {
+		t.Fatalf("pull output = %q, want terminal success", output.String())
+	}
+}
+
+func TestModelsTransportErrorSummaryIdentifiesTimeoutAndCancellation(t *testing.T) {
+	t.Parallel()
+	if got := modelsTransportErrorSummary(context.DeadlineExceeded); got != "error=timeout" {
+		t.Fatalf("deadline summary = %q, want error=timeout", got)
+	}
+	if got := modelsTransportErrorSummary(context.Canceled); got != "error=canceled" {
+		t.Fatalf("cancellation summary = %q, want error=canceled", got)
+	}
+	if got := modelsTransportErrorSummary(errors.New("connection refused")); got != "error=unreachable" {
+		t.Fatalf("transport summary = %q, want error=unreachable", got)
+	}
+}
+
+func TestModelsPullDiagnosticsIdentifyOrdinaryClientTimeout(t *testing.T) {
+	t.Parallel()
+	protocol, err := clihttp.NewProtocol(&http.Client{
+		Timeout: 5 * time.Millisecond,
+		Transport: modelsPullRoundTripper(func(request *http.Request) (*http.Response, error) {
+			<-request.Context().Done()
+			return nil, request.Context().Err()
+		}),
+	}, testHTTPClock{})
+	if err != nil {
+		t.Fatalf("timeout protocol: %v", err)
+	}
+	var diagnostics bytes.Buffer
+	_, err = pullModel(pullOptions{
+		Context: context.Background(), Server: "http://factory.test",
+		ModelName: "OMNIVOICE_Q4_K_M", Diagnostics: &diagnostics, Verbose: true,
+		HTTP: protocol,
+	})
+	if err == nil {
+		t.Fatal("pull error = nil, want ordinary client timeout")
+	}
+	if !strings.Contains(diagnostics.String(), "error=timeout") {
+		t.Fatalf("timeout diagnostics = %q, want error=timeout", diagnostics.String())
 	}
 }
 

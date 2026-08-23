@@ -46,6 +46,7 @@ type InvokeRuntimeScope struct {
 type Config struct {
 	Models           models.Service
 	HTTP             clihttp.Protocol
+	PullHTTP         clihttp.Protocol
 	Artifacts        ArtifactExporter
 	OutputFileSystem OutputFileSystem
 	OpenInvokeScope  func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
@@ -55,6 +56,7 @@ type Config struct {
 type rootService struct {
 	models           models.Service
 	http             clihttp.Protocol
+	pullHTTP         clihttp.Protocol
 	artifacts        ArtifactExporter
 	outputFileSystem OutputFileSystem
 	openInvokeScope  func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
@@ -69,6 +71,7 @@ func NewService(cfg Config) Service {
 	return &rootService{
 		models:           cfg.Models,
 		http:             cfg.HTTP,
+		pullHTTP:         cfg.PullHTTP,
 		artifacts:        cfg.Artifacts,
 		outputFileSystem: cfg.OutputFileSystem,
 		openInvokeScope:  cfg.OpenInvokeScope,

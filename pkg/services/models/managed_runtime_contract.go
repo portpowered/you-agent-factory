@@ -280,6 +280,44 @@ func (runtime Runtime) Clone() Runtime {
 	return runtime
 }
 
+// ManagedRuntimeCacheFacts are the Models-owned observations used to derive
+// managed local-model installation state. Expected artifacts come from the
+// cache manifest or the active preparation plan; observed artifacts come from
+// the cache inspection effect. Installed is retained as a compatibility fact
+// for older adapters that cannot provide manifest details yet.
+type ManagedRuntimeCacheFacts struct {
+	Locality           Locality
+	Supported          bool
+	Installed          bool
+	ManifestPresent    bool
+	ManifestValid      bool
+	ExpectedArtifacts  []AssetRequirement
+	ObservedArtifacts  []AssetArtifact
+	InstalledFileCount int
+	PartialArtifacts   bool
+	ActivePull         bool
+	IntegrityVerified  bool
+	FailureReason      string
+}
+
+// ManagedRuntimeHostFacts are the detached runtime-host observations layered
+// over verified installation facts. A host cannot make an uninstalled model
+// ready; the projection falls back to cache state when the facts conflict.
+type ManagedRuntimeHostFacts struct {
+	Observed       bool
+	ReadinessState ReadinessState
+	LifecycleState LifecycleState
+}
+
+// ManagedRuntimeStateProjection is the canonical compatible state pair for a
+// managed runtime. FailureReason is safe diagnostic context owned by Models,
+// not a transport error or provider-native message.
+type ManagedRuntimeStateProjection struct {
+	ReadinessState ReadinessState
+	LifecycleState LifecycleState
+	FailureReason  string
+}
+
 const genericInvocationOutputLimitBytes int64 = 16 << 20
 
 // NormalizeGenericInvocationOutputs validates and detaches named outputs from

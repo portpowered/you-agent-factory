@@ -87,6 +87,7 @@ type Service interface {
 
 type httpService struct {
 	http       clihttp.Protocol
+	pullHTTP   clihttp.Protocol
 	invocation InvocationOperation
 }
 
@@ -111,7 +112,25 @@ func NewWithOutputFileSystem(
 	outputFileSystem OutputFileSystem,
 	providers ...CompositionScopeProvider,
 ) Service {
-	return bindCompositionService(httpProtocol, invocation, outputFileSystem, providers...)
+	return NewWithOutputFileSystemAndPullProtocol(
+		httpProtocol, httpProtocol, invocation, outputFileSystem, providers...,
+	)
+}
+
+// NewWithOutputFileSystemAndPullProtocol constructs the Models CLI service
+// with an operation-appropriate HTTP protocol for synchronous pulls. The
+// pull protocol is expected to rely on caller cancellation rather than the
+// ordinary short CLI request deadline.
+func NewWithOutputFileSystemAndPullProtocol(
+	httpProtocol clihttp.Protocol,
+	pullHTTPProtocol clihttp.Protocol,
+	invocation InvocationOperation,
+	outputFileSystem OutputFileSystem,
+	providers ...CompositionScopeProvider,
+) Service {
+	return bindCompositionService(
+		httpProtocol, pullHTTPProtocol, invocation, outputFileSystem, providers...,
+	)
 }
 
 func (service *httpService) List(cfg ListConfig) error {
@@ -241,13 +260,17 @@ func (service *httpService) Pull(cfg PullConfig) error {
 	if modelName == "" {
 		return fmt.Errorf("model name is required")
 	}
+	pullHTTP := service.pullHTTP
+	if pullHTTP == nil {
+		pullHTTP = service.http
+	}
 	response, err := pullModel(pullOptions{
 		Context:     cfg.Context,
 		Server:      cfg.Server,
 		ModelName:   modelName,
 		Verbose:     cfg.Verbose,
 		Diagnostics: cfg.Diagnostics,
-		HTTP:        service.http,
+		HTTP:        pullHTTP,
 	})
 	if cfg.JSON {
 		if encodeErr := json.NewEncoder(cfg.Output).Encode(response); encodeErr != nil {
@@ -434,7 +457,10 @@ func doModelsPOST(ctx context.Context, transport clihttp.Protocol, server, path 
 		out,
 	)
 	if err != nil {
-		logModelsResponse(diagnostics, endpoint, 0, response.Duration, "error=unreachable")
+		logModelsResponse(
+			diagnostics, endpoint, 0, response.Duration,
+			modelsTransportErrorSummary(err),
+		)
 		return fmt.Errorf("models endpoint not reachable at %s: %w", endpoint.String(), err)
 	}
 	resp := response.HTTP
@@ -478,7 +504,10 @@ func doModelsGET(ctx context.Context, transport clihttp.Protocol, endpoint url.U
 		out,
 	)
 	if err != nil {
-		logModelsResponse(diagnostics, endpoint, 0, response.Duration, "error=unreachable")
+		logModelsResponse(
+			diagnostics, endpoint, 0, response.Duration,
+			modelsTransportErrorSummary(err),
+		)
 		return fmt.Errorf("models endpoint not reachable at %s: %w", endpoint.String(), err)
 	}
 	resp := response.HTTP
@@ -506,6 +535,17 @@ func modelsResponseBytes(out any) (int, error) {
 		return 0, fmt.Errorf("marshal models response: %w", err)
 	}
 	return len(body), nil
+}
+
+func modelsTransportErrorSummary(err error) string {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return "error=timeout"
+	case errors.Is(err, context.Canceled):
+		return "error=canceled"
+	default:
+		return "error=unreachable"
+	}
 }
 
 func (diagnostics requestDiagnostics) summary() string {

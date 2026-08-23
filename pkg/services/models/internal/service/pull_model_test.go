@@ -284,6 +284,16 @@ func TestService_PullModel_LogsSuccessAndFailureOutcomes(t *testing.T) {
 	if observed.FilterMessage("managed runtime pull failed").Len() != 1 {
 		t.Fatalf("failure logs = %d, want 1", observed.FilterMessage("managed runtime pull failed").Len())
 	}
+	if observed.FilterMessage("managed runtime pull started").Len() != 2 {
+		t.Fatalf("start logs = %d, want one per pull", observed.FilterMessage("managed runtime pull started").Len())
+	}
+	failureEntries := observed.FilterMessage("managed runtime pull failed").All()
+	if got := failureEntries[0].ContextMap()["failure_reason"]; got != "pull_failed" {
+		t.Fatalf("failure reason = %#v, want pull_failed", got)
+	}
+	if got := failureEntries[0].ContextMap()["lifecycle_state"]; got != string(managedruntime.LifecycleStateNotInstalled) {
+		t.Fatalf("failure lifecycle = %#v, want NOT_INSTALLED", got)
+	}
 }
 
 func TestService_PullModel_UsesInjectedClockForDuration(t *testing.T) {

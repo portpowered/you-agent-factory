@@ -336,6 +336,7 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideSubmitPayloadReader,
 	provideOperatorDefaultsResolver,
 	provideStandardCLIHTTPProtocol,
+	provideModelsPullCLIHTTPProtocol,
 	provideMetricsCLI,
 	provideCostsCLI,
 	provideRemoteInvocationOperation,

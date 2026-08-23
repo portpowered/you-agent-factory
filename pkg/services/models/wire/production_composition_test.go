@@ -117,6 +117,24 @@ func TestProductionCompositionReportsCurrentScopedReadinessWithCompatibilityPari
 			t.Fatalf("write model cache file %s: %v", name, err)
 		}
 	}
+	metadata, err := json.Marshal(map[string]any{
+		"modelName": "OMNIVOICE_Q4_K_M",
+		"revision":  "rev-live",
+		"files": []map[string]any{
+			{"path": "omnivoice-base-Q4_K_M.gguf", "bytes": len("fixture")},
+			{"path": "omnivoice-tokenizer-Q4_K_M.gguf", "bytes": len("fixture")},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal live cache metadata: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M", ".managed-cache.json"),
+		metadata,
+		0o644,
+	); err != nil {
+		t.Fatalf("write live cache metadata: %v", err)
+	}
 
 	current, err := service.GetModelReadiness(context.Background(), request)
 	if err != nil {

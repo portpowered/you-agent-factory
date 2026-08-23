@@ -432,6 +432,10 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
+	wireModelsPullCLIHTTPProtocol, err := provideModelsPullCLIHTTPProtocol()
+	if err != nil {
+		return nil, err
+	}
 	workingDirectory := provideFactorySessionsWorkingDirectory(edges2)
 	v67, err := provideModelInvocationArtifactExporter(edges2)
 	if err != nil {
@@ -449,7 +453,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	outputFileSystem := provideModelsCLIOutputFileSystem(edges2)
-	cliService := provideModelsCLIService(wireStandardCLIHTTPProtocol, invocationOperation, compositionScopeProvider, outputFileSystem)
+	cliService := provideModelsCLIService(wireStandardCLIHTTPProtocol, wireModelsPullCLIHTTPProtocol, invocationOperation, compositionScopeProvider, outputFileSystem)
 	service2 := provideProvidersCLIService(service)
 	v69 := wire.NewRequestPreparation()
 	sessionService := provideSessionsCLIService(wireStandardCLIHTTPProtocol, v69)
@@ -537,11 +541,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	handler := http.NewHandler(httpAdapter, logger)
 	contentPreparation := work.NewContentPreparation()
 	requestPreparation := provideFactorySessionHTTPRequestPreparation(v69)
-	priceTableReader, err := provideProviderPriceTableReader()
+	runtimeMetricsQuery, err := provideFactoryVisualizationMetricsQuery(loggingLogger)
 	if err != nil {
 		return nil, err
 	}
-	runtimeMetricsQuery, err := provideFactoryVisualizationMetricsQuery(loggingLogger)
+	priceTableReader, err := provideProviderPriceTableReader()
 	if err != nil {
 		return nil, err
 	}
@@ -1098,6 +1102,7 @@ var cliCommandOperationsSet = wire5.NewSet(
 	provideSubmitPayloadReader,
 	provideOperatorDefaultsResolver,
 	provideStandardCLIHTTPProtocol,
+	provideModelsPullCLIHTTPProtocol,
 	provideMetricsCLI,
 	provideCostsCLI,
 	provideRemoteInvocationOperation,

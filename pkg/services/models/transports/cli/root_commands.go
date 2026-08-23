@@ -153,7 +153,11 @@ func (service *rootService) inspectRemote(cfg InspectConfig) error {
 }
 
 func (service *rootService) pullRemote(cfg PullConfig) error {
-	if service.http == nil {
+	pullHTTP := service.pullHTTP
+	if pullHTTP == nil {
+		pullHTTP = service.http
+	}
+	if pullHTTP == nil {
 		return fmt.Errorf("CLI HTTP protocol is required for remote models pull")
 	}
 	modelName := strings.TrimSpace(cfg.ModelName)
@@ -163,7 +167,7 @@ func (service *rootService) pullRemote(cfg PullConfig) error {
 		ModelName:   modelName,
 		Verbose:     cfg.Verbose,
 		Diagnostics: cfg.Diagnostics,
-		HTTP:        service.http,
+		HTTP:        pullHTTP,
 	})
 	if cfg.JSON {
 		if encodeErr := json.NewEncoder(cfg.Output).Encode(response); encodeErr != nil {

@@ -40,6 +40,10 @@ type service struct {
 	cacheMu  sync.Mutex
 	inflight map[string]*assetCacheCall
 
+	pullStateMu sync.RWMutex
+	activePulls map[string]activePullState
+	pullFailure map[string]string
+
 	preparedRuntimeMu sync.RWMutex
 	preparedRuntime   map[string]assets.RuntimeCacheInspection
 }
@@ -61,6 +65,11 @@ type metadataFile struct {
 	Path   string `json:"path"`
 	Bytes  int64  `json:"bytes,omitempty"`
 	SHA256 string `json:"sha256,omitempty"`
+}
+
+type activePullState struct {
+	expected []models.AssetRequirement
+	revision string
 }
 
 var _ assets.Service = (*service)(nil)
@@ -114,6 +123,8 @@ func New(
 		resolveEnvironment: resolveEnvironment,
 		resolveRevision:    resolveRevision,
 		inflight:           make(map[string]*assetCacheCall),
+		activePulls:        make(map[string]activePullState),
+		pullFailure:        make(map[string]string),
 		preparedRuntime:    make(map[string]assets.RuntimeCacheInspection),
 	}
 }
@@ -210,38 +221,240 @@ func (s *service) InspectRuntimeCache(
 	if err != nil {
 		return assets.RuntimeCacheInspection{}, err
 	}
+	active, isActive, pullFailure := s.activePullStateFor(request.Scope, request.Name)
 	if inspection, ok := s.preparedRuntimeInspection(request.Scope, request.Name); ok {
-		return inspection, nil
+		return s.applyActivePullFacts(inspection, active, isActive, pullFailure), nil
 	}
-	spec, source, err := s.resolveSource(scope.Runtime, request.Name)
-	if errors.Is(err, models.ErrAssetSourceUnsupported) {
+	spec, source, supported, err := s.resolveRuntimeCacheSource(scope.Runtime, request.Name)
+	if err != nil {
+		return assets.RuntimeCacheInspection{}, err
+	}
+	if !supported {
 		return assets.RuntimeCacheInspection{}, nil
 	}
+	expected := assetRequirementsForSpec(spec)
+	cacheRoot, rootErr := s.modelCacheRoot(scope.CacheDirectory, spec.modelName)
+	if rootErr != nil {
+		return assets.RuntimeCacheInspection{}, rootErr
+	}
+	metadata, manifestPresent, metadataErr := s.readMetadata(
+		ctx,
+		filepath.Join(cacheRoot, metadataFileName),
+	)
+	if metadataErr != nil {
+		return s.invalidRuntimeCacheInspection(ctx, expected, active, isActive, pullFailure)
+	}
+	if manifestPresent {
+		expected = requirementsFromMetadata(spec, metadata)
+	}
+	result, err := s.inspectRuntimeCacheFiles(
+		ctx, scope.CacheDirectory, spec, source, expected, cacheRoot, metadata, manifestPresent,
+	)
 	if err != nil {
 		return assets.RuntimeCacheInspection{}, err
 	}
-	snapshot, available, err := s.inspectCache(ctx, scope.CacheDirectory, spec, source)
+	return s.applyActivePullFacts(result, active, isActive, pullFailure), nil
+}
+
+func (s *service) resolveRuntimeCacheSource(
+	config models.RuntimeConfig,
+	modelName string,
+) (assetSpec, models.SourceMetadata, bool, error) {
+	spec, source, err := s.resolveSource(config, modelName)
+	if errors.Is(err, models.ErrAssetSourceUnsupported) {
+		return assetSpec{}, models.SourceMetadata{}, false, nil
+	}
+	if err != nil {
+		return assetSpec{}, models.SourceMetadata{}, false, err
+	}
+	return spec, source, true, nil
+}
+
+func (s *service) invalidRuntimeCacheInspection(
+	ctx context.Context,
+	expected []models.AssetRequirement,
+	active activePullState,
+	isActive bool,
+	pullFailure string,
+) (assets.RuntimeCacheInspection, error) {
+	if contextErr := assetContextError(ctx); contextErr != nil {
+		return assets.RuntimeCacheInspection{}, contextErr
+	}
+	return s.applyActivePullFacts(assets.RuntimeCacheInspection{
+		Supported:         true,
+		ManifestPresent:   true,
+		ExpectedArtifacts: expected,
+		FailureReason:     "managed cache manifest is invalid",
+	}, active, isActive, pullFailure), nil
+}
+
+func (s *service) inspectRuntimeCacheFiles(
+	ctx context.Context,
+	cacheDirectory string,
+	spec assetSpec,
+	source models.SourceMetadata,
+	expected []models.AssetRequirement,
+	cacheRoot string,
+	metadata cacheMetadata,
+	manifestPresent bool,
+) (assets.RuntimeCacheInspection, error) {
+	snapshot, available, err := s.inspectCache(ctx, cacheDirectory, spec, source)
 	if err != nil {
 		return assets.RuntimeCacheInspection{}, err
 	}
+	manifestValid := manifestPresent && manifestContainsRequiredArtifacts(spec, metadata)
 	result := assets.RuntimeCacheInspection{
-		Supported:     true,
-		Installed:     available,
-		Revision:      snapshot.Revision,
-		MissingAssets: append([]string(nil), spec.requiredArtifacts...),
+		Supported:         true,
+		Installed:         available,
+		Revision:          snapshot.Revision,
+		ManifestPresent:   manifestPresent,
+		ManifestValid:     manifestValid,
+		ExpectedArtifacts: append([]models.AssetRequirement(nil), expected...),
+		ObservedArtifacts: append([]models.AssetArtifact(nil), snapshot.Artifacts...),
+		MissingAssets:     missingAssetNames(expected, snapshot.Artifacts),
+		PartialArtifacts:  len(snapshot.Artifacts) > 0 && !available,
+		FailureReason:     cacheInspectionFailureReason(expected, snapshot.Artifacts, manifestValid),
 	}
 	if snapshot.Revision != "" {
-		root, rootErr := s.modelCacheRoot(scope.CacheDirectory, spec.modelName)
-		if rootErr != nil {
-			return assets.RuntimeCacheInspection{}, rootErr
-		}
-		result.CachePath = filepath.Join(root, snapshot.Revision)
+		result.CachePath = filepath.Join(cacheRoot, snapshot.Revision)
 	}
 	if available {
 		result.InstalledFileCount = len(snapshot.Artifacts)
-		result.MissingAssets = nil
 	}
-	return result, nil
+	return s.verifyRuntimeCacheIntegrity(ctx, cacheDirectory, spec, source, expected, result), nil
+}
+
+func (s *service) verifyRuntimeCacheIntegrity(
+	ctx context.Context,
+	cacheDirectory string,
+	spec assetSpec,
+	source models.SourceMetadata,
+	expected []models.AssetRequirement,
+	result assets.RuntimeCacheInspection,
+) assets.RuntimeCacheInspection {
+	if !result.ManifestValid || !hasVerifiableMetadata(expected) {
+		return result
+	}
+	verified, verifiedAvailable, verifyErr := s.inspectVerifiedCache(ctx, cacheDirectory, spec, source)
+	if verifyErr != nil {
+		result.FailureReason = safeAssetFailureReason(verifyErr)
+		result.Installed = false
+		result.ObservedArtifacts = append([]models.AssetArtifact(nil), verified.Artifacts...)
+		result.InstalledFileCount = len(verified.Artifacts)
+		result.PartialArtifacts = len(verified.Artifacts) > 0
+		return result
+	}
+	if !verifiedAvailable {
+		return result
+	}
+	result.Installed = true
+	result.IntegrityVerified = true
+	result.ObservedArtifacts = append([]models.AssetArtifact(nil), verified.Artifacts...)
+	result.InstalledFileCount = len(verified.Artifacts)
+	result.MissingAssets = nil
+	return result
+}
+
+func (s *service) applyActivePullFacts(
+	inspection assets.RuntimeCacheInspection,
+	active activePullState,
+	isActive bool,
+	pullFailure string,
+) assets.RuntimeCacheInspection {
+	inspection.ExpectedArtifacts = append([]models.AssetRequirement(nil), inspection.ExpectedArtifacts...)
+	inspection.ObservedArtifacts = append([]models.AssetArtifact(nil), inspection.ObservedArtifacts...)
+	inspection.MissingAssets = append([]string(nil), inspection.MissingAssets...)
+	if isActive {
+		inspection.ActivePull = true
+		if len(active.expected) > 0 {
+			inspection.ExpectedArtifacts = append([]models.AssetRequirement(nil), active.expected...)
+			inspection.MissingAssets = missingAssetNames(active.expected, inspection.ObservedArtifacts)
+		}
+		if active.revision != "" {
+			inspection.Revision = active.revision
+		}
+	} else if strings.TrimSpace(inspection.FailureReason) == "" {
+		inspection.FailureReason = strings.TrimSpace(pullFailure)
+	}
+	return inspection
+}
+
+func requirementsFromMetadata(spec assetSpec, metadata cacheMetadata) []models.AssetRequirement {
+	byName := make(map[string]metadataFile, len(metadata.Files))
+	for _, file := range metadata.Files {
+		byName[filepath.ToSlash(strings.TrimSpace(file.Path))] = file
+	}
+	result := make([]models.AssetRequirement, 0, len(spec.requiredArtifacts))
+	for _, name := range spec.requiredArtifacts {
+		file := byName[name]
+		result = append(result, models.AssetRequirement{
+			Name: name, Bytes: file.Bytes, SHA256: strings.ToLower(strings.TrimSpace(file.SHA256)),
+		})
+	}
+	return result
+}
+
+func manifestContainsRequiredArtifacts(spec assetSpec, metadata cacheMetadata) bool {
+	seen := make(map[string]struct{}, len(metadata.Files))
+	for _, file := range metadata.Files {
+		seen[filepath.ToSlash(strings.TrimSpace(file.Path))] = struct{}{}
+	}
+	for _, name := range spec.requiredArtifacts {
+		if _, ok := seen[name]; !ok {
+			return false
+		}
+	}
+	return strings.TrimSpace(metadata.Revision) != ""
+}
+
+func hasVerifiableMetadata(expected []models.AssetRequirement) bool {
+	if len(expected) == 0 {
+		return false
+	}
+	for _, artifact := range expected {
+		if artifact.Bytes <= 0 || len(strings.TrimSpace(artifact.SHA256)) != 64 {
+			return false
+		}
+	}
+	return true
+}
+
+func missingAssetNames(
+	expected []models.AssetRequirement,
+	observed []models.AssetArtifact,
+) []string {
+	seen := make(map[string]struct{}, len(observed))
+	for _, artifact := range observed {
+		seen[filepath.ToSlash(strings.TrimSpace(artifact.Name))] = struct{}{}
+	}
+	missing := make([]string, 0, len(expected))
+	for _, artifact := range expected {
+		if _, ok := seen[filepath.ToSlash(strings.TrimSpace(artifact.Name))]; !ok {
+			missing = append(missing, artifact.Name)
+		}
+	}
+	return missing
+}
+
+func cacheInspectionFailureReason(
+	expected []models.AssetRequirement,
+	observed []models.AssetArtifact,
+	manifestValid bool,
+) string {
+	if !manifestValid && len(observed) > 0 {
+		return "managed cache manifest is missing or incomplete"
+	}
+	byName := make(map[string]models.AssetArtifact, len(observed))
+	for _, artifact := range observed {
+		byName[filepath.ToSlash(strings.TrimSpace(artifact.Name))] = artifact
+	}
+	for _, requirement := range expected {
+		artifact, ok := byName[filepath.ToSlash(strings.TrimSpace(requirement.Name))]
+		if ok && requirement.Bytes > 0 && artifact.Bytes != requirement.Bytes {
+			return fmt.Sprintf("managed cache artifact %q has unexpected size", requirement.Name)
+		}
+	}
+	return ""
 }
 
 func preparedRuntimeKey(scope models.RuntimeScopeRef, name string) string {
@@ -257,6 +470,8 @@ func (s *service) rememberPreparedRuntime(
 		return
 	}
 	inspection.MissingAssets = append([]string(nil), inspection.MissingAssets...)
+	inspection.ExpectedArtifacts = append([]models.AssetRequirement(nil), inspection.ExpectedArtifacts...)
+	inspection.ObservedArtifacts = append([]models.AssetArtifact(nil), inspection.ObservedArtifacts...)
 	s.preparedRuntimeMu.Lock()
 	s.preparedRuntime[preparedRuntimeKey(scope, name)] = inspection
 	s.preparedRuntimeMu.Unlock()
@@ -276,7 +491,96 @@ func (s *service) preparedRuntimeInspection(
 		return assets.RuntimeCacheInspection{}, false
 	}
 	inspection.MissingAssets = append([]string(nil), inspection.MissingAssets...)
+	inspection.ExpectedArtifacts = append([]models.AssetRequirement(nil), inspection.ExpectedArtifacts...)
+	inspection.ObservedArtifacts = append([]models.AssetArtifact(nil), inspection.ObservedArtifacts...)
 	return inspection, true
+}
+
+func (s *service) beginActivePull(scope models.RuntimeScopeRef, name string, expected []models.AssetRequirement) {
+	if s == nil || scope.IsZero() || strings.TrimSpace(name) == "" {
+		return
+	}
+	key := preparedRuntimeKey(scope, name)
+	s.pullStateMu.Lock()
+	s.activePulls[key] = activePullState{expected: cloneAssetRequirements(expected)}
+	delete(s.pullFailure, key)
+	s.pullStateMu.Unlock()
+}
+
+func (s *service) updateActivePull(
+	scope models.RuntimeScopeRef,
+	name string,
+	expected []models.AssetRequirement,
+	revision string,
+) {
+	if s == nil || scope.IsZero() || strings.TrimSpace(name) == "" {
+		return
+	}
+	key := preparedRuntimeKey(scope, name)
+	s.pullStateMu.Lock()
+	state, ok := s.activePulls[key]
+	if ok {
+		state.expected = cloneAssetRequirements(expected)
+		state.revision = strings.TrimSpace(revision)
+		s.activePulls[key] = state
+	}
+	s.pullStateMu.Unlock()
+}
+
+func (s *service) finishActivePull(scope models.RuntimeScopeRef, name string, err error) {
+	if s == nil || scope.IsZero() || strings.TrimSpace(name) == "" {
+		return
+	}
+	key := preparedRuntimeKey(scope, name)
+	s.pullStateMu.Lock()
+	delete(s.activePulls, key)
+	if err == nil {
+		delete(s.pullFailure, key)
+	} else {
+		s.pullFailure[key] = safeAssetFailureReason(err)
+	}
+	s.pullStateMu.Unlock()
+}
+
+func (s *service) activePullStateFor(scope models.RuntimeScopeRef, name string) (activePullState, bool, string) {
+	if s == nil {
+		return activePullState{}, false, ""
+	}
+	key := preparedRuntimeKey(scope, name)
+	s.pullStateMu.RLock()
+	state, active := s.activePulls[key]
+	failure := s.pullFailure[key]
+	s.pullStateMu.RUnlock()
+	state.expected = cloneAssetRequirements(state.expected)
+	return state, active, failure
+}
+
+func cloneAssetRequirements(requirements []models.AssetRequirement) []models.AssetRequirement {
+	if len(requirements) == 0 {
+		return nil
+	}
+	return append([]models.AssetRequirement(nil), requirements...)
+}
+
+func safeAssetFailureReason(err error) string {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return "asset pull cancelled"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "asset pull timed out"
+	case errors.Is(err, models.ErrAssetIntegrityFailed):
+		return "asset integrity verification failed"
+	case errors.Is(err, models.ErrAssetSourceMissing):
+		return "asset source is missing"
+	case errors.Is(err, models.ErrAssetSourceUnsupported):
+		return "asset source is unsupported"
+	case errors.Is(err, models.ErrSourceFetchFailed):
+		return "asset source fetch failed"
+	case errors.Is(err, models.ErrAssetPreparationInterrupted):
+		return "asset preparation was interrupted"
+	default:
+		return "asset pull failed"
+	}
 }
 
 func (s *service) resolveScope(
