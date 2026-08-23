@@ -70,6 +70,19 @@ func (service *rootService) invokeInScope(
 		}
 		return mapModelsRootError(err)
 	}
+	// Catalog identity is static; readiness is an observed runtime fact. Use
+	// the current scoped projection before the invoke preflight so a local
+	// cache is not reported as missing merely because the catalog detail was
+	// assembled without filesystem observations. Keep the unsupported fallback
+	// for lightweight embedded Models roots that predate this capability.
+	readiness, readinessErr := service.models.GetModelReadiness(cfg.Context, modelinference.GetModelReadinessRequest{
+		Scope: scope, Name: modelName, Operation: operation,
+	})
+	if readinessErr == nil {
+		catalogResult.Model.ManagedRuntime = readiness.Readiness.Clone()
+	} else if !errors.Is(readinessErr, modelinference.ErrUnsupportedOperation) {
+		return mapModelsRootError(readinessErr)
+	}
 	if err := validateCLIOutputShape(cfg, catalogResult.Model, operation); err != nil {
 		return err
 	}

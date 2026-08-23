@@ -41,6 +41,13 @@ func (a *Adapter) GetModel(ctx context.Context, modelName string) (factoryapi.Mo
 	if err != nil {
 		return factoryapi.ModelDetail{}, err
 	}
+	readiness, err := a.models.GetModelReadiness(ctx, models.GetModelReadinessRequest{
+		Scope: a.scope, Name: request.Name, Operation: request.Operation,
+	})
+	if err != nil {
+		return factoryapi.ModelDetail{}, err
+	}
+	scoped.Model.ManagedRuntime = readiness.Readiness.Clone()
 	return detailToGenerated(scoped.Model), nil
 }
 

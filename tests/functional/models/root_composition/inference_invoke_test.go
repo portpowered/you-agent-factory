@@ -573,14 +573,19 @@ func writeReadyOmniVoiceInvokeCache(t *testing.T, home string) {
 		t.Fatalf("create model cache fixture: %v", err)
 	}
 	files := []string{"omnivoice-base-Q4_K_M.gguf", "omnivoice-tokenizer-Q4_K_M.gguf"}
+	body := []byte("fixture")
+	digest := fmt.Sprintf("%x", sha256.Sum256(body))
 	for _, name := range files {
-		if err := os.WriteFile(filepath.Join(revisionDir, name), []byte("fixture"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(revisionDir, name), body, 0o644); err != nil {
 			t.Fatalf("write model cache fixture %s: %v", name, err)
 		}
 	}
 	metadata := map[string]any{
 		"modelName": "OMNIVOICE_Q4_K_M", "revision": "rev-test",
-		"files": []map[string]any{{"path": files[0]}, {"path": files[1]}},
+		"files": []map[string]any{
+			{"path": files[0], "bytes": len(body), "sha256": digest},
+			{"path": files[1], "bytes": len(body), "sha256": digest},
+		},
 	}
 	data, err := json.Marshal(metadata)
 	if err != nil {

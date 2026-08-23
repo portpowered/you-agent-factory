@@ -45,6 +45,17 @@ Use these managed-runtime fields when deciding what to do next:
 
 `lifecycleState` distinguishes installation from loading, including
 `NOT_INSTALLED`, `INSTALLING`, `INSTALLED`, `LOADING`, and `LOADED`.
+For managed local models, Models derives the two fields together from the
+observed cache, active pull, and host facts:
+
+- no verified required assets is `MISSING` / `NOT_INSTALLED`;
+- an active pull with incomplete assets is `LOADING` / `INSTALLING`;
+- verified required assets are `READY` / `INSTALLED`, or `READY` / `LOADED`
+  when the host is loaded; and
+- a failed observation is `FAILED` with a lifecycle consistent with the
+  installed evidence.
+
+The service does not publish `READY` with `NOT_INSTALLED`.
 
 ## Pull A Managed Local Model
 
@@ -55,12 +66,16 @@ you models pull OMNIVOICE_Q4_K_M
 you --json models pull OMNIVOICE_Q4_K_M
 ```
 
-The result reports the pull outcome, resulting readiness, cache path, revision,
-and downloaded files. Common outcomes include `ALREADY_READY`,
-`INSTALLED_SUCCESSFULLY`, `ALREADY_PRESENT`, `STILL_LOADING`, `TIMED_OUT`,
-`SOURCE_FETCH_FAILED`, and `UNSUPPORTED_RUNTIME`. A successful download can
-still be `LOADING`; inspect the model until it becomes `READY` before invoking
-it.
+The command is synchronous for managed local assets: it remains active until
+source transfer, byte/checksum verification, and cache publication reach a
+terminal success or failure. It does not report success while the backing
+download is still running. The result reports the pull outcome, resulting
+readiness, cache path, revision, and downloaded files. Common outcomes include
+`ALREADY_READY`, `INSTALLED_SUCCESSFULLY`, `ALREADY_PRESENT`, `STILL_LOADING`,
+`TIMED_OUT`, `SOURCE_FETCH_FAILED`, and `UNSUPPORTED_RUNTIME`. A successful
+pull normally leaves the model `READY` / `INSTALLED` (or `READY` / `LOADED` if
+the host is already loaded); a concurrent `inspect` may observe
+`LOADING` / `INSTALLING` while the pull is active.
 
 If pull fails, use the returned outcome and diagnostics rather than editing the
 managed cache. Check network and source credentials for `SOURCE_FETCH_FAILED`,
