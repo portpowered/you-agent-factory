@@ -9208,7 +9208,7 @@
           },
           "description": {
             "id": "you.worker-sessions.description",
-            "canonicalEnglish": "Inspect authoritative Worker Session attempts correlated with one Work item."
+            "canonicalEnglish": "Inspect authoritative Worker Session attempts correlated with one Work item. The current list route requires --work-id. Fleet-wide listing is not currently available."
           }
         },
         "examples": [
@@ -9243,17 +9243,14 @@
         "documentation": {
           "title": {
             "id": "you.worker-sessions.list.title",
-          "canonicalEnglish": "List fleet-wide or Work-scoped Worker Sessions"
+            "canonicalEnglish": "List Work-scoped Worker Sessions"
           },
           "description": {
             "id": "you.worker-sessions.list.description",
-          "canonicalEnglish": "List authoritative Worker Session observations by stable identity. Omit --work-id to inspect the fleet-wide top-level identity surface, or provide --work-id for one Work. Repeat --state values to combine lifecycle states with OR semantics. Use --limit as a positive fleet-wide result bound after filtering. The legacy --max-results and --next-token options are also fleet-wide only. Work-scoped listing does not accept those filters and returns a typed error when they are supplied. The human table shows Work name and ID, Worker Session ID, provider and kind, state, start time, duration, and exit or failure kind. Provider-session identity remains distinct from Worker Session identity. Use --output json for stable machine-readable facts."
+          "canonicalEnglish": "List authoritative Worker Session observations for one Work item. The current list route requires --work-id. Fleet-wide listing is not currently available. Use --output json for stable machine-readable facts."
           }
         },
         "examples": [
-          "you worker-sessions list",
-          "you worker-sessions list --state RUNNING --state FAILED --limit 25",
-          "you worker-sessions list --scope direct --state COMPLETED",
           "you worker-sessions list --work-id work-123",
           "you worker-sessions list --work-id work-123 --output json"
         ],
@@ -9277,7 +9274,7 @@
         "you.worker-sessions.list.flag.work-id": {
           "id": "you.worker-sessions.list.flag.work-id",
           "long": "work-id",
-          "usage": "Work identity whose Worker Session attempts should be listed",
+          "usage": "required Work identity for the current Work-scoped list route",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -9301,7 +9298,7 @@
         "you.worker-sessions.list.flag.scope": {
           "id": "you.worker-sessions.list.flag.scope",
           "long": "scope",
-          "usage": "top-level observation scope: omit for fleet-wide, or use direct, factory, or all",
+          "usage": "reserved fleet-wide observation scope. Fleet-wide listing is not currently available",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -9330,7 +9327,7 @@
         "you.worker-sessions.list.flag.state": {
           "id": "you.worker-sessions.list.flag.state",
           "long": "state",
-          "usage": "repeatable fleet-wide Worker Session lifecycle state filter. Work-scoped listing does not support this option",
+          "usage": "reserved fleet-wide lifecycle filter. Work-scoped listing does not support this option",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -9364,7 +9361,7 @@
         "you.worker-sessions.list.flag.limit": {
           "id": "you.worker-sessions.list.flag.limit",
           "long": "limit",
-          "usage": "positive fleet-wide maximum Worker Session observations after scope and state filters",
+          "usage": "reserved fleet-wide result bound. Work-scoped listing does not support this option",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -9388,7 +9385,7 @@
         "you.worker-sessions.list.flag.max-results": {
           "id": "you.worker-sessions.list.flag.max-results",
           "long": "max-results",
-          "usage": "legacy fleet-wide maximum Worker Session observations per page. Prefer --limit",
+          "usage": "reserved fleet-wide page bound. Work-scoped listing does not support this option",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -9412,7 +9409,7 @@
         "you.worker-sessions.list.flag.next-token": {
           "id": "you.worker-sessions.list.flag.next-token",
           "long": "next-token",
-          "usage": "opaque cursor returned by a previous fleet-wide Worker Session list",
+          "usage": "reserved fleet-wide cursor. Work-scoped listing does not support this option",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -13684,7 +13681,7 @@
           },
           "description": {
             "id": "you.metrics.description",
-            "canonicalEnglish": "Inspect recorded Factory Runtime metrics grouped by workstation, worker, or provider. Use --session to scope one Factory Session and --json for deterministic machine-readable output. Use `you metrics costs` to query exact operator-configured runtime cost rollups from a running Factory API."
+            "canonicalEnglish": "Inspect recorded Factory Runtime metrics grouped by workstation, worker, or provider. Use --session to scope one Factory Session and --json for deterministic machine-readable output. Use `you metrics costs` to query exact operator-configured runtime cost rollups from a running Factory API. The base command reports token and latency metrics. Costs are reported separately."
           }
         },
         "examples": [
@@ -13972,7 +13969,7 @@
           },
           "description": {
             "id": "you.metrics.costs.description",
-            "canonicalEnglish": "Query exact operator-configured runtime cost rollups from the running Factory API. Use --session to select one Factory Session and --json for the API-shaped report. Missing prices remain visible as UNPRICED usage; this command does not fetch live vendor pricing or enforce billing."
+            "canonicalEnglish": "Query exact operator-configured runtime cost rollups from the running Factory API. Use --session to select one Factory Session and --json for the API-shaped report. PRICED rows include price_source as BUILT_IN or OPERATOR_SUPPLIED. Missing prices remain visible as UNPRICED usage. This command does not fetch live vendor pricing or enforce billing."
           }
         },
         "examples": [

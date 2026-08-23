@@ -321,17 +321,20 @@ durable watch cursor or replay lost session state. See `you docs work` for the
 transition schema and reconnect boundary.
 
 When a model-backed dispatch needs provider-level diagnosis, inspect its
-Worker Session through its stable identity. Direct Worker Sessions do not need
-a Factory Session or Work correlation:
+Worker Session through its stable identity. Use a Work-scoped list to discover
+the identity, then use the direct inspection commands:
 
 ```bash
-you --server http://localhost:7437 worker-sessions list
-you --server http://localhost:7437 worker-sessions list --state RUNNING --state FAILED --limit 25
-you --server http://localhost:7437 worker-sessions list --scope direct --state COMPLETED
+you --server http://localhost:7437 worker-sessions list --work-id <work-id>
 you --server http://localhost:7437 worker-sessions show --worker-session-id <worker-session-id>
 you --server http://localhost:7437 worker-sessions stream --worker-session-id <worker-session-id>
 you --server http://localhost:7437 worker-sessions read --worker-session-id <worker-session-id>
 ```
+
+The current `worker-sessions list` route requires `--work-id`. The no-work-id
+route currently returns HTTP `500` with `INTERNAL_ERROR`. Fleet-wide browsing is
+not currently available. The `--scope`, `--state`, `--limit`, `--max-results`,
+and `--next-token` filters are reserved for the future fleet-wide route.
 
 Direct Worker Session stdin is limited to 1,048,576 bytes, inclusive. This
 limit applies to `--execution -` and to non-terminal stdin used for direct
@@ -435,22 +438,13 @@ topic, and observation guidance needed for later `show`, `read`, or `stream`
 operations. A source must be terminal and have a valid server-recorded Provider
 Session that supports continuation.
 
-The unscoped top-level list is the fleet-wide view: it includes direct and
-Factory-originated observations across the process. Use `--scope direct`,
-`--scope factory`, or `--scope all` when an origin-specific view is needed.
-Repeat `--state` to select multiple lifecycle states (the values are combined
-with OR). `--limit` is a positive result bound applied after scope and state
-filters; `--next-token` resumes from the opaque cursor returned in JSON
-`paginationContext`. The legacy `--max-results` flag remains accepted for
-compatibility when `--limit` is omitted. These filters are fleet-wide only.
-When `--work-id` is supplied, the Work-scoped endpoint preserves its established
-unfiltered behavior and returns a typed error if `--state`, `--limit`,
-`--max-results`, or `--next-token` is supplied. Omit `--work-id` to filter the
-fleet-wide view.
+The Work-scoped list returns observations correlated with one Work item.
+Supply `--work-id` for the current route. It returns a typed error when the
+reserved fleet-wide filters are supplied.
 
-The human fleet table includes Work name and ID, the stable Worker Session ID,
-provider and provider-session kind, provider-session ID when available, state,
-start time, duration, and exit/failure kind. A `-` means that the observation
+The human Work-scoped table includes Work name and ID, the stable Worker Session
+ID, provider, and provider-session kind. It also includes provider-session ID,
+state, start time, duration, and exit/failure kind. A `-` means that the observation
 does not expose that fact. The Worker Session ID is the canonical identity for
 `show`, `stream`, and `read`; a provider-session ID is a separate
 provider-issued correlation value. JSON output preserves these identities and

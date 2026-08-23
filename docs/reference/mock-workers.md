@@ -241,7 +241,7 @@ In a second terminal, list the Worker Sessions and select the `executor`
 Worker Session ID. Inspect its usage and the Factory cost report:
 
 ```bash
-you --server http://localhost:7437 worker-sessions list --scope factory
+you --server http://localhost:7437 worker-sessions list --work-id <work-id>
 you --server http://localhost:7437 worker-sessions show --worker-session-id <worker-session-id>
 you --server http://localhost:7437 metrics costs
 ```

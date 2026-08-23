@@ -117,7 +117,8 @@ labels `Input tokens`, `Output tokens`, `Completed dispatches`, and `Failures by
 
 Latency uses milliseconds. The command reports p50 and p95 values when samples exist. It prints `no samples` when a latency value has no samples.
 
-Cost is always `unavailable`. The command does not emit a numeric price.
+The base metrics command does not emit a numeric price. Use `you metrics costs`
+for runtime cost status and exact priced amounts.
 
 The provider breakdown includes every completed dispatch. Its completed
 dispatch counts, including the unavailable attribution group, sum to the
@@ -150,7 +151,7 @@ The top-level fields are:
 | `scope` | `all_factory_sessions` for an unscoped query or `factory_session` with the selected live ID. |
 | `group_by` | The requested `workstation`, `worker`, or `provider` grouping. |
 | `units` | `tokens`, `count`, and `milliseconds`. |
-| `cost.availability` | The base metrics cost state. It remains `unavailable`. |
+| `cost.availability` | The base metrics cost state. It remains `unavailable`. Use `you metrics costs` for runtime cost status. |
 | `totals` | Token, completion, failure, and latency aggregates for the selected scope. |
 | `groups` | Rows for only the requested grouping, sorted by key. |
 
@@ -182,20 +183,23 @@ document.
 
 Costs uses two pricing authorities. Providers owns the immutable built-in table
 shipped with the application. Operator Settings owns the optional `priceTable`
-in `~/.you-agent-factory/config.json`.
+in `~/.you-agent-factory/config.json`. Omit `priceTable` to use an empty
+operator table.
 
 The effective table uses the exact normalized provider/model pair as its key.
 An operator row supplements a missing built-in pair. A matching operator row
 replaces the complete built-in row. Costs never combines fields from both rows.
 
-An operator row must include `inputPerMillionTokens` and
+When `priceTable` is present, `currency` must be `USD` and `models` must be an
+array. An operator row must include `inputPerMillionTokens` and
 `outputPerMillionTokens`. `cachedInputPerMillionTokens` and
 `reasoningOutputPerMillionTokens` are optional. If an operator omits one of
 these optional rates, that measured class remains `UNPRICED`.
 
 The Operator Settings decoder trims provider and model values. It canonicalizes
 supported provider aliases and does not guess or alias model identifiers.
-Missing provider/model identity or a missing effective row remains `UNPRICED`.
+Duplicate normalized provider/model pairs are rejected. Missing provider/model
+identity or a missing effective row remains `UNPRICED`.
 Cached input is deducted from total input. Reasoning output is deducted from
 total output before the corresponding rates are applied.
 
