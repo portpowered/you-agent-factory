@@ -44,6 +44,10 @@ class DirtyRootError(RuntimeError):
     """A bounded, already-rendered diagnostic for an operator-owned root."""
 
 
+class RootStatusError(RuntimeError):
+    """A root status inspection failure that belongs to the setup preflight."""
+
+
 def raw_failure_details(error):
     """Return an exception's text without allowing rendering to raise again."""
     try:
@@ -336,6 +340,14 @@ def ensure_clean_repository_root(repo_root):
     entries = repository_status_entries(repo_root)
     if entries:
         raise DirtyRootError(dirty_root_diagnostic(repo_root, entries))
+
+
+def root_status_for_setup(repo_root):
+    """Inspect root dirt after fetch while preserving the preflight failure stage."""
+    try:
+        return repository_status_entries(repo_root)
+    except Exception as error:  # noqa: BLE001 - preserve the CLI stage boundary
+        raise RootStatusError(str(error)) from error
 
 
 def command_failure_details(result):
@@ -925,12 +937,19 @@ def _sync_main(repo_root):
     """Best-effort root main sync without disturbing the working tree.
 
     Uses fetch plus refs/heads/main fast-forward when safe instead of git pull,
-    so dirty-root checkouts can continue workspace setup from local state.
+    so clean-root checkouts can continue workspace setup from local state.
+    Dirty roots skip root synchronization after fetch when a local or remote
+    main ref can provide a safe start point for the requested lane.
     Returns a human-readable outcome string for logging.
     """
     if not has_origin_remote(repo_root):
+        entries = root_status_for_setup(repo_root)
         if local_main_ref_exists(repo_root):
+            if entries:
+                return "skipped (dirty root; using local main without root sync)"
             return "skipped (no origin remote)"
+        if entries:
+            raise DirtyRootError(dirty_root_diagnostic(repo_root, entries))
         raise RuntimeError(
             "no origin remote and refs/heads/main is missing"
         )
@@ -950,6 +969,17 @@ def _sync_main(repo_root):
             )
 
     remote_sha = resolve_remote_main_sha(repo_root, fetch_succeeded)
+    entries = root_status_for_setup(repo_root)
+    if entries:
+        if remote_sha is not None:
+            return (
+                "skipped (dirty root; using origin/main "
+                f"{remote_sha[:8]} without root sync)"
+            )
+        if local_main_ref_exists(repo_root):
+            return "skipped (dirty root; using local main without root sync)"
+        raise DirtyRootError(dirty_root_diagnostic(repo_root, entries))
+
     if remote_sha is None:
         if local_main_ref_exists(repo_root):
             return "skipped (origin has no main branch)"
@@ -1242,26 +1272,14 @@ def main():
         print("PRD name must not be empty", file=sys.stderr)
         sys.exit(1)
 
-    # Root setup is deliberately fail-closed: the legacy synchronization path
-    # can snapshot and restore local changes, but intake must not mutate an
-    # operator's repository before the lane has even been created.
-    try:
-        ensure_clean_repository_root(repo_root)
-    except DirtyRootError as e:
-        print(f"Root cleanliness check failed: {e}", file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
-        print(
-            format_stage_failure("Root cleanliness check failed", e),
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
     # Sync main and prune worktrees.
     try:
         sync_outcome = sync_main(repo_root)
         print(f"Root sync: {sync_outcome}", file=sys.stderr)
         prune_worktrees(repo_root)
+    except (DirtyRootError, RootStatusError) as e:
+        print(f"Root cleanliness check failed: {e}", file=sys.stderr)
+        sys.exit(1)
     except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
         print(format_stage_failure("Root sync failed", e), file=sys.stderr)
         sys.exit(1)

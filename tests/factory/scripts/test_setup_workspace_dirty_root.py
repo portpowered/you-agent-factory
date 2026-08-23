@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regression tests for refusing a dirty repository root during setup."""
+"""Regression tests for safe setup from a dirty repository root."""
 
 import importlib.util
 import io
@@ -66,13 +66,46 @@ def write_prd(repo_path, prd_name):
     )
 
 
-def run_setup_workspace(repo_path, prd_name):
+def create_remote_operator(base_path):
+    """Create an operator clone whose remote can advance independently."""
+    remote_path = base_path / "remote.git"
+    remote_path.mkdir()
+    git(["init", "--bare", "-b", "main"], remote_path)
+
+    upstream_path = base_path / "upstream"
+    upstream_path.mkdir()
+    init_repository(upstream_path)
+    git(["remote", "add", "origin", str(remote_path)], upstream_path)
+    git(["push", "-u", "origin", "main"], upstream_path)
+
+    operator_path = base_path / "operator"
+    git(["clone", str(remote_path), operator_path.name], base_path)
+    git(
+        ["config", "user.email", "setup-workspace-test@example.com"],
+        operator_path,
+    )
+    git(
+        ["config", "user.name", "Setup Workspace Test"],
+        operator_path,
+    )
+    (operator_path / ".git" / "info" / "exclude").write_text(
+        "tasks/todo/\n.claude/\n",
+        encoding="utf-8",
+    )
+    return operator_path, upstream_path
+
+
+def run_setup_workspace(repo_path, prd_name, env=None):
+    environment = os.environ.copy()
+    if env:
+        environment.update(env)
     return subprocess.run(
         [sys.executable, str(SCRIPT_PATH), prd_name],
         cwd=repo_path,
         capture_output=True,
         text=True,
         check=False,
+        env=environment,
     )
 
 
@@ -85,55 +118,66 @@ class SetupWorkspaceDirtyRootTest(unittest.TestCase):
     def tearDown(self):
         self.temp_dir.cleanup()
 
-    def run_refusal_case(self, mutate_root):
+    def run_safe_case(self, mutate_root):
         init_repository(self.repo_path)
         prd_name = "dirty-root-prd"
         write_prd(self.repo_path, prd_name)
         mutate_root()
 
-        head_before = git(["rev-parse", "HEAD"], self.repo_path).stdout
+        head_before = git(["rev-parse", "HEAD"], self.repo_path).stdout.strip()
+        branch_before = git(
+            ["branch", "--show-current"], self.repo_path,
+        ).stdout.strip()
+        main_before = git(
+            ["rev-parse", "refs/heads/main"], self.repo_path,
+        ).stdout.strip()
         status_before = git(["status", "--porcelain=v1"], self.repo_path).stdout
+        index_before = git(["ls-files", "--stage"], self.repo_path).stdout
         result = run_setup_workspace(self.repo_path, prd_name)
 
-        self.assertEqual(result.returncode, 1, result.stdout)
-        self.assertEqual(result.stdout, "")
-        self.assertIn("repository root is dirty", result.stderr.lower())
-        self.assertIn(str(self.repo_path), result.stderr)
-        self.assertIn("total entries=", result.stderr)
-        self.assertIn("tracked changes=", result.stderr)
-        self.assertIn("untracked files=", result.stderr)
-        self.assertIn("Inspect the repository root manually", result.stderr)
-        self.assertIn("commit the changes", result.stderr)
-        self.assertIn("back them up and restore them manually", result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ready")
+        self.assertTrue(Path(payload["worktree"]).exists())
         self.assertEqual(
-            git(["rev-parse", "HEAD"], self.repo_path).stdout,
+            git(["rev-parse", "HEAD"], self.repo_path).stdout.strip(),
             head_before,
         )
         self.assertEqual(
             git(["status", "--porcelain=v1"], self.repo_path).stdout,
             status_before,
         )
-        self.assertFalse(
-            (self.repo_path / ".claude" / "worktrees" / prd_name).exists()
+        self.assertEqual(
+            git(["ls-files", "--stage"], self.repo_path).stdout,
+            index_before,
         )
+        self.assertEqual(
+            git(["branch", "--show-current"], self.repo_path).stdout.strip(),
+            branch_before,
+        )
+        self.assertEqual(
+            git(["rev-parse", "refs/heads/main"], self.repo_path).stdout.strip(),
+            main_before,
+        )
+        return result
 
-    def test_refuses_unstaged_tracked_change_before_mutation(self):
+    def test_allows_unstaged_tracked_change_without_root_mutation(self):
         def mutate():
             (self.repo_path / "README.md").write_text(
                 "operator edit\n", encoding="utf-8",
             )
 
-        self.run_refusal_case(mutate)
+        self.run_safe_case(mutate)
 
-    def test_refuses_staged_tracked_change_before_mutation(self):
+    def test_allows_staged_tracked_change_without_root_mutation(self):
         def mutate():
             staged_path = self.repo_path / "staged.txt"
             staged_path.write_text("staged\n", encoding="utf-8")
             git(["add", staged_path.name], self.repo_path)
 
-        self.run_refusal_case(mutate)
+        self.run_safe_case(mutate)
 
-    def test_refuses_mixed_tracked_and_untracked_changes_with_separate_counts(self):
+    def test_all_dirty_root_change_types_remain_eligible(self):
         def mutate():
             (self.repo_path / "README.md").write_text(
                 "operator edit\n", encoding="utf-8",
@@ -142,10 +186,7 @@ class SetupWorkspaceDirtyRootTest(unittest.TestCase):
                 "operator data\n", encoding="utf-8",
             )
 
-        self.run_refusal_case(mutate)
-        result = run_setup_workspace(self.repo_path, "dirty-root-prd")
-        self.assertIn("tracked changes=1", result.stderr)
-        self.assertIn("untracked files=1", result.stderr)
+        self.run_safe_case(mutate)
 
     def test_ignored_only_root_remains_eligible(self):
         init_repository(self.repo_path)
@@ -161,7 +202,7 @@ class SetupWorkspaceDirtyRootTest(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout)["status"], "ready")
         self.assertTrue(ignored_path.exists())
 
-    def test_unusual_path_is_safely_escaped(self):
+    def test_unusual_path_does_not_block_safe_setup(self):
         init_repository(self.repo_path)
         prd_name = "unusual-path-prd"
         write_prd(self.repo_path, prd_name)
@@ -172,14 +213,10 @@ class SetupWorkspaceDirtyRootTest(unittest.TestCase):
 
         result = run_setup_workspace(self.repo_path, prd_name)
 
-        self.assertEqual(result.returncode, 1, result.stdout)
-        self.assertIn(
-            json.dumps(unusual_name, ensure_ascii=True),
-            result.stderr,
-        )
-        self.assertNotIn(unusual_name, result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.repo_path / unusual_name).exists())
 
-    def test_sample_is_bounded_deterministic_and_reports_omitted_paths(self):
+    def test_many_dirty_paths_do_not_block_safe_setup(self):
         init_repository(self.repo_path)
         prd_name = "bounded-sample-prd"
         write_prd(self.repo_path, prd_name)
@@ -188,19 +225,9 @@ class SetupWorkspaceDirtyRootTest(unittest.TestCase):
                 "operator data\n", encoding="utf-8",
             )
 
-        first = run_setup_workspace(self.repo_path, prd_name)
-        second = run_setup_workspace(self.repo_path, prd_name)
-
-        self.assertEqual(first.returncode, 1, first.stdout)
-        self.assertEqual(second.returncode, 1, second.stdout)
-        self.assertEqual(first.stderr, second.stderr)
-        sample_entries = [
-            line for line in first.stderr.splitlines() if line.startswith("    ?? ")
-        ]
-        self.assertEqual(
-            len(sample_entries), self.module.MAX_DIRTY_ROOT_SAMPLE_ENTRIES,
-        )
-        self.assertIn("5 additional path(s) omitted", first.stderr)
+        result = run_setup_workspace(self.repo_path, prd_name)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["status"], "ready")
 
     def test_status_command_failure_stops_before_mutation(self):
         init_repository(self.repo_path)
@@ -222,19 +249,18 @@ class SetupWorkspaceDirtyRootTest(unittest.TestCase):
         os.chdir(self.repo_path)
         try:
             with mock.patch.object(self.module, "run_git", side_effect=failing_status):
-                with mock.patch.object(self.module, "sync_main") as sync_main:
+                with mock.patch.object(
+                    self.module, "prune_worktrees",
+                ) as prune_worktrees:
                     with mock.patch.object(
-                        self.module, "prune_worktrees",
-                    ) as prune_worktrees:
+                        self.module, "create_or_reuse_worktree",
+                    ) as create_worktree:
                         with mock.patch.object(
-                            self.module, "create_or_reuse_worktree",
-                        ) as create_worktree:
-                            with mock.patch.object(
-                                sys, "argv", ["setup-workspace.py", prd_name],
-                            ):
-                                with redirect_stderr(stderr):
-                                    with self.assertRaises(SystemExit) as raised:
-                                        self.module.main()
+                            sys, "argv", ["setup-workspace.py", prd_name],
+                        ):
+                            with redirect_stderr(stderr):
+                                with self.assertRaises(SystemExit) as raised:
+                                    self.module.main()
         finally:
             os.chdir(original_cwd)
 
@@ -242,47 +268,113 @@ class SetupWorkspaceDirtyRootTest(unittest.TestCase):
         self.assertIn("Root cleanliness check failed", stderr.getvalue())
         self.assertIn("git status --porcelain=v1 failed", stderr.getvalue())
         self.assertIn("simulated status failure", stderr.getvalue())
-        sync_main.assert_not_called()
         prune_worktrees.assert_not_called()
         create_worktree.assert_not_called()
 
-    def test_dirty_root_stops_before_mutation_capable_stages(self):
-        init_repository(self.repo_path)
-        prd_name = "dirty-stage-order-prd"
-        write_prd(self.repo_path, prd_name)
-        (self.repo_path / "README.md").write_text(
-            "operator edit\n", encoding="utf-8",
+    def test_subprocess_setup_uses_fresh_origin_main_and_preserves_dirty_root(self):
+        operator_path, upstream_path = create_remote_operator(self.repo_path)
+        prd_name = "dirty-root-remote-prd"
+        write_prd(operator_path, prd_name)
+
+        (upstream_path / "remote-only.txt").write_text(
+            "fresh remote start\n", encoding="utf-8",
+        )
+        git(["add", "remote-only.txt"], upstream_path)
+        git(["commit", "-m", "advance remote main"], upstream_path)
+        git(["push", "origin", "main"], upstream_path)
+        remote_sha = git(["rev-parse", "HEAD"], upstream_path).stdout.strip()
+
+        (operator_path / "README.md").write_text(
+            "operator tracked edit\n", encoding="utf-8",
+        )
+        staged_path = operator_path / "operator-staged.txt"
+        staged_path.write_text("operator staged\n", encoding="utf-8")
+        git(["add", staged_path.name], operator_path)
+        untracked_path = operator_path / "operator-untracked.txt"
+        untracked_path.write_text("operator untracked\n", encoding="utf-8")
+
+        before = {
+            "head": git(["rev-parse", "HEAD"], operator_path).stdout.strip(),
+            "branch": git(
+                ["branch", "--show-current"], operator_path,
+            ).stdout.strip(),
+            "main": git(
+                ["rev-parse", "refs/heads/main"], operator_path,
+            ).stdout.strip(),
+            "status": git(
+                ["status", "--porcelain=v1"], operator_path,
+            ).stdout,
+            "index": git(["ls-files", "--stage"], operator_path).stdout,
+        }
+        trace_path = self.repo_path / "git-trace.json"
+        result = run_setup_workspace(
+            operator_path,
+            prd_name,
+            env={"GIT_TRACE2_EVENT": str(trace_path)},
         )
 
-        stderr = io.StringIO()
-        original_cwd = os.getcwd()
-        os.chdir(self.repo_path)
-        try:
-            with mock.patch.object(self.module, "sync_main") as sync_main, \
-                    mock.patch.object(
-                        self.module, "prune_worktrees",
-                    ) as prune_worktrees, \
-                    mock.patch.object(
-                        self.module, "create_or_reuse_worktree",
-                    ) as create_worktree, \
-                    mock.patch.object(
-                        self.module, "copy_prd_files",
-                    ) as copy_prd_files:
-                with mock.patch.object(
-                    sys, "argv", ["setup-workspace.py", prd_name],
-                ):
-                    with redirect_stderr(stderr):
-                        with self.assertRaises(SystemExit) as raised:
-                            self.module.main()
-        finally:
-            os.chdir(original_cwd)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ready")
+        worktree_path = Path(payload["worktree"])
+        self.assertEqual(
+            git(["rev-parse", "HEAD"], worktree_path).stdout.strip(),
+            remote_sha,
+        )
+        self.assertEqual(
+            git(
+                ["rev-parse", f"refs/heads/{prd_name}"],
+                worktree_path,
+            ).stdout.strip(),
+            remote_sha,
+        )
+        self.assertEqual(
+            git(["rev-parse", "HEAD"], operator_path).stdout.strip(),
+            before["head"],
+        )
+        self.assertEqual(
+            git(["branch", "--show-current"], operator_path).stdout.strip(),
+            before["branch"],
+        )
+        self.assertEqual(
+            git(["rev-parse", "refs/heads/main"], operator_path).stdout.strip(),
+            before["main"],
+        )
+        self.assertEqual(
+            git(["status", "--porcelain=v1"], operator_path).stdout,
+            before["status"],
+        )
+        self.assertEqual(
+            git(["ls-files", "--stage"], operator_path).stdout,
+            before["index"],
+        )
+        self.assertEqual(
+            staged_path.read_text(encoding="utf-8"),
+            "operator staged\n",
+        )
+        self.assertEqual(
+            untracked_path.read_text(encoding="utf-8"),
+            "operator untracked\n",
+        )
 
-        self.assertEqual(raised.exception.code, 1)
-        self.assertIn("repository root is dirty", stderr.getvalue().lower())
-        sync_main.assert_not_called()
-        prune_worktrees.assert_not_called()
-        create_worktree.assert_not_called()
-        copy_prd_files.assert_not_called()
+        trace_events = [
+            json.loads(line)
+            for line in trace_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        child_commands = [
+            event.get("child_argv", [])
+            for event in trace_events
+            if event.get("event") == "child_start"
+        ]
+        self.assertTrue(child_commands)
+        self.assertFalse(
+            any(
+                command[:1] == ["stash"]
+                or command[:2] == ["git", "stash"]
+                for command in child_commands
+            ),
+        )
 
 
 if __name__ == "__main__":

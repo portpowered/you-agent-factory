@@ -349,9 +349,8 @@ class SetupWorkspaceWorktreeTest(unittest.TestCase):
         git(["add", "staged.txt"], local_repo)
 
         second = run_setup_workspace(local_repo, prd_name)
-        self.assertEqual(second.returncode, 1, second.stdout)
-        self.assertEqual(second.stdout, "")
-        self.assertIn("repository root is dirty", second.stderr.lower())
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertTrue(json.loads(second.stdout)["reused"])
         self.assertTrue(marker.exists())
         self.assertIn("A  staged.txt", git(["status", "--porcelain"], local_repo).stdout)
 
