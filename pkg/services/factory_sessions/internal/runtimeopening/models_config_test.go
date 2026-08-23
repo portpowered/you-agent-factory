@@ -401,6 +401,102 @@ func TestRuntimeModelInvokerUsesSharedWorkersForManagedModel(t *testing.T) {
 	assertManagedModelInvocation(t, result, err, scope, modelsService, workersService)
 }
 
+func TestRuntimeModelInvokerUsesEffectiveBuiltinWithoutDeclaredWorker(t *testing.T) {
+	t.Parallel()
+
+	scope := mustRuntimeModelScope(t, "factory-session:models:effective-builtin")
+	definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameTTS)
+	if !ok {
+		t.Fatal("built-in TTS definition is unavailable")
+	}
+	modelsService := &runtimeInvokerModelsStub{
+		resolution: models.ResolveModelReferenceResult{
+			Resolved: models.ResolvedModelReference{Definition: definition},
+		},
+		readiness: models.GetModelReadinessResult{
+			ModelName: models.BuiltInModelNameTTS,
+			Readiness: models.Runtime{ReadinessState: models.ReadinessStateReady},
+		},
+	}
+	workersService := &runtimeInvokerWorkersStub{result: workers.ExecuteResult{
+		Outcome: workers.ExecutionOutcomeAccepted,
+		Output: workers.ProposedOutput{Primary: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeAudio, File: "/tmp/tts.wav", ContentType: "audio/wav",
+		}}},
+	}}
+	invoker := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{
+		Models: modelsService, Scope: scope, Sessions: sessionsWithConfig(&factorydefinitions.FactoryConfig{}),
+		Workers: workersService,
+	})
+	result, err := invoker.InvokeModel(context.Background(), models.BuiltInModelNameTTS, models.Request{
+		Operation: models.OperationTTS,
+		Content: []work.WorkContentPart{{
+			Slot: "text", Type: work.WorkContentPartTypeText, Text: "hello",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("InvokeModel(effective built-in) error = %v, want nil", err)
+	}
+	if result.ModelName != models.BuiltInModelNameTTS || result.Worker != models.BuiltInModelNameTTS ||
+		result.Operation != models.OperationTTS || result.ProviderLocality != models.RuntimeModelLocalityLocal {
+		t.Fatalf("effective built-in result = %#v, want tts identity/locality", result)
+	}
+	if len(result.Content) != 1 || result.Content[0].Type != work.WorkContentPartTypeAudio {
+		t.Fatalf("effective built-in content = %#v, want one audio part", result.Content)
+	}
+	if len(modelsService.resolutionRequests) != 1 {
+		t.Fatalf("resolution requests = %#v, want one effective-definition lookup", modelsService.resolutionRequests)
+	}
+	resolution := modelsService.resolutionRequests[0]
+	if resolution.Scope != scope || resolution.Reference.NameOrURI != models.BuiltInModelNameTTS {
+		t.Fatalf("resolution request = %#v, want opened scope and tts name", resolution)
+	}
+	if len(modelsService.readinessRequests) != 1 || modelsService.readinessRequests[0].Name != models.BuiltInModelNameTTS ||
+		modelsService.readinessRequests[0].Operation != models.OperationTTS {
+		t.Fatalf("readiness requests = %#v, want effective tts operation", modelsService.readinessRequests)
+	}
+	if len(workersService.requests) != 1 {
+		t.Fatalf("Workers Execute requests = %d, want one", len(workersService.requests))
+	}
+	execute := workersService.requests[0]
+	if execute.Target.WorkerName != models.BuiltInModelNameTTS || execute.Target.WorkerType != factorydefinitions.WorkerTypeInference ||
+		execute.Target.Model.Name != models.BuiltInModelNameTTS || execute.Target.Model.Locality != models.RuntimeModelLocalityLocal {
+		t.Fatalf("effective built-in target = %#v, want synthetic inference target", execute.Target)
+	}
+	if execute.Input.ModelRuntime == nil || execute.Input.ModelRuntime.Worker.Model != models.BuiltInModelNameTTS {
+		t.Fatalf("effective built-in runtime input = %#v, want managed model projection", execute.Input.ModelRuntime)
+	}
+	if len(execute.Input.ModelBindings) != 3 || execute.Input.ModelBindings[0].Slot != "text" ||
+		execute.Input.ModelBindings[0].Source != workers.ModelOperationBindingSourceInput ||
+		execute.Input.ModelBindings[1].Source != workers.ModelOperationBindingSourceOmitted {
+		t.Fatalf("effective built-in bindings = %#v, want projected TTS slots", execute.Input.ModelBindings)
+	}
+}
+
+func TestRuntimeModelInvokerPreservesEffectiveBuiltinUnsupportedOperation(t *testing.T) {
+	t.Parallel()
+
+	scope := mustRuntimeModelScope(t, "factory-session:models:effective-unsupported")
+	definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameTTS)
+	if !ok {
+		t.Fatal("built-in TTS definition is unavailable")
+	}
+	modelsService := &runtimeInvokerModelsStub{resolution: models.ResolveModelReferenceResult{
+		Resolved: models.ResolvedModelReference{Definition: definition},
+	}}
+	invoker := NewRuntimeModelInvoker(RuntimeModelInvokerConfig{
+		Models: modelsService, Scope: scope, Sessions: sessionsWithConfig(&factorydefinitions.FactoryConfig{}),
+		Workers: &runtimeInvokerWorkersStub{},
+	})
+	_, err := invoker.InvokeModel(context.Background(), models.BuiltInModelNameTTS, models.Request{Operation: models.OperationASR})
+	if err == nil || !errors.Is(err, models.ErrUnsupportedOperation) {
+		t.Fatalf("unsupported effective operation error = %v, want ErrUnsupportedOperation", err)
+	}
+	if len(modelsService.resolutionRequests) != 1 || len(modelsService.readinessRequests) != 0 {
+		t.Fatalf("effective unsupported lookup state = resolutions=%d readiness=%d, want resolution only", len(modelsService.resolutionRequests), len(modelsService.readinessRequests))
+	}
+}
+
 func assertManagedModelInvocation(
 	t *testing.T,
 	result models.Result,
@@ -418,6 +514,9 @@ func assertManagedModelInvocation(
 	}
 	if len(modelsService.readinessRequests) != 1 || modelsService.readinessRequests[0].Scope != scope {
 		t.Fatalf("readiness requests = %#v, want opened runtime scope", modelsService.readinessRequests)
+	}
+	if len(modelsService.resolutionRequests) != 0 {
+		t.Fatalf("effective-definition resolution requests = %#v, want declared worker precedence", modelsService.resolutionRequests)
 	}
 	if len(workersService.requests) != 1 {
 		t.Fatalf("Workers Execute requests = %d, want one", len(workersService.requests))
@@ -675,14 +774,22 @@ func sessionsWithConfig(config *factorydefinitions.FactoryConfig) *runtimeInvoke
 
 type runtimeInvokerModelsStub struct {
 	models.Service
-	readiness         models.GetModelReadinessResult
-	readinessErr      error
-	readinessRequests []models.GetModelReadinessRequest
+	readiness          models.GetModelReadinessResult
+	readinessErr       error
+	readinessRequests  []models.GetModelReadinessRequest
+	resolution         models.ResolveModelReferenceResult
+	resolutionErr      error
+	resolutionRequests []models.ResolveModelReferenceRequest
 }
 
 func (stub *runtimeInvokerModelsStub) GetModelReadiness(_ context.Context, request models.GetModelReadinessRequest) (models.GetModelReadinessResult, error) {
 	stub.readinessRequests = append(stub.readinessRequests, request)
 	return stub.readiness, stub.readinessErr
+}
+
+func (stub *runtimeInvokerModelsStub) ResolveModelReference(_ context.Context, request models.ResolveModelReferenceRequest) (models.ResolveModelReferenceResult, error) {
+	stub.resolutionRequests = append(stub.resolutionRequests, request)
+	return stub.resolution, stub.resolutionErr
 }
 
 type runtimeInvokerSessionsStub struct {

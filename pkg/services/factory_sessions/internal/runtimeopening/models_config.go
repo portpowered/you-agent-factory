@@ -3,6 +3,7 @@ package runtimeopening
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -139,8 +140,8 @@ func (invoker *runtimeModelInvoker) InvokeModel(
 	if err != nil {
 		return models.Result{}, err
 	}
-	worker, operation, err := directRuntimeModelWorker(
-		projection.Context.FactoryCfg, modelName, request.Operation,
+	worker, operation, err := invoker.resolveRuntimeModelWorker(
+		ctx, projection.Context.FactoryCfg, modelName, request.Operation,
 	)
 	if err != nil {
 		return models.Result{}, classifyRuntimeModelError(err, failureContext)
@@ -186,6 +187,79 @@ func (invoker *runtimeModelInvoker) InvokeModel(
 		StreamFile:        streamFile,
 		StreamContentType: streamContentType,
 	}, nil
+}
+
+func (invoker *runtimeModelInvoker) resolveRuntimeModelWorker(
+	ctx context.Context,
+	factoryConfig *factorydefinitions.FactoryConfig,
+	modelName, operationName string,
+) (*factorydefinitions.FactoryWorkerConfig, factorydefinitions.ModelOperation, error) {
+	worker, operation, err := directRuntimeModelWorker(factoryConfig, modelName, operationName)
+	if err == nil || (!errors.Is(err, models.ErrNotFound) && factoryConfig != nil) {
+		return worker, operation, err
+	}
+	resolved, resolveErr := invoker.config.Models.ResolveModelReference(ctx, models.ResolveModelReferenceRequest{
+		Scope: invoker.config.Scope,
+		Reference: models.ModelReference{
+			NameOrURI: strings.TrimSpace(modelName),
+		},
+	})
+	if resolveErr != nil {
+		return nil, factorydefinitions.ModelOperation{}, resolveErr
+	}
+	return effectiveRuntimeModelWorker(resolved.Resolved.Definition, operationName)
+}
+
+func effectiveRuntimeModelWorker(
+	definition models.ModelDefinition,
+	operationName string,
+) (*factorydefinitions.FactoryWorkerConfig, factorydefinitions.ModelOperation, error) {
+	modelName := strings.TrimSpace(definition.Name)
+	if modelName == "" {
+		return nil, factorydefinitions.ModelOperation{}, fmt.Errorf(
+			"%w: resolved model has no name", models.ErrNotFound,
+		)
+	}
+	worker := &factorydefinitions.FactoryWorkerConfig{
+		Name:          modelName,
+		Type:          factorydefinitions.WorkerTypeInference,
+		Model:         modelName,
+		ModelLocality: models.RuntimeModelLocalityLocal,
+	}
+	for _, candidate := range definition.Operations {
+		operation := projectEffectiveRuntimeModelOperation(candidate)
+		worker.Operations = append(worker.Operations, operation)
+		if strings.TrimSpace(operation.Name) == strings.TrimSpace(operationName) {
+			return worker, operation, nil
+		}
+	}
+	return nil, factorydefinitions.ModelOperation{}, fmt.Errorf(
+		"%w: model %q does not support operation %q",
+		models.ErrUnsupportedOperation, modelName, operationName,
+	)
+}
+
+func projectEffectiveRuntimeModelOperation(operation models.Operation) factorydefinitions.ModelOperation {
+	return factorydefinitions.ModelOperation{
+		Name:    operation.Name,
+		Inputs:  projectEffectiveRuntimeModelSlots(operation.Inputs),
+		Outputs: projectEffectiveRuntimeModelSlots(operation.Outputs),
+	}
+}
+
+func projectEffectiveRuntimeModelSlots(slots []models.OperationSlot) []factorydefinitions.ModelOperationSlot {
+	if len(slots) == 0 {
+		return nil
+	}
+	projected := make([]factorydefinitions.ModelOperationSlot, len(slots))
+	for index, slot := range slots {
+		projected[index] = factorydefinitions.ModelOperationSlot{
+			Name:         slot.Name,
+			ContentTypes: append([]string(nil), slot.ContentTypes...),
+			Required:     slot.Required != nil && *slot.Required,
+		}
+	}
+	return projected
 }
 
 func (invoker *runtimeModelInvoker) invokeRuntimeModel(
