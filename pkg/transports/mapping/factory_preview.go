@@ -254,17 +254,6 @@ func workflowDiagnosticFromSource(diagnostic factory.WorkflowSourceDiagnostic) f
 	}
 }
 
-func workflowDiagnosticsFromPolicy(diagnostics []factory.JavaScriptPolicyDiagnostic) []factoryapi.WorkflowDiagnostic {
-	out := make([]factoryapi.WorkflowDiagnostic, 0, len(diagnostics))
-	for _, diagnostic := range diagnostics {
-		out = append(out, factoryapi.WorkflowDiagnostic{
-			Code:    diagnostic.Code,
-			Message: diagnostic.Message,
-		})
-	}
-	return out
-}
-
 func workflowDiagnosticsFromPolicyIssues(issues []factory.JavaScriptPolicyIssue) []factoryapi.WorkflowDiagnostic {
 	out := make([]factoryapi.WorkflowDiagnostic, 0, len(issues))
 	for _, issue := range issues {

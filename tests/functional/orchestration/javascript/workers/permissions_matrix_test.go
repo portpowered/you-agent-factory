@@ -19,56 +19,37 @@ const disallowedPermissionWorkflow = `return (async function () {
     prompt: "permission denial child",
     label: "skip-child",
     modelProvider: "codex",
-    skipPermissions: true
+    permissions: "SKIP_PERMISSIONS"
   });
 })();`
 
 func TestJavaScriptAgentRunCodexCommandCharacterization(t *testing.T) {
 	tests := []struct {
-		name            string
-		mode            string
-		skipPermissions string
-		wantArgs        []string
+		name        string
+		permissions string
+		wantArgs    []string
 	}{
 		{
-			name:            "mode-unset/skipPermissions-absent",
-			skipPermissions: "absent",
-			wantArgs:        []string{"exec", "--json", "-"},
+			name:        "permissions-omitted",
+			permissions: "omitted",
+			wantArgs:    []string{"exec", "--json", "-"},
 		},
 		{
-			name:            "mode-unset/skipPermissions-false",
-			skipPermissions: "false",
-			wantArgs:        []string{"exec", "--json", "-"},
+			name:        "permissions-default",
+			permissions: "DEFAULT",
+			wantArgs:    []string{"exec", "--json", "-"},
 		},
 		{
-			name:            "mode-unset/skipPermissions-true",
-			skipPermissions: "true",
-			wantArgs:        []string{"exec", "--json", "--dangerously-bypass-approvals-and-sandbox", "-"},
-		},
-		{
-			name:            "READ_ONLY/skipPermissions-absent",
-			mode:            "READ_ONLY",
-			skipPermissions: "absent",
-			wantArgs:        []string{"exec", "--json", "-"},
-		},
-		{
-			name:            "READ_ONLY/skipPermissions-false",
-			mode:            "READ_ONLY",
-			skipPermissions: "false",
-			wantArgs:        []string{"exec", "--json", "-"},
-		},
-		{
-			name:            "READ_ONLY/skipPermissions-true",
-			mode:            "READ_ONLY",
-			skipPermissions: "true",
-			wantArgs:        []string{"exec", "--json", "--dangerously-bypass-approvals-and-sandbox", "-"},
+			name:        "permissions-skip",
+			permissions: "SKIP_PERMISSIONS",
+			wantArgs:    []string{"exec", "--json", "--dangerously-bypass-approvals-and-sandbox", "-"},
 		},
 	}
 
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			dir := support.ScaffoldFactory(t, permissionMatrixFactoryConfig(test.mode, permissionMatrixWorkflow(test.skipPermissions)))
+			dir := support.ScaffoldFactory(t, permissionMatrixFactoryConfig(permissionMatrixWorkflow(test.permissions)))
 			runner := support.NewRecordingCommandRunner("permission matrix child output")
 			inputs := support.FakeInputs(t.Context(), []string{
 				"you", "--json", "run",
@@ -143,11 +124,7 @@ func TestJavaScriptAgentRunDisallowedPermissionFailsThroughPublicCLI(t *testing.
 	}
 }
 
-func permissionMatrixFactoryConfig(mode, source string) map[string]any {
-	defaultPolicy := map[string]any{}
-	if mode != "" {
-		defaultPolicy["mode"] = mode
-	}
+func permissionMatrixFactoryConfig(source string) map[string]any {
 	config := map[string]any{}
 	config["name"] = "javascript-permission-matrix"
 	config["invocationSignature"] = map[string]any{
@@ -168,14 +145,13 @@ func permissionMatrixFactoryConfig(mode, source string) map[string]any {
 				"properties":           map[string]any{"prompt": map[string]any{"type": "string"}},
 				"additionalProperties": false,
 			},
-			"defaultPolicy": defaultPolicy,
 		},
 	}
 	return config
 }
 
 func disallowedPermissionFactoryConfig() map[string]any {
-	config := permissionMatrixFactoryConfig("", disallowedPermissionWorkflow)
+	config := permissionMatrixFactoryConfig(disallowedPermissionWorkflow)
 	config["name"] = "named-factory"
 	orchestrator := config["orchestrator"].(map[string]any)
 	javascript := orchestrator["javascript"].(map[string]any)
@@ -187,10 +163,10 @@ func disallowedPermissionFactoryConfig() map[string]any {
 	return config
 }
 
-func permissionMatrixWorkflow(skipPermissions string) string {
+func permissionMatrixWorkflow(permissions string) string {
 	field := ""
-	if skipPermissions != "absent" {
-		field = ", skipPermissions: " + skipPermissions
+	if permissions != "omitted" {
+		field = `, permissions: "` + permissions + `"`
 	}
 	return `return (async function () {
   return await agent.run({

@@ -376,6 +376,13 @@ return (async function () {
 
 func assertAgentRunInventoryRecord(t *testing.T, record callbehavior.CallBehaviorRecord) {
 	t.Helper()
+	assertAgentRunParameterInventory(t, record)
+	assertAgentRunReturnInventory(t, record)
+	assertAgentRunEmissionInventory(t, record)
+}
+
+func assertAgentRunParameterInventory(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
 	if len(record.Parameters) != 1 || !record.Parameters[0].Required || record.Parameters[0].Type != "object" {
 		t.Fatalf("agent.run parameters = %#v, want one required object", record.Parameters)
 	}
@@ -389,9 +396,17 @@ func assertAgentRunInventoryRecord(t *testing.T, record callbehavior.CallBehavio
 	if permissions.Type != "string" || len(permissions.Enum) != 2 || permissions.Enum[0] != "DEFAULT" || permissions.Enum[1] != "SKIP_PERMISSIONS" {
 		t.Fatalf("agent.run permissions property = %#v, want DEFAULT/SKIP_PERMISSIONS string enum", permissions)
 	}
+}
+
+func assertAgentRunReturnInventory(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
 	if record.Return == nil || !record.Return.Async || record.Return.PromiseType != "child-result-object" {
 		t.Fatalf("agent.run return = %#v, want async child-result-object promise", record.Return)
 	}
+}
+
+func assertAgentRunEmissionInventory(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
 	if len(record.EmittedRecords) != 1 || record.EmittedRecords[0] != "child_dispatch" {
 		t.Fatalf("agent.run emittedRecords = %v, want [child_dispatch]", record.EmittedRecords)
 	}
