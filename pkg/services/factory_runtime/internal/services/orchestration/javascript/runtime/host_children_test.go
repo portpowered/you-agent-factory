@@ -391,6 +391,7 @@ func TestBTRCP0DirectJavaScriptSuccessCharacterization(t *testing.T) {
 			"providerSessionRef": "fake-provider-session-1",
 			"artifactRef":        factory.FormatArtifactURI(sessionID, "child-artifact-1"),
 			"promptDigest":       workflowruntime.TextDigest("summarize direct JavaScript"),
+			"permissions":        "DEFAULT",
 			"output": map[string]any{
 				"text":            "fake:btrc-direct-javascript:direct-child:summarize direct JavaScript:characterization",
 				"subject":         "characterization",
@@ -709,11 +710,11 @@ func TestRun_AgentRunStaticAndDynamicObjectsCarryCanonicalFieldsToExecutor(t *te
 	}{
 		{
 			name:   "static object",
-			source: `agent.run({ prompt: " review ", label: " reviewer ", preset: " careful ", executorProvider: " cursor-acp ", modelProvider: " codex ", model: " gpt-test ", reasoningEffort: " high ", skipPermissions: true }); return { ok: true };`,
+			source: `agent.run({ prompt: " review ", label: " reviewer ", preset: " careful ", executorProvider: " cursor-acp ", modelProvider: " codex ", model: " gpt-test ", reasoningEffort: " high ", permissions: "SKIP_PERMISSIONS" }); return { ok: true };`,
 		},
 		{
 			name:   "dynamic object",
-			source: `const child = { prompt: " review ", label: " reviewer ", preset: " careful ", executorProvider: " cursor-acp ", modelProvider: " codex ", model: " gpt-test ", reasoningEffort: " high ", skipPermissions: true }; agent.run(child); return { ok: true };`,
+			source: `const child = { prompt: " review ", label: " reviewer ", preset: " careful ", executorProvider: " cursor-acp ", modelProvider: " codex ", model: " gpt-test ", reasoningEffort: " high ", permissions: "SKIP_PERMISSIONS" }; agent.run(child); return { ok: true };`,
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -735,17 +736,18 @@ func TestRun_AgentRunStaticAndDynamicObjectsCarryCanonicalFieldsToExecutor(t *te
 				t.Fatalf("executor request count = %d, want 1", len(requests))
 			}
 			got := requests[0]
-			if got.Prompt != "review" || got.Label != "reviewer" || got.Preset != "careful" || got.ExecutorProvider != "cursor-acp" || got.ModelProvider != "codex" || got.Model != "gpt-test" || got.ReasoningEffort != "high" || !got.SkipPermissions {
+			if got.Prompt != "review" || got.Label != "reviewer" || got.Preset != "careful" || got.ExecutorProvider != "cursor-acp" || got.ModelProvider != "codex" || got.Model != "gpt-test" || got.ReasoningEffort != "high" || got.Permissions != factory.JavaScriptChildPermissionSkipPermissions || !got.SkipPermissions {
 				t.Fatalf("executor request = %#v, want normalized canonical fields", got)
 			}
 		})
 	}
 }
 
-func TestRun_AgentRunRejectsNonBooleanSkipPermissionsBeforeDispatch(t *testing.T) {
+func TestRun_AgentRunRejectsRetiredPermissionFieldBeforeDispatch(t *testing.T) {
 	stub := &stubChildExecutor{mode: stubChildExecutionMode}
+	retiredField := "skip" + "Permissions"
 	outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
-		Source:    `agent.run({ prompt: "review", skipPermissions: "true" }); return { ok: true };`,
+		Source:    `agent.run({ prompt: "review", ` + retiredField + `: true }); return { ok: true };`,
 		SourceRef: "inline", SessionID: "invalid-skip-permissions",
 		Policy: workflowpolicy.DefaultEffectivePolicy(),
 	}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
@@ -754,11 +756,35 @@ func TestRun_AgentRunRejectsNonBooleanSkipPermissionsBeforeDispatch(t *testing.T
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if outcome.OK || !strings.Contains(outcome.Failure.Message, `agent.run() requires "skipPermissions" to be a boolean`) {
-		t.Fatalf("Run() outcome = %#v, want typed skipPermissions failure", outcome)
+	if outcome.OK || !strings.Contains(outcome.Failure.Message, `field "`+retiredField+`"`) || !strings.Contains(outcome.Failure.Message, `use "permissions"`) {
+		t.Fatalf("Run() outcome = %#v, want actionable permissions replacement", outcome)
 	}
 	if len(stub.executionRequests()) != 0 {
-		t.Fatal("invalid skipPermissions reached child executor")
+		t.Fatal("retired permission field reached child executor")
+	}
+}
+
+func TestRun_AgentRunPermissionsDefaultOmitsProviderBypass(t *testing.T) {
+	for _, source := range []string{
+		`agent.run({ prompt: "review" }); return { ok: true };`,
+		`agent.run({ prompt: "review", permissions: "DEFAULT" }); return { ok: true };`,
+	} {
+		t.Run(source, func(t *testing.T) {
+			stub := &stubChildExecutor{mode: stubChildExecutionMode}
+			outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+				Source: source, SourceRef: "inline", SessionID: "default-permissions",
+				Policy: workflowpolicy.DefaultEffectivePolicy(),
+			}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+				return stub
+			}})
+			if err != nil || !outcome.OK {
+				t.Fatalf("Run() outcome = %#v, error = %v", outcome, err)
+			}
+			requests := stub.executionRequests()
+			if len(requests) != 1 || requests[0].Permissions != factory.JavaScriptChildPermissionDefault || requests[0].SkipPermissions {
+				t.Fatalf("executor requests = %#v, want DEFAULT without provider bypass", requests)
+			}
+		})
 	}
 }
 

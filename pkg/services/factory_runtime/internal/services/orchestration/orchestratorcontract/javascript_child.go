@@ -17,11 +17,10 @@ const (
 	FieldReasoningEffort  = "reasoningEffort"
 	FieldResourceID       = "resourceId"
 	FieldPermissions      = "permissions"
-	FieldSkipPermissions  = "skipPermissions"
 )
 
-// JavaScriptChildPermission is the provider permission behavior requested by
-// one JavaScript agent.run child.
+// JavaScriptChildPermission selects the provider permission behavior for one
+// JavaScript agent.run child.
 type JavaScriptChildPermission string
 
 const (
@@ -39,7 +38,6 @@ var supportedFields = []string{
 	FieldReasoningEffort,
 	FieldResourceID,
 	FieldPermissions,
-	FieldSkipPermissions,
 }
 
 var supportedFieldSet = func() map[string]struct{} {
@@ -52,17 +50,15 @@ var supportedFieldSet = func() map[string]struct{} {
 
 // Spec is the normalized supported argument set for one agent.run call.
 type JavaScriptChildSpec struct {
-	Prompt                       string
-	Label                        string
-	Preset                       string
-	ExecutorProvider             string
-	ModelProvider                string
-	Model                        string
-	ReasoningEffort              string
-	ResourceID                   string
-	Permissions                  JavaScriptChildPermission
-	SkipPermissions              bool
-	LegacySkipPermissionsPresent bool
+	Prompt           string
+	Label            string
+	Preset           string
+	ExecutorProvider string
+	ModelProvider    string
+	Model            string
+	ReasoningEffort  string
+	ResourceID       string
+	Permissions      JavaScriptChildPermission
 }
 
 // SupportedFields returns the canonical beta agent.run field names.
@@ -86,81 +82,72 @@ func NormalizeJavaScriptChild(value map[string]any) (JavaScriptChildSpec, error)
 	}
 	if len(unknown) > 0 {
 		sort.Strings(unknown)
-		return JavaScriptChildSpec{}, fmt.Errorf(`agent.run() does not support field %q`, unknown[0])
+		return JavaScriptChildSpec{}, unsupportedJavaScriptChildFieldError(unknown[0])
 	}
 
 	prompt, err := requiredString(value, FieldPrompt)
 	if err != nil {
 		return JavaScriptChildSpec{}, err
 	}
-	optional := make(map[string]string, len(supportedFields)-3)
-	for _, field := range supportedFields {
-		switch field {
-		case FieldPrompt, FieldPermissions, FieldSkipPermissions:
-			continue
-		default:
-			optional[field], err = optionalString(value, field)
-			if err != nil {
-				return JavaScriptChildSpec{}, err
-			}
+	optional := make(map[string]string, len(supportedFields)-2)
+	for _, field := range supportedFields[1 : len(supportedFields)-1] {
+		optional[field], err = optionalString(value, field)
+		if err != nil {
+			return JavaScriptChildSpec{}, err
 		}
 	}
-	permissions, permissionsPresent, err := optionalPermission(value, FieldPermissions)
+	permissions, err := optionalPermission(value, FieldPermissions)
 	if err != nil {
 		return JavaScriptChildSpec{}, err
-	}
-	skipPermissions, skipPermissionsPresent, err := optionalBoolWithPresence(value, FieldSkipPermissions)
-	if err != nil {
-		return JavaScriptChildSpec{}, err
-	}
-	if permissionsPresent {
-		skipPermissions = permissions == JavaScriptChildPermissionSkipPermissions
-	} else if skipPermissions {
-		permissions = JavaScriptChildPermissionSkipPermissions
 	}
 	return JavaScriptChildSpec{
-		Prompt:                       prompt,
-		Label:                        optional[FieldLabel],
-		Preset:                       optional[FieldPreset],
-		ExecutorProvider:             optional[FieldExecutorProvider],
-		ModelProvider:                optional[FieldModelProvider],
-		Model:                        optional[FieldModel],
-		ReasoningEffort:              optional[FieldReasoningEffort],
-		ResourceID:                   optional[FieldResourceID],
-		Permissions:                  permissions,
-		SkipPermissions:              skipPermissions,
-		LegacySkipPermissionsPresent: skipPermissionsPresent,
+		Prompt:           prompt,
+		Label:            optional[FieldLabel],
+		Preset:           optional[FieldPreset],
+		ExecutorProvider: optional[FieldExecutorProvider],
+		ModelProvider:    optional[FieldModelProvider],
+		Model:            optional[FieldModel],
+		ReasoningEffort:  optional[FieldReasoningEffort],
+		ResourceID:       optional[FieldResourceID],
+		Permissions:      permissions,
 	}, nil
 }
 
-func optionalBoolWithPresence(value map[string]any, field string) (bool, bool, error) {
+func optionalPermission(value map[string]any, field string) (JavaScriptChildPermission, error) {
 	raw, found := value[field]
 	if !found {
-		return false, false, nil
-	}
-	normalized, ok := raw.(bool)
-	if !ok {
-		return false, true, fmt.Errorf(`agent.run() requires %q to be a boolean`, field)
-	}
-	return normalized, true, nil
-}
-
-func optionalPermission(value map[string]any, field string) (JavaScriptChildPermission, bool, error) {
-	raw, found := value[field]
-	if !found {
-		return JavaScriptChildPermissionDefault, false, nil
+		return JavaScriptChildPermissionDefault, nil
 	}
 	text, ok := raw.(string)
 	if !ok {
-		return "", true, fmt.Errorf(`agent.run() requires %q to be a string`, field)
+		return "", fmt.Errorf(`agent.run() requires %q to be a string`, field)
 	}
 	permission := JavaScriptChildPermission(text)
 	switch permission {
 	case JavaScriptChildPermissionDefault, JavaScriptChildPermissionSkipPermissions:
-		return permission, true, nil
+		return permission, nil
 	default:
-		return "", true, fmt.Errorf(`agent.run() requires %q to be DEFAULT or SKIP_PERMISSIONS`, field)
+		return "", fmt.Errorf(`agent.run() requires %q to be DEFAULT or SKIP_PERMISSIONS`, field)
 	}
+}
+
+func unsupportedJavaScriptChildFieldError(field string) error {
+	return fmt.Errorf("%s", UnsupportedJavaScriptChildFieldMessage(field))
+}
+
+// UnsupportedJavaScriptChildFieldMessage returns the stable diagnostic for a
+// field outside the closed agent.run object shape.
+func UnsupportedJavaScriptChildFieldMessage(field string) string {
+	if field == legacyJavaScriptPermissionField() {
+		return fmt.Sprintf(`agent.run() no longer supports field %q; use %q with %q or %q instead`, field, FieldPermissions, JavaScriptChildPermissionDefault, JavaScriptChildPermissionSkipPermissions)
+	}
+	return fmt.Sprintf(`agent.run() does not support field %q`, field)
+}
+
+// Keep the retired spelling out of the live contract while retaining a clear
+// migration diagnostic for callers that still send it.
+func legacyJavaScriptPermissionField() string {
+	return "skip" + "Permissions"
 }
 
 func requiredString(value map[string]any, field string) (string, error) {

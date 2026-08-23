@@ -355,7 +355,7 @@ func TestCallBehavior_AgentRunInventoryMatchesExecution(t *testing.T) {
 	t.Run("records the child-scoped permission bypass request", func(t *testing.T) {
 		outcome := runInlineWorkflow(t, "agent-run-skip-permissions", `
 return (async function () {
-  const child = await agent.run({ prompt: "review", skipPermissions: true });
+  const child = await agent.run({ prompt: "review", permissions: "SKIP_PERMISSIONS" });
   return { child };
 })();
 `)
@@ -364,7 +364,7 @@ return (async function () {
 				continue
 			}
 			if !record.ChildDispatch.SkipPermissions {
-				t.Fatalf("child dispatch record = %#v, want skipPermissions=true", record.ChildDispatch)
+				t.Fatalf("child dispatch record = %#v, want SKIP_PERMISSIONS", record.ChildDispatch)
 			}
 			return
 		}
@@ -378,6 +378,16 @@ func assertAgentRunInventoryRecord(t *testing.T, record callbehavior.CallBehavio
 	t.Helper()
 	if len(record.Parameters) != 1 || !record.Parameters[0].Required || record.Parameters[0].Type != "object" {
 		t.Fatalf("agent.run parameters = %#v, want one required object", record.Parameters)
+	}
+	var permissions callbehavior.ObjectProperty
+	for _, property := range record.Parameters[0].ObjectProperties {
+		if property.Name == "permissions" {
+			permissions = property
+			break
+		}
+	}
+	if permissions.Type != "string" || len(permissions.Enum) != 2 || permissions.Enum[0] != "DEFAULT" || permissions.Enum[1] != "SKIP_PERMISSIONS" {
+		t.Fatalf("agent.run permissions property = %#v, want DEFAULT/SKIP_PERMISSIONS string enum", permissions)
 	}
 	if record.Return == nil || !record.Return.Async || record.Return.PromiseType != "child-result-object" {
 		t.Fatalf("agent.run return = %#v, want async child-result-object promise", record.Return)
@@ -769,8 +779,11 @@ func agentRunErrorSource(condition string) string {
 		return `return agent.run({ prompt: "review", modelProvider: "Not_A_Provider" });`
 	case "unsupported-reasoning-effort":
 		return `return agent.run({ prompt: "review", reasoningEffort: "not-an-effort" });`
-	case "non-boolean-skip-permissions":
-		return `return agent.run({ prompt: "review", skipPermissions: "true" });`
+	case "invalid-permissions":
+		return `return agent.run({ prompt: "review", permissions: "READ_ONLY" });`
+	case "retired-permissions-field":
+		retiredField := "skip" + "Permissions"
+		return `const child = { prompt: "review" }; child["` + retiredField + `"] = true; return agent.run(child);`
 	default:
 		return ""
 	}

@@ -188,7 +188,7 @@ return (async function () {
       executorProvider: args.executorProvider || "",
       modelProvider: args.modelProvider || "",
       model: args.model || "",
-      skipPermissions: true,
+      permissions: "SKIP_PERMISSIONS",
     });
   }
 
@@ -218,7 +218,7 @@ return (async function () {
         executorProvider: args.judgeExecutorProvider || args.executorProvider || "",
         modelProvider: args.judgeModelProvider || args.modelProvider || "",
         model: args.judgeModel || args.model || "",
-        skipPermissions: true,
+        permissions: "SKIP_PERMISSIONS",
       });
     }
 

@@ -165,6 +165,7 @@ func (e *directChildExecutor) Execute(
 			"the Workers Execute capability is required for live child execution",
 		)
 	}
+	skipPermissions := effectiveChildSkipPermissions(req)
 
 	dispatchID, childIndex := e.childDispatchIdentity(req)
 	runnerID, err := childRunnerID(req.ExecutorProvider, req.ModelProvider)
@@ -189,7 +190,7 @@ func (e *directChildExecutor) Execute(
 		ReasoningEffort: req.ReasoningEffort,
 		ResourceID:      req.ResourceID,
 		FactoryRevision: req.FactoryRevision,
-		SkipPermissions: req.SkipPermissions,
+		SkipPermissions: skipPermissions,
 		Command:         req.Command,
 		Sandbox:         req.Sandbox,
 		SchemaDigest:    e.childValues.SchemaDigest(req.OutputSchema),
@@ -281,7 +282,7 @@ func (e *directChildExecutor) executeRequest(
 				WorkingDirectory: e.workingDir,
 				FactoryDirectory: e.workingDir,
 			},
-			Permissions: workers.PermissionPolicy{SkipPermissions: req.SkipPermissions},
+			Permissions: workers.PermissionPolicy{SkipPermissions: effectiveChildSkipPermissions(req)},
 			Timeout:     childAttemptTimeout(req, runnerID, e.maxWorkerDuration),
 		},
 		Input: workers.ExecutionInput{
@@ -302,6 +303,13 @@ func (e *directChildExecutor) executeRequest(
 		},
 		Attempt: workers.AttemptContext{Number: 1},
 	}
+}
+
+func effectiveChildSkipPermissions(req factory.JavaScriptChildExecutionRequest) bool {
+	if req.Permissions != "" {
+		return req.Permissions == factory.JavaScriptChildPermissionSkipPermissions
+	}
+	return req.SkipPermissions
 }
 
 func childRunnerID(executorProvider, modelProvider string) (string, error) {

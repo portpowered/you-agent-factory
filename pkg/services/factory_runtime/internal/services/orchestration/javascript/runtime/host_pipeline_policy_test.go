@@ -354,7 +354,7 @@ func TestRun_PolicyDeniedChildOperations_ReturnStableDiagnostics(t *testing.T) {
 	}
 }
 
-func TestRun_SkipPermissionsIsChildScopedAndDoesNotBypassRoutingPolicy(t *testing.T) {
+func TestRun_SkipPermissionsPermissionIsChildScopedAndDoesNotBypassRoutingPolicy(t *testing.T) {
 	policy := workflowpolicy.DefaultEffectivePolicy()
 	policy.MaxAgents = 4
 	policy.AllowedModels = []string{"gpt-allowed"}
@@ -365,7 +365,7 @@ func TestRun_SkipPermissionsIsChildScopedAndDoesNotBypassRoutingPolicy(t *testin
     prompt: "autonomous review",
     label: "autonomous-child",
     model: "gpt-allowed",
-    skipPermissions: true,
+    permissions: "SKIP_PERMISSIONS",
   });
 agent.run({
     prompt: "ordinary review",
@@ -394,7 +394,7 @@ return { autonomous };`,
 		t.Fatalf("Run() outcome = %#v, want ordinary sibling policy denial", outcome)
 	}
 	if len(requests) != 1 || !requests[0].SkipPermissions || requests[0].Label != "autonomous-child" {
-		t.Fatalf("provider requests = %#v, want only the first child with skipPermissions=true", requests)
+		t.Fatalf("provider requests = %#v, want only the first child with SKIP_PERMISSIONS", requests)
 	}
 }
 

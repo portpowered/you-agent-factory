@@ -111,10 +111,9 @@ argument contract is intentionally small:
 | `model` | Optional string |
 | `reasoningEffort` | Optional string |
 | `resourceId` | Optional stable Factory Runtime resource ID whose capacity admission governs the child |
-| `permissions` | Optional `DEFAULT` or `SKIP_PERMISSIONS`; controls whether the selected provider receives its existing bypass flag |
-| `skipPermissions` | Optional boolean; set `true` only when the child is intentionally autonomous |
+| `permissions` | Optional `DEFAULT` or `SKIP_PERMISSIONS`; choose whether the provider launch uses its normal permission checks |
 
-This complete example uses the canonical permission field:
+This complete example uses every supported field:
 
 ```javascript agent-run-valid
 const child = await agent.run({
@@ -126,27 +125,21 @@ const child = await agent.run({
   model: "gpt-example",
   reasoningEffort: "high",
   resourceId: "reviewers",
-  permissions: "DEFAULT",
+  permissions: "SKIP_PERMISSIONS",
 });
 ```
 
 All other per-child properties are rejected before dispatch. In particular,
 host-access fields, output schemas, per-child concurrency or agent caps, and
 duration controls are unsupported. Configure global budgets on an applicable
-factory or Factory Session policy surface when one exists. The canonical
-per-child permission control is `permissions`: `DEFAULT` leaves the provider's
-normal behavior in place, while `SKIP_PERMISSIONS` requests the selected
-provider's existing bypass flag. The legacy boolean `skipPermissions` remains
-supported during migration and maps to the same two values. The selected
-provider must advertise permission-bypass support when bypass is requested.
-Explicit use of the legacy field appends a non-fatal diagnostic naming
-`permissions`; requests that use only `permissions` do not append that
-diagnostic. When both fields are present, `permissions` still controls the
-provider flag.
-Unsupported routes fail before execution with a safe capability diagnostic. The
-field does not disable routing, model or reasoning allowlists, fanout,
-concurrency, duration, token, output, artifact, network, connector, or other
-resource controls.
+factory or Factory Session policy surface when one exists. The only supported
+per-child permission control is the `permissions` field. It defaults to
+`DEFAULT`, which launches the selected provider with its normal permission
+checks. `SKIP_PERMISSIONS` requests the provider's existing bypass behavior for
+that child; providers that cannot honor it fail before execution with a safe
+capability diagnostic. The field does not disable routing, model or reasoning
+allowlists, fanout, concurrency, duration, token, output, artifact, network,
+connector, or other resource controls.
 
 For example, this workflow fails validation with
 `agent.run() does not support field "writableRoots"`; the diagnostic names the

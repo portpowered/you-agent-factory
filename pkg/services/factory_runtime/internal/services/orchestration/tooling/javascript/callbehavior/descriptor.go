@@ -346,7 +346,12 @@ func agentRunRecord() CallBehaviorRecord {
 					idProperty("modelProvider", false, "string"),
 					idProperty("model", false, "string"),
 					idProperty("reasoningEffort", false, "string"),
-					idProperty("skipPermissions", false, "boolean"),
+					{
+						IDCandidate: "permissions",
+						Name:        "permissions",
+						Type:        "string",
+						Enum:        []string{"DEFAULT", "SKIP_PERMISSIONS"},
+					},
 				},
 			},
 		},
@@ -397,9 +402,14 @@ func agentRunRecord() CallBehaviorRecord {
 				Message:   "agent.run() has unsupported effective reasoningEffort",
 			},
 			{
-				Condition: "non-boolean-skip-permissions",
+				Condition: "invalid-permissions",
 				Type:      "TypeError",
-				Message:   `agent.run() requires "skipPermissions" to be a boolean`,
+				Message:   `agent.run() requires "permissions" to be DEFAULT or SKIP_PERMISSIONS`,
+			},
+			{
+				Condition: "retired-permissions-field",
+				Type:      "TypeError",
+				Message:   `use "permissions" with "DEFAULT" or "SKIP_PERMISSIONS" instead`,
 			},
 		},
 	}

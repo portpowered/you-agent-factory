@@ -206,7 +206,7 @@ return (async function () {
         modelProvider: modelProvider || "",
         model: model || "",
         reasoningEffort: reasoningEffort,
-        skipPermissions: true,
+        permissions: "SKIP_PERMISSIONS",
       },
       {
         label: "research-specialist-tradeoffs",
@@ -214,7 +214,7 @@ return (async function () {
         modelProvider: modelProvider || "",
         model: model || "",
         reasoningEffort: reasoningEffort,
-        skipPermissions: true,
+        permissions: "SKIP_PERMISSIONS",
       },
     ].slice(0, maxSubagents);
     specialistFindings = await parallel(specialistRequests);
@@ -227,7 +227,7 @@ return (async function () {
           modelProvider: retryRequest.modelProvider,
           model: retryRequest.model,
           reasoningEffort: retryRequest.reasoningEffort,
-          skipPermissions: true,
+          permissions: "SKIP_PERMISSIONS",
         });
       }
     }
@@ -257,7 +257,7 @@ return (async function () {
     modelProvider: modelProvider || "",
     model: model || "",
     reasoningEffort: reasoningEffort,
-    skipPermissions: true,
+    permissions: "SKIP_PERMISSIONS",
   });
   if (leadSynthesis.status !== "COMPLETED") {
     throw "lead research synthesis failed";

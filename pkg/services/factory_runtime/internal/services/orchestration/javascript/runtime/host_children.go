@@ -122,7 +122,7 @@ func childPolicyRequest(req ChildExecutionRequest) workflowpolicy.ChildRequest {
 		ReasoningEffort: req.ReasoningEffort,
 		Command:         req.Command,
 		Sandbox:         req.Sandbox,
-		SkipPermissions: req.SkipPermissions,
+		SkipPermissions: childSkipPermissions(req),
 		WritableRoots:   append([]string(nil), req.WritableRoots...),
 		AllowNetwork:    req.AllowNetwork,
 		Concurrency:     req.Concurrency,
