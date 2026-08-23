@@ -538,6 +538,10 @@ func openRuntime(
 	opened.application.Resources.Clock = clock
 	opened.application.Recordings = recordingsService
 	opened.application.OperatorSettingsPath = operatorSettingsPath
+	opened.application.ReplayMetadataWarnings = append(
+		[]recordings.MetadataMismatchWarning(nil),
+		load.ReplayMetadataWarnings...,
+	)
 	opened.execution.Recordings = recordingsService
 	return opened, nil
 }

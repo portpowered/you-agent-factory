@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -30,6 +31,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionscli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -302,20 +304,21 @@ type resolvedRunRecordPath struct {
 // Operation is one invocation-local run selected by the customer command.
 // Its runtime state is opened through injected service operations.
 type Operation struct {
-	cfg                  RunConfig
-	logger               *zap.Logger
-	runner               RuntimeRunner
-	invocationRequest    *factoryapi.InvocationRequest
-	invocationTarget     factorysessions.InvocationTarget
-	invocation           InvocationOperation
-	presentation         factoryvisualization.ResponsePresentation
-	invocationMode       bool
-	recordPath           resolvedRunRecordPath
-	hostedInvocation     HostedInvocationOperation
-	historicalReplay     *factorysessions.HistoricalReplayInspection
-	openingPresentations factorysessions.OpeningPresentationOwner
-	visualizations       factoryvisualization.RuntimeSinkOwner
-	visualizationSinkID  factoryvisualization.RuntimeSinkID
+	cfg                    RunConfig
+	logger                 *zap.Logger
+	runner                 RuntimeRunner
+	invocationRequest      *factoryapi.InvocationRequest
+	invocationTarget       factorysessions.InvocationTarget
+	invocation             InvocationOperation
+	presentation           factoryvisualization.ResponsePresentation
+	invocationMode         bool
+	recordPath             resolvedRunRecordPath
+	hostedInvocation       HostedInvocationOperation
+	historicalReplay       *factorysessions.HistoricalReplayInspection
+	replayMetadataWarnings []recordings.MetadataMismatchWarning
+	openingPresentations   factorysessions.OpeningPresentationOwner
+	visualizations         factoryvisualization.RuntimeSinkOwner
+	visualizationSinkID    factoryvisualization.RuntimeSinkID
 }
 
 // Open resolves run inputs and opens invocation-local runtime state without
@@ -487,12 +490,84 @@ func (operation *Operation) Run(ctx context.Context) error {
 		emitStartupMessages(operation.cfg, runtimeLogDiagnosticsForRunner(operation.runner))
 	}
 
-	return runFactoryServiceAndEmitResult(
+	if err := runFactoryServiceAndEmitResult(
 		ctx,
 		operation.cfg,
 		operation.runner,
 		operation.recordPath,
-	)
+	); err != nil {
+		return err
+	}
+	if operation.cfg.JSONOutput {
+		return nil
+	}
+	return emitReplayMetadataWarnings(replayMetadataOutput(operation.cfg), operation.replayMetadataWarnings)
+}
+
+func replayMetadataOutput(cfg RunConfig) io.Writer {
+	if cfg.Output != nil {
+		return cfg.Output
+	}
+	if cfg.ReplayMetadataOutput != nil {
+		return cfg.ReplayMetadataOutput
+	}
+	return cfg.StartupOutput
+}
+
+func emitReplayMetadataWarnings(
+	output io.Writer,
+	warnings []recordings.MetadataMismatchWarning,
+) error {
+	if output == nil || len(warnings) == 0 {
+		return nil
+	}
+	components := replayMetadataWarningComponents(warnings)
+	if len(components) == 0 {
+		return nil
+	}
+	if _, err := fmt.Fprintf(
+		output,
+		"Replay warning: current Factory Definition differs from the recording; affected components: %s. Replay continues with recorded inputs.\n",
+		strings.Join(components, ", "),
+	); err != nil {
+		return fmt.Errorf("write replay drift warning: %w", err)
+	}
+	return nil
+}
+
+func replayMetadataWarningComponents(
+	warnings []recordings.MetadataMismatchWarning,
+) []string {
+	seen := make(map[string]struct{}, len(warnings))
+	components := make([]string, 0, len(warnings))
+	for _, warning := range warnings {
+		component := replayMetadataWarningComponent(warning.Key)
+		if component == "" {
+			continue
+		}
+		if _, ok := seen[component]; ok {
+			continue
+		}
+		seen[component] = struct{}{}
+		components = append(components, component)
+	}
+	sort.Strings(components)
+	return components
+}
+
+func replayMetadataWarningComponent(key string) string {
+	switch key {
+	case "factory_hash":
+		return "Factory Definition"
+	case "workers_hash":
+		return "workers"
+	case "workstations_hash":
+		return "workstations"
+	case "runtime_config_hash":
+		return "runtime configuration"
+	default:
+		return strings.TrimSpace(key)
+	}
 }
 
 func emitHistoricalReplayInspection(

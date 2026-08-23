@@ -587,6 +587,7 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 		cfg.StartupOutput = humanTerminal
 	}
 	cfg.Diagnostics = runPolicy.DiagnosticsWriter(cmd.ErrOrStderr())
+	cfg.ReplayMetadataOutput = cmd.OutOrStdout()
 	cfg.JSONOutput = globals.json
 	if remotePlacementSelected(globals) {
 		return runcli.RunRemoteInvocationWithWorkTarget(

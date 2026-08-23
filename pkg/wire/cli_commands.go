@@ -124,6 +124,7 @@ func provideRunRuntimeRunnerBuilder(
 		sinkID factorysessions.VisualizationSinkID,
 	) (initializer.LocalRuntimeRunner, error) {
 		var replay *factorysessions.HistoricalReplayInspection
+		var replayMetadataWarnings []recordings.MetadataMismatchWarning
 		var hostedInvocation runcli.HostedInvocationOperation
 		var cleanInvocation factoryruntime.Service
 		runner, err := build(ctx, func(openCtx context.Context) (initializer.OpenedApplication, error) {
@@ -132,6 +133,10 @@ func provideRunRuntimeRunnerBuilder(
 				return initializer.OpenedApplication{}, err
 			}
 			replay = opened.HistoricalReplay
+			replayMetadataWarnings = append(
+				[]recordings.MetadataMismatchWarning(nil),
+				opened.ReplayMetadataWarnings...,
+			)
 			hostedInvocation = opened.HostedInvocation
 			cleanInvocation = opened.CleanInvocation
 			return initializer.OpenedApplication{
@@ -145,6 +150,7 @@ func provideRunRuntimeRunnerBuilder(
 		}
 		runner = runcli.WithHostedInvocation(runner, hostedInvocation)
 		runner = runcli.WithCleanInvocationSnapshot(runner, cleanInvocation)
+		runner = runcli.WithReplayMetadataWarnings(runner, replayMetadataWarnings)
 		return runcli.WithHistoricalReplay(runner, replay), nil
 	}, nil
 }
