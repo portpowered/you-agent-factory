@@ -53,6 +53,17 @@ func (r *factoryWorldReducer) applyHumanApprovalRequestedEvent(event interfaces.
 	return nil
 }
 
+func (r *factoryWorldReducer) removePendingHumanApprovalForDispatch(dispatchID string) {
+	if r == nil || strings.TrimSpace(dispatchID) == "" {
+		return
+	}
+	for approvalID, approval := range r.stateValue.PendingHumanApprovalsByID {
+		if strings.TrimSpace(approval.DispatchID) == strings.TrimSpace(dispatchID) {
+			delete(r.stateValue.PendingHumanApprovalsByID, approvalID)
+		}
+	}
+}
+
 func appendUniqueStrings(values []string, additions ...string) []string {
 	for _, value := range additions {
 		if strings.TrimSpace(value) == "" {

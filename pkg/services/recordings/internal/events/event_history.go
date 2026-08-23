@@ -14,6 +14,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	eventsnapshot "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events/snapshot"
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -112,28 +113,30 @@ func (h *FactoryEventHistory) CloseLiveSubscriptions() {
 // FactoryEventHistory stores the current-process canonical event history.
 // It is intentionally in-memory and unbounded for the event-stream MVP.
 type FactoryEventHistory struct {
-	mu                  sync.RWMutex
-	initialStructure    interfaces.InitialStructurePayload
-	runtimeConfig       interfaces.RuntimeDefinitionLookup
-	factoryRunner       string
-	initialFactory      *interfaces.FactorySnapshot
-	now                 func() time.Time
-	streamGenerationID  string
-	events              []interfaces.FactoryEvent
-	recorders           []func(interfaces.FactoryEvent)
-	eventTypeRecorders  []func(interfaces.FactoryEventType)
-	nextID              int
-	streams             map[int]*eventHistorySubscription
-	runRecordedAt       time.Time
-	hasRunRequest       bool
-	hasRunResponse      bool
-	hasInitialStructure bool
-	sessionStartedAt    time.Time
-	hasSessionStarted   bool
-	hasSessionCompleted bool
-	liveClosed          bool
-	sessionID           string
-	nextSessionSequence int
+	mu                   sync.RWMutex
+	initialStructure     interfaces.InitialStructurePayload
+	runtimeConfig        interfaces.RuntimeDefinitionLookup
+	factoryRunner        string
+	initialFactory       *interfaces.FactorySnapshot
+	now                  func() time.Time
+	streamGenerationID   string
+	events               []interfaces.FactoryEvent
+	sessionProjection    *projections.IncrementalSessionProjection
+	sessionProjectionErr error
+	recorders            []func(interfaces.FactoryEvent)
+	eventTypeRecorders   []func(interfaces.FactoryEventType)
+	nextID               int
+	streams              map[int]*eventHistorySubscription
+	runRecordedAt        time.Time
+	hasRunRequest        bool
+	hasRunResponse       bool
+	hasInitialStructure  bool
+	sessionStartedAt     time.Time
+	hasSessionStarted    bool
+	hasSessionCompleted  bool
+	liveClosed           bool
+	sessionID            string
+	nextSessionSequence  int
 }
 
 // NewFactoryEventHistory creates an in-memory factory event history for one
@@ -153,6 +156,7 @@ func NewFactoryEventHistory(topology recordings.InitialStructureSource, now func
 		runtimeConfig:      runtimeConfig,
 		now:                now,
 		streamGenerationID: streamGenerationID,
+		sessionProjection:  projections.NewIncrementalSessionProjection(),
 		streams:            make(map[int]*eventHistorySubscription),
 	}
 }

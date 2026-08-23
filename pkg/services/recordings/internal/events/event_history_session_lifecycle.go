@@ -10,6 +10,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -83,6 +84,14 @@ func (h *FactoryEventHistory) SeedCanonicalEvents(events []interfaces.FactoryEve
 		return fmt.Errorf("factory event history already contains events")
 	}
 	h.events = cloneFactoryEvents(events)
+	if h.sessionProjection == nil {
+		h.sessionProjection = projections.NewIncrementalSessionProjection()
+	}
+	for _, event := range h.events {
+		if err := h.sessionProjection.Apply(event); err != nil && h.sessionProjectionErr == nil {
+			h.sessionProjectionErr = err
+		}
+	}
 	for _, event := range h.events {
 		switch event.Type {
 		case interfaces.FactoryEventTypeInitialStructureRequest:
@@ -557,6 +566,11 @@ func (h *FactoryEventHistory) appendEventWithValidation(
 		}
 	}
 	h.events = append(h.events, event)
+	if h.sessionProjection != nil {
+		if err := h.sessionProjection.Apply(event); err != nil && h.sessionProjectionErr == nil {
+			h.sessionProjectionErr = err
+		}
+	}
 	streams := make([]*eventHistorySubscription, 0, len(h.streams))
 	for _, stream := range h.streams {
 		streams = append(streams, stream)

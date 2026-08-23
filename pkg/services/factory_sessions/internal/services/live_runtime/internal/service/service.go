@@ -85,7 +85,12 @@ func (s *service) Snapshot(ctx context.Context, sessionID string) (*legacysnapsh
 	if err != nil {
 		return nil, err
 	}
-	snapshot, err := legacyObservation.GetEngineStateSnapshot(ctx)
+	var snapshot *legacysnapshot.Snapshot
+	if workProvider, ok := legacyObservation.(legacysnapshot.WorkProvider); ok && workProvider != nil {
+		snapshot, err = workProvider.GetWorkStateSnapshot(ctx)
+	} else {
+		snapshot, err = legacyObservation.GetEngineStateSnapshot(ctx)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("get engine state snapshot: %w", err)
 	}

@@ -34,7 +34,11 @@ func BuildProjectionContext(input ProjectionBuildInput) (ProjectionContext, erro
 	if interfaces.IsJavaScriptOrchestratorFactory(factoryCfg) && input.CheckpointStore != nil {
 		result.JavaScriptCheckpoints = input.CheckpointStore.List()
 	}
-	if len(input.Events) > 0 {
+	if input.SessionProjection != nil {
+		result.JavaScript = input.SessionProjection.JavaScriptRuntime
+		result.JavaScriptSession = input.SessionProjection.SessionBracket
+		result.PendingHumanApprovals = pendingHumanApprovals(input.SessionProjection.PendingHumanApprovals)
+	} else if len(input.Events) > 0 {
 		if input.WorldStateProjector == nil {
 			return ProjectionContext{}, fmt.Errorf("Recordings world-state projector is required")
 		}

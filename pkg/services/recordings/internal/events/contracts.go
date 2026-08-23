@@ -71,6 +71,25 @@ func NewRuntimeLedger(
 var _ recordings.RuntimeEventLedger = (*FactoryEventHistory)(nil)
 var _ recordings.DispatchWorkerSessionAssociationRecorder = (*FactoryEventHistory)(nil)
 var _ recordings.WorkerEventRecorder = (*FactoryEventHistory)(nil)
+var _ recordings.SessionProjectionReader = (*FactoryEventHistory)(nil)
+
+// CurrentSessionProjectionFacts returns detached event-derived facts maintained
+// while canonical events are appended. It never reads the canonical event
+// slice, so live session requests remain independent of history length.
+func (h *FactoryEventHistory) CurrentSessionProjectionFacts() (recordings.SessionProjectionFacts, error) {
+	if h == nil {
+		return recordings.SessionProjectionFacts{}, nil
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if h.sessionProjectionErr != nil {
+		return recordings.SessionProjectionFacts{}, fmt.Errorf("incremental session projection: %w", h.sessionProjectionErr)
+	}
+	if h.sessionProjection == nil {
+		return recordings.SessionProjectionFacts{}, nil
+	}
+	return h.sessionProjection.SnapshotSessionProjectionFacts(), nil
+}
 
 func cloneExpectedArtifactTemplateContext(
 	context *work.ExpectedArtifactTemplateContext,
