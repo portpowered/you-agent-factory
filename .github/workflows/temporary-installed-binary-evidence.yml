@@ -44,6 +44,7 @@ jobs:
             _, _ = os.ReadFile(path)
           }
           EOF
+          export YOU_INTEGRATION_SOURCE_TREE_PROBE="$source_path"
           echo "YOU_INTEGRATION_SOURCE_TREE_PROBE=$source_path" >> "$GITHUB_ENV"
           set +e
           go test -v ./tests/integration -run '^TestI8FactoryConfigValidation$' -count=1 2>&1 | tee "$RUNNER_TEMP/source-tree-read.log"
