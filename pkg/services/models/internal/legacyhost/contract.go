@@ -208,7 +208,7 @@ func FailureClassFromError(err error) FailureClass {
 
 // ManagedRuntimeFromSnapshot projects one host readiness snapshot into the public contract.
 func ManagedRuntimeFromSnapshot(snapshot ReadinessSnapshot) managedruntime.Runtime {
-	readiness, lifecycle := models.NormalizeManagedRuntimeState(
+	readiness, lifecycle := managedruntime.NormalizeManagedRuntimeState(
 		snapshot.Identity.Locality, snapshot.ReadinessState, snapshot.LifecycleState,
 	)
 	diagnostics := make(map[string]string, len(snapshot.Diagnostics)+1)
@@ -264,7 +264,7 @@ func ClassifyReadiness(identity Identity, inspection CacheInspection, unsupporte
 		}
 	}
 	if inspection.Supported {
-		projection := models.ProjectManagedRuntimeState(
+		projection := managedruntime.ProjectManagedRuntimeState(
 			managedRuntimeCacheFacts(identity.Locality, inspection),
 			models.ManagedRuntimeHostFacts{},
 		)

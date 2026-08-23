@@ -56,14 +56,14 @@ func buildManagedRuntimeProjection(input managedRuntimeProjection) managedruntim
 func managedRuntimeStates(input managedRuntimeProjection) (managedruntime.ReadinessState, managedruntime.LifecycleState) {
 	if input.cacheInspection != nil {
 		inspection := *input.cacheInspection
-		projection := models.ProjectManagedRuntimeState(
+		projection := managedruntime.ProjectManagedRuntimeState(
 			managedRuntimeCacheFacts(input.summary.locality, inspection),
 			models.ManagedRuntimeHostFacts{},
 		)
 		return projection.ReadinessState, projection.LifecycleState
 	}
 	if input.summary.locality == managedruntime.LocalityLocal {
-		projection := models.ProjectManagedRuntimeState(
+		projection := managedruntime.ProjectManagedRuntimeState(
 			models.ManagedRuntimeCacheFacts{
 				Locality:  models.LocalityLocal,
 				Supported: true,
@@ -72,7 +72,7 @@ func managedRuntimeStates(input managedRuntimeProjection) (managedruntime.Readin
 		)
 		return projection.ReadinessState, projection.LifecycleState
 	}
-	readiness, lifecycle := models.NormalizeManagedRuntimeState(
+	readiness, lifecycle := managedruntime.NormalizeManagedRuntimeState(
 		models.Locality(input.summary.locality), input.summary.readiness, input.summary.lifecycle,
 	)
 	return readiness, lifecycle

@@ -271,6 +271,7 @@ type strictModelsServiceFake struct {
 	modelinference.Service
 	list          func(context.Context) (modelinference.List, error)
 	get           func(context.Context, string) (modelinference.Detail, error)
+	readiness     func(context.Context, string) (modelinference.Runtime, error)
 	invoke        func(context.Context, string, modelinference.Request) (modelinference.Result, error)
 	genericInvoke func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error)
 	pull          func(context.Context, string) (modelinference.PullResult, error)
@@ -290,6 +291,14 @@ func (fake strictModelsServiceFake) GetCatalogModel(ctx context.Context, request
 	}
 	detail, err := fake.get(ctx, request.Name)
 	return modelinference.GetModelResult{Model: detail}, err
+}
+
+func (fake strictModelsServiceFake) GetModelReadiness(ctx context.Context, request modelinference.GetModelReadinessRequest) (modelinference.GetModelReadinessResult, error) {
+	if fake.readiness == nil {
+		panic("unexpected models.Service.GetModelReadiness call")
+	}
+	readiness, err := fake.readiness(ctx, request.Name)
+	return modelinference.GetModelReadinessResult{ModelName: request.Name, Readiness: readiness}, err
 }
 
 func (fake strictModelsServiceFake) InvokeModel(ctx context.Context, request modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {

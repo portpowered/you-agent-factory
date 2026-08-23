@@ -118,63 +118,65 @@ func TestModelsPublicPullWorkflowProvesTruthfulTerminalState(t *testing.T) {
 		t.Fatalf("final on-disk artifact bytes = %d, want %d", after.ArtifactBytes, len(baseBody)+len(tokenizerBody))
 	}
 
-	t.Run("controlled source failure", func(t *testing.T) {
-		failureSource := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-			if request.URL.Path != "/models/"+story003Repository {
-				http.NotFound(writer, request)
-				return
-			}
-			http.Error(writer, "controlled source failure", http.StatusServiceUnavailable)
-		}))
-		t.Cleanup(failureSource.Close)
+	t.Run("controlled source failure", testStory003ControlledSourceFailure)
+}
 
-		failureFactoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig(failureSource.URL))
-		failureCacheDirectory := t.TempDir()
-		failureHomeDirectory := t.TempDir()
-		failureEnvironment := append(
-			os.Environ(),
-			runcli.ModelCacheDirEnvironment+"="+failureCacheDirectory,
-			"HOME="+failureHomeDirectory,
-			"USERPROFILE="+failureHomeDirectory,
-		)
-		failureServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-			FactoryDir:                failureFactoryDir,
-			WaitForServiceModeRuntime: true,
-			Env:                       failureEnvironment,
-			Edges: serviceedges.Edges{
-				ModelAssetHTTPClient: failureSource.Client(),
-				ModelAssetEndpoints: modelservice.RuntimeAssetEndpoints{
-					BaseURL:    failureSource.URL,
-					APIBaseURL: failureSource.URL,
-				},
+func testStory003ControlledSourceFailure(t *testing.T) {
+	failureSource := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/models/"+story003Repository {
+			http.NotFound(writer, request)
+			return
+		}
+		http.Error(writer, "controlled source failure", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(failureSource.Close)
+
+	failureFactoryDir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig(failureSource.URL))
+	failureCacheDirectory := t.TempDir()
+	failureHomeDirectory := t.TempDir()
+	failureEnvironment := append(
+		os.Environ(),
+		runcli.ModelCacheDirEnvironment+"="+failureCacheDirectory,
+		"HOME="+failureHomeDirectory,
+		"USERPROFILE="+failureHomeDirectory,
+	)
+	failureServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                failureFactoryDir,
+		WaitForServiceModeRuntime: true,
+		Env:                       failureEnvironment,
+		Edges: serviceedges.Edges{
+			ModelAssetHTTPClient: failureSource.Client(),
+			ModelAssetEndpoints: modelservice.RuntimeAssetEndpoints{
+				BaseURL:    failureSource.URL,
+				APIBaseURL: failureSource.URL,
 			},
-		})
-
-		failureProcess := support.BuildProcess(t, serviceedges.Edges{})
-		support.CleanupProcess(t, failureProcess)
-		failureInputs := support.FakeInputs(t.Context(), story003ModelsPullArgs(failureServer.URL()))
-		failureInputs.Input.WorkingDirectory = failureFactoryDir
-		err := failureProcess.Execute(failureInputs.Input)
-		if err == nil {
-			t.Fatalf("Process.Execute(failed models pull) error = nil, want non-zero exit\nstdout:\n%s", failureInputs.Stdout())
-		}
-		if !strings.Contains(err.Error(), string(factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED)) {
-			t.Fatalf("failed pull error = %v, want SOURCE_FETCH_FAILED classification", err)
-		}
-
-		var failureResponse factoryapi.ModelPullResponse
-		if decodeErr := json.Unmarshal([]byte(failureInputs.Stdout()), &failureResponse); decodeErr != nil {
-			t.Fatalf("decode failed models pull response: %v\nstdout:\n%s\nstderr:\n%s", decodeErr, failureInputs.Stdout(), failureInputs.Stderr())
-		}
-		if failureResponse.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED ||
-			failureResponse.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateFAILED {
-			t.Fatalf("failed pull response = %#v, want SOURCE_FETCH_FAILED/FAILED", failureResponse)
-		}
-		if strings.TrimSpace(failureInputs.Stderr()) == "" {
-			t.Fatal("failed pull stderr was empty, want the generic CLI diagnostic envelope")
-		}
-		support.RequireSafeCLIDiagnostic(t, failureInputs.Stderr())
+		},
 	})
+
+	failureProcess := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, failureProcess)
+	failureInputs := support.FakeInputs(t.Context(), story003ModelsPullArgs(failureServer.URL()))
+	failureInputs.Input.WorkingDirectory = failureFactoryDir
+	err := failureProcess.Execute(failureInputs.Input)
+	if err == nil {
+		t.Fatalf("Process.Execute(failed models pull) error = nil, want non-zero exit\nstdout:\n%s", failureInputs.Stdout())
+	}
+	if !strings.Contains(err.Error(), string(factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED)) {
+		t.Fatalf("failed pull error = %v, want SOURCE_FETCH_FAILED classification", err)
+	}
+
+	var failureResponse factoryapi.ModelPullResponse
+	if decodeErr := json.Unmarshal([]byte(failureInputs.Stdout()), &failureResponse); decodeErr != nil {
+		t.Fatalf("decode failed models pull response: %v\nstdout:\n%s\nstderr:\n%s", decodeErr, failureInputs.Stdout(), failureInputs.Stderr())
+	}
+	if failureResponse.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED ||
+		failureResponse.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateFAILED {
+		t.Fatalf("failed pull response = %#v, want SOURCE_FETCH_FAILED/FAILED", failureResponse)
+	}
+	if strings.TrimSpace(failureInputs.Stderr()) == "" {
+		t.Fatal("failed pull stderr was empty, want the generic CLI diagnostic envelope")
+	}
+	support.RequireSafeCLIDiagnostic(t, failureInputs.Stderr())
 }
 
 type story003InspectCapture struct {

@@ -146,23 +146,36 @@ func TestBuildManagedRuntimeProjection_ReportsInstalledCacheState(t *testing.T) 
 
 func TestProjectManagedRuntimeState_UsesCacheAndHostFacts(t *testing.T) {
 	t.Parallel()
-
-	expected := []models.AssetRequirement{
-		{Name: "weights.gguf", Bytes: 4},
-		{Name: "tokenizer.gguf", Bytes: 2},
+	for _, tc := range managedRuntimeProjectionCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			projection := managedruntime.ProjectManagedRuntimeState(tc.cache, tc.host)
+			if projection.ReadinessState != tc.readiness || projection.LifecycleState != tc.lifecycle {
+				t.Fatalf("projection = (%s, %s), want (%s, %s)",
+					projection.ReadinessState, projection.LifecycleState, tc.readiness, tc.lifecycle)
+			}
+		})
 	}
-	tests := []struct {
-		name      string
-		cache     models.ManagedRuntimeCacheFacts
-		host      models.ManagedRuntimeHostFacts
-		readiness models.ReadinessState
-		lifecycle models.LifecycleState
-	}{
+}
+
+type managedRuntimeProjectionCase struct {
+	name      string
+	cache     models.ManagedRuntimeCacheFacts
+	host      models.ManagedRuntimeHostFacts
+	readiness models.ReadinessState
+	lifecycle models.LifecycleState
+}
+
+func managedRuntimeProjectionCases() []managedRuntimeProjectionCase {
+	return append(managedRuntimeProjectionMissingCases(), managedRuntimeProjectionHostCases()...)
+}
+
+func managedRuntimeProjectionMissingCases() []managedRuntimeProjectionCase {
+	expected := managedRuntimeProjectionExpectedArtifacts()
+	return []managedRuntimeProjectionCase{
 		{
 			name: "missing manifest and artifacts",
 			cache: models.ManagedRuntimeCacheFacts{
-				Locality: models.LocalityLocal, Supported: true,
-				ExpectedArtifacts: expected,
+				Locality: models.LocalityLocal, Supported: true, ExpectedArtifacts: expected,
 			},
 			readiness: models.ReadinessStateMissing, lifecycle: models.LifecycleStateNotInstalled,
 		},
@@ -179,22 +192,9 @@ func TestProjectManagedRuntimeState_UsesCacheAndHostFacts(t *testing.T) {
 			name: "active pull while manifest is pending",
 			cache: models.ManagedRuntimeCacheFacts{
 				Locality: models.LocalityLocal, Supported: true, ActivePull: true,
-				ExpectedArtifacts: expected,
-				FailureReason:     "managed cache manifest is invalid",
+				ExpectedArtifacts: expected, FailureReason: "managed cache manifest is invalid",
 			},
 			readiness: models.ReadinessStateLoading, lifecycle: models.LifecycleStateInstalling,
-		},
-		{
-			name: "verified cache",
-			cache: models.ManagedRuntimeCacheFacts{
-				Locality: models.LocalityLocal, Supported: true,
-				ManifestPresent: true, ManifestValid: true, ExpectedArtifacts: expected,
-				ObservedArtifacts: []models.AssetArtifact{
-					{Name: "weights.gguf", Bytes: 4}, {Name: "tokenizer.gguf", Bytes: 2},
-				},
-				IntegrityVerified: true,
-			},
-			readiness: models.ReadinessStateReady, lifecycle: models.LifecycleStateInstalled,
 		},
 		{
 			name: "wrong-sized artifact",
@@ -219,16 +219,28 @@ func TestProjectManagedRuntimeState_UsesCacheAndHostFacts(t *testing.T) {
 			},
 			readiness: models.ReadinessStateFailed, lifecycle: models.LifecycleStateNotInstalled,
 		},
-		{
-			name: "host loading",
-			cache: models.ManagedRuntimeCacheFacts{
-				Locality: models.LocalityLocal, Supported: true,
-				ManifestPresent: true, ManifestValid: true, ExpectedArtifacts: expected,
-				ObservedArtifacts: []models.AssetArtifact{
-					{Name: "weights.gguf", Bytes: 4}, {Name: "tokenizer.gguf", Bytes: 2},
-				},
-				IntegrityVerified: true,
+	}
+}
+
+func managedRuntimeProjectionHostCases() []managedRuntimeProjectionCase {
+	expected := managedRuntimeProjectionExpectedArtifacts()
+	completeCache := func() models.ManagedRuntimeCacheFacts {
+		return models.ManagedRuntimeCacheFacts{
+			Locality: models.LocalityLocal, Supported: true,
+			ManifestPresent: true, ManifestValid: true, ExpectedArtifacts: expected,
+			ObservedArtifacts: []models.AssetArtifact{
+				{Name: "weights.gguf", Bytes: 4}, {Name: "tokenizer.gguf", Bytes: 2},
 			},
+			IntegrityVerified: true,
+		}
+	}
+	return []managedRuntimeProjectionCase{
+		{
+			name: "verified cache", cache: completeCache(),
+			readiness: models.ReadinessStateReady, lifecycle: models.LifecycleStateInstalled,
+		},
+		{
+			name: "host loading", cache: completeCache(),
 			host: models.ManagedRuntimeHostFacts{
 				Observed: true, ReadinessState: models.ReadinessStateLoading,
 				LifecycleState: models.LifecycleStateLoading,
@@ -236,15 +248,7 @@ func TestProjectManagedRuntimeState_UsesCacheAndHostFacts(t *testing.T) {
 			readiness: models.ReadinessStateLoading, lifecycle: models.LifecycleStateLoading,
 		},
 		{
-			name: "host loaded",
-			cache: models.ManagedRuntimeCacheFacts{
-				Locality: models.LocalityLocal, Supported: true,
-				ManifestPresent: true, ManifestValid: true, ExpectedArtifacts: expected,
-				ObservedArtifacts: []models.AssetArtifact{
-					{Name: "weights.gguf", Bytes: 4}, {Name: "tokenizer.gguf", Bytes: 2},
-				},
-				IntegrityVerified: true,
-			},
+			name: "host loaded", cache: completeCache(),
 			host: models.ManagedRuntimeHostFacts{
 				Observed: true, ReadinessState: models.ReadinessStateReady,
 				LifecycleState: models.LifecycleStateLoaded,
@@ -252,14 +256,11 @@ func TestProjectManagedRuntimeState_UsesCacheAndHostFacts(t *testing.T) {
 			readiness: models.ReadinessStateReady, lifecycle: models.LifecycleStateLoaded,
 		},
 	}
+}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			projection := models.ProjectManagedRuntimeState(tc.cache, tc.host)
-			if projection.ReadinessState != tc.readiness || projection.LifecycleState != tc.lifecycle {
-				t.Fatalf("projection = (%s, %s), want (%s, %s)",
-					projection.ReadinessState, projection.LifecycleState, tc.readiness, tc.lifecycle)
-			}
-		})
+func managedRuntimeProjectionExpectedArtifacts() []models.AssetRequirement {
+	return []models.AssetRequirement{
+		{Name: "weights.gguf", Bytes: 4},
+		{Name: "tokenizer.gguf", Bytes: 2},
 	}
 }

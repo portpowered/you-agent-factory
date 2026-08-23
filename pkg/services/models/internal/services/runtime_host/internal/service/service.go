@@ -10,6 +10,7 @@ import (
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
@@ -564,7 +565,7 @@ func hostSnapshotFromAssets(
 func projectAssetCacheState(
 	inspection scopedassets.RuntimeCacheInspection,
 ) models.ManagedRuntimeStateProjection {
-	return models.ProjectManagedRuntimeState(
+	return managedruntime.ProjectManagedRuntimeState(
 		models.ManagedRuntimeCacheFacts{
 			Locality:           models.LocalityLocal,
 			Supported:          inspection.Supported,

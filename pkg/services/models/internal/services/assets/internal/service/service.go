@@ -225,12 +225,12 @@ func (s *service) InspectRuntimeCache(
 	if inspection, ok := s.preparedRuntimeInspection(request.Scope, request.Name); ok {
 		return s.applyActivePullFacts(inspection, active, isActive, pullFailure), nil
 	}
-	spec, source, err := s.resolveSource(scope.Runtime, request.Name)
-	if errors.Is(err, models.ErrAssetSourceUnsupported) {
-		return assets.RuntimeCacheInspection{}, nil
-	}
+	spec, source, supported, err := s.resolveRuntimeCacheSource(scope.Runtime, request.Name)
 	if err != nil {
 		return assets.RuntimeCacheInspection{}, err
+	}
+	if !supported {
+		return assets.RuntimeCacheInspection{}, nil
 	}
 	expected := assetRequirementsForSpec(spec)
 	cacheRoot, rootErr := s.modelCacheRoot(scope.CacheDirectory, spec.modelName)
@@ -242,60 +242,117 @@ func (s *service) InspectRuntimeCache(
 		filepath.Join(cacheRoot, metadataFileName),
 	)
 	if metadataErr != nil {
-		if contextErr := assetContextError(ctx); contextErr != nil {
-			return assets.RuntimeCacheInspection{}, contextErr
-		}
-		return s.applyActivePullFacts(assets.RuntimeCacheInspection{
-			Supported:         true,
-			ManifestPresent:   true,
-			ExpectedArtifacts: expected,
-			FailureReason:     "managed cache manifest is invalid",
-		}, active, isActive, pullFailure), nil
+		return s.invalidRuntimeCacheInspection(ctx, expected, active, isActive, pullFailure)
 	}
 	if manifestPresent {
 		expected = requirementsFromMetadata(spec, metadata)
 	}
-	snapshot, available, err := s.inspectCache(ctx, scope.CacheDirectory, spec, source)
+	result, err := s.inspectRuntimeCacheFiles(
+		ctx, scope.CacheDirectory, spec, source, expected, cacheRoot, metadata, manifestPresent,
+	)
 	if err != nil {
 		return assets.RuntimeCacheInspection{}, err
 	}
+	return s.applyActivePullFacts(result, active, isActive, pullFailure), nil
+}
+
+func (s *service) resolveRuntimeCacheSource(
+	config models.RuntimeConfig,
+	modelName string,
+) (assetSpec, models.SourceMetadata, bool, error) {
+	spec, source, err := s.resolveSource(config, modelName)
+	if errors.Is(err, models.ErrAssetSourceUnsupported) {
+		return assetSpec{}, models.SourceMetadata{}, false, nil
+	}
+	if err != nil {
+		return assetSpec{}, models.SourceMetadata{}, false, err
+	}
+	return spec, source, true, nil
+}
+
+func (s *service) invalidRuntimeCacheInspection(
+	ctx context.Context,
+	expected []models.AssetRequirement,
+	active activePullState,
+	isActive bool,
+	pullFailure string,
+) (assets.RuntimeCacheInspection, error) {
+	if contextErr := assetContextError(ctx); contextErr != nil {
+		return assets.RuntimeCacheInspection{}, contextErr
+	}
+	return s.applyActivePullFacts(assets.RuntimeCacheInspection{
+		Supported:         true,
+		ManifestPresent:   true,
+		ExpectedArtifacts: expected,
+		FailureReason:     "managed cache manifest is invalid",
+	}, active, isActive, pullFailure), nil
+}
+
+func (s *service) inspectRuntimeCacheFiles(
+	ctx context.Context,
+	cacheDirectory string,
+	spec assetSpec,
+	source models.SourceMetadata,
+	expected []models.AssetRequirement,
+	cacheRoot string,
+	metadata cacheMetadata,
+	manifestPresent bool,
+) (assets.RuntimeCacheInspection, error) {
+	snapshot, available, err := s.inspectCache(ctx, cacheDirectory, spec, source)
+	if err != nil {
+		return assets.RuntimeCacheInspection{}, err
+	}
+	manifestValid := manifestPresent && manifestContainsRequiredArtifacts(spec, metadata)
 	result := assets.RuntimeCacheInspection{
 		Supported:         true,
 		Installed:         available,
 		Revision:          snapshot.Revision,
 		ManifestPresent:   manifestPresent,
-		ManifestValid:     manifestPresent && manifestContainsRequiredArtifacts(spec, metadata),
+		ManifestValid:     manifestValid,
 		ExpectedArtifacts: append([]models.AssetRequirement(nil), expected...),
 		ObservedArtifacts: append([]models.AssetArtifact(nil), snapshot.Artifacts...),
 		MissingAssets:     missingAssetNames(expected, snapshot.Artifacts),
 		PartialArtifacts:  len(snapshot.Artifacts) > 0 && !available,
+		FailureReason:     cacheInspectionFailureReason(expected, snapshot.Artifacts, manifestValid),
 	}
-	result.FailureReason = cacheInspectionFailureReason(expected, snapshot.Artifacts, result.ManifestValid)
 	if snapshot.Revision != "" {
 		result.CachePath = filepath.Join(cacheRoot, snapshot.Revision)
 	}
 	if available {
 		result.InstalledFileCount = len(snapshot.Artifacts)
 	}
-	if result.ManifestValid && hasVerifiableMetadata(expected) {
-		verified, verifiedAvailable, verifyErr := s.inspectVerifiedCache(
-			ctx, scope.CacheDirectory, spec, source,
-		)
-		if verifyErr != nil {
-			result.FailureReason = safeAssetFailureReason(verifyErr)
-			result.Installed = false
-			result.ObservedArtifacts = append([]models.AssetArtifact(nil), verified.Artifacts...)
-			result.InstalledFileCount = len(verified.Artifacts)
-			result.PartialArtifacts = len(verified.Artifacts) > 0
-		} else if verifiedAvailable {
-			result.Installed = true
-			result.IntegrityVerified = true
-			result.ObservedArtifacts = append([]models.AssetArtifact(nil), verified.Artifacts...)
-			result.InstalledFileCount = len(verified.Artifacts)
-			result.MissingAssets = nil
-		}
+	return s.verifyRuntimeCacheIntegrity(ctx, cacheDirectory, spec, source, expected, result), nil
+}
+
+func (s *service) verifyRuntimeCacheIntegrity(
+	ctx context.Context,
+	cacheDirectory string,
+	spec assetSpec,
+	source models.SourceMetadata,
+	expected []models.AssetRequirement,
+	result assets.RuntimeCacheInspection,
+) assets.RuntimeCacheInspection {
+	if !result.ManifestValid || !hasVerifiableMetadata(expected) {
+		return result
 	}
-	return s.applyActivePullFacts(result, active, isActive, pullFailure), nil
+	verified, verifiedAvailable, verifyErr := s.inspectVerifiedCache(ctx, cacheDirectory, spec, source)
+	if verifyErr != nil {
+		result.FailureReason = safeAssetFailureReason(verifyErr)
+		result.Installed = false
+		result.ObservedArtifacts = append([]models.AssetArtifact(nil), verified.Artifacts...)
+		result.InstalledFileCount = len(verified.Artifacts)
+		result.PartialArtifacts = len(verified.Artifacts) > 0
+		return result
+	}
+	if !verifiedAvailable {
+		return result
+	}
+	result.Installed = true
+	result.IntegrityVerified = true
+	result.ObservedArtifacts = append([]models.AssetArtifact(nil), verified.Artifacts...)
+	result.InstalledFileCount = len(verified.Artifacts)
+	result.MissingAssets = nil
+	return result
 }
 
 func (s *service) applyActivePullFacts(
