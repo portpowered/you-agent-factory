@@ -61,7 +61,7 @@ func TestExecuteMaterializesWorkContentBeforeRunnerAndCleansItUp(t *testing.T) {
 		Name: "submitted-image",
 		Content: []work.WorkContentPart{{
 			Type:        work.WorkContentPartTypeImage,
-			URL:         "file:///submitted/image.png",
+			URL:         "file://submitted/image.png",
 			ContentType: "image/png",
 			Metadata:    map[string]any{"origin": "submitted-work"},
 		}},
@@ -74,14 +74,21 @@ func TestExecuteMaterializesWorkContentBeforeRunnerAndCleansItUp(t *testing.T) {
 	if result.Outcome != workers.ExecutionOutcomeAccepted {
 		t.Fatalf("outcome = %q, want ACCEPTED", result.Outcome)
 	}
-	if materializedURL != "file:///C:/workspace/submitted/image.png" {
-		t.Fatalf("materialized URL = %q, want dispatch-resolved content URL", materializedURL)
+	wantMaterializedURL, err := work.ResolveDispatchContentURL(
+		"C:/workspace",
+		"file://submitted/image.png",
+	)
+	if err != nil {
+		t.Fatalf("resolve expected materialized URL: %v", err)
+	}
+	if materializedURL != wantMaterializedURL {
+		t.Fatalf("materialized URL = %q, want %q", materializedURL, wantMaterializedURL)
 	}
 	if runnerCalls.Load() != 1 || cleanupCalls.Load() != 1 {
 		t.Fatalf("runner calls = %d, cleanup calls = %d, want one each", runnerCalls.Load(), cleanupCalls.Load())
 	}
 	original := request.Input.Work[0].Content[0]
-	if original.URL != "file:///submitted/image.png" || original.File != "" {
+	if original.URL != "file://submitted/image.png" || original.File != "" {
 		t.Fatalf("caller content mutated = %#v, want original URL-only content", original)
 	}
 }
