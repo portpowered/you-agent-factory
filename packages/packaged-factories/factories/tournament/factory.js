@@ -158,15 +158,13 @@
     "additionalProperties": false
   },
   "defaultPolicy": {
-    "mode": "READ_ONLY",
     "maxAgents": 15,
     "concurrency": 8,
     "maxDepth": 1,
     "maxRetries": 0,
-    "allowNetwork": false,
-    "allowConnectors": false,
-    "allowDangerFullAccess": false,
-    "writableRoots": []
+    "allowedPermissions": [
+      "SKIP_PERMISSIONS"
+    ]
   }
 }
 */
@@ -188,7 +186,7 @@ return (async function () {
       executorProvider: args.executorProvider || "",
       modelProvider: args.modelProvider || "",
       model: args.model || "",
-      skipPermissions: true,
+      permissions: "SKIP_PERMISSIONS",
     });
   }
 
@@ -218,7 +216,7 @@ return (async function () {
         executorProvider: args.judgeExecutorProvider || args.executorProvider || "",
         modelProvider: args.judgeModelProvider || args.modelProvider || "",
         model: args.judgeModel || args.model || "",
-        skipPermissions: true,
+        permissions: "SKIP_PERMISSIONS",
       });
     }
 

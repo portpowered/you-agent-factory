@@ -496,7 +496,6 @@ return { ok: true };`
 	}
 
 	defaultPolicy := json.RawMessage(`{
-  "mode":"READ_ONLY",
   "maxAgents":4,
   "concurrency":2,
   "allowedModels":["gpt-allowed"],

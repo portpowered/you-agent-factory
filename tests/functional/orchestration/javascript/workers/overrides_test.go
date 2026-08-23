@@ -106,7 +106,7 @@ func TestJavaScriptAntigravityChildUsesModelEmbeddedEffortThroughRootProcess(t *
   modelProvider: "ANTIGRAVITY",
   model: "` + agyJavaScriptChildModel + `",
   reasoningEffort: "high",
-  skipPermissions: true
+  permissions: "SKIP_PERMISSIONS"
 });
 })();`
 			started := startOverridesWorkflow(t, server.URL(), "javascript-antigravity-"+strings.ToLower(strings.ReplaceAll(executorProvider, "_", "-")), workflow)
@@ -153,7 +153,7 @@ func TestJavaScriptAntigravityCommandRejectionRemainsTypedThroughRootProcess(t *
     label: "javascript-antigravity-rejection",
     modelProvider: "ANTIGRAVITY",
     model: "gemini-3.6-flash-medium",
-    skipPermissions: true
+    permissions: "SKIP_PERMISSIONS"
   });
 })();`)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
@@ -282,12 +282,10 @@ func exerciseJavaScriptChildPermissionsResolveToExistingProviderCommandFlag(t *t
 		dynamic    bool
 		wantBypass bool
 	}{
-		{name: "permissions default", fields: `permissions: "DEFAULT"`, dynamic: true, wantBypass: false},
-		{name: "permissions skip", fields: `permissions: "SKIP_PERMISSIONS"`, dynamic: true, wantBypass: true},
-		{name: "legacy true", fields: `skipPermissions: true`, wantBypass: true},
-		{name: "legacy false", fields: `skipPermissions: false`, wantBypass: false},
-		{name: "both default wins", fields: `permissions: "DEFAULT", skipPermissions: true`, wantBypass: false},
-		{name: "both skip wins", fields: `permissions: "SKIP_PERMISSIONS", skipPermissions: false`, wantBypass: true},
+		{name: "permissions default dynamic", fields: `permissions: "DEFAULT"`, dynamic: true, wantBypass: false},
+		{name: "permissions skip dynamic", fields: `permissions: "SKIP_PERMISSIONS"`, dynamic: true, wantBypass: true},
+		{name: "permissions default static", fields: `permissions: "DEFAULT"`, wantBypass: false},
+		{name: "permissions skip static", fields: `permissions: "SKIP_PERMISSIONS"`, wantBypass: true},
 		{name: "neither", fields: "", wantBypass: false},
 	}
 	for _, test := range tests {

@@ -113,7 +113,6 @@ argument contract is intentionally small:
 | `resourceId` | Optional stable Factory Runtime resource ID whose capacity admission governs the child |
 | `schema` | Optional valid JSON Schema object; the runtime validates and detaches it before dispatch |
 | `permissions` | Optional `DEFAULT` or `SKIP_PERMISSIONS`; controls whether the selected provider receives its existing bypass flag |
-| `skipPermissions` | Optional boolean; set `true` only when the child is intentionally autonomous |
 
 This complete example uses the canonical permission field:
 
@@ -142,13 +141,8 @@ duration controls are unsupported. Configure global budgets on an applicable
 factory or Factory Session policy surface when one exists. The canonical
 per-child permission control is `permissions`: `DEFAULT` leaves the provider's
 normal behavior in place, while `SKIP_PERMISSIONS` requests the selected
-provider's existing bypass flag. The legacy boolean `skipPermissions` remains
-supported during migration and maps to the same two values. The selected
+provider's existing bypass flag. The selected
 provider must advertise permission-bypass support when bypass is requested.
-Explicit use of the legacy field appends a non-fatal diagnostic naming
-`permissions`; requests that use only `permissions` do not append that
-diagnostic. When both fields are present, `permissions` still controls the
-provider flag.
 Unsupported routes fail before execution with a safe capability diagnostic. The
 field does not disable routing, model or reasoning allowlists, fanout,
 concurrency, duration, token, output, artifact, network, connector, or other

@@ -116,15 +116,13 @@
     "additionalProperties": false
   },
   "defaultPolicy": {
-    "mode": "READ_ONLY",
     "maxAgents": 16,
     "concurrency": 8,
     "maxDepth": 1,
     "maxRetries": 0,
-    "allowNetwork": false,
-    "allowConnectors": false,
-    "allowDangerFullAccess": false,
-    "writableRoots": []
+    "allowedPermissions": [
+      "SKIP_PERMISSIONS"
+    ]
   }
 }
 */
@@ -171,7 +169,7 @@ return (async function () {
     executorProvider: args.executorProvider || "",
     modelProvider: args.modelProvider || "",
     model: args.model || "",
-    skipPermissions: true,
+    permissions: "SKIP_PERMISSIONS",
     schema: taskPlanSchema,
   });
   if (plan.status !== "COMPLETED" || !plan.schemaValidated) {
@@ -205,7 +203,7 @@ return (async function () {
       executorProvider: args.executorProvider || "",
       modelProvider: args.modelProvider || "",
       model: args.model || "",
-      skipPermissions: true,
+      permissions: "SKIP_PERMISSIONS",
       schema: taskResultSchema,
     });
   }
@@ -234,7 +232,7 @@ return (async function () {
     executorProvider: args.executorProvider || "",
     modelProvider: args.modelProvider || "",
     model: args.model || "",
-    skipPermissions: true,
+    permissions: "SKIP_PERMISSIONS",
     schema: mergerResultSchema,
   });
   if (merged.status !== "COMPLETED" || !merged.schemaValidated) {

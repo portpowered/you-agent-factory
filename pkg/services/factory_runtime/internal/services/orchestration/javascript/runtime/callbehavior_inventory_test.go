@@ -23,7 +23,7 @@ func TestRun_AgentRunAcceptsAndNormalizesAllSupportedFields(t *testing.T) {
   model: "  gpt-test  ",
   reasoningEffort: "  high  ",
   resourceId: "  reviewers  ",
-  skipPermissions: true
+  permissions: "SKIP_PERMISSIONS"
 }); return { ok: true };`,
 		SourceRef: "agent-run-closed-contract",
 		SessionID: "agent-run-closed-contract-valid",
@@ -51,6 +51,7 @@ func TestRun_AgentRunAcceptsAndNormalizesAllSupportedFields(t *testing.T) {
 		Model:            "gpt-test",
 		ReasoningEffort:  "high",
 		ResourceID:       "reviewers",
+		Permissions:      workflowpolicy.JavaScriptChildPermissionSkipPermissions,
 		SkipPermissions:  true,
 	}
 	got := requests[0]
@@ -62,6 +63,7 @@ func TestRun_AgentRunAcceptsAndNormalizesAllSupportedFields(t *testing.T) {
 		got.Model != want.Model ||
 		got.ReasoningEffort != want.ReasoningEffort ||
 		got.ResourceID != want.ResourceID ||
+		got.Permissions != want.Permissions ||
 		got.SkipPermissions != want.SkipPermissions {
 		t.Fatalf("child executor request = %#v, want %#v", requests[0], want)
 	}
@@ -96,13 +98,13 @@ func TestRun_AgentRunRejectsInvalidOptionalValuesBeforeDispatch(t *testing.T) {
 	}
 }
 
-func TestRun_AgentRunNormalizesOmittedAndFalseSkipPermissions(t *testing.T) {
+func TestRun_AgentRunNormalizesOmittedAndDefaultPermission(t *testing.T) {
 	for _, test := range []struct {
 		name   string
 		source string
 	}{
 		{name: "omitted", source: `agent.run({ prompt: "review" }); return { ok: true };`},
-		{name: "explicit false", source: `agent.run({ prompt: "review", skipPermissions: false }); return { ok: true };`},
+		{name: "explicit default", source: `agent.run({ prompt: "review", permissions: "DEFAULT" }); return { ok: true };`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			outcome, stub := runAgentRunWithStub(t, test.source, factory.JavaScriptWorkerSettings{})
@@ -114,7 +116,7 @@ func TestRun_AgentRunNormalizesOmittedAndFalseSkipPermissions(t *testing.T) {
 				t.Fatalf("child executor request count = %d, want 1", len(requests))
 			}
 			if requests[0].SkipPermissions {
-				t.Fatalf("child executor request = %#v, want skipPermissions=false", requests[0])
+				t.Fatalf("child executor request = %#v, want default permission", requests[0])
 			}
 		})
 	}
@@ -355,7 +357,7 @@ func TestCallBehavior_AgentRunInventoryMatchesExecution(t *testing.T) {
 	t.Run("records the child-scoped permission bypass request", func(t *testing.T) {
 		outcome := runInlineWorkflow(t, "agent-run-skip-permissions", `
 return (async function () {
-  const child = await agent.run({ prompt: "review", skipPermissions: true });
+  const child = await agent.run({ prompt: "review", permissions: "SKIP_PERMISSIONS" });
   return { child };
 })();
 `)
@@ -364,7 +366,7 @@ return (async function () {
 				continue
 			}
 			if !record.ChildDispatch.SkipPermissions {
-				t.Fatalf("child dispatch record = %#v, want skipPermissions=true", record.ChildDispatch)
+				t.Fatalf("child dispatch record = %#v, want SKIP_PERMISSIONS", record.ChildDispatch)
 			}
 			return
 		}
@@ -376,12 +378,42 @@ return (async function () {
 
 func assertAgentRunInventoryRecord(t *testing.T, record callbehavior.CallBehaviorRecord) {
 	t.Helper()
+	assertAgentRunParameterInventory(t, record)
+	assertAgentRunReturnInventory(t, record)
+	assertAgentRunEmissionInventory(t, record)
+}
+
+func assertAgentRunParameterInventory(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
 	if len(record.Parameters) != 1 || !record.Parameters[0].Required || record.Parameters[0].Type != "object" {
 		t.Fatalf("agent.run parameters = %#v, want one required object", record.Parameters)
 	}
+	var schema, permissions callbehavior.ObjectProperty
+	for _, property := range record.Parameters[0].ObjectProperties {
+		switch property.Name {
+		case "schema":
+			schema = property
+		case "permissions":
+			permissions = property
+		}
+	}
+	if schema.Type != "object" {
+		t.Fatalf("agent.run schema property = %#v, want optional object", schema)
+	}
+	if permissions.Type != "string" || len(permissions.Enum) != 2 || permissions.Enum[0] != "DEFAULT" || permissions.Enum[1] != "SKIP_PERMISSIONS" {
+		t.Fatalf("agent.run permissions property = %#v, want DEFAULT/SKIP_PERMISSIONS string enum", permissions)
+	}
+}
+
+func assertAgentRunReturnInventory(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
 	if record.Return == nil || !record.Return.Async || record.Return.PromiseType != "child-result-object" {
 		t.Fatalf("agent.run return = %#v, want async child-result-object promise", record.Return)
 	}
+}
+
+func assertAgentRunEmissionInventory(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
 	if len(record.EmittedRecords) != 1 || record.EmittedRecords[0] != "child_dispatch" {
 		t.Fatalf("agent.run emittedRecords = %v, want [child_dispatch]", record.EmittedRecords)
 	}
@@ -769,8 +801,11 @@ func agentRunErrorSource(condition string) string {
 		return `return agent.run({ prompt: "review", modelProvider: "Not_A_Provider" });`
 	case "unsupported-reasoning-effort":
 		return `return agent.run({ prompt: "review", reasoningEffort: "not-an-effort" });`
-	case "non-boolean-skip-permissions":
-		return `return agent.run({ prompt: "review", skipPermissions: "true" });`
+	case "invalid-permissions":
+		return `return agent.run({ prompt: "review", permissions: "READ_ONLY" });`
+	case "retired-permissions-field":
+		retiredField := "skip" + "Permissions"
+		return `const child = { prompt: "review" }; child["` + retiredField + `"] = true; return agent.run(child);`
 	case "non-object-schema":
 		return `return agent.run({ prompt: "review", schema: "schema-secret" });`
 	default:

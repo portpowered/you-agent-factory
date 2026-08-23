@@ -693,17 +693,18 @@ func TestChildWorkerExecutor_CarriesTheAuthoredWorkerNameAndPermissionPolicy(t *
 	}
 }
 
-// TestDirectChildExecutor_CarriesSkipPermissionsToWorkersExecuteRequest
+// TestDirectChildExecutor_CarriesCanonicalPermissionsToWorkersExecuteRequest
 // is the standalone composition regression. Its child has no Factory Runtime
-// or Worker Session behind it, so the direct executor must carry the resolved
-// child policy into the detached Workers request itself.
-func TestDirectChildExecutor_CarriesSkipPermissionsToWorkersExecuteRequest(t *testing.T) {
+// or Worker Session behind it, so the direct executor must translate the
+// canonical child permission into the detached Workers request itself.
+func TestDirectChildExecutor_CarriesCanonicalPermissionsToWorkersExecuteRequest(t *testing.T) {
 	for _, test := range []struct {
-		name string
-		want bool
+		name       string
+		permission factory.JavaScriptChildPermission
+		want       bool
 	}{
-		{name: "true", want: true},
-		{name: "false", want: false},
+		{name: "DEFAULT", permission: factory.JavaScriptChildPermissionDefault, want: false},
+		{name: "SKIP_PERMISSIONS", permission: factory.JavaScriptChildPermissionSkipPermissions, want: true},
 		{name: "omitted", want: false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -724,10 +725,7 @@ func TestDirectChildExecutor_CarriesSkipPermissionsToWorkersExecuteRequest(t *te
 				"/project",
 				0,
 			)
-			request := factory.JavaScriptChildExecutionRequest{Prompt: "run"}
-			if test.name == "true" {
-				request.SkipPermissions = true
-			}
+			request := factory.JavaScriptChildExecutionRequest{Prompt: "run", Permissions: test.permission}
 
 			if _, err := executor.Execute(context.Background(), request); err != nil {
 				t.Fatalf("Execute: %v", err)

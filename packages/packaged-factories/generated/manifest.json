@@ -96,11 +96,11 @@
       "slug": "deep-research",
       "json": {
         "locator": "generated/factories/deep-research/factory.json",
-        "sha256": "b0cd92f470c046ce440aa63c140bcae5d0d962fdadfeece3cd11857eef6dd3e0"
+        "sha256": "6b4fee158727957c7efa4627c6c448a866a4aa53e8a42df62da47bdc9a7d80de"
       },
       "yaml": {
         "locator": "generated/factories/deep-research/factory.yaml",
-        "sha256": "6d5d450899cd6171ff77b64f53b8a4c9659463ce536bb75afaf9b527b4a5cb80"
+        "sha256": "c332532400d26a37ebd9794dbfdc96839e1c16adf7d5d9a550fb7268acf75aad"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -501,11 +501,11 @@
       "slug": "spawn",
       "json": {
         "locator": "generated/factories/spawn/factory.json",
-        "sha256": "e335e30705e566a1ea82e9e3ddf517f4097ff275de83993635615431164ad2c8"
+        "sha256": "fe6dcc5a7072e5690dcb29b3a2b502c70ddd669250f7c654341069ab6faf1bfa"
       },
       "yaml": {
         "locator": "generated/factories/spawn/factory.yaml",
-        "sha256": "d963c9e7cf49f9c59130103a88db5f626a76d20b6180e3c5bbede81ac6b8c01e"
+        "sha256": "6a957a17c70b71d455bc39c1e0c9c807816a6a7e4ad73d608caddbe09ddadb27"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -570,11 +570,11 @@
       "slug": "tournament",
       "json": {
         "locator": "generated/factories/tournament/factory.json",
-        "sha256": "ff589e1b7e218cad928dc877519c8c17c633abf0cecf999ae4cd16384475085b"
+        "sha256": "ea7332fd44e96022a6044fcd7d11117289753d83bd5a67e69b9ef91a63f5b6a8"
       },
       "yaml": {
         "locator": "generated/factories/tournament/factory.yaml",
-        "sha256": "c434ea91a7a4026575bfae9b4e9be20778cf4b79bbc2834eb7bfc3442d0da8a8"
+        "sha256": "c6a84cd300d36f94c08a7c5db02309c8b2e0b50aa709199442e6db152aa79c97"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",

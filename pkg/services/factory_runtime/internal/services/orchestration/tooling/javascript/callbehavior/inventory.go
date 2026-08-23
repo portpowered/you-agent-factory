@@ -50,11 +50,12 @@ type Parameter struct {
 
 // ObjectProperty documents one required or optional object field.
 type ObjectProperty struct {
-	IDCandidate string `json:"idCandidate"`
-	Name        string `json:"name"`
-	Required    bool   `json:"required"`
-	Type        string `json:"type"`
-	Default     string `json:"default,omitempty"`
+	IDCandidate string   `json:"idCandidate"`
+	Name        string   `json:"name"`
+	Required    bool     `json:"required"`
+	Type        string   `json:"type"`
+	Default     string   `json:"default,omitempty"`
+	Enum        []string `json:"enum,omitempty"`
 }
 
 // CallbackShape documents a function argument or stage callback.

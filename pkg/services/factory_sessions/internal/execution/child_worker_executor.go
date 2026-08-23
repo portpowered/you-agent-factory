@@ -614,6 +614,7 @@ func (e *childWorkerExecutor) executeRequest(
 	if progressBridge != nil {
 		progress = progressBridge.publishProgress
 	}
+	skipPermissions := effectiveChildSkipPermissions(req)
 	attemptID := fmt.Sprintf("%s/attempt/%d", workerDispatchID, attemptNumber)
 	return workers.ExecuteRequest{
 		Correlation: workers.ExecutionCorrelation{
@@ -654,7 +655,7 @@ func (e *childWorkerExecutor) executeRequest(
 				WorkingDirectory: e.workingDir,
 				FactoryDirectory: e.workingDir,
 			},
-			Permissions: workers.PermissionPolicy{SkipPermissions: req.SkipPermissions},
+			Permissions: workers.PermissionPolicy{SkipPermissions: skipPermissions},
 			Timeout:     childAttemptTimeout(req, base.RunnerID, e.maxWorkerDuration),
 		},
 		Input: workers.ExecutionInput{
@@ -788,7 +789,7 @@ func (e *childWorkerExecutor) openChild(
 		ReasoningEffort: req.ReasoningEffort,
 		ResourceID:      req.ResourceID,
 		FactoryRevision: req.FactoryRevision,
-		SkipPermissions: req.SkipPermissions,
+		SkipPermissions: effectiveChildSkipPermissions(req),
 		Command:         req.Command,
 		Sandbox:         req.Sandbox,
 		SchemaDigest:    e.childValues.SchemaDigest(req.OutputSchema),

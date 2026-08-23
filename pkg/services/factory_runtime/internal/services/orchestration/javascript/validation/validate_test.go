@@ -18,38 +18,39 @@ return { ok: true };`,
 	}
 }
 
-func TestValidateAgentRunSkipPermissionsBooleanShape(t *testing.T) {
-	t.Parallel()
-
-	accepted := Validate(Request{
-		Source:    `return agent.run({ prompt: "review", skipPermissions: true });`,
-		SourceRef: "workflow.js",
-	})
-	if accepted.HasIssues() {
-		t.Fatalf("Validate(true) issues = %#v, want none", accepted.Issues)
-	}
-
-	rejected := Validate(Request{
-		Source:    `return agent.run({ prompt: "review", skipPermissions: "true" });`,
-		SourceRef: "workflow.js",
-	})
-	if !rejected.HasIssues() {
-		t.Fatal("Validate(string) issues = nil, want boolean shape error")
-	}
-}
-
 func TestValidateAgentRunPermissionsEnumShape(t *testing.T) {
 	t.Parallel()
 
-	for _, permissions := range []string{"DEFAULT", "SKIP_PERMISSIONS"} {
+	for _, permission := range []string{"DEFAULT", "SKIP_PERMISSIONS"} {
 		accepted := Validate(Request{
-			Source:    `return agent.run({ prompt: "review", permissions: "` + permissions + `" });`,
+			Source:    `return agent.run({ prompt: "review", permissions: "` + permission + `" });`,
 			SourceRef: "workflow.js",
 		})
 		if accepted.HasIssues() {
-			t.Fatalf("Validate(%q) issues = %#v, want none", permissions, accepted.Issues)
+			t.Fatalf("Validate(%q) issues = %#v, want none", permission, accepted.Issues)
 		}
 	}
+
+	rejected := Validate(Request{
+		Source:    `return agent.run({ prompt: "review", permissions: "READ_ONLY" });`,
+		SourceRef: "workflow.js",
+	})
+	if !rejected.HasIssues() {
+		t.Fatal("Validate(READ_ONLY) issues = nil, want enum error")
+	}
+	if !strings.Contains(rejected.Issues[0].Message, `"permissions"`) {
+		t.Fatalf("Validate(READ_ONLY) issue = %#v, want permissions diagnostic", rejected.Issues[0])
+	}
+
+	retiredField := "skip" + "Permissions"
+	legacy := Validate(Request{
+		Source:    `return agent.run({ prompt: "review", ` + retiredField + `: true });`,
+		SourceRef: "workflow.js",
+	})
+	if !legacy.HasIssues() || !strings.Contains(legacy.Issues[0].Message, `use "permissions"`) {
+		t.Fatalf("Validate(retired field) issues = %#v, want permissions replacement", legacy.Issues)
+	}
+
 	singleQuoted := Validate(Request{
 		Source:    `return agent.run({ prompt: 'review', permissions: 'DEFAULT' });`,
 		SourceRef: "workflow.js",

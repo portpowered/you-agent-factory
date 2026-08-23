@@ -15,27 +15,30 @@ import (
 // ChildExecutionRequest is the typed child-agent request shared by host primitives
 // and future dispatch bridges.
 type ChildExecutionRequest struct {
-	Prompt                       string
-	Label                        string
-	AgentID                      string
-	Preset                       string
-	ExecutorProvider             string
-	ModelProvider                string
-	Model                        string
-	ReasoningEffort              string
-	ResourceID                   string
-	FactoryRevision              int
-	SkipPermissions              bool
-	LegacySkipPermissionsPresent bool
-	Command                      string
-	Sandbox                      string
-	WritableRoots                []string
-	AllowNetwork                 bool
-	Concurrency                  int
-	OutputSchema                 map[string]any
-	WorkflowName                 string
-	ArgsSubject                  string
-	ReservedIdentity             *ChildDispatchIdentity
+	Prompt           string
+	Label            string
+	AgentID          string
+	Preset           string
+	ExecutorProvider string
+	ModelProvider    string
+	Model            string
+	ReasoningEffort  string
+	ResourceID       string
+	FactoryRevision  int
+	Permissions      orchestratorcontract.JavaScriptChildPermission
+	// SkipPermissions is the provider-facing projection of Permissions. It is
+	// retained on the internal request because Workers and Providers consume the
+	// existing boolean bypass flag.
+	SkipPermissions  bool
+	Command          string
+	Sandbox          string
+	WritableRoots    []string
+	AllowNetwork     bool
+	Concurrency      int
+	OutputSchema     map[string]any
+	WorkflowName     string
+	ArgsSubject      string
+	ReservedIdentity *ChildDispatchIdentity
 }
 
 // ChildDispatchIdentity reserves stable dispatch metadata before concurrent execution.
@@ -283,19 +286,19 @@ func childExecutionRequestFromSpec(spec map[string]any, workflowName, argsSubjec
 		return ChildExecutionRequest{}, err
 	}
 	return ChildExecutionRequest{
-		Prompt:                       normalized.Prompt,
-		Label:                        normalized.Label,
-		Preset:                       normalized.Preset,
-		ExecutorProvider:             normalized.ExecutorProvider,
-		ModelProvider:                normalized.ModelProvider,
-		Model:                        normalized.Model,
-		ReasoningEffort:              normalized.ReasoningEffort,
-		ResourceID:                   normalized.ResourceID,
-		OutputSchema:                 normalized.Schema,
-		SkipPermissions:              normalized.SkipPermissions,
-		LegacySkipPermissionsPresent: normalized.LegacySkipPermissionsPresent,
-		WorkflowName:                 workflowName,
-		ArgsSubject:                  argsSubject,
+		Prompt:           normalized.Prompt,
+		Label:            normalized.Label,
+		Preset:           normalized.Preset,
+		ExecutorProvider: normalized.ExecutorProvider,
+		ModelProvider:    normalized.ModelProvider,
+		Model:            normalized.Model,
+		ReasoningEffort:  normalized.ReasoningEffort,
+		ResourceID:       normalized.ResourceID,
+		OutputSchema:     normalized.Schema,
+		Permissions:      normalized.Permissions,
+		SkipPermissions:  normalized.Permissions == orchestratorcontract.JavaScriptChildPermissionSkipPermissions,
+		WorkflowName:     workflowName,
+		ArgsSubject:      argsSubject,
 	}, nil
 }
 
@@ -373,9 +376,7 @@ func childResultValueMap(result ChildExecutionResult) map[string]any {
 	if req.ReasoningEffort != "" {
 		value["reasoningEffort"] = req.ReasoningEffort
 	}
-	if req.SkipPermissions {
-		value["skipPermissions"] = true
-	}
+	value["permissions"] = string(childPermission(req))
 	if req.Command != "" {
 		value["command"] = req.Command
 	}
@@ -528,6 +529,7 @@ func childExecutionResultFromRecord(child ChildDispatchRecord) ChildExecutionRes
 			ReasoningEffort: child.ReasoningEffort,
 			ResourceID:      child.ResourceID,
 			FactoryRevision: child.FactoryRevision,
+			Permissions:     permissionFromSkipPermissions(child.SkipPermissions),
 			SkipPermissions: child.SkipPermissions,
 			Command:         child.Command,
 			Sandbox:         child.Sandbox,
@@ -535,6 +537,27 @@ func childExecutionResultFromRecord(child ChildDispatchRecord) ChildExecutionRes
 			// replay uses the recorded validation result and object directly.
 		},
 	}
+}
+
+func childSkipPermissions(req ChildExecutionRequest) bool {
+	if req.Permissions != "" {
+		return req.Permissions == orchestratorcontract.JavaScriptChildPermissionSkipPermissions
+	}
+	return req.SkipPermissions
+}
+
+func childPermission(req ChildExecutionRequest) orchestratorcontract.JavaScriptChildPermission {
+	if req.Permissions != "" {
+		return req.Permissions
+	}
+	return permissionFromSkipPermissions(req.SkipPermissions)
+}
+
+func permissionFromSkipPermissions(skip bool) orchestratorcontract.JavaScriptChildPermission {
+	if skip {
+		return orchestratorcontract.JavaScriptChildPermissionSkipPermissions
+	}
+	return orchestratorcontract.JavaScriptChildPermissionDefault
 }
 
 func syntheticChildOutputFromRecord(child ChildDispatchRecord, executionMode string) map[string]any {

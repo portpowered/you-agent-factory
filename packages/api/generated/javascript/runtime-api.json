@@ -203,7 +203,7 @@
           }
         },
         "examples": [
-          "{ \"prompt\": \"Summarize findings\", \"label\": \"summarize\", \"schema\": { \"type\": \"object\" }, \"skipPermissions\": true }"
+          "{ \"prompt\": \"Summarize findings\", \"label\": \"summarize\", \"schema\": { \"type\": \"object\" }, \"permissions\": \"SKIP_PERMISSIONS\" }"
         ],
         "visibility": "public",
         "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -234,8 +234,12 @@
             "type": "object",
             "additionalProperties": false
           },
-          "skipPermissions": {
-            "type": "boolean"
+          "permissions": {
+            "type": "string",
+            "enum": [
+              "DEFAULT",
+              "SKIP_PERMISSIONS"
+            ]
           }
         },
         "required": [
@@ -542,14 +546,19 @@
           "message": "agent.run() has unsupported effective reasoningEffort"
         },
         {
-          "condition": "non-boolean-skip-permissions",
-          "type": "TypeError",
-          "message": "agent.run() requires \"skipPermissions\" to be a boolean"
-        },
-        {
           "condition": "non-object-schema",
           "type": "TypeError",
           "message": "agent.run() requires \"schema\" to be an object"
+        },
+        {
+          "condition": "invalid-permissions",
+          "type": "TypeError",
+          "message": "agent.run() requires \"permissions\" to be DEFAULT or SKIP_PERMISSIONS"
+        },
+        {
+          "condition": "retired-permissions-field",
+          "type": "TypeError",
+          "message": "use \"permissions\" with \"DEFAULT\" or \"SKIP_PERMISSIONS\" instead"
         }
       ],
       "documentation": {
@@ -562,11 +571,11 @@
           },
           "description": {
             "id": "javascript.agent.run.description",
-            "canonicalEnglish": "Dispatches one child agent run from a closed spec object with a required prompt and optional model, preset, child result schema, or child-scoped permission-bypass fields. The declared schema is validated before dispatch; skipPermissions is honored only by providers that advertise the capability; unsupported routes fail before provider execution side effects. Returns a promise that resolves to the child result object after policy checks and child_dispatch emission."
+            "canonicalEnglish": "Dispatches one child agent run from a closed spec object with a required prompt and optional model, preset, child result schema, or child-scoped permission mode. The declared schema is validated before dispatch; SKIP_PERMISSIONS is honored only by providers that advertise the capability; unsupported routes fail before provider execution side effects. Returns a promise that resolves to the child result object after policy checks and child_dispatch emission."
           }
         },
         "examples": [
-          "await agent.run({ prompt: \"Summarize findings\", label: \"summarize\", preset: \"operator\", schema: { \"type\": \"object\" }, skipPermissions: true })"
+          "await agent.run({ prompt: \"Summarize findings\", label: \"summarize\", preset: \"operator\", schema: { \"type\": \"object\" }, permissions: \"SKIP_PERMISSIONS\" })"
         ],
         "visibility": "public",
         "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"

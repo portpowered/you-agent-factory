@@ -118,7 +118,7 @@ to the facts that remain inspectable.
 | `phase` | `phase(name: string): void` | Appends an ordered phase observation for the `FactorySession` and its `FactoryEvent` stream. |
 | `log` | `log(message: string, fields?: object): void` | Appends a structured log observation. Fields must be JSON-compatible. |
 | `workflow.log` | `workflow.log(message: string, fields?: object): void` | Same observable log contract as `log`. |
-| `agent.run` | `await agent.run({prompt, label?, preset?, executorProvider?, modelProvider?, model?, reasoningEffort?, resourceId?, schema?, permissions?, skipPermissions?})` | Requests one child execution and resolves to its structured result. Its resolved worker selection, resource admission, and lifecycle are inspectable as a `Dispatch` and related `FactoryEvent` records. For ACP, use `executorProvider: "ACP"` and select the integration with `modelProvider`, such as `cursor-acp`. Set `resourceId` to a stable Factory Runtime resource ID when the child must consume shared live capacity. Set `schema` to a valid JSON Schema object when the child result must follow a declared shape; the runtime validates the declaration and passes a detached copy to execution. Use `permissions: "DEFAULT"` or `permissions: "SKIP_PERMISSIONS"` for the canonical provider permission value. The legacy `skipPermissions` boolean remains accepted during migration and emits a non-fatal diagnostic when explicitly present. Explicit settings remain subject to policy. |
+| `agent.run` | `await agent.run({prompt, label?, preset?, executorProvider?, modelProvider?, model?, reasoningEffort?, resourceId?, schema?, permissions?})` | Requests one child execution and resolves to its structured result. Its resolved worker selection, resource admission, and lifecycle are inspectable as a `Dispatch` and related `FactoryEvent` records. For ACP, use `executorProvider: "ACP"` and select the integration with `modelProvider`, such as `cursor-acp`. Set `resourceId` to a stable Factory Runtime resource ID when the child must consume shared live capacity. Set `schema` to a valid JSON Schema object when the child result must follow a declared shape; the runtime validates the declaration and passes a detached copy to execution. Use `permissions: "DEFAULT"` or `permissions: "SKIP_PERMISSIONS"` for the canonical provider permission value. Explicit settings remain subject to policy. |
 | `parallel` | `await parallel(items)` where each item is an `agent.run` request object or async function | Runs bounded child work and returns results in input order. Child work remains individually inspectable as `Dispatch` records. |
 | `pipeline` | `await pipeline(items, worker, next?)` | Runs `worker(item, index)` and optional `next(workerResult, item, index)` for each item. Returns ordered per-item status and stage results. |
 | `workflow.checkpoint` | `workflow.checkpoint({label: string, state?: object}): void` | Persists JSON-compatible application state as a checkpoint artifact/reference and appends a checkpoint observation. It does not snapshot the JavaScript VM. |
@@ -137,25 +137,22 @@ listed above plus ordinary JavaScript language facilities. Direct filesystem,
 shell, process, module `import`/`require`, and network access is unavailable.
 Child requests may select a preset, executor provider, model provider, model,
 reasoning effort, stable `resourceId`, a valid `schema` object, and the
-canonical `permissions` value;
-the legacy boolean `skipPermissions` remains accepted for compatibility. The
-host permits these settings only when effective policy allows them. Explicit
-legacy-field use appends a safe, non-fatal diagnostic naming `permissions`;
-using only `permissions` does not append that diagnostic. Command, sandbox,
-writable-root, network, concurrency, `outputSchema`, and other output-schema
-fields are not supported `agent.run` arguments. Use `agent.run` for host-mediated child work and
+canonical `permissions` value. The host permits these settings only when
+effective policy allows them. Command, sandbox, writable-root, network,
+concurrency, `outputSchema`, and other output-schema fields are not supported
+`agent.run` arguments. Use `agent.run` for host-mediated child work and
 `workflow.artifact` for durable outputs.
 
-`permissions: "SKIP_PERMISSIONS"` is a dangerous, child-scoped override for the selected
-provider's approval and sandbox restrictions. The selected provider route must
-advertise the permission-bypass capability; an incapable route fails closed
-before a provider attempt, prompt, subprocess, or other execution side effect
-with a safe capability diagnostic. It does not change `policy.mode`, session
-state, model or reasoning allowlists, route selection, fanout or concurrency,
-duration, token, output, or artifact budgets, network or connector access, or
-other workflow controls. Omitted and `permissions: "DEFAULT"` retain the
-provider's normal permission behavior. When both permission fields are present,
-`permissions` controls execution.
+`permissions: "DEFAULT"` launches the selected provider with its normal
+permission checks. `permissions: "SKIP_PERMISSIONS"` requests the selected
+provider's existing permission-bypass behavior. The selected provider route
+must advertise that capability; an incapable route fails closed before a
+provider attempt, prompt, subprocess, or other execution side effect with a
+safe capability diagnostic. Neither value changes model or reasoning
+allowlists, route selection, fanout or concurrency, duration, token, output,
+artifact, network, connector, or other workflow controls. A factory's
+`defaultPolicy.allowedPermissions` allowlist can restrict which provider-launch
+choice its children may request.
 
 ## Runnable examples
 

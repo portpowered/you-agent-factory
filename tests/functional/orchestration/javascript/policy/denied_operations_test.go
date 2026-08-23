@@ -106,10 +106,8 @@ func scaffoldPolicyDeniedJavaScriptFactory(t *testing.T) string {
 					"additionalProperties": false,
 				},
 				"defaultPolicy": map[string]any{
-					"mode":                    "READ_ONLY",
 					"maxAgents":               4,
 					"concurrency":             2,
-					"allowNetwork":            false,
 					"allowedModels":           []any{"gpt-allowed"},
 					"allowedReasoningEfforts": []any{"low"},
 				},

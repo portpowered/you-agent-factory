@@ -116,7 +116,7 @@ func (a *sourceAnalyzer) validateAgentRunSupportedProperties(call *js.CallExpr, 
 		if visible && !orchestratorcontract.IsJavaScriptChildSupportedField(field) {
 			a.addIssue(
 				shapeIssueCode("agent.run"),
-				fmt.Sprintf(`agent.run() does not support field %q`, field),
+				orchestratorcontract.UnsupportedJavaScriptChildFieldMessage(field),
 				call,
 			)
 		}
@@ -136,20 +136,12 @@ func (a *sourceAnalyzer) validateAgentRunFields(call *js.CallExpr, obj *js.Objec
 
 func (a *sourceAnalyzer) validateAgentRunField(call *js.CallExpr, field string, value js.IExpr, found bool) {
 	switch field {
-	case orchestratorcontract.FieldSkipPermissions:
-		a.validateAgentRunBooleanField(call, field, value, found)
 	case orchestratorcontract.FieldPermissions:
 		a.validateAgentRunPermissionField(call, field, value, found)
 	case orchestratorcontract.FieldSchema:
 		a.validateAgentRunSchemaField(call, field, value, found)
 	default:
 		a.validateAgentRunStringField(call, field, value, found)
-	}
-}
-
-func (a *sourceAnalyzer) validateAgentRunBooleanField(call *js.CallExpr, field string, value js.IExpr, found bool) {
-	if found && !isAgentRunBooleanValue(value) {
-		a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be a boolean value`, field), call)
 	}
 }
 
@@ -196,20 +188,6 @@ func isAgentRunPermissionValue(value js.IExpr) bool {
 	}
 	return text == string(orchestratorcontract.JavaScriptChildPermissionDefault) ||
 		text == string(orchestratorcontract.JavaScriptChildPermissionSkipPermissions)
-}
-
-func isAgentRunBooleanValue(value js.IExpr) bool {
-	if !isLiteralExpr(value) {
-		return true
-	}
-	switch node := value.(type) {
-	case js.LiteralExpr:
-		return node.TokenType == js.TrueToken || node.TokenType == js.FalseToken
-	case *js.LiteralExpr:
-		return node.TokenType == js.TrueToken || node.TokenType == js.FalseToken
-	default:
-		return false
-	}
 }
 
 // Agent request fields may be computed from invocation arguments and completed

@@ -81,7 +81,6 @@ describe("WorkflowPreviewPanel", () => {
         policyHash: "sha256:policy",
         maxChildCount: 16,
         maxConcurrency: 4,
-        deniedCapabilities: [],
         validationIssues: [],
       },
       resultConstraints: {
@@ -114,7 +113,7 @@ describe("WorkflowPreviewPanel", () => {
     expect(screen.getByText(/max embedded bytes 65536/)).toBeTruthy();
   });
 
-  it("shows validation and denied capability diagnostics on failure", async () => {
+  it("shows source validation diagnostics on failure", async () => {
     vi.mocked(previewFactory).mockResolvedValue({
       valid: false,
       sourceResolution: {
@@ -134,12 +133,6 @@ describe("WorkflowPreviewPanel", () => {
         policyHash: "sha256:policy",
         maxChildCount: 16,
         maxConcurrency: 4,
-        deniedCapabilities: [
-          {
-            code: "workflow.policy.deniedCapability",
-            message: "network access denied",
-          },
-        ],
         validationIssues: [],
       },
       resultConstraints: {
@@ -167,8 +160,6 @@ describe("WorkflowPreviewPanel", () => {
     expect(
       screen.getByText(/workflow.source.forbiddenHostAccess/),
     ).toBeTruthy();
-    expect(screen.getByText("Denied capabilities")).toBeTruthy();
-    expect(screen.getByText(/network access denied/)).toBeTruthy();
   });
 
   it("shows API failures from the preview query", async () => {
@@ -223,7 +214,6 @@ describe("WorkflowPreviewPanel", () => {
         policyHash: "sha256:policy",
         maxChildCount: 16,
         maxConcurrency: 4,
-        deniedCapabilities: [],
         validationIssues: [
           {
             code: "workflow.policy.invalidConcurrency",
@@ -272,7 +262,6 @@ describe("WorkflowPreviewPanel", () => {
         policyHash: "sha256:policy",
         maxChildCount: 16,
         maxConcurrency: 4,
-        deniedCapabilities: [],
         validationIssues: [],
       },
       resultConstraints: {
@@ -363,7 +352,6 @@ describe("WorkflowPreviewPanel", () => {
     });
 
     expect(screen.queryByText("Source resolution")).toBeNull();
-    expect(screen.queryByText("Denied capabilities")).toBeNull();
   });
 
   it("formats diagnostics with path prefixes and line-only locations", async () => {
@@ -386,7 +374,6 @@ describe("WorkflowPreviewPanel", () => {
         policyHash: "sha256:policy",
         maxChildCount: 16,
         maxConcurrency: 4,
-        deniedCapabilities: [],
         validationIssues: [],
       },
       resultConstraints: {

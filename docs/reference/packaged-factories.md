@@ -772,8 +772,10 @@ optional reasoning setting for that worker. Run-level flags such as `--json`,
 combined with `--json` or `--output`.
 
 **Worker roles and provider/model overrides.** The Factory exposes exactly one
-role, `subagent-worker`, an agent worker with a `READ_ONLY` tool policy. The
-three `worker-*` flags apply to that role and there are no separate planner,
+role, `subagent-worker`, an agent worker with a bounded in-process `READ_ONLY`
+tool policy. That policy is not a provider-wide guarantee about shell,
+filesystem, or network behavior. The three `worker-*` flags apply to that role
+and there are no separate planner,
 reviewer, merger, or child-agent overrides. Omit provider or model values to
 use operator defaults. Omit reasoning effort to preserve the selected
 provider's default reasoning setting. These are the only Factory-defined
@@ -826,9 +828,12 @@ These four Factories all fan work out before returning one customer-facing
 answer, but their selection policies differ. `deep-research` gives a lead
 researcher bounded specialist evidence, `spawn` merges an exact task count,
 `quorum` reconciles two independent Graph branches, and `tournament` keeps one
-winner from a bounded 1v1 bracket. The JavaScript entries are policy-bounded
-and read-only; quorum uses canonical Graph Work and requires both branch Works
-to complete before its merge worker can run.
+winner from a bounded 1v1 bracket. The JavaScript entries use
+`defaultPolicy.allowedPermissions` to select whether child providers launch
+with `DEFAULT` or `SKIP_PERMISSIONS`; that allowlist is not a provider-wide
+filesystem, shell, or network isolation promise. Quorum uses canonical Graph
+Work and requires both branch Works to complete before its merge worker can
+run.
 
 ### `@you/deep-research`
 
@@ -861,10 +866,11 @@ call as well. Omitted values use operator defaults. Setting
 synthesis call.
 
 **Prerequisites and side effects.** A live run needs a configured provider and
-model. The JavaScript policy is `READ_ONLY`, with a maximum of five agent
-calls, at most two concurrent calls, no network or connectors, and no writable
-roots. Workers may inspect available workspace evidence, but this Factory does
-not create a worktree or promise workspace changes. The run still creates
+model. Its `defaultPolicy.allowedPermissions` authorizes `SKIP_PERMISSIONS` for
+the provider-launched child calls. The workflow is bounded to a maximum of five
+agent calls and at most two concurrent calls; it does not grant the JavaScript
+workflow direct filesystem, shell, or network access. This Factory does not
+create a worktree or promise workspace changes. The run still creates
 Factory Session/provider activity and normally records events and artifacts;
 `--no-record` suppresses the normal recording side effect. A provider failure
 after the bounded specialist/lead work fails the invocation.
@@ -902,7 +908,7 @@ response.status = "COMPLETED"
 
 ### `@you/spawn`
 
-**Purpose and suitable use.** Use `@you/spawn` when one read-only request can
+**Purpose and suitable use.** Use `@you/spawn` when one bounded request can
 be decomposed into an exact number of independent tasks and a final merger
 should reconcile every result. It is useful for bounded parallel investigation
 or comparison. It does not create task worktrees or expose each child as a
@@ -930,10 +936,12 @@ all three stages. These flags are intentionally shared: the live signature
 does not expose separate planner, child, or merger overrides.
 
 **Prerequisites and side effects.** A live run needs usable planner, task, and
-merger provider/model routes. The JavaScript policy is `READ_ONLY`, with up to
-16 agent calls, at most eight concurrent child calls, no network or connectors,
-and no writable roots. All children run in the same repository context rather
-than authored worktrees, so this is not a safe substitute for an implementation
+merger provider/model routes. Its `defaultPolicy.allowedPermissions` authorizes
+`SKIP_PERMISSIONS` for the provider-launched child calls. The workflow is
+bounded to up to 16 agent calls and at most eight concurrent child calls; it
+does not grant the JavaScript workflow direct filesystem, shell, or network
+access. All children run in the same repository context rather than authored
+worktrees, so this is not a safe substitute for an implementation
 workflow with branch isolation. The session can still create provider-session,
 recording, and artifact activity; `--no-record` suppresses normal recording.
 If the planner does not return the exact JSON array contract, a child fails, or
@@ -1073,9 +1081,11 @@ competitor selection and then to operator defaults. Every judge must return
 JSON selecting exactly `A` or `B` and a non-empty rationale.
 
 **Prerequisites and side effects.** A live run needs usable competitor and
-judge routes. The JavaScript policy is `READ_ONLY`, with a maximum of 15 agent
-calls, at most eight concurrent calls, no network or connectors, and no
-writable roots. Candidate generation and matches are bounded by `rounds`; the
+judge routes. Its `defaultPolicy.allowedPermissions` authorizes
+`SKIP_PERMISSIONS` for the provider-launched competitor and judge calls. The
+workflow is bounded to a maximum of 15 agent calls and at most eight concurrent
+calls; it does not grant the JavaScript workflow direct filesystem, shell, or
+network access. Candidate generation and matches are bounded by `rounds`; the
 Factory does not create worktrees or a persistent candidate store. Session,
 provider-session, recording, and artifact activity still occurs unless
 `--no-record` is supplied. Invalid judge JSON, a failed candidate or judge, an
