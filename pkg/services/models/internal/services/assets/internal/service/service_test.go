@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
@@ -120,8 +121,51 @@ func TestRuntimeCacheCompatibilityFactsComeFromScopedAssetsService(t *testing.T)
 		!inspection.Installed ||
 		inspection.Revision != "rev-test" ||
 		inspection.InstalledFileCount != 2 ||
+		inspection.CacheBytes != 4 ||
 		len(inspection.MissingAssets) != 0 {
 		t.Fatalf("InspectRuntimeCache = %#v", inspection)
+	}
+}
+
+func TestInspectRuntimeCacheCountsNestedRegularFilesAndSkipsSymlinks(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	revisionDirectory := filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M", "rev-test")
+	nestedDirectory := filepath.Join(revisionDirectory, "nested", "deeper")
+	if err := os.MkdirAll(nestedDirectory, 0o755); err != nil {
+		t.Fatalf("create nested cache directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(revisionDirectory, "extra.bin"), []byte("extra"), 0o644); err != nil {
+		t.Fatalf("write extra cache file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(nestedDirectory, "nested.bin"), []byte("nested"), 0o644); err != nil {
+		t.Fatalf("write nested cache file: %v", err)
+	}
+
+	externalFile := filepath.Join(t.TempDir(), "outside.bin")
+	if err := os.WriteFile(externalFile, []byte("outside-file"), 0o644); err != nil {
+		t.Fatalf("write external cache file: %v", err)
+	}
+	if err := os.Symlink(externalFile, filepath.Join(revisionDirectory, "external-link")); err != nil {
+		if runtime.GOOS != "windows" && !errors.Is(err, os.ErrPermission) {
+			t.Fatalf("create cache symlink: %v", err)
+		}
+	}
+
+	scopes := newScopes(t, "runtime-cache-accounting")
+	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
+	service := newTestService(scopes, nil)
+	inspection, err := service.InspectRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
+		Scope: ref,
+		Name:  "OMNIVOICE_Q4_K_M",
+	})
+	if err != nil {
+		t.Fatalf("InspectRuntimeCache: %v", err)
+	}
+	if inspection.CacheBytes != 15 {
+		t.Fatalf("CacheBytes = %d, want 15 bytes from required plus nested regular files", inspection.CacheBytes)
 	}
 }
 

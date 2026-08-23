@@ -13,9 +13,12 @@ import (
 
 func TestManagedRuntimeToGeneratedPreservesModelVocabulary(t *testing.T) {
 	required := true
+	revision := "rev-1"
+	cacheBytes := int64(1234)
 	result := managedRuntimeToGenerated(models.Runtime{
 		Identity: "OMNIVOICE_Q4_K_M", ReadinessState: models.ReadinessStateReady,
 		LifecycleState: models.LifecycleStateInstalled, Locality: models.LocalityLocal,
+		Revision: &revision, CacheBytes: &cacheBytes,
 		SupportedOperations: []models.Operation{{Name: "TTS", Inputs: []models.OperationSlot{{
 			Name: "text", ContentTypes: []string{"TEXT"}, Required: &required,
 		}}}},
@@ -23,7 +26,9 @@ func TestManagedRuntimeToGeneratedPreservesModelVocabulary(t *testing.T) {
 	})
 	if result.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY ||
 		result.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLED ||
-		result.Locality != factoryapi.WorkerModelLocalityLocal {
+		result.Locality != factoryapi.WorkerModelLocalityLocal ||
+		result.Revision == nil || *result.Revision != revision ||
+		result.CacheBytes == nil || *result.CacheBytes != cacheBytes {
 		t.Fatalf("managed runtime = %#v, want READY/INSTALLED/LOCAL", result)
 	}
 	if result.Diagnostics == nil || (*result.Diagnostics)["sourceKind"] != "MANAGED_MIRROR" {

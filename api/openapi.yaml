@@ -4698,6 +4698,14 @@ components:
           type: string
           description: |
             Stable managed runtime identity shared by discovery, inspect, pull or install, and factory dependency surfaces.
+        revision:
+          type: string
+          description: Installed managed-cache revision when a local cache is present.
+        cacheBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Exact recursive byte count of regular files in the installed managed-cache revision.
         readinessState:
           $ref: '#/components/schemas/ManagedRuntimeReadinessState'
         lifecycleState:

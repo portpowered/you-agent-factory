@@ -2191,6 +2191,13 @@ export interface components {
     ManagedRuntime: {
       /** @description Stable managed runtime identity shared by discovery, inspect, pull or install, and factory dependency surfaces. */
       identity: string;
+      /** @description Installed managed-cache revision when a local cache is present. */
+      revision?: string;
+      /**
+       * Format: int64
+       * @description Exact recursive byte count of regular files in the installed managed-cache revision.
+       */
+      cacheBytes?: number;
       readinessState: components["schemas"]["ManagedRuntimeReadinessState"];
       lifecycleState: components["schemas"]["ManagedRuntimeLifecycleState"];
       locality: components["schemas"]["WorkerModelLocality"];

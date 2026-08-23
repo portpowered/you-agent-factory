@@ -15,6 +15,7 @@ type RuntimeCacheInspection struct {
 	Installed          bool
 	Revision           string
 	CachePath          string
+	CacheBytes         int64
 	InstalledFileCount int
 	MissingAssets      []string
 	PartialArtifacts   bool

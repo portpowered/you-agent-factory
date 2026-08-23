@@ -5960,6 +5960,8 @@ type LogicalRoundTrip struct {
 
 // ManagedRuntime defines model for ManagedRuntime.
 type ManagedRuntime struct {
+	// CacheBytes Exact recursive byte count of regular files in the installed managed-cache revision.
+	CacheBytes  *int64     `json:"cacheBytes,omitempty"`
 	Diagnostics *StringMap `json:"diagnostics,omitempty"`
 
 	// Identity Stable managed runtime identity shared by discovery, inspect, pull or install, and factory dependency surfaces.
@@ -5973,6 +5975,9 @@ type ManagedRuntime struct {
 
 	// ReadinessState Customer-facing readiness for one managed runtime. Readiness describes whether the runtime can be invoked now or what action is required next, without naming upstream repository or provider-specific cache semantics.
 	ReadinessState ManagedRuntimeReadinessState `json:"readinessState"`
+
+	// Revision Installed managed-cache revision when a local cache is present.
+	Revision *string `json:"revision,omitempty"`
 
 	// SupportedOperations Provider-agnostic operations supported by this managed runtime.
 	SupportedOperations []ModelInvocationOperation `json:"supportedOperations"`

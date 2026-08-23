@@ -291,7 +291,7 @@ func TestModelsCLICharacterizationSuccessProjections(t *testing.T) {
 		if err := service.List(modelscli.ListConfig{Context: context.Background(), Output: &human}); err != nil {
 			t.Fatalf("List() human error = %v", err)
 		}
-		if got, want := human.String(), "NAME\tREADINESS\tLIFECYCLE\tLOCALITY\tOPERATIONS\tMODALITIES\tRESOURCES\nOMNIVOICE_Q4_K_M\tREADY\tINSTALLED\tLOCAL\tTTS\tAUDIO,TEXT\t1\n"; got != want {
+		if got, want := human.String(), "NAME\tREADINESS\tLIFECYCLE\tLOCALITY\tOPERATIONS\tMODALITIES\tRESOURCES\tCACHE SIZE\nOMNIVOICE_Q4_K_M\tREADY\tINSTALLED\tLOCAL\tTTS\tAUDIO,TEXT\t1\tNOT_INSTALLED\n"; got != want {
 			t.Fatalf("List() human = %q, want %q", got, want)
 		}
 

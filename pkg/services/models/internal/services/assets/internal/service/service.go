@@ -19,6 +19,8 @@ import (
 
 const metadataFileName = ".managed-cache.json"
 
+const maxManagedCacheBytes = int64(1<<63 - 1)
+
 type service struct {
 	scopes             runtimescopes.Service
 	platform           models.AssetHostPlatform
@@ -223,7 +225,15 @@ func (s *service) InspectRuntimeCache(
 	}
 	active, isActive, pullFailure := s.activePullStateFor(request.Scope, request.Name)
 	if inspection, ok := s.preparedRuntimeInspection(request.Scope, request.Name); ok {
-		return s.applyActivePullFacts(inspection, active, isActive, pullFailure), nil
+		inspection = s.applyActivePullFacts(inspection, active, isActive, pullFailure)
+		if inspection.Installed && strings.TrimSpace(inspection.CachePath) != "" {
+			cacheBytes, measureErr := s.measureRevisionBytes(ctx, inspection.CachePath)
+			if measureErr != nil {
+				return assets.RuntimeCacheInspection{}, measureErr
+			}
+			inspection.CacheBytes = cacheBytes
+		}
+		return inspection, nil
 	}
 	spec, source, supported, err := s.resolveRuntimeCacheSource(scope.Runtime, request.Name)
 	if err != nil {
@@ -320,6 +330,12 @@ func (s *service) inspectRuntimeCacheFiles(
 	}
 	if available {
 		result.InstalledFileCount = len(snapshot.Artifacts)
+		result.MissingAssets = nil
+		cacheBytes, measureErr := s.measureRevisionBytes(ctx, result.CachePath)
+		if measureErr != nil {
+			return assets.RuntimeCacheInspection{}, measureErr
+		}
+		result.CacheBytes = cacheBytes
 	}
 	return s.verifyRuntimeCacheIntegrity(ctx, cacheDirectory, spec, source, expected, result), nil
 }
@@ -763,6 +779,73 @@ func (s *service) inspectRevision(
 		})
 	}
 	return availableSnapshot(spec.modelName, source, revision, artifacts), true, nil
+}
+
+func (s *service) measureRevisionBytes(ctx context.Context, revisionPath string) (int64, error) {
+	if err := assetContextError(ctx); err != nil {
+		return 0, err
+	}
+	if strings.TrimSpace(revisionPath) == "" {
+		return 0, fmt.Errorf("managed cache revision path is empty")
+	}
+	return s.measureDirectoryBytes(ctx, revisionPath)
+}
+
+func (s *service) measureDirectoryBytes(ctx context.Context, directory string) (int64, error) {
+	if err := assetContextError(ctx); err != nil {
+		return 0, err
+	}
+	entries, err := s.readDirectory(directory)
+	if err != nil {
+		return 0, fmt.Errorf("read managed cache revision %q: %w", directory, err)
+	}
+	var total int64
+	for _, entry := range entries {
+		if err := assetContextError(ctx); err != nil {
+			return 0, err
+		}
+		if entry == nil || entry.Type()&os.ModeSymlink != 0 {
+			continue
+		}
+		name := entry.Name()
+		if name == "" || name == "." || name == ".." || filepath.Base(name) != name {
+			return 0, fmt.Errorf("invalid managed cache entry %q", name)
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return 0, fmt.Errorf("inspect managed cache entry %q: %w", filepath.Join(directory, name), err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			continue
+		}
+		switch {
+		case info.IsDir():
+			bytes, recurseErr := s.measureDirectoryBytes(ctx, filepath.Join(directory, name))
+			if recurseErr != nil {
+				return 0, recurseErr
+			}
+			total, err = addManagedCacheBytes(total, bytes)
+			if err != nil {
+				return 0, err
+			}
+		case info.Mode().IsRegular():
+			if info.Size() < 0 {
+				return 0, fmt.Errorf("managed cache entry %q has a negative size", filepath.Join(directory, name))
+			}
+			total, err = addManagedCacheBytes(total, info.Size())
+			if err != nil {
+				return 0, err
+			}
+		}
+	}
+	return total, nil
+}
+
+func addManagedCacheBytes(total, next int64) (int64, error) {
+	if next < 0 || total > maxManagedCacheBytes-next {
+		return 0, fmt.Errorf("managed cache byte count exceeds int64 range")
+	}
+	return total + next, nil
 }
 
 func (s *service) discoverRevision(

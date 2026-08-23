@@ -143,6 +143,45 @@ func TestGetCatalogModelReturnsStableDetachedDetail(t *testing.T) {
 	assertCatalogDetail(t, afterMutation.Model)
 }
 
+func TestListCatalogOverlaysCacheFactsWithoutChangingCatalogStates(t *testing.T) {
+	t.Parallel()
+
+	revision := "rev-installed"
+	cacheBytes := int64(1234)
+	scopes := newRuntimeScopes(t, "catalog-cache-facts")
+	service, err := catalogwire.NewService(
+		scopes,
+		func(context.Context, models.RuntimeScopeRef, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
+			return models.Runtime{
+				ReadinessState: models.ReadinessStateFailed,
+				LifecycleState: models.LifecycleStateInstalling,
+				Revision:       &revision,
+				CacheBytes:     &cacheBytes,
+			}, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("construct Catalog: %v", err)
+	}
+	scope := publicScope(t, openCatalogScope(t, scopes, "cache-model", "generate"))
+	result, err := service.ListCatalog(context.Background(), models.ListModelsRequest{Scope: scope})
+	if err != nil {
+		t.Fatalf("ListCatalog: %v", err)
+	}
+	if len(result.Models) != 1 {
+		t.Fatalf("models = %#v, want one model", result.Models)
+	}
+	runtime := result.Models[0].ManagedRuntime
+	if runtime.ReadinessState != models.ReadinessStateMissing ||
+		runtime.LifecycleState != models.LifecycleStateNotInstalled {
+		t.Fatalf("catalog states = (%s, %s), want MISSING/NOT_INSTALLED", runtime.ReadinessState, runtime.LifecycleState)
+	}
+	if runtime.Revision == nil || *runtime.Revision != revision ||
+		runtime.CacheBytes == nil || *runtime.CacheBytes != cacheBytes {
+		t.Fatalf("catalog cache facts = revision=%v bytes=%v, want rev-installed/1234", runtime.Revision, runtime.CacheBytes)
+	}
+}
+
 func TestGetCatalogModelClassifiesLookupAndOperationFailures(t *testing.T) {
 	t.Parallel()
 

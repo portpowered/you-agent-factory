@@ -44,13 +44,44 @@ func (s *service) ListCatalog(
 		if err := ctx.Err(); err != nil {
 			return models.ListModelsResult{}, err
 		}
-		result.Models = append(result.Models, stableSummary(entry.Summary))
+		summary := stableSummary(entry.Summary)
+		if s.readiness != nil {
+			current, readinessErr := s.readiness(
+				ctx,
+				request.Scope,
+				scopeConfig.Clone(),
+				entry.Detail.Clone(),
+			)
+			if readinessErr != nil {
+				if contextError := ctx.Err(); contextError != nil {
+					return models.ListModelsResult{}, contextError
+				}
+				if errors.Is(readinessErr, context.Canceled) || errors.Is(readinessErr, context.DeadlineExceeded) {
+					return models.ListModelsResult{}, readinessErr
+				}
+				return models.ListModelsResult{}, models.ErrUnavailable
+			}
+			summary.ManagedRuntime = overlayCacheFacts(summary.ManagedRuntime, current)
+		}
+		result.Models = append(result.Models, summary)
 	}
 	sort.Slice(result.Models, func(i, j int) bool {
 		return localmodels.CanonicalModelName(result.Models[i].Name) <
 			localmodels.CanonicalModelName(result.Models[j].Name)
 	})
 	return result, nil
+}
+
+func overlayCacheFacts(base, current models.Runtime) models.Runtime {
+	projected := base.Clone()
+	current = current.Clone()
+	if current.Revision != nil {
+		projected.Revision = current.Revision
+	}
+	if current.CacheBytes != nil {
+		projected.CacheBytes = current.CacheBytes
+	}
+	return projected
 }
 
 func (s *service) GetCatalogModel(

@@ -580,7 +580,7 @@ func logModelsResponse(diagnostics requestDiagnostics, endpoint url.URL, statusC
 }
 
 func renderList(response factoryapi.ListModelsResponse, output io.Writer) error {
-	if _, err := fmt.Fprintln(output, "NAME\tREADINESS\tLIFECYCLE\tLOCALITY\tOPERATIONS\tMODALITIES\tRESOURCES"); err != nil {
+	if _, err := fmt.Fprintln(output, "NAME\tREADINESS\tLIFECYCLE\tLOCALITY\tOPERATIONS\tMODALITIES\tRESOURCES\tCACHE SIZE"); err != nil {
 		return err
 	}
 	results := append([]factoryapi.ModelSummary(nil), response.Results...)
@@ -590,7 +590,7 @@ func renderList(response factoryapi.ListModelsResponse, output io.Writer) error 
 	for _, model := range results {
 		if _, err := fmt.Fprintf(
 			output,
-			"%s\t%s\t%s\t%s\t%s\t%s\t%d\n",
+			"%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\n",
 			model.Name,
 			managedRuntimeReadiness(model.ManagedRuntime),
 			managedRuntimeLifecycle(model.ManagedRuntime),
@@ -598,11 +598,34 @@ func renderList(response factoryapi.ListModelsResponse, output io.Writer) error 
 			modelOperationNames(model.Operations),
 			modelModalities(model.Modalities),
 			len(model.Resources),
+			managedRuntimeCacheSize(model.ManagedRuntime),
 		); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func managedRuntimeCacheSize(runtime factoryapi.ManagedRuntime) string {
+	if runtime.CacheBytes == nil || *runtime.CacheBytes < 0 {
+		return "NOT_INSTALLED"
+	}
+	return fmt.Sprintf("%s (%d bytes)", humanByteSize(*runtime.CacheBytes), *runtime.CacheBytes)
+}
+
+func humanByteSize(bytes int64) string {
+	if bytes < 1024 {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	value := float64(bytes)
+	units := []string{"KiB", "MiB", "GiB", "TiB", "PiB", "EiB"}
+	for _, unit := range units {
+		value /= 1024
+		if value < 1024 || unit == units[len(units)-1] {
+			return fmt.Sprintf("%.2f %s", value, unit)
+		}
+	}
+	return fmt.Sprintf("%d B", bytes)
 }
 
 func renderPull(response factoryapi.ModelPullResponse, output io.Writer) error {

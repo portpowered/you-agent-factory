@@ -19,7 +19,7 @@ func TestProcessModelsList_UsesServerFlagAndReturnsCatalogJSON(t *testing.T) {
 		if r.URL.Path != "/models" {
 			t.Fatalf("path = %q, want /models", r.URL.Path)
 		}
-		_, _ = io.WriteString(w, `{"results":[{"name":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","status":"READY","loadState":"UNLOADED","operations":[{"name":"TTS"}],"modalities":["TEXT"],"resources":[]}]}`)
+		_, _ = io.WriteString(w, `{"results":[{"name":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","status":"READY","loadState":"UNLOADED","operations":[{"name":"TTS"}],"modalities":["TEXT"],"resources":[],"managedRuntime":{"identity":"OMNIVOICE_Q4_K_M","revision":"rev1","cacheBytes":1234,"readinessState":"READY","lifecycleState":"INSTALLED","locality":"LOCAL","supportedOperations":[]}}]}`)
 	}))
 	t.Cleanup(server.Close)
 
@@ -37,6 +37,12 @@ func TestProcessModelsList_UsesServerFlagAndReturnsCatalogJSON(t *testing.T) {
 	}
 	if len(response.Results) != 1 || response.Results[0].Name != "OMNIVOICE_Q4_K_M" {
 		t.Fatalf("list response = %#v, want OMNIVOICE_Q4_K_M", response)
+	}
+	if response.Results[0].ManagedRuntime.Revision == nil ||
+		*response.Results[0].ManagedRuntime.Revision != "rev1" ||
+		response.Results[0].ManagedRuntime.CacheBytes == nil ||
+		*response.Results[0].ManagedRuntime.CacheBytes != 1234 {
+		t.Fatalf("managed runtime cache facts = revision=%v bytes=%v, want rev1/1234", response.Results[0].ManagedRuntime.Revision, response.Results[0].ManagedRuntime.CacheBytes)
 	}
 }
 
@@ -102,7 +108,7 @@ func TestProcessModelsList_ReturnsHumanReadableCatalog(t *testing.T) {
 		if r.URL.Path != "/models" {
 			t.Fatalf("path = %q, want /models", r.URL.Path)
 		}
-		_, _ = io.WriteString(w, `{"results":[{"name":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","status":"READY","loadState":"UNLOADED","operations":[{"name":"TTS"}],"modalities":["TEXT"],"resources":[]}]}`)
+		_, _ = io.WriteString(w, `{"results":[{"name":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","status":"READY","loadState":"UNLOADED","operations":[{"name":"TTS"}],"modalities":["TEXT"],"resources":[],"managedRuntime":{"identity":"OMNIVOICE_Q4_K_M","revision":"rev1","cacheBytes":1234,"readinessState":"READY","lifecycleState":"INSTALLED","locality":"LOCAL","supportedOperations":[]}}]}`)
 	}))
 	t.Cleanup(server.Close)
 
@@ -113,7 +119,7 @@ func TestProcessModelsList_ReturnsHumanReadableCatalog(t *testing.T) {
 	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(models list) error = %v\nstderr=%s", err, inputs.Stderr())
 	}
-	for _, want := range []string{"OMNIVOICE_Q4_K_M", "TTS", "NAME"} {
+	for _, want := range []string{"OMNIVOICE_Q4_K_M", "TTS", "NAME", "CACHE SIZE", "1.21 KiB (1234 bytes)"} {
 		if !strings.Contains(inputs.Stdout(), want) {
 			t.Fatalf("list output missing %q:\n%s", want, inputs.Stdout())
 		}
