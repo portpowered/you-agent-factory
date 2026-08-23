@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-08-21
+last-modified: 2026-08-23
 doc-id: agent-factory/guides/operations
 ---
 
@@ -42,6 +42,87 @@ The continuous shape is the production-oriented default for long-running
 pipelines. Submit initial or later Work through the existing submitted-Work
 surfaces described by `you docs work`; use `you docs sessions` to confirm that
 the addressed Factory Session is still live.
+
+## Stop a local server gracefully on Windows
+
+Use this procedure when a Windows terminal cannot deliver a usable console
+cancellation event. The command uses the selected loopback server's
+administrative control. It does not use forced process termination.
+
+Choose one target in PowerShell terminal 1:
+
+```powershell
+# Serve the Current Factory continuously.
+you server --listen 127.0.0.1:7437
+
+# Or keep a server-enabled run alive while its queue is idle.
+you run --dir ./factory --with-server --continuously --listen 127.0.0.1:7437
+```
+
+Run the stop command in PowerShell terminal 2:
+
+```powershell
+you --server http://127.0.0.1:7437 server stop
+```
+
+The same stop command applies to both target commands. It sends one
+`POST /shutdown` request and waits for the selected listener to stop. A
+successful command prints:
+
+```text
+Server stopped: http://127.0.0.1:7437
+```
+
+The stop request enters normal invocation cancellation. Application close
+keeps the existing five-second bound. This path does not guarantee
+synchronous Recording flush.
+
+Confirm that the target PID is absent after the command returns. Replace the
+sample PID with the PID from your target process.
+
+The measured `you server` sample was:
+
+```powershell
+PS> tasklist /FI "PID eq 50632" /FO CSV /NH
+"you.exe","50632","Console","2","38,116 K"
+PS> you --server http://127.0.0.1:12090 server stop
+Server stopped: http://127.0.0.1:12090
+PS> tasklist /FI "PID eq 50632" /FO CSV /NH
+INFO: No tasks are running which match the specified criteria.
+```
+
+The measured continuous-run sample was:
+
+```powershell
+PS> tasklist /FI "PID eq 16928" /FO CSV /NH
+"you.exe","16928","Console","2","39,804 K"
+PS> you --server http://127.0.0.1:25317 server stop
+Server stopped: http://127.0.0.1:25317
+PS> tasklist /FI "PID eq 16928" /FO CSV /NH
+INFO: No tasks are running which match the specified criteria.
+```
+
+The process-boundary check ran each target ten consecutive times. The server
+target passed `10/10` iterations in `416ms` to `502ms`. The continuous run
+target passed `10/10` iterations in `375ms` to `451ms`.
+
+If the command reports `SERVER_STOP_UNREACHABLE`, confirm the selected server
+URI and its loopback listener. If it reports
+`SERVER_STOP_OBSERVATION_TIMEOUT`, inspect the target process before retrying.
+
+Keep forceful termination as a last-resort fallback:
+
+```powershell
+taskkill /PID 33724 /F
+```
+
+`taskkill /F` terminates the target without the orderly application-close
+path. The measured fallback output was:
+
+```text
+SUCCESS: The process with PID 33724 has been terminated.
+INFO: No tasks are running which match the specified criteria.
+```
 
 ## Read the queue state correctly
 
