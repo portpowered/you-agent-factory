@@ -38,6 +38,39 @@ func selectEffects(effects []Effects) Effects {
 	return effects[0]
 }
 
+const (
+	// maxWorkerSessionExecutionStdinBytes is the inclusive byte limit for a
+	// direct Worker execution document deliberately supplied through stdin.
+	maxWorkerSessionExecutionStdinBytes = 1 * 1024 * 1024
+
+	// maxWorkerSessionMessageStdinBytes is the inclusive byte limit for a
+	// direct Worker message deliberately supplied through stdin by invoke,
+	// continue, or interrupt.
+	maxWorkerSessionMessageStdinBytes = 1 * 1024 * 1024
+)
+
+// readBoundedWorkerSessionStdin reads at most limit plus one byte. The extra
+// byte is an overflow sentinel and is discarded when the inclusive limit is
+// exceeded.
+func readBoundedWorkerSessionStdin(stdin io.Reader, limit int, label, overflowGuidance string) ([]byte, error) {
+	if stdin == nil {
+		return nil, fmt.Errorf("read %s: process stdin reader is required", label)
+	}
+	data, err := io.ReadAll(io.LimitReader(stdin, int64(limit)+1))
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", label, err)
+	}
+	if len(data) > limit {
+		return nil, fmt.Errorf(
+			"%s exceeds the %d-byte limit; %s",
+			label,
+			limit,
+			overflowGuidance,
+		)
+	}
+	return data, nil
+}
+
 func readInvokeRequest(config InvokeConfig) (factoryapi.WorkerSessionStartRequest, error) {
 	decoded, err := readInvokeRequestWithDiagnostics(config)
 	return decoded.Request, err
@@ -54,9 +87,14 @@ func readInvokeRequestWithDiagnostics(config InvokeConfig) (invokeRequestDecodeR
 			return invokeRequestDecodeResult{}, newCLIError("WORKER_SESSION_INPUT_MISSING", "--execution - requires JSON on stdin", nil)
 		}
 		var err error
-		data, err = io.ReadAll(config.Stdin)
+		data, err = readBoundedWorkerSessionStdin(
+			config.Stdin,
+			maxWorkerSessionExecutionStdinBytes,
+			"direct Worker execution stdin",
+			"use --execution FILE for larger input",
+		)
 		if err != nil {
-			return invokeRequestDecodeResult{}, newCLIError("WORKER_SESSION_INPUT_FAILED", "failed to read direct Worker execution from stdin", err)
+			return invokeRequestDecodeResult{}, newCLIError("WORKER_SESSION_INPUT_FAILED", fmt.Sprintf("failed to read direct Worker execution from stdin: %v", err), err)
 		}
 	} else if strings.HasPrefix(input, "{") {
 		data = []byte(input)

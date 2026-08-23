@@ -178,9 +178,14 @@ func resolveContinueInput(config ContinueConfig) (string, error) {
 	if config.StdinIsTTY || config.Stdin == nil {
 		return "", nil
 	}
-	data, err := io.ReadAll(config.Stdin)
+	data, err := readBoundedWorkerSessionStdin(
+		config.Stdin,
+		maxWorkerSessionMessageStdinBytes,
+		"Worker Session follow-up input stdin",
+		"use --user-message or positional input for larger input",
+	)
 	if err != nil {
-		return "", newCLIError("WORKER_SESSION_INPUT_FAILED", "failed to read Worker Session follow-up input from stdin", err)
+		return "", newCLIError("WORKER_SESSION_INPUT_FAILED", fmt.Sprintf("failed to read Worker Session follow-up input from stdin: %v", err), err)
 	}
 	return strings.TrimSpace(string(data)), nil
 }

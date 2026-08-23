@@ -246,6 +246,14 @@ you --server http://localhost:7437 worker-sessions stream --worker-session-id <w
 you --server http://localhost:7437 worker-sessions read --worker-session-id <worker-session-id>
 ```
 
+Direct Worker Session stdin is limited to 1,048,576 bytes, inclusive. This
+limit applies to `--execution -` and to non-terminal stdin used for direct
+Worker messages, continuation input, or replacement input.
+
+Input at the limit is accepted. Larger input fails before Worker Session
+admission. Use `--execution FILE`, `--user-message`, or
+`--replacement-message` when the selected command supports those alternatives.
+
 To resume a terminal direct Worker Session, continue it through the server-owned
 Provider Session association. The command reserves a distinct successor and
 returns its lineage after admission; use `--async` to return before terminal
