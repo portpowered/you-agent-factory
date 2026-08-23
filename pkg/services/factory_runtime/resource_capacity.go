@@ -176,8 +176,3 @@ type ResourceCapacityRevisionService interface {
 	CurrentFactoryRevision() int
 	SetFactoryRevision(int)
 }
-
-func normalizeResourceCapacityRequest(request ResourceCapacityRequest) ResourceCapacityRequest {
-	request.ResourceID = strings.TrimSpace(request.ResourceID)
-	return request
-}

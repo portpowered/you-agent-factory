@@ -627,15 +627,6 @@ func (e *continuationFanOutExecution) completeContinuation(
 	return nil
 }
 
-func canceledContinuationDispatch(dispatchID, workstationName string) workers.WorkstationDispatchResult {
-	return workers.WorkstationDispatchResult{
-		DispatchID: dispatchID, WorkstationName: workstationName,
-		TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeCanceled,
-		Result: workers.WorkResult{DispatchID: dispatchID, Outcome: workers.OutcomeFailed,
-			Error: workers.ErrWorkstationDispatchCanceled.Error()},
-	}
-}
-
 func completedContinuation(dispatchID string, reference providers.SessionRef) continuationDispatchResult {
 	return continuationDispatchResult{result: workers.WorkstationDispatchResult{
 		DispatchID: dispatchID, WorkstationName: "review",

@@ -497,10 +497,6 @@ func (owner testRuntimeLogOwner) Open(request factory.RuntimeLogScopeRequest) (f
 	}}, nil
 }
 
-func newTestRuntimeLogOwner(root string) factory.RuntimeLogOwner {
-	return testRuntimeLogOwner{root: root}
-}
-
 type testRuntimeMetricsSink struct {
 	artifact factory.RuntimeMetricsArtifact
 	onClose  func()
@@ -536,10 +532,6 @@ func (owner testRuntimeMetricsOwner) Open(request factory.RuntimeMetricsScopeReq
 		Path: filepath.Join(owner.root, request.Scope.RuntimeInstanceID+".runtime-metrics.log"), RootDir: owner.root,
 		StartTimeUTC: time.Now().UTC(),
 	}}, nil
-}
-
-func newTestRuntimeMetricsOwner(root string) factory.RuntimeMetricsOwner {
-	return testRuntimeMetricsOwner{root: root}
 }
 
 type runtimeRecordingsRecorderStub struct {

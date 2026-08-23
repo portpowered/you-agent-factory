@@ -32,12 +32,6 @@ func Bind(deps RootDependencies) ToolOperation {
 	}
 }
 
-// BindRuntime binds the canonical tool registry to an explicit Factory Runtime
-// root without constructing an alternate MCP client.
-func BindRuntime(runtime factoryruntime.Service) ToolOperation {
-	return Bind(RootDependencies{Runtime: runtime})
-}
-
 type canonicalToolHandler func(
 	context.Context,
 	factoryruntime.Service,

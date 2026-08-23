@@ -196,15 +196,6 @@ func (ExecutionCatalogMapper) MapExecutionCatalogEntry(
 	})
 }
 
-// MapResolvedExecutionCatalogEntry is an explicit alias for callers that want
-// the resolved-value terminology at the Runtime boundary.
-func (ExecutionCatalogMapper) MapResolvedExecutionCatalogEntry(
-	worker interfaces.ResolvedWorkerDefinition,
-	workstation interfaces.ResolvedWorkstationDefinition,
-) (workerexecution.ResolvedExecutionPolicy, error) {
-	return ExecutionCatalogMapper{}.MapExecutionCatalogEntry(worker, workstation)
-}
-
 func cloneExecutionEnvironment(values map[string]string) map[string]string {
 	if len(values) == 0 {
 		return nil

@@ -327,13 +327,3 @@ func TestNoOpDispatcher_PreservesCanonicalChainingLineageWhenLegacyTraceDiffers(
 		t.Fatalf("execution trace ID = %q, want trace-1", dispatch.Execution.TraceID)
 	}
 }
-
-// TestNoOpDispatcher_ImplementsSubsystem verifies compile-time interface compliance
-// (redundant with var _ above, but explicit for documentation).
-func TestNoOpDispatcher_ImplementsSubsystem(t *testing.T) {
-	var _ subsystems.Subsystem = (*subsystems.NoOpDispatcherSubsystem)(nil)
-	// Also verify the outcome type used.
-	if workerexecution.OutcomeAccepted != "ACCEPTED" {
-		t.Errorf("unexpected OutcomeAccepted value: %s", workerexecution.OutcomeAccepted)
-	}
-}

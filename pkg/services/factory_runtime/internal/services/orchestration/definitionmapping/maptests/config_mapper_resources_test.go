@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -360,36 +359,6 @@ func cronRequiredInputFactoryConfig() *interfaces.FactoryConfig {
 				OnContinue: []interfaces.IOConfig{
 					{StateName: "complete", WorkTypeName: "task"},
 				},
-			},
-		},
-	}
-}
-
-func configMapperWorkToken(id string, workType string, state string) *factoryruntime.RuntimeToken {
-	return &factoryruntime.RuntimeToken{
-		ID:      id,
-		PlaceID: fmt.Sprintf("%s:%s", workType, state),
-		Color: factoryruntime.RuntimeTokenColor{
-			WorkID:     id,
-			WorkTypeID: workType,
-			DataType:   factoryruntime.RuntimeTokenDataTypeWork,
-		},
-	}
-}
-
-func configMapperCronTimeToken(id string, workstation string, dueAt time.Time, expiresAt time.Time) *factoryruntime.RuntimeToken {
-	return &factoryruntime.RuntimeToken{
-		ID:      id,
-		PlaceID: interfaces.SystemTimePendingPlaceID,
-		Color: factoryruntime.RuntimeTokenColor{
-			WorkID:     id,
-			WorkTypeID: interfaces.SystemTimeWorkTypeID,
-			DataType:   factoryruntime.RuntimeTokenDataTypeWork,
-			Tags: map[string]string{
-				interfaces.TimeWorkTagKeySource:          interfaces.TimeWorkSourceCron,
-				interfaces.TimeWorkTagKeyCronWorkstation: workstation,
-				interfaces.TimeWorkTagKeyDueAt:           dueAt.UTC().Format(time.RFC3339Nano),
-				interfaces.TimeWorkTagKeyExpiresAt:       expiresAt.UTC().Format(time.RFC3339Nano),
 			},
 		},
 	}
