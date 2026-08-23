@@ -987,6 +987,7 @@ func TestDirectChildExecutor_CarriesSkipPermissionsToWorkersExecuteRequest(t *te
 				newChildRecordSink(),
 				childTestValues{},
 				"/project",
+				0,
 			)
 			request := factory.JavaScriptChildExecutionRequest{Prompt: "run"}
 			if test.name == "true" {
