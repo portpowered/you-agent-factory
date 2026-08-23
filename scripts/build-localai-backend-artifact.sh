@@ -161,13 +161,21 @@ case "$TARGET_ID:$BACKEND_ID" in
 		;;
 esac
 
+# The pinned gRPC CMake project otherwise lets the Windows generator select
+# C++14, which Abseil rejects before any backend target can compile.
+windows_cxx_standard=17
+
 if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
 	plan_git=""
 	if [[ "$TARGET_ID" == "windows-amd64" && -n "${WINDOWS_GIT_DIR:-}" ]]; then
 		plan_git=" git=$(command -v git || true)"
 	fi
-	printf 'LOCALAI_BACKEND_BUILD_PLAN backend=%s target=%s shell=%s strategy=%s binary=%s%s\n' \
-		"$BACKEND_ID" "$TARGET_ID" "$build_shell" "$build_strategy" "$binary" "$plan_git"
+	plan_cxx_standard=""
+	if [[ "$TARGET_ID" == "windows-amd64" ]]; then
+		plan_cxx_standard=" cxx_standard=$windows_cxx_standard"
+	fi
+	printf 'LOCALAI_BACKEND_BUILD_PLAN backend=%s target=%s shell=%s strategy=%s binary=%s%s%s\n' \
+		"$BACKEND_ID" "$TARGET_ID" "$build_shell" "$build_strategy" "$binary" "$plan_git" "$plan_cxx_standard"
 	exit 0
 fi
 
@@ -199,6 +207,8 @@ if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 		"-DVCPKG_OVERLAY_TRIPLETS=${overlay_triplets}"
 		"-DCMAKE_BUILD_TYPE=Release"
 		"-DBUILD_SHARED_LIBS=OFF"
+		"-DCMAKE_CXX_STANDARD=${windows_cxx_standard}"
+		"-DCMAKE_CXX_STANDARD_REQUIRED=ON"
 	)
 	export VCPKG_TRIPLET="$triplet"
 	export CXXFLAGS="${CXXFLAGS:-} -static-libgcc -static-libstdc++"
