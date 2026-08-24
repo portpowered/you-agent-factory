@@ -467,6 +467,7 @@ func (a *Assembly) Complete(
 		a.liveChangeCoordinator,
 	)
 	gateway = runtime.AttachSessionGateway(gateway)
+	gateway.bindRecordedSessionHistory(a.ListSessions)
 	invoker, err := NewInvocationOwner(runtime, a.interpolation, a.invocationWorkTypes, a.ttsObservability, a.invocationInputFiles)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
