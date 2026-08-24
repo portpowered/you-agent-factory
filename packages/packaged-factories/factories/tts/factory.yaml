@@ -45,7 +45,7 @@ workers:
     model: OMNIVOICE_Q4_K_M
     modelProvider: CODEX
     modelLocality: LOCAL
-    command: omnivoice-llamacpp
+    command: localai-vibevoice
     resources:
       - name: omnivoice-cache
         capacity: 1

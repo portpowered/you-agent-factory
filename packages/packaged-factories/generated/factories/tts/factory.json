@@ -74,7 +74,7 @@
   "workers": [
     {
       "body": "You are the local text-to-speech worker for @you/tts. Treat the bound text slot as the complete input, preserve its wording and reading order, synthesize exactly one audio result with the configured local model, and surface a clear failure rather than returning partial or unrelated content.",
-      "command": "omnivoice-llamacpp",
+      "command": "localai-vibevoice",
       "model": "OMNIVOICE_Q4_K_M",
       "modelLocality": "LOCAL",
       "modelProvider": "CODEX",
