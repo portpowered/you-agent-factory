@@ -660,11 +660,6 @@ func prepareRunConfig(
 	if err != nil {
 		return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
 	}
-
-	cfg, err := prepareCanonicalSessionIDForRun(cfg)
-	if err != nil {
-		return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
-	}
 	recordPath, err := resolveRecordPathForRun(cfg)
 	if err != nil {
 		return RunConfig{}, nil, false, resolvedRunRecordPath{}, err

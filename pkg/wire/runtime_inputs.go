@@ -323,10 +323,9 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 				// Public run and service openings use the existing durable
 				// snapshot path explicitly. Empty and disabled remain
 				// memory-only choices for callers that opt into them.
-				PersistencePolicy:  factorysessions.PersistencePolicyEnabled,
-				CanonicalSessionID: cfg.CanonicalSessionID,
-				SystemConfigHome:   cfg.HomeDir,
-				WorkFile:           cfg.WorkFile,
+				PersistencePolicy: factorysessions.PersistencePolicyEnabled,
+				SystemConfigHome:  cfg.HomeDir,
+				WorkFile:          cfg.WorkFile,
 				Host: factorysessions.RuntimeHostRequest{
 					Directory:   cfg.Dir,
 					RuntimeMode: mode,

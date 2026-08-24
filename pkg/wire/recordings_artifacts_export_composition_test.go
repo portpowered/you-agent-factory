@@ -31,10 +31,6 @@ func TestInjectBundleComposesRecordingsArtifactExportThroughWireFactory(t *testi
 		t.Fatalf("provideRuntimeArtifactPathReserver() error = %v", err)
 	}
 
-	reserver, err := provideRuntimeArtifactPathReserver()
-	if err != nil {
-		t.Fatalf("provideRuntimeArtifactPathReserver() error = %v", err)
-	}
 	root, err := provideRecordingsRoot(
 		edges,
 		provideLiveRecordingTargetPlanner(reserver),
