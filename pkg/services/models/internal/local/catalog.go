@@ -171,7 +171,7 @@ func mergeAggregateOperation(aggregate *catalogAggregate, operation models.Runti
 	if key == "" {
 		return
 	}
-	merged := catalogModelOperation(operation)
+	merged := catalogModelOperationForModel(aggregate.name, operation)
 	if existing, ok := aggregate.operations[key]; ok {
 		merged = mergeCatalogOperations(existing, merged)
 	}
@@ -190,6 +190,26 @@ func mergeAggregateOperation(aggregate *catalogAggregate, operation models.Runti
 			}
 		}
 	}
+}
+
+// catalogModelOperationForModel keeps the canonical provider-neutral shape
+// for built-in model names when an authored worker supplies the host and
+// resource binding. Authored worker fields still overlay the operation, but
+// the worker cannot accidentally remove built-in repeatability or a modality
+// that the Models-owned contract already publishes.
+func catalogModelOperationForModel(modelName string, operation models.RuntimeOperation) managedruntime.Operation {
+	authored := catalogModelOperation(operation)
+	definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(modelName)
+	if !ok {
+		return authored
+	}
+	for _, builtinOperation := range definition.Operations {
+		if !strings.EqualFold(strings.TrimSpace(builtinOperation.Name), strings.TrimSpace(operation.Name)) {
+			continue
+		}
+		return mergeCatalogOperations(builtinOperation, authored)
+	}
+	return authored
 }
 
 func mergeCatalogOperations(left, right managedruntime.Operation) managedruntime.Operation {
