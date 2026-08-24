@@ -106,6 +106,7 @@ func TestWorkerSessionHTTPFleetListWithoutWorkIDReturnsEmptyAndDirectSessions(t 
 	gate := make(chan struct{})
 	runner := newFunctionalWorkerGate(gate)
 	server := startDirectWorkerSessionServer(t, runner)
+	t.Cleanup(func() { server.Stop(t) })
 
 	listFleetWorkerSessions := func() factoryapi.ListWorkerSessionsResponse {
 		request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL()+"/worker-sessions", nil)

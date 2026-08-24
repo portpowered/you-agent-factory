@@ -84,10 +84,10 @@ func (s *FleetObservationService) prepareFleetQuery(
 	if limit == 0 {
 		limit = workersessions.DefaultWorkerSessionObservationListMaxResults
 	}
-	cursor, err := decodeFleetObservationCursor(req.NextToken)
-	if err != nil {
-		return fleetObservationQuery{}, err
-	}
+	// Request validation above has already accepted the cursor's base64
+	// encoding and non-blank decoded identity. Keep decoding here as a pure
+	// representation step so the service has one validation policy boundary.
+	cursor := decodeFleetObservationCursor(req.NextToken)
 	return fleetObservationQuery{
 		limit:  limit,
 		cursor: cursor,
@@ -202,16 +202,13 @@ func addFleetObservation(
 	observations[id] = observation
 }
 
-func decodeFleetObservationCursor(value string) (string, error) {
+func decodeFleetObservationCursor(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return "", nil
+		return ""
 	}
-	decoded, err := base64.StdEncoding.DecodeString(value)
-	if err != nil || strings.TrimSpace(string(decoded)) == "" {
-		return "", workersessions.ErrInvalidObservationPagination
-	}
-	return string(decoded), nil
+	decoded, _ := base64.StdEncoding.DecodeString(value)
+	return string(decoded)
 }
 
 func fleetObservationMatches(

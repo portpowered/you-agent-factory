@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"testing"
 	"time"
 
@@ -112,6 +113,116 @@ func TestFleetObservationServiceReturnsNonNilEmptyCollection(t *testing.T) {
 	}
 	if result.MaxResults != workersessions.DefaultWorkerSessionObservationListMaxResults {
 		t.Fatalf("empty fleet max results = %d, want default %d", result.MaxResults, workersessions.DefaultWorkerSessionObservationListMaxResults)
+	}
+}
+
+func TestFleetObservationServiceRejectsUnavailableAndInvalidQueries(t *testing.T) {
+	if service := NewFleetObservationService(nil); service != nil {
+		t.Fatalf("NewFleetObservationService(nil) = %#v, want nil", service)
+	}
+
+	var unavailable *FleetObservationService
+	if _, err := unavailable.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{}); !errors.Is(err, workersessions.ErrObservationProjectionUnavailable) {
+		t.Fatalf("nil FleetObservationService error = %v, want projection unavailable", err)
+	}
+
+	service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+		return nil, errors.New("catalog unavailable")
+	})
+	for name, request := range map[string]workersessions.ListWorkerSessionObservationsRequest{
+		"invalid scope":  {Scope: workersessions.ObservationScope("unknown")},
+		"invalid state":  {States: []workersessions.State{workersessions.State("unknown")}},
+		"negative limit": {MaxResults: -1},
+		"invalid cursor": {NextToken: "%%%"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := service.ListWorkerSessionObservations(context.Background(), request); err == nil {
+				t.Fatalf("invalid request unexpectedly succeeded")
+			}
+		})
+	}
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := service.ListWorkerSessionObservations(canceled, workersessions.ListWorkerSessionObservationsRequest{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled fleet query error = %v, want context.Canceled", err)
+	}
+
+	if _, err := service.ListWorkerSessionObservations(nil, workersessions.ListWorkerSessionObservationsRequest{}); err == nil || err.Error() != "catalog unavailable" {
+		t.Fatalf("nil-context catalog error = %v, want catalog error", err)
+	}
+}
+
+func TestFleetObservationServicePropagatesSourceFailuresAndInvalidCursors(t *testing.T) {
+	sourceError := errors.New("source unavailable")
+	source := &fleetObservationListSource{errs: map[string]error{"": sourceError}}
+	service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+		return []workersessions.Service{nil, source}, nil
+	})
+	if _, err := service.ListWorkerSessionObservations(context.Background(), workersessions.ListWorkerSessionObservationsRequest{}); !errors.Is(err, sourceError) {
+		t.Fatalf("source error = %v, want source unavailable", err)
+	}
+
+	looping := &fleetObservationListSource{pages: map[string]workersessions.ListWorkerSessionObservationsResult{
+		"":     {NextToken: "loop"},
+		"loop": {NextToken: "loop"},
+	}}
+	if err := collectFleetSource(context.Background(), looping, workersessions.ListWorkerSessionObservationsRequest{}, 1, map[string]workersessions.Observation{}); !errors.Is(err, workersessions.ErrInvalidObservationPagination) {
+		t.Fatalf("repeated source cursor error = %v, want invalid pagination", err)
+	}
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := collectFleetSource(canceled, looping, workersessions.ListWorkerSessionObservationsRequest{}, 1, map[string]workersessions.Observation{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled source collection error = %v, want context.Canceled", err)
+	}
+}
+
+func TestFleetObservationHelpersRejectBlankAndDuplicateIdentity(t *testing.T) {
+	observations := make(map[string]workersessions.Observation)
+	addFleetObservation(observations, workersessions.Observation{WorkerSessionID: "  worker-1  ", State: workersessions.StateRunning})
+	addFleetObservation(observations, workersessions.Observation{WorkerSessionID: "worker-1", State: workersessions.StateFailed})
+	addFleetObservation(observations, workersessions.Observation{})
+	if len(observations) != 1 || observations["worker-1"].State != workersessions.StateRunning {
+		t.Fatalf("fleet observations after blank/duplicate inputs = %#v, want first trimmed identity", observations)
+	}
+
+	valid := base64.StdEncoding.EncodeToString([]byte("worker-1"))
+	for name, value := range map[string]string{
+		"empty":         "",
+		"trimmed valid": "  " + valid + "  ",
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := decodeFleetObservationCursor(value)
+			if value != "" && got != "worker-1" {
+				t.Fatalf("decodeFleetObservationCursor(%q) = %q, want worker-1", value, got)
+			}
+		})
+	}
+}
+
+func TestFleetObservationMatchesScopesAndStates(t *testing.T) {
+	directRunning := workersessions.Observation{Direct: true, State: workersessions.StateRunning}
+	factoryFailed := workersessions.Observation{Direct: false, State: workersessions.StateFailed}
+	cases := []struct {
+		name        string
+		observation workersessions.Observation
+		scope       workersessions.ObservationScope
+		states      []workersessions.State
+		want        bool
+	}{
+		{"direct", directRunning, workersessions.ObservationScopeDirect, nil, true},
+		{"factory mismatch", directRunning, workersessions.ObservationScopeFactory, nil, false},
+		{"factory state", factoryFailed, workersessions.ObservationScopeFactory, []workersessions.State{workersessions.StateFailed}, true},
+		{"factory state mismatch", factoryFailed, workersessions.ObservationScopeFactory, []workersessions.State{workersessions.StateRunning}, false},
+		{"all", factoryFailed, workersessions.ObservationScopeAll, nil, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := fleetObservationMatches(tc.observation, tc.scope, tc.states); got != tc.want {
+				t.Fatalf("fleetObservationMatches() = %t, want %t", got, tc.want)
+			}
+		})
 	}
 }
 
