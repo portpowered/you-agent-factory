@@ -220,6 +220,29 @@ func TestReplayV2RejectsDuplicateTerminalAndMissingHeader(t *testing.T) {
 	}
 }
 
+func TestLoad_MalformedV2DoesNotFallBackToV1Decoder(t *testing.T) {
+	header, err := MarshalReplayV2Header(
+		&interfaces.ReplayArtifact{RecordedAt: time.Date(2026, 8, 23, 13, 30, 0, 0, time.UTC)},
+		"malformed-v2",
+	)
+	if err != nil {
+		t.Fatalf("MarshalReplayV2Header: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "malformed.jsonl")
+	data := append(header, []byte(`{"recordType":"not-a-replay-record"}`+"\n")...)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write malformed v2 artifact: %v", err)
+	}
+
+	_, err = Load(testReplayStorage(), path, testFactorySnapshotDecoder)
+	if err == nil {
+		t.Fatal("Load() error = nil, want malformed v2 framing error")
+	}
+	if !strings.Contains(err.Error(), "unsupported recordType") || strings.Contains(err.Error(), "schemaVersion is required") {
+		t.Fatalf("Load() error = %q, want v2 framing error without v1 fallback", err)
+	}
+}
+
 func TestArtifactFromEventStreamRejectsNonTailCorruption(t *testing.T) {
 	artifact := testReplayArtifact(t,
 		replayWorkRequestEvent(t, "request-1", 1, "api", []factoryapi.Work{{
