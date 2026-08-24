@@ -440,10 +440,6 @@ func (target *summary) unpricedPairsValue() []costs.UnpricedPair {
 	return result
 }
 
-func (target *summary) rollup(key string) (costs.Rollup, error) {
-	return target.rollupWithCurrency(key, "")
-}
-
 func (target *summary) rollupWithCurrency(key, currency string) (costs.Rollup, error) {
 	status, amount, coverage, err := target.result()
 	if err != nil {
