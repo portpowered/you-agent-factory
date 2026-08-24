@@ -525,6 +525,20 @@ func TestExecuteWritesIncompleteJSONWhenMeasurementFailsWithProfile(t *testing.T
 	if len(summary.Packages) == 0 {
 		t.Fatalf("incomplete coverage summary packages = %+v, want retained partial package totals", summary.Packages)
 	}
+	if len(summary.Packages) != 2 {
+		t.Fatalf("incomplete coverage summary packages = %d, want both measured packages", len(summary.Packages))
+	}
+	for _, entry := range summary.Packages {
+		if entry.PackageFloor != nil {
+			t.Fatalf("partial package %s has floor %v, want n/a until manifest evaluation", entry.Package, *entry.PackageFloor)
+		}
+	}
+	if summary.Packages[0].Package != modulePath+"/pkg/config" || summary.Packages[0].CoveragePercent != 100.0 {
+		t.Fatalf("partial config package = %+v, want measured 100.0%%", summary.Packages[0])
+	}
+	if summary.Packages[1].Package != modulePath+"/pkg/service" || summary.Packages[1].CoveragePercent != 100.0 {
+		t.Fatalf("partial service package = %+v, want measured 100.0%%", summary.Packages[1])
+	}
 	if !strings.Contains(summary.MeasurementReason, "did not complete") {
 		t.Fatalf("measurement reason = %q, want incomplete-measurement explanation", summary.MeasurementReason)
 	}

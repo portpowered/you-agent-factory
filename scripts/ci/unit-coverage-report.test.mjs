@@ -51,6 +51,9 @@ function timingArtifact() {
 		packageElapsedSecondsSum: 52.875,
 		packageCount: 2,
 		expectedPackageCount: 2,
+		packages: [
+			{ package: "pkg/ungated", seconds: 3.75, outcome: "fail" },
+		],
 		testCount: 3,
 		testFailCount: 1,
 		tests: [
@@ -60,6 +63,46 @@ function timingArtifact() {
 		],
 	};
 }
+
+test("retains measured partial packages with an explicit report-only floor and matching duration", () => {
+	const summary = summarizeUnitCoverage(
+		{
+			complete: false,
+			measurementReason: "unit test failed after the profile flushed",
+			coveredStatements: 2,
+			measurableStatements: 4,
+			coveragePercent: 50,
+			packages: [
+				{
+					package: "pkg/measured",
+					coveredStatements: 2,
+					measurableStatements: 4,
+					coveragePercent: 50,
+					packageFloor: null,
+				},
+			],
+		},
+		{
+			complete: false,
+			packages: [{ package: "pkg/measured", seconds: 3.75, outcome: "fail" }],
+			tests: [],
+		},
+	);
+
+	assert.deepEqual(summary.coverage.reportOnly, [
+		{
+			package: "pkg/measured",
+			coveragePercent: 50,
+			floor: null,
+			timing: { package: "pkg/measured", seconds: 3.75, outcome: "fail" },
+		},
+	]);
+	assert.equal(summary.coverage.gatedCount, 0);
+	const body = renderUnitCoverageJobSummary(summary);
+	assert.match(body, /Measured packages without a floor/);
+	assert.match(body, /`pkg\/measured` \| 50\.00 \| n\/a \(partial run\) \| report-only \| 3\.750/);
+	assert.doesNotMatch(body, /Headroom/);
+});
 
 test("orders gated packages by headroom ascending with violations first", () => {
 	const summary = summarizeUnitCoverage(coverageArtifact(), timingArtifact());

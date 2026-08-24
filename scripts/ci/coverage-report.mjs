@@ -32,9 +32,18 @@ const HEADROOM_EPSILON = 1e-9;
  */
 export function summarizeCoverageReport(coverage, timing, limits = {}) {
 	const resolved = { ...DEFAULT_COVERAGE_REPORT_LIMITS, ...limits };
+	const coverageSummary = summarizeCoverageArtifact(coverage, resolved);
+	const timingSummary = summarizeTimingArtifact(timing, resolved);
+	const timingByPackage = new Map(
+		timingSummary.packages.map((entry) => [entry.package, entry]),
+	);
+	coverageSummary.reportOnly = coverageSummary.reportOnly.map((entry) => ({
+		...entry,
+		timing: timingByPackage.get(entry.package) || null,
+	}));
 	return {
-		coverage: summarizeCoverageArtifact(coverage, resolved),
-		timing: summarizeTimingArtifact(timing, resolved),
+		coverage: coverageSummary,
+		timing: timingSummary,
 	};
 }
 
@@ -45,6 +54,7 @@ function summarizeCoverageArtifact(coverage, limits) {
 			packageFloorPolicy: "",
 			packageFloorFindings: [],
 			manifestDiagnostics: [],
+			reportOnly: [],
 			violations: [],
 			violationCount: 0,
 			floorHoldCount: 0,
@@ -54,7 +64,7 @@ function summarizeCoverageArtifact(coverage, limits) {
 			omitted: 0,
 		};
 	}
-	const ranked = coverage.packages
+	const packages = coverage.packages
 		.filter((entry) => entry && typeof entry.package === "string")
 		.map((entry) => ({
 			package: entry.package,
@@ -64,7 +74,8 @@ function summarizeCoverageArtifact(coverage, limits) {
 				typeof entry.packageFloor === "number" && Number.isFinite(entry.packageFloor)
 					? entry.packageFloor
 					: null,
-		}))
+		}));
+	const ranked = packages
 		.filter((entry) => entry.floor !== null)
 		.map((entry) => ({ ...entry, headroom: entry.coveragePercent - entry.floor }))
 		.sort((left, right) =>
@@ -97,6 +108,9 @@ function summarizeCoverageArtifact(coverage, limits) {
 		packageFloorPolicy: textValue(coverage.packageFloorPolicy),
 		packageFloorFindings: diagnosticEntries(coverage.packageFloorFindings),
 		manifestDiagnostics: diagnosticEntries(coverage.manifestDiagnostics),
+		reportOnly: packages
+			.filter((entry) => entry.floor === null)
+			.sort((left, right) => left.package.localeCompare(right.package)),
 		complete: coverage.complete !== false,
 		measurementReason: textValue(coverage.measurementReason),
 		coveredStatements: finiteNumber(coverage.coveredStatements),
@@ -115,8 +129,18 @@ function summarizeCoverageArtifact(coverage, limits) {
 
 function summarizeTimingArtifact(timing, limits) {
 	if (!timing || typeof timing !== "object" || !Array.isArray(timing.tests)) {
-		return { available: false, slowest: [], observed: 0, omitted: 0 };
+		return { available: false, packages: [], slowest: [], observed: 0, omitted: 0 };
 	}
+	const packages = Array.isArray(timing.packages)
+		? timing.packages
+			.filter((entry) => entry && typeof entry.package === "string")
+			.map((entry) => ({
+				package: entry.package,
+				seconds: finiteNumber(entry.seconds),
+				outcome: textValue(entry.outcome) || "unknown",
+			}))
+			.sort((left, right) => left.package.localeCompare(right.package))
+		: [];
 	const slowest = timing.tests
 		.filter((entry) => entry && typeof entry.package === "string" && typeof entry.test === "string")
 		.map((entry) => ({
@@ -133,6 +157,7 @@ function summarizeTimingArtifact(timing, limits) {
 	const shown = slowest.slice(0, limits.slowestTests);
 	return {
 		available: true,
+		packages,
 		complete: timing.complete !== false,
 		captureReason: textValue(timing.captureReason),
 		wallSeconds: finiteNumber(timing.wallSeconds),
@@ -191,6 +216,13 @@ export function renderCoverageReportBody(summary, options = {}) {
 	);
 	if (manifestDiagnostics) {
 		sections.push(manifestDiagnostics);
+	}
+	const reportOnly = renderReportOnlyPackageTable(
+		summary.coverage.reportOnly,
+		!summary.coverage.complete,
+	);
+	if (reportOnly) {
+		sections.push(`### Measured packages without a floor\n\n${reportOnly}`);
 	}
 	sections.push(renderTimingOverview(summary.timing, timingArtifactName, options));
 	const slowest = renderSlowestTable(summary.timing.slowest);
@@ -284,6 +316,24 @@ function renderPackageTable(rows) {
 	for (const row of rows) {
 		lines.push(
 			`| \`${row.package}\` | ${row.coveragePercent.toFixed(2)} | ${row.floor.toFixed(2)} | ${row.headroom.toFixed(2)} |`,
+		);
+	}
+	return lines.join("\n");
+}
+
+function renderReportOnlyPackageTable(rows, partial) {
+	if (!rows || rows.length === 0) {
+		return "";
+	}
+	const lines = [
+		"| Package | Coverage % | Floor | Status | Duration (s) |",
+		"| --- | ---: | --- | --- | ---: |",
+	];
+	for (const row of rows) {
+		const floor = partial ? "n/a (partial run)" : "n/a (report-only)";
+		const duration = row.timing ? row.timing.seconds.toFixed(3) : "unavailable";
+		lines.push(
+			`| \`${row.package}\` | ${row.coveragePercent.toFixed(2)} | ${floor} | report-only | ${duration} |`,
 		);
 	}
 	return lines.join("\n");
