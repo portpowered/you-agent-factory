@@ -24,7 +24,6 @@ import (
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformprocessmemory "github.com/portpowered/infinite-you/pkg/platform/processmemory"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -52,7 +51,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
@@ -857,12 +855,4 @@ func provideResponsePresentation() factoryvisualization.ResponsePresentation {
 
 func provideDirectJavaScriptSyncRunner() factorysessionwire.DirectJavaScriptSyncRunner {
 	return sessionexecutioncli.RunNormalizedSync
-}
-
-func provideCLIObserver(edges serviceedges.Edges) platformprocess.CLIObserver {
-	return edges.CLIObserver
-}
-
-func provideCLICommandFactory(operations cli.CommandOperations) cli.CommandFactory {
-	return cli.NewCommandFactory(operations)
 }

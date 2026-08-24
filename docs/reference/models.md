@@ -235,7 +235,7 @@ path. The command rejects incomplete, duplicate, or unknown output mappings
 before it writes a partial file.
 
 Metadata mode returns request identity and explicit execution state when JSON is
-requested without an output path or explicit output mappings, for example
+requested without an output path, input mapping, or explicit output mappings, for example
 `{"modelName":"OMNIVOICE_Q4_K_M","operation":"TTS","mode":"VALIDATION_ONLY","validationOnly":true,"inferenceExecuted":false}`.
 It validates the request but does not execute inference or return model output.
 An output path or explicit output mapping selects execution behavior.
