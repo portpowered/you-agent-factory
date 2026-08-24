@@ -50,7 +50,6 @@ func TestFactorySessionReadScaleProfile(t *testing.T) {
 	}
 	defer func() {
 		executor.stop()
-		executor.releaseAll()
 		stopSessionReadScaleProcess(harness)
 	}()
 
@@ -94,7 +93,9 @@ func TestFactorySessionReadScaleProfile(t *testing.T) {
 		} else if operations != baseline {
 			t.Fatalf("checkpoint %d read operation counts = %+v, want flat baseline %+v", checkpoint, operations, baseline)
 		}
-		executor.releaseCheckpoint(checkpoint)
+		if index < len(checkpoints)-1 {
+			executor.releaseCheckpoint(checkpoint)
+		}
 	}
 }
 
@@ -222,12 +223,6 @@ func (executor *sessionReadScaleDispatchExecutor) releaseCheckpoint(target int) 
 	executor.mu.Unlock()
 	if checkpoint != nil {
 		checkpoint.releaseOnce.Do(func() { close(checkpoint.release) })
-	}
-}
-
-func (executor *sessionReadScaleDispatchExecutor) releaseAll() {
-	for _, target := range executor.ordered {
-		executor.releaseCheckpoint(target)
 	}
 }
 
