@@ -54,6 +54,15 @@ class RootStatusError(RuntimeError):
     """A root status inspection failure that belongs to the setup preflight."""
 
 
+class RootSyncResult(str):
+    """Describe root synchronization and its optional fresh remote baseline."""
+
+    def __new__(cls, message, fresh_origin_main_sha=None):
+        result = super().__new__(cls, message)
+        result.fresh_origin_main_sha = fresh_origin_main_sha
+        return result
+
+
 def raw_failure_details(error):
     """Return an exception's text without allowing rendering to raise again."""
     try:
@@ -884,24 +893,14 @@ def remote_main_sha(repo_root):
     return result.stdout.strip().split()[0]
 
 
-def stale_origin_main_sha(repo_root):
-    """Return local origin/main sha when the remote-tracking ref exists."""
-    if not origin_main_ref_exists(repo_root):
-        return None
-    result = run_git(
-        "rev-parse", "refs/remotes/origin/main",
-        cwd=repo_root, check=False,
-    )
-    if result.returncode != 0:
-        return None
-    return result.stdout.strip()
-
-
 def resolve_remote_main_sha(repo_root, fetch_succeeded):
-    """Resolve the best available origin/main sha for root sync."""
-    if fetch_succeeded:
-        return remote_main_sha(repo_root)
-    return stale_origin_main_sha(repo_root)
+    """Resolve origin/main only when the current fetch succeeded."""
+    if not fetch_succeeded:
+        return None
+    sha = remote_main_sha(repo_root)
+    if sha is None or not immutable_object_id(sha):
+        return None
+    return sha
 
 
 def can_fast_forward_main(repo_root, local_sha, remote_sha):
@@ -1090,14 +1089,21 @@ def _sync_main(repo_root):
     so clean-root checkouts can continue workspace setup from local state.
     Dirty roots skip root synchronization after fetch when a local or remote
     main ref can provide a safe start point for the requested lane.
-    Returns a human-readable outcome string for logging.
+    Returns a string-compatible result carrying any fresh origin/main SHA.
     """
+    fresh_origin_main_sha = None
+
+    def result(message):
+        return RootSyncResult(message, fresh_origin_main_sha)
+
     if not has_origin_remote(repo_root):
         entries = root_status_for_setup(repo_root)
         if local_main_ref_exists(repo_root):
             if entries:
-                return "skipped (dirty root; using local main without root sync)"
-            return "skipped (no origin remote)"
+                return result(
+                    "skipped (dirty root; using local main without root sync)"
+                )
+            return result("skipped (no origin remote)")
         if entries:
             raise DirtyRootError(dirty_root_diagnostic(repo_root, entries))
         raise RuntimeError(
@@ -1108,7 +1114,7 @@ def _sync_main(repo_root):
     fetch_succeeded = fetch_result.returncode == 0
     if not fetch_succeeded:
         if local_main_ref_exists(repo_root):
-            return (
+            return result(
                 "skipped (fetch failed: "
                 f"{command_failure_details(fetch_result)})"
             )
@@ -1122,64 +1128,61 @@ def _sync_main(repo_root):
             )
 
     remote_sha = resolve_remote_main_sha(repo_root, fetch_succeeded)
+    fresh_origin_main_sha = remote_sha
     entries = root_status_for_setup(repo_root)
     if entries:
         if remote_sha is not None:
-            return (
+            return result(
                 "skipped (dirty root; using origin/main "
                 f"{remote_sha[:8]} without root sync)"
             )
         if local_main_ref_exists(repo_root):
-            return "skipped (dirty root; using local main without root sync)"
+            return result(
+                "skipped (dirty root; using local main without root sync)"
+            )
         raise DirtyRootError(dirty_root_diagnostic(repo_root, entries))
 
     if remote_sha is None:
         if local_main_ref_exists(repo_root):
-            return "skipped (origin has no main branch)"
+            return result("skipped (origin has no main branch)")
         raise RuntimeError(
             "origin has no main branch and refs/heads/main is missing"
         )
 
     if not local_main_ref_exists(repo_root):
         run_git("update-ref", "refs/heads/main", remote_sha, cwd=repo_root)
-        return f"created refs/heads/main at {remote_sha[:8]}"
+        return result(f"created refs/heads/main at {remote_sha[:8]}")
 
     local_sha = run_git("rev-parse", "refs/heads/main", cwd=repo_root).stdout.strip()
     if local_sha == remote_sha:
         if current_branch(repo_root) == "main":
             verify_root_after_restore(repo_root, None)
-        return "already up to date"
+        return result("already up to date")
 
     if not can_fast_forward_main(repo_root, local_sha, remote_sha):
-        return "skipped (local main is not a fast-forward behind origin/main)"
+        return result(
+            "skipped (local main is not a fast-forward behind origin/main)"
+        )
 
     if current_branch(repo_root) == "main":
-        return _sync_checked_out_main_with_stash(repo_root, remote_sha)
+        return result(_sync_checked_out_main_with_stash(repo_root, remote_sha))
 
     run_git("update-ref", "refs/heads/main", remote_sha, cwd=repo_root)
-    return (
+    return result(
         f"fast-forwarded refs/heads/main to {remote_sha[:8]} "
         "(fetch-only; did not run git pull)"
     )
 
 
-def resolve_worktree_start_point(repo_root):
+def resolve_worktree_start_point(fresh_origin_main_sha):
     """Resolve the start point for brand-new lane branches.
 
-    Prefer the origin/main remote-tracking ref (freshly fetched by sync_main
-    just before worktree creation), so lanes never inherit unpushed local-main
-    commits when local main is ahead of origin/main. Fall back to local main
-    only when no origin/main ref is available (no origin remote, or origin has
-    no main branch).
+    Use only the immutable SHA captured by the current successful fetch. A
+    missing SHA means setup is using its existing local-main fallback; a stale
+    remote-tracking ref must never become a new lane's baseline.
     """
-    if origin_main_ref_exists(repo_root):
-        result = run_git(
-            "rev-parse", "refs/remotes/origin/main",
-            cwd=repo_root, check=False,
-        )
-        sha = result.stdout.strip()
-        if result.returncode == 0 and sha:
-            return sha
+    if fresh_origin_main_sha and immutable_object_id(fresh_origin_main_sha):
+        return fresh_origin_main_sha
     return "main"
 
 
@@ -1305,7 +1308,9 @@ def sync_reused_worktree_branch(repo_root, worktree_path, branch):
         restore_stashed_changes(worktree_path, snapshot_id, f"worktree branch {branch}")
 
 
-def create_or_reuse_worktree(repo_root, branch, worktree_path):
+def create_or_reuse_worktree(
+    repo_root, branch, worktree_path, fresh_origin_main_sha=None,
+):
     """Create a new worktree or reuse an existing one. Returns reused flag."""
     if worktree_path.exists() and worktree_is_valid(worktree_path):
         sync_outcome = sync_reused_worktree_branch(repo_root, worktree_path, branch)
@@ -1333,7 +1338,7 @@ def create_or_reuse_worktree(repo_root, branch, worktree_path):
     else:
         run_git(
             "worktree", "add", "-b", branch, str(worktree_path),
-            resolve_worktree_start_point(repo_root),
+            resolve_worktree_start_point(fresh_origin_main_sha),
             cwd=repo_root,
         )
 
@@ -1427,7 +1432,11 @@ def main():
 
     # Sync main and prune worktrees.
     try:
-        sync_outcome = sync_main(repo_root)
+        sync_result = sync_main(repo_root)
+        sync_outcome = str(sync_result)
+        fresh_origin_main_sha = getattr(
+            sync_result, "fresh_origin_main_sha", None,
+        )
         print(f"Root sync: {sync_outcome}", file=sys.stderr)
         prune_worktrees(repo_root)
     except (DirtyRootError, RootStatusError) as e:
@@ -1440,7 +1449,12 @@ def main():
     # Create or reuse worktree.
     worktree_dir = repo_root / ".claude" / "worktrees" / normalize_branch(branch)
     try:
-        reused = create_or_reuse_worktree(repo_root, branch, worktree_dir)
+        reused = create_or_reuse_worktree(
+            repo_root,
+            branch,
+            worktree_dir,
+            fresh_origin_main_sha,
+        )
     except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
         print(
             format_stage_failure("Worktree preparation failed", e),

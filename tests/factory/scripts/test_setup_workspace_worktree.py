@@ -282,6 +282,17 @@ class SetupWorkspaceWorktreeTest(unittest.TestCase):
             check=False,
         )
         self.assertNotEqual(ancestor_check.returncode, 0)
+        self.assertEqual(
+            git(
+                ["merge-base", "HEAD", "refs/remotes/origin/main"],
+                worktree_path,
+            ).stdout.strip(),
+            origin_main_sha,
+        )
+        self.assertEqual(
+            git(["rev-parse", f"refs/heads/{prd_name}"], local_repo).stdout.strip(),
+            origin_main_sha,
+        )
 
         # Local main must be untouched: the ahead commits stay on it.
         self.assertEqual(
@@ -292,9 +303,45 @@ class SetupWorkspaceWorktreeTest(unittest.TestCase):
     def test_resolve_worktree_start_point_falls_back_to_main_without_origin(self):
         init_local_repo(self.repo_path)
         self.assertEqual(
-            self.module.resolve_worktree_start_point(self.repo_path),
+            self.module.resolve_worktree_start_point(None),
             "main",
         )
+
+    def test_fetch_failure_with_stale_origin_main_uses_local_main(self):
+        local_repo = self.repo_path / "local"
+        setup_repo_with_local_main_ahead(local_repo, self.repo_path, ahead_commits=2)
+
+        stale_origin_main_sha = git(
+            ["rev-parse", "refs/remotes/origin/main"],
+            local_repo,
+        ).stdout.strip()
+        local_main_sha = git(
+            ["rev-parse", "refs/heads/main"],
+            local_repo,
+        ).stdout.strip()
+        self.assertNotEqual(local_main_sha, stale_origin_main_sha)
+
+        missing_remote = self.repo_path / "missing-remote.git"
+        git(["remote", "set-url", "origin", str(missing_remote)], local_repo)
+
+        prd_name = "fetch-failure-stale-origin-prd"
+        write_prd(local_repo, prd_name)
+
+        result = run_setup_workspace(local_repo, prd_name)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        payload = json.loads(result.stdout)
+        worktree_path = Path(payload["worktree"])
+        worktree_head = git(["rev-parse", "HEAD"], worktree_path).stdout.strip()
+        self.assertEqual(worktree_head, local_main_sha)
+        self.assertNotEqual(worktree_head, stale_origin_main_sha)
+        self.assertEqual(
+            git(["rev-parse", f"refs/heads/{prd_name}"], local_repo).stdout.strip(),
+            local_main_sha,
+        )
+        for index in range(2):
+            self.assertTrue((worktree_path / f"unpushed-{index}.txt").exists())
+        self.assertIn("fetch failed", result.stderr.lower())
 
     def test_copies_prd_json_and_optional_markdown(self):
         init_local_repo(self.repo_path)
