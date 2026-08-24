@@ -8,11 +8,8 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -84,48 +81,62 @@ func TestRecordedFactoryRedactsDeclaredSecretAtRecordingWriteBoundary(t *testing
 	if bytes.Contains(data, []byte(secret)) {
 		t.Fatalf("persisted recording contains the declared secret; artifact=%s", artifactPath)
 	}
+	assertRecordedSecretArtifact(t, artifactPath, control)
+	replayInputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--replay", artifactPath, "--no-record", "--quiet",
+	})
+	replayInputs.Input.WorkingDirectory = dir
+	replayInputs.Input.Env = append(replayInputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
+	replayProcess := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, replayProcess)
+	if err := replayProcess.Execute(replayInputs.Input); err != nil {
+		t.Fatalf("replay persisted recording: %v\nstderr=%s", err, replayInputs.Stderr())
+	}
+}
+
+func assertRecordedSecretArtifact(t *testing.T, artifactPath, control string) {
+	t.Helper()
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	if len(artifact.Events) == 0 {
 		t.Fatal("persisted recording contains no Factory Events")
 	}
-
 	redactedRoles := make(map[string]bool)
 	controlCount := 0
 	for _, event := range artifact.Events {
-		switch string(event.Type) {
-		case "AGENT_RUN_RESPONSE":
-			var payload struct {
-				Diagnostics struct {
-					AgentRun struct {
-						Transcript []struct {
-							Role    string          `json:"role"`
-							Summary json.RawMessage `json:"summary"`
-						} `json:"transcript"`
-					} `json:"agentRun"`
-				} `json:"diagnostics"`
-			}
-			if err := json.Unmarshal(event.Payload, &payload); err != nil {
-				t.Fatalf("decode persisted agent-run response: %v", err)
-			}
-			for _, entry := range payload.Diagnostics.AgentRun.Transcript {
-				switch entry.Role {
-				case "system", "user":
-					var marker recordings.RecordingRedactedValue
-					if err := json.Unmarshal(entry.Summary, &marker); err != nil {
-						t.Fatalf("decode persisted %s redaction marker: %v", entry.Role, err)
-					}
-					if err := marker.Validate(); err != nil {
-						t.Fatalf("persisted %s redaction marker: %v", entry.Role, err)
-					}
-					redactedRoles[entry.Role] = true
-				case "assistant":
-					var summary string
-					if err := json.Unmarshal(entry.Summary, &summary); err != nil {
-						t.Fatalf("decode persisted assistant summary: %v", err)
-					}
-					if summary == control {
-						controlCount++
-					}
+		if string(event.Type) != "AGENT_RUN_RESPONSE" {
+			continue
+		}
+		var payload struct {
+			Diagnostics struct {
+				AgentRun struct {
+					Transcript []struct {
+						Role    string          `json:"role"`
+						Summary json.RawMessage `json:"summary"`
+					} `json:"transcript"`
+				} `json:"agentRun"`
+			} `json:"diagnostics"`
+		}
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			t.Fatalf("decode persisted agent-run response: %v", err)
+		}
+		for _, entry := range payload.Diagnostics.AgentRun.Transcript {
+			switch entry.Role {
+			case "system", "user":
+				var marker recordings.RecordingRedactedValue
+				if err := json.Unmarshal(entry.Summary, &marker); err != nil {
+					t.Fatalf("decode persisted %s redaction marker: %v", entry.Role, err)
+				}
+				if err := marker.Validate(); err != nil {
+					t.Fatalf("persisted %s redaction marker: %v", entry.Role, err)
+				}
+				redactedRoles[entry.Role] = true
+			case "assistant":
+				var summary string
+				if err := json.Unmarshal(entry.Summary, &summary); err != nil {
+					t.Fatalf("decode persisted assistant summary: %v", err)
+				}
+				if summary == control {
+					controlCount++
 				}
 			}
 		}
@@ -137,23 +148,5 @@ func TestRecordedFactoryRedactsDeclaredSecretAtRecordingWriteBoundary(t *testing
 	}
 	if controlCount == 0 {
 		t.Fatalf("persisted recording lost nonsecret control %q", control)
-	}
-	loadReplayArtifact := recordingswire.NewReplayArtifactLoader(
-		platformreplay.Local{},
-		factorydefinitionswire.FactorySnapshotJSONDecoder(),
-	)
-	if _, err := loadReplayArtifact(artifactPath); err != nil {
-		t.Fatalf("load persisted replay artifact: %v", err)
-	}
-
-	replayInputs := support.FakeInputs(t.Context(), []string{
-		"you", "run", "--replay", artifactPath, "--no-record", "--quiet",
-	})
-	replayInputs.Input.WorkingDirectory = dir
-	replayInputs.Input.Env = append(replayInputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
-	replayProcess := support.BuildProcess(t, serviceedges.Edges{})
-	support.CleanupProcess(t, replayProcess)
-	if err := replayProcess.Execute(replayInputs.Input); err != nil {
-		t.Fatalf("replay persisted recording: %v\nstderr=%s", err, replayInputs.Stderr())
 	}
 }
