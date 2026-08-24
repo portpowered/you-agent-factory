@@ -126,6 +126,34 @@ func TestServiceCancelAndTerminateUseDistinctRuntimeStopActionsAndKeepSessionIns
 	t.Parallel()
 
 	const sessionID = "session-live-stop"
+	runtime, session, service, stopCalls := newLiveStopControlService(t, sessionID)
+
+	control := factorysessions.ControlRequest{
+		RequestID: "control-cancel",
+		TurnID:    "turn-live-stop",
+		Reason:    "operator cancel",
+	}
+	assertAcceptedLiveStopControl(t, service, runtime, session, stopCalls, sessionID, factorysessions.LifecycleControlCancel, control, factoryruntime.WorkerSessionControlActionCancel, "cancel")
+
+	// The runtime stop primitive is synchronous. Reset the test observation to
+	// model another active session control without evicting the first session.
+	runtime.state = string(factorydefinitions.FactoryStateRunning)
+	terminateControl := factorysessions.ControlRequest{
+		RequestID: "control-terminate",
+		TurnID:    control.TurnID,
+		Reason:    "operator terminate",
+	}
+	assertAcceptedLiveStopControl(t, service, runtime, session, stopCalls, sessionID, factorysessions.LifecycleControlTerminate, terminateControl, factoryruntime.WorkerSessionControlActionTerminate, "terminate")
+
+	runtime.state = string(factorydefinitions.FactoryStateCompleted)
+	assertRepeatedTerminalLiveStopControl(t, service, sessionID, control)
+}
+
+func newLiveStopControlService(
+	t *testing.T,
+	sessionID string,
+) (*testFactoryRuntime, *livesession.LiveSession, liveruntime.Service, int) {
+	t.Helper()
 	runtime := &testFactoryRuntime{state: string(factorydefinitions.FactoryStateRunning)}
 	session := &livesession.LiveSession{ID: sessionID}
 	stopCalls := 0
@@ -145,58 +173,56 @@ func TestServiceCancelAndTerminateUseDistinctRuntimeStopActionsAndKeepSessionIns
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
+	return runtime, session, service, stopCalls
+}
 
-	control := factorysessions.ControlRequest{
-		RequestID: "control-cancel",
-		TurnID:    "turn-live-stop",
-		Reason:    "operator cancel",
-	}
-	canceled, err := service.ApplyControl(context.Background(), sessionID, factorysessions.LifecycleControlCancel, control)
+func assertAcceptedLiveStopControl(
+	t *testing.T,
+	service liveruntime.Service,
+	runtime *testFactoryRuntime,
+	session *livesession.LiveSession,
+	stopCalls int,
+	sessionID string,
+	kind factorysessions.LifecycleControlKind,
+	control factorysessions.ControlRequest,
+	action factoryruntime.WorkerSessionControlAction,
+	label string,
+) {
+	t.Helper()
+	result, err := service.ApplyControl(context.Background(), sessionID, kind, control)
 	if err != nil {
-		t.Fatalf("cancel: %v", err)
+		t.Fatalf("%s: %v", label, err)
 	}
-	if canceled.SessionID != sessionID || canceled.Outcome != factorysessions.LifecycleControlOutcomeAccepted || canceled.Status != factorysessions.LifecycleStatusSucceeded {
-		t.Fatalf("cancel result = %#v, want accepted terminal result", canceled)
+	if result.SessionID != sessionID || result.Outcome != factorysessions.LifecycleControlOutcomeAccepted || result.Status != factorysessions.LifecycleStatusSucceeded {
+		t.Fatalf("%s result = %#v, want accepted terminal result", label, result)
 	}
-	if len(runtime.terminateRequests) != 1 || runtime.terminateRequests[0].WorkerSessionAction != factoryruntime.WorkerSessionControlActionCancel ||
-		runtime.terminateRequests[0].TurnID != control.TurnID || runtime.terminateRequests[0].ControlID != control.RequestID || runtime.terminateRequests[0].Reason != control.Reason {
-		t.Fatalf("cancel runtime request = %#v, want CANCEL with captured identity", runtime.terminateRequests)
+	requestIndex := len(runtime.terminateRequests) - 1
+	if requestIndex < 0 || runtime.terminateRequests[requestIndex].WorkerSessionAction != action ||
+		runtime.terminateRequests[requestIndex].TurnID != control.TurnID ||
+		runtime.terminateRequests[requestIndex].ControlID != control.RequestID ||
+		runtime.terminateRequests[requestIndex].Reason != control.Reason {
+		t.Fatalf("%s runtime request = %#v, want %s with captured identity", label, runtime.terminateRequests, action)
 	}
 	if stopCalls != 0 || service.Resolve(sessionID) != session {
-		t.Fatalf("cancel cleanup = stop calls %d, resolved session %#v; want retained session and no registry stop", stopCalls, service.Resolve(sessionID))
+		t.Fatalf("%s cleanup = stop calls %d, resolved session %#v; want retained session and no registry stop", label, stopCalls, service.Resolve(sessionID))
 	}
+}
 
-	// The runtime stop primitive is synchronous. Reset the test observation to
-	// model another active session control without evicting the first session.
-	runtime.state = string(factorydefinitions.FactoryStateRunning)
-	terminateControl := factorysessions.ControlRequest{
-		RequestID: "control-terminate",
-		TurnID:    control.TurnID,
-		Reason:    "operator terminate",
-	}
-	terminated, err := service.ApplyControl(context.Background(), sessionID, factorysessions.LifecycleControlTerminate, terminateControl)
-	if err != nil {
-		t.Fatalf("terminate: %v", err)
-	}
-	if terminated.SessionID != sessionID || terminated.Outcome != factorysessions.LifecycleControlOutcomeAccepted || terminated.Status != factorysessions.LifecycleStatusSucceeded {
-		t.Fatalf("terminate result = %#v, want accepted terminal result", terminated)
-	}
-	if len(runtime.terminateRequests) != 2 || runtime.terminateRequests[1].WorkerSessionAction != factoryruntime.WorkerSessionControlActionTerminate ||
-		runtime.terminateRequests[1].TurnID != terminateControl.TurnID || runtime.terminateRequests[1].ControlID != terminateControl.RequestID || runtime.terminateRequests[1].Reason != terminateControl.Reason {
-		t.Fatalf("terminate runtime request = %#v, want TERMINATE with captured identity", runtime.terminateRequests)
-	}
-	if stopCalls != 0 || service.Resolve(sessionID) != session {
-		t.Fatalf("terminate cleanup = stop calls %d, resolved session %#v; want retained session and no registry stop", stopCalls, service.Resolve(sessionID))
-	}
-
-	runtime.state = string(factorydefinitions.FactoryStateCompleted)
+func assertRepeatedTerminalLiveStopControl(
+	t *testing.T,
+	service liveruntime.Service,
+	sessionID string,
+	control factorysessions.ControlRequest,
+) {
+	t.Helper()
 	_, firstErr := service.ApplyControl(context.Background(), sessionID, factorysessions.LifecycleControlCancel, control)
 	_, secondErr := service.ApplyControl(context.Background(), sessionID, factorysessions.LifecycleControlCancel, control)
 	var firstControlErr, secondControlErr *factorysessions.ControlError
 	if !errors.As(firstErr, &firstControlErr) || !errors.As(secondErr, &secondControlErr) {
 		t.Fatalf("repeated cancel errors = %v / %v, want typed terminal errors", firstErr, secondErr)
 	}
-	if firstControlErr.Outcome != factorysessions.LifecycleControlOutcomeTerminalSession || secondControlErr.Outcome != firstControlErr.Outcome || secondControlErr.Status != firstControlErr.Status {
+	if firstControlErr.Outcome != factorysessions.LifecycleControlOutcomeTerminalSession ||
+		secondControlErr.Outcome != firstControlErr.Outcome || secondControlErr.Status != firstControlErr.Status {
 		t.Fatalf("repeated cancel outcomes = %#v / %#v, want deterministic terminal rejection", firstControlErr, secondControlErr)
 	}
 }
