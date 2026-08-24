@@ -9,6 +9,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
@@ -124,6 +125,41 @@ func TestReconstructCanonicalFactoryWorldState_OrderedDetachedInputSkipsCopyAndS
 	}
 	if !reflect.DeepEqual(events, wantInput) {
 		t.Fatalf("ordered replay mutated caller input: got %#v, want %#v", events, wantInput)
+	}
+}
+
+func TestDispatchProjectionRetainsRunnerSelectionMetadata(t *testing.T) {
+	t.Parallel()
+
+	reducer := newFactoryWorldReducer(1)
+	applyDispatch := func(dispatchID string, metadata *interfaces.DispatchRequestEventMetadata) interfaces.FactoryWorldDispatch {
+		event := interfaces.FactoryEvent{
+			Context: interfaces.FactoryEventContext{DispatchID: &dispatchID},
+		}
+		reducer.applyDispatchCreated(event, interfaces.DispatchRequestEventPayload{Metadata: metadata})
+		return reducer.stateValue.ActiveDispatches[dispatchID]
+	}
+
+	withoutMetadata := applyDispatch("dispatch-without-runner-metadata", nil)
+	if withoutMetadata.RunnerID != "" || withoutMetadata.RunnerSelectionSource != "" {
+		t.Fatalf("dispatch without metadata = %#v, want empty runner facts", withoutMetadata)
+	}
+
+	runnerID := "claude"
+	withoutSource := applyDispatch("dispatch-without-runner-source", &interfaces.DispatchRequestEventMetadata{
+		RunnerID: &runnerID,
+	})
+	if withoutSource.RunnerID != runnerID || withoutSource.RunnerSelectionSource != "" {
+		t.Fatalf("dispatch without source = %#v, want runner ID and empty source", withoutSource)
+	}
+
+	source := workerexecution.RunnerSelectionSourceWorkstation
+	selected := applyDispatch("dispatch-with-runner-selection", &interfaces.DispatchRequestEventMetadata{
+		RunnerID:              &runnerID,
+		RunnerSelectionSource: &source,
+	})
+	if selected.RunnerID != runnerID || selected.RunnerSelectionSource != source {
+		t.Fatalf("dispatch runner selection = %#v, want ID=%q source=%q", selected, runnerID, source)
 	}
 }
 

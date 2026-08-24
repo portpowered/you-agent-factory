@@ -261,6 +261,95 @@ func TestDetachedOperationsFromProcessResolvesTypedCapability(t *testing.T) {
 	}
 }
 
+func TestProcessCapabilityRootsReifyOpaqueValuesAtTheRootBoundary(t *testing.T) {
+	t.Parallel()
+
+	if got := RecordingsProjectionFromProcess(nil); got != nil {
+		t.Fatalf("RecordingsProjectionFromProcess(nil) = %#v, want nil", got)
+	}
+	if got := OperatorSettingsFromProcess(nil); got != nil {
+		t.Fatalf("OperatorSettingsFromProcess(nil) = %#v, want nil", got)
+	}
+
+	withoutCapabilities, err := initializerapplication.NewProcess(
+		nil,
+		nil,
+		rootWorkerProcessRegistry{},
+		rootWorkerProcessLifecycle{},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewProcess() error = %v", err)
+	}
+	if got := RecordingsProjectionFromProcess(withoutCapabilities); got != nil {
+		t.Fatalf("RecordingsProjectionFromProcess(without capability) = %#v, want nil", got)
+	}
+	if got := OperatorSettingsFromProcess(withoutCapabilities); got != nil {
+		t.Fatalf("OperatorSettingsFromProcess(without capability) = %#v, want nil", got)
+	}
+
+	wrongType, err := initializerapplication.NewProcessWithRuntimeCostsAndExecutionAndCapabilities(
+		nil,
+		nil,
+		rootWorkerProcessRegistry{},
+		rootWorkerProcessLifecycle{},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		rootRecordingsProjectionCapabilityProbe{value: struct{}{}},
+		rootOperatorSettingsCapabilityProbe{value: struct{}{}},
+	)
+	if err != nil {
+		t.Fatalf("NewProcessWithRuntimeCostsAndExecutionAndCapabilities() error = %v", err)
+	}
+	if got := RecordingsProjectionFromProcess(wrongType); got != nil {
+		t.Fatalf("RecordingsProjectionFromProcess(wrong type) = %#v, want nil", got)
+	}
+	if got := OperatorSettingsFromProcess(wrongType); got != nil {
+		t.Fatalf("OperatorSettingsFromProcess(wrong type) = %#v, want nil", got)
+	}
+
+	typedProjection := &rootRecordingsProjectionProbe{}
+	typedProcess, err := initializerapplication.NewProcessWithRuntimeCostsAndExecutionAndCapabilities(
+		nil,
+		nil,
+		rootWorkerProcessRegistry{},
+		rootWorkerProcessLifecycle{},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		rootRecordingsProjectionCapabilityProbe{value: typedProjection},
+		rootOperatorSettingsCapabilityProbe{value: struct{}{}},
+	)
+	if err != nil {
+		t.Fatalf("NewProcessWithRuntimeCostsAndExecutionAndCapabilities(typed) error = %v", err)
+	}
+	if got := RecordingsProjectionFromProcess(typedProcess); got != typedProjection {
+		t.Fatalf("RecordingsProjectionFromProcess(typed) = %#v, want %#v", got, typedProjection)
+	}
+
+	composed, err := BuildProcess(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	if got := RecordingsProjectionFromProcess(composed); got == nil {
+		t.Fatal("RecordingsProjectionFromProcess(composed) = nil, want composed projection")
+	}
+	if got := OperatorSettingsFromProcess(composed); got == nil {
+		t.Fatal("OperatorSettingsFromProcess(composed) = nil, want composed service")
+	}
+}
+
 func TestWorkerRecordingReaderFromProcessPropagatesReaderError(t *testing.T) {
 	t.Parallel()
 
@@ -325,6 +414,40 @@ type rootDetachedOperationsCapabilityProbe struct {
 
 func (probe rootDetachedOperationsCapabilityProbe) DetachedOperations() any {
 	return probe.operations
+}
+
+type rootRecordingsProjectionCapabilityProbe struct {
+	value any
+}
+
+func (probe rootRecordingsProjectionCapabilityProbe) RecordingsProjection() any {
+	return probe.value
+}
+
+type rootOperatorSettingsCapabilityProbe struct {
+	value any
+}
+
+func (probe rootOperatorSettingsCapabilityProbe) OperatorSettings() any {
+	return probe.value
+}
+
+type rootRecordingsProjectionProbe struct{}
+
+func (rootRecordingsProjectionProbe) ReconstructWorldState(recordings.ReconstructWorldStateRequest) (recordings.ReconstructWorldStateResult, error) {
+	return recordings.ReconstructWorldStateResult{}, nil
+}
+
+func (rootRecordingsProjectionProbe) QueryWorkstationRequests(recordings.WorkstationRequestsQueryRequest) (recordings.WorkstationRequestsQueryResult, error) {
+	return recordings.WorkstationRequestsQueryResult{}, nil
+}
+
+func (rootRecordingsProjectionProbe) ReconstructFactoryWorldState([]recordings.FactoryEvent, int) (recordings.FactoryWorldState, error) {
+	return recordings.FactoryWorldState{}, nil
+}
+
+func (rootRecordingsProjectionProbe) ProjectWorkstationRequests(recordings.FactoryWorldState) recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice {
+	return recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice{}
 }
 
 type rootWorkerProcessRegistry struct{}
