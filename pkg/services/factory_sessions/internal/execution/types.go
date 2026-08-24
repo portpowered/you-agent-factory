@@ -322,6 +322,11 @@ func cloneFailuresPreserveNil(values []workerexecution.Failure) []workerexecutio
 	return append([]workerexecution.Failure{}, values...)
 }
 
+type durableSnapshotBounds struct {
+	persistedFailureLogCapacity int
+	persistedSnapshotMaxBytes   int
+}
+
 const (
 	// defaultPersistedTokenFailureLogCapacity bounds the failure records
 	// retained in each token copy written to a durable Factory Session

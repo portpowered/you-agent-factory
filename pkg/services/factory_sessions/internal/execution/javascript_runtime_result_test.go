@@ -6,6 +6,7 @@ import (
 	"errors"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"strings"
@@ -902,4 +903,69 @@ func (childTestValues) CloneOutputMap(m map[string]any) map[string]any {
 		clone[key] = value
 	}
 	return clone
+}
+
+func TestJavaScriptRuntimeService_SnapshotSizeLimitHonorsExactBoundAndRejectsBeforeSave(t *testing.T) {
+	t.Parallel()
+	projectRoot := t.TempDir()
+	store := &runtimeRecordingStore{}
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
+		Persistence: store,
+	})
+	if defaultPersistedSnapshotMaxBytes <= 0 {
+		t.Fatalf("default persisted snapshot maximum = %d, want positive bound", defaultPersistedSnapshotMaxBytes)
+	}
+
+	const sessionID = "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	state := runtimeSessionState{session: SessionReadResult{
+		SessionID: sessionID,
+		Status:    LifecycleStatusSucceeded,
+	}}
+	snapshot := persistedSnapshotFromRuntimeState(state)
+	exact, err := json.MarshalIndent(snapshot, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal exact snapshot: %v", err)
+	}
+
+	service.persistedSnapshotMaxBytes = len(exact)
+	if err := service.persistSessionSnapshot(state); err != nil {
+		t.Fatalf("persist snapshot at exact bound: %v", err)
+	}
+	store.mu.Lock()
+	saveCalls := store.saveCalls
+	stored := append([]byte(nil), store.payload...)
+	store.mu.Unlock()
+	if saveCalls != 1 || string(stored) != string(exact) {
+		t.Fatalf("exact-bound save = calls %d payload %d bytes, want calls 1 payload %d bytes", saveCalls, len(stored), len(exact))
+	}
+
+	previous := []byte(`{"status":"RUNNING","sequence":7}`)
+	store.mu.Lock()
+	store.saveCalls = 0
+	store.payload = append([]byte(nil), previous...)
+	store.mu.Unlock()
+	service.persistedSnapshotMaxBytes = len(exact) - 1
+	err = service.persistSessionSnapshot(state)
+	var sizeErr *SnapshotSizeLimitError
+	if !errors.As(err, &sizeErr) {
+		t.Fatalf("one-byte-over persistence error = %v, want SnapshotSizeLimitError", err)
+	}
+	wantPath := runtimepersist.SnapshotPathForProjectRoot(projectRoot, sessionID)
+	if sizeErr.Path != wantPath || sizeErr.ActualBytes != len(exact) || sizeErr.MaxBytes != len(exact)-1 {
+		t.Fatalf("size diagnostic = %#v, want path %q actual %d bound %d", sizeErr, wantPath, len(exact), len(exact)-1)
+	}
+	if strings.Contains(err.Error(), "RUNNING") || strings.Contains(err.Error(), "sequence") {
+		t.Fatalf("size diagnostic leaked snapshot content: %v", err)
+	}
+	store.mu.Lock()
+	saveCalls = store.saveCalls
+	stored = append([]byte(nil), store.payload...)
+	store.mu.Unlock()
+	if saveCalls != 0 {
+		t.Fatalf("one-byte-over save calls = %d, want writer not invoked", saveCalls)
+	}
+	if string(stored) != string(previous) {
+		t.Fatalf("one-byte-over snapshot = %s, want prior %s", stored, previous)
+	}
 }

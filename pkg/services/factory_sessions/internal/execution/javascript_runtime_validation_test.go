@@ -911,3 +911,60 @@ func assertCurrentPortableRecordingExport(t *testing.T, encoded []byte) {
 		t.Fatalf("recording Worker history = %#v, want explicit unavailable outcome", portable.WorkerHistory)
 	}
 }
+
+func TestJavaScriptRuntimeService_OversizedPetriSnapshotKeepsPriorSessionAvailable(t *testing.T) {
+	t.Parallel()
+	projectRoot := t.TempDir()
+	store := &runtimeRecordingStore{}
+	seed := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
+		Persistence: store,
+	})
+	const sessionID = "dur-sess-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	prior := runtimeSessionState{session: SessionReadResult{
+		SessionID: sessionID,
+		Status:    LifecycleStatusSucceeded,
+	}}
+	if err := seed.persistSessionSnapshot(prior); err != nil {
+		t.Fatalf("seed prior session: %v", err)
+	}
+	store.mu.Lock()
+	priorBytes := len(store.payload)
+	saveCalls := store.saveCalls
+	store.mu.Unlock()
+
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
+		Persistence: store,
+	})
+	service.persistedSnapshotMaxBytes = priorBytes
+	err := service.RecordPetriTokenMutations(sessionID, []interfaces.TokenMutationRecord{{
+		DispatchID:   "dispatch-oversized",
+		TransitionID: "retry",
+		Outcome:      workerexecution.OutcomeFailed,
+		Type:         interfaces.MutationMove,
+		TokenID:      "token-oversized",
+		ToPlace:      "task:failed",
+		Reason:       strings.Repeat("diagnostic payload ", 32),
+	}})
+	var sizeErr *SnapshotSizeLimitError
+	if !errors.As(err, &sizeErr) {
+		t.Fatalf("oversized Petri mutation error = %v, want SnapshotSizeLimitError", err)
+	}
+	if sizeErr.ActualBytes <= sizeErr.MaxBytes || sizeErr.Path == "" {
+		t.Fatalf("oversized diagnostic = %#v, want actual > bound and path", sizeErr)
+	}
+
+	read, err := service.GetSession(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("GetSession after rejected snapshot: %v", err)
+	}
+	if read.Status != LifecycleStatusSucceeded {
+		t.Fatalf("session after rejected snapshot = %#v, want prior succeeded session", read)
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.saveCalls != saveCalls {
+		t.Fatalf("save calls after rejected snapshot = %d, want unchanged %d", store.saveCalls, saveCalls)
+	}
+}
