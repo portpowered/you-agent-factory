@@ -809,6 +809,169 @@ func TestCatalogRejectsInvalidOperatorOverlays(t *testing.T) {
 	}
 }
 
+func TestCatalogRejectsInvalidOperatorOverlaysWithFieldDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	valid := func() models.ModelOverlay {
+		source := "file:///models/custom.gguf"
+		backend := "localai-test"
+		loadPolicy := models.LoadPolicyOnDemand
+		return models.ModelOverlay{
+			Source:     &source,
+			Backend:    &backend,
+			LoadPolicy: &loadPolicy,
+			Operations: []string{models.OperationOMNI},
+		}
+	}
+
+	blankSource := "   "
+	blankBackend := "\t"
+	invalidLoadPolicy := models.LoadPolicy("ALWAYS")
+	completeCustom := valid()
+	completeCustom.Operations = nil
+
+	tests := []struct {
+		name      string
+		overlays  map[string]models.ModelOverlay
+		modelName string
+		field     string
+	}{
+		{
+			name:      "invalid model name",
+			overlays:  map[string]models.ModelOverlay{"bad/name": valid()},
+			modelName: "bad/name",
+			field:     "name",
+		},
+		{
+			name: "duplicate normalized names",
+			overlays: map[string]models.ModelOverlay{
+				"Alias":   valid(),
+				" alias ": valid(),
+			},
+			modelName: "Alias",
+			field:     "name",
+		},
+		{
+			name:      "built-in blank source",
+			overlays:  map[string]models.ModelOverlay{"llm": {Source: &blankSource}},
+			modelName: "llm",
+			field:     "source",
+		},
+		{
+			name:      "built-in blank backend",
+			overlays:  map[string]models.ModelOverlay{"llm": {Backend: &blankBackend}},
+			modelName: "llm",
+			field:     "backend",
+		},
+		{
+			name:      "invalid load policy",
+			overlays:  map[string]models.ModelOverlay{"llm": {LoadPolicy: &invalidLoadPolicy}},
+			modelName: "llm",
+			field:     "loadPolicy",
+		},
+		{
+			name:      "unsupported operation",
+			overlays:  map[string]models.ModelOverlay{"llm": {Operations: []string{"classify"}}},
+			modelName: "llm",
+			field:     "operations",
+		},
+		{
+			name:      "custom operation is required",
+			overlays:  map[string]models.ModelOverlay{"custom": completeCustom},
+			modelName: "custom",
+			field:     "operations",
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			scopes := newRuntimeScopes(t, "catalog-overlay-"+test.name)
+			privateRef, err := scopes.Open(models.RuntimeBinding{
+				RuntimeConfig:  func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
+				OperatorModels: test.overlays,
+			})
+			if err != nil {
+				t.Fatalf("open scope: %v", err)
+			}
+			service := newCatalogService(t, scopes)
+			_, err = service.ListCatalog(context.Background(), models.ListModelsRequest{
+				Scope: publicScope(t, privateRef),
+			})
+
+			var failure models.ModelConfigurationFailure
+			if !errors.As(err, &failure) {
+				t.Fatalf("ListCatalog error = %v, want ModelConfigurationFailure", err)
+			}
+			if !errors.Is(err, models.ErrModelConfigurationInvalid) {
+				t.Fatalf("ListCatalog error = %v, want ErrModelConfigurationInvalid", err)
+			}
+			if failure.ModelName != test.modelName || failure.Field != test.field {
+				t.Fatalf("configuration failure = %#v, want model %q field %q", failure, test.modelName, test.field)
+			}
+		})
+	}
+}
+
+func TestCatalogReadinessFailuresAreSanitizedAcrossListAndDetail(t *testing.T) {
+	t.Parallel()
+
+	scopes := newRuntimeScopes(t, "catalog-readiness-failure-projections")
+	dependencyFailure := errors.New(`inspect C:\private\model-cache: access denied`)
+	service, err := catalogwire.NewService(
+		scopes,
+		func(context.Context, models.RuntimeScopeRef, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
+			return models.Runtime{}, dependencyFailure
+		},
+	)
+	if err != nil {
+		t.Fatalf("construct Catalog: %v", err)
+	}
+	scope := publicScope(t, openCatalogScope(t, scopes, "failed-model", "generate"))
+
+	if _, err := service.ListCatalog(context.Background(), models.ListModelsRequest{Scope: scope}); !errors.Is(err, models.ErrUnavailable) || err.Error() != models.ErrUnavailable.Error() {
+		t.Fatalf("ListCatalog error = %v, want sanitized ErrUnavailable", err)
+	}
+	if _, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{
+		Scope: scope, Name: "failed-model",
+	}); !errors.Is(err, models.ErrUnavailable) || err.Error() != models.ErrUnavailable.Error() {
+		t.Fatalf("GetCatalogModel error = %v, want sanitized ErrUnavailable", err)
+	}
+}
+
+func TestBuiltInReadinessUsesStableDiscoveryBaseline(t *testing.T) {
+	t.Parallel()
+
+	scopes := newRuntimeScopes(t, "catalog-built-in-readiness-baseline")
+	queryCalls := 0
+	service, err := catalogwire.NewService(
+		scopes,
+		func(context.Context, models.RuntimeScopeRef, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
+			queryCalls++
+			return models.Runtime{ReadinessState: models.ReadinessStateReady}, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("construct Catalog: %v", err)
+	}
+	scope := publicScope(t, openCatalogScope(t, scopes, "configured-model", "generate"))
+	readiness, err := service.GetModelReadiness(context.Background(), models.GetModelReadinessRequest{
+		Scope: scope, Name: " ASR ", Operation: models.OperationASR,
+	})
+	if err != nil {
+		t.Fatalf("GetModelReadiness built-in: %v", err)
+	}
+	if readiness.ModelName != models.BuiltInModelNameASR ||
+		readiness.Readiness.Identity != models.BuiltInModelNameASR ||
+		readiness.Readiness.ReadinessState != models.ReadinessStateMissing ||
+		readiness.Readiness.LifecycleState != models.LifecycleStateNotInstalled {
+		t.Fatalf("built-in readiness = %#v, want stable missing/not-installed baseline", readiness)
+	}
+	if queryCalls != 0 {
+		t.Fatalf("built-in readiness queried current state %d times, want zero", queryCalls)
+	}
+}
+
 func newRuntimeScopes(t *testing.T, issuer string) runtimescopes.Service {
 	t.Helper()
 	scopes, err := runtimescopeswire.NewService(func() string { return issuer })
