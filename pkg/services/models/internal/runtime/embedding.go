@@ -1,9 +1,8 @@
-package service
+package runtime
 
 import (
 	"context"
 	"errors"
-	"reflect"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -11,34 +10,28 @@ import (
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 )
 
-// EmbeddingBackend is the narrow backend seam required by the EMBED runtime.
-// Implementations may be a protocol adapter or a deterministic test fixture;
-// neither is allowed to leak backend details through the Models contract.
-type EmbeddingBackend interface {
-	InvokeEmbedding(context.Context, codecs.EmbeddingRequest) (codecs.EmbeddingResponse, error)
-}
+// EmbeddingBackend is the private effect used after the EMBED codec has
+// normalized one generic Models request. Protocol values never cross the
+// Models service boundary.
+type EmbeddingBackend func(
+	context.Context,
+	codecs.EmbeddingRequest,
+) (codecs.EmbeddingResponse, error)
 
-// EmbeddingInvocationRuntime maps one generic EMBED invocation through the
-// codec and an injected backend.
-type EmbeddingInvocationRuntime struct {
+type embedding struct {
 	codec   codecs.EmbedCodec
 	backend EmbeddingBackend
 }
 
-// NewEmbeddingInvocationRuntime constructs an EMBED runtime with an explicit
-// backend dependency.
-func NewEmbeddingInvocationRuntime(backend EmbeddingBackend) (EmbeddingInvocationRuntime, error) {
-	if backend == nil || isNilEmbeddingBackend(backend) {
-		return EmbeddingInvocationRuntime{}, models.ErrInvalidInferenceDependencies
+// NewEmbedding constructs the Models-owned EMBED invocation runtime.
+func NewEmbedding(backend EmbeddingBackend) (embedding, error) {
+	if backend == nil {
+		return embedding{}, models.ErrInvalidInferenceDependencies
 	}
-	return EmbeddingInvocationRuntime{
-		codec:   codecs.NewEmbedCodec(),
-		backend: backend,
-	}, nil
+	return embedding{codec: codecs.NewEmbedCodec(), backend: backend}, nil
 }
 
-// Invoke implements the Models inference runtime seam.
-func (runtime EmbeddingInvocationRuntime) Invoke(
+func (runtime embedding) Invoke(
 	ctx context.Context,
 	request inference.InvocationRuntimeRequest,
 ) (inference.InvocationRuntimeResult, error) {
@@ -60,7 +53,7 @@ func (runtime EmbeddingInvocationRuntime) Invoke(
 	if err != nil {
 		return inference.InvocationRuntimeResult{}, err
 	}
-	backendResponse, err := runtime.backend.InvokeEmbedding(ctx, backendRequest)
+	backendResponse, err := runtime.backend(ctx, backendRequest)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return inference.InvocationRuntimeResult{}, err
@@ -81,14 +74,4 @@ func (runtime EmbeddingInvocationRuntime) Invoke(
 		return inference.InvocationRuntimeResult{}, err
 	}
 	return inference.InvocationRuntimeResult{Content: []models.InferenceContent{content}}, nil
-}
-
-func isNilEmbeddingBackend(backend EmbeddingBackend) bool {
-	value := reflect.ValueOf(backend)
-	switch value.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return value.IsNil()
-	default:
-		return false
-	}
 }

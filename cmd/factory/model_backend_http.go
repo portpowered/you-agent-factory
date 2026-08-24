@@ -53,6 +53,7 @@ func modelBackendEdgesFromEnvironment() serviceedges.Edges {
 		ModelAssetHostPlatform:        models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		ModelInvocationBackend:        backend.invoke,
 		ModelASRBackend:               backend.asr,
+		ModelEmbeddingBackend:         backend.embed,
 		ModelResolveBackendArtifact:   environmentBackendArtifact,
 		ModelHostProcessLauncher:      environmentHostLauncher{endpoint: endpoint},
 		ModelHostProtocolNegotiator:   environmentHostProtocol{},
@@ -131,6 +132,15 @@ type environmentArtifactOutput struct {
 	Properties map[string]string `json:"properties,omitempty"`
 }
 
+type environmentEmbeddingRequest struct {
+	Text       string         `json:"text"`
+	Parameters map[string]any `json:"parameters,omitempty"`
+}
+
+type environmentEmbeddingResponse struct {
+	Embeddings []float64 `json:"embeddings"`
+}
+
 func (backend environmentModelBackend) invoke(
 	ctx context.Context,
 	request models.InvokeModelRequest,
@@ -172,6 +182,21 @@ func (backend environmentModelBackend) invoke(
 		}
 	}
 	return content, artifacts, nil
+}
+
+func (backend environmentModelBackend) embed(
+	ctx context.Context,
+	request models.EmbeddingBackendRequest,
+) (models.EmbeddingBackendResponse, error) {
+	var response environmentEmbeddingResponse
+	if err := backend.post(ctx, "/embed", environmentEmbeddingRequest{
+		Text: request.Text, Parameters: request.Parameters,
+	}, &response); err != nil {
+		return models.EmbeddingBackendResponse{}, err
+	}
+	return models.EmbeddingBackendResponse{
+		Embeddings: append([]float64(nil), response.Embeddings...),
+	}, nil
 }
 
 type environmentASRRequest struct {

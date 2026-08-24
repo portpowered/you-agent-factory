@@ -127,6 +127,7 @@ type Edges struct {
 	ModelResolveBackendArtifact ModelResolveBackendArtifact
 	ModelInvocationBackend      ModelInvocationBackend
 	ModelASRBackend             ModelASRBackend
+	ModelEmbeddingBackend       ModelEmbeddingBackend
 	ModelRuntimeCommandRunner   platformprocess.CommandRunner
 	ModelRuntimeHTTPClient      interface {
 		Do(*http.Request) (*http.Response, error)
@@ -420,6 +421,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.ModelASRBackend != nil {
 		defaults.ModelASRBackend = replacements.ModelASRBackend
+	}
+	if replacements.ModelEmbeddingBackend != nil {
+		defaults.ModelEmbeddingBackend = replacements.ModelEmbeddingBackend
 	}
 	if replacements.ModelRuntimeCommandRunner != nil {
 		defaults.ModelRuntimeCommandRunner = replacements.ModelRuntimeCommandRunner

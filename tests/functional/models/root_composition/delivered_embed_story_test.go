@@ -3,7 +3,6 @@ package root_composition_test
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,7 +20,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -30,7 +28,7 @@ const deliveredEmbedBackendName = "localai-backend-localai-llamacpp-functional.t
 
 // TestDeliveredEmbedCLIArtifactReachesProtocolFixture builds and runs the
 // actual cmd/factory artifact. The fixture endpoint supplies both the model
-// assets and the generic backend exchange; no real weights, backend process,
+// assets and the typed embedding backend exchange; no real weights, backend process,
 // release asset, or port-7437 service participates in this proof.
 func TestDeliveredEmbedCLIArtifactReachesProtocolFixture(t *testing.T) {
 	fixture := newDeliveredEmbedFixture(t)
@@ -74,13 +72,10 @@ func TestDeliveredEmbedCLIArtifactReachesProtocolFixture(t *testing.T) {
 	if len(invocations) != 2 {
 		t.Fatalf("delivered EMBED backend invocations = %d, want two", len(invocations))
 	}
-	if invocations[0].ModelName != "embed" || invocations[0].Operation != string(models.OperationEMBED) ||
-		len(invocations[0].Inputs) != 1 || invocations[0].Inputs[0].Name != "text" ||
-		invocations[0].Inputs[0].Content != "Find similar work" {
+	if invocations[0].Text != "Find similar work" || len(invocations[0].Parameters) != 0 {
 		t.Fatalf("delivered first backend request = %#v, want canonical text EMBED request", invocations[0])
 	}
-	if len(invocations[1].Inputs) != 2 || invocations[1].Inputs[1].Name != "parameters" ||
-		invocations[1].Inputs[1].Content != `{"normalize":true}` {
+	if invocations[1].Text != "Find similar work" || invocations[1].Parameters["normalize"] != true {
 		t.Fatalf("delivered second backend request = %#v, want ordered JSON parameters input", invocations[1])
 	}
 }
@@ -256,19 +251,9 @@ func deliveredEmbedCLIEnvironment(home, endpoint string) []string {
 	return append(environment, "HOME="+home, "USERPROFILE="+home, "YOU_MODELS_BACKEND_ENDPOINT="+endpoint)
 }
 
-type deliveredEmbedInput struct {
-	Name          string
-	Modality      string
-	ContentType   string
-	MediaType     string
-	ContentBase64 string
-	Content       string
-}
-
 type deliveredEmbedInvocation struct {
-	ModelName string
-	Operation string
-	Inputs    []deliveredEmbedInput
+	Text       string
+	Parameters map[string]any
 }
 
 type deliveredEmbedFixture struct {
@@ -288,8 +273,8 @@ func newDeliveredEmbedFixture(t *testing.T) *deliveredEmbedFixture {
 
 func (fixture *deliveredEmbedFixture) serveHTTP(writer http.ResponseWriter, request *http.Request) {
 	switch {
-	case request.URL.Path == "/invoke":
-		fixture.serveInvocation(writer, request)
+	case request.URL.Path == "/embed":
+		fixture.serveEmbedding(writer, request)
 	case strings.HasSuffix(request.URL.Path, "/models/Qwen/Qwen3-Embedding-0.6B"):
 		fixture.serveModelManifest(writer, request)
 	case strings.Contains(request.URL.Path, "/Qwen/Qwen3-Embedding-0.6B/resolve/"):
@@ -317,44 +302,22 @@ func (fixture *deliveredEmbedFixture) serveModelManifest(writer http.ResponseWri
 	writeDeliveredEmbedJSON(writer, http.StatusOK, payload)
 }
 
-func (fixture *deliveredEmbedFixture) serveInvocation(writer http.ResponseWriter, request *http.Request) {
+func (fixture *deliveredEmbedFixture) serveEmbedding(writer http.ResponseWriter, request *http.Request) {
 	defer request.Body.Close()
 	var input struct {
-		ModelName string `json:"modelName"`
-		Operation string `json:"operation"`
-		Inputs    []struct {
-			Name          string `json:"name"`
-			Modality      string `json:"modality"`
-			ContentType   string `json:"contentType"`
-			MediaType     string `json:"mediaType"`
-			ContentBase64 string `json:"contentBase64"`
-		} `json:"inputs"`
+		Text       string         `json:"text"`
+		Parameters map[string]any `json:"parameters,omitempty"`
 	}
 	if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
 		http.Error(writer, err.Error(), http.StatusBadRequest)
 		return
 	}
-	invocation := deliveredEmbedInvocation{ModelName: input.ModelName, Operation: input.Operation}
-	for _, value := range input.Inputs {
-		content, err := base64.StdEncoding.DecodeString(value.ContentBase64)
-		if err != nil {
-			http.Error(writer, err.Error(), http.StatusBadRequest)
-			return
-		}
-		invocation.Inputs = append(invocation.Inputs, deliveredEmbedInput{
-			Name: value.Name, Modality: value.Modality, ContentType: value.ContentType,
-			MediaType: value.MediaType, ContentBase64: value.ContentBase64, Content: string(content),
-		})
-	}
+	invocation := deliveredEmbedInvocation{Text: input.Text, Parameters: input.Parameters}
 	fixture.mu.Lock()
 	fixture.inputs = append(fixture.inputs, invocation)
 	fixture.mu.Unlock()
 	writeDeliveredEmbedJSON(writer, http.StatusOK, map[string]any{
-		"outputs": []map[string]any{{
-			"name": "embedding", "modality": string(models.ModalityJSON),
-			"contentType": "application/json", "mediaType": "application/json",
-			"contentBase64": base64.StdEncoding.EncodeToString([]byte(`[0.1,0.2,0.3,0.4]`)),
-		}},
+		"embeddings": []float64{0.1, 0.2, 0.3, 0.4},
 	})
 }
 

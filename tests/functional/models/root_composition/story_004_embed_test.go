@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -104,7 +105,7 @@ func TestModelsEmbedZeroConfigurationJourneyThroughRootBuildProcess(t *testing.T
 	if stdout != "" {
 		t.Fatalf("failed EMBED stdout = %q, want empty", stdout)
 	}
-	support.RequireSafeCLIDiagnostic(t, stderr)
+	requireEmbedTypedDiagnostic(t, stderr, "EMBED backend invocation failed")
 	for _, secret := range []string{"private.invalid", "secret", "/private/cache"} {
 		if strings.Contains(stderr, secret) {
 			t.Fatalf("failed EMBED diagnostic leaked %q: %q", secret, stderr)
@@ -119,6 +120,57 @@ func TestModelsEmbedZeroConfigurationJourneyThroughRootBuildProcess(t *testing.T
 	}
 }
 
+func TestModelsEmbedInvalidVectorUsesTypedRuntimeAndReleasesLease(t *testing.T) {
+	t.Parallel()
+
+	hostServer := story004HostServer(t)
+	home := t.TempDir()
+	backendBody := []byte("story-004-localai-backend-invalid-vector")
+	selection := story004EmbedBackendSelection(backendBody)
+	writeGenericBuiltinModelCache(t, home, story004EmbedSource)
+	writeGenericBackendCache(t, home, "localai-llamacpp", selection, backendBody)
+	assetNetwork := &rejectingModelAssetHTTP{}
+	launcher := &recordingModelHostLauncher{endpoint: hostServer.URL}
+	fixture := newStory004EmbedFixture()
+	fixture.SetResponse(models.EmbeddingBackendResponse{
+		Embeddings: []float64{math.NaN()},
+	})
+	process := support.BuildProcess(t, story004EmbedEdges(
+		home, assetNetwork, hostServer.Client(), launcher, &joinedProtocolNegotiator{},
+		&joinedCompatibilityChecker{}, selection, fixture,
+	))
+	support.CleanupProcess(t, process)
+	factoryDir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	environment := functionalHomeEnvironment(home)
+
+	stdout, stderr, err := runStory004CLI(t, process, factoryDir, environment,
+		[]string{"you", "models", "invoke", "embed", "--input", "text=Find similar work"})
+	if err == nil {
+		t.Fatal("invalid EMBED vector error = nil, want typed codec failure")
+	}
+	if stdout != "" {
+		t.Fatalf("invalid EMBED vector stdout = %q, want empty", stdout)
+	}
+	requireEmbedTypedDiagnostic(t, stderr, "EMBED backend response is malformed")
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassMalformedResponse {
+		t.Fatalf("invalid EMBED vector error = %v, failure = %#v, want malformed response", err, failure)
+	}
+	failureCalls := fixture.Calls()
+
+	fixture.SetResponse(models.EmbeddingBackendResponse{
+		Embeddings: []float64{0.1, 0.2, 0.3, 0.4},
+	})
+	stdout, stderr, err = runStory004CLI(t, process, factoryDir, environment,
+		[]string{"you", "models", "invoke", "embed", "--input", "text=Find similar work"})
+	if err != nil || stdout != `[0.1,0.2,0.3,0.4]` || stderr != "" {
+		t.Fatalf("EMBED after invalid vector = err %v stdout %q stderr %q, want released successful invocation", err, stdout, stderr)
+	}
+	if fixture.Calls() != failureCalls+1 {
+		t.Fatalf("fixture calls after invalid vector = %d, want failed call followed by one successful call", fixture.Calls())
+	}
+}
+
 func assertStory004PlainOutput(t *testing.T, err error, stdout, stderr string) {
 	t.Helper()
 	if err != nil {
@@ -127,6 +179,20 @@ func assertStory004PlainOutput(t *testing.T, err error, stdout, stderr string) {
 	if stdout != `[0.1,0.2,0.3,0.4]` || stderr != "" {
 		t.Fatalf("documented EMBED command streams = stdout %q stderr %q, want vector and empty stderr", stdout, stderr)
 	}
+}
+
+func requireEmbedTypedDiagnostic(t testing.TB, stderr, wantMessage string) factoryapi.ErrorResponse {
+	t.Helper()
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(stderr)), &response); err != nil {
+		t.Fatalf("decode typed EMBED diagnostic: %v\nstderr=%q", err, stderr)
+	}
+	if response.Code != factoryapi.ErrorResponseCode("MODEL_BACKEND_FAILURE") ||
+		response.Family != factoryapi.ErrorFamilyInternalServerError ||
+		!strings.Contains(response.Message, wantMessage) {
+		t.Fatalf("typed EMBED diagnostic = %#v, want backend failure containing %q", response, wantMessage)
+	}
+	return response
 }
 
 func TestModelsEmbedCacheMissThenHitAvoidsNetworkThroughRootBuildProcess(t *testing.T) {
@@ -314,13 +380,13 @@ func story004EmbedEdges(
 			}
 			return selection, nil
 		},
-		ModelInvocationBackend: fixture.Invoke,
+		ModelEmbeddingBackend: fixture.InvokeEmbedding,
 	}
 }
 
 type story004EmbedFixture struct {
 	mu        sync.Mutex
-	response  []byte
+	response  models.EmbeddingBackendResponse
 	failure   error
 	exchanges []story004EmbedExchange
 }
@@ -332,90 +398,55 @@ type story004EmbedExchange struct {
 }
 
 func newStory004EmbedFixture() *story004EmbedFixture {
-	return &story004EmbedFixture{response: []byte(`{"embeddings":[0.1,0.2,0.3,0.4]}`)}
+	return &story004EmbedFixture{response: models.EmbeddingBackendResponse{
+		Embeddings: []float64{0.1, 0.2, 0.3, 0.4},
+	}}
 }
 
-func (fixture *story004EmbedFixture) Invoke(
+func (fixture *story004EmbedFixture) InvokeEmbedding(
 	ctx context.Context,
-	request models.InvokeModelRequest,
-) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+	request models.EmbeddingBackendRequest,
+) (models.EmbeddingBackendResponse, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, nil, err
-	}
-	if request.Model.NameOrURI != "" && !strings.EqualFold(request.Model.NameOrURI, "embed") {
-		return nil, nil, fmt.Errorf("fixture received model %q", request.Model.NameOrURI)
-	}
-	if request.Operation != models.OperationEMBED {
-		return nil, nil, fmt.Errorf("fixture received operation %q", request.Operation)
+		return models.EmbeddingBackendResponse{}, err
 	}
 
 	protocolRequest := struct {
 		Prompt     string         `json:"prompt"`
 		Parameters map[string]any `json:"parameters,omitempty"`
-	}{Parameters: map[string]any{}}
-	for _, input := range request.Inputs {
-		switch input.Name {
-		case "text":
-			if protocolRequest.Prompt != "" {
-				return nil, nil, fmt.Errorf("fixture received repeated text input")
-			}
-			protocolRequest.Prompt = input.Content
-		case "parameters":
-			var parameters map[string]any
-			if err := json.Unmarshal([]byte(input.Content), &parameters); err != nil {
-				return nil, nil, fmt.Errorf("fixture received invalid parameter JSON: %w", err)
-			}
-			for name, value := range parameters {
-				protocolRequest.Parameters[name] = value
-			}
-		default:
-			return nil, nil, fmt.Errorf("fixture received unknown input %q", input.Name)
-		}
-	}
-	if protocolRequest.Prompt == "" {
-		return nil, nil, fmt.Errorf("fixture received empty text input")
-	}
-	if len(protocolRequest.Parameters) == 0 {
-		protocolRequest.Parameters = nil
-	}
+	}{Prompt: request.Text, Parameters: request.Parameters}
 	encoded, err := json.Marshal(protocolRequest)
 	if err != nil {
-		return nil, nil, fmt.Errorf("encode fixture protocol request: %w", err)
+		return models.EmbeddingBackendResponse{}, fmt.Errorf("encode fixture protocol request: %w", err)
 	}
 
 	fixture.mu.Lock()
 	fixture.exchanges = append(fixture.exchanges, story004EmbedExchange{
-		Model: request.Model.NameOrURI, Operation: request.Operation, ProtocolJSON: string(encoded),
+		Model: "embed", Operation: models.OperationEMBED, ProtocolJSON: string(encoded),
 	})
 	failure := fixture.failure
-	response := append([]byte(nil), fixture.response...)
+	response := models.EmbeddingBackendResponse{
+		Embeddings: append([]float64(nil), fixture.response.Embeddings...),
+	}
 	fixture.mu.Unlock()
 	if failure != nil {
-		return nil, nil, failure
+		return models.EmbeddingBackendResponse{}, failure
 	}
-	var protocolResponse struct {
-		Embeddings []float64 `json:"embeddings"`
-	}
-	if err := json.Unmarshal(response, &protocolResponse); err != nil || len(protocolResponse.Embeddings) == 0 {
-		if err == nil {
-			err = errors.New("fixture returned no embeddings")
-		}
-		return nil, nil, fmt.Errorf("decode fixture protocol response: %w", err)
-	}
-	content, err := json.Marshal(protocolResponse.Embeddings)
-	if err != nil {
-		return nil, nil, fmt.Errorf("encode fixture embedding output: %w", err)
-	}
-	return []models.InferenceContent{{
-		Name: "embedding", Modality: models.ModalityJSON,
-		ContentType: "application/json", MediaType: "application/json", Content: string(content),
-	}}, nil, nil
+	return response, nil
 }
 
 func (fixture *story004EmbedFixture) SetFailure(failure error) {
 	fixture.mu.Lock()
 	defer fixture.mu.Unlock()
 	fixture.failure = failure
+}
+
+func (fixture *story004EmbedFixture) SetResponse(response models.EmbeddingBackendResponse) {
+	fixture.mu.Lock()
+	defer fixture.mu.Unlock()
+	fixture.response = models.EmbeddingBackendResponse{
+		Embeddings: append([]float64(nil), response.Embeddings...),
+	}
 }
 
 func (fixture *story004EmbedFixture) Calls() int {

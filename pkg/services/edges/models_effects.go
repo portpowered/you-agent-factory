@@ -81,6 +81,14 @@ type ModelASRBackend func(
 	models.ASRBackendRequest,
 ) (models.ASRBackendResponse, error)
 
+// ModelEmbeddingBackend is the typed embedding operation effect. Models owns
+// generic request validation, LocalAI codec mapping, output normalization, and
+// lease lifecycle; this edge supplies only detached embedding facts.
+type ModelEmbeddingBackend func(
+	context.Context,
+	models.EmbeddingBackendRequest,
+) (models.EmbeddingBackendResponse, error)
+
 type HostProcessStartSpec struct {
 	Command                 string
 	Args, Env               []string

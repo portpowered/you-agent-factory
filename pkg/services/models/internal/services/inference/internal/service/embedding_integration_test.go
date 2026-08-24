@@ -9,7 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/codecs"
-	inferenceservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/internal/service"
+	embeddingruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/runtime"
 )
 
 func TestEmbeddingRuntimeMapsFixtureThroughModelsAndReleasesLease(t *testing.T) {
@@ -23,7 +23,9 @@ func TestEmbeddingRuntimeMapsFixtureThroughModelsAndReleasesLease(t *testing.T) 
 	backend := &recordingEmbeddingBackend{
 		response: codecs.EmbeddingResponse{Embeddings: []float64{0.1, 0.2, 0.3, 0.4}},
 	}
-	runtime, err := inferenceservice.NewEmbeddingInvocationRuntime(backend)
+	runtime, err := embeddingruntime.NewEmbedding(func(ctx context.Context, request codecs.EmbeddingRequest) (codecs.EmbeddingResponse, error) {
+		return backend.InvokeEmbedding(ctx, request)
+	})
 	if err != nil {
 		t.Fatalf("construct embedding runtime: %v", err)
 	}
@@ -96,7 +98,9 @@ func TestEmbeddingRuntimeFailuresAreTypedAtomicAndReleaseLease(t *testing.T) {
 				},
 			}
 			backend := &recordingEmbeddingBackend{backendErr: test.backendErr, response: test.response}
-			runtime, err := inferenceservice.NewEmbeddingInvocationRuntime(backend)
+			runtime, err := embeddingruntime.NewEmbedding(func(ctx context.Context, request codecs.EmbeddingRequest) (codecs.EmbeddingResponse, error) {
+				return backend.InvokeEmbedding(ctx, request)
+			})
 			if err != nil {
 				t.Fatalf("construct embedding runtime: %v", err)
 			}
@@ -136,7 +140,9 @@ func TestEmbeddingRuntimeCancellationReleasesLease(t *testing.T) {
 		},
 	}
 	backend := &recordingEmbeddingBackend{waitForCancellation: true}
-	runtime, err := inferenceservice.NewEmbeddingInvocationRuntime(backend)
+	runtime, err := embeddingruntime.NewEmbedding(func(ctx context.Context, request codecs.EmbeddingRequest) (codecs.EmbeddingResponse, error) {
+		return backend.InvokeEmbedding(ctx, request)
+	})
 	if err != nil {
 		t.Fatalf("construct embedding runtime: %v", err)
 	}

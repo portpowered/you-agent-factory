@@ -194,6 +194,7 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		backendArtifactResolver,
 		adaptModelInvocationBackend(edges.ModelInvocationBackend),
 		adaptModelASRBackend(edges.ModelASRBackend),
+		adaptModelEmbeddingBackend(edges.ModelEmbeddingBackend),
 		edges.ModelResolveHuggingFaceRevision,
 	)
 }
@@ -233,6 +234,20 @@ func adaptModelASRBackend(
 		ctx context.Context,
 		request models.ASRBackendRequest,
 	) (models.ASRBackendResponse, error) {
+		return next(ctx, request)
+	}
+}
+
+func adaptModelEmbeddingBackend(
+	next serviceedges.ModelEmbeddingBackend,
+) modelswire.EmbeddingBackend {
+	if next == nil {
+		return nil
+	}
+	return func(
+		ctx context.Context,
+		request models.EmbeddingBackendRequest,
+	) (models.EmbeddingBackendResponse, error) {
 		return next(ctx, request)
 	}
 }
