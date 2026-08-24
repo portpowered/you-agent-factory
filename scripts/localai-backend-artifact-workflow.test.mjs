@@ -271,6 +271,7 @@ test("the build harness selects the Windows and Unix strategies at runtime", (t)
 		cmake_make_program: "mingw32-make",
 		windows_minimum_target: "0x0602",
 		grpc_protobuf_source: "pinned",
+		go_dynamic_loader: "none",
 		grpc_dependency_mode: "standalone",
 	});
 	assert.deepEqual(buildPlan({ backend: "localai-llamacpp", target: "darwin-arm64", buildType: "metal" }), {
@@ -279,6 +280,7 @@ test("the build harness selects the Windows and Unix strategies at runtime", (t)
 		shell: "bash",
 		strategy: "darwin-llamacpp-grpc",
 		binary: "llama-cpp-cpu-all",
+		go_dynamic_loader: "none",
 		grpc_dependency_mode: "default",
 	});
 	assert.deepEqual(buildPlan({ backend: "localai-whisper", target: "linux-amd64", buildType: "cpu" }), {
@@ -287,8 +289,17 @@ test("the build harness selects the Windows and Unix strategies at runtime", (t)
 		shell: "bash",
 		strategy: "linux-go-build",
 		binary: "whisper",
+		go_dynamic_loader: "none",
 		grpc_dependency_mode: "default",
 	});
+	assert.equal(
+		buildPlan({ backend: "localai-whisper", target: "windows-amd64", buildType: "cpu" }).go_dynamic_loader,
+		"xsys-windows",
+	);
+	assert.equal(
+		buildPlan({ backend: "localai-vibevoice", target: "windows-amd64", buildType: "cpu" }).go_dynamic_loader,
+		"xsys-windows",
+	);
 });
 
 test("the Windows build plan resolves Git from the runner path bridge", async (t) => {

@@ -162,6 +162,18 @@ case "$TARGET_ID:$BACKEND_ID" in
 		;;
 esac
 
+go_dynamic_loader="none"
+if [[ "$TARGET_ID" == "windows-amd64" ]]; then
+	case "$BACKEND_ID" in
+		localai-whisper|localai-vibevoice)
+			# purego v0.10.0 intentionally exposes Dlopen only on Unix. The
+			# pinned LocalAI Go entrypoints use that API unconditionally, so the
+			# Windows build adds a small build-tagged loader shim below.
+			go_dynamic_loader="xsys-windows"
+			;;
+	esac
+fi
+
 # The pinned gRPC CMake project otherwise lets the Windows generator select
 # C++14, which Abseil rejects before any backend target can compile. The
 # declared vcpkg triplet is MinGW; without an explicit generator, hosted
@@ -191,6 +203,7 @@ if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
 	plan_cmake_make_program=""
 	plan_windows_target=""
 	plan_grpc_protobuf_source=""
+	plan_go_dynamic_loader=" go_dynamic_loader=$go_dynamic_loader"
 	plan_grpc_dependency_mode=" grpc_dependency_mode=$grpc_dependency_mode"
 	if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 		plan_cxx_standard=" cxx_standard=$windows_cxx_standard"
@@ -199,8 +212,8 @@ if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
 		plan_windows_target=" windows_minimum_target=$windows_minimum_target"
 		plan_grpc_protobuf_source=" grpc_protobuf_source=$grpc_protobuf_source"
 	fi
-	printf 'LOCALAI_BACKEND_BUILD_PLAN backend=%s target=%s shell=%s strategy=%s binary=%s%s%s%s\n' \
-		"$BACKEND_ID" "$TARGET_ID" "$build_shell" "$build_strategy" "$binary" "$plan_git" "$plan_cxx_standard" "$plan_cmake_generator$plan_cmake_make_program$plan_windows_target$plan_grpc_protobuf_source$plan_grpc_dependency_mode"
+	printf 'LOCALAI_BACKEND_BUILD_PLAN backend=%s target=%s shell=%s strategy=%s binary=%s%s%s%s%s\n' \
+		"$BACKEND_ID" "$TARGET_ID" "$build_shell" "$build_strategy" "$binary" "$plan_git" "$plan_cxx_standard" "$plan_cmake_generator$plan_cmake_make_program$plan_windows_target$plan_grpc_protobuf_source$plan_go_dynamic_loader$plan_grpc_dependency_mode"
 	exit 0
 fi
 
@@ -387,6 +400,48 @@ generate_go_protocol() {
 		"${LOCALAI_ROOT}/backend/backend.proto"
 }
 
+patch_windows_go_loader() {
+	if [[ "$go_dynamic_loader" != "xsys-windows" ]]; then
+		return
+	fi
+
+	local main_source="${backend_path}/main.go"
+	local loader_source="${backend_path}/localai-backend-library_windows.go"
+	if [[ ! -f "$main_source" ]]; then
+		echo "pinned LocalAI Go backend entrypoint is missing: ${main_source}" >&2
+		exit 1
+	fi
+
+	node - "$main_source" "$loader_source" <<'NODE'
+const { readFileSync, writeFileSync } = require("node:fs");
+
+const [mainPath, loaderPath] = process.argv.slice(2);
+const source = readFileSync(mainPath, "utf8");
+const needle = "purego.Dlopen(libName, purego.RTLD_NOW|purego.RTLD_GLOBAL)";
+const occurrences = source.split(needle).length - 1;
+if (occurrences !== 1) {
+	console.error(`expected one purego dynamic-loader call in ${mainPath}, found ${occurrences}`);
+	process.exit(1);
+}
+
+writeFileSync(mainPath, source.replace(needle, "loadBackendLibrary(libName)"));
+writeFileSync(
+	loaderPath,
+	`//go:build windows
+
+package main
+
+import "golang.org/x/sys/windows"
+
+func loadBackendLibrary(name string) (uintptr, error) {
+	handle, err := windows.LoadLibrary(name)
+	return uintptr(handle), err
+}
+`,
+);
+NODE
+}
+
 stage_darwin_llama_package() {
 	local package_root="${backend_path}/package"
 	mkdir -p "${package_root}/lib"
@@ -511,6 +566,7 @@ if [[ "$BACKEND_ID" == "localai-llamacpp" ]]; then
 	ensure_localai_grpc_compat_path
 	patch_llama_grpc_source
 fi
+patch_windows_go_loader
 
 case "$build_strategy" in
 	windows-llamacpp-grpc)

@@ -45,6 +45,11 @@ static library triplet, so the runtime closure is still staged and verified.
 The pinned gRPC bootstrap itself uses the checkout's bundled protobuf and
 Abseil sources on Windows; vcpkg remains an input to the backend CMake builds,
 but its rolling protobuf headers must not leak into the pinned gRPC compile.
+The pinned Go backend entrypoints use purego's Unix-only `Dlopen` API. On
+Windows, the build harness adds a temporary build-tagged loader that calls
+`golang.org/x/sys/windows.LoadLibrary`; this compatibility source is consumed
+only during the build and is not part of the published payload or Models
+artifact contract.
 
 ## Update procedure
 
