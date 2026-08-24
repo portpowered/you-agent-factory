@@ -33,21 +33,24 @@ workTypes:
       - name: failed
         type: FAILED
 resources:
-  - name: omnivoice-cache
+  - name: tts-cache
     type: MODEL
     capacity: 1
-    model: OMNIVOICE_Q4_K_M
-    backend: LLAMACPP
+    model: tts
+    backend: LOCALAI-VIBEVOICE
     loadPolicy: ON_DEMAND
 workers:
   - name: tts-executor
-    type: MODEL_WORKER
-    model: OMNIVOICE_Q4_K_M
+    type: INFERENCE_WORKER
+    model: tts
     modelProvider: CODEX
     modelLocality: LOCAL
-    command: omnivoice-llamacpp
+    command: vibevoice-cpp
+    args:
+      - --grpc-endpoint
+      - http://127.0.0.1:50051
     resources:
-      - name: omnivoice-cache
+      - name: tts-cache
         capacity: 1
     operations:
       - name: TTS
@@ -63,7 +66,7 @@ workers:
     body: "You are the local text-to-speech worker for @you/tts. Treat the bound text slot as the complete input, preserve its wording and reading order, synthesize exactly one audio result with the configured local model, and surface a clear failure rather than returning partial or unrelated content."
 workstations:
   - name: execute-tts
-    type: MODEL_INVOKE
+    type: INFERENCE_RUN
     worker: tts-executor
     operation: TTS
     operationBindings:

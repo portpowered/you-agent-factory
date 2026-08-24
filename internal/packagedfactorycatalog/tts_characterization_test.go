@@ -53,14 +53,12 @@ func assertTTSPackagedFactoryIdentity(t *testing.T, factory *factorydefinitions.
 
 func assertTTSModelResource(t *testing.T, factory *factorydefinitions.FactoryConfig) {
 	t.Helper()
-	// Characterized, not endorsed: the package currently couples TTS to the
-	// OmniVoice/LLAMACPP cache and on-demand loading policy.
 	want := []factorydefinitions.ResourceConfig{{
-		Name:       "omnivoice-cache",
+		Name:       "tts-cache",
 		Type:       factorydefinitions.ResourceTypeModel,
 		Capacity:   1,
-		Model:      "OMNIVOICE_Q4_K_M",
-		Backend:    "LLAMACPP",
+		Model:      "tts",
+		Backend:    "LOCALAI-VIBEVOICE",
 		LoadPolicy: "ON_DEMAND",
 	}}
 	if !reflect.DeepEqual(factory.Resources, want) {
@@ -70,23 +68,21 @@ func assertTTSModelResource(t *testing.T, factory *factorydefinitions.FactoryCon
 
 func assertTTSModelWorker(t *testing.T, factory *factorydefinitions.FactoryConfig) {
 	t.Helper()
-	// Characterized, not endorsed: this preserves the current CODEX provider
-	// (canonicalized to the internal "codex" value) and the missing-executable
-	// omnivoice-llamacpp command.
 	if len(factory.Workers) != 1 {
 		t.Fatalf("workers = %#v, want exactly one worker", factory.Workers)
 	}
 	worker := factory.Workers[0]
 	if worker.Name != "tts-executor" ||
 		worker.Type != factorydefinitions.WorkerTypeModel ||
-		worker.Model != "OMNIVOICE_Q4_K_M" ||
+		worker.Model != "tts" ||
 		worker.ModelProvider != "codex" ||
 		factorydefinitions.PublicWorkerModelProviderFromInternalRuntime(worker.ModelProvider) != "CODEX" ||
 		worker.ModelLocality != factorydefinitions.ModelLocalityLocal ||
-		worker.Command != "omnivoice-llamacpp" {
+		worker.Command != "vibevoice-cpp" ||
+		!reflect.DeepEqual(worker.Args, []string{"--grpc-endpoint", "http://127.0.0.1:50051"}) {
 		t.Fatalf("worker identity/runtime = %#v", worker)
 	}
-	wantResources := []factorydefinitions.ResourceConfig{{Name: "omnivoice-cache", Capacity: 1}}
+	wantResources := []factorydefinitions.ResourceConfig{{Name: "tts-cache", Capacity: 1}}
 	if !reflect.DeepEqual(worker.Resources, wantResources) {
 		t.Fatalf("worker resources = %#v, want %#v", worker.Resources, wantResources)
 	}
@@ -113,8 +109,6 @@ func assertTTSModelWorkstation(t *testing.T, factory *factorydefinitions.Factory
 		t.Fatalf("workstations = %#v, want exactly one workstation", factory.Workstations)
 	}
 	workstation := factory.Workstations[0]
-	// Characterized, not endorsed: the current declaration uses the legacy
-	// MODEL_WORKER/MODEL_INVOKE taxonomy for local TTS routing.
 	if workstation.Name != "execute-tts" ||
 		workstation.Type != factorydefinitions.WorkstationTypeInvoke ||
 		workstation.WorkerTypeName != "tts-executor" ||

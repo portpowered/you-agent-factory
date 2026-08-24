@@ -1158,62 +1158,54 @@ current help output identifies no Factory-defined voice, format,
 provider, or model flags. Run-level output and recording flags remain
 available, but they do not select a different TTS backend.
 
-**Worker roles and provider/model overrides.** The Factory has one model
-worker role, `tts-executor`, running the local `OMNIVOICE_Q4_K_M` model through
-the `LLAMACPP` backend and its `TTS` operation. The operation accepts one
-required `TEXT` slot and produces one `AUDIO` slot. There is no general
-inference-provider or model override in the live `@you/tts` signature:
-`modelProvider: CODEX` in the packaged worker metadata describes the packaged
-local route, not a supported `--provider` or `--model` option. Omitted
-operator settings therefore do not redirect this Factory to a cloud provider;
-use the packaged model readiness workflow below.
+**Worker roles and provider/model overrides.** The Factory has one inference
+worker role, `tts-executor`, selecting the built-in `tts` model backed by
+VibeVoice-7B through the Models-owned generic `InvokeModel` path and its `TTS`
+operation. The operation accepts one required `TEXT` slot and produces one
+`AUDIO` slot. The packaged Factory does not define a separate TTS codec or an
+OmniVoice-specific execution route; Models owns the generic managed backend
+process. There is no general inference-provider or model override in the live
+`@you/tts` signature: `modelProvider: CODEX` in the packaged worker metadata
+preserves the existing local worker contract; it is not a supported
+`--provider` or `--model` option.
 
-**Prerequisites and side effects.** The managed
-`OMNIVOICE_Q4_K_M` assets must be installed and report `READY` before the run
-can synthesize audio. Use [`you docs models`](./models.md) for the canonical
-list, inspect, pull, and runtime-readiness workflow; in particular, pull the
-model when inspect reports `MISSING` and wait through `LOADING` until it is
-ready. The local `omnivoice-llamacpp` runtime may load on demand, so the first
-run can take longer than later runs. The invocation creates a Factory Session
-and dispatches one local model Work; normal recording and runtime artifact
-activity applies unless a run-level option such as `--no-record` is supplied.
-It writes audio to a runtime-generated artifact and may leave the managed
-model cache and session/runtime diagnostics in the configured operator state.
-Model-not-ready or synthesis failures are terminal failures and do not imply
-that an audio artifact was produced.
+**Prerequisites and side effects.** The built-in `tts` model must be installed
+and report `READY` before the run can synthesize audio. Use [`you docs
+models`](./models.md) for the canonical list, inspect, pull, and
+runtime-readiness workflow; in particular, pull the model when inspect reports
+`MISSING` and wait through `LOADING` until it is ready. The `localai-vibevoice`
+backend may load on demand, so the first run can take longer than later runs.
+The invocation creates a Factory Session and dispatches one local model Work;
+normal recording and runtime artifact activity applies unless a run-level
+option such as `--no-record` is supplied. It writes audio to a
+runtime-generated artifact and may leave the managed model cache and
+session/runtime diagnostics in the configured operator state. Model-not-ready
+or synthesis failures are terminal failures and do not imply that an audio
+artifact was produced.
 
 **Expected output shape.** With `--output primary`, the caller receives one
 JSON metadata object rather than raw audio bytes on stdout. The current
 primary-result contract includes an opaque `artifactPath`, the reported
 `mediaType` (the local runtime currently reports `audio/wav`), the
-`OMNIVOICE_Q4_K_M/LLAMACPP` `backend`, and a `traceId`. Treat
+`tts/LOCALAI-VIBEVOICE` `backend`, and a `traceId`. Treat
 `artifactPath` as runtime-generated: do not construct or promise a fixed
 directory or filename, and inspect the returned path or artifact record to
 locate the audio. The generated audio content is not byte-stable. A failed
 run returns a TTS generation/model-readiness error without success-shaped
 metadata.
 
-**Worked invocation.** After `OMNIVOICE_Q4_K_M` reports `READY`, run this exact
-command from a blank directory:
+**Worked invocation.** After the built-in `tts` model reports `READY`, run this
+exact command from a blank directory:
 
 ```bash
 you run --named @you/tts --no-record --output primary --to "The release is ready."
 ```
 
-**Observed output evidence.** A fresh binary ran the exact command from a blank
-directory after the prompt-binding and managed-runtime handoff fixes. With the
-pinned `OMNIVOICE_Q4_K_M` cache and the repository's `omnivoice-llamacpp`
-wrapper plus native runtime available in the isolated verification PATH, the
-command returned primary metadata for the synthesized artifact:
-
-```text
-{"artifactPath":"C:\\Users\\andre\\AppData\\Local\\Temp\\infinite-you-tts-verification\\managed-cache\\OMNIVOICE_Q4_K_M\\361609388ae572a820d085185bbbe2a2aac4b30e\\omnivoice-710657892.wav","mediaType":"audio/wav","backend":"OMNIVOICE_Q4_K_M/LLAMACPP","traceId":"trace-request-b77ca9b2-35b7-4221-a735-1efc73f49307"}
-```
-
-The returned artifact was 63,884 bytes and began with the `RIFF`/`WAVE` header,
-confirming readable non-empty WAV output. The focused behavioral assertion
-`TestPackagedTTSRequiredInputProducesAudioArtifactMetadata` continues to verify
-the primary-result contract with the injected model edge.
+The focused packaged-factory tests verify the customer-facing input and
+artifact metadata contract with injected effects. Real VibeVoice asset
+download and backend conformance are separate model-asset verification scope;
+this entry documents the Factory's built-in model selection and generic
+invocation path only.
 
 ## Detailed media-review entries
 
