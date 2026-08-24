@@ -71,6 +71,43 @@ func TestMinimalWorkflowExampleValidation(t *testing.T) {
 	}
 }
 
+func TestAuthoringFactoryExamplesValidation(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		rel  string
+	}{
+		{name: "expected artifacts JSON", rel: "examples/expected-artifacts-json"},
+		{name: "expected artifacts YAML", rel: "examples/expected-artifacts-yaml"},
+		{name: "first workflow", rel: "examples/first-workflow"},
+		{name: "local OMNIVOICE TTS", rel: "examples/local-omnivoice-tts"},
+		{name: "script poller", rel: "examples/script-poller"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			factoryPath := support.AgentFactoryPath(t, test.rel)
+			inputs := support.FakeInputs(t.Context(), []string{
+				"you", "factory", "config", "validate", factoryPath,
+			})
+			inputs.Input.Env = isolatedHomeEnvironment(t)
+			inputs.Input.WorkingDirectory = filepath.Dir(factoryPath)
+
+			err := buildDefinitionsProcess(t).Execute(inputs.Input)
+			if err != nil {
+				t.Fatalf(
+					"Process.Execute(factory config validate %s) error = %v\nstdout:\n%s\nstderr:\n%s",
+					factoryPath,
+					err,
+					inputs.Stdout(),
+					inputs.Stderr(),
+				)
+			}
+			diagnostic := inputs.Stdout() + "\n" + inputs.Stderr()
+			if !strings.Contains(diagnostic, "Factory validation passed.") {
+				t.Fatalf("validation diagnostic missing success message:\n%s", diagnostic)
+			}
+		})
+	}
+}
+
 func copyWithFormerObjectOnFailure(t *testing.T, sourceDir string) string {
 	t.Helper()
 
