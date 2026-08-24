@@ -136,10 +136,6 @@
     from var(--color-surface-container-highest) r g b /
     0.08
   );
-  --color-overlay-subtle: rgb(
-    from var(--color-surface-container-low) r g b /
-    0.04
-  );
   --color-overlay-focus: rgb(
     from var(--color-surface-container-highest) r g b /
     0.1
@@ -158,7 +154,6 @@
   --color-graph-focus-indicator: var(--color-on-surface);
 
   /* --- Dashboard chart roles --- */
-  --color-chart-grid-line: rgb(from var(--color-outline) r g b / 0.032);
   --color-chart-queued: var(--color-on-primary-container);
   --color-chart-in-flight: var(--color-on-info-container);
   --color-chart-completed: var(--color-on-success-container);
@@ -166,10 +161,6 @@
   --color-chart-failure-trend: var(--color-error-bright);
   --color-chart-rework-trend: var(--color-primary);
   --color-chart-timing-trend: var(--color-info-bright);
-  --color-chart-selection-fill: var(--color-primary-container);
-  --color-chart-selection-stroke: var(--color-primary);
-  --color-chart-cursor: var(--color-outline-variant);
-  --color-chart-active-dot-stroke: var(--color-background);
 
   /* --- Product af-* keys (role-backed; formerly color-role-aliases.css) --- */
   --color-af-background: var(--color-background);
@@ -209,8 +200,7 @@
   --color-af-worker-surface: var(--color-tertiary-container);
   --color-af-worker-text: var(--color-on-tertiary-container);
 
-  /* Product chart aliases. Keep chart consumers on the shared role layer. */
-  --color-af-chart-grid-line: var(--color-chart-grid-line);
+  /* Product chart aliases. Keep consumed chart series on shared roles. */
   --color-af-chart-queued: var(--color-chart-queued);
   --color-af-chart-in-flight: var(--color-chart-in-flight);
   --color-af-chart-completed: var(--color-chart-completed);
@@ -218,14 +208,9 @@
   --color-af-chart-failure-trend: var(--color-chart-failure-trend);
   --color-af-chart-rework-trend: var(--color-chart-rework-trend);
   --color-af-chart-timing-trend: var(--color-chart-timing-trend);
-  --color-af-chart-selection-fill: var(--color-chart-selection-fill);
-  --color-af-chart-selection-stroke: var(--color-chart-selection-stroke);
-  --color-af-chart-cursor: var(--color-chart-cursor);
-  --color-af-chart-active-dot-stroke: var(--color-chart-active-dot-stroke);
 
   /* Graph, focus, and overlay product aliases stay on shared Material roles. */
   --color-af-overlay: var(--color-overlay);
-  --color-af-overlay-subtle: var(--color-overlay-subtle);
   --color-af-overlay-focus: var(--color-overlay-focus);
   --color-af-overlay-strong: var(--color-overlay-strong);
   --color-af-focus-ring: var(--color-focus-ring);

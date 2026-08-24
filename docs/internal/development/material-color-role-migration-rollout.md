@@ -29,7 +29,7 @@ Implement and review in this sequence. Later phases assume earlier ones are merg
 
 | Area | Test file | What it proves |
 | --- | --- | --- |
-| Role token wiring | `ui/src/styles/color-role-tokens.test.ts` | Accent saturation contract (primary > secondary/tertiary) and role-backed `--color-af-*` product keys |
+| Role token wiring | `ui/src/styles/theme-role-regression.component.test.ts` and `ui/src/features/work-outcome/components/work-chart/work-chart-color-role-behavior.component.test.tsx` | Compiled Material role resolution and rendered chart-series palette behavior |
 | Palette presets | `ui/src/styles/color-palette-presets.test.ts` | Five palettes override foundation keys |
 | Typography scale | `ui/packages/components/src/styles/token-styles.test.ts` | Material scale tokens and utilities are exposed by the shared package styles |
 | Layout scale | `ui/src/styles/layout-role-tokens.test.ts` | Layout spacing roles registered |
@@ -75,7 +75,7 @@ After story changes: `make ui-storybook` then `make ui-test-storybook` (or the t
 
 ## Cleanup phase (post-migration)
 
-Alias layer removal is **complete**. Role-backed `--color-af-*` product keys live in `ui/packages/components/src/styles/color-role-tokens.css`, the shared Material role source imported by the dashboard. The chart, edge, graph-control/focus, and overlay follow-up is also complete: all 26 target aliases remain consumed and resolve through shared Material roles. No target alias was retired because the final consumer audit found no zero-consumer target.
+Alias layer removal is **complete**. Role-backed `--color-af-*` product keys live in `ui/packages/components/src/styles/color-role-tokens.css`, the shared Material role source imported by the dashboard. The chart, edge, graph-control/focus, and overlay follow-up is complete with 20 consumed aliases backed by shared Material roles and six zero-consumer aliases retired after the final audit: `--color-af-chart-grid-line`, `--color-af-chart-selection-fill`, `--color-af-chart-selection-stroke`, `--color-af-chart-cursor`, `--color-af-chart-active-dot-stroke`, and `--color-af-overlay-subtle`.
 
 ### Gate checklist (maintain)
 
@@ -90,13 +90,13 @@ Alias layer removal is **complete**. Role-backed `--color-af-*` product keys liv
 
 1. Removed the obsolete alias stylesheet and its `@import` from `ui/src/styles.css`.
 2. Inlined role-backed `--color-af-*` definitions into `ui/packages/components/src/styles/color-role-tokens.css`; kept unrelated foundation and presentation aliases in their established stylesheet.
-3. Removed the obsolete alias-only test; product key wiring is asserted in `ui/src/styles/color-role-tokens.test.ts`.
+3. Removed the obsolete alias-only test; compiled role resolution is asserted by `ui/src/styles/theme-role-regression.component.test.ts`, and rendered chart behavior is asserted by `ui/src/features/work-outcome/components/work-chart/work-chart-color-role-behavior.component.test.tsx`.
 4. **Bulk migrator removed (complete).** The one-shot bulk class replacer was deleted after US-009; bulk migration is finished. Do not restore it. If transitional `af-*` patterns reappear, fix violations using `ui/src/features/feature-surface-color-roles.test.ts` and targeted manual edits.
-5. [material-color-role-taxonomy.md](./material-color-role-taxonomy.md) documents supported `--color-af-*` product keys and the completed chart/edge/graph-control/focus/overlay role pass.
+5. [material-color-role-taxonomy.md](./material-color-role-taxonomy.md) documents supported `--color-af-*` product keys and the completed chart/edge/graph-control/focus/overlay role pass, including the six retired zero-consumer aliases.
 
 ### Tokens outside this follow-up
 
-Foundation inputs and other presentation aliases outside the 26-key follow-up remain in their established stylesheet according to their existing consumers. They are not evidence that the chart, edge, graph-control/focus, or overlay target aliases are unbacked; those targets are accounted for above and are not deferred.
+Foundation inputs and other presentation aliases outside the 26-key follow-up remain in their established stylesheet according to their existing consumers. The six retired keys above have no remaining production consumers; every other target is accounted for above and is not deferred.
 
 ## Related docs
 
