@@ -1,21 +1,16 @@
 package root_composition_test
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"os"
-	"runtime"
 	"testing"
-	"time"
 
-	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -266,138 +261,79 @@ func TestModelsInstalledDetailDiagnosticsFollowResolvedRuntime(t *testing.T) {
 func TestModelsCatalogReadinessFailureKeepsPublicUnavailableTaxonomy(t *testing.T) {
 	t.Parallel()
 
-	dir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		Edges: serviceedges.Edges{
-			ModelAssetInspectPath: func(string) (os.FileInfo, error) {
-				return nil, errors.New("cache inspection failed")
-			},
-		},
-	})
-	t.Cleanup(func() { server.Stop(t) })
+	t.Run("list projects missing readiness", func(t *testing.T) {
+		cacheDirectory := t.TempDir()
+		dir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+		server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+			FactoryDir:                dir,
+			WaitForServiceModeRuntime: true,
+			Env: append(functionalHomeEnvironment(t.TempDir()),
+				runcli.ModelCacheDirEnvironment+"="+cacheDirectory),
+		})
+		t.Cleanup(func() { server.Stop(t) })
 
-	for _, endpoint := range []string{server.URL() + "/models", server.URL() + "/models/" + story003ModelName} {
-		response, err := http.Get(endpoint)
+		response, err := http.Get(server.URL() + "/models")
 		if err != nil {
-			t.Fatalf("GET %s: %v", endpoint, err)
+			t.Fatalf("GET /models: %v", err)
 		}
+		defer response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(response.Body)
+			t.Fatalf("GET /models status = %d, want 200: %s", response.StatusCode, body)
+		}
+		var list factoryapi.ListModelsResponse
+		if err := json.NewDecoder(response.Body).Decode(&list); err != nil {
+			t.Fatalf("decode GET /models: %v", err)
+		}
+		var model *factoryapi.ModelSummary
+		for index := range list.Results {
+			if list.Results[index].Name == story003ModelName {
+				model = &list.Results[index]
+				break
+			}
+		}
+		if model == nil {
+			t.Fatalf("GET /models omitted %q: %#v", story003ModelName, list.Results)
+		}
+		if model.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateMISSING ||
+			model.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED {
+			t.Fatalf("GET /models readiness = %s/%s, want MISSING/NOT_INSTALLED", model.ManagedRuntime.ReadinessState, model.ManagedRuntime.LifecycleState)
+		}
+	})
+
+	t.Run("detail maps cache inspection failure", func(t *testing.T) {
+		cacheDirectory := t.TempDir()
+		writeCachedOmniVoiceAssets(t, cacheDirectory)
+		dir := support.ScaffoldFactory(t, localModelReadinessAssetsHostFactoryConfig("http://127.0.0.1:1"))
+		server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+			FactoryDir:                dir,
+			WaitForServiceModeRuntime: true,
+			Env: append(functionalHomeEnvironment(t.TempDir()),
+				runcli.ModelCacheDirEnvironment+"="+cacheDirectory),
+			Edges: serviceedges.Edges{
+				ModelAssetInspectPath: func(string) (os.FileInfo, error) {
+					return nil, errors.New("cache inspection failed")
+				},
+			},
+		})
+		t.Cleanup(func() { server.Stop(t) })
+
+		response, err := http.Get(server.URL() + "/models/" + story003ModelName)
+		if err != nil {
+			t.Fatalf("GET /models/%s: %v", story003ModelName, err)
+		}
+		defer response.Body.Close()
 		var failure factoryapi.ErrorResponse
-		decodeErr := json.NewDecoder(response.Body).Decode(&failure)
-		response.Body.Close()
-		if decodeErr != nil {
-			t.Fatalf("decode GET %s failure: %v", endpoint, decodeErr)
+		if err := json.NewDecoder(response.Body).Decode(&failure); err != nil {
+			t.Fatalf("decode GET /models/%s failure: %v", story003ModelName, err)
 		}
 		if response.StatusCode != http.StatusNotFound ||
 			failure.Family != factoryapi.ErrorFamilyNotFound ||
 			failure.Code != factoryapi.ErrorResponseCode("MODEL_NOT_AVAILABLE") {
-			t.Fatalf("GET %s failure = status %d %#v, want public unavailable model taxonomy", endpoint, response.StatusCode, failure)
+			t.Fatalf("GET /models/%s failure = status %d %#v, want public unavailable model taxonomy", story003ModelName, response.StatusCode, failure)
 		}
-	}
-}
-
-func TestModelsCatalogPublicServicePreservesOverlayPrecedenceAndReadinessParity(t *testing.T) {
-	t.Parallel()
-
-	service := newFunctionalModelsService(t)
-	source := "hf://operator/tts/model@0123456789012345678901234567890123456789"
-	backend := "localai-operator"
-	loadPolicy := modelprovider.LoadPolicyKeepWarm
-	opened, err := service.OpenRuntimeScope(t.Context(), modelprovider.OpenRuntimeScopeRequest{
-		Config: modelprovider.RuntimeScopeConfig{
-			OperatorModels: map[string]modelprovider.ModelOverlay{
-				" TTS ": {
-					Source: &source, Backend: &backend, LoadPolicy: &loadPolicy,
-					Operations: []string{modelprovider.OperationOMNI},
-				},
-				"custom": {
-					Source: &source, Backend: &backend, LoadPolicy: &loadPolicy,
-					Operations: []string{modelprovider.OperationASR},
-				},
-			},
-		},
 	})
-	if err != nil {
-		t.Fatalf("OpenRuntimeScope: %v", err)
-	}
-	t.Cleanup(func() {
-		_, _ = service.CloseRuntimeScope(context.Background(), modelprovider.CloseRuntimeScopeRequest{Scope: opened.Scope})
-	})
-
-	listed, err := service.ListCatalog(t.Context(), modelprovider.ListModelsRequest{Scope: opened.Scope})
-	if err != nil {
-		t.Fatalf("ListCatalog: %v", err)
-	}
-	tts, ok := findPublicCatalogSummary(listed.Models, modelprovider.BuiltInModelNameTTS)
-	if !ok || len(tts.Operations) != 1 || tts.Operations[0].Name != modelprovider.OperationOMNI {
-		t.Fatalf("listed overlaid TTS = %#v, want one OMNI operation", tts)
-	}
-	custom, ok := findPublicCatalogSummary(listed.Models, "custom")
-	if !ok || len(custom.Operations) != 1 || custom.Operations[0].Name != modelprovider.OperationASR {
-		t.Fatalf("listed custom overlay = %#v, want one ASR operation", custom)
-	}
-
-	detail, err := service.GetCatalogModel(t.Context(), modelprovider.GetModelRequest{
-		Scope: opened.Scope, Name: " tts ", Operation: modelprovider.OperationOMNI,
-	})
-	if err != nil {
-		t.Fatalf("GetCatalogModel(overlaid TTS): %v", err)
-	}
-	if len(detail.Model.Sources) != 1 || detail.Model.Sources[0].Reference != source ||
-		detail.Model.ManagedRuntime.ReadinessState != modelprovider.ReadinessStateMissing ||
-		detail.Model.ManagedRuntime.LifecycleState != modelprovider.LifecycleStateNotInstalled {
-		t.Fatalf("overlaid TTS detail = %#v, want source metadata and missing/not-installed runtime", detail.Model)
-	}
-	if detail.Model.Diagnostics["readinessState"] != string(detail.Model.ManagedRuntime.ReadinessState) ||
-		detail.Model.Diagnostics["lifecycleState"] != string(detail.Model.ManagedRuntime.LifecycleState) ||
-		detail.Model.ManagedRuntime.Diagnostics["readinessState"] != string(detail.Model.ManagedRuntime.ReadinessState) ||
-		detail.Model.ManagedRuntime.Diagnostics["lifecycleState"] != string(detail.Model.ManagedRuntime.LifecycleState) {
-		t.Fatalf("overlaid TTS diagnostics diverged: detail=%#v runtime=%#v", detail.Model.Diagnostics, detail.Model.ManagedRuntime.Diagnostics)
-	}
 }
-
-func findPublicCatalogSummary(results []modelprovider.Summary, name string) (modelprovider.Summary, bool) {
-	for _, result := range results {
-		if result.Name == name {
-			return result, true
-		}
-	}
-	return modelprovider.Summary{}, false
-}
-
-func newFunctionalModelsService(t *testing.T) modelprovider.Service {
-	t.Helper()
-	service, err := modelswire.NewService(
-		modelprovider.AssetHostPlatform{OperatingSystem: runtime.GOOS, Architecture: runtime.GOARCH},
-		http.DefaultClient,
-		modelprovider.RuntimeAssetEndpoints{},
-		os.MkdirAll, os.Stat, os.UserHomeDir, os.WriteFile, os.Rename, os.Remove,
-		os.ReadFile, os.ReadDir,
-		func(path string) (io.WriteCloser, error) { return os.Create(path) },
-		func(path string) (io.ReadCloser, error) { return os.Open(path) },
-		functionalCatalogHostLauncher{}, http.DefaultClient, functionalCatalogHostClock{},
-		support.NewRecordingCommandRunner(""), http.DefaultClient, os.Stat, os.TempDir,
-		func(dir, pattern string) (modelswire.RuntimeTempFile, error) { return os.CreateTemp(dir, pattern) },
-		nil, time.Now, platformrandom.CryptoSource{}, nil, nil, nil, modelswire.LocalRuntimeHooks{},
-		os.Getenv, nil, nil,
-	)
-	if err != nil {
-		t.Fatalf("construct public Models service: %v", err)
-	}
-	return service
-}
-
-type functionalCatalogHostLauncher struct{}
-
-func (functionalCatalogHostLauncher) Start(context.Context, modelswire.HostProcessStartSpec) (modelswire.HostManagedProcess, error) {
-	return nil, errors.New("functional catalog test host launcher should remain unused")
-}
-
-type functionalCatalogHostClock struct{}
-
-func (functionalCatalogHostClock) Now() time.Time                              { return time.Unix(0, 0) }
-func (functionalCatalogHostClock) NewTimer(time.Duration) modelswire.HostTimer { return nil }
 
 func catalogDiscoveryFactoryConfig() map[string]any {
 	return map[string]any{

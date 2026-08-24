@@ -219,6 +219,14 @@ the named file. It is a file-output alias, not a named output mapping.
 Use JSON mode when a script needs output metadata instead of audio bytes:
 
 ```bash
+you --json models invoke tts --operation TTS --input text="Read the release summary."
+```
+
+With no output mapping, JSON mode validates the request and reports that
+inference was not executed. To execute and receive output metadata, provide an
+explicit output mapping:
+
+```bash
 you --json models invoke tts --operation TTS \
   --input text="Read the release summary." \
   --output audio=speech.wav
