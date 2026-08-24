@@ -173,6 +173,15 @@ func TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned(t
 	assertUnsupportedModelInvocationRejected(t, server.URL())
 }
 
+func findModelSummary(results []factoryapi.ModelSummary, name string) (factoryapi.ModelSummary, bool) {
+	for _, result := range results {
+		if result.Name == name {
+			return result, true
+		}
+	}
+	return factoryapi.ModelSummary{}, false
+}
+
 func localCachedModelTransportSmokeConfig() map[string]any {
 	return map[string]any{
 		"name": "cached-local-model-transport",
