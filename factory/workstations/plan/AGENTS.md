@@ -151,7 +151,7 @@ Story-writing rules:
 - every story must include at least one behavioral acceptance criterion
 - `Typecheck passes` must appear in every story
 - add `Tests pass` when testable logic changes
-- add direct browser verification when the story changes visible UI behavior
+- add direct browser verification when the story changes visible UI behavior. When a story's acceptance criteria require browser verification, name a fallback explicitly: state that if no dev browser tool (built-in, Playwright, or otherwise) is available in the implementer's environment, the implementer should record that once and move on rather than treat it as unfinished work requiring further attempts. Visible UI changes still require some appropriate verification.
 - order stories by dependency so earlier stories do not depend on later ones
 
 Please ensure that the PRD and prd.json both contain an overall description of
@@ -244,10 +244,6 @@ Add priority levels to tasks so users can focus on what matters most. Tasks can 
 - Should we add keyboard shortcuts for priority changes?
 ```
 
-### Dev browser skill
-
-The requirement to use the dev browser skill can be any form of browser whether its the built in one, playwright or whatever. 
-If no dev browser skill is available then its okay to move forward without it. 
 ## Output JSON Format
 
 ```json
