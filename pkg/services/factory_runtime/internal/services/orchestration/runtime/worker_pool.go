@@ -910,10 +910,11 @@ func recordDetachedAgentRunResponse(
 	}
 	eventTime := cfg.clock.Now()
 	recorder.RecordAgentRunEvent(workers.AgentRunResponseEvent{
-		ID:         fmt.Sprintf("factory-event/agent-run-response/%s", dispatchID),
-		DispatchID: dispatchID,
-		EventTime:  eventTime,
-		Tick:       detachedExecutionTick(request.Input.Dispatch.Execution),
+		ID:                         fmt.Sprintf("factory-event/agent-run-response/%s", dispatchID),
+		DispatchID:                 dispatchID,
+		EventTime:                  eventTime,
+		Tick:                       detachedExecutionTick(request.Input.Dispatch.Execution),
+		DeclaredSecretJSONPointers: agentRunSecretJSONPointers(request, transcript),
 		Payload: workers.AgentRunResponseEventPayload{
 			AgentRunID:     fmt.Sprintf("%s/agent-run/1", dispatchID),
 			Diagnostics:    diagnostics,
@@ -921,6 +922,32 @@ func recordDetachedAgentRunResponse(
 			Outcome:        string(outcome),
 		},
 	})
+}
+
+func agentRunSecretJSONPointers(
+	request workers.ExecuteRequest,
+	transcript []workers.AgentRunTranscriptEntry,
+) []string {
+	if !hasDeclaredSecretInvocationParameter(request.Input.Invocation) {
+		return nil
+	}
+	pointers := make([]string, 0, len(transcript))
+	for index, entry := range transcript {
+		if entry.Role != "system" && entry.Role != "user" {
+			continue
+		}
+		pointers = append(pointers, fmt.Sprintf("/diagnostics/agentRun/transcript/%d/summary", index))
+	}
+	return pointers
+}
+
+func hasDeclaredSecretInvocationParameter(arguments work.InvocationArguments) bool {
+	for _, argument := range arguments.Arguments {
+		if argument.Sensitive {
+			return true
+		}
+	}
+	return false
 }
 
 func detachedExecutionTick(metadata work.ExecutionMetadata) int {

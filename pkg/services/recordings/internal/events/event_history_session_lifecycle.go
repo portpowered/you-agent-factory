@@ -603,13 +603,29 @@ func (h *FactoryEventHistory) RecordFactoryStateChange(tick int, previous interf
 }
 
 func (h *FactoryEventHistory) appendEvent(event interfaces.FactoryEvent) interfaces.FactoryEvent {
-	appended, _ := h.appendEventWithValidation(event, nil)
+	appended, _ := h.appendEventWithValidationAndProvenance(event, nil, nil)
+	return appended
+}
+
+func (h *FactoryEventHistory) appendEventWithProvenance(
+	event interfaces.FactoryEvent,
+	provenance []recordings.RecordingSecret,
+) interfaces.FactoryEvent {
+	appended, _ := h.appendEventWithValidationAndProvenance(event, nil, provenance)
 	return appended
 }
 
 func (h *FactoryEventHistory) appendEventWithValidation(
 	event interfaces.FactoryEvent,
 	validate func(interfaces.FactoryEvent) error,
+) (interfaces.FactoryEvent, error) {
+	return h.appendEventWithValidationAndProvenance(event, validate, nil)
+}
+
+func (h *FactoryEventHistory) appendEventWithValidationAndProvenance(
+	event interfaces.FactoryEvent,
+	validate func(interfaces.FactoryEvent) error,
+	provenance []recordings.RecordingSecret,
 ) (interfaces.FactoryEvent, error) {
 	if h == nil {
 		return interfaces.FactoryEvent{}, fmt.Errorf("factory event history is unavailable")
@@ -630,6 +646,12 @@ func (h *FactoryEventHistory) appendEventWithValidation(
 		if err := h.sessionProjection.Apply(event); err != nil && h.sessionProjectionErr == nil {
 			h.sessionProjectionErr = err
 		}
+	}
+	if len(provenance) > 0 {
+		if h.secretProvenance == nil {
+			h.secretProvenance = make(map[string][]recordings.RecordingSecret)
+		}
+		h.secretProvenance[event.Id] = append([]recordings.RecordingSecret(nil), provenance...)
 	}
 	streams := make([]*eventHistorySubscription, 0, len(h.streams))
 	for _, stream := range h.streams {

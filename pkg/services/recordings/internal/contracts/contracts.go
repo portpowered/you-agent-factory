@@ -1786,6 +1786,15 @@ type RuntimeRecorder interface {
 	Finalize(time.Time) error
 }
 
+// RuntimeRecorderWithProvenance is the optional write-boundary extension used
+// when a runtime event carries explicit declared-secret provenance. Keeping the
+// extension separate preserves compatibility with existing runtime recorders
+// that only understand canonical Factory Events.
+type RuntimeRecorderWithProvenance interface {
+	RuntimeRecorder
+	RecordEventWithProvenance(FactoryEvent, []RecordingSecret)
+}
+
 // RuntimeRecorderFactory is retained for the compatibility opening seam until
 // Factory Sessions consumes RuntimeOpening directly.
 type RuntimeRecorderFactory func(

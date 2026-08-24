@@ -254,6 +254,15 @@ func (f *RuntimeFactory) Build(
 	if initialFactory != nil {
 		eventHistory.SetInitialStructureFactory(initialFactory)
 	}
+	if source, ok := loadedFactoryCfg.(interface {
+		InvocationSensitiveJSONPointers() []string
+	}); ok {
+		if setter, ok := eventHistory.(interface {
+			SetInvocationSensitiveJSONPointers([]string)
+		}); ok {
+			setter.SetInvocationSensitiveJSONPointers(source.InvocationSensitiveJSONPointers())
+		}
+	}
 	var mockWorkersConfig *workers.MockWorkersConfig
 	if len(mockWorkersConfigs) > 0 {
 		mockWorkersConfig = mockWorkersConfigs[0]
@@ -367,6 +376,16 @@ func assembleRuntimeBundle(
 	if recordPath != "" {
 		factoryEventRecorder = func(event interfaces.FactoryEvent) {
 			if recording == nil {
+				return
+			}
+			var provenance []recordings.RecordingSecret
+			if lookup, ok := eventHistory.(interface {
+				SecretProvenanceDuringAppend(interfaces.FactoryEvent) []recordings.RecordingSecret
+			}); ok {
+				provenance = lookup.SecretProvenanceDuringAppend(event)
+			}
+			if withProvenance, ok := recording.(recordings.RuntimeRecorderWithProvenance); ok {
+				withProvenance.RecordEventWithProvenance(event, provenance)
 				return
 			}
 			recording.RecordEvent(event)

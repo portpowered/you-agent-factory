@@ -105,7 +105,6 @@ func RedactDeclaredSecrets(request RecordingRedactionRequest) (RecordingRedactio
 	if len(paths) == 0 {
 		return RecordingRedactionResult{Payload: append(json.RawMessage(nil), request.Payload...)}, nil
 	}
-
 	document, err := decodeRecordingJSON(request.Payload)
 	if err != nil {
 		return RecordingRedactionResult{}, err
@@ -114,10 +113,14 @@ func RedactDeclaredSecrets(request RecordingRedactionRequest) (RecordingRedactio
 		Redacted:   true,
 		Provenance: RecordingSecretProvenanceDeclared,
 	}
-	for _, path := range paths {
+	for index, path := range paths {
 		document, err = replaceRecordingJSONAt(document, path, marker)
 		if err != nil {
-			return RecordingRedactionResult{}, err
+			return RecordingRedactionResult{}, fmt.Errorf(
+				"replace recording secret at JSON pointer %q: %w",
+				request.Secrets[index].JSONPointer,
+				err,
+			)
 		}
 	}
 	encoded, err := json.Marshal(document)

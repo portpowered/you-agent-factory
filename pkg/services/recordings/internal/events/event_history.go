@@ -114,34 +114,36 @@ func (h *FactoryEventHistory) CloseLiveSubscriptions() {
 // FactoryEventHistory stores the current-process canonical event history.
 // It is intentionally in-memory and unbounded for the event-stream MVP.
 type FactoryEventHistory struct {
-	mu                    sync.RWMutex
-	initialStructure      interfaces.InitialStructurePayload
-	runtimeConfig         interfaces.RuntimeDefinitionLookup
-	factoryRunner         string
-	initialFactory        *interfaces.FactorySnapshot
-	now                   func() time.Time
-	streamGenerationID    string
-	events                []interfaces.FactoryEvent
-	sessionProjection     *projections.IncrementalSessionProjection
-	sessionProjectionErr  error
-	recorders             []func(interfaces.FactoryEvent)
-	eventTypeRecorders    []func(interfaces.FactoryEventType)
-	nextID                int
-	streams               map[int]*eventHistorySubscription
-	runRecordedAt         time.Time
-	hasRunRequest         bool
-	hasRunResponse        bool
-	hasInitialStructure   bool
-	sessionStartedAt      time.Time
-	hasSessionStarted     bool
-	hasSessionCompleted   bool
-	liveClosed            bool
-	sessionID             string
-	nextSessionSequence   int
-	canonicalEventsCalls  atomic.Uint64
-	canonicalEventsCopied atomic.Uint64
-	fullHistoryReductions atomic.Uint64
-	runtimeReadRecorder   recordings.RuntimeReadMetricsRecorder
+	mu                      sync.RWMutex
+	initialStructure        interfaces.InitialStructurePayload
+	runtimeConfig           interfaces.RuntimeDefinitionLookup
+	factoryRunner           string
+	initialFactory          *interfaces.FactorySnapshot
+	initialSecretProvenance []recordings.RecordingSecret
+	now                     func() time.Time
+	streamGenerationID      string
+	events                  []interfaces.FactoryEvent
+	secretProvenance        map[string][]recordings.RecordingSecret
+	sessionProjection       *projections.IncrementalSessionProjection
+	sessionProjectionErr    error
+	recorders               []func(interfaces.FactoryEvent)
+	eventTypeRecorders      []func(interfaces.FactoryEventType)
+	nextID                  int
+	streams                 map[int]*eventHistorySubscription
+	runRecordedAt           time.Time
+	hasRunRequest           bool
+	hasRunResponse          bool
+	hasInitialStructure     bool
+	sessionStartedAt        time.Time
+	hasSessionStarted       bool
+	hasSessionCompleted     bool
+	liveClosed              bool
+	sessionID               string
+	nextSessionSequence     int
+	canonicalEventsCalls    atomic.Uint64
+	canonicalEventsCopied   atomic.Uint64
+	fullHistoryReductions   atomic.Uint64
+	runtimeReadRecorder     recordings.RuntimeReadMetricsRecorder
 }
 
 // NewFactoryEventHistory creates an in-memory factory event history for one
@@ -162,6 +164,7 @@ func NewFactoryEventHistory(topology recordings.InitialStructureSource, now func
 		now:                now,
 		streamGenerationID: streamGenerationID,
 		sessionProjection:  projections.NewIncrementalSessionProjection(),
+		secretProvenance:   make(map[string][]recordings.RecordingSecret),
 		streams:            make(map[int]*eventHistorySubscription),
 	}
 }
@@ -198,6 +201,126 @@ func (h *FactoryEventHistory) SetInitialStructureFactory(factory *interfaces.Fac
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.initialFactory = factory.Clone()
+	h.initialSecretProvenance = filterRecordingSecretsForFactory(
+		h.initialFactoryOrProjectedLocked(),
+		h.initialSecretProvenance,
+	)
+}
+
+// SetInvocationSensitiveJSONPointers installs the write-boundary provenance
+// for invocation-interpolated Factory Definition fields. Pointers are
+// relative to a Factory Event payload's factory object and contain no values.
+func (h *FactoryEventHistory) SetInvocationSensitiveJSONPointers(pointers []string) {
+	if h == nil {
+		return
+	}
+	secrets := make([]recordings.RecordingSecret, 0, len(pointers))
+	for _, pointer := range pointers {
+		if pointer == "" {
+			secrets = append(secrets, recordings.RecordingSecret{
+				JSONPointer: "/factory",
+				Provenance:  recordings.RecordingSecretProvenanceDeclared,
+			})
+			continue
+		}
+		secrets = append(secrets, recordings.RecordingSecret{
+			JSONPointer: "/factory" + pointer,
+			Provenance:  recordings.RecordingSecretProvenanceDeclared,
+		})
+	}
+	h.mu.Lock()
+	h.initialSecretProvenance = filterRecordingSecretsForFactory(
+		h.initialFactoryOrProjectedLocked(),
+		secrets,
+	)
+	h.mu.Unlock()
+}
+
+func (h *FactoryEventHistory) initialFactoryOrProjectedLocked() *interfaces.FactorySnapshot {
+	if h.initialFactory != nil {
+		return h.initialFactory
+	}
+	return eventsnapshot.FromInitialStructure(h.initialStructure)
+}
+
+func filterRecordingSecretsForFactory(
+	factory *interfaces.FactorySnapshot,
+	secrets []recordings.RecordingSecret,
+) []recordings.RecordingSecret {
+	if factory == nil || len(secrets) == 0 {
+		return nil
+	}
+	var document any
+	if err := json.Unmarshal([]byte(*factory), &document); err != nil {
+		return nil
+	}
+	filtered := make([]recordings.RecordingSecret, 0, len(secrets))
+	for _, secret := range secrets {
+		if recordingJSONPointerExistsUnderFactory(document, secret.JSONPointer) {
+			filtered = append(filtered, secret)
+		}
+	}
+	return filtered
+}
+
+func recordingJSONPointerExistsUnderFactory(document any, pointer string) bool {
+	if pointer == "/factory" {
+		return true
+	}
+	if !strings.HasPrefix(pointer, "/factory/") {
+		return false
+	}
+	segments := strings.Split(strings.TrimPrefix(pointer, "/factory/"), "/")
+	current := document
+	for _, encoded := range segments {
+		segment, ok := decodeFactoryJSONPointerToken(encoded)
+		if !ok {
+			return false
+		}
+		switch value := current.(type) {
+		case map[string]any:
+			var exists bool
+			current, exists = value[segment]
+			if !exists {
+				return false
+			}
+		case []any:
+			index, err := strconv.Atoi(segment)
+			if err != nil || index < 0 || index >= len(value) {
+				return false
+			}
+			current = value[index]
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func decodeFactoryJSONPointerToken(token string) (string, bool) {
+	if !strings.Contains(token, "~") {
+		return token, true
+	}
+	var builder strings.Builder
+	for index := 0; index < len(token); index++ {
+		if token[index] != '~' {
+			builder.WriteByte(token[index])
+			continue
+		}
+		if index+1 >= len(token) {
+			return "", false
+		}
+		index++
+		switch token[index] {
+		case '0':
+			builder.WriteByte('~')
+		case '1':
+			builder.WriteByte('/')
+		default:
+			return "", false
+		}
+	}
+	return builder.String(), true
 }
 
 // CanonicalEvents returns detached Factory-owned events in append order.
@@ -211,6 +334,32 @@ func (h *FactoryEventHistory) CanonicalEvents() []interfaces.FactoryEvent {
 	h.canonicalEventsCalls.Add(1)
 	h.canonicalEventsCopied.Add(uint64(len(h.events)))
 	return cloneFactoryEvents(h.events)
+}
+
+// SecretProvenanceForEvent returns the detached, write-boundary provenance for
+// one canonical event. Provenance is intentionally kept beside the event in
+// memory so the public Factory Event remains unchanged.
+func (h *FactoryEventHistory) SecretProvenanceForEvent(
+	event interfaces.FactoryEvent,
+) []recordings.RecordingSecret {
+	if h == nil {
+		return nil
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return append([]recordings.RecordingSecret(nil), h.secretProvenance[event.Id]...)
+}
+
+// SecretProvenanceDuringAppend returns provenance to the synchronous recorder
+// callback while the append lock is already held. It deliberately does not
+// acquire h.mu; callers outside that callback must use SecretProvenanceForEvent.
+func (h *FactoryEventHistory) SecretProvenanceDuringAppend(
+	event interfaces.FactoryEvent,
+) []recordings.RecordingSecret {
+	if h == nil {
+		return nil
+	}
+	return append([]recordings.RecordingSecret(nil), h.secretProvenance[event.Id]...)
 }
 
 // Subscribe returns a replay snapshot followed by live canonical events.
@@ -331,13 +480,14 @@ func (h *FactoryEventHistory) RecordInitialStructure() {
 	if h.initialFactory != nil {
 		factory = h.initialFactory.Clone()
 	}
+	provenance := append([]recordings.RecordingSecret(nil), h.initialSecretProvenance...)
 	h.mu.Unlock()
-	h.appendEvent(domainFactoryEvent(
+	h.appendEventWithProvenance(domainFactoryEvent(
 		interfaces.FactoryEventTypeInitialStructureRequest,
 		eventIDInitialStructure,
 		interfaces.FactoryEventContext{Tick: 0, EventTime: eventTime},
 		interfaces.InitialStructureRequestEventPayload{Factory: factory},
-	))
+	), provenance)
 }
 
 // RecordFactoryChange records a canonical topology replacement event after a
@@ -369,18 +519,22 @@ func (h *FactoryEventHistory) RecordRunRequest() {
 	recordedAt := interfaces.CanonicalEventTime(h.now())
 	h.runRecordedAt = recordedAt
 	h.hasRunRequest = true
-	h.mu.Unlock()
-
 	payload := h.initialStructure
-	h.appendEvent(domainFactoryEvent(
+	factory := eventsnapshot.FromInitialStructure(payload)
+	if h.initialFactory != nil {
+		factory = h.initialFactory.Clone()
+	}
+	provenance := append([]recordings.RecordingSecret(nil), h.initialSecretProvenance...)
+	h.mu.Unlock()
+	h.appendEventWithProvenance(domainFactoryEvent(
 		interfaces.FactoryEventTypeRunRequest,
 		eventIDRunRequest,
 		interfaces.FactoryEventContext{Tick: 0, EventTime: recordedAt},
 		interfaces.RunRequestEventPayload{
 			RecordedAt: recordedAt,
-			Factory:    eventsnapshot.FromInitialStructure(payload),
+			Factory:    factory,
 		},
-	))
+	), provenance)
 }
 
 // RecordWorkInput records a submitted work token after submit-time identity

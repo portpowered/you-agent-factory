@@ -145,8 +145,9 @@ type LifecycleEvent struct {
 // AppendLifecycleEventRequest associates one canonical Factory Event with a
 // bound recording.
 type AppendLifecycleEventRequest struct {
-	RecordingID LifecycleRecordingID
-	Event       LifecycleEvent
+	RecordingID      LifecycleRecordingID
+	Event            LifecycleEvent
+	SecretProvenance []RecordingSecret
 }
 
 // RecordLifecycleFailureRequest appends one detached failure fact. Cause is

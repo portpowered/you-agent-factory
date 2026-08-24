@@ -64,6 +64,11 @@ type InferenceEvent struct {
 	WorkIDs    []string
 	Request    *InferenceRequestEventPayload
 	Response   *InferenceResponseEventPayload
+	// DeclaredSecretJSONPointers identifies fields in the generated canonical
+	// event payload whose values came from an explicit secret classification.
+	// It is an in-memory provenance handoff and is never serialized as part of
+	// the Factory Event.
+	DeclaredSecretJSONPointers []string
 }
 
 // InferenceRequestEventPayload records the concrete provider request boundary.
@@ -186,11 +191,12 @@ type ModelResponseEventPayload struct {
 // Factory event recorder without coupling worker execution to a transport or
 // Factory event envelope.
 type AgentRunResponseEvent struct {
-	ID         string
-	DispatchID string
-	EventTime  time.Time
-	Tick       int
-	Payload    AgentRunResponseEventPayload
+	ID                         string
+	DispatchID                 string
+	EventTime                  time.Time
+	Tick                       int
+	Payload                    AgentRunResponseEventPayload
+	DeclaredSecretJSONPointers []string
 }
 
 // AgentRunResponseEventPayload is the stable agent-run completion payload.

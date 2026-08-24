@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -29,7 +30,7 @@ func (h *FactoryEventHistory) RecordInferenceEvent(event workerexecution.Inferen
 	if eventType == "" || payload == nil {
 		return
 	}
-	h.appendEvent(domainFactoryEvent(
+	h.appendEventWithProvenance(domainFactoryEvent(
 		eventType,
 		event.ID,
 		interfaces.FactoryEventContext{
@@ -41,7 +42,35 @@ func (h *FactoryEventHistory) RecordInferenceEvent(event workerexecution.Inferen
 			WorkIDs:    stringSlicePtr(event.WorkIDs),
 		},
 		payload,
-	))
+	), inferenceSecretProvenance(event))
+}
+
+func inferenceSecretProvenance(event workerexecution.InferenceEvent) []recordings.RecordingSecret {
+	if event.Kind != workerexecution.InferenceEventKindRequest || len(event.DeclaredSecretJSONPointers) == 0 {
+		return nil
+	}
+	provenance := make([]recordings.RecordingSecret, 0, len(event.DeclaredSecretJSONPointers))
+	for _, pointer := range event.DeclaredSecretJSONPointers {
+		provenance = append(provenance, recordings.RecordingSecret{
+			JSONPointer: pointer,
+			Provenance:  recordings.RecordingSecretProvenanceDeclared,
+		})
+	}
+	return provenance
+}
+
+func recordingSecretsFromJSONPointers(pointers []string) []recordings.RecordingSecret {
+	if len(pointers) == 0 {
+		return nil
+	}
+	secrets := make([]recordings.RecordingSecret, 0, len(pointers))
+	for _, pointer := range pointers {
+		secrets = append(secrets, recordings.RecordingSecret{
+			JSONPointer: pointer,
+			Provenance:  recordings.RecordingSecretProvenanceDeclared,
+		})
+	}
+	return secrets
 }
 
 func inferenceFactoryEventPayload(event workerexecution.InferenceEvent) (interfaces.FactoryEventType, any) {

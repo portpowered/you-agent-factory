@@ -64,6 +64,28 @@ func TestRecorderRedactsEveryStreamingReplaySnapshot(t *testing.T) {
 	assertReplayArtifactPayloadRedacted(t, payload, 1, "replay-control")
 }
 
+func TestReplayFactoryBoundaryMaterializesTypedRedactionMarkerSafely(t *testing.T) {
+	normalized, err := normalizeLegacyReplayFactoryBoundary(json.RawMessage(`{
+		"workstations": [{
+			"body": {"redacted": true, "provenance": "DECLARED_SECRET"}
+		}]
+	}`))
+	if err != nil {
+		t.Fatalf("normalizeLegacyReplayFactoryBoundary: %v", err)
+	}
+	var document struct {
+		Workstations []struct {
+			Body any `json:"body"`
+		} `json:"workstations"`
+	}
+	if err := json.Unmarshal(normalized, &document); err != nil {
+		t.Fatalf("decode normalized Factory: %v", err)
+	}
+	if len(document.Workstations) != 1 || document.Workstations[0].Body != "" {
+		t.Fatalf("normalized redacted body = %#v, want empty string", document.Workstations)
+	}
+}
+
 func TestSaveRejectsClassifiedReplayPathBeforeStorage(t *testing.T) {
 	t.Parallel()
 

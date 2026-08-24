@@ -116,7 +116,8 @@ func (service *combinedService) AppendEvent(
 ) (recordings.RecordingLifecycleResult, error) {
 	event := request.Event
 	result, err := service.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
-		RecordingID: recordings.RecordingID(request.RecordingID),
+		RecordingID:      recordings.RecordingID(request.RecordingID),
+		SecretProvenance: append([]recordings.RecordingSecret(nil), request.SecretProvenance...),
 		Event: recordings.CanonicalEvent{
 			ID:          recordings.CanonicalEventID(event.ID),
 			Sequence:    recordings.CanonicalEventSequence(event.Sequence),
@@ -891,6 +892,46 @@ func (router *runtimeLedgerRouter) AppendRecordedEvent(
 	if ledger != nil {
 		ledger.AppendRecordedEvent(event)
 	}
+}
+
+func (router *runtimeLedgerRouter) SecretProvenanceForEvent(
+	event factorydefinitions.FactoryEvent,
+) []recordings.RecordingSecret {
+	if router == nil {
+		return nil
+	}
+	scope := ""
+	if event.Context.SessionID != nil {
+		scope = strings.TrimSpace(*event.Context.SessionID)
+	}
+	ledger := router.route(scope)
+	lookup, ok := ledger.(interface {
+		SecretProvenanceForEvent(factorydefinitions.FactoryEvent) []recordings.RecordingSecret
+	})
+	if !ok {
+		return nil
+	}
+	return lookup.SecretProvenanceForEvent(event)
+}
+
+func (router *runtimeLedgerRouter) SecretProvenanceDuringAppend(
+	event factorydefinitions.FactoryEvent,
+) []recordings.RecordingSecret {
+	if router == nil {
+		return nil
+	}
+	scope := ""
+	if event.Context.SessionID != nil {
+		scope = strings.TrimSpace(*event.Context.SessionID)
+	}
+	ledger := router.route(scope)
+	lookup, ok := ledger.(interface {
+		SecretProvenanceDuringAppend(factorydefinitions.FactoryEvent) []recordings.RecordingSecret
+	})
+	if !ok {
+		return nil
+	}
+	return lookup.SecretProvenanceDuringAppend(event)
 }
 
 func (router *runtimeLedgerRouter) AppendRecordedEventWithValidation(

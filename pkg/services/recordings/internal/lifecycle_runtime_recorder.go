@@ -2,8 +2,11 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -14,7 +17,6 @@ import (
 	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events"
 	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 	historicalquery "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query"
-	"strings"
 	"sync"
 	"time"
 )
@@ -34,6 +36,7 @@ type lifecycleRuntimeRecorder struct {
 	startedAt          time.Time
 	streamGenerationID string
 	initialEvent       recordings.FactoryEvent
+	initialProvenance  []recordings.RecordingSecret
 	seen               map[string]struct{}
 	nextSequence       recordings.CanonicalEventSequence
 	finalizeErr        error
@@ -42,11 +45,13 @@ type lifecycleRuntimeRecorder struct {
 }
 
 type pendingRuntimeRecording struct {
-	event *recordings.FactoryEvent
-	err   error
+	event      *recordings.FactoryEvent
+	provenance []recordings.RecordingSecret
+	err        error
 }
 
 var _ recordings.RuntimeRecorder = (*lifecycleRuntimeRecorder)(nil)
+var _ recordings.RuntimeRecorderWithProvenance = (*lifecycleRuntimeRecorder)(nil)
 var _ recordings.RuntimeRecordingBinder = (*lifecycleRuntimeRecorder)(nil)
 
 // NewLifecycleRuntimeRecorder prepares a runtime recorder whose lifecycle is
@@ -137,7 +142,10 @@ func (recorder *lifecycleRuntimeRecorder) BindRecordingLifecycle(
 	recorder.lifecycle = lifecycle
 	recorder.recordingID = result.Status.RecordingID
 	recorder.scope = scope
-	if err := recorder.recordEventLocked(recorder.initialEvent); err != nil {
+	if err := recorder.recordEventLockedWithProvenance(
+		recorder.initialEvent,
+		recorder.initialProvenance,
+	); err != nil {
 		appendErr := fmt.Errorf("record initial Factory snapshot: %w", err)
 		recorder.stopErr = recorder.lifecycle.Stop(recordings.StopLifecycleRequest{
 			RecordingID: recorder.recordingID,
@@ -146,7 +154,7 @@ func (recorder *lifecycleRuntimeRecorder) BindRecordingLifecycle(
 	}
 	for _, pending := range recorder.pending {
 		if pending.event != nil {
-			if err := recorder.recordEventLocked(*pending.event); err != nil {
+			if err := recorder.recordEventLockedWithProvenance(*pending.event, pending.provenance); err != nil {
 				recorder.recordErrorLocked("producer_boundary_failed", "accept Factory event", err)
 			}
 		} else {
@@ -178,6 +186,13 @@ func (recorder *lifecycleRuntimeRecorder) Stop() {
 }
 
 func (recorder *lifecycleRuntimeRecorder) RecordEvent(event recordings.FactoryEvent) {
+	recorder.RecordEventWithProvenance(event, nil)
+}
+
+func (recorder *lifecycleRuntimeRecorder) RecordEventWithProvenance(
+	event recordings.FactoryEvent,
+	provenance []recordings.RecordingSecret,
+) {
 	if recorder == nil {
 		return
 	}
@@ -185,16 +200,26 @@ func (recorder *lifecycleRuntimeRecorder) RecordEvent(event recordings.FactoryEv
 	defer recorder.mu.Unlock()
 	if recorder.lifecycle == nil {
 		event.Payload = append([]byte(nil), event.Payload...)
-		recorder.pending = append(recorder.pending, pendingRuntimeRecording{event: &event})
+		recorder.pending = append(recorder.pending, pendingRuntimeRecording{
+			event:      &event,
+			provenance: append([]recordings.RecordingSecret(nil), provenance...),
+		})
 		return
 	}
-	if err := recorder.recordEventLocked(event); err != nil {
+	if err := recorder.recordEventLockedWithProvenance(event, provenance); err != nil {
 		recorder.recordErrorLocked("producer_boundary_failed", "accept Factory event", err)
 	}
 }
 
 func (recorder *lifecycleRuntimeRecorder) recordEventLocked(
 	event recordings.FactoryEvent,
+) error {
+	return recorder.recordEventLockedWithProvenance(event, nil)
+}
+
+func (recorder *lifecycleRuntimeRecorder) recordEventLockedWithProvenance(
+	event recordings.FactoryEvent,
+	provenance []recordings.RecordingSecret,
 ) error {
 	if recorder.lifecycle == nil {
 		return fmt.Errorf("Recordings lifecycle capability is not bound")
@@ -221,8 +246,9 @@ func (recorder *lifecycleRuntimeRecorder) recordEventLocked(
 	canonical.Sequence = nextSequence
 	canonical.Cursor.Sequence = nextSequence
 	result, err := recorder.lifecycle.AppendEvent(recordings.AppendLifecycleEventRequest{
-		RecordingID: recorder.recordingID,
-		Event:       lifecycleEventFromCanonical(canonical),
+		RecordingID:      recorder.recordingID,
+		Event:            lifecycleEventFromCanonical(canonical),
+		SecretProvenance: append([]recordings.RecordingSecret(nil), provenance...),
 	})
 	if err != nil {
 		return err
@@ -595,7 +621,102 @@ func (service *combinedService) newLifecycleRuntimeRecorder(
 		// and would disclose drift for an unchanged checkout.
 		lifecycleRecorder.initialEvent = initialEvent
 	}
+	if source, ok := request.LoadedFactory.(interface {
+		InvocationSensitiveJSONPointers() []string
+	}); ok {
+		lifecycleRecorder.initialProvenance = recordingSecretsForEventPayload(
+			lifecycleRecorder.initialEvent.Payload,
+			source.InvocationSensitiveJSONPointers(),
+		)
+	}
 	return lifecycleRecorder, nil
+}
+
+func recordingSecretsForEventPayload(
+	payload json.RawMessage,
+	pointers []string,
+) []recordings.RecordingSecret {
+	if len(payload) == 0 || len(pointers) == 0 {
+		return nil
+	}
+	var document any
+	if err := json.Unmarshal(payload, &document); err != nil {
+		return nil
+	}
+	secrets := make([]recordings.RecordingSecret, 0, len(pointers))
+	for _, pointer := range pointers {
+		jsonPointer := "/factory"
+		if pointer != "" {
+			jsonPointer += pointer
+		}
+		if !recordingJSONPointerExists(document, jsonPointer) {
+			continue
+		}
+		secrets = append(secrets, recordings.RecordingSecret{
+			JSONPointer: jsonPointer,
+			Provenance:  recordings.RecordingSecretProvenanceDeclared,
+		})
+	}
+	return secrets
+}
+
+func recordingJSONPointerExists(document any, pointer string) bool {
+	if pointer == "" {
+		return true
+	}
+	if !strings.HasPrefix(pointer, "/") {
+		return false
+	}
+	current := document
+	for _, encoded := range strings.Split(pointer[1:], "/") {
+		segment, ok := decodeRecordingJSONPointerToken(encoded)
+		if !ok {
+			return false
+		}
+		switch value := current.(type) {
+		case map[string]any:
+			var exists bool
+			current, exists = value[segment]
+			if !exists {
+				return false
+			}
+		case []any:
+			index, err := strconv.Atoi(segment)
+			if err != nil || index < 0 || index >= len(value) {
+				return false
+			}
+			current = value[index]
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func decodeRecordingJSONPointerToken(token string) (string, bool) {
+	if !strings.Contains(token, "~") {
+		return token, true
+	}
+	var builder strings.Builder
+	for index := 0; index < len(token); index++ {
+		if token[index] != '~' {
+			builder.WriteByte(token[index])
+			continue
+		}
+		if index+1 >= len(token) {
+			return "", false
+		}
+		index++
+		switch token[index] {
+		case '0':
+			builder.WriteByte('~')
+		case '1':
+			builder.WriteByte('/')
+		default:
+			return "", false
+		}
+	}
+	return builder.String(), true
 }
 
 func resumeRunRequestEvent(events []factorydefinitions.FactoryEvent) (recordings.FactoryEvent, bool) {
@@ -706,6 +827,20 @@ func (recorder *runtimeScopeRecorder) RecordEvent(event recordings.FactoryEvent)
 	if recorder != nil && recorder.inner != nil {
 		recorder.inner.RecordEvent(event)
 	}
+}
+
+func (recorder *runtimeScopeRecorder) RecordEventWithProvenance(
+	event recordings.FactoryEvent,
+	provenance []recordings.RecordingSecret,
+) {
+	if recorder == nil || recorder.inner == nil {
+		return
+	}
+	if withProvenance, ok := recorder.inner.(recordings.RuntimeRecorderWithProvenance); ok {
+		withProvenance.RecordEventWithProvenance(event, provenance)
+		return
+	}
+	recorder.inner.RecordEvent(event)
 }
 
 func (recorder *runtimeScopeRecorder) RecordError(err error) {

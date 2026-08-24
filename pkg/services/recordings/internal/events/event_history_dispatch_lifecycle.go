@@ -872,7 +872,7 @@ func (h *FactoryEventHistory) RecordAgentRunEvent(event workerexecution.AgentRun
 	if h == nil || strings.TrimSpace(event.ID) == "" || strings.TrimSpace(event.DispatchID) == "" {
 		return
 	}
-	h.appendEvent(domainFactoryEvent(
+	h.appendEventWithProvenance(domainFactoryEvent(
 		interfaces.FactoryEventTypeAgentRunResponse,
 		event.ID,
 		h.sessionScopedContext(interfaces.FactoryEventContext{
@@ -881,5 +881,5 @@ func (h *FactoryEventHistory) RecordAgentRunEvent(event workerexecution.AgentRun
 			DispatchID: stringPtr(event.DispatchID),
 		}),
 		event.Payload,
-	))
+	), recordingSecretsFromJSONPointers(event.DeclaredSecretJSONPointers))
 }
