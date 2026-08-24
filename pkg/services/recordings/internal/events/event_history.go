@@ -213,58 +213,6 @@ func (h *FactoryEventHistory) CanonicalEvents() []interfaces.FactoryEvent {
 	return cloneFactoryEvents(h.events)
 }
 
-// SetRuntimeReadMetricsRecorder binds optional process-level observation
-// telemetry without widening the RuntimeLedger contract.
-func (h *FactoryEventHistory) SetRuntimeReadMetricsRecorder(recorder recordings.RuntimeReadMetricsRecorder) {
-	if h == nil {
-		return
-	}
-	h.mu.Lock()
-	h.runtimeReadRecorder = recorder
-	h.mu.Unlock()
-}
-
-// RecordRuntimeReadMetric forwards one bounded runtime-read observation to the
-// recorder bound by the process composition root.
-func (h *FactoryEventHistory) RecordRuntimeReadMetric(metric recordings.RuntimeReadMetric) {
-	if h == nil {
-		return
-	}
-	h.mu.RLock()
-	recorder := h.runtimeReadRecorder
-	h.mu.RUnlock()
-	if recorder == nil {
-		return
-	}
-	labels := make(map[string]string, len(metric.Labels))
-	for key, value := range metric.Labels {
-		labels[key] = value
-	}
-	recorder.RecordRuntimeReadMetric(recordings.RuntimeReadMetric{Name: metric.Name, Labels: labels})
-}
-
-// CanonicalHistoryReadStats returns detached history-read counters for
-// request-level regression evidence.
-func (h *FactoryEventHistory) CanonicalHistoryReadStats() recordings.CanonicalHistoryReadStats {
-	if h == nil {
-		return recordings.CanonicalHistoryReadStats{}
-	}
-	return recordings.CanonicalHistoryReadStats{
-		CanonicalEventsCalls:  h.canonicalEventsCalls.Load(),
-		CanonicalEventsCopied: h.canonicalEventsCopied.Load(),
-		FullHistoryReductions: h.fullHistoryReductions.Load(),
-	}
-}
-
-// RecordCanonicalHistoryReduction records a full world-state reduction that
-// intentionally starts from canonical history.
-func (h *FactoryEventHistory) RecordCanonicalHistoryReduction() {
-	if h == nil {
-		return
-	}
-	h.fullHistoryReductions.Add(1)
-}
-
 // Subscribe returns a replay snapshot followed by live canonical events.
 func (h *FactoryEventHistory) Subscribe(
 	ctx context.Context,

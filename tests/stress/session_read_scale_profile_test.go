@@ -143,6 +143,8 @@ type sessionReadScaleDispatchExecutor struct {
 	ordered     []int
 	target      int
 	calls       int
+	stopped     bool
+	active      sync.WaitGroup
 	stopCh      chan struct{}
 	stopOnce    sync.Once
 }
@@ -166,6 +168,12 @@ func (executor *sessionReadScaleDispatchExecutor) Execute(ctx context.Context, d
 	executor.mu.Lock()
 	executor.calls++
 	call := executor.calls
+	if executor.stopped {
+		executor.mu.Unlock()
+		return sessionReadScaleFailure(dispatch), nil
+	}
+	executor.active.Add(1)
+	defer executor.active.Done()
 	var checkpoint *sessionReadScaleDispatchCheckpoint
 	for _, target := range executor.ordered {
 		if call < target {
@@ -214,7 +222,13 @@ func sessionReadScaleFailure(dispatch work.WorkDispatch) workers.WorkResult {
 }
 
 func (executor *sessionReadScaleDispatchExecutor) stop() {
-	executor.stopOnce.Do(func() { close(executor.stopCh) })
+	executor.stopOnce.Do(func() {
+		executor.mu.Lock()
+		executor.stopped = true
+		close(executor.stopCh)
+		executor.mu.Unlock()
+		executor.active.Wait()
+	})
 }
 
 func (executor *sessionReadScaleDispatchExecutor) releaseCheckpoint(target int) {

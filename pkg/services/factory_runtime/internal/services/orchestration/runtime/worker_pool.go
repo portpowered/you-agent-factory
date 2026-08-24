@@ -11,7 +11,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/rootobservation"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -671,72 +670,6 @@ func (f *factoryImpl) ControlMoveWork(ctx context.Context, req factory.MoveWorkR
 	}, nil
 }
 
-func (f *factoryImpl) Observe(ctx context.Context, req factory.ObserveRequest) (factory.ObserveResult, error) {
-	if !validObservationScope(req.Scope) {
-		return factory.ObserveResult{}, factory.ErrInvalidObservationScope
-	}
-	if f == nil {
-		return factory.ObserveResult{}, factory.ErrNotRunning
-	}
-	if ctx != nil {
-		if err := ctx.Err(); err != nil {
-			return factory.ObserveResult{}, err
-		}
-	}
-	f.mu.RLock()
-	state := f.state
-	startedAt := f.startedAt
-	f.mu.RUnlock()
-	switch state {
-	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle,
-		interfaces.FactoryStateCompleted, interfaces.FactoryStateFailed:
-	default:
-		return factory.ObserveResult{}, factory.ErrNotRunning
-	}
-	if f.engine == nil {
-		return factory.ObserveResult{}, factory.ErrNotRunning
-	}
-	// Runtime observation deliberately reads only the engine-owned detached
-	// boundary. GetEngineStateSnapshot also reconstructs canonical world state
-	// and evaluates enablement for migration-only callers; neither operation is
-	// part of a live status read.
-	snapshot := f.engine.GetRuntimeStateSnapshot()
-	snapshot.FactoryState = string(state)
-	snapshot.Topology = f.topology
-	snapshot.RuntimeStatus = f.deriveRuntimeStatus(state, snapshot)
-	snapshot.LifecycleControlStatus = string(durableLifecycleStatus(state))
-	snapshot.StreamGenerationID = ""
-	if f.eventHistory != nil {
-		snapshot.StreamGenerationID = f.eventHistory.StreamGenerationID()
-	}
-	if !startedAt.IsZero() && f.clock != nil {
-		snapshot.Uptime = f.clock.Now().Sub(startedAt)
-	}
-	result := factory.ObserveResult{Observation: rootobservation.Project(&snapshot, req.Scope)}
-	f.recordRuntimeObservationMetric(req.Scope)
-	return result, nil
-}
-
-const runtimeReadObservationMetricName = "factory_runtime.read.observation"
-
-func (f *factoryImpl) recordRuntimeObservationMetric(scope factory.ObservationScope) {
-	recorder, ok := f.eventHistory.(recordings.RuntimeReadMetricsRecorder)
-	if !ok || recorder == nil {
-		return
-	}
-	recorder.RecordRuntimeReadMetric(recordings.RuntimeReadMetric{
-		Name: runtimeReadObservationMetricName,
-		Labels: map[string]string{
-			"scope":                    string(scope),
-			"runtime_snapshot_reads":   "1",
-			"operation_count":          "1",
-			"canonical_history_visits": "0",
-			"canonical_events_copied":  "0",
-			"full_history_reductions":  "0",
-		},
-	})
-}
-
 func (f *factoryImpl) PlanDispatch(
 	ctx context.Context,
 	req factory.PlanDispatchRequest,
@@ -883,17 +816,6 @@ func mapDispatchPlanningError(err error) error {
 		return fmt.Errorf("%w: %v", factory.ErrInvalidDispatchResultBoundary, err)
 	default:
 		return err
-	}
-}
-
-func validObservationScope(scope factory.ObservationScope) bool {
-	switch scope {
-	case "", factory.ObservationScopeFull, factory.ObservationScopeStatus, factory.ObservationScopeProgress,
-		factory.ObservationScopeDispatches, factory.ObservationScopeResults, factory.ObservationScopeResources,
-		factory.ObservationScopeHealth:
-		return true
-	default:
-		return false
 	}
 }
 

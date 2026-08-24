@@ -950,7 +950,9 @@ func (f *factoryImpl) currentWorldState(tick int) *interfaces.FactoryWorldState 
 	if f.eventHistory == nil || f.cfg == nil || f.cfg.worldStateProjector == nil {
 		return nil
 	}
-	if recorder, ok := f.eventHistory.(recordings.CanonicalHistoryReductionRecorder); ok {
+	if recorder, ok := f.eventHistory.(interface {
+		RecordCanonicalHistoryReduction()
+	}); ok && recorder != nil {
 		recorder.RecordCanonicalHistoryReduction()
 	}
 	state, err := f.cfg.worldStateProjector(f.eventHistory.CanonicalEvents(), tick)
