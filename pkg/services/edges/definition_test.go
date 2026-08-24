@@ -389,6 +389,69 @@ func TestMergeUsesCallerOwnedAgyPTYClock(t *testing.T) {
 	}
 }
 
+func TestMergeReplacesProcessEffectsAndPreservesDefaults(t *testing.T) {
+	t.Parallel()
+
+	defaultProviderRunner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("provider-default")})
+	replacementProviderRunner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("provider-replacement")})
+	defaultScriptRunner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("script-default")})
+	replacementScriptRunner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("script-replacement")})
+	defaultClock := edgeProcessClock{now: time.Unix(100, 0)}
+	replacementClock := edgeProcessClock{now: time.Unix(200, 0)}
+	request := platformprocess.CommandRequest{Command: "injected-command"}
+
+	merged := Merge(
+		Edges{
+			ProviderCommandRunner: defaultProviderRunner,
+			ScriptCommandRunner:   defaultScriptRunner,
+			PlatformProcessClock:  defaultClock,
+		},
+		Edges{
+			ProviderCommandRunner: replacementProviderRunner,
+			ScriptCommandRunner:   replacementScriptRunner,
+			PlatformProcessClock:  replacementClock,
+		},
+	)
+	assertMergedCommandResult(t, merged.ProviderCommandRunner, request, "provider-replacement")
+	assertMergedCommandResult(t, merged.ScriptCommandRunner, request, "script-replacement")
+	if got := merged.PlatformProcessClock.Now(); !got.Equal(replacementClock.Now()) {
+		t.Fatalf("merged process clock time = %v, want replacement time %v", got, replacementClock.Now())
+	}
+	if defaultProviderRunner.CallCount() != 0 || defaultScriptRunner.CallCount() != 0 {
+		t.Fatal("merged replacements executed a default command runner")
+	}
+
+	preserved := Merge(
+		Edges{
+			ProviderCommandRunner: defaultProviderRunner,
+			ScriptCommandRunner:   defaultScriptRunner,
+			PlatformProcessClock:  defaultClock,
+		},
+		Edges{},
+	)
+	assertMergedCommandResult(t, preserved.ProviderCommandRunner, request, "provider-default")
+	assertMergedCommandResult(t, preserved.ScriptCommandRunner, request, "script-default")
+	if got := preserved.PlatformProcessClock.Now(); !got.Equal(defaultClock.Now()) {
+		t.Fatalf("preserved process clock time = %v, want default time %v", got, defaultClock.Now())
+	}
+}
+
+func assertMergedCommandResult(t *testing.T, runner platformprocess.CommandRunner, request platformprocess.CommandRequest, want string) {
+	t.Helper()
+	result, err := runner.Run(context.Background(), request)
+	if err != nil || string(result.Stdout) != want {
+		t.Fatalf("merged command result = (%q, %v), want (%q, nil)", result.Stdout, err, want)
+	}
+}
+
+type edgeProcessClock struct {
+	now time.Time
+}
+
+func (clock edgeProcessClock) Now() time.Time { return clock.now }
+
+func (edgeProcessClock) After(time.Duration) <-chan time.Time { return nil }
+
 func TestMergeAppendsAndDetachesProviderRegistrations(t *testing.T) {
 	t.Parallel()
 
