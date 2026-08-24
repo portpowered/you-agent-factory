@@ -151,6 +151,8 @@ var productionDefaultAllowances = []productionDefaultAllowance{
 	{filePath: "pkg/platform/replay/storage.go", operation: "Local.WriteFile", symbol: "os.CreateTemp", wireSymbol: repositoryImportPrefix + "pkg/platform/replay.NewLocal"},
 	{filePath: "pkg/platform/replay/storage.go", operation: "Local.WriteFile", symbol: "os.Remove", wireSymbol: repositoryImportPrefix + "pkg/platform/replay.NewLocal"},
 	{filePath: "pkg/platform/replay/storage.go", operation: "Local.WriteFile", symbol: "os.Rename", wireSymbol: repositoryImportPrefix + "pkg/platform/replay.NewLocal"},
+	{filePath: "pkg/platform/replay/storage.go", operation: "Local.AppendFile", symbol: "os.MkdirAll", wireSymbol: repositoryImportPrefix + "pkg/platform/replay.NewLocal"},
+	{filePath: "pkg/platform/replay/storage.go", operation: "Local.AppendFile", symbol: "os.OpenFile", wireSymbol: repositoryImportPrefix + "pkg/platform/replay.NewLocal"},
 	{filePath: "pkg/platform/replay/storage.go", operation: "Local.ReadFile", symbol: "os.ReadFile", wireSymbol: repositoryImportPrefix + "pkg/platform/replay.NewLocal"},
 
 	// Runtime metrics coordination is a policy-free host adapter selected by

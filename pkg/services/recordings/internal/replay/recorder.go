@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordingcontracts "github.com/portpowered/infinite-you/pkg/services/recordings/internal/contracts"
@@ -379,8 +379,10 @@ func v2ArtifactSessionID(path string, artifact *interfaces.ReplayArtifact) strin
 			return strings.TrimSpace(*sessionID)
 		}
 	}
-	name := filepath.Base(path)
-	return strings.TrimSuffix(name, filepath.Ext(name))
+	// A recorder can be constructed without an initial event. Keep that empty
+	// recording valid under the v2 header contract while allowing a later
+	// runtime event session ID to remain authoritative when one is present.
+	return uuid.NewSHA1(uuid.Nil, []byte(path)).String()
 }
 
 func (r *Recorder) appendV2Line(line []byte) error {

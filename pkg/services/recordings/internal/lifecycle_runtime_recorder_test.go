@@ -113,7 +113,7 @@ func TestReplayRecordingSnapshotWriterPreservesReplayCompatibility(t *testing.T)
 	)
 	recorder := newLifecycleRecorderForTest(t, startedAt, path)
 	if err := recorder.BindRecordingLifecycle(root.(recordings.RecordingLifecycle), recordings.CanonicalEventScope{
-		FactorySessionID: "~default",
+		FactorySessionID: "00000000-0000-4000-8000-000000000005",
 	}); err != nil {
 		t.Fatalf("BindRecordingLifecycle: %v", err)
 	}
@@ -145,8 +145,8 @@ func TestReplayRecordingSnapshotWriterPreservesReplayCompatibility(t *testing.T)
 		)
 	}
 	for index, event := range artifact.Events {
-		if event.Context.SessionID == nil || *event.Context.SessionID != "~default" {
-			t.Fatalf("replay artifact event %d session id = %v, want ~default", index, event.Context.SessionID)
+		if event.Context.SessionID == nil || *event.Context.SessionID != "00000000-0000-4000-8000-000000000005" {
+			t.Fatalf("replay artifact event %d session id = %v, want canonical UUID", index, event.Context.SessionID)
 		}
 	}
 }

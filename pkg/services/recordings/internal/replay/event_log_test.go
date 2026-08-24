@@ -990,7 +990,12 @@ func mustNewV2Recorder(
 	path string,
 ) *Recorder {
 	t.Helper()
-	recorder, err := NewRecorder(storage, path, testReplayArtifact(t), time.Hour)
+	artifact := testReplayArtifact(t)
+	sessionID := replayV2TestSessionID
+	for index := range artifact.Events {
+		artifact.Events[index].Context.SessionID = &sessionID
+	}
+	recorder, err := NewRecorder(storage, path, artifact, time.Hour)
 	if err != nil {
 		t.Fatalf("NewRecorder: %v", err)
 	}

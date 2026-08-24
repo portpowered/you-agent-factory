@@ -80,7 +80,7 @@ func NewRuntimeRoot(
 	logger logging.Logger,
 	clocks ...recordings.RecordingClock,
 ) (recordings.Service, error) {
-	return NewRuntimeRootWithAppend(
+	return newRuntimeRoot(
 		targets,
 		writeFile,
 		nil,
@@ -101,6 +101,57 @@ func NewRuntimeRoot(
 // NewRuntimeRootWithAppend constructs the process-scoped Recordings authority
 // with the separate append effect required by new v2 JSONL recordings.
 func NewRuntimeRootWithAppend(
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	appendFile func(string, []byte) error,
+	makeDirectories recordings.RecordingMakeDirectories,
+	createTemporaryFile recordings.RecordingCreateTemporaryFile,
+	removePath recordings.RecordingRemovePath,
+	renamePath recordings.RecordingRenamePath,
+	readFile recordings.RecordingReadFile,
+	captureSnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
+	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	replayInputs recordings.ReplayInputLoader,
+	logger logging.Logger,
+	clocks ...recordings.RecordingClock,
+) (recordings.Service, error) {
+	if appendFile == nil {
+		return NewRuntimeRoot(
+			targets,
+			writeFile,
+			makeDirectories,
+			createTemporaryFile,
+			removePath,
+			renamePath,
+			readFile,
+			captureSnapshot,
+			decodeSnapshot,
+			decodeRuntimeConfig,
+			replayInputs,
+			logger,
+			clocks...,
+		)
+	}
+	return newRuntimeRoot(
+		targets,
+		writeFile,
+		appendFile,
+		makeDirectories,
+		createTemporaryFile,
+		removePath,
+		renamePath,
+		readFile,
+		captureSnapshot,
+		decodeSnapshot,
+		decodeRuntimeConfig,
+		replayInputs,
+		logger,
+		clocks...,
+	)
+}
+
+func newRuntimeRoot(
 	targets recordings.LiveRecordingTargetPlanner,
 	writeFile func(string, []byte) error,
 	appendFile func(string, []byte) error,

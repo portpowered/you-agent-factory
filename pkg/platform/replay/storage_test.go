@@ -1,6 +1,8 @@
 package replay
 
 import (
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -41,6 +43,91 @@ func TestAppendAndReadFilePreservesCompletePrefix(t *testing.T) {
 		t.Fatalf("ReadFile() = %q, want appended JSONL prefix", got)
 	}
 }
+
+func TestAppendReplaySuffixRollsBackPartialWriteForRetry(t *testing.T) {
+	file := &replayAppendTestFile{data: []byte("prefix"), maxWrite: 2}
+	if err := appendReplaySuffix(file, []byte("-suffix")); !errors.Is(err, io.ErrShortWrite) {
+		t.Fatalf("appendReplaySuffix() error = %v, want short-write error", err)
+	}
+	if string(file.data) != "prefix" {
+		t.Fatalf("partial append data = %q, want original prefix", file.data)
+	}
+
+	file.maxWrite = -1
+	if err := appendReplaySuffix(file, []byte("-suffix")); err != nil {
+		t.Fatalf("retry appendReplaySuffix(): %v", err)
+	}
+	if string(file.data) != "prefix-suffix" {
+		t.Fatalf("retry append data = %q, want one suffix", file.data)
+	}
+}
+
+func TestAppendReplaySuffixRollsBackAfterSyncFailureForRetry(t *testing.T) {
+	file := &replayAppendTestFile{data: []byte("prefix"), syncFailures: 1}
+	if err := appendReplaySuffix(file, []byte("-suffix")); err == nil || !strings.Contains(err.Error(), "sync replay artifact append") {
+		t.Fatalf("appendReplaySuffix() error = %v, want sync error", err)
+	}
+	if string(file.data) != "prefix" {
+		t.Fatalf("sync-failed append data = %q, want original prefix", file.data)
+	}
+
+	if err := appendReplaySuffix(file, []byte("-suffix")); err != nil {
+		t.Fatalf("retry appendReplaySuffix(): %v", err)
+	}
+	if string(file.data) != "prefix-suffix" {
+		t.Fatalf("retry append data = %q, want one suffix", file.data)
+	}
+}
+
+type replayAppendTestFile struct {
+	data         []byte
+	position     int64
+	maxWrite     int
+	syncFailures int
+}
+
+func (file *replayAppendTestFile) Write(data []byte) (int, error) {
+	count := len(data)
+	if file.maxWrite > 0 && count > file.maxWrite {
+		count = file.maxWrite
+	}
+	end := int(file.position) + count
+	if end > len(file.data) {
+		file.data = append(file.data, make([]byte, end-len(file.data))...)
+	}
+	copy(file.data[int(file.position):end], data[:count])
+	file.position = int64(end)
+	return count, nil
+}
+
+func (file *replayAppendTestFile) Seek(offset int64, whence int) (int64, error) {
+	if whence != io.SeekEnd || offset != 0 {
+		return 0, errors.New("test append file only supports seeking to end")
+	}
+	file.position = int64(len(file.data))
+	return file.position, nil
+}
+
+func (file *replayAppendTestFile) Sync() error {
+	if file.syncFailures > 0 {
+		file.syncFailures--
+		return errors.New("injected sync failure")
+	}
+	return nil
+}
+
+func (file *replayAppendTestFile) Truncate(size int64) error {
+	if size < 0 || size > int64(len(file.data)) {
+		return errors.New("invalid test truncate size")
+	}
+	file.data = file.data[:size]
+	if file.position > size {
+		file.position = size
+	}
+	return nil
+}
+
+func (file *replayAppendTestFile) Close() error { return nil }
 
 func TestWriteAndReadFileFailuresAreActionable(t *testing.T) {
 	storage := NewLocal(runtime.GOOS)

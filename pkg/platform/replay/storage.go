@@ -29,6 +29,14 @@ type Appender interface {
 	AppendFile(string, []byte) error
 }
 
+type replayAppendFile interface {
+	io.Writer
+	io.Seeker
+	io.Closer
+	Sync() error
+	Truncate(int64) error
+}
+
 // Local is the policy-free local artifact adapter for one Wire-selected host
 // operating system.
 type Local struct {
@@ -102,32 +110,45 @@ func (local Local) AppendFile(path string, data []byte) error {
 		return fmt.Errorf("create replay artifact directory: %w", err)
 	}
 
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0o600)
 	if err != nil {
 		return fmt.Errorf("open replay artifact for append: %w", err)
 	}
-	closed := false
+	return appendReplaySuffix(file, data)
+}
+
+func appendReplaySuffix(file replayAppendFile, data []byte) (err error) {
 	defer func() {
-		if !closed {
-			_ = file.Close()
+		if closeErr := file.Close(); err == nil && closeErr != nil {
+			err = fmt.Errorf("close replay artifact append: %w", closeErr)
 		}
 	}()
 
+	originalSize, err := file.Seek(0, io.SeekEnd)
+	if err != nil {
+		return fmt.Errorf("locate replay artifact append position: %w", err)
+	}
 	written, err := file.Write(data)
 	if err != nil {
-		return fmt.Errorf("append replay artifact: %w", err)
+		return rollbackReplayAppend(file, originalSize, fmt.Errorf("append replay artifact: %w", err))
 	}
 	if written != len(data) {
-		return fmt.Errorf("append replay artifact: %w", io.ErrShortWrite)
+		return rollbackReplayAppend(file, originalSize, fmt.Errorf("append replay artifact: %w", io.ErrShortWrite))
 	}
 	if err := file.Sync(); err != nil {
-		return fmt.Errorf("sync replay artifact append: %w", err)
+		return rollbackReplayAppend(file, originalSize, fmt.Errorf("sync replay artifact append: %w", err))
 	}
-	if err := file.Close(); err != nil {
-		return fmt.Errorf("close replay artifact append: %w", err)
-	}
-	closed = true
 	return nil
+}
+
+func rollbackReplayAppend(file replayAppendFile, originalSize int64, cause error) error {
+	if err := file.Truncate(originalSize); err != nil {
+		return fmt.Errorf("%w; rollback replay artifact append: %w", cause, err)
+	}
+	if err := file.Sync(); err != nil {
+		return fmt.Errorf("%w; sync replay artifact rollback: %w", cause, err)
+	}
+	return cause
 }
 
 // ReadFile reads one artifact snapshot, retrying transient Windows replacement

@@ -48,12 +48,20 @@ func NewReplayRecordingSnapshotWriter(
 	write func(string, []byte) error,
 	appendFiles ...func(string, []byte) error,
 ) recordings.RecordingSnapshotWriter {
-	if write == nil {
-		return nil
-	}
 	var appendFile func(string, []byte) error
 	if len(appendFiles) > 0 && appendFiles[0] != nil {
 		appendFile = appendFiles[0]
+	}
+	return newReplayRecordingSnapshotWriter(write, appendFile, nil)
+}
+
+func newReplayRecordingSnapshotWriter(
+	write func(string, []byte) error,
+	appendFile func(string, []byte) error,
+	prepareAppend func(string) error,
+) recordings.RecordingSnapshotWriter {
+	if write == nil {
+		return nil
 	}
 	var stateMu sync.Mutex
 	v2States := make(map[string]*replayV2SnapshotState)
@@ -70,7 +78,7 @@ func NewReplayRecordingSnapshotWriter(
 				state = &replayV2SnapshotState{}
 				v2States[target] = state
 			}
-			return writeReplayV2Snapshot(target, redacted, appendFile, state)
+			return writeReplayV2Snapshot(target, redacted, appendFile, prepareAppend, state)
 		}
 
 		return writeReplayV1Snapshot(target, redacted, write)
@@ -78,6 +86,7 @@ func NewReplayRecordingSnapshotWriter(
 }
 
 type replayV2SnapshotState struct {
+	targetPrepared  bool
 	headerEmitted   bool
 	persistedEvents int
 	terminalEmitted bool
@@ -136,6 +145,7 @@ func writeReplayV2Snapshot(
 	target string,
 	snapshot recordings.RecordingSnapshot,
 	appendFile func(string, []byte) error,
+	prepareAppend func(string) error,
 	state *replayV2SnapshotState,
 ) error {
 	if appendFile == nil {
@@ -166,6 +176,12 @@ func writeReplayV2Snapshot(
 	}
 	if len(events) == 0 && snapshot.Status.FinalizedAt == nil {
 		return nil
+	}
+	if !state.targetPrepared && prepareAppend != nil {
+		if err := prepareAppend(target); err != nil {
+			return fmt.Errorf("%w at %q: prepare replay v2 target: %w", recordings.ErrRecordingSnapshotWrite, target, err)
+		}
+		state.targetPrepared = true
 	}
 
 	if err := writeReplayV2Header(target, snapshot, artifact, appendFile, state); err != nil {

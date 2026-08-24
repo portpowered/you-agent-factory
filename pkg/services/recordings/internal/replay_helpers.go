@@ -1,8 +1,11 @@
 package internal
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"os"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -39,7 +42,11 @@ func NewRuntimeRootWithHistoricalQueryAndAppender(
 	var writer recordings.RecordingSnapshotWriter
 	var tickers recordings.RecordingFlushTickerFactory
 	if writeFile != nil {
-		writer = NewReplayRecordingSnapshotWriter(writeFile, appendFile)
+		writer = newReplayRecordingSnapshotWriter(
+			writeFile,
+			appendFile,
+			replayV2TargetPreparation(readFile),
+		)
 		tickers = NewRecordingFlushTickerFactory()
 	}
 	service := NewServiceWithLifecycleEffectsAndHistoricalQueryAndLoggerAndReplaySource(
@@ -65,6 +72,25 @@ func NewRuntimeRootWithHistoricalQueryAndAppender(
 	root.replayConfigDecoder = decodeRuntimeConfig
 	root.replayInputs = replayInputs
 	return root
+}
+
+func replayV2TargetPreparation(readFile recordings.RecordingReadFile) func(string) error {
+	if readFile == nil {
+		return nil
+	}
+	return func(target string) error {
+		data, err := readFile(target)
+		if err == nil {
+			if len(bytes.TrimSpace(data)) != 0 {
+				return fmt.Errorf("replay v2 target already contains data")
+			}
+			return nil
+		}
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("read replay v2 target: %w", err)
+	}
 }
 
 // NewServiceWithLifecycleEffectsAndHistoricalQueryAndLoggerAndReplaySource

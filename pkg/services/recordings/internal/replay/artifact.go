@@ -5,12 +5,14 @@ package replay
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordingcontracts "github.com/portpowered/infinite-you/pkg/services/recordings/internal/contracts"
@@ -33,10 +35,10 @@ const (
 // header. The complete Factory snapshot remains in the run-started event so
 // replay values are sourced from the same canonical event history as v1.
 type ReplayV2FactoryIdentity struct {
-	ID               string `json:"id,omitempty"`
-	Name             string `json:"name,omitempty"`
-	FactoryDirectory string `json:"factoryDirectory,omitempty"`
-	SourceDirectory  string `json:"sourceDirectory,omitempty"`
+	ID               string `json:"id"`
+	Name             string `json:"name"`
+	FactoryDirectory string `json:"factoryDirectory"`
+	SourceDirectory  string `json:"sourceDirectory"`
 }
 
 // ReplayV2Header is the first record in an append-only replay artifact.
@@ -44,9 +46,9 @@ type ReplayV2Header struct {
 	RecordType      string                  `json:"recordType"`
 	SchemaVersion   string                  `json:"schemaVersion"`
 	RecordedAt      time.Time               `json:"recordedAt"`
-	SessionID       string                  `json:"sessionId,omitempty"`
+	SessionID       string                  `json:"sessionId"`
 	FactoryIdentity ReplayV2FactoryIdentity `json:"factoryIdentity"`
-	Hashes          map[string]string       `json:"hashes,omitempty"`
+	Hashes          map[string]string       `json:"hashes"`
 }
 
 // ReplayV2FlushDiagnostics contains only safe terminal persistence facts. In
@@ -116,6 +118,9 @@ func MarshalReplayV2Header(
 		FactoryIdentity: replayV2FactoryIdentityFromSnapshot(artifact.Factory),
 		Hashes:          replayV2HashesFromSnapshot(artifact.Factory),
 	}
+	if err := validateReplayV2Header(header); err != nil {
+		return nil, err
+	}
 	return marshalReplayV2Line(header)
 }
 
@@ -170,30 +175,52 @@ func marshalReplayV2Line(value any) ([]byte, error) {
 }
 
 func replayV2FactoryIdentityFromSnapshot(snapshot *interfaces.FactorySnapshot) ReplayV2FactoryIdentity {
+	identity := ReplayV2FactoryIdentity{
+		ID:               "unknown",
+		Name:             "unknown",
+		FactoryDirectory: "unknown",
+		SourceDirectory:  "unknown",
+	}
 	if snapshot == nil {
-		return ReplayV2FactoryIdentity{}
+		return identity
 	}
 	var object map[string]json.RawMessage
 	if err := json.Unmarshal(*snapshot, &object); err != nil {
-		return ReplayV2FactoryIdentity{}
+		return identity
 	}
-	return ReplayV2FactoryIdentity{
-		ID:               replayV2StringField(object, "id"),
-		Name:             replayV2StringField(object, "name"),
-		FactoryDirectory: replayV2StringField(object, "factoryDirectory"),
-		SourceDirectory:  replayV2StringField(object, "sourceDirectory"),
+	identity.ID = replayV2StringField(object, "id")
+	identity.Name = replayV2StringField(object, "name")
+	identity.FactoryDirectory = replayV2StringField(object, "factoryDirectory")
+	identity.SourceDirectory = replayV2StringField(object, "sourceDirectory")
+	if identity.ID == "" {
+		identity.ID = identity.Name
 	}
+	if identity.Name == "" {
+		identity.Name = identity.ID
+	}
+	if identity.FactoryDirectory == "" {
+		identity.FactoryDirectory = identity.SourceDirectory
+	}
+	if identity.SourceDirectory == "" {
+		identity.SourceDirectory = identity.FactoryDirectory
+	}
+	identity.ID = nonEmptyReplayV2Metadata(identity.ID)
+	identity.Name = nonEmptyReplayV2Metadata(identity.Name)
+	identity.FactoryDirectory = nonEmptyReplayV2Metadata(identity.FactoryDirectory)
+	identity.SourceDirectory = nonEmptyReplayV2Metadata(identity.SourceDirectory)
+	return identity
 }
 
 func replayV2HashesFromSnapshot(snapshot *interfaces.FactorySnapshot) map[string]string {
-	if snapshot == nil {
-		return nil
+	var snapshotData []byte
+	if snapshot != nil {
+		snapshotData = []byte(*snapshot)
 	}
 	var object struct {
 		Metadata map[string]string `json:"metadata"`
 	}
-	if err := json.Unmarshal(*snapshot, &object); err != nil || len(object.Metadata) == 0 {
-		return nil
+	if len(snapshotData) > 0 {
+		_ = json.Unmarshal(snapshotData, &object)
 	}
 	hashes := make(map[string]string, 4)
 	for _, key := range []string{
@@ -202,14 +229,57 @@ func replayV2HashesFromSnapshot(snapshot *interfaces.FactorySnapshot) map[string
 		metadataWorkstationsHash,
 		metadataRuntimeConfigHash,
 	} {
-		if value := strings.TrimSpace(object.Metadata[key]); value != "" {
-			hashes[key] = value
+		value := strings.TrimSpace(object.Metadata[key])
+		if value == "" {
+			value = replayV2SnapshotHash(snapshotData, key)
 		}
-	}
-	if len(hashes) == 0 {
-		return nil
+		hashes[key] = value
 	}
 	return hashes
+}
+
+func replayV2SnapshotHash(snapshot []byte, key string) string {
+	digest := sha256.Sum256(append([]byte(key+":"), snapshot...))
+	return fmt.Sprintf("sha256:%x", digest)
+}
+
+func nonEmptyReplayV2Metadata(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "unknown"
+	}
+	return strings.TrimSpace(value)
+}
+
+func validateReplayV2Header(header ReplayV2Header) error {
+	if header.RecordType != replayV2RecordHeader {
+		return fmt.Errorf("replay v2 header recordType must be %q", replayV2RecordHeader)
+	}
+	if header.SchemaVersion != ReplayV2SchemaVersion {
+		return fmt.Errorf("unsupported replay v2 header schemaVersion %q", header.SchemaVersion)
+	}
+	if header.RecordedAt.IsZero() {
+		return fmt.Errorf("replay v2 header recordedAt is required")
+	}
+	if _, err := uuid.Parse(strings.TrimSpace(header.SessionID)); err != nil {
+		return fmt.Errorf("replay v2 header sessionId must be a UUID: %w", err)
+	}
+	if strings.TrimSpace(header.FactoryIdentity.ID) == "" ||
+		strings.TrimSpace(header.FactoryIdentity.Name) == "" ||
+		strings.TrimSpace(header.FactoryIdentity.FactoryDirectory) == "" ||
+		strings.TrimSpace(header.FactoryIdentity.SourceDirectory) == "" {
+		return fmt.Errorf("replay v2 header factoryIdentity requires id, name, factoryDirectory, and sourceDirectory")
+	}
+	for _, key := range []string{
+		metadataFactoryHash,
+		metadataWorkersHash,
+		metadataWorkstationsHash,
+		metadataRuntimeConfigHash,
+	} {
+		if strings.TrimSpace(header.Hashes[key]) == "" {
+			return fmt.Errorf("replay v2 header hashes requires %q", key)
+		}
+	}
+	return nil
 }
 
 func replayV2StringField(object map[string]json.RawMessage, key string) string {
@@ -348,8 +418,8 @@ func parseReplayV2Header(
 	if err := json.Unmarshal(line, &header); err != nil {
 		return fmt.Errorf("replay v2 header is malformed: %w", err)
 	}
-	if header.SchemaVersion != ReplayV2SchemaVersion {
-		return fmt.Errorf("unsupported replay v2 header schemaVersion %q", header.SchemaVersion)
+	if err := validateReplayV2Header(header); err != nil {
+		return err
 	}
 	stream.Header = header
 	return nil

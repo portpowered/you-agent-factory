@@ -422,6 +422,22 @@ func TestRun_RecordOrReplayPathPassedToServiceConfig(t *testing.T) {
 	}
 }
 
+func TestPrepareCanonicalSessionIDForExplicitJSONLRecording(t *testing.T) {
+	wantID := "00000000-0000-4000-8000-000000000006"
+	cfg, err := prepareCanonicalSessionIDForRun(RunConfig{
+		RecordPath: "explicit.jsonl",
+		CanonicalSessionIDGenerator: func() string {
+			return wantID
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepareCanonicalSessionIDForRun(): %v", err)
+	}
+	if cfg.CanonicalSessionID != wantID {
+		t.Fatalf("canonical session ID = %q, want %q", cfg.CanonicalSessionID, wantID)
+	}
+}
+
 func recordOrReplayPathCases() []recordOrReplayPathCase {
 	return []recordOrReplayPathCase{
 		{

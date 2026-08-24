@@ -15,6 +15,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
+const replayV2TestSessionID = "00000000-0000-4000-8000-000000000001"
+
 func TestArtifactFromEventStream_ParsesCanonicalEventStreamAndSkipsTruncatedTail(t *testing.T) {
 	artifact := testReplayArtifact(t,
 		replayWorkRequestEvent(t, "request-1", 1, "api", []factoryapi.Work{{
@@ -68,7 +70,7 @@ func replayV2FixtureData(
 	finishedAt time.Time,
 ) []byte {
 	t.Helper()
-	header := mustReplayV2Header(t, artifact, "session-v2")
+	header := mustReplayV2Header(t, artifact, replayV2TestSessionID)
 	data := append([]byte(nil), header...)
 	for _, event := range artifact.Events {
 		data = append(data, mustReplayV2Event(t, event)...)
@@ -123,7 +125,7 @@ func assertReplayV2RoundTrip(
 	if len(stream.Events) != len(original.Events) {
 		t.Fatalf("v2 event count = %d, want %d", len(stream.Events), len(original.Events))
 	}
-	if stream.Header.SchemaVersion != ReplayV2SchemaVersion || stream.Header.SessionID != "session-v2" {
+	if stream.Header.SchemaVersion != ReplayV2SchemaVersion || stream.Header.SessionID != replayV2TestSessionID {
 		t.Fatalf("v2 header identity = %#v", stream.Header)
 	}
 	if stream.Header.FactoryIdentity.Name != "artifact-test-factory" || stream.Header.Hashes[metadataFactoryHash] != "sha256:abc" {
@@ -163,7 +165,7 @@ func assertReplayV2Event(
 func TestReplayV2TruncatedTailPreservesCompletePrefix(t *testing.T) {
 	recordedAt := time.Date(2026, 8, 23, 11, 0, 0, 0, time.UTC)
 	original := minimalValidArtifact(recordedAt)
-	header, err := MarshalReplayV2Header(original, "session-truncated")
+	header, err := MarshalReplayV2Header(original, replayV2TestSessionID)
 	if err != nil {
 		t.Fatalf("MarshalReplayV2Header: %v", err)
 	}
@@ -184,7 +186,7 @@ func TestReplayV2TruncatedTailPreservesCompletePrefix(t *testing.T) {
 func TestReplayV2AcceptsEmptyFinalizedRecording(t *testing.T) {
 	finishedAt := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
 	artifact := &interfaces.ReplayArtifact{RecordedAt: finishedAt}
-	header, err := MarshalReplayV2Header(artifact, "empty-session")
+	header, err := MarshalReplayV2Header(artifact, replayV2TestSessionID)
 	if err != nil {
 		t.Fatalf("MarshalReplayV2Header: %v", err)
 	}
@@ -201,6 +203,56 @@ func TestReplayV2AcceptsEmptyFinalizedRecording(t *testing.T) {
 	}
 }
 
+func TestParseReplayV2RejectsHeadersMissingRequiredMetadata(t *testing.T) {
+	valid := ReplayV2Header{
+		RecordType:    replayV2RecordHeader,
+		SchemaVersion: ReplayV2SchemaVersion,
+		RecordedAt:    time.Date(2026, 8, 23, 12, 30, 0, 0, time.UTC),
+		SessionID:     replayV2TestSessionID,
+		FactoryIdentity: ReplayV2FactoryIdentity{
+			ID:               "factory-1",
+			Name:             "factory",
+			FactoryDirectory: "factory",
+			SourceDirectory:  "factory/source",
+		},
+		Hashes: map[string]string{
+			metadataFactoryHash:       "sha256:factory",
+			metadataWorkersHash:       "sha256:workers",
+			metadataWorkstationsHash:  "sha256:workstations",
+			metadataRuntimeConfigHash: "sha256:runtime",
+		},
+	}
+	tests := map[string]func(*ReplayV2Header){
+		"record type":      func(header *ReplayV2Header) { header.RecordType = "" },
+		"recorded at":      func(header *ReplayV2Header) { header.RecordedAt = time.Time{} },
+		"session UUID":     func(header *ReplayV2Header) { header.SessionID = "session-1" },
+		"factory identity": func(header *ReplayV2Header) { header.FactoryIdentity.Name = "" },
+		"hash":             func(header *ReplayV2Header) { delete(header.Hashes, metadataWorkersHash) },
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			header := valid
+			header.Hashes = mapsClone(valid.Hashes)
+			mutate(&header)
+			data, err := json.Marshal(header)
+			if err != nil {
+				t.Fatalf("marshal invalid header: %v", err)
+			}
+			if _, err := ParseReplayV2(append(data, '\n')); err == nil {
+				t.Fatal("ParseReplayV2() error = nil, want required-header validation error")
+			}
+		})
+	}
+}
+
+func mapsClone(values map[string]string) map[string]string {
+	clone := make(map[string]string, len(values))
+	for key, value := range values {
+		clone[key] = value
+	}
+	return clone
+}
+
 func TestReplayV2RejectsDuplicateTerminalAndMissingHeader(t *testing.T) {
 	finishedAt := time.Date(2026, 8, 23, 13, 0, 0, 0, time.UTC)
 	terminal, err := MarshalReplayV2Terminal(finishedAt, "FINALIZED", ReplayV2FlushDiagnostics{})
@@ -211,7 +263,7 @@ func TestReplayV2RejectsDuplicateTerminalAndMissingHeader(t *testing.T) {
 		t.Fatal("ParseReplayV2() error = nil, want missing-header error")
 	}
 	artifact := &interfaces.ReplayArtifact{RecordedAt: finishedAt}
-	header, err := MarshalReplayV2Header(artifact, "duplicate-terminal")
+	header, err := MarshalReplayV2Header(artifact, replayV2TestSessionID)
 	if err != nil {
 		t.Fatalf("MarshalReplayV2Header: %v", err)
 	}
@@ -223,7 +275,7 @@ func TestReplayV2RejectsDuplicateTerminalAndMissingHeader(t *testing.T) {
 func TestLoad_MalformedV2DoesNotFallBackToV1Decoder(t *testing.T) {
 	header, err := MarshalReplayV2Header(
 		&interfaces.ReplayArtifact{RecordedAt: time.Date(2026, 8, 23, 13, 30, 0, 0, time.UTC)},
-		"malformed-v2",
+		replayV2TestSessionID,
 	)
 	if err != nil {
 		t.Fatalf("MarshalReplayV2Header: %v", err)
