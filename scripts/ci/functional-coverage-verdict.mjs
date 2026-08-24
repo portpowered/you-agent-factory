@@ -29,21 +29,11 @@ function normalizedLines(log) {
 
 function isCompactVerdictLine(line) {
 	return (
-		line === advisoryPolicyBanner ||
-		line.startsWith("Package floors and missing-manifest findings are report-only") ||
-		line.startsWith("Set -package-floor-policy=blocking to restore blocking enforcement.") ||
 		line.startsWith(inventoryPrefix) ||
 		line.startsWith("total: (statements)") ||
 		line.startsWith("Functional package coverage verdict:") ||
-		line.startsWith("  floor violation:") ||
-		line.startsWith("  floor hold:") ||
-		line === "  floor violations: none" ||
 		line.startsWith("  package=") ||
 		line.startsWith("  tally:") ||
-		line.startsWith("package coverage regression:") ||
-		line.startsWith("package coverage hold:") ||
-		line.startsWith("coverage manifest missing entry:") ||
-		line.startsWith("coverage not evaluated:") ||
 		/^(?:go|Go) coverage (?:found |.* below minimum |.* meets minimum )/.test(line)
 	);
 }
@@ -107,11 +97,11 @@ export function extractFunctionalCoverageVerdict(log) {
 	}
 
 	const tail = lines.slice(inventoryIndex);
-	const advisoryLines = lines.filter(isAdvisoryPolicyLine);
-	const verdictLines = [
+	const advisoryLines = [...new Set(lines.filter(isAdvisoryPolicyLine))];
+	const verdictLines = [...new Set([
 		...advisoryLines,
 		...tail.filter((line) => isCompactVerdictLine(line) && !isAdvisoryPolicyLine(line)),
-	];
+	])];
 	const text = verdictLines.length > 0 ? `${verdictLines.join("\n")}\n` : "";
 	return {
 		foundInventory: true,
