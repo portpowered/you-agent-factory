@@ -17,7 +17,10 @@ const roleTokensSourcePath = path.join(
   packageStylesDir,
   "color-role-tokens.css",
 );
-const stylesSourcePath = path.join(stylesDir, "..", "styles.css");
+const foundationPresetsSourcePath = path.join(
+  packageStylesDir,
+  "color-palette-presets.css",
+);
 
 const PRODUCT_AF_ROLE_PAIRS: ReadonlyArray<
   readonly [afToken: string, roleToken: string]
@@ -89,7 +92,7 @@ function readFoundationHex(stylesSource: string, token: string): string {
     ),
   );
   if (!match?.[1]) {
-    throw new Error(`missing ${token} hex in styles.css`);
+    throw new Error(`missing ${token} hex in color-palette-presets.css`);
   }
   return match[1];
 }
@@ -106,7 +109,7 @@ describe("color-role-tokens product af-* wiring", () => {
 
 describe("color-role-tokens accent rebalance (US-003)", () => {
   const roleTokensSource = readFileSync(roleTokensSourcePath, "utf8");
-  const stylesSource = readFileSync(stylesSourcePath, "utf8");
+  const stylesSource = readFileSync(foundationPresetsSourcePath, "utf8");
 
   it("routes secondary and tertiary roles through calmer foundation accent keys", () => {
     expect(roleTokensSource).toContain(
