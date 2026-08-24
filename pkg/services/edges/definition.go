@@ -125,7 +125,7 @@ type Edges struct {
 		Check(context.Context, ModelHostCompatibilityRequest) error
 	}
 	ModelResolveBackendArtifact ModelResolveBackendArtifact
-	ModelInvocationBackend     ModelInvocationBackend
+	ModelInvocationBackend      ModelInvocationBackend
 	ModelRuntimeCommandRunner   platformprocess.CommandRunner
 	ModelRuntimeHTTPClient      interface {
 		Do(*http.Request) (*http.Response, error)
