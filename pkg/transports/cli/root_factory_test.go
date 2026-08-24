@@ -58,7 +58,14 @@ func TestLocalRunResolvesHomeOnceBeforeSystemInitialization(t *testing.T) {
 			return nil
 		},
 		RunFunc: func(ctx context.Context, _ startupcli.RunIntent, selection startupcli.RunSelection) error {
-			return runCLI(ctx, testRunConfig(selection))
+			cfg := testRunConfig(selection)
+			if cfg.StartupPreparation == nil {
+				return fmt.Errorf("run startup preparation is nil")
+			}
+			if err := cfg.StartupPreparation(ctx, true, cfg.StartupOutput); err != nil {
+				return err
+			}
+			return runCLI(ctx, cfg)
 		},
 	})
 	root.SetOut(&stdout)
@@ -159,7 +166,7 @@ func TestLocalServerResolvesHomeOnceBeforeSystemInitialization(t *testing.T) {
 			if cfg.StartupPreparation == nil {
 				return fmt.Errorf("server startup preparation is nil")
 			}
-			if err := cfg.StartupPreparation(ctx, true); err != nil {
+			if err := cfg.StartupPreparation(ctx, true, cfg.StartupOutput); err != nil {
 				return err
 			}
 			return runCLI(ctx, cfg)

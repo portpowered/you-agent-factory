@@ -1,9 +1,11 @@
 package run
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
@@ -272,7 +274,8 @@ func openHostedRuntime(
 	if buildRuntimeRequest == nil {
 		return nil, errors.New("construct local runtime: runtime opening request factory is required")
 	}
-	if err := prepareStartupBeforeRuntime(ctx, cfg); err != nil {
+	startupDisclosure, err := prepareStartupBeforeRuntime(ctx, cfg)
+	if err != nil {
 		return nil, err
 	}
 	operation, runtimeCfg, err := prepareHostedInvocation(
@@ -287,6 +290,7 @@ func openHostedRuntime(
 	onBound := newRuntimeHostObserver(
 		ctx, cfg, recordPath, requestedPort,
 		func() runtimeartifact.Diagnostics { return runtimeLogDiagnosticsForRunner(factorySvc) },
+		startupDisclosure,
 	)
 	if cfg.Port <= 0 {
 		emitVerboseStartupDiagnostics(cfg, recordPath, requestedPort)
@@ -303,6 +307,9 @@ func openHostedRuntime(
 	if factorySvc == nil {
 		closeRuntimeVisualizationSink(visualizations, visualizationSinkID)
 		return nil, fmt.Errorf("construct local runtime: builder returned nil runner")
+	}
+	if cfg.Port <= 0 {
+		startupDisclosure.commit()
 	}
 	replayMetadataWarnings := replayMetadataWarningsForRunner(factorySvc)
 	historicalReplay, hostedInvocation := hostedRuntimeCapabilities(factorySvc)
@@ -416,6 +423,7 @@ func newRuntimeHostObserver(
 	recordPath resolvedRunRecordPath,
 	requestedPort int,
 	diagnostics func() runtimeartifact.Diagnostics,
+	startupDisclosure *startupDisclosure,
 ) factorysessions.RuntimeHostObserver {
 	return func(binding factorysessions.RuntimeHostBinding) {
 		resolved := cfg
@@ -423,6 +431,10 @@ func newRuntimeHostObserver(
 			resolved.BindHost = binding.Host
 		}
 		resolved.Port = binding.Port
+		// Hosted startup prepares the disclosure before opening the runtime, then
+		// commits it only after binding succeeds so a listener failure remains
+		// free of human startup output.
+		startupDisclosure.commit()
 		emitStartupDetails(resolved, diagnostics())
 		emitVerboseStartupDiagnostics(resolved, recordPath, requestedPort)
 		if shouldOpenDashboard(resolved) {
@@ -434,12 +446,48 @@ func newRuntimeHostObserver(
 // prepareStartupBeforeRuntime is the one-way process boundary for hosted
 // runs. Runtime opening owns log/metrics creation and listener setup, so the
 // process-owned preparation gate must complete before either effect occurs.
-func prepareStartupBeforeRuntime(ctx context.Context, cfg RunConfig) error {
-	if cfg.StartupPreparation != nil {
-		return cfg.StartupPreparation(ctx, true)
+type startupDisclosure struct {
+	output io.Writer
+	staged *bytes.Buffer
+}
+
+func (disclosure *startupDisclosure) commit() {
+	if disclosure == nil || disclosure.staged == nil || disclosure.output == nil {
+		return
 	}
-	emitHomeDirectoryDisclosure(cfg)
-	return nil
+	_, _ = io.Copy(disclosure.output, disclosure.staged)
+	disclosure.staged = nil
+}
+
+func prepareStartupBeforeRuntime(ctx context.Context, cfg RunConfig) (*startupDisclosure, error) {
+	discloseHome := startupDisclosureEnabled(cfg)
+	var disclosure *startupDisclosure
+	var disclosureOutput io.Writer = cfg.StartupOutput
+	if discloseHome && cfg.StartupOutput != nil &&
+		(cfg.DeferHomeDisclosureUntilHostReady || hasRecordingInput(cfg)) {
+		staged := &bytes.Buffer{}
+		disclosure = &startupDisclosure{output: cfg.StartupOutput, staged: staged}
+		disclosureOutput = staged
+	}
+	if cfg.StartupPreparation != nil {
+		if err := cfg.StartupPreparation(ctx, discloseHome, disclosureOutput); err != nil {
+			return nil, err
+		}
+		return disclosure, nil
+	}
+	if discloseHome {
+		emitHomeDirectoryDisclosureTo(cfg, disclosureOutput)
+	}
+	return disclosure, nil
+}
+
+func startupDisclosureEnabled(cfg RunConfig) bool {
+	return cfg.StartupOutput != nil && !cfg.JSON && !cfg.JSONOutput &&
+		!cfg.CleanInvocation && !cfg.SuppressDashboardRendering && !cfg.InvocationOutputExplicit
+}
+
+func hasRecordingInput(cfg RunConfig) bool {
+	return strings.TrimSpace(cfg.ReplayPath) != "" || strings.TrimSpace(cfg.ResumePath) != ""
 }
 
 func emitStartupMessages(cfg RunConfig, runtimeLog runtimeartifact.Diagnostics) bool {
@@ -486,13 +534,17 @@ func emitStartupDetails(cfg RunConfig, runtimeLog runtimeartifact.Diagnostics) b
 }
 
 func emitHomeDirectoryDisclosure(cfg RunConfig) {
-	if cfg.StartupOutput == nil ||
+	emitHomeDirectoryDisclosureTo(cfg, cfg.StartupOutput)
+}
+
+func emitHomeDirectoryDisclosureTo(cfg RunConfig, output io.Writer) {
+	if output == nil ||
 		strings.TrimSpace(cfg.HomeDir) == "" ||
 		cfg.JSON || cfg.JSONOutput || cfg.CleanInvocation ||
 		cfg.SuppressDashboardRendering || cfg.InvocationOutputExplicit {
 		return
 	}
-	_, _ = fmt.Fprintf(cfg.StartupOutput, "Home directory: %s\n", cfg.HomeDir)
+	_, _ = fmt.Fprintf(output, "Home directory: %s\n", cfg.HomeDir)
 }
 
 // DiscloseHomeDirectory writes the human startup home line using the same

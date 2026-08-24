@@ -513,7 +513,7 @@ func (operation *Operation) prepareStartup(ctx context.Context, discloseHome boo
 		return nil
 	}
 	if operation.cfg.StartupPreparation != nil {
-		if err := operation.cfg.StartupPreparation(ctx, discloseHome); err != nil {
+		if err := operation.cfg.StartupPreparation(ctx, discloseHome, operation.cfg.StartupOutput); err != nil {
 			return err
 		}
 		operation.startupPrepared = true

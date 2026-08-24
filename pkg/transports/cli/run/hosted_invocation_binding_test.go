@@ -1,8 +1,11 @@
 package run
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
@@ -12,6 +15,63 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
+
+func TestOpenHostedRuntimePreparesHomeBeforeRuntimeOpening(t *testing.T) {
+	var output bytes.Buffer
+	var events []string
+	operation, err := openHostedRuntime(
+		t.Context(),
+		RunConfig{
+			HomeDir:                           "operator-home",
+			StartupOutput:                     &output,
+			DeferHomeDisclosureUntilHostReady: true,
+			WithServer:                        true,
+			StartupPreparation: func(_ context.Context, discloseHome bool, writer io.Writer) error {
+				if !discloseHome {
+					t.Fatal("hosted startup did not request the home disclosure")
+				}
+				events = append(events, "home")
+				_, err := fmt.Fprintln(writer, "Home directory: operator-home")
+				return err
+			},
+		},
+		zap.NewNop(),
+		nil,
+		resolvedRunRecordPath{},
+		nil,
+		nil,
+		nil,
+		nil,
+		false,
+		0,
+		func(
+			_ context.Context,
+			_ *factorysessions.RuntimeOpeningRequest,
+			_ initializer.InvocationCancellation,
+			_ factorysessions.VisualizationSinkID,
+		) (initializer.LocalRuntimeRunner, error) {
+			events = append(events, "runtime log and metrics")
+			return runFuncRunner(func(context.Context) error { return nil }), nil
+		},
+		func(RunConfig, *workers.MockWorkersConfig) *factorysessions.RuntimeOpeningRequest {
+			return &factorysessions.RuntimeOpeningRequest{}
+		},
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("openHostedRuntime() error = %v", err)
+	}
+	if operation == nil {
+		t.Fatal("openHostedRuntime() operation = nil")
+	}
+	if got, want := strings.Join(events, ","), "home,runtime log and metrics"; got != want {
+		t.Fatalf("startup events = %q, want %q", got, want)
+	}
+	if got, want := output.String(), "Home directory: operator-home\n"; got != want {
+		t.Fatalf("startup disclosure = %q, want %q after successful runtime opening", got, want)
+	}
+}
 
 func TestOpenHostedRuntimeUsesOpenedHostedInvocationCapability(t *testing.T) {
 	sessions := &hostedInvocationCapabilityFake{}

@@ -1,4 +1,4 @@
-package root_discovery_test
+package runtime_startup_test
 
 import (
 	"bytes"
@@ -161,3 +161,53 @@ func TestServerInitializationFailureStopsBeforeRuntimeArtifacts(t *testing.T) {
 		t.Fatalf("stderr = %q, want bounded contention diagnostic", stderr)
 	}
 }
+
+func executeFactoryArgs(
+	t *testing.T,
+	process interface{ Execute(root.Input) error },
+	workingDirectory string,
+	args []string,
+	stdoutIsTTY bool,
+	ctx context.Context,
+) (string, string, error) {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	stdinIsTTY := true
+	home := t.TempDir()
+	err := process.Execute(root.Input{
+		Args:             args,
+		Env:              append(os.Environ(), "HOME="+home, "USERPROFILE="+home),
+		Stdin:            strings.NewReader(""),
+		Stdout:           &stdout,
+		Stderr:           &stderr,
+		Context:          ctx,
+		WorkingDirectory: workingDirectory,
+		StdinIsTTY:       &stdinIsTTY,
+		StdoutIsTTY:      &stdoutIsTTY,
+	})
+	return stdout.String(), stderr.String(), err
+}
+
+const idleCurrentFactoryJSON = `{
+  "name": "current",
+  "workTypes": [
+    {
+      "name": "task",
+      "states": [
+        {"name": "init", "type": "INITIAL"},
+        {"name": "complete", "type": "TERMINAL"},
+        {"name": "failed", "type": "FAILED"}
+      ]
+    }
+  ],
+  "workers": [{"name": "processor"}],
+  "workstations": [
+    {
+      "name": "process",
+      "inputs": [{"workType": "task", "state": "init"}],
+      "outputs": [{"workType": "task", "state": "complete"}],
+      "onFailure": [{"workType": "task", "state": "failed"}],
+      "worker": "processor"
+    }
+  ]
+}`

@@ -64,34 +64,17 @@ func prepareRunFactoryConfig(
 	cfg.Verbose = policy.VerboseEnabled()
 	cfg.TerminalPolicy = policy
 	cfg.ExecutionBaseDir = startupcli.WorkingDirectory(cmd.Context())
-	remote := remotePlacementSelected(globals)
-	if !remote {
-		if err := resolveRunBindFromServer(cmd, globals.server, &cfg); err != nil {
-			return runcli.RunConfig{}, err
-		}
-		warnLegacyListenerBinding(cmd, cfg, defaultInvocation, persistentInputWasCLI(cmd, "you.flag.server", "server"))
-	}
-	homeDir, err := resolveProcessHomeDirForCommand(cmd, rootOptions)
+	homeDir, remote, err := prepareRunFactoryConfigInputs(
+		cmd,
+		&cfg,
+		promptArgs,
+		globals,
+		policy,
+		rootOptions,
+		defaultInvocation,
+	)
 	if err != nil {
 		return runcli.RunConfig{}, err
-	}
-	cfg.HomeDir = homeDir
-	cfg.JSON = globals.json
-	cfg.JSONOutput = globals.json
-	cfg.CleanInvocation = preliminaryRunInvocationOutputIsClean(cmd, cfg, promptArgs)
-	if defaultInvocation {
-		// The default server invocation is a hosted human run even when Cobra
-		// receives non-TTY streams. Keep the preliminary gate from classifying
-		// its selected factory as a clean one-shot invocation.
-		cfg.CleanInvocation = false
-	}
-	if !remote {
-		if !cfg.CleanInvocation && !cfg.InvocationOutputExplicit {
-			cfg.StartupOutput = policy.HumanTerminalWriter(cmd.OutOrStdout())
-		}
-		if err := prepareRunStartup(cmd, &cfg, rootOptions); err != nil {
-			return runcli.RunConfig{}, err
-		}
 	}
 	if err := configureRunEnvironment(cmd, &cfg, rootOptions, homeDir); err != nil {
 		return runcli.RunConfig{}, err
@@ -123,7 +106,58 @@ func prepareRunFactoryConfig(
 		return runcli.RunConfig{}, err
 	}
 	configureRunFactoryOutput(cmd, &cfg, promptArgs, globals, policy)
+	if err := prepareRunFactoryStartup(cmd, &cfg, rootOptions, remote); err != nil {
+		return runcli.RunConfig{}, err
+	}
 	return cfg, nil
+}
+
+func prepareRunFactoryConfigInputs(
+	cmd *cobra.Command,
+	cfg *runcli.RunConfig,
+	promptArgs []string,
+	globals *cliGlobalOptions,
+	policy terminalpolicy.Policy,
+	rootOptions CommandFactory,
+	defaultInvocation bool,
+) (string, bool, error) {
+	remote := remotePlacementSelected(globals)
+	if !remote {
+		if err := resolveRunBindFromServer(cmd, globals.server, cfg); err != nil {
+			return "", false, err
+		}
+		cfg.DeferHomeDisclosureUntilHostReady = cfg.ListenExplicit ||
+			persistentInputWasCLI(cmd, "you.flag.server", "server")
+		warnLegacyListenerBinding(cmd, *cfg, defaultInvocation, persistentInputWasCLI(cmd, "you.flag.server", "server"))
+	}
+	homeDir, err := resolveProcessHomeDirForCommand(cmd, rootOptions)
+	if err != nil {
+		return "", false, err
+	}
+	cfg.HomeDir = homeDir
+	cfg.JSON = globals.json
+	cfg.JSONOutput = globals.json
+	cfg.CleanInvocation = preliminaryRunInvocationOutputIsClean(cmd, *cfg, promptArgs)
+	if defaultInvocation {
+		// The default server invocation is a hosted human run even when Cobra
+		// receives non-TTY streams. Keep the preliminary gate from classifying
+		// its selected factory as a clean one-shot invocation.
+		cfg.CleanInvocation = false
+	}
+	if !remote && !cfg.CleanInvocation && !cfg.InvocationOutputExplicit {
+		cfg.StartupOutput = policy.HumanTerminalWriter(cmd.OutOrStdout())
+	}
+	if err := prepareRunSelectionStartup(cmd, cfg, rootOptions, remote); err != nil {
+		return "", false, err
+	}
+	return homeDir, remote, nil
+}
+
+func prepareRunFactoryStartup(cmd *cobra.Command, cfg *runcli.RunConfig, options CommandFactory, remote bool) error {
+	if remote {
+		return nil
+	}
+	return prepareRunStartup(cmd, cfg, options)
 }
 
 func validateRunFactoryOptions(cfg *runcli.RunConfig, defaultInvocation bool) error {
@@ -262,15 +296,39 @@ func runCommandUsesNamedFactory(cmd *cobra.Command, cfg runcli.RunConfig) bool {
 		!cmd.Flags().Changed("factory") && !cmd.Flags().Changed("dir")
 }
 
+func runFactorySelectionNeedsInitialization(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	return cmd.Flags().Changed("factory") || cmd.Flags().Changed("named") ||
+		persistentInputWasCLI(cmd, "you.run.flag.factory", "factory") ||
+		persistentInputWasCLI(cmd, "you.run.flag.named", "named")
+}
+
+func prepareRunSelectionStartup(
+	cmd *cobra.Command,
+	cfg *runcli.RunConfig,
+	options CommandFactory,
+	remote bool,
+) error {
+	if remote || !runFactorySelectionNeedsInitialization(cmd) {
+		return nil
+	}
+	if err := prepareRunStartup(cmd, cfg, options); err != nil {
+		return err
+	}
+	if cfg.StartupPreparation == nil {
+		return nil
+	}
+	discloseHome := !cfg.DeferHomeDisclosureUntilHostReady &&
+		!runHasRecordingInput(*cfg) && runStartupDisclosureEnabled(*cfg)
+	return cfg.StartupPreparation(cmd.Context(), discloseHome, cfg.StartupOutput)
+}
+
 func prepareRunStartup(cmd *cobra.Command, cfg *runcli.RunConfig, options CommandFactory) error {
 	startupAllowed, err := prepareRunSystemInitialization(cmd, cfg, options)
 	if err != nil {
 		return err
-	}
-	if startupAllowed {
-		if err := initializeSystemAtStartupBoundary(cmd, *cfg, options, runStartupDisclosureEnabled(*cfg)); err != nil {
-			return err
-		}
 	}
 	installRunStartupPreparation(cmd, cfg, options, startupAllowed)
 	return nil
@@ -281,23 +339,44 @@ func installRunStartupPreparation(cmd *cobra.Command, cfg *runcli.RunConfig, opt
 		return
 	}
 	if !startupAllowed {
-		cfg.StartupPreparation = func(context.Context, bool) error { return nil }
+		cfg.StartupPreparation = func(context.Context, bool, io.Writer) error { return nil }
 		return
 	}
 	homeDir := cfg.HomeDir
-	initializedBeforeRun := systemInitializationCompleted(cmd.Context())
-	homeDisclosedBeforeRun := homeDisclosureCompleted(cmd.Context())
-	cfg.StartupPreparation = func(ctx context.Context, discloseHome bool) error {
-		if discloseHome && !homeDisclosedBeforeRun {
-			runcli.DiscloseHomeDirectory(*cfg)
+	initialized := systemInitializationCompleted(cmd.Context())
+	homeDisclosed := homeDisclosureCompleted(cmd.Context())
+	recordingInputChecked := false
+	recordingInputBlocked := false
+	cfg.StartupPreparation = func(ctx context.Context, discloseHome bool, disclosureOutput io.Writer) error {
+		if discloseHome && !homeDisclosed {
+			disclosureCfg := *cfg
+			if disclosureOutput != nil {
+				disclosureCfg.StartupOutput = disclosureOutput
+			}
+			runcli.DiscloseHomeDirectory(disclosureCfg)
+			homeDisclosed = true
 		}
-		if initializedBeforeRun {
+		if !recordingInputChecked &&
+			(!runHasRecordingInput(*cfg) || discloseHome || !runStartupDisclosureEnabled(*cfg)) {
+			recordingInputChecked = true
+			recordingInputBlocked = !inspectRunRecordingInput(cmd, *cfg, options)
+		}
+		if recordingInputBlocked {
+			// Let the run transport report the deterministic missing or invalid
+			// recording input without activating global state.
+			return nil
+		}
+		if initialized {
 			return nil
 		}
 		if options.initializer == nil {
 			return errors.New("run service initializer is required")
 		}
-		return options.initializer.InitializeSystem(ctx, homeDir)
+		if err := options.initializer.InitializeSystem(ctx, homeDir); err != nil {
+			return err
+		}
+		initialized = true
+		return nil
 	}
 }
 
@@ -322,6 +401,25 @@ func prepareRunSystemInitialization(cmd *cobra.Command, cfg *runcli.RunConfig, o
 		return true, nil
 	}
 	return inspectRunFactoryActivation(cmd, *cfg, options, configPath), nil
+}
+
+func inspectRunRecordingInput(cmd *cobra.Command, cfg runcli.RunConfig, options CommandFactory) bool {
+	path := strings.TrimSpace(cfg.ReplayPath)
+	if path == "" {
+		path = strings.TrimSpace(cfg.ResumePath)
+	}
+	if path == "" || options.runInputPathInspector == nil {
+		return true
+	}
+	info, err := options.runInputPathInspector.Stat(resolveRunPath(cmd, path))
+	if err != nil {
+		return !errors.Is(err, fs.ErrNotExist)
+	}
+	return info != nil && info.Mode().IsRegular()
+}
+
+func runHasRecordingInput(cfg runcli.RunConfig) bool {
+	return strings.TrimSpace(cfg.ReplayPath) != "" || strings.TrimSpace(cfg.ResumePath) != ""
 }
 
 func inspectRunFactoryActivation(cmd *cobra.Command, cfg runcli.RunConfig, options CommandFactory, configPath string) bool {

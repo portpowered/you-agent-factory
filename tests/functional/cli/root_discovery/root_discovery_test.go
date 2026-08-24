@@ -25,6 +25,24 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
+func startupOutputValue(output, label string) string {
+	for _, line := range strings.Split(output, "\n") {
+		if strings.HasPrefix(line, label) {
+			return strings.TrimSpace(strings.TrimPrefix(line, label))
+		}
+	}
+	return ""
+}
+
+func pathUnderDirectory(path, directory string) bool {
+	path = filepath.Clean(path)
+	directory = filepath.Clean(directory)
+	if path == directory {
+		return true
+	}
+	return strings.HasPrefix(path, directory+string(os.PathSeparator))
+}
+
 // TestManifestProjectedRepresentativeHandlersAcceptCanonicalInputs proves the
 // generated Session and Work leaves reach their typed transport handlers through
 // the public process root with the canonical argument and flag shapes.

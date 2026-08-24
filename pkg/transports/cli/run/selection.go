@@ -100,61 +100,74 @@ func (s *selection) Open(
 		return nil, err
 	}
 	if s.directJavaScript.Supports(cfg.FactoryConfigPath) {
-		if err := prepareStartupBeforeRuntime(ctx, cfg); err != nil {
-			return nil, err
-		}
-		request := factorysessions.DirectJavaScriptRunRequest{
-			SourcePath: cfg.FactoryConfigPath, MockWorkersEnabled: cfg.MockWorkersEnabled,
-			JSONOutput: cfg.JSONOutput,
-		}
-		var observer factorysessions.RuntimeHostObserver
-		if intent.APIEnabled {
-			request.Host = &factorysessions.RuntimeHostRequest{
-				Directory: cfg.Dir, Host: cfg.BindHost, Port: cfg.Port, AutoPort: cfg.AutoPort,
-				Pprof: cfg.Pprof,
-			}
-			observer = newRuntimeHostObserver(
-				ctx, cfg, resolvedRunRecordPath{}, cfg.Port,
-				func() runtimeartifact.Diagnostics { return runtimeartifact.Diagnostics{} },
-			)
-		}
-		var scopeID factorysessions.OpeningScopeID
-		if s.presentations != nil {
-			scopeID, err = s.presentations.RegisterDirectJavaScript(factorysessions.DirectJavaScriptRunScope{
-				Output: cfg.Output, RuntimeHostObserver: observer,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("register direct JavaScript presentation: %w", err)
-			}
-			request.ScopeID = scopeID
-		}
-		runner, err := s.buildApplication(ctx, func(openCtx context.Context) (initializer.OpenedApplication, error) {
-			opened, err := s.directJavaScript.Open(openCtx, request, cfg.Cancellation)
-			if err != nil && s.presentations != nil {
-				s.presentations.Close(scopeID)
-			}
-			return initializer.OpenedApplication{Plan: opened.Plan}, err
-		})
-		if err != nil {
-			if s.presentations != nil {
-				s.presentations.Close(scopeID)
-			}
-			return nil, err
-		}
-		if runner == nil {
-			if s.presentations != nil {
-				s.presentations.Close(scopeID)
-			}
-			return nil, fmt.Errorf("direct JavaScript application builder returned nil runner")
-		}
-		if s.presentations == nil {
-			return runner, nil
-		}
-		return closeOnRun{application: runner, close: func() {
-			s.presentations.Close(scopeID)
-		}}, nil
+		return s.openDirectJavaScript(ctx, cfg, intent)
 	}
 	return s.open(ctx, cfg, s.buildRunner, s.invocation, s.presentation)
+}
+
+func (s *selection) openDirectJavaScript(
+	ctx context.Context,
+	cfg RunConfig,
+	intent processcontract.RunIntent,
+) (initializer.RunApplication, error) {
+	startupDisclosure, err := prepareStartupBeforeRuntime(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	request := factorysessions.DirectJavaScriptRunRequest{
+		SourcePath: cfg.FactoryConfigPath, MockWorkersEnabled: cfg.MockWorkersEnabled,
+		JSONOutput: cfg.JSONOutput,
+	}
+	var observer factorysessions.RuntimeHostObserver
+	if intent.APIEnabled {
+		request.Host = &factorysessions.RuntimeHostRequest{
+			Directory: cfg.Dir, Host: cfg.BindHost, Port: cfg.Port, AutoPort: cfg.AutoPort,
+			Pprof: cfg.Pprof,
+		}
+		observer = newRuntimeHostObserver(
+			ctx, cfg, resolvedRunRecordPath{}, cfg.Port,
+			func() runtimeartifact.Diagnostics { return runtimeartifact.Diagnostics{} },
+			startupDisclosure,
+		)
+	}
+	var scopeID factorysessions.OpeningScopeID
+	if s.presentations != nil {
+		scopeID, err = s.presentations.RegisterDirectJavaScript(factorysessions.DirectJavaScriptRunScope{
+			Output: cfg.Output, RuntimeHostObserver: observer,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("register direct JavaScript presentation: %w", err)
+		}
+		request.ScopeID = scopeID
+	}
+	runner, err := s.buildApplication(ctx, func(openCtx context.Context) (initializer.OpenedApplication, error) {
+		opened, err := s.directJavaScript.Open(openCtx, request, cfg.Cancellation)
+		if err != nil && s.presentations != nil {
+			s.presentations.Close(scopeID)
+		}
+		return initializer.OpenedApplication{Plan: opened.Plan}, err
+	})
+	if err != nil {
+		if s.presentations != nil {
+			s.presentations.Close(scopeID)
+		}
+		return nil, err
+	}
+	if runner == nil {
+		if s.presentations != nil {
+			s.presentations.Close(scopeID)
+		}
+		return nil, fmt.Errorf("direct JavaScript application builder returned nil runner")
+	}
+	if !intent.APIEnabled || s.presentations == nil {
+		startupDisclosure.commit()
+	}
+	if s.presentations == nil {
+		return runner, nil
+	}
+	return closeOnRun{application: runner, close: func() {
+		s.presentations.Close(scopeID)
+	}}, nil
 }
 
 type closeOnRun struct {
