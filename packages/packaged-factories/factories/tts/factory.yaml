@@ -45,10 +45,7 @@ workers:
     model: tts
     modelProvider: CODEX
     modelLocality: LOCAL
-    command: vibevoice-cpp
-    args:
-      - --grpc-endpoint
-      - http://127.0.0.1:50051
+    command: localai-vibevoice
     resources:
       - name: tts-cache
         capacity: 1
