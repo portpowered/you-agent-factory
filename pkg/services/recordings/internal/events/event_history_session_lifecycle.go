@@ -644,17 +644,7 @@ func (h *FactoryEventHistory) appendEventWithValidationAndProvenance(
 		}
 	}
 	h.events = append(h.events, event)
-	if h.sessionProjection != nil {
-		if err := h.sessionProjection.Apply(event); err != nil && h.sessionProjectionErr == nil {
-			h.sessionProjectionErr = err
-		}
-	}
-	if len(provenance) > 0 {
-		if h.secretProvenance == nil {
-			h.secretProvenance = make(map[string][]recordings.RecordingSecret)
-		}
-		h.secretProvenance[event.Id] = append([]recordings.RecordingSecret(nil), provenance...)
-	}
+	h.recordAppendedEventFactsLocked(event, provenance)
 	streams := make([]*eventHistorySubscription, 0, len(h.streams))
 	for _, stream := range h.streams {
 		streams = append(streams, stream)
@@ -681,6 +671,24 @@ func (h *FactoryEventHistory) appendEventWithValidationAndProvenance(
 	}
 	h.mu.Unlock()
 	return event.Clone(), nil
+}
+
+func (h *FactoryEventHistory) recordAppendedEventFactsLocked(
+	event interfaces.FactoryEvent,
+	provenance []recordings.RecordingSecret,
+) {
+	if h.sessionProjection != nil {
+		if err := h.sessionProjection.Apply(event); err != nil && h.sessionProjectionErr == nil {
+			h.sessionProjectionErr = err
+		}
+	}
+	if len(provenance) == 0 {
+		return
+	}
+	if h.secretProvenance == nil {
+		h.secretProvenance = make(map[string][]recordings.RecordingSecret)
+	}
+	h.secretProvenance[event.Id] = append([]recordings.RecordingSecret(nil), provenance...)
 }
 
 // SetInitialStructureFactory overrides the canonical Factory snapshot emitted
