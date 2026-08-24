@@ -37,6 +37,7 @@ type RuntimeMetricsCoordination interface {
 	TryLockRoot(string) (io.Closer, error)
 	Claim(string) (io.Closer, error)
 	TryClaim(string) (io.Closer, error)
+	TryClaimMarker(string) (io.Closer, error)
 }
 
 type runtimeMetricsCoordination struct{}
@@ -80,6 +81,10 @@ func (runtimeMetricsCoordination) TryClaim(path string) (io.Closer, error) {
 	return acquireRuntimeMetricsLock(context.Background(), path, runtimeMetricsClaimPath(path), false, true)
 }
 
+func (runtimeMetricsCoordination) TryClaimMarker(path string) (io.Closer, error) {
+	return acquireExistingRuntimeMetricsLock(path)
+}
+
 func acquireRuntimeMetricsLock(
 	ctx context.Context,
 	resourcePath, lockPath string,
@@ -92,11 +97,23 @@ func acquireRuntimeMetricsLock(
 	if err := prepareRuntimeMetricsCoordinationRoot(filepath.Dir(lockPath)); err != nil {
 		return nil, err
 	}
-	file, err := openRuntimeMetricsLockFile(lockPath)
+	file, err := openRuntimeMetricsLockFile(lockPath, true)
 	if err != nil {
 		return nil, err
 	}
 	return acquireRuntimeMetricsFile(ctx, file, lockPath, wait, artifactClaim)
+}
+
+func acquireExistingRuntimeMetricsLock(path string) (io.Closer, error) {
+	ctx, err := validateRuntimeMetricsCoordinationContext(context.Background(), path)
+	if err != nil {
+		return nil, err
+	}
+	file, err := openRuntimeMetricsLockFile(path, false)
+	if err != nil {
+		return nil, err
+	}
+	return acquireRuntimeMetricsFile(ctx, file, path, false, true)
 }
 
 func validateRuntimeMetricsCoordinationContext(
@@ -165,7 +182,7 @@ func acquireRuntimeMetricsFile(
 	}
 }
 
-func openRuntimeMetricsLockFile(path string) (*os.File, error) {
+func openRuntimeMetricsLockFile(path string, create bool) (*os.File, error) {
 	if info, err := os.Lstat(path); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
 			return nil, fmt.Errorf("runtime metrics coordination file %q is a symlink", path)
@@ -173,7 +190,11 @@ func openRuntimeMetricsLockFile(path string) (*os.File, error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("inspect runtime metrics coordination file %q: %w", path, err)
 	}
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	flags := os.O_RDWR
+	if create {
+		flags |= os.O_CREATE
+	}
+	file, err := os.OpenFile(path, flags, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("open runtime metrics coordination file %q: %w", path, err)
 	}
