@@ -32,6 +32,7 @@ var tracePID = regexp.MustCompile(`^\s*(?:\[pid\s+)?(\d+)(?:\])?\s+`)
 var traceFDPath = regexp.MustCompile(`(?:AT_FDCWD|\d+)<([^>]+)>`)
 var traceQuoted = regexp.MustCompile(`"(?:\\.|[^"\\])*"`)
 var resumedCall = regexp.MustCompile(`^<\.\.\.\s+([[:alnum:]_]+)\s+resumed>\s*`)
+var traceReturn = regexp.MustCompile(`\)\s*=\s*`)
 
 func auditTrace(repoRoot, initialCWD string, data []byte) (*SourceTreeReadError, error) {
 	canonicalRoot, err := canonicalPath(repoRoot, "")
@@ -109,7 +110,7 @@ func parseTraceRecord(line string) (traceRecord, bool) {
 	}
 	rest := strings.TrimSpace(line[lineOffset:])
 	if resumed := resumedCall.FindStringSubmatch(rest); len(resumed) == 2 {
-		end := strings.LastIndex(rest, ") = ")
+		end, resultStart := traceReturnBounds(rest)
 		if end < 0 {
 			return traceRecord{}, false
 		}
@@ -117,7 +118,7 @@ func parseTraceRecord(line string) (traceRecord, bool) {
 			line:    line,
 			pid:     pid,
 			name:    resumed[1],
-			result:  strings.TrimSpace(rest[end+4:]),
+			result:  strings.TrimSpace(rest[resultStart:]),
 			resumed: true,
 		}, true
 	}
@@ -126,7 +127,7 @@ func parseTraceRecord(line string) (traceRecord, bool) {
 		return traceRecord{}, false
 	}
 	name := strings.TrimSpace(rest[:open])
-	end := strings.LastIndex(rest, ") = ")
+	end, resultStart := traceReturnBounds(rest)
 	unfinished := false
 	if end < 0 {
 		end = strings.LastIndex(rest, " <unfinished ...>")
@@ -140,16 +141,25 @@ func parseTraceRecord(line string) (traceRecord, bool) {
 		pid:        pid,
 		name:       name,
 		args:       rest[open+1 : end],
-		result:     traceResult(rest, end, unfinished),
+		result:     traceResult(rest, resultStart, unfinished),
 		unfinished: unfinished,
 	}, true
 }
 
-func traceResult(rest string, end int, unfinished bool) string {
-	if unfinished {
+func traceReturnBounds(rest string) (int, int) {
+	matches := traceReturn.FindAllStringIndex(rest, -1)
+	if len(matches) == 0 {
+		return -1, -1
+	}
+	match := matches[len(matches)-1]
+	return match[0], match[1]
+}
+
+func traceResult(rest string, resultStart int, unfinished bool) string {
+	if unfinished || resultStart < 0 {
 		return ""
 	}
-	return strings.TrimSpace(rest[end+4:])
+	return strings.TrimSpace(rest[resultStart:])
 }
 
 func stateFor(states map[int]*traceState, pid int, initialCWD string) *traceState {
@@ -312,12 +322,19 @@ func cloneTraceState(state *traceState) *traceState {
 }
 
 func resultNumber(result string) (int, bool) {
-	fields := strings.Fields(result)
-	if len(fields) == 0 {
+	result = strings.TrimSpace(result)
+	if result == "" {
 		return 0, false
 	}
-	number, err := strconv.Atoi(fields[0])
-	return number, err == nil && number >= 0
+	end := 0
+	for end < len(result) && result[end] >= '0' && result[end] <= '9' {
+		end++
+	}
+	if end == 0 {
+		return 0, false
+	}
+	number, err := strconv.Atoi(result[:end])
+	return number, err == nil
 }
 
 func quotedValues(args string) []string {

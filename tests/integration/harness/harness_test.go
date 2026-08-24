@@ -127,6 +127,38 @@ func TestParseTraceRecordSupportsPidAndUnfinishedForms(t *testing.T) {
 	}
 }
 
+func TestParseTraceRecordSupportsPaddedDecodedResumedReturn(t *testing.T) {
+	resumed, ok := parseTraceRecord(`364   <... openat resumed>)             = 7</tmp/factory.json>`)
+	if !ok {
+		t.Fatal("failed to parse padded resumed strace record")
+	}
+	if resumed.pid != 364 || resumed.name != "openat" || !resumed.resumed || resumed.result != "7</tmp/factory.json>" {
+		t.Fatalf("padded resumed record = %#v", resumed)
+	}
+	if number, ok := resultNumber(resumed.result); !ok || number != 7 {
+		t.Fatalf("result number = (%d, %t), want (7, true)", number, ok)
+	}
+}
+
+func TestAuditTracePairsPaddedResumedRecords(t *testing.T) {
+	repoRoot := t.TempDir()
+	workDir := t.TempDir()
+	externalPath := filepath.Join(workDir, "factory.json")
+	trace := fmt.Sprintf(
+		"364 openat(AT_FDCWD<%s>, %q, O_RDONLY <unfinished ...>\n364 <... openat resumed>)             = 7<%s>\n",
+		filepath.ToSlash(workDir),
+		filepath.Base(externalPath),
+		filepath.ToSlash(externalPath),
+	)
+	violation, err := auditTrace(repoRoot, workDir, []byte(trace))
+	if err != nil {
+		t.Fatalf("audit trace: %v", err)
+	}
+	if violation != nil {
+		t.Fatalf("audit reported an external read: %v", violation)
+	}
+}
+
 func TestAuditTraceResolvesDirectoryDescriptorReads(t *testing.T) {
 	repoRoot := t.TempDir()
 	workDir := t.TempDir()
