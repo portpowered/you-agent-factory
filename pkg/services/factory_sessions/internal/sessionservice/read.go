@@ -155,3 +155,11 @@ func isSessionReadMiss(err error) bool {
 	return errors.Is(err, factorysessions.ErrSessionNotFound) ||
 		errors.Is(err, factorysessions.ErrDurableSessionNotFound)
 }
+
+func (a *Assembly) SubscribeFactoryResponseEvents(ctx context.Context, request factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error) {
+	owner, err := a.detachedOwner(request.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	return owner.SubscribeFactoryResponseEvents(ctx, request)
+}

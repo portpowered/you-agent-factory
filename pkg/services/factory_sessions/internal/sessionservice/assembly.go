@@ -990,11 +990,3 @@ func (a *Assembly) GetFactorySessionPartialResult(ctx context.Context, sessionID
 	}
 	return owner.GetFactorySessionPartialResult(ctx, sessionID)
 }
-
-func (a *Assembly) SubscribeFactoryResponseEvents(ctx context.Context, request factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error) {
-	owner, err := a.detachedOwner(request.SessionID)
-	if err != nil {
-		return nil, err
-	}
-	return owner.SubscribeFactoryResponseEvents(ctx, request)
-}
