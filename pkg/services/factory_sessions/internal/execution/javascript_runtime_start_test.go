@@ -1113,33 +1113,33 @@ func TestDurablePetriFailureHistorySnapshotGrowthIsBounded(t *testing.T) {
 	}
 }
 
-func failureMutation(history workerexecution.History, retry int) interfaces.TokenMutationRecord {
+func failureMutation(history workers.History, retry int) interfaces.TokenMutationRecord {
 	return interfaces.TokenMutationRecord{
 		DispatchID:   fmt.Sprintf("dispatch-%04d", retry),
 		TransitionID: "retry",
-		Outcome:      workerexecution.OutcomeFailed,
+		Outcome:      workers.OutcomeFailed,
 		Type:         interfaces.MutationMove,
 		TokenID:      fmt.Sprintf("token-%04d", retry),
 		FromPlace:    "task:running",
 		ToPlace:      "task:failed",
 		Reason:       "worker failed",
-		Token: &workerexecution.Token{
+		Token: &workers.Token{
 			ID:    fmt.Sprintf("token-%04d", retry),
 			State: "failed",
-			Color: workerexecution.Color{
+			Color: workers.Color{
 				WorkID:     "work-1",
 				WorkTypeID: "task",
-				DataType:   workerexecution.DataTypeWork,
+				DataType:   workers.DataTypeWork,
 			},
 			History: history,
 		},
 	}
 }
 
-func failureHistoryForRetryCount(count int) workerexecution.History {
-	log := make([]workerexecution.Failure, count)
+func failureHistoryForRetryCount(count int) workers.History {
+	log := make([]workers.Failure, count)
 	for index := range log {
-		log[index] = workerexecution.Failure{
+		log[index] = workers.Failure{
 			TransitionID: "retry",
 			Timestamp:    time.Date(2026, 8, 22, 12, 0, index, 0, time.UTC),
 			Error:        fmt.Sprintf("failure-%04d", index+1),
@@ -1150,7 +1150,7 @@ func failureHistoryForRetryCount(count int) workerexecution.History {
 	if len(log) > 0 {
 		lastError = log[len(log)-1].Error
 	}
-	return workerexecution.History{
+	return workers.History{
 		TotalVisits:         map[string]int{"retry": count},
 		ConsecutiveFailures: map[string]int{"retry": count},
 		PlaceVisits:         map[string]int{"task:failed": count},
