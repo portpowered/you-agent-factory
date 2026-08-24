@@ -1,11 +1,86 @@
 package cli
 
 import (
+	"context"
+	"fmt"
+	"io"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+const (
+	// A pull can take hours, but a fifteen-second heartbeat keeps a waiting
+	// operator informed without turning diagnostics into a transfer log.
+	modelPullProgressInterval = 15 * time.Second
+)
+
+type synchronizedWriter struct {
+	mu     sync.Mutex
+	output io.Writer
+}
+
+func newSynchronizedWriter(output io.Writer) io.Writer {
+	if output == nil {
+		return nil
+	}
+	return &synchronizedWriter{output: output}
+}
+
+func (writer *synchronizedWriter) Write(payload []byte) (int, error) {
+	if writer == nil || writer.output == nil {
+		return len(payload), nil
+	}
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	return writer.output.Write(payload)
+}
+
+func startPullProgress(
+	ctx context.Context,
+	modelName string,
+	output io.Writer,
+	interval time.Duration,
+) func() {
+	if output == nil || interval <= 0 {
+		return func() {}
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	started := time.Now()
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if ctx.Err() != nil {
+					return
+				}
+				_, _ = fmt.Fprintf(
+					output,
+					"models pull progress modelName=%q elapsed=%s\n",
+					strings.TrimSpace(modelName), time.Since(started).Round(time.Millisecond),
+				)
+			case <-ctx.Done():
+				return
+			case <-stop:
+				return
+			}
+		}
+	}()
+	return func() {
+		close(stop)
+		<-done
+	}
+}
 
 func pullResultToGenerated(result models.PullResult) factoryapi.ModelPullResponse {
 	files := make([]factoryapi.ModelPullDownloadedFile, 0, len(result.DownloadedFiles))

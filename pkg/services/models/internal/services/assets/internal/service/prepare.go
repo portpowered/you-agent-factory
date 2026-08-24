@@ -622,7 +622,10 @@ func copyStagedAsset(
 	assetPath string,
 ) (int64, string, error) {
 	hasher := sha256.New()
-	written, copyErr := io.Copy(io.MultiWriter(output, hasher), input)
+	written, copyErr := io.Copy(
+		io.MultiWriter(output, hasher),
+		contextAssetReader{ctx: ctx, input: input},
+	)
 	closeErr := output.Close()
 	if copyErr != nil {
 		if contextErr := assetContextError(ctx); contextErr != nil {

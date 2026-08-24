@@ -285,12 +285,13 @@ func (service *httpService) Pull(cfg PullConfig) error {
 		pullHTTP = service.http
 	}
 	response, err := pullModel(pullOptions{
-		Context:     cfg.Context,
-		Server:      cfg.Server,
-		ModelName:   modelName,
-		Verbose:     cfg.Verbose,
-		Diagnostics: cfg.Diagnostics,
-		HTTP:        pullHTTP,
+		Context:          cfg.Context,
+		Server:           cfg.Server,
+		ModelName:        modelName,
+		Verbose:          cfg.Verbose,
+		Diagnostics:      cfg.Diagnostics,
+		HTTP:             pullHTTP,
+		ProgressInterval: modelPullProgressInterval,
 	})
 	if cfg.JSON {
 		if encodeErr := json.NewEncoder(cfg.Output).Encode(response); encodeErr != nil {
@@ -433,20 +434,26 @@ func invokeModelAudio(cfg invokeOptions) error {
 }
 
 type pullOptions struct {
-	Context     context.Context
-	Server      string
-	ModelName   string
-	Verbose     bool
-	Diagnostics io.Writer
-	HTTP        clihttp.Protocol
+	Context          context.Context
+	Server           string
+	ModelName        string
+	Verbose          bool
+	Diagnostics      io.Writer
+	HTTP             clihttp.Protocol
+	ProgressInterval time.Duration
 }
 
 func pullModel(cfg pullOptions) (factoryapi.ModelPullResponse, error) {
 	var response factoryapi.ModelPullResponse
 	path := "/models/" + url.PathEscape(strings.TrimSpace(cfg.ModelName)) + "/pull"
+	diagnostics := newSynchronizedWriter(cfg.Diagnostics)
+	stopProgress := startPullProgress(
+		cfg.Context, cfg.ModelName, diagnostics, cfg.ProgressInterval,
+	)
+	defer stopProgress()
 	err := doModelsPOST(cfg.Context, cfg.HTTP, cfg.Server, path, map[string]any{}, &response, requestDiagnostics{
 		Enabled:   cfg.Verbose,
-		Output:    cfg.Diagnostics,
+		Output:    diagnostics,
 		Command:   "models pull",
 		Server:    cfg.Server,
 		ModelName: strings.TrimSpace(cfg.ModelName),
