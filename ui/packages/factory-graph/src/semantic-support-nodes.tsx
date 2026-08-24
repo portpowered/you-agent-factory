@@ -564,7 +564,7 @@ export function FactoryGraphNodeBadge({
     success:
       "border-af-success-border bg-success-container text-on-success-container",
     warning:
-      "border-af-warning-border bg-warning-container text-on-warning-container",
+      "border-af-warning-border bg-warning-container text-on-warning-container factory-light:bg-warning factory-light:text-on-warning",
   }[tone];
   return (
     <span

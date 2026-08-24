@@ -12,6 +12,9 @@
  * Semantic families are status-only; do not substitute for accent emphasis.
  */
 
+/* Palette-aware role treatments stay scoped to the selected palette subtree. */
+@custom-variant factory-light (&:where([data-color-palette="factory-light"] *));
+
 /*
  * Keep the public role vocabulary in the compiled bundle even when a host
  * consumes a role through var() rather than a generated utility class.
