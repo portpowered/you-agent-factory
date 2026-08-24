@@ -131,6 +131,32 @@
   --color-error-bright: var(--color-af-foundation-danger-bright);
   --color-info-bright: var(--color-af-foundation-info-bright);
 
+  /* --- Graph, focus, and overlay roles --- */
+  --color-overlay: rgb(
+    from var(--color-surface-container-highest) r g b /
+    0.08
+  );
+  --color-overlay-subtle: rgb(
+    from var(--color-surface-container-low) r g b /
+    0.04
+  );
+  --color-overlay-focus: rgb(
+    from var(--color-surface-container-highest) r g b /
+    0.1
+  );
+  --color-overlay-strong: var(--color-scrim);
+  --color-focus-ring: rgb(from var(--color-primary) r g b / 0.25);
+  --color-edge-muted: var(--color-on-surface-variant);
+  --color-edge-muted-soft: rgb(from var(--color-on-surface) r g b / 0.56);
+  --color-edge-danger-muted: var(--color-error);
+  --color-graph-controls-surface: var(--color-surface);
+  --color-graph-controls-button-surface: var(--color-surface-container-high);
+  --color-graph-controls-button-surface-hover: var(--color-overlay);
+  --color-graph-controls-border: var(--color-outline);
+  --color-graph-controls-text: var(--color-on-surface-variant);
+  --color-graph-controls-text-hover: var(--color-on-surface);
+  --color-graph-focus-indicator: var(--color-on-surface);
+
   /* --- Dashboard chart roles --- */
   --color-chart-grid-line: rgb(from var(--color-outline) r g b / 0.032);
   --color-chart-queued: var(--color-on-primary-container);
@@ -197,8 +223,28 @@
   --color-af-chart-cursor: var(--color-chart-cursor);
   --color-af-chart-active-dot-stroke: var(--color-chart-active-dot-stroke);
 
-  /* Semantic border and overlay tokens for feedback and loading surfaces */
-  --color-af-overlay: rgb(from var(--color-af-foundation-overlay) r g b / 0.08);
+  /* Graph, focus, and overlay product aliases stay on shared Material roles. */
+  --color-af-overlay: var(--color-overlay);
+  --color-af-overlay-subtle: var(--color-overlay-subtle);
+  --color-af-overlay-focus: var(--color-overlay-focus);
+  --color-af-overlay-strong: var(--color-overlay-strong);
+  --color-af-focus-ring: var(--color-focus-ring);
+  --color-af-edge-muted: var(--color-edge-muted);
+  --color-af-edge-muted-soft: var(--color-edge-muted-soft);
+  --color-af-edge-danger-muted: var(--color-edge-danger-muted);
+  --color-af-graph-controls-surface: var(--color-graph-controls-surface);
+  --color-af-graph-controls-button-surface: var(
+    --color-graph-controls-button-surface
+  );
+  --color-af-graph-controls-button-surface-hover: var(
+    --color-graph-controls-button-surface-hover
+  );
+  --color-af-graph-controls-border: var(--color-graph-controls-border);
+  --color-af-graph-controls-text: var(--color-graph-controls-text);
+  --color-af-graph-controls-text-hover: var(--color-graph-controls-text-hover);
+  --color-af-graph-focus-indicator: var(--color-graph-focus-indicator);
+
+  /* Semantic border tokens for feedback and loading surfaces */
   --color-af-success-border: rgb(
     from var(--color-af-foundation-success) r g b /
     0.28

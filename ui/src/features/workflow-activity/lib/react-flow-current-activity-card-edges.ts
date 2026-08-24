@@ -13,8 +13,8 @@ import {
   type HandleAssignments,
 } from "./react-flow-current-activity-card-graph";
 
-const EDGE_STROKE_MUTED = "var(--color-outline-variant)";
-const EDGE_STROKE_SOFT = "var(--color-outline)";
+const EDGE_STROKE_MUTED = "var(--color-af-edge-muted)";
+const EDGE_STROKE_SOFT = "var(--color-af-edge-muted-soft)";
 const EDGE_STROKE_DANGER_MUTED = "var(--color-af-edge-danger-muted)";
 const EDGE_STROKE_ACTIVE = "var(--color-success)";
 

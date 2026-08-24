@@ -16,10 +16,16 @@ describe("dashboard graph chrome", () => {
     const source = readFileSync(dashboardGraphSourcePath, "utf8");
 
     expect(source).toContain("color={DASHBOARD_GRAPH_BACKGROUND_COLOR}");
-    expect(source).toContain("var(--color-outline)");
-    expect(source).toContain("var(--color-surface-container-high)");
-    expect(source).toContain("var(--color-on-surface-variant)");
-    expect(source).toContain("var(--color-surface)");
+    expect(source).toContain(
+      "var(--color-af-graph-controls-button-surface)",
+    );
+    expect(source).toContain(
+      "var(--color-af-graph-controls-button-surface-hover)",
+    );
+    expect(source).toContain("var(--color-af-graph-controls-border)");
+    expect(source).toContain("var(--color-af-graph-controls-text)");
+    expect(source).toContain("var(--color-af-graph-controls-text-hover)");
+    expect(source).toContain("var(--color-af-graph-controls-surface)");
   });
 });
 

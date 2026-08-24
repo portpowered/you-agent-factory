@@ -81,6 +81,43 @@ const CHART_ROLE_PAIRS: ReadonlyArray<
   ["--color-af-chart-active-dot-stroke", "--color-chart-active-dot-stroke"],
 ];
 
+const GRAPH_OVERLAY_ROLE_PAIRS: ReadonlyArray<
+  readonly [afToken: string, roleToken: string]
+> = [
+  ["--color-af-overlay", "--color-overlay"],
+  ["--color-af-overlay-subtle", "--color-overlay-subtle"],
+  ["--color-af-overlay-focus", "--color-overlay-focus"],
+  ["--color-af-overlay-strong", "--color-overlay-strong"],
+  ["--color-af-focus-ring", "--color-focus-ring"],
+  ["--color-af-edge-muted", "--color-edge-muted"],
+  ["--color-af-edge-muted-soft", "--color-edge-muted-soft"],
+  ["--color-af-edge-danger-muted", "--color-edge-danger-muted"],
+  ["--color-af-graph-controls-surface", "--color-graph-controls-surface"],
+  [
+    "--color-af-graph-controls-button-surface",
+    "--color-graph-controls-button-surface",
+  ],
+  [
+    "--color-af-graph-controls-button-surface-hover",
+    "--color-graph-controls-button-surface-hover",
+  ],
+  ["--color-af-graph-controls-border", "--color-graph-controls-border"],
+  ["--color-af-graph-controls-text", "--color-graph-controls-text"],
+  [
+    "--color-af-graph-controls-text-hover",
+    "--color-graph-controls-text-hover",
+  ],
+  ["--color-af-graph-focus-indicator", "--color-graph-focus-indicator"],
+];
+
+function normalizeCssWhitespace(source: string): string {
+  return source
+    .replace(/\s+/g, " ")
+    .replace(/\( /g, "(")
+    .replace(/ \)/g, ")")
+    .trim();
+}
+
 function parseHexColor(hex: string): readonly [number, number, number] {
   const normalized = hex.trim().replace("#", "");
   if (normalized.length !== 6) {
@@ -129,6 +166,18 @@ describe("color-role-tokens product af-* wiring", () => {
     const dashboardSource = readFileSync(dashboardStylesSourcePath, "utf8");
 
     for (const [afToken, roleToken] of CHART_ROLE_PAIRS) {
+      expect(roleSource).toContain(`${afToken}: var(${roleToken});`);
+      expect(dashboardSource).not.toContain(`${afToken}:`);
+    }
+  });
+
+  it("maps graph, focus, and overlay aliases to shared roles", () => {
+    const roleSource = normalizeCssWhitespace(
+      readFileSync(roleTokensSourcePath, "utf8"),
+    );
+    const dashboardSource = readFileSync(dashboardStylesSourcePath, "utf8");
+
+    for (const [afToken, roleToken] of GRAPH_OVERLAY_ROLE_PAIRS) {
       expect(roleSource).toContain(`${afToken}: var(${roleToken});`);
       expect(dashboardSource).not.toContain(`${afToken}:`);
     }

@@ -56,6 +56,12 @@ const CHART_SERIES_CONTRAST_PAIRS = [
   ["failed", "--color-af-chart-failed"],
 ] as const;
 
+const GRAPH_EDGE_CONTRAST_PAIRS = [
+  ["edge-muted", "--color-af-edge-muted"],
+  ["edge-muted-soft", "--color-af-edge-muted-soft"],
+  ["edge-danger-muted", "--color-af-edge-danger-muted"],
+] as const;
+
 const FACTORY_DARK_STATUS_COLORS = [
   [236, 191, 88],
   [181, 237, 244],
@@ -75,7 +81,7 @@ interface ChartContrastMeasurement {
   fillToken: string;
   foregroundToken: string;
   paletteId: ColorPaletteId;
-  property: "chart-series-on-canvas";
+  property: "chart-series-on-canvas" | "graph-edge-on-canvas";
   ratio: number;
   stableRatio: number;
 }
@@ -161,6 +167,42 @@ function measureChartSeriesContrast(
       foregroundToken,
       paletteId,
       property: "chart-series-on-canvas",
+      ratio,
+      stableRatio: stableRatio(ratio, BASELINE_PRECISION),
+    };
+  });
+}
+
+function measureGraphEdgeContrast(
+  paletteId: ColorPaletteId,
+): ChartContrastMeasurement[] {
+  applyDocumentColorPalette(paletteId);
+  const computedStyle = getComputedStyle(document.documentElement);
+  const colors = new Map<string, ParsedCssColor>();
+  const readColor = (tokenName: string): ParsedCssColor => {
+    const cached = colors.get(tokenName);
+    if (cached) {
+      return cached;
+    }
+    const color = resolveCssColor(paletteId, tokenName, computedStyle);
+    colors.set(tokenName, color);
+    return color;
+  };
+  const surface = readColor("--color-surface");
+  const surfaceRgb = compositeOver(surface, surface.rgb);
+  const canvasToken = "--color-surface-container-low";
+  const canvas = readColor(canvasToken);
+  const canvasRgb = resolveFillRgb(canvasToken, canvas, surfaceRgb);
+
+  return GRAPH_EDGE_CONTRAST_PAIRS.map(([, foregroundToken]) => {
+    const foreground = readColor(foregroundToken);
+    const foregroundRgb = compositeOver(foreground, canvasRgb);
+    const ratio = contrastRatio(foregroundRgb, canvasRgb);
+    return {
+      fillToken: canvasToken,
+      foregroundToken,
+      paletteId,
+      property: "graph-edge-on-canvas",
       ratio,
       stableRatio: stableRatio(ratio, BASELINE_PRECISION),
     };
@@ -344,6 +386,34 @@ describe("dashboard chart palette contract", () => {
     );
 
     expect(colors.map(({ rgb }) => rgb)).toEqual(FACTORY_DARK_STATUS_COLORS);
+  });
+});
+
+describe("factory graph edge palette contract", () => {
+  it("measures every graph edge role against the graph canvas in every palette", () => {
+    const measurements = COLOR_PALETTE_IDS.flatMap(measureGraphEdgeContrast);
+    const failures = measurements.filter(
+      (measurement) => measurement.ratio < CHART_CONTRAST_FLOOR,
+    );
+
+    console.log(
+      `Measured ${measurements.length} graph-edge-on-canvas cells (${COLOR_PALETTE_IDS.length} palettes x ${GRAPH_EDGE_CONTRAST_PAIRS.length} edge roles).`,
+    );
+    console.log("property\tpalette\tforeground\tfill\tratio");
+    for (const measurement of measurements) {
+      console.log(formatChartMeasurement(measurement));
+    }
+
+    expect(
+      failures,
+      failures
+        .map(
+          (measurement) =>
+            `${measurement.property} palette=${measurement.paletteId} foreground=${measurement.foregroundToken} fill=${measurement.fillToken} measured=${measurement.stableRatio.toFixed(BASELINE_PRECISION)} required floor=${CHART_CONTRAST_FLOOR.toFixed(1)}`,
+        )
+        .join("\n"),
+    ).toEqual([]);
+    expect(measurements).toHaveLength(15);
   });
 });
 

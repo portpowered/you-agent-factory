@@ -146,7 +146,7 @@ function parseCssColor(
   }
 
   const relativeRgbMatch = value.match(
-    /^rgb\( from (.+?) r g b(?: \/ (.+?))? \)$/i,
+    /^rgb\(\s*from\s+(.+?)\s+r\s+g\s+b(?:\s*\/\s*(.+?))?\s*\)$/i,
   );
   if (relativeRgbMatch?.[1]) {
     const source = parseCssColor(paletteId, tokenName, relativeRgbMatch[1]);
