@@ -524,11 +524,13 @@ func assertModelsCommandCharacterization(
 		long: "port", scope: "local", valueType: "int", defaultValue: "0", visibility: "hidden",
 	})
 	if commandID == "you.models.invoke" {
-		// The TTS-only operation surface is characterized, not endorsed: it is
+		// The generic operation surface is characterized, not endorsed: it is
 		// the current public enum exposed by this CLI.
 		wantFlags = append(wantFlags,
-			modelsCharacterizationFlag{long: "operation", scope: "local", valueType: "string", defaultValue: "TTS", enum: []string{"TTS"}, normalization: "trim", completionKind: "static", visibility: "visible"},
+			modelsCharacterizationFlag{long: "input", scope: "local", valueType: "stringArray", defaultValue: "[]", repeatable: true, visibility: "visible"},
+			modelsCharacterizationFlag{long: "operation", scope: "local", valueType: "string", defaultValue: "TTS", enum: []string{"ASR", "EMBED", "OMNI", "TTS"}, normalization: "trim", completionKind: "static", visibility: "visible"},
 			modelsCharacterizationFlag{long: "output", scope: "local", valueType: "string", normalization: "trim", visibility: "visible"},
+			modelsCharacterizationFlag{long: "output-map", scope: "local", valueType: "stringArray", defaultValue: "[]", repeatable: true, visibility: "visible"},
 			modelsCharacterizationFlag{long: "text", scope: "local", valueType: "string", normalization: "trim", visibility: "visible"},
 		)
 	}
@@ -560,6 +562,7 @@ type modelsCharacterizationFlag struct {
 	normalization   string
 	completionKind  string
 	visibility      string
+	repeatable      bool
 }
 
 func (flag modelsCharacterizationFlag) record(commandPath, commandID string) cliinputs.FlagRecord {
@@ -582,7 +585,7 @@ func (flag modelsCharacterizationFlag) record(commandPath, commandID string) cli
 		Default:           flag.defaultValue,
 		ChangedDefault:    false,
 		NoOptionDefault:   flag.noOptionDefault,
-		Repeatable:        false,
+		Repeatable:        flag.repeatable,
 		Enum:              flag.enum,
 		Normalization:     flag.normalization,
 		CompletionKind:    completionKind,

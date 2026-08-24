@@ -300,7 +300,7 @@ func TestGenericModelsInvokeDispatchResolvesDefaultsAndExplicitInputs(t *testing
 	}
 	root.SetArgs([]string{
 		"--json", "models", "invoke", "OMNIVOICE_Q4_K_M",
-		"--text", "  hello  ", "--output", "  speech.wav  ",
+		"--text", "  hello  ", "--input", "audio=@meeting.wav", "--input", "prompt=hint", "--output", "  speech.wav  ",
 	})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("Execute(models invoke) error = %v", err)
@@ -315,6 +315,10 @@ func TestGenericModelsInvokeDispatchResolvesDefaultsAndExplicitInputs(t *testing
 		if valueErr != nil || got != want {
 			t.Fatalf("resolved %s = %q, %v; want %q", inputID, got, valueErr, want)
 		}
+	}
+	inputValues, inputErr := local.StringArray("you.models.invoke.flag.input")
+	if inputErr != nil || !reflect.DeepEqual(inputValues, []string{"audio=@meeting.wav", "prompt=hint"}) {
+		t.Fatalf("resolved input mappings = %#v, %v; want ordered mappings", inputValues, inputErr)
 	}
 	assertResolvedState(t, local, "you.models.invoke.arg.0", resolvedinput.State{
 		Provenance: resolvedinput.SourcePositionalArgument, Changed: true,
@@ -359,12 +363,12 @@ func TestModelsCommandRegistersPositionalsAndFlagsFromManifest(t *testing.T) {
 	if invoke.Use != "invoke <model-name>" {
 		t.Fatalf("invoke use = %q", invoke.Use)
 	}
-	for _, name := range []string{"operation", "text", "output", "port"} {
+	for _, name := range []string{"operation", "input", "text", "output", "output-map", "port"} {
 		if invoke.Flags().Lookup(name) == nil {
 			t.Fatalf("manifest flag %q was not registered", name)
 		}
 	}
-	if err := invoke.ParseFlags([]string{"--operation", "TTS", "--text", "hello", "--output", "speech.wav"}); err != nil {
+	if err := invoke.ParseFlags([]string{"--operation", "TTS", "--input", "audio=@meeting.wav", "--input", "prompt=hint", "--text", "hello", "--output", "speech.wav"}); err != nil {
 		t.Fatal(err)
 	}
 	for name, want := range map[string]string{"operation": "TTS", "text": "hello", "output": "speech.wav"} {
@@ -372,6 +376,10 @@ func TestModelsCommandRegistersPositionalsAndFlagsFromManifest(t *testing.T) {
 		if getErr != nil || got != want {
 			t.Fatalf("flag %s = %q, %v; want %q", name, got, getErr, want)
 		}
+	}
+	inputValues, inputErr := invoke.Flags().GetStringArray("input")
+	if inputErr != nil || !reflect.DeepEqual(inputValues, []string{"audio=@meeting.wav", "prompt=hint"}) {
+		t.Fatalf("input flag = %#v, %v; want ordered mappings", inputValues, inputErr)
 	}
 	if err := invoke.ParseFlags([]string{"--operation", "INVALID"}); err == nil {
 		t.Fatal("invalid manifest operation choice was accepted")

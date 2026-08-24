@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -68,6 +69,9 @@ func TestCommandHandlerTransformsInvokeCommandState(t *testing.T) {
 			if cfg.ModelName != "OMNIVOICE_Q4_K_M" || cfg.Operation != "TTS" || cfg.Text != "hello" || cfg.OutputPath != "speech.wav" {
 				t.Fatalf("InvokeConfig command values = %#v", cfg)
 			}
+			if !reflect.DeepEqual(cfg.InputMappings, []string{"audio=@meeting.wav", "prompt=hint"}) {
+				t.Fatalf("InvokeConfig input mappings = %#v", cfg.InputMappings)
+			}
 			if cfg.Server != server || !cfg.JSON || !cfg.Verbose || !cfg.Debug {
 				t.Fatalf("InvokeConfig global values = %#v", cfg)
 			}
@@ -106,12 +110,14 @@ func resolvedInvokeHandlerInputs(
 			{ID: modelsInvokeNameInputID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourcePositionalArgument}},
 			{ID: modelsInvokeOperationID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
 			{ID: modelsInvokeTextID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
+			{ID: modelsInvokeInputID, Kind: resolvedinput.ValueKindStringArray, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
 			{ID: modelsInvokeOutputID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
 		},
 		[]resolvedinput.Candidate{
 			{InputID: modelsInvokeNameInputID, Source: resolvedinput.SourcePositionalArgument, Value: resolvedinput.StringValue("OMNIVOICE_Q4_K_M")},
 			{InputID: modelsInvokeOperationID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue("TTS")},
 			{InputID: modelsInvokeTextID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue("hello")},
+			{InputID: modelsInvokeInputID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringArrayValue([]string{"audio=@meeting.wav", "prompt=hint"})},
 			{InputID: modelsInvokeOutputID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue("speech.wav")},
 		},
 	)

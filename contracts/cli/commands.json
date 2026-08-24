@@ -12644,7 +12644,7 @@
           },
           "description": {
             "id": "you.models.invoke.description",
-            "canonicalEnglish": "Invoke one discovered model through the shared in-process bootstrap. Requires a model name, an uppercase --operation, non-empty --text, and either --output for streamed audio, repeatable --output-map slot=path mappings for named generic outputs, or global --json for structured invocation metadata. Readiness-gated execution uses the current factory configuration without starting a full workflow."
+            "canonicalEnglish": "Invoke one discovered model through the shared in-process bootstrap. Requires a model name, an uppercase --operation, either non-empty --text or repeatable named --input slot=value values (use @path for file bytes), and either --output for streamed audio, repeatable --output-map slot=path mappings for named generic outputs, or global --json for structured invocation metadata. Readiness-gated execution uses the current factory configuration without starting a full workflow."
           }
         },
         "examples": [
@@ -12920,6 +12920,38 @@
           "valueType": "string",
           "visibility": "visible"
         },
+        "you.models.invoke.flag.input": {
+          "acceptedSources": [
+            "cli",
+            "manifest-default"
+          ],
+          "aliases": [],
+          "completion": "none",
+          "defaultValue": {
+            "stringArray": []
+          },
+          "handlerBindingId": "you.models.invoke.binding.input",
+          "id": "you.models.invoke.flag.input",
+          "kind": "named",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.invoke.flag.input",
+            "state": "active",
+            "since": "1.0.0"
+          },
+          "long": "input",
+          "maxCardinality": -1,
+          "minCardinality": 0,
+          "normalization": "",
+          "repeatable": true,
+          "required": false,
+          "sensitivity": "sensitive",
+          "scope": "local",
+          "shorthand": "",
+          "usage": "named model input in the form slot=value; prefix value with @ to read a file (repeatable)",
+          "valueType": "stringArray",
+          "visibility": "visible"
+        },
         "you.models.invoke.flag.output": {
           "acceptedSources": [
             "cli",
@@ -13029,6 +13061,10 @@
         "you.models.invoke.binding.output-map": {
           "id": "you.models.invoke.binding.output-map",
           "inputId": "you.models.invoke.flag.output-map"
+        },
+        "you.models.invoke.binding.input": {
+          "id": "you.models.invoke.binding.input",
+          "inputId": "you.models.invoke.flag.input"
         },
         "you.models.invoke.binding.port": {
           "id": "you.models.invoke.binding.port",

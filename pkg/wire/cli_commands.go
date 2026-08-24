@@ -480,11 +480,19 @@ func provideModelsCLIService(
 	invocation modelscli.InvocationOperation,
 	composition modelscli.CompositionScopeProvider,
 	outputFileSystem modelscli.OutputFileSystem,
+	inputFileReader modelscli.InputFileReader,
 	clock runtimeArtifactClock,
 ) modelscli.Service {
-	return modelscli.NewWithOutputFileSystemAndPullProtocolAndClock(
-		transport.Protocol, pullTransport.Protocol, invocation, outputFileSystem, clock, composition,
+	return modelscli.NewWithOutputFileSystemAndPullProtocolAndClockAndInputFileReader(
+		transport.Protocol, pullTransport.Protocol, invocation, outputFileSystem, clock, inputFileReader, composition,
 	)
+}
+
+func provideModelsCLIInputFileReader(edges serviceedges.Edges) modelscli.InputFileReader {
+	if edges.ModelCLIInputReadFile != nil {
+		return modelscli.InputFileReader(edges.ModelCLIInputReadFile)
+	}
+	return os.ReadFile
 }
 
 func provideModelsCLIOutputFileSystem(edges serviceedges.Edges) modelscli.OutputFileSystem {

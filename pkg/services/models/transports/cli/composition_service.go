@@ -17,6 +17,7 @@ func bindCompositionService(
 	pullHTTPProtocol clihttp.Protocol,
 	invocation InvocationOperation,
 	outputFileSystem OutputFileSystem,
+	inputFileReader InputFileReader,
 	now func() time.Time,
 	providers ...CompositionScopeProvider,
 ) Service {
@@ -33,6 +34,7 @@ func bindCompositionService(
 	cfg := ConfigFromComposition(httpProtocol, invocation, providers...)
 	cfg.PullHTTP = pullHTTPProtocol
 	cfg.OutputFileSystem = outputFileSystem
+	cfg.InputFileReader = inputFileReader
 	cfg.Clock = now
 	owned := NewService(cfg)
 	if owned == nil {
@@ -79,6 +81,9 @@ func (service *compositionService) Invoke(cfg InvokeConfig) error {
 func (service *compositionService) canInvokeThroughOwned(cfg InvokeConfig) bool {
 	if strings.TrimSpace(cfg.Server) != "" {
 		return false
+	}
+	if len(cfg.InputMappings) > 0 {
+		return true
 	}
 	// Preserve the bootstrap-owned audio export contract. The joined Models
 	// path owns inline generic output and JSON projection; legacy audio export

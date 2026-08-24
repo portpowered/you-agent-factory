@@ -92,6 +92,28 @@ func TestModelsCLIOutputFileSystemUsesExplicitEdges(t *testing.T) {
 	}
 }
 
+func TestModelsCLIInputFileReaderUsesExplicitEdges(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	reader := provideModelsCLIInputFileReader(serviceedges.Edges{
+		ModelCLIInputReadFile: func(path string) ([]byte, error) {
+			called = true
+			if path != "meeting.wav" {
+				t.Fatalf("input path = %q, want meeting.wav", path)
+			}
+			return []byte{0x00, 0xff}, nil
+		},
+	})
+	got, err := reader("meeting.wav")
+	if err != nil || string(got) != string([]byte{0x00, 0xff}) {
+		t.Fatalf("input reader = %x, %v; want exact edge bytes", got, err)
+	}
+	if !called {
+		t.Fatal("explicit input reader edge was not called")
+	}
+}
+
 func TestProvideSessionsCLIServiceReturnsConstructedAdapter(t *testing.T) {
 	t.Parallel()
 

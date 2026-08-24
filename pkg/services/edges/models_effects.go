@@ -35,6 +35,11 @@ type ModelCLIOutputCreateTempFile func(string, string) (interface {
 	Name() string
 }, error)
 
+// ModelCLIInputReadFile is the host effect used to load one explicit generic
+// CLI input. The CLI adapter owns mapping validation and media classification;
+// this edge supplies only the file bytes.
+type ModelCLIInputReadFile func(string) ([]byte, error)
+
 // ModelBackendArtifactSelectionRequest contains the safe host facts needed by
 // the pinned backend publication selector. The edge owns manifest lookup;
 // Models receives only the selected immutable archive facts.

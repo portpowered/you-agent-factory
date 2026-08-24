@@ -59,6 +59,7 @@ type InvokeConfig struct {
 	ModelName        string
 	Operation        string
 	Text             string
+	InputMappings    []string
 	OutputPath       string
 	OutputMappings   []string
 	Server           string
@@ -163,8 +164,25 @@ func NewWithOutputFileSystemAndPullProtocolAndClock(
 	now func() time.Time,
 	providers ...CompositionScopeProvider,
 ) Service {
+	return NewWithOutputFileSystemAndPullProtocolAndClockAndInputFileReader(
+		httpProtocol, pullHTTPProtocol, invocation, outputFileSystem, now, nil, providers...,
+	)
+}
+
+// NewWithOutputFileSystemAndPullProtocolAndClockAndInputFileReader constructs
+// the Models CLI service with the host effect used by explicit generic input
+// mappings.
+func NewWithOutputFileSystemAndPullProtocolAndClockAndInputFileReader(
+	httpProtocol clihttp.Protocol,
+	pullHTTPProtocol clihttp.Protocol,
+	invocation InvocationOperation,
+	outputFileSystem OutputFileSystem,
+	now func() time.Time,
+	inputFileReader InputFileReader,
+	providers ...CompositionScopeProvider,
+) Service {
 	return bindCompositionService(
-		httpProtocol, pullHTTPProtocol, invocation, outputFileSystem, now, providers...,
+		httpProtocol, pullHTTPProtocol, invocation, outputFileSystem, inputFileReader, now, providers...,
 	)
 }
 
@@ -231,8 +249,11 @@ func (service *httpService) Invoke(cfg InvokeConfig) error {
 		return fmt.Errorf("--operation is required")
 	}
 	text := strings.TrimSpace(cfg.Text)
-	if text == "" {
+	if text == "" && len(cfg.InputMappings) == 0 {
 		return fmt.Errorf("--text is required")
+	}
+	if len(cfg.InputMappings) > 0 {
+		return fmt.Errorf("explicit input mappings require the local Models composition")
 	}
 	if len(cfg.OutputMappings) > 0 {
 		return fmt.Errorf("explicit output mappings require the local Models composition")

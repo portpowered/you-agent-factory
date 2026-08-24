@@ -40,6 +40,7 @@ const (
 	modelsInvokeNameInputID  = "you.models.invoke.arg.0"
 	modelsInvokeOperationID  = "you.models.invoke.flag.operation"
 	modelsInvokeTextID       = "you.models.invoke.flag.text"
+	modelsInvokeInputID      = "you.models.invoke.flag.input"
 	modelsInvokeOutputID     = "you.models.invoke.flag.output"
 	modelsInvokeOutputMapID  = "you.models.invoke.flag.output-map"
 	modelsPullNameInputID    = "you.models.pull.arg.0"
@@ -149,7 +150,7 @@ func (h *CommandHandler) Invoke(
 	}
 	cfg := InvokeConfig{
 		Context: cmd.Context(), ModelName: invokeInputs.modelName, Operation: invokeInputs.operation,
-		Text: invokeInputs.text, OutputPath: invokeInputs.outputPath,
+		Text: invokeInputs.text, InputMappings: invokeInputs.inputMappings, OutputPath: invokeInputs.outputPath,
 		OutputMappings: invokeInputs.outputMappings, Output: cmd.OutOrStdout(),
 		HomeDir: homeDir, FactoryDir: startupcli.WorkingDirectory(cmd.Context()),
 		OperatorDefaults: defaults, Logger: logger,
@@ -164,6 +165,7 @@ type modelsInvokeInputs struct {
 	modelName      string
 	operation      string
 	text           string
+	inputMappings  []string
 	outputPath     string
 	outputMappings []string
 }
@@ -181,6 +183,13 @@ func readModelsInvokeInputs(inputs resolvedinput.Inputs) (modelsInvokeInputs, er
 	if err != nil {
 		return modelsInvokeInputs{}, fmt.Errorf("read models invoke text: %w", err)
 	}
+	var inputMappings []string
+	if _, present := inputs.State(modelsInvokeInputID); present {
+		inputMappings, err = inputs.StringArray(modelsInvokeInputID)
+		if err != nil {
+			return modelsInvokeInputs{}, fmt.Errorf("read models invoke input mappings: %w", err)
+		}
+	}
 	outputPath, err := inputs.String(modelsInvokeOutputID)
 	if err != nil {
 		return modelsInvokeInputs{}, fmt.Errorf("read models invoke output: %w", err)
@@ -194,7 +203,8 @@ func readModelsInvokeInputs(inputs resolvedinput.Inputs) (modelsInvokeInputs, er
 	}
 	return modelsInvokeInputs{
 		modelName: modelName, operation: operation, text: text,
-		outputPath: outputPath, outputMappings: outputMappings,
+		inputMappings: inputMappings,
+		outputPath:    outputPath, outputMappings: outputMappings,
 	}, nil
 }
 

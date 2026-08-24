@@ -90,6 +90,7 @@ type Edges struct {
 	ModelAssetReadDirectory         AssetReadDirectory
 	ModelAssetCreateFile            AssetCreateFile
 	ModelAssetOpenFile              AssetOpenFile
+	ModelCLIInputReadFile           ModelCLIInputReadFile
 	ModelCLIOutputCreateTempFile    ModelCLIOutputCreateTempFile
 	ModelCLIOutputInspectPath       AssetInspectPath
 	ModelCLIOutputRemovePath        AssetRemovePath
@@ -374,6 +375,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.ModelAssetOpenFile != nil {
 		defaults.ModelAssetOpenFile = replacements.ModelAssetOpenFile
+	}
+	if replacements.ModelCLIInputReadFile != nil {
+		defaults.ModelCLIInputReadFile = replacements.ModelCLIInputReadFile
 	}
 	if replacements.ModelCLIOutputCreateTempFile != nil {
 		defaults.ModelCLIOutputCreateTempFile = replacements.ModelCLIOutputCreateTempFile
