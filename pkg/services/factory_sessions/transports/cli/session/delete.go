@@ -10,12 +10,14 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/sessionpath"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // DeleteConfig holds parameters for the session delete command.
 type DeleteConfig struct {
-	Port        int
+	Server      string
 	SessionID   string
 	JSON        bool
 	Verbose     bool
@@ -47,14 +49,17 @@ func Delete(cfg DeleteConfig) error {
 		return fmt.Errorf("CLI HTTP protocol is required")
 	}
 
-	endpoint := deleteEndpoint(cfg.Port, sessionID)
+	endpoint, err := deleteEndpoint(cfg.Server, sessionID)
+	if err != nil {
+		return fmt.Errorf("resolve factory session delete endpoint: %w", err)
+	}
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
-		"session delete request endpointPath=%s endpoint=%s port=%d session=%s",
+		"session delete request endpointPath=%s endpoint=%s server=%s session=%s",
 		endpoint.Path,
 		endpoint.String(),
-		cfg.Port,
+		cfg.Server,
 		sessionID,
 	)
 
@@ -92,12 +97,16 @@ func Delete(cfg DeleteConfig) error {
 	}
 }
 
-func deleteEndpoint(port int, sessionID string) url.URL {
-	return url.URL{
-		Scheme: "http",
-		Host:   fmt.Sprintf("localhost:%d", port),
-		Path:   fmt.Sprintf("/factory-sessions/%s", url.PathEscape(sessionID)),
+func deleteEndpoint(server, sessionID string) (url.URL, error) {
+	endpointURL, err := cliserver.RequestURL(server, sessionpath.ScopedPath("", sessionID))
+	if err != nil {
+		return url.URL{}, err
 	}
+	endpoint, err := url.Parse(endpointURL)
+	if err != nil {
+		return url.URL{}, fmt.Errorf("parse factory session delete endpoint: %w", err)
+	}
+	return *endpoint, nil
 }
 
 func renderDeleteSuccess(cfg DeleteConfig, sessionID string) error {

@@ -246,6 +246,16 @@ func NewResume(transport clihttp.Protocol) func(LifecycleControlConfig) error {
 	return func(cfg LifecycleControlConfig) error { cfg.HTTP = transport; return Resume(cfg) }
 }
 
+// NewCancel binds the HTTP transport to the Factory Session cancel command.
+func NewCancel(transport clihttp.Protocol) func(LifecycleControlConfig) error {
+	return func(cfg LifecycleControlConfig) error { cfg.HTTP = transport; return Cancel(cfg) }
+}
+
+// NewTerminate binds the HTTP transport to the Factory Session terminate command.
+func NewTerminate(transport clihttp.Protocol) func(LifecycleControlConfig) error {
+	return func(cfg LifecycleControlConfig) error { cfg.HTTP = transport; return Terminate(cfg) }
+}
+
 // NewLocalLifecycleControls binds the local Factory Sessions service to the
 // same CLI lifecycle-control renderer used by the HTTP adapter. The returned
 // service intentionally exposes only lifecycle controls; remote-only session

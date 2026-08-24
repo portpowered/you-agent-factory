@@ -76,8 +76,7 @@ func TestSessionCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 		"you session resume session-beta --remote --server http://factory.example:7437",
 		"you session list --json",
 		"you session create --dir /workspace/fleet --port 9090",
-		"you session delete session-beta --port 9090 --json",
-		"same default --port as work list",
+		"you --server http://localhost:9090 session delete session-beta --json",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("session help missing %q:\n%s", want, help)

@@ -15,14 +15,14 @@ func TestDelete_PerformsDELETEWithEscapedSessionPath(t *testing.T) {
 	var gotMethod, gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod = r.Method
-		gotPath = r.URL.Path
+		gotPath = r.URL.EscapedPath()
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer srv.Close()
 
 	var out bytes.Buffer
 	err := NewDelete(testHTTPProtocol(t))(DeleteConfig{
-		Port:      serverPort(t, srv),
+		Server:    srv.URL,
 		SessionID: "session/beta",
 		Output:    &out,
 	})
@@ -45,7 +45,7 @@ func TestDelete_Success204PrintsHumanConfirmation(t *testing.T) {
 
 	var out bytes.Buffer
 	err := NewDelete(testHTTPProtocol(t))(DeleteConfig{
-		Port:      serverPort(t, srv),
+		Server:    srv.URL,
 		SessionID: "session-beta",
 		Output:    &out,
 	})
@@ -65,7 +65,7 @@ func TestDelete_Success204EmitsJSONConfirmation(t *testing.T) {
 
 	var out bytes.Buffer
 	err := NewDelete(testHTTPProtocol(t))(DeleteConfig{
-		Port:      serverPort(t, srv),
+		Server:    srv.URL,
 		SessionID: "session-beta",
 		JSON:      true,
 		Output:    &out,
@@ -97,7 +97,7 @@ func TestDelete_NotFoundReturnsClearMessage(t *testing.T) {
 	defer srv.Close()
 
 	err := NewDelete(testHTTPProtocol(t))(DeleteConfig{
-		Port:      serverPort(t, srv),
+		Server:    srv.URL,
 		SessionID: "missing-session",
 		Output:    ioDiscardWriter{t},
 	})
@@ -115,7 +115,7 @@ func TestDelete_NotFoundReturnsClearMessage(t *testing.T) {
 func TestDelete_UnreachableServiceNamesEndpoint(t *testing.T) {
 	var out bytes.Buffer
 	err := NewDelete(testHTTPProtocol(t))(DeleteConfig{
-		Port:      1,
+		Server:    "http://localhost:1",
 		SessionID: "session-beta",
 		JSON:      true,
 		Output:    &out,
@@ -146,7 +146,7 @@ func TestDelete_APIErrorSurfacesMessage(t *testing.T) {
 	defer srv.Close()
 
 	err := NewDelete(testHTTPProtocol(t))(DeleteConfig{
-		Port:      serverPort(t, srv),
+		Server:    srv.URL,
 		SessionID: "session-beta",
 		Output:    ioDiscardWriter{t},
 	})
@@ -173,7 +173,7 @@ func TestDelete_ConflictReturnsActionableTypedMessage(t *testing.T) {
 	defer srv.Close()
 
 	err := NewDelete(testHTTPProtocol(t))(DeleteConfig{
-		Port:      serverPort(t, srv),
+		Server:    srv.URL,
 		SessionID: "~default",
 		Output:    ioDiscardWriter{t},
 	})
@@ -198,7 +198,7 @@ func (w ioDiscardWriter) Write(p []byte) (int, error) {
 }
 
 func TestDelete_RejectsMissingSessionID(t *testing.T) {
-	err := NewDelete(testHTTPProtocol(t))(DeleteConfig{Port: 8080, SessionID: "   "})
+	err := NewDelete(testHTTPProtocol(t))(DeleteConfig{Server: "http://localhost:8080", SessionID: "   "})
 	if err == nil {
 		t.Fatal("expected validation error")
 	}
