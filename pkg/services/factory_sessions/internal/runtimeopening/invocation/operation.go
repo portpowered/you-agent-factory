@@ -702,7 +702,6 @@ func (o *operation) runtimeConfig(target roles.InvocationTarget) factorysessions
 	config.FactorySession.SystemConfigHome = target.HomeDir
 	config.FactorySession.CanonicalSessionID = target.CanonicalSessionID
 	config.FactorySession.WorkFile = ""
-	config.FactorySession.CanonicalSessionID = target.CanonicalSessionID
 	config.FactorySession.Host.Port = 0
 	config.FactorySession.Host.RuntimeMode = factorydefinitions.RuntimeModeService
 	config.Workers.RunnerID = target.RunnerID
