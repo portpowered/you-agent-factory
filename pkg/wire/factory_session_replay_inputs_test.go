@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testpath"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -27,7 +28,7 @@ func TestProvideFactorySessionReplayInputsClassifiesPortableRecording(t *testing
 	)
 	loadReplay := provideReplayArtifactLoader(platformreplay.Local{})
 	replayFiles := provideFactorySessionReplayRecordingReader(serviceedges.Edges{})
-	capability := provideFactorySessionReplayInputs(loadReplay, replayFiles, logging.NoopLogger{})
+	capability := provideFactorySessionReplayInputs(loadReplay, replayFiles, platformfilesystem.Local{}.Open, logging.NoopLogger{})
 
 	result, err := capability.LoadReplayInput(recordings.LoadReplayInputRequest{Path: path})
 	if err != nil {
@@ -61,7 +62,7 @@ func TestProvideFactorySessionReplayInputsDelegatesLegacyArtifact(t *testing.T) 
 		return &recordings.ReplayArtifact{SchemaVersion: "legacy"}, nil
 	})
 	replayFiles := provideFactorySessionReplayRecordingReader(edges)
-	capability := provideFactorySessionReplayInputs(loadReplay, replayFiles, logging.NoopLogger{})
+	capability := provideFactorySessionReplayInputs(loadReplay, replayFiles, platformfilesystem.Local{}.Open, logging.NoopLogger{})
 
 	tempFile := filepath.Join(t.TempDir(), "legacy-replay.json")
 	if err := os.WriteFile(tempFile, []byte(`{"schemaVersion":"legacy"}`), 0o600); err != nil {

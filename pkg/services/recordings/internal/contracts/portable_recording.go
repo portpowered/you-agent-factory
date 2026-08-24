@@ -2,6 +2,7 @@ package contracts
 
 import (
 	"encoding/json"
+	"io"
 	"io/fs"
 	"time"
 
@@ -341,6 +342,9 @@ type RecordingRenamePath func(string, string) error
 
 // RecordingReadFile reads a published portable recording or artifact.
 type RecordingReadFile func(string) ([]byte, error)
+
+// RecordingOpenFile opens a published recording for bounded-memory inspection.
+type RecordingOpenFile func(string) (io.ReadCloser, error)
 
 // PortableRecordingWriter validates and atomically persists one portable
 // recording.

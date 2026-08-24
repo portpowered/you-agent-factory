@@ -140,7 +140,9 @@ func (inventory *Service) summaryForPath(
 	if err != nil {
 		return recordings.RecordedSessionSummary{}, fmt.Errorf("classify recorded session artifact %q: %w", reference, err)
 	}
-	input, err := inventory.replayInputs.LoadReplayInput(recordings.LoadReplayInputRequest{Path: path})
+	input, err := inventory.replayInputs.LoadReplayInput(recordings.LoadReplayInputRequest{
+		Path: path, MetadataOnly: true,
+	})
 	if err != nil {
 		return recordings.RecordedSessionSummary{}, fmt.Errorf("load recorded session artifact %q: %w", reference, err)
 	}
@@ -202,6 +204,9 @@ func canonicalSessionID(
 	format recordings.RecordedSessionFormat,
 	path string,
 ) (string, error) {
+	if input.Metadata != nil {
+		return requireSessionID(input.Metadata.FactorySessionID)
+	}
 	if input.Portable != nil && input.Legacy != nil {
 		return "", fmt.Errorf("replay input returned both portable and legacy identities")
 	}

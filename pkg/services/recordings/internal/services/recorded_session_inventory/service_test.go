@@ -69,6 +69,14 @@ func TestListRecordedSessionsEnumeratesMixedDatedVersionsDeterministically(t *te
 	if !reflect.DeepEqual(loader.calls, sortedCopy(paths)) {
 		t.Fatalf("loader calls = %#v, want %#v", loader.calls, sortedCopy(paths))
 	}
+	if len(loader.metadataOnly) != len(paths) {
+		t.Fatalf("metadata-only calls = %#v, want one per candidate", loader.metadataOnly)
+	}
+	for index, metadataOnly := range loader.metadataOnly {
+		if !metadataOnly {
+			t.Fatalf("loader call %d used full replay loading, want metadata-only", index)
+		}
+	}
 }
 
 func TestListRecordedSessionsReturnsEmptyForAbsentOrEmptyRoot(t *testing.T) {
@@ -178,13 +186,15 @@ func TestListRecordedSessionsRejectsConflictingLegacySessionIdentities(t *testin
 }
 
 type recordedInputLoader struct {
-	inputs map[string]recordings.LoadReplayInputResult
-	errors map[string]error
-	calls  []string
+	inputs       map[string]recordings.LoadReplayInputResult
+	errors       map[string]error
+	calls        []string
+	metadataOnly []bool
 }
 
 func (loader *recordedInputLoader) LoadReplayInput(request recordings.LoadReplayInputRequest) (recordings.LoadReplayInputResult, error) {
 	loader.calls = append(loader.calls, request.Path)
+	loader.metadataOnly = append(loader.metadataOnly, request.MetadataOnly)
 	if err := loader.errors[request.Path]; err != nil {
 		return recordings.LoadReplayInputResult{}, err
 	}

@@ -35,6 +35,7 @@ var (
 	_ recordings.RecordingRemovePath          = Edges{}.RecordingRemovePath
 	_ recordings.RecordingRenamePath          = Edges{}.RecordingRenamePath
 	_ recordings.RecordingReadFile            = Edges{}.RecordingReadFile
+	_ recordings.RecordingOpenFile            = Edges{}.RecordingOpenFile
 )
 
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
@@ -684,6 +685,37 @@ func TestMergeReplacesAndPreservesRecordingArtifactReadEffect(t *testing.T) {
 	preserved := Merge(Edges{RecordingReadFile: defaultRead}, Edges{})
 	if got, err := preserved.RecordingReadFile("artifact"); err != nil || string(got) != "default" {
 		t.Fatalf("preserved RecordingReadFile = (%q, %v), want default", got, err)
+	}
+
+	defaultOpen := recordings.RecordingOpenFile(func(string) (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader([]byte("default"))), nil
+	})
+	replacementOpen := recordings.RecordingOpenFile(func(string) (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader([]byte("replacement"))), nil
+	})
+	merged = Merge(
+		Edges{RecordingOpenFile: defaultOpen},
+		Edges{RecordingOpenFile: replacementOpen},
+	)
+	opened, err := merged.RecordingOpenFile("artifact")
+	if err != nil {
+		t.Fatalf("merged RecordingOpenFile: %v", err)
+	}
+	got, err := io.ReadAll(opened)
+	_ = opened.Close()
+	if err != nil || string(got) != "replacement" {
+		t.Fatalf("merged RecordingOpenFile = (%q, %v), want replacement", got, err)
+	}
+
+	preserved = Merge(Edges{RecordingOpenFile: defaultOpen}, Edges{})
+	opened, err = preserved.RecordingOpenFile("artifact")
+	if err != nil {
+		t.Fatalf("preserved RecordingOpenFile: %v", err)
+	}
+	got, err = io.ReadAll(opened)
+	_ = opened.Close()
+	if err != nil || string(got) != "default" {
+		t.Fatalf("preserved RecordingOpenFile = (%q, %v), want default", got, err)
 	}
 }
 

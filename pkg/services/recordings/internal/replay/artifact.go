@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -747,6 +748,271 @@ func LoadWithMetadata(
 		return nil, ReplayReadMetadata{}, err
 	}
 	return artifact, ReplayReadMetadata{SchemaVersion: artifact.SchemaVersion}, nil
+}
+
+// LoadMetadata reads only the identity-bearing metadata of either replay
+// artifact version. V2 returns after validating its header; legacy JSON scans
+// event contexts one at a time so the event history is never retained.
+func LoadMetadata(
+	openFile func(string) (io.ReadCloser, error),
+	path string,
+) (recordingcontracts.ReplayInputMetadata, error) {
+	if openFile == nil {
+		return recordingcontracts.ReplayInputMetadata{}, fmt.Errorf("replay artifact metadata opener is required")
+	}
+	file, err := openFile(path)
+	if err != nil {
+		return recordingcontracts.ReplayInputMetadata{}, fmt.Errorf("open replay artifact %q: %w", path, err)
+	}
+	reader := bufio.NewReader(file)
+	firstLine, readErr := reader.ReadBytes('\n')
+	_ = file.Close()
+	if readErr != nil && readErr != io.EOF {
+		return recordingcontracts.ReplayInputMetadata{}, fmt.Errorf("read replay artifact header %q: %w", path, readErr)
+	}
+	if len(firstLine) == 0 {
+		if readErr != nil {
+			return recordingcontracts.ReplayInputMetadata{}, fmt.Errorf("read replay artifact header %q: %w", path, readErr)
+		}
+		return recordingcontracts.ReplayInputMetadata{}, fmt.Errorf("read replay artifact header %q: empty replay artifact", path)
+	}
+	var envelope struct {
+		SchemaVersion string `json:"schemaVersion"`
+	}
+	if err := json.Unmarshal(bytes.TrimSpace(firstLine), &envelope); err == nil && envelope.SchemaVersion == ReplayV2SchemaVersion {
+		var header ReplayV2Header
+		if err := json.Unmarshal(bytes.TrimSpace(firstLine), &header); err != nil {
+			return recordingcontracts.ReplayInputMetadata{}, fmt.Errorf("parse replay v2 header %q: %w", path, err)
+		}
+		if err := validateReplayV2Header(header); err != nil {
+			return recordingcontracts.ReplayInputMetadata{}, fmt.Errorf("parse replay v2 header %q: %w", path, err)
+		}
+		return recordingcontracts.ReplayInputMetadata{FactorySessionID: strings.TrimSpace(header.SessionID)}, nil
+	}
+	return loadReplayV1Metadata(openFile, path)
+}
+
+func loadReplayV1Metadata(
+	openFile func(string) (io.ReadCloser, error),
+	path string,
+) (recordingcontracts.ReplayInputMetadata, error) {
+	file, err := openFile(path)
+	if err != nil {
+		return recordingcontracts.ReplayInputMetadata{}, fmt.Errorf("open legacy replay artifact %q: %w", path, err)
+	}
+	defer file.Close()
+	decoder := json.NewDecoder(file)
+	token, err := decoder.Token()
+	if err != nil {
+		return recordingcontracts.ReplayInputMetadata{}, fmt.Errorf("decode legacy replay artifact %q: %w", path, err)
+	}
+	if delimiter, ok := token.(json.Delim); !ok || delimiter != '{' {
+		return recordingcontracts.ReplayInputMetadata{}, fmt.Errorf("legacy replay artifact %q must contain a JSON object", path)
+	}
+	var sessionID string
+	for decoder.More() {
+		key, err := decoder.Token()
+		if err != nil {
+			return recordingcontracts.ReplayInputMetadata{}, fmt.Errorf("decode legacy replay artifact %q field: %w", path, err)
+		}
+		keyText, ok := key.(string)
+		if !ok {
+			return recordingcontracts.ReplayInputMetadata{}, fmt.Errorf("legacy replay artifact %q contains a non-string field name", path)
+		}
+		if keyText == "events" {
+			candidate, err := replayV1EventsSessionID(decoder)
+			if err != nil {
+				return recordingcontracts.ReplayInputMetadata{}, fmt.Errorf("decode legacy replay artifact %q events: %w", path, err)
+			}
+			if err := mergeReplaySessionID(&sessionID, candidate); err != nil {
+				return recordingcontracts.ReplayInputMetadata{}, fmt.Errorf("identify legacy replay artifact %q: %w", path, err)
+			}
+			continue
+		}
+		if err := skipJSONValue(decoder); err != nil {
+			return recordingcontracts.ReplayInputMetadata{}, fmt.Errorf("skip legacy replay artifact %q field %q: %w", path, keyText, err)
+		}
+	}
+	if token, err := decoder.Token(); err != nil || token != json.Delim('}') {
+		if err == nil {
+			return recordingcontracts.ReplayInputMetadata{}, fmt.Errorf("legacy replay artifact %q has an invalid object terminator", path)
+		}
+		return recordingcontracts.ReplayInputMetadata{}, fmt.Errorf("decode legacy replay artifact %q terminator: %w", path, err)
+	}
+	if err := requireJSONEOF(decoder); err != nil {
+		return recordingcontracts.ReplayInputMetadata{}, fmt.Errorf("decode legacy replay artifact %q trailing data: %w", path, err)
+	}
+	return recordingcontracts.ReplayInputMetadata{FactorySessionID: sessionID}, nil
+}
+
+func replayV1EventsSessionID(decoder *json.Decoder) (string, error) {
+	token, err := decoder.Token()
+	if err != nil {
+		return "", err
+	}
+	if delimiter, ok := token.(json.Delim); !ok || delimiter != '[' {
+		return "", fmt.Errorf("events must be an array")
+	}
+	var sessionID string
+	for decoder.More() {
+		candidate, err := replayV1EventSessionID(decoder)
+		if err != nil {
+			return "", err
+		}
+		if err := mergeReplaySessionID(&sessionID, candidate); err != nil {
+			return "", err
+		}
+	}
+	token, err = decoder.Token()
+	if err != nil {
+		return "", err
+	}
+	if delimiter, ok := token.(json.Delim); !ok || delimiter != ']' {
+		return "", fmt.Errorf("events array is not terminated")
+	}
+	return sessionID, nil
+}
+
+func replayV1EventSessionID(decoder *json.Decoder) (string, error) {
+	token, err := decoder.Token()
+	if err != nil {
+		return "", err
+	}
+	if delimiter, ok := token.(json.Delim); !ok || delimiter != '{' {
+		return "", fmt.Errorf("event must be an object")
+	}
+	var sessionID string
+	for decoder.More() {
+		key, err := decoder.Token()
+		if err != nil {
+			return "", err
+		}
+		keyText, ok := key.(string)
+		if !ok {
+			return "", fmt.Errorf("event contains a non-string field name")
+		}
+		if keyText == "context" {
+			candidate, err := replayV1ContextSessionID(decoder)
+			if err != nil {
+				return "", err
+			}
+			if err := mergeReplaySessionID(&sessionID, candidate); err != nil {
+				return "", err
+			}
+			continue
+		}
+		if err := skipJSONValue(decoder); err != nil {
+			return "", err
+		}
+	}
+	token, err = decoder.Token()
+	if err != nil {
+		return "", err
+	}
+	if delimiter, ok := token.(json.Delim); !ok || delimiter != '}' {
+		return "", fmt.Errorf("event object is not terminated")
+	}
+	return sessionID, nil
+}
+
+func replayV1ContextSessionID(decoder *json.Decoder) (string, error) {
+	token, err := decoder.Token()
+	if err != nil {
+		return "", err
+	}
+	if delimiter, ok := token.(json.Delim); !ok || delimiter != '{' {
+		return "", fmt.Errorf("event context must be an object")
+	}
+	var sessionID string
+	for decoder.More() {
+		key, err := decoder.Token()
+		if err != nil {
+			return "", err
+		}
+		keyText, ok := key.(string)
+		if !ok {
+			return "", fmt.Errorf("event context contains a non-string field name")
+		}
+		if keyText != "sessionId" {
+			if err := skipJSONValue(decoder); err != nil {
+				return "", err
+			}
+			continue
+		}
+		value, err := decoder.Token()
+		if err != nil {
+			return "", err
+		}
+		switch value := value.(type) {
+		case nil:
+		case string:
+			sessionID = strings.TrimSpace(value)
+		default:
+			return "", fmt.Errorf("event context sessionId must be a string")
+		}
+	}
+	token, err = decoder.Token()
+	if err != nil {
+		return "", err
+	}
+	if delimiter, ok := token.(json.Delim); !ok || delimiter != '}' {
+		return "", fmt.Errorf("event context is not terminated")
+	}
+	return sessionID, nil
+}
+
+func mergeReplaySessionID(current *string, candidate string) error {
+	if candidate == "" {
+		return nil
+	}
+	if *current != "" && *current != candidate {
+		return fmt.Errorf("legacy replay input contains multiple Factory Session UUIDs")
+	}
+	*current = candidate
+	return nil
+}
+
+func skipJSONValue(decoder *json.Decoder) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	delimiter, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+	switch delimiter {
+	case '{':
+		for decoder.More() {
+			if _, err := decoder.Token(); err != nil {
+				return err
+			}
+			if err := skipJSONValue(decoder); err != nil {
+				return err
+			}
+		}
+	case '[':
+		for decoder.More() {
+			if err := skipJSONValue(decoder); err != nil {
+				return err
+			}
+		}
+	default:
+		return fmt.Errorf("unexpected JSON delimiter %q", delimiter)
+	}
+	_, err = decoder.Token()
+	return err
+}
+
+func requireJSONEOF(decoder *json.Decoder) error {
+	token, err := decoder.Token()
+	if err == io.EOF {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf("unexpected trailing JSON token %v", token)
 }
 
 func unmarshalReplayArtifact(data []byte) (*interfaces.ReplayArtifact, error) {

@@ -141,6 +141,7 @@ type (
 	LoadReplayArtifactResult                                   = recordingcontracts.LoadReplayArtifactResult
 	LoadReplayInputRequest                                     = recordingcontracts.LoadReplayInputRequest
 	LoadReplayInputResult                                      = recordingcontracts.LoadReplayInputResult
+	ReplayInputMetadata                                        = recordingcontracts.ReplayInputMetadata
 	LoadResumeInputRequest                                     = recordingcontracts.LoadResumeInputRequest
 	LoadResumeInputResult                                      = recordingcontracts.LoadResumeInputResult
 	LoadReplayRecordingRequest                                 = recordingcontracts.LoadReplayRecordingRequest
@@ -202,6 +203,8 @@ type (
 	RecordingMakeDirectories                                   = recordingcontracts.RecordingMakeDirectories
 	RecordingPathJoiner                                        = recordingcontracts.RecordingPathJoiner
 	RecordingReadFile                                          = recordingcontracts.RecordingReadFile
+	RecordingOpenFile                                          = recordingcontracts.RecordingOpenFile
+	ReplayArtifactMetadataLoader                               = recordingcontracts.ReplayArtifactMetadataLoader
 	RecordingRemovePath                                        = recordingcontracts.RecordingRemovePath
 	RecordingRenamePath                                        = recordingcontracts.RecordingRenamePath
 	RecordingScopeRef                                          = recordingcontracts.RecordingScopeRef
@@ -521,6 +524,7 @@ var (
 	CurrentPortableRecordingCodec                      = recordingcontracts.CurrentPortableRecordingCodec
 	DecodePortableRecording                            = recordingcontracts.DecodePortableRecording
 	DecodePortableRecordingWithDiagnostics             = recordingcontracts.DecodePortableRecordingWithDiagnostics
+	DecodePortableRecordingMetadata                    = recordingcontracts.DecodePortableRecordingMetadata
 	DecodePortableRecordingWithVersions                = recordingcontracts.DecodePortableRecordingWithVersions
 	FactoryMetadataWarnings                            = recordingcontracts.FactoryMetadataWarnings
 	NormalizePortableRecordingWorkerHistory            = recordingcontracts.NormalizePortableRecordingWorkerHistory

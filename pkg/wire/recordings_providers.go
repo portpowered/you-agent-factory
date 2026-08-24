@@ -78,9 +78,19 @@ func provideRecordingsRuntimeOpening(
 func provideFactorySessionReplayInputs(
 	loadReplay recordings.ReplayArtifactLoader,
 	replayFiles factorysessionwire.ReplayRecordingReader,
+	openFile recordings.RecordingOpenFile,
 	logger logging.Logger,
 ) recordings.ReplayInputLoader {
-	return recordingswire.NewReplayInputLoader(recordings.RecordingReadFile(replayFiles), loadReplay, logger)
+	return recordingswire.NewReplayInputLoader(
+		recordings.RecordingReadFile(replayFiles), loadReplay, logger, openFile,
+	)
+}
+
+func provideRecordingOpenFile(edges serviceedges.Edges) recordings.RecordingOpenFile {
+	if edges.RecordingOpenFile != nil {
+		return edges.RecordingOpenFile
+	}
+	return platformfilesystem.Local{}.Open
 }
 
 func provideRecordedSessionInventory(
