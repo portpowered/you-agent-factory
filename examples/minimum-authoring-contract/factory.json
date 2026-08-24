@@ -1,0 +1,26 @@
+{
+  "id": "review-factory",
+  "workTypes": [
+    {
+      "name": "task",
+      "handlingBehavior": ["DEFAULT"],
+      "states": [
+        { "name": "init", "type": "INITIAL" },
+        { "name": "complete", "type": "TERMINAL" },
+        { "name": "failed", "type": "FAILED" }
+      ]
+    }
+  ],
+  "workers": [
+    { "name": "reviewer" }
+  ],
+  "workstations": [
+    {
+      "name": "review",
+      "worker": "reviewer",
+      "inputs": [{ "workType": "task", "state": "init" }],
+      "outputs": [{ "workType": "task", "state": "complete" }],
+      "onFailure": [{ "workType": "task", "state": "failed" }]
+    }
+  ]
+}

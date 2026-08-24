@@ -71,7 +71,7 @@ func TestMinimalWorkflowExampleValidation(t *testing.T) {
 	}
 }
 
-func TestAuthoringFactoryExamplesValidation(t *testing.T) {
+func TestReferenceFactoryExamplesValidation(t *testing.T) {
 	for _, test := range []struct {
 		name string
 		rel  string
@@ -81,6 +81,9 @@ func TestAuthoringFactoryExamplesValidation(t *testing.T) {
 		{name: "first workflow", rel: "examples/first-workflow"},
 		{name: "local OMNIVOICE TTS", rel: "examples/local-omnivoice-tts"},
 		{name: "script poller", rel: "examples/script-poller"},
+		{name: "minimum authoring contract", rel: "examples/minimum-authoring-contract"},
+		{name: "inference throttle guard", rel: "examples/inference-throttle-guard"},
+		{name: "minimal workflow shape", rel: "examples/minimal-workflow-shape"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			factoryPath := support.AgentFactoryPath(t, test.rel)
