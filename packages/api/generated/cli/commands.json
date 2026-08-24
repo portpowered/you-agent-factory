@@ -28,7 +28,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Run and manage CPN-based workflow factories.\n\nWhat:\nCPN-based workflow factory CLI for running factories, submitting work, and inspecting live sessions.\n\nHow to use:\nRun you run --work ./docs/examples/startup-work.json to start the exact Current Factory at ./factory/factory.json with explicit Work and no local server.\nUse you server to serve that Current Factory API and dashboard continuously, or add --with-server or --with-site to own a server only for one run. See you <cmd> --help for subcommand details.\n\nAgents:\nStart with you docs agents for orientation, you submit or you submit batch to enqueue work, and you session list to confirm a live factory.\nRun you docs for all packaged reference topics. Use --verbose or --debug for stderr diagnostics; full policy in you docs.",
+            "canonicalEnglish": "Run and manage CPN-based workflow factories.\n\nWhat:\nCPN-based workflow factory CLI for running factories, submitting work, and inspecting live sessions.\n\nHow to use:\nRun you run --work ./docs/examples/startup-work.json to start the exact Current Factory at ./factory/factory.json with explicit Work and no local server.\nUse you server for continuous, non-resumable hosting of the Current Factory API and dashboard. For restart-surviving hosting, use you run --with-server --continuously --record <path>. Add --with-server or --with-site to host one run. See you <cmd> --help for subcommand details.\n\nAgents:\nStart with you docs agents for orientation, you submit or you submit batch to enqueue work, and you session list to confirm a live factory.\nRun you docs for all packaged reference topics. Use --verbose or --debug for stderr diagnostics; full policy in you docs.",
             "id": "you.description"
           },
           "title": {
@@ -15924,7 +15924,7 @@
           },
           "description": {
             "id": "you.server.description",
-            "canonicalEnglish": "Validate and serve the exact Current Factory from ./factory/factory.json. This command is local-only and rejects --remote. The listener remains loopback-only; use --listen host:port for an exact local bind, or omit it for the default local bind. An explicit --server local URI remains a warned compatibility path. The command opens the embedded dashboard once after readiness and runs until cancellation. Use `you server acp` for the ACP stdio host or `you server mcp` for the MCP stdio host."
+            "canonicalEnglish": "Validate and serve the exact Current Factory from ./factory/factory.json. This command provides continuous, non-resumable hosting and does not accept recording, resume, or replay flags. For restart-surviving hosting, use you run --with-server --continuously --record <path>. This command is local-only and rejects --remote. The listener remains loopback-only; use --listen host:port for an exact local bind, or omit it for the default local bind. An explicit --server local URI remains a warned compatibility path. The command opens the embedded dashboard once after readiness and runs until cancellation. Use `you server acp` for the ACP stdio host or `you server mcp` for the MCP stdio host."
           }
         },
         "examples": [

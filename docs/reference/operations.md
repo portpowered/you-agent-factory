@@ -19,7 +19,7 @@ Session has a configured Recordings record path, startup restores its retained
 current-board state through the public Recordings history contract before the
 session is ready; this does not make arbitrary in-memory queues durable.
 
-## Use a continuous server for real pipelines
+## Use continuous hosting for real pipelines
 
 For a real pipeline that accepts or retains Work across idle periods, use the
 server-enabled continuous shape:
@@ -27,6 +27,7 @@ server-enabled continuous shape:
 ```bash
 you run --dir ./factory --with-server --continuously
 you run --dir ./factory --with-server --continuously --listen 127.0.0.1:7437
+you run --dir ./factory --with-server --continuously --record ./recordings/factory.json
 ```
 
 `--with-server` keeps the Factory Session API available for submitters and
@@ -123,6 +124,11 @@ path. The measured fallback output was:
 SUCCESS: The process with PID 33724 has been terminated.
 INFO: No tasks are running which match the specified criteria.
 ```
+
+`you server` is continuous, non-resumable hosting for the exact Current Factory.
+It does not accept recording, resume, or replay flags. Use
+`you run --with-server --continuously --record <path>` when the host must keep
+an explicit recording for restart recovery with `you run --resume <recording>`.
 
 ## Read the queue state correctly
 
@@ -560,9 +566,13 @@ Verify recovery with the same session target used for submission:
 
 1. Run `you work list` and `you work show <work-id>` to confirm Work identity,
    state, payload, and relations.
-2. Run `you session dispatches <session-id>` or inspect the Factory Session
-   dispatch API to confirm the prior dispatch is interrupted, not running.
-3. Read the Factory Session events or Worker Session observation when the
+2. Run `you worker-sessions list --work-id <work-id>` to inspect the Worker
+   Session attempts attributed to that Work.
+3. Inspect `GET /factory-sessions/<session-id>/dispatches` for exact
+   session-level dispatch records, or call `you.factory_session.list_dispatches`
+   through MCP. The Work-scoped Worker Session list does not replace these
+   Factory Session dispatch reads.
+4. Read the Factory Session events or Worker Session observation when the
    interruption reason and original attempt identity are needed.
 
 If no current-board Recording was configured, the live Factory Session queue

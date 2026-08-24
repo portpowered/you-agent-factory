@@ -30,6 +30,12 @@ import (
 // rejection.
 const maxRunInvocationStdinBytes = 1 << 20
 
+type resolvedProcessHomeDirectoryContextKey struct{}
+
+type resolvedProcessHomeDirectory struct {
+	path string
+}
+
 func scalarTarget[T bool | string | int](value T) *T {
 	return &value
 }
@@ -338,6 +344,29 @@ func resolveProcessHomeDir(options CommandFactory) (string, error) {
 	homeDir, err := options.homeDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve process home directory: %w", err)
+	}
+	return homeDir, nil
+}
+
+func resolveProcessHomeDirForCommand(cmd *cobra.Command, options CommandFactory) (string, error) {
+	if cmd != nil {
+		ctx := cmd.Context()
+		if ctx != nil {
+			if resolved, ok := ctx.Value(resolvedProcessHomeDirectoryContextKey{}).(resolvedProcessHomeDirectory); ok {
+				return resolved.path, nil
+			}
+		}
+	}
+	homeDir, err := resolveProcessHomeDir(options)
+	if err != nil {
+		return "", err
+	}
+	if cmd != nil {
+		ctx := cmd.Context()
+		if ctx == nil {
+			return "", fmt.Errorf("resolve process home directory: command context is required")
+		}
+		cmd.SetContext(context.WithValue(ctx, resolvedProcessHomeDirectoryContextKey{}, resolvedProcessHomeDirectory{path: homeDir}))
 	}
 	return homeDir, nil
 }

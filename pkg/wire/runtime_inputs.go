@@ -57,6 +57,10 @@ func provideWorkersMockWorkersConfigDiagnosticsLoader(
 	return (workers.MockWorkersConfigCodec{}).NewDiagnosticsLoader(files)
 }
 
+func provideRunInputPathInspector() platformfilesystem.PathInspector {
+	return platformfilesystem.Local{}
+}
+
 type runtimeArtifactClock func() time.Time
 type runtimeArtifactIDGenerator func() string
 

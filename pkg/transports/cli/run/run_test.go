@@ -54,6 +54,30 @@ func TestEmitHistoricalReplayInspectionIncludesLegacyWorkerHistoryOutcome(t *tes
 	}
 }
 
+func TestOperationRunDisclosesReplayHomeBeforeInspection(t *testing.T) {
+	var output bytes.Buffer
+	operation := &Operation{
+		cfg: RunConfig{
+			HomeDir:       "operator-home",
+			Output:        &output,
+			StartupOutput: &output,
+		},
+		runner: stubFactoryService{run: func(context.Context) error { return nil }},
+		historicalReplay: &factorysessions.HistoricalReplayInspection{
+			Session: factorysessions.SessionReadResult{SessionID: "replay-session"},
+		},
+	}
+
+	if err := operation.Run(context.Background()); err != nil {
+		t.Fatalf("Operation.Run() error = %v, want successful replay", err)
+	}
+	homeIndex := strings.Index(output.String(), "Home directory: operator-home\n")
+	inspectionIndex := strings.Index(output.String(), "Replayed Factory Session: replay-session\n")
+	if homeIndex < 0 || inspectionIndex < 0 || homeIndex > inspectionIndex {
+		t.Fatalf("replay output ordering is wrong:\n%s", output.String())
+	}
+}
+
 type stubFactoryService struct {
 	runtimehost.Service
 	run                   func(context.Context) error

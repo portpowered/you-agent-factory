@@ -120,6 +120,34 @@ func assertServerHelpListsChildren(t *testing.T, root *cobra.Command) {
 	}
 }
 
+func TestServerHelpDocumentsContinuousNonResumableHosting(t *testing.T) {
+	root := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI}).NewCommand(nil, nil, nil)
+	server := requireCommand(t, root, "you server", "server")
+
+	var stdout bytes.Buffer
+	root.SetOut(&stdout)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"server", "--help"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute you server --help: %v", err)
+	}
+
+	help := stdout.String()
+	for _, want := range []string{
+		"continuous, non-resumable hosting",
+		"you run --with-server --continuously --record <path>",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("you server --help missing %q:\n%s", want, help)
+		}
+	}
+	for _, flag := range []string{"record", "resume", "replay"} {
+		if server.Flags().Lookup(flag) != nil {
+			t.Fatalf("you server unexpectedly exposes --%s", flag)
+		}
+	}
+}
+
 // TestServeACPCommand_HelpRendersManifestExamplesAndNoLocalFlags executes the
 // real --help path (not a manifest-text read) so a drift between the
 // authoritative manifest and the projected runtime command tree -- for
@@ -303,7 +331,8 @@ func TestServeACPCommandInitializesSystemBeforeServing(t *testing.T) {
 	root := factory.NewCommand(func() (string, error) { return "operator-home", nil }, nil, initializer)
 	root.SetIn(strings.NewReader(""))
 	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
+	var stderr bytes.Buffer
+	root.SetErr(&stderr)
 	root.SetArgs([]string{"server", "acp"})
 
 	if err := root.Execute(); err != nil {
@@ -314,6 +343,9 @@ func TestServeACPCommandInitializesSystemBeforeServing(t *testing.T) {
 	}
 	if fake.calls != 1 {
 		t.Fatalf("Serve call count = %d, want 1 after system initialization", fake.calls)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("server ACP diagnostics = %q, want clean protocol diagnostics", got)
 	}
 }
 

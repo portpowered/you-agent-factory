@@ -17,6 +17,11 @@ inspection shared by every orchestrator kind.
 For the canonical real-pipeline lifetime and process-restart recovery runbook,
 use `you docs operations`.
 
+Use `you server` for continuous, non-resumable hosting of the exact Current
+Factory. For restart-surviving hosting with an explicit recording, use
+`you run --with-server --continuously --record <path>`. Continue that recording
+after a stop with `you run --resume <recording>`.
+
 Each live session owns its own runtime state. The service coordinates and
 routes requests between sessions, but runtime state such as loaded factory,
 event history, current work, and relative execution-path resolution is scoped
@@ -760,8 +765,9 @@ still-running service:
 | How you start | Stays running for later `you submit` / `POST /factory-sessions/{session_id}/work`? |
 |---------------|------------------------------------------------------|
 | `you` (no args) | No — prints root help and performs no runtime or listener activation. |
-| `you server` | Yes — serves the exact Current Factory until cancellation. |
-| `you run --continuously --with-server` or `--with-site` | Yes — processes work and serves until cancellation. |
+| `you server` | Yes — serves the exact Current Factory until cancellation; it is continuous, non-resumable hosting. |
+| `you run --continuously --with-server --record <path>` | Yes — processes Work, serves until cancellation, and writes the explicit recording used for restart recovery. |
+| `you run --continuously --with-server` or `--with-site` | Yes — processes Work and serves until cancellation without an explicit recording path. |
 | `you run --continuously` without a server flag | No HTTP service — the local runtime remains alive until cancellation. |
 | One-shot `you run --with-server` or `--with-site` | Only for the run lifetime — the listener is joined before the command returns. |
 | Ordinary one-shot `you run` | No — starts no listener and exits when the factory becomes idle or invocation completes. |
@@ -773,9 +779,9 @@ Factory Session is incomplete: the command returns failure with
 on stderr and joins the listener/runtime before returning. Continuous runs
 remain live while idle and end only when cancelled.
 
-For steady operator loops (check running → submit → verify), prefer `you server`
-or `you run --continuously --with-server`. See `you docs agents` for the full
-operator loop and pre-submit checklist.
+For steady operator loops (check running → submit → verify), prefer
+`you server` or `you run --continuously --with-server --record <path>`. See
+`you docs agents` for the full operator loop and pre-submit checklist.
 
 ## Event stream lifecycle and reconnect
 

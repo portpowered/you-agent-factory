@@ -170,6 +170,52 @@ func TestRun_StartupOutputReportsRuntimeLogPathAndUTCStartTime(t *testing.T) {
 	}
 }
 
+func TestRun_StartupOutputDisclosesHomeBeforeRuntimeArtifacts(t *testing.T) {
+	var output bytes.Buffer
+	cfg := RunConfig{
+		HomeDir:       "operator-home",
+		Dir:           "factory",
+		StartupOutput: &output,
+	}
+	runtimeLog := service.RuntimeLogDiagnostics{
+		Path:         "operator-home/.you-agent-factory/logs/runtime.log",
+		MetricsPath:  "operator-home/.you-agent-factory/metrics/runtime.log",
+		StartTimeUTC: time.Date(2026, 5, 29, 4, 45, 3, 0, time.UTC),
+	}
+
+	if emitStartupMessages(cfg, runtimeLog) {
+		t.Fatal("startup messages requested dashboard opening with no port")
+	}
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) == 0 || lines[0] != "Home directory: operator-home" {
+		t.Fatalf("startup output first line = %q, want resolved home disclosure\n%s", lines[0], output.String())
+	}
+	for _, marker := range []string{
+		"Factory initiated: factory",
+		"Runtime log: operator-home/.you-agent-factory/logs/runtime.log",
+		"Runtime metrics: operator-home/.you-agent-factory/metrics/runtime.log",
+	} {
+		if strings.Index(output.String(), marker) < strings.Index(output.String(), lines[0]) {
+			t.Fatalf("startup marker %q precedes home disclosure:\n%s", marker, output.String())
+		}
+	}
+}
+
+func TestRun_StartupOutputOmitsHomeForStructuredOutput(t *testing.T) {
+	var output bytes.Buffer
+	if emitStartupMessages(RunConfig{
+		HomeDir:       "operator-home",
+		Dir:           "factory",
+		JSON:          true,
+		StartupOutput: &output,
+	}, service.RuntimeLogDiagnostics{}) {
+		t.Fatal("structured startup messages requested dashboard opening with no port")
+	}
+	if strings.Contains(output.String(), "Home directory:") {
+		t.Fatalf("structured startup output disclosed human home line: %q", output.String())
+	}
+}
+
 func TestRun_StartupOutputReportsSharedLayoutPathsFromBuiltService(t *testing.T) {
 	originalBuilder := openTestRuntimeRunner
 	defer func() {

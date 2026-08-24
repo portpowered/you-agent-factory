@@ -143,6 +143,7 @@ type CommandOperations struct {
 	BuildTerminalLogger               terminalpolicy.LoggerBuilder
 	RunDefaults                       runcli.RunConfig
 	BatchInputFileSystem              submitcli.BatchInputFileSystem
+	RunInputPathInspector             platformfilesystem.PathInspector
 	RunDirectoryCreator               platformfilesystem.DirectoryCreator
 	BrowserOpener                     platformbrowser.Opener
 	ResolveOperatorDefaults           operatorconfig.DefaultsResolver
@@ -219,6 +220,7 @@ type CommandFactory struct {
 	buildTerminalLogger               terminalpolicy.LoggerBuilder
 	runDefaults                       runcli.RunConfig
 	batchInputFileSystem              submitcli.BatchInputFileSystem
+	runInputPathInspector             platformfilesystem.PathInspector
 	runDirectoryCreator               platformfilesystem.DirectoryCreator
 	browserOpener                     platformbrowser.Opener
 	resolveOperatorDefaults           operatorconfig.DefaultsResolver
@@ -294,6 +296,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		buildTerminalLogger:               operations.BuildTerminalLogger,
 		runDefaults:                       operations.RunDefaults,
 		batchInputFileSystem:              operations.BatchInputFileSystem,
+		runInputPathInspector:             operations.RunInputPathInspector,
 		runDirectoryCreator:               operations.RunDirectoryCreator,
 		browserOpener:                     operations.BrowserOpener,
 		resolveOperatorDefaults:           operations.ResolveOperatorDefaults,
@@ -590,94 +593,14 @@ func newMCPCommand(options CommandFactory) (*cobra.Command, error) {
 	}))
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, operatorDefaults *cliOperatorDefaultsOptions, policy terminalpolicy.Policy, rootOptions CommandFactory, defaultInvocation bool) error {
-	cfg = applyRunScopedServerMode(cfg)
-	if cfg.Pprof && !defaultInvocation && !cfg.WithServer && !cfg.WithSite {
-		return fmt.Errorf("input relationship %q: --pprof requires --with-server or --with-site", "you.run.rel.pprof-server")
-	}
-	if cfg.ListenExplicit || strings.TrimSpace(cfg.ListenAddress) != "" {
-		cfg.ListenExplicit = true
-		if !defaultInvocation && !cfg.WithServer && !cfg.WithSite {
-			return fmt.Errorf("--listen requires --with-server or --with-site on you run")
-		}
-	}
-	logger, err := policy.BuildLogger(rootOptions.buildTerminalLogger)
+	preparedCfg, err := prepareRunFactoryConfig(
+		cmd, cfg, promptArgs, globals, operatorDefaults, policy, rootOptions, defaultInvocation,
+	)
 	if err != nil {
 		return err
 	}
-	cfg.Logger = logger
-	cfg.Verbose = policy.VerboseEnabled()
-	cfg.TerminalPolicy = policy
-	cfg.ExecutionBaseDir = startupcli.WorkingDirectory(cmd.Context())
-
-	if !remotePlacementSelected(globals) {
-		if err := resolveRunBindFromServer(cmd, globals.server, &cfg); err != nil {
-			return err
-		}
-		warnLegacyListenerBinding(cmd, cfg, defaultInvocation, persistentInputWasCLI(cmd, "you.flag.server", "server"))
-	}
-	homeDir, err := resolveProcessHomeDir(rootOptions)
-	if err != nil {
-		return err
-	}
-	cfg.HomeDir = homeDir
-	if err := configureRunEnvironment(cmd, &cfg, rootOptions, homeDir); err != nil {
-		return err
-	}
-	if err := resolveRunFactorySelection(
-		cmd,
-		&cfg,
-		homeDir,
-		rootOptions.namedFactoryCatalog,
-		rootOptions.resolveNamedFactoryRoots,
-		rootOptions.resolveNamedFactoryCandidatePaths,
-	); err != nil {
-		return err
-	}
-
-	runOperatorDefaults := *operatorDefaults
-	runOperatorDefaults.providerOverride = cfg.ProviderOverride
-	runOperatorDefaults.modelOverride = cfg.ModelOverride
-	resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, &runOperatorDefaults, rootOptions, homeDir)
-	if err != nil {
-		return err
-	}
-	cfg.OperatorDefaults = resolvedOperatorDefaults
-	cfg.Stdin = cmd.InOrStdin()
-	cfg.StdinIsTTY = func() bool { return startupcli.StdinIsTTY(cmd.Context()) }
-	cfg.OutputIsTTY = startupcli.StdoutIsTTY(cmd.Context())
-	if err := resolveRunFactoryPrompt(cmd, &cfg, promptArgs, rootOptions.prepareInvocationInput); err != nil {
-		runcli.ObserveInvocationRejection(logger, err)
-		return err
-	}
-	cleanInvocation, textInvocation := runInvocationModes(cmd, cfg)
-	invocationFactorySelected := cmd.Flags().Changed("factory") || cmd.Flags().Changed("named") || cfg.InvocationFileExplicit
-	defaultResponseStream := !cfg.SuppressDashboardRendering &&
-		(textInvocation || (invocationFactorySelected && !cfg.Continuously && !cmd.Flags().Changed("work") && len(promptArgs) > 0))
-	if defaultResponseStream && strings.TrimSpace(cfg.InvocationOutputMode) == "" && !cfg.InvocationOutputExplicit {
-		cfg.InvocationOutputMode = runcli.InvocationOutputResponseStream
-	}
-	cfg.CleanInvocation = cleanInvocation
-	cfg.JSON = globals.json
-	runPolicy := resolveEffectiveRunPolicy(cmd, cfg, policy)
-	cfg.TerminalPolicy = runPolicy
-	cfg.Verbose = runPolicy.VerboseEnabled()
-	cfg.SuppressDashboardRendering = runPolicy.Mode() == terminalpolicy.ModeQuiet
-	configureRunProgressOutput(cmd, &cfg, policy)
-	humanTerminal := runPolicy.HumanTerminalWriter(cmd.OutOrStdout())
-	if cleanInvocation || textInvocation {
-		cfg.Output = cmd.OutOrStdout()
-	} else if strings.TrimSpace(cfg.FactoryConfigPath) != "" ||
-		(strings.TrimSpace(cfg.ReplayPath) != "" && !cfg.SuppressDashboardRendering) {
-		cfg.Output = cmd.OutOrStdout()
-		cfg.StartupOutput = humanTerminal
-	} else {
-		cfg.StartupOutput = humanTerminal
-	}
-	cfg.Diagnostics = runPolicy.DiagnosticsWriter(cmd.ErrOrStderr())
-	cfg.ReplayMetadataOutput = cmd.OutOrStdout()
-	cfg.JSONOutput = globals.json
+	cfg = preparedCfg
 	if remotePlacementSelected(globals) {
 		return runcli.RunRemoteInvocationWithWorkTarget(
 			cmd.Context(), cfg, globals.server, rootOptions.remoteInvocation,

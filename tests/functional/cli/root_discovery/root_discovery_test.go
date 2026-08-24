@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -22,6 +24,24 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+func startupOutputValue(output, label string) string {
+	for _, line := range strings.Split(output, "\n") {
+		if strings.HasPrefix(line, label) {
+			return strings.TrimSpace(strings.TrimPrefix(line, label))
+		}
+	}
+	return ""
+}
+
+func pathUnderDirectory(path, directory string) bool {
+	path = filepath.Clean(path)
+	directory = filepath.Clean(directory)
+	if path == directory {
+		return true
+	}
+	return strings.HasPrefix(path, directory+string(os.PathSeparator))
+}
 
 // TestManifestProjectedRepresentativeHandlersAcceptCanonicalInputs proves the
 // generated Session and Work leaves reach their typed transport handlers through
@@ -469,6 +489,175 @@ func TestCurrentFactoryRunsToIdleWithoutStartingServer(t *testing.T) {
 	}
 	if effects.Load() != 0 {
 		t.Fatalf("idle Current Factory external effects = %d, want no listener, browser, or provider call", effects.Load())
+	}
+}
+
+// TestLocalRunDisclosesHomeBeforeSystemInitializationAccess proves the
+// customer process writes the resolved home before the injected initialization
+// path inspects an artifact beneath that home.
+func TestLocalRunDisclosesHomeBeforeSystemInitializationAccess(t *testing.T) {
+	workingDirectory := t.TempDir()
+	factoryDir := filepath.Join(workingDirectory, "factory")
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("create Factory directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, "factory.json"), []byte(idleCurrentFactoryJSON), 0o600); err != nil {
+		t.Fatalf("write Factory config: %v", err)
+	}
+
+	homeDir := t.TempDir()
+	events := make([]string, 0, 2)
+	stdout := &orderedStartupOutput{events: &events}
+	var stderr bytes.Buffer
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		SystemInitializationInspectPath: func(path string) (fs.FileInfo, error) {
+			events = append(events, "initialize:"+path)
+			return nil, fs.ErrNotExist
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	stdinIsTTY := true
+	stdoutIsTTY := false
+	err = process.Execute(root.Input{
+		Args:             []string{"you", "run", "--dir", factoryDir, "--no-record"},
+		Env:              append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir),
+		Stdin:            strings.NewReader(""),
+		Stdout:           stdout,
+		Stderr:           &stderr,
+		Context:          t.Context(),
+		WorkingDirectory: workingDirectory,
+		StdinIsTTY:       &stdinIsTTY,
+		StdoutIsTTY:      &stdoutIsTTY,
+	})
+	if err != nil {
+		t.Fatalf("Process.Execute(local run) error = %v\nstdout=%s\nstderr=%s", err, stdout.String(), stderr.String())
+	}
+	homeIndex := -1
+	initializationIndex := -1
+	for index, event := range events {
+		if event == "home" && homeIndex < 0 {
+			homeIndex = index
+		}
+		if strings.HasPrefix(event, "initialize:") && initializationIndex < 0 {
+			initializationIndex = index
+		}
+	}
+	if homeIndex < 0 || initializationIndex < 0 || homeIndex > initializationIndex {
+		t.Fatalf("startup events = %#v, want home followed by initialization access", events)
+	}
+	if got, want := stdout.String(), "Home directory: "+homeDir+"\n"; !strings.HasPrefix(got, want) {
+		t.Fatalf("stdout = %q, want prefix %q", got, want)
+	}
+	for _, label := range []string{"Runtime log: ", "Runtime metrics: "} {
+		path := startupOutputValue(stdout.String(), label)
+		if path == "" {
+			t.Fatalf("stdout = %q, want %s startup artifact", stdout.String(), label)
+		}
+		if !pathUnderDirectory(path, homeDir) {
+			t.Fatalf("%s path = %q, want beneath resolved home %q", label, path, homeDir)
+		}
+		if _, statErr := os.Stat(path); statErr != nil {
+			t.Fatalf("stat %s artifact %q: %v", label, path, statErr)
+		}
+	}
+}
+
+type orderedStartupOutput struct {
+	bytes.Buffer
+	events      *[]string
+	homeSeen    chan struct{}
+	startupSeen chan struct{}
+	homeOnce    sync.Once
+	startupOnce sync.Once
+}
+
+func (output *orderedStartupOutput) Write(data []byte) (int, error) {
+	text := string(data)
+	if strings.Contains(text, "Home directory:") {
+		*output.events = append(*output.events, "home")
+		if output.homeSeen != nil {
+			output.homeOnce.Do(func() { close(output.homeSeen) })
+		}
+	}
+	if strings.Contains(text, "Factory initiated:") && output.startupSeen != nil {
+		output.startupOnce.Do(func() { close(output.startupSeen) })
+	}
+	return output.Buffer.Write(data)
+}
+
+// TestServerDisclosesHomeBeforeSystemInitializationAccess exercises the
+// ordinary server command through the real process graph, including listener
+// readiness and the system-initialization filesystem edge.
+func TestServerDisclosesHomeBeforeSystemInitializationAccess(t *testing.T) {
+	workingDirectory := t.TempDir()
+	factoryDir := filepath.Join(workingDirectory, "factory")
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("create Factory directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, "factory.json"), []byte(idleCurrentFactoryJSON), 0o600); err != nil {
+		t.Fatalf("write Factory config: %v", err)
+	}
+
+	homeDir := t.TempDir()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	events := make([]string, 0, 3)
+	startupSeen := make(chan struct{})
+	stdout := &orderedStartupOutput{events: &events, startupSeen: startupSeen}
+	var stderr bytes.Buffer
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		SystemInitializationInspectPath: func(path string) (fs.FileInfo, error) {
+			events = append(events, "initialize:"+path)
+			return nil, fs.ErrNotExist
+		},
+		APIServerStarter: func(serverCtx context.Context, request platformhttpserver.StartRequest) error {
+			events = append(events, "bind")
+			request.OnBound(platformhttpserver.Binding{Port: request.Port})
+			select {
+			case <-startupSeen:
+				cancel()
+			case <-time.After(5 * time.Second):
+				return errors.New("system initialization did not reach the server startup boundary")
+			}
+			return serverCtx.Err()
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	stdinIsTTY := true
+	stdoutIsTTY := false
+	err = process.Execute(root.Input{
+		Args:             []string{"you", "server"},
+		Env:              append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir),
+		Stdin:            strings.NewReader(""),
+		Stdout:           stdout,
+		Stderr:           &stderr,
+		Context:          ctx,
+		WorkingDirectory: workingDirectory,
+		StdinIsTTY:       &stdinIsTTY,
+		StdoutIsTTY:      &stdoutIsTTY,
+	})
+	if err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("Process.Execute(server) error = %v\nstdout=%s\nstderr=%s", err, stdout.String(), stderr.String())
+	}
+	homeIndex := -1
+	initializationIndex := -1
+	for index, event := range events {
+		if event == "home" && homeIndex < 0 {
+			homeIndex = index
+		}
+		if strings.HasPrefix(event, "initialize:") && initializationIndex < 0 {
+			initializationIndex = index
+		}
+	}
+	if homeIndex < 0 || initializationIndex < 0 || homeIndex > initializationIndex {
+		t.Fatalf("startup events = %#v, want home followed by initialization access", events)
+	}
+	if got, want := stdout.String(), "Home directory: "+homeDir+"\n"; !strings.HasPrefix(got, want) {
+		t.Fatalf("stdout = %q, want prefix %q", got, want)
 	}
 }
 

@@ -467,46 +467,17 @@ func executeRunCommand(cmd *cobra.Command, args []string, globals *cliGlobalOpti
 		cmd, args, defaultcmd.ExplicitRunConfig(rootOptions.runDefaults),
 	)
 	if err != nil {
-		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
-		return err
+		return writeRunCommandInvocationError(cmd, globals, err)
 	}
-	if err := validateRunRemoteHostingConflict(cmd, globals); err != nil {
-		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
-		return err
-	}
-	if err := applyRunCommandInvocationOutputMode(cmd, &resolvedConfig); err != nil {
-		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
-		return err
-	}
-	outputExplicit, changedErr := climanifestcobra.InputChanged(cmd, "you.run.flag.output")
-	if changedErr != nil {
-		return changedErr
-	}
-	if err := runcli.ValidateInvocationOutputSelection(
-		resolvedConfig.SuppressDashboardRendering,
-		globals.json,
-		outputExplicit,
-	); err != nil {
-		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
-		return err
-	}
-	if helpRequested(cmd) {
-		return writeRunCommandHelp(cmd, &resolvedConfig, rootOptions)
-	}
-	currentFactorySelected := runUsesCurrentFactory(cmd)
-	if currentFactorySelected {
-		if err := selectCurrentFactoryFromWorkingDirectory(cmd, &resolvedConfig); err != nil {
-			mapped := runcli.MapCurrentFactoryFailure(err)
-			_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), mapped, globals.json)
-			return mapped
+	if validationErr, writeError := validateRunCommandInputs(cmd, &resolvedConfig, globals); validationErr != nil {
+		if !writeError {
+			return validationErr
 		}
+		return writeRunCommandInvocationError(cmd, globals, validationErr)
 	}
-	basePolicy := diagnostics.resolvePolicy(resolvedConfig.SuppressDashboardRendering)
-	err = runFactoryWithOptions(cmd, resolvedConfig, promptArgs, globals, operatorDefaults, basePolicy, rootOptions, false)
-	if err != nil {
-		return handleRunExecutionError(cmd, resolvedConfig, promptArgs, globals, basePolicy, err, currentFactorySelected)
-	}
-	return err
+	return executeResolvedRunCommand(
+		cmd, promptArgs, resolvedConfig, globals, diagnostics, operatorDefaults, rootOptions,
+	)
 }
 
 func applyRunScopedServerMode(cfg runcli.RunConfig) runcli.RunConfig {
@@ -615,7 +586,7 @@ func writeRunCommandHelp(cmd *cobra.Command, cfg *runcli.RunConfig, rootOptions 
 	cfg.ResolveFactoryConfigRoot = rootOptions.resolveFactoryConfigRoot
 	cfg.LoadFactoryConfigFile = rootOptions.loadFactoryConfigFile
 	cfg.WorkRequestFileLoader = rootOptions.workRequestFileLoader
-	homeDir, err := resolveProcessHomeDir(rootOptions)
+	homeDir, err := resolveProcessHomeDirForCommand(cmd, rootOptions)
 	if err != nil {
 		return err
 	}
