@@ -204,6 +204,7 @@ The expected testing layers are:
 - functional tests for user-visible or system-visible flows across subsystem boundaries
 - stress or race-oriented tests for concurrency, throughput, resource exhaustion, and long-running behavior
 - contract tests for schema alignment, generated artifacts, and public surface guarantees
+- asset conformance tests for declared external artifacts, pinned dependencies, and published locations
 
 Rules:
 
@@ -228,6 +229,11 @@ Rules:
 - External effects **MUST** be replaced only through `edges.Edges`. Functional
   tests **MUST** prefer `ProviderCommandRunner` and other command-runner edge
   mocks over custom in-process provider fakes.
+- Asset conformance tests **MUST** read the real declared artifact. The
+  `edges.Edges` substitution rule does not apply to an asset conformance test. An
+  asset conformance test **MUST** fail when a declared artifact is absent,
+  unresolvable, or smaller than its documented minimum size. A hermetic test
+  **MUST NOT** be cited as evidence that a real pinned dependency is intact.
 - Functional tests **MUST** prefer mocked Codex or another real
   inference-provider variant through the command-runner edge and sanitized
   goldens over `--with-mock-workers` / `MockWorkers`, except for cells under

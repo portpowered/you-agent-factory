@@ -234,6 +234,32 @@ PRD with behavioral acceptance criteria.
 
 The Plan should be generally verbose enough such that the model won't screw up your intentions. 
 
+Every idea MUST carry an explicit validation declaration. The plan workstation
+inherits this declaration; it does not invent one.
+
+State, in the idea payload:
+
+1. the observable behavior that proves the work functions, in customer terms:
+   a command and its expected output, an emitted event, a readiness state, or a
+   rendered surface
+2. how that behavior will be observed: runtime proof against a real built
+   artifact, an asset conformance check against a real declared artifact, or an
+   automated test
+3. when no runtime-observable behavior exists, the words "runtime proof not
+   applicable" and a one-line reason
+
+Do not accept "compiles", "typechecks", "tests pass", or "the diff is correct"
+as a validation declaration. Those describe the change, not the behavior.
+
+When an idea depends on an external artifact, a downloaded asset, a pinned
+binary, or a network dependency, the declaration MUST name that dependency and
+MUST state that the real dependency is exercised. Do not let a substitute stand
+in for a real artifact the idea claims to reach.
+
+Order ideas by failure order when several defects sit on one path. A defect
+downstream of another defect cannot be observed until the upstream defect is
+fixed, so an idea chartered against it cannot produce its validation evidence.
+
 ### Work Batch Guidance
 
 Prefer batches that move forward in vertical slices:

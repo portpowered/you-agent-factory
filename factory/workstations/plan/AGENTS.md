@@ -88,6 +88,13 @@ so the last implementation iteration owns the proof or the explicit
 not-applicable reason. Do not weaken, defer, or replace this final-story
 criterion with a structural check such as file presence, typecheck, or tests.
 
+Do not write two criteria that disagree. A criterion may state that the lane
+reaches, pulls, or invokes a real external artifact. When a criterion states
+this, no other criterion in the same plan may exempt that artifact from its
+proof. Do not describe that proof as "requiring no real network download" or as
+"replacing the backend only through `edges.Edges`". Write the real-artifact
+check as a separate asset conformance criterion instead.
+
 
 The markdown PRD should include, when relevant:
 - context with customer ask, concrete problem, and high-level solution
