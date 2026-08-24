@@ -186,6 +186,11 @@ func functionalQuarantineValidationMeasurementCases(packagePath string) []functi
 			want:    "followUp",
 		},
 		{
+			name:    "flaky ownership",
+			entries: []functionalQuarantineEntry{{Package: packagePath, Test: "TestKnown", Bucket: functionalBucketFlaky, Reason: "intermittent failure"}},
+			want:    "followUpIssue or followUpLane",
+		},
+		{
 			name: "overlapping package and test",
 			entries: []functionalQuarantineEntry{
 				{Package: packagePath, Bucket: functionalBucketEnvironment, Reason: "whole package precondition"},
@@ -218,6 +223,114 @@ func TestReadFunctionalQuarantineRejectsUnknownFieldsAndTrailingValues(t *testin
 				t.Fatalf("readFunctionalQuarantineFile() error = %v, want substring %q", err, test.want)
 			}
 		})
+	}
+}
+
+func TestFunctionalQuarantineFlakyOwnershipUsesScratchManifest(t *testing.T) {
+	packagePath := modulePath + "/tests/functional/alpha"
+	inventory := functionalTestInventory{
+		Packages: []string{packagePath},
+		Tests:    map[string][]string{packagePath: {"TestKnown"}},
+	}
+	manifest := functionalQuarantine{
+		Version: functionalQuarantineVersion,
+		Suite:   functionalSuiteName,
+		Entries: []functionalQuarantineEntry{{
+			Package: packagePath,
+			Test:    "TestKnown",
+			Bucket:  functionalBucketFlaky,
+			Reason:  "intermittent failure fixture",
+		}},
+	}
+	path := filepath.Join(t.TempDir(), "functional-quarantine.json")
+
+	writeAndValidate := func() error {
+		data, err := json.MarshalIndent(manifest, "", "  ")
+		if err != nil {
+			t.Fatalf("marshal scratch manifest: %v", err)
+		}
+		if err := os.WriteFile(path, data, 0o644); err != nil {
+			t.Fatalf("write scratch manifest: %v", err)
+		}
+		parsed, err := readFunctionalQuarantineFile(path)
+		if err != nil {
+			return err
+		}
+		return validateFunctionalQuarantine(parsed, inventory)
+	}
+
+	err := writeAndValidate()
+	if err == nil || !strings.Contains(err.Error(), `selector "`+packagePath+`#TestKnown"`) || !strings.Contains(err.Error(), "followUpIssue or followUpLane") {
+		t.Fatalf("missing flaky ownership error = %v, want selector-specific follow-up diagnostic", err)
+	}
+
+	manifest.Entries[0].FollowUpIssue = "issue-123"
+	if err := writeAndValidate(); err != nil {
+		t.Fatalf("issue-owned flaky manifest validation error = %v, want success", err)
+	}
+	parsed, err := readFunctionalQuarantineFile(path)
+	if err != nil {
+		t.Fatalf("read issue-owned scratch manifest: %v", err)
+	}
+	if parsed.Entries[0].FollowUpIssue != "issue-123" {
+		t.Fatalf("parsed followUpIssue = %q, want issue-123", parsed.Entries[0].FollowUpIssue)
+	}
+
+	manifest.Entries[0].FollowUpIssue = ""
+	manifest.Entries[0].FollowUpLane = "ci/deflake-flaky-selector"
+	if err := writeAndValidate(); err != nil {
+		t.Fatalf("lane-owned flaky manifest validation error = %v, want success", err)
+	}
+
+	manifest.Entries[0].FollowUpLane = "  \t"
+	if err := writeAndValidate(); err == nil || !strings.Contains(err.Error(), "followUpIssue or followUpLane") {
+		t.Fatalf("blank flaky ownership error = %v, want required follow-up diagnostic", err)
+	}
+}
+
+func TestFunctionalQuarantineSelectorVerificationRejectsFlakyOwnershipBeforeListing(t *testing.T) {
+	originalRunner := commandRunner
+	originalStdout := stdoutWriter
+	t.Cleanup(func() {
+		commandRunner = originalRunner
+		stdoutWriter = originalStdout
+	})
+
+	path := filepath.Join(t.TempDir(), "functional-quarantine.json")
+	manifest := functionalQuarantine{
+		Version: functionalQuarantineVersion,
+		Suite:   functionalSuiteName,
+		Entries: []functionalQuarantineEntry{{
+			Package: modulePath + "/tests/functional/alpha",
+			Test:    "TestKnown",
+			Bucket:  functionalBucketFlaky,
+			Reason:  "missing ownership fixture",
+		}},
+	}
+	data, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatalf("marshal invalid flaky manifest: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write invalid flaky manifest: %v", err)
+	}
+	commandRunner = func(commandInvocation) (string, string, error) {
+		t.Fatal("invalid flaky metadata unexpectedly started selector listing")
+		return "", "", nil
+	}
+	stdoutWriter = &bytes.Buffer{}
+
+	verification := startFunctionalQuarantineSelectorVerification(
+		config{suite: functionalCoverageSuite, functionalQuarantine: path},
+		"linux",
+		2,
+		t.TempDir(),
+	)
+	if verification == nil {
+		t.Fatal("startFunctionalQuarantineSelectorVerification() returned nil for invalid metadata")
+	}
+	if err := verification.wait(); err == nil || !strings.Contains(err.Error(), "followUpIssue or followUpLane") {
+		t.Fatalf("selector verification error = %v, want ownership validation before listing", err)
 	}
 }
 
@@ -514,6 +627,58 @@ func TestFunctionalQuarantineRatchetRepeatedMeasurementRetainsExpectedFailures(t
 				t.Fatalf("expected failure sample was reported as unexpected-pass: %q", stdout.String())
 			}
 		})
+	}
+}
+
+func TestFunctionalQuarantineRatchetTreatsFlakyAsExpectedFailure(t *testing.T) {
+	originalRunner := commandRunner
+	originalStdout := stdoutWriter
+	t.Cleanup(func() {
+		commandRunner = originalRunner
+		stdoutWriter = originalStdout
+	})
+
+	packagePath := modulePath + "/tests/functional/repeated"
+	entry := functionalQuarantineEntry{
+		Package:      packagePath,
+		Test:         "TestIntermittentFailure",
+		Bucket:       functionalBucketFlaky,
+		Reason:       "repeated isolated measurements include an expected failure",
+		FollowUpLane: "ci/deflake-flaky-selector",
+		Measurement:  functionalMeasurementRepeatedIsolated,
+		Attempts:     3,
+	}
+	var stdout bytes.Buffer
+	stdoutWriter = &stdout
+	attempt := 0
+	commandRunner = func(invocation commandInvocation) (string, string, error) {
+		outcome := functionalQuarantineOutcomePass
+		if attempt == 1 {
+			outcome = functionalQuarantineOutcomeFail
+		}
+		attempt++
+		events := []goTestTimingEvent{
+			{Action: "start", Package: packagePath},
+			{Action: "run", Package: packagePath, Test: entry.Test},
+			{Action: outcome, Package: packagePath, Test: entry.Test},
+			{Action: outcome, Package: packagePath},
+		}
+		if outcome == functionalQuarantineOutcomeFail {
+			events[2].Output = "expected intermittent failure"
+			return marshalFunctionalTimingEvents(events...), "expected intermittent failure", errors.New("exit status 1")
+		}
+		return marshalFunctionalTimingEvents(events...), "", nil
+	}
+
+	if err := runFunctionalQuarantineRatchet(functionalQuarantine{Entries: []functionalQuarantineEntry{entry}}, time.Minute, false, t.TempDir()); err != nil {
+		t.Fatalf("runFunctionalQuarantineRatchet() error = %v, want expected flaky failure to retain the quarantine", err)
+	}
+	if attempt != entry.Attempts {
+		t.Fatalf("flaky invocations = %d, want %d", attempt, entry.Attempts)
+	}
+	wantStatus := `bucket=FLAKY expected=fail observed=fail status=expected measurement=repeated-isolated attempts=3 pass=2 fail=1 skip=0`
+	if !strings.Contains(stdout.String(), wantStatus) {
+		t.Fatalf("ratchet stdout = %q, want substring %q", stdout.String(), wantStatus)
 	}
 }
 

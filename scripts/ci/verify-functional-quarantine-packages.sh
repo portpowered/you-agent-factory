@@ -6,6 +6,8 @@ run_url="${FUNCTIONAL_QUARANTINE_EVIDENCE_RUN_URL:?FUNCTIONAL_QUARANTINE_EVIDENC
 head_sha="${FUNCTIONAL_QUARANTINE_EVIDENCE_SHA:?FUNCTIONAL_QUARANTINE_EVIDENCE_SHA is required}"
 output_path="${FUNCTIONAL_QUARANTINE_EVIDENCE_OUTPUT:-.artifacts/functional-test-viz/quarantine-package-evidence.txt}"
 test_timeout="${FUNCTIONAL_QUARANTINE_EVIDENCE_TIMEOUT:-15m}"
+quarantine="${FUNCTIONAL_QUARANTINE:-tests/functional/functional-quarantine.json}"
+go_bin="${GO:-go}"
 
 if ! command -v jq >/dev/null 2>&1; then
   printf '%s\n' 'jq is required to verify the structured go test package events' >&2
@@ -33,7 +35,15 @@ record() {
 
 record "functional-quarantine-evidence-run=$run_url"
 record "functional-quarantine-evidence-head-sha=$head_sha"
+record "functional-quarantine-validation-command=$go_bin run ./cmd/gocoveragecheck -suite functional -functional-quarantine $quarantine -validate-functional-quarantine -short=false -timeout=$test_timeout"
 record "functional-quarantine-evidence-command=go test -list=^Test -json -count=1 -short=false [-tags=functionallong] -timeout=$test_timeout <exact-package>"
+
+"$go_bin" run ./cmd/gocoveragecheck \
+  -suite functional \
+  -functional-quarantine "$quarantine" \
+  -validate-functional-quarantine \
+  -short=false \
+  "-timeout=$test_timeout"
 
 temporary_root="$(mktemp -d)"
 trap 'rm -rf "$temporary_root"' EXIT

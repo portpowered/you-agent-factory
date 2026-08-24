@@ -84,34 +84,35 @@ var (
 )
 
 type config struct {
-	covermode            string
-	coverpkg             string
-	functionalQuarantine string
-	jobs                 int
-	generateManifest     string
-	updateManifest       string
-	updateProfiles       string
-	packageManifest      string
-	varianceProfiles     string
-	varianceOutput       string
-	varianceCommit       string
-	varianceJobs         int
-	varianceAnnotations  string
-	jsonOutput           string
-	timingOutput         string
-	min                  float64
-	packageBaseline      string
-	packageMin           float64
-	packageFloorEpsilon  float64
-	packageFloorPolicy   string
-	packages             string
-	profile              string
-	short                bool
-	suite                string
-	stream               bool
-	timeout              time.Duration
-	totalOnly            bool
-	phaseTiming          *coveragePhaseTimer
+	covermode                    string
+	coverpkg                     string
+	functionalQuarantine         string
+	validateFunctionalQuarantine bool
+	jobs                         int
+	generateManifest             string
+	updateManifest               string
+	updateProfiles               string
+	packageManifest              string
+	varianceProfiles             string
+	varianceOutput               string
+	varianceCommit               string
+	varianceJobs                 int
+	varianceAnnotations          string
+	jsonOutput                   string
+	timingOutput                 string
+	min                          float64
+	packageBaseline              string
+	packageMin                   float64
+	packageFloorEpsilon          float64
+	packageFloorPolicy           string
+	packages                     string
+	profile                      string
+	short                        bool
+	suite                        string
+	stream                       bool
+	timeout                      time.Duration
+	totalOnly                    bool
+	phaseTiming                  *coveragePhaseTimer
 }
 
 type coverageResult struct {
@@ -149,6 +150,9 @@ func main() {
 func execute(cfg config) error {
 	if err := validateConfig(cfg); err != nil {
 		return err
+	}
+	if cfg.validateFunctionalQuarantine {
+		return executeFunctionalQuarantineValidation(cfg)
 	}
 	if cfg.varianceProfiles != "" || cfg.varianceOutput != "" {
 		return executeVarianceReport(cfg)
@@ -218,6 +222,7 @@ func parseConfig() config {
 	flag.StringVar(&cfg.covermode, "covermode", "count", "go test -covermode value")
 	flag.StringVar(&cfg.coverpkg, "coverpkg", "", "comma-separated import paths to measure; defaults to backend-owned packages")
 	flag.StringVar(&cfg.functionalQuarantine, "functional-quarantine", "", "strict functional quarantine JSON manifest; discovers and subtracts its package/test selectors")
+	flag.BoolVar(&cfg.validateFunctionalQuarantine, "validate-functional-quarantine", false, "validate a functional quarantine manifest and its selectors without running coverage")
 	flag.IntVar(&cfg.jobs, "jobs", 0, "maximum concurrent go test packages; defaults to runtime CPU count for non-Windows unit coverage, 1 for Windows unit coverage, and 2 for functional coverage")
 	flag.StringVar(&cfg.generateManifest, "generate-manifest", "", "create a deterministic package-minimum manifest from this lane's coverage profile")
 	flag.StringVar(&cfg.updateManifest, "update-manifest", "", "update an existing package-minimum manifest from a complete compatible profile sample set")
@@ -268,6 +273,9 @@ func validateConfig(cfg config) error {
 	if strings.TrimSpace(cfg.functionalQuarantine) != "" && cfg.suite != "functional" {
 		return fmt.Errorf("configure functional quarantine: -functional-quarantine requires -suite functional (got %q)", cfg.suite)
 	}
+	if cfg.validateFunctionalQuarantine && strings.TrimSpace(cfg.functionalQuarantine) == "" {
+		return errors.New("configure functional quarantine: -validate-functional-quarantine requires -functional-quarantine")
+	}
 	if strings.TrimSpace(cfg.updateProfiles) != "" && strings.TrimSpace(cfg.updateManifest) == "" {
 		return errors.New("configure go coverage manifest update: -update-profiles requires -update-manifest")
 	}
@@ -289,6 +297,50 @@ func validateConfig(cfg config) error {
 			return errors.New("configure coverage variance: -variance-commit must name the unchanged commit used for every profile")
 		}
 	}
+	return nil
+}
+
+func executeFunctionalQuarantineValidation(cfg config) error {
+	repoRoot, err := repoRootDir()
+	if err != nil {
+		return err
+	}
+	path := functionalQuarantinePath(cfg, repoRoot)
+	manifest, err := readFunctionalQuarantineFile(path)
+	if err != nil {
+		return err
+	}
+	if err := validateFunctionalQuarantineMetadata(manifest); err != nil {
+		return err
+	}
+
+	discoveryConfig := config{suite: functionalCoverageSuite}
+	packages, listedPackages, err := resolveFunctionalTestPackagesWithMetadata(discoveryConfig, repoRoot)
+	if err != nil {
+		return err
+	}
+	inventory, err := discoverFunctionalTestInventoryFromListedPackagesWithJobs(
+		packages,
+		listedPackages,
+		cfg.testJobs(runtime.GOOS, runtime.NumCPU()),
+	)
+	if err != nil {
+		return err
+	}
+	if err := validateFunctionalQuarantine(manifest, inventory); err != nil {
+		return err
+	}
+	if err := verifyFunctionalTestQuarantineSelectors(
+		manifest,
+		cfg.timeout,
+		cfg.short,
+		functionalQuarantineVerificationJobs(cfg.testJobs(runtime.GOOS, runtime.NumCPU())),
+		repoRoot,
+	); err != nil {
+		return err
+	}
+
+	fmt.Fprintf(stdoutWriter, "Functional quarantine validation: manifest=%s selectors=%d status=pass\n", filepath.ToSlash(path), len(manifest.Entries))
 	return nil
 }
 
