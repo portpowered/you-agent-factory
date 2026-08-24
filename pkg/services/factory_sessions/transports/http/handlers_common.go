@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -119,33 +120,6 @@ func stringValue(value *string) string {
 	return optional.StringValue(value)
 }
 
-func intValue(value *int) int {
-	return optional.IntValue(value)
-}
-
-func stringSliceValue(values *[]string) []string {
-	return optional.StringsValue(values)
-}
-
-func stringSlicePtrCopy(values []string) *[]string {
-	return optional.CopiedStringsPtr(values)
-}
-
-func stringPtrIfNotEmpty(value string) *string {
-	return optional.NonEmptyStringPtr(value)
-}
-
-func stringMapPtr(values map[string]string) *factoryapi.StringMap {
-	return optional.CopiedStringMapPtr(values)
-}
-
-func intPtrIfPositive(value int) *int {
-	return optional.PositiveIntPtr(value)
-}
-
-func generatedStringMap(values *factoryapi.StringMap) map[string]string {
-	return optional.StringMapValue(values)
-}
 func (s *Server) requireDurableSessionLifecycleAPI(w http.ResponseWriter) (apisurface.DurableSessionLifecycleAPI, bool) {
 	if s.durableLifecycle == nil {
 		s.writeError(w, http.StatusInternalServerError, "durable factory session lifecycle control is unavailable", "INTERNAL_ERROR")
@@ -160,13 +134,6 @@ func (s *Server) writeDurableLifecycleControlError(w http.ResponseWriter, sessio
 		return true
 	}
 	return false
-}
-
-func (s *Server) writeLifecycleControlSuccess(
-	w http.ResponseWriter,
-	response factoryapi.FactorySessionLifecycleControlResponse,
-) {
-	s.writeLifecycleControlSuccessWithDiagnostics(w, response, nil)
 }
 
 func (s *Server) writeLifecycleControlSuccessWithDiagnostics(
@@ -226,6 +193,23 @@ func (s *Server) handleDurableLifecycleControl(
 	s.writeLifecycleControlSuccessWithDiagnostics(w, response, diagnostics.Paths())
 }
 
+// usesDurableLifecycleControl selects the durable control owner for a durable
+// identity that is not also registered as a live Factory Session. A live
+// session remains authoritative when an injected or restored live identity
+// happens to use the durable prefix; otherwise its stop request would be
+// applied to a separate durable owner and leave the live runtime active.
+func (s *Server) usesDurableLifecycleControl(ctx context.Context, sessionID string) bool {
+	if !isDurableExecutionSessionID(sessionID) {
+		return false
+	}
+	if s.liveControl != nil {
+		if _, err := s.liveControl.GetFactorySession(ctx, sessionID); err == nil {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Server) handleLiveLifecycleControl(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -270,20 +254,10 @@ func (s *Server) handleLiveLifecycleControl(
 	s.writeLifecycleControlSuccessWithDiagnostics(w, response, diagnostics.Paths())
 }
 
-func decodeOptionalLifecycleControlRequest(body io.Reader) (factoryapi.FactorySessionLifecycleControlRequest, error) {
-	result, err := decodeOptionalLifecycleControlRequestWithDiagnostics(body)
-	return result.Value, err
-}
-
 func decodeOptionalLifecycleControlRequestWithDiagnostics(body io.Reader) (httpcompat.DecodeResult[factoryapi.FactorySessionLifecycleControlRequest], error) {
 	return decodeOptionalJSONWithDiagnostics(body, func() factoryapi.FactorySessionLifecycleControlRequest {
 		return factoryapi.FactorySessionLifecycleControlRequest{}
 	})
-}
-
-func decodeOptionalApproveRequest(body io.Reader) (factoryapi.FactorySessionApproveRequest, error) {
-	result, err := decodeOptionalApproveRequestWithDiagnostics(body)
-	return result.Value, err
 }
 
 func decodeOptionalApproveRequestWithDiagnostics(body io.Reader) (httpcompat.DecodeResult[factoryapi.FactorySessionApproveRequest], error) {
@@ -292,31 +266,16 @@ func decodeOptionalApproveRequestWithDiagnostics(body io.Reader) (httpcompat.Dec
 	})
 }
 
-func decodeOptionalRetryDispatchRequest(body io.Reader) (factoryapi.FactorySessionRetryDispatchRequest, error) {
-	result, err := decodeOptionalRetryDispatchRequestWithDiagnostics(body)
-	return result.Value, err
-}
-
 func decodeOptionalRetryDispatchRequestWithDiagnostics(body io.Reader) (httpcompat.DecodeResult[factoryapi.FactorySessionRetryDispatchRequest], error) {
 	return decodeOptionalJSONWithDiagnostics(body, func() factoryapi.FactorySessionRetryDispatchRequest {
 		return factoryapi.FactorySessionRetryDispatchRequest{}
 	})
 }
 
-func decodeOptionalInterruptDispatchRequest(body io.Reader) (factoryapi.FactorySessionInterruptDispatchRequest, error) {
-	result, err := decodeOptionalInterruptDispatchRequestWithDiagnostics(body)
-	return result.Value, err
-}
-
 func decodeOptionalInterruptDispatchRequestWithDiagnostics(body io.Reader) (httpcompat.DecodeResult[factoryapi.FactorySessionInterruptDispatchRequest], error) {
 	return decodeOptionalJSONWithDiagnostics(body, func() factoryapi.FactorySessionInterruptDispatchRequest {
 		return factoryapi.FactorySessionInterruptDispatchRequest{}
 	})
-}
-
-func decodeOptionalJSONRequest[T any](body io.Reader, zero func() T) (T, error) {
-	result, err := decodeOptionalJSONWithDiagnostics(body, zero)
-	return result.Value, err
 }
 
 func decodeOptionalJSONWithDiagnostics[T any](body io.Reader, zero func() T) (httpcompat.DecodeResult[T], error) {
@@ -417,7 +376,7 @@ func (s *Server) ApproveFactorySession(w http.ResponseWriter, r *http.Request, s
 }
 
 func (s *Server) PauseFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	if isDurableExecutionSessionID(string(sessionID)) {
+	if s.usesDurableLifecycleControl(r.Context(), string(sessionID)) {
 		s.handleDurableLifecycleControl(w, r, sessionID, "pause", func(
 			lifecycle apisurface.DurableSessionLifecycleAPI,
 			req factorysessionexecution.ControlRequest,
@@ -435,7 +394,7 @@ func (s *Server) PauseFactorySession(w http.ResponseWriter, r *http.Request, ses
 }
 
 func (s *Server) ResumeFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	if isDurableExecutionSessionID(string(sessionID)) {
+	if s.usesDurableLifecycleControl(r.Context(), string(sessionID)) {
 		s.handleDurableLifecycleControl(w, r, sessionID, "resume", func(
 			lifecycle apisurface.DurableSessionLifecycleAPI,
 			req factorysessionexecution.ControlRequest,
@@ -453,20 +412,38 @@ func (s *Server) ResumeFactorySession(w http.ResponseWriter, r *http.Request, se
 }
 
 func (s *Server) CancelFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	s.handleDurableLifecycleControl(w, r, sessionID, "cancel", func(
-		lifecycle apisurface.DurableSessionLifecycleAPI,
+	if s.usesDurableLifecycleControl(r.Context(), string(sessionID)) {
+		s.handleDurableLifecycleControl(w, r, sessionID, "cancel", func(
+			lifecycle apisurface.DurableSessionLifecycleAPI,
+			req factorysessionexecution.ControlRequest,
+		) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+			return lifecycle.CancelDurableFactorySession(r.Context(), string(sessionID), req)
+		})
+		return
+	}
+	s.handleLiveLifecycleControl(w, r, sessionID, "cancel", func(
+		sessionRuntime apisurface.LiveSessionAPI,
 		req factorysessionexecution.ControlRequest,
 	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-		return lifecycle.CancelDurableFactorySession(r.Context(), string(sessionID), req)
+		return sessionRuntime.CancelLiveFactorySession(r.Context(), string(sessionID), req)
 	})
 }
 
 func (s *Server) TerminateFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	s.handleDurableLifecycleControl(w, r, sessionID, "terminate", func(
-		lifecycle apisurface.DurableSessionLifecycleAPI,
+	if s.usesDurableLifecycleControl(r.Context(), string(sessionID)) {
+		s.handleDurableLifecycleControl(w, r, sessionID, "terminate", func(
+			lifecycle apisurface.DurableSessionLifecycleAPI,
+			req factorysessionexecution.ControlRequest,
+		) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+			return lifecycle.TerminateDurableFactorySession(r.Context(), string(sessionID), req)
+		})
+		return
+	}
+	s.handleLiveLifecycleControl(w, r, sessionID, "terminate", func(
+		sessionRuntime apisurface.LiveSessionAPI,
 		req factorysessionexecution.ControlRequest,
 	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-		return lifecycle.TerminateDurableFactorySession(r.Context(), string(sessionID), req)
+		return sessionRuntime.TerminateLiveFactorySession(r.Context(), string(sessionID), req)
 	})
 }
 

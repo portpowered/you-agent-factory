@@ -57,6 +57,10 @@ type RunIntent struct {
 	APIEnabled            bool
 	DashboardEnabled      bool
 	WorkerSidecarsEnabled bool
+	// Cancellation is the invocation-local authority created by the
+	// application process. It is carried explicitly so hosted controls can
+	// request the same cancellation observed by the command lifecycle.
+	Cancellation initializer.InvocationCancellation
 }
 
 type MCPIntent struct {
@@ -93,14 +97,15 @@ type Initializer interface {
 }
 
 type CommandInvocation struct {
-	Arguments   []string
-	Stdin       io.Reader
-	Stdout      io.Writer
-	Stderr      io.Writer
-	Context     context.Context
-	HomeDir     func() (string, error)
-	LookupEnv   func(string) (string, bool)
-	Initializer Initializer
+	Arguments    []string
+	Stdin        io.Reader
+	Stdout       io.Writer
+	Stderr       io.Writer
+	Context      context.Context
+	Cancellation initializer.InvocationCancellation
+	HomeDir      func() (string, error)
+	LookupEnv    func(string) (string, bool)
+	Initializer  Initializer
 }
 
 type CommandFactory interface {

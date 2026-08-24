@@ -90,6 +90,7 @@ type Edges struct {
 	ModelAssetReadDirectory         AssetReadDirectory
 	ModelAssetCreateFile            AssetCreateFile
 	ModelAssetOpenFile              AssetOpenFile
+	ModelCLIInputReadFile           ModelCLIInputReadFile
 	ModelCLIOutputCreateTempFile    ModelCLIOutputCreateTempFile
 	ModelCLIOutputInspectPath       AssetInspectPath
 	ModelCLIOutputRemovePath        AssetRemovePath
@@ -124,6 +125,8 @@ type Edges struct {
 		Check(context.Context, ModelHostCompatibilityRequest) error
 	}
 	ModelResolveBackendArtifact ModelResolveBackendArtifact
+	ModelInvocationBackend      ModelInvocationBackend
+	ModelASRBackend             ModelASRBackend
 	ModelRuntimeCommandRunner   platformprocess.CommandRunner
 	ModelRuntimeHTTPClient      interface {
 		Do(*http.Request) (*http.Response, error)
@@ -135,25 +138,29 @@ type Edges struct {
 		Open(string) (io.ReadCloser, error)
 		Create(string) (io.WriteCloser, error)
 	}
-	FactorySessionsWorkingDirectory                platformfilesystem.WorkingDirectory
-	FactorySessionExecutionOpeningFileSystem       factorysessions.ExecutionOpeningFileSystem
-	FactorySessionDirectoryInspection              factorysessions.DirectoryInspection
-	FactorySessionResolveHomeDirectory             factorysessions.HomeDirectoryResolver
-	FactorySessionResolveLogicalTargetSymlinks     factorysessions.LogicalTargetResolveSymlinks
-	FactorySessionIDGenerator                      factorysessions.SessionIDGenerator
-	FactorySessionRuntimeInstanceIDGenerator       factorysessions.RuntimeInstanceIDGenerator
-	FactorySessionResponseEventIDGenerator         factorysessions.ResponseEventIDGenerator
-	FactorySessionResponseEventRetentionLimits     *factorysessions.ResponseEventRetentionLimits
-	FactorySessionCursorPersistenceFileSystem      factorysessions.CursorPersistenceFileSystem
-	FactorySessionCursorCreateTemporaryFile        factorysessions.CursorPersistenceCreateTemporaryFile
-	FactorySessionRuntimePersistenceFileSystem     factorysessions.RuntimePersistenceFileSystem
-	FactorySessionContractFixtureReader            factorysessions.ContractFixtureReader
-	FactorySessionInvocationInputReader            factorysessions.InvocationInputReader
-	FactorySessionReplayRecordingReader            factorysessions.ReplayRecordingReader
-	FactorySessionInitialWorkReader                factorysessions.InitialWorkReader
-	FactoryRuntimeIDGenerator                      factoryruntime.IDGenerator
-	FactoryRuntimeDirectories                      factoryruntime.RuntimeDirectoryFileSystem
-	FactoryRuntimeInputs                           factoryruntime.InputFileSystem
+	FactorySessionsWorkingDirectory            platformfilesystem.WorkingDirectory
+	FactorySessionExecutionOpeningFileSystem   factorysessions.ExecutionOpeningFileSystem
+	FactorySessionDirectoryInspection          factorysessions.DirectoryInspection
+	FactorySessionResolveHomeDirectory         factorysessions.HomeDirectoryResolver
+	FactorySessionResolveLogicalTargetSymlinks factorysessions.LogicalTargetResolveSymlinks
+	FactorySessionIDGenerator                  factorysessions.SessionIDGenerator
+	FactorySessionRuntimeInstanceIDGenerator   factorysessions.RuntimeInstanceIDGenerator
+	FactorySessionResponseEventIDGenerator     factorysessions.ResponseEventIDGenerator
+	FactorySessionResponseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits
+	FactorySessionCursorPersistenceFileSystem  factorysessions.CursorPersistenceFileSystem
+	FactorySessionCursorCreateTemporaryFile    factorysessions.CursorPersistenceCreateTemporaryFile
+	FactorySessionRuntimePersistenceFileSystem factorysessions.RuntimePersistenceFileSystem
+	FactorySessionContractFixtureReader        factorysessions.ContractFixtureReader
+	FactorySessionInvocationInputReader        factorysessions.InvocationInputReader
+	FactorySessionReplayRecordingReader        factorysessions.ReplayRecordingReader
+	FactorySessionInitialWorkReader            factorysessions.InitialWorkReader
+	FactoryRuntimeIDGenerator                  factoryruntime.IDGenerator
+	FactoryRuntimeDirectories                  factoryruntime.RuntimeDirectoryFileSystem
+	FactoryRuntimeInputs                       interface {
+		ReadDir(string) ([]fs.DirEntry, error)
+		ReadFile(string) ([]byte, error)
+		Stat(string) (fs.FileInfo, error)
+	}
 	FactoryRuntimeInputDirectoryWalker             factoryruntime.InputDirectoryWalker
 	FactoryRuntimeWorkflowSources                  factoryruntime.WorkflowSourceFileSystem
 	FactoryRuntimeWorkflowSourceResolveSymlinks    factoryruntime.WorkflowSourceResolveSymlinks
@@ -210,6 +217,7 @@ type Edges struct {
 	DispatchRecorder                 recordings.DispatchRecorder
 	WorkerRecordingWriter            recordings.WorkerRecordingWriter
 	RecordingWriteFile               func(string, []byte) error
+	RecordingAppendFile              func(string, []byte) error
 	RecordingMakeDirectories         recordings.RecordingMakeDirectories
 	RecordingCreateTempFile          recordings.RecordingCreateTemporaryFile
 	RecordingRemovePath              recordings.RecordingRemovePath
@@ -371,6 +379,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	if replacements.ModelAssetOpenFile != nil {
 		defaults.ModelAssetOpenFile = replacements.ModelAssetOpenFile
 	}
+	if replacements.ModelCLIInputReadFile != nil {
+		defaults.ModelCLIInputReadFile = replacements.ModelCLIInputReadFile
+	}
 	if replacements.ModelCLIOutputCreateTempFile != nil {
 		defaults.ModelCLIOutputCreateTempFile = replacements.ModelCLIOutputCreateTempFile
 	}
@@ -403,6 +414,12 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.ModelResolveBackendArtifact != nil {
 		defaults.ModelResolveBackendArtifact = replacements.ModelResolveBackendArtifact
+	}
+	if replacements.ModelInvocationBackend != nil {
+		defaults.ModelInvocationBackend = replacements.ModelInvocationBackend
+	}
+	if replacements.ModelASRBackend != nil {
+		defaults.ModelASRBackend = replacements.ModelASRBackend
 	}
 	if replacements.ModelRuntimeCommandRunner != nil {
 		defaults.ModelRuntimeCommandRunner = replacements.ModelRuntimeCommandRunner
@@ -601,6 +618,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.RecordingWriteFile != nil {
 		defaults.RecordingWriteFile = replacements.RecordingWriteFile
+	}
+	if replacements.RecordingAppendFile != nil {
+		defaults.RecordingAppendFile = replacements.RecordingAppendFile
 	}
 	if replacements.RecordingMakeDirectories != nil {
 		defaults.RecordingMakeDirectories = replacements.RecordingMakeDirectories

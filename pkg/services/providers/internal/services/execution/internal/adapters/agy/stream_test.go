@@ -15,7 +15,6 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	agy "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type agyRecordedStreamCase struct {
@@ -419,7 +418,7 @@ func TestAgyCommandEffectRequiresStructuredOutputAfterExitZero(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: test.stdout})
-			effect := newAgyCommandEffect(workers.AdaptCommandRunner(runner))
+			effect := newAgyCommandEffect(runner)
 			result, err := newAgyRoot(t, effect).Execute(t.Context(), providers.ExecuteRequest{
 				Provider:  providers.IDAntigravity,
 				AttemptID: "agy-command-parse-" + strings.ReplaceAll(test.name, " ", "-"),

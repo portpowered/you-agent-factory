@@ -21,6 +21,9 @@ func sessionsRootErrorResponse(sessionID string, err error) (int, any, bool) {
 	if status, response, ok := sessionsRequestContextErrorResponse(err); ok {
 		return status, response, true
 	}
+	if status, response, ok := factorysession.SessionDeletionErrorResponse(sessionID, err); ok {
+		return status, response, true
+	}
 
 	if status, response, ok := factorysession.LifecycleControlErrorResponse(sessionID, err); ok {
 		return status, response, true

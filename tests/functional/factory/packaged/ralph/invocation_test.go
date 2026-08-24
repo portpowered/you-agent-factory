@@ -19,7 +19,10 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const packagedRalphFactoryName = "@you/ralph"
+const (
+	packagedRalphFactoryName           = "@you/ralph"
+	configuredPackagedRalphFactoryName = "@test/ralph"
+)
 
 var packagedRalphPlanFile = regexp.MustCompile(`tasks/todo/([A-Za-z0-9._-]+)\.json`)
 
@@ -162,16 +165,20 @@ func TestPackagedRalphUsesConfiguredAndRoleOverrideModels(t *testing.T) {
 			home := t.TempDir()
 			workspace := t.TempDir()
 			factoryDir := support.InstallPackagedFactory(t, home, packagedRalphFactoryName)
+			factoryName := packagedRalphFactoryName
 			if test.configure != nil {
 				test.configure(t, factoryDir)
+				factoryDir = support.CopyFactoryAsNamed(t, factoryDir, home, configuredPackagedRalphFactoryName)
+				factoryName = configuredPackagedRalphFactoryName
 			}
 			runner := &packagedRalphCommandRunner{workspace: workspace}
 
-			response, stderr, err := runPackagedRalphCLI(
+			response, stderr, err := runPackagedRalphCLIAs(
 				t,
 				runner,
 				home,
 				workspace,
+				factoryName,
 				append(test.args, "--to", "complete a configured Ralph request")...,
 			)
 			if err != nil {
@@ -360,8 +367,17 @@ func runPackagedRalphCLI(
 	home, workspace string,
 	args ...string,
 ) (factoryapi.InvocationResponse, string, error) {
+	return runPackagedRalphCLIAs(t, runner, home, workspace, packagedRalphFactoryName, args...)
+}
+
+func runPackagedRalphCLIAs(
+	t *testing.T,
+	runner platformprocess.CommandRunner,
+	home, workspace, factoryName string,
+	args ...string,
+) (factoryapi.InvocationResponse, string, error) {
 	t.Helper()
-	inputArgs := []string{"you", "--json", "run", "--named", packagedRalphFactoryName, "--no-record"}
+	inputArgs := []string{"you", "--json", "run", "--named", factoryName, "--no-record"}
 	inputArgs = append(inputArgs, args...)
 	inputs := support.FakeInputs(t.Context(), inputArgs)
 	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)

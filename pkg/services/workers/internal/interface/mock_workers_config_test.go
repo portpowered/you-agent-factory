@@ -78,6 +78,83 @@ func TestParseMockWorkersConfig_ValidConfigPreservesSelectorsAndRunTypeOptions(t
 	assertMockWorkerRejectEntry(t, cfg.MockWorkers[2])
 }
 
+func TestParseMockWorkersConfig_PreservesMockUsagePresenceAndExplicitZeroes(t *testing.T) {
+	cfg, err := ParseMockWorkersConfig([]byte(`{
+		"mockWorkers": [{
+			"id": "priced-accept",
+			"runType": "accept",
+			"usage": {
+				"provider": "codex",
+				"model": "gpt-5-codex",
+				"inputTokens": 0,
+				"outputTokens": 500,
+				"cachedInputTokens": 0,
+				"reasoningOutputTokens": 0
+			}
+		}]
+	}`))
+	if err != nil {
+		t.Fatalf("ParseMockWorkersConfig returned error: %v", err)
+	}
+	usage := cfg.MockWorkers[0].Usage
+	if usage == nil || usage.Provider != "codex" || usage.Model != "gpt-5-codex" {
+		t.Fatalf("usage = %#v, want provider and model", usage)
+	}
+	for name, value := range map[string]*int64{
+		"inputTokens":           usage.InputTokens,
+		"outputTokens":          usage.OutputTokens,
+		"cachedInputTokens":     usage.CachedInputTokens,
+		"reasoningOutputTokens": usage.ReasoningOutputTokens,
+	} {
+		if value == nil {
+			t.Fatalf("usage.%s is nil, want explicit value", name)
+		}
+	}
+	if *usage.InputTokens != 0 || *usage.CachedInputTokens != 0 || *usage.ReasoningOutputTokens != 0 || *usage.OutputTokens != 500 {
+		t.Fatalf("usage token values = %#v, want explicit zeroes and output 500", usage)
+	}
+
+	clone := cfg.Clone()
+	*clone.MockWorkers[0].Usage.InputTokens = 9
+	if *cfg.MockWorkers[0].Usage.InputTokens != 0 {
+		t.Fatal("Clone mutated the original usage declaration")
+	}
+}
+
+func TestParseMockWorkersConfig_RejectsInvalidMockUsage(t *testing.T) {
+	cases := []struct {
+		name    string
+		usage   string
+		message string
+	}{
+		{name: "missing provider", usage: `{"provider":"","model":"gpt-5"}`, message: "usage: provider is required"},
+		{name: "missing model", usage: `{"provider":"codex","model":" "}`, message: "usage: model is required"},
+		{name: "negative input", usage: `{"provider":"codex","model":"gpt-5","inputTokens":-1}`, message: "inputTokens must be non-negative"},
+		{name: "cached without input", usage: `{"provider":"codex","model":"gpt-5","cachedInputTokens":1}`, message: "inputTokens is required when cachedInputTokens is set"},
+		{name: "cached exceeds input", usage: `{"provider":"codex","model":"gpt-5","inputTokens":1,"cachedInputTokens":2}`, message: "cachedInputTokens must not exceed inputTokens"},
+		{name: "reasoning without output", usage: `{"provider":"codex","model":"gpt-5","reasoningOutputTokens":1}`, message: "outputTokens is required when reasoningOutputTokens is set"},
+		{name: "reasoning exceeds output", usage: `{"provider":"codex","model":"gpt-5","outputTokens":1,"reasoningOutputTokens":2}`, message: "reasoningOutputTokens must not exceed outputTokens"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseMockWorkersConfig([]byte(`{"mockWorkers":[{"runType":"accept","usage":` + tc.usage + `}]}`))
+			if err == nil || !strings.Contains(err.Error(), tc.message) {
+				t.Fatalf("error = %v, want message containing %q", err, tc.message)
+			}
+		})
+	}
+}
+
+func TestParseMockWorkersConfig_OmittedMockUsageRemainsAbsent(t *testing.T) {
+	cfg, err := ParseMockWorkersConfig([]byte(`{"mockWorkers":[{"runType":"accept"}]}`))
+	if err != nil {
+		t.Fatalf("ParseMockWorkersConfig returned error: %v", err)
+	}
+	if cfg.MockWorkers[0].Usage != nil {
+		t.Fatalf("usage = %#v, want nil when omitted", cfg.MockWorkers[0].Usage)
+	}
+}
+
 func TestParseMockWorkersConfig_AcceptsUnmatchedDispatchPolicyValues(t *testing.T) {
 	for _, policy := range []string{"", "accept", "passthrough"} {
 		t.Run(policy, func(t *testing.T) {

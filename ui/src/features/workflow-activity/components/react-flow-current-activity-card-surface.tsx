@@ -224,6 +224,9 @@ function CurrentActivityGraphSurfaceContent({
           handleGraphSelectionChange={model.handleGraphSelectionChange}
           handleGraphSelectionStart={model.handleGraphSelectionStart}
           handleNodesChange={model.handleNodesChange}
+          clearSelectedVisualGroup={
+            visualGroupControls.clearSelectedVisualGroup
+          }
           hasPendingChanges={controller.status.hasSharedGraphChanges}
           headingID={headingID}
           imports={imports}
@@ -249,10 +252,7 @@ function CurrentActivityGraphSurfaceContent({
           waypointAriaLabel={edgeWaypointControls.waypointAriaLabel}
           waypointControls={edgeWaypointControls.waypointControls}
           onCreateVisualGroup={visualGroupControls.handleCreateVisualGroup}
-          onEditorNodeClick={(nodeId) => {
-            visualGroupControls.clearSelectedVisualGroup();
-            removalControls.deleteNode(nodeId);
-          }}
+          onEditorNodeClick={removalControls.deleteNode}
           onMoveVisualGroup={visualGroupControls.handleMoveVisualGroup}
           onResizeVisualGroup={visualGroupControls.handleResizeVisualGroup}
           onSelectVisualGroup={visualGroupControls.handleSelectVisualGroup}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testpath"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -489,7 +490,7 @@ func (owner *portableReplayRuntimeOwner) SetWorkerExecution(
 	generationID string,
 	_ providers.Service,
 	_ *workers.MockWorkersConfig,
-	_ workers.CommandRunner,
+	_ platformprocess.CommandRunner,
 ) {
 	owner.workerExecution = execution
 	owner.workerRuntimeID = runtimeID
@@ -559,8 +560,8 @@ func (assembler portableReplayRuntimeAssemblerStub) Assemble(
 	factorydefinitions.WorkstationLoader,
 	factoryruntime.LoadedFactoryLoader,
 	providers.Service,
-	workers.CommandRunner,
-	workers.CommandRunner,
+	platformprocess.CommandRunner,
+	platformprocess.CommandRunner,
 	*workers.MockWorkersConfig,
 	factorydefinitions.RuntimeMode,
 	factoryruntime.Scheduler,

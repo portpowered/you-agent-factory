@@ -478,7 +478,8 @@ func canceledBeforeAdmissionResult(request workers.WorkstationDispatchRequest) w
 		Result: workers.WorkResult{
 			DispatchID:   request.Execution.Dispatch.DispatchID,
 			TransitionID: request.Execution.Dispatch.TransitionID,
-			Outcome:      workers.OutcomeFailed,
+			Outcome:      workers.OutcomeCanceled,
+			Cancellation: &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled},
 			Error:        workers.ErrWorkstationDispatchCanceled.Error(),
 		},
 	}

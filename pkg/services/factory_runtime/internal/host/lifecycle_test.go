@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 
 	"github.com/jonboulle/clockwork"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
@@ -369,7 +370,7 @@ func TestStop_EmitsCompletedLifecycleMetricWithoutRootService(t *testing.T) {
 
 	observerCtx, cancelObserver := context.WithCancel(runCtx)
 	defer cancelObserver()
-	go factoryhost.ObserveRuntimeMetrics(observerCtx, handle)
+	go factoryhost.ObserveRuntimeMetrics(observerCtx, handle, platformclock.Real{})
 
 	handle.SetRunResult(nil)
 	if err := factoryhost.Stop(handle, clockwork.NewFakeClock()); err != nil {

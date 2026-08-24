@@ -59,7 +59,14 @@ type RuntimeVisualizationServices struct {
 }
 
 type OpenedApplicationRuntime struct {
-	Process            ProcessRuntime
+	Process ProcessRuntime
+	// Cancellation is the explicit invocation-local stop authority published
+	// into the opened HTTP view by the application-opening operation.
+	Cancellation initializer.InvocationCancellation
+	// OrderlyStop is an already-bound process lifecycle operation. Factory
+	// Sessions supplies the Recordings-owned implementation when a live
+	// recording exists; Initializer only orders and awaits it.
+	OrderlyStop        lifecycle.OrderlyStopOperation
 	FactoryRuntime     factoryruntime.Service
 	FactoryDefinitions factorydefinitions.Service
 	WorkflowPreview    factoryruntime.WorkflowPreviewOperation
@@ -77,18 +84,20 @@ type OpenedApplicationRuntime struct {
 	// OperatorSettingsPath is the resolved document used by the opened
 	// runtime. Transport adapters receive it as data and never resolve or read
 	// configuration themselves.
-	OperatorSettingsPath string
-	Logger               *zap.Logger
-	Visualization        RuntimeVisualizationServices
-	Resources            RuntimeResources
-	HistoricalReplay     *factorysessions.HistoricalReplayInspection
+	OperatorSettingsPath   string
+	Logger                 *zap.Logger
+	Visualization          RuntimeVisualizationServices
+	Resources              RuntimeResources
+	HistoricalReplay       *factorysessions.HistoricalReplayInspection
+	ReplayMetadataWarnings []recordings.MetadataMismatchWarning
 }
 
 type OpenedProcessApplication struct {
-	Plan            lifecycle.Plan
-	Diagnostics     factoryruntime.RuntimeLogDiagnostics
-	Ready           <-chan initializer.RuntimeHostBinding
-	CleanInvocation factoryruntime.Service
+	Plan                   lifecycle.Plan
+	Diagnostics            factoryruntime.RuntimeLogDiagnostics
+	Ready                  <-chan initializer.RuntimeHostBinding
+	CleanInvocation        factoryruntime.Service
+	ReplayMetadataWarnings []recordings.MetadataMismatchWarning
 	// HostedInvocation is a narrow operation result for the hosted CLI path;
 	// it is not the opened runtime's HTTP service table.
 	HostedInvocation HostedInvocationOperation
@@ -190,12 +199,14 @@ type DirectJavaScriptRunOperation interface {
 	Open(
 		context.Context,
 		factorysessions.DirectJavaScriptRunRequest,
+		initializer.InvocationCancellation,
 	) (factorysessions.DirectJavaScriptApplication, error)
 }
 
 type DirectJavaScriptHostAdapter func(
 	OwnedExecutionService,
 	factorysessions.RuntimeHostRequest,
+	initializer.InvocationCancellation,
 	factorysessions.RuntimeHostObserver,
 ) (lifecycle.Component, error)
 
@@ -265,9 +276,10 @@ type RuntimeHostOperation interface {
 }
 
 type LifecyclePlanRequest struct {
-	Runtime    ProcessRuntime
-	Components factorysessions.BoundProcessComponents
-	Close      func() error
+	Runtime     ProcessRuntime
+	Components  factorysessions.BoundProcessComponents
+	Close       func() error
+	OrderlyStop lifecycle.OrderlyStopOperation
 }
 
 type LifecyclePlanOperation func(LifecyclePlanRequest) (lifecycle.Plan, error)

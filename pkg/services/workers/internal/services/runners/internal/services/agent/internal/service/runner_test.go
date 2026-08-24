@@ -51,8 +51,12 @@ func TestExecuteForwardsEnvThroughProviderRequest(t *testing.T) {
 	}
 
 	want := providers.ExecuteRequest{
-		Provider:           providers.IDCodex,
-		AttemptID:          "dispatch-env-1",
+		Provider:  providers.IDCodex,
+		AttemptID: "dispatch-env-1",
+		Correlation: providers.ExecuteCorrelation{
+			DispatchID: "dispatch-env-1",
+			AttemptID:  "dispatch-env-1",
+		},
 		WorkerType:         "goal-executor",
 		WorkstationName:    "execute-goal",
 		SystemPrompt:       "system",

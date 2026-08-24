@@ -51,12 +51,12 @@ func TestBuildPreview_ValidWorkflowName(t *testing.T) {
 	}
 }
 
-func TestBuildPreview_SkipPermissionsTrueRemainsValid(t *testing.T) {
+func TestBuildPreview_CanonicalPermissionsRemainValid(t *testing.T) {
 	t.Parallel()
 	projectRoot := t.TempDir()
 	writeWorkflow(t, projectRoot, "review.js", `
 return (async function () {
-  const child = await agent.run({ prompt: "review", skipPermissions: true });
+  const child = await agent.run({ prompt: "review", permissions: "SKIP_PERMISSIONS" });
   return { child };
 })();
 `)
@@ -75,7 +75,7 @@ return (async function () {
 	})
 
 	if !preview.Valid {
-		t.Fatalf("preview = %#v, want valid for literal skipPermissions=true", preview)
+		t.Fatalf("preview = %#v, want valid for literal SKIP_PERMISSIONS", preview)
 	}
 }
 

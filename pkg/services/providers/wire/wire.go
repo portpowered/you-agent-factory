@@ -43,6 +43,19 @@ type PTYProcessLaunch = providerservice.PTYProcessLaunch
 type PTYSessionResult = providerservice.PTYSessionResult
 
 const (
+	DefaultPTYMaxCaptureBytes = providerservice.DefaultPTYMaxCaptureBytes
+	MaxPTYMaxCaptureBytes     = providerservice.MaxPTYMaxCaptureBytes
+	DefaultPTYIdleTimeout     = providerservice.DefaultPTYIdleTimeout
+	DefaultPTYHardTimeout     = providerservice.DefaultPTYHardTimeout
+)
+
+// DefaultPTYSessionConfig returns the bounded native-session defaults used by
+// the Providers Agy adapter.
+func DefaultPTYSessionConfig() PTYSessionConfig {
+	return providerservice.DefaultPTYSessionConfig()
+}
+
+const (
 	OutputStreamStdout = providerservice.OutputStreamStdout
 	OutputStreamStderr = providerservice.OutputStreamStderr
 )

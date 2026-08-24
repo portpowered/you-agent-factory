@@ -4,7 +4,10 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  # Publishing creates an immutable tag and GitHub release. Keep that
+  # capability available at the workflow ceiling, then narrow every
+  # non-publishing job back to read-only below.
+  contents: write
 
 concurrency:
   group: localai-backend-artifacts-${{ github.ref }}
@@ -14,6 +17,8 @@ jobs:
   validate-inputs:
     name: Validate pinned backend inputs
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     outputs:
       matrix: ${{ steps.validate.outputs.matrix }}
       node_version: ${{ steps.validate.outputs.node_version }}
@@ -47,7 +52,13 @@ jobs:
     name: Build ${{ matrix.backend }} (${{ matrix.target }})
     needs: validate-inputs
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 90
+    permissions:
+      contents: read
+    # A Windows leg spends more than two hours compiling the pinned static
+    # gRPC dependency graph before the backend build starts. GitHub's maximum
+    # job timeout leaves enough room for that first-run dependency build and
+    # the backend/package verification that follows it.
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.validate-inputs.outputs.matrix) }}
@@ -91,16 +102,44 @@ jobs:
         with:
           node-version: ${{ needs.validate-inputs.outputs.node_version }}
 
+      - name: Expose the Windows Git tool to MSYS2
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $gitCommand = Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          "WINDOWS_GIT_DIR=$($gitCommand.Source | Split-Path -Parent)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Expose the pinned Node tool to MSYS2
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $nodeCommand = Get-Command node -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          "WINDOWS_NODE_DIR=$($nodeCommand.Source | Split-Path -Parent)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Set up Go at the pinned tool version
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
         with:
           go-version: ${{ needs.validate-inputs.outputs.go_version }}
           cache: false
 
+      - name: Expose the pinned Go tool to MSYS2
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $goCommand = Get-Command go -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          "WINDOWS_GO_DIR=$($goCommand.Source | Split-Path -Parent)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Set up CMake at the pinned tool version
         uses: lukka/get-cmake@fffaaafeea488556c2c12dad60690008bc1caacb
         with:
           cmakeVersion: ${{ needs.validate-inputs.outputs.cmake_version }}
+
+      - name: Expose the pinned CMake tool to MSYS2
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $cmakeCommand = Get-Command cmake -CommandType Application -ErrorAction Stop | Select-Object -First 1
+          "WINDOWS_CMAKE_DIR=$($cmakeCommand.Source | Split-Path -Parent)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Install GNU Make on Apple Silicon
         if: runner.os == 'macOS'
@@ -109,7 +148,14 @@ jobs:
           set -euo pipefail
           export HOMEBREW_NO_AUTO_UPDATE=1
           formula="https://raw.githubusercontent.com/Homebrew/homebrew-core/${{ needs.validate-inputs.outputs.macos_make_formula_commit }}/Formula/m/make.rb"
-          brew install "$formula"
+          formula_path="$RUNNER_TEMP/pinned-make.rb"
+          tap="localai/pinned-make"
+          curl --fail --silent --show-error --location "$formula" --output "$formula_path"
+          test -s "$formula_path"
+          brew tap-new --no-git "$tap"
+          tap_path="$(brew --repository "$tap")"
+          cp "$formula_path" "$tap_path/Formula/make.rb"
+          brew install --formula "$tap/make"
           observed="$(gmake --version | sed -n '1s/.* //p')"
           test "$observed" = "${{ needs.validate-inputs.outputs.macos_make_version }}"
           echo "/opt/homebrew/opt/make/libexec/gnubin" >> "$GITHUB_PATH"
@@ -120,7 +166,17 @@ jobs:
         with:
           msystem: MINGW64
           update: false
-          install: ${{ needs.validate-inputs.outputs.windows_msys_packages }}
+
+      - name: Install the pinned Windows build packages
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        env:
+          WINDOWS_MSYS_PACKAGES: ${{ needs.validate-inputs.outputs.windows_msys_packages }}
+        run: |
+          set -euo pipefail
+          pacman -Sy --noconfirm
+          read -r -a packages <<< "$WINDOWS_MSYS_PACKAGES"
+          pacman -S --needed --noconfirm --overwrite '*' "${packages[@]}"
 
       - name: Install pinned Windows C++ dependencies
         if: runner.os == 'Windows'
@@ -144,9 +200,18 @@ jobs:
             --backend "$BACKEND_ID" \
             --target "$TARGET_ID"
 
-      - name: Build the backend package
+      - name: Build the backend package on Windows
+        if: runner.os == 'Windows'
         working-directory: you-agent-factory
-        shell: ${{ runner.os == 'Windows' && 'msys2 {0}' || 'bash' }}
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          bash scripts/build-localai-backend-artifact.sh
+
+      - name: Build the backend package on Unix
+        if: runner.os != 'Windows'
+        working-directory: you-agent-factory
+        shell: bash
         run: |
           set -euo pipefail
           bash scripts/build-localai-backend-artifact.sh
@@ -197,6 +262,8 @@ jobs:
       - build
     if: ${{ always() && needs.validate-inputs.result == 'success' && needs.build.result == 'success' }}
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     outputs:
       release_tag: ${{ steps.join.outputs.release_tag }}
       pin_fingerprint: ${{ steps.join.outputs.pin_fingerprint }}
@@ -262,9 +329,9 @@ jobs:
           set -euo pipefail
 
           resolve_tag_target() {
-            local response object_type object_sha depth
+            local response object_type object_sha _depth
             response="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$1")"
-            for depth in 1 2 3 4; do
+            for _depth in 1 2 3 4; do
               object_type="$(jq -r '.object.type // empty' <<<"$response")"
               object_sha="$(jq -r '.object.sha // empty' <<<"$response")"
               case "$object_type" in

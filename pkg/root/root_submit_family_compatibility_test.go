@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -110,6 +111,41 @@ func TestSubmitBatchDocumentedIngressThroughRootBuildProcess(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			runBatchCompatibilityCase(t, test)
 		})
+	}
+}
+
+func TestSubmitBatchOversizedStdinFailsBeforeHTTPThroughRootBuildProcess(t *testing.T) {
+	t.Parallel()
+
+	const maxBatchStdinBytes = 16 * 1024 * 1024
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	reader := &countingRootStdinReader{
+		reader: bytes.NewReader(bytes.Repeat([]byte("x"), maxBatchStdinBytes+1)),
+	}
+	input := submitCompatibilityInputWithReader(
+		t,
+		[]string{"you", "--server", server.URL, "submit", "batch"},
+		reader,
+		false,
+	)
+	err := buildSubmitCompatibilityProcess(t).Execute(input)
+	if err == nil {
+		t.Fatal("Process.Execute(oversized batch stdin) succeeded, want limit error")
+	}
+	if !strings.Contains(err.Error(), fmt.Sprintf("batch stdin exceeds the %d-byte limit", maxBatchStdinBytes)) {
+		t.Fatalf("error = %q, want actionable batch limit", err)
+	}
+	if calls.Load() != 0 {
+		t.Fatalf("HTTP calls = %d, want 0 before overflow rejection", calls.Load())
+	}
+	if reader.bytesRead != maxBatchStdinBytes+1 {
+		t.Fatalf("bytes read = %d, want exactly %d", reader.bytesRead, maxBatchStdinBytes+1)
 	}
 }
 
@@ -310,18 +346,39 @@ func submitCompatibilityInput(
 	stdinIsTTY bool,
 ) Input {
 	t.Helper()
+	return submitCompatibilityInputWithReader(t, args, strings.NewReader(stdin), stdinIsTTY)
+}
+
+func submitCompatibilityInputWithReader(
+	t *testing.T,
+	args []string,
+	stdin io.Reader,
+	stdinIsTTY bool,
+) Input {
+	t.Helper()
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	return Input{
 		Args:             args,
 		Env:              homeEnvironment(t.TempDir()),
-		Stdin:            strings.NewReader(stdin),
+		Stdin:            stdin,
 		Stdout:           &stdout,
 		Stderr:           &stderr,
 		Context:          context.Background(),
 		WorkingDirectory: t.TempDir(),
 		StdinIsTTY:       &stdinIsTTY,
 	}
+}
+
+type countingRootStdinReader struct {
+	reader    io.Reader
+	bytesRead int
+}
+
+func (r *countingRootStdinReader) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	r.bytesRead += n
+	return n, err
 }
 
 func inputOutput(input Input) string {

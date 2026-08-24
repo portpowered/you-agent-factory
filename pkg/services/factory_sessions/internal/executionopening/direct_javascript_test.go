@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -67,7 +68,7 @@ func TestDirectJavaScriptRunOperationOwnsOpeningRequestPolicyAndCleanup(t *testi
 			}
 			operation, err := NewDirectJavaScriptRunOperation(
 				builder, runSync, func() string { return "direct-test-id" },
-				func(roles.OwnedExecutionService, factorysessions.RuntimeHostRequest, factorysessions.RuntimeHostObserver) (lifecycle.Component, error) {
+				func(roles.OwnedExecutionService, factorysessions.RuntimeHostRequest, initializer.InvocationCancellation, factorysessions.RuntimeHostObserver) (lifecycle.Component, error) {
 					return nil, nil
 				},
 			)
@@ -82,7 +83,7 @@ func TestDirectJavaScriptRunOperationOwnsOpeningRequestPolicyAndCleanup(t *testi
 			}
 			operation, err = NewDirectJavaScriptRunOperation(
 				builder, runSync, func() string { return "direct-test-id" },
-				func(roles.OwnedExecutionService, factorysessions.RuntimeHostRequest, factorysessions.RuntimeHostObserver) (lifecycle.Component, error) {
+				func(roles.OwnedExecutionService, factorysessions.RuntimeHostRequest, initializer.InvocationCancellation, factorysessions.RuntimeHostObserver) (lifecycle.Component, error) {
 					return nil, nil
 				}, owner,
 			)
@@ -95,6 +96,7 @@ func TestDirectJavaScriptRunOperationOwnsOpeningRequestPolicyAndCleanup(t *testi
 					SourcePath: source, MockWorkersEnabled: testCase.mockWorkers,
 					JSONOutput: true, ScopeID: scopeID,
 				},
+				nil,
 			)
 			if err != nil {
 				t.Fatalf("Open: %v", err)
@@ -130,7 +132,7 @@ func TestDirectJavaScriptRunOperationJoinsExecutionAndCloseFailures(t *testing.T
 			return runFailure
 		},
 		func() string { return "direct-test-id" },
-		func(roles.OwnedExecutionService, factorysessions.RuntimeHostRequest, factorysessions.RuntimeHostObserver) (lifecycle.Component, error) {
+		func(roles.OwnedExecutionService, factorysessions.RuntimeHostRequest, initializer.InvocationCancellation, factorysessions.RuntimeHostObserver) (lifecycle.Component, error) {
 			return nil, nil
 		},
 	)
@@ -140,6 +142,7 @@ func TestDirectJavaScriptRunOperationJoinsExecutionAndCloseFailures(t *testing.T
 	opened, err := operation.Open(
 		context.Background(),
 		factorysessions.DirectJavaScriptRunRequest{SourcePath: "workflow.js"},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
@@ -164,7 +167,7 @@ func TestDirectJavaScriptRunOperationGatesHostedCompletionOnReadiness(t *testing
 			return nil
 		},
 		func() string { return "direct-test-id" },
-		func(_ roles.OwnedExecutionService, host factorysessions.RuntimeHostRequest, observer factorysessions.RuntimeHostObserver) (lifecycle.Component, error) {
+		func(_ roles.OwnedExecutionService, host factorysessions.RuntimeHostRequest, _ initializer.InvocationCancellation, observer factorysessions.RuntimeHostObserver) (lifecycle.Component, error) {
 			return lifecycle.NewRunner(func(ctx context.Context) error {
 				ready.Store(true)
 				observer(factorysessions.RuntimeHostBinding{Port: host.Port})
@@ -194,7 +197,7 @@ func TestDirectJavaScriptRunOperationGatesHostedCompletionOnReadiness(t *testing
 			return nil
 		},
 		func() string { return "direct-test-id" },
-		func(_ roles.OwnedExecutionService, host factorysessions.RuntimeHostRequest, observer factorysessions.RuntimeHostObserver) (lifecycle.Component, error) {
+		func(_ roles.OwnedExecutionService, host factorysessions.RuntimeHostRequest, _ initializer.InvocationCancellation, observer factorysessions.RuntimeHostObserver) (lifecycle.Component, error) {
 			return lifecycle.NewRunner(func(ctx context.Context) error {
 				ready.Store(true)
 				observer(factorysessions.RuntimeHostBinding{Port: host.Port})
@@ -208,7 +211,7 @@ func TestDirectJavaScriptRunOperationGatesHostedCompletionOnReadiness(t *testing
 	}
 	opened, err := operation.Open(context.Background(), factorysessions.DirectJavaScriptRunRequest{
 		SourcePath: "workflow.js", Host: &factorysessions.RuntimeHostRequest{Port: 7437}, ScopeID: scopeID,
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

@@ -71,10 +71,14 @@ func (runtime *SessionRuntime) CompleteStartup(ctx context.Context) error {
 	serviceMode := runtimeModeOrDefault(runtime.runtimeMode) == interfaces.RuntimeModeService
 	if serviceMode && runtime.workFile != "" {
 		if err := runtime.submitWorkFile(ctx); err != nil {
-			return runtimebinding.FailStartup(
+			failure := runtimebinding.FailStartup(
 				runtime.sessionState, &runtime.runtimeState, DefaultFactorySessionID,
 				current, runtime.StopLiveRuntime, err,
 			)
+			if runtime.releaseWorkAdmissionProjection != nil {
+				runtime.releaseWorkAdmissionProjection(DefaultFactorySessionID)
+			}
+			return failure
 		}
 	}
 	return nil
@@ -134,8 +138,12 @@ func (runtime *SessionRuntime) FailStartup(err error) error {
 		return err
 	}
 	current := runtime.runtimeState.ActiveHandle()
-	return runtimebinding.FailStartup(
+	failure := runtimebinding.FailStartup(
 		runtime.sessionState, &runtime.runtimeState, DefaultFactorySessionID,
 		current, runtime.StopLiveRuntime, err,
 	)
+	if runtime.releaseWorkAdmissionProjection != nil {
+		runtime.releaseWorkAdmissionProjection(DefaultFactorySessionID)
+	}
+	return failure
 }

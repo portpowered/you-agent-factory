@@ -19,6 +19,10 @@ const maxPathCollisions = 1000
 // caller-named runtime artifact was already occupied.
 var ErrNamedReservationExhausted = errors.New("named runtime artifact reservation exhausted")
 
+// ErrNamedReservationExists indicates that an exact caller-named artifact
+// already occupies its requested path.
+var ErrNamedReservationExists = errors.New("named runtime artifact already exists")
+
 // FileSystem is the exact filesystem effect used to reserve artifact paths.
 type FileSystem interface {
 	MkdirAll(string, fs.FileMode) error
@@ -29,6 +33,15 @@ type FileSystem interface {
 type Reserver interface {
 	Reserve(string, time.Time, string, string) (string, error)
 	ReserveNamed(string, time.Time, string, string) (string, error)
+	ReserveNamedWithCollision(string, time.Time, string, string) (string, error)
+}
+
+// RuntimeArtifactPathComponents returns the sanitized, platform-independent
+// suffix used by runtime artifact filenames. Callers that build artifact
+// selectors can share the writer's exact component rules without acquiring a
+// filesystem or artifact-owner policy.
+func RuntimeArtifactPathComponents(components ...string) string {
+	return internalartifact.RuntimeArtifactPathComponents(components...)
 }
 
 type reserver struct{ filesystem FileSystem }
@@ -45,22 +58,36 @@ func (r *reserver) Reserve(root string, at time.Time, kind, suffix string) (stri
 		return internalartifact.RuntimeArtifactPathWithCollision(
 			root, at, internalartifact.RuntimeArtifactKind(kind), suffix, collision,
 		)
-	}, nil)
+	}, maxPathCollisions, nil)
 }
 
-// ReserveNamed atomically selects a unique caller-named path under a dated
-// artifact root. The extension is appended exactly as supplied.
+// ReserveNamed atomically reserves the exact caller-named path under a dated
+// artifact root. The extension is appended exactly as supplied; an occupied
+// path returns ErrNamedReservationExists without creating a collision suffix.
 func (r *reserver) ReserveNamed(root string, at time.Time, name, ext string) (string, error) {
 	return r.reserve(root, func(collision int) string {
 		return internalartifact.RuntimeNamedArtifactPathWithCollision(root, at, name, ext, collision)
-	}, ErrNamedReservationExhausted)
+	}, 1, ErrNamedReservationExists)
 }
 
-func (r *reserver) reserve(root string, pathForCollision func(int) string, exhaustion error) (string, error) {
+// ReserveNamedWithCollision retains collision-numbered allocation for generic
+// named runtime artifacts whose callers explicitly opt into that policy.
+func (r *reserver) ReserveNamedWithCollision(root string, at time.Time, name, ext string) (string, error) {
+	return r.reserve(root, func(collision int) string {
+		return internalartifact.RuntimeNamedArtifactPathWithCollision(root, at, name, ext, collision)
+	}, maxPathCollisions, ErrNamedReservationExhausted)
+}
+
+func (r *reserver) reserve(
+	root string,
+	pathForCollision func(int) string,
+	maxCandidates int,
+	exhaustion error,
+) (string, error) {
 	if root == "" {
 		return "", fmt.Errorf("runtime artifact root is required")
 	}
-	for collision := 0; collision < maxPathCollisions; collision++ {
+	for collision := 0; collision < maxCandidates; collision++ {
 		path := pathForCollision(collision)
 		if err := r.filesystem.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return "", fmt.Errorf("create runtime artifact dir %s: %w", filepath.Dir(path), err)

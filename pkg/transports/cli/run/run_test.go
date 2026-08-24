@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/batchload"
@@ -54,15 +55,46 @@ func TestEmitHistoricalReplayInspectionIncludesLegacyWorkerHistoryOutcome(t *tes
 	}
 }
 
+func TestOperationRunDisclosesReplayHomeBeforeInspection(t *testing.T) {
+	var output bytes.Buffer
+	operation := &Operation{
+		cfg: RunConfig{
+			HomeDir:       "operator-home",
+			Output:        &output,
+			StartupOutput: &output,
+		},
+		runner: stubFactoryService{run: func(context.Context) error { return nil }},
+		historicalReplay: &factorysessions.HistoricalReplayInspection{
+			Session: factorysessions.SessionReadResult{SessionID: "replay-session"},
+		},
+	}
+
+	if err := operation.Run(context.Background()); err != nil {
+		t.Fatalf("Operation.Run() error = %v, want successful replay", err)
+	}
+	homeIndex := strings.Index(output.String(), "Home directory: operator-home\n")
+	inspectionIndex := strings.Index(output.String(), "Replayed Factory Session: replay-session\n")
+	if homeIndex < 0 || inspectionIndex < 0 || homeIndex > inspectionIndex {
+		t.Fatalf("replay output ordering is wrong:\n%s", output.String())
+	}
+}
+
 type stubFactoryService struct {
 	runtimehost.Service
 	run                   func(context.Context) error
 	snapshot              func(context.Context) (*interfaces.EngineStateSnapshot[runtimehost.PetriMarkingSnapshot, *runtimehost.Net], error)
+	cleanInvocation       runtimehost.CleanInvocationSnapshot
 	runtimeLogDiagnostics runtimehost.RuntimeLogDiagnostics
 }
 
 func (s stubFactoryService) Run(ctx context.Context) error {
 	return s.run(ctx)
+}
+
+func (stubFactoryService) ControlWaitToComplete(runtimehost.WaitToCompleteRequest) runtimehost.WaitToCompleteResult {
+	done := make(chan struct{})
+	close(done)
+	return runtimehost.WaitToCompleteResult{Done: done}
 }
 
 func (s stubFactoryService) RuntimeLogDiagnostics() runtimehost.RuntimeLogDiagnostics {
@@ -74,6 +106,10 @@ func (s stubFactoryService) GetEngineStateSnapshot(ctx context.Context) (*interf
 		return nil, errors.New("snapshot unavailable")
 	}
 	return s.snapshot(ctx)
+}
+
+func (s stubFactoryService) CleanInvocationSnapshot(ctx context.Context) (runtimehost.CleanInvocationSnapshot, error) {
+	return s.cleanInvocation, nil
 }
 
 func (s stubFactoryService) RuntimeObservation(ctx context.Context) (factoryvisualization.RuntimeObservation, error) {
@@ -100,6 +136,11 @@ func buildTransportTestRuntime(
 	snapshot := completedTransportTestSnapshot()
 	return stubFactoryService{
 		run: func(context.Context) error { return nil },
+		cleanInvocation: runtimehost.CleanInvocationSnapshot{Work: []runtimehost.CleanInvocationWork{{
+			WorkID: "dashboard-render-test-work", Name: "dashboard-render-test-work", WorkTypeID: "task",
+			State: "done", StateCategory: string(runtimehost.StateCategoryTerminal),
+			Output: "mock worker accepted", TraceID: "dashboard-render-test-trace",
+		}}},
 		snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[runtimehost.PetriMarkingSnapshot, *runtimehost.Net], error) {
 			return snapshot, nil
 		},
@@ -437,6 +478,9 @@ func runRecordOrReplayPathCase(t *testing.T, tt recordOrReplayPathCase) {
 	tt.cfg.RecordingTargetPlanner = recordings.LiveRecordingTargetPlannerFunc(func(request recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
 		if request.HomeDir != tt.cfg.HomeDir || request.ReportedSessionID != defaultFactorySessionID {
 			t.Fatalf("recording request = %#v", request)
+		}
+		if _, err := uuid.Parse(request.CanonicalSessionID); err != nil {
+			t.Fatalf("canonical session ID = %q, want UUID: %v", request.CanonicalSessionID, err)
 		}
 		return recordings.LiveRecordingTarget{ServicePath: plannedPath, ReportedPath: plannedPath}, nil
 	})

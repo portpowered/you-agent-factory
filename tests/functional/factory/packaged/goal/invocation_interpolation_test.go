@@ -14,6 +14,8 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+const customizedPackagedGoalFactoryName = "@test/goal"
+
 // TestPackagedGoalInterpolationFailureStopsBeforeProviderExecution proves an
 // omitted definition variable fails in Factory Definitions before provider
 // selection for both named and explicit-file packaged goal invocation.
@@ -31,13 +33,15 @@ func TestPackagedGoalInterpolationFailureStopsBeforeProviderExecution(t *testing
 	)
 	factoryPath := filepath.Join(factoryDir, "factory.json")
 	configureMissingInterpolationFactory(t, factoryPath)
+	factoryDir = support.CopyFactoryAsNamed(t, factoryDir, homeDir, customizedPackagedGoalFactoryName)
+	factoryPath = filepath.Join(factoryDir, "factory.json")
 
 	for _, selection := range []string{"named", "file"} {
 		var stdout, stderr bytes.Buffer
 		stdinIsTTY := true
 		stdoutIsTTY := false
 		err := process.Execute(root.Input{
-			Args:             packagedGoalInterpolationFailureArguments(selection, factoryPath),
+			Args:             packagedGoalInterpolationFailureArguments(selection, factoryPath, customizedPackagedGoalFactoryName),
 			Env:              environment,
 			Stdin:            strings.NewReader(""),
 			Stdout:           &stdout,
@@ -98,10 +102,10 @@ func configureMissingInterpolationFactory(t *testing.T, factoryPath string) {
 	support.ReplaceGoalWorkerInstructions(t, factoryPath, "input=${input}|missing=${missing}")
 }
 
-func packagedGoalInterpolationFailureArguments(selection, factoryPath string) []string {
+func packagedGoalInterpolationFailureArguments(selection, factoryPath, factoryName string) []string {
 	if selection == "named" {
 		return []string{
-			"you", "run", "--named", packagedGoalFactoryName,
+			"you", "run", "--named", factoryName,
 			"--no-record", "provided interpolation input",
 		}
 	}

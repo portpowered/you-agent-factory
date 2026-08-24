@@ -10,9 +10,11 @@ import (
 	"strings"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	recordingworkstation "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections/workstation"
+	sessionprojectionfacts "github.com/portpowered/infinite-you/pkg/services/recordings/internal/sessionprojectionfacts"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -228,7 +230,7 @@ type RuntimeOpening interface {
 	ReplayClock(*ReplayArtifact) Clock
 	ReplayExecution(*ReplayArtifact) (
 		providers.Service,
-		workerexecution.CommandRunner,
+		platformprocess.CommandRunner,
 		[]ReplayHook,
 		CompletionDeliveryPlanner,
 		error,
@@ -895,11 +897,13 @@ type BindRecordingResult struct {
 
 // RecordingTargetRequest selects either an explicit opaque target or the
 // Recordings-owned generated live-recording layout. Artifact takes precedence;
-// HomeDir is required when Recordings must generate the target.
+// HomeDir and CanonicalSessionID are required when Recordings must generate
+// the target. ReportedSessionID remains a presentation/routing value only.
 type RecordingTargetRequest struct {
-	Artifact          RecordingArtifactReference
-	HomeDir           string
-	ReportedSessionID string
+	Artifact           RecordingArtifactReference
+	HomeDir            string
+	CanonicalSessionID string
+	ReportedSessionID  string
 }
 
 // Live recording target vocabulary is owned by recording_lifecycle; peers
@@ -911,9 +915,15 @@ type RecordingClock interface {
 	Now() time.Time
 }
 
-// RecordingIdentityGenerator supplies an opaque uniqueness token for a live
-// recording filename.
-type RecordingIdentityGenerator func() string
+// RecordingNamedPathReserver reserves a caller-named artifact through the
+// platform's shared dated-path and atomic-exclusion policy.
+type RecordingNamedPathReserver interface {
+	ReserveNamed(root string, at time.Time, name, ext string) (string, error)
+}
+
+// RecordingPathReserver is the concise compatibility name for the named
+// reservation port consumed by live recording target planning.
+type RecordingPathReserver = RecordingNamedPathReserver
 
 // RecordingPathJoiner supplies platform-specific path joining mechanics.
 type RecordingPathJoiner func(...string) string
@@ -921,8 +931,9 @@ type RecordingPathJoiner func(...string) string
 // LiveRecordingTargetRequest identifies the customer edge used to place and
 // report one automatically generated live recording.
 type LiveRecordingTargetRequest struct {
-	HomeDir           string
-	ReportedSessionID string
+	HomeDir            string
+	CanonicalSessionID string
+	ReportedSessionID  string
 }
 
 // LiveRecordingTarget carries the runtime template path and the customer path
@@ -970,6 +981,8 @@ type StartRecordingResult struct {
 type RecordRecordingEventRequest struct {
 	RecordingID RecordingID
 	Event       CanonicalEvent
+	// SecretProvenance contains JSON Pointers relative to Event.Payload.
+	SecretProvenance []RecordingSecret
 }
 
 // RecordRecordingEventResult reports the detached status after acceptance.
@@ -1298,6 +1311,9 @@ type ReadPortableArtifactScopeResult struct {
 type RecordingSnapshot struct {
 	Status RecordingStatusFacts
 	Events []CanonicalEvent
+	// SecretProvenance is keyed by event index; each pointer is relative to
+	// that event's Payload and is an in-memory write-boundary handoff.
+	SecretProvenance map[int][]RecordingSecret `json:"-"`
 }
 
 // RecordingSnapshotWriter persists one consistent lifecycle snapshot at the
@@ -1342,7 +1358,7 @@ type BindReplayExecutionRequest struct {
 // peer-facing Service replay slice.
 type BindReplayExecutionResult struct {
 	Provider           providers.Service
-	CommandRunner      workerexecution.CommandRunner
+	CommandRunner      platformprocess.CommandRunner
 	Hooks              []ReplayHook
 	CompletionDelivery CompletionDeliveryPlanner
 }
@@ -1423,6 +1439,9 @@ type PortableArtifact struct {
 	Summary       PortableArtifactSummary       `json:"summary"`
 	Events        []CanonicalEvent              `json:"events"`
 	Integrity     PortableArtifactIntegrity     `json:"integrity"`
+	// SecretProvenance is keyed by event index; each pointer is relative to
+	// that event's Payload and is never serialized.
+	SecretProvenance map[int][]RecordingSecret `json:"-"`
 }
 
 // BuildPortableArtifactRequest selects a closed recording by opaque identity.
@@ -1518,6 +1537,18 @@ type Ledger interface {
 	AddEventRecorder(func(FactoryEvent))
 	AddEventTypeRecorder(func(FactoryEventType))
 	AppendRecordedEvent(FactoryEvent)
+}
+
+// SessionProjectionFacts contains the event-derived facts needed by live
+// Factory Session reads. Recordings maintains these facts as events are
+// appended so request-time session reads do not reconstruct canonical history.
+type SessionProjectionFacts = sessionprojectionfacts.SessionProjectionFacts
+
+// SessionProjectionReader is an optional Ledger capability for bounded live
+// session reads. It is optional so older recording fakes and historical
+// consumers can continue to implement the canonical Ledger contract.
+type SessionProjectionReader interface {
+	CurrentSessionProjectionFacts() (SessionProjectionFacts, error)
 }
 
 // Service is the singular Recordings root contract for cross-service peers.
@@ -1764,6 +1795,15 @@ type RuntimeRecorder interface {
 	Finalize(time.Time) error
 }
 
+// RuntimeRecorderWithProvenance is the optional write-boundary extension used
+// when a runtime event carries explicit declared-secret provenance. Keeping the
+// extension separate preserves compatibility with existing runtime recorders
+// that only understand canonical Factory Events.
+type RuntimeRecorderWithProvenance interface {
+	RuntimeRecorder
+	RecordEventWithProvenance(FactoryEvent, []RecordingSecret)
+}
+
 // RuntimeRecorderFactory is retained for the compatibility opening seam until
 // Factory Sessions consumes RuntimeOpening directly.
 type RuntimeRecorderFactory func(
@@ -1782,7 +1822,7 @@ type ReplayExecutionFactory func(
 	*ReplayArtifact,
 ) (
 	providers.Service,
-	workerexecution.CommandRunner,
+	platformprocess.CommandRunner,
 	[]ReplayHook,
 	CompletionDeliveryPlanner,
 	error,

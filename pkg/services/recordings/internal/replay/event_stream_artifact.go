@@ -2,6 +2,7 @@ package replay
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -43,7 +44,27 @@ func ArtifactFromEventStream(
 	r io.Reader,
 	decodeFactorySnapshot interfaces.FactorySnapshotJSONDecoder,
 ) (*EventStreamArtifactResult, error) {
-	scanner := bufio.NewScanner(r)
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, fmt.Errorf("scan event stream: %w", err)
+	}
+	if IsReplayV2Artifact(data) {
+		artifact, stream, err := DecodeReplayV2(data, decodeFactorySnapshot)
+		if err != nil {
+			return nil, err
+		}
+		skipped := 0
+		if stream.TruncatedTail {
+			skipped = 1
+		}
+		return &EventStreamArtifactResult{
+			Artifact:              artifact,
+			ParsedEvents:          len(stream.Events),
+			SkippedTrailingBlocks: skipped,
+		}, nil
+	}
+
+	scanner := bufio.NewScanner(bytes.NewReader(data))
 	scanner.Buffer(make([]byte, 0, 64*1024), maxEventStreamLineBytes)
 	builder := eventStreamArtifactBuilder{}
 

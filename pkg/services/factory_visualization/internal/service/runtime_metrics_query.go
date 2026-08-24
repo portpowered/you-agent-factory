@@ -7,9 +7,12 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 )
 
 // metricsQuery is deliberately free of caches and runtime/session state. A
@@ -59,70 +62,118 @@ func (q *metricsQuery) QueryRuntimeMetrics(
 	sessionID := strings.TrimSpace(request.SessionID)
 	sessionIDs := normalizedMetricsSessionIDs(request.SessionIDs)
 	runtimeID := strings.TrimSpace(request.RuntimeInstanceID)
+	projection, err := newMetricsProjection(request.GroupBy)
+	if err != nil {
+		return RuntimeMetricsQueryResult{}, err
+	}
+	selection, err := runtimeMetricsStreamSelectionForSessions(
+		root,
+		sessionID,
+		sessionIDs,
+		runtimeID,
+		request.StartTimeUTC,
+		request.EndTimeUTC,
+		projection,
+	)
+	if err != nil {
+		return RuntimeMetricsQueryResult{}, err
+	}
 	q.logger.Info(
 		"Factory Runtime metrics query started",
 		"metrics_root", root,
 		"session_id", sessionID,
 		"runtime_instance_id", runtimeID,
+		"group_by", projection.groupBy,
 	)
 
-	records, err := q.reader.Read(ctx, root)
-	if err != nil {
+	accumulator := newMetricsAccumulator(projection)
+	considered := 0
+	var callbackErr error
+	visit := func(record RuntimeMetricRecord) error {
+		if err := ctx.Err(); err != nil {
+			callbackErr = err
+			return err
+		}
+		if !runtimeMetricRecordMatches(record, sessionID, sessionIDs, runtimeID) {
+			return nil
+		}
+		recognized, err := q.addRecord(accumulator, record, root)
+		if err != nil {
+			callbackErr = err
+			return err
+		}
+		if recognized {
+			considered++
+		}
+		return nil
+	}
+	streamErr := q.streamRecords(ctx, root, selection, visit)
+	if callbackErr != nil {
+		return RuntimeMetricsQueryResult{}, callbackErr
+	}
+	if streamErr != nil {
 		q.logger.Error(
 			"Factory Runtime metrics query failed",
 			"metrics_root", root,
 			"session_id", sessionID,
 			"runtime_instance_id", runtimeID,
-			"error", err,
+			"error", streamErr,
 		)
 		return RuntimeMetricsQueryResult{}, &RuntimeMetricsQueryError{
 			Kind:    RuntimeMetricsQueryReadFailed,
 			Message: "query Factory Runtime metrics: read artifacts",
-			Cause:   err,
+			Cause:   streamErr,
 		}
 	}
-
-	matchedRecords := make([]RuntimeMetricRecord, 0, len(records))
-	for _, record := range records {
-		if err := ctx.Err(); err != nil {
-			return RuntimeMetricsQueryResult{}, err
-		}
-		if runtimeMetricRecordMatches(record, sessionID, sessionIDs, runtimeID) {
-			matchedRecords = append(matchedRecords, record)
-		}
-	}
-
-	attribution := newMetricProviderAttribution(matchedRecords)
-	accumulator := newMetricsAccumulator()
-	considered := 0
-	for _, record := range matchedRecords {
-		if err := ctx.Err(); err != nil {
-			return RuntimeMetricsQueryResult{}, err
-		}
-		recognized, err := q.addRecord(accumulator, record, root, attribution)
-		if err != nil {
-			return RuntimeMetricsQueryResult{}, err
-		}
-		if recognized {
-			considered++
-		}
+	if err := ctx.Err(); err != nil {
+		return RuntimeMetricsQueryResult{}, err
 	}
 
 	return q.finishQuery(accumulator, root, sessionID, runtimeID, considered)
+}
+
+func (q *metricsQuery) streamRecords(
+	ctx context.Context,
+	root string,
+	selection platformmetrics.StreamSelection,
+	visit func(RuntimeMetricRecord) error,
+) error {
+	if selectedReader, ok := q.reader.(platformmetrics.SelectedReader); ok {
+		return selectedReader.StreamSelected(ctx, root, selection, visit)
+	}
+	if streamingReader, ok := q.reader.(platformmetrics.StreamingReader); ok {
+		return streamingReader.Stream(ctx, root, visit)
+	}
+	return q.readRecords(ctx, root, visit)
+}
+
+func (q *metricsQuery) readRecords(
+	ctx context.Context,
+	root string,
+	visit func(RuntimeMetricRecord) error,
+) error {
+	records, err := q.reader.Read(ctx, root)
+	if err != nil {
+		return err
+	}
+	for _, record := range records {
+		if err := visit(record); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (q *metricsQuery) addRecord(
 	accumulator *metricsAccumulator,
 	record RuntimeMetricRecord,
 	root string,
-	attribution metricProviderAttribution,
 ) (bool, error) {
+	accumulator.observeAttribution(record)
 	metricName, _ := recordString(record, "metric_name")
 	isUsage := isUsageRuntimeMetric(metricName)
-	provider := attribution.providerFor(record)
-	if isUsage {
-		provider = providerForUsageRecord(attribution, record)
-		if err := accumulator.addUsage(record, provider); err != nil {
+	if accumulator.projection.includeUsage && isUsage {
+		if err := accumulator.addUsage(record); err != nil {
 			q.logger.Warn(
 				"Factory Runtime metrics usage record rejected",
 				"metrics_root", root,
@@ -136,7 +187,7 @@ func (q *metricsQuery) addRecord(
 			}
 		}
 	}
-	return accumulator.add(record, provider) || isUsage, nil
+	return accumulator.add(record) || (accumulator.projection.includeUsage && isUsage), nil
 }
 
 func (q *metricsQuery) finishQuery(
@@ -173,12 +224,178 @@ func (q *metricsQuery) finishQuery(
 	return result, nil
 }
 
+type metricsProjection struct {
+	groupBy       string
+	includeUsage  bool
+	metricNames   map[string]struct{}
+	allDimensions bool
+}
+
+func newMetricsProjection(groupBy string) (metricsProjection, error) {
+	groupBy = strings.ToLower(strings.TrimSpace(groupBy))
+	switch groupBy {
+	case "":
+		return metricsProjection{
+			includeUsage:  true,
+			metricNames:   metricNamesForProjection(true),
+			allDimensions: true,
+		}, nil
+	case factoryvisualization.RuntimeMetricsGroupByWorkstation,
+		factoryvisualization.RuntimeMetricsGroupByWorker,
+		factoryvisualization.RuntimeMetricsGroupByProvider:
+		return metricsProjection{
+			groupBy:     groupBy,
+			metricNames: metricNamesForProjection(false),
+		}, nil
+	default:
+		return metricsProjection{}, &RuntimeMetricsQueryError{
+			Kind:    RuntimeMetricsQueryInvalidInput,
+			Message: fmt.Sprintf("query Factory Runtime metrics: unsupported group by %q", groupBy),
+		}
+	}
+}
+
+func metricNamesForProjection(includeUsage bool) map[string]struct{} {
+	names := map[string]struct{}{
+		factoryruntime.RuntimeProviderInputTokens:  {},
+		factoryruntime.RuntimeProviderOutputTokens: {},
+		factoryruntime.RuntimeDispatchComplete:     {},
+		factoryruntime.RuntimeProviderFailed:       {},
+		factoryruntime.RuntimeDispatchDuration:     {},
+		factoryruntime.RuntimeProviderDuration:     {},
+	}
+	for _, name := range providerAttributionMetricNames() {
+		if !includeUsage && isUsageRuntimeMetric(name) {
+			continue
+		}
+		names[name] = struct{}{}
+	}
+	if includeUsage {
+		names[factoryruntime.RuntimeProviderCachedInputTokens] = struct{}{}
+		names[factoryruntime.RuntimeProviderReasoningOutputTokens] = struct{}{}
+	}
+	return names
+}
+
+func runtimeMetricsStreamSelection(
+	root string,
+	sessionID string,
+	runtimeID string,
+	startTimeUTC time.Time,
+	endTimeUTC time.Time,
+	projection metricsProjection,
+) (platformmetrics.StreamSelection, error) {
+	return runtimeMetricsStreamSelectionForSessions(
+		root,
+		sessionID,
+		nil,
+		runtimeID,
+		startTimeUTC,
+		endTimeUTC,
+		projection,
+	)
+}
+
+func runtimeMetricsStreamSelectionForSessions(
+	root string,
+	sessionID string,
+	sessionIDs []string,
+	runtimeID string,
+	startTimeUTC time.Time,
+	endTimeUTC time.Time,
+	projection metricsProjection,
+) (platformmetrics.StreamSelection, error) {
+	startTimeUTC = startTimeUTC.UTC()
+	endTimeUTC = endTimeUTC.UTC()
+	if err := validateMetricsTimeWindow(startTimeUTC, endTimeUTC); err != nil {
+		return platformmetrics.StreamSelection{}, err
+	}
+
+	selection := platformmetrics.StreamSelection{}
+	if needsMetricsPathSelection(sessionID, sessionIDs, runtimeID, startTimeUTC, endTimeUTC) {
+		selection.Path = runtimeMetricsPathSelector(root, sessionID, sessionIDs, runtimeID, startTimeUTC, endTimeUTC)
+	}
+	if needsMetricsEnvelopeSelection(sessionID, sessionIDs, runtimeID, projection) {
+		selection.EnvelopeFields = []string{"metric_name", "session_id", "runtime_instance_id"}
+		selection.IncludeEnvelope = runtimeMetricsEnvelopeSelector(sessionID, sessionIDs, runtimeID, projection)
+	}
+	return selection, nil
+}
+
+func validateMetricsTimeWindow(startTimeUTC, endTimeUTC time.Time) error {
+	if startTimeUTC.IsZero() || endTimeUTC.IsZero() || !startTimeUTC.After(endTimeUTC) {
+		return nil
+	}
+	return &RuntimeMetricsQueryError{
+		Kind:    RuntimeMetricsQueryInvalidInput,
+		Message: "query Factory Runtime metrics: start time must not be after end time",
+	}
+}
+
+func needsMetricsPathSelection(sessionID string, sessionIDs []string, runtimeID string, startTimeUTC, endTimeUTC time.Time) bool {
+	return sessionID != "" || len(sessionIDs) > 0 || runtimeID != "" || !startTimeUTC.IsZero() || !endTimeUTC.IsZero()
+}
+
+func needsMetricsEnvelopeSelection(sessionID string, sessionIDs []string, runtimeID string, projection metricsProjection) bool {
+	return sessionID != "" || len(sessionIDs) > 0 || runtimeID != "" || !projection.allDimensions
+}
+
+func runtimeMetricsEnvelopeSelector(
+	sessionID string,
+	sessionIDs []string,
+	runtimeID string,
+	projection metricsProjection,
+) func(platformmetrics.RuntimeMetricRecordEnvelope) bool {
+	return func(envelope platformmetrics.RuntimeMetricRecordEnvelope) bool {
+		return runtimeMetricsEnvelopeMatchesScope(envelope, sessionID, sessionIDs, runtimeID) &&
+			runtimeMetricsEnvelopeMatchesProjection(envelope, projection)
+	}
+}
+
+func runtimeMetricsEnvelopeMatchesScope(
+	envelope platformmetrics.RuntimeMetricRecordEnvelope,
+	sessionID string,
+	sessionIDs []string,
+	runtimeID string,
+) bool {
+	if len(sessionIDs) > 0 {
+		if !containsMetricSessionID(sessionIDs, envelope.Fields["session_id"]) {
+			return false
+		}
+	} else if sessionID != "" && envelope.Fields["session_id"] != sessionID {
+		return false
+	}
+	if runtimeID != "" && envelope.Fields["runtime_instance_id"] != runtimeID {
+		return false
+	}
+	return true
+}
+
+func runtimeMetricsEnvelopeMatchesProjection(
+	envelope platformmetrics.RuntimeMetricRecordEnvelope,
+	projection metricsProjection,
+) bool {
+	if projection.allDimensions {
+		return true
+	}
+	_, supported := projection.metricNames[envelope.Fields["metric_name"]]
+	return supported
+}
+
 type metricsAccumulator struct {
-	totals       metricAggregateBuilder
-	workstations map[string]*metricAggregateBuilder
-	workerTypes  map[string]*metricAggregateBuilder
-	providers    map[string]*metricAggregateBuilder
-	usage        map[usageIdentity]*usageBuilder
+	projection    metricsProjection
+	attribution   metricProviderAttributionBuilder
+	totals        metricAggregateBuilder
+	workstations  map[string]*metricAggregateBuilder
+	workerTypes   map[string]*metricAggregateBuilder
+	providers     map[string]*metricAggregateBuilder
+	providerFacts map[providerAggregateKey]*metricAggregateBuilder
+	usage         map[usageIdentity]*usageBuilder
+}
+
+type providerAggregateKey struct {
+	dispatchID string
+	provider   string
 }
 
 type usageIdentity struct {
@@ -212,16 +429,30 @@ type durationBuilder struct {
 	samples []float64
 }
 
-func newMetricsAccumulator() *metricsAccumulator {
-	return &metricsAccumulator{
-		workstations: make(map[string]*metricAggregateBuilder),
-		workerTypes:  make(map[string]*metricAggregateBuilder),
-		providers:    make(map[string]*metricAggregateBuilder),
-		usage:        make(map[usageIdentity]*usageBuilder),
+func newMetricsAccumulator(projection metricsProjection) *metricsAccumulator {
+	accumulator := &metricsAccumulator{projection: projection}
+	if projection.allDimensions || projection.groupBy == factoryvisualization.RuntimeMetricsGroupByWorkstation {
+		accumulator.workstations = make(map[string]*metricAggregateBuilder)
 	}
+	if projection.allDimensions || projection.groupBy == factoryvisualization.RuntimeMetricsGroupByWorker {
+		accumulator.workerTypes = make(map[string]*metricAggregateBuilder)
+	}
+	if projection.allDimensions || projection.groupBy == factoryvisualization.RuntimeMetricsGroupByProvider {
+		accumulator.providers = make(map[string]*metricAggregateBuilder)
+		accumulator.providerFacts = make(map[providerAggregateKey]*metricAggregateBuilder)
+	}
+	if projection.includeUsage {
+		accumulator.usage = make(map[usageIdentity]*usageBuilder)
+	}
+	accumulator.attribution = newMetricProviderAttributionBuilder()
+	return accumulator
 }
 
-func (a *metricsAccumulator) addUsage(record RuntimeMetricRecord, provider string) error {
+func (a *metricsAccumulator) observeAttribution(record RuntimeMetricRecord) {
+	a.attribution.add(record)
+}
+
+func (a *metricsAccumulator) addUsage(record RuntimeMetricRecord) error {
 	metricName, ok := recordString(record, "metric_name")
 	if !ok || !isUsageRuntimeMetric(metricName) {
 		return nil
@@ -231,7 +462,6 @@ func (a *metricsAccumulator) addUsage(record RuntimeMetricRecord, provider strin
 		return fmt.Errorf("%s: %w", metricName, err)
 	}
 	identity := usageIdentityFromRecord(record)
-	identity.provider = provider
 	builder := a.usage[identity]
 	if builder == nil {
 		builder = &usageBuilder{identity: identity}
@@ -266,6 +496,38 @@ func (builder *usageBuilder) add(metricName string, value int64) error {
 	return nil
 }
 
+func (builder *usageBuilder) merge(source *usageBuilder) error {
+	var err error
+	if builder.inputTokens, err = mergeTokenCounts(builder.inputTokens, source.inputTokens); err != nil {
+		return err
+	}
+	if builder.outputTokens, err = mergeTokenCounts(builder.outputTokens, source.outputTokens); err != nil {
+		return err
+	}
+	if builder.cachedInputTokens, err = mergeTokenCounts(builder.cachedInputTokens, source.cachedInputTokens); err != nil {
+		return err
+	}
+	if builder.reasoningOutputTokens, err = mergeTokenCounts(builder.reasoningOutputTokens, source.reasoningOutputTokens); err != nil {
+		return err
+	}
+	return nil
+}
+
+func mergeTokenCounts(left, right *int64) (*int64, error) {
+	if right == nil {
+		return left, nil
+	}
+	if left == nil {
+		value := *right
+		return &value, nil
+	}
+	if *right > math.MaxInt64-*left {
+		return nil, fmt.Errorf("token count overflows int64")
+	}
+	value := *left + *right
+	return &value, nil
+}
+
 func usageIdentityFromRecord(record RuntimeMetricRecord) usageIdentity {
 	return usageIdentity{
 		factorySessionID: recordStringValue(record, "session_id"),
@@ -296,7 +558,7 @@ func runtimeMetricTokenCount(record RuntimeMetricRecord) (int64, error) {
 	return int64(value), nil
 }
 
-func (a *metricsAccumulator) add(record RuntimeMetricRecord, provider string) bool {
+func (a *metricsAccumulator) add(record RuntimeMetricRecord) bool {
 	metricName, ok := recordString(record, "metric_name")
 	if !ok || !isSupportedRuntimeMetric(metricName) {
 		return false
@@ -314,19 +576,36 @@ func (a *metricsAccumulator) add(record RuntimeMetricRecord, provider string) bo
 		applyMetric(builder, metricName, value, strings.TrimSpace(unit), strings.TrimSpace(reason))
 	}
 	apply(&a.totals)
-	addLabeledAggregate(a.workstations, recordStringValue(record, "workstation"), apply)
-	addLabeledAggregate(a.workerTypes, recordStringValue(record, "worker_type"), apply)
-	addLabeledAggregate(a.providers, provider, apply)
+	if a.workstations != nil {
+		addLabeledAggregate(a.workstations, record, "workstation", apply)
+	}
+	if a.workerTypes != nil {
+		addLabeledAggregate(a.workerTypes, record, "worker_type", apply)
+	}
+	if a.providerFacts != nil {
+		key := providerAggregateKey{
+			dispatchID: recordStringValue(record, "dispatch_id"),
+			provider:   recordStringValue(record, "provider"),
+		}
+		builder := a.providerFacts[key]
+		if builder == nil {
+			builder = &metricAggregateBuilder{}
+			a.providerFacts[key] = builder
+		}
+		apply(builder)
+	}
 	return true
 }
 
 func addLabeledAggregate(
 	groups map[string]*metricAggregateBuilder,
-	key string,
+	record RuntimeMetricRecord,
+	label string,
 	apply func(*metricAggregateBuilder),
 ) {
+	key, ok := recordString(record, label)
 	key = strings.TrimSpace(key)
-	if key == "" {
+	if !ok || key == "" {
 		return
 	}
 	builder := groups[key]
@@ -397,7 +676,12 @@ func (d *durationBuilder) add(value float64, unit string) {
 }
 
 func (a *metricsAccumulator) result() (RuntimeMetricsQueryResult, error) {
-	usageRows, err := sortedUsageRows(a.usage)
+	attribution := a.attribution.result()
+	usageGroups, err := attributedUsageGroups(a.usage, attribution)
+	if err != nil {
+		return RuntimeMetricsQueryResult{}, err
+	}
+	usageRows, err := sortedUsageRows(usageGroups)
 	if err != nil {
 		return RuntimeMetricsQueryResult{}, err
 	}
@@ -406,9 +690,78 @@ func (a *metricsAccumulator) result() (RuntimeMetricsQueryResult, error) {
 		Totals:       a.totals.result(),
 		Workstations: sortedBreakdowns(a.workstations),
 		WorkerTypes:  sortedBreakdowns(a.workerTypes),
-		Providers:    sortedBreakdowns(a.providers),
+		Providers:    sortedBreakdowns(a.attributedProviders(attribution)),
 		UsageRows:    usageRows,
 	}, nil
+}
+
+func (a *metricsAccumulator) attributedProviders(
+	attribution metricProviderAttribution,
+) map[string]*metricAggregateBuilder {
+	if a.providers == nil {
+		return nil
+	}
+	for key, source := range a.providerFacts {
+		record := RuntimeMetricRecord{
+			"dispatch_id": key.dispatchID,
+			"provider":    key.provider,
+		}
+		provider := attribution.providerFor(record)
+		target := a.providers[provider]
+		if target == nil {
+			target = &metricAggregateBuilder{}
+			a.providers[provider] = target
+		}
+		mergeMetricAggregate(target, source)
+	}
+	return a.providers
+}
+
+func mergeMetricAggregate(target, source *metricAggregateBuilder) {
+	target.inputTokens += source.inputTokens
+	target.outputTokens += source.outputTokens
+	target.completedDispatches += source.completedDispatches
+	for reason, value := range source.failuresByReason {
+		if target.failuresByReason == nil {
+			target.failuresByReason = make(map[string]float64)
+		}
+		target.failuresByReason[reason] += value
+	}
+	mergeDuration(&target.dispatchDuration, &source.dispatchDuration)
+	mergeDuration(&target.providerDuration, &source.providerDuration)
+}
+
+func mergeDuration(target, source *durationBuilder) {
+	if target.unit == "" {
+		target.unit = source.unit
+	}
+	target.samples = append(target.samples, source.samples...)
+}
+
+func attributedUsageGroups(
+	groups map[usageIdentity]*usageBuilder,
+	attribution metricProviderAttribution,
+) (map[usageIdentity]*usageBuilder, error) {
+	if len(groups) == 0 {
+		return groups, nil
+	}
+	attributed := make(map[usageIdentity]*usageBuilder, len(groups))
+	for identity, source := range groups {
+		record := RuntimeMetricRecord{
+			"dispatch_id": identity.dispatchID,
+			"provider":    identity.provider,
+		}
+		identity.provider = providerForUsageRecord(attribution, record)
+		target := attributed[identity]
+		if target == nil {
+			target = &usageBuilder{identity: identity}
+			attributed[identity] = target
+		}
+		if err := target.merge(source); err != nil {
+			return nil, err
+		}
+	}
+	return attributed, nil
 }
 
 func sortedUsageRows(groups map[usageIdentity]*usageBuilder) ([]RuntimeMetricsUsageRow, error) {

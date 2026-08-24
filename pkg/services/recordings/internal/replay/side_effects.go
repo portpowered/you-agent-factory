@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -468,20 +469,20 @@ func cloneReplayContinuation(reference *providers.ContinuationRef) *providers.Co
 	return &clone
 }
 
-// Run implements workers.CommandRunner by returning the recorded script command
-// outcome for the matching dispatch.
-func (s *SideEffects) Run(ctx context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
+// Run implements platformprocess.CommandRunner by returning the recorded
+// script command outcome for the matching platform request.
+func (s *SideEffects) Run(ctx context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	record, err := s.claim(ctx, "command", func(candidate sideEffectRecord) bool {
 		return commandRequestMatches(candidate, req)
 	})
 	if err != nil {
-		return workers.CommandResult{}, err
+		return platformprocess.CommandResult{}, err
 	}
 	if !record.hasCompletion {
-		return workers.CommandResult{}, missingCompletionError(record.dispatch)
+		return platformprocess.CommandResult{}, missingCompletionError(record.dispatch)
 	}
 	if record.completion.diagnostics == nil || record.completion.diagnostics.Command == nil {
-		result := workers.CommandResult{
+		result := platformprocess.CommandResult{
 			Stdout: []byte(record.completion.result.Output),
 			Stderr: []byte(record.completion.result.Error),
 		}
@@ -492,7 +493,7 @@ func (s *SideEffects) Run(ctx context.Context, req workers.CommandRequest) (work
 	}
 
 	command := record.completion.diagnostics.Command
-	result := workers.CommandResult{
+	result := platformprocess.CommandResult{
 		Stdout:   []byte(command.Stdout),
 		Stderr:   []byte(command.Stderr),
 		ExitCode: command.ExitCode,
@@ -563,16 +564,15 @@ func providerRequestMatches(record sideEffectRecord, req workerexecution.Provide
 	return true
 }
 
-func commandRequestMatches(record sideEffectRecord, req workers.CommandRequest) bool {
-	dispatch := record.dispatch.dispatch
-	if !executionMetadataMatches(dispatch.Execution, req.Execution) {
-		return false
-	}
+func commandRequestMatches(record sideEffectRecord, req platformprocess.CommandRequest) bool {
 	if !record.hasCompletion {
 		return true
 	}
-	if record.completion.diagnostics == nil || record.completion.diagnostics.Command == nil {
+	if record.completion.diagnostics == nil {
 		return true
+	}
+	if record.completion.diagnostics.Command == nil {
+		return false
 	}
 	command := record.completion.diagnostics.Command
 	if command.Command != "" && command.Command != req.Command {
@@ -601,4 +601,4 @@ func executionMetadataMatches(recorded, observed work.ExecutionMetadata) bool {
 }
 
 var _ providers.Service = (*SideEffects)(nil)
-var _ workers.CommandRunner = (*SideEffects)(nil)
+var _ platformprocess.CommandRunner = (*SideEffects)(nil)

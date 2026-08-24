@@ -35,7 +35,8 @@ const NESTED_ACCENT_SOFT_FILL_CLASS_NAME: Record<
 > = {
   neutral: "",
   info: "!bg-info-container",
-  warning: "!bg-warning-container",
+  warning:
+    "!bg-warning-container factory-light:!bg-warning factory-light:!text-on-warning factory-light:[&_[data-factory-entity-title]]:!text-on-warning factory-light:[&_[data-graph-semantic-icon]]:!text-on-warning factory-light:[&_[data-place-state-value]]:!text-on-warning factory-light:[&_[data-place-work-type]]:!text-on-warning factory-light:[&_[data-state-category-label]]:!text-on-warning factory-light:[&_[data-state-value]]:!text-on-warning factory-light:[&_[data-state-work-type]]:!text-on-warning factory-light:[&_[data-workstation-runtime-label]]:!text-on-warning factory-light:[&_[data-current-activity-work-progress-dot]]:!bg-on-warning",
   success: "!bg-success-container",
   danger: "!bg-error-container",
 };

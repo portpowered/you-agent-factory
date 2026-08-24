@@ -228,6 +228,10 @@ type WorkstationExecutionRequest struct {
 	// workstation-backed Worker leaves this false and takes the policy its
 	// runtime was constructed with.
 	SkipPermissions bool `json:"skip_permissions,omitempty"`
+	// DeclaredSecretInvocationParameters carries only the names of invocation
+	// parameters that the caller explicitly classified as sensitive. It is an
+	// in-memory handoff for recording provenance, never provider payload data.
+	DeclaredSecretInvocationParameters []string `json:"-"`
 }
 
 type ProviderInferenceRequest struct {
@@ -278,6 +282,11 @@ type ProviderInferenceRequest struct {
 	// resolves persisted configuration and invocation overrides before the
 	// request reaches either the native runner or neutral conductor.
 	SkipPermissions bool `json:"skip_permissions,omitempty"`
+	// DeclaredSecretInvocationParameters carries only explicit sensitivity
+	// provenance into the provider recording decorator. The values are already
+	// present in UserMessage when a declared parameter is interpolated; this
+	// field never serializes or duplicates those values.
+	DeclaredSecretInvocationParameters []string `json:"-"`
 	// TemporaryFiles is a request-scoped effect installed by Workers Execute.
 	// It is intentionally excluded from serialized provider payloads.
 	TemporaryFiles TemporaryFileSystem `json:"-"`
@@ -291,8 +300,6 @@ type ProviderInferenceRequest struct {
 
 type RunnerExecutionRequest = ProviderInferenceRequest
 type RunnerExecutionResult = InferenceResponse
-
-type SubprocessExecutionRequest = CommandRequest
 
 func CloneWorkstationExecutionRequest(request WorkstationExecutionRequest) WorkstationExecutionRequest {
 	clone := request
@@ -309,6 +316,7 @@ func CloneWorkstationExecutionRequest(request WorkstationExecutionRequest) Works
 	clone.ProcessEnvironment = append([]string(nil), request.ProcessEnvironment...)
 	clone.Continuation = cloneContinuation(request.Continuation)
 	clone.WorkflowContext = request.WorkflowContext.Clone()
+	clone.DeclaredSecretInvocationParameters = append([]string(nil), request.DeclaredSecretInvocationParameters...)
 	return clone
 }
 
@@ -325,6 +333,7 @@ func CloneProviderInferenceRequest(request ProviderInferenceRequest) ProviderInf
 	clone.Continuation = cloneContinuation(request.Continuation)
 	clone.WorkflowContext = request.WorkflowContext.Clone()
 	clone.ModelRuntime = request.ModelRuntime.Clone()
+	clone.DeclaredSecretInvocationParameters = append([]string(nil), request.DeclaredSecretInvocationParameters...)
 	clone.TemporaryFiles = request.TemporaryFiles
 	clone.ExecutionLogger = request.ExecutionLogger
 	return clone
@@ -336,24 +345,6 @@ func cloneContinuation(reference *ProviderContinuationRef) *ProviderContinuation
 	}
 	cloned := reference.Clone()
 	return &cloned
-}
-
-func CloneSubprocessExecutionRequest(request SubprocessExecutionRequest) SubprocessExecutionRequest {
-	clone := request
-	clone.Args = append([]string(nil), request.Args...)
-	clone.Stdin = append([]byte(nil), request.Stdin...)
-	clone.Env = append([]string(nil), request.Env...)
-	clone.PreviousChainingTraceIDs = append([]string(nil), request.PreviousChainingTraceIDs...)
-	clone.Execution = work.CloneExecutionMetadata(request.Execution)
-	if len(request.Inputs) > 0 {
-		clone.Inputs = make([]WorkInput, len(request.Inputs))
-		for index, input := range request.Inputs {
-			clone.Inputs[index] = input.Clone()
-		}
-	} else {
-		clone.Inputs = nil
-	}
-	return clone
 }
 
 func CloneResolvedModelOperationBindings(values []ResolvedModelOperationBinding) []ResolvedModelOperationBinding {
@@ -595,8 +586,8 @@ type ExecutionInput struct {
 	// ProviderOverride and CommandRunnerOverride carry runtime-scoped effect
 	// ports for detached execution, such as Recordings replay. They are never
 	// serialized or retained by the process-scoped Workers service.
-	ProviderOverride      providers.Service `json:"-"`
-	CommandRunnerOverride CommandRunner     `json:"-"`
+	ProviderOverride      providers.Service             `json:"-"`
+	CommandRunnerOverride platformprocess.CommandRunner `json:"-"`
 	// PreparedRequestObserver receives the detached request after Workers has
 	// prepared request-scoped resources and before the runner starts. Runtime
 	// uses it to record the effective execution target without moving resource
@@ -684,6 +675,7 @@ type ProviderContinuationRef = providers.ContinuationRef
 type ExecuteResult struct {
 	Correlation             ExecutionCorrelation
 	Outcome                 ExecutionOutcome
+	Cancellation            *DispatchCancellation
 	Output                  ProposedOutput
 	StructuredResult        any
 	StructuredResultPresent bool
@@ -882,6 +874,7 @@ func (failure ExecutionFailure) Clone() ExecutionFailure {
 
 func (result ExecuteResult) Clone() ExecuteResult {
 	clone := result
+	clone.Cancellation = result.Cancellation.Clone()
 	clone.Output = result.Output.Clone()
 	clone.StructuredResult = jsonvalue.Clone(result.StructuredResult)
 	clone.StructuredResultPresent = jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent)

@@ -31,7 +31,7 @@
       "path": "generated/cli/command-manifest.schema.json"
     },
     "generated.cli.commands": {
-      "artifactHash": "839b6a492e536d5acca70904f1610754081be04cff3f66e68d9273ffe6a12ceb",
+      "artifactHash": "3f521942ab044386aa01403856c2ef21191b867f0017805beefca3879e7b305a",
       "documentation": {
         "documentation": {
           "description": {
@@ -48,7 +48,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.cli.commands",
-        "sourceHash": "839b6a492e536d5acca70904f1610754081be04cff3f66e68d9273ffe6a12ceb",
+        "sourceHash": "3f521942ab044386aa01403856c2ef21191b867f0017805beefca3879e7b305a",
         "visibility": "public"
       },
       "family": "cli",
@@ -61,7 +61,7 @@
       "path": "generated/cli/commands.json"
     },
     "generated.javascript.runtime-api": {
-      "artifactHash": "5e0414585c1619835c84a6659dfbb1540ca0abee02a0ebc494f0957d37f72034",
+      "artifactHash": "738db9924c9887f0edfc8fbebc92a404c70d5d80673e28c869e78fefba189e3b",
       "documentation": {
         "documentation": {
           "description": {
@@ -78,7 +78,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.javascript.runtime-api",
-        "sourceHash": "5e0414585c1619835c84a6659dfbb1540ca0abee02a0ebc494f0957d37f72034",
+        "sourceHash": "738db9924c9887f0edfc8fbebc92a404c70d5d80673e28c869e78fefba189e3b",
         "visibility": "public"
       },
       "family": "javascript",
@@ -211,7 +211,7 @@
       "path": "generated/mcp/tools.json"
     },
     "generated.openapi.openapi": {
-      "artifactHash": "f42e1a8d666f353b72e17ec98f26c3649b42853c2340b2f51e22e9e529973c67",
+      "artifactHash": "1c5957df083c2f43de9af46aca7a9cdb436a2c521c32a6403282132a904de2d5",
       "documentation": {
         "documentation": {
           "description": {
@@ -228,7 +228,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.openapi.openapi",
-        "sourceHash": "f42e1a8d666f353b72e17ec98f26c3649b42853c2340b2f51e22e9e529973c67",
+        "sourceHash": "1c5957df083c2f43de9af46aca7a9cdb436a2c521c32a6403282132a904de2d5",
         "visibility": "public"
       },
       "family": "openapi",
@@ -271,7 +271,7 @@
       "path": "generated/schemas/factory.schema.json"
     },
     "generated.schemas.factory-event": {
-      "artifactHash": "151f5df2488a258d45fe55ca833f01ade4bd015d82acb05ab27449fb4c11bee7",
+      "artifactHash": "d99c327201721bfc848614f534bd0ddd1b4b5479460e51fce279ade5b2f686d2",
       "documentation": {
         "documentation": {
           "description": {
@@ -288,7 +288,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.factory-event",
-        "sourceHash": "151f5df2488a258d45fe55ca833f01ade4bd015d82acb05ab27449fb4c11bee7",
+        "sourceHash": "d99c327201721bfc848614f534bd0ddd1b4b5479460e51fce279ade5b2f686d2",
         "visibility": "public"
       },
       "family": "config",
@@ -301,7 +301,7 @@
       "path": "generated/schemas/factory-event.schema.json"
     },
     "generated.schemas.factory-recording": {
-      "artifactHash": "c42092c4205fcc0c6c538e87f5de4500eb28370fb755eb28df3c21658d4d2c21",
+      "artifactHash": "932979c7b5d803351f0c7f7db7b8576e8980c1fc7be880ceae21773a68dbc763",
       "documentation": {
         "documentation": {
           "description": {
@@ -318,7 +318,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.factory-recording",
-        "sourceHash": "c42092c4205fcc0c6c538e87f5de4500eb28370fb755eb28df3c21658d4d2c21",
+        "sourceHash": "932979c7b5d803351f0c7f7db7b8576e8980c1fc7be880ceae21773a68dbc763",
         "visibility": "public"
       },
       "family": "config",
@@ -331,7 +331,7 @@
       "path": "generated/schemas/factory-recording.schema.json"
     },
     "generated.schemas.mock-workers": {
-      "artifactHash": "870e7628e4a89e47af780d451db82585b9a7928d8f01cffe7af517eafe2f1816",
+      "artifactHash": "85930e3c418978da4f61b0082baa65ebddf205ee7253669096875288f87aef4b",
       "documentation": {
         "documentation": {
           "description": {
@@ -348,7 +348,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.mock-workers",
-        "sourceHash": "870e7628e4a89e47af780d451db82585b9a7928d8f01cffe7af517eafe2f1816",
+        "sourceHash": "85930e3c418978da4f61b0082baa65ebddf205ee7253669096875288f87aef4b",
         "visibility": "public"
       },
       "family": "config",

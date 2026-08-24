@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -126,12 +127,13 @@ func runtimeOpeningRequestFromActivation(
 		),
 		FactoryRuntime: request.Runtime,
 		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
-			FactorySessionID:  request.FactorySessionID,
-			PersistencePolicy: factorysessions.PersistencePolicy(request.Inputs.Session.PersistencePolicy),
-			BackendScopeID:    request.Inputs.Session.BackendScopeID,
-			SystemConfigHome:  request.Inputs.Session.SystemConfigHome,
-			SystemConfigPath:  request.Inputs.Session.SystemConfigPath,
-			WorkFile:          request.Inputs.Session.WorkFile,
+			FactorySessionID:   request.FactorySessionID,
+			CanonicalSessionID: request.Inputs.Session.CanonicalSessionID,
+			PersistencePolicy:  factorysessions.PersistencePolicy(request.Inputs.Session.PersistencePolicy),
+			BackendScopeID:     request.Inputs.Session.BackendScopeID,
+			SystemConfigHome:   request.Inputs.Session.SystemConfigHome,
+			SystemConfigPath:   request.Inputs.Session.SystemConfigPath,
+			WorkFile:           request.Inputs.Session.WorkFile,
 			Host: factorysessions.RuntimeHostRequest{
 				Directory:   request.Inputs.Session.Host.Directory,
 				RuntimeMode: request.Inputs.Session.Host.RuntimeMode,
@@ -140,6 +142,7 @@ func runtimeOpeningRequestFromActivation(
 				Host:        request.Inputs.Session.Host.Host,
 				Port:        request.Inputs.Session.Host.Port,
 				AutoPort:    request.Inputs.Session.Host.AutoPort,
+				Pprof:       request.Inputs.Session.Host.Pprof,
 			},
 		},
 		Workers: workers.RuntimeOpeningRequest{
@@ -234,6 +237,16 @@ func activationMockWorkers(input *factoryruntime.RuntimeActivationMockWorkersCon
 				reject.ExitCode = &value
 			}
 			converted.RejectConfig = reject
+		}
+		if worker.Usage != nil {
+			converted.Usage = &workers.MockWorkerUsageConfig{
+				Provider:              worker.Usage.Provider,
+				Model:                 worker.Usage.Model,
+				InputTokens:           cloneInt64Pointer(worker.Usage.InputTokens),
+				OutputTokens:          cloneInt64Pointer(worker.Usage.OutputTokens),
+				CachedInputTokens:     cloneInt64Pointer(worker.Usage.CachedInputTokens),
+				ReasoningOutputTokens: cloneInt64Pointer(worker.Usage.ReasoningOutputTokens),
+			}
 		}
 		config.MockWorkers[index] = converted
 	}
@@ -352,14 +365,6 @@ func (f *Factory) activationRequest(
 	request *factorysessions.RuntimeOpeningRequest,
 ) (factoryruntime.RuntimeActivationRequest, error) {
 	return f.activationRequestWithInputs(ctx, request, nil, nil)
-}
-
-func (f *Factory) activationRequestWithReplayInput(
-	ctx context.Context,
-	request *factorysessions.RuntimeOpeningRequest,
-	preloadedReplayInput *recordings.LoadReplayInputResult,
-) (factoryruntime.RuntimeActivationRequest, error) {
-	return f.activationRequestWithInputs(ctx, request, preloadedReplayInput, nil)
 }
 
 func (f *Factory) activationRequestWithInputs(
@@ -777,11 +782,12 @@ func runtimeActivationInputs(
 			ExecutionBaseDir: request.FactoryDefinition.ExecutionBaseDir,
 		},
 		Session: factoryruntime.RuntimeActivationSessionInputs{
-			PersistencePolicy: string(request.FactorySession.PersistencePolicy),
-			BackendScopeID:    request.FactorySession.BackendScopeID,
-			SystemConfigHome:  request.FactorySession.SystemConfigHome,
-			SystemConfigPath:  request.FactorySession.SystemConfigPath,
-			WorkFile:          request.FactorySession.WorkFile,
+			CanonicalSessionID: request.FactorySession.CanonicalSessionID,
+			PersistencePolicy:  string(request.FactorySession.PersistencePolicy),
+			BackendScopeID:     request.FactorySession.BackendScopeID,
+			SystemConfigHome:   request.FactorySession.SystemConfigHome,
+			SystemConfigPath:   request.FactorySession.SystemConfigPath,
+			WorkFile:           request.FactorySession.WorkFile,
 			Host: factoryruntime.RuntimeActivationHostInputs{
 				Directory:   request.FactorySession.Host.Directory,
 				RuntimeMode: request.FactorySession.Host.RuntimeMode,
@@ -790,6 +796,7 @@ func runtimeActivationInputs(
 				Host:        request.FactorySession.Host.Host,
 				Port:        request.FactorySession.Host.Port,
 				AutoPort:    request.FactorySession.Host.AutoPort,
+				Pprof:       request.FactorySession.Host.Pprof,
 			},
 		},
 		Workers: factoryruntime.RuntimeActivationWorkerInputs{
@@ -864,6 +871,16 @@ func runtimeActivationMockWorkers(input *workers.MockWorkersConfig) *factoryrunt
 				converted.RejectConfig.ExitCode = &value
 			}
 		}
+		if worker.Usage != nil {
+			converted.Usage = &factoryruntime.RuntimeActivationMockUsage{
+				Provider:              worker.Usage.Provider,
+				Model:                 worker.Usage.Model,
+				InputTokens:           cloneInt64Pointer(worker.Usage.InputTokens),
+				OutputTokens:          cloneInt64Pointer(worker.Usage.OutputTokens),
+				CachedInputTokens:     cloneInt64Pointer(worker.Usage.CachedInputTokens),
+				ReasoningOutputTokens: cloneInt64Pointer(worker.Usage.ReasoningOutputTokens),
+			}
+		}
 		output.MockWorkers[index] = converted
 	}
 	return output
@@ -878,4 +895,39 @@ func cloneStringMap(input map[string]string) map[string]string {
 		output[key] = value
 	}
 	return output
+}
+
+func cloneInt64Pointer(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
+}
+
+// newOrderlyRecordingFlush adapts the already-composed Recordings root to the
+// initializer lifecycle boundary. A missing record path means that this
+// runtime has no live recording to flush, so the orderly-stop phase remains a
+// no-op.
+func newOrderlyRecordingFlush(
+	service recordings.Service,
+	recordingID string,
+	recordPath string,
+) lifecycle.OrderlyStopOperation {
+	if service == nil || strings.TrimSpace(recordingID) == "" || strings.TrimSpace(recordPath) == "" {
+		return nil
+	}
+	return func(ctx context.Context) error {
+		if ctx != nil {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+		}
+		if _, err := service.FlushRecording(recordings.FlushRecordingRequest{
+			RecordingID: recordings.RecordingID(recordingID),
+		}); err != nil {
+			return fmt.Errorf("flush live recording during orderly shutdown: %w", err)
+		}
+		return nil
+	}
 }

@@ -35,6 +35,11 @@ type ModelCLIOutputCreateTempFile func(string, string) (interface {
 	Name() string
 }, error)
 
+// ModelCLIInputReadFile is the host effect used to load one explicit generic
+// CLI input. The CLI adapter owns mapping validation and media classification;
+// this edge supplies only the file bytes.
+type ModelCLIInputReadFile func(string) ([]byte, error)
+
 // ModelBackendArtifactSelectionRequest contains the safe host facts needed by
 // the pinned backend publication selector. The edge owns manifest lookup;
 // Models receives only the selected immutable archive facts.
@@ -58,6 +63,23 @@ type ModelResolveBackendArtifact func(
 	context.Context,
 	ModelBackendArtifactSelectionRequest,
 ) (ModelBackendArtifactSelection, error)
+
+// ModelInvocationBackend is the replaceable backend operation effect used by
+// functional fixtures and future managed-backend adapters. It returns only
+// detached provider-neutral output facts; Models retains ownership of
+// invocation status, output normalization, artifacts, and lease lifecycle.
+type ModelInvocationBackend func(
+	context.Context,
+	models.InvokeModelRequest,
+) ([]models.InferenceContent, []models.InferenceArtifact, error)
+
+// ModelASRBackend is the typed ASR operation effect. Models owns the generic
+// request validation and private LocalAI codec; this edge supplies only the
+// detached protocol result and opaque artifact metadata.
+type ModelASRBackend func(
+	context.Context,
+	models.ASRBackendRequest,
+) (models.ASRBackendResponse, error)
 
 type HostProcessStartSpec struct {
 	Command                 string

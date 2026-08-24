@@ -68,6 +68,33 @@ unless that structure is itself the product behavior under test. Prefer
 behavioral requirements that describe observable runtime, API, CLI, UI, or
 emitted-event outcomes from a user or maintainer perspective.
 
+## Conditional runtime-proof planning contract
+
+Every plan MUST emit a runtime-proof criterion at both the project acceptance
+level and on the final user story. The criterion MUST first classify whether the
+lane changes runtime-observable behavior in a CLI, API, UI, emitted event, or
+runtime lifecycle.
+
+- For an applicable lane, the criterion MUST require building the real delivered
+  artifact, exercising the delivered behavior end to end, and recording the
+  verbatim command and output. Green tests, an inspected diff, or implementer
+  evidence alone do not satisfy this proof.
+- For a lane with no runtime-observable behavior, the criterion MUST explicitly
+  say that runtime proof is not applicable and give a one-line reason. This is a
+  first-class non-blocking outcome, not an omitted criterion.
+
+The final user story MUST repeat the same conditional runtime-proof requirement
+so the last implementation iteration owns the proof or the explicit
+not-applicable reason. Do not weaken, defer, or replace this final-story
+criterion with a structural check such as file presence, typecheck, or tests.
+
+Do not write two criteria that disagree. A criterion may state that the lane
+reaches, pulls, or invokes a real external artifact. When a criterion states
+this, no other criterion in the same plan may exempt that artifact from its
+proof. Do not describe that proof as "requiring no real network download" or as
+"replacing the backend only through `edges.Edges`". Write the real-artifact
+check as a separate asset conformance criterion instead.
+
 
 The markdown PRD should include, when relevant:
 - context with customer ask, concrete problem, and high-level solution
@@ -124,7 +151,7 @@ Story-writing rules:
 - every story must include at least one behavioral acceptance criterion
 - `Typecheck passes` must appear in every story
 - add `Tests pass` when testable logic changes
-- add direct browser verification when the story changes visible UI behavior
+- add direct browser verification when the story changes visible UI behavior. When a story's acceptance criteria require browser verification, name a fallback explicitly: state that if no dev browser tool (built-in, Playwright, or otherwise) is available in the implementer's environment, the implementer should record that once and move on rather than treat it as unfinished work requiring further attempts. Visible UI changes still require some appropriate verification.
 - order stories by dependency so earlier stories do not depend on later ones
 
 Please ensure that the PRD and prd.json both contain an overall description of
@@ -217,10 +244,6 @@ Add priority levels to tasks so users can focus on what matters most. Tasks can 
 - Should we add keyboard shortcuts for priority changes?
 ```
 
-### Dev browser skill
-
-The requirement to use the dev browser skill can be any form of browser whether its the built in one, playwright or whatever. 
-If no dev browser skill is available then its okay to move forward without it. 
 ## Output JSON Format
 
 ```json

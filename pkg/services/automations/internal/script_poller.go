@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -41,7 +42,7 @@ func (s *Service) StartScriptPoller(
 // RunScriptPoller executes one script poller command cycle and submits any parsed work request.
 func (s *Service) RunScriptPoller(
 	ctx context.Context,
-	runner workers.CommandRunner,
+	runner platformprocess.CommandRunner,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	workstation interfaces.FactoryWorkstationConfig,
 	workerDef *interfaces.FactoryWorkerConfig,
@@ -76,7 +77,7 @@ func ScriptPollerCommandRequest(
 	workstation interfaces.FactoryWorkstationConfig,
 	workerDef *interfaces.FactoryWorkerConfig,
 	resolveTemplates workers.TemplateFieldResolver,
-) (workers.CommandRequest, error) {
+) (platformprocess.CommandRequest, error) {
 	return scriptpollers.ScriptPollerCommandRequest(
 		runtimeCfg,
 		workstation,

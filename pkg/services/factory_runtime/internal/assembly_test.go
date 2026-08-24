@@ -101,6 +101,27 @@ func TestReconstructRestoredWorldStateUsesLatestReplayTick(t *testing.T) {
 	}
 }
 
+func TestReconstructRestoredWorldStateUsesSuccessorTickAfterDispatchInterruption(t *testing.T) {
+	events := []interfaces.FactoryEvent{
+		{Context: interfaces.FactoryEventContext{Tick: 5}},
+		{Type: interfaces.FactoryEventTypeDispatchInterrupted, Context: interfaces.FactoryEventContext{Tick: 5}},
+		{Type: interfaces.FactoryEventTypeDispatchRequest, Context: interfaces.FactoryEventContext{Tick: 1}},
+		{Type: interfaces.FactoryEventTypeRunResponse, Context: interfaces.FactoryEventContext{Tick: 4}},
+	}
+	opening := &assemblyWorldStateOpening{state: interfaces.FactoryWorldState{Tick: 4}}
+
+	state, err := reconstructRestoredWorldState(opening, events)
+	if err != nil {
+		t.Fatalf("reconstructRestoredWorldState: %v", err)
+	}
+	if state == nil || state.Tick != 4 {
+		t.Fatalf("restored state = %#v, want successor tick 4", state)
+	}
+	if opening.tick != 4 {
+		t.Fatalf("selected reconstruction tick = %d, want successor tick 4", opening.tick)
+	}
+}
+
 func TestResumeInputSelectsRecordedEventsForRestoredWorldState(t *testing.T) {
 	resumeEvents := []interfaces.FactoryEvent{
 		{Id: "resume-event", Context: interfaces.FactoryEventContext{Tick: 9}},
@@ -142,7 +163,7 @@ func TestResumeInputRejectsPortableOrEmptyHistory(t *testing.T) {
 }
 
 func TestNewAssemblyRequiresWireConstructedRuntimeFactory(t *testing.T) {
-	assembly, err := NewAssembly(nil, stubWorkerSessionsFactory, nil)
+	assembly, err := NewAssembly(nil, stubWorkerSessionsFactory, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "Factory Runtime factory is required") {
 		t.Fatalf("NewAssembly(nil) error = %v, want required dependency", err)
 	}
@@ -153,7 +174,7 @@ func TestNewAssemblyRequiresWireConstructedRuntimeFactory(t *testing.T) {
 
 func TestNewAssemblyRequiresWorkerSessionsFactory(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
-	assembly, err := NewAssembly(runtimeFactory, nil, stubWorkersService{})
+	assembly, err := NewAssembly(runtimeFactory, nil, stubWorkersService{}, nil)
 	if err == nil || !strings.Contains(err.Error(), "Worker Sessions factory is required") {
 		t.Fatalf("NewAssembly(nil factory) error = %v, want required dependency", err)
 	}
@@ -164,7 +185,7 @@ func TestNewAssemblyRequiresWorkerSessionsFactory(t *testing.T) {
 
 func TestNewAssemblyRequiresWorkersService(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
-	assembly, err := NewAssembly(runtimeFactory, stubWorkerSessionsFactory, nil)
+	assembly, err := NewAssembly(runtimeFactory, stubWorkerSessionsFactory, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "Workers service is required") {
 		t.Fatalf("NewAssembly(nil Workers service) error = %v, want required dependency", err)
 	}
@@ -176,7 +197,7 @@ func TestNewAssemblyRequiresWorkersService(t *testing.T) {
 func TestNewAssemblyBindsRuntimeFactory(t *testing.T) {
 	runtimeFactory := &RuntimeFactory{}
 	workerService := stubWorkersService{}
-	assembly, err := NewAssembly(runtimeFactory, stubWorkerSessionsFactory, workerService)
+	assembly, err := NewAssembly(runtimeFactory, stubWorkerSessionsFactory, workerService, platformclock.Real{})
 	if err != nil {
 		t.Fatalf("NewAssembly() error = %v", err)
 	}

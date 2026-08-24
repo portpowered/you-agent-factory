@@ -1,0 +1,48 @@
+const legacyFoundationTokenNames = [
+  "af-bg",
+  "af-bg-start",
+  "af-bg-mid",
+  "af-canvas",
+  "af-ink",
+  "af-danger-bright",
+  "af-danger-ink",
+  "af-info-ink",
+  "af-success-ink",
+  "af-warning-ink",
+] as const;
+
+const packageFoundationTokenNames = [
+  "af-foundation-accent",
+  "af-foundation-accent-ink",
+  "af-foundation-accent-strong",
+  "af-foundation-background",
+  "af-foundation-background-mid",
+  "af-foundation-background-start",
+  "af-foundation-canvas",
+  "af-foundation-code-ink",
+  "af-foundation-danger",
+  "af-foundation-danger-bright",
+  "af-foundation-danger-ink",
+  "af-foundation-info",
+  "af-foundation-info-bright",
+  "af-foundation-info-ink",
+  "af-foundation-info-strong",
+  "af-foundation-ink",
+  "af-foundation-overlay",
+  "af-foundation-secondary-accent",
+  "af-foundation-secondary-accent-ink",
+  "af-foundation-success",
+  "af-foundation-success-ink",
+  "af-foundation-surface",
+  "af-foundation-tertiary-accent",
+  "af-foundation-tertiary-accent-ink",
+  "af-foundation-warning",
+  "af-foundation-warning-ink",
+  "af-foundation-worker",
+  "af-foundation-worker-ink",
+] as const;
+
+export const forbiddenFoundationTokenNames = [
+  ...legacyFoundationTokenNames,
+  ...packageFoundationTokenNames,
+] as const;

@@ -9,12 +9,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	platformruntimeartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -55,6 +57,10 @@ func provideWorkersMockWorkersConfigDiagnosticsLoader(
 	return (workers.MockWorkersConfigCodec{}).NewDiagnosticsLoader(files)
 }
 
+func provideRunInputPathInspector() platformfilesystem.PathInspector {
+	return platformfilesystem.Local{}
+}
+
 type runtimeArtifactClock func() time.Time
 type runtimeArtifactIDGenerator func() string
 
@@ -80,6 +86,14 @@ func provideRuntimeArtifactRootResolver() factoryruntime.RuntimeArtifactRootReso
 
 func provideRuntimeArtifactPathReserver() (platformruntimeartifact.Reserver, error) {
 	return platformruntimeartifact.NewReserver(platformfilesystem.Local{})
+}
+
+func provideRuntimeMetricsCoordination() (platformmetrics.RuntimeMetricsCoordination, error) {
+	return platformmetrics.NewRuntimeMetricsCoordination()
+}
+
+func provideRuntimeMetricsRetentionFileSystem() platformmetrics.RuntimeMetricsRetentionFileSystem {
+	return platformfilesystem.Local{}
 }
 
 func provideRuntimeLogOwner(
@@ -144,21 +158,80 @@ func (adapter runtimeLogSinkAdapter) Artifact() factoryruntime.RuntimeLogArtifac
 }
 
 func provideRuntimeMetricsOwner(
+	baseLogger *zap.Logger,
 	clock runtimeArtifactClock,
 	newID runtimeArtifactIDGenerator,
 	paths platformruntimeartifact.Reserver,
+	retentionFileSystem platformmetrics.RuntimeMetricsRetentionFileSystem,
+	coordination platformmetrics.RuntimeMetricsCoordination,
 ) (factoryruntime.RuntimeMetricsOwner, error) {
-	opener, err := platformmetrics.NewRuntimeMetricsOpener(paths)
+	retention, err := platformmetrics.NewRuntimeMetricsRetention(
+		retentionFileSystem, clock, coordination,
+	)
+	if err != nil {
+		return nil, err
+	}
+	scheduler, err := platformmetrics.NewRuntimeMetricsRetentionScheduler(
+		retention, nil, runtimeMetricsRetentionReporter(baseLogger),
+	)
+	if err != nil {
+		return nil, err
+	}
+	opener, err := platformmetrics.NewRuntimeMetricsOpenerWithRetention(
+		paths, scheduler, coordination,
+	)
 	if err != nil {
 		return nil, err
 	}
 	return runtimeMetricsOwner{opener: opener, clock: clock, newID: newID}, nil
 }
 
+func runtimeMetricsRetentionReporter(
+	baseLogger *zap.Logger,
+) platformmetrics.RuntimeMetricsRetentionReporter {
+	return func(report platformmetrics.RuntimeMetricsRetentionReport, sweepErr error) {
+		if baseLogger == nil {
+			return
+		}
+		fields := []zap.Field{
+			zap.String("root", report.RootDirectory),
+			zap.Bool("skipped", report.Skipped),
+			zap.Int("scanned_files", report.Scanned.Files),
+			zap.Int64("scanned_bytes", report.Scanned.Bytes),
+			zap.Int("before_files", report.Before.Files),
+			zap.Int64("before_bytes", report.Before.Bytes),
+			zap.Int("after_files", report.After.Files),
+			zap.Int64("after_bytes", report.After.Bytes),
+			zap.Int("removed_files", report.Removed.Files),
+			zap.Int64("removed_bytes", report.Removed.Bytes),
+			zap.Int("protected_files", report.Protected.Files),
+			zap.Int64("protected_bytes", report.Protected.Bytes),
+			zap.Int("failed_files", report.Failed.Files),
+			zap.Int64("failed_bytes", report.Failed.Bytes),
+		}
+		if sweepErr != nil {
+			baseLogger.Warn("runtime metrics retention sweep failed", append(fields, zap.Error(sweepErr))...)
+			return
+		}
+		if report.Failed.Files > 0 {
+			baseLogger.Warn("runtime metrics retention sweep completed with failures", fields...)
+			return
+		}
+		baseLogger.Debug("runtime metrics retention sweep completed", fields...)
+	}
+}
+
 type runtimeMetricsOwner struct {
 	opener *platformmetrics.RuntimeMetricsOpener
 	clock  runtimeArtifactClock
 	newID  runtimeArtifactIDGenerator
+}
+
+func (owner runtimeMetricsOwner) Close(ctx context.Context) error {
+	if owner.opener == nil {
+		return nil
+	}
+	return owner.opener.Close(ctx)
 }
 
 func (owner runtimeMetricsOwner) Open(request factoryruntime.RuntimeMetricsScopeRequest) (factoryruntime.RuntimeMetricsSink, error) {
@@ -246,6 +319,7 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 				},
 			},
 			FactorySession: factorysessions.SessionRuntimeOpeningRequest{
+				CanonicalSessionID: cfg.CanonicalSessionID,
 				// Public run and service openings use the existing durable
 				// snapshot path explicitly. Empty and disabled remain
 				// memory-only choices for callers that opt into them.
@@ -260,6 +334,7 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 					Host:        cfg.BindHost,
 					Port:        cfg.Port,
 					AutoPort:    cfg.AutoPort,
+					Pprof:       cfg.Pprof,
 				},
 			},
 			Workers: workers.RuntimeOpeningRequest{
@@ -347,26 +422,26 @@ func provideFactoryRuntimeProviderCommandRunner(
 	edges serviceedges.Edges,
 ) (factorysessionwire.ProviderCommandRunner, error) {
 	if edges.ProviderCommandRunner != nil {
-		return workers.AdaptCommandRunner(edges.ProviderCommandRunner), nil
+		return edges.ProviderCommandRunner, nil
 	}
 	runner, err := providePlatformProcessCommandRunner(edges)
 	if err != nil {
 		return nil, err
 	}
-	return workers.AdaptCommandRunner(runner), nil
+	return runner, nil
 }
 
 func provideFactoryRuntimeScriptCommandRunner(
 	edges serviceedges.Edges,
 ) (factorysessionwire.ScriptCommandRunner, error) {
 	if edges.ScriptCommandRunner != nil {
-		return workers.AdaptCommandRunner(edges.ScriptCommandRunner), nil
+		return edges.ScriptCommandRunner, nil
 	}
 	runner, err := providePlatformProcessCommandRunner(edges)
 	if err != nil {
 		return nil, err
 	}
-	return workers.AdaptCommandRunner(runner), nil
+	return runner, nil
 }
 
 func provideSessionExecutionOpeningFactory(
@@ -409,12 +484,8 @@ func provideInvocationOperation(
 	)
 }
 
-func provideAgyPTYAllocator(edges serviceedges.Edges) (workers.PTYAllocator, error) {
-	allocator, err := provideProvidersAgyPTYAllocator(edges)
-	if err != nil {
-		return nil, err
-	}
-	return providerPTYAllocator(allocator), nil
+func provideAgyPTYAllocator(edges serviceedges.Edges) (providerswire.PTYAllocator, error) {
+	return provideProvidersAgyPTYAllocator(edges)
 }
 
 func provideProvidersAgyPTYAllocator(edges serviceedges.Edges) (providerswire.PTYAllocator, error) {
@@ -430,7 +501,7 @@ func provideProvidersAgyPTYAllocator(edges serviceedges.Edges) (providerswire.PT
 }
 
 func provideWorkerCommandRunnerAdapter() factorysessionwire.WorkerCommandRunnerAdapter {
-	return workers.AdaptCommandRunner
+	return func(runner platformprocess.CommandRunner) platformprocess.CommandRunner { return runner }
 }
 
 func provideWorkRequestIDGenerator(edges serviceedges.Edges) work.RequestIDGenerator {
@@ -499,10 +570,11 @@ func provideDirectJavaScriptHostAdapter(
 	return func(
 		execution factorysessionwire.OwnedExecutionService,
 		host factorysessions.RuntimeHostRequest,
+		cancellation initializer.InvocationCancellation,
 		observer factorysessions.RuntimeHostObserver,
 	) (lifecycle.Component, error) {
 		handler, err := newDurableExecutionHTTPHandler(
-			execution, validation, invocationWorkType, sessionRequests, logger,
+			execution, validation, invocationWorkType, sessionRequests, logger, cancellation,
 		)
 		if err != nil {
 			return nil, err
@@ -510,7 +582,7 @@ func provideDirectJavaScriptHostAdapter(
 		return newRunner(func(ctx context.Context) error {
 			return start(ctx, platformhttpserver.StartRequest{
 				Handler: handler, Host: host.Host, Port: host.Port,
-				AutoPort: host.AutoPort, Logger: logger,
+				AutoPort: host.AutoPort, Pprof: host.Pprof, Logger: logger,
 				OnBound: func(binding platformhttpserver.Binding) {
 					if observer != nil {
 						observer(factorysessions.RuntimeHostBinding{
@@ -529,6 +601,7 @@ func newDurableExecutionHTTPHandler(
 	invocationWorkType factorydefinitions.InvocationWorkTypeService,
 	sessionRequests factorysessionshttp.RequestPreparation,
 	logger *zap.Logger,
+	cancellation initializer.InvocationCancellation,
 ) (http.Handler, error) {
 	if execution == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || logger == nil {
 		return nil, errors.New("construct durable execution HTTP handler: execution, policies, request preparation, and logger are required")
@@ -540,12 +613,16 @@ func newDurableExecutionHTTPHandler(
 		DurableLister: execution, FactoryValidation: validation,
 		InvocationWorkType: invocationWorkType, SessionRequests: sessionRequests,
 	}, logger)
-	return transporthttp.NewServerWithRecordings(
+	var shutdown transporthttp.ShutdownOperation
+	if cancellation != nil {
+		shutdown = cancellation.Cancel
+	}
+	return transporthttp.NewServerWithRecordingsAndShutdown(
 		recordingshttp.NewLegacyAdapter(
 			factorysessionmapping.NewDurableHistoryBridge(durable),
 			factorysessionshttp.NewDurableRequestPreparation(sessionRequests),
 		),
-		sessionsHandler, nil, nil, nil, nil, logger,
+		sessionsHandler, nil, nil, nil, nil, logger, shutdown,
 	).Handler(), nil
 }
 

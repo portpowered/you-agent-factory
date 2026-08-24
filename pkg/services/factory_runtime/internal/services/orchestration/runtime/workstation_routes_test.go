@@ -626,7 +626,8 @@ func TestDetachedResultMaterializationMapsTerminalOutcomes(t *testing.T) {
 		{name: "accepted", outcome: workers.ExecutionOutcomeAccepted, wantTerminal: workers.WorkstationDispatchTerminalOutcomeCompleted, wantWork: workers.OutcomeAccepted},
 		{name: "continue", outcome: workers.ExecutionOutcomeContinue, wantTerminal: workers.WorkstationDispatchTerminalOutcomeCompleted, wantWork: workers.OutcomeContinue},
 		{name: "rejected", outcome: workers.ExecutionOutcomeRejected, wantTerminal: workers.WorkstationDispatchTerminalOutcomeCompleted, wantWork: workers.OutcomeRejected},
-		{name: "canceled", outcome: workers.ExecutionOutcomeCanceled, wantTerminal: workers.WorkstationDispatchTerminalOutcomeCanceled, wantWork: workers.OutcomeFailed, wantErrorText: workers.ErrWorkstationDispatchCanceled.Error()},
+		{name: "canceled", outcome: workers.ExecutionOutcomeCanceled, wantTerminal: workers.WorkstationDispatchTerminalOutcomeCanceled, wantWork: workers.OutcomeCanceled, wantErrorText: workers.ErrWorkstationDispatchCanceled.Error()},
+		{name: "canceled error", outcome: workers.ExecutionOutcomeFailed, executeErr: workers.ErrWorkstationDispatchCanceled, wantTerminal: workers.WorkstationDispatchTerminalOutcomeCanceled, wantWork: workers.OutcomeCanceled, wantErrorText: workers.ErrWorkstationDispatchCanceled.Error()},
 		{name: "unknown", outcome: workers.ExecutionOutcome("unexpected"), wantTerminal: workers.WorkstationDispatchTerminalOutcomeFailed, wantWork: workers.OutcomeFailed},
 		{name: "execution error", outcome: workers.ExecutionOutcomeAccepted, executeErr: errors.New("transport failed"), wantTerminal: workers.WorkstationDispatchTerminalOutcomeFailed, wantWork: workers.OutcomeFailed, wantErrorText: "transport failed"},
 	}
@@ -681,6 +682,23 @@ func TestDetachedResultMaterializationMapsProcessGoneReconciliation(t *testing.T
 		result.Result.Diagnostics.Metadata[workers.ProviderResponseMetadataFailureClassification] != "process_gone" ||
 		result.Result.Diagnostics.Metadata[workers.ProviderResponseMetadataFailureStage] != "process" {
 		t.Fatalf("process-gone diagnostics = %#v, want bounded reconciliation metadata", result.Result.Diagnostics)
+	}
+}
+
+func TestProcessGoneScriptAttemptPreservesTerminalFailureReason(t *testing.T) {
+	t.Parallel()
+
+	result := processGoneAttemptResult(
+		workers.ExecuteRequest{Target: workers.ExecutionTarget{RunnerID: "script"}},
+		workers.ExecuteResult{
+			Failure: &workers.ExecutionFailure{Message: "script worker exited non-zero"},
+			Diagnostics: &workers.SafeDiagnostics{Command: &workers.SafeCommandDiagnostic{
+				Stderr: "script worker exited non-zero",
+			}},
+		},
+	)
+	if result.Failure == nil || result.Failure.Message != "script worker exited non-zero" {
+		t.Fatalf("process-gone script failure = %#v, want preserved script reason", result.Failure)
 	}
 }
 

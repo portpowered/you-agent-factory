@@ -419,7 +419,7 @@ func (p *functionalRPCPeer) respondToPackagedPrompt(request rpcEnvelope) (bool, 
 	}
 	responses := map[string][]string{
 		"tournament": {"candidate one", "candidate two", `{"winner":"B","rationale":"candidate two is stronger"}`},
-		"spawn":      {`["research climate","research cost"]`, "climate findings", "cost findings", "merged travel answer"},
+		"spawn":      {`{"tasks":["research climate","research cost"]}`, `{"result":"climate findings"}`, `{"result":"cost findings"}`, `{"answer":"merged travel answer"}`},
 	}
 	modeResponses, ok := responses[p.mode]
 	if !ok {

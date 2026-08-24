@@ -249,6 +249,13 @@ func TestNewServiceExecuteConcurrentAgentAttemptsPreserveCorrelationContinuation
 		if request.AttemptID == "" || !strings.HasPrefix(request.AttemptID, "concurrent-agent-dispatch-") {
 			t.Fatalf("provider request = %#v, want its own detached attempt identity", request)
 		}
+		wantAttemptID := strings.Replace(request.AttemptID, "-dispatch-", "-attempt-", 1)
+		if request.Correlation.DispatchID == "" ||
+			request.Correlation.AttemptID == "" ||
+			request.Correlation.DispatchID != request.AttemptID ||
+			request.Correlation.AttemptID != wantAttemptID {
+			t.Fatalf("provider request correlation = %#v, want dispatch identity and distinct caller attempt", request.Correlation)
+		}
 	}
 }
 

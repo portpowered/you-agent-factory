@@ -6,6 +6,7 @@ package http
 import (
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
 	"path"
 	"strings"
@@ -28,6 +29,10 @@ import (
 
 const dashboardUIIndexFile = "index.html"
 
+// ShutdownOperation is the narrow invocation-local cancellation capability
+// exposed to the administrative HTTP route by runtime composition.
+type ShutdownOperation func()
+
 var _ factoryapi.ServerInterface = (*Server)(nil)
 
 // Server is the REST API server for the agent-factory.
@@ -41,12 +46,67 @@ type Server struct {
 	workerSessionsHTTP     *workersessionshttp.Handler
 	metricsHTTP            *factoryvisualizationhttp.MetricsHandler
 	costsHTTP              *costshttp.Handler
+	shutdown               ShutdownOperation
 	logger                 *zap.Logger
 	router                 *mux.Router
 }
 
 type factorySessionsAdapter struct{ *factorysessionshttp.Adapter }
 type workAdapter struct{ *workhttp.Adapter }
+
+// ShutdownServer acknowledges a loopback administrative request before
+// invoking the cancellation authority. Forwarded headers are deliberately not
+// consulted; authorization uses the actual peer and listener addresses.
+func (s *Server) ShutdownServer(w http.ResponseWriter, r *http.Request) {
+	if s == nil {
+		return
+	}
+	if !isLoopbackShutdownRequest(r) {
+		s.writeError(w, http.StatusForbidden, "shutdown control requires a loopback peer", "SHUTDOWN_CONTROL_REJECTED")
+		return
+	}
+	if s.shutdown == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "shutdown control is unavailable", "SHUTDOWN_CONTROL_UNAVAILABLE")
+		return
+	}
+
+	s.writeJSON(w, http.StatusAccepted, factoryapi.ShutdownAcceptedResponse{
+		Status:  factoryapi.Accepted,
+		Message: "graceful shutdown accepted",
+	})
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	s.shutdown()
+}
+
+func isLoopbackShutdownRequest(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	remoteIP := ipFromNetworkAddress(r.RemoteAddr)
+	if remoteIP == nil || !remoteIP.IsLoopback() {
+		return false
+	}
+	localAddr, ok := r.Context().Value(http.LocalAddrContextKey).(net.Addr)
+	if !ok || localAddr == nil {
+		return false
+	}
+	localIP := ipFromNetworkAddress(localAddr.String())
+	return localIP != nil && localIP.IsLoopback()
+}
+
+func ipFromNetworkAddress(address string) net.IP {
+	trimmed := strings.TrimSpace(address)
+	if host, _, err := net.SplitHostPort(trimmed); err == nil {
+		trimmed = host
+	}
+	trimmed = strings.Trim(strings.TrimSpace(trimmed), "[]")
+	if zone := strings.LastIndex(trimmed, "%"); zone >= 0 {
+		trimmed = trimmed[:zone]
+	}
+	return net.ParseIP(trimmed)
+}
 
 // NewServer composes an immutable generated HTTP server from dependencies
 // selected by Wire and the opened Factory Session. It performs no dependency
@@ -60,7 +120,7 @@ func NewServer(
 	logger *zap.Logger,
 	workerSessions ...*workersessionshttp.Handler,
 ) *Server {
-	return newServer(nil, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, nil, nil, workerSessions...)
+	return newServer(nil, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, nil, nil, nil, workerSessions...)
 }
 
 // NewServerWithRecordings composes the generated route shell with the
@@ -76,7 +136,7 @@ func NewServerWithRecordings(
 	logger *zap.Logger,
 	workerSessions ...*workersessionshttp.Handler,
 ) *Server {
-	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, nil, nil, workerSessions...)
+	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, nil, nil, nil, workerSessions...)
 }
 
 // NewServerWithRecordingsAndCosts composes the generated route shell with the
@@ -94,7 +154,23 @@ func NewServerWithRecordingsAndCosts(
 	costsHTTP *costshttp.Handler,
 	workerSessions ...*workersessionshttp.Handler,
 ) *Server {
-	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, nil, costsHTTP, workerSessions...)
+	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, nil, costsHTTP, nil, workerSessions...)
+}
+
+// NewServerWithRecordingsAndShutdown composes the durable HTTP surface with
+// the invocation-local administrative shutdown control.
+func NewServerWithRecordingsAndShutdown(
+	recordingsHTTP *recordingshttp.Adapter,
+	factorySessionsHTTP *factorysessionshttp.Handler,
+	workHTTP *workhttp.Adapter,
+	modelsHTTP *modelshttp.Handler,
+	providerSessionsHTTP *providersessionshttp.Handler,
+	factoryDefinitionsHTTP *factorydefinitionshttp.Handler,
+	logger *zap.Logger,
+	shutdown ShutdownOperation,
+	workerSessions ...*workersessionshttp.Handler,
+) *Server {
+	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, nil, nil, shutdown, workerSessions...)
 }
 
 // NewServerWithRecordingsAndMetricsAndCosts composes the generated route shell
@@ -111,9 +187,10 @@ func NewServerWithRecordingsAndMetricsAndCosts(
 	logger *zap.Logger,
 	metricsHTTP *factoryvisualizationhttp.MetricsHandler,
 	costsHTTP *costshttp.Handler,
+	shutdown ShutdownOperation,
 	workerSessions ...*workersessionshttp.Handler,
 ) *Server {
-	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, metricsHTTP, costsHTTP, workerSessions...)
+	return newServer(recordingsHTTP, factorySessionsHTTP, workHTTP, modelsHTTP, providerSessionsHTTP, factoryDefinitionsHTTP, logger, metricsHTTP, costsHTTP, shutdown, workerSessions...)
 }
 
 func newServer(
@@ -126,6 +203,7 @@ func newServer(
 	logger *zap.Logger,
 	metricsHTTP *factoryvisualizationhttp.MetricsHandler,
 	costsHTTP *costshttp.Handler,
+	shutdown ShutdownOperation,
 	workerSessions ...*workersessionshttp.Handler,
 ) *Server {
 	if logger == nil {
@@ -142,6 +220,7 @@ func newServer(
 		modelsHTTP:             modelsHTTP, providerSessionsHTTP: providerSessionsHTTP, logger: logger,
 		metricsHTTP: metricsHTTP,
 		costsHTTP:   costsHTTP,
+		shutdown:    shutdown,
 	}
 	if len(workerSessions) > 0 {
 		srv.workerSessionsHTTP = workerSessions[0]

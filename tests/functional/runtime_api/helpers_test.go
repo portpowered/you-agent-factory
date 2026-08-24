@@ -9,12 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -22,14 +19,6 @@ import (
 )
 
 type runtimeOption func(*support.FunctionalAPIServerConfig)
-
-func withSubmissionRecorder(recorder recordings.SubmissionRecorder) runtimeOption {
-	return func(cfg *support.FunctionalAPIServerConfig) { cfg.Edges.SubmissionRecorder = recorder }
-}
-
-func withClock(clock platformclock.Source) runtimeOption {
-	return func(cfg *support.FunctionalAPIServerConfig) { cfg.Edges.Clock = clock }
-}
 
 func withProvider(provider any) runtimeOption {
 	return func(cfg *support.FunctionalAPIServerConfig) {
@@ -52,12 +41,6 @@ func withWorkerCommands(providerRunner, scriptRunner platformprocess.CommandRunn
 	return func(cfg *support.FunctionalAPIServerConfig) {
 		cfg.Edges.ProviderCommandRunner = providerRunner
 		cfg.Edges.ScriptCommandRunner = scriptRunner
-	}
-}
-
-func withInvocationMetricsRecorder(recorder factorysessions.InvocationMetricsRecorder) runtimeOption {
-	return func(cfg *support.FunctionalAPIServerConfig) {
-		cfg.Edges.InvocationMetricsRecorder = recorder
 	}
 }
 

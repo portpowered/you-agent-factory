@@ -59,8 +59,10 @@ in components that render `ReactFlow` controls or backgrounds.
 Presentation shell for a graph node body and handle rails.
 
 - **Props:** `handles` (required), `children`, optional `nodeKind`, `state`,
-  `stateLabel`, `showStateIndicator` (default `true`), and standard
-  `article` attributes.
+  `stateLabel`, `contentInset`, `showStateIndicator` (default `true`), and
+  standard `article` attributes. `contentInset` defaults to `default`; use
+  `compact` for `0.5rem` content insets without handle rails and `1.25rem`
+  on sides occupied by handle rails.
 - **States:** `default`, `selected`, `disabled`, `loading`, `error`.
 - **Accessibility:** Selected shells expose `aria-selected`; error shells expose
   `aria-invalid`; loading shells expose `aria-busy`; disabled shells expose

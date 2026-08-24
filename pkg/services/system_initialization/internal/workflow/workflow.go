@@ -224,7 +224,10 @@ func projectPackagedFactoryResults(installed []factorydefinitions.PackagedFactor
 	results := make([]systeminitialization.PackagedFactoryResult, 0, len(installed))
 	for _, result := range installed {
 		results = append(results, systeminitialization.PackagedFactoryResult{
-			Name: result.Name, FactoryDir: result.FactoryDir, Outcome: systeminitialization.PackagedFactoryOutcome(result.Outcome),
+			Name:       result.Name,
+			FactoryDir: result.FactoryDir,
+			Outcome:    systeminitialization.PackagedFactoryOutcome(result.Outcome),
+			BackupDir:  result.BackupDir,
 		})
 	}
 	return results

@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type providersRootPortProbe struct{}
@@ -54,34 +54,34 @@ func (providersRootPortProbe) ContinueReference(_ context.Context, request provi
 
 func (providersRootPortProbe) Run(
 	_ context.Context,
-	_ workers.CommandRequest,
-) (workers.CommandResult, error) {
-	return workers.CommandResult{}, nil
+	_ platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, nil
 }
 
-// TestReplayBindingContractsAcceptProvidersRootPorts proves published replay
-// binding contracts carry the Providers root rather than a Workers provider
-// client.
-func TestReplayBindingContractsAcceptWorkersRootPorts(t *testing.T) {
+// TestReplayBindingContractsAcceptPlatformProcessRootPorts proves published
+// replay binding contracts carry the platform process effect rather than a
+// Workers command client.
+func TestReplayBindingContractsAcceptPlatformProcessRootPorts(t *testing.T) {
 	t.Parallel()
 
 	probe := providersRootPortProbe{}
 	var provider providers.Service = probe
-	var runner workers.CommandRunner = probe
+	var runner platformprocess.CommandRunner = probe
 
 	binding := recordings.BindReplayExecutionResult{
 		Provider:      provider,
 		CommandRunner: runner,
 	}
 	if binding.Provider == nil || binding.CommandRunner == nil {
-		t.Fatal("BindReplayExecutionResult must accept workers root ports")
+		t.Fatal("BindReplayExecutionResult must accept platform process root ports")
 	}
 
 	var factory recordings.ReplayExecutionFactory = func(
 		_ *recordings.ReplayArtifact,
 	) (
 		providers.Service,
-		workers.CommandRunner,
+		platformprocess.CommandRunner,
 		[]recordings.ReplayHook,
 		recordings.CompletionDeliveryPlanner,
 		error,
@@ -89,7 +89,7 @@ func TestReplayBindingContractsAcceptWorkersRootPorts(t *testing.T) {
 		return provider, runner, nil, nil, nil
 	}
 	if factory == nil {
-		t.Fatal("ReplayExecutionFactory must be constructible with workers root ports")
+		t.Fatal("ReplayExecutionFactory must be constructible with platform process root ports")
 	}
 
 	p, r, _, _, err := factory(&recordings.ReplayArtifact{SchemaVersion: "replay.v1"})

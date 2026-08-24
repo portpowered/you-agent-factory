@@ -302,8 +302,9 @@ func TestFactoryEventStreamIsOrderedAndClosesAtSessionTermination(t *testing.T) 
 	collected := collectFactoryEventStreamUntilCount(t, stream, len(retained), 15*time.Second)
 	assertFactoryEventsAscendingOrder(t, collected)
 
-	support.CloseFactorySessionAt(t, server.URL(), sessionID)
+	support.TerminateFactorySessionAt(t, server.URL(), sessionID)
 	stream.WaitClosed(5 * time.Second)
+	support.CloseFactorySessionAt(t, server.URL(), sessionID)
 }
 
 // TestFactoryEventStreamReconnectHasNoGapOrDuplicate proves a dropped Factory

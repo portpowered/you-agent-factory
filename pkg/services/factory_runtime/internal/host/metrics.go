@@ -3,10 +3,15 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"runtime"
 	"strconv"
 	"strings"
 
+	platformprocessmemory "github.com/portpowered/infinite-you/pkg/platform/processmemory"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/metrics"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -42,6 +47,9 @@ const (
 	runtimeMetricScriptDuration             = "script.duration"
 	runtimeMetricScriptTimedOut             = "script.timed_out"
 	runtimeMetricScriptFailed               = "script.failed"
+	runtimeMemoryUnitBytes                  = "bytes"
+	runtimeMemoryUnitCount                  = "count"
+	runtimeMemoryUnitBoolean                = "boolean"
 )
 
 func (r *Bundle) RecordSubmissionMetric(record work.FactorySubmissionRecord) {
@@ -325,12 +333,62 @@ func (r *Bundle) metricsEmitter() metrics.MetricsEmitter {
 	return r.MetricsEmitter()
 }
 
-// MetricsEmitter returns the metrics sink emitter for the hosted bundle.
-func (r *Bundle) MetricsEmitter() metrics.MetricsEmitter {
+type synchronizedMetricsEmitter struct {
+	bundle *Bundle
+}
+
+func (emitter synchronizedMetricsEmitter) emit(
+	emit func(metrics.MetricsEmitter) error,
+) error {
+	if emitter.bundle == nil {
+		return nil
+	}
+	emitter.bundle.metricsMu.Lock()
+	defer emitter.bundle.metricsMu.Unlock()
+	if emitter.bundle.metricsClosed {
+		return nil
+	}
+	err := emit(emitter.bundle.rawMetricsEmitter())
+	return err
+}
+
+func (emitter synchronizedMetricsEmitter) Counter(
+	ctx context.Context, name string, value float64, fields metrics.Fields,
+) error {
+	return emitter.emit(func(sink metrics.MetricsEmitter) error {
+		return sink.Counter(ctx, name, value, fields)
+	})
+}
+
+func (emitter synchronizedMetricsEmitter) Gauge(
+	ctx context.Context, name string, value float64, fields metrics.Fields,
+) error {
+	return emitter.emit(func(sink metrics.MetricsEmitter) error {
+		return sink.Gauge(ctx, name, value, fields)
+	})
+}
+
+func (emitter synchronizedMetricsEmitter) Sample(
+	ctx context.Context, name string, value float64, unit string, fields metrics.Fields,
+) error {
+	return emitter.emit(func(sink metrics.MetricsEmitter) error {
+		return sink.Sample(ctx, name, value, unit, fields)
+	})
+}
+
+func (r *Bundle) rawMetricsEmitter() metrics.MetricsEmitter {
 	if r == nil {
 		return metrics.NoopEmitter{}
 	}
 	return metrics.EnsureEmitter(r.MetricsSink)
+}
+
+// MetricsEmitter returns the metrics sink emitter for the hosted bundle.
+func (r *Bundle) MetricsEmitter() metrics.MetricsEmitter {
+	if r == nil || r.MetricsSink == nil {
+		return metrics.NoopEmitter{}
+	}
+	return synchronizedMetricsEmitter{bundle: r}
 }
 
 // EmitMetricCounter records one runtime counter sample on the hosted bundle.
@@ -363,6 +421,32 @@ func (r *Bundle) emitMetricSample(name string, value float64, unit string, field
 	if err := r.metricsEmitter().Sample(context.Background(), name, value, unit, fields); err != nil {
 		r.RuntimeLogger().Warn("runtime metrics sample emission failed", zap.String("metric_name", name), zap.Error(err))
 	}
+}
+
+func (r *Bundle) reportMetricFailure(kind, name string, err error) {
+	if r == nil || err == nil {
+		return
+	}
+	failure := fmt.Errorf("runtime metrics %s emission failed for %q: %w", kind, name, err)
+	r.metricsErrMu.Lock()
+	if r.metricsErr == nil {
+		r.metricsErr = failure
+	}
+	r.metricsErrMu.Unlock()
+	r.RuntimeLogger().Warn(
+		"runtime metrics "+kind+" emission failed",
+		zap.String("metric_name", name),
+		zap.Error(err),
+	)
+}
+
+func (r *Bundle) metricsError() error {
+	if r == nil {
+		return nil
+	}
+	r.metricsErrMu.Lock()
+	defer r.metricsErrMu.Unlock()
+	return r.metricsErr
 }
 
 // EmitRuntimeLifecycleStart records the runtime lifecycle started counter.
@@ -401,4 +485,81 @@ func (r *Bundle) EmitRuntimeStateMetrics(snapshot *interfaces.EngineStateSnapsho
 	r.emitMetricGauge(runtimeMetricStatePaused, boolMetricValue(snapshot.FactoryState == string(interfaces.FactoryStatePaused)), metrics.Fields{})
 	r.emitMetricGauge(runtimeMetricStateFailed, boolMetricValue(snapshot.FactoryState == string(interfaces.FactoryStateFailed)), metrics.Fields{})
 	r.emitMetricGauge(runtimeMetricQueueInFlight, float64(snapshot.InFlightCount), metrics.Fields{})
+}
+
+// EmitRuntimeMemoryMetrics records one point-in-time runtime observation on
+// the bundle's existing runtime metrics sink. The Go memory fields and the
+// process-commit result are collected before any record is emitted, so all
+// fields describe one observer pass.
+func (r *Bundle) EmitRuntimeMemoryMetrics() error {
+	if r == nil {
+		return nil
+	}
+	var stats runtime.MemStats
+	runtime.ReadMemStats(&stats)
+	commitBytes, commitErr := platformprocessmemory.CurrentCommit()
+	return r.emitRuntimeMemoryStats(runtimeMemoryStats{
+		heapAlloc:              stats.HeapAlloc,
+		heapInuse:              stats.HeapInuse,
+		sys:                    stats.Sys,
+		numGC:                  stats.NumGC,
+		goroutines:             runtime.NumGoroutine(),
+		processCommit:          commitBytes,
+		processCommitAvailable: commitErr == nil && commitBytes > 0,
+	})
+}
+
+type runtimeMemoryStats struct {
+	heapAlloc              uint64
+	heapInuse              uint64
+	sys                    uint64
+	numGC                  uint32
+	goroutines             int
+	processCommit          uint64
+	processCommitAvailable bool
+}
+
+func (r *Bundle) emitRuntimeMemoryStats(stats runtimeMemoryStats) error {
+	if r == nil {
+		return nil
+	}
+	r.metricsMu.Lock()
+	defer r.metricsMu.Unlock()
+	if r.metricsClosed {
+		return nil
+	}
+
+	fields := metrics.Fields{}
+	var errs []error
+	errAppend := func(name string, value float64, unit string) {
+		if err := r.emitRuntimeMemorySampleLocked(name, value, unit, fields); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	errAppend(factoryruntime.RuntimeMemoryHeapAlloc, float64(stats.heapAlloc), runtimeMemoryUnitBytes)
+	errAppend(factoryruntime.RuntimeMemoryHeapInuse, float64(stats.heapInuse), runtimeMemoryUnitBytes)
+	errAppend(factoryruntime.RuntimeMemorySys, float64(stats.sys), runtimeMemoryUnitBytes)
+	errAppend(factoryruntime.RuntimeMemoryNumGC, float64(stats.numGC), runtimeMemoryUnitCount)
+	errAppend(factoryruntime.RuntimeMemoryGoroutines, float64(stats.goroutines), runtimeMemoryUnitCount)
+	errAppend(factoryruntime.RuntimeMemoryProcessCommit, float64(stats.processCommit), runtimeMemoryUnitBytes)
+	commitAvailable := 0.0
+	if stats.processCommitAvailable {
+		commitAvailable = 1
+	}
+	errAppend(factoryruntime.RuntimeMemoryProcessCommitAvailable, commitAvailable, runtimeMemoryUnitBoolean)
+	return errors.Join(errs...)
+}
+
+func (r *Bundle) emitRuntimeMemorySampleLocked(
+	name string,
+	value float64,
+	unit string,
+	fields metrics.Fields,
+) error {
+	err := r.rawMetricsEmitter().Sample(context.Background(), name, value, unit, fields)
+	if err == nil {
+		return nil
+	}
+	r.reportMetricFailure("sample", name, err)
+	return fmt.Errorf("runtime metrics sample %q: %w", name, err)
 }

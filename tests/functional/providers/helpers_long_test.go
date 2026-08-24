@@ -11,6 +11,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -236,6 +237,34 @@ func executionTemplateWantPrompt(dir string) string {
 
 func cursorExecutionTemplateWantPrompt(dir string) string {
 	return cursorMergedPrompt("Process the input task.", executionTemplateWantPrompt(dir))
+}
+
+func cursorMergedPrompt(systemPrompt, userMessage string) string {
+	systemPrompt = strings.TrimSpace(systemPrompt)
+	userMessage = strings.TrimSpace(userMessage)
+	switch {
+	case systemPrompt == "":
+		return userMessage
+	case userMessage == "":
+		return systemPrompt
+	default:
+		return "System instructions:\n" + systemPrompt + "\n\nUser request:\n" + userMessage
+	}
+}
+
+func assertCursorProviderCompleted(t *testing.T, listed factoryapi.ListWorkResponse) {
+	t.Helper()
+	assertSessionPlaces(t, listed, map[string]int{
+		"task:complete": 1, "task:init": 0, "task:failed": 0,
+	})
+}
+
+func assertProviderStdin(t *testing.T, req platformprocess.CommandRequest, want string) {
+	t.Helper()
+
+	if got := string(req.Stdin); got != want {
+		t.Fatalf("provider stdin = %q, want %q", got, want)
+	}
 }
 
 func assertProviderExecutionFields(t *testing.T, dir string, req platformprocess.CommandRequest) {

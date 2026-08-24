@@ -19,6 +19,7 @@ const (
 
 type lookupCandidate struct {
 	stage         LookupStage
+	factoryName   string
 	sourceRef     string
 	filePath      string
 	content       string
@@ -149,6 +150,7 @@ func factoryWorkflowCandidate(files fileSystem, factoryName, factoryDir string, 
 		content := jsCfg.InlineSource.Inline
 		return lookupCandidate{
 			stage:         LookupStageNamedJavaScript,
+			factoryName:   factoryName,
 			sourceRef:     fmt.Sprintf("factory:%s:inline", factoryName),
 			content:       content,
 			agents:        jsCfg.Agents,
@@ -168,6 +170,7 @@ func factoryWorkflowCandidate(files fileSystem, factoryName, factoryDir string, 
 	}
 	return lookupCandidate{
 		stage:         LookupStageNamedJavaScript,
+		factoryName:   factoryName,
 		sourceRef:     fmt.Sprintf("factory:%s:%s", factoryName, filepath.ToSlash(sourceRef)),
 		filePath:      filepath.Join(factoryDir, filepath.FromSlash(sourceRef)),
 		content:       content,
@@ -360,12 +363,22 @@ func resolveInlineSource(kind Kind, value, inline string) (Resolution, bool) {
 	if len(issues) > 0 {
 		return resolutionWithLoadIssues(kind, value, LookupStageExplicitSourceKind, "inline", issues), true
 	}
+	factoryName := ""
+	if kind == KindFactoryInline {
+		var declaration struct {
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal([]byte(value), &declaration); err == nil {
+			factoryName = strings.TrimSpace(declaration.Name)
+		}
+	}
 
 	return Resolution{
 		RequestKind:      kind,
 		RequestValue:     value,
 		ResolvedKind:     kind,
 		LookupStage:      LookupStageExplicitSourceKind,
+		FactoryName:      factoryName,
 		SourceRef:        "inline",
 		SourceHash:       loaded.SourceHash,
 		OrchestratorKind: interfaces.OrchestratorKindJavaScript,
@@ -398,6 +411,7 @@ func resolutionFromCandidate(files fileSystem, requestKind Kind, requestValue st
 		RequestValue:     requestValue,
 		ResolvedKind:     KindWorkflowFile,
 		LookupStage:      candidate.stage,
+		FactoryName:      strings.TrimSpace(candidate.factoryName),
 		SourceRef:        candidate.sourceRef,
 		SourceHash:       loaded.SourceHash,
 		OrchestratorKind: interfaces.OrchestratorKindJavaScript,

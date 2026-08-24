@@ -1,0 +1,35 @@
+{
+  "workTypes": [
+    {
+      "name": "story",
+      "states": [
+        { "name": "init", "type": "INITIAL" },
+        { "name": "in-review", "type": "PROCESSING" },
+        { "name": "complete", "type": "TERMINAL" },
+        { "name": "failed", "type": "FAILED" }
+      ]
+    }
+  ],
+  "workers": [
+    { "name": "executor" },
+    { "name": "reviewer" }
+  ],
+  "workstations": [
+    {
+      "name": "execute-story",
+      "behavior": "REPEATER",
+      "worker": "executor",
+      "inputs": [{ "workType": "story", "state": "init" }],
+      "outputs": [{ "workType": "story", "state": "in-review" }],
+      "onFailure": [{ "workType": "story", "state": "failed" }]
+    },
+    {
+      "name": "review-story",
+      "worker": "reviewer",
+      "inputs": [{ "workType": "story", "state": "in-review" }],
+      "outputs": [{ "workType": "story", "state": "complete" }],
+      "onRejection": [{ "workType": "story", "state": "init" }],
+      "onFailure": [{ "workType": "story", "state": "failed" }]
+    }
+  ]
+}

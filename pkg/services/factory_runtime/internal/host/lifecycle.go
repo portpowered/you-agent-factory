@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
@@ -141,13 +142,22 @@ func (h *Handle) LifecycleMetricsOnce() *sync.Once {
 	return &h.lifecycleMetricsOnce
 }
 
-const runtimeMetricsObserverPollInterval = 5 * time.Millisecond
+const (
+	runtimeMetricsObserverPollInterval = 5 * time.Millisecond
+	runtimeMemoryObservationInterval   = 10 * time.Second
+)
 
 type runtimeMetricsObservation struct {
 	runtimeStatus interfaces.RuntimeStatus
 	factoryState  interfaces.FactoryState
 	inFlightCount int
 	initialized   bool
+}
+
+type runtimeMetricsObserver struct {
+	last           runtimeMetricsObservation
+	lastMemoryAt   time.Time
+	memoryObserved bool
 }
 
 // WaitForStart blocks until the hosted runtime reports running readiness or fails early.
@@ -171,6 +181,10 @@ func WaitForStart(ctx context.Context, handle *Handle) error {
 		case <-handle.RunDone:
 			return startupResult(handle.Result())
 		case <-ticker.C:
+			// Startup readiness is deliberately checked through the aggregate
+			// engine boundary. Unlike lifecycle telemetry, this handshake must
+			// observe the hosted engine's complete readiness state before the
+			// transport component is allowed to start.
 			snap, err := handle.Bundle.Factory.GetEngineStateSnapshot(context.Background())
 			if err != nil {
 				continue
@@ -229,11 +243,21 @@ func FinalizeArtifacts(bundle *Bundle, clock factory.Clock) error {
 		}
 	}
 	if bundle.MetricsSink != nil {
-		if err := bundle.MetricsSink.Close(); err != nil {
+		if err := bundle.closeMetricsSink(); err != nil {
 			errs = append(errs, err)
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func (bundle *Bundle) closeMetricsSink() error {
+	if bundle == nil || bundle.MetricsSink == nil {
+		return nil
+	}
+	bundle.metricsMu.Lock()
+	defer bundle.metricsMu.Unlock()
+	bundle.metricsClosed = true
+	return errors.Join(bundle.metricsError(), bundle.MetricsSink.Close())
 }
 
 // CloseBundleSinks closes runtime log and metrics sinks created during bundle build.
@@ -254,34 +278,74 @@ func CloseBundleSinks(logSink factory.RuntimeLogSink, metricsSink factory.Runtim
 
 // ObserveRuntimeMetrics polls engine snapshots and emits runtime state gauges until the
 // hosted run loop completes or observerCtx is canceled.
-func ObserveRuntimeMetrics(observerCtx context.Context, handle *Handle) {
-	if handle == nil || handle.Bundle == nil || handle.Bundle.Factory == nil {
+func ObserveRuntimeMetrics(
+	observerCtx context.Context,
+	handle *Handle,
+	clock platformclock.TimerSource,
+) {
+	observeRuntimeMetrics(observerCtx, handle, clock)
+}
+
+func observeRuntimeMetrics(
+	observerCtx context.Context,
+	handle *Handle,
+	clock platformclock.TimerSource,
+) {
+	if handle == nil || handle.Bundle == nil || handle.Bundle.Factory == nil || clock == nil {
 		return
 	}
-	ticker := time.NewTicker(runtimeMetricsObserverPollInterval)
-	defer ticker.Stop()
-	var last runtimeMetricsObservation
+	observer := runtimeMetricsObserver{}
+	observer.observe(handle, clock.Now())
 	for {
-		snapshot, err := handle.Bundle.Factory.GetEngineStateSnapshot(context.Background())
-		if err == nil {
-			current := metricsObservationFromSnapshot(snapshot)
-			if current.changedFrom(last) {
-				handle.Bundle.EmitRuntimeStateMetrics(snapshot)
-				last = current
-			}
-		}
+		timer := clock.NewTimer(runtimeMetricsObserverPollInterval)
 		select {
 		case <-handle.RunDone:
-			finalizeRuntimeLifecycleMetrics(handle, last)
+			timer.Stop()
+			finalizeRuntimeLifecycleMetrics(handle, observer.last)
 			return
 		case <-observerCtx.Done():
+			timer.Stop()
 			// Temporary sidecar shutdown (for example during session runtime replacement)
 			// must not block on runDone or emit lifecycle stop metrics; Stop finalizes
 			// lifecycle telemetry after the runtime actually exits.
 			return
-		case <-ticker.C:
+		case observedAt := <-timer.C():
+			select {
+			case <-handle.RunDone:
+				finalizeRuntimeLifecycleMetrics(handle, observer.last)
+				return
+			default:
+			}
+			observer.observe(handle, observedAt)
 		}
 	}
+}
+
+func (o *runtimeMetricsObserver) observe(handle *Handle, observedAt time.Time) {
+	if o == nil || handle == nil || handle.Bundle == nil || handle.Bundle.Factory == nil {
+		return
+	}
+	snapshot, err := runtimeLifecycleSnapshot(context.Background(), handle.Bundle.Factory)
+	if err == nil {
+		current := metricsObservationFromSnapshot(snapshot)
+		if current.changedFrom(o.last) {
+			handle.Bundle.EmitRuntimeStateMetrics(snapshot)
+			o.last = current
+		}
+	}
+	o.observeMemory(handle.Bundle, observedAt)
+}
+
+func (o *runtimeMetricsObserver) observeMemory(bundle *Bundle, observedAt time.Time) {
+	if o == nil || bundle == nil {
+		return
+	}
+	if o.memoryObserved && observedAt.Before(o.lastMemoryAt.Add(runtimeMemoryObservationInterval)) {
+		return
+	}
+	bundle.EmitRuntimeMemoryMetrics()
+	o.lastMemoryAt = observedAt
+	o.memoryObserved = true
 }
 
 // RuntimeStopOutcome derives lifecycle-stop labels from the terminal engine snapshot and run error.
@@ -331,12 +395,29 @@ func (o runtimeMetricsObservation) changedFrom(previous runtimeMetricsObservatio
 		o.inFlightCount != previous.inFlightCount
 }
 
+// runtimeLifecycleSnapshot keeps lifecycle telemetry on the detached runtime
+// boundary when the hosted implementation exposes it. The aggregate engine
+// snapshot is intentionally a compatibility fallback: it reconstructs the
+// canonical world and transition enablement, which makes stopping a runtime
+// increasingly expensive as its event history grows.
+func runtimeLifecycleSnapshot(
+	ctx context.Context,
+	engine Engine,
+) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+	if reader, ok := engine.(interface {
+		GetWorkStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
+	}); ok {
+		return reader.GetWorkStateSnapshot(ctx)
+	}
+	return engine.GetEngineStateSnapshot(ctx)
+}
+
 func finalizeRuntimeLifecycleMetrics(handle *Handle, last runtimeMetricsObservation) {
 	if handle == nil || handle.Bundle == nil || handle.Bundle.Factory == nil {
 		return
 	}
 	handle.lifecycleMetricsOnce.Do(func() {
-		snapshot, err := handle.Bundle.Factory.GetEngineStateSnapshot(context.Background())
+		snapshot, err := runtimeLifecycleSnapshot(context.Background(), handle.Bundle.Factory)
 		if err == nil {
 			current := metricsObservationFromSnapshot(snapshot)
 			if current.changedFrom(last) {

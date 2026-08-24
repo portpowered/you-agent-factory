@@ -55,8 +55,10 @@ func TestManagedRuntimeReadinessForFactory_PackagedAndAuthoredFactoriesMatch(t *
 		authoredReadiness.Locality != packagedReadiness.Locality {
 		t.Fatalf("authored = %#v, packaged = %#v, want identical managed runtime readiness", authoredReadiness, packagedReadiness)
 	}
-	if authoredReadiness.ReadinessState != managedruntime.ReadinessStateReady {
-		t.Fatalf("readinessState = %s, want READY when dependency is declared", authoredReadiness.ReadinessState)
+	if authoredReadiness.ReadinessState != managedruntime.ReadinessStateMissing ||
+		authoredReadiness.LifecycleState != managedruntime.LifecycleStateNotInstalled {
+		t.Fatalf("readiness = (%s, %s), want MISSING/NOT_INSTALLED without cache evidence",
+			authoredReadiness.ReadinessState, authoredReadiness.LifecycleState)
 	}
 }
 

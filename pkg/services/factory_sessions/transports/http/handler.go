@@ -27,6 +27,7 @@ import (
 type Adapter struct {
 	sessionsRoot          factorysessions.Service
 	liveControl           factorysessions.LiveControlService
+	sessionDeletion       factorysessions.LiveDeletionService
 	runtime               apisurface.RuntimeAPI
 	factoryStatus         apisurface.FactoryStatusAPI
 	sessions              apisurface.LiveSessionAPI
@@ -51,6 +52,7 @@ type Adapter struct {
 type Dependencies struct {
 	SessionsRoot          factorysessions.Service
 	LiveControl           factorysessions.LiveControlService
+	SessionDeletion       factorysessions.LiveDeletionService
 	Runtime               apisurface.RuntimeAPI
 	FactoryStatus         apisurface.FactoryStatusAPI
 	Sessions              apisurface.LiveSessionAPI
@@ -98,7 +100,8 @@ func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
 	}
 	return &Adapter{
 		sessionsRoot: deps.SessionsRoot, liveControl: deps.LiveControl,
-		runtime: deps.Runtime, factoryStatus: deps.FactoryStatus,
+		sessionDeletion: deps.SessionDeletion,
+		runtime:         deps.Runtime, factoryStatus: deps.FactoryStatus,
 		sessions:           deps.Sessions,
 		invocation:         deps.Invocation,
 		factoryDefinitions: deps.FactoryDefinitions, factoryValidation: deps.FactoryValidation,
@@ -160,7 +163,7 @@ type Handler = Adapter
 type Server = Adapter
 
 // ListHumanApprovalsBySessionId returns the pending approvals projected from
-// the selected live Factory Session's canonical event history.
+// the selected live Factory Session's current session facts.
 func (s *Adapter) ListHumanApprovalsBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, params factoryapi.ListHumanApprovalsBySessionIdParams) {
 	if s.guardSessionsRequestContext(w, r) {
 		return

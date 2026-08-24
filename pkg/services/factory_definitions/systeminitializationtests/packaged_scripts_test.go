@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -27,12 +26,6 @@ import (
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
 )
-
-type directoryEntrySnapshot struct {
-	Contents []byte
-	Mode     fs.FileMode
-	IsDir    bool
-}
 
 func packagedScriptsTestPersistence() factorydefinitions.PackagedFactoryPersistence {
 	validator := factoryvalidation.New(nil)
@@ -102,57 +95,7 @@ func packagedScriptsTestPersistence() factorydefinitions.PackagedFactoryPersiste
 	return persistence
 }
 
-func snapshotDirectoryContents(t *testing.T, root string) map[string]directoryEntrySnapshot {
-	t.Helper()
-	snapshot := map[string]directoryEntrySnapshot{}
-	if err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		relative, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		value := directoryEntrySnapshot{Mode: info.Mode(), IsDir: entry.IsDir()}
-		if info.Mode().IsRegular() {
-			value.Contents, err = os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-		}
-		snapshot[filepath.ToSlash(relative)] = value
-		return nil
-	}); err != nil {
-		t.Fatalf("snapshot directory: %v", err)
-	}
-	return snapshot
-}
-
-func assertDirectorySnapshotUnchanged(t *testing.T, root string, before map[string]directoryEntrySnapshot) {
-	t.Helper()
-	after := snapshotDirectoryContents(t, root)
-	if reflect.DeepEqual(before, after) {
-		return
-	}
-	for path, want := range before {
-		if got, ok := after[path]; !ok {
-			t.Errorf("directory entry %q was removed", path)
-		} else if !reflect.DeepEqual(want, got) {
-			t.Errorf("directory entry %q changed: before=%#v after=%#v", path, want, got)
-		}
-	}
-	for path := range after {
-		if _, ok := before[path]; !ok {
-			t.Errorf("directory entry %q was added", path)
-		}
-	}
-}
-
-func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndPreservesEdits(t *testing.T) {
+func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndBacksUpEdits(t *testing.T) {
 	t.Parallel()
 
 	definition := assembledScriptPackageDefinition(t)
@@ -172,8 +115,8 @@ func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndPreser
 	}
 
 	factoryDir := created[0].FactoryDir
-	assertInstalledPackagedScript(t, factoryDir, "scripts/setup.sh", "#!/bin/sh\nprintf 'packaged setup\\n'\n")
-	assertInstalledPackagedScript(t, factoryDir, "scripts/nested/check.py", "print('nested packaged script')\n")
+	assertInstalledPackagedScript(t, factoryDir, "scripts/setup.sh", "#!/bin/sh\nprintf 'packaged setup\\n'\n", 0o755)
+	assertInstalledPackagedScript(t, factoryDir, "scripts/nested/check.py", "print('nested packaged script')\n", 0o755)
 	assertThinPackagedScriptManifest(t, factoryDir)
 	assertInstalledPackagedScriptRuntimeConfig(t, factoryDir)
 
@@ -184,9 +127,7 @@ func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndPreser
 	if err := os.Chmod(editedPath, 0o600); err != nil {
 		t.Fatalf("Chmod(operator-edited script): %v", err)
 	}
-	beforeRerun := snapshotDirectoryContents(t, factoryDir)
-
-	skipped, err := packagedinstallation.New(packagedScriptsTestPersistence(), platformfilesystem.Local{}, os.Mkdir).
+	refreshed, err := packagedinstallation.New(packagedScriptsTestPersistence(), platformfilesystem.Local{}, os.Mkdir).
 		EnsurePackagedFactories(
 			t.Context(),
 			factorydefinitions.NamedFactoriesRoot(homeDir),
@@ -196,10 +137,26 @@ func TestEnsurePackagedFactories_InstallsAssembledScriptsThinExecutableAndPreser
 	if err != nil {
 		t.Fatalf("Initialize(rerun): %v", err)
 	}
-	if len(skipped) != 1 || skipped[0].Outcome != factorydefinitions.PackagedFactoryInstallSkipped {
-		t.Fatalf("rerun results = %#v, want one skipped package", skipped)
+	if len(refreshed) != 1 || refreshed[0].Outcome != factorydefinitions.PackagedFactoryInstallCustomerModified {
+		t.Fatalf("rerun results = %#v, want one customer-modified refresh", refreshed)
 	}
-	assertDirectorySnapshotUnchanged(t, factoryDir, beforeRerun)
+	if refreshed[0].BackupDir == "" {
+		t.Fatal("rerun backup path is empty")
+	}
+	assertInstalledPackagedScript(
+		t,
+		refreshed[0].BackupDir,
+		"scripts/nested/check.py",
+		"print('operator edit')\n",
+		0o600,
+	)
+	assertInstalledPackagedScript(
+		t,
+		factoryDir,
+		"scripts/nested/check.py",
+		"print('nested packaged script')\n",
+		0o755,
+	)
 }
 
 func assembledScriptPackageDefinition(t *testing.T) factorydefinitions.PackagedDefinition {
@@ -224,7 +181,7 @@ func assembledScriptPackageDefinition(t *testing.T) factorydefinitions.PackagedD
 	return factorydefinitions.PackagedDefinition{Name: "@test/scripts", Project: "packaged-script-fixture", JSON: payload}
 }
 
-func assertInstalledPackagedScript(t *testing.T, factoryDir, relativePath, wantContent string) {
+func assertInstalledPackagedScript(t *testing.T, factoryDir, relativePath, wantContent string, wantMode fs.FileMode) {
 	t.Helper()
 
 	path := filepath.Join(factoryDir, filepath.FromSlash(relativePath))
@@ -239,8 +196,8 @@ func assertInstalledPackagedScript(t *testing.T, factoryDir, relativePath, wantC
 	if err != nil {
 		t.Fatalf("Stat(%s): %v", relativePath, err)
 	}
-	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o755 {
-		t.Fatalf("%s mode = %04o, want 0755", relativePath, info.Mode().Perm())
+	if runtime.GOOS != "windows" && info.Mode().Perm() != wantMode.Perm() {
+		t.Fatalf("%s mode = %04o, want %04o", relativePath, info.Mode().Perm(), wantMode.Perm())
 	}
 }
 

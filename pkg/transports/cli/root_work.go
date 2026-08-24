@@ -292,7 +292,8 @@ func attachServerProtocolChild(server, family *cobra.Command, childName string) 
 		return fmt.Errorf("attach server %s child: command is required", childName)
 	}
 	family.RemoveCommand(child)
-	if child.LocalNonPersistentFlags().Lookup("listen") == nil {
+	if child.LocalNonPersistentFlags().Lookup("listen") == nil ||
+		child.LocalNonPersistentFlags().Lookup("pprof") == nil {
 		if err := suppressUnrelatedServerProtocolListener(child, childName); err != nil {
 			return err
 		}
@@ -466,46 +467,17 @@ func executeRunCommand(cmd *cobra.Command, args []string, globals *cliGlobalOpti
 		cmd, args, defaultcmd.ExplicitRunConfig(rootOptions.runDefaults),
 	)
 	if err != nil {
-		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
-		return err
+		return writeRunCommandInvocationError(cmd, globals, err)
 	}
-	if err := validateRunRemoteHostingConflict(cmd, globals); err != nil {
-		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
-		return err
-	}
-	if err := applyRunCommandInvocationOutputMode(cmd, &resolvedConfig); err != nil {
-		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
-		return err
-	}
-	outputExplicit, changedErr := climanifestcobra.InputChanged(cmd, "you.run.flag.output")
-	if changedErr != nil {
-		return changedErr
-	}
-	if err := runcli.ValidateInvocationOutputSelection(
-		resolvedConfig.SuppressDashboardRendering,
-		globals.json,
-		outputExplicit,
-	); err != nil {
-		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
-		return err
-	}
-	if helpRequested(cmd) {
-		return writeRunCommandHelp(cmd, &resolvedConfig, rootOptions)
-	}
-	currentFactorySelected := runUsesCurrentFactory(cmd)
-	if currentFactorySelected {
-		if err := selectCurrentFactoryFromWorkingDirectory(cmd, &resolvedConfig); err != nil {
-			mapped := runcli.MapCurrentFactoryFailure(err)
-			_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), mapped, globals.json)
-			return mapped
+	if validationErr, writeError := validateRunCommandInputs(cmd, &resolvedConfig, globals); validationErr != nil {
+		if !writeError {
+			return validationErr
 		}
+		return writeRunCommandInvocationError(cmd, globals, validationErr)
 	}
-	basePolicy := diagnostics.resolvePolicy(resolvedConfig.SuppressDashboardRendering)
-	err = runFactoryWithOptions(cmd, resolvedConfig, promptArgs, globals, operatorDefaults, basePolicy, rootOptions, false)
-	if err != nil {
-		return handleRunExecutionError(cmd, resolvedConfig, promptArgs, globals, basePolicy, err, currentFactorySelected)
-	}
-	return err
+	return executeResolvedRunCommand(
+		cmd, promptArgs, resolvedConfig, globals, diagnostics, operatorDefaults, rootOptions,
+	)
 }
 
 func applyRunScopedServerMode(cfg runcli.RunConfig) runcli.RunConfig {
@@ -614,7 +586,7 @@ func writeRunCommandHelp(cmd *cobra.Command, cfg *runcli.RunConfig, rootOptions 
 	cfg.ResolveFactoryConfigRoot = rootOptions.resolveFactoryConfigRoot
 	cfg.LoadFactoryConfigFile = rootOptions.loadFactoryConfigFile
 	cfg.WorkRequestFileLoader = rootOptions.workRequestFileLoader
-	homeDir, err := resolveProcessHomeDir(rootOptions)
+	homeDir, err := resolveProcessHomeDirForCommand(cmd, rootOptions)
 	if err != nil {
 		return err
 	}
@@ -660,6 +632,9 @@ func newRunServerHandlerRegistry(
 				if err := validateRunListenPlacement(cmd); err != nil {
 					return err
 				}
+				if err := validateRunPprofPlacement(cmd); err != nil {
+					return err
+				}
 				return rejectDeprecatedPortFlag(cmd, args)
 			},
 			RunE: func(cmd *cobra.Command, args []string) error {
@@ -679,6 +654,14 @@ func newRunServerHandlerRegistry(
 				return executeServerCommand(
 					cmd, globals, diagnostics, operatorDefaults, rootOptions,
 				)
+			},
+		},
+		Stop: commandregistry.CommandHandlers{
+			PreRunE: func(cmd *cobra.Command, _ []string) error {
+				return validateRunServerPlacement(globals, "you.server.stop")
+			},
+			RunE: func(cmd *cobra.Command, _ []string) error {
+				return executeServerStopCommand(cmd, globals, rootOptions)
 			},
 		},
 	})
@@ -724,6 +707,35 @@ func validateRunListenPlacement(cmd *cobra.Command) error {
 		return nil
 	}
 	return fmt.Errorf("input relationship %q: --listen requires --with-server or --with-site", "you.run.rel.listen-server")
+}
+
+func validateRunPprofPlacement(cmd *cobra.Command) error {
+	if cmd == nil {
+		return nil
+	}
+	values, err := generatedCommandInputs(cmd)
+	if err != nil {
+		return err
+	}
+	enabled, err := commandInputValue[bool](values, runPprofInputID)
+	if err != nil {
+		return err
+	}
+	if !enabled {
+		return nil
+	}
+	withServer, err := climanifestcobra.InputChanged(cmd, "you.run.flag.with-server")
+	if err != nil {
+		return err
+	}
+	withSite, err := climanifestcobra.InputChanged(cmd, "you.run.flag.with-site")
+	if err != nil {
+		return err
+	}
+	if withServer || withSite {
+		return nil
+	}
+	return fmt.Errorf("input relationship %q: --pprof requires --with-server or --with-site", "you.run.rel.pprof-server")
 }
 
 func validateRunRemoteHostingConflict(cmd *cobra.Command, globals *cliGlobalOptions) error {

@@ -24,6 +24,7 @@ import (
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
+	platformprocessmemory "github.com/portpowered/infinite-you/pkg/platform/processmemory"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -72,10 +73,12 @@ func provideTerminalLoggerBuilder() terminalpolicy.LoggerBuilder {
 	}
 }
 
-func provideLiveRecordingTargetPlanner() recordings.LiveRecordingTargetPlanner {
+func provideLiveRecordingTargetPlanner(
+	reserver runtimeartifact.Reserver,
+) recordings.LiveRecordingTargetPlanner {
 	return recordingswire.NewLiveRecordingTargetPlanner(
 		platformclock.Real{},
-		uuid.NewString,
+		reserver,
 		filepath.Join,
 	)
 }
@@ -85,11 +88,12 @@ func provideCLIRunDefaults(
 	recordingsCLI recordingscli.Adapter,
 ) runcli.RunConfig {
 	return runcli.RunConfig{
-		RuntimeLogConfig:       logging.DefaultRuntimeLogConfig(),
-		RuntimeMetricsConfig:   platformmetrics.DefaultRuntimeMetricsConfig(),
-		RecordingTargetPlanner: recordingTargets,
-		RecordingsCLI:          recordingsCLI,
-		Clock:                  platformclock.Real{},
+		RuntimeLogConfig:            logging.DefaultRuntimeLogConfig(),
+		RuntimeMetricsConfig:        platformmetrics.DefaultRuntimeMetricsConfig(),
+		RecordingTargetPlanner:      recordingTargets,
+		CanonicalSessionIDGenerator: uuid.NewString,
+		RecordingsCLI:               recordingsCLI,
+		Clock:                       platformclock.Real{},
 	}
 }
 
@@ -448,15 +452,31 @@ func provideFactoryRuntimeClockResolver() factoryruntime.ClockResolver {
 	}
 }
 
+func provideFactoryRuntimeMetricsClock(edges serviceedges.Edges) platformclock.TimerSource {
+	if clock, ok := edges.Clock.(platformclock.TimerSource); ok {
+		return clock
+	}
+	return platformclock.Real{}
+}
+
+func providePprofCommandLineReader() platformhttpserver.CommandLineReader {
+	return func() []string {
+		return append([]string(nil), os.Args...)
+	}
+}
+
 func provideFactoryRuntimeSessionLoggerFactory() factoryruntime.SessionLoggerFactory {
 	return factoryruntime.NewSessionLogger
 }
 
-func provideAPIServerStarter(edges serviceedges.Edges) (platformhttpserver.Starter, error) {
+func provideAPIServerStarter(
+	edges serviceedges.Edges,
+	commandLineReader platformhttpserver.CommandLineReader,
+) (platformhttpserver.Starter, error) {
 	if edges.APIServerStarter != nil {
 		return edges.APIServerStarter, nil
 	}
-	return platformhttpserver.NewStarter(net.Listen)
+	return platformhttpserver.NewStarter(net.Listen, platformprocessmemory.CurrentCommit, commandLineReader)
 }
 
 func provideRuntimeHostOperation(

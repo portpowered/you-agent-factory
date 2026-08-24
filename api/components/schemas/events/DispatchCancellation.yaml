@@ -1,0 +1,13 @@
+type: object
+additionalProperties: false
+required:
+  - reason
+description: >-
+  Explicit dispatch lifecycle intent. A canceled or superseded dispatch is not
+  a business execution failure and must not route its Work through failure arcs.
+properties:
+  reason:
+    type: string
+    enum:
+      - CANCELED
+      - SUPERSEDED

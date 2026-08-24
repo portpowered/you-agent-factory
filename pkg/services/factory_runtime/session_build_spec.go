@@ -1,9 +1,9 @@
 package factory
 
 import (
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -35,8 +35,8 @@ type SessionBuildSpec struct {
 	RecordPath            string
 	WorkflowID            string
 	ProviderOverride      providers.Service
-	ProviderCommandRunner workers.CommandRunner
-	CommandRunnerOverride workers.CommandRunner
+	ProviderCommandRunner platformprocess.CommandRunner
+	CommandRunnerOverride platformprocess.CommandRunner
 	// RestoredWorldState is an optional detached state reconstructed by
 	// Recordings. Factory Runtime converts only its recorded Work placement;
 	// current-definition resources are always generated during construction.
@@ -50,7 +50,7 @@ type SessionBuildSpec struct {
 	// ReplayCommandRunner is kept separate from the selected production
 	// command edge so direct Workers execution can reproduce recorded script
 	// effects even when normal composition supplied a host runner.
-	ReplayCommandRunner workers.CommandRunner
+	ReplayCommandRunner platformprocess.CommandRunner
 	// ReplayEvents carries the detached canonical event history for a legacy
 	// replay. Runtime execution may re-emit events while rebuilding state, but
 	// durable Worker Session streams must retain the artifact's original cursor

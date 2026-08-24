@@ -85,8 +85,12 @@ func TestPlainBatchDrainPreservesFiniteAndContinuousCounterexamples(t *testing.T
 			if err := process.Execute(inputs.Input); err != nil {
 				t.Fatalf("finite plain batch error = %v; stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
 			}
-			if inputs.Stdout() != "" || inputs.Stderr() != "" {
-				t.Fatalf("finite plain success output = stdout:%q stderr:%q, want quiet output", inputs.Stdout(), inputs.Stderr())
+			wantStdout := ""
+			if scenario.workFile != nil {
+				wantStdout = "Batch completed successfully.\n"
+			}
+			if inputs.Stdout() != wantStdout || inputs.Stderr() != "" {
+				t.Fatalf("finite plain success output = stdout:%q stderr:%q, want stdout:%q and quiet stderr", inputs.Stdout(), inputs.Stderr(), wantStdout)
 			}
 		})
 	}

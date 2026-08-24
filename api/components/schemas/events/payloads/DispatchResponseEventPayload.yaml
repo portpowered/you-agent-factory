@@ -12,6 +12,8 @@ description: >-
   Provider-attempt session and safe diagnostic facts stay on inference
   response events instead of being copied onto dispatch completion payloads.
 properties:
+  cancellation:
+    $ref: '../DispatchCancellation.yaml'
   completionId:
     type: string
   transitionId:

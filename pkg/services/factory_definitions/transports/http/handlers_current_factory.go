@@ -3,7 +3,6 @@ package http
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"sort"
 	"strings"
@@ -218,9 +217,4 @@ func (s *Server) writeCurrentFactoryError(
 		fallbackMessage = "failed to load current factory"
 	}
 	s.writeDefinitionsRootErrorOrInternal(w, err, fallbackMessage, logFields...)
-}
-
-func decodeSaveCurrentFactoryBody(body io.Reader) (factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody, error) {
-	result, err := decodeJSONWithDiagnostics[factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody](body)
-	return result.Value, err
 }

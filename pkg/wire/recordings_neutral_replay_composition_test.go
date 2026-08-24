@@ -55,9 +55,13 @@ func TestInjectBundleComposesRecordingsNeutralReplayThroughWireFactory(t *testin
 		t.Fatalf("InjectBundle() error = %v", err)
 	}
 
+	reserver, err := provideRuntimeArtifactPathReserver()
+	if err != nil {
+		t.Fatalf("provideRuntimeArtifactPathReserver() error = %v", err)
+	}
 	root, err := provideRecordingsRoot(
 		serviceedges.Edges{},
-		provideLiveRecordingTargetPlanner(),
+		provideLiveRecordingTargetPlanner(reserver),
 		platformreplay.Local{},
 		nil,
 		nil,

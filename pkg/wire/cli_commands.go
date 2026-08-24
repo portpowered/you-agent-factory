@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -13,11 +14,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
-	costscli "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -29,7 +29,6 @@ import (
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
-	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
 	modelservice "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -53,6 +52,7 @@ import (
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	serverstopcli "github.com/portpowered/infinite-you/pkg/transports/cli/serverstop"
 	generatedhttpclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
@@ -60,10 +60,13 @@ import (
 const (
 	standardCLIHTTPTimeout = 10 * time.Second
 	extendedCLIHTTPTimeout = 15 * time.Second
-	metricsCLIHTTPTimeout  = 5 * time.Minute
 )
 
 type standardCLIHTTPProtocol struct {
+	clihttp.Protocol
+	timeout time.Duration
+}
+type modelsPullCLIHTTPProtocol struct {
 	clihttp.Protocol
 	timeout time.Duration
 }
@@ -87,22 +90,29 @@ func provideStandardCLIHTTPProtocol() (standardCLIHTTPProtocol, error) {
 	return standardCLIHTTPProtocol{Protocol: protocol, timeout: standardCLIHTTPTimeout}, nil
 }
 
-func provideCostsCLI() costscli.Operation {
-	return costscli.NewOperation(func(server string) (costscli.Client, error) {
-		return generatedhttpclient.NewClientWithResponses(
-			server,
-			generatedhttpclient.WithHTTPClient(&http.Client{Timeout: standardCLIHTTPTimeout}),
-		)
-	})
+// provideModelsPullCLIHTTPProtocol gives the synchronous managed-model pull
+// its own request lifetime. The HTTP client has no fixed timeout; the request
+// context still carries explicit caller cancellation, while the Models asset
+// service retains its bounded dependency timeout and retry policy.
+func provideModelsPullCLIHTTPProtocol() (modelsPullCLIHTTPProtocol, error) {
+	protocol, err := clihttp.NewProtocol(&http.Client{}, platformclock.Real{})
+	if err != nil {
+		return modelsPullCLIHTTPProtocol{}, fmt.Errorf("build Models pull CLI HTTP protocol: %w", err)
+	}
+	return modelsPullCLIHTTPProtocol{Protocol: protocol}, nil
 }
 
-func provideMetricsCLI() visualizationcli.Operation {
-	return visualizationcli.NewOperation(func(server string) (visualizationcli.Client, error) {
+func provideServerStopCLI() serverstopcli.Operation {
+	observer := platformhttpserver.NewListenerStopObserver(
+		(&net.Dialer{}).DialContext,
+		platformhttpserver.DefaultListenerStopObservationInterval,
+	)
+	return serverstopcli.NewOperation(func(server string) (serverstopcli.Client, error) {
 		return generatedhttpclient.NewClientWithResponses(
 			server,
-			generatedhttpclient.WithHTTPClient(&http.Client{Timeout: metricsCLIHTTPTimeout}),
+			generatedhttpclient.WithHTTPClient(&http.Client{Timeout: serverstopcli.DefaultRequestTimeout}),
 		)
-	})
+	}, observer)
 }
 
 func provideRemoteInvocationOperation(
@@ -121,17 +131,23 @@ func provideRunRuntimeRunnerBuilder(
 	return func(
 		ctx context.Context,
 		request *factorysessions.RuntimeOpeningRequest,
+		cancellation initializer.InvocationCancellation,
 		sinkID factorysessions.VisualizationSinkID,
 	) (initializer.LocalRuntimeRunner, error) {
 		var replay *factorysessions.HistoricalReplayInspection
+		var replayMetadataWarnings []recordings.MetadataMismatchWarning
 		var hostedInvocation runcli.HostedInvocationOperation
 		var cleanInvocation factoryruntime.Service
 		runner, err := build(ctx, func(openCtx context.Context) (initializer.OpenedApplication, error) {
-			opened, err := open.OpenApplication(openCtx, request, sinkID)
+			opened, err := open.OpenApplicationWithCancellation(openCtx, request, cancellation, sinkID)
 			if err != nil {
 				return initializer.OpenedApplication{}, err
 			}
 			replay = opened.HistoricalReplay
+			replayMetadataWarnings = append(
+				[]recordings.MetadataMismatchWarning(nil),
+				opened.ReplayMetadataWarnings...,
+			)
 			hostedInvocation = opened.HostedInvocation
 			cleanInvocation = opened.CleanInvocation
 			return initializer.OpenedApplication{
@@ -145,6 +161,7 @@ func provideRunRuntimeRunnerBuilder(
 		}
 		runner = runcli.WithHostedInvocation(runner, hostedInvocation)
 		runner = runcli.WithCleanInvocationSnapshot(runner, cleanInvocation)
+		runner = runcli.WithReplayMetadataWarnings(runner, replayMetadataWarnings)
 		return runcli.WithHistoricalReplay(runner, replay), nil
 	}, nil
 }
@@ -458,11 +475,23 @@ func provideLocalSessionsCLIService(
 }
 func provideModelsCLIService(
 	transport standardCLIHTTPProtocol,
+	pullTransport modelsPullCLIHTTPProtocol,
 	invocation modelscli.InvocationOperation,
 	composition modelscli.CompositionScopeProvider,
 	outputFileSystem modelscli.OutputFileSystem,
+	inputFileReader modelscli.InputFileReader,
+	clock runtimeArtifactClock,
 ) modelscli.Service {
-	return modelscli.NewWithOutputFileSystem(transport.Protocol, invocation, outputFileSystem, composition)
+	return modelscli.NewWithOutputFileSystemAndPullProtocolAndClockAndInputFileReader(
+		transport.Protocol, pullTransport.Protocol, invocation, outputFileSystem, clock, inputFileReader, composition,
+	)
+}
+
+func provideModelsCLIInputFileReader(edges serviceedges.Edges) modelscli.InputFileReader {
+	if edges.ModelCLIInputReadFile != nil {
+		return modelscli.InputFileReader(edges.ModelCLIInputReadFile)
+	}
+	return os.ReadFile
 }
 
 func provideModelsCLIOutputFileSystem(edges serviceedges.Edges) modelscli.OutputFileSystem {
@@ -963,12 +992,4 @@ func provideRunOpener(
 			prepareWorkTarget, nil, loadMockWorkers, buildRuntimeRequest, presentations, visualizations,
 		)
 	}
-}
-
-func provideCLIObserver(edges serviceedges.Edges) platformprocess.CLIObserver {
-	return edges.CLIObserver
-}
-
-func provideCLICommandFactory(operations cli.CommandOperations) cli.CommandFactory {
-	return cli.NewCommandFactory(operations)
 }

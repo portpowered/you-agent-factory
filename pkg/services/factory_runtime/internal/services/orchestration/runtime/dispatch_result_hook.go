@@ -356,16 +356,26 @@ func canonicalWorkResult(
 	if workResult.TransitionID == "" {
 		workResult.TransitionID = request.Execution.Dispatch.TransitionID
 	}
+	if workResult.Cancellation == nil {
+		workResult.Cancellation = result.Cancellation.Clone()
+	}
+	if result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCanceled ||
+		workResult.Cancellation != nil || workResult.Outcome == workerexecution.OutcomeCanceled {
+		workResult.Outcome = workerexecution.OutcomeCanceled
+		if workResult.Cancellation == nil {
+			workResult.Cancellation = &workerexecution.DispatchCancellation{Reason: workerexecution.DispatchCancellationReasonCanceled}
+		}
+		if workResult.Error == "" {
+			workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
+		}
+		workResult.FailureDetail = nil
+		workResult.FailureMetadata = nil
+		return workResult
+	}
 	if dispatchErr != nil || result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeFailed {
 		workResult.Outcome = workerexecution.OutcomeFailed
 		if workResult.Error == "" && dispatchErr != nil {
 			workResult.Error = dispatchErr.Error()
-		}
-	}
-	if result.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCanceled {
-		workResult.Outcome = workerexecution.OutcomeFailed
-		if workResult.Error == "" {
-			workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
 		}
 	}
 	return workResult
@@ -412,7 +422,8 @@ func (h *dispatchPlanningResultHook) acceptRootResult(
 		workResult.Outcome = workerexecution.OutcomeFailed
 		workResult.Error = "Workers dispatch failed"
 	case dispatchplanning.TerminalResultOutcomeCancelled:
-		workResult.Outcome = workerexecution.OutcomeFailed
+		workResult.Outcome = workerexecution.OutcomeCanceled
+		workResult.Cancellation = &workerexecution.DispatchCancellation{Reason: workerexecution.DispatchCancellationReasonCanceled}
 		workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
 	}
 	state := h.acceptanceState(req.DispatchID)
@@ -561,6 +572,8 @@ func terminalResultOutcome(outcome workerexecution.WorkOutcome) (dispatchplannin
 		return dispatchplanning.TerminalResultOutcomeSuccess, nil
 	case workerexecution.OutcomeFailed:
 		return dispatchplanning.TerminalResultOutcomeFailure, nil
+	case workerexecution.OutcomeCanceled:
+		return dispatchplanning.TerminalResultOutcomeCancelled, nil
 	default:
 		return "", fmt.Errorf(
 			"%w: Workers outcome %q is not terminal",
@@ -937,6 +950,11 @@ func (f *factoryImpl) currentWorldState(tick int) *interfaces.FactoryWorldState 
 	if f.eventHistory == nil || f.cfg == nil || f.cfg.worldStateProjector == nil {
 		return nil
 	}
+	if recorder, ok := f.eventHistory.(interface {
+		RecordCanonicalHistoryReduction()
+	}); ok && recorder != nil {
+		recorder.RecordCanonicalHistoryReduction()
+	}
 	state, err := f.cfg.worldStateProjector(f.eventHistory.CanonicalEvents(), tick)
 	if err != nil {
 		f.logger.Warn("factory world-state reconstruction failed; falling back to runtime snapshot", "error", err)
@@ -945,7 +963,7 @@ func (f *factoryImpl) currentWorldState(tick int) *interfaces.FactoryWorldState 
 	return &state
 }
 
-func (f *factoryImpl) deriveRuntimeStatus(currentState interfaces.FactoryState, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], worldState *interfaces.FactoryWorldState) interfaces.RuntimeStatus {
+func (f *factoryImpl) deriveRuntimeStatus(currentState interfaces.FactoryState, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) interfaces.RuntimeStatus {
 	if currentState == interfaces.FactoryStateCompleted || currentState == interfaces.FactoryStateFailed {
 		return interfaces.RuntimeStatusFinished
 	}

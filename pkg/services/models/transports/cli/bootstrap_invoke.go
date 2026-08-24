@@ -172,6 +172,9 @@ func mapBootstrapModelInvokeError(err error) error {
 	if errors.As(err, &failure) && failure != nil {
 		return failure
 	}
+	if mapped, ok := mapModelsInvocationError(err); ok {
+		return mapped
+	}
 	switch {
 	case errors.Is(err, modelinference.ErrNotFound):
 		return fmt.Errorf("%w: model not found", ErrModelNotFound)

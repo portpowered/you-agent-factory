@@ -50,13 +50,13 @@ func TestCanonicalProviderSessionProviderPreservesAliasesAndUnknowns(t *testing.
 	}
 }
 
-func TestCloneProviderSessionMetadataDetachesAndAcceptsNil(t *testing.T) {
+func TestProviderSessionMetadataCloneDetachesAndAcceptsNil(t *testing.T) {
 	t.Parallel()
 
 	original := &providers.SessionMetadata{Provider: "cursor", Kind: "session_id", ID: "session-1"}
 	clone := (original).Clone()
 	if clone == nil || clone == original {
-		t.Fatalf("CloneProviderSessionMetadata() = %#v, want a detached non-nil value", clone)
+		t.Fatalf("SessionMetadata.Clone() = %#v, want a detached non-nil value", clone)
 	}
 	clone.Provider = "mutated"
 	clone.ID = "mutated"
@@ -64,7 +64,7 @@ func TestCloneProviderSessionMetadataDetachesAndAcceptsNil(t *testing.T) {
 		t.Fatalf("clone mutation changed original metadata: original = %#v", original)
 	}
 	if got := (*providers.SessionMetadata)(nil).Clone(); got != nil {
-		t.Fatalf("CloneProviderSessionMetadata(nil) = %#v, want nil", got)
+		t.Fatalf("SessionMetadata.Clone(nil) = %#v, want nil", got)
 	}
 }
 

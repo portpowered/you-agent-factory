@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -28,9 +29,16 @@ import (
 )
 
 const (
-	modelAssetHTTPTimeout   = 45 * time.Second
-	modelHostHTTPTimeout    = 2 * time.Second
-	modelRuntimeHTTPTimeout = 5 * time.Minute
+	// Asset responses can carry multi-gigabyte model files, so the asset client
+	// deliberately has no whole-request deadline. These phase limits protect
+	// connection setup and response headers while the caller's context remains
+	// responsible for stopping an active transfer.
+	modelAssetDialTimeout           = 15 * time.Second
+	modelAssetKeepAlive             = 30 * time.Second
+	modelAssetTLSHandshakeTimeout   = 15 * time.Second
+	modelAssetResponseHeaderTimeout = 30 * time.Second
+	modelHostHTTPTimeout            = 2 * time.Second
+	modelRuntimeHTTPTimeout         = 5 * time.Minute
 )
 
 // TODO: this should be decomposed, we should inject these independently.
@@ -51,7 +59,7 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 
 	assetHTTP := edges.ModelAssetHTTPClient
 	if assetHTTP == nil {
-		assetHTTP = &http.Client{Timeout: modelAssetHTTPTimeout}
+		assetHTTP = newModelAssetHTTPClient()
 	}
 	assetMkdirAll := edges.ModelAssetMakeDirectories
 	if assetMkdirAll == nil {
@@ -151,7 +159,7 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		}
 	}
 
-	return modelswire.NewServiceWithBackendArtifactResolver(
+	return modelswire.NewServiceWithBackendArtifactResolverAndInvocationBackend(
 		assetPlatform,
 		assetHTTP,
 		assetEndpoints,
@@ -184,8 +192,49 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		protocolNegotiator,
 		compatibilityChecker,
 		backendArtifactResolver,
+		adaptModelInvocationBackend(edges.ModelInvocationBackend),
+		adaptModelASRBackend(edges.ModelASRBackend),
 		edges.ModelResolveHuggingFaceRevision,
 	)
+}
+
+func newModelAssetHTTPClient() *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = (&net.Dialer{
+		Timeout:   modelAssetDialTimeout,
+		KeepAlive: modelAssetKeepAlive,
+	}).DialContext
+	transport.TLSHandshakeTimeout = modelAssetTLSHandshakeTimeout
+	transport.ResponseHeaderTimeout = modelAssetResponseHeaderTimeout
+	return &http.Client{Transport: transport}
+}
+
+func adaptModelInvocationBackend(
+	next serviceedges.ModelInvocationBackend,
+) modelswire.InvocationBackend {
+	if next == nil {
+		return nil
+	}
+	return func(
+		ctx context.Context,
+		request models.InvokeModelRequest,
+	) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+		return next(ctx, request)
+	}
+}
+
+func adaptModelASRBackend(
+	next serviceedges.ModelASRBackend,
+) modelswire.ASRBackend {
+	if next == nil {
+		return nil
+	}
+	return func(
+		ctx context.Context,
+		request models.ASRBackendRequest,
+	) (models.ASRBackendResponse, error) {
+		return next(ctx, request)
+	}
 }
 
 func adaptModelBackendArtifactResolver(

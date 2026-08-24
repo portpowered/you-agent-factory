@@ -36,6 +36,7 @@ type RuntimeHostRequest struct {
 	Host        string
 	Port        int
 	AutoPort    bool
+	Pprof       bool
 }
 
 // RuntimeHostBinding is the endpoint selected by the external HTTP host.

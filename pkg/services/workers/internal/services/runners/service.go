@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/inference"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 const (
@@ -80,7 +81,7 @@ type ScriptConfig struct {
 
 // ScriptDependencies are the exact effects projected into one Script Runner.
 type ScriptDependencies struct {
-	CommandRunner workers.CommandRunner
+	CommandRunner workerprocess.CommandRunner
 	FactoryDocs   workers.FactoryDocsLoader
 	Now           func() time.Time
 	Publish       workers.ProgressPublisher
@@ -121,7 +122,7 @@ type MockConfig struct {
 // MockDependencies are optional effects for mock script execution. Omitting
 // Next confines mock accept/reject behavior to the Workers testing feature path.
 type MockDependencies struct {
-	Next workers.CommandRunner
+	Next workerprocess.CommandRunner
 }
 
 // Service owns the immutable process-scoped runner registry and request-scoped

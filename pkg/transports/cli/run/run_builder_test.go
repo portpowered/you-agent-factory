@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -193,6 +194,7 @@ type testRunnerOpeners struct {
 func (f testRunnerOpeners) BuildRunner(
 	ctx context.Context,
 	request *factorysessions.RuntimeOpeningRequest,
+	_ initializer.InvocationCancellation,
 	_ factorysessions.VisualizationSinkID,
 ) (initializer.LocalRuntimeRunner, error) {
 	if f.runtime == nil {
@@ -259,6 +261,16 @@ func (runner testRuntimeHostRunner) RuntimeLogDiagnostics() runtimeartifact.Diag
 	return runtimeLogDiagnosticsForRunner(runner.LocalRuntimeRunner)
 }
 
+func (runner testRuntimeHostRunner) CleanInvocationSnapshot(ctx context.Context) (factoryruntime.CleanInvocationSnapshot, error) {
+	provider, ok := runner.LocalRuntimeRunner.(interface {
+		CleanInvocationSnapshot(context.Context) (factoryruntime.CleanInvocationSnapshot, error)
+	})
+	if !ok {
+		return factoryruntime.CleanInvocationSnapshot{}, factoryruntime.ErrNotRunning
+	}
+	return provider.CleanInvocationSnapshot(ctx)
+}
+
 type testDashboardRenderingRunner struct {
 	initializer.LocalRuntimeRunner
 	sink  factoryvisualization.Sink
@@ -276,6 +288,16 @@ func (r testDashboardRenderingRunner) Run(ctx context.Context) error {
 	r.input.ObservedAt = time.Now()
 	r.sink.PresentFactoryView(r.input)
 	return nil
+}
+
+func (r testDashboardRenderingRunner) CleanInvocationSnapshot(ctx context.Context) (factoryruntime.CleanInvocationSnapshot, error) {
+	provider, ok := r.LocalRuntimeRunner.(interface {
+		CleanInvocationSnapshot(context.Context) (factoryruntime.CleanInvocationSnapshot, error)
+	})
+	if !ok {
+		return factoryruntime.CleanInvocationSnapshot{}, factoryruntime.ErrNotRunning
+	}
+	return provider.CleanInvocationSnapshot(ctx)
 }
 
 func (f testRunnerOpeners) Invocation() InvocationOperation {
@@ -489,6 +511,9 @@ func testMockWorkersConfigLoader(string) (*workers.MockWorkersConfig, error) {
 func ensureTestRecordingsCLI(cfg RunConfig) RunConfig {
 	if cfg.RecordingsCLI == nil {
 		cfg.RecordingsCLI = recordingscli.New()
+	}
+	if cfg.CanonicalSessionIDGenerator == nil {
+		cfg.CanonicalSessionIDGenerator = uuid.NewString
 	}
 	return cfg
 }

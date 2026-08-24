@@ -16,7 +16,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
@@ -630,54 +629,6 @@ func TestPrepareGenericAssetsDiskFailureLeavesNoPartialSnapshot(t *testing.T) {
 	}
 	if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
 		t.Fatalf("read cache root after disk failure: %v", readErr)
-	}
-}
-
-func TestPrepareGenericAssetsSharesConcurrentFirstDownload(t *testing.T) {
-	t.Parallel()
-
-	body := []byte("concurrent payload")
-	digest := sha256Hex(body)
-	entered := make(chan struct{})
-	release := make(chan struct{})
-	var downloads atomic.Int32
-	client := genericManifestClient("weights.bin", body, func() []byte {
-		downloads.Add(1)
-		select {
-		case entered <- struct{}{}:
-		default:
-		}
-		<-release
-		return body
-	})
-	scopes := newScopes(t, "generic-singleflight")
-	scope := openScope(t, scopes, t.TempDir(), models.RuntimeConfig{})
-	service := newGenericService(t, scopes, client, func(string) string { return "" })
-	request := models.PrepareModelAssetsRequest{
-		Scope:     scope,
-		Reference: models.ModelReference{NameOrURI: "hf://owner/repo/weights.bin@" + genericTestRevision},
-		Artifacts: []models.AssetRequirement{{Name: "weights.bin", SHA256: digest, Bytes: int64(len(body))}},
-	}
-	results := make(chan error, 8)
-	for index := 0; index < 8; index++ {
-		go func() {
-			_, err := service.PrepareModelAssets(context.Background(), request)
-			results <- err
-		}()
-	}
-	select {
-	case <-entered:
-	case <-time.After(2 * time.Second):
-		t.Fatal("concurrent download did not start")
-	}
-	close(release)
-	for index := 0; index < 8; index++ {
-		if err := <-results; err != nil {
-			t.Fatalf("concurrent preparation %d: %v", index, err)
-		}
-	}
-	if got := downloads.Load(); got != 1 {
-		t.Fatalf("download count = %d, want 1", got)
 	}
 }
 

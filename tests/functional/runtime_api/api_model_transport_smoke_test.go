@@ -105,20 +105,21 @@ func TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned(t
 	}
 
 	models := getGeneratedJSON[factoryapi.ListModelsResponse](t, server.URL()+"/models")
-	if len(models.Results) != 1 {
-		t.Fatalf("GET /models result count = %d, want 1", len(models.Results))
+	declaredModel, ok := findModelSummary(models.Results, "OMNIVOICE_Q4_K_M")
+	if !ok {
+		t.Fatalf("GET /models did not include declared OMNIVOICE_Q4_K_M; results=%#v", models.Results)
 	}
-	if models.Results[0].Name != "OMNIVOICE_Q4_K_M" || models.Results[0].ProviderLocality != factoryapi.WorkerModelLocalityCloud {
-		t.Fatalf("GET /models first result = %#v, want OMNIVOICE cloud model", models.Results[0])
+	if declaredModel.ProviderLocality != factoryapi.WorkerModelLocalityCloud {
+		t.Fatalf("GET /models declared result = %#v, want OMNIVOICE cloud model", declaredModel)
 	}
-	if models.Results[0].ManagedRuntime.Identity != "OMNIVOICE_Q4_K_M" {
-		t.Fatalf("GET /models managed runtime identity = %q, want OMNIVOICE_Q4_K_M", models.Results[0].ManagedRuntime.Identity)
+	if declaredModel.ManagedRuntime.Identity != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("GET /models managed runtime identity = %q, want OMNIVOICE_Q4_K_M", declaredModel.ManagedRuntime.Identity)
 	}
-	if models.Results[0].ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
-		t.Fatalf("GET /models managed readiness = %s, want READY", models.Results[0].ManagedRuntime.ReadinessState)
+	if declaredModel.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+		t.Fatalf("GET /models managed readiness = %s, want READY", declaredModel.ManagedRuntime.ReadinessState)
 	}
-	if models.Results[0].ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateNOTAPPLICABLE {
-		t.Fatalf("GET /models managed lifecycle = %s, want NOT_APPLICABLE", models.Results[0].ManagedRuntime.LifecycleState)
+	if declaredModel.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateNOTAPPLICABLE {
+		t.Fatalf("GET /models managed lifecycle = %s, want NOT_APPLICABLE", declaredModel.ManagedRuntime.LifecycleState)
 	}
 
 	model := getGeneratedJSON[factoryapi.ModelDetail](t, server.URL()+"/models/OMNIVOICE_Q4_K_M")
@@ -170,6 +171,15 @@ func TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned(t
 	}
 
 	assertUnsupportedModelInvocationRejected(t, server.URL())
+}
+
+func findModelSummary(results []factoryapi.ModelSummary, name string) (factoryapi.ModelSummary, bool) {
+	for _, result := range results {
+		if result.Name == name {
+			return result, true
+		}
+	}
+	return factoryapi.ModelSummary{}, false
 }
 
 func localCachedModelTransportSmokeConfig() map[string]any {

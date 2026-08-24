@@ -20,12 +20,19 @@ type Binding struct {
 // before the server begins accepting requests.
 type BoundObserver func(Binding)
 
+// CommandLineReader supplies the process command line to an explicitly
+// enabled pprof handler. The reader is selected by the application
+// composition root so the HTTP surface never reaches for process-global
+// arguments on its own.
+type CommandLineReader func() []string
+
 // StartRequest contains the exact host inputs for one runtime.
 type StartRequest struct {
 	Handler  http.Handler
 	Host     string
 	Port     int
 	AutoPort bool
+	Pprof    bool
 	Logger   *zap.Logger
 	OnBound  BoundObserver
 }

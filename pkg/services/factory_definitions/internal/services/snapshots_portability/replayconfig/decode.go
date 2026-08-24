@@ -37,6 +37,10 @@ func Decode(
 	if err != nil {
 		return nil, fmt.Errorf("encode replay artifact factory: %w", err)
 	}
+	payload, err = materializeRedactedReplayValues(payload)
+	if err != nil {
+		return nil, fmt.Errorf("materialize redacted replay Factory values: %w", err)
+	}
 	factoryConfig, err := decodeFactoryConfig(payload)
 	if err != nil {
 		return nil, err
@@ -72,6 +76,51 @@ func Decode(
 		}
 	}
 	return config, nil
+}
+
+// materializeRedactedReplayValues keeps a persisted typed redaction marker
+// safe and replayable when the original field was string-typed. The marker is
+// never turned back into its source value; replay receives an empty value and
+// recorded provider results continue to supply the observable output.
+func materializeRedactedReplayValues(payload []byte) ([]byte, error) {
+	var document any
+	if err := json.Unmarshal(payload, &document); err != nil {
+		return nil, err
+	}
+	document = replaceRedactedReplayValues(document)
+	return json.Marshal(document)
+}
+
+func replaceRedactedReplayValues(document any) any {
+	switch value := document.(type) {
+	case []any:
+		for index := range value {
+			value[index] = replaceRedactedReplayValues(value[index])
+		}
+		return value
+	case map[string]any:
+		if isDeclaredSecretRedactionMarker(value) {
+			return ""
+		}
+		for key, child := range value {
+			value[key] = replaceRedactedReplayValues(child)
+		}
+		return value
+	default:
+		return document
+	}
+}
+
+func isDeclaredSecretRedactionMarker(value map[string]any) bool {
+	if len(value) != 2 {
+		return false
+	}
+	redacted, ok := value["redacted"].(bool)
+	if !ok || !redacted {
+		return false
+	}
+	provenance, ok := value["provenance"].(string)
+	return ok && provenance == "DECLARED_SECRET"
 }
 
 func (c *runtimeConfig) FactoryConfig() *factorydefinitions.FactoryConfig {

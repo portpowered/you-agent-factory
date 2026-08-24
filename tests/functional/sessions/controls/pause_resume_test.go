@@ -133,7 +133,7 @@ func TestResumedFactorySessionDrainsBufferedWorkInOrder(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, pauseResumeControlsFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:        factoryDir,
-		MockWorkersConfig: pauseResumeControlsSlowMockWorkersConfig(),
+		MockWorkersConfig: pauseResumeControlsMockWorkersConfig(),
 	})
 	defer server.Stop(t)
 

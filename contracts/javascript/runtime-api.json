@@ -199,11 +199,11 @@
           },
           "description": {
             "id": "javascript.schema.agent_run_spec.description",
-            "canonicalEnglish": "Closed object shape for agent.run spec arguments."
+            "canonicalEnglish": "Closed object shape for agent.run spec arguments; schema declares the child result JSON Schema."
           }
         },
         "examples": [
-          "{ \"prompt\": \"Summarize findings\", \"label\": \"summarize\", \"skipPermissions\": true }"
+          "{ \"prompt\": \"Summarize findings\", \"label\": \"summarize\", \"schema\": { \"type\": \"object\" }, \"permissions\": \"SKIP_PERMISSIONS\" }"
         ],
         "visibility": "public",
         "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -221,6 +221,9 @@
           "preset": {
             "type": "string"
           },
+          "executorProvider": {
+            "type": "string"
+          },
           "modelProvider": {
             "type": "string"
           },
@@ -230,8 +233,19 @@
           "reasoningEffort": {
             "type": "string"
           },
-          "skipPermissions": {
-            "type": "boolean"
+          "resourceId": {
+            "type": "string"
+          },
+          "schema": {
+            "type": "object",
+            "additionalProperties": false
+          },
+          "permissions": {
+            "type": "string",
+            "enum": [
+              "DEFAULT",
+              "SKIP_PERMISSIONS"
+            ]
           }
         },
         "required": [
@@ -538,9 +552,19 @@
           "message": "agent.run() has unsupported effective reasoningEffort"
         },
         {
-          "condition": "non-boolean-skip-permissions",
+          "condition": "non-object-schema",
           "type": "TypeError",
-          "message": "agent.run() requires \"skipPermissions\" to be a boolean"
+          "message": "agent.run() requires \"schema\" to be an object"
+        },
+        {
+          "condition": "invalid-permissions",
+          "type": "TypeError",
+          "message": "agent.run() requires \"permissions\" to be DEFAULT or SKIP_PERMISSIONS"
+        },
+        {
+          "condition": "retired-permissions-field",
+          "type": "TypeError",
+          "message": "use \"permissions\" with \"DEFAULT\" or \"SKIP_PERMISSIONS\" instead"
         }
       ],
       "documentation": {
@@ -553,11 +577,11 @@
           },
           "description": {
             "id": "javascript.agent.run.description",
-            "canonicalEnglish": "Dispatches one child agent run from a closed spec object with a required prompt and optional model, preset, or child-scoped permission-bypass fields. skipPermissions is honored only by providers that advertise the capability; unsupported routes fail before provider execution side effects. Returns a promise that resolves to the child result object after policy checks and child_dispatch emission."
+            "canonicalEnglish": "Dispatches one child agent run from a closed spec object with a required prompt and optional model, preset, child result schema, or child-scoped permission mode. The declared schema is validated before dispatch; SKIP_PERMISSIONS is honored only by providers that advertise the capability; unsupported routes fail before provider execution side effects. Returns a promise that resolves to the child result object after policy checks and child_dispatch emission."
           }
         },
         "examples": [
-          "await agent.run({ prompt: \"Summarize findings\", label: \"summarize\", preset: \"operator\", skipPermissions: true })"
+          "await agent.run({ prompt: \"Summarize findings\", label: \"summarize\", preset: \"operator\", schema: { \"type\": \"object\" }, permissions: \"SKIP_PERMISSIONS\" })"
         ],
         "visibility": "public",
         "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -677,24 +701,24 @@
           "type": "array"
         },
         {
-          "id": "javascript.pipeline.param.worker",
-          "name": "worker",
+          "id": "javascript.pipeline.param.stage1",
+          "name": "stage1",
           "position": 1,
           "required": true,
           "rest": false,
           "type": "function"
         },
         {
-          "id": "javascript.pipeline.param.next",
-          "name": "next",
+          "id": "javascript.pipeline.param.stages",
+          "name": "stages",
           "position": 2,
           "required": false,
-          "rest": false,
+          "rest": true,
           "type": "function"
         }
       ],
       "callback": {
-        "role": "worker",
+        "role": "stage",
         "parameters": [
           {
             "id": "javascript.pipeline.callback.this",
@@ -722,13 +746,13 @@
             "type": "number"
           }
         ],
-        "notes": "optional next stage receives (priorResult, item, index)"
+        "notes": "stage 1 receives (item, index); every later stage receives (previousResult, item, index)"
       },
       "return": {
         "kind": "promise",
         "type": "pipeline-result-array"
       },
-      "determinism": "stages run sequentially per item; worker and next may return values or Promises",
+      "determinism": "each item advances through stages in order; stages may return values or Promises and results remain input-ordered",
       "errors": [
         {
           "condition": "missing-items-or-worker",
@@ -751,6 +775,11 @@
           "message": "pipeline() next argument must be a function when provided"
         },
         {
+          "condition": "invalid-stage-function",
+          "type": "TypeError",
+          "message": "pipeline() stage 3 argument must be a function"
+        },
+        {
           "condition": "null-or-undefined-item",
           "type": "TypeError",
           "message": "pipeline() items must not contain null or undefined entries"
@@ -766,11 +795,11 @@
           },
           "description": {
             "id": "javascript.pipeline.description",
-            "canonicalEnglish": "Maps each items entry through a required worker function and optional next stage callback, running stages sequentially per item. Returns a promise that resolves to a pipeline result array."
+            "canonicalEnglish": "Maps each item through a required first stage and any number of later stages, passing each later stage the previous result plus the original item and index. Returns a promise that resolves to an input-ordered pipeline result array."
           }
         },
         "examples": [
-          "await pipeline([1, 2], (item) => item * 2, (prior, item) => prior + item)"
+          "await pipeline([1, 2], (item, index) => item * 2 + index, (previous, item, index) => previous + item + index, (previous, item, index) => ({ previous, item, index }))"
         ],
         "visibility": "public",
         "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"

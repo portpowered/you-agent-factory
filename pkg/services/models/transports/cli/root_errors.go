@@ -3,17 +3,181 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
+	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+const (
+	modelsRootModelNotFoundCode    = "NOT_FOUND"
+	modelsRootModelUnavailableCode = "MODEL_NOT_AVAILABLE"
+	modelsRootBadRequestCode       = "BAD_REQUEST"
+	modelsRootCacheNotFoundCode    = "MODEL_CACHE_NOT_FOUND"
+	modelsRootCacheInUseCode       = "MODEL_CACHE_IN_USE"
+	modelsRootCacheUnsafeCode      = modelsRootBadRequestCode
+	modelsRootPullFailedCode       = "CLI_MODEL_PULL_FAILED"
+	modelsRootDefaultErrorText     = "models command failed"
+	modelsRootMissingCachePrefix   = "model cache is not installed; run you models pull"
+)
+
+// modelsRootError preserves a Models CLI sentinel and the originating Models
+// error while exposing the safe diagnostic fields expected by the central CLI
+// renderer. Its message is authored at this adapter boundary; the original
+// cause remains available to errors.Is/errors.As and --debug callers.
+type modelsRootError struct {
+	code     string
+	family   factoryapi.ErrorFamily
+	message  string
+	sentinel error
+	cause    error
+}
+
+func (err *modelsRootError) Error() string {
+	if err == nil {
+		return ""
+	}
+	return fmt.Sprintf("%s: %s", err.CLIErrorCode(), err.CLIErrorMessage())
+}
+
+func (err *modelsRootError) Unwrap() error {
+	if err == nil {
+		return nil
+	}
+	return err.cause
+}
+
+func (err *modelsRootError) Is(target error) bool {
+	if err == nil || err.sentinel == nil {
+		return false
+	}
+	return errors.Is(err.sentinel, target)
+}
+
+func (err *modelsRootError) CLIErrorCode() string {
+	if err == nil || strings.TrimSpace(err.code) == "" {
+		return modelsRootCacheNotFoundCode
+	}
+	return strings.TrimSpace(err.code)
+}
+
+func (err *modelsRootError) CLIErrorFamily() factoryapi.ErrorFamily {
+	if err == nil || err.family == "" {
+		return factoryapi.ErrorFamilyInternalServerError
+	}
+	return err.family
+}
+
+func (err *modelsRootError) CLIErrorMessage() string {
+	if err == nil || strings.TrimSpace(err.message) == "" {
+		return modelsRootDefaultErrorText
+	}
+	return strings.TrimSpace(err.message)
+}
+
+func newModelsRootError(
+	code string,
+	family factoryapi.ErrorFamily,
+	message string,
+	sentinel error,
+	cause error,
+) error {
+	return &modelsRootError{
+		code: code, family: family, message: message, sentinel: sentinel, cause: cause,
+	}
+}
+
+// mapModelsInvocationError preserves the Models invocation taxonomy at the
+// local CLI boundary. Generic invocation validation already carries a safe
+// public message; only the CLI diagnostic fields are missing when the error
+// crosses this adapter. The underlying typed failure remains in the cause so
+// callers and --debug diagnostics retain its identity.
+func mapModelsInvocationError(err error) (error, bool) {
+	if err == nil {
+		return nil, false
+	}
+	var failure *modelinference.InvocationFailure
+	if !errors.As(err, &failure) || failure == nil {
+		return nil, false
+	}
+	code, family := modelsInvocationDiagnostic(failure.Class)
+	return newModelsRootError(code, family, failure.Error(), nil, err), true
+}
+
+func modelsInvocationDiagnostic(class modelinference.InvocationFailureClass) (string, factoryapi.ErrorFamily) {
+	switch class {
+	case modelinference.InvocationFailureClassInvalidModelReference,
+		modelinference.InvocationFailureClassRevisionResolution:
+		return modelsRootModelUnavailableCode, factoryapi.ErrorFamilyNotFound
+	case modelinference.InvocationFailureClassInvalidOperation,
+		modelinference.InvocationFailureClassInvalidSlot,
+		modelinference.InvocationFailureClassSlotArity,
+		modelinference.InvocationFailureClassInvalidParameter,
+		modelinference.InvocationFailureClassMediaCapability,
+		modelinference.InvocationFailureClassArtifact:
+		return modelsRootBadRequestCode, factoryapi.ErrorFamilyBadRequest
+	case modelinference.InvocationFailureClassOfflineCache:
+		return "MODEL_OFFLINE_CACHE_UNAVAILABLE", factoryapi.ErrorFamilyConflict
+	case modelinference.InvocationFailureClassBackendReadiness:
+		return "MODEL_BACKEND_NOT_READY", factoryapi.ErrorFamilyInternalServerError
+	case modelinference.InvocationFailureClassBackendProtocol,
+		modelinference.InvocationFailureClassMalformedResponse:
+		return "MODEL_BACKEND_FAILURE", factoryapi.ErrorFamilyInternalServerError
+	case modelinference.InvocationFailureClassCancellation,
+		modelinference.InvocationFailureClassTimeout:
+		return "MODEL_INFERENCE_TIMEOUT", factoryapi.ErrorFamilyInternalServerError
+	case modelinference.InvocationFailureClassConfiguration:
+		return "MODEL_CONFIGURATION_FAILURE", factoryapi.ErrorFamilyInternalServerError
+	default:
+		return "MODEL_INFERENCE_RUNTIME_FAILURE", factoryapi.ErrorFamilyInternalServerError
+	}
+}
+
+func mapModelsClientError(err error) error {
+	if mapped, ok := mapModelsInvocationError(err); ok {
+		return mapped
+	}
+	return mapModelsRootError(err)
+}
 
 func mapModelsRootError(err error) error {
 	if err == nil {
 		return nil
 	}
 	switch {
+	case errors.Is(err, modelinference.ErrModelCacheNotFound):
+		return newModelsRootError(
+			modelsRootCacheNotFoundCode,
+			factoryapi.ErrorFamilyNotFound,
+			modelCacheNotFoundMessage(err),
+			ErrModelCacheNotFound,
+			err,
+		)
+	case errors.Is(err, modelinference.ErrModelCacheInUse):
+		return newModelsRootError(
+			modelsRootCacheInUseCode,
+			factoryapi.ErrorFamilyConflict,
+			strings.TrimSpace(err.Error()),
+			ErrModelCacheInUse,
+			err,
+		)
+	case errors.Is(err, modelinference.ErrModelCacheUnsafe):
+		return newModelsRootError(
+			modelsRootCacheUnsafeCode,
+			factoryapi.ErrorFamilyBadRequest,
+			strings.TrimSpace(err.Error()),
+			ErrModelCacheUnsafe,
+			err,
+		)
 	case errors.Is(err, modelinference.ErrNotFound):
-		return fmt.Errorf("%w: %s", ErrModelNotFound, err.Error())
+		return newModelsRootError(
+			modelsRootModelNotFoundCode,
+			factoryapi.ErrorFamilyNotFound,
+			modelNotFoundMessage(err),
+			ErrModelNotFound,
+			err,
+		)
 	case errors.Is(err, modelinference.ErrMissing),
 		errors.Is(err, modelinference.ErrLoading),
 		errors.Is(err, modelinference.ErrFailed),
@@ -26,13 +190,55 @@ func mapModelsRootError(err error) error {
 		return err
 	default:
 		var pullErr *modelinference.PullError
-		if errors.As(err, &pullErr) {
-			return fmt.Errorf(
-				"managed runtime pull failed (%s readiness %s)",
-				pullErr.Result.ManagedPullOutcome,
-				pullErr.Result.ReadinessState,
+		if errors.As(err, &pullErr) && pullErr != nil {
+			diagnostics := pullsupport.MergePullDiagnostics(
+				pullErr.Result.PullDiagnostics,
+				pullsupport.PullDiagnosticsFromError(pullErr.Cause),
+			).WithDefaults(
+				pullErr.Result.ModelName,
+				pullErr.Result.SourceID,
+				pullErr.Result.Revision,
+				"",
+				"pull model",
+			)
+			return newModelsRootError(
+				modelsRootPullFailedCode,
+				factoryapi.ErrorFamilyBadRequest,
+				pullErr.Error(),
+				pullErr,
+				pullsupport.NewPullDiagnosticsError(diagnostics, pullErr),
 			)
 		}
 		return err
 	}
+}
+
+func modelCacheNotFoundMessage(err error) string {
+	modelName := modelNameFromError(err, modelinference.ErrModelCacheNotFound.Error())
+	if modelName == "" {
+		return modelsRootMissingCachePrefix + " <model> first"
+	}
+	return fmt.Sprintf("%s %s first", modelsRootMissingCachePrefix, modelName)
+}
+
+func modelNotFoundMessage(err error) string {
+	modelName := modelNameFromError(err, modelinference.ErrNotFound.Error())
+	if modelName == "" {
+		return modelinference.ErrNotFound.Error()
+	}
+	return fmt.Sprintf("%s: %s", modelinference.ErrNotFound, modelName)
+}
+
+func modelNameFromError(err error, marker string) string {
+	if err == nil {
+		return ""
+	}
+	message := strings.TrimSpace(err.Error())
+	markerIndex := strings.LastIndex(message, marker)
+	if markerIndex < 0 {
+		return ""
+	}
+	modelName := strings.TrimSpace(message[markerIndex+len(marker):])
+	modelName = strings.TrimPrefix(modelName, ":")
+	return strings.TrimSpace(modelName)
 }

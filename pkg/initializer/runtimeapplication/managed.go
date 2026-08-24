@@ -220,6 +220,16 @@ func (component *completionTransport) Wait(ctx context.Context) error {
 		results <- completionTransportResult{name: "completion", err: component.completion.Wait(runCtx)}
 	}()
 	first := <-results
+	if first.name == "transport" && first.err == nil {
+		// A successful transport completion is the normal finite-run signal.
+		// Let the completion operation observe the terminal runtime and publish
+		// its result before lifecycle shutdown invalidates the bound runtime
+		// service. Errors and cancellation still take the existing fast
+		// cancellation path below.
+		second := <-results
+		component.cancelRun()
+		return joinCompletionTransportResults(first, second)
+	}
 	component.cancelRun()
 	second := <-results
 	return joinCompletionTransportResults(first, second)

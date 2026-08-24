@@ -165,7 +165,44 @@ func RunSubmitArtifact(store generatedartifacts.SourceStore, repositoryRoot stri
 	if err != nil {
 		return nil, err
 	}
-	return contractjoiner.MarshalCanonicalJSON(family)
+	return runSubmitFamilyArtifactPreservingEmptyObjects(store, manifestPath, family)
+}
+
+// runSubmitFamilyArtifactPreservingEmptyObjects keeps authored empty objects
+// such as server.stop.flags as {} in the generated family. The typed manifest
+// model intentionally uses omitempty for optional maps, so serializing that
+// model alone would erase the distinction between an authored empty object and
+// an omitted field that the CLI contract smoke validates.
+func runSubmitFamilyArtifactPreservingEmptyObjects(
+	store generatedartifacts.SourceStore,
+	manifestPath string,
+	family climanifest.Manifest,
+) ([]byte, error) {
+	raw, err := store.Read(manifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("read production CLI manifest for raw family projection: %w", err)
+	}
+	var source struct {
+		FormatVersion string                     `json:"formatVersion"`
+		RootPath      string                     `json:"rootPath"`
+		Commands      map[string]json.RawMessage `json:"commands"`
+	}
+	if err := generatedartifacts.DecodeJSONRejectingDuplicateKeys(raw, &source); err != nil {
+		return nil, fmt.Errorf("decode production CLI manifest for raw family projection: %w", err)
+	}
+	commands := make(map[string]json.RawMessage, len(family.Commands))
+	for id := range family.Commands {
+		command, ok := source.Commands[id]
+		if !ok {
+			return nil, fmt.Errorf("production manifest missing run/submit-family command %q", id)
+		}
+		commands[id] = command
+	}
+	return contractjoiner.MarshalCanonicalJSON(struct {
+		FormatVersion string                     `json:"formatVersion"`
+		RootPath      string                     `json:"rootPath"`
+		Commands      map[string]json.RawMessage `json:"commands"`
+	}{FormatVersion: source.FormatVersion, RootPath: source.RootPath, Commands: commands})
 }
 
 // FactoryConfigInitFamilyArtifact returns deterministic generated factory/config/init metadata bytes.

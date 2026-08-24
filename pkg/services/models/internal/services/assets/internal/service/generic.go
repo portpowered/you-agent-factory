@@ -2,19 +2,17 @@ package service
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
-	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 )
 
@@ -36,6 +34,7 @@ const (
 
 type genericSource struct {
 	kind        genericSourceKind
+	modelName   string
 	safe        string
 	localPath   string
 	owner       string
@@ -110,6 +109,14 @@ func (s *service) prepareGenericAssets(
 	if err != nil {
 		return models.PrepareModelAssetsResult{}, err
 	}
+	expected := make([]models.AssetRequirement, 0, len(plan.modelRequirements)+len(plan.backendRequirements))
+	for _, artifact := range plan.modelRequirements {
+		expected = append(expected, artifact.requirement)
+	}
+	for _, artifact := range plan.backendRequirements {
+		expected = append(expected, artifact.requirement)
+	}
+	s.updateActivePull(request.Scope, request.Name, expected, plan.source.revision)
 
 	modelResult, modelErr := s.acquireGenericCache(
 		ctx, assetKindModel, models.AssetArtifactKindModel, plan.source,
@@ -119,23 +126,41 @@ func (s *service) prepareGenericAssets(
 	if err := genericPreparationError(modelErr, backendErr); err != nil {
 		return genericAssetFailureResult(plan.source, modelResult, backendResult), err
 	}
+	var runtimeInspection scopedassets.RuntimeCacheInspection
+	if modelResult.snapshotPath != "" {
+		runtimeInspection, err = s.publishGenericRuntimeCache(
+			ctx, plan.cacheDirectory, request.Name, plan.source, modelResult,
+		)
+		if err != nil {
+			return genericAssetFailureResult(plan.source, modelResult, backendResult), err
+		}
+	}
 	if modelResult.snapshotPath != "" || backendResult.snapshotPath != "" {
-		s.rememberPreparedRuntime(request.Scope, request.Name, scopedassets.RuntimeCacheInspection{
-			Supported:             true,
-			Installed:             modelResult.snapshotPath != "",
-			Revision:              plan.source.revision,
-			CachePath:             modelResult.snapshotPath,
-			InstalledFileCount:    len(modelResult.artifacts),
-			BackendRequired:       len(plan.backendRequirements) > 0,
-			BackendCachePath:      backendResult.snapshotPath,
-			BackendRevision:       plan.backendSource.revision,
-			BackendInstalledFiles: len(backendResult.artifacts),
-		})
+		if !runtimeInspection.Supported {
+			runtimeInspection = scopedassets.RuntimeCacheInspection{
+				Supported:          true,
+				Installed:          modelResult.snapshotPath != "",
+				ManifestPresent:    modelResult.snapshotPath != "",
+				ManifestValid:      modelResult.snapshotPath != "",
+				ExpectedArtifacts:  append([]models.AssetRequirement(nil), expected...),
+				ObservedArtifacts:  append([]models.AssetArtifact(nil), append(modelResult.artifacts, backendResult.artifacts...)...),
+				IntegrityVerified:  modelResult.snapshotPath != "",
+				Revision:           plan.source.revision,
+				CachePath:          modelResult.snapshotPath,
+				InstalledFileCount: len(modelResult.artifacts),
+			}
+		}
+		runtimeInspection.BackendRequired = len(plan.backendRequirements) > 0
+		runtimeInspection.BackendCachePath = backendResult.snapshotPath
+		runtimeInspection.BackendRevision = plan.backendSource.revision
+		runtimeInspection.BackendInstalledFiles = len(backendResult.artifacts)
+		s.rememberPreparedRuntime(request.Scope, request.Name, runtimeInspection)
 	}
 	return genericAssetResult(plan.source, modelResult, backendResult), nil
 }
 
 type genericPreparationPlan struct {
+	cacheDirectory      string
 	source              genericSource
 	modelRequirements   []genericArtifact
 	modelRoots          []string
@@ -158,8 +183,12 @@ func (s *service) genericPreparationPlan(
 	}
 	source, err := s.resolveGenericSource(ctx, scope, rawReference)
 	if err != nil {
-		return genericPreparationPlan{}, err
+		return genericPreparationPlan{}, pullsupport.WrapPullStage(
+			models.PullStageSourceResolution, request.Name,
+			"resolve model source", rawReference, err,
+		)
 	}
+	source.modelName = request.Name
 	modelRequirements, err := s.genericModelRequirements(ctx, source, request.Artifacts)
 	if err != nil {
 		return genericPreparationPlan{}, err
@@ -174,7 +203,9 @@ func (s *service) genericPreparationPlan(
 	if err != nil {
 		return genericPreparationPlan{}, err
 	}
+	backendSource.modelName = request.Name
 	return genericPreparationPlan{
+		cacheDirectory:      scope.CacheDirectory,
 		source:              source,
 		modelRequirements:   modelRequirements,
 		modelRoots:          modelRoots,
@@ -196,7 +227,10 @@ func (s *service) genericBackendPlan(
 		var err error
 		backendSource, err = s.resolveGenericSource(ctx, scope, request.BackendReference.NameOrURI)
 		if err != nil {
-			return genericSource{}, nil, nil, err
+			return genericSource{}, nil, nil, pullsupport.WrapPullStage(
+				models.PullStageSourceResolution, request.Name,
+				"resolve backend source", request.BackendReference.NameOrURI, err,
+			)
 		}
 	}
 	if backend := strings.TrimSpace(request.Backend); backend != "" {
@@ -405,27 +439,6 @@ func genericCandidatePaths(root, kind string, source genericSource, identity, na
 	return paths
 }
 
-func (s *service) discoverCachedRequirements(
-	kind string,
-	source genericSource,
-	roots []string,
-) []models.AssetRequirement {
-	for _, root := range roots {
-		if requirements := s.discoverContentAddressedRequirements(root, kind, source); len(requirements) > 0 {
-			return requirements
-		}
-		if source.kind != genericSourceHF {
-			continue
-		}
-		snapshot := filepath.Join(root, "models--"+source.owner+"--"+source.repository,
-			"snapshots", source.revision)
-		if requirements := s.discoverSnapshotRequirements(snapshot); len(requirements) > 0 {
-			return requirements
-		}
-	}
-	return nil
-}
-
 func (s *service) discoverContentAddressedRequirements(
 	root, kind string,
 	source genericSource,
@@ -561,24 +574,45 @@ func (s *service) fetchGenericManifest(
 ) ([]genericArtifact, error) {
 	requestURL := strings.TrimRight(s.endpoints.APIBaseURL, "/") + "/models/" +
 		source.owner + "/" + source.repository + "?revision=" + url.QueryEscape(source.revision)
+	diagnostics := models.PullDiagnostics{
+		ModelName:          source.modelName,
+		ResolvedRepository: source.owner + "/" + source.repository,
+		Revision:           source.revision,
+		Operation:          "fetch model manifest",
+		RequestURL:         requestURL,
+	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: model manifest request is invalid", models.ErrSourceFetchFailed)
+		return nil, pullsupport.WrapPullDiagnostics(
+			diagnostics,
+			fmt.Errorf("%w: model manifest request is invalid", models.ErrSourceFetchFailed),
+		)
 	}
 	response, err := s.doWithRetry(request)
 	if err != nil {
 		if contextErr := assetContextError(ctx); contextErr != nil {
 			return nil, contextErr
 		}
-		return nil, fmt.Errorf("%w: model manifest fetch failed", models.ErrSourceFetchFailed)
+		return nil, pullsupport.WrapPullDiagnostics(
+			diagnostics,
+			fmt.Errorf("%w: model manifest fetch failed", models.ErrSourceFetchFailed),
+		)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%w: model manifest fetch failed", models.ErrSourceFetchFailed)
+		diagnostics.UpstreamStatusCode = response.StatusCode
+		return nil, pullsupport.WrapPullDiagnostics(
+			diagnostics,
+			fmt.Errorf("%w: model manifest fetch failed", models.ErrSourceFetchFailed),
+		)
 	}
 	var payload upstreamModel
 	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
-		return nil, fmt.Errorf("%w: model manifest is invalid", models.ErrSourceFetchFailed)
+		diagnostics.Operation = "decode model manifest"
+		return nil, pullsupport.WrapPullDiagnostics(
+			diagnostics,
+			fmt.Errorf("%w: model manifest is invalid", models.ErrSourceFetchFailed),
+		)
 	}
 	byName := make(map[string]upstreamSibling, len(payload.Siblings))
 	for _, sibling := range payload.Siblings {
@@ -600,7 +634,17 @@ func (s *service) fetchGenericManifest(
 	for _, name := range names {
 		sibling, ok := byName[name]
 		if !ok {
-			return nil, fmt.Errorf("%w: model manifest is missing an artifact", models.ErrSourceFetchFailed)
+			missing := diagnostics
+			missing.File = name
+			missing.Operation = "resolve manifest artifact"
+			return nil, pullsupport.WrapPullDiagnostics(
+				missing,
+				pullsupport.WrapPullStage(
+					models.PullStageSourceResolution, source.modelName,
+					missing.Operation, name,
+					fmt.Errorf("%w: model manifest is missing an artifact", models.ErrModelReferenceUnknown),
+				),
+			)
 		}
 		size := sibling.Size
 		digest := ""
@@ -657,7 +701,7 @@ func mergeGenericManifest(
 		}
 		return nil, fmt.Errorf(
 			"%w: model manifest is missing asset %q",
-			models.ErrSourceFetchFailed, artifact.requirement.Name,
+			models.ErrModelReferenceUnknown, artifact.requirement.Name,
 		)
 	}
 	return result, nil
@@ -732,250 +776,4 @@ func genericOverlay(
 	}
 	sort.Strings(names)
 	return names[0], overlays[names[0]].Clone(), true
-}
-
-func parseGenericSource(raw string) (genericSource, error) {
-	lower := strings.ToLower(strings.TrimSpace(raw))
-	switch {
-	case strings.HasPrefix(lower, "hf://"):
-		return parseGenericHFSource(raw)
-	case strings.HasPrefix(lower, "file://"):
-		return parseGenericFileSource(raw)
-	case strings.HasPrefix(lower, "https://"):
-		return parseGenericReleaseSource(raw)
-	case strings.Contains(raw, "://"):
-		return genericSource{}, models.ErrAssetSourceUnsupported
-	case looksLikeLocalPath(raw):
-		return genericSource{kind: genericSourceLocal, safe: "local://path", localPath: raw}, nil
-	default:
-		return genericSource{}, models.ErrAssetSourceUnsupported
-	}
-}
-
-func parseGenericReleaseSource(raw string) (genericSource, error) {
-	parsed, err := url.Parse(raw)
-	if err != nil || parsed.Scheme != "https" || parsed.Host != "github.com" ||
-		parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" ||
-		!strings.Contains(path.Clean(parsed.Path), "/releases/download/") {
-		return genericSource{}, models.ErrModelReferenceInvalid
-	}
-	name := path.Base(parsed.Path)
-	if name == "." || name == "/" || strings.TrimSpace(name) == "" || strings.ContainsAny(name, "\\\x00") {
-		return genericSource{}, models.ErrModelReferenceInvalid
-	}
-	checksum := sha256.Sum256([]byte(raw))
-	return genericSource{
-		kind: genericSourceRelease, safe: "release://" + hex.EncodeToString(checksum[:]),
-		artifactURL: raw, revision: hex.EncodeToString(checksum[:]),
-	}, nil
-}
-
-func parseGenericHFSource(raw string) (genericSource, error) {
-	rest := strings.TrimSpace(raw[len("hf://"):])
-	if rest == "" || strings.ContainsAny(rest, "\x00?#\\") {
-		return genericSource{}, models.ErrModelReferenceInvalid
-	}
-	at := strings.LastIndex(rest, "@")
-	base, revision := rest, ""
-	if at >= 0 {
-		base, revision = rest[:at], rest[at+1:]
-	}
-	parts := strings.Split(base, "/")
-	if len(parts) < 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
-		return genericSource{}, models.ErrModelReferenceInvalid
-	}
-	for _, part := range parts {
-		if strings.TrimSpace(part) == "" || part == "." || part == ".." || strings.ContainsAny(part, " @\t\r\n") {
-			return genericSource{}, models.ErrModelReferenceInvalid
-		}
-	}
-	if strings.ContainsAny(revision, "\x00/@\\?# \t\r\n") {
-		return genericSource{}, models.ErrModelRevisionUnresolved
-	}
-	file := strings.Join(parts[2:], "/")
-	safe := "hf://" + parts[0] + "/" + parts[1]
-	if file != "" {
-		safe += "/" + file
-	}
-	if revision != "" {
-		safe += "@" + revision
-	}
-	return genericSource{
-		kind: genericSourceHF, safe: safe, owner: parts[0], repository: parts[1],
-		file: file, revision: revision,
-	}, nil
-}
-
-func genericHFSafeReference(source genericSource) string {
-	safe := "hf://" + source.owner + "/" + source.repository
-	if source.file != "" {
-		safe += "/" + source.file
-	}
-	return safe + "@" + source.revision
-}
-
-func genericRevisionFailure() error {
-	return &models.InvocationFailure{
-		Class:   models.InvocationFailureClassRevisionResolution,
-		Message: "model source revision could not be resolved to an immutable commit",
-		Cause:   models.ErrModelRevisionUnresolved,
-	}
-}
-
-func parseGenericFileSource(raw string) (genericSource, error) {
-	parsed, err := url.Parse(raw)
-	if err != nil || !validGenericFileURL(parsed) {
-		return genericSource{}, models.ErrModelReferenceInvalid
-	}
-	localPath, err := genericFileURLPath(parsed)
-	if err != nil {
-		return genericSource{}, models.ErrModelReferenceInvalid
-	}
-	if localPath == "" {
-		return genericSource{}, models.ErrModelReferenceInvalid
-	}
-	return genericSource{
-		kind: genericSourceFile, safe: "file://local", localPath: filepath.FromSlash(localPath),
-	}, nil
-}
-
-func validGenericFileURL(parsed *url.URL) bool {
-	return parsed.User == nil && parsed.RawQuery == "" && parsed.Fragment == ""
-}
-
-func genericFileURLPath(parsed *url.URL) (string, error) {
-	localPath, err := url.PathUnescape(parsed.Path)
-	if err != nil {
-		return "", err
-	}
-	if parsed.Host != "" && !strings.EqualFold(parsed.Host, "localhost") {
-		if len(parsed.Host) != 2 || parsed.Host[1] != ':' || !isASCIIAlphaByte(parsed.Host[0]) {
-			return "", models.ErrModelReferenceInvalid
-		}
-		localPath = parsed.Host + localPath
-	}
-	if len(localPath) >= 3 && localPath[0] == '/' && localPath[2] == ':' && isASCIIAlphaByte(localPath[1]) {
-		localPath = localPath[1:]
-	}
-	return localPath, nil
-}
-
-func isImmutableGenericRevision(value string) bool {
-	value = strings.TrimSpace(value)
-	if len(value) != 40 && len(value) != 64 {
-		return false
-	}
-	_, err := hex.DecodeString(value)
-	return err == nil
-}
-
-func (s *service) genericAssetURL(source genericSource, name string) string {
-	if source.kind == genericSourceRelease {
-		return source.artifactURL
-	}
-	return strings.TrimRight(s.endpoints.BaseURL, "/") + "/" + source.owner + "/" +
-		source.repository + "/resolve/" + source.revision + "/" + url.PathEscape(name) + "?download=true"
-}
-
-func (s *service) addGenericURLs(source genericSource, artifacts []genericArtifact) {
-	if source.kind != genericSourceHF {
-		return
-	}
-	for index := range artifacts {
-		if artifacts[index].url == "" {
-			artifacts[index].url = s.genericAssetURL(source, artifacts[index].requirement.Name)
-		}
-	}
-}
-
-func sourceDisplayName(source genericSource) string {
-	if source.kind == genericSourceHF {
-		return source.owner + "/" + source.repository
-	}
-	return "local-model"
-}
-
-func sourceMetadata(source genericSource) models.SourceMetadata {
-	if source.kind == genericSourceHF {
-		return models.SourceMetadata{Provider: "HUGGINGFACE", Reference: source.owner + "/" + source.repository, Revision: source.revision}
-	}
-	if source.kind == genericSourceRelease {
-		return models.SourceMetadata{Provider: "PINNED_BACKEND", Reference: "pinned-backend", Revision: source.revision}
-	}
-	return models.SourceMetadata{Provider: "LOCAL", Reference: source.safe}
-}
-
-func genericCacheKey(kind string, source genericSource, artifacts []genericArtifact) string {
-	names := genericArtifactIdentityNames(artifacts)
-	sort.Strings(names)
-	return kind + "|" + genericSourceIdentity(source) + "|" + strings.Join(names, ",")
-}
-
-func genericSourceIdentity(source genericSource) string {
-	if source.kind != genericSourceLocal && source.kind != genericSourceFile {
-		return source.safe
-	}
-	checksum := sha256.Sum256([]byte(source.localPath))
-	return source.safe + "|" + hex.EncodeToString(checksum[:])
-}
-
-func genericArtifactIdentityNames(artifacts []genericArtifact) []string {
-	names := make([]string, 0, len(artifacts))
-	for _, artifact := range artifacts {
-		requirement := artifact.requirement
-		names = append(names, fmt.Sprintf(
-			"%s:%d:%s",
-			requirement.Name,
-			requirement.Bytes,
-			strings.ToLower(strings.TrimSpace(requirement.SHA256)),
-		))
-	}
-	return names
-}
-
-func genericArtifactIdentityHash(kind string, source genericSource, artifacts []genericArtifact) string {
-	return genericIdentityHash(kind, source, genericArtifactIdentityNames(artifacts))
-}
-
-func genericIdentityHash(kind string, source genericSource, names []string) string {
-	identity := kind + "|" + genericSourceIdentity(source)
-	if len(names) > 0 {
-		cloned := append([]string(nil), names...)
-		sort.Strings(cloned)
-		identity += "|" + strings.Join(cloned, ",")
-	}
-	hash := sha256.Sum256([]byte(identity))
-	return hex.EncodeToString(hash[:])
-}
-
-func missingArtifactNames(artifacts []genericArtifact) []string {
-	names := make([]string, 0, len(artifacts))
-	for _, artifact := range artifacts {
-		names = append(names, artifact.requirement.Name)
-	}
-	sort.Strings(names)
-	return uniqueStrings(names)
-}
-
-func uniqueStrings(values []string) []string {
-	if len(values) == 0 {
-		return nil
-	}
-	result := make([]string, 0, len(values))
-	for _, value := range values {
-		if len(result) == 0 || result[len(result)-1] != value {
-			result = append(result, value)
-		}
-	}
-	return result
-}
-
-func isASCIIAlphaByte(value byte) bool {
-	return value >= 'a' && value <= 'z' || value >= 'A' && value <= 'Z'
-}
-
-func looksLikeLocalPath(value string) bool {
-	return filepath.IsAbs(value) || strings.HasPrefix(value, "./") || strings.HasPrefix(value, "../") ||
-		strings.HasPrefix(value, ".\\") || strings.HasPrefix(value, "..\\") ||
-		strings.ContainsAny(value, `/\\`) || filepath.Ext(value) != ""
 }

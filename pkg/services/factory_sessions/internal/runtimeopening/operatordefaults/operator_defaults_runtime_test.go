@@ -3,8 +3,6 @@ package operatordefaults_test
 import (
 	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -369,16 +367,4 @@ func mergeOperatorDefaultsFactoryFixture(factory map[string]any) map[string]any 
 		base[key] = value
 	}
 	return base
-}
-
-func writeOperatorDefaultsFactoryJSON(t *testing.T, factoryDir string, factory map[string]any) {
-	t.Helper()
-
-	data, err := json.Marshal(factory)
-	if err != nil {
-		t.Fatalf("Marshal(factory): %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile), data, 0o644); err != nil {
-		t.Fatalf("WriteFile(factory.json): %v", err)
-	}
 }

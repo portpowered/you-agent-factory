@@ -89,6 +89,52 @@ If the change involves modification to the website, you should use the playwrigh
   comment at most once and stay silent on later holds for the same flake. Never
   demand code changes for a baseline flake in a package the diff does not touch.
 
+### Step 2.1a - Reject a plan that disagrees with itself
+
+1. Read the plan acceptance criteria.
+2. Find every criterion that says the lane reaches, pulls, or invokes a real
+   external artifact, backend, model, or pinned dependency.
+3. Find every criterion that describes the proof for that same behavior as a
+   substitute, a controlled response, or a test requiring no real download.
+4. When both apply to the same behavior, respond BLOCKING.
+5. Quote both criteria verbatim, side by side, in the review comment.
+6. Decide this by the two quoted sentences, not by judgement.
+
+### Step 2.2 — Independently verify conditional runtime proof
+
+Before Step 3, independently classify the lane and record which case applies:
+
+- **Applicable:** the diff changes runtime-observable CLI, API, UI, emitted-event,
+  or runtime-lifecycle behavior. Personally build and run the delivered behavior
+  end to end using the real artifact; do not accept a diff, green tests, or
+  implementer-provided evidence as the runtime proof.
+- **Not applicable:** the diff has no runtime-observable product behavior. State
+  the one-line reason in the PR comment. This is explicitly non-blocking and is
+  legitimate for deflake, coverage, baseline, docs, package-move, and comparable
+  lanes.
+
+For an applicable lane, use a fresh temporary directory for both the build and
+the smoke-test home, then run the exact isolated build command:
+
+```text
+go build -o <tempdir>/you-verify.exe ./cmd/factory
+```
+
+Do not run `make build-all` for this proof and do not write `bin/you.exe`. Before
+any `you` command, redirect both `HOME` and `USERPROFILE` to a scratch directory
+under the temporary path. The proof MUST NOT connect to, submit to, restart, or
+send requests to the production daemon on port `7437`; use only the temporary
+artifact and isolated inputs. If the command output prints `Runtime log:`,
+resolve that path before continuing and stop the proof immediately if it is
+outside the scratch directory. Limit the smoke to one narrow delivered flow and
+a few minutes; do not turn it into a broad or long-running test suite.
+
+Post the exact commands, verbatim output, and exit codes from this independent
+proof in a PR conversation comment. Never put runtime-proof evidence in a
+commit. The existing external-tooling waiver remains available when an external
+tool or service is unavailable, but it must be documented and cannot waive a
+repository code failure or test failure.
+
 ### Step 3 — Verify project acceptance criteria
 
 Go through the acceptance criteria from prd.json **one by one**. For each criterion, as part of the PR comment: 
@@ -193,8 +239,17 @@ checklist line is read as approval-and-merge even when you meant to hold.
 
 ## addenda
 
-sometimes there is a system problem such as the website browser tool being broken, in such cases its okay to waive the requirement. 
+When the process agent has recorded the one supported browser availability check
+as unavailable, review may waive that external-tool limitation when the record
+is present and every other story and acceptance criterion passes. The waiver
+applies only to the external browser limitation: it cannot excuse repository
+code, test, typecheck, lint, or other quality failures, unresolved blocking
+feedback, an unpushed final head, a missing pull request, or CI that has not
+started. The unavailable browser result alone must not send an otherwise
+complete lane back to process.
 
-This is not the case for code changes/tests that we can fix in the codebase though. Mostly, things that are broken out of our control like tools and mcp that we are remotely separately from. 
+Review retains ownership of waiver judgment, driving required CI to terminal
+and passing, resolving merge conflicts, and merging the pull request. Process
+does not wait for or re-check terminal CI after its finish line.
 
 Always end your PR review comment with the literal marker string [gate-policy-v3] on its own final line.

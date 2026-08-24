@@ -322,10 +322,6 @@ func normalizeRuntimeLogConfig(config RuntimeLogConfig) RuntimeLogConfig {
 	return config
 }
 
-func canonicalRuntimeLogDir(home string) string {
-	return RuntimeLogsRoot(home)
-}
-
 // RuntimeLogsRoot returns the Logging-owned default runtime log root.
 func RuntimeLogsRoot(home string) string {
 	return filepath.Join(home, ".you-agent-factory", runtimeLogSubdirName)

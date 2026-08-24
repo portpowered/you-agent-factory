@@ -413,7 +413,7 @@ func assertPublishedOperations(t *testing.T, paths map[string]any) {
 		"/factory-sessions/{session_id}/work/{id}/move":             {"post"},
 		"/status":                                {"get"},
 		"/models":                                {"get"},
-		"/models/{model_name}":                   {"get"},
+		"/models/{model_name}":                   {"get", "delete"},
 		"/models/{model_name}/invocations":       {"post"},
 		"/models/{model_name}/pull":              {"post"},
 		"/provider-sessions/detail":              {"get"},
@@ -843,6 +843,12 @@ func assertFactoryOperationResponses(t *testing.T, paths map[string]any) {
 	getModel := pathOperation(t, paths, "/models/{model_name}", "get")
 	assertResponseSchemaRef(t, getModel, "200", "#/components/schemas/ModelDetail")
 	assertResponseRef(t, getModel, "404", "#/components/responses/NotFound")
+
+	removeModel := pathOperation(t, paths, "/models/{model_name}", "delete")
+	assertResponseSchemaRef(t, removeModel, "200", "#/components/schemas/ModelRemoveResponse")
+	assertResponseRef(t, removeModel, "400", "#/components/responses/BadRequest")
+	assertResponseRef(t, removeModel, "404", "#/components/responses/NotFound")
+	assertResponseSchemaRef(t, removeModel, "409", "#/components/schemas/ErrorResponse")
 
 	invokeModel := pathOperation(t, paths, "/models/{model_name}/invocations", "post")
 	assertRequestSchemaRef(t, invokeModel, "#/components/schemas/ModelInvocationRequest")

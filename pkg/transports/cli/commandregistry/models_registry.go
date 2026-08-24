@@ -11,4 +11,5 @@ type ModelsHandler interface {
 	Inspect(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error
 	Invoke(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error
 	Pull(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error
+	Remove(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error
 }

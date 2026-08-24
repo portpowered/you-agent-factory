@@ -76,21 +76,34 @@ func TestCLILocalAndRemoteRunDomainFailureParityThroughRootProcess(t *testing.T)
 // caller cancellation reaches both local and selected-server placements and
 // neither path reports a fabricated successful primary result.
 func TestCLILocalAndRemoteRunCancellationParityThroughRootProcess(t *testing.T) {
-	homeDir := t.TempDir()
-	namedFactoryDir := scaffoldNamedPlacementFactory(
+	// Keep independent public bootstraps from contending over server-owned
+	// packaged-Factory staging while this test exercises placement parity.
+	clientHomeDir := t.TempDir()
+	serverHomeDir := t.TempDir()
+	clientFactoryDir := scaffoldNamedPlacementFactory(
 		t,
-		homeDir,
+		clientHomeDir,
 		"session-parity-cancel",
 		`while (true) {}`,
 	)
-	server := startRemotePlacementServer(t, homeDir, namedFactoryDir)
+	serverFactoryDir := scaffoldNamedPlacementFactory(
+		t,
+		serverHomeDir,
+		"session-parity-cancel",
+		`while (true) {}`,
+	)
+	server := startRemotePlacementServer(t, serverHomeDir, serverFactoryDir)
+	// Finish the server lifecycle before testing.T begins removing the isolated
+	// home. Service-mode initialization owns packaged-Factory files under this
+	// directory, so letting TempDir cleanup race that final unwind can leave the
+	// factories root non-empty on a loaded runner.
+	defer func() {
+		server.Stop(t)
+		server.Close(t)
+	}()
 
-	localContext, cancelLocal := context.WithTimeout(t.Context(), 500*time.Millisecond)
-	defer cancelLocal()
-	remoteContext, cancelRemote := context.WithTimeout(t.Context(), 500*time.Millisecond)
-	defer cancelRemote()
-	local := executePlacementRunWithContext(localContext, t, homeDir, namedFactoryDir, "session-parity-cancel", "", false)
-	remote := executePlacementRunWithContext(remoteContext, t, homeDir, namedFactoryDir, "session-parity-cancel", server.URL(), true)
+	local := executePlacementRunWithContext(t.Context(), t, clientHomeDir, clientFactoryDir, "session-parity-cancel", "", false)
+	remote := executePlacementRunWithContext(t.Context(), t, clientHomeDir, clientFactoryDir, "session-parity-cancel", server.URL(), true)
 	assertPlacementCancellationParity(t, local, remote)
 }
 
@@ -174,28 +187,144 @@ func executePlacementRun(
 	remote bool,
 ) placementRunObservation {
 	t.Helper()
-	return executePlacementRunWithContext(t.Context(), t, homeDir, workingDirectory, factoryName, serverURL, remote)
-}
-
-func executePlacementRunWithContext(
-	ctx context.Context,
-	t *testing.T,
-	homeDir, workingDirectory, factoryName, serverURL string,
-	remote bool,
-) placementRunObservation {
-	t.Helper()
 	args := []string{"you"}
 	if remote {
 		args = append(args, "--remote", "--server", serverURL)
 	}
 	args = append(args, "--json", "run", "--named", factoryName, "--no-record", "placement parity")
-	inputs := support.FakeInputs(ctx, args)
+	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.Env = []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir}
 	inputs.Input.WorkingDirectory = workingDirectory
 	process := support.BuildProcess(t, serviceedges.Edges{})
 	support.CleanupProcess(t, process)
 	err := process.Execute(inputs.Input)
 	return placementRunObservation{err: err, stdout: inputs.Stdout(), stderr: inputs.Stderr()}
+}
+
+func executePlacementRunWithContext(
+	parentContext context.Context,
+	t *testing.T,
+	homeDir, workingDirectory, factoryName, serverURL string,
+	remote bool,
+) placementRunObservation {
+	t.Helper()
+	if remote {
+		return executeRemotePlacementRunWithReadiness(
+			parentContext, t, homeDir, workingDirectory, factoryName, serverURL,
+		)
+	}
+	return executeLocalPlacementRunWithReadiness(
+		parentContext, t, homeDir, workingDirectory, factoryName,
+	)
+}
+
+func executeLocalPlacementRunWithReadiness(
+	parentContext context.Context,
+	t *testing.T,
+	homeDir, workingDirectory, factoryName string,
+) placementRunObservation {
+	t.Helper()
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	placementEnvironment := []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir}
+	// Complete public system initialization through the same process before the
+	// cancellation-controlled invocation. The invocation still waits for its
+	// observable response event before canceling.
+	support.InitializeCustomerHomeWithProcess(
+		t, process, placementEnvironment, workingDirectory,
+	)
+
+	runContext, cancel := context.WithCancel(parentContext)
+	defer cancel()
+	inputs := support.FakeInputs(runContext, []string{
+		"you", "--json", "run", "--named", factoryName, "--output", "response-stream", "--no-record", "placement parity",
+	})
+	readinessOutput := newLocalInvocationReadinessOutput()
+	inputs.Input.Stdout = readinessOutput
+	inputs.Input.Stderr = readinessOutput
+	inputs.Input.Env = placementEnvironment
+	inputs.Input.WorkingDirectory = workingDirectory
+	command := support.StartProcessCommand(t, process, inputs.Input)
+	select {
+	case <-readinessOutput.started:
+		// Stop uses the support command's existing bounded cancellation
+		// lifecycle, so a cancellation-controlled invocation cannot strand the
+		// test while it waits for Process.Execute to return.
+		command.Stop(t)
+	case <-command.Done():
+		// Preserve a pre-readiness bootstrap or invocation failure for the
+		// parity assertions instead of waiting for an outer test timeout.
+		command.AcceptError()
+		return placementObservation(command, readinessOutput)
+	case <-parentContext.Done():
+		command.Stop(t)
+		t.Fatalf("local run did not reach invocation readiness: %v\noutput:\n%s", parentContext.Err(), readinessOutput.String())
+	}
+	return placementObservation(command, readinessOutput)
+}
+
+func executeRemotePlacementRunWithReadiness(
+	parentContext context.Context,
+	t *testing.T,
+	homeDir, workingDirectory, factoryName, serverURL string,
+) placementRunObservation {
+	t.Helper()
+	args := []string{"you"}
+	args = append(args, "--remote", "--server", serverURL, "--verbose")
+	args = append(args, "--json", "run", "--named", factoryName, "--no-record", "placement parity")
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	placementEnvironment := []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir}
+	// Complete public system initialization through the same process before the
+	// cancellation-controlled invocation. The invocation still waits for
+	// observable durable admission before canceling.
+	support.InitializeCustomerHomeWithProcess(
+		t, process, placementEnvironment, workingDirectory,
+	)
+
+	runContext, cancel := context.WithCancel(parentContext)
+	defer cancel()
+	inputs := support.FakeInputs(runContext, args)
+	admissionOutput := newRemoteAdmissionOutput()
+	inputs.Input.Stdout = admissionOutput
+	inputs.Input.Stderr = admissionOutput
+	inputs.Input.Env = placementEnvironment
+	inputs.Input.WorkingDirectory = workingDirectory
+	command := support.StartProcessCommand(t, process, inputs.Input)
+	select {
+	case <-admissionOutput.started:
+		// Stop uses the support command's existing bounded cancellation
+		// lifecycle, so a cancellation-controlled invocation cannot strand the
+		// test while it waits for Process.Execute to return.
+		command.Stop(t)
+	case <-command.Done():
+		// Preserve a pre-readiness bootstrap or invocation failure for the
+		// parity assertions instead of waiting for an outer test timeout.
+		command.AcceptError()
+		return placementObservation(command, admissionOutput)
+	case <-parentContext.Done():
+		command.Stop(t)
+		t.Fatalf("remote run did not reach durable-admission readiness: %v\noutput:\n%s", parentContext.Err(), admissionOutput.String())
+	}
+	sessionID := remoteSessionIDFromAdmissionOutput(t, admissionOutput.String())
+	defer func() {
+		if err := terminateRemoteFunctionalSession(serverURL, sessionID); err != nil {
+			t.Errorf("terminate cancellation parity durable session %s: %v", sessionID, err)
+		}
+	}()
+	return placementObservation(command, admissionOutput)
+}
+
+type placementOutput interface {
+	String() string
+}
+
+func placementObservation(command *support.ProcessCommand, output placementOutput) placementRunObservation {
+	return placementRunObservation{
+		err:    command.Err(),
+		stdout: output.String(),
+		stderr: output.String(),
+	}
 }
 
 func assertPlacementSuccessParity(
@@ -279,6 +408,15 @@ func assertPlacementCancellationParity(
 		}
 		if strings.Contains(observation.stdout, "placement parity complete") {
 			t.Fatalf("%s stdout fabricated a successful primary result:\n%s", name, observation.stdout)
+		}
+		combinedOutput := strings.ToLower(observation.stdout + "\n" + observation.stderr)
+		for _, diagnostic := range []string{
+			"packaged factory installation",
+			"initialize system: system bootstrap initialize partial failure",
+		} {
+			if strings.Contains(combinedOutput, diagnostic) {
+				t.Fatalf("%s reported bootstrap diagnostic %q:\n%s", name, diagnostic, observation.stdout+"\n"+observation.stderr)
+			}
 		}
 	}
 }
@@ -452,6 +590,34 @@ func (writer *remoteAdmissionOutput) Write(p []byte) (int, error) {
 }
 
 func (writer *remoteAdmissionOutput) String() string {
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	return writer.output.String()
+}
+
+type localInvocationReadinessOutput struct {
+	mu      sync.Mutex
+	output  strings.Builder
+	started chan struct{}
+	once    sync.Once
+}
+
+func newLocalInvocationReadinessOutput() *localInvocationReadinessOutput {
+	return &localInvocationReadinessOutput{started: make(chan struct{})}
+}
+
+func (writer *localInvocationReadinessOutput) Write(p []byte) (int, error) {
+	writer.mu.Lock()
+	_, _ = writer.output.Write(p)
+	started := strings.Contains(writer.output.String(), `"recordType":"factory_event"`)
+	writer.mu.Unlock()
+	if started {
+		writer.once.Do(func() { close(writer.started) })
+	}
+	return len(p), nil
+}
+
+func (writer *localInvocationReadinessOutput) String() string {
 	writer.mu.Lock()
 	defer writer.mu.Unlock()
 	return writer.output.String()

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -71,8 +72,8 @@ func (e *IncompleteDrainError) Unwrap() error {
 type WorkersMockCommandRunnerFactory func(
 	*workers.MockWorkersConfig,
 	factorydefinitions.RuntimeDefinitionLookup,
-	workers.CommandRunner,
-) workers.CommandRunner
+	platformprocess.CommandRunner,
+) platformprocess.CommandRunner
 
 // WorkerSessionsFactory constructs the per-session Worker Sessions service
 // (W4 Runtime dispatch cutover) from the directly injected Workers execution

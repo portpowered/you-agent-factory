@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -15,7 +16,6 @@ import (
 	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 	historicalquery "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query"
 	historicalquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query/wire"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // NewPortableRecordingWriter constructs the portable recording writer selected
@@ -80,6 +80,93 @@ func NewRuntimeRoot(
 	logger logging.Logger,
 	clocks ...recordings.RecordingClock,
 ) (recordings.Service, error) {
+	return newRuntimeRoot(
+		targets,
+		writeFile,
+		nil,
+		makeDirectories,
+		createTemporaryFile,
+		removePath,
+		renamePath,
+		readFile,
+		captureSnapshot,
+		decodeSnapshot,
+		decodeRuntimeConfig,
+		replayInputs,
+		logger,
+		clocks...,
+	)
+}
+
+// NewRuntimeRootWithAppend constructs the process-scoped Recordings authority
+// with the separate append effect required by new v2 JSONL recordings.
+func NewRuntimeRootWithAppend(
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	appendFile func(string, []byte) error,
+	makeDirectories recordings.RecordingMakeDirectories,
+	createTemporaryFile recordings.RecordingCreateTemporaryFile,
+	removePath recordings.RecordingRemovePath,
+	renamePath recordings.RecordingRenamePath,
+	readFile recordings.RecordingReadFile,
+	captureSnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
+	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	replayInputs recordings.ReplayInputLoader,
+	logger logging.Logger,
+	clocks ...recordings.RecordingClock,
+) (recordings.Service, error) {
+	if appendFile == nil {
+		return NewRuntimeRoot(
+			targets,
+			writeFile,
+			makeDirectories,
+			createTemporaryFile,
+			removePath,
+			renamePath,
+			readFile,
+			captureSnapshot,
+			decodeSnapshot,
+			decodeRuntimeConfig,
+			replayInputs,
+			logger,
+			clocks...,
+		)
+	}
+	return newRuntimeRoot(
+		targets,
+		writeFile,
+		appendFile,
+		makeDirectories,
+		createTemporaryFile,
+		removePath,
+		renamePath,
+		readFile,
+		captureSnapshot,
+		decodeSnapshot,
+		decodeRuntimeConfig,
+		replayInputs,
+		logger,
+		clocks...,
+	)
+}
+
+func newRuntimeRoot(
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	appendFile func(string, []byte) error,
+	makeDirectories recordings.RecordingMakeDirectories,
+	createTemporaryFile recordings.RecordingCreateTemporaryFile,
+	removePath recordings.RecordingRemovePath,
+	renamePath recordings.RecordingRenamePath,
+	readFile recordings.RecordingReadFile,
+	captureSnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
+	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	replayInputs recordings.ReplayInputLoader,
+	logger logging.Logger,
+	clocks ...recordings.RecordingClock,
+) (recordings.Service, error) {
 	publication, err := recordingsinternal.NewPortableArtifactPublication(
 		makeDirectories,
 		createTemporaryFile,
@@ -94,9 +181,10 @@ func NewRuntimeRoot(
 		readFile,
 		recordingsinternal.NewProjectionService(),
 	)
-	root := recordingsinternal.NewRuntimeRootWithHistoricalQuery(
+	root := recordingsinternal.NewRuntimeRootWithHistoricalQueryAndAppender(
 		targets,
 		writeFile,
+		appendFile,
 		readFile,
 		publication,
 		captureSnapshot,
@@ -163,7 +251,7 @@ func NewReplayExecution(
 	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 ) (
 	providers.Service,
-	workers.CommandRunner,
+	platformprocess.CommandRunner,
 	[]recordings.ReplayHook,
 	recordings.CompletionDeliveryPlanner,
 	error,

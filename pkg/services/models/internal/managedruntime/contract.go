@@ -36,13 +36,20 @@ const (
 type PullOutcome = models.PullOutcome
 
 const (
-	PullOutcomeAlreadyPresent        = models.PullOutcomeAlreadyPresent
-	PullOutcomeAlreadyReady          = models.PullOutcomeAlreadyReady
-	PullOutcomeInstalledSuccessfully = models.PullOutcomeInstalledSuccessfully
-	PullOutcomeSourceFetchFailed     = models.PullOutcomeSourceFetchFailed
-	PullOutcomeStillLoading          = models.PullOutcomeStillLoading
-	PullOutcomeTimedOut              = models.PullOutcomeTimedOut
-	PullOutcomeUnsupportedRuntime    = models.PullOutcomeUnsupportedRuntime
+	PullOutcomeAlreadyPresent              = models.PullOutcomeAlreadyPresent
+	PullOutcomeAlreadyReady                = models.PullOutcomeAlreadyReady
+	PullOutcomeInstalledSuccessfully       = models.PullOutcomeInstalledSuccessfully
+	PullOutcomeSourceFetchFailed           = models.PullOutcomeSourceFetchFailed
+	PullOutcomeStillLoading                = models.PullOutcomeStillLoading
+	PullOutcomeTimedOut                    = models.PullOutcomeTimedOut
+	PullOutcomeCancelled                   = models.PullOutcomeCancelled
+	PullOutcomeUnsupportedRuntime          = models.PullOutcomeUnsupportedRuntime
+	PullOutcomeSourceResolutionFailed      = models.PullOutcomeSourceResolutionFailed
+	PullOutcomeIntegrityVerificationFailed = models.PullOutcomeIntegrityVerificationFailed
+	PullOutcomeAssemblyFailed              = models.PullOutcomeAssemblyFailed
+	PullOutcomeCacheInstallationFailed     = models.PullOutcomeCacheInstallationFailed
+	PullOutcomeReadinessEvaluationFailed   = models.PullOutcomeReadinessEvaluationFailed
+	PullOutcomeAssetPreparationFailed      = models.PullOutcomeAssetPreparationFailed
 )
 
 type Locality = models.Locality

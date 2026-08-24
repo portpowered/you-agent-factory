@@ -493,6 +493,7 @@
       "enum": [
         "item",
         "next",
+        "stage",
         "worker"
       ]
     },

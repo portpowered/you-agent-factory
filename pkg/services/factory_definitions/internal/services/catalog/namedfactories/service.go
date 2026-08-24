@@ -26,11 +26,6 @@ type FileSystem interface {
 	RemoveAll(string) error
 }
 
-func ValidateName(name string) error {
-	_, err := canonicalName(name)
-	return err
-}
-
 func PathSegments(name string) ([]string, error) {
 	segments, err := namedfactorypath.PathSegments(name)
 	if err != nil {
@@ -48,17 +43,6 @@ func NameFromPathSegments(segments []string) (string, error) {
 		}
 	}
 	return name, nil
-}
-
-func MapDir(rootDir, name string) (string, error) {
-	if strings.TrimSpace(rootDir) == "" {
-		return "", fmt.Errorf("factory root is required")
-	}
-	canonical, err := canonicalName(name)
-	if err != nil {
-		return "", err
-	}
-	return namedfactorypath.MapDir(rootDir, canonical)
 }
 
 func Resolve(paths PathResolver, fileSystem FileSystem, rootDir, name string) (string, error) {
@@ -123,17 +107,6 @@ func ResolveCurrent(paths PathResolver, rootDir string) (string, error) {
 		return "", fmt.Errorf("%w: %w", factorydefinitions.ErrNamedFactoryNotFound, err)
 	}
 	return "", err
-}
-
-func ReadCurrentPointer(paths PathResolver, rootDir string) (string, error) {
-	if paths == nil {
-		return "", fmt.Errorf("named Factory path resolver is required")
-	}
-	name, err := paths.ReadCurrentPointer(rootDir)
-	if err != nil && errors.Is(err, namedfactorypath.ErrInvalidName) {
-		return "", &invalidNameError{name: "", err: err}
-	}
-	return name, err
 }
 
 func WriteCurrentPointer(paths PathResolver, rootDir, name string) error {

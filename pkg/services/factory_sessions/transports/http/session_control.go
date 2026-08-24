@@ -12,15 +12,6 @@ import (
 	"go.uber.org/zap"
 )
 
-func decodeOpenFactorySessionRequest(body io.Reader) (factoryapi.OpenFactorySessionRequest, error) {
-	return decodeOpenFactorySessionBody(body)
-}
-
-func decodeStartFactorySessionRequest(body io.Reader, prepare RequestPreparation) (factorysessions.StartRequest, error) {
-	request, _, err := decodeStartFactorySessionRequestWithDiagnostics(body, prepare)
-	return request, err
-}
-
 func decodeStartFactorySessionRequestWithDiagnostics(
 	body io.Reader,
 	prepare RequestPreparation,
@@ -38,11 +29,6 @@ func decodeStartFactorySessionRequestWithDiagnostics(
 	}
 	prepared, err := prepare.PrepareStart(raw)
 	return prepared, decoded.Diagnostics, err
-}
-
-func decodeLifecycleControlRequest(body io.Reader, prepare RequestPreparation) (factorysessions.ControlRequest, error) {
-	request, _, err := decodeLifecycleControlRequestWithDiagnostics(body, prepare)
-	return request, err
 }
 
 func decodeLifecycleControlRequestWithDiagnostics(
@@ -64,11 +50,6 @@ func decodeLifecycleControlRequestWithDiagnostics(
 	return prepared, decoded.Diagnostics, err
 }
 
-func decodeApproveFactorySessionRequest(body io.Reader, prepare RequestPreparation) (factorysessions.ApproveRequest, error) {
-	request, _, err := decodeApproveFactorySessionRequestWithDiagnostics(body, prepare)
-	return request, err
-}
-
 func decodeApproveFactorySessionRequestWithDiagnostics(
 	body io.Reader,
 	prepare RequestPreparation,
@@ -88,11 +69,6 @@ func decodeApproveFactorySessionRequestWithDiagnostics(
 	return prepared, decoded.Diagnostics, err
 }
 
-func decodeRetryDispatchRequest(body io.Reader, prepare RequestPreparation) (factorysessions.RetryDispatchRequest, error) {
-	request, _, err := decodeRetryDispatchRequestWithDiagnostics(body, prepare)
-	return request, err
-}
-
 func decodeRetryDispatchRequestWithDiagnostics(
 	body io.Reader,
 	prepare RequestPreparation,
@@ -110,11 +86,6 @@ func decodeRetryDispatchRequestWithDiagnostics(
 	}
 	prepared, err := prepare.PrepareRetryDispatch(retry)
 	return prepared, decoded.Diagnostics, err
-}
-
-func decodeInterruptDispatchRequest(body io.Reader, prepare RequestPreparation) (factorysessions.InterruptDispatchRequest, error) {
-	request, _, err := decodeInterruptDispatchRequestWithDiagnostics(body, prepare)
-	return request, err
 }
 
 func decodeInterruptDispatchRequestWithDiagnostics(
@@ -173,6 +144,20 @@ func (s *Server) invokeRootLiveLifecycleControl(
 		s.finishRootLifecycleControl(w, string(sessionID), operation, result, paths, err)
 	case "resume":
 		result, err := s.liveControl.ResumeLiveFactorySession(ctx, string(sessionID), control)
+		s.finishRootLifecycleControl(w, string(sessionID), operation, result, paths, err)
+	case "cancel", "terminate":
+		lifecycle, ok := s.liveControl.(factorysessions.LiveLifecycleControlService)
+		if !ok {
+			s.writeError(w, http.StatusInternalServerError, "live factory session lifecycle control is unavailable", "INTERNAL_ERROR")
+			return
+		}
+		var result factorysessions.LifecycleControlResult
+		var err error
+		if operation == "cancel" {
+			result, err = lifecycle.CancelLiveFactorySession(ctx, string(sessionID), control)
+		} else {
+			result, err = lifecycle.TerminateLiveFactorySession(ctx, string(sessionID), control)
+		}
 		s.finishRootLifecycleControl(w, string(sessionID), operation, result, paths, err)
 	default:
 		s.writeError(w, http.StatusInternalServerError, "live factory session lifecycle control failed", "INTERNAL_ERROR")

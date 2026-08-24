@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -40,9 +41,11 @@ const (
 	modelsInvokeNameInputID  = "you.models.invoke.arg.0"
 	modelsInvokeOperationID  = "you.models.invoke.flag.operation"
 	modelsInvokeTextID       = "you.models.invoke.flag.text"
+	modelsInvokeInputID      = "you.models.invoke.flag.input"
 	modelsInvokeOutputID     = "you.models.invoke.flag.output"
 	modelsInvokeOutputMapID  = "you.models.invoke.flag.output-map"
 	modelsPullNameInputID    = "you.models.pull.arg.0"
+	modelsRemoveNameInputID  = "you.models.remove.arg.0"
 	serverInputID            = "you.flag.server"
 	jsonInputID              = "you.flag.json"
 	verboseInputID           = "you.flag.verbose"
@@ -148,7 +151,7 @@ func (h *CommandHandler) Invoke(
 	}
 	cfg := InvokeConfig{
 		Context: cmd.Context(), ModelName: invokeInputs.modelName, Operation: invokeInputs.operation,
-		Text: invokeInputs.text, OutputPath: invokeInputs.outputPath,
+		Text: invokeInputs.text, InputMappings: invokeInputs.inputMappings, OutputPath: invokeInputs.outputPath,
 		OutputMappings: invokeInputs.outputMappings, Output: cmd.OutOrStdout(),
 		HomeDir: homeDir, FactoryDir: startupcli.WorkingDirectory(cmd.Context()),
 		OperatorDefaults: defaults, Logger: logger,
@@ -163,6 +166,7 @@ type modelsInvokeInputs struct {
 	modelName      string
 	operation      string
 	text           string
+	inputMappings  []string
 	outputPath     string
 	outputMappings []string
 }
@@ -180,21 +184,75 @@ func readModelsInvokeInputs(inputs resolvedinput.Inputs) (modelsInvokeInputs, er
 	if err != nil {
 		return modelsInvokeInputs{}, fmt.Errorf("read models invoke text: %w", err)
 	}
-	outputPath, err := inputs.String(modelsInvokeOutputID)
+	inputMappings, err := readModelsInvokeInputMappings(inputs)
 	if err != nil {
-		return modelsInvokeInputs{}, fmt.Errorf("read models invoke output: %w", err)
+		return modelsInvokeInputs{}, err
 	}
-	var outputMappings []string
-	if _, present := inputs.State(modelsInvokeOutputMapID); present {
-		outputMappings, err = inputs.StringArray(modelsInvokeOutputMapID)
-		if err != nil {
-			return modelsInvokeInputs{}, fmt.Errorf("read models invoke output mappings: %w", err)
-		}
+	outputPath, outputMappings, err := readModelsInvokeOutputs(inputs)
+	if err != nil {
+		return modelsInvokeInputs{}, err
 	}
 	return modelsInvokeInputs{
 		modelName: modelName, operation: operation, text: text,
-		outputPath: outputPath, outputMappings: outputMappings,
+		inputMappings: inputMappings,
+		outputPath:    outputPath, outputMappings: outputMappings,
 	}, nil
+}
+
+func readModelsInvokeInputMappings(inputs resolvedinput.Inputs) ([]string, error) {
+	if _, present := inputs.State(modelsInvokeInputID); !present {
+		return nil, nil
+	}
+	inputMappings, err := inputs.StringArray(modelsInvokeInputID)
+	if err != nil {
+		return nil, fmt.Errorf("read models invoke input mappings: %w", err)
+	}
+	return inputMappings, nil
+}
+
+func readModelsInvokeOutputs(inputs resolvedinput.Inputs) (string, []string, error) {
+	var outputValues []string
+	var err error
+	if _, present := inputs.State(modelsInvokeOutputID); present {
+		outputValues, err = inputs.StringArray(modelsInvokeOutputID)
+		if err != nil {
+			// Keep the adapter tolerant of callers that construct resolved input
+			// values directly using the pre-repeatable scalar shape. Production
+			// manifest parsing always supplies StringArray here.
+			var scalar string
+			if scalar, err = inputs.String(modelsInvokeOutputID); err != nil {
+				return "", nil, fmt.Errorf("read models invoke output values: %w", err)
+			}
+			outputValues = []string{scalar}
+		}
+	} else if _, err = inputs.StringArray(modelsInvokeOutputID); err != nil {
+		return "", nil, fmt.Errorf("read models invoke output: %w", err)
+	}
+	var outputPath string
+	var outputMappings []string
+	for _, value := range outputValues {
+		value = strings.TrimSpace(value)
+		if strings.Contains(value, "=") {
+			outputMappings = append(outputMappings, value)
+			continue
+		}
+		if outputPath != "" {
+			return "", nil, fmt.Errorf("repeatable --output values must use slot=path mappings after the first unqualified path")
+		}
+		outputPath = value
+	}
+	if _, present := inputs.State(modelsInvokeOutputMapID); present {
+		var legacyMappings []string
+		legacyMappings, err = inputs.StringArray(modelsInvokeOutputMapID)
+		if err != nil {
+			return "", nil, fmt.Errorf("read models invoke output mappings: %w", err)
+		}
+		outputMappings = append(outputMappings, legacyMappings...)
+	}
+	if outputPath != "" && len(outputMappings) > 0 {
+		return "", nil, fmt.Errorf("--output path cannot be combined with named output mappings")
+	}
+	return outputPath, outputMappings, nil
 }
 
 func (h *CommandHandler) Pull(
@@ -216,4 +274,25 @@ func (h *CommandHandler) Pull(
 		return fmt.Errorf("resolve models pull inputs: %w", err)
 	}
 	return h.models.Pull(cfg)
+}
+
+func (h *CommandHandler) Remove(
+	cmd *cobra.Command,
+	inputs resolvedinput.Inputs,
+	inherited resolvedinput.Inputs,
+) error {
+	if h == nil || h.models == nil {
+		return fmt.Errorf("models remove service is required")
+	}
+	modelName, err := inputs.String(modelsRemoveNameInputID)
+	if err != nil {
+		return fmt.Errorf("read models remove model name: %w", err)
+	}
+	cfg := RemoveConfig{
+		Context: cmd.Context(), ModelName: modelName, Output: cmd.OutOrStdout(),
+	}
+	if err := h.applyResolvedCommon(cmd, inherited, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics); err != nil {
+		return fmt.Errorf("resolve models remove inputs: %w", err)
+	}
+	return h.models.Remove(cfg)
 }

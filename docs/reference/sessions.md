@@ -17,6 +17,11 @@ inspection shared by every orchestrator kind.
 For the canonical real-pipeline lifetime and process-restart recovery runbook,
 use `you docs operations`.
 
+Use `you server` for continuous, non-resumable hosting of the exact Current
+Factory. For restart-surviving hosting with an explicit recording, use
+`you run --with-server --continuously --record <path>`. Continue that recording
+after a stop with `you run --resume <recording>`.
+
 Each live session owns its own runtime state. The service coordinates and
 routes requests between sessions, but runtime state such as loaded factory,
 event history, current work, and relative execution-path resolution is scoped
@@ -258,8 +263,12 @@ you session list
 # API-shaped JSON for automation.
 you session list --json
 
-# Non-default port (session commands use --port, not global --server).
+# Non-default port for list and create.
 you session list --port 9090
+you session create --dir /workspace/fleet --port 9090
+
+# Delete through the selected server. The legacy --port flag is rejected.
+you --server http://localhost:9090 session delete session-beta
 ```
 
 ### Human output
@@ -717,8 +726,9 @@ you --server http://localhost:9090 --json work list
 
 | Command family | Host selection | Session selection |
 |----------------|----------------|-----------------|
-| `you session list` / `create` / `delete` | `--port` (default `7437`) | Session id is a subcommand argument on `create` / `delete` |
-| `you session show`, `you session pause`, `you session resume` | Global `--server` | Session UUID is an optional subcommand argument; omission accepts the `~default` compatibility selector |
+| `you session list` / `create` | `--port` (default `7437`) | Session id is a subcommand argument on `create` |
+| `you session delete` | Global `--server` | Session id is a required subcommand argument; legacy `--port` is rejected |
+| `you session show`, `pause`, `resume`, `cancel`, `terminate` | Global `--server` | Session UUID is an optional subcommand argument; omission accepts the `~default` compatibility selector |
 | `you factory show`, `you submit`, `you work …` | Global `--server` | `--session` on submit, batch submit, and work commands |
 | `you server --listen <host:port>` | Binds the Current Factory continuously to the exact loopback host/port | N/A — starts a runtime |
 | `you run --with-server --listen <host:port>` / `--with-site` | Binds only for the run lifetime to the exact loopback host/port | N/A — starts a runtime |
@@ -729,6 +739,10 @@ For a server that is already running, use remote placement explicitly:
 ```bash
 you --remote --server <uri> run "Review the release notes"
 ```
+
+For session pause, resume, cancel, and terminate, an explicit global
+`--server <uri>` also selects the addressed running server; `--remote` remains
+accepted when you want to make remote placement explicit.
 
 `--remote` selects the running API endpoint and never starts local hosting.
 It conflicts with `--with-server` and `--with-site`; use `--listen
@@ -760,8 +774,9 @@ still-running service:
 | How you start | Stays running for later `you submit` / `POST /factory-sessions/{session_id}/work`? |
 |---------------|------------------------------------------------------|
 | `you` (no args) | No — prints root help and performs no runtime or listener activation. |
-| `you server` | Yes — serves the exact Current Factory until cancellation. |
-| `you run --continuously --with-server` or `--with-site` | Yes — processes work and serves until cancellation. |
+| `you server` | Yes — serves the exact Current Factory until cancellation; it is continuous, non-resumable hosting. |
+| `you run --continuously --with-server --record <path>` | Yes — processes Work, serves until cancellation, and writes the explicit recording used for restart recovery. |
+| `you run --continuously --with-server` or `--with-site` | Yes — processes Work and serves until cancellation without an explicit recording path. |
 | `you run --continuously` without a server flag | No HTTP service — the local runtime remains alive until cancellation. |
 | One-shot `you run --with-server` or `--with-site` | Only for the run lifetime — the listener is joined before the command returns. |
 | Ordinary one-shot `you run` | No — starts no listener and exits when the factory becomes idle or invocation completes. |
@@ -773,9 +788,9 @@ Factory Session is incomplete: the command returns failure with
 on stderr and joins the listener/runtime before returning. Continuous runs
 remain live while idle and end only when cancelled.
 
-For steady operator loops (check running → submit → verify), prefer `you server`
-or `you run --continuously --with-server`. See `you docs agents` for the full
-operator loop and pre-submit checklist.
+For steady operator loops (check running → submit → verify), prefer
+`you server` or `you run --continuously --with-server --record <path>`. See
+`you docs agents` for the full operator loop and pre-submit checklist.
 
 ## Event stream lifecycle and reconnect
 

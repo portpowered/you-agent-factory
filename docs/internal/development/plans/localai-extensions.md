@@ -462,6 +462,19 @@ digest — never weights. C1 also scripts the exit criterion: a clean
 environment, `you docs models` as the only context, and the journeys above
 executed verbatim from the docs.
 
+## Verified lane status (2026-08-24)
+
+- `P0` is complete in merged PR #2157.
+- `P1` is complete in merged PR #2096.
+- `P2` is complete in merged PR #2130.
+- `P3` remains open: the requested redo is PR #2132. The earlier artifact
+  PR #2126 is merged, but it does not close the open redo.
+
+## Progress note — 2026-08-24
+
+`V1`, `V2`, `V3`, `V4`, `D1`, and `C1` were dispatched as lanes `lmx-v1`,
+`lmx-v2`, `lmx-v3`, `lmx-v4`, `lmx-d1`, and `lmx-c1`, gated on `P2`.
+
 ## Lane plan
 
 Ten lanes; each merges independently and leaves `main` releasable with

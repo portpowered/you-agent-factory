@@ -200,9 +200,14 @@ func resolveInterruptInput(config InterruptConfig) (string, error) {
 	if config.StdinIsTTY || config.Stdin == nil {
 		return "", nil
 	}
-	data, err := io.ReadAll(config.Stdin)
+	data, err := readBoundedWorkerSessionStdin(
+		config.Stdin,
+		maxWorkerSessionMessageStdinBytes,
+		"Worker Session replacement input stdin",
+		"use --replacement-message or positional input for larger input",
+	)
 	if err != nil {
-		return "", newInterruptCLIError("WORKER_SESSION_INPUT_FAILED", "failed to read Worker Session replacement input from stdin", string(workersessions.InterruptPhaseValidation), err)
+		return "", newInterruptCLIError("WORKER_SESSION_INPUT_FAILED", fmt.Sprintf("failed to read Worker Session replacement input from stdin: %v", err), string(workersessions.InterruptPhaseValidation), err)
 	}
 	return strings.TrimSpace(string(data)), nil
 }

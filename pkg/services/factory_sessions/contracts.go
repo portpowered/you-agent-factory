@@ -44,18 +44,21 @@ type (
 // InvocationTarget contains the detached configuration selected for one
 // invocation. Operations remain consumer-owned interfaces.
 type InvocationTarget struct {
-	FactoryDir                       string
-	FactorySourcePath                string
-	RunnerID                         string
-	WorkerReasoningEffort            string
-	Worktree                         string
-	OperatorDefaults                 operatorsettings.ResolvedDefaults
-	ExecutionBaseDir                 string
-	HomeDir                          string
-	Verbose                          bool
-	RecordPath                       string
-	ReplayPath                       string
-	ResumePath                       string
+	FactoryDir            string
+	FactorySourcePath     string
+	RunnerID              string
+	WorkerReasoningEffort string
+	Worktree              string
+	OperatorDefaults      operatorsettings.ResolvedDefaults
+	ExecutionBaseDir      string
+	HomeDir               string
+	Verbose               bool
+	RecordPath            string
+	ReplayPath            string
+	ResumePath            string
+	// CanonicalSessionID is the preallocated runtime identity used when a
+	// public default-session alias selects automatic recording.
+	CanonicalSessionID               string
 	RuntimeLogDir                    string
 	RuntimeLogConfig                 factoryruntime.RuntimeLogStorageConfig
 	RuntimeMetricsDir                string

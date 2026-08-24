@@ -180,6 +180,9 @@ func resolveStartSourceWithResolution(
 		ArgsSchema:    append(json.RawMessage(nil), resolution.ArgsSchema...),
 		DefaultPolicy: append(json.RawMessage(nil), resolution.DefaultPolicy...),
 	}
+	if factoryName := strings.TrimSpace(resolution.FactoryName); factoryName != "" {
+		resolved.Metadata["factoryName"] = factoryName
+	}
 	if stage := resolutionOrderForLookupStage(resolution.LookupStage); stage != "" {
 		resolved.ResolutionOrder = []string{stage}
 	}
@@ -191,6 +194,9 @@ func applyInlineFactoryDeclaration(resolution *factory.WorkflowSourceResolution,
 		return
 	}
 	inline := source.InlineWorkflow
+	if factoryName := strings.TrimSpace(inline.Metadata["factoryName"]); factoryName != "" {
+		resolution.FactoryName = factoryName
+	}
 	switch source.Kind {
 	case factory.WorkflowSourceKindInlineWorkflow:
 		if sourceRef := strings.TrimSpace(inline.Metadata["sourceRef"]); sourceRef != "" {

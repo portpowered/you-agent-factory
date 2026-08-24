@@ -44,7 +44,7 @@ export const CurrentSelectionSelectableButton = forwardRef<
         variantClassName,
         selected &&
           selectedStyle === "accent" &&
-          "border-primary bg-primary-container text-on-primary",
+          "border-primary bg-primary-container text-on-primary factory-light:text-on-primary-container",
         className,
       )}
       onClick={onClick}

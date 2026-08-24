@@ -82,8 +82,6 @@ export function WorkflowPreviewPanel({
   }
 
   const resolutionDiagnostics = preview.sourceResolution.diagnostics ?? [];
-  const deniedCapabilities = preview.policyPreview.deniedCapabilities ?? [];
-
   return (
     <section
       aria-live="polite"
@@ -134,19 +132,6 @@ export function WorkflowPreviewPanel({
             </li>
           ))}
         </ul>
-      ) : null}
-
-      {deniedCapabilities.length > 0 ? (
-        <div>
-          <h3>{workflowPreviewPanelMessages.deniedCapabilities}</h3>
-          <ul>
-            {deniedCapabilities.map((diagnostic) => (
-              <li key={`${diagnostic.code}:${diagnostic.message}`}>
-                {formatDiagnostic(diagnostic)}
-              </li>
-            ))}
-          </ul>
-        </div>
       ) : null}
 
       <p>

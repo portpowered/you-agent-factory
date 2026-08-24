@@ -273,7 +273,7 @@ func assertCLIWorkShowNotFoundFailure(
 	}
 
 	text := string(output)
-	support.RequireSafeCLIDiagnostic(t, text)
+	support.RequireNotFoundCLIDiagnostic(t, text)
 	if strings.Contains(text, workID) {
 		t.Fatalf("work show leaked work id %q in safe diagnostic:\n%s", workID, text)
 	}

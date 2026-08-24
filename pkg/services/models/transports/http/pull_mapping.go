@@ -23,11 +23,39 @@ func modelPullResponseFromService(result models.PullResult) factoryapi.ModelPull
 		}
 		files = append(files, current)
 	}
+	managedPull := managedRuntimePullResultToGenerated(result, files)
 	response := factoryapi.ModelPullResponse{
 		ModelName: result.ModelName, ProviderLocality: factoryapi.WorkerModelLocality(result.ProviderLocality),
-		Outcome: factoryapi.ModelPullOutcome(result.Outcome), CachePath: result.CachePath,
+		Outcome: modelPullOutcomeFromManagedRuntime(managedPull.PullOutcome), CachePath: result.CachePath,
 		Revision: result.Revision, DownloadedFiles: files,
+		ManagedRuntimePull: managedPull,
 	}
-	response.ManagedRuntimePull = managedRuntimePullResultToGenerated(result, files)
 	return response
+}
+
+func modelPullOutcomeFromManagedRuntime(outcome factoryapi.ManagedRuntimePullOutcome) factoryapi.ModelPullOutcome {
+	switch outcome {
+	case factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY:
+		return factoryapi.ModelPullOutcomePULLED
+	case factoryapi.ManagedRuntimePullOutcomeALREADYPRESENT,
+		factoryapi.ManagedRuntimePullOutcomeALREADYREADY:
+		return factoryapi.ModelPullOutcomeALREADYPRESENT
+	case factoryapi.ManagedRuntimePullOutcomeSTILLLOADING,
+		factoryapi.ManagedRuntimePullOutcomeTIMEDOUT,
+		factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED,
+		factoryapi.ManagedRuntimePullOutcomeUNSUPPORTEDRUNTIME:
+		return factoryapi.ModelPullOutcomeFAILED
+	default:
+		return factoryapi.ModelPullOutcomeFAILED
+	}
+}
+
+func modelRemoveResponseFromService(result models.RemoveModelAssetsResult) factoryapi.ModelRemoveResponse {
+	return factoryapi.ModelRemoveResponse{
+		ModelName:    result.ModelName,
+		Revision:     result.Revision,
+		CachePath:    result.CachePath,
+		Outcome:      factoryapi.ModelRemoveOutcome(result.Outcome),
+		BytesRemoved: result.BytesRemoved,
+	}
 }

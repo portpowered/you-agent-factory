@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
@@ -18,8 +17,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
-
-const queryCurrentErrorBodyPreviewLimit = 200
 
 // ErrCurrentFactoryNotFound reports that the running service could not resolve
 // a current factory.
@@ -140,10 +137,10 @@ func queryCurrent(cfg queryCurrentOptions) (factoryapi.Factory, error) {
 	if resp.StatusCode != http.StatusOK {
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return factoryapi.Factory{}, fmt.Errorf("read current factory response: %w", err)
+			return factoryapi.Factory{}, clihttp.WithHTTPResponse(resp, fmt.Errorf("read current factory response: %w", err))
 		}
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "factory show response endpointPath=%s status=%d durationMillis=%d responseBytes=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds(), len(body))
-		return factoryapi.Factory{}, queryCurrentError(resp.StatusCode, body)
+		return factoryapi.Factory{}, clihttp.WithHTTPResponse(resp, queryCurrentError(resp.StatusCode, body))
 	}
 
 	responseBytes, err := currentFactoryResponseBytes(result)
@@ -191,7 +188,7 @@ func queryCurrentError(statusCode int, body []byte) error {
 		if statusCode == http.StatusNotFound {
 			return fmt.Errorf("%w: service returned 404", ErrCurrentFactoryNotFound)
 		}
-		return unexpectedCurrentFactoryStatusError(statusCode, body)
+		return unexpectedCurrentFactoryStatusError(statusCode)
 	}
 	if statusCode == http.StatusNotFound && errResp.Code == factoryapi.ErrorResponseCodeNOTFOUND {
 		return fmt.Errorf("%w: %s", ErrCurrentFactoryNotFound, errResp.Message)
@@ -199,15 +196,8 @@ func queryCurrentError(statusCode int, body []byte) error {
 	return fmt.Errorf("query current factory failed (%d): %s", statusCode, errResp.Message)
 }
 
-func unexpectedCurrentFactoryStatusError(statusCode int, body []byte) error {
-	preview := strings.TrimSpace(string(body))
-	if preview == "" {
-		return fmt.Errorf("query current factory failed (%d)", statusCode)
-	}
-	if len(preview) > queryCurrentErrorBodyPreviewLimit {
-		preview = preview[:queryCurrentErrorBodyPreviewLimit] + "..."
-	}
-	return fmt.Errorf("query current factory failed (%d): %s", statusCode, preview)
+func unexpectedCurrentFactoryStatusError(statusCode int) error {
+	return fmt.Errorf("query current factory failed (%d)", statusCode)
 }
 
 func currentFactoryKind(current factoryapi.Factory) string {

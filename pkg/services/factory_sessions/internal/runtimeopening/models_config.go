@@ -3,6 +3,7 @@ package runtimeopening
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -139,8 +140,8 @@ func (invoker *runtimeModelInvoker) InvokeModel(
 	if err != nil {
 		return models.Result{}, err
 	}
-	worker, operation, err := directRuntimeModelWorker(
-		projection.Context.FactoryCfg, modelName, request.Operation,
+	worker, operation, err := invoker.resolveRuntimeModelWorker(
+		ctx, projection.Context.FactoryCfg, modelName, request.Operation,
 	)
 	if err != nil {
 		return models.Result{}, classifyRuntimeModelError(err, failureContext)
@@ -186,6 +187,135 @@ func (invoker *runtimeModelInvoker) InvokeModel(
 		StreamFile:        streamFile,
 		StreamContentType: streamContentType,
 	}, nil
+}
+
+func (invoker *runtimeModelInvoker) resolveRuntimeModelWorker(
+	ctx context.Context,
+	factoryConfig *factorydefinitions.FactoryConfig,
+	modelName, operationName string,
+) (*factorydefinitions.FactoryWorkerConfig, factorydefinitions.ModelOperation, error) {
+	worker, operation, err := directRuntimeModelWorker(factoryConfig, modelName, operationName)
+	if err == nil || (!errors.Is(err, models.ErrNotFound) && factoryConfig != nil) {
+		return worker, operation, err
+	}
+	resolved, resolveErr := invoker.config.Models.ResolveModelReference(ctx, models.ResolveModelReferenceRequest{
+		Scope: invoker.config.Scope,
+		Reference: models.ModelReference{
+			NameOrURI: strings.TrimSpace(modelName),
+		},
+	})
+	if resolveErr != nil {
+		return nil, factorydefinitions.ModelOperation{}, normalizeRuntimeModelResolutionError(
+			modelName, operationName, resolveErr,
+		)
+	}
+	worker, operation, effectiveErr := effectiveRuntimeModelWorker(
+		resolved.Resolved.Definition, operationName,
+	)
+	worker = attachEffectiveRuntimeResource(
+		worker, factoryConfig, resolved.Resolved.Definition,
+	)
+	return worker, operation, normalizeRuntimeModelResolutionError(
+		modelName, operationName, effectiveErr,
+	)
+}
+
+func attachEffectiveRuntimeResource(
+	worker *factorydefinitions.FactoryWorkerConfig,
+	factoryConfig *factorydefinitions.FactoryConfig,
+	definition models.ModelDefinition,
+) *factorydefinitions.FactoryWorkerConfig {
+	if worker == nil || factoryConfig == nil || len(factoryConfig.Resources) == 0 {
+		return worker
+	}
+	for _, resource := range factoryConfig.Resources {
+		if !strings.EqualFold(strings.TrimSpace(resource.Type), factorydefinitions.ResourceTypeModel) ||
+			!strings.EqualFold(strings.TrimSpace(resource.Model), strings.TrimSpace(definition.Name)) {
+			continue
+		}
+		if strings.TrimSpace(resource.Backend) != "" && strings.TrimSpace(definition.Backend) != "" &&
+			!strings.EqualFold(strings.TrimSpace(resource.Backend), strings.TrimSpace(definition.Backend)) {
+			continue
+		}
+		worker.Resources = []factorydefinitions.ResourceConfig{{
+			Name: resource.Name, Capacity: resource.Capacity,
+		}}
+		break
+	}
+	return worker
+}
+
+func normalizeRuntimeModelResolutionError(modelName, operationName string, err error) error {
+	if err == nil {
+		return nil
+	}
+	var failure *models.InvocationFailure
+	if errors.As(err, &failure) && failure != nil {
+		return err
+	}
+	if !errors.Is(err, models.ErrNotFound) {
+		return err
+	}
+	name := strings.TrimSpace(modelName)
+	return &models.InvocationFailure{
+		Class:     models.InvocationFailureClassInvalidModelReference,
+		Message:   fmt.Sprintf("model %q is not available", name),
+		Model:     models.ModelReference{NameOrURI: name},
+		Operation: strings.TrimSpace(operationName),
+		Cause:     err,
+	}
+}
+
+func effectiveRuntimeModelWorker(
+	definition models.ModelDefinition,
+	operationName string,
+) (*factorydefinitions.FactoryWorkerConfig, factorydefinitions.ModelOperation, error) {
+	modelName := strings.TrimSpace(definition.Name)
+	if modelName == "" {
+		return nil, factorydefinitions.ModelOperation{}, fmt.Errorf(
+			"%w: resolved model has no name", models.ErrNotFound,
+		)
+	}
+	worker := &factorydefinitions.FactoryWorkerConfig{
+		Name:          modelName,
+		Type:          factorydefinitions.WorkerTypeInference,
+		Model:         modelName,
+		ModelLocality: models.RuntimeModelLocalityLocal,
+	}
+	for _, candidate := range definition.Operations {
+		operation := projectEffectiveRuntimeModelOperation(candidate)
+		worker.Operations = append(worker.Operations, operation)
+		if strings.TrimSpace(operation.Name) == strings.TrimSpace(operationName) {
+			return worker, operation, nil
+		}
+	}
+	return nil, factorydefinitions.ModelOperation{}, fmt.Errorf(
+		"%w: model %q does not support operation %q",
+		models.ErrUnsupportedOperation, modelName, operationName,
+	)
+}
+
+func projectEffectiveRuntimeModelOperation(operation models.Operation) factorydefinitions.ModelOperation {
+	return factorydefinitions.ModelOperation{
+		Name:    operation.Name,
+		Inputs:  projectEffectiveRuntimeModelSlots(operation.Inputs),
+		Outputs: projectEffectiveRuntimeModelSlots(operation.Outputs),
+	}
+}
+
+func projectEffectiveRuntimeModelSlots(slots []models.OperationSlot) []factorydefinitions.ModelOperationSlot {
+	if len(slots) == 0 {
+		return nil
+	}
+	projected := make([]factorydefinitions.ModelOperationSlot, len(slots))
+	for index, slot := range slots {
+		projected[index] = factorydefinitions.ModelOperationSlot{
+			Name:         slot.Name,
+			ContentTypes: append([]string(nil), slot.ContentTypes...),
+			Required:     slot.Required != nil && *slot.Required,
+		}
+	}
+	return projected
 }
 
 func (invoker *runtimeModelInvoker) invokeRuntimeModel(
@@ -632,6 +762,10 @@ func runtimeModelStream(
 }
 
 func classifyRuntimeModelError(err error, context workers.InferenceFailureContext) error {
+	var invocationFailure *models.InvocationFailure
+	if errors.As(err, &invocationFailure) && invocationFailure != nil {
+		return err
+	}
 	if failure, ok := workers.ClassifyInferenceFailure(err, context); ok {
 		return failure
 	}

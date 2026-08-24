@@ -12,6 +12,7 @@ import (
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 )
@@ -33,8 +34,13 @@ func (service *rootService) Invoke(cfg InvokeConfig) error {
 		return fmt.Errorf("--operation is required")
 	}
 	text := strings.TrimSpace(cfg.Text)
-	if text == "" {
+	if text == "" && len(cfg.InputMappings) == 0 {
 		return fmt.Errorf("--text is required")
+	}
+	if text != "" && len(cfg.InputMappings) > 0 {
+		return clidiag.NewFlagConflictFailure(
+			"--text", "--input", fmt.Errorf("choose one input form for model invocation"),
+		)
 	}
 	if strings.TrimSpace(cfg.Server) != "" {
 		return fmt.Errorf("remote models invoke requires the composition-stable HTTP service")
@@ -44,7 +50,7 @@ func (service *rootService) Invoke(cfg InvokeConfig) error {
 	}
 	scope, err := service.openInvokeScope(cfg.Context, cfg)
 	if err != nil {
-		return mapModelsRootError(err)
+		return mapModelsClientError(err)
 	}
 	if scope.Close != nil {
 		defer func() {
@@ -61,41 +67,126 @@ func (service *rootService) invokeInScope(
 	operation string,
 	text string,
 ) error {
-	catalogResult, err := service.models.GetCatalogModel(cfg.Context, modelinference.GetModelRequest{
-		Scope: scope, Name: modelName, Operation: operation,
-	})
+	catalog, err := service.catalogForInvoke(cfg, scope, modelName, operation)
 	if err != nil {
-		if !cfg.JSON && strings.TrimSpace(cfg.OutputPath) == "" && errors.Is(err, modelinference.ErrUnsupportedOperation) {
-			return fmt.Errorf("--output is required unless --json is set")
-		}
-		return mapModelsRootError(err)
-	}
-	if err := validateCLIOutputShape(cfg, catalogResult.Model, operation); err != nil {
 		return err
 	}
-	if cfg.JSON || len(cfg.OutputMappings) > 0 || genericCLIInlineOutput(cfg, catalogResult.Model, operation) {
-		joinedResult, joinedErr := service.models.InvokeModel(cfg.Context, joinedCLIInvocationRequest(
-			scope, modelName, operation, text, catalogResult.Model,
-		))
-		if joinedErr == nil {
-			if len(cfg.OutputMappings) > 0 {
-				return service.writeGenericCLIOutputMappings(cfg, joinedResult)
-			}
-			if genericCLIJSONResult(cfg, catalogResult.Model, operation, joinedResult) {
-				return json.NewEncoder(cfg.Output).Encode(genericInvocationResponseFromInferenceResult(joinedResult))
-			}
-			if genericCLIInlineOutput(cfg, catalogResult.Model, operation) {
-				return writeGenericCLIOutput(cfg.Output, joinedResult)
-			}
-			response := modelInvocationResponseFromInferenceResult(joinedResult, catalogResult.Model, text)
-			return json.NewEncoder(cfg.Output).Encode(response)
-		}
-		if !errors.Is(joinedErr, modelinference.ErrUnsupportedOperation) &&
-			!errors.Is(joinedErr, modelinference.ErrModelReferenceUnknown) {
-			return mapModelsRootError(joinedErr)
-		}
+	// Catalog identity is static; readiness is an observed runtime fact. Use
+	// the current scoped projection before the invoke preflight so a local
+	// cache is not reported as missing merely because the catalog detail was
+	// assembled without filesystem observations. Keep the unsupported fallback
+	// for lightweight embedded Models roots that predate this capability.
+	catalog, err = service.refreshInvokeReadiness(cfg, scope, modelName, operation, catalog)
+	if err != nil {
+		return err
 	}
-	return service.invokePreparedLease(cfg, scope, modelName, operation, text, catalogResult.Model)
+	if err := validateCLIOutputShape(cfg, catalog, operation); err != nil {
+		return err
+	}
+	inputs, err := service.prepareGenericCLIInputs(cfg, operation, catalog)
+	if err != nil {
+		return err
+	}
+	handled, err := service.tryJoinedInvocation(cfg, scope, modelName, operation, text, inputs, catalog)
+	if err != nil {
+		return err
+	}
+	if handled {
+		return nil
+	}
+	return service.invokePreparedLease(cfg, scope, modelName, operation, text, catalog)
+}
+
+func (service *rootService) catalogForInvoke(
+	cfg InvokeConfig,
+	scope modelinference.RuntimeScopeRef,
+	modelName string,
+	operation string,
+) (modelinference.Detail, error) {
+	result, err := service.models.GetCatalogModel(cfg.Context, modelinference.GetModelRequest{
+		Scope: scope, Name: modelName, Operation: operation,
+	})
+	if err == nil {
+		return result.Model, nil
+	}
+	if !cfg.JSON && strings.TrimSpace(cfg.OutputPath) == "" && errors.Is(err, modelinference.ErrUnsupportedOperation) {
+		return modelinference.Detail{}, fmt.Errorf("--output is required unless --json is set")
+	}
+	return modelinference.Detail{}, mapModelsClientError(err)
+}
+
+func (service *rootService) refreshInvokeReadiness(
+	cfg InvokeConfig,
+	scope modelinference.RuntimeScopeRef,
+	modelName string,
+	operation string,
+	catalog modelinference.Detail,
+) (modelinference.Detail, error) {
+	readiness, err := service.models.GetModelReadiness(cfg.Context, modelinference.GetModelReadinessRequest{
+		Scope: scope, Name: modelName, Operation: operation,
+	})
+	if err == nil {
+		catalog.ManagedRuntime = readiness.Readiness.Clone()
+		return catalog, nil
+	}
+	if errors.Is(err, modelinference.ErrUnsupportedOperation) {
+		return catalog, nil
+	}
+	return modelinference.Detail{}, mapModelsClientError(err)
+}
+
+func (service *rootService) tryJoinedInvocation(
+	cfg InvokeConfig,
+	scope modelinference.RuntimeScopeRef,
+	modelName string,
+	operation string,
+	text string,
+	inputs []modelinference.InferenceInput,
+	catalog modelinference.Detail,
+) (bool, error) {
+	if len(inputs) == 0 && !cfg.JSON && len(cfg.OutputMappings) == 0 &&
+		strings.TrimSpace(cfg.OutputPath) == "" && !genericCLIStdoutOutput(cfg, catalog, operation) {
+		return false, nil
+	}
+	request := joinedCLIInvocationRequest(scope, modelName, operation, text, catalog)
+	if len(inputs) > 0 {
+		request.Inputs = append([]modelinference.InferenceInput(nil), inputs...)
+	}
+	joinedResult, err := service.models.InvokeModel(cfg.Context, request)
+	if err != nil {
+		if len(inputs) == 0 && (errors.Is(err, modelinference.ErrUnsupportedOperation) ||
+			errors.Is(err, modelinference.ErrModelReferenceUnknown)) {
+			return false, nil
+		}
+		return false, mapModelsClientError(err)
+	}
+	return true, service.writeJoinedInvocation(cfg, catalog, operation, joinedResult, text)
+}
+
+func (service *rootService) writeJoinedInvocation(
+	cfg InvokeConfig,
+	catalog modelinference.Detail,
+	operation string,
+	result modelinference.InvokeModelResult,
+	text string,
+) error {
+	if len(cfg.OutputMappings) > 0 {
+		return service.writeGenericCLIOutputMappings(cfg, result)
+	}
+	if genericCLIJSONResult(cfg, catalog, operation, result) {
+		return json.NewEncoder(cfg.Output).Encode(genericInvocationResponseFromInferenceResult(result))
+	}
+	if strings.TrimSpace(cfg.OutputPath) != "" && !cfg.JSON {
+		return service.writeGenericCLIOutputPath(cfg, result)
+	}
+	if genericCLIInlineOutput(cfg, catalog, operation) {
+		return writeGenericCLIOutput(cfg.Output, result)
+	}
+	if genericCLIStdoutOutput(cfg, catalog, operation) {
+		return writeGenericCLIOutput(cfg.Output, result)
+	}
+	response := modelInvocationResponseFromInferenceResult(result, catalog, text)
+	return json.NewEncoder(cfg.Output).Encode(response)
 }
 
 func validateCLIOutputShape(
@@ -122,7 +213,7 @@ func validateCLIOutputShape(
 	if strings.TrimSpace(cfg.OutputPath) != "" {
 		return nil
 	}
-	if !ok || len(selected.Outputs) != 1 || !genericCLIInlineModality(selected.Outputs[0].Modality) {
+	if !ok || len(selected.Outputs) != 1 || !genericCLIStdoutModality(selected.Outputs[0].Modality) {
 		return fmt.Errorf("--output is required unless --json is set")
 	}
 	return nil
@@ -138,6 +229,18 @@ func genericCLIInlineOutput(cfg InvokeConfig, catalog modelinference.Detail, ope
 
 func genericCLIInlineModality(modality modelinference.Modality) bool {
 	return modality == modelinference.ModalityText || modality == modelinference.ModalityJSON
+}
+
+func genericCLIStdoutOutput(cfg InvokeConfig, catalog modelinference.Detail, operation string) bool {
+	if cfg.JSON || strings.TrimSpace(cfg.OutputPath) != "" {
+		return false
+	}
+	selected, ok := catalogOperationForName(catalog, operation)
+	return ok && len(selected.Outputs) == 1 && genericCLIStdoutModality(selected.Outputs[0].Modality)
+}
+
+func genericCLIStdoutModality(modality modelinference.Modality) bool {
+	return genericCLIInlineModality(modality) || modality == modelinference.ModalityAudio
 }
 
 func genericOutputSlotNames(outputs []modelinference.OperationSlot) string {
@@ -177,6 +280,66 @@ func writeGenericCLIOutput(output io.Writer, result modelinference.InvokeModelRe
 	}
 	_, err := output.Write([]byte(value))
 	return err
+}
+
+func (service *rootService) writeGenericCLIOutputPath(
+	cfg InvokeConfig,
+	result modelinference.InvokeModelResult,
+) error {
+	if service.outputFileSystem == nil {
+		return fmt.Errorf("Models CLI output filesystem is required for --output")
+	}
+	if len(result.Outputs) != 1 {
+		return fmt.Errorf("multiple model outputs require --json or explicit output mappings")
+	}
+	output := result.Outputs[0]
+	if strings.TrimSpace(output.Name) == "" {
+		return fmt.Errorf("model invocation returned an unnamed output")
+	}
+	if output.Content == "" {
+		return fmt.Errorf("output slot %q has no inline bytes for publication", output.Name)
+	}
+	mapping := genericCLIOutputMapping{slot: output.Name, path: strings.TrimSpace(cfg.OutputPath)}
+	bySlot := map[string]genericCLIOutputMapping{mapping.slot: mapping}
+	mappings := []genericCLIOutputMapping{mapping}
+	staged := make([]genericCLIOutputStage, 0, 1)
+	backups := make([]genericCLIOutputBackup, 0, 1)
+	published := 0
+	committed := false
+	defer func() {
+		if committed {
+			removeGenericCLIOutputBackups(service.outputFileSystem, backups)
+		} else {
+			rollbackGenericCLIOutputPublication(service.outputFileSystem, staged, backups, published)
+		}
+		for _, stagedOutput := range staged {
+			if stagedOutput.temporary != "" {
+				_ = service.outputFileSystem.Remove(stagedOutput.temporary)
+			}
+		}
+	}()
+
+	var err error
+	staged, err = stageGenericCLIOutputs(cfg.Context, service.outputFileSystem, result, bySlot)
+	if err != nil {
+		return err
+	}
+	if err := cfg.Context.Err(); err != nil {
+		return err
+	}
+	backups, err = backupGenericCLIOutputTargets(cfg.Context, service.outputFileSystem, mappings)
+	if err != nil {
+		return err
+	}
+	published, err = publishGenericCLIOutputs(cfg.Context, service.outputFileSystem, result, staged)
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(cfg.Output, "Wrote audio: %s\n", mapping.path); err != nil {
+		return err
+	}
+	committed = true
+	return nil
 }
 
 type genericCLIOutputMapping struct {
@@ -482,14 +645,14 @@ func (service *rootService) invokePreparedLease(
 ) error {
 	if runtime := catalog.ManagedRuntime; strings.TrimSpace(runtime.Identity) != "" {
 		if err := runtime.InvocationError(); err != nil {
-			return mapModelsRootError(err)
+			return mapModelsClientError(err)
 		}
 	}
 	leaseResult, err := service.models.AcquireModelLease(cfg.Context, modelinference.AcquireModelLeaseRequest{
 		Scope: scope, Name: modelName, Holder: modelsCLIInvokeHolder,
 	})
 	if err != nil {
-		return mapModelsRootError(err)
+		return mapModelsClientError(err)
 	}
 	request := modelinference.InvokeModelRequest{
 		Scope:     scope,
@@ -508,7 +671,7 @@ func (service *rootService) invokePreparedLease(
 	}
 	result, err := service.models.InvokeModelWithLease(cfg.Context, request)
 	if err != nil {
-		return mapModelsRootError(err)
+		return mapModelsClientError(err)
 	}
 	if cfg.JSON {
 		response := modelInvocationResponseFromInferenceResult(result, catalog, text)
@@ -517,7 +680,7 @@ func (service *rootService) invokePreparedLease(
 	outputPath := strings.TrimSpace(cfg.OutputPath)
 	streamFile, err := inferenceArtifactSourcePath(result)
 	if err != nil {
-		return mapModelsRootError(err)
+		return mapModelsClientError(err)
 	}
 	if service.artifacts == nil {
 		return fmt.Errorf("model invocation artifact exporter is required")
@@ -539,22 +702,47 @@ func joinedCLIInvocationRequest(
 	inputName := "input"
 	modality := modelinference.ModalityText
 	contentType := "text/plain"
-	if selected, ok := catalogOperationForName(catalog, operation); ok && len(selected.Inputs) > 0 {
-		inputName = selected.Inputs[0].Name
-		if selected.Inputs[0].Modality != "" {
-			modality = selected.Inputs[0].Modality
+	if selected, ok := catalogOperationForName(catalog, operation); ok {
+		// Catalog projections sort slots by name; bind --text to the required
+		// text slot instead of assuming the first slot is the CLI input.
+		input := joinedCLITextInput(selected.Inputs)
+		if input == nil && len(selected.Inputs) > 0 {
+			input = &selected.Inputs[0]
 		}
-		if len(selected.Inputs[0].MediaTypes) > 0 {
-			contentType = selected.Inputs[0].MediaTypes[0]
+		if input != nil {
+			inputName = input.Name
+			if input.Modality != "" {
+				modality = input.Modality
+			}
+			if len(input.MediaTypes) > 0 {
+				contentType = input.MediaTypes[0]
+			}
 		}
 	}
 	return modelinference.InvokeModelRequest{
 		Scope: scope, Holder: modelsCLIInvokeHolder,
 		Model: modelinference.ModelReference{NameOrURI: modelName}, Operation: operation,
 		Inputs: []modelinference.InferenceInput{{
-			Name: inputName, Modality: modality, ContentType: contentType, Content: text,
+			Name: inputName, Modality: modality, ContentType: contentType, MediaType: contentType, Content: text,
 		}},
 	}
+}
+
+func joinedCLITextInput(inputs []modelinference.OperationSlot) *modelinference.OperationSlot {
+	var optionalText *modelinference.OperationSlot
+	for index := range inputs {
+		input := &inputs[index]
+		if input.Modality != modelinference.ModalityText {
+			continue
+		}
+		if input.Required != nil && *input.Required {
+			return input
+		}
+		if optionalText == nil {
+			optionalText = input
+		}
+	}
+	return optionalText
 }
 
 func modelInvocationResponseFromInferenceResult(

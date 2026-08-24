@@ -118,7 +118,7 @@ func (service *Service) startAPI(
 		defer sidecars.Done()
 		err := service.start(ctx, platformhttpserver.StartRequest{
 			Handler: handler, Host: request.Host, Port: request.Port,
-			AutoPort: request.AutoPort, Logger: logger,
+			AutoPort: request.AutoPort, Pprof: request.Pprof, Logger: logger,
 			OnBound: func(binding platformhttpserver.Binding) {
 				bound <- binding
 			},

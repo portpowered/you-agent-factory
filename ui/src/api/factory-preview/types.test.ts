@@ -32,7 +32,6 @@ describe("factory-preview generated types", () => {
         policyHash: "sha256:policy",
         maxChildCount: 16,
         maxConcurrency: 4,
-        deniedCapabilities: [],
         validationIssues: [],
       },
       resultConstraints: {

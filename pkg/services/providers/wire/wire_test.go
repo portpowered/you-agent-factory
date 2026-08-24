@@ -20,7 +20,6 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestNewServiceConstructsPublishedRoot(t *testing.T) {
@@ -397,7 +396,7 @@ func TestNewServiceInjectsPlatformDependenciesThroughWireOptions(t *testing.T) {
 
 	workersRunner := &recordingWorkersCommandRunner{}
 	agyAllocator := &recordingPTYAllocator{
-		result: workers.PTYSessionResult{ExitCode: 0, CleanedText: "agy via wire"},
+		result: PTYSessionResult{ExitCode: 0, CleanedText: "agy via wire"},
 	}
 	agyPath := filepath.Join(t.TempDir(), "agy")
 	agyLocator := fakeExecutableLocator{string(providers.IDAntigravity): agyPath}
@@ -656,8 +655,8 @@ type inertWorkersCommandRunner struct {
 
 func (r *inertWorkersCommandRunner) Run(
 	_ context.Context,
-	_ workers.CommandRequest,
-) (workers.CommandResult, error) {
+	_ platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
 	r.calls++
 	panic("workers command runner invoked during inert construction")
 }
@@ -668,9 +667,9 @@ type inertPTYAllocator struct {
 
 func (a *inertPTYAllocator) Allocate(
 	_ context.Context,
-	_ workers.PTYProcessLaunch,
-	_ workers.PTYSessionConfig,
-) (workers.PTYSession, error) {
+	_ PTYProcessLaunch,
+	_ PTYSessionConfig,
+) (PTYSession, error) {
 	a.calls++
 	panic("agy PTY allocation during inert construction")
 }
@@ -711,31 +710,31 @@ type recordingWorkersCommandRunner struct {
 
 func (r *recordingWorkersCommandRunner) Run(
 	_ context.Context,
-	_ workers.CommandRequest,
-) (workers.CommandResult, error) {
+	_ platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
 	r.calls++
-	return workers.CommandResult{}, nil
+	return platformprocess.CommandResult{}, nil
 }
 
 type recordingPTYAllocator struct {
 	calls  int
-	result workers.PTYSessionResult
+	result PTYSessionResult
 }
 
 func (a *recordingPTYAllocator) Allocate(
 	_ context.Context,
-	_ workers.PTYProcessLaunch,
-	_ workers.PTYSessionConfig,
-) (workers.PTYSession, error) {
+	_ PTYProcessLaunch,
+	_ PTYSessionConfig,
+) (PTYSession, error) {
 	a.calls++
 	return &recordingPTYSession{result: a.result}, nil
 }
 
 type recordingPTYSession struct {
-	result workers.PTYSessionResult
+	result PTYSessionResult
 }
 
-func (s *recordingPTYSession) Run(context.Context) (workers.PTYSessionResult, error) {
+func (s *recordingPTYSession) Run(context.Context) (PTYSessionResult, error) {
 	return s.result, nil
 }
 

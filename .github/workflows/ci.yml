@@ -65,6 +65,27 @@ jobs:
           echo "classification=full" >> "$GITHUB_OUTPUT"
           echo "areas=ci-tooling" >> "$GITHUB_OUTPUT"
 
+  workflow-lint:
+    name: Workflow Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Install pinned actionlint
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Test workflow lint failure behavior
+        run: node --test scripts/ci/workflow-lint.test.mjs
+      - name: Run schema-aware lint across all workflows
+        run: node scripts/ci/workflow-lint.mjs
+
   docs-reference:
     name: Docs Reference
     needs: classify
@@ -198,11 +219,16 @@ jobs:
       pull-requests: write
     env:
       PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-      # Keep both coverage matrix lanes report-only for package-floor and
-      # manifest-completeness findings while the test corpus is rebuilt. The
-      # Makefile default remains blocking, so removing this one setting
-      # restores enforcement for local and hosted coverage runs.
-      GO_COVERAGE_FLOOR_POLICY: advisory
+      # Package-floor enforcement is BLOCKING. Both coverage lanes inherit the
+      # Makefile default (GO_COVERAGE_FLOOR_POLICY ?= blocking), so a package
+      # that drops below its floor fails CI and the floor must be updated
+      # deliberately in the manifest rather than drifting silently.
+      #
+      # A measured package with no manifest entry is NOT a failure: it is held
+      # to its lane's default floor (cmd/gocoveragecheck/manifest_default_floor.go),
+      # so adding a package does not require a manifest edit.
+      #
+      # Do not reintroduce an advisory override here.
     strategy:
       fail-fast: false
       matrix:
@@ -482,6 +508,31 @@ jobs:
               body: publication.body,
             });
 
+  backend-test-stability:
+    name: Backend Test Stability
+    needs: classify
+    # This is a pull-request hard gate. Classification-driven skips remain
+    # observable to Verification Policy, which rejects an unexpected skip.
+    if: github.event_name == 'pull_request' && needs.classify.outputs.run_backend != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run changed-test stability hard gate
+        env:
+          CHANGED_TEST_STABILITY_BASE: ${{ github.event.pull_request.base.sha }}
+          CHANGED_TEST_STABILITY_HEAD: ${{ github.event.pull_request.head.sha }}
+          CHANGED_TEST_STABILITY_ATTEMPTS: "20"
+          CHANGED_TEST_STABILITY_BUDGET: 15m
+        run: make test-changed-test-stability
+
   backend-lint:
     name: Backend Lint
     if: github.event_name == 'pull_request' || github.event_name == 'push'
@@ -701,7 +752,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-lint, ui-backend-integration, development-package]
+    needs: [classify, workflow-lint, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-test-stability, backend-lint, ui-backend-integration, development-package]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -743,9 +794,15 @@ jobs:
           FRONTEND_BROWSER_RESULT: ${{ needs.frontend-browser.result }}
           FRONTEND_STORYBOOK_RESULT: ${{ needs.frontend-storybook.result }}
           BACKEND_RESULT: ${{ needs.backend-coverage.result }}
+          RUN_BACKEND_STABILITY: ${{ github.event_name == 'pull_request' && needs.classify.outputs.run_backend != 'false' }}
+          BACKEND_STABILITY_REASON: ${{ needs.classify.outputs.backend_reason }}
+          BACKEND_STABILITY_RESULT: ${{ needs.backend-test-stability.result }}
           RUN_BACKEND_LINT: "true"
           BACKEND_LINT_REASON: "The complete canonical LINT_TARGETS inventory is required on every pull request and push to main."
           BACKEND_LINT_RESULT: ${{ needs.backend-lint.result }}
+          RUN_WORKFLOW_LINT: "true"
+          WORKFLOW_LINT_REASON: "Every repository workflow must pass pinned schema-aware lint on every pull request and push to main."
+          WORKFLOW_LINT_RESULT: ${{ needs.workflow-lint.result }}
           UI_BACKEND_RESULT: ${{ needs.ui-backend-integration.result }}
           PACKAGE_WORKFLOW_RESULT: ${{ needs.development-package.result }}
           API_RESULT: ${{ needs.development-package.outputs.api_package_result }}

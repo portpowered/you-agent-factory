@@ -41,7 +41,9 @@ const (
 	WorkstationDispatchReconciliationReasonProcessGone WorkstationDispatchReconciliationReason = "PROCESS_GONE"
 	WorkstationDispatchReconciliationReasonTimeout     WorkstationDispatchReconciliationReason = "EXECUTION_TIMEOUT"
 
-	WorkstationDispatchCancelReasonTimeout WorkstationDispatchCancelReason = "EXECUTION_TIMEOUT"
+	WorkstationDispatchCancelReasonCanceled   WorkstationDispatchCancelReason = "CANCELED"
+	WorkstationDispatchCancelReasonSuperseded WorkstationDispatchCancelReason = "SUPERSEDED"
+	WorkstationDispatchCancelReasonTimeout    WorkstationDispatchCancelReason = "EXECUTION_TIMEOUT"
 
 	WorkstationDispatchCancelOutcomeCanceled          WorkstationDispatchCancelOutcome = "CANCELED"
 	WorkstationDispatchCancelOutcomeAlreadyCanceled   WorkstationDispatchCancelOutcome = "ALREADY_CANCELED"
@@ -91,6 +93,7 @@ type WorkstationDispatchResult struct {
 	// ReconciliationReason is set only when Workers owns a terminal result
 	// synthesized from an execution-lifecycle observation.
 	ReconciliationReason WorkstationDispatchReconciliationReason
+	Cancellation         *DispatchCancellation
 	Result               WorkResult
 	// ProposedOutput is a transient detached Worker proposal. Runtime passes it
 	// to Work for validation and canonical identity assignment before applying

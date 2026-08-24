@@ -50,6 +50,7 @@ when it matches.
 | `runType` | Yes | One of `accept`, `reject`, or `script`. |
 | `scriptConfig` | When `runType` is `script` | Command, args, env, and related script fields. |
 | `rejectConfig` | When `runType` is `reject` | Observable stdout, stderr, and exit code. |
+| `usage` | No | Provider/model identity and token counts for a matched dispatch. |
 
 Unknown JSON fields are rejected at load time.
 
@@ -182,6 +183,73 @@ command instead of returning a synthetic accept/reject result:
 Set `runType` to `"script"`, provide `scriptConfig.command`, and use the
 optional `args`, `env`, `workingDirectory`, `stdin`, and `timeout` fields to
 mirror the command you want the mock boundary to execute.
+
+## Usage Reporting
+
+A matched mock-worker entry can declare provider usage with an optional
+`usage` object. The configured `runType` outcome remains unchanged. Omit the
+object when the dispatch should report no usage.
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `provider` | When `usage` is present | Non-empty provider identity used by Worker Session inspection and Costs. |
+| `model` | When `usage` is present | Non-empty model identity used by Worker Session inspection and Costs. |
+| `inputTokens` | No | Non-negative input token count. An omitted class is absent; `0` remains an explicit value. |
+| `outputTokens` | No | Non-negative output token count. An omitted class is absent; `0` remains an explicit value. |
+| `cachedInputTokens` | No | Non-negative cached-input count. Requires `inputTokens` and cannot exceed it. Omitted and `0` retain the same missing-versus-zero distinction. |
+| `reasoningOutputTokens` | No | Non-negative reasoning-output count. Requires `outputTokens` and cannot exceed it. Omitted and `0` retain the same missing-versus-zero distinction. |
+
+Cached input is part of input. Reasoning output is part of output. Total tokens
+are derived as `inputTokens + outputTokens`, so neither subclass is counted
+again.
+
+### Priceable Usage Example
+
+The checked-in
+[`docs/examples/mock-workers-usage.json`](../examples/mock-workers-usage.json)
+configures one accepted `executor` dispatch with all four token classes:
+
+```json
+{
+  "mockWorkers": [
+    {
+      "id": "executor-usage",
+      "workerName": "executor",
+      "workstationName": "execute-story",
+      "runType": "accept",
+      "usage": {
+        "provider": "codex",
+        "model": "gpt-5-codex",
+        "inputTokens": 1000000,
+        "cachedInputTokens": 400000,
+        "outputTokens": 500000,
+        "reasoningOutputTokens": 100000
+      }
+    }
+  ]
+}
+```
+
+Start `examples/simple-tasks` in one terminal and keep its API available:
+
+```bash
+you run --dir ./examples/simple-tasks --continuously --with-server \
+  --with-mock-workers ./docs/examples/mock-workers-usage.json
+```
+
+In a second terminal, list the Worker Sessions and select the `executor`
+Worker Session ID. Inspect its usage and the Factory cost report:
+
+```bash
+you --server http://localhost:7437 worker-sessions list --work-id <work-id>
+you --server http://localhost:7437 worker-sessions show --worker-session-id <worker-session-id>
+you --server http://localhost:7437 metrics costs
+```
+
+The `worker-sessions show` output reports the declared token classes and total
+of `1500000`. With the shipped `codex/gpt-5-codex` rates, Costs reports
+`PRICED` and `Cost (USD): $5.80`. This example uses only
+`--with-mock-workers`; it does not require a recording or replay fixture.
 
 ## Mixed Mock and Real-Worker Fallback
 

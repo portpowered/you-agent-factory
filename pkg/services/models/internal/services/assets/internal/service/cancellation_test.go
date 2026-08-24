@@ -203,6 +203,10 @@ func TestPrepareModelAssetsRenameFailurePreservesExistingRevisionAndRetries(t *t
 		!errors.Is(err, renameFailure) {
 		t.Fatalf("rename error = %v, want typed interruption and rename cause", err)
 	}
+	var stageErr *models.PullStageError
+	if !errors.As(err, &stageErr) || stageErr.Stage != models.PullStageCacheInstallation {
+		t.Fatalf("rename stage error = %#v, want cache-installation stage", stageErr)
+	}
 	assertFileBody(t, existingPath, []byte("preserve me"))
 	assertAttemptAbsent(t, cacheDirectory, "new-revision")
 

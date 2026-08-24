@@ -307,6 +307,9 @@ func (s *Service) Register(registration Registration) string {
 	if isDefault && registration.AllocateDefaultID {
 		if existing := s.registry.DefaultSession(); existing != nil {
 			sessionID = existing.ID
+			if strings.TrimSpace(registration.RuntimeFactorySessionID) == "" {
+				registration.RuntimeFactorySessionID = strings.TrimSpace(existing.RuntimeFactorySessionID)
+			}
 		} else {
 			sessionID = strings.TrimSpace(s.sessionIDs())
 			if sessionID == "" {
@@ -325,7 +328,7 @@ func (s *Service) Register(registration Registration) string {
 }
 
 func (s *Service) newLiveSession(registration Registration, sessionID string, isDefault bool) *livesession.LiveSession {
-	session := livesession.New(
+	session := livesession.NewWithRuntimeID(
 		sessionID,
 		strings.TrimSpace(registration.FactoryDir),
 		strings.TrimSpace(registration.FolderPath),
@@ -337,6 +340,7 @@ func (s *Service) newLiveSession(registration Registration, sessionID string, is
 		s.clock,
 		s.sessionIDs,
 		s.eventIDs,
+		registration.RuntimeFactorySessionID,
 	)
 	if session == nil {
 		return nil

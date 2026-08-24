@@ -6,11 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -65,14 +64,9 @@ func TestSideEffects_RunReturnsRecordedCommandResult(t *testing.T) {
 		t.Fatalf("NewSideEffects: %v", err)
 	}
 
-	result, err := sideEffects.Run(context.Background(), workers.CommandRequest{
+	result, err := sideEffects.Run(context.Background(), platformprocess.CommandRequest{
 		Command: "echo",
 		Args:    []string{"ok"},
-		Execution: work.ExecutionMetadata{
-			ReplayKey: "process/trace-2/work-2",
-			TraceID:   "trace-2",
-			WorkIDs:   []string{"work-2"},
-		},
 	})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -85,6 +79,37 @@ func TestSideEffects_RunReturnsRecordedCommandResult(t *testing.T) {
 	}
 	if result.ExitCode != 0 {
 		t.Fatalf("exitCode = %d, want 0", result.ExitCode)
+	}
+}
+
+func TestSideEffects_CommandMismatchDoesNotConsumeRecordedResult(t *testing.T) {
+	sideEffects := &SideEffects{records: []sideEffectRecord{{
+		dispatch: replayDispatch{dispatchID: "dispatch-command", dispatch: work.WorkDispatch{}},
+		completion: &replayCompletion{
+			result: workerexecution.WorkResult{Output: "recorded output"},
+			diagnostics: &workerexecution.WorkDiagnostics{Command: &workerexecution.CommandDiagnostic{
+				Command: "echo", Args: []string{"ok"}, Stdout: "recorded output",
+			}},
+		},
+		hasCompletion: true,
+	}}}
+
+	if _, err := sideEffects.Run(context.Background(), platformprocess.CommandRequest{
+		Command: "echo",
+		Args:    []string{"unexpected"},
+	}); err == nil {
+		t.Fatal("Run(mismatched command) = nil, want replay divergence")
+	}
+
+	result, err := sideEffects.Run(context.Background(), platformprocess.CommandRequest{
+		Command: "echo",
+		Args:    []string{"ok"},
+	})
+	if err != nil {
+		t.Fatalf("Run(after mismatch): %v", err)
+	}
+	if string(result.Stdout) != "recorded output" {
+		t.Fatalf("stdout after mismatch = %q, want retained recorded result", result.Stdout)
 	}
 }
 
@@ -141,14 +166,9 @@ func TestSideEffects_RunResultStaysDetachedFromRecordedCommandMutation(t *testin
 	commandDiagnostics.Command.Stdout = "mutated stdout\n"
 	commandDiagnostics.Command.Stderr = "mutated stderr\n"
 
-	result, err := sideEffects.Run(context.Background(), workers.CommandRequest{
+	result, err := sideEffects.Run(context.Background(), platformprocess.CommandRequest{
 		Command: "echo",
 		Args:    []string{"ok"},
-		Execution: work.ExecutionMetadata{
-			ReplayKey: "process/trace-2/work-2",
-			TraceID:   "trace-2",
-			WorkIDs:   []string{"work-2"},
-		},
 	})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -486,14 +506,9 @@ func TestSideEffects_CancellationDoesNotConsumeRecordedCommandResult(t *testing.
 	if err != nil {
 		t.Fatalf("NewSideEffects: %v", err)
 	}
-	request := workers.CommandRequest{
+	request := platformprocess.CommandRequest{
 		Command: "echo",
 		Args:    []string{"ok"},
-		Execution: work.ExecutionMetadata{
-			ReplayKey: "process/trace-2/work-2",
-			TraceID:   "trace-2",
-			WorkIDs:   []string{"work-2"},
-		},
 	}
 
 	canceled, cancel := context.WithCancel(context.Background())

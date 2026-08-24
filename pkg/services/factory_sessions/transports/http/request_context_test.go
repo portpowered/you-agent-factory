@@ -104,7 +104,7 @@ func TestHandlerFromRoot_CloseFactorySessionDeadlineExceededReturnsGatewayTimeou
 	t.Parallel()
 
 	root := &httpSessionsRootFake{
-		onClose: func(ctx context.Context, _ string) error {
+		onDelete: func(ctx context.Context, _ string) error {
 			<-ctx.Done()
 			return ctx.Err()
 		},

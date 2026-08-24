@@ -23,3 +23,11 @@ type RuntimeWorkType = factory.WorkType
 type Provider interface {
 	GetEngineStateSnapshot(context.Context) (*Snapshot, error)
 }
+
+// WorkProvider is the fast migration-only snapshot capability used by the Work
+// list adapter. It returns the published runtime boundary and topology without
+// deriving unrelated Factory Session/world-state observability that would
+// replay the canonical event history on every Work page.
+type WorkProvider interface {
+	GetWorkStateSnapshot(context.Context) (*Snapshot, error)
+}

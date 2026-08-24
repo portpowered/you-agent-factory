@@ -23,6 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 )
@@ -51,7 +52,15 @@ type Assembly struct {
 	responseStreams              responsestreamservice.Service
 	detachedMu                   sync.RWMutex
 	detachedGateways             map[string]factorysessions.Service
-	detachedGatewayOrder         []string
+	workAdmissionsMu             sync.Mutex
+	workAdmissions               map[string][]*workAdmissionProjection
+	// beforeWorkAdmissionProjectionRegistration is only populated by the
+	// same-package replacement-window regression. It makes the otherwise
+	// scheduler-dependent capture/registration gap deterministic without
+	// changing the production dependency graph.
+	beforeWorkAdmissionProjectionRegistration func()
+	workReadMetricsRecorder                   roles.InvocationMetricsRecorder
+	detachedGatewayOrder                      []string
 }
 
 type streamManager interface {
@@ -108,6 +117,7 @@ func NewAssembly(
 		identity:                     identityService,
 		responseStreams:              responseStreamService,
 		detachedGateways:             make(map[string]factorysessions.Service),
+		workAdmissions:               make(map[string][]*workAdmissionProjection),
 	}
 }
 
@@ -128,16 +138,166 @@ func (a *Assembly) Resolve(sessionID string) *livesession.LiveSession {
 // ResolveWorkRuntime adapts the Factory Sessions registry to Work's
 // consumer-owned runtime port.
 func (a *Assembly) ResolveWorkRuntime(sessionID string) (work.Runtime, error) {
-	session := a.Resolve(sessionID)
-	if session == nil || runtimebinding.ServiceForSession(session) == nil {
-		return nil, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, sessionID)
+	// Replacement publishes the new session generation before retiring the old
+	// generation's projection. Revalidate after registration so a resolver that
+	// captured the old generation in that window releases it and retries rather
+	// than recreating stale state after retirement.
+	for {
+		session := a.Resolve(sessionID)
+		if session == nil || runtimebinding.ServiceForSession(session) == nil {
+			a.releaseWorkAdmissionProjection(sessionID)
+			return nil, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, sessionID)
+		}
+		runtime := session.Runtime
+		ingress, _ := runtimebinding.WorkAndEventIngressForLiveRuntime(runtime)
+		var ledger recordings.Ledger
+		if bundle := runtimebinding.BundleFromSession(session); bundle != nil {
+			ledger = bundle.RecordingLedger()
+		}
+		if a.beforeWorkAdmissionProjectionRegistration != nil {
+			a.beforeWorkAdmissionProjectionRegistration()
+		}
+		projection := a.workAdmissionProjection(sessionID, runtime, ledger)
+		if a.workRuntimeGenerationIsCurrent(sessionID, runtime, ledger) {
+			return workRuntimeAdapter{
+				sessionID:   sessionID,
+				clock:       runtime.Clock,
+				runtime:     runtimebinding.ServiceForSession(session),
+				ingress:     ingress,
+				admissions:  projection,
+				readMetrics: a.workReadMetricsRecorder,
+			}, nil
+		}
+		a.discardWorkAdmissionProjection(sessionID, projection)
 	}
-	ingress, _ := runtimebinding.WorkAndEventIngressForLiveRuntime(session.Runtime)
-	return workRuntimeAdapter{
-		sessionID: sessionID,
-		runtime:   runtimebinding.ServiceForSession(session),
-		ingress:   ingress,
-	}, nil
+}
+
+func (a *Assembly) workRuntimeGenerationIsCurrent(
+	sessionID string,
+	runtime *factorysessions.LiveRuntime,
+	ledger recordings.Ledger,
+) bool {
+	if a == nil || runtime == nil {
+		return false
+	}
+	session := a.Resolve(sessionID)
+	if session == nil || session.Runtime != runtime {
+		return false
+	}
+	var currentLedger recordings.Ledger
+	if bundle := runtimebinding.BundleFromSession(session); bundle != nil {
+		currentLedger = bundle.RecordingLedger()
+	}
+	return sameLedger(currentLedger, ledger)
+}
+
+func (a *Assembly) discardWorkAdmissionProjection(
+	sessionID string,
+	target *workAdmissionProjection,
+) {
+	if a == nil || target == nil {
+		return
+	}
+	a.workAdmissionsMu.Lock()
+	projections := a.workAdmissions[sessionID]
+	remaining := make([]*workAdmissionProjection, 0, len(projections))
+	removed := false
+	for _, projection := range projections {
+		if projection == target {
+			removed = true
+			continue
+		}
+		remaining = append(remaining, projection)
+	}
+	if len(remaining) == 0 {
+		delete(a.workAdmissions, sessionID)
+	} else {
+		a.workAdmissions[sessionID] = remaining
+	}
+	a.workAdmissionsMu.Unlock()
+	if removed {
+		target.Release()
+	}
+}
+
+func (a *Assembly) workAdmissionProjection(
+	sessionID string,
+	runtime *factorysessions.LiveRuntime,
+	ledger recordings.Ledger,
+) *workAdmissionProjection {
+	if a == nil {
+		return nil
+	}
+	a.workAdmissionsMu.Lock()
+	if a.workAdmissions == nil {
+		a.workAdmissions = make(map[string][]*workAdmissionProjection)
+	}
+	var projection *workAdmissionProjection
+	for _, candidate := range a.workAdmissions[sessionID] {
+		if candidate.matchesGeneration(runtime, ledger) {
+			projection = candidate
+			break
+		}
+	}
+	if projection == nil {
+		projection = newWorkAdmissionProjectionForGeneration(sessionID, runtime, ledger, runtime.Clock)
+		a.workAdmissions[sessionID] = append(a.workAdmissions[sessionID], projection)
+	}
+	a.workAdmissionsMu.Unlock()
+	projection.Bind(ledger)
+	return projection
+}
+
+func (a *Assembly) releaseWorkAdmissionProjection(sessionID string) {
+	if a == nil {
+		return
+	}
+	a.workAdmissionsMu.Lock()
+	projections := a.workAdmissions[sessionID]
+	delete(a.workAdmissions, sessionID)
+	a.workAdmissionsMu.Unlock()
+	for _, projection := range projections {
+		projection.Release()
+	}
+}
+
+// retireWorkAdmissionProjection releases only the projection owned by a
+// runtime generation that has completed replacement. An in-flight adapter may
+// still hold the old projection, so Release preserves its detached admissions
+// while retiring the ledger callback and generation identity.
+func (a *Assembly) retireWorkAdmissionProjection(
+	sessionID string,
+	runtime *factorysessions.LiveRuntime,
+	record factoryruntime.RuntimeRecord,
+) {
+	if a == nil || runtime == nil || record == nil {
+		return
+	}
+	ledger := record.RecordingLedger()
+	a.workAdmissionsMu.Lock()
+	projections := a.workAdmissions[sessionID]
+	if len(projections) == 0 {
+		a.workAdmissionsMu.Unlock()
+		return
+	}
+	remaining := make([]*workAdmissionProjection, 0, len(projections))
+	retired := make([]*workAdmissionProjection, 0, 1)
+	for _, projection := range projections {
+		if projection.matchesGeneration(runtime, ledger) {
+			retired = append(retired, projection)
+			continue
+		}
+		remaining = append(remaining, projection)
+	}
+	if len(remaining) == 0 {
+		delete(a.workAdmissions, sessionID)
+	} else {
+		a.workAdmissions[sessionID] = remaining
+	}
+	a.workAdmissionsMu.Unlock()
+	for _, projection := range retired {
+		projection.Release()
+	}
 }
 
 func (a *Assembly) WithRuntimeRead(read func(*factorysessions.LiveRuntime) error) error {
@@ -201,34 +361,28 @@ func (a *Assembly) Complete(
 	if a == nil || a.state == nil || a.registry == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Sessions assembly is required")
 	}
+	a.workReadMetricsRecorder = invocationMetricsRecorder
 	if startupRuntime == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("default Factory Runtime is required")
 	}
-	sessionID := strings.TrimSpace(factorySessionID)
-	if sessionID == "" {
-		sessionID = factorysessions.DefaultSessionID
-	}
-	isDefault := sessionID == factorysessions.DefaultSessionID
-	target := factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: sessionID}
-	if isDefault {
-		target = factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}
-	}
+	identity := selectCompletionSessionIdentity(factorySessionID, startupSpec)
 	runtimeConfig, ok := startupRuntime.LoadedRuntimeConfig().(factorydefinitions.LoadedFactorySource)
 	if !ok || runtimeConfig == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("constructed runtime config does not expose Factory Definition snapshots")
 	}
-	session := livesession.New(
-		sessionID,
+	session := livesession.NewWithRuntimeID(
+		identity.id,
 		startupRuntime.Directory(),
 		startupRuntime.FolderDirectory(),
 		startupRuntime.LoadedRuntimeConfig().RuntimeBaseDir(),
-		target,
+		identity.target,
 		&runtimebinding.SessionState{Instance: startupRuntime, Spec: &startupSpec},
-		isDefault,
+		identity.isDefault,
 		filepath.Base(startupRuntime.FolderDirectory()),
 		clock,
 		a.sessionIDs,
 		a.eventIDs,
+		identity.runtimeID,
 	)
 	if session == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("construct live Factory Session: clock and response-event identity generator are required")
@@ -294,6 +448,9 @@ func (a *Assembly) Complete(
 	if runtime == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Sessions runtime is required")
 	}
+	runtime.bindRuntimeReadMetrics(startupRuntime)
+	runtime.releaseWorkAdmissionProjection = a.releaseWorkAdmissionProjection
+	runtime.retireWorkAdmissionProjection = a.retireWorkAdmissionProjection
 	gateway := NewWithLiveChangeCoordinator(
 		SessionServiceHost(runtime),
 		a.state,
@@ -310,11 +467,35 @@ func (a *Assembly) Complete(
 		return nil, nil, nil, nil, nil, err
 	}
 	gateway.bindRootCapabilities(invoker, runtime.ActivateNamedFactory, runtime.DefinitionActivationGateway())
-	a.registerDetachedGateway(sessionID, gateway)
+	a.registerDetachedGateway(identity.id, gateway)
 	// The per-runtime gateway is returned to the operation caller. The
 	// process-scoped assembly keeps its original stable service slot so
 	// concurrent session completions cannot replace or race the shared root.
 	return runtime, gateway, invoker, definitionHost{runtime: runtime}, runtime.DefinitionActivationGateway(), nil
+}
+
+type completionSessionIdentity struct {
+	id        string
+	isDefault bool
+	target    factorysessions.TargetRef
+	runtimeID string
+}
+
+func selectCompletionSessionIdentity(factorySessionID string, startupSpec factoryruntime.SessionBuildSpec) completionSessionIdentity {
+	sessionID := strings.TrimSpace(factorySessionID)
+	if sessionID == "" {
+		sessionID = factorysessions.DefaultSessionID
+	}
+	isDefault := sessionID == factorysessions.DefaultSessionID
+	target := factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: sessionID}
+	if isDefault {
+		target = factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}
+	}
+	runtimeID := ""
+	if isDefault && livesession.IsUUIDID(startupSpec.SessionID) {
+		runtimeID = strings.TrimSpace(startupSpec.SessionID)
+	}
+	return completionSessionIdentity{id: sessionID, isDefault: isDefault, target: target, runtimeID: runtimeID}
 }
 
 type definitionHost struct {
@@ -686,12 +867,40 @@ func (a *Assembly) ResumeLiveFactorySession(ctx context.Context, sessionID strin
 	return owner.ResumeLiveFactorySession(ctx, sessionID, request)
 }
 
+func (a *Assembly) CancelLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+	owner, err := a.detachedLiveLifecycleControlOwner(sessionID)
+	if err != nil {
+		return factorysessions.LifecycleControlResult{}, err
+	}
+	return owner.CancelLiveFactorySession(ctx, sessionID, request)
+}
+
+func (a *Assembly) TerminateLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
+	owner, err := a.detachedLiveLifecycleControlOwner(sessionID)
+	if err != nil {
+		return factorysessions.LifecycleControlResult{}, err
+	}
+	return owner.TerminateLiveFactorySession(ctx, sessionID, request)
+}
+
 func (a *Assembly) CloseFactorySession(ctx context.Context, sessionID string) error {
 	owner, err := a.detachedLiveControlOwner(sessionID)
 	if err != nil {
 		return err
 	}
 	return owner.CloseFactorySession(ctx, sessionID)
+}
+
+func (a *Assembly) detachedLiveLifecycleControlOwner(sessionID string) (factorysessions.LiveLifecycleControlService, error) {
+	owner, err := a.detachedOwner(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	control, ok := owner.(factorysessions.LiveLifecycleControlService)
+	if !ok {
+		return nil, fmt.Errorf("%w: live lifecycle control capability unavailable", factorysessions.ErrDetachedServiceUnavailable)
+	}
+	return control, nil
 }
 
 func (a *Assembly) Pause(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {

@@ -439,6 +439,95 @@ func assertPersistenceFailureClearedInternalRuntimeState(t *testing.T, service *
 	}
 }
 
+func TestJavaScriptRuntimeService_TerminateWaitsForTerminalPersistence(t *testing.T) {
+	store := newBlockingRuntimePersistenceStore()
+	t.Cleanup(store.release)
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
+		ProjectRoot: t.TempDir(),
+		Persistence: store,
+		Workflows:   scriptedBlockingRuntimeWorkflows(),
+	})
+
+	started, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
+		"req-runtime-terminate-persist-barrier-001",
+		busyLoopWorkflowSource,
+		nil,
+		nil,
+	))
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+
+	controlDone := make(chan struct{})
+	var controlResult LifecycleControlResult
+	var controlErr error
+	go func() {
+		controlResult, controlErr = service.Terminate(context.Background(), started.SessionID, ControlRequest{})
+		close(controlDone)
+	}()
+
+	select {
+	case <-store.saveStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("terminal persistence did not start")
+	}
+	select {
+	case <-controlDone:
+		t.Fatal("Terminate returned before terminal persistence completed")
+	default:
+	}
+
+	store.release()
+	select {
+	case <-controlDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Terminate did not return after terminal persistence completed")
+	}
+	if controlErr != nil {
+		t.Fatalf("Terminate: %v", controlErr)
+	}
+	if controlResult.Outcome != LifecycleControlOutcomeAccepted || controlResult.Status != LifecycleStatusTerminated {
+		t.Fatalf("Terminate result = %#v, want accepted TERMINATED control", controlResult)
+	}
+	select {
+	case <-store.saveCompleted:
+	default:
+		t.Fatal("Terminate returned before the persistence writer completed")
+	}
+}
+
+type blockingRuntimePersistenceStore struct {
+	saveStarted    chan struct{}
+	releaseSave    chan struct{}
+	saveCompleted  chan struct{}
+	releaseOnce    sync.Once
+	saveStartOnce  sync.Once
+	saveFinishOnce sync.Once
+}
+
+func newBlockingRuntimePersistenceStore() *blockingRuntimePersistenceStore {
+	return &blockingRuntimePersistenceStore{
+		saveStarted:   make(chan struct{}),
+		releaseSave:   make(chan struct{}),
+		saveCompleted: make(chan struct{}),
+	}
+}
+
+func (s *blockingRuntimePersistenceStore) Save(string, []byte) error {
+	s.saveStartOnce.Do(func() { close(s.saveStarted) })
+	<-s.releaseSave
+	s.saveFinishOnce.Do(func() { close(s.saveCompleted) })
+	return nil
+}
+
+func (s *blockingRuntimePersistenceStore) Load(string) ([]byte, error) {
+	return nil, os.ErrNotExist
+}
+
+func (s *blockingRuntimePersistenceStore) release() {
+	s.releaseOnce.Do(func() { close(s.releaseSave) })
+}
+
 type runtimeRecordingStore struct {
 	mu        sync.Mutex
 	saveCalls int

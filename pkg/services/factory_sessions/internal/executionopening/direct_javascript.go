@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle"
@@ -78,6 +79,7 @@ func (*directJavaScriptRunOperation) Supports(sourcePath string) bool {
 func (o *directJavaScriptRunOperation) Open(
 	ctx context.Context,
 	request factorysessions.DirectJavaScriptRunRequest,
+	cancellation initializer.InvocationCancellation,
 ) (factorysessions.DirectJavaScriptApplication, error) {
 	if o == nil || o.build == nil || o.runSync == nil {
 		return factorysessions.DirectJavaScriptApplication{}, errors.New("direct JavaScript run operation is unavailable")
@@ -91,7 +93,7 @@ func (o *directJavaScriptRunOperation) Open(
 		return factorysessions.DirectJavaScriptApplication{}, err
 	}
 	completion := o.completion(prepared, request, presentation.Output)
-	transport, completion, err := o.prepareHosting(request.Host, presentation.RuntimeHostObserver, prepared.execution, completion)
+	transport, completion, err := o.prepareHosting(request.Host, cancellation, presentation.RuntimeHostObserver, prepared.execution, completion)
 	if err != nil {
 		return factorysessions.DirectJavaScriptApplication{}, errors.Join(err, prepared.execution.Close())
 	}
@@ -163,6 +165,7 @@ func (o *directJavaScriptRunOperation) completion(
 
 func (o *directJavaScriptRunOperation) prepareHosting(
 	host *factorysessions.RuntimeHostRequest,
+	cancellation initializer.InvocationCancellation,
 	observer factorysessions.RuntimeHostObserver,
 	execution roles.OwnedExecutionService,
 	completion func(context.Context) error,
@@ -189,7 +192,7 @@ func (o *directJavaScriptRunOperation) prepareHosting(
 			return runCtx.Err()
 		}
 	}
-	transport, err := o.host(execution, *host, readyObserver)
+	transport, err := o.host(execution, *host, cancellation, readyObserver)
 	return transport, completion, err
 }
 

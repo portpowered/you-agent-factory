@@ -65,12 +65,13 @@ type ContractFieldDocumentation struct {
 
 // ProjectContractFieldDocumentation returns canonical English and examples for every inventoried field.
 func ProjectContractFieldDocumentation() map[string]ContractFieldDocumentation {
-	documentation := make(map[string]ContractFieldDocumentation, 24)
+	documentation := make(map[string]ContractFieldDocumentation, 31)
 	mergeContractFieldDocumentation(documentation, projectContractTopLevelFieldDocumentation())
 	mergeContractFieldDocumentation(documentation, projectContractMockWorkerEntryFieldDocumentation())
 	mergeContractFieldDocumentation(documentation, projectContractWorkInputFieldDocumentation())
 	mergeContractFieldDocumentation(documentation, projectContractScriptConfigFieldDocumentation())
 	mergeContractFieldDocumentation(documentation, projectContractRejectConfigFieldDocumentation())
+	mergeContractFieldDocumentation(documentation, projectContractUsageFieldDocumentation())
 	return documentation
 }
 
@@ -169,6 +170,20 @@ func projectContractMockWorkerEntryFieldDocumentation() map[string]ContractField
 				},
 			},
 		},
+		"mockWorkers[].usage": {
+			Title:       "Mock usage declaration",
+			Description: "Optional canonical provider usage emitted for a matched mock dispatch. Provider and model are required when present.",
+			Examples: []any{
+				map[string]any{
+					"provider":              "codex",
+					"model":                 "gpt-5-codex",
+					"inputTokens":           1000000,
+					"cachedInputTokens":     400000,
+					"outputTokens":          500000,
+					"reasoningOutputTokens": 100000,
+				},
+			},
+		},
 	}
 }
 
@@ -263,6 +278,41 @@ func projectContractRejectConfigFieldDocumentation() map[string]ContractFieldDoc
 			Title:       "Rejected exit code",
 			Description: "Optional rejected exit code between 1 and 255.",
 			Examples:    []any{42},
+		},
+	}
+}
+
+func projectContractUsageFieldDocumentation() map[string]ContractFieldDocumentation {
+	return map[string]ContractFieldDocumentation{
+		"mockWorkers[].usage.provider": {
+			Title:       "Usage provider",
+			Description: "Required non-empty provider identity for the canonical usage observation.",
+			Examples:    []any{"codex", "claude"},
+		},
+		"mockWorkers[].usage.model": {
+			Title:       "Usage model",
+			Description: "Required non-empty model identity for the canonical usage observation.",
+			Examples:    []any{"gpt-5-codex", "claude-sonnet-4"},
+		},
+		"mockWorkers[].usage.inputTokens": {
+			Title:       "Input token usage",
+			Description: "Optional non-negative input token count. An explicit zero is retained as a declared token class.",
+			Examples:    []any{1000000, 0},
+		},
+		"mockWorkers[].usage.outputTokens": {
+			Title:       "Output token usage",
+			Description: "Optional non-negative output token count. An explicit zero is retained as a declared token class.",
+			Examples:    []any{500000, 0},
+		},
+		"mockWorkers[].usage.cachedInputTokens": {
+			Title:       "Cached input token usage",
+			Description: "Optional non-negative cached-input token count. When set, it cannot exceed inputTokens.",
+			Examples:    []any{400000, 0},
+		},
+		"mockWorkers[].usage.reasoningOutputTokens": {
+			Title:       "Reasoning output token usage",
+			Description: "Optional non-negative reasoning-output token count. When set, it cannot exceed outputTokens.",
+			Examples:    []any{100000, 0},
 		},
 	}
 }

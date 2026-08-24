@@ -133,6 +133,76 @@ func TestFailedFlushDoesNotReportUnwrittenPosition(t *testing.T) {
 	}
 }
 
+func TestFlushRecordingWaitsForDurableWriterCompletion(t *testing.T) {
+	t.Parallel()
+
+	writerEntered := make(chan struct{})
+	releaseWriter := make(chan struct{})
+	writerReturned := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseWriter) }) }
+	t.Cleanup(release)
+
+	root := newActiveFlushRoot(
+		func(string, recordings.RecordingSnapshot) error {
+			close(writerEntered)
+			<-releaseWriter
+			close(writerReturned)
+			return nil
+		},
+		func(time.Duration) recordings.RecordingFlushTicker {
+			return manualTickerHandle(newManualFlushTicker())
+		},
+	)
+	recordingID := startActiveRecording(t, root, "recording-flush-completion", time.Second)
+	t.Cleanup(func() { stopRecording(t, root, recordingID) })
+	event := activeFlushEvent(1)
+	recordEvent(t, root, recordingID, event)
+
+	type flushOutcome struct {
+		result recordings.FlushRecordingResult
+		err    error
+	}
+	completed := make(chan flushOutcome, 1)
+	go func() {
+		result, err := root.FlushRecording(recordings.FlushRecordingRequest{
+			RecordingID: recordingID,
+		})
+		completed <- flushOutcome{result: result, err: err}
+	}()
+
+	select {
+	case <-writerEntered:
+	case <-time.After(time.Second):
+		t.Fatal("FlushRecording did not reach the durable writer")
+	}
+	select {
+	case outcome := <-completed:
+		t.Fatalf("FlushRecording returned before the writer completed: %#v", outcome)
+	default:
+	}
+
+	release()
+	select {
+	case <-writerReturned:
+	case <-time.After(time.Second):
+		t.Fatal("durable writer did not return")
+	}
+
+	select {
+	case outcome := <-completed:
+		if outcome.err != nil {
+			t.Fatalf("FlushRecording error = %v", outcome.err)
+		}
+		if outcome.result.Status.FlushedThrough == nil ||
+			*outcome.result.Status.FlushedThrough != event.Cursor {
+			t.Fatalf("FlushRecording status = %#v, want cursor %v", outcome.result.Status, event.Cursor)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("FlushRecording did not return after the durable writer completed")
+	}
+}
+
 func TestStopRecordingJoinsPeriodicWriteAndPreventsLaterWrites(t *testing.T) {
 	t.Parallel()
 

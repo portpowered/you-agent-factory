@@ -58,12 +58,3 @@ func TestPinnedACPSDKGoldenManifestIsCompleteAndParseable(t *testing.T) {
 		t.Fatalf("ACP golden checksum count = %d, fixture count = %d", len(manifest.SHA256), len(manifest.Files))
 	}
 }
-
-func readGoldenJSON(t testing.TB, name string) json.RawMessage {
-	t.Helper()
-	data, err := acpGoldenFiles.ReadFile("testdata/json_golden/upstream/" + name)
-	if err != nil {
-		t.Fatalf("read ACP golden %q: %v", name, err)
-	}
-	return data
-}

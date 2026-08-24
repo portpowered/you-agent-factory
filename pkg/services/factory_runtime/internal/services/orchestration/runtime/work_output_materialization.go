@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -276,80 +275,6 @@ func isASCIIAlphaRuntime(value byte) bool {
 	return (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z')
 }
 
-func workstationDispatchResultFromExecute(
-	request workers.WorkstationDispatchRequest,
-	result workers.ExecuteResult,
-	executeErr error,
-) (workers.WorkstationDispatchResult, error) {
-	dispatch := request.Execution.Dispatch
-	proposedOutput := result.Output.Clone()
-	workResult := workers.WorkResult{
-		DispatchID:                  dispatch.DispatchID,
-		TransitionID:                dispatch.TransitionID,
-		Outcome:                     workers.OutcomeAccepted,
-		Output:                      primaryOutputText(result.Output.Primary),
-		StructuredResult:            jsonvalue.Clone(result.StructuredResult),
-		StructuredResultPresent:     jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent),
-		ArtifactVerification:        result.ArtifactVerification.Clone(),
-		Feedback:                    result.Output.Feedback,
-		SelectedClassificationLabel: result.Output.Classification,
-		Metrics: workers.WorkMetrics{
-			Duration:   result.Metrics.Duration,
-			Cost:       result.Metrics.Cost,
-			RetryCount: result.Metrics.RetryCount,
-		},
-		Continuation: result.Continuation,
-		Diagnostics:  result.Diagnostics.ToWorkDiagnostics(),
-	}
-	terminal := workers.WorkstationDispatchTerminalOutcomeCompleted
-	switch result.Outcome {
-	case workers.ExecutionOutcomeContinue:
-		workResult.Outcome = workers.OutcomeContinue
-	case workers.ExecutionOutcomeRejected:
-		workResult.Outcome = workers.OutcomeRejected
-	case workers.ExecutionOutcomeFailed:
-		workResult.Outcome = workers.OutcomeFailed
-		terminal = workers.WorkstationDispatchTerminalOutcomeFailed
-	case workers.ExecutionOutcomeCanceled:
-		workResult.Outcome = workers.OutcomeFailed
-		terminal = workers.WorkstationDispatchTerminalOutcomeCanceled
-	default:
-		if result.Outcome != workers.ExecutionOutcomeAccepted {
-			workResult.Outcome = workers.OutcomeFailed
-			terminal = workers.WorkstationDispatchTerminalOutcomeFailed
-		}
-	}
-	if result.Failure != nil {
-		workResult.Error = strings.TrimSpace(result.Failure.Message)
-		workResult.FailureDetail = workFailureDetail(result.Failure, workResult.Error)
-		if shouldPropagateFailureMetadata(request, result.Failure) {
-			workResult.FailureMetadata = &workers.WorkFailureMetadata{
-				Family: result.Failure.Family,
-				Type:   result.Failure.Type,
-			}
-		}
-	}
-	if executeErr != nil && terminal != workers.WorkstationDispatchTerminalOutcomeCanceled {
-		terminal = workers.WorkstationDispatchTerminalOutcomeFailed
-		workResult.Outcome = workers.OutcomeFailed
-		if strings.TrimSpace(workResult.Error) == "" {
-			workResult.Error = executeErr.Error()
-		}
-	}
-	if terminal == workers.WorkstationDispatchTerminalOutcomeCanceled && strings.TrimSpace(workResult.Error) == "" {
-		workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
-	}
-	reconciliationReason := processGoneDispatchResult(&workResult, &terminal, executeErr)
-	return workers.WorkstationDispatchResult{
-		DispatchID:           dispatch.DispatchID,
-		WorkstationName:      request.WorkstationName,
-		TerminalOutcome:      terminal,
-		ReconciliationReason: reconciliationReason,
-		Result:               workResult,
-		ProposedOutput:       &proposedOutput,
-	}, executeErr
-}
-
 func workFailureDetail(failure *workers.ExecutionFailure, message string) *workers.FailureDetail {
 	detail := workers.CloneFailureDetail(failure.Detail)
 	if detail != nil || message == "" {
@@ -496,6 +421,17 @@ func applyMaterializedWorkerOutput(
 	proposals workerexecution.ProposedOutput,
 	fromDetachedOutput bool,
 ) workerexecution.WorkResult {
+	if result.Cancellation != nil || result.Outcome == workerexecution.OutcomeCanceled {
+		result.Outcome = workerexecution.OutcomeCanceled
+		if result.Cancellation == nil {
+			result.Cancellation = &workerexecution.DispatchCancellation{Reason: workerexecution.DispatchCancellationReasonCanceled}
+		}
+		result.Output = ""
+		result.StructuredResult = nil
+		result.StructuredResultPresent = false
+		result.RecordedOutputWork = nil
+		return result
+	}
 	if len(proposals.ProposedWork) == 0 &&
 		(!fromDetachedOutput || !hasMaterializableOutput(proposals)) {
 		return result

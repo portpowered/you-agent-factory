@@ -60,10 +60,10 @@ func TestPackagedTournamentRunsOneOnOneBracketThroughCodexCommandRunner(t *testi
 
 func TestPackagedSpawnPlansExactCountRunsChildrenAndMergesThroughCodexCommandRunner(t *testing.T) {
 	runner := testutil.NewProviderCommandRunner(
-		providerResult(support.CodexSuccessStdout(`["research climate","research cost"]`)),
-		providerResult(support.CodexSuccessStdout("climate findings")),
-		providerResult(support.CodexSuccessStdout("cost findings")),
-		providerResult(support.CodexSuccessStdout("merged travel answer")),
+		providerResult(support.CodexSuccessStdout(`{"tasks":["research climate","research cost"]}`)),
+		providerResult(support.CodexSuccessStdout(`{"result":"climate findings"}`)),
+		providerResult(support.CodexSuccessStdout(`{"result":"cost findings"}`)),
+		providerResult(support.CodexSuccessStdout(`{"answer":"merged travel answer"}`)),
 	)
 	response := invokeJavaScriptFactory(t, javascriptInvocation{
 		factoryName: factorydefinitions.PackagedSpawnFactoryName,
@@ -102,9 +102,9 @@ func TestPackagedSpawnRunsAntigravityChildrenWithExactModel(t *testing.T) {
 		t.Run("executorProvider="+executorProvider, func(t *testing.T) {
 			const model = "gemini-3.6-flash-medium"
 			runner := testutil.NewProviderCommandRunner(
-				providerResult([]byte(`{"event":"result","result":{"conversation_id":"agy-spawn-plan","status":"SUCCESS","response":"[\"one task\"]","duration_seconds":1,"num_turns":1,"usage":{"input_tokens":1,"output_tokens":1,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":2}}}`+"\n")),
-				providerResult([]byte(`{"event":"result","result":{"conversation_id":"agy-spawn-task","status":"SUCCESS","response":"one task result","duration_seconds":1,"num_turns":1,"usage":{"input_tokens":1,"output_tokens":1,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":2}}}`+"\n")),
-				providerResult([]byte(`{"event":"result","result":{"conversation_id":"agy-spawn-merge","status":"SUCCESS","response":"merged Antigravity spawn answer","duration_seconds":1,"num_turns":1,"usage":{"input_tokens":1,"output_tokens":1,"thinking_tokens":0,"cache_read_tokens":0,"total_tokens":2}}}`+"\n")),
+				providerResult(antigravityStructuredResult("agy-spawn-plan", map[string]any{"tasks": []string{"one task"}}, antigravityTaskPlanSchema)),
+				providerResult(antigravityStructuredResult("agy-spawn-task", map[string]any{"result": "one task result"}, antigravityTaskResultSchema)),
+				providerResult(antigravityStructuredResult("agy-spawn-merge", map[string]any{"answer": "merged Antigravity spawn answer"}, antigravityMergerResultSchema)),
 			)
 			response := invokeJavaScriptFactory(t, javascriptInvocation{
 				factoryName: factorydefinitions.PackagedSpawnFactoryName,
@@ -249,4 +249,34 @@ func postJSON[T any](t *testing.T, endpoint string, request any) T {
 
 func providerResult(stdout []byte) platformprocess.CommandResult {
 	return platformprocess.CommandResult{Stdout: stdout}
+}
+
+const (
+	antigravityTaskPlanSchema     = `{"type":"object","properties":{"tasks":{"type":"array","minItems":1,"maxItems":1,"items":{"type":"string","minLength":1}}},"required":["tasks"],"additionalProperties":false}`
+	antigravityTaskResultSchema   = `{"type":"object","properties":{"result":{"type":"string","minLength":1}},"required":["result"],"additionalProperties":false}`
+	antigravityMergerResultSchema = `{"type":"object","properties":{"answer":{"type":"string","minLength":1}},"required":["answer"],"additionalProperties":false}`
+)
+
+func antigravityStructuredResult(conversationID string, output map[string]any, schema string) []byte {
+	encodedOutput, err := json.Marshal(output)
+	if err != nil {
+		panic(err)
+	}
+	encoded, err := json.Marshal(map[string]any{
+		"event": "result",
+		"result": map[string]any{
+			"conversation_id":   conversationID,
+			"status":            "SUCCESS",
+			"response":          string(encodedOutput),
+			"structured_output": output,
+			"json_schema":       json.RawMessage(schema),
+			"duration_seconds":  1,
+			"num_turns":         1,
+			"usage":             map[string]any{"input_tokens": 1, "output_tokens": 1, "thinking_tokens": 0, "cache_read_tokens": 0, "total_tokens": 2},
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+	return append(encoded, '\n')
 }

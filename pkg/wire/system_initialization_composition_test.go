@@ -101,7 +101,7 @@ func bootstrapCompositionGoalCatalog(t *testing.T) factorydefinitions.PackagedFa
 	return packagedCatalog
 }
 
-func TestProvideSystemInitializationServiceComposedInitializeCreatesThenSkipsPackagedFactories(t *testing.T) {
+func TestProvideSystemInitializationServiceComposedInitializeCreatesThenReportsCurrentPackagedFactories(t *testing.T) {
 	t.Parallel()
 
 	edges := serviceedges.Edges{}
@@ -167,7 +167,7 @@ func TestProvideSystemInitializationServiceComposedInitializeCreatesThenSkipsPac
 	}
 	if len(second.PackagedFactories) != 1 ||
 		second.PackagedFactories[0].Name != "@you/goal" ||
-		second.PackagedFactories[0].Outcome != systeminitialization.PackagedFactorySkipped {
-		t.Fatalf("second packaged factories = %#v, want one skipped @you/goal", second.PackagedFactories)
+		second.PackagedFactories[0].Outcome != systeminitialization.PackagedFactoryCurrent {
+		t.Fatalf("second packaged factories = %#v, want one current @you/goal", second.PackagedFactories)
 	}
 }

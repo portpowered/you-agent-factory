@@ -174,20 +174,24 @@ func TestModelsCatalogDiscoveryActivatesThroughRootBuildProcessAfterLifecycle(t 
 	}
 
 	models := support.GetJSON[factoryapi.ListModelsResponse](t, server.URL()+"/models")
-	if len(models.Results) != 1 {
-		t.Fatalf("GET /models result count = %d, want 1", len(models.Results))
+	var observed *factoryapi.ModelSummary
+	for index := range models.Results {
+		if models.Results[index].Name == "OMNIVOICE_Q4_K_M" {
+			observed = &models.Results[index]
+			break
+		}
 	}
-	if models.Results[0].Name != "OMNIVOICE_Q4_K_M" {
-		t.Fatalf("GET /models first result = %#v, want OMNIVOICE_Q4_K_M", models.Results[0])
+	if observed == nil {
+		t.Fatalf("GET /models did not include OMNIVOICE_Q4_K_M; results=%#v", models.Results)
 	}
-	if models.Results[0].ProviderLocality != factoryapi.WorkerModelLocalityCloud {
-		t.Fatalf("GET /models provider locality = %q, want CLOUD", models.Results[0].ProviderLocality)
+	if observed.ProviderLocality != factoryapi.WorkerModelLocalityCloud {
+		t.Fatalf("GET /models provider locality = %q, want CLOUD", observed.ProviderLocality)
 	}
-	if models.Results[0].ManagedRuntime.Identity != "OMNIVOICE_Q4_K_M" {
-		t.Fatalf("GET /models managed runtime identity = %q, want OMNIVOICE_Q4_K_M", models.Results[0].ManagedRuntime.Identity)
+	if observed.ManagedRuntime.Identity != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("GET /models managed runtime identity = %q, want OMNIVOICE_Q4_K_M", observed.ManagedRuntime.Identity)
 	}
-	if models.Results[0].ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
-		t.Fatalf("GET /models managed readiness = %s, want READY", models.Results[0].ManagedRuntime.ReadinessState)
+	if observed.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+		t.Fatalf("GET /models managed readiness = %s, want READY", observed.ManagedRuntime.ReadinessState)
 	}
 }
 

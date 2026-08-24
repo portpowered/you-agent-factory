@@ -15,9 +15,17 @@ type RuntimeCacheInspection struct {
 	Installed          bool
 	Revision           string
 	CachePath          string
+	CacheBytes         int64
 	InstalledFileCount int
 	MissingAssets      []string
 	PartialArtifacts   bool
+	ManifestPresent    bool
+	ManifestValid      bool
+	ExpectedArtifacts  []models.AssetRequirement
+	ObservedArtifacts  []models.AssetArtifact
+	ActivePull         bool
+	IntegrityVerified  bool
+	FailureReason      string
 }
 
 // RuntimeCacheInspector probes installed managed-runtime assets from local cache.
@@ -32,6 +40,21 @@ func runtimeCacheInspectDiagnostics(inspection RuntimeCacheInspection, forInspec
 	diagnostics := make(map[string]string)
 	if len(inspection.MissingAssets) > 0 {
 		diagnostics["missingAssets"] = strings.Join(inspection.MissingAssets, ",")
+	}
+	if inspection.ManifestPresent {
+		diagnostics["manifestValid"] = strconv.FormatBool(inspection.ManifestValid)
+	}
+	if len(inspection.ExpectedArtifacts) > 0 {
+		diagnostics["expectedFileCount"] = strconv.Itoa(len(inspection.ExpectedArtifacts))
+	}
+	if len(inspection.ObservedArtifacts) > 0 {
+		diagnostics["observedFileCount"] = strconv.Itoa(len(inspection.ObservedArtifacts))
+	}
+	if inspection.ActivePull {
+		diagnostics["activePull"] = "true"
+	}
+	if reason := strings.TrimSpace(inspection.FailureReason); reason != "" {
+		diagnostics["failureReason"] = reason
 	}
 	if !forInspect {
 		return diagnostics

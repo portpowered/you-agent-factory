@@ -5,9 +5,9 @@ package runtimebuild
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
@@ -30,8 +30,8 @@ type Service struct {
 	workstationLoader          factorydefinitions.WorkstationLoader
 	loadFactory                factory.LoadedFactoryLoader
 	providerOverride           providers.Service
-	providerCommandRunner      workers.CommandRunner
-	scriptCommandRunner        workers.CommandRunner
+	providerCommandRunner      platformprocess.CommandRunner
+	scriptCommandRunner        platformprocess.CommandRunner
 	mockWorkersConfig          *workers.MockWorkersConfig
 	newMockCommandRunner       MockCommandRunnerFactory
 	clock                      factory.Clock
@@ -53,8 +53,8 @@ func New(
 	workstationLoader factorydefinitions.WorkstationLoader,
 	loadFactory factory.LoadedFactoryLoader,
 	providerOverride providers.Service,
-	providerCommandRunner workers.CommandRunner,
-	scriptCommandRunner workers.CommandRunner,
+	providerCommandRunner platformprocess.CommandRunner,
+	scriptCommandRunner platformprocess.CommandRunner,
 	mockWorkersConfig *workers.MockWorkersConfig,
 	newMockCommandRunner MockCommandRunnerFactory,
 	clock factory.Clock,
@@ -116,7 +116,7 @@ func (s *Service) BuildSpec(
 	loadedFactoryCfg factorydefinitions.MutableLoadedFactorySource,
 	runtimeInstanceID string,
 	replayProvider providers.Service,
-	replayCommandRunner workers.CommandRunner,
+	replayCommandRunner platformprocess.CommandRunner,
 	submissionHooks []factory.SubmissionHook,
 	completionPlanner factory.CompletionDeliveryPlanner,
 	preserveCompatibilityDefaultRecordPath bool,
@@ -213,16 +213,5 @@ func (s *Service) BuildReplacement(
 
 // SessionScopedRecordPath substitutes per-session recording tokens in record paths.
 func SessionScopedRecordPath(basePath string, sessionID string) string {
-	if strings.TrimSpace(basePath) == "" {
-		return basePath
-	}
-	if strings.Contains(basePath, "__factory_session_id__") {
-		return strings.ReplaceAll(basePath, "__factory_session_id__", sessionID)
-	}
-	if sessionID == "~default" {
-		return basePath
-	}
-	ext := filepath.Ext(basePath)
-	base := strings.TrimSuffix(basePath, ext)
-	return base + "." + sessionID + ext
+	return factory.RecordingPath(basePath).ForSession(sessionID)
 }

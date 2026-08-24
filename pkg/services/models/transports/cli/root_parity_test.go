@@ -765,11 +765,17 @@ func TestRootAdapter_PullMapsClassifiedModelsRootFailure(t *testing.T) {
 					ModelName:          "OMNIVOICE_Q4_K_M",
 					ManagedPullOutcome: "SOURCE_FETCH_FAILED",
 					ReadinessState:     "FAILED",
+					SourceKind:         "UPSTREAM_REPOSITORY",
+					SourceID:           "Serveurperso/OmniVoice-GGUF",
+					ResolverNotes:      "source fetch failed",
 				}, &modelinference.PullError{
 					Result: modelinference.PullResult{
 						ModelName:          "OMNIVOICE_Q4_K_M",
 						ManagedPullOutcome: "SOURCE_FETCH_FAILED",
 						ReadinessState:     "FAILED",
+						SourceKind:         "UPSTREAM_REPOSITORY",
+						SourceID:           "Serveurperso/OmniVoice-GGUF",
+						ResolverNotes:      "source fetch failed",
 					},
 					Cause: errors.New("source fetch failed"),
 				}
@@ -791,6 +797,11 @@ func TestRootAdapter_PullMapsClassifiedModelsRootFailure(t *testing.T) {
 	}
 	if response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED {
 		t.Fatalf("pull outcome = %s, want SOURCE_FETCH_FAILED", response.ManagedRuntimePull.PullOutcome)
+	}
+	if response.ManagedRuntimePull.SourceDiagnostics == nil ||
+		response.ManagedRuntimePull.SourceDiagnostics.SourceKind == nil ||
+		*response.ManagedRuntimePull.SourceDiagnostics.SourceKind != "UPSTREAM_REPOSITORY" {
+		t.Fatalf("pull source diagnostics = %#v, want source identity", response.ManagedRuntimePull.SourceDiagnostics)
 	}
 }
 

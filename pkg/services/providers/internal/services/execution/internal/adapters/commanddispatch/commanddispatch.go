@@ -50,9 +50,18 @@ func Request(
 	request providers.ExecuteRequest,
 	command providerservice.CommandRequest,
 ) providerservice.CommandRequest {
+	dispatchID := request.Correlation.DispatchID
+	if dispatchID == "" {
+		dispatchID = request.AttemptID
+	}
+	command.DispatchID = dispatchID
 	command.AttemptID = request.AttemptID
+	command.TransitionID = request.TransitionID
 	command.WorkerType = request.WorkerType
 	command.WorkstationName = request.WorkstationName
+	command.ProjectID = request.ProjectID
+	command.InputTokens = append([]any(nil), request.InputTokens...)
+	command.InputBindings = cloneStringSliceMap(request.InputBindings)
 	command.Execution = work.ExecutionMetadata{
 		RequestID: request.Correlation.RequestID,
 		TraceID:   request.Correlation.TraceID,
@@ -62,4 +71,15 @@ func Request(
 	command.ExecutionLogger = request.ExecutionLogger
 	command.ProcessLifecycleObserver = request.ProcessLifecycleObserver
 	return command
+}
+
+func cloneStringSliceMap(values map[string][]string) map[string][]string {
+	if len(values) == 0 {
+		return nil
+	}
+	clone := make(map[string][]string, len(values))
+	for key, items := range values {
+		clone[key] = append([]string(nil), items...)
+	}
+	return clone
 }

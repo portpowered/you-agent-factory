@@ -236,25 +236,6 @@ func assertCommandArgs(t *testing.T, req platformprocess.CommandRequest, want []
 	}
 }
 
-func assertProviderArgsPrompt(t *testing.T, req platformprocess.CommandRequest, want string) {
-	t.Helper()
-
-	if len(req.Args) == 0 {
-		t.Fatal("provider args were empty")
-	}
-	if got := req.Args[len(req.Args)-1]; got != want {
-		t.Fatalf("provider prompt arg = %q, want %q", got, want)
-	}
-}
-
-func assertProviderStdin(t *testing.T, req platformprocess.CommandRequest, want string) {
-	t.Helper()
-
-	if got := string(req.Stdin); got != want {
-		t.Fatalf("provider stdin = %q, want %q", got, want)
-	}
-}
-
 func assertRuntimeMergeCommandRequest(t *testing.T, dir string, req platformprocess.CommandRequest) {
 	t.Helper()
 
@@ -301,19 +282,6 @@ func findRuntimeLogRecord(t *testing.T, path, eventName string) map[string]any {
 	return nil
 }
 
-func requireRuntimeLogPath(t *testing.T, logDir, runtimeInstanceID string) string {
-	t.Helper()
-
-	matches, err := filepath.Glob(filepath.Join(logDir, "*", "*", "*", "*-runtime-log-"+runtimeInstanceID+"-*.log"))
-	if err != nil {
-		t.Fatalf("glob runtime log path: %v", err)
-	}
-	if len(matches) != 1 {
-		t.Fatalf("runtime log paths for %q under %s = %v, want exactly one", runtimeInstanceID, logDir, matches)
-	}
-	return matches[0]
-}
-
 func containsEnv(env []string, expected string) bool {
 	for _, entry := range env {
 		if entry == expected {
@@ -321,26 +289,6 @@ func containsEnv(env []string, expected string) bool {
 		}
 	}
 	return false
-}
-
-func cursorMergedPrompt(systemPrompt, userMessage string) string {
-	systemPrompt = strings.TrimSpace(systemPrompt)
-	userMessage = strings.TrimSpace(userMessage)
-	switch {
-	case systemPrompt == "":
-		return userMessage
-	case userMessage == "":
-		return systemPrompt
-	default:
-		return "System instructions:\n" + systemPrompt + "\n\nUser request:\n" + userMessage
-	}
-}
-
-func assertCursorProviderCompleted(t *testing.T, listed factoryapi.ListWorkResponse) {
-	t.Helper()
-	assertSessionPlaces(t, listed, map[string]int{
-		"task:complete": 1, "task:init": 0, "task:failed": 0,
-	})
 }
 
 func assertSessionPlaces(t *testing.T, listed factoryapi.ListWorkResponse, wants map[string]int) {

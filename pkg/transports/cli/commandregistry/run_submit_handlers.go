@@ -8,13 +8,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 )
 
-var runServerCommandIDs = []string{"you.run", "you.server"}
+var runServerCommandIDs = []string{"you.run", "you.server", "you.server.stop"}
 
 // RunServerHandlers carries handwritten PreRunE/RunE lifecycles for the
 // retained run and server commands.
 type RunServerHandlers struct {
 	Run    CommandHandlers
 	Server CommandHandlers
+	Stop   CommandHandlers
 }
 
 // RunnableRunServerCommandIDs returns contracted runnable command IDs in stable order.
@@ -73,6 +74,7 @@ func NewRunServerRegistry(handlers RunServerHandlers) (*Registry, error) {
 	}{
 		{commandID: "you.run", handlers: handlers.Run},
 		{commandID: "you.server", handlers: handlers.Server},
+		{commandID: "you.server.stop", handlers: handlers.Stop},
 	}
 	registry := NewRegistry()
 	for _, registration := range registrations {

@@ -67,8 +67,16 @@ properties:
       - METRICS_INVALID_REQUEST
       - METRICS_SESSION_NOT_FOUND
       - METRICS_SESSION_SCOPE_UNAVAILABLE
+      - MODEL_CACHE_NOT_FOUND
+      - MODEL_CACHE_IN_USE
       - NOT_FOUND
       - INTERNAL_ERROR
+      - COSTS_INVALID_REQUEST
+      - COSTS_QUERY_CANCELED
+      - COSTS_QUERY_FAILED
+      - COSTS_QUERY_TIMEOUT
+      - SHUTDOWN_CONTROL_REJECTED
+      - SHUTDOWN_CONTROL_UNAVAILABLE
     x-enum-descriptions:
       - Request payload or parameter validation failed.
       - Factory session discovery found a readable factory target whose config could not be loaded.
@@ -121,8 +129,16 @@ properties:
       - The metrics request could not be interpreted by the canonical metrics route.
       - The requested live Factory Session identity was not discoverable.
       - The live Factory Session was discoverable, but no retained metrics scope was available.
+      - The selected managed model cache revision does not exist.
+      - The selected managed model cache revision is held by an active model host or invocation.
       - The requested resource does not exist.
       - The server failed while handling an otherwise valid request.
+      - The metrics costs request contained invalid configuration or selection input.
+      - The metrics costs request was canceled before the report completed.
+      - The metrics costs query failed while reading or valuing runtime usage.
+      - The metrics costs query exceeded its server-side completion bound.
+      - The shutdown control request came from a non-loopback peer.
+      - The invocation-local shutdown control is unavailable.
   targets:
     type: array
     description: Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields.

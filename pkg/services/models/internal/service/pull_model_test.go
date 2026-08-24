@@ -271,9 +271,19 @@ func TestService_PullModel_LogsSuccessAndFailureOutcomes(t *testing.T) {
 	}
 
 	svc = mustConstructModelService(t, modelServiceFixture{
-		RuntimeConfig:    func() *modelRuntimeConfig { return runtimeCfg },
-		Logger:           logger,
-		ModelAssetPuller: &stubPullAssetPuller{err: errors.New("pull failed")},
+		RuntimeConfig: func() *modelRuntimeConfig { return runtimeCfg },
+		Logger:        logger,
+		ModelAssetPuller: &stubPullAssetPuller{
+			result: apisurface.PullResult{
+				ModelName: "OMNIVOICE_Q4_K_M", SourceKind: "UPSTREAM_REPOSITORY",
+				SourceID: "owner/repo", Revision: "rev-1",
+				PullDiagnostics: apisurface.PullDiagnostics{
+					ResolvedRepository: "owner/repo", Revision: "rev-1",
+					File: "weights.gguf", Operation: "verify downloaded asset",
+				},
+			},
+			err: errors.New("opaque body=secret C:\\private\\weights"),
+		},
 	})
 	if _, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M"); err == nil {
 		t.Fatal("PullModel failure path: nil error, want pull failure")
@@ -283,6 +293,29 @@ func TestService_PullModel_LogsSuccessAndFailureOutcomes(t *testing.T) {
 	}
 	if observed.FilterMessage("managed runtime pull failed").Len() != 1 {
 		t.Fatalf("failure logs = %d, want 1", observed.FilterMessage("managed runtime pull failed").Len())
+	}
+	if observed.FilterMessage("managed runtime pull started").Len() != 2 {
+		t.Fatalf("start logs = %d, want one per pull", observed.FilterMessage("managed runtime pull started").Len())
+	}
+	failureEntries := observed.FilterMessage("managed runtime pull failed").All()
+	if got := failureEntries[0].ContextMap()["failure_reason"]; got != "pull_failed" {
+		t.Fatalf("failure reason = %#v, want pull_failed", got)
+	}
+	if got := failureEntries[0].ContextMap()["lifecycle_state"]; got != string(managedruntime.LifecycleStateNotInstalled) {
+		t.Fatalf("failure lifecycle = %#v, want NOT_INSTALLED", got)
+	}
+	fields := failureEntries[0].ContextMap()
+	for key, want := range map[string]string{
+		"model_name": "OMNIVOICE_Q4_K_M", "operation": "verify downloaded asset",
+		"terminal_classification": "ASSET_PREPARATION_FAILED", "resolved_source": "owner/repo",
+		"resolved_repository": "owner/repo", "revision": "rev-1", "file": "weights.gguf",
+	} {
+		if got := fields[key]; got != want {
+			t.Fatalf("failure field %s = %#v, want %q", key, got, want)
+		}
+	}
+	if _, leaked := fields["error"]; leaked {
+		t.Fatalf("failure log retained raw error field: %#v", fields)
 	}
 }
 

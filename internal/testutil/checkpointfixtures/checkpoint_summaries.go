@@ -41,19 +41,6 @@ func ResumableCheckpointSummaryResult() *factoryruntime.JavaScriptCheckpointSumm
 	}
 }
 
-// ReplayFirstChildCheckpointSummaryResult is fixed contract data for a
-// resumable scenario that replays its first child before reading resume state.
-func ReplayFirstChildCheckpointSummaryResult() *factoryruntime.JavaScriptCheckpointSummary {
-	return &factoryruntime.JavaScriptCheckpointSummary{
-		SchemaVersion:        factoryruntime.JavaScriptCheckpointSummarySchemaVersion,
-		Kind:                 factoryruntime.JavaScriptCheckpointSummaryKind,
-		CheckpointID:         "checkpoint-1",
-		Label:                "after-step-one",
-		CompletedDispatchIDs: []string{"dispatch-1"},
-		ResumeStrategy:       factoryruntime.JavaScriptResumeStrategy,
-	}
-}
-
 func cloneCheckpointSummaryResult(
 	summary *factoryruntime.JavaScriptCheckpointSummary,
 ) *factoryruntime.JavaScriptCheckpointSummary {

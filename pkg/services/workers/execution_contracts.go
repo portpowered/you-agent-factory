@@ -64,6 +64,11 @@ type InferenceEvent struct {
 	WorkIDs    []string
 	Request    *InferenceRequestEventPayload
 	Response   *InferenceResponseEventPayload
+	// DeclaredSecretJSONPointers identifies fields in the generated canonical
+	// event payload whose values came from an explicit secret classification.
+	// It is an in-memory provenance handoff and is never serialized as part of
+	// the Factory Event.
+	DeclaredSecretJSONPointers []string
 }
 
 // InferenceRequestEventPayload records the concrete provider request boundary.
@@ -186,11 +191,12 @@ type ModelResponseEventPayload struct {
 // Factory event recorder without coupling worker execution to a transport or
 // Factory event envelope.
 type AgentRunResponseEvent struct {
-	ID         string
-	DispatchID string
-	EventTime  time.Time
-	Tick       int
-	Payload    AgentRunResponseEventPayload
+	ID                         string
+	DispatchID                 string
+	EventTime                  time.Time
+	Tick                       int
+	Payload                    AgentRunResponseEventPayload
+	DeclaredSecretJSONPointers []string
 }
 
 // AgentRunResponseEventPayload is the stable agent-run completion payload.
@@ -278,6 +284,7 @@ type ScriptResponseEventPayload struct {
 type DispatchResponseEventPayload struct {
 	CompletionID                *string                       `json:"completionId,omitempty"`
 	CurrentChainingTraceID      *string                       `json:"currentChainingTraceId,omitempty"`
+	Cancellation                *DispatchCancellation         `json:"cancellation,omitempty"`
 	DurationMillis              *int64                        `json:"durationMillis,omitempty"`
 	Error                       *string                       `json:"error,omitempty"`
 	ArtifactVerification        *ExpectedArtifactVerification `json:"artifactVerification,omitempty"`
@@ -355,6 +362,7 @@ type WorkMetricsEventPayload struct {
 // carried by Factory event payloads and world-state projections.
 type WorkstationResult struct {
 	Outcome                     string                        `json:"outcome"`
+	Cancellation                *DispatchCancellation         `json:"cancellation,omitempty"`
 	Output                      string                        `json:"output,omitempty"`
 	Error                       string                        `json:"error,omitempty"`
 	Feedback                    string                        `json:"feedback,omitempty"`
@@ -394,6 +402,7 @@ func (value *WorkstationResult) UnmarshalJSON(data []byte) error {
 
 func CloneWorkstationResult(result WorkstationResult) WorkstationResult {
 	clone := result
+	clone.Cancellation = result.Cancellation.Clone()
 	clone.ArtifactVerification = result.ArtifactVerification.Clone()
 	clone.FailureDetail = CloneFailureDetail(result.FailureDetail)
 	clone.FailureMetadata = CloneWorkFailureMetadata(result.FailureMetadata)
@@ -408,17 +417,13 @@ func CanonicalProviderSessionProvider(provider string) string {
 	return providers.ID(provider).CanonicalSessionProvider()
 }
 
-// CloneProviderSessionMetadata returns a detached compatibility projection.
-func CloneProviderSessionMetadata(session *ProviderSessionMetadata) *ProviderSessionMetadata {
-	return (session).Clone()
-}
-
 // WorkResult is returned by a worker after processing.
 // The Outcome determines which arc set is used to route the resulting tokens.
 type WorkResult struct {
 	DispatchID                  string                        `json:"dispatch_id"`
 	TransitionID                string                        `json:"transition_id"`
 	Outcome                     WorkOutcome                   `json:"outcome"`
+	Cancellation                *DispatchCancellation         `json:"cancellation,omitempty"`
 	Output                      string                        `json:"output,omitempty"`
 	StructuredResult            any                           `json:"structuredResult,omitempty"`
 	RecordedOutputWork          []work.FactoryWorkItem        `json:"recorded_output_work,omitempty"`
@@ -482,6 +487,9 @@ const (
 	OutcomeRejected WorkOutcome = "REJECTED"
 	// OutcomeFailed means execution crashed, timed out, or hit a system error.
 	OutcomeFailed WorkOutcome = "FAILED"
+	// OutcomeCanceled means the dispatch stopped deliberately before producing
+	// a business result. Runtime does not route it through failure arcs.
+	OutcomeCanceled WorkOutcome = "CANCELED"
 )
 
 // WorkMetrics captures performance data from a worker execution.

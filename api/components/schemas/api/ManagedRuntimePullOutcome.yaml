@@ -2,14 +2,23 @@ type: string
 description: >
   Source-agnostic outcome for one managed runtime pull or install request.
   Outcomes classify whether the runtime is already ready, newly installed,
-  still preparing, timed out, failed to fetch required assets, or unsupported.
+  still preparing, timed out, cancelled, failed during source resolution,
+  source fetch, integrity verification, assembly, cache installation, or
+  readiness evaluation, or unsupported.
 enum:
   - ALREADY_READY
   - INSTALLED_SUCCESSFULLY
   - ALREADY_PRESENT
   - STILL_LOADING
   - TIMED_OUT
+  - CANCELLED
   - SOURCE_FETCH_FAILED
+  - SOURCE_RESOLUTION_FAILED
+  - INTEGRITY_VERIFICATION_FAILED
+  - ASSEMBLY_FAILED
+  - CACHE_INSTALLATION_FAILED
+  - READINESS_EVALUATION_FAILED
+  - ASSET_PREPARATION_FAILED
   - UNSUPPORTED_RUNTIME
 x-enum-descriptions:
   - The managed runtime was already ready and no additional install work was required.
@@ -17,5 +26,12 @@ x-enum-descriptions:
   - Required managed runtime assets were already present in the managed cache at the requested revision.
   - Managed runtime install or preparation is still in progress.
   - Managed runtime install or preparation timed out before reaching a terminal readiness state.
+  - The pull was cancelled before reaching a terminal readiness state.
   - Required managed runtime assets could not be fetched from the configured backend source.
+  - The configured source could not be resolved for the requested model assets.
+  - Prepared asset bytes failed size or digest verification.
+  - Asset assembly or staging failed after source resolution.
+  - Installation of the prepared asset snapshot into the managed cache failed.
+  - The final managed-cache readiness evaluation failed after preparation.
+  - Asset preparation failed without a more specific stage classification.
   - The requested managed runtime does not support pull or install in the current configuration.

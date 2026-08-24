@@ -75,6 +75,15 @@ func startStressProcess(
 	dir string,
 	provider any,
 ) *stressProcessHarness {
+	return startStressProcessWithMetrics(t, dir, provider, nil)
+}
+
+func startStressProcessWithMetrics(
+	t *testing.T,
+	dir string,
+	provider any,
+	invocationMetricsRecorder factorysessions.InvocationMetricsRecorder,
+) *stressProcessHarness {
 	t.Helper()
 	ensureStressProviderDefinitions(t, dir)
 	var providerService providers.Service
@@ -94,7 +103,8 @@ func startStressProcess(
 	)
 	ready := make(chan struct{})
 	edges := serviceedges.Edges{
-		ProviderOverride: providerService,
+		ProviderOverride:          providerService,
+		InvocationMetricsRecorder: invocationMetricsRecorder,
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
 			started := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				startedAt := time.Now()

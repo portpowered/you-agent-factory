@@ -60,8 +60,8 @@ func TestRun_SuppressDashboardRendering_SkipsSimpleDashboardOutput(t *testing.T)
 		t.Fatalf("Run: %v", err)
 	}
 
-	if output != "" {
-		t.Fatalf("expected no simple dashboard output, got %q", output)
+	if output != "Batch completed successfully.\n" {
+		t.Fatalf("expected truthful batch result without simple dashboard output, got %q", output)
 	}
 }
 

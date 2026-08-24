@@ -227,11 +227,3 @@ func runGoTest(cfg config, packages, expectedPackages []string) (unitTimingCaptu
 	runErr := cmd.Wait()
 	return capture, errors.Join(captureErr, runErr)
 }
-
-func commandError(err error, stderr string) error {
-	detail := strings.TrimSpace(stderr)
-	if detail == "" {
-		return err
-	}
-	return fmt.Errorf("%w\n%s", err, detail)
-}

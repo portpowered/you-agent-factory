@@ -59,6 +59,9 @@ func TestArtifactsWithDependenciesOrchestratesPipelineInExpectedOrder(t *testing
 			}
 			return []byte("manifest"), nil
 		},
+		ProjectJavaScriptCatalog: func(payload []byte) ([]byte, error) {
+			return payload, nil
+		},
 	}
 
 	artifacts, err := ArtifactsWithDependencies(inputRoot, deps)
@@ -111,6 +114,9 @@ func TestArtifactsWithDependencies_PropagatesRawArtifactReadFailure(t *testing.T
 			}
 			return []byte("ok"), nil
 		},
+		ProjectJavaScriptCatalog: func(payload []byte) ([]byte, error) {
+			return payload, nil
+		},
 	})
 	if err == nil || !strings.Contains(err.Error(), "read canonical raw artifact") {
 		t.Fatalf("expected read failure, got %v", err)
@@ -124,7 +130,10 @@ func TestArtifactsWithDependencies_PropagatesFactorySchemaFailure(t *testing.T) 
 			return []contractjoiner.Document{}, nil
 		},
 		ReadRawArtifact: func(string) ([]byte, error) { return []byte("raw"), nil },
-		GenerateSchema:  func(string) ([]byte, error) { return nil, errors.New("schema failed") },
+		ProjectJavaScriptCatalog: func(payload []byte) ([]byte, error) {
+			return payload, nil
+		},
+		GenerateSchema: func(string) ([]byte, error) { return nil, errors.New("schema failed") },
 	})
 	if err == nil || !strings.Contains(err.Error(), "schema failed") {
 		t.Fatalf("expected schema failure, got %v", err)
@@ -138,7 +147,10 @@ func TestArtifactsWithDependencies_PropagatesManifestFailure(t *testing.T) {
 			return []contractjoiner.Document{}, nil
 		},
 		ReadRawArtifact: func(string) ([]byte, error) { return []byte("raw"), nil },
-		GenerateSchema:  func(string) ([]byte, error) { return []byte("{\"type\":\"object\"}\n"), nil },
+		ProjectJavaScriptCatalog: func(payload []byte) ([]byte, error) {
+			return payload, nil
+		},
+		GenerateSchema: func(string) ([]byte, error) { return []byte("{\"type\":\"object\"}\n"), nil },
 		GenerateStandaloneSchemas: func(string) (map[string][]byte, error) {
 			return map[string][]byte{}, nil
 		},

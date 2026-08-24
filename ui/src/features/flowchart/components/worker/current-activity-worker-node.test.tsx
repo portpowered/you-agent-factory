@@ -162,8 +162,15 @@ describe("CurrentActivity worker node icons", () => {
   it.each([
     ["SCRIPT_WORKER", "codex", "script"],
     [undefined, "codex", "codex"],
+    [undefined, "openai", "codex"],
+    [undefined, "openai-codex", "codex"],
     [undefined, "CLAUDE", "claude"],
+    [undefined, "anthropic", "claude"],
+    [undefined, "claude cli", "claude"],
+    [undefined, "local_claude", "claude"],
+    [undefined, "gemini", "gemini"],
     [undefined, "antigravity", "antigravity"],
+    [undefined, "agy", "antigravity"],
   ])("selects the %s/%s worker glyph", (workerType, runnerId, expectedKind) => {
     const { container } = renderWorkerIcon({ workerType, runnerId });
 
@@ -183,6 +190,34 @@ describe("CurrentActivity worker node icons", () => {
       expect(icon?.getAttribute("data-graph-semantic-icon")).toBe("worker");
       expect(icon?.querySelectorAll("path, circle").length).toBeGreaterThan(0);
       expect(icon?.getAttribute("aria-label")).toBe("Worker");
+    },
+  );
+
+  it.each([
+    ["codex", "Codex/OpenAI"],
+    ["anthropic", "Claude/Anthropic"],
+    ["gemini", "Gemini"],
+    ["antigravity", "Antigravity"],
+  ])(
+    "includes the resolved %s provider in the worker accessible names",
+    (runnerId, providerLabel) => {
+      const { container, getByRole } = renderWorkerNode({ runnerId });
+
+      expect(
+        getByRole("button", {
+          name: `Select writer (${providerLabel}) worker`,
+        }),
+      ).toBeTruthy();
+      expect(
+        container
+          .querySelector("[data-worker-label-zone]")
+          ?.getAttribute("aria-label"),
+      ).toBe(`worker:writer (${providerLabel})`);
+      expect(
+        container
+          .querySelector("[data-graph-semantic-icon]")
+          ?.getAttribute("aria-label"),
+      ).toBe(`Worker (${providerLabel})`);
     },
   );
 
@@ -239,5 +274,34 @@ describe("CurrentActivity worker node icons", () => {
         .querySelector("[data-worker-label-zone]")
         ?.getAttribute("aria-label"),
     ).toBe("worker:writer (FUTURE_WORKER_KIND)");
+  });
+});
+
+describe("CurrentActivity future worker accessibility", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("keeps a known provider accessible when the worker kind is future", () => {
+    const { container, getByRole } = renderWorkerNode({
+      runnerId: "codex",
+      workerType: "FUTURE_WORKER_KIND",
+    });
+
+    expect(
+      getByRole("button", {
+        name: "Select writer (FUTURE_WORKER_KIND) (Codex/OpenAI) worker",
+      }),
+    ).toBeTruthy();
+    expect(
+      container
+        .querySelector("[data-worker-label-zone]")
+        ?.getAttribute("aria-label"),
+    ).toBe("worker:writer (FUTURE_WORKER_KIND) (Codex/OpenAI)");
+    expect(
+      container
+        .querySelector("[data-graph-semantic-icon]")
+        ?.getAttribute("data-graph-semantic-icon"),
+    ).toBe("worker");
   });
 });

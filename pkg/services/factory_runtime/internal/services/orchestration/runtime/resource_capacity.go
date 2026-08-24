@@ -20,6 +20,17 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func validObservationScope(scope factory.ObservationScope) bool {
+	switch scope {
+	case "", factory.ObservationScopeFull, factory.ObservationScopeStatus, factory.ObservationScopeProgress,
+		factory.ObservationScopeDispatches, factory.ObservationScopeResults, factory.ObservationScopeResources,
+		factory.ObservationScopeHealth:
+		return true
+	default:
+		return false
+	}
+}
+
 // recordRestoredWorkRequests carries the detached durable board into the new
 // process recording. Runtime ledgers are intentionally process-scoped, so a
 // restart recording must contain the request facts again before it can record

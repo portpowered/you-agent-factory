@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/portpowered/infinite-you/internal/contractstaging"
+	"github.com/portpowered/infinite-you/internal/javascriptcontract"
 )
 
 const successMessage = "[agent-factory:contracts-check] approved contract artifacts are current"
@@ -23,7 +24,12 @@ func run(root string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "[agent-factory:contracts-check] check failed: %v\n", err)
 		return 1
 	}
-	if drift.Empty() {
+	javascriptDiagnostics, err := javascriptcontract.CheckGeneratedOutputs(root)
+	if err != nil {
+		fmt.Fprintf(stderr, "[agent-factory:contracts-check] check failed: %v\n", err)
+		return 1
+	}
+	if drift.Empty() && len(javascriptDiagnostics) == 0 {
 		fmt.Fprintln(stdout, successMessage)
 		return 0
 	}
@@ -31,7 +37,13 @@ func run(root string, stdout, stderr io.Writer) int {
 	writePaths(stderr, "stale", drift.Stale)
 	writePaths(stderr, "missing", drift.Missing)
 	writePaths(stderr, "unexpected", drift.Unexpected)
-	fmt.Fprintln(stderr, "[agent-factory:contracts-check] contract staging differs from canonical sources; run `make contracts-generate` and remove every unexpected file from staging")
+	writeJavaScriptDiagnostics(stderr, javascriptDiagnostics)
+	if !drift.Empty() {
+		fmt.Fprintln(stderr, "[agent-factory:contracts-check] contract staging differs from canonical sources; run `make contracts-generate` and remove every unexpected file from staging")
+	}
+	if len(javascriptDiagnostics) > 0 {
+		fmt.Fprintln(stderr, "[agent-factory:contracts-check] generated JavaScript runtime contract differs from runtime truth; run `make contracts-generate`")
+	}
 	return 1
 }
 
@@ -42,5 +54,17 @@ func writePaths(writer io.Writer, category string, paths []string) {
 	fmt.Fprintf(writer, "[agent-factory:contracts-check] %s:\n", category)
 	for _, path := range paths {
 		fmt.Fprintf(writer, "  %s\n", path)
+	}
+}
+
+func writeJavaScriptDiagnostics(writer io.Writer, diagnostics []javascriptcontract.Diagnostic) {
+	for _, diagnostic := range diagnostics {
+		fmt.Fprintf(
+			writer,
+			"[agent-factory:contracts-check] %s (%s): %s\n",
+			diagnostic.Path,
+			diagnostic.Code,
+			diagnostic.Message,
+		)
 	}
 }

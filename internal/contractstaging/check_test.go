@@ -169,5 +169,8 @@ func canonicalFixture(path string) string {
       type: object
 `
 	}
+	if path == "contracts/javascript/runtime-api.json" {
+		return `{"sharedSchemas":{"javascript.schema.agent_run_spec":{"schema":{"type":"object","additionalProperties":false,"properties":{"prompt":{"type":"string"}},"required":["prompt"]}}}}`
+	}
 	return "canonical:" + path
 }

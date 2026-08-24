@@ -3,16 +3,247 @@ package engine
 import (
 	"context"
 	"testing"
+	"time"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token_transformer"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func TestEngine_SameWorkObserveAndConsumeDispatchesInOneTick(t *testing.T) {
+	net := sameWorkObserveConsumeNet()
+	marking := petri.NewMarking("test-wf")
+	now := time.Date(2026, time.August, 22, 12, 0, 0, 0, time.UTC)
+	marking.AddToken(testDispatchToken("work-token", "task:init", factorytoken.DataTypeWork, now))
+	marking.AddToken(testDispatchToken("slot-token", "slot:available", factorytoken.DataTypeResource, now))
+
+	dispatcher := subsystems.NewDispatcher(
+		net,
+		scheduler.NewWorkInQueueScheduler(2, nil),
+		nil, nil, nil, func() time.Time { return now }, nextTestDispatchID(),
+	)
+	var forwarded []work.WorkDispatch
+	var records []interfaces.FactoryDispatchRecord
+	engine := newTestFactoryEngine(net, marking, []subsystems.Subsystem{dispatcher},
+		WithDispatchHandler(func(dispatch work.WorkDispatch) { forwarded = append(forwarded, dispatch) }),
+		WithDispatchRecorder(func(record interfaces.FactoryDispatchRecord) { records = append(records, record) }),
+	)
+
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick() error: %v", err)
+	}
+	if len(records) != 2 || len(forwarded) != 2 {
+		t.Fatalf("same-tick dispatch records/forwards = %d/%d, want 2/2", len(records), len(forwarded))
+	}
+
+	recordedByTransition := make(map[string]interfaces.FactoryDispatchRecord, len(records))
+	for _, record := range records {
+		recordedByTransition[record.Dispatch.TransitionID] = record
+		if record.CreatedTick != 1 {
+			t.Fatalf("record %q created tick = %d, want 1", record.Dispatch.TransitionID, record.CreatedTick)
+		}
+	}
+	assertRecordedMutation(t, recordedByTransition, "consume-work", "work-token")
+	assertRecordedMutation(t, recordedByTransition, "observe-work", "slot-token")
+
+	byTransition := make(map[string]work.WorkDispatch, len(forwarded))
+	for _, dispatch := range forwarded {
+		byTransition[dispatch.TransitionID] = dispatch
+		if dispatch.Execution.DispatchCreatedTick != 1 || dispatch.Execution.CurrentTick != 1 {
+			t.Fatalf("dispatch %q tick metadata = %+v, want tick 1", dispatch.TransitionID, dispatch.Execution)
+		}
+		if !dispatchHasInputToken(dispatch, "work-token") {
+			t.Fatalf("dispatch %q inputs = %#v, want shared Work token", dispatch.TransitionID, dispatch.InputTokens)
+		}
+	}
+	if _, ok := byTransition["consume-work"]; !ok {
+		t.Fatalf("forwarded transitions = %#v, want consume-work", byTransition)
+	}
+	if observe, ok := byTransition["observe-work"]; !ok || !dispatchHasInputToken(observe, "slot-token") {
+		t.Fatalf("observe-work dispatch = %#v, want shared Work and slot inputs", observe)
+	}
+
+	running := engine.RunningDispatches()
+	if len(running) != 2 {
+		t.Fatalf("running dispatches = %d, want 2", len(running))
+	}
+	assertHeldMutationTokens(t, recordedByTransition, running, "consume-work", "work-token")
+	assertHeldMutationTokens(t, recordedByTransition, running, "observe-work", "slot-token")
+}
+
+func TestEngine_SameTickCancellationResultRestoresResources(t *testing.T) {
+	net := sameWorkObserveConsumeNet()
+	marking := petri.NewMarking("test-wf")
+	now := time.Date(2026, time.August, 22, 12, 0, 0, 0, time.UTC)
+	marking.AddToken(testDispatchToken("work-token", "task:init", factorytoken.DataTypeWork, now))
+	marking.AddToken(testDispatchToken("slot-token", "slot:available", factorytoken.DataTypeResource, now))
+
+	dispatcher := subsystems.NewDispatcher(
+		net,
+		scheduler.NewWorkInQueueScheduler(2, nil),
+		nil, nil, nil, func() time.Time { return now }, nextTestDispatchID(),
+	)
+	transitioner := subsystems.NewTransitioner(
+		net,
+		nil,
+		func() time.Time { return now },
+		token_transformer.New(net.Places, net.WorkTypes, petri.NewWorkIDGenerator()),
+		nil, nil, nil,
+		factorydefinitions.WorkPropagationPolicyFunc(func(*factorydefinitions.FactoryWorkstationConfig) factorydefinitions.WorkPropagationMode {
+			return factorydefinitions.WorkPropagationModeOutputAsPayload
+		}),
+	)
+	hook := newTestDispatchResultHook()
+	var forwarded []work.WorkDispatch
+	engine := newTestFactoryEngine(net, marking, []subsystems.Subsystem{dispatcher, transitioner},
+		WithDispatchResultHook(hook),
+		WithDispatchHandler(func(dispatch work.WorkDispatch) { forwarded = append(forwarded, dispatch) }),
+	)
+
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatalf("initial Tick() error: %v", err)
+	}
+	if len(forwarded) != 2 {
+		t.Fatalf("same-tick dispatches = %d, want winner and loser", len(forwarded))
+	}
+
+	deliverSameWorkTerminalResults(t, hook, forwarded)
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatalf("result Tick() error: %v", err)
+	}
+	assertSameWorkTerminalMarking(t, engine.GetMarking())
+	assertSameWorkDispatchHistory(t, engine.runtimeState.DispatchHistory)
+}
+
+func deliverSameWorkTerminalResults(
+	t *testing.T,
+	hook *testDispatchResultHook,
+	forwarded []work.WorkDispatch,
+) {
+	t.Helper()
+	for _, dispatch := range forwarded {
+		result := workerexecution.WorkResult{
+			DispatchID:   dispatch.DispatchID,
+			TransitionID: dispatch.TransitionID,
+		}
+		switch dispatch.TransitionID {
+		case "consume-work":
+			result.Outcome = workerexecution.OutcomeAccepted
+		case "observe-work":
+			result.Outcome = workerexecution.OutcomeCanceled
+			result.Cancellation = &workerexecution.DispatchCancellation{Reason: workerexecution.DispatchCancellationReasonSuperseded}
+		default:
+			t.Fatalf("unexpected transition %q", dispatch.TransitionID)
+		}
+		hook.results = append(hook.results, result)
+	}
+}
+
+func assertSameWorkTerminalMarking(t *testing.T, marking petri.MarkingSnapshot) {
+	t.Helper()
+	if got := len(marking.TokensInPlace("task:failed")); got != 0 {
+		t.Fatalf("failed Work tokens = %d, want none after superseded loser cleanup", got)
+	}
+	if got := len(marking.TokensInPlace("task:complete")); got != 1 {
+		t.Fatalf("completed Work tokens = %d, want winner completion", got)
+	}
+	if got := len(marking.TokensInPlace("slot:available")); got != 1 {
+		t.Fatalf("restored resource tokens = %d, want canceled loser resource claim restored", got)
+	}
+}
+
+func assertSameWorkDispatchHistory(t *testing.T, history []interfaces.CompletedDispatch) {
+	t.Helper()
+	if len(history) != 2 {
+		t.Fatalf("dispatch history = %#v, want winner and superseded loser", history)
+	}
+	var sawWinner, sawLoser bool
+	for _, completed := range history {
+		switch completed.TransitionID {
+		case "consume-work":
+			sawWinner = completed.Outcome == workerexecution.OutcomeAccepted
+		case "observe-work":
+			sawLoser = completed.Outcome == workerexecution.OutcomeCanceled &&
+				completed.Cancellation != nil &&
+				completed.Cancellation.Reason == workerexecution.DispatchCancellationReasonSuperseded
+		}
+	}
+	if !sawWinner || !sawLoser {
+		t.Fatalf("dispatch history = %#v, want accepted winner and SUPERSEDED loser", history)
+	}
+}
+
+func sameWorkObserveConsumeNet() *state.Net {
+	net := buildTestNet()
+	resource := &state.ResourceDef{ID: "slot", Name: "Slot", Capacity: 1}
+	resourcePlace, _ := state.GenerateResourcePlaces(resource, time.Time{})
+	net.Resources[resource.ID] = resource
+	net.Places[resourcePlace.ID] = resourcePlace
+	net.Transitions["consume-work"] = &petri.Transition{
+		ID: "consume-work", Name: "Consume Work", WorkerType: "worker-a",
+		InputArcs:  []petri.Arc{{ID: "consume-work-input", Name: "work", PlaceID: "task:init", Direction: petri.ArcInput, Mode: interfaces.ArcModeConsume, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}}},
+		OutputArcs: []petri.Arc{{ID: "consume-work-output", Name: "complete", PlaceID: "task:complete", Direction: petri.ArcOutput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}}},
+	}
+	net.Transitions["observe-work"] = &petri.Transition{
+		ID: "observe-work", Name: "Observe Work", WorkerType: "worker-b",
+		InputArcs: []petri.Arc{
+			{ID: "observe-work-input", Name: "work", PlaceID: "task:init", Direction: petri.ArcInput, Mode: interfaces.ArcModeObserve, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}},
+			{ID: "consume-slot-input", Name: "slot", PlaceID: resourcePlace.ID, Direction: petri.ArcInput, Mode: interfaces.ArcModeConsume, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}},
+		},
+	}
+	return net
+}
+
+func testDispatchToken(id, placeID string, dataType factorytoken.DataType, now time.Time) *factorytoken.Token {
+	return &factorytoken.Token{ID: id, PlaceID: placeID, CreatedAt: now, EnteredAt: now, Color: factorytoken.Color{WorkID: "work-1", TraceID: "trace-1", WorkTypeID: "task", DataType: dataType}}
+}
+
+func nextTestDispatchID() func() string {
+	ids := []string{"dispatch-same-work-1", "dispatch-same-work-2"}
+	next := 0
+	return func() string {
+		id := ids[next]
+		next++
+		return id
+	}
+}
+
+func dispatchHasInputToken(dispatch work.WorkDispatch, tokenID string) bool {
+	for _, token := range workers.WorkDispatchInputTokens(dispatch) {
+		if token.ID == tokenID {
+			return true
+		}
+	}
+	return false
+}
+
+func assertHeldMutationTokens(t *testing.T, records map[string]interfaces.FactoryDispatchRecord, running map[string][]interfaces.MarkingMutation, transitionID string, tokenID string) {
+	t.Helper()
+	record, ok := records[transitionID]
+	if !ok {
+		t.Fatalf("dispatch record %q missing from %#v", transitionID, records)
+	}
+	mutations, ok := running[record.DispatchID]
+	if !ok || len(mutations) != 1 || mutations[0].TokenID != tokenID || mutations[0].Type != interfaces.MutationConsume {
+		t.Fatalf("running dispatch %q = %#v, want one consume for %s", record.DispatchID, mutations, tokenID)
+	}
+}
+
+func assertRecordedMutation(t *testing.T, records map[string]interfaces.FactoryDispatchRecord, transitionID string, tokenID string) {
+	t.Helper()
+	record, ok := records[transitionID]
+	if !ok || len(record.HeldMutations) != 1 || record.HeldMutations[0].TokenID != tokenID {
+		t.Fatalf("record %q = %#v, want one held mutation for %s", transitionID, record, tokenID)
+	}
+}
 
 func TestDispatchRecordsTrackedInRunningDispatches(t *testing.T) {
 	n := buildTestNet()

@@ -305,6 +305,7 @@ func (r *factoryWorldReducer) applyDispatchCompleted(event interfaces.FactoryEve
 	if dispatchID == "" {
 		return
 	}
+	r.removePendingHumanApprovalForDispatch(dispatchID)
 	dispatch := r.stateValue.ActiveDispatches[dispatchID]
 	delete(r.stateValue.ActiveDispatches, dispatchID)
 
@@ -401,6 +402,7 @@ func (r *factoryWorldReducer) dispatchCompletionFromResponse(
 		DurationMillis:          int64Value(payload.DurationMillis),
 		Result: interfaces.WorkstationResult{
 			Outcome:                     string(payload.Outcome),
+			Cancellation:                payload.Cancellation.Clone(),
 			Output:                      stringValue(payload.Output),
 			StructuredResult:            jsonvalue.Clone(payload.StructuredResult),
 			StructuredResultPresent:     jsonvalue.Present(payload.StructuredResult, payload.StructuredResultPresent),
@@ -784,6 +786,7 @@ func (r *factoryWorldReducer) applyDispatchInterruptedEvent(event interfaces.Fac
 	if dispatchID == "" {
 		return nil
 	}
+	r.removePendingHumanApprovalForDispatch(dispatchID)
 	if r.interruptedDispatchIDs == nil {
 		r.interruptedDispatchIDs = make(map[string]struct{})
 	}
@@ -816,6 +819,7 @@ func (r *factoryWorldReducer) applyDispatchReconciledEvent(event interfaces.Fact
 	if dispatchID == "" {
 		return nil
 	}
+	r.removePendingHumanApprovalForDispatch(dispatchID)
 	if r.dispatchInterrupted(dispatchID) && !payload.Replayed {
 		return nil
 	}

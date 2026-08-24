@@ -16,10 +16,10 @@ import (
 
 	factorydefinitioncomposition "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 const (
@@ -60,7 +60,7 @@ func TestRunScriptPoller_SubmitsCanonicalWorkRequestStdout(t *testing.T) {
 		"works":[{"name":"issue-123","workTypeName":"task","payload":{"id":"ISSUE-123"}}]
 	}`)
 	runner := &pollerSequenceCommandRunner{
-		outcomes: []pollerRunOutcome{{result: workers.CommandResult{Stdout: workRequestJSON}}},
+		outcomes: []pollerRunOutcome{{result: platformprocess.CommandResult{Stdout: workRequestJSON}}},
 	}
 	submitted := &recordingSubmitter{}
 	svc := newAutomationService(automationFixture{
@@ -116,7 +116,7 @@ func TestRunScriptPoller_SubmitsSubmitStyleRecordsStdout(t *testing.T) {
 		]
 	}`)
 	runner := &pollerSequenceCommandRunner{
-		outcomes: []pollerRunOutcome{{result: workers.CommandResult{Stdout: envelopeJSON}}},
+		outcomes: []pollerRunOutcome{{result: platformprocess.CommandResult{Stdout: envelopeJSON}}},
 	}
 	submitted := &recordingSubmitter{}
 	svc := newAutomationService(automationFixture{
@@ -256,7 +256,7 @@ func TestRunScriptPoller_CommandFailureReturnsExecutionError(t *testing.T) {
 
 func TestRunScriptPoller_NonZeroExitReturnsErrorWithoutSubmit(t *testing.T) {
 	runner := &pollerSequenceCommandRunner{
-		outcomes: []pollerRunOutcome{{result: workers.CommandResult{ExitCode: 2}}},
+		outcomes: []pollerRunOutcome{{result: platformprocess.CommandResult{ExitCode: 2}}},
 	}
 	submitted := &recordingSubmitter{}
 	svc := newAutomationService(automationFixture{
@@ -295,7 +295,7 @@ func TestRunScriptPoller_SubmitFailureReturnsSubmitError(t *testing.T) {
 		"works":[{"name":"issue-999","workTypeName":"task","payload":{"id":"ISSUE-999"}}]
 	}`)
 	runner := &pollerSequenceCommandRunner{
-		outcomes: []pollerRunOutcome{{result: workers.CommandResult{Stdout: workRequestJSON}}},
+		outcomes: []pollerRunOutcome{{result: platformprocess.CommandResult{Stdout: workRequestJSON}}},
 	}
 	submitErr := errors.New("ingress unavailable")
 	submitted := &recordingSubmitter{
@@ -335,7 +335,7 @@ func TestStartScriptPoller_RestartsOnMalformedOutputWithBackoff(t *testing.T) {
 	fakeClock := clockwork.NewFakeClock()
 	runner := &pollerSequenceCommandRunner{
 		outcomes: []pollerRunOutcome{
-			{result: workers.CommandResult{Stdout: []byte("not-json\n")}},
+			{result: platformprocess.CommandResult{Stdout: []byte("not-json\n")}},
 			{waitForCancel: true},
 		},
 	}
@@ -447,7 +447,7 @@ func newScriptPollerLoadedRuntimeConfig(
 }
 
 type pollerRunOutcome struct {
-	result        workers.CommandResult
+	result        platformprocess.CommandResult
 	err           error
 	waitForCancel bool
 }
@@ -455,11 +455,11 @@ type pollerRunOutcome struct {
 type pollerSequenceCommandRunner struct {
 	mu       sync.Mutex
 	calls    int
-	reqs     []workers.CommandRequest
+	reqs     []platformprocess.CommandRequest
 	outcomes []pollerRunOutcome
 }
 
-func (r *pollerSequenceCommandRunner) Run(ctx context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
+func (r *pollerSequenceCommandRunner) Run(ctx context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	r.mu.Lock()
 	r.calls++
 	r.reqs = append(r.reqs, req)

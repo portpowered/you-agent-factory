@@ -1,0 +1,18 @@
+{
+  "mockWorkers": [
+    {
+      "id": "executor-usage",
+      "workerName": "executor",
+      "workstationName": "execute-story",
+      "runType": "accept",
+      "usage": {
+        "provider": "codex",
+        "model": "gpt-5-codex",
+        "inputTokens": 1000000,
+        "cachedInputTokens": 400000,
+        "outputTokens": 500000,
+        "reasoningOutputTokens": 100000
+      }
+    }
+  ]
+}

@@ -93,6 +93,14 @@ func TestQueryHistoricalRecordingClassifiesMissingAndCorruptHistory(t *testing.T
 		_, err := query.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{Recording: identity})
 		assertHistoricalQueryKind(t, err, recordings.HistoricalRecordingQueryErrorCorruptHistory)
 	})
+	t.Run("unreadable", func(t *testing.T) {
+		query := New(func(string) ([]byte, error) { return nil, os.ErrPermission }, recordingsinternal.NewProjectionService())
+		_, err := query.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{Recording: identity})
+		assertHistoricalQueryKind(t, err, recordings.HistoricalRecordingQueryErrorUnavailable)
+		if errors.Is(err, os.ErrNotExist) {
+			t.Fatal("unreadable recording was classified as missing history")
+		}
+	})
 }
 
 func assertHistoricalQueryKind(

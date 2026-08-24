@@ -3,8 +3,10 @@
 package runconfig
 
 import (
+	"context"
 	"io"
 
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -33,6 +35,9 @@ const (
 type Config struct {
 	Workflow     string
 	Continuously bool
+	// Cancellation is the invocation-local authority supplied by the
+	// application process for hosted administrative stop requests.
+	Cancellation initializer.InvocationCancellation
 	WorkFile     string
 	Dir          string
 	HomeDir      string
@@ -67,6 +72,7 @@ type Config struct {
 	BindHost                      string
 	ListenAddress                 string
 	ListenExplicit                bool
+	Pprof                         bool
 	Port                          int
 	AutoPort                      bool
 	RecordPath                    string
@@ -74,6 +80,8 @@ type Config struct {
 	ResumePath                    string
 	DisableDefaultRecording       bool
 	RecordingTargetPlanner        recordings.LiveRecordingTargetPlanner
+	CanonicalSessionID            string
+	CanonicalSessionIDGenerator   factorysessions.SessionIDGenerator
 	RecordingsCLI                 recordingscli.Adapter
 	Clock                         recordings.RecordingClock
 	RuntimeLogDir                 string
@@ -92,21 +100,43 @@ type Config struct {
 	JSON                          bool
 	CleanInvocationInputSource    InvocationInputSource
 	Output                        io.Writer
-	ProgressOutput                io.Writer
-	OpenDashboard                 bool
-	StartupOutput                 io.Writer
-	Diagnostics                   io.Writer
-	Stdin                         io.Reader
-	StdinIsTTY                    func() bool
-	OutputIsTTY                   bool
-	ProgressIsTTY                 bool
-	JSONOutput                    bool
-	InvocationOutputMode          string
-	InvocationOutputExplicit      bool
-	InvocationMetricsRecorder     InvocationMetricsRecorder
+	// ReplayMetadataOutput is the raw human stdout sink used for non-fatal
+	// replay drift disclosure even when quiet mode suppresses normal output.
+	ReplayMetadataOutput io.Writer
+	ProgressOutput       io.Writer
+	OpenDashboard        bool
+	StartupOutput        io.Writer
+	Diagnostics          io.Writer
+	// DeferHomeDisclosureUntilHostReady keeps an explicitly selected listener
+	// failure free of human startup output while preserving the home-before-
+	// initialization boundary for ordinary auto-port hosting.
+	DeferHomeDisclosureUntilHostReady bool
+	Stdin                             io.Reader
+	StdinIsTTY                        func() bool
+	OutputIsTTY                       bool
+	ProgressIsTTY                     bool
+	JSONOutput                        bool
+	InvocationOutputMode              string
+	InvocationOutputExplicit          bool
+	InvocationMetricsRecorder         InvocationMetricsRecorder
 
 	InvocationSkipPermissionsOverride *bool
 	Logger                            *zap.Logger
+	// StartupPreparation is the process-owned gate for local activation. The
+	// CLI installs it after resolving invocation inputs; the run transport
+	// invokes it at the applicable startup boundary so human disclosure can
+	// precede system initialization without contaminating machine output. The
+	// writer argument lets hosted startup stage that disclosure until the
+	// listener has proved ready, while still recording it before runtime work.
+	StartupPreparation func(context.Context, bool, io.Writer) error
+	// StartupDisclosureCommit flushes a home disclosure staged before hosted
+	// startup. It is installed only when a listener failure must remain free of
+	// human startup output; the run transport calls it after the host is ready.
+	StartupDisclosureCommit func()
+	// StartupPreflightBlocked records a missing or invalid local input selected
+	// during startup preparation. The runtime still owns the authoritative
+	// input load so custom replay readers remain supported.
+	StartupPreflightBlocked bool
 }
 
 // InvocationMetricsRecorder is the observability role consumed by run config.

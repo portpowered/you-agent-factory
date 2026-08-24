@@ -17,11 +17,12 @@ func TestNewRunServerRegistryAttachesCompleteHandwrittenLifecycles(t *testing.T)
 	registry, err := commandregistry.NewRunServerRegistry(commandregistry.RunServerHandlers{
 		Run:    commandregistry.CommandHandlers{PreRunE: preRun, RunE: noopRunE},
 		Server: commandregistry.CommandHandlers{PreRunE: preRun, RunE: noopRunE},
+		Stop:   commandregistry.CommandHandlers{PreRunE: preRun, RunE: noopRunE},
 	})
 	if err != nil {
 		t.Fatalf("NewRunServerRegistry() error = %v", err)
 	}
-	for _, commandID := range []string{"you.run", "you.server"} {
+	for _, commandID := range []string{"you.run", "you.server", "you.server.stop"} {
 		cmd := &cobra.Command{Use: commandID}
 		if err := registry.AttachHandlers(cmd, commandID); err != nil {
 			t.Fatalf("AttachHandlers(%s) error = %v", commandID, err)
@@ -33,8 +34,8 @@ func TestNewRunServerRegistryAttachesCompleteHandwrittenLifecycles(t *testing.T)
 			t.Fatalf("%s PreRunE error = %v", commandID, err)
 		}
 	}
-	if preRuns != 2 {
-		t.Fatalf("PreRunE calls = %d, want 2", preRuns)
+	if preRuns != 3 {
+		t.Fatalf("PreRunE calls = %d, want 3", preRuns)
 	}
 }
 
@@ -66,6 +67,7 @@ func TestVerifyRunServerRunnableCoverageRejectsOutOfFamilyHandler(t *testing.T) 
 	registry, err := commandregistry.NewRunServerRegistry(commandregistry.RunServerHandlers{
 		Run:    commandregistry.CommandHandlers{PreRunE: noopRunE, RunE: noopRunE},
 		Server: commandregistry.CommandHandlers{PreRunE: noopRunE, RunE: noopRunE},
+		Stop:   commandregistry.CommandHandlers{PreRunE: noopRunE, RunE: noopRunE},
 	})
 	if err != nil {
 		t.Fatalf("NewRunServerRegistry() error = %v", err)

@@ -293,10 +293,6 @@ func replayDiagnosticsFromRunRequestEnvelope(envelope *runRequestDiagnosticsEnve
 	return diagnostics, nil
 }
 
-func runStartedFactorySnapshotFromEvent(event interfaces.FactoryEvent) (*interfaces.FactorySnapshot, error) {
-	return runStartedFactorySnapshotFromEventWithDecoder(event, factorySnapshotFromJSON)
-}
-
 func runStartedFactorySnapshotFromEventWithDecoder(
 	event interfaces.FactoryEvent,
 	decode func([]byte) (*interfaces.FactorySnapshot, error),
@@ -330,6 +326,7 @@ func normalizeLegacyReplayFactoryBoundary(data json.RawMessage) ([]byte, error) 
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, err
 	}
+	raw = materializeDeclaredSecretReplayMarkers(raw)
 
 	root, ok := raw.(map[string]any)
 	if !ok {
@@ -351,6 +348,38 @@ func normalizeLegacyReplayFactoryBoundary(data json.RawMessage) ([]byte, error) 
 		}
 	}
 	return json.Marshal(root)
+}
+
+func materializeDeclaredSecretReplayMarkers(document any) any {
+	switch value := document.(type) {
+	case []any:
+		for index := range value {
+			value[index] = materializeDeclaredSecretReplayMarkers(value[index])
+		}
+		return value
+	case map[string]any:
+		if isDeclaredSecretReplayMarker(value) {
+			return ""
+		}
+		for key, child := range value {
+			value[key] = materializeDeclaredSecretReplayMarkers(child)
+		}
+		return value
+	default:
+		return document
+	}
+}
+
+func isDeclaredSecretReplayMarker(value map[string]any) bool {
+	if len(value) != 2 {
+		return false
+	}
+	redacted, ok := value["redacted"].(bool)
+	if !ok || !redacted {
+		return false
+	}
+	provenance, ok := value["provenance"].(string)
+	return ok && provenance == "DECLARED_SECRET"
 }
 
 func normalizeLegacyReplayTransitionRoutes(workstation map[string]any) {

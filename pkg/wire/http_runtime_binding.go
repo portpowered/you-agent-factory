@@ -4,16 +4,20 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/costs"
+	costscli "github.com/portpowered/infinite-you/pkg/services/costs/transports/cli"
 	costshttp "github.com/portpowered/infinite-you/pkg/services/costs/transports/http"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionshttp "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http"
 	factorydefinitionmapping "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorydefinition"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
 	factoryvisualizationhttp "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
@@ -22,9 +26,30 @@ import (
 	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	workersessionshttp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http"
 	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
+	generatedhttpclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
+
+const metricsCLIHTTPTimeout = 5 * time.Minute
+
+func provideCostsCLI() costscli.Operation {
+	return costscli.NewOperation(func(server string) (costscli.Client, error) {
+		return generatedhttpclient.NewClientWithResponses(
+			server,
+			generatedhttpclient.WithHTTPClient(&http.Client{Timeout: costscli.DefaultRequestTimeout}),
+		)
+	})
+}
+
+func provideMetricsCLI() visualizationcli.Operation {
+	return visualizationcli.NewOperation(func(server string) (visualizationcli.Client, error) {
+		return generatedhttpclient.NewClientWithResponses(
+			server,
+			generatedhttpclient.WithHTTPClient(&http.Client{Timeout: metricsCLIHTTPTimeout}),
+		)
+	})
+}
 
 // httpRuntimeBinding is the Wire-owned operation that builds the owner HTTP
 // adapters for one opened runtime and returns the generated route shell.
@@ -159,11 +184,13 @@ func newHTTPSessionsHandler(
 	statusAPI := factorysessionshttp.NewFactoryStatusAPI(statusSessions, factoryStatusProjector)
 	definitionsAPI := factorydefinitionmapping.NewAPI(definitionMapping, definitionMapping)
 	liveAPI := factorysessionmapping.NewLiveAPI(opened.LiveControl, liveGateway)
+	deletion, _ := opened.FactorySessions.(factorysessions.LiveDeletionService)
 	invocationAPI := factorysessionmapping.NewInvocationAPI(opened.FactorySessions)
 	durableAPI := factorysessionmapping.NewDurableAPI(opened.FactorySessions)
 	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
 		SessionsRoot: opened.FactorySessions, LiveControl: opened.LiveControl,
-		Runtime: runtimeAPI, FactoryStatus: statusAPI,
+		SessionDeletion: deletion,
+		Runtime:         runtimeAPI, FactoryStatus: statusAPI,
 		Sessions: liveAPI, Invocation: invocationAPI, FactoryDefinitions: definitionsAPI,
 		FactoryValidation: validation, WorkflowPreview: opened.WorkflowPreview,
 		DurableExecution: durableAPI, DurableLifecycle: durableAPI,
@@ -238,9 +265,13 @@ func newHTTPRuntimeServer(
 		opened.Resources.Diagnostics.MetricsRootDir,
 	)
 	metricsHandler := factoryvisualizationhttp.NewMetricsHandler(metricsAdapter, opened.Logger)
+	var shutdown transporthttp.ShutdownOperation
+	if opened.Cancellation != nil {
+		shutdown = opened.Cancellation.Cancel
+	}
 	return transporthttp.NewServerWithRecordingsAndMetricsAndCosts(
 		recordingsAdapter, sessionsHandler, workHandler, modelsHandler, providerSessionsHTTP,
-		factoryDefinitionsHandler, opened.Logger, metricsHandler, costsHandler, workerSessionsHandler,
+		factoryDefinitionsHandler, opened.Logger, metricsHandler, costsHandler, shutdown, workerSessionsHandler,
 	).Handler()
 }
 

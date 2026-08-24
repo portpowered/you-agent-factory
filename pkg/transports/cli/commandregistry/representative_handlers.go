@@ -9,6 +9,7 @@ import (
 
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
 	"github.com/spf13/cobra"
@@ -357,7 +358,7 @@ func optionalSessionID(inputs resolvedinput.Inputs, inputID string) (string, err
 func rejectDeprecatedSessionPort(inputs resolvedinput.Inputs, inputID string) error {
 	state, present := inputs.State(inputID)
 	if present && state.Changed {
-		return errors.New(deprecatedSessionPortFlagMessage)
+		return clidiag.NewUsageError("you session", errors.New(deprecatedSessionPortFlagMessage))
 	}
 	return nil
 }
@@ -416,11 +417,10 @@ func (h *SessionResolvedHandler) Delete(
 	if h == nil || h.services.remote() == nil {
 		return fmt.Errorf("session delete service is required")
 	}
-	sessionID, err := inputs.String(sessionDeleteIDInputID)
-	if err != nil {
-		return fmt.Errorf("resolve session delete inputs: %w", err)
+	if err := rejectDeprecatedSessionPort(inputs, sessionDeletePortInputID); err != nil {
+		return err
 	}
-	port, err := inputs.Int(sessionDeletePortInputID)
+	sessionID, err := inputs.String(sessionDeleteIDInputID)
 	if err != nil {
 		return fmt.Errorf("resolve session delete inputs: %w", err)
 	}
@@ -429,7 +429,7 @@ func (h *SessionResolvedHandler) Delete(
 		return fmt.Errorf("resolve session delete inputs: %w", err)
 	}
 	return h.services.remote().Delete(sessioncli.DeleteConfig{
-		Port: port, SessionID: sessionID, JSON: globals.json,
+		Server: globals.server, SessionID: sessionID, JSON: globals.json,
 		Verbose: globals.verbose, Debug: globals.debug,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics,
 	})
@@ -516,9 +516,13 @@ func (h *SessionResolvedHandler) lifecycle(
 	if err != nil {
 		return fmt.Errorf("resolve session lifecycle inputs: %w", err)
 	}
-	service := h.services.forPlacement(globals.remote)
+	remote := globals.remote
+	if serverState, present := inherited.State(sessionServerInputID); present && serverState.Changed {
+		remote = true
+	}
+	service := h.services.forPlacement(remote)
 	if service == nil {
-		return fmt.Errorf("session %s service is required for %s placement", operation, map[bool]string{true: "remote", false: "local"}[globals.remote])
+		return fmt.Errorf("session %s service is required for %s placement", operation, map[bool]string{true: "remote", false: "local"}[remote])
 	}
 	var control func(sessioncli.LifecycleControlConfig) error
 	switch operation {
@@ -534,7 +538,7 @@ func (h *SessionResolvedHandler) lifecycle(
 		return fmt.Errorf("unsupported session lifecycle operation %q", operation)
 	}
 	if control == nil {
-		return fmt.Errorf("session %s service is required for %s placement", operation, map[bool]string{true: "remote", false: "local"}[globals.remote])
+		return fmt.Errorf("session %s service is required for %s placement", operation, map[bool]string{true: "remote", false: "local"}[remote])
 	}
 	return control(sessioncli.LifecycleControlConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,

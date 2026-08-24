@@ -338,34 +338,6 @@ func NewServiceWithLifecycleEffectsAndHistoricalQuery(
 	)
 }
 
-// NewServiceWithLifecycleEffectsAndHistoricalQueryAndLogger constructs the
-// process-scoped root with both the selected logger and historical query.
-func NewServiceWithLifecycleEffectsAndHistoricalQueryAndLogger(
-	ledger recordings.Ledger,
-	projection recordings.ProjectionService,
-	targetPlanner recordings.LiveRecordingTargetPlanner,
-	writer recordings.RecordingSnapshotWriter,
-	tickers recordings.RecordingFlushTickerFactory,
-	publication portableArtifactPublication,
-	historicalQuery historicalquery.Service,
-	logger logging.Logger,
-	clocks ...recordings.RecordingClock,
-) recordings.Service {
-	return NewServiceWithLifecycleEffectsAndHistoricalQueryAndLoggerAndReplaySource(
-		ledger,
-		projection,
-		targetPlanner,
-		writer,
-		tickers,
-		publication,
-		historicalQuery,
-		nil,
-		nil,
-		logger,
-		clocks...,
-	)
-}
-
 func newServiceWithLifecycleEffects(
 	ledger recordings.Ledger,
 	projection recordings.ProjectionService,

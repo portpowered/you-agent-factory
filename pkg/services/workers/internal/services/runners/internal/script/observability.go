@@ -10,6 +10,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 func (r *runner) outputObserver(
@@ -35,8 +36,8 @@ func (r *runner) outputObserver(
 }
 
 func commandDiagnostics(
-	request workers.CommandRequest,
-	result workers.CommandResult,
+	request workerprocess.CommandRequest,
+	result workerprocess.CommandResult,
 	duration time.Duration,
 	transitionID string,
 ) *workers.WorkDiagnostics {
@@ -57,7 +58,7 @@ func commandDiagnostics(
 }
 
 func commandMetadata(
-	request workers.CommandRequest,
+	request workerprocess.CommandRequest,
 	env workers.CommandEnvDiagnosticProjection,
 	transitionID string,
 ) map[string]string {
@@ -80,7 +81,7 @@ func scriptRequestID(dispatchID string) string {
 }
 
 func scriptRequestEvent(
-	request workers.CommandRequest,
+	request workerprocess.CommandRequest,
 	requestID string,
 	eventTime time.Time,
 	transitionID string,
@@ -96,9 +97,9 @@ func scriptRequestEvent(
 }
 
 func scriptSuccessEvent(
-	request workers.CommandRequest,
+	request workerprocess.CommandRequest,
 	requestID string,
-	result workers.CommandResult,
+	result workerprocess.CommandResult,
 	duration time.Duration,
 	eventTime time.Time,
 	transitionID string,
@@ -118,9 +119,9 @@ func scriptSuccessEvent(
 }
 
 func scriptFailureEvent(
-	request workers.CommandRequest,
+	request workerprocess.CommandRequest,
 	requestID string,
-	result workers.CommandResult,
+	result workerprocess.CommandResult,
 	duration time.Duration,
 	outcome workers.ScriptExecutionOutcome,
 	failureType workers.ScriptFailureType,
@@ -151,7 +152,7 @@ func scriptFailureEvent(
 }
 
 func scriptEvent(
-	request workers.CommandRequest,
+	request workerprocess.CommandRequest,
 	eventTime time.Time,
 	requestPayload *workers.ScriptRequestEventPayload,
 	responsePayload *workers.ScriptResponseEventPayload,

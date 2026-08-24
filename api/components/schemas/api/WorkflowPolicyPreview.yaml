@@ -5,7 +5,6 @@ required:
   - policyHash
   - maxChildCount
   - maxConcurrency
-  - deniedCapabilities
   - validationIssues
 properties:
   effectivePolicy:
@@ -21,11 +20,6 @@ properties:
   maxConcurrency:
     type: integer
     description: Maximum concurrent child dispatches allowed by effective policy.
-  deniedCapabilities:
-    type: array
-    description: Capabilities denied by the effective policy before runtime execution.
-    items:
-      $ref: './WorkflowDiagnostic.yaml'
   validationIssues:
     type: array
     description: Policy validation issues for the requested or factory default policy.

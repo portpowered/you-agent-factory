@@ -11,11 +11,11 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 const (
@@ -34,7 +34,7 @@ func TestRunScriptPoller_SubmitsCanonicalWorkRequestStdout(t *testing.T) {
 		"works":[{"name":"issue-123","workTypeName":"task","payload":{"id":"ISSUE-123"}}]
 	}`)
 	runner := &sequenceCommandRunner{
-		outcomes: []runOutcome{{result: workers.CommandResult{Stdout: workRequestJSON}}},
+		outcomes: []runOutcome{{result: platformprocess.CommandResult{Stdout: workRequestJSON}}},
 	}
 	submitted := &recordingSubmitter{}
 	svc := newScriptPollersService(runner)
@@ -84,7 +84,7 @@ func TestRunScriptPoller_SubmitsSubmitStyleRecordsStdout(t *testing.T) {
 		]
 	}`)
 	runner := &sequenceCommandRunner{
-		outcomes: []runOutcome{{result: workers.CommandResult{Stdout: envelopeJSON}}},
+		outcomes: []runOutcome{{result: platformprocess.CommandResult{Stdout: envelopeJSON}}},
 	}
 	submitted := &recordingSubmitter{}
 	svc := newScriptPollersService(runner)
@@ -152,7 +152,7 @@ func TestRunScriptPoller_RejectsMalformedStdoutWithoutSubmit(t *testing.T) {
 			t.Parallel()
 
 			runner := &sequenceCommandRunner{
-				outcomes: []runOutcome{{result: workers.CommandResult{Stdout: tc.stdout}}},
+				outcomes: []runOutcome{{result: platformprocess.CommandResult{Stdout: tc.stdout}}},
 			}
 			submitted := &recordingSubmitter{}
 			svc := newScriptPollersService(runner)
@@ -183,7 +183,7 @@ func TestRunScriptPoller_EmptyStdoutDoesNotSubmit(t *testing.T) {
 	t.Parallel()
 
 	runner := &sequenceCommandRunner{
-		outcomes: []runOutcome{{result: workers.CommandResult{}}},
+		outcomes: []runOutcome{{result: platformprocess.CommandResult{}}},
 	}
 	submitted := &recordingSubmitter{}
 	svc := newScriptPollersService(runner)
@@ -218,7 +218,7 @@ func TestRunScriptPoller_SubmitFailureReturnsTypedSubmitError(t *testing.T) {
 		"works":[{"name":"issue-999","workTypeName":"task","payload":{"id":"ISSUE-999"}}]
 	}`)
 	runner := &sequenceCommandRunner{
-		outcomes: []runOutcome{{result: workers.CommandResult{Stdout: workRequestJSON}}},
+		outcomes: []runOutcome{{result: platformprocess.CommandResult{Stdout: workRequestJSON}}},
 	}
 	submitErr := errors.New("ingress unavailable")
 	submitted := &recordingSubmitter{
@@ -314,7 +314,7 @@ func (r *recordingSubmitter) submit(ctx context.Context, request work.WorkReques
 }
 
 type runOutcome struct {
-	result        workers.CommandResult
+	result        platformprocess.CommandResult
 	err           error
 	waitForCancel bool
 }
@@ -322,11 +322,11 @@ type runOutcome struct {
 type sequenceCommandRunner struct {
 	mu       sync.Mutex
 	calls    int
-	reqs     []workers.CommandRequest
+	reqs     []platformprocess.CommandRequest
 	outcomes []runOutcome
 }
 
-func (r *sequenceCommandRunner) Run(ctx context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
+func (r *sequenceCommandRunner) Run(ctx context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	r.mu.Lock()
 	r.calls++
 	r.reqs = append(r.reqs, req)
@@ -352,7 +352,7 @@ func (r *sequenceCommandRunner) callCount() int {
 	return r.calls
 }
 
-func newScriptPollersService(runner workers.CommandRunner) scriptpollers.Service {
+func newScriptPollersService(runner platformprocess.CommandRunner) scriptpollers.Service {
 	return newScriptPollersServiceWithOptions(scriptPollersServiceOptions{runner: runner})
 }
 

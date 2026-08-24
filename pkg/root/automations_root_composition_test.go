@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	costs "github.com/portpowered/infinite-you/pkg/services/costs"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -53,6 +54,30 @@ func TestAutomationsRootFromEdgesComposesPublishedRoot(t *testing.T) {
 			result.Outcomes[0].Convergence,
 			automations.ConvergenceStatusConverged,
 		)
+	}
+}
+
+func TestBuildProcessComposesAutomationsCronSchedulingInertly(t *testing.T) {
+	t.Parallel()
+
+	apiStarts := 0
+	process, err := BuildProcess(context.Background(), serviceedges.Edges{
+		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
+			apiStarts++
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	if apiStarts != 0 {
+		t.Fatalf("BuildProcess() started API lifecycle %d times, want zero", apiStarts)
+	}
+	if err := automations.ValidateCronSchedule("* * * * *"); err != nil {
+		t.Fatalf("automations cron re-export unavailable after BuildProcess: %v", err)
+	}
+	if process == nil {
+		t.Fatal("BuildProcess() returned nil process")
 	}
 }
 

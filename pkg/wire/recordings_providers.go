@@ -32,9 +32,16 @@ func provideRecordingsRoot(
 	if edges.RecordingWriteFile != nil {
 		writeFile = edges.RecordingWriteFile
 	}
-	return recordingswire.NewRuntimeRoot(
+	var appendFile func(string, []byte) error
+	if edges.RecordingAppendFile != nil {
+		appendFile = edges.RecordingAppendFile
+	} else if appender, ok := storage.(platformreplay.Appender); ok {
+		appendFile = appender.AppendFile
+	}
+	return recordingswire.NewRuntimeRootWithAppend(
 		targets,
 		writeFile,
+		appendFile,
 		makeDirectories,
 		createTemporaryFile,
 		removePath,

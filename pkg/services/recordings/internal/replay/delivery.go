@@ -613,6 +613,7 @@ func (p *CompletionDeliveryPlan) PlannedResultForDispatch(dispatch work.WorkDisp
 
 func cloneReplayPlannedResult(result workerexecution.WorkResult) workerexecution.WorkResult {
 	clone := result
+	clone.Cancellation = result.Cancellation.Clone()
 	clone.StructuredResult = jsonvalue.Clone(result.StructuredResult)
 	clone.StructuredResultPresent = jsonvalue.Present(result.StructuredResult, result.StructuredResultPresent)
 	if result.RecordedOutputWork != nil {

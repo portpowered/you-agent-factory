@@ -133,22 +133,6 @@ func assertInstallSmokeInitialize(t *testing.T, client *stdioMCPClient) {
 	}
 }
 
-func assertInstallSmokeDiscovery(t *testing.T, client *stdioMCPClient) {
-	t.Helper()
-	toolsResult := client.call("tools/list", map[string]any{})
-	toolNames := toolNamesFromListResult(t, toolsResult.Result)
-	for _, want := range []string{
-		mcpfactorysession.ToolValidateSource,
-		mcpfactorysession.ToolStartAsync,
-		mcpfactorysession.ToolGetSession,
-		mcpfactorysession.ToolGetResult,
-	} {
-		if !containsString(toolNames, want) {
-			t.Fatalf("tools/list missing %q; got %#v", want, toolNames)
-		}
-	}
-}
-
 func closeRunServeSmokeServer(t *testing.T, stdinWrite *os.File, serveErr <-chan error) {
 	t.Helper()
 	if stdinWrite != nil {

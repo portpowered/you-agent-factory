@@ -35,17 +35,6 @@ type ListDispatchesInput struct {
 	Status    string `json:"status,omitempty"`
 }
 
-// ListDispatches returns deterministic dispatch summaries for one Factory Session
-// through the you.factory_session.list_dispatches MCP tool. The canonical read
-// is owned by Recordings; the durable execution role is intentionally absent.
-func ListDispatches(
-	ctx context.Context,
-	service RecordingsInspection,
-	input ListDispatchesInput,
-) ToolResponse[factoryapi.ListFactorySessionDispatchesResponse] {
-	return listDispatchesWithFallback(ctx, nil, service, input)
-}
-
 // ListDispatchesWithFallback preserves live-session inspection while the
 // canonical Recordings artifact is still unavailable. Finalized history stays
 // on Recordings; only the explicit no-artifact compatibility case reaches the

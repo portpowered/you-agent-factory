@@ -683,30 +683,6 @@ func invalidContinuationReference(reference providers.SessionRef) providers.Cont
 	}
 }
 
-func providerRequest(request workers.RunnerExecutionRequest) providers.ExecuteRequest {
-	providerID := providerIDForRequest(request)
-	result := providers.ExecuteRequest{
-		Provider:           providerID,
-		AttemptID:          request.Dispatch.DispatchID,
-		WorkerType:         request.WorkerType,
-		WorkstationName:    request.WorkstationType,
-		Model:              request.Model,
-		ReasoningEffort:    request.ReasoningEffort,
-		SkipPermissions:    request.SkipPermissions,
-		PrintTimeout:       request.PrintTimeout,
-		SystemPrompt:       request.SystemPrompt,
-		UserMessage:        request.UserMessage,
-		InputTokens:        cloneInputTokens(request.InputTokens),
-		OutputSchema:       request.OutputSchema,
-		WorkingDirectory:   request.WorkingDirectory,
-		Worktree:           request.Worktree,
-		EnvVars:            cloneMetadata(request.EnvVars),
-		ProcessEnvironment: append([]string(nil), request.ProcessEnvironment...),
-		ExecutionLogger:    request.ExecutionLogger,
-	}
-	return result
-}
-
 // providerIDForRunner translates stable Workers runner identities at the
 // Providers boundary.
 func providerIDForRunner(runnerID string) providers.ID {

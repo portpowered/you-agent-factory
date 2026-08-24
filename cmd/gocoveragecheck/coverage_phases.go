@@ -15,21 +15,6 @@ type preparedCoverageRun struct {
 	expectedFunctionalInventory *functionalTestInventory
 }
 
-func prepareCoverageRun(cfg config, targetOS string, logicalCPUs int, profilePath string, coverPackages []string, testPackages []string, packageUniverse []string) (preparedCoverageRun, error) {
-	return prepareCoverageRunWithFunctionalMetadata(
-		cfg,
-		targetOS,
-		logicalCPUs,
-		profilePath,
-		coverPackages,
-		testPackages,
-		packageUniverse,
-		nil,
-		time.Time{},
-		nil,
-	)
-}
-
 func prepareCoverageRunWithFunctionalMetadata(
 	cfg config,
 	targetOS string,
@@ -41,6 +26,7 @@ func prepareCoverageRunWithFunctionalMetadata(
 	listedPackages []functionalGoListPackage,
 	discoveryStarted time.Time,
 	selectorVerification *functionalQuarantineSelectorVerification,
+	unitPackageFiles []coveragePackageListing,
 ) (preparedCoverageRun, error) {
 	repoRoot, err := repoRootDir()
 	if err != nil {
@@ -105,13 +91,7 @@ func prepareCoverageRunWithFunctionalMetadata(
 		fmt.Sprintf("-timeout=%s", cfg.timeout),
 	)
 	testPackageArgs := compactUnitTestPackageArgs(cfg, testPackages, targetOS, packageUniverse)
-
-	var plan coverageInvocationPlan
-	if functionalSelection == nil {
-		plan, err = planGoTestCoverageLane(coverageTestArgs, testPackages, profilePath, cfg, targetOS, testPackageArgs)
-	} else {
-		plan, err = planGoTestCoverageLaneWithSelection(coverageTestArgs, profilePath, cfg, targetOS, *functionalSelection)
-	}
+	plan, err := planCoverageInvocationWithUnitImports(cfg, coverageTestArgs, testPackages, profilePath, targetOS, testPackageArgs, functionalSelection, unitPackageFiles)
 	if err != nil {
 		return preparedCoverageRun{}, err
 	}
@@ -121,6 +101,45 @@ func prepareCoverageRunWithFunctionalMetadata(
 		testPackages:                testPackages,
 		expectedFunctionalInventory: expectedFunctionalInventory,
 	}, nil
+}
+
+func planCoverageInvocationWithUnitImports(
+	cfg config,
+	coverageTestArgs []string,
+	testPackages []string,
+	profilePath string,
+	targetOS string,
+	testPackageArgs []string,
+	functionalSelection *functionalCoverageSelection,
+	unitPackageFiles []coveragePackageListing,
+) (coverageInvocationPlan, error) {
+	unitCoverageImportCleanup := func() error { return nil }
+	if len(unitPackageFiles) > 0 && strings.TrimSpace(cfg.packages) == "" && strings.TrimSpace(cfg.coverpkg) == "" && (cfg.suite == "" || cfg.suite == unitCoverageSuite) {
+		var err error
+		unitCoverageImportCleanup, err = prepareUnitCoverageImportFile(testPackages, unitPackageFiles)
+		if err != nil {
+			if unitCoverageImportCleanup != nil {
+				err = errors.Join(err, unitCoverageImportCleanup())
+			}
+			return coverageInvocationPlan{}, err
+		}
+	}
+
+	var plan coverageInvocationPlan
+	var err error
+	if functionalSelection == nil {
+		plan, err = planGoTestCoverageLane(coverageTestArgs, testPackages, profilePath, cfg, targetOS, testPackageArgs)
+	} else {
+		plan, err = planGoTestCoverageLaneWithSelection(coverageTestArgs, profilePath, cfg, targetOS, *functionalSelection)
+	}
+	if err != nil {
+		return coverageInvocationPlan{}, errors.Join(err, unitCoverageImportCleanup())
+	}
+	planCleanup := plan.cleanup
+	plan.cleanup = func() error {
+		return errors.Join(planCleanup(), unitCoverageImportCleanup())
+	}
+	return plan, nil
 }
 
 type evaluatedCoverageRun struct {

@@ -54,6 +54,190 @@ func TestListCatalogClassifiesScopeBeforeProjection(t *testing.T) {
 	}
 }
 
+func TestCatalogDiscoversBuiltInsWithoutFactoryDeclarations(t *testing.T) {
+	t.Parallel()
+
+	scopes := newRuntimeScopes(t, "catalog-built-in-discovery")
+	privateRef, err := scopes.Open(models.RuntimeBinding{
+		RuntimeConfig: func() *models.RuntimeConfig {
+			return &models.RuntimeConfig{}
+		},
+	})
+	if err != nil {
+		t.Fatalf("open scope: %v", err)
+	}
+	scope := publicScope(t, privateRef)
+	service := newCatalogService(t, scopes)
+
+	listed, err := service.ListCatalog(context.Background(), models.ListModelsRequest{Scope: scope})
+	if err != nil {
+		t.Fatalf("ListCatalog: %v", err)
+	}
+	counts := make(map[string]int, len(listed.Models))
+	for _, model := range listed.Models {
+		counts[model.Name]++
+	}
+	for _, name := range []string{
+		models.BuiltInModelNameASR,
+		models.BuiltInModelNameEmbed,
+		models.BuiltInModelNameLLM,
+		models.BuiltInModelNameTTS,
+	} {
+		if counts[name] != 1 {
+			t.Fatalf("listed %q count = %d, want one; models = %#v", name, counts[name], listed.Models)
+		}
+	}
+
+	inspected, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{
+		Scope: scope, Name: " ASR ", Operation: models.OperationASR,
+	})
+	if err != nil {
+		t.Fatalf("GetCatalogModel(asr): %v", err)
+	}
+	if inspected.Model.Name != models.BuiltInModelNameASR ||
+		len(inspected.Model.Operations) != 1 ||
+		inspected.Model.Operations[0].Name != models.OperationASR {
+		t.Fatalf("asr detail = %#v, want effective ASR definition", inspected.Model)
+	}
+	if inspected.Model.ManagedRuntime.ReadinessState != models.ReadinessStateMissing ||
+		inspected.Model.ManagedRuntime.LifecycleState != models.LifecycleStateNotInstalled {
+		t.Fatalf("asr runtime = %#v, want missing/not-installed baseline", inspected.Model.ManagedRuntime)
+	}
+	if len(inspected.Model.Sources) != 1 || inspected.Model.Sources[0].Provider != string(models.ModelReferenceSourceHuggingFace) {
+		t.Fatalf("asr sources = %#v, want built-in source metadata", inspected.Model.Sources)
+	}
+
+	if _, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{
+		Scope: scope, Name: "unregistered-model",
+	}); !errors.Is(err, models.ErrNotFound) {
+		t.Fatalf("unknown model error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestCatalogPreservesFactoryAndOperatorPrecedenceOverBuiltIns(t *testing.T) {
+	t.Parallel()
+
+	fixture := newCatalogPrecedenceFixture(t)
+	assertCatalogPrecedenceList(t, fixture)
+	assertFactoryCatalogPrecedence(t, fixture)
+	assertOperatorCatalogPrecedence(t, fixture)
+	assertCustomCatalogPrecedence(t, fixture)
+}
+
+type catalogPrecedenceFixture struct {
+	service        catalog.Service
+	scope          models.RuntimeScopeRef
+	operatorSource string
+}
+
+func newCatalogPrecedenceFixture(t *testing.T) catalogPrecedenceFixture {
+	t.Helper()
+	operatorSource := "hf://operator/tts/model@0123456789012345678901234567890123456789"
+	operatorBackend := "localai-test"
+	operatorLoadPolicy := models.LoadPolicyKeepWarm
+	customSource := "hf://operator/custom/model@0123456789012345678901234567890123456789"
+	customBackend := "localai-custom"
+	customLoadPolicy := models.LoadPolicyOnDemand
+	scopes := newRuntimeScopes(t, "catalog-precedence")
+	privateRef, err := scopes.Open(models.RuntimeBinding{
+		RuntimeConfig: func() *models.RuntimeConfig {
+			return &models.RuntimeConfig{
+				Workers: []models.RuntimeWorker{
+					catalogWorker("factory-asr", models.BuiltInModelNameASR, "factory-operation"),
+				},
+			}
+		},
+		OperatorModels: map[string]models.ModelOverlay{
+			models.BuiltInModelNameASR: {
+				Operations: []string{models.OperationTTS},
+			},
+			" TTS ": {
+				Source: &operatorSource, Backend: &operatorBackend,
+				LoadPolicy: &operatorLoadPolicy, Operations: []string{models.OperationOMNI},
+			},
+			"custom": {
+				Source: &customSource, Backend: &customBackend,
+				LoadPolicy: &customLoadPolicy, Operations: []string{models.OperationASR},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("open scope: %v", err)
+	}
+	scope := publicScope(t, privateRef)
+	return catalogPrecedenceFixture{
+		service:        newCatalogService(t, scopes),
+		scope:          scope,
+		operatorSource: operatorSource,
+	}
+}
+
+func assertCatalogPrecedenceList(t *testing.T, fixture catalogPrecedenceFixture) {
+	t.Helper()
+	listed, err := fixture.service.ListCatalog(context.Background(), models.ListModelsRequest{Scope: fixture.scope})
+	if err != nil {
+		t.Fatalf("ListCatalog: %v", err)
+	}
+	countByName := make(map[string]int, len(listed.Models))
+	for _, model := range listed.Models {
+		countByName[model.Name]++
+	}
+	if countByName[models.BuiltInModelNameASR] != 1 {
+		t.Fatalf("asr count = %d, want one effective Factory entry", countByName[models.BuiltInModelNameASR])
+	}
+}
+
+func assertFactoryCatalogPrecedence(t *testing.T, fixture catalogPrecedenceFixture) {
+	t.Helper()
+	factory := getCatalogPrecedenceModel(t, fixture, models.GetModelRequest{
+		Scope: fixture.scope, Name: models.BuiltInModelNameASR, Operation: "factory-operation",
+	})
+	if len(factory.Model.Operations) != 1 || factory.Model.Operations[0].Name != "factory-operation" {
+		t.Fatalf("factory asr operations = %#v, want Factory operation", factory.Model.Operations)
+	}
+	if _, err := fixture.service.GetCatalogModel(context.Background(), models.GetModelRequest{
+		Scope: fixture.scope, Name: models.BuiltInModelNameASR, Operation: models.OperationTTS,
+	}); !errors.Is(err, models.ErrUnsupportedOperation) {
+		t.Fatalf("Factory precedence operation error = %v, want ErrUnsupportedOperation", err)
+	}
+}
+
+func assertOperatorCatalogPrecedence(t *testing.T, fixture catalogPrecedenceFixture) {
+	t.Helper()
+	operator := getCatalogPrecedenceModel(t, fixture, models.GetModelRequest{
+		Scope: fixture.scope, Name: models.BuiltInModelNameTTS, Operation: models.OperationOMNI,
+	})
+	if len(operator.Model.Operations) != 1 || operator.Model.Operations[0].Name != models.OperationOMNI {
+		t.Fatalf("operator tts operations = %#v, want overlaid OMNI", operator.Model.Operations)
+	}
+	if len(operator.Model.Sources) != 1 || operator.Model.Sources[0].Reference != fixture.operatorSource {
+		t.Fatalf("operator tts sources = %#v, want overlay source", operator.Model.Sources)
+	}
+}
+
+func assertCustomCatalogPrecedence(t *testing.T, fixture catalogPrecedenceFixture) {
+	t.Helper()
+	custom := getCatalogPrecedenceModel(t, fixture, models.GetModelRequest{
+		Scope: fixture.scope, Name: "CUSTOM", Operation: models.OperationASR,
+	})
+	if custom.Model.Name != "custom" || len(custom.Model.Operations) != 1 || custom.Model.Operations[0].Name != models.OperationASR {
+		t.Fatalf("custom detail = %#v, want operator definition", custom.Model)
+	}
+}
+
+func getCatalogPrecedenceModel(
+	t *testing.T,
+	fixture catalogPrecedenceFixture,
+	request models.GetModelRequest,
+) models.GetModelResult {
+	t.Helper()
+	result, err := fixture.service.GetCatalogModel(context.Background(), request)
+	if err != nil {
+		t.Fatalf("GetCatalogModel(%s): %v", request.Name, err)
+	}
+	return result
+}
+
 func TestListCatalogRejectsUnavailableScopedConfiguration(t *testing.T) {
 	t.Parallel()
 
@@ -141,6 +325,100 @@ func TestGetCatalogModelReturnsStableDetachedDetail(t *testing.T) {
 		t.Fatalf("GetCatalogModel after mutation: %v", err)
 	}
 	assertCatalogDetail(t, afterMutation.Model)
+}
+
+func TestCatalogReadsOverlayResolvedRuntimeStateAndCacheFacts(t *testing.T) {
+	t.Parallel()
+
+	revision := "rev-installed"
+	cachePath := "/tmp/models/cache-model/rev-installed"
+	cacheBytes := int64(1234)
+	scopes := newRuntimeScopes(t, "catalog-cache-facts")
+	service, err := catalogwire.NewService(
+		scopes,
+		func(context.Context, models.RuntimeScopeRef, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
+			return models.Runtime{
+				ReadinessState: models.ReadinessStateFailed,
+				LifecycleState: models.LifecycleStateInstalling,
+				Revision:       &revision,
+				CachePath:      &cachePath,
+				CacheBytes:     &cacheBytes,
+			}, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("construct Catalog: %v", err)
+	}
+	scope := publicScope(t, openCatalogScope(t, scopes, "cache-model", "generate"))
+	listCatalogCacheFacts(t, service, scope, revision, cachePath, cacheBytes)
+	detail := inspectCatalogCacheFacts(t, service, scope, revision, cachePath, cacheBytes)
+	if detail.Model.ManagedRuntime.ReadinessState != models.ReadinessStateFailed ||
+		detail.Model.ManagedRuntime.LifecycleState != models.LifecycleStateInstalling {
+		t.Fatalf("inspect runtime states = (%s, %s), want FAILED/INSTALLING", detail.Model.ManagedRuntime.ReadinessState, detail.Model.ManagedRuntime.LifecycleState)
+	}
+}
+
+func listCatalogCacheFacts(
+	t *testing.T,
+	service catalog.Service,
+	scope models.RuntimeScopeRef,
+	revision string,
+	cachePath string,
+	cacheBytes int64,
+) {
+	result, err := service.ListCatalog(context.Background(), models.ListModelsRequest{Scope: scope})
+	if err != nil {
+		t.Fatalf("ListCatalog: %v", err)
+	}
+	var model *models.Summary
+	for index := range result.Models {
+		if result.Models[index].Name == "cache-model" {
+			model = &result.Models[index]
+			break
+		}
+	}
+	if model == nil {
+		t.Fatalf("models = %#v, want cache-model", result.Models)
+	}
+	runtime := model.ManagedRuntime
+	if runtime.ReadinessState != models.ReadinessStateFailed ||
+		runtime.LifecycleState != models.LifecycleStateInstalling {
+		t.Fatalf("catalog states = (%s, %s), want FAILED/INSTALLING", runtime.ReadinessState, runtime.LifecycleState)
+	}
+	if runtime.Revision == nil || *runtime.Revision != revision ||
+		runtime.CachePath == nil || *runtime.CachePath != cachePath ||
+		runtime.CacheBytes == nil || *runtime.CacheBytes != cacheBytes {
+		t.Fatalf("catalog cache facts = revision=%v path=%v bytes=%v, want rev-installed/path/1234", runtime.Revision, runtime.CachePath, runtime.CacheBytes)
+	}
+	if runtime.Diagnostics["readinessState"] != string(models.ReadinessStateFailed) ||
+		runtime.Diagnostics["lifecycleState"] != string(models.LifecycleStateInstalling) {
+		t.Fatalf("catalog diagnostics state = %#v, want FAILED/INSTALLING", runtime.Diagnostics)
+	}
+}
+
+func inspectCatalogCacheFacts(
+	t *testing.T,
+	service catalog.Service,
+	scope models.RuntimeScopeRef,
+	revision string,
+	cachePath string,
+	cacheBytes int64,
+) models.GetModelResult {
+	detail, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{
+		Scope: scope, Name: "cache-model",
+	})
+	if err != nil {
+		t.Fatalf("GetCatalogModel: %v", err)
+	}
+	inspectRuntime := detail.Model.ManagedRuntime
+	if inspectRuntime.ReadinessState != models.ReadinessStateFailed ||
+		inspectRuntime.LifecycleState != models.LifecycleStateInstalling ||
+		inspectRuntime.CachePath == nil || *inspectRuntime.CachePath != cachePath ||
+		inspectRuntime.Revision == nil || *inspectRuntime.Revision != revision ||
+		inspectRuntime.CacheBytes == nil || *inspectRuntime.CacheBytes != cacheBytes {
+		t.Fatalf("inspect runtime = %#v, want resolved states and cache facts", inspectRuntime)
+	}
+	return detail
 }
 
 func TestGetCatalogModelClassifiesLookupAndOperationFailures(t *testing.T) {

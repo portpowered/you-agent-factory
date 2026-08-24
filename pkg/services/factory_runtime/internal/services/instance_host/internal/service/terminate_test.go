@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
@@ -292,7 +293,7 @@ func TestStopEmitsLifecycleStopMetricOnce(t *testing.T) {
 
 	observerCtx, cancelObserver := context.WithCancel(runCtx)
 	defer cancelObserver()
-	go factoryhost.ObserveRuntimeMetrics(observerCtx, handle)
+	go factoryhost.ObserveRuntimeMetrics(observerCtx, handle, platformclock.Real{})
 
 	handle.SetRunResult(nil)
 	if err := host.Stop(handle); err != nil {
@@ -339,7 +340,7 @@ func TestReplacementSidecarShutdownDoesNotEmitFalseTerminalStop(t *testing.T) {
 	t.Cleanup(runCancel)
 	observerCtx, cancelObserver := context.WithCancel(runCtx)
 	defer cancelObserver()
-	go factoryhost.ObserveRuntimeMetrics(observerCtx, current)
+	go factoryhost.ObserveRuntimeMetrics(observerCtx, current, platformclock.Real{})
 
 	replacementFactory := newLifecycleControlFactory(interfaces.FactoryStateRunning)
 	replacementBundle := testBundle(replacementFactory, "runtime-terminate-replace-sidecar-next")

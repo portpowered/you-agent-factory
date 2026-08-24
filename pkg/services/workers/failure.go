@@ -278,10 +278,6 @@ func WorkFailureDecisionFromProviderError(err *ProviderError) WorkFailureDecisio
 	return FailureDecisionFromMetadata(WorkFailureMetadataFromProviderError(err))
 }
 
-func WorkFailureDecisionFromMetadata(metadata *WorkFailureMetadata) WorkFailureDecision {
-	return FailureDecisionFromMetadata(metadata)
-}
-
 func ContainsStopToken(output, stopToken string) bool {
 	if stopToken == "" {
 		return false

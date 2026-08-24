@@ -3,6 +3,7 @@ package subsystems
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -94,7 +95,7 @@ func buildHistory(consumedTokens []factorytoken.Token, result *workerexecution.W
 	history.TotalVisits[result.TransitionID]++
 
 	switch result.Outcome {
-	case workerexecution.OutcomeAccepted, workerexecution.OutcomeContinue, workerexecution.OutcomeRejected:
+	case workerexecution.OutcomeAccepted, workerexecution.OutcomeContinue, workerexecution.OutcomeRejected, workerexecution.OutcomeCanceled:
 		// Reset consecutive failures — the worker didn't fail.
 		history.ConsecutiveFailures[result.TransitionID] = 0
 	case workerexecution.OutcomeFailed:
@@ -180,4 +181,20 @@ func firstNonResourceInput(inputs []factorytoken.Color) *factorytoken.Color {
 		}
 	}
 	return nil
+}
+
+func cloneHistoryForIntermittentFailureRequeue(
+	history factorytoken.History,
+	result resolvedWorkResult,
+	now time.Time,
+) factorytoken.History {
+	cloned := factorytoken.CloneHistory(history)
+	cloned.LastError = result.err
+	cloned.FailureLog = append(cloned.FailureLog, factorytoken.Failure{
+		TransitionID: result.transitionID,
+		Timestamp:    now,
+		Error:        result.err,
+		Attempt:      history.TotalVisits[result.transitionID],
+	})
+	return cloned
 }

@@ -8,7 +8,7 @@ import {
 } from "./overlay-layout";
 
 const DIALOG_CLOSE_BUTTON_CLASS =
-  "absolute right-4 top-4 inline-flex min-h-9 w-9 items-center justify-center rounded-full border border-outline bg-transparent p-0 text-on-surface transition-colors hover:bg-surface-container-low disabled:pointer-events-none disabled:opacity-50";
+  "absolute right-4 top-4 inline-flex min-h-9 w-9 items-center justify-center rounded-full border border-outline bg-transparent p-0 text-on-surface transition-colors hover:bg-surface-container-low disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-surface-container-low disabled:text-on-surface-disabled";
 
 function DialogCloseIcon() {
   return (
@@ -42,7 +42,7 @@ export function DialogOverlay({
   return (
     <DialogPrimitive.Overlay
       className={cn(
-        "fixed inset-0 z-50 bg-black/70 backdrop-blur-sm data-[state=closed]:animate-out data-[state=open]:animate-in",
+        "fixed inset-0 z-50 bg-scrim backdrop-blur-sm data-[state=closed]:animate-out data-[state=open]:animate-in",
         className,
       )}
       {...props}

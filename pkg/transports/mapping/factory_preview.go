@@ -169,12 +169,11 @@ func workflowPolicyPreviewFromPreview(preview factory.JavaScriptPolicyPreview) f
 		_ = json.Unmarshal(encoded, &effectivePolicy)
 	}
 	out := factoryapi.WorkflowPolicyPreview{
-		EffectivePolicy:    effectivePolicy,
-		PolicyHash:         preview.PolicyHash,
-		MaxChildCount:      preview.MaxChildCount,
-		MaxConcurrency:     preview.MaxConcurrency,
-		DeniedCapabilities: workflowDiagnosticsFromPolicy(preview.DeniedCapabilities),
-		ValidationIssues:   workflowDiagnosticsFromPolicyIssues(preview.ValidationIssues),
+		EffectivePolicy:  effectivePolicy,
+		PolicyHash:       preview.PolicyHash,
+		MaxChildCount:    preview.MaxChildCount,
+		MaxConcurrency:   preview.MaxConcurrency,
+		ValidationIssues: workflowDiagnosticsFromPolicyIssues(preview.ValidationIssues),
 	}
 	if preview.RunnerDecision != nil {
 		decision := workflowDecisionMap(preview.RunnerDecision)
@@ -253,17 +252,6 @@ func workflowDiagnosticFromSource(diagnostic factory.WorkflowSourceDiagnostic) f
 		Code:    diagnostic.Code,
 		Message: diagnostic.Message,
 	}
-}
-
-func workflowDiagnosticsFromPolicy(diagnostics []factory.JavaScriptPolicyDiagnostic) []factoryapi.WorkflowDiagnostic {
-	out := make([]factoryapi.WorkflowDiagnostic, 0, len(diagnostics))
-	for _, diagnostic := range diagnostics {
-		out = append(out, factoryapi.WorkflowDiagnostic{
-			Code:    diagnostic.Code,
-			Message: diagnostic.Message,
-		})
-	}
-	return out
 }
 
 func workflowDiagnosticsFromPolicyIssues(issues []factory.JavaScriptPolicyIssue) []factoryapi.WorkflowDiagnostic {

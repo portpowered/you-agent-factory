@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 const Identity = "mock"
@@ -21,12 +23,12 @@ type Config struct {
 // Dependencies are optional effects for mock script passthrough. Production
 // Workers construction must leave this registry unregistered.
 type Dependencies struct {
-	Next workers.CommandRunner
+	Next workerprocess.CommandRunner
 }
 
 type runner struct {
 	config *workers.MockWorkersConfig
-	next   workers.CommandRunner
+	next   workerprocess.CommandRunner
 }
 
 var _ workers.Runner = (*runner)(nil)
@@ -73,13 +75,16 @@ func (r *runner) Execute(
 		}
 		return acceptResult(), nil
 	}
+	recordMockWorkerUsage(ctx, request.Correlation, entry.Usage)
 	switch entry.RunType {
 	case workers.MockWorkerRunTypeReject:
-		return workers.RunnerExecutionResult{}, workers.NewProviderError(
-			workers.WorkFailureTypeInternalServerError,
-			"mock worker rejected the dispatch",
-			nil,
-		)
+		return workerexecution.ApplyMockWorkerUsageDiagnostics(
+				workers.RunnerExecutionResult{}, entry.Usage,
+			), workers.NewProviderError(
+				workers.WorkFailureTypeInternalServerError,
+				"mock worker rejected the dispatch",
+				nil,
+			)
 	case workers.MockWorkerRunTypeScript:
 		if entry.ScriptConfig == nil {
 			return workers.RunnerExecutionResult{}, workers.NewProviderError(
@@ -96,7 +101,7 @@ func (r *runner) Execute(
 			)
 		}
 		script := entry.ScriptConfig
-		result, err := r.next.Run(ctx, workers.CommandRequest{
+		commandResult, err := r.next.Run(ctx, workerprocess.CommandRequest{
 			Command:         script.Command,
 			Args:            append([]string(nil), script.Args...),
 			WorkerType:      request.WorkerType,
@@ -106,31 +111,44 @@ func (r *runner) Execute(
 		if err != nil {
 			return workers.RunnerExecutionResult{}, err
 		}
-		if result.ExitCode != 0 {
+		if commandResult.ExitCode != 0 {
 			return workers.RunnerExecutionResult{}, workers.NewProviderError(
 				workers.WorkFailureTypeInternalServerError,
 				"mock script command failed",
 				nil,
 			)
 		}
-		return workers.RunnerExecutionResult{
-			Content: strings.TrimSpace(string(result.Stdout)),
+		runnerResult := workers.RunnerExecutionResult{
+			Content: strings.TrimSpace(string(commandResult.Stdout)),
 			Diagnostics: &workers.WorkDiagnostics{
 				Command: &workers.CommandDiagnostic{
 					Command:  script.Command,
 					Args:     append([]string(nil), script.Args...),
-					Stdout:   string(result.Stdout),
-					Stderr:   string(result.Stderr),
-					ExitCode: result.ExitCode,
+					Stdout:   string(commandResult.Stdout),
+					Stderr:   string(commandResult.Stderr),
+					ExitCode: commandResult.ExitCode,
 				},
 				Metadata: map[string]string{
 					workers.ProviderResponseMetadataCompletionEvidence: "provider_response",
 				},
 			},
-		}, nil
+		}
+		return workerexecution.ApplyMockWorkerUsageDiagnostics(runnerResult, entry.Usage), nil
 	default:
-		return acceptResult(), nil
+		return workerexecution.ApplyMockWorkerUsageDiagnostics(acceptResult(), entry.Usage), nil
 	}
+}
+
+func recordMockWorkerUsage(
+	ctx context.Context,
+	correlation workers.ExecutionCorrelation,
+	usage *workers.MockWorkerUsageConfig,
+) {
+	if capture := workerexecution.MockWorkerUsageCaptureFromContext(ctx); capture != nil {
+		capture.Record(usage)
+		return
+	}
+	workerexecution.PublishMockWorkerUsage(ctx, correlation, usage)
 }
 
 func (r *runner) match(

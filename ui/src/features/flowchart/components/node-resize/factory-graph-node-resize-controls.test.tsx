@@ -24,23 +24,25 @@ vi.mock("@xyflow/react", async (importOriginal) => {
         dimensions: { height: number; width: number },
       ) => void;
       position: string;
+      resizeDirection?: "horizontal" | "vertical";
       style?: Record<string, string>;
       variant?: string;
     }) => (
       <button
         className={props.className}
         data-testid={`resize-${props.position}`}
+        data-resize-direction={props.resizeDirection}
         data-variant={props.variant}
         onClick={() =>
           props.onResizeEnd?.(new MouseEvent("mouseup"), {
-            height: 240,
-            width: 280,
+            height: props.resizeDirection === "horizontal" ? 240 : 280,
+            width: props.resizeDirection === "vertical" ? 200 : 280,
           })
         }
         onPointerMove={() =>
           props.onResize?.(new MouseEvent("mousemove"), {
-            height: 210,
-            width: 250,
+            height: props.resizeDirection === "horizontal" ? 210 : 250,
+            width: props.resizeDirection === "vertical" ? 200 : 250,
           })
         }
         style={props.style}
@@ -54,8 +56,10 @@ vi.mock("@xyflow/react", async (importOriginal) => {
 });
 
 import {
+  FACTORY_GRAPH_NODE_FAMILIES,
   FactoryGraphNodeResizeControls,
   type FactoryGraphNodeResizeControlsProps,
+  factoryGraphNodeFamilyRole,
 } from "@you-agent-factory/factory-graph";
 
 function resizeProps(
@@ -83,14 +87,14 @@ describe("Factory graph node resize controls", () => {
     updateNodeInternals.mockClear();
   });
 
-  it("renders one right-edge grip for a width-only family", async () => {
+  it("renders one bottom-right grip for a width-only family", async () => {
     const user = userEvent.setup();
     const onResizeEnd = vi.fn();
     const { container } = render(
       <FactoryGraphNodeResizeControls {...resizeProps({ onResizeEnd })} />,
     );
 
-    const control = screen.getByTestId("resize-right");
+    const control = screen.getByTestId("resize-bottom-right");
     expect(container.querySelectorAll("[data-testid^='resize-']")).toHaveLength(
       1,
     );
@@ -106,38 +110,44 @@ describe("Factory graph node resize controls", () => {
     expect(updateNodeInternals).toHaveBeenCalledWith("worker:writer");
   });
 
-  it("uses the bottom-right corner for a family that allows both axes", () => {
-    const { container } = render(
-      <FactoryGraphNodeResizeControls
-        {...resizeProps({
-          allowedAxes: { height: true, width: true },
-          nodeId: "workstation:review",
-        })}
-      />,
-    );
+  it.each(FACTORY_GRAPH_NODE_FAMILIES)(
+    "uses the bottom-right corner for the %s family",
+    (family) => {
+      const { allowedAxes } = factoryGraphNodeFamilyRole(family);
+      if (!allowedAxes.height && !allowedAxes.width) {
+        throw new Error(`Expected ${family} to be resizable in this matrix.`);
+      }
 
-    expect(container.querySelectorAll("[data-testid^='resize-']")).toHaveLength(
-      1,
-    );
-    expect(screen.getByTestId("resize-bottom-right")).toHaveAttribute(
-      "data-variant",
-      "handle",
-    );
-  });
+      const { container } = render(
+        <FactoryGraphNodeResizeControls {...resizeProps({ allowedAxes })} />,
+      );
 
-  it("uses the bottom edge for a height-only family", () => {
-    render(
-      <FactoryGraphNodeResizeControls
-        {...resizeProps({ allowedAxes: { height: true, width: false } })}
-      />,
-    );
-
-    expect(screen.getByTestId("resize-bottom")).toHaveAttribute(
-      "data-variant",
-      "handle",
-    );
-    expect(screen.queryByTestId("resize-right")).toBeNull();
-  });
+      expect(
+        container.querySelectorAll("[data-testid^='resize-']"),
+      ).toHaveLength(1);
+      expect(screen.getByTestId("resize-bottom-right")).toHaveAttribute(
+        "data-variant",
+        "handle",
+      );
+      const resizeDirection = allowedAxes.width
+        ? allowedAxes.height
+          ? undefined
+          : "horizontal"
+        : "vertical";
+      if (resizeDirection) {
+        expect(screen.getByTestId("resize-bottom-right")).toHaveAttribute(
+          "data-resize-direction",
+          resizeDirection,
+        );
+      } else {
+        expect(screen.getByTestId("resize-bottom-right")).not.toHaveAttribute(
+          "data-resize-direction",
+        );
+      }
+      expect(screen.queryByTestId("resize-right")).toBeNull();
+      expect(screen.queryByTestId("resize-bottom")).toBeNull();
+    },
+  );
 
   it("does not expose controls when the selected-node host is read-only", () => {
     const { container } = render(
@@ -212,14 +222,14 @@ describe("Factory graph node resize grip appearance", () => {
     );
   });
 
-  it("draws a single-axis grip as a bar rather than a corner", () => {
+  it("draws a single-axis grip as the same corner mark", () => {
     const { container } = render(
       <FactoryGraphNodeResizeControls {...resizeProps()} />,
     );
 
     const gripClassName = grip(container)?.className ?? "";
     expect(gripClassName).toContain("border-r-2");
-    expect(gripClassName).not.toContain("border-b-2");
+    expect(gripClassName).toContain("border-b-2");
   });
 });
 
@@ -243,8 +253,27 @@ describe("Factory graph node live resize", () => {
 
     fireEvent.pointerMove(screen.getByTestId("resize-bottom-right"));
 
-    expect(onResize).toHaveBeenCalledWith({ height: 210, width: 250 });
+    expect(onResize).toHaveBeenCalledWith({ height: 250, width: 250 });
     expect(onResizeEnd).not.toHaveBeenCalled();
+  });
+
+  it("keeps a width-only node height fixed during a bottom-right drag", () => {
+    const onResize = vi.fn();
+    render(
+      <FactoryGraphNodeResizeControls
+        {...resizeProps({
+          allowedAxes: { height: false, width: true },
+          onResize,
+        })}
+      />,
+    );
+
+    const control = screen.getByTestId("resize-bottom-right");
+    expect(control).toHaveAttribute("data-resize-direction", "horizontal");
+
+    fireEvent.pointerMove(control);
+
+    expect(onResize).toHaveBeenCalledWith({ height: 210, width: 250 });
   });
 
   it("leaves node internals alone until the drag settles", () => {

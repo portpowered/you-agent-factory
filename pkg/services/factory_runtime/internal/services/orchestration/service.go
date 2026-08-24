@@ -75,7 +75,6 @@ func (e *CompileError) Unwrap() error {
 // Factory definition. Only the orchestration package may unwrap variant state.
 type Binding interface {
 	OrchestrationKind() Kind
-	isOrchestrationBinding()
 }
 
 // CompileRequest carries the activated Factory definition inputs needed for

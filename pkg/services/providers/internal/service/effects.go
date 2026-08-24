@@ -45,9 +45,14 @@ type CommandRequest struct {
 	Stdin                    []byte
 	Env                      []string
 	WorkDir                  string
+	DispatchID               string
 	AttemptID                string
+	TransitionID             string
 	WorkerType               string
 	WorkstationName          string
+	ProjectID                string
+	InputTokens              []any
+	InputBindings            map[string][]string
 	Execution                work.ExecutionMetadata
 	ExecutionLogger          logging.Logger
 	ProcessLifecycleObserver platformprocess.ProcessLifecycleObserver
@@ -175,10 +180,18 @@ func reflectedRequest(target reflect.Type, request CommandRequest) (reflect.Valu
 	copyReflectedField(value, "Stdin", request.Stdin)
 	copyReflectedField(value, "Env", request.Env)
 	copyReflectedField(value, "WorkDir", request.WorkDir)
-	copyReflectedField(value, "DispatchID", request.AttemptID)
+	dispatchID := request.DispatchID
+	if dispatchID == "" {
+		dispatchID = request.AttemptID
+	}
+	copyReflectedField(value, "DispatchID", dispatchID)
 	copyReflectedField(value, "AttemptID", request.AttemptID)
+	copyReflectedField(value, "TransitionID", request.TransitionID)
 	copyReflectedField(value, "WorkerType", request.WorkerType)
 	copyReflectedField(value, "WorkstationName", request.WorkstationName)
+	copyReflectedField(value, "ProjectID", request.ProjectID)
+	copyReflectedField(value, "InputTokens", request.InputTokens)
+	copyReflectedField(value, "InputBindings", request.InputBindings)
 	copyReflectedField(value, "Execution", request.Execution)
 	copyReflectedField(value, "ExecutionLogger", request.ExecutionLogger)
 	return value, nil

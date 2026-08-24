@@ -33,6 +33,7 @@ const (
 	packagedSubagentWorkerName          = "subagent-worker"
 	packagedSubagentRunWorkstationName  = "run-subagent"
 	packagedFactoryBuilderName          = "@you/factory-builder"
+	customizedNamedGoalFactoryName      = "@test/goal"
 	wantHermeticInvocationPrimaryResult = "mock worker accepted"
 )
 
@@ -174,6 +175,8 @@ func TestRun_NamedAndExplicitNoSignatureFactoriesPreserveCompatibilityInputs(t *
 	)
 	factoryPath := filepath.Join(factoryDir, "factory.json")
 	support.RemoveInvocationSignatureFixture(t, factoryPath)
+	factoryDir = support.CopyFactoryAsNamed(t, factoryDir, homeDir, customizedNamedGoalFactoryName)
+	factoryPath = filepath.Join(factoryDir, "factory.json")
 	mockWorkersPath := writeMockWorkersConfig(t, workers.MockWorkersConfig{
 		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
 		MockWorkers: []workers.MockWorkerConfig{{
@@ -199,7 +202,7 @@ func TestRun_NamedAndExplicitNoSignatureFactoriesPreserveCompatibilityInputs(t *
 		t.Run(test.name, func(t *testing.T) {
 			namedStdout, namedStderr := executeCustomerCommandWithStdin(
 				t, process, environment, workingDirectory,
-				append(append([]string{"you", "run", "--named", packagedGoalFactoryName}, base...), test.input...),
+				append(append([]string{"you", "run", "--named", customizedNamedGoalFactoryName}, base...), test.input...),
 				test.stdin,
 			)
 			fileStdout, fileStderr := executeCustomerCommandWithStdin(
@@ -244,6 +247,8 @@ func TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatur
 	factoryPath := filepath.Join(factoryDir, "factory.json")
 	addEffectiveSignatureFixture(t, factoryPath)
 	support.ReplaceGoalWorkstationPrompt(t, factoryPath, "input=${input}|format=${format}|count=${count}|document=${document}|stdin=${body}")
+	factoryDir = support.CopyFactoryAsNamed(t, factoryDir, homeDir, customizedNamedGoalFactoryName)
+	factoryPath = filepath.Join(factoryDir, "factory.json")
 	documentPath := filepath.Join(workingDirectory, "story.md")
 	if err := os.WriteFile(documentPath, []byte("factory invocation document"), 0o600); err != nil {
 		t.Fatalf("write FILE_CONTENTS fixture: %v", err)
@@ -258,7 +263,7 @@ func TestRun_NamedAndExplicitFactorySelectionsExecuteEquivalentEffectiveSignatur
 	}
 	namedStdout, namedStderr := executeCustomerCommandWithStdin(
 		t, process, environment, workingDirectory,
-		append([]string{"you", "run", "--named", packagedGoalFactoryName}, common...),
+		append([]string{"you", "run", "--named", customizedNamedGoalFactoryName}, common...),
 		"canonical stdin body",
 	)
 	fileStdout, fileStderr := executeCustomerCommandWithStdin(
@@ -439,13 +444,15 @@ func runEmptyDefaultInvocationCase(t *testing.T, selection string) {
 	})
 	support.ReplaceGoalWorkerInstructions(t, factoryPath, "mode=${mode}")
 	support.ReplaceGoalWorkstationPrompt(t, factoryPath, "mode=${mode}")
+	factoryDir = support.CopyFactoryAsNamed(t, factoryDir, homeDir, customizedNamedGoalFactoryName)
+	factoryPath = filepath.Join(factoryDir, "factory.json")
 
 	stdout, stderr := executeCustomerCommand(
 		t,
 		process,
 		environment,
 		workingDirectory,
-		emptyInvocationArguments(selection, factoryPath),
+		emptyInvocationArguments(selection, factoryPath, customizedNamedGoalFactoryName),
 	)
 	if stdout == "" {
 		t.Fatalf("default-only invocation output: stdout=%q stderr=%q", stdout, stderr)
@@ -501,13 +508,15 @@ func runEmptyPreparationFailureCase(
 	)
 	factoryPath := filepath.Join(factoryDir, "factory.json")
 	replaceInvocationSignatureFixture(t, factoryPath, signature)
+	factoryDir = support.CopyFactoryAsNamed(t, factoryDir, homeDir, customizedNamedGoalFactoryName)
+	factoryPath = filepath.Join(factoryDir, "factory.json")
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	stdinIsTTY := true
 	stdoutIsTTY := false
 	err = process.Execute(root.Input{
-		Args:             emptyInvocationArguments(selection, factoryPath),
+		Args:             emptyInvocationArguments(selection, factoryPath, customizedNamedGoalFactoryName),
 		Env:              environment,
 		Stdin:            strings.NewReader(""),
 		Stdout:           &stdout,
@@ -523,9 +532,9 @@ func runEmptyPreparationFailureCase(
 	observation.assertNoExecution(t, provider.CallCount())
 }
 
-func emptyInvocationArguments(selection, factoryPath string) []string {
+func emptyInvocationArguments(selection, factoryPath, factoryName string) []string {
 	if selection == "named" {
-		return []string{"you", "run", "--named", packagedGoalFactoryName, "--no-record"}
+		return []string{"you", "run", "--named", factoryName, "--no-record"}
 	}
 	return []string{"you", "run", "--factory", factoryPath, "--no-record"}
 }

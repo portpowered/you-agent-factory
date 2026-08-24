@@ -3,6 +3,7 @@ package local
 import (
 	"testing"
 
+	models "github.com/portpowered/infinite-you/pkg/services/models"
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
 )
 
@@ -22,8 +23,8 @@ func TestBuildManagedRuntime_MapsCompatibilityFieldsToManagedContract(t *testing
 	if managed.Identity != summary.name {
 		t.Fatalf("identity = %q, want %q", managed.Identity, summary.name)
 	}
-	if managed.ReadinessState != managedruntime.ReadinessStateReady {
-		t.Fatalf("readiness = %s, want READY", managed.ReadinessState)
+	if managed.ReadinessState != managedruntime.ReadinessStateMissing {
+		t.Fatalf("readiness = %s, want MISSING", managed.ReadinessState)
 	}
 	if managed.LifecycleState != managedruntime.LifecycleStateNotInstalled {
 		t.Fatalf("lifecycle = %s, want NOT_INSTALLED", managed.LifecycleState)
@@ -34,8 +35,25 @@ func TestBuildManagedRuntime_MapsCompatibilityFieldsToManagedContract(t *testing
 	if len(managed.SupportedOperations) != 1 || managed.SupportedOperations[0].Name != "TTS" {
 		t.Fatalf("supported operations = %#v, want one TTS operation", managed.SupportedOperations)
 	}
-	if managed.Diagnostics["readinessState"] != "READY" || managed.Diagnostics["statusReason"] != "ready" {
+	if managed.Diagnostics["readinessState"] != "MISSING" || managed.Diagnostics["statusReason"] != "ready" {
 		t.Fatalf("diagnostics = %#v, want managed-runtime projections", managed.Diagnostics)
+	}
+}
+
+func TestBuildManagedRuntimeProjection_RejectsReadyNotInstalledForManagedLocal(t *testing.T) {
+	t.Parallel()
+
+	runtime := buildManagedRuntime(managedRuntimeSummary{
+		name:      "OMNIVOICE_Q4_K_M",
+		locality:  managedruntime.LocalityLocal,
+		readiness: managedruntime.ReadinessStateReady,
+		lifecycle: managedruntime.LifecycleStateNotInstalled,
+	}, nil)
+
+	if runtime.ReadinessState != managedruntime.ReadinessStateMissing ||
+		runtime.LifecycleState != managedruntime.LifecycleStateNotInstalled {
+		t.Fatalf("runtime state = (%s, %s), want MISSING/NOT_INSTALLED",
+			runtime.ReadinessState, runtime.LifecycleState)
 	}
 }
 
@@ -54,8 +72,11 @@ func TestListModels_PopulatesManagedRuntimeContract(t *testing.T) {
 	if model.ManagedRuntime.Identity != "OMNIVOICE_Q4_K_M" {
 		t.Fatalf("managed runtime identity = %q, want OMNIVOICE_Q4_K_M", model.ManagedRuntime.Identity)
 	}
-	if model.ManagedRuntime.ReadinessState != managedruntime.ReadinessStateReady {
-		t.Fatalf("managed readiness = %s, want READY", model.ManagedRuntime.ReadinessState)
+	if model.ManagedRuntime.ReadinessState != managedruntime.ReadinessStateMissing {
+		t.Fatalf("managed readiness = %s, want MISSING", model.ManagedRuntime.ReadinessState)
+	}
+	if model.ManagedRuntime.LifecycleState != managedruntime.LifecycleStateNotInstalled {
+		t.Fatalf("managed lifecycle = %s, want NOT_INSTALLED", model.ManagedRuntime.LifecycleState)
 	}
 }
 
@@ -107,6 +128,7 @@ func TestBuildManagedRuntimeProjection_ReportsInstalledCacheState(t *testing.T) 
 		Supported:          true,
 		Installed:          true,
 		Revision:           "rev1",
+		CachePath:          "/tmp/models/OMNIVOICE_Q4_K_M/rev1",
 		InstalledFileCount: 2,
 	}
 	managed := buildManagedRuntimeProjection(managedRuntimeProjection{
@@ -120,5 +142,129 @@ func TestBuildManagedRuntimeProjection_ReportsInstalledCacheState(t *testing.T) 
 	}
 	if managed.Diagnostics["revision"] != "rev1" {
 		t.Fatalf("diagnostics = %#v, want revision detail", managed.Diagnostics)
+	}
+	if managed.CachePath == nil || *managed.CachePath != inspection.CachePath {
+		t.Fatalf("cache path = %v, want %q", managed.CachePath, inspection.CachePath)
+	}
+}
+
+func TestProjectManagedRuntimeState_UsesCacheAndHostFacts(t *testing.T) {
+	t.Parallel()
+	for _, tc := range managedRuntimeProjectionCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			projection := managedruntime.ProjectManagedRuntimeState(tc.cache, tc.host)
+			if projection.ReadinessState != tc.readiness || projection.LifecycleState != tc.lifecycle {
+				t.Fatalf("projection = (%s, %s), want (%s, %s)",
+					projection.ReadinessState, projection.LifecycleState, tc.readiness, tc.lifecycle)
+			}
+		})
+	}
+}
+
+type managedRuntimeProjectionCase struct {
+	name      string
+	cache     models.ManagedRuntimeCacheFacts
+	host      models.ManagedRuntimeHostFacts
+	readiness models.ReadinessState
+	lifecycle models.LifecycleState
+}
+
+func managedRuntimeProjectionCases() []managedRuntimeProjectionCase {
+	return append(managedRuntimeProjectionMissingCases(), managedRuntimeProjectionHostCases()...)
+}
+
+func managedRuntimeProjectionMissingCases() []managedRuntimeProjectionCase {
+	expected := managedRuntimeProjectionExpectedArtifacts()
+	return []managedRuntimeProjectionCase{
+		{
+			name: "missing manifest and artifacts",
+			cache: models.ManagedRuntimeCacheFacts{
+				Locality: models.LocalityLocal, Supported: true, ExpectedArtifacts: expected,
+			},
+			readiness: models.ReadinessStateMissing, lifecycle: models.LifecycleStateNotInstalled,
+		},
+		{
+			name: "active pull",
+			cache: models.ManagedRuntimeCacheFacts{
+				Locality: models.LocalityLocal, Supported: true, ActivePull: true,
+				ManifestPresent: true, ManifestValid: true, ExpectedArtifacts: expected,
+				ObservedArtifacts: []models.AssetArtifact{{Name: "weights.gguf", Bytes: 1}},
+			},
+			readiness: models.ReadinessStateLoading, lifecycle: models.LifecycleStateInstalling,
+		},
+		{
+			name: "active pull while manifest is pending",
+			cache: models.ManagedRuntimeCacheFacts{
+				Locality: models.LocalityLocal, Supported: true, ActivePull: true,
+				ExpectedArtifacts: expected, FailureReason: "managed cache manifest is invalid",
+			},
+			readiness: models.ReadinessStateLoading, lifecycle: models.LifecycleStateInstalling,
+		},
+		{
+			name: "wrong-sized artifact",
+			cache: models.ManagedRuntimeCacheFacts{
+				Locality: models.LocalityLocal, Supported: true,
+				ManifestPresent: true, ManifestValid: true, ExpectedArtifacts: expected,
+				ObservedArtifacts: []models.AssetArtifact{
+					{Name: "weights.gguf", Bytes: 3}, {Name: "tokenizer.gguf", Bytes: 2},
+				},
+			},
+			readiness: models.ReadinessStateFailed, lifecycle: models.LifecycleStateNotInstalled,
+		},
+		{
+			name: "corrupt cache",
+			cache: models.ManagedRuntimeCacheFacts{
+				Locality: models.LocalityLocal, Supported: true,
+				ManifestPresent: true, ManifestValid: true, ExpectedArtifacts: expected,
+				ObservedArtifacts: []models.AssetArtifact{
+					{Name: "weights.gguf", Bytes: 4}, {Name: "tokenizer.gguf", Bytes: 2},
+				},
+				FailureReason: "asset integrity verification failed",
+			},
+			readiness: models.ReadinessStateFailed, lifecycle: models.LifecycleStateNotInstalled,
+		},
+	}
+}
+
+func managedRuntimeProjectionHostCases() []managedRuntimeProjectionCase {
+	expected := managedRuntimeProjectionExpectedArtifacts()
+	completeCache := func() models.ManagedRuntimeCacheFacts {
+		return models.ManagedRuntimeCacheFacts{
+			Locality: models.LocalityLocal, Supported: true,
+			ManifestPresent: true, ManifestValid: true, ExpectedArtifacts: expected,
+			ObservedArtifacts: []models.AssetArtifact{
+				{Name: "weights.gguf", Bytes: 4}, {Name: "tokenizer.gguf", Bytes: 2},
+			},
+			IntegrityVerified: true,
+		}
+	}
+	return []managedRuntimeProjectionCase{
+		{
+			name: "verified cache", cache: completeCache(),
+			readiness: models.ReadinessStateReady, lifecycle: models.LifecycleStateInstalled,
+		},
+		{
+			name: "host loading", cache: completeCache(),
+			host: models.ManagedRuntimeHostFacts{
+				Observed: true, ReadinessState: models.ReadinessStateLoading,
+				LifecycleState: models.LifecycleStateLoading,
+			},
+			readiness: models.ReadinessStateLoading, lifecycle: models.LifecycleStateLoading,
+		},
+		{
+			name: "host loaded", cache: completeCache(),
+			host: models.ManagedRuntimeHostFacts{
+				Observed: true, ReadinessState: models.ReadinessStateReady,
+				LifecycleState: models.LifecycleStateLoaded,
+			},
+			readiness: models.ReadinessStateReady, lifecycle: models.LifecycleStateLoaded,
+		},
+	}
+}
+
+func managedRuntimeProjectionExpectedArtifacts() []models.AssetRequirement {
+	return []models.AssetRequirement{
+		{Name: "weights.gguf", Bytes: 4},
+		{Name: "tokenizer.gguf", Bytes: 2},
 	}
 }

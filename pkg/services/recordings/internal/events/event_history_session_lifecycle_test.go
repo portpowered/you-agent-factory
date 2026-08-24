@@ -6,7 +6,10 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -321,5 +324,111 @@ func TestFactoryEventHistory_EventRecorderFollowsCanonicalAppendOrder(t *testing
 	defer recordedMu.Unlock()
 	if len(recorded) != 2 || recorded[0] != 0 || recorded[1] != 1 {
 		t.Fatalf("recorded callback sequence = %#v, want [0 1]", recorded)
+	}
+}
+
+func TestFactoryEventHistory_CurrentSessionProjectionFactsAreDetachedAndIncremental(t *testing.T) {
+	t0 := time.Date(2026, 8, 23, 17, 0, 0, 0, time.UTC)
+	history := newTestFactoryEventHistory(nil, func() time.Time { return t0 })
+	history.RecordSessionLifecycleFromFactoryConfig("session-js", &interfaces.FactoryConfig{
+		Name: "factory-js",
+		Orchestrator: &interfaces.FactoryOrchestratorConfig{
+			Kind: interfaces.OrchestratorKindJavaScript,
+		},
+	}, 0, t0)
+	history.RecordOrchestratorPhaseChanged(OrchestratorPhaseChangedInput{
+		SessionID:        "session-js",
+		OrchestratorKind: interfaces.OrchestratorKindJavaScript,
+		PhaseID:          "phase-plan",
+		PhaseName:        "plan",
+		Source:           "runtime",
+		Tick:             1,
+		PhaseStatus:      interfaces.OrchestratorPhaseStatusActive,
+	}, t0.Add(time.Second))
+
+	record := interfaces.FactoryDispatchRecord{
+		DispatchID:    "dispatch-approval",
+		HumanApproval: true,
+		Dispatch: work.WorkDispatch{
+			DispatchID:      "dispatch-approval",
+			TransitionID:    "approval-workstation",
+			WorkstationName: "Release Approval",
+			Execution:       work.ExecutionMetadata{RequestID: "request-approval"},
+			InputTokens: workerexecution.InputTokens(workerexecution.Token{
+				ID:    "token-approval",
+				Color: workerexecution.Color{WorkID: "work-approval", TraceID: "trace-approval"},
+			}),
+		},
+	}
+	history.RecordWorkstationRequest(2, record, t0.Add(2*time.Second))
+	history.RecordHumanApprovalRequested(2, record, t0.Add(2*time.Second))
+
+	facts := currentSessionProjectionFactsForTest(t, history, "initial")
+	assertSessionProjectionFacts(t, facts)
+	assertSessionProjectionFactsAreDetached(t, history, facts)
+
+	history.RecordDispatchReconciled(DispatchReconciledInput{
+		SessionID:            "session-js",
+		DispatchID:           "dispatch-approval",
+		Tick:                 3,
+		ReconciledStatus:     interfaces.FactoryDispatchStatusCompleted,
+		ReconciliationSource: interfaces.DispatchReconciliationSource("RUNTIME_RECONCILER"),
+	}, t0.Add(3*time.Second))
+	resolved := currentSessionProjectionFactsForTest(t, history, "resolution")
+	if len(resolved.PendingHumanApprovals) != 0 {
+		t.Fatalf("resolved approvals = %#v, want none", resolved.PendingHumanApprovals)
+	}
+}
+
+func currentSessionProjectionFactsForTest(
+	t *testing.T,
+	history *FactoryEventHistory,
+	phase string,
+) recordings.SessionProjectionFacts {
+	t.Helper()
+	facts, err := history.CurrentSessionProjectionFacts()
+	if err != nil {
+		t.Fatalf("CurrentSessionProjectionFacts() %s error = %v", phase, err)
+	}
+	return facts
+}
+
+func assertSessionProjectionFacts(t *testing.T, facts recordings.SessionProjectionFacts) {
+	t.Helper()
+	if facts.SessionBracket == nil || facts.SessionBracket.SessionID != "session-js" {
+		t.Fatalf("session bracket = %#v, want session-js", facts.SessionBracket)
+	}
+	if facts.JavaScriptRuntime == nil || facts.JavaScriptRuntime.Phase != "plan" {
+		t.Fatalf("JavaScript runtime = %#v, want phase plan", facts.JavaScriptRuntime)
+	}
+	approval, ok := facts.PendingHumanApprovals["approval-dispatch-approval"]
+	if !ok || approval.SessionID != "session-js" || approval.RequestID != "request-approval" ||
+		approval.WorkstationID != "approval-workstation" || len(approval.WorkItemIDs) != 1 || approval.WorkItemIDs[0] != "work-approval" {
+		t.Fatalf("pending approval = %#v, want stable correlated approval", facts.PendingHumanApprovals)
+	}
+}
+
+func assertSessionProjectionFactsAreDetached(
+	t *testing.T,
+	history *FactoryEventHistory,
+	facts recordings.SessionProjectionFacts,
+) {
+	t.Helper()
+	approval := facts.PendingHumanApprovals["approval-dispatch-approval"]
+	if len(approval.Decisions) == 0 || len(approval.WorkItemIDs) == 0 || facts.JavaScriptRuntime == nil || len(facts.JavaScriptRuntime.Phases) == 0 {
+		t.Fatalf("projection facts missing detached values: %#v", facts)
+	}
+	approval.WorkItemIDs[0] = "mutated"
+	approval.Decisions[0] = "MUTATED"
+	facts.PendingHumanApprovals["approval-dispatch-approval"] = approval
+	facts.JavaScriptRuntime.Phases[0] = "mutated"
+	next := currentSessionProjectionFactsForTest(t, history, "detachment")
+	nextApproval := next.PendingHumanApprovals["approval-dispatch-approval"]
+	if len(nextApproval.WorkItemIDs) == 0 || len(nextApproval.Decisions) == 0 || next.JavaScriptRuntime == nil || len(next.JavaScriptRuntime.Phases) == 0 {
+		t.Fatalf("detached projection facts lost values: %#v", next)
+	}
+	if nextApproval.WorkItemIDs[0] != "work-approval" || nextApproval.Decisions[0] != interfaces.HumanApprovalDecisionApprove ||
+		next.JavaScriptRuntime.Phases[0] != "plan" {
+		t.Fatalf("projection leaked mutable read state: %#v / %#v", nextApproval, next.JavaScriptRuntime)
 	}
 }

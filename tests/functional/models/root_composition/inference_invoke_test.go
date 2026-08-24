@@ -140,11 +140,10 @@ func TestModelsInferenceInvokeActivatesThroughRootBuildProcess(t *testing.T) {
 	}
 }
 
-// TestModelsJoinedInvokeConsumesGenericCacheThroughRootBuildProcess proves
-// the generic joined path can use a prepared content-addressed model snapshot
-// through the real root composition, without a legacy managed-cache fixture or
-// a model-weight download.
-func TestModelsJoinedInvokeConsumesGenericCacheThroughRootBuildProcess(t *testing.T) {
+// TestModelsJoinedBuiltinInvokeWithoutFactoryDeclaration proves the built-in
+// tts definition reaches the joined kernel through root.BuildProcess and
+// Process.Execute without a redundant Factory resource or worker declaration.
+func TestModelsJoinedBuiltinInvokeWithoutFactoryDeclaration(t *testing.T) {
 	t.Parallel()
 
 	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -164,17 +163,9 @@ func TestModelsJoinedInvokeConsumesGenericCacheThroughRootBuildProcess(t *testin
 	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
 	protocol := &joinedProtocolNegotiator{}
 	compatibility := &joinedCompatibilityChecker{}
+	backendResolverCalls := 0
 	assetFiles := functionalModelAssetFileSystem{home: home}
-	config := localModelReadinessAssetsHostFactoryConfig(modelServer.URL)
-	resources := config["resources"].([]map[string]any)
-	resources[0]["model"] = "tts"
-	resources[0]["backend"] = "localai-vibevoice"
-	workers := config["workers"].([]map[string]any)
-	workers[0]["name"] = "tts-worker"
-	workers[0]["model"] = "tts"
-	workers[0]["args"] = []string{"--grpc-endpoint", modelServer.URL}
-
-	dir := support.ScaffoldFactory(t, config)
+	dir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ModelAssetHTTPClient:           rejectingNetwork,
 		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
@@ -191,9 +182,16 @@ func TestModelsJoinedInvokeConsumesGenericCacheThroughRootBuildProcess(t *testin
 		ModelHostProcessLauncher:       hostLauncher,
 		ModelHostProtocolNegotiator:    protocol,
 		ModelHostCompatibilityChecker:  compatibility,
-		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
-		ModelHostHTTPClient:            modelServer.Client(),
-		ModelRuntimeHTTPClient:         modelServer.Client(),
+		ModelResolveBackendArtifact: func(
+			context.Context,
+			serviceedges.ModelBackendArtifactSelectionRequest,
+		) (serviceedges.ModelBackendArtifactSelection, error) {
+			backendResolverCalls++
+			return pinnedTTSBackendSelection(), nil
+		},
+		ModelAssetHostPlatform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		ModelHostHTTPClient:    modelServer.Client(),
+		ModelRuntimeHTTPClient: modelServer.Client(),
 	})
 
 	var output bytes.Buffer
@@ -218,8 +216,8 @@ func TestModelsJoinedInvokeConsumesGenericCacheThroughRootBuildProcess(t *testin
 	if rejectingNetwork.Calls() != 0 {
 		t.Fatalf("joined asset network calls = %d, want 0 from content-addressed cache", rejectingNetwork.Calls())
 	}
-	if hostLauncher.Calls() != 1 {
-		t.Fatalf("joined host starts = %d, want exactly 1", hostLauncher.Calls())
+	if backendResolverCalls != 1 {
+		t.Fatalf("joined backend resolver calls = %d, want exactly one built-in managed-backend attempt", backendResolverCalls)
 	}
 
 	closer, ok := process.(interface{ Close(context.Context) error })
@@ -229,12 +227,29 @@ func TestModelsJoinedInvokeConsumesGenericCacheThroughRootBuildProcess(t *testin
 	if err := closer.Close(context.Background()); err != nil {
 		t.Fatalf("close joined root process: %v", err)
 	}
-	if protocol.Calls() == 0 {
-		t.Fatalf("joined protocol negotiations = %d, want at least 1", protocol.Calls())
+}
+
+func builtInOnlyModelFactoryConfig() map[string]any {
+	return map[string]any{
+		"name": "models-built-in-only",
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
 	}
-	if compatibility.Calls() == 0 {
-		t.Fatalf("joined compatibility checks = %d, want at least 1", compatibility.Calls())
+}
+
+func findModelSummary(results []factoryapi.ModelSummary, name string) (factoryapi.ModelSummary, bool) {
+	for _, result := range results {
+		if result.Name == name {
+			return result, true
+		}
 	}
+	return factoryapi.ModelSummary{}, false
 }
 
 // TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess proves the
@@ -296,6 +311,184 @@ func TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess(t *testing.T
 		t.Fatalf("generic HTTP effects = network %d, starts %d, protocol %d, compatibility %d; want cache hit and joined lifecycle", rejectingNetwork.Calls(), hostLauncher.Calls(), protocol.Calls(), compatibility.Calls())
 	}
 	functionalevidence.Covers(t, "rest/invokeGenericModel")
+}
+
+// TestModelsNamedAndGenericHTTPInvocationShareBuiltinResolution proves both
+// public invocation routes use the same effective built-in definition when no
+// Factory worker is declared. The generic route keeps its slot-named output
+// contract; the named route keeps its legacy worker/content response shape.
+func TestModelsNamedAndGenericHTTPInvocationShareBuiltinResolution(t *testing.T) {
+	t.Parallel()
+
+	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/health" {
+			writer.WriteHeader(http.StatusOK)
+			return
+		}
+		http.NotFound(writer, request)
+	}))
+	t.Cleanup(modelServer.Close)
+
+	home := t.TempDir()
+	writeGenericBuiltinTTSCache(t, home)
+	writeGenericBuiltinTTSBackendCache(t, home)
+	rejectingNetwork := &rejectingModelAssetHTTP{}
+	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
+	protocol := &joinedProtocolNegotiator{}
+	compatibility := &joinedCompatibilityChecker{}
+	assetFiles := functionalModelAssetFileSystem{home: home}
+	dir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Env:                       functionalHomeEnvironment(home),
+		Edges:                     genericHTTPInvocationEdges(rejectingNetwork, assetFiles, hostLauncher, protocol, compatibility, modelServer),
+	})
+
+	text := "builtin parity input"
+	inputs := []factoryapi.ModelInvocationInput{{
+		Name: "text", Modality: factoryapi.ModelInvocationContentTypeText,
+		Content: &text,
+	}}
+	genericResponse := postFunctionalJSON[factoryapi.GenericModelInvocationResponse](
+		t,
+		server.URL()+"/models/invocations",
+		factoryapi.GenericModelInvocationRequest{
+			Scope: "factory-session:parity-generic", Holder: "functional-parity",
+			Model: factoryapi.ModelReference{NameOrUri: "tts"}, Operation: "TTS", Inputs: &inputs,
+		},
+		"POST /models/invocations built-in parity",
+	)
+	if len(genericResponse.Outputs) != 1 || genericResponse.Outputs[0].Name != "audio" ||
+		genericResponse.Outputs[0].Modality != factoryapi.ModelInvocationContentTypeAudio ||
+		genericResponse.Outputs[0].Content == nil || *genericResponse.Outputs[0].Content != text {
+		t.Fatalf("generic built-in parity response = %#v, want one audio output containing input", genericResponse)
+	}
+
+	namedContent := factoryapi.WorkContent{mustFunctionalTextPart(t, text)}
+	namedRequest := factoryapi.ModelInvocationRequest{
+		Operation: "TTS", Bindings: localModelReadinessAssetsHostBindings(), Content: &namedContent,
+	}
+	namedBody, err := json.Marshal(namedRequest)
+	if err != nil {
+		t.Fatalf("marshal named built-in parity request: %v", err)
+	}
+	namedHTTPResponse, err := http.Post(
+		server.URL()+"/models/tts/invocations", "application/json", bytes.NewReader(namedBody),
+	)
+	if err != nil {
+		t.Fatalf("POST /models/{model_name}/invocations built-in parity: %v", err)
+	}
+	var namedFailure factoryapi.ErrorResponse
+	if err := json.NewDecoder(namedHTTPResponse.Body).Decode(&namedFailure); err != nil {
+		namedHTTPResponse.Body.Close()
+		t.Fatalf("decode named built-in parity response: %v", err)
+	}
+	namedHTTPResponse.Body.Close()
+	if namedHTTPResponse.StatusCode != http.StatusNotFound ||
+		string(namedFailure.Code) != "MODEL_NOT_AVAILABLE" ||
+		namedFailure.Family != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("named built-in parity response = status %d, %#v; want effective-definition readiness 404", namedHTTPResponse.StatusCode, namedFailure)
+	}
+	if strings.Contains(strings.ToLower(namedFailure.Message), "model not found") ||
+		strings.Contains(string(namedFailure.Code), "MODEL_INFERENCE_RUNTIME_FAILURE") ||
+		namedFailure.Family == factoryapi.ErrorFamilyInternalServerError {
+		t.Fatalf("named built-in parity retained a worker-lookup failure: %#v", namedFailure)
+	}
+	if rejectingNetwork.Calls() != 0 || hostLauncher.Calls() != 0 || protocol.Calls() != 0 || compatibility.Calls() != 0 {
+		t.Fatalf("built-in parity effects = network %d, starts %d, protocol %d, compatibility %d; want no external effects for the cache-backed generic attempt or named readiness rejection", rejectingNetwork.Calls(), hostLauncher.Calls(), protocol.Calls(), compatibility.Calls())
+	}
+}
+
+// TestModelsNamedBuiltinRouteUsesEffectiveDefinitionWithoutWorker proves the
+// named route uses the discovered built-in definition even when the Factory
+// declares no matching inference worker, and preserves actionable readiness
+// and unknown-reference failures.
+func TestModelsNamedBuiltinRouteUsesEffectiveDefinitionWithoutWorker(t *testing.T) {
+	t.Parallel()
+
+	dir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	runner := support.NewRecordingCommandRunner("provider should not run before managed readiness")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+	})
+
+	assertEffectiveBuiltinDiscovery(t, server.URL())
+	assertEffectiveBuiltinReadinessFailures(t, server.URL())
+	assertUnknownBuiltinFailure(t, server.URL())
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner calls = %d, want readiness to reject unavailable built-ins before execution", runner.CallCount())
+	}
+}
+
+func assertEffectiveBuiltinDiscovery(t *testing.T, serverURL string) {
+	t.Helper()
+	listed := support.GetJSON[factoryapi.ListModelsResponse](t, serverURL+"/models")
+	if _, ok := findModelSummary(listed.Results, models.BuiltInModelNameTTS); !ok {
+		t.Fatalf("GET /models did not expose effective built-in %q; results=%#v", models.BuiltInModelNameTTS, listed.Results)
+	}
+	inspected := support.GetJSON[factoryapi.ModelDetail](t, serverURL+"/models/"+models.BuiltInModelNameTTS)
+	if inspected.Name != models.BuiltInModelNameTTS || len(inspected.Operations) != 1 || inspected.Operations[0].Name != models.OperationTTS {
+		t.Fatalf("GET /models/%s = %#v, want effective TTS definition", models.BuiltInModelNameTTS, inspected)
+	}
+}
+
+func assertEffectiveBuiltinReadinessFailures(t *testing.T, serverURL string) {
+	t.Helper()
+	for _, modelName := range []string{models.BuiltInModelNameTTS, models.BuiltInModelNameASR} {
+		operation := models.OperationTTS
+		if modelName == models.BuiltInModelNameASR {
+			operation = models.OperationASR
+		}
+		failure := postNamedBuiltinFailure(t, serverURL, modelName, operation)
+		if failure.StatusCode != http.StatusNotFound || string(failure.Body.Code) != "MODEL_NOT_AVAILABLE" {
+			t.Fatalf("POST /models/%s/invocations = status %d, failure %#v; want effective-definition readiness failure", modelName, failure.StatusCode, failure.Body)
+		}
+		if strings.Contains(strings.ToLower(failure.Body.Message), "model not found") ||
+			strings.Contains(string(failure.Body.Code), "MODEL_INFERENCE_RUNTIME_FAILURE") ||
+			failure.Body.Family == factoryapi.ErrorFamilyInternalServerError {
+			t.Fatalf("POST /models/%s/invocations retained a worker-lookup failure: %#v", modelName, failure.Body)
+		}
+	}
+}
+
+type namedBuiltinFailure struct {
+	StatusCode int
+	Body       factoryapi.ErrorResponse
+}
+
+func postNamedBuiltinFailure(t *testing.T, serverURL, modelName, operation string) namedBuiltinFailure {
+	t.Helper()
+	body, err := json.Marshal(factoryapi.ModelInvocationRequest{Operation: operation})
+	if err != nil {
+		t.Fatalf("marshal %s invocation: %v", modelName, err)
+	}
+	response, err := http.Post(serverURL+"/models/"+modelName+"/invocations", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /models/%s/invocations: %v", modelName, err)
+	}
+	defer response.Body.Close()
+	var failure factoryapi.ErrorResponse
+	if err := json.NewDecoder(response.Body).Decode(&failure); err != nil {
+		t.Fatalf("decode %s invocation failure: %v", modelName, err)
+	}
+	return namedBuiltinFailure{StatusCode: response.StatusCode, Body: failure}
+}
+
+func assertUnknownBuiltinFailure(t *testing.T, serverURL string) {
+	t.Helper()
+	failure := postNamedBuiltinFailure(t, serverURL, "unknown-discovered-model", models.OperationTTS)
+	if failure.StatusCode != http.StatusNotFound ||
+		string(failure.Body.Code) != "MODEL_NOT_AVAILABLE" ||
+		failure.Body.Family != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("POST /models/unknown-discovered-model/invocations = status %d, failure %#v; want actionable model-not-available 404", failure.StatusCode, failure.Body)
+	}
+	if strings.Contains(string(failure.Body.Code), "MODEL_INFERENCE_RUNTIME_FAILURE") ||
+		failure.Body.Family == factoryapi.ErrorFamilyInternalServerError {
+		t.Fatalf("unknown model invocation retained an internal failure classification: %#v", failure.Body)
+	}
 }
 
 func TestModelsGenericCLIOutputModesReachJoinedRootThroughProcess(t *testing.T) {
@@ -573,14 +766,19 @@ func writeReadyOmniVoiceInvokeCache(t *testing.T, home string) {
 		t.Fatalf("create model cache fixture: %v", err)
 	}
 	files := []string{"omnivoice-base-Q4_K_M.gguf", "omnivoice-tokenizer-Q4_K_M.gguf"}
+	body := []byte("fixture")
+	digest := fmt.Sprintf("%x", sha256.Sum256(body))
 	for _, name := range files {
-		if err := os.WriteFile(filepath.Join(revisionDir, name), []byte("fixture"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(revisionDir, name), body, 0o644); err != nil {
 			t.Fatalf("write model cache fixture %s: %v", name, err)
 		}
 	}
 	metadata := map[string]any{
 		"modelName": "OMNIVOICE_Q4_K_M", "revision": "rev-test",
-		"files": []map[string]any{{"path": files[0]}, {"path": files[1]}},
+		"files": []map[string]any{
+			{"path": files[0], "bytes": len(body), "sha256": digest},
+			{"path": files[1], "bytes": len(body), "sha256": digest},
+		},
 	}
 	data, err := json.Marshal(metadata)
 	if err != nil {

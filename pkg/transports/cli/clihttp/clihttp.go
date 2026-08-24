@@ -4,9 +4,11 @@ package clihttp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -26,6 +28,248 @@ type Clock interface {
 type Response struct {
 	HTTP     *http.Response
 	Duration time.Duration
+}
+
+// APIError preserves one decoded server ErrorResponse across the CLI command
+// boundary. DisplayMessage keeps the command's existing contextual error text
+// for direct callers, while the CLI diagnostic contract renders the original
+// server message and response family/code.
+type APIError struct {
+	StatusCode     int
+	Response       factoryapi.ErrorResponse
+	DisplayMessage string
+	Cause          error
+	RequestMethod  string
+	RequestURL     string
+}
+
+// NewAPIError constructs a safe typed failure from one decoded server
+// response. The caller supplies any operation-specific context and optional
+// sentinel cause separately from the server-owned diagnostic fields.
+func NewAPIError(
+	statusCode int,
+	response factoryapi.ErrorResponse,
+	displayMessage string,
+	cause error,
+) *APIError {
+	return NewAPIErrorWithRequest(nil, statusCode, response, displayMessage, cause)
+}
+
+// NewAPIErrorWithRequest preserves the request metadata needed by the shared
+// CLI debug renderer while keeping it out of the normal ErrorResponse.
+func NewAPIErrorWithRequest(
+	request *http.Request,
+	statusCode int,
+	response factoryapi.ErrorResponse,
+	displayMessage string,
+	cause error,
+) *APIError {
+	method, requestURL := requestMetadata(request)
+	return &APIError{
+		StatusCode:     statusCode,
+		Response:       response,
+		DisplayMessage: strings.TrimSpace(displayMessage),
+		Cause:          cause,
+		RequestMethod:  method,
+		RequestURL:     requestURL,
+	}
+}
+
+// NewAPIErrorFromResponse builds a structured API failure directly from the
+// HTTP response that carried it, retaining the response's request metadata.
+func NewAPIErrorFromResponse(
+	response *http.Response,
+	errResponse factoryapi.ErrorResponse,
+	displayMessage string,
+	cause error,
+) *APIError {
+	statusCode := 0
+	if response != nil {
+		statusCode = response.StatusCode
+	}
+	var request *http.Request
+	if response != nil {
+		request = response.Request
+	}
+	return NewAPIErrorWithRequest(request, statusCode, errResponse, displayMessage, cause)
+}
+
+func (err *APIError) Error() string {
+	if err == nil {
+		return ""
+	}
+	if message := strings.TrimSpace(err.DisplayMessage); message != "" {
+		return message
+	}
+	if message := strings.TrimSpace(err.Response.Message); message != "" {
+		return message
+	}
+	if err.StatusCode != 0 {
+		return fmt.Sprintf("HTTP request failed (%d)", err.StatusCode)
+	}
+	return "HTTP request failed"
+}
+
+func (err *APIError) Unwrap() error {
+	if err == nil {
+		return nil
+	}
+	return err.Cause
+}
+
+// CLIErrorCode, CLIErrorFamily, and CLIErrorMessage form the shared central
+// diagnostic contract without coupling command-specific packages to the
+// renderer's concrete implementation.
+func (err *APIError) CLIErrorCode() string {
+	if err == nil {
+		return ""
+	}
+	return strings.TrimSpace(string(err.Response.Code))
+}
+
+func (err *APIError) CLIErrorFamily() factoryapi.ErrorFamily {
+	if err == nil {
+		return ""
+	}
+	return err.Response.Family
+}
+
+func (err *APIError) CLIErrorMessage() string {
+	if err == nil {
+		return ""
+	}
+	if message := strings.TrimSpace(err.Response.Message); message != "" {
+		return message
+	}
+	return strings.TrimSpace(err.DisplayMessage)
+}
+
+// CLIErrorResponse exposes the complete already-decoded public response so
+// optional server-provided diagnostic details survive the CLI boundary too.
+func (err *APIError) CLIErrorResponse() factoryapi.ErrorResponse {
+	if err == nil {
+		return factoryapi.ErrorResponse{}
+	}
+	return err.Response
+}
+
+func (err *APIError) CLIHTTPMethod() string {
+	if err == nil {
+		return ""
+	}
+	return err.RequestMethod
+}
+
+func (err *APIError) CLIHTTPURL() string {
+	if err == nil {
+		return ""
+	}
+	return err.RequestURL
+}
+
+func (err *APIError) CLIHTTPStatus() int {
+	if err == nil {
+		return 0
+	}
+	return err.StatusCode
+}
+
+// HTTPError retains request metadata for transport, malformed-response, and
+// otherwise unclassified HTTP failures. Its Error method intentionally keeps
+// the wrapped command text unchanged for existing callers.
+type HTTPError struct {
+	Method     string
+	URL        string
+	StatusCode int
+	Cause      error
+}
+
+func (err *HTTPError) Error() string {
+	if err == nil {
+		return ""
+	}
+	if err.Cause != nil {
+		return err.Cause.Error()
+	}
+	return "HTTP request failed"
+}
+
+func (err *HTTPError) Unwrap() error {
+	if err == nil {
+		return nil
+	}
+	return err.Cause
+}
+
+func (err *HTTPError) CLIHTTPMethod() string {
+	if err == nil {
+		return ""
+	}
+	return err.Method
+}
+
+func (err *HTTPError) CLIHTTPURL() string {
+	if err == nil {
+		return ""
+	}
+	return err.URL
+}
+
+func (err *HTTPError) CLIHTTPStatus() int {
+	if err == nil {
+		return 0
+	}
+	return err.StatusCode
+}
+
+func NewHTTPError(method, requestURL string, statusCode int, cause error) error {
+	if cause == nil {
+		return nil
+	}
+	return &HTTPError{Method: method, URL: requestURL, StatusCode: statusCode, Cause: cause}
+}
+
+func NewHTTPErrorFromResponse(response *http.Response, cause error) error {
+	if cause == nil {
+		return nil
+	}
+	statusCode := 0
+	var request *http.Request
+	if response != nil {
+		statusCode = response.StatusCode
+		request = response.Request
+	}
+	method, requestURL := requestMetadata(request)
+	return NewHTTPError(method, requestURL, statusCode, cause)
+}
+
+// WithHTTPResponse adds response metadata to an error that was classified
+// after the body was consumed. Existing HTTP-aware errors pass through so
+// structured server details remain the outermost diagnostic contract.
+func WithHTTPResponse(response *http.Response, cause error) error {
+	if cause == nil {
+		return nil
+	}
+	var metadata interface {
+		CLIHTTPMethod() string
+		CLIHTTPURL() string
+		CLIHTTPStatus() int
+	}
+	if errors.As(cause, &metadata) {
+		return cause
+	}
+	return NewHTTPErrorFromResponse(response, cause)
+}
+
+func requestMetadata(request *http.Request) (string, string) {
+	if request == nil {
+		return "", ""
+	}
+	requestURL := ""
+	if request.URL != nil {
+		requestURL = request.URL.String()
+	}
+	return request.Method, requestURL
 }
 
 // Protocol is the single HTTP adapter consumed by handwritten CLI transports.
@@ -58,10 +302,21 @@ func (p *protocol) Execute(request *http.Request) (Response, error) {
 	started := p.clock.Now()
 	response, err := p.doer.Do(request)
 	result := Response{HTTP: response, Duration: p.clock.Now().Sub(started)}
-	if err == nil && response == nil {
-		return result, fmt.Errorf("HTTP doer returned a nil response")
+	if err != nil {
+		statusCode := 0
+		if response != nil {
+			statusCode = response.StatusCode
+		}
+		method, requestURL := requestMetadata(request)
+		if response != nil && response.Request != nil {
+			method, requestURL = requestMetadata(response.Request)
+		}
+		return result, NewHTTPError(method, requestURL, statusCode, err)
 	}
-	return result, err
+	if response == nil {
+		return result, NewHTTPErrorFromRequest(request, fmt.Errorf("HTTP doer returned a nil response"))
+	}
+	return result, nil
 }
 
 // GetJSON executes an HTTP GET and decodes JSON into dst for 200 OK. Other
@@ -104,7 +359,7 @@ func (p *protocol) doJSON(
 ) (Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
-		return Response{}, fmt.Errorf("build request: %w", err)
+		return Response{}, NewHTTPError(method, url, 0, fmt.Errorf("build request: %w", err))
 	}
 	if method == http.MethodPost || method == http.MethodPut {
 		req.Header.Set("Content-Type", "application/json")
@@ -121,10 +376,18 @@ func (p *protocol) doJSON(
 	if dst != nil {
 		if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
 			_ = resp.Body.Close()
-			return result, fmt.Errorf("parse response: %w", err)
+			return result, WithHTTPResponse(resp, fmt.Errorf("parse response: %w", err))
 		}
 	}
 	return result, nil
+}
+
+func NewHTTPErrorFromRequest(request *http.Request, cause error) error {
+	if cause == nil {
+		return nil
+	}
+	method, requestURL := requestMetadata(request)
+	return NewHTTPError(method, requestURL, 0, cause)
 }
 
 // DecodeAPIError decodes a factory API error response when the body includes a message.

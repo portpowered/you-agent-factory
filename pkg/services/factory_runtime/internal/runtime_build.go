@@ -7,6 +7,7 @@ import (
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
@@ -28,15 +29,14 @@ type runtimeWorkersServiceWithProgress struct {
 	workers.Service
 	publisher                         workers.ProgressPublisher
 	providerOverride                  providers.Service
-	commandRunnerOverride             workers.CommandRunner
-	replayCommandRunner               workers.CommandRunner
+	commandRunnerOverride             platformprocess.CommandRunner
+	replayCommandRunner               platformprocess.CommandRunner
 	skipBuiltInPrerequisiteValidation bool
 	invocationSkipPermissionsOverride *bool
 	workstationResolver               runtime.WorkstationExecutionResolver
 	factorySessionID                  string
 	runtimeID                         string
 	recordingID                       string
-	clock                             workers.Clock
 }
 
 func (service runtimeWorkersServiceWithProgress) RuntimeProgressPublisher() workers.ProgressPublisher {
@@ -80,31 +80,6 @@ func (service runtimeWorkersServiceWithProgress) Execute(
 		commandRunner = service.replayCommandRunner
 	}
 	if commandRunner != nil {
-		// Session build specs may carry a raw injected command edge (or a
-		// process-scoped logging runner). Clone logging runners before binding
-		// the opened Runtime's sink so concurrent sessions never mutate shared
-		// command-runner state.
-		if request.Input.ExecutionLogger != nil && service.clock != nil {
-			switch typed := commandRunner.(type) {
-			case workers.LoggingCommandRunner:
-				typed.Logger = request.Input.ExecutionLogger
-				typed.Clock = service.clock
-				commandRunner = typed
-			case *workers.LoggingCommandRunner:
-				if typed != nil {
-					clone := *typed
-					clone.Logger = request.Input.ExecutionLogger
-					clone.Clock = service.clock
-					commandRunner = &clone
-				}
-			default:
-				commandRunner = workers.CommandRunnerWithLogging(
-					commandRunner,
-					request.Input.ExecutionLogger,
-					service.clock,
-				)
-			}
-		}
 		request.Input.CommandRunnerOverride = commandRunner
 	}
 	return service.Service.Execute(ctx, request)
@@ -247,8 +222,8 @@ func NewRuntimeBuild(
 	defaultSessionID string,
 	workstationLoader factorydefinitions.WorkstationLoader,
 	providerOverride providers.Service,
-	providerCommandRunner workers.CommandRunner,
-	scriptCommandRunner workers.CommandRunner,
+	providerCommandRunner platformprocess.CommandRunner,
+	scriptCommandRunner platformprocess.CommandRunner,
 	mockWorkersConfig *workers.MockWorkersConfig,
 	runtimeMode factorydefinitions.RuntimeMode,
 	runtimeScheduler scheduler.Scheduler,
@@ -299,8 +274,8 @@ func NewRuntimeBuild(
 		func(
 			config *workers.MockWorkersConfig,
 			runtimeConfig factorydefinitions.RuntimeDefinitionLookup,
-			next workers.CommandRunner,
-		) workers.CommandRunner {
+			next platformprocess.CommandRunner,
+		) platformprocess.CommandRunner {
 			if mockCommandRunnerFactory == nil {
 				return next
 			}
@@ -487,7 +462,6 @@ func newRuntimeWorkersService(
 		factorySessionID:                  sessionID,
 		runtimeID:                         spec.RuntimeInstanceID,
 		recordingID:                       workerRecordingIdentity(spec.RuntimeInstanceID, spec.RecordPath),
-		clock:                             spec.Clock,
 	}
 	if runtimeFactory != nil && spec.LoadedFactoryCfg != nil {
 		resolver := runtime.NewWorkstationRequestExecutor(runtime.WorkstationRequestExecutorConfig{

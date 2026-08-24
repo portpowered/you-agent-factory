@@ -11,6 +11,7 @@ Exit 0 on success (stdout = JSON blob), exit 1 on failure (stderr = stage-specif
 """
 
 import contextlib
+import hashlib
 import json
 import os
 import re
@@ -28,9 +29,12 @@ SNAPSHOT_REF_PREFIX = "refs/factory-snapshots/"
 ROOT_SYNC_LOCK_FILENAME = "setup-workspace-root-sync.lock"
 MAX_ANCESTOR_RESIDUE_PATHS = 20
 MAX_DIRTY_ROOT_SAMPLE_ENTRIES = 12
+MAX_DIRTY_ROOT_ATTRIBUTION_PATHS = 5
+MAX_DIRTY_ROOT_ATTRIBUTION_WORKTREES = 20
 MAX_STATUS_FAILURE_DETAILS = 512
 MAX_FAILURE_DETAILS = 1024
 MAX_DISPLAYED_STATUS_PATH_LENGTH = 240
+FILE_DIGEST_CHUNK_SIZE = 1024 * 1024
 WINDOWS_RESERVED_PATH_COMPONENT = re.compile(
     r"(?<![a-z0-9])(?:nul|con|prn|aux|com[1-9]|lpt[1-9])"
     r"(?:\.[^\\/:*?\"<>|\r\n]*)?(?![a-z0-9])",
@@ -38,10 +42,25 @@ WINDOWS_RESERVED_PATH_COMPONENT = re.compile(
 )
 _ROOT_SYNC_THREAD_LOCKS = {}
 _ROOT_SYNC_THREAD_LOCKS_GUARD = threading.Lock()
+_MISSING_PATH = object()
+_UNAVAILABLE_PATH = object()
 
 
 class DirtyRootError(RuntimeError):
     """A bounded, already-rendered diagnostic for an operator-owned root."""
+
+
+class RootStatusError(RuntimeError):
+    """A root status inspection failure that belongs to the setup preflight."""
+
+
+class RootSyncResult(str):
+    """Describe root synchronization and its optional fresh remote baseline."""
+
+    def __new__(cls, message, fresh_origin_main_sha=None):
+        result = super().__new__(cls, message)
+        result.fresh_origin_main_sha = fresh_origin_main_sha
+        return result
 
 
 def raw_failure_details(error):
@@ -287,6 +306,156 @@ def dirty_root_sample(entries):
     return sample
 
 
+def path_content_digest(path):
+    """Return a bounded-memory digest for a file, or a path-state sentinel."""
+    try:
+        if not path.exists():
+            return _MISSING_PATH
+        if not path.is_file():
+            return _UNAVAILABLE_PATH
+
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            for chunk in iter(
+                lambda: stream.read(FILE_DIGEST_CHUNK_SIZE),
+                b"",
+            ):
+                digest.update(chunk)
+        return digest.digest()
+    except (OSError, ValueError):
+        return _UNAVAILABLE_PATH
+
+
+def git_revision_path_digest(repo_path, revision, relative_path):
+    """Return a digest for a revision path without mutating the repository."""
+    try:
+        result = run_git(
+            "show",
+            f"{revision}:{relative_path}",
+            cwd=repo_path,
+            check=False,
+        )
+    except Exception:  # noqa: BLE001 - attribution must never replace refusal
+        return _UNAVAILABLE_PATH
+
+    if result.returncode != 0:
+        return _MISSING_PATH
+    try:
+        contents = result.stdout.encode("utf-8", "surrogateescape")
+    except (AttributeError, UnicodeEncodeError):
+        return _UNAVAILABLE_PATH
+    return hashlib.sha256(contents).digest()
+
+
+def dirty_root_attribution_fingerprints(repo_path, entries):
+    """Capture at most five root changes relative to the fetched baseline."""
+    try:
+        if not origin_main_ref_exists(repo_path):
+            return []
+
+        fingerprints = []
+        for entry in dirty_root_sample(entries)[:MAX_DIRTY_ROOT_ATTRIBUTION_PATHS]:
+            paths = entry.get("paths", ())
+            if not paths:
+                continue
+            relative_path = paths[0]
+            baseline = git_revision_path_digest(
+                repo_path,
+                "refs/remotes/origin/main",
+                relative_path,
+            )
+            if baseline is _UNAVAILABLE_PATH:
+                continue
+
+            current = path_content_digest(repo_path / relative_path)
+            if current is _UNAVAILABLE_PATH or current == baseline:
+                continue
+            fingerprints.append((relative_path, baseline, current))
+        return fingerprints
+    except Exception:  # noqa: BLE001 - attribution is best effort only
+        return []
+
+
+def sibling_worktree_candidates(repo_path):
+    """Return a deterministic, bounded list of sibling directories."""
+    worktrees_dir = repo_path / ".claude" / "worktrees"
+    try:
+        children = sorted(
+            worktrees_dir.iterdir(),
+            key=lambda path: os.fsencode(path.name),
+        )
+    except (OSError, UnicodeError, ValueError):
+        return []
+
+    candidates = []
+    for candidate in children:
+        try:
+            if not candidate.is_dir():
+                continue
+        except OSError:
+            continue
+        candidates.append(candidate)
+        if len(candidates) >= MAX_DIRTY_ROOT_ATTRIBUTION_WORKTREES:
+            break
+    return candidates
+
+
+def is_valid_sibling_worktree(candidate):
+    """Check one sibling independently so stale entries cannot abort refusal."""
+    try:
+        result = run_git(
+            "rev-parse",
+            "--show-toplevel",
+            cwd=candidate,
+            check=False,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return False
+        return Path(result.stdout.strip()).resolve() == candidate.resolve()
+    except Exception:  # noqa: BLE001 - one broken candidate is non-fatal
+        return False
+
+
+def dirty_root_sibling_attribution(repo_path, entries):
+    """Find bounded sibling worktrees carrying the same sampled root changes."""
+    fingerprints = dirty_root_attribution_fingerprints(repo_path, entries)
+    if not fingerprints:
+        return []
+
+    matches = []
+    for candidate in sibling_worktree_candidates(repo_path):
+        if not is_valid_sibling_worktree(candidate):
+            continue
+
+        matching_paths = []
+        for relative_path, baseline, current in fingerprints:
+            sibling_current = path_content_digest(candidate / relative_path)
+            if sibling_current is _UNAVAILABLE_PATH:
+                continue
+            if sibling_current == current and sibling_current != baseline:
+                matching_paths.append(relative_path)
+        if matching_paths:
+            matches.append((candidate.name, matching_paths))
+
+    if not matches:
+        return []
+
+    lines = [
+        "likely sibling worktree matches (same changes relative to origin/main):",
+    ]
+    for candidate_name, matching_paths in matches:
+        rendered_paths = ", ".join(
+            json.dumps(path, ensure_ascii=True)
+            for path in matching_paths
+        )
+        lines.append(
+            "  sibling worktree "
+            f"{json.dumps(candidate_name, ensure_ascii=True)} "
+            f"matches path(s): {rendered_paths}"
+        )
+    return lines
+
+
 def dirty_root_diagnostic(repo_path, entries):
     """Describe dirty-root evidence and safe manual recovery guidance."""
     tracked_count = sum(
@@ -328,14 +497,16 @@ def dirty_root_diagnostic(repo_path, entries):
         "Inspect the repository root manually, then commit the changes or "
         "back them up and restore them manually before retrying."
     )
+    lines.extend(dirty_root_sibling_attribution(repo_path, entries))
     return "\n".join(lines)
 
 
-def ensure_clean_repository_root(repo_root):
-    """Refuse setup before any root synchronization or workspace mutation."""
-    entries = repository_status_entries(repo_root)
-    if entries:
-        raise DirtyRootError(dirty_root_diagnostic(repo_root, entries))
+def root_status_for_setup(repo_root):
+    """Inspect root dirt after fetch while preserving the preflight failure stage."""
+    try:
+        return repository_status_entries(repo_root)
+    except Exception as error:  # noqa: BLE001 - preserve the CLI stage boundary
+        raise RootStatusError(str(error)) from error
 
 
 def command_failure_details(result):
@@ -722,24 +893,14 @@ def remote_main_sha(repo_root):
     return result.stdout.strip().split()[0]
 
 
-def stale_origin_main_sha(repo_root):
-    """Return local origin/main sha when the remote-tracking ref exists."""
-    if not origin_main_ref_exists(repo_root):
-        return None
-    result = run_git(
-        "rev-parse", "refs/remotes/origin/main",
-        cwd=repo_root, check=False,
-    )
-    if result.returncode != 0:
-        return None
-    return result.stdout.strip()
-
-
 def resolve_remote_main_sha(repo_root, fetch_succeeded):
-    """Resolve the best available origin/main sha for root sync."""
-    if fetch_succeeded:
-        return remote_main_sha(repo_root)
-    return stale_origin_main_sha(repo_root)
+    """Resolve origin/main only when the current fetch succeeded."""
+    if not fetch_succeeded:
+        return None
+    sha = remote_main_sha(repo_root)
+    if sha is None or not immutable_object_id(sha):
+        return None
+    return sha
 
 
 def can_fast_forward_main(repo_root, local_sha, remote_sha):
@@ -925,12 +1086,26 @@ def _sync_main(repo_root):
     """Best-effort root main sync without disturbing the working tree.
 
     Uses fetch plus refs/heads/main fast-forward when safe instead of git pull,
-    so dirty-root checkouts can continue workspace setup from local state.
-    Returns a human-readable outcome string for logging.
+    so clean-root checkouts can continue workspace setup from local state.
+    Dirty roots skip root synchronization after fetch when a local or remote
+    main ref can provide a safe start point for the requested lane.
+    Returns a string-compatible result carrying any fresh origin/main SHA.
     """
+    fresh_origin_main_sha = None
+
+    def result(message):
+        return RootSyncResult(message, fresh_origin_main_sha)
+
     if not has_origin_remote(repo_root):
+        entries = root_status_for_setup(repo_root)
         if local_main_ref_exists(repo_root):
-            return "skipped (no origin remote)"
+            if entries:
+                return result(
+                    "skipped (dirty root; using local main without root sync)"
+                )
+            return result("skipped (no origin remote)")
+        if entries:
+            raise DirtyRootError(dirty_root_diagnostic(repo_root, entries))
         raise RuntimeError(
             "no origin remote and refs/heads/main is missing"
         )
@@ -939,64 +1114,75 @@ def _sync_main(repo_root):
     fetch_succeeded = fetch_result.returncode == 0
     if not fetch_succeeded:
         if local_main_ref_exists(repo_root):
-            return (
+            return result(
                 "skipped (fetch failed: "
                 f"{command_failure_details(fetch_result)})"
             )
         if not origin_main_ref_exists(repo_root):
+            entries = root_status_for_setup(repo_root)
+            if entries:
+                raise DirtyRootError(dirty_root_diagnostic(repo_root, entries))
             raise RuntimeError(
                 "fetch failed and refs/heads/main is missing: "
                 f"{command_failure_details(fetch_result)}"
             )
 
     remote_sha = resolve_remote_main_sha(repo_root, fetch_succeeded)
+    fresh_origin_main_sha = remote_sha
+    entries = root_status_for_setup(repo_root)
+    if entries:
+        if remote_sha is not None:
+            return result(
+                "skipped (dirty root; using origin/main "
+                f"{remote_sha[:8]} without root sync)"
+            )
+        if local_main_ref_exists(repo_root):
+            return result(
+                "skipped (dirty root; using local main without root sync)"
+            )
+        raise DirtyRootError(dirty_root_diagnostic(repo_root, entries))
+
     if remote_sha is None:
         if local_main_ref_exists(repo_root):
-            return "skipped (origin has no main branch)"
+            return result("skipped (origin has no main branch)")
         raise RuntimeError(
             "origin has no main branch and refs/heads/main is missing"
         )
 
     if not local_main_ref_exists(repo_root):
         run_git("update-ref", "refs/heads/main", remote_sha, cwd=repo_root)
-        return f"created refs/heads/main at {remote_sha[:8]}"
+        return result(f"created refs/heads/main at {remote_sha[:8]}")
 
     local_sha = run_git("rev-parse", "refs/heads/main", cwd=repo_root).stdout.strip()
     if local_sha == remote_sha:
         if current_branch(repo_root) == "main":
             verify_root_after_restore(repo_root, None)
-        return "already up to date"
+        return result("already up to date")
 
     if not can_fast_forward_main(repo_root, local_sha, remote_sha):
-        return "skipped (local main is not a fast-forward behind origin/main)"
+        return result(
+            "skipped (local main is not a fast-forward behind origin/main)"
+        )
 
     if current_branch(repo_root) == "main":
-        return _sync_checked_out_main_with_stash(repo_root, remote_sha)
+        return result(_sync_checked_out_main_with_stash(repo_root, remote_sha))
 
     run_git("update-ref", "refs/heads/main", remote_sha, cwd=repo_root)
-    return (
+    return result(
         f"fast-forwarded refs/heads/main to {remote_sha[:8]} "
         "(fetch-only; did not run git pull)"
     )
 
 
-def resolve_worktree_start_point(repo_root):
+def resolve_worktree_start_point(fresh_origin_main_sha):
     """Resolve the start point for brand-new lane branches.
 
-    Prefer the origin/main remote-tracking ref (freshly fetched by sync_main
-    just before worktree creation), so lanes never inherit unpushed local-main
-    commits when local main is ahead of origin/main. Fall back to local main
-    only when no origin/main ref is available (no origin remote, or origin has
-    no main branch).
+    Use only the immutable SHA captured by the current successful fetch. A
+    missing SHA means setup is using its existing local-main fallback; a stale
+    remote-tracking ref must never become a new lane's baseline.
     """
-    if origin_main_ref_exists(repo_root):
-        result = run_git(
-            "rev-parse", "refs/remotes/origin/main",
-            cwd=repo_root, check=False,
-        )
-        sha = result.stdout.strip()
-        if result.returncode == 0 and sha:
-            return sha
+    if fresh_origin_main_sha and immutable_object_id(fresh_origin_main_sha):
+        return fresh_origin_main_sha
     return "main"
 
 
@@ -1122,7 +1308,9 @@ def sync_reused_worktree_branch(repo_root, worktree_path, branch):
         restore_stashed_changes(worktree_path, snapshot_id, f"worktree branch {branch}")
 
 
-def create_or_reuse_worktree(repo_root, branch, worktree_path):
+def create_or_reuse_worktree(
+    repo_root, branch, worktree_path, fresh_origin_main_sha=None,
+):
     """Create a new worktree or reuse an existing one. Returns reused flag."""
     if worktree_path.exists() and worktree_is_valid(worktree_path):
         sync_outcome = sync_reused_worktree_branch(repo_root, worktree_path, branch)
@@ -1150,7 +1338,7 @@ def create_or_reuse_worktree(repo_root, branch, worktree_path):
     else:
         run_git(
             "worktree", "add", "-b", branch, str(worktree_path),
-            resolve_worktree_start_point(repo_root),
+            resolve_worktree_start_point(fresh_origin_main_sha),
             cwd=repo_root,
         )
 
@@ -1242,26 +1430,18 @@ def main():
         print("PRD name must not be empty", file=sys.stderr)
         sys.exit(1)
 
-    # Root setup is deliberately fail-closed: the legacy synchronization path
-    # can snapshot and restore local changes, but intake must not mutate an
-    # operator's repository before the lane has even been created.
-    try:
-        ensure_clean_repository_root(repo_root)
-    except DirtyRootError as e:
-        print(f"Root cleanliness check failed: {e}", file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
-        print(
-            format_stage_failure("Root cleanliness check failed", e),
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
     # Sync main and prune worktrees.
     try:
-        sync_outcome = sync_main(repo_root)
+        sync_result = sync_main(repo_root)
+        sync_outcome = str(sync_result)
+        fresh_origin_main_sha = getattr(
+            sync_result, "fresh_origin_main_sha", None,
+        )
         print(f"Root sync: {sync_outcome}", file=sys.stderr)
         prune_worktrees(repo_root)
+    except (DirtyRootError, RootStatusError) as e:
+        print(f"Root cleanliness check failed: {e}", file=sys.stderr)
+        sys.exit(1)
     except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
         print(format_stage_failure("Root sync failed", e), file=sys.stderr)
         sys.exit(1)
@@ -1269,7 +1449,12 @@ def main():
     # Create or reuse worktree.
     worktree_dir = repo_root / ".claude" / "worktrees" / normalize_branch(branch)
     try:
-        reused = create_or_reuse_worktree(repo_root, branch, worktree_dir)
+        reused = create_or_reuse_worktree(
+            repo_root,
+            branch,
+            worktree_dir,
+            fresh_origin_main_sha,
+        )
     except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
         print(
             format_stage_failure("Worktree preparation failed", e),

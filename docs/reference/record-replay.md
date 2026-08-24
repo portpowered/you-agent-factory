@@ -51,6 +51,13 @@ instead of dispatching live workers again. Pass `--replay <path>`. Replay is
 historical and read-only: it does not continue Work or write a successor
 recording.
 
+Replay compares the recording with the current effective Factory Definition.
+When the Factory Definition, workers, workstations, or runtime configuration
+has drifted, human-readable mode writes one concise warning to stdout and
+structured component details remain available in stderr diagnostics. The drift
+is non-fatal: a successful replay still exits with status 0 and uses the
+recorded inputs as the replay authority.
+
 **Resume mode** reads a recoverable Factory Event recording, reconstructs its
 last valid Factory world state, and opens a new live Factory Session from that
 state. Pass `--resume <path>`. Recorded non-terminal Work is seeded back into

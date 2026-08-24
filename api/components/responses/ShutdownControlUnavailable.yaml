@@ -1,0 +1,5 @@
+description: The server cannot expose its invocation-local shutdown control.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'

@@ -30,6 +30,10 @@ type workerSessionsObservationProvider interface {
 	WorkerSessionsObservation() workersessions.ObservationService
 }
 
+type decoratedWorkStateSnapshotProvider interface {
+	GetWorkStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.RuntimeNet], error)
+}
+
 type invocationScheduleFactory struct {
 	factoryhost.Engine
 	schedules     invocationScheduleService
@@ -103,6 +107,20 @@ func (wrapped *invocationScheduleFactory) WorkerSessionsObservationForSession(fa
 		return nil
 	}
 	return provider.WorkerSessionsObservationForSession(factorySessionID)
+}
+
+// GetWorkStateSnapshot forwards the Work-specific runtime boundary through the
+// automation decorator. Work reads must retain the fast published snapshot
+// path even when invocation scheduling wraps the underlying Factory service.
+func (wrapped *invocationScheduleFactory) GetWorkStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.RuntimeNet], error) {
+	if wrapped == nil {
+		return nil, factory.ErrNotRunning
+	}
+	provider, ok := wrapped.Engine.(decoratedWorkStateSnapshotProvider)
+	if !ok || provider == nil {
+		return nil, factory.ErrNotRunning
+	}
+	return provider.GetWorkStateSnapshot(ctx)
 }
 
 // RuntimeProgressPublisher forwards the runtime-owned child observation

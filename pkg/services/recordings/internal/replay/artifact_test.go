@@ -1,6 +1,7 @@
 package replay
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -574,13 +575,110 @@ func TestLoad_RunStartedFactoryBoundaryAcceptsUnsupportedGeneratedField(t *testi
 }
 
 func TestLoad_CheckedInInferenceEventFixtureAccepted(t *testing.T) {
-	artifact, err := Load(testReplayStorage(), filepath.FromSlash("testdata/inference-events.replay.json"), testFactorySnapshotDecoder)
+	path := filepath.FromSlash("testdata/inference-events.replay.json")
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read checked-in inference fixture: %v", err)
+	}
+	artifact, metadata, err := LoadWithMetadata(testReplayStorage(), path, testFactorySnapshotDecoder)
 	if err != nil {
 		t.Fatalf("Load() checked-in inference fixture: %v", err)
+	}
+	if metadata.SchemaVersion != CurrentSchemaVersion || metadata.V2 != nil {
+		t.Fatalf("checked-in fixture metadata = %#v, want v1 metadata", metadata)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read checked-in inference fixture after load: %v", err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Fatal("loading the v1 fixture modified its bytes")
 	}
 	assertReplayInferencePair(t, artifact, "inference-request-fixture-1")
 	if _, err := NewSideEffects(testFactorySnapshotDecoder, testRuntimeConfigDecoder, artifact); err != nil {
 		t.Fatalf("NewSideEffects(testFactorySnapshotDecoder, testRuntimeConfigDecoder, ) checked-in inference fixture: %v", err)
+	}
+}
+
+func TestLoad_V1AndV2ReplayParityPreservesValuesAndReducerOutcome(t *testing.T) {
+	recordedAt := time.Date(2026, 8, 23, 18, 0, 0, 0, time.UTC)
+	original := replayArtifactFieldsFixture(t, recordedAt)
+	v1Path := filepath.Join(t.TempDir(), "recording.json")
+	v2Path := filepath.Join(t.TempDir(), "recording.jsonl")
+
+	v1Data, err := MarshalArtifact(original)
+	if err != nil {
+		t.Fatalf("MarshalArtifact: %v", err)
+	}
+	writeReplayParityFixture(t, v1Path, v1Data, "v1")
+	v1, v1Metadata := loadReplayParityFixture(t, v1Path, "v1")
+
+	// Build the equivalent v2 stream from the normalized v1 values. This keeps
+	// the comparison about storage framing, not incidental fixture encoding.
+	v2Data := replayV2FixtureData(t, v1, v1.WallClock.FinishedAt)
+	writeReplayParityFixture(t, v2Path, v2Data, "v2")
+	v2, v2Metadata := loadReplayParityFixture(t, v2Path, "v2")
+
+	assertReplayParityMetadata(t, v1Metadata, v2Metadata)
+	assertReplayParityArtifacts(t, v1, v2)
+	assertReplayParityReduction(t, v1, v2)
+}
+
+func writeReplayParityFixture(t *testing.T, path string, data []byte, version string) {
+	t.Helper()
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write %s artifact: %v", version, err)
+	}
+}
+
+func loadReplayParityFixture(
+	t *testing.T,
+	path string,
+	version string,
+) (*interfaces.ReplayArtifact, ReplayReadMetadata) {
+	t.Helper()
+	artifact, metadata, err := LoadWithMetadata(testReplayStorage(), path, testFactorySnapshotDecoder)
+	if err != nil {
+		t.Fatalf("LoadWithMetadata(%s): %v", version, err)
+	}
+	return artifact, metadata
+}
+
+func assertReplayParityMetadata(t *testing.T, v1, v2 ReplayReadMetadata) {
+	t.Helper()
+	if v1.SchemaVersion != CurrentSchemaVersion || v1.V2 != nil {
+		t.Fatalf("v1 metadata = %#v, want v1 metadata", v1)
+	}
+	if v2.SchemaVersion != ReplayV2SchemaVersion || v2.V2 == nil {
+		t.Fatalf("v2 metadata = %#v, want v2 metadata", v2)
+	}
+}
+
+func assertReplayParityArtifacts(t *testing.T, v1, v2 *interfaces.ReplayArtifact) {
+	t.Helper()
+	if !reflect.DeepEqual(v1.Events, v2.Events) {
+		t.Fatalf("v1/v2 event values differ\nv1: %#v\nv2: %#v", v1.Events, v2.Events)
+	}
+	if !reflect.DeepEqual(v1.Factory, v2.Factory) {
+		t.Fatalf("v1/v2 Factory snapshots differ\nv1: %#v\nv2: %#v", v1.Factory, v2.Factory)
+	}
+	if !reflect.DeepEqual(v1.WallClock, v2.WallClock) {
+		t.Fatalf("v1/v2 terminal wall-clock outcome differs\nv1: %#v\nv2: %#v", v1.WallClock, v2.WallClock)
+	}
+}
+
+func assertReplayParityReduction(t *testing.T, v1, v2 *interfaces.ReplayArtifact) {
+	t.Helper()
+	v1Reduced, err := reduceReplayEvents(v1, testFactorySnapshotDecoder, testRuntimeConfigDecoder)
+	if err != nil {
+		t.Fatalf("reduce v1 replay: %v", err)
+	}
+	v2Reduced, err := reduceReplayEvents(v2, testFactorySnapshotDecoder, testRuntimeConfigDecoder)
+	if err != nil {
+		t.Fatalf("reduce v2 replay: %v", err)
+	}
+	if !reflect.DeepEqual(v1Reduced, v2Reduced) {
+		t.Fatalf("v1/v2 replay reduction differs\nv1: %#v\nv2: %#v", v1Reduced, v2Reduced)
 	}
 }
 

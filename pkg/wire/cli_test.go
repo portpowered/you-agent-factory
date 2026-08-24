@@ -92,6 +92,28 @@ func TestModelsCLIOutputFileSystemUsesExplicitEdges(t *testing.T) {
 	}
 }
 
+func TestModelsCLIInputFileReaderUsesExplicitEdges(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	reader := provideModelsCLIInputFileReader(serviceedges.Edges{
+		ModelCLIInputReadFile: func(path string) ([]byte, error) {
+			called = true
+			if path != "meeting.wav" {
+				t.Fatalf("input path = %q, want meeting.wav", path)
+			}
+			return []byte{0x00, 0xff}, nil
+		},
+	})
+	got, err := reader("meeting.wav")
+	if err != nil || string(got) != string([]byte{0x00, 0xff}) {
+		t.Fatalf("input reader = %x, %v; want exact edge bytes", got, err)
+	}
+	if !called {
+		t.Fatal("explicit input reader edge was not called")
+	}
+}
+
 func TestProvideSessionsCLIServiceReturnsConstructedAdapter(t *testing.T) {
 	t.Parallel()
 
@@ -275,15 +297,20 @@ func TestCLIRunDefaultsRetainWireSelectedRecordingTargetPlanner(t *testing.T) {
 func TestProductionLiveRecordingTargetPlannerIsUsable(t *testing.T) {
 	t.Parallel()
 
-	target, err := provideLiveRecordingTargetPlanner().PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest{
-		HomeDir:           t.TempDir(),
-		ReportedSessionID: "~default",
+	reserver, err := provideRuntimeArtifactPathReserver()
+	if err != nil {
+		t.Fatalf("provideRuntimeArtifactPathReserver: %v", err)
+	}
+	target, err := provideLiveRecordingTargetPlanner(reserver).PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest{
+		HomeDir:            t.TempDir(),
+		CanonicalSessionID: "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba",
+		ReportedSessionID:  "~default",
 	})
 	if err != nil {
 		t.Fatalf("PlanLiveRecordingTarget: %v", err)
 	}
-	if target.ServicePath == "" || target.ReportedPath == "" || target.ServicePath == target.ReportedPath {
-		t.Fatalf("target = %#v, want distinct runtime template and reported paths", target)
+	if target.ServicePath == "" || target.ReportedPath == "" || target.ServicePath != target.ReportedPath {
+		t.Fatalf("target = %#v, want one canonical service/reported path", target)
 	}
 }
 

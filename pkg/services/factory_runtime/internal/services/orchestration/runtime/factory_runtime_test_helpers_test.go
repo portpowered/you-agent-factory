@@ -362,6 +362,7 @@ func testDispatchResultFromExecute(
 		DispatchID:                  request.Execution.Dispatch.DispatchID,
 		TransitionID:                request.Execution.Dispatch.TransitionID,
 		Outcome:                     workers.OutcomeAccepted,
+		Cancellation:                result.Cancellation.Clone(),
 		Output:                      testMaterializationPrimaryOutput(result.Output.Primary),
 		Feedback:                    result.Output.Feedback,
 		SelectedClassificationLabel: result.Output.Classification,
@@ -381,8 +382,12 @@ func testDispatchResultFromExecute(
 		}
 	}
 	if executeErr != nil {
-		if errors.Is(executeErr, context.Canceled) || result.Outcome == workers.ExecutionOutcomeCanceled {
+		if errors.Is(executeErr, workers.ErrWorkstationDispatchCanceled) || result.Outcome == workers.ExecutionOutcomeCanceled {
 			terminal = workers.WorkstationDispatchTerminalOutcomeCanceled
+			workResult.Outcome = workers.OutcomeCanceled
+			if workResult.Cancellation == nil {
+				workResult.Cancellation = &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled}
+			}
 			workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
 		} else {
 			terminal = workers.WorkstationDispatchTerminalOutcomeFailed
@@ -397,14 +402,22 @@ func testDispatchResultFromExecute(
 	case workers.ExecutionOutcomeRejected:
 		workResult.Outcome = workers.OutcomeRejected
 	case workers.ExecutionOutcomeFailed:
-		workResult.Outcome = workers.OutcomeFailed
-		terminal = workers.WorkstationDispatchTerminalOutcomeFailed
+		if terminal != workers.WorkstationDispatchTerminalOutcomeCanceled {
+			workResult.Outcome = workers.OutcomeFailed
+			terminal = workers.WorkstationDispatchTerminalOutcomeFailed
+		}
 	case workers.ExecutionOutcomeCanceled:
-		workResult.Outcome = workers.OutcomeFailed
+		workResult.Outcome = workers.OutcomeCanceled
 		terminal = workers.WorkstationDispatchTerminalOutcomeCanceled
+		if workResult.Cancellation == nil {
+			workResult.Cancellation = &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled}
+		}
 		if workResult.Error == "" {
 			workResult.Error = workers.ErrWorkstationDispatchCanceled.Error()
 		}
+	}
+	if terminal == workers.WorkstationDispatchTerminalOutcomeCanceled {
+		workResult.Outcome = workers.OutcomeCanceled
 	}
 	output := result.Output.Clone()
 	return workers.WorkstationDispatchResult{
@@ -423,6 +436,7 @@ func testExecuteResultFromDispatchResult(
 	executeResult := workers.ExecuteResult{
 		Correlation:  request.Correlation,
 		Outcome:      executeOutcomeFromWorkResult(result.Result),
+		Cancellation: result.Result.Cancellation.Clone(),
 		Failure:      executeFailureFromWorkResult(result.Result),
 		Output:       workers.ProposedOutputFromLegacyWorkResult(result.Result),
 		Continuation: cloneRuntimeContinuation(result.Result.Continuation),
@@ -457,6 +471,8 @@ func executeOutcomeFromWorkResult(result workers.WorkResult) workers.ExecutionOu
 		return workers.ExecutionOutcomeRejected
 	case workers.OutcomeFailed:
 		return workers.ExecutionOutcomeFailed
+	case workers.OutcomeCanceled:
+		return workers.ExecutionOutcomeCanceled
 	default:
 		return workers.ExecutionOutcomeAccepted
 	}
@@ -682,10 +698,11 @@ func (b *testWorkstationBoundary) Execute(
 	legacy := testLegacyRequestFromExecute(request)
 	result, err := (testWorkstationRequestExecutor{executors: b.executors}).Execute(ctx, legacy.Execution)
 	return workers.ExecuteResult{
-		Correlation: request.Correlation,
-		Outcome:     executeOutcomeFromWorkResult(result),
-		Failure:     executeFailureFromWorkResult(result),
-		Output:      workers.ProposedOutputFromLegacyWorkResult(result),
+		Correlation:  request.Correlation,
+		Outcome:      executeOutcomeFromWorkResult(result),
+		Cancellation: result.Cancellation.Clone(),
+		Failure:      executeFailureFromWorkResult(result),
+		Output:       workers.ProposedOutputFromLegacyWorkResult(result),
 	}, err
 }
 
@@ -1977,6 +1994,46 @@ func (service *runtimeWorkerSessionsService) Get(
 		return workersessions.Session{}, workersessions.ErrSessionNotFound
 	}
 	return session.Clone(), nil
+}
+
+func (service *runtimeWorkerSessionsService) BeginRuntimeAttempt(
+	ctx context.Context,
+	request workersessions.RuntimeAttemptRequest,
+) (workersessions.RuntimeAttempt, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	service.mu.Lock()
+	service.sessions[request.ID] = workersessions.Session{ID: request.ID, State: workersessions.StateRunning}
+	service.mu.Unlock()
+	return workersessions.RuntimeAttempt(func(
+		_ context.Context,
+		result workers.WorkstationDispatchResult,
+		_ error,
+	) error {
+		service.mu.Lock()
+		defer service.mu.Unlock()
+		session := service.sessions[request.ID]
+		switch result.TerminalOutcome {
+		case workers.WorkstationDispatchTerminalOutcomeCompleted:
+			session.State = workersessions.StateCompleted
+			session.Result = &workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted}
+		case workers.WorkstationDispatchTerminalOutcomeCanceled:
+			session.State = workersessions.StateCanceled
+			session.Result = nil
+		default:
+			session.State = workersessions.StateFailed
+			session.Result = &workersessions.TerminalResult{
+				Outcome: workersessions.TerminalOutcomeFailed,
+				Cause: &workersessions.FailureCause{
+					Kind:   workersessions.FailureCauseWorkersExecutionFailure,
+					Detail: "runtime Worker Sessions test execution failed",
+				},
+			}
+		}
+		service.sessions[request.ID] = session
+		return nil
+	}), nil
 }
 
 func (service *runtimeWorkerSessionsService) Cancel(

@@ -59,11 +59,20 @@ func lineItemsToAPI(items []costs.LineItem) []factoryapi.CostsLineItem {
 			CachedInputTokens:     item.CachedInputTokens,
 			ReasoningOutputTokens: item.ReasoningOutputTokens,
 			Status:                factoryapi.CostsLineItemStatus(item.Status),
+			PriceSource:           priceSourceToAPI(item.PriceSource),
 			PricedAmount:          item.PricedAmount,
 			Reason:                optionalString(item.Reason),
 		})
 	}
 	return result
+}
+
+func priceSourceToAPI(source costs.PriceSource) *factoryapi.CostsLineItemPriceSource {
+	if source == "" {
+		return nil
+	}
+	value := factoryapi.CostsLineItemPriceSource(source)
+	return &value
 }
 
 func rollupsToAPI(rollups []costs.Rollup) []factoryapi.CostsRollup {

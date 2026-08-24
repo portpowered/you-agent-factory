@@ -1,4 +1,21 @@
 import { factoryGraphNodeVisualIconClassName } from "./semantic-node-style.js";
+const FACTORY_GRAPH_WORKER_PROVIDER_ALIASES = {
+    AGY: "antigravity",
+    ANTHROPIC: "claude",
+    ANTIGRAVITY: "antigravity",
+    CLAUDE: "claude",
+    "CLAUDE CLI": "claude",
+    CLAUDE_CLI: "claude",
+    "CLAUDE-CLI": "claude",
+    CODEX: "codex",
+    GEMINI: "gemini",
+    "LOCAL CLAUDE": "claude",
+    LOCAL_CLAUDE: "claude",
+    "LOCAL-CLAUDE": "claude",
+    OPENAI: "codex",
+    OPENAI_CODEX: "codex",
+    "OPENAI-CODEX": "codex",
+};
 export const FACTORY_GRAPH_WORKER_TYPES = [
     "INFERENCE_WORKER",
     "AGENT_WORKER",
@@ -17,15 +34,24 @@ export function factoryGraphWorkerIconKind(workerType, runnerId) {
     if (factoryGraphUnknownWorkerType(workerType) !== undefined) {
         return "worker";
     }
-    switch (normalize(runnerId)) {
-        case "CODEX":
-            return "codex";
-        case "CLAUDE":
-            return "claude";
-        case "ANTIGRAVITY":
-            return "antigravity";
+    return factoryGraphWorkerProviderKind(runnerId) ?? "worker";
+}
+/** Resolves only the explicitly supported provider spellings, never substrings. */
+export function factoryGraphWorkerProviderKind(providerId) {
+    return FACTORY_GRAPH_WORKER_PROVIDER_ALIASES[normalize(providerId)];
+}
+export function factoryGraphWorkerProviderLabel(providerKind) {
+    switch (providerKind) {
+        case "antigravity":
+            return "Antigravity";
+        case "claude":
+            return "Claude/Anthropic";
+        case "codex":
+            return "Codex/OpenAI";
+        case "gemini":
+            return "Gemini";
         default:
-            return "worker";
+            return undefined;
     }
 }
 export function isFactoryGraphKnownWorkerType(workerType) {

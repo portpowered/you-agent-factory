@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -309,7 +310,7 @@ func TestSessionResolvedDeletePreservesExecutableBehavior(t *testing.T) {
 		if request.Method != http.MethodDelete {
 			t.Fatalf("request method = %s, want DELETE", request.Method)
 		}
-		deletedPaths = append(deletedPaths, request.URL.Path)
+		deletedPaths = append(deletedPaths, request.URL.EscapedPath())
 		return sessionTestResponse(http.StatusNoContent, ""), nil
 	})
 	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
@@ -322,7 +323,7 @@ func TestSessionResolvedDeletePreservesExecutableBehavior(t *testing.T) {
 	if err != nil {
 		t.Fatalf("human delete Execute() error = %v", err)
 	}
-	if stdout != "Closed factory session session/beta\n" {
+	if stdout != "Deleted factory session session/beta\n" {
 		t.Fatalf("human delete stdout = %q", stdout)
 	}
 	if !strings.Contains(stderr, "session delete request") ||
@@ -350,6 +351,116 @@ func TestSessionResolvedDeletePreservesExecutableBehavior(t *testing.T) {
 		deletedPaths[0] != "/factory-sessions/session%2Fbeta" ||
 		deletedPaths[1] != "/factory-sessions/session-beta" {
 		t.Fatalf("delete paths = %#v", deletedPaths)
+	}
+}
+
+func TestSessionResolvedServerSelectionRoutesDeleteAndStopControls(t *testing.T) {
+	type observation struct {
+		method string
+		path   string
+	}
+
+	observations := make([][]observation, 2)
+	servers := make([]*httptest.Server, 2)
+	for index := range servers {
+		index := index
+		servers[index] = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			observations[index] = append(observations[index], observation{method: r.Method, path: r.URL.Path})
+			switch r.URL.Path {
+			case "/factory-sessions/session-beta/cancel":
+				w.WriteHeader(http.StatusOK)
+				_ = json.NewEncoder(w).Encode(factoryapi.FactorySessionLifecycleControlResponse{
+					SessionId: "session-beta",
+					Operation: factoryapi.FactorySessionLifecycleControlKindCancel,
+					Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
+					Status:    factoryapi.FactorySessionDurableLifecycleStatusCanceling,
+				})
+			case "/factory-sessions/session-beta/terminate":
+				w.WriteHeader(http.StatusOK)
+				_ = json.NewEncoder(w).Encode(factoryapi.FactorySessionLifecycleControlResponse{
+					SessionId: "session-beta",
+					Operation: factoryapi.FactorySessionLifecycleControlKindTerminate,
+					Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
+					Status:    factoryapi.FactorySessionDurableLifecycleStatusTerminated,
+				})
+			case "/factory-sessions/session-beta":
+				w.WriteHeader(http.StatusNoContent)
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		t.Cleanup(servers[index].Close)
+	}
+
+	protocol, err := clihttp.NewProtocol(http.DefaultClient, sessionTestClock{})
+	if err != nil {
+		t.Fatalf("NewProtocol() error = %v", err)
+	}
+	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+		Delete:    sessioncli.NewDelete(protocol),
+		Cancel:    sessioncli.NewCancel(protocol),
+		Terminate: sessioncli.NewTerminate(protocol),
+	}, nil, nil)
+
+	commands := []struct {
+		name string
+		args []string
+	}{
+		{name: "delete", args: []string{"session", "delete", "session-beta"}},
+		{name: "cancel", args: []string{"session", "cancel", "session-beta"}},
+		{name: "terminate", args: []string{"session", "terminate", "session-beta"}},
+	}
+	for _, command := range commands {
+		for serverIndex, server := range servers {
+			args := append([]string{"--server", server.URL}, command.args...)
+			if serverIndex == 1 {
+				args = append(append([]string(nil), command.args...), "--server", server.URL)
+			}
+			if _, _, err := executeResolvedSessionWithOutput(t, services, args...); err != nil {
+				t.Fatalf("execute %s against server %d: %v", command.name, serverIndex, err)
+			}
+		}
+	}
+
+	want := []observation{
+		{method: http.MethodDelete, path: "/factory-sessions/session-beta"},
+		{method: http.MethodPost, path: "/factory-sessions/session-beta/cancel"},
+		{method: http.MethodPost, path: "/factory-sessions/session-beta/terminate"},
+	}
+	for index, got := range observations {
+		if len(got) != len(want) {
+			t.Fatalf("server %d observations = %#v, want %#v", index, got, want)
+		}
+		for position := range want {
+			if got[position] != want[position] {
+				t.Fatalf("server %d observation %d = %#v, want %#v", index, position, got[position], want[position])
+			}
+		}
+	}
+}
+
+func TestSessionResolvedStopAndDeleteRejectLegacyPortBeforeOperation(t *testing.T) {
+	calls := 0
+	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+		Delete: func(sessioncli.DeleteConfig) error { calls++; return nil },
+		Cancel: func(sessioncli.LifecycleControlConfig) error { calls++; return nil },
+		Terminate: func(sessioncli.LifecycleControlConfig) error {
+			calls++
+			return nil
+		},
+	}, nil, nil)
+
+	for _, operation := range []string{"delete", "cancel", "terminate"} {
+		t.Run(operation, func(t *testing.T) {
+			if _, _, err := executeResolvedSessionWithOutput(
+				t, services, "--remote", "session", operation, "session-beta", "--port", "9090",
+			); err == nil || !strings.Contains(err.Error(), "--port is no longer supported; use --server") {
+				t.Fatalf("execute session %s with --port error = %v", operation, err)
+			}
+		})
+	}
+	if calls != 0 {
+		t.Fatalf("lifecycle/delete calls = %d, want 0 after legacy --port rejection", calls)
 	}
 }
 
@@ -881,55 +992,5 @@ func sessionTestResponse(status int, body string) *http.Response {
 		StatusCode: status,
 		Body:       io.NopCloser(strings.NewReader(body)),
 		Header:     make(http.Header),
-	}
-}
-
-func assertDefaultResolvedCreate(
-	t *testing.T,
-	cfg sessioncli.CreateConfig,
-	diagnostics io.Writer,
-) {
-	t.Helper()
-	if cfg.Dir != "fleet" || cfg.Port != 7437 ||
-		cfg.PortExplicit || cfg.Server != "http://localhost:7437" ||
-		cfg.InitNewFactory || cfg.ValidateOnly ||
-		cfg.JSON || cfg.Verbose || cfg.Debug {
-		t.Fatalf("default create config = %#v", cfg)
-	}
-	if cfg.Diagnostics != diagnostics || cfg.Output == nil {
-		t.Fatalf("default create writers = output:%T diagnostics:%T", cfg.Output, cfg.Diagnostics)
-	}
-}
-
-func assertChangedResolvedCreate(t *testing.T, cfg sessioncli.CreateConfig) {
-	t.Helper()
-	if cfg.Server != "https://factory.example" ||
-		cfg.Port != 9444 || !cfg.PortExplicit ||
-		!cfg.JSON || !cfg.Verbose || !cfg.Debug ||
-		!cfg.InitNewFactory ||
-		cfg.TargetKind != "named" || cfg.TargetName != "alpha" {
-		t.Fatalf("changed create config = %#v", cfg)
-	}
-}
-
-func assertDefaultResolvedList(t *testing.T, cfg sessioncli.ListConfig) {
-	t.Helper()
-	if cfg.Scope != "live" || cfg.Port != 7437 || cfg.Server != "" {
-		t.Fatalf("default list config = %#v", cfg)
-	}
-}
-
-func assertChangedResolvedList(t *testing.T, cfg sessioncli.ListConfig) {
-	t.Helper()
-	if cfg.Scope != "all" || cfg.Server != "https://factory.example" {
-		t.Fatalf("changed list config = %#v", cfg)
-	}
-}
-
-func assertResolvedDelete(t *testing.T, configs []sessioncli.DeleteConfig) {
-	t.Helper()
-	if len(configs) != 1 || configs[0].SessionID != "session-beta" ||
-		configs[0].Port != 7437 || !configs[0].JSON {
-		t.Fatalf("delete configs = %#v", configs)
 	}
 }

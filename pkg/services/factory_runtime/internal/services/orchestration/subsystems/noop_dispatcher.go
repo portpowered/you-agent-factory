@@ -54,13 +54,6 @@ func NewNoOpDispatcher(
 	}
 }
 
-var _ Subsystem = (*NoOpDispatcherSubsystem)(nil)
-
-// TickGroup returns Dispatcher (5).
-func (d *NoOpDispatcherSubsystem) TickGroup() TickGroup {
-	return Dispatcher
-}
-
 // Execute finds enabled transitions, selects firings via the scheduler,
 // consumes input tokens, and immediately enqueues an ACCEPTED result via the
 // enqueueResult callback with pass-through token colors. No external executor

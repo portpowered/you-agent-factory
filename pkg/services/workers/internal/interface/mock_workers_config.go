@@ -24,14 +24,11 @@ type MockWorkerConfig = workers.MockWorkerConfig
 type MockWorkInputSelector = workers.MockWorkInputSelector
 type MockWorkerScriptConfig = workers.MockWorkerScriptConfig
 type MockWorkerRejectConfig = workers.MockWorkerRejectConfig
+type MockWorkerUsageConfig = workers.MockWorkerUsageConfig
 type MockWorkersConfigFileSystem = workers.MockWorkersConfigFileSystem
 type MockWorkersConfigLoader = workers.MockWorkersConfigLoader
 type MockWorkersConfigDecodeDiagnostics = workers.MockWorkersConfigDecodeDiagnostics
 type MockWorkersConfigDiagnosticsLoader = workers.MockWorkersConfigDiagnosticsLoader
-
-func NewEmptyMockWorkersConfig() *MockWorkersConfig {
-	return workers.NewEmptyMockWorkersConfig()
-}
 
 func NewMockWorkersConfigLoader(
 	fileSystem MockWorkersConfigFileSystem,

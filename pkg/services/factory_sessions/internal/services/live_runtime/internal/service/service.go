@@ -85,7 +85,12 @@ func (s *service) Snapshot(ctx context.Context, sessionID string) (*legacysnapsh
 	if err != nil {
 		return nil, err
 	}
-	snapshot, err := legacyObservation.GetEngineStateSnapshot(ctx)
+	var snapshot *legacysnapshot.Snapshot
+	if workProvider, ok := legacyObservation.(legacysnapshot.WorkProvider); ok && workProvider != nil {
+		snapshot, err = workProvider.GetWorkStateSnapshot(ctx)
+	} else {
+		snapshot, err = legacyObservation.GetEngineStateSnapshot(ctx)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("get engine state snapshot: %w", err)
 	}
@@ -136,18 +141,22 @@ func (s *service) ApplyControl(ctx context.Context, sessionID string, operation 
 		s.dependencies.ObserveControl(sessionID, operation, control, outcome, currentStatus, controlErr)
 		return factorysessions.LifecycleControlResult{}, controlErr
 	}
-	resultStatus, err := applyAcceptedControl(ctx, activeFactory, operation, outcome, currentStatus, control)
+	resultStatus, appliedOutcome, err := applyAcceptedControl(ctx, activeFactory, sessionID, operation, outcome, currentStatus, control)
 	if err != nil {
+		s.dependencies.ObserveControl(sessionID, operation, control, outcome, currentStatus, err)
 		return factorysessions.LifecycleControlResult{}, err
+	}
+	if appliedOutcome != "" {
+		outcome = appliedOutcome
 	}
 	result := factorysessions.LifecycleControlResult{SessionID: sessionID, Operation: operation, Outcome: outcome, Status: resultStatus, Links: factorysessions.LiveLifecycleControlLinksForSession(sessionID)}
 	s.dependencies.ObserveControl(sessionID, operation, control, outcome, resultStatus, nil)
 	return result, nil
 }
 
-func applyAcceptedControl(ctx context.Context, activeFactory factoryruntime.Service, operation factorysessions.LifecycleControlKind, outcome factorysessions.LifecycleControlOutcome, currentStatus factorysessions.LifecycleStatus, control factorysessions.ControlRequest) (factorysessions.LifecycleStatus, error) {
+func applyAcceptedControl(ctx context.Context, activeFactory factoryruntime.Service, sessionID string, operation factorysessions.LifecycleControlKind, outcome factorysessions.LifecycleControlOutcome, currentStatus factorysessions.LifecycleStatus, control factorysessions.ControlRequest) (factorysessions.LifecycleStatus, factorysessions.LifecycleControlOutcome, error) {
 	if outcome != factorysessions.LifecycleControlOutcomeAccepted {
-		return currentStatus, nil
+		return currentStatus, "", nil
 	}
 	switch operation {
 	case factorysessions.LifecycleControlPause:
@@ -155,19 +164,69 @@ func applyAcceptedControl(ctx context.Context, activeFactory factoryruntime.Serv
 			TurnID:    control.TurnID,
 			ControlID: control.RequestID,
 		}); err != nil {
-			return "", fmt.Errorf("pause live factory session: %w", err)
+			return "", "", fmt.Errorf("pause live factory session: %w", err)
 		}
-		return factorysessions.LifecycleStatusPaused, nil
+		return factorysessions.LifecycleStatusPaused, "", nil
 	case factorysessions.LifecycleControlResume:
 		if _, err := activeFactory.ControlResume(ctx, factoryruntime.ResumeRequest{
 			TurnID:    control.TurnID,
 			ControlID: control.RequestID,
 		}); err != nil {
-			return "", fmt.Errorf("resume live factory session: %w", err)
+			return "", "", fmt.Errorf("resume live factory session: %w", err)
 		}
-		return factorysessions.LifecycleStatusRunning, nil
+		return factorysessions.LifecycleStatusRunning, "", nil
+	case factorysessions.LifecycleControlCancel:
+		result, err := activeFactory.ControlTerminate(ctx, factoryruntime.TerminateRequest{
+			Reason:              control.Reason,
+			TurnID:              control.TurnID,
+			ControlID:           control.RequestID,
+			WorkerSessionAction: factoryruntime.WorkerSessionControlActionCancel,
+		})
+		if err != nil {
+			return "", "", liveStopControlError(sessionID, operation, currentStatus, err)
+		}
+		return factorysessions.LifecycleStatusSucceeded, liveStopControlOutcome(result.Outcome), nil
+	case factorysessions.LifecycleControlTerminate:
+		result, err := activeFactory.ControlTerminate(ctx, factoryruntime.TerminateRequest{
+			Reason:              control.Reason,
+			TurnID:              control.TurnID,
+			ControlID:           control.RequestID,
+			WorkerSessionAction: factoryruntime.WorkerSessionControlActionTerminate,
+		})
+		if err != nil {
+			return "", "", liveStopControlError(sessionID, operation, currentStatus, err)
+		}
+		return factorysessions.LifecycleStatusSucceeded, liveStopControlOutcome(result.Outcome), nil
 	default:
-		return "", fmt.Errorf("unsupported live lifecycle operation %s", operation)
+		return "", "", fmt.Errorf("unsupported live lifecycle operation %s", operation)
+	}
+}
+
+func liveStopControlOutcome(outcome factoryruntime.ControlOutcome) factorysessions.LifecycleControlOutcome {
+	switch outcome {
+	case factoryruntime.ControlOutcomeAccepted:
+		return factorysessions.LifecycleControlOutcomeAccepted
+	case factoryruntime.ControlOutcomeNoOp:
+		return factorysessions.LifecycleControlOutcomeNoOp
+	default:
+		return factorysessions.LifecycleControlOutcomeConflict
+	}
+}
+
+func liveStopControlError(sessionID string, operation factorysessions.LifecycleControlKind, status factorysessions.LifecycleStatus, err error) error {
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	outcome := factorysessions.LifecycleControlOutcomeConflict
+	if errors.Is(err, factoryruntime.ErrAlreadyStopped) {
+		outcome = factorysessions.LifecycleControlOutcomeTerminalSession
+	}
+	return &factorysessions.ControlError{
+		Operation: operation,
+		Outcome:   outcome,
+		Status:    status,
+		Message:   fmt.Sprintf("%s could not stop the live factory session: %v", operation, err),
+		Links:     factorysessions.LiveLifecycleControlLinksForSession(sessionID),
 	}
 }
 

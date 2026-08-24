@@ -64,7 +64,7 @@ func TestProcessModelsList_ReusesCatalogScopeAcrossCommands(t *testing.T) {
 				t.Fatalf("Process.Execute(local models %s #%d) error = nil, want failure without catalog fixture", args[3], i+1)
 			}
 			stderr := inputs.Stderr()
-			support.RequireSafeCLIDiagnostic(t, stderr)
+			support.RequireNotFoundCLIDiagnostic(t, stderr)
 		default:
 			t.Fatalf("unexpected command args: %v", args)
 		}
@@ -84,7 +84,7 @@ func TestProcessModelsPull_RoutesThroughCompositionProviderWithoutServer(t *test
 	if err := process.Execute(inputs.Input); err == nil {
 		t.Fatalf("Process.Execute(local models pull) error = nil, want failure without catalog fixture")
 	}
-	support.RequireSafeCLIDiagnostic(t, inputs.Stderr())
+	support.RequireNotFoundCLIDiagnostic(t, inputs.Stderr())
 }
 
 // TestProcessModelsInvokeJSON_RoutesThroughCompositionProviderWithoutServer proves
@@ -119,5 +119,5 @@ func TestProcessModelsInspect_RoutesThroughCompositionProviderWithoutServer(t *t
 	if err := process.Execute(inputs.Input); err == nil {
 		t.Fatalf("Process.Execute(local models inspect) error = nil, want not-found failure without catalog fixture")
 	}
-	support.RequireSafeCLIDiagnostic(t, inputs.Stderr())
+	support.RequireNotFoundCLIDiagnostic(t, inputs.Stderr())
 }

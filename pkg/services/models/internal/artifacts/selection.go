@@ -34,16 +34,6 @@ func (manifest Manifest) Select(request SelectionRequest) (ArtifactDescriptor, e
 	return descriptorFromEntry(compatible[0], manifest.publication), nil
 }
 
-// SelectArtifact is a package-level convenience for the pure selection seam.
-func SelectArtifact(manifest Manifest, request SelectionRequest) (ArtifactDescriptor, error) {
-	return manifest.Select(request)
-}
-
-// SelectArtifact is the descriptive method alias used by Models callers.
-func (manifest Manifest) SelectArtifact(request SelectionRequest) (ArtifactDescriptor, error) {
-	return manifest.Select(request)
-}
-
 func validateSelectionRequest(request SelectionRequest) error {
 	if !validToken(request.Backend) {
 		if _, known := backendregistry.LookupArtifact(request.Backend); !known {
@@ -108,17 +98,6 @@ func descriptorFromEntry(entry manifestEntry, publication publication) ArtifactD
 		},
 		Artifact: entry.artifact,
 	}
-}
-
-// Clone returns a detached manifest snapshot for private callers that need to
-// retain a copy without sharing the entry or accelerator slices.
-func (manifest Manifest) Clone() Manifest {
-	clone := Manifest{publication: manifest.publication, entries: make([]manifestEntry, len(manifest.entries))}
-	for index, entry := range manifest.entries {
-		clone.entries[index] = entry
-		clone.entries[index].target.Accelerators = append([]string(nil), entry.target.Accelerators...)
-	}
-	return clone
 }
 
 // ArtifactCount reports the number of validated entries in the snapshot.
