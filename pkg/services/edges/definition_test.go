@@ -546,12 +546,19 @@ func TestMergeAppliesModelAssetAndHostEffectReplacements(t *testing.T) {
 	embedding := ModelEmbeddingBackend(func(context.Context, models.EmbeddingBackendRequest) (models.EmbeddingBackendResponse, error) {
 		return models.EmbeddingBackendResponse{Embeddings: []float64{0.1}}, nil
 	})
+	backendArtifactResolver := ModelResolveBackendArtifact(func(
+		context.Context,
+		ModelBackendArtifactSelectionRequest,
+	) (ModelBackendArtifactSelection, error) {
+		return ModelBackendArtifactSelection{Name: "fixture-backend"}, nil
+	})
 	protocol := &edgeModelHostProtocol{}
 	dialer := &edgeModelHostGRPCDialer{}
 	compatibility := &edgeModelHostCompatibilityChecker{}
 	merged := Merge(Edges{}, Edges{
 		ModelAssetResolveEnvironment:  environment,
 		ModelEmbeddingBackend:         embedding,
+		ModelResolveBackendArtifact:   backendArtifactResolver,
 		ModelHostProtocolNegotiator:   protocol,
 		ModelHostGRPCDialer:           dialer,
 		ModelHostCompatibilityChecker: compatibility,
@@ -564,6 +571,10 @@ func TestMergeAppliesModelAssetAndHostEffectReplacements(t *testing.T) {
 	}
 	if response, err := merged.ModelEmbeddingBackend(context.Background(), models.EmbeddingBackendRequest{Text: "hello"}); err != nil || len(response.Embeddings) != 1 {
 		t.Fatalf("embedding backend edge = (%#v, %v), want fixture response", response, err)
+	}
+	artifact, err := merged.ModelResolveBackendArtifact(context.Background(), ModelBackendArtifactSelectionRequest{})
+	if err != nil || artifact.Name != "fixture-backend" {
+		t.Fatalf("backend artifact resolver = (%#v, %v), want fixture-backend", artifact, err)
 	}
 	if merged.ModelHostProtocolNegotiator != protocol {
 		t.Fatal("protocol negotiator edge was not replaced")
