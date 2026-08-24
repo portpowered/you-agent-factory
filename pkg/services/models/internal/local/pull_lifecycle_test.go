@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	apisurface "github.com/portpowered/infinite-you/pkg/services/models"
+	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
 )
 
 func TestClassifySuccessfulPull_MapsLegacyOutcomesToManagedContract(t *testing.T) {
@@ -82,7 +83,7 @@ func TestClassifyPullFailure_MapsErrorsToManagedOutcomes(t *testing.T) {
 		},
 		{
 			name: "post-download cache installation",
-			err: apisurface.WrapPullStage(
+			err: pullsupport.WrapPullStage(
 				apisurface.PullStageCacheInstallation, "model", "install cache", "", apisurface.ErrNotAvailable,
 			),
 			wantPull:  managedPullOutcomeCacheInstallationFailed,

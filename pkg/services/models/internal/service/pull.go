@@ -12,6 +12,7 @@ import (
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
+	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	"go.uber.org/zap"
 )
@@ -147,9 +148,9 @@ func (s *Service) pullWithModelHost(
 	}
 	var pullErr *models.PullError
 	if errors.As(err, &pullErr) && pullErr != nil {
-		pullErr.Result.PullDiagnostics = models.MergePullDiagnostics(
+		pullErr.Result.PullDiagnostics = pullsupport.MergePullDiagnostics(
 			pullErr.Result.PullDiagnostics,
-			models.PullDiagnosticsFromError(pullErr.Cause),
+			pullsupport.PullDiagnosticsFromError(pullErr.Cause),
 		).WithDefaults(
 			modelName, pullErr.Result.SourceID, pullErr.Result.Revision, "", "pull model",
 		)
@@ -180,9 +181,9 @@ func (s *Service) pullWithModelHost(
 	if strings.TrimSpace(result.LifecycleState) == "" {
 		result.LifecycleState = string(managedruntime.LifecycleStateNotInstalled)
 	}
-	result.PullDiagnostics = models.MergePullDiagnostics(
+	result.PullDiagnostics = pullsupport.MergePullDiagnostics(
 		result.PullDiagnostics,
-		models.PullDiagnosticsFromError(err),
+		pullsupport.PullDiagnosticsFromError(err),
 	).WithDefaults(modelName, result.SourceID, result.Revision, "", "pull model")
 	return result, &models.PullError{Result: result, Cause: err}
 }
@@ -257,9 +258,9 @@ func (s *Service) recordManagedRuntimePull(modelName string, result models.PullR
 			s.recordModelPullMetric(modelPullMetricSourceFailure, failureLabels)
 		}
 		if logger := s.logger(); logger != nil {
-			diagnostics := models.MergePullDiagnostics(
+			diagnostics := pullsupport.MergePullDiagnostics(
 				result.PullDiagnostics,
-				models.PullDiagnosticsFromError(err),
+				pullsupport.PullDiagnosticsFromError(err),
 			).WithDefaults(
 				modelName, result.SourceID, result.Revision, "", pullDiagnosticOperation(result, err),
 			)
@@ -318,7 +319,7 @@ func (s *Service) recordManagedRuntimePull(modelName string, result models.PullR
 }
 
 func pullDiagnosticOperation(result models.PullResult, err error) string {
-	if diagnostics := models.PullDiagnosticsFromError(err); diagnostics.Operation != "" {
+	if diagnostics := pullsupport.PullDiagnosticsFromError(err); diagnostics.Operation != "" {
 		return diagnostics.Operation
 	}
 	switch result.FailureStage {

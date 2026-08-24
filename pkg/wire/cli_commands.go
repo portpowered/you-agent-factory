@@ -480,9 +480,10 @@ func provideModelsCLIService(
 	invocation modelscli.InvocationOperation,
 	composition modelscli.CompositionScopeProvider,
 	outputFileSystem modelscli.OutputFileSystem,
+	clock runtimeArtifactClock,
 ) modelscli.Service {
-	return modelscli.NewWithOutputFileSystemAndPullProtocol(
-		transport.Protocol, pullTransport.Protocol, invocation, outputFileSystem, composition,
+	return modelscli.NewWithOutputFileSystemAndPullProtocolAndClock(
+		transport.Protocol, pullTransport.Protocol, invocation, outputFileSystem, clock, composition,
 	)
 }
 

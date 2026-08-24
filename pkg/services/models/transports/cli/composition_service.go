@@ -2,6 +2,7 @@ package cli
 
 import (
 	"strings"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 )
@@ -16,6 +17,7 @@ func bindCompositionService(
 	pullHTTPProtocol clihttp.Protocol,
 	invocation InvocationOperation,
 	outputFileSystem OutputFileSystem,
+	now func() time.Time,
 	providers ...CompositionScopeProvider,
 ) Service {
 	if httpProtocol == nil || invocation == nil {
@@ -26,10 +28,12 @@ func bindCompositionService(
 	}
 	legacy := &httpService{
 		http: httpProtocol, pullHTTP: pullHTTPProtocol, invocation: invocation,
+		now: now,
 	}
 	cfg := ConfigFromComposition(httpProtocol, invocation, providers...)
 	cfg.PullHTTP = pullHTTPProtocol
 	cfg.OutputFileSystem = outputFileSystem
+	cfg.Clock = now
 	owned := NewService(cfg)
 	if owned == nil {
 		return legacy

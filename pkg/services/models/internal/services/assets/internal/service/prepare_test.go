@@ -18,6 +18,7 @@ import (
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
 
@@ -472,13 +473,19 @@ func TestPrepareModelAssetsClassifiesManifestFailures(t *testing.T) {
 		name       string
 		statusCode int
 		body       string
+		wantCause  error
+		wantStage  models.PullStage
 	}{
-		{name: "source response", statusCode: http.StatusBadRequest, body: "bad source request"},
+		{
+			name: "source response", statusCode: http.StatusBadRequest, body: "bad source request",
+			wantCause: models.ErrSourceFetchFailed, wantStage: models.PullStageSourceFetch,
+		},
 		{
 			name:       "missing required artifact",
 			statusCode: http.StatusOK,
 			body: `{"sha":"revision","siblings":[` +
 				`{"rfilename":"omnivoice-base-Q4_K_M.gguf","size":4}]}`,
+			wantCause: models.ErrModelReferenceUnknown, wantStage: models.PullStageSourceResolution,
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -506,15 +513,15 @@ func TestPrepareModelAssetsClassifiesManifestFailures(t *testing.T) {
 				context.Background(),
 				models.PrepareModelAssetsRequest{Scope: ref, Name: "OMNIVOICE_Q4_K_M"},
 			)
-			if !errors.Is(err, models.ErrSourceFetchFailed) {
-				t.Fatalf("PrepareModelAssets error = %v, want ErrSourceFetchFailed", err)
+			if !errors.Is(err, test.wantCause) {
+				t.Fatalf("PrepareModelAssets error = %v, want %v", err, test.wantCause)
 			}
 			var stageErr *models.PullStageError
-			if !errors.As(err, &stageErr) || stageErr.Stage != models.PullStageSourceFetch ||
+			if !errors.As(err, &stageErr) || stageErr.Stage != test.wantStage ||
 				stageErr.Cause == nil {
-				t.Fatalf("PrepareModelAssets stage error = %#v, want source-fetch stage with cause", stageErr)
+				t.Fatalf("PrepareModelAssets stage error = %#v, want %s stage with cause", stageErr, test.wantStage)
 			}
-			diagnostics := models.PullDiagnosticsFromError(err)
+			diagnostics := pullsupport.PullDiagnosticsFromError(err)
 			if diagnostics.ModelName != "OMNIVOICE_Q4_K_M" || diagnostics.ResolvedRepository == "" ||
 				diagnostics.Operation == "" || (test.statusCode != http.StatusOK && diagnostics.UpstreamStatusCode != test.statusCode) {
 				t.Fatalf("PrepareModelAssets diagnostics = %#v, want safe source facts", diagnostics)

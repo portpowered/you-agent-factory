@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
@@ -51,6 +52,7 @@ type Config struct {
 	OutputFileSystem OutputFileSystem
 	OpenInvokeScope  func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
 	OpenCatalogScope func(context.Context) (InvokeRuntimeScope, error)
+	Clock            func() time.Time
 }
 
 type rootService struct {
@@ -61,6 +63,7 @@ type rootService struct {
 	outputFileSystem OutputFileSystem
 	openInvokeScope  func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
 	openCatalogScope func(context.Context) (InvokeRuntimeScope, error)
+	now              func() time.Time
 }
 
 // NewService constructs the Models-owned CLI service from the accepted Models root.
@@ -76,5 +79,6 @@ func NewService(cfg Config) Service {
 		outputFileSystem: cfg.OutputFileSystem,
 		openInvokeScope:  cfg.OpenInvokeScope,
 		openCatalogScope: cfg.OpenCatalogScope,
+		now:              cfg.Clock,
 	}
 }

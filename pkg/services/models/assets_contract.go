@@ -104,49 +104,6 @@ func (failure *PullStageError) Unwrap() error {
 	return failure.Cause
 }
 
-// WrapPullStage attaches a stage without replacing a more specific stage
-// already present in the error chain.
-func WrapPullStage(stage PullStage, modelName, operation, artifact string, cause error) error {
-	if cause == nil {
-		return nil
-	}
-	var existing *PullStageError
-	if errors.As(cause, &existing) {
-		return cause
-	}
-	return &PullStageError{
-		Stage: stage, ModelName: strings.TrimSpace(modelName),
-		Operation: strings.TrimSpace(operation), Artifact: strings.TrimSpace(artifact),
-		Cause: cause,
-	}
-}
-
-// PullStageForError returns the most specific stage encoded by a pull error,
-// or infers one from the stable asset sentinels.
-func PullStageForError(err error) PullStage {
-	if err == nil {
-		return ""
-	}
-	var stageError *PullStageError
-	if errors.As(err, &stageError) && stageError != nil {
-		return stageError.Stage
-	}
-	switch {
-	case errors.Is(err, ErrSourceFetchFailed):
-		return PullStageSourceFetch
-	case errors.Is(err, ErrAssetIntegrityFailed):
-		return PullStageIntegrityVerification
-	case errors.Is(err, ErrAssetSourceMissing),
-		errors.Is(err, ErrAssetSourceUnsupported),
-		errors.Is(err, ErrAssetOffline):
-		return PullStageSourceResolution
-	case errors.Is(err, ErrAssetPreparationInterrupted):
-		return PullStageAssembly
-	default:
-		return ""
-	}
-}
-
 // PullDiagnostics contains safe, logical facts about one failed managed
 // runtime pull. It deliberately excludes response bodies, credentials, and
 // unrestricted local paths so callers can carry it to operator-facing
@@ -209,36 +166,6 @@ func (diagnostics PullDiagnostics) WithDefaults(
 		diagnostics.Operation = operation
 	}
 	return diagnostics.Normalize()
-}
-
-// MergePullDiagnostics keeps the primary diagnostic's non-empty facts and
-// fills gaps from the fallback. This is useful when the asset layer knows the
-// HTTP request while the pull layer knows the selected model identity.
-func MergePullDiagnostics(primary, fallback PullDiagnostics) PullDiagnostics {
-	primary = primary.Normalize()
-	fallback = fallback.Normalize()
-	if primary.ModelName == "" {
-		primary.ModelName = fallback.ModelName
-	}
-	if primary.ResolvedRepository == "" {
-		primary.ResolvedRepository = fallback.ResolvedRepository
-	}
-	if primary.Revision == "" {
-		primary.Revision = fallback.Revision
-	}
-	if primary.File == "" {
-		primary.File = fallback.File
-	}
-	if primary.Operation == "" {
-		primary.Operation = fallback.Operation
-	}
-	if primary.RequestURL == "" {
-		primary.RequestURL = fallback.RequestURL
-	}
-	if primary.UpstreamStatusCode == 0 {
-		primary.UpstreamStatusCode = fallback.UpstreamStatusCode
-	}
-	return primary.Normalize()
 }
 
 func (diagnostics PullDiagnostics) hasDetails() bool {
@@ -314,85 +241,6 @@ func (failure *PullDiagnosticsError) As(target any) bool {
 		return false
 	}
 	return errors.As(failure.Cause, target)
-}
-
-// NewPullDiagnosticsError creates the safe presentation wrapper for a raw
-// pull cause. The raw cause remains available through explicit typed matching,
-// but is never rendered by Error.
-func NewPullDiagnosticsError(diagnostics PullDiagnostics, cause error) error {
-	if cause == nil && !diagnostics.Normalize().hasDetails() {
-		return nil
-	}
-	return &PullDiagnosticsError{Diagnostics: diagnostics.Normalize(), Cause: cause}
-}
-
-// WrapPullDiagnostics attaches safe facts to a cause without replacing an
-// already-present diagnostic wrapper. Missing values are filled from the new
-// facts when a wrapper is encountered through the typed error chain.
-func WrapPullDiagnostics(diagnostics PullDiagnostics, cause error) error {
-	if cause == nil {
-		return nil
-	}
-	diagnostics = diagnostics.Normalize()
-	var existing *PullDiagnosticsError
-	if errors.As(cause, &existing) && existing != nil {
-		merged := existing.Diagnostics
-		if merged.ModelName == "" {
-			merged.ModelName = diagnostics.ModelName
-		}
-		if merged.ResolvedRepository == "" {
-			merged.ResolvedRepository = diagnostics.ResolvedRepository
-		}
-		if merged.Revision == "" {
-			merged.Revision = diagnostics.Revision
-		}
-		if merged.File == "" {
-			merged.File = diagnostics.File
-		}
-		if merged.Operation == "" {
-			merged.Operation = diagnostics.Operation
-		}
-		if merged.RequestURL == "" {
-			merged.RequestURL = diagnostics.RequestURL
-		}
-		if merged.UpstreamStatusCode == 0 {
-			merged.UpstreamStatusCode = diagnostics.UpstreamStatusCode
-		}
-		if merged.Normalize() == existing.Diagnostics.Normalize() {
-			return cause
-		}
-		return &PullDiagnosticsError{Diagnostics: merged.Normalize(), Cause: cause}
-	}
-	return &PullDiagnosticsError{Diagnostics: diagnostics, Cause: cause}
-}
-
-// PullDiagnosticsFromError recovers explicit diagnostics or derives safe
-// stage facts from a classified pull error. It never formats a raw cause.
-func PullDiagnosticsFromError(err error) PullDiagnostics {
-	if err == nil {
-		return PullDiagnostics{}
-	}
-	var pullError *PullError
-	if errors.As(err, &pullError) && pullError != nil {
-		if diagnostics := pullError.Result.PullDiagnostics.Normalize(); diagnostics.hasDetails() {
-			return diagnostics
-		}
-	}
-	var diagnosticError *PullDiagnosticsError
-	if errors.As(err, &diagnosticError) && diagnosticError != nil {
-		if diagnostics := diagnosticError.Diagnostics.Normalize(); diagnostics.hasDetails() {
-			return diagnostics
-		}
-	}
-	var stageError *PullStageError
-	if errors.As(err, &stageError) && stageError != nil {
-		return PullDiagnostics{
-			ModelName: stageError.ModelName,
-			File:      stageError.Artifact,
-			Operation: stageError.Operation,
-		}.Normalize()
-	}
-	return PullDiagnostics{}
 }
 
 func normalizePullDiagnosticText(value string) string {

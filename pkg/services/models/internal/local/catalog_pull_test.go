@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	apisurface "github.com/portpowered/infinite-you/pkg/services/models"
+	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -157,7 +158,7 @@ func TestPullModelWithOptions_ReportsVerificationFailure(t *testing.T) {
 func TestPullModelWithOptions_ClassifiesPostDownloadCacheFailure(t *testing.T) {
 	t.Parallel()
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	postDownloadErr := apisurface.WrapPullStage(
+	postDownloadErr := pullsupport.WrapPullStage(
 		apisurface.PullStageCacheInstallation,
 		"OMNIVOICE_Q4_K_M",
 		"resolve managed runtime cache",
@@ -216,6 +217,28 @@ func TestPullModelWithOptions_ReportsSourceFetchFailureWithoutSuccessProjection(
 		result.ReadinessState != managedReadinessFailed || result.LifecycleState != managedLifecycleNotInstalled ||
 		result.FailureStage != apisurface.PullStageSourceFetch {
 		t.Fatalf("pull result = %#v, error = %v, want FAILED/SOURCE_FETCH_FAILED/FAILED/NOT_INSTALLED", result, err)
+	}
+}
+
+func TestPullModelWithOptions_ClassifiesSourceResolutionFailure(t *testing.T) {
+	t.Parallel()
+	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	result, err := PullModelWithOptions(
+		&managedPullTestAssetPuller{
+			result: apisurface.PullResult{ModelName: "OMNIVOICE_Q4_K_M", Outcome: legacyPullOutcomePulled},
+			err:    apisurface.ErrModelReferenceInvalid,
+		},
+		context.Background(), loaded, "OMNIVOICE_Q4_K_M", PullOptions{},
+	)
+	if !errors.Is(err, apisurface.ErrModelReferenceInvalid) {
+		t.Fatalf("PullModelWithOptions error = %v, want source-resolution cause", err)
+	}
+	var pullErr *apisurface.PullError
+	if !errors.As(err, &pullErr) || result.ManagedPullOutcome != managedPullOutcomeSourceResolutionFailed ||
+		result.ManagedPullOutcome == managedPullOutcomeSourceFetchFailed ||
+		result.FailureStage != apisurface.PullStageSourceResolution ||
+		result.PullDiagnostics.Operation != "resolve model source" {
+		t.Fatalf("pull result = %#v, error = %v, want source-resolution classification and operation", result, err)
 	}
 }
 

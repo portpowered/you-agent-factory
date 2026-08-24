@@ -3,8 +3,10 @@ package cli
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -72,6 +74,7 @@ func TestModelsPullEmitsElapsedProgressOnDiagnosticsWhileWaiting(t *testing.T) {
 			Context: context.Background(), ModelName: "voice", Server: "http://factory.test",
 			Verbose: true, Diagnostics: progress, HTTP: protocol,
 			ProgressInterval: 5 * time.Millisecond,
+			Now:              testHTTPClock{}.Now,
 		})
 		done <- pullErr
 	}()
@@ -98,5 +101,40 @@ func TestModelsPullEmitsElapsedProgressOnDiagnosticsWhileWaiting(t *testing.T) {
 	if !strings.Contains(diagnostics, `models pull progress modelName="voice"`) ||
 		!strings.Contains(diagnostics, "elapsed=") {
 		t.Fatalf("progress diagnostics = %q, want model and elapsed time", diagnostics)
+	}
+}
+
+func TestModelsVerboseLogsFailureStatus(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = io.WriteString(w, `{"message":"model not found","family":"NOT_FOUND","code":"NOT_FOUND"}`)
+	}))
+	defer server.Close()
+
+	var diagnostics bytes.Buffer
+	_, err := queryModel(queryOptions{
+		Context:     context.Background(),
+		HTTP:        testHTTPProtocol(t),
+		Server:      strings.TrimSuffix(server.URL, "/"),
+		ModelName:   "missing",
+		Verbose:     true,
+		Diagnostics: &diagnostics,
+	})
+	if !errors.Is(err, ErrModelNotFound) {
+		t.Fatalf("queryModel error = %v, want ErrModelNotFound", err)
+	}
+	assertDiagnosticsContains(t, diagnostics.String(), []string{
+		"models inspect response",
+		"endpointPath=/models/missing",
+		"status=404",
+	})
+}
+
+func assertDiagnosticsContains(t *testing.T, got string, wants []string) {
+	t.Helper()
+	for _, want := range wants {
+		if !strings.Contains(got, want) {
+			t.Fatalf("diagnostics missing %q:\n%s", want, got)
+		}
 	}
 }

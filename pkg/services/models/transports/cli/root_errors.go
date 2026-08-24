@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
+	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -135,9 +136,9 @@ func mapModelsRootError(err error) error {
 	default:
 		var pullErr *modelinference.PullError
 		if errors.As(err, &pullErr) && pullErr != nil {
-			diagnostics := modelinference.MergePullDiagnostics(
+			diagnostics := pullsupport.MergePullDiagnostics(
 				pullErr.Result.PullDiagnostics,
-				modelinference.PullDiagnosticsFromError(pullErr.Cause),
+				pullsupport.PullDiagnosticsFromError(pullErr.Cause),
 			).WithDefaults(
 				pullErr.Result.ModelName,
 				pullErr.Result.SourceID,
@@ -150,7 +151,7 @@ func mapModelsRootError(err error) error {
 				factoryapi.ErrorFamilyBadRequest,
 				pullErr.Error(),
 				pullErr,
-				modelinference.NewPullDiagnosticsError(diagnostics, pullErr),
+				pullsupport.NewPullDiagnosticsError(diagnostics, pullErr),
 			)
 		}
 		return err

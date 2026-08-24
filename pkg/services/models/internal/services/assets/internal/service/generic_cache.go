@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
 )
 
 func (s *service) acquireGenericCache(
@@ -247,7 +248,7 @@ func (s *service) publishGenericCache(
 	}
 	backupPath, hadExisting, err := s.moveExistingGenericSnapshot(finalPath)
 	if err != nil {
-		return cacheResultFromPaths(artifactKind, artifacts, published), models.WrapPullStage(
+		return cacheResultFromPaths(artifactKind, artifacts, published), pullsupport.WrapPullStage(
 			models.PullStageCacheInstallation, "", "replace asset snapshot", "",
 			interruptedAssetError("replace asset snapshot", err),
 		)
@@ -256,7 +257,7 @@ func (s *service) publishGenericCache(
 		if hadExisting {
 			_ = s.renamePath(backupPath, finalPath)
 		}
-		return cacheResultFromPaths(artifactKind, artifacts, published), models.WrapPullStage(
+		return cacheResultFromPaths(artifactKind, artifacts, published), pullsupport.WrapPullStage(
 			models.PullStageCacheInstallation, "", "publish asset snapshot", "",
 			interruptedAssetError("publish asset snapshot", err),
 		)
@@ -264,7 +265,7 @@ func (s *service) publishGenericCache(
 	committed = true
 	if hadExisting {
 		if err := s.removeTree(backupPath); err != nil {
-			return cacheResultFromPaths(artifactKind, artifacts, published), models.WrapPullStage(
+			return cacheResultFromPaths(artifactKind, artifacts, published), pullsupport.WrapPullStage(
 				models.PullStageCacheInstallation, "", "clean replaced asset snapshot", "",
 				interruptedAssetError("clean replaced asset snapshot", err),
 			)
@@ -506,7 +507,7 @@ func (s *service) downloadGenericArtifact(
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, assetURL, nil)
 	if err != nil {
-		return models.AssetArtifact{}, models.WrapPullDiagnostics(
+		return models.AssetArtifact{}, pullsupport.WrapPullDiagnostics(
 			diagnostics,
 			fmt.Errorf("%w: asset request is invalid", models.ErrSourceFetchFailed),
 		)
@@ -516,7 +517,7 @@ func (s *service) downloadGenericArtifact(
 		if contextErr := assetContextError(ctx); contextErr != nil {
 			return models.AssetArtifact{}, contextErr
 		}
-		return models.AssetArtifact{}, models.WrapPullDiagnostics(
+		return models.AssetArtifact{}, pullsupport.WrapPullDiagnostics(
 			diagnostics,
 			fmt.Errorf("%w: asset download failed", models.ErrSourceFetchFailed),
 		)
@@ -524,26 +525,26 @@ func (s *service) downloadGenericArtifact(
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		diagnostics.UpstreamStatusCode = response.StatusCode
-		return models.AssetArtifact{}, models.WrapPullDiagnostics(
+		return models.AssetArtifact{}, pullsupport.WrapPullDiagnostics(
 			diagnostics,
 			fmt.Errorf("%w: asset download failed", models.ErrSourceFetchFailed),
 		)
 	}
 	output, err := s.createFile(target)
 	if err != nil {
-		return models.AssetArtifact{}, models.WrapPullDiagnostics(
+		return models.AssetArtifact{}, pullsupport.WrapPullDiagnostics(
 			diagnostics,
 			interruptedAssetError("create staged asset", err),
 		)
 	}
 	written, checksum, err := copyStagedAsset(ctx, output, response.Body, requirement.Name)
 	if err != nil {
-		return models.AssetArtifact{}, models.WrapPullDiagnostics(diagnostics, err)
+		return models.AssetArtifact{}, pullsupport.WrapPullDiagnostics(diagnostics, err)
 	}
 	artifact, err := verifiedGenericArtifact(requirement, written, checksum)
 	if err != nil {
 		diagnostics.Operation = "verify downloaded asset"
-		return models.AssetArtifact{}, models.WrapPullDiagnostics(diagnostics, err)
+		return models.AssetArtifact{}, pullsupport.WrapPullDiagnostics(diagnostics, err)
 	}
 	return artifact, nil
 }
