@@ -10,6 +10,7 @@ import {
 	createManifest,
 	loadConfig,
 	matrixForConfig,
+	minimumPublishedArchiveSizeBytes,
 	publicationIdentity,
 	validateConfig,
 	verifyPayload,
@@ -167,11 +168,17 @@ async function matrixArtifactFixture(t) {
 	for (const backend of config.backends) {
 		for (const target of config.targets) {
 			const archiveName = artifactArchiveName({ backend, target });
-			await writeFile(join(root, archiveName), Buffer.from(`${backend.id}/${target.id}`));
+			await writeFile(join(root, archiveName), archiveFixtureBytes(backend, target));
 			await writeFile(join(root, `${archiveName}.metadata.json`), `${JSON.stringify(metadataFixture(backend, target))}\n`);
 		}
 	}
 	return root;
+}
+
+function archiveFixtureBytes(backend, target) {
+	const bytes = Buffer.alloc(minimumPublishedArchiveSizeBytes + 1, 0x42);
+	bytes.write(`${backend.id}/${target.id}`);
+	return bytes;
 }
 
 test("the join emits one P1 manifest for the exact nine archives and re-verifies their bytes", async (t) => {
@@ -195,7 +202,7 @@ test("the join emits one P1 manifest for the exact nine archives and re-verifies
 	assert.equal(artifact.protocol.revision, config.protocolRevision);
 	assert.match(artifact.artifact.location, new RegExp(`/${result.manifest.publication.releaseTag}/`));
 	assert.match(artifact.artifact.sha256, /^[0-9a-f]{64}$/);
-	assert.equal(artifact.artifact.sizeBytes, Buffer.from("localai-llamacpp/darwin-arm64").length);
+	assert.equal(artifact.artifact.sizeBytes, minimumPublishedArchiveSizeBytes + 1);
 	assert.deepEqual((await readdir(outputRoot)).sort(), [
 		"localai-backend-localai-llamacpp-darwin-arm64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
 		"localai-backend-localai-llamacpp-linux-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
@@ -302,6 +309,63 @@ test("the build harness selects the Windows and Unix strategies at runtime", (t)
 	);
 });
 
+test("the join rejects every config-derived placeholder archive before adoption", async (t) => {
+	const matrixRoot = await matrixArtifactFixture(t);
+	for (const backend of config.backends) {
+		for (const target of config.targets) {
+			const archiveName = artifactArchiveName({ backend, target });
+			for (const size of [minimumPublishedArchiveSizeBytes, minimumPublishedArchiveSizeBytes - 1]) {
+				await writeFile(join(matrixRoot, archiveName), Buffer.alloc(size));
+				assert.throws(
+					() => createManifest({ config, artifactDirectory: matrixRoot, repository: "portpowered/infinite-you" }),
+					new RegExp(`${backend.id}/${target.id} archive is placeholder-sized at ${size} bytes`),
+				);
+			}
+			await writeFile(join(matrixRoot, archiveName), archiveFixtureBytes(backend, target));
+		}
+	}
+});
+
+test("placeholder rejection leaves the previously adopted bundle untouched", async (t) => {
+	const matrixRoot = await matrixArtifactFixture(t);
+	const placeholder = artifactArchiveName({ backend: config.backends[0], target: config.targets[0] });
+	await writeFile(join(matrixRoot, placeholder), Buffer.alloc(minimumPublishedArchiveSizeBytes));
+
+	const outputRoot = await mkdtemp(join(tmpdir(), "localai-backend-existing-release-"));
+	t.after(() => rm(outputRoot, { recursive: true, force: true }));
+	const previousManifest = join(outputRoot, "previous-manifest.json");
+	await writeFile(previousManifest, "previous immutable release");
+
+	assert.throws(
+		() => writePublicationBundle({
+			config,
+			artifactDirectory: matrixRoot,
+			outputDirectory: outputRoot,
+			repository: "portpowered/infinite-you",
+		}),
+		/placeholder-sized/,
+	);
+	assert.deepEqual((await readdir(outputRoot)).sort(), ["previous-manifest.json"]);
+	assert.equal(await readFile(previousManifest, "utf8"), "previous immutable release");
+});
+
+test("the workflow uses immutable actions, package inputs, and the pinned tag guard", async () => {
+	const workflow = await readFile(".github/workflows/localai-backend-artifacts.yml", "utf8");
+	for (const revision of Object.values(config.workflowPins)) assert.match(workflow, new RegExp(`@${revision}`));
+	assert.doesNotMatch(workflow, /uses:\s+[^\n]+@(v\d|main|master|latest)\b/);
+	assert.doesNotMatch(workflow, /update:\s*true/);
+	assert.doesNotMatch(workflow, /apt-get/);
+	assert.doesNotMatch(workflow, /brew install make\b/);
+	assert.match(workflow, /windows_vcpkg_triplet/);
+	assert.match(
+		workflow,
+		/vcpkg\.exe install grpc:\$\{\{ needs\.validate-inputs\.outputs\.windows_vcpkg_triplet \}\}[^\n]*--overlay-triplets=\$overlayTriplets/,
+	);
+	assert.match(workflow, /git\/ref\/tags/);
+	assert.match(workflow, /git\/tags/);
+	assert.match(workflow, /exists but its target could not be resolved/);
+});
+
 test("the Windows build plan resolves Git from the runner path bridge", async (t) => {
 	const root = await mkdtemp(join(tmpdir(), "localai-backend-windows-tools-"));
 	t.after(() => rm(root, { recursive: true, force: true }));
@@ -393,9 +457,9 @@ test("manifest verification rejects bytes tampered after manifest creation", asy
 	const root = await matrixArtifactFixture(t);
 	const manifest = createManifest({ config, artifactDirectory: root, repository: "portpowered/infinite-you" });
 	const archiveName = manifest.artifacts[0].artifact.name;
-	await writeFile(join(root, archiveName), "tampered bytes");
+	await writeFile(join(root, archiveName), Buffer.alloc(minimumPublishedArchiveSizeBytes + 1, 0x43));
 	assert.throws(
-		() => verifyManifestArchives({ manifest, artifactDirectory: root }),
+		() => verifyManifestArchives({ config, manifest, artifactDirectory: root }),
 		/integrity mismatch/,
 	);
 });
