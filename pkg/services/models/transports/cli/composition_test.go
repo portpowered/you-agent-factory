@@ -35,9 +35,10 @@ func compositionHTTPProtocol(t *testing.T) clihttp.Protocol {
 }
 
 type compositionModelsRoot struct {
-	listModels func(context.Context) (modelinference.List, error)
-	getModel   func(context.Context, string) (modelinference.Detail, error)
-	pullModel  func(context.Context, string) (modelinference.PullResult, error)
+	listModels  func(context.Context) (modelinference.List, error)
+	getModel    func(context.Context, string) (modelinference.Detail, error)
+	pullModel   func(context.Context, string) (modelinference.PullResult, error)
+	invokeModel func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error)
 }
 
 func (stub compositionModelsRoot) OpenRuntimeScope(context.Context, modelinference.OpenRuntimeScopeRequest) (modelinference.OpenRuntimeScopeResult, error) {
@@ -125,7 +126,10 @@ func (stub compositionModelsRoot) InvokeModelWithLease(context.Context, modelinf
 	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
 }
 
-func (stub compositionModelsRoot) InvokeModel(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+func (stub compositionModelsRoot) InvokeModel(ctx context.Context, request modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+	if stub.invokeModel != nil {
+		return stub.invokeModel(ctx, request)
+	}
 	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
 }
 
@@ -918,9 +922,9 @@ func TestRootAdapter_InvokeASRRequiresEveryNamedOutputBeforeEffects(t *testing.T
 	})
 	err := service.Invoke(modelscli.InvokeConfig{
 		Context: context.Background(), ModelName: "asr", Operation: modelinference.OperationASR,
-		InputMappings: []string{"audio=@meeting.wav"},
+		InputMappings:  []string{"audio=@meeting.wav"},
 		OutputMappings: []string{"transcript=" + filepath.Join(t.TempDir(), "transcript.txt")},
-		Output: io.Discard,
+		Output:         io.Discard,
 	})
 	if err == nil || !strings.Contains(err.Error(), "transcript, segments") {
 		t.Fatalf("ASR incomplete output mapping error = %v, want both output slots", err)

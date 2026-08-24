@@ -145,7 +145,9 @@ func (fixture *Fixture) invokeTTS(
 		Modality:    models.ModalityAudio,
 		ContentType: "audio/wav",
 		MediaType:   "audio/wav",
-		Content:     base64.StdEncoding.EncodeToString(response.GetAudio()),
+		// The generic Models boundary carries arbitrary bytes in a Go string;
+		// only the text-only ASR fixture field needs a transport encoding.
+		Content: string(response.GetAudio()),
 	}}, nil, nil
 }
 

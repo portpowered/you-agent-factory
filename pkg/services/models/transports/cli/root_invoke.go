@@ -147,7 +147,8 @@ func (service *rootService) tryJoinedInvocation(
 	inputs []modelinference.InferenceInput,
 	catalog modelinference.Detail,
 ) (bool, error) {
-	if len(inputs) == 0 && !cfg.JSON && len(cfg.OutputMappings) == 0 && !genericCLIInlineOutput(cfg, catalog, operation) {
+	if len(inputs) == 0 && !cfg.JSON && len(cfg.OutputMappings) == 0 &&
+		strings.TrimSpace(cfg.OutputPath) == "" && !genericCLIStdoutOutput(cfg, catalog, operation) {
 		return false, nil
 	}
 	request := joinedCLIInvocationRequest(scope, modelName, operation, text, catalog)
@@ -442,7 +443,13 @@ func (service *rootService) writeJoinedInvocation(
 	if genericCLIJSONResult(cfg, catalog, operation, result) {
 		return json.NewEncoder(cfg.Output).Encode(genericInvocationResponseFromInferenceResult(result))
 	}
+	if strings.TrimSpace(cfg.OutputPath) != "" && !cfg.JSON {
+		return service.writeGenericCLIOutputPath(cfg, result)
+	}
 	if genericCLIInlineOutput(cfg, catalog, operation) {
+		return writeGenericCLIOutput(cfg.Output, result)
+	}
+	if genericCLIStdoutOutput(cfg, catalog, operation) {
 		return writeGenericCLIOutput(cfg.Output, result)
 	}
 	response := modelInvocationResponseFromInferenceResult(result, catalog, text)
@@ -473,7 +480,7 @@ func validateCLIOutputShape(
 	if strings.TrimSpace(cfg.OutputPath) != "" {
 		return nil
 	}
-	if !ok || len(selected.Outputs) != 1 || !genericCLIInlineModality(selected.Outputs[0].Modality) {
+	if !ok || len(selected.Outputs) != 1 || !genericCLIStdoutModality(selected.Outputs[0].Modality) {
 		return fmt.Errorf("--output is required unless --json is set")
 	}
 	return nil
@@ -489,6 +496,18 @@ func genericCLIInlineOutput(cfg InvokeConfig, catalog modelinference.Detail, ope
 
 func genericCLIInlineModality(modality modelinference.Modality) bool {
 	return modality == modelinference.ModalityText || modality == modelinference.ModalityJSON
+}
+
+func genericCLIStdoutOutput(cfg InvokeConfig, catalog modelinference.Detail, operation string) bool {
+	if cfg.JSON || strings.TrimSpace(cfg.OutputPath) != "" {
+		return false
+	}
+	selected, ok := catalogOperationForName(catalog, operation)
+	return ok && len(selected.Outputs) == 1 && genericCLIStdoutModality(selected.Outputs[0].Modality)
+}
+
+func genericCLIStdoutModality(modality modelinference.Modality) bool {
+	return genericCLIInlineModality(modality) || modality == modelinference.ModalityAudio
 }
 
 func genericOutputSlotNames(outputs []modelinference.OperationSlot) string {
@@ -528,6 +547,66 @@ func writeGenericCLIOutput(output io.Writer, result modelinference.InvokeModelRe
 	}
 	_, err := output.Write([]byte(value))
 	return err
+}
+
+func (service *rootService) writeGenericCLIOutputPath(
+	cfg InvokeConfig,
+	result modelinference.InvokeModelResult,
+) error {
+	if service.outputFileSystem == nil {
+		return fmt.Errorf("Models CLI output filesystem is required for --output")
+	}
+	if len(result.Outputs) != 1 {
+		return fmt.Errorf("multiple model outputs require --json or explicit output mappings")
+	}
+	output := result.Outputs[0]
+	if strings.TrimSpace(output.Name) == "" {
+		return fmt.Errorf("model invocation returned an unnamed output")
+	}
+	if output.Content == "" {
+		return fmt.Errorf("output slot %q has no inline bytes for publication", output.Name)
+	}
+	mapping := genericCLIOutputMapping{slot: output.Name, path: strings.TrimSpace(cfg.OutputPath)}
+	bySlot := map[string]genericCLIOutputMapping{mapping.slot: mapping}
+	mappings := []genericCLIOutputMapping{mapping}
+	staged := make([]genericCLIOutputStage, 0, 1)
+	backups := make([]genericCLIOutputBackup, 0, 1)
+	published := 0
+	committed := false
+	defer func() {
+		if committed {
+			removeGenericCLIOutputBackups(service.outputFileSystem, backups)
+		} else {
+			rollbackGenericCLIOutputPublication(service.outputFileSystem, staged, backups, published)
+		}
+		for _, stagedOutput := range staged {
+			if stagedOutput.temporary != "" {
+				_ = service.outputFileSystem.Remove(stagedOutput.temporary)
+			}
+		}
+	}()
+
+	var err error
+	staged, err = stageGenericCLIOutputs(cfg.Context, service.outputFileSystem, result, bySlot)
+	if err != nil {
+		return err
+	}
+	if err := cfg.Context.Err(); err != nil {
+		return err
+	}
+	backups, err = backupGenericCLIOutputTargets(cfg.Context, service.outputFileSystem, mappings)
+	if err != nil {
+		return err
+	}
+	published, err = publishGenericCLIOutputs(cfg.Context, service.outputFileSystem, result, staged)
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(cfg.Output, "Wrote audio: %s\n", mapping.path); err != nil {
+		return err
+	}
+	committed = true
+	return nil
 }
 
 type genericCLIOutputMapping struct {
@@ -911,7 +990,7 @@ func joinedCLIInvocationRequest(
 		Scope: scope, Holder: modelsCLIInvokeHolder,
 		Model: modelinference.ModelReference{NameOrURI: modelName}, Operation: operation,
 		Inputs: []modelinference.InferenceInput{{
-			Name: inputName, Modality: modality, ContentType: contentType, Content: text,
+			Name: inputName, Modality: modality, ContentType: contentType, MediaType: contentType, Content: text,
 		}},
 	}
 }

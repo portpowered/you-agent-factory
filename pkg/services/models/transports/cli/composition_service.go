@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 )
 
@@ -85,12 +86,17 @@ func (service *compositionService) canInvokeThroughOwned(cfg InvokeConfig) bool 
 	if len(cfg.InputMappings) > 0 {
 		return true
 	}
-	// Preserve the bootstrap-owned audio export contract. The joined Models
-	// path owns inline generic output and JSON projection; legacy audio export
-	// still needs the bootstrap stream-file response and artifact exporter.
-	if !cfg.JSON && strings.TrimSpace(cfg.OutputPath) != "" {
+	// Existing named-worker models retain the bootstrap audio artifact contract.
+	// The effective built-in tts alias is a generic operation, so its legacy
+	// --text/--output spelling must share the same owned path as --input text=.
+	if !cfg.JSON && strings.TrimSpace(cfg.OutputPath) != "" && !isDirectTTSAlias(cfg) {
 		return false
 	}
 	root, ok := service.owned.(*rootService)
 	return ok && root != nil && root.openInvokeScope != nil
+}
+
+func isDirectTTSAlias(cfg InvokeConfig) bool {
+	return strings.EqualFold(strings.TrimSpace(cfg.ModelName), modelinference.BuiltInModelNameTTS) &&
+		strings.EqualFold(strings.TrimSpace(cfg.Operation), modelinference.OperationTTS)
 }
