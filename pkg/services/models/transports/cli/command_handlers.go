@@ -184,14 +184,35 @@ func readModelsInvokeInputs(inputs resolvedinput.Inputs) (modelsInvokeInputs, er
 	if err != nil {
 		return modelsInvokeInputs{}, fmt.Errorf("read models invoke text: %w", err)
 	}
-	var inputMappings []string
-	if _, present := inputs.State(modelsInvokeInputID); present {
-		inputMappings, err = inputs.StringArray(modelsInvokeInputID)
-		if err != nil {
-			return modelsInvokeInputs{}, fmt.Errorf("read models invoke input mappings: %w", err)
-		}
+	inputMappings, err := readModelsInvokeInputMappings(inputs)
+	if err != nil {
+		return modelsInvokeInputs{}, err
 	}
+	outputPath, outputMappings, err := readModelsInvokeOutputs(inputs)
+	if err != nil {
+		return modelsInvokeInputs{}, err
+	}
+	return modelsInvokeInputs{
+		modelName: modelName, operation: operation, text: text,
+		inputMappings: inputMappings,
+		outputPath:    outputPath, outputMappings: outputMappings,
+	}, nil
+}
+
+func readModelsInvokeInputMappings(inputs resolvedinput.Inputs) ([]string, error) {
+	if _, present := inputs.State(modelsInvokeInputID); !present {
+		return nil, nil
+	}
+	inputMappings, err := inputs.StringArray(modelsInvokeInputID)
+	if err != nil {
+		return nil, fmt.Errorf("read models invoke input mappings: %w", err)
+	}
+	return inputMappings, nil
+}
+
+func readModelsInvokeOutputs(inputs resolvedinput.Inputs) (string, []string, error) {
 	var outputValues []string
+	var err error
 	if _, present := inputs.State(modelsInvokeOutputID); present {
 		outputValues, err = inputs.StringArray(modelsInvokeOutputID)
 		if err != nil {
@@ -200,12 +221,12 @@ func readModelsInvokeInputs(inputs resolvedinput.Inputs) (modelsInvokeInputs, er
 			// manifest parsing always supplies StringArray here.
 			var scalar string
 			if scalar, err = inputs.String(modelsInvokeOutputID); err != nil {
-				return modelsInvokeInputs{}, fmt.Errorf("read models invoke output values: %w", err)
+				return "", nil, fmt.Errorf("read models invoke output values: %w", err)
 			}
 			outputValues = []string{scalar}
 		}
 	} else if _, err = inputs.StringArray(modelsInvokeOutputID); err != nil {
-		return modelsInvokeInputs{}, fmt.Errorf("read models invoke output: %w", err)
+		return "", nil, fmt.Errorf("read models invoke output: %w", err)
 	}
 	var outputPath string
 	var outputMappings []string
@@ -216,7 +237,7 @@ func readModelsInvokeInputs(inputs resolvedinput.Inputs) (modelsInvokeInputs, er
 			continue
 		}
 		if outputPath != "" {
-			return modelsInvokeInputs{}, fmt.Errorf("repeatable --output values must use slot=path mappings after the first unqualified path")
+			return "", nil, fmt.Errorf("repeatable --output values must use slot=path mappings after the first unqualified path")
 		}
 		outputPath = value
 	}
@@ -224,18 +245,14 @@ func readModelsInvokeInputs(inputs resolvedinput.Inputs) (modelsInvokeInputs, er
 		var legacyMappings []string
 		legacyMappings, err = inputs.StringArray(modelsInvokeOutputMapID)
 		if err != nil {
-			return modelsInvokeInputs{}, fmt.Errorf("read models invoke output mappings: %w", err)
+			return "", nil, fmt.Errorf("read models invoke output mappings: %w", err)
 		}
 		outputMappings = append(outputMappings, legacyMappings...)
 	}
 	if outputPath != "" && len(outputMappings) > 0 {
-		return modelsInvokeInputs{}, fmt.Errorf("--output path cannot be combined with named output mappings")
+		return "", nil, fmt.Errorf("--output path cannot be combined with named output mappings")
 	}
-	return modelsInvokeInputs{
-		modelName: modelName, operation: operation, text: text,
-		inputMappings: inputMappings,
-		outputPath:    outputPath, outputMappings: outputMappings,
-	}, nil
+	return outputPath, outputMappings, nil
 }
 
 func (h *CommandHandler) Pull(

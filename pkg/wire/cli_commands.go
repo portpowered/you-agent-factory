@@ -16,7 +16,6 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -993,12 +992,4 @@ func provideRunOpener(
 			prepareWorkTarget, nil, loadMockWorkers, buildRuntimeRequest, presentations, visualizations,
 		)
 	}
-}
-
-func provideCLIObserver(edges serviceedges.Edges) platformprocess.CLIObserver {
-	return edges.CLIObserver
-}
-
-func provideCLICommandFactory(operations cli.CommandOperations) cli.CommandFactory {
-	return cli.NewCommandFactory(operations)
 }

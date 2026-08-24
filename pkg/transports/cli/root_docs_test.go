@@ -77,14 +77,35 @@ func assertDocumentedModelConfigs(t *testing.T, listed bool, inspected, pulled s
 	if len(invocations) != 3 {
 		t.Fatalf("documented invocations reaching model boundary = %d, want 3", len(invocations))
 	}
-	if got := invocations[0]; got.ModelName != "tts" || got.Operation != "TTS" || got.Text != "" || len(got.InputMappings) != 1 || got.InputMappings[0] != "text=Read the release summary." || got.OutputPath != "" || got.JSON {
-		t.Fatalf("documented raw-audio invocation = %#v, want generic text input without metadata mode", got)
+	wants := []documentedModelInvocationProjection{
+		{modelName: "tts", operation: "TTS", inputMapping: "text=Read the release summary."},
+		{modelName: "tts", operation: "TTS", text: "Read the release summary.", outputPath: "speech.wav"},
+		{modelName: "tts", operation: "TTS", inputMapping: "text=Read the release summary.", json: true},
 	}
-	if got := invocations[1]; got.ModelName != "tts" || got.Operation != "TTS" || got.Text != "Read the release summary." || got.OutputPath != "speech.wav" || got.JSON {
-		t.Fatalf("documented alias invocation = %#v, want direct TTS text and output path", got)
+	for index, want := range wants {
+		if got := projectDocumentedModelInvocation(invocations[index]); got != want {
+			t.Fatalf("documented invocation[%d] = %#v, want %#v", index, got, want)
+		}
 	}
-	if got := invocations[2]; got.ModelName != "tts" || got.Operation != "TTS" || got.Text != "" || len(got.InputMappings) != 1 || got.InputMappings[0] != "text=Read the release summary." || got.OutputPath != "" || !got.JSON {
-		t.Fatalf("documented JSON invocation = %#v, want generic text input and JSON mode", got)
+}
+
+type documentedModelInvocationProjection struct {
+	modelName    string
+	operation    string
+	text         string
+	inputMapping string
+	outputPath   string
+	json         bool
+}
+
+func projectDocumentedModelInvocation(cfg modelscli.InvokeConfig) documentedModelInvocationProjection {
+	inputMapping := ""
+	if len(cfg.InputMappings) == 1 {
+		inputMapping = cfg.InputMappings[0]
+	}
+	return documentedModelInvocationProjection{
+		modelName: cfg.ModelName, operation: cfg.Operation, text: cfg.Text,
+		inputMapping: inputMapping, outputPath: cfg.OutputPath, json: cfg.JSON,
 	}
 }
 

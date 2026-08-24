@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/root"
-	"github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 )
@@ -26,7 +25,7 @@ var runProcess = func() int {
 
 	workingDirectory, err := os.Getwd()
 	if err == nil {
-		process, buildErr := root.BuildProcess(ctx, edges.Edges{})
+		process, buildErr := root.BuildProcess(ctx, modelBackendEdgesFromEnvironment())
 		err = buildErr
 		if err == nil {
 			stdinIsTTY := streamIsTerminal(os.Stdin)

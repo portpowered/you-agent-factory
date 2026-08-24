@@ -177,10 +177,6 @@ func (fixture *Fixture) Endpoint() string {
 	return fixture.endpoint
 }
 
-// Address is an alias for Endpoint for managed-backend edges that call their
-// dial target an address rather than an endpoint.
-func (fixture *Fixture) Address() string { return fixture.Endpoint() }
-
 // Close stops the server, closes active connections, and waits for Serve to
 // release its listener. It is idempotent and performs no timed polling.
 func (fixture *Fixture) Close() error {

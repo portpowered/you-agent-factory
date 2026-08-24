@@ -25,7 +25,24 @@ import (
 // one readiness projection, and one lease-backed fixture invocation.
 func TestModelsDirectTTSAliasEndToEndThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
+	story := setupTTSStory(t)
+	assertTTSReady(t, story)
+	wantAudio := localai.AudioBytes()
+	runGenericTTS(t, story, wantAudio)
+	runAliasTTS(t, story, wantAudio)
+	assertEquivalentTTSRequests(t, *story.requests)
+	runFailedAndRecoveredTTS(t, story, wantAudio)
+}
 
+type ttsStory struct {
+	process     support.Process
+	dir         string
+	environment []string
+	requests    *[]models.InvokeModelRequest
+}
+
+func setupTTSStory(t *testing.T) ttsStory {
+	t.Helper()
 	fixture := localai.Start(t)
 	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
@@ -85,12 +102,15 @@ func TestModelsDirectTTSAliasEndToEndThroughRootBuildProcess(t *testing.T) {
 		ModelRuntimeHTTPClient: modelServer.Client(),
 	})
 	t.Cleanup(func() { closeRootProcess(t, process, "close TTS root process") })
-	environment := functionalHomeEnvironment(home)
+	return ttsStory{process: process, dir: dir, environment: functionalHomeEnvironment(home), requests: &requests}
+}
 
+func assertTTSReady(t *testing.T, story ttsStory) {
+	t.Helper()
 	listInputs := support.FakeInputs(t.Context(), []string{"you", "--json", "models", "list"})
-	listInputs.Input.Env = environment
-	listInputs.Input.WorkingDirectory = dir
-	if err := process.Execute(listInputs.Input); err != nil {
+	listInputs.Input.Env = story.environment
+	listInputs.Input.WorkingDirectory = story.dir
+	if err := story.process.Execute(listInputs.Input); err != nil {
 		t.Fatalf("Process.Execute(models list) error = %v", err)
 	}
 	var listed factoryapi.ListModelsResponse
@@ -106,17 +126,19 @@ func TestModelsDirectTTSAliasEndToEndThroughRootBuildProcess(t *testing.T) {
 		t.Fatalf("models list TTS runtime = %#v, want READY/INSTALLED", tts.ManagedRuntime)
 	}
 	t.Logf("runtime proof command: you --json models list exitCode=0 model=tts readiness=%s lifecycle=%s", tts.ManagedRuntime.ReadinessState, tts.ManagedRuntime.LifecycleState)
+}
 
-	wantAudio := localai.AudioBytes()
+func runGenericTTS(t *testing.T, story ttsStory, wantAudio []byte) {
+	t.Helper()
 	var genericStdout, genericStderr bytes.Buffer
 	genericInputs := support.FakeInputs(t.Context(), []string{
 		"you", "models", "invoke", "tts", "--operation", "TTS", "--input", "text=hello",
 	})
-	genericInputs.Input.Env = environment
-	genericInputs.Input.WorkingDirectory = dir
+	genericInputs.Input.Env = story.environment
+	genericInputs.Input.WorkingDirectory = story.dir
 	genericInputs.Input.Stdout = &genericStdout
 	genericInputs.Input.Stderr = &genericStderr
-	if err := process.Execute(genericInputs.Input); err != nil {
+	if err := story.process.Execute(genericInputs.Input); err != nil {
 		t.Fatalf("Process.Execute(generic TTS stdout) error = %v", err)
 	}
 	if !bytes.Equal(genericStdout.Bytes(), wantAudio) {
@@ -127,17 +149,20 @@ func TestModelsDirectTTSAliasEndToEndThroughRootBuildProcess(t *testing.T) {
 	}
 	t.Logf("runtime proof command: you models invoke tts --operation TTS --input text=hello")
 	t.Logf("runtime proof exitCode=0 stdout=<raw audio bytes> mediaType=audio/wav size=%d sha256=%s stderr=%q", len(genericStdout.Bytes()), ttsDigest(genericStdout.Bytes()), genericStderr.String())
+}
 
+func runAliasTTS(t *testing.T, story ttsStory, wantAudio []byte) {
+	t.Helper()
 	aliasPath := filepath.Join(t.TempDir(), "alias.wav")
 	var aliasStdout, aliasStderr bytes.Buffer
 	aliasInputs := support.FakeInputs(t.Context(), []string{
 		"you", "models", "invoke", "tts", "--operation", "TTS", "--text", "hello", "--output", aliasPath,
 	})
-	aliasInputs.Input.Env = environment
-	aliasInputs.Input.WorkingDirectory = dir
+	aliasInputs.Input.Env = story.environment
+	aliasInputs.Input.WorkingDirectory = story.dir
 	aliasInputs.Input.Stdout = &aliasStdout
 	aliasInputs.Input.Stderr = &aliasStderr
-	if err := process.Execute(aliasInputs.Input); err != nil {
+	if err := story.process.Execute(aliasInputs.Input); err != nil {
 		t.Fatalf("Process.Execute(direct TTS alias) error = %v", err)
 	}
 	aliasAudio, err := os.ReadFile(aliasPath)
@@ -152,18 +177,20 @@ func TestModelsDirectTTSAliasEndToEndThroughRootBuildProcess(t *testing.T) {
 	}
 	t.Logf("runtime proof command: you models invoke tts --operation TTS --text hello --output %s", aliasPath)
 	t.Logf("runtime proof exitCode=0 stdout=%q stderr=%q output mediaType=audio/wav size=%d sha256=%s", aliasStdout.String(), aliasStderr.String(), len(aliasAudio), ttsDigest(aliasAudio))
-	assertEquivalentTTSRequests(t, requests[:2])
+}
 
+func runFailedAndRecoveredTTS(t *testing.T, story ttsStory, wantAudio []byte) {
+	t.Helper()
 	failurePath := filepath.Join(t.TempDir(), "failure.wav")
 	var failureStdout, failureStderr bytes.Buffer
 	failureInputs := support.FakeInputs(t.Context(), []string{
 		"you", "models", "invoke", "tts", "--operation", "TTS", "--text", "backend failure", "--output", failurePath,
 	})
-	failureInputs.Input.Env = environment
-	failureInputs.Input.WorkingDirectory = dir
+	failureInputs.Input.Env = story.environment
+	failureInputs.Input.WorkingDirectory = story.dir
 	failureInputs.Input.Stdout = &failureStdout
 	failureInputs.Input.Stderr = &failureStderr
-	failureErr := process.Execute(failureInputs.Input)
+	failureErr := story.process.Execute(failureInputs.Input)
 	if failureErr == nil {
 		t.Fatal("Process.Execute(failing direct TTS alias) error = nil, want backend failure")
 	}
@@ -181,11 +208,11 @@ func TestModelsDirectTTSAliasEndToEndThroughRootBuildProcess(t *testing.T) {
 	recoveryInputs := support.FakeInputs(t.Context(), []string{
 		"you", "models", "invoke", "tts", "--operation", "TTS", "--text", "after failure", "--output", recoveryPath,
 	})
-	recoveryInputs.Input.Env = environment
-	recoveryInputs.Input.WorkingDirectory = dir
+	recoveryInputs.Input.Env = story.environment
+	recoveryInputs.Input.WorkingDirectory = story.dir
 	recoveryInputs.Input.Stdout = &recoveryStdout
 	recoveryInputs.Input.Stderr = &recoveryStderr
-	if err := process.Execute(recoveryInputs.Input); err != nil {
+	if err := story.process.Execute(recoveryInputs.Input); err != nil {
 		t.Fatalf("Process.Execute(recovered direct TTS alias) error = %v", err)
 	}
 	recoveryAudio, err := os.ReadFile(recoveryPath)
@@ -197,8 +224,8 @@ func TestModelsDirectTTSAliasEndToEndThroughRootBuildProcess(t *testing.T) {
 	}
 	t.Logf("runtime proof command: you models invoke tts --operation TTS --text after-failure --output %s", recoveryPath)
 	t.Logf("runtime proof exitCode=0 stdout=%q stderr=%q output mediaType=audio/wav size=%d sha256=%s", recoveryStdout.String(), recoveryStderr.String(), len(recoveryAudio), ttsDigest(recoveryAudio))
-	if len(requests) != 4 {
-		t.Fatalf("fixture-backed TTS request count = %d, want generic, alias, failure, recovery", len(requests))
+	if len(*story.requests) != 4 {
+		t.Fatalf("fixture-backed TTS request count = %d, want generic, alias, failure, recovery", len(*story.requests))
 	}
 }
 

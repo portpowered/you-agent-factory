@@ -68,6 +68,65 @@ type AudioTranscriptionCodec = ASRCodec
 // NewASRCodec constructs the ASR codec.
 func NewASRCodec() ASRCodec { return ASRCodec{} }
 
+type asrRequestBuilder struct {
+	audio          []byte
+	audioMedia     string
+	audioSeen      bool
+	prompt         string
+	parametersSeen bool
+	promptSeen     bool
+	parameters     map[string]any
+}
+
+func newASRRequestBuilder() asrRequestBuilder {
+	return asrRequestBuilder{parameters: make(map[string]any)}
+}
+
+func (builder *asrRequestBuilder) addInput(input models.InferenceInput) error {
+	switch strings.TrimSpace(input.Name) {
+	case "audio":
+		if builder.audioSeen {
+			return asrRepeatedSlotFailure("audio")
+		}
+		mediaType, err := asrValidateAudioInput(input)
+		if err != nil {
+			return err
+		}
+		builder.audio = []byte(input.Content)
+		builder.audioMedia = mediaType
+		builder.audioSeen = true
+	case "prompt":
+		if builder.promptSeen {
+			return asrRepeatedSlotFailure("prompt")
+		}
+		if err := asrValidatePromptInput(input); err != nil {
+			return err
+		}
+		builder.prompt = input.Content
+		builder.promptSeen = true
+	case "parameters":
+		if builder.parametersSeen {
+			return asrRepeatedSlotFailure("parameters")
+		}
+		if err := asrValidateParametersInput(input); err != nil {
+			return err
+		}
+		parsed, err := asrParseParameterObject(input.Content)
+		if err != nil {
+			return asrInvalidParametersFailure()
+		}
+		for name, value := range parsed {
+			if err := asrAddParameter(builder.parameters, name, value); err != nil {
+				return err
+			}
+		}
+		builder.parametersSeen = true
+	default:
+		return asrUnknownSlotFailure(input.Name)
+	}
+	return nil
+}
+
 // EncodeRequest validates and maps one generic Models request. The returned
 // audio and parameters are detached from caller-owned values.
 func (ASRCodec) EncodeRequest(request models.InvokeModelRequest) (ASRRequest, error) {
@@ -80,75 +139,29 @@ func (ASRCodec) EncodeRequest(request models.InvokeModelRequest) (ASRRequest, er
 		inputs = []models.InferenceInput{request.Input}
 	}
 
-	var (
-		audio          []byte
-		audioMedia     string
-		audioSeen      bool
-		prompt         string
-		promptSeen     bool
-		parametersSeen bool
-		parameters     = make(map[string]any)
-	)
+	builder := newASRRequestBuilder()
 	for _, input := range inputs {
-		switch strings.TrimSpace(input.Name) {
-		case "audio":
-			if audioSeen {
-				return ASRRequest{}, asrRepeatedSlotFailure("audio")
-			}
-			mediaType, err := asrValidateAudioInput(input)
-			if err != nil {
-				return ASRRequest{}, err
-			}
-			audio = []byte(input.Content)
-			audioMedia = mediaType
-			audioSeen = true
-		case "prompt":
-			if promptSeen {
-				return ASRRequest{}, asrRepeatedSlotFailure("prompt")
-			}
-			if err := asrValidatePromptInput(input); err != nil {
-				return ASRRequest{}, err
-			}
-			prompt = input.Content
-			promptSeen = true
-		case "parameters":
-			if parametersSeen {
-				return ASRRequest{}, asrRepeatedSlotFailure("parameters")
-			}
-			if err := asrValidateParametersInput(input); err != nil {
-				return ASRRequest{}, err
-			}
-			parsed, err := asrParseParameterObject(input.Content)
-			if err != nil {
-				return ASRRequest{}, asrInvalidParametersFailure()
-			}
-			for name, value := range parsed {
-				if err := asrAddParameter(parameters, name, value); err != nil {
-					return ASRRequest{}, err
-				}
-			}
-			parametersSeen = true
-		default:
-			return ASRRequest{}, asrUnknownSlotFailure(input.Name)
-		}
-	}
-
-	if !audioSeen {
-		return ASRRequest{}, asrMissingAudioFailure()
-	}
-	for _, parameter := range request.Parameters {
-		if err := asrAddParameter(parameters, parameter.Name, parameter.Value); err != nil {
+		if err := builder.addInput(input); err != nil {
 			return ASRRequest{}, err
 		}
 	}
-	if len(parameters) == 0 {
-		parameters = nil
+
+	if !builder.audioSeen {
+		return ASRRequest{}, asrMissingAudioFailure()
+	}
+	for _, parameter := range request.Parameters {
+		if err := asrAddParameter(builder.parameters, parameter.Name, parameter.Value); err != nil {
+			return ASRRequest{}, err
+		}
+	}
+	if len(builder.parameters) == 0 {
+		builder.parameters = nil
 	}
 	return ASRRequest{
-		Audio:      append([]byte(nil), audio...),
-		MediaType:  audioMedia,
-		Prompt:     prompt,
-		Parameters: asrCloneObject(parameters),
+		Audio:      append([]byte(nil), builder.audio...),
+		MediaType:  builder.audioMedia,
+		Prompt:     builder.prompt,
+		Parameters: asrCloneObject(builder.parameters),
 	}, nil
 }
 
@@ -286,39 +299,48 @@ func asrAddParameter(parameters map[string]any, name string, value any) error {
 	return nil
 }
 
+var asrParameterValidators = map[string]func(any) bool{
+	"language":                asrValidLanguage,
+	"threads":                 asrPositiveInteger,
+	"translate":               asrValidBoolean,
+	"diarize":                 asrValidBoolean,
+	"temperature":             asrFiniteNumber,
+	"timestamp_granularities": asrValidTimestampGranularities,
+}
+
 func asrValidateParameter(name string, value any) error {
-	switch name {
-	case "language":
-		if language, ok := value.(string); !ok || strings.TrimSpace(language) == "" {
-			return asrInvalidParameterFailure(name)
-		}
-	case "threads":
-		if !asrPositiveInteger(value) {
-			return asrInvalidParameterFailure(name)
-		}
-	case "translate", "diarize":
-		if _, ok := value.(bool); !ok {
-			return asrInvalidParameterFailure(name)
-		}
-	case "temperature":
-		if !asrFiniteNumber(value) {
-			return asrInvalidParameterFailure(name)
-		}
-	case "timestamp_granularities":
-		values, ok := value.([]any)
-		if !ok || len(values) == 0 {
-			return asrInvalidParameterFailure(name)
-		}
-		for _, item := range values {
-			granularity, ok := item.(string)
-			if !ok || (granularity != "segment" && granularity != "word") {
-				return asrInvalidParameterFailure(name)
-			}
-		}
-	default:
+	validator, ok := asrParameterValidators[name]
+	if !ok {
 		return asrUnsupportedParameterFailure(name)
 	}
+	if !validator(value) {
+		return asrInvalidParameterFailure(name)
+	}
 	return nil
+}
+
+func asrValidLanguage(value any) bool {
+	language, ok := value.(string)
+	return ok && strings.TrimSpace(language) != ""
+}
+
+func asrValidBoolean(value any) bool {
+	_, ok := value.(bool)
+	return ok
+}
+
+func asrValidTimestampGranularities(value any) bool {
+	values, ok := value.([]any)
+	if !ok || len(values) == 0 {
+		return false
+	}
+	for _, item := range values {
+		granularity, ok := item.(string)
+		if !ok || (granularity != "segment" && granularity != "word") {
+			return false
+		}
+	}
+	return true
 }
 
 func asrPositiveInteger(value any) bool {

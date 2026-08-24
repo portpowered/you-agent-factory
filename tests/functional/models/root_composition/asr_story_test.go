@@ -27,7 +27,30 @@ import (
 // and the CLI publishes both outputs atomically before exposing JSON metadata.
 func TestModelsASRDirectCLIEndToEndThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
+	story := setupASRStory(t)
+	runASRMappedInvocation(t, story)
+	runASRJSONInvocation(t, story)
+}
 
+type asrStory struct {
+	process          support.Process
+	fixture          *localai.Fixture
+	home             string
+	dir              string
+	inputPath        string
+	inputBytes       []byte
+	transcriptPath   string
+	segmentsPath     string
+	wantSegments     string
+	received         *models.ASRBackendRequest
+	rejectingNetwork *rejectingModelAssetHTTP
+	hostLauncher     *recordingModelHostLauncher
+	protocol         *joinedProtocolNegotiator
+	compatibility    *joinedCompatibilityChecker
+}
+
+func setupASRStory(t *testing.T) asrStory {
+	t.Helper()
 	fixture := localai.Start(t)
 	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
@@ -52,9 +75,9 @@ func TestModelsASRDirectCLIEndToEndThroughRootBuildProcess(t *testing.T) {
 	segmentsPath := filepath.Join(t.TempDir(), "segments.json")
 	const wantSegments = `[{"id":0,"start":0,"end":1500,"text":"LOCALAI_FIXTURE_SEGMENT"}]`
 
-	var received models.ASRBackendRequest
+	received := &models.ASRBackendRequest{}
 	asrBackend := func(ctx context.Context, request models.ASRBackendRequest) (models.ASRBackendResponse, error) {
-		received = request
+		*received = request
 		response, err := fixture.ASRBackend(ctx, request)
 		if err != nil {
 			return models.ASRBackendResponse{}, err
@@ -102,56 +125,69 @@ func TestModelsASRDirectCLIEndToEndThroughRootBuildProcess(t *testing.T) {
 		ModelRuntimeHTTPClient: modelServer.Client(),
 	})
 	t.Cleanup(func() { closeRootProcess(t, process, "close ASR root process") })
+	return asrStory{
+		process: process, fixture: fixture, home: home, dir: dir, inputPath: inputPath, inputBytes: inputBytes,
+		transcriptPath: transcriptPath, segmentsPath: segmentsPath, wantSegments: wantSegments,
+		received: received, rejectingNetwork: rejectingNetwork, hostLauncher: hostLauncher,
+		protocol: protocol, compatibility: compatibility,
+	}
+}
+
+func runASRMappedInvocation(t *testing.T, story asrStory) {
+	t.Helper()
 
 	var output, invokeStderr bytes.Buffer
 	invoke := support.FakeInputs(t.Context(), []string{
-		"you", "models", "invoke", "asr", "--operation", "ASR",
-		"--input", "audio=@" + inputPath,
-		"--output", "transcript=" + transcriptPath,
-		"--output", "segments=" + segmentsPath,
+		"you", "models", "invoke", "asr", "--operation", "ASR", "--input", "audio=@" + story.inputPath,
+		"--output", "transcript=" + story.transcriptPath, "--output", "segments=" + story.segmentsPath,
 	})
-	invoke.Input.Env = functionalHomeEnvironment(home)
-	invoke.Input.WorkingDirectory = dir
+	invoke.Input.Env = functionalHomeEnvironment(story.home)
+	invoke.Input.WorkingDirectory = story.dir
 	invoke.Input.Stdout = &output
 	invoke.Input.Stderr = &invokeStderr
-	if err := process.Execute(invoke.Input); err != nil {
+	if err := story.process.Execute(invoke.Input); err != nil {
 		t.Fatalf("Process.Execute(ASR mapped outputs) error = %v", err)
 	}
-	transcript, err := os.ReadFile(transcriptPath)
+	transcript, err := os.ReadFile(story.transcriptPath)
 	if err != nil {
 		t.Fatalf("read transcript output: %v", err)
 	}
 	if string(transcript) != localai.FixtureTranscript {
 		t.Fatalf("transcript output = %q, want %q", transcript, localai.FixtureTranscript)
 	}
-	segments, err := os.ReadFile(segmentsPath)
+	segments, err := os.ReadFile(story.segmentsPath)
 	if err != nil {
 		t.Fatalf("read segments output: %v", err)
 	}
-	if string(segments) != wantSegments {
+	if string(segments) != story.wantSegments {
 		t.Fatalf("segments output = %s, want canonical timestamped JSON", segments)
 	}
-	if string(received.Audio) != string(inputBytes) || received.MediaType != "audio/wav" {
-		t.Fatalf("ASR backend request = %#v, want exact bytes and audio/wav", received)
+	if string(story.received.Audio) != string(story.inputBytes) || story.received.MediaType != "audio/wav" {
+		t.Fatalf("ASR backend request = %#v, want exact bytes and audio/wav", *story.received)
 	}
-	assertASRFixtureCall(t, fixture.Calls(), base64.StdEncoding.EncodeToString(inputBytes))
+	assertASRFixtureCall(t, story.fixture.Calls(), base64.StdEncoding.EncodeToString(story.inputBytes))
 	transcriptDigest := sha256.Sum256(transcript)
 	segmentsDigest := sha256.Sum256(segments)
-	t.Logf("runtime proof command: you models invoke asr --operation ASR --input audio=@%s --output transcript=%s --output segments=%s", inputPath, transcriptPath, segmentsPath)
+	t.Logf("runtime proof command: you models invoke asr --operation ASR --input audio=@%s --output transcript=%s --output segments=%s", story.inputPath, story.transcriptPath, story.segmentsPath)
 	t.Logf("runtime proof exitCode=0 stdout=%q stderr=%q", output.String(), invokeStderr.String())
 	t.Logf("runtime proof output transcript mediaType=text/plain bytes=%q size=%d sha256=%s", string(transcript), len(transcript), hex.EncodeToString(transcriptDigest[:]))
 	t.Logf("runtime proof output segments mediaType=application/json bytes=%s size=%d sha256=%s", string(segments), len(segments), hex.EncodeToString(segmentsDigest[:]))
 
-	output.Reset()
+	assertASRCacheEffects(t, story)
+}
+
+func runASRJSONInvocation(t *testing.T, story asrStory) {
+	t.Helper()
+	var output bytes.Buffer
 	var jsonStderr bytes.Buffer
 	jsonInvoke := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "models", "invoke", "asr", "--operation", "ASR", "--input", "audio=@" + inputPath,
+		"you", "--json", "models", "invoke", "asr", "--operation", "ASR", "--input", "audio=@" + story.inputPath,
 	})
-	jsonInvoke.Input.Env = functionalHomeEnvironment(home)
-	jsonInvoke.Input.WorkingDirectory = dir
+	jsonInvoke.Input.Env = functionalHomeEnvironment(story.home)
+	jsonInvoke.Input.WorkingDirectory = story.dir
 	jsonInvoke.Input.Stdout = &output
 	jsonInvoke.Input.Stderr = &jsonStderr
-	if err := process.Execute(jsonInvoke.Input); err != nil {
+	if err := story.process.Execute(jsonInvoke.Input); err != nil {
 		t.Fatalf("Process.Execute(ASR --json) error = %v", err)
 	}
 	var response factoryapi.GenericModelInvocationResponse
@@ -165,14 +201,18 @@ func TestModelsASRDirectCLIEndToEndThroughRootBuildProcess(t *testing.T) {
 		t.Fatalf("ASR JSON media metadata = %#v", response.Outputs)
 	}
 	artifact := response.Outputs[1].Artifact
-	if artifact == nil || artifact.ArtifactRef != "artifact:segments" || artifact.SizeBytes == nil || *artifact.SizeBytes != int64(len(segments)) || artifact.Properties == nil || (*artifact.Properties)["digest"] != "sha256:fixture-segments" {
+	if artifact == nil || artifact.ArtifactRef != "artifact:segments" || artifact.SizeBytes == nil || *artifact.SizeBytes != int64(len(story.wantSegments)) || artifact.Properties == nil || (*artifact.Properties)["digest"] != "sha256:fixture-segments" {
 		t.Fatalf("ASR JSON artifact metadata = %#v, want opaque ref/size/digest", artifact)
 	}
-	t.Logf("runtime proof command: you --json models invoke asr --operation ASR --input audio=@%s", inputPath)
+	t.Logf("runtime proof command: you --json models invoke asr --operation ASR --input audio=@%s", story.inputPath)
 	t.Logf("runtime proof exitCode=0 stdout=%s stderr=%q", output.String(), jsonStderr.String())
 	t.Logf("runtime proof JSON outputs transcript mediaType=text/plain segments mediaType=application/json artifactRef=%s size=%d digest=%s", artifact.ArtifactRef, *artifact.SizeBytes, (*artifact.Properties)["digest"])
-	if rejectingNetwork.Calls() != 0 || hostLauncher.Calls() == 0 || protocol.Calls() == 0 || compatibility.Calls() == 0 {
-		t.Fatalf("ASR effects = asset network %d, host starts %d, protocol %d, compatibility %d; want cache-backed joined execution", rejectingNetwork.Calls(), hostLauncher.Calls(), protocol.Calls(), compatibility.Calls())
+}
+
+func assertASRCacheEffects(t *testing.T, story asrStory) {
+	t.Helper()
+	if story.rejectingNetwork.Calls() != 0 || story.hostLauncher.Calls() == 0 || story.protocol.Calls() == 0 || story.compatibility.Calls() == 0 {
+		t.Fatalf("ASR effects = asset network %d, host starts %d, protocol %d, compatibility %d; want cache-backed joined execution", story.rejectingNetwork.Calls(), story.hostLauncher.Calls(), story.protocol.Calls(), story.compatibility.Calls())
 	}
 }
 

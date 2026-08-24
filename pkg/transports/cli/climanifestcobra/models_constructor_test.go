@@ -253,6 +253,13 @@ func TestGenericModelsPullDispatchResolvesLocalAndInheritedInputs(t *testing.T) 
 }
 
 func TestGenericModelsInvokeDispatchResolvesDefaultsAndExplicitInputs(t *testing.T) {
+	manifest, rootRecord, _, invokeRecord := modelsInvokeManifest(t)
+	local, inherited := executeGenericModelsInvoke(t, manifest, rootRecord, invokeRecord)
+	assertGenericModelsInvokeInputs(t, local, inherited)
+}
+
+func modelsInvokeManifest(t *testing.T) (climanifest.Manifest, climanifest.Command, climanifest.Command, climanifest.Command) {
+	t.Helper()
 	manifest, err := generated.ModelsDocsFamilyManifest()
 	if err != nil {
 		t.Fatal(err)
@@ -274,22 +281,25 @@ func TestGenericModelsInvokeDispatchResolvesDefaultsAndExplicitInputs(t *testing
 		t.Fatal(err)
 	}
 	manifest.Commands = map[string]climanifest.Command{
-		rootRecord.ID:   rootRecord,
-		modelsRecord.ID: modelsRecord,
-		invokeRecord.ID: invokeRecord,
+		rootRecord.ID: rootRecord, modelsRecord.ID: modelsRecord, invokeRecord.ID: invokeRecord,
 	}
+	return manifest, rootRecord, modelsRecord, invokeRecord
+}
 
+func executeGenericModelsInvoke(
+	t *testing.T,
+	manifest climanifest.Manifest,
+	rootRecord climanifest.Command,
+	invokeRecord climanifest.Command,
+) (resolvedinput.Inputs, resolvedinput.Inputs) {
+	t.Helper()
 	var local, inherited resolvedinput.Inputs
 	root, err := climanifestcobra.NewCommandTree(manifest, climanifestcobra.GenericBindings{
 		Handlers: climanifestcobra.HandlerRegistry{
 			rootRecord.Handler.ID: func(context.Context, map[string]any) error { return nil },
 		},
 		ResolvedCobraHandlers: climanifestcobra.ResolvedCobraHandlerRegistry{
-			invokeRecord.Handler.ID: func(
-				_ *cobra.Command,
-				gotLocal resolvedinput.Inputs,
-				gotInherited resolvedinput.Inputs,
-			) error {
+			invokeRecord.Handler.ID: func(_ *cobra.Command, gotLocal, gotInherited resolvedinput.Inputs) error {
 				local, inherited = gotLocal, gotInherited
 				return nil
 			},
@@ -299,12 +309,17 @@ func TestGenericModelsInvokeDispatchResolvesDefaultsAndExplicitInputs(t *testing
 		t.Fatalf("NewCommandTree() error = %v", err)
 	}
 	root.SetArgs([]string{
-		"--json", "models", "invoke", "OMNIVOICE_Q4_K_M",
-		"--text", "  hello  ", "--input", "audio=@meeting.wav", "--input", "prompt=hint", "--output", "  speech.wav  ",
+		"--json", "models", "invoke", "OMNIVOICE_Q4_K_M", "--text", "  hello  ",
+		"--input", "audio=@meeting.wav", "--input", "prompt=hint", "--output", "  speech.wav  ",
 	})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("Execute(models invoke) error = %v", err)
 	}
+	return local, inherited
+}
+
+func assertGenericModelsInvokeInputs(t *testing.T, local, inherited resolvedinput.Inputs) {
+	t.Helper()
 	for inputID, want := range map[string]string{
 		"you.models.invoke.arg.0":          "OMNIVOICE_Q4_K_M",
 		"you.models.invoke.flag.operation": "TTS",
