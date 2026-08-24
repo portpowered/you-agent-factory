@@ -950,6 +950,9 @@ func (f *factoryImpl) currentWorldState(tick int) *interfaces.FactoryWorldState 
 	if f.eventHistory == nil || f.cfg == nil || f.cfg.worldStateProjector == nil {
 		return nil
 	}
+	if recorder, ok := f.eventHistory.(recordings.CanonicalHistoryReductionRecorder); ok {
+		recorder.RecordCanonicalHistoryReduction()
+	}
 	state, err := f.cfg.worldStateProjector(f.eventHistory.CanonicalEvents(), tick)
 	if err != nil {
 		f.logger.Warn("factory world-state reconstruction failed; falling back to runtime snapshot", "error", err)

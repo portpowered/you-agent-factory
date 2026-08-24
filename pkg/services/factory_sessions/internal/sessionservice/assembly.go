@@ -455,6 +455,7 @@ func (a *Assembly) Complete(
 	if runtime == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Sessions runtime is required")
 	}
+	runtime.bindRuntimeReadMetrics(startupRuntime)
 	runtime.releaseWorkAdmissionProjection = a.releaseWorkAdmissionProjection
 	runtime.retireWorkAdmissionProjection = a.retireWorkAdmissionProjection
 	gateway := NewWithLiveChangeCoordinator(

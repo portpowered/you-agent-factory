@@ -696,7 +696,6 @@ func (f *factoryImpl) Observe(ctx context.Context, req factory.ObserveRequest) (
 	if f.engine == nil {
 		return factory.ObserveResult{}, factory.ErrNotRunning
 	}
-
 	// Runtime observation deliberately reads only the engine-owned detached
 	// boundary. GetEngineStateSnapshot also reconstructs canonical world state
 	// and evaluates enablement for migration-only callers; neither operation is
@@ -713,7 +712,29 @@ func (f *factoryImpl) Observe(ctx context.Context, req factory.ObserveRequest) (
 	if !startedAt.IsZero() && f.clock != nil {
 		snapshot.Uptime = f.clock.Now().Sub(startedAt)
 	}
-	return factory.ObserveResult{Observation: rootobservation.Project(&snapshot, req.Scope)}, nil
+	result := factory.ObserveResult{Observation: rootobservation.Project(&snapshot, req.Scope)}
+	f.recordRuntimeObservationMetric(req.Scope)
+	return result, nil
+}
+
+const runtimeReadObservationMetricName = "factory_runtime.read.observation"
+
+func (f *factoryImpl) recordRuntimeObservationMetric(scope factory.ObservationScope) {
+	recorder, ok := f.eventHistory.(recordings.RuntimeReadMetricsRecorder)
+	if !ok || recorder == nil {
+		return
+	}
+	recorder.RecordRuntimeReadMetric(recordings.RuntimeReadMetric{
+		Name: runtimeReadObservationMetricName,
+		Labels: map[string]string{
+			"scope":                    string(scope),
+			"runtime_snapshot_reads":   "1",
+			"operation_count":          "1",
+			"canonical_history_visits": "0",
+			"canonical_events_copied":  "0",
+			"full_history_reductions":  "0",
+		},
+	})
 }
 
 func (f *factoryImpl) PlanDispatch(
