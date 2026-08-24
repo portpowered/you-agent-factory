@@ -22,6 +22,26 @@ func TestModelsOmniVideoCapabilityAndCancellationThroughRootBuildProcess(t *test
 
 	const timingResponse = "At 0:30, the scene changes from shadow to light."
 	const followUpResponse = "The follow-up invocation completed."
+	environment := buildCoordinatedOmniEnvironment(t, timingResponse, followUpResponse)
+	runOmniVideoInvocation(t, environment, timingResponse)
+	runUnsupportedOmniInvocation(t, environment)
+	runCancelledOmniInvocation(t, environment)
+	runOmniFollowUpInvocation(t, environment, followUpResponse)
+	if environment.fixture.Calls() != 3 {
+		t.Fatalf("protocol calls = %d, want video, cancelled, and follow-up generations only", environment.fixture.Calls())
+	}
+}
+
+type coordinatedOmniEnvironment struct {
+	process   support.Process
+	home      string
+	dir       string
+	videoPath string
+	fixture   *coordinatedOmniProtocolFixture
+}
+
+func buildCoordinatedOmniEnvironment(t *testing.T, responses ...string) *coordinatedOmniEnvironment {
+	t.Helper()
 	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
@@ -30,27 +50,20 @@ func TestModelsOmniVideoCapabilityAndCancellationThroughRootBuildProcess(t *test
 		http.NotFound(writer, request)
 	}))
 	t.Cleanup(modelServer.Close)
-
 	home := t.TempDir()
 	writeGenericBuiltinModelCache(t, home, "hf://unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf@bfc15c382204943c3a8fff0c750b94ae2364d7a3")
 	selection := genericLlamaBackendSelection()
 	writeGenericBackendCache(t, home, "localai-llamacpp", selection, []byte("localai-llamacpp/linux-amd64"))
-
 	dir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 	promptPath := filepath.Join(dir, "timing.txt")
 	videoPath := filepath.Join(dir, "clip.mp4")
-	inputFiles := map[string][]byte{
-		promptPath: []byte("What happens at 0:30?"),
-		videoPath:  []byte("MP4-CLIP"),
-	}
-	fixture := newCoordinatedOmniProtocolFixture(timingResponse, followUpResponse)
+	inputFiles := map[string][]byte{promptPath: []byte("What happens at 0:30?"), videoPath: []byte("MP4-CLIP")}
+	fixture := newCoordinatedOmniProtocolFixture(responses...)
 	assetFiles := functionalModelAssetFileSystem{home: home}
 	rejectingNetwork := &rejectingModelAssetHTTP{}
-	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
-	protocol := &joinedProtocolNegotiator{}
-	compatibility := &joinedCompatibilityChecker{}
 	edges := genericHTTPInvocationEdges(
-		rejectingNetwork, assetFiles, hostLauncher, protocol, compatibility, modelServer,
+		rejectingNetwork, assetFiles, &recordingModelHostLauncher{endpoint: modelServer.URL},
+		&joinedProtocolNegotiator{}, &joinedCompatibilityChecker{}, modelServer,
 	)
 	edges.ModelCLIInputReadFile = func(path string) ([]byte, error) {
 		data, ok := inputFiles[path]
@@ -59,145 +72,136 @@ func TestModelsOmniVideoCapabilityAndCancellationThroughRootBuildProcess(t *test
 		}
 		return append([]byte(nil), data...), nil
 	}
-	edges.ModelResolveBackendArtifact = func(
-		context.Context,
-		serviceedges.ModelBackendArtifactSelectionRequest,
-	) (serviceedges.ModelBackendArtifactSelection, error) {
+	edges.ModelResolveBackendArtifact = func(context.Context, serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
 		return selection, nil
 	}
 	edges.ModelInvocationProtocolClient = fixture
 	process := support.BuildProcess(t, edges)
 	support.CleanupProcess(t, process)
+	return &coordinatedOmniEnvironment{process: process, home: home, dir: dir, videoPath: videoPath, fixture: fixture}
+}
 
-	var videoStdout bytes.Buffer
-	var videoStderr bytes.Buffer
-	videoInputs := support.FakeInputs(t.Context(), []string{
-		"you", "models", "invoke", "llm",
-		"--input", "prompt=What happens at 0:30?",
-		"--input", "video=@" + videoPath,
+func runOmniVideoInvocation(t *testing.T, environment *coordinatedOmniEnvironment, response string) {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "models", "invoke", "llm", "--input", "prompt=What happens at 0:30?",
+		"--input", "video=@" + environment.videoPath,
 	})
-	videoInputs.Input.Env = functionalHomeEnvironment(home)
-	videoInputs.Input.WorkingDirectory = dir
-	videoInputs.Input.Stdout = &videoStdout
-	videoInputs.Input.Stderr = &videoStderr
-	if err := process.Execute(videoInputs.Input); err != nil {
+	inputs.Input.Env = functionalHomeEnvironment(environment.home)
+	inputs.Input.WorkingDirectory = environment.dir
+	inputs.Input.Stdout = &stdout
+	inputs.Input.Stderr = &stderr
+	if err := environment.process.Execute(inputs.Input); err != nil {
 		t.Fatalf("video timing invocation error = %v", err)
 	}
-	if videoStdout.String() != timingResponse {
-		t.Fatalf("video timing stdout = %q, want %q", videoStdout.String(), timingResponse)
+	t.Logf("command: you models invoke llm --input prompt=\"What happens at 0:30?\" --input video=@%s", environment.videoPath)
+	t.Logf("stdout:\n%s\n--- end stdout", stdout.String())
+	t.Logf("stderr:\n%s\n--- end stderr", stderr.String())
+	if stdout.String() != response || stderr.Len() != 0 {
+		t.Fatalf("video output = stdout %q, stderr %q, want response without diagnostics", stdout.String(), stderr.String())
 	}
-	if videoStderr.Len() != 0 {
-		t.Fatalf("video timing stderr = %q, want no diagnostics", videoStderr.String())
+	request := environment.fixture.RequestAt(0)
+	t.Logf("protocol request: operation=%q prompt=%q inputs=%#v", request.Operation, request.Prompt, request.Inputs)
+	if request.Prompt != "What happens at 0:30?" || len(request.Inputs) != 2 || request.Inputs[0].Slot != "prompt" || request.Inputs[0].MediaType != "text/plain" || request.Inputs[0].Content != request.Prompt {
+		t.Fatalf("video protocol request = %#v, want prompt plus text input", request)
 	}
-	videoRequest := fixture.RequestAt(0)
-	if videoRequest.Prompt != "What happens at 0:30?" || len(videoRequest.Inputs) != 2 {
-		t.Fatalf("video protocol request = %#v, want prompt plus video", videoRequest)
+	media := request.Inputs[1]
+	if media.Slot != "video" || media.Modality != models.ModalityVideo || media.MediaType != "video/mp4" || media.Content != "MP4-CLIP" {
+		t.Fatalf("video media input = %#v, want ordered video media", media)
 	}
-	if videoRequest.Inputs[0].Slot != "prompt" ||
-		videoRequest.Inputs[0].MediaType != "text/plain" ||
-		videoRequest.Inputs[0].Content != "What happens at 0:30?" {
-		t.Fatalf("video prompt input = %#v, want timing prompt", videoRequest.Inputs[0])
-	}
-	if videoRequest.Inputs[1].Slot != "video" ||
-		videoRequest.Inputs[1].Modality != models.ModalityVideo ||
-		videoRequest.Inputs[1].MediaType != "video/mp4" ||
-		videoRequest.Inputs[1].Content != "MP4-CLIP" {
-		t.Fatalf("video media input = %#v, want ordered video media", videoRequest.Inputs[1])
-	}
+}
 
-	unsupportedOutput := filepath.Join(dir, "unsupported.txt")
-	unsupportedUsageOutput := filepath.Join(dir, "unsupported-usage.json")
-	var unsupportedStdout bytes.Buffer
-	var unsupportedStderr bytes.Buffer
-	unsupportedInputs := support.FakeInputs(t.Context(), []string{
-		"you", "models", "invoke", "llm",
-		"--input", "prompt=Reject this modality",
-		"--input", "audio=@" + videoPath,
-		"--output-map", "text=" + unsupportedOutput,
-		"--output-map", "usage=" + unsupportedUsageOutput,
+func runUnsupportedOmniInvocation(t *testing.T, environment *coordinatedOmniEnvironment) {
+	t.Helper()
+	output := filepath.Join(environment.dir, "unsupported.txt")
+	usageOutput := filepath.Join(environment.dir, "unsupported-usage.json")
+	var stdout, stderr bytes.Buffer
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "models", "invoke", "llm", "--input", "prompt=Reject this modality",
+		"--input", "audio=@" + environment.videoPath, "--output-map", "text=" + output,
+		"--output-map", "usage=" + usageOutput,
 	})
-	unsupportedInputs.Input.Env = functionalHomeEnvironment(home)
-	unsupportedInputs.Input.WorkingDirectory = dir
-	unsupportedInputs.Input.Stdout = &unsupportedStdout
-	unsupportedInputs.Input.Stderr = &unsupportedStderr
-	unsupportedErr := process.Execute(unsupportedInputs.Input)
-	var unsupportedFailure *models.InvocationFailure
-	if !errors.As(unsupportedErr, &unsupportedFailure) ||
-		unsupportedFailure.Class != models.InvocationFailureClassMediaCapability ||
-		unsupportedFailure.Slot != "audio" {
-		t.Fatalf("unsupported audio/video error = %v, failure = %#v, want typed audio capability failure", unsupportedErr, unsupportedFailure)
+	inputs.Input.Env = functionalHomeEnvironment(environment.home)
+	inputs.Input.WorkingDirectory = environment.dir
+	inputs.Input.Stdout = &stdout
+	inputs.Input.Stderr = &stderr
+	err := environment.process.Execute(inputs.Input)
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassMediaCapability || failure.Slot != "audio" {
+		t.Fatalf("unsupported audio/video error = %v, failure = %#v, want typed audio capability failure", err, failure)
 	}
-	if unsupportedStdout.Len() != 0 {
-		t.Fatalf("unsupported modality stdout = %q, want empty", unsupportedStdout.String())
+	t.Logf("command: you models invoke llm --input prompt=\"Reject this modality\" --input audio=@%s --output-map text=%s --output-map usage=%s", environment.videoPath, output, usageOutput)
+	t.Logf("error: %v", err)
+	t.Logf("stdout:\n%s\n--- end stdout", stdout.String())
+	t.Logf("stderr:\n%s\n--- end stderr", stderr.String())
+	if stdout.Len() != 0 || !errors.Is(statAbsent(output), os.ErrNotExist) || !errors.Is(statAbsent(usageOutput), os.ErrNotExist) {
+		t.Fatalf("unsupported modality left stdout or output artifacts: stdout=%q output=%v usage=%v", stdout.String(), statAbsent(output), statAbsent(usageOutput))
 	}
-	if _, err := os.Stat(unsupportedOutput); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("unsupported modality output stat error = %v, want no output artifact", err)
+	if environment.fixture.Calls() != 1 {
+		t.Fatalf("unsupported modality protocol calls = %d, want no generation call", environment.fixture.Calls())
 	}
-	if _, err := os.Stat(unsupportedUsageOutput); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("unsupported modality usage stat error = %v, want no output artifact", err)
-	}
-	if fixture.Calls() != 1 {
-		t.Fatalf("unsupported modality protocol calls = %d, want no generation call", fixture.Calls())
-	}
+}
 
+func runCancelledOmniInvocation(t *testing.T, environment *coordinatedOmniEnvironment) {
+	t.Helper()
 	cancelContext, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	cancelledOutput := filepath.Join(dir, "cancelled.txt")
-	cancelledUsageOutput := filepath.Join(dir, "cancelled-usage.json")
-	var cancelledStdout bytes.Buffer
-	var cancelledStderr bytes.Buffer
-	cancelledInputs := support.FakeInputs(cancelContext, []string{
-		"you", "models", "invoke", "llm",
-		"--input", "prompt=Cancel while generating",
-		"--input", "video=@" + videoPath,
-		"--output-map", "text=" + cancelledOutput,
-		"--output-map", "usage=" + cancelledUsageOutput,
+	output := filepath.Join(environment.dir, "cancelled.txt")
+	usageOutput := filepath.Join(environment.dir, "cancelled-usage.json")
+	var stdout, stderr bytes.Buffer
+	inputs := support.FakeInputs(cancelContext, []string{
+		"you", "models", "invoke", "llm", "--input", "prompt=Cancel while generating",
+		"--input", "video=@" + environment.videoPath, "--output-map", "text=" + output,
+		"--output-map", "usage=" + usageOutput,
 	})
-	cancelledInputs.Input.Env = functionalHomeEnvironment(home)
-	cancelledInputs.Input.WorkingDirectory = dir
-	cancelledInputs.Input.Stdout = &cancelledStdout
-	cancelledInputs.Input.Stderr = &cancelledStderr
-	cancelledDone := make(chan error, 1)
-	go func() { cancelledDone <- process.Execute(cancelledInputs.Input) }()
-	<-fixture.CancellationCallStarted()
+	inputs.Input.Env = functionalHomeEnvironment(environment.home)
+	inputs.Input.WorkingDirectory = environment.dir
+	inputs.Input.Stdout = &stdout
+	inputs.Input.Stderr = &stderr
+	done := make(chan error, 1)
+	go func() { done <- environment.process.Execute(inputs.Input) }()
+	<-environment.fixture.CancellationCallStarted()
 	cancel()
-	cancelledErr := <-cancelledDone
-	if !errors.Is(cancelledErr, models.ErrInferenceCancelled) {
-		t.Fatalf("cancelled invocation error = %v, want ErrInferenceCancelled", cancelledErr)
+	err := <-done
+	if !errors.Is(err, models.ErrInferenceCancelled) {
+		t.Fatalf("cancelled invocation error = %v, want ErrInferenceCancelled", err)
 	}
-	<-fixture.CancellationObserved()
-	if cancelledStdout.Len() != 0 {
-		t.Fatalf("cancelled invocation stdout = %q, want no partial output", cancelledStdout.String())
+	<-environment.fixture.CancellationObserved()
+	t.Logf("command: you models invoke llm --input prompt=\"Cancel while generating\" --input video=@%s --output-map text=%s --output-map usage=%s", environment.videoPath, output, usageOutput)
+	t.Logf("error: %v", err)
+	t.Logf("stdout:\n%s\n--- end stdout", stdout.String())
+	t.Logf("stderr:\n%s\n--- end stderr", stderr.String())
+	t.Log("fixture observed cancellation; output files absent")
+	if stdout.Len() != 0 || !errors.Is(statAbsent(output), os.ErrNotExist) || !errors.Is(statAbsent(usageOutput), os.ErrNotExist) {
+		t.Fatalf("cancelled invocation left stdout or output artifacts: stdout=%q output=%v usage=%v", stdout.String(), statAbsent(output), statAbsent(usageOutput))
 	}
-	if _, err := os.Stat(cancelledOutput); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("cancelled invocation output stat error = %v, want no output artifact", err)
-	}
-	if _, err := os.Stat(cancelledUsageOutput); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("cancelled invocation usage stat error = %v, want no output artifact", err)
-	}
+}
 
-	var followUpStdout bytes.Buffer
-	var followUpStderr bytes.Buffer
-	followUpInputs := support.FakeInputs(t.Context(), []string{
-		"you", "models", "invoke", "llm",
-		"--input", "prompt=Follow up after cancellation",
+func runOmniFollowUpInvocation(t *testing.T, environment *coordinatedOmniEnvironment, response string) {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "models", "invoke", "llm", "--input", "prompt=Follow up after cancellation",
 	})
-	followUpInputs.Input.Env = functionalHomeEnvironment(home)
-	followUpInputs.Input.WorkingDirectory = dir
-	followUpInputs.Input.Stdout = &followUpStdout
-	followUpInputs.Input.Stderr = &followUpStderr
-	if err := process.Execute(followUpInputs.Input); err != nil {
+	inputs.Input.Env = functionalHomeEnvironment(environment.home)
+	inputs.Input.WorkingDirectory = environment.dir
+	inputs.Input.Stdout = &stdout
+	inputs.Input.Stderr = &stderr
+	if err := environment.process.Execute(inputs.Input); err != nil {
 		t.Fatalf("follow-up invocation after cancellation error = %v", err)
 	}
-	if followUpStdout.String() != followUpResponse {
-		t.Fatalf("follow-up stdout = %q, want %q", followUpStdout.String(), followUpResponse)
+	t.Log("command: you models invoke llm --input prompt=\"Follow up after cancellation\"")
+	t.Logf("stdout:\n%s\n--- end stdout", stdout.String())
+	t.Logf("stderr:\n%s\n--- end stderr", stderr.String())
+	if stdout.String() != response || stderr.Len() != 0 {
+		t.Fatalf("follow-up output = stdout %q, stderr %q, want response without diagnostics", stdout.String(), stderr.String())
 	}
-	if followUpStderr.Len() != 0 {
-		t.Fatalf("follow-up stderr = %q, want no diagnostics", followUpStderr.String())
-	}
-	if fixture.Calls() != 3 {
-		t.Fatalf("protocol calls = %d, want video, cancelled, and follow-up generations only", fixture.Calls())
-	}
+}
+
+func statAbsent(path string) error {
+	_, err := os.Stat(path)
+	return err
 }
 
 type coordinatedOmniProtocolFixture struct {

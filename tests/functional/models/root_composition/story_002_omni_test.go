@@ -85,10 +85,14 @@ func TestModelsOmniTextInputReachesPinnedCodecThroughRootBuildProcess(t *testing
 	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(models invoke llm --input) error = %v", err)
 	}
+	t.Log("command: you models invoke llm --input prompt=\"Write a haiku\"")
+	t.Logf("stdout:\n%s\n--- end stdout", stdout.String())
+	t.Logf("stderr:\n%s\n--- end stderr", stderr.String())
 	if stdout.String() != generated {
 		t.Fatalf("models invoke stdout = %q, want exact fixture response %q", stdout.String(), generated)
 	}
 	request := fixture.Request()
+	t.Logf("protocol request: operation=%q prompt=%q inputs=%#v", request.Operation, request.Prompt, request.Inputs)
 	if request.Operation != models.OperationOMNI || request.Prompt != "Write a haiku" || len(request.Inputs) != 1 {
 		t.Fatalf("protocol request = %#v, want OMNI prompt request", request)
 	}

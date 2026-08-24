@@ -145,7 +145,10 @@ cache root and does not move data. Track the storage decision in [issue #2201](h
 ## Invoke A Model Directly
 
 Direct invocation runs one named operation through the current `./factory`
-configuration. It does not start a full Factory workflow.
+configuration without starting a full Factory workflow. Use an uppercase
+operation and bind inputs with repeatable `--input slot=value` flags. Legacy
+`--text` and unqualified `--output <path>` spellings remain supported for
+direct text and audio operations.
 
 Built-in model names are `llm`, `asr`, `tts`, and `embed`. Use an uppercase
 operation and bind inputs with repeatable `--input slot=value` flags.
@@ -343,6 +346,72 @@ wait and inspect again. For `FAILED`, use the inspect diagnostics and service
 logs to correct runtime startup or health failures. `MODEL_NOT_AVAILABLE` and
 the managed-runtime failure details identify the model and readiness state;
 successful output is not emitted for a failed invocation.
+
+## Invoke The Built-In Omni Model
+
+The built-in `llm` model exposes the pinned `OMNI` operation. It accepts the
+following named input slots:
+
+| Slot | Value | Required | Repeatable |
+| --- | --- | --- | --- |
+| `prompt` | Text | Yes | No |
+| `image` | `@` file detected as an image | No | Yes |
+| `audio` | `@` file detected as audio | No | No |
+| `video` | `@` file detected as video | No | No |
+| `parameters` | JSON text prefixed with `json:` | No | No |
+
+The pinned-protocol conformance fixture records the `Audios` and `Videos`
+request fields as accepted at the pinned llama.cpp protocol revision. This
+slice therefore supports text, images, audio, and video. The output is text.
+
+Use a repeatable `--input` flag for each named binding. The built-in operation
+selects automatically when `--input` is present.
+
+```bash
+you models invoke llm --input prompt="Write a haiku"
+```
+
+The command writes the generated UTF-8 text to stdout. Diagnostics remain on
+stderr. Use global `--json` when a structured output object is required.
+
+### Add Images In Command Order
+
+Repeat the `image` binding to preserve the supplied image order:
+
+```bash
+you models invoke llm \
+  --input prompt="Compare these two designs" \
+  --input image=@a.png \
+  --input image=@b.png
+```
+
+The protocol receives `a.png` before `b.png`. A second value for any
+non-repeatable slot fails before generation.
+
+### Bind Media Files
+
+Prefix a file path with `@` to read its bytes and detect its media type. Common
+extensions map to their concrete types, including `.txt`, `.png`, `.wav`, and
+`.mp4`. Unknown extensions use content detection.
+
+```bash
+you models invoke llm \
+  --input prompt="What happens at 0:30?" \
+  --input video=@clip.mp4
+
+you models invoke llm \
+  --input prompt="Describe this recording" \
+  --input audio=@speech.wav
+```
+
+The detected type must match the named slot. For example,
+`--input audio=@clip.mp4` is rejected before generation. The Models service
+classifies this as `MEDIA_CAPABILITY`. The CLI reports the safe
+`CLI_COMMAND_FAILED` diagnostic.
+Unsupported modalities are never silently omitted or converted.
+
+Cancel a running invocation with `Ctrl-C`. Cancellation releases model capacity
+and leaves no partial stdout or output file.
 
 ## Direct Operations Versus Factory Execution
 

@@ -1,11 +1,14 @@
 package cli
 
 import (
+	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 )
 
 func summaryToGenerated(summary models.Summary) factoryapi.ModelSummary {
@@ -157,6 +160,58 @@ func managedRuntimeToGenerated(runtime models.Runtime) factoryapi.ManagedRuntime
 	}
 }
 
+func modelInvocationResponseFromInferenceResult(
+	result models.InvokeModelResult,
+	catalog models.Detail,
+	inputText string,
+) factoryapi.ModelInvocationResponse {
+	worker, locality := catalogPresentationForOperation(catalog, result.Operation)
+	bindings := resolvedPresentationBindings(catalog, result.Operation, inputText)
+	content := contentcontract.GeneratedPtrFromParts(inferenceContentToWorkParts(result.Content))
+	return factoryapi.ModelInvocationResponse{
+		ModelName:        result.ModelName,
+		Worker:           worker,
+		Operation:        result.Operation,
+		ProviderLocality: factoryapi.WorkerModelLocality(locality),
+		Content:          derefGeneratedWorkContent(content),
+		Bindings:         generatedResolvedModelInvocationBindings(bindings),
+	}
+}
+
+func genericInvocationResponseFromInferenceResult(
+	result models.InvokeModelResult,
+) factoryapi.GenericModelInvocationResponse {
+	outputs := make([]factoryapi.ModelInvocationOutput, len(result.Outputs))
+	for index, output := range result.Outputs {
+		projected := factoryapi.ModelInvocationOutput{
+			Name:     output.Name,
+			Modality: factoryapi.ModelInvocationContentType(output.Modality),
+		}
+		projected.ContentType = genericCLIStringPointer(output.ContentType)
+		projected.MediaType = genericCLIStringPointer(output.MediaType)
+		projected.Content = genericCLIStringPointer(output.Content)
+		if output.Artifact != nil && !output.Artifact.Artifact.IsZero() {
+			artifact := factoryapi.ModelInvocationArtifact{ArtifactRef: output.Artifact.Artifact.String()}
+			artifact.Name = genericCLIStringPointer(output.Artifact.Name)
+			artifact.MediaType = genericCLIStringPointer(output.Artifact.MediaType)
+			if output.Artifact.SizeBytes >= 0 {
+				size := output.Artifact.SizeBytes
+				artifact.SizeBytes = &size
+			}
+			if len(output.Artifact.Properties) > 0 {
+				properties := make(factoryapi.StringMap, len(output.Artifact.Properties))
+				for key, value := range output.Artifact.Properties {
+					properties[key] = value
+				}
+				artifact.Properties = &properties
+			}
+			projected.Artifact = &artifact
+		}
+		outputs[index] = projected
+	}
+	return factoryapi.GenericModelInvocationResponse{Outputs: outputs}
+}
+
 func genericCLIStringPointer(value string) *string {
 	if strings.TrimSpace(value) == "" {
 		return nil
@@ -216,4 +271,70 @@ func catalogOperationForName(catalog models.Detail, operation string) (models.Op
 		}
 	}
 	return models.Operation{}, false
+}
+func effectiveCLIInvocationOperation(catalog models.Detail, operation string) string {
+	if strings.TrimSpace(operation) != "" {
+		return strings.TrimSpace(operation)
+	}
+	if len(catalog.Operations) == 1 {
+		return catalog.Operations[0].Name
+	}
+	return ""
+}
+
+func inferenceContentToWorkParts(content []models.InferenceContent) []work.WorkContentPart {
+	if len(content) == 0 {
+		return nil
+	}
+	parts := make([]work.WorkContentPart, 0, len(content))
+	for _, item := range content {
+		parts = append(parts, inferenceContentToWorkPart(item))
+	}
+	return parts
+}
+
+func inferenceContentToWorkPart(item models.InferenceContent) work.WorkContentPart {
+	contentType := strings.TrimSpace(item.ContentType)
+	value := strings.TrimSpace(item.Content)
+	switch {
+	case strings.HasPrefix(strings.ToLower(contentType), "audio/"):
+		return work.WorkContentPart{
+			Type:        work.WorkContentPartTypeAudio,
+			File:        value,
+			ContentType: contentType,
+			Slot:        "audio",
+		}
+	case strings.HasPrefix(strings.ToLower(contentType), "image/"):
+		return work.WorkContentPart{
+			Type:        work.WorkContentPartTypeImage,
+			URL:         value,
+			ContentType: contentType,
+			Slot:        "image",
+		}
+	case strings.EqualFold(contentType, "application/json"):
+		return work.WorkContentPart{
+			Type: work.WorkContentPartTypeJSON,
+			JSON: json.RawMessage(value),
+			Slot: "json",
+		}
+	default:
+		if contentType == "" {
+			contentType = "text/plain"
+		}
+		return work.WorkContentPart{
+			Type:        work.WorkContentPartTypeText,
+			Text:        value,
+			ContentType: contentType,
+			Slot:        "text",
+		}
+	}
+}
+
+func inferenceArtifactSourcePath(result models.InvokeModelResult) (string, error) {
+	for _, artifact := range result.Artifacts {
+		if path := strings.TrimSpace(artifact.Artifact.String()); path != "" {
+			return path, nil
+		}
+	}
+	return "", fmt.Errorf("models invoke returned no streamed audio output")
 }
