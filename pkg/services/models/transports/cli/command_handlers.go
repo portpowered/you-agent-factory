@@ -20,7 +20,10 @@ type CommandHandler struct {
 	homeDir                 func() (string, error)
 	resolveOperatorDefaults func(*cobra.Command, string) (operatorconfig.ResolvedDefaults, error)
 	buildLogger             func() (*zap.Logger, error)
+	lookupEnv               func(string) (string, bool)
 }
+
+const modelCacheDirEnvironment = "INFINITE_YOU_OMNIVOICE_CACHE_DIR"
 
 // NewCommandHandler constructs the Models-owned CLI handler from injected dependencies.
 func NewCommandHandler(
@@ -29,10 +32,16 @@ func NewCommandHandler(
 	homeDir func() (string, error),
 	resolveOperatorDefaults func(*cobra.Command, string) (operatorconfig.ResolvedDefaults, error),
 	buildLogger func() (*zap.Logger, error),
+	lookupEnv ...func(string) (string, bool),
 ) *CommandHandler {
+	var environmentLookup func(string) (string, bool)
+	if len(lookupEnv) > 0 {
+		environmentLookup = lookupEnv[0]
+	}
 	return &CommandHandler{
 		models: models, diagnosticsWriter: diagnosticsWriter, homeDir: homeDir,
 		resolveOperatorDefaults: resolveOperatorDefaults, buildLogger: buildLogger,
+		lookupEnv: environmentLookup,
 	}
 }
 
@@ -149,11 +158,15 @@ func (h *CommandHandler) Invoke(
 	if err != nil {
 		return err
 	}
+	modelCacheDir := ""
+	if h.lookupEnv != nil {
+		modelCacheDir, _ = h.lookupEnv(modelCacheDirEnvironment)
+	}
 	cfg := InvokeConfig{
 		Context: cmd.Context(), ModelName: invokeInputs.modelName, Operation: invokeInputs.operation,
 		Text: invokeInputs.text, InputMappings: invokeInputs.inputMappings, OutputPath: invokeInputs.outputPath,
 		OutputMappings: invokeInputs.outputMappings, Output: cmd.OutOrStdout(),
-		HomeDir: homeDir, FactoryDir: startupcli.WorkingDirectory(cmd.Context()),
+		HomeDir: homeDir, FactoryDir: startupcli.WorkingDirectory(cmd.Context()), ModelCacheDir: modelCacheDir,
 		OperatorDefaults: defaults, Logger: logger,
 	}
 	if err := h.applyResolvedCommon(cmd, inherited, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics); err != nil {

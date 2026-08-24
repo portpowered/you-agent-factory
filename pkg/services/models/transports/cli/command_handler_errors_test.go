@@ -39,6 +39,9 @@ func assertTransformedInvokeConfig(
 		if cfg.FactoryDir != "/factory" || cfg.HomeDir != "/home/tester" || cfg.Logger != logger || cfg.Diagnostics != diagnostics {
 			t.Fatalf("InvokeConfig dependencies = %#v", cfg)
 		}
+		if cfg.ModelCacheDir != "/managed/models" {
+			t.Fatalf("InvokeConfig model cache dir = %q, want /managed/models", cfg.ModelCacheDir)
+		}
 		return nil
 	}
 }
