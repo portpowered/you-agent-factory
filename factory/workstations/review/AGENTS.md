@@ -239,8 +239,17 @@ checklist line is read as approval-and-merge even when you meant to hold.
 
 ## addenda
 
-sometimes there is a system problem such as the website browser tool being broken, in such cases its okay to waive the requirement. 
+When the process agent has recorded the one supported browser availability check
+as unavailable, review may waive that external-tool limitation when the record
+is present and every other story and acceptance criterion passes. The waiver
+applies only to the external browser limitation: it cannot excuse repository
+code, test, typecheck, lint, or other quality failures, unresolved blocking
+feedback, an unpushed final head, a missing pull request, or CI that has not
+started. The unavailable browser result alone must not send an otherwise
+complete lane back to process.
 
-This is not the case for code changes/tests that we can fix in the codebase though. Mostly, things that are broken out of our control like tools and mcp that we are remotely separately from. 
+Review retains ownership of waiver judgment, driving required CI to terminal
+and passing, resolving merge conflicts, and merging the pull request. Process
+does not wait for or re-check terminal CI after its finish line.
 
 Always end your PR review comment with the literal marker string [gate-policy-v3] on its own final line.
