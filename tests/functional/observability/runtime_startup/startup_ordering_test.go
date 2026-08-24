@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -33,6 +34,69 @@ func pathUnderDirectory(path, directory string) bool {
 		return true
 	}
 	return strings.HasPrefix(path, directory+string(os.PathSeparator))
+}
+
+// TestLocalStartupDisclosesHomeBeforeOperatorSettingsRead proves the CLI
+// startup gate precedes the first operator-settings read beneath the resolved
+// product root, not only the later runtime log and metrics effects.
+func TestLocalStartupDisclosesHomeBeforeOperatorSettingsRead(t *testing.T) {
+	workingDirectory := t.TempDir()
+	factoryDir := filepath.Join(workingDirectory, "factory")
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("create Factory directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, "factory.json"), []byte(idleCurrentFactoryJSON), 0o600); err != nil {
+		t.Fatalf("write Factory config: %v", err)
+	}
+	homeDir := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	settingsFiles := &startupOrderingOperatorSettingsFileSystem{
+		Local:  platformfilesystem.Local{},
+		Output: &stdout,
+		Home:   homeDir,
+	}
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		OperatorSettingsFileSystem: settingsFiles,
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	stdinIsTTY := true
+	stdoutIsTTY := false
+	err = process.Execute(root.Input{
+		Args:             []string{"you", "run", "--dir", factoryDir, "--no-record"},
+		Env:              append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir),
+		Stdin:            strings.NewReader(""),
+		Stdout:           &stdout,
+		Stderr:           &stderr,
+		Context:          t.Context(),
+		WorkingDirectory: workingDirectory,
+		StdinIsTTY:       &stdinIsTTY,
+		StdoutIsTTY:      &stdoutIsTTY,
+	})
+	if err != nil {
+		t.Fatalf("Process.Execute(run) error = %v\nstdout=%s\nstderr=%s", err, stdout.String(), stderr.String())
+	}
+	if settingsFiles.ReadBeforeHome {
+		t.Fatalf("operator settings were read before home disclosure; stdout=%q", stdout.String())
+	}
+	if !strings.HasPrefix(stdout.String(), "Home directory: "+homeDir+"\n") {
+		t.Fatalf("stdout = %q, want resolved home disclosure first", stdout.String())
+	}
+}
+
+type startupOrderingOperatorSettingsFileSystem struct {
+	platformfilesystem.Local
+	Output         *bytes.Buffer
+	Home           string
+	ReadBeforeHome bool
+}
+
+func (filesystem *startupOrderingOperatorSettingsFileSystem) ReadFile(path string) ([]byte, error) {
+	if filesystem.Output == nil || !strings.HasPrefix(filesystem.Output.String(), "Home directory: "+filesystem.Home+"\n") {
+		filesystem.ReadBeforeHome = true
+	}
+	return filesystem.Local.ReadFile(path)
 }
 
 // TestReplayArtifactUnderResolvedHomeStartsAfterDisclosure proves a real
@@ -159,6 +223,9 @@ func TestServerInitializationFailureStopsBeforeRuntimeArtifacts(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "packaged factory installation contention") {
 		t.Fatalf("stderr = %q, want bounded contention diagnostic", stderr)
+	}
+	if strings.Contains(stderr, "CLI_COMMAND_FAILED") || strings.Contains(stderr, "command failed") {
+		t.Fatalf("stderr = %q, want actionable contention diagnostic without generic fallback", stderr)
 	}
 }
 

@@ -447,23 +447,33 @@ func newRuntimeHostObserver(
 // runs. Runtime opening owns log/metrics creation and listener setup, so the
 // process-owned preparation gate must complete before either effect occurs.
 type startupDisclosure struct {
-	output io.Writer
-	staged *bytes.Buffer
+	output     io.Writer
+	staged     *bytes.Buffer
+	commitFunc func()
 }
 
 func (disclosure *startupDisclosure) commit() {
-	if disclosure == nil || disclosure.staged == nil || disclosure.output == nil {
+	if disclosure == nil {
 		return
 	}
-	_, _ = io.Copy(disclosure.output, disclosure.staged)
-	disclosure.staged = nil
+	if disclosure.commitFunc != nil {
+		disclosure.commitFunc()
+		disclosure.commitFunc = nil
+	}
+	if disclosure.staged != nil && disclosure.output != nil {
+		_, _ = io.Copy(disclosure.output, disclosure.staged)
+		disclosure.staged = nil
+	}
 }
 
 func prepareStartupBeforeRuntime(ctx context.Context, cfg RunConfig) (*startupDisclosure, error) {
 	discloseHome := startupDisclosureEnabled(cfg)
 	var disclosure *startupDisclosure
 	var disclosureOutput io.Writer = cfg.StartupOutput
-	if discloseHome && cfg.StartupOutput != nil &&
+	if cfg.StartupDisclosureCommit != nil {
+		disclosure = &startupDisclosure{commitFunc: cfg.StartupDisclosureCommit}
+		disclosureOutput = io.Discard
+	} else if discloseHome && cfg.StartupOutput != nil &&
 		(cfg.DeferHomeDisclosureUntilHostReady || hasRecordingInput(cfg)) {
 		staged := &bytes.Buffer{}
 		disclosure = &startupDisclosure{output: cfg.StartupOutput, staged: staged}

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/factoryload"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
@@ -76,6 +78,12 @@ func prepareRunFactoryConfig(
 	if err != nil {
 		return runcli.RunConfig{}, err
 	}
+	if err := prepareRunFactoryStartup(cmd, &cfg, rootOptions, remote); err != nil {
+		return runcli.RunConfig{}, err
+	}
+	if err := prepareRunFactoryHomeDisclosure(cmd, &cfg, remote); err != nil {
+		return runcli.RunConfig{}, err
+	}
 	if err := configureRunEnvironment(cmd, &cfg, rootOptions, homeDir); err != nil {
 		return runcli.RunConfig{}, err
 	}
@@ -106,9 +114,6 @@ func prepareRunFactoryConfig(
 		return runcli.RunConfig{}, err
 	}
 	configureRunFactoryOutput(cmd, &cfg, promptArgs, globals, policy)
-	if err := prepareRunFactoryStartup(cmd, &cfg, rootOptions, remote); err != nil {
-		return runcli.RunConfig{}, err
-	}
 	return cfg, nil
 }
 
@@ -147,9 +152,6 @@ func prepareRunFactoryConfigInputs(
 	if !remote && !cfg.CleanInvocation && !cfg.InvocationOutputExplicit {
 		cfg.StartupOutput = policy.HumanTerminalWriter(cmd.OutOrStdout())
 	}
-	if err := prepareRunSelectionStartup(cmd, cfg, rootOptions, remote); err != nil {
-		return "", false, err
-	}
 	return homeDir, remote, nil
 }
 
@@ -158,6 +160,42 @@ func prepareRunFactoryStartup(cmd *cobra.Command, cfg *runcli.RunConfig, options
 		return nil
 	}
 	return prepareRunStartup(cmd, cfg, options)
+}
+
+func prepareRunFactoryHomeDisclosure(
+	cmd *cobra.Command,
+	cfg *runcli.RunConfig,
+	remote bool,
+) error {
+	if remote || cfg == nil || cfg.StartupPreparation == nil {
+		return nil
+	}
+	if !runStartupDisclosureEnabled(*cfg) {
+		return cfg.StartupPreparation(cmd.Context(), false, nil)
+	}
+	if !cfg.DeferHomeDisclosureUntilHostReady && !runHasRecordingInput(*cfg) {
+		return cfg.StartupPreparation(cmd.Context(), true, cfg.StartupOutput)
+	}
+
+	staged := &bytes.Buffer{}
+	if err := cfg.StartupPreparation(cmd.Context(), true, staged); err != nil {
+		return err
+	}
+	if !cfg.DeferHomeDisclosureUntilHostReady && !cfg.StartupPreflightBlocked {
+		_, _ = io.Copy(cfg.StartupOutput, staged)
+		return nil
+	}
+	committed := false
+	cfg.StartupDisclosureCommit = func() {
+		if committed {
+			return
+		}
+		committed = true
+		if cfg.StartupOutput != nil {
+			_, _ = io.Copy(cfg.StartupOutput, staged)
+		}
+	}
+	return nil
 }
 
 func validateRunFactoryOptions(cfg *runcli.RunConfig, defaultInvocation bool) error {
@@ -296,35 +334,6 @@ func runCommandUsesNamedFactory(cmd *cobra.Command, cfg runcli.RunConfig) bool {
 		!cmd.Flags().Changed("factory") && !cmd.Flags().Changed("dir")
 }
 
-func runFactorySelectionNeedsInitialization(cmd *cobra.Command) bool {
-	if cmd == nil {
-		return false
-	}
-	return cmd.Flags().Changed("factory") || cmd.Flags().Changed("named") ||
-		persistentInputWasCLI(cmd, "you.run.flag.factory", "factory") ||
-		persistentInputWasCLI(cmd, "you.run.flag.named", "named")
-}
-
-func prepareRunSelectionStartup(
-	cmd *cobra.Command,
-	cfg *runcli.RunConfig,
-	options CommandFactory,
-	remote bool,
-) error {
-	if remote || !runFactorySelectionNeedsInitialization(cmd) {
-		return nil
-	}
-	if err := prepareRunStartup(cmd, cfg, options); err != nil {
-		return err
-	}
-	if cfg.StartupPreparation == nil {
-		return nil
-	}
-	discloseHome := !cfg.DeferHomeDisclosureUntilHostReady &&
-		!runHasRecordingInput(*cfg) && runStartupDisclosureEnabled(*cfg)
-	return cfg.StartupPreparation(cmd.Context(), discloseHome, cfg.StartupOutput)
-}
-
 func prepareRunStartup(cmd *cobra.Command, cfg *runcli.RunConfig, options CommandFactory) error {
 	startupAllowed, err := prepareRunSystemInitialization(cmd, cfg, options)
 	if err != nil {
@@ -342,42 +351,107 @@ func installRunStartupPreparation(cmd *cobra.Command, cfg *runcli.RunConfig, opt
 		cfg.StartupPreparation = func(context.Context, bool, io.Writer) error { return nil }
 		return
 	}
-	homeDir := cfg.HomeDir
-	initialized := systemInitializationCompleted(cmd.Context())
-	homeDisclosed := homeDisclosureCompleted(cmd.Context())
-	recordingInputChecked := false
-	recordingInputBlocked := false
-	cfg.StartupPreparation = func(ctx context.Context, discloseHome bool, disclosureOutput io.Writer) error {
-		if discloseHome && !homeDisclosed {
-			disclosureCfg := *cfg
-			if disclosureOutput != nil {
-				disclosureCfg.StartupOutput = disclosureOutput
-			}
-			runcli.DiscloseHomeDirectory(disclosureCfg)
-			homeDisclosed = true
-		}
-		if !recordingInputChecked &&
-			(!runHasRecordingInput(*cfg) || discloseHome || !runStartupDisclosureEnabled(*cfg)) {
-			recordingInputChecked = true
-			recordingInputBlocked = !inspectRunRecordingInput(cmd, *cfg, options)
-		}
-		if recordingInputBlocked {
-			// Let the run transport report the deterministic missing or invalid
-			// recording input without activating global state.
-			return nil
-		}
-		if initialized {
-			return nil
-		}
-		if options.initializer == nil {
-			return errors.New("run service initializer is required")
-		}
-		if err := options.initializer.InitializeSystem(ctx, homeDir); err != nil {
-			return err
-		}
-		initialized = true
+	preparation := newRunStartupPreparation(cmd, cfg, options)
+	cfg.StartupPreparation = preparation.Prepare
+}
+
+type runStartupPreparation struct {
+	cmd                   *cobra.Command
+	cfg                   *runcli.RunConfig
+	options               CommandFactory
+	homeDir               string
+	initialized           bool
+	homeDisclosed         bool
+	recordingInputChecked bool
+	recordingInputBlocked bool
+	activationChecked     bool
+	activationAllowed     bool
+}
+
+func newRunStartupPreparation(cmd *cobra.Command, cfg *runcli.RunConfig, options CommandFactory) *runStartupPreparation {
+	return &runStartupPreparation{
+		cmd:               cmd,
+		cfg:               cfg,
+		options:           options,
+		homeDir:           cfg.HomeDir,
+		initialized:       systemInitializationCompleted(cmd.Context()),
+		homeDisclosed:     homeDisclosureCompleted(cmd.Context()),
+		activationAllowed: true,
+	}
+}
+
+func (preparation *runStartupPreparation) Prepare(ctx context.Context, discloseHome bool, disclosureOutput io.Writer) error {
+	if preparation == nil || preparation.cfg == nil {
+		return errors.New("run startup preparation is required")
+	}
+	if preparation.recordingInputBlocked {
+		preparation.cfg.StartupPreflightBlocked = true
 		return nil
 	}
+	preparation.checkRecordingInput(discloseHome)
+	if preparation.recordingInputBlocked {
+		preparation.cfg.StartupPreflightBlocked = true
+		return nil
+	}
+	preparation.checkFactoryActivation()
+	if !preparation.activationAllowed {
+		preparation.cfg.StartupPreflightBlocked = true
+		return nil
+	}
+	preparation.discloseHome(discloseHome, disclosureOutput)
+	return preparation.initialize(ctx)
+}
+
+func (preparation *runStartupPreparation) checkRecordingInput(discloseHome bool) {
+	if preparation.recordingInputChecked ||
+		(runHasRecordingInput(*preparation.cfg) && !discloseHome && runStartupDisclosureEnabled(*preparation.cfg)) {
+		return
+	}
+	preparation.recordingInputChecked = true
+	preparation.recordingInputBlocked = !inspectRunRecordingInput(preparation.cmd, *preparation.cfg, preparation.options)
+}
+
+func (preparation *runStartupPreparation) checkFactoryActivation() {
+	if preparation.activationChecked {
+		return
+	}
+	preparation.activationChecked = true
+	configPath := runFactoryConfigPath(preparation.cmd, *preparation.cfg)
+	if strings.TrimSpace(configPath) == "" || runFactorySourceUsesJavaScript(configPath) {
+		return
+	}
+	preparation.activationAllowed = inspectRunFactoryActivation(
+		preparation.cmd,
+		*preparation.cfg,
+		preparation.options,
+		configPath,
+	)
+}
+
+func (preparation *runStartupPreparation) discloseHome(discloseHome bool, disclosureOutput io.Writer) {
+	if !discloseHome || preparation.homeDisclosed {
+		return
+	}
+	disclosureCfg := *preparation.cfg
+	if disclosureOutput != nil {
+		disclosureCfg.StartupOutput = disclosureOutput
+	}
+	runcli.DiscloseHomeDirectory(disclosureCfg)
+	preparation.homeDisclosed = true
+}
+
+func (preparation *runStartupPreparation) initialize(ctx context.Context) error {
+	if preparation.initialized {
+		return nil
+	}
+	if preparation.options.initializer == nil {
+		return errors.New("run service initializer is required")
+	}
+	if err := preparation.options.initializer.InitializeSystem(ctx, preparation.homeDir); err != nil {
+		return reportSystemInitializationFailure(preparation.cmd, err)
+	}
+	preparation.initialized = true
+	return nil
 }
 
 func prepareRunSystemInitialization(cmd *cobra.Command, cfg *runcli.RunConfig, options CommandFactory) (bool, error) {
@@ -396,11 +470,7 @@ func prepareRunSystemInitialization(cmd *cobra.Command, cfg *runcli.RunConfig, o
 	if options.initializer == nil {
 		return false, fmt.Errorf("system initializer is required")
 	}
-	configPath := runFactoryConfigPath(cmd, *cfg)
-	if strings.TrimSpace(configPath) == "" || runFactorySourceUsesJavaScript(configPath) {
-		return true, nil
-	}
-	return inspectRunFactoryActivation(cmd, *cfg, options, configPath), nil
+	return true, nil
 }
 
 func inspectRunRecordingInput(cmd *cobra.Command, cfg runcli.RunConfig, options CommandFactory) bool {
@@ -429,7 +499,7 @@ func inspectRunFactoryActivation(cmd *cobra.Command, cfg runcli.RunConfig, optio
 	resolvedPath := resolveRunPath(cmd, configPath)
 	info, statErr := options.runInputPathInspector.Stat(resolvedPath)
 	if statErr != nil {
-		return allowRunFactoryActivationAfterStatError(cmd, cfg, statErr)
+		return allowRunFactoryActivationAfterStatError(cmd, statErr)
 	}
 	if info == nil || !info.Mode().IsRegular() {
 		return false
@@ -446,8 +516,8 @@ func inspectRunFactoryActivation(cmd *cobra.Command, cfg runcli.RunConfig, optio
 	return true
 }
 
-func allowRunFactoryActivationAfterStatError(cmd *cobra.Command, cfg runcli.RunConfig, statErr error) bool {
-	if errors.Is(statErr, fs.ErrNotExist) && runUsesCurrentFactory(cmd) && strings.TrimSpace(cfg.FactoryConfigPath) != "" {
+func allowRunFactoryActivationAfterStatError(cmd *cobra.Command, statErr error) bool {
+	if errors.Is(statErr, fs.ErrNotExist) && runUsesCurrentFactory(cmd) {
 		// Current Factory discovery owns this clean failure. Do not create
 		// global state while the selected local asset is absent.
 		return false
@@ -467,8 +537,18 @@ func runFactoryConfigPath(cmd *cobra.Command, cfg runcli.RunConfig) string {
 	if strings.TrimSpace(cfg.FactoryConfigPath) != "" {
 		return cfg.FactoryConfigPath
 	}
-	if strings.TrimSpace(cfg.Dir) == "" || strings.TrimSpace(cfg.ReplayPath) != "" {
+	if strings.TrimSpace(cfg.ReplayPath) != "" || strings.TrimSpace(cfg.ResumePath) != "" {
 		return ""
+	}
+	if strings.TrimSpace(cfg.Dir) == "" {
+		if cmd == nil || !runUsesCurrentFactory(cmd) {
+			return ""
+		}
+		workingDirectory := startupcli.WorkingDirectory(cmd.Context())
+		if strings.TrimSpace(workingDirectory) == "" {
+			return ""
+		}
+		return filepath.Join(workingDirectory, defaultcmd.FactoryDir, factorydefinitions.FactoryConfigFile)
 	}
 	return filepath.Join(cfg.Dir, factorydefinitions.FactoryConfigFile)
 }
@@ -496,18 +576,23 @@ func initializeSystemAtStartupBoundary(cmd *cobra.Command, cfg runcli.RunConfig,
 		return nil
 	}
 	if err := options.initializer.InitializeSystem(cmd.Context(), cfg.HomeDir); err != nil {
-		wrapped := fmt.Errorf("initialize system: %w", err)
-		if errors.Is(err, factorydefinitions.ErrFactoryInstallationContention) {
-			diagnostic := wrapped
-			if cause := errors.Unwrap(err); cause != nil {
-				diagnostic = fmt.Errorf("%s: %v", wrapped, cause)
-			}
-			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), diagnostic)
-		}
-		return wrapped
+		return reportSystemInitializationFailure(cmd, err)
 	}
 	cmd.SetContext(context.WithValue(cmd.Context(), systemInitializationContextKey{}, true))
 	return nil
+}
+
+func reportSystemInitializationFailure(cmd *cobra.Command, err error) error {
+	wrapped := fmt.Errorf("initialize system: %w", err)
+	if errors.Is(err, factorydefinitions.ErrFactoryInstallationContention) && cmd != nil {
+		diagnostic := wrapped
+		if cause := errors.Unwrap(err); cause != nil {
+			diagnostic = fmt.Errorf("%s: %v", wrapped, cause)
+		}
+		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), diagnostic)
+		clidiag.MarkDiagnosticRendered(cmd.ErrOrStderr())
+	}
+	return wrapped
 }
 
 func preliminaryRunInvocationOutputIsClean(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string) bool {
@@ -584,15 +669,7 @@ func newRootCommandWithFactory(options CommandFactory) *cobra.Command {
 				return err
 			}
 			if err := options.initializer.InitializeSystem(cmd.Context(), homeDir); err != nil {
-				wrapped := fmt.Errorf("initialize system: %w", err)
-				if errors.Is(err, factorydefinitions.ErrFactoryInstallationContention) {
-					diagnostic := wrapped
-					if cause := errors.Unwrap(err); cause != nil {
-						diagnostic = fmt.Errorf("%s: %v", wrapped, cause)
-					}
-					_, _ = fmt.Fprintln(cmd.ErrOrStderr(), diagnostic)
-				}
-				return wrapped
+				return reportSystemInitializationFailure(cmd, err)
 			}
 			cmd.SetContext(context.WithValue(cmd.Context(), systemInitializationContextKey{}, true))
 		}

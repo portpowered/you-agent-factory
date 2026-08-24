@@ -127,6 +127,14 @@ type Config struct {
 	// writer argument lets hosted startup stage that disclosure until the
 	// listener has proved ready, while still recording it before runtime work.
 	StartupPreparation func(context.Context, bool, io.Writer) error
+	// StartupDisclosureCommit flushes a home disclosure staged before hosted
+	// startup. It is installed only when a listener failure must remain free of
+	// human startup output; the run transport calls it after the host is ready.
+	StartupDisclosureCommit func()
+	// StartupPreflightBlocked records a missing or invalid local input selected
+	// during startup preparation. The runtime still owns the authoritative
+	// input load so custom replay readers remain supported.
+	StartupPreflightBlocked bool
 }
 
 // InvocationMetricsRecorder is the observability role consumed by run config.
