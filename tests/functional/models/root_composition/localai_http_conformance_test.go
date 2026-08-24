@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -58,7 +57,17 @@ func TestLocalAIHTTPConformanceMatrixRunsThroughRootBuildProcess(t *testing.T) {
 	}
 
 	report, err := matrix.Run(executor, conformance.ModeStrict)
+	var reportOutput strings.Builder
+	if _, writeErr := report.WriteTo(&reportOutput); writeErr != nil {
+		t.Fatalf("write conformance report: %v", writeErr)
+	}
+	for _, result := range report.Results {
+		if result.Err != nil {
+			t.Logf("%s error=%v", result.Row.Label, result.Err)
+		}
+	}
 	if err != nil {
+		t.Log(reportOutput.String())
 		t.Fatalf("LocalAI HTTP conformance: %v", err)
 	}
 	if got, want := report.ImplementedCount(), len(matrix.Rows); got != want {
@@ -74,12 +83,8 @@ func TestLocalAIHTTPConformanceMatrixRunsThroughRootBuildProcess(t *testing.T) {
 	}
 
 	probe := runNoVerticalProbe(t, server.URL()+"/models/invocations")
-	var output bytes.Buffer
-	if _, err := report.WriteTo(&output); err != nil {
-		t.Fatalf("write conformance report: %v", err)
-	}
-	fmt.Fprintf(&output, "current/no-vertical classification=%s\n", probe.Classification)
-	t.Log(output.String())
+	fmt.Fprintf(&reportOutput, "current/no-vertical classification=%s\n", probe.Classification)
+	t.Log(reportOutput.String())
 	if probe.Classification != conformance.ClassificationExpectedUnimplemented {
 		t.Fatalf("no-vertical probe classification = %s, want expected-unimplemented", probe.Classification)
 	}
@@ -396,10 +401,7 @@ func assertTTSResponse(row conformance.Row, response factoryapi.GenericModelInvo
 	if err != nil {
 		return err
 	}
-	audio, err := base64.StdEncoding.DecodeString(got)
-	if err != nil {
-		return fmt.Errorf("%s audio base64: %w", row.Label, err)
-	}
+	audio := []byte(got)
 	if len(audio) <= 44 || string(audio[:4]) != "RIFF" || string(audio[8:12]) != "WAVE" || string(audio[36:40]) != "data" {
 		return fmt.Errorf("%s audio is not a non-trivial WAV (%d bytes)", row.Label, len(audio))
 	}

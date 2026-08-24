@@ -291,17 +291,8 @@ func (service *httpService) Invoke(cfg InvokeConfig) error {
 	if text == "" && len(cfg.InputMappings) == 0 && len(cfg.InputSpecs) == 0 {
 		return fmt.Errorf("--text is required")
 	}
-	if len(cfg.InputMappings) > 0 {
-		return fmt.Errorf("explicit input mappings require the local Models composition")
-	}
-	if len(cfg.InputSpecs) > 0 {
-		return fmt.Errorf("explicit generic inputs require the local Models composition")
-	}
-	if len(cfg.ParameterSpecs) > 0 {
-		return fmt.Errorf("explicit generic parameters require the local Models composition")
-	}
-	if len(cfg.OutputMappings) > 0 {
-		return fmt.Errorf("explicit output mappings require the local Models composition")
+	if err := validateHTTPInvokeBindings(cfg); err != nil {
+		return err
 	}
 
 	if validationOnlyModelInvoke(cfg) {
@@ -335,6 +326,21 @@ func (service *httpService) Invoke(cfg InvokeConfig) error {
 	}
 	_, err := fmt.Fprintf(cfg.Output, "Wrote audio: %s\n", outputPath)
 	return err
+}
+
+func validateHTTPInvokeBindings(cfg InvokeConfig) error {
+	switch {
+	case len(cfg.InputMappings) > 0:
+		return fmt.Errorf("explicit input mappings require the local Models composition")
+	case len(cfg.InputSpecs) > 0:
+		return fmt.Errorf("explicit generic inputs require the local Models composition")
+	case len(cfg.ParameterSpecs) > 0:
+		return fmt.Errorf("explicit generic parameters require the local Models composition")
+	case len(cfg.OutputMappings) > 0:
+		return fmt.Errorf("explicit output mappings require the local Models composition")
+	default:
+		return nil
+	}
 }
 
 func (service *httpService) Pull(cfg PullConfig) error {

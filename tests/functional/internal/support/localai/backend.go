@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	localaiproto "github.com/portpowered/infinite-you/tests/functional/internal/support/localai/protocol"
 	"google.golang.org/grpc"
@@ -18,7 +19,11 @@ import (
 )
 
 const (
-	fixtureDialTimeout = 5 * time.Second
+	// PinnedHostProtocolVersion mirrors the public Models construction seam's
+	// pinned LocalAI protocol value. The generated protocol remains private to
+	// this functional fixture package.
+	PinnedHostProtocolVersion = "localai-backend-v1"
+	fixtureDialTimeout        = 5 * time.Second
 )
 
 // InvocationBackend adapts the fixture's pinned gRPC protocol to the narrow
@@ -350,4 +355,83 @@ func (fixture *Fixture) dial(ctx context.Context) (*grpc.ClientConn, localaiprot
 		return nil, nil, fmt.Errorf("dial LocalAI fixture: %w", err)
 	}
 	return connection, localaiproto.NewBackendClient(connection), nil
+}
+
+// GRPCDialer exposes the fixture through the Models managed-host edge. The
+// method's anonymous return interface intentionally matches edges.Edges so the
+// generated protocol client and connection remain inside this support package.
+func (fixture *Fixture) GRPCDialer() interface {
+	Dial(context.Context, string) (interface {
+		Negotiate(context.Context, serviceedges.ModelHostProtocolNegotiationRequest) (serviceedges.ModelHostProtocolNegotiationResult, error)
+		Close() error
+	}, error)
+} {
+	return fixtureGRPCDialer{fixture: fixture}
+}
+
+type fixtureGRPCDialer struct {
+	fixture *Fixture
+}
+
+func (dialer fixtureGRPCDialer) Dial(
+	ctx context.Context,
+	endpoint string,
+) (interface {
+	Negotiate(context.Context, serviceedges.ModelHostProtocolNegotiationRequest) (serviceedges.ModelHostProtocolNegotiationResult, error)
+	Close() error
+}, error) {
+	if dialer.fixture == nil {
+		return nil, errors.New("LocalAI fixture dialer is nil")
+	}
+	if strings.TrimSpace(endpoint) == "" {
+		endpoint = dialer.fixture.Endpoint()
+	}
+	dialContext, cancel := context.WithTimeout(ctx, fixtureDialTimeout)
+	defer cancel()
+	connection, err := grpc.DialContext(
+		dialContext,
+		endpoint,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("dial LocalAI managed host: %w", err)
+	}
+	return &fixtureGRPCConnection{
+		connection: connection,
+		client:     localaiproto.NewBackendClient(connection),
+	}, nil
+}
+
+type fixtureGRPCConnection struct {
+	connection *grpc.ClientConn
+	client     localaiproto.BackendClient
+}
+
+func (connection *fixtureGRPCConnection) Negotiate(
+	ctx context.Context,
+	request serviceedges.ModelHostProtocolNegotiationRequest,
+) (serviceedges.ModelHostProtocolNegotiationResult, error) {
+	if request.ProtocolVersion != PinnedHostProtocolVersion {
+		return serviceedges.ModelHostProtocolNegotiationResult{}, models.ErrHostProtocolIncompatible
+	}
+	health, err := connection.client.Health(ctx, &localaiproto.HealthMessage{})
+	if err != nil {
+		return serviceedges.ModelHostProtocolNegotiationResult{}, err
+	}
+	if string(health.GetMessage()) != FixtureHealthMessage {
+		return serviceedges.ModelHostProtocolNegotiationResult{}, models.ErrHostProtocolIncompatible
+	}
+	return serviceedges.ModelHostProtocolNegotiationResult{
+		ProtocolVersion: request.ProtocolVersion,
+		Backend:         request.Backend,
+		Ready:           true,
+	}, nil
+}
+
+func (connection *fixtureGRPCConnection) Close() error {
+	if connection == nil || connection.connection == nil {
+		return nil
+	}
+	return connection.connection.Close()
 }

@@ -231,7 +231,9 @@ func EmbeddingValues(dimensions int) []float32 {
 // written by TTS. The payload is intentionally non-trivial but model-free.
 func AudioBytes() []byte {
 	const (
-		sampleRate = 16000
+		// Keep the deterministic header and samples UTF-8-safe because the
+		// generic HTTP contract carries inline content as a JSON string.
+		sampleRate = 8192
 		channels   = 1
 		bits       = 16
 		samples    = 160
@@ -239,7 +241,7 @@ func AudioBytes() []byte {
 	dataSize := samples * channels * bits / 8
 	data := make([]byte, dataSize)
 	for index := 0; index < samples; index++ {
-		amplitude := int16((index%32)*500 - 7750)
+		amplitude := int16(64 + index%32)
 		binary.LittleEndian.PutUint16(data[index*2:], uint16(amplitude))
 	}
 	result := make([]byte, 44+len(data))

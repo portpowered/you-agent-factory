@@ -46,6 +46,12 @@ func TestLocalAICLIConformanceMatrixRunsThroughRootBuildProcess(t *testing.T) {
 		return cliResult, nil
 	}
 	report, err := matrix.Run(executor, conformance.ModeStrict)
+	t.Log(conformanceReportText(report))
+	for _, result := range report.Results {
+		if result.Err != nil {
+			t.Logf("%s error=%v", result.Row.Label, result.Err)
+		}
+	}
 	if err != nil {
 		t.Fatalf("LocalAI CLI conformance: %v", err)
 	}
@@ -112,7 +118,7 @@ func executeLocalAICLIConformanceRow(
 	}
 	args := []string{
 		"you", "--json", "models", "invoke", conformanceModelName(row.Operation.Name),
-		"--operation", row.Operation.Name, "--text", text,
+		"--operation", row.Operation.Name,
 	}
 	for _, input := range row.Inputs {
 		value, err := json.Marshal(struct {
@@ -130,6 +136,9 @@ func executeLocalAICLIConformanceRow(
 			return models.GenericInvocationResult{}, fmt.Errorf("%s encode CLI input: %w", row.Label, err)
 		}
 		args = append(args, "--input", string(value))
+	}
+	if len(row.Inputs) == 0 {
+		args = append(args, "--text", text)
 	}
 	for _, parameter := range conformanceParameters() {
 		value, err := json.Marshal(struct {

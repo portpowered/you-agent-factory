@@ -556,10 +556,16 @@ func TestValidateCLIOutputShapeRequiresAnUnambiguousPublicOutput(t *testing.T) {
 		{name: "mappings with output path", cfg: InvokeConfig{OutputPath: "result", OutputMappings: []string{"text=result"}}, catalog: textCatalog, want: "cannot be combined"},
 		{name: "multiple outputs without json", cfg: InvokeConfig{}, catalog: multiCatalog, want: "multiple model outputs"},
 		{name: "unknown operation", cfg: InvokeConfig{}, catalog: modelinference.Detail{}, want: "--output is required"},
-		{name: "non-inline output", cfg: InvokeConfig{}, catalog: modelinference.Detail{Summary: modelinference.Summary{Operations: []modelinference.Operation{{Name: "OMNI", Outputs: []modelinference.OperationSlot{{Name: "audio", Modality: modelinference.ModalityAudio}}}}}}, want: "--output is required"},
+		{name: "audio stdout output", cfg: InvokeConfig{}, catalog: modelinference.Detail{Summary: modelinference.Summary{Operations: []modelinference.Operation{{Name: "OMNI", Outputs: []modelinference.OperationSlot{{Name: "audio", Modality: modelinference.ModalityAudio}}}}}}, want: ""},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			err := validateCLIOutputShape(testCase.cfg, testCase.catalog, "OMNI")
+			if testCase.want == "" {
+				if err != nil {
+					t.Fatalf("validateCLIOutputShape() error = %v, want nil", err)
+				}
+				return
+			}
 			if err == nil || !strings.Contains(err.Error(), testCase.want) {
 				t.Fatalf("validateCLIOutputShape() error = %v, want substring %q", err, testCase.want)
 			}
@@ -801,7 +807,7 @@ func TestRootServiceInvokeRoutesExplicitBindingsThroughGenericModelsRequest(t *t
 
 	var output strings.Builder
 	err = service.Invoke(InvokeConfig{
-		Context: context.Background(), ModelName: "model", Operation: "OMNI", Text: "fallback",
+		Context: context.Background(), ModelName: "model", Operation: "OMNI",
 		InputSpecs: []string{
 			`{"name":"first","modality":"IMAGE","contentType":"image/png","mediaType":"image/png","content":"one"}`,
 			`{"name":"second","modality":"IMAGE","contentType":"image/png","mediaType":"image/png","content":"two"}`,

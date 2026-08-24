@@ -564,7 +564,6 @@ type modelsCharacterizationFlag struct {
 	normalization   string
 	completionKind  string
 	visibility      string
-	repeatable      bool
 }
 
 func (flag modelsCharacterizationFlag) record(commandPath, commandID string) cliinputs.FlagRecord {

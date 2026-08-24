@@ -13104,10 +13104,6 @@
           "id": "you.models.invoke.binding.output-map",
           "inputId": "you.models.invoke.flag.output-map"
         },
-        "you.models.invoke.binding.input": {
-          "id": "you.models.invoke.binding.input",
-          "inputId": "you.models.invoke.flag.input"
-        },
         "you.models.invoke.binding.port": {
           "id": "you.models.invoke.binding.port",
           "inputId": "you.models.invoke.flag.port"

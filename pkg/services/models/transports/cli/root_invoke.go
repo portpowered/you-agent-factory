@@ -101,17 +101,13 @@ func (service *rootService) invokeInScope(
 	if err := validateCLIOutputShape(cfg, catalog, operation); err != nil {
 		return err
 	}
-	inputs, err := service.prepareGenericCLIInputs(cfg, operation, catalog)
-	if err != nil {
-		return err
-	}
 	if validationOnlyModelInvoke(cfg) {
 		return writeValidationOnlyModelInvokeResponse(cfg.Output, modelName, operation)
 	}
 	if !shouldUseGenericCLIInvocation(cfg, catalog, operation) {
 		return service.invokePreparedLease(cfg, scope, modelName, operation, text, catalog)
 	}
-	handled, err := service.invokeGenericInScope(cfg, scope, modelName, operation, text, inputs, catalog)
+	handled, err := service.invokeGenericInScope(cfg, scope, modelName, operation, text, catalog)
 	if err != nil {
 		return err
 	}
@@ -163,6 +159,9 @@ func shouldUseGenericCLIInvocation(cfg InvokeConfig, catalog modelinference.Deta
 	if cfg.JSON || len(cfg.InputMappings) > 0 || len(cfg.InputSpecs) > 0 || len(cfg.ParameterSpecs) > 0 || len(cfg.OutputMappings) > 0 {
 		return true
 	}
+	if isDirectTTSAlias(cfg) && strings.TrimSpace(cfg.OutputPath) != "" {
+		return true
+	}
 	return genericCLIInlineOutput(cfg, catalog, operation)
 }
 
@@ -172,9 +171,12 @@ func (service *rootService) invokeGenericInScope(
 	modelName string,
 	operation string,
 	text string,
-	inputs []modelinference.InferenceInput,
 	catalog modelinference.Detail,
 ) (bool, error) {
+	inputs, err := service.prepareGenericCLIInputs(cfg, operation, catalog)
+	if err != nil {
+		return true, err
+	}
 	if len(inputs) == 0 && len(cfg.ParameterSpecs) == 0 && !cfg.JSON &&
 		len(cfg.OutputMappings) == 0 && strings.TrimSpace(cfg.OutputPath) == "" &&
 		!genericCLIStdoutOutput(cfg, catalog, operation) {
@@ -184,7 +186,7 @@ func (service *rootService) invokeGenericInScope(
 	if err != nil {
 		return true, err
 	}
-	request := joinedCLIInvocationRequest(scope, modelName, operation, text, inputs, parameters, catalog)
+	request := joinedCLIInvocationRequestFromInputs(scope, modelName, operation, text, inputs, parameters, catalog)
 	result, err := service.models.InvokeModel(cfg.Context, request)
 	if err == nil {
 		return true, service.writeGenericCLIInvocationResult(cfg, result, catalog, operation, text)
@@ -735,7 +737,7 @@ func (service *rootService) invokePreparedLease(
 	return err
 }
 
-func joinedCLIInvocationRequest(
+func joinedCLIInvocationRequestFromInputs(
 	scope modelinference.RuntimeScopeRef,
 	modelName string,
 	operation string,
@@ -779,6 +781,26 @@ func joinedCLIInvocationRequest(
 			Name: inputName, Modality: modality, ContentType: contentType, MediaType: contentType, Content: text,
 		}},
 	}
+}
+
+func joinedCLIInvocationRequest(
+	scope modelinference.RuntimeScopeRef,
+	modelName string,
+	operation string,
+	text string,
+	inputSpecs []string,
+	parameterSpecs []string,
+	catalog modelinference.Detail,
+) (modelinference.InvokeModelRequest, error) {
+	inputs, err := parseGenericCLIInputSpecs(inputSpecs)
+	if err != nil {
+		return modelinference.InvokeModelRequest{}, err
+	}
+	parameters, err := parseGenericCLIParameterSpecs(parameterSpecs)
+	if err != nil {
+		return modelinference.InvokeModelRequest{}, err
+	}
+	return joinedCLIInvocationRequestFromInputs(scope, modelName, operation, text, inputs, parameters, catalog), nil
 }
 
 type genericCLIInputSpec struct {
@@ -978,61 +1000,4 @@ func catalogOperationForName(catalog modelinference.Detail, operation string) (m
 		}
 	}
 	return modelinference.Operation{}, false
-}
-
-func inferenceContentToWorkParts(content []modelinference.InferenceContent) []work.WorkContentPart {
-	if len(content) == 0 {
-		return nil
-	}
-	parts := make([]work.WorkContentPart, 0, len(content))
-	for _, item := range content {
-		parts = append(parts, inferenceContentToWorkPart(item))
-	}
-	return parts
-}
-
-func inferenceContentToWorkPart(item modelinference.InferenceContent) work.WorkContentPart {
-	contentType := strings.TrimSpace(item.ContentType)
-	value := strings.TrimSpace(item.Content)
-	switch {
-	case strings.HasPrefix(strings.ToLower(contentType), "audio/"):
-		return work.WorkContentPart{
-			Type:        work.WorkContentPartTypeAudio,
-			File:        value,
-			ContentType: contentType,
-			Slot:        "audio",
-		}
-	case strings.HasPrefix(strings.ToLower(contentType), "image/"):
-		return work.WorkContentPart{
-			Type:        work.WorkContentPartTypeImage,
-			URL:         value,
-			ContentType: contentType,
-			Slot:        "image",
-		}
-	case strings.EqualFold(contentType, "application/json"):
-		return work.WorkContentPart{
-			Type: work.WorkContentPartTypeJSON,
-			JSON: json.RawMessage(value),
-			Slot: "json",
-		}
-	default:
-		if contentType == "" {
-			contentType = "text/plain"
-		}
-		return work.WorkContentPart{
-			Type:        work.WorkContentPartTypeText,
-			Text:        value,
-			ContentType: contentType,
-			Slot:        "text",
-		}
-	}
-}
-
-func inferenceArtifactSourcePath(result modelinference.InvokeModelResult) (string, error) {
-	for _, artifact := range result.Artifacts {
-		if path := strings.TrimSpace(artifact.Artifact.String()); path != "" {
-			return path, nil
-		}
-	}
-	return "", fmt.Errorf("models invoke returned no streamed audio output")
 }

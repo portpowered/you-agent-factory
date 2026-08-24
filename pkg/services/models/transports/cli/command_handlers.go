@@ -191,6 +191,9 @@ func readModelsInvokeInputs(inputs resolvedinput.Inputs) (modelsInvokeInputs, er
 		return modelsInvokeInputs{}, fmt.Errorf("read models invoke text: %w", err)
 	}
 	inputMappings, err := readModelsInvokeInputMappings(inputs)
+	if err != nil {
+		return modelsInvokeInputs{}, err
+	}
 	var parameterSpecs []string
 	if _, present := inputs.State(modelsInvokeParameterID); present {
 		parameterSpecs, err = inputs.StringArray(modelsInvokeParameterID)
