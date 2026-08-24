@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/codecs"
+	asrruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/runtime"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 )
 
@@ -18,9 +19,9 @@ func TestASRInvocationRuntimeMapsRequestAndReturnsNamedOutputs(t *testing.T) {
 		Text:     "hello world",
 		Segments: []codecs.ASRSegment{{ID: 0, Start: 0, End: 1500, Text: "hello world"}},
 	}}
-	runtime, err := inference.NewASRInvocationRuntime(backend)
+	runtime, err := asrruntime.New(backend.transcribe)
 	if err != nil {
-		t.Fatalf("NewASRInvocationRuntime() error = %v", err)
+		t.Fatalf("asrruntime.New() error = %v", err)
 	}
 	request := asrRuntimeRequest()
 	result, err := runtime.Invoke(t.Context(), inference.InvocationRuntimeRequest{Request: request})
@@ -67,9 +68,9 @@ func TestASRInvocationRuntimeClassifiesMalformedAndBackendFailuresAtomically(t *
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			backend := test.backend
-			runtime, err := inference.NewASRInvocationRuntime(&backend)
+			runtime, err := asrruntime.New(backend.transcribe)
 			if err != nil {
-				t.Fatalf("NewASRInvocationRuntime() error = %v", err)
+				t.Fatalf("asrruntime.New() error = %v", err)
 			}
 			result, err := runtime.Invoke(t.Context(), inference.InvocationRuntimeRequest{Request: asrRuntimeRequest()})
 			if result.Content != nil {
@@ -90,9 +91,9 @@ func TestASRInvocationRuntimeHonorsCancellationBeforeAndDuringBackendCall(t *tes
 	t.Parallel()
 
 	backend := &recordingASRBackend{waitForCancellation: true}
-	runtime, err := inference.NewASRInvocationRuntime(backend)
+	runtime, err := asrruntime.New(backend.transcribe)
 	if err != nil {
-		t.Fatalf("NewASRInvocationRuntime() error = %v", err)
+		t.Fatalf("asrruntime.New() error = %v", err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -102,9 +103,9 @@ func TestASRInvocationRuntimeHonorsCancellationBeforeAndDuringBackendCall(t *tes
 	}
 
 	backend = &recordingASRBackend{waitForCancellation: true}
-	runtime, err = inference.NewASRInvocationRuntime(backend)
+	runtime, err = asrruntime.New(backend.transcribe)
 	if err != nil {
-		t.Fatalf("NewASRInvocationRuntime() error = %v", err)
+		t.Fatalf("asrruntime.New() error = %v", err)
 	}
 	ctx, cancel = context.WithCancel(t.Context())
 	backend.started = make(chan struct{})
@@ -130,8 +131,8 @@ func TestASRInvocationRuntimeHonorsCancellationBeforeAndDuringBackendCall(t *tes
 func TestASRInvocationRuntimeRejectsNilBackend(t *testing.T) {
 	t.Parallel()
 
-	if _, err := inference.NewASRInvocationRuntime(nil); !errors.Is(err, models.ErrInvalidInferenceDependencies) {
-		t.Fatalf("NewASRInvocationRuntime(nil) error = %v, want ErrInvalidInferenceDependencies", err)
+	if _, err := asrruntime.New(nil); !errors.Is(err, models.ErrInvalidInferenceDependencies) {
+		t.Fatalf("asrruntime.New(nil) error = %v, want ErrInvalidInferenceDependencies", err)
 	}
 }
 
@@ -158,7 +159,7 @@ type recordingASRBackend struct {
 	calls               int
 }
 
-func (backend *recordingASRBackend) Transcribe(ctx context.Context, request codecs.ASRRequest) (codecs.ASRResponse, error) {
+func (backend *recordingASRBackend) transcribe(ctx context.Context, request codecs.ASRRequest) (codecs.ASRResponse, []models.InferenceArtifact, error) {
 	backend.calls++
 	backend.request = request
 	if backend.started != nil {
@@ -166,7 +167,7 @@ func (backend *recordingASRBackend) Transcribe(ctx context.Context, request code
 	}
 	if backend.waitForCancellation {
 		<-ctx.Done()
-		return codecs.ASRResponse{}, ctx.Err()
+		return codecs.ASRResponse{}, nil, ctx.Err()
 	}
-	return backend.response, backend.err
+	return backend.response, nil, backend.err
 }

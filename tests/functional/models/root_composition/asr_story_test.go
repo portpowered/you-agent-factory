@@ -50,23 +50,25 @@ func TestModelsASRDirectCLIEndToEndThroughRootBuildProcess(t *testing.T) {
 	}
 	transcriptPath := filepath.Join(t.TempDir(), "transcript.txt")
 	segmentsPath := filepath.Join(t.TempDir(), "segments.json")
+	const wantSegments = `[{"id":0,"start":0,"end":1500,"text":"LOCALAI_FIXTURE_SEGMENT"}]`
 
-	var received models.InvokeModelRequest
-	backend := func(ctx context.Context, request models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+	var received models.ASRBackendRequest
+	asrBackend := func(ctx context.Context, request models.ASRBackendRequest) (models.ASRBackendResponse, error) {
 		received = request
-		content, _, err := fixture.InvocationBackend(ctx, request)
+		response, err := fixture.ASRBackend(ctx, request)
 		if err != nil {
-			return nil, nil, err
+			return models.ASRBackendResponse{}, err
 		}
 		artifact, err := (models.InferenceArtifactRef{}).Parse("artifact:segments")
 		if err != nil {
-			return nil, nil, err
+			return models.ASRBackendResponse{}, err
 		}
-		return content, []models.InferenceArtifact{{
+		response.Artifacts = []models.InferenceArtifact{{
 			Name: "segments", Artifact: artifact, MediaType: "application/json",
-			SizeBytes:  int64(len(content[1].Content)),
+			SizeBytes:  int64(len(wantSegments)),
 			Properties: map[string]string{"digest": "sha256:fixture-segments"},
-		}}, nil
+		}}
+		return response, nil
 	}
 
 	rejectingNetwork := &rejectingModelAssetHTTP{}
@@ -95,7 +97,7 @@ func TestModelsASRDirectCLIEndToEndThroughRootBuildProcess(t *testing.T) {
 		ModelResolveBackendArtifact: func(context.Context, serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
 			return selection, nil
 		},
-		ModelInvocationBackend: backend,
+		ModelASRBackend:        asrBackend,
 		ModelHostHTTPClient:    modelServer.Client(),
 		ModelRuntimeHTTPClient: modelServer.Client(),
 	})
@@ -126,11 +128,11 @@ func TestModelsASRDirectCLIEndToEndThroughRootBuildProcess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read segments output: %v", err)
 	}
-	if string(segments) != `[{"id":0,"start":0,"end":1500,"text":"LOCALAI_FIXTURE_SEGMENT"}]` {
+	if string(segments) != wantSegments {
 		t.Fatalf("segments output = %s, want canonical timestamped JSON", segments)
 	}
-	if len(received.Inputs) != 1 || received.Inputs[0].Name != "audio" || received.Inputs[0].Content != string(inputBytes) || received.Inputs[0].MediaType != "audio/wav" {
-		t.Fatalf("backend request input = %#v, want exact bytes and audio/wav", received.Inputs)
+	if string(received.Audio) != string(inputBytes) || received.MediaType != "audio/wav" {
+		t.Fatalf("ASR backend request = %#v, want exact bytes and audio/wav", received)
 	}
 	assertASRFixtureCall(t, fixture.Calls(), base64.StdEncoding.EncodeToString(inputBytes))
 	transcriptDigest := sha256.Sum256(transcript)

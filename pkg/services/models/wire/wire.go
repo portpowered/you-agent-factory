@@ -13,14 +13,17 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelcodecs "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/codecs"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
+	asrruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/runtime"
 	modelsservice "github.com/portpowered/infinite-you/pkg/services/models/internal/service"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	assetswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/wire"
@@ -48,6 +51,14 @@ type InvocationBackend func(
 	context.Context,
 	models.InvokeModelRequest,
 ) ([]models.InferenceContent, []models.InferenceArtifact, error)
+
+// ASRBackend is the typed external effect used by the Models-owned ASR
+// codec/runtime. Its request and response remain provider-neutral at this
+// construction boundary.
+type ASRBackend func(
+	context.Context,
+	models.ASRBackendRequest,
+) (models.ASRBackendResponse, error)
 
 type invocationRuntime interface {
 	Invoke(context.Context, inference.InvocationRuntimeRequest) (inference.InvocationRuntimeResult, error)
@@ -99,7 +110,7 @@ func NewService(
 		assetCreate, assetOpen, processLauncher, hostHTTP, hostClock, runtimeRunner,
 		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
 		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
-		resolveEnvironment, protocolNegotiator, compatibilityChecker, nil, nil,
+		resolveEnvironment, protocolNegotiator, compatibilityChecker, nil, nil, nil,
 		revisionResolvers...,
 	)
 }
@@ -140,6 +151,7 @@ func NewServiceWithBackendArtifactResolver(
 	compatibilityChecker HostCompatibilityChecker,
 	backendResolver BackendArtifactResolver,
 	invocationBackend InvocationBackend,
+	asrBackend ASRBackend,
 	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
 	return newService(
@@ -148,7 +160,7 @@ func NewServiceWithBackendArtifactResolver(
 		assetCreate, assetOpen, processLauncher, hostHTTP, hostClock, runtimeRunner,
 		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
 		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
-		resolveEnvironment, protocolNegotiator, compatibilityChecker, backendResolver, nil,
+		resolveEnvironment, protocolNegotiator, compatibilityChecker, backendResolver, invocationBackend, nil,
 		revisionResolvers...,
 	)
 }
@@ -192,6 +204,7 @@ func NewServiceWithBackendArtifactResolverAndInvocationBackend(
 	compatibilityChecker HostCompatibilityChecker,
 	backendResolver BackendArtifactResolver,
 	invocationBackend InvocationBackend,
+	asrBackend ASRBackend,
 	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
 	return newService(
@@ -201,7 +214,7 @@ func NewServiceWithBackendArtifactResolverAndInvocationBackend(
 		runtimeHTTP, runtimeInspect, runtimeTempDir, runtimeTempFile, logger, now,
 		issuerEntropy, pullMetrics, hostLogger, hostMetrics, localHooks,
 		resolveEnvironment, protocolNegotiator, compatibilityChecker, backendResolver,
-		invocationBackend, revisionResolvers...,
+		invocationBackend, asrBackend, revisionResolvers...,
 	)
 }
 
@@ -239,6 +252,7 @@ func newService(
 	compatibilityChecker HostCompatibilityChecker,
 	backendResolver BackendArtifactResolver,
 	invocationBackend InvocationBackend,
+	asrBackend ASRBackend,
 	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
 	if err := validateConstructionInputs(
@@ -301,6 +315,7 @@ func newService(
 		compatibilityChecker,
 		backendResolver,
 		invocationBackend,
+		asrBackend,
 		revisionResolvers...,
 	)
 }
@@ -339,6 +354,7 @@ func composeModelsService(
 	compatibilityChecker HostCompatibilityChecker,
 	backendResolver BackendArtifactResolver,
 	invocationBackend InvocationBackend,
+	asrBackend ASRBackend,
 	revisionResolvers ...func(context.Context, string) (string, error),
 ) (models.Service, error) {
 	resolvedEndpoints := resolveAssetEndpoints(assetEndpoints)
@@ -350,7 +366,7 @@ func composeModelsService(
 		assetHome, assetWriteFile, assetRename, assetRemove, assetReadFile,
 		assetReadDir, assetCreate, assetOpen, processLauncher, hostHTTP, hostClock,
 		hostLogger, hostMetrics, resolveEnvironment, protocolNegotiator,
-		compatibilityChecker, invocationBackend, now, issuerEntropy,
+		compatibilityChecker, invocationBackend, asrBackend, now, issuerEntropy,
 		firstRevisionResolver(revisionResolvers),
 	)
 	if err != nil {
@@ -389,11 +405,94 @@ func (runtime backendInvocationRuntime) Invoke(
 	}, nil
 }
 
-func inferenceRuntime(backend InvocationBackend) invocationRuntime {
+type operationInvocationRuntime struct {
+	generic invocationRuntime
+	asr     invocationRuntime
+}
+
+func (runtime operationInvocationRuntime) Invoke(
+	ctx context.Context,
+	request inference.InvocationRuntimeRequest,
+) (inference.InvocationRuntimeResult, error) {
+	if runtime.asr != nil && isASROperation(request) {
+		return runtime.asr.Invoke(ctx, request)
+	}
+	return runtime.generic.Invoke(ctx, request)
+}
+
+func inferenceRuntime(backend InvocationBackend, asrBackend ASRBackend) (invocationRuntime, error) {
+	generic := genericInvocationRuntime(backend)
+	if asrBackend == nil {
+		return generic, nil
+	}
+	asr, err := newASRInvocationRuntime(asrBackend)
+	if err != nil {
+		return nil, err
+	}
+	return operationInvocationRuntime{generic: generic, asr: asr}, nil
+}
+
+func genericInvocationRuntime(backend InvocationBackend) invocationRuntime {
 	if backend == nil {
 		return inference.InputEchoInvocationRuntime{}
 	}
 	return backendInvocationRuntime{backend: backend}
+}
+
+func newASRInvocationRuntime(backend ASRBackend) (invocationRuntime, error) {
+	return asrruntime.New(func(
+		ctx context.Context,
+		request modelcodecs.ASRRequest,
+	) (modelcodecs.ASRResponse, []models.InferenceArtifact, error) {
+		response, err := backend(ctx, models.ASRBackendRequest{
+			Audio: append([]byte(nil), request.Audio...), MediaType: request.MediaType,
+			Prompt: request.Prompt, Parameters: cloneASRParameters(request.Parameters),
+		})
+		if err != nil {
+			return modelcodecs.ASRResponse{}, nil, err
+		}
+		segments := make([]modelcodecs.ASRSegment, len(response.Segments))
+		for index, segment := range response.Segments {
+			segments[index] = modelcodecs.ASRSegment{
+				ID: segment.ID, Start: segment.Start, End: segment.End, Text: segment.Text,
+			}
+		}
+		return modelcodecs.ASRResponse{Text: response.Text, Segments: segments}, response.Artifacts, nil
+	})
+}
+
+func isASROperation(request inference.InvocationRuntimeRequest) bool {
+	operation := request.Operation.Name
+	if operation == "" {
+		operation = request.Request.Operation
+	}
+	return strings.EqualFold(strings.TrimSpace(operation), models.OperationASR)
+}
+
+func cloneASRParameters(parameters map[string]any) map[string]any {
+	if parameters == nil {
+		return nil
+	}
+	cloned := make(map[string]any, len(parameters))
+	for name, value := range parameters {
+		cloned[name] = cloneASRParameterValue(value)
+	}
+	return cloned
+}
+
+func cloneASRParameterValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return cloneASRParameters(typed)
+	case []any:
+		cloned := make([]any, len(typed))
+		for index, item := range typed {
+			cloned[index] = cloneASRParameterValue(item)
+		}
+		return cloned
+	default:
+		return value
+	}
 }
 
 func invocationArtifactSources(artifacts []models.InferenceArtifact) []inference.InvocationArtifactSource {
@@ -444,6 +543,7 @@ func buildModelsServiceComponents(
 	protocolNegotiator HostProtocolNegotiator,
 	compatibilityChecker HostCompatibilityChecker,
 	invocationBackend InvocationBackend,
+	asrBackend ASRBackend,
 	now func() time.Time,
 	issuerEntropy platformrandom.Source,
 	revisionResolver func(context.Context, string) (string, error),
@@ -479,9 +579,13 @@ func buildModelsServiceComponents(
 	if err != nil {
 		return modelsServiceComponents{}, err
 	}
+	runtime, err := inferenceRuntime(invocationBackend, asrBackend)
+	if err != nil {
+		return modelsServiceComponents{}, err
+	}
 	inferenceService, err := inferencewire.NewService(
 		runtimeScopes, assetService, catalogService, runtimeHost,
-		inferenceRuntime(invocationBackend), inference.InertArtifactFileSystem{}, now,
+		runtime, inference.InertArtifactFileSystem{}, now,
 	)
 	if err != nil {
 		return modelsServiceComponents{}, err

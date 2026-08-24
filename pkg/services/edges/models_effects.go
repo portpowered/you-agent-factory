@@ -73,6 +73,14 @@ type ModelInvocationBackend func(
 	models.InvokeModelRequest,
 ) ([]models.InferenceContent, []models.InferenceArtifact, error)
 
+// ModelASRBackend is the typed ASR operation effect. Models owns the generic
+// request validation and private LocalAI codec; this edge supplies only the
+// detached protocol result and opaque artifact metadata.
+type ModelASRBackend func(
+	context.Context,
+	models.ASRBackendRequest,
+) (models.ASRBackendResponse, error)
+
 type HostProcessStartSpec struct {
 	Command                 string
 	Args, Env               []string

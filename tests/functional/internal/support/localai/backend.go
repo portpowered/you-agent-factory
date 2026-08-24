@@ -51,8 +51,6 @@ func (fixture *Fixture) InvocationBackend(
 		return fixture.invokeEMBED(ctx, client, inputs)
 	case models.OperationTTS:
 		return fixture.invokeTTS(ctx, client, request, inputs)
-	case models.OperationASR:
-		return fixture.invokeASR(ctx, client, inputs)
 	default:
 		return nil, nil, fmt.Errorf("unsupported LocalAI fixture operation %q", request.Operation)
 	}
@@ -151,58 +149,44 @@ func (fixture *Fixture) invokeTTS(
 	}}, nil, nil
 }
 
-func (fixture *Fixture) invokeASR(
+// ASRBackend adapts the fixture protocol to the typed Models ASR effect. It
+// returns decoded transcript facts; the Models codec owns validation and
+// named-output materialization.
+func (fixture *Fixture) ASRBackend(
 	ctx context.Context,
-	client localaiproto.BackendClient,
-	inputs []models.InferenceInput,
-) ([]models.InferenceContent, []models.InferenceArtifact, error) {
-	// The pinned fixture protocol carries ASR input in a protobuf string field,
-	// so encode the generic audio bytes before crossing that wire. The Models
-	// request remains byte-exact; this representation keeps arbitrary audio
-	// bytes valid on the test transport.
-	audio := base64.StdEncoding.EncodeToString([]byte(firstInputContent(inputs)))
-	response, err := client.AudioTranscription(ctx, &localaiproto.TranscriptRequest{
-		Prompt: audio,
-	})
+	request models.ASRBackendRequest,
+) (models.ASRBackendResponse, error) {
+	if fixture == nil {
+		return models.ASRBackendResponse{}, errors.New("LocalAI fixture is nil")
+	}
+	connection, client, err := fixture.dial(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("invoke LocalAI ASR: %w", err)
+		return models.ASRBackendResponse{}, err
 	}
-	if strings.TrimSpace(response.GetText()) == "" || len(response.GetSegments()) == 0 {
-		return nil, nil, malformedResponse(models.OperationASR, "transcript")
+	defer func() { _ = connection.Close() }()
+
+	// The pinned fixture protocol carries ASR input in a protobuf string field,
+	// so encode the Models-owned audio bytes before crossing that wire.
+	response, err := client.AudioTranscription(ctx, asrProtocolRequest(request))
+	if err != nil {
+		return models.ASRBackendResponse{}, fmt.Errorf("invoke LocalAI ASR: %w", err)
 	}
-	segments := make([]fixtureTranscriptSegmentValue, 0, len(response.GetSegments()))
+	segments := make([]models.ASRBackendSegment, 0, len(response.GetSegments()))
 	for _, segment := range response.GetSegments() {
 		if segment == nil {
 			continue
 		}
-		segments = append(segments, fixtureTranscriptSegmentValue{
+		segments = append(segments, models.ASRBackendSegment{
 			ID: segment.GetId(), Start: segment.GetStart(), End: segment.GetEnd(), Text: segment.GetText(),
 		})
 	}
-	if len(segments) == 0 {
-		return nil, nil, malformedResponse(models.OperationASR, "segments")
-	}
-	segmentContent, err := json.Marshal(segments)
-	if err != nil {
-		return nil, nil, fmt.Errorf("encode LocalAI ASR segments: %w", err)
-	}
-	return []models.InferenceContent{
-		{
-			Name: "transcript", Modality: models.ModalityText,
-			ContentType: "text/plain", MediaType: "text/plain", Content: response.GetText(),
-		},
-		{
-			Name: "segments", Modality: models.ModalityJSON,
-			ContentType: "application/json", MediaType: "application/json", Content: string(segmentContent),
-		},
-	}, nil, nil
+	return models.ASRBackendResponse{Text: response.GetText(), Segments: segments}, nil
 }
 
-type fixtureTranscriptSegmentValue struct {
-	ID    int32  `json:"id"`
-	Start int64  `json:"start"`
-	End   int64  `json:"end"`
-	Text  string `json:"text"`
+func asrProtocolRequest(request models.ASRBackendRequest) *localaiproto.TranscriptRequest {
+	return &localaiproto.TranscriptRequest{
+		Prompt: base64.StdEncoding.EncodeToString(request.Audio),
+	}
 }
 
 func firstInputContent(inputs []models.InferenceInput) string {
