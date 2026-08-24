@@ -168,7 +168,9 @@ esac
 # Windows runners select Visual Studio and mix MSVC with MinGW dependencies.
 windows_cxx_standard=17
 windows_cmake_generator="MinGW Makefiles"
+windows_minimum_target="0x0602"
 grpc_dependency_mode="default"
+grpc_protobuf_source="system"
 
 if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 	export CMAKE_GENERATOR="$windows_cmake_generator"
@@ -176,6 +178,7 @@ if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 	# not pass the Windows vcpkg toolchain to that bootstrap: its rolling
 	# protobuf/Abseil headers are not compatible with the pinned gRPC source.
 	grpc_dependency_mode="standalone"
+	grpc_protobuf_source="pinned"
 fi
 
 if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
@@ -186,14 +189,18 @@ if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
 	plan_cxx_standard=""
 	plan_cmake_generator=""
 	plan_cmake_make_program=""
+	plan_windows_target=""
+	plan_grpc_protobuf_source=""
 	plan_grpc_dependency_mode=" grpc_dependency_mode=$grpc_dependency_mode"
 	if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 		plan_cxx_standard=" cxx_standard=$windows_cxx_standard"
 		plan_cmake_generator=" cmake_generator=mingw-makefiles"
 		plan_cmake_make_program=" cmake_make_program=mingw32-make"
+		plan_windows_target=" windows_minimum_target=$windows_minimum_target"
+		plan_grpc_protobuf_source=" grpc_protobuf_source=$grpc_protobuf_source"
 	fi
 	printf 'LOCALAI_BACKEND_BUILD_PLAN backend=%s target=%s shell=%s strategy=%s binary=%s%s%s%s\n' \
-		"$BACKEND_ID" "$TARGET_ID" "$build_shell" "$build_strategy" "$binary" "$plan_git" "$plan_cxx_standard" "$plan_cmake_generator$plan_cmake_make_program$plan_grpc_dependency_mode"
+		"$BACKEND_ID" "$TARGET_ID" "$build_shell" "$build_strategy" "$binary" "$plan_git" "$plan_cxx_standard" "$plan_cmake_generator$plan_cmake_make_program$plan_windows_target$plan_grpc_protobuf_source$plan_grpc_dependency_mode"
 	exit 0
 fi
 
@@ -230,6 +237,7 @@ if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 		"-DBUILD_SHARED_LIBS=OFF"
 		"-DCMAKE_CXX_STANDARD=${windows_cxx_standard}"
 		"-DCMAKE_CXX_STANDARD_REQUIRED=ON"
+		"-DCMAKE_CXX_FLAGS=-D_WIN32_WINNT=${windows_minimum_target}"
 	)
 	export VCPKG_TRIPLET="$triplet"
 	export CXXFLAGS="${CXXFLAGS:-} -static-libgcc -static-libstdc++"
@@ -267,7 +275,7 @@ build_grpc_dependencies() {
 	local protoc_path="${install_path}/bin/protoc"
 	local plugin_path="${install_path}/bin/grpc_cpp_plugin"
 	local grpc_cmake_args="${grpc_dependency_cmake_args_text}"
-	grpc_added_cmake_args="-Dabsl_DIR=${install_path}/lib/cmake/absl -DProtobuf_DIR=${install_path}/lib/cmake/protobuf -DProtobuf_PROTOC_EXECUTABLE=${protoc_path} -Dutf8_range_DIR=${install_path}/lib/cmake/utf8_range -DgRPC_DIR=${install_path}/lib/cmake/grpc -DCMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES=${install_path}/include"
+	grpc_added_cmake_args="-Dabsl_DIR=${install_path}/lib/cmake/absl -DProtobuf_DIR=${install_path}/lib/cmake/protobuf -DProtobuf_INCLUDE_DIRS=${install_path}/include -DProtobuf_PROTOC_EXECUTABLE=${protoc_path} -D_PROTOBUF_PROTOC=${protoc_path} -D_GRPC_CPP_PLUGIN_EXECUTABLE=${plugin_path} -Dutf8_range_DIR=${install_path}/lib/cmake/utf8_range -DgRPC_DIR=${install_path}/lib/cmake/grpc -DCMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES=${install_path}/include"
 
 	if [[ ! -f "${grpc_path}/Makefile" ]]; then
 		echo "pinned LocalAI gRPC build directory is missing: ${grpc_path}" >&2

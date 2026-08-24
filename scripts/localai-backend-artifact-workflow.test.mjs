@@ -269,6 +269,8 @@ test("the build harness selects the Windows and Unix strategies at runtime", (t)
 		cxx_standard: "17",
 		cmake_generator: "mingw-makefiles",
 		cmake_make_program: "mingw32-make",
+		windows_minimum_target: "0x0602",
+		grpc_protobuf_source: "pinned",
 		grpc_dependency_mode: "standalone",
 	});
 	assert.deepEqual(buildPlan({ backend: "localai-llamacpp", target: "darwin-arm64", buildType: "metal" }), {
