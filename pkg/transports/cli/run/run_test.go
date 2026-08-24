@@ -82,11 +82,18 @@ type stubFactoryService struct {
 	runtimehost.Service
 	run                   func(context.Context) error
 	snapshot              func(context.Context) (*interfaces.EngineStateSnapshot[runtimehost.PetriMarkingSnapshot, *runtimehost.Net], error)
+	cleanInvocation       runtimehost.CleanInvocationSnapshot
 	runtimeLogDiagnostics runtimehost.RuntimeLogDiagnostics
 }
 
 func (s stubFactoryService) Run(ctx context.Context) error {
 	return s.run(ctx)
+}
+
+func (stubFactoryService) ControlWaitToComplete(runtimehost.WaitToCompleteRequest) runtimehost.WaitToCompleteResult {
+	done := make(chan struct{})
+	close(done)
+	return runtimehost.WaitToCompleteResult{Done: done}
 }
 
 func (s stubFactoryService) RuntimeLogDiagnostics() runtimehost.RuntimeLogDiagnostics {
@@ -98,6 +105,10 @@ func (s stubFactoryService) GetEngineStateSnapshot(ctx context.Context) (*interf
 		return nil, errors.New("snapshot unavailable")
 	}
 	return s.snapshot(ctx)
+}
+
+func (s stubFactoryService) CleanInvocationSnapshot(ctx context.Context) (runtimehost.CleanInvocationSnapshot, error) {
+	return s.cleanInvocation, nil
 }
 
 func (s stubFactoryService) RuntimeObservation(ctx context.Context) (factoryvisualization.RuntimeObservation, error) {
@@ -124,6 +135,11 @@ func buildTransportTestRuntime(
 	snapshot := completedTransportTestSnapshot()
 	return stubFactoryService{
 		run: func(context.Context) error { return nil },
+		cleanInvocation: runtimehost.CleanInvocationSnapshot{Work: []runtimehost.CleanInvocationWork{{
+			WorkID: "dashboard-render-test-work", Name: "dashboard-render-test-work", WorkTypeID: "task",
+			State: "done", StateCategory: string(runtimehost.StateCategoryTerminal),
+			Output: "mock worker accepted", TraceID: "dashboard-render-test-trace",
+		}}},
 		snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[runtimehost.PetriMarkingSnapshot, *runtimehost.Net], error) {
 			return snapshot, nil
 		},

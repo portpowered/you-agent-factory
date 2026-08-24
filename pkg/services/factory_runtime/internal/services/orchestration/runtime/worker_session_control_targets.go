@@ -225,10 +225,21 @@ func processGoneAttemptResult(
 	result.StructuredResult = nil
 	result.StructuredResultPresent = false
 	result.Continuation = nil
+	message := workers.ErrWorkstationDispatchProcessGone.Error()
+	if strings.EqualFold(strings.TrimSpace(request.Target.RunnerID), "script") && result.Failure != nil {
+		if failureMessage := strings.TrimSpace(result.Failure.Message); failureMessage != "" &&
+			!strings.EqualFold(failureMessage, "execution canceled") {
+			message = failureMessage
+		} else if result.Diagnostics != nil && result.Diagnostics.Command != nil {
+			if stderr := strings.TrimSpace(result.Diagnostics.Command.Stderr); stderr != "" {
+				message = stderr
+			}
+		}
+	}
 	result.Failure = &workers.ExecutionFailure{
 		Type:    workers.WorkFailureTypeUnknown,
 		Family:  workers.WorkFailureFamilyRetryable,
-		Message: workers.ErrWorkstationDispatchProcessGone.Error(),
+		Message: message,
 	}
 	return result
 }
@@ -243,7 +254,9 @@ func processGoneDispatchResult(
 	}
 	*terminal = workers.WorkstationDispatchTerminalOutcomeFailed
 	result.Outcome = workers.OutcomeFailed
-	result.Error = workers.ErrWorkstationDispatchProcessGone.Error()
+	if processGoneResultError(result.Error) == "" {
+		result.Error = workers.ErrWorkstationDispatchProcessGone.Error()
+	}
 	result.FailureMetadata = &workers.WorkFailureMetadata{
 		Family: workers.WorkFailureFamilyRetryable,
 		Type:   workers.WorkFailureTypeUnknown,
@@ -254,6 +267,14 @@ func processGoneDispatchResult(
 		workers.ProviderResponseMetadataFailureStage:          "process",
 	}}
 	return workers.WorkstationDispatchReconciliationReasonProcessGone
+}
+
+func processGoneResultError(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized == "" || strings.Contains(normalized, "cancel") || strings.Contains(normalized, "context canceled") {
+		return ""
+	}
+	return strings.TrimSpace(value)
 }
 
 type PromptRenderer = runtimePromptRenderer

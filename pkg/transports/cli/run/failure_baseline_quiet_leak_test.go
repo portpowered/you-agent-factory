@@ -77,8 +77,8 @@ func TestFailureBaseline_QuietLeak_OneShotBatchQuietSuppressesStartupChatter(t *
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if output != "" {
-		t.Fatalf("stdout = %q, want empty quiet success terminal output", output)
+	if output != "Batch completed successfully.\n" {
+		t.Fatalf("stdout = %q, want truthful quiet batch success result", output)
 	}
 	assertQuietLeakContractForbidden(t, output)
 }
@@ -98,8 +98,8 @@ func TestFailureBaseline_QuietLeak_OneShotBatchRunSuppressesDashboardMarkers(t *
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if output != "" {
-		t.Fatalf("stdout = %q, want empty dashboard output with quiet suppression", output)
+	if output != "Batch completed successfully.\n" {
+		t.Fatalf("stdout = %q, want truthful batch success result with quiet suppression", output)
 	}
 	assertQuietLeakContractForbidden(t, output)
 }

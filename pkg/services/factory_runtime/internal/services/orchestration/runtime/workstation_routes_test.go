@@ -685,6 +685,23 @@ func TestDetachedResultMaterializationMapsProcessGoneReconciliation(t *testing.T
 	}
 }
 
+func TestProcessGoneScriptAttemptPreservesTerminalFailureReason(t *testing.T) {
+	t.Parallel()
+
+	result := processGoneAttemptResult(
+		workers.ExecuteRequest{Target: workers.ExecutionTarget{RunnerID: "script"}},
+		workers.ExecuteResult{
+			Failure: &workers.ExecutionFailure{Message: "script worker exited non-zero"},
+			Diagnostics: &workers.SafeDiagnostics{Command: &workers.SafeCommandDiagnostic{
+				Stderr: "script worker exited non-zero",
+			}},
+		},
+	)
+	if result.Failure == nil || result.Failure.Message != "script worker exited non-zero" {
+		t.Fatalf("process-gone script failure = %#v, want preserved script reason", result.Failure)
+	}
+}
+
 func TestProviderSessionFromContinuationUsesAvailableIdentity(t *testing.T) {
 	t.Parallel()
 

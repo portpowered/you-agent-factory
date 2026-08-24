@@ -234,6 +234,17 @@ func configureRunFactoryOutput(
 	cfg.Diagnostics = runPolicy.DiagnosticsWriter(cmd.ErrOrStderr())
 	cfg.ReplayMetadataOutput = cmd.OutOrStdout()
 	cfg.JSONOutput = globals.json
+	if !cleanInvocation && strings.TrimSpace(cfg.WorkFile) != "" {
+		// A finite --work run has a customer-facing result even when it uses
+		// --dir rather than a named/current Factory selection. JSON batch
+		// results must own stdout exclusively so startup and dashboard output
+		// cannot make the document invalid.
+		cfg.Output = cmd.OutOrStdout()
+		if globals.json {
+			cfg.StartupOutput = nil
+			cfg.SuppressDashboardRendering = true
+		}
+	}
 }
 
 func configureDefaultRunInvocationOutput(cmd *cobra.Command, cfg *runcli.RunConfig, promptArgs []string, textInvocation bool) {

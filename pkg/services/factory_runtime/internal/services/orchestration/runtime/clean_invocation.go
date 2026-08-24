@@ -239,10 +239,17 @@ func cleanInvocationWorkFromToken(topology *state.Net, token *factorytoken.Token
 	if topology != nil {
 		category = topology.StateCategoryForPlace(token.PlaceID)
 	}
+	workTypeID, stateValue := state.SplitPlaceID(token.PlaceID)
+	if strings.TrimSpace(token.Color.WorkTypeID) != "" {
+		workTypeID = token.Color.WorkTypeID
+	}
 	return factory.CleanInvocationWork{
 		WorkID:        token.Color.WorkID,
-		WorkTypeID:    token.Color.WorkTypeID,
+		Name:          token.Color.Name,
+		WorkTypeID:    workTypeID,
+		State:         stateValue,
 		StateCategory: string(category),
+		FailureReason: token.History.LastError,
 		Output:        string(token.Color.Payload),
 		TraceID:       token.Color.TraceID,
 		DataType:      string(token.Color.DataType),
@@ -979,19 +986,4 @@ func orderedRuntimeWorkDispatchTokens(
 		ordered = append(ordered, token)
 	}
 	return ordered, nil
-}
-
-func workerTokenPlaceKey(token workerexecution.Token) string {
-	prefix := strings.TrimSpace(token.Color.WorkTypeID)
-	if prefix == "" {
-		prefix = strings.TrimSpace(token.Color.Name)
-	}
-	stateName := strings.TrimSpace(token.State)
-	if prefix == "" {
-		return stateName
-	}
-	if stateName == "" {
-		return prefix
-	}
-	return prefix + ":" + stateName
 }

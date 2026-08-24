@@ -3,15 +3,18 @@ package run
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/initializer/runtimeapplication"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
@@ -90,6 +93,26 @@ func (runner historicalReplayRunner) HostedInvocation() HostedInvocationOperatio
 		return nil
 	}
 	return provider.HostedInvocation()
+}
+
+func (runner historicalReplayRunner) CleanInvocationSnapshot(
+	ctx context.Context,
+) (factoryruntime.CleanInvocationSnapshot, error) {
+	provider, ok := runner.runner.(batchReportProvider)
+	if !ok {
+		return factoryruntime.CleanInvocationSnapshot{}, factoryruntime.ErrNotRunning
+	}
+	return provider.CleanInvocationSnapshot(ctx)
+}
+
+func (runner historicalReplayRunner) ControlWaitToComplete(
+	req factoryruntime.WaitToCompleteRequest,
+) factoryruntime.WaitToCompleteResult {
+	provider, ok := runner.runner.(batchCompletionWaiter)
+	if !ok || provider == nil {
+		return factoryruntime.WaitToCompleteResult{}
+	}
+	return provider.ControlWaitToComplete(req)
 }
 
 // WithHistoricalReplay keeps the detached replay read model beside the
@@ -241,14 +264,93 @@ func WithHostedInvocation(
 	return hostedInvocationRunner{runner: runner, invocation: invocation}
 }
 
-// WithCleanInvocationSnapshot remains a source-compatible Wire seam while
-// terminal classification is owned by Factory Sessions results. The Runtime
-// projection is intentionally not attached to the CLI runner anymore.
+type cleanInvocationSnapshotRunner struct {
+	runner   initializer.LocalRuntimeRunner
+	provider factoryruntime.Service
+}
+
+func (runner cleanInvocationSnapshotRunner) Run(ctx context.Context) error {
+	return runner.runner.Run(ctx)
+}
+
+func (runner cleanInvocationSnapshotRunner) RunWithCompletion(
+	ctx context.Context,
+	completion initializer.CompletionOperation,
+) error {
+	managed, ok := runner.runner.(initializer.CompletionRuntimeRunner)
+	if !ok {
+		return runner.runner.Run(ctx)
+	}
+	return managed.RunWithCompletion(ctx, completion)
+}
+
+func (runner cleanInvocationSnapshotRunner) CleanInvocationSnapshot(
+	ctx context.Context,
+) (factoryruntime.CleanInvocationSnapshot, error) {
+	if runner.provider == nil {
+		return factoryruntime.CleanInvocationSnapshot{}, factoryruntime.ErrNotRunning
+	}
+	return runner.provider.CleanInvocationSnapshot(ctx)
+}
+
+func (runner cleanInvocationSnapshotRunner) ControlWaitToComplete(
+	req factoryruntime.WaitToCompleteRequest,
+) factoryruntime.WaitToCompleteResult {
+	if runner.provider == nil {
+		return factoryruntime.WaitToCompleteResult{}
+	}
+	return runner.provider.ControlWaitToComplete(req)
+}
+
+func (runner cleanInvocationSnapshotRunner) RuntimeHostBinding(ctx context.Context) (initializer.RuntimeHostBinding, error) {
+	reader, ok := runner.runner.(interface {
+		RuntimeHostBinding(context.Context) (initializer.RuntimeHostBinding, error)
+	})
+	if !ok {
+		return initializer.RuntimeHostBinding{}, initializer.ErrRuntimeHostReadinessUnavailable
+	}
+	return reader.RuntimeHostBinding(ctx)
+}
+
+func (runner cleanInvocationSnapshotRunner) RuntimeHostReadinessConfigured() bool {
+	provider, ok := runner.runner.(interface{ RuntimeHostReadinessConfigured() bool })
+	return ok && provider.RuntimeHostReadinessConfigured()
+}
+
+func (runner cleanInvocationSnapshotRunner) RuntimeLogDiagnostics() runtimeartifact.Diagnostics {
+	return runtimeLogDiagnosticsForRunner(runner.runner)
+}
+
+func (runner cleanInvocationSnapshotRunner) HostedInvocation() HostedInvocationOperation {
+	provider, ok := runner.runner.(interface {
+		HostedInvocation() HostedInvocationOperation
+	})
+	if !ok {
+		return nil
+	}
+	return provider.HostedInvocation()
+}
+
+func (runner cleanInvocationSnapshotRunner) HistoricalReplay() *factorysessions.HistoricalReplayInspection {
+	provider, ok := runner.runner.(interface {
+		HistoricalReplay() *factorysessions.HistoricalReplayInspection
+	})
+	if !ok {
+		return nil
+	}
+	return provider.HistoricalReplay()
+}
+
+// WithCleanInvocationSnapshot keeps the Runtime-owned terminal projection
+// beside the neutral lifecycle runner for finite --work batch reporting.
 func WithCleanInvocationSnapshot(
 	runner initializer.LocalRuntimeRunner,
-	_ interface{},
+	provider factoryruntime.Service,
 ) initializer.LocalRuntimeRunner {
-	return runner
+	if runner == nil || provider == nil {
+		return runner
+	}
+	return cleanInvocationSnapshotRunner{runner: runner, provider: provider}
 }
 
 func openHostedRuntime(
@@ -313,11 +415,13 @@ func openHostedRuntime(
 	}
 	replayMetadataWarnings := replayMetadataWarningsForRunner(factorySvc)
 	historicalReplay, hostedInvocation := hostedRuntimeCapabilities(factorySvc)
+	batchProvider := batchReportProviderFromRunner(factorySvc)
 	if !cfg.CleanInvocation && (cfg.WithServer || cfg.WithSite || cfg.Port > 0) {
 		factorySvc = runtimeapplication.WithRuntimeHostObserver(factorySvc, onBound)
 	}
 	if operation != nil {
 		operation.runner = factorySvc
+		operation.batchReportProvider = batchProvider
 		operation.hostedInvocation = hostedInvocation
 		operation.historicalReplay = historicalReplay
 		operation.replayMetadataWarnings = replayMetadataWarnings
@@ -330,12 +434,18 @@ func openHostedRuntime(
 
 	return &Operation{
 		cfg: cfg, logger: logger, runner: factorySvc, recordPath: recordPath,
-		startupPrepared:  true,
-		hostedInvocation: hostedInvocation, historicalReplay: historicalReplay,
+		startupPrepared:     true,
+		batchReportProvider: batchProvider,
+		hostedInvocation:    hostedInvocation, historicalReplay: historicalReplay,
 		replayMetadataWarnings: replayMetadataWarnings,
 		openingPresentations:   presentations, visualizations: visualizations,
 		visualizationSinkID: visualizationSinkID,
 	}, nil
+}
+
+func batchReportProviderFromRunner(runner initializer.LocalRuntimeRunner) batchReportProvider {
+	provider, _ := runner.(batchReportProvider)
+	return provider
 }
 
 func registerRuntimeVisualizationSink(
@@ -602,4 +712,215 @@ func invocationFactoryEventRenderer(
 		ProgressIsTTY:        cfg.ProgressIsTTY && !cfg.JSONOutput,
 		InvocationOutputMode: cfg.InvocationOutputMode,
 	})
+}
+
+const batchFailureCode = "RUN_BATCH_FAILED"
+
+type batchReportProvider interface {
+	CleanInvocationSnapshot(context.Context) (factoryruntime.CleanInvocationSnapshot, error)
+}
+
+type batchCompletionWaiter interface {
+	ControlWaitToComplete(factoryruntime.WaitToCompleteRequest) factoryruntime.WaitToCompleteResult
+}
+
+type batchReport struct {
+	Status   string         `json:"status"`
+	Failures []batchFailure `json:"failures"`
+}
+
+type batchFailure struct {
+	WorkID    string `json:"workId,omitempty"`
+	WorkName  string `json:"workName"`
+	WorkState string `json:"workState"`
+	Reason    string `json:"reason"`
+}
+
+func reportBatchResult(
+	cfg RunConfig,
+	snapshot factoryruntime.CleanInvocationSnapshot,
+) error {
+	report := buildBatchReport(snapshot)
+	output := cfg.Output
+	if output == nil {
+		output = cfg.StartupOutput
+	}
+	if output == nil {
+		return fmt.Errorf("write batch result: process output is required")
+	}
+
+	if cfg.JSON || cfg.JSONOutput {
+		if err := json.NewEncoder(output).Encode(report); err != nil {
+			return fmt.Errorf("write batch JSON result: %w", err)
+		}
+	} else if err := writeHumanBatchReport(output, report); err != nil {
+		return err
+	}
+
+	if len(report.Failures) == 0 {
+		return nil
+	}
+	return &InvocationError{
+		Code:    batchFailureCode,
+		Message: batchFailureMessage(report.Failures),
+	}
+}
+
+func buildBatchReport(snapshot factoryruntime.CleanInvocationSnapshot) batchReport {
+	failuresByKey := make(map[string]batchFailure)
+	for _, work := range snapshot.Work {
+		if work.StateCategory != string(factoryruntime.StateCategoryFailed) {
+			continue
+		}
+		failure := batchFailure{
+			WorkID:    strings.TrimSpace(work.WorkID),
+			WorkName:  batchWorkName(work),
+			WorkState: batchWorkState(work),
+			Reason:    batchFailureReason(work, snapshot.DispatchHistory),
+		}
+		key := failure.WorkID
+		if key == "" {
+			key = failure.WorkName + "\x00" + failure.WorkState
+		}
+		if current, exists := failuresByKey[key]; !exists || batchFailureLess(failure, current) {
+			failuresByKey[key] = failure
+		}
+	}
+
+	failures := make([]batchFailure, 0, len(failuresByKey))
+	for _, failure := range failuresByKey {
+		failures = append(failures, failure)
+	}
+	sort.Slice(failures, func(i, j int) bool {
+		return batchFailureLess(failures[i], failures[j])
+	})
+	status := "COMPLETED"
+	if len(failures) > 0 {
+		status = "FAILED"
+	}
+	return batchReport{Status: status, Failures: failures}
+}
+
+func batchFailureLess(left, right batchFailure) bool {
+	if left.WorkID != right.WorkID {
+		return left.WorkID < right.WorkID
+	}
+	if left.WorkName != right.WorkName {
+		return left.WorkName < right.WorkName
+	}
+	if left.WorkState != right.WorkState {
+		return left.WorkState < right.WorkState
+	}
+	return left.Reason < right.Reason
+}
+
+func batchWorkName(work factoryruntime.CleanInvocationWork) string {
+	if name := strings.TrimSpace(work.Name); name != "" {
+		return name
+	}
+	if workID := strings.TrimSpace(work.WorkID); workID != "" {
+		return workID
+	}
+	return "<unnamed Work>"
+}
+
+func batchWorkState(work factoryruntime.CleanInvocationWork) string {
+	state := strings.TrimSpace(work.State)
+	if state == "" {
+		state = strings.ToLower(strings.TrimSpace(work.StateCategory))
+	}
+	if state == "" {
+		state = "failed"
+	}
+	workTypeID := strings.TrimSpace(work.WorkTypeID)
+	if workTypeID == "" {
+		return state
+	}
+	return workTypeID + ":" + state
+}
+
+func batchFailureReason(
+	work factoryruntime.CleanInvocationWork,
+	dispatches []factoryruntime.CleanInvocationDispatch,
+) string {
+	if reason := strings.TrimSpace(work.FailureReason); reason != "" {
+		return reason
+	}
+	for index := len(dispatches) - 1; index >= 0; index-- {
+		dispatch := dispatches[index]
+		if dispatch.Outcome != "FAILED" || !batchDispatchMatches(work, dispatch) {
+			continue
+		}
+		if reason := strings.TrimSpace(dispatch.Reason); reason != "" {
+			return reason
+		}
+		if failureType := strings.TrimSpace(dispatch.FailureType); failureType != "" {
+			return "worker dispatch failed (" + failureType + ")"
+		}
+	}
+	return "Work reached a failed terminal state; inspect the latest dispatch for recovery guidance."
+}
+
+func batchDispatchMatches(
+	work factoryruntime.CleanInvocationWork,
+	dispatch factoryruntime.CleanInvocationDispatch,
+) bool {
+	for _, candidate := range dispatch.Consumed {
+		if batchWorkMatches(work, candidate) {
+			return true
+		}
+	}
+	for _, candidate := range dispatch.Outputs {
+		if batchWorkMatches(work, candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+func batchWorkMatches(left, right factoryruntime.CleanInvocationWork) bool {
+	if left.WorkID != "" && right.WorkID != "" {
+		return left.WorkID == right.WorkID
+	}
+	if left.TraceID != "" && right.TraceID != "" {
+		return left.TraceID == right.TraceID
+	}
+	return left.Name != "" && left.Name == right.Name && left.WorkTypeID == right.WorkTypeID
+}
+
+func writeHumanBatchReport(output io.Writer, report batchReport) error {
+	if len(report.Failures) == 0 {
+		if _, err := fmt.Fprintln(output, "Batch completed successfully."); err != nil {
+			return fmt.Errorf("write batch result: %w", err)
+		}
+		return nil
+	}
+	if _, err := fmt.Fprintln(output, "Batch failed:"); err != nil {
+		return fmt.Errorf("write batch result: %w", err)
+	}
+	for _, failure := range report.Failures {
+		if _, err := fmt.Fprintf(
+			output,
+			"Work %q reached failed terminal state %s: %s\n",
+			failure.WorkName,
+			failure.WorkState,
+			failure.Reason,
+		); err != nil {
+			return fmt.Errorf("write batch result: %w", err)
+		}
+	}
+	return nil
+}
+
+func batchFailureMessage(failures []batchFailure) string {
+	parts := make([]string, 0, len(failures))
+	for _, failure := range failures {
+		parts = append(parts, fmt.Sprintf(
+			"Work %q reached %s: %s",
+			failure.WorkName,
+			failure.WorkState,
+			failure.Reason,
+		))
+	}
+	return strings.Join(parts, "; ")
 }

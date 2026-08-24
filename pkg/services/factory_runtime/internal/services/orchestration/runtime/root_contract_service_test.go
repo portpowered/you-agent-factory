@@ -327,6 +327,7 @@ func TestProjectCleanInvocationSnapshotSkipsNilTokensAndProjectsFailureFacts(t *
 			WorkID: "work-failed", WorkTypeID: "task", TraceID: "trace-failed",
 			DataType: factorytoken.DataTypeWork, Payload: []byte("failed output"),
 		},
+		History: factorytoken.History{LastError: "terminal failure reason"},
 	}
 	workerToken := factorytoken.ToWorker(*token)
 	outputToken := workerToken
@@ -347,6 +348,9 @@ func TestProjectCleanInvocationSnapshotSkipsNilTokensAndProjectsFailureFacts(t *
 	got := projectCleanInvocationSnapshot(snapshot)
 	if len(got.Work) != 1 || got.Work[0].WorkID != "work-failed" {
 		t.Fatalf("projected Work = %#v, want one nonnil token", got.Work)
+	}
+	if got.Work[0].FailureReason != "terminal failure reason" {
+		t.Fatalf("projected Work failure reason = %q, want terminal failure reason", got.Work[0].FailureReason)
 	}
 	if len(got.DispatchHistory) != 1 {
 		t.Fatalf("projected dispatch history = %#v, want one completion", got.DispatchHistory)

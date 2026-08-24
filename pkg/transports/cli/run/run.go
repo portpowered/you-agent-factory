@@ -7,9 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -17,7 +15,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/runconfig"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
@@ -316,6 +313,7 @@ type Operation struct {
 	cfg                    RunConfig
 	logger                 *zap.Logger
 	runner                 RuntimeRunner
+	batchReportProvider    batchReportProvider
 	invocationRequest      *factoryapi.InvocationRequest
 	invocationTarget       factorysessions.InvocationTarget
 	invocation             InvocationOperation
@@ -496,6 +494,7 @@ func (operation *Operation) Run(ctx context.Context) error {
 		operation.cfg,
 		operation.runner,
 		operation.recordPath,
+		operation.batchReportProvider,
 	); err != nil {
 		return err
 	}
@@ -745,8 +744,16 @@ func runFactoryServiceAndEmitResult(
 	cfg RunConfig,
 	factorySvc factoryServiceRunner,
 	recordPath resolvedRunRecordPath,
+	batchProvider batchReportProvider,
 ) error {
-	err := factorySvc.Run(ctx)
+	var snapshot state.CleanInvocationSnapshot
+	var snapshotReady bool
+	var err error
+	if shouldReportBatchResult(cfg) {
+		err = runFactoryService(ctx, factorySvc, batchProvider, &snapshot, &snapshotReady)
+	} else {
+		err = factorySvc.Run(ctx)
+	}
 	logRunServiceOutcome(ctx, cfg, err)
 	if err == nil {
 		reportRecordingPathOnShutdown(cfg.StartupOutput, recordPath, cfg.RecordingsCLI)
@@ -754,197 +761,63 @@ func runFactoryServiceAndEmitResult(
 	if err != nil {
 		return err
 	}
-	return nil
-}
-
-func emitVerboseStartupDiagnostics(cfg RunConfig, recordPath resolvedRunRecordPath, requestedPort int) {
-	resolvedFactoryDir := resolveFactoryDirForDiagnostics(cfg.Dir, cfg.ResolveCurrentFactoryDir)
-	diagnosticsEnabled := terminalpolicy.DiagnosticsEnabled(cfg.TerminalPolicy, cfg.Verbose)
-	clidiag.Printf(
-		cfg.Diagnostics,
-		diagnosticsEnabled,
-		"run startup factoryDir=%q configuredDir=%q runtimeMode=%s workflow=%q mockWorkers=%t mockWorkersConfigPath=%q recording=%s runtimeLogDir=%q runtimeLogRoll=%s runtimeMetricsDir=%q runtimeMetricsRoll=%s dashboardPort=%d requestedDashboardPort=%d autoPort=%s",
-		resolvedFactoryDir,
-		cfg.Dir,
-		runtimeModeForRun(cfg),
-		workflowLabel(cfg.Workflow),
-		cfg.MockWorkersEnabled,
-		cfg.MockWorkersConfigPath,
-		recordingDiagnostics(cfg.RecordingsCLI, recordPath, cfg.ReplayPath),
-		runtimeLogDirLabel(cfg.RuntimeLogDir),
-		rollingPolicyDiagnostics(cfg.RuntimeLogConfig.MaxSize, cfg.RuntimeLogConfig.MaxBackups, cfg.RuntimeLogConfig.MaxAge, cfg.RuntimeLogConfig.Compress),
-		runtimeMetricsDirLabel(cfg.RuntimeMetricsDir),
-		rollingPolicyDiagnostics(cfg.RuntimeMetricsConfig.MaxSize, cfg.RuntimeMetricsConfig.MaxBackups, cfg.RuntimeMetricsConfig.MaxAge, cfg.RuntimeMetricsConfig.Compress),
-		cfg.Port,
-		requestedPort,
-		autoPortDiagnostics(cfg.AutoPort, requestedPort, cfg.Port),
-	)
-	clidiag.Printf(cfg.Diagnostics, diagnosticsEnabled, "%s", cfg.OperatorDefaults.DiagnosticsLine())
-}
-
-func emitNamedFactoryResolutionDiagnostics(cfg RunConfig, logger *zap.Logger) {
-	resolution := cfg.NamedFactoryResolution
-	if resolution == nil {
-		return
+	if !shouldReportBatchResult(cfg) {
+		return nil
 	}
-
-	clidiag.Printf(
-		cfg.Diagnostics,
-		terminalpolicy.DiagnosticsEnabled(cfg.TerminalPolicy, cfg.Verbose),
-		"run named-factory resolution name=%q source=%s resolvedFactoryDir=%q projectRoot=%q globalRoot=%q precedence=%s",
-		resolution.Name,
-		resolution.Source,
-		resolution.FactoryDir,
-		resolution.ProjectRoot,
-		resolution.GlobalRoot,
-		resolution.PrecedenceDecision,
-	)
-	logger.Info(
-		"named factory resolved",
-		zap.String("named_factory_name", resolution.Name),
-		zap.String("named_factory_resolution_source", string(resolution.Source)),
-		zap.String("named_factory_dir", resolution.FactoryDir),
-		zap.String("named_factory_project_root", resolution.ProjectRoot),
-		zap.String("named_factory_global_root", resolution.GlobalRoot),
-		zap.String("named_factory_precedence_decision", string(resolution.PrecedenceDecision)),
-	)
-	if resolution.PrecedenceDecision == interfaces.NamedFactoryPrecedenceDecisionProjectOverGlobal {
-		logger.Info(
-			"named factory precedence selected",
-			zap.String("named_factory_name", resolution.Name),
-			zap.String("named_factory_precedence_decision", string(resolution.PrecedenceDecision)),
-			zap.String("named_factory_resolution_source", string(resolution.Source)),
-		)
+	if batchProvider == nil {
+		return fmt.Errorf("report batch result: clean invocation snapshot provider is required")
 	}
+	if !snapshotReady {
+		var snapshotErr error
+		snapshot, snapshotErr = batchProvider.CleanInvocationSnapshot(ctx)
+		if snapshotErr != nil {
+			return fmt.Errorf("read batch result: %w", snapshotErr)
+		}
+	}
+	return reportBatchResult(cfg, snapshot)
 }
 
-func resolveFactoryDirForDiagnostics(
-	dir string,
-	resolve interfaces.CurrentFactoryDirectoryResolver,
-) string {
-	if resolve == nil {
-		return "unresolved"
-	}
-	resolved, err := resolve(dir)
-	if err != nil {
-		return "unresolved"
-	}
-	return resolved
+func shouldReportBatchResult(cfg RunConfig) bool {
+	return strings.TrimSpace(cfg.WorkFile) != "" && !cfg.CleanInvocation && !cfg.Continuously
 }
 
-func workflowLabel(workflow string) string {
-	if strings.TrimSpace(workflow) == "" {
-		return "all"
-	}
-	return workflow
-}
-
-func runtimeLogDirLabel(dir string) string {
-	if strings.TrimSpace(dir) == "" {
-		return "default"
-	}
-	return dir
-}
-
-func runtimeMetricsDirLabel(dir string) string {
-	if strings.TrimSpace(dir) == "" {
-		return "default"
-	}
-	return dir
-}
-
-func rollingPolicyDiagnostics(maxSize, maxBackups, maxAge int, compress bool) string {
-	return fmt.Sprintf("size_mb=%d backups=%d age_days=%d compress=%t", maxSize, maxBackups, maxAge, compress)
-}
-
-func recordingDiagnostics(
-	adapter recordingscli.Adapter,
-	recordPath resolvedRunRecordPath,
-	replayPath string,
-) string {
-	if adapter == nil {
-		return "disabled"
-	}
-	return adapter.RecordingDiagnosticsLabel(recordingscli.ResolvedRecordPath{
-		ServicePath:   recordPath.servicePath,
-		ReportedPath:  recordPath.reportedPath,
-		AutoGenerated: recordPath.autoGenerated,
-	}, replayPath)
-}
-
-func autoPortDiagnostics(autoPort bool, requestedPort, resolvedPort int) string {
-	switch {
-	case requestedPort <= 0:
-		return "dashboard-disabled"
-	case !autoPort:
-		return "disabled"
-	case requestedPort == resolvedPort:
-		return "preferred-available"
-	default:
-		return "fallback"
-	}
-}
-
-func bindDashboardHost(cfg RunConfig) string {
-	if strings.TrimSpace(cfg.BindHost) != "" {
-		return cfg.BindHost
-	}
-	return "localhost"
-}
-
-// DashboardURL returns the embedded browser dashboard URL for the configured
-// local factory server host and port.
-func DashboardURL(host string, port int) string {
-	if port <= 0 {
-		return ""
-	}
-	if strings.TrimSpace(host) == "" {
-		host = "localhost"
-	}
-	authority := net.JoinHostPort(host, strconv.Itoa(port))
-	return "http://" + authority + "/dashboard/ui"
-}
-
-func shouldOpenDashboard(cfg RunConfig) bool {
-	return cfg.OpenDashboard
-}
-
-func reportRecordingPathOnShutdown(
-	output io.Writer,
-	recordPath resolvedRunRecordPath,
-	adapter recordingscli.Adapter,
-) {
-	if adapter == nil {
-		return
-	}
-	adapter.ReportRecordingPathOnShutdown(output, recordingscli.ResolvedRecordPath{
-		ServicePath:   recordPath.servicePath,
-		ReportedPath:  recordPath.reportedPath,
-		AutoGenerated: recordPath.autoGenerated,
-	})
-}
-
-func openDashboardAtBoundEndpoint(
+func runFactoryService(
 	ctx context.Context,
-	cfg RunConfig,
-	openDashboard func(context.Context, string) error,
-) {
-	url := DashboardURL(bindDashboardHost(cfg), cfg.Port)
-	if openDashboard == nil {
-		if cfg.StartupOutput != nil {
-			fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open unavailable: browser opener is required\nOpen the dashboard at %s\n", url)
+	factorySvc factoryServiceRunner,
+	batchProvider batchReportProvider,
+	snapshot *state.CleanInvocationSnapshot,
+	snapshotReady *bool,
+) error {
+	if batchProvider == nil {
+		return factorySvc.Run(ctx)
+	}
+	managed, supportsCompletion := factorySvc.(initializer.CompletionRuntimeRunner)
+	if !supportsCompletion {
+		return factorySvc.Run(ctx)
+	}
+	return managed.RunWithCompletion(ctx, func(completionCtx context.Context) error {
+		if waiter, ok := batchProvider.(batchCompletionWaiter); ok {
+			waitResult := waiter.ControlWaitToComplete(state.WaitToCompleteRequest{})
+			if waitResult.Done != nil {
+				select {
+				case <-waitResult.Done:
+				case <-completionCtx.Done():
+					return completionCtx.Err()
+				}
+			}
 		}
-		return
-	}
-	if err := openDashboard(ctx, url); err != nil {
-		if cfg.StartupOutput != nil {
-			fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open unavailable: %v\nOpen the dashboard at %s\n", err, url)
+		captured, err := batchProvider.CleanInvocationSnapshot(completionCtx)
+		if err != nil {
+			return fmt.Errorf("read batch result: %w", err)
 		}
-		return
-	}
-	if cfg.StartupOutput != nil {
-		fmt.Fprintf(cfg.StartupOutput, "Opening dashboard: %s\n", url)
-	}
+		if snapshot != nil {
+			*snapshot = captured
+		}
+		if snapshotReady != nil {
+			*snapshotReady = true
+		}
+		return nil
+	})
 }
 
 // CountTokenStates counts tokens by their state category based on place ID conventions.

@@ -945,3 +945,18 @@ func resolveRuntimeTemplateFields(
 	}
 	return nil
 }
+
+func workerTokenPlaceKey(token workers.Token) string {
+	prefix := strings.TrimSpace(token.Color.WorkTypeID)
+	if prefix == "" {
+		prefix = strings.TrimSpace(token.Color.Name)
+	}
+	stateName := strings.TrimSpace(token.State)
+	if prefix == "" {
+		return stateName
+	}
+	if stateName == "" {
+		return prefix
+	}
+	return prefix + ":" + stateName
+}
