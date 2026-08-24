@@ -55,7 +55,8 @@ describe("factoryGraphNodeVisualStateClassName work occupancy fill", () => {
       visualState({ lifecycle: "PROCESSING" }),
     );
 
-    expect(className).not.toContain("!text-on-warning");
+    expect(classTokens(className)).not.toContain("!text-on-warning");
+    expect(classTokens(className)).toContain("factory-light:!text-on-warning");
   });
 
   it("fills a held processing work state solidly", () => {

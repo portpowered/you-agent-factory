@@ -184,11 +184,11 @@ describe("exhaustive palette contrast ratchet", () => {
     expect(diagnostics, diagnostics.join("\n")).toEqual([]);
     expect(measurements).toHaveLength(105);
     expect(new Set(measurements.map(measurementKey)).size).toBe(105);
-    expect(PALETTE_CONTRAST_BASELINE).toHaveLength(16);
-    expect(debt).toHaveLength(16);
+    expect(PALETTE_CONTRAST_BASELINE).toHaveLength(8);
+    expect(debt).toHaveLength(8);
     expect(
       debt.filter(({ paletteId }) => paletteId === "factory-light"),
-    ).toHaveLength(9);
+    ).toHaveLength(1);
     expect(
       measurements.find(
         ({ fillToken, foregroundToken, paletteId }) =>
@@ -196,7 +196,7 @@ describe("exhaustive palette contrast ratchet", () => {
           foregroundToken === "--color-on-primary-container" &&
           fillToken === "--color-primary-container",
       )?.stableRatio,
-    ).toBe(2.44);
+    ).toBe(14.86);
   });
 
   it("fails unresolved, cyclic, and unsupported token values with context", () => {

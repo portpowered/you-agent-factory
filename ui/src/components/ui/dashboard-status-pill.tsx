@@ -15,14 +15,15 @@ const DASHBOARD_STATUS_PILL_SIZE_CLASS = {
 
 /** Non-interactive status labels. Use accent tones for brand emphasis, semantic tones for state meaning only. */
 const DASHBOARD_STATUS_PILL_TONE_CLASS = {
-  active: "border-primary bg-primary-container text-on-primary",
+  active:
+    "border-primary bg-primary-container text-on-primary factory-light:text-on-primary-container",
   danger: "border-af-danger-border bg-error-container text-on-error-container",
   info: "border-af-info-border bg-info-container text-on-info-container",
   neutral: "border-outline bg-surface-container-low text-on-surface-variant",
   success:
     "border-af-success-border bg-success-container text-on-success-container",
   warning:
-    "border-af-warning-border bg-warning-container text-on-warning-container",
+    "border-af-warning-border bg-warning-container text-on-warning-container factory-light:bg-warning factory-light:text-on-warning",
 } as const;
 const DASHBOARD_STATUS_PILL_TYPOGRAPHY_CLASS = {
   none: null,

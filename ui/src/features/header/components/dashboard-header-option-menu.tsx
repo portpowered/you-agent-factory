@@ -7,7 +7,7 @@ const DASHBOARD_HEADER_OPTION_MENU_ITEM_BASE_CLASS =
 const DASHBOARD_HEADER_OPTION_MENU_ITEM_UNSELECTED_CLASS =
   "border-transparent bg-transparent text-on-surface-variant hover:bg-af-overlay hover:text-on-surface";
 const DASHBOARD_HEADER_OPTION_MENU_ITEM_SELECTED_CLASS =
-  "border-primary bg-primary-container text-on-primary";
+  "border-primary bg-primary-container text-on-primary factory-light:text-on-primary-container";
 
 export interface DashboardHeaderOptionMenuSurfaceProps
   extends HTMLAttributes<HTMLDivElement> {
