@@ -38,7 +38,7 @@ func TestAllowedFunctionalDomainsMatchExpansionPlan(t *testing.T) {
 	t.Parallel()
 	want := []string{
 		"transport", "workers", "orchestration", "workstations", "work", "sessions",
-		"factory", "providers", "provider_sessions", "events", "models", "guards", "resources",
+		"factory", "providers", "provider_sessions", "events", "recordings", "models", "guards", "resources",
 		"observability", "product", "resilience",
 	}
 	if len(allowedFunctionalDomains) != len(want) {
@@ -60,6 +60,7 @@ func TestScanAcceptsApprovedDomainSubsectionWithoutDebt(t *testing.T) {
 	writeTestFile(t, repoRoot, "tests/functional/workers/script/create_test.go", "package script_test\nfunc TestCreate() {}\n")
 	writeTestFile(t, repoRoot, "tests/functional/providers/contract/custom_integration_test.go", "package contract_test\nfunc TestCustomIntegration() {}\n")
 	writeTestFile(t, repoRoot, "tests/functional/providers/gemini/invoke_test.go", "package gemini_test\nfunc TestInvoke() {}\n")
+	writeTestFile(t, repoRoot, "tests/functional/recordings/process/flush_test.go", "package process_test\nfunc TestFlush() {}\n")
 	writeTestFile(t, repoRoot, "tests/functional/transport/cli/flag_parsing_test.go", "package cli_test\nfunc TestFlagParsing() {}\n")
 	writeTestFile(t, repoRoot, "tests/functional/work/visualization/graph_test.go", "package visualization_test\nfunc TestGraph() {}\n")
 

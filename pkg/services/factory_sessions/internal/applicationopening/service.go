@@ -137,9 +137,10 @@ func (service *Service) bindLiveApplication(
 		return roles.OpenedProcessApplication{}, fmt.Errorf("bind Factory Session application: %w", err)
 	}
 	plan, err := service.planLifecycle(roles.LifecyclePlanRequest{
-		Runtime:    opened.Process,
-		Components: components,
-		Close:      opened.Resources.Close,
+		Runtime:     opened.Process,
+		Components:  components,
+		Close:       opened.Resources.Close,
+		OrderlyStop: opened.OrderlyStop,
 	})
 	if err != nil {
 		err = closeOpenedRuntime(opened, err)

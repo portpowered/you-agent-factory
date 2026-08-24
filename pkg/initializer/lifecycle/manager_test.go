@@ -155,6 +155,115 @@ func TestManagerUsesSameShutdownPathForCancellationAndRunnerFailure(t *testing.T
 	}
 }
 
+func TestManagerAwaitsOrderlyStopAfterComponentsAndBeforeResources(t *testing.T) {
+	var order []string
+	started := make(chan struct{})
+	flushEntered := make(chan struct{})
+	releaseFlush := make(chan struct{})
+	finished := make(chan error, 1)
+	primary := lifecycle.NewRunner(func(ctx context.Context) error {
+		order = append(order, "run-primary")
+		close(started)
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	secondary := lifecycle.Functions{
+		StartFunc: func(context.Context) error { order = append(order, "start-secondary"); return nil },
+		StopFunc:  func(context.Context) error { order = append(order, "stop-secondary"); return nil },
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		finished <- lifecycle.NewManager().Run(ctx, lifecycle.Plan{
+			Components: []lifecycle.NamedComponent{
+				{Name: "secondary", Component: secondary},
+				{Name: "primary", Component: primary, Primary: true},
+			},
+			OrderlyStop: func(context.Context) error {
+				order = append(order, "orderly-stop")
+				close(flushEntered)
+				<-releaseFlush
+				return nil
+			},
+			Resources: []lifecycle.NamedResource{{
+				Name:     "owned",
+				Resource: closerFunc(func() error { order = append(order, "close-resource"); return nil }),
+			}},
+		})
+	}()
+	<-started
+	cancel()
+	<-flushEntered
+	select {
+	case err := <-finished:
+		t.Fatalf("Run() returned before orderly stop completed: %v", err)
+	default:
+	}
+	close(releaseFlush)
+	if err := <-finished; err != nil {
+		t.Fatalf("Run() error = %v, want nil", err)
+	}
+	want := []string{"start-secondary", "run-primary", "stop-secondary", "orderly-stop", "close-resource"}
+	if !reflect.DeepEqual(order, want) {
+		t.Fatalf("orderly shutdown = %v, want %v", order, want)
+	}
+}
+
+func TestManagerPropagatesOrderlyStopFailureAndStillClosesResources(t *testing.T) {
+	flushErr := errors.New("recording flush failed")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started := make(chan struct{})
+	closed := 0
+	finished := make(chan error, 1)
+	go func() {
+		finished <- lifecycle.NewManager().Run(ctx, lifecycle.Plan{
+			Components: []lifecycle.NamedComponent{{
+				Name: "primary",
+				Component: lifecycle.NewRunner(func(ctx context.Context) error {
+					close(started)
+					<-ctx.Done()
+					return ctx.Err()
+				}),
+				Primary: true,
+			}},
+			OrderlyStop: func(context.Context) error { return flushErr },
+			Resources: []lifecycle.NamedResource{{
+				Name:     "owned",
+				Resource: closerFunc(func() error { closed++; return nil }),
+			}},
+		})
+	}()
+	<-started
+	cancel()
+	err := <-finished
+	if !errors.Is(err, flushErr) {
+		t.Fatalf("Run() error = %v, want orderly flush failure", err)
+	}
+	if closed != 1 {
+		t.Fatalf("resource close count = %d, want 1", closed)
+	}
+}
+
+func TestManagerSkipsOrderlyStopForNonCancellationFailure(t *testing.T) {
+	runnerErr := errors.New("runtime failed")
+	called := false
+	err := lifecycle.NewManager().Run(context.Background(), lifecycle.Plan{
+		Components: []lifecycle.NamedComponent{{
+			Name:      "primary",
+			Component: lifecycle.NewRunner(func(context.Context) error { return runnerErr }),
+			Primary:   true,
+		}},
+		OrderlyStop: func(context.Context) error { called = true; return nil },
+	})
+	if !errors.Is(err, runnerErr) {
+		t.Fatalf("Run() error = %v, want runner failure", err)
+	}
+	if called {
+		t.Fatal("orderly stop ran for a non-cancellation lifecycle failure")
+	}
+}
+
 type closerFunc func() error
 
 func (fn closerFunc) Close() error { return fn() }
