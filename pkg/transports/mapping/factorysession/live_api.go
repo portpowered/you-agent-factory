@@ -159,11 +159,22 @@ func (a *LiveAPI) OpenFactorySession(ctx context.Context, request factoryapi.Ope
 }
 
 func (a *LiveAPI) CloseFactorySession(ctx context.Context, sessionID string) error {
+	return a.DeleteFactorySession(ctx, sessionID)
+}
+
+// DeleteFactorySession forwards the public DELETE operation to the
+// Factory-Sessions-owned deletion capability. It never falls back to the
+// destructive internal close operation.
+func (a *LiveAPI) DeleteFactorySession(ctx context.Context, sessionID string) error {
 	control, err := a.requireControl()
 	if err != nil {
 		return err
 	}
-	return control.CloseFactorySession(ctx, sessionID)
+	deletion, ok := control.(factorysessions.LiveDeletionService)
+	if !ok {
+		return fmt.Errorf("Factory Session deletion service is required")
+	}
+	return deletion.DeleteFactorySession(ctx, sessionID)
 }
 
 func (a *LiveAPI) PauseLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.LiveControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {

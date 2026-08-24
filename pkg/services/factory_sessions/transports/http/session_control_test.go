@@ -192,13 +192,13 @@ func TestHandlerFromRoot_StartDurableFactorySessionAsyncInvalidSourceReturnsBadR
 func TestHandlerFromRoot_CloseFactorySessionInvokesRoot(t *testing.T) {
 	t.Parallel()
 
-	closed := false
+	deleted := false
 	root := &httpSessionsRootFake{
-		onClose: func(_ context.Context, sessionID string) error {
+		onDelete: func(_ context.Context, sessionID string) error {
 			if sessionID != "session-close-alpha" {
 				t.Fatalf("sessionId = %q, want session-close-alpha", sessionID)
 			}
-			closed = true
+			deleted = true
 			return nil
 		},
 	}
@@ -210,8 +210,8 @@ func TestHandlerFromRoot_CloseFactorySessionInvokesRoot(t *testing.T) {
 	if recorder.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", recorder.Code)
 	}
-	if !closed {
-		t.Fatal("fake root close was not invoked")
+	if !deleted {
+		t.Fatal("fake root delete was not invoked")
 	}
 }
 

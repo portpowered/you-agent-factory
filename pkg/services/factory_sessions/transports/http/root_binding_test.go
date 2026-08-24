@@ -151,6 +151,7 @@ type httpSessionsRootFake struct {
 	listSessions      func(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
 	onOpen            func(context.Context, factorysessions.OpenRequest) (*factorysessions.OpenResult, error)
 	onClose           func(context.Context, string) error
+	onDelete          func(context.Context, string) error
 	onStartAsync      func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error)
 	onPauseDurable    func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
 	onPauseLive       func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
@@ -275,6 +276,13 @@ func (fake *httpSessionsRootFake) TerminateLiveFactorySession(ctx context.Contex
 func (fake *httpSessionsRootFake) CloseFactorySession(ctx context.Context, sessionID string) error {
 	if fake.onClose != nil {
 		return fake.onClose(ctx, sessionID)
+	}
+	return factorysessions.ErrSessionNotFound
+}
+
+func (fake *httpSessionsRootFake) DeleteFactorySession(ctx context.Context, sessionID string) error {
+	if fake.onDelete != nil {
+		return fake.onDelete(ctx, sessionID)
 	}
 	return factorysessions.ErrSessionNotFound
 }

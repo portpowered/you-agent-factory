@@ -201,6 +201,160 @@ func TestServiceCancelAndTerminateUseDistinctRuntimeStopActionsAndKeepSessionIns
 	}
 }
 
+func TestServiceDeleteRejectsDefaultWithoutStoppingOrRemovingIt(t *testing.T) {
+	t.Parallel()
+
+	session := &livesession.LiveSession{ID: factorysessions.DefaultSessionID, IsDefault: true}
+	stopCalls := 0
+	dependencies := testDependencies()
+	dependencies.RequireSession = func(string) (*livesession.LiveSession, error) { return session, nil }
+	dependencies.StopSession = func(string) error {
+		stopCalls++
+		return nil
+	}
+	service, err := liveruntimewire.NewService(dependencies)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	err = service.(liveruntime.DeletionService).Delete(context.Background(), factorysessions.DefaultSessionID)
+	var deletionErr *factorysessions.SessionDeletionError
+	if !errors.As(err, &deletionErr) || deletionErr.Reason != factorysessions.SessionDeletionReasonDefault {
+		t.Fatalf("delete error = %v, want typed default-session conflict", err)
+	}
+	if !errors.Is(err, factorysessions.ErrSessionDeletionConflict) {
+		t.Fatalf("delete error = %v, want ErrSessionDeletionConflict", err)
+	}
+	if stopCalls != 0 {
+		t.Fatalf("stop calls = %d, want zero for default deletion refusal", stopCalls)
+	}
+}
+
+func TestServiceDeleteRejectsActiveRuntimeWithoutChangingState(t *testing.T) {
+	t.Parallel()
+
+	for _, state := range []string{
+		string(factorydefinitions.FactoryStateRunning),
+		string(factorydefinitions.FactoryStatePaused),
+		string(factorydefinitions.FactoryStateIdle),
+	} {
+		state := state
+		t.Run(state, func(t *testing.T) {
+			t.Parallel()
+
+			runtime := &testFactoryRuntime{state: state}
+			session := &livesession.LiveSession{
+				ID:      "session-delete-active",
+				Runtime: &factorysessions.LiveRuntime{Factory: runtime},
+			}
+			stopCalls := 0
+			dependencies := testDependencies()
+			dependencies.RequireSession = func(string) (*livesession.LiveSession, error) { return session, nil }
+			dependencies.StopSession = func(string) error {
+				stopCalls++
+				return nil
+			}
+			service, err := liveruntimewire.NewService(dependencies)
+			if err != nil {
+				t.Fatalf("NewService: %v", err)
+			}
+
+			err = service.(liveruntime.DeletionService).Delete(context.Background(), session.ID)
+			var deletionErr *factorysessions.SessionDeletionError
+			if !errors.As(err, &deletionErr) || deletionErr.Reason != factorysessions.SessionDeletionReasonRuntimeActive {
+				t.Fatalf("delete error = %v, want typed active-runtime conflict", err)
+			}
+			if deletionErr.Status != factorysessions.LifecycleStatus(state) {
+				t.Fatalf("deletion status = %q, want %q", deletionErr.Status, state)
+			}
+			if stopCalls != 0 || runtime.state != state {
+				t.Fatalf("delete changed active runtime: stop calls %d, state %q", stopCalls, runtime.state)
+			}
+		})
+	}
+}
+
+func TestServiceDeleteRejectsInFlightLifecycleControlState(t *testing.T) {
+	t.Parallel()
+
+	for _, controlState := range []string{"PAUSING", "CANCELING", "TERMINATING"} {
+		controlState := controlState
+		t.Run(controlState, func(t *testing.T) {
+			t.Parallel()
+
+			runtime := &testFactoryRuntime{
+				state:        string(factorydefinitions.FactoryStateCompleted),
+				controlState: controlState,
+			}
+			session := &livesession.LiveSession{
+				ID:      "session-delete-control-state",
+				Runtime: &factorysessions.LiveRuntime{Factory: runtime},
+			}
+			stopCalls := 0
+			dependencies := testDependencies()
+			dependencies.RequireSession = func(string) (*livesession.LiveSession, error) { return session, nil }
+			dependencies.StopSession = func(string) error {
+				stopCalls++
+				return nil
+			}
+			service, err := liveruntimewire.NewService(dependencies)
+			if err != nil {
+				t.Fatalf("NewService: %v", err)
+			}
+
+			err = service.(liveruntime.DeletionService).Delete(context.Background(), session.ID)
+			var deletionErr *factorysessions.SessionDeletionError
+			if !errors.As(err, &deletionErr) || deletionErr.Status != factorysessions.LifecycleStatus(controlState) {
+				t.Fatalf("delete error = %v, want active %s conflict", err, controlState)
+			}
+			if stopCalls != 0 {
+				t.Fatalf("stop calls = %d, want zero during %s", stopCalls, controlState)
+			}
+		})
+	}
+}
+
+func TestServiceDeleteAfterCancelRemovesStoppedNonDefaultSession(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "session-delete-after-cancel"
+	runtime := &testFactoryRuntime{state: string(factorydefinitions.FactoryStateRunning)}
+	session := &livesession.LiveSession{
+		ID:      sessionID,
+		Runtime: &factorysessions.LiveRuntime{Factory: runtime},
+	}
+	stopCalls := 0
+	dependencies := testDependencies()
+	dependencies.RequireSession = func(string) (*livesession.LiveSession, error) { return session, nil }
+	dependencies.SessionFactory = func(string) (factoryruntime.Service, error) { return runtime, nil }
+	dependencies.StopSession = func(id string) error {
+		if id != sessionID {
+			t.Fatalf("stopped session = %q, want %q", id, sessionID)
+		}
+		stopCalls++
+		return nil
+	}
+	service, err := liveruntimewire.NewService(dependencies)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	if _, err := service.ApplyControl(context.Background(), sessionID, factorysessions.LifecycleControlCancel, factorysessions.ControlRequest{RequestID: "cancel-delete"}); err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+	if len(runtime.terminateRequests) != 1 || runtime.terminateRequests[0].WorkerSessionAction != factoryruntime.WorkerSessionControlActionCancel {
+		t.Fatalf("cancel requests = %#v, want one CANCEL request", runtime.terminateRequests)
+	}
+	runtime.state = string(factorydefinitions.FactoryStateCompleted)
+
+	if err := service.(liveruntime.DeletionService).Delete(context.Background(), sessionID); err != nil {
+		t.Fatalf("delete after cancel: %v", err)
+	}
+	if stopCalls != 1 {
+		t.Fatalf("stop calls = %d, want one after runtime stopped", stopCalls)
+	}
+}
+
 func TestServiceLiveStopControlMissingSessionReturnsNotFound(t *testing.T) {
 	t.Parallel()
 
@@ -353,6 +507,7 @@ type testFactoryRuntime struct {
 	terminateRequests []factoryruntime.TerminateRequest
 	terminateErr      error
 	terminateOutcome  factoryruntime.ControlOutcome
+	controlState      string
 }
 
 type boundedSnapshotRuntime struct {
@@ -405,7 +560,7 @@ func (f *testFactoryRuntime) Terminate(context.Context, factoryruntime.Terminate
 func (f *testFactoryRuntime) Observe(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
 	return factoryruntime.ObserveResult{
 		Observation: factoryruntime.Observation{
-			Health: factoryruntime.ObservationHealth{FactoryState: f.state},
+			Health: factoryruntime.ObservationHealth{FactoryState: f.state, LifecycleControlStatus: f.controlState},
 		},
 	}, nil
 }

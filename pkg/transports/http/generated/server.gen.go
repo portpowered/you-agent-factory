@@ -9600,6 +9600,9 @@ type CurrentFactoryNotFound = ErrorResponse
 // ExecutionRequestIdConflict defines model for ExecutionRequestIdConflict.
 type ExecutionRequestIdConflict = ErrorResponse
 
+// FactorySessionDeletionConflict defines model for FactorySessionDeletionConflict.
+type FactorySessionDeletionConflict = ErrorResponse
+
 // FactorySessionLifecycleControlConflict defines model for FactorySessionLifecycleControlConflict.
 type FactorySessionLifecycleControlConflict struct {
 	union json.RawMessage
@@ -18555,7 +18558,7 @@ type ServerInterface interface {
 	// Start durable factory session execution synchronously
 	// (POST /factory-sessions/sync)
 	StartDurableFactorySessionSync(w http.ResponseWriter, r *http.Request)
-	// Close one live factory session
+	// Delete one stopped live factory session
 	// (DELETE /factory-sessions/{session_id})
 	CloseFactorySession(w http.ResponseWriter, r *http.Request, sessionId string)
 	// Get one factory session

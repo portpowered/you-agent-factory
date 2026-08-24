@@ -197,6 +197,29 @@ func TestStopSessionRetiresRegisteredTerminalRuntime(t *testing.T) {
 	}
 }
 
+func TestStopSessionRetiresSessionWhenRuntimeAlreadyStopped(t *testing.T) {
+	t.Parallel()
+
+	for _, stopErr := range []error{factory.ErrAlreadyStopped, factory.ErrNotRunning} {
+		stopErr := stopErr
+		t.Run(stopErr.Error(), func(t *testing.T) {
+			state := newRuntimeBindingState()
+			session := registerTestSession(state, "already-stopped")
+			var active runtimebinding.State
+			active.SetActive(context.Background(), session.ID, runtimebinding.HandleFromSession(session))
+
+			if err := runtimebinding.StopSession(state, &active, session.ID, func(factory.RuntimeRun) error {
+				return stopErr
+			}); err != nil {
+				t.Fatalf("StopSession(%v): %v", stopErr, err)
+			}
+			if state.Resolve(session.ID) != nil {
+				t.Fatalf("session remains registered after %v cleanup", stopErr)
+			}
+		})
+	}
+}
+
 func TestOpaqueBindingRoutesSessionServiceAndCleanup(t *testing.T) {
 	t.Parallel()
 

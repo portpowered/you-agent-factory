@@ -1,0 +1,5 @@
+description: The selected Factory Session cannot be deleted while it is the default session or its runtime is active.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'

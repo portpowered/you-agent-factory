@@ -658,7 +658,10 @@ func StopSession(
 	}
 	var cleanupErrs []error
 	if stop != nil {
-		if err := stop(handle); err != nil && !errors.Is(err, context.Canceled) {
+		if err := stop(handle); err != nil &&
+			!errors.Is(err, context.Canceled) &&
+			!errors.Is(err, factory.ErrAlreadyStopped) &&
+			!errors.Is(err, factory.ErrNotRunning) {
 			cleanupErrs = append(cleanupErrs, err)
 		}
 	}

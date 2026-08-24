@@ -78,11 +78,11 @@ func TestLiveAPI_MapsCompleteLifecycleThroughNarrowControl(t *testing.T) {
 		t.Fatalf("CloseFactorySession: %v", err)
 	}
 
-	if got, want := control.calls, []string{"open", "list", "get", "pause", "resume", "close"}; !reflect.DeepEqual(got, want) {
+	if got, want := control.calls, []string{"open", "list", "get", "pause", "resume", "delete"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("control calls = %#v, want %#v", got, want)
 	}
-	if control.pauseRequest.RequestID != "pause-1" || control.resumeRequest.RequestID != "resume-1" || control.closedID != liveControlSessionID {
-		t.Fatalf("control requests = pause:%#v resume:%#v close:%q", control.pauseRequest, control.resumeRequest, control.closedID)
+	if control.pauseRequest.RequestID != "pause-1" || control.resumeRequest.RequestID != "resume-1" || control.deletedID != liveControlSessionID {
+		t.Fatalf("control requests = pause:%#v resume:%#v delete:%q", control.pauseRequest, control.resumeRequest, control.deletedID)
 	}
 }
 
@@ -125,7 +125,7 @@ type liveControlSpy struct {
 	resumeRequest    factorysessions.LiveControlRequest
 	cancelRequest    factorysessions.LiveControlRequest
 	terminateRequest factorysessions.LiveControlRequest
-	closedID         string
+	deletedID        string
 }
 
 var _ factorysessions.LiveControlService = (*liveControlSpy)(nil)
@@ -200,7 +200,13 @@ func (s *liveControlSpy) TerminateLiveFactorySession(
 
 func (s *liveControlSpy) CloseFactorySession(_ context.Context, sessionID string) error {
 	s.calls = append(s.calls, "close")
-	s.closedID = sessionID
+	s.deletedID = sessionID
+	return nil
+}
+
+func (s *liveControlSpy) DeleteFactorySession(_ context.Context, sessionID string) error {
+	s.calls = append(s.calls, "delete")
+	s.deletedID = sessionID
 	return nil
 }
 

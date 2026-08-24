@@ -29,12 +29,12 @@ func NewDelete(transport clihttp.Protocol) func(DeleteConfig) error {
 	return func(cfg DeleteConfig) error { cfg.HTTP = transport; return Delete(cfg) }
 }
 
-// DeleteResult is the CLI JSON confirmation emitted after a successful close.
+// DeleteResult is the CLI JSON confirmation emitted after a successful delete.
 type DeleteResult struct {
 	SessionID string `json:"sessionId"`
 }
 
-// Delete closes one live factory session on a running host via HTTP.
+// Delete removes one already-stopped live factory session from a running host via HTTP.
 func Delete(cfg DeleteConfig) error {
 	sessionID := strings.TrimSpace(cfg.SessionID)
 	if sessionID == "" {
@@ -104,7 +104,7 @@ func renderDeleteSuccess(cfg DeleteConfig, sessionID string) error {
 	if cfg.JSON {
 		return json.NewEncoder(cfg.Output).Encode(DeleteResult{SessionID: sessionID})
 	}
-	_, err := fmt.Fprintf(cfg.Output, "Closed factory session %s\n", sessionID)
+	_, err := fmt.Fprintf(cfg.Output, "Deleted factory session %s\n", sessionID)
 	return err
 }
 
@@ -127,9 +127,9 @@ func deleteStatusError(resp *http.Response) error {
 		return clihttp.NewAPIErrorFromResponse(
 			resp,
 			errResp,
-			fmt.Sprintf("close factory session failed (%d): %s", resp.StatusCode, errResp.Message),
+			fmt.Sprintf("delete factory session failed (%d): %s", resp.StatusCode, errResp.Message),
 			nil,
 		)
 	}
-	return clihttp.WithHTTPResponse(resp, fmt.Errorf("close factory session failed (%d)", resp.StatusCode))
+	return clihttp.WithHTTPResponse(resp, fmt.Errorf("delete factory session failed (%d)", resp.StatusCode))
 }

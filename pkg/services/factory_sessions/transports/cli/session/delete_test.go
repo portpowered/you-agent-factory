@@ -52,7 +52,7 @@ func TestDelete_Success204PrintsHumanConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	if got := out.String(); got != "Closed factory session session-beta\n" {
+	if got := out.String(); got != "Deleted factory session session-beta\n" {
 		t.Fatalf("output = %q", got)
 	}
 }
@@ -151,10 +151,37 @@ func TestDelete_APIErrorSurfacesMessage(t *testing.T) {
 		Output:    ioDiscardWriter{t},
 	})
 	if err == nil {
-		t.Fatal("expected close error")
+		t.Fatal("expected delete error")
 	}
-	if !strings.Contains(err.Error(), "close factory session failed (500): failed to close factory session") {
+	if !strings.Contains(err.Error(), "delete factory session failed (500): failed to close factory session") {
 		t.Fatalf("error = %q", err.Error())
+	}
+}
+
+func TestDelete_ConflictReturnsActionableTypedMessage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
+			Message: "factory session \"~default\" cannot be deleted: the default session cannot be deleted; make a different session the default first",
+			Family:  factoryapi.ErrorFamilyConflict,
+			Code:    factoryapi.ErrorResponseCodeLIFECYCLECONFLICT,
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	err := NewDelete(testHTTPProtocol(t))(DeleteConfig{
+		Port:      serverPort(t, srv),
+		SessionID: "~default",
+		Output:    ioDiscardWriter{t},
+	})
+	if err == nil {
+		t.Fatal("expected conflict error")
+	}
+	if !strings.Contains(err.Error(), "delete factory session failed (409)") || !strings.Contains(err.Error(), "make a different session the default first") {
+		t.Fatalf("error = %q, want actionable 409 deletion conflict", err.Error())
 	}
 }
 

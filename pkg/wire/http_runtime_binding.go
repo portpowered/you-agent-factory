@@ -13,6 +13,7 @@ import (
 	factorydefinitionshttp "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http"
 	factorydefinitionmapping "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mapping/factorydefinition"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
@@ -183,11 +184,13 @@ func newHTTPSessionsHandler(
 	statusAPI := factorysessionshttp.NewFactoryStatusAPI(statusSessions, factoryStatusProjector)
 	definitionsAPI := factorydefinitionmapping.NewAPI(definitionMapping, definitionMapping)
 	liveAPI := factorysessionmapping.NewLiveAPI(opened.LiveControl, liveGateway)
+	deletion, _ := opened.FactorySessions.(factorysessions.LiveDeletionService)
 	invocationAPI := factorysessionmapping.NewInvocationAPI(opened.FactorySessions)
 	durableAPI := factorysessionmapping.NewDurableAPI(opened.FactorySessions)
 	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
 		SessionsRoot: opened.FactorySessions, LiveControl: opened.LiveControl,
-		Runtime: runtimeAPI, FactoryStatus: statusAPI,
+		SessionDeletion: deletion,
+		Runtime:         runtimeAPI, FactoryStatus: statusAPI,
 		Sessions: liveAPI, Invocation: invocationAPI, FactoryDefinitions: definitionsAPI,
 		FactoryValidation: validation, WorkflowPreview: opened.WorkflowPreview,
 		DurableExecution: durableAPI, DurableLifecycle: durableAPI,
