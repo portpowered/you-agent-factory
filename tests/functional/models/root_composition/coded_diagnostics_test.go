@@ -19,7 +19,7 @@ import (
 const codedDiagnosticModelName = "OMNIVOICE_Q4_K_M"
 const codedDiagnosticUnknownModelName = "missing-model"
 
-func TestModelsLocalInvokeMissingRequiredSlotRendersBadRequest(t *testing.T) {
+func TestModelsLocalInvokeJSONWithoutOutputIsValidationOnly(t *testing.T) {
 	t.Parallel()
 
 	factoryDir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
@@ -47,25 +47,12 @@ func TestModelsLocalInvokeMissingRequiredSlotRendersBadRequest(t *testing.T) {
 			inputs.Input.WorkingDirectory = factoryDir
 
 			err := process.Execute(inputs.Input)
-			if err == nil {
-				t.Fatal("Process.Execute(models invoke asr) error = nil, want missing-slot failure")
+			if err != nil {
+				t.Fatalf("Process.Execute(models invoke asr) error = %v, want validation-only success", err)
 			}
-			if inputs.Stdout() != "" {
-				t.Fatalf("models invoke missing-slot stdout = %q, want empty", inputs.Stdout())
-			}
-			var failure *modelservice.InvocationFailure
-			if !errors.As(err, &failure) || failure == nil || failure.Class != modelservice.InvocationFailureClassInvalidSlot {
-				t.Fatalf("models invoke missing-slot error = %v, failure = %#v, want typed invalid-slot failure", err, failure)
-			}
-
-			response := decodeFirstDiagnostic(t, inputs.Stderr())
-			if response.Code != factoryapi.ErrorResponseCode("BAD_REQUEST") || response.Family != factoryapi.ErrorFamilyBadRequest ||
-				!strings.Contains(response.Message, "required input slot is missing: audio") {
-				t.Fatalf("models invoke missing-slot diagnostic = %#v, want BAD_REQUEST with actionable message; stderr=%q", response, inputs.Stderr())
-			}
-			for _, fallback := range []string{"CLI_COMMAND_FAILED", "INTERNAL_SERVER_ERROR", "command failed"} {
-				if strings.Contains(inputs.Stderr(), fallback) {
-					t.Fatalf("models invoke missing-slot diagnostic contains fallback %q: %q", fallback, inputs.Stderr())
+			for _, signal := range []string{`"mode":"VALIDATION_ONLY"`, `"validationOnly":true`, `"inferenceExecuted":false`} {
+				if !strings.Contains(inputs.Stdout(), signal) {
+					t.Fatalf("models invoke validation stdout = %q, missing %q", inputs.Stdout(), signal)
 				}
 			}
 		})

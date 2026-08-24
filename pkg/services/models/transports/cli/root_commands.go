@@ -3,14 +3,12 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -408,79 +406,5 @@ func removeResultToGenerated(result modelinference.RemoveModelAssetsResult) fact
 		CachePath:    result.CachePath,
 		Outcome:      factoryapi.ModelRemoveOutcome(result.Outcome),
 		BytesRemoved: result.BytesRemoved,
-	}
-}
-
-const modelsFactoryLayoutNotFoundCode = "CURRENT_FACTORY_NOT_FOUND"
-
-// modelsFactoryLayoutNotFoundError preserves the searched Factory root while
-// exposing the not-found family expected by the process CLI boundary. The
-// resolver's cause remains available to callers that need errors.Is without
-// making the shared CLI renderer inspect private Factory Session errors.
-type modelsFactoryLayoutNotFoundError struct {
-	cause error
-}
-
-func (err *modelsFactoryLayoutNotFoundError) Error() string {
-	if err == nil || err.cause == nil {
-		return "Factory layout was not found"
-	}
-	return err.cause.Error()
-}
-
-func (err *modelsFactoryLayoutNotFoundError) Unwrap() error {
-	if err == nil {
-		return nil
-	}
-	return err.cause
-}
-
-func (err *modelsFactoryLayoutNotFoundError) CLIErrorCode() string {
-	return modelsFactoryLayoutNotFoundCode
-}
-
-func (err *modelsFactoryLayoutNotFoundError) CLIErrorFamily() factoryapi.ErrorFamily {
-	return factoryapi.ErrorFamilyNotFound
-}
-
-func (err *modelsFactoryLayoutNotFoundError) CLIErrorMessage() string {
-	return err.Error()
-}
-
-func mapModelsRootError(err error) error {
-	if err == nil {
-		return nil
-	}
-	switch {
-	case errors.Is(err, factorydefinitions.ErrFactoryLayoutNotFound):
-		return &modelsFactoryLayoutNotFoundError{cause: err}
-	case errors.Is(err, modelinference.ErrModelCacheNotFound):
-		return fmt.Errorf("%w: %s", ErrModelCacheNotFound, err.Error())
-	case errors.Is(err, modelinference.ErrModelCacheInUse):
-		return fmt.Errorf("%w: %s", ErrModelCacheInUse, err.Error())
-	case errors.Is(err, modelinference.ErrModelCacheUnsafe):
-		return fmt.Errorf("%w: %s", ErrModelCacheUnsafe, err.Error())
-	case errors.Is(err, modelinference.ErrNotFound):
-		return fmt.Errorf("%w: %s", ErrModelNotFound, err.Error())
-	case errors.Is(err, modelinference.ErrMissing),
-		errors.Is(err, modelinference.ErrLoading),
-		errors.Is(err, modelinference.ErrFailed),
-		errors.Is(err, modelinference.ErrUnsupported),
-		errors.Is(err, modelinference.ErrNotAvailable):
-		return err
-	case errors.Is(err, modelinference.ErrUnsupportedOperation),
-		errors.Is(err, modelinference.ErrUnsupportedResponseMode),
-		errors.Is(err, modelinference.ErrUnsupportedModelOperation):
-		return err
-	default:
-		var pullErr *modelinference.PullError
-		if errors.As(err, &pullErr) {
-			return fmt.Errorf(
-				"managed runtime pull failed (%s readiness %s)",
-				pullErr.Result.ManagedPullOutcome,
-				pullErr.Result.ReadinessState,
-			)
-		}
-		return err
 	}
 }

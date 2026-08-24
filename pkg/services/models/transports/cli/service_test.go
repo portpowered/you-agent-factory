@@ -213,7 +213,7 @@ func TestRootAdapter_InvokeGenericUsesRequiredTextInputWhenOptionalSlotsSortFirs
 	var output bytes.Buffer
 	if err := service.Invoke(modelscli.InvokeConfig{
 		Context: context.Background(), ModelName: modelinference.BuiltInModelNameTTS,
-		Operation: modelinference.OperationTTS, Text: "hello", JSON: true, Output: &output,
+		Operation: modelinference.OperationTTS, Text: "hello", OutputPath: "speech.wav", JSON: true, Output: &output,
 	}); err != nil {
 		t.Fatalf("Invoke() error = %v", err)
 	}
