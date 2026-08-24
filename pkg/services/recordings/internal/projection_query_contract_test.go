@@ -9,9 +9,14 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	artifactsexport "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export"
+	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
+	recordingsreplay "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay"
 )
 
 func TestProjectionQueries_AreEquivalentForRetainedAndReplayedCanonicalFacts(t *testing.T) {
@@ -564,6 +569,288 @@ func TestRecordingScopeLiveSubscriptionAndCursorValidation(t *testing.T) {
 	assertSubscriptionEvent(t, fromFirst.Subscription, second.Event.ID)
 	assertLiveCursorErrors(t, root, started.Scope, first.Event.Cursor)
 }
+
+func TestRecordingScopeActiveBoundariesPreserveCancellationAndReadFailures(t *testing.T) {
+	t.Parallel()
+
+	ledger := &stubLedger{}
+	root := NewService(ledger, NewProjectionService())
+	scope := recordings.CanonicalEventScope{FactorySessionID: "active-boundaries"}
+	started, err := root.BeginRecordingScope(context.Background(), recordings.BeginRecordingScopeRequest{
+		Enabled: true,
+		Scope:   scope,
+		Target:  recordings.RecordingTargetRequest{Artifact: "recording://active-boundaries"},
+	})
+	if err != nil {
+		t.Fatalf("BeginRecordingScope: %v", err)
+	}
+
+	if _, err := root.CreateReplayPlanScope(context.Background(), recordings.CreateReplayPlanScopeRequest{
+		Scope: started.Scope, SchemaVersion: recordings.ReplayPlanSchemaV1,
+		Timing: recordings.ReplayTimingOrderOnly,
+	}); !errors.Is(err, recordings.ErrReplayRecordingNotFinalized) {
+		t.Fatalf("CreateReplayPlanScope active = %v, want ErrReplayRecordingNotFinalized", err)
+	}
+	if _, err := root.BuildPortableArtifactScope(context.Background(), recordings.BuildPortableArtifactScopeRequest{
+		Scope: started.Scope,
+	}); !errors.Is(err, recordings.ErrPortableArtifactUnavailable) {
+		t.Fatalf("BuildPortableArtifactScope without publication = %v, want ErrPortableArtifactUnavailable", err)
+	}
+
+	validGeneration := recordings.CanonicalEventCursor{
+		StreamGenerationID: ledger.StreamGenerationID(), Sequence: 0,
+	}
+	assertScopeSubscribeError(t, root, started.Scope, validGeneration, recordings.ErrReconnectCursorExpired)
+	foreignGeneration := validGeneration
+	foreignGeneration.StreamGenerationID = "other-generation"
+	assertScopeSubscribeError(t, root, started.Scope, foreignGeneration, recordings.ErrReconnectCursorUnavailable)
+
+	if _, err := root.ObserveReplayScope(context.Background(), recordings.ObserveReplayScopeRequest{
+		Scope: started.Scope, Plan: "missing-plan",
+	}); !errors.Is(err, recordings.ErrReplayPlanNotFound) {
+		t.Fatalf("ObserveReplayScope missing plan = %v, want ErrReplayPlanNotFound", err)
+	}
+	if _, err := root.SubscribeRecordingScope(context.Background(), recordings.SubscribeRecordingScopeRequest{}); !errors.Is(err, recordings.ErrRecordingScopeInvalid) {
+		t.Fatalf("SubscribeRecordingScope zero scope = %v, want ErrRecordingScopeInvalid", err)
+	}
+	if _, err := root.CreateReplayPlanScope(context.Background(), recordings.CreateReplayPlanScopeRequest{}); !errors.Is(err, recordings.ErrRecordingScopeInvalid) {
+		t.Fatalf("CreateReplayPlanScope zero scope = %v, want ErrRecordingScopeInvalid", err)
+	}
+	if _, err := root.ObserveReplayScope(context.Background(), recordings.ObserveReplayScopeRequest{}); !errors.Is(err, recordings.ErrRecordingScopeInvalid) {
+		t.Fatalf("ObserveReplayScope zero scope = %v, want ErrRecordingScopeInvalid", err)
+	}
+	if _, err := root.ReconstructRecordingScope(context.Background(), recordings.ReconstructRecordingScopeRequest{}); !errors.Is(err, recordings.ErrRecordingScopeInvalid) {
+		t.Fatalf("ReconstructRecordingScope zero scope = %v, want ErrRecordingScopeInvalid", err)
+	}
+	ledger.subscribeErr = errors.New("scope subscription unavailable")
+	if _, err := root.SubscribeRecordingScope(context.Background(), recordings.SubscribeRecordingScopeRequest{
+		Scope: started.Scope,
+	}); !errors.Is(err, ledger.subscribeErr) {
+		t.Fatalf("SubscribeRecordingScope ledger failure = %v, want %v", err, ledger.subscribeErr)
+	}
+	ledger.subscribeErr = nil
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := root.ReconstructRecordingScope(canceled, recordings.ReconstructRecordingScopeRequest{
+		Scope: started.Scope,
+	}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("ReconstructRecordingScope canceled = %v, want context.Canceled", err)
+	}
+	if _, err := root.ObserveReplayScope(canceled, recordings.ObserveReplayScopeRequest{
+		Scope: started.Scope, Plan: "missing-plan",
+	}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("ObserveReplayScope canceled = %v, want context.Canceled", err)
+	}
+
+	closed, err := root.CloseRecordingScope(canceled, recordings.CloseRecordingScopeRequest{
+		Scope: started.Scope, FinishedAt: time.Unix(1_700_000_400, 0).UTC(),
+	})
+	if !errors.Is(err, context.Canceled) || closed.Closed {
+		t.Fatalf("CloseRecordingScope canceled = (%#v, %v), want unfinished canceled scope", closed, err)
+	}
+	closed, err = root.CloseRecordingScope(context.Background(), recordings.CloseRecordingScopeRequest{
+		Scope: started.Scope, FinishedAt: time.Unix(1_700_000_400, 0).UTC(),
+	})
+	if err != nil || !closed.Closed || closed.Status.State != recordings.RecordingFinalized {
+		t.Fatalf("CloseRecordingScope retry = (%#v, %v), want finalized closed scope", closed, err)
+	}
+	if _, err := root.QueryRecordingScope(context.Background(), recordings.QueryRecordingScopeRequest{
+		Scope: started.Scope,
+	}); !errors.Is(err, recordings.ErrRecordingScopeClosed) {
+		t.Fatalf("QueryRecordingScope after close = %v, want ErrRecordingScopeClosed", err)
+	}
+}
+
+func TestRecordingScopeDelegatesSnapshotAndReplayFailures(t *testing.T) {
+	t.Parallel()
+
+	root := newScopedQueryRoot(t).(*combinedService)
+	active, err := root.BeginRecordingScope(context.Background(), recordings.BeginRecordingScopeRequest{
+		Enabled: true,
+		Scope:   recordings.CanonicalEventScope{FactorySessionID: "snapshot-failures"},
+		Target:  recordings.RecordingTargetRequest{Artifact: "recording://snapshot-failures"},
+	})
+	if err != nil {
+		t.Fatalf("BeginRecordingScope: %v", err)
+	}
+	root.Service = snapshotErrorLifecycle{
+		Service: root.Service,
+		Err:     recordings.ErrMissingRecordingTarget,
+	}
+	if _, err := root.ReconstructRecordingScope(context.Background(), recordings.ReconstructRecordingScopeRequest{
+		Scope: active.Scope,
+	}); !errors.Is(err, recordings.ErrRecordingScopeStale) {
+		t.Fatalf("ReconstructRecordingScope stale = %v, want ErrRecordingScopeStale", err)
+	}
+	snapshotErr := errors.New("snapshot unavailable")
+	root.Service = snapshotErrorLifecycle{Service: root.Service, Err: snapshotErr}
+	if _, err := root.ReconstructRecordingScope(context.Background(), recordings.ReconstructRecordingScopeRequest{
+		Scope: active.Scope,
+	}); !errors.Is(err, snapshotErr) {
+		t.Fatalf("ReconstructRecordingScope snapshot failure = %v, want delegated error", err)
+	}
+	if _, err := root.OpenRecordingScope(context.Background(), recordings.OpenRecordingScopeRequest{
+		RecordingID: "snapshot-failure-open",
+	}); !errors.Is(err, snapshotErr) || !strings.Contains(err.Error(), "snapshot unavailable") {
+		t.Fatalf("OpenRecordingScope snapshot failure = %v, want delegated error", err)
+	}
+
+	fixture := newFinalizedQueryFixture(t)
+	plan, err := fixture.root.CreateReplayPlanScope(context.Background(), recordings.CreateReplayPlanScopeRequest{
+		Scope: fixture.ref, SchemaVersion: recordings.ReplayPlanSchemaV1,
+		Timing: recordings.ReplayTimingOrderOnly,
+	})
+	if err != nil {
+		t.Fatalf("CreateReplayPlanScope: %v", err)
+	}
+	finalizedRoot := fixture.root.(*combinedService)
+	finalizedRoot.replayService = replayObservationErrorService{
+		Service: finalizedRoot.replayService,
+		Err:     errors.New("replay observation unavailable"),
+	}
+	if _, err := fixture.root.ObserveReplayScope(context.Background(), recordings.ObserveReplayScopeRequest{
+		Scope: fixture.ref, Plan: plan.Plan.Handle,
+	}); err == nil || !strings.Contains(err.Error(), "replay observation unavailable") {
+		t.Fatalf("ObserveReplayScope delegated failure = %v, want delegated error", err)
+	}
+}
+
+func TestRecordingScopeRejectsForeignPortableArtifacts(t *testing.T) {
+	t.Parallel()
+
+	fixture := newFinalizedQueryFixture(t)
+	root := fixture.root.(*combinedService)
+	foreign := recordings.PortableArtifact{
+		Summary: recordings.PortableArtifactSummary{
+			Scope: recordings.CanonicalEventScope{FactorySessionID: "foreign-scope"},
+		},
+	}
+	root.artifactsExport = foreignArtifactExportService{
+		Service:  root.artifactsExport,
+		Artifact: foreign,
+	}
+	if _, err := fixture.root.BuildPortableArtifactScope(context.Background(), recordings.BuildPortableArtifactScopeRequest{
+		Scope: fixture.ref,
+	}); !errors.Is(err, recordings.ErrForeignPortableArtifact) {
+		t.Fatalf("BuildPortableArtifactScope foreign artifact = %v, want ErrForeignPortableArtifact", err)
+	}
+	if _, err := fixture.root.ExportPortableArtifactScope(context.Background(), recordings.ExportPortableArtifactScopeRequest{
+		Scope: fixture.ref,
+	}); !errors.Is(err, recordings.ErrForeignPortableArtifact) {
+		t.Fatalf("ExportPortableArtifactScope foreign artifact = %v, want ErrForeignPortableArtifact", err)
+	}
+	if _, err := fixture.root.ReadPortableArtifactScope(context.Background(), recordings.ReadPortableArtifactScopeRequest{
+		Scope: fixture.ref, Reference: "recording://foreign",
+	}); !errors.Is(err, recordings.ErrForeignPortableArtifact) {
+		t.Fatalf("ReadPortableArtifactScope foreign artifact = %v, want ErrForeignPortableArtifact", err)
+	}
+}
+
+func TestObserveReplayScopePropagatesCancellationAfterObservation(t *testing.T) {
+	t.Parallel()
+
+	fixture := newFinalizedQueryFixture(t)
+	plan, err := fixture.root.CreateReplayPlanScope(context.Background(), recordings.CreateReplayPlanScopeRequest{
+		Scope: fixture.ref, SchemaVersion: recordings.ReplayPlanSchemaV1,
+		Timing: recordings.ReplayTimingOrderOnly,
+	})
+	if err != nil {
+		t.Fatalf("CreateReplayPlanScope: %v", err)
+	}
+	ctx := &cancelAfterFirstErrContext{}
+	if _, err := fixture.root.ObserveReplayScope(ctx, recordings.ObserveReplayScopeRequest{
+		Scope: fixture.ref, Plan: plan.Plan.Handle,
+	}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("ObserveReplayScope cancellation after observation = %v, want context.Canceled", err)
+	}
+}
+
+func TestBeginRecordingScopeCancellationWithoutClockCleansUp(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	planner := cancelingRecordingTargetPlanner{cancel: cancel}
+	root := NewServiceWithLifecycleEffects(
+		&stubLedger{}, NewProjectionService(), planner, nil, nil, nil,
+	)
+	if _, err := root.BeginRecordingScope(ctx, recordings.BeginRecordingScopeRequest{
+		Enabled: true,
+		Scope:   recordings.CanonicalEventScope{FactorySessionID: "cancel-without-clock"},
+		Target:  recordings.RecordingTargetRequest{HomeDir: "home"},
+	}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("BeginRecordingScope cancellation without clock = %v, want context.Canceled", err)
+	}
+
+	runtimeRoot := NewRuntimeRootWithHistoricalQueryAndAppender(
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		staticRecordingClock{at: time.Unix(1_700_000_500, 0).UTC()},
+	)
+	if runtimeRoot == nil {
+		t.Fatal("NewRuntimeRootWithHistoricalQueryAndAppender returned nil")
+	}
+}
+
+type snapshotErrorLifecycle struct {
+	recordinglifecycle.Service
+	Err error
+}
+
+func (service snapshotErrorLifecycle) Snapshot(recordings.RecordingID) (recordinglifecycle.Snapshot, error) {
+	return recordinglifecycle.Snapshot{}, service.Err
+}
+
+type replayObservationErrorService struct {
+	recordingsreplay.Service
+	Err error
+}
+
+func (service replayObservationErrorService) ObserveReplay(recordings.ObserveReplayRequest) (recordings.ObserveReplayResult, error) {
+	return recordings.ObserveReplayResult{}, service.Err
+}
+
+type foreignArtifactExportService struct {
+	artifactsexport.Service
+	Artifact recordings.PortableArtifact
+}
+
+func (service foreignArtifactExportService) BuildPortableArtifact(recordings.BuildPortableArtifactRequest) (recordings.BuildPortableArtifactResult, error) {
+	return recordings.BuildPortableArtifactResult{Artifact: service.Artifact}, nil
+}
+
+func (service foreignArtifactExportService) ExportPortableArtifact(context.Context, recordings.ExportPortableArtifactRequest) (recordings.ExportPortableArtifactResult, error) {
+	return recordings.ExportPortableArtifactResult{Reference: "recording://foreign", Artifact: service.Artifact}, nil
+}
+
+func (service foreignArtifactExportService) ReadPortableArtifact(context.Context, recordings.ReadPortableArtifactRequest) (recordings.ReadPortableArtifactResult, error) {
+	return recordings.ReadPortableArtifactResult{Artifact: service.Artifact}, nil
+}
+
+type cancelingRecordingTargetPlanner struct {
+	cancel context.CancelFunc
+}
+
+func (planner cancelingRecordingTargetPlanner) PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+	planner.cancel()
+	return recordings.LiveRecordingTarget{ServicePath: "recording-target", ReportedPath: "recording-target"}, nil
+}
+
+type cancelAfterFirstErrContext struct {
+	calls int
+}
+
+func (ctx *cancelAfterFirstErrContext) Deadline() (time.Time, bool) { return time.Time{}, false }
+
+func (ctx *cancelAfterFirstErrContext) Done() <-chan struct{} { return nil }
+
+func (ctx *cancelAfterFirstErrContext) Err() error {
+	ctx.calls++
+	if ctx.calls > 1 {
+		return context.Canceled
+	}
+	return nil
+}
+
+func (ctx *cancelAfterFirstErrContext) Value(any) any { return nil }
 
 func appendScopedQueryEvent(
 	t *testing.T,

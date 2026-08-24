@@ -19,6 +19,14 @@ func TestLoadReplayArtifactTypedFailuresAndSuccess(t *testing.T) {
 	}); !errors.Is(err, recordings.ErrInvalidReplayArtifact) {
 		t.Fatalf("unknown artifact = %v, want ErrInvalidReplayArtifact", err)
 	}
+	svc.lifecycleMu.Lock()
+	svc.replayByKey = nil
+	svc.lifecycleMu.Unlock()
+	if _, err := svc.LoadReplayArtifact(recordings.LoadReplayArtifactRequest{
+		ArtifactID: "unavailable",
+	}); !errors.Is(err, recordings.ErrInvalidReplayArtifact) {
+		t.Fatalf("unavailable artifact store = %v, want ErrInvalidReplayArtifact", err)
+	}
 
 	artifact := &recordings.ReplayArtifact{SchemaVersion: "replay.v1"}
 	svc.lifecycleMu.Lock()
