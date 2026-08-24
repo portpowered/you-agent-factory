@@ -35,9 +35,11 @@ type commandServiceFake struct {
 	remove  func(RemoveConfig) error
 }
 type modelsPullDoer func(*http.Request) (*http.Response, error)
+
 func (doer modelsPullDoer) Do(request *http.Request) (*http.Response, error) {
 	return doer(request)
 }
+
 type modelsPullRoundTripper func(*http.Request) (*http.Response, error)
 
 func (roundTripper modelsPullRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {

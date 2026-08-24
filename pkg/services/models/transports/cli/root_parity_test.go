@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -211,6 +213,59 @@ func TestRootAdapter_ListJSONPreservesAcceptedOutput(t *testing.T) {
 	}
 	if len(response.Results) != 1 || response.Results[0].Name != "OMNIVOICE_Q4_K_M" {
 		t.Fatalf("List() JSON = %#v, want OMNIVOICE_Q4_K_M", response.Results)
+	}
+}
+
+func TestRootAdapter_RemoteCommandsPreserveHTTPResponses(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch {
+		case request.Method == http.MethodGet && request.URL.Path == "/models":
+			_, _ = io.WriteString(writer, `{"results":[{"name":"voice","providerLocality":"LOCAL","status":"READY","loadState":"UNLOADED","operations":[{"name":"TTS"}],"modalities":["TEXT"],"resources":[]}]}`)
+		case request.Method == http.MethodGet && request.URL.Path == "/models/voice":
+			_, _ = io.WriteString(writer, `{"name":"voice","providerLocality":"LOCAL","status":"READY","loadState":"UNLOADED","operations":[{"name":"TTS"}],"modalities":["TEXT"],"resources":[],"capabilities":[],"diagnostics":{},"managedRuntime":{"identity":"voice","readinessState":"READY","lifecycleState":"INSTALLED","locality":"LOCAL","supportedOperations":[{"name":"TTS"}],"diagnostics":{}}}`)
+		case request.Method == http.MethodPost && request.URL.Path == "/models/voice/pull":
+			_, _ = io.WriteString(writer, `{"modelName":"voice","providerLocality":"LOCAL","outcome":"PULLED","cachePath":"/models/voice/rev1","revision":"rev1","downloadedFiles":[],"managedRuntimePull":{"identity":"voice","pullOutcome":"INSTALLED_SUCCESSFULLY","readinessState":"READY"}}`)
+		case request.Method == http.MethodDelete && request.URL.Path == "/models/voice":
+			_, _ = io.WriteString(writer, `{"modelName":"voice","outcome":"REMOVED","revision":"rev1","cachePath":"/models/voice/rev1","bytesRemoved":42}`)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{}, HTTP: compositionHTTPProtocol(t), PullHTTP: compositionHTTPProtocol(t),
+	})
+	serverURL := server.URL
+	var listed bytes.Buffer
+	if err := service.List(modelscli.ListConfig{Context: context.Background(), Server: serverURL, JSON: true, Output: &listed}); err != nil {
+		t.Fatalf("remote List() = %v", err)
+	}
+	if !strings.Contains(listed.String(), `"name":"voice"`) {
+		t.Fatalf("remote list = %q, want voice", listed.String())
+	}
+	var inspected bytes.Buffer
+	if err := service.Inspect(modelscli.InspectConfig{Context: context.Background(), Server: serverURL, ModelName: "voice", Output: &inspected}); err != nil {
+		t.Fatalf("remote Inspect() = %v", err)
+	}
+	if !strings.Contains(inspected.String(), "Name:\tvoice") {
+		t.Fatalf("remote inspect = %q, want human model output", inspected.String())
+	}
+	var pulled bytes.Buffer
+	if err := service.Pull(modelscli.PullConfig{Context: context.Background(), Server: serverURL, ModelName: "voice", JSON: true, Output: &pulled}); err != nil {
+		t.Fatalf("remote Pull() = %v", err)
+	}
+	if !strings.Contains(pulled.String(), `"outcome":"PULLED"`) {
+		t.Fatalf("remote pull = %q, want PULLED", pulled.String())
+	}
+	var removed bytes.Buffer
+	if err := service.Remove(modelscli.RemoveConfig{Context: context.Background(), Server: serverURL, ModelName: "voice", Output: &removed}); err != nil {
+		t.Fatalf("remote Remove() = %v", err)
+	}
+	if !strings.Contains(removed.String(), "REMOVE OUTCOME") || !strings.Contains(removed.String(), "42 bytes") {
+		t.Fatalf("remote remove = %q, want human removal output", removed.String())
 	}
 }
 
@@ -698,6 +753,47 @@ func TestRootAdapter_InvokeAudioExportsArtifactThroughModelsRoot(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "Wrote audio: "+outputPath) {
 		t.Fatalf("Invoke() stdout = %q, want wrote-audio confirmation", out.String())
+	}
+}
+
+func TestRootAdapter_InvokeOutputPropagatesRuntimeFailure(t *testing.T) {
+	t.Parallel()
+
+	scope := testRuntimeScope(t)
+	lease := testModelLease(t)
+	runtimeErr := errors.New("inference runtime failed")
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return modelinference.GetModelResult{Model: modelinference.Detail{
+					Summary: modelinference.Summary{Name: "voice"},
+				}}, nil
+			},
+			acquireModelLease: func(context.Context, modelinference.AcquireModelLeaseRequest) (modelinference.AcquireModelLeaseResult, error) {
+				return modelinference.AcquireModelLeaseResult{Lease: modelinference.ModelLease{Lease: lease}}, nil
+			},
+			invokeModelWithLease: func(_ context.Context, request modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				if request.ResponseMode != modelinference.ResponseModeAudioStream {
+					t.Fatalf("response mode = %q, want AUDIO_STREAM", request.ResponseMode)
+				}
+				return modelinference.InvokeModelResult{}, runtimeErr
+			},
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
+	})
+
+	var out bytes.Buffer
+	err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: "voice", Operation: "TTS", Text: "hello",
+		JSON: true, OutputPath: filepath.Join(t.TempDir(), "speech.wav"), Output: &out,
+	})
+	if !errors.Is(err, runtimeErr) {
+		t.Fatalf("Invoke() error = %v, want runtime failure", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("Invoke() output = %q, want no validation-only success envelope", out.String())
 	}
 }
 

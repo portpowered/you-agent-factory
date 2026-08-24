@@ -703,6 +703,112 @@ func TestReadinessDependencyFailuresAreSanitizedAsUnavailable(t *testing.T) {
 	}
 }
 
+func TestCatalogReadinessFailuresKeepOperationTaxonomy(t *testing.T) {
+	t.Parallel()
+
+	// Exercise the list and detail adapters with a dependency failure so both
+	// projections retain the public unavailable taxonomy.
+	scopes := newRuntimeScopes(t, "catalog-readiness-failure-projections")
+	privateRef := openCatalogScope(t, scopes, "readiness-model", "generate")
+	scope := publicScope(t, privateRef)
+	readinessFailure := func(context.Context, models.RuntimeScopeRef, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
+		return models.Runtime{}, errors.New("cache probe failed")
+	}
+	service, err := catalogwire.NewService(scopes, readinessFailure)
+	if err != nil {
+		t.Fatalf("construct Catalog: %v", err)
+	}
+	if _, err := service.ListCatalog(context.Background(), models.ListModelsRequest{Scope: scope}); !errors.Is(err, models.ErrUnavailable) {
+		t.Fatalf("ListCatalog failure = %v, want ErrUnavailable", err)
+	}
+	if _, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{Scope: scope, Name: "readiness-model"}); !errors.Is(err, models.ErrUnavailable) {
+		t.Fatalf("GetCatalogModel failure = %v, want ErrUnavailable", err)
+	}
+
+	// A dependency that reports cancellation/deadline is allowed to preserve
+	// that cause instead of being sanitized as a generic unavailable error.
+	for _, cause := range []error{context.Canceled, context.DeadlineExceeded} {
+		cause := cause
+		t.Run(cause.Error(), func(t *testing.T) {
+			t.Parallel()
+			localScopes := newRuntimeScopes(t, "catalog-readiness-context")
+			localScope := publicScope(t, openCatalogScope(t, localScopes, "readiness-model", "generate"))
+			localService, err := catalogwire.NewService(localScopes, func(context.Context, models.RuntimeScopeRef, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
+				return models.Runtime{}, cause
+			})
+			if err != nil {
+				t.Fatalf("construct Catalog: %v", err)
+			}
+			if _, err := localService.ListCatalog(context.Background(), models.ListModelsRequest{Scope: localScope}); !errors.Is(err, cause) {
+				t.Fatalf("ListCatalog failure = %v, want %v", err, cause)
+			}
+			if _, err := localService.GetCatalogModel(context.Background(), models.GetModelRequest{Scope: localScope, Name: "readiness-model"}); !errors.Is(err, cause) {
+				t.Fatalf("GetCatalogModel failure = %v, want %v", err, cause)
+			}
+		})
+	}
+
+	// Keep a valid scope available to document the stable effective-definition
+	// baseline when no readiness dependency is installed.
+	nilReadinessScopes := newRuntimeScopes(t, "catalog-no-readiness")
+	nilReadinessScope := publicScope(t, openCatalogScope(t, nilReadinessScopes, "readiness-model", "generate"))
+	if _, err := newCatalogService(t, nilReadinessScopes).GetModelReadiness(context.Background(), models.GetModelReadinessRequest{
+		Scope: nilReadinessScope, Name: "readiness-model",
+	}); err != nil {
+		t.Fatalf("GetModelReadiness without dependency = %v, want stable baseline", err)
+	}
+}
+
+func TestCatalogRejectsInvalidOperatorOverlays(t *testing.T) {
+	t.Parallel()
+
+	blank := ""
+	validSource := "hf://operator/model@0123456789012345678901234567890123456789"
+	validBackend := "localai"
+	validLoadPolicy := models.LoadPolicyOnDemand
+	validOverlay := models.ModelOverlay{
+		Source: &validSource, Backend: &validBackend, LoadPolicy: &validLoadPolicy,
+		Operations: []string{models.OperationTTS},
+	}
+	tests := []struct {
+		name     string
+		operator map[string]models.ModelOverlay
+		field    string
+	}{
+		{name: "invalid name", operator: map[string]models.ModelOverlay{"bad/name": validOverlay}, field: "name"},
+		{name: "duplicate normalized name", operator: map[string]models.ModelOverlay{"Model": validOverlay, " model ": validOverlay}, field: "name"},
+		{name: "empty source", operator: map[string]models.ModelOverlay{"model": {Source: &blank, Backend: &validBackend, LoadPolicy: &validLoadPolicy, Operations: []string{models.OperationTTS}}}, field: "source"},
+		{name: "empty backend", operator: map[string]models.ModelOverlay{"model": {Source: &validSource, Backend: &blank, LoadPolicy: &validLoadPolicy, Operations: []string{models.OperationTTS}}}, field: "backend"},
+		{name: "invalid load policy", operator: map[string]models.ModelOverlay{"model": {Source: &validSource, Backend: &validBackend, LoadPolicy: func() *models.LoadPolicy { value := models.LoadPolicy("NEVER"); return &value }(), Operations: []string{models.OperationTTS}}}, field: "loadPolicy"},
+		{name: "empty operations", operator: map[string]models.ModelOverlay{"model": {Source: &validSource, Backend: &validBackend, LoadPolicy: &validLoadPolicy, Operations: []string{}}}, field: "operations"},
+		{name: "unsupported operation", operator: map[string]models.ModelOverlay{"model": {Source: &validSource, Backend: &validBackend, LoadPolicy: &validLoadPolicy, Operations: []string{"UNKNOWN"}}}, field: "operations"},
+		{name: "custom missing source", operator: map[string]models.ModelOverlay{"custom": {Backend: &validBackend, LoadPolicy: &validLoadPolicy, Operations: []string{models.OperationTTS}}}, field: "source"},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			scopes := newRuntimeScopes(t, "catalog-invalid-overlay")
+			privateRef, err := scopes.Open(models.RuntimeBinding{
+				RuntimeConfig:  func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
+				OperatorModels: test.operator,
+			})
+			if err != nil {
+				t.Fatalf("open scope: %v", err)
+			}
+			service := newCatalogService(t, scopes)
+			_, err = service.ListCatalog(context.Background(), models.ListModelsRequest{Scope: publicScope(t, privateRef)})
+			if err == nil {
+				t.Fatal("ListCatalog() = nil, want model configuration failure")
+			}
+			var failure models.ModelConfigurationFailure
+			if !errors.As(err, &failure) || failure.Field != test.field {
+				t.Fatalf("ListCatalog() error = %v (%T), want configuration field %q", err, err, test.field)
+			}
+		})
+	}
+}
+
 func newRuntimeScopes(t *testing.T, issuer string) runtimescopes.Service {
 	t.Helper()
 	scopes, err := runtimescopeswire.NewService(func() string { return issuer })

@@ -553,3 +553,48 @@ func TestMapModelsRootError_ClassifiesMissingFactoryLayoutWithSearchedRoot(t *te
 		t.Fatalf("customer response = %#v, want not-found classification and searched root %q", response, searchedRoot)
 	}
 }
+
+func TestModelsFactoryLayoutNotFoundErrorHandlesNilAndPreservesCause(t *testing.T) {
+	t.Parallel()
+
+	var nilError *modelsFactoryLayoutNotFoundError
+	if got := nilError.Error(); got != "Factory layout was not found" {
+		t.Fatalf("nil layout error = %q, want stable fallback text", got)
+	}
+	if nilError.Unwrap() != nil || nilError.CLIErrorMessage() != "Factory layout was not found" {
+		t.Fatalf("nil layout error methods = unwrap %v message %q", nilError.Unwrap(), nilError.CLIErrorMessage())
+	}
+
+	cause := errors.New("resolve current factory in C:\\workspace\\factory")
+	mapped := &modelsFactoryLayoutNotFoundError{cause: cause}
+	if mapped.Error() != cause.Error() || !errors.Is(mapped, cause) || mapped.CLIErrorCode() != modelsFactoryLayoutNotFoundCode || mapped.CLIErrorFamily() != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("mapped layout error = %v, want cause and not-found diagnostic", mapped)
+	}
+}
+
+func TestModelsInvocationDiagnosticCoversFailureClasses(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name   string
+		class  modelinference.InvocationFailureClass
+		code   string
+		family factoryapi.ErrorFamily
+	}{
+		{name: "revision", class: modelinference.InvocationFailureClassRevisionResolution, code: "MODEL_NOT_AVAILABLE", family: factoryapi.ErrorFamilyNotFound},
+		{name: "parameter", class: modelinference.InvocationFailureClassInvalidParameter, code: "BAD_REQUEST", family: factoryapi.ErrorFamilyBadRequest},
+		{name: "offline cache", class: modelinference.InvocationFailureClassOfflineCache, code: "MODEL_OFFLINE_CACHE_UNAVAILABLE", family: factoryapi.ErrorFamilyConflict},
+		{name: "backend protocol", class: modelinference.InvocationFailureClassBackendProtocol, code: "MODEL_BACKEND_FAILURE", family: factoryapi.ErrorFamilyInternalServerError},
+		{name: "timeout", class: modelinference.InvocationFailureClassTimeout, code: "MODEL_INFERENCE_TIMEOUT", family: factoryapi.ErrorFamilyInternalServerError},
+		{name: "configuration", class: modelinference.InvocationFailureClassConfiguration, code: "MODEL_CONFIGURATION_FAILURE", family: factoryapi.ErrorFamilyInternalServerError},
+		{name: "unknown", class: modelinference.InvocationFailureClass("UNKNOWN"), code: "MODEL_INFERENCE_RUNTIME_FAILURE", family: factoryapi.ErrorFamilyInternalServerError},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			code, family := modelsInvocationDiagnostic(test.class)
+			if code != test.code || family != test.family {
+				t.Fatalf("modelsInvocationDiagnostic(%q) = (%q, %q), want (%q, %q)", test.class, code, family, test.code, test.family)
+			}
+		})
+	}
+}
