@@ -232,6 +232,12 @@ function policyInputFromEnvironment() {
 				"BACKEND_LINT_RESULT",
 			),
 			directLane(
+				"Workflow Lint",
+				"RUN_WORKFLOW_LINT",
+				"WORKFLOW_LINT_REASON",
+				"WORKFLOW_LINT_RESULT",
+			),
+			directLane(
 				"UI Backend Integration",
 				"RUN_UI_BACKEND",
 				"UI_BACKEND_REASON",

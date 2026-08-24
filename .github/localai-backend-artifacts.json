@@ -10,7 +10,7 @@
   "toolchain": {
     "goVersion": "1.25.4",
     "cmakeVersion": "3.31.10",
-    "protobufVersion": "24.4",
+    "protobufVersion": "24.3",
     "grpcVersion": "1.59.0"
   },
   "workflowPins": {
@@ -26,7 +26,7 @@
     "linux": {
       "gccVersion": "13.3.0",
       "makeVersion": "4.3",
-      "ninjaVersion": "1.11.1",
+      "ninjaVersion": "1.13.2",
       "pkgConfigVersion": "1.8.1"
     },
     "macos": {
@@ -36,11 +36,12 @@
     "windows": {
       "msysPackages": [
         "make=4.4.1-3",
+        "mingw-w64-x86_64-make=4.4.1-5",
         "mingw-w64-x86_64-binutils=2.47-3",
         "mingw-w64-x86_64-gcc=16.2.0-3",
         "mingw-w64-x86_64-ninja=1.13.2-1"
       ],
-      "vcpkgTriplet": "x64-mingw-static"
+      "vcpkgTriplet": "x64-mingw-static-release"
     }
   },
   "backends": [

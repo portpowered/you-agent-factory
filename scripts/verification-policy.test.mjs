@@ -12,6 +12,7 @@ const laneNames = [
 	"Frontend",
 	"Backend",
 	"Backend Lint",
+	"Workflow Lint",
 	"UI Backend Integration",
 	"API Package",
 	"Packaged Factories Package",
@@ -86,6 +87,74 @@ test("required Backend Lint fails the policy when its hosted job is skipped", ()
 
 		assert.equal(evaluation.ok, false, `${result} must fail the required policy lane`);
 		assert.ok(evaluation.failures.some((failure) => /Backend Lint was selected/.test(failure)));
+	}
+});
+
+test("changed-test stability passes when selected, accepts a classifier-driven skip, and fails incomplete outcomes", () => {
+	const selectedPass = evaluateVerificationPolicy(
+		policy({
+			lanes: [
+				...laneNames
+					.filter((name) => name !== "Backend Test Stability")
+					.map((name) => lane(name)),
+				lane("Backend Test Stability", true, "success", {
+					reason: "Backend changes select the merge-base stability gate.",
+				}),
+			],
+		}),
+	);
+	assert.deepEqual(selectedPass, { ok: true, failures: [] });
+
+	const validSkip = evaluateVerificationPolicy(
+		policy({
+			classification: "factory-content",
+			areas: "factory-content",
+			lanes: [
+				...laneNames
+					.filter((name) => name !== "Backend Test Stability")
+					.map((name) => lane(name)),
+				lane("Backend Test Stability", false, "skipped", {
+					reason: "Factory-only changes do not select backend verification.",
+				}),
+			],
+		}),
+	);
+	assert.deepEqual(validSkip, { ok: true, failures: [] });
+
+	for (const result of ["failure", "cancelled", "skipped", "", "incomplete"]) {
+		const evaluation = evaluateVerificationPolicy(
+			policy({
+				lanes: [
+					...laneNames
+						.filter((name) => name !== "Backend Test Stability")
+						.map((name) => lane(name)),
+					lane("Backend Test Stability", true, result),
+				],
+			}),
+		);
+
+		assert.equal(evaluation.ok, false, `${result || "missing"} must fail the required stability gate`);
+		assert.ok(
+			evaluation.failures.some((failure) => /Backend Test Stability was selected/.test(failure)),
+		);
+	}
+});
+
+test("required Workflow Lint fails the policy when its hosted job is skipped or fails", () => {
+	for (const result of ["skipped", "cancelled", "timed_out", "failure"]) {
+		const evaluation = evaluateVerificationPolicy(
+			policy({
+				lanes: [
+					...laneNames.filter((name) => name !== "Workflow Lint").map((name) => lane(name)),
+					lane("Workflow Lint", true, result, {
+						reason: "Every repository workflow must pass schema-aware lint.",
+					}),
+				],
+			}),
+		);
+
+		assert.equal(evaluation.ok, false, `${result} must fail the required workflow lint lane`);
+		assert.ok(evaluation.failures.some((failure) => /Workflow Lint was selected/.test(failure)));
 	}
 });
 

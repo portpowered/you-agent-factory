@@ -65,6 +65,27 @@ jobs:
           echo "classification=full" >> "$GITHUB_OUTPUT"
           echo "areas=ci-tooling" >> "$GITHUB_OUTPUT"
 
+  workflow-lint:
+    name: Workflow Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Install pinned actionlint
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Test workflow lint failure behavior
+        run: node --test scripts/ci/workflow-lint.test.mjs
+      - name: Run schema-aware lint across all workflows
+        run: node scripts/ci/workflow-lint.mjs
+
   docs-reference:
     name: Docs Reference
     needs: classify
@@ -701,7 +722,7 @@ jobs:
 
   verification-policy:
     name: Verification Policy
-    needs: [classify, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-lint, ui-backend-integration, development-package]
+    needs: [classify, workflow-lint, docs-reference, readme, frontend, frontend-component, ui-coverage, frontend-browser, frontend-storybook, backend-coverage, backend-test-stability, backend-lint, ui-backend-integration, development-package]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -746,6 +767,9 @@ jobs:
           RUN_BACKEND_LINT: "true"
           BACKEND_LINT_REASON: "The complete canonical LINT_TARGETS inventory is required on every pull request and push to main."
           BACKEND_LINT_RESULT: ${{ needs.backend-lint.result }}
+          RUN_WORKFLOW_LINT: "true"
+          WORKFLOW_LINT_REASON: "Every repository workflow must pass pinned schema-aware lint on every pull request and push to main."
+          WORKFLOW_LINT_RESULT: ${{ needs.workflow-lint.result }}
           UI_BACKEND_RESULT: ${{ needs.ui-backend-integration.result }}
           PACKAGE_WORKFLOW_RESULT: ${{ needs.development-package.result }}
           API_RESULT: ${{ needs.development-package.outputs.api_package_result }}

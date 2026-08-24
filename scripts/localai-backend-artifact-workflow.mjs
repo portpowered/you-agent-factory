@@ -31,6 +31,7 @@ const expectedWorkflowPins = {
 };
 const expectedWindowsMsysPackages = [
 	"make=4.4.1-3",
+	"mingw-w64-x86_64-make=4.4.1-5",
 	"mingw-w64-x86_64-binutils=2.47-3",
 	"mingw-w64-x86_64-gcc=16.2.0-3",
 	"mingw-w64-x86_64-ninja=1.13.2-1",
@@ -226,7 +227,7 @@ function validateHostToolchain(errors, hostToolchain) {
 	if (!isPlainObject(windows)) {
 		addError(errors, "hostToolchain.windows must be an object");
 	} else {
-		if (windows.vcpkgTriplet !== "x64-mingw-static") addError(errors, "hostToolchain.windows.vcpkgTriplet must be x64-mingw-static");
+		if (windows.vcpkgTriplet !== "x64-mingw-static-release") addError(errors, "hostToolchain.windows.vcpkgTriplet must be x64-mingw-static-release");
 		if (JSON.stringify(windows.msysPackages) !== JSON.stringify(expectedWindowsMsysPackages)) {
 			addError(errors, "hostToolchain.windows.msysPackages must be the pinned native build package set");
 		}

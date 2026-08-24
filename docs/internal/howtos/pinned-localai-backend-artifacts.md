@@ -37,8 +37,19 @@ directory. The CPU package target produces `llama-cpp-cpu-all`; that is the
 payload name recorded in the config and metadata. Linux uses the upstream
 package target, Darwin stages the Mach-O binary and `.dylib` files without the
 Linux-loader packaging branch, and Windows builds with the static
-`x64-mingw-static` vcpkg triplet before recursively staging and verifying its
-remaining DLL closure.
+`x64-mingw-static-release` vcpkg triplet before recursively staging and
+verifying its remaining DLL closure. The release-only community triplet keeps
+vcpkg from compiling the large gRPC dependency twice (Debug and Release) and
+avoids MinGW object-file limits on the hosted Windows runner; it remains a
+static library triplet, so the runtime closure is still staged and verified.
+The pinned gRPC bootstrap itself uses the checkout's bundled protobuf and
+Abseil sources on Windows; vcpkg remains an input to the backend CMake builds,
+but its rolling protobuf headers must not leak into the pinned gRPC compile.
+The pinned Go backend entrypoints use purego's Unix-only `Dlopen` API. On
+Windows, the build harness adds a temporary build-tagged loader that calls
+`golang.org/x/sys/windows.LoadLibrary`; this compatibility source is consumed
+only during the build and is not part of the published payload or Models
+artifact contract.
 
 ## Update procedure
 
@@ -70,9 +81,26 @@ remaining DLL closure.
    Do not replace the exact Linux, macOS, or MSYS2 host versions with floating
    package installs. The workflow verifies the Linux runner image, installs
    the macOS GNU Make formula from its pinned Homebrew commit, and requests
-   the exact MSYS2 package versions from the manifest.
+   the exact MSYS2 package versions from the manifest. Windows intentionally
+   pins both MSYS `make` (for the LocalAI recursive Makefiles) and
+   `mingw-w64-x86_64-make` (which provides `mingw32-make` for the MinGW CMake
+   generator); neither tool may be replaced with an unpinned fallback.
 
-6. Run the fixture-backed manifest and compatibility checks:
+6. Run the schema-aware workflow lint gate before dispatching:
+
+   ```sh
+   go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+   node scripts/ci/workflow-lint.mjs
+   ```
+
+   The command enumerates every top-level `.yml` and `.yaml` file and must
+   print `WORKFLOW_LINT_FILE_COUNT=<count>` followed by
+   `WORKFLOW_LINT_OK files=<count>`. This is the same property-aware gate that
+   required PR and `main` CI runs; generic YAML parsing or shell syntax checks
+   do not replace it. A failure or an empty workflow directory is a blocking
+   result.
+
+7. Run the fixture-backed manifest and compatibility checks:
 
    ```sh
    node --test scripts/localai-backend-artifact-workflow.test.mjs
@@ -83,7 +111,7 @@ remaining DLL closure.
    These checks use fixture manifests and fake artifact bytes. They do not
    download model weights, start a backend, or connect to port `7437`.
 
-7. Dispatch the reviewed workflow ref after the dependency PR is ready:
+8. Dispatch the reviewed workflow ref after the dependency PR is ready:
 
    ```sh
    gh workflow run .github/workflows/localai-backend-artifacts.yml \
@@ -93,7 +121,20 @@ remaining DLL closure.
    The workflow must complete all nine build jobs. A failed or cancelled job
    prevents the join and publication jobs from succeeding.
 
-8. Review the generated publication bundle. The join job must produce exactly
+   Record the run URL and verify that it actually scheduled the closed matrix:
+
+   ```sh
+   run_id=<workflow-run-id>
+   gh run view "$run_id" --json headSha,status,conclusion,url
+   gh api "repos/<owner>/<repo>/actions/runs/$run_id/jobs" \
+     --jq '{total_count, jobs: [.jobs[] | {name, status, conclusion, html_url}]}'
+   ```
+
+   `total_count` must be greater than zero and the head SHA must be the
+   reviewed ref. A zero-job run is a workflow-parse failure, not a successful
+   no-op.
+
+9. Review the generated publication bundle. The join job must produce exactly
    nine archives and one `manifest.json`.
 
    Each manifest entry must retain its backend source, LocalAI source,
@@ -103,18 +144,35 @@ remaining DLL closure.
    Unix archives use `.tar.gz`. Windows archives use `.zip`. Each archive name
    follows `localai-backend-<backend>-<target>-<backendSourceCommit>.<extension>`.
 
-9. Confirm the publication identity. The pin fingerprint covers the canonical
+   Download the complete join artifact, then inspect the manifest and verify
+   the recorded checksums against the downloaded bytes:
+
+   ```sh
+   gh run download "$run_id" --pattern 'localai-backend-release-*' --dir .artifacts/release
+   jq -r '.artifacts[] | [.id, .artifact.name, .artifact.sizeBytes, .artifact.sha256] | @tsv' \
+     .artifacts/release/manifest.json
+   while IFS=$'\t' read -r _ archive _ _; do sha256sum ".artifacts/release/$archive"; done \
+     < <(jq -r '.artifacts[] | [.id, .artifact.name, .artifact.sizeBytes, .artifact.sha256] | @tsv' \
+       .artifacts/release/manifest.json)
+   ```
+
+   The join copies only the nine expected archives and creates the manifest
+   after validating each matrix sidecar. It hashes the source bytes and then
+   re-reads the copied publication bytes, so a missing, extra, empty, or
+   tampered file fails closed. Do not call a partial matrix a publication.
+
+10. Confirm the publication identity. The pin fingerprint covers the canonical
    pin document. The release tag has this form:
    `localai-backends-v1-<pinFingerprint>`.
 
    Archive names include the backend source commit and target. An existing
    release tag is immutable. The workflow refuses to overwrite it.
 
-10. Wait for the C1 scheduled real-backend conformance run before adoption.
+11. Wait for the C1 scheduled real-backend conformance run before adoption.
     C1 must cover `OMNI`, `EMBED`, `ASR`, and `TTS` on every supported target.
 
-11. Merge and adopt the replacement only after the fixture checks, publication
-    integrity checks, and C1 conformance all pass.
+12. Merge and adopt the replacement only after the fixture checks, publication
+   integrity checks, and C1 conformance all pass.
 
 ## Manifest and publication rules
 
@@ -127,6 +185,14 @@ output for reviewer inspection.
 The publication bundle contains the nine final archives plus the manifest.
 Matrix provenance sidecars support validation and do not replace the manifest.
 The publish job promotes the bundle only after the complete set is validated.
+
+Keep evidence in the correct place. Put stable static evidence in the PR body:
+the complete workflow-lint file count and clean output, plus the temporary
+negative lint diagnostic for the forbidden `runner` context and its repaired
+output. Put run-specific evidence in a PR comment: the workflow URL, head SHA,
+jobs API `total_count`, each archive's non-empty byte size and lowercase
+SHA-256, and the join or publication result. Never commit CI logs, downloaded
+archives, checksum tables, or audit notes to the dependency branch.
 
 C1 may publish only backend version, model revision, operation, hardware class,
 duration, and result digest. It must never publish model weights, prompts, or
@@ -147,6 +213,13 @@ own service or conformance lanes.
 | The release tag already exists | Keep the existing immutable release. Do not overwrite or redefine it. |
 | C1 conformance fails | Keep the prior pin selected. Open a new dependency PR with a new pin fingerprint. |
 | A transient CI failure occurs with unchanged inputs | Inspect the failure, then rerun the failed workflow once. |
+
+For every failed or incomplete run, disclose the exact backend/target leg and
+failed step in the PR comment and state explicitly that the join and immutable
+publication did not run. A successful subset is useful debugging evidence but
+is not a complete release. After a code or pin repair, dispatch the full
+workflow on the new reviewed head; do not reuse artifacts from a superseded
+head.
 
 The previous adopted release remains the rollback target until the replacement
 passes C1. Rollback means restoring the previous manifest selection. It does

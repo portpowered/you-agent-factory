@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -129,9 +129,10 @@ test("the validation CLI emits a matrix output suitable for GitHub Actions", asy
 	const outputText = await readFile(output, "utf8");
 	assert.match(outputText, /^matrix=\{"include":\[/m);
 	assert.match(outputText, /localai_commit=b224c96db6f4b87306a33a808650bfce63b12588/);
-	assert.match(outputText, /protobuf_version=24\.4/);
+	assert.match(outputText, /protobuf_version=24\.3/);
 	assert.match(outputText, /windows_msys_packages=make=4\.4\.1-3/);
-	assert.match(outputText, /windows_vcpkg_triplet=x64-mingw-static/);
+	assert.match(outputText, /mingw-w64-x86_64-make=4\.4\.1-5/);
+	assert.match(outputText, /windows_vcpkg_triplet=x64-mingw-static-release/);
 	assert.match(result.stdout, /LOCALAI_BACKEND_ARTIFACT_INPUTS_OK combinations=9/);
 });
 
@@ -288,18 +289,132 @@ test("the workflow uses immutable actions, package inputs, and the pinned tag gu
 	assert.match(workflow, /git\/ref\/tags/);
 	assert.match(workflow, /git\/tags/);
 	assert.match(workflow, /exists but its target could not be resolved/);
+});
+
+function buildPlan({ backend, target, buildType, environment = {} }) {
+	const script = "scripts/build-localai-backend-artifact.sh";
+	const exports = [
+		["LOCALAI_ROOT", "/tmp/localai-plan-fixture"],
+		["BACKEND_ID", backend],
+		["TARGET_ID", target],
+		["BUILD_TYPE", buildType],
+		["GRPC_COMMIT", "0000000000000000000000000000000000000000"],
+		["BACKEND_SOURCE_COMMIT", "1111111111111111111111111111111111111111"],
+		["PROTOBUF_VERSION", "24.3"],
+		["GRPC_VERSION", "1.68.1"],
+		["LOCALAI_BUILD_PLAN_ONLY", "1"],
+	];
+	const command = `export ${exports.map(([name, value]) => `${name}=${value}`).join(" ")}; bash ${script}`;
+	const result = spawnSync("bash", ["-c", command], {
+		encoding: "utf8",
+		env: { ...process.env, ...environment },
+		windowsHide: true,
+	});
+	if (result.error?.code === "ENOENT") return null;
+	assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+	const line = result.stdout.trim();
+	assert.match(line, /^LOCALAI_BACKEND_BUILD_PLAN /);
+	return Object.fromEntries(line.replace(/^LOCALAI_BACKEND_BUILD_PLAN /, "").split(" ").map((entry) => entry.split("=")));
+}
+
+test("the build harness selects the Windows and Unix strategies at runtime", (t) => {
+	const probe = spawnSync("bash", ["--version"], { encoding: "utf8", windowsHide: true });
+	if (probe.error?.code === "ENOENT") {
+		t.skip("bash is required for the executable build harness");
+		return;
+	}
+
+	assert.deepEqual(buildPlan({ backend: "localai-llamacpp", target: "windows-amd64", buildType: "cpu" }), {
+		backend: "localai-llamacpp",
+		target: "windows-amd64",
+		shell: "msys2",
+		strategy: "windows-llamacpp-grpc",
+		binary: "llama-cpp-cpu-all",
+		cxx_standard: "17",
+		cmake_generator: "mingw-makefiles",
+		cmake_make_program: "mingw32-make",
+		windows_minimum_target: "0x0A00",
+		grpc_protobuf_source: "pinned",
+		go_dynamic_loader: "none",
+		grpc_dependency_mode: "standalone",
+	});
+	assert.deepEqual(buildPlan({ backend: "localai-llamacpp", target: "darwin-arm64", buildType: "metal" }), {
+		backend: "localai-llamacpp",
+		target: "darwin-arm64",
+		shell: "bash",
+		strategy: "darwin-llamacpp-grpc",
+		binary: "llama-cpp-cpu-all",
+		go_dynamic_loader: "none",
+		grpc_dependency_mode: "default",
+	});
+	assert.deepEqual(buildPlan({ backend: "localai-whisper", target: "linux-amd64", buildType: "cpu" }), {
+		backend: "localai-whisper",
+		target: "linux-amd64",
+		shell: "bash",
+		strategy: "linux-go-build",
+		binary: "whisper",
+		go_dynamic_loader: "none",
+		grpc_dependency_mode: "default",
+	});
 	assert.equal(
-		config.backends.find(({ id }) => id === "localai-llamacpp").binary,
-		"llama-cpp-cpu-all",
+		buildPlan({ backend: "localai-whisper", target: "windows-amd64", buildType: "cpu" }).go_dynamic_loader,
+		"xsys-windows",
 	);
-	const buildScript = await readFile("scripts/build-localai-backend-artifact.sh", "utf8");
-	assert.match(buildScript, /backend\/cpp\/grpc/);
-	assert.doesNotMatch(buildScript, /backend\/grpc/);
-	assert.match(buildScript, /VCPKG_OVERLAY_TRIPLETS/);
-	assert.match(buildScript, /windows_minimum_target="0x0A00"/);
-	assert.match(buildScript, /-DCMAKE_CXX_FLAGS=-D_WIN32_WINNT=\$\{windows_minimum_target\}/);
-	assert.match(buildScript, /grpc-server/);
-	assert.match(buildScript, /llama-cpp-cpu-all/);
+	assert.equal(
+		buildPlan({ backend: "localai-vibevoice", target: "windows-amd64", buildType: "cpu" }).go_dynamic_loader,
+		"xsys-windows",
+	);
+});
+
+test("the Windows build plan resolves Git from the runner path bridge", async (t) => {
+	const root = await mkdtemp(join(tmpdir(), "localai-backend-windows-tools-"));
+	t.after(() => rm(root, { recursive: true, force: true }));
+	const fakeCygpath = join(root, "cygpath");
+	const fakeGitDirectory = join(root, "git-bin");
+	const fakeGit = join(fakeGitDirectory, "git");
+	await mkdir(fakeGitDirectory);
+	await writeFile(
+		fakeCygpath,
+		"#!/usr/bin/env bash\n" +
+			"path=\"$2\"\n" +
+			"if command -v wslpath >/dev/null 2>&1; then\n" +
+			"  wslpath -u \"$path\"\n" +
+			"elif [[ \"$path\" =~ ^[A-Za-z]:\\\\ ]]; then\n" +
+			"  drive=\"${path:0:1}\"\n" +
+			"  rest=\"${path:2}\"\n" +
+			"  printf '/%s/%s\\n' \"${drive,,}\" \"${rest//\\\\//}\"\n" +
+			"else\n" +
+			"  printf '%s\\n' \"$path\"\n" +
+			"fi\n",
+	);
+	await writeFile(fakeGit, "#!/usr/bin/env bash\nexit 0\n");
+	await chmod(fakeCygpath, 0o755);
+	await chmod(fakeGit, 0o755);
+	const shellRoot = (() => {
+		if (process.platform !== "win32") return root;
+		const converted = spawnSync("bash", ["-lc", `wslpath -u '${root.replaceAll("'", "'\\\"'\\\"'")}'`], { encoding: "utf8" });
+		if (converted.status === 0 && converted.stdout.trim()) return converted.stdout.trim();
+		return root.replace(/^([A-Za-z]):\\/, (_, drive) => `/${drive.toLowerCase()}/`).replaceAll("\\", "/");
+	})();
+	const shellEnvironment = {
+		PATH: `${shellRoot}:${process.env.PATH ?? ""}`,
+		WINDOWS_GIT_DIR: fakeGitDirectory,
+	};
+	const probe = spawnSync("bash", ["-c", "command -v cygpath || true"], {
+		encoding: "utf8",
+		env: { ...process.env, ...shellEnvironment },
+	});
+	if (!probe.stdout.trim().endsWith("/cygpath") && !probe.stdout.trim().endsWith("\\cygpath")) {
+		t.skip("the available bash launcher does not expose the injected MSYS2 path bridge");
+		return;
+	}
+	const plan = buildPlan({
+		backend: "localai-whisper",
+		target: "windows-amd64",
+		buildType: "cpu",
+		environment: shellEnvironment,
+	});
+	assert.match(plan.git.replaceAll("\\", "/"), /\/git-bin\/git$/);
 });
 
 test("manifest verification rejects bytes tampered after manifest creation", async (t) => {
