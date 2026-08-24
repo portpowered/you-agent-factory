@@ -10,10 +10,105 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 )
+
+func TestContentMaterializerConstructorsPropagateRunnerAndExecutorErrors(t *testing.T) {
+	t.Parallel()
+
+	productionRegistryFailure := newStatelessConstructionInputs()
+	productionRegistryFailure.inferenceConfig.Worker.ModelLocality = models.RuntimeModelLocalityLocal
+	productionRegistryFailure.inferenceConfig.Worker.Model = ""
+	if _, err := newWireProductionServiceWithContentMaterializer(
+		productionRegistryFailure,
+		func() time.Time { return time.Unix(1, 0) },
+	); err == nil || !strings.Contains(err.Error(), "inference runner construction failed") {
+		t.Fatalf("NewServiceWithContentMaterializer(invalid inference worker) error = %v, want runner construction failure", err)
+	}
+
+	productionExecutorFailure := newStatelessConstructionInputs()
+	if _, err := newWireProductionServiceWithContentMaterializer(productionExecutorFailure, nil); err == nil || !strings.Contains(err.Error(), "clock is required") {
+		t.Fatalf("NewServiceWithContentMaterializer(missing execute clock) error = %v, want clock failure", err)
+	}
+
+	mockValidationFailure := newStatelessConstructionInputs()
+	mockValidationFailure.agentDependencies.Providers = nil
+	if _, err := newWireMockServiceWithContentMaterializer(
+		mockValidationFailure,
+		workers.NewEmptyMockWorkersConfig(),
+		func() time.Time { return time.Unix(1, 0) },
+	); err == nil || !strings.Contains(err.Error(), "agent Providers service is required") {
+		t.Fatalf("NewMockServiceWithContentMaterializer(invalid ports) error = %v, want validation failure", err)
+	}
+
+	mockRegistryFailure := newStatelessConstructionInputs()
+	mockRegistryFailure.inferenceConfig.Worker.ModelLocality = models.RuntimeModelLocalityLocal
+	mockRegistryFailure.inferenceConfig.Worker.Model = ""
+	if _, err := newWireMockServiceWithContentMaterializer(
+		mockRegistryFailure,
+		workers.NewEmptyMockWorkersConfig(),
+		func() time.Time { return time.Unix(1, 0) },
+	); err == nil || !strings.Contains(err.Error(), "inference runner construction failed") {
+		t.Fatalf("NewMockServiceWithContentMaterializer(invalid inference worker) error = %v, want runner construction failure", err)
+	}
+
+	mockExecutorFailure := newStatelessConstructionInputs()
+	if _, err := newWireMockServiceWithContentMaterializer(
+		mockExecutorFailure,
+		workers.NewEmptyMockWorkersConfig(),
+		nil,
+	); err == nil || !strings.Contains(err.Error(), "clock is required") {
+		t.Fatalf("NewMockServiceWithContentMaterializer(missing execute clock) error = %v, want clock failure", err)
+	}
+}
+
+func newWireProductionServiceWithContentMaterializer(
+	input statelessConstructionInputs,
+	clock func() time.Time,
+) (workers.Service, error) {
+	return NewServiceWithContentMaterializer(
+		input.agentDependencies,
+		input.scriptConfig,
+		input.scriptDependencies,
+		input.inferenceConfig,
+		input.inferenceDependencies,
+		nil,
+		nil,
+		clock,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+}
+
+func newWireMockServiceWithContentMaterializer(
+	input statelessConstructionInputs,
+	mockWorkers *workers.MockWorkersConfig,
+	clock func() time.Time,
+) (workers.Service, error) {
+	return NewMockServiceWithContentMaterializer(
+		input.agentDependencies,
+		input.scriptConfig,
+		input.scriptDependencies,
+		input.inferenceConfig,
+		input.inferenceDependencies,
+		mockWorkers,
+		MockDependencies{},
+		nil,
+		nil,
+		clock,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+}
 
 type concurrentAgentExecutionResult struct {
 	index  int

@@ -20,6 +20,126 @@ const (
 	recordingsProjectionsRoot = modulePrefix + "pkg/services/recordings/internal/projections"
 )
 
+func TestFactoryWorldReducerHandlesCanonicalReplayEdges(t *testing.T) {
+	t.Parallel()
+
+	reducer := newFactoryWorldReducerWithReplayTopology(t)
+	assertReplayFactoryChange(t, reducer)
+	assertReplayReducerValidationEdges(t, reducer)
+	assertReplayReducerOutputEdges(t, reducer)
+}
+
+func newFactoryWorldReducerWithReplayTopology(t *testing.T) *factoryWorldReducer {
+	t.Helper()
+	snapshot, err := interfaces.NewFactorySnapshot(map[string]any{
+		"name": "run-factory",
+		"workTypes": []any{map[string]any{"name": "task", "states": []any{
+			map[string]any{"name": "ready", "type": "INITIAL"},
+			map[string]any{"name": "failed", "type": "FAILED"},
+		}}},
+	})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	reducer := newFactoryWorldReducer(3)
+	runRequest := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeRunRequest,
+		interfaces.FactoryEventContext{Tick: 1}, interfaces.RunRequestEventPayload{Factory: snapshot})
+	if err := reducer.applyStructureEvent(runRequest); err != nil {
+		t.Fatalf("applyStructureEvent(run request): %v", err)
+	}
+	if reducer.stateValue.Topology.Name != "run-factory" {
+		t.Fatalf("run request topology = %#v, want run-factory", reducer.stateValue.Topology)
+	}
+	incompleteRun := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeRunRequest,
+		interfaces.FactoryEventContext{Tick: 2}, interfaces.RunRequestEventPayload{})
+	if err := reducer.applyStructureEvent(incompleteRun); err != nil {
+		t.Fatalf("applyStructureEvent(replayed incomplete run request): %v", err)
+	}
+	if reducer.stateValue.Topology.Name != "run-factory" {
+		t.Fatalf("replayed incomplete run request changed topology = %#v", reducer.stateValue.Topology)
+	}
+	return reducer
+}
+
+func assertReplayFactoryChange(t *testing.T, reducer *factoryWorldReducer) {
+	t.Helper()
+	changedSnapshot, err := interfaces.NewFactorySnapshot(map[string]any{
+		"name": "changed-factory",
+		"workTypes": []any{map[string]any{"name": "task", "states": []any{
+			map[string]any{"name": "ready", "type": "INITIAL"},
+			map[string]any{"name": "done", "type": "TERMINAL"},
+		}}},
+	})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot(changed): %v", err)
+	}
+	factoryChange := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeFactoryChange,
+		interfaces.FactoryEventContext{Tick: 3}, interfaces.FactoryChangeEventPayload{Factory: changedSnapshot})
+	if err := reducer.applyStructureEvent(factoryChange); err != nil {
+		t.Fatalf("applyStructureEvent(factory change): %v", err)
+	}
+	if reducer.stateValue.Topology.Name != "changed-factory" || len(reducer.stateValue.Topology.Places) != 2 {
+		t.Fatalf("factory change topology = %#v, want changed factory with two places", reducer.stateValue.Topology)
+	}
+}
+
+func assertReplayReducerValidationEdges(t *testing.T, reducer *factoryWorldReducer) {
+	t.Helper()
+	if err := reducer.applyCanonicalFactory(nil); err == nil {
+		t.Fatal("applyCanonicalFactory(nil) error = nil, want required snapshot error")
+	}
+	if err := reducer.applyWorkRequestEvent(canonicalWorldProjectionEvent(t,
+		interfaces.FactoryEventTypeWorkRequest, interfaces.FactoryEventContext{}, work.WorkRequestEventPayload{})); err == nil {
+		t.Fatal("applyWorkRequestEvent(missing type) error = nil, want validation error")
+	}
+	if err := reducer.applyRelationshipChangeEvent(canonicalWorldProjectionEvent(t,
+		interfaces.FactoryEventTypeRelationshipChangeRequest, interfaces.FactoryEventContext{}, work.RelationshipChangeRequestEventPayload{})); err == nil {
+		t.Fatal("applyRelationshipChangeEvent(missing type) error = nil, want validation error")
+	}
+	if err := reducer.apply(interfaces.FactoryEvent{Type: interfaces.FactoryEventTypeRunResponse}); err != nil {
+		t.Fatalf("apply(run response): %v", err)
+	}
+	if err := reducer.apply(interfaces.FactoryEvent{Type: interfaces.FactoryEventType("unknown")}); err != nil {
+		t.Fatalf("apply(unknown): %v", err)
+	}
+}
+
+func assertReplayReducerOutputEdges(t *testing.T, reducer *factoryWorldReducer) {
+	t.Helper()
+	if got := reducer.outputPlaceForWork("missing-workstation", workerexecution.OutcomeFailed, "task"); got != "" {
+		t.Fatalf("missing workstation output place = %q, want empty", got)
+	}
+	reducer.applyInitialStructure(interfaces.InitialStructurePayload{
+		Places:       []interfaces.FactoryPlace{{ID: "task:failed", TypeID: "task", State: "failed", Category: "FAILED"}},
+		Workstations: []interfaces.FactoryWorkstation{{ID: "review", Name: "Review"}},
+	})
+	if got := reducer.outputPlaceForWork("review", workerexecution.OutcomeFailed, "task"); got != "task:failed" {
+		t.Fatalf("failed output place = %q, want task:failed", got)
+	}
+	if got := buildSimpleDashboardWorkstationNodes(interfaces.InitialStructurePayload{
+		Workstations: []interfaces.FactoryWorkstation{{ID: interfaces.SystemTimeExpiryTransitionID}},
+	}); got != nil {
+		t.Fatalf("system-only dashboard nodes = %#v, want nil", got)
+	}
+	workIDs := []string{"work-target"}
+	if got := sourceWorkIDFromCanonicalContext(interfaces.FactoryEventContext{WorkIDs: &workIDs}, "work-target"); got != "" {
+		t.Fatalf("source work ID for target-only context = %q, want empty", got)
+	}
+	beforeTokens := len(reducer.tokenPlaces)
+	reducer.removeToken("")
+	if len(reducer.tokenPlaces) != beforeTokens {
+		t.Fatalf("empty token removal changed token index = %#v", reducer.tokenPlaces)
+	}
+	emptyResource := []interfaces.DispatchResourceRef{{}}
+	if got := reducer.consumeResourceUnits(&emptyResource); len(got) != 0 {
+		t.Fatalf("unnamed resource consumption = %#v, want none", got)
+	}
+	if got := firstConsumedResourceIndex(
+		[]interfaces.FactoryResourceUnit{{ResourceID: "gpu"}}, []bool{false}, "cpu"); got != -1 {
+		t.Fatalf("unmatched consumed resource index = %d, want -1", got)
+	}
+}
+
 // TestProjectionsImportRuntimeRootOnly seals CUT-REC-RUN story 004: Recordings
 // projection and observation surfaces may depend on Factory Runtime only through
 // the service root contract.

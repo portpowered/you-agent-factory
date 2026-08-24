@@ -25,10 +25,30 @@ import (
 func TestRuntimeMetricsPublicArtifactsRetainAndStreamThroughPlatformContracts(t *testing.T) {
 	root := t.TempDir()
 	now := time.Date(2026, time.August, 24, 12, 30, 0, 0, time.UTC)
-	stalePath := filepath.Join(
-		root, "2026", "08", "01",
-		"120000.000000000-runtime-metrics-stale-runtime.log",
-	)
+	stalePath := seedRuntimeMetricsRetentionRoot(t, root)
+	fixture := newRuntimeMetricsFunctionalFixture(t, now)
+	writeRuntimeMetricsSinks(t, fixture.opener, root, now)
+	if len(fixture.reports) != 1 || fixture.reports[0].Removed.Files != 1 || fixture.reports[0].Skipped {
+		t.Fatalf("runtime metrics startup reports = %#v, want one non-skipped sweep removing the stale artifact", fixture.reports)
+	}
+	if _, err := os.Stat(stalePath); !os.IsNotExist(err) {
+		t.Fatalf("stale metrics artifact stat error = %v, want removed", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "operator-notes.txt")); err != nil {
+		t.Fatalf("unrecognized root file was not preserved: %v", err)
+	}
+	writeCompressedRuntimeMetricsArtifact(t, root)
+	assertRuntimeMetricsReadback(t, root)
+}
+
+type runtimeMetricsFunctionalFixture struct {
+	opener  *platformmetrics.RuntimeMetricsOpener
+	reports []platformmetrics.RuntimeMetricsRetentionReport
+}
+
+func seedRuntimeMetricsRetentionRoot(t *testing.T, root string) string {
+	t.Helper()
+	stalePath := filepath.Join(root, "2026", "08", "01", "120000.000000000-runtime-metrics-stale-runtime.log")
 	if err := os.MkdirAll(filepath.Dir(stalePath), 0o755); err != nil {
 		t.Fatalf("create stale metrics directory: %v", err)
 	}
@@ -38,25 +58,22 @@ func TestRuntimeMetricsPublicArtifactsRetainAndStreamThroughPlatformContracts(t 
 	if err := os.WriteFile(filepath.Join(root, "operator-notes.txt"), []byte("keep"), 0o600); err != nil {
 		t.Fatalf("write unrelated metrics-root file: %v", err)
 	}
+	return stalePath
+}
 
-	retention, err := platformmetrics.NewRuntimeMetricsRetention(
-		platformfilesystem.Local{},
-		func() time.Time { return now },
-	)
+func newRuntimeMetricsFunctionalFixture(t *testing.T, now time.Time) *runtimeMetricsFunctionalFixture {
+	t.Helper()
+	fixture := &runtimeMetricsFunctionalFixture{}
+	retention, err := platformmetrics.NewRuntimeMetricsRetention(platformfilesystem.Local{}, func() time.Time { return now })
 	if err != nil {
 		t.Fatalf("construct runtime metrics retention: %v", err)
 	}
-	var reports []platformmetrics.RuntimeMetricsRetentionReport
-	scheduler, err := platformmetrics.NewRuntimeMetricsRetentionScheduler(
-		retention,
-		nil,
-		func(report platformmetrics.RuntimeMetricsRetentionReport, sweepErr error) {
-			if sweepErr != nil {
-				t.Errorf("runtime metrics startup sweep: %v", sweepErr)
-			}
-			reports = append(reports, report)
-		},
-	)
+	scheduler, err := platformmetrics.NewRuntimeMetricsRetentionScheduler(retention, nil, func(report platformmetrics.RuntimeMetricsRetentionReport, sweepErr error) {
+		if sweepErr != nil {
+			t.Errorf("runtime metrics startup sweep: %v", sweepErr)
+		}
+		fixture.reports = append(fixture.reports, report)
+	})
 	if err != nil {
 		t.Fatalf("construct runtime metrics retention scheduler: %v", err)
 	}
@@ -64,52 +81,32 @@ func TestRuntimeMetricsPublicArtifactsRetainAndStreamThroughPlatformContracts(t 
 	if err != nil {
 		t.Fatalf("construct runtime artifact reserver: %v", err)
 	}
-	opener, err := platformmetrics.NewRuntimeMetricsOpener(
-		paths,
-		scheduler,
-	)
+	fixture.opener, err = platformmetrics.NewRuntimeMetricsOpener(paths, scheduler)
 	if err != nil {
 		t.Fatalf("construct runtime metrics opener: %v", err)
 	}
+	return fixture
+}
 
+func writeRuntimeMetricsSinks(t *testing.T, opener *platformmetrics.RuntimeMetricsOpener, root string, now time.Time) {
+	t.Helper()
 	config := platformmetrics.RuntimeMetricsConfig{MaxAge: 1, MaxSize: 1, MaxBackups: 2}
-	first, err := opener.Open(platformmetrics.RuntimeMetricsOpeningRequest{
-		SessionID:         "metrics-functional-session",
-		RuntimeInstanceID: "metrics-functional-runtime",
-		RootDirectory:     root,
-		StartTimeUTC:      now,
-		CollisionID:       "first",
-		Config:            config,
-	})
+	first, err := opener.Open(platformmetrics.RuntimeMetricsOpeningRequest{SessionID: "metrics-functional-session", RuntimeInstanceID: "metrics-functional-runtime", RootDirectory: root, StartTimeUTC: now, CollisionID: "first", Config: config})
 	if err != nil {
 		t.Fatalf("open first runtime metrics sink: %v", err)
 	}
-	second, err := opener.Open(platformmetrics.RuntimeMetricsOpeningRequest{
-		SessionID:         "metrics-functional-session",
-		RuntimeInstanceID: "metrics-functional-runtime",
-		RootDirectory:     root,
-		StartTimeUTC:      now,
-		CollisionID:       "second",
-		Config:            config,
-	})
+	second, err := opener.Open(platformmetrics.RuntimeMetricsOpeningRequest{SessionID: "metrics-functional-session", RuntimeInstanceID: "metrics-functional-runtime", RootDirectory: root, StartTimeUTC: now, CollisionID: "second", Config: config})
 	if err != nil {
 		_ = first.Close()
 		t.Fatalf("open shared-root runtime metrics sink: %v", err)
 	}
-
 	if first.RootDir() != root || first.StartTimeUTC() != now || first.Config().MaxAge != 1 {
 		t.Fatalf("first sink metadata = root:%q start:%s config:%#v, want selected public values", first.RootDir(), first.StartTimeUTC(), first.Config())
 	}
-	if err := first.WriteMetric(context.Background(), map[string]any{
-		"metric_name": "dispatch.completed",
-		"value":       1,
-	}); err != nil {
+	if err := first.WriteMetric(context.Background(), map[string]any{"metric_name": "dispatch.completed", "value": 1}); err != nil {
 		t.Fatalf("write first runtime metric: %v", err)
 	}
-	if err := second.WriteMetric(context.Background(), map[string]any{
-		"metric_name": "provider.completed",
-		"value":       2,
-	}); err != nil {
+	if err := second.WriteMetric(context.Background(), map[string]any{"metric_name": "provider.completed", "value": 2}); err != nil {
 		t.Fatalf("write second runtime metric: %v", err)
 	}
 	if err := second.Close(); err != nil {
@@ -121,42 +118,35 @@ func TestRuntimeMetricsPublicArtifactsRetainAndStreamThroughPlatformContracts(t 
 	if err := opener.Close(context.Background()); err != nil {
 		t.Fatalf("close runtime metrics opener: %v", err)
 	}
+}
 
-	if len(reports) != 1 || reports[0].Removed.Files != 1 || reports[0].Skipped {
-		t.Fatalf("runtime metrics startup reports = %#v, want one non-skipped sweep removing the stale artifact", reports)
-	}
-	if _, err := os.Stat(stalePath); !os.IsNotExist(err) {
-		t.Fatalf("stale metrics artifact stat error = %v, want removed", err)
-	}
-	if _, err := os.Stat(filepath.Join(root, "operator-notes.txt")); err != nil {
-		t.Fatalf("unrecognized root file was not preserved: %v", err)
-	}
-
-	backupPath := filepath.Join(
-		root, "2026", "08", "24",
-		"123000.000000000-runtime-metrics-backup-runtime-2026-08-24T12-30-00.000.log.gz",
-	)
-	if err := os.MkdirAll(filepath.Dir(backupPath), 0o755); err != nil {
+func writeCompressedRuntimeMetricsArtifact(t *testing.T, root string) {
+	t.Helper()
+	path := filepath.Join(root, "2026", "08", "24", "123000.000000000-runtime-metrics-backup-runtime-2026-08-24T12-30-00.000.log.gz")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("create compressed metrics directory: %v", err)
 	}
-	backupFile, err := os.Create(backupPath)
+	file, err := os.Create(path)
 	if err != nil {
 		t.Fatalf("create compressed metrics artifact: %v", err)
 	}
-	compressor := gzip.NewWriter(backupFile)
+	compressor := gzip.NewWriter(file)
 	if _, err := compressor.Write([]byte(`{"metric_name":"provider.completed","value":3}` + "\n")); err != nil {
 		_ = compressor.Close()
-		_ = backupFile.Close()
+		_ = file.Close()
 		t.Fatalf("write compressed metrics artifact: %v", err)
 	}
 	if err := compressor.Close(); err != nil {
-		_ = backupFile.Close()
+		_ = file.Close()
 		t.Fatalf("close compressed metrics writer: %v", err)
 	}
-	if err := backupFile.Close(); err != nil {
+	if err := file.Close(); err != nil {
 		t.Fatalf("close compressed metrics artifact: %v", err)
 	}
+}
 
+func assertRuntimeMetricsReadback(t *testing.T, root string) {
+	t.Helper()
 	reader, err := platformmetrics.NewRuntimeMetricsReader(platformfilesystem.Local{})
 	if err != nil {
 		t.Fatalf("construct runtime metrics reader: %v", err)
@@ -168,7 +158,6 @@ func TestRuntimeMetricsPublicArtifactsRetainAndStreamThroughPlatformContracts(t 
 	if len(records) != 3 {
 		t.Fatalf("read public runtime metrics records = %d, want active two plus compressed one", len(records))
 	}
-
 	stats := &platformmetrics.RuntimeMetricsReadStats{}
 	selected := make([]platformmetrics.RuntimeMetricRecord, 0, 2)
 	err = reader.StreamSelected(context.Background(), root, platformmetrics.StreamSelection{
@@ -187,7 +176,6 @@ func TestRuntimeMetricsPublicArtifactsRetainAndStreamThroughPlatformContracts(t 
 	if len(selected) != 2 || stats.ArtifactsOpened != 3 || stats.RecordsDecoded != 2 || stats.BytesRead == 0 {
 		t.Fatalf("selected metrics = %d, stats = %#v, want two selected records from three artifacts", len(selected), stats)
 	}
-
 }
 
 func TestRuntimeMetricsPublicReaderReportsMalformedAndCancelledReads(t *testing.T) {
@@ -199,105 +187,114 @@ func TestRuntimeMetricsPublicReaderReportsMalformedAndCancelledReads(t *testing.
 		t.Fatal("NewRuntimeMetricsReader(nil) error = nil, want required-filesystem error")
 	}
 
-	t.Run("invalidRequests", func(t *testing.T) {
-		var nilReader *platformmetrics.RuntimeMetricsReader
-		if err := nilReader.Stream(context.Background(), t.TempDir(), func(platformmetrics.RuntimeMetricRecord) error { return nil }); err == nil {
-			t.Fatal("nil reader Stream error = nil, want typed read error")
-		}
-		if err := reader.Stream(context.Background(), t.TempDir(), nil); err == nil {
-			t.Fatal("nil visitor Stream error = nil, want typed read error")
-		}
-		cancelled, cancel := context.WithCancel(context.Background())
-		cancel()
-		if err := reader.Stream(cancelled, t.TempDir(), func(platformmetrics.RuntimeMetricRecord) error { return nil }); err == nil {
-			t.Fatal("cancelled Stream error = nil, want context cancellation")
-		} else if !errors.Is(err, context.Canceled) {
-			t.Fatalf("cancelled Stream error = %v, want context.Canceled", err)
-		}
-		if err := reader.Stream(context.Background(), "", func(platformmetrics.RuntimeMetricRecord) error { return nil }); err == nil {
-			t.Fatal("empty-root Stream error = nil, want root validation error")
-		}
-		file := filepath.Join(t.TempDir(), "not-a-directory")
-		if err := os.WriteFile(file, []byte("file"), 0o600); err != nil {
-			t.Fatalf("write non-directory root: %v", err)
-		}
-		if err := reader.Stream(context.Background(), file, func(platformmetrics.RuntimeMetricRecord) error { return nil }); err == nil {
-			t.Fatal("file-root Stream error = nil, want not-a-directory error")
-		}
-	})
+	assertRuntimeMetricsInvalidRequests(t, reader)
+	assertRuntimeMetricsMalformedArtifact(t, reader)
+	assertRuntimeMetricsNullAndGzipArtifacts(t, reader)
+	assertRuntimeMetricsSelectionAndVisitorErrors(t, reader)
+}
 
-	t.Run("malformedArtifact", func(t *testing.T) {
-		root := t.TempDir()
-		path := filepath.Join(root, "2026", "08", "24", "123000.000000000-runtime-metrics-malformed-runtime.log")
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatalf("create malformed artifact directory: %v", err)
-		}
-		if err := os.WriteFile(path, []byte("not-json\n"), 0o600); err != nil {
-			t.Fatalf("write malformed artifact: %v", err)
-		}
-		var typedErr *platformmetrics.RuntimeMetricsReadError
-		if err := reader.Stream(context.Background(), root, func(platformmetrics.RuntimeMetricRecord) error { return nil }); err == nil {
-			t.Fatal("malformed artifact Stream error = nil, want decode error")
-		} else if !errors.As(err, &typedErr) || typedErr.Path != path {
-			t.Fatalf("malformed artifact error = %v, want typed error at %q", err, path)
-		}
-	})
+func assertRuntimeMetricsInvalidRequests(t *testing.T, reader *platformmetrics.RuntimeMetricsReader) {
+	t.Helper()
+	var nilReader *platformmetrics.RuntimeMetricsReader
+	if err := nilReader.Stream(context.Background(), t.TempDir(), func(platformmetrics.RuntimeMetricRecord) error { return nil }); err == nil {
+		t.Fatal("nil reader Stream error = nil, want typed read error")
+	}
+	if err := reader.Stream(context.Background(), t.TempDir(), nil); err == nil {
+		t.Fatal("nil visitor Stream error = nil, want typed read error")
+	}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := reader.Stream(cancelled, t.TempDir(), func(platformmetrics.RuntimeMetricRecord) error { return nil }); err == nil {
+		t.Fatal("cancelled Stream error = nil, want context cancellation")
+	} else if !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled Stream error = %v, want context.Canceled", err)
+	}
+	if err := reader.Stream(context.Background(), "", func(platformmetrics.RuntimeMetricRecord) error { return nil }); err == nil {
+		t.Fatal("empty-root Stream error = nil, want root validation error")
+	}
+	file := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(file, []byte("file"), 0o600); err != nil {
+		t.Fatalf("write non-directory root: %v", err)
+	}
+	if err := reader.Stream(context.Background(), file, func(platformmetrics.RuntimeMetricRecord) error { return nil }); err == nil {
+		t.Fatal("file-root Stream error = nil, want not-a-directory error")
+	}
+}
 
-	t.Run("nullAndGzipArtifacts", func(t *testing.T) {
-		root := t.TempDir()
-		dateDir := filepath.Join(root, "2026", "08", "24")
-		if err := os.MkdirAll(dateDir, 0o755); err != nil {
-			t.Fatalf("create null/gzip artifact directory: %v", err)
-		}
-		nullPath := filepath.Join(dateDir, "123000.000000000-runtime-metrics-null-runtime.log")
-		if err := os.WriteFile(nullPath, []byte("null\n"), 0o600); err != nil {
-			t.Fatalf("write null artifact: %v", err)
-		}
-		if err := reader.Stream(context.Background(), root, func(platformmetrics.RuntimeMetricRecord) error { return nil }); err == nil {
-			t.Fatal("null artifact Stream error = nil, want object-shape error")
-		}
-		gzipPath := filepath.Join(dateDir, "123001.000000000-runtime-metrics-invalid-runtime.log.gz")
-		if err := os.WriteFile(gzipPath, []byte("not-gzip"), 0o600); err != nil {
-			t.Fatalf("write invalid gzip artifact: %v", err)
-		}
-		if err := reader.Stream(context.Background(), root, func(platformmetrics.RuntimeMetricRecord) error { return nil }); err == nil {
-			t.Fatal("invalid gzip Stream error = nil, want gzip decoder error")
-		}
-	})
+func assertRuntimeMetricsMalformedArtifact(t *testing.T, reader *platformmetrics.RuntimeMetricsReader) {
+	t.Helper()
+	root := t.TempDir()
+	path := filepath.Join(root, "2026", "08", "24", "123000.000000000-runtime-metrics-malformed-runtime.log")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("create malformed artifact directory: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("not-json\n"), 0o600); err != nil {
+		t.Fatalf("write malformed artifact: %v", err)
+	}
+	var typedErr *platformmetrics.RuntimeMetricsReadError
+	if err := reader.Stream(context.Background(), root, func(platformmetrics.RuntimeMetricRecord) error { return nil }); err == nil {
+		t.Fatal("malformed artifact Stream error = nil, want decode error")
+	} else if !errors.As(err, &typedErr) || typedErr.Path != path {
+		t.Fatalf("malformed artifact error = %v, want typed error at %q", err, path)
+	}
+}
 
-	t.Run("selectionAndVisitorErrors", func(t *testing.T) {
-		root := t.TempDir()
-		path := filepath.Join(root, "2026", "08", "24", "123000.000000000-runtime-metrics-selected-runtime.log")
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatalf("create selected artifact directory: %v", err)
-		}
-		if err := os.WriteFile(path, []byte("{\"metric_name\":\"keep\",\"count\":1}\n{\"metric_name\":7}\n"), 0o600); err != nil {
-			t.Fatalf("write selected artifact: %v", err)
-		}
-		stats := &platformmetrics.RuntimeMetricsReadStats{}
-		var envelopes []platformmetrics.RuntimeMetricRecordEnvelope
-		err = reader.StreamSelected(context.Background(), root, platformmetrics.StreamSelection{
-			EnvelopeFields: []string{"metric_name", "missing"},
-			IncludeEnvelope: func(envelope platformmetrics.RuntimeMetricRecordEnvelope) bool {
-				envelopes = append(envelopes, envelope)
-				return envelope.Fields["metric_name"] == "keep"
-			},
-			Stats: stats,
-		}, func(platformmetrics.RuntimeMetricRecord) error { return nil })
-		if err != nil {
-			t.Fatalf("selected Stream error: %v", err)
-		}
-		if len(envelopes) != 2 || envelopes[0].Fields["metric_name"] != "keep" || len(envelopes[1].Fields) != 0 {
-			t.Fatalf("selected envelopes = %#v, want string field then omitted non-string field", envelopes)
-		}
-		if stats.RecordsDecoded != 1 || stats.BytesRead == 0 || stats.ArtifactsOpened != 1 {
-			t.Fatalf("selected stats = %#v, want one decoded record and one opened artifact", stats)
-		}
-		sentinel := errors.New("visitor stopped metrics read")
-		if err := reader.Stream(context.Background(), root, func(platformmetrics.RuntimeMetricRecord) error { return sentinel }); !errors.Is(err, sentinel) {
-			t.Fatalf("visitor error = %v, want %v", err, sentinel)
-		}
-	})
+func assertRuntimeMetricsNullAndGzipArtifacts(t *testing.T, reader *platformmetrics.RuntimeMetricsReader) {
+	t.Helper()
+	root := t.TempDir()
+	dateDir := filepath.Join(root, "2026", "08", "24")
+	if err := os.MkdirAll(dateDir, 0o755); err != nil {
+		t.Fatalf("create null/gzip artifact directory: %v", err)
+	}
+	nullPath := filepath.Join(dateDir, "123000.000000000-runtime-metrics-null-runtime.log")
+	if err := os.WriteFile(nullPath, []byte("null\n"), 0o600); err != nil {
+		t.Fatalf("write null artifact: %v", err)
+	}
+	if err := reader.Stream(context.Background(), root, func(platformmetrics.RuntimeMetricRecord) error { return nil }); err == nil {
+		t.Fatal("null artifact Stream error = nil, want object-shape error")
+	}
+	gzipPath := filepath.Join(dateDir, "123001.000000000-runtime-metrics-invalid-runtime.log.gz")
+	if err := os.WriteFile(gzipPath, []byte("not-gzip"), 0o600); err != nil {
+		t.Fatalf("write invalid gzip artifact: %v", err)
+	}
+	if err := reader.Stream(context.Background(), root, func(platformmetrics.RuntimeMetricRecord) error { return nil }); err == nil {
+		t.Fatal("invalid gzip Stream error = nil, want gzip decoder error")
+	}
+}
+
+func assertRuntimeMetricsSelectionAndVisitorErrors(t *testing.T, reader *platformmetrics.RuntimeMetricsReader) {
+	t.Helper()
+	root := t.TempDir()
+	path := filepath.Join(root, "2026", "08", "24", "123000.000000000-runtime-metrics-selected-runtime.log")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("create selected artifact directory: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("{\"metric_name\":\"keep\",\"count\":1}\n{\"metric_name\":7}\n"), 0o600); err != nil {
+		t.Fatalf("write selected artifact: %v", err)
+	}
+	stats := &platformmetrics.RuntimeMetricsReadStats{}
+	var envelopes []platformmetrics.RuntimeMetricRecordEnvelope
+	err := reader.StreamSelected(context.Background(), root, platformmetrics.StreamSelection{
+		EnvelopeFields: []string{"metric_name", "missing"},
+		IncludeEnvelope: func(envelope platformmetrics.RuntimeMetricRecordEnvelope) bool {
+			envelopes = append(envelopes, envelope)
+			return envelope.Fields["metric_name"] == "keep"
+		},
+		Stats: stats,
+	}, func(platformmetrics.RuntimeMetricRecord) error { return nil })
+	if err != nil {
+		t.Fatalf("selected Stream error: %v", err)
+	}
+	if len(envelopes) != 2 || envelopes[0].Fields["metric_name"] != "keep" || len(envelopes[1].Fields) != 0 {
+		t.Fatalf("selected envelopes = %#v, want string field then omitted non-string field", envelopes)
+	}
+	if stats.RecordsDecoded != 1 || stats.BytesRead == 0 || stats.ArtifactsOpened != 1 {
+		t.Fatalf("selected stats = %#v, want one decoded record and one opened artifact", stats)
+	}
+	sentinel := errors.New("visitor stopped metrics read")
+	if err := reader.Stream(context.Background(), root, func(platformmetrics.RuntimeMetricRecord) error { return sentinel }); !errors.Is(err, sentinel) {
+		t.Fatalf("visitor error = %v, want %v", err, sentinel)
+	}
 }
 
 func TestRuntimeMetricsPublicOpenerValidatesRequestsAndSinkLifecycle(t *testing.T) {

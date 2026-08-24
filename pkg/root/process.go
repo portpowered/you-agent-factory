@@ -127,6 +127,27 @@ func RecordingsProjectionFromProcess(process any) RecordingsProjection {
 	return projection
 }
 
+// RecordingsServiceFromProcess returns the already-composed Recordings root
+// when a caller needs an owner operation that is not part of the projection
+// view. The service remains the instance selected by canonical composition.
+func RecordingsServiceFromProcess(process any) recordings.Service {
+	applicationProcess, ok := process.(*initializerapplication.Process)
+	if !ok || applicationProcess == nil {
+		return nil
+	}
+	capability := applicationProcess.RecordingsProjection()
+	if capability == nil {
+		return nil
+	}
+	serviceCapability, ok := capability.RecordingsProjection().(interface {
+		RecordingsService() recordings.Service
+	})
+	if !ok {
+		return nil
+	}
+	return serviceCapability.RecordingsService()
+}
+
 // RecordingsProjectionQueriesFromProcess returns the already-composed
 // Recordings projection-query capability when the canonical process exposes
 // it. A nil result preserves the optional nature of this additive surface.

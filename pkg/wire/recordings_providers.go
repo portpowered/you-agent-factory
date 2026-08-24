@@ -114,6 +114,10 @@ type recordingsProjection struct {
 	projection recordings.ProjectionService
 }
 
+func (projection recordingsProjection) RecordingsService() recordings.Service {
+	return projection.service
+}
+
 func (projection recordingsProjection) ReconstructWorldState(
 	request recordings.ReconstructWorldStateRequest,
 ) (recordings.ReconstructWorldStateResult, error) {

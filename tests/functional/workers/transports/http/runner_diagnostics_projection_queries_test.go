@@ -10,6 +10,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -111,7 +112,7 @@ func canonicalEventsFromGenerated(
 	t.Helper()
 	canonical := make([]recordings.FactoryEvent, 0, len(events))
 	for _, event := range events {
-		converted, err := recordings.NewFactoryEvent(event)
+		converted, err := recordingshttp.CanonicalFactoryEvent(event)
 		if err != nil {
 			t.Fatalf("convert generated Factory Event %q: %v", event.Id, err)
 		}

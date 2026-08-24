@@ -6,8 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,82 +28,6 @@ const (
 	workerSessionsCodexSuccessID = "session_fixture_codex_success"
 	workerSessionsCodexFailureID = "session_fixture_codex_structured_failure"
 )
-
-func TestWorkerSessionsCLIEmptyErrorBodiesUseStableDiagnostics(t *testing.T) {
-	for _, test := range []struct {
-		name string
-		body string
-	}{
-		{name: "empty", body: ""},
-		{name: "malformed", body: "{"},
-		{name: "missing message", body: `{"code":"UPSTREAM_FAILURE"}`},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != http.MethodGet {
-					t.Errorf("worker-sessions list method = %s, want GET", r.Method)
-				}
-				w.WriteHeader(http.StatusBadGateway)
-				_, _ = fmt.Fprint(w, test.body)
-			}))
-			t.Cleanup(server.Close)
-
-			process := support.BuildProcess(t, serviceedges.Edges{})
-			support.CleanupProcess(t, process)
-			inputs := support.FakeInputs(t.Context(), []string{
-				"you", "--json", "--server", server.URL, "worker-sessions", "list",
-			})
-			if err := process.Execute(inputs.Input); err == nil {
-				t.Fatal("Process.Execute(worker-sessions list) error = nil, want backend failure")
-			}
-			combined := inputs.Stdout() + inputs.Stderr()
-			if !strings.Contains(combined, "WORKER_SESSION_LIST_FAILED") ||
-				strings.Contains(combined, "UPSTREAM_FAILURE") {
-				t.Fatalf("worker-sessions diagnostic = %q, want stable fallback code", combined)
-			}
-		})
-	}
-
-	t.Run("closed server uses transport-unreachable diagnostic", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
-		serverURL := server.URL
-		server.Close()
-
-		process := support.BuildProcess(t, serviceedges.Edges{})
-		support.CleanupProcess(t, process)
-		inputs := support.FakeInputs(t.Context(), []string{
-			"you", "--json", "--server", serverURL, "worker-sessions", "list",
-		})
-		if err := process.Execute(inputs.Input); err == nil {
-			t.Fatal("Process.Execute(worker-sessions list) error = nil, want transport failure")
-		}
-		combined := inputs.Stdout() + inputs.Stderr()
-		if !strings.Contains(combined, "FACTORY_UNREACHABLE") || strings.Contains(combined, "worker sessions") {
-			t.Fatalf("closed-server diagnostic = %q, want stable unreachable code", combined)
-		}
-	})
-
-	t.Run("redirect loop preserves bounded transport failure", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Location", r.URL.String())
-			w.WriteHeader(http.StatusTemporaryRedirect)
-		}))
-		t.Cleanup(server.Close)
-
-		process := support.BuildProcess(t, serviceedges.Edges{})
-		support.CleanupProcess(t, process)
-		inputs := support.FakeInputs(t.Context(), []string{
-			"you", "--json", "--server", server.URL, "worker-sessions", "list",
-		})
-		if err := process.Execute(inputs.Input); err == nil {
-			t.Fatal("Process.Execute(worker-sessions list) error = nil, want redirect-loop failure")
-		}
-		combined := inputs.Stdout() + inputs.Stderr()
-		if !strings.Contains(combined, "FACTORY_UNREACHABLE") || strings.Contains(combined, "Location") {
-			t.Fatalf("redirect-loop diagnostic = %q, want stable unreachable code", combined)
-		}
-	})
-}
 
 // TestWorkerSessionsCLI proves the complete diagnosis path through one
 // root-built application: accepted Work is executed through an injected

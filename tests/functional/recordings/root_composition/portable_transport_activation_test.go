@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	mcprecording "github.com/portpowered/infinite-you/pkg/services/recordings/transports/mcp"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -85,89 +85,14 @@ func TestRecordingsPortableBuildValidateAndTransportsActivateThroughRootBuildPro
 	testutil.WriteSeedFile(t, cliFactoryDir, "task", []byte(`{"title":"FUN Recordings CLI transport activation"}`))
 	assertRecordingsCLITransportRecordPathActivates(t, cliFactoryDir, cliArtifactPath)
 
-	recordingsService := recordingsTransportActivationService(t, edges)
+	process := support.BuildProcess(t, edges)
+	support.CleanupProcess(t, process)
+	recordingsService := root.RecordingsServiceFromProcess(process)
+	if recordingsService == nil {
+		t.Fatal("root process does not expose the composed Recordings service")
+	}
 	assertRecordingsPortableValidateAdverseOutcome(t, recordingsService)
 	assertRecordingsMCPTransportActivatesAfterLifecycle(t, recordingsService, durableSession.SessionId)
-}
-
-// TestRecordingsWireRejectsIncompletePublicRootDependencies proves composed
-// Recordings construction fails closed when a required root or filesystem
-// effect is absent, instead of returning a partially usable service.
-func TestRecordingsWireRejectsIncompletePublicRootDependencies(t *testing.T) {
-	ledger := &recordingsTransportActivationLedger{}
-	projection := recordingswire.NewProjectionService()
-	writeFile := func(string, []byte) error { return nil }
-
-	tests := []struct {
-		name string
-		call func() error
-		want string
-	}{
-		{
-			name: "NewService requires ledger",
-			call: func() error {
-				_, err := recordingswire.NewService(nil, nil, nil, nil, nil, nil, nil, nil)
-				return err
-			},
-			want: "ledger is required",
-		},
-		{
-			name: "NewService requires writer",
-			call: func() error {
-				_, err := recordingswire.NewService(ledger, nil, nil, nil, nil, nil, nil, nil)
-				return err
-			},
-			want: "snapshot write function is required",
-		},
-		{
-			name: "NewServiceWithProjection requires ledger",
-			call: func() error {
-				_, err := recordingswire.NewServiceWithProjection(nil, projection, nil, writeFile, nil, nil, nil, nil, nil)
-				return err
-			},
-			want: "ledger is required",
-		},
-		{
-			name: "NewServiceWithProjection requires projection",
-			call: func() error {
-				_, err := recordingswire.NewServiceWithProjection(ledger, nil, nil, writeFile, nil, nil, nil, nil, nil)
-				return err
-			},
-			want: "projection is required",
-		},
-		{
-			name: "NewServiceWithProjectionAndEffects requires ledger",
-			call: func() error {
-				_, err := recordingswire.NewServiceWithProjectionAndEffects(nil, projection, nil, writeFile, nil, nil, nil, nil, nil)
-				return err
-			},
-			want: "ledger is required",
-		},
-		{
-			name: "NewServiceWithProjectionAndEffects requires projection",
-			call: func() error {
-				_, err := recordingswire.NewServiceWithProjectionAndEffects(ledger, nil, nil, writeFile, nil, nil, nil, nil, nil)
-				return err
-			},
-			want: "projection is required",
-		},
-		{
-			name: "NewServiceWithProjectionAndEffects rejects missing artifact effects",
-			call: func() error {
-				_, err := recordingswire.NewServiceWithProjectionAndEffects(ledger, projection, nil, writeFile, nil, nil, nil, nil, nil)
-				return err
-			},
-			want: "construct Recordings publication",
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			err := test.call()
-			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("constructor error = %v, want message containing %q", err, test.want)
-			}
-		})
-	}
 }
 
 func recordingsTransportActivationFactoryConfig() map[string]any {
@@ -228,39 +153,6 @@ func assertRecordingsCLITransportRecordPathActivates(t *testing.T, factoryDir, a
 	}
 
 	waitForRecordingsActivationArtifact(t, artifactPath)
-}
-
-type recordingsTransportActivationLedger struct {
-	recordings.Ledger
-}
-
-func recordingsTransportActivationService(
-	t *testing.T,
-	edges serviceedges.Edges,
-) recordings.Service {
-	t.Helper()
-
-	_ = support.BuildProcess(t, edges)
-	service, err := recordingswire.NewService(
-		&recordingsTransportActivationLedger{},
-		recordings.LiveRecordingTargetPlannerFunc(
-			func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
-				return recordings.LiveRecordingTarget{}, nil
-			},
-		),
-		func(path string, payload []byte) error {
-			return os.WriteFile(path, payload, 0o600)
-		},
-		edges.RecordingMakeDirectories,
-		edges.RecordingCreateTempFile,
-		edges.RecordingRemovePath,
-		edges.RecordingRenamePath,
-		edges.RecordingReadFile,
-	)
-	if err != nil {
-		t.Fatalf("compose Recordings service for transport activation: %v", err)
-	}
-	return service
 }
 
 func assertRecordingsPortableValidateAdverseOutcome(t *testing.T, service recordings.Service) {

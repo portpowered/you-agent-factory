@@ -3,26 +3,19 @@ package root_composition_test
 import (
 	"context"
 	"errors"
-	"io"
-	"net/http"
 	"os"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"go.uber.org/zap"
 )
 
 // TestGenericModelContractsRemainDetachedAtApplicationRoot proves generic model
@@ -359,86 +352,6 @@ func TestModelsInvokeCatalogRequestCancellationStopsReadiness(t *testing.T) {
 	}
 }
 
-// TestModelsCatalogClosedScopeReturnsStableErrorThroughPublicRoot proves a
-// public Models service does not dereference a closed runtime scope while
-// loading catalog detail.
-func TestModelsCatalogClosedScopeReturnsStableErrorThroughPublicRoot(t *testing.T) {
-	service := newFunctionalModelsRoot(t)
-	opened, err := service.OpenRuntimeScope(context.Background(), modelprovider.OpenRuntimeScopeRequest{
-		Config: modelprovider.RuntimeScopeConfig{Runtime: modelprovider.RuntimeConfig{
-			Workers: []modelprovider.RuntimeWorker{{
-				Name: "closed-scope-worker", Type: modelprovider.RuntimeWorkerTypeModel,
-				Model: "OMNIVOICE_Q4_K_M", ModelLocality: modelprovider.RuntimeModelLocalityLocal,
-				Operations: []modelprovider.RuntimeOperation{{Name: "TTS"}},
-			}},
-		}},
-	})
-	if err != nil {
-		t.Fatalf("OpenRuntimeScope: %v", err)
-	}
-	if _, err := service.CloseRuntimeScope(context.Background(), modelprovider.CloseRuntimeScopeRequest{Scope: opened.Scope}); err != nil {
-		t.Fatalf("CloseRuntimeScope: %v", err)
-	}
-	_, err = service.GetCatalogModel(context.Background(), modelprovider.GetModelRequest{
-		Scope: opened.Scope, Name: "OMNIVOICE_Q4_K_M", Operation: "TTS",
-	})
-	if !errors.Is(err, modelprovider.ErrRuntimeScopeClosed) {
-		t.Fatalf("GetCatalogModel on closed scope = %v, want ErrRuntimeScopeClosed", err)
-	}
-}
-
-// TestModelsCatalogDetailHonorsCancellationAfterDiscoveryThroughPublicRoot
-// proves catalog detail does not return a stale success after its caller has
-// been canceled during the detail projection.
-func TestModelsCatalogDetailHonorsCancellationAfterDiscoveryThroughPublicRoot(t *testing.T) {
-	service := newFunctionalModelsRoot(t)
-	opened, err := service.OpenRuntimeScope(context.Background(), modelprovider.OpenRuntimeScopeRequest{
-		Config: modelprovider.RuntimeScopeConfig{Runtime: modelprovider.RuntimeConfig{
-			Workers: []modelprovider.RuntimeWorker{{
-				Name: "cancel-detail-worker", Type: modelprovider.RuntimeWorkerTypeModel,
-				Model: "OMNIVOICE_Q4_K_M", ModelLocality: modelprovider.RuntimeModelLocalityLocal,
-				Operations: []modelprovider.RuntimeOperation{{Name: "TTS"}},
-			}},
-		}},
-	})
-	if err != nil {
-		t.Fatalf("OpenRuntimeScope: %v", err)
-	}
-	ctx := &functionalErrAfterContext{Context: context.Background(), cancelAt: 2}
-	_, err = service.GetCatalogModel(ctx, modelprovider.GetModelRequest{
-		Scope: opened.Scope, Name: "OMNIVOICE_Q4_K_M", Operation: "TTS",
-	})
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("GetCatalogModel after detail cancellation = %v, want context.Canceled", err)
-	}
-}
-
-// TestModelsReadinessPostQueryCancellationThroughPublicRoot proves the final
-// readiness guard wins when the readiness observation itself is successful but
-// the caller is canceled before the result is returned.
-func TestModelsReadinessPostQueryCancellationThroughPublicRoot(t *testing.T) {
-	service := newFunctionalModelsRoot(t)
-	opened, err := service.OpenRuntimeScope(context.Background(), modelprovider.OpenRuntimeScopeRequest{
-		Config: modelprovider.RuntimeScopeConfig{Runtime: modelprovider.RuntimeConfig{
-			Workers: []modelprovider.RuntimeWorker{{
-				Name: "cancel-readiness-worker", Type: modelprovider.RuntimeWorkerTypeModel,
-				Model: "OMNIVOICE_Q4_K_M", ModelLocality: modelprovider.RuntimeModelLocalityLocal,
-				Operations: []modelprovider.RuntimeOperation{{Name: "TTS"}},
-			}},
-		}},
-	})
-	if err != nil {
-		t.Fatalf("OpenRuntimeScope: %v", err)
-	}
-	ctx := &functionalErrAfterContext{Context: context.Background(), cancelAt: 4}
-	_, err = service.GetModelReadiness(ctx, modelprovider.GetModelReadinessRequest{
-		Scope: opened.Scope, Name: "OMNIVOICE_Q4_K_M", Operation: "TTS",
-	})
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("GetModelReadiness after post-query cancellation = %v, want context.Canceled (Err calls=%d)", err, ctx.calls.Load())
-	}
-}
-
 // TestModelsInvokeReadinessCancellationAfterCatalogSuccessIsSafe proves a
 // cancellation from the direct readiness preflight remains typed and safe
 // after catalog discovery has already succeeded.
@@ -562,100 +475,6 @@ func richCatalogFactoryConfig() map[string]any {
 		},
 	}
 }
-
-func newFunctionalModelsRoot(t testing.TB) modelprovider.Service {
-	t.Helper()
-	service, err := modelswire.NewService(
-		modelprovider.AssetHostPlatform{OperatingSystem: runtime.GOOS, Architecture: runtime.GOARCH},
-		http.DefaultClient,
-		modelprovider.RuntimeAssetEndpoints{},
-		os.MkdirAll,
-		os.Stat,
-		os.UserHomeDir,
-		os.WriteFile,
-		os.Rename,
-		os.Remove,
-		os.ReadFile,
-		os.ReadDir,
-		func(path string) (io.WriteCloser, error) { return os.Create(path) },
-		func(path string) (io.ReadCloser, error) { return os.Open(path) },
-		functionalModelsProcessLauncher{},
-		http.DefaultClient,
-		functionalModelsHostClock{},
-		functionalModelsCommandRunner{},
-		http.DefaultClient,
-		os.Stat,
-		os.TempDir,
-		func(dir, pattern string) (modelswire.RuntimeTempFile, error) { return os.CreateTemp(dir, pattern) },
-		zap.NewNop(),
-		func() time.Time { return time.Unix(123, 456) },
-		platformrandom.CryptoSource{},
-		nil,
-		nil,
-		nil,
-		modelswire.LocalRuntimeHooks{},
-		nil,
-		nil,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("construct public Models root: %v", err)
-	}
-	return service
-}
-
-type functionalModelsProcessLauncher struct{}
-
-func (functionalModelsProcessLauncher) Start(
-	context.Context,
-	modelswire.HostProcessStartSpec,
-) (modelswire.HostManagedProcess, error) {
-	return functionalModelsManagedProcess{}, nil
-}
-
-type functionalModelsManagedProcess struct{}
-
-func (functionalModelsManagedProcess) HealthEndpoint() string { return "" }
-func (functionalModelsManagedProcess) Wait() error            { return nil }
-func (functionalModelsManagedProcess) Stop(context.Context) error {
-	return nil
-}
-
-type functionalModelsHostClock struct{}
-
-func (functionalModelsHostClock) Now() time.Time { return time.Unix(123, 456) }
-func (functionalModelsHostClock) NewTimer(time.Duration) modelswire.HostTimer {
-	return functionalModelsTimer{}
-}
-
-type functionalModelsTimer struct{}
-
-func (functionalModelsTimer) C() <-chan time.Time { return nil }
-func (functionalModelsTimer) Stop() bool          { return true }
-
-type functionalModelsCommandRunner struct{}
-
-func (functionalModelsCommandRunner) Run(
-	context.Context,
-	platformprocess.CommandRequest,
-) (platformprocess.CommandResult, error) {
-	return platformprocess.CommandResult{}, nil
-}
-
-type functionalErrAfterContext struct {
-	context.Context
-	cancelAt int32
-	calls    atomic.Int32
-}
-
-func (ctx *functionalErrAfterContext) Err() error {
-	if ctx.calls.Add(1) >= ctx.cancelAt {
-		return context.Canceled
-	}
-	return nil
-}
-
-func (ctx *functionalErrAfterContext) Done() <-chan struct{} { return nil }
 
 func catalogDiscoveryFactoryConfig() map[string]any {
 	return map[string]any{

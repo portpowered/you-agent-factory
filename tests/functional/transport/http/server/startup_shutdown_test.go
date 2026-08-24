@@ -124,8 +124,19 @@ func assertEnabledPprofServer(t *testing.T, enabledServer *support.FunctionalAPI
 		t.Fatalf("enabled live heap profile = %+v, want sample types and samples", heapProfile)
 	}
 
+	assertEnabledPprofAuxiliaryProfiles(t, enabledServer)
+	assertEnabledPprofCommandLine(t, enabledServer)
+	assertEnabledPprofAdditionalProfiles(t, enabledServer)
+	assertEnabledPprofSymbol(t, enabledServer)
+	assertEnabledPprofBoundedProfiles(t, enabledServer)
+	assertEnabledPprofTrace(t, enabledServer)
+	assertEnabledPprofCPU(t, enabledServer)
+}
+
+func assertEnabledPprofAuxiliaryProfiles(t *testing.T, server *support.FunctionalAPIServer) {
+	t.Helper()
 	for _, path := range []string{"/debug/pprof/allocs", "/debug/pprof/goroutine"} {
-		response, err := http.Get(enabledServer.URL() + path)
+		response, err := http.Get(server.URL() + path)
 		if err != nil {
 			t.Fatalf("enabled GET %s: %v", path, err)
 		}
@@ -138,26 +149,33 @@ func assertEnabledPprofServer(t *testing.T, enabledServer *support.FunctionalAPI
 			t.Fatalf("enabled GET %s = (%d, body length %d), want non-empty HTTP 200 response", path, response.StatusCode, len(body))
 		}
 	}
-	commandLine, err := http.Get(enabledServer.URL() + "/debug/pprof/cmdline")
+}
+
+func assertEnabledPprofCommandLine(t *testing.T, server *support.FunctionalAPIServer) {
+	t.Helper()
+	response, err := http.Get(server.URL() + "/debug/pprof/cmdline")
 	if err != nil {
 		t.Fatalf("enabled GET pprof cmdline: %v", err)
 	}
-	commandLineBody, err := io.ReadAll(commandLine.Body)
-	_ = commandLine.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	_ = response.Body.Close()
 	if err != nil {
-		t.Fatalf("read enabled pprof cmdline: %v", err)
+		t.Fatalf("read enabled GET pprof cmdline: %v", err)
 	}
-	if commandLine.StatusCode != http.StatusOK || len(commandLineBody) != 0 {
-		t.Fatalf("enabled pprof cmdline = (%d, %q), want the composed server's empty command-line edge", commandLine.StatusCode, commandLineBody)
+	if response.StatusCode != http.StatusOK || len(body) != 0 {
+		t.Fatalf("enabled pprof cmdline = (%d, %q), want the composed server's empty command-line edge", response.StatusCode, body)
 	}
+}
 
+func assertEnabledPprofAdditionalProfiles(t *testing.T, server *support.FunctionalAPIServer) {
+	t.Helper()
 	for _, path := range []string{
 		"/debug/pprof/block",
 		"/debug/pprof/mutex",
 		"/debug/pprof/threadcreate",
 		"/debug/pprof/not-a-profile",
 	} {
-		response, err := http.Get(enabledServer.URL() + path)
+		response, err := http.Get(server.URL() + path)
 		if err != nil {
 			t.Fatalf("enabled GET %s: %v", path, err)
 		}
@@ -174,25 +192,31 @@ func assertEnabledPprofServer(t *testing.T, enabledServer *support.FunctionalAPI
 			t.Fatalf("enabled GET %s = (%d, body length %d), want status %d and a non-empty profile", path, response.StatusCode, len(body), wantStatus)
 		}
 	}
+}
 
-	symbol, err := http.Get(enabledServer.URL() + "/debug/pprof/symbol?0x1+0x2")
+func assertEnabledPprofSymbol(t *testing.T, server *support.FunctionalAPIServer) {
+	t.Helper()
+	response, err := http.Get(server.URL() + "/debug/pprof/symbol?0x1+0x2")
 	if err != nil {
 		t.Fatalf("enabled GET pprof symbol: %v", err)
 	}
-	symbolBody, err := io.ReadAll(symbol.Body)
-	_ = symbol.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	_ = response.Body.Close()
 	if err != nil {
 		t.Fatalf("read enabled pprof symbol: %v", err)
 	}
-	if symbol.StatusCode != http.StatusOK || !strings.Contains(string(symbolBody), "num_symbols: 1") {
-		t.Fatalf("enabled pprof symbol = (%d, %q), want symbol response", symbol.StatusCode, symbolBody)
+	if response.StatusCode != http.StatusOK || !strings.Contains(string(body), "num_symbols: 1") {
+		t.Fatalf("enabled pprof symbol = (%d, %q), want symbol response", response.StatusCode, body)
 	}
+}
 
+func assertEnabledPprofBoundedProfiles(t *testing.T, server *support.FunctionalAPIServer) {
+	t.Helper()
 	for _, path := range []string{
 		"/debug/pprof/heap?seconds=0",
 		"/debug/pprof/heap?seconds=1&debug=1",
 	} {
-		response, err := http.Get(enabledServer.URL() + path)
+		response, err := http.Get(server.URL() + path)
 		if err != nil {
 			t.Fatalf("enabled GET %s: %v", path, err)
 		}
@@ -205,37 +229,44 @@ func assertEnabledPprofServer(t *testing.T, enabledServer *support.FunctionalAPI
 			t.Fatalf("enabled GET %s = (%d, %q), want bounded bad-request diagnostic", path, response.StatusCode, body)
 		}
 	}
+}
 
-	trace, err := http.Get(enabledServer.URL() + "/debug/pprof/trace?seconds=0")
+func assertEnabledPprofTrace(t *testing.T, server *support.FunctionalAPIServer) {
+	t.Helper()
+	response, err := http.Get(server.URL() + "/debug/pprof/trace?seconds=0")
 	if err != nil {
 		t.Fatalf("enabled GET pprof trace: %v", err)
 	}
-	traceBody, err := io.ReadAll(trace.Body)
-	_ = trace.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	_ = response.Body.Close()
 	if err != nil {
 		t.Fatalf("read enabled pprof trace: %v", err)
 	}
-	if trace.StatusCode != http.StatusOK || len(traceBody) == 0 {
-		t.Fatalf("enabled pprof trace = (%d, body length %d), want non-empty trace", trace.StatusCode, len(traceBody))
+	if response.StatusCode != http.StatusOK || len(body) == 0 {
+		t.Fatalf("enabled pprof trace = (%d, body length %d), want non-empty trace", response.StatusCode, len(body))
 	}
-	cpu, err := http.Get(enabledServer.URL() + "/debug/pprof/profile?seconds=1")
+}
+
+func assertEnabledPprofCPU(t *testing.T, server *support.FunctionalAPIServer) {
+	t.Helper()
+	response, err := http.Get(server.URL() + "/debug/pprof/profile?seconds=1")
 	if err != nil {
 		t.Fatalf("enabled GET CPU profile: %v", err)
 	}
-	cpuBody, err := io.ReadAll(cpu.Body)
-	_ = cpu.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	_ = response.Body.Close()
 	if err != nil {
 		t.Fatalf("read enabled CPU profile: %v", err)
 	}
-	if cpu.StatusCode != http.StatusOK || len(cpuBody) == 0 {
-		t.Fatalf("enabled CPU profile = (%d, body length %d), want non-empty HTTP 200 response", cpu.StatusCode, len(cpuBody))
+	if response.StatusCode != http.StatusOK || len(body) == 0 {
+		t.Fatalf("enabled CPU profile = (%d, body length %d), want non-empty HTTP 200 response", response.StatusCode, len(body))
 	}
-	cpuProfile, err := profile.Parse(bytes.NewReader(cpuBody))
+	parsed, err := profile.Parse(bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("parse enabled live CPU profile: %v", err)
 	}
-	if len(cpuProfile.SampleType) == 0 {
-		t.Fatalf("enabled live CPU profile = %+v, want sample types", cpuProfile)
+	if len(parsed.SampleType) == 0 {
+		t.Fatalf("enabled live CPU profile = %+v, want sample types", parsed)
 	}
 }
 
