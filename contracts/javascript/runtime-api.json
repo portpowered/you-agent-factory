@@ -701,24 +701,24 @@
           "type": "array"
         },
         {
-          "id": "javascript.pipeline.param.worker",
-          "name": "worker",
+          "id": "javascript.pipeline.param.stage1",
+          "name": "stage1",
           "position": 1,
           "required": true,
           "rest": false,
           "type": "function"
         },
         {
-          "id": "javascript.pipeline.param.next",
-          "name": "next",
+          "id": "javascript.pipeline.param.stages",
+          "name": "stages",
           "position": 2,
           "required": false,
-          "rest": false,
+          "rest": true,
           "type": "function"
         }
       ],
       "callback": {
-        "role": "worker",
+        "role": "stage",
         "parameters": [
           {
             "id": "javascript.pipeline.callback.this",
@@ -746,13 +746,13 @@
             "type": "number"
           }
         ],
-        "notes": "optional next stage receives (priorResult, item, index)"
+        "notes": "stage 1 receives (item, index); every later stage receives (previousResult, item, index)"
       },
       "return": {
         "kind": "promise",
         "type": "pipeline-result-array"
       },
-      "determinism": "stages run sequentially per item; worker and next may return values or Promises",
+      "determinism": "each item advances through stages in order; stages may return values or Promises and results remain input-ordered",
       "errors": [
         {
           "condition": "missing-items-or-worker",
@@ -775,6 +775,11 @@
           "message": "pipeline() next argument must be a function when provided"
         },
         {
+          "condition": "invalid-stage-function",
+          "type": "TypeError",
+          "message": "pipeline() stage 3 argument must be a function"
+        },
+        {
           "condition": "null-or-undefined-item",
           "type": "TypeError",
           "message": "pipeline() items must not contain null or undefined entries"
@@ -790,11 +795,11 @@
           },
           "description": {
             "id": "javascript.pipeline.description",
-            "canonicalEnglish": "Maps each items entry through a required worker function and optional next stage callback, running stages sequentially per item. Returns a promise that resolves to a pipeline result array."
+            "canonicalEnglish": "Maps each item through a required first stage and any number of later stages, passing each later stage the previous result plus the original item and index. Returns a promise that resolves to an input-ordered pipeline result array."
           }
         },
         "examples": [
-          "await pipeline([1, 2], (item) => item * 2, (prior, item) => prior + item)"
+          "await pipeline([1, 2], (item, index) => item * 2 + index, (previous, item, index) => previous + item + index, (previous, item, index) => ({ previous, item, index }))"
         ],
         "visibility": "public",
         "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"

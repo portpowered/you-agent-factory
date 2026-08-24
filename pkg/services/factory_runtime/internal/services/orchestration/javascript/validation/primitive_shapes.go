@@ -231,8 +231,8 @@ func (a *sourceAnalyzer) validateSingleStringArgCall(call *js.CallExpr, primitiv
 
 func (a *sourceAnalyzer) validatePipelineCall(call *js.CallExpr) {
 	arity := callArity(call)
-	if arity < 2 || arity > 3 {
-		a.addIssue(shapeIssueCode("pipeline"), "pipeline() requires 2 or 3 argument(s)", call)
+	if arity < 2 {
+		a.addIssue(shapeIssueCode("pipeline"), "pipeline() requires 2 or more argument(s)", call)
 		return
 	}
 	arg, ok := firstCallArg(call)

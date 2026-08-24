@@ -110,6 +110,8 @@ func TestJavaScriptPipelinePassesStageOutputToNextStage(t *testing.T) {
 	dispatches := listPipelineStageOutputDispatches(t, server.URL(), started.SessionId)
 	stageOneDispatch, stageTwoDispatch := assertTwoCompletedPipelineChildDispatches(t, dispatches.Dispatches)
 	assertPipelineStageOutputPrimaryResult(t, started.Result, stageOneDispatch.Id, stageTwoDispatch.Id)
+	assertPipelineFactoryEventProjection(t, support.GetFactoryEventsForSessionAt(t, server.URL(), started.SessionId),
+		factoryapi.FactorySessionDurableLifecycleStatusSucceeded, stageOneDispatch.Id, stageTwoDispatch.Id)
 }
 
 // TestJavaScriptPipelineStopsAfterStageFailure proves a JavaScript Factory
@@ -140,6 +142,8 @@ func TestJavaScriptPipelineStopsAfterStageFailure(t *testing.T) {
 	stageOneDispatch := assertSingleFailedPipelineStageOneDispatch(t, dispatches.Dispatches)
 	assertNoLaterPipelineStageDispatch(t, dispatches.Dispatches, pipelineStageTwoLabel)
 	assertPipelineStageFailurePrimaryResult(t, started.Result, stageOneDispatch.Id)
+	assertPipelineFactoryEventProjection(t, support.GetFactoryEventsForSessionAt(t, server.URL(), started.SessionId),
+		factoryapi.FactorySessionDurableLifecycleStatusSucceeded, "edit rejected")
 }
 
 func scaffoldPipelineStageOutputWorkflow(t *testing.T) string {
@@ -352,6 +356,58 @@ func assertNoLaterPipelineStageDispatch(
 				laterStageLabel,
 			)
 		}
+	}
+}
+
+func assertPipelineFactoryEventProjection(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	wantFinalStatus factoryapi.FactorySessionDurableLifecycleStatus,
+	wantEvidence ...string,
+) {
+	t.Helper()
+
+	if len(events) == 0 {
+		t.Fatal("factory events = empty, want retained pipeline lifecycle projection")
+	}
+	sawResultUpdated := false
+	sawSessionCompleted := false
+	for _, event := range events {
+		switch event.Type {
+		case factoryapi.FactoryEventTypeSessionResultUpdated:
+			payload, err := event.Payload.AsSessionResultUpdatedEventPayload()
+			if err != nil {
+				t.Fatalf("decode pipeline SESSION_RESULT_UPDATED payload: %v", err)
+			}
+			if payload.ResultStatus != factoryapi.FactoryEventSessionResultStatusFinal || payload.ResultSummary == nil {
+				t.Fatalf("pipeline result update payload = %#v, want FINAL result summary", payload)
+			}
+			encoded, err := json.Marshal(event)
+			if err != nil {
+				t.Fatalf("encode pipeline Factory Event: %v", err)
+			}
+			for _, evidence := range wantEvidence {
+				if !strings.Contains(string(encoded), evidence) {
+					t.Fatalf("pipeline result update event = %s, want evidence %q", encoded, evidence)
+				}
+			}
+			sawResultUpdated = true
+		case factoryapi.FactoryEventTypeSessionCompleted:
+			payload, err := event.Payload.AsSessionCompletedEventPayload()
+			if err != nil {
+				t.Fatalf("decode pipeline SESSION_COMPLETED payload: %v", err)
+			}
+			if payload.FinalStatus != wantFinalStatus || payload.ResultStatus == nil || *payload.ResultStatus != factoryapi.FactoryEventSessionResultStatusFinal {
+				t.Fatalf("pipeline session completed payload = %#v, want %q with FINAL result", payload, wantFinalStatus)
+			}
+			sawSessionCompleted = true
+		}
+	}
+	if !sawResultUpdated {
+		t.Fatalf("factory events = %#v, want SESSION_RESULT_UPDATED for pipeline result", events)
+	}
+	if !sawSessionCompleted {
+		t.Fatalf("factory events = %#v, want SESSION_COMPLETED for pipeline result", events)
 	}
 }
 
