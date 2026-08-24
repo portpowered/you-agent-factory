@@ -124,11 +124,11 @@ func TestExecuteReportsPackageSummariesForCompleteManifest(t *testing.T) {
 	stderrWriter = &stderr
 
 	err := execute(config{
-		min:                 0,
-		suite:               "unit",
-		coverpkg:            configPackage,
-		packages:            "./pkg/config",
-		packageManifest:     manifestPath,
+		min:             0,
+		suite:           "unit",
+		coverpkg:        configPackage,
+		packages:        "./pkg/config",
+		packageManifest: manifestPath,
 	})
 	if err != nil {
 		t.Fatalf("execute() error = %v", err)
