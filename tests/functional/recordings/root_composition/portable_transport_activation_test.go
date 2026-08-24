@@ -90,6 +90,86 @@ func TestRecordingsPortableBuildValidateAndTransportsActivateThroughRootBuildPro
 	assertRecordingsMCPTransportActivatesAfterLifecycle(t, recordingsService, durableSession.SessionId)
 }
 
+// TestRecordingsWireRejectsIncompletePublicRootDependencies proves composed
+// Recordings construction fails closed when a required root or filesystem
+// effect is absent, instead of returning a partially usable service.
+func TestRecordingsWireRejectsIncompletePublicRootDependencies(t *testing.T) {
+	ledger := &recordingsTransportActivationLedger{}
+	projection := recordingswire.NewProjectionService()
+	writeFile := func(string, []byte) error { return nil }
+
+	tests := []struct {
+		name string
+		call func() error
+		want string
+	}{
+		{
+			name: "NewService requires ledger",
+			call: func() error {
+				_, err := recordingswire.NewService(nil, nil, nil, nil, nil, nil, nil, nil)
+				return err
+			},
+			want: "ledger is required",
+		},
+		{
+			name: "NewService requires writer",
+			call: func() error {
+				_, err := recordingswire.NewService(ledger, nil, nil, nil, nil, nil, nil, nil)
+				return err
+			},
+			want: "snapshot write function is required",
+		},
+		{
+			name: "NewServiceWithProjection requires ledger",
+			call: func() error {
+				_, err := recordingswire.NewServiceWithProjection(nil, projection, nil, writeFile, nil, nil, nil, nil, nil)
+				return err
+			},
+			want: "ledger is required",
+		},
+		{
+			name: "NewServiceWithProjection requires projection",
+			call: func() error {
+				_, err := recordingswire.NewServiceWithProjection(ledger, nil, nil, writeFile, nil, nil, nil, nil, nil)
+				return err
+			},
+			want: "projection is required",
+		},
+		{
+			name: "NewServiceWithProjectionAndEffects requires ledger",
+			call: func() error {
+				_, err := recordingswire.NewServiceWithProjectionAndEffects(nil, projection, nil, writeFile, nil, nil, nil, nil, nil)
+				return err
+			},
+			want: "ledger is required",
+		},
+		{
+			name: "NewServiceWithProjectionAndEffects requires projection",
+			call: func() error {
+				_, err := recordingswire.NewServiceWithProjectionAndEffects(ledger, nil, nil, writeFile, nil, nil, nil, nil, nil)
+				return err
+			},
+			want: "projection is required",
+		},
+		{
+			name: "NewServiceWithProjectionAndEffects rejects missing artifact effects",
+			call: func() error {
+				_, err := recordingswire.NewServiceWithProjectionAndEffects(ledger, projection, nil, writeFile, nil, nil, nil, nil, nil)
+				return err
+			},
+			want: "construct Recordings publication",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := test.call()
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("constructor error = %v, want message containing %q", err, test.want)
+			}
+		})
+	}
+}
+
 func recordingsTransportActivationFactoryConfig() map[string]any {
 	return map[string]any{
 		"name": "recordings-transport-activation",

@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -248,5 +249,111 @@ func TestProcessModelsRemoteFailuresExposeSafeDiagnosticsAndHTTPMetadata(t *test
 				}
 			}
 		})
+	}
+}
+
+func TestProcessModelsCLIUsageAndDebugFalseKeepDiagnosticsBounded(t *testing.T) {
+	t.Run("usage error renders help hint without contacting a server", func(t *testing.T) {
+		var requests int
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requests++
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		t.Cleanup(server.Close)
+
+		process := support.BuildProcess(t, serviceedges.Edges{})
+		inputs := support.FakeInputs(t.Context(), []string{
+			"you", "--server", strings.TrimSuffix(server.URL, "/"), "models", "list", "unexpected",
+		})
+		if err := process.Execute(inputs.Input); err == nil {
+			t.Fatalf("Process.Execute(models list unexpected) error = nil, want usage failure")
+		}
+		if !strings.Contains(inputs.Stderr(), "Error:") || !strings.Contains(inputs.Stderr(), "--help") {
+			t.Fatalf("usage diagnostic = %q, want Error and help hint", inputs.Stderr())
+		}
+		if requests != 0 {
+			t.Fatalf("usage error contacted server %d time(s), want 0", requests)
+		}
+	})
+
+	t.Run("debug false suppresses cause and request metadata", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/models" {
+				t.Errorf("path = %q, want /models", r.URL.Path)
+			}
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = io.WriteString(w, `upstream body=debug-false-secret`)
+		}))
+		t.Cleanup(server.Close)
+
+		process := support.BuildProcess(t, serviceedges.Edges{})
+		inputs := support.FakeInputs(t.Context(), []string{
+			"you", "--json", "--debug=false", "--server", strings.TrimSuffix(server.URL, "/"), "models", "list",
+		})
+		if err := process.Execute(inputs.Input); err == nil {
+			t.Fatal("Process.Execute(models list) error = nil, want HTTP failure")
+		}
+		combined := inputs.Stdout() + inputs.Stderr()
+		if !strings.Contains(combined, "CLI_COMMAND_FAILED") {
+			t.Fatalf("bounded diagnostic = %q, want CLI_COMMAND_FAILED", combined)
+		}
+		for _, forbidden := range []string{"debug:", "debug-false-secret", server.URL} {
+			if strings.Contains(combined, forbidden) {
+				t.Fatalf("debug=false diagnostic leaked %q: %s", forbidden, combined)
+			}
+		}
+	})
+
+	t.Run("malformed server URL is a bounded HTTP failure", func(t *testing.T) {
+		process := support.BuildProcess(t, serviceedges.Edges{})
+		inputs := support.FakeInputs(t.Context(), []string{
+			"you", "--json", "--debug", "--server", "http://[::1", "models", "list",
+		})
+		if err := process.Execute(inputs.Input); err == nil {
+			t.Fatal("Process.Execute(models list) error = nil, want malformed-URL failure")
+		}
+		combined := inputs.Stdout() + inputs.Stderr()
+		if !strings.Contains(combined, "CLI_COMMAND_FAILED") || strings.Contains(combined, "http://[::1") {
+			t.Fatalf("malformed-URL diagnostic = %q, want bounded failure without raw URL", combined)
+		}
+	})
+
+	t.Run("closed server is a bounded transport failure", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+		serverURL := strings.TrimSuffix(server.URL, "/")
+		server.Close()
+
+		process := support.BuildProcess(t, serviceedges.Edges{})
+		inputs := support.FakeInputs(t.Context(), []string{
+			"you", "--json", "--debug", "--server", serverURL, "models", "list",
+		})
+		if err := process.Execute(inputs.Input); err == nil {
+			t.Fatal("Process.Execute(models list) error = nil, want unavailable-server failure")
+		}
+		combined := inputs.Stdout() + inputs.Stderr()
+		if !strings.Contains(combined, "CLI_COMMAND_FAILED") ||
+			!strings.Contains(combined, "debug: http method=GET") ||
+			!strings.Contains(combined, "status=<unavailable>") {
+			t.Fatalf("closed-server diagnostic = %q, want bounded HTTP metadata", combined)
+		}
+	})
+}
+
+func TestProcessRunMissingReplayUsesSafeLocalInputDiagnostic(t *testing.T) {
+	replayPath := filepath.Join(t.TempDir(), "missing.replay.json")
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--replay", replayPath, "--no-record",
+	})
+
+	err := process.Execute(inputs.Input)
+	if err == nil {
+		t.Fatalf("Process.Execute(run --replay) error = nil, want missing-input failure")
+	}
+	combined := inputs.Stdout() + inputs.Stderr()
+	if !strings.Contains(combined, "CLI_LOCAL_INPUT_FAILED") ||
+		!strings.Contains(combined, "--replay") ||
+		!strings.Contains(combined, filepath.Base(replayPath)) {
+		t.Fatalf("missing replay diagnostic = %q, want safe code, flag, and filename", combined)
 	}
 }

@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -112,6 +115,24 @@ func TestRecordingsEventArtifactProjectionSurfacesActivateThroughRootBuildProces
 	}
 	if artifactDetail.ContentHash == nil || strings.TrimSpace(*artifactDetail.ContentHash) == "" {
 		t.Fatalf("artifact detail contentHash = %#v, want non-empty hash after lifecycle", artifactDetail.ContentHash)
+	}
+}
+
+// TestPublicFactoryEventContractParityMatchesCanonicalRecordingEvents proves
+// the generated FactoryEvent discriminator remains closed over the canonical
+// recording inventory. This is an operator-facing replay/API contract: a
+// recorded event must have one documented payload shape, and retired or
+// response-stream vocabularies must remain excluded.
+func TestPublicFactoryEventContractParityMatchesCanonicalRecordingEvents(t *testing.T) {
+	openAPI, err := os.ReadFile(filepath.Join(testutil.MustRepoRoot(t), "api", "openapi.yaml"))
+	if err != nil {
+		t.Fatalf("read bundled OpenAPI contract: %v", err)
+	}
+	if err := recordingswire.ValidateFactoryEventContract(openAPI); err != nil {
+		t.Fatalf("FactoryEvent runtime/OpenAPI parity: %v", err)
+	}
+	if err := recordingswire.ValidateFactoryEventContract([]byte("components: [")); err == nil {
+		t.Fatal("malformed OpenAPI contract unexpectedly passed FactoryEvent parity")
 	}
 }
 

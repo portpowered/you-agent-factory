@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -101,6 +103,33 @@ func TestCLIWorkerFailureExitCode(t *testing.T) {
 	}
 	if strings.Count(stderr, diagnostic.Code) != 1 || strings.Contains(stderr, "private detail") {
 		t.Fatalf("worker failure stderr = %q, want one sanitized coded diagnostic", stderr)
+	}
+}
+
+func TestCLISubmitBatchBackendFailureUsesCreatedRequestProtocol(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Errorf("submit batch method = %s, want PUT", r.Method)
+		}
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	t.Cleanup(server.Close)
+
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--server", server.URL, "submit", "batch",
+		`{"requestId":"process-submit-protocol","type":"FACTORY_REQUEST_BATCH","works":[{"name":"protocol-task","workTypeName":"task","payload":{"title":"protocol failure"}}]}`,
+	})
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+
+	err := process.Execute(inputs.Input)
+	if err == nil {
+		t.Fatal("Process.Execute(submit batch) error = nil, want backend failure")
+	}
+	combined := inputs.Stdout() + inputs.Stderr()
+	if strings.Contains(combined, "requestId: process-submit-protocol") ||
+		strings.Contains(combined, "work count:") {
+		t.Fatalf("submit failure emitted success acknowledgment: %q", combined)
 	}
 }
 
