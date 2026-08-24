@@ -89,6 +89,17 @@ If the change involves modification to the website, you should use the playwrigh
   comment at most once and stay silent on later holds for the same flake. Never
   demand code changes for a baseline flake in a package the diff does not touch.
 
+### Step 2.1a - Reject a plan that disagrees with itself
+
+1. Read the plan acceptance criteria.
+2. Find every criterion that says the lane reaches, pulls, or invokes a real
+   external artifact, backend, model, or pinned dependency.
+3. Find every criterion that describes the proof for that same behavior as a
+   substitute, a controlled response, or a test requiring no real download.
+4. When both apply to the same behavior, respond BLOCKING.
+5. Quote both criteria verbatim, side by side, in the review comment.
+6. Decide this by the two quoted sentences, not by judgement.
+
 ### Step 2.2 — Independently verify conditional runtime proof
 
 Before Step 3, independently classify the lane and record which case applies:
