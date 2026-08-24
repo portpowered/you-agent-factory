@@ -139,6 +139,27 @@ func (projection recordingsProjection) ProjectWorkstationRequests(
 	return projection.projection.ProjectWorkstationRequests(world)
 }
 
+func (projection recordingsProjection) SimpleDashboardRenderData(
+	world recordings.FactoryWorldState,
+) recordings.SimpleDashboardRenderData {
+	return projection.projection.SimpleDashboardRenderData(world)
+}
+
+func (projection recordingsProjection) ProjectActiveThrottlePauses(
+	topology recordings.InitialStructurePayload,
+	pauses []recordings.ActiveThrottlePause,
+) []recordings.FactoryWorldThrottlePause {
+	return projection.projection.ProjectActiveThrottlePauses(topology, pauses)
+}
+
+func (projection recordingsProjection) ValidateReconnectReplay(
+	events []recordings.FactoryEvent,
+	cursor recordings.FactoryEventReconnectCursor,
+	scope recordings.FactoryEventReconnectScope,
+) error {
+	return projection.projection.ValidateReconnectReplay(events, cursor, scope)
+}
+
 // provideOperatorSettingsCapability carries the already-composed Operator
 // Settings root across the neutral initializer boundary for public bindings.
 func provideOperatorSettingsCapability(

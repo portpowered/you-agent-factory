@@ -93,6 +93,25 @@ type RecordingsProjection interface {
 	ProjectWorkstationRequests(recordings.FactoryWorldState) recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice
 }
 
+// RecordingsProjectionQueries is the optional stateless projection-query
+// surface carried by a canonical process. The original RecordingsProjection
+// contract remains narrow for existing callers; this additive capability
+// exposes the other Recordings-owned read projections without leaking the
+// application service graph.
+type RecordingsProjectionQueries interface {
+	RecordingsProjection
+	SimpleDashboardRenderData(recordings.FactoryWorldState) recordings.SimpleDashboardRenderData
+	ProjectActiveThrottlePauses(
+		recordings.InitialStructurePayload,
+		[]recordings.ActiveThrottlePause,
+	) []recordings.FactoryWorldThrottlePause
+	ValidateReconnectReplay(
+		[]recordings.FactoryEvent,
+		recordings.FactoryEventReconnectCursor,
+		recordings.FactoryEventReconnectScope,
+	) error
+}
+
 // RecordingsProjectionFromProcess returns the already-composed Recordings
 // projection capability carried by a canonical process.
 func RecordingsProjectionFromProcess(process any) RecordingsProjection {
@@ -106,6 +125,15 @@ func RecordingsProjectionFromProcess(process any) RecordingsProjection {
 	}
 	projection, _ := capability.RecordingsProjection().(RecordingsProjection)
 	return projection
+}
+
+// RecordingsProjectionQueriesFromProcess returns the already-composed
+// Recordings projection-query capability when the canonical process exposes
+// it. A nil result preserves the optional nature of this additive surface.
+func RecordingsProjectionQueriesFromProcess(process any) RecordingsProjectionQueries {
+	projection := RecordingsProjectionFromProcess(process)
+	queries, _ := projection.(RecordingsProjectionQueries)
+	return queries
 }
 
 // OperatorSettingsFromProcess returns the already-composed Operator Settings

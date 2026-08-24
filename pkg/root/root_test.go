@@ -450,6 +450,25 @@ func (rootRecordingsProjectionProbe) ProjectWorkstationRequests(recordings.Facto
 	return recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice{}
 }
 
+func (rootRecordingsProjectionProbe) SimpleDashboardRenderData(recordings.FactoryWorldState) recordings.SimpleDashboardRenderData {
+	return recordings.SimpleDashboardRenderData{}
+}
+
+func (rootRecordingsProjectionProbe) ProjectActiveThrottlePauses(
+	recordings.InitialStructurePayload,
+	[]recordings.ActiveThrottlePause,
+) []recordings.FactoryWorldThrottlePause {
+	return nil
+}
+
+func (rootRecordingsProjectionProbe) ValidateReconnectReplay(
+	[]recordings.FactoryEvent,
+	recordings.FactoryEventReconnectCursor,
+	recordings.FactoryEventReconnectScope,
+) error {
+	return nil
+}
+
 type rootWorkerProcessRegistry struct{}
 
 func (rootWorkerProcessRegistry) CanonicalIdentity(identity string) (string, error) {
