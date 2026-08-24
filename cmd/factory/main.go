@@ -11,7 +11,9 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/root"
 	"github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 )
 
@@ -54,9 +56,17 @@ func processExitCode(err, contextErr error, args []string) int {
 		return exitSuccess
 	case errors.Is(err, context.Canceled):
 		return declaredCancellationExitCode(args)
+	case isCanonicalInvocationCancellation(err):
+		return declaredCancellationExitCode(args)
 	default:
 		return exitFailure
 	}
+}
+
+func isCanonicalInvocationCancellation(err error) bool {
+	var invocationErr clidiag.InvocationCodedError
+	return errors.As(err, &invocationErr) &&
+		invocationErr.InvocationErrorCode() == string(factorysessions.InvocationErrorCodeCanceled)
 }
 
 func declaredCancellationExitCode(args []string) int {

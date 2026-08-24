@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 )
 
 func TestMainDelegatesExitCodeToRootProcess(t *testing.T) {
@@ -103,6 +104,12 @@ var processExitCodeTests = []struct {
 		want: 130,
 	},
 	{
+		name: "canonical invocation cancellation normalized by lifecycle",
+		err:  canonicalInvocationError{code: string(factorysessions.InvocationErrorCodeCanceled)},
+		args: []string{"you", "run"},
+		want: 130,
+	},
+	{
 		name:       "MCP child cancellation uses its declared lifecycle code",
 		contextErr: context.Canceled,
 		args:       []string{"you", "server", "mcp"},
@@ -148,4 +155,20 @@ func TestProcessExitCodePreservesDeclaredLifecycleContract(t *testing.T) {
 			}
 		})
 	}
+}
+
+type canonicalInvocationError struct {
+	code string
+}
+
+func (err canonicalInvocationError) Error() string {
+	return err.code
+}
+
+func (err canonicalInvocationError) InvocationErrorCode() string {
+	return err.code
+}
+
+func (err canonicalInvocationError) InvocationErrorMessage() string {
+	return err.code
 }
