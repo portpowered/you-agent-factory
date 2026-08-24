@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -262,7 +263,8 @@ func writeGenericBuiltinTTSManagedRuntimeCache(t *testing.T, home string) {
 	const revision = "505114ae6ad17be74df98e6939707434ec49c187"
 	body := []byte("joined built-in tts fixture")
 	digest := sha256.Sum256(body)
-	revisionPath := filepath.Join(home, ".agent-factory", "models", "tts", revision)
+	canonicalModelName := strings.ToUpper(strings.TrimSpace(models.BuiltInModelNameTTS))
+	revisionPath := filepath.Join(home, ".agent-factory", "models", canonicalModelName, revision)
 	if err := os.MkdirAll(revisionPath, 0o755); err != nil {
 		t.Fatalf("create managed TTS runtime fixture: %v", err)
 	}
