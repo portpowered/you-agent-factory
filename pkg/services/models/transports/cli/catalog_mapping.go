@@ -272,6 +272,16 @@ func catalogOperationForName(catalog models.Detail, operation string) (models.Op
 	}
 	return models.Operation{}, false
 }
+func catalogCapabilityOperationForName(catalog models.Detail, operation string) (models.Operation, bool) {
+	for _, capability := range catalog.Capabilities {
+		for _, catalogOperation := range capability.Operations {
+			if catalogOperation.Name == operation {
+				return catalogOperation, true
+			}
+		}
+	}
+	return models.Operation{}, false
+}
 func effectiveCLIInvocationOperation(catalog models.Detail, operation string) string {
 	if strings.TrimSpace(operation) != "" {
 		return strings.TrimSpace(operation)
