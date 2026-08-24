@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/contractjoiner"
 	"github.com/portpowered/infinite-you/internal/contractvalidator"
+	"github.com/portpowered/infinite-you/internal/javascriptcontract"
 )
 
 const (
@@ -40,6 +41,7 @@ type ArtifactsDependencies struct {
 	GenerateSchema            func(repositoryRoot string) ([]byte, error)
 	GenerateStandaloneSchemas func(repositoryRoot string) (map[string][]byte, error)
 	GenerateManifest          func(repositoryRoot string, artifacts map[string][]byte) ([]byte, error)
+	ProjectJavaScriptCatalog  func(canonical []byte) ([]byte, error)
 }
 
 // Empty reports whether package staging exactly matches canonical joined output.
@@ -93,6 +95,17 @@ func compareArtifacts(repositoryRoot string, expected map[string][]byte, actual 
 	drift := Drift{}
 	for path, expectedPayload := range expected {
 		if path == FactorySchemaAuthoredPath {
+			continue
+		}
+		if path == javascriptcontract.RuntimeCatalogPath {
+			if category, authoredPath := authoredArtifactDrift(repositoryRoot, path, expectedPayload); category != "" {
+				switch category {
+				case "stale":
+					drift.Stale = append(drift.Stale, authoredPath)
+				case "missing":
+					drift.Missing = append(drift.Missing, authoredPath)
+				}
+			}
 			continue
 		}
 		actualFile, exists := actual[path]
@@ -175,6 +188,13 @@ func artifactsWithDependencies(repositoryRoot string, dependencies ArtifactsDepe
 		if err != nil {
 			return nil, fmt.Errorf("read canonical raw artifact %s: %w", artifact.Source, err)
 		}
+		if artifact.Source == javascriptcontract.RuntimeCatalogPath {
+			payload, err = dependencies.ProjectJavaScriptCatalog(payload)
+			if err != nil {
+				return nil, fmt.Errorf("project JavaScript runtime catalog: %w", err)
+			}
+			expected[artifact.Source] = payload
+		}
 		if artifact.Source == CanonicalOpenAPIPath {
 			payload, err = dependencies.ProjectOpenAPI(payload, ReviewedOpenAPIBytePolicy)
 			if err != nil {
@@ -222,6 +242,7 @@ func normalizeArtifactsDependencies(repositoryRoot string, requested ArtifactsDe
 		GenerateSchema:            generateFactorySchema,
 		GenerateStandaloneSchemas: generateStandaloneFactorySchemas,
 		GenerateManifest:          generateManifest,
+		ProjectJavaScriptCatalog:  javascriptcontract.GenerateRuntimeCatalog,
 	}
 	if requested.Join != nil {
 		resolved.Join = requested.Join
@@ -240,6 +261,9 @@ func normalizeArtifactsDependencies(repositoryRoot string, requested ArtifactsDe
 	}
 	if requested.GenerateManifest != nil {
 		resolved.GenerateManifest = requested.GenerateManifest
+	}
+	if requested.ProjectJavaScriptCatalog != nil {
+		resolved.ProjectJavaScriptCatalog = requested.ProjectJavaScriptCatalog
 	}
 	return normalizedRoot, resolved, nil
 }

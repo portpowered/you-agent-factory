@@ -32,26 +32,34 @@ const (
 	JavaScriptChildPermissionSkipPermissions JavaScriptChildPermission = "SKIP_PERMISSIONS"
 )
 
-var supportedFields = []string{
-	FieldPrompt,
-	FieldLabel,
-	FieldPreset,
-	FieldExecutorProvider,
-	FieldModelProvider,
-	FieldModel,
-	FieldReasoningEffort,
-	FieldResourceID,
-	FieldSchema,
-	FieldPermissions,
+// JavaScriptChildFieldDescriptor is the runtime-owned contract for one
+// agent.run spec property. JSONType is the JSON value type accepted by the
+// request normalizer and emitted by generated runtime projections.
+type JavaScriptChildFieldDescriptor struct {
+	Name                 string
+	JSONType             string
+	Required             bool
+	Enum                 []string
+	AdditionalProperties *bool
 }
 
-var supportedFieldSet = func() map[string]struct{} {
-	set := make(map[string]struct{}, len(supportedFields))
-	for _, field := range supportedFields {
-		set[field] = struct{}{}
-	}
-	return set
-}()
+var schemaAdditionalProperties = false
+
+var javaScriptChildFieldDescriptors = [...]JavaScriptChildFieldDescriptor{
+	{Name: FieldPrompt, JSONType: "string", Required: true},
+	{Name: FieldLabel, JSONType: "string"},
+	{Name: FieldPreset, JSONType: "string"},
+	{Name: FieldExecutorProvider, JSONType: "string"},
+	{Name: FieldModelProvider, JSONType: "string"},
+	{Name: FieldModel, JSONType: "string"},
+	{Name: FieldReasoningEffort, JSONType: "string"},
+	{Name: FieldResourceID, JSONType: "string"},
+	{Name: FieldSchema, JSONType: "object", AdditionalProperties: &schemaAdditionalProperties},
+	{Name: FieldPermissions, JSONType: "string", Enum: []string{
+		string(JavaScriptChildPermissionDefault),
+		string(JavaScriptChildPermissionSkipPermissions),
+	}},
+}
 
 // Spec is the normalized supported argument set for one agent.run call.
 type JavaScriptChildSpec struct {
@@ -69,13 +77,35 @@ type JavaScriptChildSpec struct {
 
 // SupportedFields returns the canonical beta agent.run field names.
 func JavaScriptChildSupportedFields() []string {
-	return append([]string(nil), supportedFields...)
+	fields := make([]string, 0, len(javaScriptChildFieldDescriptors))
+	for _, descriptor := range javaScriptChildFieldDescriptors {
+		fields = append(fields, descriptor.Name)
+	}
+	return fields
+}
+
+// JavaScriptChildFieldDescriptors returns a detached copy of the immutable
+// runtime field contract for generation and other representation projections.
+func JavaScriptChildFieldDescriptors() []JavaScriptChildFieldDescriptor {
+	fields := append([]JavaScriptChildFieldDescriptor(nil), javaScriptChildFieldDescriptors[:]...)
+	for index := range fields {
+		fields[index].Enum = append([]string(nil), fields[index].Enum...)
+		if fields[index].AdditionalProperties != nil {
+			additionalProperties := *fields[index].AdditionalProperties
+			fields[index].AdditionalProperties = &additionalProperties
+		}
+	}
+	return fields
 }
 
 // IsSupportedField reports whether name belongs to the beta agent.run contract.
 func IsJavaScriptChildSupportedField(name string) bool {
-	_, ok := supportedFieldSet[name]
-	return ok
+	for _, descriptor := range javaScriptChildFieldDescriptors {
+		if descriptor.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // Normalize validates and trims one dynamically constructed agent.run object.
@@ -91,42 +121,72 @@ func NormalizeJavaScriptChild(value map[string]any) (JavaScriptChildSpec, error)
 		return JavaScriptChildSpec{}, unsupportedJavaScriptChildFieldError(unknown[0])
 	}
 
-	prompt, err := requiredString(value, FieldPrompt)
-	if err != nil {
-		return JavaScriptChildSpec{}, err
-	}
-	optional := make(map[string]string, len(supportedFields)-3)
-	for _, field := range supportedFields {
-		switch field {
-		case FieldPrompt, FieldSchema, FieldPermissions:
-			continue
-		default:
-			optional[field], err = optionalString(value, field)
-			if err != nil {
-				return JavaScriptChildSpec{}, err
-			}
-		}
-	}
-	schema, err := optionalSchema(value, FieldSchema)
-	if err != nil {
-		return JavaScriptChildSpec{}, err
-	}
-	permissions, err := optionalPermission(value, FieldPermissions)
+	fields, err := normalizeJavaScriptChildFields(value)
 	if err != nil {
 		return JavaScriptChildSpec{}, err
 	}
 	return JavaScriptChildSpec{
-		Prompt:           prompt,
-		Label:            optional[FieldLabel],
-		Preset:           optional[FieldPreset],
-		ExecutorProvider: optional[FieldExecutorProvider],
-		ModelProvider:    optional[FieldModelProvider],
-		Model:            optional[FieldModel],
-		ReasoningEffort:  optional[FieldReasoningEffort],
-		ResourceID:       optional[FieldResourceID],
-		Schema:           schema,
-		Permissions:      permissions,
+		Prompt:           fields.strings[FieldPrompt],
+		Label:            fields.strings[FieldLabel],
+		Preset:           fields.strings[FieldPreset],
+		ExecutorProvider: fields.strings[FieldExecutorProvider],
+		ModelProvider:    fields.strings[FieldModelProvider],
+		Model:            fields.strings[FieldModel],
+		ReasoningEffort:  fields.strings[FieldReasoningEffort],
+		ResourceID:       fields.strings[FieldResourceID],
+		Schema:           fields.schema,
+		Permissions:      fields.permissions,
 	}, nil
+}
+
+type normalizedJavaScriptChildFields struct {
+	strings     map[string]string
+	schema      map[string]any
+	permissions JavaScriptChildPermission
+}
+
+func normalizeJavaScriptChildFields(value map[string]any) (normalizedJavaScriptChildFields, error) {
+	fields := normalizedJavaScriptChildFields{
+		strings:     make(map[string]string, len(javaScriptChildFieldDescriptors)),
+		permissions: JavaScriptChildPermissionDefault,
+	}
+	for _, descriptor := range javaScriptChildFieldDescriptors {
+		switch descriptor.JSONType {
+		case "string":
+			if descriptor.Name == FieldPermissions {
+				var err error
+				fields.permissions, err = optionalPermission(value, descriptor.Name)
+				if err != nil {
+					return normalizedJavaScriptChildFields{}, err
+				}
+				continue
+			}
+			normalized, err := normalizeJavaScriptChildString(value, descriptor)
+			if err != nil {
+				return normalizedJavaScriptChildFields{}, err
+			}
+			fields.strings[descriptor.Name] = normalized
+		case "object":
+			if descriptor.Name != FieldSchema {
+				return normalizedJavaScriptChildFields{}, fmt.Errorf("agent.run() contract has unsupported object field %q", descriptor.Name)
+			}
+			var err error
+			fields.schema, err = optionalSchema(value, descriptor.Name)
+			if err != nil {
+				return normalizedJavaScriptChildFields{}, err
+			}
+		default:
+			return normalizedJavaScriptChildFields{}, fmt.Errorf("agent.run() contract has unsupported JSON type %q for %q", descriptor.JSONType, descriptor.Name)
+		}
+	}
+	return fields, nil
+}
+
+func normalizeJavaScriptChildString(value map[string]any, descriptor JavaScriptChildFieldDescriptor) (string, error) {
+	if descriptor.Required {
+		return requiredString(value, descriptor.Name)
+	}
+	return optionalString(value, descriptor.Name)
 }
 
 const childOutputSchemaURL = "https://schemas.portpowered.com/you/runtime/child-output-schema.json"

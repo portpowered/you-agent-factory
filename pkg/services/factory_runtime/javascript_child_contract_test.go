@@ -152,6 +152,39 @@ func TestNormalize_AcceptsAndTrimsCanonicalFields(t *testing.T) {
 	}
 }
 
+func TestJavaScriptChildFieldDescriptorIsDetachedAndRuntimeAligned(t *testing.T) {
+	t.Parallel()
+
+	descriptors := factory.JavaScriptChildFieldDescriptors()
+	want := []factory.JavaScriptChildFieldDescriptor{
+		{Name: "prompt", JSONType: "string", Required: true},
+		{Name: "label", JSONType: "string"},
+		{Name: "preset", JSONType: "string"},
+		{Name: "executorProvider", JSONType: "string"},
+		{Name: "modelProvider", JSONType: "string"},
+		{Name: "model", JSONType: "string"},
+		{Name: "reasoningEffort", JSONType: "string"},
+		{Name: "resourceId", JSONType: "string"},
+		{Name: "schema", JSONType: "object", AdditionalProperties: boolPointer(false)},
+		{Name: "permissions", JSONType: "string", Enum: []string{"DEFAULT", "SKIP_PERMISSIONS"}},
+	}
+	if !reflect.DeepEqual(descriptors, want) {
+		t.Fatalf("JavaScriptChildFieldDescriptors() = %#v, want %#v", descriptors, want)
+	}
+	descriptors[0].Name = "mutated"
+	descriptors[len(descriptors)-1].Enum[0] = "mutated"
+	if got := factory.JavaScriptChildSupportedFields()[0]; got != "prompt" {
+		t.Fatalf("mutating descriptor result changed runtime field name to %q", got)
+	}
+	if got := factory.JavaScriptChildFieldDescriptors()[len(descriptors)-1].Enum[0]; got != "DEFAULT" {
+		t.Fatalf("mutating descriptor result changed runtime enum to %q", got)
+	}
+}
+
+func boolPointer(value bool) *bool {
+	return &value
+}
+
 func TestNormalize_ClonesValidSchemaWithoutSharingNestedState(t *testing.T) {
 	t.Parallel()
 	schema := map[string]any{
