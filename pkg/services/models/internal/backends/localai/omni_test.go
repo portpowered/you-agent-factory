@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 )
 
 func TestProbePinnedOmniProtocolRecordsMediaCapability(t *testing.T) {
@@ -45,9 +46,19 @@ func TestProbePinnedOmniProtocolUsesFixtureAcceptanceAndNarrowsCodec(t *testing.
 	if len(fixture.requests) != 2 {
 		t.Fatalf("conformance requests = %#v, want audio and video probes", fixture.requests)
 	}
-	if fixture.requests[0].Slot != "audio" || fixture.requests[0].ProtocolField != "Audios" ||
-		fixture.requests[0].MediaType != "audio/*" || fixture.requests[1].Slot != "video" ||
-		fixture.requests[1].ProtocolField != "Videos" || fixture.requests[1].MediaType != "video/*" {
+	wantRequests := []OmniConformanceRequest{
+		{
+			ProtocolVersion: modelseffects.PinnedHostProtocolVersion, ProtocolRevision: PinnedProtocolRevision,
+			ProtocolPath: PinnedProtocolPath, LocalAICommit: PinnedLocalAICommit,
+			Slot: "audio", Modality: models.ModalityAudio, ProtocolField: "Audios", MediaType: "audio/*",
+		},
+		{
+			ProtocolVersion: modelseffects.PinnedHostProtocolVersion, ProtocolRevision: PinnedProtocolRevision,
+			ProtocolPath: PinnedProtocolPath, LocalAICommit: PinnedLocalAICommit,
+			Slot: "video", Modality: models.ModalityVideo, ProtocolField: "Videos", MediaType: "video/*",
+		},
+	}
+	if !reflect.DeepEqual(fixture.requests, wantRequests) {
 		t.Fatalf("conformance requests = %#v, want pinned audio/video field shapes", fixture.requests)
 	}
 
