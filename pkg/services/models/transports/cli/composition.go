@@ -117,7 +117,9 @@ func (service *rootService) prepareGenericCLIInputs(
 	operation string,
 	catalog modelinference.Detail,
 ) ([]modelinference.InferenceInput, error) {
-	if len(cfg.InputMappings) == 0 {
+	rawValues := append([]string(nil), cfg.InputMappings...)
+	rawValues = append(rawValues, cfg.InputSpecs...)
+	if len(rawValues) == 0 {
 		return nil, nil
 	}
 	selected, ok := catalogOperationForName(catalog, operation)
@@ -127,7 +129,7 @@ func (service *rootService) prepareGenericCLIInputs(
 			fmt.Sprintf("unknown operation %q", operation), operation, nil,
 		)
 	}
-	mappingValues, specValues := splitGenericCLIInputValues(cfg.InputMappings)
+	mappingValues, specValues := splitGenericCLIInputValues(rawValues)
 	var inputs []modelinference.InferenceInput
 	if len(mappingValues) > 0 {
 		mappings, err := parseGenericCLIInputMappings(mappingValues)

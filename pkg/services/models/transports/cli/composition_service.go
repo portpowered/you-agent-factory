@@ -88,7 +88,7 @@ func (service *compositionService) canInvokeThroughOwned(cfg InvokeConfig) bool 
 	if strings.TrimSpace(cfg.Server) != "" {
 		return false
 	}
-	if len(cfg.InputMappings) > 0 || len(cfg.ParameterSpecs) > 0 {
+	if len(cfg.InputMappings) > 0 || len(cfg.InputSpecs) > 0 || len(cfg.ParameterSpecs) > 0 {
 		return true
 	}
 	// Existing named-worker models retain the bootstrap audio artifact contract.

@@ -37,10 +37,10 @@ func (service *rootService) Invoke(cfg InvokeConfig) error {
 		return fmt.Errorf("--operation is required")
 	}
 	text := strings.TrimSpace(cfg.Text)
-	if text == "" && len(cfg.InputMappings) == 0 {
+	if text == "" && len(cfg.InputMappings) == 0 && len(cfg.InputSpecs) == 0 {
 		return fmt.Errorf("--text is required")
 	}
-	if text != "" && len(cfg.InputMappings) > 0 {
+	if text != "" && (len(cfg.InputMappings) > 0 || len(cfg.InputSpecs) > 0) {
 		return clidiag.NewFlagConflictFailure(
 			"--text", "--input", fmt.Errorf("choose one input form for model invocation"),
 		)
@@ -160,7 +160,7 @@ func (service *rootService) refreshInvokeReadiness(
 }
 
 func shouldUseGenericCLIInvocation(cfg InvokeConfig, catalog modelinference.Detail, operation string) bool {
-	if cfg.JSON || len(cfg.InputMappings) > 0 || len(cfg.ParameterSpecs) > 0 || len(cfg.OutputMappings) > 0 {
+	if cfg.JSON || len(cfg.InputMappings) > 0 || len(cfg.InputSpecs) > 0 || len(cfg.ParameterSpecs) > 0 || len(cfg.OutputMappings) > 0 {
 		return true
 	}
 	return genericCLIInlineOutput(cfg, catalog, operation)
@@ -303,7 +303,7 @@ func genericCLIJSONResult(
 	if !cfg.JSON || len(result.Outputs) == 0 {
 		return false
 	}
-	if len(cfg.InputMappings) > 0 || len(cfg.ParameterSpecs) > 0 || len(cfg.OutputMappings) > 0 {
+	if len(cfg.InputMappings) > 0 || len(cfg.InputSpecs) > 0 || len(cfg.ParameterSpecs) > 0 || len(cfg.OutputMappings) > 0 {
 		return true
 	}
 	if len(result.Outputs) > 1 {

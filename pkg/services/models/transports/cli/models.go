@@ -60,6 +60,10 @@ type InvokeConfig struct {
 	Operation     string
 	Text          string
 	InputMappings []string
+	// InputSpecs is the structured-input alias retained for direct callers of
+	// the Models root. The Cobra adapter carries repeatable --input values in
+	// InputMappings so legacy slot=value and JSON forms share one flag.
+	InputSpecs []string
 	// ParameterSpecs contains repeatable JSON-encoded generic operation
 	// parameters. Each value preserves one parameter's name and JSON value.
 	ParameterSpecs   []string
@@ -284,11 +288,14 @@ func (service *httpService) Invoke(cfg InvokeConfig) error {
 		return fmt.Errorf("--operation is required")
 	}
 	text := strings.TrimSpace(cfg.Text)
-	if text == "" && len(cfg.InputMappings) == 0 {
+	if text == "" && len(cfg.InputMappings) == 0 && len(cfg.InputSpecs) == 0 {
 		return fmt.Errorf("--text is required")
 	}
 	if len(cfg.InputMappings) > 0 {
 		return fmt.Errorf("explicit input mappings require the local Models composition")
+	}
+	if len(cfg.InputSpecs) > 0 {
+		return fmt.Errorf("explicit generic inputs require the local Models composition")
 	}
 	if len(cfg.ParameterSpecs) > 0 {
 		return fmt.Errorf("explicit generic parameters require the local Models composition")

@@ -62,14 +62,14 @@ func TestCommandHandlerTransformsInvokeCommandState(t *testing.T) {
 	logger := zap.NewNop()
 	var diagnostics bytes.Buffer
 
-	handler := NewCommandHandler(
-		commandServiceFake{invoke: func(cfg InvokeConfig) error {
-			assertInvokeCommandConfig(t, cfg, server, logger, &diagnostics)
-			if len(cfg.ParameterSpecs) != 1 || cfg.ParameterSpecs[0] != `{"name":"temperature","value":0.2}` {
-				t.Fatalf("InvokeConfig parameter specs = %#v", cfg.ParameterSpecs)
-			}
-			return nil
-		}},
+		handler := NewCommandHandler(
+			commandServiceFake{invoke: func(cfg InvokeConfig) error {
+				assertInvokeCommandConfig(t, cfg, server, logger, &diagnostics)
+				if len(cfg.ParameterSpecs) != 1 || cfg.ParameterSpecs[0] != `{"name":"temperature","value":0.2}` {
+					t.Fatalf("InvokeConfig parameter specs = %#v", cfg.ParameterSpecs)
+				}
+				return nil
+			}},
 		func(*cobra.Command) io.Writer { return &diagnostics },
 		func() (string, error) { return "/home/tester", nil },
 		func(_ *cobra.Command, homeDir string) (operatorconfig.ResolvedDefaults, error) {
@@ -108,7 +108,7 @@ func resolvedInvokeHandlerInputs(
 			{InputID: modelsInvokeNameInputID, Source: resolvedinput.SourcePositionalArgument, Value: resolvedinput.StringValue("OMNIVOICE_Q4_K_M")},
 			{InputID: modelsInvokeOperationID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue("TTS")},
 			{InputID: modelsInvokeTextID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue("hello")},
-			{InputID: modelsInvokeInputID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringArrayValue([]string{"audio=@meeting.wav", "prompt=hint"})},
+			{InputID: modelsInvokeInputID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringArrayValue([]string{`{"name":"prompt","modality":"TEXT","contentType":"text/plain","mediaType":"text/plain","content":"hello"}`})},
 			{InputID: modelsInvokeParameterID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringArrayValue([]string{`{"name":"temperature","value":0.2}`})},
 			{InputID: modelsInvokeOutputID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue("speech.wav")},
 		},
