@@ -65,6 +65,9 @@ func TestCommandHandlerTransformsInvokeCommandState(t *testing.T) {
 	handler := NewCommandHandler(
 		commandServiceFake{invoke: func(cfg InvokeConfig) error {
 			assertInvokeCommandConfig(t, cfg, server, logger, &diagnostics)
+			if len(cfg.ParameterSpecs) != 1 || cfg.ParameterSpecs[0] != `{"name":"temperature","value":0.2}` {
+				t.Fatalf("InvokeConfig parameter specs = %#v", cfg.ParameterSpecs)
+			}
 			return nil
 		}},
 		func(*cobra.Command) io.Writer { return &diagnostics },
@@ -98,6 +101,7 @@ func resolvedInvokeHandlerInputs(
 			{ID: modelsInvokeOperationID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
 			{ID: modelsInvokeTextID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
 			{ID: modelsInvokeInputID, Kind: resolvedinput.ValueKindStringArray, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
+			{ID: modelsInvokeParameterID, Kind: resolvedinput.ValueKindStringArray, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
 			{ID: modelsInvokeOutputID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
 		},
 		[]resolvedinput.Candidate{
@@ -105,6 +109,7 @@ func resolvedInvokeHandlerInputs(
 			{InputID: modelsInvokeOperationID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue("TTS")},
 			{InputID: modelsInvokeTextID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue("hello")},
 			{InputID: modelsInvokeInputID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringArrayValue([]string{"audio=@meeting.wav", "prompt=hint"})},
+			{InputID: modelsInvokeParameterID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringArrayValue([]string{`{"name":"temperature","value":0.2}`})},
 			{InputID: modelsInvokeOutputID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue("speech.wav")},
 		},
 	)

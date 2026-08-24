@@ -576,6 +576,29 @@ func TestMergeAppliesModelAssetAndHostEffectReplacements(t *testing.T) {
 	}
 }
 
+func TestMergeAppliesAndPreservesModelInvocationBackend(t *testing.T) {
+	t.Parallel()
+
+	defaultBackend := ModelInvocationBackend(func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+		return []models.InferenceContent{{Content: "default"}}, nil, nil
+	})
+	replacementBackend := ModelInvocationBackend(func(context.Context, models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+		return []models.InferenceContent{{Content: "replacement"}}, nil, nil
+	})
+
+	merged := Merge(Edges{ModelInvocationBackend: defaultBackend}, Edges{ModelInvocationBackend: replacementBackend})
+	content, _, err := merged.ModelInvocationBackend(context.Background(), models.InvokeModelRequest{})
+	if err != nil || len(content) != 1 || content[0].Content != "replacement" {
+		t.Fatalf("replaced ModelInvocationBackend = (%#v, %v), want replacement content", content, err)
+	}
+
+	preserved := Merge(Edges{ModelInvocationBackend: defaultBackend}, Edges{})
+	content, _, err = preserved.ModelInvocationBackend(context.Background(), models.InvokeModelRequest{})
+	if err != nil || len(content) != 1 || content[0].Content != "default" {
+		t.Fatalf("preserved ModelInvocationBackend = (%#v, %v), want default content", content, err)
+	}
+}
+
 func TestMergeAppliesCLIOutputInspectionReplacement(t *testing.T) {
 	t.Parallel()
 
