@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useFactoryGraphVisualGroupEditor } from "../../factory-graph-editor/hooks/layout/factory-graph-visual-group-editor-hook";
 import type { FactoryLayoutGroupNodeGeometry } from "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
 import { pruneFactoryGraphEditorSelectionAfterRemoval } from "../../factory-graph-editor/lib/selection/factory-graph-editor-selection-batch-delete";
@@ -34,6 +34,10 @@ export function useCurrentActivityGraphCardViewModel(
 ): CurrentActivityGraphCardViewModel {
   const [addNodePlacementViewport, setAddNodePlacementViewport] =
     useState<GraphEditorAddNodePlacementViewport | null>(null);
+  const clearVisualGroupFocusRef = useRef<() => void>(() => undefined);
+  const clearVisualGroupFocus = useCallback(() => {
+    clearVisualGroupFocusRef.current();
+  }, []);
   const {
     connectionControls,
     graphProjection: editorGraphProjection,
@@ -76,6 +80,7 @@ export function useCurrentActivityGraphCardViewModel(
   );
   const graph = useCurrentActivityGraphViewModel({
     ...input,
+    onGraphTargetSelected: clearVisualGroupFocus,
     editor: {
       activeTool: publicEditor.editorControls.activeTool,
       canInteractWithEditor: publicEditor.editorControls.canInteract,
@@ -220,6 +225,8 @@ export function useCurrentActivityGraphCardViewModel(
     setVisualGroupColor: publicEditor.layoutControls.setVisualGroupColor,
     selectedNodeIds: [...selectionState.selectedNodeIds],
   });
+  clearVisualGroupFocusRef.current =
+    visualGroupControls.clearSelectedVisualGroup;
   const {
     canonicalLayoutViewport: _canonicalLayoutViewport,
     initialFitViewKey,

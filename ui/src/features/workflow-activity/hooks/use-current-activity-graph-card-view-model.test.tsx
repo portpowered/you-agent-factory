@@ -355,6 +355,18 @@ describe("useCurrentActivityGraphCardViewModel visual groups", () => {
     expect(
       result.current.visualGroupControls.visualGroupControls?.group.id,
     ).toBe("group-1");
+
+    const onGraphTargetSelected =
+      graphViewModelMock.useCurrentActivityGraphViewModel.mock.calls[0]?.[0]
+        ?.onGraphTargetSelected;
+    expect(onGraphTargetSelected).toBeInstanceOf(Function);
+
+    act(() => {
+      onGraphTargetSelected?.();
+    });
+
+    expect(result.current.visualGroupControls.selectedGroupId).toBeNull();
+    expect(result.current.visualGroupControls.visualGroupControls).toBeNull();
   });
 });
 

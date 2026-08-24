@@ -97,6 +97,7 @@ export type CurrentActivityGraphViewModelInput = {
   onSelectWorker: (workerName: string) => void;
   onSelectWorkType: (workTypeName: string) => void;
   onSelectWorkstation: (nodeId: string) => void;
+  onGraphTargetSelected?: () => void;
   selection: CurrentActivitySelection | null;
   snapshot: DashboardSnapshot;
 };
@@ -636,6 +637,7 @@ export function useCurrentActivityGraphViewModel({
   onSelectWorker,
   onSelectWorkType,
   onSelectWorkstation,
+  onGraphTargetSelected,
   selection,
   snapshot,
 }: CurrentActivityGraphViewModelInput): CurrentActivityGraphViewModelResult {
@@ -709,12 +711,13 @@ export function useCurrentActivityGraphViewModel({
   const { replaceSelection: replaceGraphSelection } = graphSelection;
   const handleGraphSelectNode = useCallback(
     (nodeId: string) => {
+      onGraphTargetSelected?.();
       replaceGraphSelection({
         nodeIds: [nodeId],
         primaryTarget: { id: nodeId, kind: "node" },
       });
     },
-    [replaceGraphSelection],
+    [onGraphTargetSelected, replaceGraphSelection],
   );
   const graphSelectionEnabled =
     !editor.editorMode || editor.activeTool !== "delete";
