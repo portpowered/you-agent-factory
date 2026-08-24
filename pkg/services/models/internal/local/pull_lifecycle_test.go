@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	apisurface "github.com/portpowered/infinite-you/pkg/services/models"
+	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
 )
 
 func TestClassifySuccessfulPull_MapsLegacyOutcomesToManagedContract(t *testing.T) {
@@ -48,8 +49,8 @@ func TestClassifySuccessfulPull_MapsLegacyOutcomesToManagedContract(t *testing.T
 			ObservedArtifacts: []apisurface.AssetArtifact{{Name: "model.gguf", Bytes: 3}},
 			FailureReason:     "managed cache artifact \"model.gguf\" has unexpected size",
 		})
-		if outcome != managedPullOutcomeSourceFetchFailed || readiness != managedReadinessFailed || lifecycle != managedLifecycleNotInstalled {
-			t.Fatalf("classified = (%s, %s, %s), want source failure FAILED NOT_INSTALLED", outcome, readiness, lifecycle)
+		if outcome != managedPullOutcomeIntegrityVerificationFailed || readiness != managedReadinessFailed || lifecycle != managedLifecycleNotInstalled {
+			t.Fatalf("classified = (%s, %s, %s), want integrity failure FAILED NOT_INSTALLED", outcome, readiness, lifecycle)
 		}
 	})
 }
@@ -81,9 +82,29 @@ func TestClassifyPullFailure_MapsErrorsToManagedOutcomes(t *testing.T) {
 			wantReady: managedReadinessFailed,
 		},
 		{
+			name: "post-download cache installation",
+			err: pullsupport.WrapPullStage(
+				apisurface.PullStageCacheInstallation, "model", "install cache", "", apisurface.ErrNotAvailable,
+			),
+			wantPull:  managedPullOutcomeCacheInstallationFailed,
+			wantReady: managedReadinessFailed,
+		},
+		{
+			name:      "caller cancellation",
+			err:       context.Canceled,
+			wantPull:  managedPullOutcomeCancelled,
+			wantReady: managedReadinessFailed,
+		},
+		{
 			name:      "download failure message",
 			err:       errors.New("download model asset \"model.gguf\" failed (502): upstream unavailable"),
 			wantPull:  managedPullOutcomeSourceFetchFailed,
+			wantReady: managedReadinessFailed,
+		},
+		{
+			name:      "integrity failure message",
+			err:       errors.New("checksum verification failed for model.gguf"),
+			wantPull:  managedPullOutcomeIntegrityVerificationFailed,
 			wantReady: managedReadinessFailed,
 		},
 	}

@@ -12,6 +12,7 @@ import (
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
+	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	"go.uber.org/zap"
 )
@@ -56,9 +57,10 @@ func (s *Service) PullModel(ctx context.Context, modelName string) (models.PullR
 	}
 	started := s.now()
 	if logger := s.logger(); logger != nil {
+		safeModelName := (models.PullDiagnostics{ModelName: modelName}).Normalize().ModelName
 		logger.Info(
 			"managed runtime pull started",
-			zap.String("model_name", strings.TrimSpace(modelName)),
+			zap.String("model_name", safeModelName),
 		)
 	}
 	host := s.modelHost()
@@ -146,6 +148,12 @@ func (s *Service) pullWithModelHost(
 	}
 	var pullErr *models.PullError
 	if errors.As(err, &pullErr) && pullErr != nil {
+		pullErr.Result.PullDiagnostics = pullsupport.MergePullDiagnostics(
+			pullErr.Result.PullDiagnostics,
+			pullsupport.PullDiagnosticsFromError(pullErr.Cause),
+		).WithDefaults(
+			modelName, pullErr.Result.SourceID, pullErr.Result.Revision, "", "pull model",
+		)
 		return pullErr.Result, err
 	}
 	if errors.Is(err, managedruntime.ErrNotFound) {
@@ -173,6 +181,10 @@ func (s *Service) pullWithModelHost(
 	if strings.TrimSpace(result.LifecycleState) == "" {
 		result.LifecycleState = string(managedruntime.LifecycleStateNotInstalled)
 	}
+	result.PullDiagnostics = pullsupport.MergePullDiagnostics(
+		result.PullDiagnostics,
+		pullsupport.PullDiagnosticsFromError(err),
+	).WithDefaults(modelName, result.SourceID, result.Revision, "", "pull model")
 	return result, &models.PullError{Result: result, Cause: err}
 }
 
@@ -246,17 +258,41 @@ func (s *Service) recordManagedRuntimePull(modelName string, result models.PullR
 			s.recordModelPullMetric(modelPullMetricSourceFailure, failureLabels)
 		}
 		if logger := s.logger(); logger != nil {
-			logger.Warn(
-				"managed runtime pull failed",
-				zap.String("model_name", modelName),
+			diagnostics := pullsupport.MergePullDiagnostics(
+				result.PullDiagnostics,
+				pullsupport.PullDiagnosticsFromError(err),
+			).WithDefaults(
+				modelName, result.SourceID, result.Revision, "", pullDiagnosticOperation(result, err),
+			)
+			safeModelName := diagnostics.ModelName
+			resolvedSource := diagnostics.ResolvedRepository
+			if resolvedSource == "" {
+				resolvedSource = models.PullDiagnostics{ResolvedRepository: result.SourceKind}.Normalize().ResolvedRepository
+			}
+			safeSourceID := models.PullDiagnostics{ResolvedRepository: result.SourceID}.Normalize().ResolvedRepository
+			fields := []zap.Field{
+				zap.String("model_name", safeModelName),
 				zap.String("pull_outcome", pullOutcome),
+				zap.String("terminal_classification", pullOutcome),
 				zap.String("readiness_state", readiness),
 				zap.String("lifecycle_state", lifecycle),
 				zap.String("failure_reason", managedRuntimePullFailureReason(err)),
+				zap.String("operation", diagnostics.Operation),
+				zap.String("resolved_source", resolvedSource),
+				zap.String("resolved_repository", diagnostics.ResolvedRepository),
+				zap.String("revision", diagnostics.Revision),
+				zap.String("file", diagnostics.File),
+				zap.String("request_url", diagnostics.RequestURL),
 				zap.String("source_kind", strings.TrimSpace(result.SourceKind)),
-				zap.String("source_id", strings.TrimSpace(result.SourceID)),
+				zap.String("source_id", safeSourceID),
 				zap.Duration("duration", elapsed),
-				zap.Error(err),
+			}
+			if diagnostics.UpstreamStatusCode != 0 {
+				fields = append(fields, zap.Int("upstream_status_code", diagnostics.UpstreamStatusCode))
+			}
+			logger.Warn(
+				"managed runtime pull failed",
+				fields...,
 			)
 		}
 		return
@@ -279,6 +315,28 @@ func (s *Service) recordManagedRuntimePull(modelName string, result models.PullR
 			zap.String("source_id", result.SourceID),
 			zap.Duration("duration", elapsed),
 		)
+	}
+}
+
+func pullDiagnosticOperation(result models.PullResult, err error) string {
+	if diagnostics := pullsupport.PullDiagnosticsFromError(err); diagnostics.Operation != "" {
+		return diagnostics.Operation
+	}
+	switch result.FailureStage {
+	case models.PullStageSourceResolution:
+		return "resolve model source"
+	case models.PullStageSourceFetch:
+		return "fetch model assets"
+	case models.PullStageIntegrityVerification:
+		return "verify model assets"
+	case models.PullStageAssembly:
+		return "assemble model assets"
+	case models.PullStageCacheInstallation:
+		return "install model cache"
+	case models.PullStageReadinessEvaluation:
+		return "evaluate model readiness"
+	default:
+		return "pull model"
 	}
 }
 

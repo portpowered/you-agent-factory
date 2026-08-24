@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
+	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -14,6 +15,7 @@ const (
 	modelsRootCacheNotFoundCode  = "MODEL_CACHE_NOT_FOUND"
 	modelsRootCacheInUseCode     = "MODEL_CACHE_IN_USE"
 	modelsRootCacheUnsafeCode    = "BAD_REQUEST"
+	modelsRootPullFailedCode     = "CLI_MODEL_PULL_FAILED"
 	modelsRootDefaultErrorText   = "models command failed"
 	modelsRootMissingCachePrefix = "model cache is not installed; run you models pull"
 )
@@ -133,11 +135,23 @@ func mapModelsRootError(err error) error {
 		return err
 	default:
 		var pullErr *modelinference.PullError
-		if errors.As(err, &pullErr) {
-			return fmt.Errorf(
-				"managed runtime pull failed (%s readiness %s)",
-				pullErr.Result.ManagedPullOutcome,
-				pullErr.Result.ReadinessState,
+		if errors.As(err, &pullErr) && pullErr != nil {
+			diagnostics := pullsupport.MergePullDiagnostics(
+				pullErr.Result.PullDiagnostics,
+				pullsupport.PullDiagnosticsFromError(pullErr.Cause),
+			).WithDefaults(
+				pullErr.Result.ModelName,
+				pullErr.Result.SourceID,
+				pullErr.Result.Revision,
+				"",
+				"pull model",
+			)
+			return newModelsRootError(
+				modelsRootPullFailedCode,
+				factoryapi.ErrorFamilyBadRequest,
+				pullErr.Error(),
+				pullErr,
+				pullsupport.NewPullDiagnosticsError(diagnostics, pullErr),
 			)
 		}
 		return err

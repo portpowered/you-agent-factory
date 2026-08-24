@@ -60,13 +60,20 @@ const (
 type PullOutcome string
 
 const (
-	PullOutcomeAlreadyPresent        PullOutcome = "ALREADY_PRESENT"
-	PullOutcomeAlreadyReady          PullOutcome = "ALREADY_READY"
-	PullOutcomeInstalledSuccessfully PullOutcome = "INSTALLED_SUCCESSFULLY"
-	PullOutcomeSourceFetchFailed     PullOutcome = "SOURCE_FETCH_FAILED"
-	PullOutcomeStillLoading          PullOutcome = "STILL_LOADING"
-	PullOutcomeTimedOut              PullOutcome = "TIMED_OUT"
-	PullOutcomeUnsupportedRuntime    PullOutcome = "UNSUPPORTED_RUNTIME"
+	PullOutcomeAlreadyPresent              PullOutcome = "ALREADY_PRESENT"
+	PullOutcomeAlreadyReady                PullOutcome = "ALREADY_READY"
+	PullOutcomeInstalledSuccessfully       PullOutcome = "INSTALLED_SUCCESSFULLY"
+	PullOutcomeSourceFetchFailed           PullOutcome = "SOURCE_FETCH_FAILED"
+	PullOutcomeStillLoading                PullOutcome = "STILL_LOADING"
+	PullOutcomeTimedOut                    PullOutcome = "TIMED_OUT"
+	PullOutcomeCancelled                   PullOutcome = "CANCELLED"
+	PullOutcomeUnsupportedRuntime          PullOutcome = "UNSUPPORTED_RUNTIME"
+	PullOutcomeSourceResolutionFailed      PullOutcome = "SOURCE_RESOLUTION_FAILED"
+	PullOutcomeIntegrityVerificationFailed PullOutcome = "INTEGRITY_VERIFICATION_FAILED"
+	PullOutcomeAssemblyFailed              PullOutcome = "ASSEMBLY_FAILED"
+	PullOutcomeCacheInstallationFailed     PullOutcome = "CACHE_INSTALLATION_FAILED"
+	PullOutcomeReadinessEvaluationFailed   PullOutcome = "READINESS_EVALUATION_FAILED"
+	PullOutcomeAssetPreparationFailed      PullOutcome = "ASSET_PREPARATION_FAILED"
 )
 
 // Locality identifies whether a model executes locally or through a remote provider.

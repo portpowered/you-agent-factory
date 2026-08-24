@@ -3,9 +3,11 @@ package local
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	apisurface "github.com/portpowered/infinite-you/pkg/services/models"
+	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -145,10 +147,52 @@ func TestPullModelWithOptions_ReportsVerificationFailure(t *testing.T) {
 		t.Fatalf("PullModelWithOptions error = %v, want verification failure", err)
 	}
 	var pullErr *apisurface.PullError
-	if !errors.As(err, &pullErr) || result.ManagedPullOutcome != managedPullOutcomeSourceFetchFailed ||
+	if !errors.As(err, &pullErr) || result.ManagedPullOutcome != managedPullOutcomeIntegrityVerificationFailed ||
 		result.Outcome != legacyPullOutcomeFailed || result.ReadinessState != managedReadinessFailed ||
-		result.LifecycleState != managedLifecycleNotInstalled {
+		result.LifecycleState != managedLifecycleNotInstalled ||
+		result.FailureStage != apisurface.PullStageIntegrityVerification {
 		t.Fatalf("pull result = %#v, error = %v, want classified terminal verification failure", result, err)
+	}
+}
+
+func TestPullModelWithOptions_ClassifiesPostDownloadCacheFailure(t *testing.T) {
+	t.Parallel()
+	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	postDownloadErr := pullsupport.WrapPullStage(
+		apisurface.PullStageCacheInstallation,
+		"OMNIVOICE_Q4_K_M",
+		"resolve managed runtime cache",
+		"",
+		apisurface.ErrNotAvailable,
+	)
+	result, err := PullModelWithOptions(
+		&managedPullTestAssetPuller{
+			result: apisurface.PullResult{
+				ModelName: "OMNIVOICE_Q4_K_M", Outcome: legacyPullOutcomePulled,
+				DownloadedFiles: []apisurface.DownloadedFile{{
+					Path: "model.gguf", Bytes: 4, SHA256: "deadbeef",
+				}},
+			},
+			err: postDownloadErr,
+		},
+		context.Background(), loaded, "OMNIVOICE_Q4_K_M", PullOptions{},
+	)
+	if !errors.Is(err, apisurface.ErrNotAvailable) {
+		t.Fatalf("PullModelWithOptions error = %v, want post-download cache failure", err)
+	}
+	var pullErr *apisurface.PullError
+	var stageErr *apisurface.PullStageError
+	if !errors.As(err, &pullErr) || !errors.As(err, &stageErr) ||
+		result.ManagedPullOutcome != managedPullOutcomeCacheInstallationFailed ||
+		result.ManagedPullOutcome == managedPullOutcomeSourceFetchFailed ||
+		result.FailureStage != apisurface.PullStageCacheInstallation || stageErr.Cause == nil ||
+		len(result.DownloadedFiles) != 1 || result.PullDiagnostics.Operation != "resolve managed runtime cache" ||
+		result.PullDiagnostics.RequestURL != "" {
+		t.Fatalf("pull result = %#v, error = %v, want cache-installation failure with downloaded file facts", result, err)
+	}
+	if strings.Contains(result.PullDiagnostics.ErrorText(), "url=") ||
+		strings.Contains(result.PullDiagnostics.ErrorText(), "download") {
+		t.Fatalf("post-download diagnostics = %q, must not claim an HTTP download failure", result.PullDiagnostics.ErrorText())
 	}
 }
 
@@ -170,8 +214,31 @@ func TestPullModelWithOptions_ReportsSourceFetchFailureWithoutSuccessProjection(
 	var pullErr *apisurface.PullError
 	if !errors.As(err, &pullErr) || result.Outcome != legacyPullOutcomeFailed ||
 		result.ManagedPullOutcome != managedPullOutcomeSourceFetchFailed ||
-		result.ReadinessState != managedReadinessFailed || result.LifecycleState != managedLifecycleNotInstalled {
+		result.ReadinessState != managedReadinessFailed || result.LifecycleState != managedLifecycleNotInstalled ||
+		result.FailureStage != apisurface.PullStageSourceFetch {
 		t.Fatalf("pull result = %#v, error = %v, want FAILED/SOURCE_FETCH_FAILED/FAILED/NOT_INSTALLED", result, err)
+	}
+}
+
+func TestPullModelWithOptions_ClassifiesSourceResolutionFailure(t *testing.T) {
+	t.Parallel()
+	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	result, err := PullModelWithOptions(
+		&managedPullTestAssetPuller{
+			result: apisurface.PullResult{ModelName: "OMNIVOICE_Q4_K_M", Outcome: legacyPullOutcomePulled},
+			err:    apisurface.ErrModelReferenceInvalid,
+		},
+		context.Background(), loaded, "OMNIVOICE_Q4_K_M", PullOptions{},
+	)
+	if !errors.Is(err, apisurface.ErrModelReferenceInvalid) {
+		t.Fatalf("PullModelWithOptions error = %v, want source-resolution cause", err)
+	}
+	var pullErr *apisurface.PullError
+	if !errors.As(err, &pullErr) || result.ManagedPullOutcome != managedPullOutcomeSourceResolutionFailed ||
+		result.ManagedPullOutcome == managedPullOutcomeSourceFetchFailed ||
+		result.FailureStage != apisurface.PullStageSourceResolution ||
+		result.PullDiagnostics.Operation != "resolve model source" {
+		t.Fatalf("pull result = %#v, error = %v, want source-resolution classification and operation", result, err)
 	}
 }
 

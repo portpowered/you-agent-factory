@@ -60,6 +60,24 @@ func TestManagedRuntimePullMapping(t *testing.T) {
 	if !errors.As(err, &classified) || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("pull error = %v, want classified deadline failure", err)
 	}
+	httpFailure := models.PullResult{
+		ModelName:          "voice",
+		ManagedPullOutcome: "SOURCE_FETCH_FAILED",
+		ReadinessState:     "FAILED",
+		PullDiagnostics: models.PullDiagnostics{
+			ModelName: "voice", ResolvedRepository: "owner/repo", Revision: "rev-1",
+			File: "weights.gguf", Operation: "download asset",
+			RequestURL:         "https://assets.example.test/owner/repo/weights.gguf?download=true",
+			UpstreamStatusCode: http.StatusBadGateway,
+		},
+	}
+	mappedResponse := modelPullResponseFromService(httpFailure)
+	diagnostics := mappedResponse.ManagedRuntimePull.PullDiagnostics
+	if diagnostics == nil || diagnostics.ResolvedRepository == nil || *diagnostics.ResolvedRepository != "owner/repo" ||
+		diagnostics.RequestUrl == nil || *diagnostics.RequestUrl != "https://assets.example.test/owner/repo/weights.gguf?download=true" ||
+		diagnostics.UpstreamStatusCode == nil || *diagnostics.UpstreamStatusCode != int32(http.StatusBadGateway) {
+		t.Fatalf("mapped pull diagnostics = %#v repo=%q url=%q status=%v, want structured HTTP facts", diagnostics, stringValue(diagnostics.ResolvedRepository), stringValue(diagnostics.RequestUrl), int32Value(diagnostics.UpstreamStatusCode))
+	}
 }
 
 func TestInferenceFailureMapping(t *testing.T) {
@@ -70,4 +88,18 @@ func TestInferenceFailureMapping(t *testing.T) {
 	if got := inferenceFailureErrorCode(failure); got != "MODEL_RUNTIME_LOADING" {
 		t.Fatalf("code = %q, want MODEL_RUNTIME_LOADING", got)
 	}
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func int32Value(value *int32) int32 {
+	if value == nil {
+		return 0
+	}
+	return *value
 }

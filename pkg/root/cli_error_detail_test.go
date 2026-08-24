@@ -478,6 +478,61 @@ func TestProcessRemoteModelPullPreservesFailureOutcome(t *testing.T) {
 	}
 }
 
+func TestProcessRemoteModelPullDebugIncludesStructuredPullDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/models/OMNIVOICE_Q4_K_M/pull" {
+			t.Fatalf("request = %s %s, want POST /models/OMNIVOICE_Q4_K_M/pull", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","managedRuntimePull":{"identity":"OMNIVOICE_Q4_K_M","pullOutcome":"SOURCE_FETCH_FAILED","readinessState":"FAILED","pullDiagnostics":{"modelName":"OMNIVOICE_Q4_K_M","resolvedRepository":"owner/repo","revision":"rev-1","file":"weights.gguf","operation":"download asset","requestUrl":"https://user:password@upstream.example.test/owner/repo/resolve/rev-1/weights.gguf?download=true&token=secret","upstreamStatusCode":502}}}`)
+	}))
+	defer server.Close()
+
+	process, err := BuildProcess(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	t.Cleanup(func() { _ = process.Close(context.Background()) })
+
+	var stdout, stderr bytes.Buffer
+	err = process.Execute(Input{
+		Args:             []string{"you", "--json", "--debug", "--server", server.URL, "models", "pull", "OMNIVOICE_Q4_K_M"},
+		Env:              homeEnvironment(t.TempDir()),
+		Stdout:           &stdout,
+		Stderr:           &stderr,
+		Context:          context.Background(),
+		WorkingDirectory: t.TempDir(),
+	})
+	if err == nil {
+		t.Fatal("Process.Execute(models pull --json --debug) error = nil, want failure")
+	}
+	output := stderr.String()
+	for _, want := range []string{
+		"debug: cause[",
+		"repository=owner/repo",
+		"revision=rev-1",
+		"file=weights.gguf",
+		"operation=download asset",
+		"url=https://upstream.example.test/owner/repo/resolve/rev-1/weights.gguf",
+		"status=502",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("debug output = %q, want %q", output, want)
+		}
+	}
+	for _, secret := range []string{"password", "token=secret", "response-body", "C:\\private"} {
+		if strings.Contains(output+stdout.String(), secret) {
+			t.Fatalf("pull diagnostics leaked %q: stderr=%q stdout=%q", secret, output, stdout.String())
+		}
+	}
+	if !strings.Contains(stdout.String(), `"pullDiagnostics"`) ||
+		!strings.Contains(stdout.String(), "https://upstream.example.test/owner/repo/resolve/rev-1/weights.gguf") {
+		t.Fatalf("stdout = %q, want sanitized terminal pull response", stdout.String())
+	}
+}
+
 func TestProcessRemoteSessionShowPreservesStructuredNotFound(t *testing.T) {
 	t.Parallel()
 

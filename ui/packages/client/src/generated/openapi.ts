@@ -2249,7 +2249,7 @@ export interface components {
      */
     ManagedRuntimeLifecycleState: ManagedRuntimeLifecycleState;
     /**
-     * @description Source-agnostic outcome for one managed runtime pull or install request. Outcomes classify whether the runtime is already ready, newly installed, still preparing, timed out, failed to fetch required assets, or unsupported.
+     * @description Source-agnostic outcome for one managed runtime pull or install request. Outcomes classify whether the runtime is already ready, newly installed, still preparing, timed out, cancelled, failed during source resolution, source fetch, integrity verification, assembly, cache installation, or readiness evaluation, or unsupported.
      * @enum {string}
      */
     ManagedRuntimePullOutcome: ManagedRuntimePullOutcome;
@@ -2265,6 +2265,30 @@ export interface components {
       /** @description Files downloaded or verified as already present for the managed cache entry. */
       downloadedFiles?: components["schemas"]["ModelPullDownloadedFile"][];
       sourceDiagnostics?: components["schemas"]["ManagedRuntimeSourceDiagnostics"];
+      pullDiagnostics?: components["schemas"]["ManagedRuntimePullDiagnostics"];
+    };
+    /** @description Safe, logical facts describing the operation attempted by a managed runtime pull. Response bodies, credentials, authorization data, and unrestricted local paths are never included. */
+    ManagedRuntimePullDiagnostics: {
+      /** @description Model identity associated with the failed pull. */
+      modelName?: string;
+      /** @description Resolved upstream repository or other safe source identifier. */
+      resolvedRepository?: string;
+      /** @description Source revision selected for the pull. */
+      revision?: string;
+      /** @description Logical asset file involved in the failed operation, when applicable. */
+      file?: string;
+      /** @description Safe logical operation that failed. */
+      operation?: string;
+      /**
+       * Format: uri
+       * @description Sanitized HTTP request URL, when an HTTP request failed.
+       */
+      requestUrl?: string;
+      /**
+       * Format: int32
+       * @description Upstream HTTP status code, when the server returned one.
+       */
+      upstreamStatusCode?: number;
     };
     /**
      * @description Customer-facing readiness for one managed runtime. Readiness describes whether the runtime can be invoked now or what action is required next, without naming upstream repository or provider-specific cache semantics.
@@ -2489,7 +2513,7 @@ export interface components {
       sha256?: string;
     };
     /**
-     * @description Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcomes `ALREADY_PRESENT` and `ALREADY_READY`; and `FAILED` maps to `STILL_LOADING`, `TIMED_OUT`, `SOURCE_FETCH_FAILED`, and `UNSUPPORTED_RUNTIME`. Unknown managed pull outcomes also map to `FAILED` so an unrecognized value cannot be projected as a successful pull.
+     * @description Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcomes `ALREADY_PRESENT` and `ALREADY_READY`; and `FAILED` maps to every non-success managed pull outcome, including `STILL_LOADING`, `TIMED_OUT`, `CANCELLED`, `SOURCE_FETCH_FAILED`, `SOURCE_RESOLUTION_FAILED`, `INTEGRITY_VERIFICATION_FAILED`, `ASSEMBLY_FAILED`, `CACHE_INSTALLATION_FAILED`, `READINESS_EVALUATION_FAILED`, `ASSET_PREPARATION_FAILED`, and `UNSUPPORTED_RUNTIME`. Unknown managed pull outcomes also map to `FAILED` so an unrecognized value cannot be projected as a successful pull.
      * @enum {string}
      */
     ModelPullOutcome: ModelPullOutcome;
@@ -10505,8 +10529,22 @@ export const ManagedRuntimePullOutcome = {
   STILL_LOADING: "STILL_LOADING",
   // Managed runtime install or preparation timed out before reaching a terminal readiness state.
   TIMED_OUT: "TIMED_OUT",
+  // The pull was cancelled before reaching a terminal readiness state.
+  CANCELLED: "CANCELLED",
   // Required managed runtime assets could not be fetched from the configured backend source.
   SOURCE_FETCH_FAILED: "SOURCE_FETCH_FAILED",
+  // The configured source could not be resolved for the requested model assets.
+  SOURCE_RESOLUTION_FAILED: "SOURCE_RESOLUTION_FAILED",
+  // Prepared asset bytes failed size or digest verification.
+  INTEGRITY_VERIFICATION_FAILED: "INTEGRITY_VERIFICATION_FAILED",
+  // Asset assembly or staging failed after source resolution.
+  ASSEMBLY_FAILED: "ASSEMBLY_FAILED",
+  // Installation of the prepared asset snapshot into the managed cache failed.
+  CACHE_INSTALLATION_FAILED: "CACHE_INSTALLATION_FAILED",
+  // The final managed-cache readiness evaluation failed after preparation.
+  READINESS_EVALUATION_FAILED: "READINESS_EVALUATION_FAILED",
+  // Asset preparation failed without a more specific stage classification.
+  ASSET_PREPARATION_FAILED: "ASSET_PREPARATION_FAILED",
   // The requested managed runtime does not support pull or install in the current configuration.
   UNSUPPORTED_RUNTIME: "UNSUPPORTED_RUNTIME",
 } as const;

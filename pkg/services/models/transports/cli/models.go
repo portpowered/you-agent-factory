@@ -10,14 +10,14 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
 	"time"
 
+	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
+	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
@@ -108,6 +108,7 @@ type httpService struct {
 	http       clihttp.Protocol
 	pullHTTP   clihttp.Protocol
 	invocation InvocationOperation
+	now        func() time.Time
 }
 
 // New constructs the composition-stable Models CLI service injected into Cobra
@@ -147,8 +148,23 @@ func NewWithOutputFileSystemAndPullProtocol(
 	outputFileSystem OutputFileSystem,
 	providers ...CompositionScopeProvider,
 ) Service {
+	return NewWithOutputFileSystemAndPullProtocolAndClock(
+		httpProtocol, pullHTTPProtocol, invocation, outputFileSystem, nil, providers...,
+	)
+}
+
+// NewWithOutputFileSystemAndPullProtocolAndClock constructs the Models CLI
+// service with the clock used for long-pull progress elapsed time.
+func NewWithOutputFileSystemAndPullProtocolAndClock(
+	httpProtocol clihttp.Protocol,
+	pullHTTPProtocol clihttp.Protocol,
+	invocation InvocationOperation,
+	outputFileSystem OutputFileSystem,
+	now func() time.Time,
+	providers ...CompositionScopeProvider,
+) Service {
 	return bindCompositionService(
-		httpProtocol, pullHTTPProtocol, invocation, outputFileSystem, providers...,
+		httpProtocol, pullHTTPProtocol, invocation, outputFileSystem, now, providers...,
 	)
 }
 
@@ -284,12 +300,14 @@ func (service *httpService) Pull(cfg PullConfig) error {
 		pullHTTP = service.http
 	}
 	response, err := pullModel(pullOptions{
-		Context:     cfg.Context,
-		Server:      cfg.Server,
-		ModelName:   modelName,
-		Verbose:     cfg.Verbose,
-		Diagnostics: cfg.Diagnostics,
-		HTTP:        pullHTTP,
+		Context:          cfg.Context,
+		Server:           cfg.Server,
+		ModelName:        modelName,
+		Verbose:          cfg.Verbose,
+		Diagnostics:      cfg.Diagnostics,
+		HTTP:             pullHTTP,
+		ProgressInterval: modelPullProgressInterval,
+		Now:              service.now,
 	})
 	if cfg.JSON {
 		if encodeErr := json.NewEncoder(cfg.Output).Encode(response); encodeErr != nil {
@@ -432,20 +450,27 @@ func invokeModelAudio(cfg invokeOptions) error {
 }
 
 type pullOptions struct {
-	Context     context.Context
-	Server      string
-	ModelName   string
-	Verbose     bool
-	Diagnostics io.Writer
-	HTTP        clihttp.Protocol
+	Context          context.Context
+	Server           string
+	ModelName        string
+	Verbose          bool
+	Diagnostics      io.Writer
+	HTTP             clihttp.Protocol
+	ProgressInterval time.Duration
+	Now              func() time.Time
 }
 
 func pullModel(cfg pullOptions) (factoryapi.ModelPullResponse, error) {
 	var response factoryapi.ModelPullResponse
 	path := "/models/" + url.PathEscape(strings.TrimSpace(cfg.ModelName)) + "/pull"
+	diagnostics := newSynchronizedWriter(cfg.Diagnostics)
+	stopProgress := startPullProgress(
+		cfg.Context, cfg.ModelName, diagnostics, cfg.ProgressInterval, cfg.Now,
+	)
+	defer stopProgress()
 	err := doModelsPOST(cfg.Context, cfg.HTTP, cfg.Server, path, map[string]any{}, &response, requestDiagnostics{
 		Enabled:   cfg.Verbose,
-		Output:    cfg.Diagnostics,
+		Output:    diagnostics,
 		Command:   "models pull",
 		Server:    cfg.Server,
 		ModelName: strings.TrimSpace(cfg.ModelName),
@@ -529,6 +554,7 @@ func doModelsPOST(ctx context.Context, transport clihttp.Protocol, server, path 
 				if err := json.Unmarshal(responseBody, out); err != nil {
 					return clihttp.WithHTTPResponse(resp, fmt.Errorf("decode managed runtime pull response: %w", err))
 				}
+				sanitizeManagedRuntimePullResponse(out)
 			}
 			return clihttp.WithHTTPResponse(resp, pullErr)
 		}
@@ -538,8 +564,21 @@ func doModelsPOST(ctx context.Context, transport clihttp.Protocol, server, path 
 	if err != nil {
 		return err
 	}
+	sanitizeManagedRuntimePullResponse(out)
 	logModelsResponse(diagnostics, endpoint, resp.StatusCode, response.Duration, fmt.Sprintf("responseBytes=%d %s", responseBytes, diagnostics.summary()))
 	return nil
+}
+
+func sanitizeManagedRuntimePullResponse(out any) {
+	response, ok := out.(*factoryapi.ModelPullResponse)
+	if !ok || response == nil || response.ManagedRuntimePull.PullDiagnostics == nil {
+		return
+	}
+	diagnosticsError := managedRuntimePullDiagnosticsFromGenerated(response.ManagedRuntimePull.PullDiagnostics)
+	diagnostics := pullsupport.PullDiagnosticsFromError(diagnosticsError)
+	response.ManagedRuntimePull.PullDiagnostics = managedRuntimePullDiagnostics(
+		modelinference.PullResult{PullDiagnostics: diagnostics},
+	)
 }
 
 func doModelsGET(ctx context.Context, transport clihttp.Protocol, endpoint url.URL, out any, diagnostics requestDiagnostics) error {
@@ -629,314 +668,4 @@ func logModelsResponse(diagnostics requestDiagnostics, endpoint url.URL, statusC
 		return
 	}
 	clidiag.Printf(diagnostics.Output, diagnostics.Enabled, "%s response endpointPath=%s status=%d durationMillis=%d %s", diagnostics.Command, endpoint.Path, statusCode, elapsed.Milliseconds(), summary)
-}
-
-func renderList(response factoryapi.ListModelsResponse, output io.Writer) error {
-	if _, err := fmt.Fprintln(output, "NAME\tREADINESS\tLIFECYCLE\tLOCALITY\tOPERATIONS\tMODALITIES\tRESOURCES\tCACHE SIZE"); err != nil {
-		return err
-	}
-	results := append([]factoryapi.ModelSummary(nil), response.Results...)
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Name < results[j].Name
-	})
-	for _, model := range results {
-		if _, err := fmt.Fprintf(
-			output,
-			"%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\n",
-			model.Name,
-			managedRuntimeReadiness(model.ManagedRuntime),
-			managedRuntimeLifecycle(model.ManagedRuntime),
-			model.ProviderLocality,
-			modelOperationNames(model.Operations),
-			modelModalities(model.Modalities),
-			len(model.Resources),
-			managedRuntimeCacheSize(model.ManagedRuntime),
-		); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func managedRuntimeCacheSize(runtime factoryapi.ManagedRuntime) string {
-	if runtime.CacheBytes == nil || *runtime.CacheBytes < 0 {
-		return "NOT_INSTALLED"
-	}
-	return fmt.Sprintf("%s (%d bytes)", humanByteSize(*runtime.CacheBytes), *runtime.CacheBytes)
-}
-
-func managedRuntimeRevision(runtime factoryapi.ManagedRuntime) string {
-	if runtime.Revision == nil || strings.TrimSpace(*runtime.Revision) == "" {
-		return "NOT_INSTALLED"
-	}
-	return *runtime.Revision
-}
-
-func managedRuntimeCachePath(runtime factoryapi.ManagedRuntime) string {
-	if runtime.CachePath == nil || strings.TrimSpace(*runtime.CachePath) == "" {
-		return "NOT_INSTALLED"
-	}
-	return *runtime.CachePath
-}
-
-func humanByteSize(bytes int64) string {
-	if bytes < 1024 {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	value := float64(bytes)
-	units := []string{"KiB", "MiB", "GiB", "TiB", "PiB", "EiB"}
-	for _, unit := range units {
-		value /= 1024
-		if value < 1024 || unit == units[len(units)-1] {
-			return fmt.Sprintf("%.2f %s", value, unit)
-		}
-	}
-	return fmt.Sprintf("%d B", bytes)
-}
-
-func renderPull(response factoryapi.ModelPullResponse, output io.Writer) error {
-	if _, err := fmt.Fprintf(
-		output,
-		"MODEL\tPULL OUTCOME\tREADINESS\tLIFECYCLE\tREVISION\tCACHE PATH\n%s\t%s\t%s\t%s\t%s\t%s\n",
-		response.ModelName,
-		response.ManagedRuntimePull.PullOutcome,
-		response.ManagedRuntimePull.ReadinessState,
-		managedRuntimeLifecycleFromPull(response),
-		response.Revision,
-		response.CachePath,
-	); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintln(output, "FILES"); err != nil {
-		return err
-	}
-	files := append([]factoryapi.ModelPullDownloadedFile(nil), response.DownloadedFiles...)
-	sort.Slice(files, func(i, j int) bool {
-		return files[i].Path < files[j].Path
-	})
-	for _, file := range files {
-		if _, err := fmt.Fprintf(output, "%s\t%d\n", file.Path, file.Bytes); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func renderModel(model factoryapi.ModelDetail, output io.Writer) error {
-	if _, err := fmt.Fprintf(output, "Name:\t%s\n", model.Name); err != nil {
-		return err
-	}
-	for _, row := range []struct {
-		label string
-		value string
-	}{
-		{label: "Readiness", value: managedRuntimeReadiness(model.ManagedRuntime)},
-		{label: "Lifecycle", value: managedRuntimeLifecycle(model.ManagedRuntime)},
-		{label: "Locality", value: string(model.ProviderLocality)},
-		{label: "Revision", value: managedRuntimeRevision(model.ManagedRuntime)},
-		{label: "Cache Size", value: managedRuntimeCacheSize(model.ManagedRuntime)},
-		{label: "Cache Path", value: managedRuntimeCachePath(model.ManagedRuntime)},
-		{label: "Operations", value: modelOperationNames(model.Operations)},
-		{label: "Modalities", value: modelModalities(model.Modalities)},
-	} {
-		if _, err := fmt.Fprintf(output, "%s:\t%s\n", row.label, row.value); err != nil {
-			return err
-		}
-	}
-	if _, err := fmt.Fprintf(output, "Resources:\t%d\n", len(model.Resources)); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintln(output, "Capabilities:"); err != nil {
-		return err
-	}
-	for _, capability := range model.Capabilities {
-		if _, err := fmt.Fprintf(
-			output,
-			"- %s\t%s\t%s\n",
-			capability.Worker,
-			capability.ProviderLocality,
-			modelOperationNames(capability.Operations),
-		); err != nil {
-			return err
-		}
-	}
-	diagnostics := managedRuntimeDiagnosticsMap(model)
-	if len(diagnostics) > 0 {
-		keys := make([]string, 0, len(diagnostics))
-		for key := range diagnostics {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		if _, err := fmt.Fprintln(output, "Diagnostics:"); err != nil {
-			return err
-		}
-		for _, key := range keys {
-			if _, err := fmt.Fprintf(output, "- %s=%s\n", key, diagnostics[key]); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func managedRuntimeReadiness(runtime factoryapi.ManagedRuntime) string {
-	if strings.TrimSpace(string(runtime.ReadinessState)) == "" {
-		return "UNKNOWN"
-	}
-	return string(runtime.ReadinessState)
-}
-
-func managedRuntimeLifecycle(runtime factoryapi.ManagedRuntime) string {
-	if strings.TrimSpace(string(runtime.LifecycleState)) == "" {
-		return "UNKNOWN"
-	}
-	return string(runtime.LifecycleState)
-}
-
-func managedRuntimeLifecycleFromPull(response factoryapi.ModelPullResponse) string {
-	switch response.ManagedRuntimePull.PullOutcome {
-	case factoryapi.ManagedRuntimePullOutcomeSTILLLOADING:
-		return string(factoryapi.ManagedRuntimeLifecycleStateINSTALLING)
-	case factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY,
-		factoryapi.ManagedRuntimePullOutcomeALREADYPRESENT,
-		factoryapi.ManagedRuntimePullOutcomeALREADYREADY:
-		return string(factoryapi.ManagedRuntimeLifecycleStateINSTALLED)
-	default:
-		return "UNKNOWN"
-	}
-}
-
-func managedRuntimeDiagnosticsMap(model factoryapi.ModelDetail) factoryapi.StringMap {
-	if model.ManagedRuntime.Diagnostics != nil && len(*model.ManagedRuntime.Diagnostics) > 0 {
-		return *model.ManagedRuntime.Diagnostics
-	}
-	return model.Diagnostics
-}
-
-func modelOperationNames(operations []factoryapi.ModelInvocationOperation) string {
-	names := make([]string, 0, len(operations))
-	for _, operation := range operations {
-		names = append(names, operation.Name)
-	}
-	sort.Strings(names)
-	return strings.Join(names, ",")
-}
-
-func modelModalities(modalities []factoryapi.ModelInvocationContentType) string {
-	values := make([]string, 0, len(modalities))
-	for _, modality := range modalities {
-		values = append(values, string(modality))
-	}
-	sort.Strings(values)
-	return strings.Join(values, ",")
-}
-
-func managedRuntimePullResponseError(statusCode int, body []byte) error {
-	if statusCode != http.StatusUnprocessableEntity && statusCode != http.StatusGatewayTimeout {
-		return nil
-	}
-	var response factoryapi.ModelPullResponse
-	if err := json.Unmarshal(body, &response); err != nil {
-		return nil
-	}
-	switch response.ManagedRuntimePull.PullOutcome {
-	case factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED,
-		factoryapi.ManagedRuntimePullOutcomeTIMEDOUT,
-		factoryapi.ManagedRuntimePullOutcomeSTILLLOADING:
-		return &managedRuntimePullFailure{
-			Outcome:   response.ManagedRuntimePull.PullOutcome,
-			Readiness: response.ManagedRuntimePull.ReadinessState,
-		}
-	default:
-		return nil
-	}
-}
-
-type managedRuntimePullFailure struct {
-	Outcome   factoryapi.ManagedRuntimePullOutcome
-	Readiness factoryapi.ManagedRuntimeReadinessState
-}
-
-func (failure *managedRuntimePullFailure) Error() string {
-	if failure == nil {
-		return ""
-	}
-	return fmt.Sprintf(
-		"managed runtime pull failed (pullOutcome=%s readinessState=%s)",
-		failure.Outcome,
-		failure.Readiness,
-	)
-}
-
-func (failure *managedRuntimePullFailure) CLIErrorCode() string {
-	return managedRuntimePullFailureCode
-}
-
-func (failure *managedRuntimePullFailure) CLIErrorFamily() factoryapi.ErrorFamily {
-	return factoryapi.ErrorFamilyBadRequest
-}
-
-func (failure *managedRuntimePullFailure) CLIErrorMessage() string {
-	return failure.Error()
-}
-
-func modelsRequestError(statusCode int, body []byte, response ...*http.Response) error {
-	var httpResponse *http.Response
-	if len(response) > 0 {
-		httpResponse = response[0]
-	}
-	var errResp factoryapi.ErrorResponse
-	if json.Unmarshal(body, &errResp) == nil && errResp.Message != "" {
-		switch errResp.Code {
-		case factoryapi.ErrorResponseCodeMODELCACHENOTFOUND:
-			displayMessage := fmt.Sprintf("%s: %s", ErrModelCacheNotFound, errResp.Message)
-			if httpResponse != nil {
-				return clihttp.NewAPIErrorFromResponse(httpResponse, errResp, displayMessage, ErrModelCacheNotFound)
-			}
-			return clihttp.NewAPIError(statusCode, errResp, displayMessage, ErrModelCacheNotFound)
-		case factoryapi.ErrorResponseCodeMODELCACHEINUSE:
-			displayMessage := fmt.Sprintf("%s: %s", ErrModelCacheInUse, errResp.Message)
-			if httpResponse != nil {
-				return clihttp.NewAPIErrorFromResponse(httpResponse, errResp, displayMessage, ErrModelCacheInUse)
-			}
-			return clihttp.NewAPIError(statusCode, errResp, displayMessage, ErrModelCacheInUse)
-		}
-		if statusCode == http.StatusNotFound && errResp.Code == factoryapi.ErrorResponseCodeNOTFOUND {
-			if httpResponse != nil {
-				return clihttp.NewAPIErrorFromResponse(httpResponse, errResp, fmt.Sprintf("%s: %s", ErrModelNotFound, errResp.Message), ErrModelNotFound)
-			}
-			return clihttp.NewAPIError(statusCode, errResp, fmt.Sprintf("%s: %s", ErrModelNotFound, errResp.Message), ErrModelNotFound)
-		}
-		if httpResponse != nil {
-			return clihttp.NewAPIErrorFromResponse(httpResponse, errResp, fmt.Sprintf("models request failed (%d): %s", statusCode, errResp.Message), nil)
-		}
-		return clihttp.NewAPIError(statusCode, errResp, fmt.Sprintf("models request failed (%d): %s", statusCode, errResp.Message), nil)
-	}
-	return clihttp.WithHTTPResponse(
-		httpResponse,
-		fmt.Errorf("models request failed (%d): response body was not a structured API error", statusCode),
-	)
-}
-
-func modelsEndpoint(server, path string) (url.URL, error) {
-	endpointURL, err := cliserver.RequestURL(server, path)
-	if err != nil {
-		return url.URL{}, err
-	}
-	endpoint, err := url.Parse(endpointURL)
-	if err != nil {
-		return url.URL{}, fmt.Errorf("parse models endpoint: %w", err)
-	}
-	return *endpoint, nil
-}
-
-func mustGeneratedTextContentPart(text string) factoryapi.WorkContentPart {
-	var part factoryapi.WorkContentPart
-	slot := "text"
-	_ = part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
-		Type: factoryapi.WorkContentPartTypeTextUpper,
-		Text: text,
-		Slot: &slot,
-	})
-	return part
 }

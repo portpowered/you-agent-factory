@@ -583,7 +583,14 @@ func TestModelPullCompatibilityOutcomeProjectsManagedOutcomeTotally(t *testing.T
 		{name: "already ready", managed: factoryapi.ManagedRuntimePullOutcomeALREADYREADY, want: factoryapi.ModelPullOutcomeALREADYPRESENT},
 		{name: "still loading", managed: factoryapi.ManagedRuntimePullOutcomeSTILLLOADING, want: factoryapi.ModelPullOutcomeFAILED},
 		{name: "timed out", managed: factoryapi.ManagedRuntimePullOutcomeTIMEDOUT, want: factoryapi.ModelPullOutcomeFAILED},
+		{name: "cancelled", managed: factoryapi.ManagedRuntimePullOutcomeCANCELLED, want: factoryapi.ModelPullOutcomeFAILED},
 		{name: "source fetch failed", managed: factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED, want: factoryapi.ModelPullOutcomeFAILED},
+		{name: "source resolution failed", managed: factoryapi.ManagedRuntimePullOutcomeSOURCERESOLUTIONFAILED, want: factoryapi.ModelPullOutcomeFAILED},
+		{name: "integrity verification failed", managed: factoryapi.ManagedRuntimePullOutcomeINTEGRITYVERIFICATIONFAILED, want: factoryapi.ModelPullOutcomeFAILED},
+		{name: "assembly failed", managed: factoryapi.ManagedRuntimePullOutcomeASSEMBLYFAILED, want: factoryapi.ModelPullOutcomeFAILED},
+		{name: "cache installation failed", managed: factoryapi.ManagedRuntimePullOutcomeCACHEINSTALLATIONFAILED, want: factoryapi.ModelPullOutcomeFAILED},
+		{name: "readiness evaluation failed", managed: factoryapi.ManagedRuntimePullOutcomeREADINESSEVALUATIONFAILED, want: factoryapi.ModelPullOutcomeFAILED},
+		{name: "asset preparation failed", managed: factoryapi.ManagedRuntimePullOutcomeASSETPREPARATIONFAILED, want: factoryapi.ModelPullOutcomeFAILED},
 		{name: "unsupported", managed: factoryapi.ManagedRuntimePullOutcomeUNSUPPORTEDRUNTIME, want: factoryapi.ModelPullOutcomeFAILED},
 		{name: "future outcome", managed: factoryapi.ManagedRuntimePullOutcome("FUTURE_OUTCOME"), want: factoryapi.ModelPullOutcomeFAILED},
 	}
@@ -939,7 +946,16 @@ func TestManagedRuntimePullResponseErrorPreservesOutcomeDetails(t *testing.T) {
 		"managedRuntimePull": {
 			"identity": "OMNIVOICE_Q4_K_M",
 			"pullOutcome": "SOURCE_FETCH_FAILED",
-			"readinessState": "FAILED"
+			"readinessState": "FAILED",
+			"pullDiagnostics": {
+				"modelName": "OMNIVOICE_Q4_K_M",
+				"resolvedRepository": "owner/repo",
+				"revision": "rev-1",
+				"file": "weights.gguf",
+				"operation": "download asset",
+				"requestUrl": "https://assets.example.test/owner/repo/weights.gguf?download=true",
+				"upstreamStatusCode": 502
+			}
 		}
 	}`))
 	if err == nil {
@@ -961,39 +977,13 @@ func TestManagedRuntimePullResponseErrorPreservesOutcomeDetails(t *testing.T) {
 		coded.CLIErrorMessage() != err.Error() {
 		t.Fatalf("coded failure = (%q, %q, %q), want safe outcome diagnostic", coded.CLIErrorCode(), coded.CLIErrorFamily(), coded.CLIErrorMessage())
 	}
-}
-
-func TestModelsVerboseLogsFailureStatus(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-		_, _ = io.WriteString(w, `{"message":"model not found","family":"NOT_FOUND","code":"NOT_FOUND"}`)
-	}))
-	defer server.Close()
-
-	var diagnostics bytes.Buffer
-	_, err := queryModel(queryOptions{
-		Context:     context.Background(),
-		HTTP:        testHTTPProtocol(t),
-		Server:      strings.TrimSuffix(server.URL, "/"),
-		ModelName:   "missing",
-		Verbose:     true,
-		Diagnostics: &diagnostics,
-	})
-	if !errors.Is(err, ErrModelNotFound) {
-		t.Fatalf("queryModel error = %v, want ErrModelNotFound", err)
+	var diagnostics *modelinference.PullDiagnosticsError
+	if !errors.As(err, &diagnostics) || diagnostics == nil {
+		t.Fatalf("error = %T, want structured pull diagnostics cause", err)
 	}
-	assertDiagnosticsContains(t, diagnostics.String(), []string{
-		"models inspect response",
-		"endpointPath=/models/missing",
-		"status=404",
-	})
-}
-
-func assertDiagnosticsContains(t *testing.T, got string, wants []string) {
-	t.Helper()
-	for _, want := range wants {
-		if !strings.Contains(got, want) {
-			t.Fatalf("diagnostics missing %q:\n%s", want, got)
-		}
+	if !strings.Contains(diagnostics.Error(), "repository=owner/repo") ||
+		!strings.Contains(diagnostics.Error(), "status=502") ||
+		!strings.Contains(diagnostics.Error(), "operation=download asset") {
+		t.Fatalf("diagnostics = %q, want repository, operation, and status", diagnostics)
 	}
 }

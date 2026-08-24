@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -42,6 +43,40 @@ func TestModelsPullCLIHTTPProfileHasNoFixedClientTimeout(t *testing.T) {
 	}
 	if pull.timeout != 0 {
 		t.Fatalf("Models pull timeout = %s, want no fixed client timeout", pull.timeout)
+	}
+}
+
+func TestModelAssetHTTPClientAllowsBodyPastFormerWholeTransferBudget(t *testing.T) {
+	t.Parallel()
+
+	const formerWholeTransferBudget = 20 * time.Millisecond
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Content-Type", "application/octet-stream")
+		if flusher, ok := writer.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		// This delay is intentionally longer than the former whole-transfer
+		// budget while remaining short enough for a deterministic unit test.
+		time.Sleep(2 * formerWholeTransferBudget)
+		_, _ = io.WriteString(writer, "model-bytes")
+	}))
+	defer server.Close()
+
+	client := newModelAssetHTTPClient()
+	if client.Timeout != 0 {
+		t.Fatalf("asset client timeout = %s, want no whole-transfer deadline", client.Timeout)
+	}
+	response, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatalf("asset request: %v", err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read streamed asset: %v", err)
+	}
+	if string(body) != "model-bytes" {
+		t.Fatalf("streamed asset = %q, want model-bytes", body)
 	}
 }
 

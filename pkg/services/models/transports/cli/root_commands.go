@@ -203,6 +203,7 @@ func (service *rootService) pullRemote(cfg PullConfig) error {
 		Verbose:     cfg.Verbose,
 		Diagnostics: cfg.Diagnostics,
 		HTTP:        pullHTTP,
+		Now:         service.now,
 	})
 	if cfg.JSON {
 		if encodeErr := json.NewEncoder(cfg.Output).Encode(response); encodeErr != nil {
