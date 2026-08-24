@@ -25,6 +25,23 @@ func TestWriteAndReadFileReplaceSnapshot(t *testing.T) {
 	}
 }
 
+func TestAppendAndReadFilePreservesCompletePrefix(t *testing.T) {
+	storage := NewLocal(runtime.GOOS)
+	path := filepath.Join(t.TempDir(), "nested", "run.replay.jsonl")
+	for _, value := range []string{"header\n", "event\n", "terminal\n"} {
+		if err := storage.AppendFile(path, []byte(value)); err != nil {
+			t.Fatalf("AppendFile(%q): %v", value, err)
+		}
+	}
+	got, err := storage.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(): %v", err)
+	}
+	if string(got) != "header\nevent\nterminal\n" {
+		t.Fatalf("ReadFile() = %q, want appended JSONL prefix", got)
+	}
+}
+
 func TestWriteAndReadFileFailuresAreActionable(t *testing.T) {
 	storage := NewLocal(runtime.GOOS)
 	parentFile := filepath.Join(t.TempDir(), "parent-file")

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/jsonvalue"
+	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -953,6 +954,117 @@ func TestRecorder_PersistsWorkStateChangeEvents(t *testing.T) {
 	}
 }
 
+func TestRecorderV2AppendsPendingEventsAndTerminal(t *testing.T) {
+	storage := &countingAppendReplayStorage{}
+	path := filepath.Join(t.TempDir(), "session.replay.jsonl")
+	recorder := mustNewV2Recorder(t, storage, path)
+	mustV2RecorderFlush(t, recorder, "initial")
+	initialAppendCalls := storage.appends
+	initialBytes := len(storage.data)
+	assertV2InitialAppend(t, initialAppendCalls, initialBytes)
+
+	recorder.RecordEvent(interfaces.FactoryEvent{
+		Id:      "v2-extra-event",
+		Type:    interfaces.FactoryEventTypeWorkRequest,
+		Payload: []byte(`{"workId":"v2-work"}`),
+		Context: interfaces.FactoryEventContext{EventTime: time.Date(2026, 8, 23, 17, 0, 0, 0, time.UTC)},
+	})
+	mustV2RecorderFlush(t, recorder, "pending-event")
+	assertV2PendingAppend(t, storage, initialAppendCalls, initialBytes)
+
+	finishedAt := time.Date(2026, 8, 23, 17, 1, 0, 0, time.UTC)
+	recorder.Finish(finishedAt)
+	mustV2RecorderFlush(t, recorder, "terminal")
+	terminalAppendCalls := storage.appends
+	mustV2RecorderFlush(t, recorder, "clean")
+	if storage.appends != terminalAppendCalls {
+		t.Fatalf("clean v2 flush appended again: %d then %d calls", terminalAppendCalls, storage.appends)
+	}
+	loaded, metadata := mustLoadV2Recording(t, storage, path)
+	assertV2LoadedRecording(t, loaded, metadata, finishedAt)
+}
+
+func mustNewV2Recorder(
+	t *testing.T,
+	storage platformreplay.Storage,
+	path string,
+) *Recorder {
+	t.Helper()
+	recorder, err := NewRecorder(storage, path, testReplayArtifact(t), time.Hour)
+	if err != nil {
+		t.Fatalf("NewRecorder: %v", err)
+	}
+	return recorder
+}
+
+func mustV2RecorderFlush(t *testing.T, recorder *Recorder, phase string) {
+	t.Helper()
+	if err := recorder.Flush(); err != nil {
+		t.Fatalf("%s v2 Flush: %v", phase, err)
+	}
+}
+
+func assertV2InitialAppend(t *testing.T, calls, bytes int) {
+	t.Helper()
+	if calls == 0 {
+		t.Fatal("initial v2 flush did not append")
+	}
+	if bytes == 0 {
+		t.Fatal("initial v2 flush wrote no bytes")
+	}
+}
+
+func assertV2PendingAppend(
+	t *testing.T,
+	storage *countingAppendReplayStorage,
+	initialCalls, initialBytes int,
+) {
+	t.Helper()
+	if storage.appends != initialCalls+1 {
+		t.Fatalf("pending-event append calls = %d, want %d", storage.appends, initialCalls+1)
+	}
+	if len(storage.data) <= initialBytes {
+		t.Fatal("pending-event flush did not append bytes")
+	}
+}
+
+func mustLoadV2Recording(
+	t *testing.T,
+	storage platformreplay.Storage,
+	path string,
+) (*interfaces.ReplayArtifact, ReplayReadMetadata) {
+	t.Helper()
+	loaded, metadata, err := LoadWithMetadata(storage, path, testFactorySnapshotDecoder)
+	if err != nil {
+		t.Fatalf("LoadWithMetadata: %v", err)
+	}
+	return loaded, metadata
+}
+
+func assertV2LoadedRecording(
+	t *testing.T,
+	loaded *interfaces.ReplayArtifact,
+	metadata ReplayReadMetadata,
+	finishedAt time.Time,
+) {
+	t.Helper()
+	if metadata.SchemaVersion != ReplayV2SchemaVersion {
+		t.Fatalf("v2 metadata schema = %q", metadata.SchemaVersion)
+	}
+	if metadata.V2 == nil || metadata.V2.Terminal == nil {
+		t.Fatalf("v2 metadata = %#v, want terminal framing", metadata)
+	}
+	if replayEventIndexByID(loaded.Events, "v2-extra-event") < 0 {
+		t.Fatal("loaded v2 artifact omitted extra event")
+	}
+	if loaded.WallClock == nil {
+		t.Fatal("loaded v2 artifact wall clock is nil")
+	}
+	if !loaded.WallClock.FinishedAt.Equal(finishedAt) {
+		t.Fatalf("loaded finish time = %v, want %v", loaded.WallClock.FinishedAt, finishedAt)
+	}
+}
+
 func TestRecorder_RecordEventDetachesCanonicalPayload(t *testing.T) {
 	artifact := testReplayArtifact(t)
 	recorder, err := NewRecorder(testReplayStorage(), filepath.Join(t.TempDir(), "detached.replay.json"), artifact, 0)
@@ -1035,6 +1147,26 @@ func TestRecorder_StopJoinsPeriodicFlushLoop(t *testing.T) {
 type countingReplayStorage struct {
 	writes int
 	data   []byte
+}
+
+type countingAppendReplayStorage struct {
+	data    []byte
+	appends int
+}
+
+func (storage *countingAppendReplayStorage) WriteFile(_ string, data []byte) error {
+	storage.data = append([]byte(nil), data...)
+	return nil
+}
+
+func (storage *countingAppendReplayStorage) AppendFile(_ string, data []byte) error {
+	storage.appends++
+	storage.data = append(storage.data, data...)
+	return nil
+}
+
+func (storage *countingAppendReplayStorage) ReadFile(string) ([]byte, error) {
+	return append([]byte(nil), storage.data...), nil
 }
 
 func (storage *countingReplayStorage) WriteFile(_ string, data []byte) error {

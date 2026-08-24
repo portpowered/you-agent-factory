@@ -4,6 +4,7 @@ package replay
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -19,6 +20,13 @@ const (
 type Storage interface {
 	WriteFile(string, []byte) error
 	ReadFile(string) ([]byte, error)
+}
+
+// Appender is the optional append-and-sync effect used by append-only replay
+// recordings. It is intentionally separate from Storage so existing callers
+// that only read or replace v1 artifacts do not acquire append semantics.
+type Appender interface {
+	AppendFile(string, []byte) error
 }
 
 // Local is the policy-free local artifact adapter for one Wire-selected host
@@ -86,6 +94,42 @@ func (local Local) WriteFile(path string, data []byte) error {
 	return fmt.Errorf("%w; temp artifact left at %s", replaceErr, tmpPath)
 }
 
+// AppendFile appends one complete replay-framing suffix and synchronizes it
+// before returning. It never replaces or renames the existing artifact.
+func (local Local) AppendFile(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create replay artifact directory: %w", err)
+	}
+
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return fmt.Errorf("open replay artifact for append: %w", err)
+	}
+	closed := false
+	defer func() {
+		if !closed {
+			_ = file.Close()
+		}
+	}()
+
+	written, err := file.Write(data)
+	if err != nil {
+		return fmt.Errorf("append replay artifact: %w", err)
+	}
+	if written != len(data) {
+		return fmt.Errorf("append replay artifact: %w", io.ErrShortWrite)
+	}
+	if err := file.Sync(); err != nil {
+		return fmt.Errorf("sync replay artifact append: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close replay artifact append: %w", err)
+	}
+	closed = true
+	return nil
+}
+
 // ReadFile reads one artifact snapshot, retrying transient Windows replacement
 // races without interpreting the artifact contents.
 func (local Local) ReadFile(path string) ([]byte, error) {
@@ -107,3 +151,4 @@ func (local Local) ReadFile(path string) ([]byte, error) {
 }
 
 var _ Storage = Local{}
+var _ Appender = Local{}

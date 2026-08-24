@@ -16,6 +16,7 @@ import (
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/jsoncompat"
+	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 )
 
 // Service owns read-only reconstruction of one existing recording artifact.
@@ -117,6 +118,9 @@ func decodeHistoricalArtifact(
 	payload []byte,
 	identity recordings.HistoricalRecordingIdentity,
 ) ([]recordings.CanonicalEvent, int, recordings.RecordingStatusFacts, []string, error) {
+	if replayimpl.IsReplayV2Artifact(payload) {
+		return decodeReplayV2Artifact(payload, identity)
+	}
 	var header struct {
 		SchemaVersion string `json:"schemaVersion"`
 	}
@@ -266,6 +270,53 @@ func decodeLegacyArtifact(
 		return nil, 0, recordings.RecordingStatusFacts{}, err
 	}
 	return events, maxHistoricalTick(events), historicalRecordingStatus(identity, recordings.RecordingFinalized, events), nil
+}
+
+func decodeReplayV2Artifact(
+	payload []byte,
+	identity recordings.HistoricalRecordingIdentity,
+) ([]recordings.CanonicalEvent, int, recordings.RecordingStatusFacts, []string, error) {
+	stream, err := replayimpl.ParseReplayV2(payload)
+	if err != nil {
+		return nil, 0, recordings.RecordingStatusFacts{}, nil, historicalQueryError(
+			recordings.HistoricalRecordingQueryErrorCorruptHistory, identity, "", err,
+		)
+	}
+	events := make([]recordings.CanonicalEvent, len(stream.Events))
+	generationID := "historical-recording/" + string(identity.RecordingID)
+	for index, event := range stream.Events {
+		canonicalEvent := canonical.CanonicalEventFromFactory(event, generationID)
+		if event.SchemaVersion != factorydefinitions.FactoryEventSchemaVersionV1 ||
+			event.Context.Sequence != index || event.Context.Tick < 0 ||
+			canonicalEvent.Scope != identity.Scope || !canonical.ValidAppendEvent(canonicalEvent) {
+			return nil, 0, recordings.RecordingStatusFacts{}, nil, historicalQueryError(
+				recordings.HistoricalRecordingQueryErrorCorruptHistory, identity, canonicalEvent.ID, nil,
+			)
+		}
+		events[index] = canonicalEvent
+	}
+	if err := validateHistoricalEvents(identity, events); err != nil {
+		return nil, 0, recordings.RecordingStatusFacts{}, nil, err
+	}
+	state := recordings.RecordingActive
+	status := historicalRecordingStatus(identity, state, events)
+	if stream.Terminal != nil {
+		status.State = recordings.RecordingFinalized
+		if strings.EqualFold(stream.Terminal.TerminalState, string(recordings.RecordingFailed)) ||
+			strings.EqualFold(stream.Terminal.TerminalState, "FAILED") {
+			status.State = recordings.RecordingFailed
+		}
+		finishedAt := stream.Terminal.FinishedAt
+		status.FinalizedAt = &finishedAt
+		for _, code := range stream.Terminal.FlushDiagnostics.FailureCodes {
+			status.Failures = append(status.Failures, recordings.RecordingFailure{
+				Code:       code,
+				Message:    "recording persistence failure",
+				RecordedAt: finishedAt,
+			})
+		}
+	}
+	return events, maxHistoricalTick(events), status, nil, nil
 }
 
 func validateHistoricalEvents(identity recordings.HistoricalRecordingIdentity, events []recordings.CanonicalEvent) error {

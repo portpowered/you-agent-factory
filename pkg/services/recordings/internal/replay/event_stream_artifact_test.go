@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -47,6 +48,175 @@ func TestArtifactFromEventStream_ParsesCanonicalEventStreamAndSkipsTruncatedTail
 	factory := decodeReplayFactorySnapshot(t, result.Artifact.Factory)
 	if got := factory.Workers; got == nil || len(*got) != 1 {
 		t.Fatalf("artifact factory workers = %#v, want hydrated factory config", got)
+	}
+}
+
+func TestReplayV2RoundTripPreservesEventsAndTerminal(t *testing.T) {
+	recordedAt := time.Date(2026, 8, 23, 10, 0, 0, 0, time.UTC)
+	original := replayArtifactFieldsFixture(t, recordedAt)
+	data := replayV2FixtureData(t, original, recordedAt.Add(time.Minute))
+	loaded, stream, err := DecodeReplayV2(data, testFactorySnapshotDecoder)
+	if err != nil {
+		t.Fatalf("DecodeReplayV2: %v", err)
+	}
+	assertReplayV2RoundTrip(t, original, loaded, stream, recordedAt.Add(time.Minute))
+}
+
+func replayV2FixtureData(
+	t *testing.T,
+	artifact *interfaces.ReplayArtifact,
+	finishedAt time.Time,
+) []byte {
+	t.Helper()
+	header := mustReplayV2Header(t, artifact, "session-v2")
+	data := append([]byte(nil), header...)
+	for _, event := range artifact.Events {
+		data = append(data, mustReplayV2Event(t, event)...)
+	}
+	return append(data, mustReplayV2Terminal(t, finishedAt)...)
+}
+
+func mustReplayV2Header(t *testing.T, artifact *interfaces.ReplayArtifact, sessionID string) []byte {
+	t.Helper()
+	data, err := MarshalReplayV2Header(artifact, sessionID)
+	if err != nil {
+		t.Fatalf("MarshalReplayV2Header: %v", err)
+	}
+	return data
+}
+
+func mustReplayV2Event(t *testing.T, event interfaces.FactoryEvent) []byte {
+	t.Helper()
+	data, err := MarshalReplayV2Event(event)
+	if err != nil {
+		t.Fatalf("MarshalReplayV2Event(%q): %v", event.Id, err)
+	}
+	return data
+}
+
+func mustReplayV2Terminal(t *testing.T, finishedAt time.Time) []byte {
+	t.Helper()
+	data, err := MarshalReplayV2Terminal(
+		finishedAt,
+		"FINALIZED",
+		ReplayV2FlushDiagnostics{FailureCount: 1, FailureCodes: []string{"flush_failed"}},
+	)
+	if err != nil {
+		t.Fatalf("MarshalReplayV2Terminal: %v", err)
+	}
+	return data
+}
+
+func assertReplayV2RoundTrip(
+	t *testing.T,
+	original, loaded *interfaces.ReplayArtifact,
+	stream *ReplayV2Stream,
+	finishedAt time.Time,
+) {
+	t.Helper()
+	if stream.TruncatedTail {
+		t.Fatal("v2 stream is truncated")
+	}
+	if stream.Terminal == nil {
+		t.Fatal("v2 stream terminal is nil")
+	}
+	if len(stream.Events) != len(original.Events) {
+		t.Fatalf("v2 event count = %d, want %d", len(stream.Events), len(original.Events))
+	}
+	if stream.Header.SchemaVersion != ReplayV2SchemaVersion || stream.Header.SessionID != "session-v2" {
+		t.Fatalf("v2 header identity = %#v", stream.Header)
+	}
+	if stream.Header.FactoryIdentity.Name != "artifact-test-factory" || stream.Header.Hashes[metadataFactoryHash] != "sha256:abc" {
+		t.Fatalf("v2 header Factory facts = %#v", stream.Header)
+	}
+	if loaded.WallClock == nil {
+		t.Fatal("loaded v2 wall clock is nil")
+	}
+	if !loaded.WallClock.FinishedAt.Equal(finishedAt) {
+		t.Fatalf("loaded finish time = %v, want %v", loaded.WallClock.FinishedAt, finishedAt)
+	}
+	for index, want := range original.Events {
+		assertReplayV2Event(t, index, want, loaded.Events[index])
+	}
+}
+
+func assertReplayV2Event(
+	t *testing.T,
+	index int,
+	want, got interfaces.FactoryEvent,
+) {
+	t.Helper()
+	if got.Id != want.Id {
+		t.Fatalf("loaded event %d id = %q, want %q", index, got.Id, want.Id)
+	}
+	if got.Type != want.Type {
+		t.Fatalf("loaded event %d type = %q, want %q", index, got.Type, want.Type)
+	}
+	if !reflect.DeepEqual(got.Context, want.Context) {
+		t.Fatalf("loaded event %d context = %#v, want %#v", index, got.Context, want.Context)
+	}
+	if string(got.Payload) != string(want.Payload) {
+		t.Fatalf("loaded event %d payload changed", index)
+	}
+}
+
+func TestReplayV2TruncatedTailPreservesCompletePrefix(t *testing.T) {
+	recordedAt := time.Date(2026, 8, 23, 11, 0, 0, 0, time.UTC)
+	original := minimalValidArtifact(recordedAt)
+	header, err := MarshalReplayV2Header(original, "session-truncated")
+	if err != nil {
+		t.Fatalf("MarshalReplayV2Header: %v", err)
+	}
+	event, err := MarshalReplayV2Event(original.Events[0])
+	if err != nil {
+		t.Fatalf("MarshalReplayV2Event: %v", err)
+	}
+	data := append(append(header, event...), []byte(`{"recordType":"event","event":{"id":"partial"}`)...)
+	loaded, stream, err := DecodeReplayV2(data, testFactorySnapshotDecoder)
+	if err != nil {
+		t.Fatalf("DecodeReplayV2: %v", err)
+	}
+	if !stream.TruncatedTail || len(stream.Events) != 1 || len(loaded.Events) != 1 {
+		t.Fatalf("truncated v2 result = stream=%#v loadedEvents=%d", stream, len(loaded.Events))
+	}
+}
+
+func TestReplayV2AcceptsEmptyFinalizedRecording(t *testing.T) {
+	finishedAt := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
+	artifact := &interfaces.ReplayArtifact{RecordedAt: finishedAt}
+	header, err := MarshalReplayV2Header(artifact, "empty-session")
+	if err != nil {
+		t.Fatalf("MarshalReplayV2Header: %v", err)
+	}
+	terminal, err := MarshalReplayV2Terminal(finishedAt, "FINALIZED", ReplayV2FlushDiagnostics{})
+	if err != nil {
+		t.Fatalf("MarshalReplayV2Terminal: %v", err)
+	}
+	loaded, stream, err := DecodeReplayV2(append(header, terminal...), nil)
+	if err != nil {
+		t.Fatalf("DecodeReplayV2: %v", err)
+	}
+	if len(loaded.Events) != 0 || stream.Terminal == nil || !stream.Terminal.FinishedAt.Equal(finishedAt) {
+		t.Fatalf("empty v2 stream = %#v, artifact = %#v", stream, loaded)
+	}
+}
+
+func TestReplayV2RejectsDuplicateTerminalAndMissingHeader(t *testing.T) {
+	finishedAt := time.Date(2026, 8, 23, 13, 0, 0, 0, time.UTC)
+	terminal, err := MarshalReplayV2Terminal(finishedAt, "FINALIZED", ReplayV2FlushDiagnostics{})
+	if err != nil {
+		t.Fatalf("MarshalReplayV2Terminal: %v", err)
+	}
+	if _, err := ParseReplayV2(append(terminal, terminal...)); err == nil {
+		t.Fatal("ParseReplayV2() error = nil, want missing-header error")
+	}
+	artifact := &interfaces.ReplayArtifact{RecordedAt: finishedAt}
+	header, err := MarshalReplayV2Header(artifact, "duplicate-terminal")
+	if err != nil {
+		t.Fatalf("MarshalReplayV2Header: %v", err)
+	}
+	if _, err := ParseReplayV2(append(append(header, terminal...), terminal...)); err == nil {
+		t.Fatal("ParseReplayV2() error = nil, want duplicate-terminal error")
 	}
 }
 

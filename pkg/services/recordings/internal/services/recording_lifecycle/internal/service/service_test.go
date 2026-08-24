@@ -72,7 +72,7 @@ func TestRecordingsRootSelectsAndBindsOneStableGeneratedTarget(t *testing.T) {
 		"recordings",
 		"2026-07",
 		"2026-07-27",
-		"factory-session-~default-150405-identity-1.json",
+		"factory-session-~default-150405-identity-1.jsonl",
 	)
 	if first.Status.Artifact != recordings.RecordingArtifactReference(want) {
 		t.Fatalf("reported target = %q, want %q", first.Status.Artifact, want)

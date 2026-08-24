@@ -80,6 +80,42 @@ func NewRuntimeRoot(
 	logger logging.Logger,
 	clocks ...recordings.RecordingClock,
 ) (recordings.Service, error) {
+	return NewRuntimeRootWithAppend(
+		targets,
+		writeFile,
+		nil,
+		makeDirectories,
+		createTemporaryFile,
+		removePath,
+		renamePath,
+		readFile,
+		captureSnapshot,
+		decodeSnapshot,
+		decodeRuntimeConfig,
+		replayInputs,
+		logger,
+		clocks...,
+	)
+}
+
+// NewRuntimeRootWithAppend constructs the process-scoped Recordings authority
+// with the separate append effect required by new v2 JSONL recordings.
+func NewRuntimeRootWithAppend(
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	appendFile func(string, []byte) error,
+	makeDirectories recordings.RecordingMakeDirectories,
+	createTemporaryFile recordings.RecordingCreateTemporaryFile,
+	removePath recordings.RecordingRemovePath,
+	renamePath recordings.RecordingRenamePath,
+	readFile recordings.RecordingReadFile,
+	captureSnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
+	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	replayInputs recordings.ReplayInputLoader,
+	logger logging.Logger,
+	clocks ...recordings.RecordingClock,
+) (recordings.Service, error) {
 	publication, err := recordingsinternal.NewPortableArtifactPublication(
 		makeDirectories,
 		createTemporaryFile,
@@ -94,9 +130,10 @@ func NewRuntimeRoot(
 		readFile,
 		recordingsinternal.NewProjectionService(),
 	)
-	root := recordingsinternal.NewRuntimeRootWithHistoricalQuery(
+	root := recordingsinternal.NewRuntimeRootWithHistoricalQueryAndAppender(
 		targets,
 		writeFile,
+		appendFile,
 		readFile,
 		publication,
 		captureSnapshot,

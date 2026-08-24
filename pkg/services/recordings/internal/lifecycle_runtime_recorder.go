@@ -408,37 +408,20 @@ func NewRuntimeRootWithHistoricalQuery(
 	historicalQuery historicalquery.Service,
 	clocks ...recordings.RecordingClock,
 ) recordings.Service {
-	router := newRuntimeLedgerRouter(recordingClockNow(clocks...))
-	projection := NewProjectionService()
-	var writer recordings.RecordingSnapshotWriter
-	var tickers recordings.RecordingFlushTickerFactory
-	if writeFile != nil {
-		writer = NewReplayRecordingSnapshotWriter(writeFile)
-		tickers = NewRecordingFlushTickerFactory()
-	}
-	service := NewServiceWithLifecycleEffectsAndHistoricalQueryAndLoggerAndReplaySource(
-		router,
-		projection,
+	return NewRuntimeRootWithHistoricalQueryAndAppender(
 		targets,
-		writer,
-		tickers,
-		publication,
-		historicalQuery,
+		writeFile,
+		nil,
 		readFile,
+		publication,
+		captureSnapshot,
 		decodeSnapshot,
+		decodeRuntimeConfig,
+		replayInputs,
 		logger,
+		historicalQuery,
 		clocks...,
 	)
-	root, ok := service.(*combinedService)
-	if !ok || root == nil {
-		return nil
-	}
-	root.runtimeRouter = router
-	root.runtimeSnapshotCapture = captureSnapshot
-	root.replaySnapshotDecoder = decodeSnapshot
-	root.replayConfigDecoder = decodeRuntimeConfig
-	root.replayInputs = replayInputs
-	return root
 }
 
 var _ recordings.Service = (*combinedService)(nil)

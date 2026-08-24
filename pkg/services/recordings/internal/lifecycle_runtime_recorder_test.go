@@ -100,13 +100,13 @@ func TestReplayRecordingSnapshotWriterPreservesReplayCompatibility(t *testing.T)
 
 	startedAt := time.Date(2026, 7, 27, 16, 0, 0, 0, time.UTC)
 	finishedAt := startedAt.Add(time.Minute)
-	path := filepath.Join(t.TempDir(), "recording.json")
+	path := filepath.Join(t.TempDir(), "recording.jsonl")
 	storage := platformreplay.NewLocal(runtime.GOOS)
 	root := NewServiceWithLifecycleEffects(
 		NewRuntimeLedger(nil, func() time.Time { return startedAt }, "generation", nil),
 		NewProjectionService(),
 		nil,
-		NewReplayRecordingSnapshotWriter(storage.WriteFile),
+		NewReplayRecordingSnapshotWriter(storage.WriteFile, storage.AppendFile),
 		nil,
 		nil,
 		runtimeRecorderTestClock{now: startedAt},

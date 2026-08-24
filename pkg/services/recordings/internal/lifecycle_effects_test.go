@@ -232,6 +232,143 @@ func TestNewReplayRecordingSnapshotWriterPinsReplayV1JSONBytes(t *testing.T) {
 	}
 }
 
+func TestNewReplayRecordingSnapshotWriterAppendsPendingV2Records(t *testing.T) {
+	var data []byte
+	appendCalls := 0
+	writer := NewReplayRecordingSnapshotWriter(
+		func(string, []byte) error {
+			t.Fatal("v2 writer used replacement effect")
+			return nil
+		},
+		func(_ string, payload []byte) error {
+			appendCalls++
+			data = append(data, payload...)
+			return nil
+		},
+	)
+	first := v2LifecycleSnapshot(time.Date(2026, 8, 23, 14, 0, 0, 0, time.UTC), 1, false)
+	if err := writer("session.jsonl", first); err != nil {
+		t.Fatalf("first v2 flush: %v", err)
+	}
+	if appendCalls != 2 {
+		t.Fatalf("first append calls = %d, want header plus one event", appendCalls)
+	}
+	second := v2LifecycleSnapshot(first.Events[0].RecordedAt, 2, false)
+	if err := writer("session.jsonl", second); err != nil {
+		t.Fatalf("second v2 flush: %v", err)
+	}
+	if appendCalls != 3 {
+		t.Fatalf("second append calls = %d, want one pending event", appendCalls)
+	}
+	finished := v2LifecycleSnapshot(first.Events[0].RecordedAt, 2, true)
+	if err := writer("session.jsonl", finished); err != nil {
+		t.Fatalf("terminal v2 flush: %v", err)
+	}
+	if appendCalls != 4 {
+		t.Fatalf("terminal append calls = %d, want one terminal record", appendCalls)
+	}
+	stream, err := replayimpl.ParseReplayV2(data)
+	if err != nil {
+		t.Fatalf("ParseReplayV2: %v", err)
+	}
+	if len(stream.Events) != 2 || stream.Terminal == nil || stream.TruncatedTail {
+		t.Fatalf("v2 stream = %#v, want two events and one terminal", stream)
+	}
+}
+
+func TestNewReplayRecordingSnapshotWriterDoesNotAdvanceAfterAppendFailure(t *testing.T) {
+	var data []byte
+	appendCalls := 0
+	fail := true
+	writer := NewReplayRecordingSnapshotWriter(
+		func(string, []byte) error { return errors.New("replacement must not run") },
+		func(_ string, payload []byte) error {
+			appendCalls++
+			if fail && appendCalls == 3 {
+				return errors.New("append unavailable")
+			}
+			data = append(data, payload...)
+			return nil
+		},
+	)
+	startedAt := time.Date(2026, 8, 23, 15, 0, 0, 0, time.UTC)
+	if err := writer("failure.jsonl", v2LifecycleSnapshot(startedAt, 1, false)); err != nil {
+		t.Fatalf("initial v2 flush: %v", err)
+	}
+	fail = true
+	if err := writer("failure.jsonl", v2LifecycleSnapshot(startedAt, 2, false)); err == nil || !errors.Is(err, recordings.ErrRecordingSnapshotWrite) {
+		t.Fatalf("failed v2 flush = %v, want append failure", err)
+	}
+	fail = false
+	if err := writer("failure.jsonl", v2LifecycleSnapshot(startedAt, 2, false)); err != nil {
+		t.Fatalf("retry v2 flush: %v", err)
+	}
+	stream, err := replayimpl.ParseReplayV2(data)
+	if err != nil {
+		t.Fatalf("ParseReplayV2 after retry: %v", err)
+	}
+	if len(stream.Events) != 2 || appendCalls != 4 {
+		t.Fatalf("retry state = events=%d appendCalls=%d, want two events and one retry", len(stream.Events), appendCalls)
+	}
+}
+
+func TestNewReplayRecordingSnapshotWriterWritesHeaderAndTerminalForEmptyRecording(t *testing.T) {
+	var data []byte
+	writer := NewReplayRecordingSnapshotWriter(
+		func(string, []byte) error { return errors.New("replacement must not run") },
+		func(_ string, payload []byte) error {
+			data = append(data, payload...)
+			return nil
+		},
+	)
+	finishedAt := time.Date(2026, 8, 23, 16, 0, 0, 0, time.UTC)
+	if err := writer("empty.jsonl", recordings.RecordingSnapshot{
+		Status: recordings.RecordingStatusFacts{
+			Scope:       recordings.CanonicalEventScope{FactorySessionID: "empty-session"},
+			State:       recordings.RecordingFinalized,
+			FinalizedAt: &finishedAt,
+		},
+	}); err != nil {
+		t.Fatalf("empty v2 flush: %v", err)
+	}
+	stream, err := replayimpl.ParseReplayV2(data)
+	if err != nil {
+		t.Fatalf("ParseReplayV2 empty recording: %v", err)
+	}
+	if len(stream.Events) != 0 || stream.Terminal == nil || !stream.Terminal.FinishedAt.Equal(finishedAt) {
+		t.Fatalf("empty stream = %#v, want header and terminal", stream)
+	}
+}
+
+func v2LifecycleSnapshot(recordedAt time.Time, eventCount int, finalized bool) recordings.RecordingSnapshot {
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-v2"}
+	events := make([]recordings.CanonicalEvent, eventCount)
+	for index := range events {
+		payload := `{"sequence":` + string(rune('0'+index)) + `}`
+		kind := recordings.CanonicalEventKind("WORK_REQUEST")
+		if index == 0 {
+			kind = recordings.CanonicalEventKind("RUN_REQUEST")
+			payload = `{"recordedAt":"` + recordedAt.UTC().Format(time.RFC3339Nano) + `","factory":{"id":"factory-v2","name":"test-factory","metadata":{"factory_hash":"sha256:test"}}}`
+		}
+		events[index] = recordings.CanonicalEvent{
+			ID:         recordings.CanonicalEventID("event-v2-" + string(rune('0'+index))),
+			Sequence:   recordings.CanonicalEventSequence(index),
+			Scope:      scope,
+			Cursor:     recordings.CanonicalEventCursor{StreamGenerationID: "generation-v2", Sequence: recordings.CanonicalEventSequence(index)},
+			RecordedAt: recordedAt.Add(time.Duration(index) * time.Second),
+			Kind:       kind,
+			Payload:    payload,
+		}
+	}
+	status := recordings.RecordingStatusFacts{Scope: scope, State: recordings.RecordingActive}
+	if finalized {
+		finishedAt := recordedAt.Add(time.Minute)
+		status.State = recordings.RecordingFinalized
+		status.FinalizedAt = &finishedAt
+	}
+	return recordings.RecordingSnapshot{Status: status, Events: events}
+}
+
 func TestNewRecordingFlushTickerFactoryStopsTicker(t *testing.T) {
 	t.Parallel()
 

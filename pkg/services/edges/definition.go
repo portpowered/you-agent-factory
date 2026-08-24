@@ -214,6 +214,7 @@ type Edges struct {
 	DispatchRecorder                 recordings.DispatchRecorder
 	WorkerRecordingWriter            recordings.WorkerRecordingWriter
 	RecordingWriteFile               func(string, []byte) error
+	RecordingAppendFile              func(string, []byte) error
 	RecordingMakeDirectories         recordings.RecordingMakeDirectories
 	RecordingCreateTempFile          recordings.RecordingCreateTemporaryFile
 	RecordingRemovePath              recordings.RecordingRemovePath
@@ -605,6 +606,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.RecordingWriteFile != nil {
 		defaults.RecordingWriteFile = replacements.RecordingWriteFile
+	}
+	if replacements.RecordingAppendFile != nil {
+		defaults.RecordingAppendFile = replacements.RecordingAppendFile
 	}
 	if replacements.RecordingMakeDirectories != nil {
 		defaults.RecordingMakeDirectories = replacements.RecordingMakeDirectories

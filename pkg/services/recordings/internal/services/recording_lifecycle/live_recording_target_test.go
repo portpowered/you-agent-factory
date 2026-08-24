@@ -28,10 +28,10 @@ func TestLiveRecordingTargetPlannerOwnsDefaultLayoutAndReportedSessionPath(t *te
 		t.Fatalf("PlanLiveRecordingTarget: %v", err)
 	}
 	wantDir := filepath.Join("home", "operator", ".you-agent-factory", "recordings", "2026-02", "2026-02-03")
-	if want := filepath.Join(wantDir, "factory-session-__factory_session_id__-184512-uuid-1.json"); target.ServicePath != want {
+	if want := filepath.Join(wantDir, "factory-session-__factory_session_id__-184512-uuid-1.jsonl"); target.ServicePath != want {
 		t.Fatalf("service path = %q, want %q", target.ServicePath, want)
 	}
-	if want := filepath.Join(wantDir, "factory-session-~default-184512-uuid-1.json"); target.ReportedPath != want {
+	if want := filepath.Join(wantDir, "factory-session-~default-184512-uuid-1.jsonl"); target.ReportedPath != want {
 		t.Fatalf("reported path = %q, want %q", target.ReportedPath, want)
 	}
 }

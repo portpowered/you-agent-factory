@@ -51,7 +51,7 @@ func (planner *liveRecordingTargetPlanner) PlanLiveRecordingTarget(
 	recordingsRoot := planner.join(homeDir, ".you-agent-factory", "recordings")
 	recordingsDir := planner.join(recordingsRoot, now.Format("2006-01"), now.Format("2006-01-02"))
 	filename := fmt.Sprintf(
-		"factory-session-%s-%s-%s.json",
+		"factory-session-%s-%s-%s.jsonl",
 		liveRecordingSessionToken,
 		now.Format("150405"),
 		identity,
