@@ -787,7 +787,6 @@ Successful graph saves converge the document plane and live snapshot without a f
 
 ## Related Docs
 
-- [Model Provider Integration Convergence Plan](plans/model-providers/provider-integration-convergence.md)
 - [Factory CLI wire composition](cmd-factory-wire-composition.md)
 - [CLI release policy](cli-release-policy.md)
 - [Agent Factory README](../../README.md)
