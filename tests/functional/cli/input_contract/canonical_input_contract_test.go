@@ -115,7 +115,7 @@ func TestGenericRepresentativeProjectionIsObservableThroughApplicationRoot(t *te
 		t.Fatalf("Process.Execute(session show help) error = %v", err)
 	}
 	for _, marker := range []string{
-		"Show one live factory session",
+		"Show one live or persisted factory session",
 		"you session show [session-id]",
 		"--server",
 		"--json",

@@ -125,6 +125,68 @@ func TestHandlerFromRoot_GetFactorySessionEncodesRootProjectionToAPI(t *testing.
 	}
 }
 
+func TestHandlerFromRoot_GetFactorySessionPrefersLiveCompatibilityProjection(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "~default"
+	root := &httpSessionsRootFake{
+		getDurableSession: func(context.Context, string) (factorysessions.SessionReadResult, error) {
+			t.Fatal("live compatibility lookup should resolve before durable detail")
+			return factorysessions.SessionReadResult{}, nil
+		},
+		sessions: map[string]factorysessions.SessionProjection{
+			sessionID: {
+				Context: factorysessions.ProjectionContext{
+					FactorySessionID: "live-session-id",
+					Session: &factorysessions.ScopedLiveSessionSummary{
+						ID: "live-session-id", FactoryDir: "/workspace/factory", IsDefault: true,
+					},
+				},
+			},
+		},
+	}
+	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	recorder := httptest.NewRecorder()
+
+	handler.GetFactorySession(recorder, httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID, nil), sessionID)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.FactorySession
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Id != "live-session-id" || !response.IsDefault {
+		t.Fatalf("response = %#v, want live compatibility session", response)
+	}
+}
+
+func TestHandlerFromRoot_GetFactorySessionDoesNotSerializeEmptyDurableRead(t *testing.T) {
+	t.Parallel()
+
+	root := &httpSessionsRootFake{
+		getDurableSession: func(context.Context, string) (factorysessions.SessionReadResult, error) {
+			return factorysessions.SessionReadResult{}, nil
+		},
+	}
+	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
+	recorder := httptest.NewRecorder()
+
+	handler.GetFactorySession(recorder, httptest.NewRequest(http.MethodGet, "/factory-sessions/missing-session", nil), "missing-session")
+
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404: %s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if response.Code != factoryapi.ErrorResponseCodeNOTFOUND {
+		t.Fatalf("error = %#v, want NOT_FOUND", response)
+	}
+}
+
 func TestHandlerFromRoot_GetFactorySessionNotFoundReturnsTypedErrorResponse(t *testing.T) {
 	t.Parallel()
 

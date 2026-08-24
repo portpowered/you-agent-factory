@@ -120,12 +120,20 @@ func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request, par
 }
 
 func (s *Server) GetFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	durableLookupMiss, handled := s.readDurableFactorySession(w, r, string(sessionID))
-	if handled {
+	if s.liveControl != nil {
+		liveLookupMiss, handled := s.readLiveFactorySession(w, r, sessionID)
+		if handled {
+			return
+		}
+		durableLookupMiss, handled := s.readDurableFactorySession(w, r, string(sessionID))
+		if handled {
+			return
+		}
+		s.readRuntimeFactorySession(w, r, sessionID, liveLookupMiss || durableLookupMiss)
 		return
 	}
-	if s.liveControl != nil {
-		s.readLiveFactorySession(w, r, sessionID)
+	durableLookupMiss, handled := s.readDurableFactorySession(w, r, string(sessionID))
+	if handled {
 		return
 	}
 	s.readRuntimeFactorySession(w, r, sessionID, durableLookupMiss)
@@ -155,6 +163,14 @@ func (s *Server) readFactorySessionFromRoot(
 	}
 	response, err := s.sessionsRoot.GetSession(r.Context(), sessionID)
 	if err == nil {
+		// A Sessions root can legitimately have a durable capability without
+		// having a durable row for a live-session compatibility id (for example
+		// ~default). Never serialize an empty durable projection as a successful
+		// detail response: it would hide the live fallback behind a 200 response
+		// whose session identity is empty.
+		if strings.TrimSpace(response.SessionID) == "" {
+			return true, false
+		}
 		s.writeJSON(w, http.StatusOK, factorysession.SessionReadResponseToAPI(response))
 		return false, true
 	}
@@ -198,20 +214,24 @@ func (s *Server) readLiveFactorySession(
 	w http.ResponseWriter,
 	r *http.Request,
 	sessionID factoryapi.SessionID,
-) {
+) (lookupMiss, handled bool) {
 	if s.guardSessionsRequestContext(w, r) {
-		return
+		return false, true
 	}
 	projection, err := s.liveControl.GetFactorySession(r.Context(), decodeGetFactorySessionRequest(sessionID))
 	if err != nil {
+		if isSessionLookupMiss(err) {
+			return true, false
+		}
 		if s.writeSessionsRootError(w, string(sessionID), err) {
-			return
+			return false, true
 		}
 		s.logger.Error("get factory session failed", zap.Error(err))
 		s.writeSessionsRootErrorOrInternal(w, string(sessionID), err, "failed to get factory session")
-		return
+		return false, true
 	}
 	s.writeJSON(w, http.StatusOK, factorysession.SessionResponseToAPI(projection))
+	return false, true
 }
 
 func (s *Server) readRuntimeFactorySession(
