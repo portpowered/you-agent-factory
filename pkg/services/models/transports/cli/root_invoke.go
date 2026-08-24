@@ -190,10 +190,10 @@ func (service *rootService) invokeGenericInScope(
 		return true, service.writeGenericCLIInvocationResult(cfg, result, catalog, operation, text)
 	}
 	if len(inputs) > 0 || len(parameters) > 0 {
-		return true, mapModelsRootError(err)
+		return true, mapModelsClientError(err)
 	}
 	if !genericCLIInvocationFallbackError(err) {
-		return true, mapModelsRootError(err)
+		return true, mapModelsClientError(err)
 	}
 	return false, nil
 }
