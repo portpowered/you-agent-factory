@@ -76,7 +76,7 @@ func TestAPIServerPprofIsOptInThroughThePublicRunPath(t *testing.T) {
 		runtimeSnapshot.SysBytes < runtimeSnapshot.HeapInuseBytes || runtimeSnapshot.Goroutines <= 0 {
 		t.Fatalf("default runtime snapshot = %+v, want plausible live runtime values", runtimeSnapshot)
 	}
-	defaultServer.Close(t)
+	defaultServer.Stop(t)
 	assertRuntimeMemoryMetrics(t, metricsDir)
 
 	enabledServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -86,6 +86,7 @@ func TestAPIServerPprofIsOptInThroughThePublicRunPath(t *testing.T) {
 		Args:                      []string{"--pprof"},
 	})
 	assertEnabledPprofServer(t, enabledServer)
+	enabledServer.Stop(t)
 }
 
 func assertEnabledPprofServer(t *testing.T, enabledServer *support.FunctionalAPIServer) {
