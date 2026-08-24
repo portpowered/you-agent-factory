@@ -390,16 +390,10 @@ func (operation *hostedInvocationOperation) InvokeFactory(
 	if hosted == nil {
 		return factorysessions.FactoryInvocationOutcome{}, errors.New("hosted invocation operation is incomplete")
 	}
-	if projectionReader, ok := hosted.(interface {
-		GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error)
-	}); ok {
-		projection, projectionErr := projectionReader.GetFactorySession(ctx, factorysessions.DefaultSessionID)
-		if projectionErr != nil && ctx.Err() != nil {
-			return factorysessions.FactoryInvocationOutcome{}, ctx.Err()
-		}
-		if projectionErr == nil && interfaces.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
-			return operation.delegate.InvokeFactory(ctx, target, request)
-		}
+	if isJavaScriptHostedFactory, probeErr := hostedFactoryUsesJavaScriptOrchestrator(ctx, hosted); probeErr != nil {
+		return factorysessions.FactoryInvocationOutcome{}, probeErr
+	} else if isJavaScriptHostedFactory {
+		return operation.delegate.InvokeFactory(ctx, target, request)
 	}
 	var bridge interface {
 		Finish(context.Context, factoryEventReader, factorysessions.FactoryInvocationOutcome) error
@@ -434,6 +428,26 @@ func (operation *hostedInvocationOperation) InvokeFactory(
 		return outcome, invokeErr
 	}
 	return outcome, errors.Join(invokeErr, postResultErr)
+}
+
+func hostedFactoryUsesJavaScriptOrchestrator(
+	ctx context.Context,
+	hosted HostedInvocationOperation,
+) (bool, error) {
+	projectionReader, ok := hosted.(interface {
+		GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error)
+	})
+	if !ok {
+		return false, nil
+	}
+	projection, projectionErr := projectionReader.GetFactorySession(ctx, factorysessions.DefaultSessionID)
+	if projectionErr != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return false, ctxErr
+		}
+		return false, nil
+	}
+	return interfaces.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg), nil
 }
 
 func factoryInvocationResultFromSessionInvocation(
