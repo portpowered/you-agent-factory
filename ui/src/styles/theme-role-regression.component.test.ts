@@ -13,7 +13,7 @@ const uiRoot = path.resolve(stylesDir, "../..");
 const repoRoot = path.resolve(uiRoot, "..");
 const stylesSourcePath = path.join(uiRoot, "src", "styles.css");
 const REPOSITORY_FILE_PATH_PATTERN =
-  /(?<![\w/-])(?:api|cmd|docs|examples|factory|internal|packages|pkg|scripts|tasks|tests|ui)\/[\w.*\/-]+\.[\w-]+/g;
+  /(?<![\w/-])(?:api|cmd|docs|examples|factory|internal|packages|pkg|scripts|tasks|tests|ui)\/[\w.*-]+\.[\w-]+/g;
 
 function repositoryFilePathsNamedByGuide(source: string): string[] {
   return [...new Set(source.match(REPOSITORY_FILE_PATH_PATTERN) ?? [])].filter(
