@@ -542,7 +542,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     ).toBe("1");
     expect(
       screen.getByTestId("graph-controls").getAttribute("data-controls-style"),
-    ).toContain('"backgroundColor":"var(--color-surface)"');
+    ).toContain('"backgroundColor":"var(--color-af-graph-controls-surface)"');
     expect(
       screen.getByTestId("graph-controls").getAttribute("data-controls-style"),
     ).toContain('"borderRadius":8');
