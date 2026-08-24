@@ -3,13 +3,16 @@ package cli
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/resolvedinput"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
@@ -395,5 +398,87 @@ func TestCommandHandlerOmitsManifestDefaultServerFromModelsConfig(t *testing.T) 
 	}
 	if gotServer != "" {
 		t.Fatalf("server = %q, want empty for manifest-default --server", gotServer)
+	}
+}
+
+func TestModelsClientErrorPreservesTypedInvocationDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New("validation cause")
+	message := "required input slot is missing: audio"
+	for _, test := range []struct {
+		name       string
+		class      modelinference.InvocationFailureClass
+		code       string
+		family     factoryapi.ErrorFamily
+		badRequest bool
+	}{
+		{
+			name:       "missing required slot",
+			class:      modelinference.InvocationFailureClassInvalidSlot,
+			code:       "BAD_REQUEST",
+			family:     factoryapi.ErrorFamilyBadRequest,
+			badRequest: true,
+		},
+		{
+			name:   "unknown model reference",
+			class:  modelinference.InvocationFailureClassInvalidModelReference,
+			code:   "MODEL_NOT_AVAILABLE",
+			family: factoryapi.ErrorFamilyNotFound,
+		},
+		{
+			name:   "backend readiness",
+			class:  modelinference.InvocationFailureClassBackendReadiness,
+			code:   "MODEL_BACKEND_NOT_READY",
+			family: factoryapi.ErrorFamilyInternalServerError,
+		},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			failure := &modelinference.InvocationFailure{
+				Class: test.class, Message: message, Cause: cause,
+			}
+			wrapped := fmt.Errorf("models invocation: %w", failure)
+			mapped := mapModelsClientError(wrapped)
+
+			var classified *modelinference.InvocationFailure
+			if !errors.As(mapped, &classified) || classified != failure {
+				t.Fatalf("mapped error = %v, failure = %#v, want the original typed failure", mapped, classified)
+			}
+			if !errors.Is(mapped, cause) {
+				t.Fatalf("mapped error = %v, want the original cause in the chain", mapped)
+			}
+			var coded interface {
+				CLIErrorCode() string
+				CLIErrorFamily() factoryapi.ErrorFamily
+				CLIErrorMessage() string
+			}
+			if !errors.As(mapped, &coded) {
+				t.Fatalf("mapped error = %T, want CLI diagnostic contract", mapped)
+			}
+			if coded.CLIErrorCode() != test.code || coded.CLIErrorFamily() != test.family || coded.CLIErrorMessage() != message {
+				t.Fatalf("CLI fields = (%q, %q, %q), want (%q, %q, %q)", coded.CLIErrorCode(), coded.CLIErrorFamily(), coded.CLIErrorMessage(), test.code, test.family, message)
+			}
+			if test.badRequest && coded.CLIErrorFamily() == factoryapi.ErrorFamilyInternalServerError {
+				t.Fatal("client validation was classified as INTERNAL_SERVER_ERROR")
+			}
+		})
+	}
+}
+
+func TestModelsRootErrorDoesNotReclassifyInvocationFailuresOutsideClientPaths(t *testing.T) {
+	t.Parallel()
+
+	failure := &modelinference.InvocationFailure{
+		Class:   modelinference.InvocationFailureClassInvalidSlot,
+		Message: "required input slot is missing: audio",
+	}
+	if mapped := mapModelsRootError(failure); mapped != failure {
+		t.Fatalf("mapModelsRootError() = %T, want the original failure for non-invocation paths", mapped)
+	}
+	if mapped := mapModelsRootError(modelinference.ErrNotFound); mapped == nil || !errors.Is(mapped, modelinference.ErrNotFound) {
+		t.Fatalf("mapModelsRootError(ErrNotFound) = %v, want unchanged not-found identity", mapped)
 	}
 }

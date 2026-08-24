@@ -53,7 +53,7 @@ func (service *rootService) Inspect(cfg InspectConfig) error {
 			Scope: scope, Name: modelName,
 		})
 		if err != nil {
-			return mapModelsRootError(err)
+			return mapModelsClientError(err)
 		}
 		response := detailToGenerated(result.Model)
 		if cfg.JSON {
