@@ -181,7 +181,11 @@ func WaitForStart(ctx context.Context, handle *Handle) error {
 		case <-handle.RunDone:
 			return startupResult(handle.Result())
 		case <-ticker.C:
-			snap, err := runtimeLifecycleSnapshot(context.Background(), handle.Bundle.Factory)
+			// Startup readiness is deliberately checked through the aggregate
+			// engine boundary. Unlike lifecycle telemetry, this handshake must
+			// observe the hosted engine's complete readiness state before the
+			// transport component is allowed to start.
+			snap, err := handle.Bundle.Factory.GetEngineStateSnapshot(context.Background())
 			if err != nil {
 				continue
 			}
