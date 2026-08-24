@@ -45,8 +45,9 @@ func TestModelsDocumentation_ExamplesReachCurrentCLIBoundary(t *testing.T) {
 	executeDocumentedModelExample(t, []string{"models", "list"})
 	executeDocumentedModelExample(t, []string{"models", "inspect", "OMNIVOICE_Q4_K_M"})
 	executeDocumentedModelExample(t, []string{"models", "pull", "OMNIVOICE_Q4_K_M"})
-	executeDocumentedModelExample(t, []string{"models", "invoke", "OMNIVOICE_Q4_K_M", "--operation", "TTS", "--text", "Read the release summary.", "--output", "./speech.wav"})
-	executeDocumentedModelExample(t, []string{"--json", "models", "invoke", "OMNIVOICE_Q4_K_M", "--operation", "TTS", "--text", "Read the release summary."})
+	executeDocumentedModelExample(t, []string{"models", "invoke", "tts", "--operation", "TTS", "--input", "text=Read the release summary."})
+	executeDocumentedModelExample(t, []string{"models", "invoke", "tts", "--operation", "TTS", "--text", "Read the release summary.", "--output", "speech.wav"})
+	executeDocumentedModelExample(t, []string{"--json", "models", "invoke", "tts", "--operation", "TTS", "--input", "text=Read the release summary."})
 
 	assertDocumentedModelConfigs(t, listed, inspected, pulled, invocations)
 	assertModelCommandsRequireName(t)
@@ -58,8 +59,9 @@ func requireDocumentedModelCommands(t *testing.T, doc string) {
 		"you models list",
 		"you models inspect OMNIVOICE_Q4_K_M",
 		"you models pull OMNIVOICE_Q4_K_M",
-		`you models invoke OMNIVOICE_Q4_K_M --operation TTS --text "Read the release summary." --output ./speech.wav`,
-		`you --json models invoke OMNIVOICE_Q4_K_M --operation TTS --text "Read the release summary."`,
+		`you models invoke tts --operation TTS --input text="Read the release summary." > speech.wav`,
+		`you models invoke tts --operation TTS --text "Read the release summary." --output speech.wav`,
+		`you --json models invoke tts --operation TTS --input text="Read the release summary."`,
 	} {
 		if !strings.Contains(doc, command) {
 			t.Fatalf("packaged models guide missing executable example %q", command)
@@ -72,14 +74,17 @@ func assertDocumentedModelConfigs(t *testing.T, listed bool, inspected, pulled s
 	if !listed || inspected != "OMNIVOICE_Q4_K_M" || pulled != "OMNIVOICE_Q4_K_M" {
 		t.Fatalf("documented model task boundary = listed %t, inspected %q, pulled %q", listed, inspected, pulled)
 	}
-	if len(invocations) != 2 {
-		t.Fatalf("documented invocations reaching model boundary = %d, want 2", len(invocations))
+	if len(invocations) != 3 {
+		t.Fatalf("documented invocations reaching model boundary = %d, want 3", len(invocations))
 	}
-	if got := invocations[0]; got.ModelName != "OMNIVOICE_Q4_K_M" || got.Operation != "TTS" || got.Text != "Read the release summary." || got.OutputPath != "./speech.wav" || got.JSON {
-		t.Fatalf("documented audio invocation = %#v, want complete model, operation, text, and output", got)
+	if got := invocations[0]; got.ModelName != "tts" || got.Operation != "TTS" || got.Text != "" || len(got.InputMappings) != 1 || got.InputMappings[0] != "text=Read the release summary." || got.OutputPath != "" || got.JSON {
+		t.Fatalf("documented raw-audio invocation = %#v, want generic text input without metadata mode", got)
 	}
-	if got := invocations[1]; got.ModelName != "OMNIVOICE_Q4_K_M" || got.Operation != "TTS" || got.Text != "Read the release summary." || got.OutputPath != "" || !got.JSON {
-		t.Fatalf("documented JSON invocation = %#v, want complete model, operation, text, and JSON mode", got)
+	if got := invocations[1]; got.ModelName != "tts" || got.Operation != "TTS" || got.Text != "Read the release summary." || got.OutputPath != "speech.wav" || got.JSON {
+		t.Fatalf("documented alias invocation = %#v, want direct TTS text and output path", got)
+	}
+	if got := invocations[2]; got.ModelName != "tts" || got.Operation != "TTS" || got.Text != "" || len(got.InputMappings) != 1 || got.InputMappings[0] != "text=Read the release summary." || got.OutputPath != "" || !got.JSON {
+		t.Fatalf("documented JSON invocation = %#v, want generic text input and JSON mode", got)
 	}
 }
 
