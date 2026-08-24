@@ -394,6 +394,9 @@ func (operation *hostedInvocationOperation) InvokeFactory(
 		GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error)
 	}); ok {
 		projection, projectionErr := projectionReader.GetFactorySession(ctx, factorysessions.DefaultSessionID)
+		if projectionErr != nil && ctx.Err() != nil {
+			return factorysessions.FactoryInvocationOutcome{}, ctx.Err()
+		}
 		if projectionErr == nil && interfaces.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
 			return operation.delegate.InvokeFactory(ctx, target, request)
 		}

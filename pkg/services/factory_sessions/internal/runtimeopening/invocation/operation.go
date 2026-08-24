@@ -208,6 +208,9 @@ func (o *operation) invokeFactoryOnHostedLiveRuntime(
 		projection, projectionErr := projectionReader.GetFactorySession(
 			ctx, factorysessions.DefaultSessionID,
 		)
+		if projectionErr != nil && ctx.Err() != nil {
+			return outcome, ctx.Err()
+		}
 		if projectionErr == nil && factorydefinitions.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
 			return o.invokeFactoryOnEphemeralRuntime(ctx, target, request)
 		}
@@ -270,6 +273,9 @@ func (o *operation) invokeFactoryOnOpenedRuntime(
 	projection, projectionErr := opened.Sessions.GetFactorySession(
 		runContext, factorysessions.DefaultSessionID,
 	)
+	if projectionErr != nil && runContext.Err() != nil {
+		return outcome, runContext.Err()
+	}
 	if projectionErr == nil && factorydefinitions.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
 		result, err := invokeJavaScriptFactory(
 			runContext, opened, projection.Context, target, request, o.generateSessionID,

@@ -49,6 +49,10 @@ func TestFactorySessionReadScaleProfile(t *testing.T) {
 		t.Fatal("default live Factory Session has empty identity")
 	}
 	defer func() {
+		// Cancel the Process first so in-flight worker calls observe the same
+		// shutdown authority as the engine. The executor stop then releases any
+		// test-only gate before we join Process.Execute below.
+		harness.cancel()
 		executor.stop()
 		stopSessionReadScaleProcess(harness)
 	}()
@@ -170,7 +174,7 @@ func (executor *sessionReadScaleDispatchExecutor) Execute(ctx context.Context, d
 	call := executor.calls
 	if executor.stopped {
 		executor.mu.Unlock()
-		return sessionReadScaleFailure(dispatch), nil
+		return sessionReadScaleCancellation(dispatch), nil
 	}
 	executor.active.Add(1)
 	defer executor.active.Done()
@@ -197,7 +201,7 @@ func (executor *sessionReadScaleDispatchExecutor) Execute(ctx context.Context, d
 		case <-ctx.Done():
 			return workers.WorkResult{}, ctx.Err()
 		case <-executor.stopCh:
-			return sessionReadScaleFailure(dispatch), nil
+			return sessionReadScaleCancellation(dispatch), nil
 		}
 	}
 	if call > executor.target {
@@ -205,7 +209,7 @@ func (executor *sessionReadScaleDispatchExecutor) Execute(ctx context.Context, d
 		case <-ctx.Done():
 			return workers.WorkResult{}, ctx.Err()
 		case <-executor.stopCh:
-			return sessionReadScaleFailure(dispatch), nil
+			return sessionReadScaleCancellation(dispatch), nil
 		}
 	}
 	return workers.WorkResult{
@@ -214,10 +218,13 @@ func (executor *sessionReadScaleDispatchExecutor) Execute(ctx context.Context, d
 	}, nil
 }
 
-func sessionReadScaleFailure(dispatch work.WorkDispatch) workers.WorkResult {
+func sessionReadScaleCancellation(dispatch work.WorkDispatch) workers.WorkResult {
 	return workers.WorkResult{
 		DispatchID: dispatch.DispatchID, TransitionID: dispatch.TransitionID,
-		Outcome: workers.OutcomeFailed, Error: "session read scale profile stopped",
+		Outcome: workers.OutcomeCanceled,
+		Cancellation: &workers.DispatchCancellation{
+			Reason: workers.DispatchCancellationReasonCanceled,
+		},
 	}
 }
 

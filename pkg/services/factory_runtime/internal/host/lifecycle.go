@@ -181,7 +181,7 @@ func WaitForStart(ctx context.Context, handle *Handle) error {
 		case <-handle.RunDone:
 			return startupResult(handle.Result())
 		case <-ticker.C:
-			snap, err := handle.Bundle.Factory.GetEngineStateSnapshot(context.Background())
+			snap, err := runtimeLifecycleSnapshot(context.Background(), handle.Bundle.Factory)
 			if err != nil {
 				continue
 			}
@@ -321,7 +321,7 @@ func (o *runtimeMetricsObserver) observe(handle *Handle, observedAt time.Time) {
 	if o == nil || handle == nil || handle.Bundle == nil || handle.Bundle.Factory == nil {
 		return
 	}
-	snapshot, err := handle.Bundle.Factory.GetEngineStateSnapshot(context.Background())
+	snapshot, err := runtimeLifecycleSnapshot(context.Background(), handle.Bundle.Factory)
 	if err == nil {
 		current := metricsObservationFromSnapshot(snapshot)
 		if current.changedFrom(o.last) {
@@ -391,12 +391,29 @@ func (o runtimeMetricsObservation) changedFrom(previous runtimeMetricsObservatio
 		o.inFlightCount != previous.inFlightCount
 }
 
+// runtimeLifecycleSnapshot keeps lifecycle telemetry on the detached runtime
+// boundary when the hosted implementation exposes it. The aggregate engine
+// snapshot is intentionally a compatibility fallback: it reconstructs the
+// canonical world and transition enablement, which makes stopping a runtime
+// increasingly expensive as its event history grows.
+func runtimeLifecycleSnapshot(
+	ctx context.Context,
+	engine Engine,
+) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+	if reader, ok := engine.(interface {
+		GetWorkStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
+	}); ok {
+		return reader.GetWorkStateSnapshot(ctx)
+	}
+	return engine.GetEngineStateSnapshot(ctx)
+}
+
 func finalizeRuntimeLifecycleMetrics(handle *Handle, last runtimeMetricsObservation) {
 	if handle == nil || handle.Bundle == nil || handle.Bundle.Factory == nil {
 		return
 	}
 	handle.lifecycleMetricsOnce.Do(func() {
-		snapshot, err := handle.Bundle.Factory.GetEngineStateSnapshot(context.Background())
+		snapshot, err := runtimeLifecycleSnapshot(context.Background(), handle.Bundle.Factory)
 		if err == nil {
 			current := metricsObservationFromSnapshot(snapshot)
 			if current.changedFrom(last) {

@@ -160,6 +160,7 @@ func (f *factoryImpl) GetWorkStateSnapshot(ctx context.Context) (*interfaces.Eng
 	currentState := f.state
 	f.mu.RUnlock()
 	runtimeSnap.FactoryState = string(currentState)
+	runtimeSnap.RuntimeStatus = f.deriveRuntimeStatus(currentState, runtimeSnap)
 	if currentState == interfaces.FactoryStatePaused {
 		runtimeSnap.LifecycleControlStatus = string(interfaces.FactorySessionLifecycleStatusPaused)
 	}
