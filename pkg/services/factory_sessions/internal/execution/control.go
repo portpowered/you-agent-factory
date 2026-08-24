@@ -440,7 +440,15 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	var runDone <-chan struct{}
+	defer func() {
+		// The terminal finalizer needs this lock before it can finish its
+		// durable write, so release it before joining the run.
+		s.mu.Unlock()
+		if runDone != nil {
+			<-runDone
+		}
+	}()
 
 	state, ok := s.sessions[id]
 	if !ok {
@@ -492,10 +500,14 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 		previousStatus := state.session.Status
 		if operation == LifecycleControlInterruptDispatch {
 			s.recordAcceptedRuntimeInterrupt(state, dispatchSummary, interrupt)
+			runDone = state.runDone
 		} else {
 			interruptRuntime := applyRuntimeAcceptedLifecycleControl(s, state, operation, retry, interrupt)
-			if interruptRuntime && state.runCancel != nil {
-				state.runCancel()
+			if interruptRuntime {
+				if state.runCancel != nil {
+					state.runCancel()
+				}
+				runDone = state.runDone
 			}
 			if operation == LifecycleControlPause || operation == LifecycleControlResume {
 				state.events = appendAcceptedSessionLifecycleEventIfNeeded(
