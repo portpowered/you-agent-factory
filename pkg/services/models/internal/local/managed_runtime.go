@@ -218,6 +218,62 @@ func ManagedRuntimeReadinessForFactoryContext(
 	return detail.ManagedRuntime, err
 }
 
+// ManagedRuntimeReadinessForEffectiveDefinitionContext applies current cache
+// facts to a catalog entry that came from an effective definition rather than
+// a Factory worker/resource projection. Built-in and operator model entries
+// use this path when a catalog scope has no authored runtime resources.
+func ManagedRuntimeReadinessForEffectiveDefinitionContext(
+	ctx context.Context,
+	baseline models.Runtime,
+	runtimeCfg *models.RuntimeConfig,
+	modelName string,
+	runtimeCacheInspector RuntimeCacheInspector,
+) (models.Runtime, error) {
+	if err := ctx.Err(); err != nil {
+		return models.Runtime{}, err
+	}
+	if runtimeCacheInspector == nil {
+		return baseline.Clone(), nil
+	}
+	inspection, err := runtimeCacheInspector.InspectRuntimeCache(ctx, runtimeCfg, modelName)
+	if err != nil {
+		return models.Runtime{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return models.Runtime{}, err
+	}
+	return projectManagedRuntimeCacheInspection(baseline, inspection), nil
+}
+
+func projectManagedRuntimeCacheInspection(
+	baseline models.Runtime,
+	inspection RuntimeCacheInspection,
+) models.Runtime {
+	projection := buildManagedRuntimeProjection(managedRuntimeProjection{
+		summary: managedRuntimeSummary{
+			name:       baseline.Identity,
+			locality:   managedruntime.Locality(baseline.Locality),
+			readiness:  managedruntime.ReadinessState(baseline.ReadinessState),
+			lifecycle:  managedruntime.LifecycleState(baseline.LifecycleState),
+			operations: baseline.SupportedOperations,
+		},
+		baseDiagnostics: baseline.Diagnostics,
+		cacheInspection: &inspection,
+		includeInspect:  true,
+	})
+	return models.Runtime{
+		Identity:            projection.Identity,
+		ReadinessState:      projection.ReadinessState,
+		LifecycleState:      projection.LifecycleState,
+		Locality:            projection.Locality,
+		Revision:            projection.Revision,
+		CachePath:           projection.CachePath,
+		CacheBytes:          projection.CacheBytes,
+		SupportedOperations: projection.SupportedOperations,
+		Diagnostics:         projection.Diagnostics,
+	}
+}
+
 type fixedRuntimeCacheInspector struct {
 	inspection RuntimeCacheInspection
 }
