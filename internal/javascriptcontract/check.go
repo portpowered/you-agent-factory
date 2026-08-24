@@ -31,9 +31,10 @@ type Diagnostic struct {
 }
 
 type fieldShape struct {
-	JSONType string
-	Required bool
-	Enum     []string
+	JSONType             string
+	Required             bool
+	Enum                 []string
+	AdditionalProperties *bool
 }
 
 // CheckGeneratedOutputs computes the canonical catalog and documentation
@@ -181,6 +182,10 @@ func compareFieldShapes(path, surface string, expected, actual map[string]fieldS
 				detail := fmt.Sprintf("got %v, expected %v", got.Enum, want.Enum)
 				diagnostics = append(diagnostics, fieldDiagnostic(path, surface, name, "enum", detail))
 			}
+			if !equalOptionalBool(want.AdditionalProperties, got.AdditionalProperties) {
+				detail := fmt.Sprintf("got %v, expected %v", optionalBoolValue(got.AdditionalProperties), optionalBoolValue(want.AdditionalProperties))
+				diagnostics = append(diagnostics, fieldDiagnostic(path, surface, name, "additionalProperties", detail))
+			}
 		}
 	}
 	return diagnostics
@@ -200,6 +205,8 @@ func fieldDiagnostic(path, surface, field, issue, detail string) Diagnostic {
 		message += " with mismatched requiredness"
 	case "enum":
 		message += " with mismatched allowed values"
+	case "additionalProperties":
+		message += " with mismatched additionalProperties metadata"
 	}
 	if detail != "" {
 		message += " (" + detail + ")"
@@ -255,7 +262,11 @@ func parseRuntimeCatalogFields(payload []byte) (map[string]fieldShape, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%s field %q has invalid enum: %w", RuntimeCatalogPath, name, err)
 		}
-		fields[name] = fieldShape{JSONType: jsonType, Required: required[name], Enum: enum}
+		additionalProperties, err := parseJSONBoolPointer(property["additionalProperties"])
+		if err != nil {
+			return nil, fmt.Errorf("%s field %q has invalid additionalProperties: %w", RuntimeCatalogPath, name, err)
+		}
+		fields[name] = fieldShape{JSONType: jsonType, Required: required[name], Enum: enum, AdditionalProperties: additionalProperties}
 	}
 	for name := range required {
 		if _, ok := fields[name]; !ok {
@@ -369,6 +380,31 @@ func equalStrings(left, right []string) bool {
 		}
 	}
 	return true
+}
+
+func parseJSONBoolPointer(value any) (*bool, error) {
+	if value == nil {
+		return nil, nil
+	}
+	boolean, ok := value.(bool)
+	if !ok {
+		return nil, fmt.Errorf("additionalProperties must be a boolean")
+	}
+	return &boolean, nil
+}
+
+func equalOptionalBool(left, right *bool) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
+}
+
+func optionalBoolValue(value *bool) any {
+	if value == nil {
+		return nil
+	}
+	return *value
 }
 
 func parseDocumentationCodeCell(cell string) (string, error) {

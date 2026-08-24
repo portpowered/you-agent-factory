@@ -130,18 +130,18 @@ to the facts that remain inspectable.
 <!-- BEGIN GENERATED: javascript.agent.run.fields -->
 ### `agent.run` request fields
 
-| Field | JSON type | Requiredness |
-|-------|-----------|--------------|
-| `prompt` | `string` | required |
-| `label` | `string` | optional |
-| `preset` | `string` | optional |
-| `executorProvider` | `string` | optional |
-| `modelProvider` | `string` | optional |
-| `model` | `string` | optional |
-| `reasoningEffort` | `string` | optional |
-| `resourceId` | `string` | optional |
-| `schema` | `object` | optional |
-| `permissions` | `string` | optional |
+| Field | JSON type | Requiredness | Allowed values |
+|-------|-----------|--------------|----------------|
+| `prompt` | `string` | required | — |
+| `label` | `string` | optional | — |
+| `preset` | `string` | optional | — |
+| `executorProvider` | `string` | optional | — |
+| `modelProvider` | `string` | optional | — |
+| `model` | `string` | optional | — |
+| `reasoningEffort` | `string` | optional | — |
+| `resourceId` | `string` | optional | — |
+| `schema` | `object` | optional | — |
+| `permissions` | `string` | optional | DEFAULT, SKIP_PERMISSIONS |
 <!-- END GENERATED: javascript.agent.run.fields -->
 
 Promises returned by `agent.run`, `parallel`, and `pipeline` must be awaited or

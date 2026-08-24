@@ -37,6 +37,11 @@ func TestGenerateRuntimeCatalogProjectsEveryRuntimeField(t *testing.T) {
 				t.Errorf("projected field %q enum = %#v, want %#v", descriptor.Name, projected["enum"], wantEnum)
 			}
 		}
+		if descriptor.AdditionalProperties != nil {
+			if got := projected["additionalProperties"]; got != *descriptor.AdditionalProperties {
+				t.Errorf("projected field %q additionalProperties = %#v, want %t", descriptor.Name, got, *descriptor.AdditionalProperties)
+			}
+		}
 	}
 	required := projectedRequired(t, payload)
 	if !reflect.DeepEqual(required, []any{"prompt"}) {

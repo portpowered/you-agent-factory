@@ -221,6 +221,9 @@
           "preset": {
             "type": "string"
           },
+          "executorProvider": {
+            "type": "string"
+          },
           "modelProvider": {
             "type": "string"
           },
@@ -228,6 +231,9 @@
             "type": "string"
           },
           "reasoningEffort": {
+            "type": "string"
+          },
+          "resourceId": {
             "type": "string"
           },
           "schema": {

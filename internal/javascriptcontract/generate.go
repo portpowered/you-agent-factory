@@ -129,6 +129,9 @@ func validateFields(fields []factoryruntime.JavaScriptChildFieldDescriptor) erro
 		if len(field.Enum) > 0 && field.JSONType != "string" {
 			return fmt.Errorf("agent.run runtime descriptor field %q cannot declare enum values for JSON type %q", field.Name, field.JSONType)
 		}
+		if field.AdditionalProperties != nil && field.JSONType != "object" {
+			return fmt.Errorf("agent.run runtime descriptor field %q cannot declare additionalProperties for JSON type %q", field.Name, field.JSONType)
+		}
 	}
 	return nil
 }
@@ -330,6 +333,14 @@ func marshalProperties(fields []factoryruntime.JavaScriptChildFieldDescriptor) (
 			return nil, fmt.Errorf("encode JSON type for %q: %w", field.Name, err)
 		}
 		result.Write(typeName)
+		if field.AdditionalProperties != nil {
+			result.WriteString(",\n    \"additionalProperties\": ")
+			additionalProperties, err := json.Marshal(*field.AdditionalProperties)
+			if err != nil {
+				return nil, fmt.Errorf("encode additionalProperties for %q: %w", field.Name, err)
+			}
+			result.Write(additionalProperties)
+		}
 		if len(field.Enum) > 0 {
 			result.WriteString(",\n    \"enum\": [")
 			for enumIndex, allowed := range field.Enum {

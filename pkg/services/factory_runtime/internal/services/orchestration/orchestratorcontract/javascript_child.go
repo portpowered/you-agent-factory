@@ -36,11 +36,14 @@ const (
 // agent.run spec property. JSONType is the JSON value type accepted by the
 // request normalizer and emitted by generated runtime projections.
 type JavaScriptChildFieldDescriptor struct {
-	Name     string
-	JSONType string
-	Required bool
-	Enum     []string
+	Name                 string
+	JSONType             string
+	Required             bool
+	Enum                 []string
+	AdditionalProperties *bool
 }
+
+var schemaAdditionalProperties = false
 
 var javaScriptChildFieldDescriptors = [...]JavaScriptChildFieldDescriptor{
 	{Name: FieldPrompt, JSONType: "string", Required: true},
@@ -51,7 +54,7 @@ var javaScriptChildFieldDescriptors = [...]JavaScriptChildFieldDescriptor{
 	{Name: FieldModel, JSONType: "string"},
 	{Name: FieldReasoningEffort, JSONType: "string"},
 	{Name: FieldResourceID, JSONType: "string"},
-	{Name: FieldSchema, JSONType: "object"},
+	{Name: FieldSchema, JSONType: "object", AdditionalProperties: &schemaAdditionalProperties},
 	{Name: FieldPermissions, JSONType: "string", Enum: []string{
 		string(JavaScriptChildPermissionDefault),
 		string(JavaScriptChildPermissionSkipPermissions),
@@ -87,6 +90,10 @@ func JavaScriptChildFieldDescriptors() []JavaScriptChildFieldDescriptor {
 	fields := append([]JavaScriptChildFieldDescriptor(nil), javaScriptChildFieldDescriptors[:]...)
 	for index := range fields {
 		fields[index].Enum = append([]string(nil), fields[index].Enum...)
+		if fields[index].AdditionalProperties != nil {
+			additionalProperties := *fields[index].AdditionalProperties
+			fields[index].AdditionalProperties = &additionalProperties
+		}
 	}
 	return fields
 }

@@ -165,7 +165,7 @@ func TestJavaScriptChildFieldDescriptorIsDetachedAndRuntimeAligned(t *testing.T)
 		{Name: "model", JSONType: "string"},
 		{Name: "reasoningEffort", JSONType: "string"},
 		{Name: "resourceId", JSONType: "string"},
-		{Name: "schema", JSONType: "object"},
+		{Name: "schema", JSONType: "object", AdditionalProperties: boolPointer(false)},
 		{Name: "permissions", JSONType: "string", Enum: []string{"DEFAULT", "SKIP_PERMISSIONS"}},
 	}
 	if !reflect.DeepEqual(descriptors, want) {
@@ -179,6 +179,10 @@ func TestJavaScriptChildFieldDescriptorIsDetachedAndRuntimeAligned(t *testing.T)
 	if got := factory.JavaScriptChildFieldDescriptors()[len(descriptors)-1].Enum[0]; got != "DEFAULT" {
 		t.Fatalf("mutating descriptor result changed runtime enum to %q", got)
 	}
+}
+
+func boolPointer(value bool) *bool {
+	return &value
 }
 
 func TestNormalize_ClonesValidSchemaWithoutSharingNestedState(t *testing.T) {
