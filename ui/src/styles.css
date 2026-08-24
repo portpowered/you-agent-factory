@@ -256,6 +256,12 @@
   }
 
   :is([data-current-activity-flow], [data-dashboard-graph-frame])
+    .react-flow__controls-button:focus-visible {
+    outline: 2px solid var(--color-af-graph-focus-indicator);
+    outline-offset: -2px;
+  }
+
+  :is([data-current-activity-flow], [data-dashboard-graph-frame])
     .react-flow__controls-button:disabled {
     @apply text-af-text-disabled;
   }
@@ -297,6 +303,30 @@
     .react-flow__edge.agent-flow-edge--muted
     .react-flow__edge-text {
     @apply fill-af-text-disabled;
+  }
+
+  [data-color-palette="factory-dark"]
+    [data-current-activity-flow]
+    .react-flow__edge.agent-flow-edge--role-muted:not(
+      .agent-flow-edge--active
+    ):not(.agent-flow-edge--pending-addition):not(:hover) {
+    opacity: var(--color-edge-muted-opacity);
+  }
+
+  [data-color-palette="factory-dark"]
+    [data-current-activity-flow]
+    .react-flow__edge.agent-flow-edge--role-muted-soft:not(
+      .agent-flow-edge--active
+    ):not(.agent-flow-edge--pending-addition):not(:hover) {
+    opacity: var(--color-edge-muted-soft-opacity);
+  }
+
+  [data-color-palette="factory-dark"]
+    [data-current-activity-flow]
+    .react-flow__edge.agent-flow-edge--role-danger-muted:not(
+      .agent-flow-edge--active
+    ):not(.agent-flow-edge--pending-addition):not(:hover) {
+    opacity: var(--color-edge-danger-muted-opacity);
   }
 
   [data-current-activity-flow]

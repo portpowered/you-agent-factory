@@ -30,6 +30,21 @@ describe("buildGraphEdges hover emphasis", () => {
         edge.className?.includes(CURRENT_ACTIVITY_GRAPH_EDGE_HOVER_CLASS),
       ),
     ).toBe(true);
+    expect(
+      neutralEdges.some((edge) =>
+        edge.className?.includes("agent-flow-edge--role-muted"),
+      ),
+    ).toBe(true);
+    expect(
+      neutralEdges.some((edge) =>
+        edge.className?.includes("agent-flow-edge--role-muted-soft"),
+      ),
+    ).toBe(true);
+    expect(
+      neutralEdges.some((edge) =>
+        edge.className?.includes("agent-flow-edge--role-danger-muted"),
+      ),
+    ).toBe(true);
 
     const activeEdge = visibleGraphEdges.find(
       (edge) =>

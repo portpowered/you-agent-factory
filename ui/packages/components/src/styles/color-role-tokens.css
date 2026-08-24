@@ -145,6 +145,9 @@
   --color-edge-muted: var(--color-on-surface-variant);
   --color-edge-muted-soft: rgb(from var(--color-on-surface) r g b / 0.56);
   --color-edge-danger-muted: var(--color-error);
+  --color-edge-muted-opacity: 1;
+  --color-edge-muted-soft-opacity: 1;
+  --color-edge-danger-muted-opacity: 1;
   --color-graph-controls-surface: var(--color-surface);
   --color-graph-controls-button-surface: var(--color-surface-container-high);
   --color-graph-controls-button-surface-hover: var(--color-overlay);
@@ -263,4 +266,16 @@
   --color-chart-queued: var(--color-on-warning-container);
   --color-chart-failed: var(--color-error);
   --color-chart-failure-trend: var(--color-error);
+}
+
+/*
+ * Keep the original Factory Dark graph strokes while the shared foreground
+ * roles remain palette-aware for the other presets. The opaque role colors
+ * preserve the contrast contract; these palette-specific opacities preserve
+ * the prior rendered alpha on the dark graph canvas.
+ */
+[data-color-palette="factory-dark"] {
+  --color-edge-muted-opacity: 0.18;
+  --color-edge-muted-soft-opacity: 0.1;
+  --color-edge-danger-muted-opacity: 0.32;
 }

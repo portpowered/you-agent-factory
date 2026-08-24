@@ -415,6 +415,19 @@ describe("factory graph edge palette contract", () => {
     ).toEqual([]);
     expect(measurements).toHaveLength(15);
   });
+
+  it("retains Factory Dark graph stroke alpha through palette roles", () => {
+    applyDocumentColorPalette("factory-dark");
+    const computedStyle = getComputedStyle(document.documentElement);
+
+    expect(
+      [
+        "--color-edge-muted-opacity",
+        "--color-edge-muted-soft-opacity",
+        "--color-edge-danger-muted-opacity",
+      ].map((token) => computedStyle.getPropertyValue(token).trim()),
+    ).toEqual(["0.18", "0.1", "0.32"]);
+  });
 });
 
 describe("palette token resolution diagnostics", () => {
