@@ -20,7 +20,7 @@ func TestNewInvocationRuntimeFailsClosedWhenOmniProtocolIsUnbound(t *testing.T) 
 	if !ok {
 		t.Fatal("GenericOperationContract(OMNI) = false")
 	}
-	runtime := newInvocationRuntime(nil)
+	runtime := newInvocationRuntime(nil, nil)
 	result, err := runtime.Invoke(context.Background(), inference.InvocationRuntimeRequest{
 		Request: models.InvokeModelRequest{
 			Scope: scope, Holder: "unbound-test", Model: models.ModelReference{NameOrURI: "llm"},

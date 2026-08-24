@@ -29,7 +29,10 @@ func (s *service) acquireHostSlot(
 	entry := s.hostSlots[key]
 	if entry != nil && entry.warm {
 		s.hostMu.Unlock()
-		return inference.HostHandleSlot{Reused: true}, nil
+		return inference.HostHandleSlot{
+			Reused:   true,
+			Endpoint: s.invocationEndpoint(ctx, request.Scope, request.ModelName),
+		}, nil
 	}
 	s.hostMu.Unlock()
 
@@ -52,5 +55,26 @@ func (s *service) acquireHostSlot(
 	s.hostSlots[key].warm = true
 	s.hostMu.Unlock()
 
-	return inference.HostHandleSlot{Reused: reused}, nil
+	return inference.HostHandleSlot{
+		Reused:   reused,
+		Endpoint: s.invocationEndpoint(ctx, request.Scope, request.ModelName),
+	}, nil
+}
+
+func (s *service) invocationEndpoint(
+	ctx context.Context,
+	scope models.RuntimeScopeRef,
+	modelName string,
+) string {
+	provider, ok := s.runtimeHost.(interface {
+		InvocationEndpoint(context.Context, models.RuntimeScopeRef, string) (string, error)
+	})
+	if !ok {
+		return ""
+	}
+	endpoint, err := provider.InvocationEndpoint(ctx, scope, modelName)
+	if err != nil {
+		return ""
+	}
+	return endpoint
 }

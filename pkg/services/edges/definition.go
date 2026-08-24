@@ -20,6 +20,7 @@ import (
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -145,6 +146,10 @@ type Edges struct {
 	ModelInvocationProtocolClient interface {
 		Predict(context.Context, models.InvocationProtocolRequest) (models.InvocationProtocolResponse, error)
 	}
+	// ModelInvocationGRPCDialer is the policy-free transport edge used by the
+	// production pinned LocalAI adapter. Backend method names and protobuf
+	// messages stay behind the Models wire boundary.
+	ModelInvocationGRPCDialer                  platformgrpc.Dialer
 	FactorySessionsWorkingDirectory            platformfilesystem.WorkingDirectory
 	FactorySessionExecutionOpeningFileSystem   factorysessions.ExecutionOpeningFileSystem
 	FactorySessionDirectoryInspection          factorysessions.DirectoryInspection
@@ -444,6 +449,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.ModelInvocationProtocolClient != nil {
 		defaults.ModelInvocationProtocolClient = replacements.ModelInvocationProtocolClient
+	}
+	if replacements.ModelInvocationGRPCDialer != nil {
+		defaults.ModelInvocationGRPCDialer = replacements.ModelInvocationGRPCDialer
 	}
 	if replacements.FactorySessionsWorkingDirectory != nil {
 		defaults.FactorySessionsWorkingDirectory = replacements.FactorySessionsWorkingDirectory

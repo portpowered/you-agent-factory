@@ -434,6 +434,18 @@ func (r *supervisedRuntime) isReady() bool {
 	return r.state == supervisedStateReady
 }
 
+func (r *supervisedRuntime) invocationEndpoint() string {
+	if r == nil {
+		return ""
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.state != supervisedStateReady {
+		return ""
+	}
+	return strings.TrimSpace(r.endpoint)
+}
+
 func (r *supervisedRuntime) isLoading() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
