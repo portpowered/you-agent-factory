@@ -6,13 +6,16 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 func TestCanonicalRuntimeBridgeHelpers(t *testing.T) {
@@ -179,6 +182,115 @@ func TestCanonicalMockCommandRunnerRequiresNextCommandRunner(t *testing.T) {
 	_, err := runner.Run(context.Background(), platformprocess.CommandRequest{Command: "codex"})
 	if err == nil || !strings.Contains(err.Error(), "next command runner is required") {
 		t.Fatalf("Run(no next runner) error = %v, want a required-next-runner failure", err)
+	}
+}
+
+func TestCanonicalProviderCommandRunnerProjectsRequestsAndStreaming(t *testing.T) {
+	t.Parallel()
+
+	next := &providerWireWorkerRunner{}
+	runner := providerCommandRunner{runner: next}
+	request := providerCommandRequest{
+		Command:         "codex",
+		Args:            []string{"--headless"},
+		Stdin:           []byte("input"),
+		Env:             []string{"MODE=test"},
+		WorkDir:         "factory",
+		DispatchID:      "dispatch-1",
+		AttemptID:       "attempt-1",
+		TransitionID:    "transition-1",
+		WorkerType:      "agent",
+		WorkstationName: "workstation-1",
+		ProjectID:       "project-1",
+		InputTokens:     []any{"token"},
+		InputBindings:   map[string][]string{"input": {"token"}},
+		Execution:       work.ExecutionMetadata{RequestID: "request-1"},
+	}
+
+	result, err := runner.Run(context.Background(), request)
+	if err != nil {
+		t.Fatalf("providerCommandRunner.Run() error = %v", err)
+	}
+	if string(result.Stdout) != "provider-run" {
+		t.Fatalf("providerCommandRunner.Run() result = %#v", result)
+	}
+	if len(next.requests) != 1 || next.requests[0].DispatchID != "dispatch-1" {
+		t.Fatalf("projected Run() requests = %#v", next.requests)
+	}
+	if next.requests[0].Command != request.Command || next.requests[0].WorkDir != request.WorkDir {
+		t.Fatalf("projected Run() request = %#v", next.requests[0])
+	}
+
+	request.DispatchID = ""
+	result, err = runner.Run(context.Background(), request)
+	if err != nil {
+		t.Fatalf("providerCommandRunner.Run() fallback error = %v", err)
+	}
+	if len(next.requests) != 2 || next.requests[1].DispatchID != "attempt-1" {
+		t.Fatalf("attempt fallback request = %#v", next.requests[1])
+	}
+
+	var chunks []recordedOutputChunk
+	result, err = runner.RunStreaming(context.Background(), request, recordOutputChunks(&chunks))
+	if err != nil {
+		t.Fatalf("providerCommandRunner.RunStreaming() error = %v", err)
+	}
+	if string(result.Stdout) != "provider-stream" {
+		t.Fatalf("providerCommandRunner.RunStreaming() result = %#v", result)
+	}
+	assertStreamedChunks(t, chunks, []recordedOutputChunk{{stream: platformprocess.OutputStreamStdout, chunk: "provider chunk"}})
+
+	if _, ok := NewProviderCommandRunner(stubCanonicalCommandRunner{}).(providerCommandRunner); !ok {
+		t.Fatal("NewProviderCommandRunner() returned an unexpected shape")
+	}
+}
+
+func TestCanonicalProviderCommandRunnerHandlesMissingAndBufferedEdges(t *testing.T) {
+	t.Parallel()
+
+	var missing providerCommandRunner
+	if _, err := missing.Run(context.Background(), providerCommandRequest{}); err == nil || !strings.Contains(err.Error(), "provider command runner is required") {
+		t.Fatalf("providerCommandRunner.Run(nil) error = %v", err)
+	}
+	if _, err := missing.RunStreaming(context.Background(), providerCommandRequest{}, nil); err == nil || !strings.Contains(err.Error(), "provider command runner is required") {
+		t.Fatalf("providerCommandRunner.RunStreaming(nil) error = %v", err)
+	}
+
+	buffered := providerCommandRunner{runner: providerWireBufferedWorkerRunner{}}
+	var chunks []recordedOutputChunk
+	result, err := buffered.RunStreaming(context.Background(), providerCommandRequest{}, recordOutputChunks(&chunks))
+	if err != nil {
+		t.Fatalf("buffered providerCommandRunner.RunStreaming() error = %v", err)
+	}
+	if string(result.Stdout) != "buffered stdout" || string(result.Stderr) != "buffered stderr" {
+		t.Fatalf("buffered provider result = %#v", result)
+	}
+	assertStreamedChunks(t, chunks, []recordedOutputChunk{
+		{stream: platformprocess.OutputStreamStdout, chunk: "buffered stdout"},
+		{stream: platformprocess.OutputStreamStderr, chunk: "buffered stderr"},
+	})
+}
+
+func TestCanonicalLoggingAndProviderBridgesExposeRequiredEdges(t *testing.T) {
+	t.Parallel()
+
+	if got := NewLoggingCommandRunner(nil, nil, func() time.Time { return time.Unix(1, 0) }); got != nil {
+		t.Fatalf("NewLoggingCommandRunner(nil runner) = %#v, want nil", got)
+	}
+	if got := NewLoggingCommandRunner(stubCanonicalCommandRunner{}, nil, nil); got == nil {
+		t.Fatal("NewLoggingCommandRunner(missing clock) returned nil")
+	}
+	if got := NewLoggingCommandRunner(stubCanonicalCommandRunner{}, nil, func() time.Time { return time.Unix(1, 0) }); got == nil {
+		t.Fatal("NewLoggingCommandRunner() returned nil")
+	}
+
+	service := &statelessTestProviders{}
+	got, err := NewProviderFromCommandRunner(service, nil, nil, nil, nil, nil, nil, "")
+	if err != nil {
+		t.Fatalf("NewProviderFromCommandRunner() error = %v", err)
+	}
+	if got != service {
+		t.Fatalf("NewProviderFromCommandRunner() service = %#v, want original service", got)
 	}
 }
 
@@ -381,4 +493,34 @@ type canonicalCommandRunnerFunc func(context.Context, platformprocess.CommandReq
 
 func (runner canonicalCommandRunnerFunc) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	return runner(ctx, request)
+}
+
+type providerWireWorkerRunner struct {
+	requests []workerprocess.CommandRequest
+}
+
+func (runner *providerWireWorkerRunner) Run(_ context.Context, request workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
+	runner.requests = append(runner.requests, workerprocess.CloneCommandRequest(request))
+	return workerprocess.CommandResult{Stdout: []byte("provider-run")}, nil
+}
+
+func (runner *providerWireWorkerRunner) RunStreaming(
+	_ context.Context,
+	request workerprocess.CommandRequest,
+	observer workerprocess.OutputChunkObserver,
+) (workerprocess.CommandResult, error) {
+	runner.requests = append(runner.requests, workerprocess.CloneCommandRequest(request))
+	if observer != nil {
+		observer(workerprocess.OutputStreamStdout, []byte("provider chunk"))
+	}
+	return workerprocess.CommandResult{Stdout: []byte("provider-stream")}, nil
+}
+
+type providerWireBufferedWorkerRunner struct{}
+
+func (providerWireBufferedWorkerRunner) Run(context.Context, workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
+	return workerprocess.CommandResult{
+		Stdout: []byte("buffered stdout"),
+		Stderr: []byte("buffered stderr"),
+	}, nil
 }
