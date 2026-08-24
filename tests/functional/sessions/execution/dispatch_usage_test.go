@@ -108,22 +108,39 @@ func runPetriDispatchUsage(t *testing.T, test petriDispatchUsageCase) string {
 
 func assertPetriDispatchUsage(t *testing.T, endpoint string, test petriDispatchUsageCase) {
 	t.Helper()
-	response, err := http.Get(endpoint)
-	if err != nil {
-		t.Fatalf("GET %s: %v", endpoint, err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		payload, _ := io.ReadAll(response.Body)
-		t.Fatalf("GET %s status = %d, want 200: %s", endpoint, response.StatusCode, payload)
-	}
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatalf("read GET %s response: %v", endpoint, err)
-	}
-	var listed factoryapi.ListFactorySessionDispatchesResponse
-	if err := json.Unmarshal(body, &listed); err != nil {
-		t.Fatalf("decode GET %s response: %v", endpoint, err)
+	deadline := time.NewTimer(10 * time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	var (
+		body   []byte
+		listed factoryapi.ListFactorySessionDispatchesResponse
+	)
+	for {
+		response, err := http.Get(endpoint)
+		if err != nil {
+			t.Fatalf("GET %s: %v", endpoint, err)
+		}
+		body, err = io.ReadAll(response.Body)
+		response.Body.Close()
+		if err != nil {
+			t.Fatalf("read GET %s response: %v", endpoint, err)
+		}
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("GET %s status = %d, want 200: %s", endpoint, response.StatusCode, body)
+		}
+		listed = factoryapi.ListFactorySessionDispatchesResponse{}
+		if err := json.Unmarshal(body, &listed); err != nil {
+			t.Fatalf("decode GET %s response: %v", endpoint, err)
+		}
+		if len(listed.Dispatches) > 0 {
+			break
+		}
+		select {
+		case <-deadline.C:
+			t.Fatalf("GET %s dispatches remained empty after waiting for recording projection", endpoint)
+		case <-ticker.C:
+		}
 	}
 	if len(listed.Dispatches) != 1 {
 		t.Fatalf("GET %s dispatches = %#v, want one completed Petri dispatch", endpoint, listed.Dispatches)

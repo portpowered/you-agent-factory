@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -192,6 +193,23 @@ func (s *Server) handleDurableLifecycleControl(
 	s.writeLifecycleControlSuccessWithDiagnostics(w, response, diagnostics.Paths())
 }
 
+// usesDurableLifecycleControl selects the durable control owner for a durable
+// identity that is not also registered as a live Factory Session. A live
+// session remains authoritative when an injected or restored live identity
+// happens to use the durable prefix; otherwise its stop request would be
+// applied to a separate durable owner and leave the live runtime active.
+func (s *Server) usesDurableLifecycleControl(ctx context.Context, sessionID string) bool {
+	if !isDurableExecutionSessionID(sessionID) {
+		return false
+	}
+	if s.liveControl != nil {
+		if _, err := s.liveControl.GetFactorySession(ctx, sessionID); err == nil {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Server) handleLiveLifecycleControl(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -358,7 +376,7 @@ func (s *Server) ApproveFactorySession(w http.ResponseWriter, r *http.Request, s
 }
 
 func (s *Server) PauseFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	if isDurableExecutionSessionID(string(sessionID)) {
+	if s.usesDurableLifecycleControl(r.Context(), string(sessionID)) {
 		s.handleDurableLifecycleControl(w, r, sessionID, "pause", func(
 			lifecycle apisurface.DurableSessionLifecycleAPI,
 			req factorysessionexecution.ControlRequest,
@@ -376,7 +394,7 @@ func (s *Server) PauseFactorySession(w http.ResponseWriter, r *http.Request, ses
 }
 
 func (s *Server) ResumeFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	if isDurableExecutionSessionID(string(sessionID)) {
+	if s.usesDurableLifecycleControl(r.Context(), string(sessionID)) {
 		s.handleDurableLifecycleControl(w, r, sessionID, "resume", func(
 			lifecycle apisurface.DurableSessionLifecycleAPI,
 			req factorysessionexecution.ControlRequest,
@@ -394,7 +412,7 @@ func (s *Server) ResumeFactorySession(w http.ResponseWriter, r *http.Request, se
 }
 
 func (s *Server) CancelFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	if isDurableExecutionSessionID(string(sessionID)) {
+	if s.usesDurableLifecycleControl(r.Context(), string(sessionID)) {
 		s.handleDurableLifecycleControl(w, r, sessionID, "cancel", func(
 			lifecycle apisurface.DurableSessionLifecycleAPI,
 			req factorysessionexecution.ControlRequest,
@@ -412,7 +430,7 @@ func (s *Server) CancelFactorySession(w http.ResponseWriter, r *http.Request, se
 }
 
 func (s *Server) TerminateFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	if isDurableExecutionSessionID(string(sessionID)) {
+	if s.usesDurableLifecycleControl(r.Context(), string(sessionID)) {
 		s.handleDurableLifecycleControl(w, r, sessionID, "terminate", func(
 			lifecycle apisurface.DurableSessionLifecycleAPI,
 			req factorysessionexecution.ControlRequest,
