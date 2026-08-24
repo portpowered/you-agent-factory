@@ -22,8 +22,8 @@ doc-id: agent-factory/proposals/dispatch-performance-cost-mvp-how-to
 The core reader, CLI, dispatch-usage, session-scope, cost-rollup, price-table,
 and bounded-read work described here is merged in PRs #2094, #2106, #2084,
 #2141, #2159, #2120, #2162, and #2152. The related customer-documentation and
-guard work remains open in PR #2252. This note records delivery state only;
-the proposed command and report design below is unchanged.
+guard work is merged in PR #2252. This note records delivery state only; the
+proposed command and report design below is unchanged.
 
 Use dispatch performance reports to answer three questions:
 
