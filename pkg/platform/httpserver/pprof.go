@@ -127,15 +127,13 @@ Types of profiles available:
 
 	for _, profile := range profiles {
 		link := &url.URL{Path: profile.Href, RawQuery: "debug=1"}
-		if _, err := fmt.Fprintf(
+		_, _ = fmt.Fprintf(
 			&body,
 			"<tr><td>%d</td><td><a href='%s'>%s</a></td></tr>\n",
 			profile.Count,
 			link,
 			html.EscapeString(profile.Name),
-		); err != nil {
-			return err
-		}
+		)
 	}
 
 	body.WriteString(`</table>
@@ -144,16 +142,14 @@ Types of profiles available:
 <p>
 Profile Descriptions:
 <ul>
-`)
+	`)
 	for _, profile := range profiles {
-		if _, err := fmt.Fprintf(
+		_, _ = fmt.Fprintf(
 			&body,
 			"<li><div class=profile-name>%s: </div> %s</li>\n",
 			html.EscapeString(profile.Name),
 			html.EscapeString(profile.Desc),
-		); err != nil {
-			return err
-		}
+		)
 	}
 	body.WriteString(`</ul>
 </p>
