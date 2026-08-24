@@ -76,3 +76,64 @@ func TestServiceRegisterResolveAndUnregister(t *testing.T) {
 		t.Fatalf("unregister = (closed %q, count %d), want (%q, 0)", closed, registry.Count(), id)
 	}
 }
+
+func TestServiceRegisterDefaultPreservesCanonicalRuntimeID(t *testing.T) {
+	t.Parallel()
+
+	clock := platformclock.Real{}
+	registry := sessionregistry.New()
+	service := sessionruntime.New(
+		registry,
+		responsestream.NewRegistry(newRuntimeTestResponseStream, clock),
+		nil,
+		clock,
+		func() string { return "response-event-test-id" },
+		func() string { return "replacement-session-id" },
+	)
+	canonicalID := "550e8400-e29b-41d4-a716-446655440000"
+	existing := livesession.NewWithRuntimeID(
+		factorysessions.DefaultSessionID,
+		"factory-dir",
+		"folder-path",
+		"execution-base",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		struct{}{},
+		true,
+		"project",
+		clock,
+		func() string { return "existing-session-id" },
+		func() string { return "existing-response-event-id" },
+		canonicalID,
+	)
+	if existing == nil {
+		t.Fatal("construct existing default session")
+	}
+	registry.Upsert(existing, true)
+
+	gotID := service.Register(sessionruntime.Registration{
+		SessionID:         factorysessions.DefaultSessionID,
+		Default:           true,
+		AllocateDefaultID: true,
+		Handle:            struct{}{},
+	})
+	if gotID != factorysessions.DefaultSessionID {
+		t.Fatalf("replacement default ID = %q, want public alias %q", gotID, factorysessions.DefaultSessionID)
+	}
+	got := service.Default()
+	if got == nil {
+		t.Fatal("replacement default session is nil")
+	}
+	if got.RuntimeFactorySessionID != canonicalID {
+		t.Fatalf("replacement canonical runtime ID = %q, want %q", got.RuntimeFactorySessionID, canonicalID)
+	}
+	if service.Resolve(canonicalID) != got || got.ResponseEvents == nil || got.ResponseEvents.FactorySessionID() != canonicalID {
+		t.Fatalf("replacement canonical session resolution/events = (%v, %q), want canonical session", service.Resolve(canonicalID) == got, responseEventSessionID(got))
+	}
+}
+
+func responseEventSessionID(session *livesession.LiveSession) string {
+	if session == nil || session.ResponseEvents == nil {
+		return ""
+	}
+	return session.ResponseEvents.FactorySessionID()
+}

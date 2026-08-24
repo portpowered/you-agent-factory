@@ -275,15 +275,20 @@ func TestCLIRunDefaultsRetainWireSelectedRecordingTargetPlanner(t *testing.T) {
 func TestProductionLiveRecordingTargetPlannerIsUsable(t *testing.T) {
 	t.Parallel()
 
-	target, err := provideLiveRecordingTargetPlanner().PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest{
-		HomeDir:           t.TempDir(),
-		ReportedSessionID: "~default",
+	reserver, err := provideRuntimeArtifactPathReserver()
+	if err != nil {
+		t.Fatalf("provideRuntimeArtifactPathReserver: %v", err)
+	}
+	target, err := provideLiveRecordingTargetPlanner(reserver).PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest{
+		HomeDir:            t.TempDir(),
+		CanonicalSessionID: "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba",
+		ReportedSessionID:  "~default",
 	})
 	if err != nil {
 		t.Fatalf("PlanLiveRecordingTarget: %v", err)
 	}
-	if target.ServicePath == "" || target.ReportedPath == "" || target.ServicePath == target.ReportedPath {
-		t.Fatalf("target = %#v, want distinct runtime template and reported paths", target)
+	if target.ServicePath == "" || target.ReportedPath == "" || target.ServicePath != target.ReportedPath {
+		t.Fatalf("target = %#v, want one canonical service/reported path", target)
 	}
 }
 

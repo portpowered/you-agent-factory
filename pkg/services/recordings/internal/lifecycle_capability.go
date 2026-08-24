@@ -77,9 +77,10 @@ func (service *combinedService) Begin(
 		RecordingID: recordings.RecordingID(request.RecordingID),
 		Scope:       fromLifecycleScope(request.Scope),
 		Target: recordings.RecordingTargetRequest{
-			Artifact:          recordings.RecordingArtifactReference(request.Artifact),
-			HomeDir:           request.HomeDir,
-			ReportedSessionID: request.ReportedSessionID,
+			Artifact:           recordings.RecordingArtifactReference(request.Artifact),
+			HomeDir:            request.HomeDir,
+			CanonicalSessionID: request.CanonicalSessionID,
+			ReportedSessionID:  request.ReportedSessionID,
 		},
 		FlushInterval: request.FlushInterval,
 	})

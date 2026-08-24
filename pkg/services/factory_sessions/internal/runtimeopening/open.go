@@ -96,6 +96,11 @@ func openRuntime(
 	if sessionID == "" {
 		sessionID = factorysessions.DefaultSessionID
 	}
+	canonicalSessionID := strings.TrimSpace(sessionRequest.CanonicalSessionID)
+	effectiveSessionID := sessionID
+	if canonicalSessionID != "" {
+		effectiveSessionID = canonicalSessionID
+	}
 	sessionRequest.FactorySessionID = sessionID
 	workerRequest := request.Workers
 	recordingRequest := request.Recordings
@@ -282,12 +287,12 @@ func openRuntime(
 	// direct live opening should restore the current board recording; applying
 	// that restart-only probe to an explicit resume artifact would reject valid
 	// replay fixtures that intentionally have no current-board recording.
-	if load.ReplayArtifact == nil && resumeInput == nil {
+	if load.ReplayArtifact == nil && resumeInput == nil && canonicalSessionID == "" {
 		if strings.TrimSpace(configured.Recordings.RecordPath) != "" {
 			boardHistoryOpening, err = inspectCurrentBoardHistory(
 				ctx,
 				durableExecution.Service,
-				sessionID,
+				effectiveSessionID,
 			)
 			if err != nil {
 				return runtimeProducts{}, err
@@ -296,7 +301,7 @@ func openRuntime(
 		restoredWorldState, err = restoreCurrentBoardState(
 			recordingsService,
 			configured.Recordings.RecordPath,
-			sessionID,
+			effectiveSessionID,
 			boardHistoryOpening.allowMissingHistory,
 		)
 		if err != nil {
@@ -317,7 +322,7 @@ func openRuntime(
 			configured.Recordings.ReplayPath == "",
 			configured.Recordings.RecordPath,
 			configured.Recordings.WorkflowID,
-			sessionID,
+			effectiveSessionID,
 			nil,
 			loadFactory,
 			providerOverride,
@@ -396,7 +401,7 @@ func openRuntime(
 		startupRuntime.RecordingLedger(),
 		load.LoadedFactoryCfg,
 		load.ReplayArtifact == nil,
-		sessionID,
+		effectiveSessionID,
 	)
 	if err != nil {
 		return runtimeProducts{}, err
@@ -497,7 +502,7 @@ func openRuntime(
 		resourceLeaseAdmission = admission
 	}
 	if err := bindDurableExecutionCapabilities(
-		sessionID,
+		effectiveSessionID,
 		durableExecution.Service,
 		workerService,
 		rootRuntime,
@@ -533,7 +538,7 @@ func openRuntime(
 		configured.Runtime.RuntimeInstanceID,
 		configured.Session.BackendScopeID,
 		cleanup.Close,
-		sessionID,
+		effectiveSessionID,
 	)
 	opened.engine = startupRuntime.RuntimeService()
 	opened.application.Resources.Clock = clock

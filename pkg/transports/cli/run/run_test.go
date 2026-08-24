@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/work/transports/cli/batchload"
@@ -477,6 +478,9 @@ func runRecordOrReplayPathCase(t *testing.T, tt recordOrReplayPathCase) {
 	tt.cfg.RecordingTargetPlanner = recordings.LiveRecordingTargetPlannerFunc(func(request recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
 		if request.HomeDir != tt.cfg.HomeDir || request.ReportedSessionID != defaultFactorySessionID {
 			t.Fatalf("recording request = %#v", request)
+		}
+		if _, err := uuid.Parse(request.CanonicalSessionID); err != nil {
+			t.Fatalf("canonical session ID = %q, want UUID: %v", request.CanonicalSessionID, err)
 		}
 		return recordings.LiveRecordingTarget{ServicePath: plannedPath, ReportedPath: plannedPath}, nil
 	})

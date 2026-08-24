@@ -11,10 +11,10 @@ import (
 // the Recordings composition layer without exposing its implementation package.
 func NewTargetPlanner(
 	clock recordings.RecordingClock,
-	newID recordings.RecordingIdentityGenerator,
+	reserve recordings.RecordingNamedPathReserver,
 	join recordings.RecordingPathJoiner,
 ) recordings.LiveRecordingTargetPlanner {
-	return lifecycleservice.NewTargetPlanner(clock, newID, join)
+	return lifecycleservice.NewTargetPlanner(clock, reserve, join)
 }
 
 // NewService constructs the private lifecycle owner from the exact target

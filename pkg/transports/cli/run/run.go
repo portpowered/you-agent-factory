@@ -657,6 +657,10 @@ func prepareRunConfig(
 		}
 	}
 
+	cfg, err := prepareCanonicalSessionIDForRun(cfg)
+	if err != nil {
+		return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
+	}
 	recordPath, err := resolveRecordPathForRun(cfg)
 	if err != nil {
 		return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
@@ -720,6 +724,7 @@ func resolveRecordPathForRun(cfg RunConfig) (resolvedRunRecordPath, error) {
 		DisableDefaultRecording: cfg.DisableDefaultRecording,
 		HomeDir:                 cfg.HomeDir,
 		RecordingTargetPlanner:  cfg.RecordingTargetPlanner,
+		CanonicalSessionID:      cfg.CanonicalSessionID,
 		ReportedSessionID:       defaultFactorySessionID,
 	})
 	if err != nil {

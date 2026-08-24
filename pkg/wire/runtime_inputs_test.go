@@ -538,6 +538,7 @@ func TestRuntimeOpeningRequestFactoryMapsSelectionsIntoOwnerRequests(t *testing.
 		Port: 8080, AutoPort: true,
 		Continuously: true, Verbose: true, RecordPath: "record.json",
 		ReplayPath: "replay.json", ResumePath: "source.recording.json", Workflow: "flow", ModelCacheDir: "models",
+		CanonicalSessionID:                "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba",
 		WorkerReasoningEffort:             "xhigh",
 		InvocationSkipPermissionsOverride: &skip,
 	}, mocks)
@@ -559,6 +560,9 @@ func TestRuntimeOpeningRequestFactoryMapsSelectionsIntoOwnerRequests(t *testing.
 	}
 	if request.FactorySession.PersistencePolicy != factorysessions.PersistencePolicyEnabled {
 		t.Fatalf("Factory Session persistence policy = %q, want %q", request.FactorySession.PersistencePolicy, factorysessions.PersistencePolicyEnabled)
+	}
+	if request.FactorySession.CanonicalSessionID != "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba" {
+		t.Fatalf("Factory Session canonical ID = %q, want preallocated UUID", request.FactorySession.CanonicalSessionID)
 	}
 	if request.Workers.RunnerID != "runner" || request.Workers.Worktree != "feature-login" ||
 		request.Workers.WorkerReasoningEffort != "xhigh" ||

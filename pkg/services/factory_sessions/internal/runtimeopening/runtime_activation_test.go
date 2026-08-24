@@ -432,7 +432,8 @@ func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {
 		},
 		FactoryRuntime: factoryruntime.RuntimeOpeningRequest{Verbose: true},
 		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
-			BackendScopeID: "scope",
+			CanonicalSessionID: "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba",
+			BackendScopeID:     "scope",
 			Host: factorysessions.RuntimeHostRequest{
 				Host:  "127.0.0.1",
 				Port:  8080,
@@ -455,7 +456,9 @@ func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {
 	if activation.RuntimeID != "runtime-1" || activation.FactorySessionID != factorysessions.DefaultSessionID {
 		t.Fatalf("activation identity = %#v, want runtime-1/%q", activation, factorysessions.DefaultSessionID)
 	}
-	if activation.Inputs.Definition.SourcePath != "/source" || activation.Inputs.Session.BackendScopeID != "scope" {
+	if activation.Inputs.Definition.SourcePath != "/source" ||
+		activation.Inputs.Session.BackendScopeID != "scope" ||
+		activation.Inputs.Session.CanonicalSessionID != "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba" {
 		t.Fatalf("activation inputs lost source or session values: %#v", activation.Inputs)
 	}
 	if activation.Inputs.Workers.InvocationSkipPermissionsOverride == nil || !*activation.Inputs.Workers.InvocationSkipPermissionsOverride {
@@ -482,6 +485,9 @@ func TestRuntimeOpeningRequestRoundTripsResumePathToRecordingsContract(t *testin
 	}
 	request := factorysessions.RuntimeOpeningRequest{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
+		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
+			CanonicalSessionID: "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba",
+		},
 		Recordings: recordings.RuntimeOpeningRequest{
 			RecordPath: "successor.recording.json",
 			ResumePath: resumePath,
@@ -501,6 +507,9 @@ func TestRuntimeOpeningRequestRoundTripsResumePathToRecordingsContract(t *testin
 	}
 	if opening.Recordings.RecordPath != request.Recordings.RecordPath {
 		t.Fatalf("Recordings successor path = %q, want %q", opening.Recordings.RecordPath, request.Recordings.RecordPath)
+	}
+	if opening.FactorySession.CanonicalSessionID != request.FactorySession.CanonicalSessionID {
+		t.Fatalf("Factory Session canonical ID = %q, want %q", opening.FactorySession.CanonicalSessionID, request.FactorySession.CanonicalSessionID)
 	}
 	if opening.Recordings.ResumeInput != resumeInput {
 		t.Fatalf("Recordings resume input = %#v, want %#v", opening.Recordings.ResumeInput, resumeInput)

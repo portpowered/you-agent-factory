@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -510,6 +511,9 @@ func testMockWorkersConfigLoader(string) (*workers.MockWorkersConfig, error) {
 func ensureTestRecordingsCLI(cfg RunConfig) RunConfig {
 	if cfg.RecordingsCLI == nil {
 		cfg.RecordingsCLI = recordingscli.New()
+	}
+	if cfg.CanonicalSessionIDGenerator == nil {
+		cfg.CanonicalSessionIDGenerator = uuid.NewString
 	}
 	return cfg
 }

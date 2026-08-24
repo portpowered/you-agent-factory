@@ -897,11 +897,13 @@ type BindRecordingResult struct {
 
 // RecordingTargetRequest selects either an explicit opaque target or the
 // Recordings-owned generated live-recording layout. Artifact takes precedence;
-// HomeDir is required when Recordings must generate the target.
+// HomeDir and CanonicalSessionID are required when Recordings must generate
+// the target. ReportedSessionID remains a presentation/routing value only.
 type RecordingTargetRequest struct {
-	Artifact          RecordingArtifactReference
-	HomeDir           string
-	ReportedSessionID string
+	Artifact           RecordingArtifactReference
+	HomeDir            string
+	CanonicalSessionID string
+	ReportedSessionID  string
 }
 
 // Live recording target vocabulary is owned by recording_lifecycle; peers
@@ -913,9 +915,15 @@ type RecordingClock interface {
 	Now() time.Time
 }
 
-// RecordingIdentityGenerator supplies an opaque uniqueness token for a live
-// recording filename.
-type RecordingIdentityGenerator func() string
+// RecordingNamedPathReserver reserves a caller-named artifact through the
+// platform's shared dated-path and atomic-exclusion policy.
+type RecordingNamedPathReserver interface {
+	ReserveNamed(root string, at time.Time, name, ext string) (string, error)
+}
+
+// RecordingPathReserver is the concise compatibility name for the named
+// reservation port consumed by live recording target planning.
+type RecordingPathReserver = RecordingNamedPathReserver
 
 // RecordingPathJoiner supplies platform-specific path joining mechanics.
 type RecordingPathJoiner func(...string) string
@@ -923,8 +931,9 @@ type RecordingPathJoiner func(...string) string
 // LiveRecordingTargetRequest identifies the customer edge used to place and
 // report one automatically generated live recording.
 type LiveRecordingTargetRequest struct {
-	HomeDir           string
-	ReportedSessionID string
+	HomeDir            string
+	CanonicalSessionID string
+	ReportedSessionID  string
 }
 
 // LiveRecordingTarget carries the runtime template path and the customer path

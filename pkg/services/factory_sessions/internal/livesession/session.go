@@ -69,11 +69,45 @@ func New(
 	generateSessionID factorysessions.SessionIDGenerator,
 	eventIDs factorysessions.ResponseEventIDGenerator,
 ) *LiveSession {
+	return NewWithRuntimeID(
+		sessionID,
+		factoryDir,
+		folderPath,
+		executionBaseDir,
+		target,
+		handle,
+		isDefault,
+		project,
+		clock,
+		generateSessionID,
+		eventIDs,
+		"",
+	)
+}
+
+// NewWithRuntimeID constructs a registry entry with an optional preallocated
+// runtime identity. The default-session alias remains the public registry key
+// while the supplied UUID becomes the durable event and response scope.
+func NewWithRuntimeID(
+	sessionID string,
+	factoryDir string,
+	folderPath string,
+	executionBaseDir string,
+	target factorysessions.TargetRef,
+	handle any,
+	isDefault bool,
+	project string,
+	clock factoryruntime.Clock,
+	generateSessionID factorysessions.SessionIDGenerator,
+	eventIDs factorysessions.ResponseEventIDGenerator,
+	runtimeSessionID string,
+) *LiveSession {
 	if clock == nil || generateSessionID == nil || eventIDs == nil {
 		return nil
 	}
 	session := &LiveSession{
-		ID: sessionID,
+		ID:                      sessionID,
+		RuntimeFactorySessionID: strings.TrimSpace(runtimeSessionID),
 		SessionState: SessionState{
 			FactoryDir:       factoryDir,
 			FolderPath:       folderPath,

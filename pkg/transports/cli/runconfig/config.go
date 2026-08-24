@@ -80,6 +80,8 @@ type Config struct {
 	ResumePath                    string
 	DisableDefaultRecording       bool
 	RecordingTargetPlanner        recordings.LiveRecordingTargetPlanner
+	CanonicalSessionID            string
+	CanonicalSessionIDGenerator   factorysessions.SessionIDGenerator
 	RecordingsCLI                 recordingscli.Adapter
 	Clock                         recordings.RecordingClock
 	RuntimeLogDir                 string

@@ -196,7 +196,8 @@ type (
 	RecordingFlushTicker                                       = recordingcontracts.RecordingFlushTicker
 	RecordingFlushTickerFactory                                = recordingcontracts.RecordingFlushTickerFactory
 	RecordingID                                                = recordingcontracts.RecordingID
-	RecordingIdentityGenerator                                 = recordingcontracts.RecordingIdentityGenerator
+	RecordingNamedPathReserver                                 = recordingcontracts.RecordingNamedPathReserver
+	RecordingPathReserver                                      = recordingcontracts.RecordingPathReserver
 	RecordingLifecycleState                                    = recordingcontracts.RecordingLifecycleState
 	RecordingMakeDirectories                                   = recordingcontracts.RecordingMakeDirectories
 	RecordingPathJoiner                                        = recordingcontracts.RecordingPathJoiner

@@ -9,8 +9,8 @@ import (
 // policy from exact mechanics selected by process-graph composition.
 func NewLiveRecordingTargetPlanner(
 	clock recordings.RecordingClock,
-	newID recordings.RecordingIdentityGenerator,
+	reserve recordings.RecordingNamedPathReserver,
 	join recordings.RecordingPathJoiner,
 ) recordings.LiveRecordingTargetPlanner {
-	return recordinglifecyclewire.NewTargetPlanner(clock, newID, join)
+	return recordinglifecyclewire.NewTargetPlanner(clock, reserve, join)
 }

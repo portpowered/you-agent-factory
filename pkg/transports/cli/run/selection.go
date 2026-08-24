@@ -2,7 +2,9 @@ package run
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
@@ -11,6 +13,36 @@ import (
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 )
+
+// prepareCanonicalSessionIDForRun allocates the identity used by the
+// automatic recording target and by explicit append-only JSONL recordings.
+// Keeping allocation at the CLI boundary means the recording path can be
+// reserved before runtime construction without deriving a second identity.
+func prepareCanonicalSessionIDForRun(cfg RunConfig) (RunConfig, error) {
+	if !usesCanonicalRecording(cfg) || strings.TrimSpace(cfg.CanonicalSessionID) != "" {
+		return cfg, nil
+	}
+	generator := cfg.CanonicalSessionIDGenerator
+	if generator == nil {
+		return RunConfig{}, errors.New("prepare recording: canonical Factory Session ID generator is required")
+	}
+	canonicalID := strings.TrimSpace(generator())
+	if canonicalID == "" {
+		return RunConfig{}, fmt.Errorf("canonical Factory Session ID generator returned an empty identity")
+	}
+	cfg.CanonicalSessionID = canonicalID
+	return cfg, nil
+}
+
+func usesCanonicalRecording(cfg RunConfig) bool {
+	if strings.TrimSpace(cfg.ReplayPath) != "" || cfg.DisableDefaultRecording {
+		return false
+	}
+	if strings.TrimSpace(cfg.RecordPath) == "" {
+		return true
+	}
+	return strings.HasSuffix(strings.ToLower(strings.TrimSpace(cfg.RecordPath)), ".jsonl")
+}
 
 // InvocationOperation is the exact Factory invocation capability consumed by
 // the run transport.

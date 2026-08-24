@@ -675,6 +675,7 @@ func (o *operation) runtimeConfig(target roles.InvocationTarget) factorysessions
 	}
 	config.FactoryRuntime.MetricsConfig = target.RuntimeMetricsConfig
 	config.FactorySession.SystemConfigHome = target.HomeDir
+	config.FactorySession.CanonicalSessionID = target.CanonicalSessionID
 	config.FactorySession.WorkFile = ""
 	config.FactorySession.Host.Port = 0
 	config.FactorySession.Host.RuntimeMode = factorydefinitions.RuntimeModeService

@@ -634,6 +634,7 @@ func invocationTarget(
 		RecordPath:            cfg.RecordPath,
 		ReplayPath:            cfg.ReplayPath,
 		ResumePath:            cfg.ResumePath,
+		CanonicalSessionID:    cfg.CanonicalSessionID,
 		RuntimeLogDir:         cfg.RuntimeLogDir,
 		RuntimeLogConfig: factoryruntime.RuntimeLogStorageConfig{
 			MaxSize: cfg.RuntimeLogConfig.MaxSize, MaxBackups: cfg.RuntimeLogConfig.MaxBackups,
