@@ -269,6 +269,7 @@ test("the build harness selects the Windows and Unix strategies at runtime", (t)
 		cxx_standard: "17",
 		cmake_generator: "mingw-makefiles",
 		cmake_make_program: "mingw32-make",
+		grpc_dependency_mode: "standalone",
 	});
 	assert.deepEqual(buildPlan({ backend: "localai-llamacpp", target: "darwin-arm64", buildType: "metal" }), {
 		backend: "localai-llamacpp",
@@ -276,6 +277,7 @@ test("the build harness selects the Windows and Unix strategies at runtime", (t)
 		shell: "bash",
 		strategy: "darwin-llamacpp-grpc",
 		binary: "llama-cpp-cpu-all",
+		grpc_dependency_mode: "default",
 	});
 	assert.deepEqual(buildPlan({ backend: "localai-whisper", target: "linux-amd64", buildType: "cpu" }), {
 		backend: "localai-whisper",
@@ -283,6 +285,7 @@ test("the build harness selects the Windows and Unix strategies at runtime", (t)
 		shell: "bash",
 		strategy: "linux-go-build",
 		binary: "whisper",
+		grpc_dependency_mode: "default",
 	});
 });
 
@@ -293,18 +296,46 @@ test("the Windows build plan resolves Git from the runner path bridge", async (t
 	const fakeGitDirectory = join(root, "git-bin");
 	const fakeGit = join(fakeGitDirectory, "git");
 	await mkdir(fakeGitDirectory);
-	await writeFile(fakeCygpath, "#!/usr/bin/env bash\nprintf '%s\\n' \"$2\"\n");
+	await writeFile(
+		fakeCygpath,
+		"#!/usr/bin/env bash\n" +
+			"path=\"$2\"\n" +
+			"if command -v wslpath >/dev/null 2>&1; then\n" +
+			"  wslpath -u \"$path\"\n" +
+			"elif [[ \"$path\" =~ ^[A-Za-z]:\\\\ ]]; then\n" +
+			"  drive=\"${path:0:1}\"\n" +
+			"  rest=\"${path:2}\"\n" +
+			"  printf '/%s/%s\\n' \"${drive,,}\" \"${rest//\\\\//}\"\n" +
+			"else\n" +
+			"  printf '%s\\n' \"$path\"\n" +
+			"fi\n",
+	);
 	await writeFile(fakeGit, "#!/usr/bin/env bash\nexit 0\n");
 	await chmod(fakeCygpath, 0o755);
 	await chmod(fakeGit, 0o755);
+	const shellRoot = (() => {
+		if (process.platform !== "win32") return root;
+		const converted = spawnSync("bash", ["-lc", `wslpath -u '${root.replaceAll("'", "'\\\"'\\\"'")}'`], { encoding: "utf8" });
+		if (converted.status === 0 && converted.stdout.trim()) return converted.stdout.trim();
+		return root.replace(/^([A-Za-z]):\\/, (_, drive) => `/${drive.toLowerCase()}/`).replaceAll("\\", "/");
+	})();
+	const shellEnvironment = {
+		PATH: `${shellRoot}:${process.env.PATH ?? ""}`,
+		WINDOWS_GIT_DIR: fakeGitDirectory,
+	};
+	const probe = spawnSync("bash", ["-c", "command -v cygpath || true"], {
+		encoding: "utf8",
+		env: { ...process.env, ...shellEnvironment },
+	});
+	if (!probe.stdout.trim().endsWith("/cygpath") && !probe.stdout.trim().endsWith("\\cygpath")) {
+		t.skip("the available bash launcher does not expose the injected MSYS2 path bridge");
+		return;
+	}
 	const plan = buildPlan({
 		backend: "localai-whisper",
 		target: "windows-amd64",
 		buildType: "cpu",
-		environment: {
-			PATH: `${root}${process.platform === "win32" ? ";" : ":"}${process.env.PATH ?? ""}`,
-			WINDOWS_GIT_DIR: fakeGitDirectory,
-		},
+		environment: shellEnvironment,
 	});
 	assert.match(plan.git.replaceAll("\\", "/"), /\/git-bin\/git$/);
 });

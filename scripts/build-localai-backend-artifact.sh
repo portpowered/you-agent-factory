@@ -168,9 +168,14 @@ esac
 # Windows runners select Visual Studio and mix MSVC with MinGW dependencies.
 windows_cxx_standard=17
 windows_cmake_generator="MinGW Makefiles"
+grpc_dependency_mode="default"
 
 if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 	export CMAKE_GENERATOR="$windows_cmake_generator"
+	# The pinned gRPC checkout builds its own protobuf and Abseil sources. Do
+	# not pass the Windows vcpkg toolchain to that bootstrap: its rolling
+	# protobuf/Abseil headers are not compatible with the pinned gRPC source.
+	grpc_dependency_mode="standalone"
 fi
 
 if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
@@ -181,13 +186,14 @@ if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
 	plan_cxx_standard=""
 	plan_cmake_generator=""
 	plan_cmake_make_program=""
+	plan_grpc_dependency_mode=" grpc_dependency_mode=$grpc_dependency_mode"
 	if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 		plan_cxx_standard=" cxx_standard=$windows_cxx_standard"
 		plan_cmake_generator=" cmake_generator=mingw-makefiles"
 		plan_cmake_make_program=" cmake_make_program=mingw32-make"
 	fi
 	printf 'LOCALAI_BACKEND_BUILD_PLAN backend=%s target=%s shell=%s strategy=%s binary=%s%s%s%s\n' \
-		"$BACKEND_ID" "$TARGET_ID" "$build_shell" "$build_strategy" "$binary" "$plan_git" "$plan_cxx_standard" "$plan_cmake_generator$plan_cmake_make_program"
+		"$BACKEND_ID" "$TARGET_ID" "$build_shell" "$build_strategy" "$binary" "$plan_git" "$plan_cxx_standard" "$plan_cmake_generator$plan_cmake_make_program$plan_grpc_dependency_mode"
 	exit 0
 fi
 
@@ -231,6 +237,28 @@ if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 	export CGO_ENABLED=1
 fi
 cmake_args_text="${cmake_args[*]:-}"
+grpc_dependency_cmake_args_text="$cmake_args_text"
+if [[ "$TARGET_ID" == "windows-amd64" ]]; then
+	# Keep the pinned gRPC/protobuf/Abseil dependency graph independent from
+	# vcpkg. The backend builds below still receive cmake_args_text and use the
+	# static vcpkg triplet where their CMake projects need it.
+	grpc_dependency_cmake_args=(
+		"-DCMAKE_MAKE_PROGRAM=mingw32-make"
+		"-DCMAKE_C_COMPILER=gcc"
+		"-DCMAKE_CXX_COMPILER=g++"
+		"-DCMAKE_BUILD_TYPE=Release"
+		"-DBUILD_SHARED_LIBS=OFF"
+		"-DCMAKE_CXX_STANDARD=${windows_cxx_standard}"
+		"-DCMAKE_CXX_STANDARD_REQUIRED=ON"
+		"-DgRPC_ZLIB_PROVIDER=module"
+		"-DgRPC_CARES_PROVIDER=module"
+		"-DgRPC_RE2_PROVIDER=module"
+		"-DgRPC_SSL_PROVIDER=module"
+		"-DgRPC_PROTOBUF_PROVIDER=module"
+		"-DgRPC_ABSL_PROVIDER=module"
+	)
+	grpc_dependency_cmake_args_text="${grpc_dependency_cmake_args[*]}"
+fi
 grpc_added_cmake_args=""
 
 build_grpc_dependencies() {
@@ -238,7 +266,7 @@ build_grpc_dependencies() {
 	local install_path="${grpc_path}/installed_packages"
 	local protoc_path="${install_path}/bin/protoc"
 	local plugin_path="${install_path}/bin/grpc_cpp_plugin"
-	local grpc_cmake_args="${cmake_args_text}"
+	local grpc_cmake_args="${grpc_dependency_cmake_args_text}"
 	grpc_added_cmake_args="-Dabsl_DIR=${install_path}/lib/cmake/absl -DProtobuf_DIR=${install_path}/lib/cmake/protobuf -DProtobuf_PROTOC_EXECUTABLE=${protoc_path} -Dutf8_range_DIR=${install_path}/lib/cmake/utf8_range -DgRPC_DIR=${install_path}/lib/cmake/grpc -DCMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES=${install_path}/include"
 
 	if [[ ! -f "${grpc_path}/Makefile" ]]; then

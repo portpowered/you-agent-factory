@@ -42,6 +42,9 @@ verifying its remaining DLL closure. The release-only community triplet keeps
 vcpkg from compiling the large gRPC dependency twice (Debug and Release) and
 avoids MinGW object-file limits on the hosted Windows runner; it remains a
 static library triplet, so the runtime closure is still staged and verified.
+The pinned gRPC bootstrap itself uses the checkout's bundled protobuf and
+Abseil sources on Windows; vcpkg remains an input to the backend CMake builds,
+but its rolling protobuf headers must not leak into the pinned gRPC compile.
 
 ## Update procedure
 
