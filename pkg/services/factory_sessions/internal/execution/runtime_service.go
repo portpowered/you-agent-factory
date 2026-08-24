@@ -53,7 +53,6 @@ type runtimeSessionState struct {
 	presentedEventIDs         map[string]struct{}
 	responseEvents            *responseeventstore.SessionResponseEventStore
 }
-
 type startInflightFlight struct {
 	done chan struct{}
 }
