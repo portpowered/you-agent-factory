@@ -30,6 +30,7 @@ const (
 	environmentEmbedBackendBytes    = int64(25)
 	environmentEmbedBackendSHA256   = "daed908ff6377212bb87323b0bddf0a891961abbc87cdbc1da4cf9fbe71bffc8"
 )
+
 type environmentModelBackend struct {
 	client   *http.Client
 	endpoint string
@@ -93,6 +94,7 @@ func cloneURL(value *url.URL) *url.URL {
 	clone := *value
 	return &clone
 }
+
 type environmentGenericRequest struct {
 	ModelName string                    `json:"modelName"`
 	Operation string                    `json:"operation"`
