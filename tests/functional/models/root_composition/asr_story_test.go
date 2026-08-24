@@ -1,0 +1,214 @@
+package root_composition_test
+
+import (
+	"bytes"
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
+
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	models "github.com/portpowered/infinite-you/pkg/services/models"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support/localai"
+)
+
+// TestModelsASRDirectCLIEndToEndThroughRootBuildProcess proves the complete
+// public path for named ASR outputs: file bytes enter the generic request,
+// the injected LocalAI fixture returns transcript and timestamped segments,
+// and the CLI publishes both outputs atomically before exposing JSON metadata.
+func TestModelsASRDirectCLIEndToEndThroughRootBuildProcess(t *testing.T) {
+	t.Parallel()
+
+	fixture := localai.Start(t)
+	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/health" {
+			writer.WriteHeader(http.StatusOK)
+			return
+		}
+		http.NotFound(writer, request)
+	}))
+	t.Cleanup(modelServer.Close)
+
+	home := t.TempDir()
+	writeGenericBuiltinModelCache(t, home, "hf://ggerganov/whisper.cpp/ggml-base.en.bin@5359861c739e955e79d9a303bcbc70fb988958b1")
+	selection := pinnedASRBackendSelection()
+	writeGenericBackendCache(t, home, "localai-whisper", selection, []byte("pinned-asr-backend-fixture"))
+
+	inputBytes := []byte{0x00, 0xff, 0x10, 0x80, 0x7f, 0x01}
+	inputPath := filepath.Join(t.TempDir(), "meeting.wav")
+	if err := os.WriteFile(inputPath, inputBytes, 0o644); err != nil {
+		t.Fatalf("write ASR input fixture: %v", err)
+	}
+	transcriptPath := filepath.Join(t.TempDir(), "transcript.txt")
+	segmentsPath := filepath.Join(t.TempDir(), "segments.json")
+
+	var received models.InvokeModelRequest
+	backend := func(ctx context.Context, request models.InvokeModelRequest) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+		received = request
+		content, _, err := fixture.InvocationBackend(ctx, request)
+		if err != nil {
+			return nil, nil, err
+		}
+		artifact, err := (models.InferenceArtifactRef{}).Parse("artifact:segments")
+		if err != nil {
+			return nil, nil, err
+		}
+		return content, []models.InferenceArtifact{{
+			Name: "segments", Artifact: artifact, MediaType: "application/json",
+			SizeBytes:  int64(len(content[1].Content)),
+			Properties: map[string]string{"digest": "sha256:fixture-segments"},
+		}}, nil
+	}
+
+	rejectingNetwork := &rejectingModelAssetHTTP{}
+	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
+	protocol := &joinedProtocolNegotiator{}
+	compatibility := &joinedCompatibilityChecker{}
+	assetFiles := functionalModelAssetFileSystem{home: home}
+	dir := support.ScaffoldFactory(t, asrModelFactoryConfig(modelServer.URL))
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ModelAssetHTTPClient:           rejectingNetwork,
+		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
+		ModelAssetInspectPath:          assetFiles.Stat,
+		ModelAssetResolveHomeDirectory: assetFiles.UserHomeDir,
+		ModelAssetResolveEnvironment:   func(string) string { return "" },
+		ModelAssetWriteFile:            assetFiles.WriteFile,
+		ModelAssetRenamePath:           assetFiles.Rename,
+		ModelAssetRemovePath:           assetFiles.Remove,
+		ModelAssetReadFile:             assetFiles.ReadFile,
+		ModelAssetReadDirectory:        assetFiles.ReadDir,
+		ModelAssetCreateFile:           assetFiles.Create,
+		ModelAssetOpenFile:             assetFiles.Open,
+		ModelHostProcessLauncher:       hostLauncher,
+		ModelHostProtocolNegotiator:    protocol,
+		ModelHostCompatibilityChecker:  compatibility,
+		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		ModelResolveBackendArtifact: func(context.Context, serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
+			return selection, nil
+		},
+		ModelInvocationBackend: backend,
+		ModelHostHTTPClient:    modelServer.Client(),
+		ModelRuntimeHTTPClient: modelServer.Client(),
+	})
+	t.Cleanup(func() { closeRootProcess(t, process, "close ASR root process") })
+
+	var output bytes.Buffer
+	invoke := support.FakeInputs(t.Context(), []string{
+		"you", "models", "invoke", "asr", "--operation", "ASR",
+		"--input", "audio=@" + inputPath,
+		"--output", "transcript=" + transcriptPath,
+		"--output", "segments=" + segmentsPath,
+	})
+	invoke.Input.Env = functionalHomeEnvironment(home)
+	invoke.Input.WorkingDirectory = dir
+	invoke.Input.Stdout = &output
+	invoke.Input.Stderr = io.Discard
+	if err := process.Execute(invoke.Input); err != nil {
+		t.Fatalf("Process.Execute(ASR mapped outputs) error = %v", err)
+	}
+	transcript, err := os.ReadFile(transcriptPath)
+	if err != nil {
+		t.Fatalf("read transcript output: %v", err)
+	}
+	if string(transcript) != localai.FixtureTranscript {
+		t.Fatalf("transcript output = %q, want %q", transcript, localai.FixtureTranscript)
+	}
+	segments, err := os.ReadFile(segmentsPath)
+	if err != nil {
+		t.Fatalf("read segments output: %v", err)
+	}
+	if string(segments) != `[{"id":0,"start":0,"end":1500,"text":"LOCALAI_FIXTURE_SEGMENT"}]` {
+		t.Fatalf("segments output = %s, want canonical timestamped JSON", segments)
+	}
+	if len(received.Inputs) != 1 || received.Inputs[0].Name != "audio" || received.Inputs[0].Content != string(inputBytes) || received.Inputs[0].MediaType != "audio/wav" {
+		t.Fatalf("backend request input = %#v, want exact bytes and audio/wav", received.Inputs)
+	}
+	assertASRFixtureCall(t, fixture.Calls(), base64.StdEncoding.EncodeToString(inputBytes))
+
+	output.Reset()
+	jsonInvoke := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "models", "invoke", "asr", "--operation", "ASR", "--input", "audio=@" + inputPath,
+	})
+	jsonInvoke.Input.Env = functionalHomeEnvironment(home)
+	jsonInvoke.Input.WorkingDirectory = dir
+	jsonInvoke.Input.Stdout = &output
+	jsonInvoke.Input.Stderr = io.Discard
+	if err := process.Execute(jsonInvoke.Input); err != nil {
+		t.Fatalf("Process.Execute(ASR --json) error = %v", err)
+	}
+	var response factoryapi.GenericModelInvocationResponse
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("decode ASR JSON response: %v\n%s", err, output.String())
+	}
+	if len(response.Outputs) != 2 || response.Outputs[0].Name != "transcript" || response.Outputs[1].Name != "segments" {
+		t.Fatalf("ASR JSON outputs = %#v, want transcript then segments", response.Outputs)
+	}
+	if response.Outputs[0].MediaType == nil || *response.Outputs[0].MediaType != "text/plain" || response.Outputs[1].MediaType == nil || *response.Outputs[1].MediaType != "application/json" {
+		t.Fatalf("ASR JSON media metadata = %#v", response.Outputs)
+	}
+	artifact := response.Outputs[1].Artifact
+	if artifact == nil || artifact.ArtifactRef != "artifact:segments" || artifact.SizeBytes == nil || *artifact.SizeBytes != int64(len(segments)) || artifact.Properties == nil || (*artifact.Properties)["digest"] != "sha256:fixture-segments" {
+		t.Fatalf("ASR JSON artifact metadata = %#v, want opaque ref/size/digest", artifact)
+	}
+	if rejectingNetwork.Calls() != 0 || hostLauncher.Calls() == 0 || protocol.Calls() == 0 || compatibility.Calls() == 0 {
+		t.Fatalf("ASR effects = asset network %d, host starts %d, protocol %d, compatibility %d; want cache-backed joined execution", rejectingNetwork.Calls(), hostLauncher.Calls(), protocol.Calls(), compatibility.Calls())
+	}
+}
+
+func asrModelFactoryConfig(endpoint string) map[string]any {
+	config := localModelReadinessAssetsHostFactoryConfig(endpoint)
+	resources := config["resources"].([]map[string]any)
+	resources[0]["name"] = "asr-cache"
+	resources[0]["model"] = "asr"
+	resources[0]["backend"] = "localai-whisper"
+	workers := config["workers"].([]map[string]any)
+	workers[0]["name"] = "asr-worker"
+	workers[0]["model"] = "asr"
+	workers[0]["command"] = "whisper"
+	workers[0]["args"] = []string{"--grpc-endpoint", endpoint}
+	workerResources := workers[0]["resources"].([]map[string]any)
+	workerResources[0]["name"] = "asr-cache"
+	workers[0]["operations"] = []map[string]any{{
+		"name": "ASR",
+		"inputs": []map[string]any{
+			{"name": "audio", "contentTypes": []string{interfaces.ModelOperationContentTypeAudio}, "required": true},
+			{"name": "prompt", "contentTypes": []string{interfaces.ModelOperationContentTypeText}},
+			{"name": "parameters", "contentTypes": []string{interfaces.ModelOperationContentTypeJSON}},
+		},
+		"outputs": []map[string]any{
+			{"name": "transcript", "contentTypes": []string{interfaces.ModelOperationContentTypeText}},
+			{"name": "segments", "contentTypes": []string{interfaces.ModelOperationContentTypeJSON}},
+		},
+	}}
+	return config
+}
+
+func pinnedASRBackendSelection() serviceedges.ModelBackendArtifactSelection {
+	return serviceedges.ModelBackendArtifactSelection{
+		Name:     "localai-backend-localai-whisper-linux-amd64-fixture.tar.gz",
+		Location: "https://github.com/portpowered/infinite-you/releases/download/localai-backends-v1-fixture/localai-backend-localai-whisper-linux-amd64-fixture.tar.gz",
+		Bytes:    26,
+		SHA256:   "d1481b62fccf94404c3ca599efa30c432d87bdad4bc7493c7e8f82ff84e0e61b",
+	}
+}
+
+func assertASRFixtureCall(t *testing.T, calls []localai.Call, wantPrompt string) {
+	t.Helper()
+	for _, call := range calls {
+		if call.Method == "AudioTranscription" {
+			if call.Prompt != wantPrompt {
+				t.Fatalf("ASR fixture prompt = %q, want base64 audio bytes %q", call.Prompt, wantPrompt)
+			}
+			return
+		}
+	}
+	t.Fatalf("LocalAI fixture calls = %#v, want AudioTranscription", calls)
+}

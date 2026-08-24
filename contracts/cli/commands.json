@@ -12644,13 +12644,14 @@
           },
           "description": {
             "id": "you.models.invoke.description",
-            "canonicalEnglish": "Invoke one discovered model through the shared in-process bootstrap. Requires a model name, an uppercase --operation, either non-empty --text or repeatable named --input slot=value values (use @path for file bytes), and either --output for streamed audio, repeatable --output-map slot=path mappings for named generic outputs, or global --json for structured invocation metadata. Readiness-gated execution uses the current factory configuration without starting a full workflow."
+            "canonicalEnglish": "Invoke one discovered model through the shared in-process bootstrap. Requires a model name, an uppercase --operation, either non-empty --text or repeatable named --input slot=value values (use @path for file bytes), and either repeatable --output paths or repeatable --output slot=path mappings for named outputs, or global --json for structured invocation metadata. Readiness-gated execution uses the current factory configuration without starting a full workflow."
           }
         },
         "examples": [
           "you models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\" --output ./speech.wav",
           "you --json models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\"",
-          "you models invoke omni --operation OMNI --text \"Summarize this.\" --output-map text=./answer.txt --output-map usage=./usage.json"
+          "you models invoke omni --operation OMNI --text \"Summarize this.\" --output text=./answer.txt --output usage=./usage.json",
+          "you models invoke asr --operation ASR --input audio=@meeting.wav --output transcript=./transcript.txt --output segments=./segments.json"
         ],
         "visibility": "public",
         "sourceHash": "b469b217b664304f713e17511a3cb96c37ba5cc8cca78419a699575f309fcd54"
@@ -12666,7 +12667,7 @@
       "placement": "remote-only",
       "usage": {
         "line": "invoke <model-name>",
-        "example": "  # Stream TTS audio to a file.\n  you models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\" --output ./speech.wav\n\n  # Emit structured invocation metadata.\n  you --json models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\"\n\n  # Map every named generic output to an atomic file.\n  you models invoke omni --operation OMNI --text \"Summarize this.\" --output-map text=./answer.txt --output-map usage=./usage.json"
+        "example": "  # Stream TTS audio to a file.\n  you models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\" --output ./speech.wav\n\n  # Emit structured invocation metadata.\n  you --json models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\"\n\n  # Map every named generic output to an atomic file.\n  you models invoke omni --operation OMNI --text \"Summarize this.\" --output text=./answer.txt --output usage=./usage.json\n\n  # Transcribe audio into canonical transcript and timestamped segments files.\n  you models invoke asr --operation ASR --input audio=@meeting.wav --output transcript=./transcript.txt --output segments=./segments.json"
       },
       "arguments": {
         "you.models.invoke.arg.0": {
@@ -12960,7 +12961,7 @@
           "aliases": [],
           "completion": "none",
           "defaultValue": {
-            "string": ""
+            "stringArray": []
           },
           "handlerBindingId": "you.models.invoke.binding.output",
           "id": "you.models.invoke.flag.output",
@@ -12972,16 +12973,16 @@
             "since": "1.0.0"
           },
           "long": "output",
-          "maxCardinality": 1,
+          "maxCardinality": -1,
           "minCardinality": 0,
-          "normalization": "trim",
-          "repeatable": false,
+          "normalization": "",
+          "repeatable": true,
           "required": false,
           "sensitivity": "public",
           "scope": "local",
           "shorthand": "",
-          "usage": "path for streamed model output",
-          "valueType": "string",
+          "usage": "output path or named output mapping in the form slot=path (repeatable)",
+          "valueType": "stringArray",
           "visibility": "visible"
         },
         "you.models.invoke.flag.output-map": {

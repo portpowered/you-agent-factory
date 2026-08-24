@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -190,16 +191,45 @@ func readModelsInvokeInputs(inputs resolvedinput.Inputs) (modelsInvokeInputs, er
 			return modelsInvokeInputs{}, fmt.Errorf("read models invoke input mappings: %w", err)
 		}
 	}
-	outputPath, err := inputs.String(modelsInvokeOutputID)
-	if err != nil {
+	var outputValues []string
+	if _, present := inputs.State(modelsInvokeOutputID); present {
+		outputValues, err = inputs.StringArray(modelsInvokeOutputID)
+		if err != nil {
+			// Keep the adapter tolerant of callers that construct resolved input
+			// values directly using the pre-repeatable scalar shape. Production
+			// manifest parsing always supplies StringArray here.
+			var scalar string
+			if scalar, err = inputs.String(modelsInvokeOutputID); err != nil {
+				return modelsInvokeInputs{}, fmt.Errorf("read models invoke output values: %w", err)
+			}
+			outputValues = []string{scalar}
+		}
+	} else if _, err = inputs.StringArray(modelsInvokeOutputID); err != nil {
 		return modelsInvokeInputs{}, fmt.Errorf("read models invoke output: %w", err)
 	}
+	var outputPath string
 	var outputMappings []string
+	for _, value := range outputValues {
+		value = strings.TrimSpace(value)
+		if strings.Contains(value, "=") {
+			outputMappings = append(outputMappings, value)
+			continue
+		}
+		if outputPath != "" {
+			return modelsInvokeInputs{}, fmt.Errorf("repeatable --output values must use slot=path mappings after the first unqualified path")
+		}
+		outputPath = value
+	}
 	if _, present := inputs.State(modelsInvokeOutputMapID); present {
-		outputMappings, err = inputs.StringArray(modelsInvokeOutputMapID)
+		var legacyMappings []string
+		legacyMappings, err = inputs.StringArray(modelsInvokeOutputMapID)
 		if err != nil {
 			return modelsInvokeInputs{}, fmt.Errorf("read models invoke output mappings: %w", err)
 		}
+		outputMappings = append(outputMappings, legacyMappings...)
+	}
+	if outputPath != "" && len(outputMappings) > 0 {
+		return modelsInvokeInputs{}, fmt.Errorf("--output path cannot be combined with named output mappings")
 	}
 	return modelsInvokeInputs{
 		modelName: modelName, operation: operation, text: text,

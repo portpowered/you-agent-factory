@@ -309,12 +309,15 @@ func TestGenericModelsInvokeDispatchResolvesDefaultsAndExplicitInputs(t *testing
 		"you.models.invoke.arg.0":          "OMNIVOICE_Q4_K_M",
 		"you.models.invoke.flag.operation": "TTS",
 		"you.models.invoke.flag.text":      "hello",
-		"you.models.invoke.flag.output":    "speech.wav",
 	} {
 		got, valueErr := local.String(inputID)
 		if valueErr != nil || got != want {
 			t.Fatalf("resolved %s = %q, %v; want %q", inputID, got, valueErr, want)
 		}
+	}
+	outputValues, outputErr := local.StringArray("you.models.invoke.flag.output")
+	if outputErr != nil || !reflect.DeepEqual(outputValues, []string{"  speech.wav  "}) {
+		t.Fatalf("resolved output values = %#v, %v; want one unqualified path", outputValues, outputErr)
 	}
 	inputValues, inputErr := local.StringArray("you.models.invoke.flag.input")
 	if inputErr != nil || !reflect.DeepEqual(inputValues, []string{"audio=@meeting.wav", "prompt=hint"}) {
@@ -371,11 +374,15 @@ func TestModelsCommandRegistersPositionalsAndFlagsFromManifest(t *testing.T) {
 	if err := invoke.ParseFlags([]string{"--operation", "TTS", "--input", "audio=@meeting.wav", "--input", "prompt=hint", "--text", "hello", "--output", "speech.wav"}); err != nil {
 		t.Fatal(err)
 	}
-	for name, want := range map[string]string{"operation": "TTS", "text": "hello", "output": "speech.wav"} {
+	for name, want := range map[string]string{"operation": "TTS", "text": "hello"} {
 		got, getErr := invoke.Flags().GetString(name)
 		if getErr != nil || got != want {
 			t.Fatalf("flag %s = %q, %v; want %q", name, got, getErr, want)
 		}
+	}
+	outputValues, outputErr := invoke.Flags().GetStringArray("output")
+	if outputErr != nil || !reflect.DeepEqual(outputValues, []string{"speech.wav"}) {
+		t.Fatalf("output flag = %#v, %v; want one unqualified path", outputValues, outputErr)
 	}
 	inputValues, inputErr := invoke.Flags().GetStringArray("input")
 	if inputErr != nil || !reflect.DeepEqual(inputValues, []string{"audio=@meeting.wav", "prompt=hint"}) {

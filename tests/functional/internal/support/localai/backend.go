@@ -154,8 +154,13 @@ func (fixture *Fixture) invokeASR(
 	client localaiproto.BackendClient,
 	inputs []models.InferenceInput,
 ) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+	// The pinned fixture protocol carries ASR input in a protobuf string field,
+	// so encode the generic audio bytes before crossing that wire. The Models
+	// request remains byte-exact; this representation keeps arbitrary audio
+	// bytes valid on the test transport.
+	audio := base64.StdEncoding.EncodeToString([]byte(firstInputContent(inputs)))
 	response, err := client.AudioTranscription(ctx, &localaiproto.TranscriptRequest{
-		Prompt: firstInputContent(inputs),
+		Prompt: audio,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("invoke LocalAI ASR: %w", err)

@@ -884,6 +884,52 @@ func TestRootAdapter_InvokeGenericInputPreflightRejectsBeforeBackend(t *testing.
 	}
 }
 
+func TestRootAdapter_InvokeASRRequiresEveryNamedOutputBeforeEffects(t *testing.T) {
+	t.Parallel()
+
+	scope := testRuntimeScope(t)
+	reads := 0
+	invokes := 0
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return genericCLIOperationModel("asr", modelinference.OperationASR,
+					[]modelinference.OperationSlot{{
+						Name: "audio", Modality: modelinference.ModalityAudio,
+						Required: boolPointer(true), MediaTypes: []string{"audio/*"},
+					}},
+					[]modelinference.OperationSlot{
+						{Name: "transcript", Modality: modelinference.ModalityText, Required: boolPointer(true)},
+						{Name: "segments", Modality: modelinference.ModalityJSON, Required: boolPointer(true)},
+					}), nil
+			},
+			invokeModel: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				invokes++
+				return modelinference.InvokeModelResult{}, nil
+			},
+		},
+		InputFileReader: func(string) ([]byte, error) {
+			reads++
+			return []byte("audio"), nil
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
+	})
+	err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: "asr", Operation: modelinference.OperationASR,
+		InputMappings: []string{"audio=@meeting.wav"},
+		OutputMappings: []string{"transcript=" + filepath.Join(t.TempDir(), "transcript.txt")},
+		Output: io.Discard,
+	})
+	if err == nil || !strings.Contains(err.Error(), "transcript, segments") {
+		t.Fatalf("ASR incomplete output mapping error = %v, want both output slots", err)
+	}
+	if reads != 0 || invokes != 0 {
+		t.Fatalf("ASR incomplete mapping effects = reads:%d invokes:%d, want 0/0", reads, invokes)
+	}
+}
+
 type localOutputFileSystem struct{}
 
 func (localOutputFileSystem) CreateTemp(dir, pattern string) (modelscli.OutputTemporaryFile, error) {
