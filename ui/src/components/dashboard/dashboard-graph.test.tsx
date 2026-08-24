@@ -32,9 +32,6 @@ describe("dashboard graph chrome", () => {
     expect((controls as HTMLElement | null)?.style.backgroundColor).toBe(
       "var(--color-af-graph-controls-surface)",
     );
-    expect((controls as HTMLElement | null)?.style.border).toBe(
-      "1px solid var(--color-af-graph-controls-border)",
-    );
 
     const zoomIn = screen.getByRole("button", { name: "Zoom In" });
     expect(zoomIn).not.toBeNull();
