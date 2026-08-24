@@ -1,6 +1,8 @@
 package wire
 
 import (
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
@@ -29,4 +31,12 @@ func provideInstallPackagedFactoryCLI(
 	return func(cfg factorydefinitionscli.InstallPackagedFactoryConfig) error {
 		return factorydefinitionscli.InstallPackagedFactory(cfg, install)
 	}
+}
+
+func provideCLIObserver(edges serviceedges.Edges) platformprocess.CLIObserver {
+	return edges.CLIObserver
+}
+
+func provideCLICommandFactory(operations cli.CommandOperations) cli.CommandFactory {
+	return cli.NewCommandFactory(operations)
 }

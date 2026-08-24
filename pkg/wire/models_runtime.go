@@ -159,7 +159,7 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		}
 	}
 
-	return modelswire.NewServiceWithBackendArtifactResolver(
+	return modelswire.NewServiceWithBackendArtifactResolverAndInvocationBackend(
 		assetPlatform,
 		assetHTTP,
 		assetEndpoints,
@@ -192,6 +192,8 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 		protocolNegotiator,
 		compatibilityChecker,
 		backendArtifactResolver,
+		adaptModelInvocationBackend(edges.ModelInvocationBackend),
+		adaptModelASRBackend(edges.ModelASRBackend),
 		edges.ModelResolveHuggingFaceRevision,
 	)
 }
@@ -205,6 +207,34 @@ func newModelAssetHTTPClient() *http.Client {
 	transport.TLSHandshakeTimeout = modelAssetTLSHandshakeTimeout
 	transport.ResponseHeaderTimeout = modelAssetResponseHeaderTimeout
 	return &http.Client{Transport: transport}
+}
+
+func adaptModelInvocationBackend(
+	next serviceedges.ModelInvocationBackend,
+) modelswire.InvocationBackend {
+	if next == nil {
+		return nil
+	}
+	return func(
+		ctx context.Context,
+		request models.InvokeModelRequest,
+	) ([]models.InferenceContent, []models.InferenceArtifact, error) {
+		return next(ctx, request)
+	}
+}
+
+func adaptModelASRBackend(
+	next serviceedges.ModelASRBackend,
+) modelswire.ASRBackend {
+	if next == nil {
+		return nil
+	}
+	return func(
+		ctx context.Context,
+		request models.ASRBackendRequest,
+	) (models.ASRBackendResponse, error) {
+		return next(ctx, request)
+	}
 }
 
 func adaptModelBackendArtifactResolver(

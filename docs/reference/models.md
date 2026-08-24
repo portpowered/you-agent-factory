@@ -145,25 +145,88 @@ cache root and does not move data. Track the storage decision in [issue #2201](h
 ## Invoke A Model Directly
 
 Direct invocation runs one named operation through the current `./factory`
-configuration without starting a full Factory workflow. Every invocation must
-name the model, name an uppercase operation, provide non-empty text, and choose
-either an output file or JSON metadata.
+configuration. It does not start a full Factory workflow.
 
-Write TTS audio to a file:
+Built-in model names are `llm`, `asr`, `tts`, and `embed`. Use an uppercase
+operation and bind inputs with repeatable `--input slot=value` flags.
+
+Use `@path` to bind file bytes. Models detects the media type from the path and
+file content, then validates it against the input slot before model execution.
+Use inline values for text, and valid JSON values for JSON slots.
+
+### Operation contracts
+
+| Operation | Required inputs | Optional inputs | Outputs |
+| --- | --- | --- | --- |
+| `OMNI` | `prompt:TEXT` | `image:IMAGE` (repeatable), `audio:AUDIO`, `video:VIDEO`, `parameters:JSON` | `text:TEXT`, optional `usage:JSON` |
+| `EMBED` | `text:TEXT` | `parameters:JSON` | `embedding:JSON` |
+| `TTS` | `text:TEXT` | `voice:AUDIO`, `parameters:JSON` | `audio:AUDIO` |
+| `ASR` | `audio:AUDIO` | `prompt:TEXT`, `parameters:JSON` | `transcript:TEXT`, `segments:JSON` |
+
+`ASR` preserves backend segment timestamps in the `segments` JSON output. Each
+segment contains `id`, `start`, `end`, and `text` fields.
+
+### Transcribe audio
+
+Map every ASR output explicitly:
 
 ```bash
-you models invoke OMNIVOICE_Q4_K_M --operation TTS --text "Read the release summary." --output ./speech.wav
+you models invoke asr --operation ASR \
+  --input audio=@meeting.wav \
+  --output transcript=meeting.txt \
+  --output segments=meeting.json
 ```
 
-Return structured invocation metadata and canonical `WorkContent` references:
+The transcript file uses `text/plain`. The segments file uses
+`application/json`. Both files are published atomically after all outputs are
+validated.
+
+Use JSON mode when a script needs named output metadata and artifact references:
 
 ```bash
-you --json models invoke OMNIVOICE_Q4_K_M --operation TTS --text "Read the release summary."
+you --json models invoke asr --operation ASR --input audio=@meeting.wav
 ```
 
-`--output` selects streamed-audio mode and writes the response bytes to the
-given path. The global `--json` flag selects metadata mode instead. Omitting
-`--text`, or omitting both result choices, is rejected before model execution.
+The JSON response includes both named outputs, their media types, sizes, and
+artifact references. A multi-output ASR invocation without explicit mappings or
+`--json` fails before download or backend activation and lists `transcript` and
+`segments` as the required output slots.
+
+### Synthesize speech
+
+With no output mapping, TTS writes only raw audio bytes to standard output.
+Diagnostics remain on standard error, so shell redirection and pipes are safe:
+
+```bash
+you models invoke tts --operation TTS --input text="Read the release summary." > speech.wav
+```
+
+The `--text` and unqualified `--output <path>` spellings remain compatibility
+aliases for direct TTS. They use the same model readiness, request, and output
+path as the named generic input:
+
+```bash
+you models invoke tts --operation TTS --text "Read the release summary." --output speech.wav
+```
+
+The unqualified `--output` form writes the backend-declared audio media type to
+the named file. It is a file-output alias, not a named output mapping.
+
+Use JSON mode when a script needs output metadata instead of audio bytes:
+
+```bash
+you --json models invoke tts --operation TTS --input text="Read the release summary."
+```
+
+### Input and output failures
+
+An empty assignment, unknown slot, unreadable file, unsupported media type, or
+duplicate non-repeatable input fails with an actionable error before download
+or backend activation. A missing `audio` input fails before ASR execution.
+
+Use `--output slot=path` once for each output slot. Do not reuse a destination
+path. The command rejects incomplete, duplicate, or unknown output mappings
+before it writes a partial file.
 
 Invocation is readiness-gated. For `MISSING`, pull the model. For `LOADING`,
 wait and inspect again. For `FAILED`, use the inspect diagnostics and service

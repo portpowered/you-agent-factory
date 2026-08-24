@@ -200,6 +200,32 @@ type InferenceContent struct {
 	Content     string
 }
 
+// ASRBackendRequest is the detached, provider-neutral request supplied to a
+// Models-owned ASR backend effect. The LocalAI wire representation remains
+// private to the Models codec boundary.
+type ASRBackendRequest struct {
+	Audio      []byte
+	MediaType  string
+	Prompt     string
+	Parameters map[string]any
+}
+
+// ASRBackendSegment is one timestamped segment returned by an ASR backend.
+type ASRBackendSegment struct {
+	ID    int32
+	Start int64
+	End   int64
+	Text  string
+}
+
+// ASRBackendResponse carries decoded ASR facts and any opaque artifacts that
+// the backend effect has associated with the operation.
+type ASRBackendResponse struct {
+	Text      string
+	Segments  []ASRBackendSegment
+	Artifacts []InferenceArtifact
+}
+
 // InferenceOutput is one ordered, slot-named generic invocation output. An
 // output may carry inline content, an opaque artifact, or both metadata forms.
 type InferenceOutput struct {

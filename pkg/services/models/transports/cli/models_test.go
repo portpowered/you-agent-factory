@@ -34,7 +34,6 @@ type commandServiceFake struct {
 	pull    func(PullConfig) error
 	remove  func(RemoveConfig) error
 }
-
 type modelsPullDoer func(*http.Request) (*http.Response, error)
 
 func (doer modelsPullDoer) Do(request *http.Request) (*http.Response, error) {
@@ -57,25 +56,13 @@ func (fake commandServiceFake) Remove(cfg RemoveConfig) error {
 	}
 	return nil
 }
-
 func TestCommandHandlerTransformsInvokeCommandState(t *testing.T) {
 	server := "http://127.0.0.1:7437"
 	logger := zap.NewNop()
 	var diagnostics bytes.Buffer
 
 	handler := NewCommandHandler(
-		commandServiceFake{invoke: func(cfg InvokeConfig) error {
-			if cfg.ModelName != "OMNIVOICE_Q4_K_M" || cfg.Operation != "TTS" || cfg.Text != "hello" || cfg.OutputPath != "speech.wav" {
-				t.Fatalf("InvokeConfig command values = %#v", cfg)
-			}
-			if cfg.Server != server || !cfg.JSON || !cfg.Verbose || !cfg.Debug {
-				t.Fatalf("InvokeConfig global values = %#v", cfg)
-			}
-			if cfg.FactoryDir != "/factory" || cfg.HomeDir != "/home/tester" || cfg.Logger != logger || cfg.Diagnostics != &diagnostics {
-				t.Fatalf("InvokeConfig dependencies = %#v", cfg)
-			}
-			return nil
-		}},
+		commandServiceFake{invoke: assertTransformedInvokeConfig(t, server, logger, &diagnostics)},
 		func(*cobra.Command) io.Writer { return &diagnostics },
 		func() (string, error) { return "/home/tester", nil },
 		func(_ *cobra.Command, homeDir string) (operatorconfig.ResolvedDefaults, error) {
@@ -95,7 +82,6 @@ func TestCommandHandlerTransformsInvokeCommandState(t *testing.T) {
 		t.Fatalf("Invoke() error = %v", err)
 	}
 }
-
 func resolvedInvokeHandlerInputs(
 	t *testing.T,
 	server string,
@@ -106,12 +92,14 @@ func resolvedInvokeHandlerInputs(
 			{ID: modelsInvokeNameInputID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourcePositionalArgument}},
 			{ID: modelsInvokeOperationID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
 			{ID: modelsInvokeTextID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
+			{ID: modelsInvokeInputID, Kind: resolvedinput.ValueKindStringArray, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
 			{ID: modelsInvokeOutputID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag}},
 		},
 		[]resolvedinput.Candidate{
 			{InputID: modelsInvokeNameInputID, Source: resolvedinput.SourcePositionalArgument, Value: resolvedinput.StringValue("OMNIVOICE_Q4_K_M")},
 			{InputID: modelsInvokeOperationID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue("TTS")},
 			{InputID: modelsInvokeTextID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue("hello")},
+			{InputID: modelsInvokeInputID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringArrayValue([]string{"audio=@meeting.wav", "prompt=hint"})},
 			{InputID: modelsInvokeOutputID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.StringValue("speech.wav")},
 		},
 	)
@@ -121,7 +109,6 @@ func resolvedInvokeHandlerInputs(
 	_, _, inherited := resolvedModelsHandlerInputs(t, server)
 	return local, inherited
 }
-
 func TestCommandHandlerTransformsListInspectAndPullArguments(t *testing.T) {
 	server := "http://127.0.0.1:7437"
 	called := map[string]bool{}
