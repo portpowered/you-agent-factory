@@ -120,6 +120,53 @@ func TestModelsEmbedZeroConfigurationJourneyThroughRootBuildProcess(t *testing.T
 	}
 }
 
+func TestModelsEmbedOversizedFileInputFailsBeforeBackendThroughRootBuildProcess(t *testing.T) {
+	t.Parallel()
+
+	hostServer := story004HostServer(t)
+	home := t.TempDir()
+	backendBody := []byte("story-004-localai-backend-oversized-input")
+	selection := story004EmbedBackendSelection(backendBody)
+	writeGenericBuiltinModelCache(t, home, story004EmbedSource)
+	writeGenericBackendCache(t, home, "localai-llamacpp", selection, backendBody)
+	assetNetwork := &rejectingModelAssetHTTP{}
+	launcher := &recordingModelHostLauncher{endpoint: hostServer.URL}
+	fixture := newStory004EmbedFixture()
+	edges := story004EmbedEdges(
+		home, assetNetwork, hostServer.Client(), launcher, &joinedProtocolNegotiator{},
+		&joinedCompatibilityChecker{}, selection, fixture,
+	)
+	var receivedLimit int64
+	edges.ModelCLIInputReadFile = func(_ context.Context, _ string, maxBytes int64) ([]byte, error) {
+		receivedLimit = maxBytes
+		return bytes.Repeat([]byte{'x'}, int(maxBytes+1)), nil
+	}
+	process := support.BuildProcess(t, edges)
+	support.CleanupProcess(t, process)
+	factoryDir := support.ScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+
+	stdout, stderr, err := runStory004CLI(t, process, factoryDir, functionalHomeEnvironment(home),
+		[]string{"you", "models", "invoke", "embed", "--input", "text=@oversized.txt"})
+	if err == nil {
+		t.Fatal("oversized EMBED file error = nil, want local preflight failure")
+	}
+	if stdout != "" {
+		t.Fatalf("oversized EMBED file stdout = %q, want empty", stdout)
+	}
+	var diagnostic factoryapi.ErrorResponse
+	if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(stderr)), &diagnostic); decodeErr != nil {
+		t.Fatalf("decode oversized EMBED diagnostic: %v\nstderr=%q", decodeErr, stderr)
+	}
+	if diagnostic.Code != factoryapi.ErrorResponseCode("CLI_LOCAL_INPUT_FAILED") ||
+		diagnostic.Family != factoryapi.ErrorFamilyBadRequest ||
+		!strings.Contains(diagnostic.Message, "failed to load --input") {
+		t.Fatalf("oversized EMBED diagnostic = %#v, want customer-safe local input failure", diagnostic)
+	}
+	if receivedLimit <= 0 || fixture.Calls() != 0 || launcher.Calls() != 0 || assetNetwork.Calls() != 0 {
+		t.Fatalf("oversized EMBED effects = limit:%d backend:%d starts:%d assets:%d, want positive limit and no downstream effects", receivedLimit, fixture.Calls(), launcher.Calls(), assetNetwork.Calls())
+	}
+}
+
 func TestModelsEmbedInvalidVectorUsesTypedRuntimeAndReleasesLease(t *testing.T) {
 	t.Parallel()
 

@@ -678,7 +678,6 @@ func TestRootAdapter_InvokeGenericExplicitMappingsPublishBytesAndMetadata(t *tes
 	assertMappedCLIFile(t, usagePath, "{\"tokens\":2}")
 	assertMappedCLIResponse(t, out.Bytes())
 }
-
 func TestRootAdapter_InvokeGenericFileInputsPreservesOrderBytesAndMedia(t *testing.T) {
 	t.Parallel()
 
@@ -703,9 +702,12 @@ func TestRootAdapter_InvokeGenericFileInputsPreservesOrderBytesAndMedia(t *testi
 				}}, nil
 			},
 		},
-		InputFileReader: func(path string) ([]byte, error) {
+		InputFileReader: func(_ context.Context, path string, maxBytes int64) ([]byte, error) {
 			if path != "meeting.wav" {
 				return nil, fmt.Errorf("unexpected input path %q", path)
+			}
+			if maxBytes <= 0 {
+				return nil, fmt.Errorf("unexpected non-positive input limit %d", maxBytes)
 			}
 			return wantBytes, nil
 		},
@@ -732,7 +734,6 @@ func TestRootAdapter_InvokeGenericFileInputsPreservesOrderBytesAndMedia(t *testi
 		t.Fatalf("prompt input = %#v, want ordered text input", prompt)
 	}
 }
-
 func TestRootAdapter_InvokeGenericInlineJSONInputPreservesContent(t *testing.T) {
 	t.Parallel()
 
@@ -759,7 +760,7 @@ func TestRootAdapter_InvokeGenericInlineJSONInputPreservesContent(t *testing.T) 
 				}}, nil
 			},
 		},
-		InputFileReader: func(string) ([]byte, error) { return []byte("RIFF"), nil },
+		InputFileReader: func(context.Context, string, int64) ([]byte, error) { return []byte("RIFF"), nil },
 		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
 			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
 		},
@@ -818,7 +819,7 @@ func TestRootAdapter_InvokeGenericInputPreflightRejectsBeforeBackend(t *testing.
 						return modelinference.InvokeModelResult{}, nil
 					},
 				},
-				InputFileReader: func(string) ([]byte, error) {
+				InputFileReader: func(context.Context, string, int64) ([]byte, error) {
 					reads++
 					return test.readBytes, test.readErr
 				},
@@ -873,7 +874,7 @@ func TestRootAdapter_InvokeASRRequiresEveryNamedOutputBeforeEffects(t *testing.T
 				return modelinference.InvokeModelResult{}, nil
 			},
 		},
-		InputFileReader: func(string) ([]byte, error) {
+		InputFileReader: func(context.Context, string, int64) ([]byte, error) {
 			reads++
 			return []byte("audio"), nil
 		},

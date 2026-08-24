@@ -8,9 +8,11 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -783,5 +785,109 @@ func TestRootAdapter_InspectMapsTypedInvocationValidation(t *testing.T) {
 	}
 	if coded.CLIErrorCode() != "BAD_REQUEST" || coded.CLIErrorFamily() != factoryapi.ErrorFamilyBadRequest || coded.CLIErrorMessage() != failure.Message {
 		t.Fatalf("Inspect() CLI fields = (%q, %q, %q), want BAD_REQUEST/BAD_REQUEST/%q", coded.CLIErrorCode(), coded.CLIErrorFamily(), coded.CLIErrorMessage(), failure.Message)
+	}
+}
+
+func TestRootAdapter_InvokeGenericFileInputRejectsOversizedBeforeInvocation(t *testing.T) {
+	t.Parallel()
+
+	scope := testRuntimeScope(t)
+	invokes := 0
+	var receivedLimit int64
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return genericCLIModelWithInputs("asr", modelinference.OperationASR,
+					modelinference.OperationSlot{
+						Name: "audio", Modality: modelinference.ModalityAudio,
+						Required: boolPointer(true), MediaTypes: []string{"audio/*"},
+					},
+					modelinference.OperationSlot{Name: "transcript", Modality: modelinference.ModalityText},
+				), nil
+			},
+			invokeModel: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				invokes++
+				return modelinference.InvokeModelResult{}, nil
+			},
+		},
+		InputFileReader: func(_ context.Context, _ string, maxBytes int64) ([]byte, error) {
+			receivedLimit = maxBytes
+			return bytes.Repeat([]byte{'x'}, int(maxBytes+1)), nil
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
+	})
+
+	err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: "asr", Operation: modelinference.OperationASR,
+		InputMappings: []string{"audio=@oversized.wav"}, JSON: true, Output: io.Discard,
+	})
+	var localFailure *clidiag.LocalFailure
+	if err == nil || !errors.As(err, &localFailure) {
+		t.Fatalf("oversized generic input error = %v, want safe local failure", err)
+	}
+	if receivedLimit <= 0 || invokes != 0 {
+		t.Fatalf("oversized generic input effects = limit:%d invokes:%d, want positive limit and zero invokes", receivedLimit, invokes)
+	}
+}
+
+func TestRootAdapter_InvokeGenericFileInputCancellationStopsPreparation(t *testing.T) {
+	t.Parallel()
+
+	scope := testRuntimeScope(t)
+	started := make(chan struct{})
+	invokes := 0
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return genericCLIModelWithInputs("asr", modelinference.OperationASR,
+					modelinference.OperationSlot{
+						Name: "audio", Modality: modelinference.ModalityAudio,
+						Required: boolPointer(true), MediaTypes: []string{"audio/*"},
+					},
+					modelinference.OperationSlot{Name: "transcript", Modality: modelinference.ModalityText},
+				), nil
+			},
+			invokeModel: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				invokes++
+				return modelinference.InvokeModelResult{}, nil
+			},
+		},
+		InputFileReader: func(ctx context.Context, _ string, _ int64) ([]byte, error) {
+			close(started)
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	result := make(chan error, 1)
+	go func() {
+		result <- service.Invoke(modelscli.InvokeConfig{
+			Context: ctx, ModelName: "asr", Operation: modelinference.OperationASR,
+			InputMappings: []string{"audio=@meeting.wav"}, JSON: true, Output: io.Discard,
+		})
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("generic input reader did not start")
+	}
+	cancel()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled generic input error = %v, want context.Canceled", err)
+		}
+		if invokes != 0 {
+			t.Fatalf("canceled generic input invokes = %d, want zero", invokes)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("canceled generic input did not stop preparation")
 	}
 }

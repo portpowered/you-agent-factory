@@ -16,6 +16,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 )
 
+const genericCLIInputMaxFileBytes int64 = 8 * 1024 * 1024
+
 // CompositionModelsRoot exposes the accepted Models root from injected
 // composition collaborators when the invocation operation can supply it.
 type CompositionModelsRoot interface {
@@ -271,9 +273,18 @@ func (service *rootService) genericCLIInput(
 				"--input", path, errors.New("Models CLI input filesystem is not configured"),
 			)
 		}
-		data, err := service.inputFileReader(path)
+		data, err := service.inputFileReader(cfg.Context, path, genericCLIInputMaxFileBytes)
 		if err != nil {
 			return modelinference.InferenceInput{}, clidiag.NewLocalInputFailure("--input", path, err)
+		}
+		if err := cfg.Context.Err(); err != nil {
+			return modelinference.InferenceInput{}, clidiag.NewLocalInputFailure("--input", path, err)
+		}
+		if int64(len(data)) > genericCLIInputMaxFileBytes {
+			return modelinference.InferenceInput{}, clidiag.NewLocalInputFailure(
+				"--input", path,
+				fmt.Errorf("file content exceeds the %d-byte limit", genericCLIInputMaxFileBytes),
+			)
 		}
 		mediaType := genericCLIInputMediaType(path, data)
 		if !genericCLIInputAcceptsMediaType(slot, mediaType) {

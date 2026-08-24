@@ -680,14 +680,76 @@ func provideModelsCLIInvocationOperation(
 }
 
 func provideModelsCLIInputFileReader(edges serviceedges.Edges) modelscli.InputFileReader {
-	readFile := edges.ModelCLIInputReadFile
-	if readFile == nil && edges.ModelAssetReadFile != nil {
-		readFile = serviceedges.ModelCLIInputReadFile(edges.ModelAssetReadFile)
+	if readFile := edges.ModelCLIInputReadFile; readFile != nil {
+		return modelscli.InputFileReader(readFile)
 	}
-	if readFile == nil {
-		readFile = os.ReadFile
+	if readFile := edges.ModelAssetReadFile; readFile != nil {
+		return func(ctx context.Context, path string, maxBytes int64) ([]byte, error) {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			data, err := readFile(path)
+			if err != nil {
+				return nil, err
+			}
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			if int64(len(data)) > maxBytes {
+				return nil, fmt.Errorf("file content exceeds the %d-byte limit", maxBytes)
+			}
+			return data, nil
+		}
 	}
-	return modelscli.InputFileReader(readFile)
+	return readModelsCLIInputFile
+}
+
+func readModelsCLIInputFile(ctx context.Context, path string, maxBytes int64) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if maxBytes <= 0 {
+		return nil, fmt.Errorf("file content limit must be positive")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	readLimit := maxBytes
+	if maxBytes < int64(^uint64(0)>>1) {
+		readLimit++
+	}
+	data, err := io.ReadAll(io.LimitReader(modelsCLIInputContextReader{
+		ctx: ctx, reader: file,
+	}, readLimit))
+	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("file content exceeds the %d-byte limit", maxBytes)
+	}
+	return data, nil
+}
+
+type modelsCLIInputContextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (reader modelsCLIInputContextReader) Read(buffer []byte) (int, error) {
+	if err := reader.ctx.Err(); err != nil {
+		return 0, err
+	}
+	read, err := reader.reader.Read(buffer)
+	if contextErr := reader.ctx.Err(); contextErr != nil {
+		return read, contextErr
+	}
+	return read, err
 }
 
 // modelsCLIInvocationOperation maps the four invocation inputs the Models CLI
