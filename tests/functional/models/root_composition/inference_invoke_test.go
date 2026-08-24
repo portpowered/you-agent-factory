@@ -469,6 +469,12 @@ func assertEffectiveBuiltinReadinessFailures(t *testing.T, serverURL string) {
 			t.Fatalf("POST /models/%s/invocations retained a worker-lookup failure: %#v", modelName, failure.Body)
 		}
 	}
+	unsupported := postNamedBuiltinFailure(t, serverURL, models.BuiltInModelNameTTS, models.OperationASR)
+	if unsupported.StatusCode != http.StatusBadRequest ||
+		unsupported.Body.Family != factoryapi.ErrorFamilyBadRequest ||
+		unsupported.Body.Code != factoryapi.ErrorResponseCode("BAD_REQUEST") {
+		t.Fatalf("POST /models/%s/invocations unsupported operation = status %d %#v, want bad-request taxonomy", models.BuiltInModelNameTTS, unsupported.StatusCode, unsupported.Body)
+	}
 }
 
 type namedBuiltinFailure struct {

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -22,27 +21,22 @@ import (
 	"go.uber.org/zap"
 )
 
-func assertTransformedInvokeConfig(
+func assertInvokeCommandConfig(
 	t *testing.T,
+	cfg InvokeConfig,
 	server string,
 	logger *zap.Logger,
 	diagnostics *bytes.Buffer,
-) func(InvokeConfig) error {
+) {
 	t.Helper()
-	return func(cfg InvokeConfig) error {
-		if cfg.ModelName != "OMNIVOICE_Q4_K_M" || cfg.Operation != "TTS" || cfg.Text != "hello" || cfg.OutputPath != "speech.wav" {
-			t.Fatalf("InvokeConfig command values = %#v", cfg)
-		}
-		if !reflect.DeepEqual(cfg.InputMappings, []string{"audio=@meeting.wav", "prompt=hint"}) {
-			t.Fatalf("InvokeConfig input mappings = %#v", cfg.InputMappings)
-		}
-		if cfg.Server != server || !cfg.JSON || !cfg.Verbose || !cfg.Debug {
-			t.Fatalf("InvokeConfig global values = %#v", cfg)
-		}
-		if cfg.FactoryDir != "/factory" || cfg.HomeDir != "/home/tester" || cfg.Logger != logger || cfg.Diagnostics != diagnostics {
-			t.Fatalf("InvokeConfig dependencies = %#v", cfg)
-		}
-		return nil
+	if cfg.ModelName != "OMNIVOICE_Q4_K_M" || cfg.Operation != "TTS" || cfg.Text != "hello" || cfg.OutputPath != "speech.wav" {
+		t.Fatalf("InvokeConfig command values = %#v", cfg)
+	}
+	if cfg.Server != server || !cfg.JSON || !cfg.Verbose || !cfg.Debug {
+		t.Fatalf("InvokeConfig global values = %#v", cfg)
+	}
+	if cfg.FactoryDir != "" || cfg.WorkingDirectory != "/factory" || cfg.HomeDir != "/home/tester" || cfg.Logger != logger || cfg.Diagnostics != diagnostics {
+		t.Fatalf("InvokeConfig dependencies = %#v", cfg)
 	}
 }
 
