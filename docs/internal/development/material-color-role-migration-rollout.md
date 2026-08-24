@@ -31,30 +31,30 @@ Implement and review in this sequence. Later phases assume earlier ones are merg
 | --- | --- | --- |
 | Role token wiring | `ui/src/styles/color-role-tokens.test.ts` | Accent saturation contract (primary > secondary/tertiary) and role-backed `--color-af-*` product keys |
 | Palette presets | `ui/src/styles/color-palette-presets.test.ts` | Five palettes override foundation keys |
-| Typography scale | `ui/src/styles/typography-role-tokens.test.ts` | Material scale tokens and utilities exist |
+| Typography scale | `ui/packages/components/src/styles/token-styles.test.ts` | Material scale tokens and utilities are exposed by the shared package styles |
 | Layout scale | `ui/src/styles/layout-role-tokens.test.ts` | Layout spacing roles registered |
 | Shared primitive semantics | `ui/src/components/ui/shared-primitive-semantic-color-roles.test.ts` | No semantic misuse for brand emphasis |
 | Shared primitive neutrals | `ui/src/components/ui/shared-primitive-neutral-surface-roles.test.ts` | Neutral chrome on role utilities |
 | Shared primitive disabled text | `ui/src/components/ui/shared-primitive-disabled-text-color-roles.test.ts` | Disabled/muted copy on `text-on-surface-disabled` in input, panel trigger, chart legend, action button spinner |
 | Calendar accent/text | `ui/src/components/ui/calendar-color-roles.test.ts` | DayPicker selected, today, outside, disabled, and weekday cells on role utilities |
 | Feature & graph surfaces | `ui/src/features/feature-surface-color-roles.test.ts` | Features avoid transitional tokens; graph/header samples use roles |
-| Prompt-editor neutrals | `ui/src/components/prompt-editor/prompt-editor-neutral-surface-roles.test.ts` | Monaco shells, diagnostics rows, and resize handle on role utilities |
+| Prompt-editor neutrals | `ui/src/components/prompt-editor/prompt-editor-surface-role-behavior.test.tsx` | Monaco shells, diagnostics rows, and resize handle on role utilities |
 | Graph chrome | `ui/src/components/dashboard/dashboard-graph.test.tsx` | React Flow frame constraints; role CSS variables on canvas/controls |
-| Migration index | `ui/src/styles/theme-role-regression.test.ts` | Regression contract files remain wired |
+| Migration index | `ui/src/styles/theme-role-regression.component.test.ts` | Regression contract files remain wired |
 
 Run targeted UI checks from the repo root:
 
 ```bash
 cd ui && bun install
 cd ui && bun run tsc
-cd ui && bun x vitest run src/styles/theme-role-regression.test.ts \
+cd ui && bun x vitest run src/styles/theme-role-regression.component.test.ts \
   src/styles/color-role-tokens.test.ts \
   src/styles/color-palette-presets.test.ts \
   src/features/feature-surface-color-roles.test.ts \
   src/components/ui/shared-primitive-neutral-surface-roles.test.ts \
   src/components/ui/shared-primitive-disabled-text-color-roles.test.ts \
   src/components/ui/calendar-color-roles.test.ts \
-  src/components/prompt-editor/prompt-editor-neutral-surface-roles.test.ts \
+  src/components/prompt-editor/prompt-editor-surface-role-behavior.test.tsx \
   src/components/ui/shared-primitive-semantic-color-roles.test.ts \
   src/components/dashboard/dashboard-graph.test.tsx
 ```
@@ -69,34 +69,34 @@ cd ui && bun x vitest run src/styles/theme-role-regression.test.ts \
 | Typography hierarchy | `Agent Factory/UI/Typography Role Hierarchy` |
 | Layout primitives | `Agent Factory/UI/Layout Role Primitives` |
 | Palette selector | `you-agent-factory/Dashboard/Color Palette Selector` |
-| Graph surfaces (feature) | `ui/src/features/trace-drilldown/components/trace-graph-surfaces.stories.tsx`, `factory-graph-editor-flow.stories.tsx`, `react-flow-current-activity-card.stories.tsx` |
+| Graph surfaces (feature) | `ui/src/features/trace-drilldown/components/trace-graph-surfaces.stories.tsx`, `ui/src/features/factory-graph-editor/components/flow/factory-graph-editor-flow.stories.tsx`, `ui/src/features/workflow-activity/components/react-flow-current-activity-card.stories.tsx` |
 
 After story changes: `make ui-storybook` then `make ui-test-storybook` (or the targeted Storybook Vitest lane in [development.md](./development.md)).
 
 ## Cleanup phase (post-migration)
 
-Alias layer removal is **complete**. Role-backed `--color-af-*` product keys live in `ui/src/styles/color-role-tokens.css`; foundation, overlay, border, and chart keys without role equivalents remain in `ui/src/styles.css`. Do not reintroduce `color-role-aliases.css` or its `@import`.
+Alias layer removal is **complete**. Role-backed `--color-af-*` product keys live in `ui/packages/components/src/styles/color-role-tokens.css`, the shared Material role source imported by the dashboard. The chart, edge, graph-control/focus, and overlay follow-up is also complete: all 26 target aliases remain consumed and resolve through shared Material roles. No target alias was retired because the final consumer audit found no zero-consumer target.
 
 ### Gate checklist (maintain)
 
 1. `ui/src/features/**` — no `bg-af-surface-*`, `text-af-text`, `bg-af-accent-*` (enforced by `feature-surface-color-roles.test.ts`).
 2. `ui/src/components/ui/**` — neutral and semantic contracts green (see shared-primitive `*.test.ts` files).
 3. `ui/src/components/ui/calendar.tsx` — DayPicker selected, today, outside, disabled, and weekday cells on role utilities (enforced by `calendar-color-roles.test.ts`); `ui-foundation.test.tsx` and Storybook foundation showcase assert behavior/labels only and do not pin transitional accent/text class substrings on the calendar primitive.
-4. `ui/src/components/prompt-editor/**` — Monaco shells, diagnostics rows, and resize handle on role utilities (enforced by `prompt-editor-neutral-surface-roles.test.ts`); RTL consumer tests in the same folder assert behavior only and do not pin transitional neutral class substrings.
+4. `ui/src/components/prompt-editor/**` — Monaco shells, diagnostics rows, and resize handle on role utilities (enforced by `prompt-editor-surface-role-behavior.test.tsx`); RTL consumer tests in the same folder assert behavior only and do not pin transitional neutral class substrings.
 5. Storybook overview and palette selector reviewed on all five palettes.
 6. Full `cd ui && bun run tsc` and theme regression vitest bundle (above) pass.
 
 ### Completed alias removal
 
-1. Deleted `ui/src/styles/color-role-aliases.css` and removed its `@import` from `ui/src/styles.css`.
-2. Inlined role-backed `--color-af-*` definitions into `color-role-tokens.css`; kept foundation keys, overlays, semantic borders, and chart keys in `styles.css`.
-3. Deleted `ui/src/styles/color-role-aliases.test.ts`; product key wiring is asserted in `color-role-tokens.test.ts`.
+1. Removed the obsolete alias stylesheet and its `@import` from `ui/src/styles.css`.
+2. Inlined role-backed `--color-af-*` definitions into `ui/packages/components/src/styles/color-role-tokens.css`; kept unrelated foundation and presentation aliases in their established stylesheet.
+3. Removed the obsolete alias-only test; product key wiring is asserted in `ui/src/styles/color-role-tokens.test.ts`.
 4. **Bulk migrator removed (complete).** The one-shot bulk class replacer was deleted after US-009; bulk migration is finished. Do not restore it. If transitional `af-*` patterns reappear, fix violations using `ui/src/features/feature-surface-color-roles.test.ts` and targeted manual edits.
-5. [material-color-role-taxonomy.md](./material-color-role-taxonomy.md) documents supported `--color-af-*` product keys until a later chart/overlay role pass.
+5. [material-color-role-taxonomy.md](./material-color-role-taxonomy.md) documents supported `--color-af-*` product keys and the completed chart/edge/graph-control/focus/overlay role pass.
 
-### Tokens that may remain
+### Tokens outside this follow-up
 
-Foundation palette keys (`af-foundation-*`), overlays (`af-overlay`), semantic border opacities (`af-*-border`), chart series keys (`af-chart-*`), and graph-edge keys without role equivalents stay in `styles.css` until a follow-up adds roles or retires the product keys.
+Foundation inputs and other presentation aliases outside the 26-key follow-up remain in their established stylesheet according to their existing consumers. They are not evidence that the chart, edge, graph-control/focus, or overlay target aliases are unbacked; those targets are accounted for above and are not deferred.
 
 ## Related docs
 

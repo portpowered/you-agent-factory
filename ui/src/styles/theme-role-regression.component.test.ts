@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -12,6 +12,14 @@ const stylesDir = path.dirname(fileURLToPath(import.meta.url));
 const uiRoot = path.resolve(stylesDir, "../..");
 const repoRoot = path.resolve(uiRoot, "..");
 const stylesSourcePath = path.join(uiRoot, "src", "styles.css");
+const REPOSITORY_FILE_PATH_PATTERN =
+  /(?<![\w/-])(?:api|cmd|docs|examples|factory|internal|packages|pkg|scripts|tasks|tests|ui)\/[\w.*\/-]+\.[\w-]+/g;
+
+function repositoryFilePathsNamedByGuide(source: string): string[] {
+  return [...new Set(source.match(REPOSITORY_FILE_PATH_PATTERN) ?? [])].filter(
+    (repositoryPath) => !repositoryPath.includes("*"),
+  );
+}
 
 function injectCompiledRootRules(compiledCss: string): void {
   const rootBlocks = compiledCss.match(/:root[^{]*\{[^}]*\}/g) ?? [];
@@ -169,6 +177,23 @@ describe("theme role migration regression (US-010)", () => {
     expect(source).toContain("## Cleanup phase");
     expect(source).toMatch(/Taxonomy.*US-001/s);
     expect(source).toContain("color-role-tokens.test.ts");
+  });
+
+  it("keeps every exact repository file path named by the rollout guide present", () => {
+    const rolloutPath = path.join(
+      repoRoot,
+      "docs/internal/development/material-color-role-migration-rollout.md",
+    );
+    const source = readFileSync(rolloutPath, "utf8");
+    const missingPaths = repositoryFilePathsNamedByGuide(source).filter(
+      (repositoryPath) =>
+        !existsSync(path.join(repoRoot, ...repositoryPath.split("/"))),
+    );
+
+    expect(
+      missingPaths,
+      `rollout guide names missing repository file path(s): ${missingPaths.join(", ")}`,
+    ).toEqual([]);
   });
 });
 // Component lane: requires DOM APIs.
