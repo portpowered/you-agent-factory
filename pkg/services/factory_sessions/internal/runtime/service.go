@@ -307,6 +307,9 @@ func (s *Service) Register(registration Registration) string {
 	if isDefault && registration.AllocateDefaultID {
 		if existing := s.registry.DefaultSession(); existing != nil {
 			sessionID = existing.ID
+			if strings.TrimSpace(registration.RuntimeFactorySessionID) == "" {
+				registration.RuntimeFactorySessionID = strings.TrimSpace(existing.RuntimeFactorySessionID)
+			}
 		} else {
 			sessionID = strings.TrimSpace(s.sessionIDs())
 			if sessionID == "" {

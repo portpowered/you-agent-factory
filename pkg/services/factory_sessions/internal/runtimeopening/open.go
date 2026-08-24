@@ -462,14 +462,14 @@ func openRuntime(
 		}
 	}
 	if err := definitionRuntimeRouter.Bind(
-		effectiveSessionID,
+		sessionID,
 		definitionHost,
 		definitionActivationGateway,
 	); err != nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: bind Factory Definitions runtime: %w", err)
 	}
 	cleanup.Add(func() error {
-		definitionRuntimeRouter.Unbind(effectiveSessionID)
+		definitionRuntimeRouter.Unbind(sessionID)
 		return nil
 	})
 	if processRuntimeFactory == nil {
