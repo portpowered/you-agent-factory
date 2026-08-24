@@ -4799,7 +4799,7 @@ func TestWorkerSessionClassification_CoversStructuredFallbackAndAssociationRejec
 	})
 }
 
-func TestWorkerSessionCoverageCoversCancellationAndReplayRaceEdges(t *testing.T) {
+func TestWorkerSessionCancellationClassificationAndProcessExitEdges(t *testing.T) {
 	if got := contradictorySuccessDetail(true, ""); got != "the Workers adapter reported failure after a successful result" {
 		t.Fatalf("contradictorySuccessDetail(adapter error) = %q, want adapter-specific detail", got)
 	}
@@ -4822,7 +4822,9 @@ func TestWorkerSessionCoverageCoversCancellationAndReplayRaceEdges(t *testing.T)
 	if !errors.Is(err, workers.ErrWorkstationDispatchCanceled) || terminal != workers.WorkstationDispatchTerminalOutcomeCanceled || classifiedResult.Cancellation == nil {
 		t.Fatalf("classifyExecuteError(dispatch canceled) = %q, %v, %#v, want canceled result", terminal, err, classifiedResult)
 	}
+}
 
+func TestWorkerSessionReplayAndOwnedShutdownCancellationEdges(t *testing.T) {
 	startDone := &startReplay{done: make(chan struct{}), result: workersessions.StartResult{Session: workersessions.Session{ID: "replayed-start"}}}
 	close(startDone.done)
 	canceled, cancel := context.WithCancel(context.Background())
@@ -4848,7 +4850,9 @@ func TestWorkerSessionCoverageCoversCancellationAndReplayRaceEdges(t *testing.T)
 	if err := stopRegistry.stopOwned(stopContext); !errors.Is(err, workersessions.ErrSessionNotFound) || !errors.Is(err, context.Canceled) {
 		t.Fatalf("stopOwned(orphan canceled) error = %v, want session-not-found and context canceled", err)
 	}
+}
 
+func TestWorkerSessionCancellationBoundaryAppliesBeforeAdmission(t *testing.T) {
 	boundaryRegistry := newTestRegistry(t)
 	boundarySupervision := newSupervision("boundary-dispatch", "turn-boundary")
 	boundaryRegistry.sessions["boundary-worker"] = workersessions.Session{ID: "boundary-worker", State: workersessions.StateStarting}
