@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { BACKEND_LINT_COMMENT_MARKER } from "./backend-lint-report.mjs";
+import { renderCoverageReportBody } from "./coverage-report.mjs";
 import { FUNCTIONAL_COVERAGE_COMMENT_MARKER } from "./functional-coverage-comment.mjs";
 import {
 	UNIT_COVERAGE_COMMENT_MARKER,
@@ -99,9 +100,8 @@ test("retains measured partial packages with an explicit report-only floor and m
 	]);
 	assert.equal(summary.coverage.gatedCount, 0);
 	const body = renderUnitCoverageJobSummary(summary);
-	assert.match(body, /Measured packages without a floor/);
-	assert.match(body, /`pkg\/measured` \| 50\.00 \| n\/a \(partial run\) \| report-only \| 3\.750/);
-	assert.doesNotMatch(body, /Headroom/);
+	assert.match(body, /Package verdicts/);
+	assert.match(body, /`pkg\/measured` \| 50\.00 \| n\/a \(partial run\) \| n\/a \| report-only \| 3\.750 \| fail/);
 });
 
 test("orders gated packages by headroom ascending with violations first", () => {
@@ -217,13 +217,14 @@ test("renders a package table ordered by headroom, not by import path", () => {
 		summarizeUnitCoverage(coverageArtifact(), timingArtifact()),
 	);
 	assert.ok(body.includes("## Backend Unit Coverage"));
-	assert.ok(body.includes("| `pkg/regressed` | 40.00 | 70.00 | -30.00 |"));
-	assert.ok(body.indexOf("### Floor violations") < body.indexOf("### Closest to their floor"));
+	assert.ok(body.includes("| `pkg/regressed` | 40.00 | 70.00 | -30.00 | WARN |"));
+	assert.ok(body.includes("| `pkg/regressed` | 40.00 | 70.00 | -30.00 | WARN | unavailable | unavailable |"));
 	// pkg/near has 0.50 headroom and pkg/ample has 89.00, so headroom ordering
 	// puts pkg/near first even though pkg/ample sorts first by import path.
 	assert.ok(body.indexOf("`pkg/near`") < body.indexOf("`pkg/ample`"));
-	// A package held to the 0.00 lane-default floor cannot be close to failing.
-	assert.ok(!body.includes("`pkg/lane-default`"));
+	// Every measured package has one compact verdict row, including the package
+	// held to the 0.00 lane-default floor.
+	assert.ok(body.includes("`pkg/lane-default`"));
 });
 
 test("renders advisory policy and all retained floor and manifest diagnostics", () => {
@@ -236,6 +237,38 @@ test("renders advisory policy and all retained floor and manifest diagnostics", 
 	assert.match(body, /package coverage regression: package=pkg\/regressed/);
 	assert.match(body, /coverage manifest missing entry: package=pkg\/services\/example/);
 	assert.match(body, /coverage not evaluated: package=pkg\/unmeasured/);
+});
+
+test("suppresses uncovered source details in default unit Markdown while retaining the compact finding", () => {
+	const summary = summarizeUnitCoverage(
+		{
+			...coverageArtifact(),
+			packageFloorFindings: [
+				"package coverage regression: package=pkg/regressed; uncovered blocks: pkg/regressed/file.go:41 (2 statements); restore coverage",
+			],
+		},
+		timingArtifact(),
+	);
+	const body = renderUnitCoverageJobSummary(summary);
+	assert.ok(body.includes("package coverage regression: package=pkg/regressed; restore coverage"));
+	assert.ok(!body.includes("file.go:41 (2 statements)"));
+});
+
+test("renders uncovered source details only when explicitly enabled", () => {
+	const summary = summarizeUnitCoverage(
+		{
+			...coverageArtifact(),
+			packageFloorFindings: [
+				"package coverage regression: package=pkg/regressed; uncovered blocks: pkg/regressed/file.go:41 (2 statements); restore coverage",
+			],
+		},
+		timingArtifact(),
+	);
+	const body = renderCoverageReportBody(summary, {
+		heading: "Detailed coverage",
+		includeUncoveredDetails: true,
+	});
+	assert.ok(body.includes("file.go:41 (2 statements)"));
 });
 
 test("renders the slowest unit tests with real durations, ordered descending", () => {
@@ -322,7 +355,7 @@ test("states the omitted counts for every capped table instead of truncating sil
 	assert.equal(summary.timing.omitted, 7);
 
 	const body = renderUnitCoverageComment(summary);
-	assert.ok(body.includes("- 4 additional gated package(s) omitted."));
+	assert.ok(body.includes("- 4 additional package verdict(s) omitted."));
 	assert.ok(body.includes("- 7 additional row(s) omitted."));
 	assert.ok(!body.includes("`TestCase00`"));
 });
@@ -343,7 +376,7 @@ test("caps the violation table while reporting the true violation count", () => 
 
 	const body = renderUnitCoverageComment(summary);
 	assert.ok(body.includes(`- Floor violations: ${UNIT_COVERAGE_VIOLATION_LIMIT + 3}`));
-	assert.ok(body.includes("- 3 additional violation(s) omitted."));
+	assert.ok(body.includes("additional package verdict(s) omitted."));
 	// The worst regression is always kept; the mildest ones are dropped.
 	assert.ok(body.includes("`pkg/broken00`"));
 	assert.ok(!body.includes("`pkg/broken27`"));
@@ -379,7 +412,7 @@ test("the job summary carries more rows than the comment and omits the marker", 
 
 	assert.ok(!jobSummary.includes(UNIT_COVERAGE_COMMENT_MARKER));
 	assert.ok(jobSummary.startsWith("## Backend Unit Coverage"));
-	assert.ok(jobSummary.includes("- 2 additional gated package(s) omitted."));
+	assert.ok(jobSummary.includes("- 2 additional package verdict(s) omitted."));
 	assert.ok(jobSummary.includes("- 2 additional row(s) omitted."));
 	assert.equal(
 		jobSummary.split("\n").filter((line) => line.startsWith("| `pkg/p")).length,

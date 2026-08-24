@@ -36,6 +36,10 @@ function timingArtifact() {
 		wallSeconds: 61.5,
 		packageCount: 2,
 		expectedPackageCount: 2,
+		packages: [
+			{ package: "tests/functional/alpha", seconds: 41.25, outcome: "fail" },
+			{ package: "tests/functional/beta", seconds: 12.5, outcome: "pass" },
+		],
 		testCount: 3,
 		testFailCount: 1,
 		tests: [
@@ -80,16 +84,18 @@ test("renders a marked body distinct from the backend lint comment", () => {
 	assert.ok(body.startsWith(FUNCTIONAL_COVERAGE_COMMENT_MARKER));
 	assert.notEqual(FUNCTIONAL_COVERAGE_COMMENT_MARKER, BACKEND_LINT_COMMENT_MARKER);
 	assert.ok(!body.includes(BACKEND_LINT_COMMENT_MARKER));
-	assert.ok(body.includes("### Floor violations"));
-	assert.ok(body.includes("| `pkg/regressed` | 40.00 | 70.00 | -30.00 |"));
+	assert.ok(body.includes("### Package verdicts"));
+	assert.ok(body.includes("| `pkg/regressed` | 40.00 | 70.00 | -30.00 | FAIL |"));
+	assert.ok(body.includes("### Functional test package timing"));
+	assert.ok(body.includes("| `tests/functional/alpha` | 41.250 | fail |"));
 	assert.ok(body.includes("### Slowest top-level tests"));
 	assert.ok(body.includes("| `TestSlow` | `tests/functional/alpha` | 40.125 | fail |"));
 	assert.ok(body.includes("- 0 additional row(s) omitted."));
 	assert.ok(body.includes("- Hosted head: `abc123`"));
 	assert.ok(body.includes("https://example.test/run/1"));
-	assert.ok(body.indexOf("### Floor violations") < body.indexOf("### Closest to their floor"));
-	// A package held to the 0.00 lane-default floor cannot be close to failing.
-	assert.ok(!body.includes("`pkg/lane-default`"));
+	// Every measured package has one compact verdict row, including a package
+	// held to the 0.00 lane-default floor.
+	assert.ok(body.includes("`pkg/lane-default`"));
 });
 
 test("caps both tables and states the omitted row counts", () => {
@@ -121,7 +127,7 @@ test("caps both tables and states the omitted row counts", () => {
 	assert.equal(summary.timing.omitted, 7);
 
 	const body = renderFunctionalCoverageComment(summary);
-	assert.ok(body.includes("- 4 additional gated package(s) omitted."));
+	assert.ok(body.includes("- 4 additional package verdict(s) omitted."));
 	assert.ok(body.includes("- 7 additional row(s) omitted."));
 	assert.ok(!body.includes("`TestCase00`"));
 });
@@ -143,10 +149,27 @@ test("caps the violation table while reporting the true violation count", () => 
 
 	const body = renderFunctionalCoverageComment(summary);
 	assert.ok(body.includes(`- Floor violations: ${FUNCTIONAL_COVERAGE_VIOLATION_LIMIT + 3}`));
-	assert.ok(body.includes("- 3 additional violation(s) omitted."));
+	assert.ok(body.includes("additional package verdict(s) omitted."));
 	// The worst regression is always kept; the mildest ones are dropped.
 	assert.ok(body.includes("`pkg/broken00`"));
 	assert.ok(!body.includes("`pkg/broken27`"));
+});
+
+test("renders advisory findings as WARN and suppresses uncovered source details by default", () => {
+	const summary = summarizeFunctionalCoverage(
+		{
+			...coverageArtifact(),
+			packageFloorPolicy: "advisory",
+			packageFloorFindings: [
+				"package coverage regression: package=pkg/regressed; uncovered blocks: pkg/regressed/file.go:41 (2 statements); restore coverage",
+			],
+		},
+		timingArtifact(),
+	);
+	const body = renderFunctionalCoverageComment(summary);
+	assert.ok(body.includes("| `pkg/regressed` | 40.00 | 70.00 | -30.00 | WARN |"));
+	assert.ok(body.includes("package coverage regression: package=pkg/regressed; restore coverage"));
+	assert.ok(!body.includes("file.go:41 (2 statements)"));
 });
 
 test("reports missing and malformed artifacts instead of throwing", () => {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -110,6 +111,45 @@ func TestCoverageSummaryRetainsFloorPolicyAndDiagnostics(t *testing.T) {
 	}
 }
 
+func TestDetailedDiagnosticsOnlyChangesJSONFindingPresentation(t *testing.T) {
+	floor := 80.0
+	detailedFinding := "package coverage regression: package=pkg/example lane=unit expected-minimum=80.00% actual=40.0000% delta=-40.0000 percentage-points covered=2/5 statements; uncovered blocks: pkg/example/file.go:41 (2 statements); restore coverage"
+	result := coverageResult{
+		actual:                 40,
+		packageFloorPolicy:     coverageFloorPolicyBlocking,
+		packageMinimumFailures: []string{detailedFinding},
+		packageSummaries:       []packageCoverageSummary{{importPath: "pkg/example", coverage: 40}},
+		packageTotals: map[string]packageCoverageTotals{
+			"pkg/example": {coveredStatements: 2, totalStatements: 5},
+		},
+		packageGates: map[string]packageCoverageGate{
+			"pkg/example": {Floor: &floor},
+		},
+	}
+
+	compact := buildCoverageSummaryJSON(result)
+	detailedResult := result
+	detailedResult.detailedDiagnostics = true
+	detailed := buildCoverageSummaryJSON(detailedResult)
+
+	wantCompactFinding := "package coverage regression: package=pkg/example lane=unit expected-minimum=80.00% actual=40.0000% delta=-40.0000 percentage-points covered=2/5 statements; restore coverage"
+	if compact.PackageFloorFindings[0] != wantCompactFinding {
+		t.Fatalf("default package finding = %q, want compact finding %q", compact.PackageFloorFindings[0], wantCompactFinding)
+	}
+	if detailed.PackageFloorFindings[0] != detailedFinding {
+		t.Fatalf("detailed package finding = %q, want full finding %q", detailed.PackageFloorFindings[0], detailedFinding)
+	}
+	if !reflect.DeepEqual(compact.Packages, detailed.Packages) {
+		t.Fatalf("package measurement changed with detailed diagnostics: compact=%+v detailed=%+v", compact.Packages, detailed.Packages)
+	}
+	if compact.CoveredStatements != detailed.CoveredStatements ||
+		compact.MeasurableStatements != detailed.MeasurableStatements ||
+		compact.CoveragePercent != detailed.CoveragePercent ||
+		compact.PackageFloorPolicy != detailed.PackageFloorPolicy {
+		t.Fatalf("coverage summary changed with detailed diagnostics: compact=%+v detailed=%+v", compact, detailed)
+	}
+}
+
 func TestExecuteOmitsJSONFileWhenJSONOutputOptionAbsent(t *testing.T) {
 	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
@@ -146,10 +186,10 @@ func TestExecuteOmitsJSONFileWhenJSONOutputOptionAbsent(t *testing.T) {
 	if !strings.Contains(got, "total: (statements) 100.0%") {
 		t.Fatalf("execute() stdout = %q, want total coverage line", got)
 	}
-	if !strings.Contains(got, modulePath+"/pkg/config\tcoverage: 100.0% of statements") {
+	if !strings.Contains(got, "package="+modulePath+"/pkg/config coverage=100.0% floor=80.0% delta=+20.0pp status=PASS lane=unit") {
 		t.Fatalf("execute() stdout = %q, want package summary for pkg/config", got)
 	}
-	if !strings.Contains(got, modulePath+"/pkg/service\tcoverage: 100.0% of statements") {
+	if !strings.Contains(got, "package="+modulePath+"/pkg/service coverage=100.0% floor=80.0% delta=+20.0pp status=PASS lane=unit") {
 		t.Fatalf("execute() stdout = %q, want package summary for pkg/service", got)
 	}
 	wantSuccess := "Go coverage 100.0% meets minimum 80.0%."
@@ -656,10 +696,10 @@ func TestExecuteFloorFailureWithoutJSONOptionKeepsHumanDiagnostics(t *testing.T)
 	if !strings.Contains(got, "total: (statements) 100.0%") {
 		t.Fatalf("execute() stdout = %q, want total coverage line", got)
 	}
-	if !strings.Contains(got, modulePath+"/pkg/config\tcoverage: 100.0% of statements") {
+	if !strings.Contains(got, "package="+modulePath+"/pkg/config coverage=100.0% floor=80.0% delta=+20.0pp status=PASS lane=unit") {
 		t.Fatalf("execute() stdout = %q, want package summary for pkg/config", got)
 	}
-	if !strings.Contains(got, modulePath+"/pkg/service\tcoverage: 100.0% of statements") {
+	if !strings.Contains(got, "package="+modulePath+"/pkg/service coverage=100.0% floor=80.0% delta=+20.0pp status=PASS lane=unit") {
 		t.Fatalf("execute() stdout = %q, want package summary for pkg/service", got)
 	}
 	if strings.Contains(got, "meets minimum") {
