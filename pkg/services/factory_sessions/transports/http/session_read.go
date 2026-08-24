@@ -33,12 +33,13 @@ func normalizeListSessionsScope(request factorysessions.ListSessionsRequest) (fa
 	switch request.Scope {
 	case factorysessions.SessionListScopeLive,
 		factorysessions.SessionListScopePersisted,
+		factorysessions.SessionListScopeHistory,
 		factorysessions.SessionListScopeAll:
 		return request, nil
 	default:
 		return factorysessions.ListSessionsRequest{}, &factorysessions.ExecutionValidationError{
 			Field:   "scope",
-			Message: fmt.Sprintf("scope must be live, persisted, or all (got %q)", request.Scope),
+			Message: fmt.Sprintf("scope must be live, persisted, or all; history is also supported (got %q)", request.Scope),
 		}
 	}
 }

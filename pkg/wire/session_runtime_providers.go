@@ -602,10 +602,11 @@ func provideFactorySessionsService(
 	eventsService events.Service,
 	clock factoryruntime.Clock,
 	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
+	recordedSessionInventory recordings.RecordedSessionInventory,
 ) (factorysessions.Service, error) {
 	return factorysessionwire.NewService(func() factoryruntime.JavaScriptCheckpointStore {
 		return factoryruntimewire.NewJavaScriptCheckpointStore()
-	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, responseEventRetentionLimits, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks, eventsService, clock, liveChangeCoordinator)
+	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, responseEventRetentionLimits, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks, eventsService, clock, liveChangeCoordinator, recordedSessionInventory)
 }
 
 // provideFactorySessionDetachedOperations publishes the one detached value

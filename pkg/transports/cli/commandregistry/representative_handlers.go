@@ -159,6 +159,8 @@ const (
 	sessionDeletePortInputID                  = "you.session.delete.flag.port"
 	sessionListPortInputID                    = "you.session.list.flag.port"
 	sessionListScopeInputID                   = "you.session.list.flag.scope"
+	sessionListLiveOnlyInputID                = "you.session.list.flag.live-only"
+	sessionListHistoryOnlyInputID             = "you.session.list.flag.history-only"
 	sessionShowIDInputID                      = "you.session.show.arg.0"
 	sessionShowPortInputID                    = "you.session.show.flag.port"
 	sessionPauseIDInputID                     = "you.session.pause.arg.0"
@@ -451,12 +453,20 @@ func (h *SessionResolvedHandler) List(
 	if err != nil {
 		return fmt.Errorf("resolve session list inputs: %w", err)
 	}
+	liveOnly, err := inputs.Bool(sessionListLiveOnlyInputID)
+	if err != nil {
+		return fmt.Errorf("resolve session list inputs: %w", err)
+	}
+	historyOnly, err := inputs.Bool(sessionListHistoryOnlyInputID)
+	if err != nil {
+		return fmt.Errorf("resolve session list inputs: %w", err)
+	}
 	globals, diagnostics, err := h.base(cmd, inherited)
 	if err != nil {
 		return fmt.Errorf("resolve session list inputs: %w", err)
 	}
 	cfg := sessioncli.ListConfig{
-		Context: cmd.Context(), Port: port, Scope: scope, JSON: globals.json,
+		Context: cmd.Context(), Port: port, Scope: scope, LiveOnly: liveOnly, HistoryOnly: historyOnly, JSON: globals.json,
 		Verbose: globals.verbose, Debug: globals.debug,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics,
 	}

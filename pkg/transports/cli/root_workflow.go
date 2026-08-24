@@ -28,6 +28,9 @@ func newSessionHandlerRegistry(
 
 func sessionListPrepare(options CommandFactory) func(context.Context, *sessioncli.ListConfig) error {
 	return func(ctx context.Context, cfg *sessioncli.ListConfig) error {
+		if cfg.LiveOnly || cfg.HistoryOnly {
+			return nil
+		}
 		scope := fse.SessionListScope(strings.TrimSpace(cfg.Scope))
 		if scope != fse.SessionListScopePersisted && scope != fse.SessionListScopeAll {
 			return nil

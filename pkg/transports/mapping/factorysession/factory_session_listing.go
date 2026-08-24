@@ -468,6 +468,17 @@ func ListSessionsRequestFromAPI(params factoryapi.ListFactorySessionsParams) (fa
 	return req, nil
 }
 
+// RecordedSessionSummaryToAPI maps the detached recorded-history projection
+// without exposing a host path or re-deriving its source identity.
+func RecordedSessionSummaryToAPI(summary factorysessions.RecordedSessionListSummary) factoryapi.FactorySessionRecordedSummary {
+	return factoryapi.FactorySessionRecordedSummary{
+		SessionId:         summary.SessionID,
+		Source:            factoryapi.FactorySessionRecordedSource(summary.Source),
+		ArtifactReference: summary.ArtifactReference,
+		Format:            factoryapi.FactorySessionRecordedFormat(summary.Format),
+	}
+}
+
 // ListSessionsResponseToAPI maps one scoped session list result to the public response shape.
 func ListSessionsResponseToAPI(result factorysessionexecution.ListSessionsResult) factoryapi.ListFactorySessionsResponse {
 	scope := factoryapi.FactorySessionListScope(result.Scope)
@@ -484,6 +495,13 @@ func ListSessionsResponseToAPI(result factorysessionexecution.ListSessionsResult
 			durable = append(durable, DurableSessionSummaryToAPI(summary))
 		}
 		response.DurableSessions = &durable
+	}
+	if len(result.RecordedSessions) > 0 {
+		recorded := make([]factoryapi.FactorySessionRecordedSummary, 0, len(result.RecordedSessions))
+		for _, summary := range result.RecordedSessions {
+			recorded = append(recorded, RecordedSessionSummaryToAPI(summary))
+		}
+		response.RecordedSessions = &recorded
 	}
 	response.Sessions = canonicalAPILiveSessionSummaries(response.Sessions)
 	return response
@@ -511,6 +529,13 @@ func ScopedSessionListResponseToAPI(result factorysessions.ScopedSessionListResu
 			durable = append(durable, DurableSessionSummaryToAPI(summary))
 		}
 		response.DurableSessions = &durable
+	}
+	if len(result.RecordedSessions) > 0 {
+		recorded := make([]factoryapi.FactorySessionRecordedSummary, 0, len(result.RecordedSessions))
+		for _, summary := range result.RecordedSessions {
+			recorded = append(recorded, RecordedSessionSummaryToAPI(summary))
+		}
+		response.RecordedSessions = &recorded
 	}
 	return response
 }

@@ -567,7 +567,7 @@ func TestSessionResolvedInspectionPreservesLiveAndPersistedListing(t *testing.T)
 		},
 	}, nil, nil)
 
-	stdout, _, err := executeResolvedSessionWithOutput(t, services, "--json", "session", "list")
+	stdout, _, err := executeResolvedSessionWithOutput(t, services, "--json", "session", "list", "--scope", "live")
 	if err != nil {
 		t.Fatalf("live list Execute() error = %v", err)
 	}
@@ -586,7 +586,7 @@ func TestSessionResolvedInspectionPreservesLiveAndPersistedListing(t *testing.T)
 	if !strings.Contains(stdout, "dur-sess-review-001") || !strings.Contains(stdout, "Factory Sessions (durable):") {
 		t.Fatalf("persisted list output = %q", stdout)
 	}
-	stdout, _, err = executeResolvedSessionWithOutput(t, services, "session", "list")
+	stdout, _, err = executeResolvedSessionWithOutput(t, services, "session", "list", "--scope", "live")
 	if err != nil {
 		t.Fatalf("empty live list Execute() error = %v", err)
 	}
@@ -992,5 +992,55 @@ func sessionTestResponse(status int, body string) *http.Response {
 		StatusCode: status,
 		Body:       io.NopCloser(strings.NewReader(body)),
 		Header:     make(http.Header),
+	}
+}
+
+func assertDefaultResolvedCreate(
+	t *testing.T,
+	cfg sessioncli.CreateConfig,
+	diagnostics io.Writer,
+) {
+	t.Helper()
+	if cfg.Dir != "fleet" || cfg.Port != 7437 ||
+		cfg.PortExplicit || cfg.Server != "http://localhost:7437" ||
+		cfg.InitNewFactory || cfg.ValidateOnly ||
+		cfg.JSON || cfg.Verbose || cfg.Debug {
+		t.Fatalf("default create config = %#v", cfg)
+	}
+	if cfg.Diagnostics != diagnostics || cfg.Output == nil {
+		t.Fatalf("default create writers = output:%T diagnostics:%T", cfg.Output, cfg.Diagnostics)
+	}
+}
+
+func assertChangedResolvedCreate(t *testing.T, cfg sessioncli.CreateConfig) {
+	t.Helper()
+	if cfg.Server != "https://factory.example" ||
+		cfg.Port != 9444 || !cfg.PortExplicit ||
+		!cfg.JSON || !cfg.Verbose || !cfg.Debug ||
+		!cfg.InitNewFactory ||
+		cfg.TargetKind != "named" || cfg.TargetName != "alpha" {
+		t.Fatalf("changed create config = %#v", cfg)
+	}
+}
+
+func assertDefaultResolvedList(t *testing.T, cfg sessioncli.ListConfig) {
+	t.Helper()
+	if cfg.Scope != "all" || cfg.Port != 7437 || cfg.Server != "" {
+		t.Fatalf("default list config = %#v", cfg)
+	}
+}
+
+func assertChangedResolvedList(t *testing.T, cfg sessioncli.ListConfig) {
+	t.Helper()
+	if cfg.Scope != "all" || cfg.Server != "https://factory.example" {
+		t.Fatalf("changed list config = %#v", cfg)
+	}
+}
+
+func assertResolvedDelete(t *testing.T, configs []sessioncli.DeleteConfig) {
+	t.Helper()
+	if len(configs) != 1 || configs[0].SessionID != "session-beta" ||
+		configs[0].Port != 7437 || !configs[0].JSON {
+		t.Fatalf("delete configs = %#v", configs)
 	}
 }

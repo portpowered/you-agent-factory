@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -80,4 +81,16 @@ func provideFactorySessionReplayInputs(
 	logger logging.Logger,
 ) recordings.ReplayInputLoader {
 	return recordingswire.NewReplayInputLoader(recordings.RecordingReadFile(replayFiles), loadReplay, logger)
+}
+
+func provideRecordedSessionInventory(
+	edges serviceedges.Edges,
+	replayInputs recordings.ReplayInputLoader,
+	logger logging.Logger,
+) recordings.RecordedSessionInventory {
+	readDir := edges.RecordingReadDirectory
+	if readDir == nil {
+		readDir = platformfilesystem.Local{}.ReadDir
+	}
+	return recordingswire.NewRecordedSessionInventory(readDir, replayInputs, logger)
 }

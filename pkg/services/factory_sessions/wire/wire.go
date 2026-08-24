@@ -75,6 +75,7 @@ func NewService(
 	eventsService events.Service,
 	clock factoryruntime.Clock,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+	recordedSessionInventory recordings.RecordedSessionInventory,
 ) (factorysessions.Service, error) {
 	if sessionResultProjection == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: session result projection is required")
@@ -132,6 +133,7 @@ func NewService(
 		responseStreams,
 		clock,
 		liveChangeCoordinator,
+		recordedSessionInventory,
 	)
 	if err != nil {
 		return nil, err

@@ -1,0 +1,6 @@
+type: string
+description: Explicit provenance for a read-only recorded Factory Session row.
+enum:
+  - recorded-history
+x-enum-varnames:
+  - FactorySessionRecordedSourceHistory

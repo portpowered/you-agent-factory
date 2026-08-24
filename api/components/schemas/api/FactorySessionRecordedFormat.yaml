@@ -1,0 +1,8 @@
+type: string
+description: Recording artifact format interpreted by the shared replay reader.
+enum:
+  - V1_JSON
+  - V2_JSONL
+x-enum-varnames:
+  - FactorySessionRecordedFormatV1JSON
+  - FactorySessionRecordedFormatV2JSONL

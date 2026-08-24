@@ -11,7 +11,8 @@ import (
 func renderListResult(output io.Writer, result factoryapi.ListFactorySessionsResponse) error {
 	hasLive := len(result.Sessions) > 0
 	hasDurable := result.DurableSessions != nil && len(*result.DurableSessions) > 0
-	if !hasLive && !hasDurable {
+	hasRecorded := result.RecordedSessions != nil && len(*result.RecordedSessions) > 0
+	if !hasLive && !hasDurable && !hasRecorded {
 		return renderListEmptyState(output, result.Scope)
 	}
 	if hasLive {
@@ -29,6 +30,16 @@ func renderListResult(output io.Writer, result factoryapi.ListFactorySessionsRes
 			return err
 		}
 	}
+	if hasRecorded {
+		if hasLive || hasDurable {
+			if _, err := fmt.Fprintln(output); err != nil {
+				return err
+			}
+		}
+		if err := renderRecordedSessionTable(output, *result.RecordedSessions); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -38,12 +49,29 @@ func renderListEmptyState(output io.Writer, scope *factoryapi.FactorySessionList
 		switch *scope {
 		case factoryapi.FactorySessionListScopePersisted:
 			message = "No persisted Factory Sessions were found."
+		case factoryapi.FactorySessionListScopeHistory:
+			message = "No recorded Factory Session history was found."
 		case factoryapi.FactorySessionListScopeAll:
-			message = "No live factory sessions or persisted Factory Sessions were found."
+			message = "No live factory sessions, persisted Factory Sessions, or recorded history was found."
 		}
 	}
 	_, err := fmt.Fprintln(output, message)
 	return err
+}
+
+func renderRecordedSessionTable(output io.Writer, sessions []factoryapi.FactorySessionRecordedSummary) error {
+	if _, err := fmt.Fprintln(output, "Factory Sessions (recorded history):"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(output, "SESSION ID\tSOURCE\tARTIFACT REFERENCE\tFORMAT"); err != nil {
+		return err
+	}
+	for _, session := range sessions {
+		if _, err := fmt.Fprintf(output, "%s\t%s\t%s\t%s\n", session.SessionId, session.Source, session.ArtifactReference, session.Format); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func renderLiveSessionTable(output io.Writer, sessions []factoryapi.FactorySessionSummary) error {

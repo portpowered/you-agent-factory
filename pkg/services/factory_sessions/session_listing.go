@@ -17,7 +17,8 @@ type ScopedLiveSessionSummary struct {
 // customer transports. Transports map it but do not reapply scope or merge
 // policy.
 type ScopedSessionListResult struct {
-	Scope           SessionListScope
-	LiveSessions    []ScopedLiveSessionSummary
-	DurableSessions []DurableSessionListSummary
+	Scope            SessionListScope
+	LiveSessions     []ScopedLiveSessionSummary
+	DurableSessions  []DurableSessionListSummary
+	RecordedSessions []RecordedSessionListSummary
 }

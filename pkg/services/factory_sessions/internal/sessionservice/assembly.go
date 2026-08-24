@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 
@@ -44,6 +45,7 @@ type Assembly struct {
 	eventIDs                     factorysessions.ResponseEventIDGenerator
 	sessionIDs                   factorysessions.SessionIDGenerator
 	resolveHome                  factorysessions.HomeDirectoryResolver
+	recordedSessionInventory     recordings.RecordedSessionInventory
 	directoryInspection          roles.DirectoryInspection
 	namedPaths                   factorydefinitions.NamedPathResolver
 	invocationInputFiles         fileeffects.InvocationInputReader
@@ -86,6 +88,7 @@ func NewAssembly(
 	identityService identity.Service,
 	responseStreamService responsestreamservice.Service,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+	recordedSessionInventory recordings.RecordedSessionInventory,
 ) roles.RuntimeAssembly {
 	if clock == nil || eventIDs == nil || sessionIDs == nil || resolveHome == nil || directoryInspection == nil || namedPaths == nil || invocationInputFiles == nil || initialWorkFiles == nil || sessionResultProjection == nil || identityService == nil || responseStreamService == nil || liveChangeCoordinator == nil {
 		return nil
@@ -110,6 +113,7 @@ func NewAssembly(
 		eventIDs:                     eventIDs,
 		sessionIDs:                   sessionIDs,
 		resolveHome:                  resolveHome,
+		recordedSessionInventory:     recordedSessionInventory,
 		directoryInspection:          directoryInspection,
 		namedPaths:                   namedPaths,
 		invocationInputFiles:         invocationInputFiles,
@@ -818,12 +822,72 @@ func (a *Assembly) ListFactorySessions(ctx context.Context) ([]factorysessions.R
 	return result, nil
 }
 
+func (a *Assembly) recordingRoot() (string, error) {
+	if a == nil || a.resolveHome == nil {
+		return "", fmt.Errorf("recorded session home directory resolver is required")
+	}
+	home, err := a.resolveHome()
+	if err != nil {
+		return "", fmt.Errorf("resolve recorded session home directory: %w", err)
+	}
+	home = strings.TrimSpace(home)
+	if home == "" {
+		return "", fmt.Errorf("resolve recorded session home directory: empty path")
+	}
+	return filepath.Join(home, ".you-agent-factory", "recordings"), nil
+}
+
 func (a *Assembly) ListSessions(ctx context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+	scope := request.Scope
+	if scope == "" {
+		scope = factorysessions.DefaultSessionListScope
+	}
+	request.Scope = scope
+	result := factorysessions.ListSessionsResult{Scope: scope}
+	includeRecordedHistory := !request.ExcludeRecordedHistory
+	if scope == factorysessions.SessionListScopeHistory || (scope == factorysessions.SessionListScopeAll && includeRecordedHistory) {
+		if a.recordedSessionInventory == nil {
+			if scope == factorysessions.SessionListScopeHistory {
+				return factorysessions.ListSessionsResult{}, fmt.Errorf("recorded session inventory is required")
+			}
+		} else {
+			root, err := a.recordingRoot()
+			if err != nil {
+				return factorysessions.ListSessionsResult{}, err
+			}
+			listed, err := a.recordedSessionInventory.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{
+				RecordingRoot: root,
+			})
+			if err != nil {
+				return factorysessions.ListSessionsResult{}, fmt.Errorf("list recorded Factory Sessions: %w", err)
+			}
+			result.RecordedSessions = make([]factorysessions.RecordedSessionListSummary, 0, len(listed.Sessions))
+			for _, session := range listed.Sessions {
+				result.RecordedSessions = append(result.RecordedSessions, factorysessions.RecordedSessionListSummary{
+					SessionID:         session.FactorySessionID,
+					Source:            factorysessions.RecordedSessionListSourceHistory,
+					ArtifactReference: session.ArtifactReference,
+					Format:            string(session.Format),
+				})
+			}
+			sort.SliceStable(result.RecordedSessions, func(left, right int) bool {
+				if result.RecordedSessions[left].SessionID != result.RecordedSessions[right].SessionID {
+					return result.RecordedSessions[left].SessionID < result.RecordedSessions[right].SessionID
+				}
+				return result.RecordedSessions[left].ArtifactReference < result.RecordedSessions[right].ArtifactReference
+			})
+		}
+	}
+	if scope == factorysessions.SessionListScopeHistory {
+		return result, nil
+	}
 	owners := a.detachedOwners()
 	if len(owners) == 0 {
+		if a.recordedSessionInventory != nil && scope == factorysessions.SessionListScopeAll {
+			return result, nil
+		}
 		return factorysessions.ListSessionsResult{}, factorysessions.ErrDetachedServiceUnavailable
 	}
-	result := factorysessions.ListSessionsResult{Scope: request.Scope}
 	seenLive := make(map[string]struct{})
 	seenDurable := make(map[string]struct{})
 	for _, owner := range owners {

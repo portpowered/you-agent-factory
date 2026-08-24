@@ -12,6 +12,7 @@ import (
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 // Root is the one process-scoped Factory Sessions root. Its live-session
@@ -45,6 +46,7 @@ func NewRoot(
 	responseStreams responsestreamservice.Service,
 	clock factoryruntime.Clock,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+	recordedSessionInventory recordings.RecordedSessionInventory,
 ) (*Root, error) {
 	if err := validateRootDependencies(
 		sessionResultProjection,
@@ -80,6 +82,7 @@ func NewRoot(
 		identityService,
 		responseStreams,
 		liveChangeCoordinator,
+		recordedSessionInventory,
 	)
 	assembly, ok := assemblyRole.(*legacyservice.Assembly)
 	if !ok || assembly == nil {

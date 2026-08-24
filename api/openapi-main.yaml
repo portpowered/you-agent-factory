@@ -1643,9 +1643,11 @@ paths:
         Lists factory sessions for the requested scope. live returns workspace
         sessions kept open by the runtime host, including the reserved default
         session. persisted returns durable execution sessions stored outside the
-        live workspace. all returns both live and persisted summaries. Persisted
-        summaries cover active, terminal, interrupted, and stale-lease durable
-        sessions without exposing raw workflow source or unrestricted host paths.
+        live workspace. history returns read-only recorded Factory Session
+        artifacts. all returns live, persisted, and recorded-history summaries.
+        Persisted summaries cover active, terminal, interrupted, and stale-lease
+        durable sessions without exposing raw workflow source or unrestricted
+        host paths.
       parameters:
         - $ref: '#/components/parameters/FactorySessionListScope'
       responses:
@@ -2959,6 +2961,12 @@ components:
       $ref: './components/schemas/api/FactorySessionListScope.yaml'
     FactorySessionDurableSummary:
       $ref: './components/schemas/api/FactorySessionDurableSummary.yaml'
+    FactorySessionRecordedSummary:
+      $ref: './components/schemas/api/FactorySessionRecordedSummary.yaml'
+    FactorySessionRecordedSource:
+      $ref: './components/schemas/api/FactorySessionRecordedSource.yaml'
+    FactorySessionRecordedFormat:
+      $ref: './components/schemas/api/FactorySessionRecordedFormat.yaml'
     FactorySessionDurableReadModel:
       $ref: './components/schemas/api/FactorySessionDurableReadModel.yaml'
     FactorySessionGetResponse:
