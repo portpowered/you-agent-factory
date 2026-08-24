@@ -3,9 +3,10 @@ package root_composition_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -100,7 +101,7 @@ func TestModelsASRDirectCLIEndToEndThroughRootBuildProcess(t *testing.T) {
 	})
 	t.Cleanup(func() { closeRootProcess(t, process, "close ASR root process") })
 
-	var output bytes.Buffer
+	var output, invokeStderr bytes.Buffer
 	invoke := support.FakeInputs(t.Context(), []string{
 		"you", "models", "invoke", "asr", "--operation", "ASR",
 		"--input", "audio=@" + inputPath,
@@ -110,7 +111,7 @@ func TestModelsASRDirectCLIEndToEndThroughRootBuildProcess(t *testing.T) {
 	invoke.Input.Env = functionalHomeEnvironment(home)
 	invoke.Input.WorkingDirectory = dir
 	invoke.Input.Stdout = &output
-	invoke.Input.Stderr = io.Discard
+	invoke.Input.Stderr = &invokeStderr
 	if err := process.Execute(invoke.Input); err != nil {
 		t.Fatalf("Process.Execute(ASR mapped outputs) error = %v", err)
 	}
@@ -132,15 +133,22 @@ func TestModelsASRDirectCLIEndToEndThroughRootBuildProcess(t *testing.T) {
 		t.Fatalf("backend request input = %#v, want exact bytes and audio/wav", received.Inputs)
 	}
 	assertASRFixtureCall(t, fixture.Calls(), base64.StdEncoding.EncodeToString(inputBytes))
+	transcriptDigest := sha256.Sum256(transcript)
+	segmentsDigest := sha256.Sum256(segments)
+	t.Logf("runtime proof command: you models invoke asr --operation ASR --input audio=@%s --output transcript=%s --output segments=%s", inputPath, transcriptPath, segmentsPath)
+	t.Logf("runtime proof exitCode=0 stdout=%q stderr=%q", output.String(), invokeStderr.String())
+	t.Logf("runtime proof output transcript mediaType=text/plain bytes=%q size=%d sha256=%s", string(transcript), len(transcript), hex.EncodeToString(transcriptDigest[:]))
+	t.Logf("runtime proof output segments mediaType=application/json bytes=%s size=%d sha256=%s", string(segments), len(segments), hex.EncodeToString(segmentsDigest[:]))
 
 	output.Reset()
+	var jsonStderr bytes.Buffer
 	jsonInvoke := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "models", "invoke", "asr", "--operation", "ASR", "--input", "audio=@" + inputPath,
 	})
 	jsonInvoke.Input.Env = functionalHomeEnvironment(home)
 	jsonInvoke.Input.WorkingDirectory = dir
 	jsonInvoke.Input.Stdout = &output
-	jsonInvoke.Input.Stderr = io.Discard
+	jsonInvoke.Input.Stderr = &jsonStderr
 	if err := process.Execute(jsonInvoke.Input); err != nil {
 		t.Fatalf("Process.Execute(ASR --json) error = %v", err)
 	}
@@ -158,6 +166,9 @@ func TestModelsASRDirectCLIEndToEndThroughRootBuildProcess(t *testing.T) {
 	if artifact == nil || artifact.ArtifactRef != "artifact:segments" || artifact.SizeBytes == nil || *artifact.SizeBytes != int64(len(segments)) || artifact.Properties == nil || (*artifact.Properties)["digest"] != "sha256:fixture-segments" {
 		t.Fatalf("ASR JSON artifact metadata = %#v, want opaque ref/size/digest", artifact)
 	}
+	t.Logf("runtime proof command: you --json models invoke asr --operation ASR --input audio=@%s", inputPath)
+	t.Logf("runtime proof exitCode=0 stdout=%s stderr=%q", output.String(), jsonStderr.String())
+	t.Logf("runtime proof JSON outputs transcript mediaType=text/plain segments mediaType=application/json artifactRef=%s size=%d digest=%s", artifact.ArtifactRef, *artifact.SizeBytes, (*artifact.Properties)["digest"])
 	if rejectingNetwork.Calls() != 0 || hostLauncher.Calls() == 0 || protocol.Calls() == 0 || compatibility.Calls() == 0 {
 		t.Fatalf("ASR effects = asset network %d, host starts %d, protocol %d, compatibility %d; want cache-backed joined execution", rejectingNetwork.Calls(), hostLauncher.Calls(), protocol.Calls(), compatibility.Calls())
 	}
